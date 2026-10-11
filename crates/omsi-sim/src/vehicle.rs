@@ -1161,6 +1161,20 @@ impl VehicleInstance {
             };
             state.vars[id as usize] = value;
         }
+        // Model directives such as [visible] refer to vehicle variables too. Register their
+        // names before mesh properties are resolved, even when the vehicle's varlists omit
+        // them; scripts and model directives then share the same runtime variable table.
+        for (name, value) in ty.model.meshes.iter().filter_map(|m| m.visible.as_ref()) {
+            let key = name.to_ascii_lowercase();
+            if !var_index.contains_key(&key) {
+                let id = state.vars.len() as omsi_script::VarId;
+                // A model-only selector has no script slot to initialise it. Keep the
+                // mesh at the value explicitly requested by [visible] until a script
+                // provides the variable; script-declared variables retain their own state.
+                state.vars.push(*value);
+                var_index.insert(key, id);
+            }
+        }
         // `Axle_Springfactor_*` (varlist_roadvehicle.txt): the engine's spring scale, which
         // air-suspension scripts overwrite with their bellows pressure; a steel-sprung bus
         // never writes it and must not ride on springs of zero
