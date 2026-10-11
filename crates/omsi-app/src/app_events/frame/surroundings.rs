@@ -69,6 +69,12 @@ pub(super) fn lights(cx: LightsCx, dt: f32, daylight: omsi_sim::Daylight, behind
         w.update_light_map_atlas(r, cam.position);
     }
     cx.perf.profile.add(crate::profile_keys::ProfKey::LightsAtlas, __ta.elapsed().as_secs_f64());
+    // the roads' and roofs' built-up snow, its ruts and tracks (omsi_scene::road_snow)
+    if let (Some(r), Some(cam), Some(scene)) = (cx.gfx.renderer.as_ref(), cx.view.camera.as_ref(), cx.gfx.scene.as_mut()) {
+        let (v, p, view) = (omsi_scene::road_snow::vehicles(cx.player.player.as_ref().map(|p| &p.vehicle), cx.traffic.traffic.as_deref()), cx.player.player.as_ref(), &cx.gfx.gfx.sim_view.traffic);
+        omsi_scene::road_snow::frame(r, if *cx.clock.paused { 0.0 } else { dt * crate::app_impl::time_speed(cx.common.settings, cx.net) as f32 }, cx.weather.weather.as_ref(), cam.position, cx.traffic.traffic.as_ref().map(|t| &t.net), &v);
+        omsi_scene::road_snow::show_roofs(r, scene, v.iter().map(|x| x.0), |k| if k == 0 { p.map(|p| (&p.render, &p.trailer_renders[..])) } else { view.car(k - 1).map(|c| (&c.body, &c.trailers[..])) });
+    }
     if let (Some(w), Some(scene), Some(cam)) = (
         cx.world.world.as_ref(),
         cx.gfx.scene.as_mut(),

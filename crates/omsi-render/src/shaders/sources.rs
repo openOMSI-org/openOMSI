@@ -121,6 +121,7 @@ pub(crate) fn scene_shader_text(gl: bool) -> String {
     let src = [
         include_str!("../colour.wgsl"),
         shaders::SCENE,
+        if road_snow_supported_on(gl, omsi_cfg::flags::OMSI_GL_TEXTURE_UNITS.is_set(), array_path()) { include_str!("../road_snow.wgsl") } else { include_str!("../road_snow_off.wgsl") },
         include_str!("../enhanced_common.wgsl"),
         include_str!("../puddle_common.wgsl"),
         include_str!("../beam_shadow_none.wgsl"),

@@ -602,6 +602,8 @@ impl Renderer {
                 lm_atlas: scene.lm_atlas,
                 lm_uniform: scene.lm_uniform,
                 lm_place: std::cell::Cell::new((0.0, 0.0, 0.0)),
+                snow_track: scene.snow_track,
+                snow_track_uniform: scene.snow_track_uniform,
                 fog_lamps_pipeline: fog_lamps.pipeline,
                 fog_lamps_layout: fog_lamps.layout,
                 fog_lamps_buf: fog_lamps.buf,
