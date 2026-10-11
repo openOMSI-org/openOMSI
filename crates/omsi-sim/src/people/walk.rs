@@ -274,7 +274,7 @@ impl PeopleSim {
                     .as_ref()
                     .and_then(|p| {
                         p.end_node(net, &leg)
-                            .and_then(|n| p.next_leg(net, n, leg.lane, pick))
+                            .and_then(|n| p.next_leg(net, n, &leg, pick))
                     })
                     .unwrap_or_else(|| {
                         // a leg that ends in the middle of its path (the point of a stop
@@ -434,8 +434,13 @@ impl PeopleSim {
         pace: f64,
         held: f32,
     ) -> Result<(), &'static str> {
-        if !next.from_end(net) {
+        if !next.from_end(net) && !ped.as_deref().is_some_and(|p| p.is_tap(next.lane, next.a)) {
             return Ok(());
+        }
+        if let Some(p) = ped.as_deref_mut().filter(|p| p.taps.contains_key(&next.lane)) {
+            if !p.crosses_on(net, next) {
+                return Ok(());
+            }
         }
         let lane = &net.lanes[next.lane];
         let t_cross = next.len() as f64 / pace.max(0.5) + 1.0;
@@ -465,9 +470,10 @@ impl PeopleSim {
         // out in front of a car that is about to be there (after 45 s they used to ignore
         // the cars altogether)
         let margin = if held > 45.0 { 0.0 } else if held > 20.0 { 1.0 } else { 2.5 };
-        for x in ped.crossings(net, next.lane) {
+        let crossings = if ped.taps.contains_key(&next.lane) { ped.crossings_on(net, next) } else { ped.crossings(net, next.lane).to_vec() };
+        for x in crossings {
             for (p, v, half) in cars {
-                let rel = *x - *p;
+                let rel = x - *p;
                 let dist = rel.length();
                 if dist > 90.0 {
                     continue;

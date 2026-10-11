@@ -142,6 +142,11 @@ pub struct PedNet {
     /// How many lanes of the traffic network are in (the network only grows: tiles bring
     /// their lanes and the indices stay).
     pub built: usize,
+    pub taps: HashMap<usize, Vec<(f32, usize)>>,
+    pub through: Vec<Vec<(usize, f32)>>,
+    pub bounds: HashMap<usize, (DVec2, DVec2)>,
+    pub along: HashMap<usize, Vec<f32>>,
+    pub tracks: HashMap<usize, Vec<f32>>,
 }
 
 impl PedNet {
@@ -155,6 +160,11 @@ impl PedNet {
             nodes: Vec::new(),
             cells: HashMap::new(),
             built: 0,
+            taps: HashMap::new(),
+            through: Vec::new(),
+            bounds: HashMap::new(),
+            along: HashMap::new(),
+            tracks: HashMap::new(),
         };
         p.extend(net);
         log::info!(
@@ -169,11 +179,14 @@ impl PedNet {
     pub fn extend(&mut self, net: &Network) -> usize {
         let from = self.built.min(net.lanes.len());
         let before = self.ends.len();
+        let mut added = Vec::new();
         for i in from..net.lanes.len() {
             let l = &net.lanes[i];
-            if l.kind == LaneKind::Street && from > 0 {
+            if matches!(l.kind, LaneKind::Street | LaneKind::Rail) && from > 0 {
                 // a new carriageway may cross pavement paths that are in already
                 self.crossings.clear();
+                self.along.clear();
+                self.tracks.clear();
             }
             if l.kind != LaneKind::Sidewalk || l.points.len() < 2 || l.length() < 0.3 {
                 continue;
@@ -186,6 +199,10 @@ impl PedNet {
             self.ends.insert(i, (a, b));
             self.out[a].push((i, true));
             self.out[b].push((i, false));
+            let lo = l.points.iter().fold(DVec2::splat(f64::MAX), |m, p| m.min(p.truncate()));
+            let hi = l.points.iter().fold(DVec2::splat(f64::MIN), |m, p| m.max(p.truncate()));
+            self.bounds.insert(i, (lo, hi));
+            added.push(i);
             let mut seen: Vec<(i32, i32)> = Vec::new();
             for p in &l.points {
                 let c = ((p.x / 50.0).floor() as i32, (p.y / 50.0).floor() as i32);
@@ -196,7 +213,108 @@ impl PedNet {
             }
         }
         self.built = net.lanes.len();
+        self.join_midway(net, &added, from);
         self.ends.len() - before
+    }
+
+    fn lanes_near(&self, p: DVec2) -> Vec<usize> {
+        let (cx, cy) = ((p.x / 50.0).floor() as i32, (p.y / 50.0).floor() as i32);
+        let mut lanes = Vec::new();
+        for dx in -1..=1 {
+            for dy in -1..=1 {
+                lanes.extend_from_slice(self.grid.get(&(cx + dx, cy + dy)).map(|v| v.as_slice()).unwrap_or(&[]));
+            }
+        }
+        lanes.sort_unstable();
+        lanes.dedup();
+        lanes
+    }
+
+    fn join_midway(&mut self, net: &Network, added: &[usize], from: usize) {
+        let mut pairs: Vec<(usize, usize)> = Vec::new();
+        for &i in added {
+            let (a, b) = self.ends[&i];
+            for n in [a, b] {
+                for l in self.lanes_near(self.nodes[n].truncate()) {
+                    pairs.push((l, n));
+                }
+            }
+            if from > 0 {
+                let mut cells: Vec<(i32, i32)> = net.lanes[i].points.iter().map(|p| ((p.x / 50.0).floor() as i32, (p.y / 50.0).floor() as i32)).collect();
+                cells.sort_unstable();
+                cells.dedup();
+                let mut old: Vec<usize> = Vec::new();
+                for (cx, cy) in cells {
+                    let c = DVec2::new((cx as f64 + 0.5) * 50.0, (cy as f64 + 0.5) * 50.0);
+                    old.extend(self.lanes_near(c).into_iter().filter(|&l| l < from));
+                }
+                old.sort_unstable();
+                old.dedup();
+                for l in old {
+                    let (a, b) = self.ends[&l];
+                    pairs.push((i, a));
+                    pairs.push((i, b));
+                }
+            }
+        }
+        for (l, n) in pairs {
+            self.tap(net, l, n);
+        }
+    }
+
+    fn tap(&mut self, net: &Network, l: usize, n: usize) {
+        const JOIN: f64 = 1.2;
+        let Some(&(a, b)) = self.ends.get(&l) else { return };
+        let p = self.nodes[n];
+        let (lo, hi) = self.bounds[&l];
+        if a == n || b == n || p.x < lo.x - JOIN || p.y < lo.y - JOIN || p.x > hi.x + JOIN || p.y > hi.y + JOIN {
+            return;
+        }
+        let lane = &net.lanes[l];
+        let Some((s, _)) = lane.nearest_point(p) else { return };
+        if s < 0.3 || s > lane.length() - 0.3 {
+            return;
+        }
+        let (q, _) = lane.at(s);
+        if (q - p).truncate().length() >= JOIN || (q.z - p.z).abs() >= 2.5 {
+            return;
+        }
+        let taps = self.taps.entry(l).or_default();
+        if taps.iter().any(|&(_, m)| m == n) {
+            return;
+        }
+        taps.push((s, n));
+        taps.sort_by(|x, y| x.0.total_cmp(&y.0));
+        self.through[n].push((l, s));
+    }
+
+    fn stop(&self, net: &Network, lane: usize, from: f32, fwd: bool) -> f32 {
+        let taps = self.taps.get(&lane).map(|t| t.as_slice()).unwrap_or(&[]);
+        if fwd {
+            taps.iter().map(|t| t.0).find(|&s| s > from + 0.05).unwrap_or(net.lanes[lane].length())
+        } else {
+            taps.iter().rev().map(|t| t.0).find(|&s| s < from - 0.05).unwrap_or(0.0)
+        }
+    }
+
+    fn leg_from(&self, net: &Network, lane: usize, a: f32, fwd: bool) -> Leg {
+        Leg { lane, a, b: self.stop(net, lane, a, fwd) }
+    }
+
+    fn together(&self, node: usize) -> Vec<usize> {
+        let mut nodes = vec![node];
+        for &(l, s) in &self.through[node] {
+            for &(at, n) in self.taps.get(&l).map(|t| t.as_slice()).unwrap_or(&[]) {
+                if (at - s).abs() < 0.05 && !nodes.contains(&n) {
+                    nodes.push(n);
+                }
+            }
+        }
+        nodes
+    }
+
+    pub fn is_tap(&self, lane: usize, s: f32) -> bool {
+        self.taps.get(&lane).is_some_and(|t| t.iter().any(|&(at, _)| (at - s).abs() < 0.05))
     }
 
     /// The junction at `p`, a new one when there is none within a metre.
@@ -217,6 +335,7 @@ impl PedNet {
         }
         self.nodes.push(p);
         self.out.push(Vec::new());
+        self.through.push(Vec::new());
         self.cells
             .entry((cx, cy))
             .or_default()
@@ -273,75 +392,76 @@ impl PedNet {
         } else if leg.b > len - 0.05 {
             Some(b)
         } else {
-            None
+            self.taps.get(&leg.lane)?.iter().find(|t| (t.0 - leg.b).abs() < 0.05).map(|t| t.1)
         }
     }
 
     /// A leg leaving junction `node`, not back along `came` (unless it is a dead end).
-    pub fn next_leg(&self, net: &Network, node: usize, came: usize, pick: u64) -> Option<Leg> {
-        let back = self.ends.get(&came).copied();
+    pub fn next_leg(&self, net: &Network, node: usize, came: &Leg, pick: u64) -> Option<Leg> {
+        let back = self.ends.get(&came.lane).copied();
+        let ahead = if came.len() < 0.05 { came.b > 0.05 } else { came.b > came.a };
         let twin = |l: usize| -> bool {
-            l == came
-                || matches!((self.ends.get(&l), back), (Some(&(a, b)), Some((c, d))) if a == d && b == c && (net.lanes[l].length() - net.lanes[came].length()).abs() < 1.0)
+            matches!((self.ends.get(&l), back), (Some(&(a, b)), Some((c, d))) if a == d && b == c && (net.lanes[l].length() - net.lanes[came.lane].length()).abs() < 1.0)
         };
-        let list: Vec<(usize, bool)> = self
-            .out
-            .get(node)?
-            .iter()
-            .copied()
-            .filter(|(l, _)| !twin(*l))
-            .collect();
+        let reverse = |l: usize, a: f32, fwd: bool| l == came.lane && fwd != ahead && (a - came.b).abs() < 0.05;
+        let mut list: Vec<Leg> = Vec::new();
+        self.out.get(node)?;
+        for n in self.together(node) {
+            for &(l, fwd) in &self.out[n] {
+                let a = if fwd { 0.0 } else { net.lanes[l].length() };
+                if (l != came.lane && twin(l)) || (l == came.lane && (!self.taps.contains_key(&l) || reverse(l, a, fwd))) {
+                    continue;
+                }
+                list.push(self.leg_from(net, l, a, fwd));
+            }
+            for &(l, s) in &self.through[n] {
+                for fwd in [true, false] {
+                    let leg = self.leg_from(net, l, s, fwd);
+                    if !reverse(l, s, fwd) && !list.iter().any(|o| o.lane == leg.lane && (o.b - leg.b).abs() < 0.05 && (o.b > o.a) == fwd) {
+                        list.push(leg);
+                    }
+                }
+            }
+        }
         // the way on rather than back: a path leaving the junction within 110° of the way
         // the walker came (there usually is one - a pavement goes on past a side street),
         // else any. Picked from all, a stroller would turn round at every corner and walk
         // back the way they came, which looked like a change of mind for no reason.
         let heading_in = {
-            let l = &net.lanes[came];
-            let (a, _) = back.unwrap_or((usize::MAX, usize::MAX));
-            // arriving at `node` along `came`: forwards if its end is the node
-            if a == node {
-                wrap_heading(l.start_heading() as f64 + 180.0)
-            } else {
-                l.end_heading() as f64
-            }
+            let h = net.lanes[came.lane].at(came.b).1 as f64;
+            if ahead { h } else { wrap_heading(h + 180.0) }
         };
-        let leaving = |&(l, fwd): &(usize, bool)| -> f64 {
-            let lane = &net.lanes[l];
-            if fwd {
-                lane.start_heading() as f64
-            } else {
-                wrap_heading(lane.end_heading() as f64 + 180.0)
-            }
-        };
-        let onward: Vec<(usize, bool)> = list
+        let onward: Vec<Leg> = list
             .iter()
             .copied()
-            .filter(|o| angle_between(heading_in, leaving(o)) <= 110.0)
+            .filter(|o| angle_between(heading_in, o.at(net, 0.0).1) <= 110.0)
             .collect();
         let list = if onward.is_empty() { list } else { onward };
-        let (lane, fwd) = if list.is_empty() {
+        if list.is_empty() {
             // a dead end: turn round
             let (a, _) = back?;
-            (came, a == node)
-        } else {
-            list[(pick as usize) % list.len()]
-        };
-        let len = net.lanes[lane].length();
-        Some(if fwd {
-            Leg {
-                lane,
-                a: 0.0,
-                b: len,
-            }
-        } else {
-            Leg {
-                lane,
-                a: len,
-                b: 0.0,
-            }
-        })
+            let fwd = a == node;
+            let start = if fwd { 0.0 } else { net.lanes[came.lane].length() };
+            return Some(self.leg_from(net, came.lane, start, fwd));
+        }
+        Some(list[(pick as usize) % list.len()])
     }
 
+    pub fn crosses_on(&mut self, net: &Network, leg: &Leg) -> bool {
+        let (lo, hi) = (leg.a.min(leg.b) - 0.5, leg.a.max(leg.b) + 0.5);
+        !self.crossings_on(net, leg).is_empty() || self.tracks[&leg.lane].iter().any(|s| (lo..=hi).contains(s))
+    }
+
+    pub fn crossings_on(&mut self, net: &Network, leg: &Leg) -> Vec<DVec2> {
+        self.crossings(net, leg.lane);
+        let (lo, hi) = (leg.a.min(leg.b) - 0.5, leg.a.max(leg.b) + 0.5);
+        self.crossings[&leg.lane]
+            .iter()
+            .zip(&self.along[&leg.lane])
+            .filter(|(_, s)| (lo..=hi).contains(*s))
+            .map(|(x, _)| *x)
+            .collect()
+    }
 
     /// Where pavement lane `lane` crosses a carriageway.
     pub fn crossings(&mut self, net: &Network, lane: usize) -> &[DVec2] {
@@ -354,17 +474,19 @@ impl PedNet {
                     .get(&((p.x / 50.0).floor() as i32, (p.y / 50.0).floor() as i32))
                 {
                     for &i in list {
-                        if net.lanes[i].kind == LaneKind::Street && !cand.contains(&i) {
+                        if matches!(net.lanes[i].kind, LaneKind::Street | LaneKind::Rail) && !cand.contains(&i) {
                             cand.push(i);
                         }
                     }
                 }
             }
             let mut out = Vec::new();
+            let mut along = Vec::new();
+            let mut tracks = Vec::new();
             let mut crossed = Vec::new();
             for i in cand {
                 let o = &net.lanes[i];
-                for w in l.points.windows(2) {
+                for (k, w) in l.points.windows(2).enumerate() {
                     for v in o.points.windows(2) {
                         if (w[0].z - v[0].z).abs() > 3.0 {
                             continue;
@@ -375,17 +497,25 @@ impl PedNet {
                             v[0].truncate(),
                             v[1].truncate(),
                         ) {
+                            let s = l.dist[k] + (x - w[0].truncate()).length() as f32;
+                            if o.kind == LaneKind::Rail {
+                                tracks.push(s);
+                                continue;
+                            }
                             if !crossed.contains(&i) {
                                 crossed.push(i);
                             }
                             if !out.iter().any(|q: &DVec2| (*q - x).length() < 1.5) {
                                 out.push(x);
+                                along.push(s);
                             }
                         }
                     }
                 }
             }
             self.crossings.insert(lane, out);
+            self.along.insert(lane, along);
+            self.tracks.insert(lane, tracks);
             self.crossed.insert(lane, crossed);
         }
         &self.crossings[&lane]

@@ -171,9 +171,80 @@ fn pavement_corners_are_joined_and_routed() {
             },
         )
         .unwrap();
-    let turn = ped.next_leg(&net, n, 1, 7).unwrap();
+    let turn = ped.next_leg(&net, n, &Leg { lane: 1, a: 0.0, b: net.lanes[1].length() }, 7).unwrap();
     assert_eq!(turn.lane, 1);
-    assert!(turn.a > turn.b);
+    assert!(turn.a > turn.b);    let mut net = Network::default();
+    net.lanes.push(lane(vec![DVec3::new(0.0, 0.0, 0.0), DVec3::new(0.0, 20.0, 0.0)], LaneKind::Sidewalk));
+    net.lanes.push(lane(vec![DVec3::new(0.0, 0.0, 0.0), DVec3::new(0.0, -20.0, 0.0)], LaneKind::Sidewalk));
+    net.lanes.push(lane(vec![DVec3::new(0.0, 0.0, 0.0), DVec3::new(20.0, 0.0, 0.0)], LaneKind::Sidewalk));
+    net.link(1.5);
+    let ped = PedNet::build(&net);
+    let off = Leg { lane: 0, a: 0.0, b: 0.0 };
+    let n = ped.end_node(&net, &off).unwrap();
+    let ways: Vec<usize> = (0..4).map(|pick| ped.next_leg(&net, n, &off, pick).unwrap().lane).collect();
+    assert!(ways.contains(&1), "{ways:?}");
+}
+
+#[test]
+fn a_roundabout_pavement_is_left_where_paths_meet_it_midway() {
+    let ring: Vec<DVec3> = (0..=48)
+        .map(|k| {
+            let a = k as f64 / 48.0 * std::f64::consts::TAU;
+            DVec3::new(8.0 * a.cos(), 8.0 * a.sin(), 0.0)
+        })
+        .collect();
+    let mut net = Network::default();
+    net.lanes.push(lane(ring, LaneKind::Sidewalk));
+    net.lanes.push(lane(vec![DVec3::new(0.0, 8.0, 0.0), DVec3::new(0.0, 30.0, 0.0)], LaneKind::Sidewalk));
+    net.lanes.push(lane(vec![DVec3::new(-8.0, 0.0, 0.0), DVec3::new(-30.0, 0.0, 0.0)], LaneKind::Sidewalk));
+    net.link(1.5);
+    let ped = PedNet::build(&net);
+    let walk = |mut leg: Leg, steps: u64| {
+        let mut lanes = Vec::new();
+        for pick in 0..steps {
+            let n = ped.end_node(&net, &leg).unwrap();
+            leg = ped.next_leg(&net, n, &leg, pick).unwrap();
+            assert!(leg.len() > 0.05, "{leg:?}");
+            lanes.push(leg.lane);
+        }
+        lanes
+    };
+    let round = walk(Leg { lane: 0, a: 0.0, b: net.lanes[0].length() }, 4);
+    assert!(round.iter().any(|&l| l != 0), "{round:?}");
+    let len = net.lanes[1].length();
+    let inward = walk(Leg { lane: 1, a: len, b: 0.0 }, 12);
+    assert!(inward.contains(&0) && inward.contains(&2), "{inward:?}");
+    let seam = ped.ends[&0].0;
+    for pick in 0..4 {
+        let on = ped.next_leg(&net, seam, &Leg { lane: 0, a: 6.0, b: 0.0 }, pick).unwrap();
+        assert!(on.lane == 0 && on.b < on.a, "{on:?}");
+    }
+}
+
+#[test]
+fn a_crossing_with_an_island_is_crossed_one_carriageway_at_a_time() {
+    let mut net = Network::default();
+    net.lanes.push(lane(vec![DVec3::new(0.0, 0.0, 0.0), DVec3::new(0.0, 16.0, 0.0)], LaneKind::Sidewalk));
+    net.lanes.push(lane(vec![DVec3::new(-60.0, 4.0, 0.0), DVec3::new(60.0, 4.0, 0.0)], LaneKind::Street));
+    net.lanes.push(lane(vec![DVec3::new(60.0, 12.0, 0.0), DVec3::new(-60.0, 12.0, 0.0)], LaneKind::Street));
+    net.lanes.push(lane(vec![DVec3::new(0.6, 8.0, 0.0), DVec3::new(10.0, 8.0, 0.0)], LaneKind::Sidewalk));
+    net.link(1.5);
+    let mut ped = PedNet::build(&net);
+    let h = PeopleSim::new(Path::new("/nonexistent"), 0);
+    let near = [(DVec2::new(-15.0, 4.0), DVec2::new(10.0, 0.0), 2.0)];
+    let far = [(DVec2::new(15.0, 12.0), DVec2::new(-10.0, 0.0), 2.0)];
+    let kerb = ped.ends[&0].0;
+    let over = ped.next_leg(&net, kerb, &Leg { lane: 0, a: 1.0, b: 0.0 }, 0).unwrap();
+    assert!((over.b - 8.0).abs() < 0.1, "{over:?}");
+    assert!(h.may_cross(Some(&mut ped), &net, &over, None, &near, 1.2, 0.0).is_err());
+    assert!(h.may_cross(Some(&mut ped), &net, &over, None, &far, 1.2, 0.0).is_ok());
+    let island = ped.end_node(&net, &over).unwrap();
+    let on = (0..6)
+        .map(|pick| ped.next_leg(&net, island, &over, pick).unwrap())
+        .find(|l| l.lane == 0 && l.b > l.a)
+        .unwrap();
+    assert!(h.may_cross(Some(&mut ped), &net, &on, None, &far, 1.2, 0.0).is_err());
+    assert!(h.may_cross(Some(&mut ped), &net, &on, None, &near, 1.2, 0.0).is_ok());
 }
 
 #[test]
