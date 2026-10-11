@@ -4,6 +4,12 @@ Every push to `main` is released as `MAJOR.MINOR.COMMIT` (see
 [docs/VERSIONING.md](docs/VERSIONING.md)); the downloads are on the
 [Releases](https://github.com/openOMSI-Project/openOMSI/releases) page.
 
+## 0.2.31 - 2026-10-11
+
+### New
+- **Multiplayer: interact with bus of another Players!**
+- now you can press buttons (e.g. stop request, doors) from the bus of your fellow players
+
 ## 0.2.30 - 2026-10-11
 
 ### Changes
