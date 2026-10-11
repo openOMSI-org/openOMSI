@@ -362,6 +362,12 @@ impl Career {
         ])
     }
 
+    pub fn trip_people(&self, run: u64) -> Option<(i32, i32)> {
+        let t = self.trip.as_ref().filter(|t| t.run == run)?;
+        let n = t.next?;
+        Some((n.stepped_in - t.from.stepped_in, n.ticket_requests - t.from.ticket_requests))
+    }
+
     /// A timetable stop the bus arrived at `arrival` seconds after its time and left
     /// `departure` seconds after its departure (the original, both
     /// rounded to whole seconds).
@@ -539,7 +545,10 @@ mod tests {
         // the same run goes on
         c.trip_driven(1);
         assert_eq!(c.trip_ended(2), None, "another run's end");
+        assert_eq!(c.trip_people(1), None);
         assert_eq!(c.trip_ended(1), Some([50.0, 75.0, 50.0]));
+        assert_eq!(c.trip_people(1), Some((4, 2)));
+        assert_eq!(c.trip_people(2), None);
         assert_eq!(c.trip_ended(1), None, "told once");
         c.trip_driven(3);
         c.no_trip();

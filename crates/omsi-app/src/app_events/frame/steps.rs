@@ -313,21 +313,22 @@ pub(crate) fn duty_step(
         let career = &*career;
         crate::journey::note(journey, d, due, served, p.vehicle.odometer_km(), root, || crate::journey::head(career, &world.global.name, &p.vehicle, clock));
     }
+    // the trip over, rated before the next one starts its ratings afresh (none for a
+    // trip the bus was never driven on: a duty taken at its last stop)
+    let rated = ended.as_ref().and_then(|f| career.trip_ended(f.run));
     // (the trip's summary, for the game to show)
     if let (Some(f), Some(j)) = (ended.as_ref(), journey.as_mut()) {
-        j.trip_ended(f.index);
+        let (passengers, tickets_asked) = career.trip_people(f.run).unwrap_or_default();
+        let rating = rated.map(|[driving, comfort, tickets]| crate::journey::TripRating { driving, comfort, tickets, passengers, tickets_asked });
+        j.trip_ended(f.index, rating);
     }
     if let Some(events) = plugin_events {
         use omsi_plugin::InfoValue::{Num, Text};
         if let Some((count, due_at, at)) = d.take_skipped() {
             crate::plugins::queue_event(events, "stops_skipped", vec![Num(count as f64), Num(due_at as f64), Num(at as f64)]);
         }
-        // the trip over, rated before the next one starts its ratings afresh (none for a
-        // trip the bus was never driven on: a duty taken at its last stop)
-        if let Some(f) = ended {
-            if let Some([driving, comfort, tickets]) = career.trip_ended(f.run) {
-                crate::plugins::queue_event(events, "trip_done", vec![Num(f.index as f64 + 1.0), Text(f.how.as_str().into()), Num(driving), Num(comfort), Num(tickets)]);
-            }
+        if let (Some(f), Some([driving, comfort, tickets])) = (ended, rated) {
+            crate::plugins::queue_event(events, "trip_done", vec![Num(f.index as f64 + 1.0), Text(f.how.as_str().into()), Num(driving), Num(comfort), Num(tickets)]);
         }
     }
     career.trip_driven(d.trip_run());
