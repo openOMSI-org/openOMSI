@@ -50,6 +50,10 @@ pub(crate) struct NetState {
     /// chat line.
     pub(crate) lan: Option<omsi_net::LanSession>,
     pub(crate) remotes: lan::LanGame,
+    /// Switches of our bus that other players hold down (`remote_switches`).
+    pub(crate) remote_holds: Vec<crate::app_impl::RemoteHold>,
+    /// The switch of another player's bus that we hold down.
+    pub(crate) remote_held: Option<crate::app_impl::HeldRemote>,
 }
 
 /// What the game talks to besides itself: the OMSI and Lua plugins, Discord, Steam, the

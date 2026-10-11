@@ -927,6 +927,17 @@ fn general_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, c
     );
     c.y += help_height + 3.0;
     toggle_setting(ui, s, dirty, c.row(), "Voice chat through GreenTeaSpeak (multiplayer)", "voice_chat");
+    // (other players on foot working the switches of our bus)
+    toggle_setting(ui, s, dirty, c.row(), "Other players may work my bus (multiplayer)", "bus_control");
+    let help_height = ui.paragraph(
+        "Another player out of the seat, at your bus, can then press its buttons (stop request, doors ...). Switch it off and nobody but you works your bus.",
+        Vec2::new(c.inner.x + 12.0, c.y - 5.0),
+        c.inner.w - 24.0,
+        11.5,
+        omsi_ui::Weight::Regular,
+        TEXT_FAINT,
+    );
+    c.y += help_height + 3.0;
     let help_height = ui.paragraph(
         "Players near you are heard from where they stand, when GreenTeaSpeak runs with the openOMSI plugin and the server names a voice server.",
         Vec2::new(c.inner.x + 12.0, c.y - 5.0),

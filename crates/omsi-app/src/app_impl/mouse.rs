@@ -474,7 +474,13 @@ impl App {
         }
         // in another player's bus: a passenger, whose clicks work nothing of it (they
         // went to the driver's game, which worked its switches for them)
+        // (its switches are worked by telling the game that drives it which one went down)
         if self.view == "foot" && self.net.inside_remote.is_some() {
+            if pressed {
+                self.remote_press();
+            } else {
+                self.remote_release();
+            }
             return;
         }
         // a page (`[htmltexture]`) on a scenery object: pressed and released like the bus's own
@@ -483,6 +489,15 @@ impl App {
         }
         if self.scenery_object_click_event(pressed) {
             return;
+        }
+        // on foot, at another player's bus: its switches, worked by its own game
+        if self.view == "foot" && self.net.lan.is_some() {
+            if !pressed && self.remote_release() {
+                return;
+            }
+            if pressed && self.remote_press() {
+                return;
+            }
         }
         // on foot: the own bus's switches, doors and flaps from inside it or standing by it
         if self.view == "foot" && !self.foot_reaches_bus() {
@@ -698,7 +713,7 @@ mod look_tests {
 
 /// A part of a vehicle (its origin, heading in degrees and `[boundingbox]`) is in reach of
 /// a person standing at `eye`: within 3 m of the box's half length round its centre.
-fn part_in_reach(eye: glam::DVec3, at: glam::DVec3, heading: f64, bb: Option<[f32; 6]>) -> bool {
+pub(super) fn part_in_reach(eye: glam::DVec3, at: glam::DVec3, heading: f64, bb: Option<[f32; 6]>) -> bool {
     let bb = bb.unwrap_or([2.5, 12.0, 3.0, 0.0, 0.0, 1.5]);
     let h = heading.to_radians();
     let (fwd, right) = (glam::DVec2::new(h.sin(), h.cos()), glam::DVec2::new(h.cos(), -h.sin()));

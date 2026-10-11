@@ -776,6 +776,8 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             is_admin: false,
             lan: None,
             remotes: Default::default(),
+            remote_holds: Vec::new(),
+            remote_held: None,
         },
         service_msg: clock_note.map(|m| (m, 10.0)),
         settings,

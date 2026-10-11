@@ -7,10 +7,13 @@ mod doors;
 mod ibis;
 mod mouse;
 mod picking;
+mod remote;
 
 pub(crate) use cameras::*;
 pub(crate) use doors::*;
 pub(crate) use picking::*;
+pub(crate) use remote::pick_event_in;
+use remote::{control_hidden_in, nearest_hits_in};
 pub(crate) use mouse::AutoDrag;
 use mouse::repair_roller_blind;
 

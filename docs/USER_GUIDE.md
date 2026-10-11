@@ -881,6 +881,13 @@ its own scripts' results (the ones its parts move smoothly by stay smooth); a co
 other files than the sender's (another version of the bus) takes nothing. `OMSI_NO_VAR_SYNC=1`
 switches it off, `OMSI_DEBUG_VAR_SYNC=<variable>` logs what arrives for one variable.
 
+**Working the switches of another player's bus.** On foot, aboard another player's bus or
+within reach of it, the left mouse button presses its buttons and switches: your game tells the
+game that owns the bus which control you pressed, held or let go of, and that game works it as
+if its driver had clicked. The owner can switch it off: Settings -> General -> *Other
+players may work my bus* (on by default). The owner's game also takes it only from a player
+who is out of the seat and at the bus, and only for the bus's own `[mouseevent]` switches.
+
 **The host's mods.** What the host's session uses that is not in the OMSI 2 folder itself
 (its map, bus, objects, splines, AI vehicles and people from the content folder or archives,
 also a content folder inside the OMSI 2 folder) is listed with a SHA-256 per file and served
