@@ -51,26 +51,18 @@ impl App {
         for (from, text) in cmds {
             self.lan_command(from, &text);
         }
+        self.tick_remote_switches();
         self.tick_voice(dt);
     }
 
     /// A command another player's game sent ours (`LanSession::command`).
     pub(crate) fn lan_command(&mut self, from: u32, text: &str) {
-        let Some(lan) = self.net.lan.as_ref() else { return };
-        let my_id = lan.my_id;
-        if let Some(ev) = text.strip_prefix("trigger ") {
-            // a switch worked by a passenger of ours: only by one who is in our bus
-            let aboard = lan.peers().find(|p| p.pose.id == from).and_then(|p| p.pose.walker).and_then(|w| w.aboard).map(|a| a.owner == my_id).unwrap_or(false);
-            if !aboard {
-                log::info!("LAN: player {from} asked for switch {ev} of our bus from outside it: ignored");
-                return;
-            }
-            if let Some(p) = self.player.as_mut() {
-                log::info!("LAN: player {from} works {ev} in our bus");
-                p.vehicle.trigger(ev.trim());
-            }
+        // a switch of our bus worked by another player: one aboard, or standing by it
+        // (`remote_switches`)
+        if self.lan_switch_command(from, text) {
             return;
         }
+        let Some(lan) = self.net.lan.as_ref() else { return };
         // the voice server of the session (`voice`): asked of the host, told by it
         if text == "voice?" {
             if lan.role == omsi_net::Role::Host {

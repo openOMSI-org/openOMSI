@@ -1841,64 +1841,13 @@ impl Player {
     /// Seen from outside: the body of the bus (a wall, a window) is hit before the control
     /// mesh `i` (of coupled part `trailer`, or of the bus itself), so it cannot be reached.
     fn control_hidden(&self, origin: DVec3, dir: Vec3, trailer: Option<usize>, i: usize) -> bool {
-        let (ty, position, xf) = match trailer {
-            None => (&self.vehicle.ty, self.vehicle.position, self.vehicle.mesh_local_transform(i)),
-            Some(ti) => {
-                let t = &self.vehicle.trailers[ti];
-                (&t.ty, t.position, t.mesh_local_transform(i))
-            }
-        };
-        let Some(&(c, r)) = ty.mesh_bounds.get(i) else {
-            return false;
-        };
-        let dir = dir.normalize_or_zero();
-        let o = (origin - position).as_vec3();
-        let scale = xf
-            .x_axis
-            .truncate()
-            .length()
-            .max(xf.y_axis.truncate().length())
-            .max(xf.z_axis.truncate().length());
-        let along = (xf.transform_point3(c) - o).dot(dir);
-        let nearest = self.nearest_hits(origin, dir).0;
-        nearest < along - r * scale - 0.1
+        control_hidden_in(&self.vehicle, origin, dir, trailer, i)
     }
 
     /// The nearest hit of a ray on the bus, and the nearest on a mesh with a mouse event
     /// (infinite: none).
     fn nearest_hits(&self, origin: DVec3, dir: Vec3) -> (f32, f32) {
-        let mut nearest = f32::INFINITY;
-        let mut nearest_control = f32::INFINITY;
-        let vehicle = &self.vehicle;
-        let o = (origin - vehicle.position).as_vec3();
-        for (i, mesh) in vehicle.ty.meshes.iter().enumerate() {
-            if !vehicle.mesh_props[i].visible { continue; }
-            let transform = vehicle.mesh_local_transform(i);
-            if !ray_may_hit(&vehicle.ty, i, &transform, o, dir, 0.0) { continue; }
-            if let Some(t) = omsi_geometry::ray_mesh(o, dir, &mesh.data, &transform) {
-                if t > 0.02 {
-                    if t < nearest { nearest = t; }
-                    if vehicle.ty.model.meshes[mesh.def_index].mouse_event.is_some()
-                        && t < nearest_control { nearest_control = t; }
-                }
-            }
-        }
-        for trailer in &vehicle.trailers {
-            let o = (origin - trailer.position).as_vec3();
-            for (i, mesh) in trailer.ty.meshes.iter().enumerate() {
-                if !trailer.mesh_props[i].visible { continue; }
-                let transform = trailer.mesh_local_transform(i);
-                if !ray_may_hit(&trailer.ty, i, &transform, o, dir, 0.0) { continue; }
-                if let Some(t) = omsi_geometry::ray_mesh(o, dir, &mesh.data, &transform) {
-                    if t > 0.02 {
-                        if t < nearest { nearest = t; }
-                        if trailer.ty.model.meshes[mesh.def_index].mouse_event.is_some()
-                            && t < nearest_control { nearest_control = t; }
-                    }
-                }
-            }
-        }
-        (nearest, nearest_control)
+        nearest_hits_in(&self.vehicle, origin, dir)
     }
 
     /// The part of the bus under a ray, switch or not: `(name, operable)`. Without this the
@@ -2379,6 +2328,9 @@ mod roller_blind_tests {
     }
 }
 
+mod remote;
+pub(crate) use remote::pick_event_in;
+
 /// See `Player::auto_drag`.
 #[derive(Debug, Clone)]
 pub(crate) struct AutoDrag {
@@ -2772,6 +2724,69 @@ pub(crate) fn sync_vehicle_transforms(
     }
     vehicle.trailers = trailers;
 }
+
+/// Seen from outside: the body of a bus (a wall, a window) is hit before the control mesh
+/// `i` (of coupled part `trailer`, or of the bus itself), so it cannot be reached.
+fn control_hidden_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3, dir: Vec3, trailer: Option<usize>, i: usize) -> bool {
+    let (ty, position, xf) = match trailer {
+        None => (&vehicle.ty, vehicle.position, vehicle.mesh_local_transform(i)),
+        Some(ti) => {
+            let t = &vehicle.trailers[ti];
+            (&t.ty, t.position, t.mesh_local_transform(i))
+        }
+    };
+    let Some(&(c, r)) = ty.mesh_bounds.get(i) else {
+        return false;
+    };
+    let dir = dir.normalize_or_zero();
+    let o = (origin - position).as_vec3();
+    let scale = xf
+        .x_axis
+        .truncate()
+        .length()
+        .max(xf.y_axis.truncate().length())
+        .max(xf.z_axis.truncate().length());
+    let along = (xf.transform_point3(c) - o).dot(dir);
+    let nearest = nearest_hits_in(vehicle, origin, dir).0;
+    nearest < along - r * scale - 0.1
+}
+
+/// The nearest hit of a ray on the bus, and the nearest on a mesh with a mouse event
+/// (infinite: none).
+fn nearest_hits_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3, dir: Vec3) -> (f32, f32) {
+    let mut nearest = f32::INFINITY;
+    let mut nearest_control = f32::INFINITY;
+    let o = (origin - vehicle.position).as_vec3();
+    for (i, mesh) in vehicle.ty.meshes.iter().enumerate() {
+        if !vehicle.mesh_props[i].visible { continue; }
+        let transform = vehicle.mesh_local_transform(i);
+        if !ray_may_hit(&vehicle.ty, i, &transform, o, dir, 0.0) { continue; }
+        if let Some(t) = omsi_geometry::ray_mesh(o, dir, &mesh.data, &transform) {
+            if t > 0.02 {
+                if t < nearest { nearest = t; }
+                if vehicle.ty.model.meshes[mesh.def_index].mouse_event.is_some()
+                    && t < nearest_control { nearest_control = t; }
+            }
+        }
+    }
+    for trailer in &vehicle.trailers {
+        let o = (origin - trailer.position).as_vec3();
+        for (i, mesh) in trailer.ty.meshes.iter().enumerate() {
+            if !trailer.mesh_props[i].visible { continue; }
+            let transform = trailer.mesh_local_transform(i);
+            if !ray_may_hit(&trailer.ty, i, &transform, o, dir, 0.0) { continue; }
+            if let Some(t) = omsi_geometry::ray_mesh(o, dir, &mesh.data, &transform) {
+                if t > 0.02 {
+                    if t < nearest { nearest = t; }
+                    if trailer.ty.model.meshes[mesh.def_index].mouse_event.is_some()
+                        && t < nearest_control { nearest_control = t; }
+                }
+            }
+        }
+    }
+    (nearest, nearest_control)
+}
+
 
 pub(crate) fn pick_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3, dir: Vec3, spread: f32) -> Option<usize> {
     let o = (origin - vehicle.position).as_vec3();

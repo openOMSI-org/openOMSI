@@ -14,6 +14,8 @@ mod menu_lists;
 mod menus;
 mod mouse;
 mod mouse_grab;
+mod remote_switches;
+pub(crate) use remote_switches::{HeldRemote, RemoteHold};
 mod saves;
 mod shell_link;
 mod vehicles;
