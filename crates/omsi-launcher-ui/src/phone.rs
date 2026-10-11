@@ -292,7 +292,7 @@ fn play(l: &mut Launcher, body: Rect) {
         }
     }
     let free = l.state.choice.free || l.state.choice.line.is_none();
-    let label = if l.state.joined_server.is_some() { "Join and drive" } else if free { "Drive" } else { "Start the duty" };
+    let label = if l.state.choice.lan_mode == "join" { "Join and drive" } else if free { "Drive" } else { "Start the duty" };
     if l.ui.button("p-start", start, label, Some("play_arrow"), ButtonKind::Primary) {
         super::drive::start_from_phone(l);
     }

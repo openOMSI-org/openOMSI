@@ -532,7 +532,8 @@ fn foot(l: &mut Launcher, f: Rect, tab: usize) {
     let pad = 16.0;
     let by = f.y + (f.h - GO_H) * 0.5;
     // the buttons, from the right
-    let go_w = 212.0;
+    let joining = tab == 2 && l.state.choice.lan_mode == "join";
+    let go_w = if joining && f.w >= 600.0 { 280.0 } else { 212.0 };
     let go = Rect::new(f.right() - pad - go_w, by, go_w, GO_H);
     let mut left_of = go.x;
     if tab < 2 {
@@ -541,14 +542,16 @@ fn foot(l: &mut Launcher, f: Rect, tab: usize) {
             l.drive.tab = tab + 1;
         }
     } else {
-        let label = if running > 0 && l.state.second_armed.map(|t| t.elapsed().as_secs() < 6).unwrap_or(false) {
-            "Start another game"
-        } else if (l.state.choice.free || l.state.choice.line.is_none()) && l.state.joined_server.is_none() {
-            "Drive"
+        let (label, icon) = if running > 0 && l.state.second_armed.map(|t| t.elapsed().as_secs() < 6).unwrap_or(false) {
+            ("Start another game".to_string(), "play_arrow")
+        } else if joining {
+            (join_label(l, go), "exit_to_app")
+        } else if l.state.choice.free || l.state.choice.line.is_none() {
+            ("Drive".to_string(), "play_arrow")
         } else {
-            "Start the duty"
+            ("Start the duty".to_string(), "play_arrow")
         };
-        if l.ui.button("launch", go, label, Some("play_arrow"), ButtonKind::Primary) {
+        if l.ui.button("launch", go, &label, Some(icon), ButtonKind::Primary) {
             start(l);
         }
     }
@@ -756,6 +759,14 @@ fn joined_server_name(l: &Launcher) -> Option<String> {
     let entry = l.state.servers.iter().find(|s| &s.address == a);
     let info = l.state.server_info.get(a).and_then(|x| x.1.as_ref().ok());
     Some(entry.map(|e| e.name.clone()).filter(|n| !n.is_empty()).or_else(|| info.map(|i| i.name.clone())).unwrap_or_else(|| a.clone()))
+}
+
+fn join_label(l: &Launcher, go: Rect) -> String {
+    let name = joined_server_name(l).or_else(|| l.state.server_info.get(&l.state.choice.lan_addr).and_then(|x| x.1.as_ref().ok()).map(|i| i.name.clone())).filter(|n| !n.is_empty());
+    match name {
+        Some(name) => l.ui.fonts.fit(&omsi_ui::tr("Join {name}").replacen("{name}", &name, 1), 14.5, Weight::Bold, go.w - 56.0),
+        None => "Join and drive".to_string(),
+    }
 }
 
 /// After the season changed: a chosen weather that does not fit it goes, and the duty is saved.
