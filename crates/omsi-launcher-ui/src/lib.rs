@@ -11,6 +11,7 @@
 //! the renderer's start, the bus preview, the city map, machine translation ...) the
 //! launcher asks through `host::Host`, which the program installs before opening it.
 
+mod clock;
 pub mod drive;
 mod device;
 pub mod host;

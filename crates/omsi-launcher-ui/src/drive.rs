@@ -447,8 +447,7 @@ fn duty_panel(l: &mut Launcher, body: Rect) {
         // the day's tours)
         if !runs {
             if let Some(n) = next {
-                l.state.choice.date = n;
-                l.state.load_lines();
+                l.state.set_date(n);
             }
         }
         l.state.choice.tour = Some(num);
@@ -805,16 +804,11 @@ fn step_time(l: &mut Launcher, r: Rect) {
     y += 22.0;
     let mut t = l.state.choice.time;
     if l.ui.time_field("time", Rect::new(r.x, y, col, 44.0), &mut t) {
-        l.state.choice.time = t;
-        l.state.touched();
+        l.state.pick_time(t);
     }
     let mut d = l.state.choice.date.clone();
     if l.ui.date_field("date", Rect::new(r.x + col + 12.0, y, col, 44.0), &mut d) {
-        l.state.choice.date = d;
-        l.state.choice.season = "auto".into();
-        l.state.choice.own_date = None;
-        l.state.load_lines();
-        l.state.touched();
+        l.state.pick_date(d);
     }
     y += 54.0;
     // the computer's clock in one click - not while the launcher follows it already

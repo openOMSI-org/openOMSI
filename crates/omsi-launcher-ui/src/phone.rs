@@ -831,8 +831,7 @@ fn tour_sheet(l: &mut Launcher, r: Rect) -> bool {
         // a tour of another day moves the date to the next day it runs, as the desktop does
         if !runs {
             if let Some(n) = next {
-                l.state.choice.date = n;
-                l.state.load_lines();
+                l.state.set_date(n);
             }
         }
         l.state.choice.tour = Some(num);
@@ -847,17 +846,12 @@ fn time_sheet(l: &mut Launcher, r: Rect) -> bool {
     l.ui.text_in("Start", Rect::new(left.x, left.y, left.w, 18.0), 12.0, Weight::Medium, TEXT_DIM, Align::Left);
     let mut t = l.state.choice.time;
     if l.ui.time_field("p-time", Rect::new(left.x, left.y + 22.0, left.w, 48.0), &mut t) {
-        l.state.choice.time = t;
-        l.state.touched();
+        l.state.pick_time(t);
     }
     l.ui.text_in("Date", Rect::new(left.x, left.y + 84.0, left.w, 18.0), 12.0, Weight::Medium, TEXT_DIM, Align::Left);
     let mut d = l.state.choice.date.clone();
     if l.ui.date_field("p-date", Rect::new(left.x, left.y + 106.0, left.w, 48.0), &mut d) {
-        l.state.choice.date = d;
-        l.state.choice.season = "auto".into();
-        l.state.choice.own_date = None;
-        l.state.load_lines();
-        l.state.touched();
+        l.state.pick_date(d);
     }
     let done = l.ui.button("p-time-done", Rect::new(left.x, left.bottom() - 52.0, left.w, 52.0), "Done", Some("check"), ButtonKind::Primary);
     // Weather has a phone/tablet layout of its own; keep the same choices and editors as
