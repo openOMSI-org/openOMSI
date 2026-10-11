@@ -554,3 +554,49 @@ fn a_bus_queueing_for_its_own_stop_does_not_go_round_the_queue() {
         assert!(c.passing.is_none(), "the bus went round the queue for its own stop (s {:.1}, {:?})", c.state.s, c.bus.as_ref().map(|b| (b.phase, b.stops.len())));
     }
 }
+
+fn player_before_red(f: &Fixture, short: f64) -> (TrafficSim, u64, PlayerBox) {
+    let lanes = vec![street(0.0, 0.0, 0.0, 200.0), street(-3.5, 400.0, 180.0, 200.0), street(0.0, 200.0, 0.0, 200.0), street(-3.5, 200.0, 180.0, 200.0)];
+    let mut net = net_of(lanes, &[]);
+    net.lanes[2].traffic_light = Some((0, 0));
+    let mut t = traffic(f, net);
+    t.lights.push(TrafficLightController::new(vec![vec![(0, 1000.0)]], 1000.0));
+    let bus: PlayerBox = (DVec3::new(0.0, 200.0 - short - 6.0, 0.0), 0.0, 6.0, 1.25, 0.0);
+    let me = add_car(&mut t, f, 0, 80.0, 0xa1a, Some(10.0));
+    (t, me, bus)
+}
+
+#[test]
+fn a_car_does_not_go_round_the_players_bus_waiting_at_a_red_light() {
+    let f = Fixture::new();
+    let (mut t, me, bus) = player_before_red(&f, 30.0);
+    for _ in 0..(60.0 / DT) as usize {
+        t.tick(DT, Some(bus));
+        let c = car(&t, me).expect("on the road");
+        assert!(c.passing.is_none() && c.state.lane == 0, "it went round the bus waiting at the red light (lane {}, s {:.1})", c.state.lane, c.state.s);
+    }
+    t.lights[0].lights[0] = vec![(6, 1000.0)];
+    let mut went_round = None;
+    for k in 0..(60.0 / DT) as usize {
+        t.tick(DT, Some(bus));
+        if went_round.is_none() && car(&t, me).expect("on the road").passing.is_some() {
+            went_round = Some(k as f32 * DT);
+        }
+    }
+    let after = went_round.expect("it does not go round the bus still standing at the green light");
+    assert!(after > 9.0, "it went round the bus {after:.1} s after the light turned green");
+}
+
+#[test]
+fn a_car_goes_round_the_players_bus_standing_well_before_a_red_light() {
+    let f = Fixture::new();
+    let (mut t, me, bus) = player_before_red(&f, 60.0);
+    let mut went_round = false;
+    for _ in 0..(60.0 / DT) as usize {
+        t.tick(DT, Some(bus));
+        let c = car(&t, me).expect("on the road");
+        went_round |= c.passing.is_some();
+        assert_eq!(c.state.lane, 0, "it drove through the red light");
+    }
+    assert!(went_round, "it does not go round the bus standing 60 m before the light");
+}

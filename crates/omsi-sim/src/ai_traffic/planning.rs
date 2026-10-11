@@ -461,7 +461,7 @@ impl TrafficSim {
                     || (o.stopped > 25.0 && !o.held && self.cars[i].stopped > 6.0)
                     || (o.stopped > 3.0 && self.standing_queue(j).1)
             }
-            Some(_) => player_standing > 10.0,
+            Some(_) => player_standing.min(self.cars[i].since_player_at_light) > 10.0,
             None => parked_ahead,
         }
     }

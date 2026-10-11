@@ -88,6 +88,7 @@ pub struct AiCar {
     pub exit_wait: bool,
     /// Stopped by a red light this frame.
     pub light_hold: bool,
+    pub since_player_at_light: f32,
     /// Junction lanes this car has claimed to drive through (`TPathInfo::reservePaths`).
     pub reserved: Vec<usize>,
     /// The light (controller, lamp) the driver decided to pass on yellow.
@@ -635,6 +636,7 @@ impl TrafficSim {
             yielding: false,
             exit_wait: false,
             light_hold: false,
+            since_player_at_light: f32::MAX,
             reserved: Vec::new(),
             amber: None,
             amber_start: false,

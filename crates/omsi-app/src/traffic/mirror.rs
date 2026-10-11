@@ -89,6 +89,7 @@ impl Traffic {
             yielding: false,
             exit_wait: false,
             light_hold: false,
+            since_player_at_light: f32::MAX,
             reserved: Vec::new(),
             amber: None,
             amber_start: false,

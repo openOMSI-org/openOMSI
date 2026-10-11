@@ -15,6 +15,7 @@ pub const ROUTE_WAIT_MAX: f32 = 40.0;
 /// A car edging out round something standing keeps to `PULL_OUT_ACCEL` until its front is
 /// this far past the obstacle's rear (m).
 pub const CREEP_PAST: f32 = 2.0;
+pub const PLAYER_AT_LIGHT: f32 = 55.0;
 
 /// Where every car is (see `Traffic::occupancy`): per lane, (car, distance along the lane,
 /// lateral place, out on that lane passing something).
@@ -714,6 +715,8 @@ impl TrafficSim {
         // (an emergency vehicle crosses against it on the movement kept for it)
         let light = self.emergency_light(i, &way, light);
         self.cars[i].light_hold = light.is_some();
+        let player_at_light = light.zip(lead).is_some_and(|(at, (l, who))| who == Some(usize::MAX) && at - self.cars[i].state.front - l.gap < PLAYER_AT_LIGHT);
+        self.cars[i].since_player_at_light = if player_at_light { 0.0 } else { self.cars[i].since_player_at_light + dt };
         self.cars[i].light_at = light;
         if light.is_some() && self.cars[i].state.speed < 0.5 {
             self.held_at_red += 1;
