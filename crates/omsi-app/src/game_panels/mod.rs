@@ -136,10 +136,11 @@ impl crate::App {
             }
         }
         // A completed trip's summary waits until the bus stops: the panel takes the mouse.
-        let speed = self.player.as_ref().map(|p| p.vehicle.physics.velocity_kmh());
+        let speed = self.player.as_ref().map_or(f32::INFINITY, |p| p.vehicle.physics.velocity_kmh());
+        let still = if self.paused { 0.0 } else { dt };
         if let Some(j) = self.session.journey.as_mut() {
             if self.settings.trip_summary {
-                if let Some(s) = speed.and_then(|speed| j.take_summary_when_stopped(speed)) {
+                if let Some(s) = j.take_summary_when_stopped(speed, still) {
                     self.menus.game_panels.trip = Some(trip_summary::TripPanel::new(s));
                 }
             } else {

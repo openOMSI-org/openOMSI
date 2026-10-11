@@ -7,6 +7,9 @@ use crate::career::{EARLY_DEPARTURE, LATE_ARRIVAL};
 use crate::schedule::{PlannedTrip, PlayerDuty};
 use std::path::PathBuf;
 
+/// The time to open the doors before the summary takes the mouse (s).
+const SUMMARY_DELAY: f32 = 5.0;
+
 /// One stop of a trip in the log.
 struct Row {
     trip: usize,
@@ -173,6 +176,7 @@ pub(crate) struct Journey {
     /// The summary of a trip that has just ended, until the game shows it, and the last.
     ready: Option<TripSummary>,
     last: Option<TripSummary>,
+    still: f32,
 }
 
 impl Journey {
@@ -192,7 +196,7 @@ impl Journey {
         }
         let line = format!("Line {}, tour {}", key.0.trim(), key.1.trim());
         let head = format!("{}\n{line}", head.trim_end());
-        Journey { key, head, trips, rows, dir, path: None, ready: None, last: None }
+        Journey { key, head, trips, rows, dir, path: None, ready: None, last: None, still: 0.0 }
     }
 
     /// The odometer (km) at the stop the bus has just come to or left, if it has none yet.
@@ -239,8 +243,9 @@ impl Journey {
 
     /// Keep the automatic summary pending while driving: opening it takes the mouse
     /// away from the bus. Use the timetable's standstill threshold (0.1 m/s).
-    pub(crate) fn take_summary_when_stopped(&mut self, speed_kmh: f32) -> Option<TripSummary> {
-        if speed_kmh.abs() < 0.36 {
+    pub(crate) fn take_summary_when_stopped(&mut self, speed_kmh: f32, dt: f32) -> Option<TripSummary> {
+        self.still = if speed_kmh.abs() < 0.36 { self.still + dt } else { 0.0 };
+        if self.still >= SUMMARY_DELAY {
             self.take_summary()
         } else {
             None
@@ -422,10 +427,10 @@ mod tests {
         let expected = j.last_summary().expect("the completed trip is already recorded");
 
         for speed in [20.0, -20.0, 1.0, -1.0, 0.36, -0.36] {
-            assert!(j.take_summary_when_stopped(speed).is_none(), "still moving at {speed} km/h");
+            assert!(j.take_summary_when_stopped(speed, 10.0).is_none(), "still moving at {speed} km/h");
         }
-        assert_eq!(j.take_summary_when_stopped(0.0), Some(expected.clone()));
-        assert!(j.take_summary_when_stopped(0.0).is_none(), "closing it must not reopen it");
+        assert_eq!(j.take_summary_when_stopped(0.0, 10.0), Some(expected.clone()));
+        assert!(j.take_summary_when_stopped(0.0, 10.0).is_none(), "closing it must not reopen it");
         assert_eq!(j.last_summary(), Some(expected), "statistics remain available in the quick menu");
     }
 
@@ -436,7 +441,8 @@ mod tests {
             let mut j = Journey::new(("5".into(), "1".into(), 0), &trips, "Test", PathBuf::new());
             j.arrived((0, 1), 0.0);
             j.trip_ended(0, None);
-            assert!(j.take_summary_when_stopped(speed).is_some(), "stopped at {speed} km/h");
+            assert!(j.take_summary_when_stopped(speed, 0.0).is_none(), "the doors first");
+            assert!(j.take_summary_when_stopped(speed, 5.0).is_some(), "stopped at {speed} km/h");
         }
     }
 
@@ -470,6 +476,22 @@ mod tests {
         assert_eq!(unrated.stars(), 5);
         assert_eq!(unrated.mood(), None);
         assert!(!unrated.text().contains("Passengers:"));
+    }
+
+    #[test]
+    fn automatic_summary_leaves_time_to_open_the_doors() {
+        let trips = [trip(&[("First", 0.0), ("Last", 60.0)])];
+        let mut j = Journey::new(("5".into(), "1".into(), 0), &trips, "Test", PathBuf::new());
+        j.arrived((0, 1), 0.0);
+        j.trip_ended(0, None);
+        for _ in 0..299 {
+            assert!(j.take_summary_when_stopped(0.0, 1.0 / 60.0).is_none(), "the doors are still opening");
+        }
+        assert!(j.take_summary_when_stopped(20.0, 1.0 / 60.0).is_none(), "moved off before it showed");
+        for _ in 0..299 {
+            assert!(j.take_summary_when_stopped(0.0, 1.0 / 60.0).is_none(), "the wait starts again at the next stop");
+        }
+        assert!(j.take_summary_when_stopped(0.0, 2.0 / 60.0).is_some(), "five seconds at a standstill");
     }
 
     /// A trip driven stop by stop: the first stop tells its departure only, the last its
