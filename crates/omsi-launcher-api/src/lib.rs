@@ -140,6 +140,37 @@ fn metar_airports() -> Answer {
     Ok(json!(core::metar_airports(&root)))
 }
 
+fn custom_weather(weather: String) -> Answer {
+    let c = core::custom_weather(&weather).map_err(err)?;
+    Ok(json!({
+        "visibility_m": c.visibility_m, "brightness": c.brightness, "wind_dir": c.wind_dir, "wind_speed": c.wind_speed, "temp_c": c.temp_c, "humidity": c.humidity, "pressure": c.pressure,
+        "cloud_cover": c.cloud_cover, "cloud_base_m": c.cloud_base_m, "precip": c.precip, "precip_intensity": c.precip_intensity, "road_wetness": c.road_wetness, "snow_cover": c.snow_cover, "snow_on_road": c.snow_on_road,
+    }))
+}
+
+fn custom_weather_text(w: Value) -> Answer {
+    let d = core::CustomWeather::default();
+    let n = |k: &str, or: f32| w.get(k).and_then(Value::as_f64).map_or(or, |x| x as f32);
+    let on = |k: &str| w.get(k).and_then(Value::as_bool).unwrap_or(false);
+    let c = core::CustomWeather {
+        visibility_m: n("visibility_m", d.visibility_m),
+        brightness: n("brightness", d.brightness),
+        wind_dir: n("wind_dir", d.wind_dir),
+        wind_speed: n("wind_speed", d.wind_speed),
+        temp_c: n("temp_c", d.temp_c),
+        humidity: n("humidity", d.humidity),
+        pressure: n("pressure", d.pressure),
+        cloud_cover: n("cloud_cover", d.cloud_cover),
+        cloud_base_m: n("cloud_base_m", d.cloud_base_m),
+        precip: n("precip", d.precip as f32).round() as i32,
+        precip_intensity: n("precip_intensity", d.precip_intensity),
+        road_wetness: n("road_wetness", d.road_wetness),
+        snow_cover: on("snow_cover"),
+        snow_on_road: on("snow_on_road"),
+    };
+    Ok(json!(c.encode()))
+}
+
 fn lines(map: String, date: String) -> Answer {
     to_json(core::list_lines(&map, &date).map_err(err)?)
 }
@@ -530,6 +561,8 @@ pub fn call(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "weather" => weather(),
         "nearest_airport" => nearest_airport(arg::<String>(args, "map")?),
         "metar_airports" => metar_airports(),
+        "custom_weather" => custom_weather(arg::<String>(args, "weather")?),
+        "custom_weather_text" => custom_weather_text(arg::<Value>(args, "custom")?),
         "lines" => lines(arg::<String>(args, "map")?, arg::<String>(args, "date")?),
         "ibis" => ibis(arg::<String>(args, "bus")?, arg::<String>(args, "hof")?, arg::<String>(args, "line")?),
         "default_hof" => default_hof(arg::<Value>(args, "map")?, arg::<Value>(args, "bus")?, arg::<String>(args, "date")?, arg::<Option<String>>(args, "line")?),
@@ -677,5 +710,22 @@ mod game_end_tests {
         stopped.stopping = Some(1);
         assert!(game_ended(&stopped).is_none());
         std::fs::remove_dir_all(&dir).ok();
+    }
+}
+
+#[cfg(test)]
+mod custom_weather_tests {
+    use super::*;
+
+    #[test]
+    fn a_weather_edited_on_the_page_keeps_every_value() {
+        let mut w = custom_weather("custom:vis=800;t=-5;pt=2;pi=200;cb=900;p=990".into()).unwrap();
+        w["wind_speed"] = json!(12.5);
+        w["precip"] = json!(1);
+        w["snow_on_road"] = json!(true);
+        let text = custom_weather_text(w).unwrap();
+        let back = core::CustomWeather::parse(text.as_str().unwrap()).unwrap();
+        let want = core::CustomWeather { visibility_m: 800.0, temp_c: -5.0, precip: 1, precip_intensity: 200.0, cloud_base_m: 900.0, pressure: 990.0, wind_speed: 12.5, snow_on_road: true, ..Default::default() };
+        assert_eq!(back, want);
     }
 }

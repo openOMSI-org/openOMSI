@@ -321,6 +321,8 @@ table.table { width: 100%; border-collapse: collapse; }
 @keyframes fade { from { opacity: 0; } }
 .dialog { background: var(--surface);  border-radius: 10px; box-shadow: var(--shadow); width: min(560px, 100%); max-height: 100%; display: flex; flex-direction: column; }
 .dialog.wide { width: min(1120px, 100%); height: min(760px, 100%); }
+.dialog.weather { width: min(760px, 100%); }
+@media (max-width: 800px) { .dialog.weather .grid-2 { grid-template-columns: minmax(0, 1fr); } }
 .dialog-head { display: flex; align-items: center; gap: 12px; padding: 18px 20px 10px; }
 .dialog-head h2 { font-size: 17px; flex: 1; }
 .dialog-body { padding: 18px 20px; overflow: auto; flex: 1; min-height: 0; }

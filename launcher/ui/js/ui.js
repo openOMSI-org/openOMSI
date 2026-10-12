@@ -88,7 +88,10 @@ export function Select({ value, options, onChange, disabled, raw, placeholder })
       }
       return;
     }
-    if (e.key === 'Escape' || e.key === 'Tab') setOpen(false);
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      setOpen(false);
+    } else if (e.key === 'Tab') setOpen(false);
     else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       move(hi + (e.key === 'ArrowDown' ? 1 : -1));
@@ -173,14 +176,14 @@ export function Tag({ kind = '', children }) {
 }
 
 /** A dialog over the page; Escape and a click beside it close it. */
-export function Dialog({ title, onClose, children, footer, wide }) {
+export function Dialog({ title, onClose, children, footer, wide, class: cls = '' }) {
   useEffect(() => {
     const k = (e) => e.key === 'Escape' && onClose?.();
     window.addEventListener('keydown', k);
     return () => window.removeEventListener('keydown', k);
   }, [onClose]);
   return html`<div class="overlay" onMouseDown=${(e) => e.target === e.currentTarget && onClose?.()}>
-    <div class=${'dialog' + (wide ? ' wide' : '')} role="dialog">
+    <div class=${'dialog' + (wide ? ' wide' : '') + (cls ? ' ' + cls : '')} role="dialog">
       <div class="dialog-head"><h2>${t(title)}</h2>${onClose && html`<${Button} kind="ghost" icon="x" title="Close" onClick=${onClose} />`}</div>
       <div class="dialog-body">${children}</div>
       ${footer && html`<div class="dialog-foot">${footer}</div>`}

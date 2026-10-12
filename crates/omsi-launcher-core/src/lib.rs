@@ -1162,6 +1162,8 @@ pub struct WeatherInfo {
 pub use omsi_content::weather_choice::metar_airports;
 mod airports;
 pub use airports::nearest_airport;
+mod custom_weather;
+pub use custom_weather::{custom_weather, CustomWeather};
 
 pub fn list_weather() -> Result<Vec<WeatherInfo>> {
     root()?;
