@@ -48,7 +48,10 @@ impl App {
     /// The player's bus as the frame shows it (`FRAME_AFTER`): between its last two ticks,
     /// into the scene and under the camera, then back where the simulation has it.
     pub(super) fn frame_player_view(&mut self, dt: f32) {
-        if !self.frame_player_input(dt) {
+        // a walker stepping into or out of the bus hears its cab by degrees
+        let walker = self.foot_sound_amount(dt);
+        omsi_audio::soundset::set_cab_amount(walker);
+        if self.player.is_none() || self.renderer.is_none() || self.scene.is_none() {
             return;
         }
         let between = match self.player.as_ref() {

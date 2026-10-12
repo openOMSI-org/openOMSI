@@ -4,17 +4,6 @@
 use super::*;
 
 impl App {
-    /// The on-screen wheel and pedals, the cab's sound for a walker: false when there is no
-    /// bus to drive or nothing to draw it with.
-    pub(super) fn frame_player_input(&mut self, dt: f32) -> bool {
-        // the on-screen wheel and pedals (a phone)
-        self.touch_frame(dt);
-        // a walker stepping into or out of the bus hears its cab by degrees
-        let walker = self.foot_sound_amount(dt);
-        omsi_audio::soundset::set_cab_amount(walker);
-        !(self.player.is_none() || self.renderer.is_none() || self.scene.is_none())
-    }
-
     /// The cursor's aim into the cab.
     pub(super) fn frame_player_hover(&mut self) {
         let __th = Instant::now();

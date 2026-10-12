@@ -118,3 +118,14 @@ fn window_stages_touch_only_what_they_declare() {
     }
     assert!(wrong.is_empty(), "stages reach groups they do not declare (app_events/frame/stages.rs):\n{}", wrong.join("\n"));
 }
+
+#[test]
+fn the_on_screen_wheel_and_pedals_reach_the_bus_before_its_ticks() {
+    use crate::app_events::{WindowStage, FRAME_BEFORE};
+    assert!(FRAME_BEFORE.contains(&WindowStage::PadActions));
+    let arms = omsi_srcscan::match_arms(&src("app_events/frame/stages.rs"), "run_stage", "stage");
+    let arm = arms.get("PadActions").expect("no run_stage arm for PadActions");
+    let pads = arm.find("frame_pad_actions(").expect("PadActions does not set the controllers' axes");
+    let touch = arm.find("touch_frame(").expect("PadActions does not take the on-screen controls");
+    assert!(pads < touch, "the controllers' axes overwrite the on-screen controls before the ticks");
+}
