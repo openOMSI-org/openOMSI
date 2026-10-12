@@ -119,6 +119,9 @@ pub(crate) fn click(app: &mut crate::App, id: &str) {
         "career" => app.open_list(crate::game_lists::ListKind::Drivers),
         _ => {}
     }
+    if app.menus.chooser.is_some() && app.menus.game_menu.is_none() {
+        app.open_game_menu();
+    }
 }
 
 #[cfg(test)]
@@ -133,5 +136,19 @@ mod tests {
         }
         let ids: std::collections::HashSet<_> = TILES.iter().map(|t| t.0).collect();
         assert_eq!(ids.len(), 12);
+    }
+
+    #[test]
+    fn a_tile_that_opens_a_list_opens_the_game_menu_under_it() {
+        let args = <crate::cli::Args as clap::Parser>::parse_from(["openomsi"]);
+        let mut app = crate::assemble_app(args, Default::default());
+        for tile in ["time", "weather", "duty", "career"] {
+            toggle(&mut app);
+            click(&mut app, tile);
+            assert!(app.menus.chooser.is_some(), "{tile}: no list");
+            assert!(app.menus.game_menu.is_some(), "{tile}: the list gets no input");
+            app.close_list();
+            app.close_game_menu();
+        }
     }
 }
