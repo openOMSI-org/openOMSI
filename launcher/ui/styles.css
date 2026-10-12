@@ -333,6 +333,7 @@ table.table { width: 100%; border-collapse: collapse; }
 
 .drive { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
 .drive .side { position: sticky; top: 0; display: flex; flex-direction: column; gap: 16px; }
+.drive-cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
 
 .pick { display: flex; gap: 16px; align-items: center; }
 .pick .pic { width: 168px; height: 94px; flex: none; }
@@ -372,7 +373,7 @@ table.table { width: 100%; border-collapse: collapse; }
 .picker .left .list { overflow: auto; padding: 8px; flex: 1; }
 .picker .right { display: flex; flex-direction: column; min-height: 0; overflow: auto; }
 .viewer { position: relative; height: 340px; background: #1a1a1a; flex: none; overflow: hidden; touch-action: none; }
-.viewer.in-card { height: 250px; border-radius: var(--radius-sm); }
+.viewer.in-card { width: 100%; height: auto; aspect-ratio: 2 / 1; min-height: 250px; max-height: 40vh; border-radius: var(--radius-sm); }
 .viewer .state.corner { inset: auto 12px 12px auto; }
 .routemap { position: relative; border-radius: var(--radius-sm); background: #0e0e0e; overflow: hidden; touch-action: none; cursor: grab; }
 .routemap canvas { width: 100%; height: 100%; display: block; }
@@ -409,6 +410,9 @@ table.table { width: 100%; border-collapse: collapse; }
 
 .splash { height: 100%; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px; color: var(--muted); }
 
+@media (min-width: 2400px) {
+  .drive-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (max-width: 1180px) {
   .drive { grid-template-columns: minmax(0, 1fr) 300px; }
   .settings-grid { grid-template-columns: 1fr; }

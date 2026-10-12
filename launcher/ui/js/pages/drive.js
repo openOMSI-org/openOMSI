@@ -36,13 +36,17 @@ export function DrivePage() {
     <${PageHead} title="Drive" text="Choose where and what you drive, then start." />
     ${s.errors.maps && html`<${Notice} kind="danger">${s.errors.maps}</${Notice}>`}
     <div class="drive">
-      <div class="stack">
-        <${MapCard} onPick=${() => setPicker('map')} />
-        <${BusCard} onPick=${() => setPicker('bus')} preview=${picker !== 'bus'} />
-        <${DutyCard} />
-        <div class="grid-2" style="gap:16px">
-          <${TimeCard} />
-          <${ConditionsCard} />
+      <div class="drive-cols">
+        <div class="stack">
+          <${MapCard} onPick=${() => setPicker('map')} />
+          <${BusCard} onPick=${() => setPicker('bus')} preview=${picker !== 'bus'} />
+        </div>
+        <div class="stack">
+          <${DutyCard} />
+          <div class="grid-2" style="gap:16px">
+            <${TimeCard} />
+            <${ConditionsCard} />
+          </div>
         </div>
       </div>
       <div class="side">
