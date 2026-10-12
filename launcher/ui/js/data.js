@@ -63,6 +63,14 @@ export async function loadContent() {
   loadProfiles();
 }
 
+export const weatherOfItsOwn = (w) => /^(cycle$|metar:|custom:)/i.test(w || '');
+
+export const weatherName = (w, list) =>
+  /^metar:/i.test(w || '') ? `${t('Current weather')}${w.length > 6 ? ` (${w.slice(6)})` : ''}`
+  : /^cycle$/i.test(w || '') ? t('Weather cycle')
+  : /^custom:/i.test(w || '') ? t('Custom weather')
+  : list?.find((x) => x.file === w)?.name || t('Natural weather');
+
 /** A remembered map or bus that is not installed any more gives way to the first one. */
 function fixChoice() {
   const c = { ...S.choice };
@@ -75,7 +83,7 @@ function fixChoice() {
     c.paint = '';
     c.number = '';
   }
-  if (S.weather && c.weather && !S.weather.some((w) => w.file === c.weather)) c.weather = '';
+  if (S.weather && c.weather && !weatherOfItsOwn(c.weather) && !S.weather.some((w) => w.file === c.weather)) c.weather = '';
   set({ choice: c });
 }
 

@@ -10,7 +10,7 @@ import { Icon } from '../icons.js';
 import { Spinner, Toggle, Slider } from '../ui.js';
 import { BusPreview } from '../preview.js';
 import { RouteMap } from '../routemap.js';
-import { choose, curMap, curBus, curLine, curTour, pickedTrip, realTime, realDate, start } from '../data.js';
+import { choose, curMap, curBus, curLine, curTour, pickedTrip, realTime, realDate, start, weatherName, weatherOfItsOwn } from '../data.js';
 import { hms, mapPicture, tripAt, depotRun, pickTrip, setSeason, localNow, SEASONS, PHASES } from '../pages/drive.js';
 import { MultiplayerPage } from '../pages/multiplayer.js';
 import { ProfilePage } from '../pages/profile.js';
@@ -77,7 +77,6 @@ function MobileDrive() {
   const picked = pickedTrip();
   const trip = c.free ? null : picked != null ? trips.find((x) => x.index === picked) : trips[tripAt(tour || { trips: [] }, c.time * 60)];
   const ready = m && v && (c.free || (line && tour));
-  const weather = s.weather?.find((x) => x.file === c.weather);
   const go = async (extra) => {
     setBusy(true);
     await start(extra);
@@ -120,7 +119,7 @@ function MobileDrive() {
       </div>
       <div class="m-group">
         ${row('time', 'clock', 'Time and date', `${hhmm(c.time)} - ${c.date}`, rt(c))}
-        ${row('weather', 'cloud', 'Weather', weather?.name || t('Natural weather'))}
+        ${row('weather', 'cloud', 'Weather', weatherName(c.weather, s.weather))}
       </div>
       <div class="m-group m-pad">
         <${Slider} label="Cars around" value=${c.traffic} min=${0} max=${120} step=${1} onChange=${(traffic) => choose({ traffic })} format=${(x) => (x ? String(Math.round(x)) : t('None'))} />
@@ -275,6 +274,7 @@ function WeatherSheet({ close }) {
   const s = useStore();
   return html`<div>
     ${pick(!s.choice.weather, () => (choose({ weather: '' }), close()), html`<span class="m-pick-text"><b>${t('Natural weather')}</b><small>${t('Develops by itself through the day and the season')}</small></span>`)}
+    ${weatherOfItsOwn(s.choice.weather) && pick(true, close, html`<span class="m-pick-text"><b>${weatherName(s.choice.weather)}</b></span>`)}
     ${(s.weather || []).map((w) => pick(s.choice.weather === w.file, () => (choose({ weather: w.file }), close()), html`<span class="m-pick-text"><b>${w.name}</b><small>${Math.round(w.temp)} °C - ${w.precip} - ${w.fog_m >= 20000 ? t('clear air') : `${Math.round(w.fog_m)} m`}</small></span>`))}
   </div>`;
 }
