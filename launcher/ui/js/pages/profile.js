@@ -65,7 +65,8 @@ export function ProfilePage() {
     ['ticket', `${p.rating_tickets.toFixed(0)} %`, 'ticket selling'],
     ['gamepad', p.sessions.length, 'runs'],
   ] : [];
-  const into = p ? Math.max(0, Math.min(1, p.xp / Math.max(1, p.next_level_xp))) : 0;
+  const from = p ? (p.level - 1) ** 2 * 250 : 0;
+  const into = p ? Math.max(0, Math.min(1, (p.xp - from) / Math.max(1, p.next_level_xp - from))) : 0;
   return html`
     <${PageHead} title="Profile" text="The driver whose personnel file the game writes: hours, kilometres, punctuality, tickets." />
     <div class="stack">
