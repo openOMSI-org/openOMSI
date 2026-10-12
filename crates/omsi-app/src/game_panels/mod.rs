@@ -202,6 +202,14 @@ impl crate::App {
         self.menus.game_panels.focused()
     }
 
+    pub(crate) fn game_panel_touch(&mut self, x: f32, y: f32) -> bool {
+        if !self.game_panels_mouse() {
+            return false;
+        }
+        self.input.cursor = (x, y);
+        self.game_panel_click(true)
+    }
+
     /// The left button while the panels have the mouse: a press on a button goes to it, a
     /// slider takes the place pressed and follows the cursor, a field starts taking the keys.
     /// True when the click was the panels' (the bus does not get it). A press beside the

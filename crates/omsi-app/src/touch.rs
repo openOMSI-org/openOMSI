@@ -120,6 +120,7 @@ enum Role {
     /// #940), where it then stays - out of the middle of the screen, which it covered on a
     /// phone (#1138).
     Navigator,
+    Panel,
 }
 
 struct Touched {
@@ -558,6 +559,8 @@ impl App {
                 let d = p - t.wheel_c;
                 Role::Wheel(d.y.atan2(d.x), d.length())
             }
+        } else if self.game_panel_touch(p.x, p.y) {
+            Role::Panel
         } else if self.menus.navigator.as_ref().is_some_and(|n| n.over_panel(p.x, p.y)) {
             Role::Navigator
         } else {
@@ -642,6 +645,10 @@ impl App {
                 if self.input.touch.fingers[k].moved {
                     self.on_cursor(p.x, p.y);
                 }
+            }
+            Role::Panel => {
+                self.input.cursor = (p.x, p.y);
+                self.game_panel_drag(p.x);
             }
             Role::Cockpit | Role::Mouse => {
                 if let (Role::Mouse, Some(_)) = (role, self.input.touch.pinch) {
@@ -728,6 +735,9 @@ impl App {
             Role::Cockpit | Role::Mouse => {
                 self.on_cursor(p.x, p.y);
                 self.left_button(event_loop, false);
+            }
+            Role::Panel => {
+                self.game_panel_click(false);
             }
             Role::Navigator => {
                 if f.moved {
