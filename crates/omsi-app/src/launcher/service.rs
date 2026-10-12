@@ -197,6 +197,10 @@ fn serve(rx: std::sync::mpsc::Receiver<Value>, reply: Reply) {
                 });
             }
             "pads" => pads.ask(req, reply.clone()),
+            "key_actions" => {
+                let out = reply.clone();
+                std::thread::spawn(move || out(&id, json!({ "ok": true }), omsi_launcher_ui::pages::key_actions(&req).to_string().as_bytes()));
+            }
             "quit" => break,
             other => send(&id, json!({ "ok": false, "error": format!("unknown command {other}") }), &[]),
         }

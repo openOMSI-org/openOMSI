@@ -626,3 +626,13 @@ html.phone, html.phone body { font-size: 15px; -webkit-tap-highlight-color: tran
 .m-dial button { height: 44px; min-width: 56px; border-radius: 10px; background: var(--surface-3); font-weight: 600; cursor: pointer; }
 .m-dial button:disabled { opacity: 0.4; }
 .m-list > * { flex: none; }
+
+.key-picker-search { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 10px; }
+.key-picker-list { max-height: min(520px, 58vh); overflow: auto; }
+.key-option { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.key-option .list-item { min-width: 0; text-align: left; background: none; color: inherit; font: inherit; }
+.key-option .list-item:hover { background: var(--surface-2); }
+.key-option .list-item .title, .key-option .list-item .sub { overflow-wrap: anywhere; }
+.key-option > .btn { flex: none; }
+.key-buses { margin: 0 12px 8px; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--surface-2); font-size: 12.5px; color: var(--muted); display: grid; gap: 4px; max-height: 136px; overflow: auto; }
+.cfg-path { display: flex; align-items: center; gap: 6px; margin-top: 12px; min-width: 0; }

@@ -1,13 +1,14 @@
 // Controls: the keys of OMSI's keyboard.cfg (the bus's own and the game's), changed by
 // pressing the new one, and a live look at the game controllers connected.
 
-import { html, useState, useEffect } from '../../vendor/preact-htm.js';
+import { html, useState, useEffect, useMemo } from '../../vendor/preact-htm.js';
 import { S, useStore, set, toast } from '../store.js';
 import { t } from '../i18n.js';
 import { call } from '../api.js';
+import { Icon } from '../icons.js';
 import { saveSettings, cached } from '../data.js';
 import { Button, Card, Search, Segmented, Tabs, Notice, Empty, Spinner, Dialog, useConfirm, PageHead } from '../ui.js';
-import { KNOWN, actionText } from './actions.js';
+import { KNOWN, H_GEARS, actionText, useActionNames, useKeyCatalog } from './actions.js';
 import { Controllers } from './controllers.js';
 
 // --- keys ---------------------------------------------------------------------------------
@@ -104,7 +105,7 @@ const STOCK_SPLIT = STOCK.findIndex((b) => b.action === 'throttle');
 const stockBindings = () => ({ game: STOCK.slice(0, STOCK_SPLIT).map((b) => ({ ...b })), vehicles: STOCK.slice(STOCK_SPLIT).map((b) => ({ ...b })) });
 
 /** The game's own actions, which the bus's section has no use for. */
-const GAME_ONLY = /^(vr_|chat_|view_|door_|doors_all$|gear_(up|down)$|sim_pause$|open_menu$|screenshot$|photo_mode$|quicksave$|toggel_|exit$|voice_radio$)/;
+const GAME_ONLY = /^(vr_|chat_|view_|door_[1-4]$|doors_all$|gear_(up|down)$|sim_pause$|open_menu$|screenshot$|photo_mode$|quicksave$|toggel_|exit$|voice_radio$)/;
 
 const SECTIONS = [
   ['vehicles', 'Driving & the bus', 'The bus\'s own keys'],
@@ -148,6 +149,7 @@ function Keyboard() {
     cached('keys', 'keybindings_get').then((v) => (v && !v.error ? setKb(v) : setLoadError(v?.error || 'no key bindings')));
   };
   useEffect(load, []);
+  useActionNames(kb ? [...(kb.vehicles || []), ...(kb.game || [])].map((b) => b.action) : []);
 
   /** Keep the lists (the whole object, as `keybindings_get` gave it) and take back what the
    * file says now. A key changed is a key the player wants: a ready-made driving layout
@@ -155,7 +157,9 @@ function Keyboard() {
   async function persist(next, vr, keepLayout = false) {
     setKb(next);
     try {
-      setKb(await call('keybindings_save', { bindings: next }));
+      const saved = await call('keybindings_save', { bindings: next });
+      setKb(saved);
+      set({ cache: { ...S.cache, keys: saved } });
       setSaveError('');
       const preset = S.settings?.drive_keys ?? 'simple';
       if (!vr && !keepLayout && S.settings && preset !== 'omsi') {
@@ -189,7 +193,7 @@ function Keyboard() {
   for (const b of list) if (b.scan_code) counts[`${b.scan_code}:${chordOf(b.modifier)}`] = (counts[`${b.scan_code}:${chordOf(b.modifier)}`] || 0) + 1;
   let shown = list
     .map((b, i) => ({ b, i, label: actionText(b.action), key: keyName(b.scan_code, b.modifier) }))
-    .filter(({ b, label, key }) => !q || label.toLowerCase().includes(q) || b.action.toLowerCase().includes(q) || key.toLowerCase().includes(q));
+    .filter(({ b, label, key }) => !q || label.toLowerCase().includes(q) || b.action.toLowerCase().includes(q) || key.toLowerCase().includes(q) || (KNOWN[b.action] || '').toLowerCase().includes(q));
   if (sec === 'game') shown = [...shown.filter((x) => x.label.startsWith('VR:')), ...shown.filter((x) => !x.label.startsWith('VR:'))];
 
   // a name the list does not have (a bus's own trigger a mod's readme gives a key): added as
@@ -300,6 +304,7 @@ function Keyboard() {
     ${picker &&
     html`<${ActionPicker}
       bindings=${kb}
+      playing=${!!s.poll?.instances?.length}
       onClose=${() => setPicker(false)}
       onPick=${(action) => {
         setPicker(false);
@@ -366,38 +371,98 @@ function CaptureDialog({ label, action, current, list, skip, onKey, onClose }) {
   </${Dialog}>`;
 }
 
-/** "Add binding": every action this page knows for the bus's section - OMSI 2's own, the
- * ones the list has and the ones the launcher has a name for. */
-function ActionPicker({ bindings, onClose, onPick }) {
-  const [q, setQ] = useState('');
+const PICKER_ROWS = 150;
+const busWords = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+
+function pickerOptions(cat, bindings) {
+  const game = new Set([...STOCK.slice(0, STOCK_SPLIT), ...(bindings.game || [])].map((b) => b.action.toLowerCase()));
   const seen = new Map();
-  const add = (a) => {
-    if (a && !GAME_ONLY.test(a) && !seen.has(a.toLowerCase())) seen.set(a.toLowerCase(), a);
+  const add = (action, label, buses) => {
+    if (!action || GAME_ONLY.test(action) || game.has(action.toLowerCase())) return;
+    const k = action.toLowerCase();
+    if (seen.has(k)) return;
+    const ours = KNOWN[action] || /^kw_s_.+_fest$/.test(action);
+    seen.set(k, { action, label: ours || !label ? actionText(action) : label, buses: buses || [] });
   };
+  (cat?.options || []).forEach((o) => add(o.action, o.label, o.buses));
   STOCK.slice(STOCK_SPLIT).forEach((b) => add(b.action));
   (bindings.vehicles || []).forEach((b) => add(b.action));
-  Object.keys(KNOWN).forEach(add);
-  for (const g of ['R', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10']) add(`kw_s_${g}_fest`);
+  Object.keys(KNOWN).forEach((a) => add(a));
+  H_GEARS.forEach((a) => add(a));
+  const order = new Intl.Collator();
+  return [...seen.values()]
+    .map((o) => ({ ...o, find: `${o.label}\n${o.action}`.toLowerCase() }))
+    .sort((a, b) => order.compare(a.find, b.find));
+}
+
+function ActionPicker({ bindings, playing, onClose, onPick }) {
+  const [q, setQ] = useState('');
+  const [bus, setBus] = useState('');
+  const [open, setOpen] = useState(null);
+  const [rows, setRows] = useState(PICKER_ROWS);
+  const [cat, failed, scan] = useKeyCatalog((bindings.vehicles || []).map((b) => b.action), playing);
+  const all = useMemo(() => pickerOptions(cat, bindings), [cat, bindings]);
+  const files = cat?.bus_files || [];
+  const words = useMemo(() => files.map(busWords), [files]);
   const query = q.trim().toLowerCase();
-  const options = [...seen.values()]
-    .map((action) => ({ action, label: actionText(action) }))
-    .filter((o) => !query || o.action.toLowerCase().includes(query) || o.label.toLowerCase().includes(query))
-    .sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()) || a.action.toLowerCase().localeCompare(b.action.toLowerCase()));
-  return html`<${Dialog} title="Add a key binding" onClose=${onClose} footer=${html`<${Button} label="Cancel" onClick=${onClose} />`}>
-    <div class="stack" style="gap:12px">
+  const busQuery = busWords(bus);
+  const fits = useMemo(() => (busQuery ? new Set(words.flatMap((w, i) => (w.includes(busQuery) ? [i] : []))) : null), [words, busQuery]);
+  const options = all.filter((o) => (!query || o.find.includes(query)) && (!fits || o.buses.some((i) => fits.has(i))));
+  const keys = new Map();
+  for (const b of bindings.vehicles || []) if (b.scan_code && !keys.has(b.action.toLowerCase())) keys.set(b.action.toLowerCase(), b);
+  const total = scan?.total || 0;
+
+  return html`<${Dialog} wide title="Add a key binding" onClose=${onClose} footer=${html`<${Button} label="Cancel" onClick=${onClose} />`}>
+    <div class="stack key-picker" style="gap:12px">
       <div class="muted small">${t('Driving & the bus')}</div>
-      <${Search} value=${q} onInput=${setQ} placeholder="Search actions..." autofocus />
-      <div class="muted small">${t('{n} results', { n: options.length })}</div>
-      <div class="list" style="max-height:420px;overflow:auto">
-        ${options.length
-          ? options.map(
-              (o) => html`<div class="list-item" onClick=${() => onPick(o.action)}>
-                <div class="grow"><div class="title">${o.label}</div><div class="sub">${o.action}</div></div>
-              </div>`,
-            )
-          : html`<div class="muted" style="padding:8px">${t('No matching actions.')}</div>`}
+      <div class="key-picker-search">
+        <${Search} value=${q} onInput=${(v) => (setQ(v), setRows(PICKER_ROWS))} placeholder="Search actions..." autofocus />
+        <div class="search">
+          <${Icon} name="folder" size=${16} />
+          <input class="input" list="key-picker-buses" spellcheck="false" value=${bus} placeholder=${t('Filter by bus folder or bus file (.bus)')} onInput=${(e) => (setBus(e.target.value), setRows(PICKER_ROWS))} />
+          <datalist id="key-picker-buses">${files.map((f) => html`<option value=${f} />`)}</datalist>
+        </div>
       </div>
-      <div class="muted small">${t("The installed buses' own script triggers are not listed here: type the trigger's name in the list's filter to add it.")}</div>
+      <div class="stack" style="gap:6px">
+        <div class="row muted small wrap" style="gap:6px 12px">
+          <span>${t('{n} results', { n: options.length })}</span>
+          ${!failed && scan && (scan.complete
+            ? html`<span>${t('{n} buses read', { n: total })}</span>`
+            : playing
+              ? html`<span>${t("The buses' scripts are read once the game is closed.")}</span>`
+              : total
+                ? html`<span>${t("Reading the buses' scripts: {done} / {total}", { done: scan.done, total })}</span><span class="ellipsis grow">${scan.current}</span>`
+                : html`<span>${t('Looking for the installed buses...')}</span>`)}
+          ${!failed && !cat && html`<${Spinner} />`}
+        </div>
+        ${!failed && scan && !scan.complete && !playing && html`<div class="progress"><div style=${`width:${total ? (100 * scan.done) / total : 0}%`}></div></div>`}
+      </div>
+      <div class="list key-picker-list">
+        ${options.length
+          ? options.slice(0, rows).map((o) => {
+              const k = keys.get(o.action.toLowerCase());
+              const shown = open === o.action;
+              return html`<div key=${o.action}>
+                <div class="key-option">
+                  <button class="list-item grow" onClick=${() => onPick(o.action)}>
+                    <div class="grow">
+                      <div class="title">${o.label}</div>
+                      <div class="sub">${o.action}</div>
+                    </div>
+                    ${k && html`<${Keys} scan=${k.scan_code} modifier=${k.modifier} />`}
+                  </button>
+                  ${o.buses.length > 0 && html`<${Button} small kind="ghost" icon="bus" onClick=${() => setOpen(shown ? null : o.action)}>${t('Used by {n} / {total} buses', { n: o.buses.length, total: Math.max(total, o.buses.length) })}</${Button}>`}
+                </div>
+                ${shown && html`<div class="key-buses">${o.buses.map((i) => html`<div class="ellipsis" title=${files[i]}>${files[i]}</div>`)}</div>`}
+              </div>`;
+            })
+          : html`<div class="muted" style="padding:8px">${t('No matching actions.')}</div>`}
+        ${options.length > rows && html`<div class="row muted small wrap" style="padding:8px;justify-content:space-between">
+          <span>${t('Showing the first {shown} of {n}: search to narrow the list.', { shown: rows, n: options.length })}</span>
+          <${Button} small label="Show more" onClick=${() => setRows(rows + PICKER_ROWS)} />
+        </div>`}
+      </div>
+      ${failed && html`<div class="muted small">${t("The installed buses' own script triggers are not listed here: type the trigger's name in the list's filter to add it.")}</div>`}
     </div>
   </${Dialog}>`;
 }

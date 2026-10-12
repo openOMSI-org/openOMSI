@@ -174,9 +174,10 @@ export async function loadSituations() {
 /** Page data kept between visits: answered at once from what was read last, read again
  * behind it (`fresh` = the command's answer is set into `S.cache[key]`). */
 export function cached(key, cmd, args) {
+  const before = S.cache[key];
   const p = call(cmd, args).then(
-    (v) => (set({ cache: { ...S.cache, [key]: v } }), v),
-    (e) => (set({ cache: { ...S.cache, [key]: { error: e.message } } }), null),
+    (v) => (S.cache[key] === before && set({ cache: { ...S.cache, [key]: v } }), v),
+    (e) => (S.cache[key] === before && set({ cache: { ...S.cache, [key]: { error: e.message } } }), null),
   );
   return S.cache[key] !== undefined ? Promise.resolve(S.cache[key]) : p;
 }

@@ -7,6 +7,7 @@ use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::time::{Duration, Instant};
 
 const IDLE: Duration = Duration::from_secs(15);
+static STOPPED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 pub struct Pads {
     tx: Sender<(Value, Reply)>,
@@ -20,6 +21,10 @@ impl Pads {
     }
 
     pub fn ask(&self, req: Value, reply: Reply) {
+        if req.get("op").and_then(Value::as_str) == Some("ffb_stop") {
+            STOPPED.store(req.get("token").and_then(Value::as_u64).unwrap_or(0), std::sync::atomic::Ordering::Relaxed);
+            return reply(&req.get("id").cloned().unwrap_or(Value::Null), json!({ "ok": true }), &[]);
+        }
         if let Err(e) = self.tx.send((req, reply)) {
             let (req, reply) = e.0;
             reply(&req.get("id").cloned().unwrap_or(Value::Null), json!({ "ok": false, "error": "the controllers' thread ended" }), &[]);
@@ -210,10 +215,11 @@ fn ffb_test(req: &Value, hwnd: Option<isize>) -> Result<Value, String> {
     let axis = req.get("axis").and_then(Value::as_u64).ok_or("no steering axis")? as usize;
     let strength = req.get("strength").and_then(Value::as_f64).unwrap_or(omsi_input::ffb_calibration::PULSE_FORCE as f64) as f32;
     log::info!("FFB calibration from the launcher: device {name}, raw steering axis {axis}, test strength {:.0}%", strength * 100.0);
+    let token = req.get("token").and_then(Value::as_u64).filter(|t| *t != 0);
     let mut d = Devices::new(hwnd, true);
     let mut test = Calibration::new(strength);
     let started = Instant::now();
-    while test.result.is_none() && started.elapsed() < Duration::from_secs(8) {
+    while test.result.is_none() && started.elapsed() < Duration::from_secs(8) && token != Some(STOPPED.load(std::sync::atomic::Ordering::Relaxed)) {
         d.poll();
         omsi_input::background::pump();
         let position = controllers::find_connected(&d.connected(), &name).and_then(|c| c.axes.iter().find(|(k, _)| *k == axis).map(|(_, v)| *v));

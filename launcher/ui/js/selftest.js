@@ -87,6 +87,12 @@ export async function selftest() {
   } catch (e) {
     check('game controllers', false, e.message || String(e));
   }
+  try {
+    const k = await call('keyboard_actions', { lang: 'en', actions: ['horn'] });
+    check('key action names', typeof k.labels?.horn === 'string', k.labels?.horn);
+  } catch (e) {
+    check('key action names', false, e.message || String(e));
+  }
   set({ page: 'controls', controlsTab: 'pads' });
   for (let i = 0; i < 50 && !document.querySelector('.pads'); i++) await sleep(100);
   check('page controls: game controllers', !!document.querySelector('.pads') && !document.querySelector('.pads .notice.danger'), document.querySelector('.page')?.textContent.slice(0, 200));

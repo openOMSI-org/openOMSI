@@ -1,4 +1,4 @@
-import { html, useState, useEffect, useRef } from '../../vendor/preact-htm.js';
+import { html, useState, useEffect, useRef, useMemo } from '../../vendor/preact-htm.js';
 import { S, useStore, toast } from '../store.js';
 import { t } from '../i18n.js';
 import { call } from '../api.js';
@@ -6,7 +6,7 @@ import { saveSettings, cached } from '../data.js';
 import { Icon } from '../icons.js';
 import { Button, Card, Search, Segmented, Select, Toggle, Notice, Empty, Spinner, Tag, Slider, useConfirm } from '../ui.js';
 import { SettingRow, settingRow } from './settings.js';
-import { actionText, padActions, PAD_ACTION_GROUPS } from './actions.js';
+import { actionText, actionNamesVersion, padActions, useActionNames, useKeyCatalog, PAD_ACTION_GROUPS } from './actions.js';
 import { SetupWizard, FeedbackTest, useMoving, Meter } from './controller-setup.js';
 
 export const AXES = ['X axis', 'Y axis', 'Z axis', 'X rotation', 'Y rotation', 'Z rotation', 'Slider 1', 'Slider 2'];
@@ -107,7 +107,10 @@ function useControllers() {
     const devices = devicesRef.current;
     saving$ = saving$.then(() =>
       call('controllers_save', { devices }).then(
-        () => setSaving('saved'),
+        (r) => {
+          setSaving('saved');
+          if (r?.path) setCfg((c) => c && { ...c, path: r.path });
+        },
         (e) => {
           setSaving('');
           toast(t('Not saved: {e}', { e: e.message }), 'error');
@@ -142,6 +145,8 @@ export function Controllers() {
   }, []);
 
   const devices = pads.cfg?.devices || [];
+  const actions = padActions(kb, devices);
+  useActionNames(actions);
   const offs = offList(s.settings || {});
   const list = [
     ...devices.map((d) => ({ name: d.name, cfg: d, live: findConnected(pads.live, d.name) })),
@@ -251,7 +256,6 @@ export function Controllers() {
   }
   if (!pads.cfg) return html`<div class="row muted"><${Spinner} /></div>`;
 
-  const actions = padActions(kb, devices);
   const wizardDevice = wizard && (findDevice(devices, wizard) || newDevice(wizard));
 
   return html`<div class="pads">
@@ -260,6 +264,7 @@ export function Controllers() {
         ? html`<div class="list">${list.map((e) => html`<${DeviceRow} e=${e} on=${e === entry} off=${offs.some((o) => namesMatch(o, e.name))} onClick=${() => pick(e.name)} />`)}</div>`
         : html`<${Empty} icon="gamepad" text="No game controller is connected, and none is set up. Connect a wheel, pedals or a joystick; a gamepad works without setting up (left stick steers, the triggers are the pedals)." />`}
       ${pads.cfg.error && html`<div style="margin-top:12px"><${Notice} kind="warn">${pads.cfg.error}</${Notice}></div>`}
+      ${pads.cfg.path && html`<div class="cfg-path muted small" title=${pads.cfg.path}><${Icon} name="file" size=${14} /><span class="ellipsis">${pads.cfg.path}</span></div>`}
     </${Card}>
     <div class="pads-detail stack">
       ${entry &&
@@ -268,6 +273,7 @@ export function Controllers() {
             e=${entry}
             s=${s.settings || {}}
             off=${offs.some((o) => namesMatch(o, entry.name))}
+            gears=${devices.some((x) => x.buttons.some(([a]) => /^kw_s_.+_fest$/.test(a)))}
             actions=${actions}
             lit=${lit && namesMatch(lit.name, entry.name) ? lit : null}
             capturing=${capturing && namesMatch(capturing.device, entry.name) ? capturing.action : null}
@@ -354,12 +360,11 @@ function LiveAxes({ live }) {
   </div>`;
 }
 
-function DeviceDetail({ e, s, off, actions, lit, capturing, padButtons, change, bind, startCapture, stopCapture, setOn, setUp, remove, paused }) {
+function DeviceDetail({ e, s, off, gears, actions, lit, capturing, padButtons, change, bind, startCapture, stopCapture, setOn, setUp, remove, paused }) {
   const d = e.cfg;
   const kind = kindOf(e);
-  const ff = e.live?.ff || d.ff_scale != null || d.ff_invert != null;
+  const ff = e.live?.ff || d.ff_invert != null || (d.ff_scale || [1, 1]).some((v) => v !== 1);
   const steers = d.axes.some((a) => a[0] === 0);
-  const gears = d.buttons.some(([a]) => /^kw_s_.+_fest$/.test(a));
   return html`
     <${Card}>
       <div class="device-head">
@@ -376,11 +381,11 @@ function DeviceDetail({ e, s, off, actions, lit, capturing, padButtons, change, 
         </div>
       </div>
       ${!e.live && html`<div style="margin-top:14px"><${Notice}>${t('Not connected: plug it in to see it answer. What it does is kept.')}</${Notice}></div>`}
-      ${gears && !s.momentary_gears && html`<div style="margin-top:14px"><${Notice} kind="warn">${t('H-pattern gears are assigned. Enable return to neutral under Settings → Driving → Game controllers if your shifter has no neutral button.')}</${Notice}></div>`}
+      ${gears && !s.momentary_gears && html`<div style="margin-top:14px"><${Notice} kind="warn"><div class="stack" style="gap:6px"><span>${t('H-pattern gears are assigned. If your shifter has no neutral button, turn on return to neutral:')}</span><${SettingRow} row=${settingRow('momentary_gears')} /></div></${Notice}></div>`}
     </${Card}>
-    ${kind === 'pad' && html`<${GamepadCard} e=${e} padButtons=${padButtons} />`}
+    ${kind === 'pad' && html`<${GamepadCard} e=${e} padButtons=${padButtons} change=${change} />`}
     ${kind !== 'buttons' && html`<${AxesCard} d=${d} live=${e.live} change=${change} gamepad=${kind === 'pad'} setUp=${setUp} />`}
-    ${steers && kind !== 'pad' && html`<${WheelCard} d=${d} live=${e.live} ff=${ff} change=${change} paused=${paused} />`}
+    ${(steers || ff) && kind === 'wheel' && html`<${WheelCard} d=${d} live=${e.live} ff=${ff} change=${change} paused=${paused} />`}
     <${ButtonsCard} d=${d} live=${e.live} actions=${actions} lit=${lit} capturing=${capturing} change=${change} bind=${bind} startCapture=${startCapture} stopCapture=${stopCapture} />
   `;
 }
@@ -408,9 +413,15 @@ function shape(v, flags) {
   return Math.min(1, Math.max(0, v));
 }
 
+function curves(a) {
+  const now = a[2] & CURVE;
+  const fit = a[0] === 0 || a[0] === 4 ? SHAPES.filter(([v]) => v === 0 || v & 0x10) : SHAPES;
+  return fit.some(([v]) => v === now) ? fit : [...fit, ...SHAPES.filter(([v]) => v === now)];
+}
+
 function AxesCard({ d, live, change, gamepad, setUp }) {
   const liveOf = (k) => live?.axes?.find((x) => x[0] === k)?.[1];
-  const slots = [...Array(8).keys()].filter((k) => d.axes[k][0] >= 0 || liveOf(k) != null);
+  const slots = [...Array(8).keys()].filter((k) => !live || d.axes[k][0] >= 0 || liveOf(k) != null);
   const moving = useMoving(live?.axes);
   const has = (f) => d.axes.findIndex((a) => a[0] === f || (a[0] === 4 && (f === 1 || f === 2)));
   const main = [[0, 'Steering'], [1, 'Throttle'], [2, 'Brake'], [3, 'Clutch']];
@@ -434,7 +445,7 @@ function AxesCard({ d, live, change, gamepad, setUp }) {
             <div class="axis-meter">${raw != null ? html`<${Meter} value=${g ? g.x : raw} centre=${g ? g.centre : true} fill=${!!g} />` : html`<${Meter} value=${0} centre=${false} />`}</div>
             <${Select} value=${a[0]} options=${FUNCS} onChange=${(v) => change((c) => (c.axes[k][0] = Number(v)))} />
             <div class="axis-flip">${a[0] >= 0 && html`<${Toggle} checked=${a[1]} onChange=${(v) => change((c) => (c.axes[k][1] = v))} />`}</div>
-            <div class="axis-curve">${a[0] >= 0 && a[0] < 5 && html`<${Select} value=${a[2] & CURVE} options=${a[0] === 0 || a[0] === 4 ? SHAPES.filter(([v]) => v === 0 || v & 0x10) : SHAPES} onChange=${(v) => change((c) => (c.axes[k][2] = (c.axes[k][2] & ~CURVE) | Number(v)))} />`}</div>
+            <div class="axis-curve">${a[0] >= 0 && a[0] < 5 && html`<${Select} value=${a[2] & CURVE} options=${curves(a)} onChange=${(v) => change((c) => (c.axes[k][2] = (c.axes[k][2] & ~CURVE) | Number(v)))} />`}</div>
           </div>`;
         })}
       </div>
@@ -501,16 +512,10 @@ function ByAction({ actions, by, q, setQ, fresh, capturing, latching, startCaptu
           </div>`}
     </div>`;
   };
-  const find = (a) => actionText(a).toLowerCase().includes(query) || a.toLowerCase().includes(query);
-  const all = [...new Set([...actions, ...others])];
   if (query) {
-    const hits = all.filter(find);
-    const typed = q.trim();
-    const custom = !all.some((a) => a.toLowerCase() === typed.toLowerCase()) && /^[A-Za-z0-9_]{2,}$/.test(typed);
     return html`<div class="stack" style="gap:14px">
       <${Search} value=${q} onInput=${setQ} placeholder="Search actions..." />
-      <div class="binds">${hits.map(row)}${custom && row(typed)}</div>
-      ${!hits.length && !custom && html`<${Empty} icon="search" title="No matching actions." />`}
+      <${SearchHits} q=${q} all=${[...new Set([...actions, ...others])]} row=${row} />
     </div>`;
   }
   return html`<div class="stack" style="gap:14px">
@@ -520,6 +525,34 @@ function ByAction({ actions, by, q, setQ, fresh, capturing, latching, startCaptu
       ${others.length > 0 && html`<div><div class="section-title">${t('Other')}</div><div class="binds">${others.map(row)}</div></div>`}
     </div>
   </div>`;
+}
+
+const HITS = 100;
+
+function SearchHits({ q, all, row }) {
+  const kb = S.cache?.keys;
+  const [cat] = useKeyCatalog((kb?.vehicles || []).map((b) => b.action), !!S.poll?.instances?.length);
+  const [rows, setRows] = useState(HITS);
+  useEffect(() => setRows(HITS), [q]);
+  const more = useMemo(() => {
+    const ours = new Set(all.map((a) => a.toLowerCase()));
+    const game = new Set((kb?.game || []).map((b) => b.action.toLowerCase()));
+    return (cat?.options || []).map((o) => o.action).filter((a) => !ours.has(a.toLowerCase()) && !game.has(a.toLowerCase()) && !/^(vr_|chat_)/.test(a));
+  }, [cat, all.join('\n'), kb]);
+  const query = q.trim().toLowerCase();
+  const hits = useMemo(() => {
+    const find = (a) => actionText(a).toLowerCase().includes(query) || a.toLowerCase().includes(query);
+    return [...all.filter(find), ...more.filter(find)];
+  }, [query, all.join('\n'), more, actionNamesVersion()]);
+  const typed = q.trim();
+  const custom = !hits.some((a) => a.toLowerCase() === typed.toLowerCase()) && /^[A-Za-z0-9_]{2,}$/.test(typed);
+  return html`
+    <div class="binds">${hits.slice(0, rows).map(row)}${custom && row(typed)}</div>
+    ${hits.length > rows && html`<div class="row muted small wrap" style="justify-content:space-between">
+      <span>${t('Showing the first {shown} of {n}: search to narrow the list.', { shown: rows, n: hits.length })}</span>
+      <${Button} small label="Show more" onClick=${() => setRows(rows + HITS)} />
+    </div>`}
+    ${!hits.length && !custom && html`<${Empty} icon="search" title="No matching actions." />`}`;
 }
 
 function ByButton({ d, live, actions, fresh, change, bind }) {
@@ -593,12 +626,14 @@ function padKind(e) {
   return set && set !== 'auto' ? set : e.live?.pad || 'xbox';
 }
 
-function GamepadCard({ e, padButtons }) {
+function GamepadCard({ e, padButtons, change }) {
   const kind = padKind(e);
   const custom = e.cfg?.buttons.some(([a]) => a);
+  const [steer, force] = e.cfg?.ff_scale || [1, 1];
   return html`<${Card} title="Gamepad">
     <div class="stack" style="gap:6px">
       <${SettingRow} row=${settingRow('pad_type')} />
+      ${change && e.live?.ff && html`<div class="setting-row full"><${Slider} label="Vibration" value=${force} min=${0} max=${2} step=${0.05} format=${(v) => `${Math.round(v * 100)} %`} onChange=${(v) => change((c) => (c.ff_scale = [steer, v]))} /></div>`}
       <${SettingRow} row=${settingRow('pad_buttons')} />
       ${S.settings?.pad_buttons !== false &&
       !custom &&

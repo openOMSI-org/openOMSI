@@ -14,7 +14,7 @@ use serde_json::{json, Value};
 // the "Add binding" picker of the keyboard page: OMSI's events and the installed buses' own
 // triggers, searchable
 mod keybind_picker;
-pub use keybind_picker::keybind_picker;
+pub use keybind_picker::{key_actions, keybind_picker};
 use keybind_picker::{controller_action_choices, KeyActionOption};
 
 #[derive(Default)]

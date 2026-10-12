@@ -317,6 +317,140 @@ fn ensure_key_action_catalog(l: &mut Launcher) {
 }
 
 
+#[derive(Default)]
+struct ServiceScan {
+    root: String,
+    run: u64,
+    started: bool,
+    cached: Option<(HashMap<String, Vec<String>>, Vec<String>, usize)>,
+    found: HashMap<String, Vec<String>>,
+    paths: Vec<String>,
+    progress: (usize, usize, String),
+    complete: bool,
+    finished: Option<std::time::Instant>,
+}
+
+static SERVICE_SCAN: std::sync::Mutex<Option<ServiceScan>> = std::sync::Mutex::new(None);
+
+fn service_names(root: &str, lang: &str) -> std::sync::Arc<omsi_input::describe::ControlNames> {
+    static NAMES: std::sync::Mutex<Option<(String, String, std::sync::Arc<omsi_input::describe::ControlNames>)>> = std::sync::Mutex::new(None);
+    let code = omsi_input::describe::language_code(lang);
+    let mut held = NAMES.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((r, l, names)) = held.as_ref() {
+        if r == root && *l == code {
+            return names.clone();
+        }
+    }
+    let names = std::sync::Arc::new(omsi_input::describe::ControlNames::load(std::path::Path::new(root), &code));
+    *held = Some((root.to_string(), code, names.clone()));
+    names
+}
+
+struct ScanEnd(String, u64);
+
+impl Drop for ScanEnd {
+    fn drop(&mut self) {
+        let mut held = SERVICE_SCAN.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(s) = held.as_mut().filter(|s| s.root == self.0 && s.run == self.1 && !s.complete) {
+            log::warn!("key action scan stopped before it completed");
+            s.complete = true;
+            if let Some((actions, paths, total)) = s.cached.take() {
+                (s.found, s.paths, s.progress.1) = (actions, paths, total);
+            }
+        }
+    }
+}
+
+type ServiceCatalog = (Option<(HashMap<String, Vec<String>>, Vec<String>)>, (usize, usize, String), bool, String);
+
+fn service_scan(root: &str, start: bool, have: &str, lang: &str) -> ServiceCatalog {
+    let mut held = SERVICE_SCAN.lock().unwrap_or_else(|e| e.into_inner());
+    if held.as_ref().is_none_or(|s| s.root != root) {
+        let run = held.as_ref().map_or(0, |s| s.run + 1);
+        let cached = load_script_action_cache(&script_action_cache_path(), root)
+            .unwrap_or_else(|error| {
+                log::warn!("key action catalog cache could not be loaded: {error}");
+                None
+            })
+            .map(|c| (c.actions, c.source_paths, c.total_buses));
+        *held = Some(ServiceScan { root: root.to_string(), run, cached, ..Default::default() });
+    }
+    let s = held.as_mut().expect("set above");
+    if start && s.finished.is_some_and(|t| t.elapsed() > std::time::Duration::from_secs(300)) {
+        let done = (std::mem::take(&mut s.found), std::mem::take(&mut s.paths), s.progress.1);
+        *s = ServiceScan { root: s.root.clone(), run: s.run + 1, cached: Some(done), ..Default::default() };
+    }
+    if start && !s.started {
+        s.started = true;
+        let (root, run) = (root.to_string(), s.run);
+        std::thread::spawn(move || {
+            let _end = ScanEnd(root.clone(), run);
+            omsi_input::describe::ControlNames::scan_script_actions(|update| take_scan_update(&root, run, update));
+        });
+    }
+    let progress = match (&s.cached, s.complete, s.progress.1) {
+        (Some((_, _, total)), false, 0) => (0, *total, String::new()),
+        _ => s.progress.clone(),
+    };
+    let (actions, paths) = match (&s.cached, s.complete) {
+        (Some((actions, paths, _)), false) => (actions, paths),
+        _ => (&s.found, &s.paths),
+    };
+    let stamp = format!("{}:{}:{}:{}:{lang}", s.run, s.complete, actions.len(), paths.len());
+    let data = (stamp != have).then(|| (actions.clone(), paths.clone()));
+    (data, progress, s.complete, stamp)
+}
+
+fn take_scan_update(root: &str, run: u64, update: omsi_input::describe::ScriptActionScanUpdate) {
+    let mut held = SERVICE_SCAN.lock().unwrap_or_else(|e| e.into_inner());
+    let Some(s) = held.as_mut().filter(|s| s.root == root && s.run == run) else { return };
+    s.progress = (update.done, update.total, update.current);
+    for (action, source) in update.discovered {
+        let path = source_path(&source);
+        if !s.paths.iter().any(|p| p.eq_ignore_ascii_case(&path)) {
+            s.paths.push(path);
+        }
+        let sources = s.found.entry(action.to_ascii_lowercase()).or_default();
+        if !sources.iter().any(|existing| existing.eq_ignore_ascii_case(&source)) {
+            sources.push(source);
+        }
+    }
+    if update.complete {
+        s.complete = true;
+        s.finished = Some(std::time::Instant::now());
+        s.paths.sort_by_key(|path| normalize_source_query(path));
+        let cache = ScriptActionCache { version: 1, root: root.to_string(), actions: s.found.clone(), source_paths: s.paths.clone(), total_buses: update.total };
+        drop(held);
+        if let Err(error) = save_script_action_cache(&script_action_cache_path(), &cache) {
+            log::warn!("key action catalog cache could not be saved: {error}");
+        }
+    }
+}
+
+pub fn key_actions(req: &Value) -> Value {
+    let _ = core::content_dir();
+    let root = core::load_config().root;
+    let names = service_names(&root, req.get("lang").and_then(Value::as_str).unwrap_or("ENG"));
+    let list = |key: &str| -> Vec<String> { req.get(key).and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).map(String::from).collect() };
+    let labels: serde_json::Map<String, Value> = list("actions").into_iter().map(|a| { let label = names.control(&a); (a, json!(label)) }).collect();
+    if !req.get("catalog").and_then(Value::as_bool).unwrap_or(false) {
+        return json!({ "labels": labels });
+    }
+    let have = req.get("have").and_then(Value::as_str).unwrap_or("");
+    let (data, (done, total, current), complete, stamp) = service_scan(&root, req.get("scan").and_then(Value::as_bool).unwrap_or(true), have, &names.lang);
+    let scan = json!({ "done": done, "total": total, "current": current, "complete": complete });
+    let Some((scripts, paths)) = data else {
+        return json!({ "labels": labels, "scan": scan, "stamp": stamp });
+    };
+    let bindings = json!({ "vehicles": list("vehicles").into_iter().map(|a| json!({ "action": a })).collect::<Vec<_>>() });
+    let index: HashMap<String, usize> = paths.iter().enumerate().map(|(i, p)| (p.to_ascii_lowercase(), i)).collect();
+    let options: Vec<Value> = action_options(&names, &scripts, &bindings)
+        .into_iter()
+        .map(|o| json!({ "action": o.action, "label": o.label, "buses": o.bus_paths.iter().filter_map(|p| index.get(&p.to_ascii_lowercase())).collect::<Vec<_>>() }))
+        .collect();
+    json!({ "labels": labels, "options": options, "bus_files": paths, "scan": scan, "stamp": stamp })
+}
+
 /// The searchable catalog of actions for a new keyboard binding.
 pub fn keybind_picker(l: &mut Launcher) {
     let Some(section) = l.pages.kb_picker else {
@@ -658,6 +792,29 @@ mod keybind_picker_tests {
         assert!(!actions.contains(&"chat_open".to_string()));
         // <none>, the two the file has, the eleven H-pattern gates and the game's own
         assert_eq!(actions.len(), 1 + 2 + 11 + PAD_GAME_ACTIONS.len());
+    }
+
+    #[test]
+    fn the_launcher_page_gets_the_scan_as_it_goes() {
+        *SERVICE_SCAN.lock().unwrap() = Some(ServiceScan { root: "R".into(), ..Default::default() });
+        let update = |found: &[(&str, &str)]| omsi_input::describe::ScriptActionScanUpdate {
+            done: 1,
+            total: 2,
+            current: "A/a.bus".into(),
+            discovered: found.iter().map(|(a, s)| (a.to_string(), s.to_string())).collect(),
+            complete: false,
+        };
+        take_scan_update("R", 0, update(&[("ivu_x", "A/a.bus (Maker A)"), ("IVU_X", "A/a.bus (Maker A)")]));
+        take_scan_update("other", 0, update(&[("lost", "B/b.bus")]));
+        take_scan_update("R", 7, update(&[("stale", "C/c.bus")]));
+        let (data, progress, complete, _) = service_scan("R", false, "", "ENG");
+        let (actions, paths) = data.unwrap();
+        assert_eq!(actions["ivu_x"], ["A/a.bus (Maker A)"]);
+        assert!(!actions.contains_key("lost"));
+        assert!(!actions.contains_key("stale"));
+        assert_eq!(paths, ["A/a.bus"]);
+        assert_eq!((progress.0, progress.1), (1, 2));
+        assert!(!complete);
     }
 
     #[test]

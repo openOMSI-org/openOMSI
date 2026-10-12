@@ -409,6 +409,12 @@ fn route_map(p: &dyn Platform, map: String, date: String, trip: String) -> Answe
     serde_json::from_slice(&body).map_err(err)
 }
 
+fn keyboard_actions(p: &dyn Platform, mut req: Value) -> Answer {
+    req["cmd"] = json!("key_actions");
+    let (_, body) = p.renderer(req, Duration::from_secs(30))?;
+    serde_json::from_slice(&body).map_err(err)
+}
+
 fn controllers(p: &dyn Platform, op: &str, mut req: Value, wait: u64) -> Answer {
     req["cmd"] = json!("pads");
     req["op"] = json!(op);
@@ -503,11 +509,13 @@ pub fn call(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "preview_look" => preview_look(p, arg::<String>(args, "bus")?, arg::<String>(args, "paint")?, arg::<String>(args, "map")?, arg::<String>(args, "weather")?, arg::<i32>(args, "time")?, arg::<String>(args, "date")?),
         "preview_warm" => preview_warm(p),
         "route_map" => route_map(p, arg::<String>(args, "map")?, arg::<String>(args, "date")?, arg::<String>(args, "trip")?),
+        "keyboard_actions" => keyboard_actions(p, json!({ "lang": arg::<Option<String>>(args, "lang")?, "actions": arg::<Option<Vec<String>>>(args, "actions")?, "vehicles": arg::<Option<Vec<String>>>(args, "vehicles")?, "catalog": arg::<Option<bool>>(args, "catalog")?, "scan": arg::<Option<bool>>(args, "scan")?, "have": arg::<Option<String>>(args, "have")? })),
         "controllers_load" => controllers(p, "load", json!({}), 20),
         "controllers_state" => controllers(p, "state", json!({}), 5),
         "controllers_save" => controllers(p, "save", json!({ "devices": arg::<Value>(args, "devices")? }), 20),
-        "controllers_ffb_test" => controllers(p, "ffb_test", json!({ "name": arg::<String>(args, "name")?, "axis": arg::<usize>(args, "axis")?, "strength": arg::<Option<f32>>(args, "strength")? }), 20),
+        "controllers_ffb_test" => controllers(p, "ffb_test", json!({ "name": arg::<String>(args, "name")?, "axis": arg::<usize>(args, "axis")?, "strength": arg::<Option<f32>>(args, "strength")?, "token": arg::<Option<u64>>(args, "token")? }), 20),
         "controllers_release" => controllers(p, "release", json!({}), 5),
+        "controllers_ffb_stop" => controllers(p, "ffb_stop", json!({ "token": arg::<Option<u64>>(args, "token")? }), 5),
         "support_package" => support_package(),
         "prepare_tunnel" => {
             std::thread::spawn(omsi_net::tunnel::ensure_cloudflared);

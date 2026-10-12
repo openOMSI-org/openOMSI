@@ -1,4 +1,4 @@
-import { html, useState, useRef } from '../../vendor/preact-htm.js';
+import { html, useState, useRef, useEffect } from '../../vendor/preact-htm.js';
 import { S } from '../store.js';
 import { t } from '../i18n.js';
 import { call } from '../api.js';
@@ -8,6 +8,8 @@ import { Button, Dialog, Notice, Slider, Toggle, Spinner } from '../ui.js';
 const AXIS_NAMES = ['X axis', 'Y axis', 'Z axis', 'X rotation', 'Y rotation', 'Z rotation', 'Slider 1', 'Slider 2'];
 const PULSE = 0.2;
 const MAX_PULSE = 0.5;
+
+const stopTest = (busy) => busy.current && call('controllers_ffb_stop', { token: busy.current }).catch(() => {});
 
 const STEPS = [
   ['Let go of everything', 'Take your hands off the wheel and your feet off the pedals (the wheel in the middle), then press Next.'],
@@ -86,8 +88,7 @@ export function wizardResult(rest, at) {
 }
 
 export function SetupWizard({ device, live, paused, onClose, onDone }) {
-  const busy = useRef(false);
-  const close = () => !busy.current && onClose();
+  const busy = useRef(0);
   const [step, setStep] = useState(0);
   const [rest, setRest] = useState(null);
   const [at, setAt] = useState([]);
@@ -100,6 +101,7 @@ export function SetupWizard({ device, live, paused, onClose, onDone }) {
   const result = rest ? wizardResult(rest, at) : null;
   const steerAxis = result ? result.findIndex((a) => a && a[0] === 0) : -1;
   const feedback = step === STEPS.length && live?.ff && !live?.gamepad && steerAxis >= 0;
+  const close = () => (stopTest(busy), feedback ? onDone(result, null) : onClose());
 
   function next(skip) {
     setError('');
@@ -172,8 +174,8 @@ export function SetupWizard({ device, live, paused, onClose, onDone }) {
 }
 
 export function FeedbackTest({ device, axis, live, paused, invert, onClose, onDone }) {
-  const busy = useRef(false);
-  const close = () => !busy.current && onClose();
+  const busy = useRef(0);
+  const close = () => (stopTest(busy), onClose());
   return html`<${Dialog} title="Force feedback direction" onClose=${close}>
     <${FeedbackBody} device=${device} axis=${axis} live=${live} paused=${paused} initial=${invert} busy=${busy} onDone=${onDone} onCancel=${close} />
   </${Dialog}>`;
@@ -184,22 +186,24 @@ function FeedbackBody({ device, axis, live, paused, initial, busy, onDone, onCan
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState(null);
   const [choice, setChoice] = useState(initial);
+  const alive = useRef(true);
+  useEffect(() => () => ((alive.current = false), stopTest(busy)), []);
 
   async function start() {
     setRunning(true);
     setResult(null);
-    busy.current = true;
+    busy.current = Date.now();
     paused.current = true;
     try {
-      const r = await call('controllers_ffb_test', { name: live?.name || device.name, axis, strength });
-      setChoice(r.invert);
-      setResult({ ok: true, invert: r.invert });
+      const r = await call('controllers_ffb_test', { name: live?.name || device.name, axis, strength, token: busy.current });
+      if (alive.current) setChoice(r.invert);
+      if (alive.current) setResult({ ok: true, invert: r.invert });
     } catch (e) {
-      setResult({ ok: false, text: e.message });
+      if (alive.current) setResult({ ok: false, text: e.message });
     }
     paused.current = false;
-    busy.current = false;
-    setRunning(false);
+    busy.current = 0;
+    if (alive.current) setRunning(false);
   }
 
   return html`<div class="stack" style="gap:14px">
@@ -212,7 +216,7 @@ function FeedbackBody({ device, axis, live, paused, initial, busy, onDone, onCan
     <${Toggle} checked=${choice} label="Invert force feedback" onChange=${setChoice} />
     <p class="muted small">${t("If detection is inconclusive, retry or choose the direction manually. You can change it later on this device's page.")}</p>
     <div class="row" style="justify-content:space-between">
-      <${Button} kind="ghost" label="Cancel" disabled=${running} onClick=${onCancel} />
+      <${Button} kind="ghost" label="Cancel" onClick=${onCancel} />
       <div class="row">
         <${Button} icon="play" label="Start test" disabled=${running || !live} onClick=${start} />
         <${Button} kind="primary" icon="check" label="Finish" disabled=${running} onClick=${() => onDone(choice)} />
