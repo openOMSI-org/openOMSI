@@ -33,7 +33,9 @@ impl omsi_launcher_api::Platform for Window {
     }
     /// The window stays where it is while the game runs (it is the player's to close or
     /// minimise): a launcher that vanished at every start looked as if it had closed.
-    fn launched(&self) {}
+    fn launched(&self) {
+        crate::service::release();
+    }
     fn renderer(&self, req: Value, wait: Duration) -> Result<(Value, Vec<u8>), String> {
         crate::service::ask(req, wait)
     }
@@ -63,7 +65,11 @@ pub fn start_watch(app: AppHandle) {
             let mut running = 0usize;
             loop {
                 std::thread::sleep(std::time::Duration::from_secs(2));
+                let asked = std::time::Instant::now();
                 let now = core::list_instances().iter().filter(|i| i.running).count();
+                if now == 0 {
+                    crate::service::no_game_since(asked);
+                }
                 if running > 0 && now == 0 {
                     let _ = app.emit("games-ended", ());
                 }

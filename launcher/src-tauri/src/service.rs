@@ -8,9 +8,10 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 type Pending = Arc<Mutex<HashMap<u64, Sender<(Value, Vec<u8>)>>>>;
 
@@ -21,7 +22,10 @@ struct Running {
 }
 
 static SERVICE: Mutex<Option<Running>> = Mutex::new(None);
-static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+static NEXT: AtomicU64 = AtomicU64::new(1);
+static LOOK: Mutex<Option<Value>> = Mutex::new(None);
+static PLAYING: AtomicBool = AtomicBool::new(false);
+static RELEASED: Mutex<Option<Instant>> = Mutex::new(None);
 
 fn start() -> Result<Running, String> {
     let game = omsi_launcher_lib::game_binary().ok_or("the game program was not found")?;
@@ -68,16 +72,31 @@ fn start() -> Result<Running, String> {
 
 /// Ask the service; its answer and the bytes after it.
 pub fn ask(mut req: Value, wait: Duration) -> Result<(Value, Vec<u8>), String> {
-    let id = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let look = req.get("cmd").and_then(Value::as_str) == Some("look");
+    let drawing = matches!(req.get("cmd").and_then(Value::as_str), Some("look" | "warm" | "frame"));
+    let id = NEXT.fetch_add(1, Ordering::Relaxed);
     req["id"] = json!(id);
     let (tx, rx) = channel();
     {
         let mut s = SERVICE.lock().unwrap_or_else(|e| e.into_inner());
+        if drawing && PLAYING.load(Ordering::Relaxed) {
+            if look {
+                *LOOK.lock().unwrap_or_else(|e| e.into_inner()) = Some(req);
+            }
+            return Ok((json!({ "ok": true, "busy": false, "failed": false, "moving": false, "picture": true }), Vec::new()));
+        }
         if s.as_mut().is_some_and(|r| r.child.try_wait().ok().flatten().is_some()) {
             *s = None;
         }
         if s.is_none() {
-            *s = Some(start()?);
+            let mut r = start()?;
+            if let Some(last) = LOOK.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+                let _ = writeln!(r.stdin, "{last}");
+            }
+            *s = Some(r);
+        }
+        if look {
+            *LOOK.lock().unwrap_or_else(|e| e.into_inner()) = Some(req.clone());
         }
         let r = s.as_mut().unwrap();
         r.pending.lock().unwrap_or_else(|e| e.into_inner()).insert(id, tx);
@@ -101,4 +120,32 @@ pub fn stop() {
         std::thread::sleep(Duration::from_millis(100));
         let _ = r.child.kill();
     }
+}
+
+pub fn no_game_since(asked: Instant) {
+    let _s = SERVICE.lock().unwrap_or_else(|e| e.into_inner());
+    if RELEASED.lock().unwrap_or_else(|e| e.into_inner()).is_none_or(|t| t < asked) {
+        PLAYING.store(false, Ordering::Relaxed);
+    }
+}
+
+pub fn release() {
+    let mut s = SERVICE.lock().unwrap_or_else(|e| e.into_inner());
+    PLAYING.store(true, Ordering::Relaxed);
+    *RELEASED.lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
+    let Some(mut r) = s.take() else { return };
+    drop(s);
+    std::thread::spawn(move || {
+        let t = Instant::now();
+        while t.elapsed() < Duration::from_secs(10) && !r.pending.lock().unwrap_or_else(|e| e.into_inner()).is_empty() {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        let _ = writeln!(r.stdin, "{}", json!({ "cmd": "quit" }));
+        let _ = r.stdin.flush();
+        while t.elapsed() < Duration::from_secs(20) && matches!(r.child.try_wait(), Ok(None)) {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        let _ = r.child.kill();
+        let _ = r.child.wait();
+    });
 }
