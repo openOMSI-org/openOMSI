@@ -364,6 +364,16 @@ table.table { width: 100%; border-collapse: collapse; }
 .sign .no { font-size: 20px; font-weight: 800; min-width: 34px; }
 .sign .to { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; font-size: 13px; }
 
+.duty-pick { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 16px; }
+.pick-list { height: 300px; overflow: auto; border-radius: var(--radius-sm); background: var(--surface-2); padding: 4px; display: flex; flex-direction: column; gap: 2px; }
+.pick-list .list-item { padding: 8px 10px; width: 100%; text-align: left; background: none; color: inherit; font: inherit; flex: none; }
+.pick-list .list-item:hover { background: var(--surface); }
+.pick-list .list-item.on { background: var(--accent-soft); }
+.pick-list .list-item.dim { opacity: .6; }
+.duty-pick-head { min-height: 32px; }
+.duty-pick-head .toggle { padding: 0; min-width: 0; }
+.duty-pick-head .toggle .text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.accent-fg { color: var(--accent); }
 .trips { max-height: 300px; overflow: auto; border-radius: var(--radius-sm); background: var(--surface-2); }
 .trips .table th { position: sticky; top: 0; background: var(--surface-2); z-index: 1; }
 
@@ -532,6 +542,8 @@ table.table { width: 100%; border-collapse: collapse; }
 }
 @media (max-width: 1040px) {
   .drive { grid-template-columns: 1fr; }
+  .duty-pick { grid-template-columns: 1fr; }
+  .pick-list { height: 240px; }
   .pads { grid-template-columns: 1fr; }
   .pads-list { position: static; }
   .drive .side { position: static; }

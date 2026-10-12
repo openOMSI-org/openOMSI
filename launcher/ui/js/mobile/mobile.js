@@ -11,7 +11,7 @@ import { Spinner, Toggle, Slider } from '../ui.js';
 import { BusPreview } from '../preview.js';
 import { RouteMap } from '../routemap.js';
 import { choose, curMap, curBus, curLine, curTour, pickedTrip, realTime, realDate, start } from '../data.js';
-import { hms, mapPicture, tripAt, depotRun, pickTrip, setSeason, localNow, SEASONS, PHASES } from '../pages/drive.js';
+import { hms, mapPicture, tripAt, depotRun, pickTrip, lineMatches, findTours, chooseLine, chooseTour, setSeason, localNow, SEASONS, PHASES } from '../pages/drive.js';
 import { MultiplayerPage } from '../pages/multiplayer.js';
 import { ProfilePage } from '../pages/profile.js';
 import { ModsPage } from '../pages/mods.js';
@@ -192,24 +192,34 @@ function PaintSheet({ close }) {
 
 function LineSheet({ close }) {
   const s = useStore();
-  const lines = (s.lines.list || []).filter((l) => l.user_allowed && l.tours.length);
-  return html`<div>${lines.map((l) => pick(l.name === s.choice.line, () => {
-    const tr = l.tours.find((x) => x.runs) || l.tours[0];
-    choose({ line: l.name, tour: tr?.number ?? null, start_trip: null });
-    close();
-  }, html`<span class="line-badge">${l.name}</span><span class="m-pick-text"><b>${l.termini.join(' - ')}</b><small>${t('{n} tours', { n: l.tours.length })}</small></span>`))}</div>`;
+  const [q, setQ] = useState('');
+  const lines = (s.lines.list || []).filter((l) => l.user_allowed && l.tours.length && lineMatches(l, q.trim().toLowerCase()));
+  return html`<div>
+    <input class="m-search" value=${q} placeholder=${t('Filter lines...')} onInput=${(e) => setQ(e.currentTarget.value)} />
+    ${lines.length === 0 && html`<p class="muted small" style="padding:8px">${t('No line matches.')}</p>`}
+    ${lines.map((l) => pick(l.name === s.choice.line, () => (chooseLine(l), close()), html`<span class="line-badge">${l.name}</span><span class="m-pick-text"><b>${l.termini.join(' - ')}</b><small>${t('{n} tours', { n: l.tours.length })}</small></span>`))}
+  </div>`;
 }
 
 function TourSheet({ close }) {
   const s = useStore();
+  const [q, setQ] = useState('');
+  const [showEnded, setShowEnded] = useState(false);
   const line = curLine();
   if (!line) return null;
-  return html`<div>${line.tours.map((x) => pick(x.number === s.choice.tour, () => {
-    const patch = { tour: x.number, start_trip: null };
-    if (!x.runs && x.next_run && !realDate()) patch.date = x.next_run;
-    choose(patch);
-    close();
-  }, html`<span class="m-pick-text"><b>${t('Tour')} ${x.number}</b><small>${x.days} - ${x.trips.length} ${t('trips')}${x.trips.length ? ` - ${hms(x.first)}-${hms(x.last)}` : ''}${!x.runs ? ` - ${t('not on this day')}` : ''}</small></span>`, x.runs ? '' : ' dim'))}</div>`;
+  const tq = q.trim().toLowerCase();
+  const { shown, endedCount } = findTours(line, s.choice.time * 60, tq, showEnded, s.choice.tour);
+  return html`<div>
+    <input class="m-search" value=${q} placeholder=${t('Filter tours: number, route, stop...')} onInput=${(e) => setQ(e.currentTarget.value)} />
+    ${endedCount > 0 && html`<div style="padding:4px 4px 10px"><${Toggle} checked=${showEnded} onChange=${setShowEnded} label=${t('Show ended tours ({n})', { n: endedCount })} /></div>`}
+    ${shown.length === 0 && html`<p class="muted small" style="padding:8px">${t(tq ? 'No tour has a trip still to come that matches.' : 'No tour left at this time: show the ended tours, or start earlier.')}</p>`}
+    ${shown.map(({ tour: x, ended, at, via }) => {
+      const trip = x.trips[at];
+      const found = tq && trip && !x.number.toLowerCase().includes(tq);
+      const what = found ? `${hms(trip.departure)} ${trip.from} → ${trip.terminus}${via ? ` (${t('via {stop}', { stop: via })})` : ''}` : `${x.days} - ${x.trips.length} ${t('trips')}${x.trips.length ? ` - ${hms(x.first)}-${hms(x.last)}` : ''}`;
+      return pick(x.number === s.choice.tour, () => (chooseTour(x, found ? trip : null), close()), html`<span class="m-pick-text"><b>${t('Tour')} ${x.number}</b><small>${what}${!x.runs ? ` - ${t('not on this day')}` : ended ? ` - ${t('ended')}` : ''}</small></span>`, x.runs && !ended ? '' : ' dim');
+    })}
+  </div>`;
 }
 
 function TripSheet({ close }) {

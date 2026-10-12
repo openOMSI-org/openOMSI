@@ -1,12 +1,12 @@
 // Drive: the duty is put together here - map, bus, line and tour (or a free drive), the
 // start time and date, the weather and the traffic - and started.
 
-import { html, useState, useEffect, useRef } from '../../vendor/preact-htm.js';
+import { html, useState, useEffect, useRef, useMemo } from '../../vendor/preact-htm.js';
 import { S, useStore, set, toast } from '../store.js';
 import { t, hhmm, longDate, language } from '../i18n.js';
 import { call, contentUrl } from '../api.js';
 import { Icon } from '../icons.js';
-import { Button, Card, Field, Select, Input, Toggle, Segmented, Slider, Picture, Notice, Spinner, PageHead, Tag } from '../ui.js';
+import { Button, Card, Field, Select, Input, Toggle, Segmented, Slider, Picture, Notice, Spinner, PageHead, Tag, Search } from '../ui.js';
 import { choose, curMap, curBus, curLine, curTour, pickedTrip, realTime, realDate, start, loadSituations, duty } from '../data.js';
 import { MapPicker } from './map-picker.js';
 import { BusPicker } from './bus-picker.js';
@@ -25,6 +25,50 @@ export const depotRun = (x) => !x.line?.trim() || /betriebsfahrt|leerfahrt|diens
 export function tripAt(tour, now) {
   const i = tour.trips.findIndex((x) => x.departure >= now - 120);
   return i >= 0 ? i : tour.trips.length ? tour.trips.length - 1 : -1;
+}
+
+export const lineMatches = (l, q) => !q || `${l.name} ${l.termini.join(' ')}`.toLowerCase().includes(q);
+
+export function tourTrip(tour, now, q) {
+  const ended = tour.runs && tour.trips.every((x) => x.departure < now - 120);
+  const first = tour.trips.length ? tripAt(tour, now) : -1;
+  const has = (s) => (s || '').toLowerCase().includes(q);
+  if (!q || has(tour.number)) return { ended, at: first };
+  const from = ended ? 0 : Math.max(first, 0);
+  const at = tour.trips.findIndex((x, i) => i >= from && (has(x.name) || has(x.line) || has(x.from) || has(x.terminus) || x.stops?.some((st) => has(st.name))));
+  const hit = tour.trips[at];
+  const via = hit && !has(hit.line) && !has(hit.from) && !has(hit.terminus) ? hit.stops?.find((st) => has(st.name))?.name : null;
+  return { ended, at, via };
+}
+
+export function findTours(line, now, q, showEnded, keep) {
+  const all = (line?.tours || []).map((tour) => ({ tour, ...tourTrip(tour, now, q) })).filter((x) => x.at >= 0 || (!x.tour.trips.length && (!q || x.tour.number.toLowerCase().includes(q))));
+  const endedCount = all.filter((x) => x.ended).length;
+  const dep = (x) => x.tour.trips[x.at]?.departure ?? Infinity;
+  const shown = all
+    .filter((x) => showEnded || !x.ended || (!q && x.tour.number === keep))
+    .sort((a, b) => b.tour.runs - a.tour.runs || a.ended - b.ended || (q ? dep(a) - dep(b) : 0) || a.tour.number.localeCompare(b.tour.number, undefined, { numeric: true }));
+  return { shown, endedCount };
+}
+
+export function tourRoute(tour) {
+  const service = tour.trips.filter((x) => !depotRun(x));
+  const from = (service[0] || tour.trips[0])?.from || '';
+  const to = (service[service.length - 1] || tour.trips[tour.trips.length - 1])?.terminus || '';
+  return from || to ? `${from} → ${to}` : '';
+}
+
+export function chooseLine(l) {
+  const tr = findTours(l, S.choice.time * 60, '', false).shown[0]?.tour || l?.tours.find((x) => x.runs) || l?.tours[0];
+  choose({ line: l.name, tour: tr?.number ?? null, start_trip: null });
+}
+
+export function chooseTour(x, trip) {
+  if (x.number === S.choice.tour && !trip) return;
+  const patch = { tour: x.number, start_trip: null };
+  if (!x.runs && x.next_run && !realDate()) patch.date = x.next_run;
+  choose(patch);
+  if (trip) pickTrip(trip);
 }
 
 export function DrivePage() {
@@ -121,7 +165,22 @@ function DutyCard() {
   const line = curLine();
   const tour = curTour();
   const [showEnded, setShowEnded] = useState(false);
+  const [lineQ, setLineQ] = useState('');
+  const [tourQ, setTourQ] = useState('');
   const now = c.time * 60;
+  const lineRef = useRef();
+  const tourRef = useRef();
+  const toChosen = (el, q) => {
+    if (!el) return;
+    const on = !q && el.querySelector('.on');
+    el.scrollTop = on ? el.scrollTop + on.getBoundingClientRect().top - el.getBoundingClientRect().top - 8 : 0;
+  };
+  useEffect(() => toChosen(lineRef.current, lineQ), [c.map, c.free, s.lines.key, !!s.lines.list, lineQ]);
+  useEffect(() => toChosen(tourRef.current, tourQ), [c.map, c.free, c.line, s.lines.key, !!s.lines.list, tourQ]);
+  useEffect(() => setTourQ(''), [c.line]);
+  useEffect(() => setLineQ(''), [c.map]);
+  const tq = tourQ.trim().toLowerCase();
+  const found = useMemo(() => findTours(line, now, tq, showEnded, c.tour), [line, now, tq, showEnded, c.tour]);
   // the trip a start takes is brought into view when the duty changes (not while one scrolls)
   const tripsRef = useRef();
   const tripKey = `${c.line}|${c.tour}|${c.time}|${pickedTrip()}|${!!s.lines.list}`;
@@ -146,34 +205,50 @@ function DutyCard() {
   } else if (!lines.length) {
     body = html`<${Notice}>${t('This map has no lines to drive on this date. Choose a free drive, or another date.')}</${Notice}>`;
   } else {
-    const tours = line ? [...line.tours] : [];
-    const ended = (x) => x.runs && x.trips.every((tr) => tr.departure < now - 120);
-    const endedCount = tours.filter(ended).length;
-    const shown = tours.filter((x) => showEnded || !ended(x)).sort((a, b) => b.runs - a.runs || ended(a) - ended(b));
+    const lq = lineQ.trim().toLowerCase();
+    const foundLines = lines.filter((l) => lineMatches(l, lq));
+    const { shown, endedCount } = found;
     const picked = pickedTrip();
     const trips = tour?.trips || [];
     const auto = tour ? tripAt(tour, now) : -1;
     const current = picked != null ? trips.findIndex((x) => x.index === picked) : auto;
     body = html`<div class="stack">
-      <div class="grid-2">
-        <${Field} label="Line">
-          <${Select} raw value=${c.line ?? ''} options=${lines.map((l) => [l.name, l.termini.length ? `${l.name} - ${l.termini.join(' - ')}` : l.name])} onChange=${(name) => {
-            const l = lines.find((x) => x.name === name);
-            const tr = l?.tours.find((x) => x.runs) || l?.tours[0];
-            choose({ line: name, tour: tr?.number ?? null, start_trip: null });
-          }} />
-        </${Field}>
-        <${Field} label="Tour">
-          <${Select} raw value=${c.tour ?? ''} options=${shown.map((x) => [x.number, `${x.number} - ${x.days}${!x.runs ? ` - ${t('not on this day')}` : ended(x) ? ` - ${t('ended')}` : ''}`])} onChange=${(number) => {
-            const x = tours.find((y) => y.number === number);
-            const patch = { tour: number, start_trip: null };
-            // a tour of another day moves the date to the next day it runs (OMSI lists only the day's tours)
-            if (x && !x.runs && x.next_run && !realDate()) patch.date = x.next_run;
-            choose(patch);
-          }} />
-        </${Field}>
+      <div class="duty-pick">
+        <div class="stack" style="gap:8px">
+          <div class="row duty-pick-head"><span class="label grow">${t('Line')}</span><span class="muted small">${lq ? `${foundLines.length} / ${lines.length}` : lines.length}</span></div>
+          <${Search} value=${lineQ} onInput=${setLineQ} placeholder="Filter lines..." />
+          <div class="pick-list" ref=${lineRef}>
+            ${foundLines.length === 0 && html`<p class="muted small" style="padding:8px">${t('No line matches.')}</p>`}
+            ${foundLines.map((l) => html`<button type="button" class=${'list-item' + (l.name === c.line ? ' on' : '')} onClick=${() => l.name !== c.line && chooseLine(l)}>
+              <div class="grow" style="min-width:0">
+                <span class="line-badge" style="max-width:100%;justify-content:flex-start"><span class="ellipsis">${l.name}</span></span>
+                ${l.termini.length > 0 && html`<div class="sub ellipsis" style="margin-top:4px">${l.termini.join(' - ')}</div>`}
+              </div>
+              <span class="muted small row" style="gap:4px" title=${t('Tours of this line on the chosen day')}><${Icon} name="calendar" size=${13} />${l.tours.filter((x) => x.runs).length}</span>
+            </button>`)}
+          </div>
+        </div>
+        <div class="stack" style="gap:8px">
+          <div class="row duty-pick-head"><span class="label grow">${t('Tour')}</span>${endedCount > 0 && html`<${Toggle} checked=${showEnded} onChange=${setShowEnded} label=${t('Show ended tours ({n})', { n: endedCount })} />`}</div>
+          <${Search} value=${tourQ} onInput=${setTourQ} placeholder="Filter tours: number, route, stop..." />
+          <div class="pick-list" ref=${tourRef}>
+            ${shown.length === 0 && html`<p class="muted small" style="padding:8px">${t(tq ? 'No tour has a trip still to come that matches.' : 'No tour left at this time: show the ended tours, or start earlier.')}</p>`}
+            ${shown.map(({ tour: x, ended: done, at, via }) => {
+              const trip = x.trips[at];
+              const live = x.runs && !done;
+              const hit = tq && trip && !x.number.toLowerCase().includes(tq);
+              const days = !x.runs ? (x.next_run ? t('runs {date}', { date: longDate(x.next_run) }) : t('never within a year')) : done ? t('ended') : x.days;
+              return html`<button type="button" class=${'list-item' + (x.number === c.tour ? ' on' : '') + (live ? '' : ' dim')} onClick=${() => chooseTour(x, hit ? trip : null)}>
+                <div class="grow" style="min-width:0">
+                  <div class="row"><b class="grow ellipsis">${x.number}</b>${trip && html`<span class=${'num small' + (live ? ' accent-fg' : ' muted')}>${hms(trip.departure)} - ${hms(trip.arrival)}</span>`}</div>
+                  <div class="sub ellipsis">${hit ? `${trip.line ? `${trip.line} | ` : ''}${trip.from} → ${trip.terminus}${via ? ` | ${t('via {stop}', { stop: via })}` : ''}` : tourRoute(x)}</div>
+                  <div class="sub ellipsis">${t('{n} trips', { n: x.trips.length })} - ${days}</div>
+                </div>
+              </button>`;
+            })}
+          </div>
+        </div>
       </div>
-      ${endedCount > 0 && html`<${Toggle} checked=${showEnded} onChange=${setShowEnded} label=${t('Show ended tours ({n})', { n: endedCount })} />`}
       ${tour && !tour.runs && html`<${Notice} kind="warn">${tour.next_run ? t('This tour does not run on the chosen date; it runs next on {date}.', { date: longDate(tour.next_run) }) : t('This tour does not run within a year of the chosen date.')}</${Notice}>`}
       ${tour && html`<div>
         <div class="row" style="margin-bottom:8px"><span class="label">${t('Trips of the tour')}</span><span class="muted small right">${t('Click a trip to start with it')}</span></div>
