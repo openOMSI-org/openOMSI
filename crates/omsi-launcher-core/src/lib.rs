@@ -7,6 +7,7 @@
 //! `install` runs mod installs as background jobs, `index` caches the content lists and
 //! tells the page when they changed, `instances` keeps track of the games started.
 
+pub mod crash;
 pub mod index;
 pub mod install;
 pub mod instances;

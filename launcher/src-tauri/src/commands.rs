@@ -62,18 +62,25 @@ pub fn start_watch(app: AppHandle) {
     std::thread::Builder::new()
         .name("launcher watch".into())
         .spawn(move || {
-            let mut running = 0usize;
+            let mut was: Vec<core::instances::Instance> = Vec::new();
             loop {
                 std::thread::sleep(std::time::Duration::from_secs(2));
                 let asked = std::time::Instant::now();
-                let now = core::list_instances().iter().filter(|i| i.running).count();
-                if now == 0 {
+                let all = core::list_instances();
+                let running: Vec<_> = all.iter().filter(|i| i.running).cloned().collect();
+                if running.is_empty() {
                     crate::service::no_game_since(asked);
                 }
-                if running > 0 && now == 0 {
+                for ended in was.iter().filter_map(|w| all.iter().find(|a| a.id == w.id && !a.running)) {
+                    if let Some((event, what)) = omsi_launcher_api::game_ended(ended) {
+                        core::log_to_file(&format!("game {} ended: {event}", ended.pid));
+                        let _ = app.emit(event, what);
+                    }
+                }
+                if !was.is_empty() && running.is_empty() {
                     let _ = app.emit("games-ended", ());
                 }
-                running = now;
+                was = running;
             }
         })
         .ok();

@@ -203,6 +203,7 @@ export async function saveSettings(patch) {
     set({ settings: await call('settings_save', { settings }) });
   } catch (e) {
     toast(t('The settings could not be saved: {e}', { e: e.message }), 'error');
+    return false;
   }
   if ('language' in patch) {
     const lang = S.boot.languages.find((l) => l.code === S.settings.language);
@@ -210,6 +211,7 @@ export async function saveSettings(patch) {
     // (the content's names and descriptions are read in the new language)
     loadContent();
   }
+  return true;
 }
 
 /** The trip of the tour picked to start with (its place), while the time is still its. */

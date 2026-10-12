@@ -6,6 +6,7 @@
 
 use crate::host::host;
 use omsi_launcher_lib as core;
+pub use omsi_launcher_lib::crash::{crash_of, disconnect_of, CRASH_TAIL_GAP};
 use serde::{Deserialize, Serialize};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Instant;
@@ -1321,91 +1322,6 @@ pub fn root_problem(root: &str) -> String {
     }
 }
 
-/// The server's message when a game ended because its server sent it away or turned it away
-/// (`lan::LEFT_SERVER` in the log of this run); None for any other end.
-pub fn disconnect_of(log: &std::path::Path) -> Option<String> {
-    let text = std::fs::read(log).ok()?;
-    let text = String::from_utf8_lossy(&text[text.len().saturating_sub(64 * 1024)..]).to_string();
-    let all: Vec<&str> = text.lines().collect();
-    let run = &all[all.iter().rposition(|l| l.contains("starting the game:")).unwrap_or(0)..];
-    let line = run.iter().rev().find(|l| l.contains(omsi_lan::LEFT_SERVER))?;
-    let why = line.split_once(omsi_lan::LEFT_SERVER)?.1.trim();
-    Some(if why.is_empty() { "sent away by the host".to_string() } else { why.chars().take(300).collect() })
-}
-
-/// What a game's log says when the game ended on an error: the error (a panic, "no graphics
-/// adapter", a fatal message) and the last lines of the log. None for a game that ended as
-/// it should.
-pub fn crash_of(log: &std::path::Path) -> Option<(String, String)> {
-    let bytes = std::fs::read(log).ok()?;
-    let text = String::from_utf8_lossy(&bytes[bytes.len().saturating_sub(64 * 1024)..]).to_string();
-    let all: Vec<&str> = text.lines().collect();
-    // (the run itself only: an error the launcher logged before the game started - a
-    // preview's picture left out - titled the report of a game that died much later, and
-    // the phone's "died compiling a shader" hint never showed, #381, #331)
-    let lines: Vec<&str> = match all.iter().rposition(|l| l.contains("starting the game:")) {
-        Some(k) => all[k..].to_vec(),
-        None => all.clone(),
-    };
-    // (an error the game got over - "the game goes on", a part of the picture left out -
-    // is no crash)
-    let recovered = |l: &str| l.contains("the game goes on") || l.contains("left out") || l.contains("could not be recorded");
-    // (a lost graphics device ends the game in order - it saves the run - but it is a crash
-    // for the player all the same: the driver gave up)
-    // (one the game got over by starting again with safer graphics is no crash)
-    if lines.iter().any(|l| l.contains("starting again with safer graphics")) {
-        return None;
-    }
-    let lost = lines.iter().rposition(|l| l.contains("the graphics device was lost"));
-    if lost.is_none() && lines.iter().any(|l| l.contains("game ends")) {
-        return None;
-    }
-    let at = lost.or_else(|| lines.iter().rposition(|l| l.contains("the game stopped on an error") || (l.contains(" ERROR ") && !recovered(l))))?;
-    let first = lines[at].split_once("] ").map(|x| x.1).unwrap_or(lines[at]).trim();
-    // (a panic's message is on the following lines)
-    let mut what = first.to_string();
-    // (and stops at the next record: a lost device's line had "game ends" and the tile
-    // loading after it in the report's title, #1187)
-    for l in lines.iter().skip(at + 1).take(6) {
-        if l.trim().is_empty() || l.trim_start().starts_with("0:") || l.starts_with('[') {
-            break;
-        }
-        what.push(' ');
-        what.push_str(l.trim());
-    }
-    // the computer, its graphics card and the command line (the map) from the start of the
-    // run, before the end of the log and a line `…`: a report of the end alone never said
-    // what it happened on (#1187). Its GitHub link keeps them and shortens only the end.
-    let whole = String::from_utf8_lossy(&bytes);
-    let machine: Vec<&str> = MACHINE_LINES.iter().filter_map(|k| whole.lines().rfind(|l| l.contains(k))).collect();
-    let end = all[all.len().saturating_sub(150)..].join("\n");
-    let tail = if machine.is_empty() { end } else { format!("{}\n{CRASH_TAIL_GAP}\n{end}", machine.join("\n")) };
-    Some((what.chars().take(600).collect(), tail))
-}
-
-/// The log lines that tell what a game ran on (see `crash_of`).
-const MACHINE_LINES: [&str; 4] = ["] system: ", "] graphics adapter: ", "] opening graphics device: ", "] command line: "];
-
-/// The line between the machine and the end of the log in a crash's tail.
-pub const CRASH_TAIL_GAP: &str = "...";
-
-#[cfg(test)]
-mod disconnect_tests {
-    #[test]
-    fn the_servers_word_is_read_back_from_the_log_of_this_run() {
-        let dir = std::env::temp_dir().join(format!("openomsi-disc-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let p = dir.join("game.log");
-        let left = omsi_lan::LEFT_SERVER;
-        std::fs::write(&p, format!("[x INFO a] starting the game: one\n[x WARN openomsi_game::lan] {left}old\n[x INFO a] starting the game: two\n[x WARN openomsi_game::lan] {left}Expulsé : conduite dangereuse\n[x INFO a] game ends\n")).unwrap();
-        assert_eq!(super::disconnect_of(&p).as_deref(), Some("Expulsé : conduite dangereuse"));
-        // a run that ended in any other way: nothing
-        std::fs::write(&p, format!("[x INFO a] starting the game: one\n[x WARN openomsi_game::lan] {left}old\n[x INFO a] starting the game: two\n[x INFO a] game ends\n")).unwrap();
-        assert!(super::disconnect_of(&p).is_none());
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-}
-
 #[cfg(test)]
 mod choice_tests {
     /// `launcher-duty.json` from before the number plate field: the missing key falls back to
@@ -1451,9 +1367,6 @@ mod launch_tests {
         assert!(!super::game_listed(None, &[game(7, true)]));
     }
 }
-
-#[cfg(test)]
-mod crash_tests;
 
 fn read_settings_file() -> Option<String> {
     std::fs::read_to_string(core::data_dir().join("settings.cfg")).ok()

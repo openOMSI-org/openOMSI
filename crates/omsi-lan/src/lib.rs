@@ -26,9 +26,7 @@ pub fn data_dir() -> Option<PathBuf> {
     Some(PathBuf::from(home).join(".openomsi"))
 }
 
-/// The line the launcher looks for in the game's log when the game is over: the server sent
-/// the player away (kick, ban) or turned it away at the door, with the server's message.
-pub const LEFT_SERVER: &str = "LAN: disconnected from the server: ";
+pub use omsi_net::LEFT_SERVER;
 
 /// The status file of this game process.
 pub fn status_path() -> Option<PathBuf> {

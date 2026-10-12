@@ -75,6 +75,10 @@
 //! LAN's), and a joining game says hello to all of them at once, takes the first that
 //! answers, and gives up with a message saying why that may be after `JOIN_TIMEOUT`.
 
+/// The line the launcher looks for in the game's log when the game is over: the server sent
+/// the player away (kick, ban) or turned it away at the door, with the server's message.
+pub const LEFT_SERVER: &str = "LAN: disconnected from the server: ";
+
 pub mod addrs;
 pub mod bridge;
 pub mod wire;

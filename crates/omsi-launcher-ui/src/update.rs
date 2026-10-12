@@ -8,6 +8,7 @@ use omsi_platform::updater::{self, Status};
 use glam::Vec2;
 use omsi_ui::paint::Align;
 use omsi_ui::{Rect, Weight};
+use omsi_launcher_lib::crash::died_compiling_on_vulkan;
 use winit::event_loop::ActiveEventLoop;
 
 impl Launcher {
@@ -192,30 +193,6 @@ impl Launcher {
         self.ui.p().rounded_border(r, 8.0, 1.0, ACCENT.alpha(0.6 * fade));
         self.ui.icon("check_circle", Vec2::new(r.x + 22.0, r.center().y), 20.0, ACCENT.alpha(fade));
         self.ui.text_in(&text, Rect::new(r.x + 40.0, r.y, w - 48.0, r.h), 13.5, Weight::Bold, TEXT.alpha(fade), Align::Left);
-    }
-}
-
-/// The run went down while a Vulkan driver compiled the shaders: the LAST it said was a stage
-/// of that, and it drew with Vulkan (as the phone's shell decides it, `android.rs`). Any
-/// compile stage anywhere in the log said so of every silent end - a phone run out of memory
-/// 75 % into loading a map on OpenGL was told its Vulkan driver had failed (#848).
-pub(crate) fn died_compiling_on_vulkan(log: &str) -> bool {
-    let last = log.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("");
-    let compiling = last.contains("renderer: compiling") || last.contains("cloud noise made") || last.contains("opening graphics device") || last.contains("compiling renderer pipelines");
-    let vulkan = log.lines().any(|l| (l.contains("renderer: ") || l.contains("opening graphics device")) && l.contains("(Vulkan")) || log.lines().any(|l| l.contains("graphics: ") && l.to_ascii_uppercase().contains("VULKAN"));
-    compiling && vulkan
-}
-
-#[cfg(test)]
-mod hint_tests {
-    #[test]
-    fn only_a_run_that_died_compiling_on_vulkan_is_told_so() {
-        let compiled = "[t INFO r] opening graphics device: Mali (Vulkan, vendor 0x13b5)\n[t INFO r] renderer: compiling the scene shaders\n";
-        assert!(super::died_compiling_on_vulkan(compiled));
-        // compiled long ago, then ran out of memory loading
-        assert!(!super::died_compiling_on_vulkan(&format!("{compiled}[t INFO g] status: 63 fps, view driver\n[t INFO m] loading tiles 75 %\n")));
-        // on OpenGL it is never the Vulkan driver
-        assert!(!super::died_compiling_on_vulkan("[t INFO r] opening graphics device: Mali (Gl, vendor 0x13b5)\n[t INFO r] renderer: compiling the scene shaders\n"));
     }
 }
 

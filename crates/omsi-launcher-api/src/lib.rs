@@ -274,6 +274,28 @@ fn stop_game(pid: u32) -> Answer {
     Ok(json!({ "ended_by_itself": core::stop_instance(pid).map_err(err)? }))
 }
 
+pub fn game_ended(game: &core::instances::Instance) -> Option<(&'static str, Value)> {
+    if game.running || game.stopping.is_some() || game.killed {
+        return None;
+    }
+    let log = std::path::Path::new(&game.log);
+    if let Some(why) = core::crash::disconnect_of(log) {
+        return Some(("game-disconnected", json!({ "why": why })));
+    }
+    let (what, tail) = core::crash::crash_of(log)?;
+    let silent = what.contains("closed without a word");
+    Some(("game-crashed", json!({
+        "what": what,
+        "tail": tail,
+        "gap": core::crash::CRASH_TAIL_GAP,
+        "lost": what.contains("graphics device was lost"),
+        "silent": silent,
+        "vulkan": silent && core::crash::died_compiling_on_vulkan(&tail),
+        "version": omsi_platform::VERSION,
+        "os": std::env::consts::OS,
+    })))
+}
+
 fn game_log(pid: u32, lines: Option<usize>) -> Answer {
     to_json(core::log_tail(pid, lines.unwrap_or(80)).map_err(err)?)
 }
@@ -523,5 +545,33 @@ pub fn call_bytes(cmd: &str, args: &Value, p: &dyn Platform) -> Result<Vec<u8>, 
         "content_picture" => content_picture(&arg::<String>(args, "path")?).ok_or_else(|| "not found".to_string()),
         "preview_frame" => preview_frame(p, arg(args, "w")?, arg(args, "h")?, arg::<Option<bool>>(args, "force")?.unwrap_or(false), arg(args, "dx")?, arg(args, "dy")?, arg(args, "zoom")?, arg(args, "quality")?),
         _ => Err(format!("unknown command {cmd}")),
+    }
+}
+
+#[cfg(test)]
+mod game_end_tests {
+    use super::*;
+
+    #[test]
+    fn a_crash_and_a_server_kick_are_told_and_a_stop_or_a_clean_end_is_not() {
+        let dir = std::env::temp_dir().join(format!("openomsi-game-end-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let game = |pid: u32, log: &str| {
+            let p = dir.join(format!("game-{pid}.log"));
+            std::fs::write(&p, log).unwrap();
+            core::instances::Instance { pid, log: p.to_string_lossy().to_string(), ..Default::default() }
+        };
+        let crashed = game(11, "[t INFO x] starting the game: omsi\n[t ERROR omsi_render] ending the session: the graphics device was lost (Unknown: Out of memory)\n[t INFO x] game ends\n");
+        let (event, what) = game_ended(&crashed).unwrap();
+        assert_eq!(event, "game-crashed");
+        assert_eq!(what["lost"], json!(true));
+        let kicked = game(12, &format!("[t INFO x] starting the game: omsi\n[t WARN openomsi_game::lan] {}Expelled: dangerous driving\n[t INFO x] game ends\n", omsi_net::LEFT_SERVER));
+        assert_eq!(game_ended(&kicked).map(|(e, w)| (e, w["why"].clone())), Some(("game-disconnected", json!("Expelled: dangerous driving"))));
+        assert!(game_ended(&game(13, "[t INFO x] starting the game: omsi\n[t INFO x] game ends\n")).is_none());
+        let mut stopped = game(14, "[t INFO x] starting the game: omsi\n[t ERROR x] the game stopped on an error: panicked at a.rs:1:1\n");
+        assert!(game_ended(&stopped).is_some());
+        stopped.stopping = Some(1);
+        assert!(game_ended(&stopped).is_none());
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
