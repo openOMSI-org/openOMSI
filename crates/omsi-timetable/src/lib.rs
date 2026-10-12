@@ -276,13 +276,38 @@ impl Line {
         o
     }
 
-    /// Write the line to `path`, in the code page of the file it replaces (else Windows-1252).
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
-        let page = std::fs::read(path).map(|b| omsi_cfg::codepage::detect(&b)).unwrap_or(omsi_cfg::codepage::CodePage::Windows1252);
+        use omsi_cfg::codepage::{detect, CodePage};
         let text = self.to_text();
-        let (bytes, _, _) = page.encoding().encode(&text);
-        std::fs::write(path, bytes)
+        let mut pages = Vec::new();
+        if let Ok(old) = std::fs::read(path) {
+            if !old.is_ascii() {
+                pages.push(detect(&old));
+            }
+        }
+        if let Some(page) = path.parent().and_then(timetable_code_page) {
+            pages.push(page);
+        }
+        pages.extend([CodePage::Windows1252, CodePage::Windows1250, CodePage::Windows1251]);
+        for page in pages {
+            let (bytes, _, unmappable) = page.encoding().encode(&text);
+            if !unmappable && omsi_cfg::decode_text(&bytes) == text {
+                return std::fs::write(path, bytes);
+            }
+        }
+        Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("line {}: its texts fit in no code page the map's timetable is written in", self.name)))
     }
+}
+
+fn timetable_code_page(dir: &Path) -> Option<omsi_cfg::codepage::CodePage> {
+    let mut names: Vec<PathBuf> = std::fs::read_dir(dir).ok()?.flatten().map(|e| e.path()).collect();
+    names.sort();
+    names
+        .iter()
+        .filter(|p| p.extension().and_then(|e| e.to_str()).is_some_and(|e| ["ttp", "ttl", "cfg"].iter().any(|x| e.eq_ignore_ascii_case(x))))
+        .filter_map(|p| std::fs::read(p).ok())
+        .find(|b| !b.is_ascii())
+        .map(|b| omsi_cfg::codepage::detect(&b))
 }
 
 impl CarUse {
@@ -476,6 +501,46 @@ mod line_tests {
         assert_eq!(back.tours, l.tours);
         assert!(back.user_allowed);
         assert_eq!(back.priority, 1);
+    }
+
+    fn line_of(trip: &str) -> Line {
+        Line { name: "5".into(), tours: vec![Tour { number: "1".into(), ai_group: "Busses".into(), extra: String::new(), trips: vec![TourTrip { trip: trip.into(), profile: 0, departure: 360.0 }] }], ..Default::default() }
+    }
+
+    fn folder(name: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("openomsi-ttl-{name}-{}", std::process::id()));
+        std::fs::remove_dir_all(&d).ok();
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn a_cyrillic_trip_name_is_written_in_the_maps_code_page_and_read_back() {
+        let d = folder("cyrillic");
+        let (ttp, _, _) = omsi_cfg::codepage::CodePage::Windows1251.encoding().encode("[trip]\r\n\r\nВокзал\r\n5\r\n");
+        std::fs::write(d.join("5_Вокзал.ttp"), ttp).unwrap();
+        let line = line_of("5_Площадь-Вокзал");
+        line.save(&d.join("5.ttl")).unwrap();
+        let bytes = std::fs::read(d.join("5.ttl")).unwrap();
+        assert!(!bytes.windows(2).any(|w| w == b"&#"));
+        assert_eq!(Line::load(&d.join("5.ttl")).unwrap().tours[0].trips[0].trip, "5_Площадь-Вокзал");
+        std::fs::remove_dir_all(&d).ok();
+    }
+
+    #[test]
+    fn a_new_line_with_cyrillic_trips_in_an_ascii_folder_is_still_read_back() {
+        let d = folder("plain");
+        line_of("5_Площадь-Вокзал").save(&d.join("5.ttl")).unwrap();
+        assert_eq!(Line::load(&d.join("5.ttl")).unwrap().tours[0].trips[0].trip, "5_Площадь-Вокзал");
+        std::fs::remove_dir_all(&d).ok();
+    }
+
+    #[test]
+    fn texts_no_code_page_holds_are_refused_and_nothing_is_written() {
+        let d = folder("mixed");
+        assert!(line_of("5_Łódź-Вокзал").save(&d.join("5.ttl")).is_err());
+        assert!(!d.join("5.ttl").exists());
+        std::fs::remove_dir_all(&d).ok();
     }
 }
 

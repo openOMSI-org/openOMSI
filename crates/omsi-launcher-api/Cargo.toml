@@ -10,6 +10,7 @@ serde.workspace = true
 serde_json.workspace = true
 omsi-launcher-core = { path = "../omsi-launcher-core" }
 omsi-cfg = { path = "../omsi-cfg" }
+omsi-timetable = { path = "../omsi-timetable" }
 # (the version the release was built as: OPENOMSI_VERSION, as the game's)
 omsi-platform = { path = "../omsi-platform" }
 omsi-net = { path = "../omsi-net" }

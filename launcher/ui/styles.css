@@ -547,8 +547,29 @@ table.table { width: 100%; border-collapse: collapse; }
 .injury { display: flex; gap: 14px; align-items: center; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--danger-soft); color: var(--danger); box-shadow: inset 0 0 0 1px var(--danger); }
 .injury svg { flex: none; }
 
+.tt { display: grid; grid-template-columns: 290px 260px minmax(0, 1fr); gap: 16px; align-items: start; }
+.tt .btn { height: auto; min-height: 36px; padding-top: 6px; padding-bottom: 6px; white-space: normal; text-align: center; line-height: 1.25; }
+.tt .btn.small { min-height: 30px; padding-top: 4px; padding-bottom: 4px; }
+.tt-list { max-height: 420px; overflow: auto; border-radius: var(--radius-sm); background: var(--surface-2); padding: 4px; display: flex; flex-direction: column; gap: 2px; }
+.tt-list .list-item { padding: 8px 10px; width: 100%; text-align: left; background: none; color: inherit; font: inherit; flex: none; gap: 10px; }
+.tt-list .list-item:hover { background: var(--surface); }
+.tt-list .list-item.on { background: var(--accent-soft); }
+.tt-count { min-width: 64px; text-align: right; }
+.tt-pair { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 8px; }
+.tt-pair .btn { min-width: 0; }
+.tt-trips-head { flex-wrap: wrap; }
+.tt-trips-head h2 { min-width: 0; flex: 1 1 160px; }
+.tt-trips-head .row { gap: 6px; }
+.tt-rows { display: flex; flex-direction: column; gap: 6px; }
+.tt-row { display: grid; grid-template-columns: 88px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) 30px; gap: 8px; align-items: center; }
+.tt-head { font-size: 12px; font-weight: 600; color: var(--muted); }
+.tt-head span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.input.bad { box-shadow: 0 0 0 1.5px var(--danger); }
+
 @media (max-width: 1180px) {
   .drive { grid-template-columns: minmax(0, 1fr) 300px; }
+  .tt { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tt-trips { grid-column: 1 / -1; }
   .pads { grid-template-columns: 240px minmax(0, 1fr); }
   .settings-grid { grid-template-columns: 1fr; }
 }
@@ -666,3 +687,8 @@ html.phone, html.phone body { font-size: 15px; -webkit-tap-highlight-color: tran
 .key-option > .btn { flex: none; }
 .key-buses { margin: 0 12px 8px; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--surface-2); font-size: 12.5px; color: var(--muted); display: grid; gap: 4px; max-height: 136px; overflow: auto; }
 .cfg-path { display: flex; align-items: center; gap: 6px; margin-top: 12px; min-width: 0; }
+
+@media (max-width: 760px) {
+  .tt { grid-template-columns: minmax(0, 1fr); }
+  .tt-row { grid-template-columns: 80px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) 30px; gap: 6px; }
+}

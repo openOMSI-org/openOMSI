@@ -3551,6 +3551,7 @@ dependencies = [
  "omsi-launcher-core",
  "omsi-net",
  "omsi-platform",
+ "omsi-timetable",
  "omsi-weather",
  "serde",
  "serde_json",

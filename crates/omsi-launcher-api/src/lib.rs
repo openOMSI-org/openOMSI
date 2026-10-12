@@ -6,6 +6,7 @@
 //! the game's renderer - it is asked through `Platform`.
 
 pub mod i18n;
+mod timetable;
 mod updates;
 mod versions;
 
@@ -536,6 +537,9 @@ pub fn call(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "saved_situations" => saved_situations(arg::<String>(args, "map")?),
         "season_date" => season_date(arg::<String>(args, "season")?, arg::<String>(args, "phase")?, arg::<String>(args, "date")?, arg::<String>(args, "map")?, arg::<bool>(args, "keep")?),
         "tutorials" => tutorials(),
+        "timetable" => timetable::load(arg::<String>(args, "map")?),
+        "timetable_save" => timetable::save(arg::<String>(args, "map")?, arg::<Vec<timetable::LineEdit>>(args, "lines")?),
+        "timetable_reset" => timetable::reset(arg::<String>(args, "map")?),
         "profiles" => profiles(),
         "profile" => profile(arg::<String>(args, "name")?),
         "profile_create" => profile_create(arg::<String>(args, "name")?, arg::<String>(args, "sex")?),

@@ -14,6 +14,7 @@ import { SettingsPage } from './pages/settings.js';
 import { ControlsPage } from './pages/controls.js';
 import { GamesPage } from './pages/games.js';
 import { TutorialsPage } from './pages/tutorials.js';
+import { TimetablePage } from './pages/timetable.js';
 import { SetupPage } from './pages/setup.js';
 import { MobileApp } from './mobile/mobile.js';
 import { GameEndDialogs, watchGameEnds } from './crash.js';
@@ -34,6 +35,7 @@ const PAGES = [
   null,
   ['games', 'Running games', 'gamepad', GamesPage],
   ['tutorials', 'Tutorials', 'book', TutorialsPage],
+  ['timetable', 'Timetable', 'clock', TimetablePage],
   ['setup', 'Setup', 'folder', SetupPage],
 ];
 
