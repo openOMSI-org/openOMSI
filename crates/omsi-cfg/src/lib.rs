@@ -1015,15 +1015,7 @@ pub fn content_dir() -> Option<PathBuf> {
     if let Some(d) = crate::flags::OMSI_CONTENT.os() {
         return Some(PathBuf::from(d));
     }
-    let exe = std::env::current_exe().ok()?;
-    let dir = exe.parent()?.to_path_buf();
-    // inside an .app bundle the binary sits in Contents/MacOS: use the folder beside the bundle
-    let dir = if dir.ends_with("Contents/MacOS") {
-        dir.parent()?.parent()?.parent()?.to_path_buf()
-    } else {
-        dir
-    };
-    let cand = content_folder_of(&dir);
+    let cand = content_folder_of_program(&std::env::current_exe().ok()?)?;
     if !is_programs_folder(&cand) && (cand.exists() || std::fs::create_dir_all(&cand).is_ok()) && is_writable(&cand) {
         Some(cand)
     } else {
@@ -1032,6 +1024,77 @@ pub fn content_dir() -> Option<PathBuf> {
         let _ = ensure_content_layout(&fallback);
         Some(fallback)
     }
+}
+
+fn content_folder_of_program(exe: &Path) -> Option<PathBuf> {
+    let dir = exe.parent()?;
+    // inside an .app bundle the binary sits in Contents/MacOS: use the folder beside the bundle
+    let dir = if dir.ends_with("Contents/MacOS") { dir.parent()?.parent()?.parent()? } else { dir };
+    Some(content_folder_of(dir))
+}
+
+const OWN_INPUTS: [&str; 2] = ["keyboard.cfg", "gamectrler.cfg"];
+
+pub fn own_input(name: &str) -> Option<PathBuf> {
+    if crate::flags::OMSI_CONTENT.os().is_some() {
+        return content_dir().map(|c| c.join("Inputs").join(name));
+    }
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
+    Some(PathBuf::from(home).join(".openomsi").join("Inputs").join(name))
+}
+
+pub fn input_in_use(name: &str) -> Option<PathBuf> {
+    newest([own_input(name), content_dir().map(|c| c.join("Inputs").join(name))])
+}
+
+pub fn adopt_own_inputs(previous_program: Option<&Path>) {
+    if crate::flags::OMSI_CONTENT.os().is_some() {
+        return;
+    }
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(|h| PathBuf::from(h).join(".openomsi").join("content"));
+    let here = std::env::current_exe().ok().and_then(|e| content_folder_of_program(&e));
+    for name in OWN_INPUTS {
+        let Some(own) = own_input(name).filter(|p| !p.exists()) else { continue };
+        let mut dirs: Vec<PathBuf> = [content_dir(), previous_program.and_then(content_folder_of_program), home.clone()].into_iter().flatten().collect();
+        dirs.extend(here.as_deref().map(sibling_installs).unwrap_or_default());
+        if let Some(found) = newest(dirs.iter().map(|d| Some(d.join("Inputs").join(name)))) {
+            adopt_input(&own, &found);
+        }
+    }
+}
+
+fn sibling_installs(here: &Path) -> Vec<PathBuf> {
+    let Some(parent) = here.parent() else { return Vec::new() };
+    let Ok(entries) = std::fs::read_dir(parent) else { return Vec::new() };
+    entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|d| ["openomsi", "openomsi.exe", "openOMSI.app"].iter().any(|p| d.join(p).exists()))
+        .map(|d| content_folder_of(&d))
+        .collect()
+}
+
+fn newest(paths: impl IntoIterator<Item = Option<PathBuf>>) -> Option<PathBuf> {
+    let mut best: Option<(PathBuf, std::time::SystemTime)> = None;
+    for p in paths.into_iter().flatten() {
+        let Some(t) = std::fs::metadata(&p).ok().filter(|m| m.is_file()).and_then(|m| m.modified().ok()) else { continue };
+        if best.as_ref().is_none_or(|(_, b)| t > *b) {
+            best = Some((p, t));
+        }
+    }
+    best.map(|(p, _)| p)
+}
+
+fn adopt_input(own: &Path, from: &Path) {
+    let (Some(dir), Some(name)) = (own.parent(), own.file_name()) else { return };
+    if own.exists() || own == from {
+        return;
+    }
+    let tmp = dir.join(format!("{}.{}.tmp", name.to_string_lossy(), std::process::id()));
+    let _ = std::fs::create_dir_all(dir).and_then(|_| std::fs::copy(from, &tmp)).and_then(|_| {
+        std::fs::hard_link(&tmp, own).or_else(|e| if e.kind() == std::io::ErrorKind::AlreadyExists { Ok(()) } else { std::fs::rename(&tmp, own) })
+    });
+    let _ = std::fs::remove_file(&tmp);
 }
 
 /// Create the content folder layout at `dir` (idempotent).
@@ -1107,6 +1170,41 @@ mod tests {
         std::fs::create_dir_all(dir.join("Vehicles").join("MAN_SD200")).unwrap();
         assert!(!is_programs_folder(&dir));
         std::fs::remove_dir_all(dir.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn own_inputs_outlive_the_program_folder() {
+        let t = std::env::temp_dir().join(format!("omsi-own-inputs-{}", std::process::id()));
+        let own = t.join("home").join("Inputs").join("keyboard.cfg");
+        let (first, second) = (t.join("openOMSI-0.2.38").join("keyboard.cfg"), t.join("openOMSI-0.2.39").join("keyboard.cfg"));
+        std::fs::create_dir_all(first.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(second.parent().unwrap()).unwrap();
+        let at = |p: &Path, secs: u64| std::fs::File::options().write(true).open(p).unwrap().set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs)).unwrap();
+        assert_eq!(newest([Some(own.clone()), Some(first.clone())]), None);
+        std::fs::write(&first, b"[game]\nsim_pause\n25\n0\n").unwrap();
+        std::fs::write(&second, b"[game]\n").unwrap();
+        at(&first, 2_000_000_000);
+        at(&second, 1_000_000_000);
+        let found = newest([None, Some(second.clone()), Some(first.clone())]).unwrap();
+        assert_eq!(found, first);
+        adopt_input(&own, &found);
+        assert_eq!(std::fs::read(&own).unwrap(), b"[game]\nsim_pause\n25\n0\n");
+        std::fs::write(&own, b"[game]\nsim_pause\n26\n0\n").unwrap();
+        adopt_input(&own, &second);
+        assert_eq!(std::fs::read(&own).unwrap(), b"[game]\nsim_pause\n26\n0\n");
+        at(&own, 2_000_000_000);
+        assert_eq!(newest([Some(own.clone()), Some(first.clone())]), Some(own.clone()));
+        at(&first, 2_000_000_001);
+        assert_eq!(newest([Some(own.clone()), Some(first.clone())]), Some(first.clone()));
+        assert_eq!(std::fs::read_dir(own.parent().unwrap()).unwrap().count(), 1);
+        std::fs::remove_dir_all(&t).unwrap();
+        std::fs::create_dir_all(t.join("openOMSI-0.2.38")).unwrap();
+        std::fs::write(t.join("openOMSI-0.2.38").join("openomsi.exe"), b"x").unwrap();
+        std::fs::create_dir_all(t.join("photos")).unwrap();
+        assert_eq!(sibling_installs(&t.join("openOMSI-0.2.40")), vec![t.join("openOMSI-0.2.38")]);
+        std::fs::remove_dir_all(&t).unwrap();
+        assert_eq!(content_folder_of_program(Path::new("/x/Games/openOMSI.app/Contents/MacOS/openomsi")), Some(PathBuf::from("/x/Games")));
+        assert_eq!(content_folder_of_program(Path::new("/x/openOMSI-0.2.38/openomsi.exe")), Some(PathBuf::from("/x/openOMSI-0.2.38")));
     }
 
     #[test]

@@ -270,6 +270,9 @@ scroll to zoom. Its pages:
   server names a voice channel (see [SERVER.md](SERVER.md) and
   `tools/greenteaspeak-plugin/README.md`).
 * **Controls** - `Inputs/keyboard.cfg`: click a key, press the new one; clashes are red. The
+  keys and the game controllers are kept in `~/.openomsi/Inputs` (on Windows
+  `C:\Users\<you>\.openomsi\Inputs`), so an update or a new program folder keeps them; the first
+  start of this version brings over those an earlier one saved beside the program. The
   keys are the game's with *Driving keys: Custom controls* (Settings → Driving); with a ready-made
   layout (W A S D, arrows) those keys drive and win over the list - the page says so, and
   changing a key switches to Custom controls by itself. *Game controllers*: wheels, pedals,
@@ -303,7 +306,7 @@ scroll to zoom. Its pages:
   (it is then neither read nor listed as steering); **Remove this device** (clicked twice) takes
   one out of the list, kept so by **Save**. Select a device to adjust *Steering force*
   (centering and resistance) and *Vibration* separately, then press **Save**. The values are stored
-  for that device in the content folder's `Inputs/gamectrler.cfg`; restart a running game to use
+  for that device in `~/.openomsi/Inputs/gamectrler.cfg`; restart a running game to use
   the new values. *Force feedback and vibration* in Settings → Driving remains the global on/off switch.
 * **Sessions** - every game started from the launcher, with its log, a **Stop** that lets
   it save its run (SIGTERM, up to 8 s, and only a stuck game is killed) and, for a LAN

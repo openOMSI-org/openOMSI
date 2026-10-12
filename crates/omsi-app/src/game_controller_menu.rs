@@ -305,8 +305,8 @@ fn switched(now: bool, mv: Move) -> bool {
 }
 
 fn save(app: &mut App, devices: Vec<DeviceCfg>) {
-    match crate::controllers::save_cfg(crate::startup::content_dir(), &devices) {
-        Ok(()) => {
+    match crate::controllers::save_cfg(&devices) {
+        Ok(_) => {
             if let Some(c) = app.input.controllers.as_mut() { c.install_cfg(devices); }
             app.input.last_ctl_steer = None;
             app.service_msg = Some(("Controller configuration saved and applied".into(), 3.0));

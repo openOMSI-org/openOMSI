@@ -126,19 +126,16 @@ pub(crate) fn fatal_dialog(title: &str, text: &str) {
 /// openOMSI's own content folder: the folder of the game binary, laid out like an OMSI 2
 /// installation (Vehicles, maps, Sceneryobjects ...). Mods live here; it is searched before
 /// the original installation.
-/// The `Inputs/keyboard.cfg` the game follows: the content folder's once the launcher has
-/// saved key bindings there, else the original installation's (never written) - or, where
-/// that has none, its `keyboard_reset.cfg`, the standard keys OMSI falls back to as well.
+/// The `Inputs/keyboard.cfg` the game follows: the newer of `~/.openomsi/Inputs`' and the
+/// content folder's once the launcher has saved key bindings, else the original installation's
+/// (never written) - or, where that has none, its `keyboard_reset.cfg`, the standard keys OMSI
+/// falls back to as well.
 pub(crate) fn keyboard_cfg(root: &Path) -> PathBuf {
-    if let Some(own) = content_dir().map(|c| c.join("Inputs/keyboard.cfg")).filter(|p| p.exists()) {
-        return own;
-    }
-    omsi_cfg::original_keyboard_cfg(root)
+    omsi_cfg::input_in_use("keyboard.cfg").unwrap_or_else(|| omsi_cfg::original_keyboard_cfg(root))
 }
 
-/// The keys (scan codes without a modifier) the player's own `keyboard.cfg` (the content
-/// folder's, written by the launcher) binds to something the original's does not bind to
-/// them: see `App::own_keys`.
+/// The keys (scan codes without a modifier) the player's own `keyboard.cfg` (written by the
+/// launcher) binds to something the original's does not bind to them: see `App::own_keys`.
 pub(crate) fn own_keys(root: &Path) -> std::collections::HashSet<i32> {
     own_bindings(root, 0)
 }
@@ -148,7 +145,11 @@ pub(crate) fn own_keys(root: &Path) -> std::collections::HashSet<i32> {
 /// built-in list, not from the installation's file - a player who edited that file had
 /// every change overridden by the game's conveniences (Z / X / C, Shift+number).
 pub(crate) fn own_bindings(root: &Path, modifier: i32) -> std::collections::HashSet<i32> {
-    let Ok(m) = omsi_content::KeyboardCfg::load(&keyboard_cfg(root)) else { return Default::default() };
+    own_bindings_in(&keyboard_cfg(root), modifier)
+}
+
+fn own_bindings_in(file: &Path, modifier: i32) -> std::collections::HashSet<i32> {
+    let Ok(m) = omsi_content::KeyboardCfg::load(file) else { return Default::default() };
     let stock: std::collections::HashSet<(String, i32, i32)> = crate::stock_keys::STOCK_KEYS.iter().map(|(a, k, md)| (a.to_ascii_lowercase(), *k, *md)).collect();
     m.vehicles
         .iter()
@@ -815,8 +816,9 @@ mod own_key_tests {
         if !root.join("Inputs/keyboard.cfg").exists() {
             return;
         }
-        assert!(super::own_bindings(root, 0).is_empty());
-        assert!(super::own_bindings(root, omsi_content::input::KEY_SHIFT).is_empty());
+        let stock = omsi_cfg::original_keyboard_cfg(root);
+        assert!(super::own_bindings_in(&stock, 0).is_empty());
+        assert!(super::own_bindings_in(&stock, omsi_content::input::KEY_SHIFT).is_empty());
     }
 }
 

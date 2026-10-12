@@ -91,10 +91,12 @@ impl DeviceCfg {
     }
 }
 
-/// The `gamectrler.cfg` in use: the content folder's (written by the launcher) before
-/// OMSI 2's own.
+/// The `gamectrler.cfg` in use: the newer of `~/.openomsi/Inputs`' (written by the launcher)
+/// and the content folder's, before OMSI 2's own.
 pub fn cfg_path(root: &Path) -> std::path::PathBuf {
-    omsi_cfg::find_in_roots("Inputs/gamectrler.cfg").map(|(_, p)| p).unwrap_or_else(|| root.join("Inputs").join("gamectrler.cfg"))
+    omsi_cfg::input_in_use("gamectrler.cfg")
+        .or_else(|| omsi_cfg::find_in_roots("Inputs/gamectrler.cfg").map(|(_, p)| p))
+        .unwrap_or_else(|| root.join("Inputs").join("gamectrler.cfg"))
 }
 
 /// `Inputs/gamectrler.cfg`: the configured devices.
@@ -1057,12 +1059,12 @@ impl HeldButtons {
     }
 }
 
-/// Save only to the writable openOMSI overlay (`content_dir`). The original OMSI installation is read-only.
-pub fn save_cfg(content_dir: Option<std::path::PathBuf>, devices: &[DeviceCfg]) -> Result<(), String> {
-    let dir = content_dir.ok_or("No writable openOMSI content folder was found")?.join("Inputs");
-    save_cfg_to(&dir.join("gamectrler.cfg"), devices)?;
+/// Save to `~/.openomsi/Inputs`. The original OMSI installation is read-only.
+pub fn save_cfg(devices: &[DeviceCfg]) -> Result<std::path::PathBuf, String> {
+    let path = omsi_cfg::own_input("gamectrler.cfg").ok_or("No home folder was found to keep the controllers in")?;
+    save_cfg_to(&path, devices)?;
     omsi_cfg::content_changed();
-    Ok(())
+    Ok(path)
 }
 
 fn save_cfg_to(path: &Path, devices: &[DeviceCfg]) -> Result<(), String> {

@@ -1831,33 +1831,24 @@ pub fn delete_profile(name: &str) -> Result<()> {
 mod profile_cleanup_tests;
 
 // ---------------------------------------------------------------------------------------
-// key bindings: the content folder's Inputs/keyboard.cfg once the page has saved one (the
-// game reads that first), else the original installation's, which is never written
+// key bindings: the newer of ~/.openomsi/Inputs/keyboard.cfg and the content folder's once
+// the page has saved one (the game reads that first), else the original installation's,
+// which is never written
+
+pub fn adopt_own_inputs() {
+    let game = load_config_raw().game;
+    omsi_cfg::adopt_own_inputs(Some(Path::new(game.trim())).filter(|p| !p.as_os_str().is_empty()));
+}
 
 fn keyboard_cfg_write_path() -> Result<PathBuf> {
-    let cand = content_dir().unwrap_or(root()?).join("Inputs").join("keyboard.cfg");
-    if let Some(p) = cand.parent() {
-        if (p.exists() || std::fs::create_dir_all(p).is_ok()) && omsi_cfg::is_writable(p) {
-            return Ok(cand);
-        }
-    }
-    let fallback = data_dir().join("Inputs").join("keyboard.cfg");
-    if let Some(p) = fallback.parent() {
-        let _ = std::fs::create_dir_all(p);
-    }
-    Ok(fallback)
+    omsi_cfg::own_input("keyboard.cfg").ok_or_else(|| anyhow!("no home folder to keep the key bindings in"))
 }
 
 fn keyboard_cfg_read_path() -> Result<PathBuf> {
-    let own = keyboard_cfg_write_path()?;
-    if own.exists() {
-        return Ok(own);
+    match omsi_cfg::input_in_use("keyboard.cfg") {
+        Some(p) => Ok(p),
+        None => Ok(omsi_cfg::original_keyboard_cfg(&root()?)),
     }
-    let fallback = data_dir().join("Inputs").join("keyboard.cfg");
-    if fallback.exists() {
-        return Ok(fallback);
-    }
-    Ok(omsi_cfg::original_keyboard_cfg(&root()?))
 }
 
 fn binding_to_json(b: &omsi_content::input::KeyBinding) -> Value {

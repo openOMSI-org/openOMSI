@@ -314,9 +314,10 @@ fn keyboard_cfg(app: &App) -> omsi_content::KeyboardCfg {
 }
 
 fn write_keyboard_cfg(_app: &App, cfg: &omsi_content::KeyboardCfg) -> Result<(), String> {
-    let dir = crate::startup::content_dir().ok_or_else(|| "No writable openOMSI content folder was found".to_string())?.join("Inputs");
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let path = dir.join("keyboard.cfg");
+    let path = omsi_cfg::own_input("keyboard.cfg").ok_or_else(|| "No home folder was found to keep the key bindings in".to_string())?;
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
     let tmp = path.with_extension("cfg.tmp");
     cfg.save(&tmp).map_err(|e| e.to_string())?;
     omsi_content::KeyboardCfg::load(&tmp).map_err(|e| e.to_string())?;

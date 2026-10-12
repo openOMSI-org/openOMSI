@@ -211,11 +211,9 @@ fn device_from(v: &Value) -> Result<DeviceCfg, String> {
 
 fn save(req: &Value, saved: &mut Vec<DeviceCfg>) -> Result<Value, String> {
     let devices = req.get("devices").and_then(Value::as_array).ok_or("no devices")?.iter().map(device_from).collect::<Result<Vec<_>, _>>()?;
-    let base = omsi_cfg::content_dir().ok_or("the game's content folder was not found")?;
-    std::fs::create_dir_all(base.join("Inputs")).map_err(|e| format!("{}: {e}", base.join("Inputs").display()))?;
-    controllers::save_cfg(Some(base.clone()), &devices)?;
+    let path = controllers::save_cfg(&devices)?;
     *saved = devices;
-    Ok(json!({ "path": base.join("Inputs").join("gamectrler.cfg").to_string_lossy() }))
+    Ok(json!({ "path": path.to_string_lossy() }))
 }
 
 fn ffb_test(req: &Value, hwnd: Option<isize>) -> Result<Value, String> {

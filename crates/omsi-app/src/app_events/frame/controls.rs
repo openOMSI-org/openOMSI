@@ -69,7 +69,7 @@ impl App {
         }
         // a device set up by itself: kept for the next start and the launcher's page
         if let Some(cfg) = ctl.auto_saved.take() {
-            if let Err(e) = crate::controllers::save_cfg(crate::startup::content_dir(), &cfg) {
+            if let Err(e) = crate::controllers::save_cfg(&cfg) {
                 log::warn!("game controllers: the automatic set-up could not be saved: {e}");
             }
         }
