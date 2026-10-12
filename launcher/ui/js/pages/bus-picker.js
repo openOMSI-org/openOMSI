@@ -84,8 +84,8 @@ export function BusPicker({ onClose }) {
       <div class="left">
         <div class="tools">
           <${Search} value=${q} onInput=${setQ} placeholder="Search buses" autofocus />
-          <div class="row">
-            <div class="grow"><${Select} raw value=${maker} options=${[['', t('All makers')], ...makers.map((m) => [m, m])]} onChange=${setMaker} /></div>
+          <div class="row wrap">
+            <div class="grow" style="min-width:140px"><${Select} raw value=${maker} options=${[['', t('All makers')], ...makers.map((m) => [m, m])]} onChange=${setMaker} /></div>
             <${Segmented} value=${show} options=${[['all', 'All'], ['fav', 'Starred'], ['mods', 'Mods']]} onChange=${setShow} />
           </div>
         </div>
