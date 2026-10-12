@@ -1999,6 +1999,14 @@ fn mirror_refresh(x: &str) -> &'static str {
     }
 }
 
+pub fn perf_overlay_mode(value: &str) -> &'static str {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "compact" | "1" | "true" | "on" => "compact",
+        "detailed" | "2" => "detailed",
+        _ => "off",
+    }
+}
+
 /// The page's view of a `settings.cfg` text (None: no file yet, the game's defaults).
 pub fn settings_from_text(text: Option<&str>) -> Value {
     let mut v = json!({ "msaa": 4, "anisotropy": 8, "ssao": true, "shadows": true, "shadow_size": 2048, "navigator": true, "ui_opacity": 0.85, "navigator_corner": "bottom-left", "boarding": "auto", "detail_textures": true, "exact_fare": true, "enhanced": false, "graphics": "vanilla_plus", "fullscreen": false, "vsync": true, "volume": 0.6, "drive_keys": "simple", "render_scale": "auto", "view_distance": "auto", "language": "ENG", "texture_memory": 0, "texture_compression": true, "gpu_texture_compression": true, "chat": true, "tooltips": true, "name_tags": true, "show_fps": false, "clouds": true, "cloud_quality": "high", "rain_quality": "high", "pax_density": 1.0, "vol_ai": 1.0, "vol_scenery": 1.0, "ambient": true, "vol_ambient": 0.8, "mirror_size": 256, "doppler": true, "driver": true, "max_fps": 0, "min_obj_size": 0.013, "max_obj_dist": "auto" });
@@ -2032,7 +2040,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     v["resolution"] = json!("auto");
     // the game's information bar along the top, as the last session left it (#1164)
     v["info_bar"] = json!(false);
-    v["perf_overlay"] = json!(false);
+    v["perf_overlay"] = json!("off");
     // Human posing; the original OMSI behavior remains the default.
     v["passenger_animation"] = json!("original");
     // the trees' foliage bends and sways in the weather's wind
@@ -2154,7 +2162,8 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             "seat_pitch_deg" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).unwrap_or(0.0).clamp(-45.0, 45.0)),
             "head_tracking_yaw_sens" | "head_tracking_pitch_sens" | "head_tracking_roll_sens" | "head_tracking_x_sens" | "head_tracking_y_sens" | "head_tracking_z_sens" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 100.0)).unwrap_or(100.0)),
             "nav_arrows" | "nav_ai" | "get_up" | "time_sync" | "metar_sync" | "ui_scale_window" | "notes" | "machine_translation" | "update_check" | "update_auto" | "update_notify" | "presence" | "reflections" | "steering_linear" | "old_steering" | "red_steer_spd" | "ff_invert" | "ff_enabled" | "brake_hold" | "auto_clutch" | "momentary_gears" | "auto_shift" | "mouse_steering" | "mouse_right_off" | "mouse_smooth" | "mouse_hold" | "blinker_cancel" => v[&k] = json!(b(val)),
-            "info_bar" | "perf_overlay" => v[&k] = json!(b(val)),
+            "info_bar" => v[&k] = json!(b(val)),
+            "perf_overlay" => v[&k] = json!(perf_overlay_mode(val)),
             "windy_trees" | "mirror_hud_every_frame" | "ai_wait_timed_stops_only" | "ambient" => v[&k] = json!(b(val)),
             "time_speed" => v[&k] = json!(val.trim_start_matches(['x', 'X']).parse::<f64>().map(|x| x.clamp(1.0, 30.0)).map(|x| if x.fract() == 0.0 { format!("{}", x as i64) } else { x.to_string() }).unwrap_or_else(|_| "1".into())),
             "language" => v[&k] = json!(language_code(val)),
@@ -2553,7 +2562,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("triple_hud_center={}\ntriple_fov_deg={}\n", b("triple_hud_center", true), if triple_fov < 20.0 { 0.0 } else { triple_fov.min(120.0) }));
     text.push_str(&format!("triple_screen={}\ntriple_span={}\n", b("triple_screen", false), b("triple_span", true)));
     text.push_str(&format!("triple_width_mm={}\ntriple_distance_mm={}\ntriple_bezel_mm={}\n", f("triple_width_mm", 600.0).clamp(200.0, 2000.0), f("triple_distance_mm", 650.0).clamp(200.0, 3000.0), f("triple_bezel_mm", 0.0).clamp(0.0, 100.0)));
-    text.push_str(&format!("info_bar={}\nperf_overlay={}\n", b("info_bar", false), b("perf_overlay", false)));
+    text.push_str(&format!("info_bar={}\nperf_overlay={}\n", b("info_bar", false), perf_overlay_mode(&v.get("perf_overlay").map(|x| x.as_str().map_or_else(|| x.to_string(), str::to_string)).unwrap_or_default())));
     text.push_str(&format!("windy_trees={}\n", b("windy_trees", true)));
     text.push_str(&format!("mirror_hud_every_frame={}\n", b("mirror_hud_every_frame", false)));
     text.push_str(&format!("standing_chance={}\n", n("standing_chance", 5).clamp(0, 100)));
@@ -3408,7 +3417,8 @@ mod tests {
         let on = settings_from_text(Some("info_bar=1\n"));
         assert_eq!(on["info_bar"], json!(true));
         assert!(settings_to_text(&on, None).lines().any(|l| l == "info_bar=1"));
-        assert!(settings_to_text(&settings_from_text(Some("perf_overlay=1\n")), None).lines().any(|l| l == "perf_overlay=1"));
+        assert_eq!(settings_from_text(None)["perf_overlay"], json!("off"));
+        assert!(settings_to_text(&settings_from_text(Some("perf_overlay=detailed\n")), None).lines().any(|l| l == "perf_overlay=detailed"));
     }
 
     /// The opacity is the whole interface's now: a file of an older build, where it was the

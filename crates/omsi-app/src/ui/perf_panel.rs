@@ -3,6 +3,24 @@ use crate::perf_overlay::{graph_scale, Part, PerfOverlay, Sample, HISTORY};
 
 const GRAPH_H: u32 = 64;
 const GRAPH_EVERY: f32 = 1.0 / 30.0;
+const SLOT_STEP: u32 = 64;
+
+struct Slot {
+    tex: TextureId,
+    text: String,
+    px: u32,
+    w: u32,
+    h: u32,
+    cap: u32,
+}
+
+#[derive(Clone, Copy)]
+struct Placed {
+    tex: TextureId,
+    w: f32,
+    h: f32,
+    cap: f32,
+}
 
 #[derive(Default)]
 pub(crate) struct PerfPanel {
@@ -10,12 +28,28 @@ pub(crate) struct PerfPanel {
     image: Option<omsi_texture::Image>,
     drawn: u64,
     since: f32,
+    scale_ms: i32,
     width: f32,
+    detailed: bool,
+    slots: Vec<Slot>,
 }
 
-pub(crate) fn raster(frames: &std::collections::VecDeque<Sample>, rgba: &mut [u8]) {
+impl PerfPanel {
+    fn free(&mut self, r: &Renderer, scene: &mut Scene) {
+        for tex in self
+            .graph
+            .take()
+            .into_iter()
+            .chain(self.slots.drain(..).map(|s| s.tex))
+        {
+            r.free_texture(scene, tex);
+        }
+        *self = PerfPanel::default();
+    }
+}
+
+pub(crate) fn raster(frames: &std::collections::VecDeque<Sample>, top: f32, rgba: &mut [u8]) {
     let (w, h) = (HISTORY, GRAPH_H as usize);
-    let top = graph_scale(frames);
     for px in rgba.chunks_exact_mut(4) {
         px.copy_from_slice(&[0, 0, 0, 70]);
     }
@@ -49,7 +83,94 @@ pub(crate) fn raster(frames: &std::collections::VecDeque<Sample>, rgba: &mut [u8
     }
 }
 
+pub(crate) fn padded(img: &omsi_texture::Image, cap: u32) -> omsi_texture::Image {
+    let mut rgba = vec![0; (cap * img.height * 4) as usize];
+    let (row, w) = ((cap * 4) as usize, (img.width.min(cap) * 4) as usize);
+    for (y, src) in img.rgba.chunks_exact((img.width * 4) as usize).enumerate() {
+        rgba[y * row..y * row + w].copy_from_slice(&src[..w]);
+    }
+    omsi_texture::Image {
+        width: cap,
+        height: img.height,
+        rgba,
+        has_alpha: true,
+    }
+}
+
 impl Ui {
+    fn perf_text(
+        &mut self,
+        r: &Renderer,
+        scene: &mut Scene,
+        k: usize,
+        text: &str,
+        px: u32,
+        color: [u8; 3],
+    ) -> Placed {
+        if let Some(s) = self
+            .perf
+            .slots
+            .get(k)
+            .filter(|s| s.px == px && s.text == text)
+        {
+            return Placed {
+                tex: s.tex,
+                w: s.w as f32,
+                h: s.h as f32,
+                cap: s.cap as f32,
+            };
+        }
+        let font = if px & BOLD != 0 {
+            &self.text.bold
+        } else {
+            &self.text.font
+        };
+        let img = render_text(
+            font,
+            &omsi_ui::text::composed(text),
+            (px & !BOLD) as f32,
+            [color[0], color[1], color[2], 0],
+        );
+        let fits = self
+            .perf
+            .slots
+            .get(k)
+            .filter(|s| s.h == img.height && s.cap >= img.width)
+            .map(|s| (s.tex, s.cap));
+        let cap = fits.map_or(img.width.div_ceil(SLOT_STEP) * SLOT_STEP, |f| f.1);
+        let full = padded(&img, cap);
+        let tex = match fits {
+            Some((tex, _)) => {
+                r.update_texture(scene, tex, &full);
+                tex
+            }
+            None => {
+                if let Some(old) = self.perf.slots.get(k) {
+                    r.free_texture(scene, old.tex);
+                }
+                r.add_texture(scene, &full, false)
+            }
+        };
+        let slot = Slot {
+            tex,
+            text: text.to_string(),
+            px,
+            w: img.width,
+            h: img.height,
+            cap,
+        };
+        match self.perf.slots.get_mut(k) {
+            Some(s) => *s = slot,
+            None => self.perf.slots.push(slot),
+        }
+        Placed {
+            tex,
+            w: img.width as f32,
+            h: img.height as f32,
+            cap: cap as f32,
+        }
+    }
+
     pub(super) fn draw_perf(
         &mut self,
         r: &Renderer,
@@ -59,88 +180,86 @@ impl Ui {
         dt: f32,
     ) {
         let Some(o) = f.perf else {
-            if let Some(tex) = self.perf.graph.take() {
-                r.free_texture(scene, tex);
+            if self.perf.graph.is_some() || !self.perf.slots.is_empty() {
+                self.perf.free(r, scene);
             }
-            self.perf = PerfPanel::default();
             return;
         };
+        if o.frames.is_empty() {
+            return;
+        }
         let graph = self.perf_graph(r, scene, o, dt);
-        let px = (12.0 * s).round() as u32;
+        let detailed = f.perf_detailed;
+        if self.perf.detailed != detailed {
+            self.perf.detailed = detailed;
+            self.perf.width = 0.0;
+        }
+        let px = ((if detailed { 12.0 } else { 11.0 }) * s).round() as u32;
         let lh = (px as f32 * 1.45).round();
-        let pad = 10.0 * s;
-        let text = [220, 220, 220, 0];
-        let title = self.text.label_op(
+        let pad = if f.perf_detailed { 10.0 } else { 8.0 } * s;
+        let (bright, text) = ([240, 240, 240], [220, 220, 220]);
+        let ro = &o.readout;
+        let title = self.perf_text(r, scene, 0, &ro.title, px | BOLD, bright);
+        let head = self.perf_text(r, scene, 1, &ro.head, px | BOLD, bright);
+        let scale = self.perf_text(
             r,
             scene,
-            &omsi_ui::tr("Performance"),
-            px | BOLD,
-            [240, 240, 240, 0],
-            1.0,
+            2,
+            &format!("{} ms", self.perf.scale_ms),
+            (10.0 * s).round() as u32,
+            [200, 200, 200],
         );
-        let head = self.text.label_op(
-            r,
-            scene,
-            &o.readout.head,
-            px | BOLD,
-            [240, 240, 240, 0],
-            1.0,
-        );
-        let parts: Vec<(Part, Label, Label)> = o
-            .readout
-            .parts
-            .iter()
-            .map(|(p, v)| {
-                (
-                    *p,
-                    self.text
-                        .label_op(r, scene, &omsi_ui::tr(p.name()), px, text, 1.0),
-                    self.text.label_op(r, scene, v, px, text, 1.0),
-                )
-            })
-            .collect();
-        let lines: Vec<Label> = o
-            .readout
-            .lines
-            .iter()
-            .map(|t| self.text.label_op(r, scene, &omsi_ui::tr(t), px, text, 1.0))
-            .collect();
+        let mut k = 3;
+        let mut parts: [(Part, Option<(Placed, Placed)>); 8] = [(Part::Other, None); 8];
+        let legend = if detailed { &ro.parts[..] } else { &[] };
+        for (i, (p, name, value)) in legend.iter().enumerate().take(8) {
+            let n = self.perf_text(r, scene, k, name, px, text);
+            let v = self.perf_text(r, scene, k + 1, value, px, text);
+            parts[i] = (*p, Some((n, v)));
+            k += 2;
+        }
+        let shown = legend.len().min(8);
+        let mut lines: [Option<Placed>; 12] = [None; 12];
+        let src = if detailed { &ro.lines } else { &ro.brief };
+        for (i, t) in src.iter().enumerate().take(12) {
+            lines[i] = Some(self.perf_text(r, scene, k + i, t, px, text));
+        }
         let swatch = 8.0 * s;
         let col = parts
             .iter()
-            .map(|(_, n, v)| swatch + 6.0 * s + n.w as f32 + 12.0 * s + v.w as f32)
+            .filter_map(|p| p.1)
+            .map(|(n, v)| swatch + 6.0 * s + n.w + 12.0 * s + v.w)
             .fold(0.0f32, f32::max);
-        let inner = [
-            (title.w + head.w) as f32 + 16.0 * s,
-            col * 2.0 + 12.0 * s,
-            280.0 * s,
-        ]
-        .into_iter()
-        .chain(lines.iter().map(|l| l.w as f32))
-        .fold(0.0f32, f32::max);
+        let least = if detailed { 280.0 } else { 190.0 } * s;
+        let inner = [title.w + head.w + 16.0 * s, col * 2.0 + 12.0 * s, least]
+            .into_iter()
+            .chain(lines.iter().flatten().map(|l| l.w))
+            .fold(0.0f32, f32::max);
         let step = 20.0 * s;
         self.perf.width = self
             .perf
             .width
             .max((inner / step).ceil() * step + pad * 2.0);
         let w = self.perf.width;
-        let x0 = (f.width - w - 14.0 * s).round();
-        let y0 = if f.fps.is_some() {
-            (36.0 * s).round()
+        let (x0, y0) = if let Some(top) = f.perf_touch {
+            let y = top.map_or(80.0 * f.scale.max(0.5) * f.ui_scale.max(1.0), |b| {
+                b + 8.0 * s
+            });
+            ((16.0 * s).round(), y.round())
+        } else if f.fps.is_some() {
+            ((f.width - w - 14.0 * s).round(), (36.0 * s).round())
         } else {
-            (10.0 * s).round()
+            ((f.width - w - 14.0 * s).round(), (10.0 * s).round())
         };
-        let gh = (GRAPH_H as f32 * s).round();
-        let rows = parts.len().div_ceil(2);
-        let h = pad
-            + lh
-            + 4.0 * s
-            + gh
-            + 6.0 * s
-            + lh * rows as f32
-            + 4.0 * s
-            + lh * lines.len() as f32
-            + pad;
+        let gh = ((if detailed { GRAPH_H as f32 } else { 30.0 }) * s).round();
+        let rows = shown.div_ceil(2);
+        let line_count = lines.iter().flatten().count();
+        let legend_h = if rows > 0 {
+            lh * rows as f32 + 4.0 * s
+        } else {
+            0.0
+        };
+        let h = pad + lh + 4.0 * s + gh + 6.0 * s + legend_h + lh * line_count as f32 + pad;
         self.text.rounded(
             r,
             scene,
@@ -148,63 +267,40 @@ impl Ui {
             8.0 * s,
             [28, 28, 28, (220.0 * self.text.backdrop.min(1.0)) as u8],
         );
-        let mut put = |l: &Label, x: f32, y: f32| {
-            let (x, y) = (x.round(), (y + (lh - l.h as f32) * 0.5).round());
-            scene
-                .overlays
-                .push((l.tex, [x, y, x + l.w as f32, y + l.h as f32]));
+        let put = |scene: &mut Scene, l: &Placed, x: f32, y: f32| {
+            let (x, y) = (x.round(), (y + (lh - l.h) * 0.5).round());
+            scene.overlays.push((l.tex, [x, y, x + l.cap, y + l.h]));
         };
         let mut y = y0 + pad;
-        put(&title, x0 + pad, y);
-        put(&head, x0 + w - pad - head.w as f32, y);
+        put(scene, &title, x0 + pad, y);
+        put(scene, &head, x0 + w - pad - head.w, y);
         y += lh + 4.0 * s;
-        let scale = self.text.label_op(
-            r,
-            scene,
-            &format!("{} ms", (graph_scale(&o.frames) * 1000.0).round() as i32),
-            (10.0 * s).round() as u32,
-            [200, 200, 200, 0],
-            1.0,
-        );
         if let Some(tex) = graph {
             scene
                 .overlays
                 .push((tex, [x0 + pad, y, x0 + w - pad, y + gh]));
         }
-        scene.overlays.push((
-            scale.tex,
-            [
-                x0 + pad + 3.0 * s,
-                y + 2.0 * s,
-                x0 + pad + 3.0 * s + scale.w as f32,
-                y + 2.0 * s + scale.h as f32,
-            ],
-        ));
+        let (sx, sy) = ((x0 + pad + 3.0 * s).round(), (y + 2.0 * s).round());
+        scene
+            .overlays
+            .push((scale.tex, [sx, sy, sx + scale.cap, sy + scale.h]));
         y += gh + 6.0 * s;
         let cw = (w - pad * 2.0 - 12.0 * s) * 0.5;
-        for (k, (p, name, value)) in parts.iter().enumerate() {
-            let x = x0 + pad + (k % 2) as f32 * (cw + 12.0 * s);
-            let ry = y + (k / 2) as f32 * lh;
+        for (i, (p, placed)) in parts.iter().enumerate() {
+            let Some((name, value)) = placed else {
+                continue;
+            };
+            let x = x0 + pad + (i % 2) as f32 * (cw + 12.0 * s);
+            let ry = y + (i / 2) as f32 * lh;
             let sw = self.text.solid(r, scene, p.color());
             let sy = (ry + (lh - swatch) * 0.5).round();
             scene.overlays.push((sw, [x, sy, x + swatch, sy + swatch]));
-            let (nx, vx) = (x + swatch + 6.0 * s, x + cw - value.w as f32);
-            let at = |l: &Label, x: f32| {
-                let (x, y) = (x.round(), (ry + (lh - l.h as f32) * 0.5).round());
-                (l.tex, [x, y, x + l.w as f32, y + l.h as f32])
-            };
-            scene.overlays.push(at(name, nx));
-            scene.overlays.push(at(value, vx));
+            put(scene, name, x + swatch + 6.0 * s, ry);
+            put(scene, value, x + cw - value.w, ry);
         }
-        y += lh * rows as f32 + 4.0 * s;
-        let mut put = |l: &Label, x: f32, y: f32| {
-            let (x, y) = (x.round(), (y + (lh - l.h as f32) * 0.5).round());
-            scene
-                .overlays
-                .push((l.tex, [x, y, x + l.w as f32, y + l.h as f32]));
-        };
-        for l in &lines {
-            put(l, x0 + pad, y);
+        y += legend_h;
+        for l in lines.iter().flatten() {
+            put(scene, l, x0 + pad, y);
             y += lh;
         }
     }
@@ -223,13 +319,15 @@ impl Ui {
         }
         self.perf.since = 0.0;
         self.perf.drawn = o.version;
+        let top = graph_scale(&o.frames);
+        self.perf.scale_ms = (top * 1000.0).round() as i32;
         let image = self.perf.image.get_or_insert_with(|| omsi_texture::Image {
             width: HISTORY as u32,
             height: GRAPH_H,
             rgba: vec![0; HISTORY * GRAPH_H as usize * 4],
             has_alpha: true,
         });
-        raster(&o.frames, &mut image.rgba);
+        raster(&o.frames, top, &mut image.rgba);
         match self.perf.graph {
             Some(tex) => r.update_texture(scene, tex, image),
             None => self.perf.graph = Some(r.add_texture(scene, image, false)),
@@ -253,7 +351,7 @@ mod tests {
             parts,
         });
         let mut rgba = vec![0; HISTORY * GRAPH_H as usize * 4];
-        raster(&frames, &mut rgba);
+        raster(&frames, graph_scale(&frames), &mut rgba);
         let at = |x: usize, row: usize| {
             let i = ((GRAPH_H as usize - 1 - row) * HISTORY + x) * 4;
             [rgba[i], rgba[i + 1], rgba[i + 2]]
@@ -262,5 +360,20 @@ mod tests {
         assert_eq!(at(x, 5), Part::Simulation.color()[..3]);
         assert_eq!(at(x, 40), Part::Gpu.color()[..3]);
         assert_eq!(at(0, 5), [0, 0, 0]);
+    }
+
+    #[test]
+    fn a_text_keeps_its_rows_in_a_wider_texture() {
+        let img = omsi_texture::Image {
+            width: 2,
+            height: 2,
+            rgba: (1..=16).collect(),
+            has_alpha: true,
+        };
+        let p = padded(&img, 4);
+        assert_eq!((p.width, p.height), (4, 2));
+        assert_eq!(&p.rgba[..8], &img.rgba[..8]);
+        assert_eq!(&p.rgba[8..16], &[0; 8]);
+        assert_eq!(&p.rgba[16..24], &img.rgba[8..16]);
     }
 }

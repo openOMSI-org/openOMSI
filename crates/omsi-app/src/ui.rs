@@ -334,6 +334,8 @@ pub struct Frame<'a> {
     /// The frame rate, top right (the `show_fps` setting).
     pub fps: Option<f32>,
     pub perf: Option<&'a crate::perf_overlay::PerfOverlay>,
+    pub perf_detailed: bool,
+    pub perf_touch: Option<Option<f32>>,
     /// The game stands paused.
     pub paused: bool,
     /// The game menu is open, with this line chosen (labels from `GAME_MENU`).

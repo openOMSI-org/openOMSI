@@ -954,7 +954,7 @@ fn general_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, c
     }
     toggle_setting(ui, s, dirty, c.row(), "Name of the button under the mouse", "tooltips");
     toggle_setting(ui, s, dirty, c.row(), "Frame rate in the corner", "show_fps");
-    toggle_setting(ui, s, dirty, c.row(), "Performance details", "perf_overlay");
+    sel_setting(ui, s, dirty, "s-perf", c.row(), "Performance details", "perf_overlay", &[("off", "Off"), ("compact", "Compact"), ("detailed", "Detailed")]);
     toggle_setting(ui, s, dirty, c.row(), "Notes in the top-left corner", "notes");
     toggle_setting(ui, s, dirty, c.row(), "Chat in online games", "chat");
     // (the chat's own size on top of the interface's; Ctrl + the wheel over it in the game)

@@ -8,6 +8,7 @@ const CPU_S: f32 = 0.5;
 const STUTTER_S: f32 = 0.05;
 const STUTTER_RATIO: f32 = 2.5;
 const WARM_UP: u32 = 60;
+const MONITOR_S: f32 = 2.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Part {
@@ -65,7 +66,7 @@ pub(crate) fn part_of(key: &str) -> Option<Part> {
         k if k.contains('.') => return None,
         "streaming" | "placement" => Part::Loading,
         "lights+rain" | "scripted" | "lighting" => Part::Scenery,
-        "hud" => Part::Interface,
+        "hud" | "photo" | "shell" => Part::Interface,
         "render" | "mirrors" => Part::Drawing,
         "acquire" | "present" | "gpu" => Part::Gpu,
         "limiter" => Part::Limit,
@@ -130,8 +131,6 @@ pub(crate) struct Machine {
     pub(crate) window: (u32, u32),
     pub(crate) scene: (u32, u32),
     pub(crate) msaa: u32,
-    pub(crate) draws: u32,
-    pub(crate) visible: u32,
     pub(crate) texture_mb: u64,
     pub(crate) tiles: usize,
     pub(crate) ai: usize,
@@ -141,9 +140,11 @@ pub(crate) struct Machine {
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Readout {
+    pub(crate) title: String,
     pub(crate) head: String,
-    pub(crate) parts: Vec<(Part, String)>,
+    pub(crate) parts: Vec<(Part, String, String)>,
     pub(crate) lines: Vec<String>,
+    pub(crate) brief: Vec<String>,
 }
 
 pub(crate) struct PerfOverlay {
@@ -157,6 +158,8 @@ pub(crate) struct PerfOverlay {
     cpu: Option<CpuMark>,
     load: Option<Load>,
     cores: usize,
+    draws: (usize, usize),
+    monitor: Option<(Instant, Option<f32>)>,
     since_refresh: f32,
     pub(crate) readout: Readout,
 }
@@ -173,7 +176,9 @@ impl Default for PerfOverlay {
             last_stutter: None,
             cpu: None,
             load: None,
-            cores: std::thread::available_parallelism().map_or(1, |n| n.get()),
+            cores: 0,
+            draws: (0, 0),
+            monitor: None,
             since_refresh: REFRESH_S,
             readout: Readout::default(),
         }
@@ -185,7 +190,17 @@ impl PerfOverlay {
         *self = PerfOverlay::default();
     }
 
-    pub(crate) fn sample(&mut self, raw_dt: f32, profile: &BTreeMap<&'static str, f64>) {
+    pub(crate) fn started(&self) -> bool {
+        self.prev.is_some()
+    }
+
+    pub(crate) fn sample(
+        &mut self,
+        raw_dt: f32,
+        profile: &BTreeMap<&'static str, f64>,
+        draws: (usize, usize),
+    ) {
+        self.draws = draws;
         let now = part_totals(profile);
         let Some(prev) = self.prev.replace(now) else {
             return;
@@ -203,6 +218,7 @@ impl PerfOverlay {
                 ms: raw_dt * 1000.0,
                 part: s.largest(),
             });
+            self.typical += (raw_dt.min(self.typical * STUTTER_RATIO * 2.0) - self.typical) * 0.01;
         } else {
             self.typical += (raw_dt - self.typical) * 0.05;
         }
@@ -241,11 +257,25 @@ impl PerfOverlay {
     }
 
     pub(crate) fn refresh_due(&self) -> bool {
-        self.since_refresh >= REFRESH_S
+        self.since_refresh >= REFRESH_S && !self.frames.is_empty()
+    }
+
+    fn refresh_hz(&mut self, ask: impl FnOnce() -> Option<f32>) -> Option<f32> {
+        match self.monitor {
+            Some((at, hz)) if at.elapsed().as_secs_f32() < MONITOR_S => hz,
+            _ => {
+                let hz = ask();
+                self.monitor = Some((Instant::now(), hz));
+                hz
+            }
+        }
     }
 
     pub(crate) fn refresh(&mut self, m: &Machine) {
         self.since_refresh = 0.0;
+        if self.cores == 0 {
+            self.cores = std::thread::available_parallelism().map_or(1, |n| n.get());
+        }
         let recent = average(self.frames.iter().rev().take(RECENT));
         let frame_ms = recent.total * 1000.0;
         let fps = if recent.total > 0.0 {
@@ -255,13 +285,17 @@ impl PerfOverlay {
         };
         let worst = self.frames.iter().map(|s| s.total).fold(0.0f32, f32::max) * 1000.0;
         let mut r = Readout {
+            title: omsi_ui::tr("Performance").into_owned(),
             head: format!("{} fps   {:.1} ms", fps.round() as i32, frame_ms),
             ..Default::default()
         };
         r.parts = Part::ALL
             .into_iter()
             .filter(|p| *p != Part::Limit || recent.parts[*p as usize] > 0.0)
-            .map(|p| (p, format!("{:.1} ms", recent.parts[p as usize] * 1000.0)))
+            .map(|p| {
+                let ms = format!("{:.1} ms", recent.parts[p as usize] * 1000.0);
+                (p, omsi_ui::tr(p.name()).into_owned(), ms)
+            })
             .collect();
         r.lines.push(format!(
             "Slowest frame of the graph: {} ms",
@@ -311,16 +345,24 @@ impl PerfOverlay {
                 m.window.0, m.window.1, pct, m.msaa
             ));
         }
-        r.lines.push(format!(
-            "Draw calls {}, objects visible {}",
-            m.draws, m.visible
-        ));
+        if self.draws.0 > 0 {
+            r.lines.push(format!(
+                "Draw calls {}, objects visible {}",
+                self.draws.0, self.draws.1
+            ));
+        }
         r.lines.push(format!(
             "Texture memory {} MB, map tiles {}",
             m.texture_mb, m.tiles
         ));
         r.lines
             .push(format!("AI vehicles {}, people {}", m.ai, m.people));
+        for line in &mut r.lines {
+            if let std::borrow::Cow::Owned(t) = omsi_ui::tr(line) {
+                *line = t;
+            }
+        }
+        r.brief = r.lines[1..3].to_vec();
         if !m.gpu.is_empty() {
             r.lines.push(m.gpu.clone());
         }
@@ -330,7 +372,7 @@ impl PerfOverlay {
 
 impl crate::App {
     pub(crate) fn refresh_perf_overlay(&mut self) {
-        if !self.settings.perf_overlay || !self.perf.overlay.refresh_due() {
+        if !self.settings.perf_overlay_on() || !self.perf.overlay.refresh_due() {
             return;
         }
         let fps = self
@@ -347,16 +389,20 @@ impl crate::App {
         } else {
             0.0
         };
-        let refresh = self
-            .window
-            .as_ref()
-            .and_then(|w| w.current_monitor())
-            .and_then(|m| m.refresh_rate_millihertz())
-            .map(|mhz| mhz as f32 / 1000.0);
+        let vsync = self.settings.vsync && !self.vr_active();
+        let window = self.window.as_ref();
+        let refresh = vsync
+            .then(|| {
+                self.perf.overlay.refresh_hz(|| {
+                    window
+                        .and_then(|w| w.current_monitor())
+                        .and_then(|m| m.refresh_rate_millihertz())
+                        .map(|mhz| mhz as f32 / 1000.0)
+                })
+            })
+            .flatten();
         let mut m = Machine {
-            vsync_bound: self.settings.vsync
-                && !self.vr_active()
-                && refresh.is_some_and(|hz| fps >= hz * 0.95),
+            vsync_bound: refresh.is_some_and(|hz| fps >= hz * 0.95),
             tiles: self.world.as_ref().map_or(0, |w| w.loaded_tiles().len()),
             ai: self.session.traffic.as_ref().map_or(0, |t| {
                 let (cars, buses, _, _) = t.sim.counts();
@@ -371,7 +417,6 @@ impl crate::App {
                 m.scene = r.scene_size(s.config.width, s.config.height);
             }
             m.msaa = r.options.msaa;
-            (m.draws, m.visible) = (r.last_draws.0 as u32, r.last_draws.1 as u32);
             m.texture_mb = self
                 .scene
                 .as_ref()
@@ -471,7 +516,11 @@ mod tests {
     #[test]
     fn a_frame_is_what_its_stages_took_since_the_last_one() {
         let mut o = PerfOverlay::default();
-        o.sample(0.016, &profile(&[("traffic", 1.0), ("present", 2.0)]));
+        o.sample(
+            0.016,
+            &profile(&[("traffic", 1.0), ("present", 2.0)]),
+            (0, 0),
+        );
         assert!(o.frames.is_empty());
         o.sample(
             0.020,
@@ -480,6 +529,7 @@ mod tests {
                 ("traffic.tick", 1.5),
                 ("present", 2.010),
             ]),
+            (0, 0),
         );
         let s = o.frames.back().copied().unwrap();
         assert!((s.parts[Part::Simulation as usize] - 0.004).abs() < 1e-5);
@@ -492,21 +542,38 @@ mod tests {
         let mut o = PerfOverlay::default();
         let mut t = 0.0;
         for _ in 0..100 {
-            o.sample(0.016, &profile(&[("streaming", t)]));
+            o.sample(0.016, &profile(&[("streaming", t)]), (0, 0));
         }
         assert_eq!(o.stutters, 0);
         t += 0.12;
-        o.sample(0.13, &profile(&[("streaming", t)]));
+        o.sample(0.13, &profile(&[("streaming", t)]), (0, 0));
         assert_eq!(o.stutters, 1);
         assert_eq!(o.last_stutter.map(|s| s.part), Some(Part::Loading));
         assert_eq!(o.frames.len(), 100);
     }
 
     #[test]
+    fn a_frame_rate_that_stays_low_stops_counting_as_stutters() {
+        let mut o = PerfOverlay::default();
+        for _ in 0..100 {
+            o.sample(0.016, &BTreeMap::new(), (0, 0));
+        }
+        for _ in 0..600 {
+            o.sample(0.08, &BTreeMap::new(), (0, 0));
+        }
+        let after = o.stutters;
+        for _ in 0..100 {
+            o.sample(0.08, &BTreeMap::new(), (0, 0));
+        }
+        assert!(after > 0);
+        assert_eq!(o.stutters, after);
+    }
+
+    #[test]
     fn the_history_keeps_its_length() {
         let mut o = PerfOverlay::default();
         for _ in 0..HISTORY + 50 {
-            o.sample(0.01, &BTreeMap::new());
+            o.sample(0.01, &BTreeMap::new(), (0, 0));
         }
         assert_eq!(o.frames.len(), HISTORY);
     }

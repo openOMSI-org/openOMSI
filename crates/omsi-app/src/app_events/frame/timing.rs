@@ -68,8 +68,11 @@ impl App {
         let now = Instant::now();
         let raw_dt = (now - self.last).as_secs_f32();
         self.log_frame(raw_dt);
-        if self.settings.perf_overlay {
-            self.perf.overlay.sample(raw_dt, &self.perf.profile);
+        let draws = self.renderer.as_mut().map_or((0, 0), |r| std::mem::take(&mut r.frame_draws));
+        if self.settings.perf_overlay_on() {
+            self.perf.overlay.sample(raw_dt, &self.perf.profile, draws);
+        } else if self.perf.overlay.started() {
+            self.perf.overlay.reset();
         }
         let profiling = omsi_cfg::flags::OMSI_PROFILE.is_set();
         if profiling && self.perf.profile_mark.is_some() && self.perf.frame_times.len() < crate::perf_report::MAX_FRAMES {

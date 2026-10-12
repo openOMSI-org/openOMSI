@@ -457,7 +457,9 @@ impl App {
                 // once they stood on the timetable's line)
                 notes: if !map_open && self.menus.game_menu.is_none() { notes } else { &[] },
                 fps: self.settings.show_fps.then_some(self.perf.fps),
-                perf: self.settings.perf_overlay.then_some(&self.perf.overlay),
+                perf: self.settings.perf_overlay_on().then_some(&self.perf.overlay),
+                perf_detailed: self.settings.perf_overlay == "detailed",
+                perf_touch: self.input.touch.enabled.then(|| self.input.touch.top_gap.map(|g| g[2])),
                 paused: self.paused,
                 menu: match chooser_sel {
                     _ if shell_menu => None,

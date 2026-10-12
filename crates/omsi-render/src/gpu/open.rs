@@ -653,7 +653,7 @@ impl Renderer {
             gpu_timers,
             stats: Default::default(),
             counts: Default::default(),
-            last_draws: (0, 0),
+            frame_draws: (0, 0),
             profiling: omsi_cfg::flags::OMSI_PROFILE.is_set(),
             draw_audit_at: std::time::Instant::now(),
             encoding_pool: if omsi_cfg::flags::OMSI_NO_RENDER_POOL.is_set() {

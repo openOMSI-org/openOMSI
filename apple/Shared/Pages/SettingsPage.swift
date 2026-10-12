@@ -268,6 +268,7 @@ struct SettingsPage: View {
             SettingSlider(label: "Interface opacity", key: "ui_opacity", range: 0.2 ... 1, step: 0.05, fallback: 0.85) { "\(Int($0 * 100))%" }
             if !phone { SettingToggle(label: "Name of the button under the mouse", key: "tooltips", fallback: true) }
             SettingToggle(label: "Frame rate in the corner", key: "show_fps")
+            SettingSelect(label: "Performance details", key: "perf_overlay", options: [("off", "Off"), ("compact", "Compact"), ("detailed", "Detailed")])
             SettingToggle(label: "Notes in the top-left corner", key: "notes", fallback: true)
             SettingToggle(label: "Chat in online games", key: "chat", fallback: true)
             SettingToggle(label: "Other players' names above their buses", key: "name_tags", fallback: true)
