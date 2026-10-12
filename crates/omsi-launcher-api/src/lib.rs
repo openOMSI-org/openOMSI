@@ -277,6 +277,25 @@ fn keybindings_save(bindings: Value) -> Answer {
     core::get_keybindings().map_err(err)
 }
 
+fn radio_stations() -> Answer {
+    let _one = RADIO_WRITE.lock().unwrap_or_else(|e| e.into_inner());
+    stations_json()
+}
+
+fn stations_json() -> Answer {
+    Ok(json!(omsi_cfg::radio::own_stations().into_iter().map(|(name, address)| json!({ "name": name, "address": address })).collect::<Vec<_>>()))
+}
+
+fn radio_stations_save(list: Vec<Value>) -> Answer {
+    let text = |s: &Value, k: &str| s.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let list: Vec<(String, String)> = list.iter().map(|s| (text(s, "name"), text(s, "address"))).collect();
+    let _one = RADIO_WRITE.lock().unwrap_or_else(|e| e.into_inner());
+    omsi_cfg::radio::save_stations(&list).map_err(err)?;
+    stations_json()
+}
+
+static RADIO_WRITE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 // --- mods ------------------------------------------------------------------------------
 
 fn mods_status() -> Answer {
@@ -556,6 +575,8 @@ pub fn call(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "graphics_profile_delete" => graphics_profile_delete(arg::<String>(args, "name")?),
         "keybindings_get" => keybindings_get(),
         "keybindings_save" => keybindings_save(arg::<Value>(args, "bindings")?),
+        "radio_stations" => radio_stations(),
+        "radio_stations_save" => radio_stations_save(arg::<Vec<Value>>(args, "list")?),
         "mods_status" => mods_status(),
         "mod_set_enabled" => mod_set_enabled(arg::<String>(args, "id")?, arg::<bool>(args, "on")?),
         "mod_remove" => mod_remove(arg::<String>(args, "id")?),

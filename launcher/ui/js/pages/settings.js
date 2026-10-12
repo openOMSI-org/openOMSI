@@ -11,6 +11,7 @@ import { saveSettings, applyTheme } from '../data.js';
 import { UpdateRow } from '../updates.js';
 import { SETTINGS_TABS, GRAPHICS_PROFILE_KEYS } from './settings-schema.js';
 import { VersionsDialog } from './versions.js';
+import { RadioStations } from './radio-stations.js';
 
 const REPO_URL = 'https://github.com/openOmsi-project/openOMSI';
 
@@ -194,6 +195,7 @@ const CUSTOM = {
   version: () => html`<${VersionRow} />`,
   reset: ({ ask }) => html`<${ResetRow} ask=${ask} />`,
   support: () => html`<${SupportRow} />`,
+  radio: () => html`<${RadioStations} />`,
 };
 
 /** The quality presets of the graphics mode chosen: the one the settings match, else

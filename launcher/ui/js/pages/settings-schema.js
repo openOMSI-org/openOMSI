@@ -306,8 +306,7 @@ const sound = {
       title: 'Radio stations',
       rows: [
         { type: 'note', text: "A radio's station button n plays the n-th station, a cassette player the first; Shift+R steps through them. An address is an MP3, AAC or Ogg stream or an .m3u/.pls playlist." },
-        // (the launcher has no command for radio.cfg yet)
-        { type: 'note', text: 'The stations cannot be edited here yet.' },
+        { type: 'custom', id: 'radio' },
       ],
     },
   ],

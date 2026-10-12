@@ -416,6 +416,13 @@ table.table { width: 100%; border-collapse: collapse; }
 .setting-row .name { min-width: 0; }
 .setting-row .name span { display: block; font-size: 12px; color: var(--muted); }
 .setting-row.full { grid-template-columns: 1fr; }
+.radio-list { display: flex; flex-direction: column; gap: 8px; padding: 8px 0; container-type: inline-size; }
+.radio-row { display: grid; grid-template-columns: 20px minmax(0, 1fr) minmax(0, 2fr) 30px; gap: 8px; align-items: center; }
+.radio-number { text-align: right; }
+@container (max-width: 420px) {
+  .radio-row { grid-template-columns: 20px minmax(0, 1fr) 30px; }
+  .radio-row > .input:nth-of-type(2) { grid-column: 2; grid-row: 2; }
+}
 .setting-row .toggle { padding: 0; justify-content: flex-end; }
 
 /* stat tiles (Profile) */

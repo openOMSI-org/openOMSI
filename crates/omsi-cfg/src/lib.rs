@@ -29,6 +29,7 @@ pub mod lang;
 mod keywords;
 pub mod number;
 pub mod par;
+pub mod radio;
 pub mod panic_guard;
 pub mod vfs;
 pub mod install_search;
