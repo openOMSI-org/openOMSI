@@ -197,10 +197,8 @@ fn device_from(v: &Value) -> Result<DeviceCfg, String> {
 
 fn save(req: &Value) -> Result<Value, String> {
     let devices = req.get("devices").and_then(Value::as_array).ok_or("no devices")?.iter().map(device_from).collect::<Result<Vec<_>, _>>()?;
-    let base = omsi_launcher_lib::content_dir()
-        .filter(|c| c.join("Inputs").exists() || std::fs::create_dir_all(c.join("Inputs")).is_ok())
-        .filter(|c| omsi_cfg::is_writable(&c.join("Inputs")))
-        .unwrap_or_else(|| omsi_launcher_lib::data_dir().join("content"));
+    let base = omsi_cfg::content_dir().ok_or("the game's content folder was not found")?;
+    std::fs::create_dir_all(base.join("Inputs")).map_err(|e| format!("{}: {e}", base.join("Inputs").display()))?;
     controllers::save_cfg(Some(base.clone()), &devices)?;
     Ok(json!({ "path": base.join("Inputs").join("gamectrler.cfg").to_string_lossy() }))
 }

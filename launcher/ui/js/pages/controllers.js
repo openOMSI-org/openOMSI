@@ -152,7 +152,7 @@ export function Controllers() {
   // a wheel, pedals or a joystick nobody set up is set up by itself from its axes at rest
   // (the game does the same when it meets one): the player only changes what is wrong
   useEffect(() => {
-    if (!pads.cfg || wizard) return;
+    if (!pads.cfg || pads.cfg.error || wizard) return;
     const fresh = pads.live.filter((c) => c.auto && !findDevice(pads.devicesRef.current || [], c.name) && !offs.some((o) => namesMatch(o, c.name)));
     if (!fresh.length) return;
     pads.setDevices([...(pads.devicesRef.current || []), ...fresh.map((c) => c.auto.device)]);

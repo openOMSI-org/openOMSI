@@ -1158,6 +1158,7 @@ pub struct Controllers {
     rests: crate::auto_setup::Rests,
     /// The set-up after a device was set up by itself (`auto_setup`), for the game to save.
     pub auto_saved: Option<Vec<DeviceCfg>>,
+    cfg_unread: bool,
     /// The steering device: its name, physical position (-1..1, before dead zone
     /// and steering gain) now and previously, and whether it pushes back.
     steer: Option<(String, f32, f32, bool)>,
@@ -1192,6 +1193,7 @@ impl Controllers {
     pub fn install_cfg(&mut self, cfg: Vec<DeviceCfg>) {
         self.held.release(&mut self.actions);
         self.cfg = cfg;
+        self.cfg_unread = false;
         self.notice = None;
     }
 
@@ -1220,15 +1222,26 @@ impl Controllers {
 
     pub fn new(root: &Path, hwnd: Option<isize>) -> Controllers {
         let devices = Devices::new(hwnd, true);
-        let cfg = read_cfg(root);
+        let (cfg, unread) = match read_cfg_checked(root) {
+            Ok(cfg) => (cfg, false),
+            Err(e) => {
+                let unread = cfg_path(root).exists();
+                if unread {
+                    log::warn!("gamectrler.cfg could not be read, nothing set up by itself is saved over it: {e}");
+                }
+                (Vec::new(), unread)
+            }
+        };
         for c in devices.connected() {
             log::info!("game controller: {} ({})", c.name, if cfg.iter().any(|d| names_match(&d.name, &c.name)) { "set up in gamectrler.cfg" } else if c.gamepad { "as a gamepad" } else { "not set up: its X axis steers" });
         }
-        Self::with_devices(devices, cfg)
+        let mut c = Self::with_devices(devices, cfg);
+        c.cfg_unread = unread;
+        c
     }
 
     fn with_devices(devices: Devices, cfg: Vec<DeviceCfg>) -> Controllers {
-        Controllers { settled: Vec::new(), devices, focused: true, cfg, held: HeldButtons::default(), editing: false, raw_buttons: Vec::new(), deadzone: 0.0, right_stick_look: true, pad_deadzone: 0.08, pad_presets: true, pedal_throttle: 1.0, pedal_brake: 1.0, disabled: Vec::new(), ff_invert: false, ff_enabled: true, ff_road: 1.0, ff_engine: 1.0, ff_fade: FF_FADE, steer_gain: 1.0, enabled: true, actions: Vec::new(), announced: Vec::new(), moved: Vec::new(), notice: None, rests: Default::default(), auto_saved: None, steer: None, ff_t: 0.0, ff_lateral: 0.0, ff_bump: 0.0, ff_bump_age: 0.0, ff_micro: Micro::default(), ff_vib: ScriptVib::default(), ff_rumble: 0.0, ff_source_logged: None, rumble: Vec::new(), #[cfg(all(target_os = "linux", target_pointer_width = "64"))] wheel: None, #[cfg(all(target_os = "linux", target_pointer_width = "64"))] wheel_tried: None }
+        Controllers { settled: Vec::new(), devices, focused: true, cfg, held: HeldButtons::default(), editing: false, raw_buttons: Vec::new(), deadzone: 0.0, right_stick_look: true, pad_deadzone: 0.08, pad_presets: true, pedal_throttle: 1.0, pedal_brake: 1.0, disabled: Vec::new(), ff_invert: false, ff_enabled: true, ff_road: 1.0, ff_engine: 1.0, ff_fade: FF_FADE, steer_gain: 1.0, enabled: true, actions: Vec::new(), announced: Vec::new(), moved: Vec::new(), notice: None, rests: Default::default(), auto_saved: None, cfg_unread: false, steer: None, ff_t: 0.0, ff_lateral: 0.0, ff_bump: 0.0, ff_bump_age: 0.0, ff_micro: Micro::default(), ff_vib: ScriptVib::default(), ff_rumble: 0.0, ff_source_logged: None, rumble: Vec::new(), #[cfg(all(target_os = "linux", target_pointer_width = "64"))] wheel: None, #[cfg(all(target_os = "linux", target_pointer_width = "64"))] wheel_tried: None }
     }
 
     /// Whether this device steers the bus (set up so, or steering now): the photo mode's camera takes none for its gamepad (a wheel turned it).
@@ -1391,7 +1404,9 @@ impl Controllers {
         }
         if !set_up.is_empty() {
             self.cfg.extend(set_up);
-            self.auto_saved = Some(self.cfg.clone());
+            if !self.cfg_unread {
+                self.auto_saved = Some(self.cfg.clone());
+            }
         }
         // gamepads: the left stick steers, the triggers are the pedals
         let di = self.devices.direct_input();
