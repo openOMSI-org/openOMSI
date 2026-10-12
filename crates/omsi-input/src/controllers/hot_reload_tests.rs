@@ -209,3 +209,26 @@ fn hot_reload_save_replaces_existing_file_and_rejects_invalid_input() {
     assert!(save_cfg_to(&path.join("not-a-directory.cfg"), &[]).is_err());
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn the_forces_go_to_the_wheel_whichever_steering_device_is_listed_first() {
+    let shifter = Some(("Shifter".to_string(), 0.0, false));
+    let wheel = Some(("Test wheel".to_string(), 0.1, true));
+    assert!(takes_feedback(&None, false));
+    assert!(takes_feedback(&shifter, true));
+    assert!(!takes_feedback(&shifter, false));
+    assert!(!takes_feedback(&wheel, false));
+    assert!(!takes_feedback(&wheel, true));
+}
+
+#[test]
+fn only_a_connected_force_feedback_wheel_set_up_to_steer_counts_as_the_wheel() {
+    let connected = |name: &str, gamepad: bool, ff: bool| Connected { name: name.into(), hardware_id: None, axes: vec![(0, 0.0)], gamepad, ff, ff_capable: ff, buttons: 0 };
+    let mut pad = wheel();
+    pad.name = "Xbox Controller".into();
+    assert!(wheel_set_up(&[wheel()], &[connected("Test wheel", false, true)]));
+    assert!(!wheel_set_up(&[wheel()], &[connected("Test wheel", false, false)]));
+    assert!(!wheel_set_up(&[wheel()], &[connected("Shifter", false, true)]));
+    assert!(!wheel_set_up(&[pad], &[connected("Xbox Controller", true, true)]));
+    assert!(!wheel_set_up(&[DeviceCfg { name: "Test wheel".into(), ..Default::default() }], &[connected("Test wheel", false, true)]));
+}

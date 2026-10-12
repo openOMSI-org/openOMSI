@@ -60,6 +60,7 @@ function useControllers() {
   const paused = useRef(false);
   const listeners = useRef(new Set());
   const devicesRef = useRef(null);
+  const off = useRef([]);
 
   const load = () => {
     setError('');
@@ -80,7 +81,7 @@ function useControllers() {
       while (alive) {
         if (!paused.current) {
           try {
-            const st = await call('controllers_state');
+            const st = await call('controllers_state', { off: off.current });
             if (!alive) break;
             setLive(st.connected || []);
             for (const [name, n] of st.pressed || []) listeners.current.forEach((f) => f(name, n));
@@ -123,7 +124,7 @@ function useControllers() {
     saveTimer = setTimeout(flush, 400);
   }
 
-  return { cfg, error, live, saving, load, setDevices, devicesRef, paused, listeners };
+  return { cfg, error, live, saving, load, setDevices, devicesRef, paused, listeners, off };
 }
 
 export function Controllers() {
@@ -143,6 +144,7 @@ export function Controllers() {
 
   const devices = pads.cfg?.devices || [];
   const offs = offList(s.settings || {});
+  pads.off.current = offs;
   const list = [
     ...devices.map((d) => ({ name: d.name, cfg: d, live: findConnected(pads.live, d.name) })),
     ...pads.live.filter((c) => !devices.some((d) => namesMatch(d.name, c.name))).map((c) => ({ name: c.name, cfg: null, live: c })),

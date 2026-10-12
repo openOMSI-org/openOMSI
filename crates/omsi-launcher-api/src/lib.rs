@@ -504,7 +504,7 @@ pub fn call(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "preview_warm" => preview_warm(p),
         "route_map" => route_map(p, arg::<String>(args, "map")?, arg::<String>(args, "date")?, arg::<String>(args, "trip")?),
         "controllers_load" => controllers(p, "load", json!({}), 20),
-        "controllers_state" => controllers(p, "state", json!({}), 5),
+        "controllers_state" => controllers(p, "state", json!({ "off": arg::<Option<Vec<String>>>(args, "off")?.unwrap_or_default() }), 5),
         "controllers_save" => controllers(p, "save", json!({ "devices": arg::<Value>(args, "devices")? }), 20),
         "controllers_ffb_test" => controllers(p, "ffb_test", json!({ "name": arg::<String>(args, "name")?, "axis": arg::<usize>(args, "axis")?, "strength": arg::<Option<f32>>(args, "strength")? }), 20),
         "controllers_release" => controllers(p, "release", json!({}), 5),

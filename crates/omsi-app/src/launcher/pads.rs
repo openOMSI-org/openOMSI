@@ -32,6 +32,7 @@ fn run(rx: Receiver<(Value, Reply)>) {
     let mut io: Option<Devices> = None;
     let mut pressed: Vec<(String, usize)> = Vec::new();
     let mut rests = omsi_input::auto_setup::Rests::default();
+    let mut saved: Vec<DeviceCfg> = Vec::new();
     let mut asked = Instant::now();
     loop {
         let wait = match (&io, window) {
@@ -45,14 +46,14 @@ fn run(rx: Receiver<(Value, Reply)>) {
                 let id = req.get("id").cloned().unwrap_or(Value::Null);
                 let hwnd = *window.get_or_insert_with(omsi_input::background::window);
                 let answer = match req.get("op").and_then(Value::as_str).unwrap_or("") {
-                    "load" => Ok(load()),
+                    "load" => Ok(load(&mut saved)),
                     "state" => {
                         let d = io.get_or_insert_with(|| Devices::new(hwnd, false));
                         poll(d, &mut pressed);
                         watch(&mut rests, d);
-                        Ok(state(d, std::mem::take(&mut pressed), &rests))
+                        Ok(state(d, std::mem::take(&mut pressed), &rests, &saved, &off(&req)))
                     }
-                    "save" => save(&req),
+                    "save" => save(&req, &mut saved),
                     "ffb_test" => {
                         io = None;
                         pressed.clear();
@@ -98,13 +99,14 @@ fn poll(d: &mut Devices, pressed: &mut Vec<(String, usize)>) {
     pressed.drain(..over);
 }
 
-fn load() -> Value {
+fn load(saved: &mut Vec<DeviceCfg>) -> Value {
     let _ = omsi_launcher_lib::content_dir();
     let root = omsi_launcher_lib::root_dir().unwrap_or_default();
     let (devices, error) = match controllers::read_cfg_checked(&root) {
         Ok(d) => (d, None),
         Err(e) => (Vec::new(), (controllers::cfg_path(&root).exists()).then_some(e)),
     };
+    saved.clone_from(&devices);
     let pad_buttons: Vec<Value> = gamepad_profile::PRESET_BUTTONS
         .iter()
         .filter_map(|b| {
@@ -131,16 +133,23 @@ fn watch(rests: &mut omsi_input::auto_setup::Rests, d: &Devices) {
     }
 }
 
-fn state(d: &Devices, pressed: Vec<(String, usize)>, rests: &omsi_input::auto_setup::Rests) -> Value {
-    let connected: Vec<Value> = d.connected().iter().map(|c| connected_json(d, c, rests)).collect();
+fn off(req: &Value) -> Vec<String> {
+    req.get("off").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).map(str::to_string).collect()
+}
+
+fn state(d: &Devices, pressed: Vec<(String, usize)>, rests: &omsi_input::auto_setup::Rests, saved: &[DeviceCfg], off: &[String]) -> Value {
+    let all = d.connected();
+    let on: Vec<Connected> = all.iter().filter(|c| !off.iter().any(|o| controllers::names_match(o, &c.name))).cloned().collect();
+    // (a gamepad drives with its own layout; a device of buttons alone has nothing to guess)
+    let fresh: Vec<(&Connected, &[(usize, f32)])> = on.iter().filter(|c| !c.gamepad && !d.buttons_only(&c.name) && !saved.iter().any(|s| controllers::names_match(&s.name, &c.name))).filter_map(|c| Some((c, rests.of(&c.name)?))).collect();
+    let autos = omsi_input::auto_setup::guess_all(&fresh, controllers::wheel_set_up(saved, &on));
+    let connected: Vec<Value> = all.iter().map(|c| connected_json(d, c, autos.iter().find(|a| a.name == c.name))).collect();
     json!({ "connected": connected, "pressed": pressed })
 }
 
-fn connected_json(d: &Devices, c: &Connected, rests: &omsi_input::auto_setup::Rests) -> Value {
-    // (a gamepad drives with its own layout; a device of buttons alone has nothing to guess)
-    let auto = (!c.gamepad && !d.buttons_only(&c.name)).then(|| rests.of(&c.name)).flatten().and_then(|rest| omsi_input::auto_setup::guess(&c.name, c.hardware_id, c.ff_capable, rest));
+fn connected_json(d: &Devices, c: &Connected, auto: Option<&DeviceCfg>) -> Value {
     json!({
-        "auto": auto.as_ref().map(|a| json!({ "device": device_json(a), "what": omsi_input::auto_setup::describe(a) })),
+        "auto": auto.map(|a| json!({ "device": device_json(a), "what": omsi_input::auto_setup::describe(a) })),
         "name": c.name,
         "axes": c.axes,
         "buttons": c.buttons,
@@ -195,13 +204,14 @@ fn device_from(v: &Value) -> Result<DeviceCfg, String> {
     Ok(d)
 }
 
-fn save(req: &Value) -> Result<Value, String> {
+fn save(req: &Value, saved: &mut Vec<DeviceCfg>) -> Result<Value, String> {
     let devices = req.get("devices").and_then(Value::as_array).ok_or("no devices")?.iter().map(device_from).collect::<Result<Vec<_>, _>>()?;
     let base = omsi_launcher_lib::content_dir()
         .filter(|c| c.join("Inputs").exists() || std::fs::create_dir_all(c.join("Inputs")).is_ok())
         .filter(|c| omsi_cfg::is_writable(&c.join("Inputs")))
         .unwrap_or_else(|| omsi_launcher_lib::data_dir().join("content"));
     controllers::save_cfg(Some(base.clone()), &devices)?;
+    *saved = devices;
     Ok(json!({ "path": base.join("Inputs").join("gamectrler.cfg").to_string_lossy() }))
 }
 
