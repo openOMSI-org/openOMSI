@@ -353,8 +353,7 @@ function ResetRow({ ask }) {
     try {
       const defaults = await call('settings_defaults');
       // (the whole set replaced, not merged: keys the defaults lack go back to the game's own)
-      set({ settings: { ...defaults, language: S.settings.language, texture_memory_auto: S.settings.texture_memory_auto } });
-      await saveSettings({});
+      await saveSettings({ ...defaults, language: S.settings.language, texture_memory_auto: S.settings.texture_memory_auto }, true);
       toast(t('Every setting is back to how it came.'), 'ok');
     } catch (e) {
       toast(e.message, 'error');

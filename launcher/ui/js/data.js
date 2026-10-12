@@ -196,20 +196,41 @@ export async function loadProfiles() {
   if (name) set({ profile: await call('profile', { name }).catch(() => null) });
 }
 
-export async function saveSettings(patch) {
-  const settings = { ...S.settings, ...patch };
-  set({ settings });
-  try {
-    set({ settings: await call('settings_save', { settings }) });
-  } catch (e) {
-    toast(t('The settings could not be saved: {e}', { e: e.message }), 'error');
-  }
-  if ('language' in patch) {
-    const lang = S.boot.languages.find((l) => l.code === S.settings.language);
-    await setLanguage(lang?.iso || 'en');
-    // (the content's names and descriptions are read in the new language)
-    loadContent();
-  }
+let settingsSaved = Promise.resolve();
+let settingsSeq = 0;
+
+export function reloadSettings() {
+  settingsSaved = settingsSaved.then(async () => {
+    const mine = settingsSeq;
+    const now = await call('settings_get').catch(() => null);
+    if (!now || mine !== settingsSeq) return;
+    const before = S.settings?.language;
+    set({ settings: now });
+    if (now.language !== before) await applyLanguage();
+  });
+  return settingsSaved;
+}
+
+async function applyLanguage() {
+  const lang = S.boot.languages.find((l) => l.code === S.settings.language);
+  await setLanguage(lang?.iso || 'en');
+  // (the content's names and descriptions are read in the new language)
+  loadContent();
+}
+
+export async function saveSettings(patch, whole = false) {
+  set({ settings: whole ? patch : { ...S.settings, ...patch } });
+  const mine = ++settingsSeq;
+  settingsSaved = settingsSaved.then(async () => {
+    try {
+      const saved = await call(whole ? 'settings_save' : 'settings_patch', whole ? { settings: patch } : { patch });
+      if (mine === settingsSeq) set({ settings: saved });
+    } catch (e) {
+      toast(t('The settings could not be saved: {e}', { e: e.message }), 'error');
+    }
+  });
+  await settingsSaved;
+  if (!whole && 'language' in patch) await applyLanguage();
 }
 
 /** The trip of the tour picked to start with (its place), while the time is still its. */
@@ -302,5 +323,7 @@ function startPolling() {
     pollNow();
     loadProfiles();
     loadSituations();
+    reloadSettings();
   });
+  window.addEventListener('focus', reloadSettings);
 }

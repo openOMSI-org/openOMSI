@@ -197,8 +197,26 @@ fn settings_get() -> Answer {
 /// Save the settings (the whole set, as `settings_get` gave it, changed); answers them as
 /// read back.
 fn settings_save(settings: Value) -> Answer {
+    let _one = SETTINGS_WRITE.lock().unwrap_or_else(|e| e.into_inner());
     core::save_settings(&settings).map_err(err)?;
     core::get_settings().map_err(err)
+}
+
+static SETTINGS_WRITE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn settings_patch(patch: Value) -> Answer {
+    let _one = SETTINGS_WRITE.lock().unwrap_or_else(|e| e.into_inner());
+    core::save_settings(&patched(core::get_settings().map_err(err)?, &patch)).map_err(err)?;
+    core::get_settings().map_err(err)
+}
+
+fn patched(mut settings: Value, patch: &Value) -> Value {
+    if let (Some(to), Some(from)) = (settings.as_object_mut(), patch.as_object()) {
+        for (k, v) in from {
+            to.insert(k.clone(), v.clone());
+        }
+    }
+    settings
 }
 
 /// Every setting as it comes (Reset).
@@ -476,6 +494,7 @@ pub fn call(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "profile_select" => profile_select(arg::<String>(args, "name")?),
         "settings_get" => settings_get(),
         "settings_save" => settings_save(arg::<Value>(args, "settings")?),
+        "settings_patch" => settings_patch(arg::<Value>(args, "patch")?),
         "settings_defaults" => settings_defaults(),
         "option_presets" => option_presets(),
         "graphics_presets" => graphics_presets(arg::<String>(args, "mode")?),
@@ -523,5 +542,21 @@ pub fn call_bytes(cmd: &str, args: &Value, p: &dyn Platform) -> Result<Vec<u8>, 
         "content_picture" => content_picture(&arg::<String>(args, "path")?).ok_or_else(|| "not found".to_string()),
         "preview_frame" => preview_frame(p, arg(args, "w")?, arg(args, "h")?, arg::<Option<bool>>(args, "force")?.unwrap_or(false), arg(args, "dx")?, arg(args, "dy")?, arg(args, "zoom")?, arg(args, "quality")?),
         _ => Err(format!("unknown command {cmd}")),
+    }
+}
+
+#[cfg(test)]
+mod settings_tests {
+    use super::*;
+
+    #[test]
+    fn a_launcher_change_keeps_what_the_game_changed_meanwhile() {
+        let game_wrote = "volume=0.25\nwheel_range=540\nmsaa=4\n";
+        let on_disk = core::settings_from_text(Some(game_wrote));
+        let text = core::settings_to_text(&patched(on_disk, &json!({ "msaa": 8 })), Some(game_wrote));
+        let now = core::settings_from_text(Some(&text));
+        assert_eq!(now["msaa"], json!(8));
+        assert_eq!(now["volume"], json!(0.25));
+        assert_eq!(now["wheel_range"], json!(540.0));
     }
 }
