@@ -7,7 +7,7 @@ import { t } from '../i18n.js';
 import { call } from '../api.js';
 import { Icon } from '../icons.js';
 import { Button, Card, Field, Input, Empty, PageHead, Spinner, Tabs, Toggle, Notice, Tag } from '../ui.js';
-import { choose, cached } from '../data.js';
+import { choose, cached, serverJoined, allowedBus } from '../data.js';
 
 export function MultiplayerPage() {
   const [tab, setTab] = useState('code');
@@ -40,7 +40,8 @@ function ByCode() {
     if (!code.trim()) return toast(t('Paste a session code first'), 'error');
     const known = host?.code === code.trim() ? host : null;
     if (known?.map && S.maps?.some((m) => m.file.toLowerCase() === known.map.replace(/\\/g, '/').toLowerCase())) choose({ map: known.map.replace(/\\/g, '/') });
-    choose({ lan_mode: 'join', lan_addr: code.trim(), lan_map: known?.map || '' });
+    choose({ lan_mode: 'join', lan_addr: code.trim(), lan_map: known?.map || '', ...serverJoined(known) });
+    choose(allowedBus());
     set({ page: 'drive' });
   };
   return html`<div class="grid-2" style="align-items:start">
@@ -112,8 +113,9 @@ function Servers() {
     if (map && s.maps?.some((m) => m.file.toLowerCase() === map.toLowerCase())) choose({ map });
     else if (map) toast(t('The server plays {}, which is not installed here: it is fetched from the server on joining.', [map]));
     const web = /^(https?|wss?):\/\//.test(x.address) || x.address === 'openomsi';
-    choose({ lan_mode: 'join', lan_addr: !web && i.reached_at ? i.reached_at : x.address, lan_map: i.map || '' });
-    toast(t('Joined {} - choose your bus and duty, then Start the duty', [i.name || x.name]), 'ok');
+    choose({ lan_mode: 'join', lan_addr: !web && i.reached_at ? i.reached_at : x.address, lan_map: i.map || '', ...serverJoined({ ...i, name: x.name || i.name }) });
+    choose(allowedBus());
+    toast(t('Joined {} - choose your bus and duty, then Start the duty', [x.name || i.name]), 'ok');
     set({ page: 'drive' });
   };
   return html`<div class="stack">

@@ -8,7 +8,7 @@ import { t } from '../i18n.js';
 import { call } from '../api.js';
 import { Icon } from '../icons.js';
 import { Dialog, Search, Select, Segmented, Empty, Spinner, Button, Tag, Notice, Field } from '../ui.js';
-import { choose } from '../data.js';
+import { choose, busFile, serverBuses } from '../data.js';
 
 const favKey = (file) => file.replace(/\\/g, '/').toLowerCase();
 
@@ -54,7 +54,8 @@ export function BusPicker({ onClose }) {
   const [show, setShow] = useState('all');
   const [sel, setSel] = useState(s.choice.bus);
   const [paint, setPaint] = useState(s.choice.bus === sel ? s.choice.paint : '');
-  const all = s.vehicles || [];
+  const joined = serverBuses(s.choice);
+  const all = (s.vehicles || []).filter((v) => !joined || joined.has(busFile(v.file)));
   const makers = useMemo(() => [...new Set(all.map((v) => v.manufacturer).filter(Boolean))].sort(), [all]);
   const ql = q.trim().toLowerCase();
   const list = all

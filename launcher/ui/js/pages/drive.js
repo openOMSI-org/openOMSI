@@ -7,7 +7,7 @@ import { t, hhmm, longDate, language } from '../i18n.js';
 import { call, contentUrl } from '../api.js';
 import { Icon } from '../icons.js';
 import { Button, Card, Field, Select, Input, Toggle, Segmented, Slider, Picture, Notice, Spinner, PageHead, Tag } from '../ui.js';
-import { choose, curMap, curBus, curLine, curTour, pickedTrip, realTime, realDate, start, loadSituations, duty } from '../data.js';
+import { choose, curMap, curBus, curLine, curTour, pickedTrip, realTime, realDate, start, loadSituations, duty, mapName, askJoined, noServerBus } from '../data.js';
 import { MapPicker } from './map-picker.js';
 import { BusPicker } from './bus-picker.js';
 import { BusPreview } from '../preview.js';
@@ -31,6 +31,9 @@ export function DrivePage() {
   const s = useStore();
   const [picker, setPicker] = useState(null);
   const c = s.choice;
+  useEffect(() => {
+    askJoined();
+  }, [c?.lan_mode, c?.lan_addr]);
   if (!c) return null;
   return html`
     <${PageHead} title="Drive" text="Choose where and what you drive, then start." />
@@ -61,6 +64,15 @@ export function DrivePage() {
 function MapCard({ onPick }) {
   const s = useStore();
   const m = curMap();
+  const srv = s.choice.lan_mode === 'join' ? s.choice.lan_server || { name: s.choice.lan_addr } : null;
+  if (srv) {
+    return html`<${Card} title="Map" actions=${html`<${Button} small icon="x" label="Leave the server" onClick=${() => choose({ lan_mode: 'off' })} />`}>
+      <div class="stack" style="gap:8px">
+        <h3>${s.choice.lan_map ? mapName(s.choice.lan_map.replace(/\\/g, '/')) : m ? m.friendly || m.name : ''}</h3>
+        <div class="muted small">${t('Set by {server}', { server: srv.name || s.choice.lan_addr })}</div>
+      </div>
+    </${Card}>`;
+  }
   return html`<${Card} title="Map" actions=${html`<${Button} small icon="map" label="Change map" onClick=${onPick} disabled=${!s.maps?.length} />`}>
     ${!s.maps
       ? html`<div class="row muted"><${Spinner} /> ${t('Reading the maps…')}</div>`
@@ -90,6 +102,7 @@ function BusCard({ onPick, preview }) {
       : !v
         ? html`<${Notice} kind="warn">${t('No bus is installed.')}</${Notice}>`
         : html`<div class="stack">
+            ${noServerBus() && html`<${Notice} kind="danger">${t('The server offers none of the vehicles installed here')}</${Notice}>`}
             ${preview && html`<${BusPreview} class="in-card" look=${{ bus: v.file, paint: c.paint, map: c.map, weather: c.weather, time: c.time, date: c.date }} />`}
             <div class="row">
               <div class="grow">
@@ -277,6 +290,19 @@ function TimeCard() {
     : c.weather?.startsWith('metar:') ? t('METAR of {} (fetched at the start)', [metar])
     : c.weather === 'cycle' ? 'Changes every 25-60 minutes, as the month allows'
     : c.weather ? null : 'Develops by itself through the day and the season';
+  if (c.lan_mode === 'join') {
+    const srv = c.lan_server || {};
+    return html`<${Card} title="Time and weather">
+      <div class="stack" style="gap:10px">
+        <div class="muted small">${t('Set by {server}', { server: srv.name || c.lan_addr })}</div>
+        <dl class="facts">
+          <dt>${t('Time')}</dt><dd>${srv.time || '-'}</dd>
+          <dt>${t('Weather')}</dt><dd>${srv.weather || t("the map's (the server's)")}</dd>
+        </dl>
+        <p class="muted small">${t('On a server the map, the time, the date and the weather are the same for everybody: the server keeps the world\'s clock. You choose your bus and your duty.')}</p>
+      </div>
+    </${Card}>`;
+  }
   return html`<${Card} title="Time and weather">
     <div class="stack">
       <div class="grid-2">
@@ -330,9 +356,9 @@ function Summary() {
   const [busy, setBusy] = useState(false);
   const [args, setArgs] = useState(null);
   const trip = tour && !c.free ? (pickedTrip() != null ? tour.trips.find((x) => x.index === pickedTrip()) : tour.trips[tripAt(tour, c.time * 60)]) : null;
-  const ready = m && v && (c.free || (line && tour));
-  const running = s.poll.instances?.length || 0;
   const joined = c.lan_mode === 'join';
+  const ready = m && v && (c.free || (line && tour)) && !noServerBus();
+  const running = s.poll.instances?.length || 0;
   const go = async (extra) => {
     setBusy(true);
     await start(extra);
@@ -342,7 +368,7 @@ function Summary() {
   return html`
     <section class="card summary">
       <${Picture} src=${m ? mapPicture(m.file) : ''}>
-        ${m && html`<div class="over"><b>${m.friendly || m.name}</b><span>${longDate(c.date)} - ${hhmm(c.time)}</span></div>`}
+        ${m && html`<div class="over"><b>${joined && c.lan_map ? mapName(c.lan_map.replace(/\\/g, '/')) : m.friendly || m.name}</b><span>${joined ? `${c.lan_server?.time || ''} ${t("(the server's clock)")}` : `${longDate(c.date)} - ${hhmm(c.time)}`}</span></div>`}
       </${Picture}>
       <div class="card-body stack" style="gap:14px">
         ${trip && !depotRun(trip)
@@ -353,11 +379,11 @@ function Summary() {
           ${!c.free && html`<dt>${t('Line')}</dt><dd>${line ? line.name : '-'}</dd>`}
           ${!c.free && html`<dt>${t('Tour')}</dt><dd>${tour ? tour.number : '-'}</dd>`}
           ${trip && html`<dt>${t('First trip')}</dt><dd class="num">${hms(trip.departure)} ${trip.from}</dd>`}
-          <dt>${t('Weather')}</dt><dd>${s.weather?.find((x) => x.file === c.weather)?.name || t('Natural weather')}</dd>
+          <dt>${t('Weather')}</dt><dd>${joined ? c.lan_server?.weather || t("the map's (the server's)") : s.weather?.find((x) => x.file === c.weather)?.name || t('Natural weather')}</dd>
           <dt>${t('Driver')}</dt><dd>${s.config?.profile || '-'}</dd>
         </dl>
         ${joined && html`<${Notice} icon="users">
-          <div class="row"><span class="grow">${t('Joining {server}', { server: c.lan_addr })}</span><${Button} small kind="ghost" label="Leave" onClick=${() => choose({ lan_mode: 'off' })} /></div>
+          <div class="row"><span class="grow">${t('Joining {server}', { server: c.lan_server?.name || c.lan_addr })}</span><${Button} small kind="ghost" label="Leave" onClick=${() => choose({ lan_mode: 'off' })} /></div>
         </${Notice}>`}
         <${Button} kind="primary" big wide icon="play" disabled=${!ready || busy} onClick=${() => go()}>
           ${busy ? t('Starting…') : joined ? t('Join and drive') : c.free ? t('Start driving') : t('Start the duty')}
@@ -377,7 +403,7 @@ function Continue({ go, busy }) {
   useEffect(() => {
     loadSituations();
   }, []);
-  if (!s.situations?.length) return null;
+  if (!s.situations?.length || s.choice.lan_mode === 'join') return null;
   return html`<${Card} title="Continue">
     <div class="list" style="margin:-6px -8px">
       ${s.situations.slice(0, 5).map((x) => html`<div class="list-item" onClick=${() => !busy && go({ situation: x.file })}>

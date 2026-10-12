@@ -76,10 +76,46 @@ function fixChoice() {
     c.number = '';
   }
   if (S.weather && c.weather && !S.weather.some((w) => w.file === c.weather)) c.weather = '';
+  Object.assign(c, allowedBus(c));
   set({ choice: c });
 }
 
 const norm = (f) => (f || '').replace(/\\/g, '/').toLowerCase();
+
+export const busFile = (f) => {
+  const n = norm(f);
+  const at = n.lastIndexOf('vehicles/');
+  return at > 0 ? n.slice(at) : n;
+};
+
+export function serverBuses(c = S.choice) {
+  return c?.lan_mode === 'join' && c.lan_server?.vehicles?.length ? new Set(c.lan_server.vehicles.map(busFile)) : null;
+}
+
+export function allowedBus(c = S.choice) {
+  const allowed = serverBuses(c);
+  if (!allowed || allowed.has(busFile(c.bus))) return {};
+  const own = S.vehicles?.find((v) => allowed.has(busFile(v.file)));
+  return own ? { bus: own.file, paint: '', number: '', hof_manual: false } : {};
+}
+
+export const noServerBus = () => {
+  const allowed = serverBuses();
+  return !!allowed && !!S.vehicles && !S.vehicles.some((v) => allowed.has(busFile(v.file)));
+};
+
+export const serverJoined = (answer) => ({
+  lan_server: { asked: !!answer, name: answer?.name || '', time: answer?.time || '', weather: answer?.weather || '', vehicles: answer?.vehicles || [] },
+});
+
+export async function askJoined() {
+  const c = S.choice;
+  if (c?.lan_mode !== 'join' || c.lan_server?.asked) return;
+  const r = await call('server_query', { address: c.lan_addr.trim() }).catch(() => null);
+  if (!r || S.choice.lan_mode !== 'join' || S.choice.lan_addr !== c.lan_addr) return;
+  choose({ ...serverJoined({ ...r, name: c.lan_server?.name || r.name }), lan_map: c.lan_map || r.map || '' });
+  choose(allowedBus());
+}
 
 /** A bus as people call it (its [friendlyname]), from its file: never "MAN_SD77.bus". */
 export function busName(file) {
