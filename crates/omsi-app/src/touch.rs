@@ -116,6 +116,7 @@ enum Role {
     Mouse,
     /// The game menu's (or the chooser's) list: a drag scrolls it, a tap picks a line.
     Menu,
+    MenuSlider,
     /// The small navigator: a tap opens the city map, a drag moves it (as the mouse does,
     /// #940), where it then stays - out of the middle of the screen, which it covered on a
     /// phone (#1138).
@@ -583,11 +584,12 @@ impl App {
             // (the line under the finger lights up; it is picked when the finger comes up
             // without having moved - a finger that came down to scroll used to pick the
             // line it landed on)
-            Role::Menu => self.on_cursor(p.x, p.y),
+            Role::Menu if !self.input.touch.fingers.iter().any(|f| f.role == Role::MenuSlider) => self.on_cursor(p.x, p.y),
             Role::Wheel(..) => self.input.touch.steering = true,
             _ => {}
         }
-        self.input.touch.fingers.push(Touched { id, start: p, pos: p, role, moved: false, since: Instant::now() });
+        let moved = role == Role::Menu && self.input.touch.fingers.iter().any(|f| f.role == Role::MenuSlider);
+        self.input.touch.fingers.push(Touched { id, start: p, pos: p, role, moved, since: Instant::now() });
         self.touch_pedals(p);
         // two fingers on the picture: a pinch
         let looks: Vec<Vec2> = self.input.touch.fingers.iter().filter(|f| matches!(f.role, Role::Look | Role::Mouse)).map(|f| f.pos).collect();
@@ -599,7 +601,7 @@ impl App {
     pub(crate) fn finger_move(&mut self, id: u64, p: Vec2) {
         let u = self.input.touch.u;
         let Some(k) = self.input.touch.fingers.iter().position(|f| f.id == id) else { return };
-        let last = self.input.touch.fingers[k].pos;
+        let (last, start, was_moved) = (self.input.touch.fingers[k].pos, self.input.touch.fingers[k].start, self.input.touch.fingers[k].moved);
         {
             let f = &mut self.input.touch.fingers[k];
             f.pos = p;
@@ -608,6 +610,16 @@ impl App {
             }
         }
         let role = self.input.touch.fingers[k].role;
+        if role == Role::Menu && self.input.touch.fingers.iter().any(|f| f.role == Role::MenuSlider) { return; }
+        let sideways = (p.x - start.x).abs() >= (p.y - start.y).abs();
+        let grip = if role == Role::Menu && !was_moved && self.input.touch.fingers[k].moved && sideways && self.shell_takes_mouse() { self.shell.onto_slider(start, p) } else { None };
+        if let Some(q) = grip {
+            self.input.touch.fingers.iter_mut().filter(|f| f.role == Role::Menu).for_each(|f| f.moved = true);
+            self.input.touch.fingers[k].role = Role::MenuSlider;
+            self.on_cursor(q.x, q.y);
+            self.shell.button(true);
+            return;
+        }
         match role {
             Role::Wheel(a0, _) => {
                 // The wheel turns as far round as the finger goes round its centre - the
@@ -642,6 +654,10 @@ impl App {
                 if self.input.touch.fingers[k].moved {
                     self.on_cursor(p.x, p.y);
                 }
+            }
+            Role::MenuSlider => {
+                let q = self.shell.onto_slider(start, p).unwrap_or(p);
+                self.on_cursor(q.x, q.y);
             }
             Role::Cockpit | Role::Mouse => {
                 if let (Role::Mouse, Some(_)) = (role, self.input.touch.pinch) {
@@ -740,6 +756,11 @@ impl App {
                     }
                     _ => self.left_button(event_loop, false),
                 }
+            }
+            Role::MenuSlider => {
+                let at = if cancelled { Vec2::splat(-1e4) } else { self.shell.onto_slider(f.start, p).unwrap_or(p) };
+                self.on_cursor(at.x, at.y);
+                self.shell.button(false);
             }
             Role::Menu => {
                 if !f.moved && !cancelled {

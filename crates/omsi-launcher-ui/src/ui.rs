@@ -236,6 +236,7 @@ pub struct Ui {
     /// a field, a button or a popup.
     pub flat: bool,
     tooltip: Option<(String, Vec2)>,
+    sliders: Vec<Rect>,
     /// (tests) Where each clickable widget was this frame, by id.
     #[cfg(any(test, feature = "test-support"))]
     pub drawn: HashMap<Id, Rect>,
@@ -270,6 +271,7 @@ impl Ui {
             over_ui: false,
             flat: false,
             tooltip: None,
+            sliders: Vec::new(),
             #[cfg(any(test, feature = "test-support"))]
             drawn: HashMap::new(),
         }
@@ -289,6 +291,7 @@ impl Ui {
         self.cursor = winit::window::CursorIcon::Default;
         self.over_ui = false;
         self.tooltip = None;
+        self.sliders.clear();
         #[cfg(any(test, feature = "test-support"))]
         self.drawn.clear();
         self.push_layer(Rect::new(0.0, 0.0, size.x, size.y), 0.0);
@@ -384,6 +387,13 @@ impl Ui {
 
     fn clip_now(&self) -> Rect {
         self.clip_stack.last().map(|c| c.0).unwrap_or(Rect::new(0.0, 0.0, self.size.x, self.size.y))
+    }
+
+    pub fn onto_slider(&self, start: Vec2, p: Vec2) -> Option<Vec2> {
+        let covered = self.popup.as_ref().is_some_and(|q| popup_rect(q, self.size).contains(start))
+            || self.date_popup.as_ref().is_some_and(|q| date_rect(q, self.size).contains(start));
+        let r = self.sliders.iter().find(|r| r.contains(start)).filter(|_| !covered)?;
+        Some(Vec2::new(p.x.clamp(r.x, r.right() - 0.5), start.y))
     }
 
     pub fn rect_visible(&self, r: Rect) -> bool {
@@ -643,9 +653,11 @@ impl Ui {
         let label_w = if label.is_empty() { 0.0 } else { (r.w * 0.38).min(170.0) };
         let val_w = 58.0;
         let track_r = Rect::new(r.x + label_w, r.y, r.w - label_w - val_w, r.h);
-        let (h, held, _) = self.interact(id, track_r.pad(-8.0, 0.0));
+        let grab = track_r.pad(-8.0, 0.0);
+        self.sliders.push(intersect(self.clip_now(), grab));
+        let (h, held, clicked) = self.interact(id, grab);
         let before = *value;
-        if held {
+        if held || clicked {
             let t = ((self.input.mouse.x - track_r.x) / track_r.w.max(1.0)).clamp(0.0, 1.0);
             let mut v = min + t * (max - min);
             if step > 0.0 {

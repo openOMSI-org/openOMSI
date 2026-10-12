@@ -129,6 +129,10 @@ impl Shell {
         self.ui.input.mouse = Vec2::new(x, y) / self.scale;
     }
 
+    pub(crate) fn onto_slider(&self, start: Vec2, p: Vec2) -> Option<Vec2> {
+        self.ui.onto_slider(start / self.scale, p / self.scale).filter(|_| self.showing() && self.dd_anchor.is_none()).map(|q| q * self.scale)
+    }
+
     pub(crate) fn button(&mut self, pressed: bool) {
         log::debug!("screens: button {pressed} at {:?}", self.ui.input.mouse);
         if pressed {
