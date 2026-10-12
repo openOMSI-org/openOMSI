@@ -178,7 +178,7 @@ export function Dialog({ title, onClose, children, footer, wide }) {
   }, [onClose]);
   return html`<div class="overlay" onMouseDown=${(e) => e.target === e.currentTarget && onClose?.()}>
     <div class=${'dialog' + (wide ? ' wide' : '')} role="dialog">
-      <div class="dialog-head"><h2>${t(title)}</h2><${Button} kind="ghost" icon="x" title="Close" onClick=${onClose} /></div>
+      <div class="dialog-head"><h2>${t(title)}</h2>${onClose && html`<${Button} kind="ghost" icon="x" title="Close" onClick=${onClose} />`}</div>
       <div class="dialog-body">${children}</div>
       ${footer && html`<div class="dialog-foot">${footer}</div>`}
     </div>

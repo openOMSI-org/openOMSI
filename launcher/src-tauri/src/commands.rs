@@ -42,6 +42,9 @@ impl omsi_launcher_api::Platform for Window {
     fn selftest(&self) -> Option<String> {
         crate::selftest().then(|| std::env::var("OPENOMSI_LAUNCHER_SELFTEST").unwrap_or_default())
     }
+    fn quit(&self) {
+        self.0.exit(0);
+    }
 }
 
 /// A command of the page (see `omsi-launcher-api`).

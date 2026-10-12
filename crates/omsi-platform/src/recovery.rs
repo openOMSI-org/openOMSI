@@ -224,14 +224,25 @@ pub fn rollback(place: &Place) -> anyhow::Result<String> {
 /// ["0.2.29"], "message": "..."}`), its message (or an empty one). A short wait at most;
 /// no answer (offline, GitHub down) is no verdict.
 pub fn remotely_bad(version: &str) -> Option<String> {
+    listed_bad(&health()?, version)
+}
+
+pub fn listed_broken() -> Vec<String> {
+    health().map(|t| broken_of(&t)).unwrap_or_default()
+}
+
+fn health() -> Option<String> {
     let url = omsi_cfg::flags::OMSI_HEALTH_URL.var().map(str::to_string).unwrap_or_else(|| HEALTH_URL.to_string());
-    let text = if let Some(p) = url.strip_prefix("file://") {
-        std::fs::read_to_string(p).ok()?
-    } else {
-        let agent = ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(4)).timeout_read(Duration::from_secs(4)).user_agent(&format!("openOMSI/{} (guard)", updater::current_version())).build();
-        agent.get(&url).call().ok()?.into_string().ok()?
-    };
-    listed_bad(&text, version)
+    if let Some(p) = url.strip_prefix("file://") {
+        return std::fs::read_to_string(p).ok();
+    }
+    let agent = ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(4)).timeout_read(Duration::from_secs(4)).user_agent(&format!("openOMSI/{} (guard)", updater::current_version())).build();
+    agent.get(&url).call().ok()?.into_string().ok()
+}
+
+fn broken_of(text: &str) -> Vec<String> {
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(text) else { return Vec::new() };
+    v["bad"].as_array().into_iter().flatten().filter_map(|b| b.as_str()).map(|b| b.trim().trim_start_matches(['v', 'V']).to_string()).filter(|b| !b.is_empty()).collect()
 }
 
 /// `version` in a `health.json`'s `bad` list: its message.
@@ -395,5 +406,8 @@ mod tests {
         assert!(listed_bad(text, "0.2.30").is_none());
         assert!(listed_bad(r#"{"bad": []}"#, "0.2.29").is_none());
         assert!(listed_bad("not json", "0.2.29").is_none());
+        assert_eq!(broken_of(text), ["0.2.29", "0.2.31"]);
+        assert!(broken_of(r#"{"bad": [" ", 3]}"#).is_empty());
+        assert!(broken_of("not json").is_empty());
     }
 }

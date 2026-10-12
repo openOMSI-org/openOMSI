@@ -33,6 +33,7 @@ export async function boot() {
   }
   startPolling();
   on('vehicles-progress', (p) => set({ vehiclesProgress: p }));
+  if (b.updated) toast(t('openOMSI {version} is installed', { version: b.updated }), 'ok', 8000);
 }
 
 export function applyTheme() {

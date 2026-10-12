@@ -429,6 +429,17 @@ table.table { width: 100%; border-collapse: collapse; }
 .pads-list .card-body { padding: 10px 10px 14px; }
 .pads-detail { gap: 16px; min-width: 0; container-type: inline-size; }
 .list-item.device { padding: 10px; width: 100%; text-align: left; background: none; color: inherit; font: inherit; }
+.list-item.version { width: 100%; text-align: left; background: none; color: inherit; font: inherit; flex-wrap: wrap; row-gap: 6px; }
+.list-item.version:disabled { cursor: default; }
+.list-item.version:disabled:hover { background: none; }
+.list-item.version.on, .list-item.version.on:hover { background: var(--accent-soft); }
+.list-item.version:disabled .title { color: var(--text-2); }
+.list-item.version .title, .list-item.version .sub { display: block; }
+.list-item.version .tags { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.versions { display: flex; flex-direction: column; gap: 12px; }
+.versions .list { max-height: min(46vh, 380px); overflow: auto; margin: 0 -8px; padding: 0 8px; }
+.version-keep { margin-top: 6px; }
+.version-progress { display: flex; flex-direction: column; gap: 10px; padding: 6px 0 4px; }
 .list-item.device:hover { background: var(--surface-2); }
 .list-item.device.on { background: var(--accent-soft); }
 .list-item.device .title, .list-item.device .sub { display: block; }

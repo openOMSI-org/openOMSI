@@ -77,6 +77,11 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if omsi_launcher_api::installing() {
+                    api.prevent_close();
+                }
+            }
             // the window closed while it rests behind a game: the program ends with it
             if let tauri::WindowEvent::Destroyed = event {
                 if window.app_handle().webview_windows().is_empty() {
@@ -85,7 +90,13 @@ fn main() {
             }
         })
         .build(tauri::generate_context!())
-        .map(|app| app.run(|_, e| if let tauri::RunEvent::Exit = e { service::stop() }));
+        .map(|app| {
+            app.run(|_, e| match e {
+                tauri::RunEvent::ExitRequested { api, .. } if omsi_launcher_api::installing() => api.prevent_exit(),
+                tauri::RunEvent::Exit => service::stop(),
+                _ => {}
+            })
+        });
 
     if let Err(e) = result {
         omsi_launcher_lib::log_to_file(&format!("the launcher's window could not open: {e}"));
