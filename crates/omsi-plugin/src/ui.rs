@@ -168,10 +168,10 @@ pub struct Element {
 }
 
 impl Element {
-    /// Whether a click on it is a `ui_click`: a button's always, others' with an id and
+    /// Whether a click on it is a `ui_click`: a button's or a tile's always, others' with an id and
     /// `clickable = true`.
     pub fn takes_clicks(&self) -> bool {
-        matches!(self.kind, Kind::Button { .. }) || (self.clickable && self.id.is_some())
+        matches!(self.kind, Kind::Button { .. } | Kind::Tile { .. }) || (self.clickable && self.id.is_some())
     }
 
     /// Whether the mouse changes its value (a checkbox, a slider, a field, tabs).
@@ -210,6 +210,7 @@ pub enum Kind {
     Divider,
     Space { size: f32 },
     Button { text: String, icon: Option<String> },
+    Tile { text: String, icon: String },
     /// A picture of the plugin's folder (PNG, JPEG, BMP, TGA); `path` None: no such file.
     Image { path: Option<PathBuf>, width: f32, height: f32 },
     Checkbox { text: String, checked: bool },

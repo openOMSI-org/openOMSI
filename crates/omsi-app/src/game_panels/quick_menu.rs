@@ -3,14 +3,22 @@
 //! pixel tiles, each starting what the old toolbar's buttons did - 0x686e3c). Its tiles here
 //! are those of OMSI's that the game has: OMSI's place, swap, remove and reset of the bus,
 //! the timetable, the destination, the repair, the pump and the wash, the route arrows, the
-//! time, the weather and the statistics; the AI driving the player's bus, the breakdown
-//! call and the input devices' tile are left out. A tile with more than one thing to do
-//! (refuel or wash, the trip's summary or the personnel file) opens a row of its own.
+//! time and the weather in one, and the statistics; the AI driving the player's bus, the
+//! breakdown call and the input devices' tile are left out. The statistics tile shows the last
+//! trip's summary again, or the personnel file when there is none.
 
-use super::{button, card, grow_row, note};
-use omsi_plugin::ui::{Anchor, Panel};
+use super::{card, el, note};
+use omsi_plugin::ui::{Anchor, Element, Kind, Panel, Rgba, RowAlign};
+use omsi_ui::tr;
 
-/// The tiles: id, label, icon - in OMSI's order, four to a row.
+const ACCENT: Rgba = Rgba([232, 160, 48, 255]);
+const COLUMNS: usize = 6;
+
+fn tile(id: &str, label: &str, icon: &str) -> Element {
+    el(Some(id), Kind::Tile { text: tr(label).into_owned(), icon: icon.to_string() })
+}
+
+/// The tiles: id, label, icon - in OMSI's order, six to a row.
 pub(crate) const TILES: [(&str, &str, &str); 12] = [
     ("place", "Place a vehicle", "add"),
     ("switch", "Change vehicle", "sync_alt"),
@@ -19,53 +27,31 @@ pub(crate) const TILES: [(&str, &str, &str); 12] = [
     ("duty", "Timetable", "departure_board"),
     ("dest", "Destination", "directions_bus"),
     ("repair", "Repair", "construction"),
-    ("station", "Refuel / wash", "water_drop"),
+    ("refuel", "Refuel", "local_gas_station"),
+    ("wash", "Wash", "local_car_wash"),
     ("arrows", "Route arrows", "navigation"),
-    ("time", "Time", "schedule"),
-    ("weather", "Weather", "partly_cloudy_day"),
+    ("world", "Time & weather", "partly_cloudy_day"),
     ("stats", "Statistics", "receipt_long"),
 ];
 
-/// The open quick menu and the tile whose own row is open.
-#[derive(Default)]
-pub(crate) struct QuickMenu {
-    pub(super) sub: Option<&'static str>,
-}
+pub(crate) struct QuickMenu;
 
 impl QuickMenu {
     pub(crate) fn panel(&self, app: &crate::App) -> Panel {
-        self.panel_of(app.settings.nav_arrows, app.session.journey.as_ref().is_some_and(|j| j.has_summary()))
+        self.panel_of(app.settings.nav_arrows)
     }
 
-    /// The menu with the route arrows on or off, and a trip summary to show again or none.
-    pub(crate) fn panel_of(&self, arrows: bool, summary: bool) -> Panel {
-        let mut children = Vec::new();
-        for four in TILES.chunks(4) {
-            children.push(grow_row(four.iter().map(|(id, label, icon)| super::Element { color: self.lit(arrows, id), ..button(id, label, Some(icon)) }).collect()));
-        }
-        match self.sub {
-            Some("station") => children.push(grow_row(vec![button("refuel", "Refuel", Some("water_drop")), button("wash", "Wash", Some("water_drop"))])),
-            Some("stats") => {
-                let mut row = vec![button("career", "Personnel file", Some("badge"))];
-                if summary {
-                    row.insert(0, button("summary", "Trip summary", Some("receipt_long")));
-                }
-                children.push(grow_row(row));
-            }
-            _ => {}
-        }
-        children.push(note("Alt or Esc closes the menu; the game goes on."));
-        // (bottom right, over the picture's corner as OMSI's)
-        card(Anchor::BottomRight, -16.0, -16.0, 680.0, 228, children)
-    }
-
-    /// A tile that is on (the route arrows) or open (its own row) is drawn lit.
-    fn lit(&self, arrows: bool, id: &str) -> Option<omsi_plugin::ui::Rgba> {
-        let on = match id {
-            "arrows" => arrows,
-            other => self.sub == Some(other),
-        };
-        on.then_some(omsi_plugin::ui::Rgba([232, 160, 48, 255]))
+    /// The menu with the route arrows on (their tile lit) or off.
+    pub(crate) fn panel_of(&self, arrows: bool) -> Panel {
+        let mut children: Vec<Element> = TILES
+            .chunks(COLUMNS)
+            .map(|line| {
+                let tiles = line.iter().map(|(id, label, icon)| Element { grow: true, color: (*id == "arrows" && arrows).then_some(ACCENT), ..tile(id, label, icon) }).collect();
+                el(None, Kind::Row { children: tiles, gap: 6.0, align: RowAlign::Start })
+            })
+            .collect();
+        children.push(note(&tr("Alt or Esc closes the menu; the game goes on.")));
+        Panel { padding: 10.0, gap: 6.0, ..card(Anchor::BottomRight, 32.0, 32.0, 560.0, 150, children) }
     }
 }
 
@@ -74,22 +60,12 @@ pub(crate) fn toggle(app: &mut crate::App) {
     let gp = &mut app.menus.game_panels;
     gp.quick = match gp.quick.take() {
         Some(_) => None,
-        None => Some(QuickMenu::default()),
+        None => Some(QuickMenu),
     };
 }
 
-/// A tile clicked: what it starts. The menu closes, unless the tile opened a row of its own.
+/// A tile clicked: what it starts, the menu closing.
 pub(crate) fn click(app: &mut crate::App, id: &str) {
-    let toggle_sub = |app: &mut crate::App, sub: &'static str| {
-        if let Some(q) = app.menus.game_panels.quick.as_mut() {
-            q.sub = if q.sub == Some(sub) { None } else { Some(sub) };
-        }
-    };
-    match id {
-        "station" => return toggle_sub(app, "station"),
-        "stats" => return toggle_sub(app, "stats"),
-        _ => {}
-    }
     app.menus.game_panels.quick = None;
     match id {
         "place" | "switch" | "remove" | "reset" | "repair" | "refuel" | "wash" => {
@@ -103,20 +79,14 @@ pub(crate) fn click(app: &mut crate::App, id: &str) {
         "arrows" => {
             crate::game_lists::option_do(app, "nav_arrows", "", crate::game_lists::Move::Next);
         }
-        "time" => {
+        "world" => {
             let tab = crate::game_lists::tab_of(app, crate::game_lists::ListKind::World(0), "Time");
             app.open_list(crate::game_lists::ListKind::World(tab));
         }
-        "weather" => {
-            let tab = crate::game_lists::tab_of(app, crate::game_lists::ListKind::World(0), "Weather");
-            app.open_list(crate::game_lists::ListKind::World(tab));
-        }
-        "summary" => {
-            if let Some(s) = app.session.journey.as_ref().and_then(|j| j.last_summary()) {
-                app.menus.game_panels.trip = Some(super::trip_summary::TripPanel::new(s));
-            }
-        }
-        "career" => app.open_list(crate::game_lists::ListKind::Drivers),
+        "stats" => match app.session.journey.as_ref().and_then(|j| j.last_summary()) {
+            Some(s) => app.menus.game_panels.trip = Some(super::trip_summary::TripPanel::new(s)),
+            None => app.open_list(crate::game_lists::ListKind::Drivers),
+        },
         _ => {}
     }
 }

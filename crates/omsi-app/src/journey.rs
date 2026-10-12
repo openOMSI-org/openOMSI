@@ -257,10 +257,6 @@ impl Journey {
         self.last.clone()
     }
 
-    pub(crate) fn has_summary(&self) -> bool {
-        self.last.is_some()
-    }
-
     /// The bus arrived at stop `at` (trip, stop) `late` s after its time (negative: early).
     /// True when that is news.
     fn arrived(&mut self, at: (usize, usize), late: f64) -> bool {
@@ -535,7 +531,7 @@ mod tests {
         j.odometer((0, 3), 1236.5);
         j.trip_ended(0, None);
         let s = j.take_summary().expect("a summary");
-        assert!(j.take_summary().is_none() && j.has_summary());
+        assert!(j.take_summary().is_none() && j.last_summary().is_some());
         assert_eq!(s.rows.len(), 4);
         assert_eq!(s.rows[0], ["Metro Mlociny".to_string(), "08:00:00".into(), "08:00:57".into(), "+00:00:57".into(), "1234.0 km".into()]);
         assert_eq!(s.rows[2][2], "", "passed by");

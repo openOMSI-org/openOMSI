@@ -38,6 +38,7 @@ const ACCENT: Color = Color::rgba(232, 160, 48, 1.0);
 const TRACK: Color = Color::rgba(62, 62, 62, 1.0);
 const DIVIDER: Color = Color::rgba(52, 52, 52, 1.0);
 const BUTTON: Color = Color::rgba(44, 44, 44, 1.0);
+const TILE: Color = Color::rgba(46, 48, 54, 0.6);
 const SHADOW: Color = Color::rgba(0, 0, 0, 0.35);
 
 /// A text line's height, times its size.
@@ -50,6 +51,13 @@ const BUTTON_PX: f32 = 14.0;
 const BUTTON_PAD: f32 = 14.0;
 const BUTTON_ICON: f32 = 18.0;
 const BUTTON_R: f32 = 8.0;
+const TILE_H: f32 = 66.0;
+const TILE_PX: f32 = 11.0;
+const TILE_PX_MIN: f32 = 9.0;
+const TILE_PAD: f32 = 6.0;
+const TILE_ICON: f32 = 22.0;
+const TILE_GAP: f32 = 4.0;
+const TILE_R: f32 = 8.0;
 /// A bar in a row that does not grow.
 const BAR_W: f32 = 60.0;
 const STRIPE: f32 = 4.0;
@@ -290,6 +298,9 @@ impl Layout<'_> {
             Kind::Button { text, icon } => {
                 (self.button_content(text, icon) + 2.0 * BUTTON_PAD).ceil()
             }
+            Kind::Tile { text, .. } => {
+                (self.width(text, TILE_PX, Weight::Medium).max(TILE_ICON) + 2.0 * TILE_PAD).ceil()
+            }
             _ => self.widget_natural(e),
         }
     }
@@ -351,6 +362,7 @@ impl Layout<'_> {
             Kind::Bar { height, .. } => *height,
             Kind::Badge { .. } => BADGE_H,
             Kind::Button { .. } => BUTTON_H,
+            Kind::Tile { .. } => TILE_H,
             Kind::Divider => {
                 if in_row {
                     0.0
@@ -398,7 +410,10 @@ impl Layout<'_> {
     /// Put `e` into `r` (its width; in a row the row's height, in the stack its own).
     fn emit(&mut self, e: &Element, r: Rect, in_row: bool) {
         // (before what is in it: a clickable row's buttons are found first, as drawn later)
-        if e.takes_clicks() && !matches!(e.kind, Kind::Button { .. }) && !e.is_control() {
+        if e.takes_clicks()
+            && !matches!(e.kind, Kind::Button { .. } | Kind::Tile { .. })
+            && !e.is_control()
+        {
             self.out.hits.push(Hit {
                 r,
                 element: e.id.clone(),
@@ -544,7 +559,65 @@ impl Layout<'_> {
                 let y = self.baseline(b.y, b.h, BUTTON_PX, Weight::Medium);
                 self.text(t, BUTTON_PX, Weight::Medium, Vec2::new(x + icon_w, y), ink);
             }
+            Kind::Tile { text, icon } => self.tile(e, r, text, icon),
             _ => self.widget_emit(e, r),
+        }
+    }
+}
+
+impl Layout<'_> {
+    fn tile(&mut self, e: &Element, r: Rect, text: &str, icon: &str) {
+        let b = Rect::new(r.x, r.y + (r.h - TILE_H) * 0.5, r.w, TILE_H);
+        let hit = self.out.hits.len();
+        self.out.hits.push(Hit {
+            r: b,
+            element: e.id.clone(),
+            kind: HitKind::Click,
+        });
+        let fill = e.color.map(color).unwrap_or(TILE);
+        self.rounded(b, TILE_R, fill, Some(hit));
+        let (ink, mark) = match e.color {
+            Some(_) => (ink_on(fill), ink_on(fill)),
+            None => (INK, ACCENT),
+        };
+        let room = (b.w - 2.0 * TILE_PAD).max(1.0);
+        let widest = text
+            .split_whitespace()
+            .map(|w| self.width(w, TILE_PX, Weight::Medium))
+            .fold(0.0, f32::max);
+        let px = if widest > room {
+            (TILE_PX * room / widest).max(TILE_PX_MIN)
+        } else {
+            TILE_PX
+        };
+        let mut lines = self.wrap(text, px, Weight::Medium, room);
+        if lines.len() > 2 {
+            let rest = lines.split_off(1).join(" ");
+            lines.push(self.fit(&rest, px, Weight::Medium, room));
+        }
+        let lh = px * LINE;
+        let top = b.y + (b.h - TILE_ICON - TILE_GAP - lh * lines.len() as f32) * 0.5;
+        self.out.items.push(Item::Icon {
+            name: icon.to_string(),
+            center: Vec2::new(b.x + b.w * 0.5, top + TILE_ICON * 0.5),
+            size: TILE_ICON,
+            color: mark,
+        });
+        for (k, line) in lines.into_iter().enumerate() {
+            let lw = self.width(&line, px, Weight::Medium);
+            let y = self.baseline(
+                top + TILE_ICON + TILE_GAP + k as f32 * lh,
+                lh,
+                px,
+                Weight::Medium,
+            );
+            self.text(
+                line,
+                px,
+                Weight::Medium,
+                Vec2::new(b.x + (b.w - lw) * 0.5, y),
+                ink,
+            );
         }
     }
 }

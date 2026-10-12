@@ -97,8 +97,7 @@ fn summary() -> crate::journey::TripSummary {
 #[test]
 #[ignore]
 fn preview() {
-    let quick = quick_menu::QuickMenu { sub: Some("station") };
-    picture("game-panels-quick.png", &[(quick.panel_of(true, true), Some("repair"))]);
+    picture("game-panels-quick.png", &[(quick_menu::QuickMenu.panel_of(true), Some("repair"))]);
     picture("game-panels-trip.png", &[(trip_summary::TripPanel::new(summary()).panel(), Some("save"))]);
     let form = dest_form::DestForm { route: "137".into(), lines: ["Sonderfahrt".into(), "Betriebshof".into()], ..Default::default() };
     picture("game-panels-dest.png", &[(form.panel(), Some("select"))]);
