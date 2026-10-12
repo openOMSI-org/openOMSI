@@ -557,7 +557,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
     let fps_t = Instant::now();
     let update_watch = crate::update_watch::UpdateWatch::new();
     // (a server counts its players by their own games, not itself)
-    let presence = if is_server { None } else { crate::presence::Presence::start() };
+    let presence = if is_server || cfg!(test) { None } else { crate::presence::Presence::start() };
     let touch = touch::Touch::new();
     App {
         args,

@@ -121,4 +121,19 @@ mod tests {
             app.close_game_menu();
         }
     }
+
+    #[test]
+    fn a_tile_leaves_the_pause_as_it_was() {
+        let args = <crate::cli::Args as clap::Parser>::parse_from(["openomsi"]);
+        let mut app = crate::assemble_app(args, Default::default());
+        for (paused, stale) in [(true, false), (false, true)] {
+            for tile in ["reset", "remove", "repair"] {
+                app.paused = paused;
+                app.menus.menu_prev_pause = stale;
+                toggle(&mut app);
+                click(&mut app, tile);
+                assert_eq!(app.paused, paused, "{tile}");
+            }
+        }
+    }
 }

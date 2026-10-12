@@ -28,9 +28,11 @@ impl App {
             if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);}
             self.menus.menu_edit_icao=false; self.menus.menu_edit=None;
         }
-        self.menus.game_menu = None;
+        let was_open = self.menus.game_menu.take().is_some();
         self.menus.menu_top = None;
-        self.paused = self.menus.menu_prev_pause;
+        if was_open {
+            self.paused = self.menus.menu_prev_pause;
+        }
     }
 
     pub(crate) fn menu_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode) {
@@ -214,7 +216,7 @@ impl App {
                 self.back_to_bus();
             }
             "load" => {
-                self.menus.game_menu = None;
+                self.close_game_menu();
                 if self.load_quicksave() {
                     self.finish_session();
                     crate::platform::exit(event_loop);
