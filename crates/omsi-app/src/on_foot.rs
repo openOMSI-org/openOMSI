@@ -149,6 +149,11 @@ impl OnFoot {
         }
     }
 
+    pub(crate) fn eye_aboard(&self) -> Option<DVec3> {
+        let aboard = self.settle <= 0.0 && self.cam == FootCam::First && (self.seat.is_some() || self.inside.is_some());
+        self.eye.filter(|_| aboard)
+    }
+
     /// Whether the feet are on the ground.
     fn grounded(&self) -> bool {
         self.lift <= 1e-4 && self.vz <= 0.0

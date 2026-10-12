@@ -5,7 +5,7 @@ use super::*;
 
 crate::app::stage_ctx!(
     /// The lighting stage's part of the game.
-    LightingCx { reads: [net, player, world, clock], writes: [weather] }
+    LightingCx { reads: [net, world, clock], writes: [weather, player] }
 );
 
 /// The lighting the frame is drawn with.

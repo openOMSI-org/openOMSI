@@ -28,7 +28,7 @@ fn the_window_frame_runs_in_this_order() {
             // once per tick
             "traffic", "player_tick", "on_foot", "humans", "after_humans", "duty", "weather", "wheel_surface",
             // once a frame
-            "player_view", "audio", "lan", "integrations", "view_keys", "lights", "scripted", "photo", "ui",
+            "player_view", "audio", "lan", "integrations", "view_keys", "drawn", "lights", "scripted", "photo", "ui",
             "lighting", "trace_look", "render",
         ]
     );

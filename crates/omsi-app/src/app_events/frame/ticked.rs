@@ -9,6 +9,12 @@ use super::stages::{WindowFrame, FRAME_AFTER, FRAME_BEFORE, FRAME_TICK};
 use super::*;
 use crate::frame_stages::Flow;
 
+pub(crate) struct DrawnPose {
+    uid: u64,
+    sim: Vec<omsi_sim::tick::BodyPose>,
+    drawn: Vec<omsi_sim::tick::BodyPose>,
+}
+
 impl App {
     /// One frame of the window (see the module's notes).
     pub(super) fn frame_ticked(&mut self, event_loop: &ActiveEventLoop) -> anyhow::Result<()> {
@@ -54,18 +60,31 @@ impl App {
         if self.player.is_none() || self.renderer.is_none() || self.scene.is_none() {
             return;
         }
-        let between = match self.player.as_ref() {
-            Some(p) if !self.paused => self.fixed_tick.between(&p.vehicle),
-            _ => None,
-        };
-        if let (Some((_, at)), Some(p)) = (between.as_ref(), self.player.as_mut()) {
-            omsi_sim::tick::put(&mut p.vehicle, at);
-        }
+        let sim = self.player_to_drawn_pose();
         super::driving::player_to_scene(super::driving::PlayerToSceneCx::of(&mut self.parts()), dt);
         self.frame_view_camera(dt);
-        if let (Some((cur, _)), Some(p)) = (between.as_ref(), self.player.as_mut()) {
-            omsi_sim::tick::put(&mut p.vehicle, cur);
-        }
+        self.player_back_to_sim_pose(sim);
         self.frame_player_hover();
+    }
+
+    pub(crate) fn player_to_drawn_pose(&mut self) -> Option<DrawnPose> {
+        let p = self.player.as_mut().filter(|_| !self.paused)?;
+        let (sim, drawn) = self.fixed_tick.to_drawn(&mut p.vehicle)?;
+        Some(DrawnPose { uid: p.uid, sim, drawn })
+    }
+
+    pub(super) fn drawn_behind(&self) -> f32 {
+        if self.paused {
+            0.0
+        } else {
+            self.fixed_tick.behind()
+        }
+    }
+
+    pub(crate) fn player_back_to_sim_pose(&mut self, pose: Option<DrawnPose>) {
+        let Some(p) = self.player.as_mut() else { return };
+        if let Some(d) = pose.filter(|d| d.uid == p.uid && omsi_sim::tick::poses_of(&p.vehicle) == d.drawn) {
+            omsi_sim::tick::put(&mut p.vehicle, &d.sim);
+        }
     }
 }

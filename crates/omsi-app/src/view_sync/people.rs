@@ -18,7 +18,8 @@ use glam::{DVec3, Mat4, Vec3};
 use hashbrown::HashMap;
 use omsi_render::{AlphaMode, MaterialId, MeshId, Renderer, Scene};
 use omsi_sim::human::{skin, HumanType};
-use omsi_sim::people::{BodyOp, Place};
+use omsi_sim::people::cabin::DrawnBus;
+use omsi_sim::people::{BodyOp, BusId, Place};
 use omsi_sim::view_events::{PeopleFrame, PersonFrame};
 use omsi_sim::VehicleInstance;
 use std::path::{Path, PathBuf};
@@ -284,7 +285,7 @@ impl Humans {
         }
     }
 
-    pub(super) fn sync_money(&mut self, view: &mut PeopleView, world: &World, renderer: &Renderer, scene: &mut Scene, bus: &VehicleInstance) {
+    pub(crate) fn sync_money(&mut self, view: &mut PeopleView, world: &World, renderer: &Renderer, scene: &mut Scene, bus: &VehicleInstance) {
         if let Some(m) = self.sim.money.as_mut() {
             crate::money::sync(m, renderer, scene, bus);
         }
@@ -307,6 +308,31 @@ impl Humans {
         self.catch_up_bodies(view, renderer, scene);
         self.sim.snapshot_into(&mut view.frame);
         view.pose(world, renderer, scene, camera);
+    }
+}
+
+impl PeopleView {
+    pub(crate) fn follow_buses<'a>(&self, vehicle_of: impl Fn(BusId) -> Option<&'a VehicleInstance>, avatar: Option<u32>, renderer: &Renderer, scene: &mut Scene) -> Option<DVec3> {
+        let mut drawn: HashMap<BusId, Option<(usize, DrawnBus)>> = HashMap::new();
+        let mut moved = None;
+        for p in &self.frame.people {
+            let Place::Bus(b, l) = p.place else { continue };
+            let found = drawn.entry(b).or_insert_with(|| {
+                let k = self.frame.buses.iter().position(|x| x.id == b)?;
+                vehicle_of(b).map(|v| (k, DrawnBus::of(v, &self.frame.buses[k].cabin)))
+            });
+            let Some((k, d)) = found.as_ref() else { continue };
+            let (at, heading, tilt) = self.frame.buses[*k].follow(d, l, p.position, p.heading, p.tilt);
+            if avatar == Some(p.id) {
+                moved = Some(at - p.position);
+            }
+            let Some(st) = self.people.get(&p.id) else { continue };
+            let xf = tilt * Mat4::from_rotation_z((-heading).to_radians() as f32);
+            for (_, inst) in &st.meshes {
+                renderer.set_transform(scene, *inst, at, xf);
+            }
+        }
+        moved
     }
 }
 

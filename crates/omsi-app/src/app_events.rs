@@ -492,6 +492,12 @@ impl App {
 
     /// The mouse wheel (or a pinch of two fingers): `amount` notches, up positive.
     pub(crate) fn wheel(&mut self, amount: f32) {
+        let sim = self.player_to_drawn_pose();
+        self.wheel_now(amount);
+        self.player_back_to_sim_pose(sim);
+    }
+
+    fn wheel_now(&mut self, amount: f32) {
         // the photo mode: the lens zooms, or its panel scrolls under the mouse
         if self.photo_on() {
             if self.shell.over_ui {

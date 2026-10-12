@@ -166,6 +166,12 @@ impl App {
     }
 
     fn html_move(&mut self) {
+        let sim = self.player_to_drawn_pose();
+        self.html_move_now();
+        self.player_back_to_sim_pose(sim);
+    }
+
+    fn html_move_now(&mut self) {
         if let Some((id, page, ..)) = self.input.html_object_pressed {
             let Some((o, d, _)) = self.cursor_ray_now() else { return };
             let Some(w) = self.world.clone() else { return };
@@ -395,6 +401,12 @@ impl App {
     }
 
     pub(crate) fn on_left(&mut self, pressed: bool) {
+        let sim = self.player_to_drawn_pose();
+        self.left_now(pressed);
+        self.player_back_to_sim_pose(sim);
+    }
+
+    fn left_now(&mut self, pressed: bool) {
         if self.xr.vr_nav_edit.is_some() { return; }
         // the object editor: the mouse picks and drags
         if self.menus.game_menu.is_none() && self.editor_mouse(pressed) {

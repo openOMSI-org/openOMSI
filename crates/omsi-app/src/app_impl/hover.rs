@@ -43,6 +43,12 @@ impl App {
     }
 
     pub(crate) fn update_hover(&mut self) {
+        let sim = self.player_to_drawn_pose();
+        self.hover_now();
+        self.player_back_to_sim_pose(sim);
+    }
+
+    fn hover_now(&mut self) {
         if self.xr.vr_nav_edit.is_some() || self.input.cursor_hidden.is_some() {
             self.menus.hover = None;
             self.menus.hover_part = None;

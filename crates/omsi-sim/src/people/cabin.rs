@@ -642,6 +642,44 @@ pub fn train_point(pos: DVec3, rot: &Mat4, trailers: &[PartFrame], local: Vec3) 
     here
 }
 
+fn train_tilt(rot: &Mat4, heading: f64, trailers: &[PartFrame], local: Vec3) -> Mat4 {
+    let (mut rot, mut heading) = (*rot, heading);
+    for t in trailers {
+        if behind(t, local.y) < 0.5 {
+            break;
+        }
+        rot = t.rot;
+        heading = t.heading;
+    }
+    rot * Mat4::from_rotation_z(heading.to_radians() as f32)
+}
+
+#[derive(Debug, Clone)]
+pub struct DrawnBus {
+    pub pos: DVec3,
+    pub rot: Mat4,
+    pub heading: f64,
+    pub trailers: Vec<PartFrame>,
+}
+
+impl DrawnBus {
+    pub fn of(v: &VehicleInstance, cabin: &Cabin) -> DrawnBus {
+        DrawnBus { pos: v.position, rot: v.body_rotation(), heading: v.heading, trailers: part_frames(v, cabin) }
+    }
+
+    pub fn world(&self, local: Vec3) -> DVec3 {
+        train_point(self.pos, &self.rot, &self.trailers, local)
+    }
+
+    pub fn heading_at(&self, local: Vec3) -> f64 {
+        train_heading(self.heading, &self.trailers, local)
+    }
+
+    pub fn tilt_at(&self, local: Vec3) -> Mat4 {
+        train_tilt(&self.rot, self.heading, &self.trailers, local)
+    }
+}
+
 /// The heading of the floor at a point of a cabin (see [`train_point`]).
 pub fn train_heading(heading: f64, trailers: &[PartFrame], local: Vec3) -> f64 {
     let mut here = heading;
@@ -677,16 +715,15 @@ impl BusNow {
     /// The tilt (pitch and bank, in the world's axes, no heading) of the section a point of
     /// the cabin is in.
     pub fn tilt_at(&self, local: Vec3) -> Mat4 {
-        let mut rot = self.rot;
-        let mut heading = self.heading;
-        for t in &self.trailers {
-            if behind(t, local.y) < 0.5 {
-                break;
-            }
-            rot = t.rot;
-            heading = t.heading;
-        }
-        rot * Mat4::from_rotation_z(heading.to_radians() as f32)
+        train_tilt(&self.rot, self.heading, &self.trailers, local)
+    }
+
+    pub fn follow(&self, drawn: &DrawnBus, local: Vec3, position: DVec3, heading: f64, tilt: Mat4) -> (DVec3, f64, Mat4) {
+        (
+            position + (drawn.world(local) - self.world(local)),
+            heading + crowd::angle_diff(self.heading_at(local), drawn.heading_at(local)),
+            drawn.tilt_at(local) * self.tilt_at(local).inverse() * tilt,
+        )
     }
     /// The heading of the section a point of the cabin is in.
     pub fn heading_at(&self, local: Vec3) -> f64 {

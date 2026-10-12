@@ -182,6 +182,16 @@ impl SimTicks {
         })
     }
 
+    pub fn to_drawn(&self, v: &mut crate::VehicleInstance) -> Option<(Vec<BodyPose>, Vec<BodyPose>)> {
+        let (cur, at) = self.between(v)?;
+        put(v, &at);
+        Some((cur, at))
+    }
+
+    pub fn behind(&self) -> f32 {
+        (1.0 - self.alpha) * self.step.dt()
+    }
+
     /// The daylight the frame takes: its last tick's, else the one kept from before.
     pub fn daylight(&self) -> Option<crate::Daylight> {
         self.daylight

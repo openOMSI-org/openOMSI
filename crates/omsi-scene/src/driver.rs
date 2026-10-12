@@ -38,7 +38,7 @@
 //! the gear lever the lone hand pushes the wheel round as far as it can and then takes it again
 //! further back (palming it), rather than letting the rim slide through it.
 
-use glam::{Mat4, Vec3};
+use glam::{DVec3, Mat4, Vec3};
 use omsi_render::{AlphaMode, MeshId, Renderer, Scene};
 use omsi_sim::human::{curl_hands, grip_centres, hand_slot, skin_from, Activity, HumanType, Pose, PoseInput};
 use std::sync::Arc;
@@ -602,6 +602,19 @@ impl DriverFigure {
             renderer.set_params(scene, *inst, &[], false, &[]);
         }
         self.shown = false;
+    }
+
+    pub fn follow(&self, renderer: &Renderer, scene: &mut Scene, position: DVec3, body: Mat4) {
+        if !self.shown || !self.settled {
+            return;
+        }
+        let h = self.heading.to_radians();
+        let floor = self.floor + Vec3::new(h.sin(), h.cos(), 0.0) * self.slide;
+        let at = position + body.transform_point3(floor).as_dvec3();
+        let xf = body * Mat4::from_rotation_z(-h);
+        for (_, inst) in &self.meshes {
+            renderer.set_transform(scene, *inst, at, xf);
+        }
     }
 
     /// Turn the hands with the wheel, pose, skin and place the figure; `show` false hides it,

@@ -316,6 +316,12 @@ impl App {
     /// The developer tools' frame: their files looked at, the overlays and the panel drawn
     /// over the picture (in place of the pause menu's screens, which are closed).
     pub(crate) fn frame_devtools(&mut self, dt: f32) {
+        let sim = self.player_to_drawn_pose();
+        self.devtools_now(dt);
+        self.player_back_to_sim_pose(sim);
+    }
+
+    fn devtools_now(&mut self, dt: f32) {
         let Some(s) = self.gfx.surface.as_ref() else { return };
         let (w, h) = (s.config.width as f32, s.config.height as f32);
         let dpi = self.window.as_ref().map(|w| w.scale_factor() as f32).unwrap_or(1.0);

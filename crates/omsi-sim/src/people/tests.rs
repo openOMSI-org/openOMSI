@@ -1020,3 +1020,49 @@ fn walking_can_find_a_biarticulated_bus_at_its_last_section() {
     assert!(people.bus_ids_near(DVec3::new(100.0, -34.0, 0.0), 25.0).is_empty());
     assert_eq!(people.bus_ids_near(DVec3::ZERO, 25.0), [BusId::Ai(42)]);
 }
+
+#[test]
+fn riders_are_drawn_on_the_bus_where_it_is_drawn() {
+    let dir = std::env::temp_dir().join(format!("omsi-drawn-bus-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("test.bus"), "[boundingbox]\n2.5\n12\n3\n0\n0\n1.5\n\n[passengercabin]\ncabin.cfg\n\n[paths]\npaths.cfg\n").unwrap();
+    std::fs::write(dir.join("paths.cfg"), "[pathpnt]\n0\n4\n0.5\n\n[pathpnt]\n0\n-3\n0.5\n\n[pathlink]\n0\n1\n").unwrap();
+    std::fs::write(dir.join("cabin.cfg"), "[entry]\n0\n\n[exit]\n1\n").unwrap();
+    let def = omsi_vehicle::Vehicle::load(&dir.join("test.bus")).unwrap();
+    let cabin = Arc::new(Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY)]).expect("cabin"));
+    std::fs::remove_dir_all(&dir).ok();
+    let pose = |pos: DVec3, heading: f64| (pos, Mat4::from_rotation_z((-heading).to_radians() as f32), heading);
+    let (pos, rot, heading) = pose(DVec3::new(100.0, 200.0, 5.0), 30.0);
+    let bn = BusNow {
+        id: BusId::Ai(7),
+        cabin,
+        pos,
+        rot,
+        heading,
+        speed: 10.0,
+        entry_open: vec![false],
+        exit_open: vec![false],
+        walk_open: None,
+        interior: 0.0,
+        air: CabinAir::default(),
+        half: DVec2::new(1.25, 6.0),
+        centre: DVec2::ZERO,
+        accel: DVec2::ZERO,
+        trailers: Vec::new(),
+        terminus: None,
+        takes: Takes::Nobody,
+        next_stop: None,
+        places_off: Vec::new(),
+        served: None,
+    };
+    let local = Vec3::new(0.6, -2.0, 0.9);
+    let (at, faces, tilt) = (bn.world(local), heading + 90.0, bn.tilt_at(local));
+    let still = DrawnBus { pos, rot, heading, trailers: Vec::new() };
+    let (p, h, t) = bn.follow(&still, local, at, faces, tilt);
+    assert!((p - at).length() < 1e-9 && (h - faces).abs() < 1e-9 && t.abs_diff_eq(tilt, 1e-6), "a bus drawn where it stands leaves its riders be");
+    let (pos2, rot2, heading2) = pose(DVec3::new(100.1, 200.2, 5.0), 31.0);
+    let drawn = DrawnBus { pos: pos2, rot: rot2, heading: heading2, trailers: Vec::new() };
+    let (p, h, _) = bn.follow(&drawn, local, at, faces, tilt);
+    assert!((p - drawn.world(local)).length() < 1e-6, "the rider stands on the drawn floor: {p:?}");
+    assert!((h - (faces + 1.0)).abs() < 1e-9, "and turns with it: {h}");
+}

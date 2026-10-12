@@ -248,6 +248,47 @@ impl Traffic {
         self.sim.show_actual();
     }
 
+    pub(crate) fn follow_drawn(&self, view: &TrafficView, renderer: &Renderer, scene: &mut Scene) {
+        let snap = &self.snapshot;
+        if snap.cars.is_empty() {
+            return;
+        }
+        let mut index: Option<HashMap<u64, usize>> = None;
+        for (k, frame) in snap.cars.iter().enumerate() {
+            let Some(looks) = snap.looks(frame).filter(|_| frame.shown) else { continue };
+            let Some(r) = view.cars.get(&frame.id) else { continue };
+            let i = match self.sim.cars.get(k) {
+                Some(c) if c.id == frame.id => k,
+                _ => match index.get_or_insert_with(|| self.sim.cars.iter().enumerate().map(|(i, c)| (c.id, i)).collect()).get(&frame.id) {
+                    Some(&i) => i,
+                    None => continue,
+                },
+            };
+            let v = &self.sim.cars[i].vehicle;
+            let parts = snap.parts(frame);
+            if r.body.hidden || parts.len() != 1 + v.trailers.len() {
+                continue;
+            }
+            let now = std::iter::once((v.position, v.body_rotation())).chain(v.trailers.iter().map(|t| (t.position, t.body_rotation())));
+            for (j, ((part, (position, rot)), render)) in parts.iter().zip(now).zip(std::iter::once(&r.body).chain(&r.trailers)).enumerate() {
+                let turn = rot * part.rotation.inverse();
+                let meshes = snap.meshes(part);
+                for (inst, m) in render.instances.iter().zip(meshes) {
+                    renderer.set_transform(scene, *inst, position, turn * m.local);
+                }
+                let lamps = snap.lamps(looks, j);
+                crate::scene::sync_interior_lamps(renderer, scene, &part.ty, position, rot, |li| lamps.get(li).copied().unwrap_or(false), render);
+                if j == 0 {
+                    let local = |m: usize| meshes.get(m).map_or(glam::Mat4::IDENTITY, |f| turn * f.local);
+                    crate::view_sync::vehicle_damage::place_cracks(renderer, scene, render, position, local);
+                }
+            }
+            if let Some(d) = view.drivers.get(&frame.id) {
+                d.follow(renderer, scene, v.position, v.body_rotation());
+            }
+        }
+    }
+
     /// The traffic light lamps (see `sync`).
     fn sync_lamps(&mut self, world: &World, scenery: &mut omsi_sim::scenery::SceneryState, renderer: &Renderer, scene: &mut Scene) {
         // (the lamps' scripts are the simulation's: it takes the lamps placed since first)

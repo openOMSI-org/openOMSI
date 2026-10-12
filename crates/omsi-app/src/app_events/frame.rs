@@ -7,6 +7,7 @@ use super::*;
 use crate::view_sync::{self, ViewSync};
 
 mod controls;
+mod drawn;
 mod driving;
 mod integrations;
 mod interface;
