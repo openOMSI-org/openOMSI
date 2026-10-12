@@ -16,6 +16,7 @@ export const S = {
   choice: null,
   favourites: [],
   hof: '',
+  ibis: null,
   situations: [],
   profiles: null,
   profile: null,

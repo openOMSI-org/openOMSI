@@ -1,6 +1,6 @@
 // Loading the content and keeping the duty: what the pages share.
 
-import { call, on } from './api.js';
+import { call, on, onPhone } from './api.js';
 import { S, set, toast } from './store.js';
 import { setLanguage, t, hhmm } from './i18n.js';
 
@@ -184,6 +184,7 @@ export function choose(patch) {
   }
   if (c.map !== before.map) loadSituations();
   if (c.map !== before.map || c.bus !== before.bus || c.date !== before.date || c.line !== before.line || c.free !== before.free) updateHof();
+  else if (c.hof !== before.hof || c.hof_manual !== before.hof_manual) loadIbis();
 }
 
 export async function loadLines() {
@@ -209,6 +210,25 @@ async function updateHof() {
   const c = S.choice;
   const hof = await call('default_hof', { map: curMap() || null, bus: curBus() || null, date: c.date, line: c.free ? null : c.line }).catch(() => '');
   set({ hof });
+  loadIbis();
+}
+
+export const dutyHof = () => (S.choice.hof_manual ? S.choice.hof : S.hof) || '';
+
+let ibisAsked = '';
+export async function loadIbis() {
+  if (onPhone) return;
+  const c = S.choice;
+  const hof = /\.(bus|ovh)/i.test(dutyHof()) ? '' : dutyHof();
+  const key = c.free || !c.line || !c.bus ? '' : `${c.bus}|${hof}|${c.line}`;
+  if (key === ibisAsked) return;
+  ibisAsked = key;
+  set({ ibis: null });
+  if (!key) return;
+  const ibis = await call('ibis', { bus: c.bus, hof, line: c.line }).then((info) => ({ info }), (e) => ({ error: e.message || String(e) }));
+  if (ibisAsked !== key) return;
+  if ('error' in ibis) ibisAsked = '';
+  set({ ibis });
 }
 
 export async function loadSituations() {
@@ -307,7 +327,7 @@ export async function duty(extra = {}) {
     paint: c.paint || null,
     plate: c.plate?.trim() || null,
     number: c.number?.trim() || null,
-    hof: (c.hof_manual ? c.hof : S.hof) || null,
+    hof: dutyHof() || null,
     entry: c.entry,
     line: c.free ? null : c.line,
     tour: c.free ? null : c.tour,
