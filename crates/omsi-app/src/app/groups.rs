@@ -130,6 +130,7 @@ pub(crate) struct PerfState {
     /// since then (s), for the exit summary's percentiles (see `perf_report`).
     pub(crate) profile_mark: Option<crate::perf_report::ProfileMark>,
     pub(crate) frame_times: Vec<f32>,
+    pub(crate) overlay: crate::perf_overlay::PerfOverlay,
 }
 
 /// The drawing around the renderer: the wgpu instance and surface, the tile streaming, the

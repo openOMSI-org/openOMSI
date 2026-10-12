@@ -131,6 +131,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         switch_row(app, "vsync", "V-sync", "Waits for the screen's refresh"),
         pick("max_fps", "Frame limit", "Frames a second at most"),
         switch_row(app, "fps", "Frame rate", "Show the frames per second in the top right corner"),
+        switch_row(app, "perf_overlay", "Performance details", "Where each frame's time goes, how busy the processor is and what slows the game down, with live graphs"),
         pick("view_distance", "View distance", later),
         pick("max_obj_dist", "Object distance", later),
         pick("min_obj_size", "Small objects", later),

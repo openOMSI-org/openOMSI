@@ -48,7 +48,15 @@ pub(crate) fn thread_cpu_seconds() -> Option<f64> {
         }
         None
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        use windows::Win32::System::Threading::{GetCurrentThread, GetThreadTimes};
+        let (mut created, mut exited, mut kernel, mut user) = Default::default();
+        unsafe { GetThreadTimes(GetCurrentThread(), &mut created, &mut exited, &mut kernel, &mut user) }.ok()?;
+        let ticks = |t: windows::Win32::Foundation::FILETIME| ((t.dwHighDateTime as u64) << 32 | t.dwLowDateTime as u64) as f64;
+        Some((ticks(kernel) + ticks(user)) / 1e7)
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         None
     }

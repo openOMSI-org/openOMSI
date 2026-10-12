@@ -174,6 +174,7 @@ pub struct Renderer {
     /// What the window's pictures drew since start, summed (OMSI_PROFILE): instances that
     /// passed the culling and draws per pass.
     pub counts: std::cell::RefCell<std::collections::BTreeMap<&'static str, f64>>,
+    pub last_draws: (usize, usize),
     profiling: bool,
     draw_audit_at: std::time::Instant,
     /// Reuse a small set of encoding workers instead of creating OS threads for each

@@ -364,6 +364,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "mouse_hold" => s.mouse_hold,
         "blinker_cancel" => s.blinker_cancel,
         "fps" => s.show_fps,
+        "perf_overlay" => s.perf_overlay,
         "get_up" => s.get_up,
         "trip_summary" => s.trip_summary,
         "time_sync" => s.time_sync,
@@ -533,6 +534,11 @@ pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static 
         "fps" => {
             app.settings.show_fps = on;
             Some(("show_fps", bit))
+        }
+        "perf_overlay" => {
+            app.settings.perf_overlay = on;
+            app.perf.overlay.reset();
+            Some(("perf_overlay", bit))
         }
         "headtrack" => {
             app.settings.head_tracking = on;

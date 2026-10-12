@@ -10,6 +10,7 @@ use ab_glyph::{Font, FontVec, PxScale, ScaleFont, VariableFont};
 use omsi_render::{Renderer, Scene, TextureId};
 
 mod menu;
+mod perf_panel;
 mod text;
 
 pub use text::TextCache;
@@ -332,6 +333,7 @@ pub struct Frame<'a> {
     pub notes: &'a [String],
     /// The frame rate, top right (the `show_fps` setting).
     pub fps: Option<f32>,
+    pub perf: Option<&'a crate::perf_overlay::PerfOverlay>,
     /// The game stands paused.
     pub paused: bool,
     /// The game menu is open, with this line chosen (labels from `GAME_MENU`).
@@ -433,6 +435,7 @@ pub struct Ui {
     /// Where the information bar was drawn (within the panel, before `origin_x`), for the
     /// navigator to keep out of its way.
     pub info_rect: Option<[f32; 4]>,
+    perf: perf_panel::PerfPanel,
 }
 
 /// Between the information bar's parts.
@@ -512,7 +515,7 @@ impl Ui {
         self.chat.rect[2] += x;
     }
     pub fn new() -> Option<Ui> {
-        Some(Ui { origin_x: 0.0, text: TextCache::new()?, chat: ChatWidget::default(), menu_rects: Vec::new(), menu_arrows: Vec::new(), menu_scroll_thumb: None, menu_scroll_track: None, menu_ctl: Vec::new(), dd_rects: Vec::new(), dd_top: 0, dd_rows: 8, dd_scroll: None, menu_side: Vec::new(), menu_pane: Vec::new(), menu_pane_start: 0, menu_pane_go: None, menu_pane_box: None, menu_pane_scroll: None, menu_time: Vec::new(), anim: Default::default(), anim_dt: 0.0, menu_overlay_range: 0..0, vr_cursor_overlay: None, vr_tooltip_overlay: None, menu_start: 0, menu_rows: 0, menu_row_h: 1.0, images: Default::default(), info_rect: None })
+        Some(Ui { origin_x: 0.0, text: TextCache::new()?, chat: ChatWidget::default(), menu_rects: Vec::new(), menu_arrows: Vec::new(), menu_scroll_thumb: None, menu_scroll_track: None, menu_ctl: Vec::new(), dd_rects: Vec::new(), dd_top: 0, dd_rows: 8, dd_scroll: None, menu_side: Vec::new(), menu_pane: Vec::new(), menu_pane_start: 0, menu_pane_go: None, menu_pane_box: None, menu_pane_scroll: None, menu_time: Vec::new(), anim: Default::default(), anim_dt: 0.0, menu_overlay_range: 0..0, vr_cursor_overlay: None, vr_tooltip_overlay: None, menu_start: 0, menu_rows: 0, menu_row_h: 1.0, images: Default::default(), info_rect: None, perf: Default::default() })
     }
 
     /// Draw the frame's interface: its overlays go after the HUD's in `scene.overlays`.
@@ -648,6 +651,7 @@ impl Ui {
             self.text.rounded(r, scene, [x - 6.0 * s, y, x + l.w as f32 + 6.0 * s, y + l.h as f32], 6.0 * s, [28, 28, 28, (220.0 * self.text.backdrop.min(1.0)) as u8]);
             scene.overlays.push((l.tex, [x, y, x + l.w as f32, y + l.h as f32]));
         }
+        self.draw_perf(r, scene, f, s, dt);
         // --- the information bar, along the top in the middle: in as many rows as the room
         // it has needs
         self.info_rect = None;

@@ -488,6 +488,9 @@ impl Renderer {
     /// OMSI_PROFILE: the frame's counts, and every ten seconds what each asset costs.
     pub(crate) fn count_draws(&mut self, scene: &Scene, with_overlays: bool, visible: usize, plan: &DrawPlan, shadow_batches: &[Vec<Batch>; SHADOW_LISTS]) {
         let DrawPlan { main_batches, prepass_batches, main_draws, .. } = plan;
+        if with_overlays {
+            self.last_draws = (main_batches.len() + prepass_batches.len() + shadow_batches.iter().map(Vec::len).sum::<usize>(), visible);
+        }
         if self.profiling && !with_overlays {
             let mut c = self.counts.borrow_mut();
             *c.entry("mirror pictures").or_default() += 1.0;

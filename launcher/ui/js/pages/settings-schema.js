@@ -374,6 +374,7 @@ const general = {
         { type: 'slider', key: 'ui_opacity', label: 'Interface opacity', min: 0.2, max: 1, step: 0.05, def: 0.85, format: pct, store: r2 },
         { type: 'toggle', key: 'tooltips', label: 'Name of the button under the mouse' },
         { type: 'toggle', key: 'show_fps', label: 'Frame rate in the corner' },
+        { type: 'toggle', key: 'perf_overlay', label: 'Performance details' },
         { type: 'toggle', key: 'notes', label: 'Notes in the top-left corner' },
         { type: 'toggle', key: 'chat', label: 'Chat in online games' },
         // (on top of the interface's size; Ctrl + the wheel over it in the game)

@@ -358,6 +358,7 @@ impl App {
     ) {
         // (the steering cross: before the renderer and the scene are borrowed)
         let steer_cross = self.steer_cross_point();
+        self.refresh_perf_overlay();
         // (the pause menu is the launcher toolkit's, `frame_shell`, unless a headset shows it)
         let shell_menu = self.shell_takes_mouse();
         let (Some(r), Some(scene)) = (self.renderer.as_ref(), self.scene.as_mut()) else { return };
@@ -456,6 +457,7 @@ impl App {
                 // once they stood on the timetable's line)
                 notes: if !map_open && self.menus.game_menu.is_none() { notes } else { &[] },
                 fps: self.settings.show_fps.then_some(self.perf.fps),
+                perf: self.settings.perf_overlay.then_some(&self.perf.overlay),
                 paused: self.paused,
                 menu: match chooser_sel {
                     _ if shell_menu => None,

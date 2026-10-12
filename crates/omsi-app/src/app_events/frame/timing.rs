@@ -68,6 +68,9 @@ impl App {
         let now = Instant::now();
         let raw_dt = (now - self.last).as_secs_f32();
         self.log_frame(raw_dt);
+        if self.settings.perf_overlay {
+            self.perf.overlay.sample(raw_dt, &self.perf.profile);
+        }
         let profiling = omsi_cfg::flags::OMSI_PROFILE.is_set();
         if profiling && self.perf.profile_mark.is_some() && self.perf.frame_times.len() < crate::perf_report::MAX_FRAMES {
             self.perf.frame_times.push(raw_dt);
