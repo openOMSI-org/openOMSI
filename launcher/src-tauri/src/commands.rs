@@ -21,7 +21,7 @@ async fn work<F: FnOnce() -> Answer + Send + 'static>(f: F) -> Answer {
 }
 
 pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
-    tauri::generate_handler![call, call_bytes, pick_folder, pick_file, pick_mod, open_path, open_url, classic_launcher, selftest_done]
+    tauri::generate_handler![call, call_bytes, pick_folder, pick_file, pick_mod, open_path, open_url, classic_launcher, update_relaunch, selftest_done]
 }
 
 /// This window, for the commands of `omsi-launcher-api`.
@@ -34,6 +34,9 @@ impl omsi_launcher_api::Platform for Window {
     /// The window stays where it is while the game runs (it is the player's to close or
     /// minimise): a launcher that vanished at every start looked as if it had closed.
     fn launched(&self) {
+        crate::service::release();
+    }
+    fn before_update(&self) {
         crate::service::release();
     }
     fn renderer(&self, req: Value, wait: Duration) -> Result<(Value, Vec<u8>), String> {
@@ -143,6 +146,17 @@ fn classic_launcher(app: AppHandle) -> Answer {
     if !crate::classic_launcher() {
         return Err("the game program was not found".into());
     }
+    app.exit(0);
+    Ok(json!(true))
+}
+
+#[tauri::command]
+fn update_relaunch(app: AppHandle) -> Answer {
+    let place = omsi_platform::updater::install_place().map_err(err)?;
+    let game = place.exe.with_file_name(if cfg!(windows) { "openomsi.exe" } else { "openomsi" });
+    let program = if game.is_file() { game } else { place.exe.clone() };
+    omsi_launcher_lib::log_to_file(&format!("update: starting {} after the update", program.display()));
+    std::process::Command::new(&program).current_dir(&place.dir).spawn().map_err(err)?;
     app.exit(0);
     Ok(json!(true))
 }

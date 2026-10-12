@@ -6,6 +6,7 @@
 //! the game's renderer - it is asked through `Platform`.
 
 pub mod i18n;
+mod updates;
 
 use omsi_launcher_lib as core;
 use serde_json::{json, Value};
@@ -27,6 +28,7 @@ pub trait Platform: Send + Sync {
     fn selftest(&self) -> Option<String> {
         None
     }
+    fn before_update(&self) {}
 }
 
 fn err(e: impl std::fmt::Display) -> String {
@@ -64,6 +66,7 @@ fn bootstrap(p: &dyn Platform) -> Answer {
         "choice": choice,
         "favourites": favourites,
         "selftest": p.selftest(),
+        "updated": updates::just_updated(),
         "now": core::local_now().map(|(y, mo, d, h, mi)| json!({ "date": format!("{y:04}-{mo:02}-{d:02}"), "minutes": h * 60 + mi })),
     }))
 }
@@ -474,6 +477,10 @@ pub fn call(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "profile_create" => profile_create(arg::<String>(args, "name")?, arg::<String>(args, "sex")?),
         "profile_delete" => profile_delete(arg::<String>(args, "name")?),
         "profile_select" => profile_select(arg::<String>(args, "name")?),
+        "update_status" => Ok(updates::status()),
+        "update_check" => Ok(updates::check(arg::<Option<bool>>(args, "again")?.unwrap_or(false))),
+        "update_install" => Ok(updates::install(p)),
+        "update_dismiss" => Ok(updates::dismiss()),
         "settings_get" => settings_get(),
         "settings_save" => settings_save(arg::<Value>(args, "settings")?),
         "settings_defaults" => settings_defaults(),

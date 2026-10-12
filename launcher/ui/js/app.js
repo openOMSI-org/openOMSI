@@ -16,6 +16,7 @@ import { GamesPage } from './pages/games.js';
 import { TutorialsPage } from './pages/tutorials.js';
 import { SetupPage } from './pages/setup.js';
 import { MobileApp } from './mobile/mobile.js';
+import { UpdateDialog, startUpdates } from './updates.js';
 import { onPhone } from './api.js';
 
 // (the phone app, or `?phone` for a look at it in a browser)
@@ -69,12 +70,13 @@ function App() {
   if (!s.ready) {
     return html`<div class="splash">${s.errors.boot ? html`<div class="notice danger" style="max-width:520px">${s.errors.boot}</div>` : html`<${Spinner} />`}</div>`;
   }
-  if (PHONE) return html`<${MobileApp} /><${Toasts} />`;
+  if (PHONE) return html`<${MobileApp} /><${UpdateDialog} /><${Toasts} />`;
   const page = PAGES.find((x) => x && x[0] === s.page) || PAGES[0];
   const Page = page[3];
   return html`<div class="shell">
     <${Sidebar} />
     <main class="main"><div class="page" key=${s.page}><${Page} /></div></main>
+    <${UpdateDialog} />
     <${Toasts} />
   </div>`;
 }
@@ -82,7 +84,7 @@ function App() {
 plainText(document.body);
 render(html`<${App} />`, document.getElementById('app'));
 boot()
-  .then(() => S.boot?.selftest && import('./selftest.js').then((m) => m.selftest()))
+  .then(() => (S.boot?.selftest ? import('./selftest.js').then((m) => m.selftest()) : startUpdates()))
   .catch((e) => set({ errors: { ...S.errors, boot: String(e.message || e) } }));
 
 // (the page follows the system's light or dark look when asked to)

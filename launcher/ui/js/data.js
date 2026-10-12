@@ -260,6 +260,7 @@ export async function start(extra) {
   try {
     const d = await duty(extra);
     const r = await call('launch', { duty: d });
+    set({ gameStarted: true });
     toast(r.others ? t('The game is starting ({n} already running)', { n: r.others }) : t('The game is starting…'), 'ok');
     pollNow();
     return r;
@@ -299,6 +300,7 @@ function startPolling() {
     if (busy || Date.now() % 4000 < 1000) pollNow();
   }, 1000);
   on('games-ended', () => {
+    set({ gameStarted: false });
     pollNow();
     loadProfiles();
     loadSituations();

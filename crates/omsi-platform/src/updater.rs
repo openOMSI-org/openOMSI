@@ -459,8 +459,11 @@ fn download(r: &Release, to: &Path, status: &Mutex<Status>) -> anyhow::Result<()
     if downloaded(r) {
         return Ok(());
     }
-    let _ = std::fs::remove_file(checked_note(to));
     let part = to.with_extension("part");
+    if std::fs::metadata(&part).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).is_some_and(|age| age < std::time::Duration::from_secs(15)) {
+        anyhow::bail!("another download of openOMSI {} is under way; try again in a moment", r.version);
+    }
+    let _ = std::fs::remove_file(checked_note(to));
     let mut hasher = sha2::Sha256::new();
     let mut out = std::fs::File::create(&part)?;
     let mut buf = vec![0u8; 256 * 1024];
