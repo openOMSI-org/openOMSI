@@ -226,8 +226,12 @@ export async function duty(extra = {}) {
   const c = S.choice;
   const seasonWord = c.season && c.season !== 'auto' ? (await call('season_date', { season: c.season, phase: c.phase, date: c.date, map: c.map, keep: true }).catch(() => null))?.word : null;
   const trip = pickedTrip();
+  const ask = () => Promise.race([call('server_query', { address: c.lan_addr.trim() }).catch(() => null), new Promise((r) => setTimeout(r, 3000))]);
+  const joined = c.lan_mode === 'join' && !extra.tutorial && !extra.situation ? c.lan_map || (await ask())?.map : '';
+  const hostMap = (joined || '').trim().replace(/\\/g, '/');
+  const installed = S.maps?.find((m) => m.file.toLowerCase() === hostMap.toLowerCase())?.file;
   return {
-    map: c.map,
+    map: /maps\//i.test(hostMap) ? installed || hostMap : c.map,
     bus: c.bus,
     paint: c.paint || null,
     plate: c.plate?.trim() || null,
