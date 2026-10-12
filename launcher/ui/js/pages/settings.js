@@ -84,6 +84,15 @@ export function SettingsPage() {
   `;
 }
 
+export function settingRow(key) {
+  for (const tab of SETTINGS_TABS) for (const col of tab.cols) for (const row of col.rows) if (row.key === key) return row;
+  return null;
+}
+
+export function SettingRow({ row, ask }) {
+  return row ? html`<${Row} row=${row} ask=${ask} />` : null;
+}
+
 function Row({ row, ask }) {
   switch (row.type) {
     case 'section':

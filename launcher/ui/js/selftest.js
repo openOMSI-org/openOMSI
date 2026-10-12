@@ -81,7 +81,16 @@ export async function selftest() {
     const dash = document.body.textContent.match(/.{0,20}[\u2010-\u2015\u2212\u2E3A\u2E3B\uFE58\uFF0D\u00B7].{0,20}/);
     if (dash) check(`no dashes on ${page}`, false, dash[0]);
   }
-  set({ page: 'drive' });
+  try {
+    const [c, st] = [await call('controllers_load'), await call('controllers_state')];
+    check('game controllers', Array.isArray(c.devices) && Array.isArray(st.connected), `${c.devices.length} set up, ${st.connected.length} connected`);
+  } catch (e) {
+    check('game controllers', false, e.message || String(e));
+  }
+  set({ page: 'controls', controlsTab: 'pads' });
+  for (let i = 0; i < 50 && !document.querySelector('.pads'); i++) await sleep(100);
+  check('page controls: game controllers', !!document.querySelector('.pads') && !document.querySelector('.pads .notice.danger'), document.querySelector('.page')?.textContent.slice(0, 200));
+  set({ page: 'drive', controlsTab: 'keyboard' });
   check('no script errors', errors.length === 0, errors.join('; '));
   const report = { version: S.boot?.version, seconds: Math.round(performance.now() - t0) / 1000, passed, failed, errors };
   await call('selftest_done', { report });

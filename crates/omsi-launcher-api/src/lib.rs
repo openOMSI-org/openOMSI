@@ -397,6 +397,18 @@ fn route_map(p: &dyn Platform, map: String, date: String, trip: String) -> Answe
     serde_json::from_slice(&body).map_err(err)
 }
 
+fn controllers(p: &dyn Platform, op: &str, mut req: Value, wait: u64) -> Answer {
+    req["cmd"] = json!("pads");
+    req["op"] = json!(op);
+    let (mut head, _) = p.renderer(req, Duration::from_secs(wait))?;
+    if let Some(o) = head.as_object_mut() {
+        for k in ["id", "len", "ok"] {
+            o.remove(k);
+        }
+    }
+    Ok(head)
+}
+
 /// The support package (logs, settings, the machine), written by the game program into
 /// the data folder; answers where it went.
 fn support_package() -> Answer {
@@ -477,6 +489,11 @@ pub fn call(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "preview_look" => preview_look(p, arg::<String>(args, "bus")?, arg::<String>(args, "paint")?, arg::<String>(args, "map")?, arg::<String>(args, "weather")?, arg::<i32>(args, "time")?, arg::<String>(args, "date")?),
         "preview_warm" => preview_warm(p),
         "route_map" => route_map(p, arg::<String>(args, "map")?, arg::<String>(args, "date")?, arg::<String>(args, "trip")?),
+        "controllers_load" => controllers(p, "load", json!({}), 20),
+        "controllers_state" => controllers(p, "state", json!({}), 5),
+        "controllers_save" => controllers(p, "save", json!({ "devices": arg::<Value>(args, "devices")? }), 20),
+        "controllers_ffb_test" => controllers(p, "ffb_test", json!({ "name": arg::<String>(args, "name")?, "axis": arg::<usize>(args, "axis")?, "strength": arg::<Option<f32>>(args, "strength")? }), 20),
+        "controllers_release" => controllers(p, "release", json!({}), 5),
         "support_package" => support_package(),
         "prepare_tunnel" => {
             std::thread::spawn(omsi_net::tunnel::ensure_cloudflared);

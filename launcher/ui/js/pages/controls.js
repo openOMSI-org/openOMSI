@@ -6,7 +6,9 @@ import { S, useStore, set, toast } from '../store.js';
 import { t } from '../i18n.js';
 import { call } from '../api.js';
 import { saveSettings, cached } from '../data.js';
-import { Button, Card, Search, Segmented, Tabs, Notice, Empty, Spinner, Dialog, useConfirm, PageHead, Slider } from '../ui.js';
+import { Button, Card, Search, Segmented, Tabs, Notice, Empty, Spinner, Dialog, useConfirm, PageHead } from '../ui.js';
+import { KNOWN, actionText } from './actions.js';
+import { Controllers } from './controllers.js';
 
 // --- keys ---------------------------------------------------------------------------------
 
@@ -68,87 +70,6 @@ function Keys({ scan, modifier }) {
   return html`<span class="row" style="gap:4px;flex-wrap:wrap">${parts.map((p) => html`<span class="kbd">${p}</span>`)}</span>`;
 }
 
-// --- what the actions are called -----------------------------------------------------------
-
-const KNOWN = {
-  throttle: 'Throttle',
-  brake: 'Brake',
-  throttle_amplify: 'Throttle (full, kickdown)',
-  clutch: 'Clutch',
-  steering_left: 'Steer left',
-  steering_right: 'Steer right',
-  steering_neutral: 'Steering to centre',
-  parking_brake_toggle: 'Parking brake',
-  blinker_left_set: 'Indicator left',
-  blinker_right_set: 'Indicator right',
-  blinker_left_toggle: 'Indicator left (toggle)',
-  blinker_right_toggle: 'Indicator right (toggle)',
-  blinker_off: 'Indicators off',
-  blinker_warn_toggle: 'Hazard lights',
-  gear_up: 'Gear up (manual gearbox)',
-  gear_down: 'Gear down (manual gearbox)',
-  horn: 'Horn',
-  kw_scheinwerfer_toggle: 'Headlights',
-  kw_standlicht_toggle: 'Sidelights',
-  kw_fernlicht_toggle: 'High beam',
-  kw_m_enginestart: 'Starter',
-  kw_wipermode_up: 'Wipers (next mode)',
-  cp_batterietrennschalter_toggle: 'Battery / ignition',
-  automatic_D: 'Gear D',
-  automatic_N: 'Gear N',
-  automatic_R: 'Gear R',
-  bus_doorfront0: 'Front door (leaf 1)',
-  bus_doorfront1: 'Front door (leaf 2)',
-  bus_dooraft: 'Release rear doors',
-  door_1: 'Door 1 (front), any bus',
-  door_2: 'Door 2, any bus',
-  door_3: 'Door 3, any bus',
-  door_4: 'Door 4, any bus',
-  doors_all: 'All doors, any bus',
-  ticket_give: 'Sell the requested ticket',
-  view_set_driver: "Driver's view",
-  view_set_passenger: 'Passenger view',
-  view_set_outside: 'Outside view',
-  view_toggle_viewpoint: 'Next view',
-  view_toggle_interior: 'Cabin and outside, one key',
-  vr_recenter: 'VR: Reset view',
-  vr_toggle_desktop_mirror: 'VR: Monitor preview',
-  vr_toggle_mode: 'VR: Switch VR / desktop',
-  vr_toggle_navigator: 'VR: Toggle navigator',
-  vr_position_navigator: 'VR: Position navigator',
-  exit: 'Quit',
-  chat_open: 'Multiplayer: write in the chat',
-  chat_toggle: 'Multiplayer: show / hide the chat',
-  voice_radio: 'Multiplayer: bus radio (hold)',
-  sim_pause: 'Pause',
-  open_menu: 'Open / close the main menu',
-  screenshot: 'Screenshot',
-  photo_mode: 'Photo mode',
-  quicksave: 'Quicksave',
-  toggel_mouse_ctrl: 'Toggle mouse steering',
-  toggel_ctrler: 'Toggle game controllers',
-};
-
-/** A name of the files made readable ("IBIS_vor" → "IBIS vor"): the words of it, without
- * the prefixes OMSI puts on every trigger. */
-function humanize(name) {
-  const words = name
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/(\d)(\D)|(\D)(\d)/g, (m, a, b, c, d) => (a ? `${a} ${b}` : `${c} ${d}`))
-    .split(/[_\-\s./\\]+/)
-    .filter((w) => w && !['cp', 'kw', 'bus', 'toggle', 'mouse', 'lod'].includes(w.toLowerCase()))
-    .map((w) => (w === w.toUpperCase() ? w : w.toLowerCase()));
-  const s = words.join(' ') || name;
-  return s ? s[0].toUpperCase() + s.slice(1) : s;
-}
-
-/** What an action does, as the list shows it. */
-function actionText(a) {
-  const gear = /^kw_s_(.+)_fest$/.exec(a);
-  if (gear) return t('Gear {gear} (H-pattern)', { gear: gear[1] });
-  return KNOWN[a] ? t(KNOWN[a]) : humanize(a);
-}
-
 // --- OMSI 2's own keys (Inputs/keyboard.cfg as it comes; the game's section ends where the
 // bus's begins, at the throttle) ------------------------------------------------------------
 
@@ -196,11 +117,13 @@ const chordOf = (m) => (m || 0) & CHORD;
 // --- the page -----------------------------------------------------------------------------
 
 export function ControlsPage() {
-  const [tab, setTab] = useState('keyboard');
+  const s = useStore();
+  const tab = s.controlsTab === 1 || s.controlsTab === 'pads' ? 'pads' : 'keyboard';
+  const setTab = (v) => set({ controlsTab: v });
   return html`
     <${PageHead}
       title="Controls"
-      text=${tab === 'keyboard' ? 'Click a key and press the new one (hold Shift, Ctrl or Alt for a combination); Escape leaves it as it is.' : "What each axis and button of a wheel, pedals or joystick does - OMSI 2's gamectrler.cfg, kept in the content folder."}
+      text=${tab === 'keyboard' ? 'Click a key and press the new one (hold Shift, Ctrl or Alt for a combination); Escape leaves it as it is.' : 'Your wheel, pedals, gamepad or button box: set them up, give their buttons what they do and check that they answer.'}
       actions=${html`<${Segmented} value=${tab} onChange=${setTab} options=${[['keyboard', 'Keyboard'], ['pads', 'Game controllers']]} />`}
     />
     ${tab === 'keyboard' ? html`<${Keyboard} />` : html`<${Controllers} />`}
@@ -477,97 +400,4 @@ function ActionPicker({ bindings, onClose, onPick }) {
       <div class="muted small">${t("The installed buses' own script triggers are not listed here: type the trigger's name in the list's filter to add it.")}</div>
     </div>
   </${Dialog}>`;
-}
-
-// --- game controllers ---------------------------------------------------------------------
-
-let deadzoneTimer = 0;
-
-function Controllers() {
-  const s = useStore();
-  const pads = usePads();
-  const dz = Number(s.settings?.ctrl_deadzone ?? 0);
-  return html`<div class="stack">
-    <${Card} title="Game controllers" hint="Press a button on the device...">
-      ${pads.length
-        ? html`<div class="stack">${pads.map((p) => html`<${Pad} pad=${p} />`)}</div>`
-        : html`<${Empty} icon="gamepad" text="No game controller is connected. Connect it and press one of its buttons: it shows up here." />`}
-    </${Card}>
-    <${Card}>
-      <${Slider}
-        label="Dead zone"
-        value=${dz}
-        min=${0}
-        max=${0.3}
-        step=${0.01}
-        format=${(v) => `${Math.round(v * 100)} %`}
-        onChange=${(v) => {
-          set({ settings: { ...S.settings, ctrl_deadzone: v } });
-          clearTimeout(deadzoneTimer);
-          deadzoneTimer = setTimeout(() => saveSettings({ ctrl_deadzone: v }), 300);
-        }}
-      />
-    </${Card}>
-    <p class="muted small">
-      ${t("Which axis and button does what (OMSI 2's gamectrler.cfg), the step-by-step set-up, force feedback and switching a device off need the launcher's own access to the devices, which this page does not have yet. The test above shows what the device sends, as the system sees it.")}
-    </p>
-  </div>`;
-}
-
-/** The connected controllers as the Gamepad API sees them, read some twenty times a second. */
-function usePads() {
-  const [pads, setPads] = useState([]);
-  useEffect(() => {
-    let raf = 0;
-    let last = 0;
-    const read = () => {
-      const list = [...(navigator.getGamepads?.() || [])].filter(Boolean).map((g) => ({
-        index: g.index,
-        id: g.id,
-        axes: [...g.axes],
-        buttons: g.buttons.map((b) => (b.pressed ? Math.max(b.value, 1) : b.value)),
-      }));
-      setPads(list);
-    };
-    const tick = (now) => {
-      if (now - last > 50) {
-        last = now;
-        read();
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    window.addEventListener('gamepadconnected', read);
-    window.addEventListener('gamepaddisconnected', read);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener('gamepadconnected', read);
-      window.removeEventListener('gamepaddisconnected', read);
-    };
-  }, []);
-  return pads;
-}
-
-function Pad({ pad }) {
-  return html`<div class="stack" style="gap:10px">
-    <div class="section-title" style="margin:0;text-transform:none;letter-spacing:0">${pad.id}</div>
-    ${pad.axes.length > 0 &&
-    html`<div class="grid-2">
-      ${pad.axes.map(
-        (v, k) => html`<div class="row" style="gap:10px">
-          <span class="muted small" style="width:64px">${t('Axis {n}', { n: k + 1 })}</span>
-          <div class="grow" style="position:relative;height:8px;border-radius:4px;background:var(--surface-3)">
-            <div style=${`position:absolute;top:-4px;width:4px;height:16px;border-radius:2px;background:var(--accent);left:calc(${((Math.max(-1, Math.min(1, v)) + 1) / 2) * 100}% - 2px)`}></div>
-          </div>
-          <span class="small" style="width:44px;text-align:right;font-variant-numeric:tabular-nums">${v.toFixed(2)}</span>
-        </div>`,
-      )}
-    </div>`}
-    ${pad.buttons.length > 0 &&
-    html`<div class="row wrap" style="gap:6px">
-      ${pad.buttons.map(
-        (v, b) => html`<span class="kbd" title=${t('Button {n}', { n: b + 1 })} style=${v > 0.5 ? 'background:var(--accent);color:var(--accent-text);border-color:var(--accent)' : ''}>${b + 1}</span>`,
-      )}
-    </div>`}
-  </div>`;
 }

@@ -5,6 +5,7 @@
 //! translation, the bus radio's stations and the support package.
 //! The old paths (`crate::launcher::ui`, `::state`, `::drive` ...) are the crate's.
 
+mod pads;
 mod service;
 pub(crate) mod showroom;
 pub(crate) use service::run as run_service;

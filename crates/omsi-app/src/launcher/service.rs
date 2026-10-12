@@ -22,7 +22,7 @@ use std::time::Instant;
 type Out = Arc<Mutex<Box<dyn Write + Send>>>;
 
 /// Where an answer goes: the request's `id`, what it says, the bytes after it.
-type Reply = Arc<dyn Fn(&Value, Value, &[u8]) + Send + Sync>;
+pub(super) type Reply = Arc<dyn Fn(&Value, Value, &[u8]) + Send + Sync>;
 
 /// The answers' channel: stdout as the program got it, while anything else printing to
 /// stdout from here on (a stray `println!` deep in the game) goes to stderr instead and
@@ -119,6 +119,7 @@ fn serve(rx: std::sync::mpsc::Receiver<Value>, reply: Reply) {
     let send = |id: &Value, head: Value, body: &[u8]| reply(id, head, body);
     let mut renderer: Option<Renderer> = None;
     let mut showroom = Showroom::new();
+    let pads = super::pads::Pads::start();
     let mut last = Instant::now();
     while let Ok(req) = rx.recv() {
         let id = req.get("id").cloned().unwrap_or(Value::Null);
@@ -195,6 +196,7 @@ fn serve(rx: std::sync::mpsc::Receiver<Value>, reply: Reply) {
                     out(&id, json!({ "ok": true }), v.to_string().as_bytes());
                 });
             }
+            "pads" => pads.ask(req, reply.clone()),
             "quit" => break,
             other => send(&id, json!({ "ok": false, "error": format!("unknown command {other}") }), &[]),
         }

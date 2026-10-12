@@ -230,6 +230,7 @@ pub struct DirectInput {
     ff: bool,
     /// A foreground FFB device must not be reacquired while the window is away.
     focused: bool,
+    background: bool,
     pub devices: Vec<Device>,
     found: Arc<Mutex<Option<ScanResult>>>,
     scan: mpsc::Sender<()>,
@@ -433,6 +434,54 @@ fn notification_window() -> Option<HWND> {
             return None;
         }
         Some(hwnd)
+    }
+}
+
+unsafe extern "system" fn quiet_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
+    unsafe { DefWindowProcW(hwnd, msg, wp, lp) }
+}
+
+static BACKGROUND: std::sync::OnceLock<isize> = std::sync::OnceLock::new();
+
+pub fn background_window() -> Option<isize> {
+    if let Some(h) = BACKGROUND.get() {
+        return Some(*h);
+    }
+    unsafe {
+        let hinst: HINSTANCE = GetModuleHandleW(None).ok()?.into();
+        let class = w!("openOMSI launcher controllers");
+        let wc = WNDCLASSW {
+            lpfnWndProc: Some(quiet_proc),
+            hInstance: hinst,
+            lpszClassName: class,
+            ..Default::default()
+        };
+        let _ = RegisterClassW(&wc);
+        let hwnd = CreateWindowExW(
+            WINDOW_EX_STYLE(0),
+            class,
+            w!(""),
+            WS_POPUP,
+            0,
+            0,
+            0,
+            0,
+            None,
+            None,
+            Some(hinst),
+            None,
+        )
+        .ok()?;
+        Some(*BACKGROUND.get_or_init(|| hwnd.0 as isize))
+    }
+}
+
+pub fn pump_messages() {
+    unsafe {
+        let mut msg = MSG::default();
+        while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
+            DispatchMessageW(&msg);
+        }
     }
 }
 
@@ -682,6 +731,7 @@ impl DirectInput {
             hwnd: HWND(hwnd as *mut _),
             ff,
             focused: true,
+            background: BACKGROUND.get() == Some(&hwnd),
             devices: Vec::new(),
             found,
             scan,
@@ -845,7 +895,7 @@ impl DirectInput {
             let ff_capable = caps.dwFlags & DIDC_FORCEFEEDBACK != 0;
             let mut wants_ff = self.ff && ff_capable;
             let level = if wants_ff {
-                DISCL_EXCLUSIVE | DISCL_FOREGROUND
+                DISCL_EXCLUSIVE | if self.background { DISCL_BACKGROUND } else { DISCL_FOREGROUND }
             } else {
                 DISCL_NONEXCLUSIVE | DISCL_BACKGROUND
             };
