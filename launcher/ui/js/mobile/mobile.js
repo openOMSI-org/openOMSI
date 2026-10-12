@@ -11,7 +11,7 @@ import { Spinner, Toggle, Slider } from '../ui.js';
 import { BusPreview } from '../preview.js';
 import { RouteMap } from '../routemap.js';
 import { choose, curMap, curBus, curLine, curTour, pickedTrip, realTime, realDate, start } from '../data.js';
-import { hms, mapPicture, tripAt, depotRun, pickTrip, setSeason, SEASONS, PHASES } from '../pages/drive.js';
+import { hms, mapPicture, tripAt, depotRun, pickTrip, setSeason, localNow, SEASONS, PHASES } from '../pages/drive.js';
 import { MultiplayerPage } from '../pages/multiplayer.js';
 import { ProfilePage } from '../pages/profile.js';
 import { ModsPage } from '../pages/mods.js';
@@ -258,11 +258,13 @@ function TimeSheet() {
       <button onClick=${() => step(-60)} disabled=${realTime()}>-1 h</button><button onClick=${() => step(-5)} disabled=${realTime()}>-5</button>
       <b class="num">${hhmm(c.time)}</b>
       <button onClick=${() => step(5)} disabled=${realTime()}>+5</button><button onClick=${() => step(60)} disabled=${realTime()}>+1 h</button>
+      ${!realTime() && html`<button title=${t('Current time')} onClick=${() => choose({ time: localNow().time })}><${Icon} name="clock" /></button>`}
     </div>
     <div class="m-dial">
       <button onClick=${() => day(-7)} disabled=${realDate()}>-7</button><button onClick=${() => day(-1)} disabled=${realDate()}>-1</button>
       <b>${longDate(c.date)}</b>
       <button onClick=${() => day(1)} disabled=${realDate()}>+1</button><button onClick=${() => day(7)} disabled=${realDate()}>+7</button>
+      ${!realDate() && html`<button title=${t('Current date')} onClick=${() => choose({ date: localNow().date, season: 'auto', own_date: null })}><${Icon} name="calendar" /></button>`}
     </div>
     <div class="m-seg">${SEASONS.map(([v, l]) => html`<button class=${c.season === v ? 'on' : ''} onClick=${() => setSeason(v, c.phase)}>${t(l)}</button>`)}</div>
     ${c.season !== 'auto' && html`<div class="m-seg">${PHASES.map(([v, l]) => html`<button class=${c.phase === v ? 'on' : ''} onClick=${() => setSeason(c.season, v)}>${t(l)}</button>`)}</div>`}

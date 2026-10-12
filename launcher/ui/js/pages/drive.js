@@ -246,6 +246,12 @@ export async function setSeason(season, phase) {
   choose({ season, phase, own_date: own, ...(r?.date ? { date: r.date } : {}) });
 }
 
+export function localNow() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return { time: d.getHours() * 60 + d.getMinutes(), date: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}` };
+}
+
 function TimeCard() {
   const s = useStore();
   const c = s.choice;
@@ -257,10 +263,16 @@ function TimeCard() {
     <div class="stack">
       <div class="grid-2">
         <${Field} label="Start time" help=${rt ? 'Follows the computer\'s clock (Settings)' : null}>
-          <${TimeInput} minutes=${c.time} disabled=${rt} onChange=${(time) => choose({ time })} />
+          <div class="row" style="gap:6px">
+            <div class="grow"><${TimeInput} minutes=${c.time} disabled=${rt} onChange=${(time) => choose({ time })} /></div>
+            ${!rt && html`<${Button} icon="clock" title="Current time" onClick=${() => choose({ time: localNow().time })} />`}
+          </div>
         </${Field}>
         <${Field} label="Date" help=${rd ? 'Today (Settings)' : null}>
-          <${DateInput} value=${c.date} disabled=${rd} onChange=${(date) => choose({ date, season: 'auto', own_date: null })} />
+          <div class="row" style="gap:6px">
+            <div class="grow"><${DateInput} value=${c.date} disabled=${rd} onChange=${(date) => choose({ date, season: 'auto', own_date: null })} /></div>
+            ${!rd && html`<${Button} icon="calendar" title="Current date" onClick=${() => choose({ date: localNow().date, season: 'auto', own_date: null })} />`}
+          </div>
         </${Field}>
       </div>
       <${Field} label="Season">
