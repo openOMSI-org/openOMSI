@@ -75,12 +75,22 @@ fn translations(lang: String) -> Answer {
 
 /// The OMSI 2 folder and the game program (Setup).
 fn config_save(root: String, game: String) -> Answer {
+    let chosen = root.trim().to_string();
+    if !chosen.is_empty() {
+        let missing = omsi_cfg::missing_original_essentials(std::path::Path::new(&chosen));
+        if !missing.is_empty() {
+            return Ok(json!({ "saved": false, "chosen": chosen, "missing": missing }));
+        }
+    }
     let mut c = core::load_config();
-    c.root = root;
-    c.game = game;
+    c.root = chosen.clone();
+    c.game = game.trim().to_string();
     core::save_config(&c).map_err(err)?;
+    omsi_cfg::content_changed();
+    let config = core::load_config();
+    let other = (!chosen.is_empty() && std::path::Path::new(&chosen) != std::path::Path::new(&config.root)).then(|| config.root.clone());
     let r = core::root_dir().map(|p| p.to_string_lossy().to_string());
-    Ok(json!({ "config": core::load_config(), "root": r.as_ref().ok(), "root_error": r.err().map(err), "game": core::game_binary() }))
+    Ok(json!({ "saved": true, "config": config, "root": r.as_ref().ok(), "root_error": r.err().map(err), "game": core::game_binary(), "used_other": other }))
 }
 
 // --- content ---------------------------------------------------------------------------
@@ -523,5 +533,32 @@ pub fn call_bytes(cmd: &str, args: &Value, p: &dyn Platform) -> Result<Vec<u8>, 
         "content_picture" => content_picture(&arg::<String>(args, "path")?).ok_or_else(|| "not found".to_string()),
         "preview_frame" => preview_frame(p, arg(args, "w")?, arg(args, "h")?, arg::<Option<bool>>(args, "force")?.unwrap_or(false), arg(args, "dx")?, arg(args, "dy")?, arg(args, "zoom")?, arg(args, "quality")?),
         _ => Err(format!("unknown command {cmd}")),
+    }
+}
+
+#[cfg(test)]
+mod setup_tests {
+    use super::*;
+
+    #[test]
+    fn a_folder_that_is_no_complete_omsi_2_is_not_saved() {
+        let home = std::env::temp_dir().join(format!("openomsi-setup-{}", std::process::id()));
+        let not_omsi = home.join("Downloads");
+        std::fs::create_dir_all(&not_omsi).unwrap();
+        let was = (std::env::var_os("HOME"), std::env::var_os("USERPROFILE"));
+        std::env::set_var("HOME", &home);
+        std::env::set_var("USERPROFILE", &home);
+        let r = config_save(not_omsi.to_string_lossy().to_string(), String::new()).unwrap();
+        let written = home.join(".openomsi").join("launcher.json").exists();
+        for (k, v) in [("HOME", was.0), ("USERPROFILE", was.1)] {
+            match v {
+                Some(v) => std::env::set_var(k, v),
+                None => std::env::remove_var(k),
+            }
+        }
+        assert_eq!(r["saved"], json!(false));
+        assert!(!r["missing"].as_array().unwrap().is_empty());
+        assert!(!written);
+        std::fs::remove_dir_all(&home).ok();
     }
 }

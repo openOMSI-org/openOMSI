@@ -17,11 +17,17 @@ export function SetupPage() {
     setBusy(true);
     try {
       const r = await call('config_save', { root, game });
+      if (!r.saved) {
+        const what = r.missing.slice(0, 6).join(', ') + (r.missing.length > 6 ? ` (+${r.missing.length - 6})` : '');
+        toast(t('Not saved: {folder} is not a complete OMSI 2 installation, it lacks {what}', { folder: r.chosen, what }), 'error');
+        setBusy(false);
+        return;
+      }
       set({ config: r.config, boot: { ...S.boot, root: r.root, root_error: r.root_error, game: r.game } });
-      if (r.root) {
-        toast(t('OMSI 2 was found.'), 'ok');
-        loadContent();
-      } else toast(r.root_error || t('This is not a complete OMSI 2 installation.'), 'error');
+      if (r.used_other) toast(t('Saved, but the OMSI 2 folder used is {folder}', { folder: r.used_other }), 'error');
+      else if (r.root) toast(t('OMSI 2 was found.'), 'ok');
+      else toast(r.root_error || t('This is not a complete OMSI 2 installation.'), 'error');
+      if (r.root) loadContent();
     } catch (e) {
       toast(e.message, 'error');
     }
