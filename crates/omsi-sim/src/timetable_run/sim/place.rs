@@ -16,6 +16,11 @@ impl ScheduleSim {
         day_time: f64,
         onto: Option<usize>,
     ) -> Result<Placing, Placed> {
+        // a tour the company dropped today does not run, nor one of the map's buses in a drive
+        // for the company - nor does a tour bus take it on
+        if self.kept_off(i) {
+            return Err(Placed::Drop);
+        }
         let on_route = self.locate_departure(i, world, traffic, day_time, onto)?;
         Ok(Self::route_section(world, traffic, on_route))
     }
@@ -46,6 +51,7 @@ impl ScheduleSim {
         let leave: Vec<f64> = tt.stations.iter().map(|s| departure + s.1).collect();
         let (steps, track) = self.steps_of(&trip_name, &stations);
         let station_steps = trip_station_steps(trip, track, steps.len());
+        let station_tiles = trip_station_tiles(trip, &self.data.bus_stops);
         add_twins(traffic, &steps);
         let slots = self.slots(world, traffic, &steps, None);
         if !slots.iter().any(|s| matches!(s, Slot::Lane(_))) && !slots.contains(&Slot::Waiting) {
@@ -133,13 +139,13 @@ impl ScheduleSim {
             self.retry_at.insert(i, retry);
             return Err(Placed::Wait);
         }
-        Ok(OnRoute { trip_name, stations, departure, tt, leave, steps, track, station_steps, slots, leg, frac, at, offset })
+        Ok(OnRoute { trip_name, stations, departure, tt, leave, steps, track, station_steps, station_tiles, slots, leg, frac, at, offset })
     }
 
     /// The part of the route around the bus that the network has, with the trip's stops
     /// placed on it.
     fn route_section(world: &dyn TimetableWorld, traffic: &mut TrafficSim, r: OnRoute) -> Placing {
-        let OnRoute { trip_name, stations, departure, tt, leave, steps, track, station_steps, slots, leg, frac, at, offset } = r;
+        let OnRoute { trip_name, stations, departure, tt, leave, steps, track, station_steps, station_tiles, slots, leg, frac, at, offset } = r;
         // the part of the route around the bus that the network has
         let (start, end) = section_around(&slots, at);
         let whole = start == 0 && end == slots.len();
@@ -172,7 +178,7 @@ impl ScheduleSim {
             if !track && (si < leg || (si == leg && frac > 0.0)) {
                 served[si] = true;
             }
-            let found = world.object_positions().get(sid).copied();
+            let found = world.object_of_tile(station_tiles.get(si).copied().flatten(), *sid);
             // An authored entry behind the spawn position is already passed.
             if station_steps[si].is_some_and(|entry| entry < at) {
                 served[si] = true;
@@ -203,7 +209,7 @@ impl ScheduleSim {
             let len: f32 = section.iter().map(|&l| net.lanes[l].length()).sum();
             log::info!("trip {trip_name}: {} stations {:?}, route {} of {} steps ({} lanes, {len:.0} m) from step {start}, bus on step {at} (leg {leg}, {:.0} %), stops {:?}", stations.len(), stations, end - start, steps.len(), section.len(), frac * 100.0, stops);
         }
-        Placing { trip_name, stations, departure, leave, steps, station_steps, slots, leg, frac, at, start, end, section, start_index, s, stops, served }
+        Placing { trip_name, stations, departure, leave, steps, station_steps, station_tiles, slots, leg, frac, at, start, end, section, start_index, s, stops, served }
     }
 }
 
@@ -217,6 +223,8 @@ struct OnRoute {
     steps: Vec<Step>,
     track: bool,
     station_steps: Vec<Option<usize>>,
+    /// The tile each station names (`trip_station_tiles`).
+    station_tiles: Vec<Option<usize>>,
     slots: Vec<Slot>,
     leg: usize,
     frac: f64,
@@ -232,6 +240,9 @@ pub struct Placing {
     pub leave: Vec<f64>,
     pub steps: Vec<Step>,
     pub station_steps: Vec<Option<usize>>,
+    /// The tile each station names (`trip_station_tiles`): where ids repeat across tiles,
+    /// the stop is the object of that one.
+    pub station_tiles: Vec<Option<usize>>,
     pub slots: Vec<Slot>,
     pub leg: usize,
     pub frac: f64,

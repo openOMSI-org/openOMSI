@@ -181,6 +181,20 @@ fn controller_device_filter_accepts_controllers_and_rejects_mice_keyboards_and_v
     assert!(!is_controller_device(DI8DEVTYPE_DEVICE, 0xFF00, 0x01)); // Vendor specific
 }
 
+/// A wheel's force goes to its X axis first, even where the driver lists another axis as
+/// its first actuator (the MOZA R5's Y); a device without an X axis gets its actuators.
+#[test]
+fn the_wheel_force_is_tried_on_the_x_axis_first() {
+    let mut has = [false; 8];
+    has[0] = true;
+    has[1] = true;
+    assert_eq!(force_axes(&has, &[4, 0]), vec![0, 4]);
+    assert_eq!(force_axes(&has, &[4]), vec![0, 4]);
+    assert_eq!(force_axes(&has, &[]), vec![0]);
+    let only_z = [false, false, true, false, false, false, false, false];
+    assert_eq!(force_axes(&only_z, &[8]), vec![8]);
+}
+
 #[test]
 fn button_box_without_axes_formats_successfully() {
     let objects: Vec<InputObject> = (0..16)
@@ -190,10 +204,10 @@ fn button_box_without_axes_formats_successfully() {
             flags: 0,
         })
         .collect();
-    let (objs, has_axis, ff_axis) = format_objects(&objects);
+    let (objs, has_axis, ff_axes) = format_objects(&objects);
     assert_eq!(objs.len(), 16);
     assert_eq!(has_axis, [false; 8]);
-    assert_eq!(ff_axis, None);
+    assert!(ff_axes.is_empty());
     for (i, obj) in objs.iter().enumerate() {
         assert_eq!(obj.dwOfs, (48 + i) as u32);
     }

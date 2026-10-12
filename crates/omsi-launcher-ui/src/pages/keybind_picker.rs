@@ -441,7 +441,7 @@ fn scan_progress(l: &mut Launcher, results: usize, r: Rect) {
     let bar = Rect::new(r.x, r.y + 20.0, r.w, 5.0);
     l.ui.p().rounded(bar, 3.0, Color::WHITE.alpha(0.07));
     if progress > 0.0 {
-        l.ui.p().rounded(Rect::new(bar.x, bar.y, bar.w * progress, bar.h), 3.0, ACCENT);
+        l.ui.p().rounded(Rect::new(bar.x, bar.y, bar.w * progress, bar.h), 3.0, accent());
     }
 }
 

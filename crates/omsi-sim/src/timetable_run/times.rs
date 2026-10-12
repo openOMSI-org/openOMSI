@@ -147,6 +147,22 @@ pub fn trip_stations(trip: &omsi_timetable::Trip) -> Vec<i64> {
         .collect()
 }
 
+/// The tile each station of `trip` is placed in (its index in global.cfg's `[map]` list), as
+/// the timetable says: a type-1 `[station]` record's fourth line, else the stop's
+/// `Busstops.cfg` entry; None where it says nothing. A map joined from several repeats its
+/// ids (Berlin 186: half its objects share their id with one of another tile), and by the id
+/// alone a stop was found on another tile - the navigator drew it where no road was.
+pub fn trip_station_tiles(trip: &omsi_timetable::Trip, bus_stops: &[omsi_timetable::BusStopEntry]) -> Vec<Option<usize>> {
+    if !trip.stations.is_empty() {
+        return trip.stations.iter().map(|id| bus_stops.iter().find(|b| b.object_id == *id).and_then(|b| usize::try_from(b.group).ok())).collect();
+    }
+    trip.stations_legacy
+        .iter()
+        .filter(|s| s.first().and_then(|id| id.trim().parse::<i64>().ok()).is_some())
+        .map(|s| s.get(3).and_then(|t| t.trim().parse::<usize>().ok()))
+        .collect()
+}
+
 /// A type-1 station names its entry in the trip's .ttr, not just a nearby pole.
 /// In Recife, paired boarding/alighting boxes sit on opposite sides of the same
 /// path; a platform-side search across the whole route can move one to another visit.

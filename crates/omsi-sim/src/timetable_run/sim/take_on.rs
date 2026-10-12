@@ -8,7 +8,7 @@ impl ScheduleSim {
     /// The tour's bus `ci` (in `traffic`), at the end of its previous trip, takes departure `i`
     /// on, placed by `p` (`ScheduleSim::place_departure`).
     pub fn take_trip_on(&mut self, i: usize, ci: usize, p: Placing, traffic: &mut TrafficSim, day_time: f64) -> Placed {
-        let Placing { trip_name, stations, departure, leave, steps, station_steps, slots, end, section, mut stops, served, .. } = p;
+        let Placing { trip_name, stations, departure, leave, steps, station_steps, station_tiles, slots, end, section, mut stops, served, .. } = p;
         let (ty, rail) = (traffic.cars[ci].vehicle.ty.clone(), traffic.cars[ci].is_rail());
         place_stops(&traffic.net, &section, 0, &mut stops, &ty, rail);
         // the tour's bus that has just finished its trip takes this one on from where
@@ -93,7 +93,7 @@ impl ScheduleSim {
         self.bus_runs(id, i);
         self.forget_route(id);
         if end < slots.len() {
-            self.carry_later(id, steps, end, &stations, &leave, served, station_steps);
+            self.carry_later(id, steps, end, &stations, &leave, served, station_steps, station_tiles);
         }
         log::info!(
             "scheduled bus {id}: line {line} tour {} goes on with trip {trip_name} to {} at {:.1} min (leaves {:.1} min), {n_stops} stops{}",

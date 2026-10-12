@@ -17,11 +17,11 @@ fn ago(t: u64) -> String {
 }
 
 pub fn sessions(l: &mut Launcher, area: Rect) {
-    let body = l.page_title(area, "Sessions", "The games you started, and who drives with you.");
+    let body = area;
     let list = l.state.instances.clone();
     if list.is_empty() {
         let r = Rect::new(body.x, body.y, body.w.min(720.0), 120.0);
-        l.ui.panel(r);
+        l.ui.card(r);
         l.ui.icon("sports_esports", Vec2::new(r.x + 40.0, r.center().y), 36.0, TEXT_FAINT);
         l.ui.paragraph("No game is running. Start a duty on the Drive page; to drive with friends, turn on hosting on the Multiplayer page and give them the code shown here.", Vec2::new(r.x + 76.0, r.y + 30.0), r.w - 100.0, 13.5, Weight::Regular, TEXT_DIM);
         return;
@@ -56,7 +56,7 @@ pub fn sessions(l: &mut Launcher, area: Rect) {
             h += 220.0;
         }
         let r = Rect::new(view.x, y, view.w, h);
-        l.ui.panel(r);
+        l.ui.card(r);
         let running = i.running;
         let c = Vec2::new(r.x + 24.0, r.y + 28.0);
         if running {
@@ -64,15 +64,24 @@ pub fn sessions(l: &mut Launcher, area: Rect) {
             l.ui.p().circle(c, 6.0 + 3.0 * pulse, OK.alpha(0.25));
         }
         l.ui.p().circle(c, 6.0, if running { OK } else { TEXT_FAINT });
-        let duty = i.line.as_ref().map(|ln| format!(" | line {ln}{}", i.tour.as_ref().map(|t| format!(" / {t}")).unwrap_or_default())).unwrap_or_default();
+        let duty = i.line.as_ref().map(|ln| match &i.tour {
+            Some(t) => format!(" | {}", omsi_ui::tr("line %{line} / %{tour}").replace("%{line}", ln).replace("%{tour}", t)),
+            None => format!(" | {}", omsi_ui::tr("line %{line}").replace("%{line}", ln)),
+        }).unwrap_or_default();
         l.ui.text_in(&format!("{} | {}{duty}", short_map(&i.map), short_bus(&i.bus)), Rect::new(r.x + 42.0, r.y + 16.0, r.w - 260.0, 24.0), 16.0, Weight::Black, TEXT, Align::Left);
         let status = if running {
-            if l.state.stopping.contains(&i.pid) || i.stopping.is_some() { "stopping - saving the run...".to_string() } else { format!("running for {}", ago(i.started)) }
+            if l.state.stopping.contains(&i.pid) || i.stopping.is_some() { omsi_ui::tr("stopping - saving the run...").into_owned() } else { omsi_ui::tr("running for %{time}").replace("%{time}", &ago(i.started)) }
+        } else if i.exit_code == Some(0) {
+            omsi_ui::tr("ended").into_owned()
+        } else if i.killed {
+            omsi_ui::tr("ended (killed - it did not end by itself, the run is not saved)").into_owned()
         } else {
-            let how = if i.exit_code == Some(0) { String::new() } else if i.killed { " (killed - it did not end by itself, the run is not saved)".into() } else { i.exit_code.map(|c| format!(" (exit code {c})")).unwrap_or_default() };
-            format!("ended{how}")
+            match i.exit_code {
+                Some(c) => omsi_ui::tr("ended (exit code %{code})").replace("%{code}", &c.to_string()),
+                None => omsi_ui::tr("ended").into_owned(),
+            }
         };
-        l.ui.text_in(&format!("{status} | driver {}", i.profile), Rect::new(r.x + 42.0, r.y + 42.0, r.w - 60.0, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
+        l.ui.text_in(&format!("{status} | {}", omsi_ui::tr("driver %{name}").replace("%{name}", &i.profile)), Rect::new(r.x + 42.0, r.y + 42.0, r.w - 60.0, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
         l.ui.text_in(&i.last_line, Rect::new(r.x + 42.0, r.y + 62.0, r.w - 60.0, 18.0), 11.5, Weight::Regular, TEXT_FAINT, Align::Left);
         // buttons
         let bw = 110.0;
@@ -89,9 +98,9 @@ pub fn sessions(l: &mut Launcher, area: Rect) {
         if role == "host" {
             let code = lan.get("code").and_then(|x| x.as_str()).unwrap_or("").to_string();
             let box_r = Rect::new(r.x + 20.0, yy, r.w - 40.0, 84.0);
-            l.ui.p().rounded(box_r, 10.0, ACCENT.alpha(0.10));
-            l.ui.p().rounded_border(box_r, 10.0, 1.0, ACCENT.alpha(0.5));
-            l.ui.text_in("SESSION CODE", Rect::new(box_r.x + 16.0, box_r.y + 8.0, 200.0, 16.0), 10.5, Weight::Black, ACCENT, Align::Left);
+            l.ui.p().rounded(box_r, 10.0, accent().alpha(0.10));
+            l.ui.p().rounded_border(box_r, 10.0, 1.0, accent().alpha(0.5));
+            l.ui.text_in("SESSION CODE", Rect::new(box_r.x + 16.0, box_r.y + 8.0, 200.0, 16.0), 10.5, Weight::Black, accent(), Align::Left);
             l.ui.text_in(&code, Rect::new(box_r.x + 16.0, box_r.y + 26.0, box_r.w - 170.0, 30.0), 20.0, Weight::Condensed, TEXT, Align::Left);
             l.ui.text_in("Your friends paste it into Multiplayer → Connect by Code.", Rect::new(box_r.x + 16.0, box_r.y + 58.0, box_r.w - 170.0, 18.0), 11.5, Weight::Regular, TEXT_DIM, Align::Left);
             if l.ui.button(&format!("copy-{}", i.pid), Rect::new(box_r.right() - 146.0, box_r.y + 24.0, 130.0, 36.0), "Copy code", Some("content_copy"), ButtonKind::Primary) {
@@ -101,13 +110,13 @@ pub fn sessions(l: &mut Launcher, area: Rect) {
         } else if role == "client" {
             let connected = lan.get("connected").and_then(|x| x.as_bool()).unwrap_or(false);
             let text = if let Some(rej) = lan.get("rejected").and_then(|x| x.as_str()) {
-                format!("not connected: {rej}")
+                omsi_ui::tr("not connected: %{reason}").replace("%{reason}", rej)
             } else if connected {
-                format!("connected to {}", lan.get("host_name").and_then(|x| x.as_str()).unwrap_or(""))
+                omsi_ui::tr("connected to %{host}").replace("%{host}", lan.get("host_name").and_then(|x| x.as_str()).unwrap_or(""))
             } else {
-                "connecting...".to_string()
+                omsi_ui::tr("connecting...").into_owned()
             };
-            l.ui.text_in(&format!("Multiplayer: {text}"), Rect::new(r.x + 42.0, yy, r.w - 60.0, 20.0), 12.5, Weight::Medium, if connected { OK } else { WARN }, Align::Left);
+            l.ui.text_in(&omsi_ui::tr("Multiplayer: %{state}").replace("%{state}", &text), Rect::new(r.x + 42.0, yy, r.w - 60.0, 20.0), 12.5, Weight::Medium, if connected { OK } else { WARN }, Align::Left);
             yy += 24.0;
         }
         if !players.is_empty() {
@@ -117,7 +126,7 @@ pub fn sessions(l: &mut Launcher, area: Rect) {
                 let s = |k: &str| p.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
                 let pax = p.get("passengers").and_then(|x| x.as_i64()).unwrap_or(0);
                 let dest = if s("destination").is_empty() { String::new() } else { format!(" | {} → {}", s("line"), s("destination")) };
-                l.ui.text_in(&format!("{} | {}{dest}{} | {}", s("name"), short_bus(&s("bus")), if pax > 0 { format!(" | {pax} passengers") } else { String::new() }, s("where")), Rect::new(r.x + 42.0, yy, r.w - 60.0, 18.0), 12.5, Weight::Medium, TEXT_SOFT, Align::Left);
+                l.ui.text_in(&format!("{} | {}{dest}{} | {}", s("name"), short_bus(&s("bus")), if pax > 0 { format!(" | {}", omsi_ui::tr("%{n} passengers").replace("%{n}", &pax.to_string())) } else { String::new() }, s("where")), Rect::new(r.x + 42.0, yy, r.w - 60.0, 18.0), 12.5, Weight::Medium, TEXT_SOFT, Align::Left);
                 yy += 20.0;
             }
         }

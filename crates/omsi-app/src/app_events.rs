@@ -239,6 +239,27 @@ impl ApplicationHandler for App {
                     k => k,
                 };
                 if let PhysicalKey::Code(code) = physical {
+                    // (Enter puts the card of the trip just ended away, when nothing else on
+                    // the screen wants it: not a vehicle being placed, the object editor's
+                    // pick, a tutorial's next page or VR's navigator being placed)
+                    if event.state == ElementState::Pressed
+                        && !event.repeat
+                        && matches!(code, KeyCode::Enter | KeyCode::NumpadEnter)
+                        && self.menus.game_menu.is_none()
+                        && self.menus.chooser.is_none()
+                        && !lan::chat_open(&self.net.remotes)
+                        && !self.input.keys.contains(&KeyCode::AltLeft)
+                        && !self.input.keys.contains(&KeyCode::AltRight)
+                        // (a plain Enter: Ctrl+NumpadEnter is the IBIS's)
+                        && !self.input.keys.iter().any(|k| matches!(k, KeyCode::ControlLeft | KeyCode::ControlRight | KeyCode::ShiftLeft | KeyCode::ShiftRight))
+                        && self.menus.placing.is_none()
+                        && self.menus.editor.is_none()
+                        && self.xr.vr_nav_edit.is_none()
+                        && !self.menus.tutorial.as_ref().is_some_and(|t| !t.hidden && self.net.lan.is_none())
+                        && self.session.trip_report.dismiss()
+                    {
+                        return;
+                    }
                     self.on_key(
                         event_loop,
                         code,
@@ -258,7 +279,13 @@ impl ApplicationHandler for App {
                     edit.rotating = state == ElementState::Pressed;
                     return;
                 }
-                if self.menus.navigator.as_ref().map(|n| n.map_open()).unwrap_or(false) {
+                // (a right-click on the city map sets a pin there, or takes the one under it
+                // away: `nav_pins`)
+                let (cx, cy) = self.input.cursor;
+                if let Some(n) = self.menus.navigator.as_mut().filter(|n| n.map_open()) {
+                    if state == ElementState::Pressed {
+                        n.map_right_press(cx, cy);
+                    }
                     return;
                 }
                 if self.vr_active() {
@@ -351,6 +378,17 @@ impl ApplicationHandler for App {
                     }
                 } else {
                     let pressed = state == ElementState::Pressed;
+                    // (a click on the card of the trip just ended puts it away - not while the
+                    // click places a vehicle or works the object editor)
+                    if pressed
+                        && self.menus.game_menu.is_none()
+                        && self.menus.placing.is_none()
+                        && self.menus.editor.is_none()
+                        && self.xr.vr_nav_edit.is_none()
+                        && self.session.trip_report.click(self.input.cursor.0, self.input.cursor.1)
+                    {
+                        return;
+                    }
                     self.input.buttons_held.0 = pressed;
                     // the right button already down (looking round): both held zoom, and
                     // the click works nothing in the cab
@@ -478,6 +516,8 @@ impl ApplicationHandler for App {
         // static, which Rust never drops: cloudflared outlived every session, holding the
         // port and a public tunnel open)
         crate::lan::close_public_gateway();
+        // (and the phone companion's tunnel, a cloudflared of its own)
+        crate::companion::shutdown();
         // and the launcher's LAN status file goes (Cmd+Q never returns to main's guard)
         drop(lan::StatusFileGuard);
         log::info!("game ends");
@@ -508,6 +548,10 @@ impl App {
         if self.devtools_wheel(amount) {
             return;
         }
+        // over a trip's card the wheel scrolls its stops (and keeps it open)
+        if self.menus.game_menu.is_none() && self.session.trip_report.wheel(amount, self.input.cursor.0, self.input.cursor.1) {
+            return;
+        }
         // over a mirror panel the wheel resizes it (Shift: wider or narrower)
         if let Some(size) = self.mirror_hud_size() {
             let shift =
@@ -533,9 +577,13 @@ impl App {
             self.menu_wheel(amount);
             return;
         }
-        // the city map takes the wheel while it is open
-        if let Some(n) = self.menus.navigator.as_mut().filter(|n| n.map_open()) {
-            n.map_wheel(amount, self.input.cursor.0, self.input.cursor.1);
+        // the city map takes the wheel while it is open; Ctrl + the wheel over it or over the
+        // small navigator sizes the navigator (kept as the setting)
+        let ctrl = self.input.keys.contains(&KeyCode::ControlLeft) || self.input.keys.contains(&KeyCode::ControlRight);
+        let panel = !self.vr_active();
+        let (cx, cy) = self.input.cursor;
+        if self.menus.navigator.as_mut().is_some_and(|n| n.wheel(amount, cx, cy, ctrl, panel)) {
+            self.keep_nav_size();
             return;
         }
         // the wheel over the chat (or while typing) scrolls its history
@@ -850,7 +898,7 @@ fn info_line(clock: &omsi_sim::SimClock, player: Option<&Player>, duty: Option<&
     let t = clock.time;
     let mut parts = vec![format!("{:02}:{:02}:{:02}", ((t / 3600.0) as i64).rem_euclid(24), ((t % 3600.0) / 60.0) as i64, (t % 60.0) as i64)];
     if let Some(p) = player {
-        parts.push(format!("{:.0} km/h", p.vehicle.physics.velocity_kmh().abs()));
+        parts.push(format!("{:.0} {}", crate::units::speed(p.vehicle.physics.velocity_kmh().abs()), crate::units::label("km/h")));
         parts.push(distance_driven(metres));
         // the bus's whole mileage, as OMSI's Shift+Z overlay reads it ("Mileometer", the
         // `kmcounter_*` the cockpit shows, whole kilometres and the metres of the fraction)

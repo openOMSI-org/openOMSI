@@ -7,6 +7,7 @@
 
 mod boards;
 mod choice;
+mod company;
 mod dispatch;
 mod load;
 mod place;
@@ -24,6 +25,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 pub use choice::{depot_file, pool_depot};
+pub use company::{CompanyBus, TimetableCompany};
 pub use dispatch::{tour_entry, TOUR_ENTRY_LANES};
 pub use place::Placing;
 
@@ -48,6 +50,14 @@ pub trait TimetableWorld {
     fn object_positions(&self) -> MutexGuard<'_, HashMap<i64, (DVec3, [f64; 3])>>;
     /// The side stop object `id`'s platform lies on: 0 = right, 1 = the other, 2 = both.
     fn stop_side(&self, id: i64) -> f32;
+    /// Where object `id` placed on tile `tile` (its index in global.cfg's `[map]` list, as a
+    /// timetable's station names it) stands: on a map whose ids repeat across tiles - one
+    /// joined from several - the one of that tile, else the map's object of that id (here:
+    /// the latter; omsi-app's `World` knows the objects of each tile).
+    fn object_of_tile(&self, tile: Option<usize>, id: i64) -> Option<(DVec3, [f64; 3])> {
+        let _ = tile;
+        self.object_positions().get(&id).copied()
+    }
 }
 
 struct Departure {
@@ -90,6 +100,9 @@ struct RunningTrip {
     served: Vec<bool>,
     /// Authored track entry of each type-1 station, retained while tiles stream in.
     station_steps: Vec<Option<usize>>,
+    /// The tile each station names (`trip_station_tiles`): where ids repeat across tiles,
+    /// the stop is the object of that one.
+    station_tiles: Vec<Option<usize>>,
 }
 
 /// How long before a trip is due at a stop the people for it turn up there (s).
@@ -122,6 +135,11 @@ pub struct ScheduleSim {
     departures: Vec<Departure>,
     /// Depot vehicles per AI group: (type, its fleet from the ailists, depot file).
     depots: HashMap<String, Vec<DepotVehicle>>,
+    /// The player's own lines that ask for buses of a kind, a maker or a model (the line
+    /// editor's `lines::VEHICLES_FILE`): per line (its name, lower case) the vehicles its
+    /// trips are driven with, in the shape of `depots` (omsi-app's `Schedule::new` works
+    /// them out: `set_line_buses`).
+    line_buses: HashMap<String, Vec<DepotVehicle>>,
     tile_coords: Vec<(i32, i32)>,
     /// Trains per AI group: list of (car type, reversed), first car leads.
     trains: HashMap<String, Vec<TrainCars>>,
@@ -167,6 +185,9 @@ pub struct ScheduleSim {
     /// With a single trip picked: the departure (s of the day) of that trip; the rest of
     /// the tour stays the AI's.
     player_departure: Option<f64>,
+    /// A duty of trips from several tours (`player_plan`): those trips (line, tour, departure
+    /// in s of the day) are the player's, the rest of their tours stays the AI's.
+    player_trips: Vec<(String, String, f64)>,
     /// A player tour was just taken over: its buses already on the road go at the next tick.
     purge_player_tour: bool,
     /// LAN play (host): the tours the other players drive (line, tour; lower case), left to
@@ -216,6 +237,13 @@ pub struct ScheduleSim {
     /// hashing each tour to a number put the same fleet number on two buses at once.
     tour_vehicle: HashMap<u64, (usize, usize)>,
     used_numbers: HashSet<(String, String)>,
+    /// The player's bus company on this map and day (omsi-app's `company_live`, see
+    /// [`TimetableCompany`]): its tours run with its own buses, and what they drive is
+    /// reported to it. None: a drive of the player's own reads nothing of a company.
+    company: Option<Box<dyn TimetableCompany>>,
+    /// Per departure: kept off the road for the player's bus company
+    /// (`TimetableCompany::keeps_off`), worked out with the day's plan.
+    company_off: Vec<bool>,
     /// Mixed into the draw of a tour's vehicle, so that a tour gets another of its depot's
     /// buses from session to session, as in OMSI (the session's seed; a LAN game's shared
     /// one, `set_lan_seed`). Hashing the tour alone sent the same bus out on it every time

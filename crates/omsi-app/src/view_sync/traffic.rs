@@ -125,7 +125,7 @@ impl Traffic {
                 renderer,
                 scene,
                 &t,
-                scheme.filter(|i| *i < t.paint_schemes.len()),
+                crate::spawn::part_scheme(&ty, scheme, &t),
                 Some(lead),
             ));
             vehicle.attach_trailer_ex(t, rev);

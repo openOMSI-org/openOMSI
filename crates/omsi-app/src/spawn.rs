@@ -287,7 +287,11 @@ pub(crate) fn spawn_player_prepared(
         let keys: Vec<String> = doors.iter().enumerate().map(|(i, g)| format!("Shift+{} = {}", i + 1, g.join(" + "))).collect();
         log::info!("door keys: {}", keys.join(", "));
     }
-    let host = vehicle_host(args, world, &vt);
+    let mut host = vehicle_host(args, world, &vt);
+    // and so are the bus options (`--setvar`) over them: set again over the livery's below,
+    // and once more after the first frames
+    let options = setvars(args.setvar.as_deref());
+    host.start_vars = options.clone();
     let mut vehicle = omsi_sim::VehicleInstance::new(vt.clone(), host);
     // place at the entry point
     place_at_entry_point(args, world, &mut vehicle);
@@ -302,6 +306,9 @@ pub(crate) fn spawn_player_prepared(
         None => log::info!("paint: the model's own textures"),
     }
     vehicle.apply_paint_vars(scheme);
+    for (k, v) in &options {
+        vehicle.set_var(k, *v);
+    }
     log::info!("gearbox: {}", if vehicle.ty.program.manual_gearbox() { "manual (gates)" } else { "automatic or none" });
     if let Some(sp) = &args.spawn {
         let v: Vec<f64> = sp
@@ -336,7 +343,7 @@ pub(crate) fn spawn_player_prepared(
                 renderer,
                 scene,
                 t,
-                scheme.filter(|i| *i < t.paint_schemes.len()),
+                part_scheme(&vt, scheme, t),
                 &render,
             )
         })
@@ -353,6 +360,21 @@ pub(crate) fn spawn_player_prepared(
                 .ok()
                 .map(|i| (i.width, i.height, i.rgba))
         });
+    }
+    // the display font the player chose for the bus (`--display-font`, the launcher's bus
+    // step) on its destination displays
+    if let Some(font) = args.display_font.as_deref().map(str::trim).filter(|f| !f.is_empty()) {
+        let n = vehicle.apply_display_font(font, &mut world.fonts.lock(), &|p| {
+            omsi_texture::decode_file(p)
+                .ok()
+                .map(|i| (i.width, i.height, i.rgba))
+        });
+        log::info!("display font \"{font}\": {n} destination display(s) of the bus");
+        // and the matrices its scripts draw with fonts they ask for by name (the Krüger
+        // matrices): the chosen font takes those fonts' places
+        for (script, fonts) in vehicle.apply_script_display_font(Some(font)) {
+            log::info!("display font \"{font}\": the {fonts} letter font(s) of {} (a matrix the bus's script draws)", script.display());
+        }
     }
     // number / ident were installed before {init}; do not rewrite them here.
     // ground following through the loaded tiles (road surfaces first, then terrain)
@@ -412,12 +434,10 @@ pub(crate) fn spawn_player_prepared(
     for _ in 0..3 {
         p.vehicle.update(1.0 / 30.0);
     }
-    if let Some(sv) = &args.setvar {
-        for kv in sv.split(',') {
-            if let Some((k, v)) = kv.split_once('=') {
-                if !p.vehicle.set_var(k.trim(), omsi_cfg::parse_f32(v)) {
-                    log::warn!("variable {k} not found");
-                }
+    if !options.is_empty() {
+        for (k, v) in &options {
+            if !p.vehicle.set_var(k, *v) {
+                log::warn!("variable {k} not found");
             }
         }
         p.vehicle.update(1.0 / 30.0);
@@ -655,6 +675,7 @@ fn new_player(vehicle: omsi_sim::VehicleInstance, render: scene::VehicleRender, 
         duty_typed: false,
         html_next_stop: None,
         ibis_background: false,
+        ibis_auto: crate::settings::Settings::load().ibis_auto,
         arm: Default::default(),
         blinker_key_state: 0,
         blinker_cancel: crate::settings::Settings::load().blinker_cancel,
@@ -811,6 +832,10 @@ pub(crate) fn paint_scheme(vt: &omsi_sim::VehicleType, paint: Option<&str>) -> O
     }
     found
 }
+
+// The paint scheme of a coupled part for the lead's, and the bus options of `--setvar`: the
+// launcher's own (it reads them the same way for its preview and its livery studio).
+pub(crate) use omsi_launcher_ui::spawn::{part_scheme, setvars};
 
 /// Where the map's `global.cfg` recorded an entry point (x, height, y within its tile), in
 /// world coordinates, taken in the tile of its object at `object` (Grundorf's records agree

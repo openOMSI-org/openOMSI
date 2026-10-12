@@ -421,11 +421,15 @@ impl App {
                 } else {
                     n.map_release();
                 }
+                // (its - and + size the navigator: kept for the next game)
+                self.keep_nav_size();
                 return;
             }
             // (a click opens the city map, a drag moves the navigator: #940)
+            // (its edges and corners size it, its handle shows or hides the duty board)
             if pressed && !vr_active && n.over_panel(x, y) {
                 n.panel_press(x, y);
+                self.keep_nav_size();
                 return;
             }
             if !pressed {
@@ -435,9 +439,7 @@ impl App {
                         return;
                     }
                     Some(true) => {
-                        let at = n.placement();
-                        self.settings.navigator_corner = at.clone();
-                        crate::game_lists::remember_setting("navigator_corner", &at);
+                        self.keep_nav_size();
                         return;
                     }
                     None => {}

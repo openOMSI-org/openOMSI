@@ -11,7 +11,7 @@ pub(crate) use service::run as run_service;
 #[cfg_attr(not(target_os = "android"), allow(unused_imports))]
 pub(crate) use service::InProcess;
 
-pub(crate) use omsi_launcher_ui::{drive, pages, theme, ui, Launcher, RAIL_W};
+pub(crate) use omsi_launcher_ui::{drive, pages, theme, ui, Launcher};
 #[cfg_attr(not(any(target_os = "macos", target_os = "ios")), allow(unused_imports))]
 pub(crate) use omsi_launcher_ui::mapview;
 #[cfg_attr(not(target_os = "android"), allow(unused_imports))]
@@ -123,9 +123,9 @@ impl Host for AppHost {
         showroom::clear_placing_mark();
     }
     fn city_map(&self, root: &Path, tiles: &[(i32, i32, PathBuf)], chrono: &[PathBuf]) -> CityMap {
-        let crate::scene::NavigationMap { lanes, road_surfaces, places, signs: _ } = crate::scene::navigation_map_of(root, tiles, chrono);
+        let crate::scene::NavigationMap { lanes, road_surfaces, places, signs: _, stops } = crate::scene::navigation_map_of(root, tiles, chrono);
         let (roads, net) = crate::navigator::city_roads(lanes, &road_surfaces);
-        CityMap { roads: roads.into_iter().map(|r| MapRoad { points: r.points, width: r.width, main: r.main }).collect(), net, places: places.into_iter().collect() }
+        CityMap { roads: roads.into_iter().map(|r| MapRoad { points: r.points, width: r.width, main: r.main }).collect(), net, places: places.into_iter().collect(), stops }
     }
     fn city_map_colors(&self) -> [omsi_ui::Color; 4] {
         use crate::navigator::{ROAD, ROAD_CASING, ROAD_MAIN, ROUTE};
@@ -133,6 +133,24 @@ impl Host for AppHost {
     }
     fn simplify(&self, pts: &[glam::Vec3], tol: f32) -> Vec<glam::Vec3> {
         crate::navigator::simplify(pts, tol)
+    }
+    fn new_studio(&self) -> Box<dyn omsi_launcher_ui::host::Showroom> {
+        Box::new(showroom::Showroom::studio())
+    }
+    fn player_bus_path(&self, root: &Path, bus: &str) -> anyhow::Result<PathBuf> {
+        crate::spawn::player_bus_path(root, bus)
+    }
+    fn load_coupled_parts(&self, root: &Path, vehicle: &mut omsi_sim::VehicleInstance) -> Vec<Arc<omsi_sim::VehicleType>> {
+        crate::spawn::load_coupled_parts(root, vehicle)
+    }
+    fn cloudflared(&self) -> omsi_launcher_ui::host::Cloudflared {
+        crate::companion::cloudflared()
+    }
+    fn download_cloudflared(&self) {
+        crate::companion::download_cloudflared();
+    }
+    fn personnel_of_driver(&self, name: &str) -> Option<(String, String)> {
+        crate::companion::personnel_of_driver(name)
     }
 }
 
@@ -171,7 +189,8 @@ impl omsi_launcher_ui::host::Showroom for showroom::Showroom {
         showroom::Showroom::zoom_by(self, k)
     }
     fn set_focus_x(&mut self, x: f32) {
-        self.focus_x = x;
+        // (the bus's middle at `x` of the width: the part of the picture right of the panels)
+        showroom::Showroom::set_stage(self, [(2.0 * x - 1.0).clamp(0.0, 0.9), 0.0, 1.0, 1.0]);
     }
     fn update(&mut self, renderer: &Renderer, dt: f32) -> bool {
         showroom::Showroom::update(self, renderer, dt)
@@ -193,6 +212,60 @@ impl omsi_launcher_ui::host::Showroom for showroom::Showroom {
     }
     fn drawn(&self) -> u64 {
         self.drawn
+    }
+    fn error(&self) -> Option<String> {
+        self.error.clone()
+    }
+    fn set_stage(&mut self, stage: omsi_launcher_ui::showroom::Stage) {
+        showroom::Showroom::set_stage(self, stage)
+    }
+    fn want(&mut self, look: omsi_launcher_ui::showroom::Look) {
+        showroom::Showroom::want(self, look)
+    }
+    fn shows(&self, look: &omsi_launcher_ui::showroom::Look) -> bool {
+        showroom::Showroom::shows(self, look)
+    }
+    fn gave_up(&self, look: &omsi_launcher_ui::showroom::Look) -> bool {
+        showroom::Showroom::gave_up(self, look)
+    }
+    fn dress(&mut self, options: Vec<(String, f32)>) {
+        showroom::Showroom::dress(self, options)
+    }
+    fn dressed(&self) -> Option<Vec<(String, f32)>> {
+        showroom::Showroom::dressed(self).map(<[_]>::to_vec)
+    }
+    fn letter(&mut self, font: Option<String>) {
+        showroom::Showroom::letter(self, font)
+    }
+    fn reread(&mut self, bus: &str) {
+        showroom::Showroom::reread(self, bus)
+    }
+    fn forget(&mut self) {
+        showroom::Showroom::forget(self)
+    }
+    fn touch(&mut self) {
+        showroom::Showroom::touch(self)
+    }
+    fn set_camera(&mut self, cam: Option<omsi_render::Camera>) {
+        showroom::Showroom::set_camera(self, cam)
+    }
+    fn set_second(&mut self, cam: Option<(omsi_render::Camera, u32, u32)>) {
+        showroom::Showroom::set_second(self, cam)
+    }
+    fn second_view(&self) -> Option<(wgpu::TextureView, u32, u32)> {
+        showroom::Showroom::second_view(self)
+    }
+    fn second_generation(&self) -> u64 {
+        self.second_generation
+    }
+    fn parts(&mut self) -> Option<omsi_launcher_ui::showroom::Parts<'_>> {
+        showroom::Showroom::parts(self)
+    }
+    fn photograph(&mut self, renderer: &mut Renderer, w: u32, h: u32) -> Option<image::RgbaImage> {
+        showroom::Showroom::photograph(self, renderer, w, h)
+    }
+    fn photos(&mut self) -> &mut omsi_launcher_ui::busphoto::Photos {
+        &mut self.photos
     }
 }
 

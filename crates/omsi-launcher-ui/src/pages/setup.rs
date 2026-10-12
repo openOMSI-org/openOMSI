@@ -7,9 +7,9 @@ use omsi_launcher_lib as core;
 // --- setup -----------------------------------------------------------------------------------------
 
 pub fn setup(l: &mut Launcher, area: Rect) {
-    let body = l.page_title(area, "Setup", "Where the original game and this one are.");
+    let body = area;
     let r = Rect::new(body.x, body.y, body.w.min(820.0), 300.0);
-    l.ui.panel(r);
+    l.ui.card(r);
     let inner = l.ui.heading(Rect::new(r.x + 20.0, r.y + 16.0, r.w - 40.0, r.h - 32.0), "Folders", Some("folder_open"));
     let mut root = l.pages.setup_root.clone().unwrap_or_else(|| l.state.config.root.clone());
     let mut game = l.pages.setup_game.clone().unwrap_or_else(|| l.state.config.game.clone());
@@ -19,9 +19,9 @@ pub fn setup(l: &mut Launcher, area: Rect) {
         l.pages.setup_root = Some(root.clone());
     }
     if l.ui.button("browse-root", Rect::new(inner.right() - 100.0, y, 100.0, ROW), "Browse", None, ButtonKind::Normal) {
-        if super::mobile::mobile() {
+        if crate::mobile::mobile() {
             let start = root.clone();
-            l.browse(super::mobile::Purpose::Root, &start);
+            l.browse(crate::mobile::Purpose::Root, &start);
         } else if let Some(p) = core::pick_folder("The OMSI 2 folder (with maps and Vehicles in it)") {
             l.pages.setup_root = Some(p.to_string_lossy().to_string());
         }
@@ -90,13 +90,13 @@ fn support_panel(l: &mut Launcher, r: Rect) {
     const ABOUT: &str = "A ZIP for a bug report: the program and system versions, the graphics card, its driver and the graphics settings, the controllers, and the map and bus of the last game. No folders, names, chat, LAN codes or addresses; of the logs only which events happened. It is saved on this computer and its folder opened, so you can look inside before you attach it to an issue.";
     // (as high as its text needs: it wraps to more lines on a phone)
     let r = Rect::new(r.x, r.y, r.w, 120.0 + l.ui.paragraph_height(ABOUT, r.w - 40.0, 12.5, Weight::Regular));
-    l.ui.panel(r);
+    l.ui.card(r);
     let inner = l.ui.heading(Rect::new(r.x + 20.0, r.y + 16.0, r.w - 40.0, r.h - 32.0), "Support package", Some("help"));
     let h = l.ui.paragraph(ABOUT, Vec2::new(inner.x, inner.y), inner.w, 12.5, Weight::Regular, TEXT_DIM);
     if l.ui.button("export-diagnostics", Rect::new(inner.x, inner.y + h + 12.0, 220.0, 42.0), "Export diagnostics", Some("download"), ButtonKind::Normal) {
         let c = &l.state.choice;
         let job = host().support_bundle(l.renderer.as_ref(), l.pages.pads.io.as_ref().map(|d| d.connected()), (&c.map, &c.bus, c.line.as_deref(), c.tour.as_deref()));
-        l.state.spawn(move || super::state::Msg::Diagnostics(job()));
+        l.state.spawn(move || crate::state::Msg::Diagnostics(job()));
     }
 }
 
@@ -105,7 +105,7 @@ fn support_panel(l: &mut Launcher, r: Rect) {
 
 /// OMSI's four tutorials: what each teaches, and a button to start it.
 pub fn tutorials(l: &mut Launcher, area: Rect) {
-    let body = l.page_title(area, "Tutorials", "OMSI 2's own lessons: each opens its situation, with its pages beside the picture (Enter turns the page).");
+    let body = area;
     static LIST: std::sync::OnceLock<Vec<(usize, String, String)>> = std::sync::OnceLock::new();
     let list = LIST.get_or_init(omsi_launcher_lib::tutorials);
     if list.is_empty() {
@@ -118,7 +118,7 @@ pub fn tutorials(l: &mut Launcher, area: Rect) {
     let mut start = None;
     for (k, (n, title, text)) in list.iter().enumerate() {
         let r = Rect::new(body.x + (k % cols) as f32 * (cw + GAP * 2.0), body.y + (k / cols) as f32 * (ch + GAP * 2.0), cw, ch);
-        l.ui.panel(r);
+        l.ui.card(r);
         l.ui.text_in(title, Rect::new(r.x + 18.0, r.y + 14.0, r.w - 36.0, 26.0), 17.0, Weight::Bold, TEXT, Align::Left);
         l.ui.push_clip(Rect::new(r.x + 18.0, r.y + 46.0, r.w - 36.0, r.h - 110.0), 0.0);
         l.ui.paragraph(text, Vec2::new(r.x + 18.0, r.y + 46.0), r.w - 36.0, 12.5, Weight::Regular, TEXT_DIM);

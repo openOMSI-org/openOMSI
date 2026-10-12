@@ -1,0 +1,51 @@
+_version: 2
+# The trip's card: its list of stops, and keeping it open (trip_report).
+"Due":
+  nl: "Gepland"
+  de: "Plan"
+  fr: "Prévu"
+  ru: "План"
+  uk: "План"
+  pl: "Plan"
+"Arr.":
+  nl: "Aank."
+  de: "An"
+  fr: "Arr."
+  ru: "Приб."
+  uk: "Приб."
+  pl: "Przyj."
+"Dep.":
+  nl: "Vertr."
+  de: "Ab"
+  fr: "Dép."
+  ru: "Отпр."
+  uk: "Відпр."
+  pl: "Odj."
+"±":
+  nl: "±"
+  de: "±"
+  fr: "±"
+  ru: "±"
+  uk: "±"
+  pl: "±"
+"Not served":
+  nl: "Niet bediend"
+  de: "Nicht bedient"
+  fr: "Non desservi"
+  ru: "Не обслужена"
+  uk: "Не обслуговано"
+  pl: "Nieobsłużony"
+"Click to keep it open":
+  nl: "Klik om open te houden"
+  de: "Klicken zum Offenhalten"
+  fr: "Cliquer pour garder ouvert"
+  ru: "Щёлкните, чтобы оставить открытым"
+  uk: "Клацніть, щоб залишити відкритим"
+  pl: "Kliknij, aby pozostawić otwarte"
+"Enter or × to close":
+  nl: "Enter of × om te sluiten"
+  de: "Enter oder × zum Schließen"
+  fr: "Entrée ou × pour fermer"
+  ru: "Enter или × — закрыть"
+  uk: "Enter або × — закрити"
+  pl: "Enter lub ×, aby zamknąć"

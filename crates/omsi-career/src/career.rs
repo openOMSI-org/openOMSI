@@ -14,6 +14,15 @@ use omsi_content::Driver;
 use omsi_sim::VehicleInstance;
 use std::path::{Path, PathBuf};
 
+/// The accelerations along and across smoothed as OMSI smooths them for its passengers'
+/// comfort: along over a tenth of a second (α = min(10 dt, 0.5)), across over a second
+/// (α = min(dt, 0.5)) - a bend's push counts, a twitch of the heading does not (smoothed as
+/// fast as along, every twitch of the heading in a junction was a jolt, Luc's 0 for comfort).
+pub(crate) fn smooth_accel(prev: (f32, f32), along: f32, across: f32, dt: f32) -> (f32, f32) {
+    let (ka, kc) = ((10.0 * dt).min(0.5), dt.min(0.5));
+    (prev.0 + (along - prev.0) * ka, prev.1 + (across - prev.1) * kc)
+}
+
 /// OMSI's jolts: the smoothed acceleration across over 3 m/s² or along
 /// over 5 m/s², weighing 0.1, at most one a second.
 const HARSH_ACROSS: f32 = 3.0;
@@ -23,7 +32,8 @@ const JOLT_WEIGHT: f64 = 0.1;
 const SEESAW_WEIGHT: f64 = 0.05;
 /// Kilometres that wear the penalty down by one (P −= km / 30).
 const PENALTY_KM: f64 = 30.0;
-/// A stop's arrival later than this (s) is late, its departure earlier than minus that early.
+/// A stop's arrival later than this (s) is late, its departure earlier than minus that early
+/// (the trip's report judges its stops the same way).
 pub const LATE_ARRIVAL: f64 = 180.0;
 pub const EARLY_DEPARTURE: f64 = -120.0;
 
@@ -226,11 +236,9 @@ impl Career {
         }
         let raw_across = v * (dh.to_radians() / dt.max(1e-3) as f64) as f32;
         // OMSI weighs the accelerations by the speed up to 1 m/s (standing, the body's
-        // rocking is nothing) and smooths them (α = min(10 dt, 0.5))
+        // rocking is nothing) and smooths them (`smooth_accel`)
         let weight = v.abs().min(1.0);
-        let k = (10.0 * dt).min(0.5);
-        self.smooth.0 += (raw_along * weight - self.smooth.0) * k;
-        self.smooth.1 += (raw_across * weight - self.smooth.1) * k;
+        self.smooth = smooth_accel(self.smooth, raw_along * weight, raw_across * weight, dt);
         let (along, across) = self.smooth;
         if v.abs() > 1.0 {
             self.worst_accel = self.worst_accel.max(along.abs()).max(across.abs());
@@ -491,11 +499,10 @@ impl Career {
     /// launcher adds it up into the driver's hours, experience and level (the process id
     /// keeps two games that end in the same second apart).
     pub fn write_session(&self, map: &str, bus: &str, line: Option<&str>, tour: Option<&str>) -> std::io::Result<()> {
-        let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).unwrap_or_default();
-        let dir = home.join(".openomsi").join("sessions");
+        let dir = data_dir().join("sessions");
         std::fs::create_dir_all(&dir)?;
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-        let driver = self.driver.as_ref().map(|d| d.name.clone()).or_else(|| self.path.as_ref().and_then(|p| p.file_stem().map(|s| s.to_string_lossy().to_string()))).unwrap_or_else(|| "Driver".into());
+        let driver = self.driver_name();
         let v = serde_json::json!({
             "time": now,
             "driver": driver,
@@ -525,10 +532,91 @@ impl Career {
         log::info!("session written to {}", path.display());
         Ok(())
     }
+
+    /// The name the sessions and the trips are written under: the personnel file's, else
+    /// its file's.
+    pub fn driver_name(&self) -> String {
+        self.driver.as_ref().map(|d| d.name.trim().to_string()).filter(|n| !n.is_empty()).or_else(|| self.path.as_ref().and_then(|p| p.file_stem().map(|s| s.to_string_lossy().to_string()))).unwrap_or_else(|| "Driver".into())
+    }
+
+    /// Add a trip the player just finished (`trip_report`) to the driver's trips in
+    /// `~/.openomsi/trips`, where the launcher's service record reads them: written as the
+    /// trip ends, so that a game that does not close cleanly keeps it.
+    pub fn write_trip(&self, run: &omsi_launcher_lib::TripRun, map: &str, bus: &str) -> std::io::Result<PathBuf> {
+        self.write_trip_in(&data_dir(), run, map, bus)
+    }
+
+    /// `write_trip` into the data folder `data`.
+    pub fn write_trip_in(&self, data: &Path, run: &omsi_launcher_lib::TripRun, map: &str, bus: &str) -> std::io::Result<PathBuf> {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        let run = omsi_launcher_lib::TripRun { time: now, driver: self.driver_name(), map: map.to_string(), bus: bus.to_string(), ..run.clone() };
+        let path = omsi_launcher_lib::append_trip(data, &run).map_err(std::io::Error::other)?;
+        log::info!("trip written to {}: line {} to {}, {} stops ({} early, {} late)", path.display(), run.line, run.terminus, run.stops, run.early, run.late);
+        Ok(path)
+    }
+}
+
+/// openOMSI's own data folder, `~/.openomsi` (the launcher's `data_dir`).
+fn data_dir() -> PathBuf {
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).unwrap_or_default();
+    home.join(".openomsi")
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    /// A tenth of a second's twitch of the heading (6 m/s² across) is no jolt; a bend held
+    /// for two seconds at 3.5 m/s² is.
+    #[test]
+    fn a_twitch_is_no_jolt_but_a_bend_is() {
+        let run = |across: &dyn Fn(f32) -> f32, secs: f32| -> f32 {
+            let (dt, mut s, mut most) = (1.0 / 60.0, (0.0, 0.0), 0.0f32);
+            for k in 0..(secs / dt) as usize {
+                s = smooth_accel(s, 0.0, across(k as f32 * dt), dt);
+                most = most.max(s.1.abs());
+            }
+            most
+        };
+        assert!(run(&|t| if (1.0..1.1).contains(&t) { 6.0 } else { 0.0 }, 3.0) < HARSH_ACROSS);
+        assert!(run(&|t| if (1.0..3.0).contains(&t) { 3.5 } else { 0.0 }, 4.0) > HARSH_ACROSS);
+    }
+
+    /// A trip is written under the driver's name with the map, the bus and the time, into the
+    /// folder given (never the real one in a test).
+    #[test]
+    fn a_trip_is_written_for_the_driver() {
+        let data = std::env::temp_dir().join(format!("omsi-career-trip-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&data);
+        let career = Career { driver: Some(Driver { name: "Luc".into(), ..Default::default() }), ..Default::default() };
+        let run = omsi_launcher_lib::TripRun { line: "5".into(), terminus: "Rathaus".into(), stops: 12, late: 1, ..Default::default() };
+        career.write_trip_in(&data, &run, "maps/Spandau/global.cfg", "Vehicles/SD200/SD200.bus").unwrap();
+        let read = omsi_launcher_lib::trips_of(&data, "luc");
+        assert_eq!(read.len(), 1);
+        assert_eq!((read[0].driver.as_str(), read[0].map.as_str(), read[0].line.as_str(), read[0].stops, read[0].late), ("Luc", "maps/Spandau/global.cfg", "5", 12, 1));
+        assert!(read[0].time > 1_600_000_000);
+        // (without a personnel file: the file's name, else "Driver")
+        let stem = Career { path: Some(PathBuf::from("Drivers/Anna.odr")), ..Default::default() };
+        assert_eq!(stem.driver_name(), "Anna");
+        assert_eq!(Career::default().driver_name(), "Driver");
+        let _ = std::fs::remove_dir_all(&data);
+    }
+
+    /// OMSI's limits: a stop is late more than three minutes after its arrival, early more
+    /// than two before its departure, both rounded to the second.
+    #[test]
+    fn stops_are_counted_as_omsi_counts_them() {
+        let mut c = Career::default();
+        c.stop_served(180.4, 0.0);
+        c.stop_served(181.0, 0.0);
+        c.stop_served(0.0, -120.4);
+        c.stop_served(0.0, -121.0);
+        assert_eq!(c.stops, [4, 1, 1]);
+    }
+}
+
+#[cfg(test)]
+mod rating_tests {
     use super::*;
 
     /// A trip is rated on its own: driving from 100 at its start, comfort and ticket selling

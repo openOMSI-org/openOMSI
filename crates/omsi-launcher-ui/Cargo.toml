@@ -30,12 +30,24 @@ omsi-timetable = { path = "../omsi-timetable" }
 omsi-ui = { path = "../omsi-ui" }
 omsi-vehicle = { path = "../omsi-vehicle" }
 omsi-weather = { path = "../omsi-weather" }
+# Omsi-Hub's launcher: the bus company, the editors and the livery studio
+omsi-model = { path = "../omsi-model" }
+omsi-scene = { path = "../omsi-scene" }
+omsi-texture = { path = "../omsi-texture" }
+ab_glyph.workspace = true
+pollster.workspace = true
+rayon.workspace = true
+sha2.workspace = true
+# the livery studio: shapes, outlines and SVG pictures rasterised (as omsi-ui does its icons)
+resvg = { version = "0.45", default-features = false }
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 arboard = { version = "3", default-features = false }
+# the desktop's file dialogs (the livery studio's pictures, the company's prints)
+rfd.workspace = true
 
 [features]
 # what an app's tests see of the toolkit: every clickable thing's place (`Ui::drawn`)
@@ -43,3 +55,6 @@ test-support = []
 
 [dev-dependencies]
 omsi-input = { path = "../omsi-input", features = ["test-support"] }
+# the tests that every text of the company's pages is translated read the game's tables
+# (`crates/omsi-app/locales`) as the game does
+rust-i18n = "4"

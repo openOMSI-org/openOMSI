@@ -3,6 +3,7 @@
 
 use super::*;
 
+
 /// Street lanes that stand for drawn roads, including editor-only paths corroborated by
 /// road surfaces. Uncorroborated helpers must not make a phantom road on the GPS.
 pub(super) fn visible_road_lanes(net: &Network) -> Vec<(usize, &omsi_sim::traffic::Lane)> {
@@ -111,6 +112,13 @@ pub(super) fn confirm_road_surfaces(net: &mut Network, surfaces: &[(Vec<DVec3>, 
     for i in keep { net.lanes[i].invisible = false; }
 }
 
+/// Two paths of one spline whose middles lie at most this far apart are neighbouring lanes
+/// of one carriageway, however narrow the map makes them: a path is as wide as the vehicle
+/// on it (2.5 m paths on a 4 m pitch are common), so the strip between their edges is road
+/// too - drawn apart, a two-lane street was two strips with a dark line between them. A
+/// median or a tram track in the middle puts the paths further apart than any lane is wide.
+pub(super) const LANE_PITCH_MAX: f32 = 4.6;
+
 /// Traffic paths are lane centres, not separate streets. Adjacent paths on one spline
 /// describe one carriageway; combine their footprints without filling a median. Align
 /// opposing directions before averaging so bends, mirrors and ramps retain their shape.
@@ -129,12 +137,14 @@ pub(super) fn road_geometry(net: &Network) -> Vec<MapRoad> {
         let mut start = 0;
         while start < lanes.len() {
             let a = lanes[start];
-            let lo = a.offset - a.width.max(2.6) * 0.5;
+            let mut lo = a.offset - a.width.max(2.6) * 0.5;
             let mut hi = a.offset + a.width.max(2.6) * 0.5;
             let mut end = start + 1;
             while end < lanes.len() {
                 let b = lanes[end];
-                if b.points.len() != a.points.len() || b.offset - b.width.max(2.6) * 0.5 > hi + 0.65 { break; }
+                let touching = b.offset - b.width.max(2.6) * 0.5 <= hi + 0.65;
+                let neighbour = b.offset - lanes[end - 1].offset <= LANE_PITCH_MAX;
+                if b.points.len() != a.points.len() || !(touching || neighbour) { break; }
                 let mid = a.points.len() / 2;
                 let za = a.points[if a.reversed { a.points.len() - 1 - mid } else { mid }].z;
                 let zb = b.points[if b.reversed { b.points.len() - 1 - mid } else { mid }].z;
@@ -143,6 +153,18 @@ pub(super) fn road_geometry(net: &Network) -> Vec<MapRoad> {
                 end += 1;
             }
             let b = lanes[end - 1];
+            // (lanes side by side are each a pitch wide, the outer ones too: their road reaches
+            // half a pitch past their middles, not only their narrower paths' edges)
+            if end - start >= 2 {
+                let first = lanes[start + 1].offset - a.offset;
+                let last = b.offset - lanes[end - 2].offset;
+                if first <= LANE_PITCH_MAX {
+                    lo = lo.min(a.offset - first * 0.5);
+                }
+                if last <= LANE_PITCH_MAX {
+                    hi = hi.max(b.offset + last * 0.5);
+                }
+            }
             let span = b.offset - a.offset;
             let t = if span.abs() > 0.01 { (((lo + hi) * 0.5 - a.offset) / span) as f64 } else { 0.0 };
             let point = |l: &omsi_sim::traffic::Lane, i: usize| l.points[if l.reversed { l.points.len() - 1 - i } else { i }];
@@ -259,7 +281,7 @@ pub(crate) fn simplify(pts: &[Vec3], tol: f32) -> Vec<Vec3> {
 }
 
 /// Lanes with a point within `radius` of `c` (by the network's 50 m grid).
-pub(super) fn lanes_near(net: &Network, c: DVec2, radius: f64) -> Vec<usize> {
+pub(crate) fn lanes_near(net: &Network, c: DVec2, radius: f64) -> Vec<usize> {
     let mut seen = hashbrown::HashSet::new();
     let (cx, cy) = Network::grid_cell(c.extend(0.0));
     let r = (radius / 50.0).ceil() as i32;
@@ -302,13 +324,15 @@ pub(super) fn probe_lanes(net: &Network) {
 }
 
 /// How a route is drawn: its width (lane width plus `extra_m`, at least `min_px`), arrows
-/// every so many metres for so far, how much of it, and only near a point.
+/// every so many metres for so far, how much of it, only near a point, and where on its last
+/// lane it ends (the player's own destination) when not at that lane's end.
 pub(super) struct RouteStyle {
     pub(super) extra_m: f32,
     pub(super) min_px: f32,
     pub(super) arrows: Option<(f32, f32)>,
     pub(super) max_len: f32,
     pub(super) near: Option<(DVec2, f64)>,
+    pub(super) end: Option<f32>,
 }
 
 /// Which lane of `lane`'s road (the lanes beside it going the same way) the bus at `bus`
@@ -413,14 +437,19 @@ pub(super) fn build_route(p: &mut Painter, net: &Network, lanes: &[usize], ancho
             }
         }
         let from = if k == 0 { s0 } else { 0.0 };
+        // (the last lane cut where the route ends: the player's destination)
+        let until = style.end.filter(|_| k + 1 == lanes.len()).map(|e| e.max(from)).unwrap_or(f32::MAX);
         let mut pts: Vec<Vec3> = Vec::new();
         if k == 0 {
             pts.push(rel(lane.at(s0).0));
         }
         for (q, d) in lane.points.iter().zip(&lane.dist) {
-            if *d > from + 0.05 || k > 0 {
+            if (*d > from + 0.05 || k > 0) && *d < until - 0.05 {
                 pts.push(rel(*q));
             }
+        }
+        if until < lane.length() {
+            pts.push(rel(lane.at(until).0));
         }
         let lv = level(jam.get(&route_l).copied().unwrap_or(0.0));
         let w = lane.width.max(2.6);
@@ -446,7 +475,7 @@ pub(super) fn build_route(p: &mut Painter, net: &Network, lanes: &[usize], ancho
                 let step = len / n;
                 for i in 0..n as usize {
                     let at = step * (i as f32 + 0.5);
-                    if at > from + 4.0 && total + at - from < reach {
+                    if at > from + 4.0 && at < until - 2.0 && total + at - from < reach {
                         let (q, h) = lane.at(at);
                         arrows.push((q, h, lv, w));
                     }
@@ -620,16 +649,10 @@ pub(super) fn build_streets(net: &Network, signs: &[(DVec3, f64, String)]) -> St
     Streets { names, of_lane, labels }
 }
 
-/// A way from where the bus is back onto `ahead` (the route from the lane it was last
-/// on): the lanes to drive up to the route, and the index in `ahead` of the route lane it
-/// reaches (the route goes on from there). Dijkstra over
-/// the street lanes, from the lane under the bus that runs its way, to the first route
-/// lane reached (the search stops at 6 km).
-pub(crate) fn way_back(net: &Network, bus: DVec3, heading: f64, ahead: &[usize], max_cost: f32) -> Option<(Vec<usize>, usize)> {
-    use std::cmp::Ordering;
-    use std::collections::BinaryHeap;
-    // the lane under the bus going its way; else (a depot, a car park, the grass) the
-    // nearest street lane that does not point back at the bus, else any near
+/// The lane a way from the bus begins on: the one under it going its way; else (a depot, a
+/// car park, the grass) the nearest street lane that does not point back at the bus, else
+/// any within 80 m.
+pub(crate) fn start_lane(net: &Network, bus: DVec3, heading: f64) -> Option<usize> {
     let cands: Vec<(usize, f64, f64)> = lanes_near(net, bus.truncate(), 90.0)
         .into_iter()
         .filter_map(|i| {
@@ -643,9 +666,20 @@ pub(crate) fn way_back(net: &Network, bus: DVec3, heading: f64, ahead: &[usize],
         })
         .collect();
     let pick = |max_d: f64, max_a: f64| cands.iter().filter(|c| c.1 < max_d && c.2 < max_a).min_by(|a, b| (a.1 + a.2 * 0.1).total_cmp(&(b.1 + b.2 * 0.1))).map(|c| c.0);
-    let start = pick(14.0, 70.0).or_else(|| pick(80.0, 100.0)).or_else(|| pick(80.0, 181.0));
+    pick(14.0, 70.0).or_else(|| pick(80.0, 100.0)).or_else(|| pick(80.0, 181.0))
+}
+
+/// A way from where the bus is back onto `ahead` (the route from the lane it was last
+/// on): the lanes to drive up to the route, and the index in `ahead` of the route lane it
+/// reaches (the route goes on from there). Dijkstra over
+/// the street lanes, from the lane under the bus that runs its way, to the first route
+/// lane reached (the search stops at 6 km).
+pub(crate) fn way_back(net: &Network, bus: DVec3, heading: f64, ahead: &[usize], max_cost: f32) -> Option<(Vec<usize>, usize)> {
+    use std::cmp::Ordering;
+    use std::collections::BinaryHeap;
+    let start = start_lane(net, bus, heading);
     if omsi_cfg::flags::OMSI_DEBUG_NAV.is_set() {
-        log::info!("navigator: way search from {:?} ({} street lanes within 90 m) to {} route lanes", start, cands.len(), ahead.len());
+        log::info!("navigator: way search from {:?} to {} route lanes", start, ahead.len());
     }
     let start = start?;
     let targets: HashMap<usize, usize> = ahead.iter().take(120).enumerate().map(|(k, &l)| (l, k)).collect();

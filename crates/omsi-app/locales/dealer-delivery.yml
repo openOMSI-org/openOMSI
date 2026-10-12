@@ -1,0 +1,44 @@
+_version: 2
+# The dealer's delivery of new buses: regular in a working week, or quick at once for a fee.
+"Quick delivery":
+  de: "Schnelle Lieferung"
+  fr: "Livraison express"
+  nl: "Snelle levering"
+  pl: "Szybka dostawa"
+  ru: "Быстрая доставка"
+  uk: "Швидка доставка"
+"Regular: a working week":
+  de: "Normal: eine Arbeitswoche"
+  fr: "Normale : une semaine ouvrée"
+  nl: "Gewoon: een werkweek"
+  pl: "Zwykła: tydzień roboczy"
+  ru: "Обычная: рабочая неделя"
+  uk: "Звичайна: робочий тиждень"
+"Quick: at once (+%{amount} a bus)":
+  de: "Schnell: sofort (+%{amount} pro Bus)"
+  fr: "Express : tout de suite (+%{amount} par bus)"
+  nl: "Snel: direct (+%{amount} per bus)"
+  pl: "Szybka: od razu (+%{amount} za autobus)"
+  ru: "Быстрая: сразу (+%{amount} за автобус)"
+  uk: "Швидка: одразу (+%{amount} за автобус)"
+"thrown in":
+  de: "inklusive"
+  fr: "offerte"
+  nl: "inbegrepen"
+  pl: "w cenie"
+  ru: "в подарок"
+  uk: "у подарунок"
+"Quick delivery a bus":
+  de: "Schnelle Lieferung pro Bus"
+  fr: "Livraison express par bus"
+  nl: "Snelle levering per bus"
+  pl: "Szybka dostawa za autobus"
+  ru: "Быстрая доставка за автобус"
+  uk: "Швидка доставка за автобус"
+"in %{n} days, or at once with a quick delivery":
+  de: "in %{n} Tagen, oder sofort mit schneller Lieferung"
+  fr: "dans %{n} jours, ou tout de suite en livraison express"
+  nl: "over %{n} dagen, of direct met snelle levering"
+  pl: "za %{n} dni albo od razu z szybką dostawą"
+  ru: "через %{n} дн., или сразу с быстрой доставкой"
+  uk: "через %{n} дн., або одразу зі швидкою доставкою"

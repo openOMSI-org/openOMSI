@@ -278,12 +278,15 @@ fn port_of_gateway() -> Option<u16> {
 }
 
 /// A server run: what its status page says now.
-pub fn update_server_info(players: usize, time: &str, weather: &str) {
+pub fn update_server_info(players: usize, time: &str, weather: &str, date: &str) {
     if let Ok(w) = WS_PATH.lock() {
         if let Some(g) = w.as_ref().and_then(|w| w.gateway.as_ref()) {
             if let Ok(mut i) = g.info.lock() {
                 i.players = players;
                 i.time = time.to_string();
+                if !date.is_empty() {
+                    i.date = date.to_string();
+                }
                 if !weather.is_empty() {
                     i.weather = weather.to_string();
                 }

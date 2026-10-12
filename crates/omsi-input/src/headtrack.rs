@@ -25,10 +25,48 @@ impl HeadPose {
     pub fn seat_offset(&self) -> glam::Vec3 {
         glam::Vec3::new(-self.pos[0], -self.pos[2], self.pos[1]).clamp(glam::Vec3::splat(-60.0), glam::Vec3::splat(60.0)) / 100.0
     }
+
+    /// The pose seen from `centre` (a middle taken anew, Shift+F1): the head's way from there,
+    /// its turn the short way round.
+    pub fn from_centre(&self, centre: &HeadPose) -> HeadPose {
+        let turn = |a: f32, b: f32| (a - b + 180.0).rem_euclid(360.0) - 180.0;
+        HeadPose { pos: [0, 1, 2].map(|i| self.pos[i] - centre.pos[i]), rot: [0, 1, 2].map(|i| turn(self.rot[i], centre.rot[i])) }
+    }
+
+    /// The pose with the player's sensitivities: the turn left and right times `yaw`, up and
+    /// down times `pitch`, the tilt times `roll` (0: the horizon stays level), the head's way
+    /// times `moved` (0: the eye stays where the seat has it).
+    pub fn scaled(&self, yaw: f32, pitch: f32, roll: f32, moved: f32) -> HeadPose {
+        HeadPose { pos: self.pos.map(|x| x * moved), rot: [self.rot[0] * yaw, self.rot[1] * pitch, self.rot[2] * roll] }
+    }
+}
+
+/// opentrack's last pose: when it came, its number and the time since the one before (s).
+#[derive(Clone, Copy)]
+struct Udp {
+    pose: HeadPose,
+    at: Instant,
+    seq: u64,
+    interval: f32,
+}
+
+/// A pose from opentrack into `slot`, numbered.
+fn put(slot: &Mutex<Option<Udp>>, pose: HeadPose) {
+    let now = Instant::now();
+    let mut l = slot.lock().unwrap_or_else(|e| e.into_inner());
+    let (seq, interval) = match *l {
+        Some(u) => (u.seq + 1, now.saturating_duration_since(u.at).as_secs_f32()),
+        None => (0, 0.004),
+    };
+    *l = Some(Udp { pose, at: now, seq, interval });
 }
 
 pub struct HeadTracker {
-    last: Arc<Mutex<Option<(HeadPose, Instant)>>>,
+    last: Arc<Mutex<Option<Udp>>>,
+    /// opentrack's pose taken as the middle (Shift+F1): its poses are given from there.
+    centre: Mutex<HeadPose>,
+    /// A Tobii eye tracker read natively (`crate::tobii`), when the source asks for one.
+    tobii: Option<crate::tobii::Tobii>,
 }
 
 impl HeadTracker {
@@ -57,7 +95,7 @@ impl HeadTracker {
             let _ = sock.set_read_timeout(Some(Duration::from_millis(wait)));
         }
         let listening = sock.is_some();
-        let last: Arc<Mutex<Option<(HeadPose, Instant)>>> = Arc::default();
+        let last: Arc<Mutex<Option<Udp>>> = Arc::default();
         let out = last.clone();
         std::thread::Builder::new()
             .name("head tracking".into())
@@ -86,7 +124,7 @@ impl HeadTracker {
                         #[cfg(windows)]
                         if last_udp.is_none_or(|t| t.elapsed() >= Duration::from_millis(500)) {
                             if let Some(pose) = npclient.poll().or_else(|| freetrack.poll()) {
-                                *out.lock().unwrap() = Some((pose, Instant::now()));
+                                put(&out, pose);
                             }
                         }
                         continue;
@@ -107,20 +145,63 @@ impl HeadTracker {
                     {
                         last_udp = Some(Instant::now());
                     }
-                    *out.lock().unwrap() = Some((HeadPose { pos: [v[0], v[1], v[2]], rot: [v[3], v[4], v[5]] }, Instant::now()));
+                    put(&out, HeadPose { pos: [v[0], v[1], v[2]], rot: [v[3], v[4], v[5]] });
                 }
             })
             .ok()?;
         if listening {
             log::info!("head tracking: listening for opentrack on UDP port {port}");
         }
-        Some(HeadTracker { last })
+        Some(HeadTracker { last, centre: Mutex::default(), tobii: None })
     }
 
-    /// The pose, while poses keep coming (none for half a second: the head is centred).
-    pub fn pose(&self) -> Option<HeadPose> {
-        let l = self.last.lock().ok()?;
-        l.filter(|(_, t)| t.elapsed() < Duration::from_millis(500)).map(|(p, _)| p)
+    /// The source the setting `head_tracking_source` names: "opentrack" (its UDP output and
+    /// freetrack, as `start`), "tobii" (a Tobii eye tracker natively, `crate::tobii`) or
+    /// "auto" (both: opentrack's pose while it comes - its own curves - else the tracker's).
+    /// On Windows, `window_handle` is the native game window used by NPClient (native TrackIR,
+    /// read with opentrack's output).
+    pub fn start_with(port: u16, source: &str, tobii: crate::tobii::Options, window_handle: Option<isize>) -> Option<HeadTracker> {
+        let reader = (source != "opentrack").then(|| crate::tobii::Tobii::start(tobii));
+        let udp = if source == "tobii" { None } else { HeadTracker::start(port, window_handle) };
+        match (udp, reader) {
+            (Some(mut t), r) => {
+                t.tobii = r;
+                Some(t)
+            }
+            (None, Some(r)) => Some(HeadTracker { last: Arc::default(), centre: Mutex::default(), tobii: Some(r) }),
+            (None, None) => None,
+        }
+    }
+
+    /// The middle taken anew where the head is now (Shift+F1, and C as the view is put
+    /// straight): opentrack's pose as it comes now, and the Tobii tracker's.
+    pub fn recenter(&self) {
+        if let (Some(u), Ok(mut c)) = (self.udp(), self.centre.lock()) {
+            *c = u.pose;
+        }
+        if let Some(t) = &self.tobii {
+            t.recenter();
+        }
+    }
+
+    /// The Tobii tracker's settings as they are now (they may change in the game's options).
+    pub fn set_tobii(&self, o: crate::tobii::Options) {
+        if let Some(t) = &self.tobii {
+            t.set_options(o);
+        }
+    }
+
+    /// The latest pose for the camera's filter (`crate::head_filter`), while poses keep coming
+    /// (none for half a second: the head is centred): opentrack's, else the Tobii tracker's.
+    pub fn sample(&self) -> Option<crate::head_filter::Sample> {
+        let centre = self.centre.lock().map(|c| *c).unwrap_or_default();
+        let udp = self.udp().map(|u| crate::head_filter::Sample { pose: u.pose.from_centre(&centre), gain: [1.0; 3], edge: 0.0, seq: u.seq, at: u.at, interval: u.interval, tobii: false });
+        udp.or_else(|| self.tobii.as_ref().and_then(|t| t.sample()))
+    }
+
+    /// opentrack's pose as it came, while poses keep coming.
+    fn udp(&self) -> Option<Udp> {
+        self.last.lock().ok().and_then(|l| l.filter(|u| u.at.elapsed() < Duration::from_millis(500)))
     }
 }
 
@@ -526,6 +607,22 @@ mod npclient {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A middle taken with the head turned 170 degrees right: a head turned on to 175 left is
+    /// 15 degrees further round, not 345 back; the sensitivities make the turn, the tilt and
+    /// the way larger or smaller.
+    #[test]
+    fn the_middle_and_the_sensitivities() {
+        let centre = HeadPose { pos: [2.0, 1.0, 0.0], rot: [170.0, 5.0, 0.0] };
+        let p = HeadPose { pos: [5.0, 1.0, -3.0], rot: [-175.0, 10.0, 4.0] }.from_centre(&centre);
+        assert!((p.rot[0] - 15.0).abs() < 1e-3 && (p.rot[1] - 5.0).abs() < 1e-3, "{p:?}");
+        assert_eq!(p.pos, [3.0, 0.0, -3.0]);
+        let s = p.scaled(2.0, 0.5, 1.5, 0.0);
+        assert!((s.rot[0] - 30.0).abs() < 1e-3 && (s.rot[1] - 2.5).abs() < 1e-3 && (s.rot[2] - 6.0).abs() < 1e-3);
+        assert_eq!(s.seat_offset(), glam::Vec3::ZERO);
+        // (no tilt: the horizon level)
+        assert_eq!(p.scaled(1.0, 1.0, 0.0, 1.0).rot[2], 0.0);
+    }
 
     #[test]
     fn freetrack_pose_is_in_cm_and_degrees() {

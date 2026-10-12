@@ -217,6 +217,23 @@ impl Player {
         Some((name, false))
     }
 
+    /// Mesh `i` of the bus clicked as the mouse clicks it (a phone's or a tablet's tap on its
+    /// touch area): its `[mouseevent]`, held until [`Player::release`]. None when it is no
+    /// switch or is not shown.
+    pub(crate) fn click_mesh(&mut self, i: usize) -> Option<String> {
+        self.release();
+        let ev = self.vehicle.ty.meshes.get(i).and_then(|m| self.vehicle.ty.model.meshes.get(m.def_index)).and_then(|d| d.mouse_event.clone())?;
+        if !self.vehicle.mesh_props.get(i).is_some_and(|p| p.visible) {
+            return None;
+        }
+        log::info!("mouse event {ev} (from a device)");
+        let plain = self.vehicle.trigger(&ev);
+        self.pressed_mesh = Some(i);
+        self.press_info = (plain, 0.0);
+        self.auto_drag = None;
+        Some(ev)
+    }
+
     pub(crate) fn click(&mut self, origin: DVec3, dir: Vec3, spread: f32) -> Option<usize> {
         self.release();
         if let Some(i) = self.pick(origin, dir, spread) {

@@ -115,10 +115,8 @@ pub(super) fn step_bus(l: &mut Launcher, r: Rect) {
     let norm = |f: &str| f.replace('\\', "/").to_lowercase();
     let allowed: Option<std::collections::HashSet<String>> = l.state.host_vehicles().map(|v| v.iter().map(|f| norm(f)).collect());
     if let Some(a) = allowed.as_ref() {
-        if !a.contains(&norm(&l.state.choice.bus)) {
-            if let Some(first) = l.state.vehicles.iter().find(|v| a.contains(&norm(&v.file))).map(|v| v.file.clone()) {
-                l.state.select_bus(&first);
-            }
+        if !l.state.choice.bus.is_empty() && !a.contains(&norm(&l.state.choice.bus)) {
+            l.state.clear_bus();
         }
     }
     let allowed_key = allowed.as_ref().map(|a| a.iter().fold(0u64, |hash, file| hash ^ id_of(file))).unwrap_or(u64::MAX);
@@ -185,7 +183,7 @@ pub(super) fn step_bus(l: &mut Launcher, r: Rect) {
                 if model.variants.len() == 1 { pick = Some(model.variants[0].file.clone()); }
                 else { toggle = Some(model.key.clone()); }
             }
-            ui.icon("directions_bus", Vec2::new(row.x + 20.0, row.y + 23.0), 20.0, if selected.is_some() { ACCENT } else { TEXT_DIM });
+            ui.icon("directions_bus", Vec2::new(row.x + 20.0, row.y + 23.0), 20.0, if selected.is_some() { accent() } else { TEXT_DIM });
             let title = Rect::new(row.x + 42.0, row.y + 7.0, row.w - 78.0, 20.0);
             ui.text_in(&model.name, title, 13.0, Weight::Medium, TEXT, Align::Left);
             ui.tooltip(title, &model.name);
@@ -196,7 +194,7 @@ pub(super) fn step_bus(l: &mut Launcher, r: Rect) {
             else if selected.is_some_and(|v| v.fresh) { format!("{subtitle} | {}", omsi_ui::tr("NEW")) }
             else if selected.is_some_and(|v| v.installed) { format!("{subtitle} | {}", omsi_ui::tr("MOD")) } else { subtitle };
             ui.text_in(&subtitle, Rect::new(title.x, row.y + 29.0, title.w, 17.0), 11.5, Weight::Regular, TEXT_DIM, Align::Left);
-            ui.icon(if model.variants.len() == 1 { if selected.is_some() { "check" } else { "chevron_right" } } else if open { "expand_less" } else { "expand_more" }, Vec2::new(row.right() - 18.0, row.center().y), 18.0, if selected.is_some() { ACCENT } else { TEXT_DIM });
+            ui.icon(if model.variants.len() == 1 { if selected.is_some() { "check" } else { "chevron_right" } } else if open { "expand_less" } else { "expand_more" }, Vec2::new(row.right() - 18.0, row.center().y), 18.0, if selected.is_some() { accent() } else { TEXT_DIM });
             // the star: a bus of its own is starred here, a family's types in its list below
             let starred = model.variants.iter().any(|v| is_fav(&v.file));
             let sr = Rect::new(row.right() - 62.0, row.center().y - 13.0, 26.0, 26.0);
@@ -205,10 +203,10 @@ pub(super) fn step_bus(l: &mut Launcher, r: Rect) {
                 if cs {
                     star = Some(model.variants[0].file.clone());
                 }
-                ui.icon("star", sr.center(), 16.0, if starred { ACCENT } else if hs { TEXT_SOFT } else { Color::WHITE.alpha(0.16) });
+                ui.icon("star", sr.center(), 16.0, if starred { accent() } else if hs { TEXT_SOFT } else { Color::WHITE.alpha(0.16) });
                 ui.tooltip(sr, if starred { "Remove from the favourites" } else { "Add to the favourites" });
             } else if starred {
-                ui.icon("star", sr.center(), 14.0, ACCENT.alpha(0.8));
+                ui.icon("star", sr.center(), 14.0, accent().alpha(0.8));
             }
             y += 58.0;
             if open {
@@ -231,7 +229,7 @@ pub(super) fn step_bus(l: &mut Launcher, r: Rect) {
                     if cs {
                         star = Some(variant.file.clone());
                     }
-                    ui.icon("star", sr.center(), 18.0, if on { ACCENT } else if hs { TEXT_SOFT } else { Color::WHITE.alpha(0.2) });
+                    ui.icon("star", sr.center(), 18.0, if on { accent() } else if hs { TEXT_SOFT } else { Color::WHITE.alpha(0.2) });
                     ui.tooltip(sr, if on { "Remove from the favourites" } else { "Add to the favourites" });
                 }
                 if let Some(variant) = selected {
@@ -296,13 +294,25 @@ pub(super) fn step_bus(l: &mut Launcher, r: Rect) {
             let mut number_sel = vehicle.numbers.iter().position(|(number, _)| *number == l.state.choice.number).unwrap_or(0);
             let mut plate = l.state.choice.plate.clone();
             let auto = l.state.default_hof();
-            let mut hof_options = vec![format!("Automatic ({auto})")];
+            let mut hof_options = vec![omsi_ui::tr("Automatic (%{hof})").replace("%{hof}", &auto)];
             hof_options.extend(vehicle.hofs.iter().cloned());
             let mut hof_sel = if l.state.choice.hof_manual { vehicle.hofs.iter().position(|h| h.eq_ignore_ascii_case(&l.state.choice.hof)).map(|i| i + 1).unwrap_or(0) } else { 0 };
             let mut plate_changed = false;
+            // the bus options first, under the livery (see `busoptions`)
+            let options = l.state.bus_options.catalogue(&l.state.config.root, &vehicle.file).filter(|c| !c.options.is_empty());
+            let (picks, paint, technical) = (l.state.bus_options.picks(&vehicle.file), l.state.choice.paint.clone(), l.state.bus_options.technical_open);
+            let mut option_edit = None;
             l.ui.scroll_area("bus-details", details, &mut |ui, view| {
                 let mut y = view.y;
                 let field_w = view.w - 8.0;
+                if let Some(cat) = options.as_deref() {
+                    let section = crate::busoptions::Section { cat, livery: &paint, picks: &picks, technical_open: technical };
+                    let (h, e) = crate::busoptions::section(ui, view.x, y, field_w, &section);
+                    option_edit = e;
+                    y += h + 10.0;
+                    ui.p().rect(Rect::new(view.x, y, field_w, 1.0), HAIRLINE);
+                    y += 14.0;
+                }
                 ui.label(Rect::new(view.x, y, 110.0, ROW), "Depot file");
                 if ui.select("hof", Rect::new(view.x + 110.0, y, field_w - 110.0, ROW), &mut hof_sel, &hof_options) { hof_pick = Some(hof_sel); }
                 y += ROW + 8.0;
@@ -322,6 +332,9 @@ pub(super) fn step_bus(l: &mut Launcher, r: Rect) {
                 y += ui.paragraph(&vehicle.file, Vec2::new(view.x, y), field_w, 10.5, Weight::Regular, TEXT_FAINT);
                 y - view.y + 8.0
             });
+            if let Some(e) = option_edit {
+                l.state.edit_bus_options(&vehicle.file, e);
+            }
             if let Some(sel) = hof_pick {
                 l.state.choice.hof_manual = sel != 0;
                 l.state.choice.hof = if sel == 0 { auto } else { vehicle.hofs[sel - 1].clone() };

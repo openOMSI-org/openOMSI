@@ -1,0 +1,30 @@
+_version: 2
+# openOMSI 0.2.30's texts the fork shows, in the fork's six languages (merged in by hand).
+"Touch controls":
+  de: "Touch-Steuerung"
+  fr: "Commandes tactiles"
+  nl: "Aanraakbediening"
+  pl: "Sterowanie dotykowe"
+  ru: "Сенсорное управление"
+  uk: "Сенсорне керування"
+"Door buttons":
+  de: "Türtasten"
+  fr: "Boutons des portes"
+  nl: "Deurknoppen"
+  pl: "Przyciski drzwi"
+  ru: "Кнопки дверей"
+  uk: "Кнопки дверей"
+"Standard (physical doors)":
+  de: "Standard (echte Türen)"
+  fr: "Standard (portes physiques)"
+  nl: "Standaard (echte deuren)"
+  pl: "Standard (fizyczne drzwi)"
+  ru: "Стандарт (физические двери)"
+  uk: "Стандарт (фізичні двері)"
+"Direct OMSI triggers":
+  de: "Direkte OMSI-Auslöser"
+  fr: "Déclencheurs OMSI directs"
+  nl: "Directe OMSI-triggers"
+  pl: "Bezpośrednie wyzwalacze OMSI"
+  ru: "Прямые триггеры OMSI"
+  uk: "Прямі тригери OMSI"

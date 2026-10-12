@@ -5,6 +5,7 @@
 //! the list again (or the next one: a line's tours).
 
 use crate::App;
+use omsi_launcher_lib::lines::is_own_file;
 /// The cloud types of OMSI's weather (`Weather/clouds.cfg`): the name in a weather file and
 /// the name shown.
 use crate::weather_setup::CLOUD_KINDS;
@@ -170,7 +171,7 @@ pub(crate) fn set_route_by_hand(app: &mut App, line: &str) {
             p.vehicle.var("IBIS_LinieKurs"),
             p.vehicle.str_var("Matrix_Nr")
         );
-        app.service_msg = Some((format!("Route {line}"), 3.0));
+        app.service_msg = Some((omsi_ui::tr("Route %{line}").replace("%{line}", line), 3.0));
     }
 }
 
@@ -460,9 +461,10 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
         ListKind::Lines => {
             if let Some(sch) = crate::duty_book::timetable(app) {
                 let mut lines: Vec<&omsi_timetable::Line> = sch.data.lines.iter().filter(|l| l.user_allowed && l.tours.iter().any(|t| tour_listed(sch, &l.name, t, app.clock.time))).collect();
-                lines.sort_by(|a, b| natural(&a.name, &b.name));
+                // (the player's own lines - the line editor's - after the map's)
+                lines.sort_by(|a, b| is_own_file(&a.name).cmp(&is_own_file(&b.name)).then_with(|| natural(&a.name, &b.name)));
                 for l in lines {
-                    out.push((format!("{} {}  ({} {})", tr("Line"), l.name, l.tours.iter().filter(|t| tour_listed(sch, &l.name, t, app.clock.time)).count(), tr("tours")), format!("line {}", l.name)));
+                    out.push((format!("{}  ({} {})", line_title(Some(sch), l), l.tours.iter().filter(|t| tour_listed(sch, &l.name, t, app.clock.time)).count(), tr("tours")), format!("line {}", l.name)));
                 }
             }
             if out.is_empty() {
@@ -704,9 +706,10 @@ pub(crate) fn menu_extras(
                         (what, when)
                     })
                     .collect();
-                Some(Preview { title: format!("{} {}", tr("Line"), line.name), meta: format!("{} {}", line.tours.iter().filter(|t| schedule.is_some_and(|s| tour_listed(s, &line.name, t, now))).count(), tr("tours")), rows, chosen: None, button: None, time: None })
+                Some(Preview { title: line_title(schedule, line), meta: format!("{} {}", line.tours.iter().filter(|t| schedule.is_some_and(|s| tour_listed(s, &line.name, t, now))).count(), tr("tours")), rows, chosen: None, button: None, time: None })
             });
-            (MenuKind::Lines, head("Line and tour..."), preview)
+            // (the small line above: the driver's personnel number and code, to sign on with)
+            (MenuKind::Lines, Some((title("Line and tour..."), crate::companion::duty_menu_note())), preview)
         }
         ListKind::Tours(line_name, pick) => {
             // (the line number of the trip of a tour shown: a tour may run trips of several lines)
@@ -819,6 +822,20 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                         app.menus.menu_edit = Some(String::new());
                     }
                 }
+                "nav_reset" if step => {
+                    if let Some(n) = app.menus.navigator.as_mut() {
+                        n.reset_panel();
+                    }
+                    let s = &mut app.settings;
+                    (s.navigator_corner, s.nav_rect, s.nav_scale, s.nav_board) = ("bottom-left".into(), String::new(), 1.0, true);
+                    for (k, v) in [("navigator_corner", "bottom-left"), ("nav_rect", ""), ("nav_scale", "1"), ("nav_board", "1")] {
+                        remember_setting(k, v);
+                    }
+                    app.menus.list_dirty = true;
+                }
+                "head_recenter" if step => {
+                    app.game_action("head_tracking_recenter");
+                }
                 "view_editor" if step => { crate::game_panels::view_editor::open(app); return None; }
                 "seat_reset" if step => {
                     // (this bus's views as its .bus file has them again)
@@ -923,9 +940,9 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                     Ok(h) => {
                         let name = h.name.clone();
                         p.vehicle.host.hof = Some(std::sync::Arc::new(h));
-                        app.service_msg = Some((format!("Depot file: {}", name.trim()), 3.0));
+                        app.service_msg = Some((omsi_ui::tr("Depot file: %{hof}").replace("%{hof}", name.trim()), 3.0));
                     }
-                    Err(e) => app.service_msg = Some((format!("Depot file: {e}"), 4.0)),
+                    Err(e) => app.service_msg = Some((omsi_ui::tr("Depot file: %{hof}").replace("%{hof}", &e.to_string()), 4.0)),
                 }
             }
             None
@@ -988,7 +1005,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                     let name = t.menu_name();
                     p.set_destination_by_hand(hof, &line, ti);
                     log::info!("destination display set by hand: {} {} (terminus code now {:?})", t.code, name.trim(), p.vehicle.var("IBIS_TerminusCode"));
-                    app.service_msg = Some((format!("Destination: {}", name.trim()), 3.0));
+                    app.service_msg = Some((omsi_ui::tr("Destination: %{name}").replace("%{name}", name.trim()), 3.0));
                 }
             }
             None
@@ -1004,7 +1021,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                         v.state.str_vars[i as usize] = reg.to_string();
                     }
                 }
-                app.service_msg = Some((format!("Fleet number {n}"), 3.0));
+                app.service_msg = Some((omsi_ui::tr("Fleet number %{n}").replace("%{n}", &n.to_string()), 3.0));
             }
             None
         }
@@ -1129,6 +1146,15 @@ mod tests {
         let mut v = vec!["13N", "5", "137", "N30", "92"];
         v.sort_by(|a, b| super::natural(a, b));
         assert_eq!(v, vec!["5", "13N", "92", "137", "N30"]);
+    }
+
+    #[test]
+    fn the_players_own_lines_are_marked_in_the_timetable_dialog() {
+        let tr = |t: &str| omsi_ui::tr(t).into_owned();
+        let line = |name: &str| omsi_timetable::Line { path: Default::default(), name: name.into(), user_allowed: true, priority: 1, tours: Vec::new() };
+        assert_eq!(super::line_title(None, &line("12")), format!("{} 12", tr("Line")));
+        // (without the timetable at hand, the number from the file's name)
+        assert_eq!(super::line_title(None, &line("oo_42")), format!("{} 42  · {}", tr("Line"), tr("own line")));
     }
 
     #[test]

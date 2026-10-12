@@ -542,6 +542,9 @@ impl App {
                         trip: None,
                         autostart: false,
                         situation_next_stop: None,
+                        // (the bus options are the player's bus's, as is its display font)
+                        setvar: None,
+                        display_font: None,
                         ..self.args.clone()
                     };
                     match spawn_player(&one, &w, &renderer, &mut scene) {
@@ -564,7 +567,12 @@ impl App {
                 if let Some(n) = self.menus.navigator.as_mut() {
                     n.arrows = self.settings.nav_arrows;
                     n.show_ai = self.settings.nav_ai;
+                    n.size = self.settings.nav_scale;
+                    n.board = self.settings.nav_board;
+                    n.set_rect(&self.settings.nav_rect);
                 }
+                crate::stop_signs::set_style(crate::stop_signs::Style::from_setting(&self.settings.stop_style));
+                crate::units::set(&self.settings.speed_unit);
                 if let Some(d) = self.args.driver.as_deref() {
                     self.session.career = career::Career::load(&self.args.root, d);
                 }
@@ -621,6 +629,11 @@ impl App {
                     if self.args.schedule {
                         let mut sch =
                             schedule::Schedule::new(&self.args.root, &w, &start_clock(&self.args));
+                        // (a duty of the player's bus company: only its buses on the map - a
+                        // player joining draws the host's)
+                        if let Some(id) = self.args.company.as_deref().filter(|_| self.args.lan_join.is_none()) {
+                            sch.set_company(&w, id);
+                        }
                         // (the tours' buses drawn alike on every machine of a LAN game)
                         if let Some(lan) = self.net.lan.as_ref() {
                             sch.sim.vehicle_seed = omsi_script::mix_seed(lan::population_seed(lan) ^ 0x746f_7572_5f62_7573);
@@ -632,14 +645,12 @@ impl App {
                             self.session.traffic.as_mut(),
                             parse_time(&self.args.time),
                         );
-                        if let (Some(line), Some(p)) = (&self.args.line, self.player.as_mut()) {
-                            self.session.duty = match sch.player_duty(
+                        if let (Some(_), Some(p)) = (&self.args.line, self.player.as_mut()) {
+                            self.session.duty = match crate::duty_start::player_duty(
+                                &mut sch,
                                 &w,
-                                line,
-                                self.args.tour.as_deref().unwrap_or(""),
+                                &self.args,
                                 parse_time(&self.args.time),
-                                self.args.trip.as_deref(),
-                                self.args.whole_tour,
                             ) {
                                 Ok(mut d) => {
                                     if let Some(k) = self.args.duty_trip {
@@ -753,6 +764,10 @@ impl App {
                 w.loaded_tiles().len()
             );
             self.start_world(w, cam, &renderer, &mut scene);
+            // (the loading screen's picture is let go)
+            if let Some(ui) = self.ui.as_mut() {
+                ui.loaded(&renderer, &mut scene);
+            }
             self.renderer = Some(renderer);
             self.scene = Some(scene);
             return true;

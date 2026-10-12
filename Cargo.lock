@@ -3365,6 +3365,7 @@ dependencies = [
  "parking_lot",
  "pollster",
  "rayon",
+ "resvg",
  "rfd",
  "ring",
  "rust-i18n",
@@ -3407,6 +3408,7 @@ dependencies = [
  "log",
  "omsi-cfg",
  "omsi-content",
+ "omsi-launcher-core",
  "omsi-sim",
  "serde_json",
  "windows 0.62.2",
@@ -3453,6 +3455,7 @@ dependencies = [
 name = "omsi-content"
 version = "0.1.0"
 dependencies = [
+ "ab_glyph",
  "log",
  "omsi-cfg",
 ]
@@ -3582,6 +3585,7 @@ dependencies = [
 name = "omsi-launcher-ui"
 version = "0.1.0"
 dependencies = [
+ "ab_glyph",
  "anyhow",
  "arboard",
  "glam",
@@ -3596,16 +3600,25 @@ dependencies = [
  "omsi-lan",
  "omsi-launcher-core",
  "omsi-map",
+ "omsi-model",
  "omsi-net",
  "omsi-platform",
  "omsi-render",
+ "omsi-scene",
  "omsi-sim",
+ "omsi-texture",
  "omsi-timetable",
  "omsi-ui",
  "omsi-vehicle",
  "omsi-weather",
+ "pollster",
+ "rayon",
+ "resvg",
+ "rfd",
+ "rust-i18n",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "wgpu",
  "winit",
 ]

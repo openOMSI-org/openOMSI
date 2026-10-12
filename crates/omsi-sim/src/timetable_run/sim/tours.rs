@@ -99,6 +99,28 @@ impl ScheduleSim {
     /// Returns how many of today's departures that takes from the AI.
     pub fn reserve_tour(&mut self, line: &str, tour: &str) -> usize {
         self.player_tour = Some((line.to_string(), tour.to_string()));
+        self.player_trips.clear();
+        let n = self.leave_to_player();
+        log::info!("timetable: {n} departures of line {line} tour {tour} left to the player");
+        n
+    }
+
+    /// The player drives these trips (line, tour, departure in s of the day) of a duty made
+    /// of several tours: the AI runs the rest of each tour - its bus drives off at the
+    /// terminus where the player takes the tour over, and a bus of its own comes for the
+    /// trips after.
+    pub fn reserve_trips(&mut self, trips: Vec<(String, String, f64)>) -> usize {
+        self.player_tour = None;
+        self.player_departure = None;
+        self.player_trips = trips;
+        let n = self.leave_to_player();
+        log::info!("timetable: {n} departures of the player's duty left to the player");
+        n
+    }
+
+    /// Takes the departures the player drives from the AI (their buses already on the road
+    /// go at the next tick). Returns how many.
+    fn leave_to_player(&mut self) -> usize {
         let mine: Vec<bool> = (0..self.departures.len())
             .map(|i| self.is_player_tour(i))
             .collect();
@@ -113,7 +135,6 @@ impl ScheduleSim {
         self.waiting.retain(|i| !mine[*i]);
         self.retry_at.retain(|i, _| !mine[*i]);
         self.purge_player_tour = true;
-        log::info!("timetable: {n} departures of line {line} tour {tour} left to the player");
         n
     }
 
@@ -158,6 +179,9 @@ impl ScheduleSim {
     pub(super) fn is_player_tour(&self, i: usize) -> bool {
         if let Some(d) = self.departures.get(i) {
             if self.lan_tours.iter().any(|t| d.line.eq_ignore_ascii_case(&t.0) && d.tour.eq_ignore_ascii_case(&t.1)) {
+                return true;
+            }
+            if self.player_trips.iter().any(|(line, tour, time)| d.line.eq_ignore_ascii_case(line) && d.tour.eq_ignore_ascii_case(tour) && (d.time - time).abs() < 30.0) {
                 return true;
             }
         }
@@ -243,50 +267,7 @@ impl ScheduleSim {
                 first
             }
         };
-        let mut trips = Vec::new();
-        for tt in &t.trips {
-            let Some(ti) = self
-                .data
-                .trips
-                .iter()
-                .position(|x| x.name.eq_ignore_ascii_case(&tt.trip))
-            else {
-                continue;
-            };
-            let trip = &self.data.trips[ti];
-            let departure = tt.departure as f64 * 60.0;
-            let times = &self.times[ti][usize::try_from(tt.profile)
-                .unwrap_or(0)
-                .min(self.times[ti].len() - 1)];
-            let stops = trip_stations(trip)
-                .iter()
-                .enumerate()
-                .map(|(i, id)| {
-                    let name = self.station_name(trip, i, *id);
-                    let position = world.object_positions().get(id).map(|p| p.0);
-                    let (arr, dep) = times.stations[i];
-                    PlannedStop {
-                        object_id: *id,
-                        name,
-                        arr: departure + arr,
-                        dep: departure + dep,
-                        position,
-                        dir: StopDir::default(),
-                        stops: times.stops[i],
-                    }
-                })
-                .collect();
-            let mut planned = PlannedTrip {
-                name: trip.name.clone(),
-                line: trip.line.clone(),
-                terminus: trip.terminus.clone(),
-                departure,
-                end: departure + times.duration,
-                stops,
-            };
-            planned.set_dirs();
-            trips.push(planned);
-        }
+        let mut trips = self.planned_trips(world, t);
         if trips.is_empty() {
             return Err(format!(
                 "line {} tour {} has no trip the timetable knows ({} listed)",
@@ -354,5 +335,141 @@ impl ScheduleSim {
             first_trip,
             trip.map(|t| !t.trim().is_empty()).unwrap_or(false),
         ))
+    }
+
+    /// The trips of a tour as the player drives them, with their stops and times; a trip the
+    /// timetable does not know is left out (so a trip's place here is its place in OMSI's
+    /// dialog, which leaves them out too).
+    fn planned_trips(&self, world: &dyn TimetableWorld, t: &omsi_timetable::Tour) -> Vec<PlannedTrip> {
+        let mut trips = Vec::new();
+        for tt in &t.trips {
+            let Some(ti) = self
+                .data
+                .trips
+                .iter()
+                .position(|x| x.name.eq_ignore_ascii_case(&tt.trip))
+            else {
+                continue;
+            };
+            trips.push(self.planned_trip(world, ti, tt.profile, tt.departure as f64 * 60.0));
+        }
+        trips
+    }
+
+    /// Trip `ti` of the timetable as the player drives it, leaving at `departure` (seconds of
+    /// the day) with the times of its profile `profile`: its stops, their places and times.
+    /// A stop is the object of the tile its station names (`trip_station_tiles`), where the
+    /// map repeats its ids across tiles.
+    fn planned_trip(&self, world: &dyn TimetableWorld, ti: usize, profile: i32, departure: f64) -> PlannedTrip {
+        let trip = &self.data.trips[ti];
+        let times = &self.times[ti][usize::try_from(profile)
+            .unwrap_or(0)
+            .min(self.times[ti].len() - 1)];
+        let tiles = trip_station_tiles(trip, &self.data.bus_stops);
+        let stops = trip_stations(trip)
+            .iter()
+            .enumerate()
+            .map(|(i, id)| {
+                let name = self.station_name(trip, i, *id);
+                let position = world.object_of_tile(tiles.get(i).copied().flatten(), *id).map(|p| p.0);
+                let (arr, dep) = times.stations[i];
+                PlannedStop {
+                    object_id: *id,
+                    name,
+                    arr: departure + arr,
+                    dep: departure + dep,
+                    position,
+                    dir: StopDir::default(),
+                    stops: times.stops[i],
+                }
+            })
+            .collect();
+        let mut planned = PlannedTrip {
+            name: trip.name.clone(),
+            line: trip.line.clone(),
+            terminus: trip.terminus.clone(),
+            departure,
+            end: departure + times.duration,
+            stops,
+        };
+        planned.set_dirs();
+        planned
+    }
+
+    /// A free drive along one route of a line (`--free-line`, the launcher's free drive with
+    /// a line the player chose): the timetable's trip `trip` (its file's name, the route as
+    /// the map names it) as a duty of that one trip, leaving at `now` - the player chose
+    /// where to drive, not when - so the navigator draws its way and the IBIS can be typed
+    /// for it. Nothing is booked: the AI keeps every tour (the timetable's own bus on that
+    /// route still drives), and the duty is `free`, so nobody keeps its time. `line` is the
+    /// timetable's line it was chosen under.
+    pub fn free_line_duty(&self, world: &dyn TimetableWorld, line: &str, trip: &str, now: f64) -> Result<PlayerDuty, String> {
+        let Some(ti) = self.data.trips.iter().position(|x| x.name.trim().eq_ignore_ascii_case(trip.trim())) else {
+            return Err(format!("the timetable of this map has no route '{}'", trip.trim()));
+        };
+        if self.times.get(ti).is_none_or(|t| t.is_empty()) {
+            return Err(format!("route '{}' has no times", trip.trim()));
+        }
+        let planned = self.planned_trip(world, ti, 0, now);
+        if planned.stops.is_empty() {
+            return Err(format!("route '{}' has no stops", trip.trim()));
+        }
+        let line = if line.trim().is_empty() { planned.line.trim().to_string() } else { line.trim().to_string() };
+        log::info!(
+            "free drive along line {line}: route {} from {} to {}, {} stops, nothing booked",
+            planned.name,
+            planned.stops[0].name.trim(),
+            planned.terminus.trim(),
+            planned.stops.len()
+        );
+        let mut d = PlayerDuty::new(line, String::new(), vec![planned], 0, 0, true);
+        d.free = true;
+        Ok(d)
+    }
+
+    /// A duty of trips from several tours, as the launcher puts one together (omsi-app's
+    /// `--duty-leg`, parsed there: see `omsi_launcher_lib::compose`): each leg is (line, tour,
+    /// first, trips), so many trips of the tour from its trip `first` (1 = the first) on.
+    /// Where one leg ends the next leaves, a few minutes later: the bus stays the player's
+    /// and takes the next tour over there, as a driver whose shift goes on with another
+    /// line. The AI keeps the rest of those tours.
+    pub fn player_plan(&mut self, world: &dyn TimetableWorld, legs: &[(String, String, usize, usize)]) -> Result<PlayerDuty, String> {
+        let mut trips: Vec<PlannedTrip> = Vec::new();
+        let mut tours: Vec<(String, String, usize)> = Vec::new();
+        for (line, tour, first, count) in legs {
+            let (first, count) = (*first, *count);
+            let Some(l) = self.data.lines.iter().find(|l| l.name.eq_ignore_ascii_case(line)) else {
+                return Err(format!("line {line} is not in the timetable of this map on this day"));
+            };
+            let Some(t) = l.tours.iter().find(|t| t.number.eq_ignore_ascii_case(tour)) else {
+                return Err(format!("line {} has no tour {tour}", l.name));
+            };
+            let all = self.planned_trips(world, t);
+            if first == 0 || first > all.len() {
+                return Err(format!("line {} tour {} has no trip {first}: it has {}", l.name, t.number, all.len()));
+            }
+            for (k, p) in all.into_iter().enumerate().skip(first - 1).take(count.max(1)) {
+                tours.push((l.name.clone(), t.number.clone(), k));
+                trips.push(p);
+            }
+        }
+        let Some(first) = trips.first() else {
+            return Err("the duty has no trips".into());
+        };
+        log::info!(
+            "player duty of {} trips in {} parts: from {} {} at {} to {} at {}",
+            trips.len(),
+            legs.len(),
+            tours[0].0,
+            first.name,
+            hhmm(first.departure),
+            trips[trips.len() - 1].terminus,
+            hhmm(trips[trips.len() - 1].end)
+        );
+        self.reserve_trips(trips.iter().zip(&tours).map(|(p, (l, t, _))| (l.clone(), t.clone(), p.departure)).collect());
+        // (the duty is the player's from its first trip, however late the bus is for it)
+        let mut d = PlayerDuty::new(tours[0].0.clone(), tours[0].1.clone(), trips, 0, 0, true);
+        d.tours = tours;
+        Ok(d)
     }
 }

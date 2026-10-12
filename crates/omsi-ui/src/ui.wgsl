@@ -41,9 +41,12 @@ fn vs_main(v: VIn) -> VOut {
         o.clip = vec4<f32>(q.x * 2.0 - 1.0, 1.0 - q.y * 2.0, 0.0, 1.0);
     } else {
         let c = u.view_proj * vec4<f32>(v.pos, 1.0);
-        // the larger of the width in metres and in pixels at this depth
+        // the larger of the width in metres and in pixels at this depth, and round it an edge
+        // in pixels (an untextured world vertex's `uv.x`: a road's casing, a hair wide at any
+        // zoom)
         let mpp = max(c.w, 0.01) * u.params.z;
-        let w = max(v.width.x, v.width.y * mpp);
+        let edge = select(0.0, v.uv.x, v.mode.y < 0.5);
+        let w = max(v.width.x, v.width.y * mpp) + edge * mpp;
         let wp = v.pos + vec3<f32>(v.ext * w, 0.0);
         o.clip = u.view_proj * vec4<f32>(wp, 1.0);
         o.clip.z = 0.5 * o.clip.w;

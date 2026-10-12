@@ -47,11 +47,12 @@ impl<'a> Offscreen<'a> {
         // what the renderer shows of the traffic and the people (see `view_sync`)
         let mut sim_view = crate::view_sync::SimView::default();
         let mut schedule = if args.schedule {
-            Some(schedule::Schedule::new(
-                &args.root,
-                &world,
-                &start_clock(args),
-            ))
+            let mut s = schedule::Schedule::new(&args.root, &world, &start_clock(args));
+            // (a duty of the player's bus company: only its buses on the map)
+            if let Some(id) = args.company.as_deref().filter(|_| args.lan_join.is_none()) {
+                s.set_company(&world, id);
+            }
+            Some(s)
         } else {
             None
         };
@@ -322,7 +323,8 @@ fn new_traffic(
     Ok(Some(t))
 }
 
-/// The player's duty (`--line`, `--tour`, `--trip`), or why there is none.
+/// The player's duty (`--line`, `--tour`, `--trip`, or the legs of a planned duty or a
+/// free line: see `duty_start::player_duty`), or why there is none.
 fn player_duty(
     args: &Args,
     world: &World,
@@ -332,15 +334,8 @@ fn player_duty(
     let mut duty: Option<schedule::PlayerDuty> = None;
     // why the duty asked for cannot be driven (the picture's HUD says it too)
     let mut duty_error: Option<String> = None;
-    if let (Some(sch), Some(line), Some(p)) = (schedule.as_mut(), &args.line, player.as_mut()) {
-        match sch.player_duty(
-            world,
-            line,
-            args.tour.as_deref().unwrap_or(""),
-            parse_time(&args.time),
-            args.trip.as_deref(),
-            args.whole_tour,
-        ) {
+    if let (Some(sch), Some(_), Some(p)) = (schedule.as_mut(), &args.line, player.as_mut()) {
+        match crate::duty_start::player_duty(sch, world, args, parse_time(&args.time)) {
             Ok(mut d) => {
                 if let Some(k) = args.duty_trip {
                     d.start_at(k, args.duty_first_stop);

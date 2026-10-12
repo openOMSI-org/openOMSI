@@ -134,19 +134,23 @@ impl VehicleInstance {
         if let (Some(i), Some(h)) = (program.str_var("yard"), host.hof.as_ref()) {
             state.str_vars[i as usize] = h.name.clone();
         }
+        let mut put = |name: &str, v: f32| {
+            if let Some(id) = var_index.get(&name.to_ascii_lowercase()) {
+                state.vars[*id as usize] = v;
+            }
+        };
         if let Some(scheme) = host.paint_scheme {
             let scheme = scheme.filter(|i| *i < ty.paint_schemes.len());
-            let mut put = |name: &str, v: f32| {
-                if let Some(id) = var_index.get(&name.to_ascii_lowercase()) {
-                    state.vars[*id as usize] = v;
-                }
-            };
             put("Colorscheme", scheme.map(|i| i as f32).unwrap_or(-1.0));
             if let Some(i) = scheme {
                 for (var, v) in &ty.paint_schemes[i].set_vars {
                     put(var, *v);
                 }
             }
+        }
+        // (the bus options over the scheme's own, as a livery that set them would have)
+        for (var, v) in &host.start_vars {
+            put(var, *v);
         }
         if let Some(i) = var_index.get("schedule_active") {
             state.vars[*i as usize] = host.schedule_active;
@@ -358,6 +362,36 @@ impl VehicleInstance {
             .iter()
             .map(|t| crate::texttex::TextTextureState::new(t.clone(), lib.get(&t.font, decode)))
             .collect();
+    }
+
+    /// Draw the bus's destination displays - and those of its coupled parts - in the display
+    /// font `font` the player chose for it (a `DisplayFontSpec` argument, see
+    /// `texttex::apply_display_font`), after `init_text_textures`; and the matrices its sign
+    /// scripts draw (`texttex::script_signs`) with it in place of their fonts. Returns how
+    /// many text displays it changed.
+    pub fn apply_display_font(
+        &mut self,
+        font: &str,
+        lib: &mut crate::texttex::FontLibrary,
+        decode: &dyn Fn(&Path) -> Option<(u32, u32, Vec<u8>)>,
+    ) -> usize {
+        let mut n = crate::texttex::apply_display_font(&mut self.text_textures, &self.ty.model, font, lib, decode);
+        for t in &mut self.trailers {
+            n += crate::texttex::apply_display_font(&mut t.text_textures, &t.ty.model, font, lib, decode);
+        }
+        n
+    }
+
+    /// The matrices the bus's sign scripts draw (`texttex::script_signs`) in the display font
+    /// `font` (a `DisplayFontSpec` argument; None: their own fonts). Returns the scripts and
+    /// how many fonts each asks for that the font takes the place of. (The host's font
+    /// library must not be locked: the fonts are looked up through it.)
+    pub fn apply_script_display_font(&mut self, font: Option<&str>) -> Vec<(PathBuf, usize)> {
+        let spec = font.and_then(omsi_content::dotfont::DisplayFontSpec::parse);
+        let signs = if spec.is_some() { crate::texttex::script_signs(&self.ty.def.scripts.scripts) } else { Vec::new() };
+        let fonts: Vec<String> = signs.iter().flat_map(|s| s.fonts.iter().map(|f| f.trim().to_lowercase())).collect();
+        self.host.set_display_font(spec.map(|spec| crate::host::ScriptDisplayFont { spec, fonts }));
+        signs.iter().map(|s| (s.script.clone(), s.fonts.len())).collect()
     }
 
     /// Current text of a string variable (empty when it does not exist).

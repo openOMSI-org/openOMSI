@@ -30,6 +30,13 @@ struct Args {
     /// `fleet`: also start every vehicle (Shift+U) and run its scripts for 20 s.
     #[arg(long)]
     run: bool,
+    /// `fleet --run`: run every vehicle a second time with this display font on its
+    /// destination signs (as the launcher hands it to the game: an `.oft` font's name, or a
+    /// vector font as `Arial|file=C:\Windows\Fonts\arial.ttf`), and report a display that
+    /// it leaves blank where the bus's own fonts draw, or a matrix script that then spaces its
+    /// letters closer than nothing.
+    #[arg(long)]
+    display_font: Option<String>,
     /// Write a fingerprint of what every content file (installation and `--content`) parses
     /// to, one line per file, and do nothing else: two dumps from two builds differ exactly
     /// in the files a loader change affects.
@@ -255,7 +262,7 @@ fn main() -> Result<()> {
         return Ok(());
     }
     if args.only.iter().any(|o| o == "fleet") {
-        fleet::check_fleet(&root, &content, args.vehicles.as_deref(), args.run, args.verbose);
+        fleet::check_fleet(&root, &content, args.vehicles.as_deref(), args.run, args.display_font.as_deref(), args.verbose);
     }
     let want = |n: &str| args.only.is_empty() || args.only.iter().any(|o| o == n);
     if want("o3d") {

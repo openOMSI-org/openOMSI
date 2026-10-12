@@ -70,6 +70,8 @@ parking_lot.workspace = true
 image.workspace = true
 serde_json.workspace = true
 ab_glyph.workspace = true
+# the livery studio: shapes, outlines and SVG pictures rasterised (as omsi-ui does its icons)
+resvg = { version = "0.45", default-features = false }
 rustrict = "0.7"
 gilrs = "0.11"
 ureq.workspace = true
@@ -122,6 +124,8 @@ ndk-context = "0.1"
 [dev-dependencies]
 # the control names from a table (`ControlNames::from_table`) for the key picker's tests
 omsi-input = { path = "../omsi-input", features = ["test-support"] }
+# the duty board's fixtures (`nav_duty::tests`) for the navigator's and the trip report's tests
+omsi-launcher-ui = { path = "../omsi-launcher-ui", features = ["test-support"] }
 
 # iPhone and iPad: the window the game draws in is put on the app's scene (UIKit's scene life
 # cycle, which the Swift app keeps) through the Objective-C runtime

@@ -3,55 +3,69 @@
 use super::*;
 
 // ---------------------------------------------------------------------------------------
-// the game menu and its lists: flat near-black greys and one amber accent, as the launcher
+// the game menu and its lists in the launcher's new look, its dark mode: night blue greys
+// and the player's accent
 
 /// How long a fade of the menu takes (a line lit, a switch turned over): a short moment.
 pub(super) const FADE_SECS: f32 = 0.15;
 pub(super) const BAR_SECS: f32 = 0.19;
 
-// (the launcher's values, see `launcher/theme.rs`: neutral greys, no tint)
-pub(super) const PANEL: [u8; 4] = [22, 22, 22, 255];
-pub(super) const PANEL_ALT: [u8; 4] = [31, 31, 31, 255];
-pub(super) const BORDER: [u8; 4] = [255, 255, 255, 15];
-pub(super) const ACCENT: [u8; 4] = [232, 160, 48, 255];
-pub(super) const ACCENT_SOFT: [u8; 4] = [232, 160, 48, 34];
+// (the launcher's values, see `launcher/theme.rs`: its panel, field and hover)
+pub(super) const PANEL: [u8; 4] = [20, 26, 38, 255];
+pub(super) const PANEL_ALT: [u8; 4] = [27, 34, 49, 255];
+pub(super) const BORDER: [u8; 4] = [255, 255, 255, 18];
+/// The accent (the player's colour, `crate::accent`; openOMSI's was amber), and as a faint
+/// tint behind a mark.
+pub(super) fn accent() -> [u8; 4] {
+    crate::accent::bytes(crate::accent::base(), 255)
+}
+pub(super) fn accent_soft() -> [u8; 4] {
+    crate::accent::bytes(crate::accent::base(), 34)
+}
 pub(super) const DANGER: [u8; 4] = [222, 78, 68, 255];
 /// A line under the mouse, and the line chosen: the launcher's `HOVER` and `SELECTED`, as
 /// solid greys. (They were white at 6 % and 9 %, which the overlays blend in linear light:
 /// on the 22-grey card that came out 73 and 92, twice as light as the launcher's 38 and 44.)
-pub(super) const LIT: [u8; 4] = [38, 38, 38, 255];
-pub(super) const SELECTED: [u8; 4] = [44, 44, 44, 255];
+pub(super) const LIT: [u8; 4] = [33, 40, 54, 255];
+pub(super) const SELECTED: [u8; 4] = [40, 48, 66, 255];
 /// "End the session" under the mouse: the danger colour at 14 % on the card, solid.
-pub(super) const LIT_DANGER: [u8; 4] = [50, 30, 28, 255];
+pub(super) const LIT_DANGER: [u8; 4] = [60, 32, 38, 255];
 /// A stepper's or a button's field: the launcher's `FIELD`.
-pub(super) const CHIP: [u8; 4] = [31, 31, 31, 255];
+pub(super) const CHIP: [u8; 4] = [27, 34, 49, 255];
 /// A switch's track when off, a slider's empty track, their knob (the launcher's).
-pub(super) const TRACK_OFF: [u8; 4] = [62, 62, 62, 255];
-pub(super) const SLIDER_TRACK: [u8; 4] = [58, 58, 58, 255];
+pub(super) const TRACK_OFF: [u8; 4] = [58, 66, 86, 255];
+pub(super) const SLIDER_TRACK: [u8; 4] = [52, 60, 80, 255];
 pub(super) const KNOB: [u8; 4] = [240, 240, 240, 255];
 /// A scroll bar's thumb, idle and with the mouse over its list (the launcher's white at
 /// 10 % and 35 %; no track, no accent).
 pub(super) const THUMB: [u8; 4] = [255, 255, 255, 26];
 pub(super) const THUMB_HOT: [u8; 4] = [255, 255, 255, 90];
 /// The small capitals over a title (the launcher's section headings: 11 px, bold, dim).
-pub(super) const DIM: [u8; 4] = [142, 142, 142, 0];
+pub(super) const DIM: [u8; 4] = [149, 157, 176, 0];
 /// The accent's fill under the mouse, and the ink on it (the launcher's primary button).
-pub(super) const ACCENT_HOT: [u8; 4] = [246, 182, 84, 255];
-pub(super) const ON_ACCENT: [u8; 4] = [18, 14, 8, 0];
+pub(super) fn accent_hot() -> [u8; 4] {
+    crate::accent::bytes(crate::accent::shades().hover, 255)
+}
+pub(super) fn on_accent() -> [u8; 4] {
+    crate::accent::bytes(crate::accent::shades().on, 0)
+}
 /// Text colours (alpha 0: no outline on the flat panel).
-pub(super) const WHITE: [u8; 4] = [236, 236, 236, 0];
-pub(super) const SOFT: [u8; 4] = [200, 200, 200, 0];
-pub(super) const MUTED: [u8; 4] = [142, 142, 142, 0];
-pub(super) const AMBER: [u8; 4] = [255, 200, 110, 0];
+pub(super) const WHITE: [u8; 4] = [232, 235, 242, 0];
+pub(super) const SOFT: [u8; 4] = [196, 202, 214, 0];
+pub(super) const MUTED: [u8; 4] = [149, 157, 176, 0];
+/// The accent as letters (lighter; openOMSI's amber ones).
+pub(super) fn amber() -> [u8; 4] {
+    crate::accent::bytes(crate::accent::shades().soft, 0)
+}
 
 /// The ink of a greyed-out line and its small hint.
-pub(super) const OFF_INK: [u8; 4] = [96, 96, 96, 0];
-pub(super) const OFF_HINT: [u8; 4] = [96, 96, 96, 0];
+pub(super) const OFF_INK: [u8; 4] = [96, 104, 122, 0];
+pub(super) const OFF_HINT: [u8; 4] = [96, 104, 122, 0];
 
 /// The card's radius, a line's, and the inset of lines from the card's edge and of their
 /// text from the line's edge (all times the scale).
-pub(super) const CARD_R: f32 = 8.0;
-pub(super) const ROW_R: f32 = 6.0;
+pub(super) const CARD_R: f32 = 14.0;
+pub(super) const ROW_R: f32 = 8.0;
 pub(super) const PAD: f32 = 12.0;
 pub(super) const TEXT_IN: f32 = 16.0;
 
@@ -200,7 +214,7 @@ impl Ui {
         let full = (rect[3] - rect[1] - 20.0 * s).max(10.0 * s);
         let bh = full * (0.4 + 0.6 * k);
         let by = (rect[1] + rect[3]) * 0.5 - bh * 0.5;
-        self.text.rounded(r, scene, [rect[0], by, rect[0] + 2.0 * s, by + bh], 1.0 * s, fade(if danger { DANGER } else { ACCENT }, k));
+        self.text.rounded(r, scene, [rect[0], by, rect[0] + 2.0 * s, by + bh], 1.0 * s, fade(if danger { DANGER } else { accent() }, k));
     }
 
     /// The header of the card at (`x`, `y`) of `w` wide: what the list is of, small and in
@@ -445,18 +459,18 @@ impl Ui {
                 MenuKind::Lines => {
                     let parsed = label.strip_prefix(line_pre.as_str()).and_then(|rest| rest.rsplit_once("  (")).map(|(n, t)| (n, t.trim_end_matches(')')));
                     if let Some((name, info)) = parsed {
-                        let bl = self.text.label(r, scene, name, (15.0 * s) as u32, ON_ACCENT);
+                        let bl = self.text.label(r, scene, name, (15.0 * s) as u32, on_accent());
                         let (bw, bh) = (sign_w, 28.0 * s);
                         let bx = lx;
-                        let sign = mix(mix(ACCENT, [150, 104, 30, 255], 0.30), ACCENT_HOT, glow);
+                        let sign = mix(crate::accent::bytes(crate::accent::base().darken(0.35), 255), accent_hot(), glow);
                         self.text.rounded(r, scene, [bx, cy - bh * 0.5, bx + bw, cy + bh * 0.5], 7.0 * s, sign);
                         let (lx0, ly0) = (bx + (bw - bl.w as f32) * 0.5, cy - bl.h as f32 * 0.5);
                         scene.overlays.push((bl.tex, [lx0, ly0, lx0 + bl.w as f32, ly0 + bl.h as f32]));
                         let tx = bx + bw + 14.0 * s;
                         let d = 22.0 * s;
-                        self.text.rounded(r, scene, [rx - d, cy - d * 0.5, rx, cy + d * 0.5], d * 0.5, fade(ACCENT, 0.10 + 0.30 * glow));
+                        self.text.rounded(r, scene, [rx - d, cy - d * 0.5, rx, cy + d * 0.5], d * 0.5, fade(accent(), 0.10 + 0.30 * glow));
                         let aw = self.text.width("›", (px + 2) as f32);
-                        self.put(r, scene, "›", px + 2, mix(MUTED, ACCENT_HOT, glow), rx - d * 0.5 - aw * 0.5, cy - 1.0 * s);
+                        self.put(r, scene, "›", px + 2, mix(MUTED, accent_hot(), glow), rx - d * 0.5 - aw * 0.5, cy - 1.0 * s);
                         let info = clip_to(&self.text, info, px as f32, rx - d - 12.0 * s - tx);
                         self.put(r, scene, &info, px, ink, tx, cy);
                         done = true;
@@ -464,7 +478,7 @@ impl Ui {
                 }
                 MenuKind::List if code_w > 0.0 => {
                     if let Some((code, name)) = code_and_name(label) {
-                        self.put_right(r, scene, code, px, mix(MUTED, ACCENT_HOT, glow), lx + code_w, cy);
+                        self.put_right(r, scene, code, px, mix(MUTED, accent_hot(), glow), lx + code_w, cy);
                         let nx = lx + code_w + 12.0 * s;
                         let name = clip_to(&self.text, name, px as f32, rx - nx);
                         self.put(r, scene, &name, px, ink, nx, cy);
@@ -575,8 +589,8 @@ impl Ui {
             for j in 0..2usize {
                 let rect = if j == 0 { [left, by, left + bw, by + bh] } else { [right - bw, by, right, by + bh] };
                 let a = self.easeq((14, "time", j + base), if over(rect) { 1.0 } else { 0.0 }, 1.0 / FADE_SECS);
-                self.text.rounded(r, scene, rect, ROW_R * s, mix([232, 160, 48, 60], ACCENT, a * 0.7));
-                let col = mix(ACCENT_HOT, [18, 14, 8, 255], a);
+                self.text.rounded(r, scene, rect, ROW_R * s, mix(crate::accent::bytes(crate::accent::base(), 60), accent(), a * 0.7));
+                let col = mix(accent_hot(), crate::accent::bytes(crate::accent::shades().on, 255), a);
                 let (cx, cy) = ((rect[0] + rect[2]) * 0.5, (rect[1] + rect[3]) * 0.5);
                 // (a real arrow: a shaft and a head of stacked strips)
                 let dir = if j == 0 { -1.0 } else { 1.0 };
@@ -598,7 +612,7 @@ impl Ui {
             let mid_r = right - bw - 10.0 * s;
             let time = clip_to(&self.text, time, fs * s, mid_r - mid_l);
             let tw = self.text.width(&time, fs * s);
-            self.put(r, scene, &time, (fs * s) as u32, if base == 0 { AMBER } else { WHITE }, mid_l + (mid_r - mid_l - tw) * 0.5, by + bh * 0.5);
+            self.put(r, scene, &time, (fs * s) as u32, if base == 0 { amber() } else { WHITE }, mid_l + (mid_r - mid_l - tw) * 0.5, by + bh * 0.5);
             top = by + bh + 8.0 * s;
         }
         let n = p.rows.len();
@@ -634,17 +648,17 @@ impl Ui {
                 }
                 if a_on > 0.0 {
                     self.text.rounded(r, scene, rect, ROW_R * s, fade(SELECTED, a_on));
-                    self.text.rounded(r, scene, [rect[0], rect[1] + 7.0 * s, rect[0] + 2.0 * s, rect[3] - 7.0 * s], 1.0 * s, fade(ACCENT, a_on));
+                    self.text.rounded(r, scene, [rect[0], rect[1] + 7.0 * s, rect[0] + 2.0 * s, rect[3] - 7.0 * s], 1.0 * s, fade(accent(), a_on));
                 }
-                self.put_right(r, scene, when, rpx, AMBER, px1 - pad, ry);
+                self.put_right(r, scene, when, rpx, amber(), px1 - pad, ry);
                 let what = clip_to(&self.text, what, rpx as f32, inner - time_w - 14.0 * s);
                 self.put(r, scene, &what, rpx, mix(SOFT, WHITE, a_on), px0 + pad, ry);
                 self.menu_pane.push(rect);
             }
             // the button that starts the trip
             let a_go = self.easeq((13, "go", 0), if over(go) { 1.0 } else { 0.0 }, 1.0 / FADE_SECS);
-            self.text.rounded(r, scene, go, ROW_R * s, mix(ACCENT, ACCENT_HOT, a_go));
-            let l = self.text.label(r, scene, button, (14.0 * s) as u32 | BOLD, ON_ACCENT);
+            self.text.rounded(r, scene, go, ROW_R * s, mix(accent(), accent_hot(), a_go));
+            let l = self.text.label(r, scene, button, (14.0 * s) as u32 | BOLD, on_accent());
             let (gx, gy) = (go[0] + (go[2] - go[0] - l.w as f32) * 0.5, (go[1] + go[3]) * 0.5 - l.h as f32 * 0.5);
             scene.overlays.push((l.tex, [gx, gy, gx + l.w as f32, gy + l.h as f32]));
             self.menu_pane_go = Some(go);
@@ -658,13 +672,13 @@ impl Ui {
             let tile_w = p.rows.iter().take(shown).filter_map(|row| row.0.strip_prefix(tp.as_str()).and_then(|x| x.split_once("  ›  ").map(|(n, _)| n).or(Some(x)))).map(|n| self.text.width(n.trim(), rpx as f32) + 16.0 * s).fold(30.0 * s, f32::max);
             for (i, (what, when)) in p.rows.iter().take(shown).enumerate() {
                 let ry = top + lh * i as f32 + lh * 0.5;
-                self.put_right(r, scene, when, rpx, AMBER, px1 - pad, ry);
+                self.put_right(r, scene, when, rpx, amber(), px1 - pad, ry);
                 if let Some(rest) = what.strip_prefix(tp.as_str()) {
                     let (num, dest) = rest.split_once("  ›  ").unwrap_or((rest, ""));
                     let th = lh - 6.0 * s;
-                    self.text.rounded(r, scene, [px0 + pad, ry - th * 0.5, px0 + pad + tile_w, ry + th * 0.5], 5.0 * s, ACCENT_SOFT);
+                    self.text.rounded(r, scene, [px0 + pad, ry - th * 0.5, px0 + pad + tile_w, ry + th * 0.5], 5.0 * s, accent_soft());
                     let nw = self.text.width(num.trim(), rpx as f32);
-                    self.put(r, scene, num.trim(), rpx, txt(ACCENT), px0 + pad + (tile_w - nw) * 0.5, ry);
+                    self.put(r, scene, num.trim(), rpx, txt(accent()), px0 + pad + (tile_w - nw) * 0.5, ry);
                     let dx = px0 + pad + tile_w + 10.0 * s;
                     let dest = clip_to(&self.text, dest, rpx as f32, px1 - pad - time_w - 14.0 * s - dx);
                     self.put(r, scene, &dest, rpx, SOFT, dx, ry);
@@ -682,7 +696,9 @@ impl Ui {
 }
 
 /// The launcher's rail and its separator line (`launcher/theme.rs` `RAIL`, `EDGE`).
-pub(super) const RAIL: [u8; 4] = [18, 18, 18, 255];
+/// (solid: under a card seen through, its accent edge tinted it brown - the overlays blend in
+/// linear light)
+pub(super) const RAIL: [u8; 4] = [16, 22, 36, 255];
 pub(super) const EDGE: [u8; 4] = [255, 255, 255, 15];
 
 /// The Material icon of a line of the game menu (the launcher's icon set).
@@ -710,11 +726,12 @@ pub(super) fn game_menu_icon(id: &str) -> &'static str {
 }
 
 impl Ui {
-    /// The pause menu as the launcher's rail: a full-height panel on the left over the
-    /// dimmed picture - the game's name and version on top, "Resume" as the launcher's
-    /// amber primary button, the other lines as its pages (an icon, the name, the chosen one
-    /// on a lighter grey with the accent bar), "End the session" in the danger colour at the
-    /// end. A menu longer than the screen scrolls, as the card did.
+    /// The pause menu in the launcher's new look: a floating card on the left over the
+    /// dimmed picture - night blue, rounded, an edge of the accent - with openOMSI's mark on
+    /// top (`crate::splash`) and the version and the state under it, "Resume" as the
+    /// launcher's primary button in the accent, the other lines as its pages (an icon, the
+    /// name, the chosen one lighter with the accent bar), "End the session" in the danger
+    /// colour at the end. A menu longer than the screen scrolls.
     pub(super) fn draw_game_menu(&mut self, r: &Renderer, scene: &mut Scene, f: &Frame, sel: usize, items: &[(&str, &str)]) {
         let s = menu_scale(f);
         let dim = self.text.plate(r, scene, 6);
@@ -724,27 +741,44 @@ impl Ui {
         // side in one of the two landscape turns - its contents keep clear of it)
         let cut = if crate::platform::MOBILE || omsi_cfg::flags::OMSI_MOBILE.is_set() { 18.0 * s } else { 0.0 };
         let rail_w = (264.0 * s + cut).min(f.width * 0.86).round();
-        // the rail: flat, a hairline at its edge, a soft shadow over the picture
-        self.text.shadow(r, scene, [-40.0 * s, -40.0 * s, rail_w, f.height + 40.0 * s], 0.0, 30.0 * s, 0.0, 120);
-        self.text.rounded(r, scene, [0.0, 0.0, rail_w, f.height], 0.0, RAIL);
-        self.text.rounded(r, scene, [rail_w - 1.0, 0.0, rail_w, f.height], 0.0, EDGE);
-        // the game's name and version, as at the top of the launcher's rail
-        let bx = 24.0 * s + cut;
-        let name_w = self.put(r, scene, "openOMSI", (20.0 * s) as u32 | BOLD, WHITE, bx, 34.0 * s);
-        self.put(r, scene, crate::startup::VERSION, (12.0 * s) as u32, MUTED, bx, 54.0 * s);
-        // what state the game is in, a small amber tag beside the name
+        // the card: floating clear of the screen's edges, rounded, night blue with an edge of
+        // the accent, a soft shadow over the picture
+        let m = (14.0 * s).round();
+        let card = [m, m, m + rail_w, f.height - m];
+        let radius = 18.0 * s;
+        self.text.shadow(r, scene, card, radius, 30.0 * s, 6.0 * s, 140);
+        self.text.rounded(r, scene, [card[0] - 1.0, card[1] - 1.0, card[2] + 1.0, card[3] + 1.0], radius + 1.0, fade(accent(), 0.4));
+        self.text.rounded(r, scene, card, radius, RAIL);
+        // openOMSI's mark on top, as the launcher draws it; the version and the state under it
+        let bx = m + 22.0 * s + cut;
+        let mark_w = (rail_w - 44.0 * s - cut).min(230.0 * s);
+        let mut head = m + 34.0 * s;
+        let mark = self.splash.get_or_insert_with(crate::splash::Splash::new).mark(r, scene, mark_w, s);
+        match mark {
+            Some((tex, mw, mh)) => {
+                let my = (m + 18.0 * s).round();
+                scene.overlays.push((tex, [bx, my, bx + mw, my + mh]));
+                head = my + mh + 12.0 * s;
+            }
+            None => {
+                self.put(r, scene, "openOMSI", (20.0 * s) as u32 | BOLD, WHITE, bx, head);
+                head += 20.0 * s;
+            }
+        }
+        let version_w = self.put(r, scene, crate::startup::VERSION, (12.0 * s) as u32, MUTED, bx, head);
+        // what state the game is in, a small tag in the accent beside the version
         let tag = if f.paused { "PAUSED" } else { "MENU" };
-        let tl = self.text.label(r, scene, tag, (10.0 * s) as u32 | BOLD, txt(ACCENT));
+        let tl = self.text.label(r, scene, tag, (10.0 * s) as u32 | BOLD, txt(accent()));
         let (tw, th) = (tl.w as f32 + 12.0 * s, tl.h as f32 + 4.0 * s);
-        let tx = (bx + name_w + 10.0 * s).min(rail_w - tw - 12.0 * s);
-        let ty = 34.0 * s - th * 0.5;
-        self.text.rounded(r, scene, [tx, ty, tx + tw, ty + th], 4.0 * s, ACCENT_SOFT);
+        let tx = (bx + version_w + 10.0 * s).min(card[2] - tw - 12.0 * s);
+        let ty = head - th * 0.5;
+        self.text.rounded(r, scene, [tx, ty, tx + tw, ty + th], th * 0.5, accent_soft());
         scene.overlays.push((tl.tex, [tx + 6.0 * s, ty + 2.0 * s, tx + 6.0 * s + tl.w as f32, ty + 2.0 * s + tl.h as f32]));
         // the lines: as many as fit at the launcher's 42 px pitch (down to 32), the rest
         // scrolled to
         let n = items.len();
-        let top = 80.0 * s;
-        let foot = if keys { 40.0 * s } else { 12.0 * s };
+        let top = head + 26.0 * s;
+        let foot = m + if keys { 40.0 * s } else { 12.0 * s };
         let room = (f.height - top - foot).max(32.0 * s);
         let pitch = (42.0 * s).min(room / n.max(1) as f32).max(32.0 * s);
         let rows = ((room / pitch).floor() as usize).clamp(1, n.max(1));
@@ -757,16 +791,16 @@ impl Ui {
         self.menu_rows = rows;
         self.menu_row_h = pitch;
         let scrolls = n > rows;
-        let x0 = 12.0 * s + cut;
-        let x1 = rail_w - if scrolls { 20.0 * s } else { 12.0 * s };
+        let x0 = m + 12.0 * s + cut;
+        let x1 = card[2] - if scrolls { 20.0 * s } else { 12.0 * s };
         if scrolls {
-            let track = [rail_w - 10.0 * s, top, rail_w - 6.0 * s, top + pitch * rows as f32 - 4.0 * s];
+            let track = [card[2] - 10.0 * s, top, card[2] - 6.0 * s, top + pitch * rows as f32 - 4.0 * s];
             self.menu_scroll_track = Some(track);
-            let hot = over_rect(f.cursor, [0.0, 0.0, rail_w, f.height]);
+            let hot = over_rect(f.cursor, card);
             let thumb = self.thumb(r, scene, track, start, rows, n, hot, s);
             self.menu_scroll_thumb = Some([thumb[0] - 6.0 * s, thumb[1], thumb[2] + 6.0 * s, thumb[3]]);
         }
-        let any_hovered = over_rect(f.cursor, [0.0, top, rail_w, top + pitch * rows as f32]);
+        let any_hovered = over_rect(f.cursor, [card[0], top, card[2], top + pitch * rows as f32]);
         let px = (13.5 * s).round() as u32;
         let icon_px = (18.0 * s).round() as u32;
         for (k, &(id, label)) in items.iter().enumerate().skip(start).take(rows) {
@@ -786,13 +820,13 @@ impl Ui {
             let glow = self.easeq((7, id, k), if lit { 1.0 } else { 0.0 }, 1.0 / FADE_SECS);
             let cy = (rect[1] + rect[3]) * 0.5;
             let (ink, icon_ink) = if primary {
-                // the launcher's primary button: amber, dark bold text, lighter under the mouse
-                self.text.rounded(r, scene, rect, 6.0 * s, mix(ACCENT, ACCENT_HOT, glow));
-                ([18, 14, 8, 0], [18, 14, 8, 255])
+                // the launcher's primary button: the accent, its ink, lighter under the mouse
+                self.text.rounded(r, scene, rect, ROW_R * s, mix(accent(), accent_hot(), glow));
+                (on_accent(), [on_accent()[0], on_accent()[1], on_accent()[2], 255])
             } else {
                 if glow > 0.0 {
                     let fill = if danger { LIT_DANGER } else if chosen { SELECTED } else { LIT };
-                    self.text.rounded(r, scene, rect, 6.0 * s, fade(fill, glow));
+                    self.text.rounded(r, scene, rect, ROW_R * s, fade(fill, glow));
                     self.accent_bar(r, scene, rect, glow, danger, s);
                 }
                 let c = if off {
@@ -833,8 +867,8 @@ impl Ui {
         // the keys, quietly at the bottom, where there is a keyboard
         if keys {
             let hint = omsi_ui::tr("Esc resumes  |  P pauses").into_owned();
-            let hint = clip_to(&self.text, &hint, 11.0 * s, rail_w - bx * 2.0);
-            self.put(r, scene, &hint, (11.0 * s) as u32, OFF_INK, bx, f.height - 20.0 * s);
+            let hint = clip_to(&self.text, &hint, 11.0 * s, card[2] - bx - 16.0 * s);
+            self.put(r, scene, &hint, (11.0 * s) as u32, OFF_INK, bx, f.height - m - 20.0 * s);
         }
     }
 }
@@ -995,7 +1029,7 @@ impl Ui {
                     // (the knob slides over and the track changes its colour)
                     let t = self.ease((5, id, k), if on { 1.0 } else { 0.0 }, 1.0 / FADE_SECS);
                     let tq = quant(t);
-                    self.text.rounded(r, scene, track, th * 0.5, mix(TRACK_OFF, ACCENT, tq));
+                    self.text.rounded(r, scene, track, th * 0.5, mix(TRACK_OFF, accent(), tq));
                     let kn = th - 6.0 * s;
                     let kx = tx + 3.0 * s + (tw - kn - 6.0 * s) * t;
                     self.text.rounded(r, scene, [kx, cy - kn * 0.5, kx + kn, cy + kn * 0.5], kn * 0.5, KNOB);
@@ -1014,7 +1048,7 @@ impl Ui {
                     let fr = self.ease((6, id, k), frac.unwrap_or(0.0).clamp(0.0, 1.0), 2.0 / FADE_SECS);
                     let fx = x0 + tw * fr;
                     if fx - x0 >= 1.0 {
-                        self.text.rounded(r, scene, [x0, cy - th * 0.5, fx, cy + th * 0.5], th * 0.5, ACCENT);
+                        self.text.rounded(r, scene, [x0, cy - th * 0.5, fx, cy + th * 0.5], th * 0.5, accent());
                     }
                     let kn = (13.0 + 2.0 * a) * s;
                     self.text.rounded(r, scene, [fx - kn * 0.5, cy - kn * 0.5, fx + kn * 0.5, cy + kn * 0.5], kn * 0.5, KNOB);
@@ -1044,13 +1078,13 @@ impl Ui {
                     rx - cw
                 }
                 // a value being typed: lit in the accent
-                "E" => self.chip(r, scene, value, (13.0 * s) as u32, AMBER, ACCENT_SOFT, false, rx, cy, s),
+                "E" => self.chip(r, scene, value, (13.0 * s) as u32, amber(), accent_soft(), false, rx, cy, s),
                 // a button
                 _ => {
                     if value.is_empty() {
                         rx
                     } else {
-                        self.chip(r, scene, value, (13.0 * s) as u32, mix(SOFT, AMBER, a), mix(CHIP, ACCENT_SOFT, a), false, rx, cy, s)
+                        self.chip(r, scene, value, (13.0 * s) as u32, mix(SOFT, amber(), a), mix(CHIP, accent_soft(), a), false, rx, cy, s)
                     }
                 }
             };

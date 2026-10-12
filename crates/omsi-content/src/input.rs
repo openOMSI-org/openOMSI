@@ -133,6 +133,15 @@ impl KeyboardCfg {
             let x_free = !taken(&self, 45);
             self.game.push(KeyBinding { action: "voice_radio".into(), scan_code: if x_free { 45 } else { 0 }, modifier: 0 });
         }
+        // head tracking: Shift+F1 takes where the head is as the middle, Shift+F2 turns it on
+        // or off (OMSI's own file has nothing on either; one the player already uses leaves
+        // the entry unbound). An existing entry wins.
+        for (action, scan_code) in [("head_tracking_recenter", 59), ("head_tracking_toggle", 60)] {
+            if !self.game.iter().any(|b| b.action.eq_ignore_ascii_case(action)) {
+                let used = self.game.iter().chain(self.vehicles.iter()).any(|b| b.scan_code == scan_code && b.chord() & (KEY_SHIFT | KEY_CTRL) == KEY_SHIFT);
+                self.game.push(KeyBinding { action: action.into(), scan_code: if used { 0 } else { scan_code }, modifier: if used { 0 } else { KEY_SHIFT } });
+            }
+        }
         self
     }
 
@@ -305,6 +314,21 @@ mod tests {
         let taken = KeyBinding { action: "horn".into(), scan_code: 45, modifier: 0 };
         let cfg = KeyboardCfg { vehicles: vec![taken], ..Default::default() }.with_game_defaults();
         assert_eq!(key(&cfg, "voice_radio"), vec![(0, 0)]);
+    }
+
+    #[test]
+    fn the_head_tracking_keys_are_shift_f1_and_shift_f2_when_free() {
+        let key = |c: &KeyboardCfg, a: &str| c.game.iter().filter(|b| b.action == a).map(|b| (b.scan_code, b.modifier)).collect::<Vec<_>>();
+        let cfg = KeyboardCfg::default().with_game_defaults().with_game_defaults();
+        assert_eq!(key(&cfg, "head_tracking_recenter"), vec![(59, KEY_SHIFT)]);
+        assert_eq!(key(&cfg, "head_tracking_toggle"), vec![(60, KEY_SHIFT)]);
+        // (plain F1, the driver's view, is no reason to leave Shift+F1 alone; a Shift+F2 of
+        // the bus is)
+        let views = KeyBinding { action: "view_set_driver".into(), scan_code: 59, modifier: 0 };
+        let wiper = KeyBinding { action: "wiper".into(), scan_code: 60, modifier: KEY_SHIFT };
+        let cfg = KeyboardCfg { game: vec![views], vehicles: vec![wiper] }.with_game_defaults();
+        assert_eq!(key(&cfg, "head_tracking_recenter"), vec![(59, KEY_SHIFT)]);
+        assert_eq!(key(&cfg, "head_tracking_toggle"), vec![(0, 0)]);
     }
 
     #[test]

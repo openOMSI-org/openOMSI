@@ -43,6 +43,8 @@ impl Schedule {
         let done: Vec<u64> = traffic.cars.iter().filter(|c| c.trip_done()).map(|c| c.id).collect();
         for id in done {
             let Some(ci) = traffic.cars.iter().position(|c| c.id == id) else { continue };
+            // (a trip of the player's bus company is reported to it: `company_live`)
+            self.sim.car_trip_done(id, traffic.cars[ci].bus.as_ref().map(|b| b.delay).unwrap_or(0.0));
             let next = self.sim.next_of_car(id);
             let mut taken = false;
             if let Some(j) = next {

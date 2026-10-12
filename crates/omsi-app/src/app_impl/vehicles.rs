@@ -101,6 +101,10 @@ impl App {
             autostart: false,
             paint,
             hof: hof.or(self.args.hof.clone()),
+            // (the launcher's bus options are for the bus it started with: kept for that file)
+            setvar: self.args.setvar.clone().filter(|_| self.args.bus.as_deref().is_some_and(|b| b.replace('\\', "/").eq_ignore_ascii_case(&bus.replace('\\', "/")))),
+            // (and so is its display font)
+            display_font: self.args.display_font.clone().filter(|_| self.args.bus.as_deref().is_some_and(|b| b.replace('\\', "/").eq_ignore_ascii_case(&bus.replace('\\', "/")))),
             ..self.args.clone()
         };
         let prefetch = w.placement_prefetch(r);

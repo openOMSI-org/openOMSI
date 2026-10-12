@@ -9,6 +9,8 @@ description = "openOMSI's driver record: the personnel file's career (ratings, s
 omsi-cfg = { path = "../omsi-cfg" }
 omsi-content = { path = "../omsi-content" }
 omsi-sim = { path = "../omsi-sim" }
+# (the trips the player drives go into the launcher's trip log: `Career::write_trip`)
+omsi-launcher-core = { path = "../omsi-launcher-core" }
 glam.workspace = true
 log.workspace = true
 serde_json.workspace = true

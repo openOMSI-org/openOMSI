@@ -76,7 +76,7 @@ pub trait Host: Send + Sync {
     }
     /// The bus preview (drawn by the game's renderer with the game's scene).
     fn new_showroom(&self) -> Box<dyn Showroom> {
-        Box::new(NoShowroom)
+        Box::new(NoShowroom::default())
     }
     /// The launcher ends in order while a preview is being placed: no hang to remember.
     fn clear_showroom_mark(&self) {}
@@ -93,6 +93,40 @@ pub trait Host: Send + Sync {
     fn simplify(&self, pts: &[Vec3], _tol: f32) -> Vec<Vec3> {
         pts.to_vec()
     }
+
+    // --- what Omsi-Hub's launcher asks besides
+    /// The studio that takes the bus picker's photos (a showroom of its own: the bus from
+    /// the same corner every time, nothing eased).
+    fn new_studio(&self) -> Box<dyn Showroom> {
+        Box::new(NoShowroom::default())
+    }
+    /// The vehicle file the game spawns for `bus` (an articulated bus's rear section: the
+    /// whole bus; one nothing couples is refused).
+    fn player_bus_path(&self, root: &Path, bus: &str) -> anyhow::Result<PathBuf> {
+        Ok(omsi_cfg::resolve_path(root, bus))
+    }
+    /// The `[couple_back]` chain behind `vehicle`, read and coupled as the game does it.
+    fn load_coupled_parts(&self, _root: &Path, _vehicle: &mut omsi_sim::VehicleInstance) -> Vec<Arc<omsi_sim::VehicleType>> {
+        Vec::new()
+    }
+    /// The phone companion's tunnel program: there, missing, being fetched; and fetching it.
+    fn cloudflared(&self) -> Cloudflared {
+        Cloudflared::Missing
+    }
+    fn download_cloudflared(&self) {}
+    /// The personnel number and code driver `name` signs on with at the navigator.
+    fn personnel_of_driver(&self, _name: &str) -> Option<(String, String)> {
+        None
+    }
+}
+
+/// The phone companion's tunnel program (cloudflared), as the game program finds it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Cloudflared {
+    Installed(PathBuf),
+    Missing,
+    Downloading,
+    Failed,
 }
 
 /// What the launcher has chosen, for the support package: map, bus, line, tour.
@@ -137,10 +171,63 @@ pub trait Showroom {
     /// Bumped when the picture's texture is made anew / at every drawing of it.
     fn generation(&self) -> u64;
     fn drawn(&self) -> u64;
+
+    // --- Omsi-Hub's launcher: the stage, the bus options, the livery studio, the photos
+    /// Why the bus could not be shown (None: it could, or it is not known yet).
+    fn error(&self) -> Option<String> {
+        None
+    }
+    /// The part of the picture the bus is to stand in (see `showroom::stage_in`).
+    fn set_stage(&mut self, _stage: crate::showroom::Stage) {}
+    /// Show this look (a bus, its paint, the time and weather to light it with).
+    fn want(&mut self, _look: crate::showroom::Look) {}
+    /// `look` is in place, ready to be drawn; it will not be (the bus did not load).
+    fn shows(&self, _look: &crate::showroom::Look) -> bool {
+        false
+    }
+    fn gave_up(&self, _look: &crate::showroom::Look) -> bool {
+        true
+    }
+    /// The bus options it is to wear, and those it wears (None: no bus shown).
+    fn dress(&mut self, _options: Vec<(String, f32)>) {}
+    fn dressed(&self) -> Option<Vec<(String, f32)>> {
+        None
+    }
+    /// The display font its destination displays are drawn in (None: their own).
+    fn letter(&mut self, _font: Option<String>) {}
+    /// The files of bus `bus` changed: read it again.
+    fn reread(&mut self, _bus: &str) {}
+    /// Let go of the bus shown and its scene.
+    fn forget(&mut self) {}
+    /// Draw the picture again (a texture of the bus changed).
+    fn touch(&mut self) {}
+    /// A camera of the caller's own instead of the orbit (None: the orbit).
+    fn set_camera(&mut self, _cam: Option<omsi_render::Camera>) {}
+    /// A second picture with its own camera and size, drawn whenever the first is.
+    fn set_second(&mut self, _cam: Option<(omsi_render::Camera, u32, u32)>) {}
+    fn second_view(&self) -> Option<(wgpu::TextureView, u32, u32)> {
+        None
+    }
+    fn second_generation(&self) -> u64 {
+        0
+    }
+    /// The bus shown opened up for the livery studio (None while none is placed).
+    fn parts(&mut self) -> Option<crate::showroom::Parts<'_>> {
+        None
+    }
+    /// The bus shown, drawn at `w` x `h` and read back (the bus picker's photos).
+    fn photograph(&mut self, _renderer: &mut Renderer, _w: u32, _h: u32) -> Option<image::RgbaImage> {
+        None
+    }
+    /// The bus picker's photos, on the GPU with this showroom (see `busphoto`).
+    fn photos(&mut self) -> &mut crate::busphoto::Photos;
 }
 
 /// No preview (no host).
-struct NoShowroom;
+#[derive(Default)]
+struct NoShowroom {
+    photos: crate::busphoto::Photos,
+}
 
 impl Showroom for NoShowroom {
     fn want_choice(&mut self, _root: &str, _choice: &crate::state::Choice) {}
@@ -168,6 +255,9 @@ impl Showroom for NoShowroom {
     fn drawn(&self) -> u64 {
         0
     }
+    fn photos(&mut self) -> &mut crate::busphoto::Photos {
+        &mut self.photos
+    }
 }
 
 /// A carriageway of the city map: points in world metres.
@@ -186,6 +276,8 @@ pub struct CityMap {
     pub net: omsi_sim::traffic::Network,
     /// Every placed object's world place by id.
     pub places: HashMap<i64, DVec3>,
+    /// The map's bus stops (Omsi-Hub's map draws them as the navigator's stop signs).
+    pub stops: Vec<omsi_scene::MapStop>,
 }
 
 // (an install-once hook: the program's side, the same for every launcher window)

@@ -323,7 +323,7 @@ impl TextCache {
             // them), unless the opacity setting asks for less
             3 => vec![22, 22, 22, 255],
             // the chosen line: the interface's accent
-            4 => vec![232, 160, 48, 255],
+            4 => accent().to_vec(),
             // a line the mouse is over, the next stop
             5 => vec![255, 255, 255, 28],
             // a hairline between groups (the card's border colour)

@@ -99,7 +99,7 @@ impl Schedule {
         t_spawn: std::time::Instant,
         t_route: std::time::Duration,
     ) -> Placed {
-        let Placing { trip_name, stations, departure, leave, steps, station_steps, slots, leg, frac, at, start, end, section, start_index, mut s, mut stops, served } = p;
+        let Placing { trip_name, stations, departure, leave, steps, station_steps, station_tiles, slots, leg, frac, at, start, end, section, start_index, mut s, mut stops, served } = p;
         let Some(Choice {
                      ty,
                      number,
@@ -279,7 +279,7 @@ impl Schedule {
         set_ai_destination(&mut car.vehicle, hof.as_deref(), &line, &terminus, &names);
         log::info!("scheduled bus: line {line} tour {tour} trip {trip_name} {} #{:?} at {:.1} min, {} stops, at ({:.1}, {:.1}) heading {:.0}{}", ty.def.type_name, number.as_ref().map(|n| format!("{} plate {:?} paint {:?}", n.0, n.1, scheme.and_then(|i| ty.paint_schemes.get(i)).map(|p| p.name.as_str()))), day_time / 60.0, car.bus.as_ref().map(|b| b.stops.len()).unwrap_or(0), car.vehicle.position.x, car.vehicle.position.y, car.vehicle.heading, if end < slots.len() { format!(", route {} of {} steps so far", end - start, steps.len()) } else { String::new() });
         if end < slots.len() {
-            self.sim.carry_later(car.id, steps, end, &stations, &leave, served, station_steps);
+            self.sim.carry_later(car.id, steps, end, &stations, &leave, served, station_steps, station_tiles);
         }
         if profile {
             log::info!(

@@ -13,7 +13,7 @@ fn by_tab() -> Vec<Vec<&'static str>> {
         graphics.push("s-api");
     }
     let driving = vec![
-        "s-keys", "set-steering_linear", "set-old_steering", "set-red_steer_spd", "s-mouse", "s-mouse-pedal", "set-mouse_smooth", "set-mouse_hold", "set-mouse_right_off", "set-blinker_cancel", "set-brake_hold", "set-auto_clutch", "set-auto_shift", "set-momentary_gears", "s-go-keys",
+        "s-keys", "set-steering_linear", "set-old_steering", "set-red_steer_spd", "s-mouse", "s-mouse-pedal", "set-mouse_smooth", "set-mouse_hold", "set-mouse_right_off", "set-blinker_cancel", "set-brake_hold", "set-auto_clutch", "set-auto_shift", "set-ibis_auto", "set-momentary_gears", "s-go-keys",
         "s-wrange", "s-wlock", "s-pad-steer-smooth", "s-pad-steer-speed", "s-pad-deadzone", "set-pad_steer_linear", "s-pad-type", "set-pad_buttons", "set-arrows_switch_cams", "s-pedt", "s-pedb", "set-ff_enabled", "set-ff_invert", "s-ffroad", "s-ffeng", "s-fffade", "s-wreset", "s-go-pads",
     ];
     let mut camera = vec![
@@ -64,8 +64,8 @@ fn by_tab() -> Vec<Vec<&'static str>> {
         "s-maint", "set-collision_vehicles", "set-collision_objects", "set-collision_pedestrians", "set-use_real_time", "set-use_real_date", "set-time_sync", "set-metar_sync", "s-timespeed",
     ];
     let general = vec![
-        "s-lang", "set-machine_translation", "set-launcher_rest", "set-discord_status", "set-voice_chat", "s-uiscale", "set-ui_scale_window", "s-uiop", "set-tooltips", "set-show_fps", "set-notes", "set-chat", "s-chatsize", "set-name_tags",
-        "set-navigator", "set-nav_arrows", "set-nav_ai", "corner-top-left", "corner-top-right", "corner-bottom-left", "corner-bottom-right",
+        "s-lang", "set-machine_translation", "set-launcher_rest", "set-discord_status", "set-voice_chat", "set-companion", "s-launcher-scale", "set-animations", "set-page_bus", "s-accent-sw0", "s-accent-sw1", "s-accent-sw2", "s-accent-sw3", "s-accent-sw4", "s-accent-sw5", "s-accent-sw6", "s-accent-sw7", "s-accent-custom", "s-welcome-again", "s-tour-start", "s-uiscale", "set-ui_scale_window", "s-uiop", "set-tooltips", "set-show_fps", "set-notes", "set-chat", "s-chatsize", "set-name_tags",
+        "set-navigator", "set-nav_arrows", "set-nav_ai", "set-nav_board", "s-nav-scale", "s-stop-style", "s-speed-unit", "set-nav_signon", "corner-top-left", "corner-top-right", "corner-bottom-left", "corner-bottom-right", "s-nav-reset",
         "set-update_check", "set-update_auto", "set-update_notify", "set-presence", "s-upd-check", "s-upd-github", "s-reset",
     ];
     vec![graphics, driving, camera, sound, gameplay, general]
@@ -81,7 +81,7 @@ fn all_rows() -> Value {
 }
 
 fn outside() -> Outside {
-    Outside { update: Status::Idle, check_updates: false, reset: false, controls: None }
+    Outside { update: Status::Idle, check_updates: false, reset: false, controls: None, again: None }
 }
 
 /// One frame of tab `tab`, its two columns tall enough that nothing is cut off. The Sound
@@ -182,6 +182,15 @@ fn smooth_mouse_steering_switches_off_and_is_saved() {
     assert!(saved.contains("mouse_smooth=0\n"), "{saved}");
     assert_eq!(core::settings_from_text(Some(&saved))["mouse_smooth"], json!(false));
     // (that the game reads it so: omsi-app's launcher tests)
+}
+
+#[test]
+fn the_general_tab_shows_the_welcome_and_the_tour_again() {
+    let mut s = all_rows();
+    let before = s.clone();
+    assert_eq!(click(5, "s-welcome-again", &mut s).again, Some(Again::Welcome));
+    assert_eq!(click(5, "s-tour-start", &mut s).again, Some(Again::Tour));
+    assert_eq!(s, before, "the page writes welcome_done itself, once it shows the welcome");
 }
 
 #[test]

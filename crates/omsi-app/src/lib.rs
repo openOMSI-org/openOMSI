@@ -17,7 +17,7 @@ use omsi_platform::discord;
 mod steam;
 use omsi_lan::voice;
 mod head_idle;
-use omsi_input::headtrack;
+use omsi_input::{head_filter, headtrack};
 #[cfg(windows)]
 use omsi_xr::openxr;
 #[cfg(target_os = "android")]
@@ -37,12 +37,15 @@ mod mt;
 use omsi_platform::updater;
 mod update_watch;
 use omsi_platform::presence;
+// (the player's accent is the launcher's: omsi-launcher-ui)
+pub(crate) use omsi_launcher_ui::accent;
 use omsi_soundscape::ambience;
 mod soundscape;
 use omsi_scene::wheel_surface;
 use omsi_scene::camera_arm;
 mod cam_approach;
 use omsi_career::career;
+mod companion;
 use omsi_input::describe;
 mod editor;
 mod duty_book;
@@ -60,9 +63,22 @@ mod lan;
 mod lan_world;
 use omsi_scene::lights;
 mod launcher;
+// openOMSI's own launcher as it was before the new one, for players who choose it
+// (`launcher_ui=classic`); the game side keeps using `launcher`
+mod launcher_classic;
 mod menu;
 mod mirror_hud;
 mod navigator;
+// (the duty board, the stop signs and the launcher's picture of the loading screen are drawn with the
+// launcher's toolkit: omsi-launcher-ui)
+pub(crate) use omsi_launcher_ui::nav_duty;
+mod nav_panel;
+mod nav_signon;
+mod nav_pins;
+pub(crate) use omsi_launcher_ui::stop_signs;
+pub(crate) use omsi_launcher_ui::splash;
+use omsi_input::tobii;
+mod units;
 mod vr_navigator;
 use omsi_scene::money;
 mod radio;
@@ -72,6 +88,7 @@ mod quit;
 use omsi_weather::condensation;
 use omsi_scene::{rain, window_wipers};
 mod scene;
+mod company_live;
 mod season_phase;
 mod schedule;
 mod schedule_paper;
@@ -84,6 +101,9 @@ mod telemetry;
 use omsi_scene::threads;
 mod tiles;
 mod traffic;
+mod trip_report;
+// red lights, speed cameras and comfort: what a trip is judged by besides the timetable
+mod drive_watch;
 mod view_sync;
 mod ui;
 
@@ -94,7 +114,7 @@ mod app_events;
 mod bus_service;
 mod camera_util;
 // the game controllers, their mappings and force feedback (`omsi-input`), at their old paths
-use omsi_input::{controllers, gamepad_profile, hpattern};
+use omsi_input::{controllers, ffb_calibration, gamepad_profile, hpattern};
 mod cli;
 mod diagnostics;
 mod perf_report;
@@ -133,6 +153,37 @@ rust_i18n::i18n!("locales");
 // (the tables are read when this crate compiles: this makes cargo compile it again when they
 // change - the macro alone left the old texts in the program)
 const _LOCALES: &str = include_str!("../locales/app.yml");
+const _LOCALES_LINES: &str = include_str!("../locales/lijnsoort.yml");
+const _LOCALES_DEPOTS: &str = include_str!("../locales/hof.yml");
+const _LOCALES_FONTS: &str = include_str!("../locales/fonts.yml");
+const _LOCALES_COMPANY: &str = include_str!("../locales/bedrijf2.yml");
+const _LOCALES_MORE: &str = include_str!("../locales/vertalingen.yml");
+const _LOCALES_TOBII: &str = include_str!("../locales/tobii.yml");
+const _LOCALES_SESSION: &str = include_str!("../locales/sessie.yml");
+const _LOCALES_COMPANY_DUTY: &str = include_str!("../locales/bedrijfsdienst.yml");
+const _LOCALES_UPSTREAM_0227: &str = include_str!("../locales/openomsi-0227.yml");
+const _LOCALES_UPSTREAM_0230: &str = include_str!("../locales/openomsi-0230.yml");
+const _LOCALES_COMPANY_PAGES: &str = include_str!("../locales/company-pages.yml");
+const _LOCALES_COMPANY_RESEARCH: &str = include_str!("../locales/company-research.yml");
+const _LOCALES_COMPANY_STAFF: &str = include_str!("../locales/company-staff.yml");
+const _LOCALES_COMPANY_CONTRACTS: &str = include_str!("../locales/company-contracts.yml");
+const _LOCALES_COMPANY_HOME: &str = include_str!("../locales/company-home.yml");
+const _LOCALES_COMPANY_CHOOSER: &str = include_str!("../locales/company-chooser.yml");
+const _LOCALES_DEALER_DELIVERY: &str = include_str!("../locales/dealer-delivery.yml");
+const _LOCALES_COMPANY_EASY: &str = include_str!("../locales/company-easy.yml");
+const _LOCALES_TRIP_CARD: &str = include_str!("../locales/ritkaart.yml");
+const _LOCALES_DESTINATION: &str = include_str!("../locales/bestemming.yml");
+const _LOCALES_APP_THEME: &str = include_str!("../locales/app-theme.yml");
+const _LOCALES_FONT_FIT: &str = include_str!("../locales/fontfit.yml");
+const _LOCALES_LIVERY_LAYERS: &str = include_str!("../locales/livery-layers.yml");
+const _LOCALES_COMPANY_REALTIME: &str = include_str!("../locales/company-realtime.yml");
+const _LOCALES_EASY_POLISH: &str = include_str!("../locales/easy-polish.yml");
+const _LOCALES_LINE_EXISTING: &str = include_str!("../locales/line-existing.yml");
+const _LOCALES_COMPANY_PLANNING: &str = include_str!("../locales/company-planning.yml");
+const _LOCALES_PLANNING_STUDIO: &str = include_str!("../locales/planning-studio.yml");
+const _LOCALES_ROSTERFLOW: &str = include_str!("../locales/rosterflow.yml");
+const _LOCALES_ROSTERFLOW_TIMEPLAN: &str = include_str!("../locales/rosterflow-timeplan.yml");
+const _LOCALES_ROSTERFLOW_TUTORIAL: &str = include_str!("../locales/rosterflow-tutorial.yml");
 
 /// Show the interface in `code` (the settings' ENG / DEU / FRA / RUS).
 pub(crate) fn ui_language(code: &str) {
@@ -195,6 +246,9 @@ use traffic_link::*;
 use weather_setup::*;
 use world_load::*;
 
+/// Whether a panic is written into ~/.openomsi/launcher.log too (this process is the launcher).
+static PANICS_TO_LAUNCHER_LOG: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// The game (and its launcher) from the command line: what `main` does.
 pub fn run() -> Result<()> {
     view_sync::install_sim_decoder();
@@ -213,10 +267,12 @@ pub fn run() -> Result<()> {
             log::warn!("caught by the renderer: {info}");
             return;
         }
-        log::error!(
-            "the game stopped on an error (build {BUILD}): {info}\n{}",
-            std::backtrace::Backtrace::force_capture()
-        );
+        let trace = std::backtrace::Backtrace::force_capture();
+        log::error!("the game stopped on an error (build {BUILD}): {info}\n{trace}");
+        // (the launcher's own log is a file: its window has no terminal to show the panic in)
+        if PANICS_TO_LAUNCHER_LOG.load(std::sync::atomic::Ordering::Relaxed) {
+            omsi_launcher_lib::log_to_file(&format!("the launcher stopped on an error (build {BUILD}): {info}\n{trace}"));
+        }
         default_hook(info);
     }));
     log::info!(
@@ -250,11 +306,18 @@ pub fn run() -> Result<()> {
         if omsi_cfg::flags::OMSI_LAUNCHER.is_set() && open_launcher()? {
             return Ok(());
         }
-        // a plain start (not `--launcher`): the desktop launcher when it is beside the game
-        if !args.launcher && open_app_launcher()? {
+        PANICS_TO_LAUNCHER_LOG.store(true, std::sync::atomic::Ordering::Relaxed);
+        // a plain start (not `--launcher`): the desktop launcher only when the player chose it
+        // (`launcher_ui=desktop` or `OMSI_LAUNCHER_UI=desktop`, see `desktop_launcher_chosen`)
+        // and it is beside the game - this build's own launcher is the one a plain start opens
+        if !args.launcher && desktop_launcher_chosen() && open_app_launcher()? {
             return Ok(());
         }
         launcher_statics();
+        // (the classic launcher when the player chose it; the new one otherwise)
+        if launcher_classic::chosen() {
+            return launcher_classic::run(graphics_instance());
+        }
         return launcher::run(graphics_instance());
     }
     let Some(app) = make_app(args, server_cfg)? else { return Ok(()) };
@@ -301,6 +364,8 @@ pub(crate) fn launcher_statics() {
 /// nothing more to do (a fatal error was shown).
 pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option<server::ServerCfg>)>> {
     ui_language(&settings::Settings::load().language);
+    // (the interface's accent colour, as the launcher's Settings chose it)
+    accent::set_from_setting(Some(&settings::Settings::load().accent));
     // (a server has no interface to translate)
     mt::enable(settings::Settings::load().machine_translation && args.server.is_none());
     // the dedicated server: server.cfg decides the world, the rest is a host without a window
@@ -622,6 +687,8 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             pumping: None,
             career: Default::default(),
             journey: None,
+            trip_report: Default::default(),
+            drive_watch: Default::default(),
             wetness: 0.0,
             cloud_drift: [0.0; 4],
             weather_blend: None,
@@ -747,6 +814,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             pad_voice_radio: false,
             arrow_glance: false,
             headtrack: None,
+            head_filter: Default::default(),
             headtrack_failed: None,
             headtrack_scale_last: None,
             headtrack_scale_bias: [0.0; 6],
@@ -810,6 +878,10 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
         devtools: None,
     }
 }
+
+// every text the interface shows, in its six languages
+#[cfg(test)]
+mod locale_check;
 
 #[cfg(test)]
 mod tests {

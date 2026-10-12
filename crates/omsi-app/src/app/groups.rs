@@ -250,6 +250,8 @@ pub(crate) struct InputState {
     pub(crate) arrow_glance: bool,
     /// Head tracking (Settings → head tracking), started with the first frame that wants it.
     pub(crate) headtrack: Option<crate::headtrack::HeadTracker>,
+    /// The head tracker's pose made calm for the camera, frame by frame.
+    pub(crate) head_filter: crate::head_filter::HeadFilter,
     /// When head tracking last failed to start (tried again a few seconds later).
     pub(crate) headtrack_failed: Option<std::time::Instant>,
     /// Last TrackIR/OpenTrack output scales, used to keep the displayed camera position
@@ -482,6 +484,11 @@ pub(crate) struct SessionState {
     pub(crate) career: career::Career,
     /// The duty's stops with their times as driven, kept in a file (`journey`).
     pub(crate) journey: Option<crate::journey::Journey>,
+    /// The report of each trip of the duty as it ends: its card and the driver's record.
+    pub(crate) trip_report: crate::trip_report::TripReport,
+    /// Red lights, speed cameras and the passengers' comfort, said on the screen and taken
+    /// into each trip's report.
+    pub(crate) drive_watch: crate::drive_watch::DriveWatch,
     /// How wet the roads are (0..1), built up by rain and dried by the sun.
     pub(crate) wetness: f32,
     /// How far the cloud cover has drifted with the wind (fractions of its tiling), summed

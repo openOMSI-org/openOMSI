@@ -3,7 +3,7 @@
 
 use super::state::{fmt_bytes, hhmm, short_map};
 use super::theme::*;
-use super::ui::{id_of, matches, ButtonKind, Ui};
+use super::ui::{id_of, matches, ButtonKind, Key, Ui};
 use super::{Launcher, Page};
 use glam::Vec2;
 use omsi_launcher_lib as core;
@@ -19,8 +19,14 @@ use keybind_picker::{controller_action_choices, KeyActionOption};
 
 #[derive(Default)]
 pub struct PagesView {
+    /// The name of a driver being made, and whether its field is open (on the drivers step
+    /// and on the service record).
     pub new_driver: String,
-    pub confirm_delete: Option<std::time::Instant>,
+    pub new_driver_open: bool,
+    /// "Delete this driver" pressed once: for which driver, and when.
+    pub confirm_delete: Option<(String, std::time::Instant)>,
+    /// The driver the drivers step asks about deleting (its dialog is open while set).
+    pub delete_driver: Option<String>,
     /// The "reset every setting" dialog is open.
     pub confirm_reset: bool,
     pub kb_filter: [String; 2],
@@ -44,6 +50,8 @@ pub struct PagesView {
     pub setup_game: Option<String>,
     /// The Controls page's tab: 0 the keyboard, 1 the game controllers.
     pub controls_tab: usize,
+    /// On a phone, which list of keys the Controls page shows (0 the bus's, 1 the game's).
+    pub kb_section: usize,
     /// Sources indexed by action name, filled as installed vehicle scripts are scanned.
     pub kb_script_actions: Option<std::collections::HashMap<String, Vec<String>>>,
     pub kb_script_actions_rx: Option<std::sync::mpsc::Receiver<omsi_input::describe::ScriptActionScanUpdate>>,
@@ -64,6 +72,10 @@ pub struct PagesView {
     pub settings_tab: usize,
     pub pads: PadsView,
     pub tt: super::timetable::TimetableView,
+    /// The editor hub's map for the map objects, and the line editor.
+    pub hub: super::editor_hub::HubView,
+    pub lines: super::lineeditor::LineEditorView,
+    pub depots: super::depoteditor::DepotEditorView,
 }
 
 /// The game controllers tab: the devices `gamectrler.cfg` sets up, the ones connected now,
@@ -129,6 +141,7 @@ fn release_feedback(io: &mut Option<omsi_input::controllers::Devices>, active: &
 }
 
 // the pages, one file each (what they reach of the launcher besides `Launcher`)
+#[allow(unused_imports)]
 use super::{mobile, state};
 mod profile;
 mod settings;

@@ -30,6 +30,9 @@ fn early_departure_duty() -> PlayerDuty {
         first_update: None,
         heading: 90.0,
         position: None,
+        tours: Vec::new(),
+        free: false,
+        dup_tiles: Default::default(),
     }
 }
 
@@ -99,6 +102,9 @@ fn ibox_busstop_is_prepositioned_when_the_timetable_jumps() {
         first_update: None,
         heading: 90.0,
         position: None,
+        tours: Vec::new(),
+        free: false,
+        dup_tiles: Default::default(),
     };
     // jump from the first stop to the last: the script will +1 once, so leave 1 behind
     duty.next_stop = 2;
@@ -140,6 +146,9 @@ fn duty_place_keeps_first_stop_while_its_place_is_unknown() {
         first_update: None,
         heading: 90.0,
         position: None,
+        tours: Vec::new(),
+        free: false,
+        dup_tiles: Default::default(),
     };
     // late for the trip, standing at stop 2 whose place is known
     d.place(glam::DVec3::new(20.0, 0.0, 0.0), 250.0);
@@ -273,6 +282,9 @@ fn resumed_duty_keeps_its_trip_and_stop_before_the_first_script_frame() {
         first_update: None,
         heading: 90.0,
         position: None,
+        tours: Vec::new(),
+        free: false,
+        dup_tiles: Default::default(),
     };
     // The same name appears twice. Its saved ordinal, rather than its name or the
     // bus's position far from any stop, selects the second occurrence.
@@ -360,6 +372,9 @@ fn a_stop_placed_only_once_its_tile_loads_is_reached() {
         first_update: None,
         heading: 90.0,
         position: None,
+        tours: Vec::new(),
+        free: false,
+        dup_tiles: Default::default(),
     };
     d.advance(glam::DVec3::new(0.0, 0.0, 0.0), 0.0);
     d.advance(glam::DVec3::new(100.0, 0.0, 0.0), 10.0);
@@ -367,7 +382,7 @@ fn a_stop_placed_only_once_its_tile_loads_is_reached() {
     // its tile comes: the map has it now
     let mut positions = HashMap::new();
     positions.insert(1i64, (glam::DVec3::new(500.0, 0.0, 0.0), [0.0; 3]));
-    d.learn_loaded(&positions);
+    d.learn_loaded(&positions, &HashMap::new());
     assert_eq!(d.trips[0].stops[1].position, Some(glam::DVec3::new(500.0, 0.0, 0.0)));
     d.advance(glam::DVec3::new(500.0, 0.0, 0.0), 100.0);
     d.advance(glam::DVec3::new(700.0, 0.0, 0.0), 130.0);
@@ -403,6 +418,9 @@ fn the_next_trip_starts_at_its_first_stop_though_the_last_one_was_missed() {
         first_update: None,
         heading: 90.0,
         position: None,
+        tours: Vec::new(),
+        free: false,
+        dup_tiles: Default::default(),
     };
     d.advance(glam::DVec3::new(0.0, 0.0, 0.0), 0.0);
     d.advance(glam::DVec3::new(100.0, 0.0, 0.0), 10.0);
@@ -442,6 +460,9 @@ fn the_next_trip_starts_at_its_first_stop_though_the_last_one_was_missed() {
         first_update: None,
         heading: 90.0,
         position: None,
+        tours: Vec::new(),
+        free: false,
+        dup_tiles: Default::default(),
     };
     d.advance(glam::DVec3::new(800.0, 0.0, 0.0), 345.0);
     assert_eq!(d.trip_index, 0);
@@ -452,7 +473,7 @@ fn the_next_trip_starts_at_its_first_stop_though_the_last_one_was_missed() {
 fn the_next_stop_can_be_skipped() {
     let trip = planned(0.0, &[(0.0, 0.0, 0.0), (100.0, 60.0, 60.0), (500.0, 120.0, 120.0), (1000.0, 200.0, 200.0)]);
     let next = planned(400.0, &[(1040.0, 400.0, 400.0), (1500.0, 500.0, 500.0)]);
-    let mut d = PlayerDuty { line: "5".into(), tour: "1".into(), trips: vec![trip, next], trip_index: 0, first_trip: 0, next_stop: 0, at_stop: false, arrived_late: None, done: false, served_terminus: None, left_late: None, held_back: false, placed: true, trip_changed: false, skipped: None, run: 0, finished: None, reopened: None, picked: true, first_update: None, heading: 90.0, position: None };
+    let mut d = PlayerDuty { line: "5".into(), tour: "1".into(), trips: vec![trip, next], trip_index: 0, first_trip: 0, next_stop: 0, at_stop: false, arrived_late: None, done: false, served_terminus: None, left_late: None, held_back: false, placed: true, trip_changed: false, skipped: None, run: 0, finished: None, reopened: None, picked: true, first_update: None, heading: 90.0, position: None, tours: Vec::new(), free: false, dup_tiles: Default::default() };
     // at the first stop and away from it: the next is s1
     d.advance(glam::DVec3::new(0.0, 0.0, 0.0), 0.0);
     d.advance(glam::DVec3::new(50.0, 0.0, 0.0), 10.0);
@@ -507,6 +528,9 @@ fn a_page_can_go_back_to_an_earlier_stop() {
         first_update: None,
         heading: 90.0,
         position: None,
+        tours: Vec::new(),
+        free: false,
+        dup_tiles: Default::default(),
     };
     assert!(d.skip_to(2));
     assert_eq!(d.next_stop, 2);
@@ -562,6 +586,9 @@ fn a_loop_does_not_jump_to_the_stop_over_the_road() {
         first_update: None,
         heading: 90.0,
         position: None,
+        tours: Vec::new(),
+        free: false,
+        dup_tiles: Default::default(),
     };
     // at stop 0, then leaving east
     d.advance(glam::DVec3::new(0.0, 0.0, 0.0), 0.0);
@@ -600,6 +627,9 @@ fn stops_passed_without_stopping_are_told_once() {
         first_update: None,
         heading: 90.0,
         position: None,
+        tours: Vec::new(),
+        free: false,
+        dup_tiles: Default::default(),
     };
     d.advance(glam::DVec3::new(0.0, 0.0, 0.0), 0.0);
     d.advance(glam::DVec3::new(60.0, 0.0, 0.0), 30.0);
@@ -673,6 +703,9 @@ fn a_duty_starts_with_the_trip_that_fits_the_time() {
         first_update: None,
         heading: 0.0,
         position: None,
+        tours: Vec::new(),
+        free: false,
+        dup_tiles: Default::default(),
     };
     // 200 m from the first stop two minutes before the departure: early, next stop the first
     assert_eq!(d.advance(glam::DVec3::new(300.0, 0.0, 0.0), now), None);
@@ -729,6 +762,9 @@ fn a_duty_starts_with_a_trip_the_bus_can_reach() {
         first_update: None,
         heading: 0.0,
         position: None,
+        tours: Vec::new(),
+        free: false,
+        dup_tiles: Default::default(),
     };
     // 4 km away two minutes before the 15:07 leaves: the duty begins with the 16:01
     let mut d = duty(trips.clone());
@@ -776,6 +812,9 @@ fn ibis_skips_a_service_leg_for_the_player_display() {
         first_update: None,
         heading: 0.0,
         position: None,
+        tours: Vec::new(),
+        free: false,
+        dup_tiles: Default::default(),
     };
     let (trip, stop) = d.trip_for_ibis();
     assert_eq!(trip.line, "5E");
@@ -911,4 +950,113 @@ fn the_delay_on_the_way_follows_where_the_bus_is() {
     assert!((d.delay(150.0) - 0.0).abs() < 1e-6);
     assert!((d.delay(170.0) - 20.0).abs() < 1e-6);
     assert!((d.delay(120.0) + 30.0).abs() < 1e-6);
+}
+
+/// Berlin 186, a map joined from others: half its objects share their id with one of
+/// another tile. A stop's tile is what its station names (a type-1 `[station]`'s fourth
+/// line, else `Busstops.cfg`), and a tile loaded later with an object of the same id
+/// elsewhere does not take the stop away from where its own tile placed it.
+#[test]
+fn a_stop_is_the_object_of_its_own_tile_where_ids_repeat() {
+    let legacy = omsi_timetable::Trip {
+        stations_legacy: vec![
+            ["44740", "57", "Mercatorweg", "78", "2.992", "841.176", "10.199", "6.500"].map(String::from).to_vec(),
+            ["x", "0", "not a station", "3", "0", "0", "0", "0"].map(String::from).to_vec(),
+            ["44747", "69", "Woltmannweg", "", "0", "0", "0", "0"].map(String::from).to_vec(),
+        ],
+        ..Default::default()
+    };
+    assert_eq!(trip_station_tiles(&legacy, &[]), vec![Some(78), None]);
+    let typ2 = omsi_timetable::Trip { stations: vec![2049, 7], ..Default::default() };
+    let stops = vec![omsi_timetable::BusStopEntry { name: "Siegener Str".into(), group: 18, object_id: 2049, params: [13.0, 0.0, 0.0] }];
+    assert_eq!(trip_station_tiles(&typ2, &stops), vec![Some(18), None]);
+    // the stop placed by its tile at x = 500; the same id on a tile 3 km off loaded last
+    let mut t = planned(0.0, &[(0.0, 0.0, 0.0), (500.0, 100.0, 100.0), (1000.0, 200.0, 200.0)]);
+    t.stops[1].position = Some(glam::DVec3::new(500.0, 0.0, 0.0));
+    let mut d = PlayerDuty {
+        line: "186".into(),
+        tour: "10".into(),
+        trips: vec![t],
+        trip_index: 0,
+        first_trip: 0,
+        next_stop: 0,
+        at_stop: false,
+        arrived_late: None,
+        done: false,
+        served_terminus: None,
+        left_late: None,
+        held_back: false,
+        placed: true,
+        trip_changed: false,
+        skipped: None,
+        run: 0,
+        finished: None,
+        reopened: None,
+        picked: true,
+        first_update: None,
+        heading: 90.0,
+        position: None,
+        tours: Vec::new(),
+        free: false,
+        dup_tiles: Default::default(),
+    };
+    let id = d.trips[0].stops[1].object_id;
+    let mut positions = HashMap::new();
+    positions.insert(id, (glam::DVec3::new(3000.0, 2000.0, 0.0), [0.0; 3]));
+    let mut dups = HashMap::new();
+    dups.insert(((64, 1), id), (glam::DVec3::new(3000.0, 2000.0, 0.0), [0.0; 3]));
+    dups.insert(((78, 1), id), (glam::DVec3::new(502.0, 1.0, 0.0), [0.0; 3]));
+    d.learn_loaded(&positions, &dups);
+    assert_eq!(d.trips[0].stops[1].position, Some(glam::DVec3::new(502.0, 1.0, 0.0)));
+    // (the tiles sharing the id are looked for once; where their objects stand is read
+    // every time)
+    assert_eq!(d.dup_tiles.0, Some((0, 2)));
+    dups.insert(((78, 1), id), (glam::DVec3::new(503.0, 1.0, 0.0), [0.0; 3]));
+    d.learn_loaded(&positions, &dups);
+    assert_eq!(d.trips[0].stops[1].position, Some(glam::DVec3::new(503.0, 1.0, 0.0)));
+}
+
+/// A duty of two tours (`player_plan`): at the terminus where the first ends the bus goes
+/// on with the second, and the duty's line and tour - what the IBIS, the HUD and the
+/// other players are told - are the second's from then on.
+#[test]
+fn a_composed_duty_goes_on_with_the_next_tour() {
+    let t1 = planned(0.0, &[(0.0, 0.0, 0.0), (500.0, 100.0, 100.0), (1000.0, 200.0, 200.0)]);
+    let t2 = planned(400.0, &[(1000.0, 400.0, 400.0), (1500.0, 500.0, 500.0)]);
+    let tours = vec![("130".to_string(), "4".to_string(), 2), ("137".to_string(), "Mo-Fr 2".to_string(), 5)];
+    let mut d = PlayerDuty { line: "130".into(), tour: "4".into(), trips: vec![t1, t2], trip_index: 0, first_trip: 0, next_stop: 0, at_stop: false, arrived_late: None, done: false, served_terminus: None, left_late: None, held_back: false, placed: true, trip_changed: false, skipped: None, run: 0, finished: None, reopened: None, picked: true, first_update: None, heading: 90.0, position: None, tours, free: false, dup_tiles: Default::default() };
+    for (x, t) in [(0.0, 0.0), (100.0, 10.0), (500.0, 100.0), (700.0, 130.0), (1000.0, 200.0)] {
+        d.advance(glam::DVec3::new(x, 0.0, 0.0), t);
+    }
+    assert!(d.trip_done());
+    assert_eq!((d.line.as_str(), d.tour.as_str()), ("130", "4"));
+    d.advance(glam::DVec3::new(1000.0, 0.0, 0.0), 345.0);
+    assert_eq!(d.trip_index, 1);
+    assert_eq!((d.line.as_str(), d.tour.as_str()), ("137", "Mo-Fr 2"));
+    assert_eq!(d.tour_trip(), 5, "a save names the trip by its place in its own tour");
+}
+
+/// A free drive along a line (`--free-line`): the bus goes on from stop to stop as on a
+/// duty - the navigator and the IBIS follow it - but it is never late, and no stop it
+/// leaves is counted for the personnel file.
+#[test]
+fn a_free_line_follows_its_stops_but_keeps_no_time() {
+    let duty = |free: bool| PlayerDuty { line: "5".into(), tour: String::new(), trips: vec![planned(0.0, &[(0.0, 0.0, 0.0), (500.0, 100.0, 100.0), (1000.0, 200.0, 200.0)])], trip_index: 0, first_trip: 0, next_stop: 0, at_stop: false, arrived_late: None, done: false, served_terminus: None, left_late: None, held_back: false, placed: true, trip_changed: false, skipped: None, run: 0, finished: None, reopened: None, picked: true, first_update: None, heading: 90.0, position: None, tours: Vec::new(), free, dup_tiles: Default::default() };
+    let mut v = timetable_test_vehicle();
+    let mut drive = |d: &mut PlayerDuty| {
+        // five minutes late at the second stop
+        let mut counted = Vec::new();
+        for (x, t) in [(0.0, 0.0), (100.0, 10.0), (500.0, 400.0), (700.0, 430.0)] {
+            v.position = glam::DVec3::new(x, 0.0, 0.0);
+            counted.extend(d.update(&mut v, t));
+        }
+        (counted, d.next_stop, d.delay(430.0), v.host.tt_delay)
+    };
+    let (counted, next, delay, shown) = drive(&mut duty(false));
+    assert!(!counted.is_empty() && delay > 200.0 && shown > 200.0, "a duty counts its stops and keeps its time");
+    assert_eq!(next, 2);
+    let (counted, next, delay, shown) = drive(&mut duty(true));
+    assert_eq!(next, 2, "a free drive follows the stops all the same");
+    assert!(counted.is_empty(), "no stop of a free drive is counted early or late");
+    assert_eq!((delay, shown), (0.0, 0.0), "a free drive is never late");
 }

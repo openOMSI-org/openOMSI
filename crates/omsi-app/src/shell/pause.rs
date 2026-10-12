@@ -18,7 +18,8 @@ use crate::launcher::ui::{id_of, ButtonKind, Ui};
 use crate::ui::{DropdownView, MenuKind, Preview};
 
 /// The launcher's rail width.
-const RAIL_W: f32 = crate::launcher::RAIL_W;
+// (the rail of the pause menu, as wide as the launcher's rail was)
+const RAIL_W: f32 = 236.0;
 /// The launcher page's background.
 const PAGE: Color = BG;
 /// A list's row.
@@ -265,7 +266,7 @@ fn rail(sh: &mut Shell, v: &PauseView) {
             } else {
                 INK_2.mix(INK, t)
             };
-            let icon_c = if open || (kbd && !danger) { ACCENT } else { c };
+            let icon_c = if open || (kbd && !danger) { accent() } else { c };
             let (text, more) = plain(label);
             ui.icon(rail_icon(id), Vec2::new(row.x + 19.5, row.center().y), 19.0, icon_c);
             ui.text_in(text, Rect::new(row.x + 41.0, row.y, row.w - 64.0, row.h), 14.0, Weight::Medium, c, Align::Left);
@@ -311,7 +312,7 @@ fn tabs(ui: &mut Ui, at: Vec2, titles: &[String], chosen: usize, max_w: f32) -> 
         let on = i == chosen;
         ui.text_in(t, r, 14.0, Weight::Medium, if on || h { INK } else { INK_MUTED }, Align::Center);
         if on {
-            ui.p().rect(Rect::new(r.x, r.bottom() - 2.0, r.w, 2.0), ACCENT);
+            ui.p().rect(Rect::new(r.x, r.bottom() - 2.0, r.w, 2.0), accent());
         }
         if clicked && !on {
             out = Some(i);
@@ -509,7 +510,7 @@ fn settings_row(ui: &mut Ui, k: usize, label: &str, r: Rect, kbd: bool, dd_open:
         ui.p().rounded(r, 6.0, SURFACE.mix(SURFACE_2, 0.5).alpha(t));
     }
     if kbd {
-        ui.p().rounded(Rect::new(r.x, r.y + 8.0, 2.0, r.h - 16.0), 1.0, ACCENT);
+        ui.p().rounded(Rect::new(r.x, r.y + 8.0, 2.0, r.h - 16.0), 1.0, accent());
     }
     let lx = r.x + 8.0;
     let ctl_w = (r.w * 0.5).min(300.0);
@@ -557,7 +558,7 @@ fn settings_row(ui: &mut Ui, k: usize, label: &str, r: Rect, kbd: bool, dd_open:
                 if h {
                     ui.p().rounded(half.inset(3.0), 5.0, SURFACE_3);
                 }
-                ui.icon(icon, half.center(), 18.0, if h { ACCENT } else { TEXT_DIM });
+                ui.icon(icon, half.center(), 18.0, if h { accent() } else { TEXT_DIM });
                 if clicked {
                     out = Some(Action::Control(k, fx));
                 }
@@ -578,7 +579,7 @@ fn settings_row(ui: &mut Ui, k: usize, label: &str, r: Rect, kbd: bool, dd_open:
                 (false, true) => "expand_less",
                 (false, false) => "expand_more",
             };
-            ui.icon(icon, Vec2::new(ctl.right() - 18.0, ctl.center().y), 18.0, if row.value.is_empty() { TEXT_DIM.mix(ACCENT, a) } else { TEXT_DIM });
+            ui.icon(icon, Vec2::new(ctl.right() - 18.0, ctl.center().y), 18.0, if row.value.is_empty() { TEXT_DIM.mix(accent(), a) } else { TEXT_DIM });
             if dd_open {
                 *dd_anchor = Some(ctl);
             }
@@ -653,7 +654,7 @@ fn dropdown(sh: &mut Shell, d: &DropdownView, a: Rect, kbd: bool) {
         let (h, _, clicked) = ui.interact(id_of(&format!("pause-dd-{i}")), cell);
         if d.current == Some(i) {
             ui.p().rounded(cell, 5.0, SURFACE_3);
-            ui.icon("check", Vec2::new(cell.right() - 16.0, cell.center().y), 15.0, ACCENT);
+            ui.icon("check", Vec2::new(cell.right() - 16.0, cell.center().y), 15.0, accent());
         } else if h || (kbd && d.sel == i) {
             ui.p().rounded(cell, 5.0, SURFACE_3.alpha(0.6));
         }
@@ -732,12 +733,12 @@ fn list_rows(sh: &mut Shell, v: &PauseView, list: &ListView, r: Rect, keep_marke
                 // a line of the timetable: its number on a sign, as a line sign on a bus
                 let sw = (ui.width(name, 14.0, Weight::Bold) + 22.0).max(48.0);
                 let sign = Rect::new(row.x + 10.0, cy - 13.0, sw, 26.0);
-                ui.p().rounded(sign, 6.0, ACCENT.mix(Color::rgba(150, 104, 30, 1.0), if marked || h { 0.0 } else { 0.3 }));
+                ui.p().rounded(sign, 6.0, accent().mix(Color::rgba(150, 104, 30, 1.0), if marked || h { 0.0 } else { 0.3 }));
                 ui.text_in(name, sign, 14.0, Weight::Bold, Color::rgba(18, 14, 8, 1.0), Align::Center);
                 ui.text_in(info, Rect::new(sign.right() + 12.0, row.y, row.right() - sign.right() - 40.0, row.h), 13.0, Weight::Regular, ink, Align::Left);
                 ui.icon("chevron_right", Vec2::new(row.right() - 16.0, cy), 16.0, TEXT_DIM);
             } else if let Some((code, name)) = code_and_name(label).filter(|_| code_w > 0.0) {
-                ui.text_in(code, Rect::new(row.x + 12.0, row.y, code_w, row.h), 13.0, Weight::Medium, ACCENT, Align::Right);
+                ui.text_in(code, Rect::new(row.x + 12.0, row.y, code_w, row.h), 13.0, Weight::Medium, accent(), Align::Right);
                 ui.text_in(name, Rect::new(row.x + 24.0 + code_w, row.y, row.w - code_w - 36.0, row.h), 13.0, Weight::Regular, ink, Align::Left);
             } else {
                 let (text, more) = plain(label);
@@ -813,7 +814,7 @@ fn preview(sh: &mut Shell, p: &Preview, list: &ListView, r: Rect) {
                 acts.push(Action::Pane(code));
             }
         }
-        ui.text_in(time, Rect::new(prev.right() + 8.0, top, next.x - prev.right() - 16.0, bh), 18.0, Weight::Bold, ACCENT, Align::Center);
+        ui.text_in(time, Rect::new(prev.right() + 8.0, top, next.x - prev.right() - 16.0, bh), 18.0, Weight::Bold, accent(), Align::Center);
         top += bh + 10.0;
     }
     let lh = 28.0;
@@ -832,7 +833,7 @@ fn preview(sh: &mut Shell, p: &Preview, list: &ListView, r: Rect) {
                     if i == chosen {
                         first_view = Some(i as f32 * lh);
                     }
-                    ui.text_in(when, Rect::new(row.right() - 70.0, row.y, 60.0, row.h), 12.5, Weight::Medium, ACCENT, Align::Right);
+                    ui.text_in(when, Rect::new(row.right() - 70.0, row.y, 60.0, row.h), 12.5, Weight::Medium, accent(), Align::Right);
                     ui.text_in(what, Rect::new(row.x + 10.0, row.y, row.w - 90.0, row.h), 12.5, Weight::Regular, if i == chosen { TEXT } else { TEXT_SOFT }, Align::Left);
                 }
                 p.rows.len() as f32 * lh
@@ -853,14 +854,14 @@ fn preview(sh: &mut Shell, p: &Preview, list: &ListView, r: Rect) {
             ui.scroll_area(&key, rows_r, &mut |ui, view| {
                 for (i, (what, when)) in p.rows.iter().enumerate() {
                     let y = view.y + i as f32 * lh;
-                    ui.text_in(when, Rect::new(view.right() - 78.0, y, 70.0, lh), 12.5, Weight::Medium, ACCENT, Align::Right);
+                    ui.text_in(when, Rect::new(view.right() - 78.0, y, 70.0, lh), 12.5, Weight::Medium, accent(), Align::Right);
                     match what.strip_prefix(tp.as_str()) {
                         Some(rest) => {
                             let (num, dest) = rest.split_once("  ›  ").unwrap_or((rest, ""));
                             let tw = (ui.width(num.trim(), 12.5, Weight::Bold) + 16.0).max(34.0);
                             let tile = Rect::new(view.x, y + 3.0, tw, lh - 6.0);
-                            ui.p().rounded(tile, 5.0, ACCENT.alpha(0.16));
-                            ui.text_in(num.trim(), tile, 12.5, Weight::Bold, ACCENT, Align::Center);
+                            ui.p().rounded(tile, 5.0, accent().alpha(0.16));
+                            ui.text_in(num.trim(), tile, 12.5, Weight::Bold, accent(), Align::Center);
                             ui.text_in(dest, Rect::new(tile.right() + 10.0, y, view.w - tw - 100.0, lh), 12.5, Weight::Regular, TEXT_SOFT, Align::Left);
                         }
                         None => {

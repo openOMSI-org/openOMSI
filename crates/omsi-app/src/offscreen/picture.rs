@@ -317,6 +317,9 @@ impl Offscreen<'_> {
                 let mut nav = navigator::Navigator::new(true, settings.ui_opacity, &settings.navigator_corner);
                 nav.schedule = omsi_cfg::flags::OMSI_NAV_SCHEDULE.is_set();
                 nav.show_ai = settings.nav_ai;
+                nav.set_rect(&settings.nav_rect);
+                crate::stop_signs::set_style(crate::stop_signs::Style::from_setting(&settings.stop_style));
+                crate::units::set(&settings.speed_unit);
                 if omsi_cfg::flags::OMSI_NAV_MAP.is_set() {
                     nav.toggle_map();
                 }
@@ -343,6 +346,7 @@ impl Offscreen<'_> {
                     terminus,
                     stops,
                     delay: duty.as_ref().map(|_| p.vehicle.host.tt_delay as f64),
+                    duty: duty.as_ref(),
                     passengers: humans_off.as_ref().map(|h| h.riding()),
                     stop_requested: navigator::stop_requested(&p.vehicle),
                     time: clock.time,

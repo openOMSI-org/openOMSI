@@ -319,7 +319,8 @@ scripts/build-macos.sh   # or build-windows.cmd / build-linux.sh: the game opens
 ```
 
 Without a person at it: `OMSI_LAUNCHER_PAGE=drive:2` opens a page (and a Drive step;
-`settings:3` or `controls:1` a tab), `OMSI_LAUNCHER_SHOT=secs:file.png` writes a picture,
+`settings:3` or `controls:1` a tab, `bus company:7` a page of the bus company and
+`bus company:home` its start screen), `OMSI_LAUNCHER_SHOT=secs:file.png` writes a picture,
 `OMSI_LAUNCHER_EXIT=secs` closes it,
 `OMSI_LAUNCHER_INPUT="t=2 click 412,60; t=3 type 76; t=4 key Enter; t=5 shot a.png"` works
 it (logical pixels). The data side is `crates/omsi-launcher-core`:

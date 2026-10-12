@@ -558,8 +558,9 @@ impl RendererStart {
 }
 
 /// The colour a window shows before it has anything else to show: the launcher's background
-/// and the game's loading screen (linear, as the sRGB window takes it).
-pub(crate) const WINDOW_BACKGROUND: wgpu::Color = wgpu::Color { r: 0.0056, g: 0.0056, b: 0.0056, a: 1.0 };
+/// and the game's loading screen (linear, as the sRGB window takes it): the Omsi-Hub launcher's
+/// night blue.
+pub(crate) const WINDOW_BACKGROUND: wgpu::Color = wgpu::Color { r: 0.0027, g: 0.0037, b: 0.0091, a: 1.0 };
 
 /// A picture of `color` alone into `surface`, shown (no pipeline needed: a clear). False when
 /// the window gave no picture to draw into (hidden, covered, being resized).

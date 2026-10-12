@@ -30,6 +30,19 @@ pub(super) fn line_sign(schedule: Option<&crate::schedule::Schedule>, line: &oms
     sign.unwrap_or_else(|| line.name.clone())
 }
 
+/// "Line 12" for a line of the map's (its file's name, as OMSI lists it); a line the player
+/// made in the line editor (`oo_…`) by the number its trips carry, and marked as theirs.
+pub(super) fn line_title(schedule: Option<&crate::schedule::Schedule>, line: &omsi_timetable::Line) -> String {
+    let tr = |t: &str| omsi_ui::tr(t).into_owned();
+    if is_own_file(&line.name) {
+        let sign = line_sign(schedule, line);
+        let number = if sign == line.name { sign.trim().get(omsi_launcher_lib::lines::FILE_PREFIX.len()..).unwrap_or(&sign).to_string() } else { sign };
+        format!("{} {number}  · {}", tr("Line"), tr("own line"))
+    } else {
+        format!("{} {}", tr("Line"), line.name)
+    }
+}
+
 /// A line's tours in alphabetical order of their numbers (numbers inside them as numbers:
 /// "2" before "10"; equal numbers by the time they start).
 pub(super) fn sorted_tours(line: &omsi_timetable::Line) -> Vec<&omsi_timetable::Tour> {
@@ -166,7 +179,7 @@ pub(super) fn switch_driver(app: &mut App, name: &str) {
     next.go_on_from(&mut app.session.career);
     app.session.career = next;
     app.args.driver = Some(rel);
-    app.service_msg = Some((format!("Driver: {name}"), 3.0));
+    app.service_msg = Some((omsi_ui::tr("Driver: %{name}").replace("%{name}", &name), 3.0));
 }
 
 /// The fleet numbers of the bus's `[number]` list with their registrations.
@@ -218,7 +231,7 @@ pub(crate) fn start_duty_at(app: &mut App, line: &str, tour: &str, trip: usize, 
     let mut d = match sch.player_duty(&w, line, tour, now, None, false) {
         Ok(d) => d,
         Err(e) => {
-            app.service_msg = Some((format!("No duty: {e}"), 8.0));
+            app.service_msg = Some((omsi_ui::tr("No duty: %{error}").replace("%{error}", &e.to_string()), 8.0));
             return;
         }
     };
@@ -237,7 +250,7 @@ pub(crate) fn start_duty_at(app: &mut App, line: &str, tour: &str, trip: usize, 
     app.args.line = Some(line.to_string());
     app.args.tour = Some(tour.to_string());
     app.session.duty = Some(d);
-    app.service_msg = Some((format!("Line {line}, tour {}", tour.trim()), 4.0));
+    app.service_msg = Some((omsi_ui::tr("Line %{line}, tour %{tour}").replace("%{line}", line).replace("%{tour}", tour.trim()), 4.0));
 }
 
 pub(super) fn start_duty(app: &mut App, line: &str, tour: &str) {
@@ -260,8 +273,8 @@ pub(super) fn start_duty(app: &mut App, line: &str, tour: &str) {
             app.args.line = Some(line.to_string());
             app.args.tour = Some(tour.to_string());
             app.session.duty = Some(d);
-            app.service_msg = Some((format!("Line {line}, tour {}", tour.trim()), 4.0));
+            app.service_msg = Some((omsi_ui::tr("Line %{line}, tour %{tour}").replace("%{line}", line).replace("%{tour}", tour.trim()), 4.0));
         }
-        Err(e) => app.service_msg = Some((format!("No duty: {e}"), 8.0)),
+        Err(e) => app.service_msg = Some((omsi_ui::tr("No duty: %{error}").replace("%{error}", &e.to_string()), 8.0)),
     }
 }

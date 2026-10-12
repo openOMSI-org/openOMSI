@@ -14,6 +14,8 @@ pub fn is_game_action(name: &str) -> bool {
                 | "toggel_mouse_ctrl"
                 | "toggel_ctrler"
                 | "voice_radio"
+                | "head_tracking_recenter"
+                | "head_tracking_toggle"
         )
 }
 

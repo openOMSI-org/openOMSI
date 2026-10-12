@@ -44,15 +44,29 @@ impl App {
                 // menu at once)
                 if self.settings.head_tracking && self.input.headtrack.is_none() && self.input.headtrack_failed.is_none_or(|t| t.elapsed().as_secs_f32() > 5.0) {
                     let hwnd = self.window.as_ref().and_then(|window| crate::controllers::window_handle(window));
-                    self.input.headtrack = crate::headtrack::HeadTracker::start(self.settings.head_tracking_port, hwnd);
+                    let tobii = crate::tobii::Options { edges: self.settings.tobii_edges, ..Default::default() };
+                    self.input.headtrack = crate::headtrack::HeadTracker::start_with(self.settings.head_tracking_port, &self.settings.head_tracking_source, tobii, hwnd);
                     self.input.headtrack_failed = self.input.headtrack.is_none().then(std::time::Instant::now);
+                }
+                if let Some(h) = self.input.headtrack.as_ref() {
+                    h.set_tobii(crate::tobii::Options { edges: self.settings.tobii_edges, ..Default::default() });
                 }
                 if !self.settings.head_tracking {
                     self.input.headtrack_scale_last = None;
                     self.input.headtrack_scale_bias = [0.0; 6];
                     self.input.headtrack_invert_last = None;
                 }
-                let tracked = self.input.headtrack.as_ref().and_then(|h| h.pose()).filter(|_| self.settings.head_tracking && matches!(self.view.as_str(), "driver" | "pax"));
+                // (the tracker's latest pose made calm frame by frame - glided between the
+                // tracker's poses, its trembling filtered out, see `crate::head_filter` - then
+                // the player's sensitivities; with head tracking switched off or the tracker
+                // lost the view glides home. Native TrackIR's sensitivities and inversions,
+                // `head_track_adjust`, go on top below)
+                let sample = self.input.headtrack.as_ref().and_then(|h| h.sample()).filter(|_| self.settings.head_tracking);
+                let calm = crate::head_filter::Params::tobii(self.settings.head_tracking_smoothing, self.settings.head_tracking_dead_zone);
+                let gain = (self.settings.head_tracking_yaw, self.settings.head_tracking_pitch, self.settings.head_tracking_roll, self.settings.head_tracking_move);
+                let tracked = self.input.head_filter.step(sample.as_ref(), std::time::Instant::now(), calm)
+                    .filter(|_| matches!(self.view.as_str(), "driver" | "pax"))
+                    .map(|t| t.scaled(gain.0, gain.1, gain.2, gain.3));
                 #[cfg(windows)]
                 let vr_on = self.xr.vr.is_some();
                 #[cfg(not(windows))]

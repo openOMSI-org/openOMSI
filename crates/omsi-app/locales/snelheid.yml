@@ -1,0 +1,30 @@
+_version: 2
+# Speeds in miles an hour (the setting speed_unit): the English text is the key, as in app.yml.
+"%{speed} mph where %{limit} is allowed · fine %{amount}":
+  nl: "%{speed} mph waar %{limit} is toegestaan · boete %{amount}"
+  de: "%{speed} mph bei erlaubten %{limit} · Bußgeld %{amount}"
+  fr: "%{speed} mph là où %{limit} est autorisé · amende %{amount}"
+  ru: "%{speed} mph при разрешённых %{limit} · штраф %{amount}"
+  uk: "%{speed} mph при дозволених %{limit} · штраф %{amount}"
+  pl: "%{speed} mph przy dozwolonych %{limit} · mandat %{amount}"
+"Speed in":
+  nl: "Snelheid in"
+  de: "Geschwindigkeit in"
+  fr: "Vitesse en"
+  ru: "Скорость в"
+  uk: "Швидкість у"
+  pl: "Prędkość w"
+"km/h":
+  nl: "km/u"
+  de: "km/h"
+  fr: "km/h"
+  ru: "км/ч"
+  uk: "км/год"
+  pl: "km/h"
+"mph (miles per hour)":
+  nl: "mph (mijl per uur)"
+  de: "mph (Meilen pro Stunde)"
+  fr: "mph (miles par heure)"
+  ru: "mph (мили в час)"
+  uk: "mph (милі на годину)"
+  pl: "mph (mile na godzinę)"

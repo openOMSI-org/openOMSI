@@ -17,10 +17,12 @@ impl App {
             }
             return true;
         }
+        // (the board is a step only for a player who wants it under the map - the setting and
+        // the handle on the panel: else the map, off)
         if let Some(n) = self.menus.navigator.as_mut() {
             match (n.enabled, n.schedule) {
-                (true, false) => n.schedule = true,
-                (true, true) => {
+                (true, false) if n.board => n.schedule = true,
+                (true, _) => {
                     n.enabled = false;
                     n.schedule = false;
                 }
@@ -205,6 +207,10 @@ impl App {
             // (Omsi.exe's camera reset, 0x7edde4, puts back the field of view with the
             // direction: the zoom goes as well, #244)
             "view_reset_direction" => {
+                // (a Tobii tracker's middle: where the head is now)
+                if let Some(h) = self.input.headtrack.as_ref() {
+                    h.recenter();
+                }
                 // F1 eases home (look + zoom glide) from the values in place:
                 // zeroing them first would flash a frame of the destination.
                 if self.view == "driver"
@@ -301,6 +307,27 @@ impl App {
                     let msg = if !c.any() { "No game controller found" } else if c.enabled { "Game controller on" } else { "Game controller off" };
                     self.service_msg = Some((msg.into(), 3.0));
                 }
+            }
+            // head tracking on or off (Shift+F2), as the switch in the options does it
+            "head_tracking_toggle" => {
+                let on = !self.settings.head_tracking;
+                self.settings.head_tracking = on;
+                crate::game_lists::remember_setting("head_tracking", if on { "1" } else { "0" });
+                // (the options open: the switch and the rows under it as they are now)
+                self.menus.list_dirty = true;
+                self.service_msg = Some((if on { "Head tracking on" } else { "Head tracking off" }.into(), 2.5));
+            }
+            // the head's middle where it is now (Shift+F1), the view left as it is
+            "head_tracking_recenter" => {
+                let msg = match self.input.headtrack.as_ref() {
+                    _ if !self.settings.head_tracking => "Head tracking is off",
+                    Some(h) => {
+                        h.recenter();
+                        "Head position reset"
+                    }
+                    None => "No head tracker found",
+                };
+                self.service_msg = Some((msg.into(), 2.5));
             }
             _ => return false,
         }

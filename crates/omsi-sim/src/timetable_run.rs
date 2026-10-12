@@ -209,6 +209,18 @@ pub struct PlayerDuty {
     /// Where the bus was at the last update: how far along the way to the next stop it
     /// is, for the delay on the way (`delay`).
     position: Option<glam::DVec3>,
+    /// A duty of several tours (`ScheduleSim::player_plan`): the line and tour of each trip
+    /// and its place in that tour (0 = the first); `line` and `tour` follow them from trip
+    /// to trip. Empty: all are `line` and `tour`, from `first_trip` on.
+    pub tours: Vec<(String, String, usize)>,
+    /// A free drive along a line (`ScheduleSim::free_line_duty`): its stops are followed -
+    /// the navigator draws the way, the IBIS goes on with them - but not judged: no delay,
+    /// no stop counted early or late.
+    pub free: bool,
+    /// The tiles whose objects share the id of a stop of the trip under way or the next
+    /// (omsi-app's `World::object_dups`), as found for that trip and that many shared
+    /// objects: looked for again only when either changes (`learn_loaded` runs every frame).
+    dup_tiles: (Option<(usize, usize)>, HashMap<i64, Vec<(i32, i32)>>),
 }
 
 pub const DAY: f64 = 86_400.0;

@@ -725,6 +725,20 @@ impl World {
         drive_probe(&self.terrains, &self.surfaces, x, y, near + 1.5).below.filter(|g| near - g < 3.0)
     }
 
+    /// Where object `id` placed on tile `tile` (its index in global.cfg's `[map]` list, as a
+    /// timetable's station names it) stands: on a map whose ids repeat across tiles - one
+    /// joined from several - the one of that tile, else the map's object of that id.
+    pub fn object_of_tile(&self, tile: Option<usize>, id: i64) -> Option<(DVec3, [f64; 3])> {
+        if let Some(t) = tile.and_then(|i| self.global.raw_tiles.get(i)).copied() {
+            // (the index knows every tile's objects whose ids repeat, loaded or not)
+            self.index();
+            if let Some(p) = self.object_dups.lock().get(&(t, id)) {
+                return Some(*p);
+            }
+        }
+        self.object_positions.lock().get(&id).copied()
+    }
+
     /// Where entry point `ep` stands (position, heading): its object, found on the tile
     /// the entry point names (global.cfg's `[entrypoints]` record holds the index of its
     /// tile in the `[map]` list, and the place within that tile). An object of that id on

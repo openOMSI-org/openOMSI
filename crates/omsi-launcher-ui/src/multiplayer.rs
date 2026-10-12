@@ -31,13 +31,13 @@ pub struct MultiplayerView {
 }
 
 pub fn draw(l: &mut Launcher, area: Rect) {
-    let body = l.page_title(area, "Multiplayer", "Drive with friends by a code, or on servers that are always on.");
-    let tabs = Rect::new(body.x, body.y, 360.0, 36.0);
+    let body = area;
+    let tabs = Rect::new(body.x, body.y, body.w, 34.0);
     let mut tab = l.mp.tab;
-    if l.ui.segmented("mp-tab", tabs, &mut tab, &["Connect by Code", "Servers"]) {
+    if l.ui.chips("mp-tab", tabs, &mut tab, &["Connect by Code", "Servers"]) {
         l.mp.tab = tab;
     }
-    let rest = Rect::new(body.x, tabs.bottom() + 18.0, body.w, body.bottom() - tabs.bottom() - 18.0);
+    let rest = Rect::new(body.x, tabs.bottom() + 16.0, body.w, body.bottom() - tabs.bottom() - 16.0);
     if l.mp.tab == 0 {
         by_code(l, rest);
     } else {
@@ -49,7 +49,7 @@ fn by_code(l: &mut Launcher, r: Rect) {
     let col = (r.w - 24.0) / 2.0;
     // host
     let host = Rect::new(r.x, r.y, col, 300.0);
-    l.ui.panel(host);
+    l.ui.card(host);
     let mut y = host.y + 18.0;
     l.ui.heading(Rect::new(host.x + 18.0, y, host.w - 36.0, 28.0), "Host a game", Some("wifi_tethering"));
     y += 36.0;
@@ -101,7 +101,7 @@ fn by_code(l: &mut Launcher, r: Rect) {
     }
     // join
     let join = Rect::new(r.x + col + 24.0, r.y, col, 300.0);
-    l.ui.panel(join);
+    l.ui.card(join);
     let mut y = join.y + 18.0;
     l.ui.heading(Rect::new(join.x + 18.0, y, join.w - 36.0, 28.0), "Connect by Code", Some("link"));
     y += 36.0;
@@ -124,11 +124,20 @@ fn by_code(l: &mut Launcher, r: Rect) {
     let can = l.state.choice.lan_mode == "join" && l.state.joined_server.is_none() && l.state.join.0 && !l.state.choice.lan_addr.is_empty();
     if l.ui.button("mp-join", Rect::new(join.x + 18.0, join.bottom() - 18.0 - ROW, 200.0, ROW), "Choose a bus and join", Some("exit_to_app"), if can { ButtonKind::Primary } else { ButtonKind::Normal }) {
         if can {
-            l.go(super::Page::Drive);
+            to_the_modes(l);
         } else {
             l.state.set_status("Paste a session code first", true);
         }
     }
+}
+
+/// A session joined (by its code or a server): the Drive page's first choice, how to drive,
+/// and a word that it is to be made now - the page changed under the player without one, and
+/// it was not clear something was asked (Luc).
+pub(super) fn to_the_modes(l: &mut Launcher) {
+    l.drive.step = super::flow::Step::Mode;
+    l.go(super::Page::Drive);
+    l.show_hint("link", "Ready to join", "Now choose how you want to drive: a duty, a tour or a free drive. You join the others when the game starts.");
 }
 
 fn servers(l: &mut Launcher, r: Rect) {
@@ -165,7 +174,7 @@ fn servers(l: &mut Launcher, r: Rect) {
         l.state.ask_server(&e.address, 15.0);
     }
     if entries.is_empty() {
-        l.ui.panel(Rect::new(list.x, list.y, list.w, 110.0));
+        l.ui.card(Rect::new(list.x, list.y, list.w, 110.0));
         l.ui.icon("dns", Vec2::new(list.x + 44.0, list.y + 55.0), 30.0, TEXT_FAINT);
         l.ui.paragraph("No servers yet. Add a server by the address its owner gives you.", Vec2::new(list.x + 80.0, list.y + 32.0), list.w - 110.0, 13.0, Weight::Regular, TEXT_DIM);
     }
@@ -206,12 +215,12 @@ fn servers(l: &mut Launcher, r: Rect) {
             Some(Ok(i)) => {
                 l.ui.text_in(&i.motd, Rect::new(x, rr.y + 32.0, rr.w - 320.0, 18.0), 12.5, Weight::Regular, TEXT_SOFT, Align::Left);
                 let map = std::path::Path::new(&i.map.replace('\\', "/")).parent().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| i.map.clone());
-                l.ui.text_in(&format!("{map} | {} | {}", i.time, if i.weather.is_empty() { "the map's weather" } else { i.weather.as_str() }), Rect::new(x, rr.y + 52.0, rr.w - 320.0, 18.0), 11.5, Weight::Regular, TEXT_FAINT, Align::Left);
+                l.ui.text_in(&format!("{map} | {} | {}", i.time, if i.weather.is_empty() { omsi_ui::tr("the map's weather") } else { std::borrow::Cow::Borrowed(i.weather.as_str()) }), Rect::new(x, rr.y + 52.0, rr.w - 320.0, 18.0), 11.5, Weight::Regular, TEXT_FAINT, Align::Left);
                 l.ui.text_in(&format!("{}/{}", i.players, i.max_players), Rect::new(rr.right() - 300.0, rr.y + 10.0, 80.0, 22.0), 14.0, Weight::Medium, OK, Align::Right);
                 l.ui.icon("signal_cellular_alt", Vec2::new(rr.right() - 206.0, rr.y + 21.0), 16.0, OK);
             }
             Some(Err(err)) => {
-                l.ui.text_in(&format!("Can't reach the server: {err}"), Rect::new(x, rr.y + 32.0, rr.w - 320.0, 18.0), 12.0, Weight::Regular, DANGER, Align::Left);
+                l.ui.text_in(&omsi_ui::tr("Can't reach the server: %{error}").replace("%{error}", err), Rect::new(x, rr.y + 32.0, rr.w - 320.0, 18.0), 12.0, Weight::Regular, DANGER, Align::Left);
                 l.ui.text_in(&e.address, Rect::new(x, rr.y + 52.0, rr.w - 320.0, 18.0), 11.5, Weight::Regular, TEXT_FAINT, Align::Left);
             }
             None => {
@@ -236,7 +245,7 @@ fn servers(l: &mut Launcher, r: Rect) {
         let proto = [JoinProto::Auto, JoinProto::Udp, JoinProto::WebSocket][l.mp.proto.min(2)];
         l.state.join_server(&a, proto);
         if l.state.joined_server.as_deref() == Some(a.as_str()) {
-            l.go(super::Page::Drive);
+            to_the_modes(l);
         }
     }
     if l.ui.button("mp-refresh", Rect::new(r.x, r.bottom() - ROW, 150.0, ROW), "Refresh", Some("refresh"), ButtonKind::Normal) {

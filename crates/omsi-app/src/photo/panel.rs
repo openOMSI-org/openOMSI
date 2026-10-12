@@ -176,7 +176,7 @@ fn page(ui: &mut Ui, ph: &mut Photo, info: &Info, x: f32, mut y: f32, w: f32, ac
             section(ui, &mut y, "Time of day");
             let r = row(&mut y);
             ui.label(Rect::new(r.x, r.y, r.w * 0.38, r.h), "Clock");
-            ui.text_in(&info.time, Rect::new(r.x + r.w * 0.38, r.y, r.w * 0.62, r.h), 15.0, Weight::Bold, ACCENT, Align::Center);
+            ui.text_in(&info.time, Rect::new(r.x + r.w * 0.38, r.y, r.w * 0.62, r.h), 15.0, Weight::Bold, accent(), Align::Center);
             let r = row(&mut y);
             let bw = (r.w - 18.0) / 4.0;
             for (k, (text, secs)) in [("-1 h", -3600.0), ("-15 min", -900.0), ("+15 min", 900.0), ("+1 h", 3600.0)].into_iter().enumerate() {
@@ -264,7 +264,7 @@ pub(crate) fn draw(sh: &mut Shell, ph: &mut Photo, info: &Info) {
         ui.text_in(&text, Rect::new(r.x + 36.0, r.y, r.w - 44.0, 40.0), 13.0, Weight::Medium, TEXT.alpha(a), Align::Left);
         if let (Some(place), Some(path)) = (place, path) {
             ui.text_in(&place, Rect::new(r.x + 36.0, r.y + 30.0, r.w - 72.0, 18.0), 11.5, Weight::Regular, TEXT_DIM.alpha(a), Align::Left);
-            ui.icon("folder_open", Vec2::new(r.right() - 22.0, r.y + 39.0), 16.0, if hover { ACCENT.alpha(a) } else { TEXT_DIM.alpha(a) });
+            ui.icon("folder_open", Vec2::new(r.right() - 22.0, r.y + 39.0), 16.0, if hover { accent().alpha(a) } else { TEXT_DIM.alpha(a) });
             if clicked {
                 acts.push(Request::Reveal(path));
             }
@@ -283,7 +283,7 @@ pub(crate) fn draw(sh: &mut Shell, ph: &mut Photo, info: &Info) {
     let r = Rect::new(20.0, 20.0, PANEL_W.min(size.x - 40.0), size.y - 40.0);
     ui.panel(r);
     let inner = Rect::new(r.x + 18.0, r.y + 16.0, r.w - 36.0, r.h - 32.0);
-    ui.icon("photo_camera", Vec2::new(inner.x + 12.0, inner.y + 14.0), 20.0, ACCENT);
+    ui.icon("photo_camera", Vec2::new(inner.x + 12.0, inner.y + 14.0), 20.0, accent());
     ui.text("Photo mode", Vec2::new(inner.x + 32.0, inner.y + 21.0), 18.0, Weight::Bold, TEXT, Align::Left);
     let mm = lens::focal_mm(ph.settings.fov);
     let fnum = FSTOPS[ph.settings.fstop.min(FSTOPS.len() - 1)];

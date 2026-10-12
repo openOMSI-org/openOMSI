@@ -168,6 +168,26 @@ impl Launcher {
         }
     }
 
+    /// The window's picture drawn again into a texture that stays on the graphics card, to be
+    /// drawn with (the old look while the new one spreads, `theme_switch`): nothing is read
+    /// back and nothing waits for it. None when the card cannot make one (a format it cannot
+    /// read back in a shader): the look then changes at once.
+    pub(super) fn look_picture(&mut self, w: u32, h: u32, layers: &[omsi_ui::Layer], draws: &[Draw], bg: wgpu::Color) -> Option<(wgpu::Texture, wgpu::TextureView)> {
+        let (device, queue, format) = self.dev.clone()?;
+        let gpu = self.gpu.as_mut()?;
+        let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let tex = device.create_texture(&wgpu::TextureDescriptor { label: Some("launcher look"), size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format, usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING, view_formats: &[] });
+        if let Some(e) = pollster::block_on(scope.pop()) {
+            log::warn!("launcher: no picture of the look for its switch ({e}); it changes at once");
+            return None;
+        }
+        let view = tex.create_view(&Default::default());
+        let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("launcher look") });
+        gpu.render(&device, &queue, &mut enc, &view, (w, h), Some(bg), layers, draws);
+        queue.submit([enc.finish()]);
+        Some((tex, view))
+    }
+
     /// The window's picture drawn again into a texture and read back (for OMSI_LAUNCHER_SHOT).
     pub(super) fn shot_image(&mut self, w: u32, h: u32, layers: &[omsi_ui::Layer], draws: &[Draw], bg: wgpu::Color) -> Option<image::RgbaImage> {
         let (device, queue, format) = self.dev.clone()?;

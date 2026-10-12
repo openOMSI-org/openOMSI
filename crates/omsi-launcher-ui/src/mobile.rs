@@ -85,7 +85,7 @@ pub fn storage_roots() -> Vec<(String, PathBuf)> {
         }
         let p = PathBuf::from("/storage").join(&n);
         if p.is_dir() {
-            v.push((format!("Card {n}"), p));
+            v.push((omsi_ui::tr("Card %{n}").replace("%{n}", &n), p));
         }
     }
     if v.is_empty() {
@@ -350,7 +350,7 @@ impl Launcher {
                 if ui.row(&format!("{key}-{k}"), rr, false) {
                     picked = Some((name.clone(), *dir));
                 }
-                ui.icon(if *dir { "folder" } else { "inventory_2" }, Vec2::new(rr.x + 18.0, rr.center().y), 20.0, if *dir { ACCENT } else { TEXT_SOFT });
+                ui.icon(if *dir { "folder" } else { "inventory_2" }, Vec2::new(rr.x + 18.0, rr.center().y), 20.0, if *dir { accent() } else { TEXT_SOFT });
                 ui.text_in(name, Rect::new(rr.x + 40.0, rr.y, rr.w - 140.0, rr.h), 13.5, Weight::Medium, TEXT, Align::Left);
                 if !*dir {
                     ui.text_in(&super::state::fmt_bytes(*bytes), Rect::new(rr.x, rr.y, rr.w - 12.0, rr.h), 12.0, Weight::Regular, TEXT_DIM, Align::Right);

@@ -442,7 +442,7 @@ impl ScheduleSim {
                     if run.served[si] {
                         continue;
                     }
-                    let Some((pos, _)) = world.object_positions().get(sid).copied() else {
+                    let Some((pos, _)) = world.object_of_tile(run.station_tiles.get(si).copied().flatten(), *sid) else {
                         continue;
                     };
                     if let Some((ri, ss, lat)) = project_stop(
@@ -543,9 +543,10 @@ impl ScheduleSim {
     }
 
     /// Car `car`'s route stops short at step `next` of `steps`: it is carried on as the tiles
-    /// come, with the trip's `stations` (left at `leave`) not `served` yet.
+    /// come, with the trip's `stations` (left at `leave`, placed on the tiles
+    /// `station_tiles` names) not `served` yet.
     #[allow(clippy::too_many_arguments)]
-    pub fn carry_later(&mut self, car: u64, steps: Vec<Step>, next: usize, stations: &[i64], leave: &[f64], served: Vec<bool>, station_steps: Vec<Option<usize>>) {
+    pub fn carry_later(&mut self, car: u64, steps: Vec<Step>, next: usize, stations: &[i64], leave: &[f64], served: Vec<bool>, station_steps: Vec<Option<usize>>, station_tiles: Vec<Option<usize>>) {
         self.running.push(RunningTrip {
             car,
             steps,
@@ -553,6 +554,7 @@ impl ScheduleSim {
             stations: stations.iter().copied().zip(leave.iter().copied()).collect(),
             served,
             station_steps,
+            station_tiles,
         });
     }
 

@@ -226,6 +226,8 @@ impl ScheduleSim {
             data,
             departures,
             depots,
+            // (the player's own lines' buses: omsi-app's `Schedule::new`, `set_line_buses`)
+            line_buses: HashMap::new(),
             tile_coords,
             trains,
             pools: HashMap::new(),
@@ -244,6 +246,7 @@ impl ScheduleSim {
             boards_made: f64::NEG_INFINITY,
             player_tour: None,
             player_departure: None,
+            player_trips: Vec::new(),
             purge_player_tour: false,
             lan_tours: HashSet::new(),
             last_tod: 0.0,
@@ -264,6 +267,9 @@ impl ScheduleSim {
             car_use,
             tour_vehicle: HashMap::new(),
             used_numbers: HashSet::new(),
+            // (a drive of the player's own reads nothing of a company: `set_company`)
+            company: None,
+            company_off: Vec::new(),
             vehicle_seed: omsi_script::session_seed().map(|s| omsi_script::mix_seed(s ^ 0x746f_7572_5f62_7573)).unwrap_or(0),
         };
         s.assign_car_use();
@@ -391,10 +397,11 @@ impl ScheduleSim {
         day_bits(&self.calendar, &c)
     }
 
-    /// Whether departure `i`'s tour runs on the current day.
+    /// Whether departure `i`'s tour runs on the current day (and, in a drive for the player's
+    /// bus company, is not kept in its depot: `kept_off`).
     pub(super) fn runs(&self, i: usize) -> bool {
         let m = self.departures[i].mask;
-        m & self.day_bits.0 != 0 && m & self.day_bits.1 != 0
+        m & self.day_bits.0 != 0 && m & self.day_bits.1 != 0 && !self.kept_off(i)
     }
 
     /// Move the timetable on to the clock's date when it has changed (midnight): the day's
@@ -408,7 +415,11 @@ impl ScheduleSim {
             return;
         }
         self.day = date;
+        if let Some(c) = self.company.as_deref_mut() {
+            c.set_day(date);
+        }
         self.day_bits = day_bits(&self.calendar, clock);
+        self.mark_company();
         self.next_day_bit = 1 << ((clock.weekday() + 1) % 7);
         let busy: HashSet<usize> = self
             .pending

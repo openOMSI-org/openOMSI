@@ -36,9 +36,12 @@ pub struct ServerInfo {
     pub version: String,
     /// A PNG (64x64 like a Minecraft server's), empty for none.
     pub icon: Vec<u8>,
-    /// The time of day and weather the world has now (for the list).
+    /// The time of day and weather the world has now (for the list), and its date
+    /// (`YYYY-MM-DD`; empty: not said - an older game): a duty is chosen for the day the
+    /// session drives, the timetable's lines are those of that day.
     pub time: String,
     pub weather: String,
+    pub date: String,
     pub password: bool,
     /// The buses that may be driven there (vehicle files, `Vehicles/…/….bus`): what the
     /// host has installed, or a server's own list. Empty: not said (an older game).
@@ -144,7 +147,7 @@ pub fn players_json(players: &[PlayerInfo]) -> String {
 impl ServerInfo {
     pub fn to_json(&self) -> String {
         format!(
-            "{{\"name\":{},\"motd\":{},\"map\":{},\"players\":{},\"max_players\":{},\"version\":{},\"icon\":{},\"time\":{},\"weather\":{},\"password\":{},\"protocol\":{},\"vehicles\":{},\"world\":{}}}",
+            "{{\"name\":{},\"motd\":{},\"map\":{},\"players\":{},\"max_players\":{},\"version\":{},\"icon\":{},\"time\":{},\"date\":{},\"weather\":{},\"password\":{},\"protocol\":{},\"vehicles\":{},\"world\":{}}}",
             json_str(&self.name),
             json_str(&self.motd),
             json_str(&self.map),
@@ -153,6 +156,7 @@ impl ServerInfo {
             json_str(&self.version),
             !self.icon.is_empty(),
             json_str(&self.time),
+            json_str(&self.date),
             json_str(&self.weather),
             self.password,
             crate::PROTOCOL,
@@ -174,6 +178,7 @@ impl ServerInfo {
             version: text("version").unwrap_or_default(),
             icon: if json_value(s, "icon").map(|v| v.trim() == "true").unwrap_or(false) { vec![1] } else { Vec::new() },
             time: text("time").unwrap_or_default(),
+            date: text("date").unwrap_or_default(),
             weather: text("weather").unwrap_or_default(),
             password: json_value(s, "password").map(|v| v.trim() == "true").unwrap_or(false),
             vehicles: text("vehicles").map(|v| v.split(';').map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect()).unwrap_or_default(),
@@ -880,10 +885,13 @@ mod tests {
 
     #[test]
     fn status_round_trip() {
-        let i = ServerInfo { name: "Spandau \"1\"".into(), motd: "hi".into(), map: "maps/Berlin-Spandau/global.cfg".into(), players: 2, max_players: 16, version: "0.1".into(), icon: vec![1, 2], time: "08:00".into(), weather: "Sommerlich".into(), password: false, vehicles: vec!["Vehicles/MAN_SD202/SD202.bus".into()], ..Default::default() };
+        let i = ServerInfo { name: "Spandau \"1\"".into(), motd: "hi".into(), map: "maps/Berlin-Spandau/global.cfg".into(), players: 2, max_players: 16, version: "0.1".into(), icon: vec![1, 2], time: "08:00".into(), date: "2026-10-09".into(), weather: "Sommerlich".into(), password: false, vehicles: vec!["Vehicles/MAN_SD202/SD202.bus".into()], ..Default::default() };
         let j = i.to_json();
         let b = ServerInfo::from_json(&j).unwrap();
         assert_eq!(b.name, i.name);
+        assert_eq!((b.time.as_str(), b.date.as_str()), ("08:00", "2026-10-09"));
+        // (an older game's status: no date)
+        assert_eq!(ServerInfo::from_json(r#"{"name":"old","time":"08:00"}"#).unwrap().date, "");
         assert_eq!(b.vehicles, i.vehicles);
         assert_eq!(b.players, 2);
         assert_eq!(b.max_players, 16);

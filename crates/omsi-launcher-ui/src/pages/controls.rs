@@ -8,9 +8,10 @@ use omsi_launcher_lib as core;
 /// The game's own actions a controller's button can be given, besides the bus's: the doors
 /// and gears of any bus, looking round while held, the bus radio while held, the cameras
 /// and the views - both of OMSI's view resets, the one view's (C) and every view's (Space),
-/// which a controller could not bring back to the first camera (#1167) - and the main menu,
-/// which Esc opens and a controller has no Esc for.
-pub(super) const PAD_GAME_ACTIONS: [&str; 27] = ["doors_all", "door_4", "door_3", "door_2", "door_1", "gear_up", "gear_down", "view_look_left", "view_look_right", "view_look_up", "view_look_down", "view_reset_direction", "view_reset_all_directions", "view_interiorcam_plus", "view_interiorcam_minus", "view_toggle_viewpoint", "view_toggle_interior", "view_set_driver", "view_set_passenger", "view_set_outside", "sim_pause", "open_menu", "screenshot", "quicksave", "toggel_mouse_ctrl", "toggel_ctrler", "voice_radio"];
+/// which a controller could not bring back to the first camera (#1167) - the main menu,
+/// which Esc opens and a controller has no Esc for - and head tracking's switch and the
+/// reset of the head's middle.
+pub(super) const PAD_GAME_ACTIONS: [&str; 29] = ["head_tracking_recenter", "head_tracking_toggle", "doors_all", "door_4", "door_3", "door_2", "door_1", "gear_up", "gear_down", "view_look_left", "view_look_right", "view_look_up", "view_look_down", "view_reset_direction", "view_reset_all_directions", "view_interiorcam_plus", "view_interiorcam_minus", "view_toggle_viewpoint", "view_toggle_interior", "view_set_driver", "view_set_passenger", "view_set_outside", "sim_pause", "open_menu", "screenshot", "quicksave", "toggel_mouse_ctrl", "toggel_ctrler", "voice_radio"];
 
 pub(super) fn action_text(names: &omsi_input::describe::ControlNames, a: &str) -> String {
     known_action(a).unwrap_or_else(|| names.control(a))
@@ -22,7 +23,7 @@ pub(super) fn control_names(l: &Launcher) -> &'static omsi_input::describe::Cont
 
 fn known_action(a: &str) -> Option<String> {
     if let Some(gear) = a.strip_prefix("kw_s_").and_then(|s| s.strip_suffix("_fest")) {
-        return Some(format!("Gear {gear} (H-pattern)"));
+        return Some(omsi_ui::tr("Gear %{gear} (H-pattern)").replace("%{gear}", gear));
     }
     let known: &[(&str, &str)] = &[
         ("throttle", "Throttle"),
@@ -65,6 +66,8 @@ fn known_action(a: &str) -> Option<String> {
         ("view_set_outside", "Outside view"),
         ("view_toggle_viewpoint", "Next view"),
         ("view_toggle_interior", "Cabin and outside, one key"),
+        ("head_tracking_recenter", "Head tracking: reset the head position"),
+        ("head_tracking_toggle", "Head tracking on / off"),
         ("vr_recenter", "VR: Reset view"),
         ("vr_toggle_desktop_mirror", "VR: Monitor preview"),
         ("vr_toggle_mode", "VR: Switch VR / desktop"),
@@ -86,11 +89,11 @@ fn known_action(a: &str) -> Option<String> {
 }
 
 pub fn controls(l: &mut Launcher, area: Rect) {
-    let body = l.page_title(area, "Controls", if l.pages.controls_tab == 0 { "Click a key and press the new one (hold Shift, Ctrl or Alt for a combination); Escape leaves it as it is." } else { "What each axis and button of a wheel, pedals or joystick does - OMSI 2's gamectrler.cfg, kept in the content folder." });
     let mut tab = l.pages.controls_tab;
-    if l.ui.segmented("controls-tab", Rect::new(body.right() - 320.0, body.y - 46.0, 320.0, 34.0), &mut tab, &["Keyboard", "Game controllers"]) {
+    if l.ui.chips("controls-tab", Rect::new(area.x, area.y, area.w, 34.0), &mut tab, &["Keyboard", "Game controllers"]) {
         l.pages.controls_tab = tab;
     }
+    let body = Rect::new(area.x, area.y + 50.0, area.w, (area.h - 50.0).max(0.0));
     if l.pages.controls_tab == 1 {
         game_controllers(l, body);
         return;
@@ -117,7 +120,7 @@ pub fn controls(l: &mut Launcher, area: Rect) {
                     }
                     save_keys(l, vr_binding);
                 }
-                None => l.state.set_status(format!("{code:?} has no DirectInput scan code the game understands."), true),
+                None => l.state.set_status(omsi_ui::tr("%{key} has no DirectInput scan code the game understands.").replace("%{key}", &format!("{code:?}")), true),
             }
             l.pages.capturing = None;
         }
@@ -129,21 +132,25 @@ pub fn controls(l: &mut Launcher, area: Rect) {
     // with the switch right here - and changing a key switches by itself (see `save_keys`).
     let preset = l.state.settings.get("drive_keys").and_then(|v| v.as_str()).unwrap_or("simple").to_string();
     let body = if preset != "omsi" {
-        let name = match preset.as_str() {
+        let name = omsi_ui::tr(match preset.as_str() {
             "wasd" => "W A S D only",
             "arrows" => "Arrow keys only",
             _ => "W A S D + arrows",
-        };
+        });
         let bw = if body.w < 700.0 { 150.0 } else { 200.0 };
-        let text = format!("Driving keys: {name} (Settings). Those keys drive the bus and win over the list below. Change any key here and your own layout (Custom controls) is used from then on.");
-        let tw = body.w - bw - 70.0;
+        let text = omsi_ui::tr("Driving keys: %{name} (Settings). Those keys drive the bus and win over the list below. Change any key here and your own layout (Custom controls) is used from then on.").replace("%{name}", &name);
+        // (a phone: the button under the words, not beside them in a column one word wide)
+        let narrow = body.w < 520.0;
+        let tw = if narrow { body.w - 56.0 } else { body.w - bw - 70.0 };
         let th = l.ui.paragraph_height(&text, tw, 12.5, Weight::Medium);
-        let bar = Rect::new(body.x, body.y, body.w, (th + 22.0).max(54.0));
-        l.ui.p().rounded(bar, 8.0, ACCENT.alpha(0.1));
-        l.ui.p().rounded_border(bar, 8.0, 1.0, ACCENT.alpha(0.45));
-        l.ui.icon("info", Vec2::new(bar.x + 22.0, bar.center().y), 20.0, ACCENT);
-        l.ui.paragraph(&text, Vec2::new(bar.x + 42.0, bar.center().y - th * 0.5), tw, 12.5, Weight::Medium, TEXT_SOFT);
-        if l.ui.button("kb-use-custom", Rect::new(bar.right() - bw - 10.0, bar.center().y - 18.0, bw, 36.0), "Use these keys", Some("keyboard"), ButtonKind::Primary) {
+        let bar = Rect::new(body.x, body.y, body.w, if narrow { th + 22.0 + 46.0 } else { (th + 22.0).max(54.0) });
+        l.ui.p().rounded(bar, 8.0, accent().alpha(0.1));
+        l.ui.p().rounded_border(bar, 8.0, 1.0, accent().alpha(0.45));
+        let ty = if narrow { bar.y + 11.0 } else { bar.center().y - th * 0.5 };
+        l.ui.icon("info", Vec2::new(bar.x + 22.0, if narrow { ty + 9.0 } else { bar.center().y }), 20.0, accent());
+        l.ui.paragraph(&text, Vec2::new(bar.x + 42.0, ty), tw, 12.5, Weight::Medium, TEXT_SOFT);
+        let button = if narrow { Rect::new(bar.x + 42.0, bar.bottom() - 46.0, bar.w - 52.0, 36.0) } else { Rect::new(bar.right() - bw - 10.0, bar.center().y - 18.0, bw, 36.0) };
+        if l.ui.button("kb-use-custom", button, "Use these keys", Some("keyboard"), ButtonKind::Primary) {
             use_custom_keys(l);
         }
         let used = bar.h + 12.0;
@@ -151,11 +158,26 @@ pub fn controls(l: &mut Launcher, area: Rect) {
     } else {
         body
     };
-    let half = (body.w - GAP * 2.0) * 0.5;
     let names = control_names(l);
-    for (sec, (title, sub, key)) in [("Driving & the bus", "The bus's own keys", "vehicles"), ("The game", "Menus, views, pausing", "game")].iter().enumerate() {
-        let r = Rect::new(body.x + sec as f32 * (half + GAP * 2.0), body.y, half, body.h);
-        l.ui.panel(r);
+    let sections = [("Driving & the bus", "The bus's own keys", "vehicles"), ("The game", "Menus, views, pausing", "game")];
+    // (a phone: one list at a time, the chips choosing which, each row in two lines - side by
+    // side the lists were too narrow to show what a key does)
+    let narrow = body.w < 640.0;
+    let (body, half) = if narrow {
+        let mut k = l.pages.kb_section;
+        if l.ui.chips("kb-section", Rect::new(body.x, body.y, body.w, 34.0), &mut k, &[sections[0].0, sections[1].0]) {
+            l.pages.kb_section = k;
+        }
+        (Rect::new(body.x, body.y + 48.0, body.w, (body.h - 48.0).max(0.0)), body.w)
+    } else {
+        (body, (body.w - GAP * 2.0) * 0.5)
+    };
+    for (sec, (title, sub, key)) in sections.iter().enumerate() {
+        if narrow && sec != l.pages.kb_section {
+            continue;
+        }
+        let r = if narrow { body } else { Rect::new(body.x + sec as f32 * (half + GAP * 2.0), body.y, half, body.h) };
+        l.ui.card(r);
         let inner = l.ui.heading(Rect::new(r.x + 18.0, r.y + 14.0, r.w - 36.0, r.h - 28.0), title, Some(if sec == 0 { "directions_bus" } else { "sports_esports" }));
         l.ui.text_in(sub, Rect::new(inner.x, inner.y - 6.0, inner.w, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
         let mut filter = std::mem::take(&mut l.pages.kb_filter[sec]);
@@ -202,7 +224,7 @@ pub fn controls(l: &mut Launcher, area: Rect) {
         let new_action = filter.trim();
         let mut list_top = inner.y + 62.0;
         if shown.is_empty() && new_action.len() > 1 && new_action.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-            if l.ui.button(&format!("kb-add-custom-{sec}"), Rect::new(inner.x, list_top, inner.w, 36.0), &format!("Add \"{new_action}\" and give it a key"), Some("add"), ButtonKind::Normal) {
+            if l.ui.button(&format!("kb-add-custom-{sec}"), Rect::new(inner.x, list_top, inner.w, 36.0), &omsi_ui::tr("Add \"%{action}\" and give it a key").replace("%{action}", new_action), Some("add"), ButtonKind::Normal) {
                 if let Some(a) = l.state.keybindings.get_mut(*key).and_then(|a| a.as_array_mut()) {
                     a.push(json!({ "action": new_action, "scan_code": 0, "modifier": 0 }));
                     l.pages.capturing = Some((sec, a.len() - 1));
@@ -212,38 +234,42 @@ pub fn controls(l: &mut Launcher, area: Rect) {
             list_top += 44.0;
         }
         l.ui.scroll_area(&format!("kb-{sec}"), Rect::new(inner.x - 6.0, list_top, inner.w + 12.0, inner.bottom() - list_top), &mut |ui, v| {
-            let rh = 40.0;
+            let rh = if narrow { 74.0 } else { 40.0 };
             for (row, (i, label, keyn, clash)) in shown.iter().enumerate() {
                 let rr = Rect::new(v.x + 6.0, v.y + row as f32 * rh, v.w - 16.0, rh - 4.0);
                 if rr.bottom() < v.y - 50.0 {
                     continue;
                 }
                 ui.p().rounded(rr, 8.0, Color::WHITE.alpha(0.03));
-                ui.text_in(label, Rect::new(rr.x + 12.0, rr.y, rr.w - 270.0, rr.h), 13.0, Weight::Medium, TEXT_SOFT, Align::Left);
+                // (the key's row: on a phone the line under the name)
+                let keys = if narrow { Rect::new(rr.x, rr.y + 34.0, rr.w, 36.0) } else { Rect::new(rr.x, rr.y, rr.w, rr.h) };
+                let label_r = if narrow { Rect::new(rr.x + 12.0, rr.y + 2.0, rr.w - 24.0, 32.0) } else { Rect::new(rr.x + 12.0, rr.y, rr.w - 270.0, rr.h) };
+                ui.text_in(label, label_r, 13.0, Weight::Medium, TEXT_SOFT, Align::Left);
+                let kw = if narrow { (keys.w - 134.0).max(60.0) } else { 150.0 };
                 // another key for the same action (OMSI's file may give one action
                 // several [entry]s; several actions on one key need nothing more than the
                 // same key pressed for each)
-                let pr = Rect::new(rr.right() - 252.0, rr.y + 5.0, 26.0, rr.h - 10.0);
+                let pr = Rect::new(keys.right() - 102.0 - kw, keys.y + 5.0, 26.0, keys.h - 10.0);
                 let (hp, _, cp) = ui.interact(id_of(&format!("kb-{sec}-{i}-more")), pr);
-                ui.icon("add", pr.center(), 16.0, if hp { ACCENT } else { TEXT_FAINT });
+                ui.icon("add", pr.center(), 16.0, if hp { accent() } else { TEXT_FAINT });
                 if ui.hover(pr) {
                     ui.tooltip(pr, "Add another key for this action");
                 }
                 if cp {
                     more = Some(*i);
                 }
-                let kr = Rect::new(rr.right() - 220.0, rr.y + 5.0, 150.0, rr.h - 10.0);
+                let kr = Rect::new(keys.right() - 70.0 - kw, keys.y + 5.0, kw, keys.h - 10.0);
                 let waiting = capturing == Some((sec, *i));
                 let id = id_of(&format!("kb-{sec}-{i}"));
                 let (h, _, c) = ui.interact(id, kr);
                 if c {
                     clicked = Some((*i, RowAsked::Capture));
                 }
-                let base = if waiting { ACCENT.alpha(0.25 + 0.15 * (time * 6.0).sin().abs()) } else if *clash { DANGER.alpha(0.22) } else { Color::WHITE.alpha(if h { 0.12 } else { 0.07 }) };
+                let base = if waiting { accent().alpha(0.25 + 0.15 * (time * 6.0).sin().abs()) } else if *clash { DANGER.alpha(0.22) } else { Color::WHITE.alpha(if h { 0.12 } else { 0.07 }) };
                 ui.p().rounded(kr, 6.0, base);
-                ui.p().rounded_border(kr, 6.0, 1.0, if waiting { ACCENT } else if *clash { DANGER } else { Color::WHITE.alpha(0.1) });
+                ui.p().rounded_border(kr, 6.0, 1.0, if waiting { accent() } else if *clash { DANGER } else { Color::WHITE.alpha(0.1) });
                 ui.text_in(if waiting { "press a key..." } else { keyn }, kr, 12.0, Weight::Bold, if *clash { DANGER.lighten(0.3) } else { TEXT }, Align::Center);
-                let dr = Rect::new(rr.right() - 64.0, rr.y + 5.0, 26.0, rr.h - 10.0);
+                let dr = Rect::new(keys.right() - 64.0, keys.y + 5.0, 26.0, keys.h - 10.0);
                 let (hd, _, cd) = ui.interact(id_of(&format!("kb-{sec}-{i}-clear")), dr);
                 ui.icon("delete", dr.center(), 16.0, if hd { TEXT } else { TEXT_FAINT });
                 if ui.hover(dr) {
@@ -252,7 +278,7 @@ pub fn controls(l: &mut Launcher, area: Rect) {
                 if cd {
                     clicked = Some((*i, RowAsked::Clear));
                 }
-                let xr = Rect::new(rr.right() - 32.0, rr.y + 5.0, 26.0, rr.h - 10.0);
+                let xr = Rect::new(keys.right() - 32.0, keys.y + 5.0, 26.0, keys.h - 10.0);
                 let (hx, _, cx) = ui.interact(id_of(&format!("kb-{sec}-{i}-remove")), xr);
                 ui.icon("close", xr.center(), 16.0, if hx { DANGER } else { TEXT_FAINT });
                 if ui.hover(xr) {
@@ -355,7 +381,7 @@ fn game_controllers(l: &mut Launcher, body: Rect) {
     let list_w = (body.w * 0.32).min(360.0);
     let left = Rect::new(body.x, body.y, list_w, body.h);
     let right = Rect::new(body.x + list_w + GAP * 2.0, body.y, body.w - list_w - GAP * 2.0, body.h);
-    l.ui.panel(left);
+    l.ui.card(left);
     let inner = l.ui.heading(Rect::new(left.x + 18.0, left.y + 14.0, left.w - 36.0, left.h - 28.0), "Devices", Some("sports_esports"));
     let list_r = Rect::new(inner.x - 6.0, inner.y, inner.w + 12.0, inner.h - 108.0);
     let offs: Vec<String> = l.state.settings.get("ctrl_off").and_then(|v| v.as_str()).unwrap_or("").split('|').map(str::to_string).filter(|s| !s.is_empty()).collect();
@@ -393,13 +419,13 @@ fn game_controllers(l: &mut Launcher, body: Rect) {
         match save_gamectrler(devices) {
             Ok(p) => {
                 pv.dirty = false;
-                l.state.set_status(format!("Game controllers saved to {}", p.display()), false);
+                l.state.set_status(omsi_ui::tr("Game controllers saved to %{path}").replace("%{path}", &p.display().to_string()), false);
             }
-            Err(e) => l.state.set_status(format!("Not saved: {e}"), true),
+            Err(e) => l.state.set_status(omsi_ui::tr("Not saved: %{error}").replace("%{error}", &e.to_string()), true),
         }
     }
     // the device shown
-    l.ui.panel(right);
+    l.ui.card(right);
     let Some(d) = devices.get_mut(pv.selected) else { return };
     let inner = l.ui.heading(Rect::new(right.x + 18.0, right.y + 14.0, right.w - 36.0, right.h - 28.0), &d.name.clone(), Some("tune"));
     let live_dev = omsi_input::controllers::find_connected(&connected, &d.name);
@@ -480,7 +506,7 @@ fn game_controllers(l: &mut Launcher, body: Rect) {
             ui.p().rounded(bar, 4.0, Color::WHITE.alpha(0.06));
             if let Some((_, v)) = live.iter().find(|(k, _)| *k == a) {
                 let x = bar.x + (v.clamp(-1.0, 1.0) + 1.0) * 0.5 * bar.w;
-                ui.p().rounded(Rect::new(x - 2.0, bar.y - 3.0, 4.0, bar.h + 6.0), 2.0, ACCENT);
+                ui.p().rounded(Rect::new(x - 2.0, bar.y - 3.0, 4.0, bar.h + 6.0), 2.0, accent());
             }
             let mut sel = (Func::code(d.axes[a].map(|x| x.0)) + 1) as usize;
             if ui.select(&format!("pad-axis-{a}"), Rect::new(bar.right() + GAP, r.y, sel_w, r.h), &mut sel, &funcs) {
@@ -519,12 +545,9 @@ fn game_controllers(l: &mut Launcher, body: Rect) {
         for (b, (act, _)) in d.buttons.iter_mut().take(shown_buttons).enumerate() {
             let (col, row) = (b / rows.max(1), b % rows.max(1));
             let r = Rect::new(x0 + col as f32 * (cw + GAP), y + row as f32 * per_row, cw, ROW);
-            let label = match b.checked_sub(omsi_input::controllers::HAT_BUTTONS) {
-                Some(h) => format!("Hat {} {}", h / 4 + 1, ["up", "right", "down", "left"][h % 4]),
-                None => format!("Button {}", b + 1),
-            };
+            let label = button_label(b);
             if lit == Some(b) {
-                ui.p().rounded(Rect::new(r.x - 4.0, r.y - 2.0, r.w + 8.0, r.h + 4.0), 6.0, ACCENT.alpha(0.28));
+                ui.p().rounded(Rect::new(r.x - 4.0, r.y - 2.0, r.w + 8.0, r.h + 4.0), 6.0, accent().alpha(0.28));
             }
             ui.label(Rect::new(r.x, r.y, 90.0, r.h), &label);
             // (a latching switch - a turn signal lever, a lit hazard button - also switches
@@ -566,14 +589,12 @@ fn game_controllers(l: &mut Launcher, body: Rect) {
             l.ui.scroll_to("pad-detail", buttons_start_y + row as f32 * (ROW + 4.0), ROW, list.h);
             pv.last_pressed = Some((n, std::time::Instant::now()));
             let now = d.buttons.get(n).map(|b| b.0.clone()).filter(|a| !a.is_empty());
-            let label = match n.checked_sub(omsi_input::controllers::HAT_BUTTONS) {
-                Some(h) => format!("hat {} {}", h / 4 + 1, ["up", "right", "down", "left"][h % 4]),
-                None => format!("button {}", n + 1),
+            let label = button_label(n);
+            let text = match now {
+                Some(a) => omsi_ui::tr("%{device}: %{button} - %{action} (lit in the list: choose another there)").replace("%{action}", &omsi_ui::tr(&action_text(names, &a))),
+                None => omsi_ui::tr("%{device}: %{button} - nothing yet (lit in the list: choose what it does)").into_owned(),
             };
-            l.state.set_status(match now {
-                Some(a) => format!("{name}: {label} - {} (lit in the list: choose another there)", action_text(names, &a)),
-                None => format!("{name}: {label} - nothing yet (lit in the list: choose what it does)"),
-            }, false);
+            l.state.set_status(text.replace("%{device}", &name).replace("%{button}", &label), false);
         }
     }
     let add_r = Rect::new(inner.x, inner.bottom() - 40.0, 260.0, 36.0);
@@ -625,7 +646,7 @@ fn device_list(ui: &mut Ui, list_r: Rect, devices: &[omsi_input::controllers::De
         }
         for c in connected.iter().filter(|c| !devices.iter().any(|d| omsi_input::controllers::names_match(&d.name, &c.name))) {
             let r = Rect::new(v.x + 6.0, y, v.w - 12.0, 38.0);
-            if ui.button(&format!("pad-add-{}", c.name), r, &format!("Set up {}", c.name), Some("add"), ButtonKind::Primary) {
+            if ui.button(&format!("pad-add-{}", c.name), r, &omsi_ui::tr("Set up %{device}").replace("%{device}", &c.name), Some("add"), ButtonKind::Primary) {
                 add = Some(c.name.clone());
             }
             y += 44.0;
@@ -676,6 +697,14 @@ fn remove_device(devices: &mut Vec<omsi_input::controllers::DeviceCfg>, selected
     name
 }
 
+/// A device's button `b` as its line names it: a hat's direction, or the button's number.
+fn button_label(b: usize) -> String {
+    match b.checked_sub(crate::controllers::HAT_BUTTONS) {
+        Some(h) => omsi_ui::tr(["Hat %{n} up", "Hat %{n} right", "Hat %{n} down", "Hat %{n} left"][h % 4]).replace("%{n}", &(h / 4 + 1).to_string()),
+        None => omsi_ui::tr("Button %{n}").replace("%{n}", &(b + 1).to_string()),
+    }
+}
+
 /// The steps of the set-up assistant (see `Wizard`): what the player is asked each time.
 const WIZARD_STEPS: [(&str, &str); 5] = [
     ("Let go of everything", "Take your hands off the wheel and your feet off the pedals (the wheel in the middle), then press Next."),
@@ -689,7 +718,7 @@ const WIZARD_STEPS: [(&str, &str); 5] = [
 /// when the player gave up.
 fn wizard(ui: &mut Ui, r: Rect, w: &mut Wizard, d: &mut omsi_input::controllers::DeviceCfg, live: &[(usize, f32)], connected: bool, feedback: bool) -> Option<bool> {
     let (title, text) = WIZARD_STEPS[w.step];
-    ui.text_in(&format!("Step {} of {}: {title}", w.step + 1, WIZARD_STEPS.len()), Rect::new(r.x, r.y, r.w, 26.0), 17.0, Weight::Bold, TEXT, Align::Left);
+    ui.text_in(&omsi_ui::tr("Step %{n} of %{total}: %{title}").replace("%{n}", &(w.step + 1).to_string()).replace("%{total}", &WIZARD_STEPS.len().to_string()).replace("%{title}", &omsi_ui::tr(title)), Rect::new(r.x, r.y, r.w, 26.0), 17.0, Weight::Bold, TEXT, Align::Left);
     let mut y = r.y + 34.0;
     y += ui.paragraph(text, Vec2::new(r.x, y), r.w, 13.5, Weight::Regular, TEXT_SOFT) + 10.0;
     if !connected {
@@ -704,7 +733,7 @@ fn wizard(ui: &mut Ui, r: Rect, w: &mut Wizard, d: &mut omsi_input::controllers:
         ui.text_in(["X", "Y", "Z", "Rx", "Ry", "Rz", "Slider 1", "Slider 2"][*k], Rect::new(r.x, y, 84.0, 24.0), 12.0, Weight::Medium, TEXT_DIM, Align::Left);
         ui.p().rounded(bar, 4.0, Color::WHITE.alpha(0.06));
         let x = bar.x + (v.clamp(-1.0, 1.0) + 1.0) * 0.5 * bar.w;
-        ui.p().rounded(Rect::new(x - 2.0, bar.y - 4.0, 4.0, bar.h + 8.0), 2.0, ACCENT);
+        ui.p().rounded(Rect::new(x - 2.0, bar.y - 4.0, 4.0, bar.h + 8.0), 2.0, accent());
         y += 26.0;
     }
     let now = |live: &[(usize, f32)]| {

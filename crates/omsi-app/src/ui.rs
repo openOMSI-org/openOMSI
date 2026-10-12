@@ -413,6 +413,8 @@ pub struct Ui {
     pub menu_overlay_range: std::ops::Range<usize>,
     /// The pointer texture, positioned separately for each headset eye.
     pub vr_cursor_overlay: Option<usize>,
+    /// The launcher's painter for the loading screen and the pause menu's mark (`splash`).
+    splash: Option<crate::splash::Splash>,
     pub vr_tooltip_overlay: Option<usize>,
     /// The first line of the menu shown (a long menu scrolls: `menu_rects[k]` is line
     /// `menu_start + k`).
@@ -512,7 +514,7 @@ impl Ui {
         self.chat.rect[2] += x;
     }
     pub fn new() -> Option<Ui> {
-        Some(Ui { origin_x: 0.0, text: TextCache::new()?, chat: ChatWidget::default(), menu_rects: Vec::new(), menu_arrows: Vec::new(), menu_scroll_thumb: None, menu_scroll_track: None, menu_ctl: Vec::new(), dd_rects: Vec::new(), dd_top: 0, dd_rows: 8, dd_scroll: None, menu_side: Vec::new(), menu_pane: Vec::new(), menu_pane_start: 0, menu_pane_go: None, menu_pane_box: None, menu_pane_scroll: None, menu_time: Vec::new(), anim: Default::default(), anim_dt: 0.0, menu_overlay_range: 0..0, vr_cursor_overlay: None, vr_tooltip_overlay: None, menu_start: 0, menu_rows: 0, menu_row_h: 1.0, images: Default::default(), info_rect: None })
+        Some(Ui { origin_x: 0.0, text: TextCache::new()?, chat: ChatWidget::default(), menu_rects: Vec::new(), menu_arrows: Vec::new(), menu_scroll_thumb: None, menu_scroll_track: None, menu_ctl: Vec::new(), dd_rects: Vec::new(), dd_top: 0, dd_rows: 8, dd_scroll: None, menu_side: Vec::new(), menu_pane: Vec::new(), menu_pane_start: 0, menu_pane_go: None, menu_pane_box: None, menu_pane_scroll: None, menu_time: Vec::new(), anim: Default::default(), anim_dt: 0.0, menu_overlay_range: 0..0, splash: None, vr_cursor_overlay: None, vr_tooltip_overlay: None, menu_start: 0, menu_rows: 0, menu_row_h: 1.0, images: Default::default(), info_rect: None })
     }
 
     /// Draw the frame's interface: its overlays go after the HUD's in `scene.overlays`.
@@ -1238,6 +1240,10 @@ impl Ui {
     /// over the first pictures of the session); `clock` moves the stripes and the tips.
     #[allow(clippy::too_many_arguments)]
     pub fn loading_screen(&mut self, r: &Renderer, scene: &mut Scene, width: f32, height: f32, scale: f32, title: &str, progress: f32, opacity: f32, clock: f32, tip: (&str, f32)) {
+        // (this build draws the loading screen as its launcher does: `hub_loading`)
+        if self.hub_loading(r, scene, width, height, scale, title, progress, opacity, tip) {
+            return;
+        }
         let s = scale.max(0.5);
         let k = (opacity.clamp(0.0, 1.0) * 16.0).round() / 16.0;
         if k <= 0.0 {
@@ -1305,6 +1311,31 @@ impl Ui {
         let head = self.text.label_op(r, scene, &omsi_ui::tr("Tips").to_uppercase(), small, [232, 160, 48, 0], k);
         let hy = row_y - tl.h as f32 - head.h as f32 + 2.0 * s;
         scene.overlays.push((head.tex, [bx, hy, bx + head.w as f32, hy + head.h as f32]));
+    }
+
+    /// The loading screen as the launcher draws (`crate::splash`): its ground in the dark,
+    /// openOMSI's mark in the middle - its ring and line are the bar of how far the start
+    /// area got - the map's name under it and the tip of the moment under that. Over the
+    /// session's first pictures (`opacity` going down) it stays whole for the first half and
+    /// is then let go: the launcher's picture cannot be drawn half seen. Always true: this
+    /// build draws no other.
+    #[allow(clippy::too_many_arguments)]
+    fn hub_loading(&mut self, r: &Renderer, scene: &mut Scene, width: f32, height: f32, scale: f32, title: &str, progress: f32, opacity: f32, tip: (&str, f32)) -> bool {
+        if opacity < 0.5 {
+            self.loaded(r, scene);
+            return true;
+        }
+        let caption = if tip.1 > 0.5 { omsi_ui::tr(tip.0).into_owned() } else { String::new() };
+        let splash = self.splash.get_or_insert_with(crate::splash::Splash::new);
+        splash.loading(r, scene, width, height, scale, title, &caption, progress);
+        true
+    }
+
+    /// The loading screen is over: its picture is let go.
+    pub fn loaded(&mut self, r: &Renderer, scene: &mut Scene) {
+        if let Some(s) = self.splash.as_mut() {
+            s.release(r, scene);
+        }
     }
 
     /// The loading screen alone, before the session's first picture.
@@ -1431,6 +1462,55 @@ mod tests {
     }
 
     use super::*;
+
+    /// The pause menu and the loading screen as pictures, drawn without a window and without
+    /// the game (a renderer of its own, nothing of a map loaded). Run by hand:
+    /// `OMSI_MENU_LOOK=<folder> cargo test -p omsi-app --lib ui::tests::pictures_of_the_menus -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn pictures_of_the_menus() {
+        let Some(out) = omsi_cfg::env::var("OMSI_MENU_LOOK").ok() else { return };
+        let out = std::path::PathBuf::from(out);
+        let instance = wgpu::Instance::default();
+        let mut r = pollster::block_on(Renderer::new(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb))).expect("a renderer");
+        let mut scene = r.new_scene();
+        let mut ui = Ui::new().expect("the interface");
+        let (w, h) = (1440u32, 900u32);
+        let items = crate::app_impl::menus::GAME_MENU;
+        let camera = omsi_render::Camera { position: glam::DVec3::new(0.0, 0.0, -1.0e6), yaw: 0.0, pitch: -89.0, roll: 0.0, fov_deg: 60.0, near: 0.5, far: 10.0 };
+        let lighting = omsi_render::Lighting { sky_color: glam::Vec3::new(0.32, 0.38, 0.46), ..Default::default() };
+        for (name, cursor) in [("pauze.png", (-1.0, -1.0)), ("pauze-muis.png", (120.0, 300.0))] {
+            let frame = Frame { scale: 1.0, ui_scale: 1.0, opacity: 0.9, width: w as f32, height: h as f32, cursor, vr: false, tooltip: None, chat: None, chat_size: 1.0, notes: &[], fps: None, paused: true, menu: Some((0, &items[..])), menu_top: None, menu_disabled: &[], timetable: None, info: None, info_room: None, tutorial: None, tags: Vec::new(), notices: &[], notice_anchor: None, menu_kind: MenuKind::Game, menu_head: None, menu_preview: None, pane_first: None, menu_tabs: None, menu_kbd: false, dropdown: None, steer_cross: None, tooltip_above: false };
+            // (frames enough for the eases to settle)
+            for _ in 0..40 {
+                scene.overlays.clear();
+                ui.draw(&r, &mut scene, &frame, 1.0 / 30.0);
+            }
+            let px = r.render_to_image(&mut scene, w, h, &camera, &lighting).expect("the picture");
+            image::save_buffer(out.join(name), &px, w, h, image::ColorType::Rgba8).expect("written");
+        }
+        for (k, p) in [0.4f32, 0.8].iter().enumerate() {
+            for _ in 0..40 {
+                scene.overlays.clear();
+                ui.loading(&r, &mut scene, w as f32, h as f32, 1.0, "Berlin 186", *p, 0.0, ("", 0.0));
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            let px = r.render_to_image(&mut scene, w, h, &camera, &lighting).expect("the picture");
+            image::save_buffer(out.join(format!("laden-{k}.png")), &px, w, h, image::ColorType::Rgba8).expect("written");
+        }
+        // loading as a heavy map does it: frames far apart, the H just passed - it stands full
+        // size by the next ones (Luc saw it small)
+        ui.loaded(&r, &mut scene);
+        for (p, wait) in [(0.6f32, 10), (0.75, 600), (0.78, 600), (0.8, 600)] {
+            for _ in 0..if wait > 100 { 1 } else { 30 } {
+                scene.overlays.clear();
+                ui.loading(&r, &mut scene, w as f32, h as f32, 1.0, "Berlin 186", p, 0.0, ("", 0.0));
+                std::thread::sleep(std::time::Duration::from_millis(wait));
+            }
+        }
+        let px = r.render_to_image(&mut scene, w, h, &camera, &lighting).expect("the picture");
+        image::save_buffer(out.join("laden-traag.png"), &px, w, h, image::ColorType::Rgba8).expect("written");
+    }
 
     /// The information bar is broken between its parts into rows that fit the room it has,
     /// as many parts to a row as go in; a part wider than the room alone is a row of its own

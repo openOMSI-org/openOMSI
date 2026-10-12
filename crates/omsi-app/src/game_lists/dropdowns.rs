@@ -139,6 +139,16 @@ pub(crate) fn dropdown_apply(app: &mut App, action: &str) {
         "pick" => {
             if let Some((key, value)) = arg.split_once(' ') {
                 remember_setting(key, value);
+                // (a corner chosen: the navigator goes there, a place it was dragged to is
+                // forgotten - its size stays)
+                if key == "navigator_corner" {
+                    let size = omsi_launcher_lib::nav_rect_parts(&app.settings.nav_rect).1;
+                    remember_setting("nav_rect", &omsi_launcher_lib::nav_rect_text(None, size));
+                    if let Some(n) = app.menus.navigator.as_mut() {
+                        n.corner = value.to_string();
+                        n.at = None;
+                    }
+                }
                 reload_settings(app);
             }
         }
@@ -163,9 +173,9 @@ pub(crate) fn dropdown_apply(app: &mut App, action: &str) {
                     store_with(app, |v| omsi_launcher_lib::apply_graphics_profile(p, v));
                     sync_live(app);
                     app.menus.list_dirty = true;
-                    app.service_msg = Some((format!("Graphics profile \"{name}\" loaded: graphics settings apply when the game starts the next time"), 5.0));
+                    app.service_msg = Some((omsi_ui::tr("Graphics profile \"%{name}\" loaded: graphics settings apply when the game starts the next time").replace("%{name}", &name), 5.0));
                 }
-                None => app.service_msg = Some((format!("Graphics profile \"{name}\" not found"), 4.0)),
+                None => app.service_msg = Some((omsi_ui::tr("Graphics profile \"%{name}\" not found").replace("%{name}", &name), 4.0)),
             }
         }
         "reset_all" => store_with(app, |v| {

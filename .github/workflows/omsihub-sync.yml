@@ -1,0 +1,144 @@
+# Omsi-Hub (this fork, github.com/Luc-nbr/openOMSI): takes the openOMSI project's new
+# commits (github.com/openOMSI-Project/openOMSI, main) into beta every hour - when they merge
+# and the workspace tests pass - and publishes the result (omsihub-release.yml). So the
+# project's updates reach the fork's players with the Omsi-Hub interface kept.
+# The interface texts (crates/omsi-app/locales/*.yml) merge by text and language
+# (scripts/merge_locales.py, a merge driver): the project's new texts and the fork's
+# translations never conflict. A conflict in the code is resolved by Claude Code
+# (.github/omsihub-merge.md) when the secret CLAUDE_CODE_OAUTH_TOKEN (`claude setup-token`)
+# or ANTHROPIC_API_KEY is set; the build and the workspace tests must pass after it, or
+# nothing is pushed and GitHub mails the fork's owner (as without the secret).
+# A Cargo.lock that both sides changed is taken from the project and brought up to date.
+# (Scheduled runs only start on the repository's default branch: beta.)
+# The secret OMSIHUB_TOKEN (a token with the `repo` and `workflow` rights), when set, pushes
+# the merge: the workflow's own token may not push the project's changes to its workflows.
+name: Omsi-Hub sync with openOMSI
+
+on:
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: omsihub-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      new: ${{ steps.c.outputs.new }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: beta
+          fetch-depth: 0
+      - id: c
+        run: |
+          git remote add upstream https://github.com/openOMSI-Project/openOMSI.git
+          git fetch --no-tags upstream main
+          if git merge-base --is-ancestor upstream/main HEAD; then
+            echo "new=false" >> "$GITHUB_OUTPUT"
+            echo "Nothing new in openOMSI's main." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+            { echo "### New in openOMSI's main"; git log --no-merges --format='- %s' HEAD..upstream/main | head -40; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  merge:
+    needs: check
+    if: needs.check.outputs.new == 'true'
+    runs-on: windows-latest
+    # (a merge Claude has to resolve builds the workspace a few times)
+    timeout-minutes: 180
+    steps:
+      # (the files as they are in git: the shell scripts would get Windows line ends)
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v7
+        with:
+          ref: beta
+          fetch-depth: 0
+          token: ${{ secrets.OMSIHUB_TOKEN || github.token }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: omsihub-x64
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Merge openOMSI's main
+        shell: bash
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # (the interface texts merge by text and language: .gitattributes names the driver)
+          git config merge.omsihub-locales.name "Omsi-Hub interface texts"
+          git config merge.omsihub-locales.driver "python scripts/merge_locales.py %O %A %B"
+          git remote add upstream https://github.com/openOMSI-Project/openOMSI.git
+          git fetch --no-tags upstream main
+          last=$(git log -1 --format=%H upstream/main -- VERSION)
+          up="$(git show upstream/main:VERSION | tr -d ' \r\n').$(git rev-list --count --invert-grep --fixed-strings --grep='[skip ci]' --grep='[skip actions]' "$last..upstream/main")"
+          if ! git merge --no-edit -m "Merge openOMSI $up into beta" upstream/main; then
+            conflicts=$(git diff --name-only --diff-filter=U)
+            # (a lock file both sides changed: the project's, brought up to date)
+            if echo "$conflicts" | grep -qx Cargo.lock; then
+              git checkout --theirs Cargo.lock
+              cargo metadata --format-version 1 > /dev/null
+              git add Cargo.lock
+              conflicts=$(git diff --name-only --diff-filter=U)
+            fi
+            if [ -n "$conflicts" ]; then
+              if [ -z "$CLAUDE_CODE_OAUTH_TOKEN$ANTHROPIC_API_KEY" ]; then
+                echo "::error::openOMSI $up does not merge into beta by itself, and no CLAUDE_CODE_OAUTH_TOKEN is set to resolve it - merge it by hand. Conflicts: $(echo $conflicts)"
+                git merge --abort
+                exit 1
+              fi
+              echo "### Conflicts Claude resolves" >> "$GITHUB_STEP_SUMMARY"
+              echo "$conflicts" | sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY"
+              npm install -g @anthropic-ai/claude-code
+              claude -p "$(cat .github/omsihub-merge.md)" \
+                --permission-mode acceptEdits \
+                --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git show:*),Bash(git diff:*),Bash(git log:*),Bash(git status:*),Bash(cargo check:*),Bash(cargo build:*),Bash(cargo metadata:*)" \
+                --max-turns 400 > "$RUNNER_TEMP/claude-merge.txt" 2>&1 || true
+              { echo '```'; tail -c 6000 "$RUNNER_TEMP/claude-merge.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+              left=$(grep -lE '^(<<<<<<<|>>>>>>>) ' $conflicts 2>/dev/null || true)
+              if [ -n "$left" ]; then
+                echo "::error::Claude left conflicts in: $(echo $left) - merge openOMSI $up by hand."
+                git merge --abort
+                exit 1
+              fi
+              git add -A
+              git commit --no-edit
+            else
+              git commit --no-edit
+            fi
+          fi
+          # (a lock file both sides changed without a conflict may still lack a dependency)
+          if ! cargo metadata --locked --format-version 1 > /dev/null 2>&1; then
+            cargo metadata --format-version 1 > /dev/null
+            git add Cargo.lock
+            git commit --amend --no-edit
+          fi
+          echo "### Merged openOMSI $up into beta" >> "$GITHUB_STEP_SUMMARY"
+      # (the language check needs every text in the six languages of the interface: a text
+      # the project adds shows in English until it is translated)
+      - name: Workspace regression tests
+        run: cargo test --locked --workspace --no-fail-fast -- --skip locale_check
+      - name: Push
+        shell: bash
+        run: git push origin HEAD:beta
+
+  release:
+    needs: merge
+    uses: ./.github/workflows/omsihub-release.yml
+    with:
+      tested: true

@@ -89,7 +89,7 @@ fn variables(ui: &mut Ui, d: &mut DevTools, mut p: Option<&mut Player>, r: Rect)
             let name = if w.string { format!("${}", w.name) } else { w.name.clone() };
             ui.text_in(&name, Rect::new(row.x + 8.0, row.y, row.w * 0.55, row.h), 12.5, Weight::Medium, TEXT, Align::Left);
             let held = if w.hold.is_some() { "  [held]" } else { "" };
-            ui.text_in(&format!("{}{held}", value_of(pv, &w.name, w.string)), Rect::new(row.x + row.w * 0.55, row.y, row.w * 0.45 - 34.0, row.h), 12.5, Weight::Regular, if w.hold.is_some() { ACCENT } else { TEXT_SOFT }, Align::Right);
+            ui.text_in(&format!("{}{held}", value_of(pv, &w.name, w.string)), Rect::new(row.x + row.w * 0.55, row.y, row.w * 0.45 - 34.0, row.h), 12.5, Weight::Regular, if w.hold.is_some() { accent() } else { TEXT_SOFT }, Align::Right);
             if ui.icon_button(&format!("dt-wx{k}"), Vec2::new(row.right() - 12.0, row.center().y), 10.0, "close", "Stop watching") {
                 remove = Some(k);
             }

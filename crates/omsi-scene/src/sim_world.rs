@@ -87,4 +87,7 @@ impl TimetableWorld for World {
     fn stop_side(&self, id: i64) -> f32 {
         World::stop_side(self, id)
     }
+    fn object_of_tile(&self, tile: Option<usize>, id: i64) -> Option<(glam::DVec3, [f64; 3])> {
+        World::object_of_tile(self, tile, id)
+    }
 }

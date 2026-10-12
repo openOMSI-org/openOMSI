@@ -67,6 +67,15 @@ impl App {
                 steps::push_mirror_hud(&self.gfx.mirror_hud, scene, w, hud, (self.input.cursor.0 - hud[0], self.input.cursor.1));
             }
         }
+        // the card of the trip just ended (`trip_report`): over the navigator, under the
+        // menus; its time runs with the game
+        if let (Some(r), Some(scene)) = (self.renderer.as_ref(), self.scene.as_mut()) {
+            let running = !self.paused && self.menus.game_menu.is_none();
+            self.session.trip_report.frame(r, scene, hud, &self.settings, dt, running);
+            // a red light or a speed camera: its notice, under the trip's card if one is up
+            let under = self.session.trip_report.bottom();
+            self.session.drive_watch.frame(r, scene, hud, self.settings.ui_scale, under, dt, running);
+        }
         self.frame_ui_draw(dt, hud, vr_active, plugin_focus, &notes, tooltip, menu_lines, menu_tabs);
         // the loading screen fading over the first pictures, over all of the interface
         self.frame_loading_fade();
@@ -112,6 +121,8 @@ impl App {
                     next.stops.first().map(|s| s.name.trim()).unwrap_or("?"),
                     crate::schedule::hhmm(next.departure)
                 ),
+                // (a free drive along a line is no duty: its end is the line's)
+                None if d.free => "End of the line: drive on freely, or choose another line in the launcher".into(),
                 None => "End of the duty: the tour's last trip is done".into(),
             };
             say(format!("trip end {}", d.trip_index), text, NoticeKind::Success);
@@ -216,6 +227,12 @@ impl App {
             if let Some(w) = self.world.as_ref() {
                 nav.start_map(w.clone());
             }
+            // (the timetable's stops name the pins set on the city map)
+            if nav.wants_stop_names() {
+                if let Some(sch) = self.session.schedule.as_ref() {
+                    nav.set_stop_names(sch.stop_names());
+                }
+            }
             // stops beyond the loaded tiles: their places from the navigator's map
             if let (Some(places), Some(d)) = (nav.places(), self.session.duty.as_mut()) {
                 if !self.session.duty_places {
@@ -265,6 +282,7 @@ impl App {
                 terminus,
                 stops,
                 delay: self.session.duty.as_ref().zip(p).map(|(_, p)| p.vehicle.host.tt_delay as f64),
+                duty: self.session.duty.as_ref(),
                 passengers: self.session.humans.as_ref().map(|h| h.riding()),
                 stop_requested: p.is_some_and(|p| navigator::stop_requested(&p.vehicle)),
                 time: self.clock.time,

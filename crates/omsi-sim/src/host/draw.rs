@@ -34,10 +34,8 @@ impl VehicleHost {
                 let idx = match self.fonts.entries.iter().position(|f| f.0.eq_ignore_ascii_case(&font)) {
                     Some(i) => i,
                     None => {
-                        // an empty name or a depot string that is no font (the Krüger
-                        // matrix asks for the custom fonts of termini 14991.. this way) is
-                        // looked up once and remembered as missing
-                        let atlas = if font.trim().is_empty() { None } else { self.font_lib.as_ref().and_then(|l| l.lock().load(&font)) };
+                        // (looked up once: a missing one is remembered as missing)
+                        let atlas = self.font_for(&font);
                         self.fonts.entries.push((font, atlas));
                         self.fonts.entries.len() - 1
                     }
@@ -128,6 +126,9 @@ impl VehicleHost {
                 let x = arg_i32(stacks.pop());
                 let i = arg_idx(stacks.pop());
                 let atlas = self.font_atlas(font);
+                if spacing < 0 {
+                    self.negative_spacing += 1;
+                }
                 if debug_text() {
                     log::info!("STTextOut(tex {i}, x {x}, y {y}, font {font}, spacing {spacing}, {text:?}) atlas {:?} from {:?} bitmap {:?} {}x{} E {:?}", atlas.as_ref().map(|a| a.font.name.clone()), atlas.as_ref().map(|a| a.font.path.clone()), atlas.as_ref().map(|a| a.font.alpha.clone()), atlas.as_ref().map(|a| a.width).unwrap_or(0), atlas.as_ref().map(|a| a.height).unwrap_or(0), atlas.as_ref().and_then(|a| a.font.glyph('E').map(|g| (g.x0, g.x1, g.y))));
                 }

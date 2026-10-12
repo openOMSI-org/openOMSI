@@ -482,6 +482,13 @@ impl App {
         }
         self.gfx.mirror_panel_cams = panel_cams;
         *self.perf.profile.entry("mirrors").or_default() += __t.elapsed().as_secs_f64();
+        // the bus's devices as a phone or tablet watches them (the companion's live pictures:
+        // a small picture a few times a second, only while one is watched)
+        if let Some(p) = self.player.as_ref() {
+            let __t = Instant::now();
+            crate::companion::draw_devices(r, scene, p, lighting);
+            *self.perf.profile.entry("companion").or_default() += __t.elapsed().as_secs_f64();
+        }
     }
 
     /// Nothing to draw into: what was uploaded let go, the simulation at a display's pace.

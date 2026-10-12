@@ -151,7 +151,7 @@ fn missing(label: &str, base: &Path, rel: &str, out: &mut Vec<String>) -> Option
 }
 
 /// One vehicle: the problems found, in the order a modder would fix them.
-pub fn check_vehicle(root: &Path, path: &Path, run: bool) -> (Vec<String>, Vec<String>) {
+pub fn check_vehicle(root: &Path, path: &Path, run: bool, display_font: Option<&str>) -> (Vec<String>, Vec<String>) {
     let mut problems: Vec<String> = Vec::new();
     let mut info: Vec<String> = Vec::new();
     let def = match omsi_vehicle::Vehicle::load(path) {
@@ -420,64 +420,121 @@ pub fn check_vehicle(root: &Path, path: &Path, run: bool) -> (Vec<String>, Vec<S
     // only what a player can drive is started (a rear section runs on its front's scripts,
     // an AI-only vehicle is never put into service by hand)
     if run && def.is_selectable() && !def.is_rear_section() {
-        run_vehicle(root, &vt, &mut problems, &mut info);
+        run_vehicle(root, &vt, display_font, &mut problems, &mut info);
     }
     (problems, info)
 }
 
-/// Start the vehicle the way Shift+U does and run its scripts for a while: whether the
-/// electrics and the engine come on, which displays get drawn, which callbacks were missed.
-fn run_vehicle(
-    root: &Path,
-    vt: &Arc<omsi_sim::VehicleType>,
-    problems: &mut Vec<String>,
-    info: &mut Vec<String>,
-) {
+/// A vehicle started the way Shift+U does, its scripts run for 20 s: the instance, what the
+/// start-up pressed, and what typing the depot file's first trip into the IBIS gave (None: the
+/// start-up never got that far).
+struct Started {
+    v: omsi_sim::VehicleInstance,
+    report: Vec<String>,
+    typed: Option<Option<String>>,
+    /// The display font's text displays and the fonts of sign scripts it took the place of.
+    replaced: Option<(usize, usize)>,
+}
+
+/// Start the vehicle (see `Started`) - in the display font `font` on its destination signs
+/// when one is given, put on before the start-up as the game does with `--display-font`.
+fn start(root: &Path, vt: &Arc<omsi_sim::VehicleType>, font: Option<&str>) -> Started {
     let mut host = omsi_sim::VehicleHost::new(omsi_sim::SimClock::default());
-    host.font_lib = Some(Arc::new(parking_lot::Mutex::new(
-        omsi_sim::texttex::FontLibrary::new(root),
-    )));
+    let lib = Arc::new(parking_lot::Mutex::new(omsi_sim::texttex::FontLibrary::new(root)));
+    host.font_lib = Some(lib.clone());
     // the depot file next to the vehicle, as a map without one would give it
     host.hof = omsi_vehicle::hof::depot_files(vt.def.dir())
         .first()
         .and_then(|h| omsi_vehicle::Hof::load(h).ok())
         .map(Arc::new);
     let mut v = omsi_sim::VehicleInstance::new(vt.clone(), host);
-    {
-        let lib = v.host.font_lib.clone().unwrap();
-        v.init_text_textures(&mut lib.lock(), &|p| {
-            omsi_texture::decode_file(p)
-                .ok()
-                .map(|i| (i.width, i.height, i.rgba))
-        });
-    }
+    let decode = |p: &Path| {
+        omsi_texture::decode_file(p)
+            .ok()
+            .map(|i| (i.width, i.height, i.rgba))
+    };
+    v.init_text_textures(&mut lib.lock(), &decode);
+    let replaced = font.map(|f| {
+        let texts = v.apply_display_font(f, &mut lib.lock(), &decode);
+        let scripts = v.apply_script_display_font(Some(f)).iter().map(|s| s.1).sum();
+        (texts, scripts)
+    });
     let bound: Vec<String> = omsi_content::KeyboardCfg::load(&root.join("Inputs/keyboard.cfg"))
         .map(|k| k.vehicles.iter().map(|b| b.action.clone()).collect())
         .unwrap_or_default();
     let mut s = omsi_sim::startup::StartUp::new(&v, &bound);
     let dt = 1.0 / 30.0;
-    let mut typed = false;
+    let mut typed = None;
     for _ in 0..(20.0 / dt) as usize {
         if s.running() {
             s.tick(&mut v, &bound, dt);
-        } else if !typed {
+        } else if typed.is_none() {
             // the displays show something only once the IBIS has a trip
-            typed = true;
-            match type_first_trip(&mut v) {
-                Some(t) => info.push(t),
-                None => {
-                    info.push("no IBIS trip could be typed (no depot file, or no IBIS keys)".into())
-                }
-            }
+            typed = Some(type_first_trip(&mut v));
         }
         v.update(dt);
     }
-    let power = omsi_sim::startup::power_on(&v);
-    let engine = omsi_sim::startup::engine_running(&v);
-    let what = if s.report.is_empty() {
+    let _ = v.update_text_textures();
+    Started { report: s.report.clone(), v, typed, replaced }
+}
+
+/// The displays of a started vehicle that a mesh shows and that have something drawn on
+/// them: its script textures (each group of them one display) and its destination text
+/// displays (those a display font draws).
+fn inked_displays(vt: &omsi_sim::VehicleType, v: &omsi_sim::VehicleInstance) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    // (a work texture holds its picture in the colour channels with alpha 0, the LED
+    // textures in alpha alone: any byte counts)
+    for group in shown_script_texture_groups(&vt.model, |name| v.var(name)) {
+        if group.iter().any(|i| {
+            v.host
+                .script_textures
+                .get(*i)
+                .is_some_and(|t| t.rgba.iter().any(|b| *b != 0))
+        }) {
+            let ids = group.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", ");
+            out.push(format!("[scripttexture] {ids}"));
+        }
+    }
+    let shown = shown_text_textures(&vt.model);
+    for i in omsi_sim::texttex::destination_displays(&vt.model).into_iter().filter(|i| shown.contains(i)) {
+        let Some(t) = v.text_textures.get(i) else {
+            continue;
+        };
+        let inked = t
+            .last_text
+            .as_deref()
+            .is_some_and(|text| t.image(text).chunks(4).any(|p| p[3] > 0));
+        if inked {
+            out.push(format!("[texttexture] {i} (\"{}\")", t.def.variable));
+        }
+    }
+    out
+}
+
+/// Start the vehicle the way Shift+U does and run its scripts for a while: whether the
+/// electrics and the engine come on, which displays get drawn, which callbacks were missed.
+/// With a display font: started again in it, and what it changes for the worse.
+fn run_vehicle(
+    root: &Path,
+    vt: &Arc<omsi_sim::VehicleType>,
+    display_font: Option<&str>,
+    problems: &mut Vec<String>,
+    info: &mut Vec<String>,
+) {
+    let own = start(root, vt, None);
+    let v = &own.v;
+    match &own.typed {
+        Some(Some(t)) => info.push(t.clone()),
+        Some(None) => info.push("no IBIS trip could be typed (no depot file, or no IBIS keys)".into()),
+        None => {}
+    }
+    let power = omsi_sim::startup::power_on(v);
+    let engine = omsi_sim::startup::engine_running(v);
+    let what = if own.report.is_empty() {
         "nothing pressed".to_string()
     } else {
-        s.report.join(", ")
+        own.report.join(", ")
     };
     if power && engine {
         info.push(format!("start-up: {what}"));
@@ -496,7 +553,6 @@ fn run_vehicle(
             }
         }
     }
-    let _ = v.update_text_textures();
     // a work texture holds its picture in the colour channels with alpha 0 (the Krüger
     // matrix), the LED textures in alpha alone: any byte counts
     let drawn = v
@@ -555,6 +611,36 @@ fn run_vehicle(
         problems.push(format!(
             "called callbacks the engine does not provide: {:?}",
             v.host.unknown_callbacks()
+        ));
+    }
+    let Some(font) = display_font else {
+        return;
+    };
+    // the same again in the display font: a sign it leaves dark that the bus's own fonts
+    // draw, or a matrix script that finds no size its text fits in (it spaces the letters
+    // closer than nothing: the font came out wider than those it replaces)
+    let name = omsi_content::dotfont::DisplayFontSpec::parse(font)
+        .map(|s| s.name)
+        .unwrap_or_else(|| font.to_string());
+    let chosen = start(root, vt, Some(font));
+    let (texts, scripts) = chosen.replaced.unwrap_or_default();
+    info.push(format!(
+        "display font \"{name}\": {texts} text displays and {scripts} fonts of sign scripts drawn in it"
+    ));
+    let theirs = inked_displays(vt, &chosen.v);
+    let dark: Vec<String> = inked_displays(vt, v)
+        .into_iter()
+        .filter(|d| !theirs.contains(d))
+        .collect();
+    if !dark.is_empty() {
+        problems.push(format!(
+            "display font \"{name}\" leaves displays blank that the bus's own fonts draw: {dark:?}"
+        ));
+    }
+    let (mine, in_font) = (v.host.negative_spacing, chosen.v.host.negative_spacing);
+    if in_font > 0 && mine == 0 {
+        problems.push(format!(
+            "display font \"{name}\": a sign script spaced its letters closer than nothing {in_font} times (in the bus's own fonts never)"
         ));
     }
 }
@@ -652,6 +738,8 @@ fn cause_of(problem: &str) -> &'static str {
         // it with the real problems buried them under the size of the rolling-stock fleet
         _ if p.starts_with("rear section that no vehicle couples") => "not driveable alone (no [couple_back] found for it - almost always unfinished stock rolling stock, not a mod problem)",
         _ if p.starts_with("displays a mesh shows") => "displays that stay blank with the IBIS set",
+        _ if p.starts_with("display font") && p.contains("blank") => "displays the chosen display font leaves blank",
+        _ if p.starts_with("display font") => "sign scripts the chosen display font makes space letters closer than nothing",
         _ if p.contains("textures not found") => "textures not found",
         _ if p.contains("meshes missing") => "meshes missing or unreadable",
         _ if p.contains("sound files not found") => "sound files not found",
@@ -710,6 +798,7 @@ pub fn check_fleet(
     content: &[PathBuf],
     filter: Option<&str>,
     run: bool,
+    display_font: Option<&str>,
     verbose: bool,
 ) {
     // every content root the game itself would search, mods first: `--content` alone used to
@@ -735,7 +824,7 @@ pub fn check_fleet(
     let results: Vec<(PathBuf, Vec<String>, Vec<String>)> = files
         .par_iter()
         .map(|f| {
-            let (p, i) = check_vehicle(root, f, run);
+            let (p, i) = check_vehicle(root, f, run, display_font);
             (f.clone(), p, i)
         })
         .collect();

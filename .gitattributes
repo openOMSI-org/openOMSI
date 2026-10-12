@@ -1,0 +1,3 @@
+
+# the interface texts merge by text and language (scripts/merge_locales.py, set up by the sync)
+crates/omsi-app/locales/*.yml merge=omsihub-locales

@@ -11,7 +11,7 @@ mod editor_ops;
 mod hover;
 mod lan_tick;
 mod menu_lists;
-mod menus;
+pub(crate) mod menus;
 mod mouse;
 mod mouse_grab;
 mod saves;

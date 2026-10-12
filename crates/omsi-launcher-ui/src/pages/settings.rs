@@ -61,6 +61,15 @@ struct Outside {
     check_updates: bool,
     reset: bool,
     controls: Option<usize>,
+    /// "Show the welcome screen again" or "Start the tour" was pressed.
+    again: Option<Again>,
+}
+
+/// What the General tab shows again of a first start.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Again {
+    Welcome,
+    Tour,
 }
 
 thread_local! {
@@ -70,18 +79,19 @@ thread_local! {
 }
 
 pub fn settings(l: &mut Launcher, area: Rect) {
-    let body = l.page_title(area, "Settings", "Every change is saved at once; the game reads them when it starts.");
+    let body = area;
     // (one tab at a time: the whole page in three columns was taller than two screens, and a
-    // setting was found by reading all of it)
-    let bar = Rect::new(body.x, body.y, body.w.min(660.0), 36.0);
+    // setting was found by reading all of it; the tabs as Omsi-Hub's chips)
+    let ch = l.ui.chips_height(body.w, 34.0, &SETTINGS_TABS);
     let mut tab = l.pages.settings_tab;
-    if l.ui.segmented("settings-tab", bar, &mut tab, &SETTINGS_TABS) {
+    if l.ui.chips("settings-tab", Rect::new(body.x, body.y, body.w, 34.0), &mut tab, &SETTINGS_TABS) {
         l.pages.settings_tab = tab;
     }
-    let body = Rect::new(body.x, bar.bottom() + 18.0, body.w, (body.bottom() - bar.bottom() - 18.0).max(0.0));
+    let top = body.y + ch + 16.0;
+    let body = Rect::new(body.x, top, body.w, (body.bottom() - top).max(0.0));
     let s = &mut l.state.settings;
     let dirty = &mut l.state.settings_dirty;
-    let mut out = Outside { update: l.update.status(), check_updates: false, reset: false, controls: None };
+    let mut out = Outside { update: l.update.status(), check_updates: false, reset: false, controls: None, again: None };
     // (two columns side by side; where they would be too narrow to read - a phone - one
     // under the other, each as high as it was the frame before)
     let stacked = body.w < 900.0;
@@ -114,6 +124,16 @@ pub fn settings(l: &mut Launcher, area: Rect) {
         l.pages.controls_tab = t;
         l.go(Page::Controls);
     }
+    match out.again {
+        Some(Again::Welcome) => crate::welcome::show_again(l),
+        // (the tour begins at the start)
+        Some(Again::Tour) => {
+            l.drive.step = crate::flow::Step::Mode;
+            l.go(Page::Drive);
+            crate::tour::start(l);
+        }
+        None => {}
+    }
 }
 
 /// The dialog that asks before every setting goes back to how it came.
@@ -135,15 +155,110 @@ pub fn reset_dialog(l: &mut Launcher) {
         l.pages.confirm_reset = false;
     }
     if l.ui.button("reset-yes", Rect::new(inner.right() - 130.0, by, 130.0, 38.0), "Reset", Some("restart_alt"), ButtonKind::Danger) {
-        let language = l.state.settings.get("language").cloned();
+        // (the language, the welcome having been seen and the launcher chosen stay: a reset
+        // that opened the welcome again, or another launcher, was not asked for)
+        let kept: Vec<(&str, serde_json::Value)> = ["language", "welcome_done", "launcher_ui"].iter().filter_map(|k| l.state.settings.get(*k).cloned().map(|v| (*k, v))).collect();
         l.state.settings = core::settings_from_text(None);
-        if let Some(lang) = language {
-            l.state.settings["language"] = lang;
+        for (k, v) in kept {
+            l.state.settings[k] = v;
         }
         l.state.settings_dirty = 0.3;
         l.pages.confirm_reset = false;
         l.state.set_status("Every setting is back to how it came.", false);
     }
+}
+
+thread_local! {
+    /// A Tobii eye tracker read while the settings show it (`tobii_rows`), and when they last
+    /// did: let go a moment after (`tobii_idle`).
+    static TOBII: std::cell::RefCell<Option<(crate::tobii::Tobii, std::time::Instant, crate::head_filter::HeadFilter)>> = const { std::cell::RefCell::new(None) };
+}
+
+/// The settings left: the tracker read for them is let go.
+pub(crate) fn tobii_idle() {
+    TOBII.with(|t| {
+        let mut t = t.borrow_mut();
+        if t.as_ref().is_some_and(|(_, at, _)| at.elapsed().as_secs_f32() > 1.5) {
+            *t = None;
+        }
+    });
+}
+
+/// Under the head tracking switch: where the pose comes from, and for a Tobii eye tracker
+/// (`crate::tobii`, read natively) what it says now - found, connected, and the turn the
+/// camera would make for the head as it is (to see left is left) - and the look at the
+/// screen's edges; for every source the sensitivities and the game's keys for it.
+fn tobii_rows(ui: &mut Ui, c: &mut Col, s: &mut Value, dirty: &mut f32) {
+    sel_setting(ui, s, dirty, "s-head-source", c.row(), "Head tracking with", "head_tracking_source", &[("auto", "Automatic"), ("tobii", "Tobii eye tracker"), ("opentrack", "opentrack (UDP 4242)")]);
+    let value = |s: &Value, k: &str| core::head_tracking_value(k, get(s, k).as_f64()) as f32;
+    let tobii = get(s, "head_tracking_source").as_str() != Some("opentrack");
+    if tobii {
+        let gain = ["head_tracking_yaw", "head_tracking_pitch", "head_tracking_roll"].map(|k| value(s, k));
+        let calm = crate::head_filter::Params::tobii(value(s, "head_tracking_smoothing"), value(s, "head_tracking_dead_zone"));
+        tobii_status(ui, c, s, dirty, gain, calm);
+    }
+    let pct = |v: f32| format!("{:.0} %", v * 100.0);
+    let deg = |v: f32| format!("{v:.2}°");
+    let mut rows: Vec<(&str, &str, &str, f32, &dyn Fn(f32) -> String)> = vec![
+        ("s-ht-yaw", "Sensitivity left and right", "head_tracking_yaw", 4.0, &pct),
+        ("s-ht-pitch", "Sensitivity up and down", "head_tracking_pitch", 4.0, &pct),
+        ("s-ht-roll", "Sensitivity for tilting", "head_tracking_roll", 2.0, &pct),
+        ("s-ht-move", "Sensitivity for leaning", "head_tracking_move", 3.0, &pct),
+    ];
+    // (opentrack filters its poses itself: its Accela filter)
+    if tobii {
+        rows.push(("s-ht-smooth", "Smoothing", "head_tracking_smoothing", 1.0, &pct));
+        rows.push(("s-ht-dead", "Dead zone", "head_tracking_dead_zone", 1.0, &deg));
+    }
+    for (id, label, key, most, fmt) in rows {
+        let mut v = value(s, key);
+        if ui.slider(id, c.row(), &mut v, 0.0, most, 0.05, label, fmt) {
+            s[key] = json!(core::head_tracking_value(key, Some(v as f64)));
+            *dirty = 0.3;
+        }
+    }
+    c.y += ui.paragraph("Smoothing steadies the view against the tracker's trembling (big turns still follow at once); the dead zone leaves head movements smaller than it out. With opentrack, choose its Accela filter there.", Vec2::new(c.inner.x, c.y), c.inner.w, 11.5, Weight::Regular, TEXT_FAINT) + 4.0;
+    c.y += ui.paragraph("In the game, Shift+F1 takes where your head is as the middle and Shift+F2 turns head tracking on or off (keys you can change under Controls).", Vec2::new(c.inner.x, c.y), c.inner.w, 11.5, Weight::Regular, TEXT_FAINT) + 6.0;
+}
+
+/// A Tobii eye tracker's state, and the turn the camera would make for the head as it is
+/// (filtered as the camera filters it, `calm`, with the sensitivities `gain`: left-right,
+/// up-down, tilt), and its look at the screen's edges.
+fn tobii_status(ui: &mut Ui, c: &mut Col, s: &mut Value, dirty: &mut f32, gain: [f32; 3], calm: crate::head_filter::Params) {
+    let edges = get(s, "tobii_edges").as_bool().unwrap_or(false);
+    let opts = crate::tobii::Options { edges, ..Default::default() };
+    let (status, pose) = TOBII.with(|t| {
+        let mut t = t.borrow_mut();
+        let now = std::time::Instant::now();
+        let (reader, at, filter) = t.get_or_insert_with(|| (crate::tobii::Tobii::start(opts), now, Default::default()));
+        *at = now;
+        reader.set_options(opts);
+        let pose = filter.step(reader.sample().as_ref(), now, calm).map(|p| p.scaled(gain[0], gain[1], gain[2], 1.0));
+        (reader.status(), pose)
+    });
+    use crate::tobii::Status;
+    let (text, colour) = match status {
+        Status::Starting => (omsi_ui::tr("Looking for a Tobii eye tracker…").into_owned(), TEXT_DIM),
+        Status::NoRuntime => (omsi_ui::tr("No Tobii software found: install the Tobii Experience.").into_owned(), WARN),
+        Status::NoDevice => (omsi_ui::tr("No Tobii eye tracker connected.").into_owned(), WARN),
+        Status::Failed(e) => (omsi_ui::tr("The Tobii eye tracker could not be used: %{e}").replace("%{e}", &e), WARN),
+        Status::Connected(_) => {
+            let way = match pose {
+                Some(p) if p.rot[0].abs() >= 0.5 || p.rot[1].abs() >= 0.5 => {
+                    // (in words: the interface's font has no arrow to the left)
+                    let side = omsi_ui::tr(if p.rot[0] < 0.0 { "left %{n}°" } else { "right %{n}°" }).replace("%{n}", &format!("{:.0}", p.rot[0].abs()));
+                    let up = omsi_ui::tr(if p.rot[1] < 0.0 { "down %{n}°" } else { "up %{n}°" }).replace("%{n}", &format!("{:.0}", p.rot[1].abs()));
+                    format!("{side} · {up}")
+                }
+                Some(_) => omsi_ui::tr("straight ahead").into_owned(),
+                None => "…".to_string(),
+            };
+            (omsi_ui::tr("Tobii eye tracker connected - turn your head to try it: %{turn}").replace("%{turn}", &way), OK)
+        }
+    };
+    c.y += ui.paragraph(&text, Vec2::new(c.inner.x, c.y), c.inner.w, 12.0, Weight::Medium, colour) + 6.0;
+    ui.keep_moving();
+    toggle_setting(ui, s, dirty, c.row(), "Look further at the screen's edges (Tobii)", "tobii_edges");
 }
 
 /// A column of a settings tab: its panel, and the rows and sections laid down it.
@@ -156,7 +271,7 @@ struct Col {
 impl Col {
     /// The column in `r`, under the title of its first section.
     fn new(ui: &mut Ui, r: Rect, title: &str) -> Col {
-        ui.panel(r);
+        ui.card(r);
         let inner = ui.heading(Rect::new(r.x + 18.0, r.y + 14.0, r.w - 36.0, r.h - 28.0), title, None);
         Col { top: r.y, inner, y: inner.y }
     }
@@ -214,7 +329,7 @@ fn graphics_profiles_block(ui: &mut Ui, s: &mut Value, dirty: &mut f32, c: &mut 
         let g = &mut *g;
         let names: Vec<String> = g.list.get_or_insert_with(|| core::graphics_profiles().into_keys().collect()).clone();
         g.sel = g.sel.min(names.len().saturating_sub(1));
-        let labels: Vec<String> = if names.is_empty() { vec!["No saved profiles".to_string()] } else { names.clone() };
+        let labels: Vec<String> = if names.is_empty() { vec![omsi_ui::tr("No saved profiles").into_owned()] } else { names.clone() };
         let r = c.row();
         ui.label(Rect::new(r.x, r.y, r.w * 0.45, r.h), "Saved profile");
         if ui.select("s-gp-sel", Rect::new(r.x + r.w * 0.45, r.y, r.w * 0.55, r.h), &mut g.sel, &labels) && !names.is_empty() {
@@ -228,15 +343,15 @@ fn graphics_profiles_block(ui: &mut Ui, s: &mut Value, dirty: &mut f32, c: &mut 
                 Some(p) => {
                     core::apply_graphics_profile(p, s);
                     *dirty = 0.3;
-                    g.msg = format!("Loaded \"{name}\".");
+                    g.msg = omsi_ui::tr("Loaded \"%{name}\".").replace("%{name}", &name);
                 }
-                None => g.msg = format!("\"{name}\" is gone."),
+                None => g.msg = omsi_ui::tr("\"%{name}\" is gone.").replace("%{name}", &name),
             }
         }
         if ui.button("s-gp-del", Rect::new(r.x + half + GAP, r.y, half, r.h), "Delete", Some("delete"), ButtonKind::Danger) && !names.is_empty() {
             let name = names[g.sel].clone();
             g.msg = match core::delete_graphics_profile(&name) {
-                Ok(()) => format!("Deleted \"{name}\"."),
+                Ok(()) => omsi_ui::tr("Deleted \"%{name}\".").replace("%{name}", &name),
                 Err(e) => format!("{e:#}"),
             };
             g.list = None;
@@ -252,7 +367,7 @@ fn graphics_profiles_block(ui: &mut Ui, s: &mut Value, dirty: &mut f32, c: &mut 
                     if let Some(i) = core::graphics_profiles().keys().position(|k| *k == name) {
                         g.sel = i;
                     }
-                    format!("Saved \"{name}\".")
+                    omsi_ui::tr("Saved \"%{name}\".").replace("%{name}", &name)
                 }
                 Err(e) => format!("{e:#}"),
             };
@@ -372,7 +487,7 @@ fn graphics_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) ->
         (0, a) => a,
         (m, a) => m.min(a),
     };
-    let auto_label = if auto_mb > 0 { format!("Automatic ({} here)", mb(auto_mb)) } else { "Automatic".to_string() };
+    let auto_label = if auto_mb > 0 { omsi_ui::tr("Automatic (%{size} here)").replace("%{size}", &mb(auto_mb)) } else { "Automatic".to_string() };
     let opts: Vec<(&str, &str)> = vec![("0", auto_label.as_str()), ("500", "500 MB"), ("1000", "1 GB"), ("1500", "1.5 GB"), ("2000", "2 GB"), ("3000", "3 GB"), ("4000", "4 GB"), ("6000", "6 GB")];
     sel_setting(ui, s, dirty, "s-texmem", c.row(), "Texture memory", "texture_memory", &opts);
     toggle_setting(ui, s, dirty, c.row(), "Compress textures on loading", "texture_compression");
@@ -388,7 +503,7 @@ fn graphics_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) ->
 /// Controls page).
 fn driving_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, cols: [Rect; 2]) -> [f32; 2] {
     let mut c = Col::new(ui, cols[0], "Keyboard & mouse");
-    if super::mobile::mobile() {
+    if crate::mobile::mobile() {
         c.section(ui, "Touch controls");
         sel_setting(ui, s, dirty, "s-touch-doors", c.row(), "Door buttons", "touch_door_mode", &[("standard", "Standard (physical doors)"), ("direct", "Direct OMSI triggers")]);
         c.section(ui, "Keyboard & mouse");
@@ -432,6 +547,8 @@ fn driving_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, c
     toggle_setting(ui, s, dirty, c.row(), "Automatic clutch (manual gearboxes)", "auto_clutch");
     // (it was in the game's menu only, #1780)
     toggle_setting(ui, s, dirty, c.row(), "Automated manual gearbox (shifts a manual gearbox for you by the engine speed)", "auto_shift");
+    // (on a duty: the line, route and destination typed into the IBIS for the driver)
+    toggle_setting(ui, s, dirty, c.row(), "Fill in the IBIS automatically", "ibis_auto");
     if ui.button("s-go-keys", c.row(), "Change the keys", Some("keyboard"), ButtonKind::Normal) {
         out.controls = Some(0);
     }
@@ -476,7 +593,7 @@ fn driving_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, c
     // the pedals' response: softer (below 1) or stronger (above 1) than the pedal reads
     for (key, label, id) in [("pedal_throttle", "Throttle pedal strength", "s-pedt"), ("pedal_brake", "Brake pedal strength", "s-pedb")] {
         let mut v = get(s, key).as_f64().unwrap_or(1.0) as f32;
-        if ui.slider(id, c.row(), &mut v, 0.5, 2.0, 0.05, label, &|v| if (v - 1.0).abs() < 0.01 { "Normal".to_string() } else if v < 1.0 { format!("Softer x{v:.2}") } else { format!("Stronger x{v:.2}") }) {
+        if ui.slider(id, c.row(), &mut v, 0.5, 2.0, 0.05, label, &|v| if (v - 1.0).abs() < 0.01 { "Normal".to_string() } else if v < 1.0 { omsi_ui::tr("Softer x%{k}").replace("%{k}", &format!("{v:.2}")) } else { omsi_ui::tr("Stronger x%{k}").replace("%{k}", &format!("{v:.2}")) }) {
             s[key] = json!((v * 100.0).round() / 100.0);
             *dirty = 0.3;
         }
@@ -594,7 +711,10 @@ fn camera_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, co
     toggle_setting(ui, s, dirty, c.row(), "Camera collisions (outside view)", "camera_collision");
     toggle_setting(ui, s, dirty, c.row(), "Driver at the wheel (outside views)", "driver");
     c.section(ui, "Head tracking");
-    toggle_setting(ui, s, dirty, c.row(), "Head tracking (native TrackIR / OpenTrack)", "head_tracking");
+    toggle_setting(ui, s, dirty, c.row(), "Head tracking (Tobii eye trackers, native TrackIR / OpenTrack)", "head_tracking");
+    if get(s, "head_tracking").as_bool().unwrap_or(false) {
+        tobii_rows(ui, &mut c, s, dirty);
+    }
 
     // TrackIR axis controls. Values are stored as user-facing percentages:
     // 0% disables an axis; 100% (the default) is 1:1.
@@ -936,6 +1056,63 @@ fn general_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, c
         TEXT_FAINT,
     );
     c.y += help_height + 3.0;
+    // the duty's companion on a phone or a tablet (see `crate::companion`): off by default
+    let r = c.row();
+    toggle_setting(ui, s, dirty, r, "Phone & tablet", "companion");
+    let about = "Sign on, the duty menu and the bus's screens on a phone or tablet in your network. The game shows the address and the pairing code when you drive.";
+    ui.tooltip(r, about);
+    c.y += ui.paragraph(about, Vec2::new(c.inner.x + 12.0, c.y - 5.0), c.inner.w - 24.0, 11.5, omsi_ui::Weight::Regular, TEXT_FAINT) + 3.0;
+    if get(s, "companion").as_bool().unwrap_or(false) {
+        // (covered on the screen unless asked otherwise: a stream shows the screen to everyone)
+        let r = c.row();
+        toggle_setting(ui, s, dirty, r, "Hide address and pairing code (streaming)", "companion_hide");
+        ui.tooltip(r, "The navigator and the game menu cover the address, the pairing code and the QR code until you press Show.");
+        // the Cloudflare tunnel: off unless asked for, and cloudflared fetched only on a press
+        let r = c.row();
+        toggle_setting(ui, s, dirty, r, "Connect through Cloudflare (also outside your network)", "companion_tunnel");
+        ui.tooltip(r, "A free Cloudflare quick tunnel makes the page reachable at an https address from anywhere, e.g. over mobile data. Devices still need the pairing code.");
+        if get(s, "companion_tunnel").as_bool().unwrap_or(false) {
+            let (line, fetch) = match crate::companion::cloudflared() {
+                crate::companion::Cloudflared::Installed(_) => ("cloudflared is installed.", false),
+                crate::companion::Cloudflared::Missing => ("The tunnel needs cloudflared, Cloudflare's own program (about 40 MB).", true),
+                crate::companion::Cloudflared::Downloading => ("Downloading cloudflared…", false),
+                crate::companion::Cloudflared::Failed => ("cloudflared could not be downloaded. Check the internet connection and try again.", true),
+            };
+            c.y += ui.paragraph(line, Vec2::new(c.inner.x + 12.0, c.y - 5.0), c.inner.w - 24.0, 11.5, omsi_ui::Weight::Regular, TEXT_FAINT) + 3.0;
+            if fetch && ui.button("s-cloudflared", c.row(), "Download cloudflared", Some("download"), ButtonKind::Normal) {
+                crate::companion::download_cloudflared();
+            }
+        }
+    }
+    // (the launcher's own size, on top of the system's: Ctrl+wheel and Ctrl +/- set it too)
+    let mut own = core::launcher_scale(get(s, "launcher_scale").as_f64()) as f32;
+    // (given out as the slider is let go: dragged, the window scaled under the mouse)
+    if ui.slider_on_release("s-launcher-scale", c.row(), &mut own, 0.6, 2.0, 0.05, "Launcher size", &|v| format!("{:.0}%", v * 100.0)) {
+        s["launcher_scale"] = json!(core::launcher_scale(Some(own as f64)));
+        *dirty = 0.3;
+    }
+    // (the opening, the bus between pages, the tiles following the mouse: off for less motion)
+    toggle_setting(ui, s, dirty, c.row(), "Animations", "animations");
+    // (the bus across the screen between pages: off by default, too much on every page)
+    toggle_setting(ui, s, dirty, c.row(), "Bus across the screen between pages", "page_bus");
+    // (the interface's accent colour: the presets and a picker for any other, at once)
+    ui.label(c.row(), "Accent colour");
+    c.y += crate::accent_pick::chooser(ui, "s-accent", c.inner.x, c.y - 6.0, c.inner.w, s, dirty) + 4.0;
+    // (the first start's welcome and the tour through the launcher, once more; side by side,
+    // one under the other where the column is narrow)
+    let r = c.row();
+    let (a, b) = if r.w >= 520.0 {
+        let half = (r.w - 8.0) * 0.5;
+        (Rect::new(r.x, r.y, half, r.h), Rect::new(r.x + half + 8.0, r.y, half, r.h))
+    } else {
+        (r, c.row())
+    };
+    if ui.button("s-welcome-again", a, "Show the welcome screen again", Some("restart_alt"), ButtonKind::Normal) {
+        out.again = Some(Again::Welcome);
+    }
+    if ui.button("s-tour-start", b, "Start the tour", Some("route"), ButtonKind::Normal) {
+        out.again = Some(Again::Tour);
+    }
     // (the texts over the picture, the menu, the timetable and the navigator: larger for
     // those who find them hard to read, smaller for more of the picture; on a window taller
     // than 1080p they grow with it as well, and the launcher grows with its window anyway)
@@ -967,6 +1144,20 @@ fn general_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, c
     toggle_setting(ui, s, dirty, c.row(), "Navigator (Shift+N: map, schedule, off)", "navigator");
     toggle_setting(ui, s, dirty, c.row(), "Route arrows (as in OMSI 2)", "nav_arrows");
     toggle_setting(ui, s, dirty, c.row(), "AI vehicles on the map", "nav_ai");
+    // (the trip, its stops and what comes next under the map - its handle on the navigator
+    // switches it in the game too)
+    toggle_setting(ui, s, dirty, c.row(), "Duty board under the navigator", "nav_board");
+    let mut nav = core::nav_scale(get(s, "nav_scale").as_f64()) as f32;
+    if ui.slider("s-nav-scale", c.row(), &mut nav, 0.6, 2.0, 0.05, "Navigator size", &|v| format!("{:.0}%", v * 100.0)) {
+        s["nav_scale"] = json!(core::nav_scale(Some(nav as f64)));
+        *dirty = 0.3;
+    }
+    sel_setting(ui, s, dirty, "s-stop-style", c.row(), "Bus stop signs", "stop_style", &[("de", "German (H)"), ("uk", "British"), ("fr", "French")]);
+    sel_setting(ui, s, dirty, "s-speed-unit", c.row(), "Speed in", "speed_unit", &[("kmh", "km/h"), ("mph", "mph (miles per hour)")]);
+    // (signing on as at a depot: off, the duty is there at once)
+    toggle_setting(ui, s, dirty, c.row(), "Sign on with personnel number and code", "nav_signon");
+    c.y += ui.paragraph("Before a duty the navigator asks for your number and code and for the duty order to be accepted. Off, the map and the duty show at once.", Vec2::new(c.inner.x + 12.0, c.y - 5.0), c.inner.w - 24.0, 11.5, omsi_ui::Weight::Regular, TEXT_FAINT) + 3.0;
+
     // the corner: a little screen with four corners to click
     let r = Rect::new(c.inner.x, c.y, c.inner.w, 70.0);
     ui.label(Rect::new(r.x, r.y, r.w * 0.45, 24.0), "Corner");
@@ -977,20 +1168,38 @@ fn general_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, c
     for (name, x, yy) in [("top-left", 0.0, 0.0), ("top-right", 1.0, 0.0), ("bottom-left", 0.0, 1.0), ("bottom-right", 1.0, 1.0)] {
         let cell = Rect::new(screen.x + 5.0 + x * (screen.w * 0.5), screen.y + 5.0 + yy * (screen.h * 0.5), screen.w * 0.5 - 10.0, screen.h * 0.5 - 10.0);
         let (h, _, clicked) = ui.interact(id_of(&format!("corner-{name}")), cell);
+        let (dragged, size) = core::nav_rect_parts(get(s, "nav_rect").as_str().unwrap_or(""));
         if clicked {
+            // (a corner chosen: the place it was dragged to in the game is forgotten, its size
+            // stays)
             s["navigator_corner"] = json!(name);
+            s["nav_rect"] = json!(core::nav_rect_text(None, size));
             *dirty = 0.3;
         }
-        let on = cur == name;
-        ui.p().rounded(cell, 3.0, if on { ACCENT } else { Color::WHITE.alpha(if h { 0.2 } else { 0.08 }) });
+        let on = cur == name && dragged.is_none();
+        ui.p().rounded(cell, 3.0, if on { accent() } else { Color::WHITE.alpha(if h { 0.2 } else { 0.08 }) });
     }
-    // (dragged somewhere else in the game, #940: that place, until a corner is chosen)
-    if let Some(a) = host().navigator_placed_at(&cur) {
-        let (cw, ch) = (screen.w * 0.5 - 10.0, screen.h * 0.5 - 10.0);
-        let cell = Rect::new(screen.x + 5.0 + a[0] * (screen.w - 10.0 - cw), screen.y + 5.0 + a[1] * (screen.h - 10.0 - ch), cw, ch);
-        ui.p().rounded(cell, 3.0, ACCENT);
+    // (dragged and sized in the game: that place and shape on the little screen, until a
+    // corner is chosen)
+    let (dragged, size) = core::nav_rect_parts(get(s, "nav_rect").as_str().unwrap_or(""));
+    if let Some(a) = dragged {
+        let inner = screen.inset(5.0);
+        // (its size in shares of the window's height, on the little screen - as wide as a
+        // 16:9 window)
+        let (cw, ch) = size.map(|z| ((z[0] as f32 * inner.h).min(inner.w), (z[1] as f32 * inner.h).min(inner.h))).unwrap_or((screen.w * 0.5 - 10.0, screen.h * 0.5 - 10.0));
+        let (cw, ch) = (cw.max(6.0), ch.max(5.0));
+        let cell = Rect::new(inner.x + a[0] as f32 * (inner.w - cw), inner.y + a[1] as f32 * (inner.h - ch), cw, ch);
+        ui.p().rounded(cell, 3.0, accent());
     }
     c.y += 74.0;
+    // (back to its corner and its own size, the board under the map, 100 %)
+    if ui.button("s-nav-reset", c.row(), "Reset navigator", Some("restart_alt"), ButtonKind::Normal) {
+        s["navigator_corner"] = json!("bottom-left");
+        s["nav_rect"] = json!("");
+        s["nav_scale"] = json!(1.0);
+        s["nav_board"] = json!(true);
+        *dirty = 0.3;
+    }
     let left = c.used();
     // updates from the GitHub releases (see `omsi_platform::updater`)
     let mut c = Col::new(ui, cols[1], "Updates");
@@ -1007,14 +1216,14 @@ fn general_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, c
         }
         let text = match &out.update {
             Status::UpToDate if omsi_platform::updater::is_test_build(omsi_platform::updater::current_version()) => format!("{} is a test build: it is not updated", omsi_platform::updater::current_version()),
-            Status::UpToDate => format!("{} is the latest version", omsi_platform::updater::current_version()),
-            Status::Available(rel) => format!("{} is available", rel.version),
+            Status::UpToDate => omsi_ui::tr("%{version} is the latest version").replace("%{version}", &omsi_platform::updater::current_version()),
+            Status::Available(rel) => omsi_ui::tr("%{version} is available").replace("%{version}", &rel.version),
             Status::Failed(_) => "The last check failed".to_string(),
-            _ => format!("This is openOMSI {}", omsi_platform::updater::current_version()),
+            _ => omsi_ui::tr("This is openOMSI %{version}").replace("%{version}", &omsi_platform::updater::current_version()),
         };
         ui.text_in(&text, Rect::new(r.x + 162.0, r.y, r.w - 162.0, r.h), 12.5, omsi_ui::Weight::Regular, TEXT_DIM, omsi_ui::paint::Align::Left);
     }
-    if ui.button("s-upd-github", c.row(), "github.com/openOmsi-project/openOMSI", Some("open_in_new"), ButtonKind::Ghost) {
+    if ui.button("s-upd-github", c.row(), "github.com/Luc-nbr/openOMSI", Some("open_in_new"), ButtonKind::Ghost) {
         omsi_platform::updater::open_url(omsi_platform::updater::REPO_URL);
     }
     // every setting at once: here at the end, not first on the page where it was the

@@ -1,0 +1,11 @@
+_version: 2
+# Texts of the company's economy added with their fixes (omsi-launcher-core company:
+# concessions.rs). The English text is the key, as in app.yml.
+
+"The company holds as many concessions as its level allows.":
+  nl: "Het bedrijf heeft al zoveel concessies als zijn niveau toestaat."
+  de: "Das Unternehmen hat schon so viele Konzessionen, wie seine Stufe erlaubt."
+  fr: "L'entreprise détient déjà autant de concessions que son niveau le permet."
+  ru: "У предприятия уже столько концессий, сколько позволяет его уровень."
+  uk: "Підприємство вже має стільки концесій, скільки дозволяє його рівень."
+  pl: "Firma ma już tyle koncesji, na ile pozwala jej poziom."

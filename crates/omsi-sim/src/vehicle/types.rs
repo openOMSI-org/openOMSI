@@ -272,6 +272,29 @@ pub fn load_paint_schemes(dir: &Path) -> Vec<PaintScheme> {
     schemes
 }
 
+/// The paint schemes of a vehicle in folder `dir` with model `model`: the `[item]`s of the
+/// `.cti` files in its `[CTC]` folders, then the model's own items (their textures in the
+/// first `[CTC]` folder, as a `.cti` of that folder has them). Their order is the one
+/// `Colorscheme` counts in.
+pub fn model_paint_schemes(dir: &Path, model: &Model) -> Vec<PaintScheme> {
+    let mut paint_schemes = Vec::new();
+    for c in &model.ctc {
+        let d = omsi_cfg::resolve_path(dir, &c.path);
+        paint_schemes.extend(load_paint_schemes(&d));
+    }
+    let item_dir = model.ctc.first().map(|c| omsi_cfg::resolve_path(dir, &c.path)).unwrap_or_else(|| dir.to_path_buf());
+    for it in &model.items {
+        match paint_schemes.last_mut().filter(|s: &&mut PaintScheme| s.name.eq_ignore_ascii_case(&it.name) && s.dir == item_dir) {
+            Some(s) => {
+                s.textures.push((it.ctc.clone(), it.texture.clone()));
+                s.set_vars.extend(it.set_vars.iter().cloned());
+            }
+            None => paint_schemes.push(PaintScheme { name: it.name.clone(), dir: item_dir.clone(), textures: vec![(it.ctc.clone(), it.texture.clone())], set_vars: it.set_vars.clone() }),
+        }
+    }
+    paint_schemes
+}
+
 /// The vehicle pack a mesh file belongs to (the folder under `Vehicles`, lower case), the
 /// unit its exporter's winding is judged by; a file elsewhere is judged with its folder.
 pub(super) fn winding_pack(p: &Path) -> String {
@@ -476,23 +499,7 @@ impl VehicleType {
                 bus_file.display()
             );
         }
-        let mut paint_schemes = Vec::new();
-        for c in &model.ctc {
-            let d = omsi_cfg::resolve_path(&dir, &c.path);
-            paint_schemes.extend(load_paint_schemes(&d));
-        }
-        // the model's own items, after the `.cti` files' (their textures in the first
-        // `[CTC]` folder, as a `.cti` of that folder has them)
-        let item_dir = model.ctc.first().map(|c| omsi_cfg::resolve_path(&dir, &c.path)).unwrap_or_else(|| dir.clone());
-        for it in &model.items {
-            match paint_schemes.last_mut().filter(|s: &&mut PaintScheme| s.name.eq_ignore_ascii_case(&it.name) && s.dir == item_dir) {
-                Some(s) => {
-                    s.textures.push((it.ctc.clone(), it.texture.clone()));
-                    s.set_vars.extend(it.set_vars.iter().cloned());
-                }
-                None => paint_schemes.push(PaintScheme { name: it.name.clone(), dir: item_dir.clone(), textures: vec![(it.ctc.clone(), it.texture.clone())], set_vars: it.set_vars.clone() }),
-            }
-        }
+        let paint_schemes = model_paint_schemes(&dir, &model);
         let texchanges = omsi_model::load_texchanges(&dir, &model.texchanges);
         let (wheel_meshes, suspension_axles) = wheel_meshes(&model, &meshes);
         let mesh_boxes: Vec<(Vec3, Vec3)> = meshes
@@ -880,5 +887,55 @@ mod winding_exporter_tests {
     #[test]
     fn forward_majority_keeps_existing_behaviour() {
         assert!(keep_authored_winding(80, 40, 1, 1));
+    }
+}
+
+#[cfg(test)]
+mod start_var_tests {
+    use super::*;
+    use std::sync::Arc;
+
+    /// A bus whose `{init}` takes its fitting over into a variable of its own (as the
+    /// Kajosoft O530's `setvar_reset` does), with one livery that sets the fitting to 1.
+    fn bus() -> Arc<VehicleType> {
+        let dir = std::env::temp_dir().join(format!("omsi_start_vars_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let script = dir.join("setvar.osc");
+        std::fs::write(&script, "{init}\n(L.L.fitting) (S.L.in_fitting)\n{end}\n").unwrap();
+        let vars = dir.join("vars.txt");
+        std::fs::write(&vars, "fitting\nin_fitting\nColorscheme\n").unwrap();
+        let program = omsi_script::compile(&omsi_script::CompileInput { scripts: vec![script], varlists: vec![vars], ..Default::default() });
+        assert!(program.errors.is_empty(), "{:?}", program.errors);
+        std::fs::remove_dir_all(&dir).unwrap();
+        let scheme = PaintScheme { name: "Berlin".into(), set_vars: vec![("fitting".into(), 1.0)], ..Default::default() };
+        Arc::new(VehicleType {
+            def: Default::default(),
+            model: Model::default(),
+            model_dir: dir,
+            program: Arc::new(program),
+            meshes: Vec::new(),
+            paint_schemes: vec![scheme],
+            texchanges: Vec::new(),
+            wheel_meshes: Vec::new(),
+            suspension_axles: Vec::new(),
+            missing_packs: Vec::new(),
+            mesh_bounds: Vec::new(),
+            mesh_boxes: Vec::new(),
+        })
+    }
+
+    #[test]
+    fn the_bus_options_are_there_for_init_over_the_liverys() {
+        let ty = bus();
+        let mut host = VehicleHost::new(Default::default());
+        host.paint_scheme = Some(Some(0));
+        let livery = VehicleInstance::new(ty.clone(), host);
+        assert_eq!(livery.var("in_fitting"), Some(1.0), "the livery's own value");
+        let mut host = VehicleHost::new(Default::default());
+        host.paint_scheme = Some(Some(0));
+        host.start_vars = vec![("FITTING".into(), 2.0), ("not_a_variable".into(), 5.0)];
+        let chosen = VehicleInstance::new(ty, host);
+        assert_eq!(chosen.var("in_fitting"), Some(2.0), "the option, seen by {{init}}");
+        assert_eq!(chosen.var("Colorscheme"), Some(0.0));
     }
 }

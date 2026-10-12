@@ -6,6 +6,10 @@ use super::*;
 impl ScheduleSim {
     /// The vehicle departure `i` is driven with (see [`Choice`]).
     pub fn choose(&mut self, i: usize, world: &dyn TimetableWorld) -> Option<Choice> {
+        // (a tour of the player's bus company runs with the company's own bus)
+        if let Some(c) = self.company_choice(i, world) {
+            return Some(c);
+        }
         let group = self.departures[i].ai_group.to_ascii_lowercase();
         let key = self.tour_key(i);
         // the draw: the tour mixed with the session (#2250); `key` names the tour's choice
@@ -19,7 +23,7 @@ impl ScheduleSim {
             Arc<VehicleType>,
             Vec<omsi_map::DepotEntry>,
             Option<Arc<omsi_vehicle::Hof>>,
-        ) = match (&train, self.depots.get(&group).filter(|v| !v.is_empty())) {
+        ) = match (&train, self.line_buses.get(&self.departures[i].line.to_ascii_lowercase()).or_else(|| self.depots.get(&group)).filter(|v| !v.is_empty())) {
             (Some(cars), _) => (cars[0].0.clone(), Vec::new(), None),
             (None, Some(vehicles)) => {
                 // The depot's types come out in proportion to their fleets: a typgroup
@@ -137,6 +141,26 @@ impl ScheduleSim {
     /// The depot vehicles of every AI group.
     pub fn depot_vehicles(&self) -> impl Iterator<Item = &DepotVehicle> {
         self.depots.values().flatten()
+    }
+
+    /// The depot vehicles per AI group (lower case): what the player's own lines choose
+    /// their buses from (omsi-app's `Schedule::new`).
+    pub fn depots(&self) -> &HashMap<String, Vec<DepotVehicle>> {
+        &self.depots
+    }
+
+    /// The player's own lines that ask for buses of their own (the line editor's choice,
+    /// worked out by omsi-app's `Schedule::new`): per line (its name, lower case) the vehicles
+    /// its trips are driven with instead of its depot group's.
+    pub fn set_line_buses(&mut self, buses: HashMap<String, Vec<DepotVehicle>>) {
+        self.line_buses = buses;
+        // (whether a line runs trams only says what a drive for the company keeps off)
+        self.mark_company();
+    }
+
+    /// The vehicles of the player's own lines (`set_line_buses`).
+    pub fn line_bus_vehicles(&self) -> impl Iterator<Item = &DepotVehicle> {
+        self.line_buses.values().flatten()
     }
 
     /// The vehicles of the plain `[aigroup_2]` pools loaded so far.

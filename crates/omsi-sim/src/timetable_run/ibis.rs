@@ -397,7 +397,7 @@ pub(crate) fn terminus_match_score(t: &omsi_vehicle::hof::Terminus, wanted: &str
 /// is the name (Omsi.exe TRoadVehicleInst.virtual_10: that row is `AI_target_index`); else
 /// the best of the looser matches - the first of equals, not the last (a depot file whose
 /// codes are not in row order put the AI bus's matrix on another terminus's picture, #110).
-pub(crate) fn find_terminus(hof: &omsi_vehicle::Hof, wanted: &str) -> Option<usize> {
+pub fn find_terminus(hof: &omsi_vehicle::Hof, wanted: &str) -> Option<usize> {
     termini_named(hof, wanted).first().copied()
 }
 
@@ -479,7 +479,7 @@ pub fn ibis_codes(
 /// The depot file's routes of `line` to a terminus with one of `codes`, in file order. The
 /// route code is the line's number and two digits: a driver types those, whatever the
 /// route's line string says (Grundorf's 7601 to Krankenhaus has "TML").
-pub(crate) fn routes_to(hof: &omsi_vehicle::Hof, line: &str, codes: &[i32]) -> Vec<usize> {
+pub fn routes_to(hof: &omsi_vehicle::Hof, line: &str, codes: &[i32]) -> Vec<usize> {
     let line_digits: String = line
         .trim()
         .chars()

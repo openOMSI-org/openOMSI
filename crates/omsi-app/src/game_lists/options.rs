@@ -22,6 +22,12 @@ pub(super) fn option_now(app: &App, verb: &str, arg: &str) -> Option<f32> {
         "mouse_sens" => s.mouse_sens,
         "mouse_pedal_strength" => s.mouse_pedal_strength,
         "look_sens" => s.look_sens,
+        "ht_yaw" => s.head_tracking_yaw,
+        "ht_pitch" => s.head_tracking_pitch,
+        "ht_move" => s.head_tracking_move,
+        "ht_roll" => s.head_tracking_roll,
+        "ht_smooth" => s.head_tracking_smoothing,
+        "ht_dead" => s.head_tracking_dead_zone,
         "look_smoothing_ms" => s.look_smoothing_ms,
         "pad_steer_smooth" => s.pad_steer_smooth,
         "pad_steer_speed" => s.pad_steer_speed,
@@ -131,6 +137,19 @@ pub(super) fn option_set(app: &mut App, verb: &str, arg: &str, v: f32) -> Option
         "look_sens" => {
             app.settings.look_sens = (v * 100.0).round() / 100.0;
             Some(("look_sens", app.settings.look_sens.to_string()))
+        }
+        "ht_yaw" | "ht_pitch" | "ht_move" | "ht_roll" | "ht_smooth" | "ht_dead" => {
+            let s = &mut app.settings;
+            let (key, to) = match verb {
+                "ht_yaw" => ("head_tracking_yaw", &mut s.head_tracking_yaw),
+                "ht_pitch" => ("head_tracking_pitch", &mut s.head_tracking_pitch),
+                "ht_roll" => ("head_tracking_roll", &mut s.head_tracking_roll),
+                "ht_smooth" => ("head_tracking_smoothing", &mut s.head_tracking_smoothing),
+                "ht_dead" => ("head_tracking_dead_zone", &mut s.head_tracking_dead_zone),
+                _ => ("head_tracking_move", &mut s.head_tracking_move),
+            };
+            *to = omsi_launcher_lib::head_tracking_value(key, Some(v as f64)) as f32;
+            Some((key, to.to_string()))
         }
         "pad_steer_smooth" => {
             app.settings.pad_steer_smooth = v.clamp(0.0, 300.0).round();
@@ -353,6 +372,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
     Some(match id {
         "navigator" => if app.vr_active() { app.vr_nav_profile().enabled } else { app.menus.navigator.as_ref().is_some_and(|n| n.enabled) },
         "nav_ai" => app.menus.navigator.as_ref().map_or(s.nav_ai, |n| n.show_ai),
+        "nav_board" => app.menus.navigator.as_ref().map_or(s.nav_board, |n| n.board),
         "shadows" => s.shadows,
         "head" => s.head_movement,
         "cam_smooth" => s.driverview_smooth,
@@ -365,6 +385,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "blinker_cancel" => s.blinker_cancel,
         "fps" => s.show_fps,
         "get_up" => s.get_up,
+        "ibis_auto" => s.ibis_auto,
         "trip_summary" => s.trip_summary,
         "time_sync" => s.time_sync,
         "metar_sync" => s.metar_sync,
@@ -449,6 +470,14 @@ pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static 
             app.settings.nav_ai = on;
             Some(("nav_ai", bit))
         }
+        "nav_board" => {
+            // (on, it shows at once; off, it goes)
+            if let Some(n) = app.menus.navigator.as_mut() {
+                n.set_board(on);
+            }
+            app.settings.nav_board = on;
+            Some(("nav_board", bit))
+        }
         "shadows" => {
             app.settings.shadows = on;
             Some(("shadows", bit))
@@ -503,6 +532,13 @@ pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static 
         "get_up" => {
             app.settings.get_up = on;
             Some(("get_up", bit))
+        }
+        "ibis_auto" => {
+            app.settings.ibis_auto = on;
+            if let Some(p) = app.player.as_mut() {
+                p.ibis_auto = on;
+            }
+            Some(("ibis_auto", bit))
         }
         "trip_summary" => { app.settings.trip_summary = on; Some(("trip_summary", bit)) }
         // the real-time sync: the clock takes the device's date and time at once (a host's

@@ -42,6 +42,17 @@ pub(crate) fn find_app_launcher() -> Option<PathBuf> {
     cands.into_iter().find(|p| p.is_file())
 }
 
+/// Whether a plain start opens the desktop launcher (openOMSI's Tauri window): only when the
+/// player chose it - `launcher_ui=desktop` in the settings, or `OMSI_LAUNCHER_UI=desktop` for
+/// one start. This build's own launcher (the Omsi-Hub interface in the game's window) is the
+/// one a plain start opens otherwise, and the desktop launcher's WebView2 is never asked for.
+pub(crate) fn desktop_launcher_chosen() -> bool {
+    if let Ok(v) = omsi_cfg::env::var("OMSI_LAUNCHER_UI") {
+        return omsi_launcher_lib::launcher_ui(&v) == "desktop";
+    }
+    omsi_launcher_lib::get_settings().map(|v| omsi_launcher_lib::launcher_ui(v.get("launcher_ui").and_then(|x| x.as_str()).unwrap_or("new")) == "desktop").unwrap_or(false)
+}
+
 /// A plain start: the desktop launcher when it is there (`Ok(true)` once it runs). It opens
 /// the game's own launcher by itself where its window cannot start (no webview).
 pub(crate) fn open_app_launcher() -> Result<bool> {

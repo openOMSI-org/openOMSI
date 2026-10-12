@@ -1,0 +1,30 @@
+_version: 2
+# Display fonts fitted to the letters they replace: the launcher's display font section (launcher/displayfont).
+"This bus's matrix script (%{script}) writes its destination and line number itself, in fonts it asks the game for by name: a chosen font takes their place there, each fitted to the height, the baseline and the width of the letters it replaces, so the matrix picks its sizes as with its own fonts.":
+  nl: "Het matrixscript van deze bus (%{script}) schrijft de bestemming en het lijnnummer zelf, in lettertypes die het bij naam aan het spel vraagt: een gekozen lettertype neemt daar hun plaats in, telkens passend gemaakt op de hoogte, de basislijn en de breedte van de letters die het vervangt, zodat de matrix zijn maten kiest zoals met zijn eigen lettertypes."
+  de: "Das Matrix-Skript dieses Busses (%{script}) schreibt Ziel und Liniennummer selbst, in Schriften, die es beim Spiel über ihren Namen anfordert: Eine gewählte Schrift tritt dort an ihre Stelle, jeweils an Höhe, Grundlinie und Breite der ersetzten Buchstaben angepasst, sodass die Matrix ihre Größen wie mit ihren eigenen Schriften wählt."
+  fr: "Le script de matrice de ce bus (%{script}) écrit lui-même la destination et le numéro de ligne, dans des polices qu'il demande au jeu par leur nom : une police choisie prend leur place, chaque fois ajustée à la hauteur, à la ligne de base et à la largeur des lettres qu'elle remplace, pour que la matrice choisisse ses tailles comme avec ses propres polices."
+  ru: "Скрипт матрицы этого автобуса (%{script}) сам пишет направление и номер маршрута шрифтами, которые запрашивает у игры по имени: выбранный шрифт занимает их место, каждый раз подогнанный по высоте, базовой линии и ширине заменяемых букв, так что матрица выбирает размеры, как со своими шрифтами."
+  uk: "Скрипт матриці цього автобуса (%{script}) сам пише напрямок і номер маршруту шрифтами, які запитує в гри за назвою: вибраний шрифт займає їхнє місце, щоразу підігнаний за висотою, базовою лінією та шириною літер, які замінює, тож матриця вибирає розміри, як зі своїми шрифтами."
+  pl: "Skrypt matrycy tego autobusu (%{script}) sam wypisuje kierunek i numer linii czcionkami, o które prosi grę po nazwie: wybrana czcionka zajmuje tam ich miejsce, za każdym razem dopasowana do wysokości, linii bazowej i szerokości liter, które zastępuje, więc matryca wybiera rozmiary jak przy własnych czcionkach."
+"Drawn on its %{n} displays in their own grid, as tall and as wide as the letters of %{font} (capitals %{rows} dots high). Their symbols and pictograms stay the bus's own.":
+  nl: "Getekend op zijn %{n} displays in hun eigen raster, even hoog en even breed als de letters van %{font} (hoofdletters %{rows} punten hoog). Hun symbolen en pictogrammen blijven die van de bus."
+  de: "Auf seinen %{n} Anzeigen in deren eigenem Raster gezeichnet, so hoch und so breit wie die Buchstaben von %{font} (Großbuchstaben %{rows} Punkte hoch). Ihre Symbole und Piktogramme bleiben die des Busses."
+  fr: "Dessinée sur ses %{n} afficheurs dans leur propre grille, aussi haute et aussi large que les lettres de %{font} (majuscules de %{rows} points de haut). Leurs symboles et pictogrammes restent ceux du bus."
+  ru: "Рисуется на его табло (%{n}) в их собственной сетке, той же высоты и ширины, что и буквы %{font} (высота заглавных в точках: %{rows}). Их символы и пиктограммы остаются такими же, как у автобуса."
+  uk: "Малюється на його табло (%{n}) у їхній власній сітці, тієї ж висоти й ширини, що й літери %{font} (висота великих літер у точках: %{rows}). Їхні символи й піктограми залишаються такими, як в автобуса."
+  pl: "Rysowana na jego wyświetlaczach (%{n}) w ich własnej siatce, tak wysoka i tak szeroka jak litery %{font} (wysokość wielkich liter w punktach: %{rows}). Ich symbole i piktogramy pozostają takie jak w autobusie."
+"Drawn in the display's own grid, as tall and as wide as the letters of %{font} (capitals %{rows} dots high). Its symbols and pictograms stay the bus's own.":
+  nl: "Getekend in het eigen raster van het display, even hoog en even breed als de letters van %{font} (hoofdletters %{rows} punten hoog). Zijn symbolen en pictogrammen blijven die van de bus."
+  de: "Im eigenen Raster der Anzeige gezeichnet, so hoch und so breit wie die Buchstaben von %{font} (Großbuchstaben %{rows} Punkte hoch). Ihre Symbole und Piktogramme bleiben die des Busses."
+  fr: "Dessinée dans la propre grille de l'afficheur, aussi haute et aussi large que les lettres de %{font} (majuscules de %{rows} points de haut). Ses symboles et pictogrammes restent ceux du bus."
+  ru: "Рисуется в собственной сетке табло, той же высоты и ширины, что и буквы %{font} (высота заглавных в точках: %{rows}). Его символы и пиктограммы остаются такими же, как у автобуса."
+  uk: "Малюється у власній сітці табло, тієї ж висоти й ширини, що й літери %{font} (висота великих літер у точках: %{rows}). Його символи й піктограми залишаються такими, як в автобуса."
+  pl: "Rysowana we własnej siatce wyświetlacza, tak wysoka i tak szeroka jak litery %{font} (wysokość wielkich liter w punktach: %{rows}). Jego symbole i piktogramy pozostają takie jak w autobusie."
+"%{n} dots":
+  nl: "%{n} punten"
+  de: "%{n} Punkte"
+  fr: "%{n} points"
+  ru: "Точек: %{n}"
+  uk: "Точок: %{n}"
+  pl: "Punktów: %{n}"

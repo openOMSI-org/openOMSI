@@ -9,7 +9,7 @@ pub fn mods(l: &mut Launcher, area: Rect) {
     if !l.state.mods_asked {
         l.state.load_mods();
     }
-    let body = l.page_title(area, "Mods", "A bus, a map, scenery, a whole OMSI folder - as a folder or a .zip, .7z or .rar. The original OMSI 2 folder is never written to.");
+    let body = area;
     // (installing and the installs on the left, the list of every mod taking the rest)
     let side = (body.w * 0.27).clamp(280.0, 380.0);
     let list_w = body.w - 2.0 * (side + GAP * 2.0);
@@ -26,20 +26,20 @@ pub fn mods(l: &mut Launcher, area: Rect) {
     }
     // install
     let c0 = colr(0);
-    l.ui.panel(c0);
+    l.ui.card(c0);
     let inner = l.ui.heading(Rect::new(c0.x + 18.0, c0.y + 14.0, c0.w - 36.0, c0.h - 28.0), "Install a mod", Some("download"));
     let mut y = inner.y;
     let half = (inner.w - GAP) * 0.5;
     if l.ui.button("mod-folder", Rect::new(inner.x, y, half, 40.0), "Choose a folder", Some("folder_open"), ButtonKind::Primary) {
-        if super::mobile::mobile() {
-            l.browse(super::mobile::Purpose::ModFolder, "");
+        if crate::mobile::mobile() {
+            l.browse(crate::mobile::Purpose::ModFolder, "");
         } else if let Some(p) = core::pick_mod(false) {
             l.state.install(p.to_string_lossy().to_string());
         }
     }
     if l.ui.button("mod-zip", Rect::new(inner.x + half + GAP, y, half, 40.0), "Choose archive", Some("inventory_2"), ButtonKind::Normal) {
-        if super::mobile::mobile() {
-            l.browse(super::mobile::Purpose::ModZip, "");
+        if crate::mobile::mobile() {
+            l.browse(crate::mobile::Purpose::ModZip, "");
         } else if let Some(p) = core::pick_mod(true) {
             l.state.install(p.to_string_lossy().to_string());
         }
@@ -55,7 +55,7 @@ pub fn mods(l: &mut Launcher, area: Rect) {
     let drop = Rect::new(inner.x, y, inner.w, 110.0);
     let hot = l.pages.drop_hover;
     let t = l.ui.anim(id_of("drop"), if hot { 1.0 } else { 0.0 }, 0.1);
-    l.ui.p().rounded(drop, 12.0, ACCENT.alpha(0.05 + 0.12 * t));
+    l.ui.p().rounded(drop, 12.0, accent().alpha(0.05 + 0.12 * t));
     // a dashed edge
     let per = 2.0 * (drop.w + drop.h);
     let n = (per / 14.0) as usize;
@@ -70,9 +70,9 @@ pub fn mods(l: &mut Launcher, area: Rect) {
         } else {
             Vec2::new(drop.x, drop.bottom() - (s - 2.0 * drop.w - drop.h))
         };
-        l.ui.p().circle(p, 1.3, ACCENT.alpha(0.35 + 0.5 * t));
+        l.ui.p().circle(p, 1.3, accent().alpha(0.35 + 0.5 * t));
     }
-    l.ui.icon("upload", Vec2::new(drop.center().x, drop.y + 38.0), 30.0, ACCENT.alpha(0.6 + 0.4 * t));
+    l.ui.icon("upload", Vec2::new(drop.center().x, drop.y + 38.0), 30.0, accent().alpha(0.6 + 0.4 * t));
     l.ui.text_in("...or drop a mod folder or .zip, .7z or .rar onto this window", Rect::new(drop.x, drop.y + 62.0, drop.w, 30.0), 12.5, Weight::Medium, TEXT_SOFT, Align::Center);
     y += 122.0;
     if !l.state.mod_path.is_empty() {
@@ -80,9 +80,10 @@ pub fn mods(l: &mut Launcher, area: Rect) {
         y += l.ui.paragraph(&p, Vec2::new(inner.x, y), inner.w, 11.5, Weight::Regular, TEXT_FAINT);
         match l.state.mod_info.clone() {
             Some(Ok(i)) if i.is_archive => {
-                let fit = if i.fits { format!("fits ({} free)", fmt_bytes(i.free_bytes)) } else { format!("does not fit: needs {}, {} free", fmt_bytes(i.needed_bytes), fmt_bytes(i.free_bytes)) };
-                let place = if i.in_place_ok { "can be used in place".to_string() } else { i.in_place.clone() };
-                y += l.ui.paragraph(&format!("{} archive, {} files, {} unpacked - {fit}; {place}", fmt_bytes(i.archive_bytes), i.files, fmt_bytes(i.unpacked_bytes)), Vec2::new(inner.x, y), inner.w, 12.0, Weight::Regular, if i.fits { TEXT_DIM } else { WARN });
+                let fit = if i.fits { omsi_ui::tr("fits (%{free} free)").replace("%{free}", &fmt_bytes(i.free_bytes)) } else { omsi_ui::tr("does not fit: needs %{needed}, %{free} free").replace("%{needed}", &fmt_bytes(i.needed_bytes)).replace("%{free}", &fmt_bytes(i.free_bytes)) };
+                let place = if i.in_place_ok { omsi_ui::tr("can be used in place").into_owned() } else { i.in_place.clone() };
+                let what = omsi_ui::tr("%{size} archive, %{files} files, %{unpacked} unpacked").replace("%{size}", &fmt_bytes(i.archive_bytes)).replace("%{files}", &i.files.to_string()).replace("%{unpacked}", &fmt_bytes(i.unpacked_bytes));
+                y += l.ui.paragraph(&format!("{what} - {fit}; {place}"), Vec2::new(inner.x, y), inner.w, 12.0, Weight::Regular, if i.fits { TEXT_DIM } else { WARN });
             }
             Some(Err(e)) => {
                 y += l.ui.paragraph(&e, Vec2::new(inner.x, y), inner.w, 12.0, Weight::Regular, DANGER);
@@ -94,14 +95,20 @@ pub fn mods(l: &mut Launcher, area: Rect) {
     if let Some(m) = l.state.mods.clone() {
         l.ui.heading(Rect::new(inner.x, y, inner.w, 28.0), "The Mods folder", None);
         y += 30.0;
-        y += l.ui.paragraph(&format!("Anything put into {} is installed by itself once it has finished copying.", m.inbox), Vec2::new(inner.x, y), inner.w, 12.0, Weight::Regular, TEXT_DIM);
+        // (the folder on a line of its own, cut to the column: a path has no spaces to break
+        // at and ran out of the card)
+        y += l.ui.paragraph("Anything put into this folder is installed by itself once it has finished copying.", Vec2::new(inner.x, y), inner.w, 12.0, Weight::Regular, TEXT_DIM);
+        let at = Rect::new(inner.x, y + 2.0, inner.w, 18.0);
+        l.ui.text_in(&m.inbox, at, 12.0, Weight::Medium, TEXT_SOFT, Align::Left);
+        l.ui.tooltip(at, &m.inbox);
+        y += 24.0;
         if !m.inbox_items.is_empty() {
-            l.ui.paragraph(&format!("In it now: {}", m.inbox_items.join(", ")), Vec2::new(inner.x, y + 4.0), inner.w, 12.0, Weight::Regular, TEXT_SOFT);
+            l.ui.paragraph(&omsi_ui::tr("In it now: %{items}").replace("%{items}", &m.inbox_items.join(", ")), Vec2::new(inner.x, y + 4.0), inner.w, 12.0, Weight::Regular, TEXT_SOFT);
         }
     }
     // installs
     let c1 = colr(1);
-    l.ui.panel(c1);
+    l.ui.card(c1);
     let inner = l.ui.heading(Rect::new(c1.x + 18.0, c1.y + 14.0, c1.w - 36.0, c1.h - 28.0), "Installs", Some("inventory_2"));
     if l.ui.button("jobs-clear", Rect::new(c1.right() - 18.0 - 130.0, c1.y + 12.0, 130.0, 30.0), "Clear finished", None, ButtonKind::Ghost) {
         core::install::clear_finished();
@@ -126,14 +133,14 @@ pub fn mods(l: &mut Launcher, area: Rect) {
                 "done" => OK,
                 "failed" => DANGER,
                 "cancelled" => TEXT_DIM,
-                _ => ACCENT,
+                _ => accent(),
             };
-            ui.badge(Vec2::new(r.right() - 90.0, r.y + 10.0), &j.state.to_uppercase(), sc);
+            ui.badge(Vec2::new(r.right() - 90.0, r.y + 10.0), &omsi_ui::tr(&j.state).to_uppercase(), sc);
             let mut yy = r.y + 34.0;
             if running {
                 let frac = if j.bytes_total > 0 { j.bytes_done as f32 / j.bytes_total as f32 } else if j.files_total > 0 { j.files_done as f32 / j.files_total as f32 } else { 0.0 };
                 ui.progress(Rect::new(r.x + 12.0, yy, r.w - 24.0, 8.0), frac, true);
-                ui.text_in(&format!("{} / {} files | {} / {}", j.files_done, j.files_total, fmt_bytes(j.bytes_done), fmt_bytes(j.bytes_total)), Rect::new(r.x + 12.0, yy + 10.0, r.w - 24.0, 16.0), 11.0, Weight::Regular, TEXT_DIM, Align::Left);
+                ui.text_in(&format!("{} | {} / {}", omsi_ui::tr("%{done} / %{total} files").replace("%{done}", &j.files_done.to_string()).replace("%{total}", &j.files_total.to_string()), fmt_bytes(j.bytes_done), fmt_bytes(j.bytes_total)), Rect::new(r.x + 12.0, yy + 10.0, r.w - 24.0, 16.0), 11.0, Weight::Regular, TEXT_DIM, Align::Left);
                 yy += 30.0;
             }
             yy += ui.paragraph(&j.message, Vec2::new(r.x + 12.0, yy), r.w - 24.0, 12.0, Weight::Regular, if j.state == "failed" { DANGER } else { TEXT_SOFT });
@@ -184,7 +191,7 @@ fn mod_passes(m: &core::mods::Mod, filter: usize) -> bool {
 /// or deleted after a question asked in its row.
 fn mod_list(l: &mut Launcher, c: Rect) {
     use core::mods::Kind;
-    l.ui.panel(c);
+    l.ui.card(c);
     let inner = l.ui.heading(Rect::new(c.x + 18.0, c.y + 14.0, c.w - 36.0, c.h - 28.0), "Installed mods", Some("extension"));
     let Some(status) = l.state.mods.clone() else {
         l.ui.text_in("Reading the content folder...", Rect::new(inner.x, inner.y, inner.w, 20.0), 12.5, Weight::Regular, TEXT_DIM, Align::Left);
@@ -195,7 +202,11 @@ fn mod_list(l: &mut Launcher, c: Rect) {
     // the content folder: where, how much room
     l.ui.text_in(&format!("{} mods, {on} on | {} free", mods.len(), fmt_bytes(status.free_bytes)), Rect::new(c.x + 220.0, c.y + 14.0, c.w - 238.0, 28.0), 12.0, Weight::Regular, TEXT_DIM, Align::Right);
     let mut y = inner.y;
-    l.ui.text_in(&status.content_dir, Rect::new(inner.x, y, inner.w - 90.0, 18.0), 11.5, Weight::Regular, TEXT_FAINT, Align::Left);
+    // (the folder cut to the column, the whole of it on hovering: a path has no spaces to
+    // break at)
+    let at = Rect::new(inner.x, y, inner.w - 90.0, 18.0);
+    l.ui.text_in(&status.content_dir, at, 11.5, Weight::Regular, TEXT_FAINT, Align::Left);
+    l.ui.tooltip(at, &status.content_dir);
     if l.ui.button("mods-open-folder", Rect::new(inner.right() - 80.0, y - 4.0, 80.0, 26.0), "Open", Some("open_in_new"), ButtonKind::Ghost) {
         omsi_platform::updater::open_url(&status.content_dir);
     }
@@ -225,6 +236,8 @@ fn mod_list(l: &mut Launcher, c: Rect) {
     let mut delete: Option<String> = None;
     let mut open_toggle: Option<String> = None;
     let opened = l.pages.mod_open.clone();
+    // (the install dates in the machine's time zone, as the service record writes its dates)
+    let offset = core::utc_offset();
     let list = Rect::new(inner.x - 6.0, y, inner.w + 12.0, inner.bottom() - y);
     l.ui.scroll_area("mods-list", list, &mut |ui, v| {
         if shown.is_empty() {
@@ -268,7 +281,7 @@ fn mod_list(l: &mut Launcher, c: Rect) {
                 Kind::Archive => "inventory_2",
                 Kind::Other => "extension",
             };
-            ui.icon(icon, Vec2::new(r.x + 22.0, r.center().y), 20.0, if m.enabled { ACCENT } else { TEXT_FAINT });
+            ui.icon(icon, Vec2::new(r.x + 22.0, r.center().y), 20.0, if m.enabled { accent() } else { TEXT_FAINT });
             let tw = r.w - 230.0;
             ui.text_in(&m.name, Rect::new(r.x + 44.0, r.y + 6.0, tw, 20.0), 13.5, Weight::Medium, if m.enabled { TEXT } else { TEXT_DIM }, Align::Left);
             let open = opened.contains(&m.id);
@@ -282,7 +295,7 @@ fn mod_list(l: &mut Launcher, c: Rect) {
                 sub.insert(0, "OFF".into());
             }
             if m.installed > 0 {
-                sub.push(format!("installed {}", chrono_like(m.installed)));
+                sub.push(format!("installed {}", date_text(m.installed, offset, false)));
             } else if !m.noted {
                 sub.push("found in the content folder".into());
             }

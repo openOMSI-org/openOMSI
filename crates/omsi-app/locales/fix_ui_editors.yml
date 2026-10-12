@@ -1,0 +1,26 @@
+_version: 2
+# Texts of the line editor, the depot editor and the display font row added with their fixes
+# (launcher/lineeditor.rs, depoteditor.rs, displayfont.rs). The English text is the key, as in
+# app.yml.
+
+"%{name} was changed elsewhere since you opened it: saving writes your changes over that":
+  nl: "%{name} is ergens anders gewijzigd sinds je het opende: opslaan schrijft jouw wijzigingen daaroverheen"
+  de: "%{name} wurde seit dem Öffnen anderswo geändert: Speichern schreibt deine Änderungen darüber"
+  fr: "%{name} a été modifié ailleurs depuis son ouverture : l’enregistrer écrit vos modifications par-dessus"
+  ru: "%{name} изменён в другом месте после открытия: сохранение запишет ваши изменения поверх"
+  uk: "%{name} змінено деінде після відкриття: збереження запише ваші зміни поверх"
+  pl: "Plik %{name} zmieniono gdzie indziej od jego otwarcia: zapisanie nadpisze to twoimi zmianami"
+"The bus's displays could not be read.":
+  nl: "De displays van de bus konden niet worden gelezen."
+  de: "Die Anzeigen des Busses konnten nicht gelesen werden."
+  fr: "Les girouettes du bus n’ont pas pu être lues."
+  ru: "Не удалось прочитать указатели автобуса."
+  uk: "Не вдалося прочитати покажчики автобуса."
+  pl: "Nie udało się odczytać wyświetlaczy autobusu."
+"Deleted from your lines, but there is no content folder to take it out of the timetable":
+  nl: "Verwijderd uit je lijnen, maar er is geen contentmap om het uit de dienstregeling te halen"
+  de: "Aus deinen Linien gelöscht, aber es gibt keinen Inhaltsordner, um sie aus dem Fahrplan zu nehmen"
+  fr: "Supprimée de vos lignes, mais aucun dossier de contenu d’où la retirer de l’horaire"
+  ru: "Удалено из ваших линий, но нет папки контента, чтобы убрать её из расписания"
+  uk: "Видалено з ваших ліній, але немає теки вмісту, щоб прибрати її з розкладу"
+  pl: "Usunięto z twoich linii, ale brak folderu zawartości, by usunąć ją z rozkładu"

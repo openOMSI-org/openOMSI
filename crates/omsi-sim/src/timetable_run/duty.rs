@@ -157,6 +157,9 @@ impl PlayerDuty {
             first_update: None,
             heading: 0.0,
             position: None,
+            tours: Vec::new(),
+            free: false,
+            dup_tiles: Default::default(),
         }
     }
 
@@ -177,6 +180,20 @@ impl PlayerDuty {
     /// None while it has not left one.
     pub fn left_late(&self) -> Option<f64> {
         self.left_late
+    }
+
+    /// How late (s, negative early) the bus arrived at the stop it stands at; None away from
+    /// one (the trip's report reads the last stop's arrival from it).
+    pub fn arrived_late(&self) -> Option<f64> {
+        self.arrived_late
+    }
+
+    /// The current trip's place in its tour (0 = the first), as a saved situation names it.
+    pub fn tour_trip(&self) -> usize {
+        match self.tours.get(self.trip_index) {
+            Some((_, _, k)) => *k,
+            None => self.first_trip + self.trip_index,
+        }
     }
 
     /// Service/depot legs have no public line and use the HOF's
@@ -267,15 +284,40 @@ impl PlayerDuty {
     /// gets its place once the tile comes, and one placed roughly (an object hung on
     /// another) its exact one. A stop without a place was never reached: the next stop
     /// stayed on it for the rest of the trip (#975) and the map left it out (#1014).
-    pub fn learn_loaded(&mut self, positions: &HashMap<i64, (glam::DVec3, [f64; 3])>) {
+    /// An id objects of several tiles share (`dups`, omsi-app's `World::object_dups`: a map
+    /// joined from others) is the one nearest to where the stop's own tile placed it, never
+    /// the last tile loaded.
+    pub fn learn_loaded(&mut self, positions: &HashMap<i64, (glam::DVec3, [f64; 3])>, dups: &HashMap<((i32, i32), i64), (glam::DVec3, [f64; 3])>) {
         // (the trip under way and the next: the later ones learn theirs when they come)
         let from = self.trip_index;
+        // (the shared ids' tiles looked for once a trip, not every frame: a map joined from
+        // others has hundreds of thousands, and the tiles being placed wait for the lock)
+        if self.dup_tiles.0 != Some((from, dups.len())) {
+            let ids: std::collections::HashSet<i64> = self.trips[from..].iter().take(2).flat_map(|t| t.stops.iter().map(|s| s.object_id)).collect();
+            let mut tiles: HashMap<i64, Vec<(i32, i32)>> = HashMap::new();
+            for &(tile, id) in dups.keys() {
+                if ids.contains(&id) {
+                    tiles.entry(id).or_default().push(tile);
+                }
+            }
+            self.dup_tiles = (Some((from, dups.len())), tiles);
+        }
+        let shared: HashMap<i64, Vec<glam::DVec3>> = self
+            .dup_tiles
+            .1
+            .iter()
+            .map(|(&id, tiles)| (id, tiles.iter().filter_map(|&t| dups.get(&(t, id)).map(|p| p.0)).collect()))
+            .collect();
         for trip in self.trips[from..].iter_mut().take(2) {
             let mut changed = false;
             for s in &mut trip.stops {
-                if let Some((p, _)) = positions.get(&s.object_id) {
-                    if s.position != Some(*p) {
-                        s.position = Some(*p);
+                let found = match shared.get(&s.object_id) {
+                    Some(c) => s.position.and_then(|at| c.iter().copied().min_by(|a, b| a.distance(at).total_cmp(&b.distance(at)))),
+                    None => positions.get(&s.object_id).map(|p| p.0),
+                };
+                if let Some(p) = found {
+                    if s.position != Some(p) {
+                        s.position = Some(p);
                         changed = true;
                     }
                 }
@@ -523,6 +565,13 @@ impl PlayerDuty {
     }
 
     pub(crate) fn set_trip(&mut self, index: usize) {
+        if let Some((line, tour, _)) = self.tours.get(index) {
+            if !(line.eq_ignore_ascii_case(&self.line) && tour.eq_ignore_ascii_case(&self.tour)) {
+                log::info!("duty: on with line {line} tour {tour}");
+            }
+            self.line = line.clone();
+            self.tour = tour.clone();
+        }
         self.trip_index = index;
         self.run = next_run();
         self.next_stop = 0;
@@ -544,6 +593,10 @@ impl PlayerDuty {
     /// left and the stop ahead, as Omsi.exe weighs the two times for `GetTTDelay` (0x61f59c
     /// measures them, 0x7d5124 weighs).
     pub fn delay(&self, now: f64) -> f64 {
+        // (a free drive along a line keeps no time: its stops' times are only its pace)
+        if self.free {
+            return 0.0;
+        }
         let now = self.duty_time(now);
         let trip = self.trip();
         if self.done {
@@ -627,7 +680,8 @@ impl PlayerDuty {
             self.advance(bus.position, day_time);
         }
         self.feed_host(bus, day_time);
-        served
+        // (a free drive along a line goes on from stop to stop, but none is counted)
+        served.filter(|_| !self.free)
     }
 
     pub(crate) fn doors_open(bus: &crate::VehicleInstance) -> bool {

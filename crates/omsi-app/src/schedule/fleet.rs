@@ -50,7 +50,8 @@ impl Schedule {
         }
         let t1 = std::time::Instant::now();
         let mut seen = std::collections::HashSet::new();
-        for (ty, _, hof) in self.sim.depot_vehicles() {
+        // (the depots' buses, and those the player's own lines ask for)
+        for (ty, _, hof) in self.sim.depot_vehicles().chain(self.sim.line_bus_vehicles()) {
             if !seen.insert(ty.def.path.clone()) {
                 continue;
             }
