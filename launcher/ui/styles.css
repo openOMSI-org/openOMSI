@@ -250,6 +250,7 @@ textarea.input { height: auto; padding: 9px 11px; resize: vertical; }
 .segmented button:hover { color: var(--text); }
 .segmented button.on { background: #3a3a3a; color: var(--text); }
 .segmented.full { display: flex; }
+.segmented.wrap { flex-wrap: wrap; }
 .segmented.full button { flex: 1; }
 
 /* tabs (underlined) */

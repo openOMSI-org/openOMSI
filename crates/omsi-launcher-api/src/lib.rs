@@ -489,6 +489,11 @@ pub fn call(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "mod_remove" => mod_remove(arg::<String>(args, "id")?),
         "mod_inspect" => mod_inspect(arg::<String>(args, "path")?),
         "mod_install" => mod_install(arg::<String>(args, "path")?, arg::<String>(args, "mode")?),
+        "mod_cancel" => Ok(json!(core::install::cancel(arg::<u64>(args, "id")?))),
+        "mods_clear_finished" => {
+            core::install::clear_finished();
+            Ok(json!(true))
+        }
         "poll" => poll(),
         "stop_game" => stop_game(arg::<u32>(args, "pid")?),
         "game_log" => game_log(arg::<u32>(args, "pid")?, arg::<Option<usize>>(args, "lines")?),

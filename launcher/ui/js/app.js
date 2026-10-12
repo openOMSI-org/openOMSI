@@ -5,7 +5,7 @@ import { useStore, set, S } from './store.js';
 import { t, plainText } from './i18n.js';
 import { Icon } from './icons.js';
 import { Spinner } from './ui.js';
-import { boot } from './data.js';
+import { boot, installMod, jobRunning } from './data.js';
 import { DrivePage } from './pages/drive.js';
 import { MultiplayerPage } from './pages/multiplayer.js';
 import { ProfilePage } from './pages/profile.js';
@@ -16,7 +16,7 @@ import { GamesPage } from './pages/games.js';
 import { TutorialsPage } from './pages/tutorials.js';
 import { SetupPage } from './pages/setup.js';
 import { MobileApp } from './mobile/mobile.js';
-import { onPhone } from './api.js';
+import { onPhone, onDrop } from './api.js';
 
 // (the phone app, or `?phone` for a look at it in a browser)
 const PHONE = onPhone || new URLSearchParams(location.search).has('phone');
@@ -38,7 +38,7 @@ const PAGES = [
 function Sidebar() {
   const s = useStore();
   const running = s.poll.instances?.length || 0;
-  const installing = s.poll.jobs?.filter((j) => !['done', 'failed', 'cancelled'].includes(j.state)).length || 0;
+  const installing = s.poll.jobs?.filter(jobRunning).length || 0;
   const p = s.profile;
   const name = s.config?.profile || '';
   return html`<nav class="sidebar">
@@ -81,6 +81,14 @@ function App() {
 
 plainText(document.body);
 render(html`<${App} />`, document.getElementById('app'));
+onDrop(
+  (paths) => {
+    if (!S.ready || S.page === 'setup') return;
+    set({ page: 'mods' });
+    paths.forEach(installMod);
+  },
+  (over) => over !== S.dropOver && set({ dropOver: over }),
+);
 boot()
   .then(() => S.boot?.selftest && import('./selftest.js').then((m) => m.selftest()))
   .catch((e) => set({ errors: { ...S.errors, boot: String(e.message || e) } }));

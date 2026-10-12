@@ -272,15 +272,42 @@ export async function start(extra) {
 // --- polling: running games, installs, content changes ----------------------------------
 
 let polling = false;
+export const jobRunning = (j) => !!j.state && !['done', 'failed', 'cancelled'].includes(j.state);
+
+export async function installMod(path) {
+  const mode = S.modMode || 'auto';
+  set({ modPath: path, modInfo: null });
+  call('mod_inspect', { path })
+    .then((i) => {
+      if (S.modPath !== path) return;
+      set({ modInfo: i });
+      if (!i.fits && i.in_place_ok && (S.modMode || 'auto') === 'extract') set({ modMode: 'inplace' });
+    })
+    .catch((e) => S.modPath === path && set({ modInfo: { error: e.message } }));
+  try {
+    await call('mod_install', { path, mode });
+    toast(t('Installing {name}…', { name: path.split(/[\\/]/).pop() }));
+    pollNow();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
 export async function pollNow() {
   if (polling) return;
   polling = true;
   try {
     const p = await call('poll');
     const changed = S.poll.stamp && p.stamp !== S.poll.stamp;
+    const before = S.poll.jobs || [];
     set({ poll: p });
     for (const s of p.started || []) toast(t('Installing {name}…', { name: s }));
-    if (changed) {
+    const finished = S.poll.stamp ? (p.jobs || []).filter((j) => !jobRunning(j) && !before.some((b) => b.id === j.id && !jobRunning(b))) : [];
+    for (const j of finished) {
+      if (j.state === 'done') toast(j.message || t('{name} installed', { name: j.name }), 'ok');
+      else if (j.state === 'failed') toast(`${j.name}: ${j.message}`, 'error');
+    }
+    if (changed || finished.length) {
       loadContent();
       cached('mods', 'mods_status');
     }
@@ -295,7 +322,7 @@ function startPolling() {
   setInterval(() => {
     followClock();
     // (faster while something happens)
-    const busy = S.poll.jobs.some((j) => !['done', 'failed', 'cancelled'].includes(j.state));
+    const busy = S.poll.jobs.some(jobRunning);
     if (busy || Date.now() % 4000 < 1000) pollNow();
   }, 1000);
   on('games-ended', () => {
