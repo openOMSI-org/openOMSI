@@ -626,3 +626,9 @@ html.phone, html.phone body { font-size: 15px; -webkit-tap-highlight-color: tran
 .m-dial button { height: 44px; min-width: 56px; border-radius: 10px; background: var(--surface-3); font-weight: 600; cursor: pointer; }
 .m-dial button:disabled { opacity: 0.4; }
 .m-list > * { flex: none; }
+.session-code { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 12px 16px; border-radius: var(--radius); border: 1px solid var(--accent); background: var(--accent-soft); }
+.session-code .code { font: 600 20px ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .04em; overflow-wrap: anywhere; }
+.ok-text { color: var(--ok); }
+.warn-text { color: var(--warn); }
+.log .log-error { color: var(--danger); }
+.log .log-warn { color: var(--warn); }

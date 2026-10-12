@@ -260,6 +260,7 @@ export async function start(extra) {
   try {
     const d = await duty(extra);
     const r = await call('launch', { duty: d });
+    if (d.lan !== 'off' && !d.tutorial) set({ page: 'games' });
     toast(r.others ? t('The game is starting ({n} already running)', { n: r.others }) : t('The game is starting…'), 'ok');
     pollNow();
     return r;
