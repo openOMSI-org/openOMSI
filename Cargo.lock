@@ -3495,7 +3495,7 @@ dependencies = [
  "omsi-xr",
  "parking_lot",
  "png 0.18.1",
- "pollster",
+ "pollster 1.0.1",
  "rayon",
  "rfd",
  "ring",
@@ -3824,7 +3824,7 @@ dependencies = [
  "omsi-plugin",
  "omsi-render",
  "omsi-ui",
- "pollster",
+ "pollster 1.0.1",
  "wgpu",
 ]
 
@@ -3844,7 +3844,7 @@ dependencies = [
  "omsi-cfg",
  "omsi-geometry",
  "omsi-texture",
- "pollster",
+ "pollster 1.0.1",
  "rayon",
  "wgpu",
  "windows 0.62.2",
@@ -3879,7 +3879,7 @@ dependencies = [
  "omsi-weather",
  "omsi-world",
  "parking_lot",
- "pollster",
+ "pollster 1.0.1",
  "rayon",
  "wgpu",
  "zip",
@@ -3987,7 +3987,7 @@ dependencies = [
  "image",
  "log",
  "naga",
- "pollster",
+ "pollster 1.0.1",
  "resvg",
  "wgpu",
  "winit",
@@ -4301,6 +4301,12 @@ name = "pollster"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2f3a9f18d041e6d0e102a0a46750538147e5e8992d3b4873aaafee2520b00ce3"
+
+[[package]]
+name = "pollster"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc6355899e1c9462875b6757c79f3caa011a1fdae12bbb1a2e72dd1f234f8336"
 
 [[package]]
 name = "poly1305"
@@ -4666,7 +4672,7 @@ dependencies = [
  "objc2-app-kit 0.3.2",
  "objc2-core-foundation",
  "objc2-foundation 0.3.2",
- "pollster",
+ "pollster 0.4.0",
  "raw-window-handle",
  "urlencoding",
  "wasm-bindgen",

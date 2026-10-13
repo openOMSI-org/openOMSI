@@ -71,7 +71,7 @@ wgpu-hal = "29"
 naga = "29"
 winit = "0.30"
 bytemuck = { version = "1", features = ["derive"] }
-pollster = "0.4"
+pollster = "1.0"
 # (every picture format a mod or a photo may come in; DDS and TGA have readers of our own)
 image = { version = "0.25", default-features = false, features = ["png", "bmp", "tga", "dds", "jpeg", "webp", "gif", "tiff", "hdr", "exr", "pnm", "qoi", "ico", "ff"] }
 serde = { version = "1", features = ["derive"] }
