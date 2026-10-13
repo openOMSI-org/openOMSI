@@ -246,6 +246,7 @@ pub(super) fn same_value(a: &str, b: &str) -> bool {
 pub(super) fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
     match key {
         "cloud_quality" => vec![("high", "High"), ("low", "Low")],
+        "simhub_port" => vec![("0", "Off"), ("5300", "UDP port 5300"), ("5301", "UDP port 5301"), ("5302", "UDP port 5302"), ("20777", "UDP port 20777")],
         "rain_quality" => vec![("high", "High"), ("medium", "Medium"), ("low", "Low")],
         "graphics" => vec![("vanilla", "Vanilla (as OMSI 2)"), ("vanilla_plus", "Vanilla+"), ("enhanced", "Enhanced"), ("enhanced_plus", "Enhanced+")],
         "msaa" => vec![("1", "Off"), ("2", "2x MSAA"), ("4", "4x MSAA"), ("8", "8x MSAA")],

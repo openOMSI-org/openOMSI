@@ -369,6 +369,7 @@ const general = {
         // (texts nobody has translated: translated on this machine)
         { type: 'toggle', key: 'machine_translation', label: 'Translate the remaining texts automatically (offline, downloads 620 MB once)' },
         { type: 'toggle', key: 'launcher_rest', label: 'The launcher rests while a game runs (gives the graphics card to the game)' },
+        { type: 'select', key: 'simhub_port', label: 'SimHub telemetry', help: 'The bus as Forza Motorsport 7 packets on this UDP port: in SimHub choose Forza Motorsport 7 and the same port.', options: [['0', 'Off'], ['5300', 'UDP port 5300'], ['5301', 'UDP port 5301'], ['5302', 'UDP port 5302'], ['20777', 'UDP port 20777']] },
         { type: 'toggle', key: 'discord_status', label: 'Discord Rich Presence', help: 'Shows the launcher or your map, bus, line and multiplayer status in Discord.' },
         { type: 'toggle', key: 'voice_chat', label: 'Voice chat through GreenTeaSpeak (multiplayer)', help: 'Players near you are heard from where they stand, when GreenTeaSpeak runs with the openOMSI plugin and the server names a voice server.' },
         // (larger for those who find the texts hard to read, smaller for more of the picture)

@@ -4,6 +4,15 @@ _version: 2
 
 "Ambience volume":
   zh-tw: "環境音量"
+"SimHub telemetry":
+  sr: "SimHub telemetrija"
+
+"The bus as Forza Motorsport 7 packets on this UDP port: choose Forza Motorsport 7 in SimHub with the same port":
+  sr: "Bus kao paketi Forza Motorsport 7 na ovom UDP portu: u SimHub-u izaberi Forza Motorsport 7 i isti port"
+
+"The bus as Forza Motorsport 7 packets on this UDP port: in SimHub choose Forza Motorsport 7 and the same port.":
+  sr: "Bus kao paketi Forza Motorsport 7 na ovom UDP portu: u SimHub-u izaberi Forza Motorsport 7 i isti port."
+
 "Yaw sensitivity (left / right)":
   zh-tw: "水平旋轉靈敏度（左／右）"
 "Pitch sensitivity (up / down)":

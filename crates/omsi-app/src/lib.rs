@@ -84,6 +84,7 @@ mod settings;
 mod shell;
 mod photo;
 mod devtools;
+mod simhub;
 mod telemetry;
 use omsi_scene::threads;
 mod tiles;
