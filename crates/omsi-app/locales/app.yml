@@ -2,6 +2,23 @@
 # language of a text under it. `pt` is Brazilian Portuguese; `pt-pt` is European Portuguese.
 _version: 2
 
+"Ambience volume":
+  zh-tw: "環境音量"
+"Yaw sensitivity (left / right)":
+  zh-tw: "水平旋轉靈敏度（左／右）"
+"Pitch sensitivity (up / down)":
+  zh-tw: "俯仰靈敏度（上／下）"
+"Roll sensitivity":
+  zh-tw: "側傾靈敏度"
+"X sensitivity (left / right)":
+  zh-tw: "X 軸靈敏度（左／右）"
+"Y sensitivity (up / down)":
+  zh-tw: "Y 軸靈敏度（上／下）"
+"Z sensitivity (forward / back)":
+  zh-tw: "Z 軸靈敏度（前／後）"
+"Light theme":
+  zh-tw: "淺色"
+
 "Current time":
   de: "Aktuelle Uhrzeit"
   fr: "Heure actuelle"
@@ -3963,6 +3980,7 @@ _version: 2
   tl: "Gumawa ng driver para magsimula ng personnel record."
   sv: "Skapa en förare för att påbörja en personalakt."
 "Level":
+  zh-tw: "等級"
   fr: "Niveau"
   nl: "Niveau"
   sv: "Nivå"
@@ -20956,10 +20974,12 @@ _version: 2
   nl: "Gevoeligheid van muissturing (O)"
   sv: "Musstyrningens känslighet (O)"
 "Mouse pedal strength":
+  zh-tw: "滑鼠踏板力度"
   fr: "Force des pédales à la souris"
   nl: "Sterkte van muispedalen"
   sv: "Muspedalernas styrka"
 "Adjust how much mouse travel is needed to reach full throttle or braking":
+  zh-tw: "調整滑鼠需要移動多少距離才能達到全油門或全煞車"
   fr: "Règle la course de souris nécessaire pour atteindre l'accélération ou le freinage maximal"
   nl: "Stel in hoeveel muisbeweging nodig is om volledig gas te geven of te remmen"
   sv: "Justera hur långt musen behöver röra sig för full gas eller broms"
@@ -24454,6 +24474,7 @@ _version: 2
   hi: "टूर छाँटें: नंबर, रूट, स्टॉप..."
   sv: "Filtrera omlopp: nummer, rutt, hållplats..."
 "Ended tours":
+  zh-tw: "已結束的班次"
   ca: "Torns acabats"
   fr: "Services terminés"
   de: "Beendete Umläufe"
@@ -26787,6 +26808,7 @@ _version: 2
   tl: "Huli"
   sv: "Sen"
 "Support package":
+  zh-tw: "支援套件"
   pt: "Pacote de diagnóstico"
   pt-pt: "Pacote de diagnóstico"
   nl: "Ondersteuningspakket"
@@ -26804,12 +26826,14 @@ _version: 2
   nl: "8x MSAA"
   sv: "8x MSAA"
 "Windy trees":
+  zh-tw: "樹木隨風搖曳"
   pt: "Árvores ao vento"
   pt-pt: "Árvores ao vento"
   fr: "Arbres dans le vent"
   nl: "Bomen bewegen in de wind"
   sv: "Träd som rör sig i vinden"
 "Automated manual gearbox (shifts a manual gearbox for you by the engine speed)":
+  zh-tw: "自動換檔手排變速箱（依引擎轉速換檔）"
   pt: "Câmbio manual automatizado (troca as marchas conforme a rotação do motor)"
   pt-pt: "Caixa manual automatizada (muda de velocidade conforme a rotação do motor)"
   nl: "Geautomatiseerde handgeschakelde versnellingsbak (schakelt op basis van het motortoerental)"
@@ -26871,41 +26895,49 @@ _version: 2
   ca: "Les fletxes també canvien de càmera amb volant (sense mirar als costats)"
   sv: "Piltangenter byter kamera även med en ratt (ingen sidoblick)"
 "Head tracking (native TrackIR / OpenTrack)":
+  zh-tw: "頭部追蹤（原生 TrackIR／OpenTrack）"
   pt: "Rastreamento da cabeça (TrackIR nativo / OpenTrack)"
   pt-pt: "Seguimento da cabeça (TrackIR nativo / OpenTrack)"
   nl: "Hoofdtracking (native TrackIR / OpenTrack)"
   sv: "Huvudspårning (inbyggt TrackIR / OpenTrack)"
 "Invert yaw":
+  zh-tw: "反轉水平旋轉"
   pt: "Inverter rotação horizontal"
   pt-pt: "Inverter rotação horizontal"
   nl: "Gierhoek omkeren"
   sv: "Invertera horisontell rotation"
 "Invert pitch":
+  zh-tw: "反轉俯仰"
   pt: "Inverter inclinação vertical"
   pt-pt: "Inverter inclinação vertical"
   nl: "Kantelhoek omkeren"
   sv: "Invertera vertikal rotation"
 "Invert roll":
+  zh-tw: "反轉側傾"
   pt: "Inverter inclinação lateral"
   pt-pt: "Inverter inclinação lateral"
   nl: "Rolhoek omkeren"
   sv: "Invertera sidolutning"
 "Invert X":
+  zh-tw: "反轉 X 軸"
   pt: "Inverter X"
   pt-pt: "Inverter X"
   nl: "X omkeren"
   sv: "Invertera X"
 "Invert Y":
+  zh-tw: "反轉 Y 軸"
   pt: "Inverter Y"
   pt-pt: "Inverter Y"
   nl: "Y omkeren"
   sv: "Invertera Y"
 "Invert Z":
+  zh-tw: "反轉 Z 軸"
   pt: "Inverter Z"
   pt-pt: "Inverter Z"
   nl: "Z omkeren"
   sv: "Invertera Z"
 "Reset head-tracking axes":
+  zh-tw: "重設頭部追蹤軸"
   pt: "Redefinir eixos do rastreamento da cabeça"
   pt-pt: "Repor eixos do seguimento da cabeça"
   nl: "Assen van hoofdtracking herstellen"
@@ -27172,62 +27204,77 @@ _version: 2
   sv: "Se uppåt / nedåt"
 
 "No buttons assigned":
+  zh-tw: "尚未指定按鈕"
   fr: "Aucun bouton attribué"
   sv: "Inga knappar tilldelade"
 
 "Press a physical button or choose its number above":
+  zh-tw: "按下實體按鈕，或在上方選擇其編號"
   fr: "Appuyez sur un bouton physique ou choisissez son numéro ci-dessus"
   sv: "Tryck på en fysisk knapp eller välj dess nummer ovan"
 
 "Reload saved controllers":
+  zh-tw: "重新載入已儲存的控制器"
   fr: "Recharger les manettes enregistrées"
   sv: "Läs in sparade kontroller igen"
 
 "Apply saved mappings to the connected devices":
+  zh-tw: "將已儲存的對應設定套用至連接的裝置"
   fr: "Appliquer les attributions enregistrées aux appareils connectés"
   sv: "Tillämpa sparade bindningar på anslutna enheter"
 
 "Connected devices":
+  zh-tw: "已連接的裝置"
   fr: "Appareils connectés"
   sv: "Anslutna enheter"
 
 "Configure this wheel, pedals or gamepad":
+  zh-tw: "設定此方向盤、踏板或遊戲手把"
   fr: "Configurer ce volant, ces pédales ou cette manette"
   sv: "Konfigurera denna ratt, pedaler eller handkontroll"
 
 "No controller connected":
+  zh-tw: "未連接控制器"
   fr: "Aucune manette connectée"
   sv: "Ingen kontroll ansluten"
 
 "Saved devices can still be edited below":
+  zh-tw: "仍可在下方編輯已儲存的裝置"
   fr: "Les appareils enregistrés restent modifiables ci-dessous"
   sv: "Sparade enheter kan fortfarande redigeras nedan"
 
 "Saved devices (disconnected)":
+  zh-tw: "已儲存的裝置（未連接）"
   fr: "Appareils enregistrés (déconnectés)"
   sv: "Sparade enheter (frånkopplade)"
 
 "Edit the saved configuration":
+  zh-tw: "編輯已儲存的設定"
   fr: "Modifier la configuration enregistrée"
   sv: "Redigera sparad konfiguration"
 
 "Ignore movement around the centre or at pedal rest":
+  zh-tw: "忽略中心附近或踏板放開時的移動"
   fr: "Ignorer les mouvements autour du centre ou pédale relâchée"
   sv: "Ignorera rörelser kring mitten eller pedalernas viloläge"
 
 "Arrows switch the cameras":
+  zh-tw: "方向鍵切換視角"
   fr: "Les flèches changent de caméra"
   sv: "Piltangenterna byter kamera"
 
 "With a wheel, Left/Right change the interior camera as without one, instead of turning the head":
+  zh-tw: "使用方向盤時，左右方向鍵也會切換車內視角，而非轉動頭部"
   fr: "Avec un volant, Gauche/Droite changent la caméra intérieure au lieu de tourner la tête"
   sv: "Med ratt byter vänster/höger den inre kameran som utan ratt, i stället för att vrida huvudet"
 
 "Stick steers like a wheel":
+  zh-tw: "搖桿如方向盤般轉向"
   fr: "Le stick dirige comme un volant"
   sv: "Spaken styr som en ratt"
 
 "The wheel where the stick points, as far at any speed: for a wheel the system calls an Xbox controller":
+  zh-tw: "方向盤跟隨搖桿位置，任何速度下轉向幅度都相同：適用系統辨識為 Xbox 控制器的方向盤"
   fr: "Le volant suit le stick, même braquage à toute vitesse : pour un volant vu comme une manette Xbox"
   sv: "Ratten följer spakens läge, lika långt vid alla hastigheter: för en ratt som systemet kallar en Xbox-kontroll"
 
@@ -27265,66 +27312,82 @@ _version: 2
   sv: "Jämnar ut små skakningar i handkontrollens spak (av: spakens direkta värde)"
 
 "Your wheel's rotation from lock to lock":
+  zh-tw: "方向盤從一側極限到另一側的旋轉角度"
   fr: "La rotation de votre volant d'une butée à l'autre"
   sv: "Din ratts rotation mellan ändlägena"
 
 "Rotation for the bus's full lock":
+  zh-tw: "達到巴士最大轉向角所需的旋轉角度"
   fr: "Rotation pour le braquage maximal du bus"
   sv: "Rotation för bussens fulla rattutslag"
 
 "Pedal response":
+  zh-tw: "踏板反應"
   fr: "Réponse des pédales"
   sv: "Pedalrespons"
 
 "Enable steering forces and gamepad rumble":
+  zh-tw: "啟用轉向力回饋與手把震動"
   fr: "Activer les forces dans le volant et les vibrations de la manette"
   sv: "Aktivera styrkrafter och handkontrollsvibrationer"
 
 "Device strengths":
+  zh-tw: "裝置力道"
   fr: "Intensité par appareil"
   sv: "Enheternas styrkor"
 
 "Select a device and open its Force feedback tab to adjust force, vibration and direction":
+  zh-tw: "選擇裝置並開啟「力回饋」分頁，以調整力道、震動與方向"
   fr: "Choisissez un appareil et ouvrez son onglet Retour de force pour régler la force, la vibration et le sens"
   sv: "Välj en enhet och öppna dess flik Force feedback för att justera kraft, vibration och riktning"
 
 "Successful changes are saved and applied immediately":
+  zh-tw: "變更成功後會立即儲存並套用"
   fr: "Les modifications réussies sont enregistrées et appliquées immédiatement"
   sv: "Lyckade ändringar sparas och tillämpas direkt"
 
 "Enable axes and buttons":
+  zh-tw: "啟用軸與按鈕"
   fr: "Activer les axes et les boutons"
   sv: "Aktivera axlar och knappar"
 
 "Map steering, throttle, brake and clutch":
+  zh-tw: "指定轉向、油門、煞車與離合器"
   fr: "Attribuer la direction, l'accélérateur, le frein et l'embrayage"
   sv: "Tilldela styrning, gas, broms och koppling"
 
 "Assign controls and configure latching switches":
+  zh-tw: "指定操作並設定固定式開關"
   fr: "Attribuer les commandes et configurer les interrupteurs maintenus"
   sv: "Tilldela kontroller och konfigurera låsande omkopplare"
 
 "Adjust this device's force, vibration and direction":
+  zh-tw: "調整此裝置的力道、震動與方向"
   fr: "Régler la force, la vibration et le sens de cet appareil"
   sv: "Justera denna enhets kraft, vibration och riktning"
 
 "Motor direction for this device":
+  zh-tw: "此裝置的馬達方向"
   fr: "Sens du moteur pour cet appareil"
   sv: "Motorriktning för denna enhet"
 
 "Live reading":
+  zh-tw: "即時讀值"
   fr: "Valeur en direct"
   sv: "Aktuellt värde"
 
 "Move the wheel, pedal or stick to identify this axis":
+  zh-tw: "移動方向盤、踏板或搖桿以辨識此軸"
   fr: "Bougez le volant, la pédale ou le stick pour identifier cet axe"
   sv: "Rör ratten, pedalen eller spaken för att identifiera denna axel"
 
 "Choose what this axis controls":
+  zh-tw: "選擇此軸控制的功能"
   fr: "Choisir ce que commande cet axe"
   sv: "Välj vad denna axel styr"
 
 "Reverse this axis":
+  zh-tw: "反轉此軸"
   fr: "Inverser cet axe"
   sv: "Invertera denna axel"
 
@@ -27358,34 +27421,42 @@ _version: 2
   sv: "Responskurva"
 
 "Choose the characteristic of this axis":
+  zh-tw: "選擇此軸的反應特性"
   fr: "Choisir la caractéristique de cet axe"
   sv: "Välj denna axels egenskaper"
 
 "Choose an OMSI event or game action":
+  zh-tw: "選擇 OMSI 事件或遊戲動作"
   fr: "Choisir un événement OMSI ou une action du jeu"
   sv: "Välj en OMSI-händelse eller spelåtgärd"
 
 "Latching switch":
+  zh-tw: "固定式開關"
   fr: "Interrupteur maintenu"
   sv: "Låsande omkopplare"
 
 "Switch back when a physical switch is released":
+  zh-tw: "實體開關放開時切換回原狀態"
   fr: "Rebasculer l'action quand l'interrupteur physique est relâché"
   sv: "Återställ när en fysisk omkopplare släpps"
 
 "Clear assignment":
+  zh-tw: "清除指定"
   fr: "Effacer l'attribution"
   sv: "Rensa tilldelning"
 
 "Leave this button without an action":
+  zh-tw: "不為此按鈕指定動作"
   fr: "Laisser ce bouton sans action"
   sv: "Lämna denna knapp utan åtgärd"
 
 "Controller configuration saved and applied":
+  zh-tw: "控制器設定已儲存並套用"
   fr: "Configuration des manettes enregistrée et appliquée"
   sv: "Kontrollkonfigurationen har sparats och tillämpats"
 
 "Saved controller mappings reloaded":
+  zh-tw: "已重新載入控制器對應設定"
   fr: "Attributions des manettes enregistrées rechargées"
   sv: "Sparade kontrollbindningar har lästs in igen"
 
@@ -27448,58 +27519,72 @@ _version: 2
   sv: "Force feedback"
 
 "Choose the function, direction and response curve of this axis":
+  zh-tw: "選擇此軸的功能、方向與反應曲線"
   fr: "Choisir la fonction, le sens et la courbe de réponse de cet axe"
   sv: "Välj denna axels funktion, riktning och responskurva"
 
 "Press a button to assign it...":
+  zh-tw: "按下按鈕以指定功能……"
   fr: "Appuyez sur un bouton pour l'attribuer..."
   sv: "Tryck på en knapp för att tilldela den..."
 
 "Capture a button on this device":
+  zh-tw: "偵測此裝置的按鈕"
   fr: "Capturer un bouton de cet appareil"
   sv: "Registrera en knapp på denna enhet"
 
 "Choose a button by number...":
+  zh-tw: "依編號選擇按鈕……"
   fr: "Choisir un bouton par son numéro..."
   sv: "Välj en knapp efter nummer..."
 
 "Includes unassigned buttons and hat directions":
+  zh-tw: "包含未指定按鈕與方向帽方向"
   fr: "Inclut les boutons non attribués et les directions du chapeau chinois (POV)"
   sv: "Inkluderar otilldelade knappar och styrkorsets riktningar"
 
 "Assigned buttons":
+  zh-tw: "已指定的按鈕"
   fr: "Boutons attribués"
   sv: "Tilldelade knappar"
 
 "Latching switch | choose its action or behaviour":
+  zh-tw: "固定式開關 | 選擇動作或行為"
   fr: "Interrupteur maintenu | choisissez son action ou son comportement"
   sv: "Låsande omkopplare | välj dess åtgärd eller beteende"
 
 "Choose its action or switch behaviour":
+  zh-tw: "選擇動作或開關行為"
   fr: "Choisir son action ou son comportement d'interrupteur"
   sv: "Välj dess åtgärd eller omkopplarbeteende"
 
 "The trees' leaves bend and sway in the wind and its gusts; with no wind they stand still":
+  zh-tw: "樹葉會隨風與陣風彎曲搖曳；無風時保持靜止"
   fr: "Les feuilles ploient au vent et aux rafales ; sans vent, elles restent immobiles"
   sv: "Trädens löv böjs och svajar i vinden och vindbyarna; utan vind står de stilla"
 
 "How much the view sways on its own when nothing is done to it - a head at rest is never quite still, most of it seen while the bus waits at a stop":
+  zh-tw: "未操作時視角自行晃動的幅度：頭部休息時仍有細微動作，主要在巴士停站時可見"
   fr: "À quel point la vue se balance d'elle-même quand on n'y touche pas - une tête au repos n'est jamais tout à fait immobile ; cela se voit surtout quand le bus attend à un arrêt"
   sv: "Hur mycket vyn rör sig av sig själv när inget görs – ett vilande huvud är aldrig helt stilla, mest synligt när bussen väntar vid en hållplats"
 
 "How fast that sway moves (100% is the pace it is designed at)":
+  zh-tw: "晃動速度（100% 為原設計速度）"
   fr: "Vitesse de ce balancement (100 % : le rythme prévu)"
   sv: "Hur snabbt rörelsen sker (100 % är den avsedda takten)"
 
 "How long the view takes to come round to where the mouse or the stick turned it (off: at once, as OMSI)":
+  zh-tw: "視角跟隨滑鼠或搖桿轉動所需的時間（關閉時立即跟隨，如同 OMSI）"
   fr: "Le temps que met la vue à rejoindre là où la souris ou le stick l'a tournée (désactivé : immédiatement, comme OMSI)"
   sv: "Hur lång tid vyn tar för att nå dit musen eller spaken vridit den (av: direkt, som i OMSI)"
 
 "The mouse zoom follows the FOV curve instead of OMSI's linear way":
+  zh-tw: "滑鼠縮放使用視野角度曲線，取代 OMSI 的線性方式"
   fr: "Le zoom à la souris suit la courbe du champ de vision au lieu du mode linéaire d'OMSI"
   sv: "Muszoomen följer synfältskurvan i stället för OMSI:s linjära metod"
 
 "Set the driver's neutral head tilt up or down, independent of the display setup":
+  zh-tw: "設定駕駛員頭部預設的上下傾斜角度，獨立於顯示器設定"
   fr: "Régler l'inclinaison neutre de la tête du conducteur vers le haut ou le bas, indépendamment de l'affichage"
   sv: "Ställ in förarens neutrala huvudlutning uppåt eller nedåt, oberoende av skärminställningarna"
 
@@ -27576,6 +27661,7 @@ _version: 2
   sv: "Det finns inget fordon att läsa in igen: du är till fots"
 
 "That key has no DirectInput scan code":
+  zh-tw: "此按鍵沒有 DirectInput 掃描碼"
   fr: "Cette touche n'a pas de scan code DirectInput"
   sv: "Den tangenten saknar DirectInput-skanningskod"
 
@@ -27613,6 +27699,7 @@ _version: 2
   sv: "Servern erbjuder inget av de fordon som är installerade här"
 
 "No server code: not in a LAN session or on a server":
+  zh-tw: "沒有連線碼：目前未加入區域網絡遊戲或伺服器"
   fr: "Pas de code serveur : ni en session réseau, ni sur un serveur"
   sv: "Ingen serverkod: du är inte i en LAN-session eller på en server"
 
@@ -27737,6 +27824,7 @@ _version: 2
   sv: "Markpensel: {:.1} m"
 
 "Press a button on {name} (Esc cancels)":
+  zh-tw: "按下 {name} 的按鈕（Esc 取消）"
   fr: "Appuyez sur un bouton de {name} (Échap annule)"
   sv: "Tryck på en knapp på {name} (Esc avbryter)"
 
@@ -27777,30 +27865,35 @@ _version: 2
   sv: "Värdens moddar: {} filer ({:.0} MB) hämtade (behålls till nästa anslutning)"
 
 "Personnel file of {name} deleted.":
+  zh-tw: "已刪除 {name} 的個人檔案。"
   fr: "Dossier de {name} supprimé."
   de: "Personalakte von {name} gelöscht."
   ru: "Личное дело {name} удалено."
   sv: "Personalakten för {name} har tagits bort."
 
 "Driver {name} created.":
+  zh-tw: "已建立駕駛員 {name}。"
   fr: "Conducteur {name} créé."
   de: "Fahrer {name} angelegt."
   ru: "Водитель {name} создан."
   sv: "Föraren {name} har skapats."
 
 "Loaded \"{name}\".":
+  zh-tw: "已載入「{name}」。"
   fr: "« {name} » chargé."
   de: "„{name}“ geladen."
   ru: "Загружен «{name}»."
   sv: "Läste in ”{name}”."
 
 "Deleted \"{name}\".":
+  zh-tw: "已刪除「{name}」。"
   fr: "« {name} » supprimé."
   de: "„{name}“ gelöscht."
   ru: "«{name}» удалён."
   sv: "Tog bort ”{name}”."
 
 "Saved \"{name}\".":
+  zh-tw: "已儲存「{name}」。"
   fr: "« {name} » enregistré."
   de: "„{name}“ gespeichert."
   ru: "«{name}» сохранён."
@@ -27836,16 +27929,19 @@ _version: 2
   sv: "Växel {gear} (H-mönster)"
 
 "Driving keys: {name} (Settings). Those keys drive the bus and win over the list below. Change any key here and your own layout (Custom controls) is used from then on.":
+  zh-tw: "駕駛按鍵：{name}（依設定）。這些按鍵用於駕駛巴士，並優先於下方清單。在此變更任何按鍵後，便會改用自訂操作配置。"
   fr: "Touches de conduite : {name} (Paramètres). Ces touches conduisent le bus et l'emportent sur la liste ci-dessous. Changez une touche ici et votre propre disposition (Commandes personnalisées) est utilisée dès lors."
   sv: "Körtangenter: {name} (Inställningar). Dessa tangenter kör bussen och har företräde framför listan nedan. Ändra en tangent här så används din egen layout (Anpassade kontroller) därefter."
 
 "Anything put into {} is installed by itself once it has finished copying.":
+  zh-tw: "放入 {} 的內容會在複製完成後自動安裝。"
   fr: "Tout ce qui est mis dans {} s'installe tout seul une fois la copie terminée."
   de: "Alles, was in {} gelegt wird, installiert sich von selbst, sobald es fertig kopiert ist."
   ru: "Всё, что положено в {}, устанавливается само после завершения копирования."
   sv: "Allt som placeras i {} installeras automatiskt när kopieringen är klar."
 
 "The server plays {}, which is not installed here: it is fetched from the server on joining.":
+  zh-tw: "伺服器使用尚未在此安裝的 {}：加入時會從伺服器下載。"
   fr: "Le serveur utilise la carte {}, qui n'est pas installée ici : elle sera téléchargée depuis le serveur à la connexion."
   sv: "Servern använder {}, som inte är installerat här: det hämtas från servern vid anslutning."
 
@@ -27862,6 +27958,7 @@ _version: 2
   sv: "Spel {pid} avslutades inte av sig självt och tvångsavslutades – denna körning sparas inte."
 
 "Line {name} is there already":
+  zh-tw: "路線 {name} 已存在"
   fr: "La ligne {name} existe déjà"
   sv: "Linje {name} finns redan"
 
@@ -27910,6 +28007,7 @@ _version: 2
   sv: "openOMSI uppdaterades inte till {}: installation av appar tilläts inte för openOMSI (Inställningar → Appar → openOMSI → Installera okända appar)."
 
 "METAR of {} (fetched at the start)":
+  zh-tw: "{} 的 METAR（啟動時取得）"
   fr: "METAR de {} (récupéré au démarrage)"
   sv: "METAR från {} (hämtas vid start)"
 
@@ -32337,156 +32435,187 @@ _version: 2
   sv: "En panel bredvid förarvyn: ögonposition, riktning, synfält och varje spegel, sparat för detta fordon."
 
 "Running games":
+  zh-tw: "執行中的遊戲"
   de: "Laufende Spiele"
   ru: "Запущенные игры"
   sv: "Spel som körs"
 
 "Launcher":
+  zh-tw: "啟動器"
   de: "Launcher"
   ru: "Лаунчер"
   sv: "Startprogram"
 
 "Level {n}":
+  zh-tw: "等級 {n}"
   de: "Stufe {n}"
   ru: "Уровень {n}"
   sv: "Nivå {n}"
 
 "Choose a driver":
+  zh-tw: "選擇駕駛員"
   de: "Fahrer wählen"
   ru: "Выберите водителя"
   sv: "Välj en förare"
 
 "{n} buses":
+  zh-tw: "{n} 輛巴士"
   de: "{n} Busse"
   ru: "Автобусов: {n}"
   sv: "{n} bussar"
 
 "Take this bus":
+  zh-tw: "選擇此巴士"
   de: "Diesen Bus nehmen"
   ru: "Взять этот автобус"
   sv: "Välj denna buss"
 
 "Search buses":
+  zh-tw: "搜尋巴士"
   de: "Busse suchen"
   ru: "Поиск автобусов"
   sv: "Sök bussar"
 
 "All makers":
+  zh-tw: "所有製造商"
   de: "Alle Hersteller"
   ru: "Все производители"
   sv: "Alla tillverkare"
 
 "Starred":
+  zh-tw: "已加星號"
   de: "Markiert"
   ru: "Избранные"
   sv: "Favoriter"
 
 "{n} paints":
+  zh-tw: "{n} 種塗裝"
   de: "{n} Lackierungen"
   ru: "Окрасок: {n}"
   sv: "{n} lackeringar"
 
 "Parts missing":
+  zh-tw: "缺少零件"
   de: "Teile fehlen"
   ru: "Не хватает частей"
   sv: "Delar saknas"
 
 "Star":
+  zh-tw: "加上星號"
   de: "Markieren"
   ru: "В избранное"
   sv: "Markera som favorit"
 
 "Mod":
+  zh-tw: "模組"
   de: "Mod"
   ru: "Мод"
   sv: "Modd"
 
 "Parts of this bus come from packs that are not installed: {packs}":
+  zh-tw: "此巴士的部分零件來自尚未安裝的套件：{packs}"
   de: "Teile dieses Busses stammen aus nicht installierten Paketen: {packs}"
   ru: "Часть деталей этого автобуса берётся из неустановленных пакетов: {packs}"
   sv: "Delar av denna buss kommer från paket som inte är installerade: {packs}"
 
 "Choose a bus on the left":
+  zh-tw: "在左側選擇巴士"
   de: "Wähle links einen Bus"
   ru: "Выберите автобус слева"
   sv: "Välj en buss till vänster"
 
 "Preparing the preview…":
+  zh-tw: "正在準備預覽……"
   de: "Vorschau wird vorbereitet…"
   ru: "Готовим превью…"
   sv: "Förbereder förhandsvisningen…"
 
 "No preview of this bus":
+  zh-tw: "沒有此巴士的預覽"
   de: "Keine Vorschau für diesen Bus"
   ru: "Для этого автобуса нет превью"
   sv: "Ingen förhandsvisning av denna buss"
 
 "Drag to turn, scroll to zoom":
+  zh-tw: "拖曳以旋轉，滾動以縮放"
   de: "Ziehen zum Drehen, Mausrad zum Zoomen"
   ru: "Тяните, чтобы повернуть; колесо: масштаб"
   sv: "Dra för att rotera, rulla för att zooma"
 
 "Reading the keys…":
+  zh-tw: "正在讀取按鍵……"
   de: "Tasten werden gelesen…"
   ru: "Читаем клавиши…"
   sv: "Läser in tangenterna…"
 
 "Reset to defaults":
+  zh-tw: "恢復預設值"
   de: "Auf Standard zurücksetzen"
   ru: "Сбросить по умолчанию"
   sv: "Återställ standardvärden"
 
 "Every key goes back to OMSI 2's own keyboard.cfg. Keys you added for a bus's own triggers are removed.":
+  zh-tw: "所有按鍵將恢復為 OMSI 2 的 keyboard.cfg 設定。為巴士觸發事件新增的按鍵會被移除。"
   de: "Alle Tasten kehren zur keyboard.cfg von OMSI 2 zurück. Für Bus-eigene Trigger hinzugefügte Tasten werden entfernt."
   ru: "Все клавиши вернутся к keyboard.cfg из OMSI 2. Клавиши, добавленные для триггеров автобусов, будут удалены."
   sv: "Alla tangenter återställs till OMSI 2:s egen keyboard.cfg. Tangenter du lagt till för bussens egna skripthändelser tas bort."
 
 "Add binding":
+  zh-tw: "新增按鍵綁定"
   de: "Belegung hinzufügen"
   ru: "Добавить привязку"
   sv: "Lägg till bindning"
 
 "Add \"{name}\" and give it a key":
+  zh-tw: "新增「{name}」並指定按鍵"
   de: "„{name}“ hinzufügen und eine Taste geben"
   ru: "Добавить «{name}» и назначить клавишу"
   sv: "Lägg till ”{name}” och tilldela en tangent"
 
 "Action":
+  zh-tw: "動作"
   de: "Aktion"
   ru: "Действие"
   sv: "Åtgärd"
 
 "Key":
+  zh-tw: "按鍵"
   de: "Taste"
   ru: "Клавиша"
   sv: "Tangent"
 
 "Another entry of this list has the same key.":
+  zh-tw: "此清單的另一個項目使用相同按鍵。"
   de: "Ein anderer Eintrag dieser Liste hat dieselbe Taste."
   ru: "В этом списке есть другая запись с той же клавишей."
   sv: "En annan post i listan använder samma tangent."
 
 "Same key":
+  zh-tw: "相同按鍵"
   de: "Gleiche Taste"
   ru: "Та же клавиша"
   sv: "Samma tangent"
 
 "Edit":
+  zh-tw: "編輯"
   de: "Ändern"
   ru: "Изменить"
   sv: "Redigera"
 
 "Add another key for this action":
+  zh-tw: "為此動作新增另一個按鍵"
   de: "Weitere Taste für diese Aktion"
   ru: "Добавить ещё одну клавишу для этого действия"
   sv: "Lägg till en annan tangent för denna åtgärd"
 
 "Clear the key (the entry stays)":
+  zh-tw: "清除按鍵（保留項目）"
   de: "Taste löschen (Eintrag bleibt)"
   ru: "Очистить клавишу (запись останется)"
   sv: "Rensa tangenten (posten behålls)"
 
 "Remove the entry":
+  zh-tw: "移除項目"
   de: "Eintrag entfernen"
   ru: "Удалить запись"
   sv: "Ta bort posten"
@@ -32521,26 +32650,31 @@ _version: 2
   sv: "Inga matchande åtgärder."
 
 "{code} has no DirectInput scan code the game understands.":
+  zh-tw: "{code} 沒有遊戲可辨識的 DirectInput 掃描碼。"
   de: "{code} hat keinen DirectInput-Scancode, den das Spiel versteht."
   ru: "У {code} нет скан-кода DirectInput, понятного игре."
   sv: "{code} saknar en DirectInput-skanningskod som spelet förstår."
 
 "Use it anyway":
+  zh-tw: "仍然使用"
   de: "Trotzdem verwenden"
   ru: "Всё равно назначить"
   sv: "Använd ändå"
 
 "Now:":
+  zh-tw: "目前："
   de: "Jetzt:"
   ru: "Сейчас:"
   sv: "Nu:"
 
 "This key is already used by: {actions}":
+  zh-tw: "此按鍵已用於：{actions}"
   de: "Diese Taste ist schon belegt: {actions}"
   ru: "Эта клавиша уже занята: {actions}"
   sv: "Denna tangent används redan av: {actions}"
 
 "Both will react to it. Press another key, or use it anyway.":
+  zh-tw: "兩個動作都會回應此按鍵。請按另一個按鍵，或仍然使用它。"
   de: "Beide reagieren darauf. Drücke eine andere Taste oder verwende sie trotzdem."
   ru: "Сработают оба. Нажмите другую клавишу или назначьте всё равно."
   sv: "Båda reagerar på den. Tryck på en annan tangent eller använd den ändå."
@@ -32711,16 +32845,19 @@ _version: 2
   sv: "Knapp {n}"
 
 "The settings could not be saved: {e}":
+  zh-tw: "無法儲存設定：{e}"
   de: "Die Einstellungen konnten nicht gespeichert werden: {e}"
   ru: "Не удалось сохранить настройки: {e}"
   sv: "Inställningarna kunde inte sparas: {e}"
 
 "The game is starting ({n} already running)":
+  zh-tw: "正在啟動遊戲（已有 {n} 個遊戲執行中）"
   de: "Das Spiel startet ({n} laufen schon)"
   ru: "Игра запускается (уже запущено: {n})"
   sv: "Spelet startar ({n} körs redan)"
 
 "The game is starting…":
+  zh-tw: "正在啟動遊戲……"
   de: "Das Spiel startet…"
   ru: "Игра запускается…"
   sv: "Spelet startar…"
@@ -32755,56 +32892,67 @@ _version: 2
   sv: "Installerar {name}…"
 
 "Choose where and what you drive, then start.":
+  zh-tw: "選擇駕駛地點與車輛，然後開始。"
   de: "Wähle, wo und womit du fährst, dann los."
   ru: "Выберите, где и на чём поедете, и стартуйте."
   sv: "Välj var och vad du kör och starta sedan."
 
 "Change map":
+  zh-tw: "變更地圖"
   de: "Karte wechseln"
   ru: "Сменить карту"
   sv: "Byt karta"
 
 "Reading the maps…":
+  zh-tw: "正在讀取地圖……"
   de: "Karten werden gelesen…"
   ru: "Читаем карты…"
   sv: "Läser in kartorna…"
 
 "No map is installed.":
+  zh-tw: "尚未安裝地圖。"
   de: "Keine Karte installiert."
   ru: "Не установлено ни одной карты."
   sv: "Ingen karta är installerad."
 
 "{n} entry points":
+  zh-tw: "{n} 個入口點"
   de: "{n} Einstiegspunkte"
   ru: "Точек входа: {n}"
   sv: "{n} startpunkter"
 
 "Change bus":
+  zh-tw: "變更巴士"
   de: "Bus wechseln"
   ru: "Сменить автобус"
   sv: "Byt buss"
 
 "Reading the buses… {done} of {total}":
+  zh-tw: "正在讀取巴士……{done}／{total}"
   de: "Busse werden gelesen… {done} von {total}"
   ru: "Читаем автобусы… {done} из {total}"
   sv: "Läser in bussarna… {done} av {total}"
 
 "Reading the buses…":
+  zh-tw: "正在讀取巴士……"
   de: "Busse werden gelesen…"
   ru: "Читаем автобусы…"
   sv: "Läser in bussarna…"
 
 "No bus is installed.":
+  zh-tw: "尚未安裝巴士。"
   de: "Kein Bus installiert."
   ru: "Не установлено ни одного автобуса."
   sv: "Ingen buss är installerad."
 
 "Reading the timetable…":
+  zh-tw: "正在讀取時刻表……"
   de: "Fahrplan wird gelesen…"
   ru: "Читаем расписание…"
   sv: "Läser in tidtabellen…"
 
 "This map has no lines to drive on this date. Choose a free drive, or another date.":
+  zh-tw: "此地圖在所選日期沒有可駕駛路線。請選擇自由駕駛或其他日期。"
   de: "Diese Karte hat an diesem Datum keine Linien. Wähle freies Fahren oder ein anderes Datum."
   ru: "На этой карте в эту дату нет линий. Выберите свободную езду или другую дату."
   sv: "Den här kartan har inga linjer att köra detta datum. Välj fri körning eller ett annat datum."
@@ -32873,6 +33021,7 @@ _version: 2
   sv: "Det här omloppet körs inte på valt datum; nästa gång är {date}."
 
 "This tour does not run within a year of the chosen date.":
+  zh-tw: "此班次在所選日期起一年內不會行駛。"
   de: "Dieser Umlauf fährt innerhalb eines Jahres ab dem Datum nicht."
   ru: "Этот выход не работает в течение года от выбранной даты."
   sv: "Det här omloppet körs inte inom ett år från valt datum."
@@ -32936,61 +33085,73 @@ _version: 2
   sv: "Klicka på en tur för att starta med den"
 
 "From":
+  zh-tw: "起點"
   de: "Von"
   ru: "Откуда"
   sv: "Från"
 
 "Arrives":
+  zh-tw: "到達"
   de: "Ankunft"
   ru: "Прибытие"
   sv: "Ankommer"
 
 "Depot run":
+  zh-tw: "回廠行程"
   de: "Betriebsfahrt"
   ru: "Служебный рейс"
   sv: "Depåkörning"
 
 "Start time":
+  zh-tw: "開始時間"
   de: "Startzeit"
   ru: "Время начала"
   sv: "Starttid"
 
 "On the road":
+  zh-tw: "道路交通"
   de: "Auf der Straße"
   ru: "На дороге"
   sv: "På vägen"
 
 "People wait at the stops and ride along":
+  zh-tw: "乘客會在車站候車並搭車"
   de: "Fahrgäste warten an den Haltestellen und fahren mit"
   ru: "Люди ждут на остановках и ездят"
   sv: "Människor väntar vid hållplatser och åker med"
 
 "Other buses of the timetable drive their lines":
+  zh-tw: "其他時刻表巴士會依路線行駛"
   de: "Andere Busse des Fahrplans fahren ihre Linien"
   ru: "Другие автобусы расписания ездят по своим линиям"
   sv: "Andra tidtabellsbussar kör sina linjer"
 
 "Bus ready to go":
+  zh-tw: "巴士準備出發"
   de: "Bus abfahrbereit"
   ru: "Автобус готов к выезду"
   sv: "Bussen är körklar"
 
 "Engine running, doors and lights set":
+  zh-tw: "引擎已啟動，車門與車燈已設定"
   de: "Motor läuft, Türen und Licht eingestellt"
   ru: "Двигатель заведён, двери и свет настроены"
   sv: "Motorn igång, dörrar och ljus inställda"
 
 "Start on foot":
+  zh-tw: "徒步開始"
   de: "Zu Fuß beginnen"
   ru: "Начать пешком"
   sv: "Starta till fots"
 
 "Walk to the bus, or place one later from the menu":
+  zh-tw: "步行前往巴士，或稍後從選單放置巴士"
   de: "Geh zum Bus oder setze später einen aus dem Menü"
   ru: "Дойдите до автобуса или поставьте его позже из меню"
   sv: "Gå till bussen eller placera en senare från menyn"
 
 "First trip":
+  zh-tw: "首趟行程"
   de: "Erste Fahrt"
   ru: "Первый рейс"
   sv: "Första turen"
@@ -33025,41 +33186,49 @@ _version: 2
   sv: "Ansluter till {server}"
 
 "Starting…":
+  zh-tw: "正在啟動……"
   de: "Startet…"
   ru: "Запуск…"
   sv: "Startar…"
 
 "Start driving":
+  zh-tw: "開始駕駛"
   de: "Losfahren"
   ru: "Поехать"
   sv: "Börja köra"
 
 "{n} game(s) running":
+  zh-tw: "{n} 個遊戲執行中"
   de: "Laufende Spiele: {n}"
   ru: "Запущено игр: {n}"
   sv: "{n} spel körs"
 
 "Show":
+  zh-tw: "顯示"
   de: "Zeigen"
   ru: "Показать"
   sv: "Visa"
 
 "Hide the command line":
+  zh-tw: "隱藏命令列"
   de: "Befehlszeile ausblenden"
   ru: "Скрыть командную строку"
   sv: "Dölj kommandoraden"
 
 "Show the command line":
+  zh-tw: "顯示命令列"
   de: "Befehlszeile zeigen"
   ru: "Показать командную строку"
   sv: "Visa kommandoraden"
 
 "Follows the computer's clock (Settings)":
+  zh-tw: "跟隨電腦時間（依設定）"
   de: "Folgt der Uhr des Computers (Einstellungen)"
   ru: "Идёт по часам компьютера (Настройки)"
   sv: "Följer datorns klocka (Inställningar)"
 
 "Today (Settings)":
+  zh-tw: "今日（依設定）"
   de: "Heute (Einstellungen)"
   ru: "Сегодня (Настройки)"
   sv: "Idag (Inställningar)"
@@ -33070,16 +33239,19 @@ _version: 2
   sv: "Valfritt antal spel kan köras samtidigt; varje spel skriver sin egen logg."
 
 "No game is running":
+  zh-tw: "沒有正在執行的遊戲"
   de: "Kein Spiel läuft"
   ru: "Ни одна игра не запущена"
   sv: "Inget spel körs"
 
 "Start one on the Drive page.":
+  zh-tw: "請在「駕駛」頁面開始遊戲。"
   de: "Starte eines auf der Seite „Fahren“."
   ru: "Запустите её на странице «Поездка»."
   sv: "Starta ett på sidan Kör."
 
 "Stop this game?":
+  zh-tw: "結束此遊戲？"
   de: "Dieses Spiel beenden?"
   ru: "Остановить эту игру?"
   sv: "Stoppa detta spel?"
@@ -33090,61 +33262,73 @@ _version: 2
   sv: "Spelet avslutas som om Escape och Avsluta valts; en osparad session försvinner."
 
 "The game was stopped.":
+  zh-tw: "遊戲已結束。"
   de: "Das Spiel wurde beendet."
   ru: "Игра остановлена."
   sv: "Spelet stoppades."
 
 "started {when}":
+  zh-tw: "於 {when} 啟動"
   de: "gestartet {when}"
   ru: "запущена {when}"
   sv: "startat {when}"
 
 "Show the log file":
+  zh-tw: "顯示記錄檔"
   de: "Protokolldatei zeigen"
   ru: "Показать файл журнала"
   sv: "Visa loggfilen"
 
 "just now":
+  zh-tw: "剛剛"
   de: "gerade eben"
   ru: "только что"
   sv: "nyss"
 
 "{n} min ago":
+  zh-tw: "{n} 分鐘前"
   de: "vor {n} Min."
   ru: "{n} мин назад"
   sv: "för {n} min sedan"
 
 "{n} h ago":
+  zh-tw: "{n} 小時前"
   de: "vor {n} Std."
   ru: "{n} ч назад"
   sv: "för {n} tim sedan"
 
 "Search maps":
+  zh-tw: "搜尋地圖"
   de: "Karten suchen"
   ru: "Поиск карт"
   sv: "Sök kartor"
 
 "{n} maps":
+  zh-tw: "{n} 張地圖"
   de: "{n} Karten"
   ru: "Карт: {n}"
   sv: "{n} kartor"
 
 "No map found":
+  zh-tw: "找不到地圖"
   de: "Keine Karte gefunden"
   ru: "Карты не найдены"
   sv: "Ingen karta hittades"
 
 "No bus found":
+  zh-tw: "找不到巴士"
   de: "Kein Bus gefunden"
   ru: "Автобусы не найдены"
   sv: "Ingen buss hittades"
 
 "No starred bus":
+  zh-tw: "沒有已加星號的巴士"
   de: "Kein markierter Bus"
   ru: "Нет избранных автобусов"
   sv: "Ingen favoritbuss"
 
 "Star a bus to find it here.":
+  zh-tw: "為巴士加上星號後，即可在此找到。"
   de: "Markiere einen Bus, um ihn hier zu finden."
   ru: "Отметьте автобус звёздочкой, чтобы найти его здесь."
   sv: "Markera en buss som favorit för att hitta den här."
@@ -33208,26 +33392,31 @@ _version: 2
   sv: "Annat"
 
 "Delete this mod?":
+  zh-tw: "刪除此模組？"
   de: "Diesen Mod löschen?"
   ru: "Удалить этот мод?"
   sv: "Ta bort denna modd?"
 
 "{name} and its files are deleted from the content folder. Switch it off instead to keep it.":
+  zh-tw: "將從內容資料夾刪除 {name} 及其檔案。若要保留檔案，請改為停用。"
   de: "{name} und seine Dateien werden aus dem Inhaltsordner gelöscht. Schalte ihn stattdessen aus, um ihn zu behalten."
   ru: "{name} и его файлы будут удалены из папки контента. Чтобы сохранить мод, просто отключите его."
   sv: "{name} och dess filer tas bort från innehållsmappen. Stäng av den i stället för att behålla den."
 
 "{name} deleted":
+  zh-tw: "已刪除 {name}"
   de: "{name} gelöscht"
   ru: "{name} удалён"
   sv: "{name} har tagits bort"
 
 "{name} switched on":
+  zh-tw: "已啟用 {name}"
   de: "{name} eingeschaltet"
   ru: "{name} включён"
   sv: "{name} har aktiverats"
 
 "{name} switched off":
+  zh-tw: "已停用 {name}"
   de: "{name} ausgeschaltet"
   ru: "{name} отключён"
   sv: "{name} har inaktiverats"
@@ -33291,11 +33480,13 @@ _version: 2
   sv: "Sök moddar..."
 
 "Reading the content folder...":
+  zh-tw: "正在讀取內容資料夾……"
   de: "Inhaltsordner wird gelesen..."
   ru: "Читаем папку контента..."
   sv: "Läser in innehållsmappen..."
 
 "No mods yet. Choose a folder or an archive on the right, or drop one onto the window.":
+  zh-tw: "尚未安裝模組。在右側選擇資料夾或壓縮檔，或將它拖放至視窗。"
   de: "Noch keine Mods. Wähle rechts einen Ordner oder ein Archiv oder zieh eines ins Fenster."
   ru: "Модов пока нет. Выберите папку или архив справа или перетащите их в окно."
   sv: "Inga moddar ännu. Välj en mapp eller ett arkiv till höger eller släpp ett i fönstret."
@@ -33335,6 +33526,7 @@ _version: 2
   sv: "Ta bort denna modd (frågar först; stäng av den i stället för att behålla den)"
 
 "Packs installed before the bus they belong to: they go in once it is there.":
+  zh-tw: "先於所屬巴士安裝的套件：巴士安裝後會自動套用。"
   de: "Pakete, die vor ihrem Bus installiert wurden: Sie kommen hinein, sobald er da ist."
   ru: "Пакеты, установленные раньше своего автобуса: они встанут, как только он появится."
   sv: "Paket som installerats före bussen de tillhör: de installeras när bussen finns på plats."
@@ -33369,106 +33561,127 @@ _version: 2
   sv: "Arkiv"
 
 "Read in place by the game, without unpacking.":
+  zh-tw: "遊戲會直接讀取原位置的內容，無需解壓縮。"
   de: "Vom Spiel direkt gelesen, ohne Entpacken."
   ru: "Игра читает их на месте, без распаковки."
   sv: "Läses direkt av spelet utan uppackning."
 
 "Drop a folder or an archive here":
+  zh-tw: "將資料夾或壓縮檔拖放至此處"
   de: "Ordner oder Archiv hierher ziehen"
   ru: "Перетащите сюда папку или архив"
   sv: "Släpp en mapp eller ett arkiv här"
 
 "Free space: {n}":
+  zh-tw: "可用空間：{n}"
   de: "Freier Platz: {n}"
   ru: "Свободно: {n}"
   sv: "Ledigt utrymme: {n}"
 
 "this folder":
+  zh-tw: "此資料夾"
   de: "diesen Ordner"
   ru: "эту папку"
   sv: "denna mapp"
 
 "In it now: {}":
+  zh-tw: "目前內容：{}"
   de: "Jetzt darin: {}"
   ru: "Сейчас там: {}"
   sv: "Innehåller nu: {}"
 
 "{n} of {max} players":
+  zh-tw: "{n}／{max} 名玩家"
   de: "{n} von {max} Spielern"
   ru: "Игроков: {n} из {max}"
   sv: "{n} av {max} spelare"
 
 "Joined {} - choose your bus and duty, then Start the duty":
+  zh-tw: "已加入 {}：選擇巴士與執勤班次，然後開始執勤"
   de: "{} beigetreten - wähle Bus und Dienst, dann starte den Dienst"
   ru: "Подключено к {}: выберите автобус и смену, затем начните смену"
   sv: "Ansluten till {} – välj din buss och tjänst och sedan Starta tjänsten"
 
 "Password":
+  zh-tw: "密碼"
   de: "Passwort"
   ru: "Пароль"
   sv: "Lösenord"
 
 "Can't reach the server: {err}":
+  zh-tw: "無法連線至伺服器：{err}"
   de: "Server nicht erreichbar: {err}"
   ru: "Сервер недоступен: {err}"
   sv: "Kan inte nå servern: {err}"
 
 "Delete this driver?":
+  zh-tw: "刪除此駕駛員？"
   de: "Diesen Fahrer löschen?"
   ru: "Удалить этого водителя?"
   sv: "Ta bort denna förare?"
 
 "The personnel file of {name} is deleted with all its figures.":
+  zh-tw: "將刪除 {name} 的個人檔案與所有統計資料。"
   de: "Die Personalakte von {name} wird mit allen Zahlen gelöscht."
   ru: "Личное дело {name} будет удалено со всей статистикой."
   sv: "Personalakten för {name} tas bort tillsammans med all statistik."
 
 "Male":
+  zh-tw: "男性"
   de: "Männlich"
   ru: "Мужчина"
   sv: "Man"
 
 "Female":
+  zh-tw: "女性"
   de: "Weiblich"
   ru: "Женщина"
   sv: "Kvinna"
 
 "No driver yet":
+  zh-tw: "尚未建立駕駛員"
   de: "Noch kein Fahrer"
   ru: "Водителя пока нет"
   sv: "Ingen förare ännu"
 
 "(no personnel file yet)":
+  zh-tw: "（尚無個人檔案）"
   de: "(noch keine Personalakte)"
   ru: "(личного дела пока нет)"
   sv: "(ingen personalakt ännu)"
 
 "{xp} XP, {left} to level {next}":
+  zh-tw: "{xp} 經驗值，距離等級 {next} 尚需 {left}"
   de: "{xp} XP, noch {left} bis Stufe {next}"
   ru: "{xp} XP, до уровня {next} осталось {left}"
   sv: "{xp} XP, {left} till nivå {next}"
 
 "When":
+  zh-tw: "時間"
   de: "Wann"
   ru: "Когда"
   sv: "När"
 
 "Distance":
+  zh-tw: "距離"
   de: "Strecke"
   ru: "Расстояние"
   sv: "Sträcka"
 
 "Stops":
+  zh-tw: "車站"
   de: "Haltestellen"
   ru: "Остановки"
   sv: "Hållplatser"
 
 "Tickets":
+  zh-tw: "車票"
   de: "Fahrkarten"
   ru: "Билеты"
   sv: "Biljetter"
 
 "Crashes":
+  zh-tw: "碰撞"
   de: "Unfälle"
   ru: "Аварии"
   sv: "Kollisioner"
@@ -33484,51 +33697,61 @@ _version: 2
   sv: "kollisioner"
 
 "Softer":
+  zh-tw: "較柔和"
   de: "Weicher"
   ru: "Мягче"
   sv: "Mjukare"
 
 "Stronger":
+  zh-tw: "較強"
   de: "Stärker"
   ru: "Сильнее"
   sv: "Starkare"
 
 "Night brightness":
+  zh-tw: "夜間亮度"
   de: "Nachthelligkeit"
   ru: "Яркость ночью"
   sv: "Nattljusstyrka"
 
 "Rain quality":
+  zh-tw: "雨水品質"
   de: "Regenqualität"
   ru: "Качество дождя"
   sv: "Regnkvalitet"
 
 "Mirror panels every frame":
+  zh-tw: "每幀更新後視鏡面板"
   de: "Spiegelpanels in jedem Bild"
   ru: "Панели зеркал каждый кадр"
   sv: "Spegelpaneler varje bildruta"
 
 "Touch controls":
+  zh-tw: "觸控操作"
   de: "Touch-Steuerung"
   ru: "Сенсорное управление"
   sv: "Pekkontroller"
 
 "Door buttons":
+  zh-tw: "車門按鈕"
   de: "Türtasten"
   ru: "Кнопки дверей"
   sv: "Dörrknappar"
 
 "Standard (physical doors)":
+  zh-tw: "標準（實際車門）"
   de: "Standard (physische Türen)"
   ru: "Стандартные (физические двери)"
   sv: "Standard (fysiska dörrar)"
 
 "Direct OMSI triggers":
+  zh-tw: "直接使用 OMSI 觸發事件"
   de: "Direkte OMSI-Trigger"
   ru: "Прямые триггеры OMSI"
   sv: "Direkta OMSI-skripthändelser"
 
 "Hold the cursor while the mouse steers (off: the crosshair stays free, the window's edges are the lock)":
+  zh-tw: "滑鼠轉向時鎖定游標（關閉時準星可自由移動，視窗邊緣為轉向極限）"
   de: "Cursor beim Lenken mit der Maus festhalten (aus: das Fadenkreuz bleibt frei, die Fensterränder sind der Anschlag)"
   ru: "Удерживать курсор при рулении мышью (выкл.: перекрестие свободно, края окна служат упором)"
   sv: "Håll markören medan musen styr (av: hårkorset är fritt, fönstrets kanter är ändlägena)"
@@ -33650,166 +33873,199 @@ _version: 2
   sv: "Standardknappar för handkontroll (blinkers, dörrar, vyer, växlar, meny, paus)"
 
 "Rotation":
+  zh-tw: "旋轉"
   de: "Drehung"
   ru: "Вращение"
   sv: "Rotation"
 
 "Position":
+  zh-tw: "位置"
   de: "Position"
   ru: "Положение"
   sv: "Position"
 
 "Ambience (places, weather, nature, town)":
+  zh-tw: "環境音效（場所、天氣、自然、城鎮）"
   de: "Umgebung (Orte, Wetter, Natur, Stadt)"
   ru: "Окружение (места, погода, природа, город)"
   sv: "Omgivningsljud (platser, väder, natur, stad)"
 
 "Support":
+  zh-tw: "支援"
   de: "Support"
   ru: "Поддержка"
   sv: "Support"
 
 "Writing the support package…":
+  zh-tw: "正在建立支援套件……"
   de: "Support-Paket wird geschrieben…"
   ru: "Собираем пакет для поддержки…"
   sv: "Skriver supportpaketet…"
 
 "Support package saved: {path}":
+  zh-tw: "支援套件已儲存：{path}"
   de: "Support-Paket gespeichert: {path}"
   ru: "Пакет для поддержки сохранён: {path}"
   sv: "Supportpaket sparat: {path}"
 
 "\"{name}\" is gone.":
+  zh-tw: "「{name}」已不存在。"
   de: "„{name}“ ist weg."
   ru: "«{name}» больше нет."
   sv: "”{name}” finns inte längre."
 
 "Launcher theme":
+  zh-tw: "啟動器主題"
   de: "Launcher-Design"
   ru: "Тема лаунчера"
   sv: "Startprogrammets tema"
 
 "Dark":
+  zh-tw: "深色"
   de: "Dunkel"
   ru: "Тёмная"
   sv: "Mörkt"
 
 "System":
+  zh-tw: "跟隨系統"
   de: "Wie das System"
   ru: "Как в системе"
   sv: "System"
 
 "Automatic ({size} here)":
+  zh-tw: "自動（此處為 {size}）"
   de: "Automatisch (hier {size})"
   ru: "Автоматически (здесь {size})"
   sv: "Automatiskt ({size} här)"
 
 "This is openOMSI {version}":
+  zh-tw: "目前為 openOMSI {version}"
   de: "Dies ist openOMSI {version}"
   ru: "Это openOMSI {version}"
   sv: "Detta är openOMSI {version}"
 
 "OMSI 2 was found.":
+  zh-tw: "已找到 OMSI 2。"
   de: "OMSI 2 wurde gefunden."
   ru: "OMSI 2 найдена."
   sv: "OMSI 2 hittades."
 
 "This is not a complete OMSI 2 installation.":
+  zh-tw: "這不是完整的 OMSI 2 安裝。"
   de: "Das ist keine vollständige OMSI-2-Installation."
   ru: "Это не полная установка OMSI 2."
   sv: "Detta är inte en fullständig OMSI 2-installation."
 
 "openOMSI plays the content of an OMSI 2 installation: the original game must be installed (Steam or another copy).":
+  zh-tw: "openOMSI 使用 OMSI 2 的內容：必須先安裝原版遊戲（Steam 或其他版本）。"
   de: "openOMSI spielt die Inhalte einer OMSI-2-Installation: Das Originalspiel muss installiert sein (Steam oder eine andere Kopie)."
   ru: "openOMSI использует контент установленной OMSI 2: оригинальная игра должна быть установлена (Steam или другая копия)."
   sv: "openOMSI använder innehållet från en OMSI 2-installation: originalspelet måste vara installerat (Steam eller annan kopia)."
 
 "OMSI 2 was not found. Choose its folder below.":
+  zh-tw: "找不到 OMSI 2。請在下方選擇其資料夾。"
   de: "OMSI 2 wurde nicht gefunden. Wähle unten ihren Ordner."
   ru: "OMSI 2 не найдена. Укажите её папку ниже."
   sv: "OMSI 2 hittades inte. Välj dess mapp nedan."
 
 "The folder with Omsi.exe, maps and Vehicles. Left empty, the usual places are searched (Steam libraries, Wine bottles).":
+  zh-tw: "包含 Omsi.exe、maps 與 Vehicles 的資料夾。留空時會搜尋常見位置（Steam 遊戲庫、Wine 容器）。"
   de: "Der Ordner mit Omsi.exe, maps und Vehicles. Leer gelassen, werden die üblichen Orte durchsucht (Steam-Bibliotheken, Wine-Flaschen)."
   ru: "Папка с Omsi.exe, maps и Vehicles. Если оставить пустым, поиск идёт в обычных местах (библиотеки Steam, бутылки Wine)."
   sv: "Mappen med Omsi.exe, maps och Vehicles. Om fältet lämnas tomt söks vanliga platser igenom (Steam-bibliotek, Wine-miljöer)."
 
 "Browse…":
+  zh-tw: "瀏覽……"
   de: "Durchsuchen…"
   ru: "Обзор…"
   sv: "Bläddra…"
 
 "Game program":
+  zh-tw: "遊戲程式"
   de: "Spielprogramm"
   ru: "Программа игры"
   sv: "Spelprogram"
 
 "The openomsi program the duties start. Left empty, the one beside the launcher.":
+  zh-tw: "執勤時啟動的 openomsi 程式。留空時會使用啟動器旁的程式。"
   de: "Das openomsi-Programm, das die Dienste startet. Leer gelassen, das neben dem Launcher."
   ru: "Программа openomsi, которую запускают смены. Если пусто, то та, что рядом с лаунчером."
   sv: "Programmet openomsi som tjänsterna startar. Om fältet lämnas tomt används det bredvid startprogrammet."
 
 "Choose the game program":
+  zh-tw: "選擇遊戲程式"
   de: "Spielprogramm wählen"
   ru: "Выберите программу игры"
   sv: "Välj spelprogrammet"
 
 "Where things are":
+  zh-tw: "檔案位置"
   de: "Wo alles liegt"
   ru: "Где что лежит"
   sv: "Var saker finns"
 
 "Content folder (mods)":
+  zh-tw: "內容資料夾（模組）"
   de: "Inhaltsordner (Mods)"
   ru: "Папка контента (моды)"
   sv: "Innehållsmapp (moddar)"
 
 "Settings and logs":
+  zh-tw: "設定與記錄"
   de: "Einstellungen und Protokolle"
   ru: "Настройки и журналы"
   sv: "Inställningar och loggar"
 
 "Open the content folder":
+  zh-tw: "開啟內容資料夾"
   de: "Inhaltsordner öffnen"
   ru: "Открыть папку контента"
   sv: "Öppna innehållsmappen"
 
 "Open the settings folder":
+  zh-tw: "開啟設定資料夾"
   de: "Einstellungsordner öffnen"
   ru: "Открыть папку настроек"
   sv: "Öppna inställningsmappen"
 
 "OMSI 2's lessons: driving the bus, the stops, the ticket printer and the timetable.":
+  zh-tw: "OMSI 2 教學：巴士駕駛、車站、售票機與時刻表。"
   de: "Die Lektionen von OMSI 2: Busfahren, Haltestellen, Fahrscheindrucker und Fahrplan."
   ru: "Уроки OMSI 2: вождение автобуса, остановки, билетный принтер и расписание."
   sv: "OMSI 2:s lektioner: köra bussen, hållplatserna, biljettskrivaren och tidtabellen."
 
 "Reading the tutorials…":
+  zh-tw: "正在讀取教學……"
   de: "Tutorials werden gelesen…"
   ru: "Читаем обучение…"
   sv: "Läser in handledningarna…"
 
 "No tutorial found":
+  zh-tw: "找不到教學"
   de: "Kein Tutorial gefunden"
   ru: "Обучение не найдено"
   sv: "Ingen handledning hittades"
 
 "The tutorials come with OMSI 2 (its Tutorials folder).":
+  zh-tw: "教學隨 OMSI 2 提供（位於 Tutorials 資料夾）。"
   de: "Die Tutorials gehören zu OMSI 2 (sein Ordner Tutorials)."
   ru: "Обучение идёт вместе с OMSI 2 (её папка Tutorials)."
   sv: "Handledningar följer med OMSI 2 (dess Tutorials-mapp)."
 
 "Start the tutorial":
+  zh-tw: "開始教學"
   de: "Tutorial starten"
   ru: "Начать обучение"
   sv: "Starta handledningen"
 
 "Reading the map…":
+  zh-tw: "正在讀取地圖……"
   de: "Karte wird gelesen…"
   ru: "Читаем карту…"
   sv: "Läser in kartan…"
 
 "{roads} roads | {stops} stops | {entries} entry points":
+  zh-tw: "{roads} 條道路 | {stops} 個車站 | {entries} 個入口點"
   de: "{roads} Straßen | {stops} Haltestellen | {entries} Einstiegspunkte"
   ru: "Дорог: {roads} | остановок: {stops} | точек входа: {entries}"
   sv: "{roads} vägar | {stops} hållplatser | {entries} startpunkter"
@@ -33820,6 +34076,7 @@ _version: 2
   sv: "Kopiera hela OMSI 2-mappen (med Omsi.exe, maps och Vehicles) från en dator till openOMSI/OMSI 2 i telefonens internminne; den hittas där automatiskt."
 
 "Time and date":
+  zh-tw: "時間與日期"
   de: "Zeit und Datum"
   ru: "Время и дата"
   sv: "Tid och datum"
@@ -33883,6 +34140,7 @@ _version: 2
   sv: "turer"
 
 "Driving hints":
+  zh-tw: "駕駛提示"
   de: "Fahrhinweise"
   ru: "Подсказки при вождении"
   uk: "Підказки під час руху"
@@ -33895,6 +34153,7 @@ _version: 2
   sv: "Körtips"
 
 "Why the vehicle does not move, the change due, what a service did: as short notifications":
+  zh-tw: "以簡短通知說明車輛無法行駛的原因、應找零金額及維修結果"
   de: "Warum das Fahrzeug nicht fährt, das fällige Wechselgeld, was ein Dienst getan hat: als kurze Benachrichtigungen"
   ru: "Почему машина не едет, какую сдачу дать, что сделала служба: короткими уведомлениями"
   uk: "Чому машина не їде, яку решту дати, що зробила служба: короткими сповіщеннями"
@@ -34087,6 +34346,7 @@ _version: 2
   sv: "W A S D: flytta, mellanslag: uppåt, Ctrl: nedåt, Shift: snabbare, dra eller piltangenter: se dig omkring"
 
 "Move the clock.":
+  zh-tw: "調整時間。"
   de: "Die Uhr verstellen."
   ru: "Перевести часы."
   uk: "Перевести годинник."
@@ -34145,6 +34405,7 @@ _version: 2
   sv: "Tankar: {now:.0} l"
 
 "{n} versions":
+  zh-tw: "{n} 個版本"
   de: "{n} Versionen"
   fr: "{n} versions"
   es: "{n} versiones"
@@ -36621,6 +36882,7 @@ _version: 2
   sv: "För alla rattar"
 
 "{name} was set up by itself ({what}). Check it below and change what is wrong.":
+  zh-tw: "已自動設定 {name}（{what}）。請在下方檢查並修正不正確的設定。"
   ru: "{name} настроено автоматически ({what}). Проверьте ниже и измените, если что-то не так."
   de: "{name} wurde automatisch eingerichtet ({what}). Unten prüfen und ändern, was nicht stimmt."
   fr: "{name} a été configuré automatiquement ({what}). Vérifiez ci-dessous et corrigez ce qui ne va pas."
@@ -36682,6 +36944,7 @@ _version: 2
   ca: "Desat, però la carpeta d'OMSI 2 que s'usa és {folder}"
 
 "Door release (passengers open), any bus":
+  zh-tw: "車門釋放（乘客開門），適用所有巴士"
   de: "Türfreigabe (Fahrgäste öffnen), jeder Bus"
   fr: "Déverrouillage des portes (les voyageurs ouvrent), tous bus"
 
@@ -42338,3 +42601,333 @@ _version: 2
   ms: "Tarikh +1 bulan"
   tl: "Petsa +1 buwan"
   sv: "Datum +1 månad"
+
+"Mirror quality":
+  zh-tw: "後視鏡品質"
+
+"As the picture (Enhanced)":
+  zh-tw: "與主畫面相同（增強）"
+
+"Every frame (smoothest)":
+  zh-tw: "每幀更新（最流暢）"
+
+"(the server's clock)":
+  zh-tw: "（伺服器的時間）"
+
+"the map's (the server's)":
+  zh-tw: "地圖（伺服器）的"
+
+"Check now":
+  zh-tw: "立即檢查"
+
+"Choose…":
+  zh-tw: "選擇……"
+
+"Clear finished":
+  zh-tw: "清除已完成項目"
+
+"Copy code":
+  zh-tw: "複製連線碼"
+
+"Copy report":
+  zh-tw: "複製報告"
+
+"Copy the report (the end of the game's log), or open a GitHub issue with it: it tells what went wrong on this computer.":
+  zh-tw: "複製報告（遊戲記錄的末段），或附上報告在 GitHub 回報問題：報告會說明這台電腦發生的錯誤。"
+
+"Install updates without asking from now on":
+  zh-tw: "今後自動安裝更新"
+
+"Multiplayer: show / hide the chat":
+  zh-tw: "多人遊戲：顯示／隱藏聊天"
+
+"No tour has a trip still to come that matches.":
+  zh-tw: "沒有符合條件且仍有未出發行程的班次。"
+
+"No tour left at this time: show the ended tours, or start earlier.":
+  zh-tw: "此時間已無可用班次：顯示已結束班次，或提早開始。"
+
+"Not updated":
+  zh-tw: "尚未更新"
+
+"Open / close the main menu":
+  zh-tw: "開啟／關閉主選單"
+
+"Open on GitHub":
+  zh-tw: "在 GitHub 開啟"
+
+"Search":
+  zh-tw: "搜尋"
+
+"The bus's own keys":
+  zh-tw: "巴士專用按鍵"
+
+"The game closed on an error":
+  zh-tw: "遊戲因錯誤而關閉"
+
+"The game was closed by the system":
+  zh-tw: "遊戲被系統關閉"
+
+"The report is copied: paste it into a GitHub issue or a message.":
+  zh-tw: "報告已複製：可貼到 GitHub 問題回報或訊息中。"
+
+"Tours of this line on the chosen day":
+  zh-tw: "此路線在所選日期的班次"
+
+"Update now":
+  zh-tw: "立即更新"
+
+"Use DirectX 12":
+  zh-tw: "使用 DirectX 12"
+
+"What's new":
+  zh-tw: "更新內容"
+
+"Your friends paste it into Multiplayer → Connect by Code.":
+  zh-tw: "朋友可將它貼到「多人遊戲 → 使用連線碼連線」。"
+
+"stopping - saving the run...":
+  zh-tw: "正在結束：儲存行程……"
+
+"Android asks whether to update openOMSI: press Update there. The app then starts again by itself.":
+  zh-tw: "Android 會詢問是否更新 openOMSI：請按「更新」。完成後應用程式會自動重新啟動。"
+
+"CHAT  (V in the game to write)":
+  zh-tw: "聊天（遊戲中按 V 輸入）"
+
+"no key bindings":
+  zh-tw: "沒有按鍵綁定"
+
+"On a server the map, the time, the date and the weather are the same for everybody: the server keeps the world's clock. You choose your bus and your duty.":
+  zh-tw: "伺服器上的所有玩家共用地圖、時間、日期與天氣，由伺服器控制世界時間。你可以選擇自己的巴士與執勤班次。"
+
+"The Vulkan graphics driver stopped while compiling shaders. Starting the game again will switch to OpenGL (or change it in Settings → Graphics API).":
+  zh-tw: "Vulkan 顯示驅動程式在編譯著色器時停止運作。重新啟動遊戲將切換至 OpenGL（也可在「設定 → 圖形 API」變更）。"
+
+"The game draws with DirectX 12 from the next start (Settings → Graphics API to change it back).":
+  zh-tw: "下次啟動遊戲時將使用 DirectX 12 繪圖（可在「設定 → 圖形 API」切換回原設定）。"
+
+"The server ended your game. Its message:":
+  zh-tw: "伺服器已結束你的遊戲。伺服器訊息："
+
+"The system closed the game while it was running, typically because the device ran out of memory (RAM). Lowering texture resolution or reducing AI traffic in Settings helps prevent memory exhaustion.":
+  zh-tw: "系統在遊戲執行期間將它關閉，通常是因為記憶體（RAM）不足。在設定中降低材質解析度或減少 AI 交通，有助於避免記憶體耗盡。"
+
+"Controls...":
+  zh-tw: "操作設定……"
+
+"Ambience":
+  zh-tw: "環境音效"
+
+"Draws the clouds":
+  zh-tw: "顯示雲層"
+
+"Enhanced graphics: how much brighter the night is shown":
+  zh-tw: "增強畫面模式下夜間亮度的提升幅度"
+
+"How loud the ambience is":
+  zh-tw: "環境音效的音量"
+
+"The place, the weather, the birds of the season and the town's life, from real recordings":
+  zh-tw: "以實際錄音呈現場所、天氣、季節鳥鳴與城鎮生活的聲音"
+
+"Hold the cursor while steering":
+  zh-tw: "轉向時鎖定游標"
+
+"The wheel reaches its lock past the window's edges; off: the crosshair stays free and without delay, as in OMSI":
+  zh-tw: "超出視窗邊緣時方向盤達到轉向極限；關閉時準星可自由移動且沒有延遲，如同 OMSI"
+
+"Steering and view":
+  zh-tw: "轉向與視角"
+
+"Stick smoothing":
+  zh-tw: "搖桿平滑度"
+
+"Steering speed":
+  zh-tw: "轉向速度"
+
+"Evens out the small shakes of the stick (off: the stick as it reads)":
+  zh-tw: "平滑搖桿的細微晃動（關閉時直接使用讀取值）"
+
+"Ignore movement round the stick's centre (raise it if the bus steers by itself)":
+  zh-tw: "忽略搖桿中心附近的移動（若巴士自行轉向，請提高此值）"
+
+"Seconds the stick takes to turn the wheel from the middle to the full lock - more is smoother":
+  zh-tw: "搖桿將方向盤從中央轉至極限所需的秒數：越高越平滑"
+
+"Pedals":
+  zh-tw: "踏板"
+
+"Wheel":
+  zh-tw: "方向盤"
+
+"How often the mirrors are drawn: every frame, the street moves through them as smoothly as through the windscreen":
+  zh-tw: "後視鏡的更新頻率：每幀更新時，鏡中的道路與擋風玻璃外一樣流暢"
+
+"In Enhanced and Enhanced+: the mirrors shaded as the picture is, with its light and its sky, instead of the plain light":
+  zh-tw: "在 Enhanced 與 Enhanced+ 模式下，後視鏡使用與主畫面相同的光照與天空"
+
+"The mirror panels in the cab (Ctrl+M) are drawn every frame, as in ETS2, instead of taking turns with the other mirrors":
+  zh-tw: "車內後視鏡面板（Ctrl+M）會如 ETS2 一樣每幀更新，不與其他後視鏡輪流更新"
+
+"Plain":
+  zh-tw: "基本"
+
+"Lower is faster: the drops on the glass painted less often, less spray and fewer streaks; Low shows OMSI 2's own rain on the glass (from the next bus loaded)":
+  zh-tw: "較低品質可提高效能：減少玻璃雨滴更新、水花與雨線；低品質會使用 OMSI 2 的玻璃雨效（下次載入巴士生效）"
+
+"Switch off to keep the camera still while you steer":
+  zh-tw: "關閉後，轉向時視角保持固定"
+
+"TrackIR yaw sensitivity":
+  zh-tw: "TrackIR 水平旋轉靈敏度"
+
+"TrackIR pitch sensitivity":
+  zh-tw: "TrackIR 俯仰靈敏度"
+
+"TrackIR roll sensitivity":
+  zh-tw: "TrackIR 側傾靈敏度"
+
+"TrackIR X sensitivity":
+  zh-tw: "TrackIR X 軸靈敏度"
+
+"TrackIR Y sensitivity":
+  zh-tw: "TrackIR Y 軸靈敏度"
+
+"TrackIR Z sensitivity":
+  zh-tw: "TrackIR Z 軸靈敏度"
+
+"Invert TrackIR yaw":
+  zh-tw: "反轉 TrackIR 水平旋轉"
+
+"Invert TrackIR pitch":
+  zh-tw: "反轉 TrackIR 俯仰"
+
+"Invert TrackIR roll":
+  zh-tw: "反轉 TrackIR 側傾"
+
+"Invert TrackIR X":
+  zh-tw: "反轉 TrackIR X 軸"
+
+"Invert TrackIR Y":
+  zh-tw: "反轉 TrackIR Y 軸"
+
+"Invert TrackIR Z":
+  zh-tw: "反轉 TrackIR Z 軸"
+
+"Use native TrackIR on Windows, or OpenTrack on UDP port {}":
+  zh-tw: "在 Windows 使用原生 TrackIR，或透過 UDP 連接埠 {} 使用 OpenTrack"
+
+"Head tilt. 100% is 1:1; the low end is deliberately finer.":
+  zh-tw: "頭部側傾。100% 為 1:1；低值範圍提供更細緻的調整。"
+
+"Left / right head movement. 100% is 1:1; the low end is deliberately finer.":
+  zh-tw: "頭部左右移動。100% 為 1:1；低值範圍提供更細緻的調整。"
+
+"Up / down head movement. 100% is 1:1; the low end is deliberately finer.":
+  zh-tw: "頭部上下移動。100% 為 1:1；低值範圍提供更細緻的調整。"
+
+"Move your head forward / back. 100% is 1:1; the low end is deliberately finer.":
+  zh-tw: "頭部前後移動。100% 為 1:1；低值範圍提供更細緻的調整。"
+
+"Move your head left / right. 100% is 1:1; the low end is deliberately finer.":
+  zh-tw: "頭部左右移動。100% 為 1:1；低值範圍提供更細緻的調整。"
+
+"Move your head up / down. 100% is 1:1; the low end is deliberately finer.":
+  zh-tw: "頭部上下移動。100% 為 1:1；低值範圍提供更細緻的調整。"
+
+"Reverse forward / back head movement":
+  zh-tw: "反轉頭部前後移動"
+
+"Reverse head tilt":
+  zh-tw: "反轉頭部側傾"
+
+"Reverse left / right head movement":
+  zh-tw: "反轉頭部左右移動"
+
+"Reverse left / right head rotation":
+  zh-tw: "反轉頭部水平旋轉"
+
+"Reverse up / down head movement":
+  zh-tw: "反轉頭部上下移動"
+
+"Reverse up / down head rotation":
+  zh-tw: "反轉頭部俯仰"
+
+"Action: {value}":
+  zh-tw: "動作：{value}"
+
+"Automatic ({})":
+  zh-tw: "自動（{}）"
+
+"Axis":
+  zh-tw: "軸"
+
+"Button":
+  zh-tw: "按鈕"
+
+"Button {}":
+  zh-tw: "按鈕 {}"
+
+"Clear":
+  zh-tw: "清除"
+
+"Clear {}":
+  zh-tw: "清除 {}"
+
+"Connection":
+  zh-tw: "連線"
+
+"Controller":
+  zh-tw: "控制器"
+
+"Controller configuration was not saved: {e}":
+  zh-tw: "無法儲存控制器設定：{e}"
+
+"Controller mappings were not reloaded: {e}":
+  zh-tw: "無法重新載入控制器對應設定：{e}"
+
+"Controller type":
+  zh-tw: "控制器類型"
+
+"Device":
+  zh-tw: "裝置"
+
+"Disconnected":
+  zh-tw: "未連接"
+
+"Found by its name and USB ids":
+  zh-tw: "依名稱與 USB 識別碼找到"
+
+"Function":
+  zh-tw: "功能"
+
+"Left/right adjusts in steps of 5 % (0-200 %)":
+  zh-tw: "左右調整以 5% 為單位（0–200%）"
+
+"Unassigned":
+  zh-tw: "未指定"
+
+"Default buttons":
+  zh-tw: "預設按鈕"
+
+"Left stick / triggers":
+  zh-tw: "左搖桿／扳機"
+
+"Left stick steers, left trigger brakes, right trigger is the throttle":
+  zh-tw: "左搖桿轉向、左扳機煞車、右扳機油門"
+
+"Steer / brake, throttle":
+  zh-tw: "轉向／煞車、油門"
+
+"No Xbox or PlayStation pad found":
+  zh-tw: "找不到 Xbox 或 PlayStation 手把"
+
+"Connect a pad, or choose its type below to see the button names":
+  zh-tw: "連接手把，或在下方選擇類型以查看按鈕名稱"
+
+"Names the buttons below for the pad you hold: Automatic, Xbox, PlayStation 4 or PlayStation 5":
+  zh-tw: "依手把類型顯示下方按鈕名稱：自動、Xbox、PlayStation 4 或 PlayStation 5"
+
+"A gamepad with no buttons set up drives the cabin with these; set up its buttons under Devices to use your own":
+  zh-tw: "尚未設定按鈕的手把會以這些按鈕操作駕駛室；可在「裝置」中自訂按鈕"

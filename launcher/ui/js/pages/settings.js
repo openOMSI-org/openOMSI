@@ -301,7 +301,7 @@ function ThemeRow() {
   const [theme, setTheme] = useState(() => storageGet('theme', 'dark'));
   return html`<div class="setting-row">
     <${Name} label="Launcher theme" />
-    <${Select} value=${theme} options=${[['dark', 'Dark'], ['light', 'Light'], ['system', 'System']]} onChange=${(v) => {
+    <${Select} value=${theme} options=${[['dark', 'Dark'], ['light', 'Light theme'], ['system', 'System']]} onChange=${(v) => {
       setTheme(v);
       storageSet('theme', v);
       try {

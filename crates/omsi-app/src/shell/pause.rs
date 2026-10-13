@@ -176,7 +176,9 @@ fn rail(sh: &mut Shell, v: &PauseView) {
                 INK_2.mix(INK, t)
             };
             let icon_c = if open || (kbd && !danger) { ACCENT } else { c };
-            let (text, more) = plain(label);
+            let translated = omsi_ui::tr(label);
+            let (text, _) = plain(&translated);
+            let (_, more) = plain(label);
             ui.icon(rail_icon(id), Vec2::new(row.x + 19.5, row.center().y), 19.0, icon_c);
             ui.text_in(text, Rect::new(row.x + 41.0, row.y, row.w - 64.0, row.h), 14.0, Weight::Medium, c, Align::Left);
             if more {
