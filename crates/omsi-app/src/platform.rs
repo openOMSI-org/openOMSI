@@ -106,3 +106,14 @@ pub(crate) fn safe_insets() -> (f32, f32, f32, f32) {
         (0.0, 0.0, 0.0, 0.0)
     }
 }
+
+pub(crate) fn surface_size(window: &winit::window::Window) -> winit::dpi::PhysicalSize<u32> {
+    #[cfg(target_os = "ios")]
+    {
+        window.outer_size()
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        window.inner_size()
+    }
+}

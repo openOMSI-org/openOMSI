@@ -89,7 +89,7 @@ impl App {
                 self.renderer.as_ref(),
                 self.window.as_ref(),
             ) {
-                let size = win.inner_size();
+                let size = crate::platform::surface_size(win);
                 s.resize(r, size.width, size.height);
             }
         }

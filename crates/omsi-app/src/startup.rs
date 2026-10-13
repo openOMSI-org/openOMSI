@@ -564,7 +564,7 @@ pub(crate) fn present_clear(surface: &mut SurfaceState<'_>, device: &wgpu::Devic
     let frame = match surface.acquire() {
         wgpu::CurrentSurfaceTexture::Success(f) | wgpu::CurrentSurfaceTexture::Suboptimal(f) => f,
         wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
-            let size = window.inner_size();
+            let size = crate::platform::surface_size(window);
             surface.resize_on(device, size.width, size.height);
             return false;
         }

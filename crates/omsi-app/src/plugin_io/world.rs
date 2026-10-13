@@ -146,7 +146,7 @@ pub(crate) fn set_preset(app: &mut App, file: Option<&str>, secs: f32) -> Result
 
 pub(crate) fn camera(app: &App) -> Option<op::Camera> {
     let c = app.camera.as_ref()?;
-    let (width, height) = app.gfx.surface.as_ref().map(|s| (s.config.width, s.config.height)).or_else(|| app.window.as_ref().map(|w| (w.inner_size().width, w.inner_size().height))).unwrap_or((0, 0));
+    let (width, height) = app.gfx.surface.as_ref().map(|s| (s.config.width, s.config.height)).or_else(|| app.window.as_ref().map(|w| { let s = crate::platform::surface_size(w); (s.width, s.height) })).unwrap_or((0, 0));
     Some(op::Camera {
         view: app.view.clone(),
         pos: [c.position.x, c.position.y, c.position.z],
