@@ -66,6 +66,7 @@ targets:
     settings:
       base:
         INFOPLIST_FILE: macOS/Info.plist
+        EXECUTABLE_NAME: openOMSI-Mac
         CODE_SIGN_ENTITLEMENTS: macOS/openOMSI.entitlements
         ENABLE_HARDENED_RUNTIME: YES
         LIBRARY_SEARCH_PATHS: '"$(OPENOMSI_RUST_TARGET)/universal-apple-darwin/$(OPENOMSI_RUST_PROFILE)" "$(SRCROOT)/../assets/steam_redist"'

@@ -14,7 +14,8 @@
   game's window goes and the launcher is back.
 - **Mac**: the app is the launcher (`apple/macOS/OpenOMSIApp.swift`); the game program
   `openomsi` lies beside it in `Contents/MacOS` and runs every drive as a process of its own,
-  as the launcher starts it on the other computers.
+  as the launcher starts it on the other computers. The app's own program is `openOMSI-Mac`:
+  a Mac's disk does not tell `openOMSI` from `openomsi`, and the game took its place.
 - **The launcher** (`apple/Shared`) is SwiftUI in the look and structure of the desktop
   launcher (`launcher/ui`): neutral graphite surfaces without outlines, one amber accent,
   Inter for every text (`apple/Resources/Fonts`, with its licence), radius 8 for cards and 6
