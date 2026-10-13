@@ -192,7 +192,7 @@ pub(super) fn player_step(cx: PlayerStepCx, dt: f32) {
 
 crate::app::stage_ctx!(
     /// The player's bus into the scene: its part of the game.
-    PlayerToSceneCx { reads: [view, world, people], writes: [player, gfx] }
+    PlayerToSceneCx { reads: [view, world, people, ui], writes: [player, gfx] }
 );
 
 /// The bus and its driver into the scene.
@@ -212,7 +212,7 @@ pub(super) fn player_to_scene(cx: PlayerToSceneCx, dt: f32) {
     // the photo mode keeps the driver's view while its camera flies off, and taken from
     // there every photo showed the bus without its driver)
     // (out of the seat: nobody at the wheel)
-    let at_eyes = *cx.view.view == "driver" && cx.view.camera.as_ref().is_none_or(|c| (c.position - crate::camera_util::driver_eye(p)).length() < 0.5);
+    let at_eyes = *cx.view.view == "driver" && (cx.ui.photo.is_none() || cx.view.camera.as_ref().is_none_or(|c| (c.position - crate::camera_util::driver_eye(p)).length() < 0.5));
     p.sync_driver_hands(r, scene, dt, cx.common.settings.driver && cx.people.on_foot.is_none(), at_eyes, cx.common.settings.hands_in_cab);
 }
 
