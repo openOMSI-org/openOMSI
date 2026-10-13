@@ -504,8 +504,8 @@ fn preview_warm(p: &dyn Platform) -> Answer {
 /// (`busy`, `moving`, `failed`, `error`), the state, then a JPEG when the picture changed
 /// since the last one asked for.
 #[allow(clippy::too_many_arguments)]
-fn preview_frame(p: &dyn Platform, w: u32, h: u32, force: bool, dx: Option<f32>, dy: Option<f32>, zoom: Option<f32>, quality: Option<u8>) -> Result<Vec<u8>, String> {
-    let req = json!({ "cmd": "frame", "w": w.clamp(64, 4096), "h": h.clamp(64, 4096), "force": force, "dx": dx.unwrap_or(0.0), "dy": dy.unwrap_or(0.0), "zoom": zoom.unwrap_or(1.0), "quality": quality.unwrap_or(90) });
+fn preview_frame(p: &dyn Platform, w: u32, h: u32, force: bool, dx: Option<f32>, dy: Option<f32>, zoom: Option<f32>, quality: Option<u8>, view: Option<String>) -> Result<Vec<u8>, String> {
+    let req = json!({ "cmd": "frame", "w": w.clamp(64, 4096), "h": h.clamp(64, 4096), "force": force, "dx": dx.unwrap_or(0.0), "dy": dy.unwrap_or(0.0), "zoom": zoom.unwrap_or(1.0), "quality": quality.unwrap_or(90), "view": view });
     let (head, jpeg) = p.renderer(req, Duration::from_secs(30))?;
     let head = head.to_string().into_bytes();
     let mut out = Vec::with_capacity(4 + head.len() + jpeg.len());
@@ -662,7 +662,7 @@ pub fn call(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
 pub fn call_bytes(cmd: &str, args: &Value, p: &dyn Platform) -> Result<Vec<u8>, String> {
     match cmd {
         "content_picture" => content_picture(&arg::<String>(args, "path")?).ok_or_else(|| "not found".to_string()),
-        "preview_frame" => preview_frame(p, arg(args, "w")?, arg(args, "h")?, arg::<Option<bool>>(args, "force")?.unwrap_or(false), arg(args, "dx")?, arg(args, "dy")?, arg(args, "zoom")?, arg(args, "quality")?),
+        "preview_frame" => preview_frame(p, arg(args, "w")?, arg(args, "h")?, arg::<Option<bool>>(args, "force")?.unwrap_or(false), arg(args, "dx")?, arg(args, "dy")?, arg(args, "zoom")?, arg(args, "quality")?, arg(args, "view")?),
         _ => Err(format!("unknown command {cmd}")),
     }
 }

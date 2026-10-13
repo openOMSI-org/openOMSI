@@ -165,12 +165,21 @@ export function RouteMap({ map, date, trip, stops = [], entry = -1, onEntry, hei
       g.fillText(plain(e.name), X(e.at[0]) - w / 2 + 6, Y(e.at[1]) - 19);
     }
   };
-  useEffect(draw);
+  const latest = useRef(draw);
+  latest.current = draw;
+  useEffect(draw, [data, hover, entry, stops.map((x) => `${x.time} ${x.name}`).join('|')]);
   useEffect(() => {
-    const ro = new ResizeObserver(() => draw());
+    const redraw = () => latest.current();
+    const ro = new ResizeObserver(redraw);
     ro.observe(box.current);
-    return () => ro.disconnect();
-  });
+    document.fonts?.ready.then(redraw);
+    const scale = matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+    scale.addEventListener('change', redraw);
+    return () => {
+      ro.disconnect();
+      scale.removeEventListener('change', redraw);
+    };
+  }, []);
 
   const at = (e) => {
     const r = cv.current.getBoundingClientRect();

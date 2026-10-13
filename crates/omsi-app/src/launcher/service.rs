@@ -11,7 +11,7 @@
 //! A phone runs the launcher's page inside the game program itself: there the same service
 //! runs on a thread of its own (`in_process`), asked through a channel instead of a pipe.
 
-use super::showroom::{Look, Showroom};
+use super::showroom::{Look, PreviewView, Showroom};
 use omsi_render::Renderer;
 use serde_json::{json, Value};
 use std::io::{BufRead, Write};
@@ -158,6 +158,9 @@ fn serve(rx: std::sync::mpsc::Receiver<Value>, reply: Reply) {
                 if zoom != 1.0 {
                     showroom.zoom_by(zoom);
                 }
+                if let Some(view) = req.get("view").and_then(Value::as_str).and_then(PreviewView::from_name) {
+                    showroom.set_view(view);
+                }
                 if renderer.is_none() {
                     match open_renderer() {
                         Ok(r) => renderer = Some(r),
@@ -174,7 +177,7 @@ fn serve(rx: std::sync::mpsc::Receiver<Value>, reply: Reply) {
                 let before = showroom.drawn;
                 let (w, h) = (f("w", 960.0) as u32, f("h", 540.0) as u32);
                 let _ = showroom.preview(r, w, h);
-                let head = json!({ "ok": true, "busy": showroom.busy, "failed": showroom.failed(), "error": showroom.error, "moving": showroom.moving(), "picture": showroom.has_picture() });
+                let head = json!({ "ok": true, "busy": showroom.busy, "failed": showroom.failed(), "error": showroom.error, "moving": showroom.moving(), "picture": showroom.has_picture(), "view": showroom.view.name(), "views": showroom.views() });
                 let new = showroom.drawn != before || req.get("force").and_then(Value::as_bool).unwrap_or(false);
                 match (new, showroom.picture()) {
                     (true, Some(tex)) => {

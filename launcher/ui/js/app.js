@@ -1,11 +1,11 @@
 // The launcher's frame: the menu on the left, the page beside it, messages in the corner.
 
-import { html, render } from '../vendor/preact-htm.js';
+import { html, render, useState, useEffect } from '../vendor/preact-htm.js';
 import { useStore, set, S } from './store.js';
 import { t, plainText } from './i18n.js';
 import { Icon } from './icons.js';
 import { Spinner } from './ui.js';
-import { boot, installMod, jobRunning } from './data.js';
+import { boot, installMod, jobRunning, fitWindow } from './data.js';
 import { DrivePage } from './pages/drive.js';
 import { MultiplayerPage } from './pages/multiplayer.js';
 import { ProfilePage } from './pages/profile.js';
@@ -68,17 +68,37 @@ function Toasts() {
   return html`<div class="toasts">${s.toasts.map((x) => html`<div class=${'toast ' + x.kind}><${Icon} name=${x.kind === 'error' ? 'alert' : x.kind === 'ok' ? 'check' : 'info'} /><div class="selectable">${x.text}</div></div>`)}</div>`;
 }
 
+function useFocused() {
+  const [focused, setFocused] = useState(() => document.hasFocus());
+  useEffect(() => {
+    const on = () => setFocused(true);
+    const off = () => setFocused(false);
+    addEventListener('focus', on);
+    addEventListener('blur', off);
+    return () => {
+      removeEventListener('focus', on);
+      removeEventListener('blur', off);
+    };
+  }, []);
+  return focused;
+}
+
 function App() {
   const s = useStore();
+  const focused = useFocused();
   if (!s.ready) {
     return html`<div class="splash">${s.errors.boot ? html`<div class="notice danger" style="max-width:520px">${s.errors.boot}</div>` : html`<${Spinner} />`}</div>`;
   }
   if (PHONE) return html`<${MobileApp} /><${GameEndDialogs} /><${UpdateDialog} /><${Toasts} />`;
   const page = PAGES.find((x) => x && x[0] === s.page) || PAGES[0];
   const Page = page[3];
+  const resting = !s.boot?.selftest && s.settings?.launcher_rest !== false && s.poll.instances?.length > 0 && !focused;
   return html`<div class="shell">
     <${Sidebar} />
-    <main class="main"><div class="page" key=${s.page}><${Page} /></div></main>
+    <main class="main">
+      <div class=${'page page-' + page[0]} key=${s.page} hidden=${resting}><${Page} /></div>
+      ${resting && html`<div class="splash resting"><${Icon} name="bus" size=${40} /><p>${t('The launcher rests while you drive, so that the game has the graphics card to itself. It is back as soon as the game ends.')}</p></div>`}
+    </main>
     <${GameEndDialogs} />
     <${UpdateDialog} />
     <${Toasts} />
@@ -86,6 +106,12 @@ function App() {
 }
 
 plainText(document.body);
+fitWindow();
+let fitting = 0;
+addEventListener('resize', () => {
+  clearTimeout(fitting);
+  fitting = setTimeout(fitWindow, 100);
+});
 render(html`<${App} />`, document.getElementById('app'));
 watchGameEnds();
 onDrop(

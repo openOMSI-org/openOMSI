@@ -21,7 +21,7 @@ async fn work<F: FnOnce() -> Answer + Send + 'static>(f: F) -> Answer {
 }
 
 pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
-    tauri::generate_handler![call, call_bytes, pick_folder, pick_file, pick_mod, open_path, open_url, update_relaunch, selftest_done]
+    tauri::generate_handler![call, call_bytes, pick_folder, pick_file, pick_mod, open_path, open_url, update_relaunch, selftest_done, fit_zoom]
 }
 
 /// This window, for the commands of `omsi-launcher-api`.
@@ -148,6 +148,16 @@ fn open_with_system(what: &std::ffi::OsStr) -> Answer {
     let mut c = std::process::Command::new("xdg-open");
     c.arg(what).spawn().map_err(err)?;
     Ok(json!(true))
+}
+
+#[tauri::command]
+fn fit_zoom(window: tauri::WebviewWindow, size: f64) -> Answer {
+    let dpi = window.scale_factor().map_err(err)?;
+    let inner = window.inner_size().map_err(err)?;
+    let (w, h) = (inner.width as f64 / dpi, inner.height as f64 / dpi);
+    let zoom = (w / 1440.0).min(h / 820.0).clamp(1.0, 2.2) * size.clamp(0.8, 1.5);
+    window.set_zoom(zoom).map_err(err)?;
+    Ok(json!(zoom))
 }
 
 #[tauri::command]

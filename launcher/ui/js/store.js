@@ -63,3 +63,19 @@ export function toast(text, kind = 'info', ms = 5000) {
   set({ toasts: [...S.toasts, { id, text, kind }] });
   setTimeout(() => set({ toasts: S.toasts.filter((x) => x.id !== id) }), kind === 'error' ? Math.max(ms, 8000) : ms);
 }
+
+export function remembered(key, fallback) {
+  try {
+    return localStorage.getItem(key) || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function remember(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    return;
+  }
+}

@@ -1,7 +1,7 @@
 // Loading the content and keeping the duty: what the pages share.
 
-import { call, on, onPhone } from './api.js';
-import { S, set, toast } from './store.js';
+import { call, on, onPhone, inTauri } from './api.js';
+import { S, set, toast, remembered } from './store.js';
 import { setLanguage, t, hhmm } from './i18n.js';
 
 /** The duty as the launcher remembers it (`launcher-duty.json`, shared with the game's own
@@ -36,10 +36,23 @@ export async function boot() {
   if (b.updated) toast(t('openOMSI {version} is installed', { version: b.updated }), 'ok', 8000);
 }
 
+export const LAUNCHER_SIZES = [['0.9', 'Smaller'], ['1', 'Normal'], ['1.15', 'Larger'], ['1.3', 'Largest']];
+
+export const launcherSize = () => remembered('launcher_size', '1');
+
+export const LAUNCHER_LAYOUTS = [['cards', 'Modern: everything on one page'], ['classic', 'Classic: in steps, as before']];
+
+export const launcherLayout = () => (remembered('launcher_layout', 'cards') === 'classic' ? 'classic' : 'cards');
+
+export function fitWindow() {
+  if (inTauri) call('fit_zoom', { size: Number(launcherSize()) || 1 }).catch(() => {});
+}
+
 export function applyTheme() {
   const pick = localStorage.getItem('theme') || 'dark';
   const light = pick === 'light' || (pick === 'system' && matchMedia('(prefers-color-scheme: light)').matches);
   document.documentElement.dataset.theme = light ? 'light' : 'dark';
+  document.documentElement.dataset.layout = launcherLayout();
 }
 
 export async function loadContent() {
@@ -397,7 +410,8 @@ export async function pollNow() {
     const p = await call('poll');
     const changed = S.poll.stamp && p.stamp !== S.poll.stamp;
     const before = S.poll.jobs || [];
-    set({ poll: p });
+    const same = (x) => JSON.stringify([x.stamp, x.jobs, x.instances]);
+    if (same(p) !== same(S.poll) || p.started?.length) set({ poll: p });
     for (const s of p.started || []) toast(t('Installing {name}…', { name: s }));
     const finished = S.poll.stamp ? (p.jobs || []).filter((j) => !jobRunning(j) && !before.some((b) => b.id === j.id && !jobRunning(b))) : [];
     for (const j of finished) {
@@ -420,7 +434,8 @@ function startPolling() {
     followClock();
     // (faster while something happens)
     const busy = S.poll.jobs.some(jobRunning);
-    if (busy || Date.now() % 4000 < 1000) pollNow();
+    const every = S.poll.instances?.length && !document.hasFocus() ? 20000 : 4000;
+    if (busy || Date.now() % every < 1000) pollNow();
   }, 1000);
   on('games-ended', () => {
     set({ gameStarted: false });
@@ -429,5 +444,8 @@ function startPolling() {
     loadSituations();
     reloadSettings();
   });
-  window.addEventListener('focus', reloadSettings);
+  window.addEventListener('focus', () => {
+    reloadSettings();
+    pollNow();
+  });
 }

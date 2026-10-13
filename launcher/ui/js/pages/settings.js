@@ -3,33 +3,17 @@
 // change goes to settings.cfg at once.
 
 import { html, useState, useEffect, useRef } from '../../vendor/preact-htm.js';
-import { S, useStore, set, toast } from '../store.js';
+import { S, useStore, set, toast, remembered, remember } from '../store.js';
 import { t } from '../i18n.js';
-import { call } from '../api.js';
+import { call, onPhone, inTauri } from '../api.js';
 import { Button, Card, Select, Input, Toggle, Tabs, Slider, PageHead, useConfirm } from '../ui.js';
-import { saveSettings, applyTheme } from '../data.js';
+import { saveSettings, applyTheme, fitWindow, launcherSize, LAUNCHER_SIZES, launcherLayout, LAUNCHER_LAYOUTS } from '../data.js';
 import { UpdateRow } from '../updates.js';
 import { SETTINGS_TABS, GRAPHICS_PROFILE_KEYS } from './settings-schema.js';
 import { VersionsDialog } from './versions.js';
 import { RadioStations } from './radio-stations.js';
 
 const REPO_URL = 'https://github.com/openOmsi-project/openOMSI';
-
-function storageGet(key, fallback) {
-  try {
-    return localStorage.getItem(key) || fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function storageSet(key, value) {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    /* a private window: only for this session */
-  }
-}
 
 /** A number, also of the text a select keeps ("0.65"); NaN for anything else. */
 function num(x) {
@@ -64,7 +48,7 @@ const visible = (row, s, platform) => !row.when || row.when(s, platform);
 export function SettingsPage() {
   const s = useStore();
   const [tab, setTab] = useState(() => {
-    const id = storageGet('settings-tab', 'graphics');
+    const id = remembered('settings-tab', 'graphics');
     return SETTINGS_TABS.some((x) => x.id === id) ? id : 'graphics';
   });
   const [ask, dialog] = useConfirm();
@@ -73,7 +57,7 @@ export function SettingsPage() {
   const current = SETTINGS_TABS.find((x) => x.id === tab);
   const pick = (id) => {
     setTab(id);
-    storageSet('settings-tab', id);
+    remember('settings-tab', id);
   };
   return html`
     <${PageHead} title="Settings" text="Every change is saved at once; the game reads them when it starts." />
@@ -191,6 +175,8 @@ const CUSTOM = {
   preset: () => html`<${PresetRow} />`,
   profiles: () => html`<${ProfilesBlock} />`,
   theme: () => html`<${ThemeRow} />`,
+  launcher_layout: () => !onPhone && html`<${LauncherLayoutRow} />`,
+  launcher_size: () => inTauri && html`<${LauncherSizeRow} />`,
   corner: () => html`<${CornerRow} />`,
   version: () => html`<${VersionRow} />`,
   reset: ({ ask }) => html`<${ResetRow} ask=${ask} />`,
@@ -298,17 +284,41 @@ function ProfilesBlock() {
 
 /** The launcher's own look; the game does not read it, so it stays in this window. */
 function ThemeRow() {
-  const [theme, setTheme] = useState(() => storageGet('theme', 'dark'));
+  const [theme, setTheme] = useState(() => remembered('theme', 'dark'));
   return html`<div class="setting-row">
     <${Name} label="Launcher theme" />
     <${Select} value=${theme} options=${[['dark', 'Dark'], ['light', 'Light theme'], ['system', 'System']]} onChange=${(v) => {
       setTheme(v);
-      storageSet('theme', v);
+      remember('theme', v);
       try {
         applyTheme();
       } catch {
         /* storage blocked: the look stays as it is */
       }
+    }} />
+  </div>`;
+}
+
+function LauncherLayoutRow() {
+  const [layout, setLayout] = useState(launcherLayout);
+  return html`<div class="setting-row">
+    <${Name} label="Launcher layout" />
+    <${Select} value=${layout} options=${LAUNCHER_LAYOUTS} onChange=${(v) => {
+      setLayout(v);
+      remember('launcher_layout', v);
+      applyTheme();
+    }} />
+  </div>`;
+}
+
+function LauncherSizeRow() {
+  const [size, setSize] = useState(launcherSize);
+  return html`<div class="setting-row">
+    <${Name} label="Launcher size" help="Grows with the window; this sets how big it is" />
+    <${Select} value=${size} options=${LAUNCHER_SIZES} onChange=${(v) => {
+      setSize(v);
+      remember('launcher_size', v);
+      fitWindow();
     }} />
   </div>`;
 }

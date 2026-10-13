@@ -365,6 +365,8 @@ const general = {
       title: 'Interface & online',
       rows: [
         { type: 'custom', id: 'theme' },
+        { type: 'custom', id: 'launcher_layout' },
+        { type: 'custom', id: 'launcher_size' },
         { type: 'select', key: 'language', label: 'Language', raw: true, options: (s, boot) => (boot?.languages || []).map((l) => [l.code, l.name]) },
         // (texts nobody has translated: translated on this machine)
         { type: 'toggle', key: 'machine_translation', label: 'Translate the remaining texts automatically (offline, downloads 620 MB once)' },

@@ -7,8 +7,9 @@ import { t, hhmm, longDate, language } from '../i18n.js';
 import { call, contentUrl } from '../api.js';
 import { Icon } from '../icons.js';
 import { Button, Card, Field, Select, Input, Toggle, Segmented, Slider, Picture, Notice, Spinner, PageHead, Tag, Search } from '../ui.js';
-import { choose, curMap, curBus, curLine, curTour, pickedTrip, realTime, realDate, start, loadSituations, duty, weatherName, weatherOfItsOwn, mapName, askJoined, noServerBus } from '../data.js';
+import { choose, curMap, curBus, curLine, curTour, pickedTrip, realTime, realDate, start, loadSituations, duty, weatherName, weatherOfItsOwn, mapName, askJoined, noServerBus, launcherLayout } from '../data.js';
 import { MapPicker } from './map-picker.js';
+import { ClassicDrive } from './drive-classic.js';
 import { BusPicker } from './bus-picker.js';
 import { BusPreview } from '../preview.js';
 import { RouteMap } from '../routemap.js';
@@ -73,6 +74,11 @@ export function chooseTour(x, trip) {
 }
 
 export function DrivePage() {
+  useStore();
+  return launcherLayout() === 'classic' ? html`<${ClassicDrive} />` : html`<${CardsDrive} />`;
+}
+
+function CardsDrive() {
   const s = useStore();
   const [picker, setPicker] = useState(null);
   const c = s.choice;
@@ -329,7 +335,7 @@ function IbisBox() {
 }
 
 /** HH:MM typed in 24 hours (the timetables' clock, whatever the system's locale says). */
-function TimeInput({ minutes, onChange, disabled }) {
+export function TimeInput({ minutes, onChange, disabled }) {
   const [text, setText] = useState(hhmm(minutes));
   useEffect(() => setText(hhmm(minutes)), [minutes]);
   const commit = () => {
@@ -343,7 +349,7 @@ function TimeInput({ minutes, onChange, disabled }) {
 }
 
 /** A date typed as the timetables write it (YYYY-MM-DD), whatever the system's locale. */
-function DateInput({ value, onChange, disabled }) {
+export function DateInput({ value, onChange, disabled }) {
   const [text, setText] = useState(value);
   useEffect(() => setText(value), [value]);
   const commit = () => {

@@ -19,12 +19,15 @@ async function frame(args) {
   return { head, jpeg };
 }
 
+const VIEWS = [['outside', 'Outside view', 'bus'], ['passenger', 'Passenger view', 'users'], ['driver', "Driver's view", 'person']];
+
 export function BusPreview({ look, class: cls = '' }) {
   const host = useRef();
   const canvas = useRef();
   const [state, setState] = useState('loading');
   // what the loop sends next: the drag and zoom gathered since the last picture
-  const r = useRef({ alive: true, force: true, dx: 0, dy: 0, zoom: 1, dragging: false, wake: null });
+  const r = useRef({ alive: true, force: true, dx: 0, dy: 0, zoom: 1, view: null, dragging: false, easing: false, wake: null });
+  const [views, setViews] = useState('outside|');
 
   const wake = (force) => {
     const st = r.current;
@@ -44,7 +47,9 @@ export function BusPreview({ look, class: cls = '' }) {
         const k = Math.min(window.devicePixelRatio || 1, 2);
         const w = Math.round((el?.clientWidth || 640) * k);
         const h = Math.round((el?.clientHeight || 360) * k);
-        const args = { w, h, force: st.force, dx: st.dx, dy: st.dy, zoom: st.zoom, quality: 90 };
+        const soft = st.dragging || st.easing;
+        const args = { w, h, force: st.force, dx: st.dx, dy: st.dy, zoom: st.zoom, quality: soft ? 70 : 90, view: st.view };
+        st.view = null;
         st.dx = st.dy = 0;
         st.zoom = 1;
         st.force = false;
@@ -58,17 +63,20 @@ export function BusPreview({ look, class: cls = '' }) {
             c.getContext('2d').drawImage(bmp, 0, 0);
             bmp.close();
           }
-          setState(head.failed ? 'failed' : head.picture ? (head.busy ? 'switching' : 'ok') : 'loading');
-          more = head.busy || head.moving || !head.picture;
+          setViews(`${head.view || 'outside'}|${(head.views || []).join(',')}`);
+          setState(head.failed || head.ok === false ? 'failed' : head.picture ? (head.busy ? 'switching' : 'ok') : 'loading');
+          st.easing = !!head.moving;
+          more = head.ok !== false && !head.failed && (head.busy || head.moving || !head.picture);
+          if (!more && soft && !st.dragging) st.force = true;
         } catch {
           setState('failed');
         }
         if (!st.alive) break;
-        if (more || st.dx !== 0 || st.dy !== 0 || st.zoom !== 1) await new Promise((res) => requestAnimationFrame(res));
+        if (more || st.force || st.view || st.dx !== 0 || st.dy !== 0 || st.zoom !== 1) await new Promise((res) => requestAnimationFrame(res));
         else await new Promise((res) => (st.wake = res));
       }
     })();
-    const ro = new ResizeObserver(() => wake(true));
+    const ro = new ResizeObserver(() => host.current?.clientWidth && wake(true));
     ro.observe(host.current);
     const off = on('games-ended', () => wake(true));
     return () => {
@@ -87,6 +95,12 @@ export function BusPreview({ look, class: cls = '' }) {
   }, [key]);
 
   const last = useRef(null);
+  const [now, can] = views.split('|');
+  const available = can ? can.split(',') : [];
+  const pick = (view) => {
+    r.current.view = view;
+    wake(true);
+  };
   return html`<div class=${'viewer ' + cls} ref=${host}
       onPointerDown=${(e) => {
         last.current = { x: e.clientX, y: e.clientY };
@@ -104,7 +118,7 @@ export function BusPreview({ look, class: cls = '' }) {
       onPointerUp=${() => {
         last.current = null;
         r.current.dragging = false;
-        wake();
+        wake(true);
       }}
       onWheel=${(e) => {
         e.preventDefault();
@@ -116,5 +130,10 @@ export function BusPreview({ look, class: cls = '' }) {
     ${state === 'switching' && html`<div class="state corner"><${Spinner} /></div>`}
     ${state === 'failed' && html`<div class="state"><${Icon} name="bus" size=${28} /> ${t('No preview of this bus')}</div>`}
     ${state === 'ok' && html`<div class="hint">${t('Drag to turn, scroll to zoom')}</div>`}
+    ${state !== 'failed' && available.length > 1 && html`<div class="preview-views" onPointerDown=${(e) => e.stopPropagation()} onWheel=${(e) => e.stopPropagation()}>
+      ${VIEWS.map(([id, label, icon]) => html`<button type="button" class=${id === now ? 'on' : ''} aria-pressed=${id === now} disabled=${!available.includes(id)} title=${t(label)} onClick=${() => pick(id)}>
+        <${Icon} name=${icon} size=${16} /><span>${t(label)}</span>
+      </button>`)}
+    </div>`}
   </div>`;
 }

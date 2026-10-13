@@ -15,7 +15,7 @@ const favKey = (file) => file.replace(/\\/g, '/').toLowerCase();
 const words = (x) => (x || '').replace(/_/g, ' ').split(/\s+/).filter(Boolean);
 
 /** One vehicle folder's buses of a maker as one model, named by what their types share. */
-function families(list) {
+export function families(list) {
   const by = new Map();
   for (const v of list) {
     const key = `${(v.manufacturer || '').toLowerCase()}|${favKey(v.file).replace(/[^/]*$/, '')}`;

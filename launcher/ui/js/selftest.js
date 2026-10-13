@@ -3,7 +3,8 @@
 // every page draws without an error. The report goes back to the program, which prints it.
 
 import { call, contentUrl } from './api.js';
-import { S, set } from './store.js';
+import { S, set, remembered, remember } from './store.js';
+import { applyTheme } from './data.js';
 import { t } from './i18n.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -81,6 +82,20 @@ export async function selftest() {
     const dash = document.body.textContent.match(/.{0,20}[\u2010-\u2015\u2212\u2E3A\u2E3B\uFE58\uFF0D\u00B7].{0,20}/);
     if (dash) check(`no dashes on ${page}`, false, dash[0]);
   }
+  const layout = remembered('launcher_layout', 'cards');
+  for (const other of ['classic', 'cards']) {
+    const before = errors.length;
+    remember('launcher_layout', other);
+    applyTheme();
+    set({ page: 'profile' });
+    await sleep(100);
+    set({ page: 'drive' });
+    await sleep(500);
+    const shown = document.querySelector('.page h1')?.textContent;
+    check(`page drive (${other})`, !!shown && errors.length === before && !!document.querySelector(other === 'classic' ? '.classic-drive' : '.drive'), shown || errors.slice(before).join('; '));
+  }
+  remember('launcher_layout', layout);
+  applyTheme();
   try {
     const [c, st] = [await call('controllers_load'), await call('controllers_state')];
     check('game controllers', Array.isArray(c.devices) && Array.isArray(st.connected), `${c.devices.length} set up, ${st.connected.length} connected`);
