@@ -1,6 +1,6 @@
 # Changelog
 
-Every push to `main` is released as the beta `MAJOR.MINOR.COMMIT`, and tested betas are
+Betas `MAJOR.MINOR.COMMIT` are published by hand from `main`, and tested betas are
 promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the downloads are on the
 [Releases](https://github.com/openOMSI-org/openOMSI/releases) page.
 

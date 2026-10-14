@@ -20,8 +20,8 @@ Thanks for helping! A few rules keep the project healthy:
    linked in a comment, so anyone can try the change before it is merged.
 4. One maintainer other than the author approves it, and it is merged. Some parts need a
    second review: see [GOVERNANCE.md](GOVERNANCE.md).
-5. Once merged, it is in the next **beta** (a merge marked `[skip ci]` is not released), and
-   players get it with the next stable release.
+5. Once merged, it is in the next **beta** a maintainer publishes, and players get it with the
+   next stable release.
 
 ## Files and licences
 
@@ -69,8 +69,8 @@ See the layout in the [README](README.md#repository-layout) and
 
 ## Releases
 
-Every merge into `main` is published as a **beta** (a GitHub pre-release) for testers;
-players only get **stable** releases, which are betas the maintainers have tested and
-promoted, about once a week. A published release is never replaced: a fix is a new version.
-Maintainers bump `MAJOR.MINOR` in the `VERSION` file (in a pull request) and promote betas;
-everything else is automatic - see [docs/VERSIONING.md](docs/VERSIONING.md).
+Maintainers publish **betas** (GitHub pre-releases) of `main` for testers, by running the
+Release workflow by hand; players only get **stable** releases, which are betas the
+maintainers have tested and promoted, about once a week. A published release is never
+replaced: a fix is a new version. Maintainers bump `MAJOR.MINOR` in the `VERSION` file (in a
+pull request), publish betas and promote them - see [docs/VERSIONING.md](docs/VERSIONING.md).

@@ -1,8 +1,8 @@
 # Builds openOMSI for Windows and Linux (x64, ARM64), macOS (Apple silicon, Intel) and Android
-# (plus the dedicated server for Linux and Windows) on every push to
-# main and publishes them as the beta (pre-release) v<MAJOR.MINOR.COMMIT>; promote.yml makes a
-# tested beta the stable release. See docs/VERSIONING.md.
-# Pull requests run the same builds without publishing.
+# (plus the dedicated server for Linux and Windows) on every push to main and every pull
+# request, without publishing. A maintainer publishes a beta (pre-release)
+# v<MAJOR.MINOR.COMMIT> by running this workflow by hand on main; promote.yml makes a tested
+# beta the stable release. See docs/VERSIONING.md.
 name: Release
 
 on:
@@ -332,7 +332,7 @@ jobs:
 
   release:
     # (the platforms not built again are skipped, not failed)
-    if: ${{ !cancelled() && !failure() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+    if: ${{ !cancelled() && !failure() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
     needs: [version, windows, macos, linux, android]
     runs-on: ubuntu-latest
     permissions:

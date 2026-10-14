@@ -35,8 +35,8 @@ The original openOMSI codebase was created by usonskyyyy. The official organizat
 
 ## Releases
 
-Every merge into `main` is published as a beta (except a merge marked `[skip ci]`), and
-players get stable releases only (see
+A maintainer publishes a beta of `main` by hand (**Actions → Release → Run workflow**)
+whenever there is something worth testing, and players get stable releases only (see
 [docs/VERSIONING.md](docs/VERSIONING.md)). A maintainer promotes a beta, about once a week,
 when:
 
