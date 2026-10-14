@@ -11,7 +11,7 @@ bytemuck.workspace = true
 glam.workspace = true
 log.workspace = true
 ab_glyph.workspace = true
-resvg = { version = "0.45", default-features = false }
+resvg = { version = "0.48", default-features = false }
 hashbrown.workspace = true
 pollster.workspace = true
 # (the widget kit's key codes and cursor shapes)

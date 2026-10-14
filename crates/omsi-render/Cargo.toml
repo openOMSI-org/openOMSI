@@ -28,7 +28,7 @@ winit.workspace = true
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = ["Win32_Graphics_Dxgi", "Win32_Foundation"] }
 # (the same glow as wgpu's GL backend, to turn ANGLE's parallel shader compiles off)
-glow = "0.17"
+glow = "0.18"
 
 [dev-dependencies]
 naga = { workspace = true, features = ["spv-out", "glsl-out", "hlsl-out"] }

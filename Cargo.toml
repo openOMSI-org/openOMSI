@@ -63,7 +63,7 @@ smallvec = "1"
 parking_lot = "0.12"
 # (the world snapshot the simulation reads without a lock: `omsi-sim::world_data`)
 arc-swap = "1.7"
-rand = "0.9"
+rand = "0.10"
 wgpu = { version = "29", default-features = false, features = ["std", "parking_lot", "metal", "vulkan", "dx12", "gles", "wgsl", "noop"] }
 # wgpu's parts that are used directly: always wgpu's own version, or their types do not
 # match wgpu's (Dependabot's `wgpu` group updates the three together)
@@ -83,7 +83,7 @@ sha2 = "0.11"
 ring = "0.17"
 flate2 = "1"
 ab_glyph = "0.2"
-rfd = "0.15"
+rfd = "0.17"
 libc = "0.2"
 windows = "0.62"
 winresource = "0.1"
