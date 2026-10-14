@@ -82,7 +82,7 @@ optional = true
 package = "gio-sys"
 
 [dependencies.glib-macros]
-version = "0.18"
+version = "0.22"
 
 [dependencies.gobject_ffi]
 version = "0.18"
@@ -111,7 +111,7 @@ features = [
 ]
 
 [dependencies.thiserror]
-version = "1"
+version = "2"
 
 [dev-dependencies.criterion]
 version = "0.5.1"
