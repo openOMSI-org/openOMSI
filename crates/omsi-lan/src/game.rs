@@ -1807,6 +1807,33 @@ fn glide(cur: &mut Vec<f32>, want: &[f32], k: f32) {
     }
 }
 
+/// The pictures on our bus's displays to the others, and theirs shown on the copies drawn
+/// here (`omsi_net::display`): a copy's own scripts scroll on their own clock and draw with
+/// what fonts and pictures this game has - the sender's picture is what their display shows.
+fn sync_displays(lan: &mut LanSession, game: &mut LanGame, player: Option<&omsi_sim::VehicleInstance>, dt: f32) {
+    if omsi_cfg::flags::OMSI_NO_DISPLAY_SYNC.is_set() {
+        return;
+    }
+    if let Some(p) = player {
+        if lan.peers().next().is_some() {
+            let textures: Vec<(u32, u32, &[u8])> = p.host.script_textures.iter().map(|t| (t.width, t.height, t.rgba.as_slice())).collect();
+            lan.send_displays(&textures, dt);
+        }
+    }
+    for d in lan.take_displays() {
+        let Some(rv) = game.remotes.get_mut(&d.id) else { continue };
+        if rv.stand_in {
+            continue;
+        }
+        if let Some(t) = rv.vehicle.host.script_textures.get_mut(d.tex) {
+            if !t.fed {
+                log::info!("LAN: player {}'s display {} ({}x{}) is shown as they draw it from now on", d.id, d.tex, d.width, d.height);
+            }
+            t.feed(d.width, d.height, d.rgba);
+        }
+    }
+}
+
 /// One frame of another player's bus: the pose glides towards the latest state, the AI
 /// scripts run with that state as their inputs, the table's variables are pinned to the
 /// sender's values, and the horn is pressed and let go as theirs is.
@@ -2070,6 +2097,7 @@ pub fn tick_send(
     }
     let gone = lan.tick(dt, &mine);
     sync_vars(lan, game, player, dt);
+    sync_displays(lan, game, player, dt);
     Sent { updates, gone }
 }
 

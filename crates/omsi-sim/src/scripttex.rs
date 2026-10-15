@@ -21,6 +21,9 @@ pub struct ScriptTexture {
     pub mipmaps: bool,
     /// Current draw colour as set by `STSetColor` (r, g, b, a).
     pub color: [u8; 4],
+    /// The picture comes from another player's game (`feed`): what the scripts draw here
+    /// is not shown - the copy's own scrolling fought the sender's picture.
+    pub fed: bool,
     /// The size the `[scripttexture]` entry declares, which `STNewTex` comes back to
     /// (`STLoadTex` makes the texture the size of its file).
     declared: (u32, u32),
@@ -38,8 +41,30 @@ impl ScriptTexture {
             pending: None,
             mipmaps: false,
             color: [255, 255, 255, 255],
+            fed: false,
             declared: (w, h),
         }
+    }
+
+    /// Show the picture another player's scripts drew on their bus (`width` x `height`,
+    /// RGBA), from now on instead of what the scripts here draw. Nothing changes for a
+    /// picture equal to the one shown.
+    pub fn feed(&mut self, width: u32, height: u32, rgba: Vec<u8>) {
+        if width == 0 || height == 0 || rgba.len() < (width * height * 4) as usize {
+            return;
+        }
+        let same = self.fed && (width, height) == (self.width, self.height) && rgba == self.rgba;
+        self.fed = true;
+        self.locked = false;
+        self.dirty = false;
+        if same {
+            return;
+        }
+        self.width = width;
+        self.height = height;
+        self.rgba = rgba;
+        self.rgba.truncate((width * height * 4) as usize);
+        self.pending = Some(self.rgba.clone());
     }
 
     /// `STNewTex`: a new, empty texture of the declared size (TComplMapObjInst.v06 case 0
@@ -103,6 +128,10 @@ impl ScriptTexture {
 
     pub fn unlock(&mut self) {
         self.locked = false;
+        if self.fed {
+            self.dirty = false;
+            return;
+        }
         if self.dirty {
             // (into the buffer of an image released before and not yet taken, when there
             // is one: a script that unlocks several times a frame made a new copy each time)
@@ -117,6 +146,10 @@ impl ScriptTexture {
     /// Take the latest released image. A locked buffer may already contain edits
     /// for the next unlock; those must not replace the image just released.
     pub fn take_upload(&mut self) -> Option<Vec<u8>> {
+        if self.fed {
+            self.dirty = false;
+            return self.pending.take();
+        }
         if !self.locked && self.dirty {
             self.dirty = false;
             self.pending = None;
@@ -259,6 +292,25 @@ mod tests {
         assert_eq!(t.take_upload(), Some(vec![9; 8]));
     }
     use super::ScriptTexture;
+
+    /// A picture fed from another player's game goes up, and what the scripts draw here
+    /// afterwards does not; the same picture fed again goes up no more.
+    #[test]
+    fn a_fed_picture_shows_instead_of_the_scripts_own_drawing() {
+        let mut t = ScriptTexture::new(2, 1);
+        let _ = t.take_upload();
+        t.feed(2, 1, vec![7; 8]);
+        assert_eq!(t.take_upload(), Some(vec![7; 8]));
+        t.feed(2, 1, vec![7; 8]);
+        assert_eq!(t.take_upload(), None, "the same picture again");
+        t.color = [255; 4];
+        t.rect(0, 0, 1, 0);
+        t.unlock();
+        assert_eq!(t.take_upload(), None, "the script's drawing stays at home");
+        t.feed(2, 1, vec![8; 8]);
+        assert_eq!(t.take_upload(), Some(vec![8; 8]));
+        assert_eq!(t.get(1, 0), [8; 4]);
+    }
 
     /// A plugin's picture (`AccessScriptTexture`) goes up at the texture's size only, and
     /// while a script holds the texture locked it waits as the released image.

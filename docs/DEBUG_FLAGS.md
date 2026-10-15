@@ -259,6 +259,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_NO_CLOUDS` | bool | off | use | app | No clouds. |
 | `OMSI_NO_CORONAS` | bool | off | frame | render | No light coronas. |
 | `OMSI_NO_CULL` | bool | off | once | render | Draw every mesh from both sides (A/B). |
+| `OMSI_NO_DISPLAY_SYNC` | bool | off | use | lan | LAN: the others' display pictures are not taken, nor ours sent. |
 | `OMSI_NO_ENHANCED` | bool | off | frame | render | Enhanced settings drawn with the plain path. |
 | `OMSI_NO_ENVMAP` | bool | off | use | scene | No environment maps. |
 | `OMSI_NO_FXAA` | bool | off | frame | render | No FXAA. |

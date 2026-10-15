@@ -86,6 +86,7 @@ pub mod bridge;
 pub mod wire;
 pub mod world;
 pub mod vars;
+pub mod display;
 pub mod ws;
 pub mod tunnel;
 pub mod official;
@@ -157,6 +158,8 @@ const MAX_FIELD: usize = 64;
 /// A host takes at most this many states and this many other messages a second from one
 /// player (with bursts of as many); chat lines one a second (bursts of three).
 const STATE_RATE: (f32, f32) = (40.0, 40.0);
+/// Display pictures (`display.rs`): a few a second, in chunks.
+const DISPLAY_RATE: (f32, f32) = (30.0, 60.0);
 const MESSAGE_RATE: (f32, f32) = (10.0, 20.0);
 const CHAT_RATE: (f32, f32) = (1.0, 3.0);
 // ---------------------------------------------------------------------------------------
@@ -1278,6 +1281,7 @@ pub struct Peer {
     states: Bucket,
     messages: Bucket,
     chat: Bucket,
+    displays: Bucket,
     /// Datagrams of this player the host threw away (too many at once).
     pub dropped: u32,
     /// The nonce of the player's hellos (host side).
@@ -1304,6 +1308,7 @@ impl Peer {
             states: Bucket::new(STATE_RATE.1),
             messages: Bucket::new(MESSAGE_RATE.1),
             chat: Bucket::new(CHAT_RATE.1),
+            displays: Bucket::new(DISPLAY_RATE.1),
             dropped: 0,
             history: std::collections::VecDeque::new(),
             nonce: None,
@@ -1425,6 +1430,10 @@ pub struct LanSession {
     /// Every script variable of our vehicle going out (`vars.rs`), and the others' coming in.
     var_sender: vars::VarSender,
     vars_in: Vec<vars::VarsIn>,
+    /// The pictures of our vehicle's displays going out (`display.rs`), the others' coming in.
+    display_sender: display::DisplaySender,
+    displays: display::DisplayAssembler,
+    displays_in: Vec<display::DisplayIn>,
     descs: Vec<world::Desc>,
     wants: Vec<(u32, Vec<world::EntityRef>)>,
     claims: Vec<(u32, Vec<u32>)>,
@@ -1534,6 +1543,9 @@ impl LanSession {
             world_in: Vec::new(),
             var_sender: vars::VarSender::default(),
             vars_in: Vec::new(),
+            display_sender: display::DisplaySender::default(),
+            displays: display::DisplayAssembler::default(),
+            displays_in: Vec::new(),
             descs: Vec::new(),
             wants: Vec::new(),
             claims: Vec::new(),
@@ -2606,6 +2618,10 @@ impl LanSession {
                 self.on_vars(&data, from);
                 continue;
             }
+            if data[0] == display::DISP_MAGIC {
+                self.on_display(&data, from);
+                continue;
+            }
             let Ok(text) = std::str::from_utf8(&data) else {
                 continue;
             };
@@ -2837,6 +2853,55 @@ impl LanSession {
     /// The others' vehicle variables that came since the last call, oldest first.
     pub fn take_vars(&mut self) -> Vec<vars::VarsIn> {
         std::mem::take(&mut self.vars_in)
+    }
+
+    /// The pictures on our vehicle's displays (see `display.rs`): `textures[k]` the width,
+    /// height and RGBA pixels of its k-th `[scripttexture]`.
+    pub fn send_displays(&mut self, textures: &[(u32, u32, &[u8])], dt: f32) {
+        let msgs = self.display_sender.tick(PROTOCOL as u8, self.my_id, textures, dt);
+        for m in msgs {
+            match self.role {
+                Role::Host => self.broadcast(&m, None),
+                Role::Client => {
+                    if let Some(h) = self.host {
+                        self.send(&m, h);
+                    }
+                }
+            }
+        }
+    }
+
+    /// The others' display pictures that came whole since the last call, oldest first.
+    pub fn take_displays(&mut self) -> Vec<display::DisplayIn> {
+        std::mem::take(&mut self.displays_in)
+    }
+
+    fn on_display(&mut self, data: &[u8], from: SocketAddr) {
+        let Some(id) = display::sender_of(data, PROTOCOL as u8) else { return };
+        if id == self.my_id || id == 0 {
+            return;
+        }
+        match self.role {
+            // (only a player we welcomed, from its address, within its rate)
+            Role::Host => {
+                let Some(peer) = self.peers.get_mut(&id) else { return };
+                if peer.addr != Some(from) || !peer.displays.take(DISPLAY_RATE) {
+                    return;
+                }
+                self.broadcast(data, Some(id));
+            }
+            Role::Client => {
+                if !self.peers.contains_key(&id) {
+                    return;
+                }
+            }
+        }
+        if let Some(d) = self.displays.take(data, PROTOCOL as u8) {
+            // (a game that stopped reading does not pile them up without end)
+            if self.displays_in.len() < 64 {
+                self.displays_in.push(d);
+            }
+        }
     }
 
     fn on_vars(&mut self, data: &[u8], from: SocketAddr) {

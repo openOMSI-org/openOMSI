@@ -342,6 +342,7 @@ flags! {
     OMSI_NO_CLOUDS: Bool, Switch, Use, "off", "No clouds.";
     OMSI_NO_CORONAS: Bool, Switch, Frame, "off", "No light coronas.";
     OMSI_NO_CULL: Bool, Switch, Once, "off", "Draw every mesh from both sides (A/B).";
+    OMSI_NO_DISPLAY_SYNC: Bool, Switch, Use, "off", "LAN: the others' display pictures are not taken, nor ours sent.";
     OMSI_NO_ENHANCED: Bool, Switch, Frame, "off", "Enhanced settings drawn with the plain path.";
     OMSI_NO_ENVMAP: Bool, Switch, Use, "off", "No environment maps.";
     OMSI_NO_FXAA: Bool, Switch, Frame, "off", "No FXAA.";
