@@ -35,6 +35,7 @@ pub mod lights;
 pub mod money;
 pub mod puddles;
 pub mod rain;
+pub mod road_snow;
 pub mod route_arrows;
 pub mod threads;
 pub mod wheel_surface;

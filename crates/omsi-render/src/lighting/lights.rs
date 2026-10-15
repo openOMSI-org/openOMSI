@@ -152,6 +152,22 @@ pub(crate) fn smoke_sprite(p: &SmokeParticle, ro: DVec3) -> Option<GpuCorona> {
 pub const LM_ATLAS_TILES: u32 = 5;
 pub const LM_TILE_PX: u32 = 256;
 
+/// The snow track field (road_snow.wgsl): texels a side, and the metres it spans before it
+/// wraps around (12.5 cm a texel), in tiles of `SNOW_TRACK_TILE` texels a side. It is a
+/// storage buffer, tile after tile, each row after row, a texel an RGBA8 word: the scene's
+/// fragment stage reads sixteen textures already, the most a device gives by default.
+pub const SNOW_TRACK_TEXELS: u32 = 2048;
+pub const SNOW_TRACK_TILE: u32 = 256;
+pub const SNOW_TRACK_SIDE: f64 = 256.0;
+
+/// The snow track field is left out of the camera group (and road_snow_off.wgsl drawn in
+/// its place): on OpenGL, where the scene's arrays may have no storage buffers to read and
+/// its sixteen texture units are full (see `sixteen_texture_units`), or with
+/// `OMSI_GL_TEXTURE_UNITS` that tries that layout.
+pub(crate) fn snow_track_left_out(gl: bool) -> bool {
+    gl || omsi_cfg::flags::OMSI_GL_TEXTURE_UNITS.is_set()
+}
+
 /// A light corona sprite (`[light_enh]`, `[light_enh_2]`).
 #[derive(Debug, Clone, Copy)]
 pub struct Corona {
@@ -584,6 +600,20 @@ impl Renderer {
         );
     }
 
+    /// Write whole rows of a tile of the snow track field (road_snow.wgsl): tile `tile`
+    /// (column + row * tiles a side), its rows from `row` on, `rgba` holding them (each
+    /// `SNOW_TRACK_TILE` texels of 4 bytes; rows along world y, see the shader).
+    pub fn set_snow_track_rows(&self, tile: u32, row: u32, rgba: &[u8]) {
+        let per_side = SNOW_TRACK_TEXELS / SNOW_TRACK_TILE;
+        let row_bytes = (SNOW_TRACK_TILE * 4) as usize;
+        let rows = (rgba.len() / row_bytes) as u32;
+        if tile >= per_side * per_side || rows == 0 || row + rows > SNOW_TRACK_TILE {
+            return;
+        }
+        let offset = ((tile * SNOW_TRACK_TILE + row) * SNOW_TRACK_TILE * 4) as u64;
+        self.queue.write_buffer(&self.lights.snow_track, offset, &rgba[..rows as usize * row_bytes]);
+    }
+
     /// Where the light map atlas lies: its south-west corner (world x, y) and its side (m).
     pub fn set_light_map_place(&self, x: f64, y: f64, side: f64) {
         self.lights.lm_place.set((x, y, side));
@@ -746,4 +776,7 @@ pub(crate) struct LightRes {
     pub(crate) lm_atlas_view: wgpu::TextureView,
     pub(crate) lm_uniform: wgpu::Buffer,
     pub(crate) lm_place: std::cell::Cell<(f64, f64, f64)>,
+    /// The snow track field around the camera (road_snow.wgsl) and its place and state.
+    pub(crate) snow_track: wgpu::Buffer,
+    pub(crate) snow_track_uniform: wgpu::Buffer,
 }

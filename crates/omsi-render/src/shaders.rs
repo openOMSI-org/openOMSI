@@ -43,7 +43,8 @@ mod tests {
         text.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3))
     }
 
-    /// The assembled modules are byte for byte the single files they were cut from (sizes
+    /// The assembled modules are byte for byte the single files they were cut from (as changed
+    /// since: the roads' and roofs' built-up snow, road_snow.wgsl) (sizes
     /// and hashes taken of `shader.wgsl` and `enhanced.wgsl` before the cut, updated for
     /// 0.2.30's capped surface pull and the Vanilla/transparency fixes in both modules, and
     /// 0.2.42's night sphere map and lacquer, and people lit as bodies, not leaves, and the far map's shadow where no traced one is found, and 0.2.51's clear coat that stays sharp on lacquer).
@@ -52,7 +53,7 @@ mod tests {
     #[test]
     fn assembled_shaders_are_the_old_files() {
         let (scene, enhanced) = (super::SCENE.replace("\r\n", "\n"), super::ENHANCED.replace("\r\n", "\n"));
-        assert_eq!((scene.len(), fnv1a(&scene)), (120_956, 0x321f_4579_3b08_5bfd));
-        assert_eq!((enhanced.len(), fnv1a(&enhanced)), (86_528, 0xb2a5_d02a_77aa_488f));
+        assert_eq!((scene.len(), fnv1a(&scene)), (122_487, 0x883f_c8c0_ac52_183c));
+        assert_eq!((enhanced.len(), fnv1a(&enhanced)), (87_699, 0x01e2_c325_03f8_f6c5));
     }
 }

@@ -724,7 +724,7 @@ impl SessionSettings {
         SessionSettings {
             enhanced_plus: plus,
             enhanced,
-            classic: settings.classic() && !enhanced,
+            classic: omsi_scene::road_snow::picture_classic(settings.classic() && !enhanced),
             clouds: SessionSettings::clouds_of(settings),
             sound_scenery: settings.vol_scenery,
             mirror_size: settings.mirror_size,

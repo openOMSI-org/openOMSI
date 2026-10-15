@@ -124,6 +124,7 @@ impl Renderer {
             casts_shadow: true,
             shadow_owner: None,
             roof: None,
+            roof_snow: 0.0,
         });
         if scene.bounds_known.get(mesh).copied().unwrap_or(false) {
             scene.bounds_users.push(scene.instances.len() - 1);
@@ -182,6 +183,7 @@ impl Renderer {
             casts_shadow: false,
             shadow_owner: None,
             roof: None,
+            roof_snow: 0.0,
         });
         if scene.bounds_known.get(mesh).copied().unwrap_or(false) {
             scene.bounds_users.push(scene.instances.len() - 1);
@@ -288,6 +290,17 @@ impl Renderer {
     }
 
     /// The vehicle roof height of an instance (see [`Instance::roof`]).
+    /// How much snow lies on the roof of an instance's vehicle (see [`Instance::roof_snow`]).
+    pub fn set_roof_snow(&self, scene: &mut Scene, instance: usize, snow: f32) {
+        if let Some(i) = scene.instances.get_mut(instance) {
+            // (a fortieth: the steps the shader tells apart)
+            if (i.roof_snow - snow).abs() >= 0.0125 {
+                i.roof_snow = snow;
+                Self::mark_changed(scene, instance);
+            }
+        }
+    }
+
     pub fn set_roof(&self, scene: &mut Scene, instance: usize, roof: Option<f32>) {
         if let Some(i) = scene.instances.get_mut(instance) {
             if i.roof != roof {

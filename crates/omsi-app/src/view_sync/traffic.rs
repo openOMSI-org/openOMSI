@@ -56,6 +56,7 @@ pub(crate) struct TrafficView {
 }
 
 impl TrafficView {
+    pub(crate) fn car(&self, id: u64) -> Option<&CarRender> { self.cars.get(&id) } // car `id`'s renders
     /// The renders of the car `id` that has just been put on the road.
     pub(crate) fn insert(&mut self, id: u64, render: CarRender) {
         if let Some(old) = self.cars.insert(id, render) {

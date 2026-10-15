@@ -456,6 +456,7 @@ pub(crate) fn picture_lighting(
     lighting.led_mips = settings.led_mips;
     // the enhanced clouds marched in fewer steps (`Settings::cloud_quality`)
     lighting.low_clouds = settings.cloud_quality == "low";
+    omsi_scene::road_snow::light(&mut lighting);
     lighting
 }
 

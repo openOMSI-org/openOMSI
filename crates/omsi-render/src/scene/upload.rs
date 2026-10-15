@@ -59,7 +59,9 @@ impl Renderer {
     pub(crate) fn roof_code(i: &Instance, ro: DVec3) -> Option<f32> {
         let roof = i.roof.filter(|_| !i.blob && !i.surface)?;
         let z = (i.origin - ro).z as f32 + i.transform.transform_point3(Vec3::new(0.0, 0.0, roof)).z;
-        Some(-(5000.0 + z.clamp(-4000.0, 4000.0)))
+        // (the snow on the roof, 0..40, in the code's ten thousands: road_snow.wgsl)
+        let snow = (i.roof_snow.clamp(0.0, 1.0) * 40.0).round();
+        Some(-(5000.0 + z.clamp(-4000.0, 4000.0) + 10000.0 * snow))
     }
 
     pub fn prepare(&self, scene: &mut Scene) {
@@ -349,7 +351,18 @@ impl Renderer {
                     binding: 19,
                     resource: self.lights.lm_uniform.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 20,
+                    resource: self.lights.snow_track.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 21,
+                    resource: self.lights.snow_track_uniform.as_entire_binding(),
+                },
         ];
+        if sixteen_texture_units() || snow_track_left_out(gl_backend()) {
+            entries.retain(|e| e.binding != 20);
+        }
         // (the point lights where the device has storage buffers for them)
         if array_path() != ArrayPath::NoStorage {
             entries.push(wgpu::BindGroupEntry { binding: 3, resource: light_buf.binding() });

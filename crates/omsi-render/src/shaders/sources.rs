@@ -121,6 +121,7 @@ pub(crate) fn scene_shader_text(gl: bool) -> String {
     let src = [
         include_str!("../colour.wgsl"),
         shaders::SCENE,
+        if snow_track_left_out(gl) { include_str!("../road_snow_off.wgsl") } else { include_str!("../road_snow.wgsl") },
         include_str!("../enhanced_common.wgsl"),
         include_str!("../puddle_common.wgsl"),
         include_str!("../lamp_air.wgsl"),
