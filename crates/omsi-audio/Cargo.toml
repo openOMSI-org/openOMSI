@@ -17,7 +17,7 @@ anyhow.workspace = true
 # internet radio (MP3 / AAC / Ogg streams over HTTP(S)) and every sound file besides WAV:
 # Ogg Vorbis, FLAC, MP3 / MP2 / MP1, AAC and ALAC in MP4 / M4A, AIFF, CAF, Matroska audio,
 # and the WAV codings our own reader leaves (ADPCM and the like)
-symphonia = { version = "0.5", default-features = false, features = ["mp1", "mp2", "mp3", "aac", "alac", "adpcm", "pcm", "ogg", "vorbis", "flac", "wav", "aiff", "caf", "isomp4", "mkv"] }
+symphonia = { version = "0.6", default-features = false, features = ["mp1", "mp2", "mp3", "aac", "alac", "adpcm", "pcm", "ogg", "vorbis", "flac", "wav", "aiff", "caf", "isomp4", "mkv"] }
 ureq.workspace = true
 
 [dev-dependencies]
