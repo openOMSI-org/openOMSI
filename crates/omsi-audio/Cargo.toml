@@ -8,7 +8,7 @@ description = "Audio: cpal mixer with pitch/gain/3D voices, WAV loading, and the
 [dependencies]
 omsi-vehicle = { path = "../omsi-vehicle" }
 omsi-cfg = { path = "../omsi-cfg" }
-cpal = "0.15"
+cpal = "0.18"
 parking_lot.workspace = true
 hashbrown.workspace = true
 glam.workspace = true
