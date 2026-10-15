@@ -144,7 +144,6 @@ impl PlayerDuty {
             at_stop: false,
             arrived_late: None,
             done: false,
-            served_terminus: None,
             left_late: None,
             held_back: false,
             placed: false,
@@ -168,6 +167,23 @@ impl PlayerDuty {
 
     pub fn trip_done(&self) -> bool {
         self.done
+    }
+
+    /// The completed trip has a successor the driver can prepare before its departure.
+    pub fn can_begin_next_trip(&self) -> bool {
+        self.done && self.trip_index + 1 < self.trips.len()
+    }
+
+    /// Begin exactly one trip on the driver's request, keeping its scheduled times.
+    /// The next update feeds the new timetable and signals the IBIS as usual.
+    pub fn begin_next_trip(&mut self) -> bool {
+        if !self.can_begin_next_trip() {
+            return false;
+        }
+        self.set_trip(self.trip_index + 1);
+        // Keep the chosen first stop even if a restored duty has not been placed yet.
+        self.placed = true;
+        true
     }
 
     /// True while the bus stands at the next stop.
@@ -444,7 +460,6 @@ impl PlayerDuty {
     /// `place` has it): `catch_up` may then look as far as the last stop and `delay`
     /// counts from there. Saved at the last stop, the trip is over.
     pub fn restore_progress(&mut self, stop: usize, pos: glam::DVec3) {
-        self.served_terminus = None;
         let last = self.trip().stops.len().saturating_sub(1);
         self.next_stop = stop.min(last);
         self.left_late = (self.next_stop > 0).then_some(0.0);
@@ -486,7 +501,6 @@ impl PlayerDuty {
         self.next_stop = stop;
         self.at_stop = false;
         self.passed = PassedStop::default();
-        self.served_terminus = None;
         self.arrived_late = None;
         if back {
             // the trip ended reopened: an ending not yet taken is no ending, one taken is
@@ -532,7 +546,6 @@ impl PlayerDuty {
         self.next_stop = 0;
         self.at_stop = false;
         self.done = false;
-        self.served_terminus = None;
         self.left_late = None;
         self.held_back = false;
         self.trip_changed = true;
@@ -604,23 +617,8 @@ impl PlayerDuty {
         } else if !self.at_stop && standing && Self::doors_open(bus) {
             self.step_back(bus.position, day_time);
         }
-        if self.done
-            && self.at_stop
-            && bus.physics.velocity_kmh().abs() < 0.36
-            && Self::doors_open(bus)
-        {
-            self.served_terminus = self.trip().stops.last().and_then(|stop| stop.position);
-        }
-        // On to the next trip as soon as the bus has served the terminus (stopped there with
-        // a door open), as OMSI 2 does: the next trip's stops and departure, and the people
-        // at the terminus board for it. The duty stayed on the trip over until a minute before
-        // the next one left (or the bus drove off): nobody boarded the bus re-signed for its
-        // next trip while it waited at the terminus (#2148, #2060).
-        if self.trip_index + 1 < self.trips.len() && self.served_terminus.is_some() {
-            self.set_trip(self.trip_index + 1);
-            log::info!("duty: terminus served, on to trip {} {} to {}", self.trip_index + 1, self.trip().name, self.trip().terminus);
-            self.advance(bus.position, day_time);
-        }
+        // Early preparation is the driver's choice in the pause menu; opening the doors
+        // at the terminus must leave time to unload before the next trip is selected.
         self.feed_host(bus, day_time);
         served
     }
@@ -771,8 +769,8 @@ impl PlayerDuty {
             self.place(pos, day_time);
         }
         // on to the next trip a minute before it leaves, once this one is over, was never
-        // begun, or was given up half an hour ago (one whose terminus the bus served goes on
-        // at once, `update`)
+        // begun, or was given up half an hour ago. The driver can prepare it earlier with
+        // `begin_next_trip` once this trip is over.
         while self.trip_index + 1 < self.trips.len()
             && self.trips[self.trip_index + 1].departure - 60.0 <= day_time
         {

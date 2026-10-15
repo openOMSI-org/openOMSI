@@ -17,7 +17,6 @@ fn early_departure_duty() -> PlayerDuty {
         at_stop: false,
         arrived_late: None,
         done: false,
-        served_terminus: None,
         left_late: Some(0.0),
         held_back: false,
         placed: true,
@@ -88,7 +87,6 @@ fn ibox_busstop_is_prepositioned_when_the_timetable_jumps() {
         at_stop: false,
         arrived_late: None,
         done: false,
-        served_terminus: None,
         left_late: None,
         held_back: false,
         placed: true,
@@ -131,7 +129,6 @@ fn duty_place_keeps_first_stop_while_its_place_is_unknown() {
         at_stop: false,
         arrived_late: None,
         done: false,
-        served_terminus: None,
         left_late: None,
         held_back: false,
         placed: true,
@@ -157,10 +154,9 @@ fn duty_place_keeps_first_stop_while_its_place_is_unknown() {
     assert_eq!(bus.host.tt_stops[0].0, "s0");
 }
 
-/// The terminus served (the bus stopped there, a door open): the duty goes on to the next
-/// trip at once, as OMSI 2 does - not a minute before it leaves (#2148, #2060).
+/// Unloading does not select the next trip: the driver explicitly prepares it early.
 #[test]
-fn serving_the_terminus_starts_the_next_trip() {
+fn the_driver_can_begin_the_next_trip_early() {
     for door in ["door_0", "PAX_Exit0_Open"] {
         let mut duty = early_departure_duty();
         let mut bus = timetable_test_vehicle_with_door(door);
@@ -170,6 +166,18 @@ fn serving_the_terminus_starts_the_next_trip() {
         duty.update(&mut bus, 145.0);
         assert_eq!(duty.trip_index, 0, "rolling in with a door open serves nothing");
         bus.set_speed(0.0);
+        duty.update(&mut bus, 150.0);
+        assert_eq!(duty.trip_index, 0, "opening the doors does not choose the next trip");
+        assert!(duty.can_begin_next_trip());
+        let run = duty.trip_run();
+        assert!(duty.begin_next_trip());
+        assert!(!duty.begin_next_trip(), "a repeated click must not skip another trip");
+        assert_ne!(duty.trip_run(), run);
+        let finished = duty.take_finished().expect("the completed trip is still reported");
+        assert_eq!(finished.index, 0);
+        assert_eq!(finished.run, run);
+        assert_eq!(finished.how, TripEnd::Arrived);
+        assert!(duty.take_finished().is_none());
         duty.update(&mut bus, 150.0);
         assert_eq!((duty.trip_index, duty.next_stop), (1, 0));
         assert!(duty.take_trip_change());
@@ -188,36 +196,29 @@ fn serving_the_terminus_starts_the_next_trip() {
 }
 
 #[test]
-fn early_trip_progress_requires_stopping_with_a_door_open_at_the_last_stop() {
-    for (speed, open) in [(5.0, 1.0), (0.0, 0.0)] {
-        let mut duty = early_departure_duty();
-        let mut bus = timetable_test_vehicle();
-        // Doors opened at another stop do not serve the terminus.
-        bus.set_var("door_0", 1.0);
-        duty.update(&mut bus, 140.0);
-        bus.position.x = 500.0;
-        bus.set_speed(speed);
-        bus.set_var("door_0", open);
-        duty.update(&mut bus, 150.0);
-        bus.position.x = 560.0;
-        bus.set_speed(5.0);
-        bus.set_var("door_0", 0.0);
-        duty.update(&mut bus, 160.0);
-        assert_eq!(duty.trip_index, 0);
-    }
+fn beginning_the_next_trip_requires_a_completed_trip() {
+    let mut duty = early_departure_duty();
+    let run = duty.trip_run();
+    assert!(!duty.can_begin_next_trip());
+    assert!(!duty.begin_next_trip());
+    assert_eq!((duty.trip_index, duty.next_stop), (0, 1));
+    assert_eq!(duty.trip_run(), run);
+    assert!(!duty.take_trip_change());
 }
 
 #[test]
-fn waiting_at_the_terminus_with_the_doors_shut_uses_the_scheduled_changeover() {
-    let mut duty = early_departure_duty();
-    let mut bus = timetable_test_vehicle();
-    bus.position.x = 500.0;
-    duty.update(&mut bus, 150.0);
-    duty.update(&mut bus, 539.0);
-    assert_eq!(duty.trip_index, 0);
-    duty.update(&mut bus, 540.0);
-    assert_eq!((duty.trip_index, duty.next_stop), (1, 0));
-    assert!(duty.served_terminus.is_none());
+fn waiting_at_the_terminus_uses_the_scheduled_changeover() {
+    for open in [0.0, 1.0] {
+        let mut duty = early_departure_duty();
+        let mut bus = timetable_test_vehicle();
+        bus.position.x = 500.0;
+        bus.set_var("door_0", open);
+        duty.update(&mut bus, 150.0);
+        duty.update(&mut bus, 539.0);
+        assert_eq!(duty.trip_index, 0);
+        duty.update(&mut bus, 540.0);
+        assert_eq!((duty.trip_index, duty.next_stop), (1, 0));
+    }
 }
 
 #[test]
@@ -233,6 +234,23 @@ fn early_departure_does_not_run_past_the_end_of_the_duty() {
     duty.update(&mut bus, 160.0);
     assert_eq!(duty.trip_index, 0);
     assert!(duty.done);
+    assert!(!duty.can_begin_next_trip());
+    assert!(!duty.begin_next_trip());
+}
+
+#[test]
+fn beginning_a_restored_trip_early_keeps_the_schedule_and_bus_position() {
+    let mut duty = early_departure_duty();
+    let mut bus = timetable_test_vehicle();
+    bus.position.x = 500.0;
+    duty.restore_progress(1, bus.position);
+    let position = bus.position;
+    assert!(duty.begin_next_trip(), "a resumed terminus needs no new door event");
+    duty.update(&mut bus, 150.0);
+    assert_eq!(bus.position, position);
+    assert_eq!(duty.trip().departure, 600.0);
+    assert_eq!(bus.host.tt_stops[0].1, 600.0);
+    assert_eq!(duty.delay(150.0), -450.0);
 }
 
 #[test]
@@ -259,7 +277,6 @@ fn resumed_duty_keeps_its_trip_and_stop_before_the_first_script_frame() {
         at_stop: false,
         arrived_late: None,
         done: false,
-        served_terminus: None,
         left_late: None,
         held_back: false,
         placed: false,
@@ -348,7 +365,6 @@ fn a_stop_placed_only_once_its_tile_loads_is_reached() {
         at_stop: false,
         arrived_late: None,
         done: false,
-        served_terminus: None,
         left_late: None,
         held_back: false,
         placed: true,
@@ -393,7 +409,6 @@ fn the_next_trip_starts_at_its_first_stop_though_the_last_one_was_missed() {
         at_stop: false,
         arrived_late: None,
         done: false,
-        served_terminus: None,
         left_late: None,
         held_back: false,
         placed: true,
@@ -434,7 +449,6 @@ fn the_next_trip_starts_at_its_first_stop_though_the_last_one_was_missed() {
         at_stop: false,
         arrived_late: None,
         done: false,
-        served_terminus: None,
         left_late: Some(0.0),
         held_back: false,
         placed: true,
@@ -459,7 +473,7 @@ fn the_next_trip_starts_at_its_first_stop_though_the_last_one_was_missed() {
 fn the_next_stop_can_be_skipped() {
     let trip = planned(0.0, &[(0.0, 0.0, 0.0), (100.0, 60.0, 60.0), (500.0, 120.0, 120.0), (1000.0, 200.0, 200.0)]);
     let next = planned(400.0, &[(1040.0, 400.0, 400.0), (1500.0, 500.0, 500.0)]);
-    let mut d = PlayerDuty { line: "5".into(), tour: "1".into(), trips: vec![trip, next], trip_index: 0, first_trip: 0, next_stop: 0, at_stop: false, arrived_late: None, done: false, served_terminus: None, left_late: None, held_back: false, placed: true, trip_changed: false, skipped: None, run: 0, finished: None, reopened: None, picked: true, first_update: None, heading: 90.0, position: None, unnumbered_public: Vec::new(), passed: Default::default() };
+    let mut d = PlayerDuty { line: "5".into(), tour: "1".into(), trips: vec![trip, next], trip_index: 0, first_trip: 0, next_stop: 0, at_stop: false, arrived_late: None, done: false, left_late: None, held_back: false, placed: true, trip_changed: false, skipped: None, run: 0, finished: None, reopened: None, picked: true, first_update: None, heading: 90.0, position: None, unnumbered_public: Vec::new(), passed: Default::default() };
     // at the first stop and away from it: the next is s1
     d.advance(glam::DVec3::new(0.0, 0.0, 0.0), 0.0);
     d.advance(glam::DVec3::new(50.0, 0.0, 0.0), 10.0);
@@ -501,7 +515,6 @@ fn a_page_can_go_back_to_an_earlier_stop() {
         at_stop: false,
         arrived_late: None,
         done: false,
-        served_terminus: None,
         left_late: None,
         held_back: false,
         placed: true,
@@ -558,7 +571,6 @@ fn a_loop_does_not_jump_to_the_stop_over_the_road() {
         at_stop: false,
         arrived_late: None,
         done: false,
-        served_terminus: None,
         left_late: None,
         held_back: false,
         placed: true,
@@ -598,7 +610,6 @@ fn stops_passed_without_stopping_are_told_once() {
         at_stop: false,
         arrived_late: None,
         done: false,
-        served_terminus: None,
         left_late: None,
         held_back: false,
         placed: true,
@@ -673,7 +684,6 @@ fn a_duty_starts_with_the_trip_that_fits_the_time() {
         at_stop: false,
         arrived_late: None,
         done: false,
-        served_terminus: None,
         left_late: None,
         held_back: false,
         placed: false,
@@ -731,7 +741,6 @@ fn a_duty_starts_with_a_trip_the_bus_can_reach() {
         at_stop: false,
         arrived_late: None,
         done: false,
-        served_terminus: None,
         left_late: None,
         held_back: false,
         placed: false,
@@ -780,7 +789,6 @@ fn ibis_skips_a_service_leg_for_the_player_display() {
         at_stop: false,
         arrived_late: None,
         done: false,
-        served_terminus: None,
         left_late: None,
         held_back: false,
         placed: false,

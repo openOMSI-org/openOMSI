@@ -172,8 +172,6 @@ pub struct PlayerDuty {
     arrived_late: Option<f64>,
     /// The bus has reached the last stop of the current trip.
     done: bool,
-    /// The last stop where this trip actually stopped with a passenger door open.
-    served_terminus: Option<glam::DVec3>,
     /// How late (s, negative = early) the bus left the last stop it served on this trip;
     /// None while it has not left one.
     left_late: Option<f64>,

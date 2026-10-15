@@ -697,6 +697,7 @@ pub(super) fn game_menu_icon(id: &str) -> &'static str {
         "world" => "partly_cloudy_day",
         "map" => "map",
         "duty" => "departure_board",
+        "nexttrip" => "play_arrow",
         "skipstop" => "near_me",
         "endduty" => "sports_score",
         "save" => "save",

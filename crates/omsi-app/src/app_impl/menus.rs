@@ -206,6 +206,16 @@ impl App {
                 self.close_game_menu();
                 self.skip_next_stop();
             }
+            "nexttrip" => {
+                if let (Some(d), Some(p)) = (self.session.duty.as_mut(), self.player.as_mut()) {
+                    if d.begin_next_trip() {
+                        // This explicit request also asks the normal duty step to program
+                        // the destination, even when the bus was set up manually.
+                        p.duty_typed = true;
+                    }
+                }
+                self.close_game_menu();
+            }
             // the route ends here: free drive, as the list of lines has it
             "endduty" => {
                 crate::game_lists::end_duty(self);
@@ -363,13 +373,14 @@ impl App {
 
 /// The game menu on a server (`--lan-join https://…`): the world's clock and weather are the
 /// server's, and the way out leaves the server.
-pub(crate) const SERVER_GAME_MENU: [(&str, &str); 8] = [
+pub(crate) const SERVER_GAME_MENU: [(&str, &str); 9] = [
     ("resume", "Resume"),
     ("options", "Options..."),
     ("camera", "Camera..."),
     ("vehicle", "Vehicle options..."),
     ("world", "World options..."),
     ("map", "City map"),
+    ("nexttrip", "Begin next trip"),
     ("photo", "Photo mode"),
     ("quit", "Leave the server"),
 ];
@@ -410,6 +421,9 @@ impl crate::App {
         }
         if !self.session.duty.as_ref().is_some_and(|d| d.stop_to_skip()) {
             v.retain(|x| x.0 != "skipstop");
+        }
+        if self.player.is_none() || !self.session.duty.as_ref().is_some_and(|d| d.can_begin_next_trip()) {
+            v.retain(|x| x.0 != "nexttrip");
         }
         if self.menus.navigator.is_none() {
             v.retain(|x| x.0 != "map");
@@ -488,7 +502,7 @@ impl crate::App {
 
 /// The lines of the game menu: (what, label). What can be set is on the pages behind
 /// "Options", "Vehicle options" and "World options" (see `game_lists`).
-pub(crate) const GAME_MENU: [(&str, &str); 15] = [
+pub(crate) const GAME_MENU: [(&str, &str); 16] = [
     ("resume", "Resume"),
     ("options", "Options..."),
     ("controls", "Controls..."),
@@ -499,6 +513,7 @@ pub(crate) const GAME_MENU: [(&str, &str); 15] = [
     ("world", "World options..."),
     ("map", "City map"),
     ("duty", "Line and tour..."),
+    ("nexttrip", "Begin next trip"),
     ("skipstop", "Skip the next stop"),
     ("endduty", "End the tour"),
     ("save", "Save the situation"),
