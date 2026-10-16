@@ -1164,6 +1164,11 @@ impl Navigator {
                 }
             }
         }
+        let light_net = net.filter(|n| n.lanes.iter().any(|l| l.traffic_light.is_some()))
+            .or(f.traffic.filter(|t| t.net.lanes.iter().any(|l| l.traffic_light.is_some())).map(|t| &t.net));
+        if let Some(net) = light_net {
+            build_lights(&mut dy, net, anchor);
+        }
         let n_world = dy.len();
 
         let mut ui = Painter::new();
@@ -1492,5 +1497,3 @@ mod city_map;
 pub use city_map::*;
 #[cfg(test)]
 mod tests;
-
-

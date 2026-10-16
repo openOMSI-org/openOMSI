@@ -126,6 +126,18 @@ impl App {
             }
         }
         self.service_msg = self.service_msg.take().filter(|(_, l)| *l > 0.0);
+        let mut question_timed_out = false;
+        if let Some(q) = self.session.passenger_question.as_mut() {
+            q.left -= dt;
+            if q.left > 0.0 {
+            } else {
+                question_timed_out = true;
+                say("passenger question timeout".into(), omsi_ui::tr("The passenger left without an answer.").into_owned(), NoticeKind::Info);
+            }
+        }
+        if question_timed_out {
+            self.session.passenger_question = None;
+        }
         if let Some(lan) = self.net.lan.as_ref() {
             for t in lan::hud_lines(lan).into_iter().chain(self.sound.voice.as_ref().and_then(|v| v.hud_line())) {
                 say(t.clone(), t, NoticeKind::Info);
@@ -444,6 +456,13 @@ impl App {
                 scale,
                 ui_scale: ui::size_factor(h, scale, self.settings.ui_scale, self.settings.ui_scale_window),
                 opacity: ui::backdrop(self.settings.ui_opacity),
+                passenger_question: self.session.passenger_question.as_ref().map(|q| ui::PassengerQuestionView {
+                    question: &q.question,
+                    options: [&q.options[0], &q.options[1], &q.options[2]],
+                    selected: q.selected,
+                    left: q.left,
+                    closing: q.closing,
+                }),
                 width: w,
                 height: h,
                 cursor: (self.input.cursor.0 - hud[0], self.input.cursor.1),
@@ -511,6 +530,10 @@ fn message_kind(msg: &str) -> crate::ui::NoticeKind {
         NoticeKind::Action
     } else if m.contains("saved") || m.contains("applied") || m.contains("reloaded") {
         NoticeKind::Success
+    } else if m.contains("o-bucks +") || m.contains("bonne réponse") || m.contains("n'êtes pas en tort") {
+        NoticeKind::Success
+    } else if m.contains("o-bucks") {
+        NoticeKind::Warn
     } else {
         NoticeKind::Info
     }

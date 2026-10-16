@@ -208,6 +208,9 @@ impl PeopleSim {
         if matches!(p.task, Task::InBusToPlace | Task::InBusToExit | Task::SittingInBus) {
             if let (Some(stop), Some(b)) = (p.stop, p.bus) {
                 if !at_stops.get(&b).is_some_and(|r| r.near.contains(&stop)) {
+                    if b == BusId::Player && p.inside == Some(BusId::Player) && p.task == Task::InBusToExit {
+                        self.missed_player_alighting += 1;
+                    }
                     let p = self.pax_mut(i).unwrap();
                     p.stop = None;
                 }

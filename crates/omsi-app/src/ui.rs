@@ -310,6 +310,7 @@ pub struct Frame<'a> {
     /// How strongly the backgrounds are drawn (`backdrop`): the menu's and the timetable's
     /// panels, the chat's box, the plates under the notes, the tooltip and the frame rate.
     pub opacity: f32,
+    pub passenger_question: Option<PassengerQuestionView<'a>>,
     pub width: f32,
     pub height: f32,
     pub cursor: (f32, f32),
@@ -379,6 +380,14 @@ pub struct Frame<'a> {
     pub menu_kbd: bool,
     /// The drop-down open over a row of the settings window.
     pub dropdown: Option<DropdownView<'a>>,
+}
+
+pub struct PassengerQuestionView<'a> {
+    pub question: &'a str,
+    pub options: [&'a str; 3],
+    pub selected: usize,
+    pub left: f32,
+    pub closing: bool,
 }
 
 pub struct Ui {
@@ -544,6 +553,44 @@ impl Ui {
         // the top of the windows in the corners: the notes on the left start on the line of
         // the timetable and a tutorial page on the right (14 px down, they stood higher)
         let corner_top = 60.0 * s;
+        if let Some(question) = f.passenger_question.as_ref() {
+            const QUESTION_LIFETIME: f32 = 30.0;
+            let entering = ((QUESTION_LIFETIME - question.left) / 0.35).clamp(0.0, 1.0);
+            let leaving = if question.closing { (question.left / 0.45).clamp(0.0, 1.0) } else { 1.0 };
+            let visibility = entering.min(leaving);
+            let eased = visibility * visibility * (3.0 - 2.0 * visibility);
+            let x0 = f.width * 0.25;
+            let x1 = f.width * 0.75;
+            let base_y0 = f.height * 0.30;
+            let base_y1 = f.height * 0.66;
+            let offset_y = (1.0 - eased) * 16.0 * s;
+            let y0 = base_y0 + offset_y;
+            let y1 = base_y1 + offset_y;
+            let pad = 12.0 * s;
+            let alpha = (246.0 * self.text.backdrop.min(1.0) * eased) as u8;
+            self.text.shadow(r, scene, [x0, y0, x1, y1], 9.0 * s, 20.0 * s, 5.0 * s, (100.0 * eased) as u8);
+            self.text.rounded(r, scene, [x0, y0, x1, y1], 9.0 * s, [28, 28, 28, alpha]);
+            self.text.rounded(r, scene, [x0, y0, x1, y0 + 4.0 * s], 3.0 * s, [232, 160, 48, alpha]);
+            let icon_px = (19.0 * s).round() as u32;
+            if let Some(icon) = self.text.icon(r, scene, "help", icon_px, [232, 160, 48, (255.0 * eased) as u8]) {
+                let iy = y0 + pad + 1.0 * s;
+                scene.overlays.push((icon, [x0 + pad, iy, x0 + pad + icon_px as f32, iy + icon_px as f32]));
+            }
+            let title_x = x0 + pad + icon_px as f32 + 9.0 * s;
+            let title = self.text.label_op(r, scene, &format!("{}  •  {}", omsi_ui::tr("Passenger"), question.question), (14.0 * s).round() as u32, [245, 245, 245, 0], eased);
+            scene.overlays.push((title.tex, [title_x, y0 + pad, title_x + title.w as f32, y0 + pad + title.h as f32]));
+            let row_h = (y1 - y0) * 0.27 / 3.0;
+            for (i, option) in question.options.iter().enumerate() {
+                let ry = y0 + (y1 - y0) * 0.40 + row_h * i as f32;
+                let selected = i == question.selected;
+                let color = if selected { [52, 105, 165, (245.0 * eased) as u8] } else { [38, 44, 55, (225.0 * eased) as u8] };
+                self.text.rounded(r, scene, [x0 + pad * 0.5, ry, x1 - pad * 0.5, ry + row_h - 3.0 * s], 5.0 * s, color);
+                let label = self.text.label_op(r, scene, &format!("{} {}. {option}", if selected { "▶" } else { " " }, i + 1), (12.0 * s).round() as u32, if selected { [255, 255, 255, 0] } else { [215, 220, 230, 0] }, eased);
+                scene.overlays.push((label.tex, [x0 + pad, ry + (row_h - label.h as f32) * 0.5, x0 + pad + label.w as f32, ry + (row_h - label.h as f32) * 0.5 + label.h as f32]));
+            }
+            let hint = self.text.label_op(r, scene, "Molette : choisir   •   Clic : répondre", (10.0 * s).round() as u32, [175, 185, 200, 0], eased);
+            scene.overlays.push((hint.tex, [x1 - pad - hint.w as f32, y1 - pad - hint.h as f32, x1 - pad, y1 - pad]));
+        }
         // --- the notes, top left: only the editors' keys while one is on (what the driver
         // has to do comes as a notification): one flat card, the lines in it
         let notes_bottom = {

@@ -1638,6 +1638,7 @@ pub struct Profile {
     pub xp: i64,
     pub level: i64,
     pub next_level_xp: i64,
+    pub obucks: f64,
     pub stops: i32,
     pub early: i32,
     pub late: i32,
@@ -1671,6 +1672,13 @@ fn level_of(xp: i64) -> (i64, i64) {
     let level = ((xp as f64 / 250.0).sqrt().floor() as i64) + 1;
     let next = (level * level) as i64 * 250;
     (level, next)
+}
+
+fn obucks_of(name: &str) -> f64 {
+    let Some(root) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) else { return 25.0 };
+    let safe: String = name.chars().map(|c| if c.is_ascii_alphanumeric() || "-_".contains(c) { c } else { '_' }).collect();
+    std::fs::read_to_string(std::path::PathBuf::from(root).join(".openomsi").join("obucks").join(format!("{safe}.json")))
+        .ok().and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok()).and_then(|v| v.get("balance").and_then(|v| v.as_f64())).unwrap_or(125.0)
 }
 
 /// Where a driver's personnel file is written: the content folder's `Drivers` (the
@@ -1727,7 +1735,7 @@ pub fn get_profile(name: &str) -> Result<Profile> {
             (km, mine.iter().map(|s| s.stops).sum(), mine.iter().map(|s| s.early).sum(), mine.iter().map(|s| s.late).sum(), mine.iter().map(|s| s.tickets as f64).sum(), mine.iter().map(|s| s.cash).sum(), mine.iter().map(|s| s.crashes).sum(), mine.iter().map(|s| s.hurt).sum(), [mine.iter().map(|s| s.driving).sum::<f64>() / n, mine.iter().map(|s| s.comfort).sum::<f64>() / n, mine.iter().map(|s| s.ticketing).sum::<f64>() / n])
         }
     };
-    Ok(Profile { name: name.to_string(), file: format!("Drivers/{name}.odr"), hours, km, xp, level, next_level_xp: next, stops, early, late, tickets, cash, crashes, hurt, rating_driving: rating[0], rating_comfort: rating[1], rating_tickets: rating[2], sessions: mine.into_iter().take(40).collect(), exists: driver.is_some() })
+    Ok(Profile { name: name.to_string(), file: format!("Drivers/{name}.odr"), hours, km, xp, level, next_level_xp: next, obucks: obucks_of(name), stops, early, late, tickets, cash, crashes, hurt, rating_driving: rating[0], rating_comfort: rating[1], rating_tickets: rating[2], sessions: mine.into_iter().take(40).collect(), exists: driver.is_some() })
 }
 
 /// Create the personnel file for a new driver (OMSI's own `.odr` format), so that the game

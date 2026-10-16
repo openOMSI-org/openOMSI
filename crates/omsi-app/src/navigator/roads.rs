@@ -237,6 +237,21 @@ pub(super) fn build_roads(p: &mut Painter, net: &Network, anchor: DVec2, light: 
     }
 }
 
+pub(super) fn build_lights(p: &mut Painter, net: &Network, anchor: DVec2) {
+    let rel = |q: DVec3| Vec3::new((q.x - anchor.x) as f32, (q.y - anchor.y) as f32, 0.0);
+    let mut points = Vec::<DVec2>::new();
+    for lane in net.lanes.iter().filter(|l| l.kind == LaneKind::Street && l.traffic_light.is_some()) {
+        let point = lane.start().truncate();
+        if (point - anchor).length() > super::ROAD_RADIUS || points.iter().any(|old| (*old - point).length_squared() < 4.0) {
+            continue;
+        }
+        points.push(point);
+        p.world_disc(rel(point.extend(0.0)), 3.0, 7.0, Color::rgba(8, 8, 8, 0.98));
+        p.world_disc(rel(point.extend(0.0)), 2.2, 5.5, Color::rgba(196, 48, 48, 1.0));
+        p.world_disc(rel(point.extend(0.0)), 1.0, 2.8, Color::rgba(196, 48, 48, 1.0));
+    }
+}
+
 /// `pts` with the points dropped that lie within `tol` metres of the line through their
 /// neighbours kept (Douglas-Peucker): a lane is sampled every metre or two, a ribbon needs
 /// only its bends. The launcher's map picture draws its roads with this too.

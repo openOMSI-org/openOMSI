@@ -448,6 +448,15 @@ pub(crate) struct MenuState {
 /// vehicles, the AI traffic and people, the duty and timetable, the weather and the wet
 /// roads, the driver's career and the player on foot.
 pub(crate) struct SessionState {
+    pub(crate) passenger_question: Option<PassengerQuestion>,
+    pub(crate) passenger_dialogs: u64,
+    pub(crate) accident_review: Option<(f32, bool)>,
+    pub(crate) accident_reason: Option<String>,
+    pub(crate) red_light_watch: Option<RedLightWatch>,
+    pub(crate) road_offence_cool: f32,
+    pub(crate) wrong_way_watch: f32,
+    pub(crate) priority_offence_cool: f32,
+    pub(crate) courtesy_watch: f32,
     /// A situation's further vehicles and those placed from the game menu, standing.
     pub(crate) placed: Vec<Player>,
     /// The sim date and the season's texture folder the loaded world shows (see
@@ -519,6 +528,21 @@ pub(crate) struct SessionState {
     pub(crate) metar_next: f64,
     /// The sky's cloud type and the physical weather model (see `weather_setup::SkyState`).
     pub(crate) sky: crate::weather_setup::SkyState,
+}
+
+pub(crate) struct PassengerQuestion {
+    pub(crate) question: String,
+    pub(crate) options: [String; 3],
+    pub(crate) correct: usize,
+    pub(crate) selected: usize,
+    pub(crate) left: f32,
+    pub(crate) closing: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct RedLightWatch {
+    pub(crate) controller: usize,
+    pub(crate) light: usize,
 }
 
 /// The fuel pump or the bus wash running (`SessionState::pumping`).

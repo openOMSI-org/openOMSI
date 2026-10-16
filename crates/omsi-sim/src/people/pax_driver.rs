@@ -122,10 +122,13 @@ impl PeopleSim {
                     let k = if daypart == 0 { self.rand() % 2 } else { self.rand() % 3 };
                     if k < 2 {
                         self.say_ex(i, &format!("Hello_{}", k + 1), false);
+                        self.passenger_compliments += 1;
                     } else if daypart == 1 {
                         self.say_ex(i, "GoodMorning_1", false);
+                        self.passenger_compliments += 1;
                     } else {
                         self.say_ex(i, "GoodEvening_1", false);
+                        self.passenger_compliments += 1;
                     }
                 }
             }
@@ -284,6 +287,7 @@ impl PeopleSim {
                 let r = self.rand_f() as f32;
                 if !too_much && self.tickets.as_ref().is_some_and(|t| r < t.chattiness) {
                     self.say_ex(i, "Thanks_1", false);
+                    self.passenger_compliments += 1;
                 }
             }
         } else if p.sub == 8 && p.timer <= 0.0 {

@@ -4,6 +4,16 @@
 use super::*;
 
 impl PeopleSim {
+    pub fn take_missed_player_stops(&mut self) -> (u32, u32) {
+        (
+            std::mem::take(&mut self.missed_player_alighting),
+            std::mem::take(&mut self.missed_player_boarding),
+        )
+    }
+
+    pub fn take_passenger_compliments(&mut self) -> u32 {
+        std::mem::take(&mut self.passenger_compliments)
+    }
     /// The buses somebody stamped a ticket in since the last call (the app fires their
     /// `ev_Stamper` sound trigger): `None` the player's, else the AI car's id.
     pub fn take_stamped(&mut self) -> Vec<Option<u64>> {

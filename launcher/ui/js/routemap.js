@@ -168,6 +168,22 @@ export function RouteMap({ map, date, trip, stops = [], entry = -1, onEntry, hei
       line(p);
       g.stroke();
     }
+    // traffic lights: fixed amber markers on the map, independent of the current phase
+    for (const light of d.lights || []) {
+      const x = X(light.at[0]);
+      const y = Y(light.at[1]);
+      g.fillStyle = '#419c00';
+      g.strokeStyle = 'rgba(14,14,14,0.9)';
+      g.lineWidth = 1.5;
+      g.beginPath();
+      g.arc(x, y, 4.5, 0, Math.PI * 2);
+      g.fill();
+      g.stroke();
+      g.fillStyle = '#9b2c2c';
+      g.beginPath();
+      g.arc(x, y, 1.8, 0, Math.PI * 2);
+      g.fill();
+    }
     // stops, with their times and names
     g.font = '600 11.5px Inter, sans-serif';
     // (a label that would cover one already written goes to the left of its stop, else away)
@@ -309,6 +325,6 @@ export function RouteMap({ map, date, trip, stops = [], entry = -1, onEntry, hei
     ${!data && html`<div class="state"><${Spinner} /> ${t('Reading the map…')}</div>`}
     ${data?.error && html`<div class="state">${data.error}</div>`}
     ${data?.package?.credit && html`<div class="credit">${data.package.credit}</div>`}
-    ${data && !data.error && html`<div class="legend">${t('{roads} roads | {stops} stops | {entries} entry points', { roads: data.roads.length, stops: data.stops.length, entries: data.entries.length })}</div>`}
+    ${data && !data.error && html`<div class="legend">${t('{roads} roads | {stops} stops | {entries} entry points | {lights} traffic lights', { roads: data.roads.length, stops: data.stops.length, entries: data.entries.length, lights: (data.lights || []).length })}</div>`}
   </div>`;
 }

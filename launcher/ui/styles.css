@@ -127,6 +127,7 @@ img { -webkit-user-drag: none; }
 .nav-item.active { background: var(--surface-3); color: var(--text); }
 .nav-item.active svg { color: var(--accent); }
 .nav-item svg { width: 19px; height: 19px; flex: none; }
+.nav-item.obucks-item svg { width: 27px; height: 27px; margin: -4px; }
 .nav-item .count { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--accent); color: var(--accent-text); font-size: 11.5px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
 .nav-sep { height: 10px; }
 .nav-fill { flex: 1; }
@@ -141,7 +142,8 @@ img { -webkit-user-drag: none; }
 .avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--surface-3); display: inline-flex; align-items: center; justify-content: center; font-weight: 700; color: var(--text-2); flex: none; }
 .driver-chip .who { min-width: 0; }
 .driver-chip .who b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
-.driver-chip .who span { color: var(--muted); font-size: 12px; }
+.driver-chip .who > span { display: block; color: var(--muted); font-size: 12px; }
+.driver-chip .who .obucks { color: #f2c14e; font-weight: 700; }
 
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .page { flex: 1; overflow: auto; padding: 28px 32px 40px; }

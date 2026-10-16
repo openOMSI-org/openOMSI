@@ -117,12 +117,21 @@ pub fn export(map: &str, global: &Path, date: &str, trip: &str, tolerance: f32) 
     let rel = |q: DVec2| [((q.x - o.x) * 10.0).round() / 10.0, ((q.y - o.y) * 10.0).round() / 10.0];
     let stops: Vec<serde_json::Value> = path.stops.iter().enumerate().filter_map(|(k, id)| roads.objects.get(id).map(|q| json!({ "k": k, "at": rel(*q) }))).collect();
     let entries: Vec<serde_json::Value> = roads.entries.iter().map(|e| json!({ "index": e.index, "name": e.name, "at": rel(e.at) })).collect();
+    let mut light_points = Vec::<DVec2>::new();
+    for lane in &roads.net.lanes {
+        if lane.traffic_light.is_none() { continue; }
+        let point = lane.start().truncate();
+        if light_points.iter().all(|old| (*old - point).length_squared() > 4.0) {
+            light_points.push(point);
+        }
+    }
+    let lights: Vec<serde_json::Value> = light_points.into_iter().map(|p| json!({ "at": rel(p) })).collect();
     let css = |c: [f32; 4]| format!("rgba({},{},{},{:.3})", (c[0] * 255.0).round(), (c[1] * 255.0).round(), (c[2] * 255.0).round(), c[3]);
     let [casing, road, main, red] = crate::host::host().city_map_colors();
     json!({
         "origin": [o.x, o.y],
         "lo": rel(roads.lo), "hi": rel(roads.hi),
-        "roads": list, "route": route, "stops": stops, "entries": entries,
+        "roads": list, "route": route, "stops": stops, "entries": entries, "lights": lights,
         "colors": [css(casing), css(road), css(main), css(red)],
         "package": package_view(global, o, roads.lo, roads.hi, tolerance),
     })

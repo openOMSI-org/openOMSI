@@ -281,7 +281,7 @@ pub(crate) fn humans_after_step(
 
 /// The people's counts in the personnel file.
 pub(crate) fn career_from_humans(career: &mut career::Career, h: &humans::Humans) {
-    career.tickets = (h.tickets_sold as i32, h.ticket_cash as f64);
+    career.ticket_sales(h.tickets_sold as i32, h.ticket_cash as f64);
     career.boarded = h.boarded as i32;
     career.served = h.served as i32;
     career.stepped_in = h.stepped_in as i32;

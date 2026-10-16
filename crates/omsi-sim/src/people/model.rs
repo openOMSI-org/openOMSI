@@ -268,6 +268,9 @@ pub struct PeopleSim {
     pub bodies: BodyOps,
     /// Stop the player's bus is serving (standing at it).
     pub served_stop: Option<i64>,
+    pub missed_player_alighting: u32,
+    pub missed_player_boarding: u32,
+    pub passenger_compliments: u32,
     /// Timetable buses at a stop: id → (stop, time the visit began).
     pub ai_visits: HashMap<u64, (i64, f64)>,
     /// When each bus last had a door open (the passengers' clock).

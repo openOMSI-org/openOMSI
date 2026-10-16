@@ -91,7 +91,8 @@ export function ProfilePage() {
               <div class="avatar" style="width:64px;height:64px;font-size:26px">${p.name[0]?.toUpperCase()}</div>
               <div class="grow">
                 <h2 style="font-size:22px">${p.name}${!p.exists ? html` <span class="muted small">${t('(no personnel file yet)')}</span>` : ''}</h2>
-                <div class="muted" style="margin:2px 0 10px">${t('Level {n}', { n: p.level })} - ${t('{xp} XP, {left} to level {next}', { xp: p.xp, left: Math.max(0, p.next_level_xp - p.xp), next: p.level + 1 })}</div>
+                <div class="muted" style="margin:2px 0 4px">${t('Level {n}', { n: p.level })} - ${t('{xp} XP, {left} to level {next}', { xp: p.xp, left: Math.max(0, p.next_level_xp - p.xp), next: p.level + 1 })}</div>
+                <div style="margin:0 0 10px;color:#f2c14e;font-weight:700">${p.obucks.toFixed(2)} O-Bucks</div>
                 <div class="progress" style="max-width:420px"><div style=${`width:${into * 100}%`}></div></div>
               </div>
             </div>

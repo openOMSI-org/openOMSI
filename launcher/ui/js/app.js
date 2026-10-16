@@ -8,6 +8,7 @@ import { Spinner } from './ui.js';
 import { boot, installMod, jobRunning, fitWindow } from './data.js';
 import { DrivePage } from './pages/drive.js';
 import { MultiplayerPage } from './pages/multiplayer.js';
+import { OBucksPage } from './pages/obucks.js';
 import { ProfilePage } from './pages/profile.js';
 import { ModsPage } from './pages/mods.js';
 import { ModelTestPage } from './pages/modeltest.js';
@@ -29,6 +30,7 @@ if (PHONE) document.documentElement.classList.add('phone');
 const PAGES = [
   ['drive', 'Drive', 'bus', DrivePage],
   ['multiplayer', 'Multiplayer', 'users', MultiplayerPage],
+  ['obucks', 'O-Bucks', 'info', OBucksPage],
   ['profile', 'Profile', 'user', ProfilePage],
   ['mods', 'Mods', 'puzzle', ModsPage],
   ['modeltest', 'Model test', 'check', ModelTestPage],
@@ -53,14 +55,18 @@ function Sidebar() {
       if (!x) return html`<div class="nav-sep"></div>`;
       const [id, label, icon] = x;
       const count = id === 'games' ? running : id === 'mods' ? installing : 0;
-      return html`<button class=${'nav-item' + (s.page === id ? ' active' : '')} onClick=${() => set({ page: id })} title=${t(label)}>
+      return html`<button class=${'nav-item' + (id === 'obucks' ? ' obucks-item' : '') + (s.page === id ? ' active' : '')} onClick=${() => set({ page: id })} title=${t(label)}>
         <${Icon} name=${icon} /><span class="label">${t(label)}</span>${count > 0 && html`<span class="count">${count}</span>`}
       </button>`;
     })}
     <div class="nav-fill"></div>
     <button class="driver-chip" onClick=${() => set({ page: 'profile' })} title=${t('Profile')}>
       <span class="avatar">${(name[0] || '?').toUpperCase()}</span>
-      <span class="who"><b>${name || t('No driver')}</b><span>${p ? t('Level {n}', { n: p.level }) : t('Choose a driver')}</span></span>
+      <span class="who">
+        <b>${name || t('No driver')}</b>
+        <span>${p ? t('Level {n}', { n: p.level }) : t('Choose a driver')}</span>
+        ${p && html`<span class="obucks">${p.obucks.toFixed(2)} O-Bucks</span>`}
+      </span>
     </button>
   </nav>`;
 }

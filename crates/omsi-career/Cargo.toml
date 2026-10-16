@@ -12,6 +12,7 @@ omsi-sim = { path = "../omsi-sim" }
 glam.workspace = true
 log.workspace = true
 serde_json.workspace = true
+serde.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true

@@ -52,6 +52,7 @@ impl App {
             self.service_msg = Some((line, 6.0));
         }
         if let Some(minutes) = repaired {
+            self.session.career.wallet_change(-omsi_career::economy::REPAIR_COST, "bus repair: workshop repaired the player's vehicle");
             self.service_event("repair", by, Some(minutes));
         }
     }

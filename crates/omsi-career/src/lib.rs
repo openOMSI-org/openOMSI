@@ -4,4 +4,5 @@
 //! game's `App`, the renderer or the network.
 
 pub mod career;
+pub mod economy;
 pub mod real_time;

@@ -474,6 +474,9 @@ impl PeopleSim {
         }
         self.pax_mut(i).unwrap().seat = None;
         if bn.speed.abs() >= 3.0 {
+            if bn.id == BusId::Player && p.stop.is_some() {
+                self.missed_player_boarding += 1;
+            }
             self.set_task(i, Task::ToBus, buses, bus_ix, world);
         } else {
             self.set_task(i, Task::WalkingToBusstop, buses, bus_ix, world);

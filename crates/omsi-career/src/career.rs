@@ -10,16 +10,14 @@
 //! see-saw or crash moves P a part of the way to 1 and the kilometres driven wear it down.
 
 use glam::DVec3;
+use crate::economy;
 use omsi_content::Driver;
 use omsi_sim::VehicleInstance;
 use std::path::{Path, PathBuf};
 
-/// OMSI's jolts: the smoothed acceleration across over 3 m/s² or along
-/// over 5 m/s², weighing 0.1, at most one a second.
-const HARSH_ACROSS: f32 = 3.0;
-const HARSH_ALONG: f32 = 5.0;
+const HARSH_ACROSS: f32 = 4.0;
+const HARSH_ALONG: f32 = 6.5;
 const JOLT_WEIGHT: f64 = 0.1;
-/// More than four changes between throttle and brake (either over 0.2) within four seconds.
 const SEESAW_WEIGHT: f64 = 0.05;
 /// Kilometres that wear the penalty down by one (P −= km / 30).
 const PENALTY_KM: f64 = 30.0;
@@ -38,6 +36,10 @@ pub struct Career {
     pub crashes: [i32; 4],
     /// Tickets sold and the takings.
     pub tickets: (i32, f64),
+    /// The driver's persistent O-Bucks balance.
+    pub wallet: economy::Wallet,
+    /// The most recent wallet operation, consumed by the in-game O-Bucks HUD.
+    wallet_event: Option<(f64, f64, String)>,
     /// Harsh accelerations, and those with passengers aboard.
     pub harsh: i32,
     pub harsh_pax: i32,
@@ -135,6 +137,8 @@ impl Default for Career {
             stops: [0; 3],
             crashes: [0; 4],
             tickets: (0, 0.0),
+            wallet: Default::default(),
+            wallet_event: None,
             harsh: 0,
             harsh_pax: 0,
             door_seconds: 0.0,
@@ -199,7 +203,8 @@ impl Career {
             }
         };
         let penalty = driver.as_ref().map(|d| d.rating[0].clamp(0.0, 1.0)).unwrap_or(0.0);
-        Career { driver, path: Some(path), penalty, ..Default::default() }
+        let wallet = driver.as_ref().map(|d| economy::Wallet::load(&d.name)).unwrap_or_default();
+        Career { driver, path: Some(path), penalty, wallet, ..Default::default() }
     }
 
     /// `metres` driven in the bus of this `[friendlyname]` (a bus without one is not counted).
@@ -257,6 +262,7 @@ impl Career {
             self.harsh_cool = 1.0;
             self.harsh += 1;
             self.penalise(JOLT_WEIGHT);
+            self.wallet_change(-economy::BAD_DRIVING_FINE, "rough driving: harsh braking, acceleration or steering detected");
             self.jolts.push(Jolt { along, across, speed_kmh: v.abs() * 3.6, riders });
             if omsi_cfg::flags::OMSI_DEBUG_CAREER.is_set() {
                 log::info!("jolt after {:.0} m: along {along:+.1} across {across:+.1} m/s2 at {:.0} km/h", self.metres, v * 3.6);
@@ -275,9 +281,10 @@ impl Career {
         while self.seesaw.front().is_some_and(|t| self.seconds - t > 4.0) {
             self.seesaw.pop_front();
         }
-        if self.seesaw.len() > 4 {
+        if self.seesaw.len() > 5 {
             self.seesaw.clear();
             self.penalise(SEESAW_WEIGHT);
+            self.wallet_change(-economy::BAD_DRIVING_FINE, "rough driving: repeated throttle and brake changes detected");
         }
         // the kilometres wear the penalty down
         self.penalty = worn(self.penalty, step_km);
@@ -396,6 +403,14 @@ impl Career {
         if arrival.round() > LATE_ARRIVAL {
             self.stops[2] += 1;
         }
+        if departure.round() < EARLY_DEPARTURE || arrival.round() > LATE_ARRIVAL {
+            self.wallet_change(
+                -economy::EARLY_OR_LATE_FINE,
+                if departure.round() < EARLY_DEPARTURE { "early arrival: departed the stop more than 120 seconds before schedule" } else { "late arrival: reached the stop more than 180 seconds after schedule" },
+            );
+        } else {
+            self.wallet_change(economy::ON_TIME_REWARD, "on-time stop service: arrival and departure within schedule tolerance");
+        }
     }
 
     /// A crash of `energy` joules at `speed` m/s: it weighs min(|v| / 5, 1) on the driving.
@@ -405,6 +420,42 @@ impl Career {
             self.crashes[3] += 1;
         }
         self.penalise((speed.abs() / 5.0).min(1.0) as f64);
+    }
+
+    /// Record ticket sales and pay the same amount in O-Bucks. Called with the cumulative
+    /// counters maintained by the passenger simulation, so a frame cannot pay twice.
+    pub fn ticket_sales(&mut self, sold: i32, cash: f64) {
+        let delta = (cash - self.tickets.1).max(0.0);
+        if delta > 0.0 { self.wallet_change(delta, "ticket sale: passenger fare received"); }
+        self.tickets = (sold, cash);
+    }
+
+    /// Change the wallet and retain a precise reason for the in-game HUD.
+    pub fn wallet_change(&mut self, amount: f64, reason: &'static str) -> economy::MoneyChange {
+        self.wallet_change_detail(amount, reason.to_owned())
+    }
+
+    /// Change the wallet with a runtime-generated explanation for the HUD.
+    pub fn wallet_change_detail(&mut self, amount: f64, reason: String) -> economy::MoneyChange {
+        let change = self.wallet.change(amount);
+        if change.amount.abs() >= 0.005 {
+            if let Some((pending, balance, previous_reason)) = self.wallet_event.as_mut() {
+                *pending += change.amount;
+                *balance = change.balance;
+                if previous_reason.as_str() != reason.as_str() {
+                    previous_reason.push_str("; ");
+                    previous_reason.push_str(&reason);
+                }
+            } else {
+                self.wallet_event = Some((change.amount, change.balance, reason));
+            }
+        }
+        change
+    }
+
+    /// Take the latest wallet event for the game's HUD.
+    pub fn take_wallet_event(&mut self) -> Option<(f64, f64, String)> {
+        self.wallet_event.take()
     }
 
     /// Per cent, as the personnel dialog shows it: 100 (1 − P).
@@ -477,6 +528,7 @@ impl Career {
             d.rating[slot] += (now[k] - w.counters[k]) as f64;
         }
         d.save(&path)?;
+        self.wallet.save(&d.name)?;
         self.written = Written { metres: w.metres + hm * 100.0, stops: self.stops, crashes: self.crashes, tickets: self.tickets, counters: now };
         log::info!("personnel file {} updated: {}", path.display(), self.summary());
         self.driver = Some(d);
@@ -521,6 +573,7 @@ impl Career {
         std::fs::create_dir_all(&dir)?;
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
         let driver = self.driver.as_ref().map(|d| d.name.clone()).or_else(|| self.path.as_ref().and_then(|p| p.file_stem().map(|s| s.to_string_lossy().to_string()))).unwrap_or_else(|| "Driver".into());
+        self.wallet.save(&driver)?;
         let v = serde_json::json!({
             "time": now,
             "driver": driver,

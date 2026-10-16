@@ -505,6 +505,7 @@ impl App {
     }
 
     fn wheel_now(&mut self, amount: f32) {
+        if self.passenger_question_wheel(amount) { return; }
         // the photo mode: the lens zooms, or its panel scrolls under the mouse
         if self.photo_on() {
             if self.shell.over_ui {
@@ -618,6 +619,7 @@ impl App {
 
     /// The left mouse button (or a finger's tap) where the cursor is.
     pub(crate) fn left_button(&mut self, event_loop: &ActiveEventLoop, pressed: bool) {
+        if self.passenger_question_click(pressed) { return; }
         if let Some(edit) = self.xr.vr_nav_edit.as_mut() { edit.moving = pressed; return; }
         // the pause menu (and the photo mode) of the launcher's toolkit take the clicks
         if self.shell_takes_mouse() {
