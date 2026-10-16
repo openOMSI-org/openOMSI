@@ -388,6 +388,29 @@ impl Navigator {
         }
     }
 
+    /// Arrow keys (and WASD) move the open map by a fifth of its window, + and - zoom about
+    /// its middle, Home or C goes back to the bus. True when the key was the map's.
+    pub fn map_key(&mut self, code: winit::keyboard::KeyCode) -> bool {
+        use winit::keyboard::KeyCode as K;
+        let r = self.city.rect;
+        let (w, h) = ((r[2] - r[0]) as f64, (r[3] - r[1]) as f64);
+        let step = |dx: f64, dy: f64, c: &mut CityMap| {
+            c.follow = false;
+            c.center += DVec2::new(dx * w, dy * h) * 0.2 * c.mpp;
+        };
+        match code {
+            K::ArrowLeft | K::KeyA => step(-1.0, 0.0, &mut self.city),
+            K::ArrowRight | K::KeyD => step(1.0, 0.0, &mut self.city),
+            K::ArrowUp | K::KeyW => step(0.0, 1.0, &mut self.city),
+            K::ArrowDown | K::KeyS => step(0.0, -1.0, &mut self.city),
+            K::Equal | K::NumpadAdd => self.map_wheel(1.0, (r[0] + r[2]) * 0.5, (r[1] + r[3]) * 0.5),
+            K::Minus | K::NumpadSubtract => self.map_wheel(-1.0, (r[0] + r[2]) * 0.5, (r[1] + r[3]) * 0.5),
+            K::Home | K::KeyC => self.city.follow = true,
+            _ => return false,
+        }
+        true
+    }
+
     fn max_mpp(&self) -> f64 {
         let (lo, hi) = self.city.extent;
         let span = (hi - lo).max_element().max(2000.0);

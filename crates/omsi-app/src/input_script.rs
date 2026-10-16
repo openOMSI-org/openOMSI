@@ -41,6 +41,14 @@ impl App {
         if self.mirror_hud_key(code, pressed, repeat) {
             return;
         }
+        // the open city map's own keys: arrows and WASD move it, +/- zoom, Home/C the bus
+        if pressed && self.menus.game_menu.is_none() {
+            if let Some(n) = self.menus.navigator.as_mut().filter(|n| n.map_open()) {
+                if n.map_key(code) {
+                    return;
+                }
+            }
+        }
         // Escape closes the city map first (it would end the session)
         if pressed && code == KeyCode::Escape {
             if let Some(n) = self.menus.navigator.as_mut().filter(|n| n.map_open()) {
