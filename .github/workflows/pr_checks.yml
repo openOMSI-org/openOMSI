@@ -49,32 +49,20 @@ jobs:
           git show "$BASE:$LOCALES" > "$RUNNER_TEMP/app.base.yml" 2>/dev/null || : > "$RUNNER_TEMP/app.base.yml"
           python3 .github/scripts/check_locales.py "$RUNNER_TEMP/app.base.yml" "$LOCALES"
 
-  # No Rust file and no function may grow past its recorded size (+5 %), and new ones stay
-  # under 1500 / 300 lines: scripts/size-budget.sh, baseline in scripts/size-budget.txt.
-  size-budget:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
+      # No Rust file and no function may grow past its recorded size (+5 %), and new ones stay
+      # under 1500 / 300 lines: scripts/size-budget.sh, baseline in scripts/size-budget.txt.
       - name: File and function sizes
+        if: ${{ !cancelled() }}
         run: bash scripts/size-budget.sh
 
       # Which crate may depend on which (nothing on omsi-app, the simulation on no renderer,
       # ...) and the app crate only shrinking: scripts/arch-guard.sh, rules in scripts/arch-rules.txt.
       - name: Crate layers
+        if: ${{ !cancelled() }}
         run: bash scripts/arch-guard.sh
 
-  launcher-drive:
-    runs-on: ubuntu-latest
-    env:
-      BASE: ${{ github.event.pull_request.base.sha }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Fetch the base commit
-        run: git fetch --no-tags --depth=1 origin "$BASE"
-
       - name: Drive page layouts
+        if: ${{ !cancelled() }}
         run: |
           if git diff --quiet "$BASE" HEAD -- launcher/ui launcher/tests .github/workflows/pr_checks.yml; then
             echo "The launcher's page is not changed."

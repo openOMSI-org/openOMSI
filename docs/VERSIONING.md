@@ -90,8 +90,9 @@ The launcher's updater checks each archive against the SHA-256 that GitHub's API
 it before installing it (when the API cannot be reached and the updater falls back to
 github.com, it relies on the HTTPS connection alone).
 
-Pull requests run the same builds without publishing anything. Build output never goes
-into the repository (`target/` and `dist/` are ignored).
+Pull requests build Windows x64, macOS for Apple silicon, Linux x64 and Android without
+publishing anything; every push to `main` builds all the platforms above, also without
+publishing. Build output never goes into the repository (`target/` and `dist/` are ignored).
 
 ### Test builds of a pull request
 

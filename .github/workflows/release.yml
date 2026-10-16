@@ -2,12 +2,15 @@
 # (plus the dedicated server for Linux and Windows) when a maintainer runs it from main
 # (Actions -> Release -> Run workflow) and publishes them as the beta (pre-release)
 # v<MAJOR.MINOR.PATCH>; promote.yml makes a tested beta the stable release. A push to main
-# publishes nothing by itself. See docs/VERSIONING.md.
-# Pull requests run the same builds without publishing.
+# builds every platform and publishes nothing. See docs/VERSIONING.md.
+# Pull requests build Windows x64, macOS (Apple silicon), Linux x64 and Android, without publishing.
 name: Release
 
 on:
   pull_request:
+  push:
+    branches: [main]
+    paths-ignore: ["docs/**", "site/**", "*.md"]
   workflow_dispatch:
     # (a beta of one platform alone, to test a fix only that platform needs; a published
     # release keeps its files, so the others never join it, and it cannot be promoted)
@@ -19,7 +22,7 @@ on:
         options: [all, windows, macos, linux, android]
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # The builds (and the actions they use) only read the repository; `release` alone writes,
@@ -56,31 +59,26 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - target: x86_64-pc-windows-msvc
-            arch: x64
-          # ARM64 (Snapdragon laptops): built on the x64 runner with its ARM64 tools
-          - target: aarch64-pc-windows-msvc
-            arch: arm64
+        # ARM64 (Snapdragon laptops): built on the x64 runner with its ARM64 tools
+        arch: ${{ fromJSON(github.event_name == 'pull_request' && '["x64"]' || '["x64", "arm64"]') }}
     env:
       OPENOMSI_VERSION: ${{ needs.version.outputs.version }}
+      TARGET: ${{ matrix.arch == 'arm64' && 'aarch64-pc-windows-msvc' || 'x86_64-pc-windows-msvc' }}
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: ${{ env.TARGET }}
       - uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.target }}
+          key: ${{ env.TARGET }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: |
             . -> target
             launcher/src-tauri -> target
-      - name: Workspace regression tests
-        if: matrix.arch == 'x64'
-        run: cargo test --locked --workspace --no-fail-fast
       - name: Build
         shell: cmd
-        run: scripts\build-windows.cmd ${{ matrix.target }}
+        run: scripts\build-windows.cmd %TARGET%
       # Microsoft's shader compiler for DirectX 12 (dxcompiler.dll, dxil.dll beside the
       # program): without it wgpu falls back to the old FXC, which is slow and refuses
       # some of the game's shaders. DirectX 12 is the way round a Vulkan driver that fails.
@@ -167,6 +165,20 @@ jobs:
           name: windows-${{ matrix.arch }}
           path: out/*.zip
 
+  windows-tests:
+    if: ${{ !inputs.only || inputs.only == 'all' || inputs.only == 'windows' }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Workspace regression tests
+        env:
+          CARGO_PROFILE_DEV_DEBUG: line-tables-only
+        run: cargo test --locked --workspace --no-fail-fast
+
   macos:
     needs: version
     if: ${{ !inputs.only || inputs.only == 'all' || inputs.only == 'macos' }}
@@ -174,24 +186,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - target: aarch64-apple-darwin
-            arch: arm64
-          # Intel Macs: built on the Apple silicon runner for x86_64
-          - target: x86_64-apple-darwin
-            arch: x64
+        # Intel Macs: built on the Apple silicon runner for x86_64
+        arch: ${{ fromJSON(github.event_name == 'pull_request' && '["arm64"]' || '["arm64", "x64"]') }}
     env:
       OPENOMSI_VERSION: ${{ needs.version.outputs.version }}
-      OPENOMSI_TARGET: ${{ matrix.target }}
+      OPENOMSI_TARGET: ${{ matrix.arch == 'x64' && 'x86_64-apple-darwin' || 'aarch64-apple-darwin' }}
       MACOSX_DEPLOYMENT_TARGET: '11.0'
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: ${{ env.OPENOMSI_TARGET }}
       - uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.target }}
+          key: ${{ env.OPENOMSI_TARGET }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: |
             . -> target
             launcher/src-tauri -> target
@@ -215,12 +224,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - runner: ubuntu-22.04
-            arch: x64
-          - runner: ubuntu-22.04-arm
-            arch: arm64
-    runs-on: ${{ matrix.runner }}
+        arch: ${{ fromJSON(github.event_name == 'pull_request' && '["x64"]' || '["x64", "arm64"]') }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-22.04-arm' || 'ubuntu-22.04' }}
     env:
       OPENOMSI_VERSION: ${{ needs.version.outputs.version }}
     steps:
@@ -238,6 +243,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: |
             . -> target
             launcher/src-tauri -> target
@@ -252,6 +258,7 @@ jobs:
         if: matrix.arch == 'x64'
         env:
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=lld"
+          CARGO_PROFILE_DEV_DEBUG: line-tables-only
         run: |
           cargo test --locked --workspace --no-fail-fast
           # (the tests' debug build is not needed for the release one: its room is)
@@ -303,6 +310,8 @@ jobs:
         with:
           targets: aarch64-linux-android
       - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: actions/setup-java@v6
         with:
           distribution: zulu
@@ -331,8 +340,8 @@ jobs:
 
   release:
     # (the platforms not built again are skipped, not failed)
-    if: ${{ !cancelled() && !failure() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
-    needs: [version, windows, macos, linux, android]
+    if: ${{ !cancelled() && !failure() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
+    needs: [version, windows, windows-tests, macos, linux, android]
     runs-on: ubuntu-latest
     permissions:
       contents: write

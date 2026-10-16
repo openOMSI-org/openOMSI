@@ -54,6 +54,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: apple
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Tools
         run: |
           brew install xcodegen
