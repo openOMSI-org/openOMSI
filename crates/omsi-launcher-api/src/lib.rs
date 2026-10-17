@@ -5,6 +5,7 @@
 //! window around the page can do - its events, stepping aside while a game runs, drawing with
 //! the game's renderer - it is asked through `Platform`.
 
+mod addons;
 pub mod i18n;
 mod timetable;
 mod updates;
@@ -672,6 +673,7 @@ pub fn call(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "delete_situation" => delete_situation(arg::<String>(args, "map")?, arg::<String>(args, "file")?),
         "season_date" => season_date(arg::<String>(args, "season")?, arg::<String>(args, "phase")?, arg::<String>(args, "date")?, arg::<String>(args, "map")?, arg::<bool>(args, "keep")?),
         "tutorials" => tutorials(),
+        "addons" => addons::list(),
         "timetable" => timetable::load(arg::<String>(args, "map")?),
         "timetable_save" => timetable::save(arg::<String>(args, "map")?, arg::<Vec<timetable::LineEdit>>(args, "lines")?),
         "timetable_reset" => timetable::reset(arg::<String>(args, "map")?),
