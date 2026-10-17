@@ -733,6 +733,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             thread_cpu_mark: None,
             instructions_mark: None,
             profile_mark: None,
+            profile_written: false,
             frame_times: Vec::new(),
             frame_stages: Vec::new(),
             overlay: crate::perf_overlay::new(),

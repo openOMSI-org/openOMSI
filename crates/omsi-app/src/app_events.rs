@@ -470,6 +470,8 @@ impl ApplicationHandler for App {
     /// quit signal): the session is written and the LAN peers hear that we left, before
     /// anything else is torn down (Cmd+Q ends the process without returning from the loop).
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
+        // (OMSI_PROFILE: the summary when the player closes the game, not only after --exit-after)
+        self.log_profile_summary();
         crate::game_lists::flush_settings(true);
         self.abort_optimiser();
         self.finish_session();

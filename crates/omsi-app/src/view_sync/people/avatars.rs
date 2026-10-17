@@ -237,16 +237,20 @@ pub(crate) struct Warm {
     done: Arc<Mutex<Vec<(usize, Vec<(std::path::PathBuf, Prepared)>)>>>,
     /// Pictures read and not uploaded yet, by file.
     pub(super) prepared: hashbrown::HashMap<std::path::PathBuf, Prepared>,
+    /// The map's own figures (by `Arc` address) read ahead as the avatars are, see
+    /// `Warm::map_figures`.
+    figures: hashbrown::HashSet<usize>,
 }
+
+/// How much the map's figures read ahead may hold before they are drawn (bytes): beyond it a
+/// figure's pictures are let go once read, and its first person decodes them on the frame
+/// as before.
+const FIGURES_AHEAD_BYTES: usize = 160 << 20;
 
 impl Warm {
     /// Whether avatar `a`'s pictures are read; starts reading them on a worker if not.
     pub(super) fn ready(&mut self, a: &Arc<HumanType>, root: &std::path::Path) -> bool {
-        for (k, list) in self.done.lock().drain(..) {
-            self.reading.remove(&k);
-            self.ready.insert(k);
-            self.prepared.extend(list);
-        }
+        self.collect();
         let key = Arc::as_ptr(a) as usize;
         if self.ready.contains(&key) {
             return true;
@@ -270,5 +274,37 @@ impl Warm {
             });
         }
         false
+    }
+
+    /// Take in what the workers finished.
+    fn collect(&mut self) {
+        let finished: Vec<_> = self.done.lock().drain(..).collect();
+        for (k, list) in finished {
+            self.reading.remove(&k);
+            self.ready.insert(k);
+            if self.figures.contains(&k) && self.prepared_bytes() > FIGURES_AHEAD_BYTES {
+                continue;
+            }
+            self.prepared.extend(list);
+        }
+    }
+
+    /// The bytes the pictures read and not yet uploaded hold.
+    fn prepared_bytes(&self) -> usize {
+        self.prepared.values().filter_map(|(t, _)| t.as_ref()).map(|t| t.levels.iter().map(Vec::len).sum::<usize>()).sum()
+    }
+
+    /// Have the pictures of the map's own figures (in their default clothes) read on the
+    /// workers as an avatar's are, up to `FIGURES_AHEAD_BYTES`: the first person of a figure
+    /// otherwise read and decoded them on the frame - a busy stop with a big pack of figures
+    /// stalled for up to half a second at a time. The person is drawn at once all the same;
+    /// whatever is not there yet is read on the frame as before.
+    pub(super) fn map_figures(&mut self, types: &[Arc<HumanType>], root: &std::path::Path) {
+        self.collect();
+        for t in types {
+            if self.figures.insert(Arc::as_ptr(t) as usize) {
+                self.ready(t, root);
+            }
+        }
     }
 }

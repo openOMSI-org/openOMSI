@@ -763,7 +763,7 @@ station` line at all means the bus's radio sets neither variable.
 
 ## Performance
 
-`OMSI_PROFILE=1 … --exit-after N` prints the frame split (render, mirrors, traffic, people,
+`OMSI_PROFILE=1` (with `--exit-after N`, or just closing the game) prints the frame split (render, mirrors, traffic, people,
 scripted objects, LAN), counts frames over 50 ms and logs the GPU and CPU memory by kind
 every ten seconds; the per-draw buffers are updated in contiguous runs and appended to as
 cars and people spawn (no full rebuild), everything behind the fog is culled, culling runs

@@ -233,11 +233,10 @@ impl World {
                 }
             }
             for v in render.variants {
+                for built in v.free_built.values() {
+                    own_materials.extend(built.materials());
+                }
                 for f in v.free {
-                    for (b, it) in f.cache.into_values() {
-                        own_materials.push(b);
-                        own_materials.push(it);
-                    }
                     // the pictures it showed: shared, gone with their last holder
                     let mut shared = f.shared.lock();
                     for p in f.held {
@@ -1212,14 +1211,22 @@ impl World {
         materials.extend(more.iter().copied());
         // [matl_freetex]: the file is only known at run time (the destination
         // roller builds its path from the map's depot and terminus strings)
-        let free: Vec<FreeTex> = free_texture_defs(&ov_all).into_iter().map(|(item_only, key, var)| FreeTex {
+        // (each half's own records: an item lists the slot's free textures and its own, the
+        // NLC's switch stripes keep the white picture under their light map in item 1 while
+        // item 2 swaps it for the black one under its night map)
+        let mut halves: Vec<Vec<&MaterialDef>> = vec![ov.clone()];
+        if spec.item.is_some() {
+            halves.push(first_item.clone());
+            halves.extend(later_items.iter().map(|o| vec![*o]));
+        }
+        let free: Vec<FreeTex> = free_texture_defs(&halves).into_iter().map(|(halves, key, var)| FreeTex {
             var,
             diffuse: key.eq_ignore_ascii_case(&m.texture),
             key: tex!(&subst(&key), &dirs_ref),
-            item_only,
+            halves,
             dirs: dirs.to_vec(),
             textures: self.textures.clone(),
-            cache: HashMap::new(),
+            pictures: HashMap::new(),
             current: None,
             shared: self.vehicle_textures.clone(),
             held: Vec::new(),
@@ -1243,9 +1250,9 @@ impl World {
         };
         if spec.item.is_some() || !entries.is_empty() || !free.is_empty() {
             let tex_var = master.map(|m| m.variable.clone()).unwrap_or_default();
-            variants.push(VariantSlot { mesh: instances.len(), slot, base, item, more, var: change_var.unwrap_or_default(), more_vars: change_vars.iter().skip(1).cloned().collect(), entries, tex_var, free, spec, base_tex, entry_tex, lights: multi_light(base, item) });
+            variants.push(VariantSlot { mesh: instances.len(), slot, base, item, more, var: change_var.unwrap_or_default(), more_vars: change_vars.iter().skip(1).cloned().collect(), entries, tex_var, free, free_built: HashMap::new(), free_lights: None, spec, base_tex, entry_tex, lights: multi_light(base, item) });
         } else if let Some(lights) = multi_light(base, item) {
-            variants.push(VariantSlot { mesh: instances.len(), slot, base, item, more: Vec::new(), var: String::new(), more_vars: Vec::new(), entries, tex_var: String::new(), free: Vec::new(), spec, base_tex, entry_tex, lights: Some(lights) });
+            variants.push(VariantSlot { mesh: instances.len(), slot, base, item, more: Vec::new(), var: String::new(), more_vars: Vec::new(), entries, tex_var: String::new(), free: Vec::new(), free_built: HashMap::new(), free_lights: None, spec, base_tex, entry_tex, lights: Some(lights) });
         } else if base_dyn.any() {
             dyn_slots.push(DynSlot { mesh: instances.len(), slot, text: text_slot, script: script_slot, script_trans, lit: script_slot.is_some_and(|i| vt.model.html_page_lit(i)), tex, alpha, transmap, night, lightmap, envmap, address, extra, color, emissive });
         }
