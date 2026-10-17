@@ -184,6 +184,7 @@ impl crate::App {
             dt,
             backdrop: crate::ui::backdrop(self.settings.ui_opacity),
             navigator: None,
+            dock: None,
         };
         let gp = &mut self.menus.game_panels;
         gp.draw.frame(r, scene, &mut gp.ui, &frame);

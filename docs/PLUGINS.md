@@ -312,8 +312,8 @@ end)
 F10 gives the panels the mouse; a click on the button sounds the horn. The whole example is
 [`docs/examples/plugins/trip_panel.lua`](examples/plugins/trip_panel.lua).
 
-`omsi.ui.version` is `2` (`1` before the controls below): test
-`if omsi.ui and omsi.ui.version >= 2` in a plugin that should also run in an older openOMSI.
+`omsi.ui.version` is `3` (`2` before the navigator's board, `1` before the controls below):
+test `if omsi.ui and omsi.ui.version >= 2` in a plugin that should also run in an older openOMSI.
 The panels are the plugin's own: one plugin cannot change or remove another's, and when the
 plugin stops, or is loaded again after a change of its file, its panels go (its
 notifications run their time). They show over the picture and the navigator and under the
@@ -324,7 +324,7 @@ city map is open, nor in VR.
 
 ```lua
 omsi.ui.set("trip", {
-  anchor = "top_left",       -- top_left top top_right left center right bottom_left bottom bottom_right
+  anchor = "top_left",       -- top_left top top_right left center right bottom_left bottom bottom_right, or navigator
   x = 16, y = 16,             -- from the anchor towards the middle (from a middle: right and down)
   width = 340,                -- the height follows the content
   padding = 12,               -- default 12
@@ -342,6 +342,29 @@ omsi.ui.set("trip", {
 Sizes are pixels of a 1080p screen at the normal interface size. A panel stays on the screen
 whatever its offset; one the player dragged keeps its new place when it is set again
 (`omsi.ui.moved(id)` says how far).
+
+#### In the navigator
+
+A panel with `anchor = "navigator"` goes into the navigator's board under its map, in place
+of the list of the next stops: as wide as the navigator, at its scale, and on its card (no
+card, shadow, accent or rounded corners of its own; `background` still paints it). `x`, `y`,
+`width` and `draggable` are left aside, and the navigator grows as tall as the panel comes to,
+as far as the window has room. Shift+N cycles the navigator through map, map and board, off
+as it does with the stop list; the first time a plugin asks for the board the navigator opens
+it by itself. One plugin's panel is in the board at a time: another waits until it goes.
+
+```lua
+if (omsi.ui.version or 0) >= 3 then
+  omsi.ui.set("board", { anchor = "navigator", padding = 10, children = { ... } })
+else
+  omsi.ui.set("board", { anchor = "left", x = 16, width = 340, children = { ... } })
+end
+```
+
+`omsi.ui.dock()` gives the board's width, the most height there is room for, the height the
+panel came to, in the panel's pixels, and whether the panel in the board is this plugin's. A
+panel taller than the room is cut off at the bottom (what is cut off takes no click either), so
+a plugin can leave out rows that do not fit.
 
 #### Elements
 
@@ -652,6 +675,7 @@ declared to call the function (a plain `.lua` file has them all).
 | --- | --- | --- | --- |
 | `omsi.message(text, [seconds])` | nil | A line of text on the screen (5 seconds when not given). *Permission: `ui`.* | 0.1.5 |
 | `omsi.ui.clear()` | nil | Removes every panel of the plugin. *Permission: `ui`.* | 0.2.21 |
+| `omsi.ui.dock()` | width, room, height, mine | The navigator's board, where a panel with `anchor = "navigator"` goes, in that panel's pixels: its width, the most height there is room for, the height the panel there came to (0 before it is laid out; more than `room`: it is cut off at the bottom), and whether that panel is this plugin's (the first one asked for has the board, another waits). Nothing while the navigator shows no board: it is off, or Shift+N put its lower part away. | 0.3.36 |
 | `omsi.ui.focus(on)` | boolean | `true`: the panels get the mouse (the cursor shows, a click goes to the panel under it and none to the bus); `false`, Esc or a menu of the game gives it back. Returns the new state. *Permission: `ui`.* | 0.2.21 |
 | `omsi.ui.focused()` | boolean | Whether the panels have the mouse. | 0.2.21 |
 | `omsi.ui.moved(panel)` | dx, dy | How far the player dragged a panel from where its table puts it (pixels). | 0.2.22 |

@@ -15,7 +15,8 @@ use std::rc::Rc;
 
 /// `omsi.ui.version`: raised when something is added a plugin may want to test for.
 /// 2: images, checkboxes, sliders, text fields, tabs, charts, tables, draggable panels.
-pub const VERSION: i64 = 2;
+/// 3: the navigator's board (`anchor = "navigator"`, `ui.dock`).
+pub const VERSION: i64 = 3;
 /// Most panels of one plugin.
 pub const MAX_PANELS: usize = 16;
 /// Most elements of one panel, those in rows included.
@@ -65,6 +66,9 @@ pub enum Anchor {
     BottomLeft,
     Bottom,
     BottomRight,
+    /// In the navigator's board, under its map, as wide as the navigator: `x`, `y`, `width`
+    /// and the card's own look are left aside.
+    Navigator,
 }
 
 impl Anchor {
@@ -79,6 +83,7 @@ impl Anchor {
             "bottom_left" => Anchor::BottomLeft,
             "bottom" => Anchor::Bottom,
             "bottom_right" => Anchor::BottomRight,
+            "navigator" => Anchor::Navigator,
             _ => return None,
         })
     }
@@ -95,6 +100,8 @@ impl Anchor {
             Anchor::BottomLeft => (0.0, 1.0),
             Anchor::Bottom => (0.5, 1.0),
             Anchor::BottomRight => (1.0, 1.0),
+            // (not placed on the screen: the navigator says where it goes)
+            Anchor::Navigator => (0.0, 0.0),
         }
     }
 }
@@ -291,12 +298,27 @@ pub struct UiState {
     screen: [f32; 3],
     serial: u64,
     typing: Option<Typing>,
+    /// The navigator's board (None: the navigator shows none).
+    dock: Option<Dock>,
+}
+
+/// The navigator's board as the plugins see it (`ui.dock`), in the panel's pixels.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Dock {
+    pub width: f32,
+    /// The most height there is room for.
+    pub room: f32,
+    /// The height the panel in it came to (more than `room`: it is cut off there; 0 before
+    /// it is laid out).
+    pub height: f32,
+    /// The plugin whose panel is in it.
+    pub owner: Option<u64>,
 }
 
 impl Default for UiState {
     fn default() -> Self {
         // (until the game has drawn a frame: a 1080p screen)
-        UiState { panels: Vec::new(), toasts: Vec::new(), clicks: Vec::new(), changes: Vec::new(), focus: None, shown: true, screen: [1920.0, 1080.0, 1.0], serial: 0, typing: None }
+        UiState { panels: Vec::new(), toasts: Vec::new(), clicks: Vec::new(), changes: Vec::new(), focus: None, shown: true, screen: [1920.0, 1080.0, 1.0], serial: 0, typing: None, dock: None }
     }
 }
 
@@ -458,6 +480,17 @@ impl UiState {
     /// `omsi.ui.screen()`: logical width, height, and the interface's scale.
     pub fn screen(&self) -> [f32; 3] {
         self.screen
+    }
+
+    /// The game says where the navigator's board is and whose panel is in it, or that it
+    /// shows none.
+    pub fn set_dock(&mut self, dock: Option<Dock>) {
+        self.dock = dock;
+    }
+
+    /// `omsi.ui.dock()`: the navigator's board, None while it shows none.
+    pub fn dock(&self) -> Option<Dock> {
+        self.dock
     }
 
     pub fn panels(&self) -> &[PanelEntry] {
@@ -1032,6 +1065,18 @@ mod tests {
         for bad in ["F47F30", "#F47F3", "#GGGGGG", "#F47F30C", "#ÄÄÄ"] {
             assert_eq!(Rgba::parse(bad), None, "{bad}");
         }
+    }
+
+    #[test]
+    fn a_panel_for_the_navigators_board() {
+        let p = panel(r##"{ anchor = "navigator", children = { { type = "text", text = "Next: Markt" } } }"##).unwrap();
+        assert_eq!((p.anchor, p.anchor.factors()), (Anchor::Navigator, (0.0, 0.0)));
+        // the game says where the board is, or that there is none
+        let mut ui = UiState::default();
+        assert_eq!(ui.dock(), None);
+        let d = Dock { width: 360.0, room: 420.0, height: 96.0, owner: Some(7) };
+        ui.set_dock(Some(d));
+        assert_eq!(ui.dock(), Some(d));
     }
 
     #[test]

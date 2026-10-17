@@ -52,6 +52,11 @@ impl App {
         // (not under the open game menu: the pause menu's rail covers the left
         // edge, and the navigator's panel stood out from under it)
         let nav_hidden = !vr_active && self.menus.game_menu.is_some();
+        // (a plugin's panel for the navigator's board, as tall as it was laid out last: the
+        // navigator makes room for it and says where it goes)
+        if let Some(n) = self.menus.navigator.as_mut() {
+            n.dock = self.integrations.plugin_panels.docked;
+        }
         self.frame_navigator(dt, hud, vr_active, nav_hidden, vr_nav_display);
         // the Lua plugins' panels (`omsi.ui`): over the picture and the navigator,
         // under the game's own interface; not under its menus, nor in VR
@@ -355,6 +360,7 @@ impl App {
                 dt,
                 backdrop: ui::backdrop(settings.ui_opacity),
                 navigator: self.menus.navigator.as_ref().and_then(|n| n.screen_rect()),
+                dock: self.menus.navigator.as_ref().and_then(|n| n.dock_slot).map(|(r, scale, placed)| crate::plugin_ui::Dock { width: r[2], room: r[3], scale, at: placed.then(|| glam::Vec2::new(r[0], r[1])) }),
             };
             let mut state = plugin_ui.borrow_mut();
             self.integrations.plugin_panels.frame(r, scene, &mut state, &frame);
