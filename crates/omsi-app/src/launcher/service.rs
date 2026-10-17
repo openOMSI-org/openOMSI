@@ -320,20 +320,15 @@ fn read_jpeg(r: &Renderer, tex: &wgpu::Texture, quality: u8) -> anyhow::Result<V
     omsi_render::wait_gpu(&r.device, None).ok();
     let data = slice.get_mapped_range();
     let bgra = matches!(tex.format(), wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb);
-    let mut rgb = Vec::with_capacity((w * h * 3) as usize);
+    // (the rows as they are, without the copy's padding: the encoder takes the card's own pixels)
+    let mut pixels = Vec::with_capacity((w * h * 4) as usize);
     for y in 0..h as usize {
-        let line = &data[y * row as usize..y * row as usize + w as usize * 4];
-        for p in line.chunks_exact(4) {
-            if bgra {
-                rgb.extend_from_slice(&[p[2], p[1], p[0]]);
-            } else {
-                rgb.extend_from_slice(&p[..3]);
-            }
-        }
+        pixels.extend_from_slice(&data[y * row as usize..y * row as usize + w as usize * 4]);
     }
     drop(data);
     buf.unmap();
     let mut jpeg = Vec::new();
-    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, quality).encode(&rgb, w, h, image::ExtendedColorType::Rgb8)?;
+    let kind = if bgra { jpeg_encoder::ColorType::Bgra } else { jpeg_encoder::ColorType::Rgba };
+    jpeg_encoder::Encoder::new(&mut jpeg, quality).encode(&pixels, w as u16, h as u16, kind)?;
     Ok(jpeg)
 }

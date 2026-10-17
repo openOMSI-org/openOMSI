@@ -81,6 +81,8 @@ ring.workspace = true
 rust-i18n = "4"
 # updates: the release archives from GitHub
 zip.workspace = true
+# the launcher preview's pictures: a JPEG encoder a few times faster than image's
+jpeg-encoder = { version = "0.7.1", features = ["simd"] }
 
 # the desktop's clipboard and file dialogs (a phone has neither in this form; an iPhone's
 # come from the Swift side, see `apple`)

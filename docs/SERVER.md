@@ -217,3 +217,9 @@ check) and the same mods as the players: the server lists its content in `WELCOM
 4. Lobby: servers post `name/map/players/code` to the relay's lobby topic; the launcher
    shows the list.
 5. Admin commands and a small status page (players, tick time, bandwidth).
+
+## License
+
+openOMSI is released under the GNU Affero General Public License, version 3 only (`LICENSE`).
+Its launcher preview encodes pictures with [jpeg-encoder](https://crates.io/crates/jpeg-encoder): this
+software is based in part on the work of the Independent JPEG Group.

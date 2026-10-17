@@ -200,6 +200,9 @@ coffee or support it on Ko-fi - thank you!
 openOMSI is released under the [GNU Affero General Public License, version 3 only](LICENSE)
 (`AGPL-3.0-only`). The historical MIT copyright and permission notice is retained in
 `LICENSE`; earlier MIT releases keep their terms. Third-party files keep their own licenses.
+The launcher's bus preview encodes its pictures with
+[jpeg-encoder](https://crates.io/crates/jpeg-encoder): this software is based in part on the
+work of the Independent JPEG Group.
 The openOMSI name and original project logos are marks of `usonskyyyy`, who created
 the original codebase; see [TRADEMARKS.md](TRADEMARKS.md). The official organization is
 [openOMSI.org (`openOMSI-org`)](https://github.com/openOMSI-org).

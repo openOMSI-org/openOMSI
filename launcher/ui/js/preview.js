@@ -4,7 +4,7 @@
 //
 // One request a picture, and the drag and the wheel ride along with it, so a turn costs one
 // round trip. Nothing is asked while nothing moves or the window is hidden; moving
-// pictures are capped at 30 per second to leave room for the launcher's interface.
+// pictures are capped at 60 per second to leave room for the launcher's interface.
 
 import { html, useEffect, useRef, useState } from '../vendor/preact-htm.js';
 import { call, on } from './api.js';
@@ -43,8 +43,8 @@ export function BusPreview({ look, class: cls = '' }) {
     st.alive = true;
     let lastFrame = 0;
     const paced = () => new Promise((res) => {
-      const step = (t) => (t - lastFrame >= 1000 / 30 - 4 ? res() : requestAnimationFrame(step));
-      if (performance.now() - lastFrame >= 1000 / 30) res();
+      const step = (t) => (t - lastFrame >= 1000 / 60 - 2 ? res() : requestAnimationFrame(step));
+      if (performance.now() - lastFrame >= 1000 / 60) res();
       else requestAnimationFrame(step);
     });
     (async () => {
