@@ -583,6 +583,26 @@ mod tests {
         }
     }
 
+    /// At the start every trip still under way comes out, however long ago it left (a bus
+    /// that stands on a detector from 20:00 to 04:00, the map opened at 23:30); once the
+    /// map is running, only the departures of the moment do, and a trip already over never.
+    #[test]
+    fn the_trips_under_way_at_the_start_all_come_out() {
+        let mut sim = schedule();
+        let (world, mut traffic) = (no_world(), no_traffic());
+        tours(&mut sim, &[(72_000.0, "1", None), (82_000.0, "2", None), (84_300.0, "3", None)]);
+        sim.times[0][0].duration = 8.0 * 3600.0;
+        sim.times.push(vec![TripTimes { stations: vec![(0.0, 0.0), (60.0, 60.0)], stops: vec![true, true], duration: 60.0, ..Default::default() }]);
+        sim.departures[1].trip = 1;
+        sim.queue_due(&world, &mut traffic, 84_600.0, 20.0 * 60.0);
+        assert_eq!(sim.pending.iter().copied().collect::<Vec<_>>(), [0, 2], "20:00's long trip and 23:25's, not 22:46's one-minute trip, over long ago");
+        let mut later = schedule();
+        tours(&mut later, &[(72_000.0, "1", None)]);
+        later.times[0][0].duration = 8.0 * 3600.0;
+        later.queue_due(&world, &mut traffic, 84_600.0, 2.5);
+        assert!(later.pending.is_empty(), "a running map does not put out a trip begun hours ago");
+    }
+
     /// A tour's bus is out only while its tour runs: the second trip of a tour whose bus is
     /// missing stands at its first stop well before it leaves (#2593), the first trip of a
     /// tour comes at its departure time and not before (#2595).
