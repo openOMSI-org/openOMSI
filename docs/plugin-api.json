@@ -1078,7 +1078,7 @@
       "name": "duty.set_auto_ibis",
       "group": "duty",
       "since": "0.3.36",
-      "doc": "Whether the game types the duty into the bus's IBIS by itself - line, route, destination and the stop, at Shift+U and `--autostart` and again as each trip begins (on as a bus is taken). Off, the driver types them, or the plugin with `duty.type_ibis`. For the bus the player drives now; `true` when there is one.",
+      "doc": "Whether the game types the duty into the bus's IBIS by itself - line, route, destination and the stop, at Shift+U and `--autostart` and again as each trip begins (on as a bus is taken). Off, the driver types them, or the plugin with `duty.type_ibis`. For the bus the player drives now, and while the plugin runs: when it stops or is switched off the game types the IBIS again. `true` when there is a bus.",
       "params": [
         {
           "name": "on",

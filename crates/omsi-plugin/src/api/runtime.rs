@@ -213,6 +213,9 @@ pub struct PluginState {
     pub settings: super::fns::plugin::Settings,
     /// Sounds it started (stopped when it stops).
     pub voices: Vec<u64>,
+    /// It left the IBIS to the driver (`duty.set_auto_ibis(false)`): the game types it again
+    /// once the plugin goes ([`PluginState::give_back`]).
+    pub ibis_held: bool,
 }
 
 impl PluginState {
@@ -242,6 +245,7 @@ impl PluginState {
             sender: Default::default(),
             settings: Default::default(),
             voices: Vec::new(),
+            ibis_held: false,
         }
     }
 
@@ -264,6 +268,14 @@ impl PluginState {
         self.handlers.get(event).is_some_and(|l| !l.is_empty())
     }
 
+    /// What the plugin changed in the game that lasts beyond its own calls, given back as it
+    /// goes (stopped, failed or switched off): the IBIS typed by the game again.
+    pub fn give_back(&mut self, io: &mut dyn PluginIo) {
+        if std::mem::take(&mut self.ibis_held) {
+            io.duty_set_auto_ibis(true);
+        }
+    }
+
     /// A failed call: logged, shown, counted; switched off at `MAX_ERRORS` or when it ran
     /// past its budget.
     pub fn record_error(&mut self, io: &mut dyn PluginIo, e: &CallError) {
@@ -280,6 +292,7 @@ impl PluginState {
         if self.disabled {
             // (its buttons would answer nothing any more)
             self.hub.ui.borrow_mut().remove_owner(self.owner);
+            self.give_back(io);
         }
     }
 }
@@ -623,6 +636,8 @@ pub fn finish(ctx: &mut Ctx<'_>) {
     }
     let owner = ctx.state().owner;
     ctx.state().ui().remove_owner(owner);
+    let (io, s) = ctx.both();
+    s.give_back(io);
     let name = ctx_name(ctx);
     ctx.state().hub.names.borrow_mut().retain(|n| *n != name);
 }

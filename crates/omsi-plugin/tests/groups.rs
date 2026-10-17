@@ -402,3 +402,33 @@ fn passengers_tickets() {
     assert_eq!(g.messages, ["heard 1"]);
     assert_eq!(*g.log.borrow(), ["ticket 1 None None Some(\"Zone 1\") Some(30.0) Some(\"Zone_1\") Some(\"zones\") by tickets"]);
 }
+
+/// A plugin that left the IBIS to the driver gives it back to the game when it goes:
+/// stopped, or switched off (review of #2877).
+#[test]
+fn the_ibis_is_given_back_when_its_plugin_goes() {
+    // (a plugin's calls in its first frame, where it has the game)
+    let once = |body: &str| format!("local done = false
+function on_frame()
+if done then return end
+done = true
+{body}
+end");
+    // stopped (loaded again after a change, say)
+    let mut g = Game::new();
+    let mut p = run("ibisstop", &once("assert(omsi.duty.set_auto_ibis(false))"), &mut g, 1);
+    assert_eq!(g.log.borrow().as_slice(), ["auto ibis false"]);
+    p.lua[0].stop(&mut g);
+    assert_eq!(g.log.borrow().as_slice(), ["auto ibis false", "auto ibis true"]);
+    // switched off
+    let mut g = Game::new();
+    run("ibisoff", &once("assert(omsi.duty.set_auto_ibis(false))
+omsi.plugin.disable('done')"), &mut g, 2);
+    assert_eq!(g.log.borrow().as_slice(), ["auto ibis false", "auto ibis true"]);
+    // (one that turned it on again has nothing to give back)
+    let mut g = Game::new();
+    let mut p = run("ibisagain", &once("omsi.duty.set_auto_ibis(false)
+omsi.duty.set_auto_ibis(true)"), &mut g, 1);
+    p.lua[0].stop(&mut g);
+    assert_eq!(g.log.borrow().as_slice(), ["auto ibis false", "auto ibis true"]);
+}
