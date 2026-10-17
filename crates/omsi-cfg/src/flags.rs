@@ -412,6 +412,7 @@ flags! {
     OMSI_PAX_CROSS: Text, Test, Use, "-", "x,y: send pedestrians across the signalised crossing nearest that point.";
     OMSI_PAX_WAITING: Num, Test, Use, "-", "Number of passengers waiting at each stop.";
     OMSI_PHOTO: Text, Test, Use, "-", "Photo mode settings for a test, key=value by commas: orbit (dist, around, up), kmh (the bus moving), focal (mm), dof, fstop (f-number), focus (m; none: on the bus), motion, shutter (1/s), filter (0..10), vignette, grain, exposure (EV), aspect (0..7), grid (0..3), quality (0..3).";
+    OMSI_PICK_BUSES: Text, Test, Use, "-", "cargo test -p omsi-app installed_switches_stay_reachable_from_inside: more .bus files to check, by commas (under the root, or absolute).";
     OMSI_PLUGIN_HOST32: Text, Setup, Use, "beside the game", "Path of omsi-plugin-host32.exe.";
     OMSI_POPULATION_SHOTS: Bool, Test, Use, "off", "Offscreen: pictures of the framed population spawns.";
     OMSI_PRESENCE_URL: Text, Setup, Use, "built-in", "Base URL of the presence (\"playing now\") service.";

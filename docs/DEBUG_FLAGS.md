@@ -204,6 +204,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_PAX_CROSS` | text | - | use | sim | x,y: send pedestrians across the signalised crossing nearest that point. |
 | `OMSI_PAX_WAITING` | num | - | use | sim | Number of passengers waiting at each stop. |
 | `OMSI_PHOTO` | text | - | use | app | Photo mode settings for a test, key=value by commas: orbit (dist, around, up), kmh (the bus moving), focal (mm), dof, fstop (f-number), focus (m; none: on the bus), motion, shutter (1/s), filter (0..10), vignette, grain, exposure (EV), aspect (0..7), grid (0..3), quality (0..3). |
+| `OMSI_PICK_BUSES` | text | - | use | app | cargo test -p omsi-app installed_switches_stay_reachable_from_inside: more .bus files to check, by commas (under the root, or absolute). |
 | `OMSI_POPULATION_SHOTS` | bool | off | use | app | Offscreen: pictures of the framed population spawns. |
 | `OMSI_PROBE` | text | - | use | app | x0,y0,x1,y1[,n]: print terrain and road surface heights along a line. |
 | `OMSI_PROBE_GRID` | text | - | use | app | x,y,half,step: the wheels' ground on a grid around a point. |
