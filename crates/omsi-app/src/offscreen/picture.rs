@@ -327,6 +327,7 @@ impl Offscreen<'_> {
                 nav.set_map(world.navigation_map());
                 nav.set_surface(omsi_map::package::Package::open(&world.map_dir));
                 nav.set_layers(world.map_layers());
+                nav.show_contours = omsi_cfg::flags::OMSI_NAV_CONTOURS.is_set();
                 if let Some(spec) = omsi_cfg::flags::OMSI_NAV_LINES.var() {
                     nav.debug_lines(spec);
                 }

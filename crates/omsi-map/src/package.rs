@@ -17,8 +17,10 @@ use std::path::{Path, PathBuf};
 
 mod lines;
 mod places;
+mod relief;
 pub use lines::{LineInfo, RouteInfo, GROUP_BRT, GROUP_EXPRESS, GROUP_FEEDER, MODAL_BUS, MODAL_METRO, MODAL_RAIL, MODAL_TRAM};
 pub use places::{Label, Marker, Region, Street};
+pub use relief::{LINE_CONTOUR, LINE_CONTOUR_INDEX};
 
 pub const FOLDER: &str = "openomsi-realmap";
 const MAGIC: &[u8; 4] = b"OMSF";
@@ -156,6 +158,8 @@ pub struct Layers {
     /// Rivers, rail and borders (the streets and contours of a package are not here: the
     /// readers that need them read their own classes).
     pub lines: Vec<Line>,
+    /// The contour lines of the ground (classes 5 and 6; `width` is the height in metres): none in a package without relief.
+    pub contours: Vec<Line>,
 }
 
 /// The package of a map (see the module).
@@ -180,6 +184,10 @@ pub struct Package {
     regions: Vec<Region>,
     has_streets: bool,
     lines: Vec<LineInfo>,
+    /// The package carries contour lines; the manifest's `terrain_offset`; where heights are written (made on first use).
+    has_contours: bool,
+    terrain_offset: f32,
+    contour_marks: std::sync::OnceLock<Vec<((f64, f64), i32, bool)>>,
 }
 
 /// Bounds-checked reading: any short or odd file ends in `None`, never a panic.
@@ -238,6 +246,7 @@ impl Package {
         let (mut format, mut grid) = (0u32, 0.0f64);
         let (mut name, mut credit) = (String::new(), String::new());
         let (mut dark, mut light) = (Palette::dark(), Palette::light());
+        let mut terrain_offset = 0.0f32;
         for line in text.lines() {
             let line = line.trim();
             if line.starts_with('#') {
@@ -252,6 +261,7 @@ impl Package {
                 "grid" => grid = v.parse().unwrap_or(0.0),
                 "name" => name = v.to_string(),
                 "credit" => credit = v.to_string(),
+                "terrain_offset" => terrain_offset = v.parse().unwrap_or(0.0),
                 _ => {
                     // a colour: `water = #..` for the dark map, `light_water = #..` for the light one
                     if let Some(c) = parse_color(v) {
@@ -275,6 +285,8 @@ impl Package {
         if let Some(p) = p.as_mut() {
             p.dir = dir.clone();
             p.map_dir = map_dir.to_path_buf();
+            p.terrain_offset = terrain_offset;
+            p.load_relief();
             p.load_places();
             p.load_lines();
         }
@@ -347,6 +359,9 @@ impl Package {
             regions: Vec::new(),
             has_streets: false,
             lines: Vec::new(),
+            has_contours: false,
+            terrain_offset: 0.0,
+            contour_marks: std::sync::OnceLock::new(),
         })
     }
 
@@ -442,8 +457,16 @@ impl Package {
             if n.checked_mul(8)? > r.left() {
                 return None;
             }
+            if class == LINE_CONTOUR || class == LINE_CONTOUR_INDEX {
+                let mut points = Vec::with_capacity(n);
+                for _ in 0..n {
+                    points.push(self.to_world(r.f32()?, r.f32()?));
+                }
+                out.contours.push(Line { class, width, points });
+                continue;
+            }
             if !matches!(class, LINE_RIVER | LINE_RAIL | LINE_BORDER) {
-                // a street to look up or a contour: not for this reader
+                // a street to look up: not for this reader
                 r.take(n * 8)?;
                 continue;
             }
@@ -482,6 +505,9 @@ impl Package {
             regions: Vec::new(),
             has_streets: false,
             lines: Vec::new(),
+            has_contours: false,
+            terrain_offset: 0.0,
+            contour_marks: std::sync::OnceLock::new(),
         }
     }
 }
@@ -617,6 +643,10 @@ mod tests {
         }
         let classes: Vec<u8> = l.lines.iter().map(|x| x.class).collect();
         assert_eq!(classes, vec![LINE_RIVER, LINE_RIVER, LINE_RAIL, LINE_BORDER]);
+        // a hill: eleven contour lines, from 40 to 60 m, an index line at each tenth
+        assert!(p.has_contours());
+        assert_eq!(l.contours.len(), 11);
+        assert_eq!(l.contours.iter().filter(|c| c.class == LINE_CONTOUR_INDEX).map(|c| c.width as i32).collect::<Vec<_>>(), vec![40, 50, 60]);
         // the file's origin is the south-west corner of the tutorial map's tiles (-300, -600): tile (-1, -2)
         let (x, y) = crate::tile_local_to_world(-1, -2, 0.0, 0.0);
         let first = l.fills[FILL_WATER as usize][0][0];

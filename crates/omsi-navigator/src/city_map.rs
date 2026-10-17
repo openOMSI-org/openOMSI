@@ -329,6 +329,7 @@ impl Navigator {
         }
         match hit {
             Some(5) => self.city.lines.toggle(),
+            Some(6) => self.show_contours = !self.show_contours,
             Some(0) => self.city.follow = true,
             Some(1) => self.city.mpp = (self.city.mpp / 1.6).max(MIN_MPP),
             Some(2) => self.city.mpp = (self.city.mpp * 1.6).min(self.max_mpp()),
@@ -439,7 +440,8 @@ impl Navigator {
         // (tilted, the far part of the view reaches well beyond the middle's scale)
         let radius = (w.max(h) as f64 * mpp * (0.8 + 1.4 * tilt as f64)).max(500.0);
         let detail = (mpp < 0.7) as u64 | ((mpp < 2.2) as u64) << 1 | ((mpp < 3.5) as u64) << 2 | ((mpp < 6.0) as u64) << 3;
-        let key = self.look_key() ^ detail << 40 ^ self.global_version << 48;
+        let band = self.contour_band();
+        let key = self.look_key() ^ detail << 40 ^ self.global_version << 48 ^ band.map_or(0, |b| 1 + b.1) << 36;
         let mut arrived = None;
         if let Some(job) = self.city_job.as_ref() {
             match job.poll() {
@@ -460,7 +462,7 @@ impl Navigator {
         };
         if stale && arrived.is_none() {
             let look = GroundLook { surfaces: mpp < 0.7, trees: mpp < 0.7, dashes: mpp < 3.5 };
-            let parts = self.ground_parts(net);
+            let parts = self.ground_parts(net, band.map(|b| b.0));
             let pal2 = *pal;
             let houses = mpp < 6.0;
             let job = move || super::build::build(&parts, centre, radius, &pal2, look, mpp < 2.2, houses);
@@ -652,6 +654,7 @@ impl Navigator {
                 ui.text_rotated(&mut self.atlas, &self.fonts, name, px, Weight::Medium, p, ang, pal.label);
             }
         }
+        self.terrain_labels(&mut ui, &on_screen, win, s);
         for (k, p) in markers.into_iter().rev() {
             if self.city.mpp < 4.0 || k == 0 || k + 1 == n_stops {
                 stop_pin(&mut ui, &mut self.atlas, p, k == 0, k + 1 == n_stops, s);
@@ -740,7 +743,8 @@ impl Navigator {
             self.city.buttons.push((r, id));
         }
         // the Lines button, left of the close button, and its panel, left of the column
-        self.draw_lines_ui(&mut ui, (w, h, s), (pad, bs, bx, close), &on_line, &on_screen);
+        let right = self.draw_lines_ui(&mut ui, (w, h, s), (pad, bs, bx, close), &on_line, &on_screen);
+        self.draw_terrain_button(&mut ui, pad, bs, right, s);
         if self.show_surface && self.place.has_location() {
             self.place.draw_chips(&mut ui, &mut self.atlas, &self.fonts, head, w, pad, s);
         }

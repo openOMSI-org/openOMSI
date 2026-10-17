@@ -61,6 +61,7 @@ light_water = #9cc3d6
 - `format`: integer. A reader that does not know it ignores the package.
 - `grid`: the author's tile size in metres (section 3). Required, greater than 1.
 - `name`: for people. `credit`: shown on the city map; give it when the data needs attribution.
+- `terrain_offset`: metres added to the height of every contour line when the game writes it (default 0; section 10).
 - Colours: the game has a **dark** and a **light** look. `water = #rrggbb` colours the dark map and its
   `light_` twin the light one. Keys: `land water river green grass forest sport farm built rail rail_edge
   border`. The layers are semantic, so the game keeps the last word on how they look.
@@ -100,7 +101,8 @@ u32  n_labels  ; n_labels x { u8 kind, u8 rank, u32 name, f32 x, f32 y }   names
 
 - Fill `class`: `0 water, 1 green (parks, gardens), 2 built, 3 grass (grass, meadow, scrub), 4 forest (wood,
   forest), 5 sport (pitches, stadiums), 6 farm`.
-- Line `class`: `0 river, 1 rail, 2 border`, drawn; `3 street` and `4 street with limits`, not drawn (section 8). A
+- Line `class`: `0 river, 1 rail, 2 border`, drawn; `3 street` and `4 street with limits`, not drawn (section 8);
+  `5 contour line` and `6 index contour line` (every fifth), drawn in the terrain view (section 10). A
   river's `width_m` of 5 or more is a river, less a stream. Other classes are skipped, so a later version can add
   more without breaking this one.
 - Triangles are already triangulated; there are no holes to resolve. `name` indexes the string table
@@ -184,12 +186,26 @@ time, days, model, route 1 or 2), and the list of the map's lines with a tick bo
 colour of its own, with its stops; the vehicles that run it (read from the line they show) get a ring in its colour,
 and the card counts them. The route of the trip the player drives is not changed. Without the file there is no button.
 
-## 10. Trying it
+## 10. Relief: contour lines
+
+Contour lines of the ground are lines of `surface.oms` of class 5 (a line every so many metres of height) and
+class 6 (an **index** line, every fifth, drawn stronger): their `width_m` is the **height above sea level in metres**.
+The author's tools make them (from the real terrain, or from the map's own ground), at a spacing that suits the
+land: 1 m on a city, 5 m on hills. Heights are above sea level; `terrain_offset` in the manifest is only for a
+package whose lines are in the editor's own heights.
+
+With contour lines in the package the city map gets a **Terrain** button: the **terrain view** shows only water,
+rivers, rail and the contour lines (the land use is left out so that the lines stand out), with the **height** in
+metres written on the lines: on all of them up close, on the index lines only from further away, never one over
+another. From far away the lines are fainter, so that the streets stand out. Without contour lines there is no
+button, and a reader that does not know classes 5 and 6 skips them.
+
+## 11. Trying it
 
 - **The example in this repository**, `docs/examples/openomsi-realmap/`: a few made-up shapes (a lake, a
-  river, a railway, a border, a park, a wood), three names, a street with a 30 km/h limit, two icons (a stop and a
+  river, a railway, a border, a park, a wood, a hill with its contour lines), three names, a street with a 30 km/h limit, two icons (a stop and a
   station), one region and three lines (two bus lines and a tram), in the tile grid of the tutorial map **Grundorf**,
-  about 3 KB in all, with no data of
+  about 6 KB in all, with no data of
   OMSI 2 or OpenStreetMap. Copy the folder to `Maps/Grundorf/openomsi-realmap/` in the content folder, start
   Grundorf and open the navigator (Shift+N) and the city map (Shift+M): near the start of the map the row under the
   next stop says "Exampleton | Example Street".

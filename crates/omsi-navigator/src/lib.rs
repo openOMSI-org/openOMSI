@@ -367,6 +367,9 @@ pub struct Navigator {
     surface_version: u64,
     /// The surface is drawn (the `nav_surface` setting).
     pub show_surface: bool,
+    /// The terrain view of the city map: contour lines and their heights, where the map's package carries them (the
+    /// `nav_contours` setting; a button on the map).
+    pub show_contours: bool,
     /// The light look of the maps (the `nav_light` setting).
     pub light: bool,
     /// The map's own layers (houses, ground, paving: `omsi_scene::mapgen`), once read, and a
@@ -550,6 +553,7 @@ impl Navigator {
             surface: None,
             surface_version: 0,
             show_surface: true,
+            show_contours: false,
             light: false,
             map_data: None,
             map_version: 0,
@@ -1307,6 +1311,7 @@ mod line_times;
 mod lines_panel;
 mod lines_sheet;
 mod place;
+mod relief;
 mod surface;
 pub use omsi_mapdraw::style;
 pub use omsi_mapdraw as mapmesh;

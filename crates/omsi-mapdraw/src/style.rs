@@ -42,6 +42,8 @@ pub struct Palette {
     pub card_dim: Color,
     pub label: Color,
     pub label_halo: Color,
+    /// The ground's contour lines (the terrain view).
+    pub contour: Color,
 }
 
 const fn hex(v: u32) -> Color {
@@ -78,6 +80,7 @@ pub const LIGHT: Palette = Palette {
     card_dim: hex(0x6e6e73),
     label: hex(0x4a4a4f),
     label_halo: Color::rgba(255, 255, 255, 0.9),
+    contour: Color::rgba(150, 105, 60, 1.0),
 };
 
 pub const DARK: Palette = Palette {
@@ -110,6 +113,7 @@ pub const DARK: Palette = Palette {
     card_dim: hex(0xa1a1a8),
     label: hex(0xd6d6db),
     label_halo: Color::rgba(20, 20, 22, 0.85),
+    contour: Color::rgba(190, 150, 100, 1.0),
 };
 
 pub fn palette(light: bool) -> &'static Palette {

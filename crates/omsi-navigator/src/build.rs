@@ -17,6 +17,8 @@ pub(super) struct GroundParts {
     pub net: Option<Arc<Network>>,
     pub md: Option<Arc<MapData>>,
     pub surface: Option<Arc<omsi_map::package::Package>>,
+    /// The terrain view: how strong the contour lines are (None: off).
+    pub contours: Option<f32>,
 }
 
 /// What a build makes, relative to `anchor`: the ground, and the houses' shadows, standing
@@ -52,10 +54,13 @@ impl Built {
 pub(super) fn build(parts: &GroundParts, anchor: DVec2, reach: f64, pal: &Palette, look: GroundLook, paved: bool, houses: bool) -> Built {
     let mut p = Painter::new();
     if let Some(sf) = parts.surface.as_deref() {
-        super::surface::build_surface(&mut p, sf, anchor, Some((anchor, reach)), pal);
+        super::surface::build_surface(&mut p, sf, anchor, Some((anchor, reach)), pal, parts.contours.is_some());
     }
     if let Some(md) = parts.md.as_deref() {
         md.build_land(&mut p, anchor, anchor, reach, pal, look);
+    }
+    if let (Some(sf), Some(k)) = (parts.surface.as_deref(), parts.contours) {
+        super::surface::build_contours(&mut p, sf, anchor, Some((anchor, reach)), pal, k);
     }
     let paved = paved && parts.md.is_some();
     let rel = |q: DVec3| Vec3::new((q.x - anchor.x) as f32, (q.y - anchor.y) as f32, 0.0);
@@ -175,13 +180,14 @@ impl Navigator {
     }
 
     /// What a build reads now (`net`: the network the roads are drawn from).
-    pub(super) fn ground_parts(&mut self, net: Option<&Network>) -> GroundParts {
+    pub(super) fn ground_parts(&mut self, net: Option<&Network>, contours: Option<f32>) -> GroundParts {
         let roads = net.map(|n| self.road_list(n)).unwrap_or_default();
         GroundParts {
             roads,
             net: self.global.clone(),
             md: self.map_data.clone(),
             surface: self.surface.clone().filter(|_| self.show_surface),
+            contours,
         }
     }
 }

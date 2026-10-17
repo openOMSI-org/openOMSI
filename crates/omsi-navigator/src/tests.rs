@@ -370,6 +370,43 @@ fn the_route_of_the_line_in_focus_is_picked() {
 }
 
 #[test]
+fn the_terrain_view_leaves_out_the_land_use_and_draws_the_contour_lines() {
+    let n = with_example_lines();
+    let sf = n.surface.clone().unwrap();
+    assert!(sf.has_contours());
+    let pal = style::palette(false);
+    let (mut full, mut terrain) = (Painter::new(), Painter::new());
+    surface::build_surface(&mut full, &sf, DVec2::ZERO, None, pal, false);
+    surface::build_surface(&mut terrain, &sf, DVec2::ZERO, None, pal, true);
+    assert!(!full.verts.is_empty() && !terrain.verts.is_empty());
+    // (the land use is left out of the terrain view)
+    assert!(terrain.verts.len() < full.verts.len());
+    // the contour lines are a ribbon each; the strength changes the colour, not the lines
+    let (mut strong, mut faint) = (Painter::new(), Painter::new());
+    surface::build_contours(&mut strong, &sf, DVec2::ZERO, None, pal, 1.0);
+    surface::build_contours(&mut faint, &sf, DVec2::ZERO, None, pal, 0.2);
+    assert!(!strong.verts.is_empty());
+    assert_eq!(strong.verts.len(), faint.verts.len());
+    assert!(strong.verts.iter().zip(&faint.verts).any(|(a, b)| a.color != b.color));
+}
+
+#[test]
+fn the_terrain_view_needs_a_button_a_package_with_relief_and_has_a_band_for_each_zoom() {
+    let mut n = with_example_lines();
+    assert!(n.contour_band().is_none(), "off until the button is pressed");
+    n.show_contours = true;
+    n.city.mpp = 2.0;
+    assert_eq!(n.contour_band().map(|b| b.1), Some(0));
+    n.city.mpp = 8.0;
+    assert_eq!(n.contour_band().map(|b| b.1), Some(1));
+    n.city.mpp = 30.0;
+    assert_eq!(n.contour_band().map(|b| b.1), Some(2));
+    // (the surface drawn off: no terrain view either)
+    n.surface = None;
+    assert!(n.contour_band().is_none());
+}
+
+#[test]
 fn the_timetable_is_read_on_a_worker_and_the_frame_does_not_wait_for_it() {
     let mut n = with_example_lines();
     n.date = 19900101;

@@ -353,10 +353,10 @@ impl Navigator {
 
     /// The Lines button left of the close button and its panel left of the column of buttons (`size`: the window's width
     /// and height and the interface scale; `at`: the pad, the button size, the column's x and the close button).
-    pub(super) fn draw_lines_ui(&mut self, ui: &mut Painter, size: (f32, f32, f32), at: (f32, f32, f32, Rect), on_line: &HashMap<usize, usize>, on_screen: &dyn Fn(DVec3) -> Vec2) {
+    pub(super) fn draw_lines_ui(&mut self, ui: &mut Painter, size: (f32, f32, f32), at: (f32, f32, f32, Rect), on_line: &HashMap<usize, usize>, on_screen: &dyn Fn(DVec3) -> Vec2) -> f32 {
         let ((w, h, s), (pad, bs, bx, close)) = (size, at);
         let lt = lines_text();
-        self.draw_lines_button(ui, pad, bs, close.x - 8.0 * s, s, &lt);
+        let right = self.draw_lines_button(ui, pad, bs, close.x - 8.0 * s, s, &lt);
         if self.city.lines.open && self.surface.as_ref().is_some_and(|sf| !sf.lines().is_empty()) {
             // (a departure picked: the time at each stop, on the map)
             if let (true, Some(sf), Some(i)) = (self.city.lines.sheet, self.surface.clone(), self.city.lines.focus) {
@@ -364,6 +364,7 @@ impl Navigator {
             }
             self.lines_panel(ui, w, h, s, close.bottom() + 12.0 * s, bx - 12.0 * s, &lt, on_line);
         }
+        right
     }
 
     /// The Lines button, only where the package has lines: `bs` high at `y`, its right edge at `right`; returns the new `right`.

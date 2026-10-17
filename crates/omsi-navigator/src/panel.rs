@@ -67,7 +67,7 @@ impl Navigator {
         }
         if rebuild && self.panel_job.is_none() && built.is_none() {
             let anchor = f.bus.truncate();
-            let parts = self.ground_parts(net);
+            let parts = self.ground_parts(net, None);
             let look = GroundLook { surfaces: true, trees: true, dashes: true };
             let reach = PANEL_REACH;
             if self.global.is_some() {
