@@ -33,6 +33,12 @@ impl Built {
         Built { anchor, counts: verts.each_ref().map(Vec::len), verts, made: None }
     }
 
+    /// The vertices as built (empty once `made_on` put them on the GPU): the ground, then the
+    /// houses' shadows, their standing walls and roofs, and their flat roofs.
+    pub fn vertices(&self) -> &[Vec<Vertex>; 4] {
+        &self.verts
+    }
+
     pub fn made_on(mut self, device: &wgpu::Device) -> Built {
         self.made = Some(self.verts.each_ref().map(|v| omsi_ui::Gpu::vertices(device, v)));
         self.verts = Default::default();

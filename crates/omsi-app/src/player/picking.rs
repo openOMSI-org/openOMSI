@@ -88,6 +88,7 @@ pub(crate) const RING_SLACK: f32 = 0.05;
 pub(crate) struct Reach(pub f32);
 
 impl Reach {
+    #[cfg(test)]
     pub(crate) const ANY: Reach = Reach(f32::INFINITY);
 
     /// The farthest hit ring `ring` (0: the ray through the cursor) may take.

@@ -257,6 +257,7 @@ fn map_ground(map: &str, global: &std::path::Path, date: &str, at: glam::DVec2, 
     };
     let (origin, ground) = read;
     let b = ground.build(origin + at, reach, mpp, light);
+    let [ground_v, _, solid, flat] = b.vertices();
     let pal = omsi_mapdraw::style::palette(light);
     let css = |c: omsi_ui::Color| {
         let c = c.0;
@@ -264,10 +265,10 @@ fn map_ground(map: &str, global: &std::path::Path, date: &str, at: glam::DVec2, 
     };
     let head = json!({
         "anchor": [b.anchor.x - origin.x, b.anchor.y - origin.y],
-        "ground": b.ground.len(),
+        "ground": ground_v.len(),
         // (the houses' standing walls and roofs, then the flat roofs; their shadows only
         // fall where the map is tilted, which this one never is)
-        "houses": [b.houses[1].len(), b.houses[2].len()],
+        "houses": [solid.len(), flat.len()],
         "palette": {
             "land": css(pal.land), "route": css(pal.route), "route_edge": css(pal.route_edge), "driven": css(pal.driven),
             "card": css(pal.card), "card_text": css(pal.card_text), "card_dim": css(pal.card_dim),
@@ -275,8 +276,8 @@ fn map_ground(map: &str, global: &std::path::Path, date: &str, at: glam::DVec2, 
         },
     })
     .to_string();
-    let verts = b.ground.iter().chain(&b.houses[1]).chain(&b.houses[2]);
-    let mut out = Vec::with_capacity(4 + head.len() + 28 * (b.ground.len() + b.houses[1].len() + b.houses[2].len()));
+    let verts = ground_v.iter().chain(solid).chain(flat);
+    let mut out = Vec::with_capacity(4 + head.len() + 28 * (ground_v.len() + solid.len() + flat.len()));
     out.extend_from_slice(&(head.len() as u32).to_le_bytes());
     out.extend_from_slice(head.as_bytes());
     for v in verts {
