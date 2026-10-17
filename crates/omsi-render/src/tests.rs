@@ -1452,6 +1452,7 @@ fn flares_show_through_the_glass_of_the_vehicle_the_camera_is_in() {
 mod bundles;
 mod coplanar;
 mod lamp_shadows;
+mod light_grid;
 mod light_maps;
 mod more;
 mod prepass_reach;
