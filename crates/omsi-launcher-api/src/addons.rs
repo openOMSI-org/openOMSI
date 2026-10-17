@@ -36,6 +36,21 @@ struct Addon {
     tags: Vec<String>,
 }
 
+/// Whether a homepage is a plain https address of a named website, as the browser reads it
+/// (the URL standard, as the page's `new URL` does): no user name or password before the host
+/// (`https://example.org@localhost/` goes to localhost), no port, no IP address or localhost,
+/// and none of the characters other programs read in other ways (a backslash, quotes, `<>`):
+/// the system opens the address, not only a browser that follows the standard.
+fn homepage_ok(text: &str) -> bool {
+    let odd = |c: char| c.is_whitespace() || c.is_control() || matches!(c, '\\' | '"' | '\'' | '<' | '>' | '^' | '`' | '{' | '}' | '|');
+    if !text.starts_with("https://") || text.len() > 200 || text.chars().any(odd) {
+        return false;
+    }
+    let Ok(u) = url::Url::parse(text) else { return false };
+    let named = matches!(u.host(), Some(url::Host::Domain(d)) if d.contains('.') && !d.ends_with('.') && d != "localhost" && !d.ends_with(".localhost"));
+    u.scheme() == "https" && u.username().is_empty() && u.password().is_none() && u.port().is_none() && named
+}
+
 /// What is wrong with an entry, if anything: it is then left out of the page.
 fn problem(a: &Addon) -> Option<String> {
     let short = |text: &str, max: usize| !text.trim().is_empty() && text.chars().count() <= max;
@@ -57,18 +72,8 @@ fn problem(a: &Addon) -> Option<String> {
     if !a.translations.keys().all(|l| plain(l) && l.len() <= 8) {
         return Some("a translation's language is not a code of app.yml".into());
     }
-    // (https only, and nothing the browser could read as more than an address)
-    let host = a
-        .homepage
-        .strip_prefix("https://")
-        .map(|r| r.split(['/', '?', '#']).next().unwrap_or(""));
-    if !matches!(host, Some(h) if h.contains('.'))
-        || a.homepage.len() > 200
-        || a.homepage
-            .chars()
-            .any(|c| c.is_whitespace() || c.is_control())
-    {
-        return Some("the homepage is not an https address".into());
+    if !homepage_ok(&a.homepage) {
+        return Some("the homepage is not a plain https address of a named website".into());
     }
     if let Some(icon) = &a.icon {
         if !(plain(icon.trim_end_matches(".svg").trim_end_matches(".png"))
@@ -161,6 +166,31 @@ mod tests {
             assert!(problem(&a).is_some(), "{url}");
         }
         assert_eq!(problem(&addon()), None);
+    }
+
+    /// The host is the one the browser goes to: a user name or password before it, a port,
+    /// an IP address or localhost under another spelling are refused (review of #2875).
+    #[test]
+    fn the_homepage_is_judged_by_its_parsed_host() {
+        for url in [
+            "https://example.com@localhost/",
+            "https://example.com@localhost",
+            "https://user:pass@example.org/",
+            "https://:pass@example.org/",
+            "https://example.org:8443/",
+            "https://127.0.0.1/",
+            "https://0x7f.0.0.1/",
+            "https://[::1]/",
+            "https://shop.localhost/",
+            "https://LOCALHOST/",
+            "https://example.org\\@localhost/",
+            "https:example.org",
+        ] {
+            assert!(!homepage_ok(url), "{url}");
+        }
+        for url in ["https://example.org", "https://example.org/an-addon?x=1#top", "https://Example.ORG/", "https://example.org/team@example/"] {
+            assert!(homepage_ok(url), "{url}");
+        }
     }
 
     #[test]

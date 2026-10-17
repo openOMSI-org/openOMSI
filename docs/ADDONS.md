@@ -35,7 +35,7 @@ icon to that folder) - nothing else in the same pull request. New entries go at 
 | `author` | yes | a person, group or company, at most 40 characters |
 | `description` | yes | English, at most 200 characters; what it does, not why it is the best |
 | `translations` | no | the description in other languages, by the codes of `crates/omsi-app/locales/app.yml` (`de`, `pt-pt`, `zh-tw`, ...); the page shows the player's language, else English |
-| `homepage` | yes | an `https://` address of the project's own page, at most 200 characters |
+| `homepage` | yes | an `https://` address of the project's own page on a named website, at most 200 characters: no user name or password in it, no port, no IP address or localhost |
 | `icon` | no | a `.svg` or `.png` file in `launcher/ui/addons/`, square, at most 10 KB; without one the card shows a globe |
 | `tags` | no | up to 5, lowercase, at most 20 characters each |
 

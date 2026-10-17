@@ -3679,6 +3679,7 @@ dependencies = [
  "omsi-weather",
  "serde",
  "serde_json",
+ "url",
 ]
 
 [[package]]
