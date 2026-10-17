@@ -25,6 +25,7 @@ members = [
     "crates/omsi-launcher-core",
     "crates/omsi-launcher-api",
     "crates/omsi-launcher-model",
+    "crates/omsi-admin",
     "crates/omsi-lan",
     "crates/omsi-platform",
     "crates/omsi-guard",

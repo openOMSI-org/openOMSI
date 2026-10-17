@@ -3421,6 +3421,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "omsi-admin"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "ring",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "omsi-app"
 version = "0.1.0"
 dependencies = [
@@ -3440,6 +3450,7 @@ dependencies = [
  "mimalloc",
  "ndk-context",
  "objc2 0.6.5",
+ "omsi-admin",
  "omsi-audio",
  "omsi-career",
  "omsi-cfg",
@@ -3647,6 +3658,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "libc",
  "log",
+ "omsi-admin",
  "omsi-cfg",
  "omsi-map",
  "omsi-model",

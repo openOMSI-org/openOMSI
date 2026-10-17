@@ -1,0 +1,12 @@
+[package]
+name = "omsi-admin"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "A dedicated server's administration without the game: who may do what, the admins' sessions, the operations they ask for and what became of them, the audit log, the players as the admins see them"
+
+[dependencies]
+log.workspace = true
+ring.workspace = true
+serde.workspace = true
+serde_json.workspace = true

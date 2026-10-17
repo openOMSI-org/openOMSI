@@ -1,7 +1,8 @@
 #!/bin/sh
 # Build the dedicated server (Linux, or any Unix) into dist/server - or into the folder
 # given as the first argument. The server is the game binary started with --server; the
-# folder gets start.sh and, on the first start, server.cfg with its defaults.
+# folder gets start.sh, run-server.sh (which asks for the folder, the settings and the map)
+# and, on the first start, server.cfg with its defaults.
 set -eu
 repo="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 cd "$repo"
@@ -15,7 +16,8 @@ cp target/release/openomsi "$dest/openomsi"
 # (Steam's library beside it, x86-64 only: the program does not start without it there)
 [ -f target/release/libsteam_api.so ] && cp target/release/libsteam_api.so "$dest/"
 cp scripts/server/start.sh "$dest/start.sh"
+cp scripts/server/run-server.sh "$dest/run-server.sh"
 cp docs/SERVER.md "$dest/README.md"
-chmod +x "$dest/start.sh" "$dest/openomsi"
+chmod +x "$dest/start.sh" "$dest/run-server.sh" "$dest/openomsi"
 touch "$dest/.openomsi-content"
-echo "openOMSI server $OPENOMSI_VERSION in $dest. Start it: $dest/start.sh /path/to/OMSI2"
+echo "openOMSI server $OPENOMSI_VERSION in $dest. Start it: $dest/run-server.sh (it asks), or $dest/start.sh /path/to/OMSI2"

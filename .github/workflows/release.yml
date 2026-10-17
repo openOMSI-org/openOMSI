@@ -152,9 +152,10 @@ jobs:
           Copy-Item README.md, LICENSE dist/windows/
           Compress-Archive -Path dist/windows/* -DestinationPath "out/$name.zip"
           # the dedicated server for Windows (Server 2016 and later): the same program
-          # started with --server, and start.cmd
+          # started with --server, start.cmd, and run-server.cmd that asks for the folder,
+          # the settings and the map
           New-Item -ItemType Directory -Force dist/server | Out-Null
-          Copy-Item dist/windows/openomsi.exe, dist/windows/vcruntime140.dll, dist/windows/vcruntime140_1.dll, dist/windows/msvcp140.dll, scripts/server/start.cmd, LICENSE dist/server/
+          Copy-Item dist/windows/openomsi.exe, dist/windows/vcruntime140.dll, dist/windows/vcruntime140_1.dll, dist/windows/msvcp140.dll, scripts/server/start.cmd, scripts/server/run-server.cmd, scripts/server/run-server.ps1, LICENSE dist/server/
           # (Steam's library: the x64 program does not start without it beside it)
           if (Test-Path dist/windows/steam_api64.dll) { Copy-Item dist/windows/steam_api64.dll dist/server/ }
           Copy-Item docs/SERVER.md dist/server/README.md

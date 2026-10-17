@@ -24,7 +24,7 @@ pub(crate) fn rail_of(kind: &ListKind, camera_tab: bool) -> Option<&'static str>
         | ListKind::Events => "controls",
         ListKind::World(_) => "world",
         ListKind::Lines | ListKind::Tours(..) => "duty",
-        ListKind::Admin => "admin",
+        ListKind::Admin | ListKind::AdminPlayers | ListKind::AdminPlayer(_) | ListKind::AdminConfirm(..) | ListKind::AdminClassic => "admin",
         _ => "vehicle",
     })
 }

@@ -55,6 +55,7 @@ impl Offscreen<'_> {
             ref mut sim_view,
             ref humans_off,
             ref mut real_time,
+            ref settings,
             ..
         } = *self;
         *srv_clock += dt as f64 * lan_off.as_ref().map(|l| l.clock_speed).unwrap_or(1.0);
@@ -105,67 +106,32 @@ impl Offscreen<'_> {
         if let Some(l) = lan_off.as_mut() {
             let positions = |id: u32| remotes_off.remotes.get(&id).map(|r| (r.vehicle().position, r.vehicle().heading));
             srv_admin.prune(l);
+            // the administration, whatever way it came (see `omsi_lan::admin::exec`): the
+            // players' games, a tool on this machine (POST /admin, checked by the gateway: an
+            // admin of its own), the web panel's requests
+            let hub = omsi_lan::admin::hub().map(|h| &**h);
+            let rules = crate::admin::server_rules(srv_metar.is_some());
             for (from, text) in l.take_commands() {
-                crate::admin::server_command(l, from, &text, srv_admin, &positions);
+                omsi_lan::admin::server_command(l, from, &text, srv_admin, &positions, &rules, hub);
             }
-            // a tool on this machine (POST /admin, checked by the gateway): an admin of its own
             for text in crate::lan::take_local_admin() {
-                srv_admin.admins.insert(crate::admin::LOCAL_ADMIN);
-                crate::admin::server_command(l, crate::admin::LOCAL_ADMIN, &format!("admin {text}"), srv_admin, &positions);
+                srv_admin.admins.insert(crate::admin::LOCAL_ADMIN, omsi_admin::Role::Admin);
+                omsi_lan::admin::server_command(l, crate::admin::LOCAL_ADMIN, &format!("admin {text}"), srv_admin, &positions, &rules, hub);
             }
-            // an admin set the time of day: the shift that makes the clock read it
-            if let Some(want) = srv_admin.set_clock.take() {
-                let now = (parse_time(&args.time) + *srv_clock + srv_admin.shift).rem_euclid(86400.0);
-                srv_admin.shift += (want - now + 43_200.0).rem_euclid(86_400.0) - 43_200.0;
-            }
-            // an admin's traffic order: the density asked for, or every AI car off the road
-            match srv_admin.traffic.take() {
-                Some(crate::admin::TrafficOrder::Density(n)) => {
-                    if let Some(t) = traffic.as_mut() {
-                        t.target = n;
-                        log::info!("server: traffic density now {n}");
-                    }
-                }
-                Some(crate::admin::TrafficOrder::Clear) => {
-                    if let Some(t) = traffic.as_mut() {
-                        let ids: Vec<u64> = t.cars.iter().filter(|c| !c.is_bus()).map(|c| c.id).collect();
-                        for id in &ids {
-                            t.remove_car(*id);
-                        }
-                        view_sync::apply_traffic(t, &mut sim_view.traffic, world, renderer, scene);
-                        log::info!("server: {} AI vehicles taken off the road", ids.len());
-                    }
-                }
-                None => {}
-            }
-            if let Some(want) = srv_admin.set_weather.take() {
-                // only an installed weather (the name came over the network)
-                let found = omsi_cfg::read_dir_merged("Weather")
-                    .into_iter()
-                    .filter_map(|p| p.file_name().map(|n| format!("Weather/{}", n.to_string_lossy())))
-                    .find(|f| f.eq_ignore_ascii_case(&want));
-                match found {
-                    Some(f) => {
-                        log::info!("server: weather now {f}");
-                        l.set_weather(&f);
-                    }
-                    None => log::info!("server: weather {want} is not installed"),
+            if let Some(h) = hub {
+                for job in h.take(16) {
+                    omsi_lan::admin::run_job(l, srv_admin, job, &positions, &rules, h);
                 }
             }
-            // (the weather follows the METAR report: no next weather for the admins)
-            if std::mem::take(&mut srv_admin.next_weather) && srv_metar.is_none() {
-                let mut files: Vec<String> = omsi_cfg::read_dir_merged("Weather")
-                    .into_iter()
-                    .filter(|p| p.extension().map(|e| e.eq_ignore_ascii_case("owt")).unwrap_or(false))
-                    .filter_map(|p| p.file_name().map(|n| format!("Weather/{}", n.to_string_lossy())))
-                    .collect();
-                files.sort();
-                files.dedup();
-                if !files.is_empty() {
-                    let cur = l.weather().replace('\\', "/").to_ascii_lowercase();
-                    let k = files.iter().position(|f| f.to_ascii_lowercase() == cur).map(|k| (k + 1) % files.len()).unwrap_or(0);
-                    log::info!("server: weather now {}", files[k]);
-                    l.set_weather(&files[k]);
+            // and their part on the server's own world
+            let jobs = srv_admin.take_world();
+            if !jobs.is_empty() {
+                let resync = |t: &mut crate::traffic::Traffic| view_sync::apply_traffic(t, &mut sim_view.traffic, world, renderer, scene);
+                let mut cars = traffic.as_mut().map(|t| AdminTraffic(t, resync));
+                let mut w = omsi_lan::admin::world::ServerWorld { lan: l, shift: &mut srv_admin.shift, passenger_density: &mut srv_admin.passenger_density, clock: parse_time(&args.time) + *srv_clock, traffic: cars.as_mut().map(|c| c as &mut dyn omsi_lan::admin::world::ServerTraffic), traffic_max: crate::game_lists::TRAFFIC_MAX };
+                for job in jobs {
+                    let out = omsi_lan::admin::world::apply(&mut w, &job.action);
+                    omsi_lan::admin::report(w.lan, hub, &job.actor, job.record, &out);
                 }
             }
         }
@@ -181,7 +147,14 @@ impl Offscreen<'_> {
                 let (cars, buses, dormant, parked) = traffic.as_ref().map(|t| t.counts()).unwrap_or_default();
                 let (walking, waiting, aboard) = humans_off.as_ref().map(|h| h.counts()).unwrap_or_default();
                 let target = traffic.as_ref().map(|t| t.target).unwrap_or(0);
-                crate::lan::update_server_world(omsi_net::ws::WorldCounts { cars, buses, dormant, parked, walking, waiting, aboard, traffic: target });
+                let (passengers, passenger_density) = (humans_off.is_some(), srv_admin.passenger_density.unwrap_or(settings.pax_density));
+                crate::lan::update_server_world(omsi_net::ws::WorldCounts { cars, buses, dormant, parked, walking, waiting, aboard, traffic: target, passengers, passenger_density });
+                // and for the admins' panels
+                if let Some(h) = omsi_lan::admin::hub() {
+                    let time = parse_time(&args.time) + *srv_clock + srv_admin.shift;
+                    let state = crate::server::admin_state(time, l.clock_speed, srv_weather_name, srv_metar.as_deref(), omsi_net::ws::WorldCounts { cars, buses, dormant, parked, walking, waiting, aboard, traffic: target, passengers, passenger_density });
+                    omsi_lan::admin::publish(h, l, srv_admin, state);
+                }
             }
         }
         if lan_off.is_none() {
@@ -665,6 +638,7 @@ impl Offscreen<'_> {
             ref mut humans_off,
             ref world,
             ref settings,
+            ref srv_admin,
             ref run_clock,
             ref remotes_off,
             ref mut player,
@@ -683,7 +657,9 @@ impl Offscreen<'_> {
             // (stop_target = enter_mean * density; without this it stays at the startup
             // value and the new formula returns 0 for the whole session when the map has
             // a low hourly density at the start time)
-            steps::humans_by_hour(h, world, run_clock.time, settings.pax_density, duty.as_ref());
+            // (a dedicated server's own passenger density, which its admins may change)
+            let density = srv_admin.passenger_density.unwrap_or(settings.pax_density);
+            steps::humans_by_hour(h, world, run_clock.time, density, duty.as_ref());
             // populate stops near every LAN player every 2 seconds, as app_events.rs
             // does every 2 s near the local player.  At startup `center` is ZERO (no
             // player bus on a headless server), so stops on the actual map - which can
@@ -932,5 +908,23 @@ impl Offscreen<'_> {
             }
         }
         Ok(())
+    }
+}
+
+/// The server's AI traffic for its admins' operations (`omsi_lan::admin::world`), its look
+/// brought up to date after cars were taken off the road.
+struct AdminTraffic<'a, F: FnMut(&mut crate::traffic::Traffic)>(&'a mut crate::traffic::Traffic, F);
+
+impl<F: FnMut(&mut crate::traffic::Traffic)> omsi_lan::admin::world::ServerTraffic for AdminTraffic<'_, F> {
+    fn set_density(&mut self, n: usize) {
+        self.0.target = n;
+    }
+    fn clear_cars(&mut self) -> usize {
+        let ids: Vec<u64> = self.0.cars.iter().filter(|c| !c.is_bus()).map(|c| c.id).collect();
+        for id in &ids {
+            self.0.remove_car(*id);
+        }
+        (self.1)(self.0);
+        ids.len()
     }
 }

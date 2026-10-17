@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>openOMSI server administration</title>
+<link rel="stylesheet" href="panel.css">
+<script src="panel.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <h1 data-t="title">Server administration</h1>
+  <div class="who">
+    <span id="who"></span>
+    <button id="lang" type="button" class="link" aria-label="Language">PT</button>
+    <button id="logout" type="button" hidden data-t="logout">Log out</button>
+  </div>
+</header>
+<div id="banner" class="banner" hidden role="status"></div>
+
+<main>
+  <section id="login" class="card narrow" hidden>
+    <h2 data-t="login">Log in</h2>
+    <form id="login-form" autocomplete="off">
+      <label><span data-t="password">Admin or moderator password</span>
+        <input id="password" type="password" required minlength="8" autocomplete="current-password"></label>
+      <button type="submit" data-t="enter">Log in</button>
+      <p id="login-msg" class="msg" role="alert"></p>
+    </form>
+    <p class="hint" data-t="login-hint">The password of server.cfg (admin_password or moderator_password). It is sent to this server only, and kept nowhere in this page.</p>
+  </section>
+
+  <div id="app" hidden>
+    <section class="card" id="overview">
+      <h2 data-t="overview">Server</h2>
+      <dl class="facts" id="facts"></dl>
+      <p class="stale" id="stale" hidden data-t="stale">The server has not reported for a while: what you see may be old.</p>
+    </section>
+
+    <section class="card" id="players-card">
+      <h2><span data-t="players">Players</span> <small id="count"></small></h2>
+      <input id="search" type="search" data-tp="search" placeholder="Search by name or #number" autocomplete="off">
+      <ul id="players" class="list" aria-live="polite"></ul>
+      <div id="selected" class="selected" hidden>
+        <h3 id="sel-name"></h3>
+        <p class="hint" id="sel-facts"></p>
+        <p class="hint" id="sel-gone" hidden data-t="sel-gone">This player is no longer on the server (or reconnected). Pick them again from the list.</p>
+        <label><span data-t="reason">Reason (the player reads it)</span>
+          <input id="reason" maxlength="120" autocomplete="off"></label>
+        <div class="row">
+          <button type="button" id="kick" class="danger" data-perm="moderate" data-t="kick">Send away</button>
+          <button type="button" id="ban" class="danger" data-perm="moderate" data-t="ban">Send away for this run</button>
+        </div>
+        <label><span data-t="tell">A word for this player only</span>
+          <input id="tell-text" maxlength="160" autocomplete="off"></label>
+        <button type="button" id="tell" data-perm="moderate" data-t="send">Send</button>
+      </div>
+    </section>
+
+    <section class="card" id="chat-card">
+      <h2 data-t="announce">Announcement</h2>
+      <label><span data-t="say">A chat line to everybody</span>
+        <input id="say-text" maxlength="160" autocomplete="off"></label>
+      <button type="button" id="say" data-perm="moderate" data-t="send">Send</button>
+    </section>
+
+    <section class="card" id="world">
+      <h2 data-t="world">World</h2>
+      <p class="hint" id="world-role" hidden data-t="world-role">A moderator leaves the world alone: these are for an admin.</p>
+      <fieldset id="clock-set">
+        <legend data-t="clock">Clock</legend>
+        <p class="hint" id="clock-lock" hidden data-t="clock-lock">The clock follows the server machine's real time (real_time = 1): it cannot be moved.</p>
+        <div class="row">
+          <input id="clock" type="time" required>
+          <button type="button" id="clock-go" data-perm="world" data-t="set">Set</button>
+          <button type="button" id="hour-back" data-perm="world">−1 h</button>
+          <button type="button" id="hour-on" data-perm="world">+1 h</button>
+        </div>
+        <label><span data-t="speed">Speed</span>
+          <select id="speed"><option>1</option><option>2</option><option>4</option><option>8</option><option>15</option><option>30</option></select></label>
+        <button type="button" id="speed-go" data-perm="world" data-t="set">Set</button>
+      </fieldset>
+      <fieldset id="weather-set">
+        <legend data-t="weather">Weather</legend>
+        <p class="hint" id="weather-lock" hidden data-t="weather-lock">The weather follows the METAR report (metar_sync = 1): it cannot be changed.</p>
+        <div class="row">
+          <button type="button" id="weather-next" data-perm="world" data-t="next">Next weather</button>
+        </div>
+        <label><span data-t="weather-file">Or a weather file</span>
+          <input id="weather-file" placeholder="Weather/#CAVOK.owt" maxlength="120" autocomplete="off"></label>
+        <button type="button" id="weather-go" data-perm="world" data-t="set">Set</button>
+      </fieldset>
+      <fieldset>
+        <legend data-t="traffic">AI traffic</legend>
+        <div class="row">
+          <input id="traffic" type="number" min="0" step="1" inputmode="numeric">
+          <button type="button" id="traffic-go" data-perm="world" data-t="set">Set</button>
+          <button type="button" id="traffic-clear" class="danger" data-perm="world" data-t="clear">Clear the road</button>
+        </div>
+      </fieldset>
+      <fieldset id="pax-set">
+        <legend data-t="pax">Passenger density</legend>
+        <p class="hint" data-t="pax-hint">A factor on the map's own demand (1 = as the map says, 0 = no new people). People already waiting, walking or aboard stay.</p>
+        <p class="hint" id="pax-off" hidden data-t="pax-off">The server has no passengers (passengers = 0 in server.cfg).</p>
+        <div class="row">
+          <input id="pax" type="number" min="0" max="3" step="0.1" inputmode="decimal">
+          <button type="button" id="pax-go" data-perm="world" data-t="set">Set</button>
+        </div>
+      </fieldset>
+    </section>
+
+    <section class="card" id="events-card">
+      <h2 data-t="events">What happened</h2>
+      <ul id="events" class="list events" aria-live="polite"></ul>
+    </section>
+  </div>
+</main>
+
+<dialog id="confirm">
+  <form method="dialog">
+    <p id="confirm-text"></p>
+    <div class="row">
+      <button value="cancel" data-t="cancel">Cancel</button>
+      <button value="ok" id="confirm-ok" class="danger" data-t="confirm">Confirm</button>
+    </div>
+  </form>
+</dialog>
+</body>
+</html>

@@ -54,6 +54,7 @@ rayon.workspace = true
 omsi-net = { path = "../omsi-net" }
 omsi-platform = { path = "../omsi-platform" }
 omsi-guard = { path = "../omsi-guard" }
+omsi-admin = { path = "../omsi-admin" }
 omsi-lan = { path = "../omsi-lan" }
 omsi-input = { path = "../omsi-input" }
 omsi-xr = { path = "../omsi-xr" }

@@ -21,9 +21,9 @@
 //! `weather cycle`, `weather set <Weather/file.owt>`.
 
 use crate::App;
-use omsi_net::{LanSession, Role};
+use omsi_net::Role;
 
-pub(crate) use omsi_lan::admin::{duty_arg, ServerAdmin, TrafficOrder, LOCAL_ADMIN};
+pub(crate) use omsi_lan::admin::{duty_arg, ServerAdmin, LOCAL_ADMIN};
 use omsi_lan::admin::{act_on_session, answer, beside, Action, Admin, Done, WeatherAction};
 use omsi_lan::commands::Command;
 
@@ -155,6 +155,8 @@ fn host_action(app: &mut App, action: &str) {
             app.change_weather(Some(file), true, 1.0);
         }
         (Action::Weather(_), _) => app.next_weather(),
+        // (a dedicated server's: a game's own is its Options' passengers setting)
+        (Action::PassengerDensity(_), _) => app.service_msg = Some((omsi_ui::tr("The passenger density is set in Options here").into_owned(), 3.0)),
         (Action::Traffic(arg), _) if arg == "clear" => clear_ai_traffic(app),
         (Action::Traffic(_), _) => {
             if let Some(t) = app.session.traffic.as_mut() {
@@ -340,10 +342,13 @@ pub(crate) fn carry_out(app: &mut App, from: u32, command: Command) {
         }
         Command::AdminLocked => app.service_msg = Some(("Too many wrong admin passwords: try again later".into(), 4.0)),
         // (server → us) the password was right: the menu is ours
-        Command::AdminOk => {
+        Command::AdminOk(role) => {
             app.net.is_admin = true;
+            crate::admin_panel::take(app, &Command::AdminOk(role));
             app.service_msg = Some(("You administer this server now: Esc menu, Administration".into(), 6.0));
         }
+        // (server → us) what its admin's menu shows
+        c @ (Command::AdminResult { .. } | Command::AdminPlayer(_) | Command::AdminListEnd { .. } | Command::AdminState(_)) => crate::admin_panel::take(app, &c),
         Command::AdminNo => app.service_msg = Some(("Wrong admin password".into(), 4.0)),
         // (a game hosting by code sent a notice: the player's game showed it)
         Command::NotifySeen(id) => log::info!("LAN: player {from} saw notice {id}"),
@@ -352,14 +357,13 @@ pub(crate) fn carry_out(app: &mut App, from: u32, command: Command) {
     }
 }
 
-/// A command a player sent the dedicated server (see `omsi_lan::admin::server_command`).
-pub(crate) fn server_command(lan: &mut LanSession, from: u32, text: &str, adm: &mut ServerAdmin, positions: &dyn Fn(u32) -> Option<(glam::DVec3, f64)>) {
-    let rules = omsi_lan::admin::ServerRules {
-        real_time: crate::real_time::server_real(),
-        traffic_max: crate::game_lists::TRAFFIC_MAX,
-        notice_ok: &|text| crate::ui::Notice::parse(text).is_some(),
-    };
-    omsi_lan::admin::server_command(lan, from, text, adm, positions, &rules);
+/// What of the game a dedicated server's administration goes by (`metar`: its weather
+/// follows a METAR report).
+pub(crate) fn server_rules(metar: bool) -> omsi_lan::admin::ServerRules<'static> {
+    fn notice_ok(text: &str) -> bool {
+        crate::ui::Notice::parse(text).is_some()
+    }
+    omsi_lan::admin::ServerRules { real_time: crate::real_time::server_real(), traffic_max: crate::game_lists::TRAFFIC_MAX, notice_ok: &notice_ok, metar }
 }
 
 /// The bus fallen through the world (a hole in the ground, a tile that was not there yet,
@@ -401,7 +405,7 @@ pub(crate) fn guard_fall(app: &mut App, dt: f32) {
 
 #[cfg(test)]
 mod traffic_order_tests {
-    use super::TrafficOrder;
+    use omsi_lan::admin::TrafficOrder;
 
     #[test]
     fn a_traffic_order_is_read() {

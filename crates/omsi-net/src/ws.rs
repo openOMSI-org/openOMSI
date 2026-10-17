@@ -27,6 +27,7 @@ use std::net::{SocketAddr, TcpListener, TcpStream, UdpSocket};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use crate::ws_http::{header, last_header, peek_head, read_body, read_head, refuse, REQUEST_TIME};
 use tungstenite::protocol::WebSocketConfig;
 use tungstenite::{Message, WebSocket};
 
@@ -68,7 +69,9 @@ pub struct ServerInfo {
 /// What a dedicated server's shared world holds: the AI cars on the roads (`cars`), its
 /// timetable buses (`buses`), the cars put to sleep far from every player (`dormant`), the
 /// parked cars (`parked`), the people walking (`walking`), waiting at a stop (`waiting`) or
-/// in a bus (`aboard`), and the traffic density asked for (`traffic`, as `server.cfg`'s).
+/// in a bus (`aboard`), the traffic density asked for (`traffic`, as `server.cfg`'s), whether
+/// the server has people at all (`passengers`) and the passenger density it applies now
+/// (`passenger_density`, the factor on the map's own demand).
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct WorldCounts {
     pub cars: usize,
@@ -79,13 +82,24 @@ pub struct WorldCounts {
     pub waiting: usize,
     pub aboard: usize,
     pub traffic: usize,
+    pub passengers: bool,
+    pub passenger_density: f32,
 }
 
 impl WorldCounts {
     pub fn to_json(&self) -> String {
         format!(
-            "{{\"cars\":{},\"buses\":{},\"dormant\":{},\"parked\":{},\"walking\":{},\"waiting\":{},\"aboard\":{},\"traffic\":{}}}",
-            self.cars, self.buses, self.dormant, self.parked, self.walking, self.waiting, self.aboard, self.traffic
+            "{{\"cars\":{},\"buses\":{},\"dormant\":{},\"parked\":{},\"walking\":{},\"waiting\":{},\"aboard\":{},\"traffic\":{},\"passengers\":{},\"passenger_density\":{}}}",
+            self.cars,
+            self.buses,
+            self.dormant,
+            self.parked,
+            self.walking,
+            self.waiting,
+            self.aboard,
+            self.traffic,
+            self.passengers,
+            if self.passenger_density.is_finite() { format!("{:.2}", self.passenger_density) } else { "null".into() }
         )
     }
 }
@@ -530,31 +544,27 @@ impl WsGateway {
 const ADMIN_LOCK_AFTER: usize = 5;
 const ADMIN_LOCK_WINDOW: Duration = Duration::from_secs(120);
 
-/// The rest of a request's body, up to its `Content-Length` (4 KiB at most).
-fn read_body(s: &mut TcpStream, request: &mut Vec<u8>) {
-    let text = String::from_utf8_lossy(request).to_string();
-    let Some(head_end) = text.find("\r\n\r\n") else { return };
-    let want = header(&text[..head_end], "content-length").and_then(|v| v.parse::<usize>().ok()).unwrap_or(0).min(4096);
-    let mut buf = [0u8; 1024];
-    while request.len() < head_end + 4 + want {
-        match s.read(&mut buf) {
-            Ok(0) | Err(_) => break,
-            Ok(n) => request.extend_from_slice(&buf[..n]),
-        }
-    }
+/// Behind Cloudflare's proxy and one of this machine, the player's address is Cloudflare's
+/// `CF-Connecting-IP`, not the last `X-Forwarded-For` (an edge's): `gateway_proxy_header`.
+static CF_FIRST: AtomicBool = AtomicBool::new(false);
+
+/// Believe `CF-Connecting-IP` before `X-Forwarded-For` (`gateway_proxy_header =
+/// cf-connecting-ip`): only with Cloudflare in front, which writes it over the client's own.
+pub fn believe_cf_connecting_ip(on: bool) {
+    CF_FIRST.store(on, Ordering::Relaxed);
 }
 
-fn header<'a>(head: &'a str, name: &str) -> Option<&'a str> {
-    head.lines().skip(1).find_map(|l| l.split_once(':').filter(|(k, _)| k.trim().eq_ignore_ascii_case(name)).map(|(_, v)| v.trim()))
-}
-
-fn client_ip(head: &str, peer: Option<SocketAddr>) -> Option<std::net::IpAddr> {
+fn client_ip(head: &str, peer: Option<SocketAddr>, cf_first: bool) -> Option<std::net::IpAddr> {
     let peer = peer?;
     if !peer.ip().is_loopback() {
         return Some(peer.ip());
     }
-    header(head, "cf-connecting-ip")
-        .or_else(|| header(head, "x-forwarded-for").and_then(|v| v.rsplit(',').next()))
+    // (the address the proxy added - the last of X-Forwarded-For: a CF-Connecting-IP or an
+    // earlier address may be the client's own, passed on by a proxy on this machine; Cloudflare
+    // writes both, the same - unless the operator says Cloudflare is in front)
+    let forwarded = || last_header(head, "x-forwarded-for").and_then(|v| v.rsplit(',').next());
+    let cf = || last_header(head, "cf-connecting-ip");
+    if cf_first { cf().or_else(forwarded) } else { forwarded().or_else(cf) }
         .map(str::trim)
         .and_then(|v| v.parse::<std::net::IpAddr>().ok())
         .filter(|ip| !ip.is_loopback())
@@ -627,12 +637,14 @@ fn serve(stream: TcpStream, slot: Option<SourceSlot>, target: SocketAddr, info: 
     let peer = stream.peer_addr().ok();
     stream.set_nonblocking(false).map_err(|e| e.to_string())?;
     stream.set_read_timeout(Some(HEAD_WAIT)).map_err(|e| e.to_string())?;
-    let mut head = [0u8; 2048];
-    let n = stream.peek(&mut head).map_err(|e| e.to_string())?;
-    let req = String::from_utf8_lossy(&head[..n]).to_string();
+    let mut first = [0u8; 1];
+    stream.peek(&mut first).map_err(|e| e.to_string())?;
+    let deadline = Instant::now() + REQUEST_TIME;
+    let req = String::from_utf8_lossy(&peek_head(&stream, deadline)).to_string();
+    stream.set_read_timeout(Some(HEAD_WAIT)).map_err(|e| e.to_string())?;
     let path = req.split_whitespace().nth(1).unwrap_or("/").to_string();
     let upgrade = req.to_ascii_lowercase().contains("upgrade: websocket");
-    let client = client_ip(&req, peer);
+    let client = client_ip(&req, peer, CF_FIRST.load(Ordering::Relaxed));
     let source = client.map(|ip| ip.to_string()).unwrap_or_else(|| peer.map(|p| p.ip().to_string()).unwrap_or_else(|| "?".into()));
     let _slot = match (slot, client) {
         (Some(slot), _) => Some(slot),
@@ -649,8 +661,7 @@ fn serve(stream: TcpStream, slot: Option<SourceSlot>, target: SocketAddr, info: 
             Some(place) => Some(place),
             None => {
                 log::debug!("ws gateway: {source}: {MAX_ORDINARY} players and requests carried already; one more told to come back");
-                let mut s = stream;
-                let _ = s.write_all(b"HTTP/1.1 503 Service Unavailable\r\nRetry-After: 2\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                refuse(stream, "503 Service Unavailable", "Retry-After: 2\r\n");
                 return Ok(());
             }
         }
@@ -660,12 +671,30 @@ fn serve(stream: TcpStream, slot: Option<SourceSlot>, target: SocketAddr, info: 
     }
     if !upgrade {
         let mut s = stream;
-        // (the request is read off the socket before the answer: some proxies wait)
-        let got = s.read(&mut head).unwrap_or(0);
-        let mut request = head[..got].to_vec();
+        // (the request is read off the socket before the answer: some proxies wait) - the
+        // whole head, however it came in pieces: one cut short would lose the headers past
+        // the cut - a tunnel's or a proxy's marks, the Authorization
+        let mut request = Vec::new();
+        if let Err(status) = read_head(&mut s, &mut request, deadline) {
+            refuse(s, status, "");
+            return Ok(());
+        }
+        // a dedicated server's administration (`ws_api`): its own answer and headers
+        if crate::ws_api::wants(&path) {
+            read_body(&mut s, &mut request, deadline);
+            let r = crate::ws_api::answer(&request, peer);
+            let mut hdr = format!("HTTP/1.1 {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n", r.status, r.content_type, r.body.len());
+            for (k, v) in &r.headers {
+                hdr.push_str(&format!("{k}: {}\r\n", v.replace(['\r', '\n'], " ")));
+            }
+            hdr.push_str("\r\n");
+            s.write_all(hdr.as_bytes()).map_err(|e| e.to_string())?;
+            s.write_all(&r.body).map_err(|e| e.to_string())?;
+            return Ok(());
+        }
         let (status, ctype, body): (&str, &str, Vec<u8>) = match path.as_str() {
             "/admin" => {
-                read_body(&mut s, &mut request);
+                read_body(&mut s, &mut request, deadline);
                 let (status, text) = local_admin(&request, peer, info);
                 (status, "text/plain; charset=utf-8", text.into_bytes())
             }
@@ -1068,24 +1097,38 @@ mod tests {
         let far: SocketAddr = "203.0.113.7:50000".parse().unwrap();
         let req = |h: &str| format!("GET / HTTP/1.1\r\nHost: x\r\n{h}Upgrade: websocket\r\n\r\n");
         let ip = |s: &str| Some(s.parse::<std::net::IpAddr>().unwrap());
-        assert_eq!(client_ip(&req("X-Forwarded-For: 10.0.0.1, 198.51.100.4\r\n"), Some(local)), ip("198.51.100.4"));
-        assert_eq!(client_ip(&req("X-Real-IP: 2001:db8::1\r\n"), Some(local)), None);
-        assert_eq!(client_ip(&req("CF-Connecting-IP: 192.0.2.9\r\nX-Forwarded-For: 198.51.100.4\r\n"), Some(local)), ip("192.0.2.9"));
+        fn client_ip_x(h: &str, p: Option<SocketAddr>) -> Option<std::net::IpAddr> {
+            client_ip(h, p, false)
+        }
+        assert_eq!(client_ip_x(&req("X-Forwarded-For: 10.0.0.1, 198.51.100.4\r\n"), Some(local)), ip("198.51.100.4"));
+        assert_eq!(client_ip_x(&req("X-Real-IP: 2001:db8::1\r\n"), Some(local)), None);
+        // (the proxy's own address, the last X-Forwarded-For: a CF-Connecting-IP through a
+        // proxy on this machine may be the client's own)
+        assert_eq!(client_ip_x(&req("CF-Connecting-IP: 192.0.2.9\r\nX-Forwarded-For: 198.51.100.4\r\n"), Some(local)), ip("198.51.100.4"));
+        assert_eq!(client_ip_x(&req("X-Forwarded-For: 192.0.2.9\r\nX-Forwarded-For: 198.51.100.4\r\n"), Some(local)), ip("198.51.100.4"));
+        assert_eq!(client_ip_x(&req("CF-Connecting-IP: 192.0.2.9\r\n"), Some(local)), ip("192.0.2.9"));
         // no proxy: the peer; a header from the internet is not believed
-        assert_eq!(client_ip(&req(""), Some(local)), None);
-        assert_eq!(client_ip(&req("X-Forwarded-For: 127.0.0.1\r\n"), Some(local)), None);
-        assert_eq!(client_ip(&req("X-Forwarded-For: 198.51.100.4\r\n"), Some(far)), ip("203.0.113.7"));
-        assert_eq!(client_ip(&req("X-Forwarded-For: not-an-address\r\n"), Some(local)), None);
-        assert_eq!(client_ip(&req(""), None), None);
+        assert_eq!(client_ip_x(&req(""), Some(local)), None);
+        assert_eq!(client_ip_x(&req("X-Forwarded-For: 127.0.0.1\r\n"), Some(local)), None);
+        assert_eq!(client_ip_x(&req("X-Forwarded-For: 198.51.100.4\r\n"), Some(far)), ip("203.0.113.7"));
+        assert_eq!(client_ip_x(&req("X-Forwarded-For: not-an-address\r\n"), Some(local)), None);
+        assert_eq!(client_ip_x(&req(""), None), None);
+        // Cloudflare in front of a proxy of this machine (`gateway_proxy_header =
+        // cf-connecting-ip`): the player, not the edge the last X-Forwarded-For names
+        let both = req("CF-Connecting-IP: 192.0.2.9\r\nX-Forwarded-For: 192.0.2.9, 172.70.1.1\r\n");
+        assert_eq!(client_ip(&both, Some(local), true), ip("192.0.2.9"));
+        assert_eq!(client_ip(&both, Some(local), false), ip("172.70.1.1"));
+        assert_eq!(client_ip(&req("X-Forwarded-For: 198.51.100.4\r\n"), Some(local), true), ip("198.51.100.4"));
+        assert_eq!(client_ip(&req("CF-Connecting-IP: 192.0.2.9\r\n"), Some(far), true), ip("203.0.113.7"));
     }
 
     #[test]
     fn status_counts_a_servers_world() {
         let mut i = ServerInfo { name: "NEROSY".into(), players: 2, vehicles: vec!["Vehicles/A/a.bus".into()], ..Default::default() };
         assert!(i.to_json().ends_with(",\"world\":null}"));
-        i.world = Some(WorldCounts { cars: 41, buses: 7, dormant: 12, parked: 230, walking: 55, waiting: 18, aboard: 9, traffic: 30 });
+        i.world = Some(WorldCounts { cars: 41, buses: 7, dormant: 12, parked: 230, walking: 55, waiting: 18, aboard: 9, traffic: 30, passengers: true, passenger_density: 1.5 });
         let j = i.to_json();
-        assert!(j.ends_with(",\"world\":{\"cars\":41,\"buses\":7,\"dormant\":12,\"parked\":230,\"walking\":55,\"waiting\":18,\"aboard\":9,\"traffic\":30}}"), "{j}");
+        assert!(j.ends_with(",\"world\":{\"cars\":41,\"buses\":7,\"dormant\":12,\"parked\":230,\"walking\":55,\"waiting\":18,\"aboard\":9,\"traffic\":30,\"passengers\":true,\"passenger_density\":1.50}}"), "{j}");
         // the launcher still reads the rest (the world's keys are none of the server's own)
         let back = ServerInfo::from_json(&j).unwrap();
         assert_eq!((back.name.as_str(), back.players, back.vehicles.len()), ("NEROSY", 2, 1));
@@ -1122,6 +1165,55 @@ mod tests {
         assert_eq!(local_admin(&post("s3cret", "say x"), here, &info).0, "429 Too Many Requests");
         assert!(same_secret("abc", "abc") && !same_secret("abc", "abd") && !same_secret("abc", "abcd") && !same_secret("", "a"));
     }
+
+    /// The whole head is read, however long (within its cap) and however it comes in pieces: a
+    /// tunnel's mark pushed past the first read by a padded header still shuts the door, and a
+    /// head past the cap is refused.
+    #[test]
+    fn the_whole_head_is_read() {
+        let gw = WsGateway::start("127.0.0.1:0".parse().unwrap(), "127.0.0.1:9".parse().unwrap(), ServerInfo { local_admin_password: "s3cret".into(), ..Default::default() }).unwrap();
+        let ask = |pieces: &[Vec<u8>]| {
+            let mut c = TcpStream::connect(gw.addr).unwrap();
+            c.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+            for p in pieces {
+                c.write_all(p).unwrap();
+                c.flush().unwrap();
+                std::thread::sleep(Duration::from_millis(60));
+            }
+            let mut out = String::new();
+            let _ = c.read_to_string(&mut out);
+            out
+        };
+        let pad = format!("X-Pad: {}\r\n", "a".repeat(3000));
+        let start = format!("POST /admin HTTP/1.1\r\nHost: x\r\nX-Admin-Password: s3cret\r\n{pad}");
+        let tunnel = b"Cf-Connecting-Ip: 203.0.113.9\r\nContent-Length: 6\r\n\r\nsay hi".to_vec();
+        let out = ask(&[start.clone().into_bytes(), tunnel]);
+        assert!(out.starts_with("HTTP/1.1 403"), "{out}");
+        assert!(gw.info.lock().unwrap().local_admin_queue.is_empty());
+        // the same, from this machine itself and in pieces: taken
+        let out = ask(&[start.into_bytes(), b"Content-Length: 6\r\n".to_vec(), b"\r\nsay hi".to_vec()]);
+        assert!(out.starts_with("HTTP/1.1 202"), "{out}");
+        // past the cap
+        let out = ask(&[format!("GET /status HTTP/1.1\r\nX-Pad: {}\r\n\r\n", "a".repeat(crate::ws_http::HEAD_MAX)).into_bytes()]);
+        assert!(out.starts_with("HTTP/1.1 431"), "{out}");
+        // who the client is, from the whole head: a proxy's mark past a padded first part
+        let pad = format!("X-Pad: {}\r\n", "a".repeat(3000));
+        let peeked = {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let mut c = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+            let (srv, _) = listener.accept().unwrap();
+            c.write_all(format!("GET /ws HTTP/1.1\r\nHost: x\r\n{pad}").as_bytes()).unwrap();
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(60));
+                let _ = c.write_all(b"X-Forwarded-For: 198.51.100.4\r\nUpgrade: websocket\r\n\r\n");
+                std::thread::sleep(Duration::from_millis(500));
+            });
+            String::from_utf8_lossy(&peek_head(&srv, Instant::now() + Duration::from_secs(5))).to_string()
+        };
+        assert!(peeked.contains("Upgrade: websocket"), "{}", peeked.len());
+        assert_eq!(client_ip(&peeked, Some(SocketAddr::from(([127, 0, 0, 1], 1))), false), Some("198.51.100.4".parse().unwrap()));
+    }
+
 
     #[test]
     fn players_list() {

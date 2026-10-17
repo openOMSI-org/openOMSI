@@ -90,6 +90,7 @@ impl App {
         for (from, text) in cmds {
             self.lan_command(from, &text);
         }
+        crate::admin_panel::tick(self);
         self.tick_voice(dt);
     }
 

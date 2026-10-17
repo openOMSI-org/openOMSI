@@ -17,6 +17,11 @@ pub struct ServerCfg {
     pub traffic: usize,
     pub timetable: bool,
     pub passengers: bool,
+    /// `passenger_density`: the factor on the map's own passenger demand (its hourly
+    /// `[trafficdensity_passenger]` and each stop's own numbers). None: the key is not in the
+    /// file (or not a valid number), and the server goes on using its machine's
+    /// `settings.cfg` `pax_density`, as it always did.
+    pub passenger_density: Option<f32>,
     pub port: u16,
     pub web_port: u16,
     pub max_players: usize,
@@ -25,6 +30,23 @@ pub struct ServerCfg {
     pub icon: Vec<u8>,
     /// Players who say `/admin <password>` in the chat administer the server (empty: nobody).
     pub admin_password: String,
+    /// The same with this password gives the moderator's role: the players and the chat,
+    /// not the world (empty: none; one equal to `admin_password` is the admin's).
+    pub moderator_password: String,
+    /// Who may reach the web panel and its API (`admin_web`: `local`, `remote`, `off`).
+    pub admin_web: omsi_admin::WebMode,
+    /// Pages of these origins may act besides the server's own (`admin_web_origins`).
+    pub admin_web_origins: Vec<String>,
+    /// The proxies whose word about a request's source and scheme is believed
+    /// (`admin_trusted_proxies`; this machine by default).
+    pub admin_trusted_proxies: Vec<std::net::IpAddr>,
+    /// The header in which they name the client (`admin_proxy_header`; the last
+    /// `X-Forwarded-For` by default).
+    pub admin_proxy_header: omsi_admin::ProxyHeader,
+    /// Players through Cloudflare's proxy and a proxy of this machine are told by
+    /// `CF-Connecting-IP` (`gateway_proxy_header = cf-connecting-ip`), not the last
+    /// `X-Forwarded-For`.
+    pub gateway_cf_connecting_ip: bool,
     /// How fast the server's clock runs (1 real time).
     pub time_speed: f64,
     /// The clock follows the server machine's real date and time (the speed and the
@@ -75,6 +97,12 @@ traffic = 30
 timetable = 1
 passengers = 1
 
+# how many people the map's stops and pavements get: a factor on the map's own demand for
+# the time of day (1 = as the map says, 0.5 = half, 2 = twice; 0 to 3). 0 brings no new
+# people but keeps the passengers on (passengers = 0 switches them off). Not the AI traffic.
+# The admins can change it while the server runs; the people already there stay
+passenger_density = 1
+
 # UDP port of the session, TCP port of the web gateway (status, icon, WebSocket players)
 port = 27015
 web_port = 27025
@@ -87,9 +115,29 @@ tunnel = 1
 radius = 0
 
 # players who say \"/admin <password>\" in the chat get the Administration menu (Esc):
-# send players away, bring them, the clock, its speed, the weather. The password needs at
-# least 8 characters; empty: nobody
+# send players away, bring them, the clock, its speed, the weather, the traffic and the
+# passengers. The password needs at least 12 characters; empty: nobody
 admin_password =
+# the same with this password: a moderator, who sees the players and sends them away, talks
+# to them, but leaves the clock, the weather, the traffic, the passengers and bringing
+# players to their bus alone
+# (at least 12 characters; empty: no moderators)
+moderator_password =
+
+# the web panel (http://127.0.0.1:<web_port>/admin/) and its API: local = from this machine
+# only (not through the tunnel or a proxy); remote = also over HTTPS through the proxies in
+# admin_trusted_proxies (this machine by default: with tunnel = 1 that is the public tunnel -
+# then the passwords alone guard it); off = none. admin_web_origins: other https:// sites
+# whose pages may use it, separated by ;
+admin_web = local
+admin_web_origins =
+admin_trusted_proxies =
+# the header in which those proxies name the client: x-forwarded-for (its last address: Caddy,
+# nginx, Cloudflare), x-real-ip or cf-connecting-ip - only that one is believed
+admin_proxy_header = x-forwarded-for
+# the same for the players who come by WebSocket through a proxy of this machine:
+# x-forwarded-for, or cf-connecting-ip with Cloudflare's proxy (the orange cloud) in front
+gateway_proxy_header = x-forwarded-for
 
 # how fast the clock runs (1 = real time, 2 = twice as fast, up to 30)
 time_speed = 1
@@ -174,7 +222,7 @@ impl ServerCfg {
         let num = |k: &str, d: i64| kv.get(k).and_then(|v| v.parse::<i64>().ok()).unwrap_or(d);
         let dir = path.parent().unwrap_or(Path::new("."));
         let icon = std::fs::read(dir.join("server-icon.png")).ok().filter(|b| b.starts_with(b"\x89PNG") && b.len() < 256 * 1024).unwrap_or_default();
-        Ok(ServerCfg {
+        Ok(remote_needs_long_passwords(ServerCfg {
             name: get("name", "openOMSI server"),
             motd: get("motd", ""),
             map: get("map", "maps/Berlin-Spandau/global.cfg"),
@@ -184,6 +232,9 @@ impl ServerCfg {
             traffic: (num("traffic", 30).max(0) as usize).min(traffic_max),
             timetable: flag("timetable", true),
             passengers: flag("passengers", true),
+            passenger_density: kv.get("passenger_density").filter(|v| !v.is_empty()).and_then(|v| {
+                passenger_density(v).map_err(|e| log::warn!("server.cfg: passenger_density = {v}: {e}; the machine's own passengers setting is used")).ok()
+            }),
             port: num("port", 27015).clamp(1, 65535) as u16,
             web_port: num("web_port", 27025).clamp(1, 65535) as u16,
             max_players: num("max_players", 16).clamp(1, 64) as usize,
@@ -191,6 +242,12 @@ impl ServerCfg {
             radius: num("radius", 0) as i32,
             icon,
             admin_password: admin_password(kv.get("admin_password").cloned().unwrap_or_default()),
+            moderator_password: checked_password(kv.get("moderator_password").cloned().unwrap_or_default(), "moderator_password"),
+            admin_web: web_mode(kv.get("admin_web").map(String::as_str)),
+            admin_web_origins: kv.get("admin_web_origins").map(|v| v.split(';').map(|o| o.trim().trim_end_matches('/').to_string()).filter(|o| o.starts_with("https://") || o.starts_with("http://")).collect()).unwrap_or_default(),
+            admin_trusted_proxies: trusted_proxies(kv.get("admin_trusted_proxies").map(String::as_str).unwrap_or("")),
+            admin_proxy_header: proxy_header(kv.get("admin_proxy_header").map(String::as_str).unwrap_or("")),
+            gateway_cf_connecting_ip: kv.get("gateway_proxy_header").is_some_and(|v| v.trim().eq_ignore_ascii_case("cf-connecting-ip")),
             time_speed: kv.get("time_speed").and_then(|v| v.parse::<f64>().ok()).filter(|v| v.is_finite()).unwrap_or(1.0).clamp(1.0, 30.0),
             real_time: flag("real_time", false),
             metar_sync: flag("metar_sync", false),
@@ -201,13 +258,76 @@ impl ServerCfg {
             uploads_keep_days: num("uploads_keep_days", 30).clamp(1, 3650) as u64,
             share_maps: flag("share_maps", true),
             voice: crate::voice::VoiceServer::from_kv(|k| kv.get(k).cloned()),
-        })
+        }))
+    }
+}
+
+/// `admin_web = remote` puts the login on the internet: its passwords need
+/// `REMOTE_MIN_PASSWORD` characters, or the panel stays on this machine (and the log says so).
+fn remote_needs_long_passwords(mut cfg: ServerCfg) -> ServerCfg {
+    let short = |p: &str| !p.is_empty() && p.chars().count() < crate::admin::REMOTE_MIN_PASSWORD;
+    if cfg.admin_web == omsi_admin::WebMode::Remote && (short(&cfg.admin_password) || short(&cfg.moderator_password)) {
+        log::warn!("server.cfg: admin_web = remote needs passwords of {} characters at least: the web administration stays on this machine (local)", crate::admin::REMOTE_MIN_PASSWORD);
+        cfg.admin_web = omsi_admin::WebMode::Local;
+    }
+    cfg
+}
+
+/// (one check for `server.cfg` and the admins: `omsi_admin::passenger_density`)
+pub use omsi_admin::{passenger_density, PASSENGER_DENSITY_MAX};
+
+/// The installed maps as server.cfg names them (`maps/<folder>/global.cfg`), sorted.
+pub fn installed_maps() -> Vec<String> {
+    let mut maps: Vec<String> = omsi_cfg::read_dir_merged("maps")
+        .into_iter()
+        .filter(|d| omsi_cfg::vfs::exists(&d.join("global.cfg")))
+        .filter_map(|d| d.file_name().map(|n| format!("maps/{}/global.cfg", n.to_string_lossy())))
+        .collect();
+    maps.sort_by_key(|m| m.to_lowercase());
+    maps
+}
+
+/// `admin_web`: none (a `server.cfg` from before the web panel) or a wrong word is off - an
+/// update opens no door the operator did not ask for; a new server's file says `local`.
+fn web_mode(v: Option<&str>) -> omsi_admin::WebMode {
+    let Some(v) = v else { return omsi_admin::WebMode::Off };
+    omsi_admin::WebMode::parse(v).unwrap_or_else(|| {
+        log::warn!("server.cfg: admin_web = {v} is not local, remote or off: off");
+        omsi_admin::WebMode::Off
+    })
+}
+
+/// `admin_proxy_header`: a wrong word is the default (the last `X-Forwarded-For`).
+fn proxy_header(v: &str) -> omsi_admin::ProxyHeader {
+    omsi_admin::ProxyHeader::parse(v).unwrap_or_else(|| {
+        log::warn!("server.cfg: admin_proxy_header = {v} is not x-forwarded-for, x-real-ip or cf-connecting-ip: x-forwarded-for");
+        omsi_admin::ProxyHeader::ForwardedFor
+    })
+}
+
+/// `admin_trusted_proxies`: addresses separated by `;` (empty: this machine).
+fn trusted_proxies(v: &str) -> Vec<std::net::IpAddr> {
+    let list: Vec<std::net::IpAddr> = v
+        .split(';')
+        .map(str::trim)
+        .filter(|a| !a.is_empty())
+        .filter_map(|a| a.parse().map_err(|_| log::warn!("server.cfg: admin_trusted_proxies: '{a}' is not an address: left out")).ok())
+        .collect();
+    if list.is_empty() {
+        omsi_admin::WebCfg::default().trusted_proxies
+    } else {
+        list
     }
 }
 
 fn admin_password(password: String) -> String {
+    checked_password(password, "admin_password")
+}
+
+/// A password of `server.cfg` (`key`), or none when it is too short (and the log says so).
+fn checked_password(password: String, key: &str) -> String {
     if !password.is_empty() && password.chars().count() < crate::admin::MIN_PASSWORD {
-        log::warn!("server.cfg: admin_password has fewer than {} characters: nobody administers this server until it is longer", crate::admin::MIN_PASSWORD);
+        log::warn!("server.cfg: {key} has fewer than {} characters: it lets nobody in until it is longer", crate::admin::MIN_PASSWORD);
         return String::new();
     }
     password
@@ -271,6 +391,84 @@ pub fn player_info<'a>(q: &omsi_net::Pose, pose_of: impl Fn(u32) -> Option<&'a o
 }
 
 #[cfg(test)]
+mod passenger_density_tests {
+    use super::ServerCfg;
+
+    fn load(text: &str) -> ServerCfg {
+        static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("omsi-pax-cfg-{}-{n}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("server.cfg");
+        std::fs::write(&path, text).unwrap();
+        let cfg = ServerCfg::load(&path, 120).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        cfg
+    }
+
+    /// An old server.cfg (no key) keeps what it had: the machine's own setting; `passengers`
+    /// stays the switch it was (`passengers = 50` is not fifty passengers).
+    #[test]
+    fn old_and_new_files_are_read() {
+        let old = load("passengers = 1\n");
+        assert!(old.passengers);
+        assert_eq!(old.passenger_density, None);
+        let new = load("passengers = 1\npassenger_density = 2.5\n");
+        assert_eq!(new.passenger_density, Some(2.5));
+        let off = load("passengers = 0\npassenger_density = 0\n");
+        assert!(!off.passengers);
+        assert_eq!(off.passenger_density, Some(0.0));
+        // a wrong value: as if it were not there (and said in the log)
+        for bad in ["-1", "10", "lots", "NaN"] {
+            assert_eq!(load(&format!("passenger_density = {bad}\n")).passenger_density, None, "{bad}");
+        }
+        // the old trap: a number for the switch is not a density, and not on
+        assert!(!load("passengers = 50\n").passengers);
+    }
+
+    /// The file written for a new server says what it means, and is read back as 1.
+    #[test]
+    fn the_default_file_has_the_density() {
+        let d = load(super::DEFAULT_CFG);
+        assert_eq!(d.passenger_density, Some(1.0));
+        assert!(d.passengers);
+        // and keeps the web administration on this machine
+        assert_eq!(d.admin_web, omsi_admin::WebMode::Local);
+        assert_eq!(d.admin_trusted_proxies, omsi_admin::WebCfg::default().trusted_proxies);
+        assert_eq!(d.admin_proxy_header, omsi_admin::ProxyHeader::ForwardedFor);
+    }
+
+    /// The web administration's keys: a wrong word is never the open door.
+    #[test]
+    fn the_web_administration_keys() {
+        // (a file from before the web panel: no panel after the update, until it says so)
+        let old = load("admin_password = a long password\n");
+        assert_eq!(old.admin_web, omsi_admin::WebMode::Off);
+        assert_eq!(load("admin_web = lcoal\n").admin_web, omsi_admin::WebMode::Off);
+        assert_eq!(load("admin_web = local\n").admin_web, omsi_admin::WebMode::Local);
+        let r = load("admin_web = remote\nadmin_web_origins = https://admin.example.org/; javascript:x; http://lan.example\nadmin_trusted_proxies = 10.0.0.1; nonsense; ::1\n");
+        assert_eq!(r.admin_web, omsi_admin::WebMode::Remote);
+        assert_eq!(r.admin_web_origins, vec!["https://admin.example.org".to_string(), "http://lan.example".to_string()]);
+        assert_eq!(r.admin_trusted_proxies, vec!["10.0.0.1".parse::<std::net::IpAddr>().unwrap(), "::1".parse().unwrap()]);
+        assert_eq!(load("admin_web = public\n").admin_web, omsi_admin::WebMode::Off);
+        assert_eq!(load("admin_web = off\n").admin_web, omsi_admin::WebMode::Off);
+        assert_eq!(load("admin_proxy_header = X-Real-IP\n").admin_proxy_header, omsi_admin::ProxyHeader::RealIp);
+        assert_eq!(load("admin_proxy_header = cf-connecting-ip\n").admin_proxy_header, omsi_admin::ProxyHeader::CfConnectingIp);
+        assert_eq!(load("admin_proxy_header = forwarded\n").admin_proxy_header, omsi_admin::ProxyHeader::ForwardedFor);
+        assert!(!load("").gateway_cf_connecting_ip);
+        assert!(load("gateway_proxy_header = CF-Connecting-IP\n").gateway_cf_connecting_ip);
+        assert!(!load("gateway_proxy_header = x-forwarded-for\n").gateway_cf_connecting_ip);
+        // remote with a password too short for the internet: the panel stays on this machine
+        let short = load("admin_web = remote\nadmin_password = twelve chars\n");
+        assert_eq!((short.admin_password.as_str(), short.admin_web), ("twelve chars", omsi_admin::WebMode::Local));
+        let long = load("admin_web = remote\nadmin_password = sixteen chars ok\nmoderator_password = and this one too\n");
+        assert_eq!(long.admin_web, omsi_admin::WebMode::Remote);
+        let short_mod = load("admin_web = remote\nadmin_password = sixteen chars ok\nmoderator_password = twelve chars\n");
+        assert_eq!(short_mod.admin_web, omsi_admin::WebMode::Local);
+    }
+}
+
+#[cfg(test)]
 mod vehicles_tests {
     use super::{admin_password, allows};
 
@@ -278,7 +476,9 @@ mod vehicles_tests {
     fn a_short_admin_password_leaves_the_administration_off() {
         assert_eq!(admin_password("1234".into()), "");
         assert_eq!(admin_password(String::new()), "");
-        assert_eq!(admin_password("eight888".into()), "eight888");
+        // (12 at least: the game's login can be overheard and guessed offline)
+        assert_eq!(admin_password("eight888".into()), "");
+        assert_eq!(admin_password("twelve chars".into()), "twelve chars");
     }
 
     #[test]

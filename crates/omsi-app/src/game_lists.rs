@@ -13,6 +13,12 @@ use crate::weather_setup::CLOUD_KINDS;
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum ListKind {
     Admin,
+    /// A dedicated server administered from afar (`admin_panel`): its players, one of them,
+    /// the question before sending them away, and the older menu's full list.
+    AdminPlayers,
+    AdminPlayer(omsi_admin::Target),
+    AdminConfirm(String, omsi_admin::Target),
+    AdminClassic,
     /// The options of the game, on this page of the settings window.
     Options(usize),
     /// What can be done with the vehicle, on this page.
@@ -62,7 +68,7 @@ pub(crate) enum ListKind {
 /// The lists with a search line on top: the vehicles to place, the depot files and the
 /// destinations.
 pub(crate) fn searchable(kind: &ListKind) -> bool {
-    matches!(kind, ListKind::Hofs | ListKind::Destinations | ListKind::PlaceMaker | ListKind::PlaceType(_) | ListKind::PlaceHof(..))
+    matches!(kind, ListKind::Hofs | ListKind::Destinations | ListKind::PlaceMaker | ListKind::PlaceType(_) | ListKind::PlaceHof(..) | ListKind::AdminPlayers)
 }
 
 /// The search typed (while it is) or set for the open list.
@@ -484,7 +490,9 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
     let tr = |t: &str| omsi_ui::tr(t).into_owned();
     let mut out: Vec<(String, String)> = Vec::new();
     match kind {
-        ListKind::Admin => return crate::admin::items(app),
+        ListKind::Admin if crate::admin_panel::remote(app) => out = crate::admin_panel::items(app, kind),
+        ListKind::Admin | ListKind::AdminClassic => return crate::admin::items(app),
+        ListKind::AdminPlayers | ListKind::AdminPlayer(_) | ListKind::AdminConfirm(..) => out = crate::admin_panel::items(app, kind),
         ListKind::Options(_) | ListKind::Vehicle(_) | ListKind::World(_) => {
             let Some((mut pages, tab)) = pages_of(app, kind) else { return out };
             if pages.is_empty() {
@@ -855,7 +863,8 @@ pub(crate) fn menu_extras(
         ListKind::SaveSlots => (MenuKind::List, head("Save to a slot..."), None),
         ListKind::Spots => (MenuKind::List, head("Teleport to a start point..."), None),
         ListKind::PlaceMaker | ListKind::PlaceType(_) | ListKind::PlaceLivery(_) | ListKind::PlaceHof(..) => (MenuKind::List, head("Place a vehicle..."), None),
-        ListKind::Admin => (MenuKind::List, Some((tr("Administration"), String::new())), None),
+        ListKind::Admin | ListKind::AdminPlayer(_) | ListKind::AdminConfirm(..) | ListKind::AdminClassic => (MenuKind::List, Some((tr("Administration"), String::new())), None),
+        ListKind::AdminPlayers => (MenuKind::List, Some((tr("Players"), String::new())), None),
     }
 }
 
@@ -881,16 +890,22 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             ListKind::Events => Some(ListKind::Keyboard(0)),
             ListKind::Keyboard(_) => Some(ListKind::Controls),
             ListKind::PlaceType(_) | ListKind::PlaceLivery(_) | ListKind::PlaceHof(..) => Some(ListKind::PlaceMaker),
+            ListKind::AdminPlayers | ListKind::AdminClassic => Some(ListKind::Admin),
+            ListKind::AdminPlayer(_) => Some(ListKind::AdminPlayers),
+            ListKind::AdminConfirm(_, t) => Some(ListKind::AdminPlayer(*t)),
             _ => None,
         };
     }
     let (verb, arg) = action.split_once(' ').unwrap_or((action, ""));
     match kind {
         ListKind::ControllerDevices(_) | ListKind::Controller(..) | ListKind::ControllerAxis(..) | ListKind::ControllerButtons(_) | ListKind::ControllerButtonSettings(..) | ListKind::ControllerButton(..) | ListKind::ControllerCapture(_) => unreachable!("controller lists handled above"),
-        ListKind::Admin => {
+        ListKind::Admin | ListKind::AdminPlayers | ListKind::AdminPlayer(_) | ListKind::AdminConfirm(..) if crate::admin_panel::remote(app) => crate::admin_panel::run(app, kind, action),
+        ListKind::Admin | ListKind::AdminClassic => {
             crate::admin::run(app, action);
-            Some(ListKind::Admin)
+            Some(kind.clone())
         }
+        // (the server's pages when it no longer lets us administer: back to the game menu)
+        ListKind::AdminPlayers | ListKind::AdminPlayer(_) | ListKind::AdminConfirm(..) => None,
         ListKind::Options(_) | ListKind::World(_) => {
             if verb == "noop" || option_do(app, verb, arg, mv) {
                 return Some(kind.clone());

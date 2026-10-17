@@ -58,6 +58,9 @@ pub enum Action {
     Notify { who: String, notice: String },
     /// The AI traffic: its argument (`clear`, a density, or the next step).
     Traffic(String),
+    /// The passenger density of a dedicated server (`passengers <factor>`, as its
+    /// `server.cfg`'s `passenger_density`).
+    PassengerDensity(f32),
     /// A service (`repair`, `refuel`, `wash`).
     Service { kind: String, whom: Whom },
     /// A player's bus put back on its wheels.
@@ -103,6 +106,7 @@ impl Action {
                 Action::Notify { who: who.to_string(), notice: notice.trim().to_string() }
             }
             "traffic" => Action::Traffic(arg.trim().to_string()),
+            "passengers" => Action::PassengerDensity(crate::server_cfg::passenger_density(arg).ok()?),
             "service" => {
                 let (kind, who) = arg.split_once(' ').unwrap_or((arg, "all"));
                 if !matches!(kind, "repair" | "refuel" | "wash") {
@@ -198,7 +202,7 @@ pub fn act_on_session(lan: &mut LanSession, action: &Action, admin: &Admin) -> D
             }
         }
         Action::Unstick(id) => lan.command(*id, "unstick"),
-        Action::Goto(_) | Action::Time(_) | Action::Speed(_) | Action::Clock(_) | Action::Weather(_) | Action::Traffic(_) => return Done::World,
+        Action::Goto(_) | Action::Time(_) | Action::Speed(_) | Action::Clock(_) | Action::Weather(_) | Action::Traffic(_) | Action::PassengerDensity(_) => return Done::World,
     }
     Done::Session
 }
@@ -227,6 +231,11 @@ mod tests {
         assert_eq!(Action::parse("duty 5 12"), None, "not a duty's argument");
         assert_eq!(Action::parse("tell 2 hello there"), Some(Action::Tell { id: 2, text: "hello there".into() }));
         assert_eq!(Action::parse("notify all 9 5 info Hi"), Some(Action::Notify { who: "all".into(), notice: "9 5 info Hi".into() }));
+        assert_eq!(Action::parse("passengers 1.5"), Some(Action::PassengerDensity(1.5)));
+        assert_eq!(Action::parse("passengers 0"), Some(Action::PassengerDensity(0.0)));
+        for bad in ["passengers", "passengers -1", "passengers 4", "passengers NaN", "passengers on"] {
+            assert_eq!(Action::parse(bad), None, "{bad}");
+        }
         assert_eq!(Action::parse("goto x"), None);
         assert_eq!(Action::parse("dance"), None);
     }

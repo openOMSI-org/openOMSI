@@ -8,6 +8,7 @@ description = "openOMSI's multiplayer on top of omsi-net: the host's mods for jo
 [dependencies]
 omsi-model = { path = "../omsi-model" }
 omsi-cfg = { path = "../omsi-cfg" }
+omsi-admin = { path = "../omsi-admin" }
 omsi-net = { path = "../omsi-net" }
 omsi-map = { path = "../omsi-map" }
 omsi-sim = { path = "../omsi-sim" }

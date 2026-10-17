@@ -12,7 +12,10 @@ pub(crate) struct Ban {
     pub why: String,
 }
 
-pub(crate) fn source_ip(from: SocketAddr) -> Option<IpAddr> {
+/// Who a datagram comes from, as bans and locks count it: the player behind the web
+/// gateway (not the gateway's own loopback socket), an IPv6 address by its /64; none for
+/// this machine.
+pub fn source_ip(from: SocketAddr) -> Option<IpAddr> {
     let ip = crate::ws::gateway_client(from).unwrap_or(from.ip());
     (!ip.is_loopback() && !ip.is_unspecified()).then(|| crate::ws::source_key(ip))
 }
@@ -284,5 +287,18 @@ mod tests {
         let fresh = raw();
         let _d = crate::ws::GatewayClient::register(fresh.local_addr().unwrap(), "203.0.113.7".parse().unwrap());
         assert!(knock(&fresh, &mut host, Some(0x3333)).unwrap().starts_with("WELCOME|"));
+    }
+
+    /// Two players behind the web gateway count as two sources (their own addresses), not
+    /// as the gateway's one loopback; a socket of this machine counts as none.
+    #[test]
+    fn gateway_players_are_their_own_source() {
+        let (a, b) = (addr("127.0.0.1:40101"), addr("127.0.0.1:40102"));
+        let _a = crate::ws::GatewayClient::register(a, "198.51.100.1".parse().unwrap());
+        let _b = crate::ws::GatewayClient::register(b, "198.51.100.2".parse().unwrap());
+        assert_eq!(source_ip(a), Some("198.51.100.1".parse().unwrap()));
+        assert_eq!(source_ip(b), Some("198.51.100.2".parse().unwrap()));
+        assert_eq!(source_ip(addr("127.0.0.1:40103")), None);
+        assert_eq!(source_ip(addr("[2001:db8:1:2:3:4:5:6]:9")), Some("2001:db8:1:2::".parse().unwrap()));
     }
 }

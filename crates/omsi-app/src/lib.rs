@@ -12,6 +12,7 @@
 //! launcher knows through `apple_bridge`.
 
 mod admin;
+mod admin_panel;
 use omsi_scene::check;
 use omsi_platform::discord;
 #[cfg(steam)]
@@ -320,6 +321,15 @@ pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option
     mt::enable(settings::Settings::load().machine_translation && args.server.is_none());
     // the dedicated server: server.cfg decides the world, the rest is a host without a window
     let server_cfg = match args.server.clone() {
+        // (a start script asking for the maps: server.cfg written when missing, nothing more
+        // of a server's start - no METAR report fetched)
+        Some(p) if args.list_maps => {
+            if let Err(e) = server::ServerCfg::load(&p, game_lists::TRAFFIC_MAX) {
+                eprintln!("server: {e:#}");
+                std::process::exit(2);
+            }
+            None
+        }
         Some(p) => match server::prepare(&mut args, &p) {
             Ok(c) => Some(c),
             Err(e) => {
@@ -345,7 +355,8 @@ pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option
     log::info!("script random seed {seed} (OMSI_SEED={seed} repeats it)");
     let launcher_mode = bare && !args.menu;
     if !is_omsi_root(&args.root) {
-        match find_root() {
+        // (a start script checks the folder it was given: never another one found instead)
+        match find_root().filter(|_| !args.list_maps) {
             Some(p) => {
                 log::info!("OMSI 2 found at {}", p.display());
                 args.root = p;
@@ -369,7 +380,7 @@ pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option
                     args.root.display(),
                     missing.join(", ")
                 );
-                if server_cfg.is_some() {
+                if server_cfg.is_some() || args.list_maps {
                     eprintln!("{text}");
                 } else {
                     fatal_dialog("openOMSI cannot start", &text);
@@ -407,6 +418,20 @@ pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option
         omsi_cfg::vfs::mount_dir_zips(&c.join("Archives"));
     }
     omsi_cfg::add_content_root(args.root.clone());
+    if args.list_maps {
+        for m in server::installed_maps() {
+            println!("{m}");
+        }
+        std::process::exit(0);
+    }
+    // a server's map must be installed: said now, with the maps there are, rather than as
+    // a file the loading could not read
+    if server_cfg.is_some() {
+        if let Err(e) = server::check_map(&args) {
+            eprintln!("server: {e}");
+            std::process::exit(2);
+        }
+    }
     Ok(Some((args, server_cfg)))
 }
 
@@ -464,6 +489,12 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     } else {
         None
     };
+    // a dedicated server without its session has nobody to serve: why, and the end (it went
+    // on running alone, unreachable, with a warning among the log's lines)
+    if let (Some(cfg), None) = (server_cfg.as_ref(), lan.as_ref()) {
+        eprintln!("server: cannot open the session on UDP port {} (the line above says why): another server or program uses it, or the system refuses it. Stop the other one, or choose another `port` in {}", cfg.port, args.server.as_deref().map(|p| p.display().to_string()).unwrap_or_else(|| "server.cfg".into()));
+        std::process::exit(3);
+    }
     // turned away at the door (banned, full, another version): no game to play there
     if lan.as_ref().and_then(lan::turned_away).is_some() {
         log::info!("game ends");
@@ -818,14 +849,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             presence,
             plugins: None,
         },
-        net: NetState {
-            remote_walkers: Vec::new(),
-            inside_remote: None,
-            is_admin: false,
-            lan: None,
-            remotes: Default::default(),
-            lan_world: Default::default(),
-        },
+        net: NetState::default(),
         service_msg: clock_note.map(|m| (m, 10.0)),
         settings,
         exiting: false,

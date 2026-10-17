@@ -40,8 +40,17 @@ pub enum Command {
     DutyOff,
     /// (server) too many wrong admin passwords lately.
     AdminLocked,
-    /// (server) the admin password was right: the administration menu is ours.
-    AdminOk,
+    /// (server) the admin password was right: the administration menu is ours, with this role
+    /// (None: a server before the roles).
+    AdminOk(Option<omsi_admin::Role>),
+    /// (server) what became of an administration operation: its record, its status, why.
+    AdminResult { record: u64, status: omsi_admin::Status, message: String },
+    /// (server) one of its players, for its admin's menu (`admin-list`)...
+    AdminPlayer(omsi_admin::Player),
+    /// ... and the end of the list: how many were listed, how many there are.
+    AdminListEnd { found: usize, total: usize },
+    /// (server) its state for its admin's menu (`admin-state`): `key=value` words.
+    AdminState(Vec<(String, String)>),
     /// (server) a wrong admin password.
     AdminNo,
     /// A game we host by code showed our notice (its id).
@@ -93,7 +102,19 @@ impl Command {
             "notify" => Command::Notify(arg.to_string()),
             "duty-off" => Command::DutyOff,
             "admin-locked" => Command::AdminLocked,
-            "admin-ok" => Command::AdminOk,
+            "admin-ok" => Command::AdminOk(omsi_admin::Role::parse(arg)),
+            "admin-result" => {
+                let mut w = arg.splitn(3, ' ');
+                let record = w.next()?.parse().ok()?;
+                let status = omsi_admin::Status::parse(w.next()?)?;
+                Command::AdminResult { record, status, message: w.next().unwrap_or("").trim().to_string() }
+            }
+            "admin-p" => Command::AdminPlayer(crate::admin::parse_player(arg)?),
+            "admin-end" => {
+                let mut w = arg.split_whitespace().map(|n| n.parse::<usize>().ok());
+                Command::AdminListEnd { found: w.next().flatten()?, total: w.next().flatten()? }
+            }
+            "admin-s" => Command::AdminState(arg.split_whitespace().filter_map(|kv| kv.split_once('=')).map(|(k, v)| (k.to_string(), v.to_string())).collect()),
             "admin-no" => Command::AdminNo,
             _ => return None,
         })
@@ -119,8 +140,17 @@ mod tests {
         assert_eq!(Command::parse(1, "service paint"), None);
         assert_eq!(Command::parse(1, "duty 12 A 1 0"), Some(Command::Duty(Some(("12".into(), "A".into(), 1, 0)))));
         assert_eq!(Command::parse(1, "duty x"), Some(Command::Duty(None)), "answered as malformed");
-        assert_eq!(Command::parse(1, "admin-ok"), Some(Command::AdminOk));
+        assert_eq!(Command::parse(1, "admin-ok"), Some(Command::AdminOk(None)));
+        assert_eq!(Command::parse(1, "admin-ok moderator"), Some(Command::AdminOk(Some(omsi_admin::Role::Moderator))));
         assert_eq!(Command::parse(3, "admin-ok"), None);
+        // the administration's answers, from the server only
+        assert_eq!(Command::parse(1, "admin-result 7 rejected no player 9 on the server"), Some(Command::AdminResult { record: 7, status: omsi_admin::Status::Rejected, message: "no player 9 on the server".into() }));
+        assert_eq!(Command::parse(1, "admin-result x applied"), None);
+        assert_eq!(Command::parse(1, "admin-end 2 5"), Some(Command::AdminListEnd { found: 2, total: 5 }));
+        assert!(matches!(Command::parse(1, "admin-p 2 17 driving - - 60 - Pichau"), Some(Command::AdminPlayer(p)) if p.name == "Pichau" && p.conn == 17));
+        assert_eq!(Command::parse(1, "admin-s role=admin rt=1"), Some(Command::AdminState(vec![("role".into(), "admin".into()), ("rt".into(), "1".into())])));
+        assert_eq!(Command::parse(4, "admin-result 7 applied forged"), None);
+        assert_eq!(Command::parse(4, "admin-p 2 17 driving - - 60 - Pichau"), None);
         assert_eq!(Command::parse(3, "notify-seen 9"), Some(Command::NotifySeen("9".into())), "anybody's game says it saw a notice");
         assert_eq!(Command::parse(3, "trigger int_haltewunsch"), Some(Command::Trigger("int_haltewunsch".into())));
         assert_eq!(Command::parse(3, "voice?"), Some(Command::VoiceAsked));

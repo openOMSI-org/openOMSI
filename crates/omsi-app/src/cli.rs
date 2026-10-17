@@ -78,6 +78,13 @@ pub(crate) struct Args {
     /// missing), with no window, no sound and no graphics card.
     #[arg(long)]
     pub(crate) server: Option<PathBuf>,
+    /// Dedicated server: this map instead of server.cfg's `map` (maps/<folder>/global.cfg).
+    #[arg(long)]
+    pub(crate) server_map: Option<String>,
+    /// Print the installed maps (as server.cfg names them), one a line, and end: for a
+    /// server's start script. With --server, a missing server.cfg is written first.
+    #[arg(long)]
+    pub(crate) list_maps: bool,
     /// Your name as the other players see it.
     #[arg(long, default_value = "Driver")]
     pub(crate) lan_name: String,

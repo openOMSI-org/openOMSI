@@ -81,6 +81,9 @@
 pub const LEFT_SERVER: &str = "LAN: disconnected from the server: ";
 
 mod admission;
+pub use admission::source_ip;
+mod paths;
+pub use paths::{human_path, vehicle_path};
 pub mod addrs;
 pub mod bridge;
 pub mod wire;
@@ -91,6 +94,8 @@ pub mod scripttex;
 pub mod ai_context;
 pub mod sounds;
 pub mod ws;
+pub mod ws_api;
+mod ws_http;
 pub mod tunnel;
 pub mod official;
 pub mod hostkey;
@@ -1170,42 +1175,6 @@ pub fn clean_text(s: &str, max: usize) -> String {
         .to_string()
 }
 
-/// The longest vehicle path taken from the network.
-const MAX_VEHICLE_PATH: usize = 260;
-
-/// `Pose::bus` as a path relative to a content root that may be looked up on this machine,
-/// or None. A pose comes from another machine, so the path is not trusted: it must be
-/// relative (no leading `/`, no drive, no `:`), without empty, `.` or `..` parts (or parts
-/// of dots only, which Windows reads as those), and name a `.bus` or `.ovh` file.
-pub fn vehicle_path(bus: &str) -> Option<String> {
-    relative_path(bus, &["bus", "ovh"])
-}
-
-/// A person's figure file (`.hum`) as another game names it: the same rules as
-/// [`vehicle_path`] (relative, no `..`, no drive letters), for the driver and walker figure.
-pub fn human_path(hum: &str) -> Option<String> {
-    relative_path(hum, &["hum"])
-}
-
-fn relative_path(path: &str, exts: &[&str]) -> Option<String> {
-    let p = path.trim().replace('\\', "/");
-    if p.is_empty()
-        || p.len() > MAX_VEHICLE_PATH
-        || p.starts_with('/')
-        || p.chars().any(|c| c == ':' || c == '|' || c.is_control())
-    {
-        return None;
-    }
-    if p.split('/')
-        .any(|part| part.trim_matches(|c| c == '.' || c == ' ').is_empty())
-    {
-        return None;
-    }
-    let file = p.rsplit('/').next()?;
-    let ext = file.rsplit_once('.')?.1.to_ascii_lowercase();
-    exts.contains(&ext.as_str()).then_some(p)
-}
-
 fn field<'a>(parts: &[&'a str], i: usize) -> &'a str {
     parts.get(i).copied().unwrap_or("")
 }
@@ -1339,7 +1308,16 @@ pub struct Peer {
     /// The latest states as they came (arrival, state), oldest first: the game draws the
     /// player's bus between two of them (`Pose::sent_ms`), not only the newest.
     pub history: std::collections::VecDeque<(Instant, Pose)>,
+    /// This connection's own number, never given to another in this process (a player who
+    /// leaves and comes back gets a new one, even with the same player number): what an
+    /// administration's choice of a player holds on to.
+    pub conn: u64,
+    /// When the player joined.
+    pub joined: Instant,
 }
+
+/// The connections counted (`Peer::conn`, from 1).
+static CONNECTIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 impl Peer {
     fn new(addr: Option<SocketAddr>, pose: Pose) -> Peer {
@@ -1365,6 +1343,8 @@ impl Peer {
             secret: admission::random_bytes(),
             home: addr,
             settled: false,
+            conn: CONNECTIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1,
+            joined: now,
         }
     }
 
