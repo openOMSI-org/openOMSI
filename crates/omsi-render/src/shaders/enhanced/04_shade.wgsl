@@ -741,7 +741,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
             // (a window lit from inside shows some 80 cd/m² - a room's 300 lux off its
             // walls and through a curtain - an illuminated sign more: over the dark street
             // round it, well over the screen's white, and the eye's glare blooms round it)
-            emit = emit + nm * select(enh.exposure.z * 3.6, max(enh.exposure.z * 2.0, 0.8), switched);
+            emit = emit + nm * select(enh.exposure.z * 3.6, mix(0.8, max(enh.exposure.z * 2.0, 0.8), outside), switched);
         }
     }
     if (material.params2.x > 0.5 && !terrain && !glass) {
