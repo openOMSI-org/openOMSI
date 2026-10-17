@@ -11,6 +11,7 @@ const SLICES_PER_FRAME: u32 = 2;
 /// The reflection probe is redrawn this often (seconds): every 30 frames it was, twice a
 /// second at 60 fps and eight times at 240, for a sky that changes over minutes.
 pub(crate) const PROBE_EVERY: f32 = 0.5;
+pub(crate) const SLICE_EVERY: f32 = 1.0 / 60.0;
 
 /// Rows a slice of a face covers (the last one takes what is left).
 pub(crate) fn slice_rows(first: u32, count: u32) -> (u32, u32) {
@@ -41,7 +42,7 @@ pub(crate) struct SkySlice {
 /// filled slice by slice into a second cube while the old one is shown, and copied over
 /// it in the frame the eye changes.
 pub(crate) struct SkySched {
-    /// Slices owed: one more each window frame.
+    /// Slices owed: one more each window frame, at most `1 / SLICE_EVERY` a second.
     pub owed: u32,
     /// The next slice of the face being redrawn (`Probe::cube_next`).
     pub slice: u32,
@@ -57,11 +58,12 @@ pub(crate) struct SkySched {
     /// A new sky came in: the probe is redrawn on the next frame (not on the one taking
     /// the new sky's table in, which has that upload already).
     pub sky_new: bool,
+    pub since_slice: f32,
 }
 
 impl Default for SkySched {
     fn default() -> Self {
-        Self { owed: 0, slice: 0, staging_eye: None, staged: 0, swap: false, staging: None, probe_since: f32::INFINITY, sky_new: false }
+        Self { owed: 0, slice: 0, staging_eye: None, staged: 0, swap: false, staging: None, probe_since: f32::INFINITY, sky_new: false, since_slice: SLICE_EVERY }
     }
 }
 
@@ -88,8 +90,13 @@ impl SkySched {
 
     /// This window frame's slices (one or two passes). `face` and `round` are the probe's
     /// `cube_next` and `cube_round`, moved on as faces are completed.
-    pub(crate) fn plan(&mut self, face: &mut u32, round: &mut u32) -> [Option<SkySlice>; 2] {
-        self.owed = (self.owed + 1).min(2 * SKY_CUBE_SLICES);
+    pub(crate) fn plan(&mut self, face: &mut u32, round: &mut u32, dt: f32) -> [Option<SkySlice>; 2] {
+        self.since_slice += dt.max(0.0);
+        let filling = self.staging_eye.is_some() && !self.staging_full();
+        if filling || self.since_slice >= SLICE_EVERY {
+            self.since_slice = (self.since_slice - SLICE_EVERY).clamp(0.0, SLICE_EVERY);
+            self.owed = (self.owed + 1).min(2 * SKY_CUBE_SLICES);
+        }
         let n = self.owed.min(SLICES_PER_FRAME);
         self.owed -= n;
         let mut out: [Option<SkySlice>; 2] = [None; 2];
@@ -135,12 +142,12 @@ mod tests {
         let mut s = SkySched::default();
         let (mut face, mut round) = (0, 0);
         for n in 0..96u32 {
-            let out = s.plan(&mut face, &mut round);
+            let out = s.plan(&mut face, &mut round, 0.02);
             assert_eq!(out.iter().flatten().map(|p| p.count).sum::<u32>(), 1, "frame {n}");
         }
         assert_eq!((face, round), (0, 24));
         s.owed += 1;
-        let out = s.plan(&mut face, &mut round);
+        let out = s.plan(&mut face, &mut round, 0.02);
         assert_eq!(out[0].map(|p| p.count), Some(2));
         assert!(out[1].is_none(), "one pass: {out:?}");
     }
@@ -154,7 +161,7 @@ mod tests {
         s.start_staging(DVec3::new(1.0, 2.0, 3.0));
         let mut seen = std::collections::HashSet::new();
         while !s.staging_full() {
-            for p in s.plan(&mut face, &mut round).into_iter().flatten() {
+            for p in s.plan(&mut face, &mut round, 0.02).into_iter().flatten() {
                 assert!(p.staging);
                 for k in p.first..p.first + p.count {
                     assert!(seen.insert((p.face, k)));
@@ -165,8 +172,36 @@ mod tests {
         assert_eq!((face, round), (2, 5));
         s.start_staging(DVec3::ZERO);
         assert_eq!(s.staging_eye, Some(DVec3::new(1.0, 2.0, 3.0)), "a fill under way is not restarted");
-        let p = s.plan(&mut face, &mut round)[0].unwrap();
+        let p = s.plan(&mut face, &mut round, 0.02)[0].unwrap();
         assert!(!p.staging && p.face == 2);
+    }
+
+    #[test]
+    fn at_most_sixty_slices_a_second() {
+        for fps in [30.0f32, 60.0, 59.0, 120.0, 144.0, 240.0] {
+            let mut s = SkySched::default();
+            let (mut face, mut round) = (0, 0);
+            let frames = (fps * 10.0) as u32;
+            let mut slices = 0;
+            for _ in 0..frames {
+                slices += s.plan(&mut face, &mut round, 1.0 / fps).iter().flatten().map(|p| p.count).sum::<u32>();
+            }
+            let want = frames.min(600);
+            assert!(slices.abs_diff(want) <= 2, "{fps} fps: {slices} slices in 10 s, {want} wanted");
+        }
+    }
+
+    #[test]
+    fn a_new_eye_fills_every_frame_at_any_rate() {
+        let mut s = SkySched::default();
+        let (mut face, mut round) = (0, 0);
+        s.start_staging(DVec3::X);
+        let mut frames = 0;
+        while !s.staging_full() {
+            assert!(s.plan(&mut face, &mut round, 1.0 / 240.0)[0].is_some_and(|p| p.staging));
+            frames += 1;
+        }
+        assert_eq!(frames, 6 * SKY_CUBE_SLICES);
     }
 
     #[test]
