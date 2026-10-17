@@ -50,10 +50,10 @@ cat <<NOTES
 
 | Platform | Download |
 | --- | --- |
-| Windows x64 | \`openOMSI-$version-windows-x64.zip\` |
-| Windows ARM64 | \`openOMSI-$version-windows-arm64.zip\` |
-| macOS (Apple silicon) | \`openOMSI-$version-macos-arm64.zip\` |
-| macOS (Intel) | \`openOMSI-$version-macos-x64.zip\` |
+| Windows x64 | \`openOMSI-$version-windows-x64-setup.exe\` (installer) or \`openOMSI-$version-windows-x64.zip\` |
+| Windows ARM64 | \`openOMSI-$version-windows-arm64-setup.exe\` (installer) or \`openOMSI-$version-windows-arm64.zip\` |
+| macOS (Apple silicon) | \`openOMSI-$version-macos-arm64.dmg\` (disk image) or \`openOMSI-$version-macos-arm64.zip\` |
+| macOS (Intel) | \`openOMSI-$version-macos-x64.dmg\` (disk image) or \`openOMSI-$version-macos-x64.zip\` |
 | Linux x64 | \`openOMSI-$version-linux-x64.zip\` |
 | Linux ARM64 | \`openOMSI-$version-linux-arm64.zip\` |
 | Android (arm64, 8.0+) | \`openOMSI-$version-android-arm64.apk\` |

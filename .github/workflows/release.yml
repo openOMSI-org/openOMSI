@@ -160,12 +160,41 @@ jobs:
           Copy-Item docs/SERVER.md dist/server/README.md
           New-Item -ItemType File -Force dist/server/.openomsi-content | Out-Null
           Compress-Archive -Path dist/server/* -DestinationPath "out/openOMSI-$env:OPENOMSI_VERSION-server-windows-${{ matrix.arch }}.zip"
+      - name: Installer
+        shell: bash
+        run: |
+          export PATH="/c/Program Files (x86)/NSIS:$PATH"
+          command -v makensis >/dev/null || choco install nsis -y --no-progress
+          sh scripts/windows/make-installer.sh dist/windows "out/openOMSI-$OPENOMSI_VERSION-windows-${{ matrix.arch }}-setup.exe"
+      - name: Installer install and uninstall
+        if: matrix.arch == 'x64'
+        shell: pwsh
+        run: |
+          $dir = "$env:RUNNER_TEMP\openOMSI"
+          $lnk = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\openOMSI.lnk"
+          $key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\openOMSI"
+          Start-Process -Wait "out/openOMSI-$env:OPENOMSI_VERSION-windows-x64-setup.exe" -ArgumentList "/S", "/D=$dir"
+          foreach ($p in "$dir\openomsi.exe", "$dir\openomsi-launcher-app.exe", "$dir\uninstall.exe", $lnk, $key) {
+            if (-not (Test-Path $p)) { throw "the installer did not make $p" }
+          }
+          New-Item -ItemType Directory -Force "$dir\Mods\mine" | Out-Null
+          Set-Content "$dir\Mods\mine\keep.txt" "a player's mod"
+          Set-Content "$dir\later.dll" "a file an update brought"
+          Set-Content "$dir\openomsi.exe.old-update" "the version before"
+          Set-Content "$dir\.openomsi-files" "later.dll`nopenomsi.exe`n..`nMods`n"
+          Start-Process -Wait "$dir\uninstall.exe" -ArgumentList "/S", "_?=$dir"
+          foreach ($p in "$dir\openomsi.exe", "$dir\openomsi-launcher-app.exe", "$dir\later.dll", "$dir\openomsi.exe.old-update", "$dir\.openomsi-files", $lnk, $key) {
+            if (Test-Path $p) { throw "the uninstaller left $p" }
+          }
+          if (-not (Test-Path "$dir\Mods\mine\keep.txt")) { throw "the uninstaller deleted the player's mods" }
       - uses: actions/upload-artifact@v7
         with:
           # (a release keeps its files; a pull request's test builds are fetched within days)
           retention-days: 14
           name: windows-${{ matrix.arch }}
-          path: out/*.zip
+          path: |
+            out/*.zip
+            out/*.exe
 
   macos:
     needs: version
@@ -201,13 +230,16 @@ jobs:
         run: |
           mkdir -p out
           cp README.md LICENSE dist/macos/
-          cd dist/macos && ditto -c -k --sequesterRsrc . "../../out/openOMSI-$OPENOMSI_VERSION-macos-${{ matrix.arch }}.zip"
+          (cd dist/macos && ditto -c -k --sequesterRsrc . "../../out/openOMSI-$OPENOMSI_VERSION-macos-${{ matrix.arch }}.zip")
+          sh scripts/macos/make-dmg.sh dist/macos/openOMSI.app "out/openOMSI-$OPENOMSI_VERSION-macos-${{ matrix.arch }}.dmg"
       - uses: actions/upload-artifact@v7
         with:
           # (a release keeps its files; a pull request's test builds are fetched within days)
           retention-days: 14
           name: macos-${{ matrix.arch }}
-          path: out/*.zip
+          path: |
+            out/*.zip
+            out/*.dmg
 
   linux:
     needs: version
@@ -369,7 +401,7 @@ jobs:
           git push origin "v$VERSION"
           sh scripts/release-notes.sh "$VERSION" > notes.md
           cd out
-          files=$(ls *.zip *.apk 2>/dev/null || true)
+          files=$(ls *.zip *.apk *.dmg *.exe 2>/dev/null || true)
           sha256sum $files > SHA256SUMS
           gh release create "v$VERSION" $files SHA256SUMS \
             --verify-tag \
