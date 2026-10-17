@@ -64,6 +64,7 @@ pub(crate) struct FrameEnv {
     pub no_glare: bool,
     pub debug_fog_lamps: bool,
     pub no_rt_grade: bool,
+    pub no_own_vehicle_lamp_block: bool,
 }
 
 impl FrameEnv {
@@ -104,6 +105,7 @@ impl FrameEnv {
             no_glare: omsi_cfg::flags::OMSI_NO_GLARE.is_set(),
             debug_fog_lamps: omsi_cfg::flags::OMSI_DEBUG_FOG_LAMPS.is_set(),
             no_rt_grade: omsi_cfg::flags::OMSI_NO_RT_GRADE.is_set(),
+            no_own_vehicle_lamp_block: omsi_cfg::flags::OMSI_NO_OWN_VEHICLE_LAMP_BLOCK.is_set(),
         }
     }
 }

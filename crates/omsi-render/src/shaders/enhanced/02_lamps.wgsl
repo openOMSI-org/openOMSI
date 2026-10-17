@@ -176,7 +176,7 @@ fn lamp_light(p: vec3<f32>, n: vec3<f32>, v: vec3<f32>, sf: Surface, thin: bool,
             // as the street.
             e = e * (0.05 + 0.95 * smoothstep(-0.1, 0.3, ld.z));
         }
-        if (e <= 0.0) {
+        if (e <= 0.0 || (!(l.extra.z == 0.0 && l.dir.w < -1.5 && l.dir.z < -0.5) && own_vehicle_blocks(p, l.pos.xyz))) {
             continue;
         }
         var irr = l.color.rgb * tint * l.color.w * enh.lights.y * e;

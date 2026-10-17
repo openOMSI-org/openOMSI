@@ -331,7 +331,10 @@ impl Renderer {
                 None => [1.0, 0.0, 0.0, 0.0],
             },
             inside_c: match lighting.inside {
-                Some((_, _, bb)) => [bb[3], bb[4], bb[5], 1.0],
+                Some(v @ (_, _, bb)) => {
+                    let block = !f.env.no_own_vehicle_lamp_block && point_in_vehicle_box(camera.position, &v);
+                    [bb[3], bb[4], bb[5], if block { 2.0 } else { 1.0 }]
+                }
                 None => [0.0; 4],
             },
             flags: [
