@@ -174,6 +174,22 @@ Ruede Trafohaus scales its frame unevenly). 27 stock scenery `.x` files have tra
 (the Verkehrszeichen_MC street name signs, Ruede's chestnut trees, bus stop poles and old
 shelter, Trafohaus, Buildings_MC's wohn_03/04 and hoch_01).
 
+**Binary `.x`** (`xof 0303bin 0032`, or `0064` for double floats) holds the same objects as
+little-endian tokens, each a WORD: 1 name and 2 string (DWORD length, then the bytes; a string
+is followed by its `,`/`;` token as a DWORD), 3 integer, 5 GUID (16 bytes), 6 integer list and
+7 float list (DWORD count, then the values), 10-20 the marks `{ } ( ) [ ] < > . , ;`,
+31 `template`, 40-52 the template member types. `omsi-o3d` reads both encodings through one
+token stream; the compressed `tzip`/`bzip` variants are refused. Mod scenery exported this way
+(the PAD-Labs houses) loads like the text files.
+
+**DeclData** inside a `Mesh` carries per-vertex data as a Direct3D 9 vertex declaration: a
+count and that many D3DVERTEXELEMENT9 entries (type, method, usage, usage index), then a
+count of DWORDs holding the vertex buffer, the elements packed one after another in each
+vertex (floats as their bit patterns). The first NORMAL and the first TEXCOORD set replace
+`MeshNormals` / `MeshTextureCoords`; packed types (DEC3N, SHORT2N, FLOAT16_2, ...) widen to
+floats as Direct3D 9 does. Without it such meshes (the PAD-Labs houses, the Köln trees) come
+out in one flat colour.
+
 **Scrambled vertices (version ≥ 4).** The `key` field (`0xFFFFFFFF` = none) selects a vertex
 scrambling reproduced from the original loader (`omsi-o3d`):
 

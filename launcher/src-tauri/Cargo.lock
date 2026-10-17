@@ -2970,6 +2970,7 @@ dependencies = [
  "encoding_rs",
  "glam",
  "gltf",
+ "half",
  "log",
  "omsi-cfg",
  "serde_json",
