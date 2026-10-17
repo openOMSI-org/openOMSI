@@ -37,42 +37,44 @@ impl Renderer {
             let (commands, main_secs, _) = done.next().expect("the picture's encoder");
             let (shadow_commands, shadow_secs, _) = done.next().expect("the shadows' encoder");
             let (prepass_commands, prepass_secs, _) = done.next().expect("the prepass's encoder");
-            let part_commands: Vec<wgpu::CommandBuffer> = done.map(|d| d.0).collect();
+            let (part_commands, part_secs): (Vec<wgpu::CommandBuffer>, Vec<f64>) = done.map(|d| (d.0, d.1)).unzip();
             debug_assert_eq!(part_commands.len(), parts);
-            (shadow_commands, prepass_commands, part_commands, commands, [shadow_secs, prepass_secs, main_secs, wait, 0.0])
+            (shadow_commands, prepass_commands, part_commands, commands, [shadow_secs, prepass_secs, main_secs, wait, 0.0, part_secs.iter().sum()])
         } else if big {
             std::thread::scope(|scope| {
                 let finish = &finish;
                 let shadow = scope.spawn(move || finish(shadow_encoder));
                 let prepass = scope.spawn(move || finish(prepass_encoder));
-                let parts: Vec<_> = main_parts.into_iter().map(|e| scope.spawn(move || finish(e).0)).collect();
+                let parts: Vec<_> = main_parts.into_iter().map(|e| scope.spawn(move || finish(e))).collect();
                 let (commands, main_secs) = finish(encoder);
                 let wait = std::time::Instant::now();
                 let (shadow_commands, shadow_secs) = shadow.join().expect("command encoding thread");
                 let shadow_wait = wait.elapsed().as_secs_f64();
                 let wait = std::time::Instant::now();
                 let (prepass_commands, prepass_secs) = prepass.join().expect("command encoding thread");
+                let (part_commands, part_secs): (Vec<_>, Vec<f64>) = parts.into_iter().map(|h| h.join().expect("command encoding thread")).unzip();
+                let prepass_wait = wait.elapsed().as_secs_f64();
                 (
                     shadow_commands,
                     prepass_commands,
-                    parts.into_iter().map(|h| h.join().expect("command encoding thread")).collect::<Vec<_>>(),
+                    part_commands,
                     commands,
-                    [shadow_secs, prepass_secs, main_secs, shadow_wait, wait.elapsed().as_secs_f64()],
+                    [shadow_secs, prepass_secs, main_secs, shadow_wait, prepass_wait, part_secs.iter().sum()],
                 )
             })
         } else {
             let (shadow, shadow_secs) = finish(shadow_encoder);
             let (prepass, prepass_secs) = finish(prepass_encoder);
-            let parts: Vec<_> = main_parts.into_iter().map(|e| finish(e).0).collect();
+            let (parts, part_secs): (Vec<_>, Vec<f64>) = main_parts.into_iter().map(finish).unzip();
             let (main, main_secs) = finish(encoder);
-            (shadow, prepass, parts, main, [shadow_secs, prepass_secs, main_secs, 0.0, 0.0])
+            (shadow, prepass, parts, main, [shadow_secs, prepass_secs, main_secs, 0.0, 0.0, part_secs.iter().sum()])
         };
         if self.profiling {
             // These overlap across helper threads; do not add them to the stage totals.
             let keys = if with_overlays {
-                ["finish.shadow", "finish.prepass", "finish.main", "finish.wait", "finish.wait prepass"]
+                ["finish.shadow", "finish.prepass", "finish.main", "finish.wait", "finish.wait prepass", "finish.parts"]
             } else {
-                ["mirror.finish.shadow", "mirror.finish.prepass", "mirror.finish.main", "mirror.finish.wait", "mirror.finish.wait prepass"]
+                ["mirror.finish.shadow", "mirror.finish.prepass", "mirror.finish.main", "mirror.finish.wait", "mirror.finish.wait prepass", "mirror.finish.parts"]
             };
             for (key, secs) in keys.into_iter().zip(finish_times) {
                 *self.stats.borrow_mut().entry(key).or_default() += secs;

@@ -725,7 +725,16 @@ impl Renderer {
         }
         self.encode_sky_cube(&mut enc.prepass, scene, &f, probe_redraw, &mut timers);
         self.encode_probe(&mut enc.prepass, scene, probe_redraw, &mut timers);
-        let main_parts = self.encode_main_pass(&mut enc.picture, scene, &f, &plan, &main_bundles, &mut timers);
+        let mut main_parts = self.encode_main_pass(&mut enc.picture, scene, &f, &plan, &main_bundles, &mut timers);
+        // Turning the recorded passes into Metal commands is the costliest CPU step of a
+        // frame (wgpu checks every draw): the shadow maps, the prepass, the main pass and
+        // the passes after it are finished side by side on helper threads and this one.
+        let big =
+            shadow_batches.iter().map(|b| b.len()).sum::<usize>() + plan.prepass_batches.len() > 64 || !main_parts.is_empty();
+        if big && !f.env.no_post_split {
+            let rest = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("after the main pass") });
+            main_parts.push(std::mem::replace(&mut enc.picture, rest));
+        }
         let puddles_on = self.encode_scene_reflections(&mut enc.picture, scene, &f, &plan, &cu, &mut timers);
         self.encode_fog_lamps(&mut enc.picture, scene, &f, vp_mat, puddles_on, &mut timers);
         self.encode_rain_film(&mut enc.picture, scene, &f, &plan.rain_batches, puddles_on);
@@ -735,11 +744,6 @@ impl Renderer {
         }
         self.encode_upscale(&mut enc.picture, scene, &f, &mut timers);
         clock.stage(self, "encode", "mirror.encode");
-        // Turning the recorded passes into Metal commands is the costliest CPU step of a
-        // frame (wgpu checks every draw): the shadow maps and the prepass are finished on
-        // helper threads while this one finishes the picture.
-        let big =
-            shadow_batches.iter().map(|b| b.len()).sum::<usize>() + plan.prepass_batches.len() > 64 || !main_parts.is_empty();
         self.finish_and_submit(enc, main_parts, big, with_overlays, &mut clock, timers);
     }
 
