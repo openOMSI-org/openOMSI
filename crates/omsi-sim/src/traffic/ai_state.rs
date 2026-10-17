@@ -125,6 +125,17 @@ pub struct AiState {
     /// At most this speed for now (m/s): rolling aside at walking pace for an emergency
     /// vehicle, or one crossing against a red light on the junction kept for it.
     pub speed_cap: Option<f32>,
+    pub bend: BendCache,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct BendCache {
+    lanes: Vec<usize>,
+    cur: usize,
+    offset: f32,
+    lat: f32,
+    next: f32,
+    samples: std::collections::VecDeque<(f32, Option<f32>)>,
 }
 
 /// An emergency vehicle on an active drive takes the speed limit times this ...
@@ -368,7 +379,7 @@ const TRAP_DEPTH: u32 = 3;
 
 impl AiState {
     pub fn new(lane: usize, s: f32, seed: u64) -> AiState {
-        AiState { traffic_pool: None, veh_type: 0, lane, s, speed: 0.0, max_speed_kmh: 50.0, accel: 1.2, decel: 3.0, length: 5.0, rng: seed | 1, blinker: 0, braking: false, brake_lamp: 0.0, odometer: 0.0, planned_next: None, ahead: Vec::new(), change_plan: Vec::new(), prev_lane: None, yield_time: 0.0, route: Vec::new(), route_index: 0, change: None, change_cooldown: 5.0, lateral: 0.0, lateral_target: 0.0, lateral_ramp: (0.0, 0.0, 0.0, 1.0), turn_wish: 0, signal: 0, signal_time: 0.0, lat_accel: 2.8, desire: 1.0, headway: 1.4, min_gap: 2.0, accept_gap: 4.0, reaction: 0.7, front: 2.5, rear: 2.5, held: false, start_timer: 0.0, acc: 0.0, accel_cap: None, ordinary_brake: ORDINARY_BRAKE, emergency_brake: MAX_BRAKE, jerk: JERK, cmd: 0.0, emergency: false, emergency_began: false, body: BodyLink::default(), nudge_ramp: (0.0, 0.0, 0.0, 1.0), priority_drive: false, speed_cap: None }
+        AiState { traffic_pool: None, veh_type: 0, lane, s, speed: 0.0, max_speed_kmh: 50.0, accel: 1.2, decel: 3.0, length: 5.0, rng: seed | 1, blinker: 0, braking: false, brake_lamp: 0.0, odometer: 0.0, planned_next: None, ahead: Vec::new(), change_plan: Vec::new(), prev_lane: None, yield_time: 0.0, route: Vec::new(), route_index: 0, change: None, change_cooldown: 5.0, lateral: 0.0, lateral_target: 0.0, lateral_ramp: (0.0, 0.0, 0.0, 1.0), turn_wish: 0, signal: 0, signal_time: 0.0, lat_accel: 2.8, desire: 1.0, headway: 1.4, min_gap: 2.0, accept_gap: 4.0, reaction: 0.7, front: 2.5, rear: 2.5, held: false, start_timer: 0.0, acc: 0.0, accel_cap: None, ordinary_brake: ORDINARY_BRAKE, emergency_brake: MAX_BRAKE, jerk: JERK, cmd: 0.0, emergency: false, emergency_began: false, body: BodyLink::default(), nudge_ramp: (0.0, 0.0, 0.0, 1.0), priority_drive: false, speed_cap: None, bend: BendCache::default() }
     }
 
     fn rand(&mut self) -> u64 {
@@ -700,8 +711,65 @@ impl AiState {
         best
     }
 
+    fn bend_reach(&self) -> f32 {
+        (self.speed * self.speed / (2.0 * BEND_DECEL) + 12.0).min(130.0)
+    }
+
+    fn bend_lat(&self) -> f32 {
+        // (an emergency vehicle on its drive takes the bends harder)
+        self.lat_accel * if self.priority_drive { 1.5 } else { 1.0 }
+    }
+
+    fn bend_at(net: &Network, q: &LaneSeq, s: f32, d: f32, lat: f32) -> Option<f32> {
+        let (i, u) = q.locate(net, s, d);
+        let turn = wrap_deg(q.heading(net, s, d + 3.0) - q.heading(net, s, d - 3.0)).abs().to_radians() / 6.0;
+        let k = net.lanes[q.lanes[i]].curvature_at(u).abs().max(turn);
+        (k > 1e-4).then(|| (lat / k).sqrt().max(2.5))
+    }
+
+    pub fn curve_speed_cached(&mut self, net: &Network) -> f32 {
+        if self.change.is_some() || omsi_cfg::flags::OMSI_NO_BEND_CACHE.is_set() {
+            return self.curve_speed(net);
+        }
+        let q = self.seq();
+        let (s, lat, reach) = (self.s, self.bend_lat(), self.bend_reach());
+        let offset = s - self.odometer;
+        let c = &mut self.bend;
+        if c.cur != q.cur || c.lanes[..] != q.lanes[..q.n] || c.lat != lat || (c.offset - offset).abs() > 0.05 {
+            c.lanes.clear();
+            c.lanes.extend_from_slice(&q.lanes[..q.n]);
+            c.cur = q.cur;
+            c.lat = lat;
+            c.offset = offset;
+            c.samples.clear();
+            c.next = s + 2.5 - self.odometer.rem_euclid(2.5);
+        }
+        while c.samples.front().is_some_and(|x| x.0 <= s) {
+            c.samples.pop_front();
+        }
+        while c.next <= s {
+            c.next += 2.5;
+        }
+        while c.next - s <= reach {
+            c.samples.push_back((c.next, Self::bend_at(net, &q, 0.0, c.next, lat)));
+            c.next += 2.5;
+        }
+        let mut best = Self::bend_at(net, &q, s, 0.0, lat).unwrap_or(f32::MAX);
+        for &(r, v) in &c.samples {
+            let d = r - s;
+            if d > reach {
+                break;
+            }
+            if let Some(v) = v {
+                best = best.min((v * v + 2.0 * BEND_DECEL * (d - 2.5).max(0.0)).sqrt());
+            }
+        }
+        best
+    }
+
     fn curve_speed_on(&self, net: &Network, q: &LaneSeq, s: f32) -> f32 {
-        let reach = (self.speed * self.speed / (2.0 * BEND_DECEL) + 12.0).min(130.0);
+        let reach = self.bend_reach();
+        let lat = self.bend_lat();
         let mut best = f32::MAX;
         // The samples lie at fixed places of the road (every 2.5 m of the odometer), not at
         // fixed distances ahead of the car: moving with the car, the sample that caught a
@@ -711,13 +779,7 @@ impl AiState {
         let mut d = 0.0f32;
         let mut next = first;
         while d <= reach {
-            let (i, u) = q.locate(net, s, d);
-            let turn = wrap_deg(q.heading(net, s, d + 3.0) - q.heading(net, s, d - 3.0)).abs().to_radians() / 6.0;
-            let k = net.lanes[q.lanes[i]].curvature_at(u).abs().max(turn);
-            if k > 1e-4 {
-                // (an emergency vehicle on its drive takes the bends harder)
-                let lat = self.lat_accel * if self.priority_drive { 1.5 } else { 1.0 };
-                let v = (lat / k).sqrt().max(2.5);
+            if let Some(v) = Self::bend_at(net, q, s, d, lat) {
                 // (a bend may begin anywhere up to a sample's spacing before the sample
                 // that finds it: the speed is taken from there, or the car met the start of
                 // a tight turn half a metre after its profile had allowed 1 m/s more)
@@ -808,6 +870,10 @@ impl AiState {
     /// `lead` is the vehicle ahead, `stop` the distance from the car's origin to where it
     /// has to stop (a light, a junction it gives way at, a bus stop).
     pub fn desired_accel(&self, net: &Network, lead: Option<Lead>, stop: Option<f32>) -> f32 {
+        self.desired_accel_bend(net, lead, stop, &|| self.curve_speed(net))
+    }
+
+    fn desired_accel_bend(&self, net: &Network, lead: Option<Lead>, stop: Option<f32>, bend: &dyn Fn() -> f32) -> f32 {
         let Some(lane) = net.lanes.get(self.lane) else { return 0.0 };
         // (an emergency vehicle on its drive pulls away hard)
         let (a, b) = (self.accel.max(0.1) * if self.priority_drive { 1.6 } else { 1.0 }, self.decel.max(0.5));
@@ -854,7 +920,7 @@ impl AiState {
         }
         // bends: follow the speed profile `curve_speed` lays out (it assumes `BEND_DECEL` of
         // braking), blending in over the last metre per second above it
-        let bend = self.curve_speed(net);
+        let bend = bend();
         if bend < v0 && v > bend - 1.0 {
             let track = -BEND_DECEL + (bend - v) / 0.6;
             let k = ((v - (bend - 1.0)) / 1.0).clamp(0.0, 1.0);
@@ -921,7 +987,8 @@ impl AiState {
     /// ceiling, and nobody could tell it from a firm brake. A car standing within
     /// `STANDSTILL_SLACK` of the gap it keeps behind a standing car stays there.
     pub fn command(&mut self, net: &Network, dt: f32, lead: Option<Lead>, stop: Option<f32>) -> f32 {
-        let want = self.desired_accel(net, lead, stop);
+        let bend = if self.lane < net.lanes.len() { self.curve_speed_cached(net) } else { 0.0 };
+        let want = self.desired_accel_bend(net, lead, stop, &|| bend);
         let was = self.emergency;
         let limit = -self.ordinary_brake.max(self.decel);
         self.emergency = want < limit || (was && want < limit + EMERGENCY_HYSTERESIS);

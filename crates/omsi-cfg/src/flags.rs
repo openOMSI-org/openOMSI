@@ -339,6 +339,7 @@ flags! {
     OMSI_NO_AO_REACH: Bool, Switch, Frame, "off", "The depth prepass that only the ambient occlusion needs draws the far scenery too, past the occlusion's reach (A/B).";
     OMSI_NO_ATTACH_FALLBACK: Bool, Switch, Use, "off", "Drop attachments that have no fallback instead of placing them (A/B).";
     OMSI_NO_BC: Bool, Switch, Use, "off", "Upload all textures as RGBA instead of keeping BC compression.";
+    OMSI_NO_BEND_CACHE: Bool, Switch, Use, "off", "AI cars look for the bends ahead anew every step (A/B).";
     OMSI_NO_BOUNDS_CACHE: Bool, Switch, Use, "off", "No cache of instance bounds.";
     OMSI_NO_BRIDGE: Bool, Switch, Use, "off", "LAN: leave the internet alone - no rendezvous bridge, no tunnel (tests, LAN parties).";
     OMSI_NO_BUMP: Bool, Switch, Use, "off", "No bump maps.";

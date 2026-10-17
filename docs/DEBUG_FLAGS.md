@@ -259,6 +259,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_NO_AO_REACH` | bool | off | frame | render | The depth prepass that only the ambient occlusion needs draws the far scenery too, past the occlusion's reach (A/B). |
 | `OMSI_NO_ATTACH_FALLBACK` | bool | off | use | scene | Drop attachments that have no fallback instead of placing them (A/B). |
 | `OMSI_NO_BC` | bool | off | use | render | Upload all textures as RGBA instead of keeping BC compression. |
+| `OMSI_NO_BEND_CACHE` | bool | off | use | sim | AI cars look for the bends ahead anew every step (A/B). |
 | `OMSI_NO_BOUNDS_CACHE` | bool | off | use | render | No cache of instance bounds. |
 | `OMSI_NO_BRIDGE` | bool | off | use | lan, net | LAN: leave the internet alone - no rendezvous bridge, no tunnel (tests, LAN parties). |
 | `OMSI_NO_BUMP` | bool | off | use | scene | No bump maps. |

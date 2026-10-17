@@ -1150,3 +1150,19 @@ fn jumps_beyond_the_cycle_restart_it() {
     inside.advance(1.0);
     assert!((inside.time - 10.5).abs() < 1e-3, "{:.2}", inside.time);
 }
+
+#[test]
+fn the_kept_bends_give_the_bend_speed_found_anew() {
+    let net = junction();
+    let mut car = AiState::new(0, 1.3, 7);
+    car.speed = 13.9;
+    car.plan_next(&net);
+    let dt = 1.0 / 50.0;
+    for k in 0..400 {
+        let (cached, fresh) = (car.curve_speed_cached(&net), car.curve_speed(&net));
+        assert!((cached - fresh).abs() < 0.05 || (cached > 1e30 && fresh > 1e30), "step {k}: {cached} vs {fresh}");
+        if !car.advance(&net, dt, None, None) {
+            break;
+        }
+    }
+}
