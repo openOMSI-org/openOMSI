@@ -23,6 +23,7 @@ use omsi_ui::paint::Align as TextAlign;
 use omsi_ui::{Atlas, Color, Draw, Fonts, Gpu, Layer, Painter, Rect, Vertex, Weight};
 
 pub mod input;
+mod nav;
 #[cfg(test)]
 mod preview;
 mod widgets;
@@ -116,6 +117,8 @@ pub struct Laid {
     pub items: Vec<Item>,
     /// The clickable parts, in the order they are drawn (the last one under the mouse wins).
     pub hits: Vec<Hit>,
+    /// Drawn without a shadow round it (a panel in the navigator's board).
+    pub flat: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -290,8 +293,8 @@ impl Layout<'_> {
                     + gap * children.len().saturating_sub(1) as f32
             }
             Kind::Bar { .. } => BAR_W,
-            Kind::Badge { text, .. } => {
-                (self.width(text, BADGE_PX, Weight::Medium) + 2.0 * BADGE_PAD).ceil()
+            Kind::Badge { text, weight: wt, .. } => {
+                (self.width(text, BADGE_PX, weight(*wt)) + 2.0 * BADGE_PAD).ceil()
             }
             Kind::Divider => 1.0,
             Kind::Space { size } => *size,
@@ -483,6 +486,7 @@ impl Layout<'_> {
                 value,
                 height,
                 background,
+                segments,
             } => {
                 let track = Rect::new(r.x, r.y + (r.h - height) * 0.5, r.w, *height);
                 self.rounded(
@@ -491,7 +495,7 @@ impl Layout<'_> {
                     background.map(color).unwrap_or(TRACK),
                     None,
                 );
-                if *value > 0.0 {
+                if !self.bar_parts(track, segments) && *value > 0.0 {
                     let fill = (r.w * value).max(*height).min(r.w);
                     self.rounded(
                         Rect::new(track.x, track.y, fill, *height),
@@ -501,22 +505,7 @@ impl Layout<'_> {
                     );
                 }
             }
-            Kind::Badge { text, text_color } => {
-                let w = self.natural(e).min(r.w);
-                let b = Rect::new(r.x, r.y + (r.h - BADGE_H) * 0.5, w, BADGE_H);
-                let fill = e.color.map(color).unwrap_or(ACCENT);
-                self.rounded(b, BADGE_H * 0.5, fill, None);
-                let t = self.fit(text, BADGE_PX, Weight::Medium, w - 2.0 * BADGE_PAD);
-                let tw = self.width(&t, BADGE_PX, Weight::Medium);
-                let y = self.baseline(b.y, b.h, BADGE_PX, Weight::Medium);
-                self.text(
-                    t,
-                    BADGE_PX,
-                    Weight::Medium,
-                    Vec2::new(b.x + (b.w - tw) * 0.5, y),
-                    text_color.map(color).unwrap_or(ink_on(fill)),
-                );
-            }
+            Kind::Badge { text, text_color, weight: wt } => self.badge(e, r, text, *text_color, weight(*wt)),
             Kind::Divider => {
                 let c = e.color.map(color).unwrap_or(DIVIDER);
                 let line = if in_row {
@@ -745,6 +734,7 @@ pub fn toast_panel(t: &Toast) -> Panel {
         visible: true,
         clickable: false,
         draggable: false,
+        grab: false,
         children,
     }
 }
@@ -758,6 +748,19 @@ pub fn place(p: &Panel, w: f32, h: f32, screen: Vec2) -> Vec2 {
         at.clamp(0.0, (room - size).max(0.0))
     };
     Vec2::new(along(ax, w, screen.x, p.x), along(ay, h, screen.y, p.y))
+}
+
+/// A card cut off at the height `h` (its own pixels): what lies below is not drawn - the
+/// card's texture ends there - and takes no click. (The hits keep their places in the list:
+/// the shapes they light refer to them by it.)
+fn cut(l: &mut Laid, h: f32) {
+    if l.h <= h {
+        return;
+    }
+    l.h = h;
+    for x in &mut l.hits {
+        x.r.h = (h - x.r.y).clamp(0.0, x.r.h);
+    }
 }
 
 /// The hit under `p` (card pixels): the last one drawn there.
@@ -811,12 +814,14 @@ pub fn draw_card(
         }
     };
     let n = p.len();
-    p.shadow(
-        Rect::new(card.x, card.y + 2.0, card.w, card.h),
-        laid.radius,
-        SHADOW_BLUR,
-        SHADOW,
-    );
+    if !laid.flat {
+        p.shadow(
+            Rect::new(card.x, card.y + 2.0, card.w, card.h),
+            laid.radius,
+            SHADOW_BLUR,
+            SHADOW,
+        );
+    }
     put(&p, n, 0, 0);
     let n = p.len();
     p.rect(card, laid.background);
@@ -932,6 +937,10 @@ struct Card {
     /// A notification's place in the stack (logical), eased.
     y: Option<f32>,
     seen: u64,
+    /// The height it came to before it was cut off to fit the navigator's board, and the
+    /// room there it was cut off to (infinite for a card of its own).
+    full_h: f32,
+    room: f32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -955,6 +964,22 @@ pub struct PanelsFrame {
     pub backdrop: f32,
     /// The navigator's panel (physical x0, y0, x1, y1), which the notifications stay clear of.
     pub navigator: Option<[f32; 4]>,
+    /// The navigator's board, where the panel with `anchor = "navigator"` goes (None: the
+    /// navigator shows none).
+    pub dock: Option<Dock>,
+}
+
+/// The navigator's board under its map.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Dock {
+    /// Its width and the most height it may take (physical pixels).
+    pub width: f32,
+    pub room: f32,
+    /// The navigator's scale: physical pixels per point of it (the panel is laid out in those).
+    pub scale: f32,
+    /// Its top left on the window (physical pixels), once the navigator made room for the
+    /// panel ([`PluginPanels::docked`]); None until then.
+    pub at: Option<Vec2>,
 }
 
 /// The plugins' panels on the screen.
@@ -973,6 +998,12 @@ pub struct PluginPanels {
     pub drag: Option<input::Drag>,
     /// The field typed into when the cards were last laid out.
     typing: Option<(u64, String, String)>,
+    /// The height of the panel in the navigator's board as last laid out (physical pixels):
+    /// the room the navigator makes for it. None: no such panel.
+    pub docked: Option<f32>,
+    /// The left button went down on a panel that takes clicks without the mouse (`grab`):
+    /// its release is the panel's too, not the cab's.
+    pub grabbed: bool,
 }
 
 impl PluginPanels {
@@ -985,6 +1016,8 @@ impl PluginPanels {
         ui.set_screen(screen.x, screen.y, k);
         ui.set_shown(!f.hidden);
         ui.tick(f.dt);
+        self.docked = None;
+        ui.set_dock(None);
         if !f.hidden && (!ui.panels().is_empty() || !ui.toasts().is_empty()) {
             self.show(r, scene, ui, f, k, screen);
         }
@@ -1041,9 +1074,29 @@ impl PluginPanels {
             }
             self.typing = typing.clone();
         }
-        let margin = (MARGIN * k).ceil();
         let mut cards: Vec<Key> = Vec::new();
+        // (the first panel for the navigator's board is the one there; another waits)
+        let mut dock_taken = false;
+        let mut dock_said = None;
         for e in ui.panels().iter().filter(|e| e.panel.visible) {
+            let dock = match (e.panel.anchor == pui::Anchor::Navigator, f.dock) {
+                (false, _) => None,
+                (true, Some(d)) if !dock_taken => {
+                    dock_taken = true;
+                    Some(d)
+                }
+                // (no board shown: the navigator hears there is a panel for one)
+                (true, None) => {
+                    self.docked.get_or_insert(0.0);
+                    continue;
+                }
+                _ => continue,
+            };
+            // (in the board: the navigator's scale and width, no card of its own round it)
+            let (ck, width) = match dock {
+                Some(d) => (d.scale.max(0.25), (d.width / d.scale.max(0.25)).max(40.0)),
+                None => (k, e.panel.width),
+            };
             let key = Key::Panel(e.owner, e.id.clone());
             let card = self.cards.entry(key.clone()).or_insert_with(|| Card {
                 revision: u64::MAX,
@@ -1055,18 +1108,47 @@ impl PluginPanels {
                 origin: Vec2::ZERO,
                 y: None,
                 seen: 0,
+                full_h: 0.0,
+                room: 0.0,
             });
-            if card.revision != e.revision || card.scale != k || card.backdrop != f.backdrop {
+            // (the most a panel in the board may be high, in its own pixels)
+            let room = dock.map_or(f32::INFINITY, |d| (d.room / ck).floor().max(1.0));
+            if card.revision != e.revision || card.scale != ck || card.backdrop != f.backdrop || card.laid.w != width || card.room != room {
                 let caret = typing.as_ref().filter(|t| t.0 == e.owner && t.1 == e.id).map(|t| t.2.as_str());
-                card.laid = layout_typing(&e.panel, fonts, f.backdrop, caret);
+                card.laid = match dock {
+                    Some(_) => {
+                        // (over the navigator's own card colour unless it says another)
+                        let p = pui::Panel { width, accent: None, radius: 0.0, background: Some(e.panel.background.unwrap_or(pui::Rgba([0, 0, 0, 0]))), ..e.panel.clone() };
+                        Laid { flat: true, ..layout_typing(&p, fonts, f.backdrop, caret) }
+                    }
+                    None => layout_typing(&e.panel, fonts, f.backdrop, caret),
+                };
+                card.full_h = card.laid.h;
+                card.room = room;
+                cut(&mut card.laid, room);
                 card.revision = e.revision;
-                card.scale = k;
+                card.scale = ck;
                 card.backdrop = f.backdrop;
                 card.drawn = None;
             }
-            let at = input::moved(place(&e.panel, card.laid.w, card.laid.h, screen), e.moved, card.laid.w, card.laid.h, screen);
-            card.origin = Vec2::new(f.hud[0] + (at.x * k).round(), f.hud[1] + (at.y * k).round());
+            match dock {
+                Some(d) => {
+                    self.docked = Some((card.laid.h * ck).ceil());
+                    dock_said = Some(pui::Dock { width, room: d.room / ck, height: card.full_h, owner: Some(e.owner) });
+                    // (until the navigator made room for it, it is laid out, not shown)
+                    let Some(at) = d.at else { continue };
+                    card.origin = Vec2::new(at.x.round(), at.y.round());
+                }
+                None => {
+                    let at = input::moved(place(&e.panel, card.laid.w, card.laid.h, screen), e.moved, card.laid.w, card.laid.h, screen);
+                    card.origin = Vec2::new(f.hud[0] + (at.x * k).round(), f.hud[1] + (at.y * k).round());
+                }
+            }
             cards.push(key);
+        }
+        if let Some(d) = f.dock {
+            let s = d.scale.max(0.25);
+            ui.set_dock(Some(dock_said.unwrap_or(pui::Dock { width: (d.width / s).max(40.0), room: d.room / s, height: 0.0, owner: None })));
         }
         // the notifications, newest at the top, under the navigator when it is in the way
         let right = screen.x - 16.0;
@@ -1090,6 +1172,8 @@ impl PluginPanels {
                 origin: Vec2::ZERO,
                 y: None,
                 seen: 0,
+                full_h: 0.0,
+                room: f32::INFINITY,
             });
             if card.scale != k || card.backdrop != f.backdrop {
                 card.laid = layout(&toast_panel(t), fonts, f.backdrop);
@@ -1125,6 +1209,10 @@ impl PluginPanels {
                 continue;
             };
             card.seen = self.frame;
+            // (a card's own scale: the navigator's for the panel in its board, which casts no
+            // shadow and so needs no room round it: what was cut off stays out of the texture)
+            let k = card.scale.max(0.25);
+            let margin = if card.laid.flat { 0.0 } else { (MARGIN * k).ceil() };
             let hot = match key {
                 Key::Panel(..) if focused => {
                     let local = (cursor - card.origin) / k;
@@ -1204,6 +1292,30 @@ mod tests {
 
     fn panel(src: &str) -> Panel {
         panel_from_source(src).unwrap()
+    }
+
+    /// A panel too tall for the navigator's board is cut off: drawn and clicked only down to
+    /// the room there (review of #2880).
+    #[test]
+    fn a_card_cut_off_takes_no_click_below() {
+        let fonts = Fonts::new();
+        let p = panel(r#"{ width = 200, padding = 0, gap = 0, children = {
+            { type = "button", id = "a", text = "A" },
+            { type = "button", id = "b", text = "B" },
+            { type = "button", id = "c", text = "C" },
+        } }"#);
+        let mut l = layout(&p, &fonts, 1.0);
+        let full = l.h;
+        let (n, hot) = (l.hits.len(), l.items.clone());
+        cut(&mut l, full * 0.5);
+        assert_eq!((l.h, l.hits.len(), &l.items), (full * 0.5, n, &hot), "the height only, and the hits keep their places");
+        assert_eq!(l.hits.iter().find(|h| h.element.as_deref() == Some("c")).unwrap().r.h, 0.0);
+        assert!(hit_at(&l, Vec2::new(10.0, full * 0.9)).is_none());
+        assert!(hit_at(&l, Vec2::new(10.0, 5.0)).is_some());
+        // (one that fits is left as it is)
+        let mut m = layout(&p, &fonts, 1.0);
+        cut(&mut m, full + 10.0);
+        assert_eq!(m.h, full);
     }
 
     #[test]

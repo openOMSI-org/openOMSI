@@ -3159,6 +3159,16 @@
       "permission": "ui"
     },
     {
+      "name": "ui.dock",
+      "group": "ui",
+      "since": "0.3.36",
+      "doc": "The navigator's board, where a panel with `anchor = \"navigator\"` goes, in that panel's pixels: its width, the most height there is room for, the height the panel there came to (0 before it is laid out; more than `room`: it is cut off at the bottom), and whether that panel is this plugin's (the first one asked for has the board, another waits). Nothing while the navigator shows no board: it is off, or Shift+N put its lower part away.",
+      "params": [],
+      "returns": "width, room, height, mine",
+      "multi": true,
+      "permission": null
+    },
+    {
       "name": "ui.focus",
       "group": "ui",
       "since": "0.2.21",
@@ -3329,7 +3339,7 @@
       "name": "ui.update",
       "group": "ui",
       "since": "0.2.22",
-      "doc": "Changes one element of a panel in place, by its id: `text`, `color`, `value` (a bar, a slider), `checked`, `selected`, `name` (an icon), `values` (a chart), `rows` (a table), `src` (an image) - cheaper than setting the whole panel again.",
+      "doc": "Changes one element of a panel in place, by its id: `text`, `color`, `value` (a bar, a slider), `segments` (a bar), `checked`, `selected`, `name` (an icon), `values` (a chart), `rows` and `aligns` (a table), `stops` (a stop list), `src` (an image) - cheaper than setting the whole panel again.",
       "params": [
         {
           "name": "panel",

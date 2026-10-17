@@ -4,7 +4,7 @@
 use super::{color, ink_on, Hit, HitKind, Item, Layout, ACCENT, BUTTON, DIVIDER, INK, LINE, TRACK};
 use glam::Vec2;
 use hashbrown::HashMap;
-use omsi_plugin::ui::{ChartStyle, Element, Kind};
+use omsi_plugin::ui::{Align, ChartStyle, Element, Kind, Rgba};
 use omsi_ui::{Color, Gpu, Rect, Weight};
 use std::path::{Path, PathBuf};
 
@@ -33,7 +33,7 @@ impl Layout<'_> {
             Kind::Tabs { tabs, .. } => tabs.iter().map(|t| self.width(t, CONTROL_PX, Weight::Medium) + 24.0).sum::<f32>().ceil(),
             Kind::Chart { .. } => CHART_W,
             Kind::Table { columns, size, .. } => columns.iter().map(|c| self.width(c, *size, Weight::Bold) + 12.0).sum::<f32>().ceil(),
-            _ => 0.0,
+            _ => self.nav_natural(e),
         }
     }
 
@@ -50,7 +50,7 @@ impl Layout<'_> {
                 let head = if columns.is_empty() { 0.0 } else { size * LINE + 3.0 };
                 head + rows.len() as f32 * size * LINE
             }
-            _ => 0.0,
+            _ => self.nav_height(e, w),
         }
     }
 
@@ -137,8 +137,8 @@ impl Layout<'_> {
                 }
             }
             Kind::Chart { values, min, max, style, fill, .. } => self.chart(r, values, *min, *max, *style, *fill, accent),
-            Kind::Table { columns, rows, widths, size } => self.table(r, columns, rows, widths, *size, e.color.map(color)),
-            _ => {}
+            Kind::Table { columns, rows, widths, size, aligns, inks } => self.table(r, columns, rows, widths, *size, e.color.map(color), aligns, inks),
+            _ => self.nav_emit(e, r),
         }
     }
 
@@ -179,7 +179,8 @@ impl Layout<'_> {
         }
     }
 
-    fn table(&mut self, r: Rect, columns: &[String], rows: &[Vec<String>], widths: &[f32], size: f32, c: Option<Color>) {
+    #[allow(clippy::too_many_arguments)]
+    fn table(&mut self, r: Rect, columns: &[String], rows: &[Vec<String>], widths: &[f32], size: f32, c: Option<Color>, aligns: &[Align], inks: &[Vec<Option<Rgba>>]) {
         let n = columns.len().max(rows.iter().map(Vec::len).max().unwrap_or(0)).max(1);
         let shares: Vec<f32> = (0..n).map(|i| widths.get(i).copied().filter(|w| *w > 0.0).unwrap_or(1.0)).collect();
         let total: f32 = shares.iter().sum();
@@ -191,22 +192,31 @@ impl Layout<'_> {
         }).collect();
         let lh = size * LINE;
         let mut y = r.y;
-        let line = |l: &mut Self, cells: &[String], y: f32, weight: Weight, ink: Color| {
+        // (a cell's text in its column as the column is aligned; a right one keeps clear of
+        // the next column's left edge, a left one of its own right edge)
+        let line = |l: &mut Self, cells: &[String], own: Option<&Vec<Option<Rgba>>>, y: f32, weight: Weight, ink: Color| {
             for (k, cell) in cells.iter().enumerate().take(n) {
                 let (x, w) = xs[k];
                 let t = l.fit(cell, size, weight, (w - 6.0).max(0.0));
                 let base = l.baseline(y, lh, size, weight);
-                l.text(t, size, weight, Vec2::new(x, base), ink);
+                let tw = l.width(&t, size, weight);
+                let at = match aligns.get(k).copied().unwrap_or_default() {
+                    Align::Left => x,
+                    Align::Center => x + (w - tw) * 0.5,
+                    Align::Right => x + w - tw - if k + 1 < n { 6.0 } else { 0.0 },
+                };
+                let ink = own.and_then(|o| o.get(k).copied().flatten()).map(color).unwrap_or(ink);
+                l.text(t, size, weight, Vec2::new(at, base), ink);
             }
         };
         if !columns.is_empty() {
-            line(self, columns, y, Weight::Bold, GREY);
+            line(self, columns, None, y, Weight::Bold, GREY);
             y += lh + 1.0;
             self.out.items.push(Item::Rect { r: Rect::new(r.x, y, r.w, 1.0), color: DIVIDER });
             y += 2.0;
         }
-        for row in rows {
-            line(self, row, y, Weight::Regular, c.unwrap_or(INK));
+        for (i, row) in rows.iter().enumerate() {
+            line(self, row, inks.get(i), y, Weight::Regular, c.unwrap_or(INK));
             y += lh;
         }
     }
@@ -244,6 +254,67 @@ impl Images {
 mod tests {
     use super::super::*;
     use omsi_plugin::ui::panel_from_source;
+
+    #[test]
+    fn a_table_aligns_its_columns_and_colours_its_cells() {
+        let fonts = Fonts::new();
+        let p = panel_from_source(
+            r##"{ width = 300, padding = 0, children = {
+                { type = "table", widths = { 1, 1 }, aligns = { "left", "right" }, rows = { { "Zoo", { text = "+3:12", color = "#FF5F57" } } } },
+            } }"##,
+        )
+        .unwrap();
+        let l = layout(&p, &fonts, 1.0);
+        let at = |t: &str| l.items.iter().find_map(|i| match i { Item::Text { text, at, color, .. } if text == t => Some((*at, *color)), _ => None }).unwrap();
+        let (zoo, _) = at("Zoo");
+        let (late, ink) = at("+3:12");
+        assert!(zoo.x < 1.0, "{zoo:?}");
+        // (the last column's text ends at the table's right edge, in its own colour)
+        let w = fonts.width_as_is("+3:12", 13.0, Weight::Regular);
+        assert!((late.x + w - 300.0).abs() < 1.0, "{late:?}");
+        assert_eq!(ink, Color::rgba(0xFF, 0x5F, 0x57, 1.0));
+    }
+
+    #[test]
+    fn a_box_holds_its_children_and_a_stop_list_takes_a_row_a_stop() {
+        let fonts = Fonts::new();
+        let p = panel_from_source(
+            r##"{ width = 300, padding = 0, gap = 0, children = {
+                { type = "box", children = { { type = "button", id = "ok", text = "OK" } } },
+                { type = "stops", stops = { { name = "Markt", time = "08:05", state = "done" }, { name = "Rathaus", time = "08:12", state = "now" }, { name = "Bahnhof", time = "08:20" } } },
+                { type = "bar", segments = { { value = 1 }, { value = 3 } } },
+            } }"##,
+        )
+        .unwrap();
+        let l = layout(&p, &fonts, 1.0);
+        // the button in the box still takes its clicks, inside the box's padding
+        let ok = l.hits.iter().find(|h| h.element.as_deref() == Some("ok")).expect("the button's hit");
+        assert!(ok.r.x > 10.0 && ok.r.y > 5.0, "{:?}", ok.r);
+        // three stops, one row each, their names in order down the list
+        let ys: Vec<f32> = ["Markt", "Rathaus", "Bahnhof"].iter().map(|n| l.items.iter().find_map(|i| match i { Item::Text { text, at, .. } if text == n => Some(at.y), _ => None }).unwrap()).collect();
+        assert!(ys[0] < ys[1] && ys[1] < ys[2], "{ys:?}");
+        assert!(((ys[2] - ys[1]) - 22.0).abs() < 1.0, "{ys:?}");
+        // the bar's two parts: a quarter and three quarters of its width
+        let parts: Vec<f32> = l.items.iter().filter_map(|i| match i { Item::Rounded { r, .. } if r.h == 6.0 && r.w < 300.0 => Some(r.w), _ => None }).collect();
+        assert_eq!(parts.len(), 2, "{parts:?}");
+        assert!(parts[1] > 2.5 * parts[0], "{parts:?}");
+    }
+
+    /// A part far smaller than the others is still a round part of its own, and it does not
+    /// reach into the next one (review of #2881).
+    #[test]
+    fn a_bars_parts_do_not_overlap() {
+        let fonts = Fonts::new();
+        let p = panel_from_source(r##"{ width = 300, padding = 0, children = { { type = "bar", height = 8, segments = { { value = 0.01 }, { value = 100 }, { value = 0.01 } } } } }"##).unwrap();
+        let l = layout(&p, &fonts, 1.0);
+        let parts: Vec<Rect> = l.items.iter().filter_map(|i| match i { Item::Rounded { r, .. } if r.h == 8.0 && r.w < 300.0 => Some(*r), _ => None }).collect();
+        assert_eq!(parts.len(), 3, "{parts:?}");
+        for w in parts.windows(2) {
+            assert!(w[0].right() <= w[1].x, "{parts:?}");
+        }
+        assert!(parts[0].w >= 7.0 && parts[2].w >= 7.0, "{parts:?}");
+        assert!((parts[2].right() - 300.0).abs() < 0.01, "{parts:?}");
+    }
 
     #[test]
     fn controls_take_their_room_and_their_hits() {

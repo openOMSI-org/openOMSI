@@ -7,10 +7,42 @@ use glam::Vec2;
 use omsi_plugin::ui::UiState;
 
 impl crate::App {
+    /// A press of the left button while the panels do not have the mouse, on a panel that
+    /// takes clicks without it (`grab`), and the release of such a press: the panel's, as a
+    /// click with the mouse would be. True when it was (the cab gets nothing of it).
+    pub(crate) fn plugin_grab(&mut self, pressed: bool) -> bool {
+        if !pressed {
+            if !std::mem::take(&mut self.integrations.plugin_panels.grabbed) {
+                return false;
+            }
+            self.plugin_click(false);
+            return true;
+        }
+        let Some(p) = self.integrations.plugins.as_ref() else { return false };
+        // (not while the mouse turns the head: there is no cursor to click with)
+        if self.input.mouse_look {
+            return false;
+        }
+        let (x, y) = self.input.cursor;
+        if !self.integrations.plugin_panels.grabs_at(&p.ui.borrow(), x, y) {
+            return false;
+        }
+        self.integrations.plugin_panels.grabbed = true;
+        self.plugin_press(true, true);
+        true
+    }
+
     /// The left button while the panels have the mouse: a press on a clickable part goes to
     /// its plugin as `ui_click`, a slider or tabs take the place pressed, a draggable panel
     /// follows the cursor from its free parts; the bus gets none of it.
     pub(crate) fn plugin_click(&mut self, pressed: bool) {
+        self.plugin_press(pressed, false);
+    }
+
+    /// [`App::plugin_click`]; `grab`: a press on a panel that takes it without the mouse,
+    /// which clicks its buttons, boxes, sliders and tabs, but neither starts typing into a
+    /// field nor drags the panel (the driver did not ask the panels for the mouse).
+    fn plugin_press(&mut self, pressed: bool, grab: bool) {
         let Some(p) = self.integrations.plugins.as_ref() else {
             return;
         };
@@ -27,13 +59,16 @@ impl crate::App {
             ui.stop_typing(false);
         }
         let Some(pr) = press else { return };
+        if grab && pr.element.as_deref().is_some_and(|el| ui.is_field(pr.owner, &pr.panel, el)) {
+            return;
+        }
         match (pr.kind, pr.element.as_deref()) {
             (HitKind::Slider, Some(el)) => {
                 ui.set_control(pr.owner, &pr.panel, el, pr.fraction);
                 self.integrations.plugin_panels.drag = Some(Drag::Slider { owner: pr.owner, panel: pr.panel.clone(), element: el.to_string(), track: pr.span });
             }
             (HitKind::Tabs, Some(el)) => ui.set_control(pr.owner, &pr.panel, el, pr.fraction),
-            _ if pr.drag => {
+            _ if pr.drag && !grab => {
                 self.integrations.plugin_panels.drag = Some(Drag::Panel { owner: pr.owner, panel: pr.panel.clone(), last: Vec2::new(x, y) });
             }
             _ if pr.hit => ui.click(pr.owner, &pr.panel, pr.element.as_deref()),

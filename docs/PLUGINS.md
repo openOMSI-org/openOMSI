@@ -312,8 +312,9 @@ end)
 F10 gives the panels the mouse; a click on the button sounds the horn. The whole example is
 [`docs/examples/plugins/trip_panel.lua`](examples/plugins/trip_panel.lua).
 
-`omsi.ui.version` is `2` (`1` before the controls below): test
-`if omsi.ui and omsi.ui.version >= 2` in a plugin that should also run in an older openOMSI.
+`omsi.ui.version` is `5` (`4` before `grab`, `3` before boxes, stop lists and the other
+elements and keys marked 4 below, `2` before the navigator's board, `1` before the controls):
+test `if omsi.ui and omsi.ui.version >= 2` in a plugin that should also run in an older openOMSI.
 The panels are the plugin's own: one plugin cannot change or remove another's, and when the
 plugin stops, or is loaded again after a change of its file, its panels go (its
 notifications run their time). They show over the picture and the navigator and under the
@@ -324,7 +325,7 @@ city map is open, nor in VR.
 
 ```lua
 omsi.ui.set("trip", {
-  anchor = "top_left",       -- top_left top top_right left center right bottom_left bottom bottom_right
+  anchor = "top_left",       -- top_left top top_right left center right bottom_left bottom bottom_right, or navigator
   x = 16, y = 16,             -- from the anchor towards the middle (from a middle: right and down)
   width = 340,                -- the height follows the content
   padding = 12,               -- default 12
@@ -335,13 +336,45 @@ omsi.ui.set("trip", {
   visible = true,             -- false hides it and keeps it
   clickable = false,          -- true: a click anywhere on it is ui_click(id, nil)
   draggable = false,          -- true: while the panels have the mouse it can be moved by its free parts
+  grab = false,               -- true: it takes its clicks even while the panels do not have the mouse (ui.version 5)
   children = { ... },         -- elements, top to bottom
 })
 ```
 
+A panel with `grab = true` takes a left click on it even while the panels do not have the
+mouse (no F10 or `ui.focus` first): its buttons, boxes, sliders and tabs answer as with the
+mouse, and the cab behind it gets none of the click. Such a click starts no typing into a text
+field and does not drag the panel. Elsewhere the click is the cab's as before; while the mouse
+turns the head (no cursor) it is the head's, and the game's own panels over it come first. It is
+for small cards the driver clicks away or keeps: a card that covers more than a quarter of the
+screen, or whose background is less than half opaque, takes no click this way.
+
 Sizes are pixels of a 1080p screen at the normal interface size. A panel stays on the screen
 whatever its offset; one the player dragged keeps its new place when it is set again
 (`omsi.ui.moved(id)` says how far).
+
+#### In the navigator
+
+A panel with `anchor = "navigator"` goes into the navigator's board under its map, in place
+of the list of the next stops: as wide as the navigator, at its scale, and on its card (no
+card, shadow, accent or rounded corners of its own; `background` still paints it). `x`, `y`,
+`width` and `draggable` are left aside, and the navigator grows as tall as the panel comes to,
+as far as the window has room. Shift+N cycles the navigator through map, map and board, off
+as it does with the stop list; the first time a plugin asks for the board the navigator opens
+it by itself. One plugin's panel is in the board at a time: another waits until it goes.
+
+```lua
+if (omsi.ui.version or 0) >= 3 then
+  omsi.ui.set("board", { anchor = "navigator", padding = 10, children = { ... } })
+else
+  omsi.ui.set("board", { anchor = "left", x = 16, width = 340, children = { ... } })
+end
+```
+
+`omsi.ui.dock()` gives the board's width, the most height there is room for, the height the
+panel came to, in the panel's pixels, and whether the panel in the board is this plugin's. A
+panel taller than the room is cut off at the bottom (what is cut off takes no click either), so
+a plugin can leave out rows that do not fit.
 
 #### Elements
 
@@ -352,8 +385,10 @@ Every element can have an `id`, a `color` and `visible = false` (left out, no ro
 | `text` | `text`, `size` (default 14), `weight` (`regular`, `medium`, `bold`), `align` (`left`, `center`, `right`), `wrap` (default `true`; `false`: one line, cut with "…") | a line or a paragraph, wrapped at the width it has; a line is 1.3 × `size` high |
 | `icon` | `name`, `size` (default 20) | one of the game's icons (Material Symbols names: `directions_bus`, `schedule`, `payments`, `warning`, `star`, `emoji_events`... - every one in [`assets/icons/material`](../assets/icons/material)); a name the game does not have draws nothing |
 | `row` | `children`, `gap` (default 8), `align` (`start`, `center`, `end`, `between`) | its children side by side, centred on each other; a child with `grow = true` takes the width the others leave (several share it); when they do not fit, texts, labels and buttons give up width alike |
-| `bar` | `value` (0 to 1), `height` (default 6), `color` (the filled part, default the game's amber), `background` | a progress bar; in a row 60 wide unless it grows |
-| `badge` | `text`, `color` (its fill, default amber), `text_color` | a small rounded label, 20 high |
+| `bar` | `value` (0 to 1), `height` (default 6), `color` (the filled part, default the game's amber), `background`; `segments` (4: `{ { value = 3, color = "#34B26E" }, ... }`, up to 16) | a progress bar; in a row 60 wide unless it grows. With `segments`: its parts side by side, each its share of their sum (early, on time, late...), in place of `value` |
+| `badge` | `text`, `color` (its fill, default amber), `text_color`, `weight` (4; default `medium`) | a small rounded label, 20 high |
+| `box` (4) | `children`, `gap` (default 4), `color` (default amber) | its children stacked in a box tinted with `color`, a stripe of it on the left: a note, an advice |
+| `stops` (4) | `stops` (`{ { name, time, expected, expected_color, state, tag }, ... }`, up to 128), `size` (13), `color` (the rail, default amber) | stops on a rail, a row each: `state` `"done"` (behind the bus: grey), `"now"` (the one it heads for: marked, bold) or `"ahead"` (the default); `time` on the right, `expected` before it in `expected_color`, and `tag` (`"terminus"`) before them |
 | `divider` | `color` | a thin line (in a row: upright) |
 | `space` | `size` (default 8) | empty room (in a row: across) |
 | `button` | `id` (needed), `text`, `icon`, `color` | a button 34 high, across the panel (in a row as wide as its label, or what it grows to); a click on it is `ui_click(panel id, button id)` |
@@ -363,7 +398,7 @@ Every element can have an `id`, a `color` and `visible = false` (left out, no ro
 | `input` | `id` (needed), `text`, `placeholder`, `max` (characters, default 100) | a text field: clicked, it takes what is typed (the keys do not reach the bus meanwhile) - `ui_change` at every key, Enter is a `ui_click` on it, Esc or a click elsewhere leaves it |
 | `tabs` | `id` (needed), `tabs` (a list of texts), `selected` (from 1) | a row of tabs: `ui_change(panel, id, number)` when one is chosen |
 | `chart` | `values` (up to 512 numbers), `min`, `max` (default: the values'), `height` (48), `style` (`line`, `bars`), `fill` | the values over the width: a line (filled below with `fill`) or bars |
-| `table` | `columns` (header texts), `rows` (a list of lists of texts), `widths` (shares of the width), `size` (13) | columns of texts, the header bold over a line |
+| `table` | `columns` (header texts), `rows` (a list of lists of texts; 4: a cell may be `{ text = "+3:12", color = "#FF5F57" }`), `widths` (shares of the width), `size` (13), `aligns` (4: `{ "left", "right", ... }`, each column's) | columns of texts, the header bold over a line |
 
 Another element with an `id` and `clickable = true` (a whole row, say) is clicked as a
 button is. Texts are shown as they are: they are not translated into the game's language.
@@ -371,8 +406,8 @@ button is. Texts are shown as they are: they are not translated into the game's 
 Keys the game does not know are left alone and an element of an unknown `type` is left out,
 so a plugin written for a later openOMSI still shows its panels here. A key of the wrong
 kind makes `set` return `false` and the reason. Limits, each plugin: 16 panels, 200
-elements in a panel (those in rows counted), 500 characters in a text, 64 in an id, rows 8
-deep, 512 values in a chart or cells in a table.
+elements in a panel (those in rows and boxes counted), 500 characters in a text, 64 in an id,
+rows and boxes 8 deep, 512 values in a chart or cells in a table.
 
 ### Example plugins
 
@@ -652,6 +687,7 @@ declared to call the function (a plain `.lua` file has them all).
 | --- | --- | --- | --- |
 | `omsi.message(text, [seconds])` | nil | A line of text on the screen (5 seconds when not given). *Permission: `ui`.* | 0.1.5 |
 | `omsi.ui.clear()` | nil | Removes every panel of the plugin. *Permission: `ui`.* | 0.2.21 |
+| `omsi.ui.dock()` | width, room, height, mine | The navigator's board, where a panel with `anchor = "navigator"` goes, in that panel's pixels: its width, the most height there is room for, the height the panel there came to (0 before it is laid out; more than `room`: it is cut off at the bottom), and whether that panel is this plugin's (the first one asked for has the board, another waits). Nothing while the navigator shows no board: it is off, or Shift+N put its lower part away. | 0.3.36 |
 | `omsi.ui.focus(on)` | boolean | `true`: the panels get the mouse (the cursor shows, a click goes to the panel under it and none to the bus); `false`, Esc or a menu of the game gives it back. Returns the new state. *Permission: `ui`.* | 0.2.21 |
 | `omsi.ui.focused()` | boolean | Whether the panels have the mouse. | 0.2.21 |
 | `omsi.ui.moved(panel)` | dx, dy | How far the player dragged a panel from where its table puts it (pixels). | 0.2.22 |
@@ -663,7 +699,7 @@ declared to call the function (a plain `.lua` file has them all).
 | `omsi.ui.toast(text, [opts])` | true, or false and the reason | A notification card at the top right, newest at the top; it goes after `opts.seconds` (1 to 60, default 5). `opts`: `title`, `icon`, `color`. A plugin shows 8 at most: a ninth makes its oldest go. *Permission: `ui`.* | 0.2.21 |
 | `omsi.ui.toggle(panel)` | boolean | Shows a hidden panel or hides a shown one; whether it shows now. *Permission: `ui`.* | 0.2.22 |
 | `omsi.ui.typing()` | boolean | Whether the player types into a text field of a plugin now (the keys then go to the field, not to the bus). | 0.2.22 |
-| `omsi.ui.update(panel, element, values)` | true, or false and the reason | Changes one element of a panel in place, by its id: `text`, `color`, `value` (a bar, a slider), `checked`, `selected`, `name` (an icon), `values` (a chart), `rows` (a table), `src` (an image) - cheaper than setting the whole panel again. *Permission: `ui`.* | 0.2.22 |
+| `omsi.ui.update(panel, element, values)` | true, or false and the reason | Changes one element of a panel in place, by its id: `text`, `color`, `value` (a bar, a slider), `segments` (a bar), `checked`, `selected`, `name` (an icon), `values` (a chart), `rows` and `aligns` (a table), `stops` (a stop list), `src` (an image) - cheaper than setting the whole panel again. *Permission: `ui`.* | 0.2.22 |
 | `omsi.ui.value(panel, element)` | any | The value of a checkbox, slider, text field or tabs element now (as `ui_change` gives it). *Permission: `ui`.* | 0.2.22 |
 
 #### Events, timers and watches
