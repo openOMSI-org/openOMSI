@@ -66,8 +66,13 @@ impl Player {
     }
 
     /// Put the duty's trip on the IBIS, at the stop the bus is at: now, or when the running
-    /// auto-start is done.
+    /// auto-start is done. Not while a plugin leaves the IBIS to the driver
+    /// (`duty.set_auto_ibis`): the driver types line, route and destination.
     pub(crate) fn set_duty_destination(&mut self, trip: &schedule::PlannedTrip, stop: usize) {
+        if !self.ibis_auto {
+            log::info!("IBIS: line {} to {} left for the driver to type", trip.line.trim(), trip.terminus.trim());
+            return;
+        }
         self.duty_typed = true;
         let stops: Vec<String> = trip.stops.iter().map(|s| s.name.clone()).collect();
         let name = trip

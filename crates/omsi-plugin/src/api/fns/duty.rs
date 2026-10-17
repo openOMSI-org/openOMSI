@@ -6,6 +6,7 @@ use crate::api::{ApiError, ApiFn, Value};
 use crate::io::{Duty, Stop, Trip};
 
 const NEW: &str = crate::api::VERSION;
+const V36: &str = "0.3.36";
 
 fn stop(s: &Stop, n: usize, next: Option<usize>) -> Value {
     let mut r = vec![("number", Value::from(n + 1)), ("name", s.name.trim().into()), ("id", Value::Int(s.id)), ("arrival", s.arr.into()), ("departure", s.dep.into()), ("stops", s.stops.into())];
@@ -70,6 +71,11 @@ pub static FNS: &[ApiFn] = &[
         Ok::<_, ApiError>(super::core::ok_or_reason(c.io().duty_start(&line, &tour, trip, stop)))
     }),
     def!("duty.finish", "duty", [], "boolean", "Gives the duty up (the bus drives on without a timetable); `true` when there was one.", NEW, WorldWrite, false, |c, a| c.io().duty_end()),
+    def!("duty.set_auto_ibis", "duty", [p("on", "bool")], "boolean", "Whether the game types the duty into the bus's IBIS by itself - line, route, destination and the stop, at Shift+U and `--autostart` and again as each trip begins (on as a bus is taken). Off, the driver types them, or the plugin with `duty.type_ibis`. For the bus the player drives now; `true` when there is one.", V36, VehicleWrite, false, |c, a| {
+        let on = a.flag(0, true);
+        c.io().duty_set_auto_ibis(on)
+    }),
+    def!("duty.type_ibis", "duty", [], "boolean", "Types the trip under way into the bus's IBIS now - line, route, destination and the stop the bus is at - as Shift+U does (`bus.set_line` types the line only); with `duty.set_auto_ibis` on, the next trips follow by themselves. `true` when there is a duty and a bus.", V36, VehicleWrite, false, |c, a| c.io().duty_type_ibis()),
     def!("timetable.lines", "duty", [], "list of tables", "The map's lines: `{name, user_allowed, tours}`, each tour `{number, today, trips}` (`today`: it runs on the game's date).", NEW, None, false, |c, a| {
         Value::List(c.io().timetable_lines().into_iter().map(|l| rec(vec![("name", l.name.into()), ("user_allowed", l.user_allowed.into()), ("tours", Value::List(l.tours.into_iter().map(|t| rec(vec![("number", t.number.into()), ("today", t.today.into()), ("trips", t.trips.into())])).collect()))])).collect())
     }),
