@@ -197,6 +197,13 @@ that camera sees from the rear section.
 - There is no limit on the number of meshes, materials, `[matl_change]` items, `[CTC]`
   entries, cameras, doors, passenger places, wheels or axles.
 
+## The X converter: many files at once
+
+`openomsi-xconv` on the command line turns DirectX `.x` meshes into `.o3d` as OMSI's own
+converter does - the same switches, defaults and output, checked against the stock files
+that ship both - but for a whole folder at a time, with a log for each file, text or
+binary `.x`, and bones or the pivot matrix when asked. See `docs/XCONV.md`.
+
 ## Passenger doors: sixteen entries and sixteen exits
 
 OMSI 2 has the door variables of eight `[entry]` and eight `[exit]` paths a vehicle

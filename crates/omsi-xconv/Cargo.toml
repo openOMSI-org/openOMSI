@@ -1,0 +1,19 @@
+[package]
+name = "omsi-xconv"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "DirectX .x meshes converted to OMSI .o3d, as OMSI's X converter does it, many files at a time"
+
+[[bin]]
+name = "openomsi-xconv"
+path = "src/main.rs"
+
+[dependencies]
+glam.workspace = true
+encoding_rs.workspace = true
+thiserror.workspace = true
+log.workspace = true
+
+[dev-dependencies]
+omsi-o3d = { path = "../omsi-o3d" }

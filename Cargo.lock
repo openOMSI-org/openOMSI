@@ -4068,6 +4068,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "omsi-xconv"
+version = "0.1.0"
+dependencies = [
+ "encoding_rs",
+ "glam",
+ "log",
+ "omsi-o3d",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "omsi-xr"
 version = "0.1.0"
 dependencies = [

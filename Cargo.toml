@@ -13,6 +13,7 @@ members = [
     "crates/omsi-timetable",
     "crates/omsi-content",
     "crates/omsi-texture",
+    "crates/omsi-xconv",
     "crates/omsi-geometry",
     "crates/omsi-render",
     "crates/omsi-sim",
