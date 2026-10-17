@@ -452,10 +452,10 @@ table.table { width: 100%; border-collapse: collapse; }
 .map-row .grow { display: flex; flex-direction: column; min-width: 0; }
 .map-row b { font-weight: 600; }
 .map-row .btn { pointer-events: none; flex: none; }
-.duty-col { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
-.duty-col.lines { flex: 2 1 170px; min-height: 170px; }
-.duty-col.tours { flex: 3 1 230px; min-height: 230px; }
-.duty-col .pick-list { flex: 1; height: auto; min-height: 110px; padding: 4px; gap: 2px; display: flex; flex-direction: column; }
+.duty-col { display: flex; flex-direction: column; gap: 8px; }
+.duty-col.lines { flex: 2 1 170px; }
+.duty-col.tours { flex: 3 1 230px; }
+.duty-col .pick-list { flex: 1; height: auto; min-height: 134px; contain: size; padding: 4px; gap: 2px; display: flex; flex-direction: column; }
 .duty-head { min-height: 28px; }
 .duty-head .toggle { padding: 0; min-width: 0; }
 .duty-head .toggle .text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
