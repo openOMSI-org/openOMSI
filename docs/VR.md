@@ -43,10 +43,10 @@ The default bindings are:
 | Show or hide the VR navigator | Ctrl+Shift+N |
 | Position the VR navigator | Ctrl+Shift+M |
 
-Adjust your seating position while driving through **Esc → Options** using
-**Seat forward**, **Seat back**, **Seat up**, **Seat down**, **Seat right**, or **Seat left**.
-**Reset the seat position** restores the bus camera's default position. The launcher
-also has seat-position sliders under **Settings → Camera**; those changes apply when the next
+Adjust your seating position while driving under **Esc → Options → Camera** with
+**Seat forward and back**, **Seat height**, **Seat left and right** and **Head pitch**.
+**Reset the seat position** puts the seat back where the bus has it. The launcher
+has the same sliders under **Settings → Camera**; those changes apply when the next
 drive starts.
 
 **Esc** opens the menu in front of the headset. Move the mouse to point at cockpit
@@ -84,7 +84,7 @@ menu are available only in VR.
 
 The placement menu also offers numeric position, width, rotation, tilt, roll and
 background opacity settings. Placement and visibility are saved separately for
-each bus. Existing saved settings are preserved.
+each bus.
 
 Single-player pauses during placement; multiplayer continues running. Mouse input
 adjusts the navigator instead of operating cockpit controls. Losing window focus

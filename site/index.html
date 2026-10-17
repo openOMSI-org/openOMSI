@@ -5,7 +5,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https:; connect-src 'self' https://api.github.com https://openomsi.savvabestbrother.workers.dev; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>openOMSI</title>
-<meta name="description" content="openOMSI: OMSI 2 recreated from scratch in Rust, fully compatible with every map and mod.">
+<meta name="description" content="openOMSI: OMSI 2 recreated from scratch in Rust. Plays your OMSI 2 maps, buses and mods on a new 64-bit engine.">
 <link rel="icon" type="image/svg+xml" href="assets/icon.svg">
 <link rel="apple-touch-icon" href="assets/icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -74,13 +74,13 @@
   <section class="hero">
     <img class="hero-logo logo-on-dark" src="assets/logos/openomsi-wordmark-light.svg" alt="openOMSI">
     <img class="hero-logo logo-on-light" src="assets/logos/openomsi-wordmark-dark.svg" alt="openOMSI">
-    <p class="hero-text">OMSI&nbsp;2, recreated from scratch in Rust - with full compatibility for every map, bus and mod.</p>
+    <p class="hero-text">OMSI&nbsp;2, recreated from scratch in Rust - your maps, buses and mods on a new 64-bit engine.</p>
     <div class="hero-actions">
       <a class="btn btn-contained" href="#/download"><span class="material-icons">download</span>Download</a>
       <a class="btn btn-outlined" href="#/docs/USER_GUIDE"><span class="material-icons">menu_book</span>Documentation</a>
       <a class="btn btn-outlined btn-discord" href="https://discord.gg/openomsi"><span class="material-icons">forum</span>Discord</a>
     </div>
-    <div class="chip chip-warn"><span class="material-icons">construction</span><span>Early release: expect bugs</span></div>
+    <div class="chip chip-warn"><span class="material-icons">construction</span><span>Early development: expect bugs</span></div>
     <div class="chip" id="version-chip"><span class="material-icons">sell</span><span>latest version…</span></div>
     <div class="chip chip-live" id="players-chip" hidden><span class="material-icons">sports_esports</span><span></span></div>
   </section>
@@ -100,23 +100,25 @@
     </div>
 
     <h2 class="section-title">What is openOMSI?</h2>
-    <p class="lead">openOMSI is a project to recreate the bus simulator <b>OMSI&nbsp;2</b> from the ground up in
-    <b>Rust</b>. Every content format of the original - maps, splines, scenery objects, buses, scripts,
-    timetables, HOF files, fonts, weather, tickets, plugins - is supported and loaded
-    exactly as OMSI&nbsp;2.2.032 does, so existing maps and mods run unchanged. Underneath it is a new engine:
-    64-bit, multithreaded, with a modern renderer.</p>
+    <p class="lead">openOMSI recreates the bus simulator <b>OMSI&nbsp;2</b> from the ground up in
+    <b>Rust</b>. It loads the content of your OMSI&nbsp;2 - maps, splines, scenery objects, buses, scripts,
+    timetables, HOF files, weather, tickets, plugins - the way OMSI&nbsp;2.2.032 does, so existing maps and
+    mods run without conversion. Underneath it is a new engine: 64-bit, multithreaded, with a modern renderer,
+    on Windows, macOS, Linux and Android.</p>
 
     <div class="grid">
-      <div class="card elevation-1"><span class="material-icons card-icon">extension</span><h3>100% mod compatibility</h3><p>Maps, buses, AI vehicles, scenery and plugins from the community work as they are - no conversion.</p></div>
-      <div class="card elevation-1"><span class="material-icons card-icon">speed</span><h3>A modern engine</h3><p>64-bit, no 2&nbsp;GB limit, tile streaming and texture loading on worker threads, Metal / Vulkan / DirectX&nbsp;12.</p></div>
-      <div class="card elevation-1"><span class="material-icons card-icon">devices</span><h3>Windows, macOS, Linux, Android</h3><p>Native builds for every platform, with betas for testers and tested stable releases.</p></div>
+      <div class="card elevation-1"><span class="material-icons card-icon">extension</span><h3>Your mods, unchanged</h3><p>Maps, buses, AI vehicles, scenery and plugins from the community load as they are. The OMSI&nbsp;2 folder is never written to.</p></div>
+      <div class="card elevation-1"><span class="material-icons card-icon">speed</span><h3>A modern engine</h3><p>64-bit with no 2&nbsp;GB limit, tiles and textures loaded on worker threads, Metal / Vulkan / DirectX&nbsp;12.</p></div>
+      <div class="card elevation-1"><span class="material-icons card-icon">wb_sunny</span><h3>Four graphics modes</h3><p>From <i>Vanilla</i>, which looks like OMSI&nbsp;2, to <i>Enhanced+</i> with physically based light, ray-traced shadows and reflections.</p></div>
+      <div class="card elevation-1"><span class="material-icons card-icon">tune</span><h3>A real launcher</h3><p>Map, line, tour and bus on one screen with a route map and a live bus preview; mods from a folder or an archive; wheels and pedals with force feedback; automatic updates.</p></div>
+      <div class="card elevation-1"><span class="material-icons card-icon">navigation</span><h3>Navigator and city map</h3><p>A navigator in the cab and a city map of the whole map, with your route and its stops.</p></div>
+      <div class="card elevation-1"><span class="material-icons card-icon">groups</span><h3>Multiplayer</h3><p>LAN sessions, and a dedicated server that runs the whole map without a window. <a href="#/docs/SERVER">More</a></p></div>
       <div class="card elevation-1"><span class="material-icons card-icon">smartphone</span><h3>On your phone</h3><p>The full game on Android: on-screen wheel or tilt steering, analog pedals, doors, gearbox and a cab panel - with the same maps, buses and mods. <a href="#/docs/ANDROID">More</a></p></div>
-      <div class="card elevation-1"><span class="material-icons card-icon">texture</span><h3>PBR materials</h3><p>Normal, roughness, metalness and occlusion maps beside a texture give mods modern materials, and still work in OMSI&nbsp;2. <a href="#/docs/PBR">More</a></p></div>
-      <div class="card elevation-1"><span class="material-icons card-icon">handyman</span><h3>No limits for modders</h3><p>Textures up to 16K, any number of interior lights per mesh, no 2&nbsp;GB limit - and OMSI&nbsp;2 content still works as it is. <a href="#/docs/MODDING">More</a></p></div>
-      <div class="card elevation-1"><span class="material-icons card-icon">groups</span><h3>Multiplayer</h3><p>LAN sessions and a dedicated server that simulates the whole map without a window.</p></div>
-      <div class="card elevation-1"><span class="material-icons card-icon">tune</span><h3>A real launcher</h3><p>Profiles, duties from the timetable, bus and livery preview, settings, one-click mod installs.</p></div>
-      <div class="card elevation-1"><span class="material-icons card-icon">code</span><h3>Lua plugins</h3><p>Write plugins in Lua: one text file in <code>plugins/</code>, reloaded as you save it, the same on every platform. <a href="#/docs/PLUGINS">Plugin docs</a>, and the <a href="https://github.com/openOMSI-org/openOMSI-Development-Tools">Development Tools</a> to build and compile them into <code>.oop</code>.</p></div>
-      <div class="card elevation-1"><span class="material-icons card-icon">description</span><h3>Open formats</h3><p>Every OMSI file format is written down - useful for modders and tool makers too.</p></div>
+      <div class="card elevation-1"><span class="material-icons card-icon">view_in_ar</span><h3>Virtual reality</h3><p>Drive in an OpenXR headset on Windows. <a href="#/docs/VR">More</a></p></div>
+      <div class="card elevation-1"><span class="material-icons card-icon">photo_camera</span><h3>Photo mode</h3><p>A free camera with focal length, depth of field, motion blur and colour grading.</p></div>
+      <div class="card elevation-1"><span class="material-icons card-icon">handyman</span><h3>More for modders</h3><p>PBR materials, textures up to 16K, any number of interior lights - and OMSI&nbsp;2 content still works as it is. <a href="#/docs/MODDING">More</a></p></div>
+      <div class="card elevation-1"><span class="material-icons card-icon">code</span><h3>Plugins</h3><p>Lua plugins as one text file in <code>plugins/</code>, reloaded as you save; compiled <code>.oop</code> plugins in Lua or WebAssembly; OMSI's plugin DLLs on Windows. <a href="#/docs/PLUGINS">Plugin docs</a> and the <a href="https://github.com/openOMSI-org/openOMSI-Development-Tools">Development Tools</a>.</p></div>
+      <div class="card elevation-1"><span class="material-icons card-icon">description</span><h3>Open formats</h3><p>Every OMSI file format is written down - useful for modders and tool makers too. <a href="#/docs/FORMATS">More</a></p></div>
     </div>
   </div>
 </template>
@@ -127,11 +129,11 @@
     <p class="lead" id="dl-channel">The stable release is recommended for everyday use. To try upcoming changes, visit <a href="#/beta">Beta downloads</a>.</p>
     <div class="card card-warning elevation-2">
       <span class="material-icons card-icon">construction</span>
-      <div><h3 id="dl-warning-title">Early release: expect bugs</h3><p id="dl-warning-text">openOMSI is in an early stage of development. Things may be missing or broken, and may change between versions. Please report problems on the <a href="#/issues">Issues</a> page.</p></div>
+      <div><h3 id="dl-warning-title">Early development: expect bugs</h3><p id="dl-warning-text">openOMSI is in an early stage of development. Things may be missing or broken, and may change between versions. Please report problems on the <a href="#/issues">Issues</a> page.</p></div>
     </div>
     <div class="card card-warning elevation-2">
       <span class="material-icons card-icon">warning</span>
-      <div><h3>OMSI&nbsp;2 is required</h3><p>Install the original OMSI&nbsp;2 first. On the first start, point the launcher to its folder (the one with <code>maps</code> and <code>Vehicles</code>).</p></div>
+      <div><h3>OMSI&nbsp;2 is required</h3><p>Install the original OMSI&nbsp;2 first. The launcher usually finds it; if not, choose its folder (the one with <code>maps</code> and <code>Vehicles</code>) under <b>Setup</b>.</p></div>
     </div>
     <div class="card card-warning elevation-2">
       <span class="material-icons card-icon">system_update</span>
@@ -143,10 +145,11 @@
     <ul class="steps">
       <li><b>Windows:</b> unpack the zip into a folder of your own (not <code>Program Files</code>) and run <code>openomsi.exe</code>. SmartScreen may warn about an unknown app: <i>More info</i> → <i>Run anyway</i>. Not sure which one? Almost every PC is <b>x64</b>; <b>ARM</b> is only for Snapdragon laptops.</li>
       <li><b>macOS:</b> unpack and open <code>openOMSI.app</code>. The first time macOS may refuse an app from the internet: right-click → <i>Open</i> → <i>Open</i>, or run <code>xattr -dr com.apple.quarantine openOMSI.app</code> once. <b>Apple silicon</b> for M1 and newer, <b>Intel</b> for older Macs.</li>
-      <li><b>Linux:</b> unpack and run <code>./openomsi</code> (<code>chmod +x openomsi</code> if it does not start; Vulkan or OpenGL drivers needed).</li>
+      <li><b>Linux:</b> unpack and run <code>./openomsi</code> (<code>chmod +x openomsi</code> if it does not start). Needs Vulkan or OpenGL drivers and <b>WebKitGTK 4.1</b> for the launcher window (<code>libwebkit2gtk-4.1-0</code> on Debian/Ubuntu, <code>webkit2gtk4.1</code> on Fedora, <code>webkit2gtk-4.1</code> on Arch).</li>
       <li><b>Android:</b> install the <code>.apk</code>, allow access to all files, copy the whole OMSI&nbsp;2 folder to <code>openOMSI/OMSI 2</code> on the phone - see <a href="#/docs/ANDROID">Android</a>.</li>
       <li><b>Dedicated server:</b> only for hosting a multiplayer session without playing on that machine - to play, take the game above. See <a href="#/docs/SERVER">Dedicated server</a>.</li>
-      <li>Mods go into the folder next to the game, or through the launcher's <b>Mods</b> page. The original OMSI&nbsp;2 folder is never changed.</li>
+      <li>Mods are installed on the launcher's <b>Mods</b> page (a folder, <code>.zip</code>, <code>.7z</code> or <code>.rar</code>) or put into the <code>Mods</code> folder next to the game. The original OMSI&nbsp;2 folder is never changed.</li>
+      <li>Updates: the launcher offers new versions at the start. <b>Settings → General → Updates</b> chooses Stable or Beta.</li>
     </ul>
     <p>All versions: <a href="#/releases">Releases</a>. Versions are numbered <code>MAJOR.MINOR.PATCH</code> - see <a href="#/docs/VERSIONING">Versioning</a>.</p>
   </div>

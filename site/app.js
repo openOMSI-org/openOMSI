@@ -6,14 +6,17 @@ const PRESENCE = "https://openomsi.savvabestbrother.workers.dev";
 const DOCS = [
   { file: "USER_GUIDE", title: "User guide", icon: "sports_esports" },
   { file: "ANDROID", title: "Android & mobile", icon: "smartphone" },
+  { file: "VR", title: "Virtual reality", icon: "view_in_ar" },
+  { file: "SERVER", title: "Dedicated server", icon: "dns" },
   { file: "MODDING", title: "Modding beyond OMSI 2", icon: "handyman" },
   { file: "PBR", title: "PBR materials", icon: "texture" },
+  { file: "MAP_PACKAGE", title: "Map packages", icon: "map" },
+  { file: "PLUGINS", title: "Plugins", icon: "extension" },
   { file: "BUILDING", title: "Building", icon: "build" },
   { file: "FORMATS", title: "Content formats", icon: "description" },
   { file: "ARCHITECTURE", title: "Architecture", icon: "account_tree" },
   { file: "ROUTES", title: "Routes", icon: "alt_route" },
-  { file: "PLUGINS", title: "Plugins", icon: "extension" },
-  { file: "SERVER", title: "Dedicated server", icon: "dns" },
+  { file: "DEBUG_FLAGS", title: "Debug switches", icon: "bug_report" },
   { file: "VERSIONING", title: "Versioning & releases", icon: "new_releases" },
 ];
 const PLATFORMS = [
@@ -21,8 +24,8 @@ const PLATFORMS = [
   { key: "windows-arm64", name: "Windows on ARM", icon: "desktop_windows", note: "ARM64 (Snapdragon laptops), Windows 11", os: "windows-arm" },
   { key: "macos-arm64", name: "macOS (Apple silicon)", icon: "laptop_mac", note: "M1 or newer, macOS 11 or newer", os: "mac" },
   { key: "macos-x64", name: "macOS (Intel)", icon: "laptop_mac", note: "Intel Macs, macOS 11 or newer", os: "mac-intel" },
-  { key: "linux-x64", name: "Linux", icon: "computer", note: "x86-64, Vulkan drivers", os: "linux" },
-  { key: "linux-arm64", name: "Linux on ARM", icon: "computer", note: "ARM64, Vulkan drivers", os: "linux-arm" },
+  { key: "linux-x64", name: "Linux", icon: "computer", note: "x86-64, Vulkan or OpenGL, WebKitGTK 4.1", os: "linux" },
+  { key: "linux-arm64", name: "Linux on ARM", icon: "computer", note: "ARM64, Vulkan or OpenGL, WebKitGTK 4.1", os: "linux-arm" },
   { key: "android-arm64", ext: "apk", name: "Android", icon: "smartphone", note: "arm64 phones and tablets, Android 8.0+", os: "android" },
 ];
 // The dedicated server: no window, for hosting a session (see the Dedicated server page).

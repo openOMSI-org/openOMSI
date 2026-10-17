@@ -1,9 +1,5 @@
 # Modding beyond OMSI 2
 
-For map-selected Tomorrow.io weather, add an `openomsi_weather.cfg` beside
-`global.cfg`. See [weather areas](WEATHER_REGIONS.md) for the format, player setup
-and the [community config editor](https://openomsi.mxnticek.eu/weather/).
-
 openOMSI reads OMSI 2 content as it is: a bus, a map or an object made for OMSI 2 works
 without changes. It also lifts limits OMSI 2 put on modders. Everything on this page is an
 addition. A file that uses it still loads in OMSI 2, which ignores what it does not know.
@@ -169,8 +165,8 @@ that camera sees from the rear section.
 - `[led_glow_effect]` after a `[matl]` (a number from 0 to 1) says how much an LED panel's
   dots glow in the enhanced picture: 1 the full `LED glow` setting, 0.5 half of it, 0 not at
   all (the slot is no LED panel). Without it openOMSI guesses: a slot with a `\S:n` script
-  mask and a white light map is taken for an LED panel. See FORMATS.md.
-- A mesh may carry **several visibility conditions** (#729) - no script needed for a mesh
+  mask and a white light map is taken for an LED panel. See [file formats](FORMATS.md).
+- A mesh may carry **several visibility conditions** - no script needed for a mesh
   shown by two variables at once:
   - `[visible_range]` with a variable, the lowest and the highest value shows the mesh while
     the variable is between them (both included): `[visible_range]` `gear` `1` `4`;
@@ -301,6 +297,12 @@ station), or `SndExt_Radio` (the station button, 0 = off) with `SndVol_Radio` (t
 0..1, up to 2). Dmitrij's "Magnitola" is served as it comes: while it shows its track,
 its `magnitola_1` (`frequency@station`, `@` the line break) gets the map's frequency for the
 place in its first line and the station and song in its second.
+
+## Weather of a real place
+
+A map can have live weather from Tomorrow.io: add an `openomsi_weather.cfg` beside its
+`global.cfg`. See [weather areas](WEATHER_REGIONS.md) for the format, the player's setup
+and the [community config editor](https://openomsi.mxnticek.eu/weather/).
 
 ## What stays as in OMSI 2
 

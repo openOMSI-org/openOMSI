@@ -1,6 +1,6 @@
 # Plugins
 
-openOMSI runs two kinds of plugins from the `plugins` folder of the game (and of every
+openOMSI runs three kinds of plugins from the `plugins` folder of the game (and of every
 content root):
 
 * **Lua plugins** (`.lua`) - a text file, no compiler, works the same on Windows, macOS,
@@ -266,7 +266,8 @@ end)
   when none is for their age, the change is refused).
 * A voice line the passenger's voice folder does not have falls back to `Ticket_<n>_<k>`.
 * `omsi.people.get(id)` shows the passenger's ticket now and which plugin changed it
-  (`ticket_by`). Without a plugin listening the passengers do as before, and nobody waits.
+  (`ticket_by`). Without a plugin listening the passengers ask for what the ticket pack
+  gives them, and nobody waits.
 
 [`reduced_tickets.lua`](examples/plugins/reduced_tickets.lua) has every adult ask for the
 reduced fare of the stock Berlin ticket packs; [`passenger_log.lua`](examples/plugins/passenger_log.lua)
@@ -884,7 +885,7 @@ What the game does with an `.oop`:
 * **Permissions.** An `.oop` declares what it may do (`ui`, `storage`, `vehicle_write`,
   `traffic_write`, `world_write`, `camera`, `audio`, `network_local`, `lan`); a function
   that needs another one fails with an error the plugin can catch. Reading the game needs
-  none. (A plain `.lua` file keeps every permission, as before.)
+  none. (A plain `.lua` file has every permission.)
 * **Signatures.** A signed plugin is logged with its author's key fingerprint
   (`signed by 3097:e2de:e2cb:4a34`); an unsigned one with a warning that its builder is not
   known.
@@ -1032,9 +1033,9 @@ A press on such a texture is the plugin's: a `[mouseevent]` mesh under it does n
 for a page. Events are not kept while the game is paused.
 
 A 64-bit DLL loads in-process in the 64-bit game, without the pipe; a 32-bit one runs in
-the host, which keeps the buffers on its side. A host from before this keeps working for
-every plugin without `AccessScriptTexture` (the textures are on the wire only for a library
-that has it).
+the host, which keeps the buffers on its side. The textures go over the pipe only for a
+library that exports `AccessScriptTexture`; an older `omsi-plugin-host32.exe` without this
+procedure still serves every other plugin.
 
 ### Passengers' tickets (openOMSI only)
 
@@ -1064,8 +1065,8 @@ change what they ask for at the cash desk - they wait in the doorway for that fr
   kind only while the passenger is not in the bus yet. The plugin's name (the DLL's) is
   kept as who changed it.
 
-`omsi-plugin-host32.exe` passes the call through; a host from before it does not report the
-procedure, and the plugin then does not hear of the passengers.
+`omsi-plugin-host32.exe` passes the call through; an older host without it does not, and the
+plugin then does not hear of the passengers.
 
 ### Building the host
 
@@ -1073,8 +1074,8 @@ procedure, and the plugin then does not hear of the passengers.
 scripts/build-plugin-host.sh
 ```
 
-needs `rustup target add i686-pc-windows-gnu` and MinGW (`brew install mingw-w64`);
-Copy `dist/omsi-plugin-host32.exe` next to the game. The 32-bit build uses
+needs `rustup target add i686-pc-windows-gnu` and MinGW (`brew install mingw-w64`, or
+`apt install mingw-w64`); copy `dist/omsi-plugin-host32.exe` next to the game. The 32-bit build uses
 `panic=abort` and a stand-in `_Unwind_Resume` (Homebrew's i686 MinGW links no unwinder the
 prebuilt standard library can use).
 

@@ -1,13 +1,13 @@
 # Map packages: a pre-built surface under the roads
 
-> **No package is needed any more.** openOMSI reads every map's own picture off its tiles the
+> **A map needs no package.** openOMSI reads every map's own picture off its tiles the
 > first time the map is driven (`omsi_scene::mapgen`, kept in `~/.openomsi/cache/mapgen`): the
 > ground by what it is painted with, water, woods and trees, every paved surface as the splines
 > and objects lay it, rail and tram tracks, and the houses from their models' roofs with their
-> heights. A package as described here still adds what lies **outside** the map's tiles (the
-> real town around a map, rivers and borders); inside the tiles the map's own layers are drawn
-> over it. `OMSI_NO_MAP_CACHE=1` reads the layers again; the example `mapgen_dump` (crate
-> `omsi-scene`) draws them into a picture.
+> heights. A package as described here adds what lies **outside** the map's tiles (the
+> real town around a map, rivers and borders), named streets, regions, icons and lines; inside
+> the tiles the map's own layers are drawn over its surface. `OMSI_NO_MAP_CACHE=1` reads the
+> layers again; the example `mapgen_dump` (crate `omsi-scene`) draws them into a picture.
 
 A map's author (or anyone) can ship a **pre-built** picture of the map next to the map itself. openOMSI
 does not compute, convert or triangulate anything: it opens the package, picks the chunks near the
@@ -20,8 +20,8 @@ geometry pipeline; the game never needs to know where the data came from; any au
 fictional map, any tool) produces the same files.
 
 It follows the precedent of `radio.cfg`: optional files in the map's folder, read only by openOMSI and
-ignored by Omsi.exe, so a map made for both games loses nothing. **A map without the folder looks exactly
-as before.**
+ignored by Omsi.exe, so a map made for both games loses nothing. A map without the folder is drawn from its
+own tiles alone.
 
 ## 1. Location and files
 
@@ -42,7 +42,7 @@ as before.**
 - The folder may lie in the map's own folder or in the same place of another content root: a package for
   a map one does not own goes in the game's content folder (`Maps/<Map>/openomsi-realmap/`), as a mod does,
   so the OMSI 2 installation is never written to. The root with the most priority wins.
-- Other files an author may put in the folder are not read by this version and are ignored.
+- Other files an author may put in the folder are ignored.
 
 ## 2. Manifest
 
@@ -113,8 +113,8 @@ u32  n_labels  ; n_labels x { u8 kind, u8 rank, u32 name, f32 x, f32 y }   names
 At the map's load, in the background step that reads the road network, openOMSI parses the manifest and
 the index of `surface.oms`. The small map (Shift+N) builds the chunks within its radius around the bus;
 the city map (Shift+M) builds all of them once. Both draw the surface **under the roads**, on the map's own
-ground colour, in the dark or light look, and the city map shows the credit. Nothing is computed from any
-other source and nothing is fetched from the network.
+ground colour and under the map's own layers, in the dark or light look, and the city map shows the credit.
+The package is drawn as it is, and nothing is fetched from the network.
 
 Settings (`~/.openomsi/settings.cfg`, the launcher's settings page and the pause menu): `nav_surface`
 (on by default) draws the surface; `nav_light` (off) gives the maps a light look.

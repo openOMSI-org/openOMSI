@@ -1,22 +1,42 @@
 # Dedicated server
 
-## How it runs today
-
 ```
 openomsi --root /path/to/OMSI2 --server /opt/openomsi-server/server.cfg
 ```
 
-(`scripts/build-server.sh` builds it on a Linux machine into `dist/server`, and `start.sh`
-there starts it; every release also has ready `openOMSI-<version>-server-linux-x64.zip` and
-`-server-linux-arm64.zip`, and for Windows (10/11 and Windows Server 2016 or later)
-`-server-windows-x64.zip` and `-server-windows-arm64.zip`, started with
-`start.cmd C:\path\to\OMSI2`.) The server is the game binary hosting a session with no window, no sound and no
+Every release has ready server packages: `openOMSI-<version>-server-linux-x64.zip` and
+`-server-linux-arm64.zip` (started with `start.sh /path/to/OMSI2 [server.cfg]`), and for
+Windows 10/11 and Windows Server 2016 or later `-server-windows-x64.zip` and
+`-server-windows-arm64.zip` (started with `start.cmd C:\path\to\OMSI2 [server.cfg]`).
+`scripts/build-server.sh [folder]` builds the same on a Linux machine into `dist/server`.
+The OMSI 2 folder given is a complete original installation, as the players have it; the
+server's mods go into its `Vehicles`, `maps`, `Sceneryobjects` … as in the game's content
+folder.
+
+The server is the game binary hosting a session with no window, no sound and no
 graphics card: the renderer runs on wgpu's no-op device, so the world, the AI traffic, the
 timetable buses and the people are simulated exactly as a hosting player's game does, and
-nothing is drawn. `server.cfg` is written with commented defaults on the first start (name,
-motd, map, date, time, weather, traffic, timetable, passengers, port, web_port,
-max_players, tunnel, radius, the voice chat); `server-icon.png` beside it (64x64, like Minecraft's) is the
-icon the players' list shows.
+nothing is drawn. `server.cfg` is written with a comment for every key on the first start:
+
+| Keys | What they set |
+|---|---|
+| `name`, `motd` | shown in the players' server list and when they join |
+| `map`, `date`, `time`, `weather` | the map, the start date (empty: today), the time of day, the weather (a `.owt`, empty: the map's default, `cycle`: one after another through the day) |
+| `time_speed`, `real_time` | how fast the clock runs (1 to 30), or the machine's real date and time |
+| `metar_sync`, `metar_station` | the weather follows an airport's METAR report (ICAO code; empty: the one nearest the map), downloaded every ten minutes and passed on to the players |
+| `traffic`, `timetable`, `passengers` | AI cars, timetable buses, waiting passengers |
+| `port`, `web_port`, `max_players` | UDP port of the session (27015), TCP port of the web gateway (27025), player limit (16) |
+| `tunnel` | start a free Cloudflare quick tunnel (needs `cloudflared`) |
+| `radius` | how many tiles round the map's first entry point are kept loaded (0: the whole map) |
+| `admin_password` | players who say `/admin <password>` in the chat get the Administration menu (Esc); at least 8 characters, empty: nobody |
+| `vehicles` | the buses players may drive, separated by `;` (empty: every bus on the server) |
+| `share_positions` | `GET /players` on the web port (below) |
+| `accept_uploads`, `uploads_keep_days` | players' buses (below) |
+| `share_maps` | a player who joins without the server's map gets it from the server (the map and everything it uses, gigabytes for a big map); off (the written default), players install it themselves and are told which one is missing |
+| `voice_*` | voice chat (below) |
+
+`server-icon.png` beside `server.cfg` (64x64, a PNG under 256 KB) is the icon the players'
+list shows.
 
 Players reach it two ways:
 
@@ -68,8 +88,8 @@ name tag. With `voice_radio` on (the default), a driver is put on a map-wide **b
 automatically: hold the bindable *Multiplayer: bus radio* key (Controls; X by default) to
 transmit to every other driver on the map while proximity voice still reaches people next
 to the bus; their name tag shows "radio". A player hosting by code names the voice server in
-`~/.openomsi/voice.cfg` with the same keys. Settings → General → *Voice chat through
-GreenTeaSpeak* switches it off. `voice_channel_password` is sent to every player who joins
+`~/.openomsi/voice.cfg` with the same keys. A player switches it off in the launcher under
+Settings → General → *Voice chat through GreenTeaSpeak (multiplayer)*. `voice_channel_password` is sent to every player who joins
 (their game needs it to enter the channel): it keeps strangers on the voice server out of
 the channel, not the server's own players. The settings together must fit a chat command
 (160 characters after encoding), or the server says so in its log and has no voice chat.
@@ -97,7 +117,7 @@ them on to every other player, so nobody sees a stand-in.
   hash over the list of its files). A game that draws that player uses its own copy when it
   is the same bus file for file, and else asks the server for that bus by its fingerprint
   ("Downloading another player's bus: 40%") - never another version that has the same path
-  here. Joining downloads the map and the server's own mods only; the buses of the players
+  here. Joining downloads only the server's own mods (and its map, with `share_maps`); the buses of the players
   who are there come this way, the moment their players are drawn (a bus still on its way to
   the server is waited for: the server answers the moment it has come). At most three buses
   download at once.
@@ -109,8 +129,7 @@ them on to every other player, so nobody sees a stand-in.
   all its pieces are here and its SHA-256 is the one its list names, and it has passed the
   checks of what it is; a bus is drawn only once every file of its list is here. Anything
   else - a piece changed on the way, a file that is not what its list says - is thrown away
-  and fetched again, never drawn. A game or server of a version before the pieces sends and
-  takes whole files, as before.
+  and fetched again, never drawn.
 * **On the server:** taken without asking and with no size limit, and kept by its content:
   every file sealed once in `~/.openomsi/lan-store` by its SHA-256 (a file several buses share
   is kept and sent once), every bus as its list of files in `lan-store/vehicles/<fingerprint>.json`
@@ -122,98 +141,8 @@ them on to every other player, so nobody sees a stand-in.
   lately used first, until it fits - no bus is ever refused for its size, only when even then
   the disk cannot hold it. A bus being sent, and every file of it, is never let go meanwhile.
   To forget a bus by hand, stop the server and delete its `.json`.
-* With `vehicles` empty the server then offers any bus (the launcher no longer limits the
-  choice to the server's own buses); with a `vehicles` list only those buses are taken.
+* With `vehicles` empty the players may choose any bus they have, not only the server's own;
+  with a `vehicles` list only those buses are taken.
 * `accept_uploads = 0` switches it off. A player's game hosting a session (`--lan-host`) takes
   the joining players' buses the same way, and keeps its own bus in its store for them.
 
-What is still to come from the plan below: a world without the renderer's data structures
-(the server keeps the tiles' meshes in memory for nothing), tiles streamed by the players'
-interest (today `radius = 0` loads the whole map), a password, admin commands.
-
-# Dedicated server - the original concept
-
-Today a session is hosted by a player's game: the host simulates the shared world (AI
-traffic, timetable buses, people, traffic lights) around every player and streams it to the
-clients (`omsi-net::world`, `omsi-app::lan_world`). A dedicated server is the same host role
-without a player, a window or a sound card, running on a machine that is always on - like a
-Minecraft server. This document fixes how it is to be built, so that the pieces written now
-fit it.
-
-## What already fits
-
-* **The protocol.** Clients do not care whether the host is a game or a server: `HELLO` /
-  `WELCOME` / states / world frames / claims are the same (`omsi-net`, `PROTOCOL`).
-* **Authority.** The host already owns the shared world; a client simulates only its own
-  bus and the people boarding it, and claims waiting passengers from the host
-  (`lan_world`). A server keeps exactly that split.
-* **Finding it.** A session code carries the session id; the rendezvous (`omsi-net::bridge`:
-  STUN, UPnP, the relay topic named after the id) finds the host behind a home router. A
-  server with a public address is simply reachable at `address:port`; it posts to the relay
-  as a host does, so a code works for it too.
-* **Areas of interest.** Traffic and people are already populated around *every* player
-  (`Traffic::lan_centers`, `Humans::lan_centers`) and sent per client only near its bus.
-
-## What has to move
-
-1. **A world without a renderer.** `scene::World` loads tiles for drawing and for the
-   simulation at once, and `Traffic`/`Humans` create render instances as they spawn. The
-   simulation part goes into its own crate (`omsi-world`: tiles' lanes, stops, objects'
-   collision and light programs, the timetable, `Traffic`, `Humans`) behind a small trait
-   the game implements to show things:
-
-   ```rust
-   pub trait Presenter {
-       fn vehicle_added(&mut self, id: u32, ty: &VehicleType, scheme: Option<usize>);
-       fn vehicle_removed(&mut self, id: u32);
-       fn person_added(&mut self, id: u32, hum: &Path);
-       fn person_removed(&mut self, id: u32);
-       // poses are read by the presenter from the world after each tick
-   }
-   ```
-
-   The game's presenter makes render instances (today's code in `Traffic::sync`,
-   `Humans::tick`); the server's does nothing. Vehicle scripts run without their meshes
-   (`VehicleInstance` already works headless: the `bus_audit` example does it).
-2. **Tiles by interest, not by camera.** The tile streamer follows the camera; the server
-   streams the tiles around every player's bus (the union of their radii) and lets go of
-   the rest.
-3. **A player without a bus of its own on the server.** The server is player 0 with no pose;
-   `LanSession` already tolerates a host whose pose has no vehicle (`Pose::has_vehicle`).
-
-## The server program
-
-`omsi-server` (a binary of its own, no winit/wgpu/cpal):
-
-```
-omsi-server --root "/path/to/OMSI 2" --config server.cfg
-```
-
-`server.cfg` (key = value, like `settings.cfg`):
-
-| key | meaning |
-|---|---|
-| `map` | `maps/Berlin-Spandau/global.cfg` |
-| `date`, `time`, `time_scale` | the world clock (the server's clock is the session's) |
-| `weather` | a `.owt`, or `auto` (a cycle) |
-| `traffic`, `passengers`, `timetable` | density and switches, as the launcher's |
-| `port` | UDP port (27015) |
-| `max_players`, `password` | who may join (`REJECT` with a reason otherwise) |
-| `name`, `motd` | shown in the launcher's list and on joining |
-| `public` | post to the relay's lobby topic, so the launcher can list the server |
-| `admins` | player names allowed to run `/kick`, `/time`, `/weather` in the chat |
-
-It needs the original OMSI 2 files like the game (same `missing_original_essentials`
-check) and the same mods as the players: the server lists its content in `WELCOME`
-(vehicle and map files with sizes), and a client missing something is told what.
-
-## Order of work
-
-1. Extract `omsi-world` with the `Presenter` trait; the game keeps working through it.
-2. Headless world tick in a test (`Traffic` and `Humans` on Grundorf for 10 minutes without a
-   renderer, compared with the game's positions for the same seed).
-3. `omsi-server` hosting a session from `server.cfg`; the launcher's Join accepts
-   `host:port` and codes as today.
-4. Lobby: servers post `name/map/players/code` to the relay's lobby topic; the launcher
-   shows the list.
-5. Admin commands and a small status page (players, tick time, bandwidth).
