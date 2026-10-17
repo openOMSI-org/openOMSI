@@ -139,6 +139,8 @@ pub(crate) struct PerfState {
     pub(crate) frame_times: Vec<f32>,
     /// Each kept frame's stage times, `ProfKey::ALL` in order (seconds; OMSI_PROFILE only).
     pub(crate) frame_stages: Vec<f32>,
+    /// OMSI_PROFILE: the session's summary has been written (`App::log_profile_summary`).
+    pub(crate) profile_written: bool,
     pub(crate) overlay: crate::perf_overlay::PerfOverlay,
     pub(crate) texture_cut_at: Option<Instant>,
     pub(crate) optimiser: crate::optimiser::Optimiser,
