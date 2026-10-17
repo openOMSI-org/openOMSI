@@ -198,8 +198,9 @@ impl PeopleSim {
         }
         if strolling {
             let seen = self.seen(self.people[i].position);
-            // (a stroller goes only once well out of everybody's range and out of sight)
-            let far = self.far_from_players(self.people[i].position, STROLL_RADIUS * 2.0);
+            // (a stroller goes only once well out of everybody's range and out of sight -
+            // not somebody put out to run for a bus, `runners`, which may be that far off)
+            let far = !self.put_out(self.people[i].id) && self.far_from_players(self.people[i].position, STROLL_RADIUS * 2.0);
             let Some(net) = net else {
                 remove.push(i);
                 return Want::stand(None, Activity::Stand);
