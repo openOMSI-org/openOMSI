@@ -3,6 +3,8 @@
 
 use super::*;
 
+const AO_PREPASS_REACH: f32 = 250.0;
+
 impl Renderer {
     /// The test hooks and the fallbacks after a GPU error. False: the device is gone and
     /// nothing is drawn.
@@ -138,7 +140,9 @@ impl Renderer {
         let ao_on = with_overlays && self.rt.is_none() && self.options.ssao && self.ssao_pipeline.is_some() && !env.no_ao;
         // the enhanced path's shading is costly: the depth prepass keeps it to the visible
         // surface (without multisampling, see `share_depth`)
-        let prepass_on = ao_on || puddles_wanted || glass_on || (enhanced && (with_overlays || xr_view)) || (self.depth_readback && projection.is_none());
+        let depth_wanted = puddles_wanted || glass_on || (enhanced && (with_overlays || xr_view)) || (self.depth_readback && projection.is_none());
+        let prepass_on = ao_on || depth_wanted;
+        let prepass_reach = if depth_wanted || env.no_ao_reach { f32::MAX } else { AO_PREPASS_REACH };
         // (only the bind group is made again, by `upload_draw_list`: dropping the instance
         // buffers for it wrote every instance's entries again at each render-scale step)
         if prepass_on && self.ensure_ao(width, height) {
@@ -210,6 +214,7 @@ impl Renderer {
             rt_frame,
             ao_on,
             prepass_on,
+            prepass_reach,
             dt,
             overlays,
         }

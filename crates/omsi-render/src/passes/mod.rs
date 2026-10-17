@@ -36,6 +36,7 @@ pub(crate) struct FrameEnv {
     pub no_puddle_reflections: bool,
     pub no_rt_frame: bool,
     pub no_ao: bool,
+    pub no_ao_reach: bool,
     pub shadow_near_every_frame: bool,
     pub shadow_far_every_frame: bool,
     pub lamp_shadows_every_frame: bool,
@@ -77,6 +78,7 @@ impl FrameEnv {
             no_puddle_reflections: omsi_cfg::flags::OMSI_NO_PUDDLE_REFLECTIONS.is_set(),
             no_rt_frame: omsi_cfg::flags::OMSI_NO_RT_FRAME.is_set(),
             no_ao: omsi_cfg::flags::OMSI_NO_AO.is_set(),
+            no_ao_reach: omsi_cfg::flags::OMSI_NO_AO_REACH.is_set(),
             shadow_near_every_frame: omsi_cfg::flags::OMSI_SHADOW_NEAR_EVERY_FRAME.is_set(),
             shadow_far_every_frame: omsi_cfg::flags::OMSI_SHADOW_FAR_EVERY_FRAME.is_set(),
             lamp_shadows_every_frame: omsi_cfg::flags::OMSI_LAMP_SHADOWS_EVERY_FRAME.is_set(),
@@ -155,6 +157,7 @@ pub(crate) struct FrameCtx<'a> {
     pub rt_frame: bool,
     pub ao_on: bool,
     pub prepass_on: bool,
+    pub prepass_reach: f32,
     pub dt: f32,
     pub overlays: Vec<(TextureId, [f32; 4])>,
 }

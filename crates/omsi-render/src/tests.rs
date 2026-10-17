@@ -1454,5 +1454,6 @@ mod coplanar;
 mod lamp_shadows;
 mod light_maps;
 mod more;
+mod prepass_reach;
 mod transparency;
 mod vanilla_lighting;
