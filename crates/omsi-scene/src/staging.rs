@@ -48,7 +48,7 @@ pub struct ObjectType {
     pub camera: std::sync::OnceLock<crate::camera_arm::BlockerShape>,
     /// The collision mesh as the vehicles meet it (built on first use).
     pub collision_shape: std::sync::OnceLock<Arc<omsi_sim::collision::MeshShape>>,
-    /// Per `[maplight]`: whether it sits inside its own pole fixture (worked out on first
+    /// Per `[maplight]`: whether it is its own pole fixture's bulb (worked out on first
     /// use, see `place::embedded_pole_light`): its lamp's shadow map leaves the fixture out.
     pub embedded_lights: std::sync::OnceLock<Vec<bool>>,
 }
