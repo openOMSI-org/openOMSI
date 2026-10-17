@@ -204,6 +204,12 @@ fn player_identity(
         Some(p.to_string())
     } else if let Some(p) = saved_ident {
         Some(p.to_string())
+    } else if vt.def.registration_free && number.as_deref().is_some_and(|n| !n.trim().is_empty()) {
+        // a free registration on a bus with a fleet number: the `[registration_list]`
+        // plate of that number when the bus has one, else the number itself, spaces and all
+        // (the IK-201 MM's " 0244" reads with the letter its plate font keeps in the space) -
+        // a made-up plate only without a number
+        number.as_deref().map(|n| vt.def.chosen_plate_of_number(n))
     } else if vt.def.registration_free {
         let seed = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

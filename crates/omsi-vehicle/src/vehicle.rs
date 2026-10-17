@@ -402,6 +402,12 @@ impl Vehicle {
                 _ => v.unknown_keywords.push((k, r.block_line())),
             }
         }
+        // `[registration_free]` written with a tab before it (the IK-201 MM's file)
+        // is no keyword line by the original's rule, and the bus fell to its plate list; the
+        // modder means the free mode - the plate as the garage number - so it counts here
+        if !v.registration_free && file.lines.iter().any(|l| l.trim().eq_ignore_ascii_case("[registration_free]")) {
+            v.registration_free = true;
+        }
         v
     }
 }
@@ -540,7 +546,9 @@ pub struct NumberList {
 impl NumberList {
     pub fn load(path: &Path) -> Result<NumberList, omsi_cfg::CfgError> {
         let f = CfgFile::read(path)?;
-        let numbers = f.lines.iter().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+        // (the line as it is, its spaces kept - a plate font may draw a letter for the
+        // space, and " 0244" in reg_mm05.org is how a Cyrillic plate asks for it)
+        let numbers = f.lines.iter().map(|s| s.trim_end_matches(['\r', '\n']).to_string()).filter(|s| !s.trim().is_empty()).collect();
         Ok(NumberList { numbers })
     }
 }
@@ -577,7 +585,7 @@ impl Vehicle {
             .filter(|(_, n)| !n.trim().is_empty())
             .map(|(i, n)| {
                 let plate = plates.as_ref().and_then(|p| p.lines.get(i)).map(|p| p.trim_end().to_string()).unwrap_or_default();
-                (n.trim().to_string(), plate)
+                (n.trim_end_matches(['\r', '\n']).to_string(), plate)
             })
             .collect()
     }
@@ -602,10 +610,19 @@ impl Vehicle {
     }
 
     fn plate_from(&self, number: &str, list: bool) -> String {
+        // the `[registration_list]` file's plate of the number comes first, whatever the mode
+        // (the IK-201 MM and GSP buses carry `[registration_free]` beside their lists: the
+        // plate is the list's "BG+056-Tc", the garage number stays " 0244" with the space
+        // its font draws as the Cyrillic letter)
         if list {
-            if let Some((_, p)) = self.numbers_with_plates().iter().find(|(n, p)| n == number.trim() && !p.is_empty()) {
+            if let Some((_, p)) = self.numbers_with_plates().iter().find(|(n, p)| n.trim() == number.trim() && !p.is_empty()) {
                 return p.clone();
             }
+        }
+        // `[registration_free]` without a plate for the number: the fleet number
+        // itself, spaces and all
+        if self.registration_free {
+            return number.to_string();
         }
         let (pre, post) = (&self.registration_affix.0, &self.registration_affix.1);
         format!("{pre}{}{post}", number.trim())
@@ -698,6 +715,49 @@ mod tests {
         let s = Vehicle::parse(&CfgFile::from_str("y.bus", "[registration_automatic]\nB-V \n\n[model]\nm.cfg\n"));
         assert_eq!(s.registration_affix, ("B-V ".to_string(), String::new()));
         assert_eq!(s.model.as_deref(), Some("m.cfg"));
+    }
+
+    /// The IK-201 MM: `[number]` with a leading space (the plate font draws the
+    /// Cyrillic letter there), an indented `[registration_free]` and a `[registration_list]`
+    /// beside it. The plate is the list's; the number stays as the file has it. Without a
+    /// list the free registration is the number itself.
+    #[test]
+    fn free_registration_takes_the_list_plate_and_keeps_the_number_as_is() {
+        let dir = std::env::temp_dir().join(format!("omsi_vehicle_free_regs_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("reg_mm05.org"), " 0244
+ 0248
+").unwrap();
+        std::fs::write(dir.join("tabl_mm05.org"), "BG+056-Tc
+BG+056-Tx
+").unwrap();
+        std::fs::write(dir.join("mm.bus"), "[number]
+reg_mm05.org
+
+	[registration_free]
+
+[registration_list]
+tabl_mm05.org
+
+[model]
+m.cfg
+").unwrap();
+        let v = Vehicle::load(&dir.join("mm.bus")).unwrap();
+        assert!(v.registration_free);
+        assert_eq!(v.numbers_with_plates()[0].0, " 0244", "the number keeps its leading space");
+        assert_eq!(v.chosen_plate_of_number(" 0244"), "BG+056-Tc");
+        assert_eq!(v.chosen_plate_of_number("0248"), "BG+056-Tx", "a trimmed number finds its plate too");
+        std::fs::write(dir.join("nolist.bus"), "[number]
+reg_mm05.org
+
+[registration_free]
+
+[model]
+m.cfg
+").unwrap();
+        let n = Vehicle::load(&dir.join("nolist.bus")).unwrap();
+        assert_eq!(n.chosen_plate_of_number(" 0244"), " 0244", "no list: the number is the plate, space and all");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// A repaint's own `[registration_list]` followed by the template's

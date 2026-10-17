@@ -98,7 +98,7 @@ impl Font {
         self.exact_glyph(c).is_some()
     }
 
-    fn exact_glyph(&self, c: char) -> Option<&FontChar> {
+    pub fn exact_glyph(&self, c: char) -> Option<&FontChar> {
         self.chars.iter().find(|g| g.ch == c).or_else(|| {
             omsi_cfg::codepage::char_variants(c)
                 .into_iter()
@@ -252,7 +252,9 @@ impl FontAtlas {
         let glyph_h = self.font.height.max(1) as i32;
         let mut x = align.offset(w as i32, self.text_width(text), self.font.gap);
         for ch in text.chars() {
-            if ch.is_whitespace() {
+            // (a space the font draws a glyph for is drawn - arialblk_clc keeps a Cyrillic
+            // letter there for the plates; a space without one is a gap)
+            if ch.is_whitespace() && self.font.exact_glyph(ch).is_none() {
                 x += self.font.space_width() + self.font.gap;
                 continue;
             }
@@ -339,6 +341,28 @@ mod tests {
         assert_eq!(font.glyph(' '), None);
         // space_width should fall back to '0' width (8)
         assert_eq!(font.space_width(), 8);
+    }
+
+    /// A font that keeps a glyph in its space (arialblk_clc draws a Cyrillic letter
+    /// there, so a plate " 0244" reads with the letter in Omsi.exe) draws it; a font without
+    /// a space entry draws nothing for one.
+    #[test]
+    fn a_space_the_font_draws_a_glyph_for_is_drawn() {
+        let font = Font {
+            path: PathBuf::new(),
+            name: "space-glyph".into(),
+            height: 4,
+            gap: 0,
+            bitmap: "x.bmp".into(),
+            alpha: String::new(),
+            chars: vec![FontChar { ch: ' ', x0: 0, x1: 4, y: 0 }, FontChar { ch: '1', x0: 4, x1: 8, y: 0 }],
+        };
+        // an 8x4 atlas, every pixel set
+        let alpha = vec![255u8; 8 * 4 * 4];
+        let atlas = FontAtlas::new(font, 8, 4, alpha.clone(), alpha);
+        let rendered = atlas.render_aligned(" 1", 8, 4, false, [255, 255, 255], TextAlign { orientation: 1, grid: 1 });
+        assert_eq!(rendered[3], 255, "the space's glyph is drawn");
+        assert_eq!(rendered[(4 * 4) + 3], 255, "the digit after it");
     }
 
     #[test]
