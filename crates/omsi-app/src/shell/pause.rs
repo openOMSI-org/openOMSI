@@ -11,6 +11,7 @@
 use glam::Vec2;
 use omsi_ui::paint::Align;
 use omsi_ui::{Color, Rect, Weight};
+use std::borrow::Cow;
 
 use super::{Action, Shell};
 use omsi_ui::theme::*;
@@ -44,7 +45,7 @@ pub(crate) struct ListView<'a> {
 pub(crate) struct PauseView<'a> {
     pub paused: bool,
     /// The game menu's lines.
-    pub rail: &'a [(&'static str, &'static str)],
+    pub rail: &'a [crate::app_impl::MenuLine],
     /// The line the keyboard is on (the game menu's, while no list is open).
     pub rail_sel: Option<usize>,
     /// The line of the rail the open list belongs to.
@@ -136,7 +137,7 @@ fn rail(sh: &mut Shell, v: &PauseView) {
     let state = omsi_ui::tr(if v.paused { "Paused" } else { "Menu" }).into_owned();
     ui.text(&format!("{}  -  {state}", crate::startup::VERSION), Vec2::new(58.0, 46.0), 11.5, Weight::Medium, INK_MUTED, Align::Left);
     // the items
-    let lines: Vec<(usize, &str, &str)> = v.rail.iter().enumerate().map(|(k, l)| (k, l.0, l.1)).collect();
+    let lines: Vec<(usize, &str, &str, Option<&omsi_plugin::ui::MenuItem>)> = v.rail.iter().enumerate().map(|(k, l)| (k, l.0, l.1.as_ref(), l.2.as_ref())).collect();
     let top = 70.0;
     let foot = 12.0 + 56.0 + 10.0;
     let area = Rect::new(0.0, top, RAIL_W, (size.y - top - foot).max(42.0));
@@ -145,14 +146,22 @@ fn rail(sh: &mut Shell, v: &PauseView) {
     let mut sel_y: Option<f32> = None;
     ui.scroll_area("pause-rail", area, &mut |ui, view| {
         let mut y = view.y;
-        for &(k, id, label) in &lines {
-            // room between the groups (the everyday lines, saving, the way out), as the
-            // launcher's `nav-sep`
-            if matches!(id, "save" | "admin" | "quit") {
+        let mut last = "";
+        for &(k, id, label, line) in &lines {
+            // room between the groups (the everyday lines, the plugins', saving, the way
+            // out), as the launcher's `nav-sep`
+            if matches!(id, "save" | "admin" | "quit") || (id == "plugin" && last != "plugin") {
                 y += 10.0;
             }
+            last = id;
+            // (a plugin's line: its own icon - the plugins' one for an icon the game does not
+            // have - and a key of its own for the hover)
+            let (icon, key) = match line {
+                Some(m) => (m.icon.as_deref().and_then(|i| omsi_ui::icons::names().find(|n| *n == i.trim())).unwrap_or("extension"), format!("plugin-{}-{}", m.owner, m.id)),
+                None => (rail_icon(id), id.to_string()),
+            };
             let row = Rect::new(12.0, y, RAIL_W - 24.0, 38.0);
-            let (h, _, clicked) = ui.interact(id_of(&format!("pause-{id}")), row);
+            let (h, _, clicked) = ui.interact(id_of(&format!("pause-{key}")), row);
             if clicked {
                 picked = Some(k);
             }
@@ -162,7 +171,7 @@ fn rail(sh: &mut Shell, v: &PauseView) {
                 sel_y = Some(y - view.y);
             }
             let danger = id == "quit";
-            let t = ui.anim(id_of(&format!("pause-hl-{id}")), if h || kbd { 1.0 } else { 0.0 }, 0.06);
+            let t = ui.anim(id_of(&format!("pause-hl-{key}")), if h || kbd { 1.0 } else { 0.0 }, 0.06);
             if open {
                 ui.p().rounded(row, 6.0, SURFACE_3);
             } else if t > 0.01 {
@@ -176,10 +185,11 @@ fn rail(sh: &mut Shell, v: &PauseView) {
                 INK_2.mix(INK, t)
             };
             let icon_c = if open || (kbd && !danger) { ACCENT } else { c };
-            let translated = omsi_ui::tr(label);
+            // (a plugin's label is shown as it is: the plugin says it in the player's language)
+            let translated = if id == "plugin" { Cow::Borrowed(label) } else { omsi_ui::tr(label) };
             let (text, _) = plain(&translated);
             let (_, more) = plain(label);
-            ui.icon(rail_icon(id), Vec2::new(row.x + 19.5, row.center().y), 19.0, icon_c);
+            ui.icon(icon, Vec2::new(row.x + 19.5, row.center().y), 19.0, icon_c);
             ui.text_in(text, Rect::new(row.x + 41.0, row.y, row.w - 64.0, row.h), 14.0, Weight::Medium, c, Align::Left);
             if more {
                 ui.icon("chevron_right", Vec2::new(row.right() - 14.0, row.center().y), 16.0, c.alpha(0.5 + 0.5 * t));

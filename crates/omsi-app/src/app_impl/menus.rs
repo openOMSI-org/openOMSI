@@ -1,6 +1,7 @@
 //! The game menu (Esc): its lines, its keys, the mouse wheel on it and what its lines do.
 
 use super::*;
+use std::borrow::Cow;
 
 impl App {
     /// What the cursor points at, for the HUD. Recomputed every frame: the head turns and
@@ -225,6 +226,7 @@ impl App {
                 self.finish_session();
                 crate::platform::exit(event_loop);
             }
+            "plugin" => self.choose_plugin_line(k),
             // (the rest are the lines of the vehicle and world pages)
             other => {
                 self.page_action(other);
@@ -387,15 +389,20 @@ pub(crate) fn game_menu_for(args: &crate::Args) -> &'static [(&'static str, &'st
     }
 }
 
+/// A line of the game menu: what it does, its label, and for a plugin's line (`"plugin"`)
+/// whose and which it is, so that a click on it goes to that very line.
+pub(crate) type MenuLine = (&'static str, Cow<'static, str>, Option<omsi_plugin::ui::MenuItem>);
+
 impl crate::App {
     /// The game menu's lines for this session: back to the own bus while walking about,
-    /// the administration for a host and a server's admin. What can be set is behind
-    /// "Options", "Vehicle options" and "World options".
-    pub(crate) fn game_menu_items(&self) -> Vec<(&'static str, &'static str)> {
-        let mut v: Vec<(&'static str, &'static str)> = game_menu_for(&self.args).to_vec();
+    /// the administration for a host and a server's admin, the plugins' lines
+    /// (`ui.set_menu_item`, each a `"plugin"` line). What can be set is behind "Options",
+    /// "Vehicle options" and "World options".
+    pub(crate) fn game_menu_items(&self) -> Vec<MenuLine> {
+        let mut v: Vec<MenuLine> = game_menu_for(&self.args).iter().map(|&(id, label)| (id, Cow::Borrowed(label), None)).collect();
         let mut at = 1;
         if self.session.on_foot.is_some() && self.player.is_some() {
-            v.insert(at, ("tobus", "Back to my bus"));
+            v.insert(at, ("tobus", "Back to my bus".into(), None));
             at += 1;
         }
         // without a bus of one's own: no line to drive
@@ -417,15 +424,34 @@ impl crate::App {
         // the server code: a line to copy it, right under "World options" (only in a LAN session or on a server)
         if self.net.lan.is_some() || on_server(&self.args) {
             if let Some(w) = v.iter().position(|x| x.0 == "world") {
-                v.insert(w + 1, ("copycode", "Copy server code"));
+                v.insert(w + 1, ("copycode", "Copy server code".into(), None));
                 at = at.max(w + 2);
             }
         }
         if host || self.net.is_admin {
             let before_quit = v.iter().position(|x| x.0 == "quit").unwrap_or(v.len()).max(at);
-            v.insert(before_quit, ("admin", "Administration..."));
+            v.insert(before_quit, ("admin", "Administration...".into(), None));
         }
+        // the plugins' lines, a group of their own before saving (or the way out)
+        let lines = self.plugin_menu_lines();
+        let before = v.iter().position(|x| matches!(x.0, "save" | "admin" | "quit")).unwrap_or(v.len()).max(at);
+        v.splice(before..before, lines.into_iter().map(|m| ("plugin", Cow::Owned(m.label.clone()), Some(m))));
         v
+    }
+
+    /// The plugins' lines of the game menu (`ui.set_menu_item`), in their order there.
+    pub(crate) fn plugin_menu_lines(&self) -> Vec<omsi_plugin::ui::MenuItem> {
+        self.integrations.plugins.as_ref().map(|p| p.ui.borrow().menu_items().to_vec()).unwrap_or_default()
+    }
+
+    /// The player chose the game menu's line `k`, a plugin's: the menu closes, and that
+    /// line's plugin hears `menu_item` with its id in its next frame.
+    fn choose_plugin_line(&mut self, k: usize) {
+        let line = self.game_menu_items().into_iter().nth(k).and_then(|m| m.2);
+        self.close_game_menu();
+        if let (Some(m), Some(p)) = (line, self.integrations.plugins.as_ref()) {
+            p.ui.borrow_mut().pick_menu_item(m.owner, &m.id);
+        }
     }
 
     /// Put the session's server code on the clipboard.

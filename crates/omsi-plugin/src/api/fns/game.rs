@@ -6,6 +6,7 @@ use super::{def, multi, o, p, rec};
 use crate::api::{ApiError, ApiFn, Ctx, Value};
 
 const NEW: &str = crate::api::VERSION;
+const V36: &str = "0.3.36";
 /// Longest `lan.send` text: the session's command messages carry 160 characters, and the
 /// plugin's name goes with it.
 pub const LAN_MAX: usize = 120;
@@ -136,4 +137,18 @@ pub static FNS: &[ApiFn] = &[
         Ok::<_, ApiError>(multi(m.map(|(x, y)| [Value::from(x), Value::from(y)])))
     }),
     def!("ui.typing", "ui", [], "boolean", "Whether the player types into a text field of a plugin now (the keys then go to the field, not to the bus).", NEW, None, false, |c, a| c.state().ui().typing().is_some()),
+    def!("ui.set_menu_item", "ui", [p("id", "string"), p("label", "string"), o("icon", "string")], "true, or false and the reason", "Puts a line in the game's pause menu, or changes the plugin's line `id`: its label (40 characters at most, shown as it is) and a Material Symbols icon of the game's (`\"departure_board\"`; the plugins' own icon without one). Choosing it closes the menu and sends `menu_item` with `id` - to open the plugin's panel, say. A plugin has 3 lines at most; they go when it stops.", V36, Ui, true, |c, a| {
+        let (id, label, icon) = (a.str(0)?, a.str(1)?, a.opt_str(2)?);
+        let s = c.state();
+        let owner = s.owner;
+        let r = s.ui().set_menu_item(owner, &id, &label, icon);
+        Ok::<_, ApiError>(super::core::ok_or_reason(r))
+    }),
+    def!("ui.remove_menu_item", "ui", [p("id", "string")], "boolean", "Takes the plugin's line `id` out of the pause menu; `true` when there was one.", V36, Ui, false, |c, a| {
+        let id = a.str(0)?;
+        let s = c.state();
+        let owner = s.owner;
+        let r = s.ui().remove_menu_item(owner, &id);
+        Ok::<_, ApiError>(r)
+    }),
 ];

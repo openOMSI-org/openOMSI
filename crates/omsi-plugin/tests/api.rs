@@ -226,6 +226,28 @@ fn settings_make_a_panel_and_tell_their_changes() {
 }
 
 #[test]
+fn a_line_in_the_pause_menu_is_heard_when_chosen() {
+    let mut g = Game::new();
+    let src = r#"
+        assert(omsi.ui.set_menu_item("board", "Duty board", "departure_board"))
+        assert(omsi.ui.set_menu_item("log", "Trip log"))
+        assert(omsi.ui.set_menu_item("board", "Duty board (3)", "departure_board"))
+        local ok, why = omsi.ui.set_menu_item("x", ""); assert(not ok and why:find("empty"))
+        assert(omsi.ui.remove_menu_item("log") and not omsi.ui.remove_menu_item("log"))
+        omsi.on("menu_item", function(id) omsi.message("chose " .. id) end)
+    "#;
+    let mut p = run("menu", src, &mut g, 1);
+    let items = p.ui.borrow().menu_items().to_vec();
+    assert_eq!(items.iter().map(|m| (m.id.as_str(), m.label.as_str(), m.icon.as_deref())).collect::<Vec<_>>(), [("board", "Duty board (3)", Some("departure_board"))]);
+    p.ui.borrow_mut().pick_menu_item(items[0].owner, "board");
+    p.frame(&mut g);
+    assert_eq!(g.messages, ["chose board"]);
+    // the plugin stopped: its lines go
+    p.finalize();
+    assert!(p.ui.borrow().menu_items().is_empty());
+}
+
+#[test]
 fn errors_name_the_function_and_argument() {
     let mut g = Game::new();
     run("errs", r#"

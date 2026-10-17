@@ -374,6 +374,24 @@ kind makes `set` return `false` and the reason. Limits, each plugin: 16 panels, 
 elements in a panel (those in rows counted), 500 characters in a text, 64 in an id, rows 8
 deep, 512 values in a chart or cells in a table.
 
+#### A line in the pause menu
+
+A plugin can put up to 3 lines of its own in the pause menu (Esc), in a group before the
+saving lines. Choosing one closes the menu and sends the plugin `menu_item`, for example to
+open the plugin's panel:
+
+```lua
+omsi.ui.set_menu_item("board", "Duty board", "departure_board")
+omsi.on("menu_item", function(id)
+  if id == "board" then omsi.ui.toggle("board") end
+end)
+```
+
+The label is shown as the plugin gives it, so the plugin writes it in the player's language.
+The icon is one of the game's Material Symbols; without one, or with one the game does not
+have, the line gets the plugins' own icon. The lines go when the plugin stops
+(`ui.remove_menu_item` takes one out before that).
+
 ### Example plugins
 
 Complete plugins to start from (each runs in the tests against a stand-in game):
@@ -657,8 +675,10 @@ declared to call the function (a plain `.lua` file has them all).
 | `omsi.ui.moved(panel)` | dx, dy | How far the player dragged a panel from where its table puts it (pixels). | 0.2.22 |
 | `omsi.ui.panels()` | list of strings | The ids of the plugin's panels. | 0.2.22 |
 | `omsi.ui.remove(id)` | boolean | Removes a panel; `true` when there was one. *Permission: `ui`.* | 0.2.21 |
+| `omsi.ui.remove_menu_item(id)` | boolean | Takes the plugin's line `id` out of the pause menu; `true` when there was one. *Permission: `ui`.* | 0.3.36 |
 | `omsi.ui.screen()` | width, height, scale | The screen in the panels' pixels, and how many of the screen's own pixels one of them is. | 0.2.21 |
 | `omsi.ui.set(id, panel)` | true, or false and the reason | Creates the panel `id` or replaces it; a table that is not right gives `false` and where (`"children[2].size: a number is expected"`). The same table again changes nothing. *Permission: `ui`.* | 0.2.21 |
+| `omsi.ui.set_menu_item(id, label, [icon])` | true, or false and the reason | Puts a line in the game's pause menu, or changes the plugin's line `id`: its label (40 characters at most, shown as it is) and a Material Symbols icon of the game's (`"departure_board"`; the plugins' own icon without one). Choosing it closes the menu and sends `menu_item` with `id` - to open the plugin's panel, say. A plugin has 3 lines at most; they go when it stops. *Permission: `ui`.* | 0.3.36 |
 | `omsi.ui.show(panel, [on])` | boolean | Shows a panel (or hides it with `false`; it is kept); `false` when there is none. *Permission: `ui`.* | 0.2.22 |
 | `omsi.ui.toast(text, [opts])` | true, or false and the reason | A notification card at the top right, newest at the top; it goes after `opts.seconds` (1 to 60, default 5). `opts`: `title`, `icon`, `color`. A plugin shows 8 at most: a ninth makes its oldest go. *Permission: `ui`.* | 0.2.21 |
 | `omsi.ui.toggle(panel)` | boolean | Shows a hidden panel or hides a shown one; whether it shows now. *Permission: `ui`.* | 0.2.22 |
@@ -809,6 +829,7 @@ declared to call the function (a plain `.lua` file has them all).
 | `jolt` | `along`, `across`, `speed_kmh`, `passengers` | The bus braked, sped up or cornered hard enough to cost driving rating (m/s², signed); at most one a second. | 0.2.21 |
 | `ticket_sold` | `name`, `price` | A ticket was sold at the cash desk: its name and price as the bus's ticket list has them. | 0.2.21 |
 | `ui_click` | `panel`, `element` | A button (or another clickable part) of one of the plugin's panels was clicked; `element` is `nil` for the panel itself. Enter in a text field is a click on it. | 0.2.21 |
+| `menu_item` | `id` | The player chose one of the plugin's lines in the pause menu (`ui.set_menu_item`); the menu has closed. | 0.3.36 |
 | `ui_focus` | `focused` | The panels got the mouse or gave it back (also by Esc, or a menu of the game opening). | 0.2.21 |
 | `ui_change` | `panel`, `element`, `value` | A checkbox (`true`/`false`), slider (its number), text field (its text, at every key) or tabs element (the tab's number from 1) of the plugin's panels was changed by the player. | 0.2.22 |
 | `message` | `from`, `topic`, `data` | Another plugin sent this one a message (`plugin.send`, `plugin.broadcast`): its name, the topic and the data (numbers, texts, tables). | 0.2.22 |

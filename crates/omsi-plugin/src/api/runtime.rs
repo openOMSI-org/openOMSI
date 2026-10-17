@@ -465,6 +465,13 @@ pub fn frame(ctx: &mut Ctx<'_>) {
             return;
         }
     }
+    // (the plugin's lines of the pause menu that were chosen: `menu_item`)
+    let picks = ctx.state().ui().take_menu_picks(owner);
+    for id in picks {
+        if !unit(ctx, |x| dispatch(x, "menu_item", vec![Value::Str(id)])) {
+            return;
+        }
+    }
     let changes = ctx.state().ui().take_changes(owner);
     for c in changes {
         if c.panel == super::fns::plugin::SETTINGS_PANEL {

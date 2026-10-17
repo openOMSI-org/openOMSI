@@ -25,6 +25,7 @@ const OLD10: &str = "0.1.10";
 const LATER: &str = "0.2.21";
 const NEW: &str = super::VERSION;
 const TICKETS: &str = "0.3";
+const V36: &str = "0.3.36";
 
 /// Every event, in the order of the documentation.
 pub static EVENTS: &[EventDef] = &[
@@ -44,6 +45,7 @@ pub static EVENTS: &[EventDef] = &[
     ev("jolt", &["along", "across", "speed_kmh", "passengers"], LATER, "The bus braked, sped up or cornered hard enough to cost driving rating (m/s², signed); at most one a second."),
     ev("ticket_sold", &["name", "price"], LATER, "A ticket was sold at the cash desk: its name and price as the bus's ticket list has them."),
     ev("ui_click", &["panel", "element"], LATER, "A button (or another clickable part) of one of the plugin's panels was clicked; `element` is `nil` for the panel itself. Enter in a text field is a click on it."),
+    ev("menu_item", &["id"], V36, "The player chose one of the plugin's lines in the pause menu (`ui.set_menu_item`); the menu has closed."),
     ev("ui_focus", &["focused"], LATER, "The panels got the mouse or gave it back (also by Esc, or a menu of the game opening)."),
     ev("ui_change", &["panel", "element", "value"], NEW, "A checkbox (`true`/`false`), slider (its number), text field (its text, at every key) or tabs element (the tab's number from 1) of the plugin's panels was changed by the player."),
     ev("message", &["from", "topic", "data"], NEW, "Another plugin sent this one a message (`plugin.send`, `plugin.broadcast`): its name, the topic and the data (numbers, texts, tables)."),

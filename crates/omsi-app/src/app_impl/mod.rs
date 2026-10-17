@@ -26,6 +26,6 @@ mod weather;
 
 pub(crate) use actions::gate_gear_var;
 pub(crate) use menu_lists::dropdown_top_at;
-pub(crate) use menus::on_server;
+pub(crate) use menus::{on_server, MenuLine};
 pub(crate) use mouse_grab::{steer_reach as mouse_grab_reach, GrabMode, MouseGrab};
 pub(crate) use view::{cab_look_yaw, chase_orbit_step, ease_look, look_key_is, look_key_of, precision_zoom_step, reset_blend, swap_cam_zoom, swap_view_look, sync_view_look, zoom_view, ZOOM_INTENT, ZOOM_INTENT_F1};

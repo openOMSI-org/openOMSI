@@ -372,9 +372,10 @@ impl App {
         plugin_focus: bool,
         notes: &[String],
         tooltip: Option<String>,
-        menu_lines: Vec<(&'static str, &'static str)>,
+        menu_lines: Vec<crate::app_impl::MenuLine>,
         menu_tabs: Option<(Vec<String>, usize)>,
     ) {
+        let menu_lines: Vec<(&str, &str)> = menu_lines.iter().map(|(id, label, _)| (*id, label.as_ref())).collect();
         // (the steering cross: before the renderer and the scene are borrowed)
         let steer_cross = self.steer_cross_point();
         self.refresh_perf_overlay();
