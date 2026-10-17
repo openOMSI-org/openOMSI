@@ -142,7 +142,7 @@ fn panel(s: &Settings) -> Panel {
             SettingKind::Number { min, max, step } => {
                 let v = st.value.as_f64().unwrap_or(*min as f64);
                 children.push(el(None, Kind::Row {
-                    children: vec![Element { grow: true, ..el(None, text(&st.label, 13.0, ui::Weight::Regular)) }, el(None, Kind::Badge { text: crate::api::value::lua_number(v).trim_end_matches(".0").to_string(), text_color: None })],
+                    children: vec![Element { grow: true, ..el(None, text(&st.label, 13.0, ui::Weight::Regular)) }, el(None, Kind::Badge { text: crate::api::value::lua_number(v).trim_end_matches(".0").to_string(), text_color: None, weight: ui::Weight::Medium })],
                     gap: 8.0,
                     align: ui::RowAlign::Start,
                 }));

@@ -168,7 +168,12 @@ impl Navigator {
         self.draw_place_row(&mut ui, Rect::new(0.0, map.bottom(), pw, loc_h), 10.0 * s, s);
         self.draw_cards(&mut ui, f, &wd, net, map, s, &pal);
         if self.schedule {
-            self.draw_schedule(&mut ui, f, Rect::new(0.0, map.bottom() + loc_h, pw, ph - map.bottom() - loc_h), s, &pal);
+            let r = Rect::new(0.0, map.bottom() + loc_h, pw, ph - map.bottom() - loc_h);
+            match self.board {
+                // (a plugin's board: its panel is drawn over the card here)
+                Some(_) => ui.rect(r, pal.card.alpha(1.0)),
+                None => self.draw_schedule(&mut ui, f, r, s, &pal),
+            }
         }
         if self.widget {
             // the corner to pull for another size

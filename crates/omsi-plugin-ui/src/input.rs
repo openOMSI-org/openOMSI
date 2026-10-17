@@ -42,12 +42,15 @@ impl PluginPanels {
     /// What a press at `(x, y)` (physical pixels on the window) is on: the topmost panel's
     /// part there.
     pub fn press_at(&self, ui: &UiState, x: f32, y: f32) -> Option<Press> {
-        let k = self.scale.max(0.25);
         for e in ui.panels().iter().rev().filter(|e| e.panel.visible) {
             let Some(card) = self.cards.get(&Key::Panel(e.owner, e.id.clone())) else { continue };
             if card.seen != self.frame {
                 continue;
             }
+            // (each card at its own scale: the navigator's for the panel in its board, which
+            // stays where the navigator puts it)
+            let k = card.scale.max(0.25);
+            let draggable = e.panel.draggable && e.panel.anchor != omsi_plugin::ui::Anchor::Navigator;
             let local = (Vec2::new(x, y) - card.origin) / k;
             if !Rect::new(0.0, 0.0, card.laid.w, card.laid.h).contains(local) {
                 continue;
@@ -63,10 +66,10 @@ impl PluginPanels {
                     kind: h.kind,
                     fraction: ((local.x - h.r.x) / h.r.w.max(1.0)).clamp(0.0, 1.0),
                     span: [card.origin.x + h.r.x * k, card.origin.x + h.r.right() * k],
-                    drag: e.panel.draggable && !on_part,
+                    drag: draggable && !on_part,
                     hit: true,
                 },
-                None => Press { owner: e.owner, panel: e.id.clone(), element: None, kind: HitKind::Click, fraction: 0.0, span: [0.0, 0.0], drag: e.panel.draggable, hit: false },
+                None => Press { owner: e.owner, panel: e.id.clone(), element: None, kind: HitKind::Click, fraction: 0.0, span: [0.0, 0.0], drag: draggable, hit: false },
             });
         }
         None

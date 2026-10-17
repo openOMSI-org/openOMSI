@@ -295,6 +295,17 @@ pub struct Navigator {
     /// The next stops with their times under the map (Shift+N cycles map, map and
     /// schedule, off).
     pub schedule: bool,
+    /// A plugin's panel for the board under the map (`anchor = "navigator"`): the height it
+    /// came to (physical pixels; 0 before it is laid out). It takes the stop list's place.
+    pub dock: Option<f32>,
+    /// Where that board is this frame: its top left, width and the most height it may take
+    /// (physical pixels on the window), the navigator's scale, and whether the navigator
+    /// made room for the panel yet. None: no board shown.
+    pub dock_slot: Option<([f32; 4], f32, bool)>,
+    /// A board was asked for once: the lower part opened for it by itself then.
+    dock_seen: bool,
+    /// The board's height in this frame's picture (physical pixels), for `draw`.
+    board: Option<f32>,
     /// Smoothed speed (m/s) for the time to the next stop.
     speed_avg: f32,
     pub opacity: f32,
@@ -511,6 +522,10 @@ impl Navigator {
             frames_since_drawn: u32::MAX,
             enabled,
             schedule: false,
+            dock: None,
+            dock_slot: None,
+            dock_seen: false,
+            board: None,
             speed_avg: 8.0,
             opacity: opacity.clamp(0.2, 1.0),
             corner: corner.to_string(),
@@ -1110,6 +1125,9 @@ impl Navigator {
         let start = scene.overlays.len();
         self.frame(renderer, scene, f);
         scene.shift_overlays(start, origin_x);
+        if let Some((r, _, _)) = self.dock_slot.as_mut() {
+            r[0] += origin_x;
+        }
         for rect in [&mut self.panel_rect, &mut self.city.rect] {
             rect[0] += origin_x;
             rect[2] += origin_x;
@@ -1119,6 +1137,8 @@ impl Navigator {
 
     pub fn frame(&mut self, renderer: &Renderer, scene: &mut Scene, f: &NavFrame) {
         self.panel_overlay = None;
+        self.dock_slot = None;
+        self.board = None;
         // (with the navigator off the route is still followed for OMSI 2's arrows)
         if !self.enabled && !self.city.open && !self.arrows && self.shown < 0.01 {
             return;
@@ -1229,10 +1249,26 @@ impl Navigator {
         let pw = (base * f.ui_scale * self.size.clamp(0.6, 2.0)).min((sh * 0.7).max(300.0) * self.size.clamp(1.0, 2.0)).min(sw * 0.92).round();
         let map_h = (pw * 0.8).round();
         let s = pw / 360.0;
-        let sched = if self.schedule { (f.stops.len().clamp(1, 5) as f32 * 22.0 + 12.0) * s } else { 0.0 };
-        let ph = (map_h + self.place_row_height(s) + sched).round();
+        // (a plugin's board takes the stop list's place, as tall as its panel came to and
+        // as there is room for; asked for the first time, it opens the lower part itself)
+        if self.dock.is_some() && !self.dock_seen {
+            self.dock_seen = true;
+            self.schedule = true;
+        }
+        let loc_h = self.place_row_height(s);
+        let room = (sh - map_h - loc_h - 32.0 * s).max(40.0 * s).round();
+        self.board = self.dock.filter(|_| self.schedule && !self.cockpit_display && self.shown > 0.99).map(|h| h.max(1.0).min(room).round());
+        let sched = match self.board {
+            Some(h) => h,
+            None if self.schedule => (f.stops.len().clamp(1, 5) as f32 * 22.0 + 12.0) * s,
+            None => 0.0,
+        };
+        let ph = (map_h + loc_h + sched).round();
         let (w, h) = (pw as u32, ph as u32);
         let (x0, y0) = self.panel_origin((sw, sh), (pw, ph), f.touch, f.info_rect, f.touch_gap);
+        if self.board.is_some() && !self.city.open {
+            self.dock_slot = Some(([x0, y0 + (map_h + loc_h).round(), pw, room], s, self.dock.is_some_and(|h| h > 0.0)));
+        }
 
         if self.gpu.is_none() {
             self.gpu = Some(Gpu::with_depth(&renderer.device, renderer.format(), map_samples(renderer.format()), self.atlas.size));
