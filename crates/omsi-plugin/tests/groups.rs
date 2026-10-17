@@ -82,6 +82,12 @@ fn duty_and_timetable() {
         assert(#omsi.duty.trips() == 1 and omsi.duty.trip_stops(1)[3].name == "Rathaus" and omsi.duty.trip_stops(9) == nil)
         assert(omsi.duty.skip_stop() == "Markt" and omsi.duty.next_stop().name == "Rathaus")
         assert(omsi.duty.skip_to(1) and not omsi.duty.skip_to(10))
+        assert(not omsi.duty.stops()[3].closed and omsi.duty.set_closed_stops({ "Rathaus" }, "via Ring") and omsi.duty.stops()[3].closed)
+        assert(not pcall(omsi.duty.set_closed_stops, "Rathaus"))
+        local many = {}
+        for i = 1, 65 do many[i] = "Stop " .. i end
+        local ok, err = pcall(omsi.duty.set_closed_stops, many); assert(not ok and tostring(err):find("at most 64"))
+        assert(omsi.duty.set_closed_stops({ "Rathaus" }, "via\nRing" .. string.rep("x", 600)))
         assert(omsi.duty.start("136", "3", 2, 1))
         local ok, why = omsi.duty.start("999", "1"); assert(not ok and why:find("999"))
         local l = omsi.timetable.lines()[1]; assert(l.name == "136" and l.tours[1].today)
@@ -95,6 +101,9 @@ fn duty_and_timetable() {
     );
     assert_eq!(out, ["ok"]);
     assert!(g.log.borrow().iter().any(|l| l == "duty 136/3 1 0"));
+    assert!(g.log.borrow().iter().any(|l| l == "closed Rathaus via via Ring"));
+    // (the way round: one line, clipped to a text's length)
+    assert!(g.log.borrow().iter().any(|l| l.starts_with("closed Rathaus via viaRingxxx") && l.chars().count() == "closed Rathaus via ".len() + omsi_plugin::ui::MAX_TEXT));
 }
 
 #[test]

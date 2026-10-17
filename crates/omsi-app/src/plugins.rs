@@ -346,7 +346,7 @@ fn stop_info(v: &mut Vec<(&'static str, InfoValue)>, stops: &[crate::schedule::P
         }
     }
     // the last stop before the next one the trip calls at (passing stations left out)
-    if let Some(s) = stops.iter().take(next).rev().find(|s| s.stops) {
+    if let Some(s) = stops.iter().take(next).rev().find(|s| s.calls()) {
         v.push(("previous_stop", Text(s.name.trim().to_string())));
         v.push(("previous_stop_id", Num(s.object_id as f64)));
         if let Some(m) = distance(s) {
@@ -753,6 +753,9 @@ impl PluginIo for Io<'_> {
     fn duty_end(&mut self) -> bool {
         self.app_mut().is_some_and(pduty::finish)
     }
+    fn duty_set_closed_stops(&mut self, stops: &[String], via: &str) -> bool {
+        self.app_mut().is_some_and(|a| pduty::set_closed_stops(a, stops, via))
+    }
     fn timetable_lines(&self) -> Vec<op::Line> {
         self.app().map(pduty::lines).unwrap_or_default()
     }
@@ -1024,6 +1027,7 @@ mod tests {
             position: (x >= 0.0).then_some(glam::DVec3::new(x, 0.0, 5.0)),
             dir: Default::default(),
             stops,
+            closed: None,
         };
         let stops = vec![stop(11, "A", 0.0, true), stop(12, "B", 100.0, false), stop(13, "C", -1.0, true)];
         let mut v = Vec::new();

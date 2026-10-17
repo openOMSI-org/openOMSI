@@ -96,6 +96,17 @@ pub struct PlannedStop {
     pub dir: StopDir,
     /// The bus stops here (a depot run passes its stations).
     pub stops: bool,
+    /// Closed today - a diversion, roadworks - as a plugin said (`duty.set_closed_stops`),
+    /// with the way round it ("" when not said): the bus does not call there, and passing it
+    /// is not missing it.
+    pub closed: Option<String>,
+}
+
+impl PlannedStop {
+    /// The bus is to call here: a stop of the timetable, and not closed.
+    pub fn calls(&self) -> bool {
+        self.stops && self.closed.is_none()
+    }
 }
 
 /// Which way a trip runs through one of its stops: the direction it arrives on and the one

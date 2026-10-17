@@ -43,7 +43,7 @@ pub struct Game {
 impl Game {
     /// A bus on a duty at noon, on a map with a little traffic.
     pub fn new() -> Game {
-        let stop = |id: i64, name: &str, t: f64, x: f64| Stop { id, name: name.into(), arr: t, dep: t + 20.0, pos: Some([x, 0.0, 0.0]), stops: true };
+        let stop = |id: i64, name: &str, t: f64, x: f64| Stop { id, name: name.into(), arr: t, dep: t + 20.0, pos: Some([x, 0.0, 0.0]), stops: true, closed: false };
         let trip = Trip { name: "Spandau".into(), line: "136".into(), terminus: "Rathaus".into(), departure: 43200.0, end: 44400.0, stops: vec![stop(11, "Zoo", 43200.0, 0.0), stop(12, "Markt", 43500.0, 300.0), stop(13, "Rathaus", 44400.0, 900.0)] };
         let mut g = Game {
             vehicle: true,
@@ -330,6 +330,14 @@ impl PluginIo for Game {
     }
     fn duty_end(&mut self) -> bool {
         self.duty.take().is_some()
+    }
+    fn duty_set_closed_stops(&mut self, stops: &[String], via: &str) -> bool {
+        let Some(d) = self.duty.as_mut() else { return false };
+        for s in &mut d.current.stops {
+            s.closed = stops.iter().any(|c| c.eq_ignore_ascii_case(&s.name));
+        }
+        self.did(format!("closed {} via {via}", stops.join(",")));
+        true
     }
     fn timetable_lines(&self) -> Vec<Line> {
         vec![Line { name: "136".into(), user_allowed: true, tours: vec![Tour { number: "3".into(), today: true, trips: 4 }] }]

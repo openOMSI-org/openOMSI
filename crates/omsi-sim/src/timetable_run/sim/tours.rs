@@ -277,6 +277,7 @@ impl ScheduleSim {
                         position,
                         dir: StopDir::default(),
                         stops: times.stops[i],
+                        closed: None,
                     }
                 })
                 .collect();

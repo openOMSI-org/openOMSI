@@ -417,3 +417,16 @@ fn the_map_zooms_in_for_a_turn_and_out_on_the_straight() {
     assert!(zoom_target(50.0, None, 30.0) < zoom_target(50.0, None, 5.0));
     assert!(zoom_target(50.0, None, -30.0) >= 150.0);
 }
+
+/// A stop a plugin closed (`duty.set_closed_stops`) is still on the list, marked with the
+/// way round, so it is drawn struck through.
+#[test]
+fn closed_stops_stay_on_the_list_marked() {
+    use omsi_sim::timetable_run::{PlannedStop, PlannedTrip, PlayerDuty};
+    let stop = |name: &str, arr: f64| PlannedStop { object_id: 0, name: name.into(), arr, dep: arr, position: None, dir: Default::default(), stops: true, closed: None };
+    let trip = PlannedTrip { name: "5_1".into(), line: "5".into(), terminus: "Bahnhof".into(), departure: 0.0, end: 120.0, stops: vec![stop("Markt", 0.0), stop("Rathaus", 60.0), stop("Bahnhof", 120.0)] };
+    let mut d = PlayerDuty::new("5".into(), "1".into(), vec![trip], 0, 0, true);
+    d.set_closed_stops(&["rathaus".into()], "via Kirchweg");
+    let (_, _, stops, _) = duty_parts(Some(&d));
+    assert_eq!(stops.iter().map(|s| s.closed.as_deref()).collect::<Vec<_>>(), [None, Some("via Kirchweg"), None]);
+}

@@ -1075,6 +1075,27 @@
       "permission": null
     },
     {
+      "name": "duty.set_closed_stops",
+      "group": "duty",
+      "since": "0.3.36",
+      "doc": "Closes stops of the duty's route for today - a diversion, roadworks: a list of their names (on every trip of the duty), and the way round them (`via`). The navigator strikes them through and shows `via` for the next one; the bus does not call there, and the duty goes on past them without counting them missed (no `stops_skipped`). Each call replaces the list (64 names at most), an empty one opens them all again; a duty taken anew (`duty.start`) starts with none. `duty.stops` marks them `closed`. `true` when there is a duty.",
+      "params": [
+        {
+          "name": "stops",
+          "type": "table",
+          "optional": false
+        },
+        {
+          "name": "via",
+          "type": "string",
+          "optional": true
+        }
+      ],
+      "returns": "boolean",
+      "multi": false,
+      "permission": "world_write"
+    },
+    {
       "name": "duty.skip_stop",
       "group": "duty",
       "since": "0.2.22",
@@ -1135,7 +1156,7 @@
       "name": "duty.stops",
       "group": "duty",
       "since": "0.2.22",
-      "doc": "The stops of the trip now: `{number, name, id, arrival, departure, stops, passed, x, y, z}` (`stops` false: the bus passes it; `x, y, z` where the stop's place is known; `id` the map's object id).",
+      "doc": "The stops of the trip now: `{number, name, id, arrival, departure, stops, closed, passed, x, y, z}` (`stops` false: the bus passes it; `closed`: closed today, `duty.set_closed_stops`; `x, y, z` where the stop's place is known; `id` the map's object id).",
       "params": [],
       "returns": "list of tables",
       "multi": false,

@@ -478,6 +478,7 @@ mod tests {
             position: None,
             dir: StopDir::default(),
             stops: true,
+            closed: None,
         }
     }
 

@@ -69,6 +69,7 @@ fn ibox_busstop_is_prepositioned_when_the_timetable_jumps() {
             position: Some(glam::DVec3::new(i as f64 * 100.0, 0.0, 0.0)),
             dir: StopDir::default(),
             stops: true,
+            closed: None,
         })
         .collect();
     let mut duty = PlayerDuty {
@@ -623,6 +624,33 @@ fn stops_passed_without_stopping_are_told_once() {
     assert_eq!(d.next_stop, 3);
     assert_eq!(d.take_skipped(), Some((2, 2, 4)), "two stops, due at 2, now at 4");
     assert_eq!(d.take_skipped(), None, "told once");
+}
+
+#[test]
+fn closed_stops_passed_are_not_missed() {
+    let drive = |closed: &[&str]| {
+        let mut trip = planned(0.0, &[(0.0, 0.0, 0.0), (100.0, 60.0, 60.0), (500.0, 120.0, 120.0), (1000.0, 200.0, 200.0), (1500.0, 280.0, 280.0)]);
+        trip.set_dirs();
+        let mut d = PlayerDuty::new("5".into(), "1".into(), vec![trip], 0, 0, true);
+        (d.placed, d.heading) = (true, 90.0);
+        let names: Vec<String> = closed.iter().map(|s| s.to_string()).collect();
+        assert_eq!(d.set_closed_stops(&names, " via Bahnhof "), closed.len());
+        d.advance(glam::DVec3::new(0.0, 0.0, 0.0), 0.0);
+        d.advance(glam::DVec3::new(60.0, 0.0, 0.0), 30.0);
+        // the bus turns up at stop 4 (numbered from 1), round stops 2 and 3
+        d.advance(glam::DVec3::new(1000.0, 0.0, 0.0), 90.0);
+        assert_eq!(d.next_stop, 3);
+        d
+    };
+    let mut d = drive(&["s1", "S2"]);
+    assert_eq!(d.take_skipped(), None, "both closed: none missed");
+    assert_eq!(d.trip().stops[2].closed.as_deref(), Some("via Bahnhof"));
+    assert!(!d.trip().stops[1].calls() && d.trip().stops[3].calls());
+    // one of them closed: the other was missed
+    assert_eq!(drive(&["s2"]).take_skipped(), Some((1, 2, 4)));
+    // and an empty list opens them again
+    assert_eq!(d.set_closed_stops(&[], ""), 0);
+    assert!(d.trip().stops.iter().all(|s| s.closed.is_none()));
 }
 
 #[test]

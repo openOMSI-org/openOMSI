@@ -269,6 +269,7 @@ pub(super) fn planned(departure: f64, stops: &[(f64, f64, f64)]) -> PlannedTrip 
             position: Some(glam::DVec3::new(x, 0.0, 0.0)),
             dir: StopDir::default(),
             stops: true,
+            closed: None,
         })
         .collect();
     PlannedTrip {

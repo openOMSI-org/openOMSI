@@ -5,7 +5,7 @@ use crate::App;
 use omsi_plugin as op;
 
 fn stop(s: &crate::schedule::PlannedStop) -> op::Stop {
-    op::Stop { id: s.object_id, name: s.name.trim().to_string(), arr: s.arr, dep: s.dep, pos: s.position.map(|p| [p.x, p.y, p.z]), stops: s.stops }
+    op::Stop { id: s.object_id, name: s.name.trim().to_string(), arr: s.arr, dep: s.dep, pos: s.position.map(|p| [p.x, p.y, p.z]), stops: s.stops, closed: s.closed.is_some() }
 }
 
 fn trip(t: &omsi_sim::timetable_run::PlannedTrip) -> op::Trip {
@@ -42,6 +42,20 @@ pub(crate) fn skip_next(app: &mut App) -> Option<String> {
         p.ibis_to_stop(trip, k);
     }
     Some(name.trim().to_string())
+}
+
+/// Close stops of the duty (a diversion): the navigator strikes them through, and the duty
+/// goes on past them.
+pub(crate) fn set_closed_stops(app: &mut App, stops: &[String], via: &str) -> bool {
+    let Some(d) = app.session.duty.as_mut() else { return false };
+    let closed = |d: &crate::schedule::PlayerDuty| d.trips.iter().flat_map(|t| t.stops.iter().map(|s| s.closed.clone())).collect::<Vec<_>>();
+    let before = closed(d);
+    let n = d.set_closed_stops(stops, via);
+    // (a plugin may say the same every frame: the log hears of a change only)
+    if closed(d) != before {
+        log::info!("duty: {n} stop(s) closed by a plugin ({})", stops.join(", "));
+    }
+    true
 }
 
 /// Make a stop of the trip the next one: handed to the duty as a bus page hands it.

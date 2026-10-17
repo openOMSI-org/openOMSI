@@ -320,6 +320,11 @@ pub trait PluginIo {
     fn duty_end(&mut self) -> bool {
         false
     }
+    /// Close the stops of the duty called `stops` (and open the others), with the way round
+    /// them (`via`, may be empty); false without a duty.
+    fn duty_set_closed_stops(&mut self, _stops: &[String], _via: &str) -> bool {
+        false
+    }
     fn timetable_lines(&self) -> Vec<Line> {
         Vec::new()
     }
@@ -769,6 +774,8 @@ pub struct Stop {
     pub pos: Option<[f64; 3]>,
     /// False: the bus passes it without stopping.
     pub stops: bool,
+    /// Closed today ([`PluginIo::duty_set_closed_stops`]): the bus does not call there.
+    pub closed: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]

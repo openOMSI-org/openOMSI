@@ -6,9 +6,17 @@ use crate::api::{ApiError, ApiFn, Value};
 use crate::io::{Duty, Stop, Trip};
 
 const NEW: &str = crate::api::VERSION;
+const V36: &str = "0.3.36";
+/// Most stops one `duty.set_closed_stops` closes.
+pub const MAX_CLOSED: usize = 64;
+
+/// A plugin's text for the screen: one line, no control characters, at most `max` characters.
+fn one_line(s: &str, max: usize) -> String {
+    s.chars().filter(|c| !c.is_control()).take(max).collect::<String>().trim().to_string()
+}
 
 fn stop(s: &Stop, n: usize, next: Option<usize>) -> Value {
-    let mut r = vec![("number", Value::from(n + 1)), ("name", s.name.trim().into()), ("id", Value::Int(s.id)), ("arrival", s.arr.into()), ("departure", s.dep.into()), ("stops", s.stops.into())];
+    let mut r = vec![("number", Value::from(n + 1)), ("name", s.name.trim().into()), ("id", Value::Int(s.id)), ("arrival", s.arr.into()), ("departure", s.dep.into()), ("stops", s.stops.into()), ("closed", s.closed.into())];
     if let Some(p) = s.pos {
         r.extend(xyz(p));
     }
@@ -51,7 +59,7 @@ pub static FNS: &[ApiFn] = &[
     def!("duty.active", "duty", [], "boolean", "Whether the player drives a duty (a line and tour of the timetable).", NEW, None, false, |c, a| c.io().duty().is_some()),
     def!("duty.get", "duty", [], "table or nil", "The duty now: `line`, `tour`, `trip` (its number in the duty, from 1), `trips`, `trip_name`, `terminus`, `departure`, `arrival`, `stops`, `next_stop` and `previous_stop` (each a stop: `{number, name, id, arrival, departure, stops, x, y, z}`), `at_stop`, `trip_done`, `delay` (seconds, late positive).", NEW, None, false, |c, a| c.io().duty().map(|d| duty(&d))),
     def!("duty.delay", "duty", [], "number or nil", "Seconds the bus is late (early negative), worked out between the stops as the game's timetable does.", NEW, None, false, |c, a| c.io().duty().map(|d| d.delay)),
-    def!("duty.stops", "duty", [], "list of tables", "The stops of the trip now: `{number, name, id, arrival, departure, stops, passed, x, y, z}` (`stops` false: the bus passes it; `x, y, z` where the stop's place is known; `id` the map's object id).", NEW, None, false, |c, a| c.io().duty().map(|d| stops(&d.current, Some(d.next)))),
+    def!("duty.stops", "duty", [], "list of tables", "The stops of the trip now: `{number, name, id, arrival, departure, stops, closed, passed, x, y, z}` (`stops` false: the bus passes it; `closed`: closed today, `duty.set_closed_stops`; `x, y, z` where the stop's place is known; `id` the map's object id).", NEW, None, false, |c, a| c.io().duty().map(|d| stops(&d.current, Some(d.next)))),
     def!("duty.next_stop", "duty", [], "table or nil", "The next stop of the trip (as `duty.stops` gives them).", NEW, None, false, |c, a| c.io().duty().and_then(|d| d.current.stops.get(d.next).map(|s| stop(s, d.next, None)))),
     def!("duty.at_stop", "duty", [], "boolean", "Whether the bus stands at the next stop (within 25 m of it).", NEW, None, false, |c, a| c.io().duty().is_some_and(|d| d.at_stop)),
     def!("duty.trips", "duty", [], "list of tables", "The trips of the duty: `{number, name, line, terminus, departure, arrival, stops}`.", NEW, None, false, |c, a| Value::List(c.io().duty_trips().iter().enumerate().map(|(i, t)| trip(t, i)).collect())),
@@ -70,6 +78,14 @@ pub static FNS: &[ApiFn] = &[
         Ok::<_, ApiError>(super::core::ok_or_reason(c.io().duty_start(&line, &tour, trip, stop)))
     }),
     def!("duty.finish", "duty", [], "boolean", "Gives the duty up (the bus drives on without a timetable); `true` when there was one.", NEW, WorldWrite, false, |c, a| c.io().duty_end()),
+    def!("duty.set_closed_stops", "duty", [p("stops", "table"), o("via", "string")], "boolean", "Closes stops of the duty's route for today - a diversion, roadworks: a list of their names (on every trip of the duty), and the way round them (`via`). The navigator strikes them through and shows `via` for the next one; the bus does not call there, and the duty goes on past them without counting them missed (no `stops_skipped`). Each call replaces the list (64 names at most), an empty one opens them all again; a duty taken anew (`duty.start`) starts with none. `duty.stops` marks them `closed`. `true` when there is a duty.", V36, WorldWrite, false, |c, a| {
+        let stops: Vec<String> = a.table(0)?.items().iter().filter_map(Value::to_text).map(|s| one_line(&s, crate::ui::MAX_TEXT)).filter(|s| !s.is_empty()).collect();
+        if stops.len() > MAX_CLOSED {
+            return Err(ApiError(format!("omsi.duty.set_closed_stops: at most {MAX_CLOSED} stops, not {}", stops.len())));
+        }
+        let via = one_line(&a.opt_str(1)?.unwrap_or_default(), crate::ui::MAX_TEXT);
+        Ok::<_, ApiError>(c.io().duty_set_closed_stops(&stops, &via))
+    }),
     def!("timetable.lines", "duty", [], "list of tables", "The map's lines: `{name, user_allowed, tours}`, each tour `{number, today, trips}` (`today`: it runs on the game's date).", NEW, None, false, |c, a| {
         Value::List(c.io().timetable_lines().into_iter().map(|l| rec(vec![("name", l.name.into()), ("user_allowed", l.user_allowed.into()), ("tours", Value::List(l.tours.into_iter().map(|t| rec(vec![("number", t.number.into()), ("today", t.today.into()), ("trips", t.trips.into())])).collect()))])).collect())
     }),

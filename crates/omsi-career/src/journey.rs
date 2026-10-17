@@ -418,7 +418,7 @@ mod tests {
             terminus: "Muzealna".into(),
             departure: stops[0].1,
             end: stops[stops.len() - 1].1,
-            stops: stops.iter().map(|(n, t)| PlannedStop { object_id: 0, name: n.to_string(), arr: *t, dep: *t, position: None, dir: Default::default(), stops: true }).collect(),
+            stops: stops.iter().map(|(n, t)| PlannedStop { object_id: 0, name: n.to_string(), arr: *t, dep: *t, position: None, dir: Default::default(), stops: true, closed: None }).collect(),
         }
     }
 

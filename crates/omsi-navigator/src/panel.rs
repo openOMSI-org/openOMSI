@@ -359,7 +359,11 @@ impl Navigator {
                     None => 0.0,
                 };
                 let name = self.fonts.fit(&name, 14.5 * s, Weight::Bold, row1.w - line_w);
-                ui.text_in(&mut self.atlas, &self.fonts, &name, 14.5 * s, Weight::Bold, Rect::new(row1.x + line_w, row1.y, row1.w - line_w, row1.h), Align::Left, pal.card_text);
+                let name_r = Rect::new(row1.x + line_w, row1.y, row1.w - line_w, row1.h);
+                let w = ui.text_in(&mut self.atlas, &self.fonts, &name, 14.5 * s, Weight::Bold, name_r, Align::Left, if st.closed.is_some() { pal.card_dim } else { pal.card_text });
+                if st.closed.is_some() {
+                    strike(ui, name_r.x, w, name_r, s, pal.card_dim);
+                }
                 let mut parts = Vec::new();
                 if let Some(d) = self.next_dist {
                     parts.push(units.distance(d));
@@ -368,9 +372,12 @@ impl Navigator {
                 }
                 parts.push(format!("{:02}:{:02}", (st.arrival / 3600.0) as i32 % 24, ((st.arrival % 3600.0) / 60.0) as i32));
                 let line2 = parts.join(" · ");
-                let (text, col) = match (&note, &jam_note) {
-                    (Some((t, c)), _) => (t.clone(), *c),
-                    (None, Some((t, c))) => (format!("{line2} · {t}"), *c),
+                // (closed: the way round in place of the distance)
+                let closed = st.closed.as_deref().map(|via| if via.is_empty() { wd.closed.to_string() } else { format!("{} · {via}", wd.closed) });
+                let (text, col) = match (&closed, &note, &jam_note) {
+                    (Some(t), _, _) => (t.clone(), WARN),
+                    (None, Some((t, c)), _) => (t.clone(), *c),
+                    (None, None, Some((t, c))) => (format!("{line2} · {t}"), *c),
                     _ => (line2, pal.card_dim),
                 };
                 let mut right = 0.0;
@@ -446,7 +453,12 @@ impl Navigator {
             let planned = format!("{:02}:{:02}", (st.arrival / 3600.0) as i32 % 24, ((st.arrival % 3600.0) / 60.0) as i32);
             ui.text_in(&mut self.atlas, &self.fonts, &planned, 12.0 * s, Weight::Bold, Rect::new(row.x + 16.0 * s, row.y, 40.0 * s, row.h), Align::Left, pal.card_dim);
             let name = self.fonts.fit(st.name.trim(), 13.0 * s, Weight::Medium, row.w - 110.0 * s);
-            ui.text_in(&mut self.atlas, &self.fonts, &name, 13.0 * s, Weight::Medium, Rect::new(row.x + 58.0 * s, row.y, row.w - 110.0 * s, row.h), Align::Left, pal.card_text);
+            let name_r = Rect::new(row.x + 58.0 * s, row.y, row.w - 110.0 * s, row.h);
+            let w = ui.text_in(&mut self.atlas, &self.fonts, &name, 13.0 * s, Weight::Medium, name_r, Align::Left, if st.closed.is_some() { pal.card_dim } else { pal.card_text });
+            // (closed today: struck through, and the bus does not stop there)
+            if st.closed.is_some() {
+                strike(ui, name_r.x, w, name_r, s, pal.card_dim);
+            }
             let exp = st.arrival + late;
             let e = format!("{:02}:{:02}", (exp / 3600.0).rem_euclid(24.0) as i32, ((exp.rem_euclid(3600.0)) / 60.0) as i32);
             ui.text_in(&mut self.atlas, &self.fonts, &e, 12.0 * s, Weight::Medium, row, Align::Right, if late > 59.0 { style::TRAFFIC[2] } else if late < -59.0 { style::TRAFFIC[0] } else { pal.card_dim });
@@ -458,6 +470,11 @@ impl Navigator {
     pub(super) fn look_key(&self) -> u64 {
         (self.light as u64) | (self.show_3d as u64) << 1 | (self.show_surface as u64) << 2 | self.surface_version << 3 | (self.map_version << 20) | (self.roads_version << 36)
     }
+}
+
+/// A line through a stop's name `w` wide from `x`, at the middle of `r` (a stop closed today).
+fn strike(ui: &mut Painter, x: f32, w: f32, r: Rect, s: f32, c: Color) {
+    ui.rect(Rect::new(x, (r.center().y - 0.75 * s).round(), w.max(0.0), (1.5 * s).max(1.0)), c);
 }
 
 /// A stop on the map: a white pin with the bus sign, blue for the next, red with a flag for the

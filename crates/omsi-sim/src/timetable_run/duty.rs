@@ -251,6 +251,20 @@ impl PlayerDuty {
         self.arrived_late.filter(|_| self.at_stop)
     }
 
+    /// Close the stops called `names` on every trip of the duty - a diversion, roadworks -
+    /// with the way round them (`via`, "" when not said), and open the others again: the bus
+    /// does not call at a closed stop, and the duty goes on past it without counting it
+    /// missed. Returns how many stops it closed.
+    pub fn set_closed_stops(&mut self, names: &[String], via: &str) -> usize {
+        let mut n = 0;
+        for s in self.trips.iter_mut().flat_map(|t| t.stops.iter_mut()) {
+            let closed = names.iter().any(|c| c.trim().eq_ignore_ascii_case(s.name.trim()));
+            s.closed = closed.then(|| via.trim().to_string());
+            n += closed as usize;
+        }
+        n
+    }
+
     /// Places of stops the timetable did not know (their tiles were not loaded when the duty
     /// was made): the navigator reads the whole map.
     pub fn learn_places(&mut self, places: &HashMap<i64, glam::DVec3>) {
@@ -347,7 +361,7 @@ impl PlayerDuty {
                     self.next_stop = t
                         .stops
                         .iter()
-                        .position(|s| s.stops && s.position.map(|p| s.arr >= now + Self::approach_time(pos, p)).unwrap_or(false))
+                        .position(|s| s.calls() && s.position.map(|p| s.arr >= now + Self::approach_time(pos, p)).unwrap_or(false))
                         .unwrap_or(0);
                     log::info!(
                         "duty: no trip of the tour can be reached in time; trip {} ({}) from stop {} '{}'",
@@ -744,15 +758,21 @@ impl PlayerDuty {
             }
         }
         let Some((k, _)) = best else { return };
+        // (a closed stop was not missed)
+        let missed = trip.stops[self.next_stop..k].iter().filter(|s| s.closed.is_none()).count();
+        if missed == 0 {
+            self.next_stop = k;
+            return;
+        }
         log::info!(
             "duty: trip {}: {} stop(s) passed without stopping, the bus at stop {} '{}' (it was due at {})",
             trip.name,
-            k - self.next_stop,
+            missed,
             k + 1,
             trip.stops[k].name.trim(),
             self.next_stop + 1
         );
-        self.skipped = Some((k - self.next_stop, self.next_stop + 1, k + 1));
+        self.skipped = Some((missed, self.next_stop + 1, k + 1));
         self.next_stop = k;
     }
 
@@ -838,11 +858,11 @@ impl PlayerDuty {
                 } else if self.at_stop && gone > LEFT_STOP {
                     self.at_stop = false;
                     let left = self.next_stop;
-                    self.passed = PassedStop { doors: false, stop: (!self.passed.doors && stop.stops).then_some(left), stand: None };
+                    self.passed = PassedStop { doors: false, stop: (!self.passed.doors && stop.calls()).then_some(left), stand: None };
                     let late = day_time - stop.dep;
                     self.left_late = Some(late);
                     // (OMSI counts a stop only with its arrival: the original)
-                    if let (true, Some(arrived)) = (stop.stops, self.arrived_late.take()) {
+                    if let (true, Some(arrived)) = (stop.calls(), self.arrived_late.take()) {
                         served = Some((arrived, late));
                     }
                     self.next_stop = (self.next_stop + 1).min(last);
