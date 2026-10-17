@@ -721,6 +721,7 @@ table.table { width: 100%; border-collapse: collapse; }
 .setting-row:last-child { border-bottom: 0; }
 .setting-row .name { min-width: 0; }
 .setting-row .name span { display: block; font-size: 12px; color: var(--muted); }
+.setting-row .name span.warn-fg { color: var(--warn); }
 .setting-row.full { grid-template-columns: 1fr; }
 .optimise-block { margin: 8px 0 12px; padding: 4px 0 12px; border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong); }
 .optimise-block .section-title { margin-top: 14px; }
