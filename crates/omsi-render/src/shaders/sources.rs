@@ -188,10 +188,17 @@ pub(crate) fn snow_shader_source() -> String {
 
 /// The rainfall (rain.wgsl), as the snowfall.
 pub(crate) fn rain_shader_source() -> String {
-    precip_shader_source(include_str!("../rain.wgsl"))
+    let src = precip_shader_source(include_str!("../rain.wgsl"));
+    if basic_pipelines() { lean_rain(src) } else { src }
 }
 
-fn precip_shader_source(own: &str) -> String {
+pub(crate) fn lean_rain(src: String) -> String {
+    const LAMPS: &str = "precip_light(in.pos, to_eye, false) * 0.3 + ";
+    debug_assert_eq!(src.matches(LAMPS).count(), 1);
+    src.replace(LAMPS, "")
+}
+
+pub(crate) fn precip_shader_source(own: &str) -> String {
     let src = [
         include_str!("../precip_common.wgsl"),
         own,

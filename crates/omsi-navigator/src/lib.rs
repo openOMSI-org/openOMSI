@@ -35,12 +35,8 @@ use omsi_sim::ai_traffic::TrafficSim;
 // --- colours (sRGB) -------------------------------------------------------------------
 
 // neutral dark, half transparent, calm
-const NAV_REDRAW_S: f32 = 1.0 / 30.0;
-/// Frames between two drawings of the navigator at least. Below 30 fps it was drawn every
-/// frame, and a drawing is a pass of its own (4x MSAA, its own submit): on OpenGL, where
-/// wgpu makes the GL calls in the submit, 4.2 ms of a 43 ms frame (a Radeon R7 200, 23
-/// fps), against 0.6 ms on Vulkan. Every other frame halves that where frames are slow.
-const NAV_REDRAW_FRAMES: u32 = 2;
+const NAV_SLOW_FPS: f32 = 30.0;
+const NAV_MAX_FPS: f32 = 75.0;
 // (the launcher's map picture draws with these too, so the two maps cannot look apart)
 pub const ROAD_CASING: Color = style::LIGHT.road_edge;
 pub const ROAD: Color = style::LIGHT.road;
@@ -152,8 +148,6 @@ fn stop_request_icon(ui: &mut Painter, atlas: &mut Atlas, requested: bool, mut r
 /// Vertical field of view and tilt of the map camera (degrees).
 const FOV: f32 = 40.0;
 const PITCH: f64 = 52.0;
-/// Roads are built for this far around the bus (m) and again when it has gone half-way.
-const ROAD_RADIUS: f64 = 1300.0;
 /// Off the route for this long (s) before a way back is looked for, and between tries.
 const OFF_ROUTE_AFTER: f32 = 2.0;
 const REROUTE_EVERY: f32 = 2.5;
@@ -291,8 +285,9 @@ pub struct Navigator {
     pub cockpit_display: bool,
     /// The speed limit (km/h) the top bar showed last, for the information bar (#2476).
     pub speed_limit: Option<f32>,
-    drawn_at: f32,
-    /// Frames since the last drawing (see `NAV_REDRAW_FRAMES`).
+    frame_dt: f32,
+    last_frame: Option<std::time::Instant>,
+    draw_every: u32,
     frames_since_drawn: u32,
     pub enabled: bool,
     /// The next stops with their times under the map (Shift+N cycles map, map and
@@ -458,6 +453,26 @@ fn angle_diff(a: f64, b: f64) -> f64 {
     d
 }
 
+fn draw_every(now: u32, frame_dt: f32) -> u32 {
+    let slow = 1.0 / (NAV_SLOW_FPS * frame_dt.max(1e-4));
+    let ideal = 1.0 / (NAV_MAX_FPS * frame_dt.max(1e-4));
+    if slow < 0.92 || (now == 2 && slow < 1.08) {
+        return 2;
+    }
+    let n = now as f32;
+    if ideal > n - 1.0 - 0.08 && ideal <= n + 0.08 {
+        return now;
+    }
+    (ideal.ceil() as u32).clamp(1, 4)
+}
+
+fn zoom_target(speed_kmh: f32, turn_dist: Option<f64>, turning_deg: f64) -> f64 {
+    let speed = 150.0 + speed_kmh.abs() as f64 * 2.4;
+    let turn = turn_dist.map_or(f64::MAX, |d| 150.0 + d * 0.6);
+    let bend = 1.0 - (turning_deg.abs() / 25.0).clamp(0.0, 1.0) * 0.25;
+    (speed.min(turn) * bend).clamp(150.0, 320.0)
+}
+
 fn ease(dt: f32, tau: f32) -> f64 {
     (1.0 - (-dt / tau.max(1e-3)).exp()) as f64
 }
@@ -480,7 +495,9 @@ impl Navigator {
             panel_overlay: None,
             cockpit_display: false,
             speed_limit: None,
-            drawn_at: f32::MIN,
+            frame_dt: 1.0 / 60.0,
+            last_frame: None,
+            draw_every: 1,
             frames_since_drawn: u32::MAX,
             enabled,
             schedule: false,
@@ -1144,12 +1161,12 @@ impl Navigator {
         self.update_drawn_cars(f);
         self.poll_road_job();
         // camera: zoomed out with speed, turned with the bus (both eased)
-        let want = (150.0 + f.speed_kmh as f64 * 2.4).clamp(150.0, 320.0);
+        let want = zoom_target(f.speed_kmh, self.next_turn.as_ref().map(|t| t.2), angle_diff(self.cam_heading, f.heading));
         if self.first {
             self.zoom = want;
             self.cam_heading = f.heading;
         }
-        self.zoom += (want - self.zoom) * ease(f.dt, 1.8);
+        self.zoom += (want - self.zoom) * ease(f.dt, if want < self.zoom { 0.7 } else { 1.8 });
         self.cam_heading += angle_diff(self.cam_heading, f.heading) * ease(f.dt, 0.3);
         let v = f.speed_kmh.abs() / 3.6;
         self.speed_avg += (v - self.speed_avg) * ease(f.dt, 20.0) as f32;
@@ -1216,10 +1233,13 @@ impl Navigator {
         }
         let (tex, _, _) = self.target.unwrap();
         let Some(view) = renderer.texture_view(scene, tex) else { return };
+        let now = std::time::Instant::now();
+        if let Some(dt) = self.last_frame.replace(now).map(|t| (now - t).as_secs_f32()).filter(|dt| *dt < 0.1) {
+            self.frame_dt += (dt - self.frame_dt) * ease(dt, 0.5) as f32;
+        }
+        self.draw_every = draw_every(self.draw_every, self.frame_dt);
         self.frames_since_drawn = self.frames_since_drawn.saturating_add(1);
-        let due = self.time - self.drawn_at >= NAV_REDRAW_S && self.frames_since_drawn >= NAV_REDRAW_FRAMES;
-        if !self.city.open && (resized || due) {
-            self.drawn_at = self.time;
+        if !self.city.open && (resized || self.frames_since_drawn >= self.draw_every) {
             self.frames_since_drawn = 0;
             self.draw(renderer, &view, (w, h), map_h, f);
         }

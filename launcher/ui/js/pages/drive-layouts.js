@@ -11,7 +11,7 @@ import { BusPicker } from './bus-picker.js';
 import { DayStep } from './drive-day.js';
 import { DutyStep, Roadbook } from './drive-duty.js';
 import { StartBar, BusStage } from './drive-classic.js';
-import { hms, tripAt, TimeInput, DateInput } from './drive.js';
+import { hms, tripAt, TimeInput, DateInput, localNow } from './drive.js';
 
 export function LayoutDrive({ layout }) {
   const s = useStore();
@@ -63,8 +63,14 @@ function DayCompact() {
   const [open, setOpen] = useState(false);
   const joined = c.lan_mode === 'join';
   return html`<div class="day-compact">
-    <label class="dc-field time"><span>${t('Start time')}</span><${TimeInput} minutes=${c.time} disabled=${realTime() || joined} onChange=${(time) => choose({ time })} /></label>
-    <label class="dc-field date"><span>${t('Date')}</span><${DateInput} value=${c.date} disabled=${realDate() || joined} onChange=${(date) => choose({ date, season: 'auto', own_date: null })} /></label>
+    <div class="dc-pair time">
+      <label class="dc-field"><span>${t('Start time')}</span><${TimeInput} minutes=${c.time} disabled=${realTime() || joined} onChange=${(time) => choose({ time })} /></label>
+      <${Button} icon="clock" title="Current time" disabled=${realTime() || joined} onClick=${() => choose({ time: localNow().time })} />
+    </div>
+    <div class="dc-pair date">
+      <label class="dc-field"><span>${t('Date')}</span><${DateInput} value=${c.date} disabled=${realDate() || joined} onChange=${(date) => choose({ date, season: 'auto', own_date: null })} /></label>
+      <${Button} icon="calendar" title="Current date" disabled=${realDate() || joined} onClick=${() => choose({ date: localNow().date, season: 'auto', own_date: null })} />
+    </div>
     <label class="dc-field weather"><span>${t('Weather')}</span>${joined
       ? html`<span class="input dc-fixed ellipsis">${c.lan_server?.weather || t("the map's (the server's)")}</span>`
       : html`<${Select} raw value=${c.weather || ''} options=${weatherOptions(s)} onChange=${(weather) => choose({ weather })} />`}</label>

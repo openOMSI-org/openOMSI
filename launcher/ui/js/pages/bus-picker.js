@@ -120,7 +120,7 @@ export function BusPicker({ onClose }) {
           })}
         </div>
       </div>
-      <div class="right">
+      <div class="detail">
         ${v ? html`<${BusPreview} look=${{ bus: v.file, paint, map: s.choice.map, weather: s.choice.weather, time: s.choice.time, date: s.choice.date }} />
           <div class="card-body stack">
             <div class="row">

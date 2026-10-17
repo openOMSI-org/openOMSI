@@ -8,6 +8,9 @@ use super::style::{self, Palette};
 use super::*;
 use omsi_ui::Vertex;
 
+const PANEL_REACH: f64 = 640.0;
+const PANEL_REBUILD: f64 = 150.0;
+
 /// The card behind the next turn (dark in both looks, as a car's guidance banner is).
 const BANNER: Color = Color::rgba(28, 30, 33, 0.95);
 const BANNER_TEXT: Color = Color::rgba(255, 255, 255, 1.0);
@@ -45,7 +48,7 @@ impl Navigator {
         let look_key = self.look_key();
         let rebuild = match &self.roads {
             None => lanes_now > 0 || self.map_data.is_some(),
-            Some(r) => r.look != look_key || (r.anchor - f.bus.truncate()).length() > ROAD_RADIUS * 0.45 || (r.lanes_seen != lanes_now && self.time - r.built_at > 1.5),
+            Some(r) => r.look != look_key || (r.anchor - f.bus.truncate()).length() > PANEL_REBUILD || (r.lanes_seen != lanes_now && self.time - r.built_at > 1.5),
         };
         // (on a worker when the map's network is there; the picture keeps the old part meanwhile)
         let mut built = None;
@@ -53,7 +56,8 @@ impl Navigator {
             match job.poll() {
                 Ok(Some(b)) => {
                     let (look, lanes) = job.meta;
-                    self.roads = Some(Roads { look, anchor: b.anchor, lanes_seen: lanes, verts: b.ground.len(), houses: [b.houses[0].len(), b.houses[1].len(), b.houses[2].len()], built_at: self.time });
+                    let [verts, houses @ ..] = b.counts;
+                    self.roads = Some(Roads { look, anchor: b.anchor, lanes_seen: lanes, verts, houses, built_at: self.time });
                     built = Some(b);
                     self.panel_job = None;
                 }
@@ -65,13 +69,15 @@ impl Navigator {
             let anchor = f.bus.truncate();
             let parts = self.ground_parts(net);
             let look = GroundLook { surfaces: true, trees: true, dashes: true };
-            let reach = ROAD_RADIUS * 1.25;
+            let reach = PANEL_REACH;
             if self.global.is_some() {
                 let pal2 = pal;
-                self.panel_job = Some(super::build::Job::start((look_key, lanes_now), move || super::build::build(&parts, anchor, reach, &pal2, look, true, true)));
+                let device = renderer.device.clone();
+                self.panel_job = Some(super::build::Job::start((look_key, lanes_now), move || super::build::build(&parts, anchor, reach, &pal2, look, true, true).made_on(&device)));
             } else {
                 let b = super::build::build(&parts, anchor, reach, &pal, look, true, true);
-                self.roads = Some(Roads { look: look_key, anchor, lanes_seen: lanes_now, verts: b.ground.len(), houses: [b.houses[0].len(), b.houses[1].len(), b.houses[2].len()], built_at: self.time });
+                let [verts, houses @ ..] = b.counts;
+                self.roads = Some(Roads { look: look_key, anchor, lanes_seen: lanes_now, verts, houses, built_at: self.time });
                 built = Some(b);
             }
         }
@@ -99,7 +105,7 @@ impl Navigator {
             let bus_lane = first.map(|l| lane_from_right(rn, l, f.bus)).unwrap_or(0);
             if self.route_mesh.0 != self.route.version || self.route_mesh.1 != self.jam_version || self.route_mesh.2 != anchor || self.route_mesh.4 != bus_lane || self.route_mesh.5 != look_key {
                 let mut p = Painter::new();
-                let style = RouteStyle { extra_m: -0.6, min_px: 5.0, arrows: Some((32.0, 900.0)), max_len: 12_000.0, near: Some((anchor, ROAD_RADIUS * 1.6)) };
+                let style = RouteStyle { extra_m: -0.6, min_px: 5.0, arrows: Some((32.0, 900.0)), max_len: 12_000.0, near: Some((anchor, PANEL_REACH)) };
                 build_route(&mut p, rn, &self.route.lanes[self.route.progress.min(self.route.lanes.len())..], anchor, self.route.s, &self.route_jam, &style, bus_lane, &pal);
                 self.route_mesh = (self.route.version, self.jam_version, anchor, p.len(), bus_lane, look_key);
                 route_verts = Some(p.verts);
@@ -147,14 +153,6 @@ impl Navigator {
                 }
             }
         }
-        if self.show_ai {
-            for v in self.live_vehicles().into_iter().filter(|v| !v.rail) {
-                if (v.pos - f.bus).truncate().length() > self.zoom * 3.5 + 150.0 {
-                    continue;
-                }
-                transit.push((v.pos, v.heading, Some(v.line.clone())));
-            }
-        }
         // (drawn over the route and the houses in their order, with no depth: a vehicle's edge,
         // body and windscreen lie one on the other, and at a depth of their own they fought
         // over it from far)
@@ -184,11 +182,7 @@ impl Navigator {
         // --- to the GPU
         let (Some(gpu), device, queue) = (self.gpu.as_mut(), &renderer.device, &renderer.queue) else { return };
         if let Some(b) = built {
-            let [sh, so, fl] = &b.houses;
-            gpu.upload(device, queue, 0, &b.ground);
-            gpu.upload(device, queue, 12, sh);
-            gpu.upload(device, queue, 8, so);
-            gpu.upload(device, queue, 13, fl);
+            b.put(gpu, device, queue, [0, 12, 8, 13]);
         }
         if let Some(v) = route_verts {
             let (solid, ghost) = solid_and_ghost(&v, 0.3);

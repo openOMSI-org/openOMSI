@@ -381,6 +381,12 @@ impl Opened {
                 log::warn!("{}: the graphics device was lost while the chosen MSAA was tried again ({why}); keeping to what worked before", info.name);
                 return Box::pin(Renderer::new_on(adapter, None, Some(format), asked_options)).await;
             }
+            if basic_pipelines() && rainfall_pipeline() {
+                log::warn!("{}: the graphics device was lost while the basic pipelines were made ({why}); opening it again without the rainfall", info.name);
+                RAINFALL_LEFT_OUT.store(true, std::sync::atomic::Ordering::Relaxed);
+                fallback_store(&name, Some((1, true)));
+                return Box::pin(Renderer::new_on(adapter, None, Some(format), asked_options)).await;
+            }
             if basic_pipelines() {
                 return Err(anyhow!("the graphics device was lost while the pipelines were made: {why}"));
             }
@@ -475,7 +481,11 @@ impl Renderer {
             match errors.iter().flatten().chain(&caught).next() {
                 None => {
                     if msaa != options.msaa || basic {
-                        log::warn!("{}: drawing with {}x MSAA{}", info.name, msaa, if basic { ", without the snowfall, the lamps in the fog and the street lamps' shadows" } else { "" });
+                        log::warn!("{}: drawing with {}x MSAA{}", info.name, msaa, match (basic, rainfall_pipeline()) {
+                            (true, true) => ", without the snowfall, the lamps in the fog and the street lamps' shadows",
+                            (true, false) => ", without the snowfall, the rainfall, the lamps in the fog and the street lamps' shadows",
+                            _ => "",
+                        });
                     }
                     // (a fallback that worked is the first try next time; the full set
                     // working again forgets it)

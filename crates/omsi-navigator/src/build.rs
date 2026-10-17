@@ -23,8 +23,28 @@ pub(super) struct GroundParts {
 /// walls and roofs, and flat roofs.
 pub struct Built {
     pub anchor: DVec2,
-    pub ground: Vec<Vertex>,
-    pub houses: [Vec<Vertex>; 3],
+    pub counts: [usize; 4],
+    verts: [Vec<Vertex>; 4],
+    made: Option<[omsi_ui::Vertices; 4]>,
+}
+
+impl Built {
+    fn new(anchor: DVec2, verts: [Vec<Vertex>; 4]) -> Built {
+        Built { anchor, counts: verts.each_ref().map(Vec::len), verts, made: None }
+    }
+
+    pub fn made_on(mut self, device: &wgpu::Device) -> Built {
+        self.made = Some(self.verts.each_ref().map(|v| omsi_ui::Gpu::vertices(device, v)));
+        self.verts = Default::default();
+        self
+    }
+
+    pub fn put(self, gpu: &mut omsi_ui::Gpu, device: &wgpu::Device, queue: &wgpu::Queue, ids: [usize; 4]) {
+        match self.made {
+            Some(made) => ids.into_iter().zip(made).for_each(|(id, v)| gpu.put(id, v)),
+            None => ids.into_iter().zip(&self.verts).for_each(|(id, v)| gpu.upload(device, queue, id, v)),
+        }
+    }
 }
 
 /// Everything within `reach` of `anchor`. `paved`: the map's paving is the roads (else every
@@ -67,7 +87,7 @@ pub(super) fn build(parts: &GroundParts, anchor: DVec2, reach: f64, pal: &Palett
     if let (true, Some(md)) = (houses, parts.md.as_deref()) {
         md.build_houses(&mut sh, &mut so, &mut fl, anchor, anchor, reach, pal);
     }
-    Built { anchor, ground: p.verts, houses: [sh.verts, so.verts, fl.verts] }
+    Built::new(anchor, [p.verts, sh.verts, so.verts, fl.verts])
 }
 
 /// A map's ground read outside a session - the launcher's map - built by the very code the

@@ -75,14 +75,14 @@ export function DayStep() {
           <${Field} label="Start time" help=${rt ? 'Follows the computer\'s clock (Settings)' : null}>
             <div class="row" style="gap:6px">
               <div class="grow"><${TimeInput} minutes=${c.time} disabled=${rt} onChange=${(time) => choose({ time })} /></div>
-              ${!rt && html`<${Button} icon="clock" title="Current time" onClick=${() => choose({ time: localNow().time })} />`}
+              <${Button} icon="clock" title="Current time" disabled=${rt} onClick=${() => choose({ time: localNow().time })} />
             </div>
           </${Field}>
           <${Field} label="Date" help=${rd ? 'Today (Settings)' : null}>
             <div class="row" style="gap:6px">
               <div class="grow"><${DateInput} value=${c.date} disabled=${rd} onChange=${(date) => choose({ date, season: 'auto', own_date: null })} /></div>
-              ${!rd && html`<${Button} icon="down" title="Choose a date" onClick=${() => setPicking(true)} />`}
-              ${!rd && html`<${Button} icon="calendar" title="Current date" onClick=${() => choose({ date: localNow().date, season: 'auto', own_date: null })} />`}
+              <${Button} icon="down" title="Choose a date" disabled=${rd} onClick=${() => setPicking(true)} />
+              <${Button} icon="calendar" title="Current date" disabled=${rd} onClick=${() => choose({ date: localNow().date, season: 'auto', own_date: null })} />
             </div>
           </${Field}>
         </div>

@@ -539,22 +539,29 @@ table.table { width: 100%; border-collapse: collapse; }
 .menu.up { max-height: min(60vh, 520px); overflow: auto; }
 .menu-item .btn.ghost { flex: none; }
 
-.day-compact { display: grid; grid-template-columns: 84px 128px minmax(0, 1fr) auto; gap: 8px; align-items: end; min-width: 0; }
+.day-compact { display: grid; grid-template-columns: 96px 144px minmax(0, 1fr) auto; gap: 8px; align-items: end; min-width: 0; }
 .dc-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .dc-field > span:first-child { font-size: 12px; font-weight: 500; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dc-field .input { width: 100%; min-width: 0; }
 .dc-fixed { display: flex; align-items: center; }
+.dc-pair { position: relative; min-width: 0; }
+.dc-pair .input { padding-right: 36px; }
+.dc-pair > .btn { position: absolute; bottom: 2px; right: 2px; width: 32px; height: 32px; background: none; color: var(--text-2); }
+.dc-pair > .btn:hover:not(:disabled) { background: var(--surface-3); color: var(--text); }
 .lc-day, .bm-top, .cp-day { container-type: inline-size; }
 @container (max-width: 440px) {
-  .day-compact { grid-template-columns: 84px minmax(0, 1fr) auto; }
+  .day-compact { grid-template-columns: 96px minmax(0, 1fr) auto; }
   .dc-field.weather { grid-column: 1 / -1; grid-row: 2; }
 }
 @container (max-width: 340px) {
-  .day-compact { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; grid-template-areas: "t d d" "w w m"; }
-  .dc-field.time { grid-area: t; }
-  .dc-field.date { grid-area: d; }
+  .day-compact { grid-template-columns: 96px minmax(0, 1fr) auto; grid-template-areas: "t d d" "w w m"; }
+  .dc-pair.time { grid-area: t; }
+  .dc-pair.date { grid-area: d; }
   .dc-field.weather { grid-area: w; }
   .dc-more { grid-area: m; }
+}
+@container (max-width: 260px) {
+  .day-compact { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "t t" "d d" "w m"; }
 }
 
 .bus-thumb { display: flex; gap: 14px; min-width: 0; height: 100%; }
@@ -676,7 +683,7 @@ table.table { width: 100%; border-collapse: collapse; }
 .picker .left { background: var(--sidebar); display: flex; flex-direction: column; min-height: 0; }
 .picker .left .tools { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
 .picker .left .list { overflow: auto; padding: 8px; flex: 1; }
-.picker .right { display: flex; flex-direction: column; min-height: 0; overflow: auto; }
+.picker .detail { display: flex; flex-direction: column; min-height: 0; overflow: auto; }
 .viewer { position: relative; height: 340px; background: #1a1a1a; flex: none; overflow: hidden; touch-action: none; }
 .viewer.in-card { width: 100%; height: auto; aspect-ratio: 2 / 1; min-height: 250px; max-height: 40vh; border-radius: var(--radius-sm); }
 .viewer .state.corner { inset: auto 12px 12px auto; }

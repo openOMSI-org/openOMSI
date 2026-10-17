@@ -307,3 +307,29 @@ fn crowded_stop_markers_and_labels_do_not_overlap() {
     assert!(stop_label_rect(p, 150.0, 1.0, win, &[win]).is_none());
 }
 
+
+#[test]
+fn redraw_rate_holds_steady_at_its_edges() {
+    let run = |fps: &[f32]| fps.iter().fold(1, |n, f| draw_every(n, 1.0 / f));
+    assert_eq!(run(&[60.0]), 1);
+    assert_eq!(run(&[74.0, 76.5, 74.5, 77.0]), 1);
+    assert_eq!(run(&[144.0]), 2);
+    assert_eq!(run(&[144.0, 148.0, 152.0, 147.0]), 2);
+    assert_eq!(run(&[240.0]), 4);
+    assert_eq!(run(&[25.0]), 2);
+    assert_eq!(run(&[25.0, 31.0, 29.5, 31.5]), 2);
+    assert_eq!(run(&[31.0, 29.0, 31.0]), 1);
+    assert_eq!(run(&[25.0, 40.0]), 1);
+}
+
+#[test]
+fn the_map_zooms_in_for_a_turn_and_out_on_the_straight() {
+    assert_eq!(zoom_target(0.0, None, 0.0), 150.0);
+    assert_eq!(zoom_target(80.0, None, 0.0), 320.0);
+    assert_eq!(zoom_target(-20.0, None, 0.0), zoom_target(20.0, None, 0.0));
+    assert_eq!(zoom_target(80.0, Some(1000.0), 0.0), 320.0);
+    assert!(zoom_target(70.0, Some(100.0), 0.0) < 220.0);
+    assert_eq!(zoom_target(70.0, Some(0.0), 0.0), 150.0);
+    assert!(zoom_target(50.0, None, 30.0) < zoom_target(50.0, None, 5.0));
+    assert!(zoom_target(50.0, None, -30.0) >= 150.0);
+}

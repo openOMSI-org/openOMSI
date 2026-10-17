@@ -416,7 +416,7 @@ impl Navigator {
 
     /// The city map's ground and houses around the view, built on a worker when the view left
     /// what was built (the picture keeps the old part meanwhile): what has just arrived.
-    fn city_ground(&mut self, net: Option<&Network>, w: f32, h: f32, pal: &Palette) -> Option<super::build::Built> {
+    fn city_ground(&mut self, device: &wgpu::Device, net: Option<&Network>, w: f32, h: f32, pal: &Palette) -> Option<super::build::Built> {
         let mpp = self.city.mpp;
         let tilt = self.city.tilt;
         let centre = self.city.center;
@@ -429,7 +429,8 @@ impl Navigator {
             match job.poll() {
                 Ok(Some(b)) => {
                     let m = &job.meta;
-                    self.city.ground = Some(CityGround { key: m.key, anchor: b.anchor, centre: m.centre, radius: m.radius, mpp: m.mpp, verts: b.ground.len() as u32, houses: [b.houses[0].len() as u32, b.houses[1].len() as u32, b.houses[2].len() as u32] });
+                    let [verts, houses @ ..] = b.counts.map(|n| n as u32);
+                    self.city.ground = Some(CityGround { key: m.key, anchor: b.anchor, centre: m.centre, radius: m.radius, mpp: m.mpp, verts, houses });
                     arrived = Some(b);
                     self.city_job = None;
                 }
@@ -450,10 +451,12 @@ impl Navigator {
             if self.city.ground.is_none() {
                 // (the first picture at once: nothing to show meanwhile)
                 let b = job();
-                self.city.ground = Some(CityGround { key, anchor: b.anchor, centre, radius, mpp, verts: b.ground.len() as u32, houses: [b.houses[0].len() as u32, b.houses[1].len() as u32, b.houses[2].len() as u32] });
+                let [verts, houses @ ..] = b.counts.map(|n| n as u32);
+                self.city.ground = Some(CityGround { key, anchor: b.anchor, centre, radius, mpp, verts, houses });
                 return Some(b);
             }
-            self.city_job = Some(super::build::Job::start(CityJob { key, centre, radius, mpp }, job));
+            let device = device.clone();
+            self.city_job = Some(super::build::Job::start(CityJob { key, centre, radius, mpp }, move || job().made_on(&device)));
         }
         arrived
     }
@@ -519,7 +522,7 @@ impl Navigator {
         if let Some(n) = net {
             self.city_extent(n);
         }
-        let built = self.city_ground(net, w, h, &pal);
+        let built = self.city_ground(&renderer.device, net, w, h, &pal);
         let anchor = self.city.ground.map(|g| g.anchor).unwrap_or(self.city.center);
         let rel = |q: DVec3| Vec3::new((q.x - anchor.x) as f32, (q.y - anchor.y) as f32, 0.0);
         let route_verts = self.city_route(net, f, anchor, s, &pal).map(|p| p.verts);
@@ -729,11 +732,7 @@ impl Navigator {
         let Some(view) = renderer.texture_view(scene, tex) else { return };
         let (Some(gpu), device, queue) = (self.gpu.as_mut(), &renderer.device, &renderer.queue) else { return };
         if let Some(b) = built {
-            let [sh, so, fl] = &b.houses;
-            gpu.upload(device, queue, 7, &b.ground);
-            gpu.upload(device, queue, 14, sh);
-            gpu.upload(device, queue, 10, so);
-            gpu.upload(device, queue, 15, fl);
+            b.put(gpu, device, queue, [7, 14, 10, 15]);
         }
         if let Some(v) = route_verts {
             let (solid, ghost) = solid_and_ghost(&v, 0.3);

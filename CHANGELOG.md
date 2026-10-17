@@ -121,11 +121,20 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 - Night in the city costs less: the classic picture lights a place with its eight strongest
   lamps, as Direct3D lit OMSI 2's, and every light grid cell keeps its strongest lamps
   rather than the first ones listed [#1467](https://github.com/openOMSI-org/openOMSI/issues/1467).
+- It rains again on computers that draw with the reduced set of pipelines after a graphics
+  failure (`~/.openomsi/gpu-fallback.cfg`): since 0.3.34 the new rain was left out there, and
+  an Apple M1 that fell back once had no streaks for the rest of the version. Buses and
+  shelters keep the rain out there as well.
 
 **Controls**
 
 - The steering wheel comes back after a turn the way a bus's does: gently at town speed and
   damped on its way back, without swinging past the centre [#2103](https://github.com/openOMSI-org/openOMSI/issues/2103).
+
+**Launcher**
+
+- The bus picker's preview and details fill their side of the window for every bus: a bus
+  with a short description no longer leaves an empty strip left of its preview.
 
 **Traffic and timetable**
 

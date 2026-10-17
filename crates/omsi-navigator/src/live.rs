@@ -110,7 +110,7 @@ impl Navigator {
         self.live_t - dt <= 0.0
     }
 
-    pub fn update_live(&mut self, sch: &ScheduleSim, now: f64, dt: f32, cars: &[(DVec3, String)]) {
+    pub fn update_live(&mut self, sch: &ScheduleSim, now: f64, dt: f32, cars: &[(DVec3, String)], driven: &dyn Fn(DVec3) -> bool) {
         // (eased towards the last places in between)
         let k = ease(dt, 0.6);
         for v in self.live_drawn.iter_mut() {
@@ -176,7 +176,7 @@ impl Navigator {
             }
             let (pos, heading) = path.at(s);
             // (the traffic drives this one itself)
-            if cars.iter().any(|(p, l)| (*p - pos).truncate().length() < if l.trim() == tt.line.trim() { 250.0 } else { 25.0 }) {
+            if driven(pos) || cars.iter().any(|(p, l)| (*p - pos).truncate().length() < if l.trim() == tt.line.trim() { 250.0 } else { 25.0 }) {
                 continue;
             }
             out.push(LiveVehicle { pos, heading, line: tt.line.clone(), rail: path.rail });

@@ -90,6 +90,8 @@ struct Tex {
     size: (u32, u32),
 }
 
+pub struct Vertices(Option<wgpu::Buffer>, u64);
+
 pub struct Gpu {
     pipeline: wgpu::RenderPipeline,
     /// With a depth buffer: the pipeline of the depth-tested layers, and the buffer.
@@ -332,21 +334,41 @@ impl Gpu {
         }
         if bytes > self.buffers[id].1 || self.buffers[id].0.is_none() {
             let cap = bytes.next_power_of_two().max(4096);
-            self.buffers[id] = (Self::vertex_buffer(device, cap), cap);
+            self.buffers[id] = (Self::vertex_buffer(device, cap, false), cap);
         }
         if let (Some(buf), true) = (&self.buffers[id].0, bytes > 0) {
             queue.write_buffer(buf, 0, bytemuck::cast_slice(verts));
         }
     }
 
+    pub fn vertices(device: &wgpu::Device, verts: &[Vertex]) -> Vertices {
+        let bytes = std::mem::size_of_val(verts) as u64;
+        if bytes == 0 {
+            return Vertices(None, 0);
+        }
+        let buf = Self::vertex_buffer(device, bytes, true);
+        if let Some(b) = &buf {
+            b.slice(..).get_mapped_range_mut().copy_from_slice(bytemuck::cast_slice(verts));
+            b.unmap();
+        }
+        Vertices(buf, bytes)
+    }
+
+    pub fn put(&mut self, id: usize, v: Vertices) {
+        while self.buffers.len() <= id {
+            self.buffers.push((None, 0));
+        }
+        self.buffers[id] = (v.0, v.1);
+    }
+
     /// A vertex buffer of `size` bytes, made where its failure can be seen: a card out of
     /// memory hands out an invalid buffer, and writing to that every frame flooded the log
     /// with thousands of errors and took the frame rate down with it (#217). A failed one
     /// is None: nothing draws from it, and the next upload tries again.
-    fn vertex_buffer(device: &wgpu::Device, size: u64) -> Option<wgpu::Buffer> {
+    fn vertex_buffer(device: &wgpu::Device, size: u64, mapped: bool) -> Option<wgpu::Buffer> {
         let oom = device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
         let valid = device.push_error_scope(wgpu::ErrorFilter::Validation);
-        let buf = device.create_buffer(&wgpu::BufferDescriptor { label: Some("omsi-ui vertices"), size, usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+        let buf = device.create_buffer(&wgpu::BufferDescriptor { label: Some("omsi-ui vertices"), size, usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST, mapped_at_creation: mapped });
         let invalid = pollster::block_on(valid.pop());
         let out_of_memory = pollster::block_on(oom.pop());
         match invalid.or(out_of_memory) {

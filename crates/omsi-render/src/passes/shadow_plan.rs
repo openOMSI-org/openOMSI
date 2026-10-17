@@ -152,8 +152,9 @@ impl Renderer {
                 light_view_proj_close,
             )));
         }
-        let falling = (scene.rainfall.rate > 0.001 && !f.env.no_rain) || (lighting.snowfall > 0.01 && !f.env.no_snowfall);
-        let precip = (falling && f.with_overlays && projection.is_none() && f.exclude_texture.is_none() && !basic_pipelines() && !f.env.no_precip_roof).then(|| precip_matrix(cam_rel));
+        let raining = scene.rainfall.rate > 0.001 && !f.env.no_rain && self.main_pass(f.enhanced, f.reflection_frame).rain_fall_pipeline.is_some();
+        let snowing = lighting.snowfall > 0.01 && !f.env.no_snowfall && self.main_pass(f.enhanced, f.reflection_frame).snow_pipeline.is_some();
+        let precip = ((raining || snowing) && f.with_overlays && projection.is_none() && f.exclude_texture.is_none() && !f.env.no_precip_roof).then(|| precip_matrix(cam_rel));
         ShadowPlan {
             precip,
             moon_shadows,

@@ -95,7 +95,7 @@ struct PassPipelines {
     /// The snowfall (snow.wgsl), opaque over the scene (premultiplied); none with
     /// `basic_pipelines`.
     snow_pipeline: Option<wgpu::RenderPipeline>,
-    /// The rainfall (rain.wgsl), as the snowfall.
+    /// The rainfall (rain.wgsl), as the snowfall; with `basic_pipelines` on computers too.
     rain_fall_pipeline: Option<wgpu::RenderPipeline>,
     sky_pipeline: wgpu::RenderPipeline,
 }

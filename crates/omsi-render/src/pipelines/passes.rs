@@ -79,7 +79,7 @@ impl PassKit<'_> {
         jobs.push(Box::new(move || Some(self.coronas.pipeline(device, f, fs.corona, fs.corona_blend, self.msaa))));
         jobs.push(Box::new(move || Some(self.coronas.pipeline(device, f, fs.smoke, ALPHA_BLEND, self.msaa))));
         jobs.push(Box::new(move || (!basic_pipelines()).then(|| optional_pipeline(device, "the snowfall", || self.snow.pipeline(device, f, fs.snow, self.msaa))).flatten()));
-        jobs.push(Box::new(move || (!basic_pipelines()).then(|| optional_pipeline(device, "the rainfall", || self.rain.pipeline(device, f, fs.rain, self.msaa))).flatten()));
+        jobs.push(Box::new(move || rainfall_pipeline().then(|| optional_pipeline(device, "the rainfall", || self.rain.pipeline(device, f, fs.rain, self.msaa))).flatten()));
         jobs.push(Box::new(move || Some(self.sky.pipeline(device, f, fs.sky, self.msaa))));
     }
 

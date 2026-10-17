@@ -196,6 +196,18 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         n = -n;
         geo_n = n;
     }
+    var face_n = n;
+    var face_v = 0.0;
+    var face_w = 1.0;
+    if (reflective_env && !glass && !terrain) {
+        let c = cross(dpdx(in.world), dpdy(in.world));
+        if (dot(c, c) > 1e-14) {
+            let face = normalize(c) * select(-1.0, 1.0, dot(c, v) >= 0.0);
+            face_n = face;
+            face_v = dot(face, v);
+            face_w = smoothstep(0.5, 0.9, dot(n, face));
+        }
+    }
     if (reflective_env && material.bump.y > 0.5) {
         // [matl_bumpmap]: the height map's slope bends the normal (tangent frame from the
         // screen-space derivatives of position and texture coordinate)
@@ -437,7 +449,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     ambient_albedo = ambient_albedo * (1.0 - metal);
     sf.f0 = f0;
     sf.rough = rough;
-    let nv = clamp(dot(n, v), 1e-4, 1.0);
+    let nv = clamp(mix(face_v, dot(n, v), face_w), 1e-4, 1.0);
     // (how wide a patch of the surface the pixel covers, m: see `relief_masking`)
     let relief_footprint = length(dpdx(in.world)) + length(dpdy(in.world));
     // --- the sun
@@ -545,11 +557,12 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     let e_amb = mix(sh_irradiance(n), cab_e * CAB_AMBIENT, 0.6 * in_cab) * ao_bounce(ao, ambient_albedo);
     var ambient = e_amb * ambient_albedo / PI * (vec3<f32>(1.0) - fr * (1.0 - rough) * env_share);
     // --- reflections: the sky probe, as sharp as the surface is smooth
-    var r = reflect(-v, n);
+    var r = reflect(-v, normalize(mix(face_n, n, face_w)));
+    let bend_n = normalize(mix(face_n, geo_n, face_w));
     // a reflection pointing into the surface would show the probe's ground: bend it up
-    let below = dot(r, geo_n);
+    let below = dot(r, bend_n);
     if (below < 0.0) {
-        r = normalize(r - geo_n * below * 1.02);
+        r = normalize(r - bend_n * below * 1.02);
     }
     // A wet road, a wet pavement is no mirror: a soft, dim sheen of what stands round it, a
     // puddle a blurred picture of it (panes, envmapped paint and still water keep their own

@@ -335,9 +335,10 @@ impl Offscreen<'_> {
                 }
                 if let Some(sch) = schedule.as_ref() {
                     let cars: Vec<(glam::DVec3, String)> = traffic.as_ref().map(|t| t.cars.iter().filter(|c| !c.gone && c.bus.is_some()).map(|c| (c.vehicle.position, c.vehicle.host.tt_line.clone())).collect()).unwrap_or_default();
+                    let ground = world.data();
                     // (a few trips' routes a call: called until they all are there)
                     for _ in 0..80 {
-                        nav.update_live(sch, clock.time, 0.6, &cars);
+                        nav.update_live(sch, clock.time, 0.6, &cars, &|p| ground.has_ground(p.x, p.y));
                     }
                 }
                 let (outside_temp, inside_temp) = crate::app_events::vehicle_temperatures(p);
