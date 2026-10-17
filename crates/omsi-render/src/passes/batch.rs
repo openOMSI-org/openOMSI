@@ -68,7 +68,7 @@ impl DrawPlan {
 }
 
 // the depth prepass: opaque and alpha-tested, single-sampled
-fn prepass_items(scene: &Scene, visible: &[(usize, f32, bool)], deferred: bool) -> (Vec<u32>, Vec<Batch>, Option<Vec<Batch>>, Vec<Batch>) {
+fn prepass_items(scene: &Scene, visible: &[(usize, f32, bool)], deferred: bool, reach: f32) -> (Vec<u32>, Vec<Batch>, Option<Vec<Batch>>, Vec<Batch>) {
     let mut items: Vec<DrawItem> = Vec::new();
     let mut kept: Vec<DrawItem> = Vec::new();
     let mut any_cut = false;
@@ -77,8 +77,9 @@ fn prepass_items(scene: &Scene, visible: &[(usize, f32, bool)], deferred: bool) 
     let mut safe_items = Vec::new();
     let mut safe_batches = Vec::new();
     let first_panes = first_depth_panes(scene, visible);
-    for &(i, _, _) in visible {
+    for &(i, z, _) in visible {
         let inst = &scene.instances[i];
+        let far = z > reach && !inst.surface && !inst.presurface && z - Renderer::bounding_sphere(scene, inst).1 > reach;
         let mut cut = inst.ordered && first_panes.get(&origin_key(inst.origin)).is_some_and(|&o| inst.draw_order > o);
         let cull = culls_back_faces(scene, inst);
         for (ri, (_, _, slot)) in scene.meshes[inst.mesh].ranges.iter().enumerate() {
@@ -100,6 +101,9 @@ fn prepass_items(scene: &Scene, visible: &[(usize, f32, bool)], deferred: bool) 
             // The transmap body prepass is for ordinary meshes, not these
             // authored surface layers (including their terrain brush masks).
             if kind == PIPE_BLEND && world_surface_phase(effective_render_phase(inst)) {
+                continue;
+            }
+            if far && kind < PIPE_BLEND {
                 continue;
             }
             if let Some(pre_kind) = depth_prepass_kind(kind, mat, inst.presurface) {
@@ -311,7 +315,7 @@ impl Renderer {
         let mut prefill = None;
         let mut msaa_safe_batches = Vec::new();
         let deferred = has_presurface && f.enhanced;
-        let prepass_job = || { prepass_items(scene, visible, deferred) };
+        let prepass_job = || { prepass_items(scene, visible, deferred, f.prepass_reach) };
         // The main pass follows the authored world phases. Each phase keeps its
         // opaque/cutout draws followed by its blended draws, far to near. Transparent
         // ground layers never write depth while composing: an alpha-zero junction

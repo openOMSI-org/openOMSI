@@ -364,6 +364,7 @@ impl Renderer {
         let mut strength = std::mem::take(&mut scene.grid_strength);
         strength.resize(cells * LIGHT_CELL_CAP, 0.0);
         let cap = if enhanced { LIGHT_CELL_CAP } else { VANILLA_CELL_CAP };
+        let squares = omsi_cfg::flags::OMSI_LIGHT_GRID_SQUARES.is_set();
         for l in &scene.lights {
             // Every light the grid reaches is in the list, the other path's too (a headlight
             // is three points for the plain shader and one spot for the enhanced): only the
@@ -427,6 +428,9 @@ impl Renderer {
                     let cx = (origin[0] + (x as f32 + 0.5) * LIGHT_CELL - p.x).abs().max(0.0) - LIGHT_CELL * 0.5;
                     let cy = (origin[1] + (y as f32 + 0.5) * LIGHT_CELL - p.y).abs().max(0.0) - LIGHT_CELL * 0.5;
                     let d2 = cx.max(0.0).powi(2) + cy.max(0.0).powi(2);
+                    if d2 >= l.radius * l.radius && !squares {
+                        continue;
+                    }
                     // (a spot - a headlight - counts as strong: it is the player's or a car's
                     // own light, which Omsi.exe gives a light of its own; past half the cell,
                     // a junction full of traffic would leave its street lamps out)

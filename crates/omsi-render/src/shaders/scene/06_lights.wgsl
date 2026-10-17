@@ -29,6 +29,9 @@ fn point_lights(p: vec3<f32>, n: vec3<f32>, map_k: f32) -> vec3<f32> {
             if (dist >= l.pos.w) {
                 continue;
             }
+            if (!(l.dir.w < -1.5 && l.dir.z < -0.5) && own_vehicle_blocks(p, l.pos.xyz)) {
+                continue;
+            }
             // full intensity within 1/8 of the range, then inverse-square, cut off at the range;
             // the strength was set by eye while a street lamp was still counted about three
             // times (see above), so it is three times what it was, to keep the lamp pools

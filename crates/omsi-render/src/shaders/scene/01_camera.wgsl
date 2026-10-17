@@ -18,7 +18,7 @@ struct Camera {
     post: vec4<f32>,         // x enhanced, y time, zw sun ndc
     inside_a: vec4<f32>,     // player vehicle box: origin xyz, sin(heading)
     inside_b: vec4<f32>,     // cos(heading), half extents xyz
-    inside_c: vec4<f32>,     // box centre offset xyz, w = 1 when there is a box
+    inside_c: vec4<f32>,     // box centre offset xyz, w = 1 when there is a box, 2 with the eye in it
     flags: vec4<f32>,        // x detail texturing, y enhanced graphics, z never set (see fs_main's end), w close cascade half range
     light_view_proj_close: mat4x4<f32>,
     wind: vec4<f32>,         // the player's vehicle's velocity (m/s, world): the airstream on its glass
@@ -143,6 +143,36 @@ fn fn_box_local(world: vec3<f32>) -> vec3<f32> {
     let sh = camera.inside_a.w;
     let ch = camera.inside_b.x;
     return vec3<f32>(d.x * ch - d.y * sh - camera.inside_c.x, d.x * sh + d.y * ch - camera.inside_c.y, d.z - camera.inside_c.z);
+}
+
+fn own_vehicle_blocks(p: vec3<f32>, l: vec3<f32>) -> bool {
+    if (camera.inside_c.w < 1.5) {
+        return false;
+    }
+    let a = fn_box_local(l);
+    let d = fn_box_local(p) - a;
+    let h = camera.inside_b.yzw - vec3<f32>(0.15);
+    if (all(abs(a) < h)) {
+        return false;
+    }
+    var t0 = 0.0;
+    var t1 = 1.0;
+    for (var k = 0; k < 3; k = k + 1) {
+        let o = a[k];
+        let dk = d[k];
+        let hk = h[k];
+        if (abs(dk) < 1e-6) {
+            if (abs(o) >= hk) {
+                return false;
+            }
+        } else {
+            let lo = (-hk - o) / dk;
+            let hi = (hk - o) / dk;
+            t0 = max(t0, min(lo, hi));
+            t1 = min(t1, max(lo, hi));
+        }
+    }
+    return t1 > t0;
 }
 
 // 1 where the weather reaches the point. The cab test above reaches 0.6 m below the

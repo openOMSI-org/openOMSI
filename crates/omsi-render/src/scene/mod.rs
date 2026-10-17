@@ -68,15 +68,53 @@ impl RenderPhase {
     ];
 }
 
+#[repr(C, align(64))]
 pub struct Instance {
+    pub mesh: MeshId,
+    /// World position of the instance's local frame.
+    pub origin: DVec3,
+    /// Transformed local bounds, refreshed with the GPU instance data. The floating
+    /// render origin is applied per view, so changing it cannot leave stale spheres.
+    pub(crate) bounds: InstanceBounds,
+    /// Screen-size range [min, max) in which this instance is drawn (`[LOD]` levels).
+    pub lod: (f32, f32),
+    /// The whole object this mesh belongs to (see `set_object_culling`): the radius of a
+    /// sphere about `origin` that holds all of it (0 = the mesh is judged on its own sphere),
+    /// its `[detail_factor]` and whether it is kept at any distance (`[noDistanceCheck]`).
+    pub object_radius: f32,
+    pub detail: f32,
+    pub any_distance: bool,
+    pub visible: bool,
+    /// Seen only in the mirrors and other views drawn into textures, not in the window's
+    /// picture: the driver at the wheel while the player looks from the driver's seat (the
+    /// figure would fill the view, but the mirrors show him as OMSI does).
+    pub mirror_only: bool,
+    /// A vehicle's flat shadow blob (`[isshadow]`, a surface). It is drawn always, as OMSI
+    /// draws it: it stood in for the sun shadow map only while that was off, and with the
+    /// map on (the usual case, Enhanced always) no bus had anything under it - the sun's
+    /// shadow falls beside the bus at any but a noon sun, while the blob is the sky light
+    /// the body keeps off the road, which no shadow map and no screen-space AO supplies.
+    pub blob: bool,
+    /// Surface geometry classification (roads, markings, crossings), used for culling and
+    /// weather/shading. `surface_bias` independently selects the vertex shader's depth pull.
+    pub surface: bool,
+    /// It may cast a sun shadow: every ordinary instance, no surface - a surface lies on
+    /// the ground, and a caster in one plane with what it falls on paints dark patches into
+    /// it - except a spline standing clear of the ground (a bridge deck, an elevated
+    /// railway), which is raised with `set_casts_shadow`.
+    pub casts_shadow: bool,
+    /// The model marks the mesh `[shadow]`: one OMSI casts a shadow from (with the
+    /// option `omsi_shadow_casters` only these do).
+    pub omsi_caster: bool,
+    /// Drawn only while the camera stands in this area of the ground (world x0, y0, x1, y1):
+    /// a stand-in for far tiles, which OMSI has loaded only around its own tile (see
+    /// `set_near_only`).
+    pub near_only: Option<[f64; 4]>,
     /// Creation order, preserved when moved into a recycled GPU slot. Transparent
     /// layers of one model must keep this order independently of their slot ids.
     pub(crate) draw_order: u64,
-    pub mesh: MeshId,
     /// Transform relative to `origin` (rotation/scale plus a small translation).
     pub transform: Mat4,
-    /// World position of the instance's local frame.
-    pub origin: DVec3,
     /// Material per mesh material slot.
     pub materials: Vec<MaterialId>,
     /// Dynamic parameters: per material slot alpha multiplier; per instance visibility and
@@ -86,7 +124,6 @@ pub struct Instance {
     pub slot_light: Vec<f32>,
     /// Per material slot: is the `[matl_item]` variant (night map) active (0/1).
     pub slot_night: Vec<f32>,
-    pub visible: bool,
     /// `[texcoordtransX/Y]` offset per material slot: every band of the SD200's roller
     /// blind scrolls on its own, so one offset for the whole mesh is not enough.
     pub slot_uv: Vec<[f32; 2]>,
@@ -99,12 +136,6 @@ pub struct Instance {
     pub interior_lamps: u32,
     /// First entry of this instance in the per-draw storage buffers (set by `prepare`).
     pub(crate) base: u32,
-    /// Transformed local bounds, refreshed with the GPU instance data. The floating
-    /// render origin is applied per view, so changing it cannot leave stale spheres.
-    pub(crate) bounds: InstanceBounds,
-    /// Surface geometry classification (roads, markings, crossings), used for culling and
-    /// weather/shading. `surface_bias` independently selects the vertex shader's depth pull.
-    pub surface: bool,
     /// `[rendertype] presurface`: drawn before terrain, including blended materials whose
     /// transparent texels write depth to reveal excavations below the ground.
     pub presurface: bool,
@@ -117,42 +148,12 @@ pub struct Instance {
     /// OMSI sorts blended spline pieces by their placement origin (horizontal distance), not
     /// the containing map tile's shared origin.
     pub blend_sort_origin: Option<DVec3>,
-    /// Screen-size range [min, max) in which this instance is drawn (`[LOD]` levels).
-    pub lod: (f32, f32),
-    /// A vehicle's flat shadow blob (`[isshadow]`, a surface). It is drawn always, as OMSI
-    /// draws it: it stood in for the sun shadow map only while that was off, and with the
-    /// map on (the usual case, Enhanced always) no bus had anything under it - the sun's
-    /// shadow falls beside the bus at any but a noon sun, while the blob is the sky light
-    /// the body keeps off the road, which no shadow map and no screen-space AO supplies.
-    pub blob: bool,
     /// A painted ground layer (`[groundtex]` through its brush mask): a surface that is the
     /// ground itself, so it does not get the roads' pull towards the camera (see vs_main).
     pub ground_layer: bool,
     /// A surface object (a crossing, markings) over the road splines. Legacy instances get a
     /// small view-space pull; ordered OMSI surfaces keep the flag for shading but skip it.
     pub decal: bool,
-    /// The whole object this mesh belongs to (see `set_object_culling`): the radius of a
-    /// sphere about `origin` that holds all of it (0 = the mesh is judged on its own sphere),
-    /// its `[detail_factor]` and whether it is kept at any distance (`[noDistanceCheck]`).
-    pub object_radius: f32,
-    pub detail: f32,
-    pub any_distance: bool,
-    /// Drawn only while the camera stands in this area of the ground (world x0, y0, x1, y1):
-    /// a stand-in for far tiles, which OMSI has loaded only around its own tile (see
-    /// `set_near_only`).
-    pub near_only: Option<[f64; 4]>,
-    /// Seen only in the mirrors and other views drawn into textures, not in the window's
-    /// picture: the driver at the wheel while the player looks from the driver's seat (the
-    /// figure would fill the view, but the mirrors show him as OMSI does).
-    pub mirror_only: bool,
-    /// The model marks the mesh `[shadow]`: one OMSI casts a shadow from (with the
-    /// option `omsi_shadow_casters` only these do).
-    pub omsi_caster: bool,
-    /// It may cast a sun shadow: every ordinary instance, no surface - a surface lies on
-    /// the ground, and a caster in one plane with what it falls on paints dark patches into
-    /// it - except a spline standing clear of the ground (a bridge deck, an elevated
-    /// railway), which is raised with `set_casts_shadow`.
-    pub casts_shadow: bool,
     /// Stable identity of a pole fixture hosting embedded virtual map lights.
     pub shadow_owner: Option<i64>,
     /// Part of a vehicle whose roof lies this high over its origin (model frame): what faces

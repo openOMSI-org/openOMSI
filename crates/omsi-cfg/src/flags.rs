@@ -319,6 +319,7 @@ flags! {
     OMSI_LAN_SAY: Text, Test, Use, "-", "\"30=Hallo;45=Bye\": LAN chat lines said at these seconds of the session.";
     OMSI_LAN_TRACE: Text, Debug, Use, "-", "LAN CSV file: where the host's people are drawn.";
     OMSI_LAUNCHER: Text, Setup, Use, "-", "Program a plain start opens as the launcher instead of the desktop launcher (openomsi-launcher-app) beside the game.";
+    OMSI_LIGHT_GRID_SQUARES: Bool, Switch, Frame, "off", "A light goes into every cell of the light grid's square round its range, the corners its range misses too (A/B).";
     OMSI_LIST_ALIGNED: Bool, Debug, Use, "off", "Log the splines aligned to the terrain.";
     OMSI_MAX_FPS: Num, Tuning, Use, "settings", "Frame rate limit for this run.";
     OMSI_METER: Text, Tuning, Use, "-", "gain,target,dark,bright,bias,night: the exposure metering.";
@@ -335,8 +336,10 @@ flags! {
     OMSI_NOZCHECK_BIAS: Bool, Switch, Use, "off", "The old reading of [matl_noZcheck] (A/B).";
     OMSI_NO_ANIMPARENT: Bool, Switch, Use, "off", "Every mesh animated on its own, without [animparent] (A/B).";
     OMSI_NO_AO: Bool, Switch, Frame, "off", "No ambient occlusion pass.";
+    OMSI_NO_AO_REACH: Bool, Switch, Frame, "off", "The depth prepass that only the ambient occlusion needs draws the far scenery too, past the occlusion's reach (A/B).";
     OMSI_NO_ATTACH_FALLBACK: Bool, Switch, Use, "off", "Drop attachments that have no fallback instead of placing them (A/B).";
     OMSI_NO_BC: Bool, Switch, Use, "off", "Upload all textures as RGBA instead of keeping BC compression.";
+    OMSI_NO_BEND_CACHE: Bool, Switch, Use, "off", "AI cars look for the bends ahead anew every step (A/B).";
     OMSI_NO_BOUNDS_CACHE: Bool, Switch, Use, "off", "No cache of instance bounds.";
     OMSI_NO_BRIDGE: Bool, Switch, Use, "off", "LAN: leave the internet alone - no rendezvous bridge, no tunnel (tests, LAN parties).";
     OMSI_NO_BUMP: Bool, Switch, Use, "off", "No bump maps.";
@@ -363,10 +366,12 @@ flags! {
     OMSI_NO_MATERIAL_SPLINE_BATCHING: Bool, Switch, Use, "off", "No batching of splines by material.";
     OMSI_NO_MODEL_ORDER: Bool, Switch, Use, "off", "Draw the opaque parts of ordered models first again (A/B).";
     OMSI_NO_MSAA_PREPASS: Bool, Switch, Frame, "off", "No depth prepass with multisampling.";
+    OMSI_NO_OWN_VEHICLE_LAMP_BLOCK: Bool, Switch, Frame, "off", "Other vehicles' lamps light the player's vehicle inside and the street beyond it through its body again (A/B).";
     OMSI_NO_PBR: Bool, Switch, Use, "off", "No PBR materials.";
     OMSI_NO_PIPELINE_CACHE: Bool, Switch, Use, "off", "Compile every pipeline at each start (no ~/.openomsi/cache/pipelines-*.bin).";
     OMSI_NO_PLUGINS: Bool, Switch, Use, "off", "No plugins loaded.";
     OMSI_NO_POLL_THREAD: Bool, Switch, Use, "off", "No device poll thread.";
+    OMSI_NO_POST_SPLIT: Bool, Switch, Frame, "off", "Finish the passes after the main pass in the main pass's own command buffer (A/B).";
     OMSI_NO_PRECIP_ROOF: Bool, Switch, Frame, "off", "Rain and snow fall through roofs (no roof map).";
     OMSI_NO_PRESENCE: Bool, Switch, Use, "off", "No presence (\"playing now\") service.";
     OMSI_NO_PUDDLE_GLASS_DEPTH: Bool, Switch, Use, "off", "Puddles without glass depth.";
@@ -407,6 +412,7 @@ flags! {
     OMSI_PAX_CROSS: Text, Test, Use, "-", "x,y: send pedestrians across the signalised crossing nearest that point.";
     OMSI_PAX_WAITING: Num, Test, Use, "-", "Number of passengers waiting at each stop.";
     OMSI_PHOTO: Text, Test, Use, "-", "Photo mode settings for a test, key=value by commas: orbit (dist, around, up), kmh (the bus moving), focal (mm), dof, fstop (f-number), focus (m; none: on the bus), motion, shutter (1/s), filter (0..10), vignette, grain, exposure (EV), aspect (0..7), grid (0..3), quality (0..3).";
+    OMSI_PICK_BUSES: Text, Test, Use, "-", "cargo test -p omsi-app installed_switches_stay_reachable_from_inside: more .bus files to check, by commas (under the root, or absolute).";
     OMSI_PLUGIN_HOST32: Text, Setup, Use, "beside the game", "Path of omsi-plugin-host32.exe.";
     OMSI_POPULATION_SHOTS: Bool, Test, Use, "off", "Offscreen: pictures of the framed population spawns.";
     OMSI_PRESENCE_URL: Text, Setup, Use, "built-in", "Base URL of the presence (\"playing now\") service.";
@@ -440,6 +446,7 @@ flags! {
     OMSI_SIM_THREAD: Text, Switch, Use, "the setting", "Window: the AI traffic's, the people's and the scenery scripts' steps on a thread of their own while the picture is drawn (one frame later): 0 / false / off / no: on the main thread, anything else: on their thread, over the `sim_thread` setting (off by default); the offscreen run ignores it.";
     OMSI_SKIP_OBJECT: Text, Test, Use, "-", "Leave out the objects whose file name contains this text.";
     OMSI_SKIP_PIPE: Text, Test, Frame, "-", "Pipeline kinds to leave out of the main pass (comma-separated numbers).";
+    OMSI_SKY_CUBE_EVERY_FRAME: Bool, Switch, Frame, "off", "Enhanced: redraw a slice of the sky cube every frame again, not at most 60 a second (A/B).";
     OMSI_SPOT_SELECT: Num, Test, Use, "-", "Turn on spotlight n (headlight pictures).";
     OMSI_SURFACE_BIAS: Num, Tuning, Use, "-24", "Depth bias of road surfaces.";
     OMSI_SURFACE_FLUSH: Num, Tuning, Once, "0.12", "Height in metres under which a surface counts as flush with the road.";

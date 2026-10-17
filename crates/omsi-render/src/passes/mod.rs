@@ -36,6 +36,7 @@ pub(crate) struct FrameEnv {
     pub no_puddle_reflections: bool,
     pub no_rt_frame: bool,
     pub no_ao: bool,
+    pub no_ao_reach: bool,
     pub shadow_near_every_frame: bool,
     pub shadow_far_every_frame: bool,
     pub lamp_shadows_every_frame: bool,
@@ -55,6 +56,7 @@ pub(crate) struct FrameEnv {
     pub no_bundles: bool,
     pub no_msaa_prepass: bool,
     pub no_main_split: bool,
+    pub no_post_split: bool,
     pub no_smoke: bool,
     pub no_snowfall: bool,
     pub no_rain: bool,
@@ -63,6 +65,8 @@ pub(crate) struct FrameEnv {
     pub no_glare: bool,
     pub debug_fog_lamps: bool,
     pub no_rt_grade: bool,
+    pub no_own_vehicle_lamp_block: bool,
+    pub sky_cube_every_frame: bool,
 }
 
 impl FrameEnv {
@@ -77,6 +81,7 @@ impl FrameEnv {
             no_puddle_reflections: omsi_cfg::flags::OMSI_NO_PUDDLE_REFLECTIONS.is_set(),
             no_rt_frame: omsi_cfg::flags::OMSI_NO_RT_FRAME.is_set(),
             no_ao: omsi_cfg::flags::OMSI_NO_AO.is_set(),
+            no_ao_reach: omsi_cfg::flags::OMSI_NO_AO_REACH.is_set(),
             shadow_near_every_frame: omsi_cfg::flags::OMSI_SHADOW_NEAR_EVERY_FRAME.is_set(),
             shadow_far_every_frame: omsi_cfg::flags::OMSI_SHADOW_FAR_EVERY_FRAME.is_set(),
             lamp_shadows_every_frame: omsi_cfg::flags::OMSI_LAMP_SHADOWS_EVERY_FRAME.is_set(),
@@ -94,6 +99,7 @@ impl FrameEnv {
             no_bundles: omsi_cfg::flags::OMSI_NO_BUNDLES.is_set(),
             no_msaa_prepass: omsi_cfg::flags::OMSI_NO_MSAA_PREPASS.is_set(),
             no_main_split: omsi_cfg::flags::OMSI_NO_MAIN_SPLIT.is_set(),
+            no_post_split: omsi_cfg::flags::OMSI_NO_POST_SPLIT.is_set(),
             no_smoke: omsi_cfg::flags::OMSI_NO_SMOKE.is_set(),
             no_snowfall: omsi_cfg::flags::OMSI_NO_SNOWFALL.is_set(),
             no_rain: omsi_cfg::flags::OMSI_NO_RAIN.is_set(),
@@ -102,6 +108,8 @@ impl FrameEnv {
             no_glare: omsi_cfg::flags::OMSI_NO_GLARE.is_set(),
             debug_fog_lamps: omsi_cfg::flags::OMSI_DEBUG_FOG_LAMPS.is_set(),
             no_rt_grade: omsi_cfg::flags::OMSI_NO_RT_GRADE.is_set(),
+            no_own_vehicle_lamp_block: omsi_cfg::flags::OMSI_NO_OWN_VEHICLE_LAMP_BLOCK.is_set(),
+            sky_cube_every_frame: omsi_cfg::flags::OMSI_SKY_CUBE_EVERY_FRAME.is_set(),
         }
     }
 }
@@ -155,6 +163,7 @@ pub(crate) struct FrameCtx<'a> {
     pub rt_frame: bool,
     pub ao_on: bool,
     pub prepass_on: bool,
+    pub prepass_reach: f32,
     pub dt: f32,
     pub overlays: Vec<(TextureId, [f32; 4])>,
 }

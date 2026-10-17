@@ -204,6 +204,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_PAX_CROSS` | text | - | use | sim | x,y: send pedestrians across the signalised crossing nearest that point. |
 | `OMSI_PAX_WAITING` | num | - | use | sim | Number of passengers waiting at each stop. |
 | `OMSI_PHOTO` | text | - | use | app | Photo mode settings for a test, key=value by commas: orbit (dist, around, up), kmh (the bus moving), focal (mm), dof, fstop (f-number), focus (m; none: on the bus), motion, shutter (1/s), filter (0..10), vignette, grain, exposure (EV), aspect (0..7), grid (0..3), quality (0..3). |
+| `OMSI_PICK_BUSES` | text | - | use | app | cargo test -p omsi-app installed_switches_stay_reachable_from_inside: more .bus files to check, by commas (under the root, or absolute). |
 | `OMSI_POPULATION_SHOTS` | bool | off | use | app | Offscreen: pictures of the framed population spawns. |
 | `OMSI_PROBE` | text | - | use | app | x0,y0,x1,y1[,n]: print terrain and road surface heights along a line. |
 | `OMSI_PROBE_GRID` | text | - | use | app | x,y,half,step: the wheels' ground on a grid around a point. |
@@ -251,12 +252,15 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_INTEL_FULL_GPU` | bool | off | use | render | Keep the requested settings on an Intel Vulkan adapter. |
 | `OMSI_KEEP_ALLOCATOR` | bool | off | use | app | Skip the restart that swaps in the faster allocator at start. |
 | `OMSI_LAMP_SHADOWS_EVERY_FRAME` | bool | off | frame | render | Redraw the street lamps' shadow tiles every frame (not only when they change). |
+| `OMSI_LIGHT_GRID_SQUARES` | bool | off | frame | render | A light goes into every cell of the light grid's square round its range, the corners its range misses too (A/B). |
 | `OMSI_MIRROR_ENHANCED` | bool | off | frame | app, render | Draw the mirrors with the enhanced shading again. |
 | `OMSI_NOZCHECK_BIAS` | bool | off | use | scene | The old reading of [matl_noZcheck] (A/B). |
 | `OMSI_NO_ANIMPARENT` | bool | off | use | sim | Every mesh animated on its own, without [animparent] (A/B). |
 | `OMSI_NO_AO` | bool | off | frame | render | No ambient occlusion pass. |
+| `OMSI_NO_AO_REACH` | bool | off | frame | render | The depth prepass that only the ambient occlusion needs draws the far scenery too, past the occlusion's reach (A/B). |
 | `OMSI_NO_ATTACH_FALLBACK` | bool | off | use | scene | Drop attachments that have no fallback instead of placing them (A/B). |
 | `OMSI_NO_BC` | bool | off | use | render | Upload all textures as RGBA instead of keeping BC compression. |
+| `OMSI_NO_BEND_CACHE` | bool | off | use | sim | AI cars look for the bends ahead anew every step (A/B). |
 | `OMSI_NO_BOUNDS_CACHE` | bool | off | use | render | No cache of instance bounds. |
 | `OMSI_NO_BRIDGE` | bool | off | use | lan, net | LAN: leave the internet alone - no rendezvous bridge, no tunnel (tests, LAN parties). |
 | `OMSI_NO_BUMP` | bool | off | use | scene | No bump maps. |
@@ -282,10 +286,12 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_NO_MATERIAL_SPLINE_BATCHING` | bool | off | use | scene | No batching of splines by material. |
 | `OMSI_NO_MODEL_ORDER` | bool | off | use | scene | Draw the opaque parts of ordered models first again (A/B). |
 | `OMSI_NO_MSAA_PREPASS` | bool | off | frame | render | No depth prepass with multisampling. |
+| `OMSI_NO_OWN_VEHICLE_LAMP_BLOCK` | bool | off | frame | render | Other vehicles' lamps light the player's vehicle inside and the street beyond it through its body again (A/B). |
 | `OMSI_NO_PBR` | bool | off | use | scene | No PBR materials. |
 | `OMSI_NO_PIPELINE_CACHE` | bool | off | use | render | Compile every pipeline at each start (no ~/.openomsi/cache/pipelines-*.bin). |
 | `OMSI_NO_PLUGINS` | bool | off | use | app, guard | No plugins loaded. |
 | `OMSI_NO_POLL_THREAD` | bool | off | use | render | No device poll thread. |
+| `OMSI_NO_POST_SPLIT` | bool | off | frame | render | Finish the passes after the main pass in the main pass's own command buffer (A/B). |
 | `OMSI_NO_PRECIP_ROOF` | bool | off | frame | render | Rain and snow fall through roofs (no roof map). |
 | `OMSI_NO_PRESENCE` | bool | off | use | platform | No presence ("playing now") service. |
 | `OMSI_NO_PUDDLE_GLASS_DEPTH` | bool | off | use | render | Puddles without glass depth. |
@@ -317,6 +323,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_SHADOW_FAR_EVERY_FRAME` | bool | off | frame | render | Redraw the far shadow map every frame. |
 | `OMSI_SHADOW_NEAR_EVERY_FRAME` | bool | off | frame | render | Redraw the near shadow map every frame. |
 | `OMSI_SIM_THREAD` | text | the setting | use | sim | Window: the AI traffic's, the people's and the scenery scripts' steps on a thread of their own while the picture is drawn (one frame later): 0 / false / off / no: on the main thread, anything else: on their thread, over the `sim_thread` setting (off by default); the offscreen run ignores it. |
+| `OMSI_SKY_CUBE_EVERY_FRAME` | bool | off | frame | render | Enhanced: redraw a slice of the sky cube every frame again, not at most 60 a second (A/B). |
 | `OMSI_TERRAIN_ALIGN` | bool | off | use | scene | Align the terrain to the splines again at load (A/B; Omsi.exe does not). |
 | `OMSI_TEXTURE_RAIN` | bool | off | use | scene | OMSI 2's own texture rain on the glass instead of the drops. |
 | `OMSI_TRACKIR_NATIVE` | text | on | use | input | 0 turns the native TrackIR interface off. |
