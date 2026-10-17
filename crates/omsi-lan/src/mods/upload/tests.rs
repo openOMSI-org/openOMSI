@@ -98,7 +98,8 @@ fn a_hosting_game_keeps_its_own_bus_for_the_others() {
     let m = VehicleManifest { bus: "Vehicles/OwnBus/own.bus".into(), entries: chosen.iter().map(|(r, p)| entry(r, &std::fs::read(p).unwrap())).collect() }.validated().unwrap();
     assert_eq!(fp, m.fingerprint(), "the fingerprint its player's game announces");
     assert_eq!(super::super::vehicles::manifest(&fp), Some(m));
-    // kept as a server would, without the refused file
+    // mounted and served as a server would, without the refused file
+    assert!(super::super::vehicles::bus_file(&fp).is_some());
     let held = super::super::vehicles::withheld_of(&fp);
     assert_eq!(held.len(), 1, "{held:?}");
     assert_eq!(held[0].path, "Vehicles/OwnBus/texture/bad.dds");
@@ -314,11 +315,11 @@ fn two_versions_of_a_bus_are_kept_side_by_side_by_their_content() {
     assert_eq!(done, Ok(Some(1)));
     let fp2 = m2.fingerprint();
     assert_ne!(fp1, fp2);
-    // each one kept as itself: the texture of each version in its bus's list
+    // each one mounted as itself: the texture of each version where its bus is
     for (fp, tex) in [(&fp1, &tex1), (&fp2, &tex2)] {
-        let m = super::super::vehicles::manifest(fp).unwrap();
-        let body = m.entries.iter().find(|e| e.path.ends_with("texture/body.dat")).unwrap();
-        assert_eq!(&super::super::vehicles::blob(&body.sha256).unwrap(), tex, "{fp}");
+        let bus_file = super::super::vehicles::bus_file(fp).unwrap();
+        let body = omsi_cfg::resolve_path(bus_file.parent().unwrap(), "texture/body.dat");
+        assert_eq!(&omsi_cfg::vfs::read(&body).unwrap(), tex, "{fp}");
     }
     // asked for by its content, over the wire
     let got: VehicleManifest = serde_json::from_slice(&ask(host, session, &format!("MANIFEST {fp2}")).unwrap()).unwrap();
@@ -367,10 +368,11 @@ fn two_versions_of_a_bus_are_kept_side_by_side_by_their_content() {
     assert_eq!(serde_json::from_value::<VehicleManifest>(answer).unwrap().validated().unwrap().fingerprint(), mb.fingerprint());
     // the file reaches nobody; its bus is mounted without it
     assert!(super::super::vehicles::blob(&super::super::sha256_of(&fake)).is_none());
-    assert!(super::super::vehicles::manifest(&mb.fingerprint()).is_some());
+    let bus_file = super::super::vehicles::bus_file(&mb.fingerprint()).unwrap();
+    assert!(omsi_cfg::vfs::read(&omsi_cfg::resolve_path(bus_file.parent().unwrap(), "t.dds")).is_err());
     // and so after a restart
     super::super::vehicles::open_for_test(&store_dir);
-    assert!(super::super::vehicles::manifest(&mb.fingerprint()).is_some(), "kept without it after a restart");
+    assert!(super::super::vehicles::bus_file(&mb.fingerprint()).is_some(), "kept without it after a restart");
     assert_eq!(super::super::vehicles::withheld_of(&mb.fingerprint()).len(), 1);
     // a bus whose bus file itself is refused is never kept
     let bad_head = VehicleManifest { bus: "Vehicles/Bad/head.bus".into(), entries: vec![entry("Vehicles/Bad/head.bus", b"[model]\0\0binary")] }.validated().unwrap();
@@ -438,7 +440,7 @@ fn a_bus_in_a_paint_is_one_fingerprint() {
     let Ok(ty) = omsi_sim::VehicleType::load(&root, &path) else { return };
     let bus = "Vehicles/MAN_SD200/MAN_SD77.bus";
     let paint = |i: usize| ty.paint_schemes[i].name.clone();
-    let files = |i: usize| super::super::bus_files::of_parts(&root, &ty, &[], Some(i), None);
+    let files = |i: usize| super::super::bus_files::of_type(&root, &ty, Some(i), None);
     let (m, fp, sent) = own_manifest(&root, bus, &paint(0), || files(0)).unwrap();
     assert!(omsi_net::is_fingerprint(&fp));
     assert_eq!(own_fingerprint(bus, &paint(0)), fp);

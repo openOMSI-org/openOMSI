@@ -43,6 +43,7 @@ pub(crate) mod failure;
 pub mod identity;
 mod paced;
 mod pieces;
+pub mod placeholder;
 mod quarantine;
 mod store;
 pub mod upload;

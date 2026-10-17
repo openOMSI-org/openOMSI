@@ -107,7 +107,7 @@ pub(super) fn apply_player(pending: &mut Vec<(Incoming, f32)>, owner: u32, rv: &
         if s.owner != owner || s.event.ai != 0 {
             return true;
         }
-        if !rv.stand_in && same_bus(&s.event.bus, &rv.last.bus) {
+        if !rv.stand_in && !rv.fallback && same_bus(&s.event.bus, &rv.last.bus) {
             apply(&mut rv.vehicle, &s.event);
         }
         false

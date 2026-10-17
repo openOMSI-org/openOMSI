@@ -38,7 +38,7 @@ pub(crate) fn publish_vehicles(root: PathBuf, only: Vec<String>) {
 }
 
 /// The other players' name tags, as ETS2 has them: the name over the bus's roof and a
-/// small line under it (line and destination, how far away), fading out beyond 300 m.
+/// small line under it (`omsi_lan::game::tag_text`), fading out beyond 300 m.
 /// Screen positions in physical pixels of a `width` x `height` picture (on a triple-screen
 /// rig, of the three panels side by side). `speaks` tells who talks in the voice chat now (by
 /// name and id): "speaking" under their name. `on_radio` who keys the bus radio: "radio"
@@ -96,27 +96,8 @@ pub(crate) fn name_tags(
         }) else {
             continue;
         };
-        let name = if r.name.trim().is_empty() {
-            format!("player {}", r.last.id)
-        } else {
-            r.name.trim().to_string()
-        };
-        let pose = &r.last;
-        let mut sub = match (pose.line.trim().is_empty(), pose.destination.trim().is_empty()) {
-            (false, false) => format!("{} {}", pose.line.trim(), pose.destination.trim()),
-            (true, false) => pose.destination.trim().to_string(),
-            (false, true) => format!("line {}", pose.line.trim()),
-            _ => String::new(),
-        };
-        if d > 25.0 {
-            let dist = crate::units::Units::now().distance(d as f64);
-            sub = if sub.is_empty() { dist } else { format!("{sub} | {dist}") };
-        }
-        if radio {
-            sub = if sub.is_empty() { omsi_ui::tr("radio").into_owned() } else { format!("{} | {sub}", omsi_ui::tr("radio")) };
-        } else if speaks(&r.name, r.last.id) {
-            sub = if sub.is_empty() { omsi_ui::tr("speaking").into_owned() } else { format!("{} | {sub}", omsi_ui::tr("speaking")) };
-        }
+        let speaking = !radio && speaks(&r.name, r.last.id);
+        let (name, sub) = omsi_lan::game::tag_text(r, d, radio, speaking, &|s| omsi_ui::tr(s).into_owned(), &|m| crate::units::Units::now().distance(m));
         let alpha = if radio { 1.0 } else { (1.0 - ((d as f32 - 300.0) / 150.0)).clamp(0.0, 1.0) };
         tags.push(((screen_x, (1.0 - y) * 0.5 * height), name, sub, alpha));
     }

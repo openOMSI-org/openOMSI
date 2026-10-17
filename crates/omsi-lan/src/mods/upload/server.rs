@@ -42,6 +42,10 @@ pub(in crate::mods) fn open() {
     uploads().open();
 }
 
+pub(in crate::mods) fn serving() -> bool {
+    uploads().serving()
+}
+
 /// `len` bytes of the request read and let go (an answer that refuses it keeps the stream in step).
 pub(super) fn skip(input: &mut impl Read, len: u64) -> std::io::Result<()> {
     let n = std::io::copy(&mut input.take(len), &mut std::io::sink())?;

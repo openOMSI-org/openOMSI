@@ -20,6 +20,7 @@ pub mod mirror;
 pub mod mods;
 pub mod passenger;
 pub mod remote;
+pub mod remote_load;
 pub mod server_cfg;
 pub mod spawn;
 pub mod sync;

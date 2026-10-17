@@ -552,6 +552,10 @@ impl VehiclePrefetch {
             let Some(path) = omsi_texture::find_texture(&name, &refs) else {
                 continue;
             };
+            // what its alpha covers, which the upload reads to tell glass from bodywork
+            // (`slot_alpha`): the whole picture decoded for it on the thread that draws was
+            // most of the 0.1 to 1 s a coach's set took there
+            let _ = crate::vehicle_materials::alpha_mask(&path);
             if self.on_gpu.lock().contains_key(&path)
                 || self.ready.lock().textures.contains_key(&path)
             {

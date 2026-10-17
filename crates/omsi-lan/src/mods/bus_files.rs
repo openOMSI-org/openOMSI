@@ -18,9 +18,15 @@ const MAX_COUPLED_PARTS: usize = 32;
 /// The season folders a texture may have a copy in (`omsi_texture::season_chain`).
 const SEASONS: &[&str] = &["wintersnowfall", "wintersnow", "winter", "fall", "spring"];
 
-/// The files of `ty` and its rear sections (`parts`, front to back, as they are loaded: not
-/// read from the disk again) in paint `scheme` (None: its own look), with the depot file
-/// `hof` its displays use. Absolute paths, each an existing file.
+/// The files of `ty` in paint `scheme` (None: its own look), with the depot file `hof` its
+/// displays use. Absolute paths, each an existing file.
+pub(crate) fn of_type(root: &Path, ty: &VehicleType, scheme: Option<usize>, hof: Option<&Path>) -> Vec<PathBuf> {
+    of_parts(root, ty, &[], scheme, hof)
+}
+
+/// `of_type` for a vehicle already loaded with its rear sections (`parts`, front to back):
+/// those are taken as they are instead of being read from the disk again - an articulated
+/// bus's trailer was loaded a second time for its list.
 pub(crate) fn of_parts(root: &Path, ty: &VehicleType, parts: &[&VehicleType], scheme: Option<usize>, hof: Option<&Path>) -> Vec<PathBuf> {
     let mut out = BTreeSet::new();
     add_type(root, ty, parts, scheme, &mut out, 0);
@@ -325,7 +331,7 @@ mod tests {
         omsi_cfg::add_content_root(root.clone());
         let bus = omsi_cfg::resolve_path(&root, "Vehicles/MAN_SD200/MAN_SD77.bus");
         let Ok(ty) = VehicleType::load(&root, &bus) else { return };
-        let files = of_parts(&root, &ty, &[], (!ty.paint_schemes.is_empty()).then_some(0), None);
+        let files = of_type(&root, &ty, (!ty.paint_schemes.is_empty()).then_some(0), None);
         let names: Vec<String> = files.iter().filter_map(|p| relative(&root, p)).map(|r| r.to_lowercase()).collect();
         assert!(names.iter().any(|n| n.ends_with(".bus")), "{names:?}");
         assert!(names.iter().any(|n| n.ends_with(".o3d")));

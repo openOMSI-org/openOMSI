@@ -69,6 +69,10 @@ pub(crate) fn knows_host(session: u64) -> bool {
     sender().knows_host(session)
 }
 
+pub(in crate::mods) fn host() -> Option<(SocketAddr, u64)> {
+    sender().host()
+}
+
 /// Once a frame (a joining player): offer our bus to the host once it is loaded.
 pub(crate) fn tick(root: &Path, bus: &str, paint: &str, own: impl FnOnce() -> Vec<PathBuf> + Send + 'static) {
     sender().tick(root, bus, paint, own);

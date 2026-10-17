@@ -19,8 +19,10 @@
 //! touches its SHA-256, nor the fingerprint of its bus.
 
 use std::collections::VecDeque;
-use std::io::{Read, Write};
+use std::io::{BufRead, Read, Write};
 use std::sync::Mutex;
+
+use super::failure::Failure;
 
 /// The size of a piece.
 pub(crate) const PIECE: u64 = 1 << 20;
@@ -100,6 +102,45 @@ pub(crate) fn send_packed(out: &mut impl Write, raw: u64, codec: char, wire: &[u
     out.write_all(wire)
 }
 
+/// Read the answer to a `PIECE` request for a piece of `raw` bytes: the piece, and how many
+/// bytes it took on the wire.
+pub(crate) fn receive(input: &mut impl BufRead, raw: u64) -> Result<(Vec<u8>, u64), Failure> {
+    let mut line = String::new();
+    // (a header is a few words: a longer line from the host ends the transfer)
+    if super::read_line_within(input, &mut line, super::MAX_REPLY).map_err(|e| Failure::ConnectionLost(e.to_string()))? == 0 {
+        return Err(Failure::ConnectionLost("closed by the host".into()));
+    }
+    let t = line.trim();
+    let Some(rest) = t.strip_prefix("OK ") else {
+        return Err(Failure::HostSays(t.strip_prefix("ERR").unwrap_or(t).trim().to_string()));
+    };
+    let (said, codec, wire) = head(rest).ok_or_else(|| Failure::Other(format!("bad reply {t:?}")))?;
+    if said != raw {
+        return Err(Failure::Other(format!("a piece of {said} bytes, {raw} asked for")));
+    }
+    read_piece(input, codec, raw, wire).map(|d| (d, wire))
+}
+
+/// `<raw> <codec> <wire>` of a piece's header.
+pub(crate) fn head(s: &str) -> Option<(u64, &str, u64)> {
+    let mut it = s.split_whitespace();
+    let raw = it.next()?.parse().ok()?;
+    let codec = it.next()?;
+    let wire = it.next()?.parse().ok()?;
+    it.next().is_none().then_some((raw, codec, wire))
+}
+
+/// The `wire` bytes of a piece of `raw` bytes, read and unpacked.
+pub(crate) fn read_piece(input: &mut impl Read, codec: &str, raw: u64, wire: u64) -> Result<Vec<u8>, Failure> {
+    // (a piece never goes bigger than it is: anything more is no piece of ours)
+    if raw > PIECE || wire > raw.max(64) {
+        return Err(Failure::Other(format!("a piece of {wire} bytes for {raw}")));
+    }
+    let mut bytes = vec![0u8; wire as usize];
+    input.read_exact(&mut bytes).map_err(|e| Failure::ConnectionLost(e.to_string()))?;
+    unpack(codec, bytes, raw).map_err(Failure::Other)
+}
+
 /// Work `items` off over up to `connections` workers at once: each takes a few items at a
 /// time from the common queue until none is left (so a big file is shared out, piece by
 /// piece). The first failure is the answer; the others' work is kept all the same.
@@ -144,18 +185,35 @@ mod tests {
             .collect();
         let (codec, wire) = pack(&noise);
         assert_eq!((codec, wire.len()), ('-', noise.len()));
+        // over the wire, with its header
+        let mut buf = Vec::new();
+        send(&mut buf, &flat).unwrap();
+        assert_eq!(receive(&mut buf.as_slice(), PIECE).unwrap().0, flat);
     }
 
     #[test]
     fn a_piece_that_unpacks_to_more_or_comes_bigger_than_it_is_is_refused() {
         // a bomb: a small piece that unpacks to far more than it says
         let (_, bomb) = pack(&vec![0u8; 64 << 20]);
-        assert!(unpack("z", bomb, 1000).is_err());
+        assert!(unpack("z", bomb.clone(), 1000).is_err());
+        let mut buf = format!("OK 1000 z {}\n", bomb.len()).into_bytes();
+        buf.extend_from_slice(&bomb);
+        assert!(receive(&mut buf.as_slice(), 1000).is_err());
+        // more bytes on the wire than the piece has
+        let mut big = b"OK 10 - 5000\n".to_vec();
+        big.extend(vec![1u8; 5000]);
+        assert!(receive(&mut big.as_slice(), 10).is_err());
+        // a piece larger than a piece
+        assert!(receive(&mut format!("OK {} - {}\n", PIECE + 1, PIECE + 1).as_bytes(), PIECE + 1).is_err());
         assert!(unpack("?", vec![1], 1).is_err());
+        assert!(receive(&mut b"ERR no such file\n".as_slice(), 10).unwrap_err().host_says("no such file"));
         // the same with zstd: one that unpacks to more than it says, or to less
         let (codec, bomb) = pack_zstd(&vec![0u8; 64 << 20], ZSTD_FAST);
         assert_eq!(codec, 's');
-        assert!(unpack("s", bomb, 1000).is_err());
+        assert!(unpack("s", bomb.clone(), 1000).is_err());
+        let mut buf = format!("OK 1000 s {}\n", bomb.len()).into_bytes();
+        buf.extend_from_slice(&bomb);
+        assert!(receive(&mut buf.as_slice(), 1000).is_err());
         let (_, small) = pack_zstd(&[5u8; 500], ZSTD_FAST);
         assert!(unpack("s", small, 1000).is_err());
         assert!(unpack("s", b"no zstd at all".to_vec(), 14).is_err());
@@ -180,7 +238,9 @@ mod tests {
         // (the slowest is not smaller every time: `vehicles::recompress` keeps the smaller)
         assert!(fast.len() < zlib.len(), "zlib {} fast {}", zlib.len(), fast.len());
         for wire in [fast, best] {
-            assert_eq!(unpack("s", wire, PIECE).unwrap(), tex);
+            let mut buf = Vec::new();
+            send_packed(&mut buf, PIECE, 's', &wire).unwrap();
+            assert_eq!(receive(&mut buf.as_slice(), PIECE).unwrap().0, tex);
         }
         // what does not get smaller goes as it is
         let noise: Vec<u8> = (0..70_000)

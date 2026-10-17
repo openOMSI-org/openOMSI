@@ -24,13 +24,16 @@ pub trait LanHost {
     /// Another player's vehicle of type `ty` in paint scheme `scheme`, made as the game
     /// makes its vehicles (fonts, text textures, coupled rear sections), on `clock`; and
     /// the depot file its destination display is set from. Set the owner-only script texture
-    /// and sound flags on its host before running its init scripts.
+    /// and sound flags on its host before running its init scripts. `fonts`: a bus fetched by
+    /// its content writes its displays with its own (`mods::vehicles::fonts_of`), else with the
+    /// world's.
     fn remote_vehicle(
         &self,
         cfg: &LanConfig,
         ty: Arc<omsi_sim::VehicleType>,
         scheme: Option<usize>,
         clock: omsi_sim::SimClock,
+        fonts: Option<crate::mods::vehicles::SharedFonts>,
     ) -> (omsi_sim::VehicleInstance, Option<Arc<omsi_vehicle::Hof>>);
     /// Set a vehicle's line and destination displays as the timetable sets an AI bus's.
     fn set_destination(&self, v: &mut omsi_sim::VehicleInstance, hof: Option<&omsi_vehicle::Hof>, line: &str, destination: &str);

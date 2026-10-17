@@ -24,6 +24,8 @@ pub struct FontLibrary {
     root: std::path::PathBuf,
     /// Every `[newfont]` of every content root's `Fonts/*.oft`, in lookup order; read once.
     index: Option<Vec<Font>>,
+    /// The fonts of `root/Fonts` and no other (`only`).
+    only_root: bool,
 }
 
 /// Style words at the end of a font name ("churafont++ 32x8 Bold").
@@ -50,7 +52,14 @@ fn size_of(name: &str) -> Option<(u32, u32)> {
 
 impl FontLibrary {
     pub fn new(root: &Path) -> FontLibrary {
-        FontLibrary { atlases: HashMap::new(), images: HashMap::new(), root: root.to_path_buf(), index: None }
+        FontLibrary { atlases: HashMap::new(), images: HashMap::new(), root: root.to_path_buf(), index: None, only_root: false }
+    }
+
+    /// The fonts of `root/Fonts` alone - not of every content folder: one bus's own (another
+    /// player's bus, mounted as its driver has it), which this machine's fonts of the same
+    /// names must not stand in for.
+    pub fn only(root: &Path) -> FontLibrary {
+        FontLibrary { only_root: true, ..FontLibrary::new(root) }
     }
 
     fn index(&mut self) -> &[Font] {
@@ -59,7 +68,7 @@ impl FontLibrary {
             // the installation): a mod's display fonts live in the content folder, and looking
             // only in the installation's `Fonts` left the O530's number plate, matrix and
             // dashboard displays empty. A file of the same name higher up replaces the stock one.
-            let mut files = omsi_cfg::read_dir_merged("Fonts");
+            let mut files = if self.only_root { Vec::new() } else { omsi_cfg::read_dir_merged("Fonts") };
             if files.is_empty() {
                 files = omsi_cfg::vfs::read_dir_paths(&self.root.join("Fonts"));
             }

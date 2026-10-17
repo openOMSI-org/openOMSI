@@ -503,6 +503,16 @@ pub fn content_changed() {
     }
 }
 
+/// Content came at `at` alone (a sealed mount of one bus, see `vfs::mount_sealed`): only the
+/// listings of `at`, of what is inside it and of the folders above it are read again. Unlike
+/// `content_changed`, the caches of lookups elsewhere (textures, depot files) are kept and
+/// the generation stays: every bus fetched from another player emptied them all.
+pub fn content_added_at(at: &Path) {
+    if let Some(l) = LISTINGS.get() {
+        l.write().unwrap_or_else(|e| e.into_inner()).retain(|dir, _| !(at.starts_with(dir) || dir.starts_with(at)));
+    }
+}
+
 /// How often the content changed so far (a cache of lookups keeps its misses only as
 /// long as this stays the same).
 pub fn content_generation() -> u64 {
