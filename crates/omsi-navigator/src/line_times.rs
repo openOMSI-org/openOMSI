@@ -17,6 +17,19 @@ pub struct Dep {
     profile: u8,
 }
 
+impl Dep {
+    /// What tells this departure from the others: the time (s) and the trip (two can leave at the same time).
+    pub fn key(&self) -> (u32, u16) {
+        (self.t as u32, self.trip)
+    }
+
+    /// Whether this is the departure picked: the time, and the trip when the pick knows it (a time written alone, as the
+    /// debug flag does, takes the first one).
+    pub fn is(&self, pick: (u32, Option<u16>)) -> bool {
+        self.t as u32 == pick.0 && pick.1.is_none_or(|trip| trip == self.trip)
+    }
+}
+
 /// A trip's stations (id and name) and when its bus is at each, per profile.
 struct Run {
     stops: Vec<(i64, String)>,
@@ -185,4 +198,22 @@ impl Sheet {
 pub fn clock(secs: f64) -> String {
     let m = (secs / 60.0).round() as i64;
     format!("{:02}:{:02}", m.div_euclid(60).rem_euclid(24), m.rem_euclid(60))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn two_departures_at_the_same_time_are_told_apart_by_their_trip() {
+        let (a, b) = (Dep { t: 50_460.0, mask: 31, trip: 3, profile: 0 }, Dep { t: 50_460.0, mask: 31, trip: 7, profile: 0 });
+        assert_ne!(a.key(), b.key());
+        // picked by a click: its time and its trip
+        assert!(a.is((50_460, Some(3))) && !b.is((50_460, Some(3))));
+        assert!(b.is((50_460, Some(7))) && !a.is((50_460, Some(7))));
+        // a time alone (the debug flag): both leave then, the first one found is the one
+        assert!(a.is((50_460, None)) && b.is((50_460, None)));
+        // another time is no departure of these
+        assert!(!a.is((50_520, None)) && !a.is((50_520, Some(3))));
+    }
 }

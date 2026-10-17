@@ -45,6 +45,12 @@ impl Navigator {
         None
     }
 
+    /// The timetable if it has been read already (for the session's date), without reading it: the Timetable button asks this, so
+    /// that opening a line does not read the map's `TTData` (only pressing the button does).
+    pub(super) fn line_times_read(&self) -> Option<std::sync::Arc<LineTimes>> {
+        self.times.as_ref().filter(|(d, _)| *d == self.date).map(|(_, t)| t.clone())
+    }
+
     /// What the sheet says while the timetable is being read.
     fn sheet_loading(&mut self, ui: &mut Painter, area: Rect, s: f32) -> Rect {
         let text = omsi_ui::tr("Loading the timetable...");
@@ -79,7 +85,7 @@ impl Navigator {
         let tab = |on: bool| if on { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(40, 46, 56, 1.0) };
         let (day, dir) = (self.sheet_day(), self.sheet_dir(sheet, i, sf));
         let deps = sheet.departures(dir, day);
-        let pick = self.city.lines.dep.and_then(|t| deps.iter().copied().find(|d| d.t as u32 == t));
+        let pick = self.city.lines.dep.and_then(|p| deps.iter().copied().find(|d| d.is(p)));
         ui.text(&mut self.atlas, &self.fonts, &format!("{}  ·  {}", lt.timetable.as_str(), lt.towards.as_str()).to_uppercase(), 11.5 * s, Weight::Bold, Vec2::new(x0 + pad, y0 + 20.0 * s), Align::Left, Color::hex(0x6f9bd6));
         if pick.is_some() {
             let rr = Rect::new(x0 + pw - pad - 34.0 * s, y0 + 6.0 * s, 34.0 * s, 22.0 * s);
@@ -157,7 +163,7 @@ impl Navigator {
                     let rr = Rect::new(x0 + pad + 42.0 * s + k as f32 * 43.0 * s, ry + 3.0 * s, 39.0 * s, row_h - 6.0 * s);
                     ui.rounded(rr, 4.0 * s, tab(Some(d.t as u32) == next));
                     ui.text_in(&mut self.atlas, &self.fonts, &format!("{:02}", (d.t / 60.0).round() as i64 % 60), 14.5 * s, Weight::Bold, rr, Align::Center, TEXT);
-                    hits.push((rr, LinesHit::Dep(d.t as u32)));
+                    hits.push((rr, LinesHit::Dep(d.key())));
                 }
             }
             scroll_bar(ui, self.city.lines.scroll, max, vis, lines.len(), row_h);
@@ -171,7 +177,7 @@ impl Navigator {
         let Some(times) = self.line_times() else { return };
         let Some(sheet) = times.line(&sf.lines()[i].number) else { return };
         let (day, dir) = (self.sheet_day(), self.sheet_dir(sheet, i, sf));
-        let Some(d) = self.city.lines.dep.and_then(|t| sheet.departures(dir, day).into_iter().find(|d| d.t as u32 == t)) else { return };
+        let Some(d) = self.city.lines.dep.and_then(|p| sheet.departures(dir, day).into_iter().find(|d| d.is(p))) else { return };
         let stops: Vec<_> = sheet.stops(d).into_iter().filter(|x| x.stops).collect();
         let n = stops.len();
         let mut placed: Vec<Rect> = Vec::new();

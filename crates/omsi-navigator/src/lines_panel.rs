@@ -101,9 +101,9 @@ pub(super) enum LinesHit {
     RoutePick(usize),
     /// The timetable in place of the list, and back.
     Sheet,
-    /// A day group (a weekday: 0, 5, 6) and a departure (its time, s).
+    /// A day group (a weekday: 0, 5, 6) and a departure (its time in s and its trip: two departures can leave at the same time).
     Day(usize),
-    Dep(u32),
+    Dep((u32, u16)),
     /// Back from a departure's stops to the departures.
     Back,
     /// Tick every line of the tab on show, or clear them when all are ticked.
@@ -129,10 +129,10 @@ pub struct LinesView {
     /// First row of the list on show.
     pub(super) scroll: f32,
     /// The timetable of the line in focus is on show in place of the list; the day group picked (else today's); the departure picked
-    /// (its time, s); and the list is put at the next departure when it is drawn.
+    /// (its time in s and, once clicked, its trip); and the list is put at the next departure when it is drawn.
     pub(super) sheet: bool,
     pub(super) day: Option<usize>,
-    pub(super) dep: Option<u32>,
+    pub(super) dep: Option<(u32, Option<u16>)>,
     pub(super) jump: bool,
     /// Bumped whenever the choice changes: the ways are drawn again.
     version: u64,
@@ -192,7 +192,7 @@ impl Navigator {
         match h {
             LinesHit::Sheet => (st.sheet, st.dep, st.jump, st.scroll) = (!st.sheet, None, true, 0.0),
             LinesHit::Day(d) => (st.day, st.dep, st.jump, st.scroll) = (Some(d), None, true, 0.0),
-            LinesHit::Dep(t) => (st.dep, st.scroll) = (Some(t), 0.0),
+            LinesHit::Dep((t, trip)) => (st.dep, st.scroll) = (Some((t, Some(trip))), 0.0),
             LinesHit::Back => (st.dep, st.jump, st.scroll) = (None, true, 0.0),
             LinesHit::Stop(id) => {
                 if let Some(p) = self.stop_pos.get(&id) {
@@ -315,7 +315,8 @@ impl Navigator {
             (st.sheet, st.jump) = (true, true);
             st.route.insert(i, d.parse().unwrap_or(0));
             if let Some((h, m)) = it.next().and_then(|t| t.split_once(':')) {
-                st.dep = Some(h.parse::<u32>().unwrap_or(0) * 3600 + m.parse::<u32>().unwrap_or(0) * 60);
+                // (a time alone: the first departure that leaves then)
+                st.dep = Some((h.parse::<u32>().unwrap_or(0) * 3600 + m.parse::<u32>().unwrap_or(0) * 60, None));
             }
         }
     }
@@ -355,6 +356,10 @@ impl Navigator {
     /// and height and the interface scale; `at`: the pad, the button size, the column's x and the close button).
     pub(super) fn draw_lines_ui(&mut self, ui: &mut Painter, size: (f32, f32, f32), at: (f32, f32, f32, Rect), on_line: &HashMap<usize, usize>, on_screen: &dyn Fn(DVec3) -> Vec2) {
         let ((w, h, s), (pad, bs, bx, close)) = (size, at);
+        // (a map without lines: no texts are looked up, nothing is drawn)
+        if !self.surface.as_ref().is_some_and(|sf| !sf.lines().is_empty()) {
+            return;
+        }
         let lt = lines_text();
         self.draw_lines_button(ui, pad, bs, close.x - 8.0 * s, s, &lt);
         if self.city.lines.open && self.surface.as_ref().is_some_and(|sf| !sf.lines().is_empty()) {
@@ -418,7 +423,8 @@ impl Navigator {
         if let Some(i) = focus {
             let l = &lines[i];
             // (the button is there while the timetable is being read; if the line has none after all it goes)
-            if self.line_times().is_none_or(|t| t.line(&l.number).is_some()) {
+            // (nothing is read for it: until the timetable has been read, by pressing the button, every line has one)
+            if self.line_times_read().is_none_or(|t| t.line(&l.number).is_some()) {
                 let tw = self.fonts.width(lt.timetable.as_str(), 11.5 * s, Weight::Bold) + 40.0 * s;
                 let rr = Rect::new(x0 + pw - pad - tw, top + 8.0 * s, tw, 22.0 * s);
                 ui.rounded(rr, 4.0 * s, if self.city.lines.sheet { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(40, 46, 56, 1.0) });
