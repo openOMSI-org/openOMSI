@@ -84,6 +84,11 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   Timetable), Options (Settings, Controls, Setup) and Help (Tutorials); the driver at its
   bottom opens the profile. It folds to its icons with the arrow at its bottom, and stays so;
   the numbers on Mods and Running games stay on their icons.
+- An **Add-ons** page (Content > Add-ons; on a phone under More) lists projects others make
+  for openOMSI, each with its author, a short description and a button that opens its website
+  in the browser after saying which site it goes to. It is a list of links only: nothing is
+  downloaded or installed. A developer adds an add-on with a pull request of one entry, see
+  [docs/ADDONS.md](docs/ADDONS.md).
 
 - The launcher's route map opens fast and follows the mouse smoothly on a big map: the
   roads and the route show at once and the surfaces (paved roads, land, houses) a moment

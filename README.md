@@ -137,6 +137,7 @@ pages live in [`docs/`](docs):
 | [Content formats](docs/FORMATS.md) | every OMSI 2 file format |
 | [Architecture](docs/ARCHITECTURE.md) | crates, threading, renderer, roadmap |
 | [Routes](docs/ROUTES.md) | how the original runs timetables, chrono, HOF, IBIS |
+| [Add-ons](docs/ADDONS.md) | the launcher's directory of add-ons, and how to list yours |
 | [Plugins](docs/PLUGINS.md) | Lua and WebAssembly plugins (the API of every group, examples), compiled `.oop` plugins, OMSI plugin DLLs and the 32-bit plugin host |
 | [Development Tools](https://github.com/openOMSI-org/openOMSI-Development-Tools) | the plugin workbench: projects, the API documentation, the `.oop` compiler and signing keys (Windows, Linux, macOS) |
 | [Dedicated server](docs/SERVER.md) | hosting a session without a window |
