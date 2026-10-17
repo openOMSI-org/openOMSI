@@ -63,8 +63,9 @@ impl FontLibrary {
             if files.is_empty() {
                 files = omsi_cfg::vfs::read_dir_paths(&self.root.join("Fonts"));
             }
-            // each folder in root order, its files in name order (a listing comes in the file
-            // system's order)
+            // each folder in root order, its files in the order Windows lists them (Omsi.exe
+            // reads `Fonts\*.oft` with FindFirst/FindNext, 0x6e5e52), whatever order this file
+            // system hands them over in
             let mut folders: Vec<std::path::PathBuf> = Vec::new();
             for p in &files {
                 let d = p.parent().map(|d| d.to_path_buf()).unwrap_or_default();
@@ -72,34 +73,20 @@ impl FontLibrary {
                     folders.push(d);
                 }
             }
-            files.sort_by_cached_key(|p| (folders.iter().position(|d| Some(d.as_path()) == p.parent()).unwrap_or(usize::MAX), p.file_name().map(|n| n.to_string_lossy().to_ascii_lowercase()).unwrap_or_default()));
-            // Two files of one folder naming the same font: the one read later takes its place,
-            // as in the original (the LiAZ's `ANX_S.oft` spells its "ц" as "=", and a
-            // "ANX_S - копия.oft" lying beside it, read first, left the letter out). A
-            // folder of higher priority keeps its fonts over the folders after it.
-            let mut all: Vec<Font> = Vec::new();
-            let mut folder_of: Vec<usize> = Vec::new();
+            let folder_rank = |p: &Path| folders.iter().position(|d| Some(d.as_path()) == p.parent()).unwrap_or(usize::MAX);
+            files.sort_by_cached_key(|p| (folder_rank(p), omsi_cfg::collate::ntfs_listing_key(&p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default())));
+            let mut loaded: Vec<(usize, Font)> = Vec::new();
             for p in files {
                 if !p.extension().map(|x| x.eq_ignore_ascii_case("oft")).unwrap_or(false) {
                     continue;
                 }
-                let folder = folders.iter().position(|d| Some(d.as_path()) == p.parent()).unwrap_or(usize::MAX);
                 // `Font::path` is the .oft (read through the VFS): its bitmaps lie next to it
                 if let Ok(list) = Font::load_all(&p) {
-                    for f in list {
-                        let key = f.name.trim().to_ascii_lowercase();
-                        match all.iter().position(|o| o.name.trim().to_ascii_lowercase() == key) {
-                            Some(k) if folder_of[k] == folder => all[k] = f,
-                            Some(_) => {}
-                            None => {
-                                all.push(f);
-                                folder_of.push(folder);
-                            }
-                        }
-                    }
+                    let rank = folder_rank(&p);
+                    loaded.extend(list.into_iter().map(|f| (rank, f)));
                 }
             }
-            self.index = Some(all);
+            self.index = Some(first_of_each_name(loaded));
         }
         self.index.as_deref().unwrap_or(&[])
     }
@@ -193,6 +180,37 @@ impl FontLibrary {
         self.atlases.insert(key, atlas.clone());
         atlas
     }
+}
+
+/// One font per name out of fonts in load order (with the rank of the folder each came
+/// from). Omsi.exe keeps every font it reads and looks a name up from the front of that
+/// list (0x5d6738), so of two files naming the same font the one listed first is the one
+/// drawn - HamburgLinie109's `2_StreetHamburg2.oft` (15 px cells, the size its sign meshes
+/// are cut for) over `StreetHamburg2.oft` (29 px). A folder of higher priority keeps its
+/// fonts over the folders after it the same way.
+///
+/// One step of our own on top: a later font of the same name and folder that draws from the
+/// same alpha bitmap is a copy of the first, and the letters only it has are added to it. The
+/// LiAZ ships `ANX_S - копия.oft`, listed before `ANX_S.oft` and lacking its "ц"; Omsi.exe
+/// draws a gap there, the copy's letters plus the original's draw the word.
+fn first_of_each_name(loaded: Vec<(usize, Font)>) -> Vec<Font> {
+    let mut kept: Vec<(usize, Font)> = Vec::new();
+    for (rank, font) in loaded {
+        let name = font.name.trim().to_lowercase();
+        let Some((first_rank, first)) = kept.iter_mut().find(|(_, f)| f.name.trim().to_lowercase() == name) else {
+            kept.push((rank, font));
+            continue;
+        };
+        let copy = *first_rank == rank && first.alpha.trim().eq_ignore_ascii_case(font.alpha.trim()) && first.path.parent() == font.path.parent();
+        if copy {
+            for c in font.chars {
+                if !first.chars.iter().any(|k| k.ch == c.ch) {
+                    first.chars.push(c);
+                }
+            }
+        }
+    }
+    kept.into_iter().map(|(_, f)| f).collect()
 }
 
 /// A font's colour bitmap laid over its alpha bitmap pixel for pixel. Omsi.exe reads a
@@ -362,5 +380,34 @@ mod tests {
         assert_eq!(family_of("churafont++ 14x10"), "churafont++ 14x10");
         assert_eq!(family_of("Bold"), "bold");
         assert_eq!(family_of("LEERFELD"), "leerfeld");
+    }
+
+    #[test]
+    fn the_font_listed_first_is_kept_and_a_copy_only_lends_missing_letters() {
+        let glyph = |ch| omsi_content::font::FontChar { ch, x0: 0, x1: 1, y: 0 };
+        let font = |file: &str, name: &str, alpha: &str, height: i32, chars: &[char]| Font {
+            path: Path::new("Fonts").join(file),
+            name: name.into(),
+            bitmap: alpha.into(),
+            alpha: alpha.into(),
+            height,
+            chars: chars.iter().map(|&c| glyph(c)).collect(),
+            ..Default::default()
+        };
+        let loaded = vec![
+            (0, font("2_StreetHamburg2.oft", "StreetHamburg2", "street_small.bmp", 15, &['A'])),
+            (0, font("ANX_S - копия.oft", "ANX_S", "anx.bmp", 9, &['а', 'б'])),
+            (0, font("ANX_S.oft", "ANX_S", "ANX.BMP", 9, &['а', 'ц'])),
+            (0, font("StreetHamburg2.oft", "StreetHamburg2", "street_big.bmp", 29, &['A', 'B'])),
+            (1, font("other.oft", "anx_s", "anx.bmp", 9, &['ж'])),
+        ];
+        let kept = first_of_each_name(loaded);
+        assert_eq!(kept.len(), 2);
+        // another bitmap: the first file stays as it is, no letters borrowed
+        assert_eq!((kept[0].height, kept[0].chars.len()), (15, 1));
+        // the same bitmap in the same folder: the copy listed first takes the letter it lacks
+        let anx: Vec<char> = kept[1].chars.iter().map(|c| c.ch).collect();
+        assert_eq!(anx, ['а', 'б', 'ц']);
+        assert!(kept[1].path.ends_with("ANX_S - копия.oft"));
     }
 }

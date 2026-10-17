@@ -90,6 +90,25 @@ pub fn windows_cmp(a: &str, b: &str) -> Ordering {
         .then_with(|| a.cmp(b))
 }
 
+/// The order a folder listing comes in on NTFS, which is the order Omsi.exe's `FindFirst` /
+/// `FindNext` loops read files in: the names' UTF-16 units compared one by one after each is
+/// put through the volume's upper-case table. Unlike [`windows_cmp`] nothing is ignored and
+/// punctuation keeps its code point (`_` after the capitals, a space before `.`); a letter
+/// whose capital is not one unit (`ß`) stays as it is.
+pub fn ntfs_listing_key(name: &str) -> Vec<u16> {
+    let mut out = Vec::with_capacity(name.len());
+    for c in name.chars() {
+        let mut up = c.to_uppercase();
+        let single = match (up.next(), up.next()) {
+            (Some(u), None) => u,
+            _ => c,
+        };
+        let mut buf = [0u16; 2];
+        out.extend_from_slice(single.encode_utf16(&mut buf));
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -123,5 +142,12 @@ mod tests {
         assert_eq!(windows_cmp("Straße A", "Strasse B"), Ordering::Less);
         assert_eq!(windows_cmp("ab", "a-b"), Ordering::Less);
         assert_eq!(windows_cmp("same", "same"), Ordering::Equal);
+    }
+
+    #[test]
+    fn listings_put_underscores_after_capitals_and_spaces_before_dots() {
+        let mut v = vec!["StreetHamburg2.oft", "2_StreetHamburg2.oft", "ANX_S.oft", "ANX_S - копия.oft", "a_b.oft", "aZ.oft", "Straße.oft", "STRASSE.oft"];
+        v.sort_by_key(|n| ntfs_listing_key(n));
+        assert_eq!(v, ["2_StreetHamburg2.oft", "ANX_S - копия.oft", "ANX_S.oft", "aZ.oft", "a_b.oft", "STRASSE.oft", "Straße.oft", "StreetHamburg2.oft"]);
     }
 }
