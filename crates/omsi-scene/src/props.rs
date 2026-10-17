@@ -942,14 +942,24 @@ impl World {
         // and every step up failed the idle look's check - the whole scan and its sort every
         // second while over)
         const STEP: u64 = 32 << 20;
-        let card_over = if card_cap > 0 { card.total().saturating_sub(card_cap) / STEP * STEP } else { 0 };
+        let card_over = if card_cap > 0 {
+            let raw = card.total().saturating_sub(card_cap);
+            if pass == BudgetPass::Now { raw } else { raw / STEP * STEP }
+        } else {
+            0
+        };
         let usage = if card_over > 0 { usage.max(limit.saturating_add(card_over)) } else { usage };
         if pass == BudgetPass::AfterStreaming && usage <= limit && !memo.resume {
+            if memo.centers.is_empty() {
+                memo.centers.extend_from_slice(centers);
+            }
             // (the bytes are all a forced look is for: the restores wait for the second's)
             return 0;
         }
         memo.checked = Some(t0);
         if usage <= limit && !any_dropped {
+            memo.centers.clear();
+            memo.centers.extend_from_slice(centers);
             memo.resume = false;
             return 0;
         }
@@ -1015,10 +1025,11 @@ impl World {
         let mut shrunk: Vec<TextureId> = Vec::new();
         let mut restoring = 0usize;
         let mut cut_short = false;
-        // (2 ms of shrinking a frame, the scan's own time not counted; a picture takes
-        // what it takes)
+        // (2 ms of shrinking a frame, the scan's own time not counted; a picture or forced
+        // pass takes what it takes)
         let budget_end = std::time::Instant::now()
             + if pass == BudgetPass::Now { std::time::Duration::from_secs(3600) } else { std::time::Duration::from_millis(2) };
+        let max_shrunk = if pass == BudgetPass::Now { usize::MAX } else { 96 };
         // A texture shrunk while its tiles were far that is near now comes back whole at
         // once, room or not: the far ones give way for it in the seconds after. (Waiting for
         // room left the buildings right in front of the bus blurred for good on a map that
@@ -1042,7 +1053,7 @@ impl World {
             for (d, p) in &entries {
                 // (96 a second: at 16 a map's first tiles stayed over a small card's budget
                 // for a minute and a half)
-                if over == 0 || shrunk.len() >= 96 || *d < NEAR {
+                if over == 0 || shrunk.len() >= max_shrunk || *d < NEAR {
                     break;
                 }
                 if std::time::Instant::now() >= budget_end {
@@ -1072,10 +1083,13 @@ impl World {
                 }
             }
             // Still over: the vehicles' pictures give way as well, the biggest first, down
-            // to 1024 pixels a side. Counted but never made smaller, the timetable's fleet
-            // filled 5 GB of textures on a graphics chip with 0.5 GB of its own until the
-            // device was lost (#1463).
-            if over > 0 && shrunk.len() < 96 && !cut_short {
+            // to 1024 pixels a side (and down to 256 if still over). Counted but never made
+            // smaller, the timetable's fleet filled 5 GB of textures on a graphics chip with
+            // 0.5 GB of its own until the device was lost (#1463).
+            for min_side in [1024u32, 256] {
+                if over == 0 || shrunk.len() >= max_shrunk || cut_short {
+                    break;
+                }
                 let mut own: Vec<(TextureId, u64)> = self
                     .vehicle_textures
                     .lock()
@@ -1084,7 +1098,7 @@ impl World {
                     .collect();
                 own.sort_by(|a, b| b.1.cmp(&a.1));
                 for (id, before) in own {
-                    if over == 0 || shrunk.len() >= 96 {
+                    if over == 0 || shrunk.len() >= max_shrunk {
                         break;
                     }
                     if std::time::Instant::now() >= budget_end {
@@ -1092,7 +1106,7 @@ impl World {
                         break;
                     }
                     let Some((w, h, levels)) = renderer.texture_levels(scene, id) else { continue };
-                    if w.min(h) / 2 < 1024 || levels < 2 {
+                    if w.min(h) / 2 < min_side || levels < 2 {
                         continue;
                     }
                     if renderer.drop_top_levels_in(&mut drops, scene, id, 1) {
@@ -1148,6 +1162,63 @@ impl World {
             log::info!("texture budget: {:.0} of {:.0} MB in use; on the card {:.0} of {:.0} MB (textures {:.0}, meshes {:.0}, the rest {:.0}{}); {} textures lost a level ({} materials rebound), {} coming back{}, in {:.1} ms", usage as f64 / 1e6, limit as f64 / 1e6, card.total() as f64 / 1e6, card_cap as f64 / 1e6, card.textures as f64 / 1e6, card.meshes as f64 / 1e6, card.other as f64 / 1e6, if card.measured { " as the driver counts" } else { " worked out" }, shrunk_n, rebound, restoring, if cut_short { ", more next frame" } else { "" }, t0.elapsed().as_secs_f64() * 1000.0);
         }
         shrunk_n + restoring
+    }
+
+    /// Enforce the texture and video memory budgets between vehicle precache uploads,
+    /// shrinking distant scenery textures (and vehicle textures if needed) to make room.
+    /// Returns `true` if there is room to continue precaching, or `false` if the device
+    /// was lost, an out-of-memory error occurred, or the budget remains full after shrinking.
+    pub fn maintain_precache_budget(&self, renderer: &Renderer, scene: &mut Scene) -> bool {
+        if renderer.device_lost().is_some() {
+            return false;
+        }
+        let mut centers = self.budget_checked.lock().centers.clone();
+        if centers.is_empty() {
+            centers.push(DVec3::ZERO);
+        }
+        if renderer.take_out_of_memory() {
+            let usage = renderer.texture_bytes(scene);
+            let cur = self.texture_budget_bytes();
+            let next = (usage * 3 / 4)
+                .min(if cur > 0 { cur * 3 / 4 } else { u64::MAX })
+                .max(256 << 20);
+            log::warn!(
+                "out of graphics memory during vehicle precache ({:.0} MB of textures): lowering texture budget to {:.0} MB",
+                usage as f64 / 1e6,
+                next as f64 / 1e6
+            );
+            self.set_texture_budget(next);
+            self.update_texture_budget(renderer, scene, &centers, true);
+            return false;
+        }
+        self.update_texture_budget(renderer, scene, &centers, true);
+        if renderer.take_out_of_memory() || renderer.device_lost().is_some() {
+            return false;
+        }
+        let limit = self.texture_limit.load(std::sync::atomic::Ordering::Relaxed);
+        let video_limit = self.video_memory_limit.load(std::sync::atomic::Ordering::Relaxed);
+        if limit == 0 && video_limit == 0 {
+            return true;
+        }
+        let vehicle_bytes: u64 = self
+            .vehicle_textures
+            .lock()
+            .values()
+            .map(|(t, _)| scene.texture_bytes_of(*t))
+            .sum();
+        let scenery_bytes: u64 = self
+            .gpu
+            .lock()
+            .textures
+            .values()
+            .map(|e| e.bytes)
+            .sum();
+        let usage = scenery_bytes + vehicle_bytes + texture_overdraft(renderer.texture_bytes(scene));
+        let card = renderer.gpu_memory(scene);
+        let card_cap = card.cap(video_limit);
+        let over_limit = limit > 0 && usage > limit;
+        let over_card = card_cap > 0 && card.total() > card_cap;
+        !over_limit && !over_card
     }
 
     /// After big unloads, cut the free tail off the scene's arrays (meshes, textures,

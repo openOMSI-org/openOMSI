@@ -168,17 +168,31 @@ impl Traffic {
     pub fn precache_random(&mut self, world: &World, renderer: &Renderer, scene: &mut Scene) {
         let t0 = std::time::Instant::now();
         let sets = self.random_sets();
-        for chunk in sets.chunks(3) {
+        let mut uploaded = 0usize;
+        'chunks: for chunk in sets.chunks(3) {
+            if !world.maintain_precache_budget(renderer, scene) {
+                break;
+            }
             world.prefetch_vehicle_sets(renderer, chunk);
             for (ty, scheme) in chunk {
                 world.precache_vehicle(renderer, scene, ty, *scheme);
+                uploaded += 1;
+                if !world.maintain_precache_budget(renderer, scene) {
+                    world.forget_prefetched();
+                    break 'chunks;
+                }
             }
+            world.forget_prefetched();
         }
         world.forget_prefetched();
         for (ty, _) in &sets {
             self.prime_pull_out_room(ty, false);
         }
-        log::info!("traffic: {} vehicle/paint sets of the random traffic read and uploaded in {:.1} s", sets.len(), t0.elapsed().as_secs_f32());
+        log::info!(
+            "traffic: {uploaded} of {} vehicle/paint sets of the random traffic read and uploaded in {:.1} s",
+            sets.len(),
+            t0.elapsed().as_secs_f32()
+        );
     }
 
     /// The drivers of the timetable buses near the camera: made when a bus comes within

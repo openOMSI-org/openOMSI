@@ -42,11 +42,21 @@ impl Schedule {
         let sets = self.upcoming_sets(world, t, day_time);
         // a few sets at a time: read on the workers, uploaded, and the copies let go
         let mut most_held = 0usize;
-        for chunk in sets.chunks(3) {
+        let mut uploaded = 0usize;
+        'chunks: for chunk in sets.chunks(3) {
+            if !world.maintain_precache_budget(renderer, scene) {
+                break;
+            }
             most_held = most_held.max(world.prefetch_vehicle_sets(renderer, chunk));
             for (ty, scheme) in chunk {
                 world.precache_vehicle(renderer, scene, ty, *scheme);
+                uploaded += 1;
+                if !world.maintain_precache_budget(renderer, scene) {
+                    world.forget_prefetched();
+                    break 'chunks;
+                }
             }
+            world.forget_prefetched();
         }
         let t1 = std::time::Instant::now();
         let mut seen = std::collections::HashSet::new();
@@ -73,7 +83,7 @@ impl Schedule {
         world.forget_prefetched();
         crate::release_free_memory();
         self.fleet_check = day_time;
-        log::info!("timetable fleet: {} vehicle/paint sets of the first {:.0} minutes read and uploaded in {:.1} s (at most {:.0} MB read ahead at once), a first start of every type in {:.1} s", sets.len(), fleet_ahead() / 60.0, (t1 - t0).as_secs_f32(), most_held as f64 / 1e6, t1.elapsed().as_secs_f32());
+        log::info!("timetable fleet: {uploaded} of {} vehicle/paint sets of the first {:.0} minutes read and uploaded in {:.1} s (at most {:.0} MB read ahead at once), a first start of every type in {:.1} s", sets.len(), fleet_ahead() / 60.0, (t1 - t0).as_secs_f32(), most_held as f64 / 1e6, t1.elapsed().as_secs_f32());
     }
 
     /// The vehicle sets a choice is drawn with: the vehicle, its rear sections, a train's
@@ -148,6 +158,9 @@ impl Schedule {
             if let Some(ty) = self.fleet_reading.remove(&key) {
                 let t = std::time::Instant::now();
                 world.precache_vehicle(renderer, scene, &ty, key.1);
+                if self.fleet_reading.is_empty() && self.fleet_ready.lock().is_empty() {
+                    world.forget_prefetched();
+                }
                 if omsi_cfg::flags::OMSI_PROFILE.is_set() {
                     log::info!(
                         "timetable fleet: {} (scheme {:?}) uploaded ahead in {:.1} ms",

@@ -40,7 +40,10 @@ pub struct GpuMesh {
 pub(crate) fn buffer_init(device: &wgpu::Device, queue: &wgpu::Queue, label: Option<&str>, contents: &[u8], usage: wgpu::BufferUsages) -> wgpu::Buffer {
     let align = wgpu::COPY_BUFFER_ALIGNMENT as usize;
     let size = contents.len().next_multiple_of(align).max(align);
-    let buf = device.create_buffer(&wgpu::BufferDescriptor { label, size: size as u64, usage: usage | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+    let usage = usage | wgpu::BufferUsages::COPY_DST;
+    let Some(buf) = try_create_buffer(device, &wgpu::BufferDescriptor { label, size: size as u64, usage, mapped_at_creation: false }) else {
+        return device.create_buffer(&wgpu::BufferDescriptor { label, size: align as u64, usage, mapped_at_creation: false });
+    };
     if !contents.is_empty() {
         if contents.len() == size {
             queue.write_buffer(&buf, 0, contents);

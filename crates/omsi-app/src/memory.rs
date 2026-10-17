@@ -10,6 +10,13 @@ pub use omsi_platform::memory::release_free_memory;
 /// setting is the video memory now, everything on the card (see [`video_memory_limit`]):
 /// half of it, on a card of its own, when that is more.
 pub(crate) fn texture_budget(video: u64) -> u64 {
+    texture_budget_for(
+        video,
+        omsi_cfg::flags::OMSI_SAFE_GPU.parse::<u32>().filter(|n| *n > 0),
+    )
+}
+
+fn texture_budget_for(video: u64, safe_gpu: Option<u32>) -> u64 {
     let mb = omsi_cfg::flags::OMSI_TEXTURE_MEMORY.parse::<u64>().unwrap_or(0);
     if mb > 0 {
         // (a budget the graphics card cannot hold is taken down to what it can: the
@@ -36,8 +43,11 @@ pub(crate) fn texture_budget(video: u64) -> u64 {
         0 => ram.min(1_600_000_000),
         g => ram.min(g * 1_000_000),
     };
+    if let Some(n) = safe_gpu {
+        return safe_video_memory(automatic, n);
+    }
     let card = omsi_render::ADAPTER_VRAM_MB.load(std::sync::atomic::Ordering::Relaxed);
-    if card == 0 || omsi_cfg::flags::OMSI_SAFE_GPU.parse::<u32>().is_some_and(|n| n > 0) {
+    if card == 0 {
         return automatic;
     }
     automatic.max(video / 2)
@@ -90,8 +100,12 @@ mod tests {
         assert_eq!(super::texture_budget(10_000_000_000), own);
         omsi_render::ADAPTER_VRAM_MB.store(12_288, Relaxed);
         let (big, small) = (super::texture_budget(10_000_000_000), super::texture_budget(own));
+        let safe1 = super::texture_budget_for(10_000_000_000, Some(1));
+        let safe2 = super::texture_budget_for(10_000_000_000, Some(2));
         omsi_render::ADAPTER_VRAM_MB.store(0, Relaxed);
         assert_eq!((big, small), (5_000_000_000, own));
+        assert_eq!(safe1, super::safe_video_memory(own, 1));
+        assert_eq!(safe2, super::safe_video_memory(own, 2));
     }
 
     #[test]

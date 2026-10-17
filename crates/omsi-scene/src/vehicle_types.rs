@@ -10,6 +10,9 @@ pub struct VehicleRender {
     pub own_materials: Vec<MaterialId>,
     /// The shared set it is drawn with (None for the player's own).
     pub set: Option<VehicleKey>,
+    /// What an unshared render (`set: None`, the player's vehicle) holds of the vehicle
+    /// textures, meshes and materials, given back when the vehicle is removed or replaced.
+    pub(super) own_set: Option<(Vec<PathBuf>, Vec<(PathBuf, usize)>, Vec<MaterialId>)>,
     /// `[matl_change]` / `[texchanges]` slots whose material a variable switches.
     pub variants: Vec<VariantSlot>,
     /// GPU texture per `[texttexture]` index.
@@ -607,6 +610,7 @@ impl VehiclePrefetch {
         }
         let data: Vec<&omsi_geometry::MeshData> = todo.iter().map(|(_, d)| d.as_ref()).collect();
         let meshes = omsi_render::prepare_meshes(&self.gpu.0, &self.gpu.1, &data, self.mesh_pages);
+        self.gpu.1.submit([]);
         let mut ready = self.ready.lock();
         for ((key, _), m) in todo.into_iter().zip(meshes) {
             ready.meshes.entry(key).or_insert(m);

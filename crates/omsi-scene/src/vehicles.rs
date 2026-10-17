@@ -16,6 +16,7 @@ impl World {
         self.mirror_glass.lock().clear();
         let set = self.upload_vehicle(renderer, scene, vt, scheme, true);
         let mut render = self.instantiate_vehicle(renderer, scene, vt, &set, None, None);
+        render.own_set = Some((set.textures, set.mesh_keys, set.materials));
         own_skinned_meshes(renderer, scene, vt, &mut render);
         render
     }
@@ -39,6 +40,7 @@ impl World {
             None
         };
         let mut render = self.instantiate_vehicle(renderer, scene, vt, &set, None, shared);
+        render.own_set = Some((set.textures, set.mesh_keys, set.materials));
         own_skinned_meshes(renderer, scene, vt, &mut render);
         render
     }
@@ -67,6 +69,12 @@ impl World {
         let p = self.vehicle_prefetch(renderer);
         sets.par_iter()
             .for_each(|(vt, scheme)| p.prefetch(vt, *scheme));
+        // Flush and reclaim wgpu staging buffers accumulated by worker-thread
+        // `prepare_texture` / `prepare_meshes` calls across this batch.
+        if !sets.is_empty() {
+            let sub = renderer.queue.submit([]);
+            let _ = omsi_render::wait_gpu(&renderer.device, Some(sub));
+        }
         self.textures.held_bytes()
             + self
                 .vehicle_ready
@@ -272,6 +280,38 @@ impl World {
                 s.users = s.users.saturating_sub(1);
                 if s.users == 0 {
                     s.idle_since = Some(std::time::Instant::now());
+                }
+            }
+        }
+        if let Some((textures, mesh_keys, materials)) = render.own_set {
+            let mut tex_ids = self.vehicle_textures.lock();
+            let mut mesh_ids = self.vehicle_meshes.lock();
+            let mut gpu = self.gpu.lock();
+            for m in materials {
+                gpu.free_material(renderer, scene, m);
+            }
+            for p in textures {
+                let Some(e) = tex_ids.get_mut(&p) else {
+                    continue;
+                };
+                e.1 = e.1.saturating_sub(1);
+                if e.1 == 0 {
+                    let id = e.0;
+                    tex_ids.remove(&p);
+                    renderer.free_texture(scene, id);
+                    gpu.free_textures.push(id);
+                }
+            }
+            for mk in mesh_keys {
+                let Some(e) = mesh_ids.get_mut(&mk) else {
+                    continue;
+                };
+                e.1 = e.1.saturating_sub(1);
+                if e.1 == 0 {
+                    let id = e.0;
+                    mesh_ids.remove(&mk);
+                    renderer.free_mesh(scene, id);
+                    gpu.free_meshes.push(id);
                 }
             }
         }
@@ -826,6 +866,7 @@ impl World {
             variants,
             own_materials,
             set: key,
+            own_set: None,
             displays_far: false,
             display_tick: 0,
             skinned: Vec::new(),
@@ -917,6 +958,11 @@ impl World {
             up.instances.push((id, mats));
         }
         let VehicleUpload { held, mut materials, tex_time, instances, mut missing_tex, variants, dyn_slots, .. } = up;
+        drop(mesh_ids);
+        // Submit and poll so wgpu's staging buffers from this vehicle's synchronous uploads
+        // and any background worker writes are closed and reclaimed immediately.
+        let sub = renderer.queue.submit([]);
+        let _ = omsi_render::wait_gpu(&renderer.device, Some(sub));
         if !missing_tex.is_empty() {
             missing_tex.sort();
             missing_tex.dedup();

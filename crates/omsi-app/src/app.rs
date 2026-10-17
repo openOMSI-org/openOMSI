@@ -485,6 +485,9 @@ impl App {
         mut scene: &mut Scene,
     ) {
         report_missing_content(&w, &mut self.service_msg);
+        let initial_centers = start_centers(&self.args, &cam, Some(&w));
+        w.apply_texture_upgrades(renderer, &mut scene, None);
+        w.update_texture_budget(renderer, &mut scene, &initial_centers, true);
         {
             {
                 // (once more when it fails: a file read while the start was still reading
@@ -569,6 +572,11 @@ impl App {
                 }
                 if self.camera.is_none() {
                     self.camera = Some(cam);
+                }
+                if let Some(c) = self.camera.as_ref() {
+                    let centers = start_centers(&self.args, c, Some(&w));
+                    w.apply_texture_upgrades(renderer, &mut scene, None);
+                    w.update_texture_budget(renderer, &mut scene, &centers, true);
                 }
                 self.menus.navigator = Some(navigator::Navigator::new(
                     self.settings.navigator,
@@ -756,6 +764,14 @@ impl App {
                     std::time::Duration::from_millis(30),
                     None,
                 );
+                if let Some(w) = self.world.as_ref() {
+                    w.apply_texture_upgrades(
+                        &renderer,
+                        &mut scene,
+                        Some(std::time::Instant::now() + std::time::Duration::from_millis(2)),
+                    );
+                    w.texture_budget_after_streaming(&renderer, &mut scene, &centers);
+                }
                 streamer.initial_progress()
             }
             None => None,

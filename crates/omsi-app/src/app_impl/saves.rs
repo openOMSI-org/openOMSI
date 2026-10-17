@@ -117,14 +117,14 @@ impl App {
             return None;
         }
         let (Some(w), Some(cam)) = (self.world.as_ref(), self.camera.as_ref()) else { return None };
-        let dir = std::path::Path::new(&self.args.map.replace('\\', "/")).parent().map(|d| d.to_path_buf())?;
-        let base = crate::startup::content_dir()?;
-        let dir = base.join(dir);
-        let _ = std::fs::create_dir_all(&dir);
+        let rel_dir = std::path::Path::new(&self.args.map.replace('\\', "/")).parent().map(|d| d.to_path_buf())?;
+        let base = crate::startup::content_dir().unwrap_or_else(|| self.args.root.clone());
+        let dir = base.join(&rel_dir);
         let out = dir.join("laststn.osn");
+        let rel = rel_dir.join("laststn.osn");
         let sit = build_situation(&self.args, w, &self.clock, self.args.weather.as_deref(), self.player.as_ref(), &self.session.placed, cam, self.session.duty.as_ref(), "Last situation");
-        match sit.save(&out) {
-            Ok(()) => {
+        match save_or_fallback(&sit, &out, rel.as_path()) {
+            Ok(out) => {
                 match self.player.as_ref() {
                     Some(p) => crate::situation::save_script_textures(&out, &p.vehicle),
                     None => crate::situation::write_script_textures(&out, &[] as &[(&[u8], u32, u32)]),
@@ -141,21 +141,58 @@ impl App {
 
     /// The graphics device was lost (the driver reset the card: it ran out of memory, or a
     /// frame took it too long): the game starts again by itself on the situation just
-    /// saved, with lighter graphics (`Settings::apply_safe_gpu`), and on Windows with the
-    /// other graphics interface when the lost one was Vulkan. Twice at most in a row. False
-    /// when it cannot (a LAN session, the tutorial, nothing to save): the session ends.
+    /// saved (or with the current map's arguments when on foot or still loading), with
+    /// lighter graphics (`Settings::apply_safe_gpu`), and on Windows with the other graphics
+    /// interface when the lost one was Vulkan. Twice at most in a row. False when it cannot
+    /// (a LAN session, the tutorial, no world open): the session ends.
     pub(crate) fn restart_after_device_loss(&mut self) -> bool {
         let n = omsi_cfg::flags::OMSI_SAFE_GPU.parse::<u32>().unwrap_or(0);
-        if n >= 2 {
+        if n >= 2 || self.menus.tutorial.is_some() || self.net.lan.is_some() || self.world.is_none() {
             return false;
         }
-        let Some(file) = self.save_last_situation() else { return false };
         let Ok(exe) = std::env::current_exe() else { return false };
         let mut cmd = std::process::Command::new(exe);
-        cmd.arg("--root").arg(&self.args.root).arg("--no-menu").arg("--situation").arg(&file);
-        // (the duty typed by itself goes on being typed: `--autostart` with a situation)
-        if self.player.as_ref().is_some_and(|p| p.duty_typed) {
-            cmd.arg("--autostart");
+        let saved = self.save_last_situation();
+        if let Some(file) = &saved {
+            cmd.arg("--root").arg(&self.args.root).arg("--no-menu").arg("--situation").arg(file);
+            // (the duty typed by itself goes on being typed: `--autostart` with a situation)
+            if self.player.as_ref().is_some_and(|p| p.duty_typed) {
+                cmd.arg("--autostart");
+            }
+        } else {
+            let cli: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
+            let has_target = cli.iter().any(|a| a == "--map" || a == "--situation");
+            if has_target {
+                cmd.args(&cli);
+                if !cli.iter().any(|a| a == "--no-menu") {
+                    cmd.arg("--no-menu");
+                }
+            } else {
+                cmd.arg("--root")
+                    .arg(&self.args.root)
+                    .arg("--no-menu")
+                    .arg("--map")
+                    .arg(&self.args.map)
+                    .arg("--time")
+                    .arg(&self.args.time)
+                    .arg("--traffic")
+                    .arg(self.args.traffic.to_string());
+                if self.args.on_foot {
+                    cmd.arg("--on-foot");
+                }
+                if let Some(bus) = &self.args.bus {
+                    cmd.arg("--bus").arg(bus);
+                }
+                if let Some(spawn) = &self.args.spawn {
+                    cmd.arg("--spawn").arg(spawn);
+                }
+                if let Some(weather) = &self.args.weather {
+                    cmd.arg("--weather").arg(weather);
+                }
+                if self.args.schedule {
+                    cmd.arg("--schedule");
+                }
+            }
         }
         cmd.env("OMSI_SAFE_GPU", (n + 1).to_string());
         // (on Windows the other interface: DirectX 12 after Vulkan, Vulkan after DirectX 12 -
@@ -170,7 +207,10 @@ impl App {
         }
         match cmd.spawn() {
             Ok(_) => {
-                log::warn!("starting again with safer graphics on {} (the graphics device was lost)", file.display());
+                match saved {
+                    Some(file) => log::warn!("starting again with safer graphics on {} (the graphics device was lost)", file.display()),
+                    None => log::warn!("starting again with safer graphics on {} (the graphics device was lost)", self.args.map),
+                }
                 true
             }
             Err(e) => {
