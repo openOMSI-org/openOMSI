@@ -189,9 +189,11 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_MOBILE` | bool | off | use | app | The phone layout on a computer (screen cut-outs). |
 | `OMSI_MUTE` | bool | off | use | audio | Mix everything as usual but play nothing. |
 | `OMSI_NAV_2D` | bool | off | use | app | Navigator pictures with flat houses (the nav_3d setting off). |
+| `OMSI_NAV_CONTOURS` | bool | off | use | app | Offscreen: the city map in its terrain view (contour lines and their heights, when the map's package has them). |
 | `OMSI_NAV_LINES` | text | - | use | app | Offscreen: open the city map's lines panel on the line with this number (a route, then a departure time, after semicolons: 5;1 or 5;1;14:07, which opens its timetable). |
 | `OMSI_NAV_MAP` | bool | off | use | app | Open the navigation map. |
 | `OMSI_NAV_MAP_MPP` | num | 2.5 | use | navigator | Navigation map zoom in metres per pixel. |
+| `OMSI_NAV_ORIENT` | text | map | use | app | Offscreen: how the city map is turned: map (as it is drawn), north (real north up, where the package says it lies) or heading (the bus's heading up). |
 | `OMSI_NAV_PROBE` | text | - | use | mapdraw | x,y[,r]: the network lanes that start or end within r of that point. |
 | `OMSI_NAV_SCHEDULE` | bool | off | use | app | Navigation map shows the schedule. |
 | `OMSI_NO_MAP_CACHE` | bool | off | use | scene | Read the map's navigator layers (houses, ground, paving) again instead of from the cache. |

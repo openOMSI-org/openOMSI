@@ -370,6 +370,73 @@ fn the_route_of_the_line_in_focus_is_picked() {
 }
 
 #[test]
+fn the_terrain_view_leaves_out_the_land_use_and_draws_the_contour_lines() {
+    let n = with_example_lines();
+    let sf = n.surface.clone().unwrap();
+    assert!(sf.has_contours());
+    let pal = style::palette(false);
+    let (mut full, mut terrain) = (Painter::new(), Painter::new());
+    surface::build_surface(&mut full, &sf, DVec2::ZERO, None, pal, false);
+    surface::build_surface(&mut terrain, &sf, DVec2::ZERO, None, pal, true);
+    assert!(!full.verts.is_empty() && !terrain.verts.is_empty());
+    // (the land use is left out of the terrain view)
+    assert!(terrain.verts.len() < full.verts.len());
+    // the contour lines are a ribbon each; the strength changes the colour, not the lines
+    let (mut strong, mut faint) = (Painter::new(), Painter::new());
+    surface::build_contours(&mut strong, &sf, DVec2::ZERO, None, pal, 1.0);
+    surface::build_contours(&mut faint, &sf, DVec2::ZERO, None, pal, 0.2);
+    assert!(!strong.verts.is_empty());
+    assert_eq!(strong.verts.len(), faint.verts.len());
+    assert!(strong.verts.iter().zip(&faint.verts).any(|(a, b)| a.color != b.color));
+}
+
+#[test]
+fn the_terrain_view_needs_a_button_a_package_with_relief_and_has_a_band_for_each_zoom() {
+    let mut n = with_example_lines();
+    assert!(n.contour_band().is_none(), "off until the button is pressed");
+    n.show_contours = true;
+    n.city.mpp = 2.0;
+    assert_eq!(n.contour_band().map(|b| b.1), Some(0));
+    n.city.mpp = 8.0;
+    assert_eq!(n.contour_band().map(|b| b.1), Some(1));
+    n.city.mpp = 30.0;
+    assert_eq!(n.contour_band().map(|b| b.1), Some(2));
+    // (the surface drawn off: no terrain view either)
+    n.surface = None;
+    assert!(n.contour_band().is_none());
+}
+
+#[test]
+fn the_turned_view_has_the_chosen_direction_up_on_the_screen() {
+    let (w, h) = (1000.0f32, 600.0f32);
+    let top = |phi: f64| Navigator::unproject(&Navigator::city_cam(2.0, 0.0, phi, w, h), w, h, w * 0.5, 0.0).unwrap();
+    let centre = |phi: f64| Navigator::unproject(&Navigator::city_cam(2.0, 0.0, phi, w, h), w, h, w * 0.5, h * 0.5).unwrap();
+    // as drawn: north (+y) is up; the middle of the view is the point looked at, however the view is turned
+    assert!(top(0.0).y > 100.0 && top(0.0).x.abs() < 1e-3);
+    assert!(centre(1.234).length() < 1e-3);
+    // turned a quarter clockwise: the direction a quarter clockwise from the map's up (east, +x) is up
+    let east = top(std::f64::consts::FRAC_PI_2);
+    assert!(east.x > 100.0 && east.y.abs() < 1e-2, "{east:?}");
+    // half a turn: south is up; the same distance from the middle whichever way it is turned
+    let south = top(std::f64::consts::PI);
+    assert!(south.y < -100.0 && (south.length() - top(0.0).length()).abs() < 1e-2, "{south:?}");
+}
+
+#[test]
+fn the_compass_changes_how_the_map_is_turned_in_turn() {
+    let mut n = with_example_lines();
+    n.city.open = true;
+    n.city.rect = [0.0, 0.0, 800.0, 500.0];
+    n.city.buttons.push((Rect::new(10.0, 10.0, 40.0, 40.0), 7));
+    assert_eq!(n.orient, 0);
+    for want in [1, 2, 0] {
+        n.map_press(20.0, 20.0);
+        n.map_release();
+        assert_eq!(n.orient, want);
+    }
+}
+
+#[test]
 fn the_timetable_is_read_on_a_worker_and_the_frame_does_not_wait_for_it() {
     let mut n = with_example_lines();
     n.date = 19900101;

@@ -23,7 +23,7 @@
 //! their width is in metres near the camera and in pixels far away, so zooming rebuilds
 //! nothing.
 
-use glam::{DVec2, DVec3, Mat4, Vec2, Vec3};
+use glam::{DVec2, DVec3, Mat3, Mat4, Vec2, Vec3};
 use hashbrown::HashMap;
 use omsi_render::{Renderer, Scene, TextureId};
 use omsi_sim::traffic::{LaneKind, Network};
@@ -367,6 +367,12 @@ pub struct Navigator {
     surface_version: u64,
     /// The surface is drawn (the `nav_surface` setting).
     pub show_surface: bool,
+    /// The terrain view of the city map: contour lines and their heights, where the map's package carries them (the
+    /// `nav_contours` setting; a button on the map).
+    pub show_contours: bool,
+    /// How the city map is turned: 0 as the map is drawn, 1 real north up (where the package says which way it lies), 2 the
+    /// heading of the bus up. A click on the compass changes it.
+    pub orient: u8,
     /// The light look of the maps (the `nav_light` setting).
     pub light: bool,
     /// The map's own layers (houses, ground, paving: `omsi_scene::mapgen`), once read, and a
@@ -550,6 +556,8 @@ impl Navigator {
             surface: None,
             surface_version: 0,
             show_surface: true,
+            show_contours: false,
+            orient: 0,
             light: false,
             map_data: None,
             map_version: 0,
@@ -1306,7 +1314,9 @@ pub use omsi_mapdraw::roads::{self, *};
 mod line_times;
 mod lines_panel;
 mod lines_sheet;
+mod orient;
 mod place;
+mod relief;
 mod surface;
 pub use omsi_mapdraw::style;
 pub use omsi_mapdraw as mapmesh;
