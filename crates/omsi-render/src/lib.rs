@@ -292,6 +292,7 @@ pub struct RenderOptions {
     /// reflections, where the device can trace rays (hardware ray queries); elsewhere the
     /// enhanced picture as it is.
     pub ray_tracing: bool,
+    pub max_scene: Option<(u32, u32)>,
 }
 
 impl Default for RenderOptions {
@@ -314,6 +315,7 @@ impl Default for RenderOptions {
             no_enhanced: false,
             preview_only: false,
             ray_tracing: false,
+            max_scene: None,
         }
     }
 }
@@ -410,6 +412,7 @@ impl Renderer {
     /// The fraction of a window of this size the 3D picture is drawn at (`render_scale`).
     pub fn scene_scale(&self, width: u32, height: u32) -> f32 {
         let s = scene_scale_for(self.options.render_scale, width, height);
+        let s = scene_scale_within(s, self.options.max_scene, width, height);
         // (a fixed render scale is the player's choice: the governor works on automatic)
         if self.options.render_scale > 0.0 {
             s
@@ -466,6 +469,10 @@ fn scene_scale_for(requested: f32, width: u32, height: u32) -> f32 {
     } else {
         (AUTO_SCALE_PIXELS / pixels).sqrt().clamp(0.5, 1.0)
     }
+}
+
+fn scene_scale_within(s: f32, max_scene: Option<(u32, u32)>, width: u32, height: u32) -> f32 {
+    max_scene.map_or(s, |(w, h)| s.min(w as f32 / width as f32).min(h as f32 / height as f32).max(0.5))
 }
 
 /// Is `p` inside a vehicle's `[boundingbox]` (origin, heading in degrees, w l h cx cy cz)?

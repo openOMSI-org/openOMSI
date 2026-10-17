@@ -835,11 +835,13 @@ impl Renderer {
         let view = tex.create_view(&Default::default());
         // a picture on its own: the enhanced exposure is where the light puts it at once
         self.instant_exposure = true;
+        let max_scene = self.options.max_scene.take();
         if let Some(rig) = rig {
             self.render_triple(scene, &view, width, height, camera, lighting, rig);
         } else {
             self.render(scene, &view, width, height, camera, lighting);
         }
+        self.options.max_scene = max_scene;
         self.instant_exposure = false;
         let mut out = self.read_texture(&tex, wgpu::TextureAspect::All)?;
         // BGRA surfaces → swap

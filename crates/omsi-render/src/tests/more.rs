@@ -508,6 +508,15 @@ fn render_scale_auto_keeps_ordinary_windows_sharp() {
 }
 
 #[test]
+fn a_set_resolution_caps_the_scene_of_a_larger_window() {
+    assert_eq!(scene_scale_within(1.0, Some((1920, 1080)), 2560, 1440), 0.75);
+    assert_eq!(scene_scale_within(0.6, Some((1920, 1080)), 2560, 1440), 0.6);
+    assert_eq!(scene_scale_within(1.0, Some((1280, 720)), 1280, 720), 1.0);
+    assert_eq!(scene_scale_within(1.0, Some((1280, 720)), 3840, 2160), 0.5);
+    assert_eq!(scene_scale_within(0.8, None, 2560, 1440), 0.8);
+}
+
+#[test]
 fn surface_depth_coverage_excludes_glass_and_terrain_masks() {
     assert!(surface_depth_coverage(RenderPhase::Spline, AlphaMode::Blend, false, false));
     for phase in RenderPhase::DRAW_ORDER {
