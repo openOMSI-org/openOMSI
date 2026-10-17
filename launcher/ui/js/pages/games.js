@@ -79,7 +79,7 @@ function Lobby({ lan }) {
       ${players.map((p) => html`<div class="small">${[p.name, busName(p.bus || ''), p.destination ? `${p.line} → ${p.destination}` : '', p.passengers > 0 ? t('{n} passengers', { n: p.passengers }) : '', p.where].filter(Boolean).join(' - ')}</div>`)}
     </div>`}
     ${chat.length > 0 && html`<div>
-      <div class="section-title">${t('CHAT  (V in the game to write)')}</div>
+      <div class="section-title">${t('CHAT  (/ in the game to write)')}</div>
       ${chat.map((c) => html`<div class="small selectable">${c}</div>`)}
     </div>`}
     ${(lan.warnings || []).map((w) => html`<${Notice} kind="warn">${w}</${Notice}>`)}

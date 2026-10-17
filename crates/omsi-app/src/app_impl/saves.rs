@@ -55,7 +55,7 @@ impl App {
             }
         }
         if !file.exists() {
-            self.service_msg = Some(("No quicksave yet (Ctrl+S saves one)".into(), 4.0));
+            self.service_msg = Some(("No quicksave yet (Alt+S saves one)".into(), 4.0));
             return false;
         }
         let Ok(exe) = std::env::current_exe() else { return false };
