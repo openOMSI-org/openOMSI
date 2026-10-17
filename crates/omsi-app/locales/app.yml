@@ -58654,3 +58654,10 @@ _version: 2
 "Weather cycle {}":
   fr: "Cycle météo {}"
   sr: "Ciklus vremenskih prilika {}"
+"Putting the vehicle into service ... A plugin leaves the IBIS for you to type.":
+  de: "Fahrzeug wird in Betrieb genommen ... Ein Plugin überlässt dir das Eintippen ins IBIS."
+  fr: "Mise en service du véhicule ... Un plugin vous laisse saisir l'IBIS vous-même."
+  nl: "Voertuig wordt in dienst genomen ... Een plugin laat het intypen van de IBIS aan jou over."
+  es: "Poniendo el vehículo en servicio ... Un plugin te deja teclear el IBIS a ti."
+  it: "Messa in servizio del veicolo ... Un plugin lascia a te la digitazione dell'IBIS."
+  pt: "Colocando o veículo em serviço ... Um plugin deixa você digitar o IBIS."

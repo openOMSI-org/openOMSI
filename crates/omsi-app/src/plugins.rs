@@ -753,6 +753,12 @@ impl PluginIo for Io<'_> {
     fn duty_end(&mut self) -> bool {
         self.app_mut().is_some_and(pduty::finish)
     }
+    fn duty_set_auto_ibis(&mut self, on: bool) -> bool {
+        self.app_mut().is_some_and(|a| pduty::set_auto_ibis(a, on))
+    }
+    fn duty_type_ibis(&mut self) -> bool {
+        self.app_mut().is_some_and(pduty::type_ibis)
+    }
     fn timetable_lines(&self) -> Vec<op::Line> {
         self.app().map(pduty::lines).unwrap_or_default()
     }

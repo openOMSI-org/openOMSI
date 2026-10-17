@@ -245,6 +245,8 @@ pub static FNS: &[ApiFn] = &[
         s.disabled = true;
         let owner = s.owner;
         s.ui().remove_owner(owner);
+        let (io, s) = c.both();
+        s.give_back(io);
         Ok::<_, ApiError>(())
     }),
     def!("plugin.settings", "plugin", [p("settings", "table"), o("title", "string")], "table", "Declares the plugin's settings: a list of `{key, type, label, default}` with `type` `\"bool\"`, `\"number\"` (`min`, `max`, `step`), `\"text\"` or `\"choice\"` (`choices`, a list of texts). The values the player chose before come back (as a table key -> value); the game makes a settings panel of them (`plugin.show_settings`), saves them in the data folder and sends `setting(key, value)` when one changes.", NEW, None, false, |c, a| {

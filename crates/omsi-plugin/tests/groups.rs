@@ -82,6 +82,7 @@ fn duty_and_timetable() {
         assert(#omsi.duty.trips() == 1 and omsi.duty.trip_stops(1)[3].name == "Rathaus" and omsi.duty.trip_stops(9) == nil)
         assert(omsi.duty.skip_stop() == "Markt" and omsi.duty.next_stop().name == "Rathaus")
         assert(omsi.duty.skip_to(1) and not omsi.duty.skip_to(10))
+        assert(omsi.duty.set_auto_ibis(false) and omsi.duty.type_ibis())
         assert(omsi.duty.start("136", "3", 2, 1))
         local ok, why = omsi.duty.start("999", "1"); assert(not ok and why:find("999"))
         local l = omsi.timetable.lines()[1]; assert(l.name == "136" and l.tours[1].today)
@@ -95,6 +96,7 @@ fn duty_and_timetable() {
     );
     assert_eq!(out, ["ok"]);
     assert!(g.log.borrow().iter().any(|l| l == "duty 136/3 1 0"));
+    assert!(g.log.borrow().windows(2).any(|w| w[0] == "auto ibis false" && w[1] == "type ibis"));
 }
 
 #[test]
@@ -399,4 +401,34 @@ fn passengers_tickets() {
     );
     assert_eq!(g.messages, ["heard 1"]);
     assert_eq!(*g.log.borrow(), ["ticket 1 None None Some(\"Zone 1\") Some(30.0) Some(\"Zone_1\") Some(\"zones\") by tickets"]);
+}
+
+/// A plugin that left the IBIS to the driver gives it back to the game when it goes:
+/// stopped, or switched off (review of #2877).
+#[test]
+fn the_ibis_is_given_back_when_its_plugin_goes() {
+    // (a plugin's calls in its first frame, where it has the game)
+    let once = |body: &str| format!("local done = false
+function on_frame()
+if done then return end
+done = true
+{body}
+end");
+    // stopped (loaded again after a change, say)
+    let mut g = Game::new();
+    let mut p = run("ibisstop", &once("assert(omsi.duty.set_auto_ibis(false))"), &mut g, 1);
+    assert_eq!(g.log.borrow().as_slice(), ["auto ibis false"]);
+    p.lua[0].stop(&mut g);
+    assert_eq!(g.log.borrow().as_slice(), ["auto ibis false", "auto ibis true"]);
+    // switched off
+    let mut g = Game::new();
+    run("ibisoff", &once("assert(omsi.duty.set_auto_ibis(false))
+omsi.plugin.disable('done')"), &mut g, 2);
+    assert_eq!(g.log.borrow().as_slice(), ["auto ibis false", "auto ibis true"]);
+    // (one that turned it on again has nothing to give back)
+    let mut g = Game::new();
+    let mut p = run("ibisagain", &once("omsi.duty.set_auto_ibis(false)
+omsi.duty.set_auto_ibis(true)"), &mut g, 1);
+    p.lua[0].stop(&mut g);
+    assert_eq!(g.log.borrow().as_slice(), ["auto ibis false", "auto ibis true"]);
 }

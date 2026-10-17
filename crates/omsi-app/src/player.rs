@@ -250,6 +250,9 @@ pub(crate) struct Player {
     /// The duty is typed into the IBIS by itself (after Shift+U or `--autostart`): a new
     /// trip of the duty is typed too.
     pub(crate) duty_typed: bool,
+    /// The game types the duty into the IBIS by itself (Shift+U, `--autostart`, each new
+    /// trip): on, unless a plugin leaves that to the driver (`duty.set_auto_ibis`).
+    pub(crate) ibis_auto: bool,
     /// The stop a page asked the duty to go on with (`omsi.setNextStop`), for the game to
     /// hand to the duty.
     pub(crate) html_next_stop: Option<usize>,

@@ -331,6 +331,14 @@ impl PluginIo for Game {
     fn duty_end(&mut self) -> bool {
         self.duty.take().is_some()
     }
+    fn duty_set_auto_ibis(&mut self, on: bool) -> bool {
+        self.did(format!("auto ibis {on}"));
+        true
+    }
+    fn duty_type_ibis(&mut self) -> bool {
+        self.did("type ibis");
+        self.duty.is_some()
+    }
     fn timetable_lines(&self) -> Vec<Line> {
         vec![Line { name: "136".into(), user_allowed: true, tours: vec![Tour { number: "3".into(), today: true, trips: 4 }] }]
     }
