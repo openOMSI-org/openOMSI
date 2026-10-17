@@ -1,0 +1,11 @@
+# The Docker build context: the sources only (target/ alone is tens of GB).
+target/
+dist/
+.git/
+android/
+site/
+**/*.png
+!assets/**/*.png
+!crates/**/*.png
+docker/server/config/
+docker/server/.env

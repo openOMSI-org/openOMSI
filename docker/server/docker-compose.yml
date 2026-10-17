@@ -1,0 +1,34 @@
+# The openOMSI dedicated server in a container (Linux). From this folder:
+#   copy .env.example .env      (and set OMSI_DIR to your OMSI 2 folder)
+#   docker compose up -d --build
+#   docker compose logs -f
+# The players join at this machine's address, port 27015 (Multiplayer -> Join, or
+# --lan-join <address>:27015). See README.md.
+services:
+  openomsi-server:
+    build:
+      context: ../..
+      dockerfile: docker/server/Dockerfile
+    image: openomsi-server
+    container_name: openomsi-server
+    restart: unless-stopped
+    ports:
+      - "27015:27015/udp"
+      - "27015:27015/tcp"
+      - "27025:27025/tcp"
+    volumes:
+      # the OMSI 2 installation, read only (the server never writes to it)
+      - "${OMSI_DIR:?set OMSI_DIR in .env to your OMSI 2 folder}:/omsi:ro"
+      # server.cfg (written with its defaults on the first start when missing)
+      - ./config:/server
+      # maps put on the server (`openomsi --pack-map`): searched before the installation,
+      # and passed on to players who join without them
+      - ./content:/content
+      # the players' buses, kept by their content, and the logs
+      - openomsi-data:/root/.openomsi
+    environment:
+      OMSI_CONTENT: /content
+    stop_grace_period: 20s
+
+volumes:
+  openomsi-data:

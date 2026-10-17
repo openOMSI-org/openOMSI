@@ -19,3 +19,8 @@ tools/greenteaspeak-plugin/*.zip
 /launcher/src-tauri/target
 /launcher/src-tauri/gen
 /launcher/mock
+
+# local Docker server: the player's own settings
+docker/server/config/
+docker/server/.env
+docker/server/content/

@@ -1,0 +1,39 @@
+# openOMSI dedicated server - a starting point for a test (copy it to config/server.cfg).
+# Every key is explained in the server.cfg the server writes on its first start.
+
+name = openOMSI server (Docker)
+motd = Test server: players' buses by their content
+
+# a small stock map for a quick start (Berlin-Spandau takes much longer to load)
+map = maps/Grundorf/global.cfg
+date =
+time = 08:00
+weather =
+
+traffic = 10
+timetable = 1
+passengers = 1
+
+port = 27015
+web_port = 27025
+max_players = 16
+
+# no Cloudflare tunnel in a local test: the players join at this machine's address
+tunnel = 0
+radius = 0
+admin_password =
+time_speed = 1
+real_time = 0
+metar_sync = 0
+metar_station =
+
+# empty: any bus (a bus the server lacks is sent to it by its player)
+vehicles =
+share_positions = 0
+
+# players' buses: taken without asking, kept by their content
+accept_uploads = 1
+uploads_keep_days = 30
+
+# the map is not passed on to players who join without it (they install it themselves)
+share_maps = 0

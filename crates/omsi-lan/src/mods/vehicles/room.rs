@@ -147,6 +147,11 @@ impl Buses {
             if v.withheld_of.remove(&fp).is_some() {
                 let _ = std::fs::remove_file(v.dir.join(format!("{fp}.withheld.json")));
             }
+            if v.mounted.remove(&fp) {
+                if let Some(base) = mounts() {
+                    omsi_cfg::vfs::unmount_sealed(&base.join(&fp));
+                }
+            }
             freed += m.size();
             gone.push(m);
         }

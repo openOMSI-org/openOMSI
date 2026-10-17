@@ -43,6 +43,7 @@ pub(crate) mod failure;
 pub mod identity;
 mod paced;
 mod pieces;
+pub mod placeholder;
 mod quarantine;
 mod store;
 pub mod upload;
@@ -198,7 +199,7 @@ fn collect(args: &ModSource) -> (Manifest, Vec<PathBuf>) {
 /// its ground pictures, the fonts its displays write with - as (relative path, where it is
 /// read from), and what its files name that is nowhere here. Those of the content root
 /// `original` (the OMSI 2 installation, found on every machine) are left out; with none,
-/// everything the map needs is in (for a server without this installation).
+/// everything the map needs is in (`map_pack`: a server without this installation).
 pub fn session_files(map: &str, bus: Option<&str>, weather: Option<&str>, original: Option<&Path>) -> (Vec<(String, PathBuf)>, Vec<String>) {
     let original = original.map(Path::to_path_buf);
     let mut missing: Vec<String> = Vec::new();

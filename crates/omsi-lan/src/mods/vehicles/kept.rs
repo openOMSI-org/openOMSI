@@ -1,5 +1,5 @@
 //! The buses kept here by their content: opened, filled file by file or piece by piece,
-//! committed under the fingerprint worked out here, served and waited for.
+//! committed under the fingerprint worked out here, served, waited for and mounted.
 
 use super::*;
 
@@ -23,6 +23,10 @@ pub(in crate::mods) fn missing(m: &VehicleManifest) -> Vec<usize> {
 
 pub(in crate::mods) fn withhold(e: &Entry, why: &str) {
     buses().withhold(e, why)
+}
+
+pub(in crate::mods) fn is_withheld(e: &Entry) -> bool {
+    buses().is_withheld(e)
 }
 
 pub(crate) fn withheld_of(fp: &str) -> Vec<Withheld> {
@@ -49,6 +53,10 @@ pub(in crate::mods) fn missing_pieces(e: &Entry) -> Vec<u64> {
     buses().missing_pieces(e)
 }
 
+pub(in crate::mods) fn put_piece(e: &Entry, i: u64, data: &[u8]) -> Result<bool, String> {
+    buses().put_piece(e, i, data)
+}
+
 pub(in crate::mods) fn put_piece_sent(e: &Entry, i: u64, data: &[u8]) -> Result<bool, String> {
     buses().put_piece_sent(e, i, data)
 }
@@ -67,6 +75,14 @@ pub(in crate::mods) fn list_memory(fp: &str) -> Option<u64> {
 
 pub(crate) fn announce<'a>(fps: impl Iterator<Item = &'a str>) {
     buses().announce(fps)
+}
+
+pub(crate) fn mount(fp: &str) -> Option<PathBuf> {
+    buses().mount(fp)
+}
+
+pub(crate) fn bus_file(fp: &str) -> Option<PathBuf> {
+    buses().bus_file(fp)
 }
 
 /// What a refused file is held back by: its SHA-256 and the kind of file its name says it is.
@@ -146,7 +162,7 @@ impl Buses {
             }
         }
         log::info!("vehicles: {} buses players sent are kept", found.len());
-        *self.lock() = Some(Vehicles { store, dir: vdir, manifests: found.into_iter().map(|(_, fp, m)| (fp, m)).collect(), sizes, withheld, withheld_of });
+        *self.lock() = Some(Vehicles { store, dir: vdir, manifests: found.into_iter().map(|(_, fp, m)| (fp, m)).collect(), sizes, mounted: HashSet::new(), withheld, withheld_of });
         // (what nobody has used for longer than buses are kept goes at once)
         self.collect(0, IN_USE);
         Ok(())
@@ -186,6 +202,11 @@ impl Buses {
         if let Some(v) = self.lock().as_mut() {
             v.withheld.insert(held_key(e), why.to_string());
         }
+    }
+
+    /// Was `e` refused for what it is (`withhold`)?
+    pub(super) fn is_withheld(&self, e: &Entry) -> bool {
+        self.lock().as_ref().is_some_and(|v| v.withheld.contains_key(&held_key(e)))
     }
 
     /// The files the kept bus `fp` is without (`withhold`).
@@ -275,6 +296,12 @@ impl Buses {
             return vec![count - 1];
         }
         missing
+    }
+
+    /// Keep piece `i` of `e` as it came; once every piece is here the file is checked and
+    /// kept whole (`finish`). True when it is.
+    pub(super) fn put_piece(&self, e: &Entry, i: u64, data: &[u8]) -> Result<bool, String> {
+        self.put_piece_making_room(e, i, data, IN_USE)
     }
 
     /// `put_piece` for a piece a player sent: room only of buses unused for a day (`put_sent`).
@@ -426,4 +453,39 @@ impl Buses {
         self.leased(fp) || self.announced.lock().unwrap_or_else(|e| e.into_inner()).as_ref().is_none_or(|a| a.contains(fp))
     }
 
+    /// Where the bus `fp` can be read: its files under `lan-vehicles/<fp>`, mounted once.
+    pub(super) fn mount(&self, fp: &str) -> Option<PathBuf> {
+        if !omsi_net::is_fingerprint(fp) {
+            return None;
+        }
+        let base = mounts()?;
+        let at = base.join(fp);
+        let mut g = self.lock();
+        let v = g.as_mut()?;
+        if v.mounted.contains(fp) {
+            return Some(at);
+        }
+        let m = &v.manifests.iter().find(|(f, _)| f == fp)?.1;
+        let files: Vec<_> = m.entries.iter().filter_map(|e| v.store.has(e)).collect();
+        // (every file of it, but those it is kept without)
+        let held = v.withheld_of.get(fp).map(Vec::len).unwrap_or(0);
+        if files.len() + held != m.entries.len() {
+            return None;
+        }
+        omsi_cfg::vfs::mount_sealed(&at, v.store.key(), files);
+        v.mounted.insert(fp.to_string());
+        drop(g);
+        // (what the folder listings knew of that place is old now - of that place only: the
+        // lookups elsewhere stay, and every fetched bus no longer emptied them all)
+        omsi_cfg::content_added_at(&at);
+        Some(at)
+    }
+
+    /// The bus file of `fp` where it is mounted.
+    pub(super) fn bus_file(&self, fp: &str) -> Option<PathBuf> {
+        let m = self.manifest(fp)?;
+        let at = self.mount(fp)?;
+        let rel = m.entries.iter().find(|e| identity::key(&e.path) == identity::key(&m.bus))?.path.clone();
+        Some(rel.split('/').fold(at, |p, c| p.join(c)))
+    }
 }

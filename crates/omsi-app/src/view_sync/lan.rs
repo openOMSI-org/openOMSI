@@ -32,6 +32,8 @@ struct RemoteView {
 #[derive(Default)]
 pub(crate) struct LanView {
     remotes: hashbrown::HashMap<u32, RemoteView>,
+    /// The world's reader of vehicle sets, lent to `omsi_lan::remote_load` while this lives.
+    prefetching: Option<omsi_lan::remote_load::Lent>,
 }
 
 impl LanView {
@@ -54,6 +56,11 @@ pub(crate) fn apply_lan(
     frame: &crate::lan::LanInput,
     dt: f32,
 ) {
+    // (other players' buses are read off the frame, their paint put on the GPU there too)
+    if view.prefetching.is_none() {
+        let p = w.vehicle_prefetch(r);
+        view.prefetching = Some(omsi_lan::remote_load::lend_prefetcher(Arc::new(move |ty: &omsi_sim::VehicleType, scheme: Option<usize>| p.prefetch(ty, scheme))));
+    }
     let changes = std::mem::take(&mut game.drawn);
     for e in changes.events {
         match e {

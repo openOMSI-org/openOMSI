@@ -473,8 +473,12 @@ pub fn trust_generated_dir(dir: &Path) {
 }
 
 fn under_content_root(path: &Path) -> bool {
+    // (or in a sealed mount: another player's bus fetched by its content, whose files the
+    // game put there itself, each checked - its paint's pictures are named in full there,
+    // and taken from this machine's own copy instead they were another bus's)
     !path.components().any(|c| matches!(c, std::path::Component::ParentDir))
         && (omsi_cfg::content_roots().iter().any(|r| path.starts_with(r))
+            || omsi_cfg::vfs::is_sealed(path)
             || GENERATED_DIRS.lock().iter().any(|d| path.starts_with(d)))
 }
 
