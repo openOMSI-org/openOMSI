@@ -237,6 +237,9 @@ pub(crate) struct Warm {
     done: Arc<Mutex<Vec<(usize, Vec<(std::path::PathBuf, Prepared)>)>>>,
     /// Pictures read and not uploaded yet, by file.
     pub(super) prepared: hashbrown::HashMap<std::path::PathBuf, Prepared>,
+    /// The map's figures whose files were looked up and read once in the background (by
+    /// `Arc` address; see `Warm::figures`).
+    figures: hashbrown::HashSet<usize>,
 }
 
 impl Warm {
@@ -270,5 +273,41 @@ impl Warm {
             });
         }
         false
+    }
+
+    /// Look up and read once, on a low-priority worker, the textures of every figure the map
+    /// can put on its streets and of each of its clothing variants, defaults first. Nothing
+    /// is kept: the lookups land in `find_texture`'s memo and the files in the system's file
+    /// cache, so the frame that first draws somebody in new clothes decodes a file already
+    /// in memory instead of waiting on the disk (busy stops with a big pack of figures cost
+    /// frames of a fifth of a second, one figure nearly half a second). A figure is done
+    /// once per session; what the people look like and when they come is not touched.
+    pub(super) fn figures(&mut self, types: &[Arc<HumanType>], root: &std::path::Path) {
+        let fresh: Vec<Arc<HumanType>> = types.iter().filter(|t| self.figures.insert(Arc::as_ptr(t) as usize)).cloned().collect();
+        if fresh.is_empty() {
+            return;
+        }
+        let root = root.to_path_buf();
+        omsi_scene::threads::background_pool().spawn(move || {
+            let mut read = hashbrown::HashSet::new();
+            // the defaults of all figures before anybody's variants: most people wear them
+            let most_variants = fresh.iter().map(|t| t.variants.len()).max().unwrap_or(0);
+            let dirs: Vec<Vec<std::path::PathBuf>> = fresh.iter().map(|t| t.texture_dirs(&root)).collect();
+            for variant in 0..=most_variants {
+                for (t, dirs) in fresh.iter().zip(&dirs) {
+                    if variant > t.variants.len() {
+                        continue;
+                    }
+                    for m in t.meshes.iter().flat_map(|hm| hm.materials.iter()) {
+                        let Some(path) = material_texture(t, dirs, &m.texture, variant) else { continue };
+                        if read.insert(path.clone()) {
+                            // (read through and dropped: only the file cache keeps it)
+                            let _ = omsi_cfg::vfs::read(&path);
+                        }
+                    }
+                }
+            }
+            log::debug!("people: {} figure textures read ahead", read.len());
+        });
     }
 }
