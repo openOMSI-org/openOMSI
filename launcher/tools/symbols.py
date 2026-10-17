@@ -25,6 +25,7 @@ NAMES = {
     "globe": "public", "link": "link", "power": "power_settings_new", "file": "description",
     "person": "directions_walk", "sun": "wb_sunny", "traffic": "traffic",
     "ticket": "confirmation_number", "save": "save", "history": "history", "badge": "badge", "help": "help",
+    "garage": "garage", "fuel": "local_gas_station", "wash": "local_car_wash", "repair": "build", "edit": "edit",
 }
 
 paths = {}

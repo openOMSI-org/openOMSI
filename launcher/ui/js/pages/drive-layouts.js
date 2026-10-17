@@ -3,7 +3,7 @@ import { useStore, remembered, remember } from '../store.js';
 import { t } from '../i18n.js';
 import { Icon } from '../icons.js';
 import { Button, Select, Dialog, Notice, Spinner } from '../ui.js';
-import { choose, curBus, curTour, pickedTrip, weatherName, realTime, realDate, askJoined, noServerBus } from '../data.js';
+import { choose, curBus, curTour, pickedTrip, weatherName, realTime, realDate, askJoined, noServerBus, depotBusOf } from '../data.js';
 import { BusPreview } from '../preview.js';
 import { RouteMap } from '../routemap.js';
 import { BusList, BusOptions, withoutMaker } from './bus-list.js';
@@ -102,6 +102,7 @@ function BusThumb({ compact }) {
         <div class="grow"><b class="ellipsis bt-name">${v ? withoutMaker(v.name, v.manufacturer) : t('No bus is installed.')}</b><div class="muted small ellipsis">${v?.manufacturer || ''}</div></div>
         ${!(compact && v) && buttons}
       </div>
+      ${depotBusOf() && html`<div class="row small depot-tag"><${Icon} name="garage" size=${16} /><span class="ellipsis">${t('Your bus: {name}', { name: `${depotBusOf().name} (${depotBusOf().plate})` })}</span></div>`}
       ${noServerBus() && html`<${Notice} kind="danger">${t('The server offers none of the vehicles installed here')}</${Notice}>`}
       ${v && html`<div class="row livery">
         <div class="grow"><${Select} raw value=${c.paint} options=${paints} onChange=${(paint) => choose({ paint })} /></div>

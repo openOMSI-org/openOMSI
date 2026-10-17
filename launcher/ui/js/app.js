@@ -7,6 +7,7 @@ import { Icon } from './icons.js';
 import { Spinner } from './ui.js';
 import { boot, installMod, jobRunning, fitWindow } from './data.js';
 import { DrivePage } from './pages/drive.js';
+import { DepotPage } from './pages/depot.js';
 import { MultiplayerPage } from './pages/multiplayer.js';
 import { ProfilePage } from './pages/profile.js';
 import { ModsPage } from './pages/mods.js';
@@ -26,7 +27,7 @@ const PHONE = onPhone || new URLSearchParams(location.search).has('phone');
 if (PHONE) document.documentElement.classList.add('phone');
 
 const GROUPS = [
-  ['Play', [['drive', 'Drive', 'bus', DrivePage], ['multiplayer', 'Multiplayer', 'users', MultiplayerPage], ['games', 'Running games', 'gamepad', GamesPage]]],
+  ['Play', [['drive', 'Drive', 'bus', DrivePage], ['depot', 'Depot', 'garage', DepotPage], ['multiplayer', 'Multiplayer', 'users', MultiplayerPage], ['games', 'Running games', 'gamepad', GamesPage]]],
   ['Content', [['mods', 'Mods', 'puzzle', ModsPage], ['timetable', 'Timetable', 'clock', TimetablePage]]],
   ['Options', [['settings', 'Settings', 'sliders', SettingsPage], ['controls', 'Controls', 'keyboard', ControlsPage], ['setup', 'Setup', 'folder', SetupPage]]],
   ['Help', [['tutorials', 'Tutorials', 'book', TutorialsPage]]],

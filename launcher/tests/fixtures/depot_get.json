@@ -1,0 +1,94 @@
+{
+  "buses": [
+    {
+      "id": "6703c1a0",
+      "name": "My NL202",
+      "bus": "Vehicles/MAN_NL_NG/MAN_EN92_main.bus",
+      "paint": "HVL",
+      "plate": "GP-123-MO",
+      "number": "8012",
+      "added": 1760000000,
+      "last_used": 1760600000,
+      "sessions": 4,
+      "metres": 61250.0,
+      "seconds": 9120.0,
+      "stops": 87,
+      "tickets": 23,
+      "takings": 41.4,
+      "crashes": 1,
+      "fuel_used": 38.6,
+      "odometer": 412873.4,
+      "fuel": 161.4,
+      "dirt": 0.42,
+      "history": [
+        {
+          "time": 1760600000,
+          "map": "maps/Berlin-Spandau/global.cfg",
+          "line": "5 & 5N",
+          "tour": "Mo-Fr 6",
+          "metres": 18250.0,
+          "seconds": 2760.0,
+          "stops": 31,
+          "tickets": 9,
+          "crashes": 0,
+          "fuel": 11.2
+        },
+        {
+          "time": 1760400000,
+          "map": "maps/Berlin-Spandau/global.cfg",
+          "line": "",
+          "tour": "",
+          "metres": 4100.0,
+          "seconds": 900.0,
+          "stops": 0,
+          "tickets": 0,
+          "crashes": 1,
+          "fuel": 3.1
+        }
+      ],
+      "faults": [
+        {
+          "id": "blinker_l",
+          "label": "Left indicator bulb blown"
+        },
+        {
+          "id": "engine",
+          "label": "Engine failure"
+        },
+        {
+          "id": "body",
+          "label": "Body damage"
+        }
+      ],
+      "group": "Grand Paris-Moulon"
+    },
+    {
+      "id": "6703c1a1",
+      "name": "MAN NL202 - EN92",
+      "bus": "Vehicles/MAN_NL_NG/MAN_EN92_main.bus",
+      "paint": "",
+      "plate": "YK-855-TX",
+      "number": "8003",
+      "added": 1760500000,
+      "last_used": 0,
+      "sessions": 0,
+      "metres": 0.0,
+      "seconds": 0.0,
+      "stops": 0,
+      "tickets": 0,
+      "takings": 0.0,
+      "crashes": 0,
+      "fuel_used": 0.0,
+      "odometer": null,
+      "fuel": null,
+      "dirt": null,
+      "history": [],
+      "faults": [],
+      "group": ""
+    }
+  ],
+  "groups": [
+    "Grand Paris-Moulon",
+    "St-Servan"
+  ]
+}

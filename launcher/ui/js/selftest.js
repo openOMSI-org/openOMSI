@@ -72,7 +72,7 @@ export async function selftest() {
       check('route map', false, e.message || String(e));
     }
   }
-  for (const page of ['drive', 'multiplayer', 'profile', 'mods', 'settings', 'controls', 'games', 'tutorials', 'timetable', 'setup']) {
+  for (const page of ['drive', 'depot', 'multiplayer', 'profile', 'mods', 'settings', 'controls', 'games', 'tutorials', 'timetable', 'setup']) {
     const before = errors.length;
     set({ page });
     await sleep(500);

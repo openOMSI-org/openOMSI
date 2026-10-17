@@ -424,3 +424,13 @@ fn dates_are_fitted_to_the_maps_year_span() {
     assert_eq!(span((2010, 2004)), Some((2010, i32::MAX)), "a last year before the first");
     assert_eq!(span((1972, 1989)), Some((1972, 1989)));
 }
+
+#[test]
+fn a_depot_bus_is_handed_to_the_game() {
+    let d = Duty { map: "maps/x/global.cfg".into(), bus: "Vehicles/x.bus".into(), time: "09:00".into(), depot: Some("6703c1a0".into()), ..Default::default() };
+    let a = duty_args_for_root(&d, Path::new("test-omsi")).unwrap();
+    let k = a.iter().position(|x| x == "--depot").unwrap();
+    assert_eq!(a[k + 1], "6703c1a0");
+    let none = duty_args_for_root(&Duty { depot: None, ..d }, Path::new("test-omsi")).unwrap();
+    assert!(!none.iter().any(|x| x == "--depot"));
+}

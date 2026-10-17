@@ -741,6 +741,22 @@ table.table { width: 100%; border-collapse: collapse; }
 .stat b { display: block; font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 .stat span { color: var(--muted); font-size: 12.5px; }
 
+/* --- the depot: the player's own buses ----------------------------------------------------- */
+.depot { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; align-items: start; }
+.depot-side { position: sticky; top: 0; gap: 10px; }
+.depot-groups { gap: 6px; }
+.depot-list { padding: 8px; max-height: calc(100vh - 210px); overflow: auto; }
+.depot-stage { position: relative; height: clamp(300px, 48vh, 600px); border-radius: var(--radius) var(--radius) 0 0; overflow: hidden; }
+.depot-state { gap: 18px; color: var(--muted); }
+.depot-state > span { display: inline-flex; align-items: center; gap: 6px; }
+.depot-detail .stat b { font-size: 19px; white-space: nowrap; }
+.depot-fault { color: var(--danger); vertical-align: -2px; display: inline-flex; }
+.depot-faults { display: flex; flex-direction: column; gap: 6px; }
+.depot-fault-row { gap: 10px; padding: 6px 10px; border-radius: var(--radius-sm); background: var(--danger-soft); }
+.depot-tag { gap: 6px; color: var(--accent); margin-top: 4px; min-width: 0; }
+@media (max-width: 900px) { .depot { grid-template-columns: minmax(0, 1fr); } .depot-side { position: static; } .depot-list { max-height: 260px; } }
+@media (max-width: 560px) { .depot-detail .grid-2 { grid-template-columns: minmax(0, 1fr); } }
+
 .log { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12px; line-height: 1.5; background: var(--surface-2);  border-radius: var(--radius-sm); padding: 10px 12px; max-height: 280px; overflow: auto; white-space: pre-wrap; word-break: break-all; user-select: text; -webkit-user-select: text; }
 
 .drop-zone { background: var(--surface-2); border-radius: var(--radius); padding: 26px; text-align: center; color: var(--muted); }

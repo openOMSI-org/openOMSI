@@ -3671,6 +3671,7 @@ dependencies = [
 name = "omsi-launcher-api"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "omsi-cfg",
  "omsi-launcher-core",
  "omsi-net",

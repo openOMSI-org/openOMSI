@@ -48,7 +48,7 @@ export function toggleFavourite(file) {
   call('favourites_save', { list }).catch(() => {});
 }
 
-export function BusPicker({ onClose }) {
+export function BusPicker({ onClose, onTake, title = 'Choose a bus', yes = 'Take this bus' }) {
   const s = useStore();
   const [q, setQ] = useState('');
   const [maker, setMaker] = useState('');
@@ -75,13 +75,17 @@ export function BusPicker({ onClose }) {
   });
   const v = all.find((x) => x.file === sel);
   const take = () => {
+    if (onTake) {
+      onTake({ bus: sel, paint });
+      return onClose();
+    }
     choose({ bus: sel, paint, number: sel === s.choice.bus ? s.choice.number : '', hof_manual: sel === s.choice.bus ? s.choice.hof_manual : false });
     onClose();
   };
-  return html`<${Dialog} wide title="Choose a bus" onClose=${onClose} footer=${html`
+  return html`<${Dialog} wide title=${title} onClose=${onClose} footer=${html`
       <span class="muted small" style="margin-right:auto">${t('{n} buses', { n: list.length })}</span>
       <${Button} label="Cancel" onClick=${onClose} />
-      <${Button} kind="primary" icon="check" label="Take this bus" disabled=${!v} onClick=${take} />`}>
+      <${Button} kind="primary" icon="check" label=${yes} disabled=${!v} onClick=${take} />`}>
     <div class="picker" style="margin:-18px -20px;height:calc(100% + 36px)">
       <div class="left">
         <div class="tools">

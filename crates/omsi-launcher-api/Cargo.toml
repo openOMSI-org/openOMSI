@@ -6,6 +6,7 @@ license.workspace = true
 description = "The launcher page's commands (desktop launcher and phone web view alike): JSON in, JSON or picture bytes out"
 
 [dependencies]
+anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 omsi-launcher-core = { path = "../omsi-launcher-core" }

@@ -28,6 +28,7 @@ export async function boot() {
   if (b.root) {
     loadContent();
     readAhead();
+    loadDepot();
     // (the bus preview's helper and renderer get ready while the page is read)
     call('preview_warm').catch(() => {});
   }
@@ -226,6 +227,8 @@ export function choose(patch) {
   if (c.bus !== before.bus && !patch.number) {
     c.number = randomFleetNumber(S.vehicles?.find((v) => v.file === c.bus));
   }
+  // (another bus does not carry on with the depot bus's plate)
+  if (c.bus !== before.bus && !('plate' in patch) && depotBusOf(before)) c.plate = '';
   set({ choice: c });
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => call('choice_save', { choice: S.choice }).catch(() => {}), 400);
@@ -279,6 +282,31 @@ export async function loadIbis() {
   if (ibisAsked !== key) return;
   if ('error' in ibis) ibisAsked = '';
   set({ ibis });
+}
+
+export async function loadDepot() {
+  try {
+    const d = await call('depot_get');
+    set({ depot: d.buses, depotGroups: d.groups, errors: { ...S.errors, depot: null } });
+  } catch (e) {
+    set({ depot: [], errors: { ...S.errors, depot: e.message } });
+  }
+}
+
+/** The depot bus the duty drives: its bus, livery, plate and fleet number all as they are. */
+export function depotBusOf(c = S.choice) {
+  const plate = (c?.plate || '').trim().toUpperCase();
+  return c && plate ? S.depot?.find((b) => busFile(b.bus) === busFile(c.bus) && (b.paint || '') === (c.paint || '') && b.plate === plate && (b.number || '') === (c.number || '').trim()) : null;
+}
+
+/** Take a depot bus for the next duty. */
+export function driveDepotBus(b) {
+  const v = S.vehicles?.find((x) => busFile(x.file) === busFile(b.bus));
+  if (!v) return;
+  choose({ bus: v.file, paint: b.paint, plate: b.plate, number: b.number, hof_manual: false });
+  if (S.choice.number !== b.number) choose({ number: b.number });
+  set({ page: 'drive' });
+  toast(t('{name} is ready under Drive: choose the time and the duty.', { name: b.name }), 'ok');
 }
 
 export async function loadSituations() {
@@ -398,6 +426,7 @@ export async function duty(extra = {}) {
     season: seasonWord || null,
     tutorial: null,
     situation: null,
+    depot: depotBusOf(c)?.id || null,
     ...extra,
   };
 }
@@ -480,6 +509,7 @@ function startPolling() {
     pollNow();
     loadProfiles();
     loadSituations();
+    loadDepot();
     reloadSettings();
   });
   window.addEventListener('focus', () => {

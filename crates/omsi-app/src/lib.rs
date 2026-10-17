@@ -93,6 +93,7 @@ mod real_time;
 mod settings;
 mod shell;
 mod photo;
+mod depot_bus;
 mod devtools;
 mod telemetry;
 use omsi_scene::threads;
