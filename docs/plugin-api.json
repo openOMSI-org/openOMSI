@@ -1709,7 +1709,7 @@
       "name": "info",
       "group": "game",
       "since": "0.1.10",
-      "doc": "What the game is doing: `map`, `clock` (seconds since midnight), `day`, `year`, `view`, `paused`, `on_foot`, `multiplayer`, `traffic`, `speed`, `delay`, `map_path`, `version`; with a bus also `tile_x`, `tile_y`, `tile_pos_x`, `tile_pos_y`, `heading`, `vehicle_manufacturer`, `vehicle_model`, `destination`, `passengers`; `crashes`, `heavy_crashes`, `pedestrians_hit`; `situation`; on a duty also `line`, `tour`, `trip`, `trips`, `trip_name`, `terminus`, `stops`, `trip_done`, `next_stop`, `next_stop_number`, `next_stop_arrival`, `next_stop_departure`, `next_stop_id`, `at_stop`, `previous_stop`, `previous_stop_id`, `next_stop_distance`, `previous_stop_distance` (see the plugin docs for each).",
+      "doc": "What the game is doing: `map`, `clock` (seconds since midnight), `day`, `year`, `view`, `paused`, `on_foot`, `multiplayer`, `traffic`, `speed`, `delay`, `map_path`, `version`; with a bus also `tile_x`, `tile_y`, `tile_pos_x`, `tile_pos_y`, `heading`, `vehicle_manufacturer`, `vehicle_model`, `destination`, `passengers`; `crashes`, `heavy_crashes`, `pedestrians_hit`; `situation`; on a duty also `line`, `tour`, `trip`, `trips`, `trip_name`, `terminus`, `stops`, `trip_done`, `next_stop`, `next_stop_number`, `next_stop_arrival`, `next_stop_departure`, `next_stop_id`, `at_stop`, `previous_stop`, `previous_stop_id`, `next_stop_distance`, `next_stop_distance_nav`, `previous_stop_distance` (see the plugin docs for each).",
       "params": [],
       "returns": "table",
       "multi": false,

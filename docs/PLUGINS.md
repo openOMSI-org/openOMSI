@@ -173,7 +173,9 @@ trip is over, though the duty moves on to the next trip only a minute before it 
 can stand for two stops, the ID cannot), `at_stop` (`true` while the bus stands at the next
 stop), `previous_stop` and `previous_stop_id` (the last stop before the next one the trip
 calls at; none before the first), `next_stop_distance` and `previous_stop_distance` (metres
-in a straight line from the bus, where the stop's place is known).
+in a straight line from the bus, where the stop's place is known). `next_stop_distance_nav`
+is the navigator's route-following distance in metres; it is `nil` until the navigator has
+computed one.
 
 #### Saved data
 
@@ -787,7 +789,7 @@ declared to call the function (a plain `.lua` file has them all).
 | `omsi.game.settings()` | table | The settings a plugin may read: `graphics` (`"vanilla"`, `"vanilla_plus"`, `"enhanced"`), `language` (the cockpit's, `"ENG"`), `ui_language`, `ui_scale`, `volume`, `fov`, `render_scale`, `max_fps`, `fullscreen`, `vsync`, `msaa`, `shadows`, `time_speed`, `units` (`"metric"`: speeds are km/h everywhere), ... | 0.2.22 |
 | `omsi.game.stats()` | table | This session's counts, as the personnel file has them: `km`, `stops_served`, `stops_skipped`, `crashes`, `heavy_crashes`, `pedestrians`, `tickets`, `cash`, `passengers`, ... | 0.2.22 |
 | `omsi.game.version()` | string | The game's version (`"0.2.22"`). | 0.2.22 |
-| `omsi.info()` | table | What the game is doing: `map`, `clock` (seconds since midnight), `day`, `year`, `view`, `paused`, `on_foot`, `multiplayer`, `traffic`, `speed`, `delay`, `map_path`, `version`; with a bus also `tile_x`, `tile_y`, `tile_pos_x`, `tile_pos_y`, `heading`, `vehicle_manufacturer`, `vehicle_model`, `destination`, `passengers`; `crashes`, `heavy_crashes`, `pedestrians_hit`; `situation`; on a duty also `line`, `tour`, `trip`, `trips`, `trip_name`, `terminus`, `stops`, `trip_done`, `next_stop`, `next_stop_number`, `next_stop_arrival`, `next_stop_departure`, `next_stop_id`, `at_stop`, `previous_stop`, `previous_stop_id`, `next_stop_distance`, `previous_stop_distance` (see the plugin docs for each). | 0.1.10 |
+| `omsi.info()` | table | What the game is doing: `map`, `clock` (seconds since midnight), `day`, `year`, `view`, `paused`, `on_foot`, `multiplayer`, `traffic`, `speed`, `delay`, `map_path`, `version`; with a bus also `tile_x`, `tile_y`, `tile_pos_x`, `tile_pos_y`, `heading`, `vehicle_manufacturer`, `vehicle_model`, `destination`, `passengers`; `crashes`, `heavy_crashes`, `pedestrians_hit`; `situation`; on a duty also `line`, `tour`, `trip`, `trips`, `trip_name`, `terminus`, `stops`, `trip_done`, `next_stop`, `next_stop_number`, `next_stop_arrival`, `next_stop_departure`, `next_stop_id`, `at_stop`, `previous_stop`, `previous_stop_id`, `next_stop_distance`, `next_stop_distance_nav`, `previous_stop_distance` (see the plugin docs for each). | 0.1.10 |
 | `omsi.info_value(key)` | any | One value of `info()` without building the whole table: cheaper for a plugin that reads one or two every frame. | 0.2.22 |
 | `omsi.log([...])` | nil | A line in `game.log`, tagged `[lua <name>]` (`print` does the same). | 0.1.5 |
 | `omsi.warn([...])` | nil | The same as a warning. | 0.1.5 |
