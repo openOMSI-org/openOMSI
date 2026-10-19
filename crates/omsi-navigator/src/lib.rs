@@ -702,6 +702,11 @@ impl Navigator {
         self.global.as_deref()
     }
 
+    /// The route-following distance to the next stop, refreshed during navigator frames.
+    pub fn next_stop_distance(&self) -> Option<f64> {
+        self.next_dist
+    }
+
     /// The map's lanes, for a session without a traffic system (added as tiles stream in).
     pub fn add_lanes(&mut self, lanes: Vec<omsi_sim::traffic::Lane>) {
         if lanes.is_empty() {
@@ -1363,5 +1368,4 @@ pub use city_map::*;
 use lines_panel::*;
 #[cfg(test)]
 mod tests;
-
 

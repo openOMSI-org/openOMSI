@@ -73,6 +73,14 @@ use omsi_sim::traffic::LaneKey;
 use omsi_sim::traffic::Lane;
 
 #[test]
+fn next_stop_distance_is_exposed_from_the_cached_route_distance() {
+    let mut n = Navigator::new(true, 0.85, "bottom-left");
+    assert_eq!(n.next_stop_distance(), None);
+    n.next_dist = Some(123.5);
+    assert_eq!(n.next_stop_distance(), Some(123.5));
+}
+
+#[test]
 fn stop_request_icon_reserves_space_only_while_active() {
     let mut atlas = Atlas::new(256);
     for scale in [0.75, 1.0, 2.0] {
