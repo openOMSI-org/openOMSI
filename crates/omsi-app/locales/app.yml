@@ -60973,13 +60973,13 @@ _version: 2
   sr: "Onlajn: {warning}"
 "nobody else yet":
   zh-tw: "尚無其他玩家"
-  sr: "Za sada nema drugih igrača"
+  sr: "za sada nema drugih igrača"
 "1 other player":
   zh-tw: "另有 1 位玩家"
-  sr: "Još 1 igrač"
+  sr: "još 1 igrač"
 "{n} other players":
   zh-tw: "另有 {n} 位玩家"
-  sr: "Još {n} igrača"
+  sr: "još {n} igrača"
 
 "connected to {host}'s session ({players} player(s))":
   zh-tw: "已連線至 {host} 的遊戲（{players} 位玩家）"
@@ -62264,7 +62264,7 @@ _version: 2
   hi: "स्क्रीन पर मिरर पैनल"
   ca: "Panells de retrovisors a la pantalla"
   sv: "Spegelpaneler på skärmen"
-  sr: "Paneli ogledala na ekranu"
+  sr: "Paneli retrovizora na ekranu"
 "Copies of the bus's mirrors over the picture in the cab, as in ETS2 (Ctrl+M shows or hides them); a bus whose panels you arranged keeps its own":
   de: "Kopien der Busspiegel über dem Bild in der Kabine, wie in ETS2 (Strg+M blendet sie ein oder aus); ein Bus, dessen Panels du angeordnet hast, behält seine eigenen"
   fr: "Des copies des rétroviseurs du bus par-dessus l'image en cabine, comme dans ETS2 (Ctrl+M les affiche ou les masque) ; un bus dont vous avez placé les rétroviseurs garde les siens"
@@ -62293,7 +62293,7 @@ _version: 2
   hi: "केबिन में तस्वीर के ऊपर बस के शीशों की प्रतियाँ, ETS2 की तरह (Ctrl+M उन्हें दिखाता या छिपाता है); जिस बस के पैनल आपने व्यवस्थित किए हैं, वह अपने ही रखती है"
   ca: "Còpies dels retrovisors de l'autobús sobre la imatge a la cabina, com a ETS2 (Ctrl+M les mostra o les amaga); un autobús on hagis col·locat els panells conserva els seus"
   sv: "Kopior av bussens speglar över bilden i hytten, som i ETS2 (Ctrl+M visar eller döljer dem); en buss där du har placerat panelerna behåller sina egna"
-  sr: "Kopije ogledala autobusa preko slike u kabini, kao u ETS2 (Ctrl+M ih prikazuje ili skriva); autobus kome si rasporedio panele zadržava svoje"
+  sr: "Kopije retrovizora autobusa preko prikaza u kabini, kao u ETS2 (Ctrl+M ih prikazuje ili skriva); autobus kome si rasporedio panele zadržava svoje"
 "Left and right":
   de: "Links und rechts"
   fr: "Gauche et droit"
@@ -62380,7 +62380,7 @@ _version: 2
   hi: "मिरर पैनल व्यवस्थित करें"
   ca: "Col·locar els panells de retrovisors"
   sv: "Placera spegelpanelerna"
-  sr: "Rasporedi panele ogledala"
+  sr: "Rasporedi panele retrovizora"
 "Drag them where you want them and change their size, saved for this vehicle (Ctrl+Shift+M).":
   de: "Zieh sie, wohin du willst, und ändere ihre Größe, gespeichert für dieses Fahrzeug (Strg+Umschalt+M)."
   fr: "Faites-les glisser où vous voulez et changez leur taille, enregistré pour ce véhicule (Ctrl+Maj+M)."
@@ -62438,7 +62438,7 @@ _version: 2
   hi: "बायाँ शीशा"
   ca: "Retrovisor esquerre"
   sv: "Vänster spegel"
-  sr: "Levo ogledalo"
+  sr: "Levi retrovizor"
 "Right mirror":
   de: "Rechter Spiegel"
   fr: "Rétroviseur droit"
@@ -62467,4 +62467,4 @@ _version: 2
   hi: "दायाँ शीशा"
   ca: "Retrovisor dret"
   sv: "Höger spegel"
-  sr: "Desno ogledalo"
+  sr: "Desni retrovizor"
