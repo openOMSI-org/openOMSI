@@ -51,7 +51,13 @@ fn hash4(n: u32) -> vec4<f32> {
 
 // The precipitation's roof map (passes/precip_map.rs): what stands over the ground round
 // the camera, its depth seen from straight above.
-@group(1) @binding(1) var roof_map: texture_depth_2d;
+@group(1) @binding(1) var roof_map: texture_2d<f32>;
+
+fn roof_depth_at(texel: vec2<i32>) -> f32 {
+    let bytes = vec3<u32>(round(textureLoad(roof_map, texel, 0).rgb * 255.0));
+    let bits = bytes.x | (bytes.y << 8u) | (bytes.z << 16u);
+    return f32(bits) / 16777215.0;
+}
 
 // Whether something solid stands over `p` (the map's matrix `m`; `on` 0 without a map): a
 // bus's or a car's roof, a shelter, a bridge, a house - no drop or flake falls there.
@@ -60,7 +66,7 @@ fn under_roof(p: vec3<f32>, m: mat4x4<f32>, on: f32) -> bool {
     let uv = vec2<f32>(c.x * 0.5 + 0.5, 0.5 - c.y * 0.5);
     let side = f32(textureDimensions(roof_map).x);
     let t = vec2<i32>(clamp(uv, vec2<f32>(0.0), vec2<f32>(0.9999)) * side);
-    let top = textureLoad(roof_map, t, 0);
+    let top = roof_depth_at(t);
     // (5 cm under it: the map's depth reaches 300 m)
     return on > 0.5 && all(abs(c.xy) < vec2<f32>(1.0)) && c.z > top + 0.00017;
 }

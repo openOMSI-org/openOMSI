@@ -21,6 +21,8 @@ fn texture_unit_fallback_builds_and_draws_without_enhanced() {
     ))
     .expect("renderer on the limited GL layout");
     let mut scene = renderer.new_scene();
+    scene.rainfall.rate = 0.5;
+    scene.rainfall.drop_mm = 2.0;
     let camera = omsi_render::Camera {
         position: glam::DVec3::new(0.0, -35.0, 30.0),
         yaw: 0.0,

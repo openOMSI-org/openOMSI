@@ -455,6 +455,7 @@ pub(crate) struct ShadowRes {
     /// [near opaque, near alpha-tested, far opaque, far alpha-tested, close opaque, close
     /// alpha-tested], then the street lamps' (6 + 2 k + kind; not with `basic_pipelines`)
     pub(crate) shadow_pipelines: Vec<wgpu::RenderPipeline>,
+    pub(crate) precip_pipelines: [wgpu::RenderPipeline; 2],
     /// The far shadow cascade as last drawn: its light matrix, frames since, the render
     /// origin and the sun it was drawn for.
     pub(crate) shadow_far_cache: std::cell::Cell<(Mat4, u32, DVec3, Vec3)>,

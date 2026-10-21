@@ -38,6 +38,9 @@ env_logger.workspace = true
 # Standalone renderer tests do not inherit omsi-app's ANGLE feature.
 workspace = true
 features = ["angle"]
+[target.'cfg(target_os = "macos")'.dev-dependencies.wgpu]
+workspace = true
+features = ["angle"]
 
 [target.'cfg(target_os = "linux")'.dependencies]
 ash = "0.38"

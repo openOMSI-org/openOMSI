@@ -75,8 +75,14 @@ impl Navigator {
             let reach = PANEL_REACH;
             if self.global.is_some() {
                 let pal2 = pal;
-                let device = renderer.device.clone();
-                self.panel_job = Some(super::build::Job::start((look_key, lanes_now), move || super::build::build(&parts, anchor, reach, &pal2, look, true, Some(PANEL_MODELS)).made_on(&device)));
+                let worker_device = super::build::worker_device(&renderer.device);
+                self.panel_job = Some(super::build::Job::start((look_key, lanes_now), move || {
+                    let built = super::build::build(&parts, anchor, reach, &pal2, look, true, Some(PANEL_MODELS));
+                    match worker_device.as_ref() {
+                        Some(device) => built.made_on(device),
+                        None => built,
+                    }
+                }));
             } else {
                 let mut b = super::build::build(&parts, anchor, reach, &pal, look, true, Some(PANEL_MODELS));
                 let [_, houses @ ..] = b.counts;
@@ -528,4 +534,3 @@ pub(super) fn car_dot(p: &mut Painter, at: Vec3, light: bool) {
     p.world_disc(at, 1.9, 4.2, edge);
     p.world_disc(at, 1.35, 3.0, fill);
 }
-

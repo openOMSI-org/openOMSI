@@ -144,6 +144,27 @@ fn fs_shadow_test(in: FsIn) {
     cutout_coverage(in.uv, in.params);
 }
 
+fn pack_precip_depth(depth: f32) -> vec4<f32> {
+    let bits = u32(clamp(depth, 0.0, 1.0) * 16777215.0);
+    return vec4<f32>(
+        f32(bits & 255u),
+        f32((bits >> 8u) & 255u),
+        f32((bits >> 16u) & 255u),
+        255.0
+    ) / 255.0;
+}
+
+@fragment
+fn fs_precip(in: FsIn) -> @location(0) vec4<f32> {
+    return pack_precip_depth(in.clip.z);
+}
+
+@fragment
+fn fs_precip_test(in: FsIn) -> @location(0) vec4<f32> {
+    cutout_coverage(in.uv, in.params);
+    return pack_precip_depth(in.clip.z);
+}
+
 // the depth-only passes' (`vs_depth`) fragment shaders: plain, cut out, a transmap's
 // opaque part
 @fragment
@@ -246,4 +267,3 @@ fn transmap_coverage(uv: vec2<f32>, params: vec4<f32>) {
 // 1 = lit by the sun, 0 = in shadow. Three cascades: the close one (the bus and what is
 // next to it), the near one around the camera and the far one covering the rest of the
 // visible street.
-

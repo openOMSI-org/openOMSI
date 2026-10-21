@@ -772,6 +772,36 @@ fn the_scene_shader_translates_to_glsl() {
     assert_eq!(const_array_in_const_array("const int A[2] = int[2](0, 1);\nfloat x = b[A[i]];"), None);
 }
 
+#[test]
+fn precipitation_vertex_shaders_translate_to_glsl() {
+    use wgpu::naga;
+    use wgpu::naga::back::glsl;
+    for (name, src, entry) in [
+        ("snow", snow_shader_source(), "vs_snow"),
+        ("rain", rain_shader_source(), "vs_rain"),
+    ] {
+        let module = naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("{name}: {}", e.emit_to_string(&src)));
+        let info = naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all())
+            .validate(&module)
+            .expect("validate precipitation shader");
+        let (module, info) = naga::back::pipeline_constants::process_overrides(
+            &module,
+            &info,
+            Some((naga::ShaderStage::Vertex, entry)),
+            &Default::default(),
+        )
+        .expect("vertex entry point");
+        for version in [glsl::Version::Embedded { version: 300, is_webgl: false }, glsl::Version::Desktop(330)] {
+            let options = glsl::Options { version, ..Default::default() };
+            let pipeline = glsl::PipelineOptions { shader_stage: naga::ShaderStage::Vertex, entry_point: entry.into(), multiview: None };
+            let mut out = String::new();
+            glsl::Writer::new(&mut out, &module, &info, &options, &pipeline, Default::default())
+                .and_then(|mut writer| writer.write())
+                .unwrap_or_else(|e| panic!("{name} {version:?}: {e:?}"));
+        }
+    }
+}
+
 /// A GLSL constant array indexed by an element of another (`A[B[i]]`, both declared
 /// `const`), if any. Adreno's GLES compiler (Adreno 710 among them) takes the inner lookup
 /// for a constant it cannot fold and rejects the shader ("array field selection out of

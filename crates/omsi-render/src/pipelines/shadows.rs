@@ -10,6 +10,7 @@ pub(crate) struct Shadows {
     pub sampler: wgpu::Sampler,
     pub clear_pipeline: wgpu::RenderPipeline,
     pub pipelines: Vec<wgpu::RenderPipeline>,
+    pub precip_pipelines: [wgpu::RenderPipeline; 2],
 }
 
 pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, shadow_size: u32) -> Shadows {
@@ -60,9 +61,14 @@ pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, shadow_size: u32) 
             bind_group_layouts: &[Some(&scene.shadow_layout), Some(&scene.material_layout)],
             immediate_size: 0,
         });
-    let make_shadow = |kind: u8, cascade: u8| {
+    let make_shadow = |kind: u8, cascade: u8, precip: bool| {
+        let precip_target = [Some(wgpu::ColorTargetState {
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            blend: None,
+            write_mask: wgpu::ColorWrites::ALL,
+        })];
         compile_pipeline(device, &wgpu::RenderPipelineDescriptor {
-            label: Some("shadow"),
+            label: Some(if precip { "precipitation roof" } else { "shadow" }),
             layout: Some(&shadow_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &scene.shader,
@@ -98,8 +104,13 @@ pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, shadow_size: u32) 
             multisample: Default::default(),
             fragment: Some(wgpu::FragmentState {
                 module: &scene.shader,
-                entry_point: Some(if kind == PIPE_ALPHA_TEST { "fs_shadow_test" } else { "fs_shadow" }),
-                targets: &[],
+                entry_point: Some(match (precip, kind == PIPE_ALPHA_TEST) {
+                    (true, true) => "fs_precip_test",
+                    (true, false) => "fs_precip",
+                    (false, true) => "fs_shadow_test",
+                    (false, false) => "fs_shadow",
+                }),
+                targets: if precip { &precip_target } else { &[] },
                 compilation_options: Default::default(),
             }),
             multiview_mask: None,
@@ -108,20 +119,21 @@ pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, shadow_size: u32) 
     };
     let shadow_clear_pipeline = clear_pipeline(device);
     let mut shadow_pipelines = vec![
-        make_shadow(PIPE_OPAQUE, 0),
-        make_shadow(PIPE_ALPHA_TEST, 0),
-        make_shadow(PIPE_OPAQUE, 1),
-        make_shadow(PIPE_ALPHA_TEST, 1),
-        make_shadow(PIPE_OPAQUE, 2),
-        make_shadow(PIPE_ALPHA_TEST, 2),
+        make_shadow(PIPE_OPAQUE, 0, false),
+        make_shadow(PIPE_ALPHA_TEST, 0, false),
+        make_shadow(PIPE_OPAQUE, 1, false),
+        make_shadow(PIPE_ALPHA_TEST, 1, false),
+        make_shadow(PIPE_OPAQUE, 2, false),
+        make_shadow(PIPE_ALPHA_TEST, 2, false),
     ];
+    let precip_pipelines = [make_shadow(PIPE_OPAQUE, 2, true), make_shadow(PIPE_ALPHA_TEST, 2, true)];
     if !basic_pipelines() {
         // (the street lamps' tiles, 6 + 2 k + kind)
         log::info!("renderer: compiling the street lamps' shadow shaders");
         // (left out alone where the driver fails on them: the lamps then cast no shadows,
         // `shadow_pipelines.len() > 6`)
         let lamps = optional_pipeline(device, "the street lamps' shadows", || {
-            (3..=6).flat_map(|cascade| [make_shadow(PIPE_OPAQUE, cascade), make_shadow(PIPE_ALPHA_TEST, cascade)]).collect::<Vec<_>>()
+            (3..=6).flat_map(|cascade| [make_shadow(PIPE_OPAQUE, cascade, false), make_shadow(PIPE_ALPHA_TEST, cascade, false)]).collect::<Vec<_>>()
         });
         shadow_pipelines.extend(lamps.into_iter().flatten());
     }
@@ -131,6 +143,7 @@ pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, shadow_size: u32) 
         sampler: shadow_sampler,
         clear_pipeline: shadow_clear_pipeline,
         pipelines: shadow_pipelines,
+        precip_pipelines,
     }
 }
 

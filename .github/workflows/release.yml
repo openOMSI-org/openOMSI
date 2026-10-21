@@ -219,13 +219,12 @@ jobs:
   macos:
     needs: version
     if: ${{ !inputs.only || inputs.only == 'all' || inputs.only == 'macos' }}
-    timeout-minutes: 90
-    runs-on: macos-latest
+    timeout-minutes: 240
+    runs-on: ${{ matrix.arch == 'x64' && 'macos-15-intel' || 'macos-latest' }}
     strategy:
       fail-fast: false
       matrix:
-        # Intel Macs: built on the Apple silicon runner for x86_64
-        arch: ${{ fromJSON(github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ci:all-platforms') && '["arm64"]' || '["arm64", "x64"]') }}
+        arch: ${{ fromJSON('["arm64", "x64"]') }}
     env:
       OPENOMSI_VERSION: ${{ needs.version.outputs.version }}
       OPENOMSI_TARGET: ${{ matrix.arch == 'x64' && 'x86_64-apple-darwin' || 'aarch64-apple-darwin' }}
@@ -242,8 +241,50 @@ jobs:
           workspaces: |
             . -> target
             launcher/src-tauri -> target
+      - name: Restore ANGLE/CGL binaries
+        if: matrix.arch == 'x64'
+        id: angle-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/openomsi-angle-libs
+          key: angle-cgl-x64-macos11-${{ hashFiles('scripts/build-angle-macos.sh') }}
+      - name: Build ANGLE/CGL binaries
+        if: matrix.arch == 'x64' && steps.angle-cache.outputs.cache-hit != 'true'
+        env:
+          OPENOMSI_ANGLE_BUILD_ROOT: ${{ runner.temp }}/openomsi-angle
+        run: |
+          angle_out=$(sh scripts/build-angle-macos.sh)
+          mkdir -p "$RUNNER_TEMP/openomsi-angle-libs"
+          cp "$angle_out/libEGL.dylib" "$angle_out/libGLESv2.dylib" "$RUNNER_TEMP/openomsi-angle-libs/"
+          cp "$angle_out/../../LICENSE" "$RUNNER_TEMP/openomsi-angle-libs/LICENSE-ANGLE.txt"
+      - name: Save ANGLE/CGL binaries
+        if: matrix.arch == 'x64' && steps.angle-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/openomsi-angle-libs
+          key: ${{ steps.angle-cache.outputs.cache-primary-key }}
       - name: Build
+        env:
+          OPENOMSI_ANGLE_ARTIFACT_DIR: ${{ runner.temp }}/openomsi-angle-libs
         run: scripts/build-macos.sh
+      - name: Rain and snow roof occlusion
+        env:
+          OPENOMSI_ROOF_TEST_BACKEND: ${{ matrix.arch == 'x64' && 'angle' || 'metal' }}
+          ANGLE_TEST_LIBRARY_DIRECTORY: ${{ github.workspace }}/dist/macos/openOMSI.app/Contents/MacOS
+        run: |
+          if [ "$OPENOMSI_ROOF_TEST_BACKEND" = angle ]; then
+            unset ANGLE_DEFAULT_PLATFORM
+            export DYLD_LIBRARY_PATH="$ANGLE_TEST_LIBRARY_DIRECTORY${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+          fi
+          cargo test --locked --release --target "$OPENOMSI_TARGET" -p omsi-render --lib roof_occlusion_gpu -- --ignored --nocapture
+      - name: ANGLE/CGL renderer regression
+        if: matrix.arch == 'x64'
+        env:
+          ANGLE_TEST_LIBRARY_DIRECTORY: ${{ github.workspace }}/dist/macos/openOMSI.app/Contents/MacOS
+        run: |
+          unset ANGLE_DEFAULT_PLATFORM
+          export DYLD_LIBRARY_PATH="$ANGLE_TEST_LIBRARY_DIRECTORY${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+          cargo test --locked --release --target "$OPENOMSI_TARGET" -p omsi-render --test angle_macos -- --ignored --nocapture
       - name: iPhone and iPad game library compiles
         if: matrix.arch == 'arm64'
         env:

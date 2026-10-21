@@ -74,7 +74,7 @@ fn splash(vid: u32, s: u32) -> RainOut {
     let mc = m * vec4<f32>(xy, 0.0, 1.0);
     let uv = vec2<f32>(mc.x * 0.5 + 0.5, 0.5 - mc.y * 0.5);
     let side = f32(textureDimensions(roof_map).x);
-    let top = textureLoad(roof_map, vec2<i32>(clamp(uv, vec2<f32>(0.0), vec2<f32>(0.9999)) * side), 0);
+    let top = roof_depth_at(vec2<i32>(clamp(uv, vec2<f32>(0.0), vec2<f32>(0.9999)) * side));
     // (the map's depth back to a height: it looks straight down)
     let z = (top - mc.z) / m[2].z;
     let p = vec3<f32>(xy, z + 0.008 + 0.012 * age);
