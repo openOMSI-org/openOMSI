@@ -128,13 +128,23 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   tower blocks, a swimming pool complex) were dropped for their yards and are now drawn, each
   house with its own height; garages and greenhouses count too.
 
-- **Content test** in Settings, in place of the launcher's Model test page: any content is
-  loaded the way the game loads it and every warning of its files is listed - a bus with the
-  parts coupled behind it, a whole map (every tile, object and spline it places, what of it
-  is not installed, its ground textures and AI lists; optionally every model, mesh and
-  texture of it), an installed mod, or any file or folder: a scenery object, a spline, a
-  human, a weather, a mesh, a mod not installed yet (folder or zip). From the command line:
+- **Troubleshooting** in the launcher's Help group (and as the last tab of Settings): what is
+  wrong with the installed content, by the bus, map or pack it concerns - packs waiting for
+  their bus, buses taking parts from packs that are not installed, map HOF files that could
+  not be added, failed installs.
+  "Scan again" looks afresh after installing what was missing and says how many problems
+  are gone; the menu entry shows how many are left.
+- **Model test** (Troubleshooting's second tab, the launcher's former Model test page): any
+  content is loaded the way the game loads it and every warning of its files is listed - a
+  bus with the parts coupled behind it, a whole map (every tile, object and spline it places,
+  what of it is not installed, its ground textures and AI lists; optionally every model,
+  mesh and texture of it), an installed mod (picked from a searchable list), or any file or
+  folder: a scenery object, a spline, a human, a weather, a mesh, a mod not installed yet
+  (folder or zip). A folder's counts filter what it holds by kind. From the command line:
   `openomsi --check <file or folder> [--deep]`.
+- **Logs** (Troubleshooting's third tab): the log of a running game as it is written, the
+  last game's log and the launcher's own, filtered by warnings or errors and searchable; a
+  log no game is writing can be deleted.
 - Save slots: the pause menu's "Save to a slot..." saves to a new slot or over one of the
   map's slots, and the launcher's Continue card deletes saves [#2556](https://github.com/openOMSI-org/openOMSI/issues/2556).
 - `[visible]` conditions combine: several `[visible]` of a mesh must all hold,

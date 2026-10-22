@@ -39,7 +39,37 @@ const android = window.OmsiLauncher
   : null;
 export const onPhone = !!android;
 
-async function mock(cmd) {
+// (a running game's log in the browser: a made-up line each second since the page opened)
+const MOCK_OPENED = Date.now();
+const MOCK_LIVE = [
+  ['INFO ', 'openomsi_game', 'stop Freudstr.: 3 boarding, 1 leaving'],
+  ['INFO ', 'omsi_ai', 'tile 8/3 loaded (36 ms)'],
+  ['INFO ', 'openomsi_game', 'next stop: U Rathaus Spandau'],
+  ['WARN ', 'omsi_render', 'frame took 41 ms (shaders compiling)'],
+  ['INFO ', 'omsi_sound', 'announcement: Rathaus Spandau'],
+  ['ERROR', 'omsi_content', 'sound file Sound/kneel.wav could not be read: invalid RIFF header'],
+];
+
+async function mockLog(args) {
+  const r = await fetch(`../mock/log_file/${String(args.name).replace(/\//g, '_')}.json`);
+  if (!r.ok) throw new Error(`no log file ${args.name}`);
+  const a = await r.json();
+  if (!a.file.pid) return a;
+  const n = Math.floor((Date.now() - MOCK_OPENED) / 1000);
+  for (let i = 0; i < n; i++) {
+    const [lv, tgt, msg] = MOCK_LIVE[i % MOCK_LIVE.length];
+    a.lines.push(`[${new Date(MOCK_OPENED + i * 1000).toISOString().slice(0, 19)}Z ${lv} ${tgt}] ${msg}`);
+  }
+  return a;
+}
+
+// (log files deleted in the browser: left out of the list until the page is opened again)
+const MOCK_DELETED = new Set();
+
+async function mock(cmd, args) {
+  if (cmd === 'log_file') return mockLog(args);
+  if (cmd === 'log_delete') return (args.names.forEach((n) => MOCK_DELETED.add(n)), args.names.length);
+  if (cmd === 'log_files') return (await (await fetch('../mock/log_files.json')).json()).filter((f) => !MOCK_DELETED.has(f.name));
   // (raw answers - the preview's pictures - as .bin)
   if (cmd === 'preview_frame') return (await fetch('../mock/preview_frame.bin')).arrayBuffer();
   if (BYTES.has(cmd)) return (await fetch(`../mock/${cmd}.json`)).arrayBuffer();
@@ -56,7 +86,7 @@ const BYTES = new Set(['preview_frame', 'route_map', 'map_ground']);
 /** Call a command; rejects with the error text the command gave. */
 export function call(cmd, args = {}) {
   if (android) return android.call(cmd, args);
-  if (!inTauri) return mock(cmd);
+  if (!inTauri) return mock(cmd, args);
   const p = OWN.has(cmd) ? tauri.core.invoke(cmd, args) : tauri.core.invoke(BYTES.has(cmd) ? 'call_bytes' : 'call', { cmd, args });
   return p.catch((e) => {
     throw new Error(typeof e === 'string' ? e : e?.message || String(e));

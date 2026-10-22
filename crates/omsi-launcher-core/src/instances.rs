@@ -441,6 +441,77 @@ fn taskkill(pid: u32, force: bool) -> Result<()> {
     Ok(())
 }
 
+fn modified(p: &Path) -> u64 {
+    std::fs::metadata(p).and_then(|m| m.modified()).ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0)
+}
+
+/// A log file the launcher can show: the games' (`game.log`, `game-n.log`) and the
+/// launcher's own.
+#[derive(Serialize, Clone, Debug)]
+pub struct LogFile {
+    /// Its name under `~/.openomsi` ("game.log", "game-2.log", "launcher.log").
+    pub name: String,
+    pub path: String,
+    pub size: u64,
+    /// When it was last written (seconds).
+    pub modified: u64,
+    /// "game" or "launcher".
+    pub kind: &'static str,
+    /// The running game writing it, if one does.
+    pub pid: Option<u32>,
+}
+
+/// Every log file, the ones running games write first, then newest first.
+pub fn log_files() -> Vec<LogFile> {
+    let data = crate::data_dir();
+    let running: Vec<Instance> = list().into_iter().filter(|i| i.running).collect();
+    let mut out = Vec::new();
+    let mut add = |name: String, path: PathBuf, kind: &'static str| {
+        let Ok(meta) = std::fs::metadata(&path) else { return };
+        if !meta.is_file() {
+            return;
+        }
+        let path_s = path.to_string_lossy().to_string();
+        let pid = running.iter().find(|i| Path::new(&i.log) == path).map(|i| i.pid);
+        out.push(LogFile { name, path: path_s, size: meta.len(), modified: modified(&path), kind, pid });
+    };
+    let game_log = |n: &str| n == "game.log" || (n.starts_with("game-") && n.ends_with(".log"));
+    if let Ok(rd) = std::fs::read_dir(&data) {
+        for e in rd.flatten() {
+            let n = e.file_name().to_string_lossy().to_string();
+            if game_log(&n) {
+                add(n, e.path(), "game");
+            }
+        }
+    }
+    add("launcher.log".into(), data.join("launcher.log"), "launcher");
+    out.sort_by(|a, b| b.pid.is_some().cmp(&a.pid.is_some()).then(b.modified.cmp(&a.modified)));
+    out
+}
+
+/// The end of the log file `name` (one of `log_files`; nothing else is read).
+pub fn log_file(name: &str, lines: usize) -> Result<Value> {
+    let f = log_files().into_iter().find(|f| f.name == name).ok_or_else(|| anyhow!("no log file {name}"))?;
+    let text = last_lines(Path::new(&f.path), lines.clamp(1, 5000), 2 * 1024 * 1024);
+    Ok(serde_json::json!({ "file": f, "lines": text }))
+}
+
+/// Delete the log files `names` (of `log_files`; the log of a running game is kept, it is
+/// still being written). Returns how many were deleted.
+pub fn log_delete(names: &[String]) -> Result<usize> {
+    let files = log_files();
+    let mut gone = 0;
+    for name in names {
+        let f = files.iter().find(|f| &f.name == name).ok_or_else(|| anyhow!("no log file {name}"))?;
+        if f.pid.is_some() {
+            return Err(anyhow!("{name} is written by a running game"));
+        }
+        std::fs::remove_file(&f.path).with_context(|| format!("deleting {}", f.path))?;
+        gone += 1;
+    }
+    Ok(gone)
+}
+
 /// The end of a game's log.
 pub fn log_tail(pid: u32, lines: usize) -> Result<Vec<String>> {
     let inst = list().into_iter().find(|i| i.pid == pid).ok_or_else(|| anyhow!("no game with process id {pid}"))?;

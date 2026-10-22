@@ -3175,7 +3175,7 @@ pub fn take_in_process_launch() -> Option<Vec<String>> {
 /// there may not start programs).
 pub const IN_PROCESS_GAMES: bool = cfg!(any(target_os = "android", target_os = "ios"));
 
-pub use instances::{list as list_instances, log_tail, stop as stop_instance, Instance};
+pub use instances::{list as list_instances, log_delete, log_file, log_files, log_tail, stop as stop_instance, Instance, LogFile};
 
 /// Terminal access to the same functions: `--cli lines '{"map":"maps/Grundorf/global.cfg"}'`.
 pub fn cli(cmd: &str, arg: &str) -> Result<Value> {

@@ -876,6 +876,9 @@ pub fn call(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "poll" => poll(),
         "stop_game" => stop_game(arg::<u32>(args, "pid")?),
         "game_log" => game_log(arg::<u32>(args, "pid")?, arg::<Option<usize>>(args, "lines")?),
+        "log_files" => to_json(core::log_files()),
+        "log_delete" => to_json(core::log_delete(&arg::<Vec<String>>(args, "names")?).map_err(err)?),
+        "log_file" => core::log_file(&arg::<String>(args, "name")?, arg::<Option<usize>>(args, "lines")?.unwrap_or(1000)).map_err(err),
         "model_check" => content_check(arg::<String>(args, "bus")?, false),
         "content_check" => content_check(arg::<String>(args, "path")?, arg::<Option<bool>>(args, "deep")?.unwrap_or(false)),
         "launch" => launch(p, arg::<Value>(args, "duty")?),
@@ -1025,7 +1028,7 @@ mod custom_weather_tests {
     }
 }
 
-// --- the content test (Settings) -----------------------------------------------------
+// --- the model test (Troubleshooting) -------------------------------------------------
 
 /// The game program loads `path` - a vehicle, a scenery object, a spline, a human, a map, a
 /// mod's folder or zip - as it would for a drive (`openomsi --check`) and answers its

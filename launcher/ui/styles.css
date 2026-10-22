@@ -1087,6 +1087,14 @@ html.phone, html.phone body { font-size: 15px; -webkit-tap-highlight-color: tran
 .warn-text { color: var(--warn); }
 .log .log-error { color: var(--danger); }
 .log .log-warn { color: var(--warn); }
+/* Troubleshooting -> Logs: the files on the left, the one chosen beside them */
+.logs-grid { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.logs-list { padding: 4px 8px 10px; max-height: 560px; overflow: auto; }
+.logs-list .nav-title { padding: 10px 12px 4px; }
+.log.logs-view { max-height: 520px; min-height: 240px; }
+.logs-list .logs-delete { flex: none; opacity: 0.55; }
+.logs-list .list-item:hover .logs-delete, .logs-list .logs-delete:focus-within { opacity: 1; }
+@media (max-width: 900px) { .logs-grid { grid-template-columns: minmax(0, 1fr); } }
 
 .key-picker-search { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 10px; }
 .key-picker-list { max-height: min(520px, 58vh); overflow: auto; }

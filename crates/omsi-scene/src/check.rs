@@ -5,7 +5,7 @@
 //! any of these in it) - with every warning and error the loaders say caught instead of
 //! scrolled past in a terminal, and the textures, meshes and files they name looked for in
 //! the folders the game looks in. `--check-vehicle <file>` is the old name of the same.
-//! The findings go to stdout as one JSON line, for the launcher's "Content test" (Settings).
+//! The findings go to stdout as one JSON line, for the launcher's "Model test" (Troubleshooting).
 //! No window, no graphics device: a modder sees what is wrong with their work in seconds.
 
 use rayon::prelude::*;
