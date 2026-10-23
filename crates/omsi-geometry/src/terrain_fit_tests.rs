@@ -950,3 +950,75 @@ fn coplanar_cleanup_keeps_duplicate_surface_boundaries_and_true_folds() {
     let folded = [[a, b, c], [a, c, d + DVec3::Z]];
     assert!(contains(&sampling::creases(folded.iter()), a, c));
 }
+
+#[test]
+fn malformed_profile_is_an_error_instead_of_aborting_a_tile_batch() {
+    let profile = SplineTerrainProfile {
+        mesh: MeshData {
+            indices: vec![0, 1, 2],
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    assert!(matches!(
+        try_build_fitted_terrain_mesh_with_roads(&ground(), &[(&profile, DVec3::ZERO)], &[], &[]),
+        Err(TerrainFitError::Panicked)
+    ));
+}
+
+#[test]
+fn excessive_terminal_depth_returns_a_recoverable_error() {
+    let c = curve([40.0, 40.0, -1000.0], 0.0, 0.0);
+    let profile = build_spline_terrain_profile(&ditch(), &c, false, 1, DVec3::ZERO);
+    assert!(matches!(
+        try_build_fitted_terrain_mesh_with_roads(&ground(), &[(&profile, DVec3::ZERO)], &[], &[]),
+        Err(TerrainFitError::Complexity)
+    ));
+}
+
+#[test]
+fn terminal_fade_preserves_the_lateral_bank_shape() {
+    let mut field = Field::new(60);
+    field.add_rim(
+        [DVec3::new(40.0, 40.0, -0.5), DVec3::new(40.0, 60.0, -0.5)],
+        Some([
+            End {
+                point: DVec2::new(40.0, 40.0),
+                outward: -DVec2::Y,
+                width: 1.0,
+            },
+            End {
+                point: DVec2::new(40.0, 60.0),
+                outward: DVec2::Y,
+                width: 1.0,
+            },
+        ]),
+        DVec2::ZERO,
+        4.0,
+    );
+    for x in [40.6, 41.0, 42.0, 43.0] {
+        let side = field.height(DVec2::new(x, 60.0), 0.0, &|_| 0.0);
+        let half = field.height(DVec2::new(x, 60.5), 0.0, &|_| 0.0);
+        assert!((half - side * 0.5).abs() < 1e-10);
+        let end = field.height(DVec2::new(x, 61.0), 0.0, &|_| 0.0);
+        let near_end = field.height(DVec2::new(x, 60.999), 0.0, &|_| 0.0);
+        assert_eq!(end, 0.0);
+        assert!(near_end.abs() < 1e-8, "end tangent must join saved ground");
+    }
+}
+
+#[test]
+fn diagonal_constraint_grid_visits_are_linear_and_include_shared_boundaries() {
+    let cover = |a, b| super::super::terrain_constraints::covered_bins([a, b], 300.0, 128);
+    let diagonal = cover(DVec2::ZERO, DVec2::splat(300.0));
+    assert!(diagonal.len() < 4 * 128);
+    let reversed = cover(DVec2::splat(300.0), DVec2::ZERO);
+    assert_eq!(diagonal, reversed);
+    let horizontal = cover(DVec2::new(0.0, 150.0), DVec2::new(300.0, 150.0));
+    let vertical = cover(DVec2::new(150.0, 0.0), DVec2::new(150.0, 300.0));
+    for cell in [63 * 128 + 63, 63 * 128 + 64, 64 * 128 + 63, 64 * 128 + 64] {
+        assert!(diagonal.contains(&cell));
+        assert!(horizontal.contains(&cell));
+        assert!(vertical.contains(&cell));
+    }
+}

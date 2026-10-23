@@ -15,7 +15,7 @@ mod terrain_fit;
 mod terrain_fit_surface;
 mod terrain_constraints;
 pub use terrain_fit::{
-    SplineTerrainProfile, build_fitted_terrain_mesh, build_fitted_terrain_mesh_with_neighbors,
+    TerrainFitError, SplineTerrainProfile, build_fitted_terrain_mesh, build_fitted_terrain_mesh_with_neighbors,
     try_build_fitted_terrain_mesh_with_roads,
     build_fitted_terrain_mesh_with_roads,
 };

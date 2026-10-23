@@ -1,8 +1,8 @@
 //! Planarize terrain constraints before giving them to the triangulator. In particular,
 //! never ask Spade's incremental constraint splitter to resolve nearly touching roads.
-use super::terrain_fit::Cdt;
+use super::terrain_fit::{Cdt, TerrainFitError};
 use glam::DVec2;
-use spade::{InsertionError, Point2, Triangulation, handles::FixedVertexHandle};
+use spade::{Point2, Triangulation, handles::FixedVertexHandle};
 use std::collections::{HashMap, HashSet};
 
 const SCALE: f64 = 10_000.0; // 0.1 mm stays distinct in tile-local f32 coordinates.
@@ -53,9 +53,12 @@ fn vertex(
     cdt: &mut Cdt,
     map: &mut HashMap<Key, FixedVertexHandle>,
     p: Key,
-) -> Result<FixedVertexHandle, InsertionError> {
+) -> Result<FixedVertexHandle, TerrainFitError> {
     if let Some(&v) = map.get(&p) {
         return Ok(v);
+    }
+    if map.len() >= 65_536 {
+        return Err(TerrainFitError::Complexity);
     }
     let q = point(p);
     let v = cdt.insert(Point2::new(q.x, q.y))?;
@@ -71,7 +74,7 @@ pub(super) fn add(
     segments: &[[DVec2; 2]],
     side: f64,
     bins: usize,
-) -> Result<(), InsertionError> {
+) -> Result<(), TerrainFitError> {
     let mut unique = HashSet::new();
     let segments: Vec<_> = segments
         .iter()
@@ -82,20 +85,17 @@ pub(super) fn add(
         .collect();
     let mut splits: Vec<Vec<Key>> = segments.iter().map(|p| p.map(key).to_vec()).collect();
     let mut spatial = vec![Vec::<usize>::new(); bins * bins];
-    let bin = |p: DVec2| {
-        let p = (p / side * bins as f64)
-            .floor()
-            .clamp(DVec2::ZERO, DVec2::splat((bins - 1) as f64));
-        (p.x as usize, p.y as usize)
-    };
+    let mut visits = 0usize;
     for (i, &[a, b]) in segments.iter().enumerate() {
-        let (lo, hi) = (a.min(b), a.max(b));
-        let ((x0, y0), (x1, y1)) = (bin(lo), bin(hi));
+        let covered = covered_bins([a, b], side, bins);
         let mut neighbors = Vec::new();
-        for y in y0..=y1 {
-            for x in x0..=x1 {
-                neighbors.extend_from_slice(&spatial[y * bins + x]);
+        for &cell in &covered {
+            let entries = &spatial[cell];
+            visits += entries.len();
+            if visits > 8_000_000 {
+                return Err(TerrainFitError::Complexity);
             }
+            neighbors.extend_from_slice(entries);
         }
         neighbors.sort_unstable();
         neighbors.dedup();
@@ -104,10 +104,8 @@ pub(super) fn add(
             splits[i].extend_from_slice(&points);
             splits[j].extend(points);
         }
-        for y in y0..=y1 {
-            for x in x0..=x1 {
-                spatial[y * bins + x].push(i);
-            }
+        for cell in covered {
+            spatial[cell].push(i);
         }
     }
     let mut vertices = HashMap::new();
@@ -137,4 +135,34 @@ pub(super) fn add(
         log::debug!("terrain fitting: {rejected} sub-pixel constraints retained as vertices");
     }
     Ok(())
+}
+
+/// Conservative supercover: include both cells at a grid boundary. Visiting
+/// each crossed column avoids the quadratic bounding-box area of diagonal roads.
+pub(super) fn covered_bins([a, b]: [DVec2; 2], side: f64, bins: usize) -> Vec<usize> {
+    let cell = side / bins as f64;
+    let d = b - a;
+    let index = |v: f64| (v / cell).floor().clamp(0.0, (bins - 1) as f64) as usize;
+    let epsilon = 1e-8;
+    let x0 = index(a.x.min(b.x) - epsilon);
+    let x1 = index(a.x.max(b.x) + epsilon);
+    let mut covered = Vec::new();
+    for x in x0..=x1 {
+        let (lo, hi) = if d.x.abs() < 1e-12 {
+            (0.0, 1.0)
+        } else {
+            let u = (x as f64 * cell - epsilon - a.x) / d.x;
+            let v = ((x + 1) as f64 * cell + epsilon - a.x) / d.x;
+            (u.min(v).max(0.0), u.max(v).min(1.0))
+        };
+        if lo > hi {
+            continue;
+        }
+        let ya = a.y + d.y * lo;
+        let yb = a.y + d.y * hi;
+        for y in index(ya.min(yb) - epsilon)..=index(ya.max(yb) + epsilon) {
+            covered.push(y * bins + x);
+        }
+    }
+    covered
 }

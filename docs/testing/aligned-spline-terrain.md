@@ -131,3 +131,25 @@ Actual Berlin-Spandau/Map 400 tile CSVs and gameplay FPS require the installed m
 The normal geometry/scene tests also cover unchanged saved terrain, matching seam
 stations, duplicate coplanar faces, actual slope folds, refinement error and invariance
 to extra stations in an otherwise identical planar road.
+
+## Streaming robustness and terminal transitions
+
+Terminal and lateral displacements use independent quintic fades. This keeps the
+bank cross-section through an end cap and gives a zero terminal derivative when
+it rejoins saved ground. Terrain-gradient probes are evaluated only within the
+half-metre tangent-matching region. Cap sampling rays are clipped before storage. Constraint intersection candidates
+use a conservative grid supercover along each segment, including both sides of
+grid boundaries, instead of every cell in its bounding rectangle.
+
+Optional fitting rejects more than 600,000 profile indices, terminal/shoulder
+widths exceeding one tile, more than 160,000 refinement probes or 80,000 constraint
+segments, 65,536 constraint vertices or eight million broad-phase pair visits.
+These deterministic limits bound the extra sampling work; they are not
+a wall-clock deadline. A budget error or caught internal fitting panic follows the
+same legacy-hole fallback as a triangulation error. Exceptionally complex tiles
+can therefore use the original cut terrain rather than the fitted backing.
+
+If a preparation batch panics outside fitting, its tiles are retried independently
+so a damaged tile cannot permanently exclude healthy neighbors in the same batch.
+Fits taking at least half a second log the tile coordinates and source counts.
+The combined cut/textures timer alone cannot distinguish fitting from image decoding.

@@ -130,6 +130,7 @@ impl World {
                             .map(move |s| (&s.shape, q.origin - origin))
                     })
                     .collect();
+                let fit_started = std::time::Instant::now();
                 p.terrain = Some(finish_spline_fit(
                     omsi_geometry::try_build_fitted_terrain_mesh_with_roads(
                         terrain, &profiles, &neighbors, &roads,
@@ -141,6 +142,9 @@ impl World {
                     key,
                     origin,
                 ));
+                if fit_started.elapsed().as_secs_f64() >= 0.5 {
+                    log::warn!("tile {},{}: spline terrain fitting took {:.2} s ({} profiles, {} road surfaces)", key.0, key.1, fit_started.elapsed().as_secs_f64(), profiles.len(), roads.len());
+                }
             }
         }
         p.hole_walls = tile_terrain

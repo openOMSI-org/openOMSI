@@ -7,6 +7,31 @@ const END_BLEND: f64 = 1.0;
 const EPS: f64 = 1e-8;
 const NORMAL_STEP: f64 = 0.01;
 
+// Bound optional fitting work; exceeding this restores the caller's legacy cuts.
+const MAX_PROBES: usize = 160_000;
+const MAX_SEGMENTS: usize = 80_000;
+
+#[derive(Debug)]
+pub enum TerrainFitError {
+    Insertion(spade::InsertionError),
+    Complexity,
+    Panicked,
+}
+impl std::fmt::Display for TerrainFitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Insertion(e) => write!(f, "{e}"),
+            Self::Complexity => f.write_str("terrain fitting work budget exceeded"),
+            Self::Panicked => f.write_str("terrain fitting failed internally"),
+        }
+    }
+}
+impl From<spade::InsertionError> for TerrainFitError {
+    fn from(e: spade::InsertionError) -> Self {
+        Self::Insertion(e)
+    }
+}
+
 pub(super) type Cdt = ConstrainedDelaunayTriangulation<Point2<f64>>;
 
 /// Solid spline backing with explicit terminal planes, in the mesh's coordinates.
@@ -232,23 +257,29 @@ impl Field {
             let q = a.lerp(b, t);
             let d = q.truncate().distance(probe);
             if d < rim.width && beyond < 1.0 {
-                let strength = (1.0 - d / rim.width) * (1.0 - beyond);
+                let lateral = 1.0 - d / rim.width;
+                let terminal = 1.0 - beyond;
                 // Blend a displacement of the saved ground, not an absolute plane:
                 // a lip's tangent must not flatten a nearby cliff or a curved hill.
                 // Match the lip derivative locally, fading that correction within
                 // one sampling step rather than extrapolating it across the bank.
                 let at = q.truncate();
-                let ground_gradient = DVec2::new(
-                    terrain_at(at + DVec2::X * NORMAL_STEP)
-                        - terrain_at(at - DVec2::X * NORMAL_STEP),
-                    terrain_at(at + DVec2::Y * NORMAL_STEP)
-                        - terrain_at(at - DVec2::Y * NORMAL_STEP),
-                ) / (2.0 * NORMAL_STEP);
                 let delta = p - at;
                 let tangent_fade = (1.0 - delta.length() / STEP).max(0.0).powi(3);
-                let correction = q.z - terrain_at(at)
-                    + (rim.gradient - ground_gradient).dot(delta) * tangent_fade;
-                let fade = strength.powi(3) * (10.0 - 15.0 * strength + 6.0 * strength * strength);
+                let mut correction = q.z - terrain_at(at);
+                if tangent_fade > 0.0 {
+                    let ground_gradient = DVec2::new(
+                        terrain_at(at + DVec2::X * NORMAL_STEP)
+                            - terrain_at(at - DVec2::X * NORMAL_STEP),
+                        terrain_at(at + DVec2::Y * NORMAL_STEP)
+                            - terrain_at(at - DVec2::Y * NORMAL_STEP),
+                    ) / (2.0 * NORMAL_STEP);
+                    correction += (rim.gradient - ground_gradient).dot(delta) * tangent_fade;
+                }
+                // Independent smooth fades keep the bank's shape through the cap.
+                let smooth = |t: f64| t.powi(3) * (10.0 - 15.0 * t + 6.0 * t * t);
+                let fade = smooth(lateral) * smooth(terminal);
+                let strength = lateral * terminal;
                 let weight = strength.powi(4) / d.powi(2).max(1e-16);
                 sum += correction * fade * weight;
                 weights += weight;
@@ -334,7 +365,25 @@ pub fn try_build_fitted_terrain_mesh_with_roads(
     profiles: &[(&SplineTerrainProfile, DVec3)],
     neighbors: &[(&Terrain, DVec2)],
     roads: &[(&MeshData, DVec3)],
-) -> Result<MeshData, spade::InsertionError> {
+) -> Result<MeshData, TerrainFitError> {
+    omsi_cfg::panic_guard::catch(|| fit_profiles(terrain, profiles, neighbors, roads))
+        .unwrap_or(Err(TerrainFitError::Panicked))
+}
+
+fn fit_profiles(
+    terrain: &Terrain,
+    profiles: &[(&SplineTerrainProfile, DVec3)],
+    neighbors: &[(&Terrain, DVec2)],
+    roads: &[(&MeshData, DVec3)],
+) -> Result<MeshData, TerrainFitError> {
+    if profiles
+        .iter()
+        .map(|(p, _)| p.mesh.indices.len())
+        .sum::<usize>()
+        > 600_000
+    {
+        return Err(TerrainFitError::Complexity);
+    }
     if profiles
         .iter()
         .all(|(profile, _)| profile.mesh.indices.is_empty())
@@ -392,6 +441,9 @@ pub fn try_build_fitted_terrain_mesh_with_roads(
         });
         if let Some(ends) = ends {
             for end in ends {
+                if !end.width.is_finite() || end.width > tile_size() {
+                    return Err(TerrainFitError::Complexity);
+                }
                 let across = DVec2::new(-end.outward.y, end.outward.x);
                 let mut span = [f64::INFINITY, f64::NEG_INFINITY];
                 for v in &mesh.positions {
@@ -404,8 +456,10 @@ pub fn try_build_fitted_terrain_mesh_with_roads(
                     }
                     if (-1e-5..=1.0).contains(&behind) {
                         let ray = [p, p + end.outward * (behind.max(0.0) + end.width)];
-                        field.cap_rays.push(ray);
-                        field.cap_constraints.push(ray);
+                        if let Some(ray) = segment(ray[0], ray[1]) {
+                            field.cap_rays.push(ray);
+                            field.cap_constraints.push(ray);
+                        }
                     }
                 }
                 if span[0].is_finite() {
@@ -413,10 +467,15 @@ pub fn try_build_fitted_terrain_mesh_with_roads(
                     let steps = (end.width / (STEP * 0.25)).ceil() as usize;
                     for i in 0..=steps {
                         let p = anchor + end.outward * (end.width * i as f64 / steps as f64);
-                        field.cap_rays.push([
+                        if let Some(ray) = segment(
                             p + across * (span[0] - blend),
                             p + across * (span[1] + blend),
-                        ]);
+                        ) {
+                            field.cap_rays.push(ray);
+                        }
+                        if field.cap_rays.len() > MAX_SEGMENTS {
+                            return Err(TerrainFitError::Complexity);
+                        }
                     }
                 }
             }
@@ -460,7 +519,7 @@ fn fit(
     terrain: &Terrain,
     field: &Field,
     terrain_at: &impl Fn(DVec2) -> f64,
-) -> Result<MeshData, spade::InsertionError> {
+) -> Result<MeshData, TerrainFitError> {
     let mut cdt = Cdt::new();
     let mut constraints = Vec::new();
     let mut probes = Vec::new();
@@ -584,6 +643,9 @@ fn fit(
     for (points, width) in runs {
         let [a, b] = points.map(|p| p.truncate());
         let normal = DVec2::new(-(b - a).y, (b - a).x).normalize();
+        if !width.is_finite() || width > tile_size() {
+            return Err(TerrainFitError::Complexity);
+        }
         let steps = (width / STEP).ceil() as i32;
         let distances = (-steps..=steps)
             .map(|step| width * step as f64 / steps as f64)
@@ -593,6 +655,9 @@ fn fit(
                 continue;
             };
             let n = (a.distance(b) / STEP).ceil().max(1.0) as usize;
+            if probes.len() + n + 1 > MAX_PROBES {
+                return Err(TerrainFitError::Complexity);
+            }
             probes.extend((0..=n).map(|i| a.lerp(b, i as f64 / n as f64)));
         }
     }
@@ -608,8 +673,14 @@ fn fit(
     for &[a, b] in &field.cap_rays {
         if let Some([a, b]) = segment(a, b) {
             let n = (a.distance(b) / (STEP * 0.25)).ceil().max(1.0) as usize;
+            if probes.len() + n + 1 > MAX_PROBES {
+                return Err(TerrainFitError::Complexity);
+            }
             probes.extend((0..=n).map(|i| a.lerp(b, i as f64 / n as f64)));
         }
+    }
+    if constraints.len() > MAX_SEGMENTS {
+        return Err(TerrainFitError::Complexity);
     }
     super::terrain_constraints::add(&mut cdt, &constraints, side, terrain.cells.clamp(1, 128))?;
     sampling::refine(
