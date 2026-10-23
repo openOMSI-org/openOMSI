@@ -921,6 +921,7 @@ fn a_crossing_far_over_the_ground_is_draped_by_its_height_field() {
         path: dir.join("tile_0_0.map"),
         base_terrain: Terrain::flat(),
         align: Vec::new(),
+        hole_rims: Vec::new(),
         water: None,
         bakes_light_map: false,
         splines: Vec::new(),

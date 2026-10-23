@@ -81,7 +81,7 @@ impl World {
         let key = (p.tx, p.ty);
         let (tx, ty) = key;
         let (x0, y0) = (tx as f64 * tile_size(), ty as f64 * tile_size());
-        let (mut ts, hole_rims, wheel_meshes) = self.tile_surface(p, staged, layout, debug_raster);
+        let (mut ts, mut hole_rims, wheel_meshes) = self.tile_surface(p, staged, layout, debug_raster);
         // (before the paint is cut: under a road the ground's layer is never asked for)
         ts.sound = self.ground_sound(p, staged.get(&key).map(|q| q.as_ref()), &ts.drive);
         if omsi_cfg::flags::OMSI_DEBUG_SURFACES.is_set() {
@@ -130,8 +130,16 @@ impl World {
                             .map(move |s| (&s.shape, q.origin - origin))
                     })
                     .collect();
-                p.terrain = Some(omsi_geometry::build_fitted_terrain_mesh_with_roads(
-                    terrain, &profiles, &neighbors, &roads,
+                p.terrain = Some(finish_spline_fit(
+                    omsi_geometry::try_build_fitted_terrain_mesh_with_roads(
+                        terrain, &profiles, &neighbors, &roads,
+                    ),
+                    terrain,
+                    &mut ts,
+                    &mut hole_rims,
+                    &order,
+                    key,
+                    origin,
                 ));
             }
         }
@@ -655,3 +663,43 @@ const BUILDING_HEIGHT: f32 = 4.0;
 const BUILDING_WIDTH: f32 = 4.0;
 /// Cells per tile edge where the ambience looks for water (some 19 m on a Berlin tile).
 const WATER_CELLS: usize = 16;
+
+/// Restore the original projected cuts only for a tile whose fitting failed.
+fn restore_spline_holes(
+    ts: &mut TileSurface,
+    hole_rims: &mut Vec<Vec<DVec3>>,
+    sources: &[&Arc<StagedTile>],
+    (tx, ty): (i32, i32),
+    origin: DVec3,
+) {
+    for q in sources {
+        if (q.tx - tx).abs() > 1 || (q.ty - ty).abs() > 1 {
+            continue;
+        }
+        for rim in &q.hole_rims {
+            let ring: Vec<_> = rim.iter().map(|v| v.truncate()).collect();
+            ts.add_outline(&ring, tx, ty);
+            hole_rims.push(rim.iter().map(|v| *v - origin).collect());
+        }
+    }
+}
+
+/// Keep failure handling in the same path as production, independently testable.
+pub(super) fn finish_spline_fit(
+    result: std::result::Result<MeshData, impl std::fmt::Display>,
+    terrain: &Terrain,
+    ts: &mut TileSurface,
+    hole_rims: &mut Vec<Vec<DVec3>>,
+    sources: &[&Arc<StagedTile>],
+    key: (i32, i32),
+    origin: DVec3,
+) -> MeshData {
+    match result {
+        Ok(mesh) => mesh,
+        Err(e) => {
+            log::warn!("tile {key:?}: cannot fit spline terrain: {e}; restoring saved ground and spline holes");
+            restore_spline_holes(ts, hole_rims, sources, key, origin);
+            build_terrain_mesh(terrain)
+        }
+    }
+}

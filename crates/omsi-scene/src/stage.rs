@@ -554,6 +554,7 @@ impl World {
             path: path.to_path_buf(),
             base_terrain,
             align: Vec::new(),
+            hole_rims: Vec::new(),
             water: None,
             bakes_light_map: false,
             splines: Vec::new(),
@@ -728,6 +729,16 @@ impl World {
                     if omsi_cfg::flags::OMSI_LIST_ALIGNED.is_set() {
                         let p = curve.point_at(curve.length * 0.5);
                         log::info!("aligned spline {} {} mode {mode} mid ({:.1}, {:.1}, {:.1}) heading {:.0}", s.id, s.file, p.x, p.y, p.z, curve.heading_at(curve.length * 0.5));
+                    }
+                    for rim in omsi_geometry::spline_hole_rims(&st.def, &curve, s.mirror, mode) {
+                        let ring: Vec<_> = rim.iter().map(|v| v.truncate()).collect();
+                        if omsi_geometry::outline_crosses_itself(&ring) {
+                            if debug_splines {
+                                log::info!("tile {tx},{ty} spline {} {}: its hole outline crosses itself, no hole (as in Omsi.exe)", s.id, s.file);
+                            }
+                            continue;
+                        }
+                        out.hole_rims.push(rim);
                     }
                 }
                 let bounds = mesh_bounds(&mesh, &Mat4::IDENTITY, origin);

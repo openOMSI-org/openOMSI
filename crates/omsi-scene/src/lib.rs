@@ -117,3 +117,6 @@ mod terrain_mapping_tests;
 
 #[cfg(test)]
 mod crossing_deformation_tests;
+
+#[cfg(test)]
+mod terrain_benchmark;

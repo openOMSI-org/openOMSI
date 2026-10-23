@@ -66,6 +66,7 @@ fn staged(path: PathBuf, ot: Arc<ObjectType>, pose: Pose) -> StagedTile {
         path,
         base_terrain: Terrain::flat(),
         align: Vec::new(),
+        hole_rims: Vec::new(),
         water: None,
         bakes_light_map: false,
         splines: Vec::new(),
@@ -121,6 +122,40 @@ fn aligned_ditch_preparation_keeps_a_solid_floor_without_an_alpha_hole() {
             p.hole_walls.is_empty(),
             "the shoulders are ground geometry, not vertical walls"
         );
+        // Inject a fitting error at the production result handler. The original
+        // outline must still cut the saved ground, including a neighboring tile.
+        let cache = world.staged.lock();
+        let q = cache.get(&(0, 0)).unwrap();
+        assert!(!q.hole_rims.is_empty());
+        for (key, origin) in [
+            ((0, 0), DVec3::ZERO),
+            ((0, 1), DVec3::new(0.0, tile_size(), 0.0)),
+        ] {
+            let mut ts = TileSurface::new(64);
+            let mut rims = Vec::new();
+            let fallback = crate::cut_terrain::finish_spline_fit(
+                Err("injected triangulation error"),
+                &q.base_terrain,
+                &mut ts,
+                &mut rims,
+                &[q],
+                key,
+                origin,
+            );
+            assert_eq!(
+                fallback.positions,
+                build_terrain_mesh(&q.base_terrain).positions
+            );
+            assert_eq!(rims.len(), q.hole_rims.len());
+            assert_eq!(rims[0][0], q.hole_rims[0][0] - origin);
+            if key == (0, 0) {
+                assert!(
+                    ts.cut_at(44.23, 50.0, 0.0, 0.03),
+                    "failure must retain the original ditch hole"
+                );
+            }
+        }
+        drop(cache);
         let terrain = p.terrain.as_ref().unwrap();
         assert!(field_height(terrain, 44.23, 50.0).unwrap() < -0.47);
         for y in [39.5, 39.75, 40.0, 50.0, 60.0, 60.25, 60.5] {
@@ -525,4 +560,43 @@ harbour.dds
         assert_eq!(stand_in_area(&pier, &xf, pos, tile), None,
             "an ordinary model of the same size keeps the far view at heading {heading}");
     }
+}
+
+#[test]
+fn aligned_overhead_only_spline_keeps_saved_ground() {
+    let fixture = Fixture::new();
+    fixture.write(
+        "global.cfg",
+        "[name]\nOverhead regression\n[map]\n0\n0\ntile_0_0.map\n",
+    );
+    fixture.write("wire.sli", "[texture]\nwire.bmp\n[profile]\n0\n[profilepnt]\n-0.1\n5.5\n0\n1\n[profilepnt]\n0.1\n5.5\n1\n1\n");
+    fixture.write("tile_0_0.map", "[version]\n14\n[spline]\n0\nwire.sli\n1\n0\n0\n40\n0\n40\n0\n20\n0\n0\n0\n0\n0\n0\n0\n0\n\n[spline_terrain_align]\n");
+    let mut saved = Terrain::flat();
+    for y in 0..saved.samples() {
+        for x in 0..saved.samples() {
+            let i = y * saved.samples() + x;
+            saved.heights[i] = x as f32 * 0.013 + y as f32 * 0.021 + (x * y) as f32 * 0.0001;
+        }
+    }
+    std::fs::write(fixture.0.join("tile_0_0.map.terrain"), saved.to_bytes()).unwrap();
+    let world = World::open(&fixture.0, &fixture.0.join("global.cfg"), 20261001).unwrap();
+    let (prepared, _) = world.prepare_tiles(&[(0, 0, fixture.0.join("tile_0_0.map"))]);
+    assert_eq!(prepared.len(), 1);
+    let cache = world.staged.lock();
+    let staged = cache.get(&(0, 0)).unwrap();
+    assert_eq!(staged.splines.len(), 1, "fixture must load a real spline");
+    assert!(!staged.align.is_empty(), "fixture must be aligned");
+    assert!(!staged.splines[0].cuts_terrain);
+    assert!(staged.splines[0].terrain_profile.is_none());
+    assert_eq!(
+        staged.base_terrain, saved,
+        "use the authored, non-flat terrain"
+    );
+    let expected = build_terrain_mesh(&saved);
+    let actual = prepared[0].terrain.as_ref().unwrap();
+    assert_eq!(actual.positions, expected.positions);
+    assert_eq!(actual.indices, expected.indices);
+    assert_eq!(actual.normals, expected.normals);
+    assert!(prepared[0].cut.is_none());
+    assert!(prepared[0].hole_walls.is_empty());
 }

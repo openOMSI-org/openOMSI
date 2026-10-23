@@ -330,6 +330,21 @@ pub fn build_fitted_terrain_mesh_with_roads(
     neighbors: &[(&Terrain, DVec2)],
     roads: &[(&MeshData, DVec3)],
 ) -> MeshData {
+    try_build_fitted_terrain_mesh_with_roads(terrain, profiles, neighbors, roads).unwrap_or_else(
+        |e| {
+            log::warn!("cannot fit spline terrain: {e}; keeping the saved ground");
+            build_terrain_mesh(terrain)
+        },
+    )
+}
+
+/// Fit terrain while allowing the caller to restore legacy spline cuts on failure.
+pub fn try_build_fitted_terrain_mesh_with_roads(
+    terrain: &Terrain,
+    profiles: &[(&SplineTerrainProfile, DVec3)],
+    neighbors: &[(&Terrain, DVec2)],
+    roads: &[(&MeshData, DVec3)],
+) -> Result<MeshData, spade::InsertionError> {
     let terrain_at = |p: DVec2| {
         let side = tile_size();
         if p.x < 0.0 || p.y < 0.0 || p.x > side || p.y > side {
@@ -424,7 +439,7 @@ pub fn build_fitted_terrain_mesh_with_roads(
         }
     }
     if field.triangles.is_empty() {
-        return build_terrain_mesh(terrain);
+        return Ok(build_terrain_mesh(terrain));
     }
     if !roads.is_empty() {
         let mut ceiling = Field::new(field.bins);
@@ -440,14 +455,7 @@ pub fn build_fitted_terrain_mesh_with_roads(
         }
         field.roads = Some(Box::new(ceiling));
     }
-    match fit(terrain, &field, &terrain_at) {
-        Ok(mesh) => mesh,
-        Err(e) => {
-            // A malformed mod must not remove the fallback ground from a whole tile.
-            log::warn!("cannot fit spline terrain: {e}; keeping the saved ground");
-            build_terrain_mesh(terrain)
-        }
-    }
+    fit(terrain, &field, &terrain_at)
 }
 
 fn fit(

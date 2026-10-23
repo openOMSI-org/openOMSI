@@ -314,7 +314,11 @@ string of joined `[profile]`s (0x5ab908): its left end and right end 3 cm in and
 down, a bottom 10 cm under its lowest point reaching 0.5 m past both ends. An outline
 that crosses itself cuts nothing.
 
-For rendering, aligned splines retain a solid terrain backing. Automatic backing follows
+openOMSI deliberately departs from Omsi.exe's projected spline hole on the successful
+rendering path: aligned splines retain a solid terrain backing. A hole alone can expose
+the sky at extended ditch ends and leave vertical soil strips along narrow banks.
+If fitting fails, the saved ground and original spline outlines (including neighboring
+tiles) are restored for that tile, together with their soil walls. Automatic backing follows
 all points of the graphical profile, 3 mm below it; it no longer substitutes a coarse
 four-point V for the rendered section. Explicit terrain-hole profiles keep their authored
 shape. Outside the rim, height displacements blend individually into the saved ground
