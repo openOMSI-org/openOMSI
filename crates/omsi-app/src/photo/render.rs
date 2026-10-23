@@ -407,7 +407,7 @@ impl crate::App {
                 }
                 Err(e) => {
                     log::warn!("photo mode: the photo could not be saved: {e}");
-                    (format!("{} {e}", omsi_ui::tr("Not saved:")), 6.0)
+                    (format!("{} {}", omsi_ui::tr("Not saved:"), omsi_ui::tr(&e.to_string())), 6.0)
                 }
             });
         }

@@ -13,6 +13,16 @@ impl VehicleInstance {
             .unwrap_or_default()
     }
 
+    /// The license plate the scripts know as `ident` (empty for a vehicle without one).
+    pub fn ident(&self) -> String {
+        self.ty
+            .program
+            .str_var("ident")
+            .and_then(|i| self.state.str_vars.get(i as usize))
+            .cloned()
+            .unwrap_or_default()
+    }
+
     pub fn new(ty: Arc<VehicleType>, host: VehicleHost) -> VehicleInstance {
         let program = ty.program.clone();
         let mut state = State::new(&program);

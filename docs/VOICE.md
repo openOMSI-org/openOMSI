@@ -28,7 +28,7 @@ or *radio*.
 Pause, open the *Player list*, pick a player: *Mute them* / *Hear them again*. A mute is by
 name, kept between sessions in `~/.openomsi/voice_mutes.txt` (a text file, one name a line;
 the game never gets other players' hardware identifiers). *Voice chat of everybody else* at the
-top of the list (or *Everybody else's voice off* in the settings) switches every other voice
+top of the list (or *Everybody else's voice chat off* in the settings) switches every other voice
 off. A muted voice is dropped as it arrives: it is not decoded or played.
 
 An admin or moderator can silence a player for the whole session (the player's page in the

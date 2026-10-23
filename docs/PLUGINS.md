@@ -471,6 +471,47 @@ if tour then
 end
 ```
 
+### Reading the complete loaded HOF
+
+`omsi.hof.get()` returns an owned snapshot of every field parsed from the player's
+currently loaded depot file. It includes the depot name and source path, service-trip
+identifier, global strings, declared string counts, all termini and bus stops (including
+their internal identifiers and every string), and the info-system trips, stop lists and
+stop rows. Empty strings and original ordering are preserved; `info_trips[].code` stays
+a string, including leading zeroes. Comments and unrecognized file directives are not
+part of the parsed data. The API does not open arbitrary HOF files or alter the depot.
+It is shared by Lua and WASM on every game platform and requires no extra permission.
+
+Use `omsi.hof.terminus(identifier)` for a single timetable destination or
+`omsi.hof.busstop(identifier)` for a single stop, without copying the whole depot.
+Both return the first exact, case-sensitive identifier match, or nil without a match,
+player vehicle or loaded HOF. Returned `index` fields are zero-based, as the existing
+`GetTerminusString` and `GetBusstopString` getters expect; arrays in Lua start at 1.
+For a terminus, `identifier` is the HOF's internal texture/change identifier, not a
+display string or numeric IBIS code. `terminus_stop` is absent when the HOF has none.
+
+`GetTTTerminusIndex` reads the current vehicle timetable state and accepts no trip
+argument. To resolve every trip of a tour without changing that state:
+
+```lua
+local tour = omsi.duty.tour()
+if tour then
+    for _, trip in ipairs(tour.trips) do
+        local terminus = omsi.hof.terminus(trip.terminus)
+        if terminus then
+            -- Getter fields 8 and 9 are Lua array elements 9 and 10.
+            local kind = terminus.strings[9] or ""
+            local route = terminus.strings[10] or ""
+            print(trip.name, terminus.index, terminus.code, kind, route)
+        end
+    end
+end
+```
+
+Snapshots are independent copies: changing a returned table does not change the game.
+Keep a snapshot for repeated reads rather than copying the whole depot every frame;
+read a fresh one when the vehicle or its HOF changes. Lookups always use the current HOF.
+
 ### Safety and errors
 
 A Lua plugin gets Lua 5.4 with the safe libraries only: `string`, `table`, `math`, `utf8`,
@@ -593,6 +634,14 @@ declared to call the function (a plain `.lua` file has them all).
 | --- | --- | --- | --- |
 | `omsi.game.queries()` | list of tables | Read-only game data getters: `{name, args = {{name, type}, ...}, result}`. Names and zero-based indices follow the M.V. getter names, but plugins read the game data directly without executing scripts. `rgba` means four results in the range 0–255. | 0.3.40 |
 | `omsi.game.query(name, [args], [object])` | value(s), or nil and reason | Read a getter listed by `game.queries` from the player's vehicle's HOF, timetable, passengers, tickets, radio, fonts or textures. Arguments are an ordered list (empty by default). No script callback is invoked. `STReadPixel` returns RGBA without changing the bus's drawing colour. Supply a loaded scripted map object's id as `object` to read its data, including `GetArrBus*` on departure boards, without needing a player vehicle. Object ids can be found through `map.objects_near`. Without `object`, reads use the player's vehicle. Unknown names, mutating operations and invalid arguments raise an error; no vehicle returns nil and a reason. | 0.3.40 |
+
+#### The loaded HOF depot file
+
+| Function | Returns | What it does | Since |
+| --- | --- | --- | --- |
+| `omsi.hof.busstop(identifier)` | table or nil | The first bus stop whose `identifier` exactly matches the supplied HOF stop identifier. Returns `{index, identifier, strings}`; `index` is zero-based for `GetBusstopString` and `strings[1]` is getter field 0. Returns nil without a vehicle, HOF or match. | 0.3.40 |
+| `omsi.hof.get()` | table or nil | A snapshot of every parsed field of the player's loaded HOF: `path`, `name`, `service_trip`, `global_strings`, `string_count_terminus`, `string_count_busstop`, `termini`, `bus_stops`, `info_trips`, `info_busstop_lists`, `info_busstops`. Records include their zero-based `index`; Lua arrays (including strings) start at 1. Returns nil without a vehicle or HOF. No filesystem access or scripts are involved; retain the snapshot until the vehicle or HOF changes. | 0.3.40 |
+| `omsi.hof.terminus(identifier)` | table or nil | The first terminus whose internal `identifier` exactly matches the supplied timetable terminus, using the same case-sensitive comparison as `GetTTTerminusIndex`. Returns `{index, code, identifier, terminus_stop, all_exit, strings}`; `index` is zero-based for `GetTerminusString`, `strings[1]` is getter field 0, and `terminus_stop` is nil when absent. Returns nil without a vehicle, HOF or match; does not change the duty or destination. | 0.3.40 |
 
 #### Duty and timetable
 

@@ -86,7 +86,7 @@ impl App {
                 true
             }
             Err(e) => {
-                self.service_msg = Some((format!("Could not start the game again: {e}"), 5.0));
+                self.service_msg = Some((format!("Could not start the game again ({e})"), 5.0));
                 false
             }
         }
@@ -214,7 +214,7 @@ impl App {
             }
             Err(e) => {
                 log::warn!("saving {}: {e}", out.display());
-                self.service_msg = Some((format!("Could not save: {e}"), 5.0));
+                self.service_msg = Some((format!("Could not save ({e})"), 5.0));
             }
         }
     }
@@ -282,7 +282,7 @@ impl App {
             }
             Err(e) => {
                 log::warn!("saving {}: {e}", out.display());
-                self.service_msg = Some((format!("Could not save: {e}"), 5.0));
+                self.service_msg = Some((format!("Could not save ({e})"), 5.0));
             }
         }
     }

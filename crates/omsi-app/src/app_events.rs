@@ -186,6 +186,12 @@ impl ApplicationHandler for App {
                 if event.state == ElementState::Pressed && self.menus.menu_edit_icao {
                     if let Some(text)=event.text.as_deref(){ self.icao_edit_text(text); }
                 }
+                if event.state == ElementState::Pressed && self.menus.menu_edit_number {
+                    if let Some(text)=event.text.as_deref(){ self.number_edit_text(text); }
+                }
+                if event.state == ElementState::Pressed && self.menus.menu_edit_ident {
+                    if let Some(text)=event.text.as_deref(){ self.ident_edit_text(text); }
+                }
                 // Route numbers are free display text in OMSI. Take the text produced by
                 // the keyboard layout (rather than only the physical key) so '-', shifted
                 // symbols and non-US layouts reach the destination display unchanged.
@@ -202,9 +208,7 @@ impl ApplicationHandler for App {
                     }
                 }
                 // a MileZero song request being typed takes the keyboard
-                if self.milezero_typing(&event) {
-                    return;
-                }
+                if self.milezero_typing(&event) { return; }
                 // '/' opens the chat's input box wherever the keyboard has it (the key
                 // itself is then swallowed by the chat) - but not Numpad ÷, OMSI's stock
                 // front door key (keyboard.cfg `bus_doorfront0 181`)

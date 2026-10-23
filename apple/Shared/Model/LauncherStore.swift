@@ -192,20 +192,20 @@ final class LauncherStore {
 
     var busTitle: String {
         guard let b = bus else { return choice.bus.isEmpty ? "No bus chosen" : choice.bus }
-        let paint = choice.paint.isEmpty ? (b.default_paint?.isEmpty == false ? b.default_paint! : "Default paint") : choice.paint
+        let paint = choice.paint.isEmpty ? (b.default_paint?.isEmpty == false ? b.default_paint! : String(localized: "Default paint")) : choice.paint
         return "\(b.name) | \(paint)"
     }
 
     var dutyTitle: String {
         if choice.free { return String(localized: "Free drive") }
         guard let l = choice.line else { return String(localized: "Choose a line") }
-        if let t = choice.tour { return "Line \(l) | tour \(t)" }
-        return "Line \(l)"
+        if let t = choice.tour { return tr("Line {line}, tour {tour}", ["line": l, "tour": "\(t)"]) }
+        return tr("Line {name}", ["name": l])
     }
 
     var weatherTitle: String {
         let w = choice.weather
-        if w.isEmpty { return weather?.name ?? "Natural weather" }
+        if w.isEmpty { return weather?.name ?? String(localized: "Natural weather") }
         if w == "cycle" { return String(localized: "Weather cycle") }
         if w == "tomorrow" { return "Tomorrow.io" }
         if w.hasPrefix("metar:") { return "METAR \(w.dropFirst(6))" }

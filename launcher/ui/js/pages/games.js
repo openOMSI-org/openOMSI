@@ -43,7 +43,7 @@ function Game({ g, ask }) {
       if (r?.ended_by_itself === false) toast(t('Game {pid} did not end by itself and was killed - this run is not saved.', { pid: g.pid }), 'error');
       else toast(t('The game was stopped.'), 'ok');
     } catch (e) {
-      toast(e.message, 'error');
+      toast(t(e.message), 'error');
     }
     setStopping(false);
     pollNow();
@@ -60,7 +60,7 @@ function Game({ g, ask }) {
         ${g.last_line && html`<div class="muted small ellipsis" title=${g.last_line}>${g.last_line}</div>`}
       </div>
       <${Button} small icon="file" label=${log == null ? 'Show log' : 'Hide log'} onClick=${() => (log == null ? call('game_log', { pid: g.pid, lines: 120 }).then(setLog).catch((e) => setLog([e.message])) : setLog(null))} />
-      <${Button} small icon="folder" title="Show the log file" onClick=${() => call('open_path', { path: g.log.replace(/[^/\\]*$/, '') }).catch((e) => toast(e.message, 'error'))} />
+      <${Button} small icon="folder" title="Show the log file" onClick=${() => call('open_path', { path: g.log.replace(/[^/\\]*$/, '') }).catch((e) => toast(t(e.message), 'error'))} />
       ${!done && html`<${Button} small kind="danger" icon="stop" label="Stop" disabled=${stopping} onClick=${stop} />`}
     </div>
     ${g.lan_status && html`<${Lobby} lan=${g.lan_status} />`}
@@ -71,7 +71,7 @@ function Game({ g, ask }) {
 function Lobby({ lan }) {
   const players = lan.players || [];
   const chat = (lan.chat || []).slice(-6);
-  const copy = () => navigator.clipboard.writeText(lan.code).then(() => toast(t('Session code copied'), 'ok'), (e) => toast(e.message, 'error'));
+  const copy = () => navigator.clipboard.writeText(lan.code).then(() => toast(t('Session code copied'), 'ok'), (e) => toast(t(e.message), 'error'));
   return html`<div class="stack lobby" style="padding:0 20px 18px;gap:12px">
     ${lan.role === 'host' && lan.code && html`<div class="session-code">
       <div class="grow">
@@ -86,7 +86,7 @@ function Lobby({ lan }) {
     }</div>`}
     ${players.length > 0 && html`<div>
       <div class="section-title">${t('PLAYERS')}</div>
-      ${players.map((p) => html`<div class="small">${[p.name, busName(p.bus || ''), p.destination ? `${p.line} → ${p.destination}` : '', p.passengers > 0 ? t('{n} passengers', { n: p.passengers }) : '', p.where].filter(Boolean).join(' - ')}</div>`)}
+      ${players.map((p) => html`<div class="small">${[p.name, busName(p.bus || ''), p.destination ? `${p.line} → ${p.destination}` : '', p.passengers > 0 ? t('{n} passengers', { n: p.passengers }) : '', typeof p.where === 'string' ? p.where : ''].filter(Boolean).join(' - ')}</div>`)}
     </div>`}
     ${chat.length > 0 && html`<div>
       <div class="section-title">${t('CHAT  (in the game: the chat key, see Controls)')}</div>

@@ -81,7 +81,7 @@ pub fn entries_of(answer: &Value, m: &dyn Moderator, icon: &mut dyn FnMut(&str) 
 /// Ask the service for the list (blocking; a few seconds at most) and moderate it.
 pub fn fetch(service: &str, m: &dyn Moderator) -> Result<Vec<Entry>, String> {
     let agent = ureq::AgentBuilder::new().timeout(std::time::Duration::from_secs(8)).build();
-    let body = agent.get(&format!("{}/v1/servers", service.trim_end_matches('/'))).call().map_err(|e| format!("the server list could not be reached: {e}"))?.into_string().map_err(|e| e.to_string())?;
+    let body = agent.get(&format!("{}/v1/servers", service.trim_end_matches('/'))).call().map_err(|e| format!("the server list could not be reached ({e})"))?.into_string().map_err(|e| e.to_string())?;
     if body.len() > 1 << 20 {
         return Err("the server list answered with too much".into());
     }

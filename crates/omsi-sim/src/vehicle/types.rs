@@ -514,7 +514,8 @@ impl VehicleType {
         // distance from nothing. The box is cut down to the model (never made bigger).
         let mut def = def;
         if def.trolley.is_empty() {
-            def.trolley = legacy_trolley(&model, &meshes, &mesh_boxes, &program, bus_file);
+            def.trolley = legacy_trolley(&model, &meshes, &mesh_boxes, &program, bus_file, keep_meshes);
+            take_model_poles(&mut model, &meshes, &mesh_boxes, &def.trolley);
             // the raised pole's own mesh follows the pole: two animations about its hinge
             if let Some(l) = def.trolley.legacy.as_ref() {
                 for (k, di) in l.mesh_defs.iter().enumerate() {
@@ -948,44 +949,94 @@ fn pole_animations(k: usize, base: Vec3, work_deg: f32) -> Vec<omsi_model::Anima
     ]
 }
 
-fn legacy_trolley(model: &omsi_model::Model, meshes: &[VehicleMesh], boxes: &[(Vec3, Vec3)], program: &Program, bus_file: &Path) -> omsi_trolley::TrolleyDef {
+const POLE_NAMES: &[&str] = &["shtang", "штанг", "stange", "palk", "палк", "pole", "boom", "szedo", "szedő"];
+const ROPE_NAMES: &[&str] = &["verevk", "веревк", "верёвк", "канат", "seil"];
+
+fn file_named(file: &str, names: &[&str]) -> bool {
+    let stem = file.rsplit(['\\', '/']).next().unwrap_or(file).to_lowercase();
+    names.iter().any(|n| stem.contains(n))
+}
+
+fn take_model_poles(model: &mut omsi_model::Model, meshes: &[VehicleMesh], boxes: &[(Vec3, Vec3)], trolley: &omsi_trolley::TrolleyDef) {
+    let Some(l) = trolley.legacy.as_ref().filter(|l| l.switches.is_empty()) else { return };
+    let mut shown_by: Vec<String> = Vec::new();
+    for di in &l.mesh_defs {
+        if let Some(md) = model.meshes.get_mut(*di) {
+            shown_by.extend(md.visible.take().map(|(v, _)| v.to_ascii_lowercase()));
+            md.visible_any.clear();
+            md.animations.clear();
+        }
+    }
+    let never = vec![vec![omsi_model::VisibleCond { variable: "Trolley_Pole1_Elev".into(), lo: 1000.0, hi: 1001.0, range: true, not: false }]];
+    for (m, (lo, hi)) in meshes.iter().zip(boxes) {
+        let Some(md) = model.meshes.get_mut(m.def_index).filter(|_| !l.mesh_defs.contains(&m.def_index)) else { continue };
+        let same_switch = md.visible.as_ref().is_some_and(|(v, _)| shown_by.contains(&v.to_ascii_lowercase()));
+        let pole_shaped = hi.y - lo.y >= 3.0 && hi.x - lo.x <= 0.7 && lo.z >= 2.0;
+        if (same_switch && (pole_shaped || file_named(&md.file, POLE_NAMES))) || file_named(&md.file, ROPE_NAMES) {
+            md.visible_any = never.clone();
+        }
+    }
+}
+
+fn legacy_trolley(model: &omsi_model::Model, meshes: &[VehicleMesh], boxes: &[(Vec3, Vec3)], program: &Program, bus_file: &Path, static_poles: bool) -> omsi_trolley::TrolleyDef {
     use omsi_trolley::{LegacyDef, PoleDef, TrolleyDef};
     let mut poles: Vec<PoleDef> = Vec::new();
     let mut switches: Vec<String> = Vec::new();
     let mut mesh_defs: Vec<usize> = Vec::new();
-    for (i, m) in meshes.iter().enumerate() {
-        let Some(md) = model.meshes.get(m.def_index) else { continue };
-        let Some((var, value)) = md.visible.as_ref() else { continue };
-        let low = var.to_ascii_lowercase();
-        if !(low.contains("shtang") || low.contains("pole") || low.contains("штанг")) || *value != 1.0 || program.var(var).is_none() {
-            continue;
+    for switched in [true, false] {
+        if !switched && !static_poles {
+            break;
         }
-        let Some((lo, hi)) = boxes.get(i).copied().filter(|(l, h)| h.x > l.x && h.y > l.y) else { continue };
-        let side: i8 = if (lo.x + hi.x) * 0.5 < 0.0 { -1 } else { 1 };
-        if poles.iter().any(|p| p.side == side) {
-            continue;
+        poles.clear();
+        switches.clear();
+        mesh_defs.clear();
+        for (i, m) in meshes.iter().enumerate() {
+            let Some(md) = model.meshes.get(m.def_index) else { continue };
+            let var = if switched {
+                let Some((var, value)) = md.visible.as_ref() else { continue };
+                let low = var.to_ascii_lowercase();
+                if !(low.contains("shtang") || low.contains("pole") || low.contains("штанг")) || *value != 1.0 || program.var(var).is_none() {
+                    continue;
+                }
+                Some(var)
+            } else if (md.visible_any.is_empty() && md.animations.is_empty()) || file_named(&md.file, POLE_NAMES) {
+                None
+            } else {
+                continue;
+            };
+            let Some((lo, hi)) = boxes.get(i).copied().filter(|(l, h)| h.x > l.x && h.y > l.y) else { continue };
+            let side: i8 = if (lo.x + hi.x) * 0.5 < 0.0 { -1 } else { 1 };
+            if poles.iter().any(|p| p.side == side) {
+                continue;
+            }
+            let base = Vec3::new((lo.x + hi.x) * 0.5, hi.y, lo.z);
+            let tip = Vec3::new((lo.x + hi.x) * 0.5, lo.y, hi.z);
+            let boom = tip - base;
+            // (a pole is long and thin: a short or a wide mesh whose visibility variable has "pole" in
+            // its name - an antenna, a flag - is no trolley pole)
+            if boom.length() < 3.0 || hi.x - lo.x > 1.2 {
+                continue;
+            }
+            if var.is_none() && (hi.x - lo.x > 0.6 || lo.z < 2.0 || boom.z < 1.0 || (lo.x + hi.x).abs() > 2.0) {
+                continue;
+            }
+            let length = boom.length().clamp(3.0, 12.0);
+            poles.push(PoleDef {
+                side,
+                base,
+                length,
+                rest_angle: 2.0,
+                work_angle: (boom.z / length).clamp(-1.0, 1.0).asin().to_degrees().clamp(8.0, 45.0),
+                motor: true,
+                retriever: 40.0,
+                ..Default::default()
+            });
+            switches.extend(var.cloned());
+            mesh_defs.push(m.def_index);
         }
-        let base = Vec3::new((lo.x + hi.x) * 0.5, hi.y, lo.z);
-        let tip = Vec3::new((lo.x + hi.x) * 0.5, lo.y, hi.z);
-        let boom = tip - base;
-        // (a pole is long and thin: a short or a wide mesh whose visibility variable has "pole" in
-        // its name - an antenna, a flag - is no trolley pole)
-        if boom.length() < 3.0 || hi.x - lo.x > 1.2 {
-            continue;
+        if poles.len() >= 2 {
+            break;
         }
-        let length = boom.length().clamp(3.0, 12.0);
-        poles.push(PoleDef {
-            side,
-            base,
-            length,
-            rest_angle: 2.0,
-            work_angle: (boom.z / length).clamp(-1.0, 1.0).asin().to_degrees().clamp(8.0, 45.0),
-            motor: true,
-            retriever: 40.0,
-            ..Default::default()
-        });
-        switches.push(var.clone());
-        mesh_defs.push(m.def_index);
     }
     if poles.len() < 2 {
         return TrolleyDef::default();
@@ -994,7 +1045,7 @@ fn legacy_trolley(model: &omsi_model::Model, meshes: &[VehicleMesh], boxes: &[(V
     let mut order: Vec<usize> = (0..poles.len()).collect();
     order.sort_by_key(|k| poles[*k].side);
     let poles2 = order.iter().map(|k| poles[*k].clone()).collect();
-    let switches2 = order.iter().map(|k| switches[*k].clone()).collect();
+    let switches2 = order.iter().filter_map(|k| switches.get(*k).cloned()).collect();
     let mesh_defs2 = order.iter().map(|k| mesh_defs[*k]).collect();
     let text: String = std::fs::read(bus_file).map(|b| omsi_cfg::decode_text(&b)).unwrap_or_default();
     let low = text.to_lowercase();
@@ -1050,5 +1101,86 @@ mod pole_animation_tests {
             // the hinge stays where it is
             assert!((m.transform_point3(base) - base).length() < 1e-4);
         }
+    }
+}
+
+#[cfg(test)]
+mod legacy_trolley_tests {
+    use super::{legacy_trolley, take_model_poles, VehicleMesh};
+    use glam::{Mat4, Vec3};
+    use std::path::{Path, PathBuf};
+
+    fn mesh(def_index: usize) -> VehicleMesh {
+        VehicleMesh {
+            def_index,
+            data: Default::default(),
+            file: PathBuf::new(),
+            materials: Vec::new(),
+            overrides: Vec::new(),
+            pivot: Mat4::IDENTITY,
+            viewpoint: 0,
+            skin: Vec::new(),
+            keep_winding: false,
+        }
+    }
+
+    #[test]
+    fn static_raised_pole_meshes_become_poles() {
+        let mut model = omsi_model::Model::default();
+        model.meshes = vec![Default::default(); 4];
+        let meshes: Vec<VehicleMesh> = (0..4).map(mesh).collect();
+        let boxes = [
+            (Vec3::new(-1.2, -5.8, 2.8), Vec3::new(1.2, 6.0, 3.0)),
+            (Vec3::new(-0.34, -6.26, 3.17), Vec3::new(-0.11, 0.27, 5.35)),
+            (Vec3::new(0.11, -6.26, 3.17), Vec3::new(0.34, 0.27, 5.35)),
+            (Vec3::new(0.5, 4.0, 3.0), Vec3::new(0.55, 4.3, 3.8)),
+        ];
+        let program = omsi_script::Program::default();
+        let bus = Path::new("/nonexistent/troll.bus");
+        let def = legacy_trolley(&model, &meshes, &boxes, &program, bus, true);
+        assert_eq!(def.poles.len(), 2);
+        assert_eq!((def.poles[0].side, def.poles[1].side), (-1, 1));
+        assert!((def.poles[0].work_angle - 18.5).abs() < 0.5, "{}", def.poles[0].work_angle);
+        let legacy = def.legacy.expect("legacy");
+        assert!(legacy.switches.is_empty());
+        assert_eq!(legacy.mesh_defs, vec![1, 2]);
+        assert!(legacy_trolley(&model, &meshes, &boxes, &program, bus, false).poles.is_empty());
+        model.meshes[2].animations.push(Default::default());
+        assert!(legacy_trolley(&model, &meshes, &boxes, &program, bus, true).poles.is_empty());
+    }
+
+    #[test]
+    fn named_animated_pole_meshes_are_taken_over() {
+        let mut model = omsi_model::Model::default();
+        let switched = |file: &str| {
+            let mut md = omsi_model::MeshDef { file: file.into(), visible: Some(("knopka_massa".into(), 1.0)), ..Default::default() };
+            md.visible_any = vec![vec![omsi_model::VisibleCond { variable: "knopka_massa".into(), lo: 1.0, ..Default::default() }]];
+            md.animations.push(omsi_model::Animation { variable: "articulation_0_beta".into(), ..Default::default() });
+            md
+        };
+        let mut folded = switched("GVM\\GVM_szedo_lent_akaszt2.o3d");
+        folded.visible = Some(("knopka_massa".into(), 0.0));
+        folded.visible_any[0][0].lo = 0.0;
+        folded.animations.clear();
+        model.meshes = vec![switched("GVM\\Shtanga_podn_L.o3d"), switched("GVM\\Shtanga_podn_R.o3d"), switched("GVM\\Verevka_podn_L.o3d"), switched("GVM\\Antenna.o3d"), folded];
+        let meshes: Vec<VehicleMesh> = (0..5).map(mesh).collect();
+        let boxes = [
+            (Vec3::new(-0.34, -4.53, 3.37), Vec3::new(-0.13, 1.75, 5.36)),
+            (Vec3::new(0.14, -4.50, 3.36), Vec3::new(0.36, 1.78, 5.35)),
+            (Vec3::new(-0.37, -3.49, 1.42), Vec3::new(-0.23, -3.40, 4.94)),
+            (Vec3::new(0.5, 4.0, 3.0), Vec3::new(0.55, 4.3, 3.8)),
+            (Vec3::new(-0.68, -4.81, 3.35), Vec3::new(-0.13, 1.73, 3.69)),
+        ];
+        let program = omsi_script::Program::default();
+        let def = legacy_trolley(&model, &meshes, &boxes, &program, Path::new("/nonexistent/b.bus"), true);
+        assert_eq!(def.legacy.as_ref().map(|l| l.mesh_defs.clone()), Some(vec![0, 1]));
+        take_model_poles(&mut model, &meshes, &boxes, &def);
+        for k in 0..2 {
+            assert!(model.meshes[k].animations.is_empty() && model.meshes[k].visible_any.is_empty());
+        }
+        let shown = |md: &omsi_model::MeshDef| md.visible_by(|v| Some(if v == "knopka_massa" { 1.0 } else { 18.0 })).unwrap_or(true);
+        assert!(!shown(&model.meshes[2]));
+        assert!(shown(&model.meshes[3]));
+        assert!(!shown(&model.meshes[4]));
     }
 }

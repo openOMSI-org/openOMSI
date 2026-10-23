@@ -140,6 +140,7 @@ impl World {
             data,
             vehicle_gpu: Mutex::new(HashMap::new()),
             vehicle_textures: Default::default(),
+            freetex_reloads: Default::default(),
             vehicle_meshes: Default::default(),
             vehicle_ready: Default::default(),
             upgrades_pending: Default::default(),

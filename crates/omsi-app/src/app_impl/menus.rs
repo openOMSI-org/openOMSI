@@ -25,6 +25,14 @@ impl App {
 
     pub(crate) fn close_game_menu(&mut self) {
         self.menus.key_capture = None;
+        if self.menus.menu_edit_number {
+            if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);}
+            self.menus.menu_edit_number=false; self.menus.menu_edit=None;
+        }
+        if self.menus.menu_edit_ident {
+            if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);}
+            self.menus.menu_edit_ident=false; self.menus.menu_edit=None;
+        }
         if self.menus.menu_edit_icao {
             if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);}
             self.menus.menu_edit_icao=false; self.menus.menu_edit=None;

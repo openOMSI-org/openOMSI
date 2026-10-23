@@ -9,6 +9,7 @@
 //! and the lists no longer see them) and back again when it is switched on; removed, they are
 //! deleted. The original OMSI 2 folder is never touched: only the content folder holds mods.
 
+use crate::i18n::{tr, trf};
 use crate::install::{self, ARCHIVES};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -185,6 +186,9 @@ pub fn list(content: &Path) -> Vec<Mod> {
         m.bytes = m.paths.iter().map(|p| size_of(&at(p))).sum();
         m.kind = kind_of(&m.paths);
         m.noted = true;
+        if let Some(folder) = m.name.strip_suffix(" (loose files)") {
+            m.name = trf("{folder} (loose files)", &[("folder", &folder)]);
+        }
         out.push(m);
     }
     let claimed: Vec<String> = r.mods.iter().flat_map(|m| m.paths.iter().map(|p| p.to_ascii_lowercase())).collect();
@@ -214,7 +218,7 @@ pub fn list(content: &Path) -> Vec<Mod> {
         if !files.is_empty() {
             let paths: Vec<String> = files.iter().map(|f| format!("{folder}/{f}")).collect();
             let bytes = paths.iter().map(|p| size_of(&content.join(p))).sum();
-            out.push(Mod { id: format!("{LOOSE}{folder}"), name: format!("{folder} (loose files)"), kind: kind_of(&paths), paths, bytes, enabled: true, installed: 0, noted: false });
+            out.push(Mod { id: format!("{LOOSE}{folder}"), name: trf("{folder} (loose files)", &[("folder", &folder)]), kind: kind_of(&paths), paths, bytes, enabled: true, installed: 0, noted: false });
         }
     }
     if let Ok(rd) = std::fs::read_dir(content.join(ARCHIVES)) {
@@ -284,7 +288,7 @@ fn take(content: &Path, r: &mut Registry, id: &str) -> anyhow::Result<usize> {
         let is_claimed = |rel: &str| claimed.iter().any(|c| c.eq_ignore_ascii_case(rel));
         let paths: Vec<String> = loose_files(content, folder, &is_claimed).into_iter().map(|f| format!("{folder}/{f}")).collect();
         if paths.is_empty() || !omsi_cfg::CONTENT_FOLDERS.iter().any(|f| f.eq_ignore_ascii_case(folder)) {
-            anyhow::bail!("no loose files in {folder}");
+            anyhow::bail!(trf("no loose files in {folder}", &[("folder", &folder)]));
         }
         let new = new_id(r, &format!("{folder} (loose files)"));
         r.mods.push(Mod { id: new, name: format!("{folder} (loose files)"), paths, enabled: true, installed: 0, bytes: 0, kind: Kind::Other, noted: true });
@@ -292,7 +296,7 @@ fn take(content: &Path, r: &mut Registry, id: &str) -> anyhow::Result<usize> {
     }
     let rel = id.strip_prefix("found:").ok_or_else(|| anyhow::anyhow!("no mod {id}"))?;
     if install::check_installed_rel(rel).is_err() || !content.join(rel).exists() {
-        anyhow::bail!("{rel} is not in the content folder");
+        anyhow::bail!(trf("{rel} is not in the content folder", &[("rel", &rel)]));
     }
     let name = rel.rsplit('/').next().unwrap_or(rel).to_string();
     let new = new_id(r, &name);
@@ -314,7 +318,7 @@ fn move_path(from: &Path, to: &Path) -> anyhow::Result<()> {
         std::fs::create_dir_all(d)?;
     }
     if to.exists() {
-        anyhow::bail!("{} is in the way", to.display());
+        anyhow::bail!(trf("{path} is in the way", &[("path", &to.display())]));
     }
     std::fs::rename(from, to).map_err(|e| anyhow::anyhow!("moving {} to {}: {e}", from.display(), to.display()))
 }
@@ -332,7 +336,7 @@ fn unmount(content: &Path, paths: &[String]) {
 /// Switch the mod `id` off (its folders into `Mods/disabled/<id>`) or on (back again).
 pub fn set_enabled(content: &Path, id: &str, on: bool) -> anyhow::Result<String> {
     if installing() {
-        anyhow::bail!("an install is under way: wait for it to end");
+        anyhow::bail!(tr("an install is under way: wait for it to end"));
     }
     let mut r = load(content);
     let k = take(content, &mut r, id)?;
@@ -378,7 +382,7 @@ pub fn set_enabled(content: &Path, id: &str, on: bool) -> anyhow::Result<String>
 /// inbox install left in `Mods/installed`.
 pub fn remove(content: &Path, id: &str) -> anyhow::Result<String> {
     if installing() {
-        anyhow::bail!("an install is under way: wait for it to end");
+        anyhow::bail!(tr("an install is under way: wait for it to end"));
     }
     let mut r = load(content);
     let k = take(content, &mut r, id)?;
@@ -388,9 +392,9 @@ pub fn remove(content: &Path, id: &str) -> anyhow::Result<String> {
         install::check_installed_rel(p)?;
         for at in [content.join(p), disabled_dir(content, &m.id).join(p)] {
             if at.is_dir() {
-                std::fs::remove_dir_all(&at).map_err(|e| anyhow::anyhow!("deleting {}: {e}", at.display()))?;
+                std::fs::remove_dir_all(&at).map_err(|e| anyhow::anyhow!(trf("deleting {path}: {e}", &[("path", &at.display()), ("e", &e)])))?;
             } else if at.exists() {
-                std::fs::remove_file(&at).map_err(|e| anyhow::anyhow!("deleting {}: {e}", at.display()))?;
+                std::fs::remove_file(&at).map_err(|e| anyhow::anyhow!(trf("deleting {path}: {e}", &[("path", &at.display()), ("e", &e)])))?;
             }
         }
     }

@@ -265,7 +265,7 @@ struct DepotDetail: View {
                     Button { confirmRemove = true } label: { Image(systemName: "trash") }.buttonStyle(.destructive).help("Remove from the depot")
                     Button { drive(v) } label: { Label("Drive this bus", systemImage: "play.fill") }.buttonStyle(.primary).disabled(v == nil)
                 }
-                if v == nil { Notice(text: "\(busName): \(String(localized: "not installed"))", kind: .warn) }
+                if v == nil { Notice(text: tr("{name}: not installed", ["name": busName]), kind: .warn) }
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
                     Field("Name") {
                         InputField(prompt: "Name (e.g. my Citaro)", text: $name) { saveName() }
@@ -297,7 +297,7 @@ struct DepotDetail: View {
                 }
                 HStack(spacing: 16) {
                     if let f = b.fuel { Label("\(Int(f.rounded())) L", systemImage: "fuelpump.fill") }
-                    Label("\(String(localized: "Dirt")) \(Int(((b.dirt ?? 0) * 100).rounded())) %", systemImage: "sun.max.fill")
+                    Label(tr("Dirt {n} %", ["n": "\(Int(((b.dirt ?? 0) * 100).rounded()))"]), systemImage: "sun.max.fill")
                 }
                 .font(.inter(13.5)).foregroundStyle(Theme.text2)
                 VStack(alignment: .leading, spacing: 8) {

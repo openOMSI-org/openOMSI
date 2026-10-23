@@ -16,7 +16,7 @@ pub fn tag_text(r: &RemoteVehicle, d: f64, radio: bool, speaking: bool, tr: &dyn
     let mut sub = match (pose.line.trim().is_empty(), pose.destination.trim().is_empty()) {
         (false, false) => format!("{} {}", pose.line.trim(), pose.destination.trim()),
         (true, false) => pose.destination.trim().to_string(),
-        (false, true) => format!("line {}", pose.line.trim()),
+        (false, true) => tr("line {}").replace("{}", pose.line.trim()),
         _ => String::new(),
     };
     if d > 25.0 {

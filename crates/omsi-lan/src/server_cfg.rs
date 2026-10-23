@@ -393,7 +393,7 @@ pub fn enforce_vehicles(lan: &mut omsi_net::LanSession) {
     for (id, bus) in out {
         log::warn!("server: player {id} drives {bus}, which the vehicles list does not allow: sent away");
         let names: Vec<&str> = list.iter().map(|v| v.rsplit('/').next().unwrap_or(v)).collect();
-        lan.kick(id, &format!("this server allows only these buses: {}", names.join(", ")), false);
+        lan.kick(id, &format!("this server allows only these buses ({})", names.join(", ")), false);
     }
 }
 

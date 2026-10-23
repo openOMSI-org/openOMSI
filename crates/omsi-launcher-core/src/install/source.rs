@@ -29,7 +29,7 @@ pub(super) fn unpack_archive(job: &Job, content: &Path, src: &Path, dest: &Path,
     let (files, bytes) = match kind {
         ArchiveKind::SevenZip => {
             let reader = sevenz_rust2::ArchiveReader::open(src, sevenz_rust2::Password::empty())
-                .with_context(|| format!("{} is not a readable 7z archive", src.display()))?;
+                .with_context(|| trf("{name} is not a readable 7z archive", &[("name", &src.display())]))?;
             let entries = &reader.archive().files;
             let files = entries.iter().filter(|e| e.has_stream && !e.is_directory).count() as u64;
             let bytes = entries.iter().filter(|e| e.has_stream && !e.is_directory).fold(0u64, |sum, e| sum.saturating_add(e.size));
@@ -37,10 +37,10 @@ pub(super) fn unpack_archive(job: &Job, content: &Path, src: &Path, dest: &Path,
         }
         ArchiveKind::Rar => {
             let archive = unrar_rs::RarArchive::open(std::fs::File::open(src)?)
-                .with_context(|| format!("{} is not a readable RAR archive", src.display()))?;
+                .with_context(|| trf("{name} is not a readable RAR archive", &[("name", &src.display())]))?;
             let members: Vec<_> = archive.entries().collect();
             if members.iter().any(|m| m.unpacked_size.is_none() && !m.is_directory) {
-                return Err(anyhow!("{} is a multi-volume RAR archive; add all parts and start with the first .rar file", src.display()));
+                return Err(anyhow!(trf("{name} is a multi-volume RAR archive; add all parts and start with the first .rar file", &[("name", &src.display())])));
             }
             let files = members.iter().filter(|m| !m.is_directory && !m.is_symlink && !m.is_hardlink).count() as u64;
             let bytes = members.iter().filter(|m| !m.is_directory && !m.is_symlink && !m.is_hardlink).fold(0u64, |sum, m| sum.saturating_add(m.unpacked_size.unwrap_or(0)));
@@ -57,7 +57,7 @@ pub(super) fn unpack_archive(job: &Job, content: &Path, src: &Path, dest: &Path,
         p.needed_bytes = needed;
     });
     if needed > free {
-        return Err(anyhow!("not enough disk space to unpack {}: {} plus {} kept free needs {}, but only {} is free on {}", src.display(), gb(bytes), gb(MIN_MARGIN), gb(needed), gb(free), content.display()));
+        return Err(anyhow!(trf("not enough disk space to unpack {name}: {size} plus {margin} kept free needs {needed}, but only {free} is free on {disk}", &[("name", &src.display()), ("size", &gb(bytes)), ("margin", &gb(MIN_MARGIN)), ("needed", &gb(needed)), ("free", &gb(free)), ("disk", &content.display())])));
     }
     if job.cancelled() {
         return Err(anyhow!(Cancelled));
@@ -73,7 +73,7 @@ pub(super) fn unpack_archive(job: &Job, content: &Path, src: &Path, dest: &Path,
                 let Some(target) = staged_target(dest, entry.name()) else {
                     std::io::copy(reader, &mut std::io::sink()).map_err(|e| sevenz_rust2::Error::Io(e, "skipping a refused entry".into()))?;
                     if !entry.is_directory {
-                        job.set(|p| p.warnings.push(format!("unsafe 7z path refused: {}", entry.name())));
+                        job.set(|p| p.warnings.push(trf("unsafe 7z path refused: {path}", &[("path", &entry.name())])));
                     }
                     return Ok(true);
                 };
@@ -86,7 +86,7 @@ pub(super) fn unpack_archive(job: &Job, content: &Path, src: &Path, dest: &Path,
                     }
                 }
                 Ok(wrote)
-            }).with_context(|| format!("unpacking {} (the archive may be damaged or encrypted)", src.display()))?;
+            }).with_context(|| trf("unpacking {name} (the archive may be damaged or encrypted)", &[("name", &src.display())]))?;
         }
         ArchiveKind::Rar => {
             let mut archive = unrar_rs::RarArchive::open(std::fs::File::open(src)?)
@@ -100,7 +100,7 @@ pub(super) fn unpack_archive(job: &Job, content: &Path, src: &Path, dest: &Path,
                     continue;
                 }
                 let Some(rel) = safe_rel(&member.name) else {
-                    job.set(|p| p.warnings.push(format!("unsafe RAR path refused: {}", member.name)));
+                    job.set(|p| p.warnings.push(trf("unsafe RAR path refused: {path}", &[("path", &member.name)])));
                     continue;
                 };
                 let out = dest.join(&rel);
@@ -219,13 +219,13 @@ pub(super) fn list_zip(z: &mut zip::ZipArchive<std::io::BufReader<std::fs::File>
     }
     job.files_done.store(0, Ordering::Relaxed);
     if encrypted > 0 {
-        problems.push(format!("{encrypted} file(s) in the archive are password protected - unpack it with the password first and install the folder"));
+        problems.push(trf("{encrypted} file(s) in the archive are password protected - unpack it with the password first and install the folder", &[("encrypted", &encrypted)]));
     }
     for (m, c) in unsupported {
-        problems.push(format!("{c} file(s) are packed with {m}, which the launcher cannot unpack - unpack the archive with the system's tool and install the folder"));
+        problems.push(trf("{c} file(s) are packed with {m}, which the launcher cannot unpack - unpack the archive with the system's tool and install the folder", &[("c", &c), ("m", &m)]));
     }
     if unsafe_names > 0 {
-        problems.push(format!("{unsafe_names} file name(s) point outside the archive and were refused"));
+        problems.push(trf("{unsafe_names} file name(s) point outside the archive and were refused", &[("unsafe_names", &unsafe_names)]));
     }
     Ok((out, problems))
 }

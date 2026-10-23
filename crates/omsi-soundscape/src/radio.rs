@@ -436,7 +436,7 @@ impl Radio {
             return "Radio off".into();
         }
         let station = self.offset % self.stations.len();
-        format!("Radio {}: {}", station + 1, self.stations[station].0)
+        format!("Radio {} plays {}", station + 1, self.stations[station].0)
     }
 
     /// Follow the player's bus radio; a text for the screen when the station or its song
@@ -485,7 +485,7 @@ impl Radio {
         let status = p.buf.status();
         if status != p.shown && !status.is_empty() && status != "connecting …" {
             p.shown = status.clone();
-            let line = format!("Radio {}: {} - {status}", p.station + 1, self.stations[p.station].0);
+            let line = format!("Radio {} plays {} ({status})", p.station + 1, self.stations[p.station].0);
             log::info!("{line}");
             return Some(line);
         }
@@ -526,7 +526,7 @@ impl Radio {
         match &self.playing {
             Some(p) => {
                 let next = (p.station + 1) % self.stations.len();
-                format!("Radio {}: {}", next + 1, self.stations[next].0)
+                format!("Radio {} plays {}", next + 1, self.stations[next].0)
             }
             None => "The bus radio is off (switch it on in the cockpit)".into(),
         }
@@ -542,7 +542,7 @@ impl Radio {
         match &self.playing {
             Some(p) => {
                 let before = (p.station + n - 1) % n;
-                format!("Radio {}: {}", before + 1, self.stations[before].0)
+                format!("Radio {} plays {}", before + 1, self.stations[before].0)
             }
             None => "The bus radio is off (switch it on in the cockpit)".into(),
         }
@@ -578,7 +578,7 @@ mod tests {
     fn the_radio_switches_on_by_itself_in_a_bus_without_one() {
         let one = vec![("One".to_string(), "https://a.example/one.mp3".to_string())];
         let mut r = Radio { stations: one.clone(), own: one, frequencies: Frequencies::new(), own_frequencies: Frequencies::new(), map: String::new(), relisted: false, volume: 0.7, offset: 0, power: false, playing: None, fx: Default::default() };
-        assert_eq!(r.toggle_power(None), "Radio 1: One");
+        assert_eq!(r.toggle_power(None), "Radio 1 plays One");
         assert!(r.power);
         assert_eq!(r.toggle_power(None), "Radio off");
         r.stations.clear();

@@ -424,7 +424,7 @@ impl Career {
 
     pub fn summary(&self) -> String {
         format!(
-            "{:.2} km, {} stops ({} early, {} late), {} tickets for {:.2}, {} crashes, {} hurt, {} jolts (worst {:.1} m/s2); driving {:.0}%, comfort {:.0}%, ticket selling {:.0}%",
+            "Driven {:.2} km, {} stops ({} early, {} late), {} tickets for {:.2}, {} crashes, {} hurt, {} jolts (worst {:.1} m/s2); driving {:.0}%, comfort {:.0}%, ticket selling {:.0}%",
             self.metres / 1000.0,
             self.stops[0],
             self.stops[1],

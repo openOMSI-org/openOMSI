@@ -220,3 +220,14 @@ fn the_order_dump_names_every_stage() {
     }
     assert!(text.starts_with(&format!("window frame: {} stages", WINDOW_FRAME.len())));
 }
+
+#[test]
+fn stopping_host_runs_no_stages() {
+    struct Stopping;
+    impl Host<Probe> for Stopping {
+        fn stopping(&self) -> bool { true }
+        fn run_stage(&mut self, _: Probe) -> anyhow::Result<Flow> { panic!("ran stage after shutdown") }
+        fn profile(&mut self) -> &mut ProfileTimes { panic!("profiled stage after shutdown") }
+    }
+    assert!(matches!(run(&mut Stopping, &[Probe::A]), Ok(Flow::Stop)));
+}

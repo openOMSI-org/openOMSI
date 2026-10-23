@@ -142,7 +142,7 @@ function Continue({ go, busy }) {
     try {
       await call('delete_situation', { map: s.choice.map, file: x.file });
     } catch (err) {
-      toast(err.message, 'error');
+      toast(t(err.message), 'error');
     }
     loadSituations();
   };

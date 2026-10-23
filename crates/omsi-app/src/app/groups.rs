@@ -402,6 +402,10 @@ pub(crate) struct MenuState {
     /// The digits of a time being typed in the world page of the game menu (None: not typing).
     pub(crate) menu_edit: Option<String>,
     pub(crate) menu_edit_icao: bool,
+    /// The fleet number being edited in the vehicle page
+    pub(crate) menu_edit_number: bool,
+    /// The plate being edited in the vehicle page
+    pub(crate) menu_edit_ident: bool,
     /// `menu_edit` is the search of the open list being typed (see `game_lists::searchable`).
     pub(crate) menu_edit_search: bool,
     /// The search the open list is filtered by (empty: none).

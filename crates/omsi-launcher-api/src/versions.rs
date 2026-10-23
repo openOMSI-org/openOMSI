@@ -195,7 +195,7 @@ pub fn status() -> Answer {
     Ok(match j.updater.status() {
         Status::Downloading { done, total, .. } => json!({ "state": "downloading", "version": v, "done": done, "total": total }),
         Status::Restarting(_) if j.ready => json!({ "state": "installed", "version": v }),
-        Status::Failed(e) => json!({ "state": "failed", "version": v, "error": reason(&e) }),
+        Status::Failed(e) => json!({ "state": "failed", "version": v, "error": core::i18n::tr(reason(&e)) }),
         Status::Installing(_) | Status::Restarting(_) => json!({ "state": "installing", "version": v }),
         _ => json!({ "state": "downloading", "version": v, "done": 0, "total": 0 }),
     })

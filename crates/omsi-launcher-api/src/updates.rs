@@ -30,7 +30,7 @@ pub fn status() -> Value {
             Status::Installing(r) => json!({ "state": "installing", "release": release_json(&r) }),
             Status::WaitingForInstaller(r) => json!({ "state": "installer", "release": release_json(&r) }),
             Status::Restarting(r) => json!({ "state": "restarting", "release": release_json(&r) }),
-            Status::Failed(msg) => json!({ "state": "failed", "message": msg }),
+            Status::Failed(msg) => json!({ "state": "failed", "message": omsi_launcher_lib::i18n::tr(&msg) }),
         };
         v["current"] = json!(updater::current_version());
         v["allowed"] = json!(allowed());

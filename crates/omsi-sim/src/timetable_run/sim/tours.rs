@@ -332,12 +332,11 @@ impl ScheduleSim {
                     .and_then(|p| omsi_cfg::CfgFile::read(&p).ok())
                     .map(|f| omsi_map::ailists::parse_chrono_cfg(&f).start_date)
                     .filter(|d| *d > 0);
-                return Err(format!(
-                    "line {name} does not run on {}: the timetable change '{}'{} takes it off. {running} other lines run that day: pick one of them, or an earlier date",
-                    date(world.date()),
-                    dir.file_name().unwrap_or_default().to_string_lossy(),
-                    from.map(|d| format!(" of {}", date(d))).unwrap_or_default()
-                ));
+                let (day, change) = (date(world.date()), dir.file_name().unwrap_or_default().to_string_lossy());
+                return Err(match from {
+                    Some(d) => format!("line {name} does not run on {day}: the timetable change '{change}' of {} takes it off. {running} other lines run that day: pick one of them, or an earlier date", date(d)),
+                    None => format!("line {name} does not run on {day}: the timetable change '{change}' takes it off. {running} other lines run that day: pick one of them, or an earlier date"),
+                });
             }
             return Err(format!("line {line} is not in the timetable of this map on {}: {running} lines run that day", date(world.date())));
         };

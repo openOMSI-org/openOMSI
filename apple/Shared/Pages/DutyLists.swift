@@ -307,7 +307,7 @@ struct NextDepartures: View {
                             LineBadge(line: u.trip.line.isEmpty ? u.l.name : u.trip.line)
                             VStack(alignment: .leading, spacing: 1) {
                                 Text("\(u.trip.from) → \(u.trip.terminus)").font(.inter(13.5)).foregroundStyle(Theme.text).lineLimit(1)
-                                Text("\(String(localized: "Tour")) \(u.x.number)").font(.inter(12)).foregroundStyle(Theme.muted).lineLimit(1)
+                                Text(tr("Tour {n}", ["n": "\(u.x.number)"])).font(.inter(12)).foregroundStyle(Theme.muted).lineLimit(1)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }

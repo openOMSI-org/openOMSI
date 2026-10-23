@@ -98,7 +98,7 @@ fn bootstrap(p: &dyn Platform) -> Answer {
 
 /// The interface texts in `lang` (the game's tables; English is the key).
 fn translations(lang: String) -> Answer {
-    to_json(crate::i18n::table(&lang))
+    to_json(&*crate::i18n::table(&lang))
 }
 
 /// The OMSI 2 folder and the game program (Setup).
@@ -410,7 +410,7 @@ pub fn game_ended(game: &core::instances::Instance) -> Option<(&'static str, Val
     }
     let log = std::path::Path::new(&game.log);
     if let Some(why) = core::crash::disconnect_of(log) {
-        return Some(("game-disconnected", json!({ "why": why })));
+        return Some(("game-disconnected", json!({ "why": core::i18n::tr_said(&why) })));
     }
     let (what, tail) = core::crash::crash_of(log)?;
     Some(("game-crashed", crash_json(&what, &tail)))
@@ -597,7 +597,7 @@ fn depot_add(bus: String, paint: Option<String>, number: Option<String>, name: S
 /// A depot bus's name, paint, plate or fleet number changed (its wear stays).
 fn depot_update(id: String, patch: Value) -> Answer {
     core::depot::update(|d| {
-        let b = d.get_mut(&id).ok_or_else(|| anyhow::anyhow!("no depot bus {id}"))?;
+        let b = d.get_mut(&id).ok_or_else(|| anyhow::anyhow!(core::i18n::tr("No depot bus {id}").replace("{id}", &id)))?;
         let text = |k: &str| patch.get(k).and_then(Value::as_str).map(str::to_string);
         if let Some(v) = text("name") {
             b.name = v;
@@ -623,9 +623,9 @@ fn depot_update(id: String, patch: Value) -> Answer {
 /// Refuel, wash or repair a depot bus (all of it, or one part): its next drive starts so.
 fn depot_service(id: String, kind: String) -> Answer {
     core::depot::update(|d| {
-        let b = d.get_mut(&id).ok_or_else(|| anyhow::anyhow!("no depot bus {id}"))?;
+        let b = d.get_mut(&id).ok_or_else(|| anyhow::anyhow!(core::i18n::tr("No depot bus {id}").replace("{id}", &id)))?;
         if !b.service(&kind) {
-            anyhow::bail!("no depot service {kind}");
+            anyhow::bail!(core::i18n::tr("No depot service {kind}").replace("{kind}", &kind));
         }
         Ok(())
     })
@@ -655,7 +655,7 @@ fn depot_group(op: &str, name: String, to: Option<String>) -> Answer {
             }
         };
         if !done {
-            anyhow::bail!("there is already a depot called {}", to.as_deref().unwrap_or(&name).trim());
+            anyhow::bail!(core::i18n::tr("There is already a depot called {name}").replace("{name}", to.as_deref().unwrap_or(&name).trim()));
         }
         Ok(d.group_names())
     })
@@ -806,6 +806,10 @@ fn list_dir(path: Option<String>, archives: bool) -> Answer {
 }
 
 pub fn call(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
+    answer(cmd, args, p).map_err(|e| core::i18n::tr(&e))
+}
+
+fn answer(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
     match cmd {
         "bootstrap" => bootstrap(p),
         "translations" => translations(arg::<String>(args, "lang")?),
@@ -1045,13 +1049,24 @@ fn content_check(path: String, deep: bool) -> Answer {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     }
-    let out = cmd.output().map_err(|e| format!("{}: {e}", game.display()))?;
+    let out = cmd.output().map_err(|e| format!("the game {} cannot start: {e}", game.display()))?;
     let text = String::from_utf8_lossy(&out.stdout);
     let line = text.lines().rev().find(|l| l.trim_start().starts_with('{')).ok_or_else(|| {
         let last = String::from_utf8_lossy(&out.stderr);
         format!("the game gave no answer ({})", last.lines().last().unwrap_or("").trim())
     })?;
-    serde_json::from_str(line).map_err(err)
+    let mut v: Value = serde_json::from_str(line).map_err(err)?;
+    for f in v.get_mut("findings").and_then(Value::as_array_mut).into_iter().flatten() {
+        for k in ["text", "what"] {
+            if let Some(t) = f.get(k).and_then(Value::as_str).map(core::i18n::tr) {
+                f[k] = json!(t);
+            }
+        }
+        if let Some(t) = f.get("hint").and_then(Value::as_str).map(|h| h.split("; ").map(core::i18n::tr).collect::<Vec<_>>().join("; ")) {
+            f["hint"] = json!(t);
+        }
+    }
+    Ok(v)
 }
 
 #[cfg(test)]

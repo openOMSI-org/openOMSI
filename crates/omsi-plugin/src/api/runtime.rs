@@ -269,7 +269,14 @@ impl PluginState {
     pub fn record_error(&mut self, io: &mut dyn PluginIo, e: &CallError) {
         self.errors += 1;
         log::warn!("{} {}", self.tag, e.msg);
-        io.message(&format!("{} {}: {}", self.label, self.name, e.msg.lines().next().unwrap_or("")), 8.0);
+        let why = e.msg.lines().next().unwrap_or("");
+        let text = match (self.label, e.fatal) {
+            ("WASM plugin", true) => format!("WASM plugin {} ran longer than {CALL_BUDGET_MS} ms and was stopped", self.name),
+            (_, true) => format!("Lua plugin {} ran longer than {CALL_BUDGET_MS} ms and was stopped", self.name),
+            ("WASM plugin", false) => format!("WASM plugin {} failed: {why}", self.name),
+            (_, false) => format!("Lua plugin {} failed: {why}", self.name),
+        };
+        io.message(&text, 8.0);
         if e.fatal {
             log::warn!("{} ran longer than {CALL_BUDGET_MS} ms in one call: switched off until it changes or the game restarts", self.tag);
             self.disabled = true;

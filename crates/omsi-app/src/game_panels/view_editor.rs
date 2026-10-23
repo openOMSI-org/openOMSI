@@ -174,7 +174,7 @@ fn save_view(app: &mut crate::App) -> String {
         .collect();
     match store(&bus, &cam, &mirrors) {
         Ok(path) => format!("{} {}", omsi_ui::tr("Saved for this vehicle:"), path.display()),
-        Err(e) => format!("{} {e}", omsi_ui::tr("Not saved:")),
+        Err(e) => format!("{} {}", omsi_ui::tr("Not saved:"), omsi_ui::tr(&e.to_string())),
     }
 }
 

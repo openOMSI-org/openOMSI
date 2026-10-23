@@ -8,6 +8,7 @@ use super::{events, registry, ApiFn, Perm};
 pub const GROUPS: &[(&str, &str)] = &[
     ("vehicle", "The player's bus"),
     ("data", "Game data getters"),
+    ("hof", "The loaded HOF depot file"),
     ("duty", "Duty and timetable"),
     ("map", "The map"),
     ("traffic", "AI traffic"),

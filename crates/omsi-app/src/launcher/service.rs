@@ -201,7 +201,7 @@ fn serve(rx: std::sync::mpsc::Receiver<Value>, reply: Reply) {
                 let t_draw = Instant::now();
                 let _ = showroom.preview(r, w, h);
                 let drew = t_draw.elapsed();
-                let head = json!({ "ok": true, "busy": showroom.busy, "failed": showroom.failed(), "error": showroom.error, "moving": showroom.moving(), "picture": showroom.has_picture(), "view": showroom.view.name(), "views": showroom.views() });
+                let head = json!({ "ok": true, "busy": showroom.busy, "failed": showroom.failed(), "error": showroom.error.as_deref().map(omsi_ui::tr), "moving": showroom.moving(), "picture": showroom.has_picture(), "view": showroom.view.name(), "views": showroom.views() });
                 let new = showroom.drawn != before || req.get("force").and_then(Value::as_bool).unwrap_or(false);
                 match (new, showroom.picture()) {
                     (true, Some(tex)) => {

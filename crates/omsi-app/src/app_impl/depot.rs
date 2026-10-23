@@ -14,7 +14,7 @@ impl App {
         if matches!(kind, "refuel" | "wash") && at_petrol_station(&w, &p.vehicle) {
             let name = if kind == "refuel" { "veh_tank" } else { "veh_wash" };
             if !p.vehicle.service(name, 0.0) {
-                self.service_msg = Some((format!("this vehicle has no {} handling ({name})", if kind == "refuel" { "fuel pump" } else { "bus wash" }), 6.0));
+                self.service_msg = Some((if kind == "refuel" { format!("this vehicle has no fuel pump handling ({name})") } else { format!("this vehicle has no bus wash handling ({name})") }, 6.0));
                 return;
             }
             if kind == "wash" {

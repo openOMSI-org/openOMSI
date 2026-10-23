@@ -54,6 +54,13 @@ pub(crate) struct Args {
     /// the flag then only has the duty's next trips typed into the IBIS as they come.
     #[arg(long)]
     pub(crate) autostart: bool,
+    /// Start a new drive at 22 °C inside when enabled, regardless of the selected trip.
+    /// Saved situations retain their cabin temperature.
+    #[arg(long)]
+    pub(crate) comfortable_cabin_on_start: bool,
+    /// An on-foot start defers the adjustment until its first placed bus loads.
+    #[arg(skip)]
+    pub(crate) pending_cabin_temperature: Arc<std::sync::atomic::AtomicBool>,
     /// Start as a pedestrian where the bus would stand (the bus left out): one is placed
     /// from the game menu, or a placed one taken over at its driver's door (G).
     #[arg(long)]

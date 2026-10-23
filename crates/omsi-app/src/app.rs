@@ -224,7 +224,7 @@ impl App {
             None => match event_loop.create_window(attrs) {
                 Ok(w) => Arc::new(w),
                 Err(e) => {
-                    fatal_message(&format!("The game cannot open its window: {e}"));
+                    fatal_message(&omsi_ui::tr("The game cannot open its window: {e}").replace("{e}", &e.to_string()));
                     crate::platform::exit(event_loop);
                     return;
                 }
@@ -233,7 +233,7 @@ impl App {
         let start = match crate::startup::RendererStart::begin(&mut self.gfx.instance, &window, omsi_render::RenderOptions { max_scene: crate::settings::fullscreen_scene_cap(self.settings.fullscreen, self.gfx.spanned, resolution), ..self.args.session_settings.render_options(&self.settings) }) {
             Ok(s) => s,
             Err(e) => {
-                fatal_message(&format!("The game cannot draw on this computer: {e:#}"));
+                fatal_message(&omsi_ui::tr("The game cannot draw on this computer: {e:#}").replace("{e:#}", &omsi_ui::tr(&format!("{e:#}"))));
                 crate::platform::exit(event_loop);
                 return;
             }
@@ -303,7 +303,7 @@ impl App {
         let renderer = match ws.start.wait(&mut self.gfx.instance) {
             Ok(r) => r,
             Err(e) => {
-                fatal_message(&format!("The game cannot draw on this computer: {e:#}"));
+                fatal_message(&omsi_ui::tr("The game cannot draw on this computer: {e:#}").replace("{e:#}", &omsi_ui::tr(&format!("{e:#}"))));
                 crate::platform::exit(event_loop);
                 return true;
             }
@@ -344,7 +344,7 @@ impl App {
             match SurfaceState::new_with(&self.gfx.instance, window.clone(), &renderer, size.width, size.height, vsync) {
                 Ok(s) => self.gfx.surface = Some(s),
                 Err(e) => {
-                    fatal_message(&format!("The game's window cannot be drawn into: {e:#}"));
+                    fatal_message(&omsi_ui::tr("The game's window cannot be drawn into: {e:#}").replace("{e:#}", &format!("{e:#}")));
                     crate::platform::exit(event_loop);
                     return;
                 }
@@ -495,7 +495,7 @@ impl App {
                     Err(e) if self.args.bus.is_some() => {
                         log::warn!("the bus could not be put down ({e:#}); trying again");
                         spawn_player(&self.args, &w, &renderer, &mut scene).map_err(|e2| {
-                            self.service_msg = Some((format!("The bus could not be loaded: {}", format!("{e2:#}").lines().next().unwrap_or_default()), 15.0));
+                            self.service_msg = Some((format!("The bus could not be loaded ({})", format!("{e2:#}").lines().next().unwrap_or_default()), 15.0));
                             e2
                         })
                     }
@@ -677,7 +677,7 @@ impl App {
                                 }
                                 Err(e) => {
                                     log::warn!("no player duty: {e}");
-                                    self.service_msg = Some((format!("No duty: {e}"), 20.0));
+                                    self.service_msg = Some((omsi_ui::i18n::tr_fill_words("No duty ({e})", &[("{e}", &e)]), 20.0));
                                     None
                                 }
                             };
@@ -729,6 +729,9 @@ impl App {
                         // player's for the first frames and then jumped out of it)
                         std::time::Duration::from_millis(1500),
                     );
+                }
+                if let Some(p) = self.player.as_mut() {
+                    crate::duty_start::set_starting_cabin_temperature(&self.args, &mut p.vehicle);
                 }
                 self.world = Some(w);
             }
@@ -946,16 +949,14 @@ pub(crate) fn report_missing_content(w: &World, msg: &mut Option<(String, f32)>)
     let _ = std::fs::write(&path, text);
     let objects = files.iter().filter(|(_, w)| *w != "spline").count();
     let splines = files.len() - objects;
-    let addons: Vec<&String> = by_addon.keys().take(4).collect();
-    let more = if by_addon.len() > 4 { format!(" and {} more", by_addon.len() - 4) } else { String::new() };
+    let mut addons = by_addon.keys().take(4).map(|a| a.as_str()).collect::<Vec<_>>().join(", ");
+    if by_addon.len() > 4 {
+        addons.push_str(", …");
+    }
     log::warn!("missing content: {objects} objects, {splines} splines, {} textures (list: {})", textures.len(), path.display());
     if !files.is_empty() {
         *msg = Some((
-            format!(
-                "This map uses {objects} objects and {splines} splines that are not installed (add-ons: {}{more}). The list is in {}",
-                addons.iter().map(|a| a.as_str()).collect::<Vec<_>>().join(", "),
-                path.display()
-            ),
+            format!("This map uses {objects} objects and {splines} splines that are not installed (add-ons: {addons}). The list is in {}", path.display()),
             15.0,
         ));
     }

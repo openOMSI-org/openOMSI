@@ -77,8 +77,8 @@ pub unsafe extern "C" fn openomsi_bridge(cmd: *const c_char, arg: *const c_char)
     let (cmd, arg) = (read(cmd), read(arg));
     let reply = match std::panic::catch_unwind(|| call(&cmd, &arg)) {
         Ok(Ok(v)) => json!({ "ok": true, "value": v }),
-        Ok(Err(e)) => json!({ "ok": false, "error": format!("{e:#}") }),
-        Err(_) => json!({ "ok": false, "error": format!("the launcher's `{cmd}` stopped on an error (see the log)") }),
+        Ok(Err(e)) => json!({ "ok": false, "error": omsi_ui::tr(&format!("{e:#}")) }),
+        Err(_) => json!({ "ok": false, "error": omsi_ui::tr("the launcher's `{cmd}` stopped on an error (see the log)").replace("{cmd}", &cmd) }),
     };
     CString::new(reply.to_string()).unwrap_or_default().into_raw()
 }
@@ -233,7 +233,7 @@ fn snapshot(s: &mut State) -> Value {
         .map(|e| {
             let info = s.server_info.get(&e.address).map(|(_, r)| match r {
                 Ok(i) => json!({ "ok": true, "name": i.name, "motd": i.motd, "map": i.map, "players": i.players, "max_players": i.max_players, "version": i.version, "time": i.time, "weather": i.weather, "password": i.password, "vehicles": i.vehicles.len() }),
-                Err(e) => json!({ "ok": false, "error": e }),
+                Err(e) => json!({ "ok": false, "error": omsi_ui::tr(e) }),
             });
             json!({ "name": e.name, "address": e.address, "protocol": e.protocol, "info": info, "official": omsi_net::official::is_alias(&e.address) })
         })
@@ -262,7 +262,7 @@ fn snapshot(s: &mut State) -> Value {
         "real_time": s.real_time(),
         "config": { "root": s.config.root, "profile": s.config.profile, "game": s.config.game },
         "root_ok": root_ok,
-        "root_problem": if root_ok { String::new() } else { crate::launcher::state::root_problem(&s.config.root) },
+        "root_problem": if root_ok { String::new() } else { omsi_ui::tr(&crate::launcher::state::root_problem(&s.config.root)).into_owned() },
         "content_dir": core::content_dir().map(|p| p.to_string_lossy().to_string()),
         "data_dir": core::data_dir().to_string_lossy(),
         "profiles": s.profiles,
@@ -423,6 +423,7 @@ fn act(s: &mut State, a: &Value) -> anyhow::Result<Value> {
                 "passengers" => s.choice.passengers = on,
                 "schedule" => s.choice.schedule = on,
                 "autostart" => s.choice.autostart = on,
+                "comfortable_cabin_on_start" => s.choice.comfortable_cabin_on_start = on,
                 "on_foot" => s.choice.on_foot = on,
                 other => anyhow::bail!("no such switch: {other}"),
             }
@@ -675,7 +676,7 @@ fn preview_thread(rx: std::sync::mpsc::Receiver<PreviewMsg>) {
                         Ok(r) => renderer = Some(r),
                         Err(e) => {
                             log::warn!("launcher preview: no renderer: {e:#}");
-                            preview_state(false, Some(format!("No graphics device for the preview: {e:#}")));
+                            preview_state(false, Some(format!("{}: {e:#}", omsi_ui::tr("No graphics device for the preview"))));
                             failed = true;
                         }
                     }

@@ -23,7 +23,7 @@ async function update(id, patch) {
   } catch (e) {
     // (the change did not reach the file: the page shows what it holds again)
     if (before) set({ depot: S.depot.map((b) => (b.id === id ? { ...b, ...Object.fromEntries(Object.keys(patch).map((k) => [k, before[k]])) } : b)) });
-    toast(e.message, 'error');
+    toast(t(e.message), 'error');
   }
 }
 
@@ -48,12 +48,12 @@ function Detail({ b, groups = [] }) {
       await call('depot_service', { id: b.id, kind });
       await loadDepot();
     } catch (e) {
-      toast(e.message, 'error');
+      toast(t(e.message), 'error');
     }
   };
   const remove = async () => {
     if (!(await ask({ title: 'Remove from the depot', text: t('{name} leaves the depot with its kilometres and its wear.', { name: b.name }), yes: 'Remove', danger: true }))) return;
-    await call('depot_remove', { id: b.id }).catch((e) => toast(e.message, 'error'));
+    await call('depot_remove', { id: b.id }).catch((e) => toast(t(e.message), 'error'));
     set({ depotSel: null });
     loadDepot();
   };
@@ -169,7 +169,7 @@ export function DepotPage() {
       setNaming(null);
       await loadDepot();
     } catch (e) {
-      toast(e.message, 'error');
+      toast(t(e.message), 'error');
     }
   };
   const removeGroup = async () => {
@@ -186,7 +186,7 @@ export function DepotPage() {
       set({ depotSel: id });
       toast(t('Bus added to your depot.'), 'ok');
     } catch (e) {
-      toast(e.message, 'error');
+      toast(t(e.message), 'error');
     }
   };
   return html`

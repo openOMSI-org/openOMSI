@@ -37,9 +37,8 @@ impl App {
         let g = p.vehicle.trolley.as_deref()?;
         let (o, d, _) = self.cursor_ray_now()?;
         let d = d.as_dvec3().normalize_or_zero();
-        let m = p.vehicle.body_rotation();
+        let (pos, m, _) = p.vehicle.trolley_frame();
         let rot = DMat3::from_cols(m.x_axis.truncate().as_dvec3(), m.y_axis.truncate().as_dvec3(), m.z_axis.truncate().as_dvec3());
-        let pos = p.vehicle.position;
         let mut best: Option<(usize, f64)> = None;
         for (k, pole) in g.rig.poles.iter().enumerate() {
             let (a, b) = (pole.base_at(pos, &rot), pole.tip_at(pos, &rot));

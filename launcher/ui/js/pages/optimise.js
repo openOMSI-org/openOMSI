@@ -48,7 +48,7 @@ export function OptimiseBlock() {
     try {
       setStatus(await call(cmd, args));
     } catch (e) {
-      toast(e.message, 'error');
+      toast(t(e.message), 'error');
     }
     setBusy(false);
   };
@@ -59,7 +59,7 @@ export function OptimiseBlock() {
       setStatus(await call('optimise_status'));
       toast(t('Your previous settings are back'), 'ok');
     } catch (e) {
-      toast(e.message, 'error');
+      toast(t(e.message), 'error');
     }
     setBusy(false);
   };

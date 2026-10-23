@@ -36,6 +36,7 @@
 //! looks for them. `InstallMode::Auto` (the page's default) unpacks what fits on the disk
 //! and uses an archive in place when its unpacked size does not.
 
+use crate::i18n::{tr, trf};
 use anyhow::{anyhow, Context, Result};
 use serde::Serialize;
 use std::collections::{BTreeMap, HashSet};
@@ -208,7 +209,7 @@ fn start_inner(content: PathBuf, root: Option<PathBuf>, source: PathBuf, mode: I
         mode,
         from_inbox,
         cancel: AtomicBool::new(false),
-        progress: Mutex::new(Progress { id, source: source.to_string_lossy().to_string(), name, state: "queued".into(), mode, from_inbox, started: now_secs(), message: "waiting for the install before it".into(), ..Default::default() }),
+        progress: Mutex::new(Progress { id, source: source.to_string_lossy().to_string(), name, state: "queued".into(), mode, from_inbox, started: now_secs(), message: tr("waiting for the install before it"), ..Default::default() }),
         bytes_done: AtomicU64::new(0),
         files_done: AtomicU64::new(0),
         linked: Mutex::new(Vec::new()),
@@ -221,7 +222,7 @@ fn start_inner(content: PathBuf, root: Option<PathBuf>, source: PathBuf, mode: I
         let result = if j.cancelled() {
             Err(anyhow!(Cancelled))
         } else {
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(&j, &content, root.as_deref()))).unwrap_or_else(|_| Err(anyhow!("the install stopped with an internal error")))
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(&j, &content, root.as_deref()))).unwrap_or_else(|_| Err(anyhow!(tr("the install stopped with an internal error"))))
         };
         // (an inbox source's files were only linked into it: removing it loses nothing)
         let staging = staging_dir(&content, j.id);
@@ -236,7 +237,7 @@ fn start_inner(content: PathBuf, root: Option<PathBuf>, source: PathBuf, mode: I
             }),
             Err(e) if e.downcast_ref::<Cancelled>().is_some() => j.set(|p| {
                 p.state = "cancelled".into();
-                p.message = "cancelled - nothing was installed, the unpacked files were removed".into();
+                p.message = tr("cancelled - nothing was installed, the unpacked files were removed");
                 p.finished = Some(now_secs());
             }),
             Err(e) => j.set(|p| {
@@ -683,7 +684,7 @@ fn plan(entries: &[Entry], source_name: &str, installed: &Installed) -> Plan {
                                 match installed.vehicle(bus) {
                                     Some(have) => plan.maps.push(Mapping { src: bpath, dest: format!("Vehicles/{have}"), what: format!("add-on for {have} (paints / textures)"), files, bytes, aside: false }),
                                     None => {
-                                        plan.warnings.push(format!("{bus}: only paints or textures for a bus that is not installed (Vehicles/{bus}) - kept aside in Mods/{WAITING} and installed by itself once that bus is installed"));
+                                        plan.warnings.push(trf("{bus}: only paints or textures for a bus that is not installed (Vehicles/{bus}) - kept aside in Mods/{folder} and installed by itself once that bus is installed", &[("bus", &bus), ("folder", &WAITING)]));
                                         plan.maps.push(Mapping { src: bpath, dest: format!("Vehicles/{bus}"), what: format!("add-on for {bus}, which is not installed"), files, bytes, aside: true });
                                     }
                                 }
@@ -715,9 +716,9 @@ fn plan(entries: &[Entry], source_name: &str, installed: &Installed) -> Plan {
         let lower = m.dest.to_ascii_lowercase();
         if lower == "plugins" || lower.starts_with("plugins/") {
             m.dest = format!("Mods/{PLUGINS_HELD}{}", &m.dest["plugins".len()..]);
-            plan.warnings.push(format!(
-                "{}: a plugin runs its own program code inside the game, so it was not enabled - it is in Mods/{PLUGINS_HELD}; move it into Plugins yourself if you trust where it came from",
-                if m.src.is_empty() { source_name } else { &m.src }
+            plan.warnings.push(trf(
+                "{name}: a plugin runs its own program code inside the game, so it was not enabled - it is in Mods/{folder}; move it into Plugins yourself if you trust where it came from",
+                &[("name", &if m.src.is_empty() { source_name } else { &m.src }), ("folder", &PLUGINS_HELD)],
             ));
         }
     }
@@ -765,46 +766,46 @@ fn run(job: &Job, content: &Path, root: Option<&Path>) -> Result<()> {
     let is_zip = archive == Some(ArchiveKind::Zip);
     let staged_archive = matches!(archive, Some(ArchiveKind::SevenZip | ArchiveKind::Rar));
     if archive.is_none() && !src.is_dir() {
-        return Err(anyhow!("{} is neither a folder nor a supported mod archive (.zip, .7z, .rar)", src.display()));
+        return Err(anyhow!(trf("{name} is neither a folder nor a supported mod archive (.zip, .7z, .rar)", &[("name", &src.display())])));
     }
     if src.starts_with(content) && !job.from_inbox && !src.starts_with(content.join("Mods")) {
-        return Err(anyhow!("{} is already inside the content folder", src.display()));
+        return Err(anyhow!(trf("{name} is already inside the content folder", &[("name", &src.display())])));
     }
     // (the name becomes a folder name: `...zip` has the stem `..`)
     let source_name = if archive.is_some() { src.file_stem() } else { src.file_name() }.map(|s| s.to_string_lossy().to_string()).filter(|n| safe_rel(n).as_deref() == Some(n.as_str())).unwrap_or_else(|| "mod".into());
     let (mut source, entries) = if staged_archive {
         let unpacked = staging_dir(content, job.id).join("source");
-        job.state("unpacking", "checking the archive and unpacking it into staging");
+        job.state("unpacking", tr("checking the archive and unpacking it into staging"));
         unpack_archive(job, content, &src, &unpacked, archive.unwrap())?;
         let (entries, paths, refused) = list_folder(&unpacked, job)?;
         if refused > 0 {
-            job.set(|p| p.warnings.push(format!("{refused} file(s) whose names cannot be installed safely were left out")));
+            job.set(|p| p.warnings.push(trf("{refused} file(s) whose names cannot be installed safely were left out", &[("refused", &refused)])));
         }
         (Source::Folder(paths), entries)
     } else if is_zip {
-        job.state("planning", "reading the archive's table of contents");
+        job.state("planning", tr("reading the archive's table of contents"));
         let f = std::fs::File::open(&src).with_context(|| format!("opening {}", src.display()))?;
-        let mut z = zip::ZipArchive::new(std::io::BufReader::with_capacity(ZIP_BUFFER, f)).with_context(|| format!("{} is not a readable zip archive", src.display()))?;
+        let mut z = zip::ZipArchive::new(std::io::BufReader::with_capacity(ZIP_BUFFER, f)).with_context(|| trf("{name} is not a readable zip archive", &[("name", &src.display())]))?;
         let (entries, problems) = list_zip(&mut z, job)?;
         if !problems.is_empty() {
             return Err(anyhow!("{}: {}", src.display(), problems.join("; ")));
         }
         (Source::Zip(z), entries)
     } else {
-        job.state("planning", "listing the folder");
+        job.state("planning", tr("listing the folder"));
         let (entries, paths, refused) = list_folder(&src, job)?;
         if refused > 0 {
-            job.set(|p| p.warnings.push(format!("{refused} file(s) whose names cannot be installed safely (a '..', '\\' or ':' in them) were left out")));
+            job.set(|p| p.warnings.push(trf("{refused} file(s) whose names cannot be installed safely (a '..', '\\' or ':' in them) were left out", &[("refused", &refused)])));
         }
         (Source::Folder(paths), entries)
     };
     if entries.is_empty() {
-        return Err(anyhow!("{} is empty", src.display()));
+        return Err(anyhow!(trf("{name} is empty", &[("name", &src.display())])));
     }
     let installed = Installed { content, root };
     let plan = plan(&entries, &source_name, &installed);
     if plan.maps.is_empty() {
-        return Err(anyhow!("could not tell what {} is: no Vehicles / maps / Sceneryobjects ... folders and no .bus / .sco / .sli / global.cfg files in it", src.display()));
+        return Err(anyhow!(trf("could not tell what {name} is: no Vehicles / maps / Sceneryobjects ... folders and no .bus / .sco / .sli / global.cfg files in it", &[("name", &src.display())])));
     }
     for m in &plan.maps {
         let line = format!("{} -> {}{}/ ({} files, {}){}", if m.src.is_empty() { source_name.as_str() } else { m.src.as_str() }, if m.aside { format!("Mods/{WAITING}/{source_name}/") } else { String::new() }, m.dest, m.files.len(), gb(m.bytes), if m.what.is_empty() { String::new() } else { format!(" - {}", m.what) });
@@ -815,7 +816,7 @@ fn run(job: &Job, content: &Path, root: Option<&Path>) -> Result<()> {
         p.warnings.extend(plan.warnings.iter().cloned());
     });
     // 2. does it fit?
-    job.state("checking", "checking the free disk space");
+    job.state("checking", tr("checking the free disk space"));
     let total_files: u64 = plan.maps.iter().map(|m| m.files.len() as u64).sum();
     let total_bytes: u64 = plan.maps.iter().map(|m| m.bytes).sum();
     // an inbox folder's files are hard-linked into the staging folder (no space, and the
@@ -830,7 +831,7 @@ fn run(job: &Job, content: &Path, root: Option<&Path>) -> Result<()> {
         p.needed_bytes = needed;
     });
     // unpack, or use the archive in place?
-    let layout = if is_zip { in_place_layout(&src, &plan) } else { Err(anyhow!("only a .zip archive can be used in place; this archive must be unpacked")) };
+    let layout = if is_zip { in_place_layout(&src, &plan) } else { Err(anyhow!(tr("only a .zip archive can be used in place; this archive must be unpacked"))) };
     let mode = if staged_archive {
         InstallMode::Extract
     } else { match job.mode {
@@ -841,7 +842,7 @@ fn run(job: &Job, content: &Path, root: Option<&Path>) -> Result<()> {
                 InstallMode::InPlace
             }
             Err(e) => {
-                let line = format!("the archive cannot be used in place either: {e:#}");
+                let line = trf("the archive cannot be used in place either: {e}", &[("e", &format!("{e:#}"))]);
                 job.set(|p| p.warnings.push(line.clone()));
                 InstallMode::Extract
             }
@@ -870,7 +871,7 @@ fn run(job: &Job, content: &Path, root: Option<&Path>) -> Result<()> {
     // 3. unpack / copy into the staging folder
     let staging = staging_dir(content, job.id);
     std::fs::create_dir_all(&staging).with_context(|| format!("creating {}", staging.display()))?;
-    job.state(if is_zip { "unpacking" } else if moving { "moving" } else { "copying" }, format!("{} files, {}", total_files, gb(total_bytes)));
+    job.state(if is_zip { "unpacking" } else if moving { "moving" } else { "copying" }, trf("{files} files, {size}", &[("files", &total_files), ("size", &gb(total_bytes))]));
     let mut buf = vec![0u8; 1 << 20];
     let mut since_check = 0u64;
     for (mi, m) in plan.maps.iter().enumerate() {
@@ -895,7 +896,7 @@ fn run(job: &Job, content: &Path, root: Option<&Path>) -> Result<()> {
                     let mut f = z.by_index(e.index).with_context(|| format!("reading {} from the archive", e.rel))?;
                     let mut w = std::fs::File::create(&out).with_context(|| format!("writing {}", out.display()))?;
                     loop {
-                        let n = f.read(&mut buf).with_context(|| format!("unpacking {} (the archive may be damaged)", e.rel))?;
+                        let n = f.read(&mut buf).with_context(|| trf("unpacking {name} (the archive may be damaged)", &[("name", &e.rel)]))?;
                         if n == 0 {
                             break;
                         }
@@ -950,7 +951,7 @@ fn run(job: &Job, content: &Path, root: Option<&Path>) -> Result<()> {
         return Err(anyhow!(Cancelled));
     }
     // 4. into place
-    job.state("moving", "moving the files into the content folder");
+    job.state("moving", tr("moving the files into the content folder"));
     let mut installed_items = Vec::new();
     let mut aside_items = Vec::new();
     // (the folders this install made: they go again when the mod is taken out of
@@ -1016,9 +1017,9 @@ fn run(job: &Job, content: &Path, root: Option<&Path>) -> Result<()> {
     // (noted as one mod: its own folders, see `mods`)
     crate::mods::record(content, &source_name, &created);
     let summary = match (installed_items.is_empty(), aside_items.is_empty()) {
-        (false, true) => format!("installed {} - it is in the lists now", installed_items.join(", ")),
-        (false, false) => format!("installed {}; kept aside: {}", installed_items.join(", "), aside_items.join(", ")),
-        (true, _) => format!("nothing installed; kept aside: {}", aside_items.join(", ")),
+        (false, true) => trf("installed {items} - it is in the lists now", &[("items", &installed_items.join(", "))]),
+        (false, false) => trf("installed {items}; kept aside: {aside}", &[("items", &installed_items.join(", ")), ("aside", &aside_items.join(", "))]),
+        (true, _) => trf("nothing installed; kept aside: {aside}", &[("aside", &aside_items.join(", "))]),
     };
     job.set(|p| {
         p.installed = installed_items.clone();
@@ -1119,13 +1120,13 @@ fn in_place_layout(src: &Path, plan: &Plan) -> Result<()> {
     for m in plan.maps.iter().filter(|m| !m.aside) {
         let want = if prefix.is_empty() { m.dest.to_lowercase() } else { format!("{prefix}/{}", m.dest.to_lowercase()) };
         if m.src.to_lowercase() != want {
-            wrong.push(format!("{} (the game would look for it at {})", if m.src.is_empty() { "the archive itself" } else { m.src.as_str() }, want));
+            wrong.push(trf("{item} (the game would look for it at {path})", &[("item", &if m.src.is_empty() { tr("the archive itself") } else { m.src.clone() }), ("path", &want)]));
         }
     }
     if wrong.is_empty() {
         Ok(())
     } else {
-        Err(anyhow!("the archive is not laid out like an OMSI 2 folder, so it has to be unpacked: {}", wrong.join("; ")))
+        Err(anyhow!(trf("the archive is not laid out like an OMSI 2 folder, so it has to be unpacked: {why}", &[("why", &wrong.join("; "))])))
     }
 }
 
@@ -1157,16 +1158,16 @@ fn place_archive(job: &Job, content: &Path, src: &Path, plan: &Plan) -> Result<(
     };
     let how;
     if dest.exists() && same(src, &dest) {
-        how = "already in place";
+        how = tr("already in place");
     } else if job.from_inbox && std::fs::rename(src, &dest).is_ok() {
-        how = "moved from the Mods folder";
+        how = tr("moved from the Mods folder");
     } else {
         // through the staging folder, so that the game never mounts half an archive
         let staging = staging_dir(content, job.id);
         std::fs::create_dir_all(&staging).with_context(|| format!("creating {}", staging.display()))?;
         let tmp = staging.join(&name);
         if std::fs::hard_link(src, &tmp).is_ok() {
-            how = "linked: no disk space used, the archive also stays where it was";
+            how = tr("linked: no disk space used, the archive also stays where it was");
         } else {
             let needed = size + (size / 20).max(MIN_MARGIN);
             let free = free_space(content).unwrap_or(u64::MAX);
@@ -1175,9 +1176,9 @@ fn place_archive(job: &Job, content: &Path, src: &Path, plan: &Plan) -> Result<(
                 p.needed_bytes = needed;
             });
             if needed > free {
-                return Err(anyhow!("not enough disk space to copy {} ({}) into {}: with {} kept free that needs {}, but only {} is free. Nothing was copied.", name, gb(size), archives.display(), gb(needed - size), gb(needed), gb(free)));
+                return Err(anyhow!(trf("not enough disk space to copy {name} ({size}) into {folder}: with {margin} kept free that needs {needed}, but only {free} is free. Nothing was copied.", &[("name", &name), ("size", &gb(size)), ("folder", &archives.display()), ("margin", &gb(needed - size)), ("needed", &gb(needed)), ("free", &gb(free))])));
             }
-            job.state("copying", format!("copying the archive ({})", gb(size)));
+            job.state("copying", trf("copying the archive ({size})", &[("size", &gb(size))]));
             let mut r = std::fs::File::open(src).with_context(|| format!("reading {}", src.display()))?;
             let mut w = std::fs::File::create(&tmp).with_context(|| format!("writing {}", tmp.display()))?;
             let mut buf = vec![0u8; 1 << 20];
@@ -1199,12 +1200,12 @@ fn place_archive(job: &Job, content: &Path, src: &Path, plan: &Plan) -> Result<(
                 }
             }
             w.flush()?;
-            how = "copied";
+            how = tr("copied");
         }
         if job.cancelled() {
             return Err(anyhow!(Cancelled));
         }
-        job.state("moving", "putting the archive into place");
+        job.state("moving", tr("putting the archive into place"));
         std::fs::rename(&tmp, &dest).with_context(|| format!("moving into {}", dest.display()))?;
         if job.from_inbox {
             // the inbox copy is in place now (it was linked or copied)
@@ -1223,7 +1224,8 @@ fn place_archive(job: &Job, content: &Path, src: &Path, plan: &Plan) -> Result<(
     }
     crate::mods::record(content, &name, &[format!("{ARCHIVES}/{name}")]);
     let items: Vec<String> = plan.maps.iter().filter(|m| !m.aside).map(|m| m.dest.clone()).collect();
-    let summary = format!("{} used in place ({how}) as {}/{} - {} in the lists now; the game reads it without unpacking", name, ARCHIVES, name, if items.is_empty() { "its content is".to_string() } else { format!("{} are", items.join(", ")) });
+    let summary = if items.is_empty() { "{name} used in place ({how}) as {path} - its content is in the lists now; the game reads it without unpacking" } else { "{name} used in place ({how}) as {path} - {items} are in the lists now; the game reads it without unpacking" };
+    let summary = trf(summary, &[("name", &name), ("how", &how), ("path", &format!("{ARCHIVES}/{name}")), ("items", &items.join(", "))]);
     job.set(|p| {
         p.installed = items.iter().map(|i| format!("{i} (in {ARCHIVES}/{name})")).collect();
         p.message = summary.clone();
@@ -1257,7 +1259,7 @@ pub fn inspect(content: &Path, root: Option<&Path>, src: &Path) -> Result<Source
     let is_zip = archive == Some(ArchiveKind::Zip);
     let free = free_space(content).unwrap_or(u64::MAX);
     if archive.is_none() {
-        return Ok(SourceInfo { free_bytes: free, fits: true, in_place: "only a .zip archive can be used in place".into(), suggested: InstallMode::Extract, ..Default::default() });
+        return Ok(SourceInfo { free_bytes: free, fits: true, in_place: tr("only a .zip archive can be used in place"), suggested: InstallMode::Extract, ..Default::default() });
     }
     let job = Job { id: 0, source: src.to_path_buf(), mode: InstallMode::Auto, from_inbox: false, cancel: AtomicBool::new(false), progress: Mutex::new(Progress::default()), bytes_done: AtomicU64::new(0), files_done: AtomicU64::new(0), linked: Mutex::new(Vec::new()), stall_at: u64::MAX };
     let archive_bytes = std::fs::metadata(src).map(|m| m.len()).unwrap_or(0);
@@ -1286,14 +1288,14 @@ pub fn inspect(content: &Path, root: Option<&Path>, src: &Path) -> Result<Source
         return Ok(SourceInfo { is_archive: true, is_zip: false, files, unpacked_bytes: unpacked, archive_bytes, needed_bytes: needed, free_bytes: free, fits: needed <= free, in_place: "7z and RAR archives must be unpacked".into(), in_place_ok: false, suggested: InstallMode::Extract });
     }
     let f = std::fs::File::open(src).with_context(|| format!("opening {}", src.display()))?;
-    let mut z = zip::ZipArchive::new(std::io::BufReader::with_capacity(ZIP_BUFFER, f)).with_context(|| format!("{} is not a readable zip archive", src.display()))?;
+    let mut z = zip::ZipArchive::new(std::io::BufReader::with_capacity(ZIP_BUFFER, f)).with_context(|| trf("{name} is not a readable zip archive", &[("name", &src.display())]))?;
     let (entries, _) = list_zip(&mut z, &job)?;
     let source_name = src.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "mod".into());
     let plan = plan(&entries, &source_name, &Installed { content, root });
     let files: u64 = plan.maps.iter().map(|m| m.files.len() as u64).sum();
     let unpacked: u64 = plan.maps.iter().map(|m| m.bytes).sum();
     let needed = unpacked + (unpacked / 20).max(MIN_MARGIN);
-    let layout = if plan.maps.is_empty() { Err(anyhow!("nothing in it the game would use")) } else { in_place_layout(src, &plan) };
+    let layout = if plan.maps.is_empty() { Err(anyhow!(tr("nothing in it the game would use"))) } else { in_place_layout(src, &plan) };
     let fits = needed <= free;
     let in_place_ok = layout.is_ok();
     Ok(SourceInfo { is_archive: true, is_zip, files, unpacked_bytes: unpacked, archive_bytes, needed_bytes: needed, free_bytes: free, fits, in_place: layout.err().map(|e| format!("{e:#}")).unwrap_or_default(), in_place_ok, suggested: if !fits && in_place_ok { InstallMode::InPlace } else { InstallMode::Extract } })
@@ -1302,7 +1304,7 @@ pub fn inspect(content: &Path, root: Option<&Path>, src: &Path) -> Result<Source
 fn check_space(content: &Path) -> Result<()> {
     if let Some(free) = free_space(content) {
         if free < ABORT_BELOW {
-            return Err(anyhow!("the disk is almost full ({} free) - stopped unpacking and removed the partial files", gb(free)));
+            return Err(anyhow!(trf("the disk is almost full ({free} free) - stopped unpacking and removed the partial files", &[("free", &gb(free))])));
         }
     }
     Ok(())
@@ -1352,7 +1354,7 @@ fn move_into(from: &Path, to: &Path) -> Result<usize> {
         } else {
             if dest.is_dir() {
                 // (a file of a mod never takes the place of a whole installed folder)
-                return Err(anyhow!("{} is a folder; the mod's file of that name was not installed over it", dest.display()));
+                return Err(anyhow!(trf("{name} is a folder; the mod's file of that name was not installed over it", &[("name", &dest.display())])));
             } else if dest.exists() {
                 replaced += 1;
             }

@@ -49,11 +49,11 @@ pub fn apply(w: &mut ServerWorld, action: &Action) -> Outcome {
         Action::Clock(want) => {
             let now = (w.clock + *w.shift).rem_euclid(86_400.0);
             *w.shift += (want - now + 43_200.0).rem_euclid(86_400.0) - 43_200.0;
-            Outcome::applied(format!("clock {}", omsi_sim::timetable_run::hhmm(*want)))
+            Outcome::applied(format!("clock set ({})", omsi_sim::timetable_run::hhmm(*want)))
         }
         Action::Speed(s) => {
             w.lan.clock_speed = *s;
-            Outcome::applied(format!("time speed x{s}"))
+            Outcome::applied(format!("time speed set (x{s})"))
         }
         Action::Weather(WeatherAction::Set(want)) => {
             // only an installed weather (the name came over the network)
@@ -61,9 +61,9 @@ pub fn apply(w: &mut ServerWorld, action: &Action) -> Outcome {
                 Some(f) => {
                     log::info!("server: weather now {f}");
                     w.lan.set_weather(&f);
-                    Outcome::applied(format!("weather {f}"))
+                    Outcome::applied(format!("weather changed ({f})"))
                 }
-                None => Outcome::rejected(format!("{want} is not installed on the server")),
+                None => Outcome::rejected(format!("weather {want} is not installed on the server")),
             }
         }
         // (a server has no weather cycle of its own: the menu's "cycle" is the next weather)
@@ -76,7 +76,8 @@ pub fn apply(w: &mut ServerWorld, action: &Action) -> Outcome {
             let k = files.iter().position(|f| f.to_ascii_lowercase() == cur).map(|k| (k + 1) % files.len()).unwrap_or(0);
             log::info!("server: weather now {}", files[k]);
             w.lan.set_weather(&files[k]);
-            Outcome::applied(format!("weather {}", files[k]))
+            let f = &files[k];
+            Outcome::applied(format!("weather changed ({f})"))
         }
         Action::Traffic(arg) => {
             let Some(t) = w.traffic.as_deref_mut() else { return Outcome::rejected("the server has no AI traffic") };
@@ -84,13 +85,13 @@ pub fn apply(w: &mut ServerWorld, action: &Action) -> Outcome {
                 Some(TrafficOrder::Density(n)) => {
                     t.set_density(n);
                     log::info!("server: traffic density now {n}");
-                    Outcome::applied(format!("traffic {n}"))
+                    Outcome::applied(format!("traffic density set ({n})"))
                 }
                 // every AI car off the road (a jam; the timetable's buses stay)
                 Some(TrafficOrder::Clear) => {
                     let n = t.clear_cars();
                     log::info!("server: {n} AI vehicles taken off the road");
-                    Outcome::applied(format!("{n} AI vehicles taken off the road"))
+                    Outcome::applied(format!("AI traffic cleared ({n} vehicles taken off the road)"))
                 }
                 None => Outcome::rejected(format!("a traffic density from 0 to {} or 'clear'", w.traffic_max)),
             }

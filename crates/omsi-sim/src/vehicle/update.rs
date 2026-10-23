@@ -154,6 +154,41 @@ impl VehicleInstance {
         self.cabin_air = Some((t, hum, t));
     }
 
+    /// Change cabin temperature once without changing heater controls or coolant.
+    /// Shared-script rear sections read the leading state; independently scripted cars
+    /// need their own temperature and humidity updated too.
+    pub fn set_cabin_temperature(&mut self, temperature: f32) {
+        if !temperature.is_finite() {
+            return;
+        }
+        let humidity = self
+            .ev(Ev::CabinAbsHum)
+            .filter(|h| h.is_finite() && *h >= 0.0)
+            .unwrap_or_else(|| self.cabin_air.map_or(9.0, |(_, h, _)| h));
+        self.set_engine_ev(Ev::CabinTemp, temperature);
+        self.set_engine_ev(Ev::CabinAbsHum, humidity);
+        self.set_engine_ev(Ev::CabinRelHum, relative_humidity(temperature, humidity));
+        self.cabin_air = Some((temperature, humidity, temperature));
+        for part in &mut self.trailers {
+            if let Some(run) = part.run.as_mut() {
+                let humidity = run
+                    .names
+                    .get("cabinair_abshum")
+                    .map(|&id| run.state.vars[id as usize])
+                    .filter(|h| h.is_finite() && *h >= 0.0)
+                    .unwrap_or(humidity);
+                for (name, value) in [
+                    ("cabinair_temp", temperature),
+                    ("cabinair_relhum", relative_humidity(temperature, humidity)),
+                ] {
+                    if let Some(&id) = run.names.get(name) {
+                        run.state.vars[id as usize] = value;
+                    }
+                }
+            }
+        }
+    }
+
     /// Run one simulation frame: physics, scripts, then animations.
     pub fn update(&mut self, dt: f32) {
         self.host.clock.advance(dt);

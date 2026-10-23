@@ -98,7 +98,7 @@ fn the_web_panels_way_and_the_games_way_do_the_same() {
     };
     assert_eq!(run.found, vec!["Pichau", "pichau_fan"]);
     assert_eq!(run.op["status"], "applied", "{}", run.op);
-    assert!(run.op["message"].as_str().unwrap().starts_with("Pichau (#"), "{}", run.op);
+    assert!(run.op["message"].as_str().unwrap().contains("Pichau (#"), "{}", run.op);
     assert!(until(&mut s, &mut [&mut pichau, &mut fan], |_, ps| ps[0].lan.turned_away.is_some()));
     assert_eq!(pichau.lan.turned_away.as_deref(), Some("spam"));
     assert!(fan.lan.connected && fan.lan.turned_away.is_none());
@@ -110,7 +110,7 @@ fn the_web_panels_way_and_the_games_way_do_the_same() {
     assert!(until(&mut s, &mut [&mut admin, &mut fan], |_, ps| !results(ps[0]).is_empty() && ps[1].lan.turned_away.is_some()));
     let (st, msg) = results(&admin).remove(0);
     assert_eq!(st, Status::Applied);
-    assert!(msg.starts_with("pichau_fan (#"), "{msg}");
+    assert!(msg.contains("pichau_fan (#"), "{msg}");
     assert_eq!(fan.lan.turned_away.as_deref(), Some("spam"));
     // both in the audit log, each with who asked
     let audit = s.hub.audit_since(0, 100);

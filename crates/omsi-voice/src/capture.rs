@@ -113,7 +113,7 @@ impl Capture {
             .or_else(|| host.default_input_device())
             .ok_or_else(|| "no microphone found".to_string())?;
         let label = device.name().unwrap_or_default();
-        let supported = device.default_input_config().map_err(|e| format!("microphone {label}: {e}"))?;
+        let supported = device.default_input_config().map_err(|e| format!("microphone {label} failed: {e}"))?;
         let format = supported.sample_format();
         let config: cpal::StreamConfig = supported.into();
         let queue = Arc::new(Mutex::new(VecDeque::new()));
@@ -126,8 +126,8 @@ impl Capture {
             SampleFormat::I8 => build::<i8>(&device, &config, q),
             other => return Err(format!("microphone {label}: sample format {other:?} is not supported")),
         }
-        .map_err(|e| format!("microphone {label}: {e}"))?;
-        stream.play().map_err(|e| format!("microphone {label}: {e}"))?;
+        .map_err(|e| format!("microphone {label} failed: {e}"))?;
+        stream.play().map_err(|e| format!("microphone {label} failed: {e}"))?;
         log::info!("voice: microphone {label} open ({} Hz, {} channel(s))", config.sample_rate.0, config.channels);
         Ok(Capture { _stream: stream, queue, device: label })
     }

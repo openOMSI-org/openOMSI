@@ -151,6 +151,7 @@ pub struct Choice {
     pub passengers: bool,
     pub schedule: bool,
     pub autostart: bool,
+    pub comfortable_cabin_on_start: bool,
     /// Start on foot (no bus of one's own until one is placed).
     pub on_foot: bool,
     /// off, host, join
@@ -187,6 +188,7 @@ impl Default for Choice {
             passengers: true,
             schedule: true,
             autostart: false,
+            comfortable_cabin_on_start: false,
             on_foot: false,
             lan_mode: "off".into(),
             lan_addr: String::new(),
@@ -404,7 +406,7 @@ impl State {
         if err {
             core::log_to_file(&format!("ERROR {t}"));
         }
-        self.status = (t, err, Instant::now());
+        self.status = (host().tr(&t), err, Instant::now());
     }
 
     /// A game is about to start, starting (not in the list of games yet) or running.
@@ -538,13 +540,13 @@ impl State {
     /// Switch the mod `id` on or off, in the background (its folders move).
     pub fn mod_toggle(&mut self, id: String, on: bool) {
         self.mod_busy = Some(id.clone());
-        self.spawn(move || Msg::ModChanged { result: core::mod_set_enabled(&id, on).map_err(|e| format!("{e:#}")), done: if on { "switched on" } else { "switched off" } });
+        self.spawn(move || Msg::ModChanged { result: core::mod_set_enabled(&id, on).map_err(|e| format!("{e:#}")), done: if on { "The mod {name} is switched on" } else { "The mod {name} is switched off" } });
     }
 
     /// Delete the mod `id`, in the background.
     pub fn mod_remove(&mut self, id: String) {
         self.mod_busy = Some(id.clone());
-        self.spawn(move || Msg::ModChanged { result: core::mod_remove(&id).map_err(|e| format!("{e:#}")), done: "deleted" });
+        self.spawn(move || Msg::ModChanged { result: core::mod_remove(&id).map_err(|e| format!("{e:#}")), done: "The mod {name} is deleted" });
     }
 
     pub fn check_join(&mut self) {
@@ -619,11 +621,11 @@ impl State {
             .map(|i| i.reached_at.clone()).filter(|url| !url.is_empty());
         self.joined_server = Some(address.to_string());
         let name = info.as_ref().map(|i| i.name.clone()).unwrap_or_else(|| address.to_string());
-        self.join = (true, format!("the server {name}"));
+        self.join = (true, core::i18n::tr("the server {name}").replace("{name}", &name));
         self.join_checked = address.to_string();
         self.touched();
-        let how = if proto == JoinProto::Udp { " over UDP" } else { "" };
-        self.set_status(format!("Joined {name}{how} - choose your bus and duty, then Start the duty"), false);
+        let joined = if proto == JoinProto::Udp { "Joined {} over UDP - choose your bus and duty, then Start the duty" } else { "Joined {} - choose your bus and duty, then Start the duty" };
+        self.set_status(joined.replace("{}", &name), false);
     }
 
     /// Back to playing alone (the Drive page's "Leave Server").
@@ -708,6 +710,7 @@ impl State {
             passengers: Some(c.passengers),
             schedule: Some(c.schedule),
             autostart: Some(c.autostart),
+            comfortable_cabin_on_start: Some(c.comfortable_cabin_on_start),
             on_foot: Some(c.on_foot),
             profile: Some(self.config.profile.clone()).filter(|p| !p.is_empty()),
             lan: Some(lan),
@@ -796,7 +799,7 @@ impl State {
                 true
             }
             Err(e) => {
-                self.set_status(format!("Could not save settings: {e:#}"), true);
+                self.set_status(format!("Could not save settings ({e:#})"), true);
                 false
             }
         }
@@ -874,7 +877,7 @@ impl State {
                 log::error!("launcher: a background job stopped: {why}");
                 self.loading_content = false;
                 self.loading_lines = false;
-                self.set_status(format!("Reading the content stopped on an error: {why}"), true);
+                self.set_status(format!("Reading the content stopped on an error ({why})"), true);
             }
             Msg::Server { address, info } => {
                 // the host of the code typed in: its map is the one the duty is chosen on
@@ -906,7 +909,7 @@ impl State {
                 self.weathers = weathers;
                 self.pick_map();
                 self.load_lines();
-                self.set_status(format!("{} maps - reading the buses...", self.maps.len()), false);
+                self.set_status(format!("Reading the buses... ({} maps)", self.maps.len()), false);
             }
             Msg::VehiclesRead { batch, done, total } => {
                 if !self.content_first {
@@ -914,7 +917,7 @@ impl State {
                 }
                 host().mt_protect(&mut batch.iter().flat_map(|v| [v.name.as_str(), v.manufacturer.as_str(), v.type_name.as_str()]).chain(batch.iter().flat_map(|v| v.paints.iter().map(|p| p.as_str()))));
                 self.vehicles.extend(batch);
-                self.set_status(format!("{} maps, {} buses - reading the vehicle folders: {done} of {total}", self.maps.len(), self.vehicles.len()), false);
+                self.set_status(format!("Reading the vehicle folders: {done} of {total} ({maps} maps, {buses} buses)", maps = self.maps.len(), buses = self.vehicles.len()), false);
             }
             Msg::Content(Ok((maps, vehicles, weathers))) => {
                 // (names of things, not the interface: never machine-translated)
@@ -929,7 +932,7 @@ impl State {
                         }
                     }
                 }
-                self.set_status(format!("{} maps, {} buses, {} weathers", maps.len(), vehicles.len(), weathers.len()), false);
+                self.set_status(format!("Content read: {} maps, {} buses, {} weathers", maps.len(), vehicles.len(), weathers.len()), false);
                 self.maps = maps;
                 self.vehicles = vehicles;
                 self.weathers = weathers;
@@ -957,7 +960,7 @@ impl State {
                 self.content_first = false;
                 self.content_done();
                 if omsi_cfg::missing_original_essentials(std::path::Path::new(&self.config.root)).is_empty() {
-                    self.set_status(format!("{e}\nSet the OMSI 2 folder under Setup."), true);
+                    self.set_status(format!("The content cannot be read: {e}\nSet the OMSI 2 folder under Setup."), true);
                 } else {
                     self.set_status(root_problem(&self.config.root), true);
                 }
@@ -973,11 +976,12 @@ impl State {
                 match lines {
                     Ok(l) => {
                         self.lines = l;
+                        let (n, date) = (self.lines.len(), self.choice.date.clone());
                         let mut note = String::new();
                         if let Some(line) = self.choice.line.clone() {
                             match self.lines.iter().find(|x| x.name == line) {
                                 None => {
-                                    note = format!(" - line {line} does not run on {}", self.choice.date);
+                                    note = format!("Timetable of {date}: {n} lines - line {line} does not run that day");
                                     self.choice.line = None;
                                     self.choice.tour = None;
                                 }
@@ -985,14 +989,15 @@ impl State {
                                     if let Some(t) = &self.choice.tour {
                                         match l.tours.iter().find(|x| &x.number == t) {
                                             None => self.choice.tour = None,
-                                            Some(t) if !t.runs => note = format!(" - tour {} of line {line} does not run that day ({})", t.number, t.days),
+                                            Some(t) if !t.runs => note = format!("Timetable of {date}: {n} lines - tour {} of line {line} does not run that day ({})", t.number, t.days),
                                             _ => {}
                                         }
                                     }
                                 }
                             }
                         }
-                        self.set_status(format!("{} lines on {}{note}", self.lines.len(), self.choice.date), !note.is_empty());
+                        let err = !note.is_empty();
+                        self.set_status(if err { note } else { format!("Timetable of {date}: {n} lines") }, err);
                     }
                     Err(e) => {
                         self.lines.clear();
@@ -1009,7 +1014,7 @@ impl State {
                             core::log_to_file(&format!("inbox: installing {s}"));
                         }
                         if !p.started.is_empty() {
-                            self.set_status(format!("Installing from the Mods folder: {}", p.started.iter().map(|x| x.rsplit('/').next().unwrap_or(x)).collect::<Vec<_>>().join(", ")), false);
+                            self.set_status(format!("Installing {} from the Mods folder...", p.started.iter().map(|x| x.rsplit('/').next().unwrap_or(x)).collect::<Vec<_>>().join(", ")), false);
                         }
                         let mut installed = false;
                         for j in &p.jobs {
@@ -1030,7 +1035,7 @@ impl State {
                             if !still && !self.stopping.contains(&old.pid) {
                                 if let Some(why) = disconnect_of(std::path::Path::new(&old.log)) {
                                     core::log_to_file(&format!("game {} was sent away by its server: {why}", old.pid));
-                                    self.disconnected = Some(why);
+                                    self.disconnected = Some(core::i18n::tr_said(&why));
                                 } else if let Some(c) = crash_of(std::path::Path::new(&old.log)) {
                                     core::log_to_file(&format!("game {} ended on an error: {}", old.pid, c.0));
                                     self.crash = Some(c);
@@ -1102,7 +1107,7 @@ impl State {
             Msg::Launched(Ok(l)) => {
                 core::log_to_file(&format!("launched pid {} ({} other game(s) running): {}", l.pid, l.others, l.command));
                 self.launched_pid = Some(l.pid);
-                self.set_status(format!("Game started (process {}), log {}{}", l.pid, l.log, if l.others > 0 { format!(" - {} other game(s) keep running", l.others) } else { String::new() }), false);
+                self.set_status(if l.others > 0 { format!("Game started (process {}), log {} - {} other game(s) keep running", l.pid, l.log, l.others) } else { format!("Game started (process {}), log {}", l.pid, l.log) }, false);
                 self.poll_now();
             }
             Msg::Launched(Err(e)) => {
@@ -1132,8 +1137,8 @@ impl State {
             Msg::ModChanged { result, done } => {
                 self.mod_busy = None;
                 match result {
-                    Ok(name) => self.set_status(format!("{name} {done}"), false),
-                    Err(e) => self.set_status(format!("Not done: {e}"), true),
+                    Ok(name) => self.set_status(done.replace("{name}", &name), false),
+                    Err(e) => self.set_status(format!("Not done ({e})"), true),
                 }
                 // (the lists without it, or with it again)
                 self.load_mods();
@@ -1312,13 +1317,13 @@ pub fn root_problem(root: &str) -> String {
     if root.is_empty() {
         "The original OMSI 2 was not found automatically: choose its folder (the one with Omsi.exe, maps and Vehicles in it) under Setup and press Save.".to_string()
     } else if !p.exists() {
-        format!("{root} does not exist: choose the folder of the original OMSI 2 (with Omsi.exe, maps and Vehicles in it) under Setup.")
+        format!("The folder {root} does not exist: choose the folder of the original OMSI 2 (with Omsi.exe, maps and Vehicles in it) under Setup.")
     } else if missing.iter().any(|m| m.contains("content folder")) || p.join("openomsi.exe").exists() || p.join("openomsi").is_file() {
-        format!("{root} is openOMSI's own folder, not OMSI 2's: choose the folder of the original game (with Omsi.exe in it) under Setup.")
+        format!("The folder {root} is openOMSI's own folder, not OMSI 2's: choose the folder of the original game (with Omsi.exe in it) under Setup.")
     } else if missing.is_empty() {
         String::new()
     } else {
-        format!("{root} is not a complete OMSI 2 - it lacks {}. openOMSI plays on the original's stock content: choose the folder of a complete installation under Setup.", missing.iter().take(3).cloned().collect::<Vec<_>>().join(", "))
+        format!("The folder {root} is not a complete OMSI 2 - it lacks {}. openOMSI plays on the original's stock content: choose the folder of a complete installation under Setup.", missing.iter().take(3).cloned().collect::<Vec<_>>().join(", "))
     }
 }
 
@@ -1417,10 +1422,13 @@ mod choice_tests {
     fn an_old_duty_file_loads_and_a_typed_plate_is_kept() {
         let old: super::Choice = serde_json::from_str(r#"{"bus":"Vehicles/x.bus","map":"maps/x/global.cfg"}"#).unwrap();
         assert_eq!(old.plate, "");
+        assert!(!old.comfortable_cabin_on_start);
         let mut c = super::Choice::default();
         c.plate = "B-AB 1234".into();
+        c.comfortable_cabin_on_start = true;
         let back: super::Choice = serde_json::from_str(&serde_json::to_string(&c).unwrap()).unwrap();
         assert_eq!(back.plate, "B-AB 1234");
+        assert!(back.comfortable_cabin_on_start);
     }
 }
 

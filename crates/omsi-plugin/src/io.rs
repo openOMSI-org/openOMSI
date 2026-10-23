@@ -12,6 +12,11 @@ use std::path::Path;
 
 /// The game's side of a frame.
 pub trait PluginIo {
+    /// Snapshot of every parsed field of the player's currently loaded HOF.
+    fn hof_data(&self) -> Option<Value> { None }
+    /// First exact identifier match; indices follow the zero-based game getters.
+    fn hof_terminus(&self, _identifier: &str) -> Option<Value> { None }
+    fn hof_busstop(&self, _identifier: &str) -> Option<Value> { None }
     fn duty_tour(&self) -> Option<Value> { None }
     fn timetable_tour(&self, _line: &str, _tour: &str) -> Result<Value, String> { Err("timetable unavailable".into()) }
 

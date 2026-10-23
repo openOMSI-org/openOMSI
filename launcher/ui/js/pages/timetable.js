@@ -118,7 +118,7 @@ async function reset() {
     read(tt().map);
   } catch (e) {
     up({ busy: false });
-    toast(e.message, 'error');
+    toast(t(e.message), 'error');
   }
 }
 

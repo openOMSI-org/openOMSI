@@ -20,7 +20,8 @@ impl App {
         let ed = crate::editor::Editor::default();
         let msg = self.world.as_ref().map(|w| ed.describe(w)).unwrap_or_default();
         self.menus.editor = Some(ed);
-        self.service_msg = Some((format!("{msg} - click picks, drag moves, wheel turns (Shift: height), Delete, C copy, V variant, Backspace undo, PgUp/PgDn/F ground, [ ] brush, Ctrl+S save, Esc leave"), 10.0));
+        let help = "click picks, drag moves, wheel turns (Shift: height), Delete, C copy, V variant, Backspace undo, PgUp/PgDn/F ground, [ ] brush, Ctrl+S save, Esc leave";
+        self.service_msg = Some((omsi_ui::i18n::said(format!("{msg} - {}", omsi_ui::tr(help)), format!("{} - {help}", omsi_ui::i18n::english(&msg))), 10.0));
     }
 
     /// A key while the object editor is on; true when it was the editor's.
@@ -52,7 +53,7 @@ impl App {
                 match content.map(|c| ed.save(&world, &self.args.map, &c, &self.args.root)) {
                     Some(Ok(files)) if files.is_empty() => "Nothing to save".to_string(),
                     Some(Ok(files)) => format!("Saved {} tile(s) to the content folder ({})", files.len(), files.iter().filter_map(|f| f.file_name()).map(|n| n.to_string_lossy()).collect::<Vec<_>>().join(", ")),
-                    Some(Err(e)) => format!("Not saved: {e}"),
+                    Some(Err(e)) => format!("Not saved ({e})"),
                     None => "Not saved: no content folder".to_string(),
                 }
             }

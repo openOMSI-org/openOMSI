@@ -39,7 +39,7 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str) -> Option<ListKi
                 l.command(1, &format!("admin {line}"));
             }
             app.net.admin_panel.soon();
-            app.service_msg = Some((format!("{}: {line}", omsi_ui::tr("Sent to the server")), 2.0));
+            app.service_msg = Some((crate::admin::sent_to_server(app, action), 2.0));
             // (after sending a player away: back to the players, where the answer shows)
             Some(if matches!(kind, ListKind::AdminConfirm(..)) { ListKind::AdminPlayers } else { kind.clone() })
         }
@@ -84,7 +84,7 @@ pub(crate) fn tick(app: &mut App) {
 pub(crate) fn take(app: &mut App, c: &Command) {
     if let Command::AdminResult { status, message, .. } = c {
         log::info!("LAN: the server: {} {message}", status.name());
-        app.service_msg = Some((format!("{}: {message}", omsi_ui::tr(status.label())), 4.0));
+        app.service_msg = Some((omsi_ui::i18n::said(format!("{}: {}", omsi_ui::tr(status.label()), omsi_ui::tr(message)), format!("{}: {message}", status.label())), 4.0));
     }
     if app.net.admin_panel.take(c) && admin_kind(app.menus.list_kind.as_ref()) {
         refresh_keeping(app);

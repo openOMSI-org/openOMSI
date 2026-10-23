@@ -61,6 +61,8 @@ mod scripted;
 pub use scripted::DayKind;
 mod vehicle_materials;
 mod vehicle_types;
+mod freetex_reload;
+pub use freetex_reload::FreeTextureReloads;
 mod pane_uv;
 /// Mesh `i` of a vehicle type as the GPU takes it (the glass with its film's coordinates in
 /// metres, see `pane_uv`): for a mesh uploaded again after it was changed.

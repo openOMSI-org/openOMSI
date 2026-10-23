@@ -199,6 +199,7 @@ pub(super) fn free_texture_defs(overrides: &[&MaterialDef]) -> Vec<(bool, String
 
 #[derive(Clone)]
 pub struct FreeTex {
+    pub reloads: Arc<crate::FreeTextureReloads>,
     pub var: String,
     /// The original named texture can be used by several stages (a display commonly
     /// names the same black texture as its diffuse and its switched night map).

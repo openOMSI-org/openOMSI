@@ -155,7 +155,7 @@ impl Updater {
                 Ok(None) => Status::UpToDate,
                 Err(e) => {
                     log::warn!("update check: {e:#}");
-                    Status::Failed(format!("Could not check for updates: {e}"))
+                    Status::Failed(format!("Could not check for updates: {e}."))
                 }
             };
             let said = format!("{s:?}");
@@ -201,7 +201,7 @@ impl Updater {
                 }
                 Err(e) => {
                     log::warn!("update {}: background download: {e:#}", r.version);
-                    *lock(&status) = Status::Failed(format!("openOMSI {} could not be downloaded: {e}", r.version));
+                    *lock(&status) = Status::Failed(format!("openOMSI {} could not be downloaded: {e}.", r.version));
                 }
             }
         });
@@ -347,7 +347,7 @@ fn fetch_text(url: &str) -> anyhow::Result<String> {
 fn short_error(e: &ureq::Error) -> String {
     match e {
         ureq::Error::Status(403 | 429, _) => "GitHub refused for now (too many requests from this address); it is tried again later".to_string(),
-        ureq::Error::Status(code, _) => format!("the server answered {code}"),
+        ureq::Error::Status(code, _) => format!("the server answered with an error ({code})"),
         ureq::Error::Transport(t) => match t.kind() {
             ureq::ErrorKind::Dns => "the name github.com could not be looked up (no internet?)".to_string(),
             ureq::ErrorKind::ConnectionFailed => "no connection to GitHub (a firewall or a proxy?)".to_string(),
@@ -703,8 +703,10 @@ fn download_and_install(r: &Release, status: &Mutex<Status>) -> anyhow::Result<(
     {
         let place = install_place()?;
         if !writable(&place.dir) {
-            let admin = if cfg!(windows) { " (or start it once as administrator)" } else { "" };
-            anyhow::bail!("the folder {} cannot be written. Put openOMSI in a folder of yours{admin} and update again", short_path(&place.dir));
+            if cfg!(windows) {
+                anyhow::bail!("the folder {} cannot be written. Put openOMSI in a folder of yours (or start it once as administrator) and update again", short_path(&place.dir));
+            }
+            anyhow::bail!("the folder {} cannot be written. Put openOMSI in a folder of yours and update again", short_path(&place.dir));
         }
     }
     let file = download_dir().join(&r.asset_name);

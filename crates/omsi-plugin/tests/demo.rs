@@ -161,7 +161,7 @@ fn through_the_host() {
     let dir = plugins_dir("remote");
     let dll = dir.join("Demo/demo.dll");
     let host = Path::new(env!("CARGO_BIN_EXE_omsi-plugin-host"));
-    let r = Remote::spawn(None, host, &dll).expect("host starts");
+    let r = Remote::spawn(None, host, &dll, &dir).expect("host starts");
     assert!(r.procs().variable && r.procs().trigger && r.procs().system && r.procs().string && r.procs().texture && r.procs().pointer && r.procs().ticket);
     drop(r);
     // the same frames through a plugin whose library will not load here: force the host
@@ -177,7 +177,7 @@ fn through_the_host() {
 fn host_frames() {
     let dir = plugins_dir("frames");
     let host = Path::new(env!("CARGO_BIN_EXE_omsi-plugin-host"));
-    let mut r = Remote::spawn(None, host, &dir.join("Demo/demo.dll")).unwrap();
+    let mut r = Remote::spawn(None, host, &dir.join("Demo/demo.dll"), &dir).unwrap();
     let tickets = vec![
         omsi_plugin::TicketCall { person: 1, age: 40.0, stop: "Střížkov".into(), destination: "Nový Bor".into(), stop_number: 2, destination_number: 5, kind: 2, ticket: 1, price: 20.0, name: "Full fare".into() },
         omsi_plugin::TicketCall { person: 2, age: 9.0, kind: 2, ticket: 2, ..Default::default() },
@@ -215,7 +215,7 @@ fn windows_dll_under_wine() {
     let hosts = HostConfig::detect();
     let wine = hosts.runner.clone().or_else(|| cfg!(windows).then(PathBuf::new));
     let runner = if cfg!(windows) { None } else { Some(wine.expect("wine on the path")) };
-    let mut r = Remote::spawn(runner.as_deref(), &dir.join("omsi-plugin-host.exe"), &dir.join("omsi_demo_plugin.dll")).expect("the 32-bit host starts");
+    let mut r = Remote::spawn(runner.as_deref(), &dir.join("omsi-plugin-host.exe"), &dir.join("omsi_demo_plugin.dll"), &dir).expect("the 32-bit host starts");
     let f = omsi_plugin::Frame { system: vec![(0, 5.0)], vars: vec![(0, 0.75)], strings: vec![(0, "abcdefghijk".into())], triggers: vec![0], textures: vec![(0, 2, 2)], ..Default::default() };
     let reply = r.frame(&f).unwrap();
     assert_eq!(reply.vars, [Some(1.5)]);

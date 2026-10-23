@@ -27,7 +27,8 @@ pub fn open(url: &str) -> Arc<StreamBuf> {
         .name("radio".into())
         .spawn(move || run(&b, &url));
     if let Err(e) = spawned {
-        buf.set_status(format!("cannot start the radio: {e}"));
+        log::warn!("radio: cannot start the radio: {e}");
+        buf.set_status("cannot start the radio");
     }
     buf
 }
@@ -48,7 +49,7 @@ fn run(buf: &StreamBuf, url: &str) {
                     return;
                 }
                 log::warn!("radio {url}: {e}");
-                buf.set_status(format!("no signal ({e})"));
+                buf.set_status("no signal");
             }
         }
         // the connection ended or failed: try again, less often the longer it fails

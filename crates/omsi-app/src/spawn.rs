@@ -460,6 +460,9 @@ pub(crate) fn spawn_player_prepared(
     }
     p.vehicle.host.fired_triggers.clear();
     p.vehicle.host.fired_trigger_vars.clear();
+    if args.pending_cabin_temperature.swap(false, std::sync::atomic::Ordering::Relaxed) {
+        p.vehicle.set_cabin_temperature(22.0);
+    }
     Ok(Some(p))
 }
 

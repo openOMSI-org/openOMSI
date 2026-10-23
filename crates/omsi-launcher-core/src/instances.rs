@@ -8,6 +8,7 @@
 //! process started: a live process with that id is the game only if it started then too.
 //! Nothing is shown as running, and nothing is stopped, on the process id alone.
 
+use crate::i18n::trf;
 use crate::install::{now_secs, pid_alive};
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
@@ -223,6 +224,24 @@ pub fn list() -> Vec<Instance> {
         let lan = lan_dir().join(format!("{}.json", inst.id));
         if alive {
             inst.lan_status = std::fs::read(&lan).ok().and_then(|b| serde_json::from_slice(&b).ok());
+            for (_, v) in inst.lan_status.iter_mut().filter_map(Value::as_object_mut).flatten().filter(|(k, _)| *k == "warnings" || *k == "rejected") {
+                let texts: Vec<&mut Value> = match v {
+                    Value::Array(a) => a.iter_mut().collect(),
+                    other => vec![other],
+                };
+                for text in texts {
+                    if let Some(t) = text.as_str().map(crate::i18n::tr_said) {
+                        *text = Value::String(t);
+                    }
+                }
+            }
+            for p in inst.lan_status.iter_mut().filter_map(|s| s.get_mut("players")).filter_map(Value::as_array_mut).flatten() {
+                if let Some(w) = p.get("where").filter(|w| w.is_object()) {
+                    let d = w.get("d").and_then(Value::as_str).unwrap_or("").to_string();
+                    let t = crate::i18n::trf(w.get("key").and_then(Value::as_str).unwrap_or(""), &[("d", &d)]);
+                    p["where"] = Value::String(t);
+                }
+            }
         } else {
             let _ = std::fs::remove_file(&lan);
         }
@@ -289,7 +308,7 @@ pub fn start(game: &Path, args: &[String], d: &crate::Duty, profile: &str) -> Re
     if let Some((x, y)) = *SCREEN_AT.lock().unwrap_or_else(|e| e.into_inner()) {
         cmd.env("OMSI_SCREEN_AT", format!("{x},{y}"));
     }
-    let child = cmd.spawn().with_context(|| format!("starting {}", game.display()))?;
+    let child = cmd.spawn().with_context(|| trf("starting {game}", &[("game", &game.display())]))?;
     let pid = child.id();
     let process_started = process_start(pid);
     CHILDREN.lock().unwrap_or_else(|e| e.into_inner()).push((id.clone(), child));
@@ -329,7 +348,7 @@ pub fn stop(pid: u32) -> Result<bool> {
 fn stop_within(pid: u32, grace: std::time::Duration) -> Result<bool> {
     reap();
     let Some(mut inst) = read_all().into_iter().find(|i| i.pid == pid && is_that_game(i)) else {
-        return Err(anyhow!("no running game with process id {pid} was started by the launcher"));
+        return Err(anyhow!(trf("no running game with process id {pid} was started by the launcher", &[("pid", &pid)])));
     };
     // every launcher window shows it as stopping meanwhile
     inst.stopping = Some(now_secs());
@@ -353,7 +372,7 @@ fn stop_within(pid: u32, grace: std::time::Duration) -> Result<bool> {
 fn end_process(inst: &Instance, grace: std::time::Duration) -> Result<bool> {
     let ours = is_our_child(&inst.id);
     if !ours && !same_process(inst) {
-        return Err(anyhow!("process {} is no longer the game that was started (it has ended; the id now belongs to another program) - nothing was stopped", inst.pid));
+        return Err(anyhow!(trf("process {pid} is no longer the game that was started (it has ended; the id now belongs to another program) - nothing was stopped", &[("pid", &inst.pid)])));
     }
     let ended = || if ours { reap(); !is_our_child(&inst.id) } else { !same_process(inst) };
     let asked = if ours {
@@ -410,7 +429,7 @@ fn force_kill(pid: u32) -> Result<()> {
 #[cfg(unix)]
 fn signal(pid: u32, sig: libc::c_int) -> Result<()> {
     if unsafe { libc::kill(pid as libc::pid_t, sig) } != 0 {
-        return Err(anyhow!("could not stop process {pid}: {}", std::io::Error::last_os_error()));
+        return Err(anyhow!(trf("could not stop process {pid}: {e}", &[("pid", &pid), ("e", &std::io::Error::last_os_error())])));
     }
     Ok(())
 }
@@ -436,14 +455,14 @@ fn taskkill(pid: u32, force: bool) -> Result<()> {
     }
     let status = std::process::Command::new("taskkill").args(&args).status()?;
     if !status.success() {
-        return Err(anyhow!("could not stop process {pid}"));
+        return Err(anyhow!(trf("could not stop process {pid}", &[("pid", &pid)])));
     }
     Ok(())
 }
 
 /// The end of a game's log.
 pub fn log_tail(pid: u32, lines: usize) -> Result<Vec<String>> {
-    let inst = list().into_iter().find(|i| i.pid == pid).ok_or_else(|| anyhow!("no game with process id {pid}"))?;
+    let inst = list().into_iter().find(|i| i.pid == pid).ok_or_else(|| anyhow!(trf("no game with process id {pid}", &[("pid", &pid)])))?;
     Ok(last_lines(Path::new(&inst.log), lines.clamp(1, 2000), 256 * 1024))
 }
 

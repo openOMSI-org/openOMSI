@@ -360,7 +360,7 @@ function VersionRow() {
     <div class="row wrap">
       <span class="muted small grow">${t('This is openOMSI {version}', { version: S.boot?.version || '' })}</span>
       ${S.boot?.versions && html`<${Button} small icon="history" label="Choose a version…" onClick=${() => setOpen(true)} />`}
-      <${Button} small kind="ghost" icon="external" onClick=${() => call('open_url', { url: REPO_URL }).catch((e) => toast(e.message, 'error'))}>github.com/openOmsi-project/openOMSI</${Button}>
+      <${Button} small kind="ghost" icon="external" onClick=${() => call('open_url', { url: REPO_URL }).catch((e) => toast(t(e.message), 'error'))}>github.com/openOmsi-project/openOMSI</${Button}>
     </div>
     ${open && html`<${VersionsDialog} onClose=${() => setOpen(false)} />`}
   </div>`;
@@ -382,7 +382,7 @@ function ResetRow({ ask }) {
       await saveSettings({ ...defaults, language: S.settings.language }, true);
       toast(t('Every setting is back to how it came.'), 'ok');
     } catch (e) {
-      toast(e.message, 'error');
+      toast(t(e.message), 'error');
     }
   };
   return html`<div class="setting-row full">
@@ -399,7 +399,7 @@ function SupportRow() {
       const path = await call('support_package');
       toast(t('Support package saved: {path}', { path }), 'ok', 10000);
     } catch (e) {
-      toast(e.message, 'error');
+      toast(t(e.message), 'error');
     }
     setBusy(false);
   };

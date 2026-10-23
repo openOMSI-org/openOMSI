@@ -743,14 +743,19 @@ impl World {
                 }
                 let done = self.upgrades_done.clone();
                 let restore = restores.contains(&path);
+                let reloads = self.freetex_reloads.clone();
                 // (off the frame's pool: see `threads`)
                 crate::threads::background_pool().spawn(move || {
-                    if let Some(t) = load_texture_key(&path, true) {
+                    let tracked = reloads.tracks(&path);
+                    let before = tracked.then(|| crate::freetex_reload::FileStamp::read(&path)).flatten();
+                    if let Some(t) = load_texture_key(&path, true)
+                        .filter(|_| !tracked || crate::freetex_reload::FileStamp::read(&path) == before)
+                    {
                         // (a texture over the budget comes back whatever it is, and so
                         // does one put up at half its size meanwhile: see
                         // `omsi_texture::gpu::halved_for_now`)
                         if t.format.is_compressed() || restore || (t.width >= 256 && t.height >= 256) {
-                            done.lock().push((path, Arc::new(t)));
+                            done.lock().push((path, Arc::new(t), before));
                             return;
                         }
                     }
@@ -765,23 +770,44 @@ impl World {
                             has_alpha: false,
                             gpu_mips: false,
                         }),
+                        before,
                     ));
                 });
             }
         }
         let mut swapped: Vec<TextureId> = Vec::new();
+        let mut refreshed = 0;
+        let mut rebound_reload = 0;
+        // One ready file at most per frame, under the existing upload deadline.
+        // All cached material variants keep referring to this same texture id.
+        if deadline.is_none_or(|d| std::time::Instant::now() < d) {
+            if let Some(reload) = self.freetex_reloads.next() {
+                let id = self.vehicle_textures.lock().get(&reload.path).map(|e| e.0);
+                if id == Some(reload.id) && self.freetex_reloads.accepts(&reload.path, Some(reload.stamp)) {
+                    self.textures.release(&reload.path);
+                    if renderer.refresh_texture(scene, reload.id, &reload.data) {
+                        swapped.push(reload.id);
+                        rebound_reload = 1;
+                    }
+                    refreshed = 1;
+                }
+            }
+        }
         loop {
             if deadline
                 .map(|d| std::time::Instant::now() >= d)
                 .unwrap_or(false)
-                && !swapped.is_empty()
+                && (!swapped.is_empty() || refreshed > 0)
             {
                 break;
             }
-            let Some((path, data)) = self.upgrades_done.lock().pop() else {
+            let Some((path, data, stamp)) = self.upgrades_done.lock().pop() else {
                 break;
             };
             self.upgrades_pending.lock().remove(&path);
+            if !self.freetex_reloads.accepts(&path, stamp) {
+                continue;
+            }
             // the texture is still up under that name (it may have gone meanwhile)
             let vid = self.vehicle_textures.lock().get(&path).map(|e| e.0);
             let id = match vid {
@@ -823,7 +849,7 @@ impl World {
                 log::info!("textures: {} compressed ones swapped in, {rebound} materials rebound in {:.1} ms", ids.len(), t.elapsed().as_secs_f64() * 1000.0);
             }
         }
-        n
+        n + refreshed - rebound_reload
     }
 
     /// OMSI's `[texmemlimit]`: the scenery and vehicle textures may take `bytes` on the GPU

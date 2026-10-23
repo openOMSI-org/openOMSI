@@ -16,6 +16,7 @@ const NOTICE_KEYS: &[&str] = &[
     "asked the server for its administration",
     "the host ended the session",
     "the host has gone quiet; trying to reach it again",
+    "the host has not answered for {:.0} s - the session is over (playing on alone; still trying, or type /reconnect)",
 ];
 
 #[derive(Default)]
@@ -32,7 +33,10 @@ impl TranslationCache {
         lookup: impl Fn(&str) -> Option<String>,
     ) -> Cow<'a, str> {
         if !line.starts_with("* ") {
-            return Cow::Borrowed(line);
+            return match line.strip_prefix("Admin (private): ").and_then(|text| Some((text, lookup("Admin (private)")?))) {
+                Some((text, admin)) => Cow::Owned(format!("{admin}: {text}")),
+                None => Cow::Borrowed(line),
+            };
         }
         if self.language != language {
             self.language = language.to_owned();
@@ -83,6 +87,11 @@ pub(super) fn translated_chat_line(line: &str, lookup: impl Fn(&str) -> Option<S
         };
         return format!("* {}", translation.replace("{players}", &players));
     }
+    for key in ["the host turned us away: {reason}", "the host sent you away: {reason}"] {
+        if let Some(reason) = notice.strip_prefix(key.trim_end_matches("{reason}")) {
+            return lookup(key).map_or_else(|| line.into(), |t| format!("* {}", t.replace("{reason}", &omsi_ui::tr(reason))));
+        }
+    }
     static TEMPLATES: std::sync::OnceLock<Vec<omsi_ui::i18n::Template>> =
         std::sync::OnceLock::new();
     let templates = TEMPLATES.get_or_init(|| {
@@ -96,7 +105,7 @@ pub(super) fn translated_chat_line(line: &str, lookup: impl Fn(&str) -> Option<S
                     pieces.push(omsi_ui::i18n::Piece::Text(rest[..open].into()));
                 }
                 let close = rest.find('}').unwrap();
-                pieces.push(omsi_ui::i18n::Piece::Hole(rest[open + 1..close].into()));
+                pieces.push(omsi_ui::i18n::Piece::Hole(rest[open + 1..close].split(':').next().unwrap_or("").into()));
                 rest = &rest[close + 1..];
             }
             if !rest.is_empty() {
@@ -156,6 +165,8 @@ mod tests {
         );
         assert_eq!(translate("* Alice left"), "* Alice 已離開");
         assert_eq!(translate("* reconnecting ..."), "* 正在重新連線...");
+        let away = crate::_rust_i18n_try_translate("zh-tw", "the host sent you away: {reason}").unwrap().replace("{reason}", "banned");
+        assert_eq!(translate("* the host sent you away: banned"), format!("* {away}"));
         for text in [
             "Alice: connected to OMSI-Fan's session (2 player(s))",
             "Alice: In this session: OMSI-Fan (host)",

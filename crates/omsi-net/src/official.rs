@@ -77,7 +77,7 @@ pub fn resolve() -> Result<String, String> {
     let body = agent
         .get(&format!("{RELAY}/{TOPIC}/json?poll=1&since=1h"))
         .call()
-        .map_err(|e| format!("the official server's address could not be read: {e}"))?
+        .map_err(|e| format!("the official server's address could not be read ({e})"))?
         .into_string()
         .map_err(|e| e.to_string())?;
     let t = now();

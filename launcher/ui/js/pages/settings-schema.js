@@ -312,7 +312,7 @@ const sound = {
         vol('radio_hiss', 'Radio: FM hiss', 0),
         vol('radio_dropouts', 'Radio: signal dropouts', 0),
         // voice chat in multiplayer (off until switched on; the microphone is used with a talk key held)
-        { type: 'section', title: 'Voice chat (multiplayer)' },
+        { type: 'section', title: 'Voice chat in multiplayer' },
         { type: 'toggle', key: 'voice_enabled', label: 'Voice chat', help: 'Hold a talk key to speak: Nearby (V) is heard by players close to you, Radio (B) by everybody in the session. The keys are in Controls. The system asks for the microphone the first time. Nothing is recorded or stored; the microphone is used only while a talk key is held (or always, in the open mode).' },
         { type: 'select', key: 'voice_mode', label: 'Microphone', options: [['ptt', 'Push to talk'], ['open', 'Open microphone (nearby)']], when: (s) => !!s.voice_enabled },
         { type: 'slider', key: 'voice_mic_gain', label: 'Microphone gain', min: 0, max: 4, step: 0.1, def: 1, format: pct, store: r1, when: (s) => !!s.voice_enabled },
@@ -322,7 +322,7 @@ const sound = {
         vol('voice_volume_radio', 'Voices: radio', 1, (s) => !!s.voice_enabled, 2),
         { type: 'slider', key: 'voice_range', label: 'Nearby voice range when you host', min: 10, max: 300, step: 5, def: 75, format: (v) => `${v.toFixed(0)} m`, store: round, when: (s) => !!s.voice_enabled },
         { type: 'toggle', key: 'voice_talker_list', label: 'Show who is talking', when: (s) => !!s.voice_enabled },
-        { type: 'toggle', key: 'voice_all_off', label: "Everybody else's voice off", help: 'Single players are muted in the pause menu, under Players.', when: (s) => !!s.voice_enabled },
+        { type: 'toggle', key: 'voice_all_off', label: "Everybody else's voice chat off", help: 'Single players are muted in the pause menu, under Players.', when: (s) => !!s.voice_enabled },
       ],
     },
     {

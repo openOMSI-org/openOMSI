@@ -157,6 +157,7 @@ pub(crate) trait Stage: Copy + std::fmt::Debug + 'static {
 
 /// What takes a list's stages: the window's frame, the offscreen run's step.
 pub(crate) trait Host<S: Stage> {
+    fn stopping(&self) -> bool { false }
     fn run_stage(&mut self, stage: S) -> anyhow::Result<Flow>;
     /// Where the stages' times go (`App::perf.profile`, the offscreen run's own).
     fn profile(&mut self) -> &mut ProfileTimes;
@@ -165,6 +166,9 @@ pub(crate) trait Host<S: Stage> {
 /// The runner: `list`'s stages in their order, each timed under its profile key, until one
 /// ends the frame.
 pub(crate) fn run<S: Stage, H: Host<S>>(host: &mut H, list: &[S]) -> anyhow::Result<Flow> {
+    if host.stopping() {
+        return Ok(Flow::Stop);
+    }
     for &stage in list {
         let t = Instant::now();
         let flow = host.run_stage(stage)?;

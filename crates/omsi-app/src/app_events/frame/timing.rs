@@ -187,7 +187,7 @@ impl App {
                             });
                             if let Some(what) = what {
                                 log::warn!("frame rate {fps:.0} fps at the smallest render scale: {what} to keep up");
-                                self.service_msg = Some((format!("The graphics card cannot keep up: {what}"), 4.0));
+                                self.service_msg = Some((format!("The graphics card cannot keep up: {what} for this drive"), 4.0));
                             }
                         }
                     }

@@ -48,23 +48,27 @@ pub(crate) fn weekday(code: i32) -> i32 {
 
 /// A tour's validity mask in words: "Mon-Fri", "Sat", "Sun", "daily", ...
 pub(crate) fn days_of(mask: i32) -> String {
+    use crate::i18n::{tr, trf};
     let week = mask & 0x7f;
     let names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
     let mut out = match week {
-        0x7f => "daily".to_string(),
-        0x1f => "Mon-Fri".to_string(),
-        0x3f => "Mon-Sat".to_string(),
-        0x60 => "Sat-Sun".to_string(),
+        0x7f => tr("daily"),
+        0x1f => tr("Mon-Fri"),
+        0x3f => tr("Mon-Sat"),
+        0x60 => tr("Sat-Sun"),
         0 => String::new(),
-        w => (0..7).filter(|i| w & (1 << i) != 0).map(|i| names[i]).collect::<Vec<_>>().join(", "),
+        w => (0..7).filter(|i| w & (1 << i) != 0).map(|i| tr(names[i])).collect::<Vec<_>>().join(", "),
     };
     if mask & (1 << 7) != 0 && week != 0x7f {
-        out.push_str(if out.is_empty() { "holidays" } else { " & holidays" });
+        out = if out.is_empty() { tr("holidays") } else { trf("{days} & holidays", &[("days", &out)]) };
     }
-    match (mask & (1 << 8) != 0, mask & (1 << 9) != 0) {
-        (true, false) => out.push_str(", school days"),
-        (false, true) => out.push_str(", school holidays"),
-        _ => {}
+    let school = match (mask & (1 << 8) != 0, mask & (1 << 9) != 0) {
+        (true, false) => Some(("school days", "{days}, school days")),
+        (false, true) => Some(("school holidays", "{days}, school holidays")),
+        _ => None,
+    };
+    if let Some((alone, after)) = school {
+        out = if out.is_empty() { tr(alone) } else { trf(after, &[("days", &out)]) };
     }
     out
 }

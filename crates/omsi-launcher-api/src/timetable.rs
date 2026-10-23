@@ -87,10 +87,10 @@ fn within(p: &Path, dir: &Path) -> bool {
 impl Place {
     fn of(map: &str) -> Result<Place, String> {
         let global = core::content_path(map).map_err(err)?;
-        let map_dir = global.parent().map(Path::to_path_buf).ok_or_else(|| format!("{map} is not a map file"))?;
+        let map_dir = global.parent().map(Path::to_path_buf).ok_or_else(|| core::i18n::tr("{map} is not a map file").replace("{map}", &map))?;
         let rel = PathBuf::from(map.replace('\\', "/")).parent().map(Path::to_path_buf).unwrap_or_default();
         if rel.as_os_str().is_empty() || !rel.components().all(|c| matches!(c, Component::Normal(_))) {
-            return Err(format!("{map} is not a map file"));
+            return Err(core::i18n::tr("{map} is not a map file").replace("{map}", map));
         }
         let content = core::content_dir().ok_or_else(|| "no content folder".to_string())?;
         let root = core::load_config().root;
@@ -118,7 +118,7 @@ impl Place {
 
 pub fn load(map: String) -> Answer {
     let global = core::content_path(&map).map_err(err)?;
-    let map_dir = global.parent().map(Path::to_path_buf).ok_or_else(|| format!("{map} is not a map file"))?;
+    let map_dir = global.parent().map(Path::to_path_buf).ok_or_else(|| core::i18n::tr("{map} is not a map file").replace("{map}", &map))?;
     Ok(read(&map_dir))
 }
 
@@ -169,7 +169,7 @@ fn save_lines(place: &Place, edits: Vec<LineEdit>) -> Value {
         match save_line(place, &original, &known, e) {
             Ok(()) => saved.push(name),
             Err(why) => {
-                error.get_or_insert(format!("line {name}: {why}"));
+                error.get_or_insert(core::i18n::tr("line {name}: {why}").replace("{why}", &why).replace("{name}", &name));
             }
         }
     }
@@ -188,14 +188,14 @@ fn file_name_ok(name: &str) -> bool {
 fn save_line(place: &Place, original: &Path, known: &[Line], e: LineEdit) -> Result<(), String> {
     let name = e.name.trim().to_string();
     if !file_name_ok(&name) {
-        return Err("not a file name".into());
+        return Err(core::i18n::tr("not a file name"));
     }
     let mut tours = Vec::with_capacity(e.tours.len());
     for t in e.tours {
         let mut trips = Vec::with_capacity(t.trips.len());
         for x in t.trips {
             if !x.departure.is_finite() || x.departure < 0.0 {
-                return Err(format!("tour {}: a departure is not a time", t.number));
+                return Err(core::i18n::tr("tour {tour}: a departure is not a time").replace("{tour}", &t.number));
             }
             trips.push(TourTrip { trip: x.trip, profile: x.profile, departure: x.departure });
         }
@@ -206,9 +206,9 @@ fn save_line(place: &Place, original: &Path, known: &[Line], e: LineEdit) -> Res
     let line = Line { path, name, user_allowed: e.user_allowed, priority: e.priority, tours };
     let target = save_target(place, &line, original)?;
     if place.original(&target) {
-        return Err("it would be written into the OMSI 2 folder".into());
+        return Err(core::i18n::tr("it would be written into the OMSI 2 folder"));
     }
-    line.save(&target).map_err(err)
+    line.save(&target).map_err(|e| core::i18n::tr(&err(e)))
 }
 
 fn save_target(place: &Place, line: &Line, original: &Path) -> Result<PathBuf, String> {
@@ -223,7 +223,7 @@ fn save_target(place: &Place, line: &Line, original: &Path) -> Result<PathBuf, S
     }
     let dir = place.copy_dir();
     if place.original(&dir) {
-        return Err("its copy would go into the OMSI 2 folder".into());
+        return Err(core::i18n::tr("its copy would go into the OMSI 2 folder"));
     }
     if !dir.is_dir() {
         copy_whole(original, &dir)?;
@@ -232,7 +232,7 @@ fn save_target(place: &Place, line: &Line, original: &Path) -> Result<PathBuf, S
 }
 
 fn copy_whole(original: &Path, dir: &Path) -> Result<(), String> {
-    let names = omsi_cfg::vfs::list_dir(original).ok_or_else(|| format!("{} cannot be read", original.display()))?;
+    let names = omsi_cfg::vfs::list_dir(original).ok_or_else(|| core::i18n::tr("{folder} cannot be read").replace("{folder}", &original.display().to_string()))?;
     let partial = dir.with_file_name(PARTIAL);
     if partial.exists() {
         std::fs::remove_dir_all(&partial).map_err(err)?;
@@ -294,6 +294,7 @@ mod tests {
     }
 
     fn dirs_at(name: &str, omsi: &str, content: &str) -> Dirs {
+        omsi_launcher_lib::i18n::pin_language("ENG");
         let top = std::env::temp_dir().join(format!("openomsi-timetable-{name}-{}", std::process::id()));
         std::fs::remove_dir_all(&top).ok();
         let (omsi, content) = (top.join(omsi), top.join(content));

@@ -197,6 +197,7 @@ impl<'a> WindowFrame<'a> {
 }
 
 impl frame_stages::Host<WindowStage> for WindowFrame<'_> {
+    fn stopping(&self) -> bool { self.app.exiting }
     fn run_stage(&mut self, stage: WindowStage) -> anyhow::Result<Flow> {
         use WindowStage::*;
         let app = &mut *self.app;

@@ -32,7 +32,7 @@ struct MapCanvas: View {
                     .onTapGesture(coordinateSpace: .local) { p in tap(o, p, geo.size, c, m) }
                     .onAppear { fit(o) }
                     .onChange(of: o.map + o.trip) { _, _ in fit(o) }
-                    Text("\(o.roads.count) roads | \(o.stops.count) stops | \(o.entries.count) entry points")
+                    Text(tr("{roads} roads | {stops} stops | {entries} entry points", ["roads": "\(o.roads.count)", "stops": "\(o.stops.count)", "entries": "\(o.entries.count)"]))
                         .font(.inter(11.5))
                         .foregroundStyle(Theme.text2)
                         .padding(.horizontal, 8).padding(.vertical, 3)
@@ -42,7 +42,7 @@ struct MapCanvas: View {
                 } else {
                     HStack(spacing: 10) {
                         if store.overviewLoading { ProgressView().controlSize(.small).tint(Theme.accent) }
-                        Text(store.overviewLoading ? "Reading the map…" : "No map chosen").font(.inter(14)).foregroundStyle(Theme.muted)
+                        Text(LocalizedStringKey(store.overviewLoading ? "Reading the map…" : "No map chosen")).font(.inter(14)).foregroundStyle(Theme.muted)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -208,7 +208,7 @@ struct MapCanvas: View {
         let d = { (e: MapOverview.Entry) in hypot(screen(e.x, e.y, size, c, m).x - p.x, screen(e.x, e.y, size, c, m).y - p.y) }
         if let e = o.entries.min(by: { d($0) < d($1) }), d(e) < 18 {
             store.act("entry", ["entry": e.index])
-            store.say(String(localized: "Starting point: \(e.name)"), error: false)
+            store.say(tr("Starting point: {name}", ["name": e.name]), error: false)
         }
     }
 }

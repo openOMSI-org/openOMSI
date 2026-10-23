@@ -169,7 +169,7 @@ impl VoiceChat {
         let tr = |s: &str| omsi_ui::tr(s).into_owned();
         let mut v = Vec::new();
         if let Some(e) = &self.status.error {
-            v.push(format!("{} ({e})", tr("Voice: the microphone cannot be used")));
+            v.push(tr("Voice: the microphone cannot be used ({e})").replace("{e}", &tr(e)));
         }
         if self.server_muted {
             v.push(tr("Voice: an admin has silenced your voice chat"));

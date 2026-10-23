@@ -171,7 +171,7 @@ pub(super) fn from_game(lan: &mut LanSession, from: u32, role: Role, arg: &str, 
     let target_name = action.as_ref().and_then(subject).and_then(|id| players(lan, adm).into_iter().find(|p| p.id == id)).map(|p| p.label()).unwrap_or_default();
     let record = hub.map(|h| h.begin(&actor, &verb, &omsi_admin::clean(&line, 160), guard, &target_name)).unwrap_or(0);
     let Some(action) = action else {
-        report(lan, hub, &actor, record, &Outcome::rejected(format!("'{}' is not an administration command the server takes", omsi_admin::clean(&verb, 24))));
+        report(lan, hub, &actor, record, &Outcome::rejected(format!("the server takes no administration command '{}'", omsi_admin::clean(&verb, 24))));
         return;
     };
     run(lan, adm, actor, record, action, guard, positions, rules, hub);
@@ -239,9 +239,9 @@ pub fn exec(lan: &mut LanSession, adm: &ServerAdmin, actor: &Actor, action: &Act
             }
             session(lan);
             if lan.peers().any(|p| p.pose.id == *id) {
-                Done(Outcome::rejected(format!("{name} is still on the server")))
+                Done(Outcome::rejected(format!("could not send {name} away: they are still on the server")))
             } else {
-                Done(Outcome::applied(format!("{name} sent away{}", if *ban { " for the rest of this server run" } else { "" })))
+                Done(Outcome::applied(if *ban { format!("sent {name} away for the rest of this server run") } else { format!("sent {name} away") }))
             }
         }
         Action::HwBan { id, scope, hours, why } => {
@@ -277,15 +277,15 @@ pub fn exec(lan: &mut LanSession, adm: &ServerAdmin, actor: &Actor, action: &Act
             (Some(me), Some((pos, h))) => {
                 let (x, y) = beside(pos, h, 8.0);
                 lan.command(me, &format!("teleport {x:.2} {y:.2} {:.2} {h:.1}", pos.z));
-                Done(Outcome::pending(format!("your game goes to {name}")))
+                Done(Outcome::pending(format!("your game goes to {name}'s bus")))
             }
             (None, _) => Done(Outcome::rejected("only from the game")),
-            (_, None) => Done(Outcome::rejected(format!("{name} has no bus to go to"))),
+            (_, None) => Done(Outcome::rejected(format!("there is no bus of {name} to go to"))),
         },
         Action::Duty { .. } | Action::DutyOff(_) | Action::Service { .. } | Action::Unstick(_) | Action::Notify { .. } => {
-            let what = if who.is_some() { format!("{name}'s game") } else { "the players' games".to_string() };
             match session(lan) {
-                SessionDone::Session | SessionDone::AlsoHere => Done(Outcome::pending(format!("sent to {what}; its answer is in the server's log"))),
+                SessionDone::Session | SessionDone::AlsoHere if who.is_some() => Done(Outcome::pending(format!("sent to {name}'s game; its answer is in the server's log"))),
+                SessionDone::Session | SessionDone::AlsoHere => Done(Outcome::pending("sent to the players' games; its answer is in the server's log")),
                 SessionDone::World => Done(Outcome::rejected("not for a server")),
             }
         }
@@ -294,7 +294,7 @@ pub fn exec(lan: &mut LanSession, adm: &ServerAdmin, actor: &Actor, action: &Act
                 return Done(Outcome::rejected("a moderator may not silence an admin"));
             }
             session(lan);
-            Done(Outcome::applied(format!("{name}'s voice chat is {}", if *muted { "silenced" } else { "allowed again" })))
+            Done(Outcome::applied(if *muted { format!("voice chat of {name} silenced") } else { format!("voice chat of {name} allowed again") }))
         }
         Action::Time(_) | Action::Speed(_) | Action::Clock(_) if rules.real_time => Done(Outcome::rejected("the clock follows this machine's real time (real_time = 1 in server.cfg): it cannot be moved or sped up")),
         Action::Weather(_) if rules.metar => Done(Outcome::rejected("the weather follows the METAR report (metar_sync = 1 in server.cfg): it cannot be changed")),

@@ -270,7 +270,7 @@ impl Editor {
         if e.deleted {
             format!("Object {id} {name}: deleted (Delete brings it back)")
         } else if e == ObjectEdit::default() {
-            format!("Object {id} {name}")
+            omsi_ui::i18n::said(omsi_ui::tr("Object {id} {name}").replace("{id}", &id.to_string()).replace("{name}", &name), format!("Object {id} {name}"))
         } else {
             format!("Object {id} {name}: moved {:+.2} / {:+.2} / {:+.2} m, turned {:+.1}°", e.moved.x, e.moved.y, e.moved.z, e.turned)
         }
@@ -350,17 +350,17 @@ impl Editor {
         let map_dir = Path::new(map_rel).parent().unwrap_or(Path::new(""));
         let mut written = Vec::new();
         for ((tx, ty), edits) in by_tile {
-            let src = world.tile_source(tx, ty).ok_or_else(|| format!("tile ({tx}, {ty}) is not in the map"))?;
+            let src = world.tile_source(tx, ty).ok_or_else(|| omsi_ui::tr("tile ({tx}, {ty}) is not in the map").replace("{tx}", &tx.to_string()).replace("{ty}", &ty.to_string()))?;
             // (a LAN host's map is sealed: never written out in plain form, edited or not)
             if omsi_cfg::vfs::is_sealed(&src) {
-                return Err(format!("{} is the LAN host's map: not written", src.display()));
+                return Err(omsi_ui::tr("{file} is the LAN host's map: not written").replace("{file}", &src.display().to_string()));
             }
-            let name = src.file_name().ok_or("tile without a name")?.to_owned();
+            let name = src.file_name().ok_or_else(|| omsi_ui::tr("tile without a name").into_owned())?.to_owned();
             let out = content.join(map_dir).join(&name);
             // never into the installation itself
             if let (Ok(o), Ok(r)) = (out.parent().map(|p| p.to_path_buf()).unwrap_or_default().canonicalize().or_else(|_| Ok::<_, std::io::Error>(out.clone())), original.canonicalize()) {
                 if o.starts_with(&r) {
-                    return Err(format!("{} lies in the original installation: not written", out.display()));
+                    return Err(omsi_ui::tr("{file} lies in the original installation: not written").replace("{file}", &out.display().to_string()));
                 }
             }
             let bytes = omsi_cfg::vfs::read(&src).map_err(|e| format!("{}: {e}", src.display()))?;
@@ -369,7 +369,7 @@ impl Editor {
             let (new_text, c) = add_copies(&new_text, copies_by_tile.get(&(tx, ty)).map(|v| v.as_slice()).unwrap_or(&[]));
             let n = n + c;
             if n == 0 {
-                return Err(format!("the objects edited were not found in {}", src.display()));
+                return Err(omsi_ui::tr("the objects edited were not found in {file}").replace("{file}", &src.display().to_string()));
             }
             std::fs::create_dir_all(out.parent().unwrap_or(Path::new("."))).map_err(|e| e.to_string())?;
             let data = encode(&new_text, enc);
@@ -380,16 +380,16 @@ impl Editor {
         // the ground the brush shaped: each tile's .map.terrain
         let terrains = world.terrain_edits.lock().clone();
         for ((tx, ty), t) in terrains {
-            let src = world.tile_source(tx, ty).ok_or_else(|| format!("tile ({tx}, {ty}) is not in the map"))?;
+            let src = world.tile_source(tx, ty).ok_or_else(|| omsi_ui::tr("tile ({tx}, {ty}) is not in the map").replace("{tx}", &tx.to_string()).replace("{ty}", &ty.to_string()))?;
             // (a LAN host's map is sealed: never written out in plain form, edited or not)
             if omsi_cfg::vfs::is_sealed(&src) {
-                return Err(format!("{} is the LAN host's map: not written", src.display()));
+                return Err(omsi_ui::tr("{file} is the LAN host's map: not written").replace("{file}", &src.display().to_string()));
             }
-            let name = format!("{}.terrain", src.file_name().ok_or("tile without a name")?.to_string_lossy());
+            let name = format!("{}.terrain", src.file_name().ok_or_else(|| omsi_ui::tr("tile without a name").into_owned())?.to_string_lossy());
             let out = content.join(map_dir).join(&name);
             if let (Some(dir), Ok(r)) = (out.parent(), original.canonicalize()) {
                 if dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf()).starts_with(&r) {
-                    return Err(format!("{} lies in the original installation: not written", out.display()));
+                    return Err(omsi_ui::tr("{file} lies in the original installation: not written").replace("{file}", &out.display().to_string()));
                 }
             }
             std::fs::create_dir_all(out.parent().unwrap_or(Path::new("."))).map_err(|e| e.to_string())?;

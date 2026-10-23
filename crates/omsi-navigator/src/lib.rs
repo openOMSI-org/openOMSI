@@ -220,29 +220,19 @@ pub struct NavFrame<'a> {
 /// Street name signs (place, heading, name) and weaker hints (place, name).
 type NameHints = (Vec<(DVec3, f64, String)>, Vec<(DVec3, String)>);
 
-/// The texts, per language.
+/// The texts, in English: the painter shows them in the interface's language.
 struct Words {
-    kmh: &'static str,
     days: [&'static str; 7],
     off_route: &'static str,
     rerouting: &'static str,
     recalculated: &'static str,
-    jam: &'static str,
-    slow: &'static str,
     no_duty: &'static str,
     last_stop: &'static str,
     on_time: &'static str,
     closed: &'static str,
 }
 
-fn words(lang: &str) -> Words {
-    match lang.to_ascii_uppercase().as_str() {
-        "DEU" | "DE" | "GER" => Words { kmh: "km/h", days: ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"], off_route: "Abseits der Route", rerouting: "Route wird neu berechnet", recalculated: "Route neu berechnet", jam: "Stau", slow: "Zähfließend", no_duty: "Freie Fahrt", last_stop: "Endhaltestelle", on_time: "pünktlich", closed: "Gesperrt" },
-        "FRA" | "FR" => Words { kmh: "km/h", days: ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"], off_route: "Hors itinéraire", rerouting: "Recalcul de l'itinéraire", recalculated: "Itinéraire recalculé", jam: "Bouchon", slow: "Ralentissement", no_duty: "Conduite libre", last_stop: "Terminus", on_time: "à l'heure", closed: "Fermé" },
-        "RUS" | "RU" => Words { kmh: "км/ч", days: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"], off_route: "Вне маршрута", rerouting: "Перестроение маршрута", recalculated: "Маршрут перестроен", jam: "Пробка", slow: "Затруднено", no_duty: "Свободная езда", last_stop: "Конечная", on_time: "по графику", closed: "Закрыта" },
-        _ => Words { kmh: "km/h", days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], off_route: "Off route", rerouting: "Recalculating route", recalculated: "Route recalculated", jam: "Traffic jam", slow: "Slow traffic", no_duty: "Free drive", last_stop: "Final stop", on_time: "on time", closed: "Closed" },
-    }
-}
+const WORDS: Words = Words { days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], off_route: "Off route", rerouting: "Recalculating route", recalculated: "Route recalculated", no_duty: "Free drive", last_stop: "Final stop", on_time: "on time", closed: "Closed" };
 
 /// The route being followed: the lanes, how far along the bus is, and whether it was
 /// replaced by a way back after leaving it.

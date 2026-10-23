@@ -83,7 +83,7 @@ impl Navigator {
             if !win.pad(30.0 * s, 30.0 * s).contains(p) || shown.iter().any(|q| (*q - p).length() < if close { 64.0 * s } else { 120.0 * s }) {
                 continue;
             }
-            let text = format!("{height} m");
+            let text = format!("{height} {}", omsi_ui::tr("m"));
             let tw = self.fonts.width(&text, px, Weight::Medium);
             let box_ = Rect::new(p.x - tw * 0.5 - 3.0 * s, p.y - px * 0.7, tw + 6.0 * s, px * 1.4);
             if taken.iter().any(|t| rects_overlap(t, &box_)) {

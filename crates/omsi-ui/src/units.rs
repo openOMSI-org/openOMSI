@@ -63,7 +63,7 @@ impl Units {
     /// A speed as text: `48 km/h`, `30 mph`.
     pub fn speed_text(self, kmh: f32) -> String {
         let (v, unit) = self.speed(kmh);
-        format!("{v:.0} {unit}")
+        format!("{v:.0} {}", crate::i18n::tr(unit))
     }
 
     /// A speed limit as a sign shows it: to the nearest five.

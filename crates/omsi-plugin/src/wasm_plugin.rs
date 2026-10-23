@@ -144,7 +144,7 @@ impl WasmHost {
         });
         if let Err(e) = r {
             log::warn!("{} {}", p.state.tag, e.msg);
-            io.message(&format!("WASM plugin {}: {}", p.name, e.msg.lines().next().unwrap_or("")), 8.0);
+            io.message(&format!("WASM plugin {} failed: {}", p.name, e.msg.lines().next().unwrap_or("")), 8.0);
             p.with_ctx(io, |ctx, _| runtime::finish(ctx));
             return Err(format!("{} did not start", p.name));
         }

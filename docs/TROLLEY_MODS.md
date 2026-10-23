@@ -80,6 +80,16 @@ This is the interface the real content leaves to its host (openOMSI provides all
    meshes visible on a variable called `*SHTANG*` / `*pole*` with value 1 has two poles, whose
    hinges and lengths are those meshes' (hinge: the low end of the box furthest forward; shoe:
    the high end furthest back). The variable is the cab's switch.
+   A bus whose poles are two plain meshes always shown, raised (the ZiU-682B that ships with
+   Bronitsyn: `animation\palkalev.o3d` / `palkaprav.o3d`, no `[visible]`, no animation), has two
+   poles too, told by the meshes' shape: under 0.6 m wide, on the roof (2 m up or more), at
+   least 3 m long and rising 1 m or more towards the back. It has no cab switch.
+   The same shape test takes a pole mesh that its model animates or shows on another variable
+   when its file is named like a pole (`shtang`, `stange`, `palk`, `pole`...): the Ikarus 280T
+   (GVM) has `GVM\Shtanga_podn_L/R.o3d` on its rear section, shown by the battery switch
+   `knopka_massa` and turned by `articulation_0_alpha/beta` to look as if they followed a wire.
+   Those conditions and animations are dropped, and the rope meshes beside them (`Verevka_*`)
+   are hidden (the game draws the ropes).
 3. **Make the electrics from the poles**: the bus's own script keeps driving it (that is the only
    drive it has); the host takes its driving torque away when the poles do not bring current,
    and says how much current it draws from what the script asks.
@@ -102,6 +112,12 @@ This is the interface the real content leaves to its host (openOMSI provides all
   and while ours are up the variable reads 2, which hides both of the model's meshes (ours are drawn
   instead); the key (the script turns the 2 into a 0) pulls them down; down, the variable is 0 and
   the model's folded poles show.
+* A bus with always-shown pole meshes (no switch) gets its poles from those meshes, for the
+  player's bus only (an AI copy keeps them as they are drawn). The model's own meshes are turned
+  about their hinges by the pole angles, so they fold on the roof when down and follow the wire
+  when up. They are raised with R in the cab (the motor finds the wire), or by hand from outside.
+  Poles on the rear section of an articulated bus belong to the front part's gear (its script,
+  its traction), and stand on the rear section: the hinge, the hands and the drawing follow it.
 * Everything of the first version stays: the poles' mechanics and dewiring, current needed to
   move, arcs, the hands (R/T from outside, the same keys; scripted by `OMSI_TROLLEY_HANDS`),
   sound. With the script's own drive the line current is estimated from the force and speed

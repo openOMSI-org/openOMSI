@@ -556,7 +556,7 @@ impl App {
         }
         let name = format!("{} {}", p.vehicle.ty.def.manufacturer, p.vehicle.ty.def.type_name);
         self.start_on_foot(stand.0, stand.1);
-        self.service_msg = Some((format!("{} removed: you are on foot (Esc menu: Place a vehicle, or G at a bus's driver's door)", name.trim()), 6.0));
+        self.service_msg = Some((omsi_ui::i18n::tr_fill("{} removed: you are on foot (Esc menu: Place a vehicle, or G at a bus's driver's door)", &[("{}", &name.trim())]), 6.0));
     }
 
     /// On foot at `pos` without a bus of one's own (the vehicle removed, or the session
@@ -1035,7 +1035,7 @@ pub(crate) fn take_placed(
     if let (Some(cam), Some(p)) = (view.camera.as_ref(), player.player.as_ref()) {
         *view.camera = Some(p.camera("driver", cam));
     }
-    *ui.service_msg = Some((format!("Now driving: {}", name.trim()), 4.0));
+    *ui.service_msg = Some((omsi_ui::i18n::tr_fill("Now driving: {name}", &[("{name}", &name.trim())]), 4.0));
 }
 
 /// Back at the wheel of the own bus.

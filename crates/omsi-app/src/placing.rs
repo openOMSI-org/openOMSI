@@ -213,7 +213,7 @@ impl App {
                 }
             }
         }
-        self.service_msg = Some((format!("{n} placed vehicle(s) removed"), 3.0));
+        self.service_msg = Some((omsi_ui::i18n::tr_fill("{n} placed vehicle(s) removed", &[("{n}", &n.to_string())]), 3.0));
     }
 
     /// Escape while placing: the vehicle goes again.

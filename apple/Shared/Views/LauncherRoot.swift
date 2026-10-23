@@ -136,7 +136,7 @@ struct Sidebar: View {
                 if !railOnly {
                     VStack(alignment: .leading, spacing: 0) {
                         Text("openOMSI").font(.inter(17, .bold)).tracking(-0.3)
-                        Text("Launcher \(store.version)").font(.inter(11.5, .medium)).foregroundStyle(Theme.muted)
+                        Text(String(localized: "Launcher") + " \(store.version)").font(.inter(11.5, .medium)).foregroundStyle(Theme.muted)
                     }
                 }
             }
@@ -224,7 +224,7 @@ struct DriverChip: View {
                 if !railOnly {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(name.isEmpty ? String(localized: "No driver") : name).font(.inter(14, .semibold)).lineLimit(1)
-                        Text(store.snapshot.profile.map { "Level \($0.level)" } ?? String(localized: "Choose a driver"))
+                        Text(store.snapshot.profile.map { tr("Level {n}", ["n": "\($0.level)"]) } ?? String(localized: "Choose a driver"))
                             .font(.inter(12)).foregroundStyle(Theme.muted)
                     }
                     Spacer(minLength: 0)

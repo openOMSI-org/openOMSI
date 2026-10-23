@@ -725,7 +725,7 @@ impl Navigator {
         let icon_verts = self.city_icons(&on_screen, win, s);
         // --- the cards: the trip top left, the buttons top right, the scale bottom left
         let pad = 14.0 * s;
-        let wd = words(f.language);
+        let wd = &WORDS;
         let head = Rect::new(pad, pad, (w * 0.5).min(520.0 * s), 58.0 * s);
         ui.shadow(head, 14.0 * s, 10.0 * s, Color::rgba(0, 0, 0, 0.14));
         ui.rounded(head, 14.0 * s, pal.card);

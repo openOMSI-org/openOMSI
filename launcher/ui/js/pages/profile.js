@@ -15,7 +15,7 @@ async function select(name) {
     const config = await call('profile_select', { name });
     set({ config, profile: await call('profile', { name }) });
   } catch (e) {
-    toast(e.message, 'error');
+    toast(t(e.message), 'error');
   }
 }
 
@@ -35,7 +35,7 @@ export function ProfilePage() {
       await loadProfiles();
       toast(t('Driver {name} created.', { name: n }), 'ok');
     } catch (e) {
-      toast(e.message, 'error');
+      toast(t(e.message), 'error');
     }
   };
   const remove = async () => {
@@ -48,7 +48,7 @@ export function ProfilePage() {
       if (rest[0]) await select(rest[0]);
       await loadProfiles();
     } catch (e) {
-      toast(e.message, 'error');
+      toast(t(e.message), 'error');
     }
   };
   const tiles = p ? [

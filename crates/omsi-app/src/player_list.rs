@@ -146,7 +146,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
             let Some(p) = list.iter().find(|p| p.id == t.id && p.conn == t.conn) else { return vec![(tr("That player is no longer here: pick them again"), "list".into())] };
             let who = format!("{} (#{})", p.name, p.id);
             let why = reason();
-            let mut out = vec![noop(if verb == "ban" { format!("{} {who}", tr("Ban the machine of")) } else { format!("{} {who}", tr("Send away")) })];
+            let mut out = vec![noop(tr(if verb == "ban" { "Ban the machine of {who}" } else { "Send away {who}" }).replace("{who}", &who))];
             out.push((format!("{}: {}", tr("Reason"), if why.is_empty() { tr("none") } else { tr(why) }), "reason".into()));
             let tg = tag(app, *t);
             let r = if why.is_empty() { String::new() } else { format!(" {why}") };
@@ -176,7 +176,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
                 out.push(noop(tr("Nobody is banned")));
             }
             for b in &bans {
-                let until = b.until.map(|u| format!(", {} {}", tr("ends in"), omsi_lan::admin::ban::span(u.saturating_sub(now)))).unwrap_or_else(|| format!(", {}", tr("for good")));
+                let until = b.until.map(|u| format!(", {}", tr(&format!("ends in {}", omsi_lan::admin::ban::span(u.saturating_sub(now)))))).unwrap_or_else(|| format!(", {}", tr("for good")));
                 let name = if b.name.is_empty() { tr("unknown name") } else { b.name.clone() };
                 let reason = if b.reason.is_empty() { String::new() } else { format!(" - {}", b.reason) };
                 let label = format!("{name} [{}{until}]{reason}", if b.scope == "all" { tr("all sessions") } else { tr("this session") });

@@ -73,7 +73,7 @@ export function UpdateDialog() {
   const shown = u.state === 'available' ? !putAside(u) : u.state === 'failed' ? s.updateAsked && !u.dismissed : BUSY.includes(u.state) && u.state !== 'checking';
   if (!shown) return null;
   const busy = u.state !== 'available' && u.state !== 'failed';
-  const open = (url) => call('open_url', { url }).catch((e) => toast(e.message, 'error'));
+  const open = (url) => call('open_url', { url }).catch((e) => toast(t(e.message), 'error'));
   const title = u.state === 'available' ? t('openOMSI {version} is available', { version: r.version })
     : u.state === 'downloading' ? t('Downloading openOMSI {version}', { version: r.version })
     : u.state === 'failed' ? t('Not updated')

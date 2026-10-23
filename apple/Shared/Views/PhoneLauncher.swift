@@ -256,6 +256,7 @@ struct PhoneDrive: View {
                     toggle("Passengers", "passengers", c.passengers)
                     toggle("Timetable buses", "schedule", c.schedule)
                     toggle("Bus ready to go", "autostart", c.autostart)
+                    CabinTemperatureOption()
                     toggle("Start on foot", "on_foot", c.on_foot)
                 }
                 .padding(.horizontal, 14).padding(.vertical, 10)
@@ -470,7 +471,7 @@ struct PhoneSheetView: View {
                             if on { Image(systemName: "checkmark").font(.system(size: 14, weight: .bold)).foregroundStyle(Theme.accent) }
                         }
                         .padding(.horizontal, 12)
-                        Text("\(m.entry_points.count) entry points").font(.inter(12.5)).foregroundStyle(Theme.muted).padding(.horizontal, 12).padding(.bottom, 10)
+                        Text(tr("{n} entry points", ["n": "\(m.entry_points.count)"])).font(.inter(12.5)).foregroundStyle(Theme.muted).padding(.horizontal, 12).padding(.bottom, 10)
                     }
                     .background(on ? Theme.accentSoft : Theme.surface)
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -551,7 +552,7 @@ struct PhoneSheetView: View {
                         if isDepotRun(x) { Text("Depot run").font(.inter(12.5)).foregroundStyle(Theme.muted).lineLimit(1).minimumScaleFactor(0.8) } else { LineBadge(line: x.line) }
                     }
                     .frame(width: 58, alignment: .leading)
-                    text(x.terminus, "\(String(localized: "From")) \(x.from) - \(hhmm(x.arrival)) - \(tripTime(x))")
+                    text(x.terminus, tr("From {stop} - {time}", ["stop": x.from, "time": hhmm(x.arrival)]) + " - \(tripTime(x))")
                 }
             }
         }
@@ -589,7 +590,7 @@ struct PhoneSheetView: View {
         }
         ForEach(store.lists.weathers) { x in
             pick(w == x.file, { store.act("weather", ["weather": x.file]); close() }) {
-                text(x.name, "\(Int(x.temp.rounded())) °C - \(x.precip.isEmpty ? String(localized: "dry") : x.precip) - \(x.fog_m >= 10000 ? String(localized: "clear air") : "\(Int(x.fog_m)) m")")
+                text(x.name, "\(Int(x.temp.rounded())) °C - \(precipText(x.precip)) - \(x.fog_m >= 10000 ? String(localized: "clear air") : "\(Int(x.fog_m)) m")")
             }
         }
     }

@@ -158,7 +158,7 @@ impl crate::App {
                 Err(e) => {
                     self.session.tomorrow.disabled = true;
                     log::warn!("Tomorrow.io: {e}");
-                    self.service_msg = Some((format!("Tomorrow.io: {e}"), 6.0));
+                    self.service_msg = Some((omsi_ui::i18n::said(format!("Tomorrow.io: {}", omsi_ui::tr(e)), format!("Tomorrow.io: {e}")), 6.0));
                 }
             }
         }
@@ -217,7 +217,7 @@ impl crate::App {
                         Err(e) => {
                             if self.session.tomorrow.report_error(e) {
                                 log::warn!("Tomorrow.io: {e}");
-                                self.service_msg = Some((format!("Tomorrow.io: {e}"), 5.0));
+                                self.service_msg = Some((omsi_ui::i18n::said(format!("Tomorrow.io: {}", omsi_ui::tr(e)), format!("Tomorrow.io: {e}")), 5.0));
                             }
                             self.session.tomorrow.check =
                                 Some(Instant::now() + Duration::from_secs(180));

@@ -820,8 +820,9 @@ untouched. They are `radio_speaker`, `radio_hiss` and `radio_dropouts` (0..1) in
 
 **When nothing plays.** `~/.openomsi/game.log` says what happened:
 `radio: 23 stations` (the list), `radio: station 1 Radiozurnal (https://…)` (a button
-pressed), then `Radio 1: Radiozurnal - buffering …` and the song, or `no signal (…)` with
-the reason - mostly an address that is not a stream or a station that is down. No `radio:
+pressed), then `Radio 1 plays Radiozurnal (buffering …)` and the song, or `no signal`
+with the reason in a `radio <url>: …` line - mostly an address that is not a stream or a
+station that is down. No `radio:
 station` line at all means the bus's radio sets neither variable.
 
 ## Performance

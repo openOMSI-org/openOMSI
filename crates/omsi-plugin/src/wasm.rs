@@ -173,7 +173,8 @@ impl WasmPlugin {
             Ok(r) => Some(r),
             Err(e) => {
                 let why = if e.as_trap_code() == Some(wasmi::TrapCode::OutOfFuel) {
-                    format!("{what} ran too long (an endless loop?)")
+                    log::warn!("wasm plugin {}: {what} ran out of fuel", self.name);
+                    "the plugin ran too long (an endless loop?)".to_string()
                 } else {
                     format!("{what}: {e}")
                 };

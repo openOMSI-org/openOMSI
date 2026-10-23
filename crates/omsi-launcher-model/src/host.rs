@@ -19,6 +19,9 @@ pub trait Host: Send + Sync {
     /// of maps, buses, lines).
     fn mt_enable(&self, _on: bool) {}
     fn mt_protect(&self, _texts: &mut dyn Iterator<Item = &str>) {}
+    fn tr(&self, text: &str) -> String {
+        text.to_string()
+    }
     /// A phone: what the previous run said last and the end of its log, when it crashed.
     fn previous_run_crash(&self) -> Option<(String, String)> {
         None

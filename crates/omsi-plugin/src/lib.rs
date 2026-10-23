@@ -749,9 +749,9 @@ pub struct Remote {
 }
 
 impl Remote {
-    /// Start `host` (with `runner`, e.g. `wine`, in front when given) on the library and
-    /// have it call `PluginStart`.
-    pub fn spawn(runner: Option<&Path>, host: &Path, dll: &Path) -> Result<Remote, String> {
+    /// Start `host` (with `runner`, e.g. `wine`, in front when given) on the library in
+    /// `dir` and have it call `PluginStart`.
+    pub fn spawn(runner: Option<&Path>, host: &Path, dll: &Path, dir: &Path) -> Result<Remote, String> {
         let mut cmd = match runner {
             Some(r) => {
                 let mut c = Command::new(r);
@@ -760,11 +760,20 @@ impl Remote {
             }
             None => Command::new(host),
         };
-        cmd.arg(dll).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit());
-        if let Some(dir) = dll.parent() {
-            cmd.current_dir(dir);
+        cmd.arg(dll).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).current_dir(dir);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x0800_0000);
         }
         let mut child = cmd.spawn().map_err(|e| format!("could not start {}: {e}", host.display()))?;
+        if let Some(err) = child.stderr.take() {
+            std::thread::spawn(move || {
+                for line in std::io::BufRead::lines(BufReader::new(err)).map_while(Result::ok) {
+                    log::warn!("plugin host: {line}");
+                }
+            });
+        }
         let to = BufWriter::new(child.stdin.take().ok_or("no stdin")?);
         let from = BufReader::new(child.stdout.take().ok_or("no stdout")?);
         let mut r = Remote { child, to, from, procs: Procs::default() };
@@ -832,6 +841,12 @@ pub struct Plugin {
     failed: bool,
 }
 
+const PATCHES_OMSI_EXE: &[&str] = &["omsipresentationtools.dll"];
+
+fn patches_omsi_exe(dll: &Path) -> bool {
+    dll.file_name().is_some_and(|n| PATCHES_OMSI_EXE.contains(&n.to_string_lossy().to_ascii_lowercase().as_str()))
+}
+
 /// Where to look for the out-of-process host and what runs it.
 #[derive(Debug, Clone, Default)]
 pub struct HostConfig {
@@ -888,6 +903,9 @@ impl Plugin {
             return Err("no [dll]".into());
         }
         let dll = resolve_path(plugins_dir, &opl.dll).ok_or_else(|| format!("{} not found", opl.dll))?;
+        if patches_omsi_exe(&dll) {
+            return Err("it patches the code of OMSI.exe, which openOMSI does not run".into());
+        }
         let (backend, procs) = match Library::load(&dll) {
             Ok(lib) => {
                 lib.start();
@@ -901,7 +919,8 @@ impl Plugin {
                 if !cfg!(windows) && hosts.runner.is_none() {
                     return Err(format!("{local}; a Windows plugin needs Wine here (or OMSI_WINE)"));
                 }
-                let r = Remote::spawn(hosts.runner.as_deref(), host, &dll)?;
+                let root = plugins_dir.parent().unwrap_or(plugins_dir);
+                let r = Remote::spawn(hosts.runner.as_deref(), host, &dll, root)?;
                 let p = r.procs();
                 (Backend::Remote(r), p)
             }
@@ -1317,6 +1336,12 @@ mod tests {
         // (a kind or ticket number out of range is left as it was)
         let bad = TicketAnswer { kind: 7, ticket: -1, ..same };
         assert_eq!(call.change(&bad), TicketChange::default());
+    }
+
+    #[test]
+    fn omsi_exe_patchers_left_out() {
+        assert!(patches_omsi_exe(Path::new("plugins/OMSIPresentationTools.dll")));
+        assert!(!patches_omsi_exe(Path::new("plugins/Demo/demo.dll")));
     }
 
     #[test]

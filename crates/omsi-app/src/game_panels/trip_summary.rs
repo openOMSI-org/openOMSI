@@ -158,10 +158,10 @@ pub(crate) fn click(app: &mut crate::App, id: &str) {
     let Some(t) = app.menus.game_panels.trip.as_mut() else { return };
     match id {
         "copy" => {
-            t.said = Some(if to_clipboard(&t.summary.text()) { omsi_ui::tr("Copied to the clipboard").into_owned() } else { omsi_ui::tr("The clipboard cannot be reached").into_owned() });
+            t.said = Some(if to_clipboard(&t.summary.text_in(|s| omsi_ui::tr(s).into_owned())) { omsi_ui::tr("Copied to the clipboard").into_owned() } else { omsi_ui::tr("The clipboard cannot be reached").into_owned() });
         }
         "save" => {
-            t.said = Some(match t.summary.save() {
+            t.said = Some(match t.summary.save_in(|s| omsi_ui::tr(s).into_owned()) {
                 Ok(p) => format!("{} {}", omsi_ui::tr("Saved:"), p.display()),
                 Err(e) => format!("{} {e}", omsi_ui::tr("Not saved:")),
             });

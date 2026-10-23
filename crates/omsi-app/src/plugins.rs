@@ -405,6 +405,15 @@ impl PluginIo for Io<'_> {
         pduty::tour(self.app().ok_or("no game")?, line, tour, false)
     }
 
+    fn hof_data(&self) -> Option<omsi_plugin::api::Value> {
+        Some(crate::plugin_io::hof::snapshot(self.veh()?.host.hof.as_deref()?))
+    }
+    fn hof_terminus(&self, identifier: &str) -> Option<omsi_plugin::api::Value> {
+        crate::plugin_io::hof::find_terminus(self.veh()?.host.hof.as_deref()?, identifier)
+    }
+    fn hof_busstop(&self, identifier: &str) -> Option<omsi_plugin::api::Value> {
+        crate::plugin_io::hof::find_busstop(self.veh()?.host.hof.as_deref()?, identifier)
+    }
     fn data_query(&mut self, query: omsi_plugin::data::DataQuery, args: &[omsi_plugin::data::QueryValue], object: Option<i64>) -> Result<Vec<omsi_plugin::data::QueryValue>, String> {
         if let Some(id) = object {
             let object = self.app_mut().ok_or("no game")?.session.scenery.find_mut(id).ok_or("scripted scenery object not loaded")?;

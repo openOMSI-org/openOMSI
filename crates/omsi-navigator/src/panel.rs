@@ -34,7 +34,7 @@ impl Navigator {
     pub(super) fn draw(&mut self, renderer: &Renderer, target: &wgpu::TextureView, size: (u32, u32), map_h: f32, f: &NavFrame) {
         let (pw, ph) = (size.0 as f32, size.1 as f32);
         let s = pw / 360.0;
-        let wd = words(f.language);
+        let wd = &WORDS;
         let pal = *style::palette(self.light);
         self.atlas.begin_frame();
         let panel = Rect::new(0.0, 0.0, pw, ph);
@@ -171,7 +171,7 @@ impl Navigator {
         let icon_verts = self.minimap_icons(vpm, vp, anchor, f.bus.truncate(), map, s);
         let loc_h = self.place_row_height(s);
         self.draw_place_row(&mut ui, Rect::new(0.0, map.bottom(), pw, loc_h), 10.0 * s, s);
-        self.draw_cards(&mut ui, f, &wd, net, map, s, &pal);
+        self.draw_cards(&mut ui, f, wd, net, map, s, &pal);
         if self.schedule {
             let r = Rect::new(0.0, map.bottom() + loc_h, pw, ph - map.bottom() - loc_h);
             match self.board {
@@ -361,12 +361,12 @@ impl Navigator {
             None
         };
         let jam_note = (self.jam_cost >= 30.0).then(|| {
-            let what = if self.jam_cost >= 60.0 { wd.jam } else { wd.slow };
-            (format!("{what} +{:.0} {}", (self.jam_cost / 60.0).max(1.0).round(), omsi_ui::tr("min")), if self.jam_cost >= 60.0 { style::TRAFFIC[2] } else { style::TRAFFIC[1] })
+            let n = (self.jam_cost / 60.0).max(1.0).round();
+            (if self.jam_cost >= 60.0 { format!("Traffic jam +{n:.0} min") } else { format!("Slow traffic +{n:.0} min") }, if self.jam_cost >= 60.0 { style::TRAFFIC[2] } else { style::TRAFFIC[1] })
         });
         match f.stops.first() {
             Some(st) => {
-                let name = if f.stops.len() == 1 { format!("{} · {}", st.name.trim(), wd.last_stop) } else { st.name.trim().to_string() };
+                let name = if f.stops.len() == 1 { format!("{} · {}", st.name.trim(), omsi_ui::tr(wd.last_stop)) } else { st.name.trim().to_string() };
                 let line_w = match f.line.as_deref().map(str::trim).filter(|l| !l.is_empty()) {
                     Some(l) => {
                         let px = 11.0 * s;
@@ -394,11 +394,11 @@ impl Navigator {
                 parts.push(format!("{:02}:{:02}", (st.arrival / 3600.0) as i32 % 24, ((st.arrival % 3600.0) / 60.0) as i32));
                 let line2 = parts.join(" · ");
                 // (closed: the way round in place of the distance)
-                let closed = st.closed.as_deref().map(|via| if via.is_empty() { wd.closed.to_string() } else { format!("{} · {via}", wd.closed) });
+                let closed = st.closed.as_deref().map(|via| if via.is_empty() { wd.closed.to_string() } else { format!("{} · {via}", omsi_ui::tr(wd.closed)) });
                 let (text, col) = match (&closed, &note, &jam_note) {
                     (Some(t), _, _) => (t.clone(), WARN),
                     (None, Some((t, c)), _) => (t.clone(), *c),
-                    (None, None, Some((t, c))) => (format!("{line2} · {t}"), *c),
+                    (None, None, Some((t, c))) => (format!("{line2} · {}", omsi_ui::tr(t)), *c),
                     _ => (line2, pal.card_dim),
                 };
                 let mut right = 0.0;
@@ -442,7 +442,6 @@ impl Navigator {
         ui.circle(c + Vec2::new(0.0, 1.5 * s), r + 1.0 * s, Color::rgba(0, 0, 0, 0.14));
         ui.circle(c, r, pal.card);
         let sp = format!("{speed:.0}");
-        let unit = if units == omsi_ui::units::Units::Metric { wd.kmh } else { unit };
         ui.text(&mut self.atlas, &self.fonts, &sp, 17.0 * s, Weight::Bold, Vec2::new(c.x, c.y + 3.0 * s), Align::Center, if over { style::TRAFFIC[2] } else { pal.card_text });
         ui.text(&mut self.atlas, &self.fonts, unit, 7.5 * s, Weight::Medium, Vec2::new(c.x, c.y + 12.0 * s), Align::Center, pal.card_dim);
         if let Some(v) = limit {

@@ -22,7 +22,8 @@ impl VehicleInstance {
             Some(t) => (t.ty.clone(), t.reversed),
             None => (self.ty.clone(), false),
         };
-        let t = TrailerPart::new_ex(
+        let adopted = self.adopt_trailer_trolley(&ty, self.trailers.len());
+        let mut t = TrailerPart::new_ex(
             ty,
             &lead_ty,
             lead_reversed,
@@ -31,6 +32,10 @@ impl VehicleInstance {
             first_axle,
             self.trailers.len(),
         );
+        if adopted {
+            let program = self.ty.program.clone();
+            t.animators = part_animators(&t.ty, &|n| program.var(n).or_else(|| self.var_index.get(&n.to_ascii_lowercase()).copied()));
+        }
         self.trailers.push(t);
     }
 }

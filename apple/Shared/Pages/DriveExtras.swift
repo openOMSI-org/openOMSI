@@ -18,7 +18,7 @@ func longDate(_ iso: String) -> String {
 
 func entryName(_ e: EntryInfo) -> String {
     let n = e.name.trimmingCharacters(in: .whitespaces)
-    return n.isEmpty ? "\(String(localized: "Entry point")) \(e.index + 1)" : n
+    return n.isEmpty ? tr("Entry point {n}", ["n": "\(e.index + 1)"]) : n
 }
 
 extension LauncherStore {

@@ -168,3 +168,45 @@ pub(crate) fn place_on_duty(args: &mut Args) {
     }
     log::info!("duty start: no stop of the next trips can be reached from the entry points; the timetable decides, {:.1} s", t0.elapsed().as_secs_f64());
 }
+
+/// Adjust the new session's cabin once after script initialization, on any trip.
+pub(crate) fn set_starting_cabin_temperature(
+    args: &Args,
+    vehicle: &mut omsi_sim::VehicleInstance,
+) {
+    if use_comfortable_cabin(args) {
+        if args.on_foot {
+            args.pending_cabin_temperature
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+        } else {
+            vehicle.set_cabin_temperature(22.0);
+        }
+    }
+}
+
+fn use_comfortable_cabin(args: &Args) -> bool {
+    args.comfortable_cabin_on_start && !args.is_resuming()
+}
+
+#[cfg(test)]
+mod cabin_temperature_tests {
+    use super::*;
+
+    #[test]
+    fn cabin_start_follows_switch_on_every_trip_and_preserves_saved_state() {
+        let mut args = Args::parse_from(["openomsi", "--comfortable-cabin-on-start"]);
+        assert!(use_comfortable_cabin(&args));
+        // The same enabled switch applies to the first and later trips of a tour.
+        args.line = Some("5".into());
+        args.tour = Some("1".into());
+        for trip in ["1", "2", "4"] {
+            args.trip = Some(trip.into());
+            assert!(use_comfortable_cabin(&args));
+        }
+        args.comfortable_cabin_on_start = false;
+        assert!(!use_comfortable_cabin(&args));
+        args.comfortable_cabin_on_start = true;
+        args.situation = Some("saved.osn".into());
+        assert!(!use_comfortable_cabin(&args));
+    }
+}

@@ -451,7 +451,7 @@ impl Navigator {
             ui.text(&mut self.atlas, &self.fonts, &itin, 11.5 * s, Weight::Medium, Vec2::new(x0 + pad + 4.0 * s, top + 68.0 * s), Align::Left, TEXT_DIM);
             // length, stops, trip time
             let colw = (pw - 2.0 * pad) / 3.0;
-            let stats = [(lt.length.as_str(), format!("{} km", num(r.km, 1))), (lt.stops.as_str(), format!("{}", r.stops_n)), (lt.trip.as_str(), format!("{} {}", r.minutes, lt.minutes.as_str()))];
+            let stats = [(lt.length.as_str(), format!("{} {}", num(r.km, 1), omsi_ui::tr("km"))), (lt.stops.as_str(), format!("{}", r.stops_n)), (lt.trip.as_str(), format!("{} {}", r.minutes, lt.minutes.as_str()))];
             for (k, (label, value)) in stats.iter().enumerate() {
                 let sx = x0 + pad + 4.0 * s + colw * k as f32;
                 ui.text(&mut self.atlas, &self.fonts, &self.fonts.fit(label, 10.0 * s, Weight::Medium, colw - 6.0 * s), 10.0 * s, Weight::Medium, Vec2::new(sx, top + 92.0 * s), Align::Left, TEXT_DIM);

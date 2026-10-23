@@ -1773,6 +1773,48 @@
       "permission": null
     },
     {
+      "name": "hof.busstop",
+      "group": "hof",
+      "since": "0.3.40",
+      "doc": "The first bus stop whose `identifier` exactly matches the supplied HOF stop identifier. Returns `{index, identifier, strings}`; `index` is zero-based for `GetBusstopString` and `strings[1]` is getter field 0. Returns nil without a vehicle, HOF or match.",
+      "params": [
+        {
+          "name": "identifier",
+          "type": "string",
+          "optional": false
+        }
+      ],
+      "returns": "table or nil",
+      "multi": false,
+      "permission": null
+    },
+    {
+      "name": "hof.get",
+      "group": "hof",
+      "since": "0.3.40",
+      "doc": "A snapshot of every parsed field of the player's loaded HOF: `path`, `name`, `service_trip`, `global_strings`, `string_count_terminus`, `string_count_busstop`, `termini`, `bus_stops`, `info_trips`, `info_busstop_lists`, `info_busstops`. Records include their zero-based `index`; Lua arrays (including strings) start at 1. Returns nil without a vehicle or HOF. No filesystem access or scripts are involved; retain the snapshot until the vehicle or HOF changes.",
+      "params": [],
+      "returns": "table or nil",
+      "multi": false,
+      "permission": null
+    },
+    {
+      "name": "hof.terminus",
+      "group": "hof",
+      "since": "0.3.40",
+      "doc": "The first terminus whose internal `identifier` exactly matches the supplied timetable terminus, using the same case-sensitive comparison as `GetTTTerminusIndex`. Returns `{index, code, identifier, terminus_stop, all_exit, strings}`; `index` is zero-based for `GetTerminusString`, `strings[1]` is getter field 0, and `terminus_stop` is nil when absent. Returns nil without a vehicle, HOF or match; does not change the duty or destination.",
+      "params": [
+        {
+          "name": "identifier",
+          "type": "string",
+          "optional": false
+        }
+      ],
+      "returns": "table or nil",
+      "multi": false,
+      "permission": null
+    },
+    {
       "name": "info",
       "group": "game",
       "since": "0.1.10",

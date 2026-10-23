@@ -24,14 +24,14 @@ export function WeatherEditor({ from, onClose }) {
   const [w, setW] = useState(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    call('custom_weather', { weather: from }).then(setW).catch((e) => (toast(e.message, 'error'), onClose()));
+    call('custom_weather', { weather: from }).then(setW).catch((e) => (toast(t(e.message), 'error'), onClose()));
   }, [from]);
   const put = (patch) => setW({ ...w, ...patch });
   const use = () => {
     setBusy(true);
     call('custom_weather_text', { custom: w })
       .then((weather) => (choose({ weather }), onClose()))
-      .catch((e) => (toast(e.message, 'error'), setBusy(false)));
+      .catch((e) => (toast(t(e.message), 'error'), setBusy(false)));
   };
   const footer = html`
     <${Button} label="Cancel" onClick=${onClose} />

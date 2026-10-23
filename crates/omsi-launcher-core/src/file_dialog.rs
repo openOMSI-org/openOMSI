@@ -7,9 +7,9 @@ pub fn pick_mod(zip: bool) -> Option<PathBuf> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         if zip {
-            rfd::FileDialog::new().set_title("Choose a mod archive").add_filter("Mod archive", &["zip", "7z", "rar"]).pick_file()
+            rfd::FileDialog::new().set_title(crate::i18n::tr("Choose a mod archive")).add_filter(crate::i18n::tr("Mod archive"), &["zip", "7z", "rar"]).pick_file()
         } else {
-            rfd::FileDialog::new().set_title("Choose the mod folder").pick_folder()
+            rfd::FileDialog::new().set_title(crate::i18n::tr("Choose the mod folder")).pick_folder()
         }
     }
     #[cfg(any(target_os = "android", target_os = "ios"))]

@@ -92,7 +92,7 @@ impl App {
                 pt.arc(c, rim_in, r, top + 0.12, top + TAU - 0.12, part);
                 pt.arc(c, rim_in, r, top - 0.12, top + 0.12, PANEL_ON);
             } else {
-                pt.text(atlas, fonts, "TILT", 14.0 * u, Weight::Bold, t.wheel_c, Align::Center, DIM);
+                pt.text(atlas, fonts, &omsi_ui::tr("TILT"), 14.0 * u, Weight::Bold, t.wheel_c, Align::Center, DIM);
             }
             for (r, v, name) in [(t.clutch_r, t.clutch, "CLUTCH"), (t.brake_r, t.brake, "BRAKE"), (t.throttle_r, t.throttle, "GAS")] {
                 if r.w <= 0.0 {
@@ -109,7 +109,7 @@ impl App {
                     let y = r.y + r.h * k as f32 / 5.0;
                     pt.line(Vec2::new(r.x + 12.0 * u, y), Vec2::new(r.right() - 12.0 * u, y), 2.0 * u, Color::rgba(230, 230, 230, 0.18));
                 }
-                pt.text(atlas, fonts, name, 11.0 * u, Weight::Bold, Vec2::new(r.center().x, r.bottom() - 10.0 * u), Align::Center, DIM);
+                pt.text(atlas, fonts, &omsi_ui::tr(name), 11.0 * u, Weight::Bold, Vec2::new(r.center().x, r.bottom() - 10.0 * u), Align::Center, DIM);
             }
             if let Some(v) = speed {
                 let at = Vec2::new(w * 0.5, h - 22.0 * u);

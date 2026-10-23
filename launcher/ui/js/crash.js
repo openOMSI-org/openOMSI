@@ -33,7 +33,7 @@ async function copy(c) {
     await navigator.clipboard.writeText(report(c));
     toast(t('The report is copied: paste it into a GitHub issue or a message.'), 'ok');
   } catch (e) {
-    toast(e.message, 'error');
+    toast(t(e.message), 'error');
   }
 }
 
@@ -66,7 +66,7 @@ export function GameEndDialogs() {
   const footer = html`
     ${c.silent
       ? html`<${Button} kind="ghost" icon="sliders" label="Settings" onClick=${() => set({ crash: null, page: 'settings' })} />`
-      : html`<${Button} kind="ghost" icon="external" label="Report on GitHub" onClick=${() => (navigator.clipboard?.writeText(report(c)).catch(() => {}), call('open_url', { url: issueUrl(c) }).catch((e) => toast(e.message, 'error')))} />`}
+      : html`<${Button} kind="ghost" icon="external" label="Report on GitHub" onClick=${() => (navigator.clipboard?.writeText(report(c)).catch(() => {}), call('open_url', { url: issueUrl(c) }).catch((e) => toast(t(e.message), 'error')))} />`}
     ${dx12 && html`<${Button} label="Use DirectX 12" onClick=${async () => {
       if (!(await saveSettings({ graphics_api: 'dx12' }))) return;
       close();

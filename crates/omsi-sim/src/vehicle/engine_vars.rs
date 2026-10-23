@@ -115,6 +115,63 @@ mod tests {
         assert_eq!(NAMES[Ev::PriorityWarning as usize], "TrafficPriorityWarningNeeded");
     }
 
+    #[test]
+    fn cabin_temperature_initialization_preserves_humidity_and_then_evolves() {
+        let mut v = VehicleInstance::new(
+            crate::vehicle::tests::coupling_test_type(None),
+            VehicleHost::new(Default::default()),
+        );
+        v.host.temperature = -10.0;
+        v.update_engine_vars(1.0);
+        v.set_engine_ev(Ev::CabinAbsHum, 4.0);
+        v.set_cabin_temperature(22.0);
+        assert_eq!(v.ev(Ev::CabinTemp), Some(22.0));
+        assert_eq!(v.ev(Ev::CabinAbsHum), Some(4.0));
+        assert_eq!(v.ev(Ev::CabinRelHum), Some(relative_humidity(22.0, 4.0)));
+        v.update_engine_vars(1.0);
+        let t = v.ev(Ev::CabinTemp).unwrap();
+        assert!(
+            t < 22.0 && t > 21.0,
+            "normal heat loss resumes from the chosen temperature: {t}"
+        );
+    }
+
+    #[test]
+    fn scripted_cabin_temperature_starts_once_and_keeps_simulating() {
+        let mut v = crate::timetable_run::tests::script_test_vehicle(
+            "{init}\n-5 (S.L.Cabinair_Temp)\n4 (S.L.Cabinair_absHum)\n{end}\n{frame}\n(L.L.Cabinair_Temp) (L.S.Timegap) - (S.L.Cabinair_Temp)\n{end}\n",
+            "Cabinair_Temp\nCabinair_absHum\nCabinair_relHum\n",
+            "",
+        );
+        v.set_cabin_temperature(22.0);
+        assert_eq!(v.var("Cabinair_Temp"), Some(22.0));
+        v.update(0.5);
+        assert_eq!(v.var("Cabinair_Temp"), Some(21.5));
+        assert_eq!(v.var("Cabinair_absHum"), Some(4.0));
+    }
+
+    #[test]
+    fn cabin_temperature_updates_independently_scripted_sections() {
+        let mut v = VehicleInstance::new(
+            crate::vehicle::tests::coupling_test_type(None),
+            VehicleHost::new(Default::default()),
+        );
+        let part = crate::timetable_run::tests::script_test_vehicle(
+            "{init}\n-5 (S.L.Cabinair_Temp)\n6 (S.L.Cabinair_absHum)\n{end}\n{frame}\n(L.L.Cabinair_Temp) (L.S.Timegap) - (S.L.Cabinair_Temp)\n{end}\n",
+            "Cabinair_Temp\nCabinair_absHum\nCabinair_relHum\n",
+            "",
+        );
+        v.attach_trailer(part.ty.clone());
+        let run = crate::vehicle::car_run::CarRun::start(&part.ty, &mut v, [1.0, 0.0, 0.0]);
+        v.trailers[0].run = Some(Box::new(run));
+        v.set_cabin_temperature(22.0);
+        let run = v.trailers[0].run.as_ref().unwrap();
+        let at = |name: &str| run.state.vars[run.names[name] as usize];
+        assert_eq!(at("cabinair_temp"), 22.0);
+        assert_eq!(at("cabinair_abshum"), 6.0);
+        assert_eq!(at("cabinair_relhum"), relative_humidity(22.0, 6.0));
+    }
+
     /// Read and written by id as by name, also for a variable the vehicle gains on the way.
     #[test]
     fn engine_vars_answer_as_by_name() {

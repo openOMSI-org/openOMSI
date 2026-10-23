@@ -11,7 +11,7 @@ export const CHOICE_DEFAULTS = {
   map: '', entry: -1, line: null, tour: null, free: false,
   time: 9 * 60, start_trip: null, date: '1989-05-30',
   season: 'auto', phase: 'mid', own_date: null,
-  weather: '', traffic: 30, passengers: true, schedule: true, autostart: false, on_foot: false,
+  weather: '', traffic: 30, passengers: true, schedule: true, autostart: false, comfortable_cabin_on_start: false, on_foot: false,
   lan_mode: 'off', lan_addr: '', lan_ws_fallback: null, version: 2,
 };
 
@@ -430,6 +430,7 @@ export async function duty(extra = {}) {
     passengers: c.passengers,
     schedule: c.schedule,
     autostart: c.autostart,
+    comfortable_cabin_on_start: c.comfortable_cabin_on_start,
     on_foot: c.on_foot,
     profile: S.config?.profile || null,
     lan: c.lan_mode === 'host' ? 'host' : c.lan_mode === 'join' ? `join:${c.lan_addr.trim()}` : 'off',
@@ -453,7 +454,7 @@ export async function start(extra) {
     pollNow();
     return r;
   } catch (e) {
-    toast(e.message, 'error');
+    toast(t(e.message), 'error');
     return null;
   }
 }
@@ -478,7 +479,7 @@ export async function installMod(path) {
     toast(t('Installing {name}…', { name: path.split(/[\\/]/).pop() }));
     pollNow();
   } catch (e) {
-    toast(e.message, 'error');
+    toast(t(e.message), 'error');
   }
 }
 

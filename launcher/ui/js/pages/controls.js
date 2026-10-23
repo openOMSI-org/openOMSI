@@ -69,7 +69,7 @@ function keyParts(scan, modifier) {
   if (modifier & KEY_SHIFT) parts.push('Shift');
   if (modifier & KEY_CTRL) parts.push('Ctrl');
   if (modifier & KEY_ALT) parts.push('Alt');
-  parts.push(NAME_OF[scan] || `scan ${scan}`);
+  parts.push(NAME_OF[scan]?.startsWith('Mouse') ? t(NAME_OF[scan]) : NAME_OF[scan] || `scan ${scan}`);
   return parts;
 }
 
@@ -181,7 +181,7 @@ function Keyboard() {
       }
     } catch (e) {
       setSaveError(e.message);
-      toast(e.message, 'error');
+      toast(t(e.message), 'error');
     }
   }
 

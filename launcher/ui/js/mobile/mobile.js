@@ -1,3 +1,4 @@
+import { CabinTemperatureOption } from '../pages/drive-day.js';
 // The launcher on a phone: a layout of its own for a landscape phone and a finger, on the
 // same data and commands as the desktop launcher. A rail of icons on the left; Drive is the
 // bus turning on the left half with the Start button over it, and the duty as a list of rows
@@ -150,6 +151,7 @@ function MobileDrive() {
         <${Toggle} checked=${c.passengers} onChange=${(passengers) => choose({ passengers })} label="Passengers" />
         <${Toggle} checked=${c.schedule} onChange=${(schedule) => choose({ schedule })} label="Timetable buses" />
         <${Toggle} checked=${c.autostart} onChange=${(autostart) => choose({ autostart })} label="Bus ready to go" />
+        <${CabinTemperatureOption} />
         <${Toggle} checked=${c.on_foot} onChange=${(on_foot) => choose({ on_foot })} label="Start on foot" />
       </div>
       ${!joined && s.situations?.length > 0 && html`<div class="m-group">
@@ -240,7 +242,7 @@ function TourSheet({ close }) {
     ${shown.map(({ tour: x, ended, at, via }) => {
       const trip = x.trips[at];
       const found = tq && trip && !x.number.toLowerCase().includes(tq);
-      const what = found ? html`${hms(trip.departure)} <${TripEnds} trip=${trip} />${via ? ` (${t('via {stop}', { stop: via })})` : ''}` : `${x.days} - ${x.trips.length} ${t('trips')}${x.trips.length ? ` - ${hms(x.first)}-${hms(x.last)}` : ''}`;
+      const what = found ? html`${hms(trip.departure)} <${TripEnds} trip=${trip} />${via ? ` (${t('via {stop}', { stop: via })})` : ''}` : `${x.days} - ${t('{n} trips', { n: x.trips.length })}${x.trips.length ? ` - ${hms(x.first)}-${hms(x.last)}` : ''}`;
       return pick(x.number === s.choice.tour, () => (chooseTour(x, found ? trip : null), close()), html`<span class="m-pick-text"><b>${t('Tour')} ${x.number}</b><small>${what}${!x.runs ? ` - ${t('not on this day')}` : ended ? ` - ${t('ended')}` : ''}</small></span>`, x.runs && !ended ? '' : ' dim');
     })}
   </div>`;

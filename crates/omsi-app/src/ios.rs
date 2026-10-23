@@ -268,7 +268,7 @@ impl Shell {
             }
             Err(e) => {
                 log::error!("the game could not start: {e:#}");
-                crate::apple_bridge::game_status(&format!("The game could not start: {e:#}"));
+                crate::apple_bridge::game_status(&format!("{}: {e:#}", omsi_ui::tr("The game could not start")));
                 crate::apple_bridge::game_ended();
                 return;
             }

@@ -81,7 +81,11 @@ pub struct TripSummary {
 impl TripSummary {
     /// The table as text, in columns (copied, or saved to the Journeys folder).
     pub fn text(&self) -> String {
-        let head = ["Stop", "Plan", "Actual", "Diff", "Odometer"];
+        self.text_in(str::to_string)
+    }
+
+    pub fn text_in(&self, tr: impl Fn(&str) -> String) -> String {
+        let head = ["Bus stop", "Plan", "Actual", "Diff", "Odometer"].map(&tr);
         let width = |k: usize| self.rows.iter().map(|r| r[k].chars().count()).chain([head[k].chars().count()]).max().unwrap_or(0);
         let w: Vec<usize> = (0..5).map(width).collect();
         let line = |cells: [&str; 5]| -> String {
@@ -91,26 +95,32 @@ impl TripSummary {
             }
             out.trim_end().to_string()
         };
-        let mut out = format!("{}\n{}\n\n{}\n", self.head, self.title, line(head));
+        let mut out = format!("{}\n{}\n\n{}\n", self.head, self.title, line(head.each_ref().map(String::as_str)));
         out.push_str(&"-".repeat(w.iter().sum::<usize>() + 8));
         out.push('\n');
         for r in &self.rows {
             out.push_str(&line([&r[0], &r[1], &r[2], &r[3], &r[4]]));
             out.push('\n');
         }
-        out.push_str(&format!("\nStops served: {} of {}", self.served.0, self.served.1));
-        if let Some(km) = self.km {
-            out.push_str(&format!(", {km:.1} km"));
-        }
-        out.push_str(&format!("\nOn time: {} of {}", self.on_time, self.served.0));
+        out.push('\n');
+        out.push_str(&match self.km {
+            Some(km) => tr(&format!("Stops served: {} of {}, {km:.1} km", self.served.0, self.served.1)),
+            None => tr(&format!("Stops served: {} of {}", self.served.0, self.served.1)),
+        });
+        out.push('\n');
+        out.push_str(&tr(&format!("On time: {} of {}", self.on_time, self.served.0)));
         if let Some(d) = self.driven {
-            out.push_str(&format!("\nTime driven: {}", hms(d)));
+            out.push('\n');
+            out.push_str(&tr("Time driven: {}").replace("{}", &hms(d)));
         }
         if let Some(r) = self.rating {
             let percent = |p: Option<f64>| p.map(|p| format!("{p:.0} %")).unwrap_or_else(|| "-".into());
-            out.push_str(&format!("\nPassengers: {}, driving {:.0} %, comfort {}, ticket selling {}", r.passengers, r.driving, percent(r.comfort_rated()), percent(r.tickets_rated())));
+            out.push('\n');
+            out.push_str(&tr(&format!("Passengers: {}, driving {:.0} %, comfort {}, ticket selling {}", r.passengers, r.driving, percent(r.comfort_rated()), percent(r.tickets_rated()))));
         }
-        out.push_str(&format!("\nRating: {} of 5\n", self.stars()));
+        out.push('\n');
+        out.push_str(&tr(&format!("Rating: {} of 5", self.stars())));
+        out.push('\n');
         out
     }
 
@@ -152,12 +162,16 @@ impl TripSummary {
 
     /// The summary written to the Journeys folder; the file it went to.
     pub fn save(&self) -> std::io::Result<PathBuf> {
+        self.save_in(str::to_string)
+    }
+
+    pub fn save_in(&self, tr: impl Fn(&str) -> String) -> std::io::Result<PathBuf> {
         std::fs::create_dir_all(&self.dir)?;
         let path = (1..100)
             .map(|n| self.dir.join(if n == 1 { format!("{}.txt", self.stem) } else { format!("{} ({n}).txt", self.stem) }))
             .find(|p| !p.exists())
             .unwrap_or_else(|| self.dir.join(format!("{}.txt", self.stem)));
-        std::fs::write(&path, self.text())?;
+        std::fs::write(&path, self.text_in(tr))?;
         Ok(path)
     }
 }

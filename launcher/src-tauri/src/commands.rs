@@ -121,7 +121,7 @@ async fn open_path(path: String) -> Answer {
     work(move || {
         let p = PathBuf::from(&path);
         if !p.exists() {
-            return Err(format!("{path} is not there"));
+            return Err(core::i18n::trf("{path} is not there", &[("path", &path)]));
         }
         open_with_system(p.as_os_str())
     })

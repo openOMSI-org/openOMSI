@@ -148,7 +148,7 @@ function HostByCode() {
     call('prepare_tunnel').catch(() => toast(t('Internet preparation could not be started. You can still set up a LAN game.'), 'error'));
   };
   const copy = () => navigator.clipboard.writeText(session.code)
-    .then(() => toast(t('Session code copied'), 'ok'), (e) => toast(e.message, 'error'));
+    .then(() => toast(t('Session code copied'), 'ok'), (e) => toast(t(e.message), 'error'));
   return html`<div class="multiplayer-flow">
     <${Card} body=${false}>
       <${FlowSteps} labels=${['Set up a hosted duty', 'Start the duty', 'Copy code']} current=${session?.code ? 2 : hosting ? 1 : 0} />
@@ -223,7 +223,7 @@ function Servers() {
   const save = (l) => {
     setList(l);
     set({ cache: { ...S.cache, servers: l } });
-    call('servers_save', { list: l }).catch((e) => toast(e.message, 'error'));
+    call('servers_save', { list: l }).catch((e) => toast(t(e.message), 'error'));
   };
   const add = () => {
     const a = address.trim();

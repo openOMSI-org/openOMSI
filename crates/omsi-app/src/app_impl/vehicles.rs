@@ -41,7 +41,7 @@ impl App {
         // (a server's own buses only - its `vehicles` list, #1183 - whoever asks: the lists,
         // a plugin, the input script)
         if crate::lan::server_offers().is_some_and(|o| !crate::lan::offers(&o, bus)) {
-            self.service_msg = Some((format!("The server does not offer {name}"), 4.0));
+            self.service_msg = Some((omsi_ui::i18n::tr_fill("The server does not offer {name}", &[("{name}", &name)]), 4.0));
             return;
         }
         let bus = bus.to_string();
@@ -105,7 +105,7 @@ impl App {
                 });
                 self.service_msg = Some(("Loading vehicle...".into(), 4.0));
             }
-            Err(e) => self.service_msg = Some((format!("Could not place {name}: {e}"), 5.0)),
+            Err(e) => self.service_msg = Some((format!("Could not place {name} ({e})"), 5.0)),
         }
     }
 
@@ -213,7 +213,7 @@ pub(crate) fn placement(mut cx: PlacementCx) {
             return;
         }
         Ok(Err(e)) => {
-            *cx.ui.service_msg = Some((format!("Could not place {}: {e:#}", pending.name), 5.0));
+            *cx.ui.service_msg = Some((format!("Could not place {} ({e:#})", pending.name), 5.0));
             return;
         }
         Ok(Ok(prepared)) => prepared,
@@ -235,7 +235,7 @@ pub(crate) fn placement(mut cx: PlacementCx) {
             let name = format!("{} {}", q.vehicle.ty.def.manufacturer, q.vehicle.ty.def.type_name);
             replace_driven_vehicle(q, &mut cx);
             *cx.ui.service_msg = Some(if pending.reload {
-                (format!("Reloaded from its files: {}", name.trim()), 4.0)
+                (format!("Reloaded {} from its files", name.trim()), 4.0)
             } else {
                 ("Vehicle loaded".into(), 4.0)
             });
@@ -248,7 +248,7 @@ pub(crate) fn placement(mut cx: PlacementCx) {
             *cx.ui.service_msg = Some(("Vehicle loaded".into(), 4.0));
         }
         Ok(None) => {}
-        Err(e) => *cx.ui.service_msg = Some((format!("Could not place {}: {e:#}", pending.name), 5.0)),
+        Err(e) => *cx.ui.service_msg = Some((format!("Could not place {} ({e:#})", pending.name), 5.0)),
     }
 }
 
@@ -290,5 +290,5 @@ fn switch_vehicle(
     }
     *player.player = Some(next);
     view.cam.look = (0.0, 0.0);
-    *ui.service_msg = Some((format!("Now driving: {}", name.trim()), 4.0));
+    *ui.service_msg = Some((omsi_ui::i18n::tr_fill("Now driving: {name}", &[("{name}", &name.trim())]), 4.0));
 }

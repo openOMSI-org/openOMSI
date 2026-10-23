@@ -7,24 +7,39 @@ use omsi_net::LanSession;
 
 /// What a player sent away by a ban reads.
 fn why_text(reason: &str, until: Option<u64>) -> String {
-    let mut s = String::from("you are banned from this session");
-    if let Some(u) = until {
-        let left = u.saturating_sub(omsi_admin::unix_now());
-        s.push_str(&format!(" for {}", span(left)));
+    let left = until.map(|u| span_in(u.saturating_sub(omsi_admin::unix_now())));
+    match (left, reason.is_empty()) {
+        (None, true) => "you are banned from this session".into(),
+        (None, false) => format!("you are banned from this session (reason: {reason})"),
+        (Some((n, Unit::Min)), true) => format!("you are banned from this session ({n} min left)"),
+        (Some((n, Unit::Hours)), true) => format!("you are banned from this session ({n} h left)"),
+        (Some((n, Unit::Days)), true) => format!("you are banned from this session ({n} days left)"),
+        (Some((n, Unit::Min)), false) => format!("you are banned from this session ({n} min left): {reason}"),
+        (Some((n, Unit::Hours)), false) => format!("you are banned from this session ({n} h left): {reason}"),
+        (Some((n, Unit::Days)), false) => format!("you are banned from this session ({n} days left): {reason}"),
     }
-    if !reason.is_empty() {
-        s.push_str(": ");
-        s.push_str(reason);
+}
+
+enum Unit {
+    Min,
+    Hours,
+    Days,
+}
+
+fn span_in(secs: u64) -> (u64, Unit) {
+    match secs {
+        0..=5399 => (secs.div_ceil(60).max(1), Unit::Min),
+        5400..=172_799 => (secs.div_ceil(3600), Unit::Hours),
+        _ => (secs.div_ceil(86_400), Unit::Days),
     }
-    s
 }
 
 /// `3 hours`, `2 days`: a time left, roughly.
 pub fn span(secs: u64) -> String {
-    match secs {
-        0..=5399 => format!("{} min", secs.div_ceil(60).max(1)),
-        5400..=172_799 => format!("{} h", secs.div_ceil(3600)),
-        _ => format!("{} days", secs.div_ceil(86_400)),
+    match span_in(secs) {
+        (n, Unit::Min) => format!("{n} min"),
+        (n, Unit::Hours) => format!("{n} h"),
+        (n, Unit::Days) => format!("{n} days"),
     }
 }
 
@@ -48,7 +63,14 @@ pub fn hardware_ban(lan: &mut LanSession, id: u32, scope: Scope, hours: Option<u
     lan.kick(id, &why_text(&ban.reason, until), false);
     let mut seen = 0;
     bans::sync(lan, &mut seen);
-    Ok(format!("{} banned ({}{}), ban {}", if name.is_empty() { format!("player {id}") } else { name }, if scope == Scope::Owner { "all sessions" } else { "this session" }, until.map(|u| format!(", for {}", span(u - now))).unwrap_or_default(), ban.id))
+    let name = if name.is_empty() { format!("player {id}") } else { name };
+    let (scope, ban) = (if scope == Scope::Owner { "all sessions" } else { "this session" }, ban.id);
+    Ok(match until.map(|u| span_in(u - now)) {
+        None => format!("banned {name} ({scope}), ban {ban}"),
+        Some((n, Unit::Min)) => format!("banned {name} ({scope}, {n} min), ban {ban}"),
+        Some((n, Unit::Hours)) => format!("banned {name} ({scope}, {n} h), ban {ban}"),
+        Some((n, Unit::Days)) => format!("banned {name} ({scope}, {n} days), ban {ban}"),
+    })
 }
 
 /// Lift ban `id` of either list.

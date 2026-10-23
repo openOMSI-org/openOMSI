@@ -58,6 +58,9 @@ impl Host for AppHost {
     fn mt_protect(&self, texts: &mut dyn Iterator<Item = &str>) {
         crate::mt::protect(texts);
     }
+    fn tr(&self, text: &str) -> String {
+        omsi_ui::tr(text).into_owned()
+    }
     #[cfg(target_os = "android")]
     fn previous_run_crash(&self) -> Option<(String, String)> {
         crate::android::previous_run_crash()

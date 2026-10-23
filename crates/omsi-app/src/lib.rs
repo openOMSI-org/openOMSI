@@ -160,7 +160,7 @@ mod world_load;
 rust_i18n::i18n!("locales");
 // (the tables are read when this crate compiles: this makes cargo compile it again when they
 // change - the macro alone left the old texts in the program)
-const _LOCALES: &str = include_str!("../locales/app.yml");
+use omsi_launcher_lib::i18n::TABLES as _LOCALES;
 
 /// Show the interface in `code` (the settings' ENG / DEU / FRA / RUS).
 pub(crate) fn ui_language(code: &str) {
@@ -171,6 +171,12 @@ pub(crate) fn ui_language(code: &str) {
     omsi_ui::i18n::set_language(iso);
     omsi_sim::vehicle_api::set_locale(iso);
 }
+
+const MISSING_ORIGINAL: &str = "The original OMSI 2 was not found.\n\n\
+    openOMSI needs a complete installation of the original game (any version). \
+    Choose its folder in the launcher (Setup), or start once with \
+    --root \"/path/to/OMSI 2\", the folder with Omsi.exe, maps and Vehicles in it.\n\n\
+    Missing in {folder}: {missing}";
 
 fn locale_keys(yml: &str) -> impl Iterator<Item = String> + '_ {
     yml.lines().filter_map(|l| l.strip_prefix('"')?.strip_suffix("\":")).filter(|k| k.contains('{')).filter_map(|k| {
@@ -379,19 +385,11 @@ pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option
                 // installation of it there is nothing to play on, and every player must have
                 // the same base whatever copy of OMSI 2 they own
                 let missing = omsi_cfg::missing_original_essentials(&args.root);
-                let text = format!(
-                    "The original OMSI 2 was not found.\n\n\
-                     openOMSI needs a complete installation of the original game (any version). \
-                     Choose its folder in the launcher (Setup), or start once with \
-                     --root \"/path/to/OMSI 2\", the folder with Omsi.exe, maps and Vehicles in it.\n\n\
-                     Missing in {}: {}",
-                    args.root.display(),
-                    missing.join(", ")
-                );
+                let text = omsi_ui::tr(MISSING_ORIGINAL).replace("{folder}", &args.root.display().to_string()).replace("{missing}", &missing.join(", "));
                 if server_cfg.is_some() || args.list_maps {
                     eprintln!("{text}");
                 } else {
-                    fatal_dialog("openOMSI cannot start", &text);
+                    fatal_dialog(&omsi_ui::tr("openOMSI cannot start"), &text);
                 }
                 if cfg!(any(target_os = "android", target_os = "ios")) {
                     // (a phone's app is not ended from inside: back to the launcher)
@@ -735,6 +733,8 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             loading: Default::default(),
             menu_edit: None,
             menu_edit_icao: false,
+            menu_edit_number: false,
+            menu_edit_ident: false,
             menu_edit_search: false,
             menu_search: String::new(),
             swap_pending: false,

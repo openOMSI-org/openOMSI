@@ -1216,18 +1216,10 @@ impl World {
         materials.extend(more.iter().copied());
         // [matl_freetex]: the file is only known at run time (the destination
         // roller builds its path from the map's depot and terminus strings)
-        let free: Vec<FreeTex> = free_texture_defs(&ov_all).into_iter().map(|(item_only, key, var)| FreeTex {
-            var,
-            diffuse: key.eq_ignore_ascii_case(&m.texture),
-            key: tex!(&subst(&key), &dirs_ref),
-            item_only,
-            dirs: dirs.to_vec(),
-            textures: self.textures.clone(),
-            cache: HashMap::new(),
-            current: None,
-            shared: self.vehicle_textures.clone(),
-            held: Vec::new(),
-            wants_upgrade: self.freetex_upgrades.clone(),
+        let free: Vec<FreeTex> = free_texture_defs(&ov_all).into_iter().map(|(item_only, key, var)| {
+            let diffuse = key.eq_ignore_ascii_case(&m.texture);
+            let texture = tex!(&subst(&key), &dirs_ref);
+            self.free_texture_slot(var, texture, diffuse, item_only, dirs)
         }).collect();
         let multi_light = |base: MaterialId, item: MaterialId| -> Option<MultiLight> {
             let list = ov.iter().map(|o| &o.lightmaps).find(|l| !l.is_empty())?;
@@ -1254,6 +1246,31 @@ impl World {
             dyn_slots.push(DynSlot { mesh: instances.len(), slot, text: text_slot, script: script_slot, script_trans, lit: script_slot.is_some_and(|i| vt.model.html_page_lit(i)), tex, alpha, transmap, night, lightmap, envmap, address, extra, color, emissive });
         }
         base
+    }
+
+    /// Cache state and reload ownership shared by free textures in this world.
+    fn free_texture_slot(
+        &self,
+        var: String,
+        key: Option<TextureId>,
+        diffuse: bool,
+        item_only: bool,
+        dirs: &[PathBuf],
+    ) -> FreeTex {
+        FreeTex {
+            reloads: self.freetex_reloads.clone(),
+            var,
+            diffuse,
+            key,
+            item_only,
+            dirs: dirs.to_vec(),
+            textures: self.textures.clone(),
+            cache: HashMap::new(),
+            current: None,
+            shared: self.vehicle_textures.clone(),
+            held: Vec::new(),
+            wants_upgrade: self.freetex_upgrades.clone(),
+        }
     }
 }
 

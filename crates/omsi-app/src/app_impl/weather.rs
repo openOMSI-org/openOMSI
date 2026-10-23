@@ -97,7 +97,7 @@ impl App {
             }
         }
         log::info!("weather: going over to {file:?} ({name})");
-        self.service_msg = Some((format!("Weather: {name}"), 4.0));
+        self.service_msg = Some((omsi_ui::i18n::tr_fill_words("Weather: {name}", &[("{name}", &name)]), 4.0));
     }
 
     /// The weather this frame: a change coming in, and the cycle's next one (`secs` of the
@@ -182,7 +182,7 @@ impl App {
         let (tx,rx)=std::sync::mpsc::channel();
         self.session.metar_rx=Some(rx);
         std::thread::spawn(move||{let _=tx.send(crate::weather_setup::try_metar(&icao));});
-        self.service_msg=Some((format!("Weather: loading METAR for {}",self.metar_station()),4.0));
+        self.service_msg=Some((omsi_ui::i18n::tr_fill("Weather: loading METAR for {station}", &[("{station}", &self.metar_station())]),4.0));
     }
 
     /// Ask the continuous METAR sync to fetch its selected station immediately.
@@ -194,7 +194,7 @@ impl App {
         self.session.metar_rx=None;
         self.session.metar_once=false;
         self.session.metar_next=0.0;
-        self.service_msg=Some((format!("Weather: refreshing METAR for {}",self.metar_station()),4.0));
+        self.service_msg=Some((omsi_ui::i18n::tr_fill("Weather: refreshing METAR for {station}", &[("{station}", &self.metar_station())]),4.0));
     }
 
     /// Freeze the weather currently in force into an editable custom state.
@@ -291,6 +291,6 @@ impl App {
             l.set_weather(&wire);
         }
         log::info!("weather: applying report ({name})");
-        self.service_msg = Some((format!("Weather: {name}"), 4.0));
+        self.service_msg = Some((omsi_ui::i18n::tr_fill_words("Weather: {name}", &[("{name}", &name)]), 4.0));
     }
 }

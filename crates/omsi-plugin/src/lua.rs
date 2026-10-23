@@ -234,7 +234,7 @@ impl LuaPlugin {
         });
         if let Err(e) = r {
             log::warn!("{} {}", self.state.tag, e.msg);
-            io.message(&format!("Lua plugin {}: {}", self.name, e.msg.lines().next().unwrap_or("")), 8.0);
+            io.message(&format!("Lua plugin {} failed: {}", self.name, e.msg.lines().next().unwrap_or("")), 8.0);
             // (what its top level showed before it failed would stay for good)
             self.with_ctx(io, |ctx, _| {
                 runtime::finish(ctx);

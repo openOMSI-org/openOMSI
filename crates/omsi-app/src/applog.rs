@@ -109,7 +109,7 @@ impl App {
         if self.service_msg.as_ref().map(|m| &m.0) != self.perf.log_state.last_msg.as_ref() {
             let msg = self.service_msg.as_ref().map(|m| m.0.clone());
             if msg.is_some() {
-                log::info!("on screen: {}", msg.as_deref().unwrap_or_default());
+                log::info!("on screen: {}", omsi_ui::i18n::english(msg.as_deref().unwrap_or_default()));
             }
             self.perf.log_state.last_msg = msg;
         }

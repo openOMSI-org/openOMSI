@@ -244,8 +244,13 @@ export function weatherFits(w, season) {
   return season !== 'summer' || w.temp >= 8;
 }
 
+const precipText = (p) => {
+  const m = /^(rain|snow) (\d+)%$/.exec(p || '');
+  return m ? (m[1] === 'rain' ? t('rain {n}%', { n: m[2] }) : t('snow {n}%', { n: m[2] })) : t(p || '');
+};
+
 /** What a weather file says about itself, short: "15 °C - rain 68% - 200 m". */
-export const weatherFacts = (w) => `${Math.round(w.temp)} °C - ${w.precip} - ${w.fog_m >= 20000 ? t('clear air') : `${Math.round(w.fog_m)} m`}`;
+export const weatherFacts = (w) => `${Math.round(w.temp)} °C - ${precipText(w.precip)} - ${w.fog_m >= 20000 ? t('clear air') : `${Math.round(w.fog_m)} m`}`;
 
 /** The icon a weather file deserves. */
 export function weatherIcon(w) {

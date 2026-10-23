@@ -23,9 +23,8 @@ pub(crate) struct Hands<'a> {
 /// Set the ropes of the vehicle's poles from the keys; a message when the keys were held out of
 /// reach of any rope.
 pub(crate) fn apply(v: &mut VehicleInstance, h: &Hands) -> Option<&'static str> {
-    let rot = v.body_rotation();
-    let pos = v.position;
-    let rear = v.ty.def.bounding_box.map_or(-5.5, |b| b[4] - b[1].abs() * 0.5);
+    let (pos, rot, bbox) = v.trolley_frame();
+    let rear = bbox.map_or(-5.5, |b| b[4] - b[1].abs() * 0.5);
     let g = v.trolley.as_deref_mut()?;
     if g.rig.poles.is_empty() {
         return None;
@@ -78,8 +77,7 @@ pub(crate) fn apply(v: &mut VehicleInstance, h: &Hands) -> Option<&'static str> 
 /// entries separated by `;`. A raising hand stands a few metres behind the bus and looks at where
 /// the wire should be for the pole's working angle.
 pub(crate) fn scripted(v: &mut VehicleInstance, spec: &str, t: f64) {
-    let rot = v.body_rotation();
-    let pos = v.position;
+    let (pos, rot, _) = v.trolley_frame();
     let Some(g) = v.trolley.as_deref_mut() else { return };
     g.ropes.iter_mut().for_each(|r| *r = RopeCmd::Idle);
     for item in spec.split(';') {

@@ -62,7 +62,7 @@ function SummaryTags({ sum, only, setOnly }) {
   const tag = (label, v, kind = '') => v != null && html`<${Tag} kind=${kind}>${t(label)}: ${v}</${Tag}>`;
   // (a folder's counts are <button>s, not Tags, so they can be reached and pressed with the keyboard)
   const filter = (label, n, on, onClick, title) => html`<button class=${'tag tag-button' + (on ? ' accent' : '')} title=${title} onClick=${onClick}>${label}: ${n}</button>`;
-  const textures = sum.textures != null && html`<${Tag} kind=${sum.textures_missing ? 'danger' : 'ok'}>${t('textures')}: ${sum.textures}${sum.textures_missing ? ` (${sum.textures_missing} ${t('missing')})` : ''}</${Tag}>`;
+  const textures = sum.textures != null && html`<${Tag} kind=${sum.textures_missing ? 'danger' : 'ok'}>${t('textures')}: ${sum.textures}${sum.textures_missing ? ` (${t('{n} missing', { n: sum.textures_missing })})` : ''}</${Tag}>`;
   switch (sum.kind) {
     case 'vehicle':
       return html`${sum.parts?.length > 1 && tag('parts', sum.parts.length, 'accent')}${tag('meshes', sum.meshes)}${tag('materials', sum.materials)}${textures}${tag('paint schemes', sum.paint_schemes)}${tag('script variables', sum.variables)}`;
@@ -98,7 +98,7 @@ function Items({ items, findings, part, setPart, only, setOnly }) {
       const [e, w] = counts(it.file);
       return html`<div class=${'list-item' + (part === of(it.file) ? ' on' : '')} onClick=${() => setPart(part === of(it.file) ? null : of(it.file))}>
         <${Tag} kind=${!it.ok || e ? 'danger' : w ? 'accent' : 'ok'}>${t(it.kind)}</${Tag}>
-        <div class="grow" style="min-width:0"><div class="title" style="word-break:break-word">${it.summary?.name || it.file}</div><div class="sub">${it.file}${e ? ` · ${e} ${t('errors')}` : ''}${w ? ` · ${w} ${t('warnings')}` : ''}</div></div>
+        <div class="grow" style="min-width:0"><div class="title" style="word-break:break-word">${it.summary?.name || it.file}</div><div class="sub">${it.file}${e ? ` · ${t('{n} errors', { n: e })}` : ''}${w ? ` · ${t('{n} warnings', { n: w })}` : ''}</div></div>
       </div>`;
     })}</div>
   </${Card}>`;
@@ -158,7 +158,7 @@ export function ContentTest({ initial } = {}) {
     try {
       setResult(await call('content_check', { path: paths.join('\n'), deep }));
     } catch (e) {
-      toast(e.message, 'error');
+      toast(t(e.message), 'error');
     }
     setBusy(false);
   };
@@ -212,12 +212,12 @@ export function ContentTest({ initial } = {}) {
       ? html`<${Empty} icon=${KIND_ICONS[kind] || 'check'} text="Choose what to check and press Check." />`
       : html`<div class="stack">
         ${result.ok
-          ? html`<${Notice} kind="ok">${t('Loaded without errors: {name}', { name: sum.name || result.file })}${result.warnings ? ` · ${result.warnings} ${t('warnings')}` : ''}</${Notice}>`
+          ? html`<${Notice} kind="ok">${t('Loaded without errors: {name}', { name: sum.name || result.file })}${result.warnings ? ` · ${t('{n} warnings', { n: result.warnings })}` : ''}</${Notice}>`
           : html`<${Notice} kind="danger">${t('It did not load cleanly: {n} errors, {w} warnings', { n: result.errors, w: result.warnings })}</${Notice}>`}
         <${Card} title="Summary">
           <div class="row wrap">
             <${SummaryTags} sum=${sum} only=${only} setOnly=${(value) => { setPart(null); setOnly(value); }} />
-            <span class="muted">${result.seconds?.toFixed(1)} s · ${result.log_lines} ${t('log lines')} · ${result.file}</span>
+            <span class="muted">${result.seconds?.toFixed(1)} s · ${t('{n} log lines', { n: result.log_lines })} · ${result.file}</span>
           </div>
         </${Card}>
         ${allItems.length > 0 && html`<${Items} items=${items} findings=${allFindings} part=${part} setPart=${setPart} only=${only} setOnly=${setOnly} />`}

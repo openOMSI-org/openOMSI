@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""The Swift launcher's string catalog (apple/Resources/Localizable.xcstrings) from the game
+"""The Swift launcher's string catalog (apple/Resources/Localizable.xcstrings) and
+apple/Resources/InfoPlist.xcstrings (the permission prompts of the Info.plists) from the game
 launcher's translations (crates/omsi-app/locales/app.yml): the English text is the key in
 both. Only the texts the Swift sources use are taken. Run after changing either:
 
     python3 apple/Tools/gen-strings.py
 """
+import html
 import json
 import os
 import re
@@ -13,6 +15,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 YML = os.path.join(ROOT, "crates", "omsi-app", "locales", "app.yml")
 OUT = os.path.join(ROOT, "apple", "Resources", "Localizable.xcstrings")
+INFO_OUT = os.path.join(ROOT, "apple", "Resources", "InfoPlist.xcstrings")
 LANGS = os.path.join(ROOT, "crates", "omsi-cfg", "src", "lang.rs")
 PLISTS = [os.path.join(ROOT, "apple", p, "Info.plist") for p in ("iOS", "macOS")]
 
@@ -53,9 +56,9 @@ def swift_texts():
     return texts
 
 
-def write(strings):
+def write(strings, out=OUT):
     rows = [json.dumps(k, ensure_ascii=False) + ": " + json.dumps(v, ensure_ascii=False, separators=(",", ":")) for k, v in strings.items()]
-    with open(OUT, "w", encoding="utf-8") as f:
+    with open(out, "w", encoding="utf-8") as f:
         f.write('{\n  "sourceLanguage": "en",\n  "strings": {\n    ' + ",\n    ".join(rows) + '\n  },\n  "version": "1.0"\n}\n')
 
 
@@ -71,6 +74,18 @@ def write_plists(langs):
         open(path, "w", encoding="utf-8").write(text)
 
 
+def usage_texts():
+    texts = {}
+    for path in PLISTS:
+        for key, text in re.findall(r"<key>(NS\w+UsageDescription)</key>\s*<string>(.*?)</string>", open(path, encoding="utf-8").read(), re.S):
+            texts[key] = html.unescape(text)
+    return texts
+
+
+def localized(tr):
+    return {"localizations": {APPLE.get(l, l): {"stringUnit": {"state": "translated", "value": v}} for l, v in sorted(tr.items())}}
+
+
 def main():
     table = read_yml(YML)
     used = swift_texts()
@@ -79,8 +94,9 @@ def main():
         tr = table.get(text)
         if not tr:
             continue
-        strings[text] = {"localizations": {APPLE.get(l, l): {"stringUnit": {"state": "translated", "value": v}} for l, v in sorted(tr.items())}}
+        strings[text] = localized(tr)
     write(strings)
+    write({k: localized(table[t]) for k, t in sorted(usage_texts().items()) if table.get(t)}, INFO_OUT)
     langs = sorted({l for s in strings.values() for l in s["localizations"]})
     write_plists(["en", *sorted(APPLE.get(l, l) for l in game_languages() if l != "en")])
     print(f"{len(strings)} of {len(used)} texts translated, {len(langs)} languages: {' '.join(langs)}")

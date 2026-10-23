@@ -193,7 +193,7 @@ struct ProfilePage: View {
                                 Text(p.name).font(.inter(22, .semibold))
                                 if !p.exists { Text("(no personnel file yet)").font(.inter(12.5)).foregroundStyle(Theme.muted) }
                             }
-                            Text("Level \(p.level) - \(p.xp) XP, \(max(0, p.next_level_xp - p.xp)) to level \(p.level + 1)").font(.inter(14)).foregroundStyle(Theme.muted)
+                            Text(tr("Level {n}", ["n": "\(p.level)"]) + " - " + tr("{xp} XP, {left} to level {next}", ["xp": "\(p.xp)", "left": "\(max(0, p.next_level_xp - p.xp))", "next": "\(p.level + 1)"])).font(.inter(14)).foregroundStyle(Theme.muted)
                             ProgressBar(value: progress(p)).frame(maxWidth: 420).padding(.top, 6)
                         }
                     }
@@ -227,10 +227,10 @@ struct ProfilePage: View {
                     SelectField(options: store.snapshot.profiles.map { (value: $0, label: $0) }, selection: store.snapshot.config.profile, onChange: { store.act("profile", ["name": $0]) }, placeholder: "Choose a driver")
                     Button { confirmDelete = true } label: { Image(systemName: "trash") }.buttonStyle(.destructive).help("Delete this driver")
                         .disabled(store.snapshot.config.profile.isEmpty)
-                        .confirmationDialog("Delete \(store.snapshot.config.profile)?", isPresented: $confirmDelete) {
+                        .confirmationDialog("Delete this driver?", isPresented: $confirmDelete) {
                             Button("Delete", role: .destructive) { store.act("profile_delete", ["name": store.snapshot.config.profile]) }
                         } message: {
-                            Text("The personnel file of \(store.snapshot.config.profile) is deleted with all its figures.")
+                            Text(tr("The personnel file of {name} is deleted with all its figures.", ["name": store.snapshot.config.profile]))
                         }
                 }
                 HStack(spacing: 8) {
@@ -260,7 +260,7 @@ struct ProfilePage: View {
                             if let l = s.line { LineBadge(line: l) }
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("\(s.bus.stem) - \(mapName(s.map))").font(.inter(14, .medium)).lineLimit(1)
-                                Text("\(ago(s.time)) - \(duration(s.seconds)) - \(String(format: "%.1f", s.metres / 1000)) km - \(s.stops) stops").font(.inter(12.5)).foregroundStyle(Theme.muted).lineLimit(1)
+                                Text("\(ago(s.time)) - \(duration(s.seconds)) - \(String(format: "%.1f", s.metres / 1000)) km - " + tr("{n} stops", ["n": "\(s.stops)"])).font(.inter(12.5)).foregroundStyle(Theme.muted).lineLimit(1)
                             }
                         }
                     }
@@ -375,7 +375,7 @@ struct GamesPage: View {
                                 if let l = i.line { LineBadge(line: l) }
                                 Text("\(i.bus.stem) - \(i.map.replacingOccurrences(of: "/global.cfg", with: "").replacingOccurrences(of: "maps/", with: ""))").font(.inter(15, .semibold)).lineLimit(1)
                             }
-                            Text("process \(i.pid) - \(i.profile) - \(i.lan)").font(.inter(12.5)).foregroundStyle(Theme.muted)
+                            Text(tr("Process {pid}", ["pid": "\(i.pid)"]) + " - \(i.profile) - \(i.lan)").font(.inter(12.5)).foregroundStyle(Theme.muted)
                             if let last = i.last_line, !last.isEmpty {
                                 Text(last).font(.inter(12.5)).foregroundStyle(Theme.muted).lineLimit(1).truncationMode(.tail).help(last)
                             }
@@ -484,7 +484,7 @@ struct ModsPage: View {
     private var install: some View {
         Card("Install a mod") {
             HStack(spacing: 8) {
-                Button { pick(folder: true) } label: { Label("Folder", systemImage: "folder.fill") }.buttonStyle(.launcher(.primary, wide: true))
+                Button { pick(folder: true) } label: { Label("Folder…", systemImage: "folder.fill") }.buttonStyle(.launcher(.primary, wide: true))
                 Button { pick(folder: false) } label: { Label("Archive", systemImage: "archivebox.fill") }.buttonStyle(.launcher(.plain, wide: true))
             }
             Button { choosingHofs = true } label: { Label("Add HOF files to buses", systemImage: "doc.fill") }.buttonStyle(.launcher(.plain, wide: true))

@@ -267,7 +267,7 @@ struct TimetablePage: View {
                             back(String(localized: "Lines")) { tt.level = 0 }
                             ToursCard(line: l, tour: tourIndex) { tt.level = 2 }
                         case (2, .some(let l)) where hasTour:
-                            back("\(String(localized: "Line")) \(l.name)") { tt.level = 1 }
+                            back(tr("Line {name}", ["name": l.name])) { tt.level = 1 }
                             TripsCard(line: l, tour: tourIndex)
                         default:
                             LinesCard(maps: maps) { tt.level = 1 }
@@ -371,10 +371,10 @@ private struct ToursCard: View {
         let until = ttParse(tt.until)
         let base = line.tours.indices.contains(tour) ? line.tours[tour] : nil
         Card {
-            Text("\(String(localized: "Line")) \(line.name)").font(.inter(15, .semibold)).lineLimit(1)
+            Text(tr("Line {name}", ["name": line.name])).font(.inter(15, .semibold)).lineLimit(1)
             VStack(spacing: 0) {
                 ForEach(Array(line.tours.enumerated()), id: \.offset) { i, x in
-                    ListItem(title: "\(String(localized: "Tour")) \(x.number)", subtitle: [x.trips.first.map { ttTime($0.departure) } ?? "", tr("{n} trips", ["n": "\(x.trips.count)"])].filter { !$0.isEmpty }.joined(separator: " - "),
+                    ListItem(title: tr("Tour {n}", ["n": "\(x.number)"]), subtitle: [x.trips.first.map { ttTime($0.departure) } ?? "", tr("{n} trips", ["n": "\(x.trips.count)"])].filter { !$0.isEmpty }.joined(separator: " - "),
                              selected: opened == nil && i == tour) {
                         tt.pickTour(i)
                         opened?()
@@ -453,7 +453,7 @@ private struct TripsCard: View {
         let choices = tt.choices(line)
         Card {
             HStack(spacing: 8) {
-                Text("\(String(localized: "Tour")) \(t.number) - \(t.ai_group)").font(.inter(15, .semibold)).lineLimit(1)
+                Text(tr("Tour {n}", ["n": "\(t.number)"]) + " - \(t.ai_group)").font(.inter(15, .semibold)).lineLimit(1)
                 Spacer(minLength: 8)
                 Button { addTrip(choices) } label: { Label("Add trip", systemImage: "plus") }.buttonStyle(.launcher(.plain, small: true))
                 Button("-1 min") { shift(-1) }.buttonStyle(.launcher(.plain, small: true)).disabled(t.trips.isEmpty)

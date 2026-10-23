@@ -130,7 +130,7 @@ fn axis_rows(d: &DeviceCfg, live: Option<&crate::controllers::Connected>) -> Row
         let function = Func::LABELS[(Func::code(d.axes[a].map(|x| x.0)) + 1) as usize];
         let value = live.and_then(|c| c.axes.iter().find(|(k, _)| *k == a))
             .map(|(_, v)| format!(" | {v:+.2}")).unwrap_or_default();
-        crate::game_lists::opens(&format!("{label}: {function}{value}"),
+        crate::game_lists::opens(&format!("{}: {}{value}", omsi_ui::tr(label), omsi_ui::tr(function)),
             "Choose the function, direction and response curve of this axis", &format!("edit_axis {a}"))
     }).collect()
 }
@@ -148,7 +148,7 @@ fn button_rows(d: &DeviceCfg, names: &crate::describe::ControlNames) -> Rows {
         if action.is_empty() && !d.latching.contains(&b) { continue; }
         let label = if action.is_empty() { "<none>".into() } else { names.control(action) };
         let desc = if d.latching.contains(&b) { "Latching switch | choose its action or behaviour" } else { "Choose its action or switch behaviour" };
-        out.push(crate::game_lists::opens(&format!("{}: {label}", button_label(b)), desc, &format!("button {b}")));
+        out.push(crate::game_lists::opens(&format!("{}: {}", button_label(b), omsi_ui::tr(&label)), desc, &format!("button {b}")));
     }
     if out.len() == 3 {
         out.push((crate::game_lists::row("No buttons assigned", 'i', "", "Press a physical button or choose its number above", None), "noop".into()));
@@ -260,7 +260,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
                 .chain(crate::controllers::HAT_BUTTONS..crate::controllers::HAT_BUTTONS + 16) {
                 let action = d.buttons.get(b).map(|x| x.0.as_str()).unwrap_or("");
                 let value = if action.is_empty() { "Unassigned".into() } else { names.control(action) };
-                out.push((format!("{}: {value}", button_label(b)), format!("button {b}")));
+                out.push((format!("{}: {}", button_label(b), omsi_ui::tr(&value)), format!("button {b}")));
             }
         }
         ListKind::ControllerButtonSettings(name, b) => {
@@ -268,9 +268,9 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
             let action = d.buttons.get(*b).map(|x| x.0.as_str()).unwrap_or("");
             let names = crate::describe::names(&app.args.root, &app.settings.language);
             let value = if action.is_empty() { "Unassigned".into() } else { names.control(action) };
-            out.push(crate::game_lists::opens(&format!("Action: {value}"), "Choose an OMSI event or game action", "choose_action"));
+            out.push(crate::game_lists::opens(&omsi_ui::tr("Action: {value}").replace("{value}", &omsi_ui::tr(&value)), "Choose an OMSI event or game action", "choose_action"));
             for (i, (_, a)) in d.more.iter().enumerate().filter(|(_, (x, _))| x == b) {
-                out.push(crate::game_lists::button(&format!("Also: {}", names.control(a)), "Remove", "The same press does this as well", &format!("unbind_more {i}")));
+                out.push(crate::game_lists::button(&omsi_ui::tr("Also: {}").replace("{}", &omsi_ui::tr(&names.control(a))), "Remove", "The same press does this as well", &format!("unbind_more {i}")));
             }
             if !action.is_empty() {
                 out.push(crate::game_lists::opens("Add another action", "One press does several things: every door at once, a light with its switch", "add_action"));
@@ -286,7 +286,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
         ListKind::ControllerButton(name, b) => {
             let d = index(&devices, name).map(|i| devices[i].clone()).unwrap_or_default();
             out.extend(action_rows(event_names(app, &d)));
-            out.push((format!("Clear {}", button_label(*b)), "bind ".into()));
+            out.push((omsi_ui::tr("Clear {}").replace("{}", &button_label(*b)), "bind ".into()));
             out.push(("Back".into(), "back".into()));
         }
         _ => {}
@@ -297,9 +297,9 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
 pub(crate) fn button_label(b: usize) -> String {
     if b >= crate::controllers::HAT_BUTTONS {
         let h = b - crate::controllers::HAT_BUTTONS;
-        format!("Hat {} {}", h / 4 + 1, ["up", "right", "down", "left"][h % 4])
+        omsi_ui::tr(&format!("Hat {} {}", h / 4 + 1, ["up", "right", "down", "left"][h % 4])).into_owned()
     } else {
-        format!("Button {}", b + 1)
+        omsi_ui::tr("Button {}").replace("{}", &(b + 1).to_string())
     }
 }
 
@@ -323,7 +323,7 @@ fn save(app: &mut App, devices: Vec<DeviceCfg>) {
             app.input.last_ctl_steer = None;
             app.service_msg = Some(("Controller configuration saved and applied".into(), 3.0));
         }
-        Err(e) => app.service_msg = Some((format!("Controller configuration was not saved: {e}"), 6.0)),
+        Err(e) => app.service_msg = Some((format!("Controller configuration was not saved ({e})"), 6.0)),
     }
 }
 
@@ -348,7 +348,7 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str, mv: Move) -> Opt
                         app.input.last_ctl_steer = None;
                         app.service_msg = Some(("Saved controller mappings reloaded".into(), 3.0));
                     }
-                    Err(e) => app.service_msg = Some((format!("Controller mappings were not reloaded: {e}"), 6.0)),
+                    Err(e) => app.service_msg = Some((format!("Controller mappings were not reloaded ({e})"), 6.0)),
                 }
                 kind.clone()
             }
@@ -483,49 +483,55 @@ mod tests {
     use super::*;
     #[test]
     fn controller_menu_steps_clamp_and_wrap() {
-        assert_eq!(step(0, 8, Move::Dec), 0);
-        assert_eq!(step(7, 8, Move::Inc), 7);
-        assert_eq!(step(7, 8, Move::Next), 0);
-        assert_eq!(step(0, 41, Move::To(1.0)), 40);
-        assert_eq!(button_label(0), "Button 1");
-        assert_eq!(button_label(128), "Hat 1 up");
-        assert!(is_controller_list(Some(&ListKind::ControllerCapture("Wheel".into()))));
-        assert!(!is_controller_list(Some(&ListKind::Events)));
+        crate::with_test_language("ENG", || {
+            assert_eq!(step(0, 8, Move::Dec), 0);
+            assert_eq!(step(7, 8, Move::Inc), 7);
+            assert_eq!(step(7, 8, Move::Next), 0);
+            assert_eq!(step(0, 41, Move::To(1.0)), 40);
+            assert_eq!(button_label(0), "Button 1");
+            assert_eq!(button_label(128), "Hat 1 up");
+            assert!(is_controller_list(Some(&ListKind::ControllerCapture("Wheel".into()))));
+            assert!(!is_controller_list(Some(&ListKind::Events)));
+        });
     }
 
     #[test]
     fn axes_overview_keeps_eight_distinct_editors_and_live_readings() {
-        let mut d = DeviceCfg::default();
-        d.axes[0] = Some((Func::Steering, true));
-        d.axes[5] = Some((Func::Brake, false));
-        let live = crate::controllers::Connected {
-            name: "Wheel".into(), hardware_id: None, axes: vec![(0, 0.25)],
-            gamepad: false, ff: false, ff_capable: false, buttons: 0,
-        };
-        let rows = axis_rows(&d, Some(&live));
-        assert_eq!(rows.len(), 8);
-        assert_eq!(rows.iter().map(|r| r.1.as_str()).collect::<Vec<_>>(),
-            ["edit_axis 0", "edit_axis 1", "edit_axis 2", "edit_axis 3", "edit_axis 4", "edit_axis 5", "edit_axis 6", "edit_axis 7"]);
-        assert!(rows[0].0.starts_with("X axis: Steering | +0.25"));
-        assert!(rows[5].0.starts_with("Z rotation: Brake"));
-        assert!(axis_rows(&d, None)[0].0.starts_with("X axis: Steering"));
+        crate::with_test_language("ENG", || {
+            let mut d = DeviceCfg::default();
+            d.axes[0] = Some((Func::Steering, true));
+            d.axes[5] = Some((Func::Brake, false));
+            let live = crate::controllers::Connected {
+                name: "Wheel".into(), hardware_id: None, axes: vec![(0, 0.25)],
+                gamepad: false, ff: false, ff_capable: false, buttons: 0,
+            };
+            let rows = axis_rows(&d, Some(&live));
+            assert_eq!(rows.len(), 8);
+            assert_eq!(rows.iter().map(|r| r.1.as_str()).collect::<Vec<_>>(),
+                ["edit_axis 0", "edit_axis 1", "edit_axis 2", "edit_axis 3", "edit_axis 4", "edit_axis 5", "edit_axis 6", "edit_axis 7"]);
+            assert!(rows[0].0.starts_with("X axis: Steering | +0.25"));
+            assert!(rows[5].0.starts_with("Z rotation: Brake"));
+            assert!(axis_rows(&d, None)[0].0.starts_with("X axis: Steering"));
+        });
     }
 
     #[test]
     fn buttons_overview_hides_empty_slots_without_renumbering_assignments() {
-        let mut d = DeviceCfg::default();
-        d.buttons.resize(144, (String::new(), "0".into()));
-        d.buttons[7].0 = "horn".into();
-        d.buttons[131].0 = "view_look_left".into();
-        d.latching = vec![129];
-        let names = crate::describe::ControlNames::load(std::path::Path::new("."), "ENG");
-        let rows = button_rows(&d, &names);
-        assert_eq!(rows.iter().filter_map(|r| r.1.strip_prefix("button ")).collect::<Vec<_>>(), ["7", "129", "131"]);
-        assert_eq!(rows.len(), 6);
-        assert!(rows[3].0.starts_with("Button 8:"));
-        assert!(rows[4].0.starts_with("Hat 1 right:"));
-        assert!(rows[5].0.starts_with("Hat 1 left:"));
-        assert_eq!(button_rows(&DeviceCfg::default(), &names).len(), 4);
+        crate::with_test_language("ENG", || {
+            let mut d = DeviceCfg::default();
+            d.buttons.resize(144, (String::new(), "0".into()));
+            d.buttons[7].0 = "horn".into();
+            d.buttons[131].0 = "view_look_left".into();
+            d.latching = vec![129];
+            let names = crate::describe::ControlNames::load(std::path::Path::new("."), "ENG");
+            let rows = button_rows(&d, &names);
+            assert_eq!(rows.iter().filter_map(|r| r.1.strip_prefix("button ")).collect::<Vec<_>>(), ["7", "129", "131"]);
+            assert_eq!(rows.len(), 6);
+            assert!(rows[3].0.starts_with("Button 8:"));
+            assert!(rows[4].0.starts_with("Hat 1 right:"));
+            assert!(rows[5].0.starts_with("Hat 1 left:"));
+            assert_eq!(button_rows(&DeviceCfg::default(), &names).len(), 4);
+        });
     }
 
     #[test]

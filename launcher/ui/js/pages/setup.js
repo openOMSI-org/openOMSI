@@ -29,7 +29,7 @@ export function SetupPage() {
       else toast(r.root_error || t('This is not a complete OMSI 2 installation.'), 'error');
       if (r.root) loadContent();
     } catch (e) {
-      toast(e.message, 'error');
+      toast(t(e.message), 'error');
     }
     setBusy(false);
   };

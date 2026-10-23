@@ -8,7 +8,7 @@ pub fn custom_weather(choice: &str) -> Result<CustomWeather> {
         return Ok(c);
     }
     if !choice.to_ascii_lowercase().ends_with(".owt") {
-        return Err(anyhow!("{choice} is no weather file"));
+        return Err(anyhow!(crate::i18n::trf("{choice} is no weather file", &[("choice", &choice)])));
     }
     let w = omsi_content::weather::Weather::load(&content_path(choice)?).with_context(|| format!("reading {choice}"))?;
     Ok(CustomWeather::from_weather(&w, 1.0, (w.ground_wet[0] / 255.0).clamp(0.0, 1.0)))

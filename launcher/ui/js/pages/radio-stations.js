@@ -1,6 +1,7 @@
 import { html, useState, useEffect, useRef } from '../../vendor/preact-htm.js';
 import { toast } from '../store.js';
 import { call } from '../api.js';
+import { t } from '../i18n.js';
 import { Button, Input } from '../ui.js';
 
 let saving = Promise.resolve();
@@ -14,7 +15,7 @@ export function RadioStations() {
     const l = pending.current;
     pending.current = null;
     if (!l) return;
-    saving = saving.then(() => call('radio_stations_save', { list: l }).catch((e) => toast(e.message, 'error')));
+    saving = saving.then(() => call('radio_stations_save', { list: l }).catch((e) => toast(t(e.message), 'error')));
   };
   useEffect(() => {
     let gone = false;
@@ -23,7 +24,7 @@ export function RadioStations() {
       .then((l) => !gone && setList(Array.isArray(l) ? l : []))
       .catch((e) => {
         if (!gone) setList([]);
-        toast(e.message, 'error');
+        toast(t(e.message), 'error');
       });
     window.addEventListener('pagehide', flush);
     return () => {

@@ -260,10 +260,9 @@ impl TrolleyView {
                 renderer.set_transform(scene, f.tongue, f.pos + DVec3::Z * 0.2, Mat4::from_cols(x.extend(0.0), y.extend(0.0), z.extend(0.0), glam::Vec4::W));
             }
         }
-        let rot = vehicle.body_rotation();
-        let pos = vehicle.position;
-        let rear = vehicle.ty.def.bounding_box.map_or(-5.5, |b| b[4] - b[1].abs() * 0.5);
-        let legacy = vehicle.ty.def.trolley.legacy.is_some();
+        let (pos, rot, bbox) = vehicle.trolley_frame();
+        let rear = bbox.map_or(-5.5, |b| b[4] - b[1].abs() * 0.5);
+        let legacy = vehicle.trolley.as_deref().is_some_and(|g| g.rig.def.legacy.is_some());
         let sparks = {
             let Some(g) = vehicle.trolley.as_deref_mut() else { return };
             for (k, p) in g.rig.poles.iter().enumerate() {

@@ -595,11 +595,11 @@ pub fn forget() {
 
 pub fn restore() -> Result<Value> {
     if running() {
-        return Err(anyhow!("Close the game first: it is optimising the settings."));
+        return Err(anyhow!(crate::i18n::tr("Close the game first: it is optimising the settings.")));
     }
     let mut settings = get_settings()?;
     if !restore_into(&mut settings) {
-        return Err(anyhow!("No settings were saved before an optimisation."));
+        return Err(anyhow!(crate::i18n::tr("No settings were saved before an optimisation.")));
     }
     save_settings(&settings)?;
     forget();

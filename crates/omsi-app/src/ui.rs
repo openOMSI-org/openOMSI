@@ -637,8 +637,7 @@ impl Ui {
                 let ty = by + (bh - l.h as f32) * 0.5;
                 scene.overlays.push((l.tex, [x0 + 2.0 * s, ty, x0 + 2.0 * s + l.w as f32, ty + l.h as f32]));
                 if self.chat.scroll > 0 && (open || self.chat.hovered) {
-                    // (the words translated apart from the number: whole, the text was no key)
-                    let m = self.text.label(r, scene, &format!("{} {}", self.chat.scroll, omsi_ui::tr("newer below")), (11.0 * s) as u32, [200, 200, 200, 200]);
+                    let m = self.text.label(r, scene, &omsi_ui::tr("{n} newer below").replace("{n}", &self.chat.scroll.to_string()), (11.0 * s) as u32, [200, 200, 200, 200]);
                     scene.overlays.push((m.tex, [x0 + width - m.w as f32, by - m.h as f32, x0 + width, by]));
                 }
             }
@@ -867,7 +866,7 @@ impl Ui {
         let hy = top + head_h + th_h * 0.5;
         let col_exp = x + w - pad;
         let col_dep = if roomy { col_exp - exp_w } else { col_exp };
-        let heads = [(omsi_ui::tr("Arrives"), col_arr, false), (omsi_ui::tr("Stop"), col_stop, false), (omsi_ui::tr("Departs"), col_dep, true), (omsi_ui::tr("Expected"), col_exp, true)];
+        let heads = [(omsi_ui::tr("Arrives"), col_arr, false), (omsi_ui::tr("Bus stop"), col_stop, false), (omsi_ui::tr("Departs"), col_dep, true), (omsi_ui::tr("Expected"), col_exp, true)];
         for (txt, at, right) in heads.into_iter().take(if roomy { 4 } else { 3 }) {
             let l = self.text.label_op(r, scene, &txt, hpx, muted, 1.0);
             let lx = if right { at - l.w as f32 } else { at };

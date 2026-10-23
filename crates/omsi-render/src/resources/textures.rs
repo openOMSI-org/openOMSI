@@ -911,6 +911,76 @@ impl Renderer {
         scene.textures[id] = self.upload_texture_data(data);
     }
 
+    /// Refresh a changed file in its existing slot. Reuse the GPU allocation and all
+    /// material bind groups when format, dimensions and mip count have not changed.
+    /// Returns true only when callers must rebind materials to a replacement texture.
+    /// File decoding, compression and fitting to the device limit happen on a worker.
+    pub fn refresh_texture(
+        &self,
+        scene: &mut Scene,
+        id: TextureId,
+        data: &omsi_texture::TextureData,
+    ) -> bool {
+        let Some(old) = scene.textures.get(id) else {
+            return false;
+        };
+        use omsi_texture::PixelFormat;
+        let format = match data.format {
+            PixelFormat::Rgba8 => wgpu::TextureFormat::Rgba8UnormSrgb,
+            PixelFormat::Bc1 => wgpu::TextureFormat::Bc1RgbaUnormSrgb,
+            PixelFormat::Bc2 => wgpu::TextureFormat::Bc2RgbaUnormSrgb,
+            PixelFormat::Bc3 => wgpu::TextureFormat::Bc3RgbaUnormSrgb,
+            PixelFormat::Bc7 => wgpu::TextureFormat::Bc7RgbaUnormSrgb,
+        };
+        let generate = data.format == PixelFormat::Rgba8
+            && data.levels.len() == 1
+            && data.gpu_mips
+            && data.width > 1
+            && data.height > 1;
+        let levels = if generate {
+            (32 - data.width.max(data.height).leading_zeros()).max(1)
+        } else {
+            data.levels.len() as u32
+        };
+        if old.bytes == 0
+            || old.size != (data.width, data.height)
+            || old.texture.format() != format
+            || old.texture.mip_level_count() != levels
+        {
+            self.replace_texture(scene, id, data);
+            return true;
+        }
+        let (bw, bh) = format.block_dimensions();
+        let block = format.block_copy_size(None).unwrap_or(4);
+        for (level, bytes) in data.levels.iter().enumerate() {
+            let width = (data.width >> level).max(1).div_ceil(bw) * bw;
+            let height = (data.height >> level).max(1).div_ceil(bh) * bh;
+            self.queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &old.texture,
+                    mip_level: level as u32,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                bytes,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(width / bw * block),
+                    rows_per_image: Some(height / bh),
+                },
+                wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+            );
+        }
+        if generate && levels > 1 {
+            self.generate_mip_chain(&old.texture, levels, MipAverage::ByCoverage);
+        }
+        false
+    }
+
     /// Mip levels and size of a texture: (width, height, levels).
     pub fn texture_levels(&self, scene: &Scene, id: TextureId) -> Option<(u32, u32, u32)> {
         let t = scene.textures.get(id)?;

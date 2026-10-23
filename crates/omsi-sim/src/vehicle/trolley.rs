@@ -8,6 +8,8 @@ use omsi_trolley::{RigInput, RopeCmd, TrolleyDef, TrolleyRig, WireNet};
 
 pub struct TrolleyGear {
     pub rig: TrolleyRig,
+    def: Arc<TrolleyDef>,
+    pub carrier: Option<usize>,
     /// The overhead wire of the map the vehicle is on.
     pub net: Option<Arc<WireNet>>,
     /// What each pole's rope is doing (set by whoever handles the poles).
@@ -70,6 +72,8 @@ impl TrolleyGear {
         rig.verbose = omsi_cfg::flags::OMSI_DEBUG_TROLLEY.is_set();
         Some(Box::new(TrolleyGear {
             rig,
+            def: Arc::new(def.clone()),
+            carrier: None,
             net: None,
             auto_raise_for: 0.0,
             ropes: vec![RopeCmd::Idle; def.poles.len()],
@@ -111,6 +115,25 @@ impl VehicleInstance {
         }
     }
 
+    pub fn trolley_frame(&self) -> (glam::DVec3, glam::Mat4, Option<[f32; 6]>) {
+        match self.trolley.as_ref().and_then(|g| g.carrier).and_then(|k| self.trailers.get(k)) {
+            Some(t) => (t.position, t.body_rotation(), t.ty.def.bounding_box),
+            None => (self.position, self.body_rotation(), self.ty.def.bounding_box),
+        }
+    }
+
+    pub(super) fn adopt_trailer_trolley(&mut self, ty: &VehicleType, carrier: usize) -> bool {
+        if self.trolley.is_some() || ty.def.trolley.poles.is_empty() {
+            return false;
+        }
+        self.trolley = TrolleyGear::for_type(&ty.def.trolley, carrier as u64 ^ 0x7f4a_7c15);
+        if let Some(g) = self.trolley.as_mut() {
+            g.carrier = Some(carrier);
+        }
+        self.declare_trolley_vars();
+        true
+    }
+
     /// The driven wheels' radius (m).
     fn driven_radius(&self) -> f32 {
         let a = self.ty.def.axles.iter().find(|a| a.driven).or(self.ty.def.axles.first());
@@ -122,9 +145,9 @@ impl VehicleInstance {
         if self.trolley.is_none() {
             return;
         }
-        let m = self.body_rotation();
+        let (pos, m, _) = self.trolley_frame();
         let rot = glam::DMat3::from_cols(m.x_axis.truncate().as_dvec3(), m.y_axis.truncate().as_dvec3(), m.z_axis.truncate().as_dvec3());
-        let def = &self.ty.def.trolley;
+        let def = self.trolley.as_ref().unwrap().def.clone();
         let dir = self.var(&def.vars.direction).map_or(1.0, |d| if d > 0.5 { 1.0 } else if d < -0.5 { -1.0 } else { 0.0 });
         let blinker = {
             let l = self.var(&def.vars.indicator_left).is_some_and(|v| v > 0.5);
@@ -146,7 +169,7 @@ impl VehicleInstance {
         let script_force = (self.get(self.v_m_wheel) / self.driven_radius().max(0.1)).max(0.0);
         let radius = self.driven_radius();
         let c = self.physics.controls;
-        let (pos, speed, accel) = (self.position, self.physics.speed, self.physics.a_trans);
+        let (speed, accel) = (self.physics.speed, self.physics.a_trans);
         let has_drive = def.drive.is_some();
         let g = self.trolley.as_mut().unwrap();
         // the cab's switch: motorised poles go up (+) or down (-)

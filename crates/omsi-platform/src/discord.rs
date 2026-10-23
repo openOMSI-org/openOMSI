@@ -1,5 +1,6 @@
 //! Discord Rich Presence over the local Discord IPC connection.
 
+use omsi_launcher_lib::i18n::{tr, trf};
 use std::io::{self, Read, Write};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -48,18 +49,18 @@ impl Presence {
             (if short.is_empty() { full } else { short }, full)
         });
         let details = match duty {
-            Some((line, _)) => format!("{} | Line {}", compact(map, 24), line.trim()),
+            Some((line, _)) => format!("{} | {}", compact(map, 24), trf("Line {line}", &[("line", &line.trim())])),
             None => compact(map, 24),
         };
         let mut state = match (bus, duty) {
             (Some((short, _)), Some((_, tour))) => {
-                format!("{} | Tour {}", compact(short, 16), tour.trim())
+                format!("{} | {}", compact(short, 16), trf("Tour {tour}", &[("tour", &tour.trim())]))
             }
-            (Some((short, _)), None) => format!("{} | Free drive", compact(short, 16)),
-            (None, _) => "On foot".to_string(),
+            (Some((short, _)), None) => format!("{} | {}", compact(short, 16), tr("Free drive")),
+            (None, _) => tr("On foot"),
         };
         if multiplayer {
-            state.push_str(" | Multiplayer");
+            state.push_str(&format!(" | {}", tr("Multiplayer")));
         }
         let large_text = match bus {
             Some((_, full)) => format!("openOMSI | {map} | {full}"),
@@ -74,8 +75,8 @@ impl Presence {
 
     pub fn for_launcher(enabled: bool, launching: bool, game_running: bool) -> Option<Self> {
         (enabled && !launching && !game_running).then(|| Self {
-            details: "In launcher".into(),
-            state: "Preparing a drive".into(),
+            details: tr("In launcher"),
+            state: tr("Preparing a drive"),
             large_text: "openOMSI".into(),
         })
     }
@@ -641,6 +642,7 @@ mod tests {
 
     #[test]
     fn presence_requires_a_map_and_describes_session() {
+        omsi_launcher_lib::i18n::pin_language("ENG");
         assert_eq!(
             Presence::for_game(None, Some(("Bus", "Bus")), None, false),
             None
@@ -716,6 +718,7 @@ mod tests {
 
     #[test]
     fn local_discord_peer_handles_ready_asset_failure_ping_and_reconnect() {
+        omsi_launcher_lib::i18n::pin_language("ENG");
         use std::collections::VecDeque;
 
         let (client_one, mut peer_one) = pair();
@@ -808,6 +811,7 @@ mod tests {
 
     #[test]
     fn unanswered_activity_times_out_and_reconnects() {
+        omsi_launcher_lib::i18n::pin_language("ENG");
         use std::sync::atomic::AtomicUsize;
 
         let (client, mut peer) = pair();
@@ -864,6 +868,7 @@ mod tests {
 
     #[test]
     fn launcher_yields_to_games_and_respects_the_switch() {
+        omsi_launcher_lib::i18n::pin_language("ENG");
         let idle = Presence::for_launcher(true, false, false).unwrap();
         assert_eq!(idle.details, "In launcher");
         assert_eq!(Presence::for_launcher(false, false, false), None);
@@ -906,6 +911,7 @@ mod tests {
 
     #[test]
     fn short_bus_label_preserves_full_name_in_tooltip() {
+        omsi_launcher_lib::i18n::pin_language("ENG");
         let presence = Presence::for_game(
             Some("Grundorf"),
             Some((
@@ -926,6 +932,7 @@ mod tests {
 
     #[test]
     fn a_driven_bus_with_an_empty_type_uses_its_full_name() {
+        omsi_launcher_lib::i18n::pin_language("ENG");
         for short in ["", "   "] {
             let free =
                 Presence::for_game(Some("Grundorf"), Some((short, "MAN NL202")), None, false)

@@ -295,7 +295,7 @@ impl Line {
                 return std::fs::write(path, bytes);
             }
         }
-        Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("line {}: its texts fit in no code page the map's timetable is written in", self.name)))
+        Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "its texts fit in no code page the map's timetable is written in"))
     }
 }
 

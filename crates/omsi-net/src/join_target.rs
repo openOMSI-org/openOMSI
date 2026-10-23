@@ -51,7 +51,7 @@ pub fn describe_join(text: &str) -> Result<String, String> {
             Ok(p) if (1..=65535).contains(&p) => {
                 Ok(format!("a session hosted on this computer, port {p}"))
             }
-            _ => Err(format!("{t} is not a port (1 to 65535)")),
+            _ => Err(format!("the number {t} is not a port (1 to 65535)")),
         };
     }
     if let Ok(a) = t.parse::<SocketAddr>() {
@@ -86,7 +86,7 @@ pub fn describe_join(text: &str) -> Result<String, String> {
     {
         return Ok(format!("the computer named {host}, port {port}"));
     }
-    Err(format!("'{t}' is neither a session code (OMSI-XXXX-…), an address (192.168.1.20 or 192.168.1.20:27015), a port, nor empty (search)"))
+    Err(format!("the entry '{t}' is neither a session code (OMSI-XXXX-…), an address (192.168.1.20 or 192.168.1.20:27015), a port, nor empty (search)"))
 }
 
 /// Read what a player typed into the join field: a session code, `ip`, `ip:port`,
@@ -115,7 +115,7 @@ pub fn parse_join(text: &str) -> Result<JoinTarget, String> {
                 session: None,
                 protocol: None,
             }),
-            _ => Err(format!("{t} is not a port (1 to 65535)")),
+            _ => Err(format!("the number {t} is not a port (1 to 65535)")),
         };
     }
     if let Ok(a) = t.parse::<SocketAddr>() {
@@ -138,7 +138,7 @@ pub fn parse_join(text: &str) -> Result<JoinTarget, String> {
             Ok(p) if p > 0 => (h, p),
             _ => {
                 return Err(format!(
-                    "'{t}': the part after ':' must be a port (1 to 65535)"
+                    "the entry '{t}': the part after ':' must be a port (1 to 65535)"
                 ))
             }
         },
@@ -149,13 +149,13 @@ pub fn parse_join(text: &str) -> Result<JoinTarget, String> {
         || host.contains(char::is_whitespace)
         || host.bytes().all(|b| b.is_ascii_digit() || b == b'.')
     {
-        return Err(format!("'{t}' is neither a session code (OMSI-…), an address (192.168.1.20 or 192.168.1.20:27015) nor a port"));
+        return Err(format!("the entry '{t}' is neither a session code (OMSI-…), an address (192.168.1.20 or 192.168.1.20:27015) nor a port"));
     }
     match (host, port).to_socket_addrs() {
         Ok(mut it) => match it.find(|a| a.is_ipv4()) {
             Some(a) => Ok(JoinTarget::Direct { addrs: vec![a], session: None, protocol: None }),
-            None => Err(format!("{host} has no IPv4 address")),
+            None => Err(format!("the computer {host} has no IPv4 address")),
         },
-        Err(e) => Err(format!("'{t}' is neither a session code (OMSI-…), an address nor a port, and no computer of that name was found ({e})")),
+        Err(e) => Err(format!("the entry '{t}' is neither a session code (OMSI-…), an address nor a port, and no computer of that name was found ({e})")),
     }
 }

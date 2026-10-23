@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 #[derive(Default)]
 pub struct Game {
+    pub hof: Option<api::Value>,
     pub vehicle: bool,
     pub vars: HashMap<String, f32>,
     pub strings: HashMap<String, String>,
@@ -71,6 +72,17 @@ impl Game {
 }
 
 impl PluginIo for Game {
+    fn hof_data(&self) -> Option<api::Value> {
+        self.vehicle.then(|| self.hof.clone()).flatten()
+    }
+    fn hof_terminus(&self, identifier: &str) -> Option<api::Value> {
+        let data = self.hof_data()?;
+        data.get("termini")?.items().iter().find(|t| t.get("identifier") == Some(&identifier.into())).cloned()
+    }
+    fn hof_busstop(&self, identifier: &str) -> Option<api::Value> {
+        let data = self.hof_data()?;
+        data.get("bus_stops")?.items().iter().find(|t| t.get("identifier") == Some(&identifier.into())).cloned()
+    }
     fn system(&mut self, name: &str) -> Option<f32> {
         match name {
             "Time" => Some(self.clock.time as f32),

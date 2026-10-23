@@ -134,7 +134,7 @@ impl App {
         if let Some((msg, left)) = self.service_msg.as_mut() {
             *left -= dt;
             if *left > 0.0 {
-                let kind = message_kind(msg);
+                let kind = message_kind(&omsi_ui::i18n::english(msg));
                 say(format!("message {msg}"), msg.clone(), kind);
             }
         }
@@ -170,7 +170,7 @@ impl App {
             if let Some(hint) = h.hint() {
                 say(hint.clone(), hint, NoticeKind::Action);
             } else if let Some((name, value)) = &h.request {
-                let t = format!("Passenger wants: {name}  {value:.2}");
+                let t = omsi_ui::tr("Passenger wants: {name}  {value:.2}").replace("{name}", name).replace("{value:.2}", &format!("{value:.2}"));
                 say(t.clone(), t, NoticeKind::Action);
             }
             if let Some((paid, value)) = h.paid {
@@ -178,7 +178,7 @@ impl App {
                 say(t.clone(), t, NoticeKind::Info);
             }
             if let Some(owed) = h.change_due {
-                let t = format!("Change due: {owed:.2}");
+                let t = omsi_ui::tr("Change due: {owed:.2}").replace("{owed:.2}", &format!("{owed:.2}"));
                 say(t.clone(), t, NoticeKind::Action);
             }
         }

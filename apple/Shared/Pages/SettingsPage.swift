@@ -445,7 +445,7 @@ struct SettingsPage: View {
             HStack {
                 Button("Export diagnostics") {
                     if let path = (try? JSONSerialization.jsonObject(with: Bridge.call("act", ["do": "diagnostics"]), options: [.fragmentsAllowed])) as? String {
-                        store.say(String(localized: "Support package saved: \(path)"), error: false)
+                        store.say(tr("Support package saved: {path}", ["path": path]), error: false)
                         Platform.reveal(path)
                     }
                 }
