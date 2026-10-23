@@ -1016,9 +1016,12 @@ fn diagonal_constraint_grid_visits_are_linear_and_include_shared_boundaries() {
     assert_eq!(diagonal, reversed);
     let horizontal = cover(DVec2::new(0.0, 150.0), DVec2::new(300.0, 150.0));
     let vertical = cover(DVec2::new(150.0, 0.0), DVec2::new(150.0, 300.0));
+    // Every segment sharing the grid corner must be compared in its floor cell.
+    assert!(horizontal.contains(&(64 * 128 + 64)));
+    assert!(vertical.contains(&(64 * 128 + 64)));
+    assert_eq!(horizontal.len(), 128);
+    assert_eq!(vertical.len(), 128);
     for cell in [63 * 128 + 63, 63 * 128 + 64, 64 * 128 + 63, 64 * 128 + 64] {
         assert!(diagonal.contains(&cell));
-        assert!(horizontal.contains(&cell));
-        assert!(vertical.contains(&cell));
     }
 }

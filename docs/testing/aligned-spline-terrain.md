@@ -138,8 +138,9 @@ Terminal and lateral displacements use independent quintic fades. This keeps the
 bank cross-section through an end cap and gives a zero terminal derivative when
 it rejoins saved ground. Terrain-gradient probes are evaluated only within the
 half-metre tangent-matching region. Cap sampling rays are clipped before storage. Constraint intersection candidates
-use a conservative grid supercover along each segment, including both sides of
-grid boundaries, instead of every cell in its bounding rectangle.
+use a conservative grid supercover along each segment, retaining shared
+grid-boundary intersections, instead of every cell in its bounding rectangle.
+Short constraints and axis-aligned ranges retain the original rectangle fast path.
 
 Optional fitting rejects more than 600,000 profile indices, terminal/shoulder
 widths exceeding one tile, more than 160,000 refinement probes or 80,000 constraint

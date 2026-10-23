@@ -143,6 +143,13 @@ pub(super) fn covered_bins([a, b]: [DVec2; 2], side: f64, bins: usize) -> Vec<us
     let cell = side / bins as f64;
     let d = b - a;
     let index = |v: f64| (v / cell).floor().clamp(0.0, (bins - 1) as f64) as usize;
+    // The original rectangle is already optimal for grid edges and short
+    // constraints. Avoid extra boundary halos and per-column arithmetic there.
+    let (x0, x1) = (index(a.x.min(b.x)), index(a.x.max(b.x)));
+    let (y0, y1) = (index(a.y.min(b.y)), index(a.y.max(b.y)));
+    if x0 == x1 || y0 == y1 || (x1 - x0 + 1) * (y1 - y0 + 1) <= 8 {
+        return (x0..=x1).flat_map(|x| (y0..=y1).map(move |y| y * bins + x)).collect();
+    }
     let epsilon = 1e-8;
     let x0 = index(a.x.min(b.x) - epsilon);
     let x1 = index(a.x.max(b.x) + epsilon);
