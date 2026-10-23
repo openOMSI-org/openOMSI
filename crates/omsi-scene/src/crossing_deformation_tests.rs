@@ -66,7 +66,6 @@ fn staged(path: PathBuf, ot: Arc<ObjectType>, pose: Pose) -> StagedTile {
         path,
         base_terrain: Terrain::flat(),
         align: Vec::new(),
-        hole_rims: Vec::new(),
         water: None,
         bakes_light_map: false,
         splines: Vec::new(),
@@ -90,6 +89,145 @@ fn staged(path: PathBuf, ot: Arc<ObjectType>, pose: Pose) -> StagedTile {
         anchors: Vec::new(),
         counts: LoadStats::default(),
         resolved: std::sync::OnceLock::new(),
+    }
+}
+
+#[test]
+fn aligned_ditch_preparation_keeps_a_solid_floor_without_an_alpha_hole() {
+    let fixture = Fixture::new();
+    fixture.write(
+        "global.cfg",
+        "[name]\nAligned ditch\n[map]\n0\n0\ntile_0_0.map\n",
+    );
+    fixture.write("ditch.sli", "[heightprofile]\n2.92\n5.35\n0.10\n0.04\n[texture]\ngras1.bmp\n[profile]\n0\n[profilepnt]\n2.92\n0.10\n0.7\n0.167\n[profilepnt]\n4.23\n-0.47\n0.7\n0.167\n[profilepnt]\n5.35\n0.04\n0.2\n0.167\n");
+    for flag in [
+        "[spline_terrain_align]".to_string(),
+        "[spline_terrain_align_2]\n4".to_string(),
+    ] {
+        fixture.write("tile_0_0.map", &format!("[version]\n14\n[spline]\n0\nditch.sli\n1\n0\n0\n40\n0\n40\n0\n20\n0\n0\n0\n0\n0\n0\n0\n0\n\n{flag}\n"));
+        let world = World::open(&fixture.0, &fixture.0.join("global.cfg"), 20261001).unwrap();
+        let (prepared, _) = world.prepare_tiles(&[(0, 0, fixture.0.join("tile_0_0.map"))]);
+        assert_eq!(prepared.len(), 1);
+        let p = &prepared[0];
+        assert!(
+            !p.splines.is_empty(),
+            "the fixture spline must actually be loaded"
+        );
+        assert!(
+            p.cut.is_none(),
+            "an aligned ditch must not punch a raster hole in its solid backing"
+        );
+        assert!(
+            p.hole_walls.is_empty(),
+            "the shoulders are ground geometry, not vertical walls"
+        );
+        let terrain = p.terrain.as_ref().unwrap();
+        assert!(field_height(terrain, 44.23, 50.0).unwrap() < -0.47);
+        for y in [39.5, 39.75, 40.0, 50.0, 60.0, 60.25, 60.5] {
+            assert!(
+                field_height(terrain, 44.23, y).is_some(),
+                "the extended end cannot expose the sky"
+            );
+        }
+    }
+}
+
+#[test]
+fn aligned_ditch_shoulder_does_not_cover_the_adjacent_road() {
+    check_adjacent_asphalt(true);
+}
+
+#[test]
+fn aligned_ditch_shoulder_respects_asphalt_without_vehicle_paths() {
+    check_adjacent_asphalt(false);
+}
+
+fn check_adjacent_asphalt(has_vehicle_paths: bool) {
+    let fixture = Fixture::new();
+    fixture.write(
+        "global.cfg",
+        "[name]\nDitch next to road\n[map]\n0\n0\ntile_0_0.map\n",
+    );
+    fixture.write("ditch.sli", "[heightprofile]\n2.92\n5.35\n0.10\n0.04\n[texture]\ngras1.bmp\n[profile]\n0\n[profilepnt]\n2.92\n0.10\n0.7\n0.167\n[profilepnt]\n4.23\n-0.47\n0.7\n0.167\n[profilepnt]\n5.35\n0.04\n0.2\n0.167\n");
+    let mut asphalt = "[heightprofile]\n-3\n2.92\n0\n0\n[texture]\nasphalt.bmp\n[profile]\n0\n[profilepnt]\n-3\n0\n0\n1\n[profilepnt]\n2.92\n0\n1\n1\n".to_string();
+    if has_vehicle_paths {
+        asphalt.push_str("[path]\n0\n0\n0\n3\n0\n");
+    }
+    fixture.write("road.sli", &asphalt);
+    let mut tile = "[version]\n14\n".to_string();
+    for (id, file, z, flag) in [
+        (1, "ditch.sli", 0.18, "[spline_terrain_align_2]\n4\n"),
+        (2, "road.sli", 0.03, ""),
+    ] {
+        tile.push_str(&format!("[spline]\n0\n{file}\n{id}\n0\n0\n40\n{z}\n40\n0\n20\n0\n0\n0\n0\n0\n0\n0\n0\n\n{flag}\n"));
+    }
+    fixture.write("tile_0_0.map", &tile);
+    let world = World::open(&fixture.0, &fixture.0.join("global.cfg"), 20261001).unwrap();
+    let (prepared, _) = world.prepare_tiles(&[(0, 0, fixture.0.join("tile_0_0.map"))]);
+    assert_eq!(prepared.len(), 1);
+    let p = &prepared[0];
+    assert!(
+        p.cut.is_none(),
+        "road protection must not create an alpha hole"
+    );
+    let terrain = p.terrain.as_ref().unwrap();
+    for y in [40.1, 45.0, 50.0, 55.0, 59.9] {
+        for x in [41.0, 42.0, 42.8, 42.91] {
+            assert!(
+                field_height(terrain, x, y).unwrap() <= 0.028,
+                "the real road surface at 3 cm must remain visible at {x}, {y}"
+            );
+        }
+    }
+    assert!(
+        field_height(terrain, 44.23, 50.0).unwrap() < -0.29,
+        "the ditch floor must remain underneath its graphical profile"
+    );
+}
+
+#[test]
+fn streaming_overlapping_ditches_at_negative_tiles_keeps_the_entire_batch() {
+    let fixture = Fixture::new();
+    let keys = [(-28, 6), (-29, 6), (-28, 7)];
+    let mut global = "[name]\nStreaming ditch regression\n".to_string();
+    let mut tiles = Vec::new();
+    for (tx, ty) in keys {
+        let name = format!("tile_{tx}_{ty}.map");
+        global.push_str(&format!("[map]\n{tx}\n{ty}\n{name}\n"));
+        let mut tile = "[version]\n14\n".to_string();
+        for (i, heading, dx, dy) in [
+            (1, 7.123, 0.0, 0.0),
+            (2, 7.123, 0.00000317, -0.00000197),
+            (3, 24.25, 0.0, 0.0),
+        ] {
+            tile.push_str(&format!("[spline]\n0\nditch.sli\n{i}\n0\n0\n{}\n0\n{}\n{heading}\n20\n31.319\n0\n0\n0\n0\n0\n0\n0\nmirror\n\n[spline_terrain_align]\n", 39.731 + dx, 40.127 + dy));
+        }
+        fixture.write(&name, &tile);
+        assert_eq!(
+            omsi_map::Tile::load(&fixture.0.join(&name))
+                .unwrap()
+                .splines
+                .len(),
+            3
+        );
+        tiles.push((tx, ty, fixture.0.join(name)));
+    }
+    fixture.write("global.cfg", &global);
+    fixture.write("ditch.sli", "[heightprofile]\n2.92\n5.35\n0.10\n0.04\n[texture]\ngras1.bmp\n[profile]\n0\n[profilepnt]\n2.92\n0.10\n0.7\n0.167\n[profilepnt]\n4.23\n-0.47\n0.7\n0.167\n[profilepnt]\n5.35\n0.04\n0.2\n0.167\n");
+    let world = World::open(&fixture.0, &fixture.0.join("global.cfg"), 20261001).unwrap();
+    let (prepared, _) = world.prepare_tiles(&tiles);
+    assert_eq!(
+        prepared.len(),
+        tiles.len(),
+        "no tile in the streaming batch may be discarded"
+    );
+    for p in prepared {
+        assert!(
+            !p.splines.is_empty(),
+            "the three source splines may be merged into a render batch"
+        );
+        assert!(!p.terrain.as_ref().unwrap().indices.is_empty());
+        assert!(p.cut.is_none());
     }
 }
 

@@ -323,7 +323,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_NO_SMOKE` | bool | off | frame | render | No smoke. |
 | `OMSI_NO_SNOWFALL` | bool | off | frame | render | No snowfall. |
 | `OMSI_NO_SPLINE_BATCHING` | bool | off | use | scene | No spline batching. |
-| `OMSI_NO_SPLINE_HOLES` | bool | off | use | scene | Splines without hole rims. |
+| `OMSI_NO_SPLINE_HOLES` | bool | off | use | scene | Keep the unfitted terrain mesh beneath aligned splines. |
 | `OMSI_NO_SPRAY` | bool | off | use | app | No tyre spray. |
 | `OMSI_NO_SURF` | bool | off | once | scene | Every road as smooth as before (no surface texture) (A/B). |
 | `OMSI_NO_TEXCOMPRESS` | bool | off | use | render | No runtime texture compression. |

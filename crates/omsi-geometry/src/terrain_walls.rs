@@ -106,7 +106,7 @@ fn clip(edge: Edge, side: f64) -> Option<(f64, f64)> {
 
 /// Exact height on the drawn triangles, including the last row/column. Terrain::sample
 /// keeps queries just inside the last cell; walls on a tile seam must share its vertices.
-fn height(terrain: &Terrain, p: DVec2, side: f64) -> f64 {
+pub(super) fn height(terrain: &Terrain, p: DVec2, side: f64) -> f64 {
     let n = terrain.cells;
     let f = (p / side * n as f64).clamp(DVec2::ZERO, DVec2::splat(n as f64));
     let (i, j) = (
@@ -160,7 +160,8 @@ fn triangle(mesh: &mut MeshData, mut p: [DVec3; 3], inward: DVec2, side: f64) {
 /// triangles even on uneven ground. Only boundaries of the union of the holes get walls;
 /// overlapping or adjacent cutters cannot put a barrier through a road. Invalid outlines
 /// are ignored, matching the cut-mask policy. Rims come from the authored geometry;
-/// no height is inferred from a raster or a road.
+/// no height is inferred from a raster or a road. Walls expose soil only below the
+/// saved terrain surface: a raised cutter must not pull grass up to the spline.
 /// Keep a terrain cut open where a road continues across its rim. A tunnel's cutter
 /// can end at road height even though the terrain above it reaches the tunnel roof;
 /// connecting those two heights would put a grass curtain across the carriageway.
@@ -362,12 +363,18 @@ fn build_walls(rims: &[Vec<DVec3>], terrain: &Terrain, roads: Option<&DriveGrid>
             let top_a = a.truncate().extend(height(terrain, a.truncate(), side));
             let top_b = b.truncate().extend(height(terrain, b.truncate(), side));
             let (da, db) = (top_a.z - a.z, top_b.z - b.z);
+            if da <= 0.0 && db <= 0.0 {
+                continue;
+            }
             if da * db < 0.0 {
-                // The rim crosses the ground. Two triangular ends, never a twisted quad.
+                // Stop at the ground crossing. The part above it is open air, not soil.
                 let at = da / (da - db);
-                let join = a.lerp(b, at);
-                triangle(&mut mesh, [top_a, a, join], inward, side);
-                triangle(&mut mesh, [join, b, top_b], inward, side);
+                let join = a.lerp(b, at).truncate().extend(top_a.lerp(top_b, at).z);
+                if da > 0.0 {
+                    triangle(&mut mesh, [top_a, a, join], inward, side);
+                } else {
+                    triangle(&mut mesh, [join, b, top_b], inward, side);
+                }
             } else {
                 triangle(&mut mesh, [top_a, a, top_b], inward, side);
                 triangle(&mut mesh, [top_b, a, b], inward, side);
@@ -521,6 +528,50 @@ mod tests {
     }
 
     #[test]
+    fn aligned_ditch_does_not_raise_soil_to_its_positive_profile_edges() {
+        use omsi_scenery::sli::{HeightProfile, SplineProfile, SplineProfilePoint};
+        // Reported gras1.bmp ditch: positive lips, with a depression between them.
+        let points = [
+            (2.92, 0.10), (3.32, 0.09), (3.40, 0.07), (3.60, 0.01),
+            (3.85, -0.20), (4.00, -0.35), (4.15, -0.45), (4.23, -0.47),
+            (4.33, -0.43), (4.70, -0.15), (5.00, 0.01), (5.12, 0.04),
+            (5.35, 0.04),
+        ];
+        let def = Spline {
+            height_profiles: vec![HeightProfile { x0: 2.92, x1: 5.35, z0: 0.10, z1: 0.04 }],
+            profiles: vec![SplineProfile {
+                points: points.into_iter().map(|(x, z)| SplineProfilePoint {
+                    x, z, ..Default::default()
+                }).collect(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let ground = terrain(4, |_, _| 0.0);
+        let saved = ground.heights.clone();
+        for radius in [0.0, 80.0] {
+            let curve = SplineCurve::from_map(&MapSpline {
+                pos: [40.0, 40.0, 0.0], length: 20.0, radius,
+                ..Default::default()
+            }, DVec2::ZERO);
+            for mirror in [false, true] {
+                for mode in 1..=4 {
+                    let rims = spline_hole_rims(&def, &curve, mirror, mode);
+                    assert_eq!(rims.len(), 1);
+                    let walls = terrain_hole_walls(&rims, &ground);
+                    valid(&walls);
+                    assert!(walls.positions.iter().all(|p| p.z <= 0.0),
+                        "align mode {mode}, mirror {mirror}: soil cannot rise above saved terrain");
+                    if mode == 1 {
+                        assert!(!walls.is_empty(), "the buried end of the trough still exposes soil");
+                    }
+                }
+            }
+        }
+        assert_eq!(ground.heights, saved);
+    }
+
+    #[test]
     fn automatic_holes_reject_inverted_wire_profiles_but_keep_authored_narrow_cuts() {
         use omsi_scenery::sli::{SplineProfile, SplineProfilePoint};
         let profile = |x0, x1, z| SplineProfile {
@@ -558,12 +609,15 @@ mod tests {
             assert!(!walls.indices.is_empty());
             assert!(walls.positions.iter().all(|p| p.z <= 12.0));
         }
-        // Width validity is independent of elevation: an authored elevated surface
-        // with enough room for both insets still connects to the terrain.
+        // Width validity is independent of elevation, but an elevated surface must
+        // not grow a grass wall up from the saved ground.
         def.profiles.push(profile(3.0, 5.0, 20.0));
         assert_eq!(crate::terrain_hole_profiles(&def).len(), 2);
         let rims = spline_hole_rims(&def, &curve, false, 1);
         assert!(rims.iter().flatten().any(|p| p.z > 29.0));
+        let walls = terrain_hole_walls(&rims, &terrain(1, |_, _| 12.0));
+        assert!(!walls.is_empty());
+        assert!(walls.positions.iter().all(|p| p.z <= 12.0));
 
         let authored = vec![vec![[0.0, 5.0, 0.0], [0.02, 5.0, 0.0]]];
         def.terrain_hole_profiles = authored.clone();
@@ -571,8 +625,7 @@ mod tests {
         let rims = spline_hole_rims(&def, &curve, false, 1);
         assert_eq!(rims.len(), 1);
         let walls = terrain_hole_walls(&rims, &terrain(1, |_, _| 12.0));
-        assert!(!walls.indices.is_empty());
-        assert!(walls.positions.iter().any(|p| p.z == 15.0));
+        assert!(walls.is_empty(), "an authored elevated rim cannot lift the ground either");
     }
 
     #[test]
@@ -721,6 +774,9 @@ mod tests {
         crossing[2].z = 12.0;
         let mesh = terrain_hole_walls(&[crossing], &t);
         valid(&mesh);
+        assert!((area(&mesh) - 30.0).abs() < 1e-5,
+            "only the buried half of the rim exposes soil: {}", area(&mesh));
+        assert!(mesh.positions.iter().all(|p| p.z <= 10.0));
         for tri in mesh.indices.chunks_exact(3) {
             let dz = tri.iter().map(|i| mesh.positions[*i as usize].z - 10.0);
             let lo = dz.clone().fold(f32::INFINITY, f32::min);

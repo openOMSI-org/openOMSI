@@ -312,7 +312,33 @@ far end at the spline's end, 3 and 4 the near end at its start, otherwise each p
 third value moves it past the end. A `.sli` without `[terrainholeprofile]` gets one per
 string of joined `[profile]`s (0x5ab908): its left end and right end 3 cm in and 3 mm
 down, a bottom 10 cm under its lowest point reaching 0.5 m past both ends. An outline
-that crosses itself cuts nothing. Each `[terrainhole] <mesh.o3d>` in a `.sco` or model.cfg names an
+that crosses itself cuts nothing.
+
+For rendering, aligned splines retain a solid terrain backing. Automatic backing follows
+all points of the graphical profile, 3 mm below it; it no longer substitutes a coarse
+four-point V for the rendered section. Explicit terrain-hole profiles keep their authored
+shape. Outside the rim, height displacements blend individually into the saved ground
+using a quintic fade, without a nearest-rim switch. A local tangent correction matches
+the rim slope and fades within half a metre, preserving the original hillside instead
+of extrapolating the spline's plane across a cliff or bend. Transition
+widths follow the local height difference with at least one saved terrain cell for side
+shoulders. Terminal widths have an independent one-metre minimum. Caps keep their own
+constrained samples. Lighting normals come from the height field, including a neighbor halo
+at tile borders, rather than depending on incidental skinny CDT triangles.
+
+Graphical ground spline surfaces also constrain the fitted mesh, including asphalt
+without `[path]` declarations (its traffic may use a separate invisible spline).
+Overlays, overhead-only meshes and the aligned ditch backing itself are excluded. New shoulder fill is limited
+by their graphical triangles, with a half-metre smooth approach outside the road rim.
+This retains the solid backing instead of cutting alpha holes along the carriageway.
+The limit does not excavate original terrain above a lower road or raise terrain beneath
+a bridge. Neighboring tiles contribute their road surfaces in the same coordinates.
+
+Vertices are welded and triangulated at the precision used for rendering. The whole tile
+remains covered, including the ditch's floor and extended ends. Saved terrain heights are
+unchanged; object and tunnel cutters still use their own explicit holes.
+
+Each `[terrainhole] <mesh.o3d>` in a `.sco` or model.cfg names an
 object-wide cutter, including declarations before the first `[mesh]` and repeated commands.
 The cutter sits next to its declaring file or in its `model` folder; declarations in a `.sco`
 also apply when it references a separate model.cfg. Explicit cutters apply even to deep

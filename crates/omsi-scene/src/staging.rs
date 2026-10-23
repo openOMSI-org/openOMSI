@@ -708,6 +708,8 @@ pub(super) fn row_object_key(tx: i32, ty: i32, row: i64, index: usize) -> i64 {
 pub(super) struct StagedSpline {
     /// Positions (relative to the tile origin) and triangles only.
     pub(super) shape: MeshData,
+    /// Solid trough beneath an aligned spline, rather than an open alpha-mask hole.
+    pub(super) terrain_profile: Option<omsi_geometry::SplineTerrainProfile>,
     pub(super) ty: Arc<SplineType>,
     /// World bounds (x0, y0, x1, y1).
     pub(super) bounds: [f64; 4],
@@ -870,8 +872,6 @@ pub struct StagedTile {
     pub(super) base_terrain: Terrain,
     /// `[spline_terrain_align]` splines: (index into `splines`, reach in metres).
     pub(super) align: Vec<(usize, f32)>,
-    /// The hole boundaries in world space, including the profile's authored height.
-    pub(super) hole_rims: Vec<Vec<DVec3>>,
     pub(super) water: Option<[f32; 4]>,
     /// `[variable_terrainlightmap]`: the tile's light map is baked from the lamps around it
     /// (see [`bake_light_map`]), not read from its `.map.LM.bmp`.

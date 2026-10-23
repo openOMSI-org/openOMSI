@@ -89,6 +89,52 @@ impl World {
             log::info!("tile ({tx}, {ty}): wheel faces by surface {}", faces.join(", "));
         }
         let tile_terrain = self.data.peek().ground.terrains.get(&key).cloned();
+        if let Some(terrain) = &tile_terrain {
+            if !omsi_cfg::flags::OMSI_NO_SPLINE_HOLES.is_set() {
+                let sources = Self::sources(layout, staged, key);
+                let mut order: Vec<_> = sources.values().collect();
+                order.sort_by_key(|q| (q.tx, q.ty));
+                let origin = p.origin;
+                let profiles: Vec<_> = order
+                    .iter()
+                    .flat_map(|q| {
+                        q.splines
+                            .iter()
+                            .filter_map(move |s| Some((s.terrain_profile.as_ref()?, q.origin - origin)))
+                    })
+                    .collect();
+                let data = self.data.peek();
+                let neighbors: Vec<_> = data
+                    .ground
+                    .terrains
+                    .iter()
+                    .filter(|((x, y), _)| (*x - tx).abs() <= 1 && (*y - ty).abs() <= 1)
+                    .map(|(&(x, y), t)| {
+                        (
+                            t.as_ref(),
+                            DVec2::new((x - tx) as f64 * tile_size(), (y - ty) as f64 * tile_size()),
+                        )
+                    })
+                    .collect();
+                let roads: Vec<_> = order
+                    .iter()
+                    .flat_map(|q| {
+                        // Painted asphalt often has no [path]; a separate invisible
+                        // spline carries traffic. Its graphical surface still bounds
+                        // the ground. Exclude the aligned ditch backing itself.
+                        q.splines
+                            .iter()
+                            .filter(|s| {
+                                s.cuts_terrain && !s.overlay && (s.drivable || s.terrain_profile.is_none())
+                            })
+                            .map(move |s| (&s.shape, q.origin - origin))
+                    })
+                    .collect();
+                p.terrain = Some(omsi_geometry::build_fitted_terrain_mesh_with_roads(
+                    terrain, &profiles, &neighbors, &roads,
+                ));
+            }
+        }
         p.hole_walls = tile_terrain
             .as_ref()
             .map(|terrain| omsi_geometry::terrain_hole_walls_with_roads(&hole_rims, terrain, &ts.drive))
@@ -222,13 +268,8 @@ impl World {
             else {
                 continue;
             };
-            if !omsi_cfg::flags::OMSI_NO_SPLINE_HOLES.is_set() {
-                for rim in &q.hole_rims {
-                    let ring: Vec<_> = rim.iter().map(|v| v.truncate()).collect();
-                    ts.add_outline(&ring, tx, ty);
-                    hole_rims.push(rim.iter().map(|v| *v - p.origin).collect());
-                }
-            }
+            // Aligned splines are backed by fitted, continuous ground. Only explicit
+            // object/tunnel cutters remove terrain; no raster hole is made for a spline.
             for (oi, (o, pose)) in q.objects.iter().zip(res.poses.iter()).enumerate() {
                 let Some(pose) = pose else { continue };
                 let ot = &o.ot;
