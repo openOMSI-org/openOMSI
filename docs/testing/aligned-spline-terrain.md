@@ -73,29 +73,53 @@ workflow does not provide that approval. Local results do not substitute for CI.
 
 ## Avoiding terrain over-tessellation
 
-Road constraints and their fine blend samples are limited to the spline influence
-region, using the existing conservative spatial index plus a halo for the road blend
-and normal probes. The road mesh, its original boundaries, and the fine sampling
-resolution within this region are retained. Original terrain grid diagonals still
-constrain the entire tile. Empty profile lists bypass spatial-index allocation.
+Road refinement is restricted to the aligned spline influence using the existing
+conservative spatial index and a halo. The complete original road/spline height fields
+and road clearance remain available for height and normal evaluation. Coplanar internal
+source edges are omitted from the CDT; boundaries, real slope changes, duplicate-face
+boundaries and non-manifold joins are retained. Straight sampling runs can be joined
+only when they are collinear in 3D and have identical shoulder widths.
 
-This addresses excessive terrain geometry during rendering, including shadow passes,
-as well as loading cost. Distant road meshes no longer refine the ground. The complete
-road height field and original clearance remain available for height and normal
-evaluation. A regression checks that a distant road adds no vertices, preserves the
-local ditch fit and retains the original clearance under that road.
+The potentially changed region is enclosed by a frame of saved-grid edges. Every
+saved slope change and tile-border grid station is preserved. Flat grid subdivisions
+outside the frame can be omitted without letting fitted triangles extend into unchanged
+ground. Neighboring tiles keep every clipped sampling station on their shared border,
+regardless of how their interiors refine.
 
-Controlled synthetic measurement against `7123267`, Linux x86-64, Rust 1.99.1,
-release profile with debug symbols disabled. The fixture has a 128-cell saved terrain,
-one 200 m aligned ditch and fourteen 300 m roads with half-metre stations. Each variant
-uses one warm-up and three measured runs; mesh construction is timed without fixture
-allocation. Median times and stable mesh counts:
+The original half-metre shoulder probes, fine near-rim offsets and eighth-metre cap
+probes are retained as error checks, rather than all becoming permanent vertices.
+Longitudinal profile-knot cap constraints remain explicit to prevent secondary dips.
+Refinement inserts the largest error per current face, then resolves remaining errors
+in sequential sweeps. The error budget at a changed probe is 1 mm; a probe matching
+saved ground uses a 1e-9 m budget. Heights are cached during refinement. This is a
+bound at those probes, not a proof of the error everywhere between them. After sixteen
+unsuccessful passes all probes are inserted, preserving the dense fallback. Normals
+still use the original height field and neighbor halo.
 
-| Metric | Before optimization | After optimization |
-| --- | ---: | ---: |
-| Terrain vertices | 316,744 | 48,727 |
-| Terrain triangles | 632,114 | 96,940 |
-| Geometry preparation, median | 981.849 ms | 239.914 ms |
+### Controlled synthetic comparison
+
+Linux x86-64, Rust 1.99.1, release with debug symbols disabled. A 128-cell tile has one
+200 m aligned ditch and fourteen 300 m roads with half-metre stations. The flat case
+uses constant saved height; the uneven case uses a 15 cm sinusoidal surface that
+changes the slope at nearly every saved cell. Each variant has one warm-up and three
+measured runs, excluding fixture allocation. The previous implementation is `e3ff15e6`
+with the exact same benchmark fixture copied into it. Times below are medians.
+
+| Case / metric | Previous test build | Current implementation | Saved mesh alone |
+| --- | ---: | ---: | ---: |
+| Flat: vertices | 48,727 | 8,820 | 16,641 |
+| Flat: triangles | 96,940 | 17,126 | 32,768 |
+| Flat: geometry preparation | 255.026 ms | 250.075 ms | about 0.5 ms |
+| Uneven: vertices | 48,740 | 26,450 | 16,641 |
+| Uneven: triangles | 96,966 | 52,386 | 32,768 |
+| Uneven: geometry preparation | 269.341 ms | 229.924 ms | about 0.3 ms |
+
+The saved-mesh column times `build_terrain_mesh`, without a ditch, spline-hole cutting
+or soil walls. It is a reference geometry budget, not the full tile-load time or FPS of
+an unmodified game. Terrain fitting still has a preparation cost. On uneven terrain
+this fixture still needs about 60% more triangles than the saved mesh; equal cost on
+all maps is not established. The first optimization had reduced the original flat
+fixture from 632,114 to 96,940 triangles; this change reduces the latter by another 82%.
 
 Reproduce with:
 
@@ -103,9 +127,7 @@ Reproduce with:
 CARGO_PROFILE_RELEASE_DEBUG=0 cargo test --locked --release -p omsi-geometry --lib spline_heavy_terrain_cost -- --ignored --nocapture
 ```
 
-To compare `7123267`, add the
-same benchmark fixture to that checkout without changing its terrain implementation.
-This is a synthetic workload, not a stock-map measurement or a measured FPS improvement.
-Actual Berlin-Spandau/Map 400 CSVs and gameplay FPS still need the installed maps.
-
-Validation after optimization: `cargo test --locked -p omsi-geometry -p omsi-scene --lib` passes 252 tests (6 ignored, including the opt-in performance fixture).
+Actual Berlin-Spandau/Map 400 tile CSVs and gameplay FPS require the installed maps.
+The normal geometry/scene tests also cover unchanged saved terrain, matching seam
+stations, duplicate coplanar faces, actual slope folds, refinement error and invariance
+to extra stations in an otherwise identical planar road.

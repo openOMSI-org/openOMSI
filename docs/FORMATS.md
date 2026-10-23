@@ -326,8 +326,7 @@ using a quintic fade, without a nearest-rim switch. A local tangent correction m
 the rim slope and fades within half a metre, preserving the original hillside instead
 of extrapolating the spline's plane across a cliff or bend. Transition
 widths follow the local height difference with at least one saved terrain cell for side
-shoulders. Terminal widths have an independent one-metre minimum. Caps keep their own
-constrained samples. Lighting normals come from the height field, including a neighbor halo
+shoulders. Terminal widths have an independent one-metre minimum. Caps retain longitudinal profile-knot constraints and fine height probes. Lighting normals come from the height field, including a neighbor halo
 at tile borders, rather than depending on incidental skinny CDT triangles.
 
 Graphical ground spline surfaces also constrain the fitted mesh, including asphalt
@@ -337,6 +336,14 @@ by their graphical triangles, with a half-metre smooth approach outside the road
 This retains the solid backing instead of cutting alpha holes along the carriageway.
 The limit does not excavate original terrain above a lower road or raise terrain beneath
 a bridge. Neighboring tiles contribute their road surfaces in the same coordinates.
+
+Coplanar source divisions are omitted while true surface creases remain constrained.
+A frame of saved-grid edges encloses the changed region; flat grid subdivisions outside
+it may be omitted, retaining all saved slope changes and tile-border stations. Fine rim
+and cap probes drive adaptive refinement with a 1 mm height budget at changed probes,
+and a tighter budget where a probe matches saved ground. Every clipped seam probe is
+retained on both tiles. This reduces rendering geometry; fitting still costs more to
+prepare than a plain saved mesh (see `docs/testing/aligned-spline-terrain.md`).
 
 Vertices are welded and triangulated at the precision used for rendering. The whole tile
 remains covered, including the ditch's floor and extended ends. Saved terrain heights are

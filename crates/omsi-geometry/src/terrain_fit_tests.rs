@@ -1,4 +1,5 @@
 use super::*;
+use spade::FloatTriangulation;
 use std::collections::HashMap;
 
 #[test]
@@ -268,6 +269,22 @@ fn trough_and_blended_shoulders_match_across_tile_seams() {
     );
     closed_tile(&left);
     closed_tile(&right);
+    let seam_stations = |mesh: &MeshData, x: f32| {
+        let mut stations: Vec<_> = mesh
+            .positions
+            .iter()
+            .filter(|p| (p.x - x).abs() < 1e-5)
+            .map(|p| (p.y as f64 * 10000.0).round() as i64)
+            .collect();
+        stations.sort_unstable();
+        stations.dedup();
+        stations
+    };
+    assert_eq!(
+        seam_stations(&left, tile_size() as f32),
+        seam_stations(&right, 0.0),
+        "adaptive refinement must keep matching seam vertices"
+    );
     for i in 0..100 {
         let y = 33.0 + i as f64 * 0.1;
         let (a, b) = (sample(&left, tile_size(), y), sample(&right, 0.0, y));
@@ -665,21 +682,44 @@ fn spline_heavy_terrain_cost() {
         roads.push(mesh);
     }
     let roads: Vec<_> = roads.iter().map(|m| (m, DVec3::ZERO)).collect();
-    for run in 0..4 {
-        let start = std::time::Instant::now();
-        let mesh = try_build_fitted_terrain_mesh_with_roads(
-            &terrain,
-            &[(&profile, DVec3::ZERO)],
-            &[],
-            &roads,
-        )
-        .unwrap();
-        println!(
-            "FIT_COST,{run},{:.3},{},{}",
-            start.elapsed().as_secs_f64() * 1000.0,
-            mesh.positions.len(),
-            mesh.indices.len() / 3
-        );
+    let uneven = Terrain {
+        cells: 128,
+        heights: (0..129)
+            .flat_map(|y| {
+                (0..129).map(move |x| {
+                    (1.0 + 0.15 * (x as f64 * 0.13).sin() * (y as f64 * 0.11).cos()) as f32
+                })
+            })
+            .collect(),
+    };
+    for (kind, terrain) in [("flat", terrain), ("uneven", uneven)] {
+        for run in 0..4 {
+            let start = std::time::Instant::now();
+            let mesh = build_terrain_mesh(&terrain);
+            println!(
+                "SAVED_COST,{kind},{run},{:.3},{},{}",
+                start.elapsed().as_secs_f64() * 1000.0,
+                mesh.positions.len(),
+                mesh.indices.len() / 3
+            );
+            std::hint::black_box(mesh);
+        }
+        for run in 0..4 {
+            let start = std::time::Instant::now();
+            let mesh = try_build_fitted_terrain_mesh_with_roads(
+                &terrain,
+                &[(&profile, DVec3::ZERO)],
+                &[],
+                &roads,
+            )
+            .unwrap();
+            println!(
+                "FIT_COST,{kind},{run},{:.3},{},{}",
+                start.elapsed().as_secs_f64() * 1000.0,
+                mesh.positions.len(),
+                mesh.indices.len() / 3
+            );
+        }
     }
 }
 
@@ -691,10 +731,10 @@ fn distant_roads_do_not_refine_terrain_or_change_the_local_fit() {
     let expected = build_fitted_terrain_mesh(&terrain, &[(&profile, DVec3::ZERO)]);
     let road = MeshData {
         positions: vec![
-            Vec3::new(240.0, 20.0, -1.0),
-            Vec3::new(248.0, 20.0, -1.0),
-            Vec3::new(240.0, 280.0, -1.0),
-            Vec3::new(248.0, 280.0, -1.0),
+            Vec3::new(240.0, 20.0, 1.0),
+            Vec3::new(248.0, 20.0, 1.0),
+            Vec3::new(240.0, 280.0, 1.0),
+            Vec3::new(248.0, 280.0, 1.0),
         ],
         indices: vec![0, 1, 3, 0, 3, 2],
         ..Default::default()
@@ -717,6 +757,196 @@ fn distant_roads_do_not_refine_terrain_or_change_the_local_fit() {
         }
         assert!(actual.normals[i].is_finite());
     }
-    // Preserve the original road clearance even outside the spline influence.
-    assert!((sample(&actual, 244.0, 100.0) + 0.003).abs() < 1e-6);
+    // A road above the saved ground must not refine a flat, untouched region.
+    assert_eq!(sample(&actual, 244.0, 100.0), 0.0);
+    // Clearance beneath a road below the saved terrain still uses the old grid;
+    // it must not introduce road-station sampling outside the fitted region.
+    let mut low_road = road.clone();
+    for p in &mut low_road.positions {
+        p.z = -1.0;
+    }
+    let low = build_fitted_terrain_mesh_with_roads(
+        &terrain,
+        &[(&profile, DVec3::ZERO)],
+        &[],
+        &[(&low_road, DVec3::ZERO)],
+    );
+    let cell = tile_size() / terrain.cells as f64;
+    for p in low.positions.iter().filter(|p| p.x > 150.0) {
+        assert!((p.x as f64 / cell - (p.x as f64 / cell).round()).abs() < 1e-5);
+        assert!((p.y as f64 / cell - (p.y as f64 / cell).round()).abs() < 1e-5);
+    }
+    assert!((sample(&low, 244.0, 100.0) + 0.003).abs() < 1e-6);
+}
+
+#[test]
+fn adaptive_mesh_preserves_saved_terrain_and_the_full_tile_border() {
+    for uneven in [false, true] {
+        let cells = 16usize;
+        let terrain = Terrain {
+            cells,
+            heights: (0..=cells)
+                .flat_map(|y| {
+                    (0..=cells).map(move |x| {
+                        if uneven {
+                            (x / 3) as f32 + (y as f32 - 8.0).powi(2) * 0.1 + (x * y) as f32 * 0.02
+                        } else {
+                            1.0
+                        }
+                    })
+                })
+                .collect(),
+        };
+        let profile = build_spline_terrain_profile(
+            &ditch(),
+            &curve([40.0, 40.0, 0.0], 0.0, 0.0),
+            false,
+            1,
+            DVec3::ZERO,
+        );
+        let mesh = build_fitted_terrain_mesh(&terrain, &[(&profile, DVec3::ZERO)]);
+        let side = tile_size();
+        let cell = side / cells as f64;
+        for y in 8..cells {
+            for x in 8..cells {
+                for offset in [
+                    DVec2::splat(0.25),
+                    DVec2::new(0.75, 0.25),
+                    DVec2::splat(0.75),
+                ] {
+                    let p = (DVec2::new(x as f64, y as f64) + offset) * cell;
+                    let expected = super::super::terrain_walls::height(&terrain, p, side);
+                    assert!(
+                        (sample(&mesh, p.x, p.y) - expected).abs() < 1e-5,
+                        "saved terrain changed at {p}"
+                    );
+                }
+            }
+        }
+        for i in 0..=cells {
+            for p in [
+                DVec2::new(i as f64 * cell, 0.0),
+                DVec2::new(i as f64 * cell, side),
+                DVec2::new(0.0, i as f64 * cell),
+                DVec2::new(side, i as f64 * cell),
+            ] {
+                assert!(
+                    mesh.positions
+                        .iter()
+                        .any(|q| q.truncate().as_dvec2().distance(p) < 1e-5),
+                    "missing border point {p}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn coplanar_road_station_density_does_not_inflate_fitted_terrain() {
+    let terrain = ground();
+    let profile = build_spline_terrain_profile(
+        &ditch(),
+        &curve([40.0, 40.0, 0.0], 0.0, 0.0),
+        false,
+        1,
+        DVec3::ZERO,
+    );
+    let road = |stations: usize| {
+        let mut mesh = MeshData::default();
+        for i in 0..=stations {
+            let y = 20.0 + 100.0 * i as f32 / stations as f32;
+            mesh.positions
+                .extend([Vec3::new(42.0, y, 0.05), Vec3::new(48.0, y, 0.05)]);
+            if i < stations {
+                let a = (i * 2) as u32;
+                mesh.indices.extend([a, a + 1, a + 3, a, a + 3, a + 2]);
+            }
+        }
+        mesh
+    };
+    let coarse_road = road(1);
+    let dense_road = road(200);
+    let fit = |road: &MeshData| {
+        build_fitted_terrain_mesh_with_roads(
+            &terrain,
+            &[(&profile, DVec3::ZERO)],
+            &[],
+            &[(road, DVec3::ZERO)],
+        )
+    };
+    let coarse = fit(&coarse_road);
+    let dense = fit(&dense_road);
+    assert!(
+        dense.positions.len() <= coarse.positions.len() + 64,
+        "{} vs {}",
+        dense.positions.len(),
+        coarse.positions.len()
+    );
+    for y in (35..66).step_by(2) {
+        for x in (35..53).step_by(2) {
+            assert!(
+                (sample(&dense, x as f64, y as f64) - sample(&coarse, x as f64, y as f64)).abs()
+                    < 0.002
+            );
+        }
+    }
+}
+
+#[test]
+fn adaptive_refinement_bounds_height_error_without_retaining_every_probe() {
+    let height = |p: DVec2| 0.04 * (p.x * 0.3).sin() + (p.x - 8.0).max(0.0) * 0.01;
+    let mut cdt = Cdt::new();
+    for p in [
+        DVec2::ZERO,
+        DVec2::new(20.0, 0.0),
+        DVec2::new(20.0, 2.0),
+        DVec2::new(0.0, 2.0),
+    ] {
+        insert(&mut cdt, p).unwrap();
+    }
+    let probes: Vec<_> = (0..=40)
+        .flat_map(|x| (0..=4).map(move |y| DVec2::new(x as f64 * 0.5, y as f64 * 0.5)))
+        .collect();
+    sampling::refine(&mut cdt, probes.clone(), height, |_, _| 0.0005).unwrap();
+    assert!(cdt.num_vertices() < probes.len());
+    for p in probes {
+        let actual = cdt
+            .barycentric()
+            .interpolate(
+                |v| {
+                    let q = v.position();
+                    height(DVec2::new(q.x, q.y))
+                },
+                Point2::new(p.x, p.y),
+            )
+            .unwrap();
+        assert!((actual - height(p)).abs() <= 0.0005 + 1e-10);
+    }
+}
+
+#[test]
+fn coplanar_cleanup_keeps_duplicate_surface_boundaries_and_true_folds() {
+    let a = DVec3::ZERO;
+    let b = DVec3::X;
+    let c = DVec3::new(1.0, 1.0, 0.0);
+    let d = DVec3::Y;
+    let contains = |edges: &Vec<[DVec2; 2]>, u: DVec3, v: DVec3| {
+        edges.iter().any(|edge| {
+            *edge == [u.truncate(), v.truncate()] || *edge == [v.truncate(), u.truncate()]
+        })
+    };
+    let planar = [[a, b, c], [a, c, d]];
+    let edges = sampling::creases(planar.iter());
+    assert!(!contains(&edges, a, c));
+    for triangles in [
+        vec![planar[0], planar[1]],
+        vec![planar[0], planar[1], planar[0], planar[1]],
+    ] {
+        let edges = sampling::creases(triangles.iter());
+        for [u, v] in [[a, b], [b, c], [c, d], [d, a]] {
+            assert!(contains(&edges, u, v));
+        }
+    }
+    let folded = [[a, b, c], [a, c, d + DVec3::Z]];
+    assert!(contains(&sampling::creases(folded.iter()), a, c));
 }

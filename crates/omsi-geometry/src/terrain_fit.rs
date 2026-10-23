@@ -63,6 +63,7 @@ struct Field {
     rims: Vec<Vec<usize>>,
     bins: usize,
     cap_rays: Vec<[DVec2; 2]>,
+    cap_constraints: Vec<[DVec2; 2]>,
     roads: Option<Box<Field>>,
 }
 
@@ -75,6 +76,7 @@ impl Field {
             rims: vec![Vec::new(); bins * bins],
             bins,
             cap_rays: Vec::new(),
+            cap_constraints: Vec::new(),
             roads: None,
         }
     }
@@ -259,32 +261,6 @@ impl Field {
     }
 }
 
-/// Clip a surface triangle to the tile. Interpolate the actual 3D surface at seams.
-fn clip(mut p: Vec<DVec3>) -> Vec<DVec3> {
-    for (axis, bound, sign) in [
-        (0, 0.0, 1.0),
-        (0, tile_size(), -1.0),
-        (1, 0.0, 1.0),
-        (1, tile_size(), -1.0),
-    ] {
-        let mut out = Vec::new();
-        for i in 0..p.len() {
-            let (a, b) = (p[i], p[(i + 1) % p.len()]);
-            let (da, db) = ((a[axis] - bound) * sign, (b[axis] - bound) * sign);
-            if da >= 0.0 {
-                out.push(a);
-            }
-            if (da >= 0.0) != (db >= 0.0) {
-                let mut q = a.lerp(b, da / (da - db));
-                q[axis] = bound;
-                out.push(q);
-            }
-        }
-        p = out;
-    }
-    p
-}
-
 fn insert(
     cdt: &mut Cdt,
     p: DVec2,
@@ -314,9 +290,9 @@ fn segment(a: DVec2, b: DVec2) -> Option<[DVec2; 2]> {
     })
 }
 
-/// Fit the ground to complete spline troughs, retaining every terrain triangle.
+/// Fit the ground to complete spline troughs, preserving the authored terrain shape.
 /// Positions in each profile mesh are offset into this tile's local coordinates.
-/// Both the old terrain diagonals and the trough's triangle edges constrain the
+/// Authored terrain slope changes and trough creases constrain the
 /// tessellation: narrow ditches cannot disappear between five-metre terrain points.
 /// Explicit object/tunnel holes remain handled separately by the cut mask.
 pub fn build_fitted_terrain_mesh(
@@ -336,8 +312,8 @@ pub fn build_fitted_terrain_mesh_with_neighbors(
     build_fitted_terrain_mesh_with_roads(terrain, profiles, neighbors, &[])
 }
 
-/// Keep the fitted ground beneath the actual graphical road surfaces. Road triangle
-/// edges constrain the same triangulation, so no triangle can cut across a road rim.
+/// Keep the fitted ground beneath the actual graphical road surfaces. Road
+/// boundaries and slope changes constrain the triangulation, retaining every road rim.
 pub fn build_fitted_terrain_mesh_with_roads(
     terrain: &Terrain,
     profiles: &[(&SplineTerrainProfile, DVec3)],
@@ -427,9 +403,9 @@ pub fn try_build_fitted_terrain_mesh_with_roads(
                         span[1] = span[1].max(t);
                     }
                     if (-1e-5..=1.0).contains(&behind) {
-                        field
-                            .cap_rays
-                            .push([p, p + end.outward * (behind.max(0.0) + end.width)]);
+                        let ray = [p, p + end.outward * (behind.max(0.0) + end.width)];
+                        field.cap_rays.push(ray);
+                        field.cap_constraints.push(ray);
                     }
                 }
                 if span[0].is_finite() {
@@ -487,83 +463,167 @@ fn fit(
 ) -> Result<MeshData, spade::InsertionError> {
     let mut cdt = Cdt::new();
     let mut constraints = Vec::new();
+    let mut probes = Vec::new();
     let side = tile_size();
     let cell = side / terrain.cells as f64;
-    // Constrain the original grid and diagonal, preserving the authored surface
-    // exactly outside the local transition. Every tile shares the same seam grid.
-    for y in 0..=terrain.cells {
-        for x in 0..=terrain.cells {
+    // Enclose every possible spline displacement in a frame of saved-grid
+    // edges. Outside it, flat grid interiors can be omitted without allowing a
+    // fitted triangle to leak into unchanged terrain. Preserve every real saved
+    // slope change and every tile-border station, including inside the frame.
+    let n = terrain.cells;
+    let mut frame = [n, n, 0usize, 0usize];
+    for y in 0..n {
+        for x in 0..n {
+            let a = DVec3::new(x as f64 * cell, y as f64 * cell, 0.0);
+            let b = a + DVec3::new(cell, cell, 0.0);
+            if field.affects(&[a, b], 2.0 * NORMAL_STEP) {
+                frame[0] = frame[0].min(x.saturating_sub(1));
+                frame[1] = frame[1].min(y.saturating_sub(1));
+                frame[2] = frame[2].max((x + 2).min(n));
+                frame[3] = frame[3].max((y + 2).min(n));
+            }
+        }
+    }
+    // The old clearance under a low, distant road is part of the height field too.
+    if let Some(roads) = &field.roads {
+        for y in 0..=n {
+            for x in 0..=n {
+                let p = DVec2::new(x as f64 * cell, y as f64 * cell);
+                let base = terrain.height_at(x, y) as f64;
+                if roads.affects(&[p.extend(0.0)], 2.0 * NORMAL_STEP)
+                    && (field.height(p, base, terrain_at) - base).abs() > 1e-8
+                {
+                    frame[0] = frame[0].min(x.saturating_sub(1));
+                    frame[1] = frame[1].min(y.saturating_sub(1));
+                    frame[2] = frame[2].max((x + 1).min(n));
+                    frame[3] = frame[3].max((y + 1).min(n));
+                }
+            }
+        }
+    }
+    let gradients: Vec<_> = (0..n)
+        .flat_map(|y| {
+            (0..n).map(move |x| {
+                let a = terrain.height_at(x, y) as f64;
+                let b = terrain.height_at(x + 1, y) as f64;
+                let c = terrain.height_at(x, y + 1) as f64;
+                let d = terrain.height_at(x + 1, y + 1) as f64;
+                [
+                    DVec2::new(b - a, d - b) / cell,
+                    DVec2::new(d - c, c - a) / cell,
+                ]
+            })
+        })
+        .collect();
+    let crease = |a: DVec2, b: DVec2| {
+        !a.is_finite() || !b.is_finite() || (a - b).abs().max_element() > 1e-10
+    };
+    for y in 0..=n {
+        for x in 0..=n {
             let a = DVec2::new(x as f64 * cell, y as f64 * cell);
-            insert(&mut cdt, a)?;
-            if x < terrain.cells {
+            if x >= frame[0] && x <= frame[2] && y >= frame[1] && y <= frame[3] {
+                insert(&mut cdt, a)?;
+            }
+            let horizontal_frame =
+                (y == frame[1] || y == frame[3]) && x >= frame[0] && x < frame[2];
+            let vertical_frame = (x == frame[0] || x == frame[2]) && y >= frame[1] && y < frame[3];
+            if x < n
+                && (y == 0
+                    || y == n
+                    || horizontal_frame
+                    || crease(gradients[y * n + x][0], gradients[(y - 1) * n + x][1]))
+            {
                 constraints.push([a, a + DVec2::X * cell]);
             }
-            if y < terrain.cells {
+            if y < n
+                && (x == 0
+                    || x == n
+                    || vertical_frame
+                    || crease(gradients[y * n + x][1], gradients[y * n + x - 1][0]))
+            {
                 constraints.push([a, a + DVec2::Y * cell]);
             }
-            if x < terrain.cells && y < terrain.cells {
+            if x < n && y < n && crease(gradients[y * n + x][0], gradients[y * n + x][1]) {
                 constraints.push([a, a + DVec2::splat(cell)]);
             }
         }
     }
-    for tri in field.triangles.iter().chain(
-        field
-            .roads
-            .iter()
-            .flat_map(|r| &r.triangles)
-            .filter(|tri| field.affects(&tri[..], STEP + 2.0 * NORMAL_STEP)),
-    ) {
-        let p = clip(tri.to_vec());
-        for i in 0..p.len() {
-            constraints.push([p[i].truncate(), p[(i + 1) % p.len()].truncate()]);
+    // Coplanar source triangles do not introduce a height crease. Keep their
+    // boundary and true slope changes instead of cutting the ground at every
+    // road/spline station and diagonal. The full height field is unchanged.
+    let creases = sampling::creases(
+        field.triangles.iter().chain(
+            field
+                .roads
+                .iter()
+                .flat_map(|r| &r.triangles)
+                .filter(|tri| field.affects(&tri[..], STEP + 2.0 * NORMAL_STEP)),
+        ),
+    );
+    for [a, b] in creases {
+        if let Some(segment) = segment(a, b) {
+            constraints.push(segment);
         }
     }
-    // Put the blend's samples only beside a rim, not over the entire tile. Inserting
-    // into the constrained mesh also splits existing edges instead of making cracks.
-    for edge in field.edges.iter().chain(
+    // Join only straight sampling runs. The original rims, height field and all
+    // profile/road crease constraints remain unchanged.
+    let runs = sampling::runs(
         field
-            .roads
+            .edges
             .iter()
-            .flat_map(|r| &r.edges)
-            .filter(|edge| field.affects(&edge.points, STEP + 2.0 * NORMAL_STEP)),
-    ) {
-        let [a, b] = edge.points;
-        let d = (b - a).truncate();
-        let normal = DVec2::new(-d.y, d.x).normalize();
-        let steps = (edge.width / STEP).ceil() as i32;
+            .chain(
+                field
+                    .roads
+                    .iter()
+                    .flat_map(|r| &r.edges)
+                    .filter(|edge| field.affects(&edge.points, STEP + 2.0 * NORMAL_STEP)),
+            )
+            .map(|edge| (edge.points, edge.width))
+            .collect(),
+    );
+    for (points, width) in runs {
+        let [a, b] = points.map(|p| p.truncate());
+        let normal = DVec2::new(-(b - a).y, (b - a).x).normalize();
+        let steps = (width / STEP).ceil() as i32;
         let distances = (-steps..=steps)
-            .map(|step| edge.width * step as f64 / steps as f64)
+            .map(|step| width * step as f64 / steps as f64)
             .chain([-0.25, -0.125, -0.06, -0.03, 0.03, 0.06, 0.125, 0.25]);
         for distance in distances {
-            let Some([a, b]) = segment(
-                a.truncate() + normal * distance,
-                b.truncate() + normal * distance,
-            ) else {
+            let Some([a, b]) = segment(a + normal * distance, b + normal * distance) else {
                 continue;
             };
-            // Retain the clipped endpoints on tile seams too. The blend is a smooth
-            // field, not a crease: constraining its offset lines would introduce
-            // nearly coincident intersections with the actual profile constraints.
-            insert(&mut cdt, a)?;
-            insert(&mut cdt, b)?;
             let n = (a.distance(b) / STEP).ceil().max(1.0) as usize;
-            for i in 0..=n {
-                insert(&mut cdt, a.lerp(b, i as f64 / n as f64))?;
-            }
+            probes.extend((0..=n).map(|i| a.lerp(b, i as f64 / n as f64)));
         }
     }
-    // Resolve the short cap along its profile knots, rather than letting sparse
-    // side-shoulder samples triangulate a second dip after the visible ditch ends.
+    // Keep the longitudinal profile-knot constraints: otherwise triangles from
+    // a side shoulder can cross a narrow end cap and introduce a second dip.
+    for &[a, b] in &field.cap_constraints {
+        if let Some(ray) = segment(a, b) {
+            constraints.push(ray);
+        }
+    }
+    // All original fine cap probes still bound the height error; the transverse
+    // probe lines do not need to become permanent triangulation constraints.
     for &[a, b] in &field.cap_rays {
         if let Some([a, b]) = segment(a, b) {
-            constraints.push([a, b]);
             let n = (a.distance(b) / (STEP * 0.25)).ceil().max(1.0) as usize;
-            for i in 0..=n {
-                insert(&mut cdt, a.lerp(b, i as f64 / n as f64))?;
-            }
+            probes.extend((0..=n).map(|i| a.lerp(b, i as f64 / n as f64)));
         }
     }
     super::terrain_constraints::add(&mut cdt, &constraints, side, terrain.cells.clamp(1, 128))?;
+    sampling::refine(
+        &mut cdt,
+        probes,
+        |p| field.height(p, terrain_at(p), terrain_at),
+        |p, h| {
+            if (h - terrain_at(p)).abs() <= 1e-10 {
+                1e-9
+            } else {
+                0.001
+            }
+        },
+    )?;
     let mut mesh = MeshData::default();
     for v in cdt.vertices() {
         let p = v.position();
@@ -589,6 +649,9 @@ fn fit(
     }
     Ok(mesh)
 }
+
+#[path = "terrain_fit_sampling.rs"]
+mod sampling;
 
 #[cfg(test)]
 #[path = "terrain_fit_tests.rs"]
