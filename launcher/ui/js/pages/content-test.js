@@ -216,7 +216,7 @@ export function ContentTest({ initial } = {}) {
           : html`<${Notice} kind="danger">${t('It did not load cleanly: {n} errors, {w} warnings', { n: result.errors, w: result.warnings })}</${Notice}>`}
         <${Card} title="Summary">
           <div class="row wrap">
-            <${SummaryTags} sum=${sum} only=${only} setOnly=${setOnly} />
+            <${SummaryTags} sum=${sum} only=${only} setOnly=${(value) => { setPart(null); setOnly(value); }} />
             <span class="muted">${result.seconds?.toFixed(1)} s · ${result.log_lines} ${t('log lines')} · ${result.file}</span>
           </div>
         </${Card}>
