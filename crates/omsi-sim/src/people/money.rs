@@ -241,6 +241,11 @@ impl Money {
         let coins: Vec<usize> = self.placed.iter().filter(|p| p.3).map(|p| p.2).collect();
         self.value_of(&coins)
     }
+
+    pub fn change_left_coins(&mut self, owed: f32) -> Vec<usize> {
+        let left = owed - self.change_value();
+        if left > self.smallest_value() / 2.0 { self.exact_coins_for(left) } else { Vec::new() }
+    }
 }
 
 #[cfg(test)]
@@ -274,6 +279,20 @@ mod tests {
         assert_eq!(m.hidden, vec![11]);
         m.take_coin(9);
         assert_eq!(m.placed.len(), 2);
+    }
+
+    #[test]
+    fn the_change_left_comes_in_coins_on_top_of_the_tray() {
+        let mut m = money_with_currency(&[0.1, 0.2, 0.5, 1.0, 2.0], &[5.0]);
+        let all = m.change_left_coins(3.7);
+        assert!((m.value_of(&all) - 3.7).abs() < 1e-4);
+        m.placed.push((1, Mat4::IDENTITY, 3, true, None));
+        m.placed.push((2, Mat4::IDENTITY, 4, false, None));
+        let left = m.change_left_coins(3.7);
+        assert!((m.value_of(&left) - 2.7).abs() < 1e-4);
+        m.placed.push((3, Mat4::IDENTITY, 4, true, None));
+        assert!(m.change_left_coins(3.0).is_empty());
+        assert!(m.change_left_coins(2.9).is_empty());
     }
 
     fn money_with_currency(coins: &[f32], bills: &[f32]) -> Money {
