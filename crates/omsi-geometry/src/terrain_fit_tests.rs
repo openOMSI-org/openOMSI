@@ -637,3 +637,86 @@ fn road_constraint_keeps_ground_under_a_bridge_and_blends_outside_its_rim() {
         "new fill must be limited without excavating the original roof over an underpass"
     );
 }
+
+/// Synthetic load/mesh-size comparison; no original map content is required.
+#[test]
+#[ignore = "opt-in release performance measurement"]
+fn spline_heavy_terrain_cost() {
+    let terrain = Terrain {
+        cells: 128,
+        heights: vec![1.0; 129 * 129],
+    };
+    let mut c = curve([140.0, 40.0, 0.0], 0.0, 0.0);
+    c.length = 200.0;
+    let profile = build_spline_terrain_profile(&ditch(), &c, false, 1, DVec3::ZERO);
+    let mut roads = Vec::new();
+    for lane in 0..14 {
+        let mut mesh = MeshData::default();
+        let x = 10.0 + lane as f32 * 20.0;
+        for station in 0..=600 {
+            let y = station as f32 * 0.5;
+            mesh.positions
+                .extend([Vec3::new(x, y, 1.1), Vec3::new(x + 6.0, y, 1.1)]);
+            if station < 600 {
+                let a = station * 2;
+                mesh.indices.extend([a, a + 1, a + 3, a, a + 3, a + 2]);
+            }
+        }
+        roads.push(mesh);
+    }
+    let roads: Vec<_> = roads.iter().map(|m| (m, DVec3::ZERO)).collect();
+    for run in 0..4 {
+        let start = std::time::Instant::now();
+        let mesh = try_build_fitted_terrain_mesh_with_roads(
+            &terrain,
+            &[(&profile, DVec3::ZERO)],
+            &[],
+            &roads,
+        )
+        .unwrap();
+        println!(
+            "FIT_COST,{run},{:.3},{},{}",
+            start.elapsed().as_secs_f64() * 1000.0,
+            mesh.positions.len(),
+            mesh.indices.len() / 3
+        );
+    }
+}
+
+#[test]
+fn distant_roads_do_not_refine_terrain_or_change_the_local_fit() {
+    let terrain = ground();
+    let c = curve([40.0, 40.0, 0.0], 0.0, 0.0);
+    let profile = build_spline_terrain_profile(&ditch(), &c, false, 1, DVec3::ZERO);
+    let expected = build_fitted_terrain_mesh(&terrain, &[(&profile, DVec3::ZERO)]);
+    let road = MeshData {
+        positions: vec![
+            Vec3::new(240.0, 20.0, -1.0),
+            Vec3::new(248.0, 20.0, -1.0),
+            Vec3::new(240.0, 280.0, -1.0),
+            Vec3::new(248.0, 280.0, -1.0),
+        ],
+        indices: vec![0, 1, 3, 0, 3, 2],
+        ..Default::default()
+    };
+    let actual = build_fitted_terrain_mesh_with_roads(
+        &terrain,
+        &[(&profile, DVec3::ZERO)],
+        &[],
+        &[(&road, DVec3::ZERO)],
+    );
+    assert_eq!(actual.positions.len(), expected.positions.len());
+    assert_eq!(actual.indices, expected.indices);
+    for (i, (actual_position, expected_position)) in
+        actual.positions.iter().zip(&expected.positions).enumerate()
+    {
+        assert_eq!(actual_position.truncate(), expected_position.truncate());
+        if actual_position.x < 150.0 {
+            assert_eq!(actual_position, expected_position);
+            assert_eq!(actual.normals[i], expected.normals[i]);
+        }
+        assert!(actual.normals[i].is_finite());
+    }
+    // Preserve the original road clearance even outside the spline influence.
+    assert!((sample(&actual, 244.0, 100.0) + 0.003).abs() < 1e-6);
+}

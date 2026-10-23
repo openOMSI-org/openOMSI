@@ -70,3 +70,42 @@ Run `cargo test --locked --workspace --no-fail-fast` and `cargo build --locked -
 The upstream Release workflow already contains workspace regression tests and platform
 builds. Runs with `action_required` need approval in the upstream repository; editing the
 workflow does not provide that approval. Local results do not substitute for CI.
+
+## Avoiding terrain over-tessellation
+
+Road constraints and their fine blend samples are limited to the spline influence
+region, using the existing conservative spatial index plus a halo for the road blend
+and normal probes. The road mesh, its original boundaries, and the fine sampling
+resolution within this region are retained. Original terrain grid diagonals still
+constrain the entire tile. Empty profile lists bypass spatial-index allocation.
+
+This addresses excessive terrain geometry during rendering, including shadow passes,
+as well as loading cost. Distant road meshes no longer refine the ground. The complete
+road height field and original clearance remain available for height and normal
+evaluation. A regression checks that a distant road adds no vertices, preserves the
+local ditch fit and retains the original clearance under that road.
+
+Controlled synthetic measurement against `7123267`, Linux x86-64, Rust 1.99.1,
+release profile with debug symbols disabled. The fixture has a 128-cell saved terrain,
+one 200 m aligned ditch and fourteen 300 m roads with half-metre stations. Each variant
+uses one warm-up and three measured runs; mesh construction is timed without fixture
+allocation. Median times and stable mesh counts:
+
+| Metric | Before optimization | After optimization |
+| --- | ---: | ---: |
+| Terrain vertices | 316,744 | 48,727 |
+| Terrain triangles | 632,114 | 96,940 |
+| Geometry preparation, median | 981.849 ms | 239.914 ms |
+
+Reproduce with:
+
+```sh
+CARGO_PROFILE_RELEASE_DEBUG=0 cargo test --locked --release -p omsi-geometry --lib spline_heavy_terrain_cost -- --ignored --nocapture
+```
+
+To compare `7123267`, add the
+same benchmark fixture to that checkout without changing its terrain implementation.
+This is a synthetic workload, not a stock-map measurement or a measured FPS improvement.
+Actual Berlin-Spandau/Map 400 CSVs and gameplay FPS still need the installed maps.
+
+Validation after optimization: `cargo test --locked -p omsi-geometry -p omsi-scene --lib` passes 252 tests (6 ignored, including the opt-in performance fixture).

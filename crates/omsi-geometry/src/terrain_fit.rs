@@ -103,6 +103,20 @@ impl Field {
         Some([x0, y0, x1, y1])
     }
 
+    /// Conservative overlap with the spline's existing spatial index. Include a
+    /// halo for road blending and normal probes; do not refine unrelated roads.
+    fn affects(&self, points: &[DVec3], pad: f64) -> bool {
+        let Some([x0, y0, x1, y1]) = self.bounds(points, pad) else {
+            return false;
+        };
+        (y0..=y1).any(|y| {
+            (x0..=x1).any(|x| {
+                let i = y * self.bins + x;
+                !self.faces[i].is_empty() || !self.rims[i].is_empty()
+            })
+        })
+    }
+
     fn add_triangle(&mut self, p: [DVec3; 3]) {
         if p.iter().any(|p| !p.is_finite())
             || (p[1] - p[0])
@@ -345,6 +359,12 @@ pub fn try_build_fitted_terrain_mesh_with_roads(
     neighbors: &[(&Terrain, DVec2)],
     roads: &[(&MeshData, DVec3)],
 ) -> Result<MeshData, spade::InsertionError> {
+    if profiles
+        .iter()
+        .all(|(profile, _)| profile.mesh.indices.is_empty())
+    {
+        return Ok(build_terrain_mesh(terrain));
+    }
     let terrain_at = |p: DVec2| {
         let side = tile_size();
         if p.x < 0.0 || p.y < 0.0 || p.x > side || p.y > side {
@@ -441,6 +461,8 @@ pub fn try_build_fitted_terrain_mesh_with_roads(
     if field.triangles.is_empty() {
         return Ok(build_terrain_mesh(terrain));
     }
+    // Retain the complete road height field, including its clearance. Only CDT
+    // constraints and dense samples are culled below, avoiding artificial seams.
     if !roads.is_empty() {
         let mut ceiling = Field::new(field.bins);
         for &(mesh, offset) in roads {
@@ -484,11 +506,13 @@ fn fit(
             }
         }
     }
-    for tri in field
-        .triangles
-        .iter()
-        .chain(field.roads.iter().flat_map(|r| &r.triangles))
-    {
+    for tri in field.triangles.iter().chain(
+        field
+            .roads
+            .iter()
+            .flat_map(|r| &r.triangles)
+            .filter(|tri| field.affects(&tri[..], STEP + 2.0 * NORMAL_STEP)),
+    ) {
         let p = clip(tri.to_vec());
         for i in 0..p.len() {
             constraints.push([p[i].truncate(), p[(i + 1) % p.len()].truncate()]);
@@ -496,11 +520,13 @@ fn fit(
     }
     // Put the blend's samples only beside a rim, not over the entire tile. Inserting
     // into the constrained mesh also splits existing edges instead of making cracks.
-    for edge in field
-        .edges
-        .iter()
-        .chain(field.roads.iter().flat_map(|r| &r.edges))
-    {
+    for edge in field.edges.iter().chain(
+        field
+            .roads
+            .iter()
+            .flat_map(|r| &r.edges)
+            .filter(|edge| field.affects(&edge.points, STEP + 2.0 * NORMAL_STEP)),
+    ) {
         let [a, b] = edge.points;
         let d = (b - a).truncate();
         let normal = DVec2::new(-d.y, d.x).normalize();
