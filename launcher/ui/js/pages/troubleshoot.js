@@ -4,8 +4,9 @@
 
 import { html, useState } from '../../vendor/preact-htm.js';
 import { S, useStore, set, toast, remembered, remember } from '../store.js';
-import { t, ago } from '../i18n.js';
+import { t, ago, language } from '../i18n.js';
 import { call } from '../api.js';
+import { fixChoice, updateHof, pollNow } from '../data.js';
 import { Icon } from '../icons.js';
 import { Button, Card, Empty, Notice, PageHead, Search, Spinner, Tabs, Tag } from '../ui.js';
 import { ContentTest } from './content-test.js';
@@ -17,6 +18,18 @@ const LEVEL_TAG = { error: 'danger', warn: 'accent', info: '' };
  * text, items }] }] (errors first). Read from what the launcher holds already: the mods'
  * status, the bus list and the installs since it started. */
 export function problems(s) {
+  // (the sidebar and the phone menu ask on every render: the list is kept while what it is
+  // read from, and the language of its texts, stay the same)
+  const key = [s.cache.mods, s.vehicles, s.poll.jobs, language()];
+  if (memo && memo.key.every((k, i) => k === key[i])) return memo.list;
+  const list = collect(s);
+  memo = { key, list };
+  return list;
+}
+
+let memo = null;
+
+function collect(s) {
   const status = s.cache.mods;
   const groups = new Map();
   const add = (kind, id, name, issue) => {
@@ -67,8 +80,11 @@ function Overview({ onCheck }) {
     setBusy(true);
     const before = lastKeys ?? new Set(problems(S).flatMap((g) => g.issues.map((i) => i.key)));
     try {
-      const [mods, vehicles] = await Promise.all([call('mods_status'), call('vehicles')]);
+      const [mods, vehicles] = await Promise.all([call('mods_status'), call('vehicles'), pollNow()]);
       set({ cache: { ...S.cache, mods }, vehicles, scannedAt: Date.now() / 1000 });
+      // (as the content loading does: a bus taken away since must not stay the chosen one)
+      fixChoice();
+      updateHof();
       const now = problems(S);
       const keys = new Set(now.flatMap((g) => g.issues.map((i) => i.key)));
       const gone = [...before].filter((k) => !keys.has(k));
@@ -80,6 +96,8 @@ function Overview({ onCheck }) {
     }
     setBusy(false);
   };
+  // (a failed install stays in the installs' list until it is cleared: the way to resolve it)
+  const clearInstalls = () => call('mods_clear_finished').then(pollNow).catch((e) => toast(t(e.message), 'error'));
   return html`<div class="stack">
     <${Card} title="Problems by content" actions=${html`<div class="row" style="gap:8px">
         ${s.scannedAt && html`<span class="muted small">${t('Last scan: {when}', { when: ago(s.scannedAt) })}</span>`}
@@ -119,6 +137,7 @@ function Overview({ onCheck }) {
                       ${i.items?.length > 0 && html`<ul class="muted selectable" style="margin:4px 0 0;padding-left:18px">${i.items.slice(0, 50).map((x) => html`<li style="word-break:break-word">${x}</li>`)}${i.items.length > 50 && html`<li>+${i.items.length - 50}</li>`}</ul>`}
                     </div>
                   </div>`)}
+                  ${g.kind === 'mod' && html`<div><${Button} small icon="x" label="Clear finished" onClick=${clearInstalls} /></div>`}
                   ${g.kind === 'bus' && onCheck && html`<div><${Button} small icon="bus" label="Check in model test" onClick=${() => onCheck({ kind: 'bus', target: g.id })} /></div>`}
                 </div>`}
               </div>`;

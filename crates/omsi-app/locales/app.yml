@@ -71044,6 +71044,7 @@ _version: 2
   vi: "Khắc phục sự cố"
   zh: "故障排除"
   zh-tw: "疑難排解"
+  ka: "პრობლემების მოგვარება"
 "Overview":
   be: "Агляд"
   ca: "Resum"
@@ -71073,6 +71074,7 @@ _version: 2
   vi: "Tổng quan"
   zh: "概览"
   zh-tw: "總覽"
+  ka: "მიმოხილვა"
 "Problems by content":
   be: "Праблемы па змесціве"
   ca: "Problemes per contingut"
@@ -71102,6 +71104,7 @@ _version: 2
   vi: "Sự cố theo nội dung"
   zh: "按内容列出的问题"
   zh-tw: "依內容列出的問題"
+  ka: "პრობლემები შიგთავსის მიხედვით"
 "Packs waiting for their bus, buses missing parts, map HOF files and failed installs. Install what is missing, then scan again.":
   be: "Пакеты, якія чакаюць свой аўтобус, аўтобусы без частак, HOF-файлы карт і няўдалыя ўсталёўкі. Усталюйце тое, чаго не хапае, і праскануйце зноў."
   ca: "Paquets que esperen el seu autobús, autobusos amb peces que falten, fitxers HOF de mapes i instal·lacions fallides. Instal·leu el que falta i torneu a escanejar."
@@ -71131,6 +71134,7 @@ _version: 2
   vi: "Gói đang chờ xe buýt của chúng, xe buýt thiếu bộ phận, tệp HOF của bản đồ và các lần cài đặt thất bại. Hãy cài phần còn thiếu rồi quét lại."
   zh: "等待其巴士的包、缺少部件的巴士、地图 HOF 文件以及安装失败的项目。安装缺少的内容后再次扫描。"
   zh-tw: "等待其巴士的套件、缺少零件的巴士、地圖 HOF 檔案以及安裝失敗的項目。安裝缺少的內容後再次掃描。"
+  ka: "პაკეტები, რომლებიც თავიანთ ავტობუსს ელოდებიან, ავტობუსები ნაკლული ნაწილებით, რუკების HOF ფაილები და წარუმატებელი ინსტალაციები. დააინსტალირეთ ის, რაც აკლია, და ხელახლა დაასკანირეთ."
 "Last scan: {when}":
   be: "Апошняе сканаванне: {when}"
   ca: "Últim escaneig: {when}"
@@ -71160,6 +71164,7 @@ _version: 2
   vi: "Lần quét gần nhất: {when}"
   zh: "上次扫描：{when}"
   zh-tw: "上次掃描：{when}"
+  ka: "ბოლო სკანირება: {when}"
 "Scanning...":
   be: "Сканаванне..."
   ca: "Escanejant..."
@@ -71189,6 +71194,7 @@ _version: 2
   vi: "Đang quét..."
   zh: "正在扫描..."
   zh-tw: "正在掃描..."
+  ka: "სკანირება..."
 "Scan again":
   be: "Сканаваць зноў"
   ca: "Torna a escanejar"
@@ -71218,6 +71224,7 @@ _version: 2
   vi: "Quét lại"
   zh: "重新扫描"
   zh-tw: "重新掃描"
+  ka: "ხელახლა სკანირება"
 "{n} problems resolved since the last scan":
   be: "Праблем вырашана з апошняга сканавання: {n}"
   ca: "{n} problemes resolts des de l'últim escaneig"
@@ -71247,6 +71254,7 @@ _version: 2
   vi: "Đã khắc phục {n} sự cố kể từ lần quét trước"
   zh: "自上次扫描以来已解决 {n} 个问题"
   zh-tw: "自上次掃描以來已解決 {n} 個問題"
+  ka: "ბოლო სკანირების შემდეგ მოგვარდა პრობლემა: {n}"
 "{n} problems resolved, {m} left":
   be: "Вырашана: {n}, засталося: {m}"
   ca: "{n} problemes resolts, en queden {m}"
@@ -71276,6 +71284,7 @@ _version: 2
   vi: "Đã khắc phục {n} sự cố, còn {m}"
   zh: "已解决 {n} 个问题，剩余 {m} 个"
   zh-tw: "已解決 {n} 個問題，剩餘 {m} 個"
+  ka: "მოგვარდა პრობლემა: {n}, დარჩა: {m}"
 "Packs":
   be: "Пакеты"
   ca: "Paquets"
@@ -71305,6 +71314,7 @@ _version: 2
   vi: "Gói"
   zh: "包"
   zh-tw: "套件"
+  ka: "პაკეტები"
 "Nothing matches.":
   be: "Нічога не знойдзена."
   ca: "No hi ha cap coincidència."
@@ -71334,6 +71344,7 @@ _version: 2
   vi: "Không có kết quả phù hợp."
   zh: "没有匹配项。"
   zh-tw: "沒有符合的項目。"
+  ka: "არაფერი ემთხვევა."
 "No problems found.":
   be: "Праблем не знойдзена."
   ca: "No s'ha trobat cap problema."
@@ -71363,6 +71374,7 @@ _version: 2
   vi: "Không tìm thấy sự cố nào."
   zh: "未发现问题。"
   zh-tw: "未發現問題。"
+  ka: "პრობლემები ვერ მოიძებნა."
 "Details in Troubleshooting":
   be: "Падрабязнасці ў «Выпраўленні праблем»"
   ca: "Detalls a Resolució de problemes"
@@ -71392,6 +71404,7 @@ _version: 2
   vi: "Chi tiết trong Khắc phục sự cố"
   zh: "详情见故障排除"
   zh-tw: "詳情見疑難排解"
+  ka: "დეტალები განყოფილებაში „პრობლემების მოგვარება“"
 "Check in model test":
   be: "Праверыць у тэсце мадэлі"
   ca: "Comprova a la prova de models"
@@ -71421,6 +71434,7 @@ _version: 2
   vi: "Kiểm tra trong phần kiểm tra mô hình"
   zh: "在模型测试中检查"
   zh-tw: "在模型測試中檢查"
+  ka: "შემოწმება მოდელის ტესტში"
 "Show only these":
   be: "Паказаць толькі гэтыя"
   ca: "Mostra només aquests"
@@ -71450,6 +71464,7 @@ _version: 2
   vi: "Chỉ hiện các mục này"
   zh: "仅显示这些"
   zh-tw: "只顯示這些"
+  ka: "მხოლოდ ამათი ჩვენება"
 "Choose a line":
   be: "Выберыце лінію"
   ca: "Tria una línia"
