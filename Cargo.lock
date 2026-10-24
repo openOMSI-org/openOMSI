@@ -4166,6 +4166,7 @@ dependencies = [
  "omsi-cfg",
  "omsi-render",
  "openxr",
+ "pollster 1.0.1",
  "serde",
  "serde_json",
  "wgpu",
