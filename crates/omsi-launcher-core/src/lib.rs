@@ -7,6 +7,7 @@
 //! `install` runs mod installs as background jobs, `index` caches the content lists and
 //! tells the page when they changed, `instances` keeps track of the games started.
 
+pub mod ai_lists;
 pub mod crash;
 pub mod depot;
 pub mod index;
@@ -3270,6 +3271,18 @@ pub fn cli(cmd: &str, arg: &str) -> Result<Value> {
         "vehicles" => serde_json::to_value(list_vehicles()?)?,
         "weather" => serde_json::to_value(list_weather()?)?,
         "lines" => serde_json::to_value(list_lines(&s("map"), &s("date"))?)?,
+        "ai_vehicles" => serde_json::to_value(ai_lists::vehicles(false)?)?,
+        "ai_lists" => ai_lists::view(&s("map"), &s("date"))?,
+        "ai_lists_save" => ai_lists::save(
+            &s("map"),
+            &s("date"),
+            &serde_json::from_value::<Vec<ai_lists::GroupJson>>(a.get("groups").cloned().unwrap_or_default())?,
+            &serde_json::from_value::<Vec<ai_lists::RuleJson>>(a.get("rules").cloned().unwrap_or_default())?,
+        )?,
+        "ai_lists_reset" => {
+            ai_lists::reset(&s("map"))?;
+            json!({})
+        }
         "ibis" => serde_json::to_value(ibis_info(&s("bus"), &s("hof"), &s("line"), &s("terminus"), &serde_json::from_value::<Vec<String>>(a.get("stops").cloned().unwrap_or_default()).unwrap_or_default())?)?,
         "profiles" => serde_json::to_value(list_profiles()?)?,
         "profile" => serde_json::to_value(get_profile(&s("name"))?)?,

@@ -362,10 +362,20 @@ impl CarUse {
 
     /// Every `car_use/*.ocu` of a map folder, in the order the folder lists them.
     pub fn load_dir(map_dir: &Path) -> Vec<CarUse> {
-        let mut files: Vec<std::path::PathBuf> = omsi_cfg::vfs::read_dir_paths(&omsi_cfg::resolve_path(map_dir, "car_use"))
-            .into_iter()
-            .filter(|p| p.extension().map(|e| e.eq_ignore_ascii_case("ocu")).unwrap_or(false))
-            .collect();
+        // (every copy of the folder: the player's own rules of the launcher's AI Lists page are
+        // in the content folder, the map's in the OMSI folder; a name in both is the content's)
+        let mut files: Vec<std::path::PathBuf> = Vec::new();
+        for d in omsi_cfg::mirrored_dirs(&omsi_cfg::resolve_path(map_dir, "car_use")) {
+            for p in omsi_cfg::vfs::read_dir_paths(&d) {
+                let is_ocu = p.extension().map(|e| e.eq_ignore_ascii_case("ocu")).unwrap_or(false);
+                let name = p.file_name().map(|n| n.to_ascii_lowercase());
+                if is_ocu && !files.iter().any(|f| f.file_name().map(|n| n.to_ascii_lowercase()) == name) {
+                    files.push(p);
+                }
+            }
+        }
+        // (a name starting with `!` - the launcher's rules - sorts before the map's: the first
+        // rule to give a tour its bus keeps it)
         files.sort_by_key(|p| p.file_name().map(|n| n.to_ascii_lowercase()));
         files.iter().filter_map(|p| CarUse::load(p).map_err(|e| log::warn!("{}: {e}", p.display())).ok()).collect()
     }

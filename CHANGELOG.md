@@ -8,6 +8,17 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **AI Lists** (Settings, the new *AI Lists* tab): choose, map by map, which AI cars, lorries and
+  buses the traffic is made of and which buses run on which line - only from what is installed
+  (the AI vehicles and the buses, with every repaint), nothing new is added. *Traffic* changes the
+  weighted lists of the random traffic (replace a car by another, add or remove one, set how often
+  it appears); *Depot buses* changes a depot's types, fleet numbers, plates and repaints; *Lines*
+  makes a line run only, or mostly, the types you choose (a type the line's depot lacks is added to
+  it with a few buses). Every list and the picker show the vehicle in the 3D preview of the Drive
+  page. The map's own files are never touched: the changes are kept in the content folder
+  (`ailists_#user.cfg` and `car_use/!openomsi-ai-lists-*.ocu` of the map's folder, the format OMSI
+  itself reads), a group or a line can be reset on its own, and *Reset the map* deletes them, which
+  gives the map's defaults back. Translated into every language of the launcher.
 - **LAN protocol 15**: a game of this version cannot join a session of an older one, nor the
   other way round (the AI traffic goes as a table, see below). Update the game on both sides.
 - **Every light casts a shadow** (Enhanced and Enhanced+): the lamps' shadow maps were four, now

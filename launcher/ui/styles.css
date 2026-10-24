@@ -1165,3 +1165,48 @@ html.phone, html.phone body { font-size: 15px; -webkit-tap-highlight-color: tran
   .tte-right { grid-row: 2; }
   .tte-search { width: 240px; min-width: 0; }
 }
+
+/* AI Lists */
+.ail { display: flex; flex-direction: column; gap: 14px; min-height: 100%; padding-bottom: 70px; }
+.ail .page-head { margin-bottom: 0; }
+.ail-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ail-cols { display: grid; grid-template-columns: clamp(240px, 26%, 320px) minmax(0, 1fr); gap: 12px; align-items: start; }
+.ail-side { padding: 6px; display: flex; flex-direction: column; gap: 2px; max-height: 70vh; overflow: auto; }
+.ail-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--text); text-align: left; cursor: pointer; font: inherit; }
+.ail-item:hover { background: var(--surface-2); }
+.ail-item.on { background: var(--surface-3); }
+.ail-item b, .ail-row b, .ail-type b, .ail-pick b { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ail-item small, .ail-row small, .ail-type small, .ail-pick small { display: block; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ail-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+.ail-main { min-width: 0; }
+.ail-stack { display: flex; flex-direction: column; gap: 14px; }
+.ail-rows { display: flex; flex-direction: column; gap: 4px; }
+.ail-row { display: flex; align-items: center; gap: 8px; padding: 6px 4px; border-radius: var(--radius-sm); }
+.ail-row:hover { background: var(--surface-2); }
+.ail-row .grow, .ail-type-head .grow, .ail-pick .grow { min-width: 0; }
+.ail-weight { display: flex; align-items: center; gap: 8px; width: 120px; flex: none; }
+.ail-weight .input { width: 70px; }
+.ail-type { background: var(--surface-2); border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 10px; }
+.ail-type-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.ail-entries { display: flex; flex-direction: column; gap: 6px; }
+.ail-entry { display: grid; grid-template-columns: 90px 130px minmax(140px, 1fr) minmax(0, 150px) auto; gap: 8px; align-items: center; }
+.ail-dates { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ail-save { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius); box-shadow: var(--shadow); z-index: 50; }
+.ail-picker-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+.ail-picker-bar .search { flex: 1; min-width: 200px; }
+.ail-picker-list { display: flex; flex-direction: column; gap: 2px; max-height: 52vh; overflow: auto; }
+.ail-pick { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--text); text-align: left; cursor: pointer; font: inherit; }
+.ail-pick:hover { background: var(--surface-2); }
+@media (max-width: 900px) { .ail-cols { grid-template-columns: minmax(0, 1fr); } .ail-entry { grid-template-columns: 1fr 1fr; } }
+.ail-cols { grid-template-columns: clamp(220px, 22%, 280px) minmax(0, 1fr) clamp(280px, 30%, 420px); }
+.ail-stage { overflow: hidden; position: sticky; top: 0; }
+.ail-view { width: 100%; aspect-ratio: 4 / 3; min-height: 220px; }
+.ail-view.empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: var(--surface-2); padding: 20px; text-align: center; }
+.ail-row, .ail-entry, .ail-type-head { cursor: pointer; }
+.ail-row.on, .ail-entry.on, .ail-type-head.on { background: var(--surface-3); }
+.ail-pick.on { background: var(--surface-3); }
+.ail-picker { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 42%); gap: 14px; }
+.ail-picker-right { background: var(--surface-2); border-radius: var(--radius-sm); overflow: hidden; align-self: start; }
+.ail-picker-list { max-height: 46vh; }
+@media (max-width: 1100px) { .ail-cols { grid-template-columns: clamp(200px, 30%, 260px) minmax(0, 1fr); } .ail-stage { grid-column: 1 / -1; position: static; } .ail-picker { grid-template-columns: minmax(0, 1fr); } }
+.ail.busy { opacity: 0.6; }

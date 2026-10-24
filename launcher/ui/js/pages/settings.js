@@ -12,6 +12,7 @@ import { UpdateRow, checkUpdates } from '../updates.js';
 import { SETTINGS_TABS, GRAPHICS_PROFILE_KEYS } from './settings-schema.js';
 import { VersionsDialog } from './versions.js';
 import { RadioStations } from './radio-stations.js';
+import { AiListsPage } from './ai-lists.js';
 import { OptimiseBlock } from './optimise.js';
 
 const REPO_URL = 'https://github.com/openOmsi-project/openOMSI';
@@ -71,11 +72,13 @@ export function SettingsPage() {
   return html`
     <${PageHead} title="Settings" text="Every change is saved at once; the game reads them when it starts." />
     <${Tabs} value=${current.id} options=${[...tabs.map((x) => [x.id, x.label]), ...(phone ? [] : [['troubleshoot', 'Troubleshooting']])]} onChange=${pick} />
-    <div class="settings-grid" key=${tab}>
+    ${current.page === 'ailists'
+      ? html`<div key=${tab}><${AiListsPage} /></div>`
+      : html`<div class="settings-grid" key=${tab}>
       ${current.cols.map((col) => html`<${Card} title=${col.title}>
         ${col.rows.filter((row) => visible(row, s.settings, platform)).map((row, i) => html`<${Row} key=${i + (row.key || row.id || row.label || row.title || '')} row=${row} ask=${ask} />`)}
       </${Card}>`)}
-    </div>
+    </div>`}
     ${dialog}
   `;
 }

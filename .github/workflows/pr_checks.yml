@@ -76,3 +76,7 @@ jobs:
           else
             node --experimental-websocket launcher/tests/drive-check.mjs
           fi
+
+      - name: AI Lists state
+        if: ${{ !cancelled() }}
+        run: node launcher/tests/ai-lists-check.mjs
