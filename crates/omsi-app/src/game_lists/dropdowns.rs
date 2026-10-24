@@ -268,6 +268,8 @@ pub(super) fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
         "graphics" => vec![("vanilla", "Vanilla (as OMSI 2)"), ("vanilla_plus", "Vanilla+"), ("enhanced", "Enhanced"), ("enhanced_plus", "Enhanced+")],
         "msaa" => vec![("1", "Off"), ("2", "2x MSAA"), ("4", "4x MSAA"), ("8", "8x MSAA")],
         "render_scale" => vec![("auto", "Auto"), ("1", "100%"), ("0.85", "85%"), ("0.75", "75%"), ("0.67", "67%"), ("0.5", "50%")],
+        "upscaler" => vec![("default", "Standard (Catmull-Rom)"), ("fsr1", "AMD FSR 1 (experimental)")],
+        "fsr_quality" => vec![("ultra", "Ultra Quality (77%)"), ("quality", "Quality (67%)"), ("balanced", "Balanced (59%)"), ("performance", "Performance (50%)"), ("auto", "Automatic (keeps the frame rate)"), ("custom", "Use render scale")],
         "anisotropy" => vec![("1", "Off"), ("2", "2x"), ("4", "4x"), ("8", "8x"), ("16", "16x")],
         "shadow_size" => vec![("1024", "1024"), ("2048", "2048"), ("4096", "4096")],
         "shadow_casters" => vec![("all", "Every solid mesh"), ("omsi", "[shadow] meshes, as OMSI")],
@@ -397,6 +399,17 @@ pub(super) fn text_in_mode(text: &str, mode: &str) -> crate::settings::Settings 
 }
 
 pub(super) fn sync_live(app: &mut App) {
+    // (the upscaler and its sharpening at once, FSR 1 built when first asked for; and the
+    // render scale with them, FSR's quality being one. Only when one of them changed and FSR
+    // was or is asked for: without it the render scale stays for the next start, as its row
+    // says)
+    let o = app.settings.render_options();
+    if let Some(r) = app.renderer.as_mut() {
+        let asked = r.upscaler_asked();
+        if (o.fsr1 || asked.0) && (o.fsr1, o.fsr_sharpness, o.render_scale) != asked && !r.set_upscaler(o.fsr1, o.fsr_sharpness, o.render_scale) {
+            app.service_msg = Some((omsi_ui::tr("FSR 1 does not run on this graphics driver: the standard upscaler stays").into_owned(), 6.0));
+        }
+    }
     // (the street light takes effect at once: the renderer reads it every frame)
     let street_light = app.settings.render_options().street_light;
     if let Some(r) = app.renderer.as_mut() {

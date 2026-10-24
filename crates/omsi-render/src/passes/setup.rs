@@ -73,6 +73,9 @@ impl Renderer {
         let (full_w, full_h) = (width, height);
         let (width, height) = if with_overlays {
             self.scene_size(full_w, full_h)
+        } else if let Some(s) = self.xr_fsr_scale().filter(|_| projection.is_some()) {
+            // (a VR eye with FSR 1: drawn smaller, scaled up to the headset's image)
+            (((full_w as f32 * s).round() as u32).max(1), ((full_h as f32 * s).round() as u32).max(1))
         } else {
             (full_w, full_h)
         };
@@ -407,6 +410,7 @@ impl Renderer {
                 }
                 std::array::from_fn(|r| std::array::from_fn(|c| at[r * 4 + c]))
             },
+            lod: [self.fsr_mip_bias(f), 0.0, 0.0, 0.0],
         };
         self.queue
             .write_buffer(&self.camera_buf, 0, bytemuck::bytes_of(&cu));

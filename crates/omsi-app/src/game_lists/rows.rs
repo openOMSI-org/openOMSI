@@ -96,6 +96,7 @@ pub(super) fn steps_of(verb: &str) -> Option<Vec<f32>> {
         "volume" => VOLUME.to_vec(),
         "led_glow" => (0..16).map(|v| v as f32).collect(),
         "night_brightness" => (0..=12).map(|v| v as f32 * 0.25).collect(),
+        "fsr_sharpness" => (0..=20).map(|v| v as f32 * 0.05).collect(),
         "reflections" => (0..=20).map(|v| v as f32 / 20.0).collect(),
         "led_mips" => (0..=80).map(|v| v as f32 * 0.05).collect(),
         "ui_scale" => (10..=40).map(|v| v as f32 * 0.05).collect(),

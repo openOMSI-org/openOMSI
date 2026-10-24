@@ -285,7 +285,9 @@ impl Ui {
         // key hints only where there is a keyboard
         let keys = !f.vr && !crate::platform::touch_controls();
         // the timetable beside the list, where the window is wide enough
-        let preview = f.menu_preview.as_ref().filter(|_| !f.vr && f.width >= 760.0 * s);
+        // VR uses the same timetable pane and hit rectangles as the desktop:
+        // hiding it also removes trip-time selection and the start-trip button.
+        let preview = f.menu_preview.as_ref().filter(|_| f.width >= 760.0 * s);
         let timetable_kind = matches!(kind, MenuKind::Lines | MenuKind::Tours);
         let pane_w = if preview.is_some() { (if timetable_kind { 320.0 } else { 340.0 }) * s } else { 0.0 };
         let want = if timetable_kind { 360.0 * s } else { 380.0 * s };

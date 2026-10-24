@@ -135,7 +135,7 @@ fn display_level(t: vec3<f32>) -> vec3<f32> {
 // panels' `Led glow`) and is held against the metering as an LED panel's dots are; the
 // glare round it comes from how bright it is, as every light's does (post.wgsl).
 fn matl_glow_light(buv: vec2<f32>, col: vec3<f32>) -> vec3<f32> {
-    let gm = textureSample(t_light, s_diffuse, buv);
+    let gm = textureSampleBias(t_light, s_diffuse, buv, camera.lod.x);
     return col * dot(gm.rgb, vec3<f32>(0.299, 0.587, 0.114)) * material.glow.x * max(enh.exposure.z * 2.0, 0.8);
 }
 

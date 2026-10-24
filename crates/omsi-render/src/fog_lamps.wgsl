@@ -37,6 +37,8 @@ struct Camera {
     inside2_c: vec4<f32>,
     cookies: array<vec4<f32>, 8>,
     cabin_lamps: array<vec4<f32>, 4>,
+    // x: the textures' mip bias (FSR 1: negative, see `CameraUniform::lod`)
+    lod: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> camera: Camera;
 

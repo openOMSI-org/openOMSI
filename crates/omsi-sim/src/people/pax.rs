@@ -347,6 +347,8 @@ pub struct PaxStop {
     pub pos: DVec3,
     /// The object's heading (degrees).
     pub heading: f64,
+    /// Boarding side relative to traffic: 0 = kerb, 1 = opposite, 2 = both.
+    pub side: u8,
     /// Where people gather when a bus comes (+0x48): a metre to the side and a metre
     /// along the stop.
     pub gather: DVec3,

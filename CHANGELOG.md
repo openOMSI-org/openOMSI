@@ -419,6 +419,13 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 - **Trolleybus poles stay on the wire over bumps and joints**: a shoe that a bump lifts for
   a moment no longer comes off (it has to stay out of its groove for 0.15 s, or leave it by
   more than three groove depths), the groove is deeper and bends are taken faster.
+- **Trolleybus poles no longer come off at the map's frogs whatever the bus does**: a map's
+  junctions are drawn with the three wires up to a metre apart or a branch started from the
+  middle of another wire, and only one frog in seventeen was found (on Bronitsyn), so the
+  shoe ran off a wire that simply ended. The ends of a junction within 1.2 m are now one
+  point, a branch from the middle of a wire cuts it into a frog, and the contact plate before
+  a frog is found over short spans and joints too (a toe cut shorter than 9 m never set its
+  frog). Power on takes the branch, coasting goes straight.
 
 - The windows of Russian and other mod buses whose texture names are not plain ASCII (the
   ZiU-682G, the Trolza Optima) are see-through again: the `.o3d` keeps a texture's name in

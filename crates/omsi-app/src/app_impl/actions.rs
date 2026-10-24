@@ -67,8 +67,9 @@ impl App {
             if self.xr.vr.is_some() {
                 self.xr.vr = None;
                 self.service_msg = Some(("Desktop mode".into(), 2.0));
-            } else if let Some(renderer) = self.renderer.as_ref() {
-                match crate::openxr::Vr::new(renderer, self.settings.vr_scale,
+            } else if let Some(renderer) = self.renderer.as_mut() {
+                let image_scale = renderer.start_xr(self.settings.vr_scale);
+                match crate::openxr::Vr::new(renderer, image_scale,
                                              self.settings.vr_desktop_mirror) {
                     Ok(vr) => {
                         self.xr.vr = Some(vr);

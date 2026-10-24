@@ -43,13 +43,13 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         .into_iter()
         .flatten()
         .collect();
-    let graphics: Vec<(String, String)> = vec![
+    let mut graphics: Vec<(String, String)> = vec![
         pick("graphics", "Graphics", later),
         preset_row(&file, "Quality preset", "Sets most of the graphics options at once"),
         app.can_optimise().then(|| button("Optimise for my PC", "Start", "Measures while you drive and adjusts the graphics for a smooth frame rate; your settings are saved first", "optimise")),
         omsi_launcher_lib::optimise::backup().is_some().then(|| button("Restore my previous settings", "Restore", "The graphics settings as they were before the last optimisation", "optimise_restore")),
         pick("msaa", "Anti-aliasing", later),
-        pick("render_scale", "Render scale", later),
+        pick("render_scale", "Render scale", if s.upscaler == "fsr1" { "With FSR 1 it changes at once" } else { later }),
         pick("anisotropy", "Anisotropic", later),
         // (Enhanced+ traces its shadows, occlusion and reflections: always on there)
         switch_row(app, "shadows", "Sun shadows", "Enables/Disables shadows").filter(|_| shown("shadows")),
@@ -72,6 +72,8 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         .into_iter()
         .flatten()
         .collect();
+    let at = graphics.iter().position(|r| r.1 == "sel render_scale").map_or(graphics.len(), |k| k + 1);
+    graphics.splice(at..at, upscaler_rows(app, &file));
     let mut display = vec![
         switch_row(app, "fullscreen", "Fullscreen", "Switches the window between windowed and fullscreen"),
         pick("resolution", "Window size", later),
@@ -567,6 +569,30 @@ mod tests {
         assert_eq!(mode_of_session(&session(false, true, false), "vanilla"), "enhanced");
         assert_eq!(mode_of_session(&session(true, true, false), "vanilla"), "enhanced_plus");
         assert_eq!(mode_of_session(&session(false, false, false), "enhanced"), "vanilla_plus");
+    }
+}
+
+/// The upscaler's rows of the graphics page (after the render scale's): the upscaler, and
+/// FSR 1's quality and sharpening while it is chosen.
+fn upscaler_rows(app: &App, file: &serde_json::Value) -> Vec<(String, String)> {
+    let fsr = app.settings.upscaler == "fsr1";
+    let pct = |v: f32| format!("{:.0} %", v * 100.0);
+    [
+        select_row(file, "upscaler", "Upscaling", "Standard Catmull-Rom or experimental FSR 1; changes show at once"),
+        select_row(file, "fsr_quality", "FSR quality", &fsr_size(app)).filter(|_| fsr),
+        slider_row(app, "fsr_sharpness", "FSR sharpness", "RCAS sharpening strength", &pct).filter(|_| fsr),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
+}
+
+/// What FSR 1's quality means now: the size the 3D picture is drawn at, and the window's.
+fn fsr_size(app: &App) -> String {
+    let sizes = app.gfx.surface.as_ref().zip(app.renderer.as_ref()).map(|(sf, r)| ((sf.config.width, sf.config.height), r.scene_size(sf.config.width, sf.config.height)));
+    match sizes {
+        Some(((ww, wh), (w, h))) => omsi_ui::tr("The 3D picture is drawn at {} and scaled up to {}").replacen("{}", &format!("{w}×{h}"), 1).replacen("{}", &format!("{ww}×{wh}"), 1),
+        None => omsi_ui::tr("Internal render resolution").into_owned(),
     }
 }
 
