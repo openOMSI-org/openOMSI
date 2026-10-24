@@ -18,6 +18,7 @@ impl App {
             self.paused = true;
         }
         self.shell.pause_category = Default::default();
+        self.shell.quick_edit = false;
         self.menus.game_menu = Some(0);
         self.menus.menu_top = None;
         self.menus.menu_kbd = true;
@@ -25,6 +26,7 @@ impl App {
     }
 
     pub(crate) fn close_game_menu(&mut self) {
+        self.shell.quick_edit = false;
         self.menus.key_capture = None;
         if self.menus.menu_edit_number {
             if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);}
@@ -70,11 +72,18 @@ impl App {
             self.chooser_key(code);
             return;
         }
+        if self.quick_editor_key(code) { return; }
         let sel = self.menus.game_menu.unwrap_or(0);
         let modified = self.input.keys.iter().any(|key| {
             matches!(*key, KeyCode::ControlLeft | KeyCode::ControlRight | KeyCode::AltLeft | KeyCode::AltRight | KeyCode::ShiftLeft | KeyCode::ShiftRight)
         });
         self.menus.menu_top = None;
+        if code == KeyCode::KeyE && !modified && !self.vr_active() && self.shell.pause_category == crate::shell::pause::navigation::Category::Home {
+            self.shell.quick_edit = true;
+            self.shell.quick_focus = 0;
+            self.shell.last_sel = None;
+            return;
+        }
         match code {
             // P changes only the simulation state, even while a menu is open.
             KeyCode::KeyP if !modified => self.toggle_pause(),
@@ -101,7 +110,8 @@ impl App {
         }
         self.close_list();
         self.shell.pause_category = category;
-        self.menus.game_menu = Some(category.indices(&ids).first().copied().unwrap_or(0));
+        self.shell.quick_edit = false;
+        self.menus.game_menu = Some(crate::shell::pause::quick_actions::indices(category, &menu, &self.settings.pause_quick_actions).first().copied().unwrap_or(0));
         self.shell.last_sel = None;
     }
 
@@ -120,7 +130,10 @@ impl App {
             return self.menu_step(from, menu.len(), down);
         }
         let ids: Vec<_> = menu.iter().map(|line| line.0).collect();
-        let indices: Vec<_> = self.shell.pause_category.focus_indices(&ids).into_iter().filter(|k| !self.menu_item_off(*k)).collect();
+        let mut indices: Vec<_> = ids.iter().position(|id| *id == "resume").into_iter().collect();
+        indices.extend(crate::shell::pause::quick_actions::indices(self.shell.pause_category, &menu, &self.settings.pause_quick_actions));
+        indices.extend(ids.iter().position(|id| *id == "quit"));
+        indices.retain(|k| !self.menu_item_off(*k));
         crate::shell::pause::navigation::step(&indices, from, down).unwrap_or(from)
     }
 

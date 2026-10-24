@@ -33,7 +33,7 @@ fn session_action(sh: &mut Shell, v: &PauseView, id: &str, rect: Rect, kind: But
     let x = rect.center().x - (width + 32.0) * 0.5;
     ui.icon(rail_icon(id), Vec2::new(x + 12.0, rect.center().y), 24.0, ink);
     ui.text_in(&label, Rect::new(x + 32.0, rect.y, width + 2.0, rect.h), 18.0, Weight::Bold, ink, Align::Left);
-    if v.kbd && v.list.is_none() && v.rail_sel == Some(k) {
+    if v.kbd && !sh.quick_edit && v.list.is_none() && v.rail_sel == Some(k) {
         ui.p().rounded_border(rect.inset(-2.0), 9.0, 2.0, ACCENT);
     }
     if clicked {
@@ -112,6 +112,7 @@ pub(super) fn page(sh: &mut Shell, v: &PauseView, page: Rect, compact: bool) {
         sh.pause_category = Category::Home;
     }
     let category = sh.pause_category;
+    if category != Category::Home { sh.quick_edit = false; }
     let pad = if page.w < 420.0 { 18.0 } else { 36.0 };
     let width = (page.w - pad * 2.0).clamp(0.0, 980.0);
     let x = page.x + (page.w - width) * 0.5;
@@ -133,9 +134,20 @@ pub(super) fn page(sh: &mut Shell, v: &PauseView, page: Rect, compact: bool) {
             126.0
         };
     }
-    sh.ui.text_in(&omsi_ui::tr(category.title()), Rect::new(x, top, width, 46.0), 34.0, Weight::Bold, INK, Align::Left);
+    let editing = sh.quick_edit;
+    let title_w = if category == Category::Home { (width - 98.0).max(0.0) } else { width };
+    sh.ui.text_in(&omsi_ui::tr(category.title()), Rect::new(x, top, title_w, 46.0), if category == Category::Home && width < 420.0 { 26.0 } else { 34.0 }, Weight::Bold, INK, Align::Left);
     if !short {
-        sh.ui.text_in(&omsi_ui::tr(category.hint()), Rect::new(x, top + 54.0, width, 28.0), 16.0, Weight::Regular, INK_2, Align::Left);
+        sh.ui.text_in(&omsi_ui::tr(if sh.quick_edit { "Choose actions and set their order" } else { category.hint() }), Rect::new(x, top + 54.0, width, 28.0), 16.0, Weight::Regular, INK_2, Align::Left);
+    }
+    if category == Category::Home {
+        let edit_rect = Rect::new(x + width - 90.0, top + 4.0, 90.0, 38.0);
+        if v.keys { sh.ui.tooltip(edit_rect, &format!("{} ({})", omsi_ui::tr(if editing { "Done" } else { "Edit" }), if editing { "Esc" } else { "E" })); }
+        if sh.ui.button("pause-quick-edit", edit_rect, &omsi_ui::tr(if editing { "Done" } else { "Edit" }), None, ButtonKind::Ghost) {
+            sh.quick_edit = !editing;
+            sh.quick_focus = 0;
+            sh.last_sel = None;
+        }
     }
     top += if tight {
         44.0
@@ -145,18 +157,21 @@ pub(super) fn page(sh: &mut Shell, v: &PauseView, page: Rect, compact: bool) {
         98.0
     };
     let footer_h = if compact { 94.0 } else { 48.0 };
-    if compact {
+    if compact && !sh.quick_edit {
         let nav_h = (page.h - top - footer_h - 106.0).clamp(34.0, 82.0);
         top = compact_categories(sh, &ids, Rect::new(x, top, width, nav_h), v.kbd);
     }
     let area = Rect::new(x, top, width, (page.h - top - footer_h).max(0.0));
-    cards(sh, v, category, area);
+    if sh.quick_edit { super::quick_actions_ui::editor(sh, v, area); } else { cards(sh, v, category, area); }
     if compact {
         session_action(sh, v, "quit", Rect::new(x, page.h - 84.0, width, 54.0), ButtonKind::Danger);
     }
     if v.keys {
-        let text = omsi_ui::tr("Esc resumes  |  Left / Right: categories  |  Up / Down: actions");
-        sh.ui.text_in(&text, Rect::new(x, page.h - 27.0, width, 18.0), 12.0, Weight::Regular, INK_MUTED, Align::Left);
+        let text = omsi_ui::tr(if sh.quick_edit { "Up / Down: select | Space: toggle | Left / Right: reorder | R: reset | Esc: done" } else { "Esc resumes  |  Left / Right: categories  |  Up / Down: actions" });
+        let footer = Rect::new(x, page.h - 27.0, width, 18.0);
+        let shown = if sh.quick_edit && width < 750.0 { "↑ ↓ / Space / ← → / R / Esc" } else { &text };
+        sh.ui.text_in(shown, footer, 12.0, Weight::Regular, INK_MUTED, Align::Left);
+        if sh.quick_edit { sh.ui.tooltip(footer, &text); }
     }
 }
 
@@ -202,7 +217,7 @@ fn compact_categories(sh: &mut Shell, ids: &[&str], area: Rect, keyboard: bool) 
 }
 
 fn cards(sh: &mut Shell, v: &PauseView, category: Category, area: Rect) {
-    let indices = category.indices(&ids(v));
+    let indices = super::quick_actions::indices(category, v.rail, v.quick_actions);
     let cols = if area.w >= 520.0 { 2 } else { 1 };
     let gap = 14.0;
     let w = ((area.w - gap * (cols - 1) as f32) / cols as f32).max(0.0);

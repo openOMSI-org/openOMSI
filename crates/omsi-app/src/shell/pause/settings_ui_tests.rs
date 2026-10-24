@@ -42,6 +42,7 @@ fn nested_view<'a>(rail: &'a [MenuLine], rows: &'a [(&'static str, String)], wor
         .collect();
     PauseView {
         paused: true,
+        quick_actions: "default",
         rail,
         rail_sel: Some(1),
         disabled: &[],

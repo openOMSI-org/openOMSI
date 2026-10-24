@@ -22,6 +22,7 @@ fn menu() -> Vec<MenuLine> {
 fn view(rail: &[MenuLine]) -> PauseView<'_> {
     PauseView {
         paused: true,
+        quick_actions: "default",
         rail,
         rail_sel: Some(0),
         disabled: &[],
@@ -120,11 +121,18 @@ fn pause_navigation_write_preview() {
         ("pause-quit-focus", Category::Home, 1440, 900, Some(rail.len() - 1)),
         ("pause-saves", Category::Saves, 1440, 900, None),
         ("pause-narrow", Category::Home, 400, 720, None),
+        ("quick-actions-editor", Category::Home, 1440, 900, None),
+        ("quick-actions-editor-laptop", Category::Home, 1366, 768, None),
+        ("quick-actions-editor-narrow", Category::Home, 400, 720, None),
+        ("quick-actions-editor-short", Category::Home, 400, 320, None),
+        ("quick-actions-custom", Category::Home, 1440, 900, None),
     ] {
         let mut sh = Shell::new();
         sh.pause_category = category;
+        sh.quick_edit = name.starts_with("quick-actions-editor");
         sh.begin(w as f32, h as f32, 1.0, 1.0 / 60.0);
         let mut v = view(&rail);
+        if name.starts_with("quick-actions-") { v.quick_actions = r#"["save","world","camera","map"]"#; }
         if let Some(index) = selected {
             v.kbd = true;
             v.rail_sel = Some(index);
@@ -209,5 +217,64 @@ fn pause_navigation_open_list_preserves_origin_category() {
             draw(&mut sh, &v);
             assert_eq!(sh.pause_category, origin, "returning from {target}");
         }
+    }
+}
+
+#[test]
+fn quick_actions_custom_card_keeps_original_index() {
+    let rail = menu();
+    let mut v = view(&rail);
+    v.quick_actions = r#"["save","camera"]"#;
+    let mut sh = Shell::new();
+    click(&mut sh, &v, Vec2::new(400.0, 225.0));
+    assert_eq!(sh.actions, [Action::Choose(5)]);
+}
+
+#[test]
+fn quick_actions_editor_toggle_never_executes_action() {
+    let rail = menu();
+    let mut sh = Shell::new();
+    sh.quick_edit = true;
+    click(&mut sh, &view(&rail), Vec2::new(400.0, 265.0));
+    assert!(sh.actions.iter().any(|a| matches!(a, Action::QuickActions(_))));
+    assert!(!sh.actions.iter().any(|a| matches!(a, Action::Choose(_) | Action::Rail(_))));
+}
+
+#[test]
+fn quick_actions_empty_page_keeps_edit_entry_accessible() {
+    let rail = menu();
+    let mut v = view(&rail);
+    v.quick_actions = "[]";
+    let mut sh = Shell::new();
+    click(&mut sh, &v, Vec2::new(1280.0, 105.0));
+    assert!(sh.quick_edit);
+    assert!(sh.actions.is_empty());
+}
+
+#[test]
+fn quick_actions_editor_draws_checkbox_and_footer_at_all_sizes() {
+    let rail = menu();
+    for (w, h, scale) in [(320.0, 480.0, 1.0), (400.0, 320.0, 1.0), (1366.0, 768.0, 1.5), (1920.0, 1080.0, 1.0)] {
+        let mut sh = Shell::new();
+        sh.quick_edit = true;
+        sh.begin(w, h, scale, 0.016);
+        draw(&mut sh, &view(&rail));
+        let sidebar = sh.ui.size.x >= 700.0;
+        let left = if sidebar { RAIL_W } else { 0.0 };
+        let page_w = sh.ui.size.x - left;
+        let pad = if page_w < 420.0 { 18.0 } else { 36.0 };
+        let width = (page_w - pad * 2.0).min(980.0);
+        let x = left + (page_w - width) * 0.5;
+        let button_w = (width - 24.0) * 0.5;
+        let done = Vec2::new(x + width - 8.0 - button_w * 0.5, sh.ui.size.y - if sidebar { 48.0 } else { 94.0 } - 27.0);
+        assert!(done.x >= 0.0 && done.x <= sh.ui.size.x && done.y > 0.0);
+        sh.finish();
+        sh.begin(w, h, scale, 0.016);
+        sh.pointer(done.x * scale, done.y * scale);
+        sh.ui.input.pressed = true;
+        sh.ui.input.released = true;
+        draw(&mut sh, &view(&rail));
+        assert!(!sh.quick_edit, "Done must remain clickable at {w}x{h}, scale {scale}");
+        assert!(sh.actions.is_empty());
     }
 }
