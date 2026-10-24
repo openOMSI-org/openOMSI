@@ -1051,8 +1051,9 @@ pub struct Prepared {
     /// `tile.map.water`: the height of the tile's water surface at its four corners.
     pub(super) water: Option<[f32; 4]>,
     /// Spline meshes are local to the tile origin.
-    /// Spline meshes (local to the tile origin), their type and whether they cast a shadow.
-    pub(super) splines: Vec<(Arc<MeshData>, Arc<SplineType>, bool, DVec3)>,
+    /// Spline meshes (local to the tile origin), their type, whether they cast a shadow,
+    /// their blend sort origin and their depth step (`spline_layers`).
+    pub(super) splines: Vec<(Arc<MeshData>, Arc<SplineType>, bool, DVec3, crate::spline_layers::SplineLayer)>,
     /// Terrain-mapped spline faces pooled across types within spatial cells.
     pub(super) ground_splines: Vec<Arc<MeshData>>,
     pub(super) objects: Vec<PlacedObject>,

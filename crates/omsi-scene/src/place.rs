@@ -461,7 +461,7 @@ impl World {
         note_place_stats(stats, &st, &res, objects.len());
         self.tile_state.lock().insert(key, state);
         let light_map = self.tile_light_map(key, &st, layout, staged);
-        let (splines, ground_splines) = self.tile_splines(&st);
+        let (splines, ground_splines) = self.tile_splines(&st, &objects, staged, layout);
         Some(Prepared {
             tx,
             ty,
@@ -682,13 +682,68 @@ impl World {
     /// The tile's spline meshes for the GPU: their `[terrainmapping]` faces pooled apart,
     /// the rest batched.
     #[allow(clippy::type_complexity)]
-    fn tile_splines(&self, st: &StagedTile) -> (Vec<(Arc<MeshData>, Arc<SplineType>, bool, DVec3)>, Vec<Arc<MeshData>>) {
+    fn tile_splines(&self, st: &StagedTile, objects: &[PlacedObject], staged: &HashMap<(i32, i32), Arc<StagedTile>>, layout: &TileLayout) -> (Vec<(Arc<MeshData>, Arc<SplineType>, bool, DVec3, crate::spline_layers::SplineLayer)>, Vec<Arc<MeshData>>) {
         // the whole spline meshes go to the GPU from here (a later load reads the tile again)
         let meshes = st.meshes.lock().take().unwrap_or_default();
+        // (in the tile's order, before anything is split off or batched: a spline laid on an
+        // earlier one at its height, or on a `[surface]` object, is drawn over it, as in
+        // Omsi.exe)
+        let levels = if omsi_cfg::flags::OMSI_NO_DRAW_ORDER_DEPTH.is_set() {
+            vec![Default::default(); meshes.len()]
+        } else {
+            // the `[surface]` objects of this tile, and those of the tiles around it that
+            // reach into it (a lane near the edge lies on the next tile's junction)
+            let size = tile_size() as f32;
+            let mut ground: Vec<[glam::Vec3; 3]> = Vec::new();
+            let mut add = |ot: &ObjectType, pos: DVec3, xf: &Mat4, warped: Option<&Vec<MeshData>>, edge_only: bool| {
+                if !ot.sco.surface {
+                    return;
+                }
+                let at = (pos - st.origin).as_vec3();
+                let meshes: Vec<&MeshData> = match warped {
+                    Some(w) => w.iter().collect(),
+                    None => ot.meshes.iter().map(|(m, _, _)| m).collect(),
+                };
+                for m in meshes {
+                    let placed: Vec<glam::Vec3> = m.positions.iter().map(|v| at + xf.transform_point3(*v)).collect();
+                    if edge_only {
+                        let (lo, hi) = placed.iter().fold((glam::Vec3::splat(f32::MAX), glam::Vec3::splat(f32::MIN)), |(lo, hi), p| (lo.min(*p), hi.max(*p)));
+                        if hi.x < -1.0 || hi.y < -1.0 || lo.x > size + 1.0 || lo.y > size + 1.0 {
+                            continue;
+                        }
+                    }
+                    ground.extend(m.indices.chunks_exact(3).filter_map(|t| {
+                        let p = |i: u32| placed.get(i as usize).copied();
+                        Some([p(t[0])?, p(t[1])?, p(t[2])?])
+                    }));
+                }
+            };
+            for o in objects {
+                add(&o.ot, o.pos, &o.xf, o.warped.as_deref(), false);
+            }
+            for dx in -1..=1 {
+                for dy in -1..=1 {
+                    if (dx, dy) == (0, 0) {
+                        continue;
+                    }
+                    let nk = (st.tx + dx, st.ty + dy);
+                    let Some(n) = staged.get(&nk) else { continue };
+                    // (resolved now if it is not yet, as the terrain cut does: taken only when
+                    // ready, a lane came out right or not by the order the tiles loaded in)
+                    let Some(res) = self.resolve(nk, &Self::sources(layout, staged, nk)) else { continue };
+                    for (oi, (o, pose)) in n.objects.iter().zip(res.poses.iter()).enumerate() {
+                        let Some(Pose { pos, rot }) = *pose else { continue };
+                        add(&o.ot, pos, &rot, res.warped.get(&oi).map(|w| w.as_ref()), true);
+                    }
+                }
+            }
+            crate::spline_layers::spline_layers(&meshes.iter().map(|m| m.as_ref()).collect::<Vec<_>>(), &ground)
+        };
         let splines: Vec<_> = meshes
             .into_iter()
             .zip(st.splines.iter())
-            .map(|(m, sp)| (m, sp.ty.clone(), sp.casts_shadow, sp.sort_origin))
+            .zip(levels)
+            .map(|((m, sp), level)| (m, sp.ty.clone(), sp.casts_shadow, sp.sort_origin, level))
             .collect();
         let (splines, ground_splines) = if omsi_cfg::flags::OMSI_NO_GROUND_SPLINE_BATCHING.is_set()
             || omsi_cfg::flags::OMSI_NO_SPLINE_BATCHING.is_set()
@@ -698,7 +753,7 @@ impl World {
             let mut slots_by_type = HashMap::new();
             let mut rest = Vec::new();
             let mut ground = Vec::new();
-            for (mesh, ty, casts, sort_origin) in splines {
+            for (mesh, ty, casts, sort_origin, level) in splines {
                 let slots: &Vec<usize> = slots_by_type.entry(Arc::as_ptr(&ty) as usize).or_insert_with(|| {
                     let dirs = texture_dirs(&self.root, &ty.dir);
                     let dirs: Vec<&Path> = dirs.iter().map(|p| p.as_path()).collect();
@@ -707,13 +762,13 @@ impl World {
                         .map(|(i, _)| i).collect()
                 });
                 if slots.is_empty() {
-                    rest.push((mesh, ty, casts, sort_origin));
+                    rest.push((mesh, ty, casts, sort_origin, level));
                     continue;
                 }
                 let faces = terrain_ground(&mesh, slots, st.origin, Mat4::IDENTITY, st.origin);
                 if !faces.is_empty() { ground.push(Arc::new(faces)); }
                 let mesh = terrain_rest(&mesh, slots);
-                if !mesh.ranges.is_empty() { rest.push((Arc::new(mesh), ty, casts, sort_origin)); }
+                if !mesh.ranges.is_empty() { rest.push((Arc::new(mesh), ty, casts, sort_origin, level)); }
             }
             (rest, batch_ground_splines(ground))
         };

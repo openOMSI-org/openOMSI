@@ -355,13 +355,16 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
-- **London's road markings stay put** when the camera moves away or around the bus: a cut-out
-  strip lying just over the driving surface its spline declares (`[heightprofile]`) is paint,
-  as one lying just over the spline's line already was. Road-hog123's British markings lie
-  5 mm over a 10 cm surface; taken for road, they went under the `[surface]` junction objects
-  laid over them, as Crystal Palace bus station's bays did
-  ([#2853](https://github.com/openOMSI-org/openOMSI/issues/2853), in part: the red bus lane
-  surfacing, at the road's own height, is not yet fixed).
+- **London's road markings and red bus lanes stay put** when the camera moves away or around
+  the bus ([#2853](https://github.com/openOMSI-org/openOMSI/issues/2853)). A cut-out strip lying
+  just over the driving surface its spline declares (`[heightprofile]`) is paint, as one lying
+  just over the spline's line already was: Road-hog123's British markings lie 5 mm over a
+  10 cm surface. A spline laid on an earlier spline of its tile at the same height is drawn
+  over it, as Omsi.exe draws a tile's splines in order (the red lanes over the road fought it
+  for every pixel). And a spline laid on a `[surface]` object - Crystal Palace's carriageway is
+  one, its own tile's or the next one's - is pulled towards the eye as the object is, which
+  covered it from a few metres away or from above. `OMSI_NO_DRAW_ORDER_DEPTH=1` turns the
+  last two off.
 - **The MAN DN95 is no longer a mirror**: a texture a model asks for as `.dds` that is not
   there is missing, as in OMSI, instead of being stood in for by a `.bmp` or another file of the
   same name. The DN95's body asks for an `envmap.dds` it does not ship; its `envmap.bmp` (the
