@@ -21,6 +21,14 @@ impl App {
 
     /// A key of the window, or of an `OMSI_INPUT` script.
     pub(crate) fn on_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode, pressed: bool, repeat: bool) {
+        if self.has_process_permission_prompt() {
+            if pressed && !repeat && code == KeyCode::Escape {
+                if let Some(prompt) = self.process_permission_prompt() {
+                    self.answer_process_permission(prompt.id, omsi_plugin::api::process::ProcessDecision::Deny);
+                }
+            }
+            return;
+        }
         // (Alt tapped alone opens OMSI 2's quick menu: `game_panels`)
         self.alt_tap(code, pressed, repeat);
         // the photo mode has all the keys

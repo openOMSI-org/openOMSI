@@ -3880,12 +3880,17 @@ dependencies = [
 name = "omsi-plugin"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "libloading 0.9.0",
  "log",
  "mlua",
  "omsi-cfg",
  "oop-format",
+ "serde",
+ "serde_json",
+ "sha2",
  "wasmi",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

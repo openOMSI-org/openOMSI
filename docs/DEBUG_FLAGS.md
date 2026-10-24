@@ -400,6 +400,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_LAUNCHER` | text | - | use | app, guard | Program a plain start opens as the launcher instead of the desktop launcher (openomsi-launcher-app) beside the game. |
 | `OMSI_OFFICIAL_KEY` | text | - | use | lan | File of the official server's signing key. |
 | `OMSI_PLUGIN_HOST32` | text | beside the game | use | plugin | Path of omsi-plugin-host32.exe. |
+| `OMSI_PLUGIN_PROCESS_ALLOW` | text | none | use | plugin | Optional native process preapproval: absolute path to a JSON manifest binding plugin content and in-folder helpers to SHA256 hashes. The interactive game otherwise asks the player. Changes revoke consent; packages must declare process. Approved programs run with the game account permissions. |
 | `OMSI_PRESENCE_URL` | text | built-in | use | platform | Base URL of the presence ("playing now") service. |
 | `OMSI_ROOT` | text | found | use | app, lan, launcher-core, o3d, sim | The OMSI 2 installation folder (also the content root for tests that need real content). |
 | `OMSI_SAFE_GPU` | num | 0 | use | app | Restarts after a lost graphics device: lighter on the card each time. Set at runtime on Android and by the restart. |

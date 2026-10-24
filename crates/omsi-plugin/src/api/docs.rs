@@ -22,6 +22,7 @@ pub const GROUPS: &[(&str, &str)] = &[
     ("events", "Events, timers and watches"),
     ("plugin", "The plugin itself"),
     ("storage", "Storage and files"),
+    ("process", "External programs"),
     ("network", "Programs on this computer"),
     ("lan", "LAN games"),
     ("game", "The game"),

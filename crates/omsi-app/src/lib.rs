@@ -142,6 +142,7 @@ mod plugin_io;
 // the plugins' panels (`omsi-plugin-ui`) at their old path, and the app's side of their input
 use omsi_plugin_ui as plugin_ui;
 mod plugin_panels;
+mod process_permissions;
 mod plugins;
 mod services;
 mod sim_thread;

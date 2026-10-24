@@ -21,7 +21,10 @@ pub(crate) fn load() -> Plugins {
     if dirs.is_empty() {
         return Plugins::default();
     }
-    Plugins::load(&dirs, &HostConfig::detect())
+    let permissions = std::sync::Arc::new(omsi_plugin::api::process::ProcessPermissions::new(
+        crate::lan::data_dir().map(|p| p.join("plugin-process-permissions.json")),
+    ));
+    Plugins::load_with_process_permissions(&dirs, &HostConfig::detect(), omsi_plugin::api::process::ProcessGrants::from_env(), permissions)
 }
 
 /// The game's side of a plugin frame: the whole game (the plugins taken out of it for the

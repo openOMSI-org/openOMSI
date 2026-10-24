@@ -15,6 +15,7 @@ impl App {
         }
         // the game controllers: their axes this frame, their buttons' key actions
         let hwnd = self.window.as_deref().and_then(crate::controllers::window_handle);
+        let process_prompt = self.has_process_permission_prompt();
         let ctl = self.input.controllers.get_or_insert_with(|| crate::controllers::Controllers::new(&self.args.root, hwnd));
         ctl.set_background(self.settings.ctrl_background);
         ctl.set_focus(self.input.window_focused || self.settings.ctrl_background);
@@ -51,6 +52,7 @@ impl App {
         #[cfg(not(windows))]
         let vr_on = false;
         let needs_mouse = self.input.mouse_drive
+            || process_prompt
             || self.menus.game_menu.is_some()
             || self.menus.chooser.is_some()
             || self.menus.list_kind.is_some()

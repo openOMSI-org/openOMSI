@@ -233,7 +233,7 @@ pub static FNS: &[ApiFn] = &[
         let r = c.state().folder.clone().ok_or_else(|| "no folder".to_string()).and_then(|f| paths::inside(&f, &rel)).and_then(|p| super::storage::list_dir(&p));
         Ok::<_, ApiError>(r.unwrap_or(Value::List(Vec::new())))
     }),
-    def!("plugin.permissions", "plugin", [], "list of strings", "The permissions the plugin has (a plain `.lua` file has them all).", NEW, None, false, |c, a| {
+    def!("plugin.permissions", "plugin", [], "list of strings", "The permissions the plugin has (native process access additionally requires player opt-in).", NEW, None, false, |c, a| {
         let s = c.state();
         Perm::ALL.iter().filter(|p| s.allows(**p)).map(|p| p.as_str().to_string()).collect::<Vec<_>>()
     }),

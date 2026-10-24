@@ -729,6 +729,7 @@ pub(crate) fn draw(sh: &mut Shell, ph: &mut Photo, info: &Info) {
 
 /// The photo mode's panel for this frame.
 pub(super) fn photo_panel(cx: &mut super::PhotoCx, dt: f32) {
+    if cx.menus.shell.process_prompt.is_some() { return; }
     let Some(s) = cx.gfx.gfx.surface.as_ref() else { return };
     let (w, h) = (s.config.width as f32, s.config.height as f32);
     let dpi = cx.gfx.window.as_ref().map(|w| w.scale_factor() as f32).unwrap_or(1.0);
