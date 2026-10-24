@@ -113,6 +113,7 @@ impl Renderer {
         // the plain graphics with Enhanced on); the first eye is the one that moves the
         // exposure, the sky cube and the frame clock on, as the window does without VR.
         let xr_view = projection.is_some();
+        let eye_color = enhanced_view && !with_overlays && xr_view && self.hdr_eye_pass.is_some();
         let lead_view = (with_overlays || xr_view) && !second_eye;
         let enhanced_frame = lighting.enhanced && self.hdr_pass.is_some() && !env.no_enhanced && (with_overlays || xr_view || env.mirror_enhanced || self.options.mirror_enhanced);
         // the mirrors are drawn by the same path as the window (their picture graded with
@@ -163,7 +164,7 @@ impl Renderer {
             scene.camera_bind_group = None;
         }
         if masked_frame {
-            self.hdr_targets(width, height);
+            self.hdr_targets(width, height, rt_gbuf() && !eye_color);
         }
         if glass_on {
             self.prepare_glass_behind(scene, width, height, if masked_frame { HDR_FORMAT } else { self.format });
@@ -211,6 +212,7 @@ impl Renderer {
             aspect,
             cam_rel,
             xr_view,
+            eye_color,
             lead_view,
             enhanced_frame,
             enhanced,

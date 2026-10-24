@@ -68,7 +68,7 @@ impl Renderer {
         // multisampled depth (133 MB at 4K) and the main pass loaded it straight back.
         let prefill = (msaa_prepass && !presurface_prefill && targets.is_some())
             .then_some(())
-            .and(self.prepass_msaa_pipelines.as_ref())
+            .and(self.prefill_pipelines(f.eye_color))
             .map(|pipes| (plan.prefill_batches(), pipes));
         let mut main_parts: Vec<wgpu::CommandEncoder> = Vec::new();
         {
@@ -107,11 +107,14 @@ impl Renderer {
                         }
                     }
                 };
-            let pp = self.main_pass(enhanced, f.reflection_frame);
+            let pp = self.main_pass(enhanced, f.reflection_frame, f.eye_color);
             // (a mirror of an Enhanced picture, plainly shaded: the window's sky, see
             // `sky_mirror_pipeline`)
             let sky_pipe = match &self.sky.sky_mirror_pipeline {
-                Some(p) if lighting.enhanced && !enhanced && !with_overlays && self.sky.sky_state.is_some() && !f.env.no_enhanced => p,
+                Some(p) if lighting.enhanced && !enhanced && !with_overlays && self.sky.sky_state.is_some() && !f.env.no_enhanced =>
+                {
+                    p
+                }
                 _ => &pp.sky_pipeline,
             };
             let per_part = main_bundles.len().div_ceil(parts.max(1));
@@ -201,13 +204,15 @@ impl Renderer {
                 resolve_target: None,
                 ops: wgpu::Operations { load: if first { wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT) } else { wgpu::LoadOp::Load }, store: wgpu::StoreOp::Store },
             }),
-            hdr.and_then(|h| h.gbuf.as_ref()).map(|g| wgpu::RenderPassColorAttachment {
+            hdr.filter(|_| !f.eye_color)
+                .and_then(|h| h.gbuf.as_ref()).map(|g| wgpu::RenderPassColorAttachment {
                 view: g[0].0.as_ref().unwrap_or(&g[0].1),
                 depth_slice: None,
                 resolve_target: None,
                 ops: wgpu::Operations { load: if first { wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT) } else { wgpu::LoadOp::Load }, store: wgpu::StoreOp::Store },
             }),
-            hdr.and_then(|h| h.gbuf.as_ref()).map(|g| wgpu::RenderPassColorAttachment {
+            hdr.filter(|_| !f.eye_color)
+                .and_then(|h| h.gbuf.as_ref()).map(|g| wgpu::RenderPassColorAttachment {
                 view: g[1].0.as_ref().unwrap_or(&g[1].1),
                 depth_slice: None,
                 resolve_target: None,
@@ -268,7 +273,8 @@ impl Renderer {
                     },
                 },
             });
-        let gbuf_attachments = hdr.and_then(|h| h.gbuf.as_ref()).map(|g| {
+        let gbuf_attachments = hdr.filter(|_| !f.eye_color)
+            .and_then(|h| h.gbuf.as_ref()).map(|g| {
             g.each_ref().map(|(msaa, view)| {
                 Some(wgpu::RenderPassColorAttachment {
                     view: msaa.as_ref().unwrap_or(view),
@@ -321,7 +327,7 @@ impl Renderer {
             encode_batches(&mut pass, scene, &plan.main_batches[..plan.presurface_batch_end], |pipe| main_pipeline(pp, pipe));
             // At 1x an excavation still prevents sharing the earlier prepass depth.
             // Refill ordinary scenery here, after its floor and cover have been coloured.
-            let pipes = self.prepass_msaa_pipelines.as_ref().unwrap();
+            let pipes = self.prefill_pipelines(f.eye_color).unwrap();
             self.encode_prefill(&mut pass, scene, f, &plan.msaa_safe_batches, pipes);
         } else if let Some((batches, pipes)) = prefill {
             self.encode_prefill(&mut pass, scene, f, batches, pipes);

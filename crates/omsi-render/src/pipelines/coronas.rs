@@ -34,6 +34,7 @@ pub(crate) const ALPHA_BLEND: wgpu::BlendState = wgpu::BlendState {
 const CORONA_ATTRIBUTES: [wgpu::VertexAttribute; 6] =
     wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32, 2 => Float32x4, 3 => Float32x4, 4 => Float32x4, 5 => Float32x4];
 
+#[derive(Clone)]
 pub(crate) struct Coronas {
     pub sampler: wgpu::Sampler,
     pub bind_group: wgpu::BindGroup,
@@ -121,7 +122,9 @@ impl Coronas {
         (coronas, corona_texture)
     }
 
-    pub(crate) fn pipeline(&self, device: &wgpu::Device, f: wgpu::TextureFormat, fs: &str, blend: wgpu::BlendState, msaa: u32) -> wgpu::RenderPipeline {
+    pub(crate) fn pipeline_for(&self, device: &wgpu::Device, f: wgpu::TextureFormat, fs: &str, blend: wgpu::BlendState, msaa: u32,
+        surfaces: bool,
+    ) -> wgpu::RenderPipeline {
         let corona_vertex = wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<GpuCorona>() as u64,
             step_mode: wgpu::VertexStepMode::Instance,
@@ -151,7 +154,9 @@ impl Coronas {
             fragment: Some(wgpu::FragmentState {
                 module: &self.shader,
                 entry_point: Some(fs),
-                targets: &color_targets(f, Some(blend), wgpu::ColorWrites::COLOR, false, false),
+                targets: &color_targets_for(f, Some(blend), wgpu::ColorWrites::COLOR, false, false,
+                        surfaces,
+                    ),
                 compilation_options: Default::default(),
             }),
             multiview_mask: None,
@@ -162,6 +167,7 @@ impl Coronas {
 
 /// The snowfall (snow.wgsl) or the rainfall (rain.wgsl): the camera group and its own
 /// parameters, no vertices.
+#[derive(Clone)]
 pub(crate) struct Precip {
     shader: wgpu::ShaderModule,
     pub buf: wgpu::Buffer,
@@ -217,9 +223,13 @@ impl Precip {
         Precip { shader, buf, bind_group, pl, label, vs }
     }
 
-    pub(crate) fn pipeline(&self, device: &wgpu::Device, f: wgpu::TextureFormat, fs: &str, msaa: u32) -> wgpu::RenderPipeline {
+    pub(crate) fn pipeline_for(&self, device: &wgpu::Device, f: wgpu::TextureFormat, fs: &str, msaa: u32,
+        surfaces: bool,
+    ) -> wgpu::RenderPipeline {
         log::info!("renderer: compiling the {} shader ({fs})", self.label);
-        let targets = color_targets(f, Some(PREMULTIPLIED_SNOW), wgpu::ColorWrites::COLOR, false, false);
+        let targets = color_targets_for(f, Some(PREMULTIPLIED_SNOW), wgpu::ColorWrites::COLOR, false, false,
+            surfaces,
+        );
         no_vertex_pipeline(self.label, &self.pl, &self.shader, fs, &targets)
             .vs(self.vs)
             .depth(depth_test(wgpu::CompareFunction::GreaterEqual))

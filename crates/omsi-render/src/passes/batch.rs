@@ -617,7 +617,7 @@ impl Renderer {
         // has to load the first one's targets back into the GPU's tile memory, which cost
         // more GPU time than it saved on the CPU.)
         if !f.env.no_bundles {
-            let pp = self.main_pass(f.enhanced, f.reflection_frame);
+            let pp = self.main_pass(f.enhanced, f.reflection_frame, f.eye_color);
             let format = if f.masked_frame { HDR_FORMAT } else { self.format };
             let batches = if plan.presurface_prefill(self, f) { &plan.main_batches[plan.presurface_batch_end..] } else { &plan.main_batches };
             let camera = scene.camera_bind_group.as_ref().expect("camera bind group");
@@ -632,7 +632,8 @@ impl Renderer {
             // mirror pictures a frame recorded some 1.5 ms of bundles each.
             let kept = f.with_overlays && f.projection.is_none() && !f.second_eye;
             let mirror = (!f.with_overlays && !f.second_eye).then_some(f.exclude_texture).flatten();
-            let mode = (f.enhanced, f.reflection_frame, format, self.options.msaa, rt_gbuf());
+            let mode = (f.enhanced, f.reflection_frame, format, self.options.msaa, rt_gbuf() && !f.eye_color,
+            );
             let chunks = bundle_chunks(self.encoding_pool.as_ref(), batches);
             let mut reuse: Vec<Option<wgpu::RenderBundle>> = vec![None; chunks.len()];
             // (what a part binds is kept once its batches repeat: while driving they change every frame)
@@ -667,7 +668,9 @@ impl Renderer {
             if f.with_overlays {
                 self.history.bundle_stats.set((chunks.len() - kept_parts, kept_parts));
             }
-            let bundles = record_bundles(&self.device, self.encoding_pool.as_ref(), scene, &chunks, &reuse, pp, camera, format, self.options.msaa);
+            let bundles = record_bundles(&self.device, self.encoding_pool.as_ref(), scene, &chunks, &reuse, pp, camera, format, self.options.msaa,
+                rt_gbuf() && !f.eye_color,
+            );
             // (not when a part could not be recorded: it would be left out frame after frame;
             // and a mirror's or an eye's picture leaves the window's alone - it cleared them,
             // so with the mirrors on the window never kept a bundle)

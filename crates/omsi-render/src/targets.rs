@@ -374,11 +374,16 @@ impl Renderer {
 
     /// The HDR colour targets of the enhanced path for this size, with the glow's levels,
     /// the tone-mapped picture FXAA reads and the post passes' bind groups.
-    pub(crate) fn hdr_targets(&mut self, w: u32, h: u32) -> bool {
+    pub(crate) fn hdr_targets(&mut self, w: u32, h: u32, surfaces: bool) -> bool {
         self.targets.target_use.insert((w, h), std::time::Instant::now());
-        if self.targets.hdr_targets.contains_key(&(w, h)) {
-            return false;
+        if let Some(hdr) = self.targets.hdr_targets.get(&(w, h)) {
+            if !surfaces || hdr.gbuf.is_some() {
+                return false;
         }
+        }
+        // A desktop view may reuse an eye's dimensions. Upgrade once if it needs
+        // ray-reflection surfaces; switching back to VR must not reallocate them.
+        self.targets.hdr_targets.remove(&(w, h));
         self.evict_targets();
         let fmt = wgpu::TextureFormat::Rgba16Float;
         let target = |label: &str, tw: u32, th: u32, format: wgpu::TextureFormat, samples: u32| {
@@ -409,7 +414,7 @@ impl Renderer {
         let view = target("hdr", w, h, fmt, 1);
         let mask_msaa = (self.options.msaa > 1).then(|| target("screen mask msaa", w, h, MASK_FORMAT, self.options.msaa));
         let mask = target("screen mask", w, h, MASK_FORMAT, 1);
-        let gbuf = rt_gbuf().then(|| {
+        let gbuf = surfaces.then(|| {
             [GBUF_FORMAT, AUX_FORMAT].map(|f| ((self.options.msaa > 1).then(|| target("rt surfaces msaa", w, h, f, self.options.msaa)), target("rt surfaces", w, h, f, 1)))
         });
         // the glow: halving until the smallest level is a few dozen pixels across

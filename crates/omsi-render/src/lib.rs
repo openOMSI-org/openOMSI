@@ -128,6 +128,9 @@ pub struct Renderer {
     material_layout: wgpu::BindGroupLayout,
     pass: PassPipelines,
     hdr_pass: Option<PassPipelines>,
+    /// Enhanced colour/mask without desktop ray-reflection surface attachments.
+    hdr_eye_pass: Option<PassPipelines>,
+    eye_pipeline_kit: Option<pipelines::passes::EyePipelineKit>,
     reflection_pass: Option<PassPipelines>,
     overlay_pipeline: wgpu::RenderPipeline,
     overlay_layout: wgpu::BindGroupLayout,
@@ -150,6 +153,7 @@ pub struct Renderer {
     /// its own depth laid first (see `encode_prefill`), so that its costly shading runs
     /// once per visible surface.
     prepass_msaa_pipelines: Option<[wgpu::RenderPipeline; 6]>,
+    prepass_eye_pipelines: Option<[wgpu::RenderPipeline; 6]>,
     /// Ambient occlusion and its blur; none on OpenGL (GLES), whose shading language cannot
     /// read a depth texture texel by texel - the pipelines failed there, AO off or not (#422).
     ssao_pipeline: Option<wgpu::RenderPipeline>,
@@ -407,7 +411,8 @@ const HDR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 /// The colour targets of a pipeline drawing into `format`: Enhanced and classic puddle
 /// shading draw into `HDR_FORMAT` with the screen mask beside it,
 /// written by the scene's own shader only (`mask`), coverage-blended where the colour is.
-fn color_targets(format: wgpu::TextureFormat, blend: Option<wgpu::BlendState>, write: wgpu::ColorWrites, mask: bool, gbuf: bool) -> Vec<Option<wgpu::ColorTargetState>> {
+fn color_targets_for(format: wgpu::TextureFormat, blend: Option<wgpu::BlendState>, write: wgpu::ColorWrites, mask: bool, gbuf: bool,
+    surfaces: bool) -> Vec<Option<wgpu::ColorTargetState>> {
     let mut v = vec![Some(wgpu::ColorTargetState { format, blend, write_mask: write })];
     if format == HDR_FORMAT {
         v.push(Some(wgpu::ColorTargetState {
@@ -418,7 +423,7 @@ fn color_targets(format: wgpu::TextureFormat, blend: Option<wgpu::BlendState>, w
             }),
             write_mask: if mask { wgpu::ColorWrites::ALL } else { wgpu::ColorWrites::empty() },
         }));
-        if rt_gbuf() {
+        if surfaces {
             // (premultiplied by the reflection's weight, the shader's alpha)
             let over = blend.map(|_| wgpu::BlendState {
                 color: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One, dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha, operation: wgpu::BlendOperation::Add },
@@ -447,10 +452,36 @@ const SHADOW_CLOSE_MAX: u32 = 2048;
 
 impl Renderer {
 
-    fn main_pass(&self, enhanced: bool, reflections: bool) -> &PassPipelines {
-        if enhanced { self.hdr_pass.as_ref().unwrap() }
+    /// Compile Enhanced+ colour-only pipelines once, when a headset session starts.
+    /// Desktop-only renderers never compile the headset variants.
+    pub fn prepare_xr_eye_pipelines(&mut self) {
+        if let Some(kit) = self.eye_pipeline_kit.take() {
+            let (pass, prefill) = kit.build(&self.device);
+            self.prepass_eye_pipelines = Some(prefill);
+            self.hdr_eye_pass = Some(pass);
+        }
+    }
+
+    fn main_pass(&self, enhanced: bool, reflections: bool, eye_color: bool) -> &PassPipelines {
+        if enhanced && eye_color {
+            self.hdr_eye_pass
+                .as_ref()
+                .or(self.hdr_pass.as_ref())
+                .unwrap()
+        } else if enhanced { self.hdr_pass.as_ref().unwrap() }
         else if reflections { self.reflection_pass.as_ref().unwrap() }
-        else { &self.pass }
+        else { &self.pass
+        }
+    }
+
+    fn prefill_pipelines(&self, eye_color: bool) -> Option<&[wgpu::RenderPipeline; 6]> {
+        if eye_color {
+            self.prepass_eye_pipelines
+                .as_ref()
+                .or(self.prepass_msaa_pipelines.as_ref())
+        } else {
+            self.prepass_msaa_pipelines.as_ref()
+        }
     }
 
     pub fn format(&self) -> wgpu::TextureFormat {

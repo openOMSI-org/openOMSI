@@ -152,6 +152,7 @@ pub(crate) struct FrameCtx<'a> {
     pub aspect: f32,
     pub cam_rel: Vec3,
     pub xr_view: bool,
+    pub eye_color: bool,
     pub lead_view: bool,
     pub enhanced_frame: bool,
     pub enhanced: bool,

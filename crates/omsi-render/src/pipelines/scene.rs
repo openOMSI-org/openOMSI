@@ -5,6 +5,7 @@ use super::common::*;
 use crate::*;
 
 /// The scene shader and what every pipeline drawing meshes with it shares.
+#[derive(Clone)]
 pub(crate) struct SceneBase {
     pub shader: wgpu::ShaderModule,
     pub shadow_layout: wgpu::BindGroupLayout,
@@ -95,6 +96,7 @@ impl SceneBase {
         alpha_to_coverage: bool,
         terrain_paint: bool,
         samples: u32,
+        surfaces: bool,
     ) -> wgpu::RenderPipeline {
         let use_alpha_to_coverage = alpha_to_coverage && samples > 1;
         compile_pipeline(device, &wgpu::RenderPipelineDescriptor {
@@ -133,13 +135,14 @@ impl SceneBase {
             fragment: Some(wgpu::FragmentState {
                 module: &self.shader,
                 entry_point: Some(fs),
-                targets: &color_targets(
+                targets: &color_targets_for(
                     format,
                     blend,
                     if fs == "fs_surface_depth" { wgpu::ColorWrites::empty() } else { wgpu::ColorWrites::ALL },
                     fs != "fs_surface_depth",
                     fs == "fs_enhanced",
-                ),
+                        surfaces,
+                    ),
                 // Only cutouts and painted terrain keep their discard; opaque and blended
                 // materials retain early depth testing. (A blend that writes depth writes it
                 // where it is invisible too: Omsi.exe draws `[matl_alpha] 2` with the alpha
@@ -165,7 +168,9 @@ impl SceneBase {
 
     /// The pipeline at `index` of the ones per `pipe_code` (kind, then culled, then surface
     /// bias): the kind decides blending and the depth write.
-    pub(crate) fn pipeline_at(&self, device: &wgpu::Device, f: wgpu::TextureFormat, fs: &str, samples: u32, index: usize) -> wgpu::RenderPipeline {
+    pub(crate) fn pipeline_at_for(&self, device: &wgpu::Device, f: wgpu::TextureFormat, fs: &str, samples: u32, index: usize,
+        surfaces: bool,
+    ) -> wgpu::RenderPipeline {
         let kind = (index / 4) as u8;
         let (cull, surface) = (index & 2 != 0, index & 1 != 0);
         let blend = matches!(kind, PIPE_BLEND | PIPE_BLEND_NO_WRITE | PIPE_TERRAIN_PAINT)
@@ -180,8 +185,9 @@ impl SceneBase {
             cull,
             if surface { self.bias } else { 0 },
             kind == PIPE_ALPHA_TEST,
-            kind == PIPE_TERRAIN_PAINT && fs == "fs_enhanced",
+            kind == PIPE_TERRAIN_PAINT && fs.starts_with("fs_enhanced"),
             samples,
+            surfaces,
         )
     }
 }
@@ -191,9 +197,43 @@ pub(crate) struct Prepass {
     pub pipelines: [wgpu::RenderPipeline; 6],
     /// (drawn in the enhanced main pass, see `encode_prefill`)
     pub msaa_pipelines: Option<[wgpu::RenderPipeline; 6]>,
+    pub eye_pipelines: Option<[wgpu::RenderPipeline; 6]>,
 }
 
 pub(crate) fn prepass(device: &wgpu::Device, scene: &SceneBase, msaa: u32, enhanced: bool) -> Prepass {
+    let make_prepass_samples = prepass_builder(device, scene);
+    let make_prepass = |kind: u8, cull: bool| make_prepass_samples(kind, cull, 1, false, false);
+    let pipelines = [
+        make_prepass(0, false),
+        make_prepass(0, true),
+        make_prepass(1, false),
+        make_prepass(1, true),
+        make_prepass(2, false),
+        make_prepass(2, true),
+    ];
+    // Apple views with cutout/blended draws also need these pipelines: their
+    // visibility depends on shading, unlike opaque hidden-surface removal.
+    // Purely opaque Apple views still skip the prefill to avoid its cost.
+    // (Only these: the prefill is drawn inside the main pass, with its colour targets.)
+    // Excavations need a depth refill even at 1x, after their floors and covers.
+    // The depth-only pass's pipelines cannot bind the main pass's colour targets.
+    let msaa_pipelines = (msaa > 1 || enhanced).then(|| {
+        [(0, false), (0, true), (1, false), (1, true), (2, false), (2, true)]
+            .map(|(kind, cull)| make_prepass_samples(kind, cull, msaa, true, rt_gbuf()))
+    });
+    let eye_pipelines = None;
+    Prepass { pipelines, msaa_pipelines,
+        eye_pipelines,
+    }
+}
+
+pub(crate) fn eye_prepass(device: &wgpu::Device, scene: &SceneBase, msaa: u32) -> [wgpu::RenderPipeline; 6] {
+    let make = prepass_builder(device, scene);
+    [(0, false), (0, true), (1, false), (1, true), (2, false), (2, true)]
+        .map(|(kind, cull)| make(kind, cull, msaa, true, false))
+}
+
+fn prepass_builder<'a>(device: &'a wgpu::Device, scene: &'a SceneBase) -> impl Fn(u8, bool, u32, bool, bool) -> wgpu::RenderPipeline + 'a {
     let prepass_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("prepass"),
         bind_group_layouts: &[Some(&scene.camera_layout), Some(&scene.material_layout)],
@@ -201,7 +241,7 @@ pub(crate) fn prepass(device: &wgpu::Device, scene: &SceneBase, msaa: u32, enhan
     });
     // the prepass culls exactly as the main pass does: a back face that wrote depth
     // here would hide what the main pass then draws behind it
-    let make_prepass_samples = |kind: u8, cull: bool, samples: u32, in_main: bool| {
+    move |kind: u8, cull: bool, samples: u32, in_main: bool, surfaces: bool| {
         let fragment = match kind {
             0 => "fs_depth",
             // (the multisampled prefill in the main pass: only what alpha-to-coverage will
@@ -233,31 +273,14 @@ pub(crate) fn prepass(device: &wgpu::Device, scene: &SceneBase, msaa: u32, enhan
             fragment: Some(wgpu::FragmentState {
                 module: &scene.shader,
                 entry_point: Some(fragment),
-                targets: &if in_main { color_targets(HDR_FORMAT, None, wgpu::ColorWrites::empty(), false, false) } else { Vec::new() },
+                targets: &if in_main {
+                            color_targets_for(HDR_FORMAT, None, wgpu::ColorWrites::empty(), false, false,
+                                surfaces,
+                            ) } else { Vec::new() },
                 compilation_options: Default::default(),
             }),
             multiview_mask: None,
             cache: crate::pipeline_cache::get(device).as_ref(),
         })
-    };
-    let make_prepass = |kind: u8, cull: bool| make_prepass_samples(kind, cull, 1, false);
-    let pipelines = [
-        make_prepass(0, false),
-        make_prepass(0, true),
-        make_prepass(1, false),
-        make_prepass(1, true),
-        make_prepass(2, false),
-        make_prepass(2, true),
-    ];
-    // Apple views with cutout/blended draws also need these pipelines: their
-    // visibility depends on shading, unlike opaque hidden-surface removal.
-    // Purely opaque Apple views still skip the prefill to avoid its cost.
-    // (Only these: the prefill is drawn inside the main pass, with its colour targets.)
-    // Excavations need a depth refill even at 1x, after their floors and covers.
-    // The depth-only pass's pipelines cannot bind the main pass's colour targets.
-    let msaa_pipelines = (msaa > 1 || enhanced).then(|| {
-        [(0, false), (0, true), (1, false), (1, true), (2, false), (2, true)]
-            .map(|(kind, cull)| make_prepass_samples(kind, cull, msaa, true))
-    });
-    Prepass { pipelines, msaa_pipelines }
+    }
 }

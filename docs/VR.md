@@ -90,3 +90,16 @@ Single-player pauses during placement; multiplayer continues running. Mouse inpu
 adjusts the navigator instead of operating cockpit controls. Losing window focus
 saves and ends placement. The display is an overlay, so place it in a clear spot:
 cockpit geometry does not hide it.
+
+## Enhanced+ headset render targets
+
+With Enhanced+ (ray tracing) enabled, headset eyes keep HDR colour and screen masks
+but omit unused desktop ray-reflection surfaces. The extra eye pipelines compile
+once when a VR session starts, not at desktop startup; later VR sessions reuse
+them. Desktop views keep their original surfaces and upgrade cached targets when
+needed. Rain films use the eye attachment layout even after such an upgrade.
+Without Enhanced+, this optimization changes neither pipelines nor rendering.
+Native GPU regressions compare both eye images at 1x/4x MSAA and validate rainy
+same-sized desktop/eye transitions. Per-eye history and stereo preparation remain
+separate changes. The upstream FSR 1 eye scale and mip-bias path is retained;
+a native regression covers both eyes at 75% scale with 1x/4x MSAA.

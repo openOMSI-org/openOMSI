@@ -320,7 +320,7 @@ impl App {
         #[cfg(windows)]
         if self.settings.vr_requested() {
             let image_scale = renderer.start_xr(self.settings.vr_scale);
-            match crate::openxr::Vr::new(&renderer, image_scale, self.settings.vr_desktop_mirror) {
+            match crate::openxr::Vr::new(&mut renderer, image_scale, self.settings.vr_desktop_mirror) {
                 Ok(vr) => self.xr.vr = Some(vr),
                 Err(e) => log::error!("OpenXR could not start: {e:#}"),
             }

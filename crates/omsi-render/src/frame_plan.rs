@@ -402,13 +402,14 @@ pub(crate) fn record_bundles(
     camera: &wgpu::BindGroup,
     format: wgpu::TextureFormat,
     samples: u32,
+    surfaces: bool,
 ) -> Vec<Option<wgpu::RenderBundle>> {
     let color_formats = [Some(format), Some(MASK_FORMAT), Some(GBUF_FORMAT), Some(AUX_FORMAT)];
     let record = |chunk: &[Batch]| -> wgpu::RenderBundle {
         let mut bundle =
             device.create_render_bundle_encoder(&wgpu::RenderBundleEncoderDescriptor {
                 label: Some("main pass part"),
-                color_formats: &color_formats[..if format != HDR_FORMAT { 1 } else if rt_gbuf() { 4 } else { 2 }],
+                color_formats: &color_formats[..if format != HDR_FORMAT { 1 } else if surfaces { 4 } else { 2 }],
                 depth_stencil: Some(wgpu::RenderBundleDepthStencil {
                     format: DEPTH_FORMAT,
                     depth_read_only: false,
