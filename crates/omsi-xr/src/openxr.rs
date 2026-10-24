@@ -38,6 +38,7 @@ pub struct Vr {
     origin_rotation: Option<Quat>,
     smoothed_head: Option<(Vec3, Quat, Instant)>,
     mirror_camera: Option<(Camera, Mat4)>,
+    mirror_views: Option<[(Camera, Mat4); 2]>,
     menu_anchor: Option<UiAnchor>,
     cursor_anchor: Option<UiAnchor>,
     cursor_surface_local: Option<Vec3>,
@@ -147,11 +148,7 @@ impl UiAnchor {
 }
 
 impl Vr {
-    pub fn new(
-        renderer: &Renderer,
-        configured_scale: f32,
-        desktop_mirror: bool,
-    ) -> Result<Self> {
+    pub fn new(renderer: &Renderer, configured_scale: f32, desktop_mirror: bool) -> Result<Self> {
         let entry = xr::Entry::linked(&()).context("load OpenXR")?;
         if !entry.enumerate_extensions()?.khr_d3d12_enable {
             bail!("the active OpenXR runtime does not support D3D12");
@@ -210,7 +207,8 @@ impl Vr {
         }
         // The runtime's recommendation is a quality target, not a minimum.
         // Rendering both eyes at the full Quest Link size is expensive.
-        let scale = omsi_cfg::flags::OMSI_OPENXR_SCALE.parse::<f32>()
+        let scale = omsi_cfg::flags::OMSI_OPENXR_SCALE
+            .parse::<f32>()
             .filter(|s| s.is_finite())
             .unwrap_or(configured_scale)
             .clamp(0.5, 1.0);
@@ -336,7 +334,9 @@ impl Vr {
             scale
         );
         if let Some(rate) = omsi_cfg::flags::OMSI_OPENXR_MIRROR_RATE.var() {
-            log::info!("OpenXR bus mirror rate override: {rate} pictures/s (-1: every mirror each game frame)");
+            log::info!(
+                "OpenXR bus mirror rate override: {rate} pictures/s (-1: every mirror each game frame)"
+            );
         }
         Ok(Self {
             instance,
@@ -358,6 +358,7 @@ impl Vr {
             origin_rotation: None,
             smoothed_head: None,
             mirror_camera: None,
+            mirror_views: None,
             menu_anchor: None,
             cursor_anchor: None,
             cursor_surface_local: None,
@@ -421,6 +422,7 @@ impl Vr {
         self.origin_rotation = None;
         self.smoothed_head = None;
         self.mirror_camera = None;
+        self.mirror_views = None;
         self.menu_anchor = None;
         self.recenter_pointer();
     }
@@ -537,6 +539,12 @@ impl Vr {
         self.mirror_camera.map(|(camera, _)| camera)
     }
 
+    /// Last submitted eye views for conservative mirror refresh selection. The
+    /// caller allows head-motion margin and initializes unseen textures first.
+    pub fn mirror_views(&self) -> Option<[(Camera, Mat4); 2]> {
+        self.mirror_views
+    }
+
     pub fn render(
         &mut self,
         renderer: &mut Renderer,
@@ -592,7 +600,8 @@ impl Vr {
         // still recenters the seated origin in poll().
         let valid = xr::ViewStateFlags::POSITION_VALID | xr::ViewStateFlags::ORIENTATION_VALID;
         if !view_state.contains(valid) {
-            self.frame_stream.end(frame.predicted_display_time, self.blend, &[])?;
+            self.frame_stream
+                .end(frame.predicted_display_time, self.blend, &[])?;
             return Ok(false);
         }
         let midpoint = (xr_position(views[0].pose) + xr_position(views[1].pose)) * 0.5;
@@ -685,7 +694,6 @@ impl Vr {
         let mut ui_projections = [Mat4::IDENTITY; 2];
         let stereo_center = (xr_position(eye_poses[0]) + xr_position(eye_poses[1])) * 0.5;
         for (eye, xr_view) in views.iter().enumerate() {
-            let eye_start = Instant::now();
             let tracked_eye = xr_position(eye_poses[eye]);
             let tracked_relative = origin_rotation.inverse() * (tracked_eye - origin);
             // A narrower picture magnifies stereo disparity. Reduce the virtual
@@ -710,21 +718,34 @@ impl Vr {
             if eye == 0 {
                 self.mirror_camera = Some((camera, projection));
             }
-            renderer.render_xr_eye(
-                scene,
-                &targets[eye],
-                self.width,
-                self.height,
-                &camera,
-                lighting,
-                projection,
-                eye == 1,
-            );
-            self.stats_eyes[eye] += eye_start.elapsed();
+        }
+        self.mirror_views = Some(std::array::from_fn(|eye| {
+            (eye_cameras[eye], eye_projections[eye])
+        }));
+        let eye_times = renderer.render_xr_stereo(
+            scene,
+            [&targets[0], &targets[1]],
+            (self.width, self.height),
+            &eye_cameras,
+            lighting,
+            &eye_projections,
+        );
+        for (total, elapsed) in self.stats_eyes.iter_mut().zip(eye_times) {
+            *total += elapsed;
         }
         renderer.set_env_heading(None);
         let menu_open = !menu_range.is_empty();
-        self.place_cursor(menu_open, cockpit_pointer_enabled, cursor_position, desktop_size, bus_pose, &eye_cameras, &eye_projections, &ui_cameras, views[0].fov);
+        self.place_cursor(
+            menu_open,
+            cockpit_pointer_enabled,
+            cursor_position,
+            desktop_size,
+            bus_pose,
+            &eye_cameras,
+            &eye_projections,
+            &ui_cameras,
+            views[0].fov,
+        );
         let menu_transforms = [0, 1].map(|eye| {
             self.menu_anchor
                 .map(|anchor| anchor.transform(&ui_cameras[eye], ui_projections[eye]))
@@ -745,12 +766,27 @@ impl Vr {
                     }
                 })
         });
-        let navigator = navigator.zip(bus_pose).and_then(|((index, display), (position, body))| {
-            let (texture, rect) = scene.overlays.get(index)?;
-            let aspect = (rect[2] - rect[0]) / (rect[3] - rect[1]);
-            if !aspect.is_finite() || aspect <= 0.0 { return None; }
-            Some((*texture, [0, 1].map(|eye| display.transform(position, body, &eye_cameras[eye], eye_projections[eye], aspect))))
-        });
+        let navigator = navigator
+            .zip(bus_pose)
+            .and_then(|((index, display), (position, body))| {
+                let (texture, rect) = scene.overlays.get(index)?;
+                let aspect = (rect[2] - rect[0]) / (rect[3] - rect[1]);
+                if !aspect.is_finite() || aspect <= 0.0 {
+                    return None;
+                }
+                Some((
+                    *texture,
+                    [0, 1].map(|eye| {
+                        display.transform(
+                            position,
+                            body,
+                            &eye_cameras[eye],
+                            eye_projections[eye],
+                            aspect,
+                        )
+                    }),
+                ))
+            });
         renderer.render_xr_ui(
             scene,
             &targets,

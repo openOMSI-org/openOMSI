@@ -60,8 +60,25 @@ impl Renderer {
 
     /// The frame's modes (render scale, Enhanced, the reflections, the prepass, ray
     /// tracing) and the targets they need, the lights, coronas and smoke prepared.
-    pub(crate) fn begin_frame<'a>(&mut self, scene: &mut Scene, env: FrameEnv, a: FrameArgs<'a>, clock: &mut StageClock) -> FrameCtx<'a> {
-        let FrameArgs { target, width, height, camera, lighting, with_overlays, exclude_texture, projection, second_eye } = a;
+    pub(crate) fn begin_frame<'a>(
+        &mut self,
+        scene: &mut Scene,
+        env: FrameEnv,
+        a: FrameArgs<'a>,
+        clock: &mut StageClock,
+    ) -> FrameCtx<'a> {
+        let FrameArgs {
+            target,
+            width,
+            height,
+            camera,
+            lighting,
+            with_overlays,
+            exclude_texture,
+            projection,
+            second_eye,
+            stereo,
+        } = a;
         // render origin: the camera position rounded to 100 m, kept while the camera stays near it
         if (camera.position - scene.render_origin).abs().max_element() > 200.0 {
             self.set_render_origin(scene, (camera.position / 100.0).floor() * 100.0);
@@ -92,13 +109,16 @@ impl Renderer {
             && scene.glass_slot.is_some()
             && (lighting.rain > 0.001 || lighting.wetness > 0.02)
             && !env.no_glass_picture;
-        let scaled = (width, height) != (full_w, full_h) || vanilla_fxaa || (glass_on && !enhanced_view);
+        let scaled =
+            (width, height) != (full_w, full_h) || vanilla_fxaa || (glass_on && !enhanced_view);
         let scene_target: Option<(wgpu::TextureView, wgpu::BindGroup)> = if scaled {
             Some(self.scale_target(width, height))
         } else {
             None
         };
-        let aspect = self.texture_aspect.unwrap_or(width as f32 / height.max(1) as f32);
+        let aspect = self
+            .texture_aspect
+            .unwrap_or(width as f32 / height.max(1) as f32);
         let cam_rel = (camera.position - ro).as_vec3();
         // The mirrors are drawn with the plain shading even in Enhanced: a mirror has no depth
         // prepass (sized for the window), so every layer of its picture runs the enhanced shader
@@ -111,7 +131,10 @@ impl Renderer {
         // exposure, the sky cube and the frame clock on, as the window does without VR.
         let xr_view = projection.is_some();
         let lead_view = (with_overlays || xr_view) && !second_eye;
-        let enhanced_frame = lighting.enhanced && self.hdr_pass.is_some() && !env.no_enhanced && (with_overlays || xr_view || env.mirror_enhanced || self.options.mirror_enhanced);
+        let enhanced_frame = lighting.enhanced
+            && self.hdr_pass.is_some()
+            && !env.no_enhanced
+            && (with_overlays || xr_view || env.mirror_enhanced || self.options.mirror_enhanced);
         // the mirrors are drawn by the same path as the window (their picture graded with
         // the window's exposure, see the post passes)
         let enhanced = enhanced_frame;
@@ -130,10 +153,28 @@ impl Renderer {
         let eye = LightEye {
             cam_rel,
             view_proj: projection.is_none().then(|| camera.view_proj(aspect, ro)),
-            vehicle: lighting.inside.as_ref().map(|b| (b, lighting.inside_rotation)),
+            vehicle: lighting
+                .inside
+                .as_ref()
+                .map(|b| (b, lighting.inside_rotation)),
         };
-        let (grid, lamp_shadows) = self.prepare_lights(scene, &eye, enhanced_frame, lighting.lamp_shadows && with_overlays && projection.is_none() && self.shadows.shadow_pipelines.len() > 6);
-        self.prepare_coronas(scene, lighting.night, lighting.inside.as_ref().filter(|v| point_in_vehicle_box(camera.position, v)));
+        let (grid, lamp_shadows) = self.prepare_lights(
+            scene,
+            &eye,
+            enhanced_frame,
+            lighting.lamp_shadows
+                && with_overlays
+                && projection.is_none()
+                && self.shadows.shadow_pipelines.len() > 6,
+        );
+        self.prepare_coronas(
+            scene,
+            lighting.night,
+            lighting
+                .inside
+                .as_ref()
+                .filter(|v| point_in_vehicle_box(camera.position, v)),
+        );
         // (the mirrors draw no smoke, see `encode_main_late`)
         if exclude_texture.is_none() {
             self.prepare_smoke(scene, camera.position);
@@ -141,21 +182,47 @@ impl Renderer {
         // ambient occlusion only for the real picture, not for the mirrors
         // Enhanced+: the window's picture traces its sun shadow and ambient occlusion (not the
         // mirrors, a headset's eyes or a triple screen's panels: they keep the shadow map)
-        let rt_frame = self.rt.is_some() && enhanced && with_overlays && projection.is_none() && !env.no_rt_frame;
-        let ao_on = with_overlays && self.rt.is_none() && self.options.ssao && self.ssao_pipeline.is_some() && !env.no_ao;
+        let rt_frame = self.rt.is_some()
+            && enhanced
+            && with_overlays
+            && projection.is_none()
+            && !env.no_rt_frame;
+        let ao_on = with_overlays
+            && self.rt.is_none()
+            && self.options.ssao
+            && self.ssao_pipeline.is_some()
+            && !env.no_ao;
         // the enhanced path's shading is costly: the depth prepass keeps it to the visible
         // surface (without multisampling, see `share_depth`)
-        let depth_wanted = puddles_wanted || glass_on || (enhanced && (with_overlays || xr_view)) || (self.depth_readback && projection.is_none());
+        let depth_wanted = puddles_wanted
+            || glass_on
+            || (enhanced && (with_overlays || xr_view))
+            || (self.depth_readback && projection.is_none());
         let prepass_on = ao_on || depth_wanted;
-        let prepass_reach = if depth_wanted || env.no_ao_reach { f32::MAX } else { AO_PREPASS_REACH };
+        let prepass_reach = if depth_wanted || env.no_ao_reach {
+            f32::MAX
+        } else {
+            AO_PREPASS_REACH
+        };
         // (only the bind group is made again, by `upload_draw_list`: dropping the instance
         // buffers for it wrote every instance's entries again at each render-scale step)
-        if prepass_on && self.ensure_ao(width, height, crate::lighting::bounce_wanted(ao_on, enhanced_frame, self.street_light())) {
+        if prepass_on
+            && self.ensure_ao(
+                width,
+                height,
+                crate::lighting::bounce_wanted(ao_on, enhanced_frame, self.street_light()),
+            )
+        {
             // a new AO texture: the camera bind group must point at it
             scene.camera_bind_group = None;
             self.targets.hdr_targets.clear();
         }
-        if rt_frame && self.rt.as_mut().is_some_and(|rt| rt.ensure_targets(&self.device, width, height)) {
+        if rt_frame
+            && self
+                .rt
+                .as_mut()
+                .is_some_and(|rt| rt.ensure_targets(&self.device, width, height))
+        {
             // the camera bind group must point at the new lighting texture
             scene.camera_bind_group = None;
         }
@@ -163,7 +230,16 @@ impl Renderer {
             self.hdr_targets(width, height);
         }
         if glass_on {
-            self.prepare_glass_behind(scene, width, height, if masked_frame { HDR_FORMAT } else { self.format });
+            self.prepare_glass_behind(
+                scene,
+                width,
+                height,
+                if masked_frame {
+                    HDR_FORMAT
+                } else {
+                    self.format
+                },
+            );
         }
         let dt = {
             let now = std::time::Instant::now();
@@ -177,7 +253,9 @@ impl Renderer {
             dt
         };
         clock.stage(self, "setup", "mirror.setup");
-        self.prepare(scene);
+        if stereo.is_none() {
+            self.prepare(scene);
+        }
         clock.stage(self, "prepare", "mirror.prepare");
         // overlay uniforms/bind groups (rects in pixels → NDC)
         let overlays: Vec<(TextureId, [f32; 4])> = if with_overlays {
@@ -189,6 +267,7 @@ impl Renderer {
             self.prepare_overlays(scene, full_w, full_h);
         }
         FrameCtx {
+            stereo,
             env,
             target,
             camera,

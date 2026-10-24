@@ -404,12 +404,18 @@ impl App {
         let vr_active = false;
         let mirrors_shown = self.settings.mirror_size != 0
             && self.settings.mirror_refresh != "off"
-            && (self.cam.in_cab || self.player.as_ref().is_some_and(|p| (p.vehicle.position - cam.position).length() < 12.0));
+            && (self.cam.in_cab
+                || self
+                    .player
+                    .as_ref()
+                    .is_some_and(|p| (p.vehicle.position - cam.position).length() < 12.0));
         self.gfx.sim_view.people.mirror_hz = if vr_active {
             None
         } else if !mirrors_shown {
             Some(0.0)
-        } else if self.settings.mirror_refresh == "every" || (self.settings.mirror_hud_every_frame && self.gfx.mirror_hud.active()) {
+        } else if self.settings.mirror_refresh == "every"
+            || (self.settings.mirror_hud_every_frame && self.gfx.mirror_hud.active())
+        {
             None
         } else if self.settings.mirror_refresh == "full" {
             Some(MIRROR_MAX_HZ_FULL)
@@ -421,17 +427,34 @@ impl App {
         // screen, not a small picture far off. The other mirrors take their turns below without
         // them. (In VR the panels are not drawn.)
         let mut panel_cams = std::mem::take(&mut self.gfx.mirror_panel_cams);
-        if self.settings.mirror_size != 0 && !vr_active && self.cam.in_cab && self.gfx.mirror_hud.active() {
+        if self.settings.mirror_size != 0
+            && !vr_active
+            && self.cam.in_cab
+            && self.gfx.mirror_hud.active()
+        {
             self.gfx.mirror_hud.cams_into(&mut panel_cams);
         } else {
             panel_cams.clear();
         }
         let every_frame = self.settings.mirror_hud_every_frame;
-        let (skip, on_screen): (&[usize], &[usize]) = if every_frame { (&panel_cams, &[]) } else { (&[], &panel_cams) };
+        let (skip, on_screen): (&[usize], &[usize]) = if every_frame {
+            (&panel_cams, &[])
+        } else {
+            (&[], &panel_cams)
+        };
         if every_frame && !panel_cams.is_empty() {
             if let (Some(w), Some(p)) = (self.world.as_ref(), self.player.as_ref()) {
                 let view = (*cam, s.config.width as f32 / s.config.height.max(1) as f32);
-                render_mirrors(r, scene, w, p, lighting, MirrorPick::Only(&panel_cams), Some(view), &[]);
+                render_mirrors(
+                    r,
+                    scene,
+                    w,
+                    p,
+                    lighting,
+                    MirrorPick::Only(&panel_cams),
+                    Some(view),
+                    &[],
+                );
             }
         }
         if self.settings.mirror_size == 0 {
@@ -447,10 +470,22 @@ impl App {
             } else {
                 Some((*cam, s.config.width as f32 / s.config.height.max(1) as f32))
             };
-            let near = self.player.as_ref().is_some_and(|p| (p.vehicle.position - cam.position).length() < 12.0);
+            let near = self
+                .player
+                .as_ref()
+                .is_some_and(|p| (p.vehicle.position - cam.position).length() < 12.0);
             if let (Some(w), Some(p)) = (self.world.as_ref(), self.player.as_ref()) {
                 if self.cam.in_cab || near {
-                    self.gfx.mirrors_seen = render_mirrors(r, scene, w, p, lighting, MirrorPick::All(skip), mirror_view, on_screen);
+                    self.gfx.mirrors_seen = render_mirrors(
+                        r,
+                        scene,
+                        w,
+                        p,
+                        lighting,
+                        MirrorPick::All(skip),
+                        mirror_view,
+                        on_screen,
+                    );
                 }
             }
         } else if self.settings.mirror_refresh == "off" {
@@ -462,62 +497,109 @@ impl App {
                 };
                 let next = since.max(0.0) + raw_dt.min(0.1);
                 // (and while the driver turns a mirror, so it can be aimed)
-                if since < 0.0 || (since < MIRROR_FREEZE_REDRAW && next >= MIRROR_FREEZE_REDRAW) || p.mirrors_dirty {
-                    self.gfx.mirrors_seen = render_mirrors(r, scene, w, p, lighting, MirrorPick::All(skip), None, on_screen);
+                if since < 0.0
+                    || (since < MIRROR_FREEZE_REDRAW && next >= MIRROR_FREEZE_REDRAW)
+                    || p.mirrors_dirty
+                {
+                    self.gfx.mirrors_seen = render_mirrors(
+                        r,
+                        scene,
+                        w,
+                        p,
+                        lighting,
+                        MirrorPick::All(skip),
+                        None,
+                        on_screen,
+                    );
                 }
-                self.gfx.frozen_mirrors = Some(FrozenMirrors { bus: p.uid, since: next });
+                self.gfx.frozen_mirrors = Some(FrozenMirrors {
+                    bus: p.uid,
+                    since: next,
+                });
+            }
+        } else if vr_active {
+            #[cfg(windows)]
+            let views = self.xr.vr.as_ref().and_then(|vr| vr.mirror_views());
+            #[cfg(not(windows))]
+            let views: Option<[(Camera, glam::Mat4); 2]> = None;
+            if let (Some(w), Some(p)) = (self.world.as_ref(), self.player.as_ref()) {
+                let near = (p.vehicle.position - cam.position).length() < 12.0;
+                if self.cam.in_cab || near {
+                    let (count, visible) =
+                        crate::camera_util::vr_mirror_selection(p, views.as_ref());
+                    if views.is_none() {
+                        self.gfx.vr_mirrors = Default::default();
+                    }
+                    let rate = omsi_cfg::flags::OMSI_OPENXR_MIRROR_RATE
+                        .parse::<f32>()
+                        .filter(|v| v.is_finite() && *v >= -1.0)
+                        .unwrap_or(self.settings.vr_mirror_rate);
+                    let updates =
+                        vr_mirror_updates(&mut self.gfx.mirror_budget, raw_dt, rate, count);
+                    let due = self.gfx.vr_mirrors.select(
+                        p.uid,
+                        count,
+                        &visible,
+                        updates,
+                        raw_dt,
+                        rate != 0.0,
+                    );
+                    self.gfx.mirrors_seen = visible.len();
+                    if !due.is_empty() {
+                        let view = views.map(|v| {
+                            (
+                                v[0].0,
+                                s.config.width as f32 / s.config.height.max(1) as f32,
+                            )
+                        });
+                        render_mirrors(r, scene, w, p, lighting, MirrorPick::Only(&due), view, &[]);
+                    }
+                } else {
+                    self.gfx.mirror_budget = 0.0;
+                }
             }
         } else {
-            let mirrors = self.player.as_ref().map(|p| p.vehicle.ty.def.cameras_reflexion.len()).unwrap_or(0);
-            let rate = {
-                if vr_active {
-                    // Preserve the user's total redraw budget. A negative
-                    // value explicitly requests every mirror each frame.
-                    omsi_cfg::flags::OMSI_OPENXR_MIRROR_RATE.parse::<f32>()
-                        .filter(|rate| rate.is_finite() && *rate >= -1.0)
-                        .unwrap_or(self.settings.vr_mirror_rate)
-                } else {
-                    let max_hz = if self.settings.mirror_refresh == "full" { MIRROR_MAX_HZ_FULL } else { MIRROR_MAX_HZ_ECO };
-                    MIRROR_RATE.max(mirrors as f32 * MIRROR_MIN_HZ).min(max_hz * self.gfx.mirrors_seen.max(1) as f32)
-                }
+            let mirrors = self
+                .player
+                .as_ref()
+                .map(|p| p.vehicle.ty.def.cameras_reflexion.len())
+                .unwrap_or(0);
+            let max_hz = if self.settings.mirror_refresh == "full" {
+                MIRROR_MAX_HZ_FULL
+            } else {
+                MIRROR_MAX_HZ_ECO
             };
-            // The desktop camera does not follow the headset. Culling by
-            // its frustum can leave a mirror visible in VR uninitialised
-            // (black). Refresh all bus mirrors in VR, still taking turns
-            // within the configured budget; keep desktop visibility culling.
+            let rate = MIRROR_RATE
+                .max(mirrors as f32 * MIRROR_MIN_HZ)
+                .min(max_hz * self.gfx.mirrors_seen.max(1) as f32);
             // (Panels taking their turns keep their mirrors in the turns, in the picture or
             // not. Panels drawn every frame above are left out of the turns instead.)
-            let mirror_view = if vr_active || self.settings.triple.enabled {
+            let mirror_view = if self.settings.triple.enabled {
                 None
             } else {
                 Some((*cam, s.config.width as f32 / s.config.height.max(1) as f32))
             };
             // (in the cab, and from outside too while the bus is near: its
             // mirrors are seen from the pavement and stood frozen)
-            let near = self.player.as_ref().zip(self.camera.as_ref()).is_some_and(|(p, c)| (p.vehicle.position - c.position).length() < 12.0);
-            let draw_limit = if vr_active {
-                if self.cam.in_cab || near {
-                    vr_mirror_updates(&mut self.gfx.mirror_budget, raw_dt, rate, mirrors)
-                } else {
-                    self.gfx.mirror_budget = 0.0;
-                    0
-                }
-            } else {
-                let min_rate = self.gfx.mirrors_seen.max(1) as f32 * MIRROR_MIN_HZ;
-                mirror_updates(&mut self.gfx.mirror_budget, &mut self.gfx.mirror_dt, raw_dt, rate, min_rate, self.gfx.mirrors_seen.clamp(1, 2))
-            };
+            let near = self
+                .player
+                .as_ref()
+                .zip(self.camera.as_ref())
+                .is_some_and(|(p, c)| (p.vehicle.position - c.position).length() < 12.0);
+            let min_rate = self.gfx.mirrors_seen.max(1) as f32 * MIRROR_MIN_HZ;
+            let draw_limit = mirror_updates(
+                &mut self.gfx.mirror_budget,
+                &mut self.gfx.mirror_dt,
+                raw_dt,
+                rate,
+                min_rate,
+                self.gfx.mirrors_seen.clamp(1, 2),
+            );
             let mut drawn = 0;
-            if vr_active && draw_limit > 0 && draw_limit == mirrors {
-                // Prepare the cameras and textures only once when all
-                // mirrors are due, including the Every frame mode.
-                if let (Some(w), Some(p)) = (self.world.as_ref(), self.player.as_ref()) {
-                    self.gfx.mirror_turn = self.gfx.mirror_turn.wrapping_add(draw_limit);
-                    self.gfx.mirrors_seen = render_mirrors(r, scene, w, p, lighting, MirrorPick::All(skip), mirror_view, on_screen);
-                    drawn = draw_limit;
-                }
-            }
             while (self.cam.in_cab || near) && drawn < draw_limit {
-                let (Some(w), Some(p)) = (self.world.as_ref(), self.player.as_ref()) else { break };
+                let (Some(w), Some(p)) = (self.world.as_ref(), self.player.as_ref()) else {
+                    break;
+                };
                 drawn += 1;
                 self.gfx.mirror_turn = self.gfx.mirror_turn.wrapping_add(1);
                 self.gfx.mirrors_seen = render_mirrors(
@@ -533,7 +615,10 @@ impl App {
             }
         }
         self.gfx.mirror_panel_cams = panel_cams;
-        self.perf.profile.add(crate::profile_keys::ProfKey::Mirrors, __t.elapsed().as_secs_f64());
+        self.perf.profile.add(
+            crate::profile_keys::ProfKey::Mirrors,
+            __t.elapsed().as_secs_f64(),
+        );
     }
 
     /// Nothing to draw into: what was uploaded let go, the simulation at a display's pace.

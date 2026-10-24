@@ -115,8 +115,16 @@ impl Renderer {
         let draw_order = scene.next_instance_order;
         scene.next_instance_order += 1;
         let key = crate::frame_plan::origin_key(origin);
-        let slot_levels = scene.object_run.levels(key, draw_order, mesh, transform, &scene.meshes[mesh].flats, slots);
+        let slot_levels = scene.object_run.levels(
+            key,
+            draw_order,
+            mesh,
+            transform,
+            &scene.meshes[mesh].flats,
+            slots,
+        );
         scene.instances.push(Instance {
+            min_mesh_pixels: 0.0,
             draw_order,
             slot_levels,
             mesh,
@@ -176,8 +184,16 @@ impl Renderer {
         let draw_order = scene.next_instance_order;
         scene.next_instance_order += 1;
         let key = crate::frame_plan::origin_key(origin);
-        let slot_levels = scene.object_run.levels(key, draw_order, mesh, transform, &scene.meshes[mesh].flats, slots);
+        let slot_levels = scene.object_run.levels(
+            key,
+            draw_order,
+            mesh,
+            transform,
+            &scene.meshes[mesh].flats,
+            slots,
+        );
         scene.instances.push(Instance {
+            min_mesh_pixels: 0.0,
             draw_order,
             slot_levels,
             mesh,

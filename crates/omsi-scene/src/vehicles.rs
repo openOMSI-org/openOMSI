@@ -836,6 +836,9 @@ impl World {
             vt.model.no_distance_check || vt.model.meshes.iter().any(|m| m.no_distance_check);
         for inst in instances.iter().chain(&far) {
             renderer.set_object_culling(scene, *inst, radius, vt.model.detail_factor, any_distance);
+            // Apply after pooled slots have been acquired, including resets for
+            // the player's bus. Never discard whole AI vehicles for mesh detail.
+            scene.instances[*inst].min_mesh_pixels = if key.is_some() { 1.0 } else { 0.0 };
         }
         VehicleRender {
             window_wipers: None,

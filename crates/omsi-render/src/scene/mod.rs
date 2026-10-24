@@ -25,8 +25,10 @@ impl InstanceBounds {
     }
 }
 
-pub(crate) const CULL_BLOCK: usize = 128;
-pub(crate) const CULL_BLOCK_REBUILDS: usize = 8;
+// Smaller leaves reject nearby groups without visiting all of a large block's
+// meshes. Keep the tightening budget at 1024 instances per preparation pass.
+pub(crate) const CULL_BLOCK: usize = 64;
+pub(crate) const CULL_BLOCK_REBUILDS: usize = 16;
 
 pub(crate) fn transform_scale(transform: Mat4) -> f32 {
     transform.x_axis.truncate().length_squared()
@@ -70,6 +72,9 @@ impl RenderPhase {
 
 #[repr(C, align(64))]
 pub struct Instance {
+    /// Optional subpixel mesh cutoff for headset views. Zero preserves the
+    /// authored object-level LOD policy; AI instances opt in at one pixel.
+    pub min_mesh_pixels: f32,
     pub mesh: MeshId,
     /// World position of the instance's local frame.
     pub origin: DVec3,

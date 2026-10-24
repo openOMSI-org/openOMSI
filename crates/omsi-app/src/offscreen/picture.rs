@@ -419,8 +419,7 @@ impl Offscreen<'_> {
         // OMSI_BENCH=n: the final picture drawn n more times as a window frame would be (one
         // mirror, then the view), with the median CPU time of the drawing calls and of the wait
         // for the GPU - medians shrug off what else the machine is doing
-        if let Some(n) = omsi_cfg::flags::OMSI_BENCH.parse::<usize>()
-        {
+        if let Some(n) = omsi_cfg::flags::OMSI_BENCH.parse::<usize>() {
             let target = renderer.device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("bench"),
                 size: wgpu::Extent3d {
@@ -436,20 +435,80 @@ impl Offscreen<'_> {
                 view_formats: &[],
             });
             let view = target.create_view(&Default::default());
+            let stereo = omsi_cfg::flags::OMSI_BENCH_STEREO.is_set();
+            let right = stereo.then(|| {
+                renderer.device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("stereo bench right"),
+                    size: wgpu::Extent3d {
+                        width: w,
+                        height: h,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: renderer.format(),
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                    view_formats: &[],
+                })
+            });
+            let right_view = right.as_ref().map(|t| t.create_view(&Default::default()));
+            let mut cameras = [camera.clone(), camera.clone()];
+            for (eye, offset) in cameras.iter_mut().zip([-0.032, 0.032]) {
+                eye.position += camera.right().as_dvec3() * offset;
+                eye.fov_deg = 100.0;
+            }
+            let projections = cameras.each_ref().map(|c| {
+                glam::Mat4::perspective_rh(
+                    c.fov_deg.to_radians(),
+                    w as f32 / h as f32,
+                    c.far,
+                    c.near,
+                )
+            });
+            if stereo {
+                log::info!(
+                    "bench stereo: {w}x{h} per eye, symmetric vertical FOV 100, IPD 64 mm; fixed scene, no runtime or desktop pacing"
+                );
+            }
             let (mut cpu, mut gpu) = (Vec::with_capacity(n), Vec::with_capacity(n));
             for k in 0..n {
                 let t = Instant::now();
                 if let Some(p) = player_ref.as_ref() {
-                    render_mirrors(renderer, scene, world, p, lighting, MirrorPick::Turn(k, &[]), None, &[]);
+                    render_mirrors(
+                        renderer,
+                        scene,
+                        world,
+                        p,
+                        lighting,
+                        MirrorPick::Turn(k, &[]),
+                        None,
+                        &[],
+                    );
                 }
-                renderer.render(scene, &view, w, h, camera, lighting);
+                if let Some(right) = &right_view {
+                    renderer.render_xr_stereo(
+                        scene,
+                        [&view, right],
+                        (w, h),
+                        &cameras,
+                        lighting,
+                        &projections,
+                    );
+                } else {
+                    renderer.render(scene, &view, w, h, camera, lighting);
+                }
                 let drawn = t.elapsed().as_secs_f64();
                 let t = Instant::now();
                 let _ = omsi_render::wait_gpu(&renderer.device, None);
                 cpu.push(drawn * 1000.0);
                 gpu.push(t.elapsed().as_secs_f64() * 1000.0);
                 if omsi_cfg::flags::OMSI_BENCH_FRAMES.is_set() {
-                    log::info!("bench frame {k}: drawing {:.2} ms, GPU wait {:.2} ms", drawn * 1000.0, gpu[k]);
+                    log::info!(
+                        "bench frame {k}: drawing {:.2} ms, GPU wait {:.2} ms",
+                        drawn * 1000.0,
+                        gpu[k]
+                    );
                 }
             }
             let median = |v: &mut Vec<f64>| {

@@ -70,6 +70,7 @@ use omsi_scene::lights;
 mod launcher;
 mod menu;
 mod mirror_hud;
+mod vr_mirrors;
 use omsi_navigator as navigator;
 mod vr_navigator;
 use omsi_scene::money;
@@ -590,15 +591,23 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
     // (as the last session left it, #1164)
     let info_bar = settings.info_bar;
     let is_server = args.server.is_some();
-    let sky = crate::weather_setup::SkyState { look: args.session_settings, ..Default::default() };
+    let sky = crate::weather_setup::SkyState {
+        look: args.session_settings,
+        ..Default::default()
+    };
     // What loads, starts or reads the clock, made one after the other in a fixed order before
     // the App and its groups are put together (their logs and threads come in this order).
     // Steam must be initialized before the graphics instance and window so its overlay can
     // hook the rendering process before the first surface is created.
     #[cfg(steam)]
-    let steam = if is_server { None } else { crate::steam::Steam::start() };
+    let steam = if is_server {
+        None
+    } else {
+        crate::steam::Steam::start()
+    };
     let instance = graphics_instance();
-    let vr_nav_profiles = crate::vr_navigator::Profiles::load(crate::vr_navigator::profiles_path().as_deref());
+    let vr_nav_profiles =
+        crate::vr_navigator::Profiles::load(crate::vr_navigator::profiles_path().as_deref());
     let ui = ui::Ui::new();
     let rain = rain::Rain::new();
     let cabin_air = crate::condensation::CabinAir::new();
@@ -608,13 +617,23 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
     let started = Instant::now();
     let last = Instant::now();
     let input_script = parse_input_script();
-    let game_keys = omsi_content::KeyboardCfg::load(&crate::startup::keyboard_cfg(&args_root_for_keys)).unwrap_or_default().with_game_defaults().with_vr_defaults().game;
+    let game_keys =
+        omsi_content::KeyboardCfg::load(&crate::startup::keyboard_cfg(&args_root_for_keys))
+            .unwrap_or_default()
+            .with_game_defaults()
+            .with_vr_defaults()
+            .game;
     let own_keys = crate::startup::own_keys(&args_root_for_keys);
-    let own_shift = crate::startup::own_bindings(&args_root_for_keys, omsi_content::input::KEY_SHIFT);
+    let own_shift =
+        crate::startup::own_bindings(&args_root_for_keys, omsi_content::input::KEY_SHIFT);
     let fps_t = Instant::now();
     let update_watch = crate::update_watch::UpdateWatch::new();
     // (a server counts its players by their own games, not itself)
-    let presence = if is_server || cfg!(test) { None } else { crate::presence::Presence::start() };
+    let presence = if is_server || cfg!(test) {
+        None
+    } else {
+        crate::presence::Presence::start()
+    };
     let touch = touch::Touch::new();
     App {
         args,
@@ -627,6 +646,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             mirror_dt: 0.0,
             mirrors_seen: 2,
             mirror_turn: 0,
+            vr_mirrors: Default::default(),
             mirror_panel_cams: Vec::new(),
             frozen_mirrors: None,
             mirror_hud: Default::default(),

@@ -522,17 +522,27 @@ impl Renderer {
         format: wgpu::TextureFormat,
         options: RenderOptions,
     ) -> Renderer {
-        use pipelines::{coronas, defaults, enhanced, errors, mip, overlays, passes, post, scene, shadows, sky, ssao, upscale};
+        use pipelines::{
+            coronas, defaults, enhanced, errors, mip, overlays, passes, post, scene, shadows, sky,
+            ssao, upscale,
+        };
         let (msaa, shadow_size) = (options.msaa, options.shadow_size);
         RT_GBUF.store(options.ray_tracing, std::sync::atomic::Ordering::Relaxed);
         let errors = errors::install(&device, format, &options);
         let leave_out_enhanced = passes::leave_out_enhanced(&options, &adapter_name);
         if sixteen_texture_units() && !options.no_enhanced && !options.preview_only {
-            log::warn!("renderer: the enhanced graphics take more textures than OpenGL has units for on {adapter_name}; drawing vanilla+");
+            log::warn!(
+                "renderer: the enhanced graphics take more textures than OpenGL has units for on {adapter_name}; drawing vanilla+"
+            );
         }
         let scene = scene::SceneBase::new(&device, leave_out_enhanced);
         let hdr_format = wgpu::TextureFormat::Rgba16Float;
-        let shadows = shadows::build(&device, &scene, shadow_size, !leave_out_enhanced && !options.no_enhanced);
+        let shadows = shadows::build(
+            &device,
+            &scene,
+            shadow_size,
+            !leave_out_enhanced && !options.no_enhanced,
+        );
         let defaults = defaults::build(&device, &queue, options.anisotropy);
         let (coronas, corona_texture) = coronas::Coronas::new(&device, &queue, &scene);
         let precip = crate::passes::PrecipMap::new(&device);
@@ -540,8 +550,16 @@ impl Renderer {
         let rain = coronas::Precip::rain(&device, &scene.camera_layout, &precip.view);
         drop(corona_texture);
         let sky = sky::SkyBase::new(&device, &queue, &scene.camera_layout, !leave_out_enhanced);
-        let passes = passes::PassKit { device: &device, scene: &scene, coronas: &coronas, snow: &snow, rain: &rain, sky: &sky, msaa }
-            .build(format, hdr_format, leave_out_enhanced);
+        let passes = passes::PassKit {
+            device: &device,
+            scene: &scene,
+            coronas: &coronas,
+            snow: &snow,
+            rain: &rain,
+            sky: &sky,
+            msaa,
+        }
+        .build(format, hdr_format, leave_out_enhanced);
         let (sky_sampler, sky_mesh) = sky::dome(&device, &queue);
         let overlays = overlays::Overlays::new(&device, format, msaa);
         let gl = GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed);
@@ -550,13 +568,25 @@ impl Renderer {
         let prepass = scene::prepass(&device, &scene, msaa, !leave_out_enhanced);
         let mip = mip::build(&device);
         let post = post::build(&device, format, hdr_format, &defaults.white_texture);
-        let enhanced = enhanced::build(&device, &queue, hdr_format, &defaults.camera_buf, &sky, !leave_out_enhanced);
+        let enhanced = enhanced::build(
+            &device,
+            &queue,
+            hdr_format,
+            &defaults.camera_buf,
+            &sky,
+            !leave_out_enhanced,
+        );
         let (overlay_pipeline_1x, xr_ui_pipeline) = overlays.single_sampled(&device, format);
         let upscale = upscale::build(&device, format);
-        let gpu_timers = [GpuTimers::new(&device), GpuTimers::new(&device)];
+        let gpu_timers = std::array::from_fn(|_| GpuTimers::new(&device));
         // GLES cannot reliably read the depth buffer (the same limitation as SSAO).
         let puddles = (!gl && !passes.leave_out_enhanced).then(|| {
-            puddles::Pipelines::new(&device, &scene.shader, &scene.camera_layout, &scene.material_layout)
+            puddles::Pipelines::new(
+                &device,
+                &scene.shader,
+                &scene.camera_layout,
+                &scene.material_layout,
+            )
         });
         let rt = options.ray_tracing.then(|| rt::RayTracer::new(&device));
         let cookie_atlas = cookies::CookieAtlas::new();
@@ -598,7 +628,9 @@ impl Renderer {
                 sky_mesh,
             },
             lights: LightRes {
-                lm_atlas_view: scene.lm_atlas.create_view(&wgpu::TextureViewDescriptor::default()),
+                lm_atlas_view: scene
+                    .lm_atlas
+                    .create_view(&wgpu::TextureViewDescriptor::default()),
                 lm_atlas: scene.lm_atlas,
                 lm_uniform: scene.lm_uniform,
                 lm_place: std::cell::Cell::new((0.0, 0.0, 0.0)),
@@ -640,8 +672,18 @@ impl Renderer {
                 bounce_reproj: (Mat4::ZERO.to_cols_array_2d(), 0.0),
             },
             shadows: ShadowRes {
-                shadow_far_cache: std::cell::Cell::new((Mat4::IDENTITY, 0, DVec3::ZERO, Vec3::ZERO)),
-                shadow_near_cache: std::cell::Cell::new((Mat4::IDENTITY, 0, DVec3::ZERO, Vec3::ZERO)),
+                shadow_far_cache: std::cell::Cell::new((
+                    Mat4::IDENTITY,
+                    0,
+                    DVec3::ZERO,
+                    Vec3::ZERO,
+                )),
+                shadow_near_cache: std::cell::Cell::new((
+                    Mat4::IDENTITY,
+                    0,
+                    DVec3::ZERO,
+                    Vec3::ZERO,
+                )),
                 shadow_close_cache: std::cell::Cell::new((Mat4::IDENTITY, DVec3::ZERO, Vec3::ZERO)),
                 xr_shadow_cache: std::cell::Cell::new(None),
                 shadow_clear_pipeline: shadows.clear_pipeline,
@@ -658,6 +700,7 @@ impl Renderer {
             },
             history: ViewHistory {
                 triple_culling: Default::default(),
+                xr_culling: Default::default(),
                 flicker: std::cell::RefCell::new(HashMap::new()),
                 main_bundles: Default::default(),
                 mirror_bundles: Default::default(),
@@ -693,7 +736,13 @@ impl Renderer {
             // (OMSI_RENDER_CLOCK=<s>: the animations' clock starts that far on - offscreen
             // stills of moving things, the windy trees, at different moments)
             started: std::time::Instant::now()
-                .checked_sub(std::time::Duration::from_secs_f64(omsi_cfg::flags::OMSI_RENDER_CLOCK.var().and_then(|v| v.trim().parse::<f64>().ok()).filter(|s| s.is_finite() && *s >= 0.0).unwrap_or(0.0)))
+                .checked_sub(std::time::Duration::from_secs_f64(
+                    omsi_cfg::flags::OMSI_RENDER_CLOCK
+                        .var()
+                        .and_then(|v| v.trim().parse::<f64>().ok())
+                        .filter(|s| s.is_finite() && *s >= 0.0)
+                        .unwrap_or(0.0),
+                ))
                 .unwrap_or_else(std::time::Instant::now),
             tree_gust_drift: std::cell::Cell::new((glam::DVec2::ZERO, 0.0)),
             ao_sampler: ssao.sampler,
@@ -735,10 +784,15 @@ impl Renderer {
             encoding_pool: if omsi_cfg::flags::OMSI_NO_RENDER_POOL.is_set() {
                 None
             } else {
-                let workers = std::thread::available_parallelism().map(|n| n.get() / 2).unwrap_or(2).clamp(2, 8);
-                rayon::ThreadPoolBuilder::new().num_threads(workers)
+                let workers = std::thread::available_parallelism()
+                    .map(|n| n.get() / 2)
+                    .unwrap_or(2)
+                    .clamp(2, 8);
+                rayon::ThreadPoolBuilder::new()
+                    .num_threads(workers)
                     .thread_name(|i| format!("omsi-render-{i}"))
-                    .build().ok()
+                    .build()
+                    .ok()
             },
             pending_meshes: Default::default(),
             freed: std::cell::OnceCell::new(),

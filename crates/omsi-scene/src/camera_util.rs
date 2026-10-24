@@ -3,7 +3,7 @@
 //! mirror's camera looks (as Omsi.exe aims it) and whether a view sees it.
 
 use crate::World;
-use glam::{DVec3, Vec3};
+use glam::{DVec3, Mat4, Vec3};
 use omsi_render::Camera;
 
 /// Default camera from `[mapcam]`: tile x, tile y, x, z, y, yaw, pitch, distance.
@@ -118,6 +118,83 @@ pub fn mirror_in_view(eye: DVec3, radius: f32, view: &(Camera, f32)) -> bool {
     let slack_x = radius * (1.0 + tan_x * tan_x).sqrt();
     let slack_y = radius * (1.0 + tan_y * tan_y).sqrt();
     d.dot(r).abs() <= z.max(0.0) * tan_x + slack_x && d.dot(u).abs() <= z.max(0.0) * tan_y + slack_y
+}
+
+/// Conservative headset visibility for refresh scheduling, not scene clipping.
+/// The last submitted pose is up to one frame old: widen each side by 15 degrees
+/// and the mirror sphere by 35 cm. The two eyes are tested separately by callers.
+pub fn mirror_in_projection(eye: DVec3, radius: f32, camera: &Camera, projection: Mat4) -> bool {
+    let extent = |offset: f32, scale: f32| {
+        ((offset - 1.0) / scale)
+            .abs()
+            .max(((offset + 1.0) / scale).abs())
+    };
+    let x = extent(projection.z_axis.x, projection.x_axis.x);
+    let y = extent(projection.z_axis.y, projection.y_axis.y);
+    if !x.is_finite() || !y.is_finite() || x <= 0.0 || y <= 0.0 {
+        return true;
+    }
+    let widen = |v: f32| {
+        (v.atan() + 15f32.to_radians())
+            .min(89f32.to_radians())
+            .tan()
+    };
+    let (x, y) = (widen(x), widen(y));
+    let mut conservative = *camera;
+    conservative.fov_deg = 2.0 * y.atan().to_degrees();
+    mirror_in_view(eye, radius.max(0.0) + 0.35, &(conservative, x / y))
+}
+
+#[cfg(test)]
+mod stereo_mirror_tests {
+    use super::*;
+
+    #[test]
+    fn headset_mirrors_use_asymmetric_projection_and_keep_motion_margin() {
+        let camera = Camera {
+            position: DVec3::ZERO,
+            yaw: 0.0,
+            pitch: 0.0,
+            roll: 0.0,
+            fov_deg: 90.0,
+            near: 0.1,
+            far: 1000.0,
+        };
+        let projection = Mat4::perspective_rh(90f32.to_radians(), 1.0, 1000.0, 0.1);
+        assert!(mirror_in_projection(
+            DVec3::new(0.0, 10.0, 0.0),
+            0.1,
+            &camera,
+            projection
+        ));
+        assert!(!mirror_in_projection(
+            DVec3::new(0.0, -10.0, 0.0),
+            0.1,
+            &camera,
+            projection
+        ));
+        assert!(!mirror_in_projection(
+            DVec3::new(25.0, 10.0, 0.0),
+            0.1,
+            &camera,
+            projection
+        ));
+        let mut asymmetric = projection;
+        asymmetric.z_axis.x = 2.0;
+        assert!(mirror_in_projection(
+            DVec3::new(25.0, 10.0, 0.0),
+            0.1,
+            &camera,
+            asymmetric
+        ));
+        // Invalid/incomplete runtime projections must not freeze a mirror.
+        assert!(mirror_in_projection(
+            DVec3::new(25.0, 10.0, 0.0),
+            0.1,
+            &camera,
+            Mat4::ZERO
+        ));
+    }
 }
 
 /// A mirror's camera as Omsi.exe aims it, every frame (0x6f6468 -> 0x7ed0e8): the yaw and

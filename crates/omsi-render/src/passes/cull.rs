@@ -15,12 +15,33 @@ struct Frustum {
 
 impl Frustum {
     fn new(f: &FrameCtx) -> Frustum {
-        let (camera, lighting, aspect) = (f.camera, f.lighting, f.aspect);
+        Self::for_view(
+            f.camera,
+            f.lighting,
+            f.aspect,
+            f.projection,
+            f.ro,
+            f.enhanced_frame,
+        )
+    }
+
+    fn for_view(
+        camera: &Camera,
+        lighting: &Lighting,
+        aspect: f32,
+        projection: Option<Mat4>,
+        origin: DVec3,
+        enhanced: bool,
+    ) -> Frustum {
         // Frustum culling by bounding sphere in view space. OpenXR projections
         // are asymmetric; the desktop field of view must not clip an eye's
         // wider side as the head turns.
-        let view = Mat4::look_to_rh(f.cam_rel, camera.forward(), camera.up());
-        let (tan_x, tan_y) = if let Some(p) = f.projection {
+        let view = Mat4::look_to_rh(
+            (camera.position - origin).as_vec3(),
+            camera.forward(),
+            camera.up(),
+        );
+        let (tan_x, tan_y) = if let Some(p) = projection {
             (
                 ((p.z_axis.x - 1.0) / p.x_axis.x)
                     .abs()
@@ -45,7 +66,7 @@ impl Frustum {
         // scale height over the fog's base). Culled by the vanilla density, whatever stood
         // in thin fog went missing in plain sight - most of all seen from above, with the
         // camera zoomed out.
-        let fog_far = if f.enhanced_frame {
+        let fog_far = if enhanced {
             if lighting.fog_density > 1e-4 {
                 let base = lighting
                     .fog_base
@@ -54,7 +75,11 @@ impl Frustum {
                 let kh = ((camera.position.z - base).max(0.0) / 300.0) as f32;
                 // a point on the ground seen from the camera's height: the thinnest fog a
                 // line of sight down to the scenery passes through
-                let thin = if kh < 1e-3 { 1.0 } else { (1.0 - (-kh).exp()) / kh };
+                let thin = if kh < 1e-3 {
+                    1.0
+                } else {
+                    (1.0 - (-kh).exp()) / kh
+                };
                 (4.6 / (lighting.fog_density * thin)).min(camera.far)
             } else {
                 camera.far
@@ -64,7 +89,137 @@ impl Frustum {
         } else {
             camera.far
         };
-        Frustum { view, tan_x, tan_y, cos_x, cos_y, fog_far }
+        Frustum {
+            view,
+            tan_x,
+            tan_y,
+            cos_x,
+            cos_y,
+            fog_far,
+        }
+    }
+
+    fn sees_sphere(&self, centre: Vec3, radius: f32, near: f32, fog: bool) -> bool {
+        let v = self.view.transform_point3(centre);
+        self.sees_view_sphere(v, radius, near, fog)
+    }
+
+    fn sees_view_sphere(&self, v: Vec3, radius: f32, near: f32, fog: bool) -> bool {
+        let z = -v.z;
+        v.length() <= radius
+            || !(z + radius < near
+                || (fog && z - radius > self.fog_far)
+                || v.x.abs() > z * self.tan_x + radius / self.cos_x
+                || v.y.abs() > z * self.tan_y + radius / self.cos_y)
+    }
+}
+
+/// Immutable, frame-local broad phase. Bounds and scene eligibility are read once;
+/// each eye still applies its own frustum, distance/LOD history and blended ordering.
+/// Nothing is retained across a scene update or an origin change.
+pub(crate) struct StereoCulling {
+    pub(crate) eyes: [Vec<CullCandidate>; 2],
+    objects: Vec<StereoObject>,
+}
+
+pub(crate) struct CullCandidate {
+    instance: usize,
+    view: Vec3,
+    radius: f32,
+    object: Option<usize>,
+}
+
+struct StereoObject {
+    key: [u64; 4],
+    views: [Vec3; 2],
+    distances: [f32; 2],
+    radius: f32,
+}
+
+impl StereoCulling {
+    pub(crate) fn new(
+        scene: &Scene,
+        cameras: &[Camera; 2],
+        projections: &[Mat4; 2],
+        lighting: &Lighting,
+        aspect: f32,
+        enhanced: bool,
+        shadow_blobs: bool,
+    ) -> Self {
+        let views = std::array::from_fn::<_, 2, _>(|i| {
+            Frustum::for_view(
+                &cameras[i],
+                lighting,
+                aspect,
+                Some(projections[i]),
+                scene.render_origin,
+                enhanced,
+            )
+        });
+        let mut eyes: [Vec<CullCandidate>; 2] = Default::default();
+        let mut objects = Vec::new();
+        let mut object_indices: HashMap<[u64; 4], usize> = HashMap::new();
+        let blocks = Renderer::cull_blocks(scene);
+        for start in (0..scene.instances.len()).step_by(CULL_BLOCK) {
+            let seen: [bool; 2] = std::array::from_fn(|eye| {
+                blocks.as_ref().is_none_or(|b| {
+                    let (centre, radius) = b[start / CULL_BLOCK];
+                    views[eye].sees_sphere(centre, radius, cameras[eye].near, !enhanced)
+                })
+            });
+            if !seen.iter().any(|v| *v) {
+                continue;
+            }
+            for i in start..(start + CULL_BLOCK).min(scene.instances.len()) {
+                let inst = &scene.instances[i];
+                if !inst.visible
+                    || inst.mirror_only
+                    || (inst.blob && !shadow_blobs)
+                    || scene.meshes[inst.mesh].ranges.is_empty()
+                {
+                    continue;
+                }
+                let (centre, radius) = Renderer::bounding_sphere(scene, inst);
+                let object = (inst.object_radius > 0.0).then(|| {
+                    let radius = inst.object_radius * Renderer::instance_scale(scene, inst);
+                    let key = [
+                        inst.origin.x.to_bits(),
+                        inst.origin.y.to_bits(),
+                        inst.origin.z.to_bits(),
+                        radius.to_bits() as u64,
+                    ];
+                    *object_indices.entry(key).or_insert_with(|| {
+                        let origin = (inst.origin - scene.render_origin).as_vec3();
+                        let views = views.map(|view| view.view.transform_point3(origin));
+                        let id = objects.len();
+                        objects.push(StereoObject {
+                            key,
+                            distances: views.map(|v| v.length()),
+                            views,
+                            radius,
+                        });
+                        id
+                    })
+                });
+                for eye in 0..2 {
+                    // Enhanced ground and large bounds have a fog exception in
+                    // cull_view. Do not let this broad phase override it.
+                    if !seen[eye] {
+                        continue;
+                    }
+                    let view = views[eye].view.transform_point3(centre);
+                    if views[eye].sees_view_sphere(view, radius, cameras[eye].near, !enhanced) {
+                        eyes[eye].push(CullCandidate {
+                            instance: i,
+                            view,
+                            radius,
+                            object,
+                        });
+                    }
+                }
+            }
+        }
+        Self { eyes, objects }
     }
 }
 
@@ -104,7 +259,7 @@ impl Renderer {
         } else {
             Default::default()
         };
-        let cull_one = |i: usize, sizes: &mut Vec<([u64; 4], f32)>| -> Option<(usize, f32, bool)> {
+        let cull_one = |i: usize, prepared: Option<&CullCandidate>, sizes: &mut Vec<([u64; 4], f32)>| -> Option<(usize, f32, bool)> {
             let inst = &scene.instances[i];
             let m = &scene.meshes[inst.mesh];
             if m.ranges.is_empty() || !inst.visible || (inst.mirror_only && main_view) {
@@ -120,8 +275,10 @@ impl Renderer {
             if inst.blob && !shadow_blobs {
                 return None;
             }
-            let (c, r) = Self::bounding_sphere(scene, inst);
-            let v = view.transform_point3(c);
+            let (v, r) = match prepared {
+                Some(c) => (c.view, c.radius),
+                None => { let (c, r) = Self::bounding_sphere(scene, inst); (view.transform_point3(c), r) }
+            };
             let z = -v.z; // distance along the view direction
             // camera inside the sphere: drawn whatever the frustum says, but the
             // object's LOD still chooses (all levels of a building stood in at once)
@@ -138,6 +295,24 @@ impl Renderer {
             if !inside && (v.x.abs() > z * tan_x + r / cos_x || v.y.abs() > z * tan_y + r / cos_y) {
                 return None;
             }
+            // AI vehicles are one object for authored LOD selection, but a
+            // distant screw/seat fitting need not keep drawing with its body.
+            // Use the nearest point of its sphere, conservatively, and retain
+            // each eye's own deadband. Desktop and mirror quality are unchanged.
+            if f.xr_view && !with_overlays && inst.min_mesh_pixels > 0.0 && !inside {
+                let focal = f.projection.map_or(1.0 / (fov_y * 0.5).tan(), |p| p.y_axis.y.abs());
+                let pixels = r * focal * f.height as f32 / (v.length() - r).max(0.01);
+                let keep = if was_drawn(i) { 0.85 } else { 1.0 };
+                if pixels < inst.min_mesh_pixels * keep {
+                    // Subpixel lamps/signs can still contribute visible glow.
+                    // Check materials only when a mesh would otherwise be cut.
+                    let luminous = inst.materials.iter().any(|&id| {
+                        let m = &scene.materials[id];
+                        m.unlit || m.nightmap.is_some() || m.emissive.iter().any(|v| *v > 0.0)
+                    });
+                    if !luminous { return None; }
+                }
+            }
             // The screen size: the diameter over the distance to the camera (not the
             // depth along the view: that is largest in the middle of the picture, so
             // a pole looked at straight on shrank below the limit and vanished while
@@ -146,10 +321,15 @@ impl Renderer {
             // `set_object_culling`), else of the mesh alone. Surfaces and terrain
             // are never dropped for it.
             let size = if inst.object_radius > 0.0 {
-                let scale = Self::instance_scale(scene, inst);
-                let radius = inst.object_radius * scale;
-                let ov = view.transform_point3((inst.origin - scene.render_origin).as_vec3());
-                let (od, oz) = (ov.length(), -ov.z);
+                let object = f.stereo.zip(prepared).and_then(|(stereo, c)| c.object.map(|i| &stereo.objects[i]));
+                let (radius, od, oz, key) = if let Some(o) = object {
+                    let eye = f.second_eye as usize;
+                    (o.radius, o.distances[eye], -o.views[eye].z, o.key)
+                } else {
+                    let radius = inst.object_radius * Self::instance_scale(scene, inst);
+                    let ov = view.transform_point3((inst.origin - scene.render_origin).as_vec3());
+                    (radius, ov.length(), -ov.z, [inst.origin.x.to_bits(), inst.origin.y.to_bits(), inst.origin.z.to_bits(), radius.to_bits() as u64])
+                };
                 if od <= radius {
                     f32::MAX
                 } else {
@@ -164,12 +344,6 @@ impl Renderer {
                     // one size for the whole object, held while it moves less than
                     // 6 % (the view's jitter); every mesh and level of it computes
                     // the same key and the same size, so they decide alike
-                    let key = [
-                        inst.origin.x.to_bits(),
-                        inst.origin.y.to_bits(),
-                        inst.origin.z.to_bits(),
-                        radius.to_bits() as u64,
-                    ];
                     let fresh = 2.0 * radius / (od.max(0.01) * fov_y);
                     let size = match sizes_before.get(&key) {
                         Some(&last) if fresh > last * 0.94 && fresh < last * 1.06 => last,
@@ -208,10 +382,11 @@ impl Renderer {
             }
             Some((i, z, inside))
         };
-        let n = scene.instances.len();
+        let candidates = f.stereo.map(|s| s.eyes[f.second_eye as usize].as_slice());
+        let n = candidates.map_or(scene.instances.len(), |c| c.len());
         let parts = (n / 8192).clamp(1, self.encoding_pool.as_ref().map_or(3, |p| p.current_num_threads()) + 1);
         let chunk = n.div_ceil(parts).div_ceil(CULL_BLOCK) * CULL_BLOCK;
-        let blocks = Self::cull_blocks(scene);
+        let blocks = if candidates.is_none() { Self::cull_blocks(scene) } else { None };
         let block_seen = |b: usize| {
             let Some(bl) = blocks.as_ref() else { return true };
             let (c, r) = bl[b];
@@ -233,8 +408,10 @@ impl Renderer {
             let mut b = p * chunk;
             while b < end {
                 let next = (b + CULL_BLOCK).min(end);
-                if block_seen(b / CULL_BLOCK) {
-                    v.extend((b..next).filter_map(|i| cull_one(i, &mut sizes)));
+                if let Some(candidates) = candidates {
+                    v.extend(candidates[b..next].iter().filter_map(|c| cull_one(c.instance, Some(c), &mut sizes)));
+                } else if block_seen(b / CULL_BLOCK) {
+                    v.extend((b..next).filter_map(|i| cull_one(i, None, &mut sizes)));
                 }
                 b = next;
             }

@@ -808,7 +808,19 @@ impl Renderer {
         let view = t.view.clone();
         let (w, h) = t.size;
         self.texture_aspect = Some(aspect);
-        self.render_inner(scene, &view, w, h, camera, lighting, false, Some(id), None, false);
+        self.render_inner(
+            scene,
+            &view,
+            w,
+            h,
+            camera,
+            lighting,
+            false,
+            Some(id),
+            None,
+            false,
+            None,
+        );
         self.texture_aspect = None;
     }
 

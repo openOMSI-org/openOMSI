@@ -30,8 +30,17 @@ impl Renderer {
 
     /// The main pass into `encoder`, the parts before its last one (when it is split) into
     /// encoders of their own, which are returned.
-    pub(crate) fn encode_main_pass(&mut self, encoder: &mut wgpu::CommandEncoder, scene: &Scene, f: &FrameCtx, plan: &DrawPlan, main_bundles: &[wgpu::RenderBundle], timers: &mut PassTimers) -> Vec<wgpu::CommandEncoder> {
-        let (width, height, enhanced, with_overlays, lighting) = (f.width, f.height, f.enhanced, f.with_overlays, f.lighting);
+    pub(crate) fn encode_main_pass(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        scene: &Scene,
+        f: &FrameCtx,
+        plan: &DrawPlan,
+        main_bundles: &[wgpu::RenderBundle],
+        timers: &mut PassTimers,
+    ) -> Vec<wgpu::CommandEncoder> {
+        let (width, height, enhanced, with_overlays, lighting) =
+            (f.width, f.height, f.enhanced, f.with_overlays, f.lighting);
         // Without multisampling the main pass tests against the depth the prepass left
         // (when there was one): the costly shading - lighting, the shadow filter - is then
         // done once per pixel for the surface that is seen, not for every tree and wall
@@ -43,7 +52,8 @@ impl Renderer {
         // A depth-writing window in the colour pass must not replace the road receiver.
         let share_depth = self.shares_prepass_depth(f, plan);
         // (the colour only where the picture is drawn into it: not into the HDR targets)
-        let msaa_color = !single && !(f.masked_frame && self.targets.hdr_targets.contains_key(&(width, height)));
+        let msaa_color =
+            !single && !(f.masked_frame && self.targets.hdr_targets.contains_key(&(width, height)));
         let targets = if share_depth {
             None
         } else {
@@ -59,10 +69,22 @@ impl Renderer {
         // depth before cutouts/blends saved more hidden shading than the pass cost.
         let msaa_prepass = plan.msaa_prepass(self, f);
         let presurface_prefill = plan.presurface_prefill(self, f);
-        let parts = if presurface_prefill { 1 } else if !cfg!(any(target_os = "macos", target_os = "ios")) && main_bundles.len() >= 2 && !f.env.no_main_split {
+        let parts = if presurface_prefill {
+            1
+        } else if !cfg!(any(target_os = "macos", target_os = "ios"))
+            && main_bundles.len() >= 2
+            && !f.env.no_main_split
+        {
             main_bundles.len().min(2)
-        } else { 1 };
-        let mut lead = (parts > 1).then(|| self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("main part") }));
+        } else {
+            1
+        };
+        let mut lead = (parts > 1).then(|| {
+            self.device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("main part"),
+                })
+        });
         // The prefill is drawn inside the main pass, before its colour draws (as with an
         // excavation, `presurface_prefill`): as a render pass of its own it stored the
         // multisampled depth (133 MB at 4K) and the main pass loaded it straight back.
@@ -80,7 +102,17 @@ impl Renderer {
             // (unscaled - multiplying it by the enhanced exposure blew a night sky's dim clear
             // colour out to white instead) keeps a real gap from ever reading as a rendering
             // bug of its own.
-            let sky = if lighting.classic && !enhanced { lighting.sky_color.map(|v| if v <= 0.04045 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }) } else { lighting.sky_color };
+            let sky = if lighting.classic && !enhanced {
+                lighting.sky_color.map(|v| {
+                    if v <= 0.04045 {
+                        v / 12.92
+                    } else {
+                        ((v + 0.055) / 1.055).powf(2.4)
+                    }
+                })
+            } else {
+                lighting.sky_color
+            };
             let msaa_color = targets.as_ref().and_then(|t| t.0.as_ref());
             let depth_view: &wgpu::TextureView = match &targets {
                 Some(t) => &t.1,
@@ -111,12 +143,29 @@ impl Renderer {
             // (a mirror of an Enhanced picture, plainly shaded: the window's sky, see
             // `sky_mirror_pipeline`)
             let sky_pipe = match &self.sky.sky_mirror_pipeline {
-                Some(p) if lighting.enhanced && !enhanced && !with_overlays && self.sky.sky_state.is_some() && !f.env.no_enhanced => p,
+                Some(p)
+                    if lighting.enhanced
+                        && !enhanced
+                        && !with_overlays
+                        && self.sky.sky_state.is_some()
+                        && !f.env.no_enhanced =>
+                {
+                    p
+                }
                 _ => &pp.sky_pipeline,
             };
             let per_part = main_bundles.len().div_ceil(parts.max(1));
-            let sky_clear = wgpu::LoadOp::Clear(wgpu::Color { r: sky.x as f64, g: sky.y as f64, b: sky.z as f64, a: 1.0 });
-            let depth_first = if share_depth { wgpu::LoadOp::Load } else { wgpu::LoadOp::Clear(0.0) };
+            let sky_clear = wgpu::LoadOp::Clear(wgpu::Color {
+                r: sky.x as f64,
+                g: sky.y as f64,
+                b: sky.z as f64,
+                a: 1.0,
+            });
+            let depth_first = if share_depth {
+                wgpu::LoadOp::Load
+            } else {
+                wgpu::LoadOp::Clear(0.0)
+            };
             let tail = (parts - 1) * per_part;
             let mt = MainTargets {
                 draw_view,
@@ -143,11 +192,36 @@ impl Renderer {
             };
             for g in 0..parts.saturating_sub(1) {
                 let first = g == 0;
-                let mut part = lead.take().unwrap_or_else(|| self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("main part") }));
+                let mut part = lead.take().unwrap_or_else(|| {
+                    self.device
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("main part"),
+                        })
+                });
                 // (OMSI_GPU_TIMERS: the first part timed too - the sky and the first bundles;
                 // ahead of every other timed pass, it was counted nowhere)
-                let stamp = if first { pass_timer(timers.set.as_ref(), &mut timers.timed, if f.with_overlays { "main part" } else { "mirror part" }) } else { None };
-                self.encode_main_part(&mut part, scene, f, &mt, &main_bundles[g * per_part..((g + 1) * per_part).min(main_bundles.len())], first, stamp);
+                let stamp = if first {
+                    pass_timer(
+                        timers.set.as_ref(),
+                        &mut timers.timed,
+                        if f.with_overlays || f.xr_view {
+                            "main part"
+                        } else {
+                            "mirror part"
+                        },
+                    )
+                } else {
+                    None
+                };
+                self.encode_main_part(
+                    &mut part,
+                    scene,
+                    f,
+                    &mt,
+                    &main_bundles[g * per_part..((g + 1) * per_part).min(main_bundles.len())],
+                    first,
+                    stamp,
+                );
                 main_parts.push(part);
             }
             self.encode_main(encoder, scene, f, plan, &mt, timers);
@@ -243,31 +317,65 @@ impl Renderer {
     }
 
     /// The main pass (the last part of a split one).
-    fn encode_main(&self, encoder: &mut wgpu::CommandEncoder, scene: &Scene, f: &FrameCtx, plan: &DrawPlan, mt: &MainTargets, timers: &mut PassTimers) {
-        let MainTargets { draw_view, resolve_view, depth_view, hdr, pp, sky_pipe, sky_clear, depth_first, depth_store, parts, presurface_prefill, prefill, bundles } = *mt;
+    fn encode_main(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        scene: &Scene,
+        f: &FrameCtx,
+        plan: &DrawPlan,
+        mt: &MainTargets,
+        timers: &mut PassTimers,
+    ) {
+        let MainTargets {
+            draw_view,
+            resolve_view,
+            depth_view,
+            hdr,
+            pp,
+            sky_pipe,
+            sky_clear,
+            depth_first,
+            depth_store,
+            parts,
+            presurface_prefill,
+            prefill,
+            bundles,
+        } = *mt;
         // the enhanced pass's screen mask beside the picture (see `MASK_FORMAT`)
         let mask_attachment = hdr.map(|h| wgpu::RenderPassColorAttachment {
             view: h.mask_msaa.as_ref().unwrap_or(&h.mask),
             depth_slice: None,
             resolve_target: h.mask_msaa.as_ref().map(|_| &h.mask),
             ops: wgpu::Operations {
-                load: if parts > 1 { wgpu::LoadOp::Load } else { wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT) },
-                store: if h.mask_msaa.is_some() { wgpu::StoreOp::Discard } else { wgpu::StoreOp::Store },
+                load: if parts > 1 {
+                    wgpu::LoadOp::Load
+                } else {
+                    wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
+                },
+                store: if h.mask_msaa.is_some() {
+                    wgpu::StoreOp::Discard
+                } else {
+                    wgpu::StoreOp::Store
+                },
             },
         });
         let main_attachment = Some(wgpu::RenderPassColorAttachment {
-                view: draw_view,
-                depth_slice: None,
-                resolve_target: resolve_view,
-                ops: wgpu::Operations {
-                    load: if parts > 1 { wgpu::LoadOp::Load } else { sky_clear },
-                    store: if resolve_view.is_none() {
-                        wgpu::StoreOp::Store
-                    } else {
-                        wgpu::StoreOp::Discard
-                    },
+            view: draw_view,
+            depth_slice: None,
+            resolve_target: resolve_view,
+            ops: wgpu::Operations {
+                load: if parts > 1 {
+                    wgpu::LoadOp::Load
+                } else {
+                    sky_clear
                 },
-            });
+                store: if resolve_view.is_none() {
+                    wgpu::StoreOp::Store
+                } else {
+                    wgpu::StoreOp::Discard
+                },
+            },
+        });
         let gbuf_attachments = hdr.and_then(|h| h.gbuf.as_ref()).map(|g| {
             g.each_ref().map(|(msaa, view)| {
                 Some(wgpu::RenderPassColorAttachment {
@@ -275,15 +383,29 @@ impl Renderer {
                     depth_slice: None,
                     resolve_target: msaa.as_ref().map(|_| view),
                     ops: wgpu::Operations {
-                        load: if parts > 1 { wgpu::LoadOp::Load } else { wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT) },
-                        store: if msaa.is_some() { wgpu::StoreOp::Discard } else { wgpu::StoreOp::Store },
+                        load: if parts > 1 {
+                            wgpu::LoadOp::Load
+                        } else {
+                            wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
+                        },
+                        store: if msaa.is_some() {
+                            wgpu::StoreOp::Discard
+                        } else {
+                            wgpu::StoreOp::Store
+                        },
                     },
                 })
             })
         });
         let [g0, g1] = gbuf_attachments.unwrap_or([None, None]);
         let colors = [main_attachment, mask_attachment, g0, g1];
-        let colors = if colors[2].is_some() { &colors[..] } else if colors[1].is_some() { &colors[..2] } else { &colors[..1] };
+        let colors = if colors[2].is_some() {
+            &colors[..]
+        } else if colors[1].is_some() {
+            &colors[..2]
+        } else {
+            &colors[..1]
+        };
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("main"),
             // drawn with MSAA samples and resolved into the real target at the end
@@ -292,7 +414,11 @@ impl Renderer {
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                 view: depth_view,
                 depth_ops: Some(wgpu::Operations {
-                    load: if parts > 1 { wgpu::LoadOp::Load } else { depth_first },
+                    load: if parts > 1 {
+                        wgpu::LoadOp::Load
+                    } else {
+                        depth_first
+                    },
                     store: depth_store,
                 }),
                 stencil_ops: None,
@@ -300,7 +426,11 @@ impl Renderer {
             timestamp_writes: pass_timer(
                 timers.set.as_ref(),
                 &mut timers.timed,
-                if f.with_overlays { "main" } else { "mirror" },
+                if f.with_overlays || f.xr_view {
+                    "main"
+                } else {
+                    "mirror"
+                },
             ),
             occlusion_query_set: None,
             multiview_mask: None,
@@ -318,7 +448,12 @@ impl Renderer {
         if presurface_prefill {
             // Colour and seal the excavation first; prefill ordinary scenery without
             // storing and reloading the colour attachments in a separate pass.
-            encode_batches(&mut pass, scene, &plan.main_batches[..plan.presurface_batch_end], |pipe| main_pipeline(pp, pipe));
+            encode_batches(
+                &mut pass,
+                scene,
+                &plan.main_batches[..plan.presurface_batch_end],
+                |pipe| main_pipeline(pp, pipe),
+            );
             // At 1x an excavation still prevents sharing the earlier prepass depth.
             // Refill ordinary scenery here, after its floor and cover have been coloured.
             let pipes = self.prepass_msaa_pipelines.as_ref().unwrap();
@@ -331,9 +466,16 @@ impl Renderer {
         }
         if bundles.is_empty() {
             pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
-            encode_batches(&mut pass, scene, if presurface_prefill { &plan.main_batches[plan.presurface_batch_end..] } else { &plan.main_batches }, |pipe| {
-                main_pipeline(pp, pipe)
-            });
+            encode_batches(
+                &mut pass,
+                scene,
+                if presurface_prefill {
+                    &plan.main_batches[plan.presurface_batch_end..]
+                } else {
+                    &plan.main_batches
+                },
+                |pipe| main_pipeline(pp, pipe),
+            );
         } else {
             // the batches, recorded as bundles on several threads (see `record_bundles`)
             pass.execute_bundles(bundles.iter());

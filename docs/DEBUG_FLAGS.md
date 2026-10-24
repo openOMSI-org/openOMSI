@@ -109,7 +109,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_ENV_PHOTO` | num | 1 | use | render | 0 leaves the environment photo out of the debug views. |
 | `OMSI_FORCE_LOD` | bool | off | use | scene | Draw the lower levels of detail of the AI vehicles at any size (to look at them). |
 | `OMSI_FRAME_ORDER` | bool | off | once | app | Log the window's frame and the offscreen run's step as their ordered stages (phase, what each reads and writes, its profile key), once at start. |
-| `OMSI_GPU_TIMERS` | bool | off | use | render | Measure GPU time per pass with timestamp queries. |
+| `OMSI_GPU_TIMERS` | bool | off | use | app, render | Measure GPU time per pass with timestamp queries. |
 | `OMSI_GPU_TIMERS_RAW` | bool | off | use | render | With OMSI_GPU_TIMERS: the passes in the order the GPU finished them. |
 | `OMSI_GROUND_GAP` | text | - | use | sim | Offscreen CSV (or -): how far every drawn tyre stands over or sinks into the ground. |
 | `OMSI_GROUND_GAP_RADIUS` | num | 150 | use | sim | With OMSI_GROUND_GAP: the radius in metres. |
@@ -146,6 +146,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_BACKGROUND` | bool | off | use | app | A test window that does not take the keyboard focus (OMSI_INPUT drives the handlers directly); with OMSI_INPUT it ignores the real mouse too. |
 | `OMSI_BATCH` | num | - | use | scene | Offscreen: prepare the map tiles this many at a time, as the window's streaming does. |
 | `OMSI_BENCH` | num | - | use | app | Offscreen: draw the final picture this many more times and log the median CPU and GPU-wait time. |
+| `OMSI_BENCH_STEREO` | bool | off | use | app | With OMSI_BENCH: benchmark a stationary stereo pair without a headset; --size is per eye, symmetric 100 degree vertical FOV and 64 mm eye separation. GPU completion waits are confined to this offline benchmark. |
 | `OMSI_BLEND_AB` | bool | off | use | app | Offscreen: a second picture with the blended draws in the old order, for a before/after of the draw order. |
 | `OMSI_BRIDGE_ONLY` | bool | off | use | net | LAN: forget our own addresses so that only what the rendezvous bridge reports is tried. |
 | `OMSI_BUDGET_FROM` | text | - | use | app | Offscreen with OMSI_TEXTURE_MEMORY: x,y[,MB] - the texture budget is met as seen from that point. |

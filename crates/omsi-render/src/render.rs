@@ -2,6 +2,7 @@
 //! fallbacks when a device refuses a feature, and the post pass with its exposure metering.
 
 use crate::*;
+use crate::passes::StereoCulling;
 
 /// One single-sampled full-screen pass.
 pub(crate) fn post_pass(
@@ -298,7 +299,9 @@ impl Renderer {
         if self.targets.triple_targets.take().is_some() {
             self.history.triple_culling = Default::default();
         }
-        self.render_inner(scene, target, width, height, camera, lighting, true, None, None, false);
+        self.render_inner(
+            scene, target, width, height, camera, lighting, true, None, None, false, None,
+        );
     }
 
     /// Three independently culled and shaded physical panels, composited into a
@@ -393,6 +396,7 @@ impl Renderer {
                 None,
                 Some(views[i].projection),
                 turn != 0,
+                None,
             );
             self.swap_triple_culling(i);
         }
@@ -427,7 +431,11 @@ impl Renderer {
                 // (the right panel loses its last pixel or two at the window's edge)
                 let [x, y, w, h] = v.viewport;
                 pass.set_scissor_rect(x, y, w.min(width - x), h);
-                pass.set_bind_group(0, &self.targets.triple_targets.as_ref().unwrap().1[i].1, &[]);
+                pass.set_bind_group(
+                    0,
+                    &self.targets.triple_targets.as_ref().unwrap().1[i].1,
+                    &[],
+                );
                 pass.draw(0..3, 0..1);
             }
             pass.set_scissor_rect(0, 0, width, height);
@@ -451,7 +459,8 @@ impl Renderer {
 
     /// Render one OpenXR view using the headset's asymmetric projection matrix.
     /// The matrix uses the same reversed depth range as the desktop camera. The
-    /// second eye reuses the first eye's shadow atlas when both share an origin.
+    /// second eye reuses the first eye's shadow atlas when both share an origin,
+    /// while each eye keeps its own visibility and LOD history between frames.
     pub fn render_xr_eye(
         &mut self,
         scene: &mut Scene,
@@ -463,7 +472,107 @@ impl Renderer {
         projection: Mat4,
         second_eye: bool,
     ) {
-        self.render_inner(scene, target, width, height, camera, lighting, false, None, Some(projection), second_eye);
+        self.swap_xr_culling(second_eye as usize);
+        self.render_inner(
+            scene,
+            target,
+            width,
+            height,
+            camera,
+            lighting,
+            false,
+            None,
+            Some(projection),
+            second_eye,
+            None,
+        );
+        self.swap_xr_culling(second_eye as usize);
+    }
+
+    fn swap_xr_culling(&mut self, eye: usize) {
+        // As with triple-screen panels, an eye must use its own previous view,
+        // and leave the desktop's history intact when returning from the draw.
+        let history = &mut self.history.xr_culling[eye];
+        std::mem::swap(self.history.main_bundles.get_mut(), &mut history.bundles);
+        std::mem::swap(self.history.cull_drawn.get_mut(), &mut history.drawn);
+        std::mem::swap(self.history.object_sizes.get_mut(), &mut history.sizes);
+        std::mem::swap(
+            self.history.object_sizes_scratch.get_mut(),
+            &mut history.scratch,
+        );
+    }
+
+    /// Draw a stereo pair from one immutable scene snapshot. Shared preparation
+    /// is charged to the first eye's CPU duration. Draw lists, LOD hysteresis and
+    /// transparency sorting remain per eye; standalone eye rendering still works.
+    pub fn render_xr_stereo(
+        &mut self,
+        scene: &mut Scene,
+        targets: [&wgpu::TextureView; 2],
+        size: (u32, u32),
+        cameras: &[Camera; 2],
+        lighting: &Lighting,
+        projections: &[Mat4; 2],
+    ) -> [std::time::Duration; 2] {
+        let start = std::time::Instant::now();
+        if !self.frame_hooks(scene, &FrameEnv::read(), false) {
+            return [std::time::Duration::ZERO; 2];
+        }
+        if (cameras[0].position - scene.render_origin)
+            .abs()
+            .max_element()
+            > 200.0
+        {
+            self.set_render_origin(scene, (cameras[0].position / 100.0).floor() * 100.0);
+        }
+        // Unusual callers can supply widely separated views. Keep the original
+        // per-view upload path if the second view would move the render origin.
+        let shared = (cameras[1].position - scene.render_origin)
+            .abs()
+            .max_element()
+            <= 200.0;
+        let culling = if shared {
+            self.prepare(scene);
+            Some(StereoCulling::new(
+                scene,
+                cameras,
+                projections,
+                lighting,
+                self.texture_aspect
+                    .unwrap_or(size.0 as f32 / size.1.max(1) as f32),
+                lighting.enhanced
+                    && self.hdr_pass.is_some()
+                    && !omsi_cfg::flags::OMSI_NO_ENHANCED.is_set(),
+                self.shadow_blobs,
+            ))
+        } else {
+            None
+        };
+        let mut times = [std::time::Duration::ZERO; 2];
+        for eye in 0..2 {
+            let eye_start = if eye == 0 {
+                start
+            } else {
+                std::time::Instant::now()
+            };
+            self.swap_xr_culling(eye);
+            self.render_inner(
+                scene,
+                targets[eye],
+                size.0,
+                size.1,
+                &cameras[eye],
+                lighting,
+                false,
+                None,
+                Some(projections[eye]),
+                eye == 1,
+                culling.as_ref(),
+            );
+            self.swap_xr_culling(eye);
+            times[eye] = eye_start.elapsed();
+        }
+        times
     }
 
     /// Composite the shared game menu and a world-positioned pointer into each eye.
@@ -655,6 +764,7 @@ impl Renderer {
         exclude_texture: Option<TextureId>,
         projection: Option<Mat4>,
         second_eye: bool,
+        stereo: Option<&StereoCulling>,
     ) {
         // the frame's switches from the environment, each read once
         let env = FrameEnv::read();
@@ -663,11 +773,13 @@ impl Renderer {
         }
         // OMSI_GPU_TIMERS: GPU time per pass, one frame at a time
         self.collect_gpu_timers();
+        let timer_view = view_index(with_overlays, projection.is_some(), second_eye);
         let mut pictures = self.pictures.get();
-        pictures[with_overlays as usize] += 1;
+        pictures[timer_view] += 1;
         self.pictures.set(pictures);
         let mut timers = PassTimers {
-            set: self.gpu_timers[with_overlays as usize]
+            view: timer_view,
+            set: self.gpu_timers[timer_view]
                 .as_ref()
                 .filter(|t| !t.waiting && !t.unresolved)
                 .map(|t| t.set.clone()),
@@ -675,7 +787,18 @@ impl Renderer {
         };
         // OMSI_PROFILE: time per stage, the mirrors apart from the window's picture
         let mut clock = StageClock::new(with_overlays);
-        let args = FrameArgs { target, width, height, camera, lighting, with_overlays, exclude_texture, projection, second_eye };
+        let args = FrameArgs {
+            target,
+            width,
+            height,
+            camera,
+            lighting,
+            with_overlays,
+            exclude_texture,
+            projection,
+            second_eye,
+            stereo,
+        };
         let f = self.begin_frame(scene, env, args, &mut clock);
         let sh = self.plan_shadow_cache(scene, &f);
         let (vp_mat, cu, probe_redraw) = self.frame_uniforms(scene, &f, &sh, &mut clock);
@@ -695,7 +818,14 @@ impl Renderer {
             b.instances = b.instances.start + at..b.instances.end + at;
         }
         plan.list.extend_from_slice(&shadow_list);
-        self.count_draws(scene, with_overlays, visible.len(), &plan, &shadow_batches);
+        self.count_draws(
+            scene,
+            with_overlays,
+            &visible,
+            &plan,
+            &shadow_batches,
+            timer_view,
+        );
         clock.stage(self, "items", "mirror.items");
         plan.split_rain(scene, f.glass_on);
         self.upload_draw_list(scene, &plan.list);
@@ -726,29 +856,59 @@ impl Renderer {
         self.encode_shadow_maps(&mut enc.shadow, scene, &sh, &shadow_batches, &mut timers);
         self.encode_lamp_shadows(&mut enc.shadow, scene, &f, &shadow_batches, &mut timers);
         self.encode_precip_map(&mut enc.shadow, scene, &sh, &shadow_batches, &mut timers);
-        let prepass_batches = if self.shares_prepass_depth(&f, &plan) { plan.prefill_batches() } else { &plan.prepass_batches };
+        let prepass_batches = if self.shares_prepass_depth(&f, &plan) {
+            plan.prefill_batches()
+        } else {
+            &plan.prepass_batches
+        };
         self.encode_depth_prepass(&mut enc.prepass, scene, &f, prepass_batches, &mut timers);
         if f.enhanced && f.lead_view && f.prepass_on && self.device_lost().is_none() {
             if let (Some(s), Some(ao)) = (self.tone.lamp_sight.as_mut(), self.targets.ao.as_ref()) {
-                s.encode(&self.device, &self.queue, &mut enc.prepass, &ao.depth_view, vp_mat, f.ro, f.cam_rel);
+                s.encode(
+                    &self.device,
+                    &self.queue,
+                    &mut enc.prepass,
+                    &ao.depth_view,
+                    vp_mat,
+                    f.ro,
+                    f.cam_rel,
+                );
             }
         }
         if f.rt_frame {
-            self.encode_ray_tracing(&mut enc.prepass, scene, timers.set.as_ref(), &mut timers.timed);
+            self.encode_ray_tracing(
+                &mut enc.prepass,
+                scene,
+                timers.set.as_ref(),
+                &mut timers.timed,
+            );
         }
         self.encode_sky_cube(&mut enc.prepass, scene, &f, probe_redraw, &mut timers);
         self.encode_probe(&mut enc.prepass, scene, probe_redraw, &mut timers);
-        let mut main_parts = self.encode_main_pass(&mut enc.picture, scene, &f, &plan, &main_bundles, &mut timers);
+        let mut main_parts = self.encode_main_pass(
+            &mut enc.picture,
+            scene,
+            &f,
+            &plan,
+            &main_bundles,
+            &mut timers,
+        );
         // Turning the recorded passes into Metal commands is the costliest CPU step of a
         // frame (wgpu checks every draw): the shadow maps, the prepass, the main pass and
         // the passes after it are finished side by side on helper threads and this one.
         let big =
-            shadow_batches.iter().map(|b| b.len()).sum::<usize>() + plan.prepass_batches.len() > 64 || !main_parts.is_empty();
+            shadow_batches.iter().map(|b| b.len()).sum::<usize>() + plan.prepass_batches.len() > 64
+                || !main_parts.is_empty();
         if big && !f.env.no_post_split {
-            let rest = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("after the main pass") });
+            let rest = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("after the main pass"),
+                });
             main_parts.push(std::mem::replace(&mut enc.picture, rest));
         }
-        let puddles_on = self.encode_scene_reflections(&mut enc.picture, scene, &f, &plan, &cu, &mut timers);
+        let puddles_on =
+            self.encode_scene_reflections(&mut enc.picture, scene, &f, &plan, &cu, &mut timers);
         self.encode_fog_lamps(&mut enc.picture, scene, &f, vp_mat, puddles_on, &mut timers);
         self.encode_rain_film(&mut enc.picture, scene, &f, &plan.rain_batches, puddles_on);
         self.encode_classic_present(&mut enc.picture, scene, &f, puddles_on);
