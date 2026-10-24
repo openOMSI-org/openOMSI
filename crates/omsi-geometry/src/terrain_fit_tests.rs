@@ -54,6 +54,17 @@ fn curved_shoulder_preserves_the_bank_outside_the_bend() {
     }
 }
 
+fn test_profile(
+    def: &Spline,
+    curve: &SplineCurve,
+    mirror: bool,
+    mode: u8,
+    origin: DVec3,
+) -> SplineTerrainProfile {
+    let rims = spline_hole_rims(def, curve, mirror, mode);
+    build_spline_terrain_profile(def, curve, mirror, mode, &rims, origin)
+}
+
 fn ditch() -> Spline {
     // Synthetic cross-section with the reported lip spacing and depth. The
     // intermediate shape is authored for this test, not copied from a map asset.
@@ -178,7 +189,7 @@ fn reported_ditch_has_a_floor_smooth_shoulders_and_closed_extended_ends() {
     for mirror in [false, true] {
         for mode in 1..=4 {
             let c = curve([40.0, 40.0, 0.0], 0.0, 0.0);
-            let profile = build_spline_terrain_profile(&def, &c, mirror, mode, DVec3::ZERO);
+            let profile = test_profile(&def, &c, mirror, mode, DVec3::ZERO);
             let mesh = build_fitted_terrain_mesh(&ground, &[(&profile, DVec3::ZERO)]);
             closed_tile(&mesh);
             let x = |offset: f64| 40.0 + if mirror { -offset } else { offset };
@@ -221,8 +232,8 @@ fn curved_sloping_canted_and_overlapping_profiles_keep_the_tile_closed() {
     c.cant_start = 7.0;
     c.cant_end = -5.0;
     let other = curve([35.0, 50.0, -0.1], 90.0, 0.0);
-    let a = build_spline_terrain_profile(&def, &c, false, 1, DVec3::ZERO);
-    let b = build_spline_terrain_profile(&def, &other, true, 4, DVec3::ZERO);
+    let a = test_profile(&def, &c, false, 1, DVec3::ZERO);
+    let b = test_profile(&def, &other, true, 4, DVec3::ZERO);
     let m = build_fitted_terrain_mesh(&ground(), &[(&a, DVec3::ZERO), (&b, DVec3::ZERO)]);
     closed_tile(&m);
     let reversed = build_fitted_terrain_mesh(&ground(), &[(&b, DVec3::ZERO), (&a, DVec3::ZERO)]);
@@ -242,7 +253,7 @@ fn curved_sloping_canted_and_overlapping_profiles_keep_the_tile_closed() {
 #[test]
 fn trough_and_blended_shoulders_match_across_tile_seams() {
     let c = curve([tile_size() - 10.0, 40.0, 0.0], 73.0, 0.0);
-    let profile = build_spline_terrain_profile(&ditch(), &c, false, 1, DVec3::ZERO);
+    let profile = test_profile(&ditch(), &c, false, 1, DVec3::ZERO);
     let graded = |origin_x: f64| {
         let mut t = ground();
         for y in 0..=t.cells {
@@ -310,7 +321,7 @@ fn saved_terrain_triangles_are_preserved_away_from_the_ditch() {
         }
     }
     let c = curve([40.0, 40.0, 0.0], 0.0, 0.0);
-    let p = build_spline_terrain_profile(&ditch(), &c, false, 1, DVec3::ZERO);
+    let p = test_profile(&ditch(), &c, false, 1, DVec3::ZERO);
     let m = build_fitted_terrain_mesh(&t, &[(&p, DVec3::ZERO)]);
     closed_tile(&m);
     for y in (100..290).step_by(19) {
@@ -335,10 +346,10 @@ fn streamed_nearly_coincident_profiles_do_not_abort_the_tile() {
             7.123 + i as f64 * 1.713,
             31.319 + i as f64 * 0.327,
         );
-        let a = build_spline_terrain_profile(&def, &c, i % 2 == 0, 1 + i % 4, DVec3::ZERO);
+        let a = test_profile(&def, &c, i % 2 == 0, 1 + i % 4, DVec3::ZERO);
         let mut other = c;
         other.heading_deg += 17.127;
-        let b = build_spline_terrain_profile(&def, &other, false, 1, DVec3::ZERO);
+        let b = test_profile(&def, &other, false, 1, DVec3::ZERO);
         let m = build_fitted_terrain_mesh(
             &ground(),
             &[
@@ -405,7 +416,7 @@ fn steep_hillside_joins_the_ditch_over_the_terrain_sampling_distance() {
         }
     }
     let c = curve([220.0, 190.0, 24.0], 0.0, 0.0);
-    let profile = build_spline_terrain_profile(&ditch(), &c, true, 1, DVec3::ZERO);
+    let profile = test_profile(&ditch(), &c, true, 1, DVec3::ZERO);
     let mesh = build_fitted_terrain_mesh(&terrain, &[(&profile, DVec3::ZERO)]);
     closed_tile(&mesh);
     let mut previous = sample(&mesh, 205.0, 200.0);
@@ -455,7 +466,7 @@ fn ditch_ends_close_locally_without_a_long_bowl_in_the_saved_ground() {
     for mirror in [false, true] {
         for mode in 1..=4 {
             let c = curve([40.0, 40.0, 0.0], 0.0, 0.0);
-            let profile = build_spline_terrain_profile(&ditch(), &c, mirror, mode, DVec3::ZERO);
+            let profile = test_profile(&ditch(), &c, mirror, mode, DVec3::ZERO);
             let mesh = build_fitted_terrain_mesh(&ground(), &[(&profile, DVec3::ZERO)]);
             let x = 40.0 + if mirror { -4.23 } else { 4.23 };
             for y in [37.5, 38.0, 62.0, 62.5, 63.0] {
@@ -492,7 +503,7 @@ fn curved_sloping_end_caps_preserve_saved_ground_beyond_both_terminals() {
             let mut c = curve([100.0, 100.0, 0.0], 37.0, -45.0);
             c.grad_start = 2.0;
             c.grad_end = 4.0;
-            let profile = build_spline_terrain_profile(&ditch(), &c, mirror, mode, DVec3::ZERO);
+            let profile = test_profile(&ditch(), &c, mirror, mode, DVec3::ZERO);
             let mesh = build_fitted_terrain_mesh(&ground(), &[(&profile, DVec3::ZERO)]);
             closed_tile(&mesh);
             for s in [-3.0, c.length + 3.0] {
@@ -535,7 +546,7 @@ fn transition_slope_does_not_jump_at_a_nearest_rim_bisector() {
 
 #[test]
 fn backing_follows_the_graphical_profile_at_its_lip_instead_of_a_coarse_v() {
-    let profile = build_spline_terrain_profile(
+    let profile = test_profile(
         &ditch(),
         &curve([40.0, 40.0, 0.0], 0.0, 0.0),
         false,
@@ -583,7 +594,7 @@ fn road_surfaces_bound_the_shoulder_in_straights_bends_and_hills() {
         let mut c = curve([100.0, 100.0, 0.18], heading, radius);
         c.grad_start = grade;
         c.grad_end = grade;
-        let profile = build_spline_terrain_profile(&ditch(), &c, false, 4, DVec3::ZERO);
+        let profile = test_profile(&ditch(), &c, false, 4, DVec3::ZERO);
         let mut road = MeshData::default();
         for i in 0..=40 {
             for x in [-3.0, 2.92] {
@@ -665,7 +676,7 @@ fn spline_heavy_terrain_cost() {
     };
     let mut c = curve([140.0, 40.0, 0.0], 0.0, 0.0);
     c.length = 200.0;
-    let profile = build_spline_terrain_profile(&ditch(), &c, false, 1, DVec3::ZERO);
+    let profile = test_profile(&ditch(), &c, false, 1, DVec3::ZERO);
     let mut roads = Vec::new();
     for lane in 0..14 {
         let mut mesh = MeshData::default();
@@ -727,7 +738,7 @@ fn spline_heavy_terrain_cost() {
 fn distant_roads_do_not_refine_terrain_or_change_the_local_fit() {
     let terrain = ground();
     let c = curve([40.0, 40.0, 0.0], 0.0, 0.0);
-    let profile = build_spline_terrain_profile(&ditch(), &c, false, 1, DVec3::ZERO);
+    let profile = test_profile(&ditch(), &c, false, 1, DVec3::ZERO);
     let expected = build_fitted_terrain_mesh(&terrain, &[(&profile, DVec3::ZERO)]);
     let road = MeshData {
         positions: vec![
@@ -797,7 +808,7 @@ fn adaptive_mesh_preserves_saved_terrain_and_the_full_tile_border() {
                 })
                 .collect(),
         };
-        let profile = build_spline_terrain_profile(
+        let profile = test_profile(
             &ditch(),
             &curve([40.0, 40.0, 0.0], 0.0, 0.0),
             false,
@@ -844,7 +855,7 @@ fn adaptive_mesh_preserves_saved_terrain_and_the_full_tile_border() {
 #[test]
 fn coplanar_road_station_density_does_not_inflate_fitted_terrain() {
     let terrain = ground();
-    let profile = build_spline_terrain_profile(
+    let profile = test_profile(
         &ditch(),
         &curve([40.0, 40.0, 0.0], 0.0, 0.0),
         false,
@@ -969,7 +980,7 @@ fn malformed_profile_is_an_error_instead_of_aborting_a_tile_batch() {
 #[test]
 fn excessive_terminal_depth_returns_a_recoverable_error() {
     let c = curve([40.0, 40.0, -1000.0], 0.0, 0.0);
-    let profile = build_spline_terrain_profile(&ditch(), &c, false, 1, DVec3::ZERO);
+    let profile = test_profile(&ditch(), &c, false, 1, DVec3::ZERO);
     assert!(matches!(
         try_build_fitted_terrain_mesh_with_roads(&ground(), &[(&profile, DVec3::ZERO)], &[], &[]),
         Err(TerrainFitError::Complexity)
@@ -1024,4 +1035,58 @@ fn diagonal_constraint_grid_visits_are_linear_and_include_shared_boundaries() {
     for cell in [63 * 128 + 63, 63 * 128 + 64, 64 * 128 + 63, 64 * 128 + 64] {
         assert!(diagonal.contains(&cell));
     }
+}
+
+#[test]
+fn a_ditch_ending_short_of_the_border_still_moves_both_sides_alike() {
+    // A ditch parallel to the border whose outer lip is 1 to 3 m short of it lies in the
+    // left tile only: the right tile holds none of its triangles, yet must meet the left.
+    for end in [1.0, 2.0, 3.0] {
+        let c = curve([tile_size() - 5.35 - end, 30.0, 0.0], 0.0, 0.0);
+        let profile = test_profile(&ditch(), &c, false, 1, DVec3::ZERO);
+        let graded = |origin_x: f64| {
+            let mut t = ground();
+            for y in 0..=t.cells {
+                for x in 0..=t.cells {
+                    let px = origin_x + x as f64 * tile_size() / t.cells as f64;
+                    t.heights[y * (t.cells + 1) + x] = (px * 0.02).sin() as f32;
+                }
+            }
+            t
+        };
+        let (left_ground, right_ground) = (graded(0.0), graded(tile_size()));
+        let left = build_fitted_terrain_mesh_with_neighbors(
+            &left_ground,
+            &[(&profile, DVec3::ZERO)],
+            &[(&right_ground, DVec2::new(tile_size(), 0.0))],
+        );
+        let right = build_fitted_terrain_mesh_with_neighbors(
+            &right_ground,
+            &[(&profile, DVec3::new(-tile_size(), 0.0, 0.0))],
+            &[(&left_ground, DVec2::new(-tile_size(), 0.0))],
+        );
+        closed_tile(&left);
+        closed_tile(&right);
+        for i in 0..200 {
+            let y = 28.0 + i as f64 * 0.1;
+            let (a, b) = (sample(&left, tile_size(), y), sample(&right, 0.0, y));
+            assert!((a - b).abs() < 0.0001, "end {end} m before the border, y {y}: {a} != {b}");
+        }
+    }
+}
+
+#[test]
+fn a_spline_in_a_cutting_is_left_to_the_hole_but_a_trough_is_not() {
+    let c = curve([40.0, 40.0, 0.0], 0.0, 0.0);
+    let profile = test_profile(&ditch(), &c, false, 1, DVec3::ZERO);
+    let mut hill = ground();
+    assert!(!profile_in_cutting(&profile, DVec3::ZERO, &hill, &[]), "flat ground");
+    for v in hill.heights.iter_mut() {
+        *v = 0.5;
+    }
+    assert!(!profile_in_cutting(&profile, DVec3::ZERO, &hill, &[]), "a lip 0.5 m under the hill");
+    for v in hill.heights.iter_mut() {
+        *v = 5.0;
+    }
+    assert!(profile_in_cutting(&profile, DVec3::ZERO, &hill, &[]), "a 5 m cutting");
 }

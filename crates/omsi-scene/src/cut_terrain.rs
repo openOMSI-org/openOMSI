@@ -95,14 +95,6 @@ impl World {
                 let mut order: Vec<_> = sources.values().collect();
                 order.sort_by_key(|q| (q.tx, q.ty));
                 let origin = p.origin;
-                let profiles: Vec<_> = order
-                    .iter()
-                    .flat_map(|q| {
-                        q.splines
-                            .iter()
-                            .filter_map(move |s| Some((s.terrain_profile.as_ref()?, q.origin - origin)))
-                    })
-                    .collect();
                 let data = self.data.peek();
                 let neighbors: Vec<_> = data
                     .ground
@@ -116,6 +108,21 @@ impl World {
                         )
                     })
                     .collect();
+                // A spline whose rim lies well under the saved hill (a cutting, a tunnel
+                // approach) keeps Omsi.exe's hole and soil walls; the rest are fitted.
+                let mut profiles = Vec::new();
+                let mut cuttings: Vec<&Vec<Vec<DVec3>>> = Vec::new();
+                for q in &order {
+                    for s in &q.splines {
+                        let Some(profile) = s.terrain_profile.as_ref() else { continue };
+                        let offset = q.origin - origin;
+                        if omsi_geometry::profile_in_cutting(profile, offset, terrain, &neighbors) {
+                            cuttings.push(&s.hole_rims);
+                        } else {
+                            profiles.push((profile, offset));
+                        }
+                    }
+                }
                 let roads: Vec<_> = order
                     .iter()
                     .flat_map(|q| {
@@ -131,6 +138,9 @@ impl World {
                     })
                     .collect();
                 let fit_started = std::time::Instant::now();
+                for rims in cuttings {
+                    cut_spline_rims(&mut ts, &mut hole_rims, rims, key, origin);
+                }
                 p.terrain = Some(finish_spline_fit(
                     omsi_geometry::try_build_fitted_terrain_mesh_with_roads(
                         terrain, &profiles, &neighbors, &roads,
@@ -146,6 +156,9 @@ impl World {
                     log::warn!("tile {},{}: spline terrain fitting took {:.2} s ({} profiles, {} road surfaces)", key.0, key.1, fit_started.elapsed().as_secs_f64(), profiles.len(), roads.len());
                 }
             }
+        }
+        if p.terrain.is_none() {
+            p.terrain = tile_terrain.as_deref().map(build_terrain_mesh);
         }
         p.hole_walls = tile_terrain
             .as_ref()
@@ -680,11 +693,22 @@ fn restore_spline_holes(
         if (q.tx - tx).abs() > 1 || (q.ty - ty).abs() > 1 {
             continue;
         }
-        for rim in &q.hole_rims {
-            let ring: Vec<_> = rim.iter().map(|v| v.truncate()).collect();
-            ts.add_outline(&ring, tx, ty);
-            hole_rims.push(rim.iter().map(|v| *v - origin).collect());
-        }
+        cut_spline_rims(ts, hole_rims, &q.hole_rims, (tx, ty), origin);
+    }
+}
+
+/// Cut Omsi.exe's outlines (world space) of aligned splines out of this tile's ground.
+fn cut_spline_rims(
+    ts: &mut TileSurface,
+    hole_rims: &mut Vec<Vec<DVec3>>,
+    rims: &[Vec<DVec3>],
+    (tx, ty): (i32, i32),
+    origin: DVec3,
+) {
+    for rim in rims {
+        let ring: Vec<_> = rim.iter().map(|v| v.truncate()).collect();
+        ts.add_outline(&ring, tx, ty);
+        hole_rims.push(rim.iter().map(|v| *v - origin).collect());
     }
 }
 

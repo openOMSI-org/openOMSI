@@ -466,7 +466,8 @@ impl World {
         Some(Prepared {
             tx,
             ty,
-            terrain: Some(build_terrain_mesh(terrain)),
+            // (`cut_tile` makes the ground: fitted to the aligned splines, or the saved mesh)
+            terrain: None,
             hole_walls: MeshData::default(),
             paint_masks: self.load_ground_paint(&st.path),
             paint: Vec::new(),

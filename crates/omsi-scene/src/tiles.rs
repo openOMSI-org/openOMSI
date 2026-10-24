@@ -469,28 +469,12 @@ impl Streamer {
                 }
                 let spawned = std::thread::Builder::new().name("tile loader".into()).spawn(move || {
                     let t = std::time::Instant::now();
-                    // Isolate a failed batch: one broken tile must not blacklist
-                    // all its healthy neighbors for the rest of this session.
-                    let prepare = |tiles: &[(i32, i32, std::path::PathBuf)]| {
-                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                            if first { world.prepare_tiles_initial(tiles) }
-                            else { loader_pool().install(|| world.prepare_tiles(tiles)) }
-                        }))
-                    };
-                    let (prepared, stats) = prepare(&batch).unwrap_or_else(|_| {
-                        log::error!("tile streaming: batch failed; retrying its tiles independently");
-                        let mut prepared = Vec::new();
-                        let mut stats = crate::LoadStats::default();
-                        for tile in &batch {
-                            match prepare(std::slice::from_ref(tile)) {
-                                Ok((mut tiles, s)) => {
-                                    prepared.append(&mut tiles);
-                                    stats.add_prepared(&s);
-                                }
-                                Err(_) => log::error!("tile streaming: tile {},{} failed independently", tile.0, tile.1),
-                            }
-                        }
-                        (prepared, stats)
+                    // (a panic on a damaged file must not end the streaming: the batch comes
+                    // back empty and its tiles are let go)
+                    let made = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| if first { world.prepare_tiles_initial(&batch) } else { loader_pool().install(|| world.prepare_tiles(&batch)) }));
+                    let (prepared, stats) = made.unwrap_or_else(|_| {
+                        log::error!("tile streaming: loading tiles {:?} failed", batch.iter().map(|t| (t.0, t.1)).collect::<Vec<_>>());
+                        Default::default()
                     });
                     let _ = tx.send((batch.iter().map(|t| (t.0, t.1)).collect(), prepared, stats, t.elapsed().as_secs_f64()));
                 });

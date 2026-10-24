@@ -359,6 +359,41 @@ pub fn build_fitted_terrain_mesh_with_roads(
     )
 }
 
+/// Saved ground height at `p` (this tile's coordinates) on this tile or a neighbor;
+/// `None` further out, where nothing is loaded.
+fn saved_ground(terrain: &Terrain, neighbors: &[(&Terrain, DVec2)], p: DVec2) -> Option<f64> {
+    let side = tile_size();
+    let inside = |q: DVec2| q.x >= 0.0 && q.y >= 0.0 && q.x <= side && q.y <= side;
+    if inside(p) {
+        return Some(super::terrain_walls::height(terrain, p, side));
+    }
+    neighbors
+        .iter()
+        .find(|&&(_, origin)| inside(p - origin))
+        .map(|&(t, origin)| super::terrain_walls::height(t, p - origin, side))
+}
+
+/// How far the saved ground may stand over a profile's rim before the spline is a cutting
+/// (or a tunnel approach) rather than a trough: the hill is then left to the projected hole.
+const CUTTING_DEPTH: f64 = 1.0;
+
+/// Does the saved ground stand more than `CUTTING_DEPTH` above the rim of this profile
+/// anywhere it is known? Such a spline keeps Omsi.exe's hole and soil walls instead of
+/// pulling the hillside down to it.
+pub fn profile_in_cutting(
+    profile: &SplineTerrainProfile,
+    offset: DVec3,
+    terrain: &Terrain,
+    neighbors: &[(&Terrain, DVec2)],
+) -> bool {
+    super::terrain_fit_surface::boundary(&profile.mesh, offset)
+        .iter()
+        .flat_map(|(rim, _)| rim.iter())
+        .any(|p| {
+            saved_ground(terrain, neighbors, p.truncate()).is_some_and(|z| z - p.z > CUTTING_DEPTH)
+        })
+}
+
 /// Fit terrain while allowing the caller to restore legacy spline cuts on failure.
 pub fn try_build_fitted_terrain_mesh_with_roads(
     terrain: &Terrain,
@@ -391,16 +426,9 @@ fn fit_profiles(
         return Ok(build_terrain_mesh(terrain));
     }
     let terrain_at = |p: DVec2| {
-        let side = tile_size();
-        if p.x < 0.0 || p.y < 0.0 || p.x > side || p.y > side {
-            for &(t, origin) in neighbors {
-                let q = p - origin;
-                if q.x >= 0.0 && q.y >= 0.0 && q.x <= side && q.y <= side {
-                    return super::terrain_walls::height(t, q, side);
-                }
-            }
-        }
-        super::terrain_walls::height(terrain, p, side)
+        saved_ground(terrain, neighbors, p).unwrap_or_else(|| {
+            super::terrain_walls::height(terrain, p, tile_size())
+        })
     };
     // Side shoulders need a full ground cell even if the lip itself is already
     // aligned: the saved hill can rise steeply immediately beside that lip.
@@ -493,7 +521,9 @@ fn fit_profiles(
             field.add_rim(points, ends, gradient, (2.0 * mismatch).max(blend));
         }
     }
-    if field.triangles.is_empty() {
+    // (a profile that ends a few metres outside the tile has no triangle in it, but its
+    // shoulder still moves the border: the neighbor, which holds the triangles, fits it)
+    if field.triangles.is_empty() && field.edges.is_empty() {
         return Ok(build_terrain_mesh(terrain));
     }
     // Retain the complete road height field, including its clearance. Only CDT

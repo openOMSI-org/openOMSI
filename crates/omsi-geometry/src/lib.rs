@@ -15,6 +15,7 @@ mod terrain_fit;
 mod terrain_fit_surface;
 mod terrain_constraints;
 pub use terrain_fit::{
+    profile_in_cutting,
     TerrainFitError, SplineTerrainProfile, build_fitted_terrain_mesh, build_fitted_terrain_mesh_with_neighbors,
     try_build_fitted_terrain_mesh_with_roads,
     build_fitted_terrain_mesh_with_roads,
@@ -624,11 +625,13 @@ pub fn spline_hole_rims(def: &Spline, curve: &SplineCurve, mirror: bool, mode: u
 
 /// The solid ground backing of an aligned spline. Unlike a projected hole, this
 /// retains the trough's floor and its end extensions, even where no road is drawn.
+/// `rims` are the spline's `spline_hole_rims`, one per profile, in world space.
 pub fn build_spline_terrain_profile(
     def: &Spline,
     curve: &SplineCurve,
     mirror: bool,
     mode: u8,
+    rims: &[Vec<DVec3>],
     origin: DVec3,
 ) -> SplineTerrainProfile {
     let mut mesh = MeshData::default();
@@ -638,7 +641,6 @@ pub fn build_spline_terrain_profile(
     let mut n = spline_station_count(def, curve);
     let _ = patchwork(def, curve, &mut n);
     let n = n.max(1);
-    let rims = spline_hole_rims(def, curve, mirror, mode);
     let curve = curve.with_sli(def);
     for (profile, rim) in terrain_fit_surface::profiles(def).into_iter().zip(rims) {
         if profile.len() < 2

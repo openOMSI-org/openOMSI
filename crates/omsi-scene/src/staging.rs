@@ -710,6 +710,8 @@ pub(super) struct StagedSpline {
     pub(super) shape: MeshData,
     /// Solid trough beneath an aligned spline, rather than an open alpha-mask hole.
     pub(super) terrain_profile: Option<omsi_geometry::SplineTerrainProfile>,
+    /// This spline's own cut outlines (world space), for when its backing is not used.
+    pub(super) hole_rims: Vec<Vec<DVec3>>,
     pub(super) ty: Arc<SplineType>,
     /// World bounds (x0, y0, x1, y1).
     pub(super) bounds: [f64; 4],

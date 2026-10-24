@@ -312,44 +312,10 @@ far end at the spline's end, 3 and 4 the near end at its start, otherwise each p
 third value moves it past the end. A `.sli` without `[terrainholeprofile]` gets one per
 string of joined `[profile]`s (0x5ab908): its left end and right end 3 cm in and 3 mm
 down, a bottom 10 cm under its lowest point reaching 0.5 m past both ends. An outline
-that crosses itself cuts nothing.
-
-openOMSI deliberately departs from Omsi.exe's projected spline hole on the successful
-rendering path: aligned splines retain a solid terrain backing. A hole alone can expose
-the sky at extended ditch ends and leave vertical soil strips along narrow banks.
-If fitting fails, the saved ground and original spline outlines (including neighboring
-tiles) are restored for that tile, together with their soil walls. Automatic backing follows
-all points of the graphical profile, 3 mm below it; it no longer substitutes a coarse
-four-point V for the rendered section. Explicit terrain-hole profiles keep their authored
-shape. Outside the rim, height displacements blend individually into the saved ground
-using a quintic fade, without a nearest-rim switch. A local tangent correction matches
-the rim slope and fades within half a metre, preserving the original hillside instead
-of extrapolating the spline's plane across a cliff or bend. Transition
-widths follow the local height difference with at least one saved terrain cell for side
-shoulders. Terminal widths have an independent one-metre minimum. Caps retain longitudinal profile-knot constraints and fine height probes. Lighting normals come from the height field, including a neighbor halo
-at tile borders, rather than depending on incidental skinny CDT triangles.
-
-Graphical ground spline surfaces also constrain the fitted mesh, including asphalt
-without `[path]` declarations (its traffic may use a separate invisible spline).
-Overlays, overhead-only meshes and the aligned ditch backing itself are excluded. New shoulder fill is limited
-by their graphical triangles, with a half-metre smooth approach outside the road rim.
-This retains the solid backing instead of cutting alpha holes along the carriageway.
-The limit does not excavate original terrain above a lower road or raise terrain beneath
-a bridge. Neighboring tiles contribute their road surfaces in the same coordinates.
-
-Coplanar source divisions are omitted while true surface creases remain constrained.
-A frame of saved-grid edges encloses the changed region; flat grid subdivisions outside
-it may be omitted, retaining all saved slope changes and tile-border stations. Fine rim
-and cap probes drive adaptive refinement with a 1 mm height budget at changed probes,
-and a tighter budget where a probe matches saved ground. Every clipped seam probe is
-retained on both tiles. This reduces rendering geometry; fitting still costs more to
-prepare than a plain saved mesh (see `docs/testing/aligned-spline-terrain.md`).
-
-Vertices are welded and triangulated at the precision used for rendering. The whole tile
-remains covered, including the ditch's floor and extended ends. Saved terrain heights are
-unchanged; object and tunnel cutters still use their own explicit holes.
-
-Each `[terrainhole] <mesh.o3d>` in a `.sco` or model.cfg names an
+that crosses itself cuts nothing. openOMSI does not cut this outline out of the drawn ground
+where the aligned spline lies in a trough: it fills the trough with solid ground instead, and
+cuts the outline as Omsi.exe does where the saved ground stands above the spline (a cutting)
+or where that fill cannot be built. Each `[terrainhole] <mesh.o3d>` in a `.sco` or model.cfg names an
 object-wide cutter, including declarations before the first `[mesh]` and repeated commands.
 The cutter sits next to its declaring file or in its `model` folder; declarations in a `.sco`
 also apply when it references a separate model.cfg. Explicit cutters apply even to deep
