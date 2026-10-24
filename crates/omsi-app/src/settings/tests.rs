@@ -465,3 +465,26 @@ fn arrival_announcements_are_off_at_first_and_kept() {
     let on = Settings { auto_announce: true, ..Default::default() };
     assert_eq!(Settings::from_text(&on.to_text()), on);
 }
+
+#[test]
+fn quick_actions_settings_round_trip_and_launcher_preservation() {
+    let input = "pause_quick_actions=[\"save\",\"camera\"]\n";
+    let game = Settings::from_text(input);
+    assert_eq!(game.pause_quick_actions, "[\"save\",\"camera\"]");
+    assert_eq!(Settings::from_text(&game.to_text()).pause_quick_actions, game.pause_quick_actions);
+    let launcher = omsi_launcher_lib::settings_from_text(Some(input));
+    let saved = omsi_launcher_lib::settings_to_text(&launcher, Some(input));
+    assert_eq!(Settings::from_text(&saved).pause_quick_actions, game.pause_quick_actions);
+    let empty = omsi_launcher_lib::settings_from_text(Some("pause_quick_actions=[]\n"));
+    assert_eq!(Settings::from_text(&omsi_launcher_lib::settings_to_text(&empty, None)).pause_quick_actions, "[]");
+}
+
+#[test]
+fn quick_actions_pending_setting_is_not_lost_when_other_settings_are_saved() {
+    let mut launcher = omsi_launcher_lib::settings_from_text(None);
+    crate::game_lists::apply_pending(&mut launcher, &[("pause_quick_actions".into(), r#"["world","save"]"#.into())]);
+    launcher["volume"] = serde_json::json!(0.4);
+    let saved = omsi_launcher_lib::settings_to_text(&launcher, None);
+    assert_eq!(Settings::from_text(&saved).pause_quick_actions, r#"["world","save"]"#);
+    assert_eq!(saved.matches("pause_quick_actions=").count(), 1);
+}

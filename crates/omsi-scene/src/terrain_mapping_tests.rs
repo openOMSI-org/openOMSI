@@ -128,7 +128,7 @@ fn mapped_splines_and_objects_use_uncut_base_while_ground_keeps_paint() {
         // Both upload paths must agree: a spatially batched mapped spline and one
         // left in the per-spline path (OMSI_NO_GROUND_SPLINE_BATCHING).
         ground_splines: batch_ground_splines(vec![Arc::new(triangle(0.5))]),
-        splines: vec![(Arc::new(triangle(1.0)), spline, false, DVec3::ZERO)],
+        splines: vec![(Arc::new(triangle(1.0)), spline, false, DVec3::ZERO, Default::default())],
         objects: vec![PlacedObject {
             ot: object,
             pos: DVec3::ZERO,

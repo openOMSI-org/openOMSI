@@ -26,6 +26,8 @@ pub(crate) enum Action {
     Choose(usize),
     /// Switch the presentation category without changing the underlying actions.
     PauseCategory(pause::navigation::Category),
+    /// Edit presentation-only shortcuts without executing the underlying action.
+    QuickActions(pause::quick_actions::Edit),
     /// A line of the pause menu's rail chosen while a list is open over it: the list closes
     /// and the line is done.
     Rail(usize),
@@ -50,6 +52,8 @@ pub(crate) struct Shell {
     pub(crate) process_dialog: crate::process_permissions::DialogState,
     pub(crate) ui: Ui,
     pub(crate) pause_category: pause::navigation::Category,
+    pub(crate) quick_edit: bool,
+    pub(crate) quick_focus: usize,
     gpu: Option<(Gpu, wgpu::TextureFormat)>,
     shot_gpu: Option<Gpu>,
     drawn: Option<Drawn>,
@@ -87,7 +91,7 @@ impl Shell {
         // (the desktop launcher's calm look: graphite surfaces, no edges)
         let mut ui = Ui::new();
         ui.flat = true;
-        Shell { process_prompt: None, process_dialog: Default::default(), ui, pause_category: Default::default(), gpu: None, shot_gpu: None, drawn: None, actions: Vec::new(), picture: None, picture_tex: None, logo_tex: None, shot_logo: None, scale: 1.0, over_ui: false, last_sel: None, dd_anchor: None, opaque: false }
+        Shell { process_prompt: None, process_dialog: Default::default(), ui, pause_category: Default::default(), quick_edit: false, quick_focus: 0, gpu: None, shot_gpu: None, drawn: None, actions: Vec::new(), picture: None, picture_tex: None, logo_tex: None, shot_logo: None, scale: 1.0, over_ui: false, last_sel: None, dd_anchor: None, opaque: false }
     }
 
     /// A frame of the screens begins: the window's size in physical pixels and how many of

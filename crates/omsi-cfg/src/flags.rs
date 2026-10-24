@@ -362,7 +362,7 @@ flags! {
     OMSI_NO_CLOUDS: Bool, Switch, Use, "off", "No clouds.";
     OMSI_NO_CORONAS: Bool, Switch, Frame, "off", "No light coronas.";
     OMSI_NO_CULL: Bool, Switch, Once, "off", "Draw every mesh from both sides (A/B).";
-    OMSI_NO_DRAW_ORDER_DEPTH: Bool, Switch, Once, "off", "An object's surfaces in one plane without the draw order's depth step (A/B).";
+    OMSI_NO_DRAW_ORDER_DEPTH: Bool, Switch, Once, "off", "An object's surfaces in one plane, and a spline laid on an earlier one at its height, without the draw order's depth step (A/B).";
     OMSI_NO_ENHANCED: Bool, Switch, Frame, "off", "Enhanced settings drawn with the plain path.";
     OMSI_NO_ENVMAP: Bool, Switch, Use, "off", "No environment maps.";
     OMSI_NO_FSR_MIP_BIAS: Bool, Switch, Frame, "off", "FSR 1 without its textures' mip bias (to compare).";

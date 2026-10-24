@@ -288,7 +288,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_NO_CLOUDS` | bool | off | use | app | No clouds. |
 | `OMSI_NO_CORONAS` | bool | off | frame | render | No light coronas. |
 | `OMSI_NO_CULL` | bool | off | once | render | Draw every mesh from both sides (A/B). |
-| `OMSI_NO_DRAW_ORDER_DEPTH` | bool | off | once | render | An object's surfaces in one plane without the draw order's depth step (A/B). |
+| `OMSI_NO_DRAW_ORDER_DEPTH` | bool | off | once | render, scene | An object's surfaces in one plane, and a spline laid on an earlier one at its height, without the draw order's depth step (A/B). |
 | `OMSI_NO_ENHANCED` | bool | off | frame | render | Enhanced settings drawn with the plain path. |
 | `OMSI_NO_ENVMAP` | bool | off | use | scene | No environment maps. |
 | `OMSI_NO_FSR_MIP_BIAS` | bool | off | frame | render | FSR 1 without its textures' mip bias (to compare). |

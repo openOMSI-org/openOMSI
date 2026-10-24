@@ -83,6 +83,7 @@ impl Category {
         Self::ALL.into_iter().filter(|c| *c == Self::Home || !c.indices(ids).is_empty()).collect()
     }
 
+    #[cfg(test)]
     pub fn focus_indices(self, ids: &[&str]) -> Vec<usize> {
         let mut indices: Vec<usize> = ids.iter().position(|id| *id == "resume").into_iter().collect();
         indices.extend(self.indices(ids));

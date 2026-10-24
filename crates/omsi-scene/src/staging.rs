@@ -774,7 +774,30 @@ pub(super) fn spline_paint_slots(def: &omsi_scenery::sli::Spline) -> Vec<usize> 
             |(x0, x1, z0, z1), p| (x0.min(p.x), x1.max(p.x), z0.min(p.z), z1.max(p.z)),
         );
         let top = if alpha == 2 { 0.25 } else { 0.05 };
-        x1 > x0 && x1 - x0 <= 0.5 && z0 >= -0.05 && z1 <= top && z1 - z0 <= 0.05
+        if !(x1 > x0 && x1 - x0 <= 0.5 && z1 - z0 <= 0.05) {
+            return false;
+        }
+        // On the road: just over the spline's line, or just over its own driving surface - a
+        // `[heightprofile]` under the whole strip. Road-hog123's British markings lie 5 mm
+        // over the 10 cm surface their splines declare (0.105 over 0.100); measured from the
+        // line alone they were road, not paint, and a `[surface]` junction object laid over
+        // them (pulled further towards the eye than a road) covered them from a few metres
+        // away or from above - London's bus station bays came and went as the camera moved
+        // (#2853). A kerb top with no surface declared under it stays what it was.
+        let lies_on = |h0: f32, h1: f32| z0 >= h0.min(h1) - 0.05 && z1 <= h0.max(h1) + top;
+        lies_on(0.0, 0.0)
+            || def.height_profiles.iter().any(|h| {
+                let (hx0, hx1) = (h.x0.min(h.x1), h.x0.max(h.x1));
+                if !(hx1 > hx0 && hx0 <= x0 && x1 <= hx1) {
+                    return false;
+                }
+                // the surface's height across the strip
+                let at = |x: f32| {
+                    let t = (x - h.x0) / (h.x1 - h.x0);
+                    h.z0 + (h.z1 - h.z0) * t
+                };
+                lies_on(at(x0), at(x1))
+            })
     };
     let mut slots = Vec::new();
     for p in &def.profiles {
@@ -1028,8 +1051,9 @@ pub struct Prepared {
     /// `tile.map.water`: the height of the tile's water surface at its four corners.
     pub(super) water: Option<[f32; 4]>,
     /// Spline meshes are local to the tile origin.
-    /// Spline meshes (local to the tile origin), their type and whether they cast a shadow.
-    pub(super) splines: Vec<(Arc<MeshData>, Arc<SplineType>, bool, DVec3)>,
+    /// Spline meshes (local to the tile origin), their type, whether they cast a shadow,
+    /// their blend sort origin and their depth step (`spline_layers`).
+    pub(super) splines: Vec<(Arc<MeshData>, Arc<SplineType>, bool, DVec3, crate::spline_layers::SplineLayer)>,
     /// Terrain-mapped spline faces pooled across types within spatial cells.
     pub(super) ground_splines: Vec<Arc<MeshData>>,
     pub(super) objects: Vec<PlacedObject>,
