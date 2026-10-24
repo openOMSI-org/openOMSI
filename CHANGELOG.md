@@ -366,6 +366,12 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **Destination displays light up at night in Enhanced and Enhanced+**: a script's screen is
+  never taken for a pane. The EMT Citaro's Krueger matrix (Mallorca) is blended, writes no
+  depth and draws its letters through a `\S:n` transparency map - the layout of a window - so
+  the Enhanced pictures shaded it as glass, which gives no light of its own: its light map was
+  left out and its letters stayed grey at night, where Vanilla+ lights them
+  ([#2927](https://github.com/openOMSI-org/openOMSI/issues/2927)).
 - **The MAN DN95 is no longer a mirror**: a texture a model asks for as `.dds` that is not
   there is missing, as in OMSI, instead of being stood in for by a `.bmp` or another file of the
   same name. The DN95's body asks for an `envmap.dds` it does not ship; its `envmap.bmp` (the
