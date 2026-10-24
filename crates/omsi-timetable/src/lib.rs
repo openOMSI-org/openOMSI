@@ -277,25 +277,57 @@ impl Line {
     }
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
-        use omsi_cfg::codepage::{detect, CodePage};
-        let text = self.to_text();
-        let mut pages = Vec::new();
-        if let Ok(old) = std::fs::read(path) {
-            if !old.is_ascii() {
-                pages.push(detect(&old));
+        write_text(path, &self.to_text())
+    }
+}
+
+/// Writes a timetable file in the code page its folder's files are in (the file's own, when
+/// it has one already), so a text typed in the launcher reads back the same in the game.
+pub fn write_text(path: &Path, text: &str) -> std::io::Result<()> {
+    use omsi_cfg::codepage::{detect, CodePage};
+    let mut pages = Vec::new();
+    if let Ok(old) = std::fs::read(path) {
+        if !old.is_ascii() {
+            pages.push(detect(&old));
+        }
+    }
+    if let Some(page) = path.parent().and_then(timetable_code_page) {
+        pages.push(page);
+    }
+    pages.extend([CodePage::Windows1252, CodePage::Windows1250, CodePage::Windows1251]);
+    for page in pages {
+        let (bytes, _, unmappable) = page.encoding().encode(text);
+        if !unmappable && omsi_cfg::decode_text(&bytes) == text {
+            return std::fs::write(path, bytes);
+        }
+    }
+    Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "its texts fit in no code page the map's timetable is written in"))
+}
+
+impl Trip {
+    /// The trip as OMSI writes a `.ttp`: its terminus and line, the stops it calls at in
+    /// order, and its profiles (name and total minutes; the game spreads the minutes over the
+    /// stops by their distances where no stop has a time of its own).
+    pub fn to_text(&self) -> String {
+        let mut o = String::new();
+        o.push_str("-----------------------\r\nTime Table Trip File\r\n-----------------------\r\n\r\nCreated with openOMSI\r\n\r\n");
+        o.push_str(&format!("[trip]\r\n{}\r\n{}\r\n{}\r\n\r\n", self.display_name, self.terminus, self.line));
+        o.push_str(".........................\r\n        Stations\r\n.........................\r\n\r\n");
+        for id in &self.stations {
+            o.push_str(&format!("[station_typ2]\r\n{id}\r\n\r\n"));
+        }
+        o.push_str("\r\n.........................\r\n        Profiles\r\n.........................\r\n\r\n");
+        for p in &self.profiles {
+            o.push_str(&format!("[profile]\r\n{}\r\n{:.3}\r\n\r\n", p.name, p.factor));
+            for (i, v) in &p.man_dep_time {
+                o.push_str(&format!("[profile_man_dep_time]\r\n{i}\r\n{v:.3}\r\n"));
             }
         }
-        if let Some(page) = path.parent().and_then(timetable_code_page) {
-            pages.push(page);
-        }
-        pages.extend([CodePage::Windows1252, CodePage::Windows1250, CodePage::Windows1251]);
-        for page in pages {
-            let (bytes, _, unmappable) = page.encoding().encode(&text);
-            if !unmappable && omsi_cfg::decode_text(&bytes) == text {
-                return std::fs::write(path, bytes);
-            }
-        }
-        Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "its texts fit in no code page the map's timetable is written in"))
+        o
+    }
+
+    pub fn save(&self, path: &Path) -> std::io::Result<()> {
+        write_text(path, &self.to_text())
     }
 }
 
@@ -568,5 +600,27 @@ mod stock_line_tests {
             }
         }
         eprintln!("{n} lines");
+    }
+}
+
+#[cfg(test)]
+mod trip_text_tests {
+    use super::*;
+
+    #[test]
+    fn a_written_trip_reads_back_the_same() {
+        let t = Trip {
+            terminus: "Nervenklinik".into(),
+            line: "130".into(),
+            stations: vec![3211605, 3211600, 524],
+            profiles: vec![TripProfile { name: "standard".into(), factor: 12.5, ..Default::default() }],
+            ..Default::default()
+        };
+        let back = Trip::parse(&CfgFile::from_str(PathBuf::from("T.ttp"), &t.to_text()));
+        assert_eq!((back.terminus.as_str(), back.line.as_str()), ("Nervenklinik", "130"));
+        assert_eq!(back.display_name, "");
+        assert_eq!(back.stations, t.stations);
+        assert_eq!(back.profiles.len(), 1);
+        assert_eq!((back.profiles[0].name.as_str(), back.profiles[0].factor), ("standard", 12.5));
     }
 }

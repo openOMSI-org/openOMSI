@@ -172,7 +172,7 @@ final class LauncherStore {
     var bus: VehicleInfo? { lists.vehicles.first { $0.file == choice.bus } }
     var map: MapInfo? { lists.maps.first { $0.file == choice.map } }
     var line: LineInfo? { lines.first { $0.name == choice.line } }
-    var tour: TourInfo? { line?.tours.first { $0.number == choice.tour } }
+    var tour: TourInfo? { line?.tours.first { $0.id == choice.tour } ?? line?.tours.first { $0.number == choice.tour && $0.runs } ?? line?.tours.first { $0.number == choice.tour } }
     var firstTrip: TripInfo? {
         guard let t = tour else { return nil }
         let i = snapshot.first_trip ?? 0
@@ -199,7 +199,7 @@ final class LauncherStore {
     var dutyTitle: String {
         if choice.free { return String(localized: "Free drive") }
         guard let l = choice.line else { return String(localized: "Choose a line") }
-        if let t = choice.tour { return tr("Line {line}, tour {tour}", ["line": l, "tour": "\(t)"]) }
+        if let t = tour?.number { return tr("Line {line}, tour {tour}", ["line": l, "tour": t]) }
         return tr("Line {name}", ["name": l])
     }
 

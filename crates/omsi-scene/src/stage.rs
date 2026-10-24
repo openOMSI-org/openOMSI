@@ -1285,7 +1285,7 @@ mod off_tile_tests {
     use super::hidden_off_tile;
 
     #[test]
-    fn a_tree_past_its_tiles_edge_is_left_out() {
+    fn off_tile_records_trees_always_crossings_only_on_terrain() {
         let t = omsi_map::tile_size();
         let off = [t + 0.85, 120.0, 0.0];
         let on = [t - 0.85, 120.0, 0.0];

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https:; connect-src 'self' https://api.github.com https://openomsi.savvabestbrother.workers.dev; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https:; connect-src 'self' https://api.github.com https://raw.githubusercontent.com https://openomsi.savvabestbrother.workers.dev; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>openOMSI</title>
 <meta name="description" content="openOMSI: OMSI 2 recreated from scratch in Rust. Plays your OMSI 2 maps, buses and mods on a new 64-bit engine.">
@@ -36,6 +36,10 @@
     <a href="#/" data-route="/"><span class="material-icons">home</span>Overview</a>
     <a href="#/download" data-route="/download"><span class="material-icons">download</span>Download</a>
     <a href="#/beta" data-route="/beta"><span class="material-icons">science</span>Betas</a>
+  </div>
+  <div class="drawer-subheader">openMapper</div>
+  <div class="drawer-section" id="mapper-links">
+    <a href="#/docs/OPENMAPPER" data-route="/docs/OPENMAPPER"><span class="material-icons">edit_road</span>Map editor<span class="new-badge" id="mapper-badge" hidden>New</span></a>
   </div>
   <div class="drawer-subheader">Documentation</div>
   <div class="drawer-section" id="doc-links"></div>
@@ -93,6 +97,10 @@
         <p>openOMSI contains <b>no game content</b>. It plays on the maps, vehicles and files of an installed
         copy of OMSI&nbsp;2 and <b>does not start without one</b>.</p>
       </div>
+    </div>
+    <div class="card card-warning elevation-2" id="mapper-news" hidden>
+      <span class="material-icons card-icon">edit_road</span>
+      <div><h3>New: openMapper, a map editor for openOMSI</h3><p>Draw roads, place buildings and trees, shape the ground and drive your map in openOMSI on one key. <a href="#/docs/OPENMAPPER">Meet openMapper</a></p></div>
     </div>
     <div class="card card-warning elevation-2">
       <span class="material-icons card-icon">system_update</span>

@@ -248,11 +248,18 @@ impl ScheduleSim {
         let tod = day_time - self.day_base;
         let window = if std::mem::take(&mut self.restarted) { window.max(20.0 * 60.0) } else { window };
         let loading = window > 60.0;
+        // At the start (and after the clock was set) every trip still under way is put out,
+        // however long ago it left - yesterday's night trips before 24:00 among them, as
+        // Omsi.exe's loader places each tour's bus on its last trip begun (0x73a700): only
+        // the last 20 minutes' trips came, and a map opened in the evening never got the
+        // bus that stands on a light's detector from 20:00 to 04:00 (Städtedreieck's
+        // Bergerplatz, so its evening and night programs never ran).
+        let under_way = |d: &Departure| loading && self.times.get(d.trip).and_then(|t| t.get(d.profile)).is_some_and(|t| d.time + t.duration > tod);
         let due: Vec<usize> = self
             .departures
             .iter()
             .enumerate()
-            .filter(|(i, d)| !d.spawned && d.time <= tod && d.time > tod - window && self.runs(*i))
+            .filter(|(i, d)| !d.spawned && d.time <= tod && (d.time > tod - window || under_way(d)) && self.runs(*i))
             .map(|(i, _)| i)
             .collect();
         for i in due {

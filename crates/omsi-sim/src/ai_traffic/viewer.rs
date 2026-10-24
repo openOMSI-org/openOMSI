@@ -164,6 +164,12 @@ impl TrafficSim {
             && self.lan_eyes.iter().all(|v| v.hides(p, r, || occluded(v)))
     }
 
+    /// Whether `test` holds for everybody looking (the player's camera and the LAN eyes);
+    /// true when nobody looks.
+    pub fn every_eye(&self, mut test: impl FnMut(&Viewer) -> bool) -> bool {
+        self.viewer.iter().chain(self.lan_eyes.iter()).all(|v| test(v))
+    }
+
     /// How far the nearest one looking (the player's camera or a LAN player's eye) is from
     /// `p`, None when nobody looks.
     pub fn nearest_eye(&self, p: DVec3) -> Option<f64> {

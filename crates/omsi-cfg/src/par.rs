@@ -32,6 +32,10 @@ struct Shared {
     /// only after claiming an index below `len`, and the call does not return before every
     /// claimed index is done, so it is never read after the call.
     body: usize,
+    /// The calling thread, woken by whoever finishes the last item (it sleeps while it waits
+    /// for items a helper has started: spinning there kept a core busy for nothing when the
+    /// helper had been descheduled).
+    caller: std::thread::Thread,
 }
 
 /// Run `f` on every item, on the calling thread and on up to `helpers` workers of the
@@ -59,6 +63,7 @@ pub fn frame_each<T: Send, F: Fn(&mut T) + Sync>(items: &mut [T], helpers: usize
         done: AtomicUsize::new(0),
         len,
         body: &body as *const &(dyn Fn(usize) + Sync) as usize,
+        caller: std::thread::current(),
     });
     fn work(s: &Shared) {
         loop {
@@ -70,7 +75,9 @@ pub fn frame_each<T: Send, F: Fn(&mut T) + Sync>(items: &mut [T], helpers: usize
             // body it points to) waiting until `done` counts it.
             let body = unsafe { &*(s.body as *const &(dyn Fn(usize) + Sync)) };
             body(i);
-            s.done.fetch_add(1, Ordering::AcqRel);
+            if s.done.fetch_add(1, Ordering::AcqRel) + 1 == s.len {
+                s.caller.unpark();
+            }
         }
     }
     for _ in 0..helpers.min(len - 1) {
@@ -79,9 +86,15 @@ pub fn frame_each<T: Send, F: Fn(&mut T) + Sync>(items: &mut [T], helpers: usize
     }
     work(&shared);
     // Only items a helper is working on right now are left: wait for those, briefly.
+    // (a short spin first: most waits are a few microseconds; then asleep, woken by the last
+    // item, with a timeout as a net)
+    let spin_until = std::time::Instant::now() + std::time::Duration::from_micros(40);
     while shared.done.load(Ordering::Acquire) < len {
-        std::hint::spin_loop();
-        std::thread::yield_now();
+        if std::time::Instant::now() < spin_until {
+            std::hint::spin_loop();
+        } else {
+            std::thread::park_timeout(std::time::Duration::from_micros(300));
+        }
     }
 }
 

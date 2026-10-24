@@ -41,7 +41,9 @@ pub(super) fn declared_coupling(def: &Vehicle, front: bool) -> Vec3 {
     let p = coupling
         .as_ref()
         .map(|c| Vec3::from(c.pos))
-        .unwrap_or(Vec3::new(0.0, if front { 4.0 } else { -4.0 }, 0.3));
+        // (a bogie frame names one coupling only and hangs by its origin at the other, see
+        // `is_bogie_frame`)
+        .unwrap_or(if is_bogie_frame(def) { Vec3::ZERO } else { Vec3::new(0.0, if front { 4.0 } else { -4.0 }, 0.3) });
     // Rail couplings are declared in the path frame. Express them in the model frame
     // so body_rotation can turn a negative-bogie body without moving its joints.
     if body_reversed(def, false) {
@@ -49,6 +51,20 @@ pub(super) fn declared_coupling(def: &Vehicle, front: bool) -> Vec3 {
     } else {
         p
     }
+}
+
+/// A rail part that is a bogie frame as some mods make them (the Tatra T6B5's `_trail.bus`):
+/// no `[boogies]`, one axle at most, and the one coupling of the two it needs named - the other is its
+/// own origin. The coupling of the car it hangs from says where it stands, as it does for a
+/// car with `[boogies]`.
+pub(super) fn is_bogie_frame(def: &Vehicle) -> bool {
+    def.is_rail() && def.boogies.is_none() && def.axles.len() <= 1 && (def.coupling_front.is_some() != def.coupling_back.is_some())
+}
+
+/// A rail vehicle that says where its couplings are (or where its bogies are, which sets them):
+/// joined as it says, not by the ends of its body.
+fn declares_couplings(def: &Vehicle) -> bool {
+    def.boogies.is_some() || is_bogie_frame(def)
 }
 
 /// Where the two parts meet, in their respective model frames. Bogie-defined trains
@@ -70,13 +86,13 @@ pub fn coupling_offsets(
     // its rear coupling, which is its front coupling where it is itself turned round; the
     // one behind joins by its front coupling, which is its rear where it is turned round.
     // The two read opposite ends because the two face opposite ways.
-    let lead_rear = if lead.def.boogies.is_some() {
+    let lead_rear = if declares_couplings(&lead.def) {
         declared_coupling(&lead.def, lead_reversed).y
     } else {
         lead.model_box()
             .map(|(lo, hi)| if lead_reversed { hi.y } else { lo.y })?
     };
-    let car_front = if car.def.boogies.is_some() {
+    let car_front = if declares_couplings(&car.def) {
         declared_coupling(&car.def, !car_reversed).y
     } else {
         car.model_box()

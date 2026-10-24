@@ -72,8 +72,9 @@ impl FontLibrary {
             if files.is_empty() {
                 files = omsi_cfg::vfs::read_dir_paths(&self.root.join("Fonts"));
             }
-            // each folder in root order, its files in name order (a listing comes in the file
-            // system's order)
+            // each folder in root order, its files in the order Windows lists them: Omsi.exe
+            // loads `Fonts\*.oft` as its FindFirst loop meets them (0x6e5e52), and this file
+            // system may hand them over in another
             let mut folders: Vec<std::path::PathBuf> = Vec::new();
             for p in &files {
                 let d = p.parent().map(|d| d.to_path_buf()).unwrap_or_default();
@@ -81,10 +82,14 @@ impl FontLibrary {
                     folders.push(d);
                 }
             }
-            files.sort_by_cached_key(|p| (folders.iter().position(|d| Some(d.as_path()) == p.parent()).unwrap_or(usize::MAX), p.file_name().map(|n| n.to_string_lossy().to_ascii_lowercase()).unwrap_or_default()));
-            // Two files of one folder naming the same font: the one read later takes its place,
-            // as in the original (the LiAZ's `ANX_S.oft` spells its "ц" as "=", and a
-            // "ANX_S - копия.oft" lying beside it, read first, left the letter out). A
+            let rank = |p: &Path| folders.iter().position(|d| Some(d.as_path()) == p.parent()).unwrap_or(usize::MAX);
+            let name = |p: &Path| p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            files.sort_by(|a, b| rank(a).cmp(&rank(b)).then_with(|| omsi_cfg::collate::cmp_as_listed(&name(a), &name(b))));
+            // Two files of one folder naming the same font: Omsi.exe keeps both and looks a
+            // name up from the front (0x5d6738), so the one listed first is drawn. Our one
+            // exception is a second file drawing on the same alpha bitmap - an edited copy of
+            // the font beside the original: whichever of the two has more letters is drawn
+            // (the LiAZ's `ANX_S - копия.oft`, listed before `ANX_S.oft`, lacks the "ц"). A
             // folder of higher priority keeps its fonts over the folders after it.
             let mut all: Vec<Font> = Vec::new();
             let mut folder_of: Vec<usize> = Vec::new();
@@ -98,7 +103,7 @@ impl FontLibrary {
                     for f in list {
                         let key = f.name.trim().to_ascii_lowercase();
                         match all.iter().position(|o| o.name.trim().to_ascii_lowercase() == key) {
-                            Some(k) if folder_of[k] == folder => all[k] = f,
+                            Some(k) if folder_of[k] == folder && same_bitmap_fuller(&all[k], &f) => all[k] = f,
                             Some(_) => {}
                             None => {
                                 all.push(f);
@@ -202,6 +207,16 @@ impl FontLibrary {
         self.atlases.insert(key, atlas.clone());
         atlas
     }
+}
+
+/// `later`, a font of the same name as `kept` in the same folder, is an edited copy of it
+/// that only adds letters (see `FontLibrary::index`): cut from the same alpha bitmap, the same
+/// height, every letter of `kept` at the same place in it, and more of them. A copy that
+/// moves or drops a letter is another font, and Omsi.exe's first one stays.
+fn same_bitmap_fuller(kept: &Font, later: &Font) -> bool {
+    let bitmap = |f: &Font| f.path.parent().map(|d| omsi_cfg::resolve_path(d, f.alpha.trim()).to_string_lossy().to_lowercase());
+    let keeps_every_letter = kept.chars.iter().all(|k| later.chars.iter().any(|c| c.ch == k.ch && (c.x0, c.x1, c.y) == (k.x0, k.x1, k.y)));
+    bitmap(kept) == bitmap(later) && later.height == kept.height && later.chars.len() > kept.chars.len() && keeps_every_letter
 }
 
 /// A font's colour bitmap laid over its alpha bitmap pixel for pixel. Omsi.exe reads a
@@ -371,5 +386,26 @@ mod tests {
         assert_eq!(family_of("churafont++ 14x10"), "churafont++ 14x10");
         assert_eq!(family_of("Bold"), "bold");
         assert_eq!(family_of("LEERFELD"), "leerfeld");
+    }
+
+    #[test]
+    fn an_edited_copy_on_the_same_bitmap_wins_only_with_more_letters() {
+        let font = |file: &str, alpha: &str, letters: &str| Font {
+            path: Path::new("Fonts").join(file),
+            name: "Matrix 8x5".into(),
+            alpha: alpha.into(),
+            height: 8,
+            chars: letters.chars().map(|ch| omsi_content::font::FontChar { ch, x0: 0, x1: 4, y: 0 }).collect(),
+            ..Default::default()
+        };
+        let original = font("matrix.oft", "matrix_a.tga", "ABC");
+        assert!(same_bitmap_fuller(&original, &font("matrix (2).oft", "MATRIX_A.tga", "ABCD")));
+        assert!(!same_bitmap_fuller(&original, &font("matrix (2).oft", "matrix_a.tga", "AB")));
+        assert!(!same_bitmap_fuller(&original, &font("matrix big.oft", "matrix_big.tga", "ABCDEFG")));
+        // more letters, but one of the original's gone or another height: not a copy
+        assert!(!same_bitmap_fuller(&original, &font("matrix (3).oft", "matrix_a.tga", "ABDE")));
+        let mut taller = font("matrix (4).oft", "matrix_a.tga", "ABCD");
+        taller.height = 9;
+        assert!(!same_bitmap_fuller(&original, &taller));
     }
 }

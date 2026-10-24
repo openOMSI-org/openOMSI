@@ -261,26 +261,30 @@ function* drawLayers(g, l, v, W, H, seen) {
 
 // --- The ground as the game builds it (`map_ground`)
 
-/** The city map's ground around `at` (metres from the page's origin) at `mpp`: the head and
- * the vertices (28 bytes each, see `map_ground` in the game's launcher service). */
+/** The city map's ground around `at` (metres from the page's origin) at `mpp`: the head, and
+ * the flat and the widened triangles' vertices (see `map_ground` in the game's launcher service). */
 async function readGround(map, date, at, reach, mpp, light) {
   const buf = await call('map_ground', { map, date, x: at[0], y: at[1], reach, mpp, light });
   const n = new DataView(buf).getUint32(0, true);
   const head = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 4, n)));
-  return { head, verts: buf.slice(4 + n) };
+  return { head, flat: buf.slice(4 + n, 4 + n + head.flat), wide: buf.slice(4 + n + head.flat) };
 }
 
 // the game's own vertex rule (omsi-ui's `ui.wgsl`): a vertex moves out along its extrusion
-// by the larger of its width in metres and its width in pixels at this scale
-const VS = `attribute vec2 p; attribute vec2 e; attribute vec2 w; attribute vec4 c;
-uniform vec2 centre; uniform float mpp; uniform vec2 hsize;
+// by the larger of its width in metres and its width in pixels at this scale (positions come
+// in steps of `step` metres, the extrusion in 1/4096, the widths in 1/256). The flat triangles,
+// which have no extrusion, have a program of their own.
+const VS = (wide) => `attribute vec2 p; attribute vec4 c; ${wide ? 'attribute vec2 e; attribute vec2 w;' : ''}
+uniform vec2 centre; uniform float mpp; uniform vec2 hsize; uniform float step;
 varying vec4 v;
 void main() {
-  vec2 q = p + e * max(w.x, w.y * mpp);
+  vec2 q = p * step${wide ? ' + e / 4096.0 * max(w.x, w.y * mpp) / 256.0' : ''};
   gl_Position = vec4((q - centre) / mpp / hsize, 0.0, 1.0);
   v = c;
 }`;
 const FS = `precision mediump float; varying vec4 v; void main() { gl_FragColor = vec4(v.rgb * v.a, v.a); }`;
+// where each attribute is, in both programs
+const AT = { p: 0, c: 1, e: 2, w: 3 };
 
 /** A WebGL picture of the ground on `canvas`; none where the browser has no WebGL. */
 function groundGl(canvas) {
@@ -292,49 +296,67 @@ function groundGl(canvas) {
     gl.compileShader(o);
     return o;
   };
-  const prog = gl.createProgram();
-  gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS));
-  gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
-  gl.linkProgram(prog);
-  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return null;
-  const at = (n) => gl.getAttribLocation(prog, n);
-  const un = (n) => gl.getUniformLocation(prog, n);
-  return { gl, prog, buf: gl.createBuffer(), a: { p: at('p'), e: at('e'), w: at('w'), c: at('c') }, u: { centre: un('centre'), mpp: un('mpp'), hsize: un('hsize') }, count: 0 };
+  const program = (wide) => {
+    const prog = gl.createProgram();
+    gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS(wide)));
+    gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
+    for (const [n, i] of Object.entries(AT)) gl.bindAttribLocation(prog, i, n);
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return null;
+    const un = (n) => gl.getUniformLocation(prog, n);
+    return { prog, u: { centre: un('centre'), mpp: un('mpp'), hsize: un('hsize'), step: un('step') } };
+  };
+  const progs = [program(false), program(true)];
+  if (!progs[0] || !progs[1]) return null;
+  return { gl, progs, bufs: [gl.createBuffer(), gl.createBuffer()], runs: [] };
 }
 
 /** Upload a ground the game built. */
 function uploadGround(g, ground) {
   const { gl } = g;
-  gl.bindBuffer(gl.ARRAY_BUFFER, g.buf);
-  gl.bufferData(gl.ARRAY_BUFFER, ground.verts, gl.STATIC_DRAW);
-  g.count = ground.verts.byteLength / 28;
+  [ground.flat, ground.wide].forEach((data, i) => {
+    gl.bindBuffer(gl.ARRAY_BUFFER, g.bufs[i]);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+  });
+  g.runs = ground.head.runs;
+  g.step = ground.head.step;
   g.anchor = ground.head.anchor;
 }
 
-/** Draw the uploaded ground with the view `v` (centre and metres a pixel) on a W x H page. */
+/** Draw the uploaded ground with the view `v` (centre and metres a pixel) on a W x H page:
+ * its runs of flat and widened triangles in order, each with its own program and buffer. */
 function drawGround(g, v, W, H, dpr, land) {
-  const { gl, a, u } = g;
+  const { gl } = g;
   gl.viewport(0, 0, Math.round(W * dpr), Math.round(H * dpr));
   const [r, gr, b] = land;
   gl.clearColor(r, gr, b, 1);
   gl.clear(gl.COLOR_BUFFER_BIT);
-  if (!g.count) return;
-  gl.useProgram(g.prog);
+  if (!g.runs.length) return;
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-  gl.bindBuffer(gl.ARRAY_BUFFER, g.buf);
-  gl.enableVertexAttribArray(a.p);
-  gl.vertexAttribPointer(a.p, 2, gl.FLOAT, false, 28, 0);
-  gl.enableVertexAttribArray(a.e);
-  gl.vertexAttribPointer(a.e, 2, gl.FLOAT, false, 28, 8);
-  gl.enableVertexAttribArray(a.w);
-  gl.vertexAttribPointer(a.w, 2, gl.FLOAT, false, 28, 16);
-  gl.enableVertexAttribArray(a.c);
-  gl.vertexAttribPointer(a.c, 4, gl.UNSIGNED_BYTE, true, 28, 24);
-  gl.uniform2f(u.centre, v.cx - g.anchor[0], v.cy - g.anchor[1]);
-  gl.uniform1f(u.mpp, v.mpp);
-  gl.uniform2f(u.hsize, W / 2, H / 2);
-  gl.drawArrays(gl.TRIANGLES, 0, g.count);
+  const from = [0, 0];
+  for (const [wide, n] of g.runs) {
+    const { prog, u } = g.progs[wide];
+    gl.useProgram(prog);
+    gl.uniform2f(u.centre, v.cx - g.anchor[0], v.cy - g.anchor[1]);
+    gl.uniform1f(u.mpp, v.mpp);
+    gl.uniform2f(u.hsize, W / 2, H / 2);
+    gl.uniform1f(u.step, g.step);
+    const size = wide ? 16 : 8;
+    gl.bindBuffer(gl.ARRAY_BUFFER, g.bufs[wide]);
+    gl.enableVertexAttribArray(AT.p);
+    gl.vertexAttribPointer(AT.p, 2, gl.SHORT, false, size, 0);
+    gl.enableVertexAttribArray(AT.c);
+    gl.vertexAttribPointer(AT.c, 4, gl.UNSIGNED_BYTE, true, size, size - 4);
+    for (const [k, at] of [['e', 4], ['w', 8]]) {
+      if (wide) {
+        gl.enableVertexAttribArray(AT[k]);
+        gl.vertexAttribPointer(AT[k], 2, gl.SHORT, false, size, at);
+      } else gl.disableVertexAttribArray(AT[k]);
+    }
+    gl.drawArrays(gl.TRIANGLES, from[wide], n);
+    from[wide] += n;
+  }
 }
 
 /** A CSS colour - `#rgb`, `#rrggbb` or `rgb(a)(r,g,b,...)` - as 0..1 numbers. (The page's
@@ -362,8 +384,8 @@ const detail = (mpp) => (mpp < 0.7 ? 1 : 0) | (mpp < 2.2 ? 2 : 0) | (mpp < 3.5 ?
 const surfaces = new Map();
 let drawn = 0;
 
-export async function readRouteMap(map, date, trip, surface = true) {
-  return JSON.parse(new TextDecoder().decode(await call('route_map', { map, date, trip, surface })));
+export async function readRouteMap(map, date, trip, surface = true, mode = '') {
+  return JSON.parse(new TextDecoder().decode(await call('route_map', { map, date, trip, surface, editor: mode === 'editor', route_only: mode === 'route' })));
 }
 
 const surfaceNow = new Map();
@@ -383,11 +405,17 @@ function surfaceOf(map, date) {
   return surfaces.get(at);
 }
 
-function load(map, date, trip) {
-  const key = `${map}|${date}|${trip}`;
-  if (!cache.has(key)) cache.set(key, readRouteMap(map, date, trip, false).then(onRoute, (e) => ({ error: e.message })));
+function load(map, date, trip, mode = '') {
+  const key = `${map}|${date}|${trip}|${mode}`;
+  if (!cache.has(key)) cache.set(key, readRouteMap(map, date, trip, false, mode).then(onRoute, (e) => ({ error: e.message })));
   return cache.get(key);
 }
+
+const NO_ROUTE = { route: [], stops: [] };
+
+/** The map as the timetable editor draws it: the roads, and every stop of the timetable with its
+ * place (`busstops`). The editor's own map and the page ask for the same one. */
+export const editorMap = (map, date) => load(map, date, '', 'editor');
 
 const withSurface = (d, s) => ({ ...d, package: s?.package ?? d.package, layers: s?.layers ?? d.layers, id: ++drawn });
 
@@ -501,10 +529,100 @@ function fit(d, W, H, inset, el) {
   return { cx: (lo[0] + hi[0]) / 2 - ox * span, cy: (lo[1] + hi[1]) / 2 + oy * span, mpp: span };
 }
 
+/** The timetable editor's stops over the map: every stop a small dot (a depot a square), the stops
+ * the next click may go to ringed, the trip under way numbered in order, and the names where
+ * there is room for them. `editor`: { chain: [ids], reach: Set | null, depots: Set }. */
+function drawEditorStops(g, d, editor, hover, X, Y, W, H, v, taken, free, P) {
+  const chain = new Map((editor.chain || []).map((id, i) => [id, i]));
+  const reach = editor.reach || null;
+  const depots = editor.depots || new Set();
+  const dim = !!reach && reach.size > 0;
+  g.font = '600 11.5px Inter, sans-serif';
+  const label = (x, y, text, strong) => {
+    const w = g.measureText(text).width + 14;
+    const lx = [x + 11, x - 11 - w].find((lx) => free(lx, y - 10, w));
+    if (lx === undefined) return;
+    taken.push([lx, y - 10, w]);
+    g.save();
+    g.shadowColor = LOOK.cardShadow;
+    g.shadowBlur = 6;
+    g.fillStyle = P?.card || LOOK.card;
+    g.beginPath();
+    g.roundRect(lx, y - 10, w, 20, 7);
+    g.fill();
+    g.restore();
+    g.fillStyle = strong ? LOOK.route : P?.card_text || LOOK.text;
+    g.fillText(text, lx + 7, y + 4);
+  };
+  const shown = [];
+  d.busstops.forEach((b, i) => {
+    const x = X(b.at[0]);
+    const y = Y(b.at[1]);
+    if (x < -20 || x > W + 20 || y < -20 || y > H + 20) return;
+    shown.push([b, i, x, y]);
+  });
+  // (the plain ones first, then the depots, the reachable ones, the chosen ones over them)
+  const rank = ([b, i]) => (chain.has(b.id) ? 4 : reach?.has(b.id) ? 3 : i === hover ? 2 : depots.has(b.id) ? 1 : 0);
+  shown.sort((a, b) => rank(a) - rank(b));
+  const small = v.mpp > 14;
+  for (const [b, i, x, y] of shown) {
+    const k = chain.get(b.id);
+    const r = rank([b, i]);
+    if (k !== undefined) {
+      g.fillStyle = LOOK.route;
+      g.beginPath();
+      g.arc(x, y, 9, 0, Math.PI * 2);
+      g.fill();
+      g.strokeStyle = LOOK.pin;
+      g.lineWidth = 2;
+      g.stroke();
+      g.fillStyle = '#ffffff';
+      g.textAlign = 'center';
+      g.fillText(String(k + 1), x, y + 4);
+      g.textAlign = 'left';
+    } else if (depots.has(b.id)) {
+      const s = i === hover ? 11 : 9;
+      g.fillStyle = LOOK.entry;
+      g.beginPath();
+      g.roundRect(x - s / 2, y - s / 2, s, s, 2.5);
+      g.fill();
+      g.strokeStyle = LOOK.pin;
+      g.lineWidth = 1.6;
+      g.stroke();
+    } else {
+      g.fillStyle = LOOK.pin;
+      g.globalAlpha = dim && r < 3 && i !== hover ? 0.55 : 1;
+      g.beginPath();
+      g.arc(x, y, i === hover ? 6 : small ? 2 : 3.4, 0, Math.PI * 2);
+      g.fill();
+      g.strokeStyle = 'rgba(20,22,26,0.55)';
+      g.lineWidth = 1;
+      g.stroke();
+      g.globalAlpha = 1;
+    }
+    if (r === 3 && k === undefined) {
+      g.strokeStyle = LOOK.route;
+      g.lineWidth = 2.4;
+      g.beginPath();
+      g.arc(x, y, 9, 0, Math.PI * 2);
+      g.stroke();
+    }
+  }
+  // names: the ones that matter first (the trip's, the reachable, the hovered), then the rest
+  // as far as there is room, close enough to read
+  const named = [...shown].sort((a, b) => rank(b) - rank(a));
+  for (const [b, i, x, y] of named) {
+    const r = rank([b, i]);
+    if (r === 0 && v.mpp > 3.2) continue;
+    if (r === 1 && v.mpp > 9) continue;
+    label(x, y, plain(b.name), r >= 3 || i === hover);
+  }
+}
+
 const MIN_MPP = 0.15;
 const MAX_MPP = 200;
 
-export function RouteMap({ map, date, trip, stops = [], entry = -1, onEntry, height = 340, inset }) {
+export function RouteMap({ map, date, trip, stops = [], entry = -1, onEntry, height = 340, inset, editor }) {
   const box = useRef();
   const cv = useRef();
   const gcv = useRef();
@@ -525,6 +643,12 @@ export function RouteMap({ map, date, trip, stops = [], entry = -1, onEntry, hei
   const settle = useRef(0);
   const frame = useRef(0);
   const [hover, setHover] = useState(-1);
+  // the timetable editor: the route of the trip (or of the stops being chosen) comes apart from
+  // the map, which is read once, and the stop under the pointer
+  const [rt, setRt] = useState(null);
+  const [hoverStop, setHoverStop] = useState(-1);
+  const ed = useRef(editor);
+  ed.current = editor;
   // the ground the game built (null: not asked yet, false: this browser or game cannot)
   const gl = useRef(null);
   const ground = useRef({ built: null, asking: null, failed: false });
@@ -534,7 +658,7 @@ export function RouteMap({ map, date, trip, stops = [], entry = -1, onEntry, hei
     let alive = true;
     // (the surface only where the page draws the map itself: WebGL draws the game's ground)
     const surface = hasWebgl() ? null : surfaceOf(map, date);
-    load(map, date, trip).then((d) => {
+    load(map, date, editor ? '' : trip, editor ? 'editor' : '').then((d) => {
       if (!alive) return;
       const now = surfaceNow.get(`${map}|${date}`);
       setData(d.error ? d : withSurface(d, now));
@@ -544,7 +668,23 @@ export function RouteMap({ map, date, trip, stops = [], entry = -1, onEntry, hei
       surface.then((s) => alive && s && setData((cur) => (cur && !cur.error ? withSurface(cur, s) : cur)));
     });
     return () => (alive = false);
-  }, [map, date, trip]);
+  }, [map, date, editor ? '' : trip, !!editor]);
+
+  // (the editor's route: lighter, and asked for again at every change of the trip)
+  useEffect(() => {
+    if (!editor || !map) return undefined;
+    if (!trip) {
+      setRt(NO_ROUTE);
+      return undefined;
+    }
+    let alive = true;
+    load(map, date, trip, 'route').then((r) => {
+      if (!alive) return;
+      setRt(r.error ? NO_ROUTE : r);
+      if (!r.error && r.route?.length && ed.current?.fit !== false) refit.current = true;
+    });
+    return () => (alive = false);
+  }, [map, date, trip, !!editor]);
 
   /** Start drawing the picture `v` needs, unless it is there or under way. */
   const refresh = (d, v, W, H, dpr) => {
@@ -605,7 +745,7 @@ export function RouteMap({ map, date, trip, stops = [], entry = -1, onEntry, hei
   // a new map: its own ground
   useEffect(() => {
     ground.current = { built: null, asking: null, failed: false };
-    if (gl.current) gl.current.count = 0;
+    if (gl.current) gl.current.runs = [];
   }, [map, date]);
 
   /** Ask the game for the ground around the view when the one there is does not cover it,
@@ -616,7 +756,9 @@ export function RouteMap({ map, date, trip, stops = [], entry = -1, onEntry, hei
     const reach = Math.max(500, Math.max(W, H) * v.mpp * 0.8);
     const b = G.built;
     const fresh = b && b.light === light && detail(b.mpp) === detail(v.mpp) && Math.hypot(b.at[0] - v.cx, b.at[1] - v.cy) <= b.reach * 0.35 && b.mpp / v.mpp <= 1.7 && v.mpp / b.mpp <= 1.7;
-    if (fresh) return;
+    // (while it moves, the ground there is kept as long as it covers the view)
+    const covers = b && b.light === light && Math.abs(b.at[0] - v.cx) + (W / 2) * v.mpp <= b.reach && Math.abs(b.at[1] - v.cy) + (H / 2) * v.mpp <= b.reach;
+    if (fresh || (busy.current && covers)) return;
     const ask = { at: [v.cx, v.cy], reach, mpp: v.mpp, light };
     G.asking = ask;
     readGround(map, date, ask.at, reach, v.mpp, light).then(
@@ -648,6 +790,8 @@ export function RouteMap({ map, date, trip, stops = [], entry = -1, onEntry, hei
     const dpr = window.devicePixelRatio || 1;
     const light = document.documentElement.dataset.theme === 'light';
     LOOK = light ? LOOKS.light : LOOKS.dark;
+    // (the timetable editor draws the route it is asked for, which is not the map's own)
+    const R = editor ? rt || NO_ROUTE : d;
     const W = box.current.clientWidth;
     const H = box.current.clientHeight;
     if (!W || !H) return;
@@ -655,12 +799,12 @@ export function RouteMap({ map, date, trip, stops = [], entry = -1, onEntry, hei
       if (el && (el.width !== Math.round(W * dpr) || el.height !== Math.round(H * dpr))) Object.assign(el, { width: Math.round(W * dpr), height: Math.round(H * dpr) });
     }
     if (!view.current) {
-      view.current = fit(d, W, H, inset, box.current);
+      view.current = fit(editor ? { lo: d.lo, hi: d.hi, route: R.route } : d, W, H, inset, box.current);
       aim.current = { ...view.current };
       refit.current = false;
     } else if (refit.current) {
       refit.current = false;
-      aim.current = fit(d, W, H, inset, box.current);
+      aim.current = fit(editor ? { lo: d.lo, hi: d.hi, route: R.route } : d, W, H, inset, box.current);
       aim.current.zoomAt = null;
       animate();
     }
@@ -698,7 +842,7 @@ export function RouteMap({ map, date, trip, stops = [], entry = -1, onEntry, hei
     for (const [color, wide] of [[P?.route_edge || LOOK.routeEdge, 7], [routeColor, 4.6]]) {
       g.strokeStyle = color;
       g.lineWidth = wide * v.mpp;
-      g.stroke(routePath(d));
+      g.stroke(routePath(R));
     }
     g.restore();
     g.lineCap = g.lineJoin = 'round';
@@ -707,7 +851,7 @@ export function RouteMap({ map, date, trip, stops = [], entry = -1, onEntry, hei
     // (a label that would cover one already written goes to the left of its stop, else away)
     const taken = [];
     const free = (x, y, w) => !taken.some((r) => x < r[0] + r[2] && x + w > r[0] && y < r[1] + 20 && y + 20 > r[1]);
-    for (const s of d.stops) {
+    for (const s of R.stops) {
       const x = X(s.at[0]);
       const y = Y(s.at[1]);
       if (x < -300 || x > W + 300 || y < -30 || y > H + 30) continue;
@@ -747,8 +891,9 @@ export function RouteMap({ map, date, trip, stops = [], entry = -1, onEntry, hei
         g.fillText(plain(st.name), lx + 7 + g.measureText(`${st.time}  `).width, y + 4);
       }
     }
+    if (editor && d.busstops) drawEditorStops(g, d, editor, hoverStop, X, Y, W, H, v, taken, free, P);
     // entry points: amber, the hovered one ringed grey, the chosen one white
-    d.entries.forEach((e, i) => {
+    (editor ? [] : d.entries).forEach((e, i) => {
       const x = X(e.at[0]);
       const y = Y(e.at[1]);
       if (x < -20 || x > W + 20 || y < -20 || y > H + 20) return;
@@ -841,7 +986,7 @@ export function RouteMap({ map, date, trip, stops = [], entry = -1, onEntry, hei
     }, 150);
     request();
   };
-  useEffect(() => request(), [data, hover, entry, stops.map((x) => `${x.time} ${x.name}`).join('|')]);
+  useEffect(() => request(), [data, rt, hover, hoverStop, editor, entry, stops.map((x) => `${x.time} ${x.name}`).join('|')]);
   useEffect(() => () => {
     clearTimeout(settle.current);
     cancelAnimationFrame(frame.current);
@@ -905,8 +1050,31 @@ export function RouteMap({ map, date, trip, stops = [], entry = -1, onEntry, hei
     });
     return best;
   };
+  /** The timetable stop under a pointer position (within 10 pixels), as its place in the list. */
+  const stopAt = ([px, py]) => {
+    const d = data;
+    const v = view.current;
+    if (!d?.busstops || !v) return -1;
+    const W = box.current.clientWidth;
+    const H = box.current.clientHeight;
+    let best = -1;
+    let bd = 11 * 11;
+    d.busstops.forEach((b, i) => {
+      const dx = W / 2 + (b.at[0] - v.cx) / v.mpp - px;
+      const dy = H / 2 - (b.at[1] - v.cy) / v.mpp - py;
+      if (dx * dx + dy * dy < bd) (bd = dx * dx + dy * dy), (best = i);
+    });
+    return best;
+  };
+  // the editor sends the view somewhere (a stop chosen from a list): it flies there
+  useEffect(() => {
+    const f = editor?.focus;
+    if (!f || !view.current) return;
+    aim.current = { cx: f.x, cy: f.y, mpp: f.mpp ?? Math.min(view.current.mpp, 2.5), zoomAt: null };
+    animate();
+  }, [editor?.focus]);
   const drag = useRef(null);
-  return html`<div class="routemap" ref=${box} style=${height ? `height:${height}px` : ''}
+  return html`<div class="routemap" ref=${box} style=${(height ? `height:${height}px;` : '') + (hoverStop >= 0 ? 'cursor:pointer' : '')}
       onPointerDown=${(e) => {
         drag.current = { p: at(e), moved: 0 };
         // (a drag takes the map where it is: an easing in progress stops there)
@@ -927,6 +1095,9 @@ export function RouteMap({ map, date, trip, stops = [], entry = -1, onEntry, hei
           view.current.cy += dy * view.current.mpp;
           aim.current = { ...view.current, zoomAt: null };
           moving();
+        } else if (ed.current) {
+          const h = stopAt(p);
+          if (h !== hoverStop) setHoverStop(h);
         } else {
           const h = entryAt(p);
           if (h !== hover) setHover(h);
@@ -941,11 +1112,16 @@ export function RouteMap({ map, date, trip, stops = [], entry = -1, onEntry, hei
           request();
         }
         if (d && d.moved < 5) {
-          const i = entryAt(at(e));
-          if (i >= 0) onEntry?.(data.entries[i].index);
+          if (ed.current) {
+            const i = stopAt(at(e));
+            if (i >= 0) ed.current.onStop?.(data.busstops[i].id, e);
+          } else {
+            const i = entryAt(at(e));
+            if (i >= 0) onEntry?.(data.entries[i].index);
+          }
         }
       }}
-      onPointerLeave=${() => setHover(-1)}
+      onPointerLeave=${() => (setHover(-1), setHoverStop(-1))}
       onWheel=${(e) => {
         e.preventDefault();
         const v = view.current;
@@ -966,6 +1142,6 @@ export function RouteMap({ map, date, trip, stops = [], entry = -1, onEntry, hei
     ${!data && html`<div class="state"><${Spinner} /> ${t('Reading the map…')}</div>`}
     ${data?.error && html`<div class="state">${data.error}</div>`}
     ${(data?.credit || data?.package?.credit) && html`<div class="credit">${data.credit || data.package.credit}</div>`}
-    ${data && !data.error && html`<div class="legend">${t('{roads} roads | {stops} stops | {entries} entry points', { roads: data.roads.length, stops: data.stops.length, entries: data.entries.length })}</div>`}
+    ${data && !data.error && !editor && html`<div class="legend">${t('{roads} roads | {stops} stops | {entries} entry points', { roads: data.roads.length, stops: data.stops.length, entries: data.entries.length })}</div>`}
   </div>`;
 }

@@ -357,6 +357,7 @@ mod reach_tests {
             model_dir: Default::default(),
             program: Default::default(),
             meshes: vec![pm, sm],
+            lod_meshes: Vec::new(),
             paint_schemes: Vec::new(),
             texchanges: Vec::new(),
             wheel_meshes: Vec::new(),

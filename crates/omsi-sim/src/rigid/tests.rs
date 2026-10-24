@@ -952,3 +952,285 @@ fn moves_alike_at_any_frame_rate() {
     }
     assert!((rb.origin().y - y).abs() < 0.005, "crept {} m at 240 fps", rb.origin().y - y);
 }
+
+/// A body of the realistic road model (the setting on).
+fn realistic_body() -> RigidBody {
+    let mut rb = RigidBody::from_definition(&bus(), &[]);
+    rb.realistic = true;
+    rb
+}
+
+/// A bus at `kmh` over a flat road of `surface` for `secs`: the RMS of the body's vertical
+/// acceleration (m/s²) once it has settled.
+fn vertical_shake(surface: u8, kmh: f32, secs: f32) -> f32 {
+    let mut rb = realistic_body();
+    rb.place(DVec3::ZERO, 0.0);
+    let g = road(1e9, 0.0);
+    run(&mut rb, 2.0, 0.0, 0.0, &g);
+    let v = kmh / 3.6;
+    rb.velocity = rb.orientation.mul_vec3(Vec3::Y) * v;
+    for w in rb.wheels.iter_mut() {
+        w.spin = v / w.radius;
+        w.surface = surface;
+        w.surface_now = surface;
+        w.surface_was = surface;
+    }
+    let radius = rb.wheels.iter().find(|w| w.driven).unwrap().radius;
+    let mut samples = Vec::new();
+    for i in 0..(secs * 120.0) as usize {
+        // hold the speed so the roughness is driven over at the same pace throughout
+        let torque = ((v - rb.forward_speed()) * rb.mass * 2.0 + rb.rolling_resistance) * radius;
+        rb.step(1.0 / 120.0, torque, &[0.0; 4], 0.0, &g);
+        if i > 120 {
+            // (the body's acceleration reads 9.81 standing: what shakes is the deviation)
+            samples.push(rb.accel_body.z as f64);
+        }
+    }
+    let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+    (samples.iter().map(|a| (a - mean).powi(2)).sum::<f64>() / samples.len() as f64).sqrt() as f32
+}
+
+/// Cobbles, a gravel road and a slab road shake a bus - the "road damage has no impact"
+/// of #3069 - where asphalt hardly does, and a faster bus is shaken harder.
+#[test]
+fn a_rough_road_shakes_the_bus() {
+    let asphalt = vertical_shake(0, 40.0, 8.0);
+    let slabs = vertical_shake(1, 40.0, 8.0);
+    let cobbles = vertical_shake(2, 40.0, 8.0);
+    let gravel = vertical_shake(5, 40.0, 8.0);
+    eprintln!("vertical shake at 40 km/h (m/s² rms): asphalt {asphalt:.3}, slabs {slabs:.3}, cobbles {cobbles:.3}, gravel {gravel:.3}");
+    assert!(asphalt < 0.15, "asphalt {asphalt}");
+    assert!(slabs > asphalt * 1.5, "slabs {slabs} asphalt {asphalt}");
+    assert!(cobbles > asphalt * 2.5, "cobbles {cobbles} asphalt {asphalt}");
+    assert!(gravel > cobbles, "gravel {gravel} cobbles {cobbles}");
+    // the bus's own springs keep a dirt road within what a passenger bears (ISO 2631: a
+    // bus on a poor road is "a little uncomfortable" to "uncomfortable": 0.5-1.6 m/s²)
+    assert!(gravel < 3.0, "gravel {gravel}");
+    let fast = vertical_shake(2, 60.0, 8.0);
+    assert!(fast > cobbles, "the faster, the harder: {cobbles} at 40 km/h, {fast} at 60 (asphalt {asphalt}, slabs {slabs}, gravel {gravel})");
+}
+
+/// A bus brakes harder on dry asphalt than on grass or in the snow, with the same brakes.
+#[test]
+fn the_surface_decides_how_far_a_braking_bus_goes() {
+    let stop = |surface: u8, wet: f32| {
+        let mut rb = realistic_body();
+        rb.place(DVec3::ZERO, 0.0);
+        // the road's grip in the weather, as `road_grip` gives it
+        rb.friction = crate::vehicle::weather::road_grip(wet, 15.0);
+        rb.wetness = wet;
+        let g = road(1e9, 0.0);
+        run(&mut rb, 2.0, 0.0, 0.0, &g);
+        rb.velocity = rb.orientation.mul_vec3(Vec3::Y) * 16.0;
+        for w in rb.wheels.iter_mut() {
+            w.spin = 16.0 / w.radius;
+            w.surface = surface;
+            w.surface_now = surface;
+            w.surface_was = surface;
+        }
+        let y0 = rb.position.y;
+        // a brake the dry road takes, held
+        let brakes = vec![30_000.0; rb.wheels.len()];
+        for _ in 0..(12.0 * 120.0) as usize {
+            rb.step(1.0 / 120.0, 0.0, &brakes, 0.0, &g);
+        }
+        (rb.position.y - y0) as f32
+    };
+    let dry = stop(0, 0.0);
+    let wet = stop(0, 1.0);
+    let cobbles_wet = stop(2, 1.0);
+    let grass = stop(4, 0.0);
+    assert!(dry < wet && wet < cobbles_wet, "dry {dry}, wet {wet}, wet cobbles {cobbles_wet}, grass {grass}");
+    // 16 m/s at 0.85 g would stop in 15 m, on grass (0.5 x 0.85) in 30 m or more
+    assert!(dry > 14.0 && dry < 22.0, "dry {dry}");
+    assert!(grass > dry * 1.5, "grass {grass}");
+}
+
+/// The vehicle's scripts already put the still-air drag on its brakes (bremse.osc), so the body
+/// adds only what the weather changes: a headwind slows a coasting bus more, a tailwind less, a
+/// denser air more, and the air of the scripts nothing at all.
+#[test]
+fn the_weather_changes_the_drag_the_scripts_give() {
+    let coast = |density: f32, wind: Vec3| {
+        let mut rb = realistic_body();
+        rb.place(DVec3::ZERO, 0.0);
+        rb.air_density = density;
+        rb.wind = wind;
+        let g = road(1e9, 0.0);
+        run(&mut rb, 2.0, 0.0, 0.0, &g);
+        rb.velocity = rb.orientation.mul_vec3(Vec3::Y) * 25.0;
+        for w in rb.wheels.iter_mut() {
+            w.spin = 25.0 / w.radius;
+        }
+        run(&mut rb, 10.0, 0.0, 0.0, &g);
+        rb.forward_speed()
+    };
+    let calm = coast(realism::SCRIPT_DENSITY, Vec3::ZERO);
+    // (only the rolling resistance of the file slows it: 1 kN on 10 t for 10 s)
+    assert!(calm > 23.5 && calm < 25.0, "{calm}");
+    assert!(coast(1.4, Vec3::ZERO) < calm, "a denser air takes more");
+    assert!(coast(realism::SCRIPT_DENSITY, Vec3::new(0.0, -12.0, 0.0)) < calm - 0.5, "a headwind takes more");
+    assert!(coast(realism::SCRIPT_DENSITY, Vec3::new(0.0, 12.0, 0.0)) > calm, "a tailwind takes less");
+}
+
+/// The OMSI 2 model (the setting off) is as it was: a bus follows its wheels at any speed
+/// short of the grip, asphalt is smooth, and the old drag (the mass-guessed area) acts.
+#[test]
+fn without_the_setting_the_body_is_omsi_s() {
+    let mut rb = RigidBody::from_definition(&bus(), &[]);
+    assert!(!rb.realistic, "off by default");
+    rb.place(DVec3::ZERO, 0.0);
+    for w in rb.wheels.iter_mut() {
+        w.surface = 2;
+    }
+    let g = road(1e9, 0.0);
+    run(&mut rb, 2.0, 0.0, 0.0, &g);
+    assert!(rb.wheels.iter().all(|w| w.rough == 0.0 && w.mu_scale == 1.0), "no road unevenness or surface grip");
+    rb.wind = Vec3::new(-25.0, 0.0, 0.0);
+    let before = rb.velocity;
+    run(&mut rb, 1.0, 0.0, 0.0, &g);
+    assert!((rb.velocity - before).length() < 0.05, "no wind");
+    // a bend follows the wheels at 50 km/h, instantly
+    let mut rb = RigidBody::from_definition(&bus(), &[]);
+    rb.place(DVec3::ZERO, 0.0);
+    run(&mut rb, 2.0, 0.0, 0.0, &g);
+    rb.velocity = rb.orientation.mul_vec3(Vec3::Y) * 13.9;
+    for w in rb.wheels.iter_mut() {
+        w.spin = 13.9 / w.radius;
+    }
+    let radius = rb.wheels.iter().find(|w| w.driven).unwrap().radius;
+    let mut yaw = 0.0;
+    for i in 0..480 {
+        let torque = ((13.9 - rb.forward_speed()) * rb.mass * 2.0 + rb.rolling_resistance) * radius;
+        rb.step(1.0 / 60.0, torque, &[0.0; 4], 0.15, &g);
+        if i >= 420 {
+            yaw += rb.omega.z.abs() / 60.0;
+        }
+    }
+    let ratio = yaw / (rb.forward_speed() * 0.15 * rb.inv_min_turn_radius);
+    assert!((ratio - 1.0).abs() < 0.03, "{ratio}");
+}
+
+/// A tyre that leaves the ground or is put down anew starts without a lagging contact patch.
+#[test]
+fn a_tyre_in_the_air_forgets_its_patch() {
+    let mut rb = realistic_body();
+    rb.place(DVec3::ZERO, 0.0);
+    rb.wheels[0].lat_defl = 0.05;
+    rb.place(DVec3::new(10.0, 0.0, 0.0), 0.0);
+    assert_eq!(rb.wheels[0].lat_defl, 0.0, "put down anew");
+    let g = road(1e9, 0.0);
+    run(&mut rb, 1.0, 0.0, 0.0, &g);
+    rb.wheels[1].lat_defl = 0.04;
+    // (no ground at all: every tyre is in the air)
+    let air = |_x: f64, _y: f64, _t: f64| GroundProbe { below: None, above: None };
+    rb.step(1.0 / 60.0, 0.0, &[0.0; 4], 0.0, &air);
+    assert_eq!(rb.wheels[1].lat_defl, 0.0);
+}
+
+/// A gale across the road pushes a standing bus along the wind and leans it.
+#[test]
+fn a_crosswind_leans_and_pushes_the_bus() {
+    let mut rb = realistic_body();
+    rb.place(DVec3::ZERO, 0.0);
+    // blowing towards -x (to the bus's left)
+    rb.wind = Vec3::new(-25.0, 0.0, 0.0);
+    let g = road(1e9, 0.0);
+    run(&mut rb, 3.0, 0.0, 0.0, &g);
+    let (_, _, bank) = rb.heading_pitch_bank();
+    let mut calm = realistic_body();
+    calm.place(DVec3::ZERO, 0.0);
+    run(&mut calm, 3.0, 0.0, 0.0, &g);
+    let (_, _, calm_bank) = calm.heading_pitch_bank();
+    // a bus on its tyres does not blow away, but its body leans from the gale
+    assert!((bank - calm_bank).abs() > 0.05, "no lean: {bank} against {calm_bank}");
+    assert!(rb.velocity.length() < 0.5, "a standing bus holds its place: {:?}", rb.velocity);
+}
+
+/// The yaw rate the bus settles to in a steady bend of `steer` at `kmh`, against the
+/// geometry's own (speed times the curvature the steering asks for): 1 is a bus that
+/// follows its wheels.
+fn yaw_ratio(kmh: f32, steer: f32, fps: f32) -> f32 {
+    let mut rb = realistic_body();
+    rb.place(DVec3::ZERO, 0.0);
+    let g = road(1e9, 0.0);
+    run(&mut rb, 2.0, 0.0, 0.0, &g);
+    let v = kmh / 3.6;
+    rb.velocity = rb.orientation.mul_vec3(Vec3::Y) * v;
+    for w in rb.wheels.iter_mut() {
+        w.spin = v / w.radius;
+    }
+    let radius = rb.wheels.iter().find(|w| w.driven).unwrap().radius;
+    let dt = 1.0 / fps;
+    let mut yaw = 0.0;
+    let n = (8.0 / dt) as usize;
+    for i in 0..n {
+        let torque = ((v - rb.forward_speed()) * rb.mass * 2.0 + rb.rolling_resistance) * radius;
+        rb.step(dt, torque, &[0.0; 4], steer, &g);
+        if i + (fps as usize) >= n {
+            yaw += rb.omega.z.abs() / fps;
+        }
+    }
+    yaw / (rb.forward_speed() * steer * rb.inv_min_turn_radius).max(1e-6)
+}
+
+/// A slip-angle tyre needs slip to make a side force: a bus follows its wheels at a walking
+/// pace and understeers as it goes faster, and the same at any frame rate.
+#[test]
+fn a_bus_understeers_as_it_speeds_up() {
+    let slow = yaw_ratio(10.0, 0.15, 60.0);
+    let mid = yaw_ratio(40.0, 0.15, 60.0);
+    let fast = yaw_ratio(70.0, 0.15, 60.0);
+    assert!(slow > 0.97 && slow < 1.03, "walking pace: {slow}");
+    assert!(mid < slow && fast < mid, "{slow} {mid} {fast}");
+    assert!(mid > 0.8 && fast > 0.5, "{mid} {fast}");
+    for fps in [30.0, 120.0] {
+        let r = yaw_ratio(40.0, 0.15, fps);
+        assert!((r - mid).abs() < 0.04, "{fps} fps: {r} against {mid}");
+    }
+}
+
+/// A bus on a road that falls away sideways stays where it is: the tyres hold it across.
+#[test]
+fn the_tyres_hold_a_parked_bus_on_a_cross_slope() {
+    let slope = |grade: f64| move |x: f64, _y: f64, top: f64| {
+        let z = -grade * x;
+        if z <= top { GroundProbe { below: Some(z), above: None } } else { GroundProbe { below: Some(z - 1.0), above: Some(z) } }
+    };
+    for (grade, holds) in [(0.08, true), (0.3, true)] {
+        let mut rb = realistic_body();
+        rb.place(DVec3::ZERO, 0.0);
+        let g = slope(grade);
+        let brakes = vec![3000.0; rb.wheels.len()];
+        for _ in 0..(6.0 * 60.0) as usize {
+            rb.step(1.0 / 60.0, 0.0, &brakes, 0.0, &g);
+        }
+        let moved = rb.position.x.abs();
+        if holds {
+            assert!(moved < 0.5, "slid {moved} m on {grade}");
+        } else {
+            assert!(moved > 1.0, "held on {grade}");
+        }
+    }
+}
+
+/// What the realistic road model costs a step: `cargo test -p omsi-sim --release physics_cost -- --ignored --nocapture`.
+#[test]
+#[ignore = "a measurement, not a check"]
+fn physics_cost() {
+    let g = road(1e9, 0.0);
+    for realistic in [false, true] {
+        let mut rb = RigidBody::from_definition(&bus(), &[]);
+        rb.realistic = realistic;
+        rb.place(DVec3::ZERO, 0.0);
+        run(&mut rb, 2.0, 0.0, 0.0, &g);
+        rb.velocity = rb.orientation.mul_vec3(Vec3::Y) * 14.0;
+        let steps = 20_000;
+        let t = std::time::Instant::now();
+        for i in 0..steps {
+            rb.step(1.0 / 120.0, 3000.0, &[0.0; 4], (i as f32 * 0.01).sin() * 0.2, &g);
+        }
+        let us = t.elapsed().as_secs_f64() * 1e6 / steps as f64;
+        eprintln!("{} road model: {us:.1} us per step of 1/120 s", if realistic { "realistic" } else { "OMSI 2   " });
+    }
+}

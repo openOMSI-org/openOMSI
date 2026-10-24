@@ -20,8 +20,14 @@
 // The sky cube keeps the result in a fixed world frame (lib.rs `SKY_CUBE_SIZE`): each
 // redraw starts the steps at another random point and is blended into what is there, so
 // the grain of a few dozen steps averages out over the frames.
-const CLOUD_BOTTOM: f32 = 1400.0;
-const CLOUD_TOP: f32 = 2800.0;
+// The layer's base and top over the ground (m): the weather model's condensation level
+// and where its convection stops (a shallow stratocumulus sheet under a high, towers in
+// a moist lifting troposphere, a thunderstorm's whole troposphere); 1400 and 2800 for the
+// stock weather.
+fn cloud_bottom() -> f32 { return enh.layers.x; }
+fn cloud_top() -> f32 { return enh.layers.y; }
+// The storm's activity: the layer is a cumulonimbus, dense, dark, with its anvil.
+fn storm_cb() -> f32 { return enh.layers.w; }
 const EARTH_R: f32 = 6371000.0;
 // Extinction per metre of the densest cloud.
 const CLOUD_SIGMA: f32 = 0.035;
@@ -106,7 +112,7 @@ fn cloud_shell(d: vec3<f32>, h: f32) -> f32 {
 // The sun's irradiance at height z (as `cloud_height` gives it) in the cloud layer:
 // between the base, middle and top of `enh.cloud_sun`.
 fn cloud_sun_at(z: f32) -> vec3<f32> {
-    let t = clamp((z - CLOUD_BOTTOM) / (CLOUD_TOP - CLOUD_BOTTOM), 0.0, 1.0) * 2.0;
+    let t = clamp((z - cloud_bottom()) / (cloud_top() - cloud_bottom()), 0.0, 1.0) * 2.0;
     return select(mix(enh.cloud_sun[1].rgb, enh.cloud_sun[2].rgb, t - 1.0), mix(enh.cloud_sun[0].rgb, enh.cloud_sun[1].rgb, t), t < 1.0);
 }
 
@@ -129,8 +135,22 @@ fn cloud_base_shape(p: vec3<f32>, h: f32, lod: f32) -> vec2<f32> {
     // the heap narrows upwards (every heap: with the map's rounding alone, a heap where it
     // was small rose as a column with a flat lid against the top of the layer)
     let n = h * h * (0.7 + s.b) + pow(1.0 - h, 16.0);
-    let m = (s.r - n - lo) / (1.0 - lo);
-    return vec2<f32>(m * (linearstep(0.0, 0.1, h) - linearstep(0.6, 1.0, h)), s.b);
+    var m = (s.r - n - lo) / (1.0 - lo);
+    let cb = storm_cb();
+    // (a storm's heap stands up to near the top of the layer instead of fading over its
+    // upper 40 %, and spreads into an anvil under the tropopause: a flat sheet, wide as the
+    // coarse shape of the heaps round it, which the upper level wind pulls downwind)
+    let top_fade = mix(0.6, 0.86, cb);
+    var shape_m = m * (linearstep(0.0, 0.1, h) - linearstep(top_fade, 1.0, h));
+    if (cb > 0.05) {
+        let wide = textureSampleLevel(t_cloud_shape, s_cloud, (p.xy + drift + vec2<f32>(1500.0, 800.0) * (h - 0.8)) / CLOUD_SHAPE_PERIOD, lod + 4.0).r;
+        // (it follows the heaps' own picture, and is thin and torn at its edges, as the real
+        // sheet of ice crystals is: a flat plateau with a sharp rim read as an oval lid)
+        let spread = smoothstep(0.35, 0.7, mix(wide, s.r, 0.5));
+        let anvil = cb * smoothstep(0.74, 0.86, h) * (1.0 - smoothstep(0.9, 1.0, h)) * spread * spread;
+        shape_m = max(shape_m, anvil * (0.15 + 0.85 * s.r));
+    }
+    return vec2<f32>(shape_m, s.b);
 }
 
 // Extinction (1/m) at p.
@@ -165,23 +185,85 @@ fn cloud_sigma(p: vec3<f32>, h: f32, coverage: f32, lod: f32) -> f32 {
     // fair-weather cumulus keeps the scale the look was tuned on, and it is a rising
     // cover - a storm's denser droplets - that takes it up to 2.6 times under a shut one.
     let storm = smoothstep(0.55, 0.95, camera.clouds.x);
-    return m * CLOUD_SIGMA * (1.0 + 1.6 * storm);
+    return m * CLOUD_SIGMA * (1.0 + 1.6 * max(storm, storm_cb()));
+}
+
+// The lightning's colour: a channel of plasma at some 30 000 K, scattered by the cloud
+const FLASH_COLOUR: vec3<f32> = vec3<f32>(0.80, 0.90, 1.0);
+
+fn flash_dir() -> vec3<f32> {
+    return enh.flash2.xyz;
+}
+
+// The light a flash puts into the cloud at p (as radiance towards the camera): the cloud
+// lights up round the flash, brightest next to its channel, fading with the distance from
+// it through the cloud (a cell's size is some ten kilometres; the light spreads by
+// multiple scattering far beyond the flash itself).
+fn flash_in_cloud(p: vec3<f32>, d: vec3<f32>) -> vec3<f32> {
+    if (enh.flash.x <= 0.0) {
+        return vec3<f32>(0.0);
+    }
+    let fd = flash_dir();
+    let ang = acos(clamp(dot(d, fd), -1.0, 1.0));
+    let near = exp(-ang * ang / (2.0 * 0.22 * 0.22));
+    let broad = exp(-ang * ang / (2.0 * 0.9 * 0.9));
+    return FLASH_COLOUR * enh.flash.x * (8.0 * near + 1.0 * broad);
+}
+
+// The channel of a cloud-to-ground stroke: a jagged line from the cloud's base to the
+// ground (a fractal in the real thing; sines of three scales with the flash's seed make the
+// same crooked path, one branch breaking off a third of the way down), seen as a thin hot
+// core in a wider halo.
+fn flash_channel(d: vec3<f32>) -> vec3<f32> {
+    let k = enh.flash2.w;
+    if (k <= 0.01) {
+        return vec3<f32>(0.0);
+    }
+    let az = vec2<f32>(enh.flash.y, enh.flash.z);
+    // angle sideways from the flash's vertical plane, and the elevation, of this pixel
+    let across = (d.x * az.y - d.y * az.x);
+    let along = d.x * az.x + d.y * az.y;
+    if (along <= 0.0) {
+        return vec3<f32>(0.0);
+    }
+    let el = atan2(d.z, along);
+    let top = enh.flash.w + 0.14;
+    let bottom = 0.0;
+    if (el > top || el < bottom - 0.02) {
+        return vec3<f32>(0.0);
+    }
+    let u = clamp((top - el) / (top - bottom), 0.0, 1.0);
+    let seed = enh.flash3.x;
+    let amp = (top - bottom) * 0.22;
+    let path = amp * (0.5 * sin(6.0 * u + seed) + 0.28 * sin(17.0 * u + 2.3 * seed) + 0.14 * sin(41.0 * u + 3.1 * seed));
+    var dist = abs(across - path);
+    // the branch: leaves the channel at a third of its way down and bends away from it
+    let ub = 0.33;
+    if (u > ub && u < ub + 0.4) {
+        let pb = amp * (0.5 * sin(6.0 * ub + seed) + 0.28 * sin(17.0 * ub + 2.3 * seed) + 0.14 * sin(41.0 * ub + 3.1 * seed));
+        let side = select(-1.0, 1.0, fract(seed * 7.0) > 0.5);
+        let branch = pb + side * (u - ub) * (top - bottom) * 0.45 + amp * 0.12 * sin(33.0 * (u - ub) + seed);
+        dist = min(dist, abs(across - branch) * 1.6);
+    }
+    let core = exp(-dist * dist / (2.0 * 0.0009 * 0.0009));
+    let halo = exp(-dist * dist / (2.0 * 0.008 * 0.008));
+    return FLASH_COLOUR * k * (60.0 * core + 1.5 * halo) * (1.0 - 0.5 * u);
 }
 
 // The clouds towards d in front of `below` (the sky behind them): rgb the picture, a how
 // much the clouds cover.
 fn cloud_layer(d: vec3<f32>, below: vec3<f32>, pix: f32) -> vec4<f32> {
-    if (camera.clouds.x <= 0.001 || d.z <= -0.01 || camera.cam_pos.z + eye_off.z > CLOUD_BOTTOM) {
+    if (camera.clouds.x <= 0.001 || d.z <= -0.01 || camera.cam_pos.z + eye_off.z > cloud_bottom()) {
         return vec4<f32>(below, 0.0);
     }
     let sd = normalize(camera.sun_dir.xyz);
     // a closed cover (or a sky that rain or snow falls from) is the grey deck of the table
     let closed = max(smoothstep(0.85, 1.0, camera.clouds.x), enh.weather.w);
-    let t0 = cloud_shell(d, CLOUD_BOTTOM);
+    let t0 = cloud_shell(d, cloud_bottom());
     if (t0 < 0.0 || t0 > CLOUD_MAX_DIST) {
         return vec4<f32>(below, 0.0);
     }
-    let t1 = min(cloud_shell(d, CLOUD_TOP), min(t0 + 12000.0, CLOUD_MAX_DIST + 6000.0));
+    let t1 = min(cloud_shell(d, cloud_top()), min(t0 + 12000.0, CLOUD_MAX_DIST + 6000.0));
     // (the march's steps: `CLOUD_STEPS` in lib.rs, fewer with the low cloud quality)
     let steps = max(i32(enh.eye.w), 1);
     let ds = (t1 - t0) / f32(steps);
@@ -200,7 +282,7 @@ fn cloud_layer(d: vec3<f32>, below: vec3<f32>, pix: f32) -> vec4<f32> {
     var t = t0 + ds * cloud_jitter;
     for (var i = 0; i < steps; i = i + 1) {
         let p = vec3<f32>(cloud_ground(d, t), cloud_height(d, t));
-        let h = (p.z - CLOUD_BOTTOM) / (CLOUD_TOP - CLOUD_BOTTOM);
+        let h = (p.z - cloud_bottom()) / (cloud_top() - cloud_bottom());
         let sigma = cloud_sigma(p, h, coverage, lod);
         if (sigma > 1e-6) {
             // the sunlight reaching p through the cloud towards the sun (with the billows
@@ -212,7 +294,7 @@ fn cloud_layer(d: vec3<f32>, below: vec3<f32>, pix: f32) -> vec4<f32> {
             var lt = ls * 0.5;
             for (var k = 0; k < 6; k = k + 1) {
                 let q = p + sd * lt;
-                let hq = (q.z - CLOUD_BOTTOM) / (CLOUD_TOP - CLOUD_BOTTOM);
+                let hq = (q.z - cloud_bottom()) / (cloud_top() - cloud_bottom());
                 if (hq >= 1.0) {
                     break;
                 }
@@ -263,7 +345,7 @@ fn cloud_layer(d: vec3<f32>, below: vec3<f32>, pix: f32) -> vec4<f32> {
             // (the floor is the light that comes in sideways, through the gaps and the thin
             // parts around: half of what it was, now that the light from above through the
             // depth - which it used to stand in for - is counted by `through` itself)
-            let deep = smoothstep(0.6, 0.85, camera.clouds.x);
+            let deep = max(smoothstep(0.6, 0.85, camera.clouds.x), storm_cb());
             let shade = mix(0.20, 0.02, deep);
             let through = 1.0 / (1.0 + 0.75 * (1.0 - CLOUD_G) * od);
             let amb = mix(ground * 0.45 + sky_top * 0.55, sky_top * 1.1, clamp(h * 1.4, 0.0, 1.0)) * (shade + (1.0 - shade) * through);
@@ -292,8 +374,24 @@ fn cloud_layer(d: vec3<f32>, below: vec3<f32>, pix: f32) -> vec4<f32> {
     // flat card used to be laid over the clouds to read as overcast, one even tone with
     // nothing in it. The deck itself carries it now - as dark as it is deep, and with
     // its own heaps in it; `closed` stays on to hide the high veil under a shut sky.)
-    // the high, thin layer
     let drift = camera.clouds.yz * 2500.0;
+    // altocumulus: a sheet of rolls and cells at 4 km (the middle levels' moisture ahead of
+    // a front), lit by the sun through the air up there and darker where it is thick
+    let alto_cover = enh.layers.z * (1.0 - closed) * clamp(d.z * 6.0, 0.0, 1.0);
+    if (alto_cover > 0.01 && camera.cam_pos.z + eye_off.z < 4000.0) {
+        let t_alto = (4000.0 - camera.cam_pos.z - eye_off.z) / max(d.z, 0.03);
+        let pa = cloud_ground(d, t_alto);
+        let rolls = cloud_fbm((pa + drift * 1.4) / 700.0);
+        let cells = cloud_fbm((pa + drift * 1.4) / 180.0 + vec2<f32>(7.1, 3.3));
+        let dens = rolls * 0.7 + cells * 0.3;
+        let thick = smoothstep(1.0 - alto_cover * 0.9 - 0.15, 1.0 - alto_cover * 0.9 + 0.12, dens);
+        let lit = enh.cloud_sun[3].rgb * (0.10 + 0.55 * hg_phase(cos_sun, 0.7)) / PI;
+        let under = mix(1.0, 0.45, thick * thick);
+        let alto_col = (lit * mix(0.5, 1.0, cells) + sky_top * 0.85) * under;
+        let alto_a = thick * 0.85 * (1.0 - a) * (1.0 - smoothstep(30000.0, 90000.0, t_alto));
+        col = mix(col, alto_col, alto_a);
+    }
+    // the high, thin layer
     let t_hi = 7000.0 / max(d.z, 0.02);
     let p_hi = cloud_ground(d, t_hi);
     let hi = cloud_fbm((p_hi + drift * 1.7) / 2500.0);
@@ -337,8 +435,8 @@ fn enhanced_sky(in: VsOut) -> vec4<f32> {
     // the cube is drawn from its own eye (lib.rs Probe::cube_eye): look the clouds' base up
     // from there, so the sky does not slide with a camera that moved since
     var ld = d;
-    let tb = cloud_shell(d, CLOUD_BOTTOM);
-    if (tb > 0.0 && camera.cam_pos.z < CLOUD_BOTTOM) {
+    let tb = cloud_shell(d, cloud_bottom());
+    if (tb > 0.0 && camera.cam_pos.z < cloud_bottom()) {
         ld = normalize(d * min(tb, CLOUD_MAX_DIST) - enh.eye.xyz);
     }
     let cube = textureSampleLevel(t_sky_cube, s_lin, vec3<f32>(ld.x, ld.z, ld.y), 0.0);
@@ -360,6 +458,12 @@ fn enhanced_sky(in: VsOut) -> vec4<f32> {
         sun_px = l;
     }
     col = col + night_sky(d, cube.a, fwidth(d));
+    // lightning (not part of the cube, which keeps a few seconds of history: a flash lasts
+    // a tenth of one): the cloud lit from inside, the haze lit a little, and the channel
+    if (enh.flash.x > 0.0) {
+        col = col + flash_in_cloud(vec3<f32>(0.0), d) * (0.12 + 0.88 * cube.a);
+        col = col + flash_channel(d);
+    }
     // the dome is drawn pre-exposed; the disc only a little over white: the eye's glare round
     // it is drawn from its light (fog_lamps.wgsl `sun_glare`), and from the disc's pixels
     // as well the glow would have counted it twice

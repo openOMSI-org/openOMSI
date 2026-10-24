@@ -917,25 +917,38 @@ fn object_lights(state: &mut TileState, ot: &ObjectType, pos: DVec3, xf: Mat4, l
         // declared as 0.1 red is a glow by its pumps, not a red wash over the
         // whole street.
         // (A building's window glow is declared with a core of 60 or 120 m: filled at full colour that
-        // far round, the snow and the ground of the whole street glowed with it, evenly, from windows
-        // that light a few metres of their facade. The core is held to 15 m - a street lamp's is
-        // 12 - and the light falls off with the square of the distance beyond it. The baked light
-        // maps of the vanilla picture keep the authored radius.)
+        // far round, the ground of the whole street glowed with it, evenly, from windows that light
+        // a few metres of their facade. The core is held to 15 m - a street lamp's is 12 - and the
+        // light falls off with the square of the distance beyond it. The baked light maps of the vanilla
+        // picture keep the authored radius.)
         // (And a building's light is not a street lamp's: a lit room lights the ground outside a
         // fifth as much - a courtyard ringed by lit windows came out as bright as the street under
         // a lamp, as every window added a lamp's full colour.)
-        let glow = if lamp.is_none() && ml.radius > 6.0 { 0.2 } else { 1.0 };
-        let core = ml.radius.max(0.5).min(15.0);
-        state.lights.push(omsi_render::PointLight {
+        // (A source of 6 to 25 m - a floodlight mast's core is 20, a petrol station's canopy 10 and
+        // 20 - is held so for the plain picture, Vanilla and Vanilla+, as before. The Enhanced
+        // picture lights its ground by the lamps alone, not by the baked pools as well, and takes it
+        // as declared, at its own full colour: see `LightMode`.)
+        let window_glow = lamp.is_none() && ml.radius > 6.0;
+        let held = ml.radius.max(0.5).min(15.0);
+        let glow = if window_glow { 0.2 } else { 1.0 };
+        let owner = embedded.get(k).copied().unwrap_or(false).then_some(key);
+        let light = |core: f32, glow: f32, mode: omsi_render::LightMode| omsi_render::PointLight {
             position: p,
             radius: core * 6.0,
             color: [ml.color[0] * glow, ml.color[1] * glow, ml.color[2] * glow],
             intensity: 1.0,
             core,
             housed: true,
-            shadow_owner: embedded.get(k).copied().unwrap_or(false).then_some(key),
+            shadow_owner: owner,
+            mode,
             ..Default::default()
-        });
+        };
+        if window_glow && ml.radius <= 25.0 {
+            state.lights.push(light(held, glow, omsi_render::LightMode::Vanilla));
+            state.lights.push(light(ml.radius, 1.0, omsi_render::LightMode::Enhanced));
+        } else {
+            state.lights.push(light(held, glow, omsi_render::LightMode::Both));
+        }
     }
 }
 
@@ -1174,6 +1187,34 @@ mod embedded_light_tests {
             assert_eq!(placed.color, source.color);
             assert_eq!(placed.intensity, 1.0);
         }
+    }
+
+    /// A floodlight mast's core (20 m) and a petrol station's canopy are held, as before, for the
+    /// plain picture and as declared for the Enhanced one; a building's window glow, declared with
+    /// a core past 25 m, is held to 15 m and a fifth in both.
+    #[test]
+    fn floodlights_are_as_declared_in_enhanced_and_held_in_the_plain_picture() {
+        use omsi_render::LightMode;
+        let mut fixture = pole_fixture();
+        fixture.sco.crash_mode_pole = None;
+        fixture.sco.map_lights = vec![
+            omsi_scenery::sco::MapLight { pos: [0.0; 3], color: [1.0, 0.776, 0.46], radius: 20.0 },
+            omsi_scenery::sco::MapLight { pos: [8.0, 0.0, 0.0], color: [1.0; 3], radius: 60.0 },
+        ];
+        let mut state = TileState::default();
+        object_lights(&mut state, &fixture, DVec3::ZERO, Mat4::IDENTITY, None, 7);
+        assert_eq!(state.lights.len(), 3);
+        let [plain, enhanced, glow] = [&state.lights[0], &state.lights[1], &state.lights[2]];
+        assert_eq!((plain.mode, plain.core, plain.radius), (LightMode::Vanilla, 15.0, 90.0));
+        assert!((plain.color[0] - 0.2).abs() < 1e-6 && (plain.color[1] - 0.1552).abs() < 1e-4);
+        assert_eq!((enhanced.mode, enhanced.core, enhanced.radius), (LightMode::Enhanced, 20.0, 120.0));
+        assert_eq!(enhanced.color, [1.0, 0.776, 0.46]);
+        assert_eq!((glow.mode, glow.core, glow.radius), (LightMode::Both, 15.0, 90.0));
+        assert!((glow.color[0] - 0.2).abs() < 1e-6);
+        // a street lamp's source (a `lamp`) is a lamp's full colour, one light for both
+        let mut state = TileState::default();
+        object_lights(&mut state, &fixture, DVec3::ZERO, Mat4::IDENTITY, Some((3, 0, true)), 7);
+        assert!(state.lights.iter().all(|l| l.mode == LightMode::Both && l.color[0] == 1.0));
     }
 }
 

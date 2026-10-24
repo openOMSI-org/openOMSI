@@ -359,7 +359,7 @@ fn act(s: &mut State, a: &Value) -> anyhow::Result<Value> {
         }
         "tour" => {
             let num = st("tour");
-            let other_day = s.line().and_then(|l| l.tours.iter().find(|t| t.number == num)).filter(|t| !t.runs).and_then(|t| t.next_run.clone());
+            let other_day = s.line().and_then(|l| l.tour(&num)).filter(|t| !t.runs).and_then(|t| t.next_run.clone());
             // a tour of another day moves the date to the next day it runs (OMSI lists only
             // the day's tours)
             if let Some(n) = other_day {

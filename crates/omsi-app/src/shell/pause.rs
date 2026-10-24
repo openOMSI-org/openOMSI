@@ -8,22 +8,24 @@
 //! description\u{1f}fraction`, see `ui::MenuKind::Options`); what a click does goes back to
 //! the game as an [`Action`].
 
+pub(crate) mod navigation;
+mod navigation_ui;
+
+use std::borrow::Cow;
 use glam::Vec2;
 use omsi_ui::paint::Align;
 use omsi_ui::{Color, Rect, Weight};
-use std::borrow::Cow;
 
 use super::{Action, Shell};
 use omsi_ui::theme::*;
 use omsi_ui::kit::{id_of, ButtonKind, Ui};
 use crate::ui::{DropdownView, MenuKind, Preview};
 
-/// The page's background behind a list or settings window: the launcher's, solid.
+/// The solid background behind a list or settings window.
 const PAGE: Color = BG;
-/// ... and on the home page, where nothing but the sidebar is drawn: the paused game stays
-/// in view, dimmed.
+/// Keep the paused game visible behind the category home pages.
 const HOME_VEIL: Color = Color([BG.0[0], BG.0[1], BG.0[2], 0.72]);
-/// Narrower than this (points) an open page has the screen to itself.
+/// Compact margins for the existing settings and list pages.
 const NARROW: f32 = 560.0;
 /// A list's row.
 const LIST_ROW: f32 = 40.0;
@@ -50,6 +52,7 @@ pub(crate) struct PauseView<'a> {
     pub rail: &'a [crate::app_impl::MenuLine],
     /// The line the keyboard is on (the game menu's, while no list is open).
     pub rail_sel: Option<usize>,
+    pub disabled: &'a [&'a str],
     /// The line of the rail the open list belongs to.
     pub rail_open: Option<&'static str>,
     pub list: Option<ListView<'a>>,
@@ -88,6 +91,8 @@ pub(crate) fn rail_icon(id: &str) -> &'static str {
         "load" => "history",
         "copycode" => "content_copy",
         "admin" => "key",
+        "players" => "group",
+        "plugin" => "extension",
         "quit" => "logout",
         _ => "chevron_right",
     }
@@ -104,124 +109,19 @@ fn plain(label: &str) -> (&str, bool) {
 
 pub(crate) fn draw(sh: &mut Shell, v: &PauseView) {
     let size = sh.ui.size;
-    // the launcher's window: its sidebar and a page beside it - the home page with the
-    // session's summary, or the list or settings window opened from the sidebar
-    // (on a narrow screen - a phone held upright - an open page takes the whole width, the
-    // way back at its top: beside the rail it was a strip with the switches and no names)
-    let narrow = v.list.is_some() && size.x < NARROW;
-    let page = if narrow { Rect::new(0.0, 0.0, size.x, size.y) } else { Rect::new(RAIL_W, 0.0, (size.x - RAIL_W).max(0.0), size.y) };
+    // Drawing a submenu must not change the category that opened it.
+    let sidebar = size.x >= if v.list.is_some() { NARROW } else { 700.0 };
+    let left = if sidebar { RAIL_W } else { 0.0 };
+    let page = Rect::new(left, 0.0, (size.x - left).max(0.0), size.y);
     sh.ui.solid(page);
-    match v.list.as_ref() {
-        Some(list) => {
-            sh.ui.p().rect(page, PAGE);
-            list_page(sh, v, list, page);
-        }
-        // (the home page: the game, dimmed - the sidebar holds every action)
-        None => sh.ui.p().rect(page, HOME_VEIL),
+    sh.ui.p().rect(page, if v.list.is_some() { PAGE } else { HOME_VEIL });
+    if let Some(list) = v.list.as_ref() {
+        list_page(sh, v, list, page);
+    } else {
+        navigation_ui::page(sh, v, page, !sidebar);
     }
-    if !narrow {
-        rail(sh, v);
-    }
-}
-
-
-
-/// The launcher's sidebar with the game menu's lines as its items: the logo, the name and
-/// the version on top, the items (the open one on the highest grey, its icon in the
-/// accent), room between their groups, the driver at the bottom.
-fn rail(sh: &mut Shell, v: &PauseView) {
-    let size = sh.ui.size;
-    let r = Rect::new(0.0, 0.0, RAIL_W, size.y);
-    let logo = sh.logo_tex;
-    let ui = &mut sh.ui;
-    ui.solid(r);
-    ui.p().rect(r, SIDEBAR);
-    // the brand
-    if let Some(tex) = logo {
-        ui.image(Rect::new(18.0, 16.0, 32.0, 32.0), tex, 7.0);
-    }
-    ui.text("openOMSI", Vec2::new(58.0, 31.0), 17.0, Weight::Bold, INK, Align::Left);
-    let state = omsi_ui::tr(if v.paused { "Paused" } else { "Menu" }).into_owned();
-    ui.text(&format!("{}  -  {state}", crate::startup::VERSION), Vec2::new(58.0, 46.0), 11.5, Weight::Medium, INK_MUTED, Align::Left);
-    // the items
-    let lines: Vec<(usize, &str, &str, Option<&omsi_plugin::ui::MenuItem>)> = v.rail.iter().enumerate().map(|(k, l)| (k, l.0, l.1.as_ref(), l.2.as_ref())).collect();
-    let top = 70.0;
-    let foot = 12.0 + 56.0 + 10.0;
-    let area = Rect::new(0.0, top, RAIL_W, (size.y - top - foot).max(42.0));
-    let any_hover = ui.hover(area);
-    let mut picked: Option<usize> = None;
-    let mut sel_y: Option<f32> = None;
-    ui.scroll_area("pause-rail", area, &mut |ui, view| {
-        let mut y = view.y;
-        let mut last = "";
-        for &(k, id, label, line) in &lines {
-            // room between the groups (the everyday lines, the plugins', saving, the way
-            // out), as the launcher's `nav-sep`
-            if matches!(id, "save" | "admin" | "quit") || (id == "plugin" && last != "plugin") {
-                y += 10.0;
-            }
-            last = id;
-            // (a plugin's line: its own icon - the plugins' one for an icon the game does not
-            // have - and a key of its own for the hover)
-            let (icon, key) = match line {
-                Some(m) => (m.icon.as_deref().and_then(|i| omsi_ui::icons::names().find(|n| *n == i.trim())).unwrap_or("extension"), format!("plugin-{}-{}", m.owner, m.id)),
-                None => (rail_icon(id), id.to_string()),
-            };
-            let row = Rect::new(12.0, y, RAIL_W - 24.0, 38.0);
-            let (h, _, clicked) = ui.interact(id_of(&format!("pause-{key}")), row);
-            if clicked {
-                picked = Some(k);
-            }
-            let open = v.rail_open == Some(id);
-            let kbd = v.kbd && !any_hover && v.list.is_none() && v.rail_sel == Some(k);
-            if kbd {
-                sel_y = Some(y - view.y);
-            }
-            let danger = id == "quit";
-            let t = ui.anim(id_of(&format!("pause-hl-{key}")), if h || kbd { 1.0 } else { 0.0 }, 0.06);
-            if open {
-                ui.p().rounded(row, 6.0, SURFACE_3);
-            } else if t > 0.01 {
-                ui.p().rounded(row, 6.0, if danger { DANGER_2.alpha(0.14 * t) } else { SURFACE_2.alpha(t) });
-            }
-            let c = if danger {
-                DANGER_2.mix(Color::rgba(255, 176, 166, 1.0), t)
-            } else if open {
-                INK
-            } else {
-                INK_2.mix(INK, t)
-            };
-            let icon_c = if open || (kbd && !danger) { ACCENT } else { c };
-            // (a plugin's label is shown as it is: the plugin says it in the player's language)
-            let translated = if id == "plugin" { Cow::Borrowed(label) } else { omsi_ui::tr(label) };
-            let (text, _) = plain(&translated);
-            let (_, more) = plain(label);
-            ui.icon(icon, Vec2::new(row.x + 19.5, row.center().y), 19.0, icon_c);
-            ui.text_in(text, Rect::new(row.x + 41.0, row.y, row.w - 64.0, row.h), 14.0, Weight::Medium, c, Align::Left);
-            if more {
-                ui.icon("chevron_right", Vec2::new(row.right() - 14.0, row.center().y), 16.0, c.alpha(0.5 + 0.5 * t));
-            } else if id == "resume" && v.keys {
-                ui.text_in("Esc", Rect::new(row.right() - 44.0, row.y, 34.0, row.h), 11.5, Weight::Medium, INK_MUTED, Align::Right);
-            }
-            y += 40.0;
-        }
-        y - view.y + 8.0
-    });
-    if let (Some(y), true) = (sel_y, v.kbd) {
-        sh.ui.scroll_to("pause-rail", y, 38.0, area.h);
-    }
-    // the driver, at the bottom: the launcher's driver chip
-    let ui = &mut sh.ui;
-    let chip = Rect::new(12.0, size.y - 12.0 - 56.0, RAIL_W - 24.0, 56.0);
-    ui.p().rounded(chip, 8.0, SURFACE);
-    let av = Vec2::new(chip.x + 10.0 + 17.0, chip.center().y);
-    ui.p().circle(av, 17.0, SURFACE_3);
-    let initial = v.summary.driver.chars().next().map(|c| c.to_uppercase().to_string()).unwrap_or_else(|| "?".into());
-    ui.text_in(&initial, Rect::new(av.x - 17.0, av.y - 17.0, 34.0, 34.0), 14.0, Weight::Bold, INK_2, Align::Center);
-    ui.text_in(&v.summary.driver, Rect::new(chip.x + 54.0, chip.y + 9.0, chip.w - 64.0, 20.0), 13.5, Weight::Bold, INK, Align::Left);
-    ui.text_in(&v.summary.bus, Rect::new(chip.x + 54.0, chip.y + 28.0, chip.w - 64.0, 18.0), 12.0, Weight::Regular, INK_MUTED, Align::Left);
-    if let Some(k) = picked {
-        sh.actions.push(if v.list.is_some() { Action::Rail(k) } else { Action::Choose(k) });
+    if sidebar {
+        navigation_ui::rail(sh, v);
     }
 }
 
@@ -354,8 +254,8 @@ fn row_h(id: &str, label: &str) -> f32 {
 /// the page is wide enough, the headings of the list as the panels' section titles.
 fn settings_rows(sh: &mut Shell, v: &PauseView, list: &ListView, body: Rect, anchor: &mut Option<Rect>) {
     let items = &list.items;
-    // (the way back is the arrow before the title)
-    let shown: Vec<usize> = (0..items.len()).filter(|&k| !(items[k].0 == "back" && list.tabs.is_none() && plain(parse_row(items[k].1).name).0 == omsi_ui::tr("Back").as_ref())).collect();
+    // The groups retain original indices; the settings layout stays unchanged.
+    let shown: Vec<usize> = settings_groups(items, list.tabs.is_none()).into_iter().flatten().collect();
     let two = body.w >= 900.0 && shown.len() > 6;
     // (split where the heights balance, at a heading if one is near)
     let total: f32 = shown.iter().map(|&k| row_h(items[k].0, items[k].1)).sum();
@@ -428,6 +328,17 @@ fn settings_rows(sh: &mut Shell, v: &PauseView, list: &ListView, body: Rect, anc
     sh.last_sel = Some((id_of(&key), list.sel));
     *anchor = dd_anchor;
     sh.actions.extend(acts);
+}
+
+/// Keep section boundaries and original action indices independent of screen width.
+fn settings_groups(items: &[(&str, &str)], hide_back: bool) -> Vec<Vec<usize>> {
+    let mut groups: Vec<Vec<usize>> = Vec::new();
+    for (k, &(id, label)) in items.iter().enumerate() {
+        if hide_back && id == "back" && plain(parse_row(label).name).0 == omsi_ui::tr("Back").as_ref() { continue; }
+        if groups.is_empty() || id == crate::game_lists::HEADING { groups.push(Vec::new()); }
+        groups.last_mut().unwrap().push(k);
+    }
+    groups
 }
 
 /// One row of a settings window: its name (and description) on the left, its control on
@@ -532,7 +443,7 @@ fn settings_row(ui: &mut Ui, k: usize, label: &str, r: Rect, kbd: bool, dd_open:
         // a button with its text as the value
         _ => {
             let text = if row.value.is_empty() { omsi_ui::tr("Open").into_owned() } else { row.value.to_string() };
-            let bw = (ui.width(&text, 13.0, Weight::Medium) + 36.0).clamp(96.0, ctl_w);
+            let bw = (ui.width(&text, 13.0, Weight::Medium) + 36.0).max(96.0).min(ctl_w);
             let b = Rect::new(r.right() - 8.0 - bw, ctl.y, bw, ctl.h);
             let pressed = ui.button(&format!("pause-bt-{k}-{}", row.name), b, &text, None, ButtonKind::Normal);
             let (_, _, clicked) = ui.interact(id, Rect::new(r.x, r.y, b.x - r.x - 6.0, r.h));
@@ -842,3 +753,7 @@ mod tests {
         assert!(high.y >= 134.0, "{high:?}");
     }
 }
+
+#[cfg(test)]
+#[path = "pause/settings_ui_tests.rs"]
+mod settings_ui_tests;

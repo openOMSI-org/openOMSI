@@ -45,6 +45,63 @@ pub(crate) fn meter_tuning() -> [f32; 6] {
     })
 }
 
+/// The street's scale of the ambient light: how far the sky's occlusion by the houses,
+/// trees and hills reaches (m), how much of the occluded sky it takes away, the bounced
+/// light's gain and the brightest radiance it is taken from (1 = 10 000 cd/m²: the sun on
+/// white plaster is about 2.5). `OMSI_WIDE_AO=reach,strength,gain,max` overrides.
+pub(crate) fn occlusion_tuning(street_light: bool) -> [f32; 4] {
+    if !street_light {
+        return [0.0; 4];
+    }
+    static T: std::sync::OnceLock<[f32; 4]> = std::sync::OnceLock::new();
+    *T.get_or_init(|| {
+        let mut t = [WIDE_AO_REACH, WIDE_AO_STRENGTH, BOUNCE_GAIN, BOUNCE_MAX];
+        if let Some(v) = omsi_cfg::flags::OMSI_WIDE_AO.var() {
+            for (k, x) in v.split(',').take(4).enumerate() {
+                if let Ok(x) = x.trim().parse() {
+                    t[k] = x;
+                }
+            }
+        }
+        t
+    })
+}
+/// Whether the AO pass carries the bounced light in this frame: the Enhanced picture with
+/// the AO on, and a gain and a strength to show (it reads the last frame's picture, which
+/// then costs a pass and a texture: no other pipeline pays for it).
+pub(crate) fn bounce_wanted(ao_on: bool, enhanced: bool, street_light: bool) -> bool {
+    let t = occlusion_tuning(street_light);
+    ao_on && enhanced && t[1] > 0.0 && t[2] > 0.0
+}
+
+/// Where a view-space point of this frame was in the last frame's picture (its clip space),
+/// and whether that picture can be read at all: not after a cut (another view, a jump, a
+/// long pause, another size), where it shows unrelated surfaces.
+pub(crate) fn bounce_history(
+    prev: Option<(Mat4, DVec3, (u32, u32), Vec3, Vec3)>,
+    view: Mat4,
+    ro: DVec3,
+    size: (u32, u32),
+    pos: Vec3,
+    forward: Vec3,
+    dt: f32,
+) -> ([[f32; 4]; 4], f32) {
+    let Some((vp, pro, psize, ppos, pfwd)) = prev else {
+        return (Mat4::ZERO.to_cols_array_2d(), 0.0);
+    };
+    let moved = ((pos.as_dvec3() + ro) - (ppos.as_dvec3() + pro)).length();
+    let ok = psize == size && dt < 0.25 && moved < 25.0 && forward.dot(pfwd) > 0.5;
+    if !ok {
+        return (Mat4::ZERO.to_cols_array_2d(), 0.0);
+    }
+    ((vp * Mat4::from_translation((ro - pro).as_vec3()) * view.inverse()).to_cols_array_2d(), 1.0)
+}
+
+pub(crate) const WIDE_AO_REACH: f32 = 18.0;
+pub(crate) const WIDE_AO_STRENGTH: f32 = 0.9;
+pub(crate) const BOUNCE_GAIN: f32 = 0.85;
+pub(crate) const BOUNCE_MAX: f32 = 4.0;
+
 /// The tone curve's contrast about mid grey for a pre-exposure (its natural log): a
 /// camera's by day, falling off through the dusk to a little under none at night, where
 /// the eye's own adaptation to the dark between the street lamps lifts it out of black
@@ -73,9 +130,24 @@ pub(crate) const CLOUD_SHADOW_EROSION: f32 = 0.15;
 /// How far the exposure follows the light into a cloud's shadow (log terms).
 pub(crate) const CLOUD_SHADE_ADAPT: f32 = 0.5;
 
+/// The cumulus layer's bottom and top in the render origin's frame (where the camera and the
+/// sky shader are): the weather model's heights are above the ground (the fog's base, under
+/// the player's vehicle or just under the camera), so a map in the hills keeps its clouds.
+pub(crate) fn cloud_levels(lighting: &Lighting, cam_rel: Vec3, ro: DVec3) -> [f32; 2] {
+    match lighting.cloud_layer {
+        Some([b, t]) => {
+            let ground = match lighting.fog_base.or(lighting.inside.map(|v| v.0.z)) {
+                Some(z) => (z - ro.z) as f32,
+                None => cam_rel.z - 2.0,
+            };
+            [ground + b, ground + t]
+        }
+        None => [1400.0, 2800.0],
+    }
+}
+
 pub(crate) fn cloud_sun_transmittance(shape: &[u8], lighting: &Lighting, cam_rel: Vec3, ro: DVec3) -> f32 {
-    const BOTTOM: f32 = 1400.0;
-    const TOP: f32 = 2800.0;
+    let [bottom, top] = cloud_levels(lighting, cam_rel, ro);
     const PERIOD: f32 = 13000.0;
     const SIGMA: f32 = 0.035;
     let s = lighting.sun_dir.normalize_or_zero();
@@ -113,8 +185,8 @@ pub(crate) fn cloud_sun_transmittance(shape: &[u8], lighting: &Lighting, cam_rel
     let coverage = (0.3 + cover * 0.55 - CLOUD_SHADOW_EROSION).clamp(0.0, 1.0);
     let origin = glam::Vec2::new(ro.x.rem_euclid(CLOUD_ORIGIN_PERIOD) as f32, ro.y.rem_euclid(CLOUD_ORIGIN_PERIOD) as f32);
     let drift = glam::Vec2::new(lighting.cloud_offset[0], lighting.cloud_offset[1]) * 2500.0;
-    let t0 = (BOTTOM - cam_rel.z).max(0.0) / s.z;
-    let t1 = ((TOP - cam_rel.z).max(0.0) / s.z).min(t0 + 12_000.0);
+    let t0 = (bottom - cam_rel.z).max(0.0) / s.z;
+    let t1 = ((top - cam_rel.z).max(0.0) / s.z).min(t0 + 12_000.0);
     let steps = 24;
     let ds = (t1 - t0) / steps as f32;
     let side = glam::Vec2::new(-s.y, s.x).normalize_or_zero();
@@ -125,7 +197,7 @@ pub(crate) fn cloud_sun_transmittance(shape: &[u8], lighting: &Lighting, cam_rel
         for k in 0..steps {
             let t = t0 + (k as f32 + 0.5) * ds;
             let p = cam_rel + s * t;
-            let h = (p.z - BOTTOM) / (TOP - BOTTOM);
+            let h = (p.z - bottom) / (top - bottom);
             if !(0.0..1.0).contains(&h) {
                 continue;
             }
@@ -411,6 +483,9 @@ pub(crate) fn enhanced_sky_input(lighting: &Lighting, city_glow: f32) -> (atmosp
         moon_dir: lighting.moon_dir,
         moon_illum: lighting.moon_illum,
         city_glow,
+        deck_tau: lighting.deck_tau.unwrap_or(0.0),
+        cloud_base: lighting.cloud_layer.map_or(1400.0, |l| l[0]),
+        cloud_top: lighting.cloud_layer.map_or(2800.0, |l| l[1]),
     };
     // (the disc in the sky: what the veil lets through of it as well)
     let veil_t = (-input.veil / s.z.max(0.03)).exp();
@@ -498,6 +573,9 @@ pub(crate) fn sky_input_differs(a: &atmosphere::SkyInput, b: &atmosphere::SkyInp
         || !near(a.strat_aod, b.strat_aod, 0.0005)
         || !near(a.veil, b.veil, 0.01)
         || !near(a.cumulus, b.cumulus, 0.02)
+        || !near(a.deck_tau, b.deck_tau, 0.5)
+        || !near(a.cloud_base, b.cloud_base, 60.0)
+        || !near(a.cloud_top, b.cloud_top, 100.0)
         || a.moon_dir.dot(b.moon_dir) < 0.9999
         || !near(a.moon_illum, b.moon_illum, 0.01)
         || !near(a.city_glow, b.city_glow, 0.01)
@@ -770,6 +848,17 @@ impl Renderer {
             }
             None => Vec3::ZERO,
         };
+        // the thunderstorm: its activity, and this frame's flash (OMSI_STORM forces both)
+        let forced = forced_storm();
+        let storm = forced.map_or(lighting.storm, |f| f.0).clamp(0.0, 1.0);
+        let flash = match forced {
+            Some((_, Some(seed))) => Lightning::frozen(seed),
+            _ => self.tone.flash,
+        };
+        let layer = match forced {
+            Some(_) => [1100.0, 1100.0 + 300.0 + 7000.0 * storm],
+            None => cloud_levels(lighting, cam_rel, ro),
+        };
         let u = EnhancedUniform {
             // (self-lit surfaces at their own brightness after the metering, see ExposureLog)
             exposure: [pre, 2f32.powf(-self.tone.exposure_log.as_ref().map(|l| l.ev).unwrap_or(0.0)).clamp(0.7, 1.6), pre * WINDOW_RADIANCE, 1.6],
@@ -810,6 +899,13 @@ impl Renderer {
                 c
             },
             condensation: lighting.condensation,
+            layers: [layer[0], layer[1], lighting.alto, storm],
+            flash: [flash.light, flash.dir[0], flash.dir[1], flash.elevation],
+            flash2: {
+                let (c, s) = (flash.elevation.cos(), flash.elevation.sin());
+                [flash.dir[0] * c, flash.dir[1] * c, s, flash.bolt * flash.channel]
+            },
+            flash3: [flash.seed, 0.0, 0.0, 0.0],
             moon_light: st.moon_light.extend(if lighting.casts_moon_shadows() { 1.0 } else { 0.0 }).to_array(),
             moon_disc: st.moon_disc.extend((1.0 - 0.18 * (st.input.haze - 1.0).max(0.0)).clamp(0.2, 1.0) * 0.55).to_array(),
         };
@@ -852,11 +948,36 @@ pub(crate) const WINDOW_RADIANCE: f32 = 0.0022;
 /// The metering (see `meter_tuning`).
 pub(crate) const METER_GAIN: f32 = 0.4;
 pub(crate) const METER_TARGET: f32 = -2.84;
-// (how far the eye adapts to what it looks at beyond what the light model knows: the sun
-// in view, a dark cab or an underpass by day - two stops and a half and more for the
-// eye; at the metering's gain a snow field still comes out darkened by well under a stop)
+// (how far the eye adapts to what it looks at beyond what the light model knows. A surplus
+// (the sun in view, a snow field) is anchored by white: the eye lets it darken the picture a
+// couple of stops at the gain above, and a snow field still comes out well under a stop
+// darker. A shortfall has no such anchor - an underpass, a tunnel, a dark cab by day are
+// seen after a few seconds almost as bright as the street (the eye's range at one adaptation
+// is some five stops, but over seconds it moves across eight or more: a tunnel is a hundred
+// to three hundred times darker than the day), so it makes up most of the difference over a
+// range of six stops. At night the light model's own exposure is the adaptation (see
+// `encode_post`: this range fades out as the pre-exposure rises).)
 pub(crate) const METER_DARKEN: f32 = 2.0;
-pub(crate) const METER_BRIGHTEN: f32 = 1.6;
+pub(crate) const METER_BRIGHTEN: f32 = 6.0;
+pub(crate) const METER_SHORTFALL_GAIN: f32 = 0.85;
+/// How far the metering may brighten (EV) and how much of a shortfall it makes up, for the
+/// light model's pre-exposure (log2), the tuned reach and the tuned share. The eye's wide, fast
+/// correction is for a dark place in daylight - a tunnel, a cab, an underpass: it fades out
+/// over the dusk (by a pre-exposure of 8) and is gone by night, where the light model's own
+/// exposure is the adaptation and the old gentle metering (1.6 EV, a share of 0.4) is all
+/// there is - or every night in the blue hour and the twilight of a summer night would be
+/// shown as bright as a white night, which only a sun a few degrees under the horizon makes.
+pub(crate) fn shortfall_adaptation(log2_pre: f32, brighten: f32, gain: f32) -> (f32, f32) {
+    const GENTLE: f32 = 1.6;
+    let day = 1.0 - atmosphere::smoothstep(0.5, 3.0, log2_pre);
+    let reach = GENTLE.min(brighten) + (brighten - GENTLE).max(0.0) * day;
+    (reach * (1.0 - atmosphere::smoothstep(3.0, 7.0, log2_pre)), gain + (METER_SHORTFALL_GAIN - gain) * day)
+}
+/// How fast the eye follows a darker and a brighter picture (s): light adaptation of the
+/// cones takes about a second (a dazzle after a tunnel's mouth passes in that time), dark
+/// adaptation to a fraction of the way some three.
+pub(crate) const ADAPT_TO_DARK_S: f32 = 3.0;
+pub(crate) const ADAPT_TO_LIGHT_S: f32 = 0.9;
 /// The tone curve's contrast about mid grey by day and at night (see `tone_contrast`).
 pub(crate) const TONE_CONTRAST_DAY: f32 = 1.22;
 pub(crate) const TONE_CONTRAST_NIGHT: f32 = 0.94;

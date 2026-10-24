@@ -1,14 +1,18 @@
 use crate::{err, Answer};
 use omsi_launcher_lib as core;
-use omsi_timetable::{Line, TimetableData, Tour, TourTrip};
+use omsi_timetable::{Line, TimetableData, Tour, TourTrip, Trip, TripProfile};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 
 const COPY_MARK: &str = ".openomsi-ttdata-copy";
+/// The trips made in a map's own TTData folder (no copy of it): one name a line, so that a
+/// reset can take them away again.
+const NEW_TRIPS: &str = ".openomsi-new-trips";
 const PARTIAL: &str = "TTData.openomsi-partial";
-const NOT_IN_NAMES: [char; 9] = ['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
+// (the quote is written as its code, so that a tool reading the file's string literals keeps in step)
+const NOT_IN_NAMES: [char; 9] = ['/', '\\', ':', '*', '?', '\u{22}', '<', '>', '|'];
 
 static WRITING: Mutex<()> = Mutex::new(());
 
@@ -143,10 +147,16 @@ fn read(map_dir: &Path) -> Value {
     let trips: Vec<Value> = d
         .trips
         .iter()
-        .map(|t| json!({ "name": t.name, "line": t.line, "terminus": t.terminus, "profiles": t.profiles.iter().map(|p| p.name.clone()).collect::<Vec<_>>() }))
+        .map(|t| json!({ "name": t.name, "line": t.line, "terminus": t.terminus, "profiles": t.profiles.iter().map(|p| p.name.clone()).collect::<Vec<_>>(), "stops": t.stations, "minutes": t.profiles.first().map(|p| p.factor) }))
         .collect();
+    // every stop the timetable knows (a name stands for one object), and the station links
+    // between them (a trip may follow only these): [from, to, metres]
+    let mut seen = std::collections::HashSet::new();
+    let stops: Vec<Value> = d.bus_stops.iter().filter(|b| seen.insert(b.object_id)).map(|b| json!({ "id": b.object_id, "name": b.name.trim() })).collect();
+    let mut linked = std::collections::HashSet::new();
+    let links: Vec<Value> = d.stn_links.iter().filter(|l| linked.insert((l.from_id, l.to_id))).map(|l| json!([l.from_id, l.to_id, l.length.round()])).collect();
     let folder = map_dir.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
-    json!({ "folder": folder, "lines": lines, "trips": trips })
+    json!({ "folder": folder, "lines": lines, "trips": trips, "stops": stops, "links": links })
 }
 
 pub fn save(map: String, lines: Vec<LineEdit>) -> Answer {
@@ -174,6 +184,99 @@ fn save_lines(place: &Place, edits: Vec<LineEdit>) -> Value {
         }
     }
     json!({ "saved": saved, "error": error })
+}
+
+/// A trip made in the editor: the stops it calls at, in order.
+#[derive(Deserialize)]
+pub struct TripNew {
+    name: String,
+    /// The line its displays show (empty: a depot run).
+    #[serde(default)]
+    line: String,
+    /// The destination text; the last stop's name when empty.
+    #[serde(default)]
+    terminus: String,
+    stops: Vec<i64>,
+    /// The minutes the trip takes, end to end; worked out from the links when 0.
+    #[serde(default)]
+    minutes: f32,
+}
+
+/// How fast a bus covers a link on average, and how long it stands at a stop, for the minutes
+/// of a trip nobody gave any.
+const SPEED_MPS: f64 = 6.5;
+const DWELL_MIN: f64 = 0.35;
+
+pub fn save_trip(map: String, trip: TripNew) -> Answer {
+    let place = Place::of(&map)?;
+    let _one = WRITING.lock().unwrap_or_else(|e| e.into_inner());
+    let name = write_trip(&place, trip)?;
+    omsi_cfg::content_changed();
+    Ok(json!({ "name": name }))
+}
+
+fn write_trip(place: &Place, e: TripNew) -> Result<String, String> {
+    let name = e.name.trim().to_string();
+    if !file_name_ok(&name) {
+        return Err(core::i18n::tr("not a file name"));
+    }
+    if e.stops.len() < 2 {
+        return Err(core::i18n::tr("A trip needs two stops at least."));
+    }
+    let data = TimetableData::load(&place.map_dir);
+    if data.trips.iter().any(|t| t.name.eq_ignore_ascii_case(&name)) {
+        return Err(core::i18n::trf("A trip named {name} is there already", &[("name", &name)]));
+    }
+    let name_of = |id: i64| data.bus_stops.iter().find(|b| b.object_id == id).map(|b| b.name.trim().to_string());
+    let mut metres = 0.0;
+    for w in e.stops.windows(2) {
+        let Some(link) = data.stn_links.iter().find(|l| l.from_id == w[0] && l.to_id == w[1]) else {
+            let (a, b) = (name_of(w[0]).unwrap_or_else(|| w[0].to_string()), name_of(w[1]).unwrap_or_else(|| w[1].to_string()));
+            return Err(core::i18n::trf("The map has no way from {a} to {b}", &[("a", &a), ("b", &b)]));
+        };
+        metres += link.length;
+    }
+    let minutes = if e.minutes > 0.0 { e.minutes } else { ((metres / SPEED_MPS / 60.0 + DWELL_MIN * (e.stops.len() - 2) as f64).ceil() as f32).max(1.0) };
+    let terminus = if e.terminus.trim().is_empty() { name_of(*e.stops.last().unwrap_or(&0)).unwrap_or_default() } else { e.terminus.trim().to_string() };
+    let trip = Trip {
+        terminus,
+        line: e.line.trim().to_string(),
+        stations: e.stops,
+        profiles: vec![TripProfile { name: "standard".into(), factor: minutes, ..Default::default() }],
+        ..Default::default()
+    };
+    let original = omsi_cfg::resolve_path(&place.map_dir, "TTData");
+    // (a map of the content folder itself is written in place: the trip is noted for the reset
+    // once it is written, so that the reset never takes away a file the editor did not make)
+    let in_place = place.ours(&original) && omsi_cfg::vfs::archive_of(&original).is_none();
+    let dir = if in_place {
+        original.clone()
+    } else {
+        let dir = place.copy_dir();
+        if place.original(&dir) {
+            return Err(core::i18n::tr("its copy would go into the OMSI 2 folder"));
+        }
+        if !dir.is_dir() {
+            copy_whole(&original, &dir)?;
+        }
+        dir
+    };
+    let target = dir.join(format!("{name}.ttp"));
+    if place.original(&target) {
+        return Err(core::i18n::tr("it would be written into the OMSI 2 folder"));
+    }
+    if target.exists() {
+        return Err(core::i18n::trf("A trip named {name} is there already", &[("name", &name)]));
+    }
+    trip.save(&target).map_err(|e| core::i18n::tr(&err(e)))?;
+    if in_place && !dir.join(COPY_MARK).is_file() {
+        let tracked = dir.join(NEW_TRIPS);
+        let mut list = std::fs::read_to_string(&tracked).unwrap_or_default();
+        list.push_str(&format!("{name}.ttp
+"));
+        std::fs::write(&tracked, list).map_err(err)?;
+    }
+    Ok(name)
 }
 
 fn file_name_ok(name: &str) -> bool {
@@ -266,6 +369,16 @@ fn reset_in(place: &Place) -> Answer {
     let own = omsi_cfg::resolve_path(&place.map_dir, "TTData");
     let mut restored = 0;
     if place.ours(&own) && own.is_dir() {
+        // (the trips made here go, one name a line)
+        let tracked = own.join(NEW_TRIPS);
+        if let Ok(list) = std::fs::read_to_string(&tracked) {
+            for name in list.lines().map(str::trim).filter(|n| file_name_ok(n)) {
+                if std::fs::remove_file(own.join(name)).is_ok() {
+                    restored += 1;
+                }
+            }
+            std::fs::remove_file(&tracked).ok();
+        }
         for e in std::fs::read_dir(&own).map_err(err)?.flatten() {
             let p = e.path();
             if let Some(orig) = p.to_str().and_then(|s| s.strip_suffix(".orig")) {
@@ -491,5 +604,73 @@ mod tests {
         assert_eq!(v["lines"][0]["name"], json!("1"));
         assert_eq!(v["lines"][0]["tours"][0]["trips"][0], json!({ "trip": "A", "profile": 0, "departure": 360.0 }));
         assert_eq!(v["trips"][0]["terminus"], json!("Hauptbahnhof"));
+    }
+
+    fn stops_and_links(map: &Path) {
+        let tt = map.join("TTData");
+        std::fs::write(tt.join("Busstops.cfg"), "[busstop]\r\nHauptbahnhof\r\n0\r\n101\r\n0\r\n0\r\n0\r\n[busstop]\r\nMarkt\r\n0\r\n102\r\n0\r\n0\r\n0\r\n[busstop]\r\nDepot\r\n0\r\n103\r\n0\r\n0\r\n0\r\n").unwrap();
+        std::fs::write(tt.join("StnLinks.cfg"), "[StnLink]\r\n650\r\n101\r\n102\r\n0\r\n0\r\n0\r\n0\r\n0\r\n0\r\n[StnLink]\r\n300\r\n102\r\n103\r\n0\r\n0\r\n0\r\n0\r\n0\r\n0\r\n").unwrap();
+    }
+
+    fn new_trip(name: &str, stops: &[i64]) -> TripNew {
+        TripNew { name: name.into(), line: "1".into(), terminus: String::new(), stops: stops.to_vec(), minutes: 0.0 }
+    }
+
+    #[test]
+    fn a_trip_made_on_the_map_follows_its_links_and_is_written_into_the_copy() {
+        let d = dirs("newtrip");
+        let map = map_at(&d.omsi);
+        stops_and_links(&map);
+        let p = place(&d, &map);
+        let before = snapshot(&d.omsi);
+        assert_eq!(write_trip(&p, new_trip("Hbf-Depot", &[101, 102, 103])).unwrap(), "Hbf-Depot");
+        assert_eq!(snapshot(&d.omsi), before);
+        let copy = d.content.join("maps").join("Grundorf").join("TTData");
+        let t = Trip::load(&copy.join("Hbf-Depot.ttp")).unwrap();
+        assert_eq!((t.terminus.as_str(), t.line.as_str()), ("Depot", "1"));
+        assert_eq!(t.stations, vec![101, 102, 103]);
+        // 950 m at 6.5 m/s is 2.4 min, and a stop in between stands 0.35: three minutes
+        assert_eq!(t.profiles[0].factor, 3.0);
+        assert!(write_trip(&p, new_trip("Hbf-Depot", &[101, 102])).unwrap_err().contains("there already"));
+    }
+
+    #[test]
+    fn a_trip_between_stops_the_map_has_no_link_for_is_refused() {
+        let d = dirs("nolink");
+        let map = map_at(&d.omsi);
+        stops_and_links(&map);
+        let p = place(&d, &map);
+        let e = write_trip(&p, new_trip("Gap", &[101, 103])).unwrap_err();
+        assert!(e.contains("Hauptbahnhof") && e.contains("Depot"), "{e}");
+        assert!(write_trip(&p, new_trip("One", &[101])).is_err());
+        assert!(!d.content.join("maps").exists());
+    }
+
+    #[test]
+    fn a_trip_made_in_a_content_map_goes_with_the_reset() {
+        let d = dirs("newtripours");
+        let map = map_at(&d.content);
+        stops_and_links(&map);
+        let p = place(&d, &map);
+        write_trip(&p, new_trip("Mine", &[101, 102])).unwrap();
+        let tt = map.join("TTData");
+        assert!(tt.join("Mine.ttp").is_file());
+        assert_eq!(reset_in(&p).unwrap()["restored"], json!(1));
+        assert!(!tt.join("Mine.ttp").exists() && !tt.join(NEW_TRIPS).exists());
+    }
+
+    #[test]
+    fn a_trip_that_could_not_be_written_is_not_taken_away_by_the_reset() {
+        let d = dirs("newtripfail");
+        let map = map_at(&d.content);
+        stops_and_links(&map);
+        let p = place(&d, &map);
+        // a file of that name is there that the timetable does not list (it is no trip file)
+        let tt = map.join("TTData");
+        std::fs::create_dir_all(tt.join("Theirs.ttp")).unwrap();
+        assert!(write_trip(&p, new_trip("Theirs", &[101, 102])).is_err());
+        assert!(!tt.join(NEW_TRIPS).exists());
+        reset_in(&p).unwrap();
+        assert!(tt.join("Theirs.ttp").is_dir());
     }
 }

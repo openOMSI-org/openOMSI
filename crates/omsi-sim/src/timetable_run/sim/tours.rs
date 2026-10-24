@@ -119,7 +119,8 @@ impl ScheduleSim {
     /// are left out.
     pub fn tour_stops(&self, line: &str, tour: &str) -> Vec<(usize, usize, String, f64)> {
         let Some(l) = self.data.lines.iter().find(|l| l.name.eq_ignore_ascii_case(line)) else { return Vec::new() };
-        let Some(t) = l.tours.iter().find(|t| t.number.eq_ignore_ascii_case(tour)) else { return Vec::new() };
+        let Some(t) = l.tours.iter().find(|t| t.number.eq_ignore_ascii_case(tour) && self.tour_available(t))
+            .or_else(|| l.tours.iter().find(|t| t.number.eq_ignore_ascii_case(tour))) else { return Vec::new() };
         let mut out = Vec::new();
         let mut k = 0;
         for tt in &t.trips {
@@ -340,7 +341,8 @@ impl ScheduleSim {
             }
             return Err(format!("line {line} is not in the timetable of this map on {}: {running} lines run that day", date(world.date())));
         };
-        let t = match l.tours.iter().find(|t| t.number.eq_ignore_ascii_case(tour)) {
+        let t = match l.tours.iter().find(|t| t.number.eq_ignore_ascii_case(tour) && self.tour_available(t))
+            .or_else(|| l.tours.iter().find(|t| t.number.eq_ignore_ascii_case(tour))) {
             Some(t) => t,
             None => {
                 let Some(first) = l.tours.first() else {

@@ -77,6 +77,20 @@ pub struct WeatherModel {
     /// The lying snow's depth (cm): a cold spell's snowfall stays for days or weeks, and
     /// thaws by the warmth of the air (degree-hours), by the sun and under rain.
     pub snow_depth: f32,
+    /// Thunderstorm activity (0 none .. 1 a violent storm): deep convection, which needs
+    /// warm moist air under a moist, rising troposphere.
+    pub storm: f32,
+    /// Optical depth of the grey deck (stratus, altostratus, nimbostratus): the liquid
+    /// water in its column. 0.15 per g/m² for droplets of 10 µm - a thin stratus (30 g/m²)
+    /// has 5, a raining nimbostratus (500 g/m²) some 75.
+    pub deck_tau: f32,
+    /// How deep the cumulus layer stands (m): the convection stops at the inversion (a
+    /// shallow stratocumulus sheet under a high), or goes on up through a moist,
+    /// lifting troposphere (towering cumulus), up to the tropopause in a thunderstorm.
+    pub cu_depth: f32,
+    /// Altocumulus (cover of the layer at 2-6 km): moist air at the middle levels
+    /// ahead of a front, before the troposphere is saturated.
+    pub alto: f32,
 }
 
 /// What the renderer takes from the model besides the `.owt` values.
@@ -89,6 +103,12 @@ pub struct ModelSky {
     pub haze: f32,
     pub angstrom: f32,
     pub aerosol_height: f32,
+    /// the cumulus layer's base and top over the ground (m)
+    pub cu_base: f32,
+    pub cu_top: f32,
+    pub alto: f32,
+    pub deck_tau: f32,
+    pub storm: f32,
 }
 
 /// The model of a session: its state, and where and from when it runs. Kept by the
@@ -262,6 +282,10 @@ impl WeatherModel {
             ground_wet: 0.0,
             snow_cover: 0.0,
             snow_depth: 0.0,
+            storm: 0.0,
+            deck_tau: 8.0,
+            cu_depth: 800.0,
+            alto: 0.0,
         };
         let (doy, _) = sun_at(clock.year, m.hours, place);
         m.temp = m.climate_temp(doy);
@@ -360,6 +384,19 @@ impl WeatherModel {
         let deck_target = mid.max(low * 0.97);
         self.deck += dt * (deck_target - self.deck) / 1.5;
         self.deck = self.deck.clamp(0.0, 1.0);
+        // its water: a saturated, strongly rising troposphere piles up a nimbostratus (liquid
+        // water path of hundreds of g/m², optical depth up to 75), a weakly rising one a thin
+        // altostratus (a few); a stratus under an inversion holds some 30-150 g/m² - thicker
+        // in the cold season, when little sun mixes it out, and as it nears the rain
+        let mid_tau = 4.0 + 70.0 * smoothstep(0.78, 1.12, self.rh_up) * (0.35 + 0.65 * lift.max(0.0).min(1.0));
+        let low_tau = 6.0 + 26.0 * (1.0 - s) + 30.0 * smoothstep(0.9, 1.0, rh_s);
+        let tau_target = mid_tau.max(low * low_tau);
+        self.deck_tau += dt * (tau_target - self.deck_tau) / 1.0;
+        self.deck_tau = self.deck_tau.clamp(1.5, 90.0);
+        // altocumulus: the middle levels moist but not yet saturated
+        let alto_target = smoothstep(0.55, 0.78, self.rh_up) * (1.0 - smoothstep(0.78, 0.95, self.rh_up)) * 0.9;
+        self.alto += dt * (alto_target - self.alto) / 2.0;
+        self.alto = self.alto.clamp(0.0, 0.95);
         // the veil: the warm front's cirrus, half a day ahead of its lift
         let ahead = self.lift(self.hours + 12.0, s);
         let veil_target = (ahead * 1.3 - 0.2).clamp(0.0, 2.0) * (1.0 - mid);
@@ -370,7 +407,20 @@ impl WeatherModel {
         // under a moist troposphere that is not sinking)
         let showers = smoothstep(0.45, 0.75, self.cumulus) * smoothstep(15.0, 24.0, self.temp) * smoothstep(0.6, 0.85, self.rh_up) * smoothstep(-0.4, 0.1, lift) * 0.8;
         let target = frontal.max(showers);
-        self.precip += dt * (target - self.precip) / 0.5;
+        // thunderstorms: a deep convective cloud needs the heat and the moisture of the
+        // shower's recipe and a free troposphere that does not sink; the strongest ones
+        // come on the hottest afternoons (and over a front's warm sector)
+        let storm_target = smoothstep(0.5, 0.8, self.cumulus) * smoothstep(19.0, 28.0, self.temp) * smoothstep(0.66, 0.9, self.rh_up) * smoothstep(-0.2, 0.3, lift) * (0.4 + 0.6 * s);
+        self.storm += dt * (storm_target - self.storm) / 0.7;
+        self.storm = self.storm.clamp(0.0, 1.0);
+        // the cumulus layer's depth: convection to the inversion - a shallow sheet in a
+        // high (sinking air), towers when the troposphere is moist and lifting, the whole
+        // troposphere in a storm
+        let conv = (0.3 + 0.45 * lift + 0.9 * (self.rh_up - 0.6)).clamp(0.0, 1.0);
+        let depth_target = (300.0 + 2300.0 * conv + 7000.0 * self.storm).min(9500.0);
+        self.cu_depth += dt * (depth_target - self.cu_depth) / 1.0;
+        self.cu_depth = self.cu_depth.clamp(250.0, 9500.0);
+        self.precip += dt * (target.max(0.7 * self.storm) - self.precip) / 0.5;
         self.precip = self.precip.clamp(0.0, 1.0);
         // (it falls as snow up to about 1.5 °C at the ground: the flakes melt on the way
         // down only in warmer air)
@@ -398,6 +448,12 @@ impl WeatherModel {
         (self.q / q_sat(self.temp)).clamp(0.0, 1.0)
     }
 
+    /// The cumulus base over the ground (m): the lifting condensation level, 125 m per
+    /// degree of the dew-point spread, kept to what the sky model can draw.
+    pub fn cloud_base(&self) -> f32 {
+        (125.0 * (self.temp - dew_point(self.q.min(q_sat(self.temp)))).max(0.0)).clamp(450.0, 3200.0)
+    }
+
     /// The sky for the renderer.
     pub fn sky(&self) -> ModelSky {
         let rh = self.humidity();
@@ -410,6 +466,11 @@ impl WeatherModel {
             haze: (self.aerosol * growth).clamp(0.3, 6.0),
             angstrom: (1.55 - 0.9 * smoothstep(0.55, 0.95, rh)).clamp(0.45, 1.6),
             aerosol_height: self.mixed.max(0.7 * self.residual).max(250.0),
+            cu_base: self.cloud_base(),
+            cu_top: self.cloud_base() + self.cu_depth,
+            alto: self.alto,
+            deck_tau: self.deck_tau,
+            storm: self.storm,
         }
     }
 

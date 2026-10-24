@@ -549,6 +549,12 @@ impl VehicleInstance {
                 let turned = body_reversed(&t.ty.def, t.reversed);
                 let origin = joint + travel(turned, t.coupling_front.y);
                 let (y_front, y_rear) = t.rail_ends();
+                if omsi_cfg::flags::OMSI_DEBUG_TRAILERS.is_set() {
+                    static SHOWN: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+                    if SHOWN.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 6 {
+                        log::info!("rail part {i}: origin {origin:.2} m behind the lead's, joint before it {joint:.2}, running ends {y_front:.2} / {y_rear:.2}, front coupling {:.2}, back coupling {:.2} (declared: front {:?}, back {:?}, {} axles, boogies {:?})", t.coupling_front.y, t.coupling_back.y, t.ty.def.coupling_front.as_ref().map(|c| c.pos), t.ty.def.coupling_back.as_ref().map(|c| c.pos), t.ty.def.axles.len(), t.ty.def.boogies);
+                    }
+                }
                 match (at_behind(origin - y_front as f64), at_behind(origin - y_rear as f64)) {
                     (Some(front), Some(back)) => t.place_on_rails(self, dt, lead, (front, y_front), (back, y_rear)),
                     _ => t.update(self, dt, lead),

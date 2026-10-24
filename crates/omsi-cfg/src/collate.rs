@@ -90,6 +90,27 @@ pub fn windows_cmp(a: &str, b: &str) -> Ordering {
         .then_with(|| a.cmp(b))
 }
 
+/// How Windows orders the entries of a folder on NTFS - the order Omsi.exe's FindFirst /
+/// FindNext loops meet files in. Unlike [`windows_cmp`] this is no word sort: the names are
+/// compared code unit by code unit (UTF-16) after the volume's upper-casing, so punctuation
+/// counts with its code point (a space and `-` before the digits, `_` after the capitals) and
+/// a letter beyond ASCII after `Z`. A letter whose capital is two letters keeps its own unit.
+pub fn cmp_as_listed(a: &str, b: &str) -> Ordering {
+    fn units(s: &str) -> impl Iterator<Item = u16> + '_ {
+        s.chars().flat_map(|c| {
+            let mut upper = c.to_uppercase();
+            let one = match (upper.next(), upper.next()) {
+                (Some(u), None) => u,
+                _ => c,
+            };
+            let mut buf = [0u16; 2];
+            let n = one.encode_utf16(&mut buf).len();
+            buf.into_iter().take(n)
+        })
+    }
+    units(a).cmp(units(b))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -123,5 +144,13 @@ mod tests {
         assert_eq!(windows_cmp("Straße A", "Strasse B"), Ordering::Less);
         assert_eq!(windows_cmp("ab", "a-b"), Ordering::Less);
         assert_eq!(windows_cmp("same", "same"), Ordering::Equal);
+    }
+
+    #[test]
+    fn folder_listings_compare_capitals_by_code_unit() {
+        let mut v = vec!["Linie_2.oft", "Zug.oft", "LINIE 2.oft", "linie2.oft", "Ära.oft", "linie-2.oft"];
+        v.sort_by(|a, b| cmp_as_listed(a, b));
+        assert_eq!(v, ["LINIE 2.oft", "linie-2.oft", "linie2.oft", "Linie_2.oft", "Zug.oft", "Ära.oft"]);
+        assert_eq!(cmp_as_listed("abc.OFT", "ABC.oft"), Ordering::Equal);
     }
 }

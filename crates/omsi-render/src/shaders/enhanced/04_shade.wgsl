@@ -538,8 +538,11 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     }
     // --- sky and ground
     var ao = 1.0;
+    var bounce = vec3<f32>(0.0);
     if (camera.clouds.w > 0.5 && !capture) {
-        ao = ao_at(in.clip.xy, in.world);
+        let ag = ao_gi_at(in.clip.xy, in.world);
+        ao = ag.x;
+        bounce = ag.yzw;
     }
     // AO is generated from the opaque depth buffer.  A transparent bus pane therefore
     // samples the seats/dashboard behind it and makes their dark outlines crawl across the
@@ -562,7 +565,11 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     ao = mix(ao, 1.0 - (1.0 - ao) * 0.35, in_cab);
     let avg_e = enh.fog_color.rgb * (PI / 0.9);
     let cab_e = vec3<f32>(dot(avg_e, vec3<f32>(0.2126, 0.7152, 0.0722))) * vec3<f32>(1.0, 0.98, 0.95);
-    let e_amb = mix(sh_irradiance(n), cab_e * CAB_AMBIENT, 0.6 * in_cab) * ao_bounce(ao, ambient_albedo);
+    let e_amb = mix(sh_irradiance(n), cab_e * CAB_AMBIENT, 0.6 * in_cab) * ao_bounce(ao, ambient_albedo)
+        + flash_irradiance(n) * ao * (1.0 - 0.7 * in_cab)
+        // the light the street's surfaces send to each other (their last frame's picture;
+        // the cab has its own even light)
+        + bounce * mix(1.0, ao, 0.5) * (1.0 - in_cab);
     var ambient = e_amb * ambient_albedo / PI * (vec3<f32>(1.0) - fr * (1.0 - rough) * env_share);
     // --- reflections: the sky probe, as sharp as the surface is smooth
     var r = reflect(-v, normalize(mix(face_n, n, face_w)));
@@ -720,7 +727,12 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         let lit_round = lamp_ground * (1.0 - open);
         reflection = reflection + lit_round * refl_f * (1.0 - cab_view);
     }
-    let cabin_light = interior_lamps(in.world, n, in.params2.z);
+    // (in the player's saloon: what its lamps' light meets on the way, see `cabin_visibility`)
+    var cabin_vis = 1.0;
+    if (in_cab > 0.5 && camera.lamp_atlas.w > 0.5) {
+        cabin_vis = cabin_visibility(in.world, n);
+    }
+    let cabin_light = interior_lamps(in.world, n, in.params2.z) * cabin_vis;
     let cabin = sf_lit.albedo * cabin_light * mix(1.0, ao, 0.85);
     var rgb = (direct + ambient + lamps) * pre + cabin;
     // A material's own emissive colour ([matl_allcolor], an .x's emissive) is the texture at
@@ -739,10 +751,15 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         // (a switched one is the display's own state: not dimmed with the instance's night
         // lighting, which is 0 by day and left the Procity's pressure screen black)
         let nm = night_sample.rgb * night * select(clamp(in.params2.y, 0.0, 1.0), 1.0, switched);
-        if (terrain) {
-            // the tile's light map: the lamps' light on the ground
-            rgb = rgb + sf.albedo / PI * nm * enh.lights.y * 3.0 * pre;
-        } else {
+        // (The ground gets no light from the tile's light map here: it is the lamps' pools as
+        // OMSI bakes them, a `[maplight]`'s colour times (radius / distance)^2 out to sixteen
+        // radii, taken through every wall and roof, with no shadow of anything and with a
+        // tail past where the lamp itself reaches. The lamps are lights of their own in this
+        // picture - the same inverse square, cut off where their reach ends, shadowed by the
+        // maps of `LampShadow` - and what the map added three times over was a snow-covered
+        // lawn in a courtyard lit orange by floodlights across a building, or the ground of a
+        // whole street glowing with one lamp's tail.)
+        if (!terrain) {
             // lit windows and signs; a switched lamp or display holds up against daylight
             // as the self-illuminated materials do
             // (a window lit from inside shows some 80 cd/m² - a room's 300 lux off its
@@ -775,7 +792,9 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
             // light map stays as it was: its dots are meant to burn above their colour.)
             // The map's script variable controls its backlight. Dimming every light-mapped
             // surface as a cab screen hid instrument backlights even with the lights on.
-            emit = emit + max(display_level(tex.rgb) * enh.exposure.y - rgb, vec3<f32>(0.0)) * lm;
+            // (the lift is the saloon lamps' light: where their light does not reach for a
+            // handrail or a seat standing in it, the map does not lift the surface either)
+            emit = emit + max(display_level(tex.rgb) * enh.exposure.y - rgb, vec3<f32>(0.0)) * lm * cabin_vis;
         }
     }
     if (material.emissive.w < -1.5) {

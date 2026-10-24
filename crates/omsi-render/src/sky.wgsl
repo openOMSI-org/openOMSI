@@ -28,15 +28,17 @@ struct Camera {
     flags: vec4<f32>,
     light_view_proj_close: mat4x4<f32>,
     wind: vec4<f32>,
-    // Enhanced: the street lamps' shadow maps (the tiles under the far map), and the
-    // lights they belong to (-1: none)
-    lamp_view_proj: array<mat4x4<f32>, 4>,
-    lamp_shadow: vec4<f32>,
+    // Enhanced: the lamps' shadow maps (the tiles under the far map; zero where nothing is
+    // drawn) and where the tiles lie: x a tile's side, y tiles to a row, z the far map's
+    // texture height, w the number of tiles (`LampAtlas::uniform`)
+    lamp_view_proj: array<mat4x4<f32>, 44>,
+    lamp_atlas: vec4<f32>,
     tree_wind: vec4<f32>,
     inside2_a: vec4<f32>,
     inside2_b: vec4<f32>,
     inside2_c: vec4<f32>,
     cookies: array<vec4<f32>, 8>,
+    cabin_lamps: array<vec4<f32>, 4>,
 };
 
 // A hash of a lattice point, from its integer bits.

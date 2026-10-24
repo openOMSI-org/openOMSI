@@ -95,20 +95,19 @@ impl Schedule {
         t_route: std::time::Duration,
     ) -> Placed {
         let Placing { trip_name, stations, departure, leave, steps, station_steps, slots, leg, frac, at, start, end, section, start_index, mut s, mut stops, served } = p;
-        let Some(Choice {
-                     ty,
-                     number,
-                     hof,
-                     scheme,
-                     train,
-                 }) = self.sim.choose(i, &*world.data())
-        else {
+        let Some(choice) = self.sim.choose(i, &*world.data()) else {
             log::warn!(
                 "trip {trip_name}: no vehicles for AI group '{}'",
                 self.sim.departure_ai_group(i)
             );
             return Placed::Drop;
         };
+        // (while the map loads the sets are built at once, as the start needs them)
+        if !traffic.loading_phase() && !self.sets_ready(&choice, world, traffic) {
+            log::debug!("trip {trip_name}: its vehicle is being read ahead");
+            return Placed::Busy;
+        }
+        let Choice { ty, number, hof, scheme, train } = choice;
         self.next_number += 1;
         let rail = traffic.net.lanes[section[start_index]].kind == omsi_sim::traffic::LaneKind::Rail;
         // every further car of the train with the cars of its unit, as Omsi.exe creates

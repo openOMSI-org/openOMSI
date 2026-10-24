@@ -172,7 +172,10 @@ export function mapName(file) {
 export const curMap = () => S.maps?.find((m) => m.file === S.choice?.map);
 export const curBus = () => S.vehicles?.find((v) => v.file === S.choice?.bus);
 export const curLine = () => S.lines.list?.find((l) => l.name === S.choice?.line);
-export const curTour = () => curLine()?.tours.find((x) => x.number === S.choice?.tour);
+// Old saved choices use the displayed number; new choices identify the variant.
+export const tourId = (tour) => tour?.id ?? tour?.number;
+export const resolveTour = (line, selection) => line?.tours.find((x) => tourId(x) === selection) || line?.tours.find((x) => x.number === selection && x.runs) || line?.tours.find((x) => x.number === selection);
+export const curTour = () => resolveTour(curLine(), S.choice?.tour);
 export const realTime = () => !!S.settings?.use_real_time;
 export const realDate = () => !!S.settings?.use_real_date;
 
@@ -260,8 +263,8 @@ export async function loadLines() {
     set({ lines: { key, list, loading: false, error: null } });
     // a line or tour that is not there on this date gives way to the first one
     const line = list.find((l) => l.name === S.choice.line) || list.find((l) => l.user_allowed && l.tours.length) || null;
-    const tour = line?.tours.find((x) => x.number === S.choice.tour) || line?.tours.find((x) => x.runs) || line?.tours[0] || null;
-    if (line?.name !== S.choice.line || tour?.number !== S.choice.tour) choose({ line: line?.name ?? null, tour: tour?.number ?? null });
+    const tour = resolveTour(line, S.choice.tour) || line?.tours.find((x) => x.runs) || line?.tours[0] || null;
+    if (line?.name !== S.choice.line || tourId(tour) !== S.choice.tour) choose({ line: line?.name ?? null, tour: tourId(tour) ?? null });
   } catch (e) {
     if (S.lines.key === key) set({ lines: { key, list: [], loading: false, error: e.message } });
   }
@@ -420,7 +423,7 @@ export async function duty(extra = {}) {
     hof: dutyHof() || null,
     entry: c.entry,
     line: c.free ? null : c.line,
-    tour: c.free ? null : c.tour,
+    tour: c.free ? null : curTour()?.number ?? null,
     trip: trip != null ? String(trip) : null,
     whole_tour: trip != null,
     time: hhmm(c.time),

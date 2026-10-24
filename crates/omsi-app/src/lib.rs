@@ -142,6 +142,7 @@ mod plugin_io;
 // the plugins' panels (`omsi-plugin-ui`) at their old path, and the app's side of their input
 use omsi_plugin_ui as plugin_ui;
 mod plugin_panels;
+mod process_permissions;
 mod plugins;
 mod services;
 mod sim_thread;
@@ -762,32 +763,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             orbit: ORBIT_DEFAULT,
         },
         ui,
-        perf: PerfState {
-            fps: 0.0,
-            profile: Default::default(),
-            profile_prev: Default::default(),
-            total_frames: 0,
-            input_script,
-            shot: None,
-            frames: 0,
-            fps_t,
-            log_state: Default::default(),
-            spikes: 0,
-            worst_ms: 0.0,
-            governor: (0.0, 0, 0.0),
-            governor_low: 0,
-            governor_wait_prev: 0.0,
-            play_started: None,
-            cpu_mark: None,
-            thread_cpu_mark: None,
-            instructions_mark: None,
-            profile_mark: None,
-            frame_times: Vec::new(),
-            frame_stages: Vec::new(),
-            overlay: crate::perf_overlay::new(),
-            texture_cut_at: None,
-            optimiser: Default::default(),
-        },
+        perf: PerfState::new(input_script, fps_t),
         sound: SoundState {
             radio,
             milezero: Default::default(),

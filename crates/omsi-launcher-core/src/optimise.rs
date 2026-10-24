@@ -127,6 +127,8 @@ pub fn lighter_steps(s: &Value, limit: Limit, m: &Machine) -> Vec<Step> {
             add(mirrors_redrawn, step("mirror_refresh", json!("eco"), Apply::Now));
             add(msaa > 2 && m.msaa(2), step("msaa", json!(2), Apply::Rebuild));
             add(mirror > 512, step("mirror_size", json!(512), Apply::NextStart));
+            // (the street light first: it is the cheaper cut, and turning the AO off takes it along)
+            add(mode == "enhanced" && on(s, "ssao", true) && text(s, "street_light", "off") != "off", step("street_light", json!("off"), Apply::Now));
             add(lit && on(s, "ssao", true), step("ssao", json!(false), Apply::Now));
             add(enhanced && on(s, "clouds", true) && text(s, "cloud_quality", "high") == "high", step("cloud_quality", json!("low"), Apply::Now));
             add(!classic && shadow > 2048, step("shadow_size", json!(2048), Apply::Rebuild));

@@ -163,6 +163,7 @@ mod tests {
             model_dir: Default::default(),
             program: Arc::new(compile(&Default::default())),
             meshes: Vec::new(),
+            lod_meshes: Vec::new(),
             paint_schemes: Vec::new(),
             texchanges: Vec::new(),
             wheel_meshes: Vec::new(),

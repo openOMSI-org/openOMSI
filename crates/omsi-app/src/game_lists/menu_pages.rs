@@ -23,6 +23,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         switch_row(app, "get_up", "Ability to get up (Ctrl+Shift+G)", "Allows you to get out of the car and explore the world"),
         switch_row(app, "coll_objects", "Collisions with objects", "Enables/disables collisions with objects such as buildings, streetlights, etc."),
         switch_row(app, "coll_vehicles", "Collisions with vehicles", "Enables/Disables Collisions with Other Vehicles"),
+        switch_row(app, "realistic_road", "Realistic road physics", "Tyres that slip, grip and roughness by road surface, wind on the bus; off, the buses drive as in OMSI 2"),
         switch_row(app, "collision_pedestrians", "Collisions with people", "Enables/disables knocking down people"),
         switch_row(app, "timetable_win", "Timetable window (Insert)", "Displays a list of all stops (only when a tour is active)"),
         switch_row(app, "trip_summary", "Trip summary", "At the end of each trip: its stops with the times planned and driven, to copy or to save"),
@@ -62,6 +63,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         slider_row(app, "reflections", "Reflection maps (paint, chrome, glass)", "Changes show at once; turned up from Off, they come back when the game starts the next time", &|v| if v < 0.005 { "Off".to_string() } else { format!("{:.0}%", v * 100.0) }).filter(|_| shown("reflections")),
         switch_row(app, "clouds", "Clouds", later),
         pick("cloud_quality", "Cloud quality", "Enhanced: the volumetric clouds marched in fewer steps - faster, a little grainier").filter(|_| shown("cloud_quality") && app.settings.clouds),
+        pick("street_light", "Street light", "Enhanced: shade over a whole street and light bounced between surfaces; Auto turns it off on a small or shared graphics chip (about half a millisecond a frame)").filter(|_| shown("street_light")),
         pick("rain_quality", "Rain quality", "Lower is faster: the drops on the glass painted less often, less spray and fewer streaks; Low shows OMSI 2's own rain on the glass (from the next bus loaded)"),
         pick("vehicle_smoke", "Vehicle smoke", "Controls the vehicles' smoke particles, not scenery effects or glowing particles."),
         pick("puddles", "Puddles", "The wet roads' reflections in the rain: Low only near the bus and in fewer rays, much cheaper; Off none (the reflections on paint and glass stay)").filter(|_| app.settings.reflections > 0.0),
@@ -355,7 +357,11 @@ pub(super) fn vehicle_pages(app: &App) -> Vec<Page> {
             service.push(opens("Teleport to a start point", "Teleport to a starting point on the map", "tplist"));
         }
     }
-    vec![("Display and driver", display), ("Vehicles", fleet), ("Service", service)]
+    vec![
+        ("Display and driver", sectioned_rows(display, "Destination and depot", &[("number", "Vehicle identification"), ("driver", "Driver")])),
+        ("Vehicles", sectioned_rows(fleet, "Switch and place vehicles", &[("couple", "Coupling"), ("getout", "Driver"), ("remove", "Replace and remove vehicles")])),
+        ("Service", sectioned_rows(service, "Vehicle maintenance", &[("reset", "Recovery and relocation")])),
+    ]
 }
 
 pub(super) fn world_pages(app: &App) -> Vec<Page> {
@@ -469,7 +475,12 @@ pub(super) fn world_pages(app: &App) -> Vec<Page> {
         people.push(button("Clear AI traffic", "Clear", "Remove the current AI cars from the road; random traffic will return automatically.", "traffic_clear"));
     }
     people.extend(slider_row(app, "pax", "Passengers", "How many passengers wait at the stops and ride.", &pct));
-    vec![("Time", time), ("Weather", weather), ("Temperature and wind", climate), ("Traffic and people", people), ("Tools", tools)]
+    vec![
+        ("Time", sectioned_rows(time, "Clock and time speed", &[("clock_shift -3600", "Quick time changes"), ("clock_set 21600", "Time presets"), ("noop", "Date"), ("clock_ontime", "Timetable"), ("speed", "Time speed")])),
+        ("Weather", weather_rows(weather, climate)),
+        ("Traffic and people", sectioned_rows(people, "Traffic", &[("pax", "Passengers")])),
+        ("Tools", tools),
+    ]
 }
 
 /// The pages of the settings window `kind` (empty ones left out) and the one shown.
@@ -495,6 +506,8 @@ fn shown_in_mode(mode: &str, key: &str) -> bool {
         "shadow_size" | "shadow_casters" | "detail_textures" => mode != "vanilla",
         "reflections" => mode != "enhanced_plus",
         "night_brightness" | "led_glow" | "led_mips" | "mirror_quality" | "cloud_quality" => matches!(mode, "enhanced" | "enhanced_plus"),
+        // (the ray-traced picture has its own occlusion)
+        "street_light" => mode == "enhanced",
         _ => true,
     }
 }
@@ -535,7 +548,7 @@ mod tests {
 
     #[test]
     fn graphics_rows_follow_the_sessions_mode() {
-        let keys = ["shadows", "shadow_size", "ssao", "shadow_casters", "detail_textures", "night_brightness", "led_glow", "led_mips", "reflections", "mirror_quality", "cloud_quality", "msaa"];
+        let keys = ["shadows", "shadow_size", "ssao", "shadow_casters", "detail_textures", "night_brightness", "led_glow", "led_mips", "reflections", "mirror_quality", "cloud_quality", "street_light", "msaa"];
         let shown = |mode: &str| keys.iter().filter(|k| shown_in_mode(mode, k)).copied().collect::<Vec<_>>();
         assert_eq!(shown("vanilla"), ["reflections", "msaa"]);
         assert_eq!(shown("vanilla_plus"), ["shadows", "shadow_size", "ssao", "shadow_casters", "detail_textures", "reflections", "msaa"]);
@@ -565,5 +578,75 @@ mod tests {
         assert_eq!(mode_of_session(&session(false, true, false), "vanilla"), "enhanced");
         assert_eq!(mode_of_session(&session(true, true, false), "vanilla"), "enhanced_plus");
         assert_eq!(mode_of_session(&session(false, false, false), "enhanced"), "vanilla_plus");
+    }
+}
+
+/// Keep all atmospheric controls together after permission and METAR filtering.
+fn weather_rows(mut weather: Vec<(String, String)>, climate: Vec<(String, String)>) -> Vec<(String, String)> {
+    weather.extend(climate);
+    sectioned_rows(weather, "Live weather", &[("weather", "Weather preset and clouds"), ("temp", "Temperature and humidity"), ("wind_speed", "Wind")])
+}
+
+/// Insert display-only headings while preserving every command and its relative order.
+fn sectioned_rows(rows: Vec<(String, String)>, first: &str, starts: &[(&str, &str)]) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for (label, action) in rows {
+        let key = action.strip_suffix(ADJUST).unwrap_or(&action);
+        let title = starts.iter().find(|(id, _)| *id == key).map(|(_, title)| *title).or_else(|| out.is_empty().then_some(first));
+        if let Some(title) = title {
+            out.push((row(title, 'i', "", "", None), HEADING.to_string()));
+        }
+        out.push((label, action));
+    }
+    out
+}
+
+#[cfg(test)]
+mod pause_sections_tests {
+    use super::*;
+
+    #[test]
+    fn pause_nested_sections_keep_actions_in_original_order() {
+        let rows = vec![button("A", "A", "", "a"), button("B", "B", "", "b"), button("C", "C", "", "c")];
+        let sections = sectioned_rows(rows.clone(), "First", &[("b", "Second")]);
+        assert_eq!(sections.iter().filter(|r| r.1 != HEADING).cloned().collect::<Vec<_>>(), rows);
+        assert_eq!(sections.iter().filter(|r| r.1 == HEADING).count(), 2);
+    }
+
+    #[test]
+    fn pause_nested_sections_omit_missing_groups_and_match_adjustable_controls() {
+        assert!(sectioned_rows(Vec::new(), "First", &[]).is_empty());
+        let sections = sectioned_rows(vec![button("Wind", "", "", &format!("wind_speed{ADJUST}"))], "First", &[("wind_speed", "Wind")]);
+        assert_eq!(sections.len(), 2);
+        assert!(sections[0].0.starts_with("Wind"));
+        assert_eq!(sections[1].1, format!("wind_speed{ADJUST}"));
+    }
+}
+
+#[cfg(test)]
+mod pause_weather_tests {
+    use super::*;
+
+    #[test]
+    fn pause_weather_merges_temperature_humidity_and_wind_without_losing_commands() {
+        let weather = vec![button("Preset", "", "", "weather")];
+        let climate = ["temp", "humidity", "wind_speed", "wind_dir"].into_iter()
+            .map(|id| button(id, "", "", &format!("{id}{ADJUST}"))).collect::<Vec<_>>();
+        let expected: Vec<_> = weather.iter().chain(&climate).cloned().collect();
+        let rows = weather_rows(weather, climate);
+        assert_eq!(rows.iter().filter(|r| r.1 != HEADING).cloned().collect::<Vec<_>>(), expected);
+        assert_eq!(rows.iter().filter(|r| r.1 == HEADING).count(), 3);
+    }
+
+    #[test]
+    fn pause_weather_filtered_climate_adds_no_empty_sections() {
+        let rows = weather_rows(vec![button("METAR sync", "", "", "metar_sync")], Vec::new());
+        assert_eq!(rows.len(), 2);
+        assert!(weather_rows(Vec::new(), Vec::new()).is_empty());
+    }
+
+    #[test]
+    fn pause_weather_wind_has_traditional_chinese_translation() {
+        assert_eq!(crate::_rust_i18n_try_translate("zh-tw", "Wind").map(|value| value.into_owned()), Some("風".to_string()));
     }
 }

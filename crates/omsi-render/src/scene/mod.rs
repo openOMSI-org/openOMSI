@@ -302,9 +302,14 @@ pub struct Scene {
     /// kept for the next: every car's exhaust is thousands of sprites, and lists made anew
     /// each time grew by copying and went back to the system (see `grid_scratch`).
     pub(crate) smoke_scratch: (Vec<(f64, GpuCorona)>, Vec<(f64, u32)>, Vec<GpuCorona>),
-    /// The street lamps that had a shadow map last frame (their places in centimetres):
-    /// they keep it against a lamp only a little stronger (`prepare_lights`).
-    pub(crate) lamp_shadow_last: Vec<[i64; 3]>,
+    /// The world's lamps that have a shadow map and the tile of each (the places of the lamps
+    /// in centimetres): they keep it against a lamp only a little stronger (`prepare_lights`).
+    pub(crate) lamp_slots: WorldSlots,
+    /// The same for the lamps of the player's saloon (`Cabin`).
+    pub(crate) cabin_slots: CabinSlots,
+    /// Where each of `interior_lights` hangs in the player's vehicle's frame, as last taken for
+    /// its tile (`lamp_tiles`).
+    pub(crate) cabin_places: Vec<Vec3>,
     pub(crate) last_lights: Vec<u8>,
     /// Material bind groups and uniform buffers made since the last `prepare`, by what they
     /// hold: materials made in one go with the same textures and values share them (a C2's

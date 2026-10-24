@@ -21,6 +21,14 @@ impl App {
 
     /// A key of the window, or of an `OMSI_INPUT` script.
     pub(crate) fn on_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode, pressed: bool, repeat: bool) {
+        if self.has_process_permission_prompt() {
+            if pressed && !repeat && code == KeyCode::Escape {
+                if let Some(prompt) = self.process_permission_prompt() {
+                    self.answer_process_permission(prompt.id, omsi_plugin::api::process::ProcessDecision::Deny);
+                }
+            }
+            return;
+        }
         // (Alt tapped alone opens OMSI 2's quick menu: `game_panels`)
         self.alt_tap(code, pressed, repeat);
         // the photo mode has all the keys
@@ -564,15 +572,33 @@ impl App {
                         // bus, shut down a running one), and set its IBIS to the current
                         // duty as the driver would do while putting it into service.
                         if let Some(p) = self.player.as_mut() {
-                            let msg = p.start_up();
-                            self.service_msg = Some((msg, 6.0));
+                            let mut msg = p.start_up();
                             if let Some(d) = self.session.duty.as_ref() {
                                 let (trip, stop) = d.trip_for_ibis();
                                 p.set_duty_destination(trip, stop);
+                                // (a plugin leaves the IBIS to the driver: said, so that an
+                                // empty IBIS does not look broken)
+                                if !p.ibis_auto() && p.putting_into_service() {
+                                    msg = "Putting the vehicle into service ... A plugin leaves the IBIS for you to type.".to_string();
+                                }
                             }
+                            self.service_msg = Some((msg, 6.0));
                         }
                     }
 
+                KeyCode::KeyP if shift_chord =>
+                    {
+                        // Shift+P: a rail vehicle's pantograph up or down (the key a tram
+                        // whose pantograph is a bus script's "door" has no other key for)
+                        if let Some(p) = self.player.as_mut() {
+                            let msg = match p.vehicle.toggle_pantograph() {
+                                Some(true) => "Raising the pantograph ...",
+                                Some(false) => "Lowering the pantograph ...",
+                                None => "This vehicle has no pantograph switch",
+                            };
+                            self.service_msg = Some((omsi_ui::i18n::tr(msg).into_owned(), 4.0));
+                        }
+                    }
                 KeyCode::KeyR if shift_chord =>
                     {
                         // Shift+R: the next internet radio station (see radio.rs)

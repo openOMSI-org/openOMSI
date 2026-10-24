@@ -383,6 +383,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "cam_smooth" => s.driverview_smooth,
         "coll_objects" => s.collision_objects,
         "coll_vehicles" => s.collision_vehicles,
+        "realistic_road" => s.realistic_road_physics,
         "mouse" => app.input.mouse_drive,
         "mouse_right" => s.mouse_right_off,
         "mouse_smooth" => s.mouse_smooth,
@@ -540,6 +541,15 @@ pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static 
         "coll_vehicles" => {
             app.settings.collision_vehicles = on;
             Some(("collision_vehicles", bit))
+        }
+        "realistic_road" => {
+            app.settings.realistic_road_physics = on;
+            omsi_sim::rigid::set_realistic_default(on);
+            // (the bus on the road now: its tyres change over at once)
+            if let Some(rb) = app.player.as_mut().and_then(|p| p.vehicle.rigid.as_mut()) {
+                rb.realistic = on;
+            }
+            Some(("realistic_road_physics", bit))
         }
         "mouse" => {
             // (as the O key does it: switched off from the menu, the brake the mouse held

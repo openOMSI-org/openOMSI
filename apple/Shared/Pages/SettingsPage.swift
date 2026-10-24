@@ -126,6 +126,9 @@ struct SettingsPage: View {
                 SettingSelect(label: "Cloud quality", key: "cloud_quality", options: Choices.cloudQuality)
             }
             SettingSelect(label: "Rain quality", key: "rain_quality", options: Choices.rainQuality)
+            if mode == "enhanced" {
+                SettingSelect(label: "Street light", key: "street_light", options: [("auto", "Auto"), ("on", "On"), ("off", "Off")])
+            }
             SettingSelect(label: "Vehicle smoke", key: "vehicle_smoke", options: [("all", "All vehicles"), ("player", "Player only"), ("off", "Off")], help: "Controls the vehicles' smoke particles, not scenery effects or glowing particles.")
             if (store.setting("reflections")?.double ?? 1) > 0.005 {
                 SettingSelect(label: "Puddles", key: "puddles", options: [("high", "High"), ("low", "Low"), ("off", "Off")])

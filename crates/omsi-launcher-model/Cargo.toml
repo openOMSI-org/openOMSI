@@ -17,4 +17,5 @@ omsi-launcher-core = { path = "../omsi-launcher-core" }
 omsi-map = { path = "../omsi-map" }
 omsi-net = { path = "../omsi-net" }
 omsi-sim = { path = "../omsi-sim" }
+omsi-timetable = { path = "../omsi-timetable" }
 omsi-weather = { path = "../omsi-weather" }

@@ -121,8 +121,8 @@ pub(crate) fn set_keep_clear(t: &mut traffic::Traffic, player: Option<&Player>, 
     );
 }
 
-/// The timetable puts out its departures: at the start the trips that left within the last
-/// 20 minutes (`first`), then those of the next moments.
+/// The timetable puts out its departures: at the start (`first`) every trip still under way
+/// and those that left within the last 20 minutes, then those of the next moments.
 pub(crate) fn schedule_tick(
     s: &mut schedule::Schedule,
     world: &World,
@@ -509,6 +509,7 @@ pub(crate) fn dress_lighting(
     settings: &crate::settings::Settings,
 ) {
     lighting.inside = inside.and_then(|v| v.ty.def.bounding_box.map(|bb| (v.position, v.heading, bb)));
+    lighting.inside_rotation = inside.filter(|v| v.ty.def.bounding_box.is_some()).map(|v| v.body_rotation());
     let puddle_surface = lighting.inside.and_then(|(o, _, _)| world.and_then(|w| w.puddle_surface(o)));
     lighting.puddle_ground = puddle_surface.map(|(h, _)| h);
     lighting.puddle_normal = puddle_surface.map_or(glam::Vec3::Z, |(_, n)| n);

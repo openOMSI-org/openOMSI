@@ -596,6 +596,13 @@ impl TrailerPart {
         if hi - lo > 0.5 {
             return (hi, lo);
         }
+        // a bogie frame that names no coupling of its own (see `declared_coupling`) stands on the
+        // track by its own middle
+        if is_bogie_frame(&self.ty.def) {
+            // (its own wheelbase: the model's length, not the distance between its couplings)
+            let half = self.ty.model_box().map(|(lo, hi)| (hi.y - lo.y) * 0.5).unwrap_or(0.9).clamp(0.5, 3.0);
+            return (half, -half);
+        }
         let front = self.coupling_front.y * turn;
         (front, front - self.length.max(0.5))
     }

@@ -107,6 +107,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_DUMP_SCENERY_TEXT` | text | - | use | scene | Directory: write the scenery objects' text textures as drawn. |
 | `OMSI_DUMP_SCRIPTTEX` | text | - | use | app | Directory: write the player's bus's script (display) textures. |
 | `OMSI_ENV_PHOTO` | num | 1 | use | render | 0 leaves the environment photo out of the debug views. |
+| `OMSI_FORCE_LOD` | bool | off | use | scene | Draw the lower levels of detail of the AI vehicles at any size (to look at them). |
 | `OMSI_FRAME_ORDER` | bool | off | once | app | Log the window's frame and the offscreen run's step as their ordered stages (phase, what each reads and writes, its profile key), once at start. |
 | `OMSI_GPU_TIMERS` | bool | off | use | render | Measure GPU time per pass with timestamp queries. |
 | `OMSI_GPU_TIMERS_RAW` | bool | off | use | render | With OMSI_GPU_TIMERS: the passes in the order the GPU finished them. |
@@ -115,9 +116,9 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_GROUND_LANES` | bool | off | use | sim | Along every street lane, every metre, how far the ground lies over or under the lane. |
 | `OMSI_LAN_TRACE` | text | - | use | app | LAN CSV file: where the host's people are drawn. |
 | `OMSI_LIST_ALIGNED` | bool | off | use | scene | Log the splines aligned to the terrain. |
-| `OMSI_PROFILE` | bool | off | use | app, platform, render, scene, sim, xr | Time per stage of the frame, logged. |
+| `OMSI_PROFILE` | bool | off | use | app, platform, render, scene, sim, xr | Time per stage of the frame, logged; the session summary comes after --exit-after or when the game is closed. |
 | `OMSI_PROFILE_GPU` | bool | off | use | app | Profile: wait for the GPU so its time shows as a stage of its own. |
-| `OMSI_PROFILE_JSON` | text | - | use | app | With OMSI_PROFILE and --exit-after: the exit summary (after the 15 s warm-up) as JSON into this file, see scripts/compare-performance.py. |
+| `OMSI_PROFILE_JSON` | text | - | use | app | With OMSI_PROFILE: the session summary written after --exit-after or when the game is closed (after the 15 s warm-up) as JSON into this file, see scripts/compare-performance.py. |
 | `OMSI_SUSP_TRACE` | text | - | use | app | Offscreen CSV: body height and each wheel's travel and load every frame. |
 | `OMSI_SUSP_TRACE_WINDOW` | text | - | use | app | Window CSV: each wheel's travel every frame. |
 | `OMSI_TRACE_AI` | text | - | use | sim | CSV: every AI car's pose, steering and speed every frame. |
@@ -149,6 +150,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_BRIDGE_ONLY` | bool | off | use | net | LAN: forget our own addresses so that only what the rendezvous bridge reports is tried. |
 | `OMSI_BUDGET_FROM` | text | - | use | app | Offscreen with OMSI_TEXTURE_MEMORY: x,y[,MB] - the texture budget is met as seen from that point. |
 | `OMSI_CABIN_LOG` | bool | off | use | app | Offscreen --drive: print the cabin air and the film on the windscreen, sides and rear every 20 s. |
+| `OMSI_CAM_SWEEP` | text | - | use | app | yaw[,jump]: the offscreen warm frames come from a camera turning yaw degrees a frame and ending in the picture's pose; with a jump (m), from a place that far to the side (a cut). For checking what reads the last frame. |
 | `OMSI_CAM_VEHICLE` | text | - | use | app | Offscreen: x,y,z,yaw,pitch[,fov] - a camera in the bus's own frame. |
 | `OMSI_CHECK_ENTRIES` | bool | off | use | app | Map check: is there ground to stand on where a player is put down. |
 | `OMSI_CHECK_GROUND` | bool | off | use | sim | Check: people on foot with a walkable surface above their heads, every two seconds. |
@@ -251,6 +253,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_BASIC_PIPELINES` | bool | off | once | guard, render | Use the reduced (basic) render pipelines, as after a driver failed to build the full ones. |
 | `OMSI_CROSSING_DEFORM` | bool | off | use | scene | Apply the crossings' ground deformation again (A/B; Omsi.exe does not). |
 | `OMSI_CUT_PLAIN` | bool | off | use | scene | Road-cut textures uploaded without GPU-made mipmaps. |
+| `OMSI_DEBUG_RAIL` | bool | off | use | sim | Log a rail vehicle's speed, the drive and brake the scripts ask for and the adhesion, twice a second. |
 | `OMSI_FIXED_SCALE` | bool | off | use | app | Keep the render scale fixed (no dynamic resolution). |
 | `OMSI_FORCE_OPAQUE` | bool | off | use | scene | Draw transmap-masked materials opaque. |
 | `OMSI_FULL_GPU` | bool | off | use | render | Keep the requested settings on a small or shared graphics chip, and 8x MSAA with Enhanced+. |
@@ -277,6 +280,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_NO_BRIDGE` | bool | off | use | lan, net | LAN: leave the internet alone - no rendezvous bridge, no tunnel (tests, LAN parties). |
 | `OMSI_NO_BUMP` | bool | off | use | scene | No bump maps. |
 | `OMSI_NO_BUNDLES` | bool | off | frame | render | Record the main pass directly instead of from render bundles. |
+| `OMSI_NO_CABIN_SHADOWS` | bool | off | frame | render | Enhanced: the lamps of the player's saloon cast no shadows (A/B). |
 | `OMSI_NO_CLOUDS` | bool | off | use | app | No clouds. |
 | `OMSI_NO_CORONAS` | bool | off | frame | render | No light coronas. |
 | `OMSI_NO_CULL` | bool | off | once | render | Draw every mesh from both sides (A/B). |
@@ -330,6 +334,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_NO_VAR_SYNC` | bool | off | use | lan | LAN: no variable sync. |
 | `OMSI_NO_WHEEL_SLIP` | bool | off | use | sim | Every wheel grips, as before wheels turned on their own (A/B). |
 | `OMSI_OLD_WORLD_GRID` | bool | off | use | map | Maps with world coordinates take the one tile size of 371.9 m (comparison). |
+| `OMSI_REALISTIC_ROAD` | bool | off | use | sim | The setting "Realistic road physics" on for this run (A/B against the OMSI 2 model: slip-angle tyres, surfaces, road roughness, wind). |
 | `OMSI_REPAIR_BODY_DEPTH` | bool | off | use | scene | The old guess for [matl_alpha] 2 vehicle bodies (A/B). |
 | `OMSI_ROAD_CUT` | bool | off | once | geometry | Take the ground away under every road surface (Omsi.exe does not). |
 | `OMSI_RT_REFL_HALF` | bool | off | use | render | Trace reflections at half size. |
@@ -369,11 +374,13 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_PUDDLE_F0` | num | 0.08 | use | render | Puddle reflectance at normal incidence (0.02 to 0.2). |
 | `OMSI_PUDDLE_THICKNESS` | num | 0.12 | use | render | Puddle water film thickness. |
 | `OMSI_RUNNER_CHANCE` | num | 0.05 | use | sim | Chance a late passenger runs for a bus standing at a stop (0: never, 1: every bus). |
+| `OMSI_STORM` | text | - | use | render | activity[,azimuth]: a thunderstorm of this activity (0..1) over the place whatever the weather; with an azimuth (degrees, 0 east, 90 north) the flash stands frozen there at its first stroke (for checks). |
 | `OMSI_SURFACE_BIAS` | num | -24 | use | render | Depth bias of road surfaces. |
 | `OMSI_SURFACE_FLUSH` | num | 0.12 | once | sim | Height in metres under which a surface counts as flush with the road. |
 | `OMSI_TEXTURE_MEMORY` | num | settings | use | app | Texture budget in MB. |
 | `OMSI_TONE_CONTRAST` | text | 1 | once | render | day[,night]: tone mapping contrast. |
 | `OMSI_VIDEO_MEMORY` | num | settings | use | app | What the game may hold on the graphics card all together (textures, meshes, render targets), in MB. |
+| `OMSI_WIDE_AO` | text | - | use | render | reach,strength,gain,max: the street-scale occlusion of the sky and the bounced light (m, 0..1, 0..1, radiance). |
 | `OMSI_WINDY_TREES` | text | settings | use | app | 0 or 1: trees in the wind off or on (A/B renders). |
 
 ## Set-up
@@ -393,6 +400,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_LAUNCHER` | text | - | use | app, guard | Program a plain start opens as the launcher instead of the desktop launcher (openomsi-launcher-app) beside the game. |
 | `OMSI_OFFICIAL_KEY` | text | - | use | lan | File of the official server's signing key. |
 | `OMSI_PLUGIN_HOST32` | text | beside the game | use | plugin | Path of omsi-plugin-host32.exe. |
+| `OMSI_PLUGIN_PROCESS_ALLOW` | text | none | use | plugin | Optional native process preapproval: absolute path to a JSON manifest binding plugin content and in-folder helpers to SHA256 hashes. The interactive game otherwise asks the player. Changes revoke consent; packages must declare process. Approved programs run with the game account permissions. |
 | `OMSI_PRESENCE_URL` | text | built-in | use | platform | Base URL of the presence ("playing now") service. |
 | `OMSI_ROOT` | text | found | use | app, lan, launcher-core, o3d, sim | The OMSI 2 installation folder (also the content root for tests that need real content). |
 | `OMSI_SAFE_GPU` | num | 0 | use | app | Restarts after a lost graphics device: lighter on the card each time. Set at runtime on Android and by the restart. |

@@ -1,11 +1,12 @@
-//! The shadow the player's own headlamps cast (Enhanced): the lamps on the vehicle's front
-//! that light the road ahead, taken together as one source between them, get one of the
-//! street lamps' shadow map tiles (`LampShadow`, under the far map) - a perspective view
-//! from there along the road. What stands in the beams - a car ahead, a pole, a passenger at
-//! the stop - throws its shadow forward along the road instead of being lit through.
+//! The shadow a vehicle's headlamps cast (Enhanced): the lamps on the vehicle's front that
+//! light the road ahead, taken together as one source between them, get one of the shadow
+//! map tiles (`LampShadow`, under the far map) - a perspective view from there along the
+//! road. What stands in the beams - a car ahead, a pole, a passenger at the stop - throws its
+//! shadow forward along the road instead of being lit through. The player's headlamps are
+//! the first of them; the nearest cars' are given the others (`group_spots`).
 //!
-//! One map for the pair, not one a lamp: two maps would take two of the four tiles the
-//! street lamps share, for shadows that differ only by the lamps' spacing at the edges.
+//! One map for the pair, not one a lamp: two maps would take two tiles, for shadows that
+//! differ only by the lamps' spacing at the edges.
 //! The vehicle's own parts are no casters for it: the map's eye sits a few centimetres
 //! ahead of the lamps' face, and a bumper or a towing eye standing out in front of it
 //! would have darkened the whole road.
@@ -20,7 +21,7 @@ const HEADLAMP_SHADOW_FOV: f32 = 110.0;
 const HEADLAMP_SHADOW_PITCH: f32 = 22.0;
 /// How far the map reaches at most (m): a full beam is declared to reach some hundreds of
 /// metres, but past this its light on a caster's shadow is lost among the street's own.
-const HEADLAMP_SHADOW_REACH: f32 = 90.0;
+pub(crate) const HEADLAMP_SHADOW_REACH: f32 = 90.0;
 /// How far round the vehicle's `[boundingbox]` a lamp still counts as one of its own (m):
 /// the headlamps' light is placed just in front of the vehicle's face (lights.rs).
 const OWN_LAMP_MARGIN: f32 = 0.6;
@@ -79,18 +80,7 @@ pub(crate) fn headlamp_shadow(lamps: &[(Vec3, Vec3, f32)], own: VehicleBox, cam_
     }
     // (the index the shaders compare is the tile's own code: every one of the lamps marked
     // as the player's reads this map, see `lamp_shadow_at`)
-    Some(LampShadow { index: 0, position, range, owner: None, look: Some(look), own: Some(own) })
-}
-
-/// What `lamp_shadow` (the camera uniform) holds for a tile: the light it belongs to, or
-/// -2 for the player's headlamps (the lights the light buffer marks as theirs, see
-/// `prepare_lights`).
-pub(crate) fn lamp_shadow_code(l: &LampShadow) -> f32 {
-    if l.look.is_some() {
-        -2.0
-    } else {
-        l.index as f32
-    }
+    Some(LampShadow { position, range, look: Some(look), own: Some(own), ..LampShadow::new(VEHICLE_SLOTS.start) })
 }
 
 impl LampShadow {
@@ -110,6 +100,10 @@ impl LampShadow {
         let d = c - self.position;
         if d.length() >= self.range + r {
             return false;
+        }
+        // (a saloon lamp's map holds what stands in the vehicle, under the lamp)
+        if let Some(cabin) = &self.cabin {
+            return c.z - r < self.position.z && cabin.vehicle.contains(c, 0.3);
         }
         match self.look {
             None => c.z - r < self.position.z,
@@ -141,7 +135,7 @@ mod tests {
     fn the_headlamps_shadow_what_is_ahead_but_not_their_own_bus() {
         let lamps = [(Vec3::new(-0.9, 6.05, 0.8), Vec3::new(0.0, 1.0, -0.05), 60.0), (Vec3::new(0.9, 6.05, 0.8), Vec3::new(0.0, 1.0, -0.05), 60.0)];
         let m = headlamp_shadow(&lamps, bus(), Vec3::new(0.0, -15.0, 3.0)).expect("a map");
-        assert_eq!(lamp_shadow_code(&m), -2.0);
+        assert_eq!(m.slot, VEHICLE_SLOTS.start);
         assert!((m.position - Vec3::new(0.0, 6.05, 0.8)).length() < 1e-4);
         // a car 15 m ahead, one beside the road behind the bus, the bus's bumper
         assert!(m.reaches(Vec3::new(0.5, 21.0, 0.7), 2.2));

@@ -44,6 +44,10 @@ pub struct Schedule {
     fleet_ready: Arc<parking_lot::Mutex<Vec<crate::scene::VehicleKey>>>,
     /// Time of day of the last look at the next departures' vehicles.
     fleet_check: f64,
+    /// Vehicle sets a departure needed that were not on the GPU: read ahead before the
+    /// departure is tried again (see `Schedule::sets_ready`), not built on the frame it
+    /// is put on the road.
+    fleet_wanted: Vec<(Arc<VehicleType>, Option<usize>)>,
     /// Seconds until the next look for due departures (see `frame_traffic`).
     pub(crate) tick_t: f32,
 }
@@ -71,6 +75,7 @@ impl Schedule {
             fleet_reading: HashMap::new(),
             fleet_ready: Default::default(),
             fleet_check: f64::NEG_INFINITY,
+            fleet_wanted: Vec::new(),
             // (a second after the population's, never in the same frame)
             tick_t: 1.0,
         }

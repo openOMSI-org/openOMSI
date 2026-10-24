@@ -390,7 +390,7 @@ struct TripsTable: View {
             .fieldBackground()
             .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSm, style: .continuous))
             .onAppear { if let c = current { proxy.scrollTo(c, anchor: .center) } }
-            .onChange(of: "\(tour.number)|\(current ?? -1)") { _, _ in
+            .onChange(of: "\(tour.id)|\(current ?? -1)") { _, _ in
                 if let c = current { withAnimation { proxy.scrollTo(c, anchor: .center) } }
             }
         }

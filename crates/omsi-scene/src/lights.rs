@@ -49,6 +49,12 @@ pub fn lighting_from(d: &Daylight, fog_range: f32) -> Lighting {
     }
 }
 
+/// How dark the weather alone makes the day (0..0.45): a closed sky and rain bring the night
+/// factor up, so the interior lights and nightmaps start to show.
+pub fn gloom_darkness(overcast: f32, rain: f32) -> f32 {
+    0.45 * (overcast * 0.5 + rain * 0.5).clamp(0.0, 1.0)
+}
+
 /// What the weather does to the light: an overcast sky takes the sun away and turns
 /// everything grey and flat, rain darkens it further, fog and snow take their colour
 /// from the sky. `cloud_density` 0..1 (1 = closed cover), `precip` 0..1, `snow` 0..1.
@@ -98,8 +104,7 @@ pub fn apply_weather(
     l.overcast = overcast;
     l.rain = rain;
     l.snowfall = if precip_kind == 2 { rain } else { 0.0 };
-    let gloom = (overcast * 0.5 + rain * 0.5).clamp(0.0, 1.0);
-    l.night = l.night.max(0.45 * gloom);
+    l.night = l.night.max(gloom_darkness(overcast, rain));
     // (night maps on with the street lamps, or where the weather makes it that dark: a
     // clear dusk showed the lit windows and signs at a fraction, a rainy one at nearly
     // full, #276)
@@ -452,6 +457,13 @@ fn push_spot(lights: &mut Vec<PointLight>, at: DVec3, d: Vec3, level: Vec3, vals
 /// near it - for cars whose beams far off light a few metres of road nobody sees.
 const AI_BEAMS: usize = 12;
 const AI_BEAM_RANGE: f64 = 200.0;
+/// How dark the scene has to be (0 day, 1 night; the sun's height and the weather's gloom, the
+/// larger) for the cars to be lent any beams, and how dark for all of `AI_BEAMS` of them within
+/// `AI_BEAM_RANGE`. In between, in a grey or rainy day, only the nearest few close by.
+const AI_BEAM_MIN_DARK: f32 = 0.12;
+const AI_BEAM_FULL_DARK: f32 = 0.5;
+const AI_BEAMS_DIM: usize = 3;
+const AI_BEAM_RANGE_DIM: f64 = 60.0;
 
 /// Whether a vehicle has no spot of its own and is lent its headlamps' beams.
 fn lends_beams(model: &omsi_model::Model) -> bool {
@@ -459,18 +471,26 @@ fn lends_beams(model: &omsi_model::Model) -> bool {
 }
 
 /// Which of `vehicles` (by index) may be lent their headlamps' beams (lit ones alone get
-/// them): the nearest `AI_BEAMS` without spots of their own within `AI_BEAM_RANGE` of the
-/// camera.
-fn cars_with_beams(vehicles: &[&VehicleInstance], camera: DVec3) -> Vec<usize> {
+/// them): the nearest without spots of their own - `AI_BEAMS` within `AI_BEAM_RANGE` of the
+/// camera in the dark, `AI_BEAMS_DIM` within `AI_BEAM_RANGE_DIM` in a gloomy day (`dark` from
+/// `AI_BEAM_MIN_DARK`), none by day.
+fn cars_with_beams(vehicles: &[&VehicleInstance], camera: DVec3, dark: f32) -> Vec<usize> {
+    let (count, range) = if dark < AI_BEAM_MIN_DARK {
+        return Vec::new();
+    } else if dark < AI_BEAM_FULL_DARK {
+        (AI_BEAMS_DIM, AI_BEAM_RANGE_DIM)
+    } else {
+        (AI_BEAMS, AI_BEAM_RANGE)
+    };
     let mut near: Vec<(f64, usize)> = vehicles
         .iter()
         .enumerate()
         .filter(|(_, v)| lends_beams(&v.ty.model))
         .map(|(k, v)| ((v.position - camera).length(), k))
-        .filter(|(d, _)| *d < AI_BEAM_RANGE)
+        .filter(|(d, _)| *d < range)
         .collect();
     near.sort_by(|a, b| a.0.total_cmp(&b.0));
-    near.into_iter().take(AI_BEAMS).map(|(_, k)| k).collect()
+    near.into_iter().take(count).map(|(_, k)| k).collect()
 }
 
 /// The headlamps a model without a `[spotlight]` has (its position, direction, colour 0..255
@@ -598,6 +618,7 @@ fn push_enhanced_spot(lights: &mut Vec<PointLight>, at: DVec3, d: Vec3, level: V
         shadow_owner: None,
         mode: LightMode::Enhanced,
         cookie: None,
+        flash: false,
     });
 }
 
@@ -940,7 +961,13 @@ pub fn collect(
     let vehicle_smoke = scene.smoke.len();
     // the headlamps lent to cars without spots of their own: the nearest few alone (see
     // `AI_BEAMS`)
-    let beams = cars_with_beams(vehicles, camera_pos);
+    // (by day they light nothing anyone sees, yet any light at all in the scene makes every
+    // pixel look through the lamp grid and the weather's fog work the lamps' air light out -
+    // 13 ms of a 25 ms frame in a grey winter noon where the cars have their lights on; so
+    // how many cars are lent beams, and how far, goes with how dark the scene is, the weather's
+    // gloom included, see `cars_with_beams`)
+    let dark = if cone.enhanced { night.max(cone.gloom) } else { 1.0 };
+    let beams = cars_with_beams(vehicles, camera_pos, dark);
     for (k, v) in vehicles.iter().enumerate() {
         vehicle_lights(v, &mut scene.coronas, &mut scene.lights, night, &world.cookie_fades, beams.contains(&k));
         // light_vehicles puts the player's bus first (if any). LAN guests and AI
@@ -1222,11 +1249,23 @@ pub fn upload_corona_textures(renderer: &mut omsi_render::Renderer) {
 pub struct ConeWeather {
     pub fog_visibility_m: f32,
     pub night: f32,
+    /// How dark the weather alone makes the day (`gloom_darkness`): it does not change the
+    /// cones, but counts in whether the scene is dark enough for the AI cars' beams.
+    pub gloom: f32,
+    pub enhanced: bool,
 }
 
 impl ConeWeather {
     pub fn new(fog_visibility_m: f32, night: f32) -> ConeWeather {
-        ConeWeather { fog_visibility_m, night: night.clamp(0.0, 1.0) }
+        ConeWeather { fog_visibility_m, night: night.clamp(0.0, 1.0), gloom: 0.0, enhanced: false }
+    }
+
+    /// [`ConeWeather::new`] for the weather `w`, whose clouds and rain darken the day.
+    pub fn of(w: &omsi_content::weather::Weather, night: f32) -> ConeWeather {
+        let (kind, rate) = omsi_weather::conditions::precip_of(w);
+        let overcast = (omsi_content::weather_choice::cover_of(w).clamp(0.0, 1.0) - 0.45).max(0.0) / 0.55;
+        let rain = if kind != 0 { rate.clamp(0.0, 1.0) } else { 0.0 };
+        ConeWeather { gloom: gloom_darkness(overcast, rain), ..ConeWeather::new(w.fog.0, night) }
     }
 
     /// The visibility (no fog: a million metres) and the dark.

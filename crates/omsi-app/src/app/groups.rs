@@ -147,9 +147,44 @@ pub(crate) struct PerfState {
     pub(crate) frame_times: Vec<f32>,
     /// Each kept frame's stage times, `ProfKey::ALL` in order (seconds; OMSI_PROFILE only).
     pub(crate) frame_stages: Vec<f32>,
+    /// OMSI_PROFILE: the session's summary has been written (`App::log_profile_summary`).
+    pub(crate) profile_written: bool,
     pub(crate) overlay: crate::perf_overlay::PerfOverlay,
     pub(crate) texture_cut_at: Option<Instant>,
     pub(crate) optimiser: crate::optimiser::Optimiser,
+}
+
+impl PerfState {
+    /// Nothing measured yet: the `OMSI_INPUT` script to play and when the frame count began.
+    pub(crate) fn new(input_script: Vec<(f32, String)>, fps_t: Instant) -> PerfState {
+        PerfState {
+            fps: 0.0,
+            profile: Default::default(),
+            profile_prev: Default::default(),
+            total_frames: 0,
+            input_script,
+            shot: None,
+            frames: 0,
+            fps_t,
+            log_state: Default::default(),
+            spikes: 0,
+            worst_ms: 0.0,
+            governor: (0.0, 0, 0.0),
+            governor_low: 0,
+            governor_wait_prev: 0.0,
+            play_started: None,
+            cpu_mark: None,
+            thread_cpu_mark: None,
+            instructions_mark: None,
+            profile_mark: None,
+            profile_written: false,
+            frame_times: Vec::new(),
+            frame_stages: Vec::new(),
+            overlay: crate::perf_overlay::new(),
+            texture_cut_at: None,
+            optimiser: Default::default(),
+        }
+    }
 }
 
 /// The drawing around the renderer: the wgpu instance and surface, the tile streaming, the

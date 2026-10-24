@@ -19,6 +19,7 @@ pub mod input;
 pub mod particles;
 pub mod people;
 pub mod physics;
+pub mod rail;
 pub mod rigid;
 pub mod scenery;
 pub mod scripttex;

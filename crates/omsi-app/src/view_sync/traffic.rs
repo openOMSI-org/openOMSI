@@ -84,7 +84,7 @@ impl TrafficView {
     pub(crate) fn add_trailer(&mut self, world: &World, renderer: &Renderer, scene: &mut Scene, id: u64, t: &Arc<VehicleType>) {
         if let Some(r) = self.cars.get_mut(&id) {
             r.trailers
-                .push(world.add_vehicle_shared(renderer, scene, t, None, Some(&r.body)));
+                .push(world.add_vehicle_shared_lod(renderer, scene, t, None, Some(&r.body), true));
         }
     }
 
@@ -116,10 +116,10 @@ impl TrafficView {
     pub(crate) fn apply(&mut self, event: TrafficEvent, world: &World, renderer: &Renderer, scene: &mut Scene) {
         match event {
             TrafficEvent::Spawned { id, ty, scheme, trailers } => {
-                let body = world.add_vehicle_shared(renderer, scene, &ty, scheme, None);
+                let body = world.add_vehicle_shared_lod(renderer, scene, &ty, scheme, None, true);
                 let trailers = trailers
                     .iter()
-                    .map(|(t, scheme)| world.add_vehicle_shared(renderer, scene, t, *scheme, Some(&body)))
+                    .map(|(t, scheme)| world.add_vehicle_shared_lod(renderer, scene, t, *scheme, Some(&body), true))
                     .collect();
                 self.insert(id, CarRender { body, trailers, strs: Vec::new() });
             }
@@ -286,6 +286,9 @@ impl Traffic {
                 let meshes = snap.meshes(part);
                 for (inst, m) in render.instances.iter().zip(meshes) {
                     renderer.set_transform(scene, *inst, position, turn * m.local);
+                }
+                for inst in &render.far {
+                    renderer.set_transform(scene, *inst, position, rot);
                 }
                 let lamps = snap.lamps(looks, j);
                 crate::scene::sync_interior_lamps(renderer, scene, &part.ty, position, rot, |li| lamps.get(li).copied().unwrap_or(false), render);
@@ -535,7 +538,7 @@ impl Traffic {
             let Some(looks) = snap.looks(frame).filter(|_| frame.shown) else {
                 if !r.body.hidden {
                     r.body.hidden = true;
-                    for inst in r.body.instances.iter().chain(r.trailers.iter().flat_map(|r| r.instances.iter())) {
+                    for inst in r.body.instances.iter().chain(&r.body.far).chain(r.trailers.iter().flat_map(|r| r.instances.iter().chain(&r.far))) {
                         renderer.set_params(scene, *inst, &[], false, &[]);
                     }
                 }
@@ -626,6 +629,12 @@ fn show_looks(renderer: &Renderer, scene: &mut Scene, snap: &FrameSnapshot, part
 /// per-slot values. `alpha`: a buffer for the slots' alpha, kept by the caller.
 fn pose_part(renderer: &Renderer, scene: &mut Scene, snap: &FrameSnapshot, part: &PartFrame, r: &VehicleRender, alpha: &mut Vec<f32>) {
     let meshes = snap.meshes(part);
+    // the lower levels of detail stand where the body does; the renderer draws them or the
+    // full model by the vehicle's size on the screen
+    for inst in &r.far {
+        renderer.set_transform(scene, *inst, part.position, part.rotation);
+        renderer.set_params(scene, *inst, &[], true, &[]);
+    }
     for (inst, m) in r.instances.iter().zip(meshes) {
         renderer.set_transform(scene, *inst, part.position, m.local);
         // AI vehicles do not run every cockpit/material script that the player

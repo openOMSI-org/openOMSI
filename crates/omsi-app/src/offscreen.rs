@@ -241,7 +241,7 @@ fn world_lights(
     world.update_light_map_atlas(renderer, eye);
     lights::collect(
         world, scene, daylight, eye, vehicles,
-        lights::ConeWeather::new(weather.fog.0, daylight.night),
+        lights::ConeWeather { enhanced: !renderer.options.no_enhanced, ..lights::ConeWeather::of(weather, daylight.night) },
         lights::VehicleSmoke::from_setting(vehicle_smoke), player_first,
     );
     // (and the pictures the lights asked for first now: a picture has the one frame)

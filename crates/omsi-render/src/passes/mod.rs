@@ -19,8 +19,8 @@ mod shadow_plan;
 mod submit;
 
 pub(crate) use batch::DrawPlan;
-pub(crate) use headlamp_shadow::{headlamp_shadow, lamp_shadow_code, own_headlamp, VehicleBox};
-pub(crate) use shadow::LampTiles;
+pub(crate) use headlamp_shadow::{headlamp_shadow, own_headlamp, VehicleBox, HEADLAMP_SHADOW_REACH};
+pub(crate) use shadow::{CabinMotion, LampTiles};
 pub(crate) use shadow_plan::ShadowPlan;
 
 /// The frame's switches from the environment: read once at the start of every frame

@@ -7,12 +7,21 @@ use crate::*;
 pub(crate) struct Shadows {
     pub view: wgpu::TextureView,
     pub view_far: wgpu::TextureView,
+    /// Where the lamps' tiles lie under the far cascade.
+    pub lamp_atlas: LampAtlas,
     pub sampler: wgpu::Sampler,
     pub clear_pipeline: wgpu::RenderPipeline,
     pub pipelines: Vec<wgpu::RenderPipeline>,
 }
 
-pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, shadow_size: u32) -> Shadows {
+/// `lamps`: the picture is an Enhanced one, which looks the lamps' shadows up (the plain ones
+/// have no tiles under the far map, nor pipelines to draw them).
+pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, shadow_size: u32, lamps: bool) -> Shadows {
+    // (the lamps' tiles are left out where their pipelines are: see `basic_pipelines`)
+    let lamp_atlas = LampAtlas::new(shadow_size, lamps && !basic_pipelines(), device.limits().max_texture_dimension_2d);
+    if lamp_atlas.rows == 0 && lamps && !basic_pipelines() {
+        log::warn!("renderer: no room for the lamps' shadow tiles under a far shadow map of {shadow_size} texels: the lamps cast no shadows");
+    }
     // sun shadow map: depth only, from the light's orthographic camera
     let shadow_tex = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("shadow map"),
@@ -32,10 +41,10 @@ pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, shadow_size: u32) 
     let shadow_view = shadow_tex.create_view(&Default::default());
     let shadow_tex_far = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("shadow map far"),
-        // (and the street lamps' tiles under it, see `LAMP_SHADOWS`)
+        // (and the lamps' tiles under it, see `LampAtlas`)
         size: wgpu::Extent3d {
             width: shadow_size,
-            height: (shadow_size as f32 * FAR_MAP_ASPECT) as u32,
+            height: lamp_atlas.height(),
             depth_or_array_layers: 1,
         },
         mip_level_count: 1,
@@ -70,10 +79,7 @@ pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, shadow_size: u32) 
                     0 => "vs_shadow",
                     1 => "vs_shadow_far",
                     2 => "vs_shadow_close",
-                    3 => "vs_shadow_lamp0",
-                    4 => "vs_shadow_lamp1",
-                    5 => "vs_shadow_lamp2",
-                    _ => "vs_shadow_lamp3",
+                    _ => "vs_shadow_lamp",
                 }),
                 buffers: &[scene.vertex_layout.clone()],
                 compilation_options: Default::default(),
@@ -115,19 +121,21 @@ pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, shadow_size: u32) 
         make_shadow(PIPE_OPAQUE, 2),
         make_shadow(PIPE_ALPHA_TEST, 2),
     ];
-    if !basic_pipelines() {
-        // (the street lamps' tiles, 6 + 2 k + kind)
-        log::info!("renderer: compiling the street lamps' shadow shaders");
+    if lamp_atlas.rows > 0 {
+        // (the lamps' tiles, 6 + kind: one vertex shader draws every tile, reading its matrix
+        // by the tile named in the draw list's entries; only where there are tiles)
+        log::info!("renderer: compiling the lamps' shadow shaders");
         // (left out alone where the driver fails on them: the lamps then cast no shadows,
         // `shadow_pipelines.len() > 6`)
-        let lamps = optional_pipeline(device, "the street lamps' shadows", || {
-            (3..=6).flat_map(|cascade| [make_shadow(PIPE_OPAQUE, cascade), make_shadow(PIPE_ALPHA_TEST, cascade)]).collect::<Vec<_>>()
+        let tile_pipelines = optional_pipeline(device, "the lamps' shadows", || {
+            vec![make_shadow(PIPE_OPAQUE, 3), make_shadow(PIPE_ALPHA_TEST, 3)]
         });
-        shadow_pipelines.extend(lamps.into_iter().flatten());
+        shadow_pipelines.extend(tile_pipelines.into_iter().flatten());
     }
     Shadows {
         view: shadow_view,
         view_far: shadow_view_far,
+        lamp_atlas,
         sampler: shadow_sampler,
         clear_pipeline: shadow_clear_pipeline,
         pipelines: shadow_pipelines,

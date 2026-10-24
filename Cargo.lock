@@ -1114,9 +1114,9 @@ dependencies = [
 
 [[package]]
 name = "ctutils"
-version = "0.4.2"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d5515a3834141de9eafb9717ad39eea8247b5674e6066c404e8c4b365d2a29e"
+checksum = "38d28fb6aa7dd680b3ffd1a3e64e115c177bdba63c0ae7f9cd48129ff05c4fa0"
 dependencies = [
  "cmov",
 ]
@@ -3708,6 +3708,7 @@ dependencies = [
  "omsi-weather",
  "serde",
  "serde_json",
+ "url",
 ]
 
 [[package]]
@@ -3747,6 +3748,7 @@ dependencies = [
  "omsi-map",
  "omsi-net",
  "omsi-sim",
+ "omsi-timetable",
  "omsi-weather",
  "serde",
  "serde_json",
@@ -3878,12 +3880,17 @@ dependencies = [
 name = "omsi-plugin"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "libloading 0.9.0",
  "log",
  "mlua",
  "omsi-cfg",
  "oop-format",
+ "serde",
+ "serde_json",
+ "sha2",
  "wasmi",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

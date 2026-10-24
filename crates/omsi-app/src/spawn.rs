@@ -345,7 +345,10 @@ pub(crate) fn spawn_player_prepared(
     // and the terrain where it is not cut away under them (the streamer keeps both maps to
     // the loaded tiles, and the bus is one of its centres)
     vehicle.contact = Some(std::sync::Arc::new(scene::LiveGround(world.data.clone())));
-    let objects = crate::settings::Settings::load().collision_objects;
+    let loaded = crate::settings::Settings::load();
+    // (the road model of new bodies: the setting, or `OMSI_REALISTIC_ROAD=1`)
+    omsi_sim::rigid::set_realistic_default(loaded.realistic_road_physics);
+    let objects = loaded.collision_objects;
     vehicle.collision = objects.then(|| world.data.peek().lists.collision.clone());
     vehicle.wheel_walls = objects;
     let wires = if vehicle.trolley.is_some() { crate::trolley_net::load(args, world) } else { None };
@@ -646,6 +649,7 @@ fn new_player(vehicle: omsi_sim::VehicleInstance, render: scene::VehicleRender, 
         blind_pick: None,
         ibis_typist: None,
         duty_typed: false,
+        ibis_holds: Default::default(),
         html_next_stop: None,
         ibis_background: false,
         arm: Default::default(),

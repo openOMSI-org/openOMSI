@@ -22,10 +22,11 @@ struct Camera {
     flags: vec4<f32>,        // x detail texturing, y enhanced graphics, z never set (see fs_main's end), w close cascade half range
     light_view_proj_close: mat4x4<f32>,
     wind: vec4<f32>,         // the player's vehicle's velocity (m/s, world): the airstream on its glass
-    // Enhanced: the street lamps' shadow maps (the tiles under the far map), and the
-    // lights they belong to (-1: none)
-    lamp_view_proj: array<mat4x4<f32>, 4>,
-    lamp_shadow: vec4<f32>,
+    // Enhanced: the lamps' shadow maps (the tiles under the far map; zero where nothing is
+    // drawn) and where the tiles lie: x a tile's side, y tiles to a row, z the far map's
+    // texture height, w the number of tiles (`LampAtlas::uniform`)
+    lamp_view_proj: array<mat4x4<f32>, 44>,
+    lamp_atlas: vec4<f32>,
     // Windy trees: xy the weather's wind (m/s, world; 0 with the setting off), zw how far
     // the air has carried the gusts since the start (m, modulo PATTERN_PERIOD)
     tree_wind: vec4<f32>,
@@ -39,6 +40,9 @@ struct Camera {
     // angles across and up; z: its first record in the light buffer), see enhanced.wgsl
     // `cookie_light`
     cookies: array<vec4<f32>, 8>,
+    // Enhanced: the lights of the player's saloon that have a shadow map (their places in the
+    // light buffer, 4 a vector, -1 for none): see `cabin_visibility`
+    cabin_lamps: array<vec4<f32>, 4>,
 };
 
 // 1 when the point lies inside the player's vehicle (its [boundingbox], shrunk a little so

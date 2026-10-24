@@ -43,6 +43,21 @@ impl Traffic {
             log::info!("traffic: the map drives on the left");
         }
         net.link(1.5);
+        // which rail lane is tram track, railway or metro, and how fast its curves allow
+        let rail_lanes = omsi_sim::rail::classify(&mut net, &omsi_sim::rail::RailMapConfig::load(&world.map_dir));
+        if rail_lanes > 0 {
+            let of = |c: omsi_sim::rail::TrackClass| net.lanes.iter().filter(|l| l.track.is_some_and(|t| t.class == c)).count();
+            log::info!("rail: {rail_lanes} rail lanes ({} in the street, {} railway)", of(omsi_sim::rail::TrackClass::Street), of(omsi_sim::rail::TrackClass::Mainline));
+            let mut names: Vec<(&str, usize)> = Vec::new();
+            for l in net.lanes.iter().filter(|l| l.track.is_some()) {
+                match names.iter_mut().find(|(n, _)| *n == l.name) {
+                    Some((_, c)) => *c += 1,
+                    None => names.push((&l.name, 1)),
+                }
+            }
+            names.sort_by_key(|(_, c)| std::cmp::Reverse(*c));
+            log::info!("rail: lanes by file: {}", names.iter().take(16).map(|(n, c)| format!("{n} x{c}")).collect::<Vec<_>>().join(", "));
+        }
         let RandomTypes { types, groups, group_curves, group_uvg, uvg_defaults } = random_types(root, world);
         // No buses in the random road traffic: the depot groups of `ailists.cfg` are the
         // fleet the *timetable* drives, and OMSI puts a bus on a street only because a trip

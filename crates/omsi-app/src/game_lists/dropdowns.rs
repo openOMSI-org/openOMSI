@@ -255,6 +255,7 @@ pub(super) fn same_value(a: &str, b: &str) -> bool {
 pub(super) fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
     match key {
         "cloud_quality" => vec![("high", "High"), ("low", "Low")],
+        "street_light" => vec![("auto", "Auto"), ("on", "On"), ("off", "Off")],
         "rain_quality" => vec![("high", "High"), ("medium", "Medium"), ("low", "Low")],
         "vehicle_smoke" => vec![("all", "All vehicles"), ("player", "Player only"), ("off", "Off")],
         "puddles" => vec![("high", "High"), ("low", "Low"), ("off", "Off")],
@@ -389,6 +390,11 @@ pub(super) fn text_in_mode(text: &str, mode: &str) -> crate::settings::Settings 
 }
 
 pub(super) fn sync_live(app: &mut App) {
+    // (the street light takes effect at once: the renderer reads it every frame)
+    let street_light = app.settings.render_options().street_light;
+    if let Some(r) = app.renderer.as_mut() {
+        r.options.street_light = street_light;
+    }
     let s = &app.settings;
     if let Some(w) = app.world.as_ref() {
         w.settings.set_sound_scenery(s.vol_scenery);

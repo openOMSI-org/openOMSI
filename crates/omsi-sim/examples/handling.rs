@@ -1,7 +1,8 @@
 //! How a bus handles on the rigid body, from its own `.bus` file: a steering step at a
 //! steady speed on a flat road, and the body settling after the wheel is straightened.
 //!
-//! `cargo run --release -p omsi-sim --example handling -- <file.bus>... [--kmh 50] [--steer 0.25]`
+//! `cargo run --release -p omsi-sim --example handling -- <file.bus>... [--kmh 50] [--steer 0.25] [--realistic]`
+//! (`--realistic`: the model of the "Realistic road physics" setting; without it OMSI 2's)
 //!
 //! Per bus it prints what the numbers of its file make of it: the yaw rate against the one
 //! the steering geometry asks for (1.00 = the bus follows its wheels), the time to 90 % of
@@ -16,10 +17,12 @@ use std::path::PathBuf;
 fn main() {
     let mut files: Vec<PathBuf> = Vec::new();
     let (mut kmh, mut steer) = (50.0f32, 0.25f32);
+    let mut realistic = false;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
             "--kmh" => kmh = args.next().and_then(|v| v.parse().ok()).unwrap_or(kmh),
+            "--realistic" => realistic = true,
             "--steer" => steer = args.next().and_then(|v| v.parse().ok()).unwrap_or(steer),
             _ => files.push(a.into()),
         }
@@ -35,6 +38,7 @@ fn main() {
             }
         };
         let mut rb = RigidBody::from_definition(&def, &[]);
+        rb.realistic = realistic;
         rb.place(DVec3::ZERO, 0.0);
         let dt = 1.0 / 60.0;
         let brakes = vec![0.0; rb.wheels.len()];

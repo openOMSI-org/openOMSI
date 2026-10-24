@@ -76,8 +76,10 @@ impl ScheduleSim {
                             yesterday: false,
                         };
                         // (a trip after 24:00 runs in the early hours of the next day as
-                        // well: the night tour that began the evening before, #2166)
-                        if d.time >= DAY {
+                        // well: the night tour that began the evening before, #2166 - and so
+                        // does one that leaves before midnight and is still on its way after
+                        // it, for a map opened in the small hours)
+                        if reaches_tomorrow(d.time, times[ti][profile].duration) {
                             departures.push(Departure { time: d.time - DAY, yesterday: true, line: d.line.clone(), ai_group: d.ai_group.clone(), tour: d.tour.clone(), ..d });
                         }
                         departures.push(d);
@@ -543,6 +545,26 @@ pub(super) fn night_twins(departures: &[Departure]) -> Vec<Option<usize>> {
         }
     }
     twin
+}
+
+/// Whether a departure at `time` (seconds of its day) of a trip `duration` long is on the
+/// road after that day's midnight: then it is also yesterday's departure in today's early
+/// hours.
+fn reaches_tomorrow(time: f64, duration: f64) -> bool {
+    time >= DAY || time + duration > DAY
+}
+
+#[cfg(test)]
+mod midnight_tests {
+    use super::reaches_tomorrow;
+
+    #[test]
+    fn trips_on_the_road_after_midnight_are_also_yesterdays() {
+        // 25:10, and 21:40 for five hours, run after midnight; 22:00 for an hour does not
+        assert!(reaches_tomorrow(90_600.0, 1_800.0));
+        assert!(reaches_tomorrow(78_000.0, 18_000.0));
+        assert!(!reaches_tomorrow(79_200.0, 3_600.0));
+    }
 }
 
 /// Advance just the calendar date. The time-of-day on this copy isn't used for

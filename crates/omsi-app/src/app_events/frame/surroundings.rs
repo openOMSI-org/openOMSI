@@ -58,7 +58,8 @@ crate::app::stage_ctx!(
 /// the snow, the cabin air, the tyres' spray and the sounds of the street.
 pub(super) fn lights(cx: LightsCx, dt: f32, daylight: omsi_sim::Daylight, behind: f32) {
     // the lamps' cones in fog and falling rain or snow, and new light pictures
-    let cone = cx.weather.weather.as_ref().map(|wt| lights::ConeWeather::new(wt.fog.0, daylight.night)).unwrap_or_default();
+    let enhanced = cx.gfx.renderer.as_ref().is_some_and(|r| !r.options.no_enhanced);
+    let cone = lights::ConeWeather { enhanced, ..cx.weather.weather.as_ref().map(|wt| lights::ConeWeather::of(wt, daylight.night)).unwrap_or_default() };
     if let Some(r) = cx.gfx.renderer.as_mut() {
         lights::upload_corona_textures(r);
     }
@@ -201,6 +202,12 @@ pub(super) fn lights(cx: LightsCx, dt: f32, daylight: omsi_sim::Daylight, behind
                     s.volume = cx.common.settings.vol_ambient;
                     let people = cx.people.humans.as_ref().map(|h| h.people.iter().filter(|p| (p.position - cam.position).length() < 40.0).count() as u32).unwrap_or(0);
                     let open = cx.player.player.as_ref().and_then(|p| p.vehicle.var("Snd_OutsideVol")).unwrap_or(0.0);
+                    // the flashes the picture showed: their thunder comes at the speed of sound
+                    if let Some(r) = cx.gfx.renderer.as_mut() {
+                        for (delay, distance, dir) in r.take_strikes() {
+                            s.thunder(delay, distance, dir, cam.position);
+                        }
+                    }
                     s.update(
                         a,
                         crate::soundscape::Moment {

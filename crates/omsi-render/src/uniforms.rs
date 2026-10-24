@@ -49,10 +49,12 @@ pub(crate) struct CameraUniform {
     /// The player's vehicle's velocity (m/s, world) and 1: the airstream the rain on its
     /// glass meets (see `Lighting::glass_wind`).
     pub(crate) wind: [f32; 4],
-    /// Enhanced: the street lamps' shadow maps (`LAMP_SHADOWS` tiles under the far map),
-    /// and the light indices they belong to (-1: none).
-    pub(crate) lamp_view_proj: [[[f32; 4]; 4]; 4],
-    pub(crate) lamp_shadow: [f32; 4],
+    /// Enhanced: the lamps' shadow maps (`LAMP_SHADOWS` tiles under the far map, zero for a
+    /// tile nothing is drawn in), and where the tiles lie (`LampAtlas::uniform`: a tile's
+    /// side, tiles to a row, the far map's texture height, tiles in all). A light names its
+    /// tile in its record (`LAMP_MARK`).
+    pub(crate) lamp_view_proj: [[[f32; 4]; 4]; LAMP_SHADOWS],
+    pub(crate) lamp_atlas: [f32; 4],
     /// Windy trees: xy the weather's wind (m/s, world; 0 with the setting off), zw how far
     /// the air has carried the gusts since the start (m, modulo the shaders' PATTERN_PERIOD).
     pub(crate) tree_wind: [f32; 4],
@@ -66,6 +68,9 @@ pub(crate) struct CameraUniform {
     /// Enhanced: the field each light cookie layer covers (`cookies::CookieAtlas::fields`).
     /// After the rest: the shaders that light nothing by a cookie leave it out.
     pub(crate) cookies: [[f32; 4]; COOKIE_LAYERS],
+    /// Enhanced: the lights of the player's saloon that have a shadow map, by their records in
+    /// the light buffer (-1: none), see `cabin_visibility` in enhanced/02_lamps.wgsl.
+    pub(crate) cabin_lamps: [[f32; 4]; 4],
 }
 
 /// The period the sky's cloud patterns repeat with (m): 5 x the cloud field (14 km), 8 x
@@ -81,6 +86,9 @@ pub(crate) struct PostUniform {
     pub(crate) b: [f32; 4],
     pub(crate) c: [f32; 4],
     pub(crate) d: [f32; 4],
+    /// x how much of a metered shortfall (a picture darker than the light model expects: a
+    /// tunnel, a dark cab) the eye makes up, the rest as post.wgsl's `c.x` does for a surplus
+    pub(crate) e: [f32; 4],
 }
 
 /// The enhanced lighting (enhanced_common.wgsl `Enhanced`).
@@ -116,6 +124,16 @@ pub(crate) struct EnhancedUniform {
     pub(crate) moon_light: [f32; 4],
     /// `Lighting::condensation`
     pub(crate) condensation: [f32; 4],
+    /// x the cumulus layer's base, y its top (m over the ground), z the altocumulus cover,
+    /// w the storm's activity
+    pub(crate) layers: [f32; 4],
+    /// The lightning of this frame: x the light it throws on a surface facing it (1 = 10 000
+    /// lux), yz towards it (horizontal unit vector), w its elevation (rad)
+    pub(crate) flash: [f32; 4],
+    /// xyz towards the flash (unit vector), w how bright its channel is
+    pub(crate) flash2: [f32; 4],
+    /// x a number the channel's shape is drawn from
+    pub(crate) flash3: [f32; 4],
 }
 
 #[repr(C)]
@@ -133,4 +151,11 @@ pub(crate) struct SsaoUniform {
     /// xy: the projection's off-centre shift (0 for the window's own symmetric frustum;
     /// a headset eye or a triple screen's side panel has one)
     pub(crate) shift: [f32; 4],
+    /// x the wide occlusion's reach (m), y its strength (0 = off), z the bounced light's
+    /// gain (0 = off), w the largest radiance a bounce is taken from
+    pub(crate) wide: [f32; 4],
+    /// From a view-space point to the last frame's clip space (the bounced light's history),
+    /// and in x whether that picture can be read (see `bounce_history`).
+    pub(crate) reproj: [[f32; 4]; 4],
+    pub(crate) history: [f32; 4],
 }

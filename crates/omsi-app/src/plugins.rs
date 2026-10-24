@@ -21,7 +21,10 @@ pub(crate) fn load() -> Plugins {
     if dirs.is_empty() {
         return Plugins::default();
     }
-    Plugins::load(&dirs, &HostConfig::detect())
+    let permissions = std::sync::Arc::new(omsi_plugin::api::process::ProcessPermissions::new(
+        crate::lan::data_dir().map(|p| p.join("plugin-process-permissions.json")),
+    ));
+    Plugins::load_with_process_permissions(&dirs, &HostConfig::detect(), omsi_plugin::api::process::ProcessGrants::from_env(), permissions)
 }
 
 /// The game's side of a plugin frame: the whole game (the plugins taken out of it for the
@@ -783,6 +786,12 @@ impl PluginIo for Io<'_> {
     }
     fn duty_end(&mut self) -> bool {
         self.app_mut().is_some_and(pduty::finish)
+    }
+    fn duty_set_auto_ibis(&mut self, owner: u64, on: bool) -> bool {
+        self.app_mut().is_some_and(|a| pduty::set_auto_ibis(a, owner, on))
+    }
+    fn duty_type_ibis(&mut self) -> bool {
+        self.app_mut().is_some_and(pduty::type_ibis)
     }
     fn duty_set_closed_stops(&mut self, stops: &[String], via: &str) -> bool {
         self.app_mut().is_some_and(|a| pduty::set_closed_stops(a, stops, via))

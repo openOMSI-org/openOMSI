@@ -40,6 +40,11 @@ pub(super) fn terrain_height(world: &World, x: f64, y: f64) -> Option<f64> {
     ) as f64)
 }
 
+/// How deep under the ground at its own place a vehicle must be to come and go near the
+/// camera (m, see `Traffic::hidden`): a tunnel's roof and the ground over it, not a cutting
+/// or an underpass a few metres down.
+const BURIED: f64 = 6.0;
+
 /// How long fewer than half the cars asked for may drive about the player before one is let
 /// appear in view far off (s, see `wake_dormant`).
 const STARVED_AFTER: f32 = 20.0;
@@ -123,8 +128,20 @@ impl Traffic {
     /// vanished beside the player's bus because the camera was looking ahead. Further off:
     /// beyond what is drawn, out of the picture, or behind something (`Viewer::hides`). A
     /// LAN host asks it of every other player's bus too (`TrafficSim::unseen`).
+    ///
+    /// Deep underground is the one exception close by: a vehicle at least `BURIED` under the
+    /// ground at its own place, with the ground in every line of sight to it, may come and
+    /// go however near the camera is - Städtedreieck's AmpelKI buses run on a track some
+    /// 10 m under the Bergerplatz crossing to stand on its detectors, and kept back while the
+    /// player stood at the crossing, the night program never came. Only for an eye that is
+    /// itself above the ground: one in the same tunnel has the ground over every point of
+    /// its line of sight as well, and would let cars come and go in front of it.
     pub fn hidden(&self, world: &World, p: DVec3, r: f64) -> bool {
-        self.sim.unseen(p, r, |v| self.occluded(world, v, p, r))
+        if self.sim.unseen(p, r, |v| self.occluded(world, v, p, r)) {
+            return true;
+        }
+        let under = |q: DVec3, depth: f64| terrain_height(world, q.x, q.y).is_some_and(|g| q.z + depth <= g);
+        under(p, BURIED) && self.sim.every_eye(|v| !under(v.pos, 0.0) && (p - v.pos).length() > r && self.occluded(world, v, p, r))
     }
 
     /// Whether nobody can see any car of `car` (`r`: the leading vehicle's radius; a

@@ -164,6 +164,10 @@ pub struct VehicleType {
     pub model_dir: PathBuf,
     pub program: Arc<Program>,
     pub meshes: Vec<VehicleMesh>,
+    /// The meshes of the model's lower levels of detail (see `load_with`), drawn instead of
+    /// `meshes` when the vehicle is small on the screen; `model.meshes[def_index].lod` is the
+    /// level, `model.lods[level].min_size` its least size.
+    pub lod_meshes: Vec<VehicleMesh>,
     /// Paint schemes / adverts from the `[CTC]` folders' `.cti` files.
     pub paint_schemes: Vec<PaintScheme>,
     /// `[texchanges]`: material textures a script variable swaps (roller blinds, trim).
@@ -454,6 +458,33 @@ impl VehicleType {
                 }
             }
         }
+        // The lower levels of detail (`[LOD]` 2 and on): the meshes a vehicle is drawn with
+        // from farther away, as Omsi.exe picks them by the vehicle's size on the screen. They
+        // are small (a few thousand triangles against tens of thousands) and kept whole, and
+        // they stay out of `meshes`: nothing that reads the model's real parts (the wheels,
+        // the animations, the lamps, the boxes) is to take them for parts.
+        let mut lod_meshes = Vec::new();
+        for l in 1..model.lods.len() {
+            let first = model.lods[l].first_mesh;
+            for (i, md) in model.lod_meshes(l).iter().enumerate() {
+                let p = mesh_path(root, &dir, &model_dir, &md.file);
+                let Ok(m) = omsi_o3d::load_mesh(&p) else { continue };
+                if m.triangles.is_empty() {
+                    continue;
+                }
+                lod_meshes.push(VehicleMesh {
+                    def_index: first + i,
+                    data: mesh_from_o3d(&m),
+                    file: p,
+                    materials: m.materials.clone(),
+                    overrides: md.materials.clone(),
+                    pivot: pivot_from_mesh(&m),
+                    viewpoint: md.viewpoint,
+                    skin: Vec::new(),
+                    keep_winding: false,
+                });
+            }
+        }
         // A pack whose meshes with a positive determinant mostly face along their normals
         // keeps the winding of its backwards ones (see bb0c32b: the Citelis' buttons). Asked
         // of the whole vehicle, a part borrowed from another pack - a ticket machine, a
@@ -513,6 +544,14 @@ impl VehicleType {
         // invisible wall metres ahead of its nose and behind its tail, the traffic kept its
         // distance from nothing. The box is cut down to the model (never made bigger).
         let mut def = def;
+        if def.is_rail() && def.pantograph_var.is_none() {
+            if let Some(var) = detect_pantograph(&model, &meshes, &program) {
+                log::info!("{}: its pantograph is `{var}` (found from its model)", bus_file.display());
+                def.pantograph_trigger = def.pantograph_trigger.take().or_else(|| triggers_storing(&program, &var).into_iter().next());
+                def.pantograph_var = Some(var);
+                def.pantograph_detected = true;
+            }
+        }
         if def.trolley.is_empty() {
             def.trolley = legacy_trolley(&model, &meshes, &mesh_boxes, &program, bus_file, keep_meshes);
             take_model_poles(&mut model, &meshes, &mesh_boxes, &def.trolley);
@@ -574,6 +613,7 @@ impl VehicleType {
             model_dir,
             program: Arc::new(program),
             meshes,
+            lod_meshes,
             paint_schemes,
             texchanges,
             wheel_meshes,
@@ -929,6 +969,63 @@ mod winding_exporter_tests {
     }
 }
 
+/// The variable that moves a rail vehicle's pantograph, read off its model: the meshes whose file
+/// names say pantograph (`PANT_1.o3d`, `Pantograf`, `Stromabnehmer`) and the variable their
+/// animations turn on - which is `Panto_anim_oben` in a tram made for it, and `door_0` in
+/// the Tatra T6B5, a bus's scripts with a tram's body, whose pantograph is the "door" the bus
+/// script already knows how to open and close. The most-used variable wins.
+pub(crate) fn detect_pantograph(model: &omsi_model::Model, meshes: &[VehicleMesh], program: &Program) -> Option<String> {
+    let named = |f: &str| {
+        let l = f.to_ascii_lowercase();
+        ["pantograph", "pantograf", "panto", "pant_", "pant.", "\\pant", "/pant", "stromabnehmer", "токоприемник", "пантограф"].iter().any(|k| l.contains(k))
+    };
+    let mut count: Vec<(String, usize)> = Vec::new();
+    for m in meshes {
+        let Some(md) = model.meshes.get(m.def_index) else { continue };
+        if !named(&md.file) {
+            continue;
+        }
+        for a in md.animations.iter().filter(|a| !a.variable.is_empty() && !a.variable.to_ascii_lowercase().starts_with("trolley_") && program.var(&a.variable).is_some()) {
+            match count.iter_mut().find(|(v, _)| v.eq_ignore_ascii_case(&a.variable)) {
+                Some((_, n)) => *n += 1,
+                None => count.push((a.variable.clone(), 1)),
+            }
+        }
+    }
+    count.sort_by_key(|(_, n)| std::cmp::Reverse(*n));
+    count.into_iter().next().map(|(v, _)| v)
+}
+
+/// The mouse-event triggers (and macros they call) of `program` that write variable `var`,
+/// first the ones a cabin switch is likely to be (names with `door`, `panto` or `tuer` first).
+pub(crate) fn triggers_storing(program: &Program, var: &str) -> Vec<String> {
+    fn stores(program: &Program, block: omsi_script::BlockId, id: omsi_script::VarId, seen: &mut hashbrown::HashSet<omsi_script::BlockId>) -> bool {
+        if !seen.insert(block) || seen.len() > 64 {
+            return false;
+        }
+        let Some(b) = program.blocks.get(block as usize) else { return false };
+        b.ops.iter().any(|op| match op {
+            omsi_script::Op::Store(v) => *v == id,
+            omsi_script::Op::Macro(m) => stores(program, *m, id, seen),
+            _ => false,
+        })
+    }
+    let Some(id) = program.var(var) else { return Vec::new() };
+    let mut out: Vec<String> = program.triggers.iter().filter(|(_, b)| stores(program, **b, id, &mut hashbrown::HashSet::new())).map(|(n, _)| n.clone()).collect();
+    if out.is_empty() {
+        // a door script: the trigger sets the leaf's target and the script moves the leaf
+        let leaf = var.to_ascii_lowercase();
+        out = program.triggers.keys().filter(|n| crate::door_keys::trigger_leaves(program, n).iter().any(|l| *l == leaf)).cloned().collect();
+    }
+    out.sort();
+    // (the opening trigger of a pair `x` / `x_close`, the shortest name, first)
+    out.sort_by_key(|n| {
+        let l = n.to_ascii_lowercase();
+        (!(l.contains("panto") || l.contains("door") || l.contains("tuer") || l.contains("pant")), l.ends_with("_close") || l.ends_with("_off") || l.ends_with("_cl"), l.len())
+    });
+    out
+}
+
 /// A trolleybus made for OMSI 2 as it comes (no `[trolley_*]` blocks): its model switches two
 /// meshes by `cp_SHTANGALEV` / `cp_SHTANGAPRAV` (0 folded on the roof, 1 raised), and no script
 /// reads them. The poles' hinges and length are read off the raised meshes (the hinge is the
@@ -978,6 +1075,37 @@ fn take_model_poles(model: &mut omsi_model::Model, meshes: &[VehicleMesh], boxes
     }
 }
 
+/// Whether nearly all of a mesh's vertices lie along the line from `base` to `tip`: a rod. A
+/// light assembly or a roof rail fills the same bounding box without following its diagonal.
+fn rod_along(positions: &[Vec3], base: Vec3, tip: Vec3) -> bool {
+    let axis = tip - base;
+    let len2 = axis.length_squared();
+    if positions.is_empty() || len2 <= f32::EPSILON {
+        return false;
+    }
+    let near = positions
+        .iter()
+        .filter(|p| {
+            let t = ((**p - base).dot(axis) / len2).clamp(0.0, 1.0);
+            (**p - (base + axis * t)).length() <= 0.4
+        })
+        .count();
+    near as f32 >= positions.len() as f32 * 0.85
+}
+
+/// Words for a lamp or a light in the languages the add-ons come in; a mesh named so is a light.
+const LIGHT_NAMES: &[&str] = &[
+    "light", "lamp", "licht", "leucht", "beleucht", "lumi", "luce", "luz", "lys", "ljus", "valo", "lampa", "swiatl", "światł", "svetil", "svetl", "fenyszoro",
+    "fény", "világít", "ışık", "isik", "свет", "ламп", "плафон", "фонар", "освещ", "підсвіт", "світл", "照明", "灯", "ライト", "라이트",
+];
+
+/// A mesh that is a light and never a pole: named like one, or lit by its own materials (a light
+/// map or a glow).
+fn is_light(md: &omsi_model::MeshDef, mesh: &VehicleMesh) -> bool {
+    file_named(&md.file, LIGHT_NAMES)
+        || mesh.overrides.iter().any(|m| !m.lightmaps.is_empty() || m.lightmap.is_some() || m.glow.is_some())
+}
+
 fn legacy_trolley(model: &omsi_model::Model, meshes: &[VehicleMesh], boxes: &[(Vec3, Vec3)], program: &Program, bus_file: &Path, static_poles: bool) -> omsi_trolley::TrolleyDef {
     use omsi_trolley::{LegacyDef, PoleDef, TrolleyDef};
     let mut poles: Vec<PoleDef> = Vec::new();
@@ -992,6 +1120,10 @@ fn legacy_trolley(model: &omsi_model::Model, meshes: &[VehicleMesh], boxes: &[(V
         mesh_defs.clear();
         for (i, m) in meshes.iter().enumerate() {
             let Some(md) = model.meshes.get(m.def_index) else { continue };
+            if is_light(md, m) {
+                continue;
+            }
+            let mut unnamed = false;
             let var = if switched {
                 let Some((var, value)) = md.visible.as_ref() else { continue };
                 let low = var.to_ascii_lowercase();
@@ -999,7 +1131,12 @@ fn legacy_trolley(model: &omsi_model::Model, meshes: &[VehicleMesh], boxes: &[(V
                     continue;
                 }
                 Some(var)
-            } else if (md.visible_any.is_empty() && md.animations.is_empty()) || file_named(&md.file, POLE_NAMES) {
+            } else if file_named(&md.file, POLE_NAMES) {
+                None
+            } else if md.visible_any.is_empty() && md.animations.is_empty() {
+                // (a plain trolleybus names nothing: its poles are two unanimated rods - the
+                // shape is checked below, since long interior lights fit the same box)
+                unnamed = true;
                 None
             } else {
                 continue;
@@ -1012,6 +1149,9 @@ fn legacy_trolley(model: &omsi_model::Model, meshes: &[VehicleMesh], boxes: &[(V
             let base = Vec3::new((lo.x + hi.x) * 0.5, hi.y, lo.z);
             let tip = Vec3::new((lo.x + hi.x) * 0.5, lo.y, hi.z);
             let boom = tip - base;
+            if unnamed && !meshes.get(i).is_some_and(|m| rod_along(&m.data.positions, base, tip)) {
+                continue;
+            }
             // (a pole is long and thin: a short or a wide mesh whose visibility variable has "pole" in
             // its name - an antenna, a flag - is no trolley pole)
             if boom.length() < 3.0 || hi.x - lo.x > 1.2 {
@@ -1124,17 +1264,38 @@ mod legacy_trolley_tests {
         }
     }
 
+    /// A rod from the box's rear-top corner to its front-bottom one, as a pole is.
+    fn rod_mesh(def_index: usize, (lo, hi): (Vec3, Vec3)) -> VehicleMesh {
+        let (base, tip) = (Vec3::new((lo.x + hi.x) * 0.5, hi.y, lo.z), Vec3::new((lo.x + hi.x) * 0.5, lo.y, hi.z));
+        let mut m = mesh(def_index);
+        m.data.positions = (0..=20).map(|k| base.lerp(tip, k as f32 / 20.0)).collect();
+        m
+    }
+
+    /// A light assembly: strips along the length at the lower and the upper edge of its box.
+    fn light_mesh(def_index: usize, (lo, hi): (Vec3, Vec3)) -> VehicleMesh {
+        let x = (lo.x + hi.x) * 0.5;
+        let mut m = mesh(def_index);
+        m.data.positions = (0..=20)
+            .flat_map(|k| {
+                let y = lo.y + (hi.y - lo.y) * k as f32 / 20.0;
+                [Vec3::new(x, y, lo.z), Vec3::new(x, y, hi.z)]
+            })
+            .collect();
+        m
+    }
+
     #[test]
     fn static_raised_pole_meshes_become_poles() {
         let mut model = omsi_model::Model::default();
         model.meshes = vec![Default::default(); 4];
-        let meshes: Vec<VehicleMesh> = (0..4).map(mesh).collect();
         let boxes = [
             (Vec3::new(-1.2, -5.8, 2.8), Vec3::new(1.2, 6.0, 3.0)),
             (Vec3::new(-0.34, -6.26, 3.17), Vec3::new(-0.11, 0.27, 5.35)),
             (Vec3::new(0.11, -6.26, 3.17), Vec3::new(0.34, 0.27, 5.35)),
             (Vec3::new(0.5, 4.0, 3.0), Vec3::new(0.55, 4.3, 3.8)),
         ];
+        let meshes: Vec<VehicleMesh> = (0..4).map(|i| rod_mesh(i, boxes[i])).collect();
         let program = omsi_script::Program::default();
         let bus = Path::new("/nonexistent/troll.bus");
         let def = legacy_trolley(&model, &meshes, &boxes, &program, bus, true);
@@ -1147,6 +1308,74 @@ mod legacy_trolley_tests {
         assert!(legacy_trolley(&model, &meshes, &boxes, &program, bus, false).poles.is_empty());
         model.meshes[2].animations.push(Default::default());
         assert!(legacy_trolley(&model, &meshes, &boxes, &program, bus, true).poles.is_empty());
+    }
+
+    #[test]
+    fn static_interior_meshes_do_not_identify_a_trolleybus() {
+        let mut model = omsi_model::Model::default();
+        model.meshes = ["interior_left.o3d", "interior_right.o3d"]
+            .into_iter()
+            .map(|file| omsi_model::MeshDef { file: file.into(), ..Default::default() })
+            .collect();
+        let boxes = [
+            (Vec3::new(-0.75, -5.67, 2.49), Vec3::new(-0.43, 4.38, 4.45)),
+            (Vec3::new(0.43, -5.67, 2.49), Vec3::new(0.75, 4.25, 4.45)),
+        ];
+        let meshes: Vec<VehicleMesh> = (0..2).map(|i| light_mesh(i, boxes[i])).collect();
+        let program = omsi_script::Program::default();
+        let bus = Path::new("/nonexistent/bus.bus");
+        let def = legacy_trolley(&model, &meshes, &boxes, &program, bus, true);
+        assert!(def.is_empty(), "interior geometry alone must not enable trolley traction");
+        take_model_poles(&mut model, &meshes, &boxes, &def);
+        assert!(model.meshes.iter().all(|md| md.animations.is_empty() && md.visible_any.is_empty()));
+    }
+
+    #[test]
+    fn lights_are_never_poles() {
+        let boxes = [
+            (Vec3::new(-0.34, -6.26, 3.17), Vec3::new(-0.11, 0.27, 5.35)),
+            (Vec3::new(0.11, -6.26, 3.17), Vec3::new(0.34, 0.27, 5.35)),
+        ];
+        let program = omsi_script::Program::default();
+        let bus = Path::new("/nonexistent/b.bus");
+        let run = |files: [&str; 2], lit: bool| {
+            let mut model = omsi_model::Model::default();
+            model.meshes = files.into_iter().map(|file| omsi_model::MeshDef { file: file.into(), ..Default::default() }).collect();
+            let meshes: Vec<VehicleMesh> = (0..2)
+                .map(|i| {
+                    let mut m = rod_mesh(i, boxes[i]);
+                    if lit {
+                        m.overrides = vec![omsi_model::MaterialDef { lightmap: Some(("l.bmp".into(), "v".into())), ..Default::default() }];
+                    }
+                    m
+                })
+                .collect();
+            legacy_trolley(&model, &meshes, &boxes, &program, bus, true).poles.len()
+        };
+        assert_eq!(run(["a.o3d", "b.o3d"], false), 2);
+        assert_eq!(run(["pole_light_l.o3d", "pole_light_r.o3d"], false), 0);
+        assert_eq!(run(["Лампа_л.o3d", "Лампа_п.o3d"], false), 0);
+        assert_eq!(run(["Leuchte_links.o3d", "Beleuchtung_rechts.o3d"], false), 0);
+        assert_eq!(run(["a.o3d", "b.o3d"], true), 0);
+    }
+
+    #[test]
+    fn pole_control_variables_still_identify_unnamed_meshes() {
+        let mut model = omsi_model::Model::default();
+        let names = ["cp_SHTANGALEV", "cp_SHTANGAPRAV"];
+        let mut program = omsi_script::Program::default();
+        for name in names {
+            program.declare_var(name);
+            model.meshes.push(omsi_model::MeshDef { visible: Some((name.into(), 1.0)), ..Default::default() });
+        }
+        let meshes: Vec<VehicleMesh> = (0..2).map(mesh).collect();
+        let boxes = [
+            (Vec3::new(-0.34, -6.26, 3.17), Vec3::new(-0.11, 0.27, 5.35)),
+            (Vec3::new(0.11, -6.26, 3.17), Vec3::new(0.34, 0.27, 5.35)),
+        ];
+        let def = legacy_trolley(&model, &meshes, &boxes, &program, Path::new("/nonexistent/b.bus"), false);
+        assert_eq!(def.poles.len(), 2);
+        assert_eq!(def.legacy.unwrap().switches, names);
     }
 
     #[test]

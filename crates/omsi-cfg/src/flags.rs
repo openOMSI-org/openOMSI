@@ -160,6 +160,7 @@ flags! {
     OMSI_BUDGET_FROM: Text, Test, Use, "-", "Offscreen with OMSI_TEXTURE_MEMORY: x,y[,MB] - the texture budget is met as seen from that point.";
     OMSI_BUILD: Text, Build, Build, "-", "Compile-time (env!): the commit the binary was built from, set by build.rs. Not read at runtime.";
     OMSI_CABIN_LOG: Bool, Test, Use, "off", "Offscreen --drive: print the cabin air and the film on the windscreen, sides and rear every 20 s.";
+    OMSI_CAM_SWEEP: Text, Test, Use, "-", "yaw[,jump]: the offscreen warm frames come from a camera turning yaw degrees a frame and ending in the picture's pose; with a jump (m), from a place that far to the side (a cut). For checking what reads the last frame.";
     OMSI_CAM_VEHICLE: Text, Test, Use, "-", "Offscreen: x,y,z,yaw,pitch[,fov] - a camera in the bus's own frame.";
     OMSI_CHARACTER_MODELS: Text, Tuning, Use, "settings", "Override the character models for a game session: original (OMSI's people) or improved (the Microsoft Rocketbox avatars, drawn on this computer only).";
     OMSI_CHECK_ENTRIES: Bool, Test, Use, "off", "Map check: is there ground to stand on where a player is put down.";
@@ -229,6 +230,7 @@ flags! {
     OMSI_DEBUG_POPULATION: Bool, Debug, Use, "off", "Log where cars appear and vanish relative to the view.";
     OMSI_DEBUG_PROPS: Bool, Debug, Use, "off", "Log the destination-display (matrix) variables.";
     OMSI_DEBUG_PUDDLES: Num, Debug, Use, "0", "Puddle debug view (a number selects it).";
+    OMSI_DEBUG_RAIL: Bool, Switch, Use, "off", "Log a rail vehicle's speed, the drive and brake the scripts ask for and the adhesion, twice a second.";
     OMSI_DEBUG_RAIN: Bool, Debug, Use, "off", "Log the tyres' spray and puddles.";
     OMSI_DEBUG_RASTER: Text, Debug, Use, "-", "x,y: log the ground raster at that point.";
     OMSI_DEBUG_REPEATERS: Bool, Debug, Use, "off", "Log repeater objects whose spline chain disagrees with the map.";
@@ -284,6 +286,7 @@ flags! {
     OMSI_FOLLOW_CAM: Text, Test, Use, "-", "right,ahead,up,yaw,pitch: a camera in the followed car's frame.";
     OMSI_FOOT_RUN: Num, Tuning, Use, "3.8", "On foot: the pace of a run (Shift) in m/s.";
     OMSI_FOOT_WALK: Num, Tuning, Use, "1.4", "On foot: the walking pace in m/s.";
+    OMSI_FORCE_LOD: Bool, Debug, Use, "off", "Draw the lower levels of detail of the AI vehicles at any size (to look at them).";
     OMSI_FORCE_OPAQUE: Bool, Switch, Use, "off", "Draw transmap-masked materials opaque.";
     OMSI_FRAME_ORDER: Bool, Debug, Once, "off", "Log the window's frame and the offscreen run's step as their ordered stages (phase, what each reads and writes, its profile key), once at start.";
     OMSI_FULL_GPU: Bool, Switch, Use, "off", "Keep the requested settings on a small or shared graphics chip, and 8x MSAA with Enhanced+.";
@@ -353,6 +356,7 @@ flags! {
     OMSI_NO_BRIDGE: Bool, Switch, Use, "off", "LAN: leave the internet alone - no rendezvous bridge, no tunnel (tests, LAN parties).";
     OMSI_NO_BUMP: Bool, Switch, Use, "off", "No bump maps.";
     OMSI_NO_BUNDLES: Bool, Switch, Frame, "off", "Record the main pass directly instead of from render bundles.";
+    OMSI_NO_CABIN_SHADOWS: Bool, Switch, Frame, "off", "Enhanced: the lamps of the player's saloon cast no shadows (A/B).";
     OMSI_NO_CLOUDS: Bool, Switch, Use, "off", "No clouds.";
     OMSI_NO_CORONAS: Bool, Switch, Frame, "off", "No light coronas.";
     OMSI_NO_CULL: Bool, Switch, Once, "off", "Draw every mesh from both sides (A/B).";
@@ -425,16 +429,18 @@ flags! {
     OMSI_PHOTO: Text, Test, Use, "-", "Photo mode settings for a test, key=value by commas: orbit (dist, around, up), kmh (the bus moving), focal (mm), dof, fstop (f-number), focus (m; none: on the bus), motion, shutter (1/s), filter (0..10), vignette, grain, exposure (EV), aspect (0..7), grid (0..3), quality (0..3).";
     OMSI_PICK_BUSES: Text, Test, Use, "-", "cargo test -p omsi-app installed_switches_stay_reachable_from_inside: more .bus files to check, by commas (under the root, or absolute).";
     OMSI_PLUGIN_HOST32: Text, Setup, Use, "beside the game", "Path of omsi-plugin-host32.exe.";
+    OMSI_PLUGIN_PROCESS_ALLOW: Text, Setup, Use, "none", "Optional native process preapproval: absolute path to a JSON manifest binding plugin content and in-folder helpers to SHA256 hashes. The interactive game otherwise asks the player. Changes revoke consent; packages must declare process. Approved programs run with the game account permissions.";
     OMSI_POPULATION_SHOTS: Bool, Test, Use, "off", "Offscreen: pictures of the framed population spawns.";
     OMSI_PRESENCE_URL: Text, Setup, Use, "built-in", "Base URL of the presence (\"playing now\") service.";
     OMSI_PRESENT_MODE: Text, Tuning, Use, "auto", "How frames reach the screen: fifo (vsync), fifo_relaxed, mailbox, immediate or auto. Vsync is `auto` (AutoVsync); a mode the surface lacks falls back to auto.";
     OMSI_PROBE: Text, Test, Use, "-", "x0,y0,x1,y1[,n]: print terrain and road surface heights along a line.";
     OMSI_PROBE_GRID: Text, Test, Use, "-", "x,y,half,step: the wheels' ground on a grid around a point.";
-    OMSI_PROFILE: Bool, Debug, Use, "off", "Time per stage of the frame, logged.";
+    OMSI_PROFILE: Bool, Debug, Use, "off", "Time per stage of the frame, logged; the session summary comes after --exit-after or when the game is closed.";
     OMSI_PROFILE_GPU: Bool, Debug, Use, "off", "Profile: wait for the GPU so its time shows as a stage of its own.";
-    OMSI_PROFILE_JSON: Text, Debug, Use, "-", "With OMSI_PROFILE and --exit-after: the exit summary (after the 15 s warm-up) as JSON into this file, see scripts/compare-performance.py.";
+    OMSI_PROFILE_JSON: Text, Debug, Use, "-", "With OMSI_PROFILE: the session summary written after --exit-after or when the game is closed (after the 15 s warm-up) as JSON into this file, see scripts/compare-performance.py.";
     OMSI_PUDDLE_F0: Num, Tuning, Use, "0.08", "Puddle reflectance at normal incidence (0.02 to 0.2).";
     OMSI_PUDDLE_THICKNESS: Num, Tuning, Use, "0.12", "Puddle water film thickness.";
+    OMSI_REALISTIC_ROAD: Bool, Switch, Use, "off", "The setting \"Realistic road physics\" on for this run (A/B against the OMSI 2 model: slip-angle tyres, surfaces, road roughness, wind).";
     OMSI_RECORD: Num, Test, Use, "-", "Offscreen --drive: a picture every 1/this second into <out>_frames/ and the run's mixed sound into <out>.wav (films with sound).";
     OMSI_RECORD_FROM: Num, Test, Use, "0", "With OMSI_RECORD: start the film this many seconds into the drive.";
     OMSI_RENDER_CLOCK: Num, Test, Use, "0", "Seconds the animation clock starts on (offscreen pictures).";
@@ -461,6 +467,7 @@ flags! {
     OMSI_SKIP_PIPE: Text, Test, Frame, "-", "Pipeline kinds to leave out of the main pass (comma-separated numbers).";
     OMSI_SKY_CUBE_EVERY_FRAME: Bool, Switch, Frame, "off", "Enhanced: redraw a slice of the sky cube every frame again, not at most 60 a second (A/B).";
     OMSI_SPOT_SELECT: Num, Test, Use, "-", "Turn on spotlight n (headlight pictures).";
+    OMSI_STORM: Text, Tuning, Use, "-", "activity[,azimuth]: a thunderstorm of this activity (0..1) over the place whatever the weather; with an azimuth (degrees, 0 east, 90 north) the flash stands frozen there at its first stroke (for checks).";
     OMSI_SURFACE_BIAS: Num, Tuning, Use, "-24", "Depth bias of road surfaces.";
     OMSI_SURFACE_FLUSH: Num, Tuning, Once, "0.12", "Height in metres under which a surface counts as flush with the road.";
     OMSI_SUSP_TRACE: Text, Debug, Use, "-", "Offscreen CSV: body height and each wheel's travel and load every frame.";
@@ -503,6 +510,7 @@ flags! {
     OMSI_WATCH_VARS: Text, Debug, Use, "-", "a,b: log every change of these variables of the player's bus.";
     OMSI_WETNESS: Num, Test, Use, "weather", "Ground wetness the picture is drawn with.";
     OMSI_WHEEL_TRACE: Bool, Debug, Use, "off", "Log the deepest a drawn tyre goes into the road, once a second.";
+    OMSI_WIDE_AO: Text, Tuning, Use, "-", "reach,strength,gain,max: the street-scale occlusion of the sky and the bounced light (m, 0..1, 0..1, radiance).";
     OMSI_WINDY_TREES: Text, Tuning, Use, "settings", "0 or 1: trees in the wind off or on (A/B renders).";
     OMSI_WINE: Text, Setup, Use, "PATH", "The Wine binary for Windows plugins.";
     OMSI_ZFIGHT_PROBE: Num, Debug, Once, "-", "Z-fighting check: the draw order's depth steps within an object from a hash (1) or its reverse (2); offscreen pictures of both differ where an object's surfaces lie in one plane.";

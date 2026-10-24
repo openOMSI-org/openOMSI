@@ -6,24 +6,20 @@ struct Surface {
     rough: f32,
 };
 
-// How much of street lamp `li` reaches the point (1 for a lamp without a shadow map): its
-// map is one of the tiles under the far shadow map (lib.rs `LampShadow`), looking down from
-// the lamp's head; a few taps of it soften the edge, as the lamp's glowing bowl does.
-// (the player's headlamps - marked so, see `light_marks` - share the tile marked -2: one
-// map from between them along the road, lib.rs `passes::headlamp_shadow`; it is read once
-// for the pair, `own_shadow`)
+// How much of lamp `li` reaches the point (1 for a lamp without a shadow map): its map is
+// one of the tiles under the far shadow map (lib.rs `LampShadow`), which the light's record
+// names (`light_marks`): looking down from a street lamp's head, or along the road from a
+// vehicle's headlamps; a few taps of it soften the edge, as the lamp's glowing bowl does.
+// (the player's headlamps - marked so - share one map from between them along the road,
+// `passes::headlamp_shadow`; it is read once for the pair, `own_shadow`)
 var<private> own_shadow: f32;
 fn lamp_shadow_at(li: u32, p: vec3<f32>, n: vec3<f32>, thin: bool) -> f32 {
-    var k = 4u;
-    let own = light_marks(lights[li]).x > 0.5;
-    for (var j = 0u; j < 4u; j = j + 1u) {
-        if ((camera.lamp_shadow[j] >= 0.0 && u32(camera.lamp_shadow[j]) == li) || (own && camera.lamp_shadow[j] < -1.5)) {
-            k = j;
-        }
-    }
-    if (k > 3u) {
+    let marks = light_marks(lights[li]);
+    let own = marks.x > 0.5;
+    if (marks.z < 0.5) {
         return 1.0;
     }
+    let k = u32(marks.z - 0.5);
     if (own && own_shadow >= 0.0) {
         return own_shadow;
     }
@@ -38,35 +34,83 @@ fn lamp_shadow_at(li: u32, p: vec3<f32>, n: vec3<f32>, thin: bool) -> f32 {
     if (abs(ndc.x) >= 1.0 || abs(ndc.y) >= 1.0 || ndc.z >= 1.0 || ndc.z <= 0.0) {
         return 1.0;
     }
+
     let tuv = vec2<f32>(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
-    let dims = vec2<f32>(textureDimensions(t_shadow_far));
-    let tile = dims.x * 0.25;
-    // (the tile's texels in the atlas's terms, kept a texel off its edges)
+    // (the far map's texture: its width, its height with the tiles under it; the tile's
+    // texels in the atlas's terms, kept a texel off its edges)
+    let dims = vec2<f32>(1.0 / camera.shadow.y, camera.lamp_atlas.z);
+    let tile = camera.lamp_atlas.x;
+    let cols = camera.lamp_atlas.y;
     let tx = clamp(tuv * tile, vec2<f32>(1.5), vec2<f32>(tile - 1.5));
-    let base = vec2<f32>(f32(k) * tile, dims.x) + tx;
+    let base = vec2<f32>(f32(k % u32(cols)) * tile, dims.x + f32(k / u32(cols)) * tile) + tx;
+    // (nine taps; a saloon's lamp - tiles 28 on - four: its tile's texels are three centimetres
+    // and every pixel of a saloon takes a handful of lamps)
+    let saloon = k >= 28u;
+    let lo = select(-1, 0, saloon);
+    let shift = select(0.0, 0.5, saloon);
     var sum = 0.0;
-    for (var y = -1; y <= 1; y = y + 1) {
-        for (var x = -1; x <= 1; x = x + 1) {
-            let a = (base + vec2<f32>(f32(x), f32(y)) * 1.25) / dims;
+    for (var y = lo; y <= 1; y = y + 1) {
+        for (var x = lo; x <= 1; x = x + 1) {
+            let a = (base + (vec2<f32>(f32(x), f32(y)) - vec2<f32>(shift)) * 1.25) / dims;
             sum = sum + textureSampleCompareLevel(t_shadow_far, s_shadow, a, ndc.z - 0.00002);
         }
     }
+    let lit = sum / f32((2 - lo) * (2 - lo));
     if (own) {
-        own_shadow = sum / 9.0;
+        own_shadow = lit;
     }
-    return sum / 9.0;
+    return lit;
+}
+
+const CABIN_FILL: f32 = 0.2;
+
+// How much of the player's saloon lamps' light reaches a point past what stands in it, 1 where
+// nothing does: each lamp that has a shadow map (`camera.cabin_lamps`: the first sixteen, by
+// their records in the light buffer, -1 for none) weighs by what it would give the point
+// unshadowed. The saloon's meshes are lit by the sets of lamps their models name and by light
+// maps made for the lamps; this is what lets a handrail or a seat shade what it stands over
+// in both.
+fn cabin_visibility(p: vec3<f32>, n: vec3<f32>) -> f32 {
+    var open_light = 0.0;
+    var seen_light = 0.0;
+    for (var i = 0u; i < 16u; i = i + 1u) {
+        let at = camera.cabin_lamps[i / 4u][i % 4u];
+        if (at < 0.0) {
+            break;
+        }
+        let li = u32(at);
+        let l = lights[li];
+        let d = l.pos.xyz - p;
+        let dist2 = max(dot(d, d), 1e-4);
+        let ndl = dot(n, d * inverseSqrt(dist2));
+        if (ndl <= 0.0 || l.color.w <= 0.0) {
+            continue;
+        }
+        let core = max(l.extra.y, 0.01);
+        let share = (l.color.r + l.color.g + l.color.b) * l.color.w * core * core / dist2 * ndl;
+        open_light = open_light + share;
+        seen_light = seen_light + share * lamp_shadow_at(li, p, n, false);
+    }
+    // (the light a closed room's lining sends back where the lamps do not reach: a saloon's
+    // walls, ceiling and seats, a third reflecting, lit by the lamps again and again - about
+    // a fifth of what the lit parts have)
+    let direct = clamp(seen_light / max(open_light, 1e-6), 0.0, 1.0);
+    return select(1.0, mix(CABIN_FILL, 1.0, direct), open_light > 1e-4);
 }
 
 // A light cookie layer's texels a side (lib.rs `cookies::COOKIE_SIZE`).
 const COOKIE_SIZE: u32 = 32u;
 
 // The enhanced path's marks on a light (lib.rs `prepare_lights`, carried in `pos.w` below
-// zero): x 1 for one of the player's headlamps, y 1 + the layer of its beam's picture
-// (0: none).
-fn light_marks(l: PointLight) -> vec2<f32> {
+// zero, in steps of 32 for its tile and the low bits below): x 1 for one of the player's
+// headlamps, y 1 + the layer of its beam's picture (0: none), z 1 + its shadow map's tile
+// (0: none, see `LAMP_MARK`).
+fn light_marks(l: PointLight) -> vec3<f32> {
     let m = max(-l.pos.w, 0.0);
-    let own = select(0.0, 1.0, m > 15.5);
-    return vec2<f32>(own, m - own * 16.0);
+    let tile = floor(m / 32.0);
+    let rest = m - tile * 32.0;
+    let own = select(0.0, 1.0, rest > 15.5);
+    return vec3<f32>(own, rest - own * 16.0, tile);
 }
 
 // A light cookie's texel (x, y) of the layer whose records start at `base`.

@@ -282,8 +282,9 @@ fn installed_sor_ois_retains_powered_freetex() {
         .meshes
         .iter()
         .flat_map(|mesh| {
-            let refs: Vec<_> = mesh.materials.iter().collect();
-            free_texture_defs(&refs)
+            let plain: Vec<_> = mesh.materials.iter().filter(|m| !m.item).collect();
+            let items: Vec<_> = mesh.materials.iter().filter(|m| m.item).collect();
+            free_texture_defs(&[plain, items])
         })
         .filter(|(_, _, var)| var == "mypoldisplej")
         .collect();
@@ -291,7 +292,7 @@ fn installed_sor_ois_retains_powered_freetex() {
     assert!(
         definitions
             .iter()
-            .any(|(item, key, _)| *item && key.eq_ignore_ascii_case("cerna.bmp")),
+            .any(|(halves, key, _)| halves & 2 != 0 && key.eq_ignore_ascii_case("cerna.bmp")),
         "{definitions:?}"
     );
     println!("SOR NB OIS: {definitions:?}");
@@ -309,10 +310,12 @@ fn powered_terminal_freetex_is_kept_and_replaces_its_black_nightmap() {
             "[matl_nightmap]\nblack.bmp\n[matl_freetex]\nblack.bmp\nscreen\n",
         ),
     ));
-    let defs: Vec<&MaterialDef> = model.meshes[0].materials.iter().collect();
+    let mats = &model.meshes[0].materials;
+    let plain: Vec<&MaterialDef> = mats.iter().filter(|m| !m.item).collect();
+    let items: Vec<&MaterialDef> = mats.iter().filter(|m| m.item).collect();
     assert_eq!(
-        free_texture_defs(&defs),
-        vec![(true, "black.bmp".into(), "screen".into())]
+        free_texture_defs(&[plain, items]),
+        vec![(0b10, "black.bmp".into(), "screen".into())]
     );
     let base = freetex_test_look();
     let mut powered = base.clone();
@@ -322,11 +325,46 @@ fn powered_terminal_freetex_is_kept_and_replaces_its_black_nightmap() {
         item: Some(powered),
         more: Vec::new(),
     };
-    let changed = spec.with_freetex(Some(10), 20, true, true);
+    let changed = spec.with_freetex(Some(10), 20, true, 0b10);
     assert_eq!(changed.base.diffuse, None); // unpowered remains black
     assert_eq!(changed.item.as_ref().unwrap().diffuse, Some(20));
     assert_eq!(changed.item.as_ref().unwrap().night, Some(20));
     assert_eq!(spec.item.as_ref().unwrap().night, Some(10)); // reusable template
+}
+
+/// Two items of one `[matl_change]`, the second swapping its night map through a free
+/// texture of its own, under a slot whose plain material shows a free picture: every half
+/// keeps the slot's picture, and only the second item gets the swapped night map.
+#[test]
+fn each_half_of_a_slot_gets_the_free_textures_its_records_list() {
+    let model = omsi_model::Model::parse(&omsi_cfg::CfgFile::from_str(
+        "model.cfg",
+        concat!(
+            "[mesh]\ndash.o3d\n[matl]\nstripe.bmp\n0\n[matl_freetex]\nstripe.bmp\nstripe_picture\n",
+            "[matl_change]\nstripe.bmp\n0\nstripe_state\n",
+            "[matl_item]\n[matl_lightmap]\nstripe_lm.bmp\nstripe_lit\n",
+            "[matl_item]\n[matl_nightmap]\nwhite_px.bmp\n[matl_freetex]\nwhite_px.bmp\nstripe_night\n",
+        ),
+    ));
+    let mats = &model.meshes[0].materials;
+    let plain: Vec<&MaterialDef> = mats.iter().filter(|m| !m.item).collect();
+    let items: Vec<&MaterialDef> = mats.iter().filter(|m| m.item).collect();
+    let defs = free_texture_defs(&[plain, vec![items[0]], vec![items[1]]]);
+    assert_eq!(
+        defs,
+        vec![(0b111, "stripe.bmp".into(), "stripe_picture".into()), (0b100, "white_px.bmp".into(), "stripe_night".into())]
+    );
+    let base = freetex_test_look();
+    let mut lit = base.clone();
+    lit.lightmap = Some(30);
+    let mut night = base.clone();
+    night.night = Some(11);
+    let spec = SlotSpec { base, item: Some(lit), more: vec![night] };
+    // stripe.bmp (10) shows picture 20, white_px.bmp (11) picture 21
+    let both = spec.with_freetex(Some(10), 20, true, defs[0].0).with_freetex(Some(11), 21, false, defs[1].0);
+    assert_eq!(both.base.diffuse, Some(20));
+    assert_eq!((both.item.as_ref().unwrap().diffuse, both.item.as_ref().unwrap().night), (Some(20), None));
+    assert_eq!((both.more[0].diffuse, both.more[0].night), (Some(20), Some(21)));
 }
 
 #[test]
@@ -343,14 +381,14 @@ fn freetex_preserves_other_stages_and_per_vehicle_script_textures() {
         item: Some(item),
         more: Vec::new(),
     };
-    let changed = spec.with_freetex(Some(10), 20, true, false);
+    let changed = spec.with_freetex(Some(10), 20, true, 0b11);
     assert_eq!(changed.base.diffuse, Some(20));
     assert_eq!(changed.base.night, Some(20));
     assert_eq!(changed.base.lightmap, Some(11));
     assert_eq!(changed.base.transmap, Some((20, true)));
     assert_eq!(changed.base.envmap, Some((12, 0.5)));
     assert_eq!(changed.item.as_ref().unwrap().diffuse, Some(99));
-    let missing_key = spec.with_freetex(None, 21, true, true);
+    let missing_key = spec.with_freetex(None, 21, true, 0b10);
     assert_eq!(missing_key.item.as_ref().unwrap().night, Some(10));
     assert_eq!(missing_key.item.as_ref().unwrap().diffuse, Some(99));
 }

@@ -6,6 +6,9 @@ use super::*;
 pub struct VehicleRender {
     pub window_wipers: Option<crate::window_wipers::WindowWipers>,
     pub instances: Vec<usize>,
+    /// The instances of the lower levels of detail: they stand where the vehicle's body does
+    /// (no animation) and are drawn while the vehicle is small on the screen.
+    pub far: Vec<usize>,
     /// Materials made for this vehicle alone (its text and script texture slots).
     pub own_materials: Vec<MaterialId>,
     /// The shared set it is drawn with (None for the player's own).
@@ -97,8 +100,14 @@ pub struct VariantSlot {
     pub entries: Vec<(MaterialId, MaterialId)>,
     /// `[texchanges]` variable: its integer value picks the entry.
     pub tex_var: String,
-    /// Free textures for the plain material and, independently, its switched item.
+    /// The slot's free textures, each on the halves that declare it.
     pub free: Vec<FreeTex>,
+    /// The materials made for one combination of the free textures' pictures (and of the
+    /// light maps switched on): plain, first item, further items. A half no free texture
+    /// and no light map touches keeps the slot's own material (None).
+    pub free_built: HashMap<String, FreeBuilt>,
+    /// The light maps the current free materials were made with (None: none made yet).
+    pub free_lights: Option<Option<u32>>,
     /// How to build a material of this slot for a texture loaded later.
     pub spec: SlotSpec,
     /// The textures `base`/`item` and each entry were made with (made again per vehicle
@@ -184,17 +193,37 @@ impl MultiLight {
 
 /// `[matl_freetex]`: the slot shows the texture file named by a string variable - the
 /// SD200's destination roller reads the terminus pictures of the map's `.hof` this way.
-pub(super) fn free_texture_defs(overrides: &[&MaterialDef]) -> Vec<(bool, String, String)> {
-    [false, true]
-        .into_iter()
-        .filter_map(|item| {
-            overrides.iter().filter(|o| o.item == item).find_map(|o| {
-                o.freetex
-                    .as_ref()
-                    .map(|(key, var)| (item, key.clone(), var.clone()))
-            })
-        })
-        .collect()
+/// `halves` are the records of the slot's halves in [`SlotSpec`] order: the plain material,
+/// its first item, then the further items. Each half shows the free textures its own records
+/// list (an item's list starts as the slot's, see `MaterialDef::freetexes`); one (texture,
+/// variable) pair is one free texture with the halves it is on as bits (bit 0 the plain
+/// material, bit 1 the first item, bit 2 + k further item k).
+pub(super) fn free_texture_defs(halves: &[Vec<&MaterialDef>]) -> Vec<(u32, String, String)> {
+    let mut out: Vec<(u32, String, String)> = Vec::new();
+    for (bit, records) in halves.iter().enumerate().take(32) {
+        for (key, var) in records.iter().flat_map(|o| o.freetexes.iter()) {
+            let same = |e: &&mut (u32, String, String)| e.1.eq_ignore_ascii_case(key) && e.2.eq_ignore_ascii_case(var);
+            match out.iter_mut().find(same) {
+                Some(e) => e.0 |= 1 << bit,
+                None => out.push((1 << bit, key.clone(), var.clone())),
+            }
+        }
+    }
+    out
+}
+
+/// The materials of one combination of free pictures (see `VariantSlot::free_built`).
+#[derive(Clone, Debug, Default)]
+pub struct FreeBuilt {
+    pub base: Option<MaterialId>,
+    pub item: Option<MaterialId>,
+    pub more: Vec<Option<MaterialId>>,
+}
+
+impl FreeBuilt {
+    pub fn materials(&self) -> impl Iterator<Item = MaterialId> + '_ {
+        self.base.into_iter().chain(self.item).chain(self.more.iter().flatten().copied())
+    }
 }
 
 #[derive(Clone)]
@@ -205,14 +234,16 @@ pub struct FreeTex {
     /// names the same black texture as its diffuse and its switched night map).
     pub key: Option<TextureId>,
     pub diffuse: bool,
-    /// A declaration inside `[matl_item]` must not change the unpowered material.
-    pub item_only: bool,
+    /// The halves of the slot it is declared on (see `free_texture_defs`): one declared
+    /// in a `[matl_item]` changes neither the plain material nor another item.
+    pub halves: u32,
     /// Where the file name is looked up (the vehicle's texture folders).
     pub dirs: Vec<PathBuf>,
     pub textures: Arc<omsi_texture::TextureCache>,
-    /// File name (lower case) → the materials already built for it.
-    pub cache: HashMap<String, (MaterialId, MaterialId)>,
-    /// The name currently applied.
+    /// File name (lower case) → the picture found for it (None: no such file, the slot
+    /// keeps its own texture there).
+    pub pictures: HashMap<String, Option<TextureId>>,
+    /// The name currently applied (lower case).
     pub current: Option<String>,
     /// The world's shared vehicle textures (a picture is one texture for every vehicle
     /// showing it; every bus had its own copy, half a gigabyte of destination pictures on
@@ -375,7 +406,7 @@ impl SlotSpec {
         key: Option<TextureId>,
         tex: TextureId,
         diffuse: bool,
-        item_only: bool,
+        halves: u32,
     ) -> Self {
         let mut spec = self.clone();
         let replace = |look: &mut Look| {
@@ -402,13 +433,42 @@ impl SlotSpec {
                 }
             }
         };
-        if !item_only {
-            replace(&mut spec.base);
-        }
-        if let Some(item) = &mut spec.item {
-            replace(item);
+        for (bit, look) in spec.halves_mut().into_iter().enumerate() {
+            if bit < 32 && halves & (1 << bit) != 0 {
+                replace(look);
+            }
         }
         spec
+    }
+
+    /// The halves in `free_texture_defs` order: plain, first item, further items.
+    fn halves_mut(&mut self) -> Vec<&mut Look> {
+        let mut out = vec![&mut self.base];
+        out.extend(self.item.as_mut());
+        out.extend(self.more.iter_mut());
+        out
+    }
+
+    /// The materials of the halves in `halves` (bits as in `free_texture_defs`; a further
+    /// item without a first item cannot be). Each is made last, so `recycle` can move it.
+    pub fn build_halves(
+        &self,
+        renderer: &Renderer,
+        scene: &mut Scene,
+        tex: Option<TextureId>,
+        halves: u32,
+        mut recycle: impl FnMut(&mut Scene, MaterialId) -> MaterialId,
+    ) -> FreeBuilt {
+        let on = |bit: usize| bit < 32 && halves & (1 << bit) != 0;
+        let mut make = |scene: &mut Scene, l: &Look| {
+            let m = l.add(renderer, scene, tex);
+            recycle(scene, m)
+        };
+        FreeBuilt {
+            base: on(0).then(|| make(scene, &self.base)),
+            item: self.item.as_ref().filter(|_| on(1)).map(|l| make(scene, l)),
+            more: self.more.iter().enumerate().map(|(k, l)| on(2 + k).then(|| make(scene, l))).collect(),
+        }
     }
 
     /// (plain material, `[matl_item]` material) for one diffuse texture; without a
@@ -480,9 +540,21 @@ pub type VehicleKey = (PathBuf, Option<usize>);
 /// The GPU side of a vehicle type in one paint scheme, shared by its AI copies: meshes and
 /// materials, the slots every copy fills itself, and what the set holds of the shared
 /// textures and meshes (given back when the set is trimmed).
+/// A mesh of a lower level of detail of a vehicle on the GPU: plain materials, drawn in place
+/// of the full model while the vehicle is small on the screen (see `lod_bands`).
+#[derive(Clone)]
+pub struct FarMesh {
+    pub(super) level: usize,
+    pub(super) mesh: MeshId,
+    pub(super) mats: Vec<MaterialId>,
+    pub(super) casts: bool,
+}
+
 #[derive(Clone)]
 pub struct VehicleSet {
     pub(super) meshes: Vec<(MeshId, Vec<MaterialId>)>,
+    /// The meshes of the lower levels of detail (none: the model has one level).
+    pub(super) far: Vec<FarMesh>,
     pub(super) dyn_slots: Vec<DynSlot>,
     pub(super) variants: Vec<VariantSlot>,
     pub(super) textures: Vec<PathBuf>,
@@ -644,7 +716,8 @@ pub(super) fn vehicle_texture_names(
             out.push((name, d.clone()));
         }
     };
-    for vm in &vt.meshes {
+    let lods = if crate::vehicles::lods::lods_misfit(vt).is_none() { vt.lod_meshes.as_slice() } else { &[] };
+    for vm in vt.meshes.iter().chain(lods) {
         for m in &vm.materials {
             match vt.texchange(&m.texture) {
                 Some(master) => {

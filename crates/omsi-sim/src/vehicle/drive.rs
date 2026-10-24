@@ -93,7 +93,12 @@ impl VehicleInstance {
             self.step_rigid(dt, m_wheel, &brakes, c.steering);
             return;
         }
-        let (ds, dheading) = self.physics.step(dt, m_wheel, &brakes);
+        let v0 = self.physics.speed;
+        let (mut ds, dheading) = self.physics.step(dt, m_wheel, &brakes);
+        // a rail vehicle's speed is the rails', not the road tyres'
+        if let Some(covered) = self.rail_override_simple(dt, v0, m_wheel, &brakes) {
+            ds = covered;
+        }
         // move along the heading
         let prev = (self.position, self.heading);
         let h = self.heading.to_radians();
@@ -385,8 +390,18 @@ impl VehicleInstance {
         let mut rb = self.rigid.take().unwrap();
         for (i, w) in rb.wheels.iter_mut().enumerate() {
             w.spring_factor = self.spring_factor(i / 2, i % 2);
+            // what each tyre rolls on (the map tells the scripts, and so us, every frame)
+            let side = usize::from(w.attach.x >= 0.0);
+            if let Some(k) = self.v_surface.get(rb.wheel_axle.get(i).copied().unwrap_or(0)).and_then(|a| a[side]) {
+                w.surface = self.state.vars[k as usize].clamp(0.0, 255.0) as u8;
+            }
         }
+        // and the weather it rolls in: the road's wetness and the air's density and motion
+        rb.wetness = self.host.street_cond;
+        rb.air_density = crate::rigid::realism::air_density(self.host.temperature, 0.0);
+        rb.wind = self.host.wind;
         rb.coupled = self.coupled_parts();
+        let v0 = rb.forward_speed();
         {
             let ground = self.ground.clone();
             let flat = |_: f64, _: f64, _: f64| crate::rigid::GroundProbe {
@@ -418,6 +433,8 @@ impl VehicleInstance {
             rb.wheel_walls = self.wheel_walls;
             rb.step(dt, m_wheel, brakes, steer, probe);
         }
+        // a rail vehicle's speed is the rails', not the road tyres'
+        self.rail_override(&mut rb, dt, v0, m_wheel, brakes);
         // what the crashes of this step destroyed, and the worst of them
         let mut energy = 0.0f32;
         let mut worst: Option<crate::rigid::Impact> = None;

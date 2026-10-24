@@ -126,23 +126,36 @@ fn nearest_rail(net: &Network, p: DVec3, heading: f64, reach: f64, within: Optio
 }
 
 /// The trail's point at travelled distance `u` (between its samples; None beyond its ends).
-pub(crate) fn point_at(trail: &std::collections::VecDeque<(f64, DVec3)>, u: f64) -> Option<DVec3> {
-    if trail.is_empty() {
-        return None;
-    }
-    if u <= trail.front().unwrap().0 {
-        return Some(trail.front().unwrap().1);
-    }
-    if u >= trail.back().unwrap().0 {
-        return Some(trail.back().unwrap().1);
-    }
-    let i = trail.iter().position(|(v, _)| *v >= u)?;
-    if i == 0 {
-        return Some(trail[0].1);
-    }
-    let (a, b) = (trail[i - 1], trail[i]);
-    let t = ((u - a.0) / (b.0 - a.0).max(1e-6)).clamp(0.0, 1.0);
-    Some(a.1 + (b.1 - a.1) * t)
+/// `head` is where the vehicle is right now, `(u, position)`: the trail is only sampled every
+/// 10 cm of travel, so its newest sample lags behind the vehicle by up to that much (at a
+/// walking pace most of the time), and a coupled part asked for a place just behind the vehicle
+/// got the stale sample while one asked for a place just ahead got the exact one - the cars
+/// jumped back and forth by a few centimetres as they crossed from one answer to the other.
+pub(crate) fn point_at(trail: &std::collections::VecDeque<(f64, DVec3)>, head: Option<(f64, DVec3)>, u: f64) -> Option<DVec3> {
+    let mut at = |u: f64| -> Option<DVec3> {
+        if trail.is_empty() {
+            return head.map(|h| h.1);
+        }
+        let newest = *trail.back().unwrap();
+        if let Some((hu, hp)) = head.filter(|h| h.0 > newest.0 + 1e-9 && u > newest.0) {
+            let t = ((u - newest.0) / (hu - newest.0)).clamp(0.0, 1.0);
+            return Some(newest.1 + (hp - newest.1) * t);
+        }
+        if u <= trail.front().unwrap().0 {
+            return Some(trail.front().unwrap().1);
+        }
+        if u >= newest.0 {
+            return Some(newest.1);
+        }
+        let i = trail.iter().position(|(v, _)| *v >= u)?;
+        if i == 0 {
+            return Some(trail[0].1);
+        }
+        let (a, b) = (trail[i - 1], trail[i]);
+        let t = ((u - a.0) / (b.0 - a.0).max(1e-6)).clamp(0.0, 1.0);
+        Some(a.1 + (b.1 - a.1) * t)
+    };
+    at(u)
 }
 
 fn angle_diff(a: f64, b: f64) -> f64 {
@@ -282,7 +295,8 @@ impl RailDrive {
             };
             // (a part may run ahead of the vehicle's origin - a bogie frame under its front
             // end - where the trail, which holds on to its newest point, has nothing yet)
-            v.retrail(dt, &|d| if d < 0.0 { probe(d) } else { point_at(trail, u - d).or_else(|| probe(d)) });
+            let head = Some((u, track_pos));
+            v.retrail(dt, &|d| if d < 0.0 { probe(d) } else { point_at(trail, head, u - d).or_else(|| probe(d)) });
         }
     }
 
@@ -331,6 +345,27 @@ impl RailDrive {
             }
         }
         true
+    }
+
+    /// What the track under the vehicle is like for its dynamics: the grade in the direction
+    /// the vehicle faces, the radius of the curve and whether it is in a tunnel.
+    pub(crate) fn env(&self, net: &Network) -> omsi_sim::vehicle::RailEnv {
+        let lane = &net.lanes[self.lane];
+        let len = lane.length();
+        // the rise over 10 m of this lane (the two ends of a lane are joined by `step`, so a
+        // short lane just looks at what it has)
+        let (s0, s1) = ((self.s - 5.0).max(0.0), (self.s + 5.0).min(len));
+        let (p0, p1) = (lane.at(s0).0, lane.at(s1).0);
+        let run = (p1.truncate() - p0.truncate()).length();
+        let along_slope = if run > 0.5 { ((p1.z - p0.z) / run) as f32 } else { 0.0 };
+        let grade = if self.along { along_slope } else { -along_slope };
+        let k = lane.curvature_at(self.s).abs();
+        let name = lane.name.to_ascii_lowercase();
+        omsi_sim::vehicle::RailEnv {
+            grade: grade.clamp(-0.2, 0.2),
+            radius: if k > 1e-4 { 1.0 / k } else { f32::INFINITY },
+            in_tunnel: lane.track.is_some_and(|t| t.tunnel) || ["tunnel", "tunel", "subway", "ubahn", "u-bhf", "u_bhf", "metro"].iter().any(|t| name.contains(t)),
+        }
     }
 
     /// The next (or previous) rail lane among `candidates`: the indicator's branch, else
@@ -398,37 +433,13 @@ pub(crate) fn frame(p: &mut Player, net: Option<&Network>, world: &World, scener
         }
         return;
     }
-    // A vehicle whose scripts give no drive to a driver (the stock trains are scripted for
-    // the AI only) is driven by a plain traction and brake of its own: a locomotive's
-    // pull (up to 300 kN, 4 MW) and 1.2 m/s² of brake at full pedal.
-    let total_mass = p.vehicle.physics.mass_kg.max(1000.0)
-        + p.vehicle.trailers.iter().map(|t| {
-            let m = t.ty.def.mass;
-            if m < 100.0 { m * 1000.0 } else { m }
-        }).sum::<f32>();
-
-    let c = p.vehicle.physics.controls;
-    let scripted = p.vehicle.var("M_Wheel").is_some_and(|m| m.abs() > 1.0) || p.vehicle.var("Brakeforce").is_some_and(|b| b > 1.0);
-    if !scripted {
-        let m = total_mass;
-        let v = p.vehicle.physics.speed;
-        let reverse = p.vehicle.var("rail_reverse").is_some_and(|r| r > 0.5);
-        let pull = (c.throttle.clamp(0.0, 1.0) * 300_000.0).min(4.0e6 / v.abs().max(1.0)).min(0.15 * m * 9.81) * if reverse { -1.0 } else { 1.0 };
-        let brake = c.brake.clamp(0.0, 1.0) * 1.2 * m;
-        let resist = 0.002 * m * 9.81 + 5.0 * v * v;
-        let mut dv = (pull / m) * dt;
-        let stop = ((brake + resist) / m) * dt;
-        let nv = v + dv;
-        dv = if nv.abs() <= stop && c.throttle < 0.05 { -v } else { dv - stop * nv.signum() };
-        p.vehicle.set_speed(v + dv);
-    } else if !p.vehicle.trailers.is_empty() {
-        let ratio = p.vehicle.physics.mass_kg / total_mass;
-        if ratio < 0.99 && dt > 0.0 {
-            let last_a = p.vehicle.physics.accel.y;
-            let excess_a = last_a * (1.0 - ratio);
-            let new_v = p.vehicle.physics.speed - excess_a * dt;
-            p.vehicle.set_speed(new_v);
-        }
+    // The track's grade and curve go to the vehicle's own dynamics (`omsi_sim::rail`): its
+    // drive and brakes - the scripts', or a class's typical ones for a vehicle scripted for the
+    // AI only - against the resistance of the rails, the weight on the slope and the adhesion
+    // of wheel on rail. The speed they make is the distance covered below.
+    if let Some(r) = p.rail.as_ref() {
+        let env = r.env(net);
+        p.vehicle.set_rail_env(Some(env));
     }
     let ds = p.vehicle.physics.speed * dt;
     let blinker = blinker_of(&p.vehicle);
@@ -449,14 +460,32 @@ mod tests {
         trail.push_back((10.0, DVec3::new(10.0, 0.0, 0.0)));
         trail.push_back((20.0, DVec3::new(20.0, 10.0, 5.0)));
 
-        let p0 = point_at(&trail, 0.0).unwrap();
+        let p0 = point_at(&trail, None, 0.0).unwrap();
         assert!((p0 - DVec3::new(0.0, 0.0, 0.0)).length() < 1e-4);
 
-        let p5 = point_at(&trail, 5.0).unwrap();
+        let p5 = point_at(&trail, None, 5.0).unwrap();
         assert!((p5 - DVec3::new(5.0, 0.0, 0.0)).length() < 1e-4);
 
-        let p15 = point_at(&trail, 15.0).unwrap();
+        let p15 = point_at(&trail, None, 15.0).unwrap();
         assert!((p15 - DVec3::new(15.0, 5.0, 2.5)).length() < 1e-4);
+    }
+
+    /// The trail is sampled every 10 cm; a place just behind the vehicle is the same distance
+    /// from where it is whichever way it is asked: a stale newest sample made it jump.
+    #[test]
+    fn the_newest_place_follows_the_vehicle_not_the_last_sample() {
+        let mut trail = std::collections::VecDeque::new();
+        trail.push_back((0.0, DVec3::new(0.0, 0.0, 0.0)));
+        trail.push_back((10.0, DVec3::new(10.0, 0.0, 0.0)));
+        // 7 cm further on, not yet sampled
+        let head = Some((10.07, DVec3::new(10.07, 0.0, 0.0)));
+        let behind = point_at(&trail, head, 10.07 - 0.02).unwrap();
+        assert!((behind.x - 10.05).abs() < 1e-6, "{behind:?}");
+        assert!((point_at(&trail, head, 10.07).unwrap().x - 10.07).abs() < 1e-6);
+        // the samples older than the newest are unchanged
+        assert!((point_at(&trail, head, 5.0).unwrap().x - 5.0).abs() < 1e-6);
+        // without a head the newest sample is the end
+        assert_eq!(point_at(&trail, None, 10.05).unwrap().x, 10.0);
     }
 
     #[test]

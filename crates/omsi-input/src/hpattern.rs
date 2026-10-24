@@ -131,6 +131,7 @@ pub mod tests {
             model_dir: dir.clone(),
             program: Arc::new(program),
             meshes: Vec::new(),
+            lod_meshes: Vec::new(),
             paint_schemes: Vec::new(),
             texchanges: Vec::new(),
             wheel_meshes: Vec::new(),

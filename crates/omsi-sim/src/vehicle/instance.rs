@@ -186,6 +186,9 @@ impl VehicleInstance {
                 ]
             })
             .collect();
+        let v_surface = (0..physics.wheels.len())
+            .map(|a| [v(&format!("Axle_SurfaceID_{a}_L")), v(&format!("Axle_SurfaceID_{a}_R"))])
+            .collect();
         let rest_sag: Vec<(f32, f32)> = {
             let rb = crate::rigid::RigidBody::from_definition(&ty.def, &ty.hub_heights(0));
             (0..physics.wheels.len())
@@ -224,6 +227,7 @@ impl VehicleInstance {
             particles: ParticleSet::new(ty.model.particle_systems(), std::ptr::addr_of!(host) as u64 ^ 0x9e37_79b9),
             light_fade: Vec::new(),
             v_springfactor,
+            v_surface,
             rest_sag,
             ai_lift,
             contact: None,
@@ -294,6 +298,10 @@ impl VehicleInstance {
             engine_ids: std::sync::OnceLock::new(),
             program_ids: std::sync::OnceLock::new(),
             trolley,
+            rail_env: None,
+            rail_scripted: false,
+            rail_out: None,
+            rail_log: 0.0,
         };
         instance.declare_trolley_vars();
         instance

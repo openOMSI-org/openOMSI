@@ -766,13 +766,13 @@ pub(super) fn road_surface_name(file: &str) -> bool {
     let base = file.replace('\\', "/").rsplit('/').next().unwrap_or("").to_ascii_lowercase();
     let stem = base.rsplit_once('.').map(|(s, _)| s).unwrap_or(&base);
     let tokens: Vec<&str> = stem.split(|c: char| !c.is_ascii_alphanumeric() && c != 'ß').filter(|t| !t.is_empty()).collect();
-    let excludes = ["light", "lamp", "sign", "schild", "rail", "track", "gleis", "tram", "strab", "wire", "mast", "wall", "fence", "leitplanke", "gehweg", "side", "bord", "pavement", "fahrrad", "radweg", "cycle", "parking", "parkplatz", "gruen", "gras"];
+    let excludes = ["light", "lamp", "sign", "schild", "rail", "track", "gleis", "tram", "strab", "wire", "mast", "wall", "fence", "leitplanke", "gehweg", "side", "bord", "pavement", "fahrrad", "radweg", "cycle", "parking", "parkplatz", "gruen", "gras", "trottoir", "pieton"];
     if tokens.iter().any(|t| excludes.iter().any(|x| t.contains(x))) {
         return false;
     }
     stem.starts_with("str_")
         || tokens.iter().any(|t| {
-            ["str", "strasse", "straße", "road", "roads", "street", "streets", "fahrbahn", "pflaster", "kopfstein", "cobble"].contains(t)
+            ["str", "strasse", "straße", "road", "roads", "street", "streets", "fahrbahn", "pflaster", "kopfstein", "cobble", "route", "routes", "rue", "chaussee", "bitume"].contains(t)
                 || t.starts_with("asph")
         })
 }

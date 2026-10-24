@@ -78,6 +78,10 @@ pub(crate) struct AoTargets {
     pub(crate) depth_tex: wgpu::Texture,
     pub(crate) ao_view: wgpu::TextureView,
     pub(crate) blur_view: wgpu::TextureView,
+    /// The last frame's picture (absolute radiance) for the bounced light.
+    pub(crate) hist_view: wgpu::TextureView,
+    /// Whether `hist_view` is a picture (not the single texel of the other pipelines).
+    pub(crate) bounce: bool,
     pub(crate) ssao_bg: wgpu::BindGroup,
     pub(crate) blur_bg: wgpu::BindGroup,
     /// The lamps' light in the fog (`fog_lamps.wgsl`): worked out at half size into
@@ -160,8 +164,8 @@ impl Renderer {
     }
 
     /// The ambient-occlusion textures for a target of this size (rebuilt on resize).
-    pub(crate) fn ensure_ao(&mut self, w: u32, h: u32) -> bool {
-        if self.targets.ao.as_ref().map(|a| a.size == (w, h)).unwrap_or(false) {
+    pub(crate) fn ensure_ao(&mut self, w: u32, h: u32, bounce: bool) -> bool {
+        if self.targets.ao.as_ref().map(|a| a.size == (w, h) && (a.bounce || !bounce)).unwrap_or(false) {
             return false;
         }
         let size = wgpu::Extent3d {
@@ -194,8 +198,11 @@ impl Renderer {
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 // r the occlusion, g the view depth (m) it was worked out at: the main
-                // pass upsamples it by depth, not bilinearly (see `ao_at` in shader.wgsl)
-                format: wgpu::TextureFormat::Rg16Float,
+                // pass upsamples it by depth, not bilinearly (see `ao_at` in shader.wgsl);
+                // b and a the light the surfaces round the point send back to it
+                // (ssao.wgsl `bounce_pack`)
+                // (two channels without the bounced light)
+                format: if bounce { wgpu::TextureFormat::Rgba16Float } else { wgpu::TextureFormat::Rg16Float },
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                     | wgpu::TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
@@ -203,6 +210,25 @@ impl Renderer {
         };
         let ao = mk("ssao");
         let blur = mk("ssao blur");
+        // the last frame's picture at this size as absolute radiance, written after the
+        // frame's main pass (post.wgsl `fs_history`) and read by the next frame's AO
+        // (only the Enhanced picture with bounced light has one: another pipeline binds a
+        // single texel)
+        let hist = if bounce {
+            mk("ssao history")
+        } else {
+            self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("ssao history (unused)"),
+                size: wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba16Float,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+        };
+        let hist_view = hist.create_view(&Default::default());
         let depth_view = depth.create_view(&Default::default());
         let ao_view = ao.create_view(&Default::default());
         let blur_view = blur.create_view(&Default::default());
@@ -223,6 +249,10 @@ impl Renderer {
                     wgpu::BindGroupEntry {
                         binding: 2,
                         resource: wgpu::BindingResource::TextureView(tex),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::TextureView(&hist_view),
                     },
                 ],
             })
@@ -261,6 +291,8 @@ impl Renderer {
             depth_tex: depth.clone(),
             ao_view,
             blur_view,
+            hist_view,
+            bounce,
             ssao_bg,
             blur_bg,
             fog_view,

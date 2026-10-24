@@ -752,7 +752,7 @@ impl SessionSettings {
     /// whatever they say.
     pub(crate) fn render_options(&self, settings: &crate::settings::Settings) -> omsi_render::RenderOptions {
         let o = settings.render_options();
-        omsi_render::RenderOptions { ray_tracing: o.ray_tracing || self.enhanced_plus, ..o }
+        omsi_render::RenderOptions { ray_tracing: o.ray_tracing || self.enhanced_plus, no_enhanced: o.no_enhanced && !self.enhanced, ..o }
     }
 
     /// The world's settings from these (see `scene::host::SceneSettings`).

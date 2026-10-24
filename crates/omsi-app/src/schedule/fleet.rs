@@ -76,6 +76,26 @@ impl Schedule {
         log::info!("timetable fleet: {} vehicle/paint sets of the first {:.0} minutes read and uploaded in {:.1} s (at most {:.0} MB read ahead at once), a first start of every type in {:.1} s", sets.len(), fleet_ahead() / 60.0, (t1 - t0).as_secs_f32(), most_held as f64 / 1e6, t1.elapsed().as_secs_f32());
     }
 
+    /// Whether every vehicle set of `c` is on the GPU. Where one is not (the clock was set
+    /// far ahead, a type nothing read ahead), the sets are asked for and false is said: the
+    /// departure is tried again once they are up, where building them on the frame it
+    /// appears on cost 120 to 300 ms (the vehicle's meshes and textures all at once).
+    pub(super) fn sets_ready(&mut self, c: &Choice, world: &World, traffic: &mut Traffic) -> bool {
+        let missing: Vec<_> = Self::choice_sets(c, traffic)
+            .into_iter()
+            .filter(|(t, s)| !world.has_vehicle_set(&(t.def.path.clone(), *s)))
+            .collect();
+        if missing.is_empty() {
+            return true;
+        }
+        for m in missing {
+            if !self.fleet_wanted.iter().any(|w| w.0.def.path == m.0.def.path && w.1 == m.1) {
+                self.fleet_wanted.push(m);
+            }
+        }
+        false
+    }
+
     /// The vehicle sets a choice is drawn with: the vehicle, its rear sections, a train's
     /// further cars.
     pub(super) fn choice_sets(c: &Choice, traffic: &mut Traffic) -> Vec<(Arc<VehicleType>, Option<usize>)> {
@@ -162,11 +182,13 @@ impl Schedule {
                 }
             }
         }
-        if (day_time - self.fleet_check).abs() < 5.0 {
+        if (day_time - self.fleet_check).abs() < 5.0 && self.fleet_wanted.is_empty() {
             return;
         }
         self.fleet_check = day_time;
-        let sets = self.upcoming_sets(world, traffic, day_time);
+        // (the sets a departure found missing go first: they are what the next tries wait for)
+        let mut sets = std::mem::take(&mut self.fleet_wanted);
+        sets.extend(self.upcoming_sets(world, traffic, day_time));
         let keep: HashSet<crate::scene::VehicleKey> = sets
             .iter()
             .map(|(t, s)| (t.def.path.clone(), *s))

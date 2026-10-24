@@ -134,6 +134,7 @@ pub struct Choice {
     /// the duty's first stop by road).
     pub entry: i32,
     pub line: Option<String>,
+    /// The launcher tour ID (legacy choices contain the displayed number).
     pub tour: Option<String>,
     pub free: bool,
     /// Minutes of the day.
@@ -700,7 +701,7 @@ impl State {
             hof: Some(if c.hof_manual { c.hof.clone() } else { self.default_hof() }).filter(|p| !p.is_empty()),
             entry: Some(c.entry),
             line: if c.free { None } else { c.line.clone() },
-            tour: if c.free { None } else { c.tour.clone() },
+            tour: if c.free { None } else { self.tour().map(|t| t.number.clone()) },
             trip: if c.free { None } else { self.picked_trip().map(|i| i.to_string()) },
             whole_tour: !c.free && self.picked_trip().is_some(),
             time: format!("{:02}:{:02}", c.time / 60, c.time % 60),
@@ -987,10 +988,14 @@ impl State {
                                 }
                                 Some(l) => {
                                     if let Some(t) = &self.choice.tour {
-                                        match l.tours.iter().find(|x| &x.number == t) {
+                                        match l.tour(t) {
                                             None => self.choice.tour = None,
-                                            Some(t) if !t.runs => note = format!("Timetable of {date}: {n} lines - tour {} of line {line} does not run that day ({})", t.number, t.days),
-                                            _ => {}
+                                            Some(t) => {
+                                                if !t.runs {
+                                                    note = format!("Timetable of {date}: {n} lines - tour {} of line {line} does not run that day ({})", t.number, t.days);
+                                                }
+                                                self.choice.tour = Some(t.id.clone());
+                                            }
                                         }
                                     }
                                 }
@@ -1182,7 +1187,7 @@ impl State {
     }
     pub fn tour(&self) -> Option<&core::TourInfo> {
         let t = self.choice.tour.as_ref()?;
-        self.line()?.tours.iter().find(|x| &x.number == t)
+        self.line()?.tour(t)
     }
 
     pub fn select_bus(&mut self, file: &str) {

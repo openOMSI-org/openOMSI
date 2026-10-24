@@ -415,8 +415,6 @@ pub struct PeopleSim {
     pub stand_chance: f32,
     /// The driver pressed the ticket key (`ticket_give`): sell the requested ticket.
     pub give_ticket: bool,
-    /// The driver pressed `change_give`: all the change owed goes on the tray at once.
-    pub give_change_all: bool,
     /// The key that sells a ticket, as the HUD names it.
     pub ticket_key: String,
     /// Where the player looks from (set by the app every frame).

@@ -190,6 +190,20 @@ impl TrafficSim {
             }
             trains.push((here, ahead));
         }
+        if omsi_cfg::flags::OMSI_DEBUG_SIGNALS.is_set() {
+            // where the player's train stands and which routes it is on or coming to
+            if let Some((here, ahead)) = trains.last() {
+                let on: Vec<i64> = routes.iter().filter(|r| r.entries.iter().any(|e| e[0] == *here)).map(|r| r.signal.0).collect();
+                let to: Vec<i64> = routes.iter().filter(|r| r.entries.iter().any(|e| ahead.contains(&e[0]) && e[0] != *here)).map(|r| r.signal.0).collect();
+                thread_local!(static LAST: std::cell::RefCell<(i64, Vec<i64>, Vec<i64>)> = const { std::cell::RefCell::new((i64::MIN, Vec::new(), Vec::new())) });
+                LAST.with(|l| {
+                    if *l.borrow() != (*here, on.clone(), to.clone()) {
+                        log::info!("signals: the train is on piece {here}, on the routes of signals {on:?}, coming to those of {to:?} ({} pieces ahead)", ahead.len());
+                        *l.borrow_mut() = (*here, on, to);
+                    }
+                });
+            }
+        }
         for r in routes {
             let pieces: hashbrown::HashSet<i64> = r.entries.iter().map(|e| e[0]).collect();
             let occupied = trains.iter().any(|(here, _)| pieces.contains(here));

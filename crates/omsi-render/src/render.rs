@@ -87,7 +87,8 @@ impl ExposureLog {
                 let bits = u16::from_le_bytes([view[0], view[1]]);
                 let metered = half_to_f32(bits);
                 let (pre, m) = self.pending;
-                let ev = ((m[1] - metered) * m[0]).clamp(-m[2], m[3]) + m[4];
+                let gap = m[1] - metered;
+                let ev = (gap * if gap > 0.0 { shortfall_adaptation(pre, m[3], m[0]).1 } else { m[0] }).clamp(-m[2], m[3]) + m[4];
                 if ev.is_finite() {
                     self.ev = ev;
                 }
@@ -142,6 +143,18 @@ pub(crate) fn half_to_f32(b: u16) -> f32 {
 }
 
 impl Renderer {
+    /// Whether the street-scale light (the wide occlusion and the bounced light) is on: the
+    /// setting's, or as the chip allows (`RenderOptions::street_light`).
+    pub(crate) fn street_light(&self) -> bool {
+        self.options.street_light.unwrap_or(true)
+    }
+
+    /// The lightning strikes since the last call, as (seconds until the thunder is heard,
+    /// distance in m, direction): the sound plays the thunder of what the picture showed.
+    pub fn take_strikes(&mut self) -> Vec<(f32, f32, [f32; 2])> {
+        std::mem::take(&mut self.tone.lightning.strikes).into_iter().map(|s| (s.delay, s.distance, s.dir)).collect()
+    }
+
     /// Change the dynamic parameters of an instance. `slot_alpha` entries beyond the mesh's
     /// slot count are ignored; missing ones keep 1.0.
     pub fn set_params(
@@ -943,4 +956,14 @@ pub(crate) struct ToneMapping {
     /// The enhanced lighting uniform as last written (`prepare_enhanced`), for the passes
     /// that decide on the CPU whether they have anything to draw (`shafts_seen`).
     pub(crate) enh_last: crate::uniforms::EnhancedUniform,
+    /// The thunderstorm's flashes (`Lightning`) and the strikes the sound has not yet taken.
+    pub(crate) lightning: crate::lighting::Lightning,
+    /// This frame's flash (stepped for every pipeline, drawn by the Enhanced one).
+    pub(crate) flash: crate::lighting::Flash,
+    /// The last frame of the window's picture the bounced light read back: its view and
+    /// projection, render origin, size and where it looked (see `bounce_history`).
+    pub(crate) bounce_prev: Option<(Mat4, DVec3, (u32, u32), Vec3, Vec3)>,
+    /// From a view-space point to the last frame's clip space, and whether that picture can
+    /// be read (0 or 1), for the AO pass.
+    pub(crate) bounce_reproj: ([[f32; 4]; 4], f32),
 }

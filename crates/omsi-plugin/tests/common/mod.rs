@@ -39,6 +39,8 @@ pub struct Game {
     pub lan_sent: Vec<(String, u32, String)>,
     /// The passengers of the frame who decided about their ticket.
     pub ticket_asks: Vec<TicketAsk>,
+    /// The plugins (owner marks) that leave the IBIS to the driver.
+    pub ibis_holds: std::collections::BTreeSet<u64>,
 }
 
 impl Game {
@@ -342,6 +344,19 @@ impl PluginIo for Game {
     }
     fn duty_end(&mut self) -> bool {
         self.duty.take().is_some()
+    }
+    fn duty_set_auto_ibis(&mut self, owner: u64, on: bool) -> bool {
+        self.did(format!("auto ibis {on}"));
+        if on {
+            self.ibis_holds.remove(&owner);
+        } else {
+            self.ibis_holds.insert(owner);
+        }
+        true
+    }
+    fn duty_type_ibis(&mut self) -> bool {
+        self.did("type ibis");
+        self.duty.is_some()
     }
     fn duty_set_closed_stops(&mut self, stops: &[String], via: &str) -> bool {
         let Some(d) = self.duty.as_mut() else { return false };

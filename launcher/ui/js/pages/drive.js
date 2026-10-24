@@ -6,7 +6,7 @@ import { S, useStore, toast } from '../store.js';
 import { t, hhmm, language } from '../i18n.js';
 import { call, contentUrl } from '../api.js';
 import { Button, Dialog } from '../ui.js';
-import { choose, realTime, realDate, launcherLayout } from '../data.js';
+import { tourId, choose, realTime, realDate, launcherLayout } from '../data.js';
 import { MultiplayerDutyNotice } from './multiplayer.js';
 import { ClassicDrive } from './drive-classic.js';
 import { LayoutDrive } from './drive-layouts.js';
@@ -71,7 +71,7 @@ export function findTours(line, now, q, showEnded, keep) {
   const endedCount = all.filter((x) => x.ended).length;
   const dep = (x) => x.tour.trips[x.at]?.departure ?? Infinity;
   const shown = all
-    .filter((x) => showEnded || !x.ended || (!q && x.tour.number === keep))
+    .filter((x) => showEnded || !x.ended || (!q && tourId(x.tour) === keep))
     .sort((a, b) => b.tour.runs - a.tour.runs || a.ended - b.ended || (q ? dep(a) - dep(b) : 0) || a.tour.number.localeCompare(b.tour.number, undefined, { numeric: true }));
   return { shown, endedCount };
 }
@@ -85,12 +85,12 @@ export function tourRoute(tour) {
 
 export function chooseLine(l) {
   const tr = findTours(l, S.choice.time * 60, '', false).shown[0]?.tour || l?.tours.find((x) => x.runs) || l?.tours[0];
-  choose({ line: l.name, tour: tr?.number ?? null, start_trip: null });
+  choose({ line: l.name, tour: tourId(tr) ?? null, start_trip: null });
 }
 
 export function chooseTour(x, trip) {
-  if (x.number === S.choice.tour && !trip) return;
-  const patch = { tour: x.number, start_trip: null };
+  if (tourId(x) === S.choice.tour && !trip) return;
+  const patch = { tour: tourId(x), start_trip: null };
   if (!x.runs && x.next_run && !realDate()) patch.date = x.next_run;
   choose(patch);
   if (trip) pickTrip(trip);

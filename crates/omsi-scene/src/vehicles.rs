@@ -1,6 +1,7 @@
 //! The vehicle upload: a vehicle type's meshes and materials made into render instances.
 use super::*;
 
+pub(crate) mod lods;
 mod night_coverage;
 use night_coverage::{load_night, night_coverage, static_diffuse};
 
@@ -18,7 +19,7 @@ impl World {
         self.mirror_aspect.lock().clear();
         self.mirror_glass.lock().clear();
         let set = self.upload_vehicle(renderer, scene, vt, scheme, true);
-        let mut render = self.instantiate_vehicle(renderer, scene, vt, &set, None, None);
+        let mut render = self.instantiate_vehicle(renderer, scene, vt, &set, None, None, false);
         own_skinned_meshes(renderer, scene, vt, &mut render);
         render
     }
@@ -41,7 +42,7 @@ impl World {
         } else {
             None
         };
-        let mut render = self.instantiate_vehicle(renderer, scene, vt, &set, None, shared);
+        let mut render = self.instantiate_vehicle(renderer, scene, vt, &set, None, shared, false);
         own_skinned_meshes(renderer, scene, vt, &mut render);
         render
     }
@@ -151,6 +152,21 @@ impl World {
         scheme: Option<usize>,
         lead: Option<&VehicleRender>,
     ) -> VehicleRender {
+        self.add_vehicle_shared_lod(renderer, scene, vt, scheme, lead, false)
+    }
+
+    /// [`World::add_vehicle_shared`] for a vehicle whose pose the caller also gives the
+    /// instances of its lower levels of detail (`VehicleRender::far`), which are drawn in
+    /// place of the full model while it is small on the screen (the AI traffic's).
+    pub fn add_vehicle_shared_lod(
+        &self,
+        renderer: &Renderer,
+        scene: &mut Scene,
+        vt: &omsi_sim::VehicleType,
+        scheme: Option<usize>,
+        lead: Option<&VehicleRender>,
+        lod: bool,
+    ) -> VehicleRender {
         let shared = lead.and_then(|l| {
             (vt.def.script_share || vt.model.script_textures.is_empty()).then(|| l.script_textures.as_slice())
         });
@@ -168,7 +184,7 @@ impl World {
             s.users += 1;
             s.idle_since = None;
         }
-        let mut render = self.instantiate_vehicle(renderer, scene, vt, &set, Some(key), shared);
+        let mut render = self.instantiate_vehicle(renderer, scene, vt, &set, Some(key), shared, lod);
         // an articulated AI bus (timetable or random traffic, and its coupled rear section)
         // bends its own bellows too, from a mesh copy of its own (freed again in
         // `release_vehicle`) - the shared set's copy has to stay in the rest pose, since
@@ -196,7 +212,7 @@ impl World {
                 gpu.free_instances.entry(slots).or_default().push(*instance);
                 renderer.free_mesh(scene, *mesh);
             }
-            for i in render.instances {
+            for i in render.instances.into_iter().chain(render.far) {
                 renderer.remove_instance(scene, i);
                 let slots = renderer.instance_slots(scene, i);
                 gpu.free_instances.entry(slots).or_default().push(i);
@@ -236,11 +252,10 @@ impl World {
                 }
             }
             for v in render.variants {
+                for built in v.free_built.values() {
+                    own_materials.extend(built.materials());
+                }
                 for f in v.free {
-                    for (b, it) in f.cache.into_values() {
-                        own_materials.push(b);
-                        own_materials.push(it);
-                    }
                     // the pictures it showed: shared, gone with their last holder
                     let mut shared = f.shared.lock();
                     for p in f.held {
@@ -586,6 +601,7 @@ impl World {
         set: &VehicleSet,
         key: Option<VehicleKey>,
         shared_script: Option<&[Option<TextureId>]>,
+        lod: bool,
     ) -> VehicleRender {
         let mut gpu = self.gpu.lock();
         let blank = |gpu: &mut GpuCache, scene: &mut Scene, w: i32, h: i32| {
@@ -806,6 +822,7 @@ impl World {
                 }
             }
         }
+        let far = self.far_instances(renderer, scene, vt, set, &instances, key.is_some() && lod, &mut gpu);
         // the vehicle is drawn or left out as one object (see `set_object_culling`): its
         // sphere about the vehicle's origin, which every mesh instance shares
         let radius = set
@@ -817,12 +834,13 @@ impl World {
             .fold(0.0f32, f32::max);
         let any_distance =
             vt.model.no_distance_check || vt.model.meshes.iter().any(|m| m.no_distance_check);
-        for inst in &instances {
+        for inst in instances.iter().chain(&far) {
             renderer.set_object_culling(scene, *inst, radius, vt.model.detail_factor, any_distance);
         }
         VehicleRender {
             window_wipers: None,
             instances,
+            far,
             text_textures,
             script_textures,
             shared_script: shared_script.is_some(),
@@ -919,6 +937,7 @@ impl World {
             mesh_secs += t_mesh.elapsed().as_secs_f64();
             up.instances.push((id, mats));
         }
+        let far = self.upload_far(renderer, scene, &mut up, &mut mesh_ids, &mut mesh_keys, only.is_some() || hide.is_some());
         let VehicleUpload { held, mut materials, tex_time, instances, mut missing_tex, variants, dyn_slots, .. } = up;
         if !missing_tex.is_empty() {
             missing_tex.sort();
@@ -942,6 +961,7 @@ impl World {
         }
         VehicleSet {
             meshes: instances,
+            far,
             dyn_slots,
             variants,
             textures: held,
@@ -1216,10 +1236,11 @@ impl World {
         materials.extend(more.iter().copied());
         // [matl_freetex]: the file is only known at run time (the destination
         // roller builds its path from the map's depot and terminus strings)
-        let free: Vec<FreeTex> = free_texture_defs(&ov_all).into_iter().map(|(item_only, key, var)| {
+        let defs = free_texture_defs(&slot_halves(&ov, &first_item, &later_items, spec.item.is_some()));
+        let free: Vec<FreeTex> = defs.into_iter().map(|(halves, key, var)| {
             let diffuse = key.eq_ignore_ascii_case(&m.texture);
             let texture = tex!(&subst(&key), &dirs_ref);
-            self.free_texture_slot(var, texture, diffuse, item_only, dirs)
+            self.free_texture_slot(var, texture, diffuse, halves, dirs)
         }).collect();
         let multi_light = |base: MaterialId, item: MaterialId| -> Option<MultiLight> {
             let list = ov.iter().map(|o| &o.lightmaps).find(|l| !l.is_empty())?;
@@ -1239,22 +1260,24 @@ impl World {
         };
         if spec.item.is_some() || !entries.is_empty() || !free.is_empty() {
             let tex_var = master.map(|m| m.variable.clone()).unwrap_or_default();
-            variants.push(VariantSlot { mesh: instances.len(), slot, base, item, more, var: change_var.unwrap_or_default(), more_vars: change_vars.iter().skip(1).cloned().collect(), entries, tex_var, free, spec, base_tex, entry_tex, lights: multi_light(base, item) });
+            variants.push(VariantSlot { mesh: instances.len(), slot, base, item, more, var: change_var.unwrap_or_default(), more_vars: change_vars.iter().skip(1).cloned().collect(), entries, tex_var, free, free_built: HashMap::new(), free_lights: None, spec, base_tex, entry_tex, lights: multi_light(base, item) });
         } else if let Some(lights) = multi_light(base, item) {
-            variants.push(VariantSlot { mesh: instances.len(), slot, base, item, more: Vec::new(), var: String::new(), more_vars: Vec::new(), entries, tex_var: String::new(), free: Vec::new(), spec, base_tex, entry_tex, lights: Some(lights) });
+            variants.push(VariantSlot { mesh: instances.len(), slot, base, item, more: Vec::new(), var: String::new(), more_vars: Vec::new(), entries, tex_var: String::new(), free: Vec::new(), free_built: HashMap::new(), free_lights: None, spec, base_tex, entry_tex, lights: Some(lights) });
         } else if base_dyn.any() {
             dyn_slots.push(DynSlot { mesh: instances.len(), slot, text: text_slot, script: script_slot, script_trans, lit: script_slot.is_some_and(|i| vt.model.html_page_lit(i)), tex, alpha, transmap, night, lightmap, envmap, address, extra, color, emissive });
         }
         base
     }
 
-    /// Cache state and reload ownership shared by free textures in this world.
+    /// Cache state and reload ownership shared by free textures in this world: one
+    /// `[matl_freetex]` of a vehicle slot, standing in for `key` (`diffuse`: the slot's own
+    /// texture), on the halves its bits name (see `free_texture_defs`).
     fn free_texture_slot(
         &self,
         var: String,
         key: Option<TextureId>,
         diffuse: bool,
-        item_only: bool,
+        halves: u32,
         dirs: &[PathBuf],
     ) -> FreeTex {
         FreeTex {
@@ -1262,16 +1285,30 @@ impl World {
             var,
             diffuse,
             key,
-            item_only,
+            halves,
             dirs: dirs.to_vec(),
             textures: self.textures.clone(),
-            cache: HashMap::new(),
+            pictures: HashMap::new(),
             current: None,
             shared: self.vehicle_textures.clone(),
             held: Vec::new(),
             wants_upgrade: self.freetex_upgrades.clone(),
         }
     }
+}
+
+/// The records of each half of a vehicle slot in `SlotSpec` order - the plain material, its
+/// first item, then the further items, each on its own - for `free_texture_defs`: an item
+/// lists the slot's free textures and its own (the NLC's switch stripes keep the white
+/// picture under their light map in item 1 while item 2 swaps it for the black one under
+/// its night map).
+fn slot_halves<'a>(plain: &[&'a MaterialDef], first_item: &[&'a MaterialDef], later_items: &[&'a MaterialDef], has_item: bool) -> Vec<Vec<&'a MaterialDef>> {
+    let mut halves = vec![plain.to_vec()];
+    if has_item {
+        halves.push(first_item.to_vec());
+        halves.extend(later_items.iter().map(|o| vec![*o]));
+    }
+    halves
 }
 
 /// One material slot of a vehicle mesh being uploaded (see [`World::vehicle_slot_material`]).

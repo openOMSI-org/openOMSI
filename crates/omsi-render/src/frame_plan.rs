@@ -453,8 +453,14 @@ pub(crate) struct ShadowRes {
     pub(crate) shadow_sampler: wgpu::Sampler,
     pub(crate) shadow_layout: wgpu::BindGroupLayout,
     /// [near opaque, near alpha-tested, far opaque, far alpha-tested, close opaque, close
-    /// alpha-tested], then the street lamps' (6 + 2 k + kind; not with `basic_pipelines`)
+    /// alpha-tested], then the lamps' (6 + kind; not with `basic_pipelines`)
     pub(crate) shadow_pipelines: Vec<wgpu::RenderPipeline>,
+    /// Where the lamps' tiles lie under the far cascade (the shaders read it from the
+    /// camera uniform).
+    pub(crate) lamp_atlas: LampAtlas,
+    /// The lamps' matrices as the window's last frame drew them: the mirrors look the tiles
+    /// up with them (see `Renderer::prepare_camera`).
+    pub(crate) lamp_matrices: std::cell::RefCell<Vec<Mat4>>,
     /// The far shadow cascade as last drawn: its light matrix, frames since, the render
     /// origin and the sun it was drawn for.
     pub(crate) shadow_far_cache: std::cell::Cell<(Mat4, u32, DVec3, Vec3)>,
@@ -472,6 +478,8 @@ pub(crate) struct ShadowRes {
     pub(crate) shadow_clear_pipeline: wgpu::RenderPipeline,
     /// What the street lamps' shadow tiles hold, kept while nothing in them changes.
     pub(crate) lamp_tiles: std::cell::Cell<passes::LampTiles>,
+    /// Which parts of the player's vehicle stand still in it (the saloon's lamp tiles hold those).
+    pub(crate) cabin_motion: std::cell::RefCell<passes::CabinMotion>,
     /// What stands over the ground round the camera, for the rain and the snow.
     pub(crate) precip: passes::PrecipMap,
 }

@@ -121,6 +121,10 @@ pub struct Lighting {
     /// The player's vehicle (origin, heading in degrees, `[boundingbox]` w l h cx cy cz):
     /// no rain sheen or snow cover is shaded inside it.
     pub inside: Option<(DVec3, f64, [f32; 6])>,
+    /// The player's vehicle's body rotation (pitch and roll as well as heading): the
+    /// saloon's lamps look down from the vehicle's own frame (`LampShadow::cabin`). Without
+    /// it the heading alone stands in.
+    pub inside_rotation: Option<Mat4>,
     /// Actual road height beneath the player's vehicle; independent of suspension motion.
     /// The local puddle capture is skipped when no road height is known.
     pub puddle_ground: Option<f64>,
@@ -197,6 +201,17 @@ pub struct Lighting {
     /// Ångström exponent and its layer's depth (m); without it the day's own air is drawn
     /// from the calendar (`day_air`).
     pub air: Option<[f32; 3]>,
+    /// The cumulus layer's base and top over the ground (m) as a weather model knows them
+    /// (the condensation level and where the convection stops); without it the stock layer
+    /// of 1400-2800 m.
+    pub cloud_layer: Option<[f32; 2]>,
+    /// Altocumulus cover of the layer at 2-6 km (0..1).
+    pub alto: f32,
+    /// The optical depth of the grey deck's liquid water as a weather model knows it;
+    /// without it a stratus' 15 and, in rain, up to a nimbostratus' 60.
+    pub deck_tau: Option<f32>,
+    /// Thunderstorm activity (0 none .. 1 violent): lightning flashes and the storm's cloud.
+    pub storm: f32,
     /// Simulation seconds for scene animation; standalone views use elapsed real time.
     pub animation_time: Option<f32>,
 }
@@ -255,6 +270,7 @@ impl Default for Lighting {
             enhanced: false,
             classic: false,
             inside: None,
+            inside_rotation: None,
             puddle_ground: None,
             puddle_normal: Vec3::Z,
             puddle_parts: Vec::new(),
@@ -278,6 +294,10 @@ impl Default for Lighting {
             day_seed: 0,
             veil: 0.0,
             air: None,
+            cloud_layer: None,
+            alto: 0.0,
+            deck_tau: None,
+            storm: 0.0,
             animation_time: None,
         }
     }

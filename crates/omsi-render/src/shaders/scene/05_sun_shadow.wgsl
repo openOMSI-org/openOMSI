@@ -51,8 +51,8 @@ const SHADOW_TENT: f32 = 2.0;
 // `uv`: the receiver in the cascade's own 0..1; `size`: the cascade's texels a side;
 // `origin`: where its first texel lies in the texture; `slope`: its receiver plane (per uv).
 // The shadow maps' size, texels a side, from the uniforms (`camera.shadow.y` is a texel): the
-// near map an atlas of two cascades side by side, the far one `FAR_MAP_ASPECT` (1.25) times
-// as high for the street lamps' tiles under it. (Asked of the textures with
+// near map an atlas of two cascades side by side, the far one taller by the lamps' tiles under
+// it (`camera.lamp_atlas.z` is its texture's height). (Asked of the textures with
 // textureDimensions in every inlined use of the sun's shadow, they brought Apple's M4 shader
 // compiler down on every scene pipeline.)
 fn shadow_map_size() -> f32 {
@@ -94,7 +94,7 @@ fn shadow_tent_near(uv: vec2<f32>, size: f32, origin: vec2<f32>, z: f32, slope: 
 }
 
 fn shadow_tent_far(uv: vec2<f32>, size: f32, z: f32, slope: vec2<f32>, widen: f32, bias: f32) -> f32 {
-    let dims = vec2<f32>(1.0, floor(shadow_map_size() * 1.25) / shadow_map_size()) * shadow_map_size();
+    let dims = vec2<f32>(shadow_map_size(), camera.lamp_atlas.z);
     let pl = shadow_tent_place(uv, size, widen);
     let k = max(1.0, floor(widen + 0.5));
     let r = SHADOW_TENT * k;
@@ -154,7 +154,7 @@ fn shadow_close(world: vec3<f32>, n: vec3<f32>, ndl: f32, thin: bool) -> vec2<f3
 }
 
 // The far map takes the top of its texture (its texels are the texture's first rows); the
-// street lamps' tiles lie under it (`FAR_MAP_ASPECT` in lib.rs).
+// lamps' tiles lie under it (`LampAtlas` in lights.rs).
 fn shadow_pcf_far(uv: vec2<f32>, z: f32, slope: vec2<f32>, widen: f32) -> f32 {
     let size = shadow_map_size();
     return shadow_tent_far(uv, size, z, slope, widen, SHADOW_BIAS_FAR / SHADOW_DEPTH_RANGE);

@@ -311,3 +311,7 @@ h1 { line-height: 1.25; }
 /* "playing now": a green dot in front of the count */
 .chip-live .material-icons { color: #2ea043; }
 .release-channels { display: flex; gap: 12px; flex-wrap: wrap; margin: 20px 0; }
+
+.new-badge { margin-left: auto; font-size: 11px; font-weight: 600; line-height: 1; padding: 4px 8px; border-radius: 999px; background: var(--primary); color: #fff; }
+.new-badge[hidden] { display: none; }
+.drawer a:has(.new-badge) { display: flex; align-items: center; }

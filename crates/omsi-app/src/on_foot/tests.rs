@@ -44,6 +44,7 @@ fn the_cab_is_heard_by_how_far_in_the_eyes_are() {
         model_dir: Default::default(),
         program: Arc::new(omsi_script::compile(&Default::default())),
         meshes: Vec::new(),
+        lod_meshes: Vec::new(),
         paint_schemes: Vec::new(),
         texchanges: Vec::new(),
         wheel_meshes: Vec::new(),

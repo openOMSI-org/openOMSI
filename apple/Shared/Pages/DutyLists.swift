@@ -38,7 +38,7 @@ func findTours(_ line: LineInfo?, now: Double, q: String, showEnded: Bool, keep:
     let all = (line?.tours ?? []).map { tourTrip($0, now, q) }.filter { $0.at >= 0 || ($0.tour.trips.isEmpty && (q.isEmpty || $0.tour.number.lowercased().contains(q))) }
     let dep = { (x: TourHit) in x.trip?.departure ?? .infinity }
     let shown = all
-        .filter { showEnded || !$0.ended || (q.isEmpty && $0.tour.number == keep) }
+        .filter { showEnded || !$0.ended || (q.isEmpty && $0.tour.id == keep) }
         .sorted { a, b in
             if a.tour.runs != b.tour.runs { return a.tour.runs }
             if a.ended != b.ended { return !a.ended }
@@ -152,7 +152,7 @@ struct LineList: View {
             store.act("line", ["line": l.name])
             let now = Double(store.choice.time * 60)
             if let t = findTours(l, now: now, q: "", showEnded: false, keep: nil).shown.first?.tour ?? l.tours.first(where: \.runs) ?? l.tours.first, t.runs {
-                store.act("tour", ["tour": t.number])
+                store.act("tour", ["tour": t.id])
             }
         }
         onPick()
@@ -185,7 +185,7 @@ struct TourList: View {
                     .font(.inter(13)).foregroundStyle(Theme.muted).padding(8).fixedSize(horizontal: false, vertical: true)
             }
             PickList(big: big, chosen: store.choice.tour) {
-                ForEach(r.shown, id: \.tour.number) { h in row(h, tq).id(h.tour.number) }
+                ForEach(r.shown, id: \.tour.id) { h in row(h, tq).id(h.tour.id) }
             }
         }
         .onChange(of: store.choice.line) { q = "" }
@@ -203,7 +203,7 @@ struct TourList: View {
             sub = "\(trip.line.isEmpty ? "" : "\(trip.line) | ")\(trip.from) → \(trip.terminus)\(h.via.map { " | \(tr("via {stop}", ["stop": $0]))" } ?? "")"
         }
         let facts = "\(tr("{n} trips", ["n": "\(x.trips.count)"])) - \(days)\(length.isEmpty ? "" : " - \(tr("{time} per trip", ["time": length]))")"
-        return DutyPickRow(on: x.number == store.choice.tour, dim: !live, big: big, action: { choose(x, hit ? trip : nil) }) {
+        return DutyPickRow(on: x.id == store.choice.tour, dim: !live, big: big, action: { choose(x, hit ? trip : nil) }) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
                     Text(x.number).font(.inter(14.5, .semibold)).foregroundStyle(Theme.text).lineLimit(1)
@@ -220,8 +220,8 @@ struct TourList: View {
     }
 
     private func choose(_ x: TourInfo, _ trip: TripInfo?) {
-        if x.number != store.choice.tour || trip != nil {
-            store.act("tour", ["tour": x.number])
+        if x.id != store.choice.tour || trip != nil {
+            store.act("tour", ["tour": x.id])
             if let trip { store.act("pick_trip", ["index": trip.index, "departure": trip.departure]) }
         }
         onPick()
@@ -302,7 +302,7 @@ struct NextDepartures: View {
             DisclosureGroup(isExpanded: $open) {
                 VStack(spacing: big ? 6 : 2) {
                     ForEach(Array(upcoming.enumerated()), id: \.offset) { _, u in
-                        DutyPickRow(on: u.l.name == c.line && u.x.number == c.tour, big: big, action: { choose(u.l, u.x, u.trip) }) {
+                        DutyPickRow(on: u.l.name == c.line && u.x.id == c.tour, big: big, action: { choose(u.l, u.x, u.trip) }) {
                             Text(hhmm(u.trip.departure)).font(.inter(14, .bold).monospacedDigit()).frame(width: 48, alignment: .leading)
                             LineBadge(line: u.trip.line.isEmpty ? u.l.name : u.trip.line)
                             VStack(alignment: .leading, spacing: 1) {
@@ -323,7 +323,7 @@ struct NextDepartures: View {
 
     private func choose(_ l: LineInfo, _ x: TourInfo, _ trip: TripInfo) {
         if l.name != store.choice.line { store.act("line", ["line": l.name]) }
-        store.act("tour", ["tour": x.number])
+        store.act("tour", ["tour": x.id])
         store.act("pick_trip", ["index": trip.index, "departure": trip.departure])
         onPick()
     }

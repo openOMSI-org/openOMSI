@@ -23,6 +23,8 @@ pub(crate) fn rail_of(kind: &ListKind, camera_tab: bool) -> Option<&'static str>
         | ListKind::ControllerCapture(_)
         | ListKind::Events => "controls",
         ListKind::World(_) => "world",
+        ListKind::SaveSlots => "saveslot",
+        ListKind::PlayerList | ListKind::PlayerPage(..) | ListKind::PlayerDo(..) | ListKind::BanList => "players",
         ListKind::Lines | ListKind::Tours(..) => "duty",
         ListKind::Admin | ListKind::AdminPlayers | ListKind::AdminPlayer(_) | ListKind::AdminConfirm(..) | ListKind::AdminClassic => "admin",
         _ => "vehicle",
@@ -33,12 +35,13 @@ impl App {
     /// The screens of the launcher's toolkit take the mouse: the pause menu is open (not in
     /// a headset, whose menu is a card in the scene), or the photo mode is on.
     pub(crate) fn shell_takes_mouse(&self) -> bool {
-        (!self.vr_active() && self.menus.game_menu.is_some()) || self.photo.is_some()
+        self.has_process_permission_prompt() || (!self.vr_active() && self.menus.game_menu.is_some()) || self.photo.is_some()
     }
 
     /// The pause menu drawn with the launcher's toolkit, over the picture (nothing when it is
     /// closed or a headset shows its own).
     pub(crate) fn frame_shell(&mut self, dt: f32) {
+        if self.frame_process_permission(dt) { return; }
         let Some(s) = self.gfx.surface.as_ref() else {
             self.shell.clear();
             return;
@@ -84,6 +87,7 @@ impl App {
             paused: self.paused,
             rail: &rail,
             rail_sel: self.menus.game_menu,
+            disabled: self.menu_disabled_ids(),
             rail_open: self.menus.list_kind.as_ref().and_then(|k| rail_of(k, camera_tab)).filter(|_| self.menus.chooser.is_some()),
             list,
             kbd: self.menus.menu_kbd,
@@ -110,6 +114,7 @@ impl App {
             // (the mouse has taken over from the keyboard)
             self.menus.menu_kbd = false;
             match a {
+                Action::ProcessPermission(id, decision) => { self.answer_process_permission(id, decision); }
                 Action::Choose(k) => {
                     if self.menus.game_menu.is_none() {
                         continue;
@@ -127,6 +132,11 @@ impl App {
                         self.menus.game_menu = Some(k);
                     }
                     self.menu_choose(event_loop, k);
+                }
+                Action::PauseCategory(category) => {
+                    if self.menus.game_menu.is_some() {
+                        self.switch_pause_category(category);
+                    }
                 }
                 Action::Rail(k) => {
                     self.close_list();
@@ -148,5 +158,17 @@ impl App {
                 Action::Photo(r) => self.photo_request(r),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod pause_navigation_tests {
+    use super::*;
+
+    #[test]
+    fn pause_navigation_player_lists_keep_the_online_category() {
+        assert_eq!(rail_of(&ListKind::PlayerList, false), Some("players"));
+        assert_eq!(rail_of(&ListKind::BanList, false), Some("players"));
+        assert_eq!(rail_of(&ListKind::SaveSlots, false), Some("saveslot"));
     }
 }

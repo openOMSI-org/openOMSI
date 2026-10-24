@@ -49,7 +49,9 @@ fn doorways(ty: &crate::VehicleType) -> Option<Vec<Vec<String>>> {
     let mut at: Vec<(String, f32, u32)> = Vec::new();
     for vm in &ty.meshes {
         let Some(def) = ty.model.meshes.get(vm.def_index) else { continue };
-        let Some(leaf) = def.animations.iter().find_map(|a| door_leaf_of(&a.variable)) else { continue };
+        // (a pantograph some mod animates with a door variable is no door)
+        let pantograph = ty.def.pantograph_var.as_deref();
+        let Some(leaf) = def.animations.iter().filter(|a| pantograph.is_none_or(|p| !p.eq_ignore_ascii_case(&a.variable))).find_map(|a| door_leaf_of(&a.variable)) else { continue };
         if vm.data.positions.is_empty() {
             continue;
         }

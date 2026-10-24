@@ -254,10 +254,10 @@ pub(crate) fn render_mirrors(
     let px = world.settings.mirror_size().max(64) as f32;
     lighting.min_obj_size = lighting.min_obj_size.max((12.0 / px).clamp(0.03, 0.09));
     // (no shadow pass of their own: the window's shadow maps are looked up, see
-    // `Renderer::plan_shadow_cache`)
-    lighting.shadows = renderer.options.mirror_shadows && lighting.shadows;
-    // Enhanced graphics draw the mirrors with the plain shading (see Renderer::render_inner),
-    // whose light is OMSI's: a night that stays a blue dusk. The window's enhanced night is
+    // `Renderer::plan_shadow_cache`; the mirrors drawn as the Enhanced picture is show them)
+    lighting.shadows = (renderer.options.mirror_shadows || (lighting.enhanced && renderer.options.mirror_enhanced)) && lighting.shadows;
+    // Enhanced graphics draw the mirrors with the plain shading unless they are asked to show the
+    // picture's (see Renderer::render_inner), whose light is OMSI's: a night that stays a blue dusk. The window's enhanced night is
     // far darker, and the mirrors showed the street by daylight beside it. The plain light
     // is taken down with the night (the lamps keep theirs) to the enhanced picture's level.
     // (By the sun's darkness, Envir_Brightness's ramp from +6 to -6 degrees: `night` is

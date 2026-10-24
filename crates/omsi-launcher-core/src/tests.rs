@@ -463,6 +463,43 @@ fn a_depot_bus_is_handed_to_the_game() {
     assert!(!none.iter().any(|x| x == "--depot"));
 }
 
+/// Same-number tours on alternating weekdays remain separate across date changes.
+#[test]
+fn duplicate_tour_numbers_have_distinct_stable_selections() {
+    let map = std::env::temp_dir().join(format!("openomsi-duplicate-tours-{}", std::process::id()));
+    let tt = map.join("TTData");
+    std::fs::create_dir_all(&tt).unwrap();
+    std::fs::write(
+        tt.join("A.ttp"),
+        "[trip]\n\nWest\n5\n[profile]\nNormal\n10\n",
+    )
+    .unwrap();
+    std::fs::write(
+        tt.join("B.ttp"),
+        "[trip]\n\nEast\n5\n[profile]\nNormal\n10\n",
+    )
+    .unwrap();
+    // Both school-day flags, plus Mon/Wed/Fri or Tue/Thu respectively.
+    std::fs::write(tt.join("5.ttl"), "[userallowed]\n[newtour]\n1\nBuses\n789\n[addtrip]\nA\n0\n420\n[newtour]\n1\nBuses\n778\n[addtrip]\nB\n0\n360\n").unwrap();
+    let monday = lines_on(&map, "2026-10-19").unwrap();
+    let tuesday = lines_on(&map, "2026-10-20").unwrap();
+    let mon = &monday[0];
+    let tue = &tuesday[0];
+    assert_eq!(mon.tours.len(), 2);
+    assert_ne!(mon.tours[0].id, mon.tours[1].id);
+    let selected = mon.tours.iter().find(|t| !t.runs).unwrap();
+    assert_eq!(selected.next_run.as_deref(), Some("2026-10-20"));
+    // An explicit other-day choice wins over the active tour with the same number.
+    assert_eq!(mon.tour(&selected.id).unwrap().trips[0].name, "B");
+    assert!(tue.tour(&selected.id).unwrap().runs);
+    assert_eq!(tue.tour(&selected.id).unwrap().trips[0].name, "B");
+    // Legacy saved choices prefer the variant operating on the selected date.
+    assert_eq!(mon.tour("1").unwrap().trips[0].name, "A");
+    assert_eq!(tue.tour("1").unwrap().trips[0].name, "B");
+    assert!(mon.tour("missing").is_none());
+    std::fs::remove_dir_all(map).unwrap();
+}
+
 #[test]
 fn comfortable_cabin_is_an_independent_opt_in_launch_flag() {
     let d = Duty {

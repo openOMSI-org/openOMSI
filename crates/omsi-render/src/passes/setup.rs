@@ -100,10 +100,10 @@ impl Renderer {
         };
         let aspect = self.texture_aspect.unwrap_or(width as f32 / height.max(1) as f32);
         let cam_rel = (camera.position - ro).as_vec3();
-        // The mirrors are drawn with the plain shading even in Enhanced: without the depth
-        // prepass (sized for the window) every layer of a mirror's picture ran the enhanced
-        // shader, 12.7 ms of GPU time for one 256-pixel mirror against 5.8 ms for the whole
-        // window; plainly shaded it is 0.6 ms, and a mirror's small picture shows no
+        // The mirrors are drawn with the plain shading even in Enhanced: a mirror has no depth
+        // prepass (sized for the window), so every layer of its picture runs the enhanced shader
+        // - 12.7 ms of GPU time for one 256-pixel mirror against 5.8 ms for the whole window on a
+        // weak card; plainly shaded it is 0.6 ms, and a mirror's small picture shows no
         // difference worth that - unless the player asks for it (`mirror_quality=enhanced`,
         // `RenderOptions::mirror_enhanced`) or `OMSI_MIRROR_ENHANCED=1`.
         // The headset's eyes are the real picture as much as the window is (#784: VR showed
@@ -127,7 +127,12 @@ impl Renderer {
             && !env.no_puddle_reflections;
         let reflection_frame = !enhanced && puddles_wanted && self.reflection_pass.is_some();
         let masked_frame = enhanced || reflection_frame;
-        let (grid, lamp_shadows) = self.prepare_lights(scene, cam_rel, enhanced_frame, lighting.lamp_shadows && with_overlays && projection.is_none() && self.shadows.shadow_pipelines.len() > 6, lighting.inside.as_ref());
+        let eye = LightEye {
+            cam_rel,
+            view_proj: projection.is_none().then(|| camera.view_proj(aspect, ro)),
+            vehicle: lighting.inside.as_ref().map(|b| (b, lighting.inside_rotation)),
+        };
+        let (grid, lamp_shadows) = self.prepare_lights(scene, &eye, enhanced_frame, lighting.lamp_shadows && with_overlays && projection.is_none() && self.shadows.shadow_pipelines.len() > 6);
         self.prepare_coronas(scene, lighting.night, lighting.inside.as_ref().filter(|v| point_in_vehicle_box(camera.position, v)));
         // (the mirrors draw no smoke, see `encode_main_late`)
         if exclude_texture.is_none() {
@@ -145,7 +150,7 @@ impl Renderer {
         let prepass_reach = if depth_wanted || env.no_ao_reach { f32::MAX } else { AO_PREPASS_REACH };
         // (only the bind group is made again, by `upload_draw_list`: dropping the instance
         // buffers for it wrote every instance's entries again at each render-scale step)
-        if prepass_on && self.ensure_ao(width, height) {
+        if prepass_on && self.ensure_ao(width, height, crate::lighting::bounce_wanted(ao_on, enhanced_frame, self.street_light())) {
             // a new AO texture: the camera bind group must point at it
             scene.camera_bind_group = None;
             self.targets.hdr_targets.clear();
@@ -227,10 +232,30 @@ impl Renderer {
         let (camera, lighting, ro, cam_rel, aspect) = (f.camera, f.lighting, f.ro, f.cam_rel, f.aspect);
         let (enhanced, lead_view, rt_frame, ao_on, glass_on, shadows) = (f.enhanced, f.lead_view, f.rt_frame, f.ao_on, f.glass_on, sh.shadows);
         let lamp_shadows = &f.lamp_shadows;
+        // The lamps' matrices: the window's frame draws the tiles and keeps what it drew them
+        // with; a mirror's picture looks the same tiles up, as it looks the sun's cascades up.
+        let lamp_mats: Vec<Mat4> = if f.with_overlays && f.projection.is_none() {
+            let m: Vec<Mat4> = (0..LAMP_SHADOWS).map(|k| lamp_shadows.iter().find(|l| l.slot == k).map_or(Mat4::ZERO, |l| l.view_proj())).collect();
+            self.shadows.lamp_matrices.borrow_mut().clone_from(&m);
+            m
+        } else {
+            self.shadows.lamp_matrices.borrow().clone()
+        };
         let vp_mat = f
             .projection
             .map(|p| p * Mat4::look_to_rh((camera.position - ro).as_vec3(), camera.forward(), camera.up()))
             .unwrap_or_else(|| camera.view_proj(aspect, ro));
+        // the last frame's picture for the bounced light, found again under this frame's view
+        if lead_view {
+            let size = (f.width, f.height);
+            self.tone.bounce_reproj = if crate::lighting::bounce_wanted(ao_on, enhanced, self.street_light()) {
+                let view = Mat4::look_to_rh(cam_rel, camera.forward(), camera.up());
+                crate::lighting::bounce_history(self.tone.bounce_prev, view, ro, size, cam_rel, camera.forward(), f.dt)
+            } else {
+                (Mat4::ZERO.to_cols_array_2d(), 0.0)
+            };
+            self.tone.bounce_prev = crate::lighting::bounce_wanted(ao_on, enhanced, self.street_light()).then_some((vp_mat, ro, size, cam_rel, camera.forward()));
+        }
         // where the tile light maps lie, relative to the render origin
         {
             let (lx, ly, side) = self.lights.lm_place.get();
@@ -347,8 +372,8 @@ impl Renderer {
             ],
             light_view_proj_close: sh.light_view_proj_close.to_cols_array_2d(),
             wind: [lighting.glass_wind.x, lighting.glass_wind.y, lighting.glass_wind.z, 1.0],
-            lamp_view_proj: std::array::from_fn(|k| lamp_shadows.get(k).map_or(Mat4::IDENTITY, |l| l.view_proj()).to_cols_array_2d()),
-            lamp_shadow: std::array::from_fn(|k| lamp_shadows.get(k).map_or(-1.0, lamp_shadow_code)),
+            lamp_view_proj: std::array::from_fn(|k| lamp_mats[k].to_cols_array_2d()),
+            lamp_atlas: self.shadows.lamp_atlas.uniform(),
             tree_wind: {
                 // the gusts drift with the wind: summed over the frames (the wind changes
                 // with the weather), in f64 and modulo the shaders' pattern period
@@ -375,6 +400,13 @@ impl Renderer {
                 _ => [0.0; 4],
             },
             cookies: self.lights.cookies.fields(),
+            cabin_lamps: {
+                let mut at = [-1.0f32; 16];
+                for (k, l) in lamp_shadows.iter().filter(|l| l.cabin.is_some()).take(16).enumerate() {
+                    at[k] = l.index as f32;
+                }
+                std::array::from_fn(|r| std::array::from_fn(|c| at[r * 4 + c]))
+            },
         };
         self.queue
             .write_buffer(&self.camera_buf, 0, bytemuck::bytes_of(&cu));
@@ -416,6 +448,12 @@ impl Renderer {
             if f.env.debug_sky && changed {
                 log::info!("sky glow from the lamps: {raw:.3} (taken {:.3})", step.exp());
             }
+        }
+        // the lightning goes on for every pipeline (the sound follows it); only the Enhanced one draws it
+        if lead_view {
+            self.tone.lightning.seed_once(lighting.day_seed);
+            let storm = crate::lighting::forced_storm().map_or(lighting.storm, |f| f.0).clamp(0.0, 1.0);
+            self.tone.flash = self.tone.lightning.step(storm, f.dt);
         }
         let probe_redraw = enhanced
             && (lead_view || self.sky.sky_state.is_none())

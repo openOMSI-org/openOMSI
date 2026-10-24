@@ -3,6 +3,12 @@
 
 use super::*;
 
+/// A truck tyre's cornering stiffness per newton of load (1/rad): 8-10 for radial bus and
+/// truck tyres (0.15 rad of slip angle peaks the force at 1.2 times the load x grip).
+pub(super) const CORNERING: f32 = 14.0;
+/// The tyre's relaxation length in tyre radii: about 0.5-1 m on a truck tyre.
+pub(super) const RELAXATION: f32 = 0.9;
+
 /// What a tyre finds along its length (see [`tyre_line`]).
 pub(super) struct TyreLine {
     /// The world height the hub has to stand at, how fast that rises as the hub rolls

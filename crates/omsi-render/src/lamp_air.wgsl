@@ -147,7 +147,7 @@ fn lamp_airlight(c: vec3<f32>, d: vec3<f32>, start: f32, len: f32, jitter: f32) 
                         // (the map is looked at only where the beam shines at all, and only for
                         // the few lamps that have a tile: no shadows, no tile, no tap)
                         var reach = 1.0;
-                        if (beam > 0.002 && tile_k < 4u) {
+                        if (beam > 0.002 && tile_k < 44u) {
                             reach = beam_reaches(tile_k, c + d * tq);
                         }
                         acc = acc + beam * reach * fog_phase(dot(ld, d)) * dphi;
@@ -158,6 +158,7 @@ fn lamp_airlight(c: vec3<f32>, d: vec3<f32>, start: f32, len: f32, jitter: f32) 
                     let pb = atan((tb - t0) / hh);
                     half = 0.5 * (pb - pa);
                     let mid = 0.5 * (pa + pb);
+                    let tile_p = beam_tile(li, l);
                     for (var q = 0u; q < 5u; q = q + 1u) {
                         let phi = mid + half * gx[q];
                         let tq = t0 + hh * tan(phi);
@@ -167,7 +168,13 @@ fn lamp_airlight(c: vec3<f32>, d: vec3<f32>, start: f32, len: f32, jitter: f32) 
                             // (a lamp in a housing: see `lamp_light`)
                             beam = 0.05 + 0.95 * smoothstep(-0.1, 0.3, ld.z);
                         }
-                        acc = acc + gw[q] * beam * fog_phase(-sin(phi));
+                        // (a lamp with a shadow map: what stands between it and the air
+                        // keeps its light out of that air, as the headlamps' beams)
+                        var reach = 1.0;
+                        if (beam > 0.002 && tile_p < 44u) {
+                            reach = beam_reaches(tile_p, c + d * tq);
+                        }
+                        acc = acc + gw[q] * beam * reach * fog_phase(-sin(phi));
                     }
                 }
                 // a lamp's irradiance is core^2 / r^2 of its colour's (a headlamp's 1 / r^2)

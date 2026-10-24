@@ -190,6 +190,10 @@ pub(crate) fn interior_lamp_on(ty: &omsi_sim::VehicleType, li: usize, var: impl 
     il.variable.trim().parse::<f32>().ok().or_else(|| var(&il.variable)).unwrap_or(0.0) >= 0.5
 }
 
+/// How many combinations of free pictures a slot keeps the materials of (see
+/// `VariantSlot::free_built`).
+const FREE_BUILT_KEEP: usize = 32;
+
 pub(crate) fn sync_materials(
     renderer: &Renderer,
     scene: &mut Scene,
@@ -197,7 +201,6 @@ pub(crate) fn sync_materials(
     render: &mut VehicleRender,
 ) {
     for v in &mut render.variants {
-        let item_has_freetex = v.free.iter().any(|f| f.item_only);
         // the light maps switched on now (several `[matl_lightmap]`s, see `MultiLight`)
         let mask = v.lights.as_ref().map(|l| {
             let mut mask = 0u32;
@@ -215,89 +218,110 @@ pub(crate) fn sync_materials(
         // two of them, #1650) is made with the maps switched on: the light maps' own
         // materials knew nothing of the free texture and put the slot's default texture
         // over the display, and a new picture came with the last map whatever its variable.
-        let lights = &mut v.lights;
+        // All free textures of the slot are laid into one material: an item records the
+        // slot's list and its own after it, so a powered display whose item swaps the night
+        // map keeps the picture the slot's string put on it, not the model's stand-in.
+        let mut changed = !v.free.is_empty() && v.free_lights != Some(mask);
         for f in &mut v.free {
-            // (the string read in place and compared with the key it made last time: the
+            // (the string read in place and compared with the name it had last time: the
             // name was copied, lower-cased and formatted for every free texture of every
             // vehicle each frame, though it changes only when a display does)
             let current = vehicle.str_var(&f.var);
-            if freetex_key_is(f.current.as_deref(), current, mask) {
+            if freetex_key_is(f.current.as_deref(), current, None) {
                 continue;
             }
-            let name = current.to_string();
-            let key = match mask {
-                Some(m) => format!("{}#{m}", name.to_ascii_lowercase()),
-                None => name.to_ascii_lowercase(),
-            };
-            if f.current.as_deref() != Some(key.as_str()) {
-                f.current = Some(key.clone());
-                let pair = match f.cache.get(&key) {
-                    Some(p) => *p,
-                    None => {
-                        let dirs: Vec<&Path> = f.dirs.iter().map(|p| p.as_path()).collect();
-                        let found = if name.is_empty() {
-                            None
-                        } else {
-                            let resolved = find_vehicle_freetex(&name, &dirs);
-                            if resolved.is_none() {
-                                log::warn!(
-                                    "vehicle [matl_freetex] '{}' = {:?}: texture not found",
-                                    f.var,
-                                    name
-                                );
-                            }
-                            resolved.and_then(|path| {
-                                let mut shared = f.shared.lock();
-                                if let Some(e) = shared.get_mut(&path) {
-                                    e.1 += 1;
-                                    f.reloads.watch(
-                                        path.clone(),
-                                        e.0,
-                                        &f.shared,
-                                        renderer.device.limits().max_texture_dimension_2d,
-                                    );
-                                    f.held.push(path);
-                                    return Some(e.0);
-                                }
-                                let (img, worth) = f.textures.get_gpu_fast(&path)?;
-                                let id = renderer.add_texture_data(scene, &img);
-                                if worth {
-                                    f.wants_upgrade.lock().push(path.clone());
-                                }
-                                attach_pbr(renderer, scene, &path, id);
-                                shared.insert(path.clone(), (id, 1));
-                                f.reloads.watch(
-                                    path.clone(),
-                                    id,
-                                    &f.shared,
-                                    renderer.device.limits().max_texture_dimension_2d,
-                                );
-                                f.held.push(path);
-                                Some(id)
-                            })
-                        };
-                        // An empty string or a file not found leaves the slot its own
-                        // texture from the mesh (with its addressing): a roller blind's idle
-                        // "next" band then stays out of sight in its transparent border
-                        // instead of covering the display as an untextured white plane.
-                        let mut spec = match found {
-                            Some(tex) => v.spec.with_freetex(f.key, tex, f.diffuse, f.item_only),
-                            None => v.spec.clone(),
-                        };
-                        if let (Some(m), Some(l)) = (mask, lights.as_mut()) {
-                            let tex = if m == 0 { None } else { l.composite(renderer, scene, m) };
-                            spec.set_lightmap(tex);
-                        }
-                        let p = spec.build(renderer, scene, v.base_tex);
-                        f.cache.insert(key, p);
-                        p
+            changed = true;
+            let name = current.to_ascii_lowercase();
+            if !f.pictures.contains_key(&name) {
+                let dirs: Vec<&Path> = f.dirs.iter().map(|p| p.as_path()).collect();
+                let found = if current.is_empty() {
+                    None
+                } else {
+                    let resolved = find_vehicle_freetex(current, &dirs);
+                    if resolved.is_none() {
+                        log::warn!("vehicle [matl_freetex] '{}' = {:?}: texture not found", f.var, current);
                     }
+                    resolved.and_then(|path| {
+                        let mut shared = f.shared.lock();
+                        // (a picture a display generator rewrites is reloaded in place,
+                        // under the same id, see `FreeTextureReloads`)
+                        let max_dimension = renderer.device.limits().max_texture_dimension_2d;
+                        if let Some(e) = shared.get_mut(&path) {
+                            e.1 += 1;
+                            f.reloads.watch(path.clone(), e.0, &f.shared, max_dimension);
+                            f.held.push(path);
+                            return Some(e.0);
+                        }
+                        let (img, worth) = f.textures.get_gpu_fast(&path)?;
+                        let id = renderer.add_texture_data(scene, &img);
+                        if worth {
+                            f.wants_upgrade.lock().push(path.clone());
+                        }
+                        attach_pbr(renderer, scene, &path, id);
+                        shared.insert(path.clone(), (id, 1));
+                        f.reloads.watch(path.clone(), id, &f.shared, max_dimension);
+                        f.held.push(path);
+                        Some(id)
+                    })
                 };
-                if !f.item_only {
-                    v.base = pair.0;
+                f.pictures.insert(name.clone(), found);
+            }
+            f.current = Some(name);
+        }
+        if changed {
+            v.free_lights = Some(mask);
+            // (the pictures by name, and the light maps: what the materials are made of)
+            let mut key = mask.map(|m| format!("#{m}")).unwrap_or_default();
+            for f in &v.free {
+                key.push('|');
+                key.push_str(f.current.as_deref().unwrap_or(""));
+            }
+            if !v.free_built.contains_key(&key) {
+                let mut spec = v.spec.clone();
+                // the halves something is laid on; the others keep the slot's materials
+                let mut halves = 0u32;
+                for f in &v.free {
+                    // (an empty string or a file not found leaves the slot its own texture
+                    // from the mesh, with its addressing: a roller blind's idle "next" band
+                    // then stays out of sight in its transparent border instead of covering
+                    // the display as an untextured white plane)
+                    if let Some(Some(tex)) = f.current.as_ref().and_then(|n| f.pictures.get(n)) {
+                        spec = spec.with_freetex(f.key, *tex, f.diffuse, f.halves);
+                    }
+                    halves |= f.halves;
                 }
-                if f.item_only || !item_has_freetex {
-                    v.item = pair.1;
+                if let (Some(m), Some(l)) = (mask, v.lights.as_mut()) {
+                    let tex = if m == 0 { None } else { l.composite(renderer, scene, m) };
+                    spec.set_lightmap(tex);
+                    halves = u32::MAX;
+                }
+                let built = spec.build_halves(renderer, scene, v.base_tex, halves, |_, m| m);
+                v.free_built.insert(key.clone(), built);
+            }
+            let built = &v.free_built[&key];
+            if let Some(m) = built.base {
+                v.base = m;
+            }
+            if let Some(m) = built.item {
+                v.item = m;
+            }
+            for (slot, m) in v.more.iter_mut().zip(&built.more) {
+                if let Some(m) = m {
+                    *slot = *m;
+                }
+            }
+            // (a display that runs through many pictures - a clock, a ticket printer - would
+            // keep the materials of every one while the vehicle lives: past a few dozen the
+            // ones not on show go)
+            if v.free_built.len() > FREE_BUILT_KEEP {
+                let shown = |b: &omsi_scene::FreeBuilt| b.materials().any(|m| m == v.base || m == v.item || v.more.contains(&m));
+                let gone: Vec<String> = v.free_built.iter().filter(|(k, b)| **k != key && !shown(b)).map(|(k, _)| k.clone()).collect();
+                for k in gone {
+                    if let Some(b) = v.free_built.remove(&k) {
+                        for m in b.materials() {
+                            renderer.free_material(scene, m);
+                        }
+                    }
                 }
             }
         }

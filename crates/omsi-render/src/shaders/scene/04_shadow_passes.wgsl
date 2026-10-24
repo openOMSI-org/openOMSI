@@ -73,10 +73,16 @@ fn vs_shadow_far(in: VsIn) -> VsOut {
     return out;
 }
 
-// Enhanced: a street lamp's shadow map (one of the tiles under the far map), looking down
-// from its head.
-fn shadow_lamp(in: VsIn, k: u32) -> VsOut {
-    let e = draw_list[in.inst];
+// Enhanced: a lamp's shadow map (one of the tiles under the far map). The draw list names
+// the tile above the entry's own bits (`LAMP_ENTRY_BITS` in lamp_slots.rs), and the tile's
+// matrix looks down from a street lamp's head or along the road from a vehicle's headlamps.
+const LAMP_ENTRY_BITS: u32 = 26u;
+
+@vertex
+fn vs_shadow_lamp(in: VsIn) -> VsOut {
+    let raw = draw_list[in.inst];
+    let e = raw & ((1u << LAMP_ENTRY_BITS) - 1u);
+    let k = raw >> LAMP_ENTRY_BITS;
     let m = model_matrix(e);
     let wp = m * vec4<f32>(in.pos, 1.0) + vec4<f32>(tree_sway(in.pos, m), 0.0);
     var out: VsOut;
@@ -93,26 +99,6 @@ fn shadow_lamp(in: VsIn, k: u32) -> VsOut {
         out.clip = vec4<f32>(0.0, 0.0, 2.0, 1.0);
     }
     return out;
-}
-
-@vertex
-fn vs_shadow_lamp0(in: VsIn) -> VsOut {
-    return shadow_lamp(in, 0u);
-}
-
-@vertex
-fn vs_shadow_lamp1(in: VsIn) -> VsOut {
-    return shadow_lamp(in, 1u);
-}
-
-@vertex
-fn vs_shadow_lamp2(in: VsIn) -> VsOut {
-    return shadow_lamp(in, 2u);
-}
-
-@vertex
-fn vs_shadow_lamp3(in: VsIn) -> VsOut {
-    return shadow_lamp(in, 3u);
 }
 
 @fragment

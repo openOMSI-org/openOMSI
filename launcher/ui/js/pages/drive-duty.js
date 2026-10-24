@@ -3,7 +3,7 @@ import { useStore } from '../store.js';
 import { t, hhmm, longDate } from '../i18n.js';
 import { Icon } from '../icons.js';
 import { Button, Field, Select, Toggle, Segmented, Picture, Notice, Spinner, Search } from '../ui.js';
-import { choose, curMap, curLine, curTour, pickedTrip, mapName, duty, busFile, realDate, loadIbis } from '../data.js';
+import { tourId, choose, curMap, curLine, curTour, pickedTrip, mapName, duty, busFile, realDate, loadIbis } from '../data.js';
 import { call } from '../api.js';
 import { RouteMap } from '../routemap.js';
 import { MapPicker } from './map-picker.js';
@@ -93,7 +93,7 @@ export function Tours({ line }) {
         const live = x.runs && !done;
         const hit = tq && trip && !x.number.toLowerCase().includes(tq);
         const days = !x.runs ? (x.next_run ? t('runs {date}', { date: longDate(x.next_run) }) : t('never within a year')) : done ? t('ended') : x.days;
-        return html`<button type="button" role="option" aria-selected=${x.number === c.tour} class=${'tour-row' + (x.number === c.tour ? ' on' : '') + (live ? '' : ' dim')} onClick=${() => chooseTour(x, hit ? trip : null)}>
+        return html`<button type="button" role="option" aria-selected=${tourId(x) === c.tour} class=${'tour-row' + (tourId(x) === c.tour ? ' on' : '') + (live ? '' : ' dim')} onClick=${() => chooseTour(x, hit ? trip : null)}>
           <span class="row"><b class="grow ellipsis">${x.number}</b>${trip && html`<span class=${'num small' + (live ? ' accent-fg' : ' muted')}>${hms(trip.departure)} - ${hms(trip.arrival)}</span>`}</span>
           <span class="sub ellipsis">${hit ? html`${trip.line ? `${trip.line} | ` : ''}<${TripEnds} trip=${trip} />${via ? ` | ${t('via {stop}', { stop: via })}` : ''}` : tourRoute(x)}</span>
           <span class="sub ellipsis">${t('{n} trips', { n: x.trips.length })} - ${days}${tripLength(x) ? ` - ${t('{time} per trip', { time: tripLength(x) })}` : ''}</span>
@@ -151,7 +151,7 @@ function NextDepartures({ lines }) {
   return html`<details class="next-tours">
     <summary class="section-title">${t('Next departures from {time}', { time: hhmm(c.time) })}</summary>
     <div class="next-list">
-      ${upcoming.map(({ l, x, trip }) => html`<button type="button" class=${'trip-row' + (l.name === c.line && x.number === c.tour ? ' on' : '')} onClick=${() => (choose({ line: l.name, tour: x.number, start_trip: null }), pickTrip(trip))}>
+      ${upcoming.map(({ l, x, trip }) => html`<button type="button" class=${'trip-row' + (l.name === c.line && tourId(x) === c.tour ? ' on' : '')} onClick=${() => (choose({ line: l.name, tour: tourId(x), start_trip: null }), pickTrip(trip))}>
         <span class="num time">${hms(trip.departure)}</span>
         <span class="line-badge">${trip.line || l.name}</span>
         <span class="grow"><span class="ellipsis"><${TripEnds} trip=${trip} /></span><span class="muted small ellipsis">${t('Tour')} ${x.number}</span></span>
@@ -260,8 +260,10 @@ export function Roadbook({ tour, trips, current, now }) {
     <div class="roadbook-trips" ref=${ref}>
       ${trips.map((x, i) => html`<button type="button" class=${'trip-row' + (i === current ? ' on' : '') + (x.arrival < now - 60 && i !== current ? ' past' : '')} onClick=${() => pickTrip(x)}>
         <span class="num time" title=${`${t('Trip duration')}: ${tripTime(x)}`}>${hms(x.departure)}<small>${hms(x.arrival)}</small><small>${tripTime(x)}</small></span>
-        <span class="kind">${depotRun(x) ? html`<span class="depot">${t('Depot run')}</span>` : html`<span class="line-badge">${x.line}</span>`}</span>
-        <span class="grow" title=${`${x.from} → ${x.terminus}`}><${TripEnds} trip=${x} stack />${x.km > 0 && html`<small class="muted">${x.km.toFixed(1)} km</small>`}</span>
+        <span class="grow" title=${`${x.from} → ${x.terminus}`}>
+          <span class="trip-tags">${depotRun(x) ? html`<span class="depot">${t('Depot run')}</span>` : html`<span class="line-badge">${x.line}</span>`}${x.km > 0 && html`<small class="muted">${x.km.toFixed(1)} km</small>`}</span>
+          <${TripEnds} trip=${x} stack />
+        </span>
       </button>
       ${i === current && x.stops?.length > 0 && html`<${TripStops} stops=${x.stops} />`}`)}
     </div>

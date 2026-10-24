@@ -9,6 +9,9 @@ description = "OMSI plugins: the .opl files of the plugins folder and their DLLs
 omsi-cfg = { path = "../omsi-cfg" }
 libloading = "0.9"
 log.workspace = true
+sha2.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 mlua = { version = "0.10", features = ["lua54", "vendored"] }
 wasmi = "2"
 oop-format = { git = "https://github.com/openOMSI-org/openOMSI-Development-Tools", rev = "496d9bd" }
@@ -16,3 +19,9 @@ oop-format = { git = "https://github.com/openOMSI-org/openOMSI-Development-Tools
 [[bin]]
 name = "omsi-plugin-host"
 path = "src/bin/omsi-plugin-host.rs"
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading"] }

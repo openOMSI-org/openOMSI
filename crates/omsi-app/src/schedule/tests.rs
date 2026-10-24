@@ -27,6 +27,7 @@ pub(crate) fn script_test_vehicle(osc: &str, varlist: &str, stringvarlist: &str)
         model_dir: dir.clone(),
         program: std::sync::Arc::new(program),
         meshes: Vec::new(),
+        lod_meshes: Vec::new(),
         paint_schemes: Vec::new(),
         texchanges: Vec::new(),
         wheel_meshes: Vec::new(),
