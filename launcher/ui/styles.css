@@ -459,6 +459,8 @@ table.table { width: 100%; border-collapse: collapse; }
 .map-row.click:hover { background: var(--surface-3); }
 .map-row .pic { width: 76px; height: 46px; flex: none; }
 .map-row .pic.placeholder svg { width: 20px; height: 20px; }
+.addon-icon { width: 48px; height: 48px; flex: none; border-radius: 12px; }
+.addon-icon.placeholder svg { width: 24px; height: 24px; }
 .map-row .grow { display: flex; flex-direction: column; min-width: 0; }
 .map-row b { font-weight: 600; }
 .map-row .btn { pointer-events: none; flex: none; }

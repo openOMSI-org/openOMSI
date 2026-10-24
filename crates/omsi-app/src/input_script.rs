@@ -564,12 +564,17 @@ impl App {
                         // bus, shut down a running one), and set its IBIS to the current
                         // duty as the driver would do while putting it into service.
                         if let Some(p) = self.player.as_mut() {
-                            let msg = p.start_up();
-                            self.service_msg = Some((msg, 6.0));
+                            let mut msg = p.start_up();
                             if let Some(d) = self.session.duty.as_ref() {
                                 let (trip, stop) = d.trip_for_ibis();
                                 p.set_duty_destination(trip, stop);
+                                // (a plugin leaves the IBIS to the driver: said, so that an
+                                // empty IBIS does not look broken)
+                                if !p.ibis_auto() && p.putting_into_service() {
+                                    msg = "Putting the vehicle into service ... A plugin leaves the IBIS for you to type.".to_string();
+                                }
                             }
+                            self.service_msg = Some((msg, 6.0));
                         }
                     }
 

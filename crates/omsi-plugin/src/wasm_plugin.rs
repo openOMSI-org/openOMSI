@@ -171,10 +171,11 @@ impl WasmHost {
         r
     }
 
-    fn check(&mut self) {
+    fn check(&mut self, io: &mut dyn PluginIo) {
         if let Some(why) = self.binding.disabled() {
             if !self.disabled {
                 log::warn!("{} stopped: {why}", self.state.tag);
+                self.state.give_back(io);
             }
             self.state.disabled = true;
         }
@@ -187,7 +188,7 @@ impl WasmHost {
             return;
         }
         self.with_ctx(io, |ctx, _| runtime::frame(ctx));
-        self.check();
+        self.check(io);
     }
 
     /// Whether the plugin listens to `event`.
@@ -201,7 +202,7 @@ impl WasmHost {
             return;
         }
         self.with_ctx(io, |ctx, _| runtime::emit_now(ctx, event, args));
-        self.check();
+        self.check(io);
     }
 
     /// The `stop` event, then the module's `oop_stop`; the storage is saved.

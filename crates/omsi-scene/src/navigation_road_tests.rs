@@ -16,6 +16,8 @@ fn road_candidates_use_drawn_width_and_ignore_nonroad_assets() {
     assert!(road_sections("Splines/StreetLight.sli", &def).is_empty());
     assert!(road_surface_name("Splines/Fahrbahn.sli"));
     assert!(!road_surface_name("Splines/Straßenbahn.sli"));
+    assert!(road_surface_name("amelys  route 6m.bmp"));
+    assert!(!road_surface_name("Splines/amelys trottoir 1.sli"));
     assert_eq!(road_sections("Splines/Str_2spur_6m.sli", &def), vec![(-4.0, 4.0, 0.0)]);
     let mut only_editor = def.clone();
     only_editor.only_editor = true;

@@ -74,12 +74,18 @@ pub(super) fn build(parts: &GroundParts, anchor: DVec2, reach: f64, pal: &Palett
     let rel = |q: DVec3| Vec3::new((q.x - anchor.x) as f32, (q.y - anchor.y) as f32, 0.0);
     // the network's carriageways where the map has no paving of its own for them (else the
     // paving is the road, and a path across a junction or a median is no road)
-    let tol = if paved { 0.12 } else { (reach / 4000.0) as f32 };
+    let tol = if paved { 0.12 } else { ((reach / 4000.0) as f32).max(look.tol) };
+    let span = |pts: &[Vec3]| {
+        let (lo, hi) = pts.iter().fold((Vec3::MAX, Vec3::MIN), |(lo, hi), q| (lo.min(*q), hi.max(*q)));
+        (hi - lo).truncate().max_element()
+    };
     let near: Vec<(&MapRoad, Vec<Vec3>)> = parts
         .roads
         .iter()
         .filter(|(l, covered)| !(paved && *covered) && l.points.iter().any(|q| (q.truncate() - anchor).length() < reach))
         .map(|(l, _)| (l, simplify(&l.points.iter().map(|q| rel(*q)).collect::<Vec<_>>(), tol)))
+        // (a road shorter than a pixel is a dot its neighbours' ends already cover)
+        .filter(|(_, pts)| look.tol == 0.0 || span(pts) >= look.tol * 2.0)
         .collect();
     for (l, pts) in &near {
         p.ribbon(pts, l.width + 1.0, if l.main { 3.4 } else { 2.8 }, pal.road_edge, true);
@@ -126,7 +132,8 @@ impl MapGround {
     /// Everything within `reach` of `anchor` as the city map shows it at `mpp` metres a pixel
     /// (its details, paving and houses come and go at the same scales: see `city_ground`).
     pub fn build(&self, anchor: DVec2, reach: f64, mpp: f64, light: bool) -> Built {
-        let look = GroundLook { surfaces: mpp < 0.7, trees: mpp < 0.7, dashes: mpp < 3.5 };
+        // (a road's line to half a pixel: finer points only make triangles no one sees)
+        let look = GroundLook { surfaces: mpp < 0.7, trees: mpp < 0.7, dashes: mpp < 3.5, tol: (mpp * 0.5) as f32 };
         build(&self.parts, anchor, reach, style::palette(light), look, mpp < 2.2, (mpp < 6.0).then_some(omsi_mapdraw::MODEL_TRIANGLES))
     }
 }

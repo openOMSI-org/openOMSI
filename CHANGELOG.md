@@ -271,6 +271,11 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   Timetable), Options (Settings, Controls, Setup) and Help (Tutorials); the driver at its
   bottom opens the profile. It folds to its icons with the arrow at its bottom, and stays so;
   the numbers on Mods and Running games stay on their icons.
+- An **Add-ons** page (Content > Add-ons; on a phone under More) lists projects others make
+  for openOMSI, each with its author, a short description and a button that opens its website
+  in the browser after saying which site it goes to. It is a list of links only: nothing is
+  downloaded or installed. A developer adds an add-on with a pull request of one entry, see
+  [docs/ADDONS.md](docs/ADDONS.md).
 
 - The launcher's route map opens fast and follows the mouse smoothly on a big map: the
   roads and the route show at once and the surfaces (paved roads, land, houses) a moment
@@ -344,6 +349,11 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **The MAN DN95 is no longer a mirror**: a texture a model asks for as `.dds` that is not
+  there is missing, as in OMSI, instead of being stood in for by a `.bmp` or another file of the
+  same name. The DN95's body asks for an `envmap.dds` it does not ship; its `envmap.bmp` (the
+  windows' sphere map) at the body's factor of 10 drew the paint over with the reflection, where
+  OMSI shows the paint without one.
 - With the new setting **Realistic road physics** on, road damage shakes a vehicle again: cobbles, gravel, dirt, grass, snow and the joints of a concrete-slab road lift each tyre by what ISO 8608 gives such a road, where only the map's geometry did before ([#3069](https://github.com/openOMSI-org/openOMSI/issues/3069)).
 - **A much lighter Enhanced frame by day**: since 0.2.42 the AI cars were lent headlamp beams
   whenever their lights were on, and in a grey winter noon (cars' lights on, no street lamp lit)

@@ -65,10 +65,19 @@ impl Player {
         }
     }
 
+    /// The game types the duty into the IBIS by itself: no plugin leaves it to the driver.
+    pub(crate) fn ibis_auto(&self) -> bool {
+        self.ibis_holds.is_empty()
+    }
+
     /// Put the duty's trip on the IBIS, at the stop the bus is at: now, or when the running
-    /// auto-start is done.
+    /// auto-start is done. Not while a plugin leaves the IBIS to the driver
+    /// (`duty.set_auto_ibis`): the driver types line, route and destination.
     pub(crate) fn set_duty_destination(&mut self, trip: &schedule::PlannedTrip, stop: usize) {
-        self.duty_typed = true;
+        if !duty_selected(&mut self.duty_typed, &self.ibis_holds) {
+            log::info!("IBIS: line {} to {} left for the driver to type", trip.line.trim(), trip.terminus.trim());
+            return;
+        }
         let stops: Vec<String> = trip.stops.iter().map(|s| s.name.clone()).collect();
         let name = trip
             .stops
@@ -251,5 +260,35 @@ impl Player {
         let line = route_line(t);
         log::info!("HTML page: route {i} '{}' (line '{line}' (file: '{}') to '{wanted}')", t.name.trim(), t.line.trim());
         self.type_destination(&line, &wanted, &stops, (0, &name));
+    }
+}
+
+/// A duty's trip is put on the IBIS: the duty is remembered as typed (`Player::duty_typed`,
+/// its next trips are typed too) even while a plugin holds the IBIS (`holds`), so that the
+/// trips after the last hold is let go are typed again. Whether the game types this one now.
+fn duty_selected(duty_typed: &mut bool, holds: &std::collections::BTreeSet<u64>) -> bool {
+    *duty_typed = true;
+    holds.is_empty()
+}
+
+#[cfg(test)]
+mod hold_tests {
+    use super::duty_selected;
+
+    /// Two plugins hold the IBIS, a duty is chosen (Shift+U), both let go: the next trip is
+    /// typed by the game again, as `steps.rs` types a new trip only when `duty_typed` (review
+    /// of #2877).
+    #[test]
+    fn a_duty_chosen_while_held_is_typed_from_the_next_trip_after_the_last_hold_goes() {
+        let mut typed = false;
+        let mut holds = std::collections::BTreeSet::new();
+        holds.insert(1);
+        holds.insert(2);
+        assert!(!duty_selected(&mut typed, &holds), "not typed while a plugin holds the IBIS");
+        assert!(typed, "the duty is remembered all the same");
+        holds.remove(&1);
+        assert!(!(typed && duty_selected(&mut typed, &holds)), "the other plugin still holds it");
+        holds.remove(&2);
+        assert!(typed && duty_selected(&mut typed, &holds), "the next trip is typed again");
     }
 }

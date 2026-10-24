@@ -251,6 +251,10 @@ pub(crate) struct Player {
     /// The duty is typed into the IBIS by itself (after Shift+U or `--autostart`): a new
     /// trip of the duty is typed too.
     pub(crate) duty_typed: bool,
+    /// The plugins (by owner mark) that leave the IBIS to the driver (`duty.set_auto_ibis`):
+    /// the game types the duty into it by itself (Shift+U, `--autostart`, each new trip) only
+    /// while there is none. Each plugin lets go of its own hold as it goes.
+    pub(crate) ibis_holds: std::collections::BTreeSet<u64>,
     /// The stop a page asked the duty to go on with (`omsi.setNextStop`), for the game to
     /// hand to the duty.
     pub(crate) html_next_stop: Option<usize>,
@@ -782,6 +786,11 @@ impl Player {
         } else {
             "Putting the vehicle into service ...".to_string()
         }
+    }
+
+    /// An auto-start is under way putting the bus into service (not switching it off).
+    pub(crate) fn putting_into_service(&self) -> bool {
+        self.startup.as_ref().is_some_and(|s| !s.shutting_down())
     }
 
     /// The vehicle actions `Inputs/keyboard.cfg` puts on keys.

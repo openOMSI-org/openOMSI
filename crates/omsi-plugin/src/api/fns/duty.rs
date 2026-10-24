@@ -7,6 +7,7 @@ use crate::io::{Duty, Stop, Trip};
 
 const NEW: &str = crate::api::VERSION;
 const V36: &str = "0.3.36";
+const V41: &str = "0.3.41";
 /// Most stops one `duty.set_closed_stops` closes.
 pub const MAX_CLOSED: usize = 64;
 
@@ -83,6 +84,16 @@ pub static FNS: &[ApiFn] = &[
         Ok::<_, ApiError>(super::core::ok_or_reason(c.io().duty_start(&line, &tour, trip, stop)))
     }),
     def!("duty.finish", "duty", [], "boolean", "Gives the duty up (the bus drives on without a timetable); `true` when there was one.", NEW, WorldWrite, false, |c, a| c.io().duty_end()),
+    def!("duty.set_auto_ibis", "duty", [p("on", "bool")], "boolean", "Whether the game types the duty into the bus's IBIS by itself - line, route, destination and the stop, at Shift+U and `--autostart` and again as each trip begins (on as a bus is taken). Off, the driver types them, or the plugin with `duty.type_ibis`. For the bus the player drives now, and while the plugin runs: when it stops or is switched off the game types the IBIS again, unless another plugin still leaves it to the driver. Off lasts for that bus only: after a change of vehicle (the `vehicle` event) the game types the new one's IBIS again, so a plugin that leaves it to the driver calls `duty.set_auto_ibis(false)` again there. `true` when there is a bus.", V41, VehicleWrite, false, |c, a| {
+        let on = a.flag(0, true);
+        let (io, s) = c.both();
+        let done = io.duty_set_auto_ibis(s.owner, on);
+        if done {
+            s.ibis_held = !on;
+        }
+        done
+    }),
+    def!("duty.type_ibis", "duty", [], "boolean", "Types the trip under way into the bus's IBIS now - line, route, destination and the stop the bus is at - as Shift+U does (`bus.set_line` types the line only); with `duty.set_auto_ibis` on, the next trips follow by themselves. `true` when there is a duty and a bus.", V41, VehicleWrite, false, |c, a| c.io().duty_type_ibis()),
     def!("duty.set_closed_stops", "duty", [p("stops", "table"), o("via", "string")], "boolean", "Closes stops of the duty's route for today - a diversion, roadworks: a list of their names (on every trip of the duty), and the way round them (`via`). The navigator strikes them through and shows `via` for the next one; the bus does not call there, and the duty goes on past them without counting them missed (no `stops_skipped`). Each call replaces the list (64 names at most), an empty one opens them all again; a duty taken anew (`duty.start`) starts with none. `duty.stops` marks them `closed`. `true` when there is a duty.", V36, WorldWrite, false, |c, a| {
         let stops: Vec<String> = a.table(0)?.items().iter().filter_map(Value::to_text).map(|s| one_line(&s, crate::ui::MAX_TEXT)).filter(|s| !s.is_empty()).collect();
         if stops.len() > MAX_CLOSED {

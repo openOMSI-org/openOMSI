@@ -784,6 +784,12 @@ impl PluginIo for Io<'_> {
     fn duty_end(&mut self) -> bool {
         self.app_mut().is_some_and(pduty::finish)
     }
+    fn duty_set_auto_ibis(&mut self, owner: u64, on: bool) -> bool {
+        self.app_mut().is_some_and(|a| pduty::set_auto_ibis(a, owner, on))
+    }
+    fn duty_type_ibis(&mut self) -> bool {
+        self.app_mut().is_some_and(pduty::type_ibis)
+    }
     fn duty_set_closed_stops(&mut self, stops: &[String], via: &str) -> bool {
         self.app_mut().is_some_and(|a| pduty::set_closed_stops(a, stops, via))
     }

@@ -144,6 +144,7 @@ The documentation is on the website, **https://openomsi.org/**, and in [`docs/`]
 | [Map packages](docs/MAP_PACKAGE.md) | optional surroundings a map can ship for the navigator and city map |
 | [Plugins](docs/PLUGINS.md) | Lua and WebAssembly plugins, `.oop` files, OMSI plugin DLLs |
 | [Development Tools](https://github.com/openOMSI-org/openOMSI-Development-Tools) | the plugin workbench: projects, API docs, the `.oop` compiler |
+| [Add-ons](docs/ADDONS.md) | the launcher's directory of add-ons, and how to list yours |
 | [Content formats](docs/FORMATS.md) | every OMSI 2 file format |
 | [Routes](docs/ROUTES.md) | timetables, chrono, HOF files, IBIS |
 | [Building](docs/BUILDING.md) | building from source on every platform |
