@@ -20,6 +20,20 @@ impl App {
         self.shell.last_sel = None;
     }
 
+    /// Keyboard focus of the pause menu's home page stays on a line that is shown: after the
+    /// editor closes (by key or by the Done button) an action that was unticked is no card any
+    /// more, and Enter must not run it. Resume and End the session are always shown.
+    pub(crate) fn fix_pause_focus(&mut self) {
+        use crate::shell::pause::navigation::Category;
+        if self.shell.quick_edit || self.shell.pause_category != Category::Home || self.menus.chooser.is_some() { return; }
+        let Some(sel) = self.menus.game_menu else { return };
+        let menu = self.game_menu_items();
+        let resume = menu.iter().position(|line| line.0 == "resume");
+        let shown = quick_actions::indices(Category::Home, &menu, &self.settings.pause_quick_actions);
+        if shown.contains(&sel) || Some(sel) == resume || menu.get(sel).is_some_and(|line| line.0 == "quit") { return; }
+        self.menus.game_menu = shown.first().copied().or(resume);
+    }
+
     pub(super) fn quick_editor_key(&mut self, code: KeyCode) -> bool {
         if self.vr_active() { return false; }
         if !self.shell.quick_edit { return false; }
@@ -38,6 +52,7 @@ impl App {
             KeyCode::KeyR => self.edit_quick_actions(Edit::Reset),
             _ => {},
         }
+        self.fix_pause_focus();
         true
     }
 }
@@ -60,5 +75,24 @@ mod tests {
         assert!(!app.shell.quick_edit);
         assert!(app.menus.game_menu.is_some());
         assert!(app.shell.actions.is_empty());
+    }
+
+    #[test]
+    fn leaving_the_editor_moves_the_focus_off_an_action_that_is_not_shown() {
+        use crate::shell::pause::navigation::Category;
+        let args = <crate::cli::Args as clap::Parser>::parse_from(["openomsi", "--server", "test-server.cfg"]);
+        let mut app = crate::assemble_app(args, Default::default());
+        app.open_game_menu();
+        let menu = app.game_menu_items();
+        let resume = menu.iter().position(|line| line.0 == "resume");
+        let Some(&hidden) = quick_actions::indices(Category::Home, &menu, &app.settings.pause_quick_actions).first() else { return };
+        app.menus.game_menu = Some(hidden);
+        app.settings.pause_quick_actions = "[]".into();
+        app.shell.quick_edit = true;
+        app.fix_pause_focus();
+        assert_eq!(app.menus.game_menu, Some(hidden), "nothing moves while the editor is open");
+        assert!(app.quick_editor_key(KeyCode::Escape));
+        assert!(!app.shell.quick_edit);
+        assert_eq!(app.menus.game_menu, resume, "the focus falls back to Resume");
     }
 }
