@@ -50,8 +50,30 @@ struct CoronaOut {
     @location(7) wpos: vec4<f32>,
 };
 
+// How many times wider than the light's own sprite the Enhanced picture draws a lamp's quad, for
+// the faint glare round it (`fs_enhanced`) - with *Glow of lights* on: 64 times the pixels.
+const GLARE_K: f32 = 8.0;
+// the glare's strength at the sprite's rim, against the lamp's core
+const GLARE_TAIL: f32 = 0.4;
+
+// How many times its sprite a lamp's quad is drawn: `GLARE_K` with *Glow of lights* on (enh.led.z),
+// and in mist, fog and rain (which have a halo of their own, in the bitmap) only the sprite.
+fn glare_scale() -> f32 {
+    let wet = clamp(enh.fog.x * 400.0 + enh.weather.z * 0.7, 0.0, 1.0);
+    return select(1.0, GLARE_K, enh.led.z > 0.5 && wet < 1.0);
+}
+
 @vertex
 fn vs_main(in: CoronaIn) -> CoronaOut {
+    return corona_vertex(in, 1.0);
+}
+
+@vertex
+fn vs_enhanced(in: CoronaIn) -> CoronaOut {
+    return corona_vertex(in, glare_scale());
+}
+
+fn corona_vertex(in: CoronaIn, glare: f32) -> CoronaOut {
     var out: CoronaOut;
     let corners = array<vec2<f32>, 6>(vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0));
     let c = corners[in.vid % 6u];
@@ -237,7 +259,7 @@ fn vs_main(in: CoronaIn) -> CoronaOut {
     // 0.9 is measured against Omsi.exe: at the size the game files ask for, every glow reads
     // a shade too wide beside the original, which draws the sprite a little inside the
     // diameter its `size` names. (Streaks keep their size: they are rain, not a light.)
-    let size = select(max(in.size * grow, dist * 0.002) * 0.9, in.size, streak);
+    let size = select(max(in.size * grow, dist * 0.002) * 0.9 * select(glare, 1.0, flake), in.size, streak);
     let stretch = select(vec2<f32>(1.0, 1.0), vec2<f32>(0.06, 4.0), streak);
     var upv = up;
     if (streak) {
@@ -340,11 +362,29 @@ fn fs_enhanced(in: CoronaOut) -> @location(0) vec4<f32> {
     }
     // (a fog cone is lit fog, not glare: it keeps the scene's level too)
     let scale = select(enh.exposure.w, enh.exposure.y, in.kind > 0.5);
-    var shape = corona_shape(in);
+    // (a lamp's quad is `GLARE_K` times its sprite: the sprite's own coordinates are these
+    // stretched out from the middle, and the rest of the quad holds the glare)
+    let lamp = in.kind < 0.5 && in.beam < 0.5;
+    var qin = in;
+    if (lamp) {
+        qin.uv = (in.uv - vec2<f32>(0.5)) * glare_scale() + vec2<f32>(0.5);
+    }
+    var shape = corona_shape(qin);
     // (taken here, in uniform control flow: how much of the sprite one pixel spans)
-    let r = length(in.uv - vec2<f32>(0.5)) * 2.0;
+    let r = length(qin.uv - vec2<f32>(0.5)) * 2.0;
     let px = fwidth(r);
-    if (in.kind < 0.5 && in.beam < 0.5) {
+    var tail = 0.0;
+    // (only with the glow on: off, a lamp is drawn exactly as it was before the option)
+    if (lamp && glare_scale() > 1.0) {
+        // The glare of a lens (and of an eye) round a bright source: a long tail falling as the
+        // cube of the distance (the near term of the CIE's glare function, 10 / theta^3), from
+        // the sprite's rim out to the quad's edge, where it is let go. Mist, fog and rain
+        // have their own halo, which the bitmap carries; in clear air this is what is left.
+        let wet0 = clamp(enh.fog.x * 400.0 + enh.weather.z * 0.7, 0.0, 1.0);
+        let k = 0.8;
+        tail = GLARE_TAIL * k * k * k / (r * r * r + k * k * k) * (1.0 - smoothstep(GLARE_K * 0.6, GLARE_K, r)) * (1.0 - wet0);
+    }
+    if (lamp) {
         // A lamp seen through clear air is a small, very bright core with a faint ring of
         // glare round it, not a lit disc as wide as its sprite (OMSI's glow bitmaps are
         // flat discs with soft rims): a narrow core bright enough for the glow pass to
@@ -362,6 +402,7 @@ fn fs_enhanced(in: CoronaOut) -> @location(0) vec4<f32> {
         // the core spans it, and brighter than white even in its corners it showed the
         // whole quad - a square blot of light for every distant headlamp)
         shape = shape * (1.0 - smoothstep(1.0 - px, 1.0, r));
+        shape = shape + vec3<f32>(tail) * max(lit, vec3<f32>(0.25));
     }
     return vec4<f32>(in.color.rgb * shape * in.color.a * scale, 1.0);
 }

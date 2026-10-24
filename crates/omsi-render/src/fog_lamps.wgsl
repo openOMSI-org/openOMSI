@@ -29,7 +29,7 @@ struct Camera {
     flags: vec4<f32>,
     light_view_proj_close: mat4x4<f32>,
     wind: vec4<f32>,
-    lamp_view_proj: array<mat4x4<f32>, 44>,
+    lamp_view_proj: array<mat4x4<f32>, 56>,
     lamp_atlas: vec4<f32>,
     tree_wind: vec4<f32>,
     inside2_a: vec4<f32>,
@@ -98,6 +98,10 @@ const SHAFT_NEAR: f32 = 180.0;
 // a low sun between the blocks, reach farther than the first hundred metres)
 const SHAFT_FAR_STEPS: u32 = 4u;
 const SHAFT_REACH: f32 = 420.0;
+// how far the sky's gaps are followed (the haze beyond that is the table's, lit as a whole) and in
+// how many steps growing by a fixed ratio
+const SKY_SHAFT_REACH: f32 = 7000.0;
+const SKY_SHAFT_STEPS: u32 = 8u;
 
 // Whether the sun reaches a point in the air (1) or a house or a crown stands between (0).
 fn sun_reaches(x: vec3<f32>) -> f32 {
@@ -126,7 +130,10 @@ fn sun_reaches(x: vec3<f32>) -> f32 {
 fn sun_shafts(c: vec3<f32>, d: vec3<f32>, len: f32, jitter: f32) -> vec3<f32> {
     let s = camera.sun_dir.xyz;
     let e_sun = enh.sun.rgb;
-    if (camera.shadow.x < 0.5 || s.z <= 0.0 || max(e_sun.r, e_sun.g) < 1e-4) {
+    // (the clouds' shadow field: the shafts through a broken sky, followed to kilometres)
+    let sky_gaps = enh.cloud_f1.w > 0.5 && s.z >= 0.06;
+    let shadows = camera.shadow.x > 0.5;
+    if ((!shadows && !sky_gaps) || s.z <= 0.0 || max(e_sun.r, e_sun.g) < 1e-4) {
         return vec3<f32>(0.0);
     }
     let end = min(len, SHAFT_NEAR);
@@ -137,9 +144,12 @@ fn sun_shafts(c: vec3<f32>, d: vec3<f32>, len: f32, jitter: f32) -> vec3<f32> {
     let p_fog = hg_phase(cos_t, 0.55) * 0.9;
     let p_air = hg_phase(cos_t, 0.7);
     let h0 = c.z - enh.fog.z;
+    // the clouds' part reaches on, out to the haze's own horizon: from the sparse steps'
+    // end, in steps growing by a fixed ratio
+    let sky_end = select(SHAFT_REACH, min(len, SKY_SHAFT_REACH), sky_gaps);
     // (the most the shadows could take out along the way, on the screen: where that is
     // too little to see - most of the picture, looking away from the sun - nothing is done)
-    let most = (enh.fog.x * p_fog + enh.fog.w * p_air) * max(e_sun.r, e_sun.g) * end * enh.exposure.x;
+    let most = (enh.fog.x * p_fog + enh.fog.w * p_air) * max(e_sun.r, e_sun.g) * max(end, select(0.0, sky_end, sky_gaps)) * enh.exposure.x;
     if (most < 0.004) {
         return vec3<f32>(0.0);
     }
@@ -152,8 +162,15 @@ fn sun_shafts(c: vec3<f32>, d: vec3<f32>, len: f32, jitter: f32) -> vec3<f32> {
         let t = select((f32(i) + jitter) * dt, SHAFT_NEAR + (f32(i - SHAFT_STEPS) + jitter) * dt_far, far);
         let w = select(dt, dt_far, far);
         let x = c + d * t;
-        let lit = sun_reaches(x);
-        if (lit >= 0.999) {
+        var lit = 1.0;
+        if (shadows) {
+            lit = sun_reaches(x);
+        }
+        if (sky_gaps) {
+            lit = lit * cloud_shadow_ratio(x);
+        }
+        // (a point the cloud lets more sun through than the camera's own place gets adds light)
+        if (lit >= 0.999 && lit <= 1.001) {
             continue;
         }
         let h = max(x.z - enh.fog.z, 0.0);
@@ -161,6 +178,25 @@ fn sun_shafts(c: vec3<f32>, d: vec3<f32>, len: f32, jitter: f32) -> vec3<f32> {
         let s_air = enh.fog.w * exp(-h / 1500.0);
         let tau = layer_depth(enh.fog.x, enh.fog.y, h0, h, t) + layer_depth(enh.fog.w, 1.0 / 1500.0, h0, h, t);
         shade = shade + vec3<f32>((1.0 - lit) * (s_fog * p_fog + s_air * p_air) * exp(-tau) * w);
+    }
+    // the part beyond the shadow maps: only the clouds' shadow is known there
+    if (sky_gaps && sky_end > SHAFT_REACH) {
+        let r = pow(sky_end / SHAFT_REACH, 1.0 / f32(SKY_SHAFT_STEPS));
+        var t0 = SHAFT_REACH;
+        for (var i = 0u; i < SKY_SHAFT_STEPS; i = i + 1u) {
+            let t1 = t0 * r;
+            let t = t0 + (t1 - t0) * jitter;
+            let x = c + d * t;
+            let lit = cloud_shadow_ratio(x);
+            if (lit < 0.999 || lit > 1.001) {
+                let h = max(x.z - enh.fog.z, 0.0);
+                let s_fog = enh.fog.x * exp(-enh.fog.y * h);
+                let s_air = enh.fog.w * exp(-h / 1500.0);
+                let tau = layer_depth(enh.fog.x, enh.fog.y, h0, h, t) + layer_depth(enh.fog.w, 1.0 / 1500.0, h0, h, t);
+                shade = shade + vec3<f32>((1.0 - lit) * (s_fog * p_fog + s_air * p_air) * exp(-tau) * (t1 - t0));
+            }
+            t0 = t1;
+        }
     }
     return -shade * e_sun;
 }
@@ -182,7 +218,7 @@ fn fs_fog_lamps(in: FogVsOut) -> @location(0) vec4<f32> {
     let q = vec2<i32>(in.clip.xy) & vec2<i32>(1);
     let ign = (f32(q.x * 2 + (q.x ^ q.y)) + 0.5) * 0.25;
     // (the lamps' halo and cones only from the mist's and fog's droplets: fp.size.w)
-    let l = (lamp_airlight(camera.cam_pos.xyz, r.xyz, 0.0, r.w, ign) * fp.size.w + sun_shafts(camera.cam_pos.xyz, r.xyz, r.w, ign)) * enh.exposure.x;
+    let l = (lamp_airlight(camera.cam_pos.xyz, r.xyz, 0.0, r.w, ign, fp.size.w) + sun_shafts(camera.cam_pos.xyz, r.xyz, r.w, ign)) * enh.exposure.x;
     return vec4<f32>(clamp(l, vec3<f32>(-4000.0), vec3<f32>(4000.0)), r.w);
 }
 

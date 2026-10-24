@@ -1245,13 +1245,14 @@ mod tests {
         assert!(super::search_matches("Anything", "bus x.bus", "  "));
     }
 
-    /// The options page names the preset a file holds after the launcher saved it, in every
-    /// graphics mode, and "Custom" once one of its values is changed.
+    /// The options page names the preset a file holds after the launcher saved it, whatever the
+    /// graphics mode the file was in before (a preset sets the mode), and "Custom" once one of its
+    /// values is changed.
     #[test]
-    fn the_preset_is_recognised_in_every_mode() {
+    fn the_preset_is_recognised_from_any_mode() {
         for mode in ["vanilla", "vanilla_plus", "enhanced", "enhanced_plus"] {
-            for (i, (_, preset)) in omsi_launcher_lib::graphics_presets_for(mode).into_iter().enumerate() {
-                let mut file = omsi_launcher_lib::settings_from_text(None);
+            for (i, (_, preset)) in omsi_launcher_lib::graphics_presets().into_iter().enumerate() {
+                let mut file = omsi_launcher_lib::settings_from_text(Some(&format!("graphics={mode}\n")));
                 omsi_launcher_lib::apply_graphics_profile(&preset, &mut file);
                 let mut file = omsi_launcher_lib::settings_from_text(Some(&omsi_launcher_lib::settings_to_text(&file, None)));
                 assert_eq!(super::preset_now(&file), Some(i), "{mode}: {i}");

@@ -126,7 +126,6 @@ pub(crate) fn tone_contrast(log_pre: f32) -> f32 {
 /// shape map's heaps cut by the cover, rounded with height, without the billows), its
 /// extinction integrated along the sun's direction through the layer, over a few rays a
 /// few tens of metres apart (the penumbra of a cloud a kilometre and a half up).
-pub(crate) const CLOUD_SHADOW_EROSION: f32 = 0.15;
 /// How far the exposure follows the light into a cloud's shadow (log terms).
 pub(crate) const CLOUD_SHADE_ADAPT: f32 = 0.5;
 
@@ -148,41 +147,11 @@ pub(crate) fn cloud_levels(lighting: &Lighting, cam_rel: Vec3, ro: DVec3) -> [f3
 
 pub(crate) fn cloud_sun_transmittance(shape: &[u8], lighting: &Lighting, cam_rel: Vec3, ro: DVec3) -> f32 {
     let [bottom, top] = cloud_levels(lighting, cam_rel, ro);
-    const PERIOD: f32 = 13000.0;
-    const SIGMA: f32 = 0.035;
     let s = lighting.sun_dir.normalize_or_zero();
-    if s.z <= 0.02 || shape.is_empty() {
+    if s.z <= 0.02 || shape.len() < (clouds::SHAPE_SIZE / 2).pow(2) as usize * 4 {
         return 1.0;
     }
-    let size = (clouds::SHAPE_SIZE / 2) as usize;
-    if shape.len() < size * size * 4 {
-        return 1.0;
-    }
-    let texel = |x: i64, y: i64| {
-        let (x, y) = (x.rem_euclid(size as i64) as usize, y.rem_euclid(size as i64) as usize);
-        let i = (y * size + x) * 4;
-        [shape[i] as f32 / 255.0, shape[i + 1] as f32 / 255.0, shape[i + 2] as f32 / 255.0]
-    };
-    let sample = |u: f32, v: f32| {
-        let (x, y) = (u * size as f32 - 0.5, v * size as f32 - 0.5);
-        let (x0, y0) = (x.floor(), y.floor());
-        let (fx, fy) = (x - x0, y - y0);
-        let (x0, y0) = (x0 as i64, y0 as i64);
-        let a = texel(x0, y0);
-        let b = texel(x0 + 1, y0);
-        let c = texel(x0, y0 + 1);
-        let d = texel(x0 + 1, y0 + 1);
-        let mut o = [0.0f32; 3];
-        for k in 0..3 {
-            o[k] = (a[k] * (1.0 - fx) + b[k] * fx) * (1.0 - fy) + (c[k] * (1.0 - fx) + d[k] * fx) * fy;
-        }
-        o
-    };
-    let lin = |a: f32, b: f32, v: f32| ((v - a) / (b - a)).clamp(0.0, 1.0);
-    let cover = lighting.cloud_density.clamp(0.0, 1.0);
-    // (less the billows' erosion, which the sky shader takes off the heaps' edges and this
-    // leaves out: on average about this much of the cover)
-    let coverage = (0.3 + cover * 0.55 - CLOUD_SHADOW_EROSION).clamp(0.0, 1.0);
+    let coverage = super::cloud_field::shadow_coverage(lighting.cloud_density);
     let origin = glam::Vec2::new(ro.x.rem_euclid(CLOUD_ORIGIN_PERIOD) as f32, ro.y.rem_euclid(CLOUD_ORIGIN_PERIOD) as f32);
     let drift = glam::Vec2::new(lighting.cloud_offset[0], lighting.cloud_offset[1]) * 2500.0;
     let t0 = (bottom - cam_rel.z).max(0.0) / s.z;
@@ -193,22 +162,13 @@ pub(crate) fn cloud_sun_transmittance(shape: &[u8], lighting: &Lighting, cam_rel
     let mut sum = 0.0;
     let offsets = [glam::Vec2::ZERO, side * 40.0, -side * 40.0, glam::Vec2::new(s.x, s.y).normalize_or_zero() * 40.0, -glam::Vec2::new(s.x, s.y).normalize_or_zero() * 40.0];
     for off in offsets {
-        let mut od = 0.0;
+        let mut od = 0.0f32;
         for k in 0..steps {
             let t = t0 + (k as f32 + 0.5) * ds;
             let p = cam_rel + s * t;
             let h = (p.z - bottom) / (top - bottom);
-            if !(0.0..1.0).contains(&h) {
-                continue;
-            }
             let g = glam::Vec2::new(p.x, p.y) + origin + off + drift;
-            let m = sample(g.x / PERIOD, g.y / PERIOD);
-            let lo = m[1] - 1.0;
-            let n = h * h * (0.7 + m[2]) + (1.0 - h).powi(16);
-            let base = (m[0] - n - lo) / (1.0 - lo) * (lin(0.0, 0.1, h) - lin(0.6, 1.0, h));
-            let x = ((base + coverage - 1.0) / 0.12).clamp(0.0, 1.0);
-            let dens = x * x * (3.0 - 2.0 * x) * (h / 0.2).min(1.0);
-            od += dens * SIGMA * ds;
+            od += super::cloud_field::layer_sigma(shape, g, h, coverage) * ds;
         }
         sum += (-od).exp();
     }
@@ -727,6 +687,8 @@ impl Renderer {
             self.sky.cloud_sun = Some(t);
             t
         };
+        // the clouds' shadow over the land, for the main pass and the fog pass
+        let (cloud_f1, cloud_f2) = self.update_cloud_field(lighting, cam_rel, ro, cloud_t);
         let st = self.sky.sky_state.as_ref().expect("sky state");
         // the exposure follows the light over a second or two (in log space); an offscreen
         // picture and the first frame take it at once
@@ -888,7 +850,7 @@ impl Renderer {
             // x how bright an LED panel's dots burn (see `MaterialExtra::led`; the settings'
             // 16 levels give 0 = off .. 3.75), y whether the LED panels' `\S:n` masks keep
             // their mip chain (0: at full resolution, the dots stay visible when small)
-            led: [lighting.led_glow, lighting.led_mips, 0.0, 0.0],
+            led: [lighting.led_glow, lighting.led_mips, if self.options.light_glow { 1.0 } else { 0.0 }, 0.0],
             moon: lighting.moon_dir.normalize_or_zero().extend(MOON_RADIUS).to_array(),
             // (w of the first: the veil's optical depth, which the sky draws as the high
             // layer; of the second: how far the veil spreads the sun, which softens shadows)
@@ -906,6 +868,8 @@ impl Renderer {
                 [flash.dir[0] * c, flash.dir[1] * c, s, flash.bolt * flash.channel]
             },
             flash3: [flash.seed, 0.0, 0.0, 0.0],
+            cloud_f1,
+            cloud_f2,
             moon_light: st.moon_light.extend(if lighting.casts_moon_shadows() { 1.0 } else { 0.0 }).to_array(),
             moon_disc: st.moon_disc.extend((1.0 - 0.18 * (st.input.haze - 1.0).max(0.0)).clamp(0.2, 1.0) * 0.55).to_array(),
         };

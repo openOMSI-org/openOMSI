@@ -194,18 +194,17 @@ const CUSTOM = {
   radio: () => html`<${RadioStations} />`,
 };
 
-/** The quality presets of the graphics mode chosen: the one the settings match, else
- * "Custom". A preset keeps the mode. */
+/** The quality presets, Low to Ultra: the one the settings match, else "Custom". A preset sets
+ * the graphics mode too (Low is Vanilla, Ultra Enhanced with everything on). */
 function PresetRow() {
-  const mode = S.settings.graphics || 'vanilla_plus';
   const [presets, setPresets] = useState([]);
   useEffect(() => {
     let gone = false;
-    call('graphics_presets', { mode })
+    call('graphics_presets', {})
       .then((p) => !gone && setPresets(p))
       .catch(() => !gone && setPresets([]));
     return () => (gone = true);
-  }, [mode]);
+  }, []);
   const s = S.settings;
   const matched = presets.find((p) => Object.entries(p.settings).every(([k, v]) => same(s[k], v)));
   const options = [...presets.map((p) => [p.name, p.name]), ['', 'Custom']];

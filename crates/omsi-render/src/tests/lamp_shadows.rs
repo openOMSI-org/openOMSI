@@ -12,6 +12,7 @@ fn renderer() -> Renderer {
             shadow_size: 1024,
             fxaa: false,
             render_scale: 1.0,
+            light_shadows: 2,
             ..Default::default()
         },
     ))
@@ -206,6 +207,64 @@ fn a_wall_between_a_street_lamp_and_the_ground_throws_its_shadow() {
 
 #[test]
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn a_wall_in_the_beam_of_a_floodlight_throws_its_shadow_along_the_beam() {
+    let mut renderer = renderer();
+    let mut scene = renderer.new_scene();
+    let grey = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [0.8, 0.8, 0.8, 1.0], false);
+    let ground = renderer.add_mesh(&mut scene, &quad(Vec3::ZERO, 2, Vec3::new(40.0, 40.0, 0.0)));
+    let wall = renderer.add_mesh(&mut scene, &quad(Vec3::new(0.0, 0.0, 3.0), 0, Vec3::new(0.0, 10.0, 3.0)));
+    renderer.add_instance(&mut scene, ground, DVec3::ZERO, Mat4::IDENTITY, vec![grey]);
+    renderer.add_instance(&mut scene, wall, DVec3::ZERO, Mat4::IDENTITY, vec![grey]);
+    // a spot on a mast 8 m off the wall, aimed across the ground at it and a little down, no
+    // street lamp: its light is a cone along its axis, and so must be its shadow
+    scene.lights = vec![PointLight {
+        position: DVec3::new(-12.0, 0.0, 5.0),
+        radius: 40.0,
+        color: [1.0, 1.0, 1.0],
+        core: 6.0,
+        direction: Vec3::new(1.0, 0.0, -0.3).normalize(),
+        cone: [50f32.to_radians().cos(), 70f32.to_radians().cos()],
+        mode: LightMode::Both,
+        ..Default::default()
+    }];
+    let rgba = renderer.render_to_image(&mut scene, 64, 64, &from_above(25.0), &night()).unwrap();
+    let reach = 25.0 * 2.0 * 30f32.to_radians().tan();
+    let lit = ground_at(&rgba, reach, -5.0, 0.0);
+    let shaded = ground_at(&rgba, reach, 5.0, 0.0);
+    assert!(lit > 8.0, "the spot lights the ground in front of the wall: {lit}");
+    assert!(shaded * 3.0 < lit, "behind the wall the spot's light does not arrive: {shaded} against {lit}");
+}
+
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn a_low_lamp_that_shines_every_way_is_shaded_by_a_wall_far_to_its_side() {
+    let mut renderer = renderer();
+    let mut scene = renderer.new_scene();
+    let grey = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [0.8, 0.8, 0.8, 1.0], false);
+    let ground = renderer.add_mesh(&mut scene, &quad(Vec3::ZERO, 2, Vec3::new(40.0, 40.0, 0.0)));
+    let wall = renderer.add_mesh(&mut scene, &quad(Vec3::new(0.0, 0.0, 3.0), 0, Vec3::new(0.0, 10.0, 3.0)));
+    renderer.add_instance(&mut scene, ground, DVec3::ZERO, Mat4::IDENTITY, vec![grey]);
+    renderer.add_instance(&mut scene, wall, DVec3::ZERO, Mat4::IDENTITY, vec![grey]);
+    // a bare point light 1.5 m up: the ground 8 m past the wall lies 10 degrees under its horizon,
+    // outside the 150 degrees a lamp looking straight down takes in
+    scene.lights = vec![PointLight {
+        position: DVec3::new(-3.0, 0.0, 1.5),
+        radius: 40.0,
+        color: [1.0, 1.0, 1.0],
+        core: 6.0,
+        mode: LightMode::Both,
+        ..Default::default()
+    }];
+    let rgba = renderer.render_to_image(&mut scene, 64, 64, &from_above(25.0), &night()).unwrap();
+    let reach = 25.0 * 2.0 * 30f32.to_radians().tan();
+    let lit = ground_at(&rgba, reach, -5.0, 0.0);
+    let shaded = ground_at(&rgba, reach, 5.0, 0.0);
+    assert!(lit > 8.0, "the lamp lights the ground on its own side: {lit}");
+    assert!(shaded * 3.0 < lit, "past the wall the lamp's light does not arrive: {shaded} against {lit}");
+}
+
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn a_handrail_in_the_players_saloon_shades_the_floor_from_its_lamp() {
     let mut renderer = renderer();
     let mut scene = renderer.new_scene();
@@ -221,7 +280,7 @@ fn a_handrail_in_the_players_saloon_shades_the_floor_from_its_lamp() {
     renderer.set_interior_light(&mut scene, slot, PointLight { position: DVec3::new(-1.5, 0.0, 3.5), radius: 100.0, core: 1.0, color: [1.0; 3], intensity: 1.0, ..Default::default() });
     let mut lighting = night();
     lighting.inside = Some((DVec3::ZERO, 0.0, [10.0, 10.0, 4.0, 0.0, 0.0, 2.0]));
-    let (_, tiles) = renderer.prepare_lights(&mut scene, &LightEye { cam_rel: Vec3::new(0.0, 0.0, 8.0), view_proj: None, vehicle: lighting.inside.as_ref().map(|b| (b, None)) }, true, true);
+    let (_, tiles) = renderer.prepare_lights(&mut scene, &LightEye { cam_rel: Vec3::new(0.0, 0.0, 8.0), view_proj: None, vehicle: lighting.inside.as_ref().map(|b| (b, None)), level: 2 }, true, true);
     assert!(tiles.iter().any(|t| t.cabin.is_some() && CABIN_SLOTS.contains(&t.slot)), "the saloon's lamp has a tile: {} tiles", tiles.len());
     let reach = 8.0 * 2.0 * 30f32.to_radians().tan();
     let rgba = renderer.render_to_image(&mut scene, 64, 64, &from_above(8.0), &lighting).unwrap();

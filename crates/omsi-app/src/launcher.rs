@@ -110,7 +110,7 @@ mod tests {
     #[test]
     fn the_preview_follows_the_quality_preset() {
         let options = |preset: &str| {
-            let (_, p) = omsi_launcher_lib::graphics_presets_for("vanilla_plus").into_iter().find(|(name, _)| *name == preset).unwrap();
+            let (_, p) = omsi_launcher_lib::graphics_presets().into_iter().find(|(name, _)| *name == preset).unwrap();
             let mut s = omsi_launcher_lib::settings_from_text(None);
             for (k, v) in p.as_object().unwrap() {
                 s[k] = v.clone();
@@ -120,7 +120,7 @@ mod tests {
         let low = options("Low");
         assert_eq!((low.msaa, low.render_scale, low.anisotropy), (1, 0.75, 2));
         let medium = options("Medium");
-        assert_eq!((medium.msaa, medium.render_scale), (2, 1.0));
+        assert_eq!((medium.msaa, medium.render_scale), (4, 1.0));
         let ultra = options("Ultra");
         assert_eq!((ultra.msaa, ultra.render_scale, ultra.shadow_size, ultra.ssao), (4, 1.0, 1024, false));
     }

@@ -19,11 +19,24 @@ fn lamp_shadow_at(li: u32, p: vec3<f32>, n: vec3<f32>, thin: bool) -> f32 {
     if (marks.z < 0.5) {
         return 1.0;
     }
-    let k = u32(marks.z - 0.5);
+    var k = u32(marks.z - 0.5);
     if (own && own_shadow >= 0.0) {
         return own_shadow;
     }
-    let d = distance(p, lights[li].pos.xyz);
+    let to_lamp = p - lights[li].pos.xyz;
+    // a lamp that shines every way has a block of six tiles, one a direction (+x -x +y -y +z -z,
+    // lib.rs `CUBE_SLOTS`): the one the lit point lies in
+    if (k >= 44u) {
+        let a = abs(to_lamp);
+        var face = select(5u, 4u, to_lamp.z > 0.0);
+        if (a.x >= a.y && a.x >= a.z) {
+            face = select(1u, 0u, to_lamp.x > 0.0);
+        } else if (a.y >= a.z) {
+            face = select(3u, 2u, to_lamp.y > 0.0);
+        }
+        k = k + face;
+    }
+    let d = length(to_lamp);
     // (off the surface by a texel or so of the map there; a leaf card towards the lamp)
     let off = select(n * (0.03 + 0.012 * d), normalize(lights[li].pos.xyz - p) * 0.3, thin);
     let q = camera.lamp_view_proj[k] * vec4<f32>(p + off, 1.0);
@@ -45,7 +58,7 @@ fn lamp_shadow_at(li: u32, p: vec3<f32>, n: vec3<f32>, thin: bool) -> f32 {
     let base = vec2<f32>(f32(k % u32(cols)) * tile, dims.x + f32(k / u32(cols)) * tile) + tx;
     // (nine taps; a saloon's lamp - tiles 28 on - four: its tile's texels are three centimetres
     // and every pixel of a saloon takes a handful of lamps)
-    let saloon = k >= 28u;
+    let saloon = k >= 28u && k < 44u;
     let lo = select(-1, 0, saloon);
     let shift = select(0.0, 0.5, saloon);
     var sum = 0.0;

@@ -490,7 +490,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         if (far) {
             shadow = shadow * sun_shadow_far(in.world, n);
         }
-        let e_sun = enh.sun.rgb * shadow;
+        let e_sun = enh.sun.rgb * (shadow * cloud_shadow_ratio(in.world));
         if (thin) {
             // foliage: a crown of leaves facing every way, whose normals OMSI points up
             // only to light it evenly - lit by the sun from any side (the shadow map
@@ -583,8 +583,8 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // puddle a blurred picture of it (panes, envmapped paint and still water keep their own
     // smoothness). Its reflection is taken this rough, at this share.
     let wet_only = !(reflective_env || glass || is_water || ((material.pbr.z > 0.5 || material.pbr.w > 0.5) && !terrain));
-    let refl_rough = select(rough, max(rough, mix(0.35, 0.16, puddle)), wet_only);
-    let wet_share = select(1.0, mix(0.35, 0.6, puddle), wet_only);
+    let refl_rough = select(rough, max(rough, mix(0.2, 0.16, puddle)), wet_only);
+    let wet_share = select(1.0, mix(0.6, 0.7, puddle), wet_only);
     let lod = refl_rough * (enh.lights.x - 1.0);
     var env = textureSampleLevel(t_probe, s_lin, to_cube(r), lod).rgb * enh.fog_color.w;
     // the probe holds only the sky: in a street the low sky is hidden behind houses and
@@ -893,8 +893,14 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // A miss adds zero, so the existing sky, Fresnel and fog stay the fallback. Colour
     // and coverage are resolved together, including terrain painting and glass over roads.
     if (!glass && !reflective_env) {
-        let weight = clamp(puddle * env_brdf(f0, rough, nv).g
-            * select(wet_road, 1.0, pbr_reflects) * wet_share * aer.a, 0.0, 1.0);
+        // (a pool mirrors by its Fresnel term and its share of the road; so does the sheen of a wet
+        // road, at the Fresnel term of water a little under full - the lamps' and the cars'
+        // streaks down a wet street at night, which come from the light's own brightness and so
+        // need no more than that share - and still water as a whole)
+        let fresnel = 0.02 + 0.98 * pow(1.0 - clamp(nv, 0.0, 1.0), 5.0);
+        let pool = puddle * env_brdf(f0, rough, nv).g * select(wet_road, 1.0, pbr_reflects) * wet_share * aer.a;
+        let sheen = select(0.8 * smoothstep(0.55, 0.95, wet_road), 1.0, is_water) * fresnel * aer.a;
+        let weight = clamp(max(pool, sheen), 0.0, 1.0);
         *puddle_weight = vec2<f32>(weight, weight * spec_occ);
     }
     // water hides what lies under it as far as it reflects (Fresnel): see-through from

@@ -16,13 +16,24 @@ use glam::{Mat4, Vec3};
 use std::ops::Range;
 
 /// How many shadow maps there are in all.
-pub(crate) const LAMP_SHADOWS: usize = 44;
+pub(crate) const LAMP_SHADOWS: usize = 56;
 /// The tiles of the world's lamps (street lamps, floodlights, platform and building lights).
 pub(crate) const WORLD_SLOTS: Range<usize> = 0..20;
 /// The tiles of vehicles' headlamps: the player's first, then the nearest cars'.
 pub(crate) const VEHICLE_SLOTS: Range<usize> = 20..28;
 /// The tiles of the lamps of the saloon of the player's vehicle.
 pub(crate) const CABIN_SLOTS: Range<usize> = 28..44;
+/// The cube maps of lamps that shine every way (a point light that is no street lamp's head and
+/// has no axis): `CUBE_BLOCKS` of them, a block of six consecutive tiles each, one for every
+/// direction - +x, -x, +y, -y, +z, -z. The shaders read a lamp's block by the first tile its
+/// record names (any tile from here on) and take the face the lit point lies in.
+pub(crate) const CUBE_SLOTS: Range<usize> = 44..56;
+pub(crate) const CUBE_BLOCKS: usize = 2;
+/// A face's field of view (degrees): a little over the right angle, so that the filter's taps
+/// stay inside the face they were found in.
+pub(crate) const CUBE_FACE_FOV: f32 = 96.0;
+/// The directions of a cube's faces, in the order of its tiles.
+pub(crate) const CUBE_FACES: [Vec3; 6] = [Vec3::X, Vec3::NEG_X, Vec3::Y, Vec3::NEG_Y, Vec3::Z, Vec3::NEG_Z];
 /// The shadow casters' lists of a frame: the near, far and close cascades, then one per
 /// tile (each lamp's own: an embedded source leaves its own fixture out), and last the
 /// precipitation's roof map (`passes::precip_map`).
@@ -102,6 +113,40 @@ impl<const N: usize> SlotSet<N> {
                     fresh -= 1;
                 }
             }
+        }
+        out
+    }
+}
+
+/// The lamps that hold a cube map, one per block.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct CubeSlots {
+    pub keys: [Option<LampKey>; CUBE_BLOCKS],
+}
+
+impl CubeSlots {
+    /// Give the strongest of the wanted lamps (`wants`, strongest first) the blocks: one that
+    /// had a block keeps it while it is among them. Returns (index in `wants`, block).
+    pub(crate) fn assign(&mut self, wants: &[LampKey]) -> Vec<(usize, usize)> {
+        let top = &wants[..wants.len().min(CUBE_BLOCKS)];
+        for k in self.keys.iter_mut() {
+            if k.as_ref().is_some_and(|key| !top.contains(key)) {
+                *k = None;
+            }
+        }
+        let mut out = Vec::new();
+        for (w, key) in top.iter().enumerate() {
+            let block = match self.keys.iter().position(|k| k.as_ref() == Some(key)) {
+                Some(b) => b,
+                None => match self.keys.iter().position(|k| k.is_none()) {
+                    Some(b) => {
+                        self.keys[b] = Some(*key);
+                        b
+                    }
+                    None => continue,
+                },
+            };
+            out.push((w, block));
         }
         out
     }
@@ -226,6 +271,21 @@ mod tests {
         }
     }
 
+    /// Two cube blocks, and a lamp keeps its block while it stays among the strongest.
+    #[test]
+    fn cube_blocks_stay_with_their_lamps() {
+        let mut slots = CubeSlots::default();
+        let k = |n: i64| [n, 0, 0];
+        assert_eq!(slots.assign(&[k(1), k(2), k(3)]), vec![(0, 0), (1, 1)]);
+        // the strongest is now another lamp: the two that had blocks keep them while wanted
+        assert_eq!(slots.assign(&[k(2), k(1)]), vec![(0, 1), (1, 0)]);
+        // a lamp that fell out of the top two gives its block to the newcomer
+        assert_eq!(slots.assign(&[k(3), k(2)]), vec![(0, 0), (1, 1)]);
+        assert!(slots.assign(&[]).is_empty() && slots.keys.iter().all(|k| k.is_none()));
+        assert_eq!(CUBE_SLOTS.end - CUBE_SLOTS.start, CUBE_BLOCKS * 6);
+        assert_eq!(CUBE_SLOTS.end, LAMP_SHADOWS);
+    }
+
     /// The shaders carry the numbers of the tiles as literals: they must be these.
     #[test]
     fn the_shaders_know_how_many_tiles_there_are() {
@@ -238,11 +298,15 @@ mod tests {
         ] {
             assert!(text.contains(&format!("lamp_view_proj: array<mat4x4<f32>, {n}>,")), "{name}");
         }
-        assert!(include_str!("../beam_shadow.wgsl").contains(&format!("if (k >= {n}u) {{")));
+        // (a beam's shadow in the air is read from the world's, the vehicles' and the saloon's tiles;
+        // a cube's faces are not looked up there)
+        let m = CUBE_SLOTS.start;
+        assert!(include_str!("../beam_shadow.wgsl").contains(&format!("if (k >= {m}u) {{")));
         let air = include_str!("../lamp_air.wgsl");
-        assert!(air.contains(&format!("tile_k < {n}u")) && air.contains(&format!("tile_p < {n}u")));
+        assert!(air.contains(&format!("tile_k < {m}u")) && air.contains(&format!("tile_p < {m}u")));
         let lamps = include_str!("../shaders/enhanced/02_lamps.wgsl");
-        assert!(lamps.contains(&format!("let saloon = k >= {}u;", CABIN_SLOTS.start)));
+        assert!(lamps.contains(&format!("let saloon = k >= {}u && k < {}u;", CABIN_SLOTS.start, CABIN_SLOTS.end)));
+        assert!(lamps.contains(&format!("if (k >= {}u) {{", CUBE_SLOTS.start)), "the cube blocks start where the shader says");
         assert!(include_str!("../shaders/scene/04_shadow_passes.wgsl").contains(&format!("const LAMP_ENTRY_BITS: u32 = {LAMP_ENTRY_BITS}u;")));
         assert!(lamps.contains(&format!("floor(m / {:.1})", LAMP_MARK)), "marks are decoded in steps of LAMP_MARK");
         assert!(n < (1usize << (32 - LAMP_ENTRY_BITS)), "a tile's number fits above the entry's bits");

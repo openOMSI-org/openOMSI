@@ -16,9 +16,9 @@ pub(crate) struct Shadows {
 
 /// `lamps`: the picture is an Enhanced one, which looks the lamps' shadows up (the plain ones
 /// have no tiles under the far map, nor pipelines to draw them).
-pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, shadow_size: u32, lamps: bool) -> Shadows {
+pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, shadow_size: u32, lamps: bool, cube: bool) -> Shadows {
     // (the lamps' tiles are left out where their pipelines are: see `basic_pipelines`)
-    let lamp_atlas = LampAtlas::new(shadow_size, lamps && !basic_pipelines(), device.limits().max_texture_dimension_2d);
+    let lamp_atlas = LampAtlas::new(shadow_size, lamps && !basic_pipelines(), device.limits().max_texture_dimension_2d, cube);
     if lamp_atlas.rows == 0 && lamps && !basic_pipelines() {
         log::warn!("renderer: no room for the lamps' shadow tiles under a far shadow map of {shadow_size} texels: the lamps cast no shadows");
     }

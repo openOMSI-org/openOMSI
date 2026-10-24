@@ -105,6 +105,12 @@ impl LampShadow {
         if let Some(cabin) = &self.cabin {
             return c.z - r < self.position.z && cabin.vehicle.contains(c, 0.3);
         }
+        if let Some(aim) = self.aim {
+            // (a spot's cone: its field's half-diagonal, a caster's sphere on top)
+            let along = d.dot(aim);
+            let half = (self.fov * 0.5).to_radians().tan() * std::f32::consts::SQRT_2;
+            return along > -r && (d - aim * along).length() < along.max(0.0) * half + r * 1.8;
+        }
         match self.look {
             None => c.z - r < self.position.z,
             Some(look) => {

@@ -15,13 +15,16 @@ pub(crate) struct LightEye<'a> {
     pub(crate) view_proj: Option<Mat4>,
     /// The player's vehicle: its box, and the rotation of its body (the heading alone without it).
     pub(crate) vehicle: Option<(&'a (DVec3, f64, [f32; 6]), Option<Mat4>)>,
+    /// Which lights have maps (`RenderOptions::light_shadows`): from 2 the spots and the lamps
+    /// that shine every way too.
+    pub(crate) level: u8,
 }
 
 #[cfg(test)]
 impl LightEye<'_> {
     /// An eye at `cam_rel` that knows of no view and no vehicle.
     pub(crate) fn at(cam_rel: Vec3) -> LightEye<'static> {
-        LightEye { cam_rel, view_proj: None, vehicle: None }
+        LightEye { cam_rel, view_proj: None, vehicle: None, level: 2 }
     }
 }
 
@@ -36,6 +39,9 @@ pub(crate) struct TileWants {
     /// The world's lamps that may have a tile: strength, identity, record in the light buffer,
     /// and the tile's description (the slot is not yet known).
     world: Vec<(f32, LampKey, u32, LampShadow)>,
+    /// The lamps that shine every way (no axis, no housing): they may have a cube map. Like the
+    /// world's, with the strength before the keeping factor.
+    cubes: Vec<(f32, LampKey, u32, LampShadow)>,
     /// The headlamps of the vehicles in front of the camera.
     spots: Vec<Spot>,
     /// The player's headlamps (place, direction, reach) and their records.
@@ -51,21 +57,20 @@ impl TileWants {
     }
 
     /// Takes note of the light `idx` (at `p`) as one that may cast shadows, for an Enhanced
-    /// frame: a lamp aimed along the road is one of a vehicle's headlamps, any other light with
-    /// no direction a lamp that looks straight down (a spot that lights a door or a work place
-    /// has none yet). Returns the marks its record gets now: where a frame draws no tiles - a
+    /// frame: a lamp aimed along the road is one of a vehicle's headlamps, any other light a world
+    /// lamp: one with no direction looks straight down, a spot (a floodlight, a lamp that lights a
+    /// door or a work place) along its own axis. Returns the marks its record gets now: where a frame draws no tiles - a
     /// mirror's picture - the tile the window's last frame gave the lamp, which it looks up.
     pub(crate) fn consider(&mut self, slots: &WorldSlots, eye: &LightEye, l: &PointLight, p: Vec3, idx: u32, lamp_shadows: bool) -> f32 {
         let key = lamp_key(l.position);
         let road = l.beam != 0.0 || (l.cookie.is_some() && l.direction.normalize_or_zero().z.abs() < 0.5);
-        let aimed = l.direction.length_squared() > 1e-6 || l.beam != 0.0;
         // (how far it is from the camera along the ground: a camera high above the street
         // - the free camera - sees the ground below it, which the lamps round it light)
         let d = (p - eye.cam_rel).length();
         let d_ground = (p - eye.cam_rel).truncate().length();
         if !lamp_shadows {
             // (a frame that draws no tiles marks the lamps the window's last frame gave one)
-            return slots.slot_of(&key).filter(|_| !aimed).map_or(0.0, |slot| LAMP_MARK * (slot + 1) as f32);
+            return slots.slot_of(&key).filter(|_| !road).map_or(0.0, |slot| LAMP_MARK * (slot + 1) as f32);
         }
         let strength = l.intensity * (l.color[0] + l.color[1] + l.color[2]);
         if road {
@@ -73,7 +78,7 @@ impl TileWants {
             if l.mode == LightMode::Enhanced && d < reach + LAMP_SHADOW_REACH && lights_the_view(eye, p, l.direction, reach) {
                 self.spots.push(Spot { index: idx, position: p, direction: l.direction, range: l.radius, score: strength / (d * d + 25.0) });
             }
-        } else if !aimed && !l.flash && d_ground < l.radius + LAMP_SHADOW_REACH {
+        } else if !l.flash && d_ground < l.radius + LAMP_SHADOW_REACH && (eye.level >= 2 || l.direction.length_squared() < 1e-6) {
             let core = l.core.max(l.radius * 0.125);
             let mut score = strength * core * core / (d_ground * d_ground + 25.0);
             // (a lamp that had a map keeps it until another is clearly stronger: the set
@@ -82,7 +87,17 @@ impl TileWants {
             if slots.slot_of(&key).is_some() {
                 score *= KEEP_FACTOR;
             }
-            self.world.push((score, key, idx, LampShadow { position: p, range: l.radius, owner: l.shadow_owner, ..LampShadow::new(0) }));
+            // (a spot that is no headlamp - a floodlight, a lamp on a facade - looks along its own
+            // axis over its cone, not down: its shadows fall where its light does)
+            let dir = l.direction.normalize_or_zero();
+            let aim = (dir != Vec3::ZERO).then_some(dir);
+            let fov = aim.map_or(LAMP_SHADOW_FOV, |_| (2.0 * l.cone[1].clamp(-1.0, 1.0).acos().to_degrees() * 1.08).clamp(30.0, 150.0));
+            let tile = LampShadow { position: p, range: l.radius, owner: l.shadow_owner, aim, fov, ..LampShadow::new(0) };
+            // (a point light that is no street lamp's head, with no axis: it lights every side)
+            if eye.level >= 2 && aim.is_none() && !l.housed && l.cookie.is_none() && l.mode != LightMode::Vanilla {
+                self.cubes.push((strength * core * core / (d * d + 25.0), key, idx, tile));
+            }
+            self.world.push((score, key, idx, tile));
         }
         0.0
     }
@@ -93,6 +108,8 @@ impl TileWants {
     pub(crate) fn tiles(mut self, scene: &mut Scene, eye: &LightEye, own: Option<passes::VehicleBox>, gpu_lights: &mut [GpuPointLight]) -> Vec<LampShadow> {
         let mut tiles: Vec<LampShadow> = Vec::new();
         let mut tiled: Vec<(u32, usize)> = Vec::new();
+        let cubed = self.cube_tiles(scene, &mut tiles, &mut tiled);
+        self.world.retain(|w| !cubed.contains(&w.2));
         self.world_tiles(scene, &mut tiles, &mut tiled);
         self.vehicle_tiles(eye.cam_rel, own, &mut tiles, &mut tiled);
         for &(idx, slot) in &tiled {
@@ -108,6 +125,30 @@ impl TileWants {
             cabin_tiles(scene, eye.cam_rel, passes::VehicleBox::new(b, ro), to_local, gpu_lights, &mut tiles);
         }
         tiles
+    }
+
+    /// The lamps that shine every way: the strongest of them, within the cube blocks, get six
+    /// tiles each, one for every direction. Returns the lamps that have them (their records in
+    /// the light buffer), which then need no tile looking down.
+    fn cube_tiles(&mut self, scene: &mut Scene, tiles: &mut Vec<LampShadow>, tiled: &mut Vec<(u32, usize)>) -> Vec<u32> {
+        for c in self.cubes.iter_mut() {
+            if scene.cube_slots.keys.contains(&Some(c.1)) {
+                c.0 *= KEEP_FACTOR;
+            }
+        }
+        self.cubes.sort_by(|a, b| b.0.total_cmp(&a.0));
+        let wants: Vec<LampKey> = self.cubes.iter().map(|c| c.1).collect();
+        let mut had = Vec::new();
+        for (w, block) in scene.cube_slots.assign(&wants) {
+            let (_, _, idx, lamp) = self.cubes[w];
+            let base = CUBE_SLOTS.start + block * 6;
+            for (f, axis) in CUBE_FACES.iter().enumerate() {
+                tiles.push(LampShadow { slot: base + f, aim: Some(*axis), fov: CUBE_FACE_FOV, ..lamp });
+            }
+            tiled.push((idx, base));
+            had.push(idx);
+        }
+        had
     }
 
     /// The world's lamps keep their tiles while they stay among the strongest.
@@ -230,7 +271,7 @@ mod tests {
     /// A view from the origin along the road (+y), 70 degrees wide.
     fn eye_along_the_road() -> LightEye<'static> {
         let vp = Mat4::perspective_rh(70f32.to_radians(), 1.5, 0.1, 400.0) * Mat4::look_to_rh(Vec3::new(0.0, 0.0, 1.5), Vec3::Y, Vec3::Z);
-        LightEye { cam_rel: Vec3::new(0.0, 0.0, 1.5), view_proj: Some(vp), vehicle: None }
+        LightEye { cam_rel: Vec3::new(0.0, 0.0, 1.5), view_proj: Some(vp), vehicle: None, level: 2 }
     }
 
     /// A car ahead that drives towards the camera lights the view, so does one behind the camera

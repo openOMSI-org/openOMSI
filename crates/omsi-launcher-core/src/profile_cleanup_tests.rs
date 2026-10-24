@@ -1,85 +1,97 @@
 use super::*;
 
-/// A quality preset keeps the graphics mode and what is not graphics; Vanilla's leave
-/// out what OMSI 2 does not draw, Enhanced+'s keep its traced shadows, occlusion and
-/// reflections; High of Vanilla+ is the defaults.
+/// A quality preset sets the graphics mode with the rest of what it holds and leaves what is not
+/// graphics alone; Medium is Vanilla+ as it starts, Ultra is Enhanced with ray tracing.
 #[test]
-fn quality_presets_keep_the_mode_and_the_rest() {
-    for mode in ["vanilla", "vanilla_plus", "enhanced", "enhanced_plus"] {
-        for (_, preset) in graphics_presets_for(mode) {
-            let mut v = settings_from_text(Some(&format!("graphics={mode}\ngraphics_api=gl\nlanguage=PTB\nai_unsched_factor=25\n")));
+fn quality_presets_set_the_mode_and_keep_the_rest() {
+    for start in ["vanilla", "vanilla_plus", "enhanced", "enhanced_plus"] {
+        for (_, preset) in graphics_presets() {
+            let mut v = settings_from_text(Some(&format!("graphics={start}\ngraphics_api=gl\nlanguage=PTB\nai_unsched_factor=25\n")));
             apply_graphics_profile(&preset, &mut v);
             let saved = settings_from_text(Some(&settings_to_text(&v, None)));
-            assert_eq!(saved["graphics"], mode);
             assert_eq!(saved["graphics_api"], "gl");
             assert_eq!(saved["language"], "PTB");
             assert_eq!(saved["ai_unsched_factor"], 25);
             for (key, x) in preset.as_object().unwrap() {
-                assert_eq!(saved[key.as_str()].to_string().trim_matches('"'), x.to_string().trim_matches('"'), "{mode}: {key}");
+                assert_eq!(saved[key.as_str()].to_string().trim_matches('"'), x.to_string().trim_matches('"'), "{start}: {key}");
             }
         }
     }
-    for (_, p) in graphics_presets_for("OMSI 2") {
-        for key in ["ssao", "shadows", "detail_textures"] {
-            assert!(p.get(key).is_none(), "{key}");
-        }
-        assert!(p.get("shadow_size").is_some());
-    }
-    for (_, p) in graphics_presets_for("Enhanced+") {
-        for key in ["ssao", "shadows", "reflections"] {
-            assert!(p.get(key).is_none(), "{key}");
-        }
-    }
+    let modes: Vec<&str> = graphics_presets().iter().map(|(_, p)| effective_mode(p)).collect();
+    assert_eq!(modes, ["vanilla", "vanilla_plus", "enhanced", "enhanced", "enhanced", "enhanced_plus"]);
+    let names: Vec<&str> = graphics_presets().iter().map(|(n, _)| *n).collect();
+    assert_eq!(names, ["Low", "Medium", "High", "Extra", "Max", "Ultra"]);
+    // Medium is what the game starts with
     let defaults = settings_from_text(None);
-    let high = &graphics_presets_for("vanilla_plus")[2].1;
-    for (k, x) in high.as_object().unwrap() {
+    let medium = &graphics_presets()[1].1;
+    for (k, x) in medium.as_object().unwrap() {
         assert_eq!(defaults[k.as_str()].to_string().trim_matches('"'), x.to_string().trim_matches('"'), "{k}");
     }
 }
 
+/// Each step up is at least as much as the one below it: the lights' shadows, the street light and
+/// the ray tracing only ever switch on as the level rises, and Ultra has them all.
 #[test]
-fn presets_keep_reflections_clouds_and_video_memory() {
-    for mode in ["vanilla", "vanilla_plus", "enhanced", "enhanced_plus"] {
-        let enhanced = mode.starts_with("enhanced");
-        for (i, (name, p)) in graphics_presets_for(mode).into_iter().enumerate() {
-            assert!(p.get("video_memory").is_none(), "{mode} {name}");
-            assert!(p.get("cloud_quality").is_none(), "{mode} {name}");
-            assert_eq!(p["clouds"], !(enhanced && i == 0), "{mode} {name}");
-            if mode != "enhanced_plus" {
-                assert_eq!(p["reflections"], 1.0, "{mode} {name}");
-            }
-            assert_eq!(p["rain_quality"], ["low", "medium", "high", "high"][i], "{mode} {name}");
-        }
-        assert_eq!(graphics_presets_for(mode)[0].1["shadow_size"], 1024, "{mode}");
+fn the_presets_rise_in_steps() {
+    let rank = |s: &str, order: &[&str]| order.iter().position(|o| *o == s).unwrap();
+    let p = graphics_presets();
+    for w in p.windows(2) {
+        let (a, b) = (&w[0].1, &w[1].1);
+        assert!(rank(b["light_shadows"].as_str().unwrap(), &["off", "street", "all"]) >= rank(a["light_shadows"].as_str().unwrap(), &["off", "street", "all"]));
+        assert!(b["shadow_size"].as_i64() >= a["shadow_size"].as_i64());
+        assert!(b["anisotropy"].as_i64() >= a["anisotropy"].as_i64());
+        assert!(b["ray_tracing"].as_bool() >= a["ray_tracing"].as_bool());
     }
-    let mut v = settings_from_text(Some("video_memory=3000\n"));
-    apply_graphics_profile(&graphics_presets_for("vanilla_plus")[0].1, &mut v);
-    let saved = settings_from_text(Some(&settings_to_text(&v, None)));
-    assert_eq!(saved["video_memory"], 3000);
-    assert_eq!(saved["reflections"], 1.0);
-    assert_eq!(saved["clouds"], true);
+    let ultra = &p[5].1;
+    assert_eq!((&ultra["ray_tracing"], &ultra["light_shadows"], &ultra["cloud_shadows"], &ultra["light_glow"], &ultra["puddles"], &ultra["street_light"]), (&json!(true), &json!("all"), &json!(true), &json!(true), &json!("high"), &json!("on")));
+    for (name, preset) in &p {
+        assert!(preset.get("video_memory").is_none(), "{name}");
+        assert!(preset.get("cloud_quality").is_none(), "{name}");
+        assert_eq!(preset["clouds"], true, "{name}");
+        assert_eq!(preset["reflections"], 1.0, "{name}");
+    }
 }
 
+/// Low is Vanilla, which draws no ambient occlusion, sun shadows or detail grain: it leaves them as
+/// they are, so that a player who picks Low and goes back to Vanilla+ finds them on, and what is not
+/// graphics (the video memory) stays as it was.
 #[test]
-fn a_vanilla_preset_leaves_the_shadows_of_vanilla_plus_alone() {
-    let mut v = settings_from_text(Some("graphics=vanilla_plus\nshadows=0\nssao=0\ndetail_textures=0\n"));
-    v["graphics"] = json!("vanilla");
-    apply_graphics_profile(&graphics_presets_for("vanilla")[3].1, &mut v);
-    v["graphics"] = json!("vanilla_plus");
+fn low_then_back_to_vanilla_plus_keeps_the_shadows() {
+    let low = &graphics_presets()[0].1;
+    for k in ["ssao", "shadows", "detail_textures"] {
+        assert!(low.get(k).is_none(), "{k}");
+    }
+    let mut v = settings_from_text(Some("graphics=vanilla_plus\nvideo_memory=3000\n"));
+    apply_graphics_profile(low, &mut v);
+    assert_eq!(effective_mode(&v), "vanilla");
     let saved = settings_from_text(Some(&settings_to_text(&v, None)));
-    assert_eq!((&saved["shadows"], &saved["ssao"], &saved["detail_textures"], &saved["shadow_size"]), (&json!(false), &json!(false), &json!(false), &json!(4096)));
-    let mut v = settings_from_text(Some("graphics=vanilla_plus\n"));
-    v["graphics"] = json!("vanilla");
-    apply_graphics_profile(&graphics_presets_for("vanilla")[0].1, &mut v);
-    v["graphics"] = json!("vanilla_plus");
-    let saved = settings_from_text(Some(&settings_to_text(&v, None)));
-    assert_eq!((&saved["shadows"], &saved["ssao"], &saved["detail_textures"], &saved["shadow_size"]), (&json!(true), &json!(true), &json!(true), &json!(1024)));
-    let mut v = settings_from_text(Some("graphics=enhanced\nshadows=0\nssao=0\nreflections=0\n"));
-    v["graphics"] = json!("enhanced_plus");
-    apply_graphics_profile(&graphics_presets_for("enhanced_plus")[0].1, &mut v);
-    v["graphics"] = json!("enhanced");
-    let saved = settings_from_text(Some(&settings_to_text(&v, None)));
-    assert_eq!((&saved["shadows"], &saved["ssao"], &saved["reflections"]), (&json!(false), &json!(false), &json!(0.0)));
+    assert_eq!((&saved["shadows"], &saved["ssao"], &saved["detail_textures"], &saved["video_memory"]), (&json!(true), &json!(true), &json!(true), &json!(3000)));
+    let mut back = saved.clone();
+    apply_graphics_profile(&graphics_presets()[1].1, &mut back);
+    assert_eq!(effective_mode(&back), "vanilla_plus");
+    assert_eq!((&back["shadows"], &back["ssao"]), (&json!(true), &json!(true)));
+    // the options that cost most are off in the defaults and in every preset below Extra
+    let defaults = settings_from_text(None);
+    assert_eq!((&defaults["light_glow"], &defaults["cloud_shadows"], &defaults["light_shadows"]), (&json!(false), &json!(false), &json!("street")));
+    for (name, p) in &graphics_presets()[..3] {
+        assert_eq!((&p["light_glow"], &p["cloud_shadows"]), (&json!(false), &json!(false)), "{name}");
+    }
+}
+
+/// A file of the days of Enhanced+ (`graphics=enhanced_plus`) reads as Enhanced with ray tracing
+/// on, and is written that way.
+#[test]
+fn enhanced_plus_is_enhanced_with_ray_tracing() {
+    let v = settings_from_text(Some("graphics=enhanced_plus\n"));
+    assert_eq!((&v["graphics"], &v["ray_tracing"], &v["enhanced"]), (&json!("enhanced"), &json!(true), &json!(true)));
+    assert_eq!(effective_mode(&v), "enhanced_plus");
+    let text = settings_to_text(&v, None);
+    assert!(text.contains("graphics=enhanced\n") && text.contains("ray_tracing=1\n"), "{text}");
+    let v = settings_from_text(Some("graphics=enhanced\nray_tracing=0\n"));
+    assert_eq!(effective_mode(&v), "enhanced");
+    // ray tracing without Enhanced draws nothing traced
+    let v = settings_from_text(Some("graphics=vanilla_plus\nray_tracing=1\n"));
+    assert_eq!(effective_mode(&v), "vanilla_plus");
 }
 
 #[test]

@@ -334,6 +334,16 @@ pub struct RenderOptions {
     /// `street_light`). `None`: as the chip allows (off on a small or shared one, see
     /// `gpu_memory::lighter_picture`).
     pub street_light: Option<bool>,
+    /// Which lights cast shadows in the Enhanced picture (the settings' `light_shadows`): 0
+    /// none, 1 the street lamps (looking down) and the vehicles' headlamps, 2 every light - the
+    /// spots too, along their own axis, and the lamps that shine every way in cube maps.
+    pub light_shadows: u8,
+    /// The clouds' shadow over the land and the sun's shafts through a broken sky (the settings'
+    /// `cloud_shadows`).
+    pub cloud_shadows: bool,
+    /// The glare round bright lights and the lamps' halo in the night air (the settings'
+    /// `light_glow`).
+    pub light_glow: bool,
     pub max_scene: Option<(u32, u32)>,
 }
 
@@ -363,6 +373,9 @@ impl Default for RenderOptions {
             preview_only: false,
             ray_tracing: false,
             street_light: None,
+            light_shadows: 1,
+            cloud_shadows: false,
+            light_glow: false,
             max_scene: None,
         }
     }

@@ -138,6 +138,13 @@ pub(crate) struct EnhancedUniform {
     pub(crate) flash2: [f32; 4],
     /// x a number the channel's shape is drawn from
     pub(crate) flash3: [f32; 4],
+    /// The clouds' shadow field (`cloud_field`): xy where its middle is in cloud space,
+    /// z one over its width, w 1 when there is one
+    pub(crate) cloud_f1: [f32; 4],
+    /// xy what takes a world point to cloud space (the render origin and the drift), z the
+    /// height of the plane the field is taken on, w the share of the sun the main pass has
+    /// already taken off for the clouds over the camera
+    pub(crate) cloud_f2: [f32; 4],
 }
 
 #[repr(C)]

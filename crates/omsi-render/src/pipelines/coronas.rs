@@ -132,7 +132,7 @@ impl Coronas {
             layout: Some(&self.pl),
             vertex: wgpu::VertexState {
                 module: &self.shader,
-                entry_point: Some("vs_main"),
+                entry_point: Some(if fs == "fs_enhanced" { "vs_enhanced" } else { "vs_main" }),
                 buffers: &[corona_vertex],
                 compilation_options: Default::default(),
             },

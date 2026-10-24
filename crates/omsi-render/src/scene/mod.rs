@@ -307,6 +307,8 @@ pub struct Scene {
     pub(crate) lamp_slots: WorldSlots,
     /// The same for the lamps of the player's saloon (`Cabin`).
     pub(crate) cabin_slots: CabinSlots,
+    /// The lamps that hold a cube map (`CUBE_SLOTS`).
+    pub(crate) cube_slots: CubeSlots,
     /// Where each of `interior_lights` hangs in the player's vehicle's frame, as last taken for
     /// its tile (`lamp_tiles`).
     pub(crate) cabin_places: Vec<Vec3>,

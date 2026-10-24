@@ -27,8 +27,8 @@ pub(crate) fn build(device: &wgpu::Device, queue: &wgpu::Queue, hdr_format: wgpu
     let sky_lut = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("sky table"),
         size: wgpu::Extent3d {
-            width: atmosphere::SKY_LUT_W,
-            height: atmosphere::SKY_LUT_H,
+            width: SKY_TEX_W,
+            height: SKY_TEX_H,
             depth_or_array_layers: 1,
         },
         mip_level_count: 1,

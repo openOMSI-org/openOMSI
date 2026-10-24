@@ -178,6 +178,28 @@ fn the_steps_fit_the_graphics_mode() {
     assert!(!lighter_steps(&two_cores, Limit::Cpu, &Machine { cores: 2, ..hw }).iter().any(|s| s.key == "sim_thread"));
 }
 
+/// "Optimise for my PC" knows Enhanced's light: ray tracing goes first, then every light's shadows,
+/// the clouds' shadow and the glow, the street lamps' shadows last; and none of it for the plain modes.
+#[test]
+fn the_steps_know_enhanceds_light() {
+    let hw = Machine { cores: 8, ..Default::default() };
+    let full = json!({ "graphics": "enhanced", "ray_tracing": true, "light_shadows": "all", "cloud_shadows": true, "light_glow": true, "msaa": 2, "ssao": true, "shadows": true, "shadow_size": 2048 });
+    let keys: Vec<&str> = lighter_steps(&full, Limit::Gpu, &hw).iter().map(|s| s.key).collect();
+    let at = |k: &str| keys.iter().position(|x| *x == k).unwrap_or_else(|| panic!("{k} in {keys:?}"));
+    assert!(at("ray_tracing") < at("light_shadows") && at("light_shadows") < at("cloud_shadows") && at("cloud_shadows") < at("light_glow"));
+    // the street lamps' shadows are a step of their own, after Every light's
+    let street = json!({ "graphics": "enhanced", "light_shadows": "street", "msaa": 1, "shadows": true });
+    let steps = lighter_steps(&street, Limit::Gpu, &hw);
+    assert_eq!(steps.iter().find(|s| s.key == "light_shadows").map(|s| s.to.clone()), Some(json!("off")));
+    // ray tracing needs a restart, the rest takes effect at once
+    let rt = lighter_steps(&full, Limit::Gpu, &hw).into_iter().find(|s| s.key == "ray_tracing").unwrap();
+    assert_eq!((rt.to, rt.apply), (json!(false), Apply::NextStart));
+    // Vanilla+ has none of it
+    let plain = json!({ "graphics": "vanilla_plus", "light_shadows": "all", "cloud_shadows": true, "light_glow": true, "msaa": 1 });
+    let keys: Vec<&str> = lighter_steps(&plain, Limit::Gpu, &hw).iter().map(|s| s.key).collect();
+    assert!(!keys.contains(&"light_shadows") && !keys.contains(&"cloud_shadows") && !keys.contains(&"light_glow"), "{keys:?}");
+}
+
 #[test]
 fn a_reading_of_frames() {
     let frames: Vec<f32> = (0..100).map(|i| if i < 90 { 0.010 } else { 0.020 }).collect();

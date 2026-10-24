@@ -392,7 +392,7 @@ lines, as in the game, whose default date is 1989-05-30.
 ## Settings, enhanced graphics, the navigator
 
 `~/.openomsi/settings.cfg` (written by the launcher's settings page, or by hand) holds
-`msaa` (1/2/4/8; a count the GPU cannot do falls back to the next lower one, and Enhanced+ draws 8 at 4), `anisotropy`
+`msaa` (1/2/4/8; a count the GPU cannot do falls back to the next lower one, and Real-Time Ray Tracing draws 8 at 4), `anisotropy`
 (1..16), `ssao`, `shadows`, `shadow_size`, `shadow_blobs` (the models' `[isshadow]` shadow
 meshes, OMSI's flat blob under a vehicle, laid on the road its wheels stand on; off, only the
 sun shadow map shades under a vehicle), `navigator`, `ui_opacity` (how much of the interface's backgrounds shows - the navigator's, the
@@ -524,7 +524,7 @@ less of the GPU's time (on an M4 at 1080p about 0.8 ms of a frame). The shade of
 moment, with a camera's middle-tone contrast; street lamps are bright points with a little
 glare in clear air and wide halos in mist and rain.
 
-Every light that lights the street casts a shadow (Enhanced and Enhanced+): the twenty street
+Every light that lights the street casts a shadow (Enhanced; Graphics: *Light has shadows*, `light_shadows=off|street|all`, *Street lamps and vehicles* by default): the twenty street
 lamps, floodlights and platform lights lighting the view most each have a shadow map that looks
 down from their head, the headlamps of the player's bus and of the cars in front of the camera
 one that looks along the road, and the lamps of the player's own saloon sixteen more, drawn in
@@ -541,7 +541,23 @@ quality* (Graphics) *As the picture* draws the mirrors of an Enhanced picture wi
 and sun shadows, *Standard* (the default) with the plain light, which costs a weak card less.
 `OMSI_NO_CABIN_SHADOWS=1` leaves the saloon's lamps without shadows for an A/B.
 
-`graphics=enhanced_plus` (Enhanced+ in the launcher, `--enhanced-plus`) is Enhanced with
+*Every light* (`light_shadows=all`) adds what the street lamps' map does not take: a spot that
+is no headlamp - a floodlight, a lamp that lights a door - looks along its own axis over its
+cone, and the two strongest lamps that shine every way (a bare point light, no street lamp's
+head) have a cube map of six tiles each, so a wall far to their side keeps their light off what
+lies behind it, not only what lies under them. There are fifty-six tiles in all, seven rows
+under the far shadow map. The clouds throw their shadow over the land as a field (*Cloud
+shadows and light shafts*, `cloud_shadows=0|1`; `OMSI_NO_CLOUD_SHADOW_FIELD=1` for an A/B): a
+square of nine kilometres worked out from the heaps the sky shows, in cloud space so that the
+wind moves it for free, read by the ground's sun and by the air, which scatters the sun's shafts
+through the gaps of a broken sky out to seven kilometres. *Glow of lights* (`light_glow=0|1`)
+draws the glare of a lens round every bright light, falling as the cube of the distance, and the
+lamps' halo in the haze of the night air. Wet roads and still water mirror what stands round
+them (*Real-Time Reflections*, `puddles=high|low|off`): the lamps and the lit windows of a
+street stream down a wet road at night.
+
+*Real-Time Ray Tracing* (`ray_tracing=1`, `--enhanced-plus`; a file of the days of Enhanced+,
+`graphics=enhanced_plus`, reads as Enhanced with it on) is Enhanced with
 hardware ray tracing, where the graphics card traces rays (Apple M3/M4 and newer, RTX and
 RDNA 2 cards and newer through Vulkan and Direct3D 12; elsewhere it draws as Enhanced, and
 should a driver refuse the ray tracing it falls back to Enhanced as well). Every solid mesh within
@@ -551,7 +567,13 @@ contact; cut-out leaves and fences keep the shadow map, whose texels they need),
 sky's occlusion within two metres, and reflections: wet roads, water, glass, envmapped
 and lacquered paint mirror what really stands around them, off the screen too, and the
 sky where nothing does. Its shadows, occlusion and reflections cannot be switched off
-apart. It shares Enhanced's tone curve, with the light a shade warmer and a light
+apart.
+
+The quality presets (*Quality preset*: Low, Medium, High, Extra, Max, Ultra) set the graphics mode
+as well as the options: Low is Vanilla, Medium Vanilla+ (what the game starts with), High and above
+Enhanced - High with the street lamps' shadows, the clouds' and the glow, Extra with the street light
+and the reflections in full, Max with every light's shadows, the mirrors drawn as the picture and
+shadow maps of 4096, Ultra with Real-Time Ray Tracing on top of all of it. It shares Enhanced's tone curve, with the light a shade warmer and a light
 vignette.
 `OMSI_NO_RT=1` opens no ray queries, `OMSI_NO_RT_GRADE=1` leaves its grade out,
 `OMSI_RT_REFL_HALF=1` traces the reflections at half size, `OMSI_DEBUG_RT=n` (see

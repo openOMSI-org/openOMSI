@@ -212,7 +212,7 @@ fn fs_trace(in: PuddleVertex) -> @location(0) vec4<f32> {
             if (hit_depth > 0.0 && gap >= 0.0 && gap < p.projection_trace.w + hit_linear * 0.015
                 && dot(hit_world - world, normal) > 0.05) {
                 let border = min(min(hit_uv.x, hit_uv.y), min(1.0 - hit_uv.x, 1.0 - hit_uv.y));
-                let confidence = smoothstep(0.0, 0.04, border) * (1.0 - smoothstep(p.quality.x * 0.75, p.quality.x, distance));
+                let confidence = smoothstep(0.0, 0.04, border) * (1.0 - smoothstep(p.quality.x * 0.35, p.quality.x, distance));
                 let colour = finite_colour(textureSampleLevel(t_scene, s_linear, hit_uv, 0.0).rgb);
                 if (p.projection_trace.z == 2.0) { return vec4<f32>(0.0, 1.0, 0.0, depth); }
                 if (p.projection_trace.z == 3.0) { return vec4<f32>(colour, depth); }

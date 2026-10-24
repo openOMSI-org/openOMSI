@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};
 
-use crate::{data_dir, get_settings, graphics_mode, save_settings, GRAPHICS_PROFILE_KEYS};
+use crate::{data_dir, effective_mode, get_settings, save_settings, GRAPHICS_PROFILE_KEYS};
 
 const AUTO_MOST: u32 = 100;
 const SETTLE_S: f32 = 2.0;
@@ -105,7 +105,7 @@ fn scale(s: &Value) -> f64 {
 }
 
 pub fn lighter_steps(s: &Value, limit: Limit, m: &Machine) -> Vec<Step> {
-    let mode = graphics_mode(text(s, "graphics", "vanilla_plus"));
+    let mode = effective_mode(s);
     let classic = mode == "vanilla";
     let traced = mode == "enhanced_plus";
     let enhanced = traced || mode == "enhanced";
@@ -127,6 +127,12 @@ pub fn lighter_steps(s: &Value, limit: Limit, m: &Machine) -> Vec<Step> {
             add(mirrors_redrawn, step("mirror_refresh", json!("eco"), Apply::Now));
             add(msaa > 2 && m.msaa(2), step("msaa", json!(2), Apply::Rebuild));
             add(mirror > 512, step("mirror_size", json!(512), Apply::NextStart));
+            // (what Enhanced's light adds, dearest first: the ray tracing, every light's shadows, the
+            // clouds' shadow, the glow - the street lamps' shadows go last, with the sun's)
+            add(traced, step("ray_tracing", json!(false), Apply::NextStart));
+            add(enhanced && text(s, "light_shadows", "street") == "all", step("light_shadows", json!("street"), Apply::Now));
+            add(enhanced && on(s, "cloud_shadows", false), step("cloud_shadows", json!(false), Apply::Now));
+            add(enhanced && on(s, "light_glow", false), step("light_glow", json!(false), Apply::Now));
             // (the street light first: it is the cheaper cut, and turning the AO off takes it along)
             add(mode == "enhanced" && on(s, "ssao", true) && text(s, "street_light", "off") != "off", step("street_light", json!("off"), Apply::Now));
             add(lit && on(s, "ssao", true), step("ssao", json!(false), Apply::Now));
@@ -138,6 +144,7 @@ pub fn lighter_steps(s: &Value, limit: Limit, m: &Machine) -> Vec<Step> {
             add(!classic && shadow > 1024, step("shadow_size", json!(1024), Apply::Rebuild));
             add(mirror > 256, step("mirror_size", json!(256), Apply::NextStart));
             add(render > 0.76, step("render_scale", json!("0.75"), Apply::Now));
+            add(enhanced && text(s, "light_shadows", "street") == "street", step("light_shadows", json!("off"), Apply::Now));
             add(lit && on(s, "shadows", true), step("shadows", json!(false), Apply::Now));
             add(render > 0.68, step("render_scale", json!("0.67"), Apply::Now));
         }
@@ -155,7 +162,7 @@ pub fn lighter_steps(s: &Value, limit: Limit, m: &Machine) -> Vec<Step> {
 }
 
 pub fn heavier_steps(s: &Value, start: &Value, m: &Machine) -> Vec<Step> {
-    let mode = graphics_mode(text(s, "graphics", "vanilla_plus"));
+    let mode = effective_mode(s);
     let classic = mode == "vanilla";
     let traced = mode == "enhanced_plus";
     let lit = !classic && !traced;

@@ -532,7 +532,7 @@ impl Renderer {
         }
         let scene = scene::SceneBase::new(&device, leave_out_enhanced);
         let hdr_format = wgpu::TextureFormat::Rgba16Float;
-        let shadows = shadows::build(&device, &scene, shadow_size, !leave_out_enhanced && !options.no_enhanced);
+        let shadows = shadows::build(&device, &scene, shadow_size, !leave_out_enhanced && !options.no_enhanced, options.light_shadows >= 2);
         let defaults = defaults::build(&device, &queue, options.anisotropy);
         let (coronas, corona_texture) = coronas::Coronas::new(&device, &queue, &scene);
         let precip = crate::passes::PrecipMap::new(&device);
@@ -594,6 +594,7 @@ impl Renderer {
             },
             sky: SkyRes {
                 sky_lut: enhanced.sky_lut,
+                cloud_field: FieldState::default(),
                 sky_lut_view: enhanced.sky_lut_view,
                 sky_state: None,
                 city_glow: None,

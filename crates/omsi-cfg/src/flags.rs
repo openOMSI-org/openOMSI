@@ -360,6 +360,7 @@ flags! {
     OMSI_NO_BUNDLES: Bool, Switch, Frame, "off", "Record the main pass directly instead of from render bundles.";
     OMSI_NO_CABIN_SHADOWS: Bool, Switch, Frame, "off", "Enhanced: the lamps of the player's saloon cast no shadows (A/B).";
     OMSI_NO_CLOUDS: Bool, Switch, Use, "off", "No clouds.";
+    OMSI_NO_CLOUD_SHADOW_FIELD: Bool, Switch, Use, "off", "Enhanced: the clouds' shadow is one number for the whole picture again, not a field over the land (A/B).";
     OMSI_NO_CORONAS: Bool, Switch, Frame, "off", "No light coronas.";
     OMSI_NO_CULL: Bool, Switch, Once, "off", "Draw every mesh from both sides (A/B).";
     OMSI_NO_DRAW_ORDER_DEPTH: Bool, Switch, Once, "off", "An object's surfaces in one plane without the draw order's depth step (A/B).";

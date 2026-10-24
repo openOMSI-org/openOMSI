@@ -41,7 +41,9 @@ impl Renderer {
     pub(crate) fn encode_fog_lamps(&self, encoder: &mut wgpu::CommandEncoder, scene: &Scene, f: &FrameCtx, vp_mat: Mat4, puddles_on: bool, timers: &mut PassTimers) {
         let (width, height, lighting) = (f.width, f.height, f.lighting);
         let (enhanced, prepass_on, with_overlays, masked_frame) = (f.enhanced, f.prepass_on, f.with_overlays, f.masked_frame);
-        let fog_lamps = enhanced_weather_fog(lighting) >= 2e-4 && !scene.lights.is_empty();
+        // (and in clear air too, at dusk and by night: the lamps' halos in the ground haze,
+        // `GROUND_HAZE_GAIN` in lamp_air.wgsl)
+        let fog_lamps = fog_lamps_wanted(enhanced_weather_fog(lighting), lighting.sun_dir.z, self.options.light_glow, scene.lights.len());
         let shafts = lighting.shadows && lighting.sun_dir.z > 0.0 && self.shafts_seen(vp_mat, lighting.sun_dir);
         // (the glare goes by how much of the sun is seen, which is none with the sun behind
         // the camera - fog_lamps.wgsl `sun_seen`: then there is no glare to add)
@@ -114,8 +116,10 @@ impl Renderer {
         }
         let cos_t = nearest_ray_cos(vp_mat, sun_dir);
         let hg = |c: f32, g: f32| (1.0 - g * g) / (4.0 * std::f32::consts::PI * (1.0 + g * g - 2.0 * g * c).max(1e-4).powf(1.5));
-        let most = (u.fog[0] * hg(cos_t, 0.55) * 0.9 + u.fog[3] * hg(cos_t, 0.7)) * e_sun * 180.0 * u.exposure[0];
-        // (180 m: the shader's SHAFT_REACH; with a margin under its 0.004)
+        // (180 m: the shader's SHAFT_NEAR; with the clouds' shadow field, as far as the sky's gaps
+        // are followed, its SKY_SHAFT_REACH of 7000 m; with a margin under its 0.004)
+        let reach = if u.cloud_f1[3] > 0.5 { 7000.0 } else { 180.0 };
+        let most = (u.fog[0] * hg(cos_t, 0.55) * 0.9 + u.fog[3] * hg(cos_t, 0.7)) * e_sun * reach * u.exposure[0];
         most >= 0.002
     }
 
@@ -255,5 +259,30 @@ mod tests {
         }
         // straight into the sun: a ray meets it
         assert!(nearest_ray_cos(vp, Vec3::Y) > 0.9999);
+    }
+}
+
+/// Whether the fog pass works out the lamps' light in the air: in the weather's fog as always, and
+/// - only with *Glow of lights* on - at dusk and by night in clear air as well, for the street
+/// lamps' halo. With the option off clear air costs the pass nothing, as before it.
+pub(crate) fn fog_lamps_wanted(weather_fog: f32, sun_z: f32, light_glow: bool, lights: usize) -> bool {
+    lights > 0 && (weather_fog >= 2e-4 || (light_glow && sun_z < 0.25))
+}
+
+#[cfg(test)]
+mod fog_lamp_tests {
+    use super::fog_lamps_wanted;
+
+    #[test]
+    fn the_fog_pass_runs_in_clear_night_air_only_with_the_glow_on() {
+        // clear air, night: the glow decides
+        assert!(fog_lamps_wanted(0.0, -0.3, true, 12));
+        assert!(!fog_lamps_wanted(0.0, -0.3, false, 12));
+        // clear air, high sun: nothing to light
+        assert!(!fog_lamps_wanted(0.0, 0.6, true, 12));
+        // the weather's fog: as ever, glow or not
+        assert!(fog_lamps_wanted(1e-3, 0.6, false, 12));
+        // no lights: no pass
+        assert!(!fog_lamps_wanted(1e-3, -0.3, true, 0));
     }
 }

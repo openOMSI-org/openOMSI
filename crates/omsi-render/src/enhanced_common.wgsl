@@ -32,7 +32,8 @@ struct Enhanced {
     // xyz where the sky cube is drawn from, relative to the camera
     eye: vec4<f32>,
     // x how bright an LED panel's dots burn (0 = off), y whether the LED panels' `\S:n`
-    // masks keep their mip chain (0: at full resolution, the dots stay visible when small)
+    // masks keep their mip chain (0: at full resolution, the dots stay visible when small), z 1
+    // when lights glare and glow in the night air (the settings' `light_glow`)
     led: vec4<f32>,
     // xyz towards the moon, w its angular radius (rad)
     moon: vec4<f32>,
@@ -58,6 +59,12 @@ struct Enhanced {
     flash2: vec4<f32>,
     // x a number the channel's shape is drawn from
     flash3: vec4<f32>,
+    // the clouds' shadow field (cloud_field.rs): xy its middle in cloud space, z one over its
+    // width, w 1 when there is one
+    cloud_f1: vec4<f32>,
+    // xy what takes a world point to cloud space, z the height of the plane it is taken on,
+    // w the share of the sun the main pass has taken off already for the clouds over the camera
+    cloud_f2: vec4<f32>,
 };
 @group(0) @binding(11) var<uniform> enh: Enhanced;
 @group(0) @binding(13) var s_lin: sampler;
@@ -87,6 +94,13 @@ fn flash_irradiance(n: vec3<f32>) -> vec3<f32> {
 
 // Sky radiance towards d (unscaled: times enh.ground.w is the radiance). The table runs
 // over the azimuth from the sun (0..π) and the elevation (denser at the horizon).
+// The sky table's texture: the table (32 x 48) in its corner and the clouds' shadow field
+// (192 x 192) beside it, one texel clear (cloud_field.rs `SKY_TEX_W`, `FIELD_X0`).
+const SKY_TEX: vec2<f32> = vec2<f32>(225.0, 192.0);
+const SKY_TABLE: vec2<f32> = vec2<f32>(32.0, 48.0);
+const FIELD_ORIGIN: f32 = 33.0;
+const FIELD_N: f32 = 192.0;
+
 fn sky_table_raw(d: vec3<f32>) -> vec3<f32> {
     let s = camera.sun_dir.xyz;
     let ls = length(s.xy);
@@ -97,7 +111,31 @@ fn sky_table_raw(d: vec3<f32>) -> vec3<f32> {
     }
     let el = asin(clamp(d.z, -1.0, 1.0));
     let v = 0.5 + 0.5 * sign(el) * sqrt(min(abs(el) / 1.5707963, 1.0));
-    return textureSampleLevel(t_sky_lut, s_lin, vec2<f32>(az / PI, v), 0.0).rgb;
+    // (kept a half texel inside the table: its neighbours in the texture are not the sky)
+    let tx = clamp(vec2<f32>(az / PI, v) * SKY_TABLE, vec2<f32>(0.5), SKY_TABLE - vec2<f32>(0.5));
+    return textureSampleLevel(t_sky_lut, s_lin, tx / SKY_TEX, 0.0).rgb;
+}
+
+// The share of the sun that reaches the point p through the clouds, as against what the main
+// pass's sun (`enh.sun`) already has for the camera's own place: the cumulus layer's shadow
+// field read where the sun's way through p meets the layer's middle. 1 where there is no
+// field, beyond its edge and where the sun is low (the camera's own factor stands there).
+fn cloud_shadow_ratio(p: vec3<f32>) -> f32 {
+    let s = camera.sun_dir.xyz;
+    if (enh.cloud_f1.w < 0.5 || s.z < 0.06) {
+        return 1.0;
+    }
+    let cs = p.xy + s.xy / s.z * (enh.cloud_f2.z - p.z) + enh.cloud_f2.xy;
+    let uv = (cs - enh.cloud_f1.xy) * enh.cloud_f1.z + vec2<f32>(0.5);
+    let edge = max(abs(uv.x - 0.5), abs(uv.y - 0.5));
+    let w = 1.0 - smoothstep(0.36, 0.48, edge);
+    if (w <= 0.0) {
+        return 1.0;
+    }
+    let tx = vec2<f32>(FIELD_ORIGIN, 0.0) + clamp(uv * FIELD_N, vec2<f32>(0.5), vec2<f32>(FIELD_N - 0.5));
+    let f = textureSampleLevel(t_sky_lut, s_lin, tx / SKY_TEX, 0.0).r;
+    let ratio = min(f / max(enh.cloud_f2.w, 0.02), 6.0);
+    return mix(1.0, ratio, w);
 }
 
 fn sky_table(d: vec3<f32>) -> vec3<f32> {

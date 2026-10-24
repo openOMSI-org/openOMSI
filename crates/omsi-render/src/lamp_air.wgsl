@@ -58,12 +58,20 @@ fn fog_phase(c: f32) -> f32 {
 }
 const AIRLIGHT_CELLS: u32 = 16u;
 
-fn lamp_airlight(c: vec3<f32>, d: vec3<f32>, start: f32, len: f32, jitter: f32) -> vec3<f32> {
+// The clear night air's own haze, which lights a lamp's halo and a headlamp's beam as the fog's
+// droplets do, only fainter: the lowest hundred metres of a city's air hold its dust, exhaust
+// and humidity at several times the column's average aerosol extinction (`enh.fog.w`), 1-3e-4
+// per metre (a visibility of 15-40 km). A lamp then has a soft glow round it and a low beam
+// a faint cone, as in any night photograph, instead of a lit disc on a black ground.
+const GROUND_HAZE_GAIN: f32 = 8.0;
+
+// `droplets`: how much of the weather's extinction scatters like fog (see `FogLampUniform`).
+fn lamp_airlight(c: vec3<f32>, d: vec3<f32>, start: f32, len: f32, jitter: f32, droplets: f32) -> vec3<f32> {
     var sum = vec3<f32>(0.0);
-    let sigma0 = enh.fog.x;
+    let sigma0 = enh.fog.x * droplets + enh.fog.w * GROUND_HAZE_GAIN * enh.led.z;
     let cell = camera.light_grid.z;
     let side = u32(camera.light_grid.w);
-    if (sigma0 < 2e-4 || cell <= 0.0 || side == 0u || len <= start) {
+    if (sigma0 < 4e-5 || cell <= 0.0 || side == 0u || len <= start) {
         return sum;
     }
     // (past a few optical depths nothing comes back)
@@ -109,6 +117,15 @@ fn lamp_airlight(c: vec3<f32>, d: vec3<f32>, start: f32, len: f32, jitter: f32) 
                 if (h >= range) {
                     continue;
                 }
+                // A beam (a headlamp, a spot) is lit in the weather's fog only: its cone is a sliver of
+                // sixteen jittered steps at half size, which the fog's density hides and the clear
+                // air's haze shows as shimmer and soap. The lamps' halo alone has the ground haze.
+                let beam_lamp = l.extra.z != 0.0 || l.dir.w > -1.5;
+                let fog_sigma = enh.fog.x * droplets;
+                if (beam_lamp && enh.fog.x < 2e-4) {
+                    continue;
+                }
+                let s0 = select(sigma0, fog_sigma, beam_lamp);
                 var core = l.extra.y;
                 if (core <= 0.0) {
                     core = range * 0.125;
@@ -180,9 +197,9 @@ fn lamp_airlight(c: vec3<f32>, d: vec3<f32>, start: f32, len: f32, jitter: f32) 
                 // a lamp's irradiance is core^2 / r^2 of its colour's (a headlamp's 1 / r^2)
                 let strength = select(core * core, 1.0, l.extra.z != 0.0);
                 let xc = c + d * tc;
-                let sigma = sigma0 * exp(-enh.fog.y * max(xc.z - enh.fog.z, 0.0));
+                let sigma = s0 * exp(-enh.fog.y * max(xc.z - enh.fog.z, 0.0));
                 let dl = distance(xc, l.pos.xyz);
-                let atten = exp(-layer_depth(sigma0, enh.fog.y, c.z - enh.fog.z, xc.z - enh.fog.z, tc - start) - sigma * dl);
+                let atten = exp(-layer_depth(s0, enh.fog.y, c.z - enh.fog.z, xc.z - enh.fog.z, tc - start) - sigma * dl);
                 sum = sum + l.color.rgb * (l.color.w * strength * acc * half / hh * sigma * atten);
             }
         }

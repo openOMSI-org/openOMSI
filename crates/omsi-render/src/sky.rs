@@ -208,6 +208,8 @@ pub(crate) struct SkyRes {
     /// much of the sun the clouds let through over the camera now (smoothed).
     pub(crate) cloud_shape_cpu: Vec<u8>,
     pub(crate) cloud_sun: Option<f32>,
+    /// The clouds' shadow over the land, held in the sky table's texture (`cloud_field`).
+    pub(crate) cloud_field: FieldState,
     pub(crate) sky_mesh: (wgpu::Buffer, wgpu::Buffer, u32),
     pub(crate) sky_lut: wgpu::Texture,
     pub(crate) sky_lut_view: wgpu::TextureView,

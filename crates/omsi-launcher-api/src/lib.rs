@@ -303,10 +303,9 @@ fn option_presets() -> Answer {
     Ok(json!(core::option_presets().into_iter().map(|(name, v)| json!({ "name": name, "settings": v })).collect::<Vec<_>>()))
 }
 
-/// The four quality presets of a graphics mode (vanilla, enhanced ...).
-fn graphics_presets(mode: String) -> Answer {
-    let mode = core::graphics_mode(&mode);
-    Ok(json!(core::graphics_presets_for(mode).into_iter().map(|(name, v)| json!({ "name": name, "settings": v })).collect::<Vec<_>>()))
+/// The six quality presets, Low to Ultra (the mode asked for is of the days when they kept it).
+fn graphics_presets(_mode: String) -> Answer {
+    Ok(json!(core::graphics_presets().into_iter().map(|(name, v)| json!({ "name": name, "settings": v })).collect::<Vec<_>>()))
 }
 
 fn optimise_arm(target: u32) -> Answer {
@@ -856,7 +855,7 @@ fn answer(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "settings_patch" => settings_patch(arg::<Value>(args, "patch")?),
         "settings_defaults" => settings_defaults(),
         "option_presets" => option_presets(),
-        "graphics_presets" => graphics_presets(arg::<String>(args, "mode")?),
+        "graphics_presets" => graphics_presets(arg::<String>(args, "mode").unwrap_or_default()),
         "graphics_profiles" => graphics_profiles(),
         "graphics_profile_save" => graphics_profile_save(arg::<String>(args, "name")?, arg::<Value>(args, "settings")?),
         "graphics_profile_delete" => graphics_profile_delete(arg::<String>(args, "name")?),

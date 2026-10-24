@@ -25,7 +25,7 @@ struct Camera {
     // Enhanced: the lamps' shadow maps (the tiles under the far map; zero where nothing is
     // drawn) and where the tiles lie: x a tile's side, y tiles to a row, z the far map's
     // texture height, w the number of tiles (`LampAtlas::uniform`)
-    lamp_view_proj: array<mat4x4<f32>, 44>,
+    lamp_view_proj: array<mat4x4<f32>, 56>,
     lamp_atlas: vec4<f32>,
     // Windy trees: xy the weather's wind (m/s, world; 0 with the setting off), zw how far
     // the air has carried the gusts since the start (m, modulo PATTERN_PERIOD)

@@ -117,8 +117,7 @@ fn call(cmd: &str, arg: &str) -> anyhow::Result<Value> {
         }
         "tutorials" => Ok(json!(core::tutorials().into_iter().map(|(n, title, text)| json!({ "n": n, "title": title, "text": text })).collect::<Vec<_>>())),
         "graphics_presets" => {
-            let mode = a.get("mode").and_then(|v| v.as_str()).unwrap_or("vanilla_plus");
-            Ok(json!(core::graphics_presets_for(mode).iter().map(|(name, v)| json!({ "name": name, "values": v })).collect::<Vec<_>>()))
+            Ok(json!(core::graphics_presets().iter().map(|(name, v)| json!({ "name": name, "values": v })).collect::<Vec<_>>()))
         }
         "graphics_profiles" => Ok(json!(core::graphics_profiles())),
         "languages" => Ok(json!(core::LANGUAGES.iter().map(|l| json!({ "code": l.0, "name": l.1, "iso": l.2 })).collect::<Vec<_>>())),

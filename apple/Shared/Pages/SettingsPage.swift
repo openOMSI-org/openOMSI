@@ -96,10 +96,14 @@ struct SettingsPage: View {
     private var graphics: some View {
         let mode = store.setting("graphics")?.string ?? "vanilla_plus"
         let classic = mode == "vanilla"
-        let traced = mode == "enhanced_plus"
         let enhanced = mode.hasPrefix("enhanced")
+        // (Real-Time Ray Tracing is a switch of Enhanced; a file of the days of Enhanced+ names it as a mode)
+        let traced = enhanced && (mode == "enhanced_plus" || store.flag("ray_tracing", false))
         return Card("Graphics") {
-            SettingSelect(label: "Graphics", key: "graphics", options: [("vanilla", "Vanilla (as OMSI 2)"), ("vanilla_plus", "Vanilla+"), ("enhanced", "Enhanced"), ("enhanced_plus", "Enhanced+")])
+            SettingSelect(label: "Graphics", key: "graphics", options: [("vanilla", "Vanilla (as OMSI 2)"), ("vanilla_plus", "Vanilla+"), ("enhanced", "Enhanced")])
+            if enhanced {
+                SettingToggle(label: "Real-Time Ray Tracing", key: "ray_tracing", fallback: false)
+            }
             PresetRow(mode: mode)
             OptimiseBlock()
             SettingSelect(label: "Anti-aliasing", key: "msaa", options: Choices.msaa, heavy: { $0 == "8" && !traced })
@@ -125,18 +129,23 @@ struct SettingsPage: View {
                 SettingSlider(label: "LED mip strength", key: "led_mips", range: 0 ... 4, step: 0.05, fallback: 1.3) { $0 < 0.005 ? off : String(format: "%.2f", $0) }
             }
             SettingToggle(label: "OMSI's shadow meshes (under vehicles)", key: "shadow_blobs", fallback: true)
-            if !traced { SettingSlider(label: "Reflection maps (paint, chrome, glass)", key: "reflections", range: 0 ... 1, step: 0.05, fallback: 1) { $0 < 0.005 ? off : pct($0) } }
+            if !traced { SettingSlider(label: "Reflective objects reflect", key: "reflections", range: 0 ... 1, step: 0.05, fallback: 1) { $0 < 0.005 ? off : pct($0) } }
             SettingToggle(label: "Clouds", key: "clouds", fallback: true)
             if enhanced && store.flag("clouds", true) {
                 SettingSelect(label: "Cloud quality", key: "cloud_quality", options: Choices.cloudQuality)
             }
             SettingSelect(label: "Rain quality", key: "rain_quality", options: Choices.rainQuality)
-            if mode == "enhanced" {
+            if enhanced && !traced {
                 SettingSelect(label: "Street light", key: "street_light", options: [("auto", "Auto"), ("on", "On"), ("off", "Off")])
+            }
+            if enhanced {
+                SettingSelect(label: "Light has shadows", key: "light_shadows", options: [("off", "Off"), ("street", "Street lamps and vehicles"), ("all", "Every light")])
+                SettingToggle(label: "Cloud shadows and light shafts", key: "cloud_shadows", fallback: true)
+                SettingToggle(label: "Glow of lights", key: "light_glow", fallback: true)
             }
             SettingSelect(label: "Vehicle smoke", key: "vehicle_smoke", options: [("all", "All vehicles"), ("player", "Player only"), ("off", "Off")], help: "Controls the vehicles' smoke particles, not scenery effects or glowing particles.")
             if (store.setting("reflections")?.double ?? 1) > 0.005 {
-                SettingSelect(label: "Puddles", key: "puddles", options: [("high", "High"), ("low", "Low"), ("off", "Off")])
+                SettingSelect(label: enhanced ? "Real-Time Reflections" : "Puddles", key: "puddles", options: [("high", "High"), ("low", "Low"), ("off", "Off")])
             }
             SettingToggle(label: "Windy trees", key: "windy_trees", fallback: true)
         }
@@ -551,8 +560,8 @@ struct CornerRow: View {
     }
 }
 
-/// The quality presets of a graphics mode (`graphics_presets_for`): the one the settings
-/// match now, else "Custom".
+/// The quality presets, Low to Ultra (`graphics_presets`; each sets the graphics mode too): the one
+/// the settings match now, else "Custom".
 struct PresetRow: View {
     @Environment(LauncherStore.self) private var store
     var mode: String

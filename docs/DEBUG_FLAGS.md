@@ -286,6 +286,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_NO_BUNDLES` | bool | off | frame | render | Record the main pass directly instead of from render bundles. |
 | `OMSI_NO_CABIN_SHADOWS` | bool | off | frame | render | Enhanced: the lamps of the player's saloon cast no shadows (A/B). |
 | `OMSI_NO_CLOUDS` | bool | off | use | app | No clouds. |
+| `OMSI_NO_CLOUD_SHADOW_FIELD` | bool | off | use | render | Enhanced: the clouds' shadow is one number for the whole picture again, not a field over the land (A/B). |
 | `OMSI_NO_CORONAS` | bool | off | frame | render | No light coronas. |
 | `OMSI_NO_CULL` | bool | off | once | render | Draw every mesh from both sides (A/B). |
 | `OMSI_NO_DRAW_ORDER_DEPTH` | bool | off | once | render | An object's surfaces in one plane without the draw order's depth step (A/B). |

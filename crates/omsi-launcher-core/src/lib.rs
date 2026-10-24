@@ -2020,50 +2020,59 @@ pub fn graphics_mode(v: &str) -> &'static str {
     }
 }
 
-/// The Graphics settings' quality presets - Low, Medium, High and Ultra - for the graphics
-/// mode chosen (`graphics_mode`), shared by the launcher and the game's options. A preset
-/// tunes that mode and keeps it: it never switches Enhanced or ray tracing on or off.
-/// Vanilla's leave out what OMSI 2 does not draw; High is the defaults of Vanilla+; the
-/// enhanced modes take fewer MSAA samples and a smaller render scale below High, and
-/// Enhanced+ smaller shadow maps and mirrors too. The texture memory is left as it is.
-pub fn graphics_presets_for(mode: &str) -> [(&'static str, Value); 4] {
-    let mode = graphics_mode(mode);
-    let classic = mode == "vanilla";
-    let traced = mode == "enhanced_plus";
-    let enhanced = traced || mode == "enhanced";
-    // per level: Low, Medium, High, Ultra
-    let (msaa, scale) = match mode {
-        "enhanced" => ([1, 1, 2, 4], ["0.67", "0.85", "auto", "auto"]),
-        "enhanced_plus" => ([1, 1, 1, 2], ["0.5", "0.67", "0.85", "auto"]),
-        _ => ([1, 2, 4, 4], ["0.75", "auto", "auto", "auto"]),
-    };
-    let shadow = if traced { [1024, 1024, 2048, 2048] } else { [1024, 1024, 2048, 4096] };
-    let mirror = if traced { [128, 128, 256, 512] } else { [128, 256, 256, 512] };
-    let refresh = if traced { ["eco", "eco", "eco", "full"] } else { ["eco", "eco", "full", "full"] };
-    let anisotropy = [2, 4, 8, 8];
-    let view = ["600", "900", "auto", "2000"];
-    let obj_size = [0.03, 0.02, 0.013, 0.005];
-    let obj_dist = ["500", "750", "auto", "1500"];
-    let rain = ["low", "medium", "high", "high"];
+/// The graphics mode a settings page's `v` draws with, ray tracing counted as a mode of its own:
+/// `vanilla`, `vanilla_plus`, `enhanced`, or `enhanced_plus` for Enhanced with Real-Time Ray
+/// Tracing on (what the code that tunes for the traced picture asks).
+pub fn effective_mode(v: &Value) -> &'static str {
+    let g = graphics_mode(v.get("graphics").and_then(|x| x.as_str()).unwrap_or("vanilla_plus"));
+    if g == "enhanced" && v.get("ray_tracing").and_then(|x| x.as_bool()).unwrap_or(false) { "enhanced_plus" } else { g }
+}
+
+/// The Graphics settings' quality presets: Low, Medium, High, Extra, Max and Ultra, shared by the
+/// launcher and the game's options. A preset sets the graphics mode as well - Low is Vanilla (as
+/// OMSI 2 draws), Medium Vanilla+ (the defaults), High and above Enhanced - and, in Enhanced, how
+/// much of its light is switched on: High the street lamps' shadows, Extra the clouds' shadow, the
+/// glow of lights, the street light and the reflections in full, Max every light's shadows and the
+/// mirrors drawn as the picture, Ultra Real-Time Ray Tracing on top of all of it. Each is a step up in cost and the
+/// light's own shadows (cached tiles, a handful of passes) are far from the dearest of them. The
+/// texture memory is left as it is.
+pub fn graphics_presets() -> [(&'static str, Value); 6] {
+    // per level: Low, Medium, High, Extra, Max, Ultra
+    let graphics = ["vanilla", "vanilla_plus", "enhanced", "enhanced", "enhanced", "enhanced"];
+    let msaa = [1, 4, 2, 4, 4, 4];
+    let scale = ["0.75", "auto", "auto", "auto", "auto", "auto"];
+    let anisotropy = [2, 8, 8, 8, 16, 16];
+    let shadow = [1024, 2048, 2048, 2048, 4096, 4096];
+    let mirror = [128, 256, 256, 512, 512, 512];
+    let refresh = ["eco", "full", "full", "full", "full", "full"];
+    let view = ["600", "auto", "auto", "auto", "2000", "2000"];
+    let obj_size = [0.03, 0.013, 0.013, 0.01, 0.005, 0.005];
+    let obj_dist = ["500", "auto", "auto", "auto", "1500", "1500"];
+    let rain = ["low", "high", "high", "high", "high", "high"];
+    let light_shadows = ["off", "street", "street", "street", "all", "all"];
+    let street_light = ["off", "off", "off", "auto", "on", "on"];
+    let puddles = ["off", "high", "low", "high", "high", "high"];
+    let mirror_quality = ["standard", "standard", "standard", "standard", "enhanced", "enhanced"];
     std::array::from_fn(|i| {
         let low = i == 0;
-        let mut preset = json!({
-            "graphics": mode, "msaa": msaa[i], "anisotropy": anisotropy[i], "shadow_size": shadow[i],
-            "clouds": !(enhanced && low), "rain_quality": rain[i], "windy_trees": !low,
+        let preset = json!({
+            "graphics": graphics[i], "ray_tracing": i == 5, "msaa": msaa[i], "anisotropy": anisotropy[i],
+            "shadow_size": shadow[i], "clouds": true, "rain_quality": rain[i], "windy_trees": !low,
             "view_distance": view[i], "min_obj_size": obj_size[i], "max_obj_dist": obj_dist[i],
-            "mirror_size": mirror[i], "mirror_refresh": refresh[i], "render_scale": scale[i],
+            "mirror_size": mirror[i], "mirror_refresh": refresh[i], "mirror_quality": mirror_quality[i], "render_scale": scale[i],
+            "detail_textures": !low, "ssao": !low, "shadows": !low, "reflections": 1.0,
+            "light_shadows": light_shadows[i], "cloud_shadows": i >= 3, "light_glow": i >= 3,
+            "street_light": street_light[i], "puddles": puddles[i],
         });
-        if !classic {
-            preset["detail_textures"] = json!(!low);
+        let mut preset = preset;
+        // (Low is Vanilla, which draws none of these: it leaves them as they are, so that going back
+        // to Vanilla+ does not find them off)
+        if low {
+            for k in ["ssao", "shadows", "detail_textures"] {
+                preset.as_object_mut().map(|o| o.remove(k));
+            }
         }
-        if !classic && !traced {
-            preset["ssao"] = json!(i >= 2);
-            preset["shadows"] = json!(!low);
-        }
-        if !traced {
-            preset["reflections"] = json!(1.0);
-        }
-        (["Low", "Medium", "High", "Ultra"][i], preset)
+        (["Low", "Medium", "High", "Extra", "Max", "Ultra"][i], preset)
     })
 }
 
@@ -2084,6 +2093,15 @@ pub fn puddles(x: &str) -> &'static str {
 /// The enhanced clouds' quality: `low`, else `high` (as the game's `settings::cloud_quality`).
 fn cloud_quality(x: &str) -> &'static str {
     if x.trim().eq_ignore_ascii_case("low") { "low" } else { "high" }
+}
+
+/// Which lights cast shadows: `off` or `all`, else `street` (as the game's `settings::light_shadows`).
+fn light_shadows(x: &str) -> &'static str {
+    match x.trim().to_ascii_lowercase().as_str() {
+        "off" | "0" | "none" | "false" => "off",
+        "all" | "2" | "every" | "max" => "all",
+        _ => "street",
+    }
 }
 
 /// The street-scale light: `on` or `off`, else `auto` (as the game's `settings::street_light`).
@@ -2162,6 +2180,10 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     v["fsr_quality"] = json!("quality");
     v["fsr_sharpness"] = json!(0.8);
     v["street_light"] = json!("off");
+    v["ray_tracing"] = json!(false);
+    v["light_shadows"] = json!("street");
+    v["cloud_shadows"] = json!(false);
+    v["light_glow"] = json!(false);
     v["puddles"] = json!("high"); // (apart: the literal above is at the json! macro's recursion limit)
     v["vehicle_smoke"] = json!("all");
     if phone {
@@ -2302,6 +2324,9 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "mirror_quality" => v[&k] = json!(mirror_quality(val)),
             "cloud_quality" => v[&k] = json!(cloud_quality(val)),
             "street_light" => v[&k] = json!(street_light(val)),
+            "ray_tracing" | "rt" => v["ray_tracing"] = json!(b(val)),
+            "light_shadows" => v[&k] = json!(light_shadows(val)),
+            "cloud_shadows" | "light_glow" => v[&k] = json!(b(val)),
             "rain_quality" => v[&k] = json!(rain_quality(val)),
             "vehicle_smoke" => v[&k] = json!(vehicle_smoke(val)),
             "puddles" => v[&k] = json!(puddles(val)),
@@ -2417,8 +2442,15 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     // a file without `graphics` (older builds) says only `enhanced`; its vanilla renderer is
     // what is now Vanilla+
     let g = graphics.unwrap_or(if v["enhanced"] == json!(true) { "enhanced" } else { "vanilla_plus" });
+    // (a file of the days of Enhanced+ names it as a mode: it is Enhanced with ray tracing on)
+    let g = if g == "enhanced_plus" {
+        v["ray_tracing"] = json!(true);
+        "enhanced"
+    } else {
+        g
+    };
     v["graphics"] = json!(g);
-    v["enhanced"] = json!(g == "enhanced" || g == "enhanced_plus");
+    v["enhanced"] = json!(g == "enhanced");
     // before version 2 the launcher wrote its old default `boarding=pay` for everybody
     // (passengers then waited at the cash desk for the driver): the game reads that as auto
     if version < 2 && v["boarding"] == "pay" {
@@ -2503,8 +2535,8 @@ pub fn save_settings(v: &Value) -> Result<()> {
 
 /// The settings a graphics profile holds: what the Graphics tab shows, except the machine's
 /// own (fullscreen, graphics API).
-pub const GRAPHICS_PROFILE_KEYS: [&str; 36] = [
-    "graphics", "msaa", "render_scale", "upscaler", "fsr_quality", "fsr_sharpness", "anisotropy", "shadow_size", "ssao", "shadows", "shadow_casters", "detail_textures", "night_brightness", "led_glow", "led_mips", "shadow_blobs", "reflections", "clouds", "cloud_quality", "street_light", "rain_quality", "vehicle_smoke", "puddles", "windy_trees",
+pub const GRAPHICS_PROFILE_KEYS: [&str; 40] = [
+    "graphics", "msaa", "render_scale", "upscaler", "fsr_quality", "fsr_sharpness", "anisotropy", "shadow_size", "ssao", "shadows", "shadow_casters", "detail_textures", "night_brightness", "led_glow", "led_mips", "shadow_blobs", "reflections", "clouds", "cloud_quality", "street_light", "rain_quality", "vehicle_smoke", "puddles", "windy_trees", "ray_tracing", "light_shadows", "cloud_shadows", "light_glow",
     "vsync", "max_fps", "view_distance", "max_obj_dist", "min_obj_size", "mirror_size", "mirror_refresh", "mirror_quality", "mirror_hud_every_frame", "video_memory", "texture_compression", "gpu_texture_compression",
 ];
 
@@ -2583,7 +2615,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("detail_textures", true),
         b("exact_fare", true),
         matches!(graphics_mode(v.get("graphics").and_then(|x| x.as_str()).unwrap_or("vanilla_plus")), "enhanced" | "enhanced_plus") as u8,
-        graphics_mode(v.get("graphics").and_then(|x| x.as_str()).unwrap_or("vanilla_plus")),
+        match graphics_mode(v.get("graphics").and_then(|x| x.as_str()).unwrap_or("vanilla_plus")) { "enhanced_plus" => "enhanced", g => g },
         b("fullscreen", false),
         b("vsync", true),
         f("volume", 0.6),
@@ -2766,6 +2798,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("gpu_texture_compression={}\n", b("gpu_texture_compression", true)));
     text.push_str(&format!("cloud_quality={}\n", cloud_quality(v.get("cloud_quality").and_then(|x| x.as_str()).unwrap_or("high"))));
     text.push_str(&format!("street_light={}\n", street_light(v.get("street_light").and_then(|x| x.as_str()).unwrap_or("off"))));
+    text.push_str(&format!("ray_tracing={}\nlight_shadows={}\ncloud_shadows={}\nlight_glow={}\n", b("ray_tracing", false) | (graphics_mode(v.get("graphics").and_then(|x| x.as_str()).unwrap_or("vanilla_plus")) == "enhanced_plus") as u8, light_shadows(v.get("light_shadows").and_then(|x| x.as_str()).unwrap_or("street")), b("cloud_shadows", false), b("light_glow", false)));
     text.push_str(&format!("rain_quality={}\n", rain_quality(v.get("rain_quality").and_then(|x| x.as_str()).unwrap_or("high"))));
     text.push_str(&format!("vehicle_smoke={}\n", vehicle_smoke(v.get("vehicle_smoke").and_then(|x| x.as_str()).unwrap_or("all"))));
     text.push_str(&format!("puddles={}\n", puddles(v.get("puddles").and_then(|x| x.as_str()).unwrap_or("high"))));
