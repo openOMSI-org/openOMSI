@@ -1174,6 +1174,9 @@ pub struct LoadTimes;
 
 impl LoadTimes {
     fn path() -> Option<std::path::PathBuf> {
+        if !cfg!(any(target_os = "android", target_os = "ios")) {
+            return Some(omsi_cfg::user_data::data_dir().join("cache/load-times.json"));
+        }
         let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
         Some(std::path::PathBuf::from(home).join(".openomsi").join("cache").join("load-times.json"))
     }

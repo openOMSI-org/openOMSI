@@ -99,6 +99,9 @@ pub fn save_stations(list: &[(String, String)]) -> std::io::Result<()> {
 }
 
 pub fn config_path() -> Option<PathBuf> {
+    if !cfg!(any(target_os = "android", target_os = "ios")) {
+        return Some(crate::user_data::data_dir().join("radio.cfg"));
+    }
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
     Some(PathBuf::from(home).join(".openomsi").join("radio.cfg"))
 }

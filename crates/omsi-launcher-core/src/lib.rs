@@ -17,6 +17,7 @@ pub mod optimise;
 mod hof_sync;
 mod file_dialog;
 pub mod i18n;
+pub mod user_data;
 
 pub use file_dialog::{pick_file, pick_folder, pick_hofs, pick_mod};
 pub use hof_sync::{add_shared_hofs, share_map_hofs, MapHofOffer};
@@ -47,7 +48,7 @@ pub fn data_dir() -> PathBuf {
     // (made once: asked for dozens of times a second - the launcher's frames, its polls - and
     // made each time, two system calls for a folder that was there)
     static MADE: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
-    let d = home().join(".openomsi");
+    let d = omsi_cfg::user_data::data_dir();
     let mut made = MADE.lock().unwrap_or_else(|e| e.into_inner());
     if made.as_ref() != Some(&d) && std::fs::create_dir_all(&d).is_ok() {
         *made = Some(d.clone());
@@ -67,22 +68,20 @@ fn is_omsi_root(p: &Path) -> bool {
 
 /// Where the game binary is: the configured path, next to the launcher, or the
 /// development build in the source tree.
-fn find_game(configured: &str) -> Option<PathBuf> {
+pub fn find_game(configured: &str) -> Option<PathBuf> {
     let mut cands: Vec<PathBuf> = Vec::new();
-    // the game that came with this launcher first: a path remembered from an older
-    // installation (`target/release/omsi` of the days before the rename) kept starting an
-    // old build after every update - the new pause menu "was not there" on macOS
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            cands.push(dir.join(if cfg!(windows) { "openomsi.exe" } else { "openomsi" }));
-        }
-    }
+    // An explicit Setup selection wins; old binaries named `omsi` remain excluded.
     if !configured.trim().is_empty() {
         let c = PathBuf::from(configured.trim());
         // (only a game of today's name: the old `omsi` binary is not taken any more)
         let stem = c.file_stem().map(|s| s.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
         if stem == "openomsi" {
             cands.push(c);
+        }
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            cands.push(dir.join(if cfg!(windows) { "openomsi.exe" } else { "openomsi" }));
         }
     }
     if let Some(p) = std::env::var_os("OPENOMSI_BIN") {
@@ -141,6 +140,23 @@ fn find_root(configured: &str) -> Option<PathBuf> {
 
 pub fn load_config() -> Config {
     let mut c: Config = std::fs::read_to_string(config_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if let Some(game) = find_game(&c.game) {
+        static INITIALIZED: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
+        let mut initialized = INITIALIZED.lock().unwrap_or_else(|e| e.into_inner());
+        if initialized.as_ref() != Some(&game) {
+            let previous = data_dir();
+            match omsi_cfg::user_data::initialize_for(&game) {
+                Ok(dir) => {
+                    *initialized = Some(game);
+                    if dir != previous {
+                        c = std::fs::read_to_string(dir.join("launcher.json")).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or(c);
+                    }
+                }
+                Err(e) => log_to_file(&format!("Could not initialize .openomsi-config: {e}")),
+            }
+        }
+    }
     if let Some(r) = find_root(&c.root) {
         c.root = r.to_string_lossy().to_string();
     }

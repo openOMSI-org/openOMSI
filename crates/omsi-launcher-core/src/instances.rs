@@ -298,6 +298,10 @@ pub fn set_screen_at(at: Option<(i32, i32)>) {
 
 /// Start the game with `args`; games already running keep running.
 pub fn start(game: &Path, args: &[String], d: &crate::Duty, profile: &str) -> Result<Started> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if game.file_stem().is_some_and(|name| name.eq_ignore_ascii_case("openomsi")) {
+        omsi_cfg::user_data::write_config_for(game, &crate::data_dir())?;
+    }
     let running: Vec<Instance> = list().into_iter().filter(|i| i.running).collect();
     let (slot, log) = free_slot(&running);
     let file = std::fs::File::create(&log).with_context(|| format!("creating {}", log.display()))?;

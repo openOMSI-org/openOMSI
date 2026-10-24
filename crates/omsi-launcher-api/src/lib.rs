@@ -19,6 +19,9 @@ use std::time::Duration;
 
 pub type Answer = Result<Value, String>;
 
+// Ordinary commands may run together, but relocation must finish before any new writes.
+static DATA_ACCESS: std::sync::RwLock<()> = std::sync::RwLock::new(());
+
 /// What the window around the page does for the commands.
 pub trait Platform: Send + Sync {
     /// Tell the page something (`vehicles-progress` ...).
@@ -102,7 +105,7 @@ fn translations(lang: String) -> Answer {
 }
 
 /// The OMSI 2 folder and the game program (Setup).
-fn config_save(root: String, game: String) -> Answer {
+fn config_save(root: String, game: String, data_path: Option<String>, move_data: Option<bool>, existing_action: Option<String>) -> Answer {
     let chosen = root.trim().to_string();
     if !chosen.is_empty() {
         let missing = omsi_cfg::missing_original_essentials(std::path::Path::new(&chosen));
@@ -113,12 +116,48 @@ fn config_save(root: String, game: String) -> Answer {
     let mut c = core::load_config();
     c.root = chosen.clone();
     c.game = game.trim().to_string();
+    let program = core::find_game(&c.game);
+    let mut warning = None;
+    if let Some(path) = data_path.map(|p| core::user_data::selected_path(Path::new(&p)).to_string_lossy().to_string()).filter(|p| Path::new(p) != core::data_dir()) {
+        if versions::installing() { return Err("Wait for game installation to finish before changing the .openomsi folder".into()); }
+        if cfg!(any(target_os = "android", target_os = "ios")) {
+            return Err("Changing the .openomsi folder is only available on desktop".into());
+        }
+        if Path::new(&path).is_dir() && existing_action.is_none() {
+            return Ok(json!({ "saved": false, "existing_folder": path }));
+        }
+        use core::user_data::ChangeMode;
+        let mode = match existing_action.as_deref() {
+            Some("use") => ChangeMode::UseExisting,
+            Some("overwrite") => ChangeMode::Overwrite,
+            Some(_) => return Err("Unknown existing-folder action".into()),
+            None => if move_data.ok_or("Choose whether to move the current folder or start fresh")? { ChangeMode::Move } else { ChangeMode::Fresh },
+        };
+        let program = program.as_ref().ok_or("Choose the game program before changing the .openomsi folder")?;
+        if mode == ChangeMode::UseExisting {
+            let launcher = Path::new(&path).join("launcher.json");
+            match std::fs::read_to_string(&launcher) {
+                Ok(text) => {
+                    c = serde_json::from_str(&text).map_err(err)?;
+                    // Keep the selected executable, but read the destination's root/profile.
+                    c.game = program.to_string_lossy().to_string();
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(err(e)),
+            }
+        }
+        warning = core::user_data::change(Path::new(&path), mode, program).map_err(err)?;
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if let Some(program) = program {
+        omsi_cfg::user_data::write_config_for(&program, &core::data_dir()).map_err(err)?;
+    }
     core::save_config(&c).map_err(err)?;
     omsi_cfg::content_changed();
     let config = core::load_config();
     let other = (!chosen.is_empty() && std::path::Path::new(&chosen) != std::path::Path::new(&config.root)).then(|| config.root.clone());
     let r = core::root_dir().map(|p| p.to_string_lossy().to_string());
-    Ok(json!({ "saved": true, "config": config, "root": r.as_ref().ok(), "root_error": r.err().map(err), "game": core::game_binary(), "used_other": other }))
+    Ok(json!({ "saved": true, "config": config, "root": r.as_ref().ok(), "root_error": r.err().map(err), "game": core::game_binary(), "used_other": other, "data_dir": core::data_dir(), "content_dir": core::content_dir(), "warning": warning }))
 }
 
 // --- content ---------------------------------------------------------------------------
@@ -809,14 +848,37 @@ fn list_dir(path: Option<String>, archives: bool) -> Answer {
 }
 
 pub fn call(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
-    answer(cmd, args, p).map_err(|e| core::i18n::tr(&e))
+    if cmd == "config_save" {
+        let _access = DATA_ACCESS.write().unwrap_or_else(|e| e.into_inner());
+        answer(cmd, args, p).map_err(|e| core::i18n::tr(&e))
+    } else {
+        let _access = DATA_ACCESS.read().unwrap_or_else(|e| e.into_inner());
+        answer(cmd, args, p).map_err(|e| core::i18n::tr(&e))
+    }
 }
 
 fn answer(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
     match cmd {
         "bootstrap" => bootstrap(p),
         "translations" => translations(arg::<String>(args, "lang")?),
-        "config_save" => config_save(arg::<String>(args, "root")?, arg::<String>(args, "game")?),
+        "data_folder_check" => {
+            if cfg!(any(target_os = "android", target_os = "ios")) { return Err("Changing the .openomsi folder is only available on desktop".into()); }
+            let path = core::user_data::selected_path(Path::new(&arg::<String>(args, "path")?));
+            omsi_cfg::user_data::validate_path(&path).map_err(err)?;
+            let exists = match std::fs::metadata(&path) {
+                Ok(metadata) => metadata.is_dir(),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+                Err(e) => return Err(err(e)),
+            };
+            let current = core::data_dir();
+            let same = path == current || (exists && path.canonicalize().ok().zip(current.canonicalize().ok()).is_some_and(|(a, b)| a == b));
+            Ok(json!({ "path": path, "exists": exists, "same": same }))
+        }
+        "config_save" => {
+            let data_path = arg::<Option<String>>(args, "data_path")?;
+            if data_path.as_ref().is_some_and(|path| Path::new(path) != core::data_dir()) { p.before_update(); }
+            config_save(arg::<String>(args, "root")?, arg::<String>(args, "game")?, data_path, arg::<Option<bool>>(args, "move_data")?, arg::<Option<String>>(args, "existing_action")?)
+        }
         "maps" => maps(),
         "list_dir" => list_dir(arg::<Option<String>>(args, "path")?, arg::<Option<bool>>(args, "archives")?.unwrap_or(false)),
         "vehicles" => vehicles(p),
@@ -931,6 +993,7 @@ fn answer(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
 
 /// Run a command that answers bytes (the bus preview's pictures).
 pub fn call_bytes(cmd: &str, args: &Value, p: &dyn Platform) -> Result<Vec<u8>, String> {
+    let _access = DATA_ACCESS.read().unwrap_or_else(|e| e.into_inner());
     match cmd {
         "content_picture" => content_picture(&arg::<String>(args, "path")?).ok_or_else(|| "not found".to_string()),
         "route_map" => route_map_bytes(p, arg::<String>(args, "map")?, arg::<String>(args, "date")?, arg::<String>(args, "trip")?, arg(args, "surface")?, arg(args, "editor")?, arg(args, "route_only")?),
@@ -957,7 +1020,7 @@ mod setup_tests {
         let was = (std::env::var_os("HOME"), std::env::var_os("USERPROFILE"));
         unsafe { std::env::set_var("HOME", &home) };
         unsafe { std::env::set_var("USERPROFILE", &home) };
-        let r = config_save(not_omsi.to_string_lossy().to_string(), String::new()).unwrap();
+        let r = config_save(not_omsi.to_string_lossy().to_string(), String::new(), None, None, None).unwrap();
         let written = home.join(".openomsi").join("launcher.json").exists();
         for (k, v) in [("HOME", was.0), ("USERPROFILE", was.1)] {
             match v {

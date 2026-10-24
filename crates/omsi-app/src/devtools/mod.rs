@@ -80,6 +80,9 @@ pub(crate) struct DevTools {
 
 /// Where the watch lists are kept: `~/.openomsi/devtools/<bus file>.watch`.
 fn watch_file(bus: &std::path::Path) -> Option<PathBuf> {
+    if !cfg!(any(target_os = "android", target_os = "ios")) {
+        return Some(omsi_cfg::user_data::data_dir().join("devtools").join(format!("{}.watch", bus.file_name()?.to_string_lossy())));
+    }
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
     let name = bus.file_name()?.to_string_lossy().to_string();
     Some(PathBuf::from(home).join(".openomsi").join("devtools").join(format!("{name}.watch")))

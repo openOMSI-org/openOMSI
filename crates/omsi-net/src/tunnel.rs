@@ -40,6 +40,9 @@ pub fn find_cloudflared() -> Option<PathBuf> {
 
 /// The game's own folder for the tools it fetches (`~/.openomsi/bin`).
 fn own_dir() -> Option<PathBuf> {
+    if !cfg!(any(target_os = "android", target_os = "ios")) {
+        return Some(omsi_cfg::user_data::data_dir().join("bin"));
+    }
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
     Some(PathBuf::from(home).join(".openomsi").join("bin"))
 }
@@ -162,6 +165,9 @@ impl Drop for Tunnel {
 
 /// Where the running tunnel's process id is kept (`~/.openomsi/cloudflared.pid`).
 fn pid_file() -> Option<std::path::PathBuf> {
+    if !cfg!(any(target_os = "android", target_os = "ios")) {
+        return Some(omsi_cfg::user_data::data_dir().join("cloudflared.pid"));
+    }
     std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(|h| std::path::PathBuf::from(h).join(".openomsi").join("cloudflared.pid"))
 }
 

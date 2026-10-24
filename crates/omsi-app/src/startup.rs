@@ -166,6 +166,9 @@ pub(crate) use omsi_cfg::content_dir;
 /// "Could not save: access is denied (os error 5)" (#1673). The launcher lists the saves
 /// there as well.
 pub(crate) fn save_fallback_dir() -> Option<PathBuf> {
+    if !cfg!(any(target_os = "android", target_os = "ios")) {
+        return Some(omsi_cfg::user_data::data_dir().join("content"));
+    }
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
     Some(PathBuf::from(home).join(".openomsi").join("content"))
 }
@@ -188,8 +191,13 @@ pub(crate) fn find_root() -> Option<PathBuf> {
         }
     }
     // the folder the launcher was told about (Setup)
-    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
-        if let Ok(t) = std::fs::read_to_string(PathBuf::from(home).join(".openomsi/launcher.json")) {
+    let launcher_config = if cfg!(any(target_os = "android", target_os = "ios")) {
+        std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(|h| PathBuf::from(h).join(".openomsi/launcher.json"))
+    } else {
+        Some(omsi_cfg::user_data::data_dir().join("launcher.json"))
+    };
+    if let Some(path) = launcher_config {
+        if let Ok(t) = std::fs::read_to_string(path) {
             if let Some(r) = serde_json::from_str::<serde_json::Value>(&t).ok().and_then(|v| v.get("root").and_then(|r| r.as_str()).map(PathBuf::from)) {
                 first.push(r);
             }

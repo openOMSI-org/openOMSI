@@ -522,6 +522,9 @@ impl Settings {
 
     /// `~/.openomsi/settings.cfg` (or `%USERPROFILE%` on Windows).
     pub fn path() -> Option<PathBuf> {
+        if !cfg!(any(target_os = "android", target_os = "ios")) {
+            return Some(omsi_cfg::user_data::data_dir().join("settings.cfg"));
+        }
         let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
         Some(PathBuf::from(home).join(".openomsi").join("settings.cfg"))
     }

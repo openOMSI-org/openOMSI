@@ -119,6 +119,45 @@ pub fn trf(text: &str, vars: &[(&str, &dyn Display)]) -> String {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn data_folder_messages_cover_all_languages_and_preserve_placeholders() {
+        use std::collections::{BTreeMap, BTreeSet};
+        let languages: BTreeSet<_> = ["de", "fr", "ru", "uk", "be", "kk", "pl", "cs", "hu", "es", "pt", "pt-pt", "it", "nl", "tr", "ja", "zh-tw", "ko", "th", "vi", "id", "ms", "tl", "zh", "hi", "ca", "sv", "sr", "ka"].into_iter().collect();
+        let section = super::TABLES.split_once("# Data folder setup interface").expect("folder messages section").1
+            .split_once("\"Ambience volume\":").expect("end of folder messages section").0;
+        let mut messages: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
+        let mut current = None;
+        for line in section.lines() {
+            if line.is_empty() || line.starts_with('#') { continue; }
+            if let Some(key) = line.strip_suffix(':').and_then(super::unquote) {
+                assert!(messages.insert(key.clone(), BTreeMap::new()).is_none(), "duplicate key: {key}");
+                current = Some(key);
+            } else if let Some((lang, value)) = line.strip_prefix("  ").and_then(|s| s.split_once(": ")) {
+                let key = current.as_ref().expect("translation without a key");
+                let value: String = serde_json::from_str(value).expect("translation must be a valid quoted string");
+                assert!(!value.trim().is_empty(), "empty {lang} translation for {key}");
+                assert!(messages.get_mut(key).unwrap().insert(lang.to_string(), value).is_none(), "duplicate {lang} translation for {key}");
+            } else { panic!("invalid translation entry: {line}"); }
+        }
+        for key in [".openomsi folder", "Existing .openomsi folder found", "Change the .openomsi folder", "Move current and overwrite", "Use existing folder", "Start fresh", "Move current folder", "config_path is not a directory", "Choose the game program before changing the .openomsi folder"] {
+            assert!(messages.contains_key(key), "missing folder message: {key}");
+        }
+        fn placeholders(text: &str) -> BTreeSet<&str> {
+            text.split('{').skip(1).filter_map(|s| s.split_once('}').map(|(key, _)| key)).collect()
+        }
+        let tables: BTreeMap<_, _> = languages.iter().map(|lang| (*lang, super::table(super::TABLES, lang))).collect();
+        for (key, translations) in &messages {
+            assert_eq!(translations.keys().map(String::as_str).collect::<BTreeSet<_>>(), languages, "incomplete language coverage for {key}");
+            let occurrences = super::TABLES.lines().filter(|line| line.strip_suffix(':').and_then(super::unquote).as_ref() == Some(key)).count();
+            assert_eq!(occurrences, 1, "duplicate catalog key: {key}");
+            for (lang, value) in translations {
+                assert_eq!(placeholders(value), placeholders(key), "placeholder mismatch for {lang}: {key}");
+                if key.contains(".openomsi") { assert!(value.contains(".openomsi"), "lost directory name in {lang}: {key}"); }
+                assert_eq!(tables[lang.as_str()].get(key), Some(value), "runtime parser mismatch for {lang}: {key}");
+            }
+        }
+    }
+
+    #[test]
     fn a_language_is_read_from_the_tables() {
         let yml = "_version: 2\n\n\"Mon\":\n  fr: \"lun.\"\n  de: \"Mo\"\n\"a \\\"b\\\"\":\n  fr: \"c\\n\"\n";
         let fr = super::table(yml, "fr");

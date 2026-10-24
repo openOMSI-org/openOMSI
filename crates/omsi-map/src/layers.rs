@@ -364,6 +364,8 @@ impl Reader<'_> {
 pub fn cache_path(map_name: &str) -> Option<std::path::PathBuf> {
     let base = if cfg!(target_os = "ios") {
         std::path::PathBuf::from(std::env::var_os("OPENOMSI_CONTAINER")?).join("Library").join("Caches")
+    } else if !cfg!(target_os = "android") {
+        omsi_cfg::user_data::data_dir().join("cache")
     } else {
         std::path::PathBuf::from(std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?).join(".openomsi").join("cache")
     };

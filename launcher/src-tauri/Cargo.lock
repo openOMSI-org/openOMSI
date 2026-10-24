@@ -3192,6 +3192,9 @@ name = "openomsi-launcher-app"
 version = "0.2.33"
 dependencies = [
  "anyhow",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
  "omsi-cfg",
  "omsi-launcher-api",
  "omsi-launcher-core",

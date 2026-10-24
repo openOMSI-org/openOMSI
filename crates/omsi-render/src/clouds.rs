@@ -235,6 +235,9 @@ fn encode_cache(noise: &Noise) -> Vec<u8> {
 }
 
 fn cache_path() -> Option<std::path::PathBuf> {
+    if !cfg!(any(target_os = "android", target_os = "ios")) {
+        return Some(omsi_cfg::user_data::data_dir().join("cache/cloud-noise-v1.bin"));
+    }
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
     let home = std::path::PathBuf::from(home);
     // An unavailable home or cache is harmless; do not write into the game/mod folders.

@@ -42,6 +42,9 @@ pub(crate) fn optional_pipeline<T>(device: &wgpu::Device, what: &str, make: impl
 /// (`~/.openomsi/gpu-fallback.cfg`, lines `adapter|msaa|basic@<version>`: the game's version
 /// that found the full set failing, see `build_with_fallbacks`; older lines have no version).
 pub(crate) fn fallback_path() -> Option<std::path::PathBuf> {
+    if !cfg!(any(target_os = "android", target_os = "ios")) {
+        return Some(omsi_cfg::user_data::data_dir().join("gpu-fallback.cfg"));
+    }
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
     Some(std::path::PathBuf::from(home).join(".openomsi").join("gpu-fallback.cfg"))
 }

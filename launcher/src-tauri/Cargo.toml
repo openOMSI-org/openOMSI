@@ -27,6 +27,11 @@ omsi-launcher-api = { path = "../../crates/omsi-launcher-api" }
 omsi-cfg = { path = "../../crates/omsi-cfg" }
 omsi-platform = { path = "../../crates/omsi-platform" }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6.4"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSApplication", "NSOpenPanel", "NSSavePanel", "NSPanel", "NSResponder", "NSWindow"] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSArray", "NSData", "NSError", "NSString", "NSURL", "NSUserDefaults"] }
+
 [profile.release]
 opt-level = "s"
 lto = "thin"

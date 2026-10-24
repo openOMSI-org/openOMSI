@@ -4,7 +4,7 @@ import { html, useState } from '../../vendor/preact-htm.js';
 import { S, useStore, set, toast } from '../store.js';
 import { t } from '../i18n.js';
 import { call, onPhone } from '../api.js';
-import { Button, Card, Field, Input, Notice, PageHead } from '../ui.js';
+import { Button, Card, Dialog, Field, Input, Notice, PageHead } from '../ui.js';
 import { loadContent } from '../data.js';
 
 export function SetupPage() {
@@ -12,18 +12,47 @@ export function SetupPage() {
   const b = s.boot;
   const [root, setRoot] = useState(s.config?.root || b.root || '');
   const [game, setGame] = useState(s.config?.game || '');
+  const [dataPath, setDataPath] = useState(b.data_dir || '');
+  const [relocating, setRelocating] = useState(false);
   const [busy, setBusy] = useState(false);
-  const save = async () => {
+  const save = async (moveData = null, existingAction = null) => {
+    const changed = !onPhone && dataPath.trim() !== b.data_dir;
     setBusy(true);
     try {
-      const r = await call('config_save', { root, game });
+      let path = relocating?.path || dataPath.trim();
+      if (changed && !relocating && b.platform === 'macos') {
+        path = await call('pick_data_folder', { path });
+        if (!path) { setBusy(false); return; }
+        setDataPath(path);
+      }
+      if (changed && moveData === null && existingAction === null) {
+        const destination = await call('data_folder_check', { path });
+        setDataPath(destination.path);
+        if (!destination.same) {
+          setRelocating(destination);
+          setBusy(false);
+          return;
+        }
+        path = b.data_dir;
+      }
+      setRelocating(false);
+      const r = await call('config_save', { root, game, ...(!onPhone ? { data_path: path, move_data: moveData, existing_action: existingAction } : {}) });
       if (!r.saved) {
+        if (r.existing_folder) {
+          setRelocating({ path: r.existing_folder, exists: true });
+          setBusy(false);
+          return;
+        }
         const what = r.missing.slice(0, 6).join(', ') + (r.missing.length > 6 ? ` (+${r.missing.length - 6})` : '');
         toast(t('Not saved: {folder} is not a complete OMSI 2 installation, it lacks {what}', { folder: r.chosen, what }), 'error');
         setBusy(false);
         return;
       }
-      set({ config: r.config, boot: { ...S.boot, root: r.root, root_error: r.root_error, game: r.game } });
+      set({ config: r.config, boot: { ...S.boot, root: r.root, root_error: r.root_error, game: r.game, data_dir: r.data_dir, content_dir: r.content_dir } });
+      setDataPath(r.data_dir || path);
+      if (r.warning) toast(r.warning, 'error', 12000);
+      // Reset cached pages and pending writes before using a fresh settings directory.
+      if (changed) { window.location.reload(); return; }
       if (r.used_other) toast(t('Saved, but the OMSI 2 folder used is {folder}', { folder: r.used_other }), 'error');
       else if (r.root) toast(t('OMSI 2 was found.'), 'ok');
       else toast(r.root_error || t('This is not a complete OMSI 2 installation.'), 'error');
@@ -36,6 +65,18 @@ export function SetupPage() {
   const browse = async (cmd, title, to) => {
     const p = await call(cmd, { title: t(title) }).catch(() => null);
     if (p) to(p);
+  };
+  const browseData = async () => {
+    setBusy(true);
+    try {
+      const path = await call('pick_data_folder', { path: null });
+      if (path) {
+        const destination = await call('data_folder_check', { path });
+        setDataPath(destination.path);
+        if (destination.exists && !destination.same) setRelocating(destination);
+      }
+    } catch (e) { toast(t(e.message), 'error'); }
+    setBusy(false);
   };
   return html`
     <${PageHead} title="Setup" text="openOMSI plays the content of an OMSI 2 installation: the original game must be installed (Steam or another copy)." />
@@ -52,8 +93,12 @@ export function SetupPage() {
               </${Field}>
               <${Field} label="Game program" help="The openomsi program the duties start. Left empty, the one beside the launcher.">
                 <div class="row"><div class="grow"><${Input} value=${game} placeholder=${b.game || 'Automatic'} onInput=${setGame} /></div><${Button} icon="file" label="Browse…" onClick=${() => browse('pick_file', 'Choose the game program', setGame)} /></div>
+              </${Field}>
+              <${Field} label=".openomsi folder" help="Settings, profiles, logs and user data. Choose a parent folder or an existing .openomsi folder; the folder name must be .openomsi.">
+                <div class="row"><div class="grow"><${Input} value=${dataPath} onInput=${setDataPath} /></div><${Button} icon="folder" label="Browse…" disabled=${busy} onClick=${browseData} /></div>
+                ${b.platform === 'macos' && html`<p class="muted">${t('macOS will ask you to grant access to the selected folder when saving.')}</p>`}
               </${Field}>`}
-          <div><${Button} kind="primary" icon="check" label="Save" disabled=${busy} onClick=${save} /></div>
+          <div><${Button} kind="primary" icon="check" label="Save" disabled=${busy} onClick=${() => save()} /></div>
         </div>
       </${Card}>
       <${Card} title="Where things are">
@@ -69,5 +114,20 @@ export function SetupPage() {
         </div>
       </${Card}>
     </div>
+    ${relocating && html`<${Dialog} title=${relocating.exists ? 'Existing .openomsi folder found' : 'Change the .openomsi folder'} onClose=${() => setRelocating(false)} footer=${html`
+      <${Button} label="Cancel" onClick=${() => setRelocating(false)} />
+      ${relocating.exists ? html`
+        <${Button} label="Move current and overwrite" disabled=${busy} onClick=${() => save(true, 'overwrite')} />
+        <${Button} kind="primary" label="Use existing folder" disabled=${busy} onClick=${() => save(null, 'use')} />
+      ` : html`
+        <${Button} label="Start fresh" disabled=${busy} onClick=${() => save(false)} />
+        <${Button} kind="primary" label="Move current folder" disabled=${busy} onClick=${() => save(true)} />
+      `}
+    `}>
+      <p>${t(relocating.exists
+        ? 'An existing .openomsi folder was found. Use it to load its settings and profiles, leaving the current folder unchanged. Moving the current folder here will overwrite the destination and replace all of its existing data.'
+        : 'Move the current .openomsi folder to the new location, or create a fresh folder there? Starting fresh keeps the old folder unchanged.')}</p>
+      <p class="selectable">${relocating.path}</p>
+    </${Dialog}>`}
   `;
 }

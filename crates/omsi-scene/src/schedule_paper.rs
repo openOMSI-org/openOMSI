@@ -113,6 +113,11 @@ fn input_key(duty: &PlayerDuty) -> u64 {
 }
 
 fn cache_dir() -> Result<PathBuf> {
+    if !cfg!(any(target_os = "android", target_os = "ios")) {
+        let dir = omsi_cfg::user_data::data_dir().join("cache/schedules");
+        omsi_texture::trust_generated_dir(&dir);
+        return Ok(dir);
+    }
     let home = std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from)

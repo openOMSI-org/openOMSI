@@ -21,7 +21,20 @@ async fn work<F: FnOnce() -> Answer + Send + 'static>(f: F) -> Answer {
 }
 
 pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
-    tauri::generate_handler![call, call_bytes, pick_folder, pick_file, pick_mod, pick_hofs, open_path, open_url, update_relaunch, selftest_done, fit_zoom]
+    tauri::generate_handler![
+        call,
+        call_bytes,
+        pick_folder,
+        pick_data_folder,
+        pick_file,
+        pick_mod,
+        pick_hofs,
+        open_path,
+        open_url,
+        update_relaunch,
+        selftest_done,
+        fit_zoom
+    ]
 }
 
 /// This window, for the commands of `omsi-launcher-api`.
@@ -98,6 +111,12 @@ pub fn start_watch(app: AppHandle) {
 #[tauri::command]
 fn pick_folder(title: String) -> Option<String> {
     core::pick_folder(&title).map(|p| p.to_string_lossy().to_string())
+}
+
+/// Browse for .openomsi, or explicitly authorize a typed target on macOS, before migration.
+#[tauri::command]
+fn pick_data_folder(path: Option<String>) -> Result<Option<String>, String> {
+    crate::data_folder::pick(path)
 }
 
 #[tauri::command]
