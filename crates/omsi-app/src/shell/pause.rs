@@ -189,6 +189,11 @@ fn list_page(sh: &mut Shell, v: &PauseView, list: &ListView, page: Rect) {
     let dd_rect = list.dropdown.as_ref().and_then(|d| sh.dd_anchor.map(|a| dropdown_rect(a, d.items.len(), sh.ui.size)));
     let mouse = sh.ui.input.mouse;
     let saved = (sh.ui.input.pressed, sh.ui.input.released);
+    // Reserve the wheel for the popup before drawing controls underneath it.
+    let wheel = sh.ui.input.wheel;
+    if list.dropdown.is_some() {
+        sh.ui.input.wheel = Vec2::ZERO;
+    }
     if let Some(r) = dd_rect {
         if r.contains(mouse) || sh.ui.input.pressed {
             sh.ui.input.pressed = false;
@@ -202,6 +207,9 @@ fn list_page(sh: &mut Shell, v: &PauseView, list: &ListView, page: Rect) {
         _ => plain_list(sh, v, list, body),
     }
     (sh.ui.input.pressed, sh.ui.input.released) = saved;
+    if list.dropdown.is_some() {
+        sh.ui.input.wheel = wheel;
+    }
     sh.dd_anchor = anchor;
     if let (Some(d), Some(a)) = (list.dropdown.as_ref(), anchor) {
         dropdown(sh, d, a, v.kbd);
@@ -298,7 +306,8 @@ fn settings_rows(sh: &mut Shell, v: &PauseView, list: &ListView, body: Rect, anc
                 if id == crate::game_lists::HEADING {
                     // (a group's title as the launcher's card title)
                     let t = parse_row(label).name;
-                    ui.text_in(t, Rect::new(inner.x, y + 4.0, inner.w, 28.0), 15.0, Weight::Bold, INK, Align::Left);
+                    ui.p().rounded(Rect::new(inner.x, y + 7.0, 3.0, 20.0), 1.5, ACCENT);
+                    ui.text_in(t, Rect::new(inner.x + 12.0, y + 4.0, inner.w - 12.0, 28.0), 15.0, Weight::Bold, INK, Align::Left);
                     y += rh;
                     continue;
                 }
@@ -386,7 +395,7 @@ fn settings_row(ui: &mut Ui, k: usize, label: &str, r: Rect, kbd: bool, dd_open:
         "v" => {
             let mut f = row.frac.unwrap_or(0.0).clamp(0.0, 1.0);
             let value = row.value.to_string();
-            let changed = ui.slider(&format!("pause-sl-{k}-{}", row.name), ctl, &mut f, 0.0, 1.0, 0.0, "", &|_| value.clone());
+            let changed = ui.slider_without_wheel(&format!("pause-sl-{k}-{}", row.name), ctl, &mut f, 0.0, 1.0, 0.0, "", &|_| value.clone());
             changed.then_some(Action::Control(k, f))
         }
         // a stepper: the value between the two arrows of a field
