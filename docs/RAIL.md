@@ -100,6 +100,19 @@ find could keep a vehicle from ever moving). The game knows which variable moves
 needs its stop brake on, as the door did). `OMSI_DEBUG_RAIL=1` logs the pantograph's value
 with the drive twice a second.
 
+With the setting "Realistic road physics" on, a raised pantograph rises until its head meets the contact wire and stops there: the head's
+travel is measured on the model, the animation is shown the travel at which the head touches, and
+current is brought only while the head lies on a live wire (a lowered one, or a wire out of reach,
+gives none). The wire's height is the class's standard one kept within the pantograph's reach, so
+that a map without a drawn wire never strands a tram. Where the wire is uneven at speed (rougher in
+wet and frost, harder at forks) the head leaves it; a break under current strikes an arc.
+`OMSI_DEBUG_RAIL=1` logs the head, the wire, the contact and the current.
+
+## Body on its springs
+
+With the same setting, `omsi_sim::rail::body`: heave, pitch and roll on the secondary suspension, pushed by the bend's
+lateral acceleration, the traction and the brake, and the rails' unevenness at each bogie.
+
 ## Movement
 
 The track says where a vehicle is; the rail dynamics (`omsi_sim::rail::dynamics`) say how fast

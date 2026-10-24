@@ -555,6 +555,12 @@ impl VehicleType {
         if def.trolley.is_empty() {
             def.trolley = legacy_trolley(&model, &meshes, &mesh_boxes, &program, bus_file, keep_meshes);
             take_model_poles(&mut model, &meshes, &mesh_boxes, &def.trolley);
+            // the drive a trolleybus's traction motors would have, kept for when the bus script's
+            // gears and interlocks have an adapter: `TrolleyGear::for_type` leaves it unused
+            if !def.trolley.poles.is_empty() && def.trolley.drive.is_none() && def.trolley.typical_drive.is_none() {
+                let chopper = def.trolley.legacy.as_ref().is_some_and(|l| l.chopper);
+                def.trolley.typical_drive = Some(omsi_trolley::DriveKind::typical(def.mass_kg(), chopper));
+            }
             // the raised pole's own mesh follows the pole: two animations about its hinge
             if let Some(l) = def.trolley.legacy.as_ref() {
                 for (k, di) in l.mesh_defs.iter().enumerate() {

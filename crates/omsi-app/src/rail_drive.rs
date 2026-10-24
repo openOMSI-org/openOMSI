@@ -25,6 +25,9 @@ pub(crate) struct RailDrive {
     trail: std::collections::VecDeque<(f64, DVec3)>,
     /// Distance travelled along the track (forward positive).
     u: f64,
+    /// The body on its springs (see `omsi_sim::rail::Body`) and the heading of the last frame.
+    body: omsi_sim::rail::Body,
+    last_heading: Option<f64>,
 }
 
 /// How much trail is kept behind the vehicle (m): a long train's length.
@@ -69,7 +72,7 @@ pub(crate) fn attach(p: &mut Player, net: &Network, reach: f64) -> Option<RailDr
             pos.y
         );
     }
-    let mut r = RailDrive { lane, s, along: diff.abs() <= 90.0, trail: Default::default(), u: 0.0 };
+    let mut r = RailDrive { lane, s, along: diff.abs() <= 90.0, trail: Default::default(), u: 0.0, body: omsi_sim::rail::Body::new(lane as u64 + 7), last_heading: None };
     // the track behind it, for its coupled parts: walked backwards from where it stands
     let mut back = r.clone();
     let mut points = Vec::new();
@@ -162,7 +165,55 @@ fn angle_diff(a: f64, b: f64) -> f64 {
     (a - b + 540.0).rem_euclid(360.0) - 180.0
 }
 
+/// The height of the contact wire over the rails (m): the standard one of the vehicle's class,
+/// kept within what its pantograph reaches (a wire it cannot touch would strand it on a map
+/// that draws none).
+fn wire_height(class: Option<omsi_sim::rail::RailClass>, shape: &omsi_trolley::PantoShape) -> f32 {
+    use omsi_sim::rail::RailClass;
+    let standard = match class {
+        Some(RailClass::Train) => 5.6,
+        _ => 5.7,
+    };
+    let (lo, hi) = (shape.height_at(0.15), shape.height_at(0.92));
+    if (lo..=hi).contains(&standard) { standard } else { shape.height_at(0.6) }
+}
+
+/// How rough the wire is for the head: more in the wet, and in frost with ice on it.
+fn wire_roughness(wet: f32, temperature: f32) -> f32 {
+    let cold = temperature < 0.0 && wet > 0.05;
+    1.3 + 0.5 * wet.clamp(0.0, 2.0) + if cold { 1.5 } else { 0.0 }
+}
+
 impl RailDrive {
+    /// A copy to look ahead along the track with: the position only, not the trail kept for the
+    /// coupled parts (about 100 KB).
+    fn probe(&self) -> RailDrive {
+        RailDrive { lane: self.lane, s: self.s, along: self.along, trail: Default::default(), u: self.u, body: omsi_sim::rail::Body::default(), last_heading: None }
+    }
+
+    /// The contact wire above the track at the pantograph: at the standard height of the
+    /// vehicle's class, kept within what its pantograph reaches (a wire it cannot touch would
+    /// strand it on a map that draws none), staggered across the track as a real wire is so
+    /// that the strip wears evenly, hard where the track forks or crosses, rougher in the wet.
+    pub(crate) fn catenary(&self, net: &Network, v: &omsi_sim::VehicleInstance) -> Option<omsi_sim::vehicle::Catenary> {
+        let g = v.pantograph()?;
+        let shape = g.shape()?;
+        use omsi_sim::rail::RailClass;
+        let height = wire_height(RailClass::of(&v.ty.def), shape);
+        // the stagger: a zigzag of 20 cm either side, 60 m to the swing
+        let lateral = 0.2 * (self.u * std::f64::consts::TAU / 60.0).sin() as f32;
+        // the pantograph's head is ahead of or behind the origin: look where it is on the lane
+        let mut probe = self.probe();
+        probe.step(net, None, shape.head[1], 0);
+        let lane = &net.lanes[probe.lane];
+        let to_end = (lane.length() - probe.s).min(probe.s);
+        let junction = (probe.s < lane.length() * 0.5 && net.prev.get(probe.lane).is_some_and(|p| p.len() > 1))
+            || (probe.s >= lane.length() * 0.5 && lane.next.len() > 1);
+        let hard = if junction { (1.0 - to_end / 4.0).clamp(0.0, 1.0) } else { 0.0 };
+        let roughness = wire_roughness(v.host.street_cond, v.host.temperature);
+        Some(omsi_sim::vehicle::Catenary { height, lateral, live: true, hard, roughness })
+    }
+
     /// Move `ds` metres (forward along the vehicle, negative backwards) and put the
     /// vehicle there. `blinker`: 1 left, 2 right (the branch at the next fork).
     pub(crate) fn advance(&mut self, p: &mut Player, net: &Network, world: &World, scenery: &mut omsi_sim::scenery::SceneryState, dt: f32, ds: f32, blinker: u8) {
@@ -267,6 +318,24 @@ impl RailDrive {
         v.heading = heading;
         v.pitch = pitch;
         v.bank = 0.0;
+        // the body rides on its springs: it leans out of bends, dips under braking and feels the
+        // rails' unevenness, instead of being nailed to the line between the bogies
+        if let (Some(class), true) = (omsi_sim::rail::RailClass::of(&v.ty.def), dt > 0.0 && omsi_sim::rail::realistic()) {
+            let span = bogie_dist.map_or(8.0, |l| l * 2.0);
+            let yaw = self.last_heading.map_or(0.0, |h| angle_diff(heading, h).to_radians() / dt as f64) as f32;
+            let a_long = v.rail_outcome().map_or(0.0, |o| o.accel);
+            let params = omsi_sim::rail::BodyParams::of(class, span);
+            let out = self.body.step(&params, dt, v.physics.speed, a_long, yaw.clamp(-1.0, 1.0));
+            v.pitch += out.pitch_deg;
+            v.bank = out.roll_deg;
+            v.position.z += out.heave as f64;
+            v.set_engine_var("rail_body_roll", out.roll_deg);
+            v.set_engine_var("rail_body_pitch", out.pitch_deg);
+            v.set_engine_var("rail_body_heave", out.heave);
+            v.set_engine_var("rail_accel_side", out.a_side);
+            v.set_engine_var("rail_accel_vert", out.a_vert);
+        }
+        self.last_heading = Some(heading);
         // the track steers: the wheel stays straight
         let mut c = v.physics.controls;
         c.steering = 0.0;
@@ -440,6 +509,10 @@ pub(crate) fn frame(p: &mut Player, net: Option<&Network>, world: &World, scener
     if let Some(r) = p.rail.as_ref() {
         let env = r.env(net);
         p.vehicle.set_rail_env(Some(env));
+        if omsi_sim::rail::realistic() {
+            let wire = r.catenary(net, &p.vehicle);
+            p.vehicle.set_catenary(wire);
+        }
     }
     let ds = p.vehicle.physics.speed * dt;
     let blinker = blinker_of(&p.vehicle);
@@ -452,6 +525,33 @@ pub(crate) fn frame(p: &mut Player, net: Option<&Network>, world: &World, scener
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn shape(top: f32) -> omsi_trolley::PantoShape {
+        omsi_trolley::PantoShape { heights: (0..=32).map(|i| 3.3 + (top - 3.3) * i as f32 / 32.0).collect(), head: [0.0, 0.0], half_width: 0.5 }
+    }
+
+    #[test]
+    fn the_wire_is_the_standard_height_where_the_pantograph_reaches_it() {
+        use omsi_sim::rail::RailClass;
+        assert_eq!(wire_height(Some(RailClass::Tram), &shape(6.5)), 5.7);
+        assert_eq!(wire_height(Some(RailClass::Train), &shape(6.5)), 5.6);
+    }
+
+    #[test]
+    fn a_wire_beyond_the_reach_is_brought_within_it() {
+        use omsi_sim::rail::RailClass;
+        let s = shape(4.6);
+        let h = wire_height(Some(RailClass::Tram), &s);
+        assert!(h <= s.top() && h >= s.bottom(), "{h}");
+    }
+
+    #[test]
+    fn the_wire_is_rougher_in_the_wet_and_in_frost() {
+        let dry = wire_roughness(0.0, 15.0);
+        assert!(wire_roughness(1.0, 15.0) > dry);
+        assert!(wire_roughness(1.0, -5.0) > wire_roughness(1.0, 15.0));
+        assert_eq!(wire_roughness(0.0, -5.0), dry, "dry frost is not ice");
+    }
 
     #[test]
     fn point_at_interpolates_properly() {
@@ -520,6 +620,8 @@ mod tests {
             along: true,
             trail: Default::default(),
             u: 0.0,
+            body: Default::default(),
+            last_heading: None,
         };
         let mut f_north = r_north.clone();
         f_north.step(&net, None, l, 0);
@@ -538,6 +640,8 @@ mod tests {
             along: false,
             trail: Default::default(),
             u: 0.0,
+            body: Default::default(),
+            last_heading: None,
         };
         let mut f_south = r_south.clone();
         f_south.step(&net, None, l, 0);

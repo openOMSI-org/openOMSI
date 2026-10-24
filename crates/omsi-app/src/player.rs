@@ -272,6 +272,8 @@ pub(crate) struct Player {
     pub(crate) blinker_cancel: bool,
     /// The overhead wire of the map and the trolleybus's poles drawn (see `omsi_scene::trolley_view`).
     pub(crate) trolley_view: Option<Box<omsi_scene::trolley_view::TrolleyView>>,
+    /// The sparks of a rail vehicle's pantograph (see `omsi_scene::arc_fx`).
+    pub(crate) panto_fx: omsi_scene::arc_fx::ArcFx,
     pub(crate) trolley_sound: crate::trolley_sound::TrolleySound,
     /// The stop announcements the game presses the IBIS on for (see `auto_announce`).
     pub(crate) announce: crate::auto_announce::AutoAnnounce,

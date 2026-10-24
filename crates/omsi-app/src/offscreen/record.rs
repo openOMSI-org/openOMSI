@@ -117,6 +117,7 @@ impl Offscreen<'_> {
             if let Some(tv) = p.trolley_view.as_ref() {
                 tv.push_effects(&mut self.scene, &p.vehicle);
             }
+            p.panto_fx.push_effects(&mut self.scene);
         }
         self.spray.sprites(cam.position, &mut self.scene.smoke);
         let lighting = self.lighting_now(&cam);

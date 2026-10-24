@@ -64,6 +64,7 @@ impl VehicleInstance {
 
     pub(super) fn step_physics(&mut self, dt: f32) {
         self.step_trolley(dt);
+        self.step_pantograph(dt);
         let c = self.physics.controls;
         self.put(self.v_throttle, c.throttle);
         self.put(self.v_brake, c.brake);
