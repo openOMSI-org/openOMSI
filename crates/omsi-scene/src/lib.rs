@@ -46,6 +46,7 @@ pub mod window_wipers;
 
 mod staging;
 mod batching;
+mod spline_layers;
 mod terrain_paint;
 mod sound_probe;
 mod world;

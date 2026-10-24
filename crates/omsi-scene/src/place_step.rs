@@ -420,7 +420,7 @@ impl World {
         ground_mat: MaterialId,
     ) {
         let images: &HashMap<PathBuf, Arc<TextureData>> = &p.images;
-        let (mesh, st, casts_shadow, sort_origin) = &p.splines[pl.next];
+        let (mesh, st, casts_shadow, sort_origin, level) = &p.splines[pl.next];
         pl.next += 1;
         let skey = Arc::as_ptr(st) as usize;
         if !gpu.splines.contains_key(&skey) {
@@ -522,6 +522,7 @@ impl World {
                     inst.render_phase = spline_render_phase(&st.def);
                     inst.blend_sort_origin = Some(*sort_origin);
                 }
+                renderer.set_spline_layer(scene, terrain_instance, level.level);
             }
         }
         let rest = (!terrain.is_empty()).then(|| terrain_rest(mesh, &terrain));
@@ -543,7 +544,14 @@ impl World {
             if let Some(inst) = scene.instances.get_mut(si) {
                 inst.render_phase = phase;
                 inst.blend_sort_origin = Some(*sort_origin);
+                // laid on a `[surface]` object: pulled towards the eye as the object is, so
+                // that their heights decide (the paint keeps its own, larger pull)
+                if level.on_object && phase == RenderPhase::Spline {
+                    inst.decal = true;
+                }
             }
+            // a spline laid on an earlier one at its height is drawn over it (`spline_layers`)
+            renderer.set_spline_layer(scene, si, level.level);
             // Preserve the deck's shadow geometry after splitting its slots.
             if *casts_shadow { renderer.set_casts_shadow(scene, si, true); }
         }
