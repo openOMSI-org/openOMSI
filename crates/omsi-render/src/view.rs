@@ -111,6 +111,16 @@ pub struct Lighting {
     /// The roads are kept clear of the snow (the weather's "snow on road" off): no cover is
     /// laid on road surfaces.
     pub roads_clear: bool,
+    /// Snow that builds up on the carriageways (0..1, see road_snow.wgsl): replaces the
+    /// on/off `roads_clear` while it is set.
+    pub road_snow: Option<f32>,
+    /// The snow fallen since the start, in thousandths of a full road cover: a tyre track
+    /// fills as more falls on it (see `set_snow_track_rows`).
+    pub snow_fallen: f64,
+    /// How deep the ruts of the lanes' wheel tracks show in the roads' snow (0..1).
+    pub snow_ruts: f32,
+    /// The snow track field holds the area around the camera (`set_snow_track_rows`).
+    pub snow_tracks: bool,
     /// Enhanced graphics: the physically based high-range renderer (enhanced.wgsl) with its
     /// computed sky, automatic exposure, glow and tone mapping (post.wgsl).
     pub enhanced: bool,
@@ -267,6 +277,10 @@ impl Default for Lighting {
             wetness: 0.0,
             snow: 0.0,
             roads_clear: false,
+            road_snow: None,
+            snow_fallen: 0.0,
+            snow_ruts: 0.0,
+            snow_tracks: false,
             enhanced: false,
             classic: false,
             inside: None,
