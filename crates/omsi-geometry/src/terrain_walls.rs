@@ -106,7 +106,7 @@ fn clip(edge: Edge, side: f64) -> Option<(f64, f64)> {
 
 /// Exact height on the drawn triangles, including the last row/column. Terrain::sample
 /// keeps queries just inside the last cell; walls on a tile seam must share its vertices.
-fn height(terrain: &Terrain, p: DVec2, side: f64) -> f64 {
+pub(super) fn height(terrain: &Terrain, p: DVec2, side: f64) -> f64 {
     let n = terrain.cells;
     let f = (p / side * n as f64).clamp(DVec2::ZERO, DVec2::splat(n as f64));
     let (i, j) = (

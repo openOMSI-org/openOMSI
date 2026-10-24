@@ -96,8 +96,9 @@ impl World {
         order.sort_by_key(|q| (q.tx, q.ty));
         // (Omsi.exe does not move the ground at all when it loads a map: the editor's "align
         // the terrain to the spline" wrote the heights into the tile's `.terrain`, and the
-        // flag left in the map only makes the spline cut its outline out of the ground -
-        // see `hole_rims`. Pulled onto the road again here, every vertex under it took
+        // flag left in the map describes the spline's terrain profile. The render mesh
+        // fits its solid backing separately in `cut_tile`. Pulled onto the road again
+        // here, every coarse vertex under it took
         // the height of whatever lay over it, and between those five-metre points the
         // ground's triangles cut through the camber and past the kerbs: a piece of road
         // gone under the grass, while beside it the ground stood lifted over the verge.
@@ -465,7 +466,8 @@ impl World {
         Some(Prepared {
             tx,
             ty,
-            terrain: Some(build_terrain_mesh(terrain)),
+            // (`cut_tile` makes the ground: fitted to the aligned splines, or the saved mesh)
+            terrain: None,
             hole_walls: MeshData::default(),
             paint_masks: self.load_ground_paint(&st.path),
             paint: Vec::new(),

@@ -11,6 +11,15 @@ mod ground_sound;
 pub use ground_sound::{GroundSound, LineKind, SoundLine, SoundSpot};
 mod terrain_walls;
 pub use terrain_walls::{terrain_hole_walls, terrain_hole_walls_with_roads};
+mod terrain_fit;
+mod terrain_fit_surface;
+mod terrain_constraints;
+pub use terrain_fit::{
+    profile_in_cutting,
+    TerrainFitError, SplineTerrainProfile, build_fitted_terrain_mesh, build_fitted_terrain_mesh_with_neighbors,
+    try_build_fitted_terrain_mesh_with_roads,
+    build_fitted_terrain_mesh_with_roads,
+};
 
 /// A renderable triangle mesh with one texture per material slot.
 #[derive(Debug, Clone, Default)]
@@ -612,6 +621,68 @@ pub fn spline_hole_rims(def: &Spline, curve: &SplineCurve, mirror: bool, mode: u
             ring
         })
         .collect()
+}
+
+/// The solid ground backing of an aligned spline. Unlike a projected hole, this
+/// retains the trough's floor and its end extensions, even where no road is drawn.
+/// `rims` are the spline's `spline_hole_rims`, one per profile, in world space.
+pub fn build_spline_terrain_profile(
+    def: &Spline,
+    curve: &SplineCurve,
+    mirror: bool,
+    mode: u8,
+    rims: &[Vec<DVec3>],
+    origin: DVec3,
+) -> SplineTerrainProfile {
+    let mut mesh = MeshData::default();
+    if mode == 0 || curve.length <= 0.0 {
+        return SplineTerrainProfile::default();
+    }
+    let mut n = spline_station_count(def, curve);
+    let _ = patchwork(def, curve, &mut n);
+    let n = n.max(1);
+    let curve = curve.with_sli(def);
+    for (profile, rim) in terrain_fit_surface::profiles(def).into_iter().zip(rims) {
+        if profile.len() < 2
+            || outline_crosses_itself(&rim.iter().map(|p| p.truncate()).collect::<Vec<_>>())
+        {
+            continue;
+        }
+        let p: Vec<_> = if mirror {
+            profile.iter().rev().map(|p| [-p[0], p[1], p[2]]).collect()
+        } else {
+            profile
+        };
+        let first = mesh.positions.len() as u32;
+        let k = p.len();
+        for i in 0..=n {
+            for q in &p {
+                let s = if i == 0 {
+                    if mode > 2 { 0.0 } else { q[2] as f64 }
+                } else if i == n {
+                    if mode & 1 == 0 {
+                        curve.length
+                    } else {
+                        curve.length - q[2] as f64
+                    }
+                } else {
+                    i as f64 * curve.length / n as f64
+                };
+                mesh.positions
+                    .push((skewed_point(&curve, s, q[0] as f64, q[1] as f64).0 - origin).as_vec3());
+            }
+        }
+        for i in 0..n {
+            for j in 0..k - 1 {
+                let a = first + (i * k + j) as u32;
+                let b = a + 1;
+                let c = a + k as u32;
+                let d = c + 1;
+                mesh.indices.extend([a, b, d, a, d, c]);
+            }
+        }
+    }
+    SplineTerrainProfile::new(mesh, &curve)
 }
 
 /// Does a closed outline cross itself? Omsi.exe cuts no hole along one that does (0x5748bc

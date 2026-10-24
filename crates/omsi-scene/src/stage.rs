@@ -708,8 +708,8 @@ impl World {
                 log::info!("tile {tx},{ty} spline {} {} h={} len={:.1} r={:.1} start=({:.1},{:.1},{:.2}) terrain_z={:.2} verts={} tris={} profiles={} tex={} local z {:.2}..{:.2}", s.id, s.file, s.is_h, s.length, s.radius, s.pos[0], s.pos[1], s.pos[2], tz, mesh.positions.len(), mesh.indices.len() / 3, st.def.profiles.len(), st.def.textures.len(), lo.z, hi.z);
             }
             if !mesh.is_empty() {
-                // `[spline_terrain_align]` / `_2 <m>`: the editor pulled the ground onto
-                // this road, and OMSI does it again on every load.
+                // An aligned spline needs a solid, finely tessellated terrain backing.
+                // A projected cut alone leaves its extended ends open to the sky.
                 let aligned = s.terrain_align_flag || s.terrain_align.is_some();
                 // (a road the ground was pulled onto lies on it whatever the heights say; a
                 // wire - under a metre across - would only flicker in the shadow map)
@@ -721,19 +721,25 @@ impl World {
                 if casts_shadow && debug_splines {
                     log::info!("tile {tx},{ty} spline {} {} stands clear of the ground: it casts a sun shadow", s.id, s.file);
                 }
+                // (the outlines, once: they cut the ground when the fit does not, and shape the fill)
+                let mut aligned_rims = Vec::new();
+                let mut spline_rims = Vec::new();
+                let mode = s.terrain_align.map(|v| v.clamp(0.0, 255.0) as u8).unwrap_or(1);
                 if aligned {
                     out.align
                         .push((out.splines.len(), s.terrain_align.unwrap_or(1.0) as f32));
                     // Omsi.exe cuts the ground out under such a spline (the flag, or the
                     // `_2` number, goes to the segment, 0x79b95e -> +0x205, and Generate
                     // makes the outline from it; the terrain takes it with the `[terrainhole]`
-                    // meshes, "Terrain hole cutting: Spline")
-                    let mode = s.terrain_align.map(|v| v.clamp(0.0, 255.0) as u8).unwrap_or(1);
+                    // meshes, "Terrain hole cutting: Spline"). openOMSI fills a trough with
+                    // fitted ground instead and keeps the cut where the hill stands over
+                    // the spline or the fit fails. The mode is the trough's end extension.
                     if omsi_cfg::flags::OMSI_LIST_ALIGNED.is_set() {
                         let p = curve.point_at(curve.length * 0.5);
                         log::info!("aligned spline {} {} mode {mode} mid ({:.1}, {:.1}, {:.1}) heading {:.0}", s.id, s.file, p.x, p.y, p.z, curve.heading_at(curve.length * 0.5));
                     }
-                    for rim in omsi_geometry::spline_hole_rims(&st.def, &curve, s.mirror, mode) {
+                    aligned_rims = omsi_geometry::spline_hole_rims(&st.def, &curve, s.mirror, mode);
+                    for rim in &aligned_rims {
                         let ring: Vec<_> = rim.iter().map(|v| v.truncate()).collect();
                         if omsi_geometry::outline_crosses_itself(&ring) {
                             if debug_splines {
@@ -741,7 +747,8 @@ impl World {
                             }
                             continue;
                         }
-                        out.hole_rims.push(rim);
+                        out.hole_rims.push(rim.clone());
+                        spline_rims.push(rim.clone());
                     }
                 }
                 let bounds = mesh_bounds(&mesh, &Mat4::IDENTITY, origin);
@@ -767,6 +774,8 @@ impl World {
                 let cuts_terrain = !overhead_only(&st.def) || !st.def.height_profiles.is_empty() || drivable;
                 out.splines.push(StagedSpline {
                     shape,
+                    terrain_profile: (aligned && cuts_terrain && !overlay).then(|| omsi_geometry::build_spline_terrain_profile(&st.def, &curve, s.mirror, mode, &aligned_rims, origin)),
+                    hole_rims: spline_rims,
                     ty: st,
                     bounds,
                     drivable,

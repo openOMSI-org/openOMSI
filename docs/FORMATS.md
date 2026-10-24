@@ -312,7 +312,10 @@ far end at the spline's end, 3 and 4 the near end at its start, otherwise each p
 third value moves it past the end. A `.sli` without `[terrainholeprofile]` gets one per
 string of joined `[profile]`s (0x5ab908): its left end and right end 3 cm in and 3 mm
 down, a bottom 10 cm under its lowest point reaching 0.5 m past both ends. An outline
-that crosses itself cuts nothing. Each `[terrainhole] <mesh.o3d>` in a `.sco` or model.cfg names an
+that crosses itself cuts nothing. openOMSI does not cut this outline out of the drawn ground
+where the aligned spline lies in a trough: it fills the trough with solid ground instead, and
+cuts the outline as Omsi.exe does where the saved ground stands above the spline (a cutting)
+or where that fill cannot be built. Each `[terrainhole] <mesh.o3d>` in a `.sco` or model.cfg names an
 object-wide cutter, including declarations before the first `[mesh]` and repeated commands.
 The cutter sits next to its declaring file or in its `model` folder; declarations in a `.sco`
 also apply when it references a separate model.cfg. Explicit cutters apply even to deep

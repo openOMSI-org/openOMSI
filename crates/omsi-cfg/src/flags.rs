@@ -401,7 +401,7 @@ flags! {
     OMSI_NO_SMOKE: Bool, Switch, Frame, "off", "No smoke.";
     OMSI_NO_SNOWFALL: Bool, Switch, Frame, "off", "No snowfall.";
     OMSI_NO_SPLINE_BATCHING: Bool, Switch, Use, "off", "No spline batching.";
-    OMSI_NO_SPLINE_HOLES: Bool, Switch, Use, "off", "Splines without hole rims.";
+    OMSI_NO_SPLINE_HOLES: Bool, Switch, Use, "off", "Keep the unfitted terrain mesh beneath aligned splines.";
     OMSI_NO_SPRAY: Bool, Switch, Use, "off", "No tyre spray.";
     OMSI_NO_SURF: Bool, Switch, Once, "off", "Every road as smooth as before (no surface texture) (A/B).";
     OMSI_NO_TEXCOMPRESS: Bool, Switch, Use, "off", "No runtime texture compression.";
