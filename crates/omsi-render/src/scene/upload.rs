@@ -434,8 +434,10 @@ impl Renderer {
 /// two of an object's surfaces in one plane - a dashboard and the instruments printed on it,
 /// a plate and the lines on it - the one later in the model is seen, as Omsi.exe draws a
 /// model mesh by mesh and subset by subset (0x7c32c4) with LESSEQUAL. Only a slot lying on
-/// an earlier surface of its object takes a step (`Instance::slot_levels`, at most 3);
-/// everything else, and the ground, the roads and what lies on them, keep their depth.
+/// an earlier surface of its object takes a step (`Instance::slot_levels`, at most 3), and no
+/// more than any surface lying just off its plane takes, so that the step never decides
+/// between surfaces that are apart (#2790); everything else, and the ground, the roads and
+/// what lies on them, keep their depth.
 /// `OMSI_ZFIGHT_PROBE` swaps the steps of the slots that have one for a hash (1) or its
 /// reverse (2), `OMSI_NO_DRAW_ORDER_DEPTH` turns them off.
 pub(crate) fn draw_order_level(i: &Instance, slot: usize) -> f32 {
