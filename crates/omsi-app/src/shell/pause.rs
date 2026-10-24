@@ -10,6 +10,8 @@
 
 pub(crate) mod navigation;
 mod navigation_ui;
+mod quick_actions_ui;
+pub(crate) mod quick_actions;
 
 use std::borrow::Cow;
 use glam::Vec2;
@@ -48,6 +50,7 @@ pub(crate) struct ListView<'a> {
 /// What the pause menu shows.
 pub(crate) struct PauseView<'a> {
     pub paused: bool,
+    pub quick_actions: &'a str,
     /// The game menu's lines.
     pub rail: &'a [crate::app_impl::MenuLine],
     /// The line the keyboard is on (the game menu's, while no list is open).

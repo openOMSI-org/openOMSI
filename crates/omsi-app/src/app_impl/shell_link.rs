@@ -84,6 +84,7 @@ impl App {
         });
         let view = PauseView {
             paused: self.paused,
+            quick_actions: &self.settings.pause_quick_actions,
             rail: &rail,
             rail_sel: self.menus.game_menu,
             disabled: self.menu_disabled_ids(),
@@ -143,6 +144,7 @@ impl App {
                         self.menu_choose(event_loop, k);
                     }
                 }
+                Action::QuickActions(edit) => self.edit_quick_actions(edit),
                 Action::Control(k, fx) => {
                     if self.menus.chooser.is_some() {
                         self.menus.chooser = Some(k);
