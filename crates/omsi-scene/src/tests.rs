@@ -644,6 +644,21 @@ fn only_flat_blended_ground_strips_draw_after_the_roads() {
     let mut kerb_top = dashes.clone();
     for p in &mut kerb_top.profiles[0].points { p.z = 0.15; }
     assert_eq!(spline_render_phase(&kerb_top), RenderPhase::Spline);
+    // cut-out dashes 5 mm over the driving surface their spline declares are paint as well:
+    // Road-hog123's British markings, 0.105 over a 0.100 [heightprofile] (#2853)
+    let mut raised = dashes.clone();
+    for p in &mut raised.profiles[0].points { p.z = 0.105; }
+    assert_eq!(spline_render_phase(&raised), RenderPhase::Spline, "without a surface under it");
+    raised.height_profiles.push(omsi_scenery::sli::HeightProfile { x0: -0.15, x1: 0.15, z0: 0.1, z1: 0.1 });
+    assert_eq!(spline_render_phase(&raised), RenderPhase::BeforeNormal);
+    // a surface that does not reach under the whole strip does not count
+    let mut narrow = raised.clone();
+    narrow.height_profiles[0].x1 = 0.0;
+    assert_eq!(spline_render_phase(&narrow), RenderPhase::Spline);
+    // nor one far below it: a strip 15 cm over the surface is still a kerb top
+    let mut high = raised.clone();
+    for p in &mut high.profiles[0].points { p.z = 0.25; }
+    assert_eq!(spline_render_phase(&high), RenderPhase::Spline);
     let mut fence = line.clone();
     fence.profiles[0].points[1].z = 1.0;
     assert_eq!(spline_render_phase(&fence), RenderPhase::Spline);
