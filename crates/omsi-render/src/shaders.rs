@@ -36,8 +36,48 @@ pub(crate) const ENHANCED: &str = concat!(
     include_str!("shaders/enhanced/05_puddles.wgsl"),
 );
 
+/// FSR 1's passes for a picture of `format`: on an sRGB one they take its texels to gamma
+/// and back (`SRGB_TARGET` in `fsr1.wgsl`), on another they read its values as they are.
+/// With `raw_input` (`fsr1_raw_input`) they read an sRGB scene's stored values as they are.
+pub(crate) fn fsr1_source_for(format: wgpu::TextureFormat, raw_input: bool) -> String {
+    let source = include_str!("fsr1.wgsl");
+    let source = if format.is_srgb() {
+        source.to_string()
+    } else {
+        source.replace("const SRGB_TARGET: bool = true;", "const SRGB_TARGET: bool = false;")
+    };
+    if raw_input && format.is_srgb() {
+        source.replace("const RAW_INPUT: bool = false;", "const RAW_INPUT: bool = true;")
+    } else {
+        source
+    }
+}
+
+/// OMSI_FSR_RAW_INPUT on a device that can read a texture through a view of another format
+/// (not OpenGL): FSR 1 reads the scene's sRGB values without decoding them.
+pub(crate) fn fsr1_raw_input(format: wgpu::TextureFormat) -> bool {
+    format.is_srgb() && !crate::gl_backend() && omsi_cfg::flags::OMSI_FSR_RAW_INPUT.is_set()
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn fsr1_shader_parses_and_validates() {
+        // No GPU or OMSI installation required. Run even though FSR is off by default.
+        // Both variants: an sRGB window (gamma 2.0 in and out) and one that is not.
+        for format in [wgpu::TextureFormat::Bgra8UnormSrgb, wgpu::TextureFormat::Rgba8Unorm] {
+            let source = super::fsr1_source_for(format, false);
+            assert_eq!(source.contains("const SRGB_TARGET: bool = true;"), format.is_srgb(), "{format:?}");
+            let module = naga::front::wgsl::parse_str(&source).expect("FSR1 WGSL must parse");
+            naga::valid::Validator::new(
+                naga::valid::ValidationFlags::all(),
+                naga::valid::Capabilities::all(),
+            )
+            .validate(&module)
+            .expect("FSR1 WGSL must validate");
+        }
+    }
+
     /// FNV-1a, 64 bits: enough to tell one text from another, and no dependency for it.
     fn fnv1a(text: &str) -> u64 {
         text.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3))
@@ -54,13 +94,13 @@ mod tests {
     /// lamps taking coverage from their active night map, and #3019's larger rain caps, and the tracked panes' snow laid out in the film mesh's own
     /// metres, and the lamps' shadow maps by the tile their record names and the saloon's visibility term
     /// with the ground no longer lit by the tile light map, and the street-scale
-    /// occlusion, the bounced light and the lightning's light).
+    /// occlusion, the bounced light and the lightning's light), and the textures read with FSR 1's mip bias, `camera.lod`.
     /// (with Unix line ends: a Windows checkout may turn the parts' into CRLF, as it did the
     /// single files', and the 0.2.31 release's Windows test failed on that alone)
     #[test]
     fn assembled_shaders_are_the_old_files() {
         let (scene, enhanced) = (super::SCENE.replace("\r\n", "\n"), super::ENHANCED.replace("\r\n", "\n"));
-        assert_eq!((scene.len(), fnv1a(&scene)), (129_213, 0xb635_89c2_5c0d_859a));
-        assert_eq!((enhanced.len(), fnv1a(&enhanced)), (91_777, 0x1500_898a_3423_0f71));
+        assert_eq!((scene.len(), fnv1a(&scene)), (130_362, 0x57b1_11c7_f717_9d08));
+        assert_eq!((enhanced.len(), fnv1a(&enhanced)), (91_885, 0x6d7a_3346_c789_6cc3));
     }
 }

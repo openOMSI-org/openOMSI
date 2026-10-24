@@ -21,7 +21,7 @@ use omsi_platform::discord;
 #[cfg(steam)]
 mod steam;
 pub(crate) use omsi_scene::head_idle;
-use omsi_input::headtrack;
+use omsi_input::{head_filter, headtrack, tobii};
 #[cfg(windows)]
 use omsi_xr::openxr;
 #[cfg(target_os = "android")]
@@ -597,7 +597,12 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
     // Steam must be initialized before the graphics instance and window so its overlay can
     // hook the rendering process before the first surface is created.
     #[cfg(steam)]
-    let steam = if is_server { None } else { crate::steam::Steam::start() };
+    // Fixtures must not create multiple process-global native Steam clients.
+    let steam = if is_server || cfg!(test) {
+        None
+    } else {
+        crate::steam::Steam::start()
+    };
     let instance = graphics_instance();
     let vr_nav_profiles = crate::vr_navigator::Profiles::load(crate::vr_navigator::profiles_path().as_deref());
     let ui = ui::Ui::new();
@@ -795,6 +800,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             pad_voice_nearby: false,
             arrow_glance: false,
             headtrack: None,
+            head_filter: Default::default(),
             headtrack_failed: None,
             headtrack_scale_last: None,
             headtrack_scale_bias: [0.0; 6],

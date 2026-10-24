@@ -98,6 +98,7 @@ impl Renderer {
             return t.clone();
         }
         self.evict_targets();
+        let raw_formats = [self.format.remove_srgb_suffix()];
         let tex = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("scaled scene"),
             size: wgpu::Extent3d {
@@ -110,7 +111,8 @@ impl Renderer {
             dimension: wgpu::TextureDimension::D2,
             format: self.format,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
+            // (FSR 1 may read it as stored, `shaders::fsr1_raw_input`)
+            view_formats: if crate::shaders::fsr1_raw_input(self.format) { &raw_formats } else { &[] },
         });
         let view = tex.create_view(&Default::default());
         let bg = self.picture_group(&view);
@@ -548,11 +550,37 @@ pub(crate) struct Targets {
     pub(crate) evicted_at: std::time::Instant,
 }
 
+/// Full-sized EASU output kept between frames, recreated when the window size changes.
+/// Reuse matters on low-memory cards: allocating this each frame causes VRAM churn.
+pub(crate) struct FsrTarget {
+    pub(crate) size: (u32, u32),
+    /// When a picture of this size last went through it (a size not seen for a while - the
+    /// window's before a resize - is let go).
+    pub(crate) used: std::cell::Cell<std::time::Instant>,
+    pub(crate) _texture: wgpu::Texture,
+    pub(crate) view: wgpu::TextureView,
+    pub(crate) bind_group: wgpu::BindGroup,
+}
+
 /// The render scale: the pipelines that scale the 3D picture up to the window or copy a panel, and the governor's factor.
 pub(crate) struct Upscale {
     /// Render scale: the pipeline that scales the 3D picture up to the window, its
     /// parameters, and the smaller targets per size (with their bind groups).
     pub(crate) upscale_pipeline: wgpu::RenderPipeline,
+    pub(crate) fsr: Option<crate::pipelines::upscale::Fsr1>,
+    /// FSR 1's full-sized intermediate pictures by size (the window's, a VR eye's, a
+    /// triple-screen panel's: a few, kept, not made anew each frame).
+    pub(crate) fsr_target: std::cell::RefCell<Vec<FsrTarget>>,
+    /// FSR 1's passes were refused by the driver once (`set_upscaler`): not tried again.
+    pub(crate) fsr_refused: bool,
+    /// What `set_upscaler` was last asked for (at the start: the settings'), FSR 1, its
+    /// sharpening and the render scale: see `Renderer::upscaler_asked`.
+    pub(crate) upscaler_asked: (bool, f32, f32),
+    /// OMSI_FSR_RAW_INPUT: the scene picture it was made for and the bind group reading it
+    /// through a view that is not sRGB (made again only for a new picture, not each frame).
+    pub(crate) fsr_raw_bg: std::cell::RefCell<Option<(wgpu::Texture, wgpu::BindGroup)>>,
+    /// FSR 1 without its mip bias (OMSI_NO_FSR_MIP_BIAS; the tests compare with it).
+    pub(crate) fsr_mip_bias_off: std::cell::Cell<bool>,
     pub(crate) copy_pipeline: wgpu::RenderPipeline,
     /// Triple screen: a panel's picture copied 1:1 to its place in the window.
     pub(crate) panel_pipeline: wgpu::RenderPipeline,

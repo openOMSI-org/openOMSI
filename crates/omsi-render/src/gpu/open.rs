@@ -552,7 +552,13 @@ impl Renderer {
         let post = post::build(&device, format, hdr_format, &defaults.white_texture);
         let enhanced = enhanced::build(&device, &queue, hdr_format, &defaults.camera_buf, &sky, !leave_out_enhanced);
         let (overlay_pipeline_1x, xr_ui_pipeline) = overlays.single_sampled(&device, format);
-        let upscale = upscale::build(&device, format);
+        let upscale = upscale::build(&device, format, options.fsr1 || crate::fsr1_enabled());
+        // (asked for at the start and refused: not tried again from the menu)
+        let fsr_refused = (options.fsr1 || crate::fsr1_enabled()) && upscale.fsr.is_none();
+        // (OMSI_FSR1: FSR 1 from the start whatever the settings say - the menu can still turn
+        // it off; what the settings asked for is kept, so that only a change of theirs does)
+        let upscaler_asked = (options.fsr1, options.fsr_sharpness, options.render_scale);
+        let options = RenderOptions { fsr1: (options.fsr1 || crate::fsr1_enabled()) && upscale.fsr.is_some(), ..options };
         let gpu_timers = [GpuTimers::new(&device), GpuTimers::new(&device)];
         // GLES cannot reliably read the depth buffer (the same limitation as SSAO).
         let puddles = (!gl && !passes.leave_out_enhanced).then(|| {
@@ -574,6 +580,12 @@ impl Renderer {
             },
             scale: Upscale {
                 upscale_pipeline: upscale.upscale_pipeline,
+                fsr: upscale.fsr,
+                fsr_target: std::cell::RefCell::new(Vec::new()),
+                fsr_refused,
+                upscaler_asked,
+                fsr_raw_bg: Default::default(),
+                fsr_mip_bias_off: Default::default(),
                 copy_pipeline: upscale.copy_pipeline,
                 panel_pipeline: upscale.panel_pipeline,
                 upscale_layout: upscale.layout,

@@ -12,6 +12,7 @@ pub mod controllers;
 pub mod describe;
 pub mod ffb_calibration;
 pub mod gamepad_profile;
+pub mod head_filter;
 pub mod headtrack;
 pub mod hpattern;
 pub mod keys;
@@ -19,6 +20,7 @@ pub mod launcher_pads;
 pub mod pedal;
 pub mod stock_keys;
 pub mod diagnostics;
+pub mod tobii;
 
 #[cfg(windows)]
 mod dinput;

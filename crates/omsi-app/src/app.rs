@@ -319,7 +319,8 @@ impl App {
         let Some(window) = self.window.clone() else { return };
         #[cfg(windows)]
         if self.settings.vr_requested() {
-            match crate::openxr::Vr::new(&renderer, self.settings.vr_scale, self.settings.vr_desktop_mirror) {
+            let image_scale = renderer.start_xr(self.settings.vr_scale);
+            match crate::openxr::Vr::new(&renderer, image_scale, self.settings.vr_desktop_mirror) {
                 Ok(vr) => self.xr.vr = Some(vr),
                 Err(e) => log::error!("OpenXR could not start: {e:#}"),
             }

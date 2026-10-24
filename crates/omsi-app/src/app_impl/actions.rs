@@ -67,8 +67,9 @@ impl App {
             if self.xr.vr.is_some() {
                 self.xr.vr = None;
                 self.service_msg = Some(("Desktop mode".into(), 2.0));
-            } else if let Some(renderer) = self.renderer.as_ref() {
-                match crate::openxr::Vr::new(renderer, self.settings.vr_scale,
+            } else if let Some(renderer) = self.renderer.as_mut() {
+                let image_scale = renderer.start_xr(self.settings.vr_scale);
+                match crate::openxr::Vr::new(renderer, image_scale,
                                              self.settings.vr_desktop_mirror) {
                     Ok(vr) => {
                         self.xr.vr = Some(vr);
@@ -208,6 +209,10 @@ impl App {
             // (Omsi.exe's camera reset, 0x7edde4, puts back the field of view with the
             // direction: the zoom goes as well, #244)
             "view_reset_direction" => {
+                // (a Tobii tracker's middle: where the head is now)
+                if let Some(h) = self.input.headtrack.as_ref() {
+                    h.recenter();
+                }
                 // F1 eases home (look + zoom glide) from the values in place:
                 // zeroing them first would flash a frame of the destination.
                 if self.view == "driver"

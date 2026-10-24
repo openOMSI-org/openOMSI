@@ -289,6 +289,8 @@ flags! {
     OMSI_FORCE_LOD: Bool, Debug, Use, "off", "Draw the lower levels of detail of the AI vehicles at any size (to look at them).";
     OMSI_FORCE_OPAQUE: Bool, Switch, Use, "off", "Draw transmap-masked materials opaque.";
     OMSI_FRAME_ORDER: Bool, Debug, Once, "off", "Log the window's frame and the offscreen run's step as their ordered stages (phase, what each reads and writes, its profile key), once at start.";
+    OMSI_FSR1: Text, Switch, Once, "off", "Experimental FSR 1 spatial upscaling (EASU + RCAS) for scaled window views: 1, true or on enables it; off by default; requires restart.";
+    OMSI_FSR_RAW_INPUT: Bool, Switch, Use, "off", "FSR 1 reads the scene through a view that is not sRGB: no square roots in EASU (not on OpenGL) - to measure.";
     OMSI_FULL_GPU: Bool, Switch, Use, "off", "Keep the requested settings on a small or shared graphics chip, and 8x MSAA with Enhanced+.";
     OMSI_GLASS_WIND: Num, Test, Use, "-", "Offscreen: the rain on the glass as met at this speed in m/s.";
     OMSI_GL_TEXTURE_UNITS: Bool, Switch, Use, "off", "Use the texture-unit layout of the OpenGL backend on any device.";
@@ -363,6 +365,7 @@ flags! {
     OMSI_NO_DRAW_ORDER_DEPTH: Bool, Switch, Once, "off", "An object's surfaces in one plane, and a spline laid on an earlier one at its height, without the draw order's depth step (A/B).";
     OMSI_NO_ENHANCED: Bool, Switch, Frame, "off", "Enhanced settings drawn with the plain path.";
     OMSI_NO_ENVMAP: Bool, Switch, Use, "off", "No environment maps.";
+    OMSI_NO_FSR_MIP_BIAS: Bool, Switch, Frame, "off", "FSR 1 without its textures' mip bias (to compare).";
     OMSI_NO_FXAA: Bool, Switch, Frame, "off", "No FXAA.";
     OMSI_NO_GLARE: Bool, Switch, Frame, "off", "No sun glare.";
     OMSI_NO_GLASS_PICTURE: Bool, Switch, Frame, "off", "No picture behind the glass (rain films).";
@@ -479,6 +482,9 @@ flags! {
     OMSI_TEST_WINE_DIR: Text, Test, Test, "-", "Plugin demo test: folder holding omsi-plugin-host.exe for Wine.";
     OMSI_TEXTURE_MEMORY: Num, Tuning, Use, "settings", "Texture budget in MB.";
     OMSI_TEXTURE_RAIN: Bool, Switch, Use, "off", "OMSI 2's own texture rain on the glass instead of the drops.";
+    OMSI_TOBII_DLL: Text, Setup, Use, "-", "The Tobii Stream Engine DLL to load instead of the Tobii Experience's.";
+    OMSI_TOBII_RAW: Text, Test, Test, "-", "Tests: a file for the Tobii tracker's raw poses (record_the_tracker_here).";
+    OMSI_TOBII_SECS: Num, Test, Test, "8", "Tests: how long the Tobii tracker is recorded.";
     OMSI_TOMORROW_API_KEY: Text, Setup, Use, "private key file", "Private Tomorrow.io API key for map-selected weather; never include it in map configs or logs.";
     OMSI_TOMORROW_CACHE_DIR: Text, Setup, Use, "settings/weather-cache", "Private Tomorrow.io response cache and shared request-budget directory.";
     OMSI_TOMORROW_KEY_FILE: Text, Setup, Use, "settings/tomorrow-api-key.txt", "Private text file containing the player's Tomorrow.io API key.";

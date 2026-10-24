@@ -49,7 +49,7 @@ fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) ->
         // terrain: uv is tile space; the ground texture repeats extra.z times per tile
         duv = in.uv * material.extra.z;
     }
-    var tex = diffuse_border(textureSample(t_diffuse, s_diffuse, duv), duv);
+    var tex = diffuse_border(textureSampleBias(t_diffuse, s_diffuse, duv, camera.lod.x), duv);
     if (is_snow_pane()) {
         tex = snow_on_pane(in, film_water);
     }
@@ -62,7 +62,7 @@ fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) ->
         // modulated over it as the original's terrain pass does. The stock detail maps are
         // bright (noise_low averages 242, gras_det 179), so they are meant to be multiplied
         // in plainly: doubling like a grey-centred D3D detail map blows the ground out.
-        let det = textureSample(t_light, s_diffuse, in.uv * material.extra.y);
+        let det = textureSampleBias(t_light, s_diffuse, in.uv * material.extra.y, camera.lod.x);
         tex = vec4<f32>(clamp(tex.rgb * det.rgb, vec3<f32>(0.0), vec3<f32>(1.0)), tex.a);
     }
     if (material.params.z > 0.5) {
@@ -176,7 +176,7 @@ fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) ->
     if (classic && material.params.y < 0.5) {
         var v = clamp(material.emissive.rgb + mat_light + material.color.rgb * interior_lamps(in.world, n, in.params2.z), vec3<f32>(0.0), vec3<f32>(1.0));
         if (light_mapped) {
-            let lm = srgb_encode(textureSample(t_light, s_diffuse, buv).rgb) * clamp(in.params2.x, 0.0, 1.0);
+            let lm = srgb_encode(textureSampleBias(t_light, s_diffuse, buv, camera.lod.x).rgb) * clamp(in.params2.x, 0.0, 1.0);
             v = v + lm * (vec3<f32>(1.0) - v);
         }
         if (terrain_night) {
@@ -207,7 +207,7 @@ fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) ->
         // too, 0x5fa8f0) among them - clamped at 1. (Added once more after the map, the
         // saloon lamps lit a cabin twice over, flat white where the map was full; and the
         // material's colour took the map down with it.)
-        let lm = srgb_encode(textureSample(t_light, s_diffuse, buv).rgb) * clamp(in.params2.x, 0.0, 1.0);
+        let lm = srgb_encode(textureSampleBias(t_light, s_diffuse, buv, camera.lod.x).rgb) * clamp(in.params2.x, 0.0, 1.0);
         let v = clamp(material.emissive.rgb + mat_light + material.color.rgb * interior_lamps(in.world, n, in.params2.z), vec3<f32>(0.0), vec3<f32>(1.0));
         lit = srgb_decode(srgb_encode(albedo) * (v + lm * (vec3<f32>(1.0) - v)));
     }
@@ -250,7 +250,7 @@ fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) ->
             env_uv = env_uv + bump_offset(duv);
         }
         let env = textureSample(t_env, s_diffuse, env_uv);
-        let diffuse_a = diffuse_border(textureSample(t_diffuse, s_diffuse, duv), duv).a;
+        let diffuse_a = diffuse_border(textureSampleBias(t_diffuse, s_diffuse, duv, camera.lod.x), duv).a;
         if (material.params.x < 1.5) {
             // rain: a painted body goes darker and glossier when it is wet, so the bus
             // stands out against a grey street instead of fading into it
@@ -286,7 +286,7 @@ fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) ->
         let g = clamp(dot(lamp_light, vec3<f32>(1.0 / 3.0)) + dot(camera.sun_color.rgb, vec3<f32>(1.0 / 3.0)), 0.0, 1.0);
         var kk = vec3<f32>(0.0);
         if (has_transmap_declared() || has_env_mask()) {
-            let a = select(diffuse_a, textureSample(t_envmask, s_diffuse, duv).a, has_env_mask());
+            let a = select(diffuse_a, textureSampleBias(t_envmask, s_diffuse, duv, camera.lod.x).a, has_env_mask());
             kk = vec3<f32>(a * g);
         } else {
             kk = omsi_texture_factor(material.params2.y, camera.ambient.rgb + vec3<f32>(g));

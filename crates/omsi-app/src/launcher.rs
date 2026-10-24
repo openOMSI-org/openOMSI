@@ -39,7 +39,7 @@ pub(crate) fn install() {
 pub(crate) fn showroom_options(settings: &crate::settings::Settings) -> omsi_render::RenderOptions {
     let enhanced = showroom_enhanced(settings);
     let render_scale = if settings.render_scale > 0.0 { settings.render_scale } else { 1.0 };
-    omsi_render::RenderOptions { msaa: settings.msaa.clamp(1, 4), ssao: false, shadow_size: settings.shadow_size.min(if cfg!(any(target_os = "android", target_os = "ios")) { 512 } else { 1024 }), render_scale, preview_only: !enhanced, no_enhanced: !enhanced, ray_tracing: false, ..settings.render_options() }
+    omsi_render::RenderOptions { msaa: settings.msaa.clamp(1, 4), ssao: false, shadow_size: settings.shadow_size.min(if cfg!(any(target_os = "android", target_os = "ios")) { 512 } else { 1024 }), render_scale, preview_only: !enhanced, no_enhanced: !enhanced, ray_tracing: false, fsr1: false, ..settings.render_options() }
 }
 
 pub(crate) fn showroom_enhanced(settings: &crate::settings::Settings) -> bool {

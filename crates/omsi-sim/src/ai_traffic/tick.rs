@@ -86,7 +86,7 @@ fn step_body(net: &Network, dt: f32, scripts: bool, profile: bool, w: &mut BodyW
     // (the scripts once a frame, with the steps' time since they last ran: see
     // `TrafficSim::scripts_due`)
     *owed += dt;
-    if !scripts {
+    if !scripts || *owed < vehicle.ai_script_period {
         return;
     }
     vehicle.update_ai(std::mem::take(owed), frame);
@@ -1285,8 +1285,16 @@ impl TrafficSim {
             for c in &mut self.cars {
                 let p = c.vehicle.position;
                 let r = (c.state.front + c.state.rear).abs().max(4.0) as f64 + 2.0;
-                c.vehicle.ai_visuals =
-                    (p - v.pos).length() < UNSEEN_NEAR || v.frames(p, r);
+                let d = (p - v.pos).length();
+                c.vehicle.ai_visuals = d < UNSEEN_NEAR || v.frames(p, r);
+                // (a car nobody sees, well out of earshot of the mirrors: its script runs a
+                // few times a second, not every frame - each car at its own beat, so the
+                // runs do not all fall in one frame; a bus keeps its stop handshake)
+                c.vehicle.ai_script_period = if !c.vehicle.ai_visuals && d > UNSEEN_SCRIPT_RANGE && c.bus.is_none() {
+                    0.2 + 0.05 * (c.id % 5) as f32
+                } else {
+                    0.0
+                };
             }
         }
     }

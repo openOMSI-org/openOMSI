@@ -210,10 +210,8 @@ impl Vr {
         }
         // The runtime's recommendation is a quality target, not a minimum.
         // Rendering both eyes at the full Quest Link size is expensive.
-        let scale = omsi_cfg::flags::OMSI_OPENXR_SCALE.parse::<f32>()
-            .filter(|s| s.is_finite())
-            .unwrap_or(configured_scale)
-            .clamp(0.5, 1.0);
+        // (`OMSI_OPENXR_SCALE` is in `configured_scale` already: `Renderer::start_xr`)
+        let scale = configured_scale.clamp(0.5, 1.0);
         let width = ((recommended_width as f32 * scale).round() as u32).max(1);
         let height = ((recommended_height as f32 * scale).round() as u32).max(1);
         let (format, dxgi_format) = match renderer.format() {

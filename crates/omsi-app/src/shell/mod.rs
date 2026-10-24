@@ -93,7 +93,13 @@ impl Shell {
     /// A frame of the screens begins: the window's size in physical pixels and how many of
     /// them make a point.
     pub(crate) fn begin(&mut self, width: f32, height: f32, scale: f32, dt: f32) {
-        self.scale = scale.max(0.25);
+        // Keep pointer capture in the same coordinate space until its release is handled.
+        let captured = self.ui.active.is_some() && (self.ui.input.down || self.ui.input.released);
+        let next_scale = if captured { self.scale } else { scale.max(0.25) };
+        if next_scale != self.scale {
+            self.ui.input.mouse = self.ui.input.mouse * self.scale / next_scale;
+        }
+        self.scale = next_scale;
         self.ui.input.touch = crate::platform::touch_controls();
         self.ui.begin(Vec2::new(width / self.scale, height / self.scale), self.scale, dt);
     }

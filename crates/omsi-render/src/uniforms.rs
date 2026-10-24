@@ -71,6 +71,10 @@ pub(crate) struct CameraUniform {
     /// Enhanced: the lights of the player's saloon that have a shadow map, by their records in
     /// the light buffer (-1: none), see `cabin_visibility` in enhanced/02_lamps.wgsl.
     pub(crate) cabin_lamps: [[f32; 4]; 4],
+    /// x: the textures' mip bias - negative (log2 of the scale) while FSR 1 scales the picture
+    /// up, as AMD advises for it: its textures as detailed as the window's size wants, not
+    /// the smaller picture's (letters, gauges and signs came out soft); 0 otherwise.
+    pub(crate) lod: [f32; 4],
 }
 
 /// The period the sky's cloud patterns repeat with (m): 5 x the cloud field (14 km), 8 x

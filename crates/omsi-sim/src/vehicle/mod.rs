@@ -201,6 +201,10 @@ pub struct VehicleInstance {
     /// out of sight, and the time it missed is made up at once when it comes back. The body,
     /// the coupled parts and the scripts still run every frame.
     pub ai_visuals: bool,
+    /// Seconds between the runs of an AI vehicle's script while it is out of sight and far
+    /// off (0 = every frame): its animations are not drawn, so the script's results wait
+    /// (`TrafficSim::set_visibility`).
+    pub ai_script_period: f32,
     ai_visuals_missed: f32,
     /// The coupled parts were moved on in the traffic's step already (`step_ai_trailers`):
     /// the frame's scripts and animations leave them be.

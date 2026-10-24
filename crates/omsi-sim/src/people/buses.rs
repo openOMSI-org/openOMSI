@@ -277,20 +277,18 @@ impl PeopleSim {
                 };
                 let speed = c.state.speed as f64;
                 let boarding = c.at_station() && speed.abs() < 0.3;
-                let near_stop = if boarding {
-                    serving(c.vehicle.position, c.vehicle.heading, 18.0)
+                // The timetable identifies the platform exactly. The closest stop object
+                // can belong to the other side of the road or a BRT platform across the
+                // median, and must not replace the service's actual stop (#3123).
+                let served = if boarding {
+                    c.bus.as_ref().and_then(|b| b.stops.front()).map(|s| s.id)
                 } else {
                     None
                 };
-                // A bus boarding at a stop missing from the stops near the passengers (the
-                // bus drove off with riders beyond them) serves its timetable's stop all the
-                // same: without it the doors stayed shut for its riders, and the one on the
-                // way to an exit held the bus at the stop for good (#1593).
-                let served = match near_stop {
-                    None if boarding => c.bus.as_ref().and_then(|b| b.stops.front()).map(|s| s.id),
-                    _ => None,
-                };
-                let stop = near_stop.or(served);
+                // Only buses without an authoritative scheduled stop use nearby geometry.
+                let stop = served.or_else(|| {
+                    boarding.then(|| serving(c.vehicle.position, c.vehicle.heading, 18.0)).flatten()
+                });
                 let since = match stop {
                     Some(s) => {
                         let v = match self.ai_visits.get(&c.id) {

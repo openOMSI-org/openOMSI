@@ -122,6 +122,9 @@ pub struct TrafficSim {
     pub dormant: Vec<DormantCar>,
     /// `time` when the dormant cars last moved on.
     pub dormant_time: f32,
+    /// The street lanes' weights summed in lane order, for placing the map's dormant cars
+    /// (`fill_map`), with the number of lanes they were made for.
+    pub(crate) lane_weight_sums: (usize, Vec<f64>),
     pub rng: u64,
     /// Target number of cars around the camera.
     pub target: usize,
