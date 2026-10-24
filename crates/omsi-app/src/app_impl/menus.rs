@@ -4,8 +4,6 @@ use super::*;
 use std::borrow::Cow;
 
 impl App {
-    /// What the cursor points at, for the HUD. Recomputed every frame: the head turns and
-    /// the bus moves under a cursor that is standing still.
     /// Open the game menu: the simulation pauses (not in a LAN session, which runs on
     /// for the other players).
     pub(crate) fn open_game_menu(&mut self) {
@@ -14,6 +12,19 @@ impl App {
         // steering key let go in the menu went on turning the wheel to full lock once the
         // menu closed (a throttle key went on accelerating, a door button stayed pressed)
         self.release_vehicle_keys();
+        // Mouse releases are consumed by the menu too. Finish any pending physical
+        // drag before letting go. VR stops precisely; desktop keeps its endpoint fallback.
+        let (dx, dy) = std::mem::take(&mut self.input.drag_delta);
+        let vr_active = self.vr_active();
+        if let Some(player) = self.player.as_mut() {
+            if self.input.dragging && (dx != 0.0 || dy != 0.0) {
+                player.drag(dx, dy);
+            }
+            player.release_for_menu(vr_active);
+        }
+        self.input.dragging = false;
+        self.input.buttons_held = (false, false);
+        self.input.both_drag = None;
         if self.net.lan.is_none() {
             self.paused = true;
         }

@@ -362,6 +362,38 @@ impl Player {
     }
 
     pub(crate) fn release(&mut self) {
+        self.release_mouse(true);
+    }
+
+    /// Precise headset manipulation must stop at the current value, including a
+    /// tiny drag or no movement. Ordinary press/release button triggers still run.
+    pub(crate) fn release_precise(&mut self) {
+        self.release_mouse(false);
+        self.cancel_auto_drag();
+    }
+
+    pub(crate) fn click_precise(&mut self, origin: DVec3, dir: Vec3, spread: f32) -> Option<usize> {
+        self.release_precise();
+        self.click(origin, dir, spread)
+    }
+
+    pub(crate) fn wheel_precise(&mut self, origin: DVec3, dir: Vec3, spread: f32, amount: f32) {
+        self.cancel_auto_drag();
+        self.wheel(origin, dir, spread, amount);
+    }
+
+    pub(crate) fn release_for_menu(&mut self, vr_active: bool) {
+        if vr_active { self.release_precise(); } else { self.release(); }
+    }
+
+    fn cancel_auto_drag(&mut self) {
+        if let Some(drag) = self.auto_drag.take() {
+            self.vehicle.host.mouse = (0.0, 0.0);
+            self.vehicle.trigger(&format!("{}_off", drag.ev));
+        }
+    }
+
+    fn release_mouse(&mut self, allow_auto_drag: bool) {
         if let Some(i) = self.pressed_mesh.take() {
             let ty = self.vehicle.ty.clone();
             let def = &ty.model.meshes[ty.meshes[i].def_index];
@@ -371,7 +403,8 @@ impl Player {
                 // other end (a click opened the NL/NG driver's door by the mouse's jitter
                 // and a second click never shut it again)
                 let anim = def.animations.first().map(|a| a.variable.clone()).filter(|v| !v.trim().is_empty() && v.trim().parse::<f32>().is_err());
-                if let (true, Some(var)) = (auto_drag_click(&ev, self.press_info.0, self.press_info.1), anim) {
+                if let (true, Some(var)) = (
+                    allow_auto_drag && auto_drag_click(&ev, self.press_info.0, self.press_info.1), anim) {
                     let now = self.vehicle.var(&var).unwrap_or(0.0);
                     let target = if now > 0.5 { 0.0 } else { 1.0 };
                     log::info!("mouse event {ev}: a click on a drag control, {var} {now:.2} -> {target}");

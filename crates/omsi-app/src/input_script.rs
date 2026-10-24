@@ -1178,10 +1178,16 @@ impl App {
         self.input.input_away = true;
         self.release_vehicle_keys();
         self.input.keys.clear();
+        let precise_release = self.vr_active();
         if let Some(p) = self.player.as_mut() {
-            p.release();
+            if precise_release {
+                p.release_precise();
+            } else {
+                p.release();
+            }
         }
         self.input.dragging = false;
+        self.input.drag_delta = (0.0, 0.0);
         self.input.buttons_held = (false, false);
         self.input.both_drag = None;
         self.menus.hud_resize = None;
