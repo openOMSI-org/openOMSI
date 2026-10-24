@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Model test checks</title>
+<link rel="stylesheet" href="../ui/styles.css">
+<style>body{overflow:auto;padding:24px}#fixture{max-width:1100px;margin:20px auto}#report{white-space:pre-wrap;user-select:text}#run{margin-bottom:16px}</style>
+<button class="btn primary" id="run">Run model test checks</button>
+<pre id="report">Ready. Uses local fixtures; the game program is not started.</pre>
+<div id="fixture"></div>
+<script type="module">
+import { run } from './content-test-check.js';
+document.querySelector('#run').onclick = async () => {
+  const button = document.querySelector('#run');
+  button.disabled = true;
+  const report = document.querySelector('#report');
+  report.textContent = 'Running…';
+  try { report.textContent = await run(document.querySelector('#fixture')); }
+  catch (e) { report.textContent = `FAIL ${e.stack || e}`; }
+  finally { button.disabled = false; }
+};
+</script>
+</html>

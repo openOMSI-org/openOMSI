@@ -195,12 +195,18 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   tower blocks, a swimming pool complex) were dropped for their yards and are now drawn, each
   house with its own height; garages and greenhouses count too.
 
-- **Content test** in Settings, in place of the launcher's Model test page: any content is
-  loaded the way the game loads it and every warning of its files is listed - a bus with the
-  parts coupled behind it, a whole map (every tile, object and spline it places, what of it
-  is not installed, its ground textures and AI lists; optionally every model, mesh and
-  texture of it), an installed mod, or any file or folder: a scenery object, a spline, a
-  human, a weather, a mesh, a mod not installed yet (folder or zip). From the command line:
+- **Troubleshooting** in the launcher's Help, below Tutorials: what is wrong with the
+  installed content, by the bus or pack it concerns - packs waiting for their bus, buses
+  taking parts from packs that are not installed, map HOF files that could not be added,
+  failed installs. "Scan again" looks afresh after installing what was missing and says how
+  many problems are gone; the menu entry shows how many are left.
+- **Model test** (Troubleshooting's second tab, the launcher's former Model test page): any
+  content is loaded the way the game loads it and every warning of its files is listed - a
+  bus with the parts coupled behind it, a whole map (every tile, object and spline it places,
+  what of it is not installed, its ground textures and AI lists; optionally every model,
+  mesh and texture of it), an installed mod (picked from a searchable list), or any file or
+  folder: a scenery object, a spline, a human, a weather, a mesh, a mod not installed yet
+  (folder or zip). A folder's counts filter what it holds by kind. From the command line:
   `openomsi --check <file or folder> [--deep]`.
 - Save slots: the pause menu's "Save to a slot..." saves to a new slot or over one of the
   map's slots, and the launcher's Continue card deletes saves [#2556](https://github.com/openOMSI-org/openOMSI/issues/2556).
@@ -254,6 +260,17 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   bans with the button to lift them. A player can switch the identifier off
   (`OMSI_NO_HARDWARE_ID=1`), a server can turn such players away (`require_hardware_id = 1`).
   This stops the player who comes back, not one who works at it (docs/SERVER.md says how).
+
+**Head tracking**
+
+- Tobii eye trackers (the Eye Tracker 5, the 4C, the ones built into laptops) track the head
+  natively on Windows, without opentrack: the game reads the Tobii Experience's own Stream
+  Engine (`Head tracking with`: Automatic takes opentrack while it sends, else the Tobii).
+  F1 takes where the head is as the middle. The tracker's trembling is smoothed away while
+  big turns still follow at once (the `Smoothing` and `Dead zone` settings), and a look at
+  the screen's left or right edge can turn the view further (`Look further at the screen's
+  edges`). Every tracker's poses are drawn frame by frame, and a lost tracker glides the
+  view home instead of snapping it there.
 
 **Launcher**
 

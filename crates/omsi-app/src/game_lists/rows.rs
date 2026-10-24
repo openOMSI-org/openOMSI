@@ -110,6 +110,7 @@ pub(super) fn steps_of(verb: &str) -> Option<Vec<f32>> {
         "steer_look_response" => (1..=20).map(|v| v as f32 * 0.05).collect(),
         "head_idle" => (0..=20).map(|v| v as f32 * 0.05).collect(),
         "head_idle_pace" => (10..=40).map(|v| v as f32 * 0.05).collect(),
+        "head_tracking_smoothing" | "head_tracking_dead_zone" => (0..=20).map(|v| v as f32 * 0.05).collect(),
         "head_tracking_yaw_sens" | "head_tracking_pitch_sens" | "head_tracking_roll_sens" | "head_tracking_x_sens" | "head_tracking_y_sens" | "head_tracking_z_sens" => (0..=100).map(|v| v as f32).collect(),
         "pedal_t" | "pedal_b" => PEDAL.to_vec(),
         "ctrl_deadzone" => (0..=30).map(|v| v as f32 * 0.01).collect(),

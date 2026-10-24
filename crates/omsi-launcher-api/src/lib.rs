@@ -1035,7 +1035,7 @@ mod custom_weather_tests {
     }
 }
 
-// --- the content test (Settings) -----------------------------------------------------
+// --- the model test (Troubleshooting) -------------------------------------------------
 
 /// The game program loads `path` - a vehicle, a scenery object, a spline, a human, a map, a
 /// mod's folder or zip - as it would for a drive (`openomsi --check`) and answers its

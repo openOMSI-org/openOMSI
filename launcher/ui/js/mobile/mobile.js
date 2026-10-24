@@ -16,6 +16,7 @@ import { hms, mapPicture, tripAt, depotRun, pickTrip, lineMatches, findTours, ch
 import { MultiplayerPage } from '../pages/multiplayer.js';
 import { ProfilePage } from '../pages/profile.js';
 import { ModsPage } from '../pages/mods.js';
+import { TroubleshootPage, problems } from '../pages/troubleshoot.js';
 import { SettingsPage } from '../pages/settings.js';
 import { ControlsPage } from '../pages/controls.js';
 import { GamesPage } from '../pages/games.js';
@@ -35,12 +36,12 @@ const TABS = [
 export function MobileApp() {
   const s = useStore();
   // (the keys and the game controllers open from Settings, #2308: they fell back to Drive)
-  const page = TABS.some((x) => x[0] === s.page) || ['games', 'tutorials', 'setup', 'controls', 'addons'].includes(s.page) ? s.page : 'drive';
-  const Body = { drive: MobileDrive, multiplayer: MultiplayerPage, profile: ProfilePage, mods: ModsPage, settings: SettingsPage, more: More, games: GamesPage, tutorials: TutorialsPage, setup: SetupPage, controls: ControlsPage, addons: AddonsPage }[page];
+  const page = TABS.some((x) => x[0] === s.page) || ['games', 'tutorials', 'setup', 'controls', 'addons', 'troubleshoot'].includes(s.page) ? s.page : 'drive';
+  const Body = { drive: MobileDrive, multiplayer: MultiplayerPage, profile: ProfilePage, mods: ModsPage, troubleshoot: TroubleshootPage, settings: SettingsPage, more: More, games: GamesPage, tutorials: TutorialsPage, setup: SetupPage, controls: ControlsPage, addons: AddonsPage }[page];
   const running = s.poll.instances?.length || 0;
   return html`<div class="m-shell">
     <nav class="m-rail">
-      ${TABS.map(([id, label, icon]) => html`<button class=${'m-tab' + (page === id || (id === 'more' && ['games', 'tutorials', 'setup', 'addons'].includes(page)) || (id === 'settings' && page === 'controls') ? ' on' : '')} onClick=${() => set({ page: id })}>
+      ${TABS.map(([id, label, icon]) => html`<button class=${'m-tab' + (page === id || (id === 'more' && ['games', 'tutorials', 'setup', 'addons', 'troubleshoot'].includes(page)) || (id === 'settings' && page === 'controls') ? ' on' : '')} onClick=${() => set({ page: id })}>
         <${Icon} name=${icon} size=${22} /><span>${t(label)}</span>${id === 'more' && running > 0 && html`<i class="m-dot"></i>`}
       </button>`)}
     </nav>
@@ -58,6 +59,7 @@ function More() {
     <h1 class="m-title">${t('More')}</h1>
     <div class="m-group">
       ${item('games', 'Running games', 'gamepad', running ? String(running) : null)}
+      ${item('troubleshoot', 'Troubleshooting', 'alert', problems(s).length ? String(problems(s).length) : null)}
       ${item('tutorials', 'Tutorials', 'book')}
       ${item('setup', 'Setup', 'folder')}
       ${item('addons', 'Add-ons', 'globe')}

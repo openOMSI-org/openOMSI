@@ -662,6 +662,17 @@ impl Ui {
     /// A slider over `[min, max]` rounded to `step`; `fmt` makes the value's text.
     #[allow(clippy::too_many_arguments)]
     pub fn slider(&mut self, name: &str, r: Rect, value: &mut f32, min: f32, max: f32, step: f32, label: &str, fmt: &dyn Fn(f32) -> String) -> bool {
+        self.slider_with_wheel(name, r, value, min, max, step, label, fmt, true)
+    }
+
+    /// A pointer-operated slider that leaves wheel input for the surrounding scroll area.
+    #[allow(clippy::too_many_arguments)]
+    pub fn slider_without_wheel(&mut self, name: &str, r: Rect, value: &mut f32, min: f32, max: f32, step: f32, label: &str, fmt: &dyn Fn(f32) -> String) -> bool {
+        self.slider_with_wheel(name, r, value, min, max, step, label, fmt, false)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn slider_with_wheel(&mut self, name: &str, r: Rect, value: &mut f32, min: f32, max: f32, step: f32, label: &str, fmt: &dyn Fn(f32) -> String, wheel: bool) -> bool {
         let id = id_of(name);
         let label_w = if label.is_empty() { 0.0 } else { (r.w * 0.38).min(170.0) };
         let val_w = 58.0;
@@ -678,7 +689,7 @@ impl Ui {
             }
             *value = v.clamp(min, max);
             self.cursor = winit::window::CursorIcon::Grabbing;
-        } else if h && self.input.wheel.y.abs() > 0.0 && !self.wheel_taken && !self.input.touch {
+        } else if wheel && h && self.input.wheel.y.abs() > 0.0 && !self.wheel_taken && !self.input.touch {
             let k = if step > 0.0 { step } else { (max - min) / 50.0 };
             *value = (*value + self.input.wheel.y.signum() * k).clamp(min, max);
             self.wheel_taken = true;

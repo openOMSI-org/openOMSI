@@ -11,6 +11,7 @@ import { DepotPage } from './pages/depot.js';
 import { MultiplayerPage } from './pages/multiplayer.js';
 import { ProfilePage } from './pages/profile.js';
 import { ModsPage } from './pages/mods.js';
+import { TroubleshootPage, problems } from './pages/troubleshoot.js';
 import { SettingsPage } from './pages/settings.js';
 import { ControlsPage } from './pages/controls.js';
 import { GamesPage } from './pages/games.js';
@@ -31,7 +32,7 @@ const GROUPS = [
   ['Play', [['drive', 'Drive', 'bus', DrivePage], ['depot', 'Depot', 'garage', DepotPage], ['multiplayer', 'Multiplayer', 'users', MultiplayerPage], ['games', 'Running games', 'gamepad', GamesPage]]],
   ['Content', [['mods', 'Mods', 'puzzle', ModsPage], ['timetable', 'Timetable', 'clock', TimetablePage], ['addons', 'Add-ons', 'globe', AddonsPage]]],
   ['Options', [['settings', 'Settings', 'sliders', SettingsPage], ['controls', 'Controls', 'keyboard', ControlsPage], ['setup', 'Setup', 'folder', SetupPage]]],
-  ['Help', [['tutorials', 'Tutorials', 'book', TutorialsPage]]],
+  ['Help', [['tutorials', 'Tutorials', 'book', TutorialsPage], ['troubleshoot', 'Troubleshooting', 'alert', TroubleshootPage]]],
 ];
 
 const PAGES = [...GROUPS.flatMap(([, pages]) => pages), ['profile', 'Profile', 'user', ProfilePage]];
@@ -52,7 +53,7 @@ function Sidebar() {
     ${GROUPS.map(([title, pages]) => html`<div class="nav-group" role="group" aria-label=${t(title)}>
       <div class="nav-title">${t(title)}</div>
       ${pages.map(([id, label, icon]) => {
-        const count = id === 'games' ? running : id === 'mods' ? installing : 0;
+        const count = id === 'games' ? running : id === 'mods' ? installing : id === 'troubleshoot' ? problems(s).length : 0;
         return html`<button class=${'nav-item' + (s.page === id ? ' active' : '')} onClick=${() => set({ page: id })} title=${t(label)}>
           <${Icon} name=${icon} /><span class="label">${t(label)}</span>${count > 0 && html`<span class="count">${count}</span>`}
         </button>`;

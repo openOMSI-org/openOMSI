@@ -97,7 +97,7 @@ export const weatherName = (w, list) =>
   : list?.find((x) => x.file === w)?.name || t('Natural weather');
 
 /** A remembered map or bus that is not installed any more gives way to the first one. */
-function fixChoice() {
+export function fixChoice() {
   const c = { ...S.choice };
   let mapChanged = false;
   if (S.maps?.length && !S.maps.some((m) => m.file === c.map)) {
@@ -270,7 +270,7 @@ export async function loadLines() {
   }
 }
 
-async function updateHof() {
+export async function updateHof() {
   const c = S.choice;
   const hof = await call('default_hof', { map: curMap() || null, bus: curBus() || null, date: c.date, line: c.free ? null : c.line }).catch(() => '');
   set({ hof });

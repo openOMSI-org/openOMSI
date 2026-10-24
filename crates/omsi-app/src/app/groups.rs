@@ -308,6 +308,8 @@ pub(crate) struct InputState {
     pub(crate) arrow_glance: bool,
     /// Head tracking (Settings → head tracking), started with the first frame that wants it.
     pub(crate) headtrack: Option<crate::headtrack::HeadTracker>,
+    /// The head tracker's pose made calm for the camera, frame by frame.
+    pub(crate) head_filter: crate::head_filter::HeadFilter,
     /// When head tracking last failed to start (tried again a few seconds later).
     pub(crate) headtrack_failed: Option<std::time::Instant>,
     /// Last TrackIR/OpenTrack output scales, used to keep the displayed camera position

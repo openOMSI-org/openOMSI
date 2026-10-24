@@ -148,6 +148,12 @@ pub(crate) fn dropdown_apply(app: &mut App, action: &str) {
                         app.gfx.mirror_hud.apply_setting(p, app.settings.mirror_hud);
                     }
                 }
+                // (another source: the tracker starts anew with it, a few seconds on - the
+                // old one's UDP port is let go first)
+                if key == "head_tracking_source" {
+                    app.input.headtrack = None;
+                    app.input.headtrack_failed = Some(std::time::Instant::now());
+                }
             }
         }
         "preset" => {
@@ -280,6 +286,7 @@ pub(super) fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
         "boarding" => vec![("auto", "Pay and take the ticket"), ("pay", "The driver sells the ticket"), ("walk", "Just walk in")],
         "standing_chance" => vec![("0", "Never"), ("5", "5%"), ("10", "10%"), ("25", "25%"), ("50", "50%"), ("100", "Always")],
         "units" => vec![("metric", "Metric (km/h, km, °C)"), ("uk", "British (mph, miles, yards, °C)"), ("us", "American (mph, miles, feet, °F)")],
+        "head_tracking_source" => vec![("auto", "Automatic"), ("tobii", "Tobii eye tracker"), ("opentrack", "opentrack (UDP 4242)")],
         "pax_voices" => vec![("all", "Greetings and tickets"), ("tickets", "Only the ticket asked for"), ("off", "Silent")],
         "perf_overlay" => vec![("off", "Off"), ("compact", "Compact"), ("detailed", "Detailed")],
         "maintenance" => vec![("0", "Infinite (no wear)"), ("1", "Very bad"), ("2", "Bad"), ("3", "Normal"), ("4", "Good")],

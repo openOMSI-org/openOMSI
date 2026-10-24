@@ -825,6 +825,8 @@ mod spot_tests {
 /// Map lights and scenery coronas are only drawn this close to the camera.
 const MAP_LIGHT_RANGE: f64 = 600.0;
 const CORONA_RANGE: f64 = 1500.0;
+/// A vehicle out of the view (`VehicleInstance::ai_visuals`) shines only this close to the camera.
+const UNSEEN_LIGHT_RANGE: f64 = 120.0;
 /// How far the camera may move before the nearby static lights are gathered again.
 const NEAR_MARGIN: f64 = 100.0;
 
@@ -969,6 +971,13 @@ pub fn collect(
     let dark = if cone.enhanced { night.max(cone.gloom) } else { 1.0 };
     let beams = cars_with_beams(vehicles, camera_pos, dark);
     for (k, v) in vehicles.iter().enumerate() {
+        // (what is not drawn does not shine: a car out of the view and beyond the mirrors'
+        // reach, or past the coronas' range, is left out whole - at night with hundreds of
+        // cars about their lamps made up most of the lights and coronas of a frame)
+        let d = (v.position - camera_pos).length();
+        if d > CORONA_RANGE || (!v.ai_visuals && d > UNSEEN_LIGHT_RANGE) {
+            continue;
+        }
         vehicle_lights(v, &mut scene.coronas, &mut scene.lights, night, &world.cookie_fades, beams.contains(&k));
         // light_vehicles puts the player's bus first (if any). LAN guests and AI
         // traffic must not be mistaken for it when no bus is driven locally.

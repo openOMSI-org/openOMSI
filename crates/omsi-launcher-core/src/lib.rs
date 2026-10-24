@@ -2133,6 +2133,24 @@ pub fn perf_overlay_mode(value: &str) -> &'static str {
     }
 }
 
+/// Where the head's pose comes from (`head_tracking_source`): "opentrack", "tobii" (a Tobii
+/// eye tracker read natively) or "auto" (both, opentrack's first).
+pub fn head_tracking_source(v: &str) -> &'static str {
+    match v.trim().to_ascii_lowercase().as_str() {
+        "opentrack" | "udp" => "opentrack",
+        "tobii" => "tobii",
+        _ => "auto",
+    }
+}
+
+/// A Tobii tracker's smoothing (`head_tracking_smoothing`, 0 to 1, 0.5) and dead zone
+/// (`head_tracking_dead_zone`, 0 to 1 degrees, 0.1), in twentieths (none, or one out of its
+/// reach: the default).
+pub fn head_tracking_value(key: &str, v: Option<f64>) -> f64 {
+    let default = if key == "head_tracking_smoothing" { 0.5 } else { 0.1 };
+    v.filter(|x| x.is_finite() && (0.0..=1.0).contains(x)).map(|x| (x * 20.0).round() / 20.0).unwrap_or(default)
+}
+
 /// The page's view of a `settings.cfg` text (None: no file yet, the game's defaults).
 pub fn settings_from_text(text: Option<&str>) -> Value {
     settings_from_text_on(text, cfg!(any(target_os = "android", target_os = "ios")))
@@ -2172,6 +2190,11 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     v["mirror_quality"] = json!("standard");
     v["vr_desktop_mirror"] = json!(true);
     v["discord_status"] = json!(true);
+    // a Tobii eye tracker read natively, beside opentrack (the game's menu switches these)
+    v["head_tracking_source"] = json!("auto");
+    v["tobii_edges"] = json!(false);
+    v["head_tracking_smoothing"] = json!(0.5);
+    v["head_tracking_dead_zone"] = json!(0.1);
     // iPhone, iPad, Mac: the cross-platform launcher (this one, drawn by the game) instead of the
     // system's own (SwiftUI); elsewhere there is only this one
     v["cross_platform_launcher"] = json!(false);
@@ -2359,6 +2382,9 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "sim_thread" => v[&k] = json!(b(val)),
             "mirror_hud" => v[&k] = json!(val.trim().parse::<u8>().map(|x| x.min(7)).unwrap_or(0)),
             "windy_trees" | "mirror_hud_every_frame" | "mirror_shadows" | "mirror_particles" | "ai_wait_timed_stops_only" | "pax_bad_driving" | "auto_announce" | "ambient" => v[&k] = json!(b(val)),
+            "head_tracking_source" => v[&k] = json!(head_tracking_source(val)),
+            "tobii_edges" => v[&k] = json!(b(val)),
+            "head_tracking_smoothing" | "head_tracking_dead_zone" => v[&k] = json!(head_tracking_value(&k, val.parse::<f64>().ok())),
             "time_speed" => v[&k] = json!(val.trim_start_matches(['x', 'X']).parse::<f64>().map(|x| x.clamp(1.0, 30.0)).map(|x| if x.fract() == 0.0 { format!("{}", x as i64) } else { x.to_string() }).unwrap_or_else(|_| "1".into())),
             "language" => v[&k] = json!(language_code(val)),
             "graphics" | "renderer" => graphics = Some(graphics_mode(val)),
@@ -2763,6 +2789,13 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("passenger_animation={}\n", if v.get("passenger_animation").and_then(|x| x.as_str()) == Some("enhanced") { "enhanced" } else { "original" }));
     text.push_str(&format!("character_models={}\n", if v.get("character_models").and_then(|x| x.as_str()) == Some("improved") { "improved" } else { "original" }));
     text.push_str(&format!("units={}\n", units_setting(v.get("units").and_then(|x| x.as_str()).unwrap_or("metric"))));
+    text.push_str(&format!(
+        "head_tracking_source={}\ntobii_edges={}\nhead_tracking_smoothing={}\nhead_tracking_dead_zone={}\n",
+        head_tracking_source(v.get("head_tracking_source").and_then(|x| x.as_str()).unwrap_or("auto")),
+        b("tobii_edges", false),
+        head_tracking_value("head_tracking_smoothing", v.get("head_tracking_smoothing").and_then(|x| x.as_f64())),
+        head_tracking_value("head_tracking_dead_zone", v.get("head_tracking_dead_zone").and_then(|x| x.as_f64())),
+    ));
     let written: Vec<String> = text.lines().filter_map(|l| l.split_once('=')).map(|(k, _)| k.trim().to_ascii_lowercase()).collect();
     for line in old.unwrap_or("").lines() {
         let t = line.trim();
@@ -3348,3 +3381,5 @@ mod omsi_options_tests;
 
 #[cfg(test)]
 mod right_stick_look_tests;
+#[cfg(test)]
+mod head_tracking_tests;

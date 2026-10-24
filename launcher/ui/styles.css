@@ -317,6 +317,7 @@ table.table { width: 100%; border-collapse: collapse; }
 .tag.ok { background: rgba(76, 183, 130, 0.14); color: var(--ok); }
 .tag.danger { background: var(--danger-soft); color: var(--danger); }
 .tag.warn { background: rgba(224, 164, 58, 0.14); color: var(--warn); }
+.tag-button { border: 0; font-family: inherit; cursor: pointer; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; flex: none; }
 .dot.ok { background: var(--ok); }
 .dot.danger { background: var(--danger); }

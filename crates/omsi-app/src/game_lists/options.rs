@@ -25,6 +25,8 @@ pub(super) fn option_now(app: &App, verb: &str, arg: &str) -> Option<f32> {
         "mouse_pedal_strength" => s.mouse_pedal_strength,
         "look_sens" => s.look_sens,
         "look_smoothing_ms" => s.look_smoothing_ms,
+        "head_tracking_smoothing" => s.head_tracking_smoothing,
+        "head_tracking_dead_zone" => s.head_tracking_dead_zone,
         "pad_steer_smooth" => s.pad_steer_smooth,
         "pad_steer_speed" => s.pad_steer_speed,
         "pad_deadzone" => s.pad_deadzone,
@@ -139,6 +141,12 @@ pub(super) fn option_set(app: &mut App, verb: &str, arg: &str, v: f32) -> Option
         "look_sens" => {
             app.settings.look_sens = (v * 100.0).round() / 100.0;
             Some(("look_sens", app.settings.look_sens.to_string()))
+        }
+        "head_tracking_smoothing" | "head_tracking_dead_zone" => {
+            let s = &mut app.settings;
+            let (key, to) = if verb == "head_tracking_smoothing" { ("head_tracking_smoothing", &mut s.head_tracking_smoothing) } else { ("head_tracking_dead_zone", &mut s.head_tracking_dead_zone) };
+            *to = omsi_launcher_lib::head_tracking_value(key, Some(v as f64)) as f32;
+            Some((key, to.to_string()))
         }
         "pad_steer_smooth" => {
             app.settings.pad_steer_smooth = v.clamp(0.0, 300.0).round();
@@ -406,6 +414,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "brake_hold" => s.brake_hold,
         "auto_clutch" => s.auto_clutch,
         "headtrack" => s.head_tracking,
+        "tobii_edges" => s.tobii_edges,
         "head_tracking_invert_yaw" => s.head_tracking_invert_yaw,
         "head_tracking_invert_pitch" => s.head_tracking_invert_pitch,
         "head_tracking_invert_roll" => s.head_tracking_invert_roll,
@@ -621,6 +630,10 @@ pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static 
         "headtrack" => {
             app.settings.head_tracking = on;
             Some(("head_tracking", bit))
+        }
+        "tobii_edges" => {
+            app.settings.tobii_edges = on;
+            Some(("tobii_edges", bit))
         }
         "head_tracking_invert_yaw" => {
             app.settings.head_tracking_invert_yaw = on;
