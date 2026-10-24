@@ -204,6 +204,8 @@ impl VehicleInstance {
         self.run_control_cables();
         let p = self.ty.program.clone();
         self.vm.run_frame(&p, &mut self.state, &mut self.host);
+        // and once more after them: what is drawn is the scheme's (see the method)
+        self.apply_scheme_vars_each_frame();
         self.show_radio_text();
         self.clear_pax_requests();
         self.update_visuals(dt);
@@ -241,6 +243,7 @@ impl VehicleInstance {
         self.host.clock.timegap = 0.0;
         self.run_control_cables();
         self.vm.run_frame(&p, &mut self.state, &mut self.host);
+        self.apply_scheme_vars_each_frame();
         self.host.clock.timegap = gap;
     }
 
@@ -444,6 +447,9 @@ impl VehicleInstance {
             self.vm.run_frame_ai(&p, &mut self.state, &mut self.host);
         }
         self.clear_pax_requests();
+        // (the scheme's [setvar]s after the scripts as well, and what another game pinned
+        // after those: see `apply_scheme_vars_each_frame`)
+        self.apply_scheme_vars_each_frame();
         for &(id, v) in pinned {
             self.put(Some(id), v);
         }
