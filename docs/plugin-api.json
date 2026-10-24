@@ -1075,6 +1075,22 @@
       "permission": null
     },
     {
+      "name": "duty.set_auto_ibis",
+      "group": "duty",
+      "since": "0.3.41",
+      "doc": "Whether the game types the duty into the bus's IBIS by itself - line, route, destination and the stop, at Shift+U and `--autostart` and again as each trip begins (on as a bus is taken). Off, the driver types them, or the plugin with `duty.type_ibis`. For the bus the player drives now, and while the plugin runs: when it stops or is switched off the game types the IBIS again, unless another plugin still leaves it to the driver. Off lasts for that bus only: after a change of vehicle (the `vehicle` event) the game types the new one's IBIS again, so a plugin that leaves it to the driver calls `duty.set_auto_ibis(false)` again there. `true` when there is a bus.",
+      "params": [
+        {
+          "name": "on",
+          "type": "bool",
+          "optional": false
+        }
+      ],
+      "returns": "boolean",
+      "multi": false,
+      "permission": "vehicle_write"
+    },
+    {
       "name": "duty.set_closed_stops",
       "group": "duty",
       "since": "0.3.36",
@@ -1197,6 +1213,16 @@
       "returns": "list of tables",
       "multi": false,
       "permission": null
+    },
+    {
+      "name": "duty.type_ibis",
+      "group": "duty",
+      "since": "0.3.41",
+      "doc": "Types the trip under way into the bus's IBIS now - line, route, destination and the stop the bus is at - as Shift+U does (`bus.set_line` types the line only); with `duty.set_auto_ibis` on, the next trips follow by themselves. `true` when there is a duty and a bus.",
+      "params": [],
+      "returns": "boolean",
+      "multi": false,
+      "permission": "vehicle_write"
     },
     {
       "name": "emit",

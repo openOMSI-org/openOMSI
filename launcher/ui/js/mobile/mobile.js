@@ -21,6 +21,7 @@ import { ControlsPage } from '../pages/controls.js';
 import { GamesPage } from '../pages/games.js';
 import { TutorialsPage } from '../pages/tutorials.js';
 import { SetupPage } from '../pages/setup.js';
+import { AddonsPage } from '../pages/addons.js';
 
 const TABS = [
   ['drive', 'Drive', 'bus'],
@@ -34,12 +35,12 @@ const TABS = [
 export function MobileApp() {
   const s = useStore();
   // (the keys and the game controllers open from Settings, #2308: they fell back to Drive)
-  const page = TABS.some((x) => x[0] === s.page) || ['games', 'tutorials', 'setup', 'controls'].includes(s.page) ? s.page : 'drive';
-  const Body = { drive: MobileDrive, multiplayer: MultiplayerPage, profile: ProfilePage, mods: ModsPage, settings: SettingsPage, more: More, games: GamesPage, tutorials: TutorialsPage, setup: SetupPage, controls: ControlsPage }[page];
+  const page = TABS.some((x) => x[0] === s.page) || ['games', 'tutorials', 'setup', 'controls', 'addons'].includes(s.page) ? s.page : 'drive';
+  const Body = { drive: MobileDrive, multiplayer: MultiplayerPage, profile: ProfilePage, mods: ModsPage, settings: SettingsPage, more: More, games: GamesPage, tutorials: TutorialsPage, setup: SetupPage, controls: ControlsPage, addons: AddonsPage }[page];
   const running = s.poll.instances?.length || 0;
   return html`<div class="m-shell">
     <nav class="m-rail">
-      ${TABS.map(([id, label, icon]) => html`<button class=${'m-tab' + (page === id || (id === 'more' && ['games', 'tutorials', 'setup'].includes(page)) || (id === 'settings' && page === 'controls') ? ' on' : '')} onClick=${() => set({ page: id })}>
+      ${TABS.map(([id, label, icon]) => html`<button class=${'m-tab' + (page === id || (id === 'more' && ['games', 'tutorials', 'setup', 'addons'].includes(page)) || (id === 'settings' && page === 'controls') ? ' on' : '')} onClick=${() => set({ page: id })}>
         <${Icon} name=${icon} size=${22} /><span>${t(label)}</span>${id === 'more' && running > 0 && html`<i class="m-dot"></i>`}
       </button>`)}
     </nav>
@@ -59,6 +60,7 @@ function More() {
       ${item('games', 'Running games', 'gamepad', running ? String(running) : null)}
       ${item('tutorials', 'Tutorials', 'book')}
       ${item('setup', 'Setup', 'folder')}
+      ${item('addons', 'Add-ons', 'globe')}
     </div>
     <p class="m-foot">openOMSI ${s.boot?.version || ''}</p>
   </div>`;

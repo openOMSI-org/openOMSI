@@ -3,7 +3,17 @@
 const REPO = "openOMSI-org/openOMSI";
 // the "playing now" counter (services/presence/): the games running right now
 const PRESENCE = "https://openomsi.savvabestbrother.workers.dev";
+const MAPPER_REPO = "openOMSI-org/openMapper";
+// The "New" markers of openMapper (menu badge, announcement on the overview) end by themselves
+const MAPPER_NEW_UNTIL = Date.parse("2026-11-23T00:00:00Z");
+const mapperIsNew = () => Date.now() < MAPPER_NEW_UNTIL;
+const MAPPER_DOCS = [
+  { file: "TUTORIAL", title: "Your first map", icon: "school" },
+  { file: "FEATURES", title: "Features and controls", icon: "list" },
+  { file: "ROADMAP", title: "Roadmap", icon: "flag" },
+];
 const DOCS = [
+  { file: "OPENMAPPER", title: "openMapper", icon: "edit_road" },
   { file: "USER_GUIDE", title: "User guide", icon: "sports_esports" },
   { file: "ANDROID", title: "Android & mobile", icon: "smartphone" },
   { file: "VR", title: "Virtual reality", icon: "view_in_ar" },
@@ -50,9 +60,11 @@ const view = document.getElementById("view");
 const drawer = document.getElementById("drawer");
 const scrim = document.getElementById("scrim");
 
-document.getElementById("doc-links").innerHTML = DOCS.map(d =>
+document.getElementById("doc-links").innerHTML = DOCS.filter(d => d.file !== "OPENMAPPER").map(d =>
   `<a href="#/docs/${d.file}" data-route="/docs/${d.file}"><span class="material-icons">${d.icon}</span>${d.title}</a>`).join("");
 
+document.getElementById("mapper-links").insertAdjacentHTML("beforeend", MAPPER_DOCS.map(d =>
+  `<a href="#/mapper/docs/${d.file}" data-route="/mapper/docs/${d.file}"><span class="material-icons">${d.icon}</span>${d.title}</a>`).join(""));
 function toggleDrawer(open) {
   drawer.classList.toggle("open", open);
   scrim.classList.toggle("open", open);
@@ -111,6 +123,7 @@ function showTemplate(id) {
 
 async function home() {
   showTemplate("home");
+  if (mapperIsNew()) document.getElementById("mapper-news")?.removeAttribute("hidden");
   playingNow();
   const rel = await latestRelease();
   const chip = document.querySelector("#version-chip span:last-child");
@@ -187,12 +200,22 @@ async function download(beta = false) {
     + SERVERS.map(card).join("");
 }
 
-async function doc(name, anchor) {
-  const meta = DOCS.find(d => d.file === name);
+// openMapper, the map editor: its own repository's latest release, the same way as the game's
+const MAPPER_RAW = `https://raw.githubusercontent.com/${MAPPER_REPO}/main`;
+// openMapper's own docs are read from its repository, so they are always the current ones
+const DOC_SETS = {
+  openomsi: { list: DOCS, repo: REPO, route: "docs", url: n => `docs/${n}.md`, blob: "" },
+  mapper: { list: MAPPER_DOCS, repo: MAPPER_REPO, route: "mapper/docs", url: n => `${MAPPER_RAW}/docs/${n}.md`, blob: "" },
+};
+
+async function doc(name, anchor, set = "openomsi") {
+  const cfg = DOC_SETS[set];
+  const meta = cfg.list.find(d => d.file === name);
   view.innerHTML = `<div class="content"><div class="doc"><div class="loading">Loading…</div></div></div>`;
   let md;
   try {
-    const r = await fetch(`docs/${name}.md`);
+    if (!meta && set !== "openomsi") throw new Error(404);
+    const r = await fetch(cfg.url(name));
     if (!r.ok) throw new Error(r.status);
     md = await r.text();
   } catch {
@@ -200,24 +223,29 @@ async function doc(name, anchor) {
     return;
   }
   const box = view.querySelector(".doc");
-  box.innerHTML = `<div class="doc-toolbar"><a href="https://github.com/${REPO}/blob/main/docs/${name}.md">
+  box.innerHTML = `<div class="doc-toolbar"><a href="https://github.com/${cfg.repo}/blob/main/docs/${name}.md">
     <span class="material-icons" style="font-size:18px">edit</span> Edit on GitHub</a></div>` + marked.parse(md);
-  document.title = `${meta ? meta.title : name} · openOMSI`;
+  document.title = `${meta ? meta.title : name} · ${set === "mapper" ? "openMapper" : "openOMSI"}`;
   // heading anchors
   box.querySelectorAll("h1, h2, h3, h4").forEach(h => {
     h.id = slug(h.textContent);
-    if (h.tagName !== "H1") h.insertAdjacentHTML("beforeend", `<a class="anchor" href="#/docs/${name}#${h.id}">#</a>`);
+    if (h.tagName !== "H1") h.insertAdjacentHTML("beforeend", `<a class="anchor" href="#/${cfg.route}/${name}#${h.id}">#</a>`);
   });
   // links between documents stay inside the site; other repository files go to GitHub
   box.querySelectorAll("a[href]").forEach(a => {
     const href = a.getAttribute("href");
     if (/^(https?:|mailto:|#)/.test(href)) return;
     const m = href.match(/^(?:\.\/)?([A-Z_]+)\.md(?:#(.*))?$/);
-    if (m && DOCS.some(d => d.file === m[1])) {
-      a.setAttribute("href", `#/docs/${m[1]}${m[2] ? "#" + m[2] : ""}`);
+    if (m && cfg.list.some(d => d.file === m[1])) {
+      a.setAttribute("href", `#/${cfg.route}/${m[1]}${m[2] ? "#" + m[2] : ""}`);
     } else {
-      a.setAttribute("href", `https://github.com/${REPO}/blob/main/docs/${href}`);
+      a.setAttribute("href", `https://github.com/${cfg.repo}/blob/main/docs/${href}`);
     }
+  });
+  // pictures of openMapper's docs live in its repository
+  if (set === "mapper") box.querySelectorAll("img[src]").forEach(i => {
+    const src = i.getAttribute("src");
+    if (!/^(https?:|data:)/.test(src)) i.src = new URL(src, `${MAPPER_RAW}/docs/`).href;
   });
   if (anchor) document.getElementById(anchor)?.scrollIntoView();
   else window.scrollTo(0, 0);
@@ -387,10 +415,13 @@ async function issue(n) {
 function route() {
   const hash = location.hash.replace(/^#/, "") || "/";
   const [path, anchor] = hash.split("#");
+  document.getElementById("mapper-badge")?.toggleAttribute("hidden", !mapperIsNew());
   document.querySelectorAll(".drawer a[data-route]").forEach(a => a.classList.toggle("active", a.dataset.route === path || (["/issues", "/releases"].includes(a.dataset.route) && path.startsWith(a.dataset.route + "/"))));
   toggleDrawer(false);
   document.title = "openOMSI";
   if (path.startsWith("/docs/")) return doc(path.slice(6), anchor);
+  if (path === "/mapper") { location.replace("#/docs/OPENMAPPER"); return; }
+  if (path.startsWith("/mapper/docs/")) return doc(path.slice(13), anchor, "mapper");
   if (path === "/download") return download();
   if (path === "/beta") return download(true);
   if (path === "/releases") return releases();

@@ -9,6 +9,7 @@ description = "The launcher page's commands (desktop launcher and phone web view
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+url.workspace = true
 omsi-launcher-core = { path = "../omsi-launcher-core" }
 omsi-cfg = { path = "../omsi-cfg" }
 omsi-timetable = { path = "../omsi-timetable" }

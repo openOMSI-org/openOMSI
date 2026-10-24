@@ -265,11 +265,13 @@ fn serve(rx: std::sync::mpsc::Receiver<Value>, reply: Reply) {
 
 /// The ground of the launcher's map around `at` (metres from the page's origin, as `map`
 /// answers it) as the game's city map builds it at `mpp` (`omsi_navigator::MapGround`): a
-/// little-endian `u32` length and a JSON head (where the vertices are measured from, how many
-/// of the ground and of the houses there are, the palette as CSS), then the vertices, 28 bytes
-/// each: position, extrusion, width in metres and in pixels (`f32` pairs), the colour (sRGB
-/// bytes, straight alpha). The page widens each by its extrusion times the larger of the two
-/// widths, as the game's shader does.
+/// little-endian `u32` length and a JSON head (where the vertices are measured from, the step
+/// of their positions, the runs of flat and widened triangles in drawing order, the palette as
+/// CSS), then the flat triangles' vertices, 8 bytes each (position as `i16` steps, the colour
+/// as sRGB bytes, straight alpha), then the widened ones', 16 bytes each (position, extrusion
+/// in 1/4096, width in metres and in pixels in 1/256, all `i16`, then the colour). The page
+/// widens each by its extrusion times the larger of the two widths, as the game's shader does.
+/// A flat triangle smaller than half a pixel is left out: the picture is the same.
 fn map_ground(map: &str, global: &std::path::Path, date: &str, at: glam::DVec2, reach: f64, mpp: f64, light: bool) -> Vec<u8> {
     use std::sync::Arc;
     type Read = (String, glam::DVec2, Arc<omsi_navigator::MapGround>);
@@ -296,12 +298,42 @@ fn map_ground(map: &str, global: &std::path::Path, date: &str, at: glam::DVec2, 
         let c = c.0;
         format!("rgba({},{},{},{:.3})", (c[0] * 255.0).round(), (c[1] * 255.0).round(), (c[2] * 255.0).round(), c[3])
     };
+    // (the houses' standing walls and roofs, then the flat roofs; their shadows only fall
+    // where the map is tilted, which this one never is)
+    let verts: Vec<&omsi_ui::Vertex> = ground_v.iter().chain(solid).chain(flat).collect();
+    let tris: Vec<(bool, &[&omsi_ui::Vertex])> = verts
+        .chunks_exact(3)
+        .filter_map(|t| {
+            let wide = t.iter().any(|v| v.ext != [0.0, 0.0]);
+            let span = |i: usize| t.iter().map(|v| v.pos[i]).fold(f32::MIN, f32::max) - t.iter().map(|v| v.pos[i]).fold(f32::MAX, f32::min);
+            (wide || span(0).max(span(1)) as f64 >= mpp * 0.5).then_some((wide, t))
+        })
+        .collect();
+    let far = tris.iter().flat_map(|(_, t)| t.iter()).fold(1.0f32, |m, v| m.max(v.pos[0].abs()).max(v.pos[1].abs()));
+    let step = far / 32000.0;
+    let mut runs: Vec<(bool, usize)> = Vec::new();
+    let (mut flats, mut wides) = (Vec::new(), Vec::new());
+    let i16s = |out: &mut Vec<u8>, xs: [f32; 2]| xs.into_iter().for_each(|x| out.extend_from_slice(&(x.round().clamp(-32767.0, 32767.0) as i16).to_le_bytes()));
+    for (wide, t) in &tris {
+        match runs.last_mut() {
+            Some((w, n)) if w == wide => *n += 3,
+            _ => runs.push((*wide, 3)),
+        }
+        for v in t.iter() {
+            let out = if *wide { &mut wides } else { &mut flats };
+            i16s(out, [v.pos[0] / step, v.pos[1] / step]);
+            if *wide {
+                i16s(out, [v.ext[0] * 4096.0, v.ext[1] * 4096.0]);
+                i16s(out, [v.width[0] * 256.0, v.width[1] * 256.0]);
+            }
+            out.extend(v.color.map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8));
+        }
+    }
     let head = json!({
         "anchor": [b.anchor.x - origin.x, b.anchor.y - origin.y],
-        "ground": ground_v.len(),
-        // (the houses' standing walls and roofs, then the flat roofs; their shadows only
-        // fall where the map is tilted, which this one never is)
-        "houses": [solid.len(), flat.len()],
+        "step": step,
+        "runs": runs.iter().map(|(w, n)| json!([*w as u8, n])).collect::<Vec<_>>(),
+        "flat": flats.len(),
         "palette": {
             "land": css(pal.land), "route": css(pal.route), "route_edge": css(pal.route_edge), "driven": css(pal.driven),
             "card": css(pal.card), "card_text": css(pal.card_text), "card_dim": css(pal.card_dim),
@@ -309,16 +341,11 @@ fn map_ground(map: &str, global: &std::path::Path, date: &str, at: glam::DVec2, 
         },
     })
     .to_string();
-    let verts = ground_v.iter().chain(solid).chain(flat);
-    let mut out = Vec::with_capacity(4 + head.len() + 28 * (ground_v.len() + solid.len() + flat.len()));
+    let mut out = Vec::with_capacity(4 + head.len() + flats.len() + wides.len());
     out.extend_from_slice(&(head.len() as u32).to_le_bytes());
     out.extend_from_slice(head.as_bytes());
-    for v in verts {
-        for x in [v.pos[0], v.pos[1], v.ext[0], v.ext[1], v.width[0], v.width[1]] {
-            out.extend_from_slice(&x.to_le_bytes());
-        }
-        out.extend(v.color.map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8));
-    }
+    out.extend_from_slice(&flats);
+    out.extend_from_slice(&wides);
     out
 }
 
