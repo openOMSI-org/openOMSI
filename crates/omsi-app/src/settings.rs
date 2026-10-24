@@ -577,10 +577,11 @@ impl Settings {
         s
     }
 
-    /// One of the Tobii head-tracking lines of the settings file (`from_text`).
-    fn read_tobii(&mut self, k: &str, v: &str) {
+    /// One of the Tobii head-tracking lines or the pause menu's shortcuts of the settings file (`from_text`).
+    fn read_extra(&mut self, k: &str, v: &str) {
         match k {
             "head_tracking_source" => self.head_tracking_source = omsi_launcher_lib::head_tracking_source(v).to_string(),
+            "pause_quick_actions" => self.pause_quick_actions = v.to_string(),
             "tobii_edges" => self.tobii_edges = matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes"),
             _ => {
                 let x = omsi_launcher_lib::head_tracking_value(k, v.parse::<f64>().ok()) as f32;
@@ -860,7 +861,7 @@ impl Settings {
                 "head_tracking_invert_x" => s.head_tracking_invert_x = b(v),
                 "head_tracking_invert_y" => s.head_tracking_invert_y = b(v),
                 "head_tracking_invert_z" => s.head_tracking_invert_z = b(v),
-                "head_tracking_source" | "tobii_edges" | "head_tracking_smoothing" | "head_tracking_dead_zone" => s.read_tobii(&k, v),
+                "head_tracking_source" | "tobii_edges" | "head_tracking_smoothing" | "head_tracking_dead_zone" | "pause_quick_actions" => s.read_extra(&k, v),
                 "discord_status" => s.discord_status = b(v),
                 "discord_app_id" => s.discord_app_id = v.trim().to_string(),
                 "voice_enabled" => s.voice_enabled = b(v),
@@ -884,7 +885,6 @@ impl Settings {
                 "seat_pitch_deg" => s.seat_pitch_deg = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(-45.0, 45.0)).unwrap_or(s.seat_pitch_deg),
                 "fov" => s.fov = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| if x < 20.0 { 0.0 } else { x.min(120.0) }).unwrap_or(s.fov),
                 "mouse_sens" => s.mouse_sens = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.1, 3.0)).unwrap_or(s.mouse_sens),
-                "pause_quick_actions" => s.pause_quick_actions = v.to_string(),
                 "ui_scale_window" => s.ui_scale_window = b(v),
                 "notes" => s.notes = b(v),
                 "info_bar" => s.info_bar = b(v),
