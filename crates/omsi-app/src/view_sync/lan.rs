@@ -11,10 +11,13 @@ use omsi_render::{Renderer, Scene};
 use std::sync::Arc;
 
 /// Other players' buses are heard within this distance (m), and fall silent beyond 1.2 times it.
+mod freetex;
+
 const HEAR_RANGE: f64 = 250.0;
 
 /// The view of one other player's vehicle.
 struct RemoteView {
+    pixels: freetex::RemotePixels,
     render: scene::VehicleRender,
     trailer_renders: Vec<scene::VehicleRender>,
     sounds: Vec<omsi_audio::SoundSet>,
@@ -31,6 +34,7 @@ struct RemoteView {
 /// The other players' vehicles as drawn and heard, by player id.
 #[derive(Default)]
 pub(crate) struct LanView {
+    pixels: freetex::Pixels,
     remotes: hashbrown::HashMap<u32, RemoteView>,
     /// The world's reader of vehicle sets, lent to `omsi_lan::remote_load` while this lives.
     prefetching: Option<omsi_lan::remote_load::Lent>,
@@ -133,7 +137,9 @@ fn made(w: &World, r: &Renderer, scene: &mut Scene, rv: &RemoteVehicle) -> Remot
         .iter()
         .map(|t| w.add_vehicle_shared(r, scene, &t.ty, scheme.filter(|i| *i < t.ty.paint_schemes.len()), Some(&render)))
         .collect();
-    RemoteView { render, trailer_renders, sounds: Vec::new(), inside_sounds: None, driver: None, driver_for: None }
+    let mut view = RemoteView { pixels: Default::default(), render, trailer_renders, sounds: Vec::new(), inside_sounds: None, driver: None, driver_for: None };
+    if !rv.stand_in && !rv.fallback { freetex::prepare(&mut view); }
+    view
 }
 
 /// A remote vehicle has gone: its sounds stop and its instances go back to the world.
@@ -147,6 +153,7 @@ fn release(r: &Renderer, scene: &mut Scene, world: &World, audio: Option<&omsi_a
         d.hide(r, scene);
     }
     world.release_vehicle(r, scene, v.render);
+    freetex::release(r, scene, v.pixels);
     for t in v.trailer_renders {
         world.release_vehicle(r, scene, t);
     }

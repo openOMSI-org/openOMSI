@@ -173,6 +173,15 @@ pub struct RemoteVehicle {
 }
 
 impl RemoteVehicle {
+    /// Same bus/schema authorization as scripttex, including compatible name mappings.
+    pub fn freetex_subscription_table(&self) -> Option<u32> {
+        if self.stand_in || self.fallback || (self.remote_schema.is_some() && self.vars.is_none()) {
+            return None;
+        }
+        // `sync_vars` has already checked the schema and authorized this owner's table.
+        // Do not rehash the whole Program on every render frame.
+        Some(crate::script_texture::script_texture_table_for_vars(&self.made_as.0, self.vars.as_ref()?.hash, &[]))
+    }
     /// The LAN player's vehicle as it is drawn here.
     pub fn vehicle(&self) -> &omsi_sim::VehicleInstance {
         &self.vehicle

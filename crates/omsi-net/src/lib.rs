@@ -100,6 +100,7 @@ pub use traffic_net::TrafficNetStats;
 pub mod vars;
 pub mod var_schema;
 pub mod scripttex;
+pub mod freetex;
 pub mod ai_context;
 pub mod sounds;
 pub mod voice_net;
@@ -1354,6 +1355,7 @@ pub struct LanSession {
     var_receiver: vars::VarReceiver,
     ai_context_in: Vec<Vec<u8>>,
     script_textures: scripttex::Sync,
+    freetex_packets: Vec<Vec<u8>>,
     sounds: sounds::Sync,
     /// Voice chat (`voice_net`): what the session allows, the players an administrator
     /// silenced (host), the frames that came in, and where we are.
@@ -1489,6 +1491,7 @@ impl LanSession {
             schema_receiver: vars::VarReceiver::default(),
             schemas_in: Vec::new(),
             script_textures: scripttex::Sync::default(),
+            freetex_packets: Vec::new(),
             sounds: sounds::Sync::default(),
             voice_policy: VoicePolicy::default(),
             voice_muted: Default::default(),
@@ -2611,8 +2614,7 @@ impl LanSession {
                 self.on_sound(&data, from);
                 continue;
             }
-            if data[0] == scripttex::MAGIC {
-                self.on_script_texture(&data, from);
+            if self.on_image_packet(&data, from) {
                 continue;
             }
             if data[0] == var_schema::MAGIC {

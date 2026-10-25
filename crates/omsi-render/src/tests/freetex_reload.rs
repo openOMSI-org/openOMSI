@@ -43,6 +43,8 @@ fn changed_freetex_reuses_cached_materials_and_rebinds_only_after_resize() {
     );
     // Selecting the cached material again sees those new pixels, without rebuilding it.
     assert_eq!(scene.materials[cached_zero].texture, Some(zero));
+    // A different owner's private texture remains unchanged by a remote update.
+    assert_eq!(read_first_texture_block(&renderer, &scene.textures[one]), [0, 0, 255, 255]);
     assert!(renderer.refresh_texture(&mut scene, zero, &picture(8, &[255, 255, 0, 255])));
     assert_ne!(scene.textures[zero].generation, old_generation);
     assert_eq!(renderer.rebind_textures(&mut scene, &[zero]), 1);
