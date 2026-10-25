@@ -451,7 +451,8 @@ impl Renderer {
 
     /// Render one OpenXR view using the headset's asymmetric projection matrix.
     /// The matrix uses the same reversed depth range as the desktop camera. The
-    /// second eye reuses the first eye's shadow atlas when both share an origin.
+    /// second eye reuses the first eye's shadow atlas when both share an origin,
+    /// while each eye keeps its own visibility and LOD history between frames.
     pub fn render_xr_eye(
         &mut self,
         scene: &mut Scene,
@@ -463,7 +464,18 @@ impl Renderer {
         projection: Mat4,
         second_eye: bool,
     ) {
+        self.swap_xr_culling(second_eye as usize);
         self.render_inner(scene, target, width, height, camera, lighting, false, None, Some(projection), second_eye);
+        self.swap_xr_culling(second_eye as usize);
+    }
+
+    fn swap_xr_culling(&mut self, eye: usize) {
+        // As with triple-screen panels, an eye must use its own previous view,
+        // and leave the desktop's history intact when returning from the draw.
+        let history = &mut self.history.xr_culling[eye];
+        std::mem::swap(self.history.cull_drawn.get_mut(), &mut history.drawn);
+        std::mem::swap(self.history.object_sizes.get_mut(), &mut history.sizes);
+        std::mem::swap(self.history.object_sizes_scratch.get_mut(), &mut history.scratch);
     }
 
     /// Composite the shared game menu and a world-positioned pointer into each eye.
@@ -688,6 +700,11 @@ impl Renderer {
         clock.stage(self, "shadow items", "mirror.shadow items");
         let visible = self.cull_view(scene, &f, &mut clock);
         let mut plan = self.batch_draws(scene, &f, &visible, Vec::new());
+        if plan.ground.active() {
+            // (the frame's uniform was written with the flag off: the base is lit from the ground picture)
+            let lod = [self.fsr_mip_bias(&f), 1.0, 0.0, 0.0];
+            self.queue.write_buffer(&self.camera_buf, std::mem::offset_of!(CameraUniform, lod) as u64, bytemuck::bytes_of(&lod));
+        }
         // (the shadow casters' entries after the passes' own: the main pass's batches keep
         // their places in the list while only the shadows change, and its bundles are kept)
         let at = plan.list.len() as u32;
@@ -728,6 +745,9 @@ impl Renderer {
         self.encode_precip_map(&mut enc.shadow, scene, &sh, &shadow_batches, &mut timers);
         let prepass_batches = if self.shares_prepass_depth(&f, &plan) { plan.prefill_batches() } else { &plan.prepass_batches };
         self.encode_depth_prepass(&mut enc.prepass, scene, &f, prepass_batches, &mut timers);
+        if plan.ground.active() {
+            self.encode_ground(&mut enc.prepass, scene, &plan.ground, &mut timers);
+        }
         if f.enhanced && f.lead_view && f.prepass_on && self.device_lost().is_none() {
             if let (Some(s), Some(ao)) = (self.tone.lamp_sight.as_mut(), self.targets.ao.as_ref()) {
                 s.encode(&self.device, &self.queue, &mut enc.prepass, &ao.depth_view, vp_mat, f.ro, f.cam_rel);

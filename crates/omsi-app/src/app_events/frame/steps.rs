@@ -42,8 +42,20 @@ pub(crate) fn traffic_tick(
         });
         t.tick(dt, player.map(|p| player_outline(p)));
         let t0 = Instant::now();
-        world.set_switches(scenery, &t.switch_requests());
-        world.set_signals(scenery, &t.signal_aspects(&world.signal_routes, player_rail));
+        // the signals first: the switches that a clear signal locks read them
+        let aspects = t.signal_aspects(&world.signal_routes, player_rail);
+        if !t.switch_board.configured {
+            t.switch_board.configure(switch_rules(&world.transit));
+        }
+        let requests = t.switch_requests();
+        let requests = if world.transit.switches.list.is_empty() {
+            requests
+        } else {
+            let occupied = t.rail_occupied_pieces();
+            t.switch_board.decide(dt, &requests, &occupied, &aspects)
+        };
+        world.set_switches(scenery, &requests);
+        world.set_signals(scenery, &aspects);
         return t0.elapsed().as_secs_f64();
     }
     0.0
@@ -555,4 +567,28 @@ pub(crate) fn push_mirror_hud(
     let start = scene.overlays.len();
     hud.push(scene, world, viewport[2], viewport[3], cursor);
     scene.shift_overlays(start, viewport[0]);
+}
+
+/// The switches `switches.cfg` configures, as the traffic's board has them: their rest position,
+/// how they are operated and the signal object that locks them.
+fn switch_rules(transit: &omsi_transit::TransitData) -> Vec<omsi_sim::ai_traffic::blocks::SwitchRule> {
+    use omsi_sim::ai_traffic::blocks::{SwitchDrive, SwitchRule};
+    transit
+        .switches
+        .list
+        .iter()
+        .filter_map(|w| {
+            let object = w.object?;
+            Some(SwitchRule {
+                object,
+                default_path: w.default_path(),
+                drive: match w.drive {
+                    omsi_transit::infra::Drive::Auto => SwitchDrive::Auto,
+                    omsi_transit::infra::Drive::Manual => SwitchDrive::Manual,
+                    omsi_transit::infra::Drive::Interlocked => SwitchDrive::Interlocked,
+                },
+                locked_by: w.locked_by.as_deref().and_then(|s| transit.signals.signals.iter().find(|x| x.id.eq_ignore_ascii_case(s))).and_then(|s| s.object),
+            })
+        })
+        .collect()
 }

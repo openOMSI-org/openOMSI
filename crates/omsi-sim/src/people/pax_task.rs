@@ -1,6 +1,7 @@
 //! Passengers' tasks (sub_62e42c): setting one up and what each task does every frame.
 
 use super::*;
+use super::pax_stops::entry_on_platform;
 
 impl PeopleSim {
     /// sub_62e42c: a new task and what it starts with.
@@ -223,10 +224,28 @@ impl PeopleSim {
         };
         // (the doors of the sections of the place reserved)
         let group = p.seat.and_then(|k| bn.cabin.seats.get(k)).map(|s| s.group);
-        let list = bn.cabin.in_group(bn.cabin.entry_points(), group);
+        let side = p.stop.and_then(|stop| self.preferred_entry_side(stop, bn, p.pos));
+        // Never select the opposite doors just because they are closer or open:
+        // on central BRT platforms this sent people straight through the bus.
+        let list: Vec<_> = bn.cabin.in_group(bn.cabin.entry_points(), group)
+            .into_iter()
+            .enumerate()
+            .map(|(k, point)| {
+                if bn.cabin.entries.get(k).is_some_and(|door| entry_on_platform(side, door.side)) {
+                    point
+                } else {
+                    None
+                }
+            })
+            .collect();
         let flags = bn.cabin.entry_flags();
         let open: Vec<bool> = (0..list.len()).map(|k| bn.entry_open.get(k).copied().unwrap_or(false)).collect();
-        let pt = bn.cabin.omsi_nearest(here, &list, p.ticket == TICKET_BUY, false, Some(&flags), Some(&open));
+        // A filtered list can begin with a door on the opposite side (None).
+        // With every matching door still shut, omsi_nearest's rigid-bus fallback
+        // returns the first slot, which might be None. Retry without the open mask
+        // to keep ticket-sale restrictions and the nearest platform-facing target.
+        let pt = bn.cabin.omsi_nearest(here, &list, p.ticket == TICKET_BUY, false, Some(&flags), Some(&open))
+            .or_else(|| bn.cabin.omsi_nearest(here, &list, p.ticket == TICKET_BUY, false, Some(&flags), None));
         let p = self.pax_mut(i).unwrap();
         if let Some(q) = pt.and_then(|k| bn.cabin.graph.points.get(k)) {
             p.target = q.as_dvec3();
@@ -298,7 +317,15 @@ impl PeopleSim {
                 let Some(stop) = p.stop else { return };
                 if let Some(bn) = bn {
                     if bn.speed.abs() < 3.0 && self.in_stop_box(stop, bn.id) {
-                        if let Some(k) = self.reserve_place(bn.id, &bn.cabin.seats, &bn.places_off) {
+                        // A seat in a disconnected trailer needs an entry on this side
+                        // too; otherwise a passenger reserves it and can never board.
+                        let side = self.preferred_entry_side(stop, bn, p.pos);
+                        let off: Vec<bool> = bn.cabin.seats.iter().enumerate().map(|(k, seat)| {
+                            bn.places_off.get(k).copied().unwrap_or(false)
+                                || !bn.cabin.entries.iter().any(|door| door.point.is_some()
+                                    && door.group == seat.group && entry_on_platform(side, door.side))
+                        }).collect();
+                        if let Some(k) = self.reserve_place(bn.id, &bn.cabin.seats, &off) {
                             let (tk, id) = self.decide_pax_ticket(i, bn);
                             let price = self.tickets.as_ref().and_then(|t| t.tickets.get(id.saturating_sub(1) as usize)).map(|t| t.value).unwrap_or(0.0);
                             self.pax_mut(i).unwrap().seat = Some(k);

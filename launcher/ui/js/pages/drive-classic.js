@@ -3,7 +3,7 @@ import { useStore, set, remembered, remember, toast } from '../store.js';
 import { t, hhmm, longDate, language } from '../i18n.js';
 import { Icon } from '../icons.js';
 import { Button, Notice, useConfirm } from '../ui.js';
-import { choose, curMap, curBus, curLine, curTour, pickedTrip, start, loadSituations, weatherName, mapName, noServerBus, askJoined } from '../data.js';
+import { choose, curMap, curBus, curLine, curTour, pickedTrip, start, loadSituations, weatherName, mapName, noServerBus, askJoined, transportRefusal } from '../data.js';
 import { call } from '../api.js';
 import { BusPreview } from '../preview.js';
 import { BusList, BusOptions, withoutMaker } from './bus-list.js';
@@ -75,7 +75,8 @@ export function StartBar({ step, go }) {
   }, [armed]);
   const trip = tour && !c.free ? (pickedTrip() != null ? tour.trips.find((x) => x.index === pickedTrip()) : tour.trips[tripAt(tour, c.time * 60)]) : null;
   const joined = c.lan_mode === 'join';
-  const ready = m && v && (c.free || (line && tour)) && !noServerBus();
+  const refusal = transportRefusal(m, v);
+  const ready = m && v && (c.free || (line && tour)) && !noServerBus() && !refusal;
   const running = s.poll.instances?.length || 0;
   const another = running > 0 && armed > 0;
   const next = STEPS.findIndex(([id]) => id === step) + 1;
@@ -106,6 +107,7 @@ export function StartBar({ step, go }) {
     <div class="what">
       <b class="ellipsis" title=${title}>${title}</b>
       <span class="ellipsis" title=${sub}>${sub}</span>
+      ${refusal && html`<span class="ellipsis" style="color:var(--warn)" title=${refusal}>${refusal}</span>`}
       ${v?.missing_packs?.length > 0 && html`<span class="ellipsis" style="color:var(--warn)" title=${v.missing_packs.join(', ')}>${t('Parts of this bus come from packs that are not installed: {packs}', { packs: v.missing_packs.join(', ') })}</span>`}
     </div>
     <div class="bar-actions">

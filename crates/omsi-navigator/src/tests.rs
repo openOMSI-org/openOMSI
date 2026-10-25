@@ -575,3 +575,16 @@ fn the_compass_keeps_clear_of_the_open_lines_panel() {
     assert!(beside.x + r <= left, "the disc ends before the panel begins: {} vs {left}", beside.x + r);
     assert_eq!(beside.y, free.y, "only moved sideways");
 }
+
+/// A plugin's panel in the whole frame puts the map where it says, kept inside the picture:
+/// what reaches past its edges is cut off, and one below it is no map at all.
+#[test]
+fn a_frame_panel_s_map_stays_inside_the_navigator() {
+    let m = |rect: [f32; 4]| FrameMap { rect, cards: false };
+    assert_eq!(framed_map(m([10.0, 80.0, 340.0, 272.0]), 360.0, 500.0), (Rect::new(10.0, 80.0, 340.0, 272.0), false));
+    assert_eq!(framed_map(m([10.0, 300.0, 400.0, 272.0]), 360.0, 500.0).0, Rect::new(10.0, 300.0, 350.0, 200.0));
+    assert_eq!(framed_map(m([10.0, 600.0, 340.0, 272.0]), 360.0, 500.0).0.h, 0.0);
+    // (no frame panel: the navigator lays itself out as ever)
+    let n = Navigator::new(true, 0.85, "bottom-left");
+    assert_eq!((n.frame_panel, n.framed, n.frame_card), (None, None, None));
+}

@@ -74,6 +74,7 @@ impl TrafficSim {
             cars: Vec::new(),
             dormant: Vec::new(),
             dormant_time: 0.0,
+            lane_weight_sums: (0, Vec::new()),
             // the session's own traffic (as the scripts' `random`, see
             // `omsi_script::set_session_seed`): which cars come, where and when differs from
             // session to session as in OMSI, and OMSI_SEED=n repeats one exactly. Without a
@@ -133,6 +134,8 @@ impl TrafficSim {
             player_turn: 0.0,
             player_blinker: 0,
             player_rail: None,
+            blocks: Default::default(),
+            switch_board: Default::default(),
             player_signal_age: f32::MAX,
             player_signalling: 0.0,
             way_users: Vec::new(),

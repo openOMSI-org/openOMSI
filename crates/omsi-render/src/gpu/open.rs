@@ -540,19 +540,28 @@ impl Renderer {
         let rain = coronas::Precip::rain(&device, &scene.camera_layout, &precip.view);
         drop(corona_texture);
         let sky = sky::SkyBase::new(&device, &queue, &scene.camera_layout, !leave_out_enhanced);
-        let passes = passes::PassKit { device: &device, scene: &scene, coronas: &coronas, snow: &snow, rain: &rain, sky: &sky, msaa }
-            .build(format, hdr_format, leave_out_enhanced);
+        let sky_pipelines = sky.pipeline_base();
+        let kit = passes::PassKit { device: &device, scene: &scene, coronas: &coronas, snow: &snow, rain: &rain, sky: &sky_pipelines, msaa };
+        let eye_pipeline_kit = (!leave_out_enhanced && options.ray_tracing).then(|| passes::EyePipelineKit::new(&kit));
+        let passes = kit.build(format, hdr_format, leave_out_enhanced);
         let (sky_sampler, sky_mesh) = sky::dome(&device, &queue);
         let overlays = overlays::Overlays::new(&device, format, msaa);
         let gl = GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed);
         let ssao = ssao::ssao(&device, gl);
         let fog_lamps = ssao::fog_lamps(&device, &scene.camera_layout, hdr_format, gl);
         let prepass = scene::prepass(&device, &scene, msaa, !leave_out_enhanced);
+        let ground_pipelines = (!gl && !leave_out_enhanced && !sixteen_texture_units()).then(|| std::array::from_fn(|i| scene.ground_pipeline_at(&device, i)));
         let mip = mip::build(&device);
         let post = post::build(&device, format, hdr_format, &defaults.white_texture);
         let enhanced = enhanced::build(&device, &queue, hdr_format, &defaults.camera_buf, &sky, !leave_out_enhanced);
         let (overlay_pipeline_1x, xr_ui_pipeline) = overlays.single_sampled(&device, format);
-        let upscale = upscale::build(&device, format);
+        let upscale = upscale::build(&device, format, options.fsr1 || crate::fsr1_enabled());
+        // (asked for at the start and refused: not tried again from the menu)
+        let fsr_refused = (options.fsr1 || crate::fsr1_enabled()) && upscale.fsr.is_none();
+        // (OMSI_FSR1: FSR 1 from the start whatever the settings say - the menu can still turn
+        // it off; what the settings asked for is kept, so that only a change of theirs does)
+        let upscaler_asked = (options.fsr1, options.fsr_sharpness, options.render_scale);
+        let options = RenderOptions { fsr1: (options.fsr1 || crate::fsr1_enabled()) && upscale.fsr.is_some(), ..options };
         let gpu_timers = [GpuTimers::new(&device), GpuTimers::new(&device)];
         // GLES cannot reliably read the depth buffer (the same limitation as SSAO).
         let puddles = (!gl && !passes.leave_out_enhanced).then(|| {
@@ -569,11 +578,18 @@ impl Renderer {
                 evicted_at: std::time::Instant::now(),
                 hdr_targets: HashMap::new(),
                 ao: None,
+                ground: None,
                 depth: None,
                 msaa_targets: HashMap::new(),
             },
             scale: Upscale {
                 upscale_pipeline: upscale.upscale_pipeline,
+                fsr: upscale.fsr,
+                fsr_target: std::cell::RefCell::new(Vec::new()),
+                fsr_refused,
+                upscaler_asked,
+                fsr_raw_bg: Default::default(),
+                fsr_mip_bias_off: Default::default(),
                 copy_pipeline: upscale.copy_pipeline,
                 panel_pipeline: upscale.panel_pipeline,
                 upscale_layout: upscale.layout,
@@ -658,6 +674,7 @@ impl Renderer {
             },
             history: ViewHistory {
                 triple_culling: Default::default(),
+                xr_culling: Default::default(),
                 flicker: std::cell::RefCell::new(HashMap::new()),
                 main_bundles: Default::default(),
                 mirror_bundles: Default::default(),
@@ -701,6 +718,9 @@ impl Renderer {
             ao_buf: ssao.buf,
             prepass_pipelines: prepass.pipelines,
             prepass_msaa_pipelines: prepass.msaa_pipelines,
+            prepass_eye_pipelines: prepass.eye_pipelines,
+            ground_pipelines,
+            ground_bound: std::cell::Cell::new(false),
             ssao_pipeline: ssao.ssao_pipeline,
             blur_pipeline: ssao.blur_pipeline,
             plain_ssao_pipeline: ssao.plain_ssao_pipeline,
@@ -712,6 +732,8 @@ impl Renderer {
             material_layout: scene.material_layout,
             pass: passes.pass,
             hdr_pass: passes.hdr_pass,
+            hdr_eye_pass: passes.hdr_eye_pass,
+            eye_pipeline_kit,
             reflection_pass: passes.reflection_pass,
             overlay_pipeline: overlays.pipeline,
             overlay_layout: overlays.layout,

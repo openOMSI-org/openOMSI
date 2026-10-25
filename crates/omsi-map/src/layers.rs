@@ -118,7 +118,7 @@ impl Mapped {
 
 const MAGIC: &[u8; 4] = b"OMML";
 /// Bumped whenever the generator changes what it makes: an older cache is read again.
-pub const VERSION: u32 = 18;
+pub const VERSION: u32 = 19;
 
 impl Layers {
     pub fn empty(origin: DVec2) -> Layers {

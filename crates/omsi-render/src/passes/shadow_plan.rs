@@ -177,8 +177,8 @@ impl Renderer {
                 light_view_proj_close,
             )));
         }
-        let raining = scene.rainfall.rate > 0.001 && !f.env.no_rain && self.main_pass(f.enhanced, f.reflection_frame).rain_fall_pipeline.is_some();
-        let snowing = lighting.snowfall > 0.01 && !f.env.no_snowfall && self.main_pass(f.enhanced, f.reflection_frame).snow_pipeline.is_some();
+        let raining = scene.rainfall.rate > 0.001 && !f.env.no_rain && self.main_pass(f.enhanced, f.reflection_frame, f.eye_color).rain_fall_pipeline.is_some();
+        let snowing = lighting.snowfall > 0.01 && !f.env.no_snowfall && self.main_pass(f.enhanced, f.reflection_frame, f.eye_color).snow_pipeline.is_some();
         let precip = ((raining || snowing) && f.with_overlays && projection.is_none() && f.exclude_texture.is_none() && !f.env.no_precip_roof).then(|| precip_matrix(cam_rel));
         ShadowPlan {
             precip,
@@ -399,7 +399,7 @@ impl Renderer {
         };
         if active.iter().any(|a| *a) || !lamp_shadows.is_empty() || precip_box.is_some() {
             let n = scene.instances.len();
-            let parts = (n / 8192).clamp(1, self.encoding_pool.as_ref().map_or(3, |p| p.current_num_threads()) + 1);
+            let parts = instance_parts(self.encoding_pool.as_ref(), n);
             let chunk = n.div_ceil(parts).div_ceil(CULL_BLOCK) * CULL_BLOCK;
             let blocks = Self::cull_blocks(scene);
             let lit = |b: usize| {

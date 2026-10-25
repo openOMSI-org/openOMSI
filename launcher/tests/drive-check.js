@@ -1,7 +1,7 @@
 import { html, render } from '../ui/vendor/preact-htm.js';
 import { Tours } from '../ui/js/pages/drive-duty.js';
 import { S, set, remember } from '../ui/js/store.js';
-import { applyTheme, choose, curTour, duty, resolveTour, LAUNCHER_LAYOUTS } from '../ui/js/data.js';
+import { applyTheme, choose, curTour, duty, resolveTour, transportRefusal, LAUNCHER_LAYOUTS } from '../ui/js/data.js';
 
 const OPTIONS = {
   Map: () => one('.page-drive .map-row'),
@@ -320,6 +320,17 @@ async function options(where) {
   return Object.keys(OPTIONS).filter((k) => !found.has(k)).map((k) => `${where}: "${k}" cannot be found`);
 }
 
+/** A bus does not run on a tram map; a map without modes takes everything. */
+function transportModes() {
+  const out = [];
+  const bus = { transport: ['bus'] };
+  const tram = { transport: ['tram'] };
+  if (transportRefusal({}, bus) || transportRefusal({ transport: [] }, tram)) out.push('transport: a map without modes must take every vehicle');
+  if (!transportRefusal({ transport: ['tram'] }, bus)) out.push('transport: a bus must not run on a tram map');
+  if (transportRefusal({ transport: ['tram', 'bus'] }, bus) || transportRefusal({ transport: ['tram'] }, tram)) out.push('transport: a vehicle of the map\'s mode must run');
+  return out;
+}
+
 /** A date the player typed stays when a duty is chosen, even outside the map's `[years]`. */
 async function dateOutsideTheMapsYears() {
   const out = [];
@@ -405,5 +416,6 @@ export async function run({ themes = ['dark', 'light'], layouts = LAUNCHER_LAYOU
   }
   report['duplicate tour numbers'] = await duplicateTourNumbers();
   report['duty date'] = await dateOutsideTheMapsYears();
+  report['transport modes'] = transportModes();
   return report;
 }

@@ -55,16 +55,26 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // one and stays.
     let pic_lod = led_lod(duv, vec2<f32>(textureDimensions(t_diffuse)));
     let led_pic = material.emissive.w < -1.5 && enh.led.y < pic_lod;
-    var tex = diffuse_border(textureSample(t_diffuse, s_diffuse, duv), duv);
-    if (is_snow_pane()) {
-        tex = snow_on_pane(in, film_water);
-    }
-    if (led_pic) {
-        tex = diffuse_border(textureSampleLevel(t_diffuse, s_diffuse, duv, enh.led.y), duv);
+    // The painted ground's albedo comes from the picture `fs_ground` laid (the base's and its
+    // layers', the frame's `camera.lod.y`): the terrain's base is lit once for all of them.
+    // (A condition of the draw alone, so the texture reads below stay in uniform control flow;
+    // `Renderer::plan_ground` has seen to it that every draw this holds for is in that picture.)
+    let from_ground = camera.lod.y > 0.5 && terrain && !TERRAIN_PAINT && !capture && material.params.x < 0.5 && material.params.z < 0.5;
+    var tex = vec4<f32>(1.0);
+    if (from_ground) {
+        tex = vec4<f32>(textureLoad(t_ao, vec2<i32>(in.clip.xy), 0).rgb, 1.0);
+    } else {
+        tex = diffuse_border(textureSampleBias(t_diffuse, s_diffuse, duv, camera.lod.x), duv);
+        if (is_snow_pane()) {
+            tex = snow_on_pane(in, film_water);
+        }
+        if (led_pic) {
+            tex = diffuse_border(textureSampleLevel(t_diffuse, s_diffuse, duv, enh.led.y), duv);
+        }
     }
     let diffuse_a = tex.a;
-    if (terrain && material.extra.y > 0.0) {
-        let det = textureSample(t_light, s_diffuse, in.uv * material.extra.y);
+    if (terrain && !from_ground && material.extra.y > 0.0) {
+        let det = textureSampleBias(t_light, s_diffuse, in.uv * material.extra.y, camera.lod.x);
         tex = vec4<f32>(clamp(tex.rgb * det.rgb, vec3<f32>(0.0), vec3<f32>(1.0)), tex.a);
     }
     if (material.params.z > 0.5) {
@@ -177,8 +187,12 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // panes on the reflection/transmission path after the material-depth repair.
     // Painted terrain also blends a transmap without writing depth. It is never glass:
     // Fresnel opacity on its empty mask pixels darkens every lower layer at grazing angles.
+    // A script's screen is never a pane, though it is laid out as one - blended, not writing
+    // depth, its letters a `\S:n` transparency map: the EMT Citaro's Krueger matrix
+    // (Mallorca) was taken for glass, which gives no light of its own, and its letters stayed
+    // grey at night while its light map lit them in Vanilla+ (#2927).
     let glass = !terrain && mode > 1.5 && (material.bump.z > 0.5 || material.emissive.w > 0.5) &&
-        (has_env || material.params.z > 0.5 || material.emissive.w > 0.5);
+        (has_env || material.params.z > 0.5 || material.emissive.w > 0.5) && material.flags.x < 0.5;
     // An envmap on opaque vehicle paint is legacy material data, not a request to make
     // the whole body behave like glass. Keep the diffuse/sun response, but use the
     // ordinary rough dielectric path for the body.
@@ -231,13 +245,13 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         let inv = inverseSqrt(max(max(dot(t, t), dot(b, b)), 1e-12));
         n = normalize(n - (t * inv * slope.x + b * inv * slope.y) * 0.6);
     }
-    var albedo = tex.rgb * material.color.rgb;
+    var albedo = select(tex.rgb * material.color.rgb, tex.rgb, from_ground);
     // OMSI materials have separate diffuse and ambient colours. Some interiors have
     // black diffuse but white ambient: using diffuse for both made them pitch black.
     // Keep the direct response, and weather both colours with the same surface effects.
     // A slot without a texture (ambient.w -1) takes its diffuse colour for both: Omsi.exe's
     // white ambient of every o3d slot under a strong sky turned a coloured model white (#1737).
-    var ambient_albedo = select(tex.rgb * material.ambient.rgb, albedo, material.ambient.w < -0.5);
+    var ambient_albedo = select(tex.rgb * material.ambient.rgb, albedo, material.ambient.w < -0.5 || from_ground);
     var detail_factor = 1.0;
     if (camera.flags.x > 0.5 && (terrain || in.params2.w > 0.5)) {
         let k = clamp(1.0 - (dist - 25.0) / 120.0, 0.0, 1.0);
@@ -344,7 +358,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // gives the occlusion, roughness and metalness in place of the guesses above
     var pbr_ao = 1.0;
     if (material.pbr.x > 0.5 && !terrain) {
-        var tn = textureSample(t_pbr_normal, s_diffuse, duv).xyz * 2.0 - vec3<f32>(1.0);
+        var tn = textureSampleBias(t_pbr_normal, s_diffuse, duv, camera.lod.x).xyz * 2.0 - vec3<f32>(1.0);
         // (an OpenGL-style map, green up: `_gl` in its name)
         if (material.pbr.x > 1.5) {
             tn.y = -tn.y;
@@ -352,7 +366,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         n = perturb_normal(n, in.world, duv, tn);
     }
     if (material.pbr.y + material.pbr.z + material.pbr.w > 0.5 && !terrain) {
-        let orm = textureSample(t_pbr_orm, s_diffuse, duv).rgb;
+        let orm = textureSampleBias(t_pbr_orm, s_diffuse, duv, camera.lod.x).rgb;
         if (material.pbr.y > 0.5) {
             pbr_ao = orm.r;
         }
@@ -774,7 +788,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         // night, and less where the saloon lamps light the surface already. (As an emission
         // at 0.6 of the texture by day and on top of the lamps at night, a switched-on
         // cabin's light-mapped parts were flat white.)
-        let lm = textureSample(t_light, s_diffuse, buv).rgb * clamp(in.params2.x, 0.0, 1.0);
+        let lm = textureSampleBias(t_light, s_diffuse, buv, camera.lod.x).rgb * clamp(in.params2.x, 0.0, 1.0);
         if (material.emissive.w < -1.5) {
             let night = clamp(camera.sun_color.w, 0.0, 1.0);
             let left = (vec3<f32>(1.0) - clamp(cabin_light, vec3<f32>(0.0), vec3<f32>(1.0))) * (0.12 + 0.88 * night);

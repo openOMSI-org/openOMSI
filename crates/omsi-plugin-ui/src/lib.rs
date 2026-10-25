@@ -24,6 +24,7 @@ use omsi_ui::{Atlas, Color, Draw, Fonts, Gpu, Layer, Painter, Rect, Vertex, Weig
 
 pub mod input;
 mod nav;
+pub use nav::{Docked, DockedMap};
 #[cfg(test)]
 mod preview;
 mod widgets;
@@ -119,6 +120,9 @@ pub struct Laid {
     pub hits: Vec<Hit>,
     /// Drawn without a shadow round it (a panel in the navigator's board).
     pub flat: bool,
+    /// Where its first `map` element is, and whether the navigator's cards go over it: the
+    /// navigator draws its map there under a panel that fills its frame.
+    pub map: Option<(Rect, bool)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -735,6 +739,7 @@ pub fn toast_panel(t: &Toast) -> Panel {
         clickable: false,
         draggable: false,
         grab: false,
+        frame: false,
         children,
     }
 }
@@ -761,6 +766,11 @@ fn cut(l: &mut Laid, h: f32) {
     for x in &mut l.hits {
         x.r.h = (h - x.r.y).clamp(0.0, x.r.h);
     }
+    // (the map too: as much of it as there is room for, none below the cut)
+    if let Some((r, _)) = l.map.as_mut() {
+        r.h = (h - r.y).clamp(0.0, r.h);
+    }
+    l.map = l.map.filter(|(r, _)| r.h > 0.0);
 }
 
 /// The hit under `p` (card pixels): the last one drawn there.
@@ -980,6 +990,8 @@ pub struct Dock {
     /// Its top left on the window (physical pixels), once the navigator made room for the
     /// panel ([`PluginPanels::docked`]); None until then.
     pub at: Option<Vec2>,
+    /// It is the navigator's whole frame, for a panel with `frame = true`.
+    pub frame: bool,
 }
 
 /// The plugins' panels on the screen.
@@ -998,9 +1010,9 @@ pub struct PluginPanels {
     pub drag: Option<input::Drag>,
     /// The field typed into when the cards were last laid out.
     typing: Option<(u64, String, String)>,
-    /// The height of the panel in the navigator's board as last laid out (physical pixels):
-    /// the room the navigator makes for it. None: no such panel.
-    pub docked: Option<f32>,
+    /// The panel for the navigator (`anchor = "navigator"`) as last laid out: the room the
+    /// navigator makes for it, under its map or in its whole frame. None: no such panel.
+    pub docked: Option<Docked>,
     /// The left button went down on a panel that takes clicks without the mouse (`grab`):
     /// its release is the panel's too, not the cab's.
     pub grabbed: bool,
@@ -1087,7 +1099,7 @@ impl PluginPanels {
                 }
                 // (no board shown: the navigator hears there is a panel for one)
                 (true, None) => {
-                    self.docked.get_or_insert(0.0);
+                    self.docked.get_or_insert(Docked { frame: e.panel.frame, ..Docked::default() });
                     continue;
                 }
                 _ => continue,
@@ -1117,9 +1129,7 @@ impl PluginPanels {
                 let caret = typing.as_ref().filter(|t| t.0 == e.owner && t.1 == e.id).map(|t| t.2.as_str());
                 card.laid = match dock {
                     Some(_) => {
-                        // (over the navigator's own card colour unless it says another)
-                        let p = pui::Panel { width, accent: None, radius: 0.0, background: Some(e.panel.background.unwrap_or(pui::Rgba([0, 0, 0, 0]))), ..e.panel.clone() };
-                        Laid { flat: true, ..layout_typing(&p, fonts, f.backdrop, caret) }
+                        Laid { flat: true, ..layout_typing(&nav::in_navigator(&e.panel, width), fonts, f.backdrop, caret) }
                     }
                     None => layout_typing(&e.panel, fonts, f.backdrop, caret),
                 };
@@ -1133,8 +1143,10 @@ impl PluginPanels {
             }
             match dock {
                 Some(d) => {
-                    self.docked = Some((card.laid.h * ck).ceil());
-                    dock_said = Some(pui::Dock { width, room: d.room / ck, height: card.full_h, owner: Some(e.owner) });
+                    let map = card.laid.map.map(|(r, cards)| DockedMap { rect: [(r.x * ck).round(), (r.y * ck).round(), (r.w * ck).round(), (r.h * ck).round()], cards });
+                    let background = e.panel.background.filter(|_| e.panel.frame).map(color);
+                    self.docked = Some(Docked { height: (card.laid.h * ck).ceil(), frame: e.panel.frame, map, background });
+                    dock_said = Some(pui::Dock { width, room: d.room / ck, height: card.full_h, owner: Some(e.owner), frame: d.frame });
                     // (until the navigator made room for it, it is laid out, not shown)
                     let Some(at) = d.at else { continue };
                     card.origin = Vec2::new(at.x.round(), at.y.round());
@@ -1148,7 +1160,7 @@ impl PluginPanels {
         }
         if let Some(d) = f.dock {
             let s = d.scale.max(0.25);
-            ui.set_dock(Some(dock_said.unwrap_or(pui::Dock { width: (d.width / s).max(40.0), room: d.room / s, height: 0.0, owner: None })));
+            ui.set_dock(Some(dock_said.unwrap_or(pui::Dock { width: (d.width / s).max(40.0), room: d.room / s, height: 0.0, owner: None, frame: d.frame })));
         }
         // the notifications, newest at the top, under the navigator when it is in the way
         let right = screen.x - 16.0;

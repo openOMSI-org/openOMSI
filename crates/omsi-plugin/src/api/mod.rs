@@ -16,6 +16,7 @@ pub mod events;
 mod fns;
 pub mod json;
 pub mod paths;
+pub mod process;
 pub mod runtime;
 pub mod value;
 
@@ -49,7 +50,7 @@ pub const fn o(name: &'static str, ty: &'static str) -> Param {
 }
 
 /// What a plugin must have declared to call a function (an `.oop`'s `permissions`; a plain
-/// `.lua` plugin has them all, as it always had).
+/// `.lua` plugin has the existing permissions; native processes need player opt-in).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Perm {
     /// Reading the game: every plugin may.
@@ -72,6 +73,8 @@ pub enum Perm {
     NetworkLocal,
     /// Messages to the other players of a LAN game.
     Lan,
+    /// Launching native programs outside the plugin sandbox.
+    Process,
 }
 
 impl Perm {
@@ -88,6 +91,7 @@ impl Perm {
             Perm::Audio => "audio",
             Perm::NetworkLocal => "network_local",
             Perm::Lan => "lan",
+            Perm::Process => "process",
         }
     }
 
@@ -95,7 +99,7 @@ impl Perm {
         Self::ALL.into_iter().find(|p| p.as_str() == s)
     }
 
-    pub const ALL: [Perm; 9] = [Perm::Ui, Perm::Storage, Perm::VehicleWrite, Perm::TrafficWrite, Perm::WorldWrite, Perm::Camera, Perm::Audio, Perm::NetworkLocal, Perm::Lan];
+    pub const ALL: [Perm; 10] = [Perm::Ui, Perm::Storage, Perm::VehicleWrite, Perm::TrafficWrite, Perm::WorldWrite, Perm::Camera, Perm::Audio, Perm::NetworkLocal, Perm::Lan, Perm::Process];
 }
 
 /// The handler of a function.
@@ -350,6 +354,9 @@ pub fn call(ctx: &mut Ctx<'_>, name: &str, args: Vec<Value>) -> Result<Value, Ap
 
 /// Call a function with the permission check.
 pub fn call_fn(ctx: &mut Ctx<'_>, f: &'static ApiFn, args: Vec<Value>) -> Result<Value, ApiError> {
+    if f.perm == Perm::Process && !ctx.state().process_allowed {
+        return Err(ApiError(format!("omsi.{}: native process access is disabled; the player must opt in with OMSI_PLUGIN_PROCESS_ALLOW", f.name)));
+    }
     if f.perm != Perm::None && !ctx.state().allows(f.perm) {
         return Err(ApiError(format!("omsi.{}: the plugin has no \"{}\" permission", f.name, f.perm.as_str())));
     }

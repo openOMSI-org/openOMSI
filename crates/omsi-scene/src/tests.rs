@@ -422,20 +422,22 @@ fn spline_batches_keep_materials_cells_shadows_and_long_segments_separate() {
         one_sided: true,
     });
     let batched = batch_static_splines(vec![
-        (mesh(1.0, 2.0), ty.clone(), false, DVec3::ZERO),
-        (mesh(5.0, 2.0), ty.clone(), false, DVec3::ZERO),
-        (mesh(9.0, 2.0), compatible, false, DVec3::ZERO),
-        (mesh(49.0, 2.0), ty.clone(), false, DVec3::ZERO),
-        (mesh(1.0, 2.0), other, false, DVec3::ZERO),
-        (mesh(1.0, 2.0), other_dir, false, DVec3::ZERO),
-        (mesh(1.0, 2.0), tested, false, DVec3::ZERO),
-        (mesh(1.0, 2.0), ty.clone(), true, DVec3::ZERO),
-        (mesh(1.0, 100.0), ty.clone(), false, DVec3::ZERO),
-        (mesh(1.0, 100.0), ty, false, DVec3::ZERO),
-        (mesh(1.0, 2.0), blended.clone(), false, DVec3::new(1.0, 2.0, 3.0)),
-        (mesh(5.0, 2.0), blended, false, DVec3::new(4.0, 5.0, 6.0)),
+        (mesh(1.0, 2.0), ty.clone(), false, DVec3::ZERO, Default::default()),
+        (mesh(5.0, 2.0), ty.clone(), false, DVec3::ZERO, Default::default()),
+        (mesh(9.0, 2.0), compatible, false, DVec3::ZERO, Default::default()),
+        (mesh(49.0, 2.0), ty.clone(), false, DVec3::ZERO, Default::default()),
+        (mesh(1.0, 2.0), other, false, DVec3::ZERO, Default::default()),
+        (mesh(1.0, 2.0), other_dir, false, DVec3::ZERO, Default::default()),
+        (mesh(1.0, 2.0), tested, false, DVec3::ZERO, Default::default()),
+        (mesh(1.0, 2.0), ty.clone(), true, DVec3::ZERO, Default::default()),
+        (mesh(1.0, 100.0), ty.clone(), false, DVec3::ZERO, Default::default()),
+        (mesh(1.0, 100.0), ty.clone(), false, DVec3::ZERO, Default::default()),
+        (mesh(1.0, 2.0), blended.clone(), false, DVec3::new(1.0, 2.0, 3.0), Default::default()),
+        (mesh(5.0, 2.0), blended, false, DVec3::new(4.0, 5.0, 6.0), Default::default()),
+        // a layer laid on another spline keeps its depth step: not merged with the others
+        (mesh(13.0, 2.0), ty, false, DVec3::ZERO, crate::spline_layers::SplineLayer { level: 1, on_object: false }),
     ]);
-    assert_eq!(batched.len(), 10);
+    assert_eq!(batched.len(), 11);
     assert_eq!(batched[8].0.indices.len(), 3);
     assert_eq!(batched[9].0.indices.len(), 3);
     assert_eq!(batched[8].3, DVec3::new(1.0, 2.0, 3.0));
@@ -443,7 +445,9 @@ fn spline_batches_keep_materials_cells_shadows_and_long_segments_separate() {
     assert_eq!(batched[0].0.indices.len(), 9);
     assert_eq!(batched[0].0.ranges, vec![(0, 9, 0)]);
     assert_eq!(batched.iter().filter(|b| b.2).count(), 1);
-    assert_eq!(batched.iter().map(|b| b.0.indices.len()).sum::<usize>(), 36);
+    assert_eq!((batched[10].0.indices.len(), batched[10].4.level), (3, 1));
+    assert!(batched[..10].iter().all(|b| b.4.level == 0));
+    assert_eq!(batched.iter().map(|b| b.0.indices.len()).sum::<usize>(), 39);
 }
 
 #[test]
@@ -644,6 +648,21 @@ fn only_flat_blended_ground_strips_draw_after_the_roads() {
     let mut kerb_top = dashes.clone();
     for p in &mut kerb_top.profiles[0].points { p.z = 0.15; }
     assert_eq!(spline_render_phase(&kerb_top), RenderPhase::Spline);
+    // cut-out dashes 5 mm over the driving surface their spline declares are paint as well:
+    // Road-hog123's British markings, 0.105 over a 0.100 [heightprofile] (#2853)
+    let mut raised = dashes.clone();
+    for p in &mut raised.profiles[0].points { p.z = 0.105; }
+    assert_eq!(spline_render_phase(&raised), RenderPhase::Spline, "without a surface under it");
+    raised.height_profiles.push(omsi_scenery::sli::HeightProfile { x0: -0.15, x1: 0.15, z0: 0.1, z1: 0.1 });
+    assert_eq!(spline_render_phase(&raised), RenderPhase::BeforeNormal);
+    // a surface that does not reach under the whole strip does not count
+    let mut narrow = raised.clone();
+    narrow.height_profiles[0].x1 = 0.0;
+    assert_eq!(spline_render_phase(&narrow), RenderPhase::Spline);
+    // nor one far below it: a strip 15 cm over the surface is still a kerb top
+    let mut high = raised.clone();
+    for p in &mut high.profiles[0].points { p.z = 0.25; }
+    assert_eq!(spline_render_phase(&high), RenderPhase::Spline);
     let mut fence = line.clone();
     fence.profiles[0].points[1].z = 1.0;
     assert_eq!(spline_render_phase(&fence), RenderPhase::Spline);

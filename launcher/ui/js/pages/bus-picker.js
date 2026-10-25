@@ -8,7 +8,7 @@ import { t } from '../i18n.js';
 import { call } from '../api.js';
 import { Icon } from '../icons.js';
 import { Dialog, Search, Select, Segmented, Empty, Spinner, Button, Tag, Notice, Field } from '../ui.js';
-import { choose, busFile, serverBuses } from '../data.js';
+import { choose, busFile, serverBuses, MODES, modeLabel, shownModes, transportRefusal, curMap } from '../data.js';
 import { Notes } from './drive.js';
 
 const favKey = (file) => file.replace(/\\/g, '/').toLowerCase();
@@ -53,14 +53,18 @@ export function BusPicker({ onClose, onTake, title = 'Choose a bus', yes = 'Take
   const [q, setQ] = useState('');
   const [maker, setMaker] = useState('');
   const [show, setShow] = useState('all');
+  const [mode, setMode] = useState('');
+  const map = curMap();
   const [sel, setSel] = useState(s.choice.bus);
   const [paint, setPaint] = useState(s.choice.bus === sel ? s.choice.paint : '');
   const joined = serverBuses(s.choice);
   const all = (s.vehicles || []).filter((v) => !joined || joined.has(busFile(v.file)));
+  const modes = all.some((v) => v.transport?.some((m) => m !== 'bus')) ? MODES.filter((x) => all.some((v) => v.transport?.includes(x))) : [];
   const makers = useMemo(() => [...new Set(all.map((v) => v.manufacturer).filter(Boolean))].sort(), [all]);
   const ql = q.trim().toLowerCase();
   const list = all
     .filter((v) => !maker || v.manufacturer === maker)
+    .filter((v) => !mode || v.transport?.includes(mode))
     .filter((v) => show !== 'fav' || s.favourites.includes(favKey(v.file)))
     .filter((v) => show !== 'mods' || v.installed)
     .filter((v) => !ql || `${v.name} ${v.manufacturer} ${v.type_name} ${v.folder}`.toLowerCase().includes(ql))
@@ -92,6 +96,7 @@ export function BusPicker({ onClose, onTake, title = 'Choose a bus', yes = 'Take
           <${Search} value=${q} onInput=${setQ} placeholder="Search buses" autofocus />
           <div class="row wrap">
             <div class="grow" style="min-width:140px"><${Select} raw value=${maker} options=${[['', t('All makers')], ...makers.map((m) => [m, m])]} onChange=${setMaker} /></div>
+            ${modes.length > 0 && html`<div class="grow" style="min-width:120px"><${Select} raw value=${mode} options=${[['', t('Any mode')], ...modes.map((m) => [m, modeLabel(m)])]} onChange=${setMode} /></div>`}
             <${Segmented} value=${show} options=${[['all', 'All'], ['fav', 'Starred'], ['mods', 'Mods']]} onChange=${setShow} />
           </div>
         </div>
@@ -104,8 +109,9 @@ export function BusPicker({ onClose, onTake, title = 'Choose a bus', yes = 'Take
             const row = (x, sub, indent) => html`<div class=${'list-item' + (x.file === sel ? ' on' : '')} style=${indent ? 'padding-left:30px' : ''} onClick=${() => (setSel(x.file), setPaint(x.file === s.choice.bus ? s.choice.paint : ''))} onDblClick=${() => (setSel(x.file), setTimeout(take))}>
               <div class="grow" style="min-width:0">
                 <div class="title" style="overflow-wrap:anywhere" title=${sub}>${sub}</div>
-                <div class="sub ellipsis">${[indent ? null : x.manufacturer, x.paints.length ? t('{n} paints', { n: x.paints.length + 1 }) : null].filter(Boolean).join(' - ')}</div>
+                <div class="sub ellipsis">${[indent ? null : x.manufacturer, shownModes(x).map(modeLabel).join(', ') || null, x.paints.length ? t('{n} paints', { n: x.paints.length + 1 }) : null].filter(Boolean).join(' - ')}</div>
               </div>
+              ${transportRefusal(map, x) && html`<span title=${transportRefusal(map, x)}><${Icon} name="alert" size=${16} /></span>`}
               ${x.missing_packs?.length > 0 && html`<span title=${t('Parts missing')}><${Icon} name="alert" size=${16} /></span>`}
               <button class=${'star' + (s.favourites.includes(favKey(x.file)) ? ' on' : '')} title=${t('Star')} onClick=${(e) => (e.stopPropagation(), toggleFavourite(x.file))}>
                 <${Icon} name="star" fill=${s.favourites.includes(favKey(x.file))} />
@@ -128,9 +134,10 @@ export function BusPicker({ onClose, onTake, title = 'Choose a bus', yes = 'Take
         ${v ? html`<${BusPreview} look=${{ bus: v.file, paint, map: s.choice.map, weather: s.choice.weather, time: s.choice.time, date: s.choice.date }} />
           <div class="card-body stack">
             <div class="row">
-              <div class="grow"><h2 style="font-size:20px">${v.name}</h2><div class="muted">${[v.manufacturer, v.type_name].filter(Boolean).join(' - ')}</div></div>
+              <div class="grow"><h2 style="font-size:20px">${v.name}</h2><div class="muted">${[v.manufacturer, v.type_name, ...shownModes(v).map(modeLabel)].filter(Boolean).join(' - ')}</div></div>
               ${v.installed && html`<${Tag}>${t('Mod')}</${Tag}>`}
             </div>
+            ${transportRefusal(map, v) && html`<${Notice} kind="warn">${transportRefusal(map, v)} ${t('Choose another map or vehicle.')}</${Notice}>`}
             ${v.missing_packs?.length > 0 && html`<${Notice} kind="warn">${t('Parts of this bus come from packs that are not installed: {packs}', { packs: v.missing_packs.join(', ') })}</${Notice}>`}
             <${Field} label="Paint">
               <${Select} raw value=${paint} options=${[['', v.default_paint ? `${t('Standard')} (${v.default_paint})` : t('Standard')], ...v.paints.map((p) => [p, p])]} onChange=${setPaint} />

@@ -752,6 +752,11 @@ impl Traffic {
     ) -> Option<usize> {
         let &lane = route.first()?;
         let kind = self.sim.net.lanes.get(lane)?.kind;
+        // a timetable vehicle for another kind of map (a bus on a tram map) stays in the depot
+        if let omsi_cfg::transport::Admission::Refused(why) = omsi_sim::transport::admission(world.global.transport, &ty.def) {
+            log::debug!("timetable vehicle {} {} not spawned: {why}", ty.def.manufacturer, ty.def.type_name);
+            return None;
+        }
         // the options' [AIMaxCountScheduled]: no more timetable vehicles than that at once
         // (and none with `--no-timetable-buses`)
         if self.sim.scheduled_room() == Some(0) {

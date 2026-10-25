@@ -13,6 +13,7 @@ mod place;
 mod route;
 mod take_on;
 mod tours;
+pub mod transit;
 
 pub use tours::{TourPlan, TourPlanTrip};
 
@@ -226,6 +227,9 @@ pub struct ScheduleSim {
     /// one, `set_lan_seed`). Hashing the tour alone sent the same bus out on it every time
     /// (#2250). 0 (tests, tools): always the same.
     pub vehicle_seed: u64,
+    /// Trips made from transport routes whose track is not found yet (lower-case names): their
+    /// departures wait for it.
+    transit_unrouted: HashSet<String>,
 }
 
 /// A tour's bus waits at the end of a trip for the next one of its tour when that leaves

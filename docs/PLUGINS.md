@@ -45,6 +45,28 @@ Start a map with a bus: the greeting shows up on the screen, and above 50 km/h t
 Edit the file while the game runs and save it - the plugin is loaded again within a second
 ("Lua plugin hello reloaded").
 
+### Scripts that belong to a vehicle
+
+A vehicle can carry its own scripts, written in Lua or compiled to a `.oop` (Lua or Rust), so a
+mod needs no plugin installed by the player. Name them in the vehicle's `.bus` or `.ovh`, relative
+to the vehicle's folder:
+
+```
+[vehicle_script]
+scripts/cab.lua
+
+[vehicle_script]
+scripts/ibis.oop
+```
+
+The scripts start when the vehicle becomes the player's and stop when another vehicle (or none)
+does; they see the same `omsi.*` API as any plugin, the `omsi.var` of the bus being theirs. They
+are named `vehicle:<file>` in the log. Because a vehicle is content from anywhere, they have only
+these permissions: `ui`, `storage`, `vehicle_write` and `audio`. The world, the traffic, the
+camera, the LAN, UDP and native programs stay with the player's own plugins; a `.oop` that
+declares more keeps these four. OMSI 2 skips the keyword and runs the vehicle's `.osc` scripts as
+ever; a vehicle can have both.
+
 ### Where plugins live
 
 | Path | The plugin's name | Its data folder |
@@ -316,7 +338,8 @@ end)
 F10 gives the panels the mouse; a click on the button sounds the horn. The whole example is
 [`docs/examples/plugins/trip_panel.lua`](examples/plugins/trip_panel.lua).
 
-`omsi.ui.version` is `5` (`4` before `grab`, `3` before boxes, stop lists and the other
+`omsi.ui.version` is `6` (`5` before a navigator panel in the whole frame and the `map`
+element, `4` before `grab`, `3` before boxes, stop lists and the other
 elements and keys marked 4 below, `2` before the navigator's board, `1` before the controls):
 test `if omsi.ui and omsi.ui.version >= 2` in a plugin that should also run in an older openOMSI.
 The panels are the plugin's own: one plugin cannot change or remove another's, and when the
@@ -341,6 +364,7 @@ omsi.ui.set("trip", {
   clickable = false,          -- true: a click anywhere on it is ui_click(id, nil)
   draggable = false,          -- true: while the panels have the mouse it can be moved by its free parts
   grab = false,               -- true: it takes its clicks even while the panels do not have the mouse (ui.version 5)
+  frame = false,              -- with anchor = "navigator": the navigator's whole frame, not the board under its map (ui.version 6)
   children = { ... },         -- elements, top to bottom
 })
 ```
@@ -380,6 +404,31 @@ panel came to, in the panel's pixels, and whether the panel in the board is this
 panel taller than the room is cut off at the bottom (what is cut off takes no click either), so
 a plugin can leave out rows that do not fit.
 
+With `frame = true` (`omsi.ui.version` 6) the panel fills the navigator's whole frame instead:
+from its top, as wide as the navigator and as tall as the panel comes to (as far as the window
+has room), on the navigator's card with its rounded corners - in the panel's `background` where
+it gives one, which the navigator paints as its card (with its corners and its opacity setting),
+not the panel as a square of its own. The map, the place row and the
+stop list make way for it; the map shows only where the panel has a `map` element, with its
+own rounded corners, and the navigator's cards over it (the next turn, the clock, the speed,
+the next stop) unless the element says `cards = false`. The navigator stays the navigator: it
+is moved and sized as before, Shift+N shows and hides it (there is no lower part to open), and
+a press on the map or on a part of the panel that takes no click is the navigator's - a drag
+moves it, a click opens the city map. A `grab` panel there takes clicks without the mouse on
+its buttons and other clickable parts alone. `omsi.ui.dock()` then gives the whole frame: its
+width, the most height there is room for, the height the panel came to, and `true` as its
+fifth value (a game that does not know `frame` lays the panel out under the map, leaves the
+`map` element out and gives no fifth value: a plugin can test for it rather than for a
+version).
+
+```lua
+omsi.ui.set("phone", { anchor = "navigator", frame = true, grab = true, padding = 10, children = {
+  { type = "text", text = "Line 5 → Hauptbahnhof", weight = "bold" },
+  { type = "map", height = 200, cards = false },
+  { type = "button", id = "next", text = "Next stop: Markt 09:14" },
+} })
+```
+
 #### Elements
 
 Every element can have an `id`, a `color` and `visible = false` (left out, no room kept).
@@ -394,6 +443,7 @@ Every element can have an `id`, a `color` and `visible = false` (left out, no ro
 | `box` (4) | `children`, `gap` (default 4), `color` (default amber) | its children stacked in a box tinted with `color`, a stripe of it on the left: a note, an advice |
 | `stops` (4) | `stops` (`{ { name, time, expected, expected_color, state, tag }, ... }`, up to 128), `size` (13), `color` (the rail, default amber) | stops on a rail, a row each: `state` `"done"` (behind the bus: grey), `"now"` (the one it heads for: marked, bold) or `"ahead"` (the default); `time` on the right, `expected` before it in `expected_color`, and `tag` (`"terminus"`) before them |
 | `divider` | `color` | a thin line (in a row: upright) |
+| `map` (6) | `height` (default: the navigator's own map's, 0.8 times the width), `cards` (default `true`) | in a panel that fills the navigator's frame, the navigator's map there (with its cards over it unless `cards = false`); elsewhere empty room of its height |
 | `space` | `size` (default 8) | empty room (in a row: across) |
 | `button` | `id` (needed), `text`, `icon`, `color` | a button 34 high, across the panel (in a row as wide as its label, or what it grows to); a click on it is `ui_click(panel id, button id)` |
 | `image` | `src` (a PNG, JPEG, BMP or TGA of the plugin's folder), `width`, `height` (default 64) | the picture, made smaller to fit the width it has |
@@ -547,7 +597,34 @@ only to ports from 1024 up. It holds at most 256 MB of memory.
 Every function and event, as the game's API registry describes them (also as JSON in
 [`plugin-api.json`](plugin-api.json), for tools and other plugin languages). `[x]` is an
 optional argument; a permission is what a plugin packed with a list of permissions must have
-declared to call the function (a plain `.lua` file has them all).
+declared to call the function (a plain `.lua` file has all except native process access, which always requires player opt-in).
+
+### Native helper programs
+
+The interactive game asks for permission when a plugin first tries to start a native helper. The host-owned window initially shows the plugin name, the application's filename and the number of arguments, together with the safety warning and decision descriptions. **Details** reveals the full executable path, plugin entry path, individual arguments and working directory; **Hide details** collapses them again. Each new request starts collapsed, and opening details never approves execution. **Allow once** covers only that launch. **Always allow** stores a hash-bound approval in `~/.openomsi/plugin-process-permissions.json` (on Windows, `%USERPROFILE%\.openomsi\plugin-process-permissions.json`). It applies only to that entry, folder snapshot and helper; changed content asks again. **Deny** blocks all native helpers for that canonical plugin entry for the current game session, even if helper names, content or arguments change. Escape also denies; Enter never automatically approves. The game and other plugins keep running while a request waits. Unload/reload cancels it. Packages must still declare `process`. Dialog text and buttons are translated into every supported interface language; plugin names, file paths and arguments are displayed literally and are never sent to translation.
+
+Embedded hosts remain default-deny unless they explicitly install `ProcessPermissions` through `Plugins::load_with_process_permissions`. The optional `OMSI_PLUGIN_PROCESS_ALLOW` variable names an absolute JSON manifest for preapproved content; ordinary players do not need environment variables or terminal commands. The manifest schema is unchanged, but older full-folder snapshots may need regeneration under the executable-content policy below. All approvals bind the canonical entry path and SHA256, canonical plugin folder, relevant executable-content files (including required modules), and the helper path and SHA256. Remove a saved approval from the user settings file with the game closed to revoke it.
+
+Inspect the plugin and its helpers before granting access. For example, generate a manifest from a dedicated deployed plugin folder with the repository utility:
+
+```powershell
+cargo run -p omsi-plugin --bin omsi-plugin-grant -- D:\Plugins\example\plugin.lua D:\Plugins\example bin/helper.exe | Set-Content -Encoding utf8 D:\Plugins\process-grants.json
+$env:OMSI_PLUGIN_PROCESS_ALLOW = 'D:\Plugins\process-grants.json'
+```
+
+When using a manual manifest, save it outside the plugin folder; its hashes must describe the deployed files, not the manifest itself. For `.oop`, use the archive as the entry and its extracted runtime asset folder as the folder (the archive's parent if it has no extracted assets). Multiple entries can be combined in the manifest's `grants` array. Embedded hosts can pass `ProcessGrants` through `Plugins::load_with_process_grants`; `ProcessGrant::capture` creates a snapshot, while `from_paths` approves code without any executable helpers.
+
+Replacing the entry/helper or changing executable content invalidates the saved grant. Ordinary `*.save.lua` files and non-executable files in top-level `data/` or `*.data/` directories are excluded: `omsi.save()`, `omsi.storage` and `omsi.files` writes therefore preserve consent. Lua modules in those directories remain hashed, since disk `require` can reach Lua modules. Native `.dll`, `.so` (including versioned names) and `.dylib` libraries also remain covered. For a folder plugin, other package files remain covered. For a one-file Lua plugin sharing the top-level plugins folder, the snapshot covers its entry, all disk-importable Lua code, native libraries and the explicitly selected helper; unrelated images, XML/configuration files, other helper executables and saved data are excluded. Sibling Lua code remains a shared trust boundary because `require` can import it; use a dedicated folder plugin to isolate module dependencies. Moving the plugin also requires new approval. Existing approvals created with the older full-folder snapshot may require approval once after updating.
+
+Load/reload only selects a manifest candidate by its absolute lexical entry/folder paths; Windows path casing and ambiguous DOS (8.3) components are accepted as candidate hints without filesystem I/O. This grants no executable access by itself: the worker resolves the actual canonical entry/folder, so a short-name lookalike at a different location is rejected. Every start freshly verifies executable content on a worker. Relevant symlinks, special files, traversal and absolute helper paths fail closed. Limits are 256 MiB/4096 included files and 4096 traversed directories; excluded data files do not consume the file/byte budget. Denial takes effect immediately for all queued requests from that plugin and survives plugin reload/content changes until the game restarts. After 256 distinct plugin session denials the broker rejects further starts rather than forgetting denials. Remove any manual manifest override and the matching saved approval, then restart to revoke consent. An already running helper is not retroactively stopped by editing its files.
+
+`process.start("bin/helper.exe", args, options)` accepts only explicitly approved helpers inside the plugin folder; Windows accepts `.exe` files, not shell scripts. Helpers run with the game account's permissions and inherited environment, except the grant variable is always removed even if an override supplies it. The hash is a check, not a filesystem lock: a concurrent writer can replace a file between verification and the path-based spawn. The checks do not sandbox trusted native code. `cwd` and `env` remain controlled by the approved plugin; overrides such as `PATH`, `LD_PRELOAD` or `DYLD_INSERT_LIBRARIES` can affect executable/library loading. Always allow therefore trusts that code to choose its arguments, working directory and environment, not only the displayed invocation.
+
+`process.start` reserves and returns a plugin-owned handle immediately. Hash verification and OS process creation run on two shared workers, with a global queue of at most 32 starts. The per-plugin limit of 32 handles counts queued and failed requests and is checked before admission. Queue/capacity failure returns nil and a reason immediately. Accepted requests can fail later: `status` has `starting`, `failed` and `error`, and `pid` is nil until launched. `exit_code`/Lua `wait` return `nil, "failed", reason` on preparation failure. Forget failed handles as well as completed children. Requests are limited to 256 arguments, 128 environment overrides and 64 KiB of argument/options text. Polling uses a cached snapshot and never waits for the worker lock. A separate owner thread polls and cleans children even while validation is slow; stop/reload cancels queued work and kills/reaps late launches.
+
+`process.start` returns a plugin-owned handle; `status` and `exit_code` poll without blocking. Lua `process.wait` suspends the top-level callback while the game and other plugins continue. Nested event callbacks and manual coroutines cannot wait. Stop, disable and reload cancel pending waits and terminate direct children. Windows assigns children atomically to a kill-on-close Job Object, including descendants, so abrupt game termination also cleans them up. Linux sets `PR_SET_PDEATHSIG` for direct children with a parent-race check; descendants are not covered. On macOS only normal plugin lifecycle cleanup is provided. Completed handles retain status until `forget`; the limit is 32 handles per plugin. Windows closes the job on forget, killing any remaining descendants. Plugins without consent keep direct callback dispatch; approved Lua plugins reuse completed callback coroutines.
+
+On macOS, helpers extracted from ZIP files may need their executable bit restored (`chmod +x /absolute/path/to/helper`) and may be blocked by Gatekeeper quarantine. Review the downloaded helper and use macOS's normal security approval flow before running it; the plugin host does not remove quarantine automatically.
 
 <!-- api:begin (written from the registry: OMSI_API_BLESS=1 cargo test -p omsi-plugin api_manifest) -->
 
@@ -653,6 +730,7 @@ declared to call the function (a plain `.lua` file has them all).
 | `omsi.duty.finish()` | boolean | Gives the duty up (the bus drives on without a timetable); `true` when there was one. *Permission: `world_write`.* | 0.2.22 |
 | `omsi.duty.get()` | table or nil | The duty now: `line`, `tour`, `trip` (its number in the duty, from 1), `trips`, `trip_name`, `terminus`, `departure`, `arrival`, `stops`, `next_stop` and `previous_stop` (each a stop: `{number, name, id, arrival, departure, stops, x, y, z}`), `at_stop`, `trip_done`, `delay` (seconds, late positive). | 0.2.22 |
 | `omsi.duty.next_stop()` | table or nil | The next stop of the trip (as `duty.stops` gives them). | 0.2.22 |
+| `omsi.duty.set_auto_ibis(on)` | boolean | Whether the game types the duty into the bus's IBIS by itself - line, route, destination and the stop, at Shift+U and `--autostart` and again as each trip begins (on as a bus is taken). Off, the driver types them, or the plugin with `duty.type_ibis`. For the bus the player drives now, and while the plugin runs: when it stops or is switched off the game types the IBIS again, unless another plugin still leaves it to the driver. Off lasts for that bus only: after a change of vehicle (the `vehicle` event) the game types the new one's IBIS again, so a plugin that leaves it to the driver calls `duty.set_auto_ibis(false)` again there. `true` when there is a bus. *Permission: `vehicle_write`.* | 0.3.41 |
 | `omsi.duty.set_closed_stops(stops, [via])` | boolean | Closes stops of the duty's route for today - a diversion, roadworks: a list of their names (on every trip of the duty), and the way round them (`via`). The navigator strikes them through and shows `via` for the next one; the bus does not call there, and the duty goes on past them without counting them missed (no `stops_skipped`). Each call replaces the list (64 names at most), an empty one opens them all again; a duty taken anew (`duty.start`) starts with none. `duty.stops` marks them `closed`. `true` when there is a duty. *Permission: `world_write`.* | 0.3.36 |
 | `omsi.duty.skip_stop()` | string or nil | Skips the next stop (the duty goes on to the one after); the name of the stop skipped. *Permission: `world_write`.* | 0.2.22 |
 | `omsi.duty.skip_to(stop)` | boolean | Makes stop `stop` (from 1) of the trip the next one, forwards or back. *Permission: `world_write`.* | 0.2.22 |
@@ -661,6 +739,7 @@ declared to call the function (a plain `.lua` file has them all).
 | `omsi.duty.tour()` | table or nil | The complete source tour of the selected duty, even when only one trip was selected. Same structure as `timetable.tour`; times align with the active duty's service day, with `time_offset` seconds applied to all trips and stops. | 0.3.40 |
 | `omsi.duty.trip_stops(trip)` | list of tables or nil | The stops of a trip of the duty (from 1), as `duty.stops` gives them. | 0.2.22 |
 | `omsi.duty.trips()` | list of tables | The trips of the duty: `{number, name, line, terminus, departure, arrival, stops}`. | 0.2.22 |
+| `omsi.duty.type_ibis()` | boolean | Types the trip under way into the bus's IBIS now - line, route, destination and the stop the bus is at - as Shift+U does (`bus.set_line` types the line only); with `duty.set_auto_ibis` on, the next trips follow by themselves. `true` when there is a duty and a bus. *Permission: `vehicle_write`.* | 0.3.41 |
 | `omsi.timetable.buses()` | list of tables | The timetable buses of the AI on the road: `{id, line, tour, trip, terminus, departure, next_stop_id, at_stop, trip_done, delay, x, y, number}`. | 0.2.22 |
 | `omsi.timetable.lines()` | list of tables | The map's lines: `{name, user_allowed, tours}`, each tour `{number, today, trips}` (`today`: it runs on the game's date). | 0.2.22 |
 | `omsi.timetable.stop_names()` | list of tables | The stops the timetable knows: `{id, name}` (`id` the map's object id). | 0.2.22 |
@@ -688,6 +767,22 @@ declared to call the function (a plain `.lua` file has them all).
 | `omsi.map.tile_at(x, y)` | tile_x, tile_y, local_x, local_y | The tile of a map point and the metres in it (x east, y north). | 0.2.22 |
 | `omsi.map.tiles()` | list of tables | The map's tiles: `{x, y, file, loaded}` (numbered as global.cfg's `[map]` list). | 0.2.22 |
 | `omsi.map.to_world(tile_x, tile_y, local_x, local_y)` | x, y | A place given by its tile and the metres in it, in map coordinates. | 0.2.22 |
+
+#### Scenery objects (for scripts a .sco names)
+
+| Function | Returns | What it does | Since |
+| --- | --- | --- | --- |
+| `omsi.object.info(id)` | table | `{id, type, x, y, z, heading, active, distance}` of an object: its type (the `.sco` file's name), where it stands (map coordinates), the way it faces (compass degrees), whether it is in the script's range and how far the listener is from it (m). | 0.2.22 |
+| `omsi.object.list()` | list of numbers | The ids of the objects this script drives that are loaded now (those within its range are active). | 0.2.22 |
+| `omsi.object.meshes(id)` | list of strings | The mesh files of an object, in the order the scripts number them from 1. | 0.2.22 |
+| `omsi.object.set_mesh(id, mesh, [transform])` | boolean | Moves, turns and scales one mesh of an object over what its animations do. `mesh` is its number from 1 or its file name; `transform` is `{x, y, z, rx, ry, rz, sx, sy, sz, px, py, pz}`: a move in metres, a turn about the x, y and z axes in degrees (z up, positive counter-clockwise seen from above), a scale, all about the point (px, py, pz) of the mesh, every key optional. Without a table the mesh is as the model has it. Objects with a script are redrawn every frame; moving a mesh costs nothing more. | 0.2.22 |
+| `omsi.object.set_str(id, name, value)` | boolean | Sets a string variable of an object (a display's text, a texture's name). | 0.2.22 |
+| `omsi.object.set_var(id, name, value)` | boolean | Sets a script variable of an object, which its `[newanim]` animations, `[visible]` conditions, materials, lamps and sounds read; false when it has none of that name. | 0.2.22 |
+| `omsi.object.set_vars(id, values)` | integer | Sets many variables of an object at once (a table name -> number); how many it has. | 0.2.22 |
+| `omsi.object.set_visible(id, mesh, [visible])` | boolean | Shows or hides one mesh of an object whatever its `[visible]` conditions say; without `visible` the conditions decide again. | 0.2.22 |
+| `omsi.object.str(id, name)` | string or nil | A string variable of an object. | 0.2.22 |
+| `omsi.object.trigger(id, name)` | boolean | Runs a `{trigger:name}` of the object's own `.osc` script; false when it has none. | 0.2.22 |
+| `omsi.object.var(id, name)` | number or nil | A script variable of an object (those its `[varnamelist]` declares, and the builtin ones: `Switch`, `InUse`, `NightlightA` ...); `nil` when it has none of that name. | 0.2.22 |
 
 #### AI traffic
 
@@ -795,7 +890,7 @@ declared to call the function (a plain `.lua` file has them all).
 | --- | --- | --- | --- |
 | `omsi.message(text, [seconds])` | nil | A line of text on the screen (5 seconds when not given). *Permission: `ui`.* | 0.1.5 |
 | `omsi.ui.clear()` | nil | Removes every panel of the plugin. *Permission: `ui`.* | 0.2.21 |
-| `omsi.ui.dock()` | width, room, height, mine | The navigator's board, where a panel with `anchor = "navigator"` goes, in that panel's pixels: its width, the most height there is room for, the height the panel there came to (0 before it is laid out; more than `room`: it is cut off at the bottom), and whether that panel is this plugin's (the first one asked for has the board, another waits). Nothing while the navigator shows no board: it is off, or Shift+N put its lower part away. | 0.3.36 |
+| `omsi.ui.dock()` | width, room, height, mine, frame | The navigator's board, where a panel with `anchor = "navigator"` goes, in that panel's pixels: its width, the most height there is room for, the height the panel there came to (0 before it is laid out; more than `room`: it is cut off at the bottom), whether that panel is this plugin's (the first one asked for has the board, another waits), and whether it fills the navigator's whole frame (`frame = true`, ui version 6; false under the map, and nothing in an older game). Nothing while the navigator shows no board: it is off, or Shift+N put its lower part away. | 0.3.36 |
 | `omsi.ui.focus(on)` | boolean | `true`: the panels get the mouse (the cursor shows, a click goes to the panel under it and none to the bus); `false`, Esc or a menu of the game gives it back. Returns the new state. *Permission: `ui`.* | 0.2.21 |
 | `omsi.ui.focused()` | boolean | Whether the panels have the mouse. | 0.2.21 |
 | `omsi.ui.moved(panel)` | dx, dy | How far the player dragged a panel from where its table puts it (pixels). | 0.2.22 |
@@ -835,7 +930,7 @@ declared to call the function (a plain `.lua` file has them all).
 | `omsi.plugin.files([dir])` | list of tables | The files of the plugin's own folder (or a folder in it): `{name, dir, size}`. | 0.2.22 |
 | `omsi.plugin.list()` | list of strings | The names of the plugins loaded, this one too. | 0.2.22 |
 | `omsi.plugin.name()` | string | The plugin's name: its file's, or its folder's for a `main.lua`. | 0.2.22 |
-| `omsi.plugin.permissions()` | list of strings | The permissions the plugin has (a plain `.lua` file has them all). | 0.2.22 |
+| `omsi.plugin.permissions()` | list of strings | The permissions the plugin has (native process access additionally requires player opt-in). | 0.2.22 |
 | `omsi.plugin.read(path)` | text, or nil and the reason | A file of the plugin's own folder (a table of stops, a translation): read only, relative to the folder. | 0.2.22 |
 | `omsi.plugin.send(to, topic, [data])` | nil | Sends a message to another plugin (by its name): it hears `message(from, topic, data)` in its next frame. The data is numbers, texts, booleans or tables of them. | 0.2.22 |
 | `omsi.plugin.set_setting(key, value)` | boolean | Changes a setting (held to its range; saved); `true` when it took the value. | 0.2.22 |
@@ -862,6 +957,17 @@ declared to call the function (a plain `.lua` file has them all).
 | `omsi.storage.keys()` | list of strings | The keys stored, in the order they were first set. *Permission: `storage`.* | 0.2.22 |
 | `omsi.storage.save()` | nil | Writes the storage now (it is written by itself when the game ends). *Permission: `storage`.* | 0.2.22 |
 | `omsi.storage.set(key, value)` | nil | Stores a value under a key: a number, text, boolean or a table of them (`nil` removes it). It is written when the game ends, the plugin is loaded again, or `storage.save()` is called. *Permission: `storage`.* | 0.2.22 |
+
+#### External programs
+
+| Function | Returns | What it does | Since |
+| --- | --- | --- | --- |
+| `omsi.process.exit_code(handle)` | code or nil, state or reason | Nonblocking exit code lookup (queued verification also counts as running): `nil, "running"` while running; `code, "exited"` after normal exit. A nonzero code is retained. Signal termination returns `nil, "exited"`; inspect `process.status` for details. Preparation failure returns `nil, "failed", reason`. An unknown handle returns `nil` and a reason. *Permission: `process`.* | unreleased |
+| `omsi.process.forget(handle)` | true, or nil and reason | Release a completed or failed process handle and its retained result. A running process cannot be forgotten. On Windows, closing its job also terminates any remaining descendants. *Permission: `process`.* | unreleased |
+| `omsi.process.kill(handle)` | true, or nil and reason | Cancel a queued start or request termination of a plugin-owned direct child without waiting. Poll `process.status` for completion; Windows also terminates the job descendants, Unix targets only the direct child. *Permission: `process`.* | unreleased |
+| `omsi.process.start(file, [args], [options])` | handle, or nil and reason | Queue a native helper without waiting; return a reserved handle immediately. The interactive game asks the player with Allow once, Always allow or Deny unless the exact content was already approved. Embedded hosts without a permission broker remain default-deny. Verification and OS process creation run on two shared workers with at most 32 globally queued starts. The 32-handle plugin limit (including queued and failed starts) is checked before admission. A full queue returns nil and a reason. Accepted starts can fail later: inspect status.error or exit_code/wait returning nil, failed, reason. `file` must be a relative path inside the plugin folder. Approval is bound to the entry, folder snapshot and helper SHA256. Allow once covers one launch; Always allow saves consent in the host user settings; Deny blocks all native helpers for this canonical plugin entry for the current session, including renamed helpers or changed content or arguments. Changed content needs new approval. While the dialog is open, preparation workers and child cleanup keep running. The entry, executable-content snapshot (including importable Lua modules and native libraries), and helper hashes are rechecked on the worker immediately before each start; code changes revoke consent, while ordinary save/data writes do not. `args` are separate literal strings without shell expansion. Options: `cwd` and `env` (string overrides, other variables inherited, except OMSI_PLUGIN_PROCESS_ALLOW is always removed). Standard streams are disconnected. Windows helpers must be .exe files. At most 32 handles per plugin; forget completed handles. Stop, disable and reload terminate children; Windows job objects also terminate descendants and survive abrupt game exit, Linux uses a parent-death signal for direct children. No native helper runs before player approval. OMSI_PLUGIN_PROCESS_ALLOW can optionally name an absolute JSON grant manifest for preapproved content. Packages must also declare process. Unload/reload cancels unanswered requests. Approved helpers run with the game account's permissions. *Permission: `process`.* | unreleased |
+| `omsi.process.status(handle)` | table, or nil and reason | Nonblocking status: `{pid, starting, awaiting_permission, running, exited, failed, error, code, success, signal}`. While verification/start is pending, starting and running are true and pid is nil. Failed preparation sets failed/error without an exit code. While running `code`, `success` and `signal` are nil. After exit `code` is the exit code (including nonzero); termination by a signal has no code, and `signal` is available on Unix. Results remain readable until forgotten. *Permission: `process`.* | unreleased |
+| `omsi.process.wait(handle)` | exit code or nil, state or reason | Lua: suspend this plugin through queued verification/start and until its direct child exits, then return `code, "exited"` (nonzero codes retained; nil code on signal exit). The game and other plugins keep running; no game-thread wait occurs. Works in the main chunk, start/frame/event handlers and timers. Queued callbacks resume afterwards (limit 256), and normal frames/timers pause during the wait. Stop/reload cancels the continuation and terminates the child. A nested `emit` callback or manually resumed coroutine cannot suspend. Preparation failure returns `nil, "failed", reason`. Other language bindings should poll `process.exit_code` instead. *Permission: `process`.* | unreleased |
 
 #### Programs on this computer
 
@@ -1000,6 +1106,10 @@ declared to call the function (a plain `.lua` file has them all).
 | `lan_leave` | `id`, `name` | A player left the LAN session. | 0.2.22 |
 | `lan_message` | `from`, `data` | The same plugin on another player's game sent this one a message (`lan.send`): the player's id and the text. | 0.2.22 |
 | `lan_chat` | `name`, `text` | A line was said in the LAN session's chat (by another player or this one). | 0.2.22 |
+| `object_init` | `id`, `type`, `x`, `y`, `z`, `heading` | A scenery object this script drives came within its range (once, again if it leaves and comes back): the map's id of the object, its type (the `.sco` file's name), where it stands and the way it faces. Only a script a `.sco` names with `[lua_script]` hears the `object_*` events. | 0.2.22 |
+| `object_frame` | `id`, `dt` | A frame of an object this script drives, while it is in range; `dt` is the game seconds since the last frame of that object (at the rate of the `.sco`'s `[lua_rate]`, else every game frame). | 0.2.22 |
+| `object_gone` | `id` | An object this script drives left its range or was unloaded with its tile; its state in the script can go. | 0.2.22 |
+| `object_click` | `id`, `event` | The player clicked the `[mouseevent]` of a mesh of an object this script drives. | 0.2.22 |
 
 <!-- api:end -->
 

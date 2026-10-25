@@ -233,7 +233,7 @@ pub static FNS: &[ApiFn] = &[
         let r = c.state().folder.clone().ok_or_else(|| "no folder".to_string()).and_then(|f| paths::inside(&f, &rel)).and_then(|p| super::storage::list_dir(&p));
         Ok::<_, ApiError>(r.unwrap_or(Value::List(Vec::new())))
     }),
-    def!("plugin.permissions", "plugin", [], "list of strings", "The permissions the plugin has (a plain `.lua` file has them all).", NEW, None, false, |c, a| {
+    def!("plugin.permissions", "plugin", [], "list of strings", "The permissions the plugin has (native process access additionally requires player opt-in).", NEW, None, false, |c, a| {
         let s = c.state();
         Perm::ALL.iter().filter(|p| s.allows(**p)).map(|p| p.as_str().to_string()).collect::<Vec<_>>()
     }),
@@ -245,6 +245,8 @@ pub static FNS: &[ApiFn] = &[
         s.disabled = true;
         let owner = s.owner;
         s.ui().remove_owner(owner);
+        let (io, s) = c.both();
+        s.give_back(io);
         Ok::<_, ApiError>(())
     }),
     def!("plugin.settings", "plugin", [p("settings", "table"), o("title", "string")], "table", "Declares the plugin's settings: a list of `{key, type, label, default}` with `type` `\"bool\"`, `\"number\"` (`min`, `max`, `step`), `\"text\"` or `\"choice\"` (`choices`, a list of texts). The values the player chose before come back (as a table key -> value); the game makes a settings panel of them (`plugin.show_settings`), saves them in the data folder and sends `setting(key, value)` when one changes.", NEW, None, false, |c, a| {

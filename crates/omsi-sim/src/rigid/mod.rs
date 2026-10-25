@@ -195,6 +195,8 @@ pub struct RigidWheel {
     pub max_force: f32,
     /// `Axle_Springfactor_*`: air suspensions scale the spring with the bellows pressure.
     pub spring_factor: f32,
+    /// The kind of strut (`[suspension]`); a coil spring unless the vehicle says otherwise.
+    pub strut: Strut,
     /// Static load at rest (N), from the mass split over the axles.
     pub rest_load: f32,
     /// Current compression (m, positive = the wheel pushed up into the body) and its rate.
@@ -241,6 +243,68 @@ fn sign(x: f32) -> f32 {
         -1.0
     } else {
         0.0
+    }
+}
+
+/// The kind of strut of a wheel and what it remembers (see `omsi_strut`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Strut {
+    pub kind: omsi_vehicle::vehicle::SuspensionKind,
+    /// Dry friction of leaf springs (N).
+    pub friction: f32,
+    /// The extra stiffness at 10 cm of compression, as a fraction of the spring's rate.
+    pub progression: f32,
+    /// The levelling valve's time constant (s).
+    pub level_time: f32,
+    /// What the levelling valve has added to the bellows' force (N).
+    pub preload: f32,
+}
+
+impl Default for Strut {
+    fn default() -> Strut {
+        Strut { kind: omsi_vehicle::vehicle::SuspensionKind::Coil, friction: 0.0, progression: 0.0, level_time: 4.0, preload: 0.0 }
+    }
+}
+
+impl Strut {
+    pub fn from_block(s: Option<omsi_vehicle::vehicle::Suspension>) -> Strut {
+        match s {
+            Some(s) => Strut { kind: s.kind, friction: s.friction, progression: s.progression, level_time: s.level_time, preload: 0.0 },
+            None => Strut::default(),
+        }
+    }
+
+    /// The spring's force at `t` metres of compression, rate `k` N/m. A coil spring is linear;
+    /// the other kinds stiffen by `progression` per 10 cm.
+    pub fn spring(&self, k: f32, t: f32) -> f32 {
+        use omsi_vehicle::vehicle::SuspensionKind::Coil;
+        if self.kind == Coil {
+            return k * t;
+        }
+        k * t * (1.0 + self.progression * (t / 0.10).max(0.0)) + self.preload
+    }
+
+    /// The damping force at an upward speed `v_up` (m/s): the damper, and for leaf springs
+    /// the friction of the leaves, which is there at any speed and fades to nothing at rest.
+    pub fn damping(&self, damper: f32, v_up: f32) -> f32 {
+        use omsi_vehicle::vehicle::SuspensionKind::Leaf;
+        let mut f = damper * v_up;
+        if self.kind == Leaf {
+            f += self.friction * (v_up / 0.03).tanh();
+        }
+        f
+    }
+
+    /// The levelling valve of air bellows: it lets air in or out until the body stands where
+    /// the empty bus stood (`design` m of compression), at a pace of one rate-times-error per
+    /// `level_time` seconds, so that bumps pass it by and a change of load does not.
+    pub fn level(&mut self, k: f32, t: f32, design: f32, dt: f32, load: f32) {
+        if self.kind != omsi_vehicle::vehicle::SuspensionKind::Air {
+            return;
+        }
+        self.preload += k * (t - design) / self.level_time.max(0.1) * dt;
+        // (the bellows cannot hold more than a fraction more than the load, nor suck)
+        self.preload = self.preload.clamp(-0.6 * load, 1.5 * load);
     }
 }
 

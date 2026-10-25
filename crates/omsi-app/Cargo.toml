@@ -35,6 +35,7 @@ omsi-render = { path = "../omsi-render" }
 omsi-photo = { path = "../omsi-photo" }
 omsi-mt = { path = "../omsi-mt" }
 omsi-sim = { path = "../omsi-sim" }
+omsi-transit = { path = "../omsi-transit" }
 omsi-trolley = { path = "../omsi-trolley" }
 omsi-htmlengine = { path = "../omsi-htmlengine" }
 omsi-plugin = { path = "../omsi-plugin" }
@@ -128,6 +129,8 @@ jni = "0.21"
 ndk-context = "0.1"
 
 [dev-dependencies]
+# Test-only access to the actual clickable control rectangles in the pause menu.
+omsi-ui = { path = "../omsi-ui", features = ["test-support"] }
 # the control names from a table (`ControlNames::from_table`) for the key picker's tests
 omsi-input = { path = "../omsi-input", features = ["test-support"] }
 # the stages' declared groups held against what their code reaches (`frame_stages/access_tests.rs`)

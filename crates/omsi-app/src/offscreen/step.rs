@@ -356,6 +356,7 @@ impl Offscreen<'_> {
         if let Some(tv) = player.trolley_view.as_mut() {
             tv.update(&self.renderer, &mut self.scene, dt, &mut player.vehicle);
         }
+        player.panto_fx.update(dt, &mut player.vehicle);
         let (vpos, vkmh) = (player.vehicle.position, player.vehicle.physics.velocity_kmh());
         if let Some(g) = player.vehicle.trolley.as_deref_mut() {
             for n in g.rig.take_notes() {
@@ -806,6 +807,7 @@ impl Offscreen<'_> {
                     }
                 }
             }
+            sim_view.lan.capture_freetex(player.as_ref(), &args.root);
             let sent = {
                 let traffic = traffic.as_ref();
                 let cars = || traffic.map(|t| t.cars.iter().map(|c| lan::car_footprint(&c.vehicle)).collect()).unwrap_or_default();
@@ -841,6 +843,7 @@ impl Offscreen<'_> {
                 &frame,
             );
             crate::view_sync::apply_lan(remotes_off, &mut sim_view.lan, world, renderer, scene, lan_audio.as_ref(), &frame, dt);
+            sim_view.lan.sync_freetex(l, remotes_off, renderer, scene, &args.root);
             for u in updates {
                 if let (lan::WorldUpdate::Tours(tours), Some(s)) = (u, schedule.as_mut()) {
                     s.set_lan_tours(tours);

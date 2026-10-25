@@ -44,6 +44,10 @@ impl App {
         }
         // the plugins' frame, with the bus's scripts done
         let mut plugins = self.integrations.plugins.take().unwrap_or_else(crate::plugins::load);
+        self.sync_vehicle_scripts(&mut plugins);
+        if !self.paused && !omsi_cfg::flags::OMSI_NO_PLUGINS.is_set() {
+            crate::plugin_io::object::drive(self, &mut plugins, dt);
+        }
         if !plugins.is_empty() {
             self.plugin_watch(&mut plugins);
         }

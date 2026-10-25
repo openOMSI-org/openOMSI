@@ -289,6 +289,8 @@ flags! {
     OMSI_FORCE_LOD: Bool, Debug, Use, "off", "Draw the lower levels of detail of the AI vehicles at any size (to look at them).";
     OMSI_FORCE_OPAQUE: Bool, Switch, Use, "off", "Draw transmap-masked materials opaque.";
     OMSI_FRAME_ORDER: Bool, Debug, Once, "off", "Log the window's frame and the offscreen run's step as their ordered stages (phase, what each reads and writes, its profile key), once at start.";
+    OMSI_FSR1: Text, Switch, Once, "off", "Experimental FSR 1 spatial upscaling (EASU + RCAS) for scaled window views: 1, true or on enables it; off by default; requires restart.";
+    OMSI_FSR_RAW_INPUT: Bool, Switch, Use, "off", "FSR 1 reads the scene through a view that is not sRGB: no square roots in EASU (not on OpenGL) - to measure.";
     OMSI_FULL_GPU: Bool, Switch, Use, "off", "Keep the requested settings on a small or shared graphics chip, and 8x MSAA with Enhanced+.";
     OMSI_GLASS_WIND: Num, Test, Use, "-", "Offscreen: the rain on the glass as met at this speed in m/s.";
     OMSI_GL_TEXTURE_UNITS: Bool, Switch, Use, "off", "Use the texture-unit layout of the OpenGL backend on any device.";
@@ -315,6 +317,7 @@ flags! {
     OMSI_HTML_FALLBACK_FONT: Text, Switch, Use, "-", "Font file for the html pages' characters Inter lacks (Hangul, CJK); else Malgun Gothic (Windows) or AppleGothic (macOS).";
     OMSI_HTML_FALLBACK_FONT_BOLD: Text, Switch, Use, "-", "With OMSI_HTML_FALLBACK_FONT: its bold face.";
     OMSI_IBIS_BUDGET: Num, Tuning, Use, "10", "Seconds the IBIS typist may take per entry.";
+    OMSI_IGNORE_TRANSPORT: Bool, Switch, Use, "off", "Run a vehicle on a map built for other transport modes (the log still says so).";
     OMSI_INPUT: Text, Test, Use, "-", "Scripted keyboard, mouse and camera input for window runs.";
     OMSI_INSTANCE: Text, Setup, Use, "-", "The id of a game instance started by the launcher (set for the child process).";
     OMSI_INTEL_FULL_GPU: Bool, Switch, Use, "off", "Keep the requested settings on an Intel Vulkan adapter.";
@@ -360,13 +363,15 @@ flags! {
     OMSI_NO_CLOUDS: Bool, Switch, Use, "off", "No clouds.";
     OMSI_NO_CORONAS: Bool, Switch, Frame, "off", "No light coronas.";
     OMSI_NO_CULL: Bool, Switch, Once, "off", "Draw every mesh from both sides (A/B).";
-    OMSI_NO_DRAW_ORDER_DEPTH: Bool, Switch, Once, "off", "An object's surfaces in one plane without the draw order's depth step (A/B).";
+    OMSI_NO_DRAW_ORDER_DEPTH: Bool, Switch, Once, "off", "An object's surfaces in one plane, and a spline laid on an earlier one at its height, without the draw order's depth step (A/B).";
     OMSI_NO_ENHANCED: Bool, Switch, Frame, "off", "Enhanced settings drawn with the plain path.";
     OMSI_NO_ENVMAP: Bool, Switch, Use, "off", "No environment maps.";
+    OMSI_NO_FSR_MIP_BIAS: Bool, Switch, Frame, "off", "FSR 1 without its textures' mip bias (to compare).";
     OMSI_NO_FXAA: Bool, Switch, Frame, "off", "No FXAA.";
     OMSI_NO_GLARE: Bool, Switch, Frame, "off", "No sun glare.";
     OMSI_NO_GLASS_PICTURE: Bool, Switch, Frame, "off", "No picture behind the glass (rain films).";
     OMSI_NO_GROUND_PAINT: Bool, Switch, Use, "off", "No painted ground layers.";
+    OMSI_NO_GROUND_PASS: Bool, Switch, Frame, "off", "The terrain's paint layers lit one by one again, not laid into one albedo picture first (A/B).";
     OMSI_NO_GROUND_SPLINE_BATCHING: Bool, Switch, Use, "off", "No batching of ground splines.";
     OMSI_NO_GUARD: Bool, Switch, Use, "off", "No start guard: a start that crashes or hangs is not healed by an update or by going back to the version before.";
     OMSI_NO_HARDWARE_ID: Bool, Switch, Once, "off", "LAN: the game sends no hardware identifier (a host can then turn the player away, and cannot ban the machine).";
@@ -429,6 +434,7 @@ flags! {
     OMSI_PHOTO: Text, Test, Use, "-", "Photo mode settings for a test, key=value by commas: orbit (dist, around, up), kmh (the bus moving), focal (mm), dof, fstop (f-number), focus (m; none: on the bus), motion, shutter (1/s), filter (0..10), vignette, grain, exposure (EV), aspect (0..7), grid (0..3), quality (0..3).";
     OMSI_PICK_BUSES: Text, Test, Use, "-", "cargo test -p omsi-app installed_switches_stay_reachable_from_inside: more .bus files to check, by commas (under the root, or absolute).";
     OMSI_PLUGIN_HOST32: Text, Setup, Use, "beside the game", "Path of omsi-plugin-host32.exe.";
+    OMSI_PLUGIN_PROCESS_ALLOW: Text, Setup, Use, "none", "Optional native process preapproval: absolute path to a JSON manifest binding plugin content and in-folder helpers to SHA256 hashes. The interactive game otherwise asks the player. Changes revoke consent; packages must declare process. Approved programs run with the game account permissions.";
     OMSI_POPULATION_SHOTS: Bool, Test, Use, "off", "Offscreen: pictures of the framed population spawns.";
     OMSI_PRESENCE_URL: Text, Setup, Use, "built-in", "Base URL of the presence (\"playing now\") service.";
     OMSI_PRESENT_MODE: Text, Tuning, Use, "auto", "How frames reach the screen: fifo (vsync), fifo_relaxed, mailbox, immediate or auto. Vsync is `auto` (AutoVsync); a mode the surface lacks falls back to auto.";
@@ -474,10 +480,14 @@ flags! {
     OMSI_TERRAIN_ALIGN: Bool, Switch, Use, "off", "Align the terrain to the splines again at load (A/B; Omsi.exe does not).";
     OMSI_TEST_AVATAR: Text, Test, Test, "-", "Test only: an avatar FBX for the avatar loading test (`cargo test -p omsi-sim a_rocketbox_avatar_loads -- --ignored`).";
     OMSI_TEST_CONTENT: Text, Test, Test, "-", "Content root for tests that need real OMSI content.";
+    OMSI_TEST_LEGACY_TROLLEY_DRIVE: Bool, Test, Test, "off", "Test only: set by the trolley test on the child process it starts to run itself with the realistic physics on.";
     OMSI_TEST_PACKAGE_MAP: Text, Test, Test, "-", "Test only: the global.cfg of a map that carries a package, for the launcher route map test (`cargo test -p omsi-launcher-model the_package_of_a_real_map_is_exported -- --ignored`).";
     OMSI_TEST_WINE_DIR: Text, Test, Test, "-", "Plugin demo test: folder holding omsi-plugin-host.exe for Wine.";
     OMSI_TEXTURE_MEMORY: Num, Tuning, Use, "settings", "Texture budget in MB.";
     OMSI_TEXTURE_RAIN: Bool, Switch, Use, "off", "OMSI 2's own texture rain on the glass instead of the drops.";
+    OMSI_TOBII_DLL: Text, Setup, Use, "-", "The Tobii Stream Engine DLL to load instead of the Tobii Experience's.";
+    OMSI_TOBII_RAW: Text, Test, Test, "-", "Tests: a file for the Tobii tracker's raw poses (record_the_tracker_here).";
+    OMSI_TOBII_SECS: Num, Test, Test, "8", "Tests: how long the Tobii tracker is recorded.";
     OMSI_TOMORROW_API_KEY: Text, Setup, Use, "private key file", "Private Tomorrow.io API key for map-selected weather; never include it in map configs or logs.";
     OMSI_TOMORROW_CACHE_DIR: Text, Setup, Use, "settings/weather-cache", "Private Tomorrow.io response cache and shared request-budget directory.";
     OMSI_TOMORROW_KEY_FILE: Text, Setup, Use, "settings/tomorrow-api-key.txt", "Private text file containing the player's Tomorrow.io API key.";

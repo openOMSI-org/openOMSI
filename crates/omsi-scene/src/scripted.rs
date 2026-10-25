@@ -126,6 +126,17 @@ impl ScriptedSet {
         s.needs_vars = !variants.is_empty() || !alpha_slots.is_empty() || !ty.dynamic_textures.is_empty() || ty.sco.sound.is_some();
         // (lamps it switches read its variables too)
         s.needs_vars |= !script_lamps.is_empty();
+        if !ty.sco.scripts.lua.is_empty() {
+            let sc = &ty.sco.scripts;
+            s.lua = Some(Arc::new(omsi_sim::scenery::ObjectLua {
+                files: sc.lua.clone(),
+                range: if sc.lua_range > 0.0 { (sc.lua_range as f64).min(omsi_sim::scenery::SCRIPT_RANGE) } else { 250.0 },
+                rate: sc.lua_rate,
+                type_name: ty.sco.path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+            }));
+            // (the way its +y axis points: compass degrees, north 0 and east 90)
+            s.heading = xf.y_axis.x.atan2(xf.y_axis.y).to_degrees();
+        }
         s.switch_dirs = ty.sco.path_switch_dir.clone();
         if s.switch_dirs.iter().any(|d| d.is_some()) {
             s.sco_path = Some(Arc::from(ty.sco.path.as_path()));

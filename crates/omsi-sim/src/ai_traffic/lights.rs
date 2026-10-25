@@ -147,10 +147,14 @@ impl TrafficSim {
     /// with a `[speedlimit]`) while a train's route is about to enter the track its signal
     /// route covers and no other train is on it; otherwise it shows stop (and falls back to
     /// stop behind the train that passed it).
-    pub fn signal_aspects(&self, routes: &[omsi_map::ailists::SignalRoute], player_rail: Option<(usize, bool)>) -> hashbrown::HashMap<i64, f32> {
+    pub fn signal_aspects(&mut self, routes: &[omsi_map::ailists::SignalRoute], player_rail: Option<(usize, bool)>) -> hashbrown::HashMap<i64, f32> {
         let mut out: hashbrown::HashMap<i64, f32> = hashbrown::HashMap::new();
         if routes.is_empty() {
             return out;
+        }
+        // (the signals of the map's blocks show whether their block is free)
+        for (id, a) in self.block_aspects() {
+            out.insert(id, a);
         }
         // per train: the map ids it stands on and those of its next lanes
         let mut trains: Vec<(i64, Vec<i64>)> = self

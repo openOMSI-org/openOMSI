@@ -18,6 +18,7 @@ omsi-map = { path = "../omsi-map" }
 omsi-timetable = { path = "../omsi-timetable" }
 omsi-world = { path = "../omsi-world" }
 omsi-trolley = { path = "../omsi-trolley" }
+omsi-transit = { path = "../omsi-transit" }
 glam.workspace = true
 log.workspace = true
 anyhow.workspace = true

@@ -34,6 +34,8 @@ pub const NEAR_HIDE: f64 = 350.0;
 /// Within this distance of the camera an AI vehicle is animated and drawn even out of the
 /// view (m): the mirrors look behind, and a car beside the view throws its shadow into it.
 pub const UNSEEN_NEAR: f64 = 80.0;
+/// Beyond this distance a car out of the view runs its script only a few times a second (m).
+pub const UNSEEN_SCRIPT_RANGE: f64 = 150.0;
 
 /// How far above where a LAN player's vehicle stands their eye is taken to be (m): a
 /// driver's in a bus.

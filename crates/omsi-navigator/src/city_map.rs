@@ -494,7 +494,7 @@ impl Navigator {
             Some(g) => g.key != key || (g.centre - centre).length() > g.radius * 0.35 || g.mpp / mpp > 1.7 || mpp / g.mpp > 1.7,
         };
         if stale && arrived.is_none() {
-            let look = GroundLook { surfaces: mpp < 0.7, trees: mpp < 0.7, dashes: mpp < 3.5 };
+            let look = GroundLook { surfaces: mpp < 0.7, trees: mpp < 0.7, dashes: mpp < 3.5, tol: 0.0 };
             let parts = self.ground_parts(net, band.map(|b| b.0));
             let pal2 = *pal;
             let houses = mpp < 6.0;

@@ -785,6 +785,7 @@ impl World {
                 let id = self.vehicle_textures.lock().get(&reload.path).map(|e| e.0);
                 if id == Some(reload.id) && self.freetex_reloads.accepts(&reload.path, Some(reload.stamp)) {
                     self.textures.release(&reload.path);
+                    self.freetex_reloads.remember(reload.id, reload.data.clone());
                     if renderer.refresh_texture(scene, reload.id, &reload.data) {
                         swapped.push(reload.id);
                         rebound_reload = 1;
@@ -820,6 +821,9 @@ impl World {
                 continue;
             }
             renderer.replace_texture(scene, id, &data);
+            if self.freetex_reloads.snapshot(id).is_some() {
+                self.freetex_reloads.remember(id, data.clone());
+            }
             if let Some(e) = self.gpu.lock().textures.get_mut(&path) {
                 e.bytes = scene.texture_bytes_of(id);
                 e.format = data.format;

@@ -128,6 +128,10 @@ pub struct GlobalCfg {
     pub dyn_helper_active: bool,
     pub real_rail: bool,
     pub left_hand_traffic: bool,
+    /// The modes the map is built for, from `[bus_transport]`, `[tram_transport]`,
+    /// `[railway_transport]`, `[metro_transport]` and `[trolleybus_transport]` (openOMSI
+    /// keywords). Empty: the map names none and takes every vehicle.
+    pub transport: omsi_cfg::transport::ModeSet,
     pub background_image: Vec<String>,
     pub map_cam: Vec<f64>,
     pub money_system: String,
@@ -190,6 +194,9 @@ impl GlobalCfg {
                 "dynhelperactive" => g.dyn_helper_active = true,
                 "realrail" => g.real_rail = true,
                 "lht" => g.left_hand_traffic = true,
+                k2 if omsi_cfg::transport::TransportMode::from_keyword(k2).is_some() => {
+                    g.transport.declare_keyword(k2);
+                }
                 "backgroundimage" => g.background_image = (0..5).map(|_| r.str().to_string()).collect(),
                 "mapcam" => g.map_cam = (0..8).map(|_| r.f64()).collect(),
                 "moneysystem" => g.money_system = r.str().to_string(),
@@ -344,6 +351,16 @@ mod tests {
     use super::*;
 
     /// Both winter kinds take the winter pictures; the snowy ones come with the weather (#2131).
+    #[test]
+    fn a_map_names_its_transport_modes() {
+        let f = omsi_cfg::CfgFile::from_str("global.cfg", "[name]\nT\n[tram_transport]\n[Metro_Transport]\n[LHT]\n");
+        let g = GlobalCfg::parse(&f);
+        assert_eq!(g.transport.describe(), "tram, metro");
+        assert!(g.left_hand_traffic, "{:?}", g.unknown_keywords);
+        assert!(g.unknown_keywords.is_empty(), "{:?}", g.unknown_keywords);
+        assert!(GlobalCfg::parse(&omsi_cfg::CfgFile::from_str("global.cfg", "[name]\nT\n")).transport.is_empty());
+    }
+
     #[test]
     fn winter_kinds_take_the_winter_folder() {
         assert_eq!(Season::folder(3), Some("Winter"));

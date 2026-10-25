@@ -1453,6 +1453,8 @@ fn flares_show_through_the_glass_of_the_vehicle_the_camera_is_in() {
 // (the rest of the renderer's tests, in a file of their own for the size budget)
 mod bundles;
 mod coplanar;
+mod fog;
+mod fsr;
 mod instance_layout;
 mod lamp_shadows;
 mod light_grid;
@@ -1464,3 +1466,6 @@ mod night_coverage;
 mod prepass_reach;
 mod transparency;
 mod vanilla_lighting;
+
+mod xr_targets;
+mod xr_culling;

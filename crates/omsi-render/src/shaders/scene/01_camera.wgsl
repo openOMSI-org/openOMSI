@@ -43,6 +43,8 @@ struct Camera {
     // Enhanced: the lights of the player's saloon that have a shadow map (their places in the
     // light buffer, 4 a vector, -1 for none): see `cabin_visibility`
     cabin_lamps: array<vec4<f32>, 4>,
+    // x: the textures' mip bias (FSR 1: negative, see `CameraUniform::lod`)
+    lod: vec4<f32>,
 };
 
 // 1 when the point lies inside the player's vehicle (its [boundingbox], shrunk a little so

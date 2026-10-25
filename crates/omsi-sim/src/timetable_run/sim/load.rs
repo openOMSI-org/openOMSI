@@ -229,7 +229,9 @@ impl ScheduleSim {
         }
         let today = departures.iter().filter(|d| d.mask & day_bit != 0 && d.mask & school_bit != 0).count();
         log::info!("timetable: {} lines, {} trips, {} tracks, {} departures today (weekday {weekday}, holiday {holiday}, school holidays {school_holiday}; {skipped_tours} tours not today), {} depot groups", data.lines.len(), data.trips.len(), data.tracks.len(), today, depots.len());
+        let transit_unrouted: HashSet<String> = data.transit_trips.iter().map(|t| t.trip.to_ascii_lowercase()).collect();
         let mut s = ScheduleSim {
+            transit_unrouted,
             data,
             departures,
             depots,

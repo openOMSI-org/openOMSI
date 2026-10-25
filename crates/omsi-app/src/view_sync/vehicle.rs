@@ -226,7 +226,7 @@ pub(crate) fn sync_materials(
             // (the string read in place and compared with the name it had last time: the
             // name was copied, lower-cased and formatted for every free texture of every
             // vehicle each frame, though it changes only when a display does)
-            let current = vehicle.str_var(&f.var);
+            let current = if f.remote.is_some() { f.remote_key.as_str() } else { vehicle.str_var(&f.var) };
             if freetex_key_is(f.current.as_deref(), current, None) {
                 continue;
             }
@@ -234,7 +234,9 @@ pub(crate) fn sync_materials(
             let name = current.to_ascii_lowercase();
             if !f.pictures.contains_key(&name) {
                 let dirs: Vec<&Path> = f.dirs.iter().map(|p| p.as_path()).collect();
-                let found = if current.is_empty() {
+                let found = if let Some(remote) = f.remote {
+                    remote
+                } else if current.is_empty() {
                     None
                 } else {
                     let resolved = find_vehicle_freetex(current, &dirs);
@@ -248,12 +250,18 @@ pub(crate) fn sync_materials(
                         let max_dimension = renderer.device.limits().max_texture_dimension_2d;
                         if let Some(e) = shared.get_mut(&path) {
                             e.1 += 1;
+                            if f.reloads.snapshot(e.0).is_none() {
+                                if let Some((data, _)) = f.textures.get_gpu_fast(&path) {
+                                    f.reloads.remember(e.0, data);
+                                }
+                            }
                             f.reloads.watch(path.clone(), e.0, &f.shared, max_dimension);
                             f.held.push(path);
                             return Some(e.0);
                         }
                         let (img, worth) = f.textures.get_gpu_fast(&path)?;
                         let id = renderer.add_texture_data(scene, &img);
+                        f.reloads.remember(id, img.clone());
                         if worth {
                             f.wants_upgrade.lock().push(path.clone());
                         }
@@ -266,6 +274,7 @@ pub(crate) fn sync_materials(
                 };
                 f.pictures.insert(name.clone(), found);
             }
+            f.image = f.pictures.get(&name).copied().flatten();
             f.current = Some(name);
         }
         if changed {

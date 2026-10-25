@@ -96,7 +96,7 @@ fn paving_of(texture: &str) -> Option<usize> {
     if has_any(base, &["gruen", "grün", "gras", "rasen", "wiese", "lawn"]) {
         return Some(layers::PAVE_GREEN);
     }
-    if has_any(base, &["gehweg", "gw_", "sidewalk", "pavement", "bordst", "kerb", "curb", "fussweg", "fußweg", "footpath", "plaster_gw", "radweg", "cycle", "str_side", "side1", "side2"]) {
+    if has_any(base, &["gehweg", "gw_", "sidewalk", "pavement", "trottoir", "bordst", "kerb", "curb", "fussweg", "fußweg", "footpath", "plaster_gw", "radweg", "cycle", "str_side", "side1", "side2"]) {
         return Some(layers::PAVE_FOOT);
     }
     if crate::open::road_surface_name(texture) || has_any(base, &["asphalt", "asph", "teer", "tarmac", "fahrbahn", "kopfstein", "cobble", "pflaster", "beton", "concrete", "parkpl"]) {

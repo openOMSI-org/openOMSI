@@ -332,6 +332,16 @@ pub trait PluginIo {
     fn duty_end(&mut self) -> bool {
         false
     }
+    /// Plugin `owner` leaves the IBIS of the bus to the driver (`on` false) or gives it back
+    /// (`on` true): the game types the duty's trips into it by itself (Shift+U, each new trip)
+    /// only while no plugin leaves it to the driver. False without a bus.
+    fn duty_set_auto_ibis(&mut self, _owner: u64, _on: bool) -> bool {
+        false
+    }
+    /// Type the trip under way into the bus's IBIS now; false without a duty or a bus.
+    fn duty_type_ibis(&mut self) -> bool {
+        false
+    }
     /// Close the stops of the duty called `stops` (and open the others), with the way round
     /// them (`via`, may be empty); false without a duty.
     fn duty_set_closed_stops(&mut self, _stops: &[String], _via: &str) -> bool {
@@ -399,6 +409,46 @@ pub trait PluginIo {
     /// The traffic lane nearest to x, y.
     fn map_lane(&self, _x: f64, _y: f64) -> Option<Lane> {
         None
+    }
+
+    // ---- scenery objects driven by `[lua_script]` (`object.*`)
+    /// Whether object `id` is driven by the plugin of that name.
+    fn object_owned_by(&self, _id: i64, _plugin: &str) -> bool {
+        false
+    }
+    /// The objects the plugin drives that are loaded now.
+    fn object_list(&self, _plugin: &str) -> Vec<i64> {
+        Vec::new()
+    }
+    fn object_info(&self, _id: i64) -> Option<ObjectInfo> {
+        None
+    }
+    fn object_var(&mut self, _id: i64, _name: &str) -> Option<f32> {
+        None
+    }
+    fn object_set_var(&mut self, _id: i64, _name: &str, _v: f32) -> bool {
+        false
+    }
+    fn object_str(&mut self, _id: i64, _name: &str) -> Option<String> {
+        None
+    }
+    fn object_set_str(&mut self, _id: i64, _name: &str, _v: &str) -> bool {
+        false
+    }
+    fn object_trigger(&mut self, _id: i64, _name: &str) -> bool {
+        false
+    }
+    /// The mesh files of an object, in order.
+    fn object_meshes(&self, _id: i64) -> Vec<String> {
+        Vec::new()
+    }
+    /// Put a transform on a mesh (`None` takes it off); false for an unknown object or mesh.
+    fn object_set_mesh(&mut self, _id: i64, _mesh: &str, _t: Option<MeshTransform>) -> bool {
+        false
+    }
+    /// Show or hide a mesh whatever the model says (`None`: as the model says).
+    fn object_set_visible(&mut self, _id: i64, _mesh: &str, _v: Option<bool>) -> bool {
+        false
     }
 
     // --- time and weather ---------------------------------------------------------------
@@ -865,6 +915,31 @@ pub struct Entry {
     pub index: usize,
     pub name: String,
     pub pos: Option<[f64; 4]>,
+}
+
+/// A placed scenery object a Lua script drives (`object.info`).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ObjectInfo {
+    pub id: i64,
+    /// Its type: the `.sco` file's name without the extension.
+    pub kind: String,
+    pub pos: [f64; 3],
+    /// Compass degrees, north 0 and east 90.
+    pub heading: f32,
+    /// The camera is within the scripts' range: its frames run.
+    pub active: bool,
+    /// Metres to the listener.
+    pub distance: f64,
+}
+
+/// What a script puts on one mesh of an object: a move, a turn and a scale in the mesh's own
+/// frame (x right, y forward, z up, metres and degrees), about `pivot`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MeshTransform {
+    pub pos: [f32; 3],
+    pub rot: [f32; 3],
+    pub scale: [f32; 3],
+    pub pivot: [f32; 3],
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]

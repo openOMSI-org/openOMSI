@@ -90,18 +90,44 @@ fn encode_image(image: &Image, previous: Option<&Image>) -> Option<Vec<u8>> {
     (compressed.len() <= MAX_BLOB).then_some(compressed)
 }
 
+fn encode_reference(image: &Image, key: [u8; 32]) -> Option<Vec<u8>> {
+    let mut raw = vec![2];
+    raw.extend(image.width.to_le_bytes());
+    raw.extend(image.height.to_le_bytes());
+    raw.push(u8::from(image.mipmaps));
+    raw.extend(key);
+    let mut compressor = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::fast());
+    compressor.write_all(&raw).ok()?;
+    compressor.finish().ok()
+}
+
+#[cfg(test)]
 fn decode_image(blob: &[u8], previous: Option<&Image>) -> Option<Image> {
+    decode_cached_image(blob, previous, &BTreeMap::new())
+}
+
+fn decode_cached_image(
+    blob: &[u8],
+    previous: Option<&Image>,
+    cache: &BTreeMap<[u8; 32], Image>,
+) -> Option<Image> {
     let mut raw = Vec::new();
     flate2::read::ZlibDecoder::new(blob)
         .take((MAX_BLOB + 1) as u64)
         .read_to_end(&mut raw)
         .ok()?;
-    if raw.len() < 10 || raw.len() > MAX_BLOB || raw[0] > 1 || raw[9] > 1 {
+    if raw.len() < 10 || raw.len() > MAX_BLOB || raw[0] > 2 || raw[9] > 1 {
         return None;
     }
     let width = u32::from_le_bytes(raw[1..5].try_into().ok()?);
     let height = u32::from_le_bytes(raw[5..9].try_into().ok()?);
     let n = image_len(width, height)?;
+    if raw[0] == 2 {
+        let key: [u8; 32] = raw.get(10..)?.try_into().ok()?;
+        let image = cache.get(&key)?;
+        return ((image.width, image.height, image.mipmaps) == (width, height, raw[9] != 0))
+            .then(|| image.clone());
+    }
     let mut rgba;
     if raw[0] == 1 {
         if raw.len() != 10 + n {
@@ -151,7 +177,11 @@ pub(crate) struct Address {
 }
 
 pub(crate) fn address(data: &[u8], protocol: u8) -> Option<Address> {
-    if data.len() < HEADER || data[0] != MAGIC || data[1] != protocol || data[2] > RETRY_ALL {
+    address_with_magic(data, protocol, MAGIC)
+}
+
+pub(crate) fn address_with_magic(data: &[u8], protocol: u8, magic: u8) -> Option<Address> {
+    if data.len() < HEADER || data[0] != magic || data[1] != protocol || data[2] > RETRY_ALL {
         return None;
     }
     Some(Address {
@@ -185,6 +215,7 @@ struct Transfer {
     blob: Vec<u8>,
     acked: Vec<bool>,
     sent: Vec<f32>,
+    reference: bool,
 }
 struct Sender {
     epoch: u64,
@@ -203,6 +234,7 @@ struct Assembly {
     chunks: Vec<Option<Vec<u8>>>,
 }
 struct Receiver {
+    reference_wait: Option<(u32, f32)>,
     epoch: Option<u64>,
     table: u32,
     cookie: u64,
@@ -213,6 +245,9 @@ struct Receiver {
 }
 
 pub struct Sync {
+    references: Vec<Option<[u8; 32]>>,
+    reusable: BTreeMap<[u8; 32], Image>,
+    packet_budget: usize,
     local: Option<(u32, Vec<Option<Image>>)>,
     senders: BTreeMap<u32, Sender>,
     receivers: BTreeMap<u32, Receiver>,
@@ -230,6 +265,9 @@ impl Default for Sync {
         // generations increase within an owner, so delayed packets cannot reset a copy.
         let seed = crate::random_session_id() & (u64::MAX >> 1);
         Self {
+            references: Vec::new(),
+            reusable: BTreeMap::new(),
+            packet_budget: 32,
             local: None,
             senders: BTreeMap::new(),
             receivers: BTreeMap::new(),
@@ -244,6 +282,30 @@ impl Default for Sync {
 }
 
 impl Sync {
+    /// Optional content references for freetex only. The caller computes identities and
+    /// supplies trusted local images off the game thread. A cache miss retries as pixels.
+    pub fn set_references(
+        &mut self,
+        references: Vec<Option<[u8; 32]>>,
+        reusable: BTreeMap<[u8; 32], Image>,
+    ) {
+        self.references = references.into_iter().take(MAX_TEXTURES).collect();
+        self.reusable.clear();
+        let mut bytes = 0;
+        for (key, image) in reusable {
+            if image.valid() && bytes + image.rgba.len() <= MAX_RETAINED {
+                bytes += image.rgba.len();
+                self.reusable.insert(key, image);
+            }
+        }
+    }
+    /// Aggregate data-packet budget per 50 ms, shared fairly by all subscribers.
+    pub fn with_packet_budget(packets: usize) -> Self {
+        Self {
+            packet_budget: packets.clamp(1, 32),
+            ..Self::default()
+        }
+    }
     pub fn set_local(&mut self, table: u32, images: Vec<Option<Image>>) {
         if images.len() > MAX_TEXTURES
             || images.iter().flatten().any(|i| !i.valid())
@@ -276,6 +338,7 @@ impl Sync {
         self.receivers.insert(
             owner,
             Receiver {
+                reference_wait: None,
                 epoch: None,
                 table,
                 cookie,
@@ -304,7 +367,7 @@ impl Sync {
         std::mem::take(&mut self.incoming).into_values().collect()
     }
 
-    pub(crate) fn tick(&mut self, protocol: u8, id: u32, dt: f32) -> Vec<Vec<u8>> {
+    pub fn tick(&mut self, protocol: u8, id: u32, dt: f32) -> Vec<Vec<u8>> {
         self.clock += dt.clamp(0.0, 0.5);
         self.acc += dt.clamp(0.0, 0.5);
         if self.acc < 0.05 {
@@ -339,7 +402,7 @@ impl Sync {
             return out;
         };
         let peers: Vec<u32> = self.senders.keys().copied().collect();
-        let mut budget = 32;
+        let mut budget = self.packet_budget;
         let mut retained = self
             .senders
             .values()
@@ -359,7 +422,14 @@ impl Sync {
                     let Some(image) = &images[index] else {
                         continue;
                     };
-                    let Some(blob) = encode_image(image, tx.baseline[index].as_ref()) else {
+                    if tx.baseline[index].as_ref() == Some(image) {
+                        continue;
+                    }
+                    let reference = self.references.get(index).copied().flatten();
+                    let Some(blob) = reference
+                        .and_then(|key| encode_reference(image, key))
+                        .or_else(|| encode_image(image, tx.baseline[index].as_ref()))
+                    else {
                         continue;
                     };
                     if retained + blob.len() > MAX_RETAINED {
@@ -378,6 +448,7 @@ impl Sync {
                         blob,
                         acked: vec![false; chunks],
                         sent: vec![f32::NEG_INFINITY; chunks],
+                        reference: reference.is_some(),
                     });
                     break;
                 }
@@ -433,7 +504,7 @@ impl Sync {
         out
     }
 
-    pub(crate) fn receive(&mut self, protocol: u8, id: u32, data: &[u8]) -> Vec<Vec<u8>> {
+    pub fn receive(&mut self, protocol: u8, id: u32, data: &[u8]) -> Vec<Vec<u8>> {
         let Some(a) = address(data, protocol) else {
             return Vec::new();
         };
@@ -479,6 +550,12 @@ impl Sync {
                 self.senders.get_mut(&a.from).unwrap().requested = self.clock;
             }
             PART_ACK | COMMIT | RETRY_ALL => {
+                let retained = self
+                    .senders
+                    .values()
+                    .filter_map(|tx| tx.pending.as_ref())
+                    .map(|p| p.blob.len())
+                    .sum::<usize>();
                 let Some(tx) = self.senders.get_mut(&a.from) else {
                     return Vec::new();
                 };
@@ -492,6 +569,21 @@ impl Sync {
                     return Vec::new();
                 }
                 if data[2] == RETRY_ALL && data.len() == HEADER {
+                    if p.reference {
+                        let Some(blob) =
+                            encode_image(&p.image, tx.baseline[p.index as usize].as_ref())
+                        else {
+                            return Vec::new();
+                        };
+                        if retained - p.blob.len() + blob.len() > MAX_RETAINED {
+                            return Vec::new();
+                        }
+                        let chunks = blob.len().div_ceil(CHUNK);
+                        p.blob = blob;
+                        p.acked = vec![false; chunks];
+                        p.sent = vec![f32::NEG_INFINITY; chunks];
+                        p.reference = false;
+                    }
                     p.acked.fill(false);
                     p.sent.fill(f32::NEG_INFINITY);
                 } else if data[2] == COMMIT && data.len() == HEADER {
@@ -504,110 +596,133 @@ impl Sync {
                     }
                 }
             }
-            DATA => {
-                let reserved = self
-                    .receivers
-                    .values()
-                    .filter_map(|rx| rx.pending.as_ref())
-                    .map(|p| p.len)
-                    .sum::<usize>();
-                let cached = self
-                    .receivers
-                    .values()
-                    .flat_map(|rx| rx.images.values())
-                    .map(|i| i.rgba.len())
-                    .sum::<usize>();
-                let Some(rx) = self.receivers.get_mut(&a.from) else {
-                    return Vec::new();
-                };
-                if (rx.table, rx.cookie) != (a.table, a.cookie) || a.index as usize >= MAX_TEXTURES
-                {
-                    return Vec::new();
-                }
-                if data.len() < HEADER + 8 {
-                    return Vec::new();
-                }
-                let part =
-                    u16::from_le_bytes(data[HEADER..HEADER + 2].try_into().unwrap()) as usize;
-                let count =
-                    u16::from_le_bytes(data[HEADER + 2..HEADER + 4].try_into().unwrap()) as usize;
-                let len =
-                    u32::from_le_bytes(data[HEADER + 4..HEADER + 8].try_into().unwrap()) as usize;
-                if len == 0
-                    || len > MAX_BLOB
-                    || count != len.div_ceil(CHUNK)
-                    || part >= count
-                    || data.len() != HEADER + 8 + (len - part * CHUNK).min(CHUNK)
-                {
-                    return Vec::new();
-                }
-                if rx.epoch != Some(a.epoch) {
-                    if a.seq != 1 || rx.epoch.is_some_and(|epoch| a.epoch <= epoch) {
-                        return Vec::new();
-                    }
-                    rx.epoch = Some(a.epoch);
-                    rx.seq = 0;
-                    rx.images.clear();
-                    rx.pending = None;
-                }
-                if a.seq <= rx.seq && a.seq > 0 {
-                    return vec![packet(protocol, COMMIT, reply, &[])];
-                }
-                if Some(a.seq) != rx.seq.checked_add(1) {
-                    return Vec::new();
-                }
-                if rx.pending.is_none() && reserved + len > MAX_RETAINED {
-                    return Vec::new();
-                }
-                let pending = rx.pending.get_or_insert_with(|| Assembly {
-                    seq: a.seq,
-                    index: a.index,
-                    len,
-                    chunks: vec![None; count],
-                });
-                if (pending.seq, pending.index, pending.len) != (a.seq, a.index, len) {
-                    return Vec::new();
-                }
-                pending.chunks[part] = Some(data[HEADER + 8..].to_vec());
-                let mut replies = vec![packet(
-                    protocol,
-                    PART_ACK,
-                    reply,
-                    &(part as u16).to_le_bytes(),
-                )];
-                if pending.chunks.iter().all(Option::is_some) {
-                    let mut blob = Vec::with_capacity(len);
-                    for chunk in &pending.chunks {
-                        blob.extend(chunk.as_ref().unwrap());
-                    }
-                    let Some(image) = decode_image(&blob, rx.images.get(&a.index)) else {
-                        rx.pending = None;
-                        return vec![packet(protocol, RETRY_ALL, reply, &[])];
-                    };
-                    let previous_len = rx.images.get(&a.index).map_or(0, |i| i.rgba.len());
-                    if cached - previous_len + image.rgba.len() > MAX_RETAINED {
-                        return Vec::new();
-                    }
-                    rx.images.insert(a.index, image.clone());
-                    rx.seq = a.seq;
-                    rx.pending = None;
-                    self.incoming.insert(
-                        (a.from, a.index),
-                        Incoming {
-                            owner: a.from,
-                            table: a.table,
-                            cookie: a.cookie,
-                            index: a.index,
-                            image,
-                        },
-                    );
-                    replies.push(packet(protocol, COMMIT, reply, &[]));
-                }
-                return replies;
-            }
+            DATA => return self.receive_data(protocol, data, a, reply),
             _ => {}
         }
         Vec::new()
+    }
+
+    fn receive_data(
+        &mut self,
+        protocol: u8,
+        data: &[u8],
+        a: Address,
+        reply: Address,
+    ) -> Vec<Vec<u8>> {
+        let reserved = self
+            .receivers
+            .values()
+            .filter_map(|rx| rx.pending.as_ref())
+            .map(|p| p.len)
+            .sum::<usize>();
+        let cached = self
+            .receivers
+            .values()
+            .flat_map(|rx| rx.images.values())
+            .map(|i| i.rgba.len())
+            .sum::<usize>();
+        let Some(rx) = self.receivers.get_mut(&a.from) else {
+            return Vec::new();
+        };
+        if (rx.table, rx.cookie) != (a.table, a.cookie) || a.index as usize >= MAX_TEXTURES {
+            return Vec::new();
+        }
+        if data.len() < HEADER + 8 {
+            return Vec::new();
+        }
+        let part = u16::from_le_bytes(data[HEADER..HEADER + 2].try_into().unwrap()) as usize;
+        let count = u16::from_le_bytes(data[HEADER + 2..HEADER + 4].try_into().unwrap()) as usize;
+        let len = u32::from_le_bytes(data[HEADER + 4..HEADER + 8].try_into().unwrap()) as usize;
+        if len == 0
+            || len > MAX_BLOB
+            || count != len.div_ceil(CHUNK)
+            || part >= count
+            || data.len() != HEADER + 8 + (len - part * CHUNK).min(CHUNK)
+        {
+            return Vec::new();
+        }
+        if rx.epoch != Some(a.epoch) {
+            if a.seq != 1 || rx.epoch.is_some_and(|epoch| a.epoch <= epoch) {
+                return Vec::new();
+            }
+            rx.epoch = Some(a.epoch);
+            rx.seq = 0;
+            rx.images.clear();
+            rx.pending = None;
+        }
+        if a.seq <= rx.seq && a.seq > 0 {
+            return vec![packet(protocol, COMMIT, reply, &[])];
+        }
+        if Some(a.seq) != rx.seq.checked_add(1) {
+            return Vec::new();
+        }
+        if rx.pending.is_none() && reserved + len > MAX_RETAINED {
+            return Vec::new();
+        }
+        let pending = rx.pending.get_or_insert_with(|| Assembly {
+            seq: a.seq,
+            index: a.index,
+            len,
+            chunks: vec![None; count],
+        });
+        if (pending.seq, pending.index, pending.len) != (a.seq, a.index, len) {
+            return Vec::new();
+        }
+        pending.chunks[part] = Some(data[HEADER + 8..].to_vec());
+        let mut replies = vec![packet(
+            protocol,
+            PART_ACK,
+            reply,
+            &(part as u16).to_le_bytes(),
+        )];
+        if pending.chunks.iter().all(Option::is_some) {
+            let mut blob = Vec::with_capacity(len);
+            for chunk in &pending.chunks {
+                blob.extend(chunk.as_ref().unwrap());
+            }
+            let Some(image) = decode_cached_image(&blob, rx.images.get(&a.index), &self.reusable)
+            else {
+                rx.pending = None;
+                // Variable/name packets can arrive after the content reference.
+                // Allow the background local lookup to catch up before requesting
+                // pixels, rather than uploading an already installed picture.
+                let mut kind = [0u8];
+                if flate2::read::ZlibDecoder::new(blob.as_slice())
+                    .read_exact(&mut kind)
+                    .is_ok()
+                    && kind[0] == 2
+                {
+                    let wait = rx.reference_wait.get_or_insert((a.seq, self.clock));
+                    if wait.0 != a.seq {
+                        *wait = (a.seq, self.clock);
+                    }
+                    if self.clock - wait.1 < 0.5 {
+                        return Vec::new();
+                    }
+                }
+                return vec![packet(protocol, RETRY_ALL, reply, &[])];
+            };
+            let previous_len = rx.images.get(&a.index).map_or(0, |i| i.rgba.len());
+            if cached - previous_len + image.rgba.len() > MAX_RETAINED {
+                return Vec::new();
+            }
+            rx.images.insert(a.index, image.clone());
+            rx.seq = a.seq;
+            rx.reference_wait = None;
+            rx.pending = None;
+            self.incoming.insert(
+                (a.from, a.index),
+                Incoming {
+                    owner: a.from,
+                    table: a.table,
+                    cookie: a.cookie,
+                    index: a.index,
+                    image,
+                },
+            );
+            replies.push(packet(protocol, COMMIT, reply, &[]));
+        }
+        return replies;
     }
 }
 

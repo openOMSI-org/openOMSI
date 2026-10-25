@@ -50,6 +50,15 @@ pub struct Schedule {
     fleet_wanted: Vec<(Arc<VehicleType>, Option<usize>)>,
     /// Seconds until the next look for due departures (see `frame_traffic`).
     pub(crate) tick_t: f32,
+    /// The tracks of the map's transport routes, being found on a worker once the map's whole
+    /// network is read.
+    transit_rx: Option<std::sync::mpsc::Receiver<TransitSolved>>,
+}
+
+/// What the worker found on the whole map's network: the trips' tracks and the blocks' lanes.
+pub(crate) struct TransitSolved {
+    trips: Vec<(String, Result<omsi_sim::timetable_run::transit::Routed, String>)>,
+    blocks: Vec<(String, Result<omsi_sim::ai_traffic::blocks::BlockDef, String>)>,
 }
 
 impl std::ops::Deref for Schedule {
@@ -78,6 +87,63 @@ impl Schedule {
             fleet_wanted: Vec::new(),
             // (a second after the population's, never in the same frame)
             tick_t: 1.0,
+            transit_rx: None,
+        }
+    }
+
+    /// Find the tracks of the trips made from the map's transport routes and the lanes of its
+    /// signalling blocks: the whole map's network is read on a worker (the navigator reads the
+    /// same), the trips and blocks routed over it, and the result taken by `poll_transit`. The
+    /// trips' departures wait until then.
+    pub fn start_transit(&mut self, world: Arc<World>) {
+        let has_blocks = world.transit.signals.blocks.iter().any(|b| b.from.is_some() && b.to.is_some());
+        if self.transit_rx.is_some() || !(self.sim.transit_pending() || has_blocks) {
+            return;
+        }
+        let wanted = self.sim.transit_wanted();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let spawned = std::thread::Builder::new().name("transport routes".into()).spawn(move || {
+            let m = world.navigation_map();
+            let mut net = omsi_sim::traffic::Network { lanes: m.lanes, ..Default::default() };
+            net.link(1.5);
+            let places: hashbrown::HashMap<i64, glam::DVec3> = m.places.into_iter().collect();
+            let trips = omsi_sim::timetable_run::transit::route_all(&net, &places, &wanted);
+            let blocks = omsi_sim::timetable_run::transit::route_blocks(&net, &world.transit.signals);
+            let _ = tx.send(TransitSolved { trips, blocks });
+        });
+        if spawned.is_ok() {
+            self.transit_rx = Some(rx);
+        }
+    }
+
+    /// Install what the worker found, if it has finished: the trips' tracks go into the
+    /// timetable, the blocks are returned for the traffic.
+    pub fn poll_transit(&mut self) -> Option<Vec<omsi_sim::ai_traffic::blocks::BlockDef>> {
+        let rx = self.transit_rx.as_ref()?;
+        match rx.try_recv() {
+            Ok(done) => {
+                self.sim.install_transit(done.trips);
+                self.transit_rx = None;
+                let mut defs = Vec::new();
+                for (id, r) in done.blocks {
+                    match r {
+                        Ok(d) => defs.push(d),
+                        Err(why) => log::warn!("signal block {id}: {why}"),
+                    }
+                }
+                if !defs.is_empty() {
+                    log::info!("signal blocks: {} found on the track", defs.len());
+                }
+                Some(defs)
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => None,
+            Err(_) => {
+                // (the worker died: give the trips up rather than hold their departures for ever)
+                let all: Vec<_> = self.sim.transit_wanted().into_iter().map(|t| (t.trip, Err("the router stopped".to_string()))).collect();
+                self.sim.install_transit(all);
+                self.transit_rx = None;
+                None
+            }
         }
     }
 

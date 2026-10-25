@@ -37,7 +37,7 @@ impl RigidBody {
             let tyre_c = TYRE_C * (tyre_k / TYRE_K).sqrt();
             for side in [-1.0f32, 1.0] {
                 let inertia_inv = if a.inertia_inv > 0.0 { a.inertia_inv } else { DEFAULT_INERTIA_INV };
-                wheels.push(RigidWheel { spin: 0.0, slipping: false, locked: false, inertia_inv, attach: Vec3::new(side * inner, a.long, z), lever: side * (outer - inner), radius: r, driven: a.driven, steered: (a.long - front_long).abs() < 0.01, steer: 0.0, tyre_k, tyre_c, spring: k, damper: c, max_force, spring_factor: 1.0, rest_load: 0.0, compression: 0.0, compression_rate: 0.0, touch: None, on_ground: true, rotation_deg: 0.0, rpm: 0.0, load: 0.0, ground_z: 0.0, ground_seen: false, walls: Vec::new(), step_force: 0.0, lat_defl: 0.0, surface: 0, surface_now: 0, surface_was: 0, surface_mix: 1.0, mu_scale: 1.0, rough: 0.0 });
+                wheels.push(RigidWheel { spin: 0.0, slipping: false, locked: false, inertia_inv, attach: Vec3::new(side * inner, a.long, z), lever: side * (outer - inner), radius: r, driven: a.driven, steered: (a.long - front_long).abs() < 0.01, steer: 0.0, tyre_k, tyre_c, spring: k, damper: c, max_force, spring_factor: 1.0, strut: Strut::from_block(omsi_vehicle::vehicle::Suspension::for_axle(&def.suspensions, ai)), rest_load: 0.0, compression: 0.0, compression_rate: 0.0, touch: None, on_ground: true, rotation_deg: 0.0, rpm: 0.0, load: 0.0, ground_z: 0.0, ground_seen: false, walls: Vec::new(), step_force: 0.0, lat_defl: 0.0, surface: 0, surface_now: 0, surface_was: 0, surface_mix: 1.0, mu_scale: 1.0, rough: 0.0 });
                 wheel_axle.push(ai);
             }
         }
@@ -976,9 +976,13 @@ fn omsi_strut(w: &mut RigidWheel, r: f32, hub0: DVec3, position: DVec3, cog: Vec
     let v_up = (velocity + omega_world.cross(r_out)).dot(up);
     let mut n = 0.0f32;
     if let Some(t) = t {
-        let spring = k * t;
+        // (a coil strut is this and nothing else: `Strut::spring` is `k * t` for it)
+        if w.strut.kind == omsi_vehicle::vehicle::SuspensionKind::Air && k > 1.0 {
+            w.strut.level(k, t, w.rest_load / k, h, w.rest_load.max(1.0));
+        }
+        let spring = w.strut.spring(k, t);
         if spring >= 0.0 {
-            n = (spring - w.damper * v_up).min(w.max_force);
+            n = (spring - w.strut.damping(w.damper, v_up)).min(w.max_force);
         }
     }
     let travel = t.unwrap_or(-DROOP);

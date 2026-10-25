@@ -60,6 +60,8 @@ pub struct GroundLook {
     pub trees: bool,
     /// The railways' dashes (lost in a blur from far).
     pub dashes: bool,
+    /// The least a road's line is simplified by, metres (0: as the build's reach makes it).
+    pub tol: f32,
 }
 
 impl MapData {
@@ -496,7 +498,7 @@ mod tests {
         l.paved[layers::PAVE_INNER] = [near, far, other].concat();
         let md = MapData::new(std::sync::Arc::new(l));
         let mut p = Painter::new();
-        let look = GroundLook { surfaces: false, trees: false, dashes: false };
+        let look = GroundLook { surfaces: false, trees: false, dashes: false, tol: 0.0 };
         md.build_paved(&mut p, DVec2::ZERO, DVec2::new(15.0, 15.0), 300.0, crate::style::palette(false), look);
         assert!(!p.verts.is_empty());
         assert!(p.verts.iter().all(|v| v.pos[0] < 100.0), "{:?}", p.verts.iter().map(|v| v.pos).collect::<Vec<_>>());

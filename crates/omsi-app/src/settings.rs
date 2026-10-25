@@ -138,6 +138,12 @@ pub struct Settings {
     /// 0 = automatic (full size unless the window has more pixels than a 2560x1080 screen,
     /// as a Retina window does). The HUD is always drawn at full size.
     pub render_scale: f32,
+    /// Upscaling method for the main game picture: default or experimental fsr1.
+    pub upscaler: String,
+    /// FSR1 internal resolution preset, or custom to use render_scale.
+    pub fsr_quality: String,
+    /// FidelityFX RCAS sharpening strength (0 .. 1).
+    pub fsr_sharpness: f32,
     /// Language of the texts the game shows about the cockpit: `ENG` (default), `DEU` or
     /// `FRA` - OMSI's own language file codes.
     pub language: String,
@@ -227,6 +233,8 @@ pub struct Settings {
     /// the navigator - on top of the screen's own scale and the window's height (see
     /// `ui::size_factor`): 0.5 .. 2 (1 = as designed).
     pub ui_scale: f32,
+    /// Ordered pause-menu action IDs as JSON; "default" keeps the built-in shortcuts.
+    pub pause_quick_actions: String,
     /// The interface grows with a window taller than 1080 lines (`ui::size_factor`); off,
     /// it keeps its size on any window, as before.
     pub ui_scale_window: bool,
@@ -456,6 +464,14 @@ pub struct Settings {
     pub head_tracking_invert_x: bool,
     pub head_tracking_invert_y: bool,
     pub head_tracking_invert_z: bool,
+    /// Where the head's pose comes from: "auto", "opentrack" or "tobii" (`crate::tobii`), and
+    /// for a Tobii eye tracker whether a look at the screen's edges turns the view further.
+    pub head_tracking_source: String,
+    pub tobii_edges: bool,
+    /// A Tobii tracker's pose steadied (0..1) and the dead zone round where the view is
+    /// (degrees of the head), `crate::head_filter`.
+    pub head_tracking_smoothing: f32,
+    pub head_tracking_dead_zone: f32,
     /// Discord's "Playing" status (Rich Presence) and the Discord application it shows as.
     pub discord_status: bool,
     pub discord_app_id: String,
@@ -506,7 +522,7 @@ impl Settings {
     }
     /// The defaults of a computer.
     fn desktop() -> Self {
-        Self { msaa: 4, anisotropy: 8, ssao: true, shadows: true, shadow_size: 2048, shadow_blobs: true, navigator: true, ui_opacity: 0.85, notes: true, ui_scale: 1.0, ui_scale_window: true, navigator_corner: "bottom-left".into(), boarding: "auto".into(), passenger_animation: "original".into(), units: "metric".into(), photo_mode: "simple".into(), character_models: "original".into(), standing_chance: 0.05, ambient: true, vol_ambient: 0.8, radio_fx: Default::default(), detail_textures: true, exact_fare: true, pax_bad_driving: true, auto_announce: false, enhanced: false, graphics: "vanilla_plus".into(), triple: Default::default(), triple_span: true, triple_hud_center: true, vr: false, vr_scale: 0.65, vr_head_smoothing_ms: 0.0, vr_mirror_rate: 16.0, vr_desktop_mirror: true, fullscreen: false, vsync: true, volume: 0.6, drive_keys: "simple".into(), touch_door_mode: "standard".into(), touch_pedal_length: 1.0, touch_pedal_deadzone: 0.15, post_aa: "fxaa".into(), render_scale: 0.0, language: "ENG".into(), pax_voices: "all".into(), nav_arrows: false, nav_ai: true, nav_surface: true, nav_light: false, nav_3d: true, nav_widget: true, milezero: false, nav_size: 1.0, get_up: false, trip_summary: true, full_tank: true, sim_thread: false, texture_compression: true, gpu_texture_compression: true, video_memory: 0, auto_clutch: true, momentary_gears: false, auto_shift: false, min_obj_size: 0.013, max_obj_dist: -1.0, max_fps: 0, chat: true, chat_size: 1.0, tooltips: true, name_tags: true, show_fps: false, perf_overlay: "off".into(), clouds: true, cloud_quality: "high".into(), street_light: "off".into(), rain_quality: "high".into(), vehicle_smoke: "all".into(), puddles: "high".into(), windy_trees: true, pax_density: 1.0, vol_ai: 1.0, vol_scenery: 1.0, mirror_size: 256, mirror_hud: 0, mirror_hud_every_frame: false, mirror_refresh: "full".into(), mirror_quality: "standard".into(), mirror_shadows: false, mirror_particles: false, doppler: true, driver: true, maintenance: 0, ai_unsched_factor: 1.0, ai_max_scheduled: 0, ai_max_parked: 0, ai_max_humans: 200, ai_wait_timed_stops_only: false, collision_vehicles: true, collision_objects: true, collision_pedestrians: true, realistic_road_physics: false, head_movement: true, driverview_smooth: true, hands_in_cab: false, alt_view: true, precision_zoom: false, time_speed: 1.0, time_sync: false, metar_sync: false, metar_station: String::new(), machine_translation: false, shadow_casters: "all".into(), ctrl_deadzone: 0.0, right_stick_look: true, ctrl_background: false, pad_steer_smooth: 120.0, pad_steer_linear: false, pad_steer_speed: 2.0, pad_deadzone: 0.08, pad_type: "auto".into(), pad_buttons: true, arrows_switch_cams: true, ctrl_off: String::new(), steering_linear: false, old_steering: false, red_steer_spd: false, reflections: 1.0, led_glow: 6, led_mips: 1.3, night_brightness: 0.0, mouse_sens: 1.0, mouse_pedal_strength: 1.0, graphics_api: "auto".into(), ff_invert: false, ff_enabled: true, ff_road_vib: 1.0, ff_engine_vib: 1.0, ff_fade: 0.28, brake_hold: true, mouse_steering: false, mouse_right_off: false, mouse_smooth: true, mouse_hold: true, mouse_pedals: true, key_pedal_speed: 1.0, look_sens: 1.0, look_smoothing_ms: 0.0, blinker_cancel: true, wheel_range: 900.0, wheel_lock: 0.0, fov: 0.0, camera_collision: true, steer_look: false, steer_look_angle: 30.0, steer_look_response: 0.25, head_idle: 0.0, head_idle_pace: 1.0, pedal_throttle: 1.0, pedal_brake: 1.0, seat: [0.0; 3], seat_pitch_deg: 0.0, head_tracking: false, head_tracking_port: 4242, head_tracking_invert: String::new(), head_tracking_yaw_sens: 100.0, head_tracking_pitch_sens: 100.0, head_tracking_roll_sens: 100.0, head_tracking_x_sens: 100.0, head_tracking_y_sens: 100.0, head_tracking_z_sens: 100.0, head_tracking_invert_yaw: false, head_tracking_invert_pitch: false, head_tracking_invert_roll: false, head_tracking_invert_x: false, head_tracking_invert_y: false, head_tracking_invert_z: false, discord_status: true, discord_app_id: String::new(), voice_enabled: false, voice_mode: "ptt".into(), voice_mic_gain: 1.0, voice_threshold_db: -45.0, voice_input_device: String::new(), voice_volume: 1.0, voice_volume_nearby: 1.0, voice_volume_radio: 1.0, voice_range: 75.0, voice_talker_list: true, voice_all_off: false, info_bar: false, hud_sizes: [1.0; 3] }
+        Self { msaa: 4, anisotropy: 8, ssao: true, shadows: true, shadow_size: 2048, shadow_blobs: true, navigator: true, ui_opacity: 0.85, notes: true, ui_scale: 1.0, pause_quick_actions: "default".into(), ui_scale_window: true, navigator_corner: "bottom-left".into(), boarding: "auto".into(), passenger_animation: "original".into(), units: "metric".into(), photo_mode: "simple".into(), character_models: "original".into(), standing_chance: 0.05, ambient: true, vol_ambient: 0.8, radio_fx: Default::default(), detail_textures: true, exact_fare: true, pax_bad_driving: true, auto_announce: false, enhanced: false, graphics: "vanilla_plus".into(), triple: Default::default(), triple_span: true, triple_hud_center: true, vr: false, vr_scale: 0.65, vr_head_smoothing_ms: 0.0, vr_mirror_rate: 16.0, vr_desktop_mirror: true, fullscreen: false, vsync: true, volume: 0.6, drive_keys: "simple".into(), touch_door_mode: "standard".into(), touch_pedal_length: 1.0, touch_pedal_deadzone: 0.15, post_aa: "fxaa".into(), render_scale: 0.0, upscaler: "default".into(), fsr_quality: "quality".into(), fsr_sharpness: 0.8, language: "ENG".into(), pax_voices: "all".into(), nav_arrows: false, nav_ai: true, nav_surface: true, nav_light: false, nav_3d: true, nav_widget: true, milezero: false, nav_size: 1.0, get_up: false, trip_summary: true, full_tank: true, sim_thread: false, texture_compression: true, gpu_texture_compression: true, video_memory: 0, auto_clutch: true, momentary_gears: false, auto_shift: false, min_obj_size: 0.013, max_obj_dist: -1.0, max_fps: 0, chat: true, chat_size: 1.0, tooltips: true, name_tags: true, show_fps: false, perf_overlay: "off".into(), clouds: true, cloud_quality: "high".into(), street_light: "off".into(), rain_quality: "high".into(), vehicle_smoke: "all".into(), puddles: "high".into(), windy_trees: true, pax_density: 1.0, vol_ai: 1.0, vol_scenery: 1.0, mirror_size: 256, mirror_hud: 0, mirror_hud_every_frame: false, mirror_refresh: "full".into(), mirror_quality: "standard".into(), mirror_shadows: false, mirror_particles: false, doppler: true, driver: true, maintenance: 0, ai_unsched_factor: 1.0, ai_max_scheduled: 0, ai_max_parked: 0, ai_max_humans: 200, ai_wait_timed_stops_only: false, collision_vehicles: true, collision_objects: true, collision_pedestrians: true, realistic_road_physics: false, head_movement: true, driverview_smooth: true, hands_in_cab: false, alt_view: true, precision_zoom: false, time_speed: 1.0, time_sync: false, metar_sync: false, metar_station: String::new(), machine_translation: false, shadow_casters: "all".into(), ctrl_deadzone: 0.0, right_stick_look: true, ctrl_background: false, pad_steer_smooth: 120.0, pad_steer_linear: false, pad_steer_speed: 2.0, pad_deadzone: 0.08, pad_type: "auto".into(), pad_buttons: true, arrows_switch_cams: true, ctrl_off: String::new(), steering_linear: false, old_steering: false, red_steer_spd: false, reflections: 1.0, led_glow: 6, led_mips: 1.3, night_brightness: 0.0, mouse_sens: 1.0, mouse_pedal_strength: 1.0, graphics_api: "auto".into(), ff_invert: false, ff_enabled: true, ff_road_vib: 1.0, ff_engine_vib: 1.0, ff_fade: 0.28, brake_hold: true, mouse_steering: false, mouse_right_off: false, mouse_smooth: true, mouse_hold: true, mouse_pedals: true, key_pedal_speed: 1.0, look_sens: 1.0, look_smoothing_ms: 0.0, blinker_cancel: true, wheel_range: 900.0, wheel_lock: 0.0, fov: 0.0, camera_collision: true, steer_look: false, steer_look_angle: 30.0, steer_look_response: 0.25, head_idle: 0.0, head_idle_pace: 1.0, pedal_throttle: 1.0, pedal_brake: 1.0, seat: [0.0; 3], seat_pitch_deg: 0.0, head_tracking: false, head_tracking_port: 4242, head_tracking_invert: String::new(), head_tracking_yaw_sens: 100.0, head_tracking_pitch_sens: 100.0, head_tracking_roll_sens: 100.0, head_tracking_x_sens: 100.0, head_tracking_y_sens: 100.0, head_tracking_z_sens: 100.0, head_tracking_invert_yaw: false, head_tracking_invert_pitch: false, head_tracking_invert_roll: false, head_tracking_invert_x: false, head_tracking_invert_y: false, head_tracking_invert_z: false, head_tracking_source: "auto".into(), tobii_edges: false, head_tracking_smoothing: 0.5, head_tracking_dead_zone: 0.1, discord_status: true, discord_app_id: String::new(), voice_enabled: false, voice_mode: "ptt".into(), voice_mic_gain: 1.0, voice_threshold_db: -45.0, voice_input_device: String::new(), voice_volume: 1.0, voice_volume_nearby: 1.0, voice_volume_radio: 1.0, voice_range: 75.0, voice_talker_list: true, voice_all_off: false, info_bar: false, hud_sizes: [1.0; 3] }
     }
 }
 
@@ -564,7 +580,32 @@ impl Settings {
         s
     }
 
+    /// One of the Tobii head-tracking lines or the pause menu's shortcuts of the settings file (`from_text`).
+    fn read_extra(&mut self, k: &str, v: &str) {
+        match k {
+            "head_tracking_source" => self.head_tracking_source = omsi_launcher_lib::head_tracking_source(v).to_string(),
+            "pause_quick_actions" => self.pause_quick_actions = v.to_string(),
+            "tobii_edges" => self.tobii_edges = matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes"),
+            _ => {
+                let x = omsi_launcher_lib::head_tracking_value(k, v.parse::<f64>().ok()) as f32;
+                if k == "head_tracking_smoothing" { self.head_tracking_smoothing = x } else { self.head_tracking_dead_zone = x }
+            }
+        }
+    }
     /// The settings a `settings.cfg` text describes (anything missing keeps its default).
+    /// The upscaler's lines of settings.cfg (`from_text`): unknown values fall back to the
+    /// standard upscaler, the Quality preset and 80 % sharpening.
+    fn read_upscaler(&mut self, k: &str, v: &str) {
+        match k {
+            "upscaler" => self.upscaler = if v.eq_ignore_ascii_case("fsr1") { "fsr1" } else { "default" }.into(),
+            "fsr_quality" => self.fsr_quality = match v.to_ascii_lowercase().as_str() {
+                "ultra" => "ultra", "balanced" => "balanced", "performance" => "performance",
+                "custom" => "custom", "auto" => "auto", _ => "quality",
+            }.into(),
+            _ => self.fsr_sharpness = v.parse::<f32>().ok().filter(|n| n.is_finite()).map(|n| n.clamp(0.0, 1.0)).unwrap_or(0.8),
+        }
+    }
+
     pub fn from_text(text: &str) -> Settings {
         let mut s = Settings::default();
         let mut version = 0u32;
@@ -666,6 +707,7 @@ impl Settings {
                 "fullscreen" => s.fullscreen = b(v),
                 "vsync" => s.vsync = b(v),
                 "volume" => s.volume = v.parse().unwrap_or(s.volume),
+                "upscaler" | "fsr_quality" | "fsr_sharpness" => s.read_upscaler(&k, v),
                 // "auto", a fraction (0.75) or a percentage (75)
                 "render_scale" => {
                     s.render_scale = if v.eq_ignore_ascii_case("auto") {
@@ -822,6 +864,7 @@ impl Settings {
                 "head_tracking_invert_x" => s.head_tracking_invert_x = b(v),
                 "head_tracking_invert_y" => s.head_tracking_invert_y = b(v),
                 "head_tracking_invert_z" => s.head_tracking_invert_z = b(v),
+                "head_tracking_source" | "tobii_edges" | "head_tracking_smoothing" | "head_tracking_dead_zone" | "pause_quick_actions" => s.read_extra(&k, v),
                 "discord_status" => s.discord_status = b(v),
                 "discord_app_id" => s.discord_app_id = v.trim().to_string(),
                 "voice_enabled" => s.voice_enabled = b(v),
@@ -907,6 +950,8 @@ impl Settings {
             "vr_head_smoothing_ms={}\nvr_mirror_rate={}\nvr_desktop_mirror={}\nled_glow={}\nled_mips={}\nnight_brightness={}\nui_scale={}\nui_scale_window={}\nchat_size={}\nnotes={}\nff_road_vib={}\nff_engine_vib={}\nff_fade={}\nrealistic_road_physics={}\n",
             self.vr_head_smoothing_ms, self.vr_mirror_rate, self.vr_desktop_mirror as u8, self.led_glow, self.led_mips, self.night_brightness, self.ui_scale, self.ui_scale_window as u8, self.chat_size, self.notes as u8, self.ff_road_vib, self.ff_engine_vib, self.ff_fade, self.realistic_road_physics as u8,
         ));
+        text.push_str(&format!("pause_quick_actions={}\n", self.pause_quick_actions));
+        text.push_str(&format!("upscaler={}\nfsr_quality={}\nfsr_sharpness={}\n", self.upscaler, self.fsr_quality, self.fsr_sharpness));
         text.push_str(&format!("mouse_pedal_strength={}\n", self.mouse_pedal_strength));
         text.push_str(&format!("pax_bad_driving={}\n", self.pax_bad_driving as u8));
         text.push_str(&format!("auto_announce={}\n", self.auto_announce as u8));
@@ -918,6 +963,7 @@ impl Settings {
         text.push_str(&format!("steer_look={}\nsteer_look_angle={}\nsteer_look_response={}\nhead_idle={}\nhead_idle_pace={}\nlook_sens={}\nlook_smoothing_ms={}\nblinker_cancel={}\n", self.steer_look as u8, self.steer_look_angle, self.steer_look_response, self.head_idle, self.head_idle_pace, self.look_sens, self.look_smoothing_ms, self.blinker_cancel as u8));
         text.push_str(&format!("seat_pitch_deg={}\n", self.seat_pitch_deg));
         text.push_str(&format!("head_tracking_yaw_sens={}\nhead_tracking_pitch_sens={}\nhead_tracking_roll_sens={}\nhead_tracking_x_sens={}\nhead_tracking_y_sens={}\nhead_tracking_z_sens={}\nhead_tracking_invert_yaw={}\nhead_tracking_invert_pitch={}\nhead_tracking_invert_roll={}\nhead_tracking_invert_x={}\nhead_tracking_invert_y={}\nhead_tracking_invert_z={}\n", self.head_tracking_yaw_sens, self.head_tracking_pitch_sens, self.head_tracking_roll_sens, self.head_tracking_x_sens, self.head_tracking_y_sens, self.head_tracking_z_sens, self.head_tracking_invert_yaw as u8, self.head_tracking_invert_pitch as u8, self.head_tracking_invert_roll as u8, self.head_tracking_invert_x as u8, self.head_tracking_invert_y as u8, self.head_tracking_invert_z as u8));
+        text.push_str(&format!("head_tracking_source={}\ntobii_edges={}\nhead_tracking_smoothing={}\nhead_tracking_dead_zone={}\n", self.head_tracking_source, self.tobii_edges as u8, self.head_tracking_smoothing, self.head_tracking_dead_zone));
         text.push_str(&format!("discord_status={}\ndiscord_app_id={}\n", self.discord_status as u8, self.discord_app_id));
         text.push_str(&format!("auto_shift={}\n", self.auto_shift as u8));
         text.push_str(&format!("sim_thread={}\n", self.sim_thread as u8));
@@ -1006,8 +1052,30 @@ impl Settings {
         log::warn!("safer graphics after a lost graphics device ({n}): msaa 1, SSAO off, shadows {} ({}), video memory {} of its limit, render scale {}", self.shadows, self.shadow_size, if n >= 2 { "half" } else { "two thirds" }, self.render_scale_text());
     }
 
+    /// The render scale the picture is drawn at: FSR 1's quality's, or the render scale's (0:
+    /// automatic, the frame-rate governor's).
+    pub fn scene_render_scale(&self) -> f32 {
+        if self.upscaler != "fsr1" {
+            return self.render_scale;
+        }
+        let preset: f32 = match self.fsr_quality.as_str() {
+            "ultra" => 0.77,
+            "balanced" => 0.59,
+            "performance" => 0.5,
+            "custom" => return self.render_scale,
+            // (the frame-rate governor picks the size, FSR 1 scales it up)
+            "auto" => return 0.0,
+            _ => 0.67,
+        };
+        // (a render scale set below the preset's - by the optimiser, or the safer graphics
+        // after a lost device - still caps it)
+        if self.render_scale > 0.0 { preset.min(self.render_scale) } else { preset }
+    }
+
     pub fn render_options(&self) -> omsi_render::RenderOptions {
-        omsi_render::RenderOptions { msaa: self.msaa, anisotropy: self.anisotropy, shadow_size: self.shadow_size, ssao: self.ssao, render_scale: self.render_scale, compress_textures: self.texture_compression, gpu_texture_compression: self.gpu_texture_compression, fxaa: self.post_aa != "off", min_obj_size: self.min_obj_size, max_obj_dist: self.object_distance(), mirror_enhanced: self.mirror_quality == "enhanced", mirror_shadows: self.mirror_shadows, mirror_particles: self.mirror_particles, omsi_shadow_casters: self.shadow_casters == "omsi", shadow_blobs: self.shadow_blobs, reflections: self.reflections > 0.0, preview_only: false, no_enhanced: !matches!(graphics_mode(&self.graphics), "enhanced" | "enhanced_plus"), ray_tracing: self.ray_tracing(), street_light: match self.street_light.as_str() { "on" => Some(true), "off" => Some(false), _ => None }, max_scene: None }
+        let fsr1 = self.upscaler == "fsr1";
+        let render_scale = self.scene_render_scale();
+        omsi_render::RenderOptions { msaa: self.msaa, anisotropy: self.anisotropy, shadow_size: self.shadow_size, ssao: self.ssao, render_scale, fsr1, fsr_sharpness: self.fsr_sharpness, xr_scale: 1.0, compress_textures: self.texture_compression, gpu_texture_compression: self.gpu_texture_compression, fxaa: self.post_aa != "off", min_obj_size: self.min_obj_size, max_obj_dist: self.object_distance(), mirror_enhanced: self.mirror_quality == "enhanced", mirror_shadows: self.mirror_shadows, mirror_particles: self.mirror_particles, omsi_shadow_casters: self.shadow_casters == "omsi", shadow_blobs: self.shadow_blobs, reflections: self.reflections > 0.0, preview_only: false, no_enhanced: !matches!(graphics_mode(&self.graphics), "enhanced" | "enhanced_plus"), ray_tracing: self.ray_tracing(), street_light: match self.street_light.as_str() { "on" => Some(true), "off" => Some(false), _ => None }, max_scene: None }
     }
 }
 

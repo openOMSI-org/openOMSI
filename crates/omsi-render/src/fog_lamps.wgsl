@@ -37,6 +37,8 @@ struct Camera {
     inside2_c: vec4<f32>,
     cookies: array<vec4<f32>, 8>,
     cabin_lamps: array<vec4<f32>, 4>,
+    // x: the textures' mip bias (FSR 1: negative, see `CameraUniform::lod`)
+    lod: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> camera: Camera;
 
@@ -238,10 +240,11 @@ fn sun_glare(dir: vec3<f32>) -> vec3<f32> {
         return vec3<f32>(0.0);
     }
     let cos_t = clamp(dot(dir, s), -1.0, 1.0);
-    let theta = max(degrees(acos(cos_t)), 0.25);
-    if (theta > 100.0) {
+    // (cos 100 degrees: past it there is no veil, and the arc cosine is not needed)
+    if (cos_t < -0.17364818) {
         return vec3<f32>(0.0);
     }
+    let theta = max(degrees(acos(cos_t)), 0.25);
     let seen = textureLoad(t_fog, vec2<i32>(0, i32(textureDimensions(t_fog).y) - 1), 0).r;
     if (seen <= 0.0) {
         return vec3<f32>(0.0);
@@ -273,6 +276,18 @@ fn gathered_air_light(at: vec2<f32>, len: f32) -> vec3<f32> {
     let f = hp - floor(hp);
     // (the last row is the sun's, see `fs_fog_lamps`)
     let hd = vec2<i32>(textureDimensions(t_fog)) - vec2<i32>(1, 2);
+    // (not one of the sixteen half-size rays holds any light: no lamp's cone and no shaft
+    // here - most of a picture in clear air - and the weighted sum below would only add up
+    // zeros, so it is not worked out. All sixteen, the whole footprint of the tent: a lit
+    // ray at its edge still lights the pixel)
+    var lit = false;
+    for (var k = 0; k < 16; k = k + 1) {
+        let o = vec2<i32>(k & 3, k >> 2) - vec2<i32>(1);
+        lit = lit || any(textureLoad(t_fog, clamp(base + o, vec2<i32>(0), hd), 0).rgb != vec3<f32>(0.0));
+    }
+    if (!lit) {
+        return vec3<f32>(0.0);
+    }
     var sum = vec3<f32>(0.0);
     var wsum = 0.0;
     // (a twig or a wire none of the four rays met: the one nearest in distance)

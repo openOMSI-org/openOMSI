@@ -102,6 +102,44 @@ pub struct RailMapConfig {
 pub const FILE: &str = "openomsi-rail.cfg";
 
 impl RailMapConfig {
+    /// The rules of a map's `transport` folder (`network.cfg` and the diverging speeds of
+    /// `switches.cfg`) after the file's own: the newer, more exact description wins.
+    pub fn add_transit(&mut self, transit: &omsi_transit::TransitData) {
+        use omsi_cfg::transport::TransportMode;
+        use omsi_transit::infra::Power;
+        for r in &transit.network.rules {
+            let rail: Vec<TransportMode> = r.modes.iter().filter(|m| m.is_rail()).collect();
+            let class = match rail.as_slice() {
+                [TransportMode::Tram] => Some(RailClass::Tram),
+                [TransportMode::Metro] => Some(RailClass::Metro),
+                [TransportMode::Railway] => Some(RailClass::Train),
+                _ => None,
+            };
+            let third_rail = match r.power {
+                Power::ThirdRail => Some(true),
+                Power::Catenary | Power::Diesel => Some(false),
+                _ => None,
+            };
+            self.rules.push(TrackRule {
+                file: r.file.clone(),
+                tile: r.tile,
+                id: r.id,
+                path: None,
+                class,
+                street: r.street,
+                third_rail,
+                tunnel: r.tunnel,
+                speed_kmh: r.speed.map(|v| v * 3.6),
+            });
+        }
+        for w in &transit.switches.list {
+            let (Some(speed), Some(id)) = (w.diverging_speed, w.object) else { continue };
+            for &path in &w.diverging_paths {
+                self.rules.push(TrackRule { tile: w.tile, id: Some(id), path: Some(path), speed_kmh: Some(speed * 3.6), ..Default::default() });
+            }
+        }
+    }
+
     pub fn load(map_dir: &Path) -> RailMapConfig {
         match std::fs::read(map_dir.join(FILE)) {
             Ok(b) => Self::parse(&String::from_utf8_lossy(&b)),
@@ -230,6 +268,35 @@ pub fn classify(net: &mut Network, cfg: &RailMapConfig) -> usize {
         l.track = Some(info);
     }
     count
+}
+
+#[cfg(test)]
+mod transit_tests {
+    use super::*;
+
+    #[test]
+    fn the_transport_folder_adds_rules_after_the_files() {
+        let dir = std::env::temp_dir().join(format!("omsi_track_transit_{}", std::process::id()));
+        let t = dir.join("transport");
+        std::fs::create_dir_all(&t).unwrap();
+        std::fs::write(t.join("network.cfg"), "[track]\nfile Splines/*/tram_*.sli\nmodes tram\nstreet yes\npower catenary\nspeed 40 km/h\n[track]\nid 9\nmodes metro\npower third_rail\ntunnel yes\n[track]\nid 10\nmodes tram railway\n").unwrap();
+        std::fs::write(t.join("switches.cfg"), "[switch]\nid W\nmodes tram\nobject 77\ntile 1 2\ndiverging_path 1\ndiverging_speed 15 km/h\n").unwrap();
+        let mut issues = Vec::new();
+        let transit = omsi_transit::TransitData::load(&dir, &mut issues);
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut cfg = RailMapConfig::parse("[track]\nid 5\nclass = train\n");
+        cfg.add_transit(&transit);
+        assert_eq!(cfg.rules.len(), 5, "{issues:?}");
+        let tram = &cfg.rules[1];
+        assert_eq!((tram.class, tram.street, tram.third_rail), (Some(RailClass::Tram), Some(true), Some(false)));
+        assert!((tram.speed_kmh.unwrap() - 40.0).abs() < 0.01);
+        let metro = &cfg.rules[2];
+        assert_eq!((metro.class, metro.third_rail, metro.tunnel), (Some(RailClass::Metro), Some(true), Some(true)));
+        assert_eq!(cfg.rules[3].class, None, "tram and railway: any");
+        let sw = &cfg.rules[4];
+        assert_eq!((sw.tile, sw.id, sw.path), (Some((1, 2)), Some(77), Some(1)));
+        assert!((sw.speed_kmh.unwrap() - 15.0).abs() < 0.01);
+    }
 }
 
 #[cfg(test)]

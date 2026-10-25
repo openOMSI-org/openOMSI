@@ -46,6 +46,7 @@ pub(crate) struct NoVertexPipeline<'a> {
     targets: &'a [Option<wgpu::ColorTargetState>],
     depth_stencil: Option<wgpu::DepthStencilState>,
     samples: u32,
+    strip: bool,
 }
 
 pub(crate) fn no_vertex_pipeline<'a>(
@@ -55,7 +56,7 @@ pub(crate) fn no_vertex_pipeline<'a>(
     fs: &'a str,
     targets: &'a [Option<wgpu::ColorTargetState>],
 ) -> NoVertexPipeline<'a> {
-    NoVertexPipeline { label, layout, module, vs: "vs_main", fs, targets, depth_stencil: None, samples: 1 }
+    NoVertexPipeline { label, layout, module, vs: "vs_main", fs, targets, depth_stencil: None, samples: 1, strip: false }
 }
 
 impl<'a> NoVertexPipeline<'a> {
@@ -65,6 +66,12 @@ impl<'a> NoVertexPipeline<'a> {
 
     pub(crate) fn depth(self, depth_stencil: wgpu::DepthStencilState) -> Self {
         NoVertexPipeline { depth_stencil: Some(depth_stencil), ..self }
+    }
+
+    /// Quads as triangle strips of four vertices, not lists of six (the vertex shader makes
+    /// them up, and runs its work once for each).
+    pub(crate) fn strip(self, strip: bool) -> Self {
+        NoVertexPipeline { strip, ..self }
     }
 
     pub(crate) fn samples(self, samples: u32) -> Self {
@@ -82,7 +89,7 @@ impl<'a> NoVertexPipeline<'a> {
                 compilation_options: Default::default(),
             },
             primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
+                topology: if self.strip { wgpu::PrimitiveTopology::TriangleStrip } else { wgpu::PrimitiveTopology::TriangleList },
                 cull_mode: None,
                 front_face: wgpu::FrontFace::Ccw,
                 ..Default::default()

@@ -83,6 +83,8 @@ pub struct Outcome {
     pub sliding: bool,
     /// Total resistance at this speed (N, positive).
     pub resistance: f32,
+    /// The greatest force any coupling of the train carries (N); 0 without a coupler model.
+    pub coupler_force: f32,
 }
 
 const G: f32 = 9.81;
@@ -187,7 +189,7 @@ pub fn step(c: &Consist, cond: &Conditions, f: &Forces, v0: f32, dt: f32) -> Out
             }
         }
     }
-    Outcome { speed: v, accel: (v - v0) / dt.max(1e-4), spinning, sliding, resistance: resist_now }
+    Outcome { speed: v, accel: (v - v0) / dt.max(1e-4), spinning, sliding, resistance: resist_now, coupler_force: 0.0 }
 }
 
 /// The drive and brake a class gives a pedal-driven vehicle (one whose scripts give none):

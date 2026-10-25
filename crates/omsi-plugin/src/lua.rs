@@ -5,8 +5,9 @@
 //! this binding. `omsi.data` is a table saved between sessions (`<name>.save.lua`). A changed
 //! file is loaded again while the game runs.
 //!
-//! Each plugin has its own Lua state with the safe libraries only: no `io`, no `os` beyond
-//! the clock, no C modules, no `dofile`, no `string.dump` and no binary chunks anywhere (Lua
+//! Each plugin has its own Lua state with the safe libraries only: no `io`, only clock/date
+//! functions in `os`; native helpers require a hash-bound player grant. No C modules,
+//! `dofile`, `string.dump` or binary chunks anywhere (Lua
 //! has no bytecode checker: a crafted binary chunk can break out of the VM), at most 256 MB
 //! of memory; `require` finds modules through the plugin's [`LuaSource`] - its own folder on
 //! disk. A call that runs longer than 50 ms is stopped and the plugin switched off; a plugin
@@ -171,6 +172,8 @@ pub struct LuaPlugin {
     stamp: Option<SystemTime>,
     last_check: Option<Instant>,
     pub disabled: bool,
+    /// Its main chunk yielded before the start event could be sent.
+    start_pending: bool,
 }
 
 /// Each plugin's mark on its panels (a plugin loaded again keeps its own).
@@ -208,7 +211,9 @@ impl LuaPlugin {
         let owner = NEXT_OWNER.fetch_add(1, Ordering::Relaxed);
         let mut state = PluginState::new(&spec.name, "Lua plugin", "lua", owner, hub, spec.folder.clone(), spec.data_dir.clone());
         state.perms = spec.perms.clone();
-        let mut p = LuaPlugin { name: spec.name.clone(), path: path.to_path_buf(), spec, binding: None, state: Box::new(state), slot: Rc::new(Cell::new(None)), stamp: None, last_check: None, disabled: false };
+        state.process_allowed = state.hub.process_permissions.is_some() || state.hub.process_grants.has_candidate(path, state.folder.as_deref());
+        state.process_entry = Some(path.to_path_buf());
+        let mut p = LuaPlugin { name: spec.name.clone(), path: path.to_path_buf(), spec, binding: None, state: Box::new(state), slot: Rc::new(Cell::new(None)), stamp: None, last_check: None, disabled: false, start_pending: false };
         p.start(io)?;
         Ok(p)
     }
@@ -226,12 +231,16 @@ impl LuaPlugin {
         let r = self.with_ctx(io, |ctx, b| {
             b.depth.set(1);
             b.deadline.set(Some(Instant::now() + Duration::from_millis(runtime::LOAD_BUDGET_MS)));
-            let top = b.lua.load(&source).set_name(format!("@{chunk}")).set_mode(ChunkMode::Text).exec().map_err(|e| b.error(e));
+            let top = b.lua.load(&source).set_name(format!("@{chunk}")).set_mode(ChunkMode::Text).into_function()
+                .map_err(|e| b.error(e)).and_then(|f| b.managed_call(f, MultiValue::new()));
             b.depth.set(0);
             b.deadline.set(None);
             top?;
-            runtime::start(ctx)
+            let pending = b.process_enabled && b.flag("_process_waiting")?;
+            if !pending { runtime::start(ctx)?; }
+            Ok::<_, CallError>(pending)
         });
+        if let Ok(pending) = &r { self.start_pending = *pending; }
         if let Err(e) = r {
             log::warn!("{} {}", self.state.tag, e.msg);
             io.message(&format!("Lua plugin {} failed: {}", self.name, e.msg.lines().next().unwrap_or("")), 8.0);
@@ -281,7 +290,35 @@ impl LuaPlugin {
         if self.disabled || self.binding.is_none() {
             return;
         }
-        self.with_ctx(io, |ctx, _| runtime::frame(ctx));
+        if !self.binding.as_ref().unwrap().process_enabled {
+            self.with_ctx(io, |ctx, _| runtime::frame(ctx));
+            self.disabled = self.state.disabled;
+            self.binding.as_ref().unwrap().sweep();
+            return;
+        }
+        let starting = self.start_pending;
+        let result = self.with_ctx(io, |ctx, b| {
+            if b.flag("_resume_process_wait")? {
+                if starting && !b.flag("_process_waiting")? {
+                    runtime::start(ctx)?;
+                    return Ok(false);
+                }
+                return Ok(starting);
+            }
+            runtime::frame(ctx);
+            Ok::<_, CallError>(false)
+        });
+        match result {
+            Ok(pending) => self.start_pending = pending,
+            Err(e) => {
+                self.state.record_error(io, &e);
+                if starting {
+                    self.start_pending = false;
+                    self.state.disabled = true;
+                    self.with_ctx(io, |ctx, _| runtime::finish(ctx));
+                }
+            }
+        }
         self.disabled = self.state.disabled;
         if let Some(b) = self.binding.as_ref() {
             b.sweep();
@@ -307,14 +344,21 @@ impl LuaPlugin {
         let old = &self.state;
         let mut s = PluginState::new(&self.spec.name, "Lua plugin", "lua", old.owner, old.hub.clone(), self.spec.folder.clone(), self.spec.data_dir.clone());
         s.perms = self.spec.perms.clone();
+        s.process_allowed = s.hub.process_permissions.is_some() || s.hub.process_grants.has_candidate(&self.path, s.folder.as_deref());
+        s.process_entry = Some(self.path.clone());
         self.state = Box::new(s);
         self.disabled = false;
+        self.start_pending = false;
     }
 
     /// The `stop` event, then `omsi.data` and the storage are saved.
     pub fn stop(&mut self, io: &mut dyn PluginIo) {
         if self.binding.is_some() {
             self.with_ctx(io, |ctx, b| {
+                if let Err(e) = if b.process_enabled { b.call_internal("_cancel_process_wait") } else { Ok(()) } {
+                    let (io, s) = ctx.both();
+                    s.record_error(io, &e);
+                }
                 runtime::stop(ctx);
                 if let Err(e) = b.call_internal("_save") {
                     let (io, s) = ctx.both();
@@ -341,6 +385,7 @@ pub struct LuaBinding {
     deadline: Rc<Cell<Option<Instant>>>,
     overran: Rc<Cell<bool>>,
     globals: Table,
+    process_enabled: bool,
 }
 
 impl LuaBinding {
@@ -365,7 +410,7 @@ impl LuaBinding {
                 _ => Ok(VmState::Continue),
             });
         }
-        let b = LuaBinding { by_id: lua.create_table()?, by_fn: lua.create_table()?, counts: RefCell::new(HashMap::new()), fresh: RefCell::new(Vec::new()), next: Cell::new(1), depth: Cell::new(0), deadline, overran, globals: g.clone(), lua };
+        let b = LuaBinding { by_id: lua.create_table()?, by_fn: lua.create_table()?, counts: RefCell::new(HashMap::new()), fresh: RefCell::new(Vec::new()), next: Cell::new(1), depth: Cell::new(0), deadline, overran, globals: g.clone(), process_enabled: p.state.allows(api::Perm::Process), lua };
         b.bind(p)?;
         Ok(b)
     }
@@ -414,6 +459,26 @@ impl LuaBinding {
                 r.map_err(|e| mlua::Error::runtime(format!("saving {}: {e}", save.display())))
             })?,
         )?;
+        omsi.set("_process_enabled", self.process_enabled)?;
+        if self.process_enabled {
+            omsi.set("_budgeted_thread", lua.create_function(|lua, f: Function| lua.create_thread(f))?)?;
+            omsi.set("_reset_thread", lua.create_function(|_, (thread, f): (mlua::Thread, Function)| thread.reset(f))?)?;
+            let (deadline, overran) = (self.deadline.clone(), self.overran.clone());
+            omsi.set("_resume_thread", lua.create_function(move |lua, mut args: MultiValue| {
+                let thread = match args.pop_front() {
+                    Some(mlua::Value::Thread(thread)) => thread,
+                    _ => return Err(mlua::Error::runtime("expected coroutine")),
+                };
+                let caller = lua.current_thread();
+                arm_budget(&thread, deadline.clone(), overran.clone());
+                let result = thread.resume::<MultiValue>(args);
+                arm_budget(&caller, deadline.clone(), overran.clone());
+                match result {
+                    Ok(mut values) => { values.push_front(mlua::Value::Boolean(true)); Ok(values) }
+                    Err(error) => Ok(MultiValue::from_iter([mlua::Value::Boolean(false), mlua::Value::String(lua.create_string(error.to_string())?)])),
+                }
+            })?)?;
+        }
         self.globals.set("omsi", omsi)?;
         require(lua, &self.globals, p.slot.clone(), source_ptr(p))?;
         lua.load(PRELUDE).set_name("=omsi").set_mode(ChunkMode::Text).exec()
@@ -505,6 +570,16 @@ impl LuaBinding {
         r.map_err(|e| self.error(e))
     }
 
+    fn managed_call(&self, f: Function, mut args: MultiValue) -> Result<mlua::Value, CallError> {
+        if !self.process_enabled { return self.guarded(|| f.call(args)); }
+        args.push_front(mlua::Value::Function(f));
+        self.guarded(|| self.globals.get::<Table>("omsi")?.get::<Function>("_managed_call")?.call(args))
+    }
+
+    fn flag(&self, name: &str) -> Result<bool, CallError> {
+        self.guarded(|| self.globals.get::<Table>("omsi")?.get::<Function>(name)?.call(()))
+    }
+
     /// One of the prelude's own functions (`omsi._save`).
     fn call_internal(&self, name: &str) -> Result<(), CallError> {
         self.guarded(|| self.globals.get::<Table>("omsi")?.get::<Function>(name)?.call::<()>(()))
@@ -537,7 +612,7 @@ impl Binding for LuaBinding {
         };
         let lua = &self.lua;
         let args = args.into_iter().map(|v| self.to_lua(lua, v)).collect::<mlua::Result<MultiValue>>().map_err(|e| self.error(e))?;
-        let r: mlua::Value = self.guarded(|| f.call(args))?;
+        let r = self.managed_call(f, args)?;
         self.to_value(&r).map_err(CallError::new)
     }
 
@@ -565,7 +640,7 @@ impl Binding for LuaBinding {
         };
         let lua = &self.lua;
         let args = args.iter().cloned().map(|v| self.to_lua(lua, v)).collect::<mlua::Result<MultiValue>>().map_err(|e| self.error(e))?;
-        self.guarded(|| f.call::<()>(args))?;
+        self.managed_call(f, args)?;
         Ok(true)
     }
 
@@ -721,4 +796,13 @@ impl PluginIo for NoVehicle {
     }
     fn set_string(&mut self, _: &str, _: &str) {}
     fn fire(&mut self, _: &str, _: bool) {}
+}
+
+fn arm_budget(thread: &mlua::Thread, deadline: Rc<Cell<Option<Instant>>>, overran: Rc<Cell<bool>>) {
+    thread.set_hook(HookTriggers::new().every_nth_instruction(10_000), move |_, _| {
+        if deadline.get().is_some_and(|d| Instant::now() > d) {
+            overran.set(true);
+            Err(mlua::Error::runtime(format!("the plugin ran longer than {} ms and was stopped", runtime::CALL_BUDGET_MS)))
+        } else { Ok(VmState::Continue) }
+    });
 }

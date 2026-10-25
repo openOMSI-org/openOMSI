@@ -27,7 +27,7 @@ fn main() {
     v.host.temperature = 15.0;
     v.position = glam::DVec3::new(0.0, 0.0, 0.0);
     if a.iter().any(|s| s == "--rigid") { v.enable_rigid_body(); }
-    v.set_rail_env(Some(omsi_sim::vehicle::RailEnv { grade: flag("--grade").unwrap_or(0.0), radius: f32::INFINITY, in_tunnel: false }));
+    v.set_rail_env(Some(omsi_sim::vehicle::RailEnv { grade: flag("--grade").unwrap_or(0.0), radius: f32::INFINITY, in_tunnel: false, wire: None, third_rail: None }));
     let dt = 1.0 / 60.0;
     for step in 0..(70.0 / dt) as usize {
         let t = step as f32 * dt;

@@ -162,7 +162,16 @@ impl<'a> Tok<'a> {
                 1 => Token::Word(ansi(self.counted(data)?)),
                 2 => {
                     let text = ansi(self.counted(data)?);
-                    let end = u32::from_le_bytes(self.take(data)?);
+                    // The terminator is a DWORD by the documentation (19 `,` or 20 `;`), but
+                    // some exporters write it as a token's WORD: PAD-Labs' binary Köln houses
+                    // (`Engeldorfer Str 32-34.X`) have `14 00` and then the `}` closing the
+                    // TextureFilename. Read as a DWORD that `}` was swallowed, the material never
+                    // closed and the model failed to load: the houses were missing (since
+                    // 0.3.38). No token is 0, so a WORD of 0 after it is the DWORD's upper half.
+                    let end = u16::from_le_bytes(self.take(data)?);
+                    if data.get(self.cur.at..self.cur.at + 2) == Some(&[0, 0]) {
+                        self.cur.at += 2;
+                    }
                     self.cur.after_string = Some(if end == 19 { b',' } else { b';' });
                     Token::Quoted(text)
                 }
@@ -503,6 +512,9 @@ fn parse_mesh(t: &mut Tok, ctx: &mut Ctx, xform: Mat4) -> Result<(), O3dError> {
     let mut normals: Vec<Vec3> = vec![Vec3::Z; nv];
     let mut uvs: Vec<Vec2> = vec![Vec2::ZERO; nv];
     let mut face_mats: Vec<u16> = vec![0; nf];
+    // (MeshNormals and MeshTextureCoords win over a DeclData that also lists them)
+    let (mut has_normals, mut has_uvs) = (false, false);
+    let mut decl: Option<VertexDeclaration> = None;
     let mut mats: Vec<Material> = Vec::new();
     let mut material_refs: Vec<(usize, String)> = Vec::new();
     loop {
@@ -510,6 +522,7 @@ fn parse_mesh(t: &mut Tok, ctx: &mut Ctx, xform: Mat4) -> Result<(), O3dError> {
         match tok.key() {
             "}" => break,
             "MeshNormals" => {
+                has_normals = true;
                 t.enter()?;
                 let nn = t.int()?;
                 let mut nrm = Vec::with_capacity(nn.min(t.left()));
@@ -534,6 +547,7 @@ fn parse_mesh(t: &mut Tok, ctx: &mut Ctx, xform: Mat4) -> Result<(), O3dError> {
                 t.skip_block()?;
             }
             "MeshTextureCoords" => {
+                has_uvs = true;
                 t.enter()?;
                 let n = t.int()?;
                 for i in 0..n {
@@ -546,9 +560,8 @@ fn parse_mesh(t: &mut Tok, ctx: &mut Ctx, xform: Mat4) -> Result<(), O3dError> {
             }
             "DeclData" => {
                 t.enter()?;
-                let decl = read_vertex_declaration(t)?;
+                decl = Some(read_vertex_declaration(t)?);
                 t.skip_block()?;
-                decl.apply(normal_matrix(xform), &mut normals, &mut uvs);
             }
             "MeshMaterialList" => {
                 t.enter()?;
@@ -600,6 +613,9 @@ fn parse_mesh(t: &mut Tok, ctx: &mut Ctx, xform: Mat4) -> Result<(), O3dError> {
             }
             _ => skip_object(t, &tok)?,
         }
+    }
+    if let Some(decl) = decl {
+        decl.apply(normal_matrix(xform), nv, (!has_normals).then_some(&mut normals[..]), (!has_uvs).then_some(&mut uvs[..]));
     }
     if mats.is_empty() {
         mats.push(Material::default());
@@ -732,7 +748,7 @@ fn unpack_element(kind: u32, w: &[u32]) -> Option<Vec4> {
 impl VertexDeclaration {
     /// Take the first normal and the first texture coordinate set out of the buffer. A layout
     /// with a type Direct3D 9 does not have gives no stride, so nothing is taken from it.
-    fn apply(&self, to_world: Mat3, normals: &mut [Vec3], uvs: &mut [Vec2]) {
+    fn apply(&self, to_world: Mat3, vertices: usize, mut normals: Option<&mut [Vec3]>, mut uvs: Option<&mut [Vec2]>) {
         let mut offsets = Vec::with_capacity(self.elements.len());
         let mut stride = 0;
         for element in &self.elements {
@@ -743,7 +759,9 @@ impl VertexDeclaration {
             offsets.push(stride);
             stride += bytes / 4;
         }
-        if stride == 0 {
+        // a buffer that does not hold exactly one record per vertex is not this mesh's
+        // (the vertex count and the stride would otherwise scramble every coordinate)
+        if stride == 0 || self.buffer.len() != stride * vertices {
             return;
         }
         for (element, &offset) in self.elements.iter().zip(&offsets) {
@@ -754,11 +772,11 @@ impl VertexDeclaration {
                 let Some(value) = unpack_element(element.kind, &vertex[offset..]) else {
                     break;
                 };
-                match element.usage {
-                    DECLUSAGE_NORMAL if v < normals.len() => {
+                match (element.usage, normals.as_deref_mut(), uvs.as_deref_mut()) {
+                    (DECLUSAGE_NORMAL, Some(normals), _) => {
                         normals[v] = (to_world * value.truncate()).normalize_or_zero();
                     }
-                    DECLUSAGE_TEXCOORD if v < uvs.len() => uvs[v] = Vec2::new(value.x, value.y),
+                    (DECLUSAGE_TEXCOORD, _, Some(uvs)) => uvs[v] = Vec2::new(value.x, value.y),
                     _ => {}
                 }
             }
@@ -1050,12 +1068,14 @@ mod binary_tests {
     struct XBin {
         buf: Vec<u8>,
         wide: bool,
+        /// strings end in a WORD token instead of the documented DWORD (PAD-Labs' exporter)
+        short_strings: bool,
     }
 
     impl XBin {
         fn new(wide: bool) -> Self {
             let header: &[u8] = if wide { b"xof 0303bin 0064" } else { b"xof 0303bin 0032" };
-            XBin { buf: header.to_vec(), wide }
+            XBin { buf: header.to_vec(), wide, short_strings: false }
         }
         fn token(&mut self, id: u16) -> &mut Self {
             self.buf.extend_from_slice(&id.to_le_bytes());
@@ -1079,7 +1099,7 @@ mod binary_tests {
         fn string(&mut self, s: &str) -> &mut Self {
             self.token(2).u32le(s.len() as u32);
             self.buf.extend_from_slice(s.as_bytes());
-            self.u32le(20)
+            if self.short_strings { self.token(20) } else { self.u32le(20) }
         }
         fn int_list(&mut self, v: &[u32]) -> &mut Self {
             self.token(6).u32le(v.len() as u32);
@@ -1104,7 +1124,12 @@ mod binary_tests {
     /// A 2 m x 3 m roof panel moved 4 m along x by its frame, with a texture on a named
     /// material defined at the top of the file and a template the reader skips.
     fn roof_panel(wide: bool) -> Vec<u8> {
+        roof_panel_with(wide, false)
+    }
+
+    fn roof_panel_with(wide: bool, short_strings: bool) -> Vec<u8> {
         let mut x = XBin::new(wide);
+        x.short_strings = short_strings;
         x.token(31).name("Mesh").open().token(5);
         x.buf.extend_from_slice(&[0x11; 16]);
         x.token(41).name("nVertices").token(20).close();
@@ -1139,6 +1164,22 @@ mod binary_tests {
             let roof = &m.materials[0];
             assert!(roof.texture == "ziegel_braun.tga", "{roof:?}");
             assert!((roof.diffuse[0] - 0.8).abs() < 1e-6 && roof.specular_power == 12.0);
+        }
+    }
+
+    /// A string ended by a WORD token, not the documented DWORD: PAD-Labs' binary Köln houses
+    /// (`Engeldorfer Str 32-34.X`) write `14 00` and then the `}` of the TextureFilename.
+    /// Read as a DWORD, the `}` was swallowed and the material never closed: the houses on
+    /// Engeldorfer Straße failed to load and were missing from 0.3.38 on.
+    #[test]
+    fn a_string_ended_by_a_word_token_keeps_what_follows() {
+        for wide in [false, true] {
+            let m = parse_x(&roof_panel_with(wide, true)).unwrap_or_else(|e| panic!("wide {wide}: {e:?}"));
+            assert_eq!(m.triangles.len(), 2);
+            assert_eq!(m.materials.len(), 1);
+            assert_eq!(m.materials[0].texture, "ziegel_braun.tga");
+            let uvs: Vec<[f32; 2]> = m.vertices.iter().map(|v| v.uv.to_array()).collect();
+            assert_eq!(uvs, [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]]);
         }
     }
 
@@ -1227,6 +1268,31 @@ mod binary_tests {
         let x = "xof 0303txt 0032\nMesh { 1; 0;0;0;; 0;;\n DeclData { 1; 42;0;3;0;; 1; 7; } }\n";
         let m = parse_x(x.as_bytes()).unwrap();
         assert_eq!(m.vertices[0].normal, Vec3::Z);
+    }
+
+    /// A mesh that has its own MeshNormals and MeshTextureCoords keeps them; DeclData fills in
+    /// only what the mesh does not say, and only when it holds one record per vertex.
+    #[test]
+    fn vertex_declaration_does_not_override_or_misfit() {
+        let f = |v: f32| v.to_bits().to_string();
+        let record = [1.0, 0.0, 0.0, 0.9, 0.9].map(f).join(",");
+        // FLOAT3 normal and FLOAT2 texcoord per vertex, `records` of them
+        let mesh = |own: &str, records: usize| {
+            let data = vec![record.as_str(); records].join(",");
+            format!(
+                "xof 0303txt 0032\nMesh {{ 2; 0;0;0;, 1;0;0;; 1; 3;0,1,1;;\n{own}\
+                 DeclData {{ 2; 2;0;3;0;, 1;0;5;0;; {}; {data};\n }} }}\n",
+                records * 5
+            )
+        };
+        let own = "MeshNormals { 2; 0;1;0;, 0;1;0;; 1; 3;0,1,1;; }\nMeshTextureCoords { 2; 0.1;0.2;, 0.3;0.4;; }\n";
+        let m = parse_x(mesh(own, 2).as_bytes()).unwrap();
+        assert_eq!((m.vertices[0].normal, m.vertices[0].uv), (Vec3::Y, Vec2::new(0.1, 0.2)));
+        // three records for two vertices are not this mesh's
+        let m = parse_x(mesh("", 3).as_bytes()).unwrap();
+        assert_eq!((m.vertices[0].normal, m.vertices[0].uv), (Vec3::Z, Vec2::ZERO));
+        let m = parse_x(mesh("", 2).as_bytes()).unwrap();
+        assert_eq!((m.vertices[1].normal, m.vertices[1].uv), (Vec3::X, Vec2::new(0.9, 0.9)));
     }
 
     /// Objects and references may carry a GUID after their name, or only a GUID.

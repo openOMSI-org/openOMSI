@@ -700,6 +700,7 @@ impl App {
         }
         self.input.drag_delta = (0.0, 0.0);
         w.scenery_object_click(&mut self.session.scenery, hit.map_id, &hit.event);
+        crate::plugin_io::object::clicked(self, hit.map_id, &hit.event);
         self.input.pressed_scenery_object = Some((hit.map_id, hit.event));
         self.input.dragging = true;
         true

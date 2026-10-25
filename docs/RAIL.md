@@ -100,6 +100,19 @@ find could keep a vehicle from ever moving). The game knows which variable moves
 needs its stop brake on, as the door did). `OMSI_DEBUG_RAIL=1` logs the pantograph's value
 with the drive twice a second.
 
+With the setting "Realistic road physics" on, a raised pantograph rises until its head meets the contact wire and stops there: the head's
+travel is measured on the model, the animation is shown the travel at which the head touches, and
+current is brought only while the head lies on a live wire (a lowered one, or a wire out of reach,
+gives none). The wire's height is the class's standard one kept within the pantograph's reach, so
+that a map without a drawn wire never strands a tram. Where the wire is uneven at speed (rougher in
+wet and frost, harder at forks) the head leaves it; a break under current strikes an arc.
+`OMSI_DEBUG_RAIL=1` logs the head, the wire, the contact and the current.
+
+## Body on its springs
+
+With the same setting, `omsi_sim::rail::body`: heave, pitch and roll on the secondary suspension, pushed by the bend's
+lateral acceleration, the traction and the brake, and the rails' unevenness at each bogie.
+
 ## Movement
 
 The track says where a vehicle is; the rail dynamics (`omsi_sim::rail::dynamics`) say how fast
@@ -144,3 +157,68 @@ vehicle's own file and the map:
   longitudinal force) instead of OMSI's "follows its wheels" rule.
 
 `cargo run -p omsi-sim --example handling -- <file.bus>... --kmh 50 [--realistic]` compares the two.
+
+## Traction, brakes and couplings of a vehicle (openOMSI blocks)
+
+A rail vehicle that is driven by the pedals (its scripts give no drive) can describe how it
+pulls, brakes and couples in three blocks of its `.bus` / `.ovh`. OMSI 2 skips them; what a file
+leaves out stays the class's typical figure. Vehicles whose scripts give the drive and the brakes
+(`M_Wheel`, `Axle_Brakeforce_*`) keep those: the blocks add nothing to them except the coupling
+check.
+
+```
+[rail_traction]
+point 0 80          // km/h  kN: the most the motors pull at that speed (repeat, ascending)
+point 40 80
+point 90 36
+power_kw 800        // the continuous power: the pull never passes P / v (efficiency 0.9 default)
+regen_point 10 60   // km/h  kN: the electric brake; none, no electric brake
+regen_point 80 60
+
+[rail_brake]
+type air            // air | ep | direct
+service 1.1         // m/s² at full service (default: the class's)
+emergency 1.6       // m/s² in an emergency (default: the class's)
+pipe_wave 250       // m/s: how fast the change runs down the brake pipe (air)
+apply_time 4        // s for a cylinder to fill; release_time 12 to empty
+blend 1             // the electric brake first, the friction brake the rest
+
+[rail_coupler]
+type scharfenberg   // screw | buffer | scharfenberg | tightlock
+slack 0.03          // m free play per coupling
+stiffness 3000      // kN/m
+damping 80          // kN s/m
+max_force 900       // kN: beyond it the train breaks in two
+```
+
+* **Traction curve.** Throttle times the curve's pull at the speed, capped by the power. Past the
+  last point the pull falls as 1/v. The adhesion limit of the rails (Curtius-Kniffler, wet,
+  leaves, ice, sand) still applies, so a strong motor spins on a leafy rail.
+* **Brake.** The handle (the brake pedal) 0 to 0.9 is a service application up to the full
+  service deceleration, above it an emergency application. On an air brake the drop in the pipe
+  runs down the train as a wave and each car's cylinder fills in `apply_time`, so the tail brakes
+  later than the head and a long train stops further on than one braked by wire (`ep`) or directly.
+  Releasing is slower than applying. The electric brake of the motors takes what it can at the
+  speed (it fades under 3 km/h), the friction brake the rest.
+* **Couplings.** The cars are masses with a free play and a draft gear between them: starting takes
+  up the slack car by car and jerks, braking from the head runs the cars in. The strongest force of
+  a coupling this step is `Outcome::coupler_force`; one pulled past `max_force` breaks the train
+  (the log says so, and the brakes come on).
+
+`OMSI_DEBUG_RAIL=1` logs the drive and the brake of a vehicle twice a second.
+
+### Current
+
+A rail vehicle can say where it gets its current:
+
+```
+[rail_power]
+catenary            // catenary | third_rail | diesel (carries its own power)
+```
+
+Left out, a `[contact_shoe]` means third rail, a declared pantograph overhead wire, anything else
+no line. On a map whose `transport` folder has a `catenary.cfg` or `thirdrail.cfg`
+([TRANSPORT_FORMATS.md](TRANSPORT_FORMATS.md)) the player's vehicle moves only where its collector
+finds a live section (the pantograph within 2.5 m of the wire, a shoe within 1.2 m of the rail, not in
+a break), and its drive weakens below 80 % of the nominal voltage and is gone at 50 %. The brakes
+always work. A map without the file is as before: the pantograph's switch alone decides.

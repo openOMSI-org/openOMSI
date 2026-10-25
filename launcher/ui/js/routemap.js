@@ -261,26 +261,30 @@ function* drawLayers(g, l, v, W, H, seen) {
 
 // --- The ground as the game builds it (`map_ground`)
 
-/** The city map's ground around `at` (metres from the page's origin) at `mpp`: the head and
- * the vertices (28 bytes each, see `map_ground` in the game's launcher service). */
+/** The city map's ground around `at` (metres from the page's origin) at `mpp`: the head, and
+ * the flat and the widened triangles' vertices (see `map_ground` in the game's launcher service). */
 async function readGround(map, date, at, reach, mpp, light) {
   const buf = await call('map_ground', { map, date, x: at[0], y: at[1], reach, mpp, light });
   const n = new DataView(buf).getUint32(0, true);
   const head = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 4, n)));
-  return { head, verts: buf.slice(4 + n) };
+  return { head, flat: buf.slice(4 + n, 4 + n + head.flat), wide: buf.slice(4 + n + head.flat) };
 }
 
 // the game's own vertex rule (omsi-ui's `ui.wgsl`): a vertex moves out along its extrusion
-// by the larger of its width in metres and its width in pixels at this scale
-const VS = `attribute vec2 p; attribute vec2 e; attribute vec2 w; attribute vec4 c;
-uniform vec2 centre; uniform float mpp; uniform vec2 hsize;
+// by the larger of its width in metres and its width in pixels at this scale (positions come
+// in steps of `step` metres, the extrusion in 1/4096, the widths in 1/256). The flat triangles,
+// which have no extrusion, have a program of their own.
+const VS = (wide) => `attribute vec2 p; attribute vec4 c; ${wide ? 'attribute vec2 e; attribute vec2 w;' : ''}
+uniform vec2 centre; uniform float mpp; uniform vec2 hsize; uniform float step;
 varying vec4 v;
 void main() {
-  vec2 q = p + e * max(w.x, w.y * mpp);
+  vec2 q = p * step${wide ? ' + e / 4096.0 * max(w.x, w.y * mpp) / 256.0' : ''};
   gl_Position = vec4((q - centre) / mpp / hsize, 0.0, 1.0);
   v = c;
 }`;
 const FS = `precision mediump float; varying vec4 v; void main() { gl_FragColor = vec4(v.rgb * v.a, v.a); }`;
+// where each attribute is, in both programs
+const AT = { p: 0, c: 1, e: 2, w: 3 };
 
 /** A WebGL picture of the ground on `canvas`; none where the browser has no WebGL. */
 function groundGl(canvas) {
@@ -292,49 +296,67 @@ function groundGl(canvas) {
     gl.compileShader(o);
     return o;
   };
-  const prog = gl.createProgram();
-  gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS));
-  gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
-  gl.linkProgram(prog);
-  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return null;
-  const at = (n) => gl.getAttribLocation(prog, n);
-  const un = (n) => gl.getUniformLocation(prog, n);
-  return { gl, prog, buf: gl.createBuffer(), a: { p: at('p'), e: at('e'), w: at('w'), c: at('c') }, u: { centre: un('centre'), mpp: un('mpp'), hsize: un('hsize') }, count: 0 };
+  const program = (wide) => {
+    const prog = gl.createProgram();
+    gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS(wide)));
+    gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
+    for (const [n, i] of Object.entries(AT)) gl.bindAttribLocation(prog, i, n);
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return null;
+    const un = (n) => gl.getUniformLocation(prog, n);
+    return { prog, u: { centre: un('centre'), mpp: un('mpp'), hsize: un('hsize'), step: un('step') } };
+  };
+  const progs = [program(false), program(true)];
+  if (!progs[0] || !progs[1]) return null;
+  return { gl, progs, bufs: [gl.createBuffer(), gl.createBuffer()], runs: [] };
 }
 
 /** Upload a ground the game built. */
 function uploadGround(g, ground) {
   const { gl } = g;
-  gl.bindBuffer(gl.ARRAY_BUFFER, g.buf);
-  gl.bufferData(gl.ARRAY_BUFFER, ground.verts, gl.STATIC_DRAW);
-  g.count = ground.verts.byteLength / 28;
+  [ground.flat, ground.wide].forEach((data, i) => {
+    gl.bindBuffer(gl.ARRAY_BUFFER, g.bufs[i]);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+  });
+  g.runs = ground.head.runs;
+  g.step = ground.head.step;
   g.anchor = ground.head.anchor;
 }
 
-/** Draw the uploaded ground with the view `v` (centre and metres a pixel) on a W x H page. */
+/** Draw the uploaded ground with the view `v` (centre and metres a pixel) on a W x H page:
+ * its runs of flat and widened triangles in order, each with its own program and buffer. */
 function drawGround(g, v, W, H, dpr, land) {
-  const { gl, a, u } = g;
+  const { gl } = g;
   gl.viewport(0, 0, Math.round(W * dpr), Math.round(H * dpr));
   const [r, gr, b] = land;
   gl.clearColor(r, gr, b, 1);
   gl.clear(gl.COLOR_BUFFER_BIT);
-  if (!g.count) return;
-  gl.useProgram(g.prog);
+  if (!g.runs.length) return;
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-  gl.bindBuffer(gl.ARRAY_BUFFER, g.buf);
-  gl.enableVertexAttribArray(a.p);
-  gl.vertexAttribPointer(a.p, 2, gl.FLOAT, false, 28, 0);
-  gl.enableVertexAttribArray(a.e);
-  gl.vertexAttribPointer(a.e, 2, gl.FLOAT, false, 28, 8);
-  gl.enableVertexAttribArray(a.w);
-  gl.vertexAttribPointer(a.w, 2, gl.FLOAT, false, 28, 16);
-  gl.enableVertexAttribArray(a.c);
-  gl.vertexAttribPointer(a.c, 4, gl.UNSIGNED_BYTE, true, 28, 24);
-  gl.uniform2f(u.centre, v.cx - g.anchor[0], v.cy - g.anchor[1]);
-  gl.uniform1f(u.mpp, v.mpp);
-  gl.uniform2f(u.hsize, W / 2, H / 2);
-  gl.drawArrays(gl.TRIANGLES, 0, g.count);
+  const from = [0, 0];
+  for (const [wide, n] of g.runs) {
+    const { prog, u } = g.progs[wide];
+    gl.useProgram(prog);
+    gl.uniform2f(u.centre, v.cx - g.anchor[0], v.cy - g.anchor[1]);
+    gl.uniform1f(u.mpp, v.mpp);
+    gl.uniform2f(u.hsize, W / 2, H / 2);
+    gl.uniform1f(u.step, g.step);
+    const size = wide ? 16 : 8;
+    gl.bindBuffer(gl.ARRAY_BUFFER, g.bufs[wide]);
+    gl.enableVertexAttribArray(AT.p);
+    gl.vertexAttribPointer(AT.p, 2, gl.SHORT, false, size, 0);
+    gl.enableVertexAttribArray(AT.c);
+    gl.vertexAttribPointer(AT.c, 4, gl.UNSIGNED_BYTE, true, size, size - 4);
+    for (const [k, at] of [['e', 4], ['w', 8]]) {
+      if (wide) {
+        gl.enableVertexAttribArray(AT[k]);
+        gl.vertexAttribPointer(AT[k], 2, gl.SHORT, false, size, at);
+      } else gl.disableVertexAttribArray(AT[k]);
+    }
+    gl.drawArrays(gl.TRIANGLES, from[wide], n);
+    from[wide] += n;
+  }
 }
 
 /** A CSS colour - `#rgb`, `#rrggbb` or `rgb(a)(r,g,b,...)` - as 0..1 numbers. (The page's
@@ -723,7 +745,7 @@ export function RouteMap({ map, date, trip, stops = [], entry = -1, onEntry, hei
   // a new map: its own ground
   useEffect(() => {
     ground.current = { built: null, asking: null, failed: false };
-    if (gl.current) gl.current.count = 0;
+    if (gl.current) gl.current.runs = [];
   }, [map, date]);
 
   /** Ask the game for the ground around the view when the one there is does not cover it,
@@ -734,7 +756,9 @@ export function RouteMap({ map, date, trip, stops = [], entry = -1, onEntry, hei
     const reach = Math.max(500, Math.max(W, H) * v.mpp * 0.8);
     const b = G.built;
     const fresh = b && b.light === light && detail(b.mpp) === detail(v.mpp) && Math.hypot(b.at[0] - v.cx, b.at[1] - v.cy) <= b.reach * 0.35 && b.mpp / v.mpp <= 1.7 && v.mpp / b.mpp <= 1.7;
-    if (fresh) return;
+    // (while it moves, the ground there is kept as long as it covers the view)
+    const covers = b && b.light === light && Math.abs(b.at[0] - v.cx) + (W / 2) * v.mpp <= b.reach && Math.abs(b.at[1] - v.cy) + (H / 2) * v.mpp <= b.reach;
+    if (fresh || (busy.current && covers)) return;
     const ask = { at: [v.cx, v.cy], reach, mpp: v.mpp, light };
     G.asking = ask;
     readGround(map, date, ask.at, reach, v.mpp, light).then(

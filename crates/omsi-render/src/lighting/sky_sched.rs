@@ -11,7 +11,10 @@ const SLICES_PER_FRAME: u32 = 2;
 /// The reflection probe is redrawn this often (seconds): every 30 frames it was, twice a
 /// second at 60 fps and eight times at 240, for a sky that changes over minutes.
 pub(crate) const PROBE_EVERY: f32 = 0.5;
-pub(crate) const SLICE_EVERY: f32 = 1.0 / 60.0;
+/// A slice of the sky cube is drawn this often (seconds): 24 a second, a face every sixth
+/// of a second, the whole cube in a second and a half - the clouds drift by a pixel of the cube
+/// in seconds, and a slice costs 0.8 ms of the frame it is drawn in on an M4.
+pub(crate) const SLICE_EVERY: f32 = 1.0 / 24.0;
 
 /// Rows a slice of a face covers (the last one takes what is left).
 pub(crate) fn slice_rows(first: u32, count: u32) -> (u32, u32) {
@@ -142,12 +145,12 @@ mod tests {
         let mut s = SkySched::default();
         let (mut face, mut round) = (0, 0);
         for n in 0..96u32 {
-            let out = s.plan(&mut face, &mut round, 0.02);
+            let out = s.plan(&mut face, &mut round, 0.05);
             assert_eq!(out.iter().flatten().map(|p| p.count).sum::<u32>(), 1, "frame {n}");
         }
         assert_eq!((face, round), (0, 24));
         s.owed += 1;
-        let out = s.plan(&mut face, &mut round, 0.02);
+        let out = s.plan(&mut face, &mut round, 0.05);
         assert_eq!(out[0].map(|p| p.count), Some(2));
         assert!(out[1].is_none(), "one pass: {out:?}");
     }
@@ -161,7 +164,7 @@ mod tests {
         s.start_staging(DVec3::new(1.0, 2.0, 3.0));
         let mut seen = std::collections::HashSet::new();
         while !s.staging_full() {
-            for p in s.plan(&mut face, &mut round, 0.02).into_iter().flatten() {
+            for p in s.plan(&mut face, &mut round, 0.05).into_iter().flatten() {
                 assert!(p.staging);
                 for k in p.first..p.first + p.count {
                     assert!(seen.insert((p.face, k)));
@@ -172,12 +175,12 @@ mod tests {
         assert_eq!((face, round), (2, 5));
         s.start_staging(DVec3::ZERO);
         assert_eq!(s.staging_eye, Some(DVec3::new(1.0, 2.0, 3.0)), "a fill under way is not restarted");
-        let p = s.plan(&mut face, &mut round, 0.02)[0].unwrap();
+        let p = s.plan(&mut face, &mut round, 0.05)[0].unwrap();
         assert!(!p.staging && p.face == 2);
     }
 
     #[test]
-    fn at_most_sixty_slices_a_second() {
+    fn at_most_twenty_four_slices_a_second() {
         for fps in [30.0f32, 60.0, 59.0, 120.0, 144.0, 240.0] {
             let mut s = SkySched::default();
             let (mut face, mut round) = (0, 0);
@@ -186,7 +189,7 @@ mod tests {
             for _ in 0..frames {
                 slices += s.plan(&mut face, &mut round, 1.0 / fps).iter().flatten().map(|p| p.count).sum::<u32>();
             }
-            let want = frames.min(600);
+            let want = frames.min(240);
             assert!(slices.abs_diff(want) <= 2, "{fps} fps: {slices} slices in 10 s, {want} wanted");
         }
     }

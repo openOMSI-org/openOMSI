@@ -10,6 +10,8 @@
 
 pub(crate) mod navigation;
 mod navigation_ui;
+mod quick_actions_ui;
+pub(crate) mod quick_actions;
 
 use std::borrow::Cow;
 use glam::Vec2;
@@ -21,10 +23,10 @@ use omsi_ui::theme::*;
 use omsi_ui::kit::{id_of, ButtonKind, Ui};
 use crate::ui::{DropdownView, MenuKind, Preview};
 
-/// The solid background behind a list or settings window.
+/// The solid background behind a category page, a list or a settings window.
 const PAGE: Color = BG;
-/// Keep the paused game visible behind the category home pages.
-const HOME_VEIL: Color = Color([BG.0[0], BG.0[1], BG.0[2], 0.72]);
+/// The paused game, dimmed, when no category is chosen.
+const HOME_VEIL: Color = Color([BG.0[0], BG.0[1], BG.0[2], 0.85]);
 /// Compact margins for the existing settings and list pages.
 const NARROW: f32 = 560.0;
 /// A list's row.
@@ -48,6 +50,7 @@ pub(crate) struct ListView<'a> {
 /// What the pause menu shows.
 pub(crate) struct PauseView<'a> {
     pub paused: bool,
+    pub quick_actions: &'a str,
     /// The game menu's lines.
     pub rail: &'a [crate::app_impl::MenuLine],
     /// The line the keyboard is on (the game menu's, while no list is open).
@@ -114,11 +117,13 @@ pub(crate) fn draw(sh: &mut Shell, v: &PauseView) {
     let left = if sidebar { RAIL_W } else { 0.0 };
     let page = Rect::new(left, 0.0, (size.x - left).max(0.0), size.y);
     sh.ui.solid(page);
-    sh.ui.p().rect(page, if v.list.is_some() { PAGE } else { HOME_VEIL });
+    sh.ui.p().rect(page, if sh.pause_hidden && v.list.is_none() { HOME_VEIL } else { PAGE });
     if let Some(list) = v.list.as_ref() {
         list_page(sh, v, list, page);
     } else {
-        navigation_ui::page(sh, v, page, !sidebar);
+        if !sh.pause_hidden {
+            navigation_ui::page(sh, v, page, !sidebar);
+        }
     }
     if sidebar {
         navigation_ui::rail(sh, v);
@@ -189,6 +194,11 @@ fn list_page(sh: &mut Shell, v: &PauseView, list: &ListView, page: Rect) {
     let dd_rect = list.dropdown.as_ref().and_then(|d| sh.dd_anchor.map(|a| dropdown_rect(a, d.items.len(), sh.ui.size)));
     let mouse = sh.ui.input.mouse;
     let saved = (sh.ui.input.pressed, sh.ui.input.released);
+    // Reserve the wheel for the popup before drawing controls underneath it.
+    let wheel = sh.ui.input.wheel;
+    if list.dropdown.is_some() {
+        sh.ui.input.wheel = Vec2::ZERO;
+    }
     if let Some(r) = dd_rect {
         if r.contains(mouse) || sh.ui.input.pressed {
             sh.ui.input.pressed = false;
@@ -202,6 +212,9 @@ fn list_page(sh: &mut Shell, v: &PauseView, list: &ListView, page: Rect) {
         _ => plain_list(sh, v, list, body),
     }
     (sh.ui.input.pressed, sh.ui.input.released) = saved;
+    if list.dropdown.is_some() {
+        sh.ui.input.wheel = wheel;
+    }
     sh.dd_anchor = anchor;
     if let (Some(d), Some(a)) = (list.dropdown.as_ref(), anchor) {
         dropdown(sh, d, a, v.kbd);
@@ -298,7 +311,8 @@ fn settings_rows(sh: &mut Shell, v: &PauseView, list: &ListView, body: Rect, anc
                 if id == crate::game_lists::HEADING {
                     // (a group's title as the launcher's card title)
                     let t = parse_row(label).name;
-                    ui.text_in(t, Rect::new(inner.x, y + 4.0, inner.w, 28.0), 15.0, Weight::Bold, INK, Align::Left);
+                    ui.p().rounded(Rect::new(inner.x, y + 7.0, 3.0, 20.0), 1.5, ACCENT);
+                    ui.text_in(t, Rect::new(inner.x + 12.0, y + 4.0, inner.w - 12.0, 28.0), 15.0, Weight::Bold, INK, Align::Left);
                     y += rh;
                     continue;
                 }
@@ -386,7 +400,7 @@ fn settings_row(ui: &mut Ui, k: usize, label: &str, r: Rect, kbd: bool, dd_open:
         "v" => {
             let mut f = row.frac.unwrap_or(0.0).clamp(0.0, 1.0);
             let value = row.value.to_string();
-            let changed = ui.slider(&format!("pause-sl-{k}-{}", row.name), ctl, &mut f, 0.0, 1.0, 0.0, "", &|_| value.clone());
+            let changed = ui.slider_without_wheel(&format!("pause-sl-{k}-{}", row.name), ctl, &mut f, 0.0, 1.0, 0.0, "", &|_| value.clone());
             changed.then_some(Action::Control(k, f))
         }
         // a stepper: the value between the two arrows of a field

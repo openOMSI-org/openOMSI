@@ -213,6 +213,12 @@ impl Default for VarNames {
 pub struct TrolleyDef {
     pub poles: Vec<PoleDef>,
     pub drive: Option<DriveKind>,
+    /// The drive a plain trolleybus could get when its file has none. Not switched on yet: it
+    /// waits for an adapter for the bus script's gears, engine and door brake (see
+    /// `TrolleyGear::for_type`).
+    pub typical_drive: Option<DriveKind>,
+    /// `drive` is that typical one (never set until that adapter exists).
+    pub drive_typical: bool,
     /// Lights, compressor and heater: taken from the line (kW).
     pub aux_kw: f32,
     pub battery: Option<BatteryDef>,
@@ -234,6 +240,24 @@ pub struct LegacyDef {
     /// turned about the pole's hinge by the pole's own angles, so that the model's own boom
     /// follows the hand and the wire instead of a drawn one.
     pub mesh_defs: Vec<usize>,
+}
+
+impl DriveKind {
+    /// The drive a trolleybus of `mass` kg (loaded) has when its file says nothing: a rheostat
+    /// controller (ZiU style), or an inverter drive where the model's description names a
+    /// chopper or asynchronous control. The ratings follow the mass as the buses' do - 13 t
+    /// has a 110 kW motor, 310 A, 1.4 m/s² off the line - so a short bus is not overpowered
+    /// and an articulated one has the force to start.
+    pub fn typical(mass: f32, chopper: bool) -> DriveKind {
+        let k = (mass / 13_000.0).clamp(0.5, 2.2);
+        if chopper {
+            let a = AsyncDef::default();
+            DriveKind::Async(AsyncDef { max_force: a.max_force * k, max_power_kw: a.max_power_kw * k, regen_power_kw: a.regen_power_kw * k, regen_force: a.regen_force * k, brake_force: a.brake_force * k, ..a })
+        } else {
+            let r = RheostatDef::default();
+            DriveKind::Rheostat(RheostatDef { current_min: r.current_min * k, current_max: r.current_max * k, brake_current: r.brake_current * k, brake_force: r.brake_force * k, ..r })
+        }
+    }
 }
 
 impl TrolleyDef {
@@ -443,5 +467,23 @@ mod tests {
             }
             _ => panic!("rheostat drive"),
         }
+    }
+
+    #[test]
+    fn the_typical_drive_follows_the_mass_and_the_kind() {
+        let force = |d: &DriveKind| match d {
+            DriveKind::Rheostat(r) => r.brake_force,
+            DriveKind::Async(a) => a.max_force,
+        };
+        let small = DriveKind::typical(8_000.0, false);
+        let big = DriveKind::typical(26_000.0, false);
+        assert!(matches!(small, DriveKind::Rheostat(_)) && matches!(big, DriveKind::Rheostat(_)));
+        assert!(force(&big) > force(&small) * 2.0, "an articulated bus has the force to start");
+        assert!(matches!(DriveKind::typical(13_000.0, true), DriveKind::Async(_)));
+        // a 13 t bus is the reference one
+        assert_eq!(force(&DriveKind::typical(13_000.0, false)), RheostatDef::default().brake_force);
+        // a toy mass and a freak one stay within bounds
+        assert_eq!(force(&DriveKind::typical(1.0, false)), RheostatDef::default().brake_force * 0.5);
+        assert_eq!(force(&DriveKind::typical(1e9, false)), RheostatDef::default().brake_force * 2.2);
     }
 }

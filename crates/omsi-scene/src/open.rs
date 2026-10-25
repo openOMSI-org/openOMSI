@@ -65,7 +65,7 @@ impl World {
             log::info!("sun: {:.3} N {:.3} E, UTC{:+}, {} summer time periods", place.latitude, place.longitude, place.timezone, place.dst.len());
         }
         omsi_sim::daylight::set_place(place);
-        let signal_routes = omsi_cfg::CfgFile::read(&omsi_cfg::resolve_path(&map_dir, "signalroutes.cfg"))
+        let mut signal_routes = omsi_cfg::CfgFile::read(&omsi_cfg::resolve_path(&map_dir, "signalroutes.cfg"))
             .map(|f| omsi_map::ailists::parse_signalroutes(&f))
             .unwrap_or_default();
         if !signal_routes.is_empty() {
@@ -122,8 +122,34 @@ impl World {
             }),
             ..Default::default()
         }));
+        let transit = {
+            let mut issues = Vec::new();
+            let t = omsi_transit::TransitData::load(&map_dir, &mut issues);
+            t.check(global.transport, &mut issues);
+            if !t.is_empty() {
+                log::info!("transport folder: {} ({} stations, {} routes, {} depots)", t.files.join(", "), t.stations.list.len(), t.routes.list.len(), t.depots.list.len());
+            }
+            for i in &issues {
+                if i.error {
+                    log::warn!("transport: {i}");
+                } else {
+                    log::info!("transport: {i}");
+                }
+            }
+            Arc::new(t)
+        };
+        // the signals of the transport folder's blocks are signals of the map: the same objects, the
+        // same `Signal` variable, shown by `signal_aspects`
+        for sig in &transit.signals.signals {
+            if let (Some(object), Some(_)) = (sig.object, sig.block.as_ref()) {
+                if !signal_routes.iter().any(|r| r.signal.0 == object) {
+                    signal_routes.push(omsi_map::ailists::SignalRoute { signal: (object, 0), ..Default::default() });
+                }
+            }
+        }
         Ok(World {
             root: root.to_path_buf(),
+            transit,
             global,
             map_dir,
             parklist: Mutex::new(HashMap::new()),
@@ -766,13 +792,13 @@ pub(super) fn road_surface_name(file: &str) -> bool {
     let base = file.replace('\\', "/").rsplit('/').next().unwrap_or("").to_ascii_lowercase();
     let stem = base.rsplit_once('.').map(|(s, _)| s).unwrap_or(&base);
     let tokens: Vec<&str> = stem.split(|c: char| !c.is_ascii_alphanumeric() && c != 'ß').filter(|t| !t.is_empty()).collect();
-    let excludes = ["light", "lamp", "sign", "schild", "rail", "track", "gleis", "tram", "strab", "wire", "mast", "wall", "fence", "leitplanke", "gehweg", "side", "bord", "pavement", "fahrrad", "radweg", "cycle", "parking", "parkplatz", "gruen", "gras"];
+    let excludes = ["light", "lamp", "sign", "schild", "rail", "track", "gleis", "tram", "strab", "wire", "mast", "wall", "fence", "leitplanke", "gehweg", "side", "bord", "pavement", "fahrrad", "radweg", "cycle", "parking", "parkplatz", "gruen", "gras", "trottoir", "pieton"];
     if tokens.iter().any(|t| excludes.iter().any(|x| t.contains(x))) {
         return false;
     }
     stem.starts_with("str_")
         || tokens.iter().any(|t| {
-            ["str", "strasse", "straße", "road", "roads", "street", "streets", "fahrbahn", "pflaster", "kopfstein", "cobble"].contains(t)
+            ["str", "strasse", "straße", "road", "roads", "street", "streets", "fahrbahn", "pflaster", "kopfstein", "cobble", "route", "routes", "rue", "chaussee", "bitume"].contains(t)
                 || t.starts_with("asph")
         })
 }
@@ -838,6 +864,7 @@ fn object_program(
         || animated
         || has_mouse_events
         || sco.sound.is_some()
+        || !sco.scripts.lua.is_empty()
     {
         Some(Arc::new(omsi_sim::scenery::compile_scenery(
             root,

@@ -142,6 +142,7 @@ impl PeopleSim {
             alias,
             pos,
             heading,
+            side,
             gather,
             spots,
             taken: vec![false; n],

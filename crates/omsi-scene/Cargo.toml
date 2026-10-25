@@ -20,6 +20,7 @@ omsi-script = { path = "../omsi-script" }
 omsi-sim = { path = "../omsi-sim" }
 omsi-soundscape = { path = "../omsi-soundscape" }
 omsi-texture = { path = "../omsi-texture" }
+omsi-transit = { path = "../omsi-transit" }
 omsi-trolley = { path = "../omsi-trolley" }
 omsi-ui = { path = "../omsi-ui" }
 omsi-vehicle = { path = "../omsi-vehicle" }

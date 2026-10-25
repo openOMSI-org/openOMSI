@@ -22,7 +22,9 @@ pub use menu::{MenuItem, MAX_MENU_ITEMS, MAX_MENU_LABEL};
 /// 4: boxes, stop lists, bars of several parts, a badge's weight, a table's column
 /// alignments and coloured cells.
 /// 5: panels that take a click without the mouse (`grab`).
-pub const VERSION: i64 = 5;
+/// 6: a navigator panel that fills the navigator's whole frame (`frame`), and the navigator's
+/// map as an element of it (`map`).
+pub const VERSION: i64 = 6;
 /// Most panels of one plugin.
 pub const MAX_PANELS: usize = 16;
 /// Most elements of one panel, those in rows included.
@@ -163,12 +165,15 @@ pub struct Panel {
     /// A click on it is its own even while the panels do not have the mouse (a card the
     /// driver clicks away or keeps): the cab behind it gets none.
     pub grab: bool,
+    /// With `anchor = "navigator"`: it fills the navigator's whole frame, not only the board
+    /// under its map; the map shows only where the panel has a `map` element.
+    pub frame: bool,
     pub children: Vec<Element>,
 }
 
 impl Default for Panel {
     fn default() -> Panel {
-        Panel { anchor: Anchor::TopLeft, x: 0.0, y: 0.0, width: 300.0, padding: 12.0, gap: 6.0, background: None, radius: 12.0, accent: None, visible: true, clickable: false, draggable: false, grab: false, children: Vec::new() }
+        Panel { anchor: Anchor::TopLeft, x: 0.0, y: 0.0, width: 300.0, padding: 12.0, gap: 6.0, background: None, radius: 12.0, accent: None, visible: true, clickable: false, draggable: false, grab: false, frame: false, children: Vec::new() }
     }
 }
 
@@ -270,6 +275,10 @@ pub enum Kind {
     /// Stops on a rail: the ones behind the bus grey, the one it heads for marked, a time on
     /// the right (and before it when the bus will be there).
     Stops { stops: Vec<Stop>, size: f32 },
+    /// The navigator's map, in a panel that fills its frame: `height` (0: as high as the
+    /// navigator's own map, 0.8 times its width), `cards` the navigator's cards over it (the
+    /// next turn, the clock, the speed, the next stop). Elsewhere empty room.
+    Map { height: f32, cards: bool },
 }
 
 /// A notification card of `omsi.ui.toast`.
@@ -358,6 +367,9 @@ pub struct Dock {
     pub height: f32,
     /// The plugin whose panel is in it.
     pub owner: Option<u64>,
+    /// It is the navigator's whole frame (a panel with `frame = true` is in it), not the board
+    /// under its map.
+    pub frame: bool,
 }
 
 impl Default for UiState {
@@ -782,6 +794,7 @@ pub fn parse_panel(t: &Value, folder: Option<&Path>) -> Result<Panel, String> {
         clickable: r.boolean("clickable", false)?,
         draggable: r.boolean("draggable", false)?,
         grab: r.boolean("grab", false)?,
+        frame: r.boolean("frame", false)?,
         children: r.children("children", 0, &mut count)?,
     })
 }
@@ -1158,6 +1171,7 @@ impl Reader<'_> {
             "box" => Kind::Box { children: self.children("children", depth + 1, count)?, gap: self.number("gap", 4.0, 0.0, 64.0)? },
             "stops" => Kind::Stops { stops: self.stops("stops")?, size: self.number("size", 13.0, 6.0, 48.0)? },
             "divider" => Kind::Divider,
+            "map" => Kind::Map { height: self.number("height", 0.0, 0.0, 4000.0)?, cards: self.boolean("cards", true)? },
             "space" => Kind::Space { size: self.number("size", 8.0, 0.0, 1000.0)? },
             "button" => {
                 needs_id("button")?;
@@ -1289,9 +1303,24 @@ mod tests {
         // the game says where the board is, or that there is none
         let mut ui = UiState::default();
         assert_eq!(ui.dock(), None);
-        let d = Dock { width: 360.0, room: 420.0, height: 96.0, owner: Some(7) };
+        let d = Dock { width: 360.0, room: 420.0, height: 96.0, owner: Some(7), frame: false };
         ui.set_dock(Some(d));
         assert_eq!(ui.dock(), Some(d));
+    }
+
+    #[test]
+    fn a_panel_that_fills_the_navigators_frame_with_its_map() {
+        let p = panel(r##"{ anchor = "navigator", frame = true, children = {
+            { type = "text", text = "Line 5" },
+            { type = "map", height = 180, cards = false },
+            { type = "map" },
+        } }"##)
+        .unwrap();
+        assert!(p.frame && !Panel::default().frame);
+        assert_eq!(p.children[1].kind, Kind::Map { height: 180.0, cards: false });
+        // (no height: the navigator's own map's; its cards over it)
+        assert_eq!(p.children[2].kind, Kind::Map { height: 0.0, cards: true });
+        assert!(panel(r##"{ frame = "yes" }"##).unwrap_err().contains("frame"));
     }
 
     #[test]

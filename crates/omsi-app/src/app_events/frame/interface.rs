@@ -53,9 +53,16 @@ impl App {
         // edge, and the navigator's panel stood out from under it)
         let nav_hidden = !vr_active && self.menus.game_menu.is_some();
         // (a plugin's panel for the navigator's board, as tall as it was laid out last: the
-        // navigator makes room for it and says where it goes)
+        // navigator makes room for it and says where it goes - under its map, or the whole
+        // frame for one that fills it, its map where the panel has it)
         if let Some(n) = self.menus.navigator.as_mut() {
-            n.dock = self.integrations.plugin_panels.docked;
+            let docked = self.integrations.plugin_panels.docked;
+            n.dock = docked.filter(|d| !d.frame).map(|d| d.height);
+            n.frame_panel = docked.filter(|d| d.frame).map(|d| navigator::FramePanel {
+                height: d.height,
+                map: d.map.map(|m| navigator::FrameMap { rect: m.rect, cards: m.cards }),
+                background: d.background,
+            });
         }
         self.frame_navigator(dt, hud, vr_active, nav_hidden, vr_nav_display);
         // the Lua plugins' panels (`omsi.ui`): over the picture and the navigator,
@@ -394,7 +401,7 @@ impl App {
                 dt,
                 backdrop: ui::backdrop(settings.ui_opacity),
                 navigator: self.menus.navigator.as_ref().and_then(|n| n.screen_rect()),
-                dock: self.menus.navigator.as_ref().and_then(|n| n.dock_slot).map(|(r, scale, placed)| crate::plugin_ui::Dock { width: r[2], room: r[3], scale, at: placed.then(|| glam::Vec2::new(r[0], r[1])) }),
+                dock: self.menus.navigator.as_ref().and_then(|n| n.dock_slot).map(|(r, scale, placed, frame)| crate::plugin_ui::Dock { width: r[2], room: r[3], scale, at: placed.then(|| glam::Vec2::new(r[0], r[1])), frame }),
             };
             let mut state = plugin_ui.borrow_mut();
             self.integrations.plugin_panels.frame(r, scene, &mut state, &frame);

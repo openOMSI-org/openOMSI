@@ -23,7 +23,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         switch_row(app, "get_up", "Ability to get up (Ctrl+Shift+G)", "Allows you to get out of the car and explore the world"),
         switch_row(app, "coll_objects", "Collisions with objects", "Enables/disables collisions with objects such as buildings, streetlights, etc."),
         switch_row(app, "coll_vehicles", "Collisions with vehicles", "Enables/Disables Collisions with Other Vehicles"),
-        switch_row(app, "realistic_road", "Realistic road physics", "Tyres that slip, grip and roughness by road surface, wind on the bus; off, the buses drive as in OMSI 2"),
+        switch_row(app, "realistic_road", "Realistic road physics", "Tyres that slip, grip and roughness by road surface, wind on the bus; trams and trains: pantograph on the wire, body on its springs; off, vehicles drive as in OMSI 2"),
         switch_row(app, "collision_pedestrians", "Collisions with people", "Enables/disables knocking down people"),
         switch_row(app, "timetable_win", "Timetable window (Insert)", "Displays a list of all stops (only when a tour is active)"),
         switch_row(app, "trip_summary", "Trip summary", "At the end of each trip: its stops with the times planned and driven, to copy or to save"),
@@ -43,13 +43,13 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         .into_iter()
         .flatten()
         .collect();
-    let graphics: Vec<(String, String)> = vec![
+    let mut graphics: Vec<(String, String)> = vec![
         pick("graphics", "Graphics", later),
         preset_row(&file, "Quality preset", "Sets most of the graphics options at once"),
         app.can_optimise().then(|| button("Optimise for my PC", "Start", "Measures while you drive and adjusts the graphics for a smooth frame rate; your settings are saved first", "optimise")),
         omsi_launcher_lib::optimise::backup().is_some().then(|| button("Restore my previous settings", "Restore", "The graphics settings as they were before the last optimisation", "optimise_restore")),
         pick("msaa", "Anti-aliasing", later),
-        pick("render_scale", "Render scale", later),
+        pick("render_scale", "Render scale", if s.upscaler == "fsr1" { "With FSR 1 it changes at once" } else { later }),
         pick("anisotropy", "Anisotropic", later),
         // (Enhanced+ traces its shadows, occlusion and reflections: always on there)
         switch_row(app, "shadows", "Sun shadows", "Enables/Disables shadows").filter(|_| shown("shadows")),
@@ -72,6 +72,8 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         .into_iter()
         .flatten()
         .collect();
+    let at = graphics.iter().position(|r| r.1 == "sel render_scale").map_or(graphics.len(), |k| k + 1);
+    graphics.splice(at..at, upscaler_rows(app, &file));
     let mut display = vec![
         switch_row(app, "fullscreen", "Fullscreen", "Switches the window between windowed and fullscreen"),
         pick("resolution", "Window size", later),
@@ -192,20 +194,10 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         slider_row(app, "head_idle_pace", "Sway pace", "How fast that sway moves (100% is the pace it is designed at)", &|v| format!("{:.0}%", v * 100.0)),
         switch_row(app, "hands_in_cab", "Driver's hands in the cab view", "Shows the driver's hand on the steering wheel (Cockpit only)"),
         switch_row(app, "driver", "Driver at the wheel (outside views)", "Shows the driver in the outside views and in the mirrors"),
-        switch_row(app, "headtrack", "Head tracking (native TrackIR / OpenTrack)", &omsi_ui::tr("Use native TrackIR on Windows, or OpenTrack on UDP port {}")
-            .into_owned().replace("{}", &s.head_tracking_port.to_string())),
-        slider_row(app, "head_tracking_yaw_sens", "TrackIR yaw sensitivity", "Left / right head movement. 100% is 1:1; the low end is deliberately finer.", &|v| format!("{v:.0}%")),
-        slider_row(app, "head_tracking_pitch_sens", "TrackIR pitch sensitivity", "Up / down head movement. 100% is 1:1; the low end is deliberately finer.", &|v| format!("{v:.0}%")),
-        slider_row(app, "head_tracking_roll_sens", "TrackIR roll sensitivity", "Head tilt. 100% is 1:1; the low end is deliberately finer.", &|v| format!("{v:.0}%")),
-        slider_row(app, "head_tracking_x_sens", "TrackIR X sensitivity", "Move your head left / right. 100% is 1:1; the low end is deliberately finer.", &|v| format!("{v:.0}%")),
-        slider_row(app, "head_tracking_y_sens", "TrackIR Y sensitivity", "Move your head up / down. 100% is 1:1; the low end is deliberately finer.", &|v| format!("{v:.0}%")),
-        slider_row(app, "head_tracking_z_sens", "TrackIR Z sensitivity", "Move your head forward / back. 100% is 1:1; the low end is deliberately finer.", &|v| format!("{v:.0}%")),
-        switch_row(app, "head_tracking_invert_yaw", "Invert TrackIR yaw", "Reverse left / right head rotation"),
-        switch_row(app, "head_tracking_invert_pitch", "Invert TrackIR pitch", "Reverse up / down head rotation"),
-        switch_row(app, "head_tracking_invert_roll", "Invert TrackIR roll", "Reverse head tilt"),
-        switch_row(app, "head_tracking_invert_x", "Invert TrackIR X", "Reverse left / right head movement"),
-        switch_row(app, "head_tracking_invert_y", "Invert TrackIR Y", "Reverse up / down head movement"),
-        switch_row(app, "head_tracking_invert_z", "Invert TrackIR Z", "Reverse forward / back head movement"),
+    ]
+        .into_iter()
+        .chain(head_tracking_rows(app, &pct))
+        .chain(vec![
         slider_row(app, "look_sens", "Mouse look sensitivity", "How fast the view turns when looking round with the mouse (100% is OMSI's)", &pct),
         slider_row(app, "look_smoothing_ms", "Smooth the mouse look", "How long the view takes to come round to where the mouse or the stick turned it (off: at once, as OMSI)", &|v| if v <= 0.0 { "Off".to_string() } else { format!("{v:.0} ms") }),
         switch_row(app, "alt_view", "Right mouse button turns the view", "Shift+right zooms; off: right zooms as in OMSI, the wheel button turns"),
@@ -215,8 +207,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         slider_row(app, "seat 2", "Seat height", "Adjust the driver's seat height", &cm),
         slider_row(app, "seat 0", "Seat left and right", "Adjust the driver's seat position from side to side", &cm),
         slider_row(app, "seat_pitch", "Head pitch", "Set the driver's neutral head tilt up or down, independent of the display setup", &|v| format!("{v:+.0}°")),
-    ]
-        .into_iter()
+        ])
         .flatten()
         .collect();
     camera.push(button("Reset the seat position", "Reset", "Put the seat back where the vehicle has it.", "seat_reset"));
@@ -581,6 +572,30 @@ mod tests {
     }
 }
 
+/// The upscaler's rows of the graphics page (after the render scale's): the upscaler, and
+/// FSR 1's quality and sharpening while it is chosen.
+fn upscaler_rows(app: &App, file: &serde_json::Value) -> Vec<(String, String)> {
+    let fsr = app.settings.upscaler == "fsr1";
+    let pct = |v: f32| format!("{:.0} %", v * 100.0);
+    [
+        select_row(file, "upscaler", "Upscaling", "Standard Catmull-Rom or experimental FSR 1; changes show at once"),
+        select_row(file, "fsr_quality", "FSR quality", &fsr_size(app)).filter(|_| fsr),
+        slider_row(app, "fsr_sharpness", "FSR sharpness", "RCAS sharpening strength", &pct).filter(|_| fsr),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
+}
+
+/// What FSR 1's quality means now: the size the 3D picture is drawn at, and the window's.
+fn fsr_size(app: &App) -> String {
+    let sizes = app.gfx.surface.as_ref().zip(app.renderer.as_ref()).map(|(sf, r)| ((sf.config.width, sf.config.height), r.scene_size(sf.config.width, sf.config.height)));
+    match sizes {
+        Some(((ww, wh), (w, h))) => omsi_ui::tr("The 3D picture is drawn at {} and scaled up to {}").replacen("{}", &format!("{w}×{h}"), 1).replacen("{}", &format!("{ww}×{wh}"), 1),
+        None => omsi_ui::tr("Internal render resolution").into_owned(),
+    }
+}
+
 /// Keep all atmospheric controls together after permission and METAR filtering.
 fn weather_rows(mut weather: Vec<(String, String)>, climate: Vec<(String, String)>) -> Vec<(String, String)> {
     weather.extend(climate);
@@ -649,4 +664,32 @@ mod pause_weather_tests {
     fn pause_weather_wind_has_traditional_chinese_translation() {
         assert_eq!(crate::_rust_i18n_try_translate("zh-tw", "Wind").map(|value| value.into_owned()), Some("風".to_string()));
     }
+}
+
+/// The head tracking rows of the camera page: native TrackIR / OpenTrack, a Tobii eye tracker,
+/// the sensitivities and the inversions.
+fn head_tracking_rows(app: &App, pct: &dyn Fn(f32) -> String) -> Vec<Option<(String, String)>> {
+    let s = &app.settings;
+    let pick = |key: &str, name: &str, desc: &str| select_row(&settings_file(), key, name, desc);
+    vec![
+        switch_row(app, "headtrack", "Head tracking (native TrackIR / OpenTrack)", &omsi_ui::tr("Use native TrackIR on Windows, or OpenTrack on UDP port {}")
+            .into_owned().replace("{}", &s.head_tracking_port.to_string())),
+        // (a Tobii eye tracker read natively: its source, its look at the edges, its smoothing)
+        pick("head_tracking_source", "Head tracking with", "Automatic: opentrack while it sends, else a Tobii eye tracker (Windows, with the Tobii Experience installed)").filter(|_| s.head_tracking),
+        switch_row(app, "tobii_edges", "Look further at the screen's edges (Tobii)", "A look at the left or right edge of the screen turns the view further that way").filter(|_| s.head_tracking && s.head_tracking_source != "opentrack"),
+        slider_row(app, "head_tracking_smoothing", "Smoothing", "Steadies the view against the tracker's trembling; big turns still follow at once (0 %: it only glides between the tracker's poses). For opentrack, choose its Accela filter there", pct).filter(|_| s.head_tracking && s.head_tracking_source != "opentrack"),
+        slider_row(app, "head_tracking_dead_zone", "Dead zone", "Head movements smaller than this leave the view where it is, wherever you look", &|v| format!("{v:.2}°")).filter(|_| s.head_tracking && s.head_tracking_source != "opentrack"),
+        slider_row(app, "head_tracking_yaw_sens", "TrackIR yaw sensitivity", "Left / right head movement. 100% is 1:1; the low end is deliberately finer.", &|v| format!("{v:.0}%")),
+        slider_row(app, "head_tracking_pitch_sens", "TrackIR pitch sensitivity", "Up / down head movement. 100% is 1:1; the low end is deliberately finer.", &|v| format!("{v:.0}%")),
+        slider_row(app, "head_tracking_roll_sens", "TrackIR roll sensitivity", "Head tilt. 100% is 1:1; the low end is deliberately finer.", &|v| format!("{v:.0}%")),
+        slider_row(app, "head_tracking_x_sens", "TrackIR X sensitivity", "Move your head left / right. 100% is 1:1; the low end is deliberately finer.", &|v| format!("{v:.0}%")),
+        slider_row(app, "head_tracking_y_sens", "TrackIR Y sensitivity", "Move your head up / down. 100% is 1:1; the low end is deliberately finer.", &|v| format!("{v:.0}%")),
+        slider_row(app, "head_tracking_z_sens", "TrackIR Z sensitivity", "Move your head forward / back. 100% is 1:1; the low end is deliberately finer.", &|v| format!("{v:.0}%")),
+        switch_row(app, "head_tracking_invert_yaw", "Invert TrackIR yaw", "Reverse left / right head rotation"),
+        switch_row(app, "head_tracking_invert_pitch", "Invert TrackIR pitch", "Reverse up / down head rotation"),
+        switch_row(app, "head_tracking_invert_roll", "Invert TrackIR roll", "Reverse head tilt"),
+        switch_row(app, "head_tracking_invert_x", "Invert TrackIR X", "Reverse left / right head movement"),
+        switch_row(app, "head_tracking_invert_y", "Invert TrackIR Y", "Reverse up / down head movement"),
+        switch_row(app, "head_tracking_invert_z", "Invert TrackIR Z", "Reverse forward / back head movement"),
+    ]
 }

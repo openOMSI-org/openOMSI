@@ -143,7 +143,7 @@ impl App {
                 let fps = self.perf.governor.1 as f32 / self.perf.governor.0;
                 let wait_share = self.perf.governor.2 / self.perf.governor.0;
                 self.perf.governor = (0.0, 0, 0.0);
-                let free = self.settings.render_scale <= 0.0
+                let free = self.settings.scene_render_scale() <= 0.0
                     && (self.settings.max_fps == 0 || self.settings.max_fps >= 50)
                     && !omsi_cfg::flags::OMSI_FIXED_SCALE.is_set()
                     && !self.optimiser_holds_frame_rate();

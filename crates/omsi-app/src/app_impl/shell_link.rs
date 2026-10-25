@@ -35,12 +35,13 @@ impl App {
     /// The screens of the launcher's toolkit take the mouse: the pause menu is open (not in
     /// a headset, whose menu is a card in the scene), or the photo mode is on.
     pub(crate) fn shell_takes_mouse(&self) -> bool {
-        (!self.vr_active() && self.menus.game_menu.is_some()) || self.photo.is_some()
+        self.has_process_permission_prompt() || (!self.vr_active() && self.menus.game_menu.is_some()) || self.photo.is_some()
     }
 
     /// The pause menu drawn with the launcher's toolkit, over the picture (nothing when it is
     /// closed or a headset shows its own).
     pub(crate) fn frame_shell(&mut self, dt: f32) {
+        if self.frame_process_permission(dt) { return; }
         let Some(s) = self.gfx.surface.as_ref() else {
             self.shell.clear();
             return;
@@ -63,6 +64,7 @@ impl App {
         let (w, h) = (s.config.width as f32, s.config.height as f32);
         let dpi = self.window.as_ref().map(|w| w.scale_factor() as f32).unwrap_or(1.0);
         let scale = dpi * ui::size_factor(h, dpi, self.settings.ui_scale, self.settings.ui_scale_window);
+        self.fix_pause_focus();
         let rail = self.game_menu_items();
         let tabs = match self.menus.list_kind.as_ref() {
             Some(k) if self.menus.chooser.is_some() => crate::game_lists::page_titles(self, k),
@@ -84,6 +86,7 @@ impl App {
         });
         let view = PauseView {
             paused: self.paused,
+            quick_actions: &self.settings.pause_quick_actions,
             rail: &rail,
             rail_sel: self.menus.game_menu,
             disabled: self.menu_disabled_ids(),
@@ -113,6 +116,7 @@ impl App {
             // (the mouse has taken over from the keyboard)
             self.menus.menu_kbd = false;
             match a {
+                Action::ProcessPermission(id, decision) => { self.answer_process_permission(id, decision); }
                 Action::Choose(k) => {
                     if self.menus.game_menu.is_none() {
                         continue;
@@ -133,7 +137,12 @@ impl App {
                 }
                 Action::PauseCategory(category) => {
                     if self.menus.game_menu.is_some() {
-                        self.switch_pause_category(category);
+                        if category == self.shell.pause_category && !self.shell.pause_hidden && self.menus.list_kind.is_none() {
+                            self.shell.pause_hidden = true;
+                            self.shell.quick_edit = false;
+                        } else {
+                            self.switch_pause_category(category);
+                        }
                     }
                 }
                 Action::Rail(k) => {
@@ -143,6 +152,7 @@ impl App {
                         self.menu_choose(event_loop, k);
                     }
                 }
+                Action::QuickActions(edit) => self.edit_quick_actions(edit),
                 Action::Control(k, fx) => {
                     if self.menus.chooser.is_some() {
                         self.menus.chooser = Some(k);

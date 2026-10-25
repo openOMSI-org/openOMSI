@@ -166,3 +166,27 @@ fn a_lua_file_of_the_same_name_wins() {
     assert_eq!(plugins.lua.len(), 1);
     assert!(plugins.lua[0].path.extension().is_some_and(|x| x == "lua"));
 }
+
+#[test]
+fn native_processes_need_both_player_consent_and_package_permission() {
+    for (declared, consent) in [(false, false), (true, false), (false, true), (true, true)] {
+        let d = dir(&format!("process-{declared}-{consent}"));
+        let permissions = if declared { vec!["process", "ui"] } else { vec!["ui"] };
+        let source = r#"
+            function on_frame()
+                local ok, err = pcall(omsi.process.status, 1)
+                omsi.message(ok and "allowed" or "denied")
+            end
+        "#;
+        let bytes = OopBuilder::new(header("org.test.process", Kind::Lua, "main.lua", &permissions))
+            .file("main.lua", source).write().unwrap();
+        let entry = d.join("trusted.oop");
+        std::fs::write(&entry, bytes).unwrap();
+        let grants = omsi_plugin::api::process::ProcessGrants::from_paths(if consent { vec![entry] } else { vec![] });
+        let mut plugins = Plugins::load_with_process_grants(&[d], &HostConfig::default(), grants);
+        let mut game = Game::default();
+        plugins.frame(&mut game);
+        assert_eq!(game.messages, [if declared && consent { "allowed" } else { "denied" }]);
+        plugins.finalize();
+    }
+}

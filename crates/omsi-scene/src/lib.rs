@@ -40,12 +40,14 @@ pub mod rain;
 pub mod route_arrows;
 pub mod threads;
 pub mod trolley_derive;
+pub mod arc_fx;
 pub mod trolley_view;
 pub mod wheel_surface;
 pub mod window_wipers;
 
 mod staging;
 mod batching;
+mod spline_layers;
 mod terrain_paint;
 mod sound_probe;
 mod world;

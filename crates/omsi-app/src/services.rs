@@ -2,6 +2,20 @@
 
 use super::*;
 
+/// The weather a bus is made in for the launcher's previews (the showroom and
+/// `--export-glb`): 22 °C, and the absolute humidity of half-saturated air at that
+/// temperature (g/m³).
+const PREVIEW_TEMPERATURE: f32 = 22.0;
+const PREVIEW_ABS_HUMIDITY: f32 = 9.7;
+
+/// Make the next vehicles on a mild day. A preview has no map and no weather: made without
+/// one a bus stood at 0 °C, and the heating scripts that read `Weather_Temperature` in
+/// {init} set it up for a cold day - the Kajosoft Citaros and the 628 fog every window up
+/// below 10 °C (`para_*` in cockpit.osc), so the launcher showed them misted over.
+pub(crate) fn preview_weather() {
+    omsi_sim::host::set_ambient_weather(PREVIEW_TEMPERATURE, PREVIEW_ABS_HUMIDITY);
+}
+
 /// `--export-glb`: the vehicle alone, no map, written as glTF.
 pub(crate) fn run_export(args: &Args, out: &PathBuf) -> Result<()> {
     let bus = args
@@ -11,6 +25,7 @@ pub(crate) fn run_export(args: &Args, out: &PathBuf) -> Result<()> {
     let path = player_bus_path(&args.root, &bus)?;
     let vt = Arc::new(omsi_sim::VehicleType::load(&args.root, &path)?);
     let scheme = paint_scheme(&vt, args.paint.as_deref());
+    preview_weather();
     let mut host = omsi_sim::VehicleHost::new(start_clock(args));
     host.paint_scheme = Some(scheme);
     let mut vehicle = omsi_sim::VehicleInstance::new(vt.clone(), host);

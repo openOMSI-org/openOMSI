@@ -92,6 +92,7 @@ pub(super) fn lights(cx: LightsCx, dt: f32, daylight: omsi_sim::Daylight, behind
             if let Some(tv) = p.trolley_view.as_ref() {
                 tv.push_effects(scene, &p.vehicle);
             }
+            p.panto_fx.push_effects(scene);
         }
         cx.perf.profile.add(crate::profile_keys::ProfKey::LightsCollect, __tc.elapsed().as_secs_f64());
         // the object editor's pick: a magenta glow over it
