@@ -162,7 +162,16 @@ impl<'a> Tok<'a> {
                 1 => Token::Word(ansi(self.counted(data)?)),
                 2 => {
                     let text = ansi(self.counted(data)?);
-                    let end = u32::from_le_bytes(self.take(data)?);
+                    // The terminator is a DWORD by the documentation (19 `,` or 20 `;`), but
+                    // some exporters write it as a token's WORD: PAD-Labs' binary Köln houses
+                    // (`Engeldorfer Str 32-34.X`) have `14 00` and then the `}` closing the
+                    // TextureFilename. Read as a DWORD that `}` was swallowed, the material never
+                    // closed and the model failed to load: the houses were missing (since
+                    // 0.3.38). No token is 0, so a WORD of 0 after it is the DWORD's upper half.
+                    let end = u16::from_le_bytes(self.take(data)?);
+                    if data.get(self.cur.at..self.cur.at + 2) == Some(&[0, 0]) {
+                        self.cur.at += 2;
+                    }
                     self.cur.after_string = Some(if end == 19 { b',' } else { b';' });
                     Token::Quoted(text)
                 }
@@ -1050,12 +1059,14 @@ mod binary_tests {
     struct XBin {
         buf: Vec<u8>,
         wide: bool,
+        /// strings end in a WORD token instead of the documented DWORD (PAD-Labs' exporter)
+        short_strings: bool,
     }
 
     impl XBin {
         fn new(wide: bool) -> Self {
             let header: &[u8] = if wide { b"xof 0303bin 0064" } else { b"xof 0303bin 0032" };
-            XBin { buf: header.to_vec(), wide }
+            XBin { buf: header.to_vec(), wide, short_strings: false }
         }
         fn token(&mut self, id: u16) -> &mut Self {
             self.buf.extend_from_slice(&id.to_le_bytes());
@@ -1079,7 +1090,7 @@ mod binary_tests {
         fn string(&mut self, s: &str) -> &mut Self {
             self.token(2).u32le(s.len() as u32);
             self.buf.extend_from_slice(s.as_bytes());
-            self.u32le(20)
+            if self.short_strings { self.token(20) } else { self.u32le(20) }
         }
         fn int_list(&mut self, v: &[u32]) -> &mut Self {
             self.token(6).u32le(v.len() as u32);
@@ -1104,7 +1115,12 @@ mod binary_tests {
     /// A 2 m x 3 m roof panel moved 4 m along x by its frame, with a texture on a named
     /// material defined at the top of the file and a template the reader skips.
     fn roof_panel(wide: bool) -> Vec<u8> {
+        roof_panel_with(wide, false)
+    }
+
+    fn roof_panel_with(wide: bool, short_strings: bool) -> Vec<u8> {
         let mut x = XBin::new(wide);
+        x.short_strings = short_strings;
         x.token(31).name("Mesh").open().token(5);
         x.buf.extend_from_slice(&[0x11; 16]);
         x.token(41).name("nVertices").token(20).close();
@@ -1139,6 +1155,22 @@ mod binary_tests {
             let roof = &m.materials[0];
             assert!(roof.texture == "ziegel_braun.tga", "{roof:?}");
             assert!((roof.diffuse[0] - 0.8).abs() < 1e-6 && roof.specular_power == 12.0);
+        }
+    }
+
+    /// A string ended by a WORD token, not the documented DWORD: PAD-Labs' binary Köln houses
+    /// (`Engeldorfer Str 32-34.X`) write `14 00` and then the `}` of the TextureFilename.
+    /// Read as a DWORD, the `}` was swallowed and the material never closed: the houses on
+    /// Engeldorfer Straße failed to load and were missing from 0.3.38 on.
+    #[test]
+    fn a_string_ended_by_a_word_token_keeps_what_follows() {
+        for wide in [false, true] {
+            let m = parse_x(&roof_panel_with(wide, true)).unwrap_or_else(|e| panic!("wide {wide}: {e:?}"));
+            assert_eq!(m.triangles.len(), 2);
+            assert_eq!(m.materials.len(), 1);
+            assert_eq!(m.materials[0].texture, "ziegel_braun.tga");
+            let uvs: Vec<[f32; 2]> = m.vertices.iter().map(|v| v.uv.to_array()).collect();
+            assert_eq!(uvs, [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]]);
         }
     }
 

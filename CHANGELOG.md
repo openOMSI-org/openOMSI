@@ -366,6 +366,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **Köln's houses on Engeldorfer Straße are back**: a binary `.x` string ended by a WORD
+  token, as PAD-Labs' exporter writes it, no longer swallows the `}` after it. Read as the
+  documented DWORD, the house's material never closed, the model failed to load and its 25
+  binary houses were missing since 0.3.38.
 - **London's road markings and red bus lanes stay put** when the camera moves away or around
   the bus ([#2853](https://github.com/openOMSI-org/openOMSI/issues/2853)). A cut-out strip lying
   just over the driving surface its spline declares (`[heightprofile]`) is paint, as one lying
