@@ -7,6 +7,17 @@ import { call, onPhone } from '../api.js';
 import { Button, Card, Dialog, Field, Input, Notice, PageHead } from '../ui.js';
 import { loadContent } from '../data.js';
 
+// Ask until the background move of the .openomsi folder has ended.
+async function waitForMove() {
+  for (;;) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const s = await call('data_move_status');
+    if (s.state === 'running') continue;
+    if (s.state === 'done') return s.result;
+    throw new Error(s.error || 'The move of the .openomsi folder did not finish');
+  }
+}
+
 export function SetupPage() {
   const s = useStore();
   const b = s.boot;
@@ -36,7 +47,12 @@ export function SetupPage() {
         path = b.data_dir;
       }
       setRelocating(false);
-      const r = await call('config_save', { root, game, ...(!onPhone ? { data_path: path, move_data: moveData, existing_action: existingAction } : {}) });
+      let r = await call('config_save', { root, game, ...(!onPhone ? { data_path: path, move_data: moveData, existing_action: existingAction } : {}) });
+      if (r.moving) {
+        // (the copy runs in the launcher in the background; leaving this page does not stop it)
+        toast(t('Moving the .openomsi folder in the background…'), 'ok', 6000);
+        r = await waitForMove();
+      }
       if (!r.saved) {
         if (r.existing_folder) {
           setRelocating({ path: r.existing_folder, exists: true });
@@ -128,6 +144,7 @@ export function SetupPage() {
         ? 'An existing .openomsi folder was found. Use it to load its settings and profiles, leaving the current folder unchanged. Moving the current folder here will overwrite the destination and replace all of its existing data.'
         : 'Move the current .openomsi folder to the new location, or create a fresh folder there? Starting fresh keeps the old folder unchanged.')}</p>
       <p class="selectable">${relocating.path}</p>
+      <p class="muted">${t('Other copies of openOMSI keep using the old folder.')}</p>
     </${Dialog}>`}
   `;
 }

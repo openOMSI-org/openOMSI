@@ -104,7 +104,16 @@ fn prepare_destination(source: &Path, target: &Path, mode: ChangeMode) -> Result
     }
 }
 
-pub fn change(path: &Path, mode: ChangeMode, game: &Path) -> Result<Option<String>> {
+/// Whether `folder` is the default one (`~/.openomsi`), where other installations still look.
+fn is_default_folder(folder: &Path) -> bool {
+    let Ok(default) = omsi_cfg::user_data::default_dir() else { return false };
+    default == folder || matches!((default.canonicalize(), folder.canonicalize()), (Ok(a), Ok(b)) if a == b)
+}
+
+/// Move to `path`. The copy runs first and takes as long as it takes; `hold` is called just
+/// before the pointers are written, so a caller can keep the other work of the launcher out
+/// of the switch (and the files written right after it) and nothing else.
+pub fn change(path: &Path, mode: ChangeMode, game: &Path, hold: impl FnOnce()) -> Result<Option<String>> {
     if cfg!(any(target_os = "android", target_os = "ios")) {
         bail!(crate::i18n::tr("Changing the .openomsi folder is only available on desktop"));
     }
@@ -142,6 +151,7 @@ pub fn change(path: &Path, mode: ChangeMode, game: &Path) -> Result<Option<Strin
         }
     }).collect::<std::io::Result<_>>()?;
     let backup = prepare_destination(&source, &target, mode)?;
+    hold();
     let commit = (|| -> Result<()> {
         omsi_cfg::user_data::write_config_for(game, &target)?;
         if omsi_cfg::user_data::config_file_for(&launcher) != game_config {
@@ -169,7 +179,12 @@ pub fn change(path: &Path, mode: ChangeMode, game: &Path) -> Result<Option<Strin
         return Err(e).context(crate::i18n::tr("Could not save .openomsi-config; the original folder is unchanged"));
     }
     let mut warnings = Vec::new();
-    if matches!(mode, ChangeMode::Move | ChangeMode::Overwrite) {
+    if matches!(mode, ChangeMode::Move | ChangeMode::Overwrite) && is_default_folder(&source) {
+        // (every installation starts on `~/.openomsi`: the others, the dedicated server, a test
+        // build unpacked elsewhere, still read their pointer and would silently begin again
+        // with an empty folder, which looks exactly like lost data)
+        warnings.push(crate::i18n::trf("The new folder is active. The old folder at {path} was kept, because other copies of openOMSI may still use it.", &[("path", &source.display())]));
+    } else if matches!(mode, ChangeMode::Move | ChangeMode::Overwrite) {
         if let Err(e) = std::fs::remove_dir_all(&source) {
             warnings.push(crate::i18n::trf("The new folder is active, but the old copy at {path} could not be removed: {error}", &[("path", &source.display()), ("error", &e)]));
         }
@@ -234,6 +249,40 @@ mod tests {
         assert!(prepare_overwrite(&source, &source.join("nested/.openomsi")).is_err());
         std::fs::remove_dir_all(root).unwrap();
     }
+    /// A copy that fails halfway (here a symbolic link among the files) leaves the original
+    /// folder as it was, takes the half-made destination away again, and changes no pointer.
+    #[cfg(unix)]
+    #[test]
+    fn a_copy_that_fails_halfway_leaves_the_original_intact() {
+        let (root, source, _) = existing_folders();
+        std::fs::write(source.join("a-first.txt"), b"first").unwrap();
+        std::os::unix::fs::symlink("a-first.txt", source.join("zz-link")).unwrap();
+        let target = root.join("new/.openomsi");
+        assert!(prepare(&source, &target, true).is_err());
+        assert!(!target.exists(), "the half-made copy is removed");
+        assert_eq!(std::fs::read(source.join("a-first.txt")).unwrap(), b"first");
+        assert_eq!(std::fs::read(source.join("profiles/current.json")).unwrap(), b"current");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_target_that_already_holds_an_openomsi_is_refused_when_moving() {
+        let (root, source, target) = existing_folders();
+        assert!(prepare(&source, &target, true).is_err());
+        assert!(prepare(&source, &target, false).is_err());
+        assert_eq!(std::fs::read(target.join("settings.cfg")).unwrap(), b"existing");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_target_inside_the_old_folder_is_refused() {
+        let (root, source, _) = existing_folders();
+        let inside = source.join("sub/.openomsi");
+        assert!(prepare(&source, &inside, true).is_err());
+        assert!(!inside.exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn selection_keeps_required_folder_name() {
         assert_eq!(selected_path(Path::new("parent")), Path::new("parent").join(".openomsi"));

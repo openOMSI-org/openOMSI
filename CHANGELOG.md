@@ -8,6 +8,13 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **Choose where openOMSI keeps its data** (Setup › `.openomsi` folder): settings, profiles,
+  logs and caches can live in another folder, on another disk. A game and its launcher find the
+  folder through a pointer file beside the program (beside the `.app` on a Mac, so an update of
+  the bundle keeps it); a first start, or an installation that cannot be written, uses `~/.openomsi`
+  as before. Moving copies the folder first, in the background (leaving the page does not stop it),
+  and switches only when the copy is whole; a copy that fails leaves the old folder as it was. The
+  default `~/.openomsi` is kept after a move, because other copies of openOMSI may still use it.
 - **Transport modes in the launcher**: maps and vehicles show their mode (tram, railway, metro,
   trolleybus), the map and vehicle pickers can filter by it, and a vehicle that does not fit the
   chosen map is marked with the reason and cannot be started (the game refuses it too).

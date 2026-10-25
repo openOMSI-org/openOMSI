@@ -37,10 +37,7 @@ fn dirs() -> Vec<PathBuf> {
 
 /// Where a downloaded pack goes.
 pub fn user_dir() -> Option<PathBuf> {
-    if !cfg!(any(target_os = "android", target_os = "ios")) {
-        return Some(omsi_cfg::user_data::data_dir().join("avatars"));
-    }
-    std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(|h| PathBuf::from(h).join(".openomsi").join("avatars"))
+    omsi_cfg::user_data::base_dir().map(|d| d.join("avatars"))
 }
 
 /// The folder of the pack, if there is one.

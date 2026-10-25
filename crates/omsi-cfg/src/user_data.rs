@@ -1,4 +1,4 @@
-//! Shared desktop user-data routing. Android keeps its existing home-based layout.
+//! Shared user-data routing: the desktop's pointer file, and the phones' home-based layout.
 use std::io;
 use std::path::{Component, Path, PathBuf};
 use std::sync::RwLock;
@@ -6,14 +6,38 @@ use std::sync::RwLock;
 static ACTIVE: RwLock<Option<PathBuf>> = RwLock::new(None);
 const CONFIG_FILE: &str = ".openomsi-config";
 
-/// Pointer beside the executable, or inside an application's Contents directory.
+/// Phones keep their data in `~/.openomsi` and have no pointer file.
+pub const fn mobile() -> bool {
+    cfg!(any(target_os = "android", target_os = "ios"))
+}
+
+/// The user-data folder for every platform, the one place that decides it: the desktop's
+/// (`data_dir`, which follows the pointer), a phone's `~/.openomsi`. `None` where a phone has
+/// no home.
+pub fn base_dir() -> Option<PathBuf> {
+    if !mobile() {
+        return Some(data_dir());
+    }
+    [std::env::var_os("HOME"), std::env::var_os("USERPROFILE")]
+        .into_iter()
+        .flatten()
+        .map(PathBuf::from)
+        .find(|p| p.is_absolute())
+        .map(|p| p.join(".openomsi"))
+}
+
+/// Pointer beside the executable, or beside an application bundle: inside the bundle it would
+/// break the signature seal, and an update replaces the whole bundle with the pointer in it.
 pub fn config_file_for(program: &Path) -> PathBuf {
     for ancestor in program.ancestors() {
         if ancestor
             .extension()
             .is_some_and(|e| e.eq_ignore_ascii_case("app"))
         {
-            return ancestor.join("Contents").join(CONFIG_FILE);
+            return ancestor
+                .parent()
+                .unwrap_or_else(|| Path::new("."))
+                .join(CONFIG_FILE);
         }
     }
     program
@@ -68,7 +92,8 @@ fn parse_config(text: &str) -> io::Result<PathBuf> {
     selected.ok_or_else(|| invalid("missing config_path"))
 }
 
-fn default_dir() -> io::Result<PathBuf> {
+/// `~/.openomsi`, where a first start puts the data and where other installations still look.
+pub fn default_dir() -> io::Result<PathBuf> {
     let path = [std::env::var_os("HOME"), std::env::var_os("USERPROFILE")]
         .into_iter()
         .flatten()
@@ -129,14 +154,23 @@ fn resolve_for(
                 .create_new(true)
                 .open(config_file_for(program))
             {
-                Ok(mut file) => writeln!(file, "config_path={}", path.to_str().unwrap())?,
+                Ok(mut file) => {
+                    if let Err(e) = writeln!(file, "config_path={}", path.to_str().unwrap()) {
+                        log::warn!("cannot write {}: {e}", config_file_for(program).display());
+                    }
+                }
                 Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
                     let selected =
                         parse_config(&std::fs::read_to_string(config_file_for(program))?)?;
                     std::fs::create_dir_all(&selected)?;
                     return Ok(selected);
                 }
-                Err(e) => return Err(e),
+                // An installation that cannot be written (Program Files, a read-only volume)
+                // runs on the default folder; only moving the folder needs the pointer.
+                Err(e) => log::warn!(
+                    "cannot write {}: {e}; using the default user data folder",
+                    config_file_for(program).display()
+                ),
             }
             path
         }
@@ -150,8 +184,8 @@ fn resolve_for(
 /// Errors leave the previously active directory unchanged.
 pub fn initialize_for(program: &Path) -> io::Result<PathBuf> {
     let mut active = ACTIVE.write().unwrap_or_else(|e| e.into_inner());
-    let path = if cfg!(target_os = "android") {
-        default_dir()?
+    let path = if mobile() {
+        base_dir().ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "cannot locate the user's home directory"))?
     } else {
         resolve_for(program, default_dir)?
     };
@@ -169,12 +203,8 @@ pub fn set_active_path(path: &Path) -> io::Result<()> {
 /// Active data directory. Desktop callers lazily initialize from current_exe, once.
 /// Unit tests do not create pointers implicitly; explicit initialization still does.
 pub fn data_dir() -> PathBuf {
-    if cfg!(target_os = "android") {
-        return std::env::var_os("HOME")
-            .or_else(|| std::env::var_os("USERPROFILE"))
-            .map(PathBuf::from)
-            .unwrap_or_default()
-            .join(".openomsi");
+    if mobile() {
+        return base_dir().unwrap_or_else(|| PathBuf::from(".openomsi"));
     }
     if let Some(path) = ACTIVE.read().unwrap_or_else(|e| e.into_inner()).as_ref() {
         return path.clone();
@@ -231,15 +261,13 @@ mod tests {
             config_file_for(&root.join("openomsi.exe")),
             root.join(CONFIG_FILE)
         );
+        // (beside the bundle, not in it: an update swaps the whole bundle)
         let app = root.join("openomsi.app");
         assert_eq!(
             config_file_for(&app.join("Contents/MacOS/openomsi")),
-            app.join("Contents").join(CONFIG_FILE)
+            root.join(CONFIG_FILE)
         );
-        assert_eq!(
-            config_file_for(&app),
-            app.join("Contents").join(CONFIG_FILE)
-        );
+        assert_eq!(config_file_for(&app), root.join(CONFIG_FILE));
     }
 
     #[test]
@@ -317,16 +345,37 @@ mod tests {
             default
         );
         assert!(default.is_dir());
-        assert!(
-            root.0
-                .join("openomsi.app/Contents/.openomsi-config")
-                .is_file()
+        assert!(root.0.join(".openomsi-config").is_file());
+        assert!(!root.0.join("openomsi.app/Contents/.openomsi-config").exists());
+    }
+
+    #[test]
+    fn the_chosen_folder_survives_a_bundle_swap() {
+        let root = Temp::new();
+        let program = root.0.join("openomsi.app/Contents/MacOS/openomsi");
+        std::fs::create_dir_all(program.parent().unwrap()).unwrap();
+        let chosen = root.0.join("elsewhere").join(".openomsi");
+        write_config_for(&program, &chosen).unwrap();
+        // (an update: the old bundle goes, a new one takes its place)
+        std::fs::remove_dir_all(root.0.join("openomsi.app")).unwrap();
+        std::fs::create_dir_all(program.parent().unwrap()).unwrap();
+        assert_eq!(
+            resolve_for(&program, || panic!("the pointer must still be there")).unwrap(),
+            chosen
         );
-        assert!(
-            !root
-                .0
-                .join("openomsi.app/Contents/MacOS/.openomsi-config")
-                .exists()
+    }
+
+    #[test]
+    fn an_installation_that_cannot_be_written_runs_on_the_default_folder() {
+        let root = Temp::new();
+        // (a program folder that does not exist stands for one that cannot be written)
+        let program = root.0.join("missing").join("openomsi");
+        let default = root.0.join("home").join(".openomsi");
+        assert_eq!(
+            resolve_for(&program, || Ok(default.clone())).unwrap(),
+            default
         );
+        assert!(default.is_dir());
+        assert!(!config_file_for(&program).exists());
     }
 }

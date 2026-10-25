@@ -516,8 +516,7 @@ impl Career {
     /// launcher adds it up into the driver's hours, experience and level (the process id
     /// keeps two games that end in the same second apart).
     pub fn write_session(&self, map: &str, bus: &str, line: Option<&str>, tour: Option<&str>) -> std::io::Result<()> {
-        let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).unwrap_or_default();
-        let dir = if cfg!(any(target_os = "android", target_os = "ios")) { home.join(".openomsi") } else { omsi_cfg::user_data::data_dir() }.join("sessions");
+        let dir = omsi_cfg::user_data::base_dir().unwrap_or_default().join("sessions");
         std::fs::create_dir_all(&dir)?;
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
         let driver = self.driver.as_ref().map(|d| d.name.clone()).or_else(|| self.path.as_ref().and_then(|p| p.file_stem().map(|s| s.to_string_lossy().to_string()))).unwrap_or_else(|| "Driver".into());

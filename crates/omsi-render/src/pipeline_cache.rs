@@ -42,12 +42,7 @@ pub(crate) fn wanted(adapter: &wgpu::Adapter) -> wgpu::Features {
 }
 
 fn path(info: &wgpu::AdapterInfo) -> Option<PathBuf> {
-    if !cfg!(any(target_os = "android", target_os = "ios")) {
-        return Some(omsi_cfg::user_data::data_dir().join("cache").join(file_name(info.backend, info.vendor, info.device)));
-    }
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    let home = PathBuf::from(home);
-    home.is_absolute().then(|| home.join(".openomsi/cache").join(file_name(info.backend, info.vendor, info.device)))
+    Some(omsi_cfg::user_data::base_dir()?.join("cache").join(file_name(info.backend, info.vendor, info.device)))
 }
 
 // (one file per GPU: a laptop's two GPUs would throw each other's data away)

@@ -29,7 +29,10 @@ static RELEASED: Mutex<Option<Instant>> = Mutex::new(None);
 
 fn start() -> Result<Running, String> {
     let game = omsi_launcher_lib::game_binary().ok_or("the game program was not found")?;
-    omsi_cfg::user_data::write_config_for(&game, &omsi_launcher_lib::data_dir()).map_err(|e| e.to_string())?;
+    // (an installation that cannot be written runs on the default folder: not a reason to stop)
+    if let Err(e) = omsi_cfg::user_data::write_config_for(&game, &omsi_launcher_lib::data_dir()) {
+        omsi_launcher_lib::log_to_file(&format!("cannot write the game's data-folder pointer: {e}"));
+    }
     let log = std::fs::File::create(omsi_launcher_lib::data_dir().join("launcher-service.log")).map_err(|e| e.to_string())?;
     let mut child = Command::new(&game)
         .arg("--launcher-service")
