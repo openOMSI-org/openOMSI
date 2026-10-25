@@ -375,5 +375,37 @@ fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) ->
     if (!is_snow_pane()) {
         a = a * clamp(film_water, 0.0, 1.0);
     }
+    if (mode > 1.5 && min(material.emissive.r, min(material.emissive.g, material.emissive.b)) > 0.99 && material.emissive.w < 1.5) {
+        a = encoded_blend_alpha(rgb, a, light);
+    }
     return vec4<f32>(rgb, a);
+}
+
+// What lies under a self-lit layer, for `encoded_blend_alpha`: a surface of this encoded
+// brightness lit by the light at the layer (the road's asphalt under the KVB Citaro's
+// light cone is 0.44 - 0.49 encoded).
+const BLEND_GROUND_ENCODED: f32 = 0.45;
+
+// A self-lit blended layer (emissive white: a light cone laid on the road, a glow) as
+// Omsi.exe blends it: Direct3D 9 mixes the gamma-encoded colours, the sRGB target here mixes
+// linear ones, and a faint layer came out far brighter - the KVB Citaro's `lichtkegel.o3d`
+// (alpha 0.14 on average) a flat beige sheet over the road where OMSI 2 shows a soft pool,
+// 120 of 255 against its 85. The target cannot be read, so what is under the layer is taken
+// to be ground lit by the light here (`light`, the vertex light the layer would have):
+// the alpha is the one that gives Omsi.exe's encoded mix over it, never more than the
+// layer's own.
+fn encoded_blend_alpha(rgb: vec3<f32>, a: f32, light: vec3<f32>) -> f32 {
+    let w = vec3<f32>(0.2126, 0.7152, 0.0722);
+    let s = max(rgb, vec3<f32>(0.0));
+    if (a <= 0.0) {
+        return a;
+    }
+    let d_enc = clamp(light, vec3<f32>(0.0), vec3<f32>(1.0)) * BLEND_GROUND_ENCODED;
+    let d = dot(srgb_decode(d_enc), w);
+    let over = dot(srgb_decode(srgb_encode(s) * a + d_enc * (1.0 - a)), w);
+    let span = dot(s, w) - d;
+    if (span < 1e-4) {
+        return a;
+    }
+    return clamp((over - d) / span, 0.0, a);
 }

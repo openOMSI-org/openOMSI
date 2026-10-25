@@ -97,13 +97,14 @@ mod tests {
     /// with the ground no longer lit by the tile light map, and the street-scale
     /// occlusion, the bounced light and the lightning's light), and the textures read with FSR 1's mip bias, `camera.lod`,
     /// and a script's screen never taken for a pane (#2927), and the lamp tiles' taps in loops of fixed bounds,
-    /// and the colour/mask-only headset entry point.
+    /// and the colour/mask-only headset entry point, and a self-lit blended layer's alpha giving
+    /// Omsi.exe's encoded mix.
     /// (with Unix line ends: a Windows checkout may turn the parts' into CRLF, as it did the
     /// single files', and the 0.2.31 release's Windows test failed on that alone)
     #[test]
     fn assembled_shaders_are_the_old_files() {
         let (scene, enhanced) = (super::SCENE.replace("\r\n", "\n"), super::ENHANCED.replace("\r\n", "\n"));
-        assert_eq!((scene.len(), fnv1a(&scene)), (130_362, 0x57b1_11c7_f717_9d08));
+        assert_eq!((scene.len(), fnv1a(&scene)), (131_984, 0xe43c_b589_a6c5_5a3f));
         assert_eq!((enhanced.len(), fnv1a(&enhanced)), (95_780, 0x382a_264e_1eb3_2019));
     }
 }
