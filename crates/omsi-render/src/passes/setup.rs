@@ -426,6 +426,7 @@ impl Renderer {
                 std::array::from_fn(|r| std::array::from_fn(|c| at[r * 4 + c]))
             },
             lod: [self.fsr_mip_bias(f), 0.0, 0.0, 0.0],
+            spot: classic_spot(scene, lighting, ro),
         };
         self.queue
             .write_buffer(&self.camera_buf, 0, bytemuck::bytes_of(&cu));
@@ -479,4 +480,27 @@ impl Renderer {
             && self.prepare_enhanced(lighting, cam_rel, ro, f.dt);
         (vp_mat, cu, probe_redraw)
     }
+}
+
+/// The camera uniform's `spot`: the player's `[spotlight]` (a classic spot of kind 1 standing
+/// in or at the player's vehicle - Omsi.exe lights the road by the player's alone, 0x708acc),
+/// none while it is off, in a frame without a player's vehicle or in the enhanced path's,
+/// which never draws the classic lights.
+fn classic_spot(scene: &Scene, lighting: &Lighting, ro: DVec3) -> [[f32; 4]; 4] {
+    let none = [[0.0; 4]; 4];
+    let Some(own) = lighting.inside.as_ref().map(|b| super::VehicleBox::new(b, ro)) else { return none };
+    let spot = scene.lights.iter().find_map(|l| {
+        let [range, setback, kind] = l.d3d_spot?;
+        let at = (l.position - ro).as_vec3();
+        (kind > 0.5 && l.mode == crate::LightMode::Vanilla && l.intensity > 0.0 && own.contains(at, 1.0)).then_some((l, at, range, setback))
+    });
+    let Some((l, at, range, setback)) = spot else { return none };
+    let d = l.direction.normalize_or_zero();
+    let c = l.color;
+    [
+        [at.x, at.y, at.z, range],
+        [d.x, d.y, d.z, l.cone[1]],
+        [c[0] * l.intensity, c[1] * l.intensity, c[2] * l.intensity, l.cone[0]],
+        [setback, 0.0, 0.0, 0.0],
+    ]
 }

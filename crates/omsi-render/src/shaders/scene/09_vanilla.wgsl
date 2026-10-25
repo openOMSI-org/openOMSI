@@ -141,12 +141,13 @@ fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) ->
     let tree_unlamped = camera.sky_color.w > 0.5 && material.params.y > 0.1 && material.params.y < 0.2;
     let map_lamps = select(1.0, 0.0, (material.params.y > 0.2 && material.params.y < 0.3) || lm_only || tree_unlamped);
     let lamp_light = point_lights(in.world, n, map_lamps);
-    var light = diffuse + lamp_light;
+    // (the headlight, lit at the vertices: see `classic_spot`)
+    var light = diffuse + lamp_light + in.spot_diffuse + in.spot_ambient;
     // D3D lights the material's diffuse colour with the sun, the light from above and the
-    // lamps, and its ambient colour with the ambient light (C). Omsi.exe makes every o3d
-    // slot's ambient white (0x7c62f8), so a white sign texture on a green material shows
-    // white in the shade, not green.
-    let ambient_light = camera.ambient.xyz * ao;
+    // lamps, and its ambient colour with the ambient light (C) and the headlight's ambient
+    // light. Omsi.exe makes every o3d slot's ambient white (0x7c62f8), so a white sign
+    // texture on a green material shows white in the shade, not green.
+    let ambient_light = camera.ambient.xyz * ao + in.spot_ambient;
     let mat_light = material.color.rgb * (light - ambient_light) + material.ambient.rgb * ambient_light;
     let light_mapped = material.params2.x > 0.5 && material.extra.x < 0.5;
     // The low-range Vanilla+ target has no exposure/tonemapping. Saturate the

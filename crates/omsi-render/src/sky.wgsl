@@ -41,6 +41,8 @@ struct Camera {
     cabin_lamps: array<vec4<f32>, 4>,
     // x: the textures' mip bias (FSR 1: negative, see `CameraUniform::lod`)
     lod: vec4<f32>,
+    // (the classic picture's headlight, `CameraUniform::spot`: unread here)
+    spot: array<vec4<f32>, 4>,
 };
 
 // A hash of a lattice point, from its integer bits.

@@ -45,6 +45,8 @@ struct Camera {
     cabin_lamps: array<vec4<f32>, 4>,
     // x: the textures' mip bias (FSR 1: negative, see `CameraUniform::lod`)
     lod: vec4<f32>,
+    // the classic picture's headlight (`CameraUniform::spot`, see `classic_spot`)
+    spot: array<vec4<f32>, 4>,
 };
 
 // 1 when the point lies inside the player's vehicle (its [boundingbox], shrunk a little so

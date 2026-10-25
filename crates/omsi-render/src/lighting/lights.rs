@@ -58,6 +58,12 @@ pub struct PointLight {
     /// `cookies`) within its cone, when a layer is free for the picture that frame.
     pub cookie: Option<Cookie>,
     pub flash: bool,
+    /// A classic-picture spot lit as Omsi.exe's Direct3D spot light: its declared range, how
+    /// far behind `position`, along the vehicle's axis, the spot itself lies, and 1 for a
+    /// vehicle's `[spotlight]` (Omsi.exe's light 3: the player's alone, lit at the vertices
+    /// through the camera uniform's `spot`), 0 for another (lit per pixel, see the shader's
+    /// `point_lights`).
+    pub d3d_spot: Option<[f32; 3]>,
 }
 
 impl Default for PointLight {
@@ -76,6 +82,7 @@ impl Default for PointLight {
             mode: LightMode::Both,
             cookie: None,
             flash: false,
+            d3d_spot: None,
         }
     }
 }
@@ -423,11 +430,18 @@ pub(crate) fn gpu_light(l: &PointLight, p: Vec3) -> GpuPointLight {
     } else {
         l.radius
     };
+    // (a Direct3D spot of the classic picture: y how far behind it the spot lies, z its
+    // declared range - the classic shader reads neither from any other spot)
+    let extra = match l.d3d_spot.filter(|_| spot && l.mode == LightMode::Vanilla) {
+        // (a [spotlight]: its range negative, the shader's per-pixel lights pass it by)
+        Some([range, setback, kind]) => [l.cone[0], setback, if kind > 0.5 { -range } else { range }, l.radius],
+        None => [l.cone[0], l.core, l.beam, l.radius],
+    };
     GpuPointLight {
         pos: [p.x, p.y, p.z, vanilla_radius],
         color: [l.color[0], l.color[1], l.color[2], l.intensity],
         dir,
-        extra: [l.cone[0], l.core, l.beam, l.radius],
+        extra,
     }
 }
 
