@@ -128,8 +128,8 @@ pub fn vehicle_lights(
     v: &VehicleInstance,
     coronas: &mut Vec<Corona>,
     lights: &mut Vec<PointLight>,
-    // (the darkness: Omsi.exe's spot is as strong by day, see `push_classic_spot`)
-    _night: f32,
+    // the player's vehicle: Omsi.exe lights the road by its [spotlight] alone (light 3)
+    player: bool,
     fades: &parking_lot::Mutex<CookieFades>,
     lent_beams: bool,
 ) {
@@ -177,10 +177,12 @@ pub fn vehicle_lights(
                 let d = body.transform_vector3(dl).normalize_or_zero();
                 let level = level_axis(body, dl);
                 let origins = spot_origins(&ty.model, ty.def.bounding_box, &vals, &v.light_fade, &value_of);
-                // the classic picture: Omsi.exe's one spot, where the [spotlight] puts it
-                // (its light leaves from the vehicle's face, see `push_classic_spot`)
+                // the classic picture: Omsi.exe's one spot, the player's, where the
+                // [spotlight] puts it (its light leaves from the vehicle's face, see
+                // `push_classic_spot`) - wherever that is: the Karosa B951's full beams stand
+                // 5 m up, over its roof
                 let total: f32 = origins.iter().map(|o| o.1).sum();
-                if total > 0.0 {
+                if player && total > 0.0 {
                     let face = origins.iter().map(|(at, share)| *at * *share).sum::<Vec3>() / total;
                     let at = Vec3::new(vals[0], face.y, vals[2]);
                     push_classic_spot(lights, v.position + body.transform_point3(at).as_dvec3(), d, &vals, 1.0, face.y - vals[1], 1.0);
@@ -1031,7 +1033,7 @@ pub fn collect(
         if d > CORONA_RANGE || (!v.ai_visuals && d > UNSEEN_LIGHT_RANGE) {
             continue;
         }
-        vehicle_lights(v, &mut scene.coronas, &mut scene.lights, night, &world.cookie_fades, beams.contains(&k));
+        vehicle_lights(v, &mut scene.coronas, &mut scene.lights, player_first && k == 0, &world.cookie_fades, beams.contains(&k));
         // light_vehicles puts the player's bus first (if any). LAN guests and AI
         // traffic must not be mistaken for it when no bus is driven locally.
         let vehicle_smoke_enabled = match smoke_mode {
