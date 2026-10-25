@@ -7,6 +7,7 @@ use super::*;
 pub(crate) mod batch;
 mod cull;
 mod effects;
+mod ground;
 mod headlamp_shadow;
 mod main_pass;
 mod post;
@@ -19,6 +20,7 @@ mod shadow_plan;
 mod submit;
 
 pub(crate) use batch::DrawPlan;
+pub(crate) use ground::GroundPlan;
 pub(crate) use headlamp_shadow::{headlamp_shadow, own_headlamp, VehicleBox, HEADLAMP_SHADOW_REACH};
 pub(crate) use shadow::{CabinMotion, LampTiles};
 pub(crate) use shadow_plan::ShadowPlan;
@@ -60,6 +62,7 @@ pub(crate) struct FrameEnv {
     pub no_smoke: bool,
     pub no_snowfall: bool,
     pub no_rain: bool,
+    pub no_ground_pass: bool,
     pub no_precip_roof: bool,
     pub no_coronas: bool,
     pub no_glare: bool,
@@ -103,6 +106,7 @@ impl FrameEnv {
             no_smoke: omsi_cfg::flags::OMSI_NO_SMOKE.is_set(),
             no_snowfall: omsi_cfg::flags::OMSI_NO_SNOWFALL.is_set(),
             no_rain: omsi_cfg::flags::OMSI_NO_RAIN.is_set(),
+            no_ground_pass: omsi_cfg::flags::OMSI_NO_GROUND_PASS.is_set(),
             no_precip_roof: omsi_cfg::flags::OMSI_NO_PRECIP_ROOF.is_set(),
             no_coronas: omsi_cfg::flags::OMSI_NO_CORONAS.is_set(),
             no_glare: omsi_cfg::flags::OMSI_NO_GLARE.is_set(),
@@ -152,6 +156,7 @@ pub(crate) struct FrameCtx<'a> {
     pub aspect: f32,
     pub cam_rel: Vec3,
     pub xr_view: bool,
+    pub eye_color: bool,
     pub lead_view: bool,
     pub enhanced_frame: bool,
     pub enhanced: bool,
@@ -162,6 +167,8 @@ pub(crate) struct FrameCtx<'a> {
     pub lamp_shadows: Vec<LampShadow>,
     pub rt_frame: bool,
     pub ao_on: bool,
+    /// The frame may lay the terrain's paint into one albedo picture (see `plan_ground`).
+    pub ground_ok: bool,
     pub prepass_on: bool,
     pub prepass_reach: f32,
     pub dt: f32,

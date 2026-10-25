@@ -377,7 +377,7 @@ impl TrolleyView {
             let k = (1.0 - t) * (1.0 - t);
             let size = 0.12 + f.energy.sqrt() * 0.04;
             scene.coronas.push(Corona { position: f.pos, size, color: [0.8, 0.88, 1.0], brightness: 3.0 * k, direction: Vec3::ZERO, cone_cos: -1.0, ..Default::default() });
-            scene.lights.push(PointLight { position: f.pos, radius: 6.0 + f.energy.sqrt() * 0.9, color: [0.7, 0.82, 1.0], intensity: (f.energy.sqrt() / 7.0).min(4.0) * k, ..Default::default() });
+            scene.lights.push(PointLight { position: f.pos, radius: 6.0 + f.energy.sqrt() * 0.9, color: [0.7, 0.82, 1.0], intensity: (f.energy.sqrt() / 7.0).min(4.0) * k, flash: true, ..Default::default() });
         }
         // an open contact carrying current burns: a flickering glow at the shoe
         if let Some(g) = vehicle.trolley.as_deref() {

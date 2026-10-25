@@ -131,6 +131,7 @@ pub(crate) fn apply_people(h: &mut Humans, view: &mut PeopleView, world: &World,
 impl Humans {
     /// Bring the renderer up to what the simulation did (see [`BodyOp`]).
     pub(crate) fn show_bodies(&mut self, view: &mut PeopleView, world: &World, renderer: &Renderer, scene: &mut Scene) {
+        view.warm.map_figures(&self.sim.types, &world.root);
         self.replay_bodies(view, Some(world), renderer, scene);
     }
 

@@ -141,16 +141,16 @@ impl Renderer {
                     view: &h.mask, depth_slice: None, resolve_target: None,
                     ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
                 }),
-                hdr.and_then(|h| h.gbuf.as_ref()).map(|g| wgpu::RenderPassColorAttachment {
+                hdr.filter(|_| !f.eye_color).and_then(|h| h.gbuf.as_ref()).map(|g| wgpu::RenderPassColorAttachment {
                     view: &g[0].1, depth_slice: None, resolve_target: None,
                     ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
                 }),
-                hdr.and_then(|h| h.gbuf.as_ref()).map(|g| wgpu::RenderPassColorAttachment {
+                hdr.filter(|_| !f.eye_color).and_then(|h| h.gbuf.as_ref()).map(|g| wgpu::RenderPassColorAttachment {
                     view: &g[1].1, depth_slice: None, resolve_target: None,
                     ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
                 }),
             ];
-            let pipes = &self.main_pass(f.enhanced, f.reflection_frame).rain_pipelines;
+            let pipes = &self.main_pass(f.enhanced, f.reflection_frame, f.eye_color).rain_pipelines;
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("rain on current scene"),
                 color_attachments: &colours[..if colours[2].is_some() { 4 } else if hdr.is_some() { 2 } else { 1 }],

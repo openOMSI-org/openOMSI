@@ -5,6 +5,7 @@
 //! window around the page can do - its events, stepping aside while a game runs, drawing with
 //! the game's renderer - it is asked through `Platform`.
 
+mod addons;
 pub mod i18n;
 mod timetable;
 mod updates;
@@ -705,12 +706,15 @@ fn preview_frame(p: &dyn Platform, w: u32, h: u32, force: bool, dx: Option<f32>,
 }
 
 /// The map with the trip's route over it (see `mapview::export` in the launcher crate).
-fn route_map(p: &dyn Platform, map: String, date: String, trip: String, surface: Option<bool>) -> Answer {
-    serde_json::from_slice(&route_map_bytes(p, map, date, trip, surface)?).map_err(err)
+fn route_map(p: &dyn Platform, map: String, date: String, trip: String, surface: Option<bool>, editor: Option<bool>, route_only: Option<bool>) -> Answer {
+    serde_json::from_slice(&route_map_bytes(p, map, date, trip, surface, editor, route_only)?).map_err(err)
 }
 
-fn route_map_bytes(p: &dyn Platform, map: String, date: String, trip: String, surface: Option<bool>) -> Result<Vec<u8>, String> {
-    let (_, body) = p.renderer(json!({ "cmd": "map", "map": map, "date": date, "trip": trip, "surface": surface.unwrap_or(true) }), Duration::from_secs(120))?;
+/// `editor`: the timetable editor's map, which carries every stop of the timetable too;
+/// `route_only`: the trip's route alone. A `trip` of `@stops:<id>,<id>,...` is the route a
+/// list of stops would drive.
+fn route_map_bytes(p: &dyn Platform, map: String, date: String, trip: String, surface: Option<bool>, editor: Option<bool>, route_only: Option<bool>) -> Result<Vec<u8>, String> {
+    let (_, body) = p.renderer(json!({ "cmd": "map", "map": map, "date": date, "trip": trip, "surface": surface.unwrap_or(true), "editor": editor.unwrap_or(false), "route_only": route_only.unwrap_or(false) }), Duration::from_secs(120))?;
     Ok(body)
 }
 
@@ -833,9 +837,16 @@ fn answer(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "delete_situation" => delete_situation(arg::<String>(args, "map")?, arg::<String>(args, "file")?),
         "season_date" => season_date(arg::<String>(args, "season")?, arg::<String>(args, "phase")?, arg::<String>(args, "date")?, arg::<String>(args, "map")?, arg::<bool>(args, "keep")?),
         "tutorials" => tutorials(),
+        "ai_vehicles" => to_json(core::ai_lists::vehicles(arg::<Option<bool>>(args, "refresh")?.unwrap_or(false)).map_err(err)?),
+        "ai_vehicle_paints" => to_json(core::ai_lists::paints(&arg::<String>(args, "file")?).map_err(err)?),
+        "ai_lists" => core::ai_lists::view(&arg::<String>(args, "map")?, &arg::<String>(args, "date")?).map_err(err),
+        "ai_lists_save" => core::ai_lists::save(&arg::<String>(args, "map")?, &arg::<String>(args, "date")?, &arg::<Vec<core::ai_lists::GroupJson>>(args, "groups")?, &arg::<Vec<core::ai_lists::RuleJson>>(args, "rules")?).map_err(err),
+        "ai_lists_reset" => core::ai_lists::reset(&arg::<String>(args, "map")?).map(|_| json!({})).map_err(err),
+        "addons" => addons::list(),
         "timetable" => timetable::load(arg::<String>(args, "map")?),
         "timetable_save" => timetable::save(arg::<String>(args, "map")?, arg::<Vec<timetable::LineEdit>>(args, "lines")?),
         "timetable_reset" => timetable::reset(arg::<String>(args, "map")?),
+        "timetable_trip_save" => timetable::save_trip(arg::<String>(args, "map")?, arg::<timetable::TripNew>(args, "trip")?),
         "profiles" => profiles(),
         "profile" => profile(arg::<String>(args, "name")?),
         "profile_create" => profile_create(arg::<String>(args, "name")?, arg::<String>(args, "sex")?),
@@ -904,7 +915,7 @@ fn answer(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "notes_save" => notes_save(arg::<String>(args, "key")?, arg::<String>(args, "text")?),
         "preview_look" => preview_look(p, arg::<String>(args, "bus")?, arg::<String>(args, "paint")?, arg::<String>(args, "map")?, arg::<String>(args, "weather")?, arg::<i32>(args, "time")?, arg::<String>(args, "date")?),
         "preview_warm" => preview_warm(p),
-        "route_map" => route_map(p, arg::<String>(args, "map")?, arg::<String>(args, "date")?, arg::<String>(args, "trip")?, arg(args, "surface")?),
+        "route_map" => route_map(p, arg::<String>(args, "map")?, arg::<String>(args, "date")?, arg::<String>(args, "trip")?, arg(args, "surface")?, arg(args, "editor")?, arg(args, "route_only")?),
         "keyboard_actions" => keyboard_actions(p, json!({ "lang": arg::<Option<String>>(args, "lang")?, "actions": arg::<Option<Vec<String>>>(args, "actions")?, "vehicles": arg::<Option<Vec<String>>>(args, "vehicles")?, "catalog": arg::<Option<bool>>(args, "catalog")?, "scan": arg::<Option<bool>>(args, "scan")?, "have": arg::<Option<String>>(args, "have")? })),
         "controllers_load" => controllers(p, "load", json!({}), 20),
         "controllers_state" => controllers(p, "state", json!({ "off": arg::<Option<Vec<String>>>(args, "off")?.unwrap_or_default() }), 5),
@@ -929,7 +940,7 @@ fn answer(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
 pub fn call_bytes(cmd: &str, args: &Value, p: &dyn Platform) -> Result<Vec<u8>, String> {
     match cmd {
         "content_picture" => content_picture(&arg::<String>(args, "path")?).ok_or_else(|| "not found".to_string()),
-        "route_map" => route_map_bytes(p, arg::<String>(args, "map")?, arg::<String>(args, "date")?, arg::<String>(args, "trip")?, arg(args, "surface")?),
+        "route_map" => route_map_bytes(p, arg::<String>(args, "map")?, arg::<String>(args, "date")?, arg::<String>(args, "trip")?, arg(args, "surface")?, arg(args, "editor")?, arg(args, "route_only")?),
         "map_ground" => {
             let mut req = args.clone();
             req["cmd"] = json!("map_ground");
@@ -1029,7 +1040,7 @@ mod custom_weather_tests {
     }
 }
 
-// --- the content test (Settings) -----------------------------------------------------
+// --- the model test (Troubleshooting) -------------------------------------------------
 
 /// The game program loads `path` - a vehicle, a scenery object, a spline, a human, a map, a
 /// mod's folder or zip - as it would for a drive (`openomsi --check`) and answers its

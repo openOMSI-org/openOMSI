@@ -126,6 +126,13 @@ pub struct SkyInput {
     pub moon_illum: f32,
     /// How much a city's lamps light its own sky at night (0 open country .. 1 a city).
     pub city_glow: f32,
+    /// The optical depth of the grey deck's liquid water (0: not known - a stratus' 15, in
+    /// rain up to a raining nimbostratus' 60).
+    pub deck_tau: f32,
+    /// The cumulus layer's base and top over the ground (m): the sun it is lit by comes
+    /// through the air up to there.
+    pub cloud_base: f32,
+    pub cloud_top: f32,
 }
 
 impl Default for SkyInput {
@@ -140,6 +147,9 @@ impl Default for SkyInput {
             strat_aod: 0.004,
             veil: 0.0,
             cumulus: 0.0,
+            deck_tau: 0.0,
+            cloud_base: 1400.0,
+            cloud_top: 2800.0,
             rain: 0.0,
             ground_albedo: 0.2,
             tint: [Vec3::ONE; 3],
@@ -657,7 +667,8 @@ impl SkyState {
         let sun_at = {
             let air = Aerosol::of(input);
             let table = depth_table(air.height);
-            let mut at = CLOUD_SUN_HEIGHTS.map(|h| wb(SUN_E0 * transmittance(table.lookup(OBSERVER_H + h, s.z), &air)) * tint[0]);
+            let heights = [input.cloud_base, 0.5 * (input.cloud_base + input.cloud_top), input.cloud_top, CLOUD_SUN_HEIGHTS[3]];
+            let mut at = heights.map(|h| wb(SUN_E0 * transmittance(table.lookup(OBSERVER_H + h, s.z), &air)) * tint[0]);
             // (the cumulus layer lies under the veil, the high layer is the veil)
             for a in at.iter_mut().take(3) {
                 *a *= veil_t;
@@ -682,7 +693,7 @@ impl SkyState {
         // and what the ground throws back up, the deck sends down again: under a cover
         // the light of a snowy day is half again as bright as of a green one
         let clear_global = (raw.sun * s.z.max(0.0) + raw.sky_horizontal).dot(LUM);
-        let tau = 15.0 + 45.0 * input.rain.clamp(0.0, 1.0);
+        let tau = if input.deck_tau > 0.0 { input.deck_tau } else { 15.0 + 45.0 * input.rain.clamp(0.0, 1.0) };
         let deck_t = 1.0 / (1.0 + 0.75 * (1.0 - 0.85) * tau);
         let overcast_e = clear_global * deck_t / (1.0 - (1.0 - deck_t) * input.ground_albedo.clamp(0.0, 0.9));
         let grey = Vec3::new(0.96, 0.98, 1.0);

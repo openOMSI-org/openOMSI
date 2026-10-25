@@ -401,6 +401,8 @@ impl Showroom {
                 let path = player_bus_path(&root, &l2.bus)?;
                 let vt = Arc::new(omsi_sim::VehicleType::load(&root, &path)?);
                 let scheme = paint_scheme(&vt, Some(l2.paint.as_str()).filter(|p| !p.is_empty()));
+                // (on a mild day, not at the 0 °C of no weather: see `preview_weather`)
+                crate::services::preview_weather();
                 let host = omsi_sim::VehicleHost::new(start_clock(&args));
                 let mut vehicle = omsi_sim::VehicleInstance::new(vt.clone(), host);
                 if let Some(i) = scheme {

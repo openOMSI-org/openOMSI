@@ -4,6 +4,7 @@ pub mod cabin;
 pub mod cam_approach;
 pub mod hof;
 pub mod paths;
+pub mod rail_spec;
 pub mod sound;
 pub mod vehicle;
 

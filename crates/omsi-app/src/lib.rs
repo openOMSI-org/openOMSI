@@ -21,7 +21,7 @@ use omsi_platform::discord;
 #[cfg(steam)]
 mod steam;
 pub(crate) use omsi_scene::head_idle;
-use omsi_input::headtrack;
+use omsi_input::{head_filter, headtrack, tobii};
 #[cfg(windows)]
 use omsi_xr::openxr;
 #[cfg(target_os = "android")]
@@ -142,6 +142,7 @@ mod plugin_io;
 // the plugins' panels (`omsi-plugin-ui`) at their old path, and the app's side of their input
 use omsi_plugin_ui as plugin_ui;
 mod plugin_panels;
+mod process_permissions;
 mod plugins;
 mod services;
 mod sim_thread;
@@ -596,7 +597,12 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
     // Steam must be initialized before the graphics instance and window so its overlay can
     // hook the rendering process before the first surface is created.
     #[cfg(steam)]
-    let steam = if is_server { None } else { crate::steam::Steam::start() };
+    // Fixtures must not create multiple process-global native Steam clients.
+    let steam = if is_server || cfg!(test) {
+        None
+    } else {
+        crate::steam::Steam::start()
+    };
     let instance = graphics_instance();
     let vr_nav_profiles = crate::vr_navigator::Profiles::load(crate::vr_navigator::profiles_path().as_deref());
     let ui = ui::Ui::new();
@@ -762,32 +768,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             orbit: ORBIT_DEFAULT,
         },
         ui,
-        perf: PerfState {
-            fps: 0.0,
-            profile: Default::default(),
-            profile_prev: Default::default(),
-            total_frames: 0,
-            input_script,
-            shot: None,
-            frames: 0,
-            fps_t,
-            log_state: Default::default(),
-            spikes: 0,
-            worst_ms: 0.0,
-            governor: (0.0, 0, 0.0),
-            governor_low: 0,
-            governor_wait_prev: 0.0,
-            play_started: None,
-            cpu_mark: None,
-            thread_cpu_mark: None,
-            instructions_mark: None,
-            profile_mark: None,
-            frame_times: Vec::new(),
-            frame_stages: Vec::new(),
-            overlay: crate::perf_overlay::new(),
-            texture_cut_at: None,
-            optimiser: Default::default(),
-        },
+        perf: PerfState::new(input_script, fps_t),
         sound: SoundState {
             radio,
             milezero: Default::default(),
@@ -819,6 +800,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             pad_voice_nearby: false,
             arrow_glance: false,
             headtrack: None,
+            head_filter: Default::default(),
             headtrack_failed: None,
             headtrack_scale_last: None,
             headtrack_scale_bias: [0.0; 6],
@@ -869,6 +851,8 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             update_watch,
             presence,
             plugins: None,
+            vehicle_scripts_of: None,
+            object_scripts: Default::default(),
         },
         net: NetState::default(),
         service_msg: clock_note.map(|m| (m, 10.0)),

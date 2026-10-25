@@ -100,6 +100,18 @@ impl Soundscape {
         }
     }
 
+    /// A lightning strike the picture showed: its thunder is heard `delay` seconds later (the
+    /// speed of sound over `distance` metres), from where the flash was (`dir`).
+    pub fn thunder(&mut self, delay: f32, distance: f32, dir: [f32; 2], ear: DVec3) {
+        if !self.active() {
+            return;
+        }
+        let slot = if distance < 1500.0 { "thunder.close" } else if distance < 4000.0 { "thunder.mid" } else { "thunder.far" };
+        let at = ear + DVec3::new((dir[0] * distance) as f64, (dir[1] * distance) as f64, 800.0);
+        let placing = Placing { at: Some(at), range: reference(slot), lowpass: air(at, ear) };
+        self.strokes.push((slot, placing, self.now + delay as f64));
+    }
+
     /// Whether there are recordings to play (the map's own rain then gives way to ours).
     pub fn active(&self) -> bool {
         self.enabled && self.pack.is_some()
@@ -217,10 +229,9 @@ impl Soundscape {
         self.wet_trees = if rain > 0.05 { (self.wet_trees + m.dt * rain / 120.0).min(1.0) } else { (self.wet_trees - m.dt / 1200.0).max(0.0) };
         // a thunderstorm: towering clouds over a warm shower (thunder in a snowfall is a rarity
         // not worth making up)
-        let storm = m.weather.is_some_and(|w| {
-            let c = w.clouds.0.to_ascii_lowercase();
-            (c.contains("cumulus 3") || c.contains("cumulonimbus") || c.contains("gewitter") || c.contains("thunder")) && kind == 1 && rate > 0.45 && w.temp.0 > 8.0
-        });
+        // (its thunder follows the flashes the picture shows, `Soundscape::thunder`: the random
+        // peals the rules would add are left out)
+        let storm = false;
         let (d, mo) = m.clock.day_month();
         let h = m.clock.hour();
         let day = m.world.map(|w| w.day_kind(m.clock)).unwrap_or(crate::scene::DayKind { workday: m.clock.weekday() < 5, holiday: false, school_holiday: false });

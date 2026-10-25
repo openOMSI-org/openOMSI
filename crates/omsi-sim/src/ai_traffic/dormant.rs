@@ -116,22 +116,32 @@ impl TrafficSim {
         if present >= map_target {
             return;
         }
-        // The full outside list is only needed while replenishing the map population.
-        let outside: Vec<(usize, f32)> = self.net.lanes.iter().enumerate()
-            .filter_map(|(i, l)| {
-                let w = street_lane_weight(l)?;
-                let d = centers.iter().map(|c| (l.start() - *c).truncate().length()).fold(f64::MAX, f64::min);
-                (d > far).then_some((i, w as f32))
-            })
-            .collect();
-        if outside.is_empty() {
+        // The lanes by weight, summed once per size of the network (a scan of every lane of
+        // a big map each time cars were wanted was a hitch of its own); the ones near the
+        // players are drawn again.
+        if self.lane_weight_sums.0 != self.net.lanes.len() {
+            let mut acc = 0.0f64;
+            let sums = self.net.lanes.iter().map(|l| { acc += street_lane_weight(l).unwrap_or(0.0); acc }).collect();
+            self.lane_weight_sums = (self.net.lanes.len(), sums);
+        }
+        let total = self.lane_weight_sums.1.last().copied().unwrap_or(0.0);
+        if total <= 0.0 {
             return;
         }
-        let mut acc = 0.0f32;
-        let cumulative: Vec<f32> = outside.iter().map(|c| { acc += c.1; acc }).collect();
         for _ in 0..(map_target - present).min(64) {
-            let x = self.rand_f() as f32 * acc;
-            let lane = outside[cumulative.partition_point(|&c| c < x).min(outside.len() - 1)].0;
+            let mut lane = None;
+            for _ in 0..32 {
+                let x = self.rand_f() * total;
+                let k = self.lane_weight_sums.1.partition_point(|&c| c < x).min(self.net.lanes.len() - 1);
+                let start = self.net.lanes[k].start();
+                if street_lane_weight(&self.net.lanes[k]).is_some()
+                    && centers.iter().all(|c| (start - *c).truncate().length() > far)
+                {
+                    lane = Some(k);
+                    break;
+                }
+            }
+            let Some(lane) = lane else { continue };
             let s = (self.rand_f() * (self.net.lanes[lane].length() as f64 - 4.0)) as f32 + 2.0;
             let Some(ty) = self.pick_type(LaneKind::Street, Some(lane)) else {
                 continue;

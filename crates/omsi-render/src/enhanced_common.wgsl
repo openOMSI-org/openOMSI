@@ -48,6 +48,16 @@ struct Enhanced {
     // rear, and how far the defroster has cleared the windscreen (0..1; omsi-app
     // condensation.rs)
     condensation: vec4<f32>,
+    // x the cumulus layer's base, y its top (m over the ground), z the altocumulus cover,
+    // w the storm's activity
+    layers: vec4<f32>,
+    // the lightning of this frame: x the light it throws on a surface facing it (1 = 10 000
+    // lux), yz towards it (horizontal unit vector), w its elevation (rad)
+    flash: vec4<f32>,
+    // xyz towards the flash (unit vector), w how bright its channel is
+    flash2: vec4<f32>,
+    // x a number the channel's shape is drawn from
+    flash3: vec4<f32>,
 };
 @group(0) @binding(11) var<uniform> enh: Enhanced;
 @group(0) @binding(13) var s_lin: sampler;
@@ -64,6 +74,15 @@ fn sh_irradiance(n: vec3<f32>) -> vec3<f32> {
         + c[6].rgb * (0.315392 * (3.0 * n.z * n.z - 1.0)) + c[7].rgb * (1.092548 * n.x * n.z)
         + c[8].rgb * (0.546274 * (n.x * n.x - n.y * n.y));
     return max(e, vec3<f32>(0.0));
+}
+
+// The lightning's light on a surface facing n: half of it from the cloud overhead and
+// round it (a hemisphere), half along the way to the flash itself.
+fn flash_irradiance(n: vec3<f32>) -> vec3<f32> {
+    if (enh.flash.x <= 0.0) {
+        return vec3<f32>(0.0);
+    }
+    return vec3<f32>(0.80, 0.90, 1.0) * enh.flash.x * (0.5 * (0.5 + 0.5 * n.z) + 0.5 * max(dot(n, enh.flash2.xyz), 0.0));
 }
 
 // Sky radiance towards d (unscaled: times enh.ground.w is the radiance). The table runs

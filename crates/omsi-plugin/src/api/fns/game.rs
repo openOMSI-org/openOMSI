@@ -151,10 +151,10 @@ pub static FNS: &[ApiFn] = &[
         let r = s.ui().remove_menu_item(owner, &id);
         Ok::<_, ApiError>(r)
     }),
-    def!("ui.dock", "ui", [], "width, room, height, mine", "The navigator's board, where a panel with `anchor = \"navigator\"` goes, in that panel's pixels: its width, the most height there is room for, the height the panel there came to (0 before it is laid out; more than `room`: it is cut off at the bottom), and whether that panel is this plugin's (the first one asked for has the board, another waits). Nothing while the navigator shows no board: it is off, or Shift+N put its lower part away.", V36, None, true, |c, a| {
+    def!("ui.dock", "ui", [], "width, room, height, mine, frame", "The navigator's board, where a panel with `anchor = \"navigator\"` goes, in that panel's pixels: its width, the most height there is room for, the height the panel there came to (0 before it is laid out; more than `room`: it is cut off at the bottom), whether that panel is this plugin's (the first one asked for has the board, another waits), and whether it fills the navigator's whole frame (`frame = true`, ui version 6; false under the map, and nothing in an older game). Nothing while the navigator shows no board: it is off, or Shift+N put its lower part away.", V36, None, true, |c, a| {
         let s = c.state();
         let owner = s.owner;
         let d = s.ui().dock();
-        multi(d.map(|d| [Value::Num(d.width as f64), Value::Num(d.room as f64), Value::Num(d.height as f64), Value::Bool(d.owner == Some(owner))]))
+        multi(d.map(|d| [Value::Num(d.width as f64), Value::Num(d.room as f64), Value::Num(d.height as f64), Value::Bool(d.owner == Some(owner)), Value::Bool(d.frame)]))
     }),
 ];

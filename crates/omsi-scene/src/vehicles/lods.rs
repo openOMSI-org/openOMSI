@@ -37,7 +37,7 @@ pub(super) fn lod_bands(model: &omsi_model::Model, present: &[usize]) -> Vec<(us
 /// a tram) keeps its full meshes, and so does one whose lower level is itself lit (a lit window
 /// must not go dark at the size the level takes over). A car's own lamp glows are coronas, which
 /// the full model's night maps only add to: the car's lower level does without them.
-pub(super) fn lods_misfit(vt: &omsi_sim::VehicleType) -> Option<&'static str> {
+pub(crate) fn lods_misfit(vt: &omsi_sim::VehicleType) -> Option<&'static str> {
     let unswitched = |o: &omsi_model::MaterialDef| o.change.is_none() && !o.item;
     let unlit = |o: &omsi_model::MaterialDef| o.nightmap.is_none() && o.lightmap.is_none() && o.lightmaps.is_empty();
     // (a number plate's text texture is no display: nobody reads it from this far)

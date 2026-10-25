@@ -57,6 +57,7 @@ pub struct PointLight {
     /// The enhanced path lights it by a picture of its beam (`[spotlight_cookie]`, see
     /// `cookies`) within its cone, when a layer is free for the picture that frame.
     pub cookie: Option<Cookie>,
+    pub flash: bool,
 }
 
 impl Default for PointLight {
@@ -74,6 +75,7 @@ impl Default for PointLight {
             shadow_owner: None,
             mode: LightMode::Both,
             cookie: None,
+            flash: false,
         }
     }
 }

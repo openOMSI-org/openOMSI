@@ -78,6 +78,10 @@ pub(crate) struct AoTargets {
     pub(crate) depth_tex: wgpu::Texture,
     pub(crate) ao_view: wgpu::TextureView,
     pub(crate) blur_view: wgpu::TextureView,
+    /// The last frame's picture (absolute radiance) for the bounced light.
+    pub(crate) hist_view: wgpu::TextureView,
+    /// Whether `hist_view` is a picture (not the single texel of the other pipelines).
+    pub(crate) bounce: bool,
     pub(crate) ssao_bg: wgpu::BindGroup,
     pub(crate) blur_bg: wgpu::BindGroup,
     /// The lamps' light in the fog (`fog_lamps.wgsl`): worked out at half size into
@@ -94,6 +98,7 @@ impl Renderer {
             return t.clone();
         }
         self.evict_targets();
+        let raw_formats = [self.format.remove_srgb_suffix()];
         let tex = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("scaled scene"),
             size: wgpu::Extent3d {
@@ -106,7 +111,8 @@ impl Renderer {
             dimension: wgpu::TextureDimension::D2,
             format: self.format,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
+            // (FSR 1 may read it as stored, `shaders::fsr1_raw_input`)
+            view_formats: if crate::shaders::fsr1_raw_input(self.format) { &raw_formats } else { &[] },
         });
         let view = tex.create_view(&Default::default());
         let bg = self.picture_group(&view);
@@ -160,8 +166,35 @@ impl Renderer {
     }
 
     /// The ambient-occlusion textures for a target of this size (rebuilt on resize).
-    pub(crate) fn ensure_ao(&mut self, w: u32, h: u32) -> bool {
-        if self.targets.ao.as_ref().map(|a| a.size == (w, h)).unwrap_or(false) {
+    /// The ground albedo picture at this size when `wanted`, let go of when not. True when it
+    /// came, went or changed size (the camera group must be made again).
+    pub(crate) fn ensure_ground(&mut self, w: u32, h: u32, wanted: bool) -> bool {
+        match (&self.targets.ground, wanted) {
+            (None, false) => false,
+            (Some((size, _)), true) if *size == (w, h) => false,
+            (_, false) => {
+                self.targets.ground = None;
+                true
+            }
+            (_, true) => {
+                let view = self.device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("ground albedo"),
+                    size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: pipelines::scene::GROUND_FORMAT,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                    view_formats: &[],
+                }).create_view(&Default::default());
+                self.targets.ground = Some(((w, h), view));
+                true
+            }
+        }
+    }
+
+    pub(crate) fn ensure_ao(&mut self, w: u32, h: u32, bounce: bool) -> bool {
+        if self.targets.ao.as_ref().map(|a| a.size == (w, h) && (a.bounce || !bounce)).unwrap_or(false) {
             return false;
         }
         let size = wgpu::Extent3d {
@@ -194,8 +227,11 @@ impl Renderer {
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 // r the occlusion, g the view depth (m) it was worked out at: the main
-                // pass upsamples it by depth, not bilinearly (see `ao_at` in shader.wgsl)
-                format: wgpu::TextureFormat::Rg16Float,
+                // pass upsamples it by depth, not bilinearly (see `ao_at` in shader.wgsl);
+                // b and a the light the surfaces round the point send back to it
+                // (ssao.wgsl `bounce_pack`)
+                // (two channels without the bounced light)
+                format: if bounce { wgpu::TextureFormat::Rgba16Float } else { wgpu::TextureFormat::Rg16Float },
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                     | wgpu::TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
@@ -203,6 +239,25 @@ impl Renderer {
         };
         let ao = mk("ssao");
         let blur = mk("ssao blur");
+        // the last frame's picture at this size as absolute radiance, written after the
+        // frame's main pass (post.wgsl `fs_history`) and read by the next frame's AO
+        // (only the Enhanced picture with bounced light has one: another pipeline binds a
+        // single texel)
+        let hist = if bounce {
+            mk("ssao history")
+        } else {
+            self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("ssao history (unused)"),
+                size: wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba16Float,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+        };
+        let hist_view = hist.create_view(&Default::default());
         let depth_view = depth.create_view(&Default::default());
         let ao_view = ao.create_view(&Default::default());
         let blur_view = blur.create_view(&Default::default());
@@ -223,6 +278,10 @@ impl Renderer {
                     wgpu::BindGroupEntry {
                         binding: 2,
                         resource: wgpu::BindingResource::TextureView(tex),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::TextureView(&hist_view),
                     },
                 ],
             })
@@ -261,6 +320,8 @@ impl Renderer {
             depth_tex: depth.clone(),
             ao_view,
             blur_view,
+            hist_view,
+            bounce,
             ssao_bg,
             blur_bg,
             fog_view,
@@ -340,11 +401,16 @@ impl Renderer {
 
     /// The HDR colour targets of the enhanced path for this size, with the glow's levels,
     /// the tone-mapped picture FXAA reads and the post passes' bind groups.
-    pub(crate) fn hdr_targets(&mut self, w: u32, h: u32) -> bool {
+    pub(crate) fn hdr_targets(&mut self, w: u32, h: u32, surfaces: bool) -> bool {
         self.targets.target_use.insert((w, h), std::time::Instant::now());
-        if self.targets.hdr_targets.contains_key(&(w, h)) {
-            return false;
+        if let Some(hdr) = self.targets.hdr_targets.get(&(w, h)) {
+            if !surfaces || hdr.gbuf.is_some() {
+                return false;
         }
+        }
+        // A desktop view may reuse an eye's dimensions. Upgrade once if it needs
+        // ray-reflection surfaces; switching back to VR must not reallocate them.
+        self.targets.hdr_targets.remove(&(w, h));
         self.evict_targets();
         let fmt = wgpu::TextureFormat::Rgba16Float;
         let target = |label: &str, tw: u32, th: u32, format: wgpu::TextureFormat, samples: u32| {
@@ -375,7 +441,7 @@ impl Renderer {
         let view = target("hdr", w, h, fmt, 1);
         let mask_msaa = (self.options.msaa > 1).then(|| target("screen mask msaa", w, h, MASK_FORMAT, self.options.msaa));
         let mask = target("screen mask", w, h, MASK_FORMAT, 1);
-        let gbuf = rt_gbuf().then(|| {
+        let gbuf = surfaces.then(|| {
             [GBUF_FORMAT, AUX_FORMAT].map(|f| ((self.options.msaa > 1).then(|| target("rt surfaces msaa", w, h, f, self.options.msaa)), target("rt surfaces", w, h, f, 1)))
         });
         // the glow: halving until the smallest level is a few dozen pixels across
@@ -505,6 +571,9 @@ pub(crate) struct Targets {
     pub(crate) msaa_targets: HashMap<(u32, u32), (Option<wgpu::TextureView>, wgpu::TextureView)>,
     /// Screen-space ambient occlusion: depth prepass and AO textures of the window's size.
     pub(crate) ao: Option<AoTargets>,
+    /// The ground albedo picture (`fs_ground`) of the window's size, made only while the
+    /// ground pass can run (`Renderer::ground_eligible`): the camera group's slot 8 holds it.
+    pub(crate) ground: Option<((u32, u32), wgpu::TextureView)>,
     /// Enhanced path: the HDR targets per size, the post pipelines and their resources.
     pub(crate) hdr_targets: HashMap<(u32, u32), HdrTargets>,
     pub(crate) scale_targets: HashMap<(u32, u32), (wgpu::TextureView, wgpu::BindGroup)>,
@@ -516,11 +585,37 @@ pub(crate) struct Targets {
     pub(crate) evicted_at: std::time::Instant,
 }
 
+/// Full-sized EASU output kept between frames, recreated when the window size changes.
+/// Reuse matters on low-memory cards: allocating this each frame causes VRAM churn.
+pub(crate) struct FsrTarget {
+    pub(crate) size: (u32, u32),
+    /// When a picture of this size last went through it (a size not seen for a while - the
+    /// window's before a resize - is let go).
+    pub(crate) used: std::cell::Cell<std::time::Instant>,
+    pub(crate) _texture: wgpu::Texture,
+    pub(crate) view: wgpu::TextureView,
+    pub(crate) bind_group: wgpu::BindGroup,
+}
+
 /// The render scale: the pipelines that scale the 3D picture up to the window or copy a panel, and the governor's factor.
 pub(crate) struct Upscale {
     /// Render scale: the pipeline that scales the 3D picture up to the window, its
     /// parameters, and the smaller targets per size (with their bind groups).
     pub(crate) upscale_pipeline: wgpu::RenderPipeline,
+    pub(crate) fsr: Option<crate::pipelines::upscale::Fsr1>,
+    /// FSR 1's full-sized intermediate pictures by size (the window's, a VR eye's, a
+    /// triple-screen panel's: a few, kept, not made anew each frame).
+    pub(crate) fsr_target: std::cell::RefCell<Vec<FsrTarget>>,
+    /// FSR 1's passes were refused by the driver once (`set_upscaler`): not tried again.
+    pub(crate) fsr_refused: bool,
+    /// What `set_upscaler` was last asked for (at the start: the settings'), FSR 1, its
+    /// sharpening and the render scale: see `Renderer::upscaler_asked`.
+    pub(crate) upscaler_asked: (bool, f32, f32),
+    /// OMSI_FSR_RAW_INPUT: the scene picture it was made for and the bind group reading it
+    /// through a view that is not sRGB (made again only for a new picture, not each frame).
+    pub(crate) fsr_raw_bg: std::cell::RefCell<Option<(wgpu::Texture, wgpu::BindGroup)>>,
+    /// FSR 1 without its mip bias (OMSI_NO_FSR_MIP_BIAS; the tests compare with it).
+    pub(crate) fsr_mip_bias_off: std::cell::Cell<bool>,
     pub(crate) copy_pipeline: wgpu::RenderPipeline,
     /// Triple screen: a panel's picture copied 1:1 to its place in the window.
     pub(crate) panel_pipeline: wgpu::RenderPipeline,

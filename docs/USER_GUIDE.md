@@ -520,7 +520,7 @@ real phase and lights the night through the same atmosphere; the stars show wher
 is dark enough, and a city's lamps light its own haze and clouds (brightest on an overcast
 night). The clouds are a volume marched through in steps; `cloud_quality=low` (Graphics:
 Cloud quality) takes fewer of them - the same clouds a little grainier at their edges, for
-less of the GPU's time (on an M4 at 1080p about 0.8 ms of a frame). The camera exposes like one: for daylight, part of the way towards the light of the
+less of the GPU's time (on an M4 at 1080p about 0.8 ms of a frame). The shade of houses and trees over a whole street and the light the surfaces send to each other (Graphics: Street light, `street_light=auto|on|off`) cost about half a millisecond a frame on an M4 at 1080p. Off is the default; On enables them, Auto enables them except on a small or shared graphics chip, and the quality optimiser turns them off when the GPU is the limit. The camera exposes like one: for daylight, part of the way towards the light of the
 moment, with a camera's middle-tone contrast; street lamps are bright points with a little
 glare in clear air and wide halos in mist and rain.
 
@@ -854,7 +854,7 @@ much of the graphics card the game may use in all (textures, models and the pict
 textures and tiles that give everything back when they unload.
 
 For measuring: `OMSI_PROFILE=1` logs the time each stage of the frame takes, and with
-`--exit-after N` (quit after N seconds) it writes a summary at the end - frame-time
+`--exit-after N` (quit after N seconds), or when you close the game, it writes a summary at the end - frame-time
 percentiles and the number of frames over 16.7, 33.3, 50 and 100 ms, counted from 15 s
 after the map has loaded. `OMSI_PROFILE_JSON=<file>` also writes the summary to a file.
 

@@ -54,6 +54,59 @@ fn rt_at(frag: vec2<f32>, world: vec3<f32>) -> vec4<f32> {
 // the object in front: every wheel, pole and kerb stood in a pale outline on the shaded
 // ground under the bus. Of the four half-size texels around the pixel only those at the
 // pixel's own depth count (a depth-aware upsample); none of them: the closest in depth.
+// The light the surfaces round a point send back to it (irradiance, rgb), packed by
+// ssao.wgsl `bounce_pack` in the AO texture's b and a.
+fn bounce_unpack(t: vec4<f32>) -> vec3<f32> {
+    let y = t.b;
+    let iu = floor(t.a / 32.0 + 0.001);
+    let iv = t.a - iu * 32.0;
+    let r = iu / 31.0 * 2.0 * y;
+    let b = iv / 31.0 * 2.0 * y;
+    let g = max((y - 0.2126 * r - 0.0722 * b) / 0.7152, 0.0);
+    return vec3<f32>(r, g, b);
+}
+
+// The occlusion (x) and the bounced light (yzw) at a pixel, upsampled by depth as `ao_at`.
+fn ao_gi_at(frag: vec2<f32>, world: vec3<f32>) -> vec4<f32> {
+    if (camera.clouds.w > 1.5) {
+        let t = rt_at(frag, world);
+        return vec4<f32>(select(t.x, 1.0, t.w < 0.5), 0.0, 0.0, 0.0);
+    }
+    let size = vec2<i32>(textureDimensions(t_ao));
+    let z = (camera.view_proj * vec4<f32>(world, 1.0)).w;
+    let f = frag * 0.5 - vec2<f32>(0.5);
+    let base = vec2<i32>(floor(f));
+    let fr = f - floor(f);
+    let tol = 0.04 + 0.015 * z;
+    var sum = 0.0;
+    var wsum = 0.0;
+    var best = vec4<f32>(1.0, 0.0, 0.0, 0.0);
+    var best_d = 1e9;
+    for (var j = 0; j < 2; j = j + 1) {
+        for (var i = 0; i < 2; i = i + 1) {
+            let c = clamp(base + vec2<i32>(i, j), vec2<i32>(0), size - vec2<i32>(1));
+            let s = textureLoad(t_ao, c, 0);
+            let bw = select(1.0 - fr.x, fr.x, i == 1) * select(1.0 - fr.y, fr.y, j == 1);
+            let dz = abs(s.g - z);
+            let w = bw * (1.0 - smoothstep(0.0, tol, dz)) + 1e-4 * bw;
+            sum = sum + s.r * w;
+            wsum = wsum + w;
+            if (dz < best_d) {
+                best_d = dz;
+                best = s;
+            }
+        }
+    }
+    // no AO sample at this surface's depth: the surface is not in the depth prepass (a
+    // door or panel drawn in front of what the AO saw) - the AO behind it must not show
+    if (best_d > tol * 1.5) {
+        return vec4<f32>(1.0, 0.0, 0.0, 0.0);
+    }
+    // (the bounced light is smooth already - the blur pass averaged it - so the tap at this
+    // surface's depth is enough)
+    return vec4<f32>(select(best.r, sum / wsum, wsum > 0.02), bounce_unpack(best));
+}
+
 fn ao_at(frag: vec2<f32>, world: vec3<f32>) -> f32 {
     if (camera.clouds.w > 1.5) {
         let t = rt_at(frag, world);
@@ -193,17 +246,23 @@ struct MaterialParams {
 // the opposite edge of the SAME tile, opening grass seams even when adjacent masks
 // agree. The diffuse/detail textures still repeat through s_diffuse.
 fn sample_transmap(uv: vec2<f32>) -> vec4<f32> {
+    return sample_transmap_bias(uv, camera.lod.x);
+}
+
+// (`bias`: FSR 1's mip bias for the picture, `camera.lod`; 0 for the shadow and rain maps,
+// drawn at their own size)
+fn sample_transmap_bias(uv: vec2<f32>, bias: f32) -> vec4<f32> {
     if (material.extra.x > 0.5 || material.wipe_bounds.z != 0.0) {
-        return textureSample(t_trans, s_tile, uv);
+        return textureSampleBias(t_trans, s_tile, uv, bias);
     }
-    return textureSample(t_trans, s_diffuse, uv);
+    return textureSampleBias(t_trans, s_diffuse, uv, bias);
 }
 
 fn sample_nightmap(uv: vec2<f32>) -> vec4<f32> {
     if (material.extra.x > 0.5) {
-        return textureSample(t_night, s_tile, uv);
+        return textureSampleBias(t_night, s_tile, uv, camera.lod.x);
     }
-    return textureSample(t_night, s_diffuse, uv);
+    return textureSampleBias(t_night, s_diffuse, uv, camera.lod.x);
 }
 
 // Some vehicle lamps use a clear diffuse placeholder and put the entire lit
@@ -248,7 +307,7 @@ fn tex_address(uv: vec2<f32>) -> vec2<f32> {
 }
 
 fn reflection_mask(uv: vec2<f32>, diffuse_a: f32) -> f32 {
-    let mask = textureSample(t_envmask, s_diffuse, uv).a;
+    let mask = textureSampleBias(t_envmask, s_diffuse, uv, camera.lod.x).a;
     return select(diffuse_a, mask, has_env_mask());
 }
 
@@ -274,9 +333,9 @@ fn omsi_texture_factor(factor: f32, light: vec3<f32>) -> vec3<f32> {
 // reflection at every seam.
 fn bump_offset(uv: vec2<f32>) -> vec2<f32> {
     let texel = 1.0 / vec2<f32>(textureDimensions(t_bump));
-    let h = textureSample(t_bump, s_diffuse, uv).a;
-    let hx = textureSample(t_bump, s_diffuse, uv + vec2<f32>(texel.x, 0.0)).a;
-    let hy = textureSample(t_bump, s_diffuse, uv + vec2<f32>(0.0, texel.y)).a;
+    let h = textureSampleBias(t_bump, s_diffuse, uv, camera.lod.x).a;
+    let hx = textureSampleBias(t_bump, s_diffuse, uv + vec2<f32>(texel.x, 0.0), camera.lod.x).a;
+    let hy = textureSampleBias(t_bump, s_diffuse, uv + vec2<f32>(0.0, texel.y), camera.lod.x).a;
     return clamp(vec2<f32>(h - hx, h - hy) * 2.0, vec2<f32>(-1.0), vec2<f32>(1.0)) * material.bump.x;
 }
 

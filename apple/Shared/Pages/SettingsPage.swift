@@ -103,6 +103,11 @@ struct SettingsPage: View {
             PresetRow(mode: mode)
             OptimiseBlock()
             SettingSelect(label: "Anti-aliasing", key: "msaa", options: Choices.msaa, heavy: { $0 == "8" && !traced })
+            SettingSelect(label: "Upscaling", key: "upscaler", options: [("default", "Standard (Catmull-Rom)"), ("fsr1", "AMD FSR 1 (experimental)")])
+            if store.setting("upscaler")?.string == "fsr1" {
+                SettingSelect(label: "FSR quality", key: "fsr_quality", options: [("ultra", "Ultra Quality (77%)"), ("quality", "Quality (67%)"), ("balanced", "Balanced (59%)"), ("performance", "Performance (50%)"), ("auto", "Automatic (keeps the frame rate)"), ("custom", "Use render scale")])
+                SettingSlider(label: "FSR sharpness", key: "fsr_sharpness", range: 0 ... 1, step: 0.05, fallback: 0.8) { "\(Int($0 * 100))%" }
+            }
             SettingSelect(label: "Render scale", key: "render_scale", options: Choices.renderScale)
             SettingSelect(label: "Anisotropic", key: "anisotropy", options: [("1", "Off"), ("2", "2x"), ("4", "4x"), ("8", "8x"), ("16", "16x")])
             if !classic {
@@ -126,6 +131,9 @@ struct SettingsPage: View {
                 SettingSelect(label: "Cloud quality", key: "cloud_quality", options: Choices.cloudQuality)
             }
             SettingSelect(label: "Rain quality", key: "rain_quality", options: Choices.rainQuality)
+            if mode == "enhanced" {
+                SettingSelect(label: "Street light", key: "street_light", options: [("auto", "Auto"), ("on", "On"), ("off", "Off")])
+            }
             SettingSelect(label: "Vehicle smoke", key: "vehicle_smoke", options: [("all", "All vehicles"), ("player", "Player only"), ("off", "Off")], help: "Controls the vehicles' smoke particles, not scenery effects or glowing particles.")
             if (store.setting("reflections")?.double ?? 1) > 0.005 {
                 SettingSelect(label: "Puddles", key: "puddles", options: [("high", "High"), ("low", "Low"), ("off", "Off")])

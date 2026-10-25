@@ -49,7 +49,9 @@ impl PluginPanels {
     /// A card that covers more than a quarter of the screen, or that one sees through (its
     /// background less than half opaque), takes none: a large or invisible panel would take
     /// the clicks the driver means for the cab. (A card in the navigator's board lies on the
-    /// navigator's own card.)
+    /// navigator's own card.) A panel that fills the navigator's frame takes them on its
+    /// clickable parts alone: the rest, its map too, is the navigator's (dragged, clicked
+    /// for the city map), however large the navigator is.
     pub fn grabs_at(&self, ui: &UiState, x: f32, y: f32) -> bool {
         let [sw, sh, s] = ui.screen();
         let screen = sw * sh * s * s;
@@ -62,6 +64,9 @@ impl PluginPanels {
             let k = card.scale.max(0.25);
             let local = (Vec2::new(x, y) - card.origin) / k;
             if Rect::new(0.0, 0.0, card.laid.w, card.laid.h).contains(local) {
+                if e.panel.frame && card.laid.flat {
+                    return e.panel.grab && hit_at(&card.laid, local).is_some_and(|i| card.laid.hits[i].element.is_some());
+                }
                 let small = card.laid.w * card.laid.h * k * k <= GRAB_MOST * screen;
                 let seen = card.laid.flat || card.laid.background.0[3] >= 0.5;
                 return e.panel.grab && small && seen;
@@ -148,5 +153,27 @@ mod tests {
         // a card not shown in the last frame takes nothing
         panels.frame += 1;
         assert!(!panels.grabs_at(&ui, 150.0, 150.0));
+    }
+
+    /// A panel that fills the navigator's frame takes a click without the mouse on its
+    /// buttons alone, however large the navigator is: on its map and its free parts the press
+    /// is the navigator's (to drag it, or open the city map).
+    #[test]
+    fn a_panel_in_the_navigators_frame_grabs_on_its_parts_alone() {
+        let (mut panels, mut ui) = (PluginPanels { scale: 1.0, ..Default::default() }, UiState::default());
+        let src = r#"{ anchor = "navigator", frame = true, grab = true, padding = 0, gap = 0, children = {
+            { type = "button", id = "tab", text = "Ride" },
+            { type = "map", height = 600 },
+        } }"#;
+        ui.set(1, "phone", panel_from_source(src).unwrap()).unwrap();
+        let fonts = super::super::Fonts::new();
+        // (laid out as in the navigator: flat, see-through, 1100 wide - over a quarter of the
+        // screen)
+        let p = omsi_plugin::ui::Panel { width: 1100.0, background: Some(omsi_plugin::ui::Rgba([0, 0, 0, 0])), ..panel_from_source(src).unwrap() };
+        let laid = Laid { flat: true, ..super::super::layout(&p, &fonts, 1.0) };
+        let card = Card { revision: 0, scale: 1.0, backdrop: 1.0, laid, tex: None, drawn: None, origin: Vec2::new(0.0, 0.0), y: None, seen: panels.frame, full_h: 0.0, room: f32::INFINITY };
+        panels.cards.insert(Key::Panel(1, "phone".into()), card);
+        assert!(panels.grabs_at(&ui, 20.0, 10.0), "its tab");
+        assert!(!panels.grabs_at(&ui, 300.0, 300.0), "its map: the navigator's");
     }
 }

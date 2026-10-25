@@ -1042,7 +1042,9 @@ fn metering_defaults_are_gentle() {
     // way, so snow stays white and a night stays dark
     let m = meter_tuning();
     assert!(m[0] > 0.0 && m[0] < 0.6, "{m:?}");
-    assert!(m[2] <= 2.5 && m[3] <= 2.0, "{m:?}");
+    assert!(m[2] <= 2.5 && m[3] <= 6.0, "{m:?}");
+    // (a shortfall is another matter: the eye makes up most of a tunnel's darkness)
+    assert!(METER_SHORTFALL_GAIN > 0.6 && METER_SHORTFALL_GAIN < 1.0);
     // a snow field metered 1.5 EV over the target is darkened by well under a stop
     let ev = ((m[1] - (m[1] + 1.5)) * m[0]).clamp(-m[2], m[3]);
     assert!(ev < 0.0 && ev >= -0.75, "{ev}");

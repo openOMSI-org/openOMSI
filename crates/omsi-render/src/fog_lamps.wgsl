@@ -37,6 +37,8 @@ struct Camera {
     inside2_c: vec4<f32>,
     cookies: array<vec4<f32>, 8>,
     cabin_lamps: array<vec4<f32>, 4>,
+    // x: the textures' mip bias (FSR 1: negative, see `CameraUniform::lod`)
+    lod: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> camera: Camera;
 
@@ -90,8 +92,12 @@ fn pixel_ray(at: vec2<f32>) -> vec4<f32> {
 @group(0) @binding(7) var t_shadow_far: texture_depth_2d;
 const SHAFT_DEPTH_RANGE: f32 = 2199.0;
 const SHAFT_STEPS: u32 = 16u;
-// how far the shafts are followed (the near cascade's reach, a little less)
-const SHAFT_REACH: f32 = 180.0;
+// how far the shafts are followed in the dense steps (the near cascade's reach, a little less)
+const SHAFT_NEAR: f32 = 180.0;
+// and, past it, in a few sparse ones to the far map's reach (the beams of a misty avenue, or
+// a low sun between the blocks, reach farther than the first hundred metres)
+const SHAFT_FAR_STEPS: u32 = 4u;
+const SHAFT_REACH: f32 = 420.0;
 
 // Whether the sun reaches a point in the air (1) or a house or a crown stands between (0).
 fn sun_reaches(x: vec3<f32>) -> f32 {
@@ -123,8 +129,10 @@ fn sun_shafts(c: vec3<f32>, d: vec3<f32>, len: f32, jitter: f32) -> vec3<f32> {
     if (camera.shadow.x < 0.5 || s.z <= 0.0 || max(e_sun.r, e_sun.g) < 1e-4) {
         return vec3<f32>(0.0);
     }
-    let end = min(len, SHAFT_REACH);
+    let end = min(len, SHAFT_NEAR);
     let dt = end / f32(SHAFT_STEPS);
+    let far_len = max(min(len, SHAFT_REACH) - SHAFT_NEAR, 0.0);
+    let dt_far = far_len / f32(SHAFT_FAR_STEPS);
     let cos_t = dot(s, d);
     let p_fog = hg_phase(cos_t, 0.55) * 0.9;
     let p_air = hg_phase(cos_t, 0.7);
@@ -136,8 +144,13 @@ fn sun_shafts(c: vec3<f32>, d: vec3<f32>, len: f32, jitter: f32) -> vec3<f32> {
         return vec3<f32>(0.0);
     }
     var shade = vec3<f32>(0.0);
-    for (var i = 0u; i < SHAFT_STEPS; i = i + 1u) {
-        let t = (f32(i) + jitter) * dt;
+    for (var i = 0u; i < SHAFT_STEPS + SHAFT_FAR_STEPS; i = i + 1u) {
+        let far = i >= SHAFT_STEPS;
+        if (far && far_len <= 0.0) {
+            break;
+        }
+        let t = select((f32(i) + jitter) * dt, SHAFT_NEAR + (f32(i - SHAFT_STEPS) + jitter) * dt_far, far);
+        let w = select(dt, dt_far, far);
         let x = c + d * t;
         let lit = sun_reaches(x);
         if (lit >= 0.999) {
@@ -147,7 +160,7 @@ fn sun_shafts(c: vec3<f32>, d: vec3<f32>, len: f32, jitter: f32) -> vec3<f32> {
         let s_fog = enh.fog.x * exp(-enh.fog.y * h);
         let s_air = enh.fog.w * exp(-h / 1500.0);
         let tau = layer_depth(enh.fog.x, enh.fog.y, h0, h, t) + layer_depth(enh.fog.w, 1.0 / 1500.0, h0, h, t);
-        shade = shade + vec3<f32>((1.0 - lit) * (s_fog * p_fog + s_air * p_air) * exp(-tau) * dt);
+        shade = shade + vec3<f32>((1.0 - lit) * (s_fog * p_fog + s_air * p_air) * exp(-tau) * w);
     }
     return -shade * e_sun;
 }
@@ -227,10 +240,11 @@ fn sun_glare(dir: vec3<f32>) -> vec3<f32> {
         return vec3<f32>(0.0);
     }
     let cos_t = clamp(dot(dir, s), -1.0, 1.0);
-    let theta = max(degrees(acos(cos_t)), 0.25);
-    if (theta > 100.0) {
+    // (cos 100 degrees: past it there is no veil, and the arc cosine is not needed)
+    if (cos_t < -0.17364818) {
         return vec3<f32>(0.0);
     }
+    let theta = max(degrees(acos(cos_t)), 0.25);
     let seen = textureLoad(t_fog, vec2<i32>(0, i32(textureDimensions(t_fog).y) - 1), 0).r;
     if (seen <= 0.0) {
         return vec3<f32>(0.0);
@@ -262,6 +276,18 @@ fn gathered_air_light(at: vec2<f32>, len: f32) -> vec3<f32> {
     let f = hp - floor(hp);
     // (the last row is the sun's, see `fs_fog_lamps`)
     let hd = vec2<i32>(textureDimensions(t_fog)) - vec2<i32>(1, 2);
+    // (not one of the sixteen half-size rays holds any light: no lamp's cone and no shaft
+    // here - most of a picture in clear air - and the weighted sum below would only add up
+    // zeros, so it is not worked out. All sixteen, the whole footprint of the tent: a lit
+    // ray at its edge still lights the pixel)
+    var lit = false;
+    for (var k = 0; k < 16; k = k + 1) {
+        let o = vec2<i32>(k & 3, k >> 2) - vec2<i32>(1);
+        lit = lit || any(textureLoad(t_fog, clamp(base + o, vec2<i32>(0), hd), 0).rgb != vec3<f32>(0.0));
+    }
+    if (!lit) {
+        return vec3<f32>(0.0);
+    }
     var sum = vec3<f32>(0.0);
     var wsum = 0.0;
     // (a twig or a wire none of the four rays met: the one nearest in distance)

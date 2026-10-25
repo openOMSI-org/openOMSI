@@ -21,7 +21,10 @@ pub(crate) fn load() -> Plugins {
     if dirs.is_empty() {
         return Plugins::default();
     }
-    Plugins::load(&dirs, &HostConfig::detect())
+    let permissions = std::sync::Arc::new(omsi_plugin::api::process::ProcessPermissions::new(
+        crate::lan::data_dir().map(|p| p.join("plugin-process-permissions.json")),
+    ));
+    Plugins::load_with_process_permissions(&dirs, &HostConfig::detect(), omsi_plugin::api::process::ProcessGrants::from_env(), permissions)
 }
 
 /// The game's side of a plugin frame: the whole game (the plugins taken out of it for the
@@ -127,6 +130,27 @@ pub(crate) struct Seen {
 }
 
 impl crate::App {
+    /// The scripts of the player's vehicle (`[vehicle_script]` in its file) run as plugins for
+    /// as long as it is the player's: another vehicle (or none) stops them and starts its own.
+    pub(crate) fn sync_vehicle_scripts(&mut self, plugins: &mut Plugins) {
+        let now = self.player.as_ref().map(|p| p.vehicle.ty.def.path.clone());
+        if now == self.integrations.vehicle_scripts_of {
+            return;
+        }
+        let files = self.player.as_ref().map(|p| p.vehicle.ty.def.script_files.clone()).unwrap_or_default();
+        if files.is_empty() && self.integrations.vehicle_scripts_of.is_none() {
+            // (nothing running, nothing to start: just remember the vehicle)
+            self.integrations.vehicle_scripts_of = now;
+            return;
+        }
+        if omsi_cfg::flags::OMSI_NO_PLUGINS.is_set() {
+            self.integrations.vehicle_scripts_of = now;
+            return;
+        }
+        plugins.attach_vehicle_scripts(&files);
+        self.integrations.vehicle_scripts_of = now;
+    }
+
     /// What happened that the plugins hear about but cannot see by looking: the game
     /// pausing (they hear it at once, then stand still) and going on, the menu, people
     /// getting in and out of the bus, players joining and leaving, buttons of the
@@ -422,6 +446,45 @@ impl PluginIo for Io<'_> {
         }
         crate::plugin_io::data::query(self.veh_mut().ok_or("no player vehicle")?, query, args)
     }
+    fn object_owned_by(&self, id: i64, plugin: &str) -> bool {
+        self.app().is_some_and(|a| crate::plugin_io::object::owned_by(a, id, plugin))
+    }
+    fn object_list(&self, plugin: &str) -> Vec<i64> {
+        self.app().map(|a| crate::plugin_io::object::list(a, plugin)).unwrap_or_default()
+    }
+    fn object_info(&self, id: i64) -> Option<omsi_plugin::ObjectInfo> {
+        crate::plugin_io::object::info(self.app()?, id)
+    }
+    fn object_var(&mut self, id: i64, name: &str) -> Option<f32> {
+        crate::plugin_io::object::var(self.app_mut()?, id, name)
+    }
+    fn object_set_var(&mut self, id: i64, name: &str, v: f32) -> bool {
+        self.app_mut().is_some_and(|a| crate::plugin_io::object::set_var(a, id, name, v))
+    }
+    fn object_str(&mut self, id: i64, name: &str) -> Option<String> {
+        crate::plugin_io::object::str_var(self.app_mut()?, id, name)
+    }
+    fn object_set_str(&mut self, id: i64, name: &str, v: &str) -> bool {
+        self.app_mut().is_some_and(|a| crate::plugin_io::object::set_str(a, id, name, v))
+    }
+    fn object_trigger(&mut self, id: i64, name: &str) -> bool {
+        self.app_mut().is_some_and(|a| crate::plugin_io::object::trigger(a, id, name))
+    }
+    fn object_meshes(&self, id: i64) -> Vec<String> {
+        // (reads only: the instance is borrowed through the list)
+        let s = &self.app().map(|a| &a.session.scenery);
+        match s.and_then(|s| s.find(id).map(|i| s.get(i))) {
+            Some(o) => (0..o.inst.mesh_count()).filter_map(|i| o.inst.mesh_file(i).map(str::to_string)).collect(),
+            None => Vec::new(),
+        }
+    }
+    fn object_set_mesh(&mut self, id: i64, mesh: &str, t: Option<omsi_plugin::MeshTransform>) -> bool {
+        self.app_mut().is_some_and(|a| crate::plugin_io::object::set_mesh(a, id, mesh, t))
+    }
+    fn object_set_visible(&mut self, id: i64, mesh: &str, v: Option<bool>) -> bool {
+        self.app_mut().is_some_and(|a| crate::plugin_io::object::set_visible(a, id, mesh, v))
+    }
+
     fn system(&mut self, name: &str) -> Option<f32> {
         let v = SysVar::from_name(name)?;
         self.veh_mut().map(|veh| veh.host.sys_var(v))
@@ -783,6 +846,12 @@ impl PluginIo for Io<'_> {
     }
     fn duty_end(&mut self) -> bool {
         self.app_mut().is_some_and(pduty::finish)
+    }
+    fn duty_set_auto_ibis(&mut self, owner: u64, on: bool) -> bool {
+        self.app_mut().is_some_and(|a| pduty::set_auto_ibis(a, owner, on))
+    }
+    fn duty_type_ibis(&mut self) -> bool {
+        self.app_mut().is_some_and(pduty::type_ibis)
     }
     fn duty_set_closed_stops(&mut self, stops: &[String], via: &str) -> bool {
         self.app_mut().is_some_and(|a| pduty::set_closed_stops(a, stops, via))

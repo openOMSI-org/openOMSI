@@ -89,6 +89,11 @@ pub struct MaterialDef {
     pub use_text_texture: Option<i32>,
     pub alphascale: Option<String>,
     pub freetex: Option<(String, String)>,
+    /// Every `[matl_freetex]` (texture, string variable) of the record in order: Omsi.exe
+    /// appends each to the record's own list (0x5f54de), and a `[matl_item]` starts with a
+    /// copy of the slot's list, so an item shows the plain slot's free pictures beside the
+    /// ones it adds, and none of another item's. `freetex` is the last of them.
+    pub freetexes: Vec<(String, String)>,
     pub lightmap: Option<(String, String)>,
     /// Every `[matl_lightmap]` of the material in order (OMSI keeps them all, a
     /// texture and a variable each: the LiAZ's saloon has one per lighting circuit);
@@ -135,6 +140,9 @@ impl MaterialDef {
             if self.border_color == [0.0; 4] {
                 self.border_color = base.border_color;
             }
+        }
+        if self.freetexes.is_empty() {
+            self.freetexes = base.freetexes.clone();
         }
         if self.lightmaps.is_empty() && !base.lightmaps.is_empty() {
             self.lightmaps = base.lightmaps.clone();
@@ -1093,6 +1101,7 @@ impl Model {
                 let t = r.str().to_string();
                 let v = r.str().to_string();
                 if let Some(m) = self.cur_matl() {
+                    m.freetexes.push((t.clone(), v.clone()));
                     m.freetex = Some((t, v));
                 }
             }
@@ -1514,6 +1523,21 @@ mod tests {
             assert!(m.text_textures.iter().all(|t| t.full_color == want), "{flag}");
             assert_eq!(m.text_textures.len(), 2);
         }
+    }
+
+    /// Each `[matl_item]` keeps the slot's free textures and adds its own; what one item
+    /// adds stays out of the slot and out of the other items.
+    #[test]
+    fn free_textures_are_listed_per_record() {
+        let text = "[mesh]\npanel.o3d\n[matl_change]\nface.dds\n0\npanel_power\n[matl_freetex]\nface.dds\npanel_face\n[matl_item]\n[matl_nightmap]\nglow_off.bmp\n[matl_freetex]\nglow_off.bmp\npanel_glow\n[matl_item]\n[matl_lightmap]\nlit.bmp\npanel_lit\n";
+        let m = Model::parse(&CfgFile::from_str("model.cfg", text));
+        let mats = &m.meshes[0].materials;
+        let plain = mats.iter().find(|x| !x.item && x.change.is_none()).unwrap();
+        let items: Vec<&MaterialDef> = mats.iter().filter(|x| x.item).collect();
+        let vars = |d: &MaterialDef| d.freetexes.iter().map(|f| f.1.clone()).collect::<Vec<_>>();
+        assert_eq!(vars(plain), ["panel_face"]);
+        assert_eq!(vars(items[0]), ["panel_face", "panel_glow"]);
+        assert_eq!(vars(items[1]), ["panel_face"]);
     }
 
     /// A `[matl_item]` is a copy of the material before it: the SD77's lit roller blind

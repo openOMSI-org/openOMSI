@@ -47,8 +47,8 @@ const RAIN_LAYERS = array<vec3<f32>, 3>(vec3<f32>(5.0, -2.5, 6.0), vec3<f32>(14.
 // precipitation's roof map has it (none without the map). Each splash takes a new place
 // round the camera every time it comes round again; the most of them close by.
 fn splash(vid: u32, s: u32) -> RainOut {
-    let corners = array<vec2<f32>, 6>(vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0));
-    let c = corners[vid % 6u];
+    // (a strip of four vertices)
+    let c = vec2<f32>(f32(i32(vid & 1u) * 2 - 1), f32(i32(vid >> 1u) * 2 - 1));
     var out: RainOut;
     out.clip = vec4<f32>(0.0, 0.0, 2.0, 1.0);
     out.uv = vec2<f32>(0.0);
@@ -104,8 +104,7 @@ fn vs_rain(@builtin(vertex_index) vid: u32, @builtin(instance_index) k: u32) -> 
         return splash(vid, k - u32(rp.view.w));
     }
     // across (-1, 1) and along (0 the tail, 1 the head)
-    let corners = array<vec2<f32>, 6>(vec2<f32>(-1.0, 0.0), vec2<f32>(1.0, 0.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 0.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0));
-    let c = corners[vid % 6u];
+    let c = vec2<f32>(f32(i32(vid & 1u) * 2 - 1), f32(vid >> 1u));
     var out: RainOut;
     out.clip = vec4<f32>(0.0, 0.0, 2.0, 1.0);
     out.uv = vec2<f32>(0.0);
@@ -130,7 +129,9 @@ fn vs_rain(@builtin(vertex_index) vid: u32, @builtin(instance_index) k: u32) -> 
     let world_cam = camera.cam_pos.xyz + vec3<f32>(camera.world_origin.xy, 0.0);
     let vel = vec3<f32>(rp.wind.xy, -fall);
     let lo = world_cam + vec3<f32>(-lh.x, -lh.x, lh.y);
-    let q = lo + (((h1.xyz * size + vel * t - lo) % size) + size) % size;
+    // (the field repeats every `size`: the place wrapped into one copy of it)
+    let wrapped = (h1.xyz * size + vel * t - lo) / size;
+    let q = lo + (wrapped - floor(wrapped)) * size;
     let p = q - vec3<f32>(camera.world_origin.xy, 0.0);
     // a denser layer thins out with the distance from the eye, over the whole of its reach,
     // into the thinner one round it: faded only at its edges, it stood round the camera as a
@@ -143,13 +144,19 @@ fn vs_rain(@builtin(vertex_index) vid: u32, @builtin(instance_index) k: u32) -> 
     // a drop right at the eye is a blur too wide and faint to see, not a streak
     let near = smoothstep(0.6, 1.6, length(p - camera.cam_pos.xyz));
     // the streak: from where the drop was against the eye a streak's time ago to where it is
-    let tail = p - (vel - rp.eye.xyz) * rp.eye.w;
     let ch = camera.view_proj * vec4<f32>(p, 1.0);
-    let ct = camera.view_proj * vec4<f32>(tail, 1.0);
-    let cu = camera.view_proj * vec4<f32>(p + camera.cam_up.xyz, 1.0);
-    if (in_own_vehicle(p) || under_roof(p, rp.roof, rp.roof_on.x) || min(ch.w, ct.w) < 0.1 || fade * near < 0.01) {
+    // (the field reaches all round the camera, most of it out of the picture: a drop well
+    // beyond its edge - a streak is a few per cent of the picture long - is let go before
+    // the rest of its work, and so is one too faint to see)
+    if (fade * near < 0.01 || ch.w < 0.1 || abs(ch.x) > 1.5 * ch.w || abs(ch.y) > 1.5 * ch.w) {
         return out;
     }
+    let tail = p - (vel - rp.eye.xyz) * rp.eye.w;
+    let ct = camera.view_proj * vec4<f32>(tail, 1.0);
+    if (ct.w < 0.1 || in_own_vehicle(p) || under_roof(p, rp.roof, rp.roof_on.x)) {
+        return out;
+    }
+    let cu = camera.view_proj * vec4<f32>(p + camera.cam_up.xyz, 1.0);
     let half_px = 0.5 * rp.view.xy;
     let sh = ch.xy / ch.w * half_px;
     let st = ct.xy / ct.w * half_px;

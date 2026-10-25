@@ -292,9 +292,22 @@ pub struct Navigator {
     /// came to (physical pixels; 0 before it is laid out). It takes the stop list's place.
     pub dock: Option<f32>,
     /// Where that board is this frame: its top left, width and the most height it may take
-    /// (physical pixels on the window), the navigator's scale, and whether the navigator
-    /// made room for the panel yet. None: no board shown.
-    pub dock_slot: Option<([f32; 4], f32, bool)>,
+    /// (physical pixels on the window), the navigator's scale, whether the navigator made
+    /// room for the panel yet, and whether it is the whole frame (`frame_panel`). None: no
+    /// board shown.
+    pub dock_slot: Option<([f32; 4], f32, bool, bool)>,
+    /// A plugin's panel that fills the navigator's whole frame (`frame = true`): it takes the
+    /// map's, the place row's and the board's place, and the map shows only where the panel
+    /// says (physical pixels, from the last frame). Set, `dock_slot` is the whole frame.
+    pub frame_panel: Option<FramePanel>,
+    /// That panel's map in this frame's picture (texture pixels) and its cards, for `draw`:
+    /// Some(None) a frame without a map; None no such panel.
+    framed: Option<Option<(Rect, bool)>>,
+    /// The colour that panel gives the navigator's card (None: the card's own).
+    frame_card: Option<Color>,
+    /// What `framed` and `frame_card` were when the picture was last drawn (drawn again at
+    /// once when they change).
+    framed_drawn: (Option<Option<(Rect, bool)>>, Option<Color>),
     /// A board was asked for once: the lower part opened for it by itself then.
     dock_seen: bool,
     /// The board's height in this frame's picture (physical pixels), for `draw`.
@@ -530,6 +543,10 @@ impl Navigator {
             schedule: false,
             dock: None,
             dock_slot: None,
+            frame_panel: None,
+            framed: None,
+            frame_card: None,
+            framed_drawn: (None, None),
             dock_seen: false,
             board: None,
             speed_avg: 8.0,
@@ -1157,7 +1174,7 @@ impl Navigator {
         let start = scene.overlays.len();
         self.frame(renderer, scene, f);
         scene.shift_overlays(start, origin_x);
-        if let Some((r, _, _)) = self.dock_slot.as_mut() {
+        if let Some((r, ..)) = self.dock_slot.as_mut() {
             r[0] += origin_x;
         }
         for rect in [&mut self.panel_rect, &mut self.city.rect] {
@@ -1290,17 +1307,31 @@ impl Navigator {
         }
         let loc_h = self.place_row_height(s);
         let room = (sh - map_h - loc_h - 32.0 * s).max(40.0 * s).round();
-        self.board = self.dock.filter(|_| self.schedule && !self.cockpit_display && self.shown > 0.99).map(|h| h.max(1.0).min(room).round());
+        // (a plugin's panel in the whole frame: as tall as it came to and as the window has
+        // room for - the map's height until it is laid out -, the map where it says)
+        let whole = self.frame_panel.filter(|_| !self.cockpit_display && self.shown > 0.99);
+        let frame_room = (sh - 32.0 * s).max(map_h).round();
+        self.framed = whole.map(|p| p.map.map(|m| framed_map(m, pw, p.height.max(1.0).min(frame_room).round())).filter(|(r, _)| r.w >= 1.0 && r.h >= 1.0));
+        self.frame_card = whole.and_then(|p| p.background);
+        self.board = self.dock.filter(|_| whole.is_none() && self.schedule && !self.cockpit_display && self.shown > 0.99).map(|h| h.max(1.0).min(room).round());
         let sched = match self.board {
             Some(h) => h,
             None if self.schedule => (f.stops.len().clamp(1, 5) as f32 * 22.0 + 12.0) * s,
             None => 0.0,
         };
-        let ph = (map_h + loc_h + sched).round();
+        let ph = match whole {
+            Some(p) if p.height > 0.0 => p.height.min(frame_room).round(),
+            Some(_) => map_h,
+            None => (map_h + loc_h + sched).round(),
+        };
         let (w, h) = (pw as u32, ph as u32);
         let (x0, y0) = self.panel_origin((sw, sh), (pw, ph), f.touch, f.info_rect, f.touch_gap);
-        if self.board.is_some() && !self.city.open {
-            self.dock_slot = Some(([x0, y0 + (map_h + loc_h).round(), pw, room], s, self.dock.is_some_and(|h| h > 0.0)));
+        if !self.city.open {
+            if let Some(p) = whole {
+                self.dock_slot = Some(([x0, y0, pw, frame_room], s, p.height > 0.0, true));
+            } else if self.board.is_some() {
+                self.dock_slot = Some(([x0, y0 + (map_h + loc_h).round(), pw, room], s, self.dock.is_some_and(|h| h > 0.0), false));
+            }
         }
 
         if self.gpu.is_none() {
@@ -1324,8 +1355,10 @@ impl Navigator {
         }
         self.draw_every = draw_every(self.draw_every, self.frame_dt);
         self.frames_since_drawn = self.frames_since_drawn.saturating_add(1);
-        if !self.city.open && (resized || self.frames_since_drawn >= self.draw_every) {
+        // (a frame panel's map moved, or came or went: at once, not a few frames late)
+        if !self.city.open && (resized || self.frames_since_drawn >= self.draw_every || (self.framed, self.frame_card) != self.framed_drawn) {
             self.frames_since_drawn = 0;
+            self.framed_drawn = (self.framed, self.frame_card);
             self.draw(renderer, &view, (w, h), map_h, f);
         }
         // (the small navigator steps aside while the city map is open)
@@ -1339,6 +1372,31 @@ impl Navigator {
         }
     }
 
+}
+
+/// A plugin's panel that fills the navigator's frame, as the panels laid it out (physical
+/// pixels): its height (0 before it is laid out) and where its map goes.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct FramePanel {
+    pub height: f32,
+    pub map: Option<FrameMap>,
+    /// The colour of the navigator's card under it (its `background`; None: the card's own).
+    pub background: Option<Color>,
+}
+
+/// The navigator's map in a frame panel: x, y, width and height from the panel's top left
+/// (physical pixels), and whether the navigator's cards go over it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FrameMap {
+    pub rect: [f32; 4],
+    pub cards: bool,
+}
+
+/// Where a frame panel's map goes in a picture `pw` x `ph`: its rectangle kept inside it.
+fn framed_map(m: FrameMap, pw: f32, ph: f32) -> (Rect, bool) {
+    let [x, y, w, h] = m.rect;
+    let (x, y) = (x.clamp(0.0, pw), y.clamp(0.0, ph));
+    (Rect::new(x, y, w.clamp(0.0, pw - x), h.clamp(0.0, ph - y)), m.cards)
 }
 
 /// The lanes of `net` that are traffic lane `l`: the same path by its key, else (a junction's

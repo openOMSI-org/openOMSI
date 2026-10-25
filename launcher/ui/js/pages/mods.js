@@ -169,7 +169,7 @@ export function ModsPage() {
                   })}
                 </div>`}
         </${Card}>
-        ${status?.waiting?.length > 0 && html`<${Card} title="Waiting for their bus" hint="Packs installed before the bus they belong to: they go in once it is there.">
+        ${status?.waiting?.length > 0 && html`<${Card} title="Waiting for their bus" hint="Packs installed before the bus they belong to: they go in once it is there." actions=${html`<${Button} small kind="ghost" icon="alert" label="Details in Troubleshooting" onClick=${() => set({ page: 'troubleshoot' })} />`}>
           <div class="row wrap">${status.waiting.map((w) => html`<${Tag}>${w}</${Tag}>`)}</div>
         </${Card}>`}
         ${offers.map((o) => html`<${Notice} key=${o.map}><b>${t('Share the HOF files of {map} with every bus?', { map: o.map })}</b><div class="small selectable">${o.files.join(', ')}</div><div>${t("Every bus can then show this map's lines and destinations. Some maps have one HOF file per company or bus: sharing them can give buses with their own IBIS wrong destinations.")}</div><div class="row wrap" style="gap:8px;margin-top:6px"><${Button} small kind="primary" label="Share with every bus" onClick=${() => shareHofs(o.map)} /><${Button} small label="Not for this map" onClick=${() => decline(o.map)} /></div></${Notice}>`)}

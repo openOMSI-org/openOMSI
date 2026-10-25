@@ -17,6 +17,9 @@ impl App {
         if self.net.lan.is_none() {
             self.paused = true;
         }
+        self.shell.pause_category = Default::default();
+        self.shell.pause_hidden = true;
+        self.shell.quick_edit = false;
         self.menus.game_menu = Some(0);
         self.menus.menu_top = None;
         self.menus.menu_kbd = true;
@@ -24,6 +27,7 @@ impl App {
     }
 
     pub(crate) fn close_game_menu(&mut self) {
+        self.shell.quick_edit = false;
         self.menus.key_capture = None;
         if self.menus.menu_edit_number {
             if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);}
@@ -69,21 +73,70 @@ impl App {
             self.chooser_key(code);
             return;
         }
-        let n = self.game_menu_items().len();
+        if self.quick_editor_key(code) { return; }
         let sel = self.menus.game_menu.unwrap_or(0);
         let modified = self.input.keys.iter().any(|key| {
             matches!(*key, KeyCode::ControlLeft | KeyCode::ControlRight | KeyCode::AltLeft | KeyCode::AltRight | KeyCode::ShiftLeft | KeyCode::ShiftRight)
         });
         self.menus.menu_top = None;
+        if code == KeyCode::KeyE && !modified && !self.vr_active() && self.shell.pause_category == crate::shell::pause::navigation::Category::Home {
+            self.shell.quick_edit = true;
+            self.shell.quick_focus = 0;
+            self.shell.last_sel = None;
+            return;
+        }
         match code {
             // P changes only the simulation state, even while a menu is open.
             KeyCode::KeyP if !modified => self.toggle_pause(),
             KeyCode::Escape => self.close_game_menu(),
-            KeyCode::ArrowUp | KeyCode::KeyW => self.menus.game_menu = Some(self.menu_step(sel, n, false)),
-            KeyCode::ArrowDown | KeyCode::KeyS => self.menus.game_menu = Some(self.menu_step(sel, n, true)),
+            KeyCode::ArrowUp | KeyCode::KeyW => self.menus.game_menu = Some(self.pause_menu_step(sel, false)),
+            KeyCode::ArrowDown | KeyCode::KeyS => self.menus.game_menu = Some(self.pause_menu_step(sel, true)),
+            KeyCode::ArrowLeft | KeyCode::KeyA if !self.vr_active() => self.step_pause_category(false),
+            KeyCode::ArrowRight | KeyCode::KeyD if !self.vr_active() => self.step_pause_category(true),
+            KeyCode::Tab if !self.vr_active() => {
+                let backwards = self.input.keys.contains(&KeyCode::ShiftLeft) || self.input.keys.contains(&KeyCode::ShiftRight);
+                self.step_pause_category(!backwards);
+            }
             KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::Space => self.menu_choose(event_loop, sel),
             _ => {}
         }
+    }
+
+    /// The category is only a view of the permission-filtered menu, never a second action list.
+    pub(crate) fn switch_pause_category(&mut self, category: crate::shell::pause::navigation::Category) {
+        let menu = self.game_menu_items();
+        let ids: Vec<_> = menu.iter().map(|line| line.0).collect();
+        if !crate::shell::pause::navigation::Category::available(&ids).contains(&category) {
+            return;
+        }
+        self.close_list();
+        self.shell.pause_category = category;
+        self.shell.pause_hidden = false;
+        self.shell.quick_edit = false;
+        self.menus.game_menu = Some(crate::shell::pause::quick_actions::indices(category, &menu, &self.settings.pause_quick_actions).first().copied().unwrap_or(0));
+        self.shell.last_sel = None;
+    }
+
+    fn step_pause_category(&mut self, forward: bool) {
+        let menu = self.game_menu_items();
+        let ids: Vec<_> = menu.iter().map(|line| line.0).collect();
+        let categories = crate::shell::pause::navigation::Category::available(&ids);
+        let current = categories.iter().position(|c| *c == self.shell.pause_category).unwrap_or(0);
+        let next = if forward { (current + 1) % categories.len() } else { (current + categories.len() - 1) % categories.len() };
+        self.switch_pause_category(categories[next]);
+    }
+
+    fn pause_menu_step(&self, from: usize, down: bool) -> usize {
+        let menu = self.game_menu_items();
+        if self.vr_active() {
+            return self.menu_step(from, menu.len(), down);
+        }
+        let ids: Vec<_> = menu.iter().map(|line| line.0).collect();
+        let mut indices: Vec<_> = ids.iter().position(|id| *id == "resume").into_iter().collect();
+        indices.extend(crate::shell::pause::quick_actions::indices(self.shell.pause_category, &menu, &self.settings.pause_quick_actions));
+        indices.extend(ids.iter().position(|id| *id == "quit"));
+        indices.retain(|k| !self.menu_item_off(*k));
+        crate::shell::pause::navigation::step(&indices, from, down).unwrap_or(from)
     }
 
     /// The open drop-down's scroll bar held with the mouse at height `y`: the first entry
@@ -109,6 +162,7 @@ impl App {
     pub(crate) fn menu_wheel(&mut self, amount: f32) {
         // (the pause menu of the launcher's toolkit scrolls what is under the mouse itself)
         if self.shell_takes_mouse() {
+            self.menus.menu_kbd = false;
             self.shell.wheel(amount);
             return;
         }

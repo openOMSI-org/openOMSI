@@ -1,0 +1,10 @@
+[package]
+name = "omsi-transit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Transit network data of a map: stations, routes of segments and services, overhead wire, third rail, switches, depots and signals (the map's transport folder)"
+
+[dependencies]
+omsi-cfg = { path = "../omsi-cfg" }
+log.workspace = true

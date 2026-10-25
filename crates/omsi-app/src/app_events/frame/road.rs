@@ -63,6 +63,9 @@ pub(super) fn traffic(cx: TrafficCx, dt: f32) {
             cx.perf.profile.add(crate::profile_keys::ProfKey::TrafficPopulate, __t5.elapsed().as_secs_f64());
         }
         if let Some(s) = cx.traffic.schedule.as_mut() {
+            if let Some(blocks) = s.poll_transit() {
+                t.sim.set_blocks(blocks);
+            }
             s.tick_t -= dt;
             // (the first look goes with the first population: the trips under way are put
             // out at the start)

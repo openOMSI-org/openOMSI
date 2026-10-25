@@ -201,6 +201,17 @@ pub struct Lighting {
     /// Ångström exponent and its layer's depth (m); without it the day's own air is drawn
     /// from the calendar (`day_air`).
     pub air: Option<[f32; 3]>,
+    /// The cumulus layer's base and top over the ground (m) as a weather model knows them
+    /// (the condensation level and where the convection stops); without it the stock layer
+    /// of 1400-2800 m.
+    pub cloud_layer: Option<[f32; 2]>,
+    /// Altocumulus cover of the layer at 2-6 km (0..1).
+    pub alto: f32,
+    /// The optical depth of the grey deck's liquid water as a weather model knows it;
+    /// without it a stratus' 15 and, in rain, up to a nimbostratus' 60.
+    pub deck_tau: Option<f32>,
+    /// Thunderstorm activity (0 none .. 1 violent): lightning flashes and the storm's cloud.
+    pub storm: f32,
     /// Simulation seconds for scene animation; standalone views use elapsed real time.
     pub animation_time: Option<f32>,
 }
@@ -283,6 +294,10 @@ impl Default for Lighting {
             day_seed: 0,
             veil: 0.0,
             air: None,
+            cloud_layer: None,
+            alto: 0.0,
+            deck_tau: None,
+            storm: 0.0,
             animation_time: None,
         }
     }

@@ -34,6 +34,8 @@ pub const NEAR_HIDE: f64 = 350.0;
 /// Within this distance of the camera an AI vehicle is animated and drawn even out of the
 /// view (m): the mirrors look behind, and a car beside the view throws its shadow into it.
 pub const UNSEEN_NEAR: f64 = 80.0;
+/// Beyond this distance a car out of the view runs its script only a few times a second (m).
+pub const UNSEEN_SCRIPT_RANGE: f64 = 150.0;
 
 /// How far above where a LAN player's vehicle stands their eye is taken to be (m): a
 /// driver's in a bus.
@@ -162,6 +164,12 @@ impl TrafficSim {
             .map(|v| v.hides(p, r, || occluded(&v)))
             .unwrap_or(true)
             && self.lan_eyes.iter().all(|v| v.hides(p, r, || occluded(v)))
+    }
+
+    /// Whether `test` holds for everybody looking (the player's camera and the LAN eyes);
+    /// true when nobody looks.
+    pub fn every_eye(&self, mut test: impl FnMut(&Viewer) -> bool) -> bool {
+        self.viewer.iter().chain(self.lan_eyes.iter()).all(|v| test(v))
     }
 
     /// How far the nearest one looking (the player's camera or a LAN player's eye) is from

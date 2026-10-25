@@ -3,7 +3,7 @@ import { S, useStore, remembered, remember } from '../store.js';
 import { t } from '../i18n.js';
 import { Icon } from '../icons.js';
 import { Search, Segmented, Empty, Spinner, Notice, Field, Select, Input, Button, Tag } from '../ui.js';
-import { choose, curBus, busFile, serverBuses, noServerBus } from '../data.js';
+import { choose, curBus, busFile, serverBuses, noServerBus, curMap, transportRefusal } from '../data.js';
 import { families, toggleFavourite } from './bus-picker.js';
 
 const favKey = (file) => file.replace(/\\/g, '/').toLowerCase();
@@ -41,12 +41,15 @@ function Star({ file }) {
     onClick=${(e) => (e.stopPropagation(), toggleFavourite(file))}><${Icon} name="star" /></button>`;
 }
 
+const curMapRefusal = (v) => transportRefusal(curMap(), v);
+
 function BusRow({ v, label, sub, indent, chosen }) {
   return html`<div class=${'bus-row bus' + (indent === 2 ? ' deep' : '') + (chosen ? ' on' : '')} aria-current=${chosen} ...${press(() => takeBus(v.file))}>
     <div class="grow">
       <div class="title ellipsis" title=${label}>${label}</div>
       ${sub && html`<div class="sub ellipsis">${sub}</div>`}
     </div>
+    ${curMapRefusal(v) && html`<span class="warn-fg" title=${curMapRefusal(v)}><${Icon} name="alert" size=${16} /></span>`}
     ${v.missing_packs?.length > 0 && html`<span class="warn-fg" title=${t('Parts missing')}><${Icon} name="alert" size=${16} /></span>`}
     ${v.installed && html`<${Tag}>${t('Mod')}</${Tag}>`}
     <${Star} file=${v.file} />

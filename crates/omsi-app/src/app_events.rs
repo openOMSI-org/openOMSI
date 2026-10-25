@@ -102,6 +102,7 @@ impl ApplicationHandler for App {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        if self.process_permission_event(event_loop, &event) { return; }
         match event {
             WindowEvent::CloseRequested => {
                 self.finish_vr_nav_edit();
@@ -484,6 +485,8 @@ impl ApplicationHandler for App {
     /// quit signal): the session is written and the LAN peers hear that we left, before
     /// anything else is torn down (Cmd+Q ends the process without returning from the loop).
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
+        // (OMSI_PROFILE: the summary when the player closes the game, not only after --exit-after)
+        self.log_profile_summary();
         crate::game_lists::flush_settings(true);
         self.abort_optimiser();
         self.finish_session();
@@ -514,6 +517,7 @@ impl App {
 
     /// The mouse wheel (or a pinch of two fingers): `amount` notches, up positive.
     pub(crate) fn wheel(&mut self, amount: f32) {
+        if self.has_process_permission_prompt() { self.shell.wheel(amount); return; }
         let sim = self.player_to_drawn_pose();
         self.wheel_now(amount);
         self.player_back_to_sim_pose(sim);
@@ -633,6 +637,7 @@ impl App {
 
     /// The left mouse button (or a finger's tap) where the cursor is.
     pub(crate) fn left_button(&mut self, event_loop: &ActiveEventLoop, pressed: bool) {
+        if self.has_process_permission_prompt() { self.shell.button(pressed); return; }
         if let Some(edit) = self.xr.vr_nav_edit.as_mut() { edit.moving = pressed; return; }
         // the pause menu (and the photo mode) of the launcher's toolkit take the clicks
         if self.shell_takes_mouse() {

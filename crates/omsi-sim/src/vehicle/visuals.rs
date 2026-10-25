@@ -108,8 +108,15 @@ impl VehicleInstance {
         if !std::mem::take(&mut self.trailers_stepped) {
             self.update_trailers(dt);
         }
+        // a raised pantograph is shown where its head meets the wire, not at the full travel
+        // the script's variable says: shown that value for the animations only
+        let shown = self.pantograph_shown();
+        let raw = shown.map(|(id, v)| (id as usize, std::mem::replace(&mut self.state.vars[id as usize], v)));
         for (i, a) in self.animators.iter_mut().enumerate() {
             self.mesh_transforms[i] = a.update(dt, &self.state.vars);
+        }
+        if let Some((id, v)) = raw {
+            self.state.vars[id] = v;
         }
         crate::anim::apply_parents(&self.animators, &mut self.mesh_transforms);
         self.seat_wheels();

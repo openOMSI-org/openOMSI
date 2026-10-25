@@ -52,6 +52,7 @@ pub(crate) fn build(device: &wgpu::Device, format: wgpu::TextureFormat, hdr_form
         tonemap: post_pipeline("fs_tonemap", format),
         tonemap_encoded: post_pipeline("fs_tonemap_encoded", wgpu::TextureFormat::Rgba8Unorm),
         fxaa: post_pipeline("fs_fxaa", format),
+        history: post_pipeline("fs_history", wgpu::TextureFormat::Rgba16Float),
     };
     let one = wgpu::Extent3d {
         width: 1,

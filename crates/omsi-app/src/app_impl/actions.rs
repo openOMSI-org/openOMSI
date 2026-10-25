@@ -3,8 +3,9 @@
 use super::*;
 
 impl App {
-    /// Shift+N: the navigator, the navigator with the schedule, off. True in VR (where the
-    /// key is used up).
+    /// Shift+N: the navigator, the navigator with the schedule, off (with a plugin's panel in
+    /// its whole frame, which has no lower part: on, off). True in VR (where the key is used
+    /// up).
     pub(crate) fn cycle_navigator(&mut self) -> bool {
         if self.vr_active() {
             if !self.vr_nav_profile().enabled {
@@ -19,6 +20,10 @@ impl App {
         }
         if let Some(n) = self.menus.navigator.as_mut() {
             match (n.enabled, n.schedule) {
+                (true, _) if n.frame_panel.is_some() => {
+                    n.enabled = false;
+                    n.schedule = false;
+                }
                 (true, false) => n.schedule = true,
                 (true, true) => {
                     n.enabled = false;
@@ -67,8 +72,9 @@ impl App {
             if self.xr.vr.is_some() {
                 self.xr.vr = None;
                 self.service_msg = Some(("Desktop mode".into(), 2.0));
-            } else if let Some(renderer) = self.renderer.as_ref() {
-                match crate::openxr::Vr::new(renderer, self.settings.vr_scale,
+            } else if let Some(renderer) = self.renderer.as_mut() {
+                let image_scale = renderer.start_xr(self.settings.vr_scale);
+                match crate::openxr::Vr::new(renderer, image_scale,
                                              self.settings.vr_desktop_mirror) {
                     Ok(vr) => {
                         self.xr.vr = Some(vr);
@@ -208,6 +214,10 @@ impl App {
             // (Omsi.exe's camera reset, 0x7edde4, puts back the field of view with the
             // direction: the zoom goes as well, #244)
             "view_reset_direction" => {
+                // (a Tobii tracker's middle: where the head is now)
+                if let Some(h) = self.input.headtrack.as_ref() {
+                    h.recenter();
+                }
                 // F1 eases home (look + zoom glide) from the values in place:
                 // zeroing them first would flash a frame of the destination.
                 if self.view == "driver"

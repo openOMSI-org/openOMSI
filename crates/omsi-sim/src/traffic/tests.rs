@@ -1195,6 +1195,29 @@ fn the_kept_bends_give_the_bend_speed_found_anew() {
     }
 }
 
+#[test]
+fn two_quiet_jumps_at_the_cycle_start_let_the_clock_run_on() {
+    // A 127 s cycle with two day jumps at 0 s, each taken while its detector light is
+    // empty (to 15 s, past the night flashing), and one at 87 s past the cycle's end. At
+    // night both detectors are occupied: neither jump fires and the clock runs through the
+    // flashing from 0 s, frame after frame, instead of standing at 0.
+    let lights = vec![(vec![(0, 127.0)], None), (vec![(0, 127.0)], None), (vec![(13, 15.0), (6, 112.0)], None)];
+    let jumps = [[0.0, 0.0, 1.0, 15.0], [1.0, 0.0, 1.0, 15.0], [2.0, 87.0, 0.0, 130.0]];
+    let mut night = TrafficLightController::from_program(lights.clone(), Some(127.0), &[], &jumps);
+    night.request = vec![true, true, false];
+    night.time = 126.0;
+    for _ in 0..60 {
+        night.advance(0.1);
+    }
+    assert!((night.time - 5.0).abs() < 1e-3, "the night clock stood at {:.2} s", night.time);
+    assert_eq!(night.state(2), 13, "the flashing runs at night");
+    // by day the empty detectors take their jump at 0 s straight past the flashing
+    let mut day = TrafficLightController::from_program(lights, Some(127.0), &[], &jumps);
+    day.time = 126.0;
+    day.advance(2.0);
+    assert!((day.time - 16.0).abs() < 1e-3, "the day clock went on at {:.2} s", day.time);
+}
+
 /// win-4.sco ("Hauptbahnhof 4", #3092): the program as the file has it, lights 0 Main,
 /// 1 Bus, 2 Bus2, 3 Green, 4 Ped, and its thirteen jumps.
 fn win4() -> TrafficLightController {

@@ -73,6 +73,9 @@ impl Renderer {
         let (full_w, full_h) = (width, height);
         let (width, height) = if with_overlays {
             self.scene_size(full_w, full_h)
+        } else if let Some(s) = self.xr_fsr_scale().filter(|_| projection.is_some()) {
+            // (a VR eye with FSR 1: drawn smaller, scaled up to the headset's image)
+            (((full_w as f32 * s).round() as u32).max(1), ((full_h as f32 * s).round() as u32).max(1))
         } else {
             (full_w, full_h)
         };
@@ -110,6 +113,7 @@ impl Renderer {
         // the plain graphics with Enhanced on); the first eye is the one that moves the
         // exposure, the sky cube and the frame clock on, as the window does without VR.
         let xr_view = projection.is_some();
+        let eye_color = enhanced_view && !with_overlays && xr_view && self.hdr_eye_pass.is_some();
         let lead_view = (with_overlays || xr_view) && !second_eye;
         let enhanced_frame = lighting.enhanced && self.hdr_pass.is_some() && !env.no_enhanced && (with_overlays || xr_view || env.mirror_enhanced || self.options.mirror_enhanced);
         // the mirrors are drawn by the same path as the window (their picture graded with
@@ -147,20 +151,32 @@ impl Renderer {
         // surface (without multisampling, see `share_depth`)
         let depth_wanted = puddles_wanted || glass_on || (enhanced && (with_overlays || xr_view)) || (self.depth_readback && projection.is_none());
         let prepass_on = ao_on || depth_wanted;
+        // the terrain's paint laid into one albedo picture first: the window's enhanced
+        // picture, single-sampled, with the camera group's slot 8 free of the AO
+        let ground_ok = with_overlays && enhanced && projection.is_none() && !second_eye && !ao_on && !rt_frame && prepass_on && self.options.msaa <= 1
+            && exclude_texture.is_none() && !env.no_ground_pass && self.ground_eligible();
         let prepass_reach = if depth_wanted || env.no_ao_reach { f32::MAX } else { AO_PREPASS_REACH };
         // (only the bind group is made again, by `upload_draw_list`: dropping the instance
         // buffers for it wrote every instance's entries again at each render-scale step)
-        if prepass_on && self.ensure_ao(width, height) {
+        if prepass_on && self.ensure_ao(width, height, crate::lighting::bounce_wanted(ao_on, enhanced_frame, self.street_light())) {
             // a new AO texture: the camera bind group must point at it
             scene.camera_bind_group = None;
             self.targets.hdr_targets.clear();
+        }
+        // (the ground albedo picture only while that pass can run)
+        if prepass_on && self.ensure_ground(width, height, self.ground_eligible()) {
+            scene.camera_bind_group = None;
+        }
+        // (slot 8 holds the AO's picture or the ground albedo's: the group is made again when that changes)
+        if prepass_on && self.ground_bound.get() != self.ground_should_bind() {
+            scene.camera_bind_group = None;
         }
         if rt_frame && self.rt.as_mut().is_some_and(|rt| rt.ensure_targets(&self.device, width, height)) {
             // the camera bind group must point at the new lighting texture
             scene.camera_bind_group = None;
         }
         if masked_frame {
-            self.hdr_targets(width, height);
+            self.hdr_targets(width, height, rt_gbuf() && !eye_color);
         }
         if glass_on {
             self.prepare_glass_behind(scene, width, height, if masked_frame { HDR_FORMAT } else { self.format });
@@ -208,6 +224,7 @@ impl Renderer {
             aspect,
             cam_rel,
             xr_view,
+            eye_color,
             lead_view,
             enhanced_frame,
             enhanced,
@@ -218,6 +235,7 @@ impl Renderer {
             lamp_shadows,
             rt_frame,
             ao_on,
+            ground_ok,
             prepass_on,
             prepass_reach,
             dt,
@@ -245,6 +263,17 @@ impl Renderer {
             .projection
             .map(|p| p * Mat4::look_to_rh((camera.position - ro).as_vec3(), camera.forward(), camera.up()))
             .unwrap_or_else(|| camera.view_proj(aspect, ro));
+        // the last frame's picture for the bounced light, found again under this frame's view
+        if lead_view {
+            let size = (f.width, f.height);
+            self.tone.bounce_reproj = if crate::lighting::bounce_wanted(ao_on, enhanced, self.street_light()) {
+                let view = Mat4::look_to_rh(cam_rel, camera.forward(), camera.up());
+                crate::lighting::bounce_history(self.tone.bounce_prev, view, ro, size, cam_rel, camera.forward(), f.dt)
+            } else {
+                (Mat4::ZERO.to_cols_array_2d(), 0.0)
+            };
+            self.tone.bounce_prev = crate::lighting::bounce_wanted(ao_on, enhanced, self.street_light()).then_some((vp_mat, ro, size, cam_rel, camera.forward()));
+        }
         // where the tile light maps lie, relative to the render origin
         {
             let (lx, ly, side) = self.lights.lm_place.get();
@@ -396,6 +425,7 @@ impl Renderer {
                 }
                 std::array::from_fn(|r| std::array::from_fn(|c| at[r * 4 + c]))
             },
+            lod: [self.fsr_mip_bias(f), 0.0, 0.0, 0.0],
         };
         self.queue
             .write_buffer(&self.camera_buf, 0, bytemuck::bytes_of(&cu));
@@ -437,6 +467,12 @@ impl Renderer {
             if f.env.debug_sky && changed {
                 log::info!("sky glow from the lamps: {raw:.3} (taken {:.3})", step.exp());
             }
+        }
+        // the lightning goes on for every pipeline (the sound follows it); only the Enhanced one draws it
+        if lead_view {
+            self.tone.lightning.seed_once(lighting.day_seed);
+            let storm = crate::lighting::forced_storm().map_or(lighting.storm, |f| f.0).clamp(0.0, 1.0);
+            self.tone.flash = self.tone.lightning.step(storm, f.dt);
         }
         let probe_redraw = enhanced
             && (lead_view || self.sky.sky_state.is_none())

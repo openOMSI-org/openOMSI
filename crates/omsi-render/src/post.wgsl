@@ -21,6 +21,10 @@ struct PostParams {
     // x Enhanced+'s grade (0/1), y the vignette's strength, z sharpening, w the tone
     // curve's contrast about mid grey (1 = none; a camera's by day, less at night)
     d: vec4<f32>,
+    // x how much of a metered shortfall (the picture darker than the light model expects: a
+    // tunnel, a dark cab) the eye makes up. Nothing anchors it as white anchors a surplus (a
+    // snow field stays white), so it follows far more of it than of a surplus.
+    e: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> p: PostParams;
 @group(0) @binding(1) var t_src: texture_2d<f32>;
@@ -174,6 +178,23 @@ fn fs_up(in: VsOut) -> @location(0) vec4<f32> {
     return vec4<f32>(mix(base, tent, 0.75), 1.0);
 }
 
+// The picture as absolute radiance (1 = 10 000 cd/m²) at half size, kept for the next
+// frame's ambient occlusion: the light the surfaces of the street send to each other (the
+// bounce) is what they looked like a frame ago. Four taps at the corners of the 2x2 block.
+@fragment
+fn fs_history(in: VsOut) -> @location(0) vec4<f32> {
+    let texel = 1.0 / vec2<f32>(textureDimensions(t_src));
+    var c = (src(in.uv, texel, -0.5, -0.5) + src(in.uv, texel, 0.5, -0.5) + src(in.uv, texel, -0.5, 0.5) + src(in.uv, texel, 0.5, 0.5)) * 0.25;
+    // A small bright thing - a lamp, a spot of glare, a sign's edge - is one texel among a
+    // hundred its neighbours: of the AO's samples it takes one, and the blur turned it into a
+    // square of the blur's size. What is far brighter than what lies round it (four taps
+    // eight pixels out) is cut down to a little more than that: a wall, a sign or a window
+    // is as bright as its neighbours.
+    let ring = (src(in.uv, texel, 8.0, 0.0) + src(in.uv, texel, -8.0, 0.0) + src(in.uv, texel, 0.0, 8.0) + src(in.uv, texel, 0.0, -8.0)) * 0.25;
+    c = min(c, ring * 1.5 + vec3<f32>(0.02) * max(p.c.z, 1e-6));
+    return vec4<f32>(c / max(p.c.z, 1e-6), 1.0);
+}
+
 // --- automatic exposure: the mean log luminance of the smallest glow level, weighted to
 // the middle of the picture, and its slow follower
 
@@ -312,7 +333,8 @@ fn graded(in: VsOut) -> vec3<f32> {
     // the eye's scattered light of what is brighter than the screen, added
     var c = hdr + glow * p.a.x;
     let metered = textureLoad(t_adapt, vec2<i32>(0, 0), 0).r;
-    let ev = clamp((p.b.z - metered) * p.c.x, -p.a.y, p.a.z) + p.b.w;
+    let gap = p.b.z - metered;
+    let ev = clamp(gap * select(p.c.x, p.e.x, gap > 0.0), -p.a.y, p.a.z) + p.b.w;
     c = max(c, vec3<f32>(0.0));
     if (p.c.y > 0.0) {
         c = night_vision(c, p.c.y, p.c.z);

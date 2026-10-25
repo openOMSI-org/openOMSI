@@ -60,6 +60,22 @@ pub struct SceneryObject {
     pub sco_path: Option<Arc<Path>>,
     /// Its `[NightMapMode]` hours (the same building keeps its hours: seeded by its id).
     pub use_: InUse,
+    /// The Lua / `.oop` scripts that drive it (`[lua_script]` of its type), with where it
+    /// stands and faces for them.
+    pub lua: Option<Arc<ObjectLua>>,
+    pub heading: f32,
+}
+
+/// The scripts of an object type and how they run (see `docs/OBJECT_SCRIPTS.md`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ObjectLua {
+    pub files: Vec<std::path::PathBuf>,
+    /// The camera must be this close for the scripts to run (m).
+    pub range: f64,
+    /// Frames of the scripts a second (0: every frame).
+    pub rate: f32,
+    /// The type's `.sco`, by which the scripts tell what they drive.
+    pub type_name: String,
 }
 
 impl SceneryObject {
@@ -83,6 +99,8 @@ impl SceneryObject {
             switch_dirs: Vec::new(),
             sco_path: None,
             use_: InUse::new(night_map_mode, map_id as u64),
+            lua: None,
+            heading: 0.0,
         }
     }
 }

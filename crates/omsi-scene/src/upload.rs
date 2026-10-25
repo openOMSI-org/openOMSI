@@ -24,7 +24,7 @@ impl World {
                     .collect(),
                 p.splines
                     .iter()
-                    .map(|(_, st, _, _)| Arc::as_ptr(st) as usize)
+                    .map(|(_, st, _, _, _)| Arc::as_ptr(st) as usize)
                     .filter(|k| gpu.splines.contains_key(k))
                     .collect(),
                 p.trees
@@ -99,7 +99,7 @@ impl World {
                 }
             }
         }
-        for (_, st, _, _) in &p.splines {
+        for (_, st, _, _, _) in &p.splines {
             if have_splines.contains(&(Arc::as_ptr(st) as usize)) {
                 continue;
             }

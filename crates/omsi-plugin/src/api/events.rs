@@ -90,6 +90,10 @@ pub static EVENTS: &[EventDef] = &[
     ev("lan_leave", &["id", "name"], NEW, "A player left the LAN session."),
     ev("lan_message", &["from", "data"], NEW, "The same plugin on another player's game sent this one a message (`lan.send`): the player's id and the text."),
     ev("lan_chat", &["name", "text"], NEW, "A line was said in the LAN session's chat (by another player or this one)."),
+    ev("object_init", &["id", "type", "x", "y", "z", "heading"], NEW, "A scenery object this script drives came within its range (once, again if it leaves and comes back): the map's id of the object, its type (the `.sco` file's name), where it stands and the way it faces. Only a script a `.sco` names with `[lua_script]` hears the `object_*` events."),
+    ev("object_frame", &["id", "dt"], NEW, "A frame of an object this script drives, while it is in range; `dt` is the game seconds since the last frame of that object (at the rate of the `.sco`'s `[lua_rate]`, else every game frame)."),
+    ev("object_gone", &["id"], NEW, "An object this script drives left its range or was unloaded with its tile; its state in the script can go."),
+    ev("object_click", &["id", "event"], NEW, "The player clicked the `[mouseevent]` of a mesh of an object this script drives."),
 ];
 
 /// The event of this name.

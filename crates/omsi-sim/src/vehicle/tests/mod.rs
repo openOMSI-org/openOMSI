@@ -7,6 +7,7 @@ use std::sync::Arc;
 mod articulation;
 mod fuel;
 mod model_variables;
+mod rail_power;
 mod scripts_props;
 
 #[test]

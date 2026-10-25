@@ -97,7 +97,7 @@ export const weatherName = (w, list) =>
   : list?.find((x) => x.file === w)?.name || t('Natural weather');
 
 /** A remembered map or bus that is not installed any more gives way to the first one. */
-function fixChoice() {
+export function fixChoice() {
   const c = { ...S.choice };
   let mapChanged = false;
   if (S.maps?.length && !S.maps.some((m) => m.file === c.map)) {
@@ -168,6 +168,21 @@ export function mapName(file) {
   if (m) return m.friendly || m.name;
   return (file || '').replace(/\\/g, '/').split('/').filter(Boolean).slice(-2, -1)[0] || file;
 }
+
+/** Transport modes (bus, tram, railway, metro, trolleybus). A map that names none takes every
+ * vehicle; otherwise the vehicle must share a mode with it. Mirrors `transport_refusal` of the
+ * launcher core, so the pickers can say why before the game does. */
+export const MODES = ['bus', 'tram', 'railway', 'metro', 'trolleybus'];
+export const modeLabel = (m) => t({ bus: 'Bus', tram: 'Tram', railway: 'Railway', metro: 'Metro', trolleybus: 'Trolleybus' }[m] || m);
+export function transportRefusal(map, vehicle) {
+  const a = map?.transport || [];
+  const b = vehicle?.transport || [];
+  if (!a.length || a.some((m) => b.includes(m))) return null;
+  return t('This map is made for {maps} only; the vehicle counts as {vehicle}.', { maps: a.map(modeLabel).join(', '), vehicle: b.length ? b.map(modeLabel).join(', ') : t('nothing known') });
+}
+/** Modes worth showing as a tag: everything but a plain bus, whose tag would be noise on the
+ * thousands of stock buses. */
+export const shownModes = (x) => (x?.transport || []).filter((m) => m !== 'bus' || (x.transport.length > 1));
 
 export const curMap = () => S.maps?.find((m) => m.file === S.choice?.map);
 export const curBus = () => S.vehicles?.find((v) => v.file === S.choice?.bus);
@@ -270,7 +285,7 @@ export async function loadLines() {
   }
 }
 
-async function updateHof() {
+export async function updateHof() {
   const c = S.choice;
   const hof = await call('default_hof', { map: curMap() || null, bus: curBus() || null, date: c.date, line: c.free ? null : c.line }).catch(() => '');
   set({ hof });

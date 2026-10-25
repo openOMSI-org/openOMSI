@@ -55,7 +55,31 @@ impl SkyBase {
         SkyBase { layout: sky_layout, cloud_shape_view, cloud_detail_view, cloud_sampler, cloud_shape_cpu, vanilla_buf, shader: sky_shader, pl: sky_pl }
     }
 
+    pub(crate) fn pipeline_base(&self) -> SkyPipelineBase {
+        SkyPipelineBase { shader: self.shader.clone(), pl: self.pl.clone() }
+    }
+}
+
+/// Only shader/layout handles are retained for deferred headset pipelines.
+#[derive(Clone)]
+pub(crate) struct SkyPipelineBase {
+    shader: wgpu::ShaderModule,
+    pl: wgpu::PipelineLayout,
+}
+
+impl SkyPipelineBase {
     pub(crate) fn pipeline(&self, device: &wgpu::Device, f: wgpu::TextureFormat, fs: &str, msaa: u32) -> wgpu::RenderPipeline {
+        self.pipeline_for(device, f, fs, msaa, rt_gbuf())
+    }
+
+    pub(crate) fn pipeline_for(
+        &self,
+        device: &wgpu::Device,
+        f: wgpu::TextureFormat,
+        fs: &str,
+        msaa: u32,
+        surfaces: bool,
+    ) -> wgpu::RenderPipeline {
         let sky_vertex = wgpu::VertexBufferLayout {
             array_stride: 12,
             step_mode: wgpu::VertexStepMode::Vertex,
@@ -87,7 +111,9 @@ impl SkyBase {
             fragment: Some(wgpu::FragmentState {
                 module: &self.shader,
                 entry_point: Some(fs),
-                targets: &color_targets(f, None, wgpu::ColorWrites::COLOR, false, false),
+                targets: &color_targets_for(f, None, wgpu::ColorWrites::COLOR, false, false,
+                        surfaces,
+                    ),
                 compilation_options: Default::default(),
             }),
             multiview_mask: None,

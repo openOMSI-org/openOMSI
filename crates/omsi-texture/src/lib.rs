@@ -3,8 +3,8 @@
 //! OMSI looks a texture up by *file name* in a search order: the object's `texture` folder,
 //! then the global `Texture` folder, trying a same-stem DDS first, the exact name, then other supported
 //! extensions (OMSI's `.dds`, `.bmp`, `.tga`, `.jpg`, `.png`, and what openOMSI reads besides:
-//! `.jpeg`, `.webp`, `.tif`, `.gif`, `.ktx2`, `.ktx`, `.qoi`, `.hdr`, `.exr`, `.pnm`), plus
-//! seasonal (`Texture\Spring` …) and `_LOW` variants. A `<texture>.cfg` sidecar carries
+//! `.jpeg`, `.webp`, `.tif`, `.gif`, `.ktx2`, `.ktx`, `.qoi`, `.hdr`, `.exr`, `.pnm`) - except
+//! for a name that asks for a DDS, which is that DDS or missing - plus seasonal (`Texture\Spring` …) and `_LOW` variants. A `<texture>.cfg` sidecar carries
 //! per-texture flags.
 
 use hashbrown::HashMap;
@@ -515,6 +515,14 @@ fn find_texture_in_dir(dir: &Path, name: &str) -> Option<PathBuf> {
     if omsi_cfg::vfs::is_file(&p) {
         return Some(p);
     }
+    // A DDS that is not there is missing, as in Omsi.exe: the stand-in only ever goes from
+    // another format to its DDS, never back. The MAN DN95's body asks for `envmap.dds`, which
+    // it does not ship; taking its `envmap.bmp` instead turned the paint into a mirror where
+    // the original draws it without a reflection.
+    let asked_dds = Path::new(name).extension().is_some_and(|e| e.eq_ignore_ascii_case("dds"));
+    if asked_dds {
+        return None;
+    }
     for ext in EXTENSIONS.into_iter().filter(|e| *e != "dds") {
         let p = omsi_cfg::resolve_path(dir, &format!("{}.{}", stem.display(), ext));
         if omsi_cfg::vfs::is_file(&p) {
@@ -839,6 +847,11 @@ mod tests {
         // Without DDS, the requested format wins over the other fallback formats.
         assert_eq!(find_texture_uncached("local_only.png", &[&local]), Some(local.join("local_only.png")));
         assert_eq!(find_texture_uncached("missing.png", &[&local]), None);
+        // A DDS asked for and not there is missing: not stood in for by the BMP beside it
+        // (the MAN DN95's `envmap.dds` next to its `envmap.bmp`).
+        std::fs::write(local.join("envmap.bmp"), b"x").unwrap();
+        assert_eq!(find_texture_uncached("envmap.dds", &[&local]), None);
+        assert_eq!(find_texture_uncached("envmap.bmp", &[&local]), Some(local.join("envmap.bmp")));
         std::fs::remove_dir_all(dir).unwrap();
     }
 

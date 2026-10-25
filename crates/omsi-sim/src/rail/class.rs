@@ -37,22 +37,11 @@ impl RailClass {
     /// (metro); a heavy car (over 45 t) or a locomotive is a railway train; the rest - light cars
     /// on bogies, however long - are trams.
     pub fn of(def: &Vehicle) -> Option<RailClass> {
-        if !def.is_rail() {
-            return None;
-        }
-        if let Some(c) = def.rail_class.as_deref().and_then(RailClass::from_name) {
-            return Some(c);
-        }
-        if !def.contact_shoes.is_empty() {
-            return Some(RailClass::Metro);
-        }
-        // (length says nothing: a modern tram of 40 m is lighter than a 20 m railway coach)
-        let heavy = def.mass_kg() > 45_000.0;
-        let loco = def.axles.iter().filter(|a| a.driven).count() >= 4 && def.mass_kg() > 60_000.0;
-        if heavy || loco {
-            Some(RailClass::Train)
-        } else {
-            Some(RailClass::Tram)
+        use omsi_cfg::transport::TransportMode;
+        match def.rail_mode()? {
+            TransportMode::Metro => Some(RailClass::Metro),
+            TransportMode::Railway => Some(RailClass::Train),
+            _ => Some(RailClass::Tram),
         }
     }
 

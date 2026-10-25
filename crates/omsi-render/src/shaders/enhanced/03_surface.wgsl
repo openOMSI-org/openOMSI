@@ -77,8 +77,7 @@ struct EnhancedOut {
 var<private> rt_gbuf: vec4<f32>;
 var<private> rt_aux: vec4<f32>;
 
-@fragment
-fn fs_enhanced(in: FsIn) -> EnhancedOut {
+fn enhanced_surface(in: FsIn) -> EnhancedOut {
     var puddle_weight = vec2<f32>(0.0);
     let c = shade_enhanced(in, &puddle_weight, false, camera.cam_pos.xyz);
     let screen = material.flags.x > 0.5;
@@ -105,6 +104,24 @@ fn fs_enhanced(in: FsIn) -> EnhancedOut {
     //RT out.gbuf = rt_gbuf;
     //RT out.aux = rt_aux;
     return out;
+}
+
+@fragment
+fn fs_enhanced(in: FsIn) -> EnhancedOut {
+    return enhanced_surface(in);
+}
+
+// A headset uses mapped shadows, not screen-space ray reflections. Its colour
+// pass needs only colour and the screen mask, even on an Enhanced+ renderer.
+struct EnhancedColorOut {
+    @location(0) color: vec4<f32>,
+    @location(1) mask: vec4<f32>,
+};
+
+@fragment
+fn fs_enhanced_color(in: FsIn) -> EnhancedColorOut {
+    let surface = enhanced_surface(in);
+    return EnhancedColorOut(surface.color, surface.mask);
 }
 
 // A self-lit picture (a display, a light-mapped surface lit fully) at its own colour after
@@ -135,7 +152,7 @@ fn display_level(t: vec3<f32>) -> vec3<f32> {
 // panels' `Led glow`) and is held against the metering as an LED panel's dots are; the
 // glare round it comes from how bright it is, as every light's does (post.wgsl).
 fn matl_glow_light(buv: vec2<f32>, col: vec3<f32>) -> vec3<f32> {
-    let gm = textureSample(t_light, s_diffuse, buv);
+    let gm = textureSampleBias(t_light, s_diffuse, buv, camera.lod.x);
     return col * dot(gm.rgb, vec3<f32>(0.299, 0.587, 0.114)) * material.glow.x * max(enh.exposure.z * 2.0, 0.8);
 }
 

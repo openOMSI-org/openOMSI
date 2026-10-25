@@ -133,6 +133,8 @@ impl WasmHost {
         let owner = crate::lua::next_owner();
         let mut state = PluginState::new(&spec.name, "WASM plugin", "wasm", owner, hub, spec.folder.clone(), spec.data_dir.clone());
         state.perms = spec.perms.clone();
+        state.process_allowed = state.hub.process_permissions.is_some() || state.hub.process_grants.has_candidate(path, state.folder.as_deref());
+        state.process_entry = Some(path.to_path_buf());
         let binding = WasmBinding { module: RefCell::new(module), raw: Cell::new(None), pending: RefCell::new(VecDeque::new()) };
         let mut p = WasmHost { name: spec.name.clone(), path: path.to_path_buf(), binding: Box::new(binding), state: Box::new(state), disabled: false };
         let r = p.with_ctx(io, |ctx, b| {
@@ -171,10 +173,11 @@ impl WasmHost {
         r
     }
 
-    fn check(&mut self) {
+    fn check(&mut self, io: &mut dyn PluginIo) {
         if let Some(why) = self.binding.disabled() {
             if !self.disabled {
                 log::warn!("{} stopped: {why}", self.state.tag);
+                self.state.give_back(io);
             }
             self.state.disabled = true;
         }
@@ -187,7 +190,7 @@ impl WasmHost {
             return;
         }
         self.with_ctx(io, |ctx, _| runtime::frame(ctx));
-        self.check();
+        self.check(io);
     }
 
     /// Whether the plugin listens to `event`.
@@ -201,7 +204,7 @@ impl WasmHost {
             return;
         }
         self.with_ctx(io, |ctx, _| runtime::emit_now(ctx, event, args));
-        self.check();
+        self.check(io);
     }
 
     /// The `stop` event, then the module's `oop_stop`; the storage is saved.

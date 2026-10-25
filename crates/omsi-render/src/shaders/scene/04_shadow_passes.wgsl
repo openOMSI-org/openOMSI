@@ -115,7 +115,7 @@ fn fs_puddle_glass_depth(in: FsIn) {
     if (inside_vehicle(camera.cam_pos.xyz) * near_player_vehicle(in.world) > 0.5) {
         discard;
     }
-    var a = diffuse_border(textureSample(t_diffuse, s_diffuse, tex_address(in.uv)), in.uv).a;
+    var a = diffuse_border(textureSampleBias(t_diffuse, s_diffuse, tex_address(in.uv), camera.lod.x), in.uv).a;
     if (material.params.z > 0.5) {
         let tm = sample_transmap(tex_address(in.uv - in.params.zw));
         a = select(1.0, tm.a, material.params.w > 0.5);
@@ -125,9 +125,10 @@ fn fs_puddle_glass_depth(in: FsIn) {
     }
 }
 
+// (the shadow and rain maps, drawn at their own size: their textures' mips as they are)
 @fragment
 fn fs_shadow_test(in: FsIn) {
-    cutout_coverage(in.uv, in.params);
+    cutout_coverage(in.uv, in.params, 0.0);
 }
 
 // the depth-only passes' (`vs_depth`) fragment shaders: plain, cut out, a transmap's
@@ -136,15 +137,18 @@ fn fs_shadow_test(in: FsIn) {
 fn fs_depth(in: DepthIn) {
 }
 
+// (the picture's depth: its textures read with the colour pass's mip bias, `camera.lod` -
+// a cut-out's edge the prepass took from a blurrier mip than the colour pass wrote depth
+// where the colour then discarded, and the sky showed through)
 @fragment
 fn fs_depth_test(in: DepthIn) {
-    cutout_coverage(in.uv, in.params);
+    cutout_coverage(in.uv, in.params, camera.lod.x);
 }
 
 // (a transmap's opaque part, see `transmap_coverage`)
 @fragment
 fn fs_depth_transmap(in: DepthIn) {
-    transmap_coverage(in.uv, in.params);
+    transmap_coverage(in.uv, in.params, camera.lod.x);
 }
 
 // The multisampled prefill's cut-outs (foliage): their depth only where the colour pass
@@ -162,15 +166,16 @@ fn fs_depth_cover(in: DepthIn) {
         discard;
     }
     let duv = tex_address(in.uv);
-    let a = diffuse_border(textureSample(t_diffuse, s_diffuse, duv), duv).a;
+    let a = diffuse_border(textureSampleBias(t_diffuse, s_diffuse, duv, camera.lod.x), duv).a;
     let aa = max(fwidth(a) * 0.5, 1.0 / 255.0);
     if (a < ALPHA_REF + aa + 4.0 / 255.0) {
         discard;
     }
 }
 
-// A cut-out's texel: kept where its alpha reaches the cutoff.
-fn cutout_coverage(uv: vec2<f32>, params: vec4<f32>) {
+// A cut-out's texel: kept where its alpha reaches the cutoff (`bias`: the mip bias its
+// pass reads the textures with, the colour pass's for the picture's depth).
+fn cutout_coverage(uv: vec2<f32>, params: vec4<f32>, bias: f32) {
     var duv = tex_address(uv);
     if (material.extra.x > 0.5) {
         duv = uv * material.extra.z;
@@ -182,10 +187,10 @@ fn cutout_coverage(uv: vec2<f32>, params: vec4<f32>) {
     // paint/gloss value rather than coverage (vehicle bodies use values such as 0.03). Only
     // alpha-test materials use diffuse alpha as a cutout; blended bodies are solid unless a
     // real transmap supplies coverage.
-    var a = select(diffuse_border(textureSample(t_diffuse, s_diffuse, duv), duv).a, 1.0, material.params.x > 1.5 && material.params.z < 0.5);
+    var a = select(diffuse_border(textureSampleBias(t_diffuse, s_diffuse, duv, bias), duv).a, 1.0, material.params.x > 1.5 && material.params.z < 0.5);
     if (material.params.z > 0.5) {
         // (the transmap stays where it is: [texcoordtransX/Y] only moves the diffuse stage)
-        let tm = sample_transmap(tex_address(uv - params.zw));
+        let tm = sample_transmap_bias(tex_address(uv - params.zw), bias);
         a = select(1.0, tm.a, material.params.w > 0.5);
     }
     if (a < ALPHA_REF) {
@@ -198,7 +203,7 @@ fn cutout_coverage(uv: vec2<f32>, params: vec4<f32>) {
 // later scenery. The transparent borders must not become invisible depth walls.
 @fragment
 fn fs_surface_depth(in: FsIn) -> @location(0) vec4<f32> {
-    let a = diffuse_border(textureSample(t_diffuse, s_diffuse, tex_address(in.uv)), in.uv).a
+    let a = diffuse_border(textureSampleBias(t_diffuse, s_diffuse, tex_address(in.uv), camera.lod.x), in.uv).a
         * material.color.a * in.params.x;
     if (a < 0.999) {
         discard;
@@ -213,11 +218,11 @@ fn fs_surface_depth(in: FsIn) -> @location(0) vec4<f32> {
 // until the colour pass (where blend order can expose the bus through the car). Keep only
 // the effectively opaque part of a transmap in a separate depth-only pass; window pixels
 // remain out of the prepass and are composited normally.
-fn transmap_coverage(uv: vec2<f32>, params: vec4<f32>) {
+fn transmap_coverage(uv: vec2<f32>, params: vec4<f32>, bias: f32) {
     if (material.params.z < 0.5) {
         discard;
     }
-    let tm = sample_transmap(tex_address(uv - params.zw));
+    let tm = sample_transmap_bias(tex_address(uv - params.zw), bias);
     let a = select(1.0, tm.a, material.params.w > 0.5) * params.x;
     // Only what the colour pass will cover completely may hide what lies behind it: a
     // texel that is merely more opaque than not (the dimmer and anti-aliased dots of a

@@ -555,6 +555,12 @@ impl VehicleType {
         if def.trolley.is_empty() {
             def.trolley = legacy_trolley(&model, &meshes, &mesh_boxes, &program, bus_file, keep_meshes);
             take_model_poles(&mut model, &meshes, &mesh_boxes, &def.trolley);
+            // the drive a trolleybus's traction motors would have, kept for when the bus script's
+            // gears and interlocks have an adapter: `TrolleyGear::for_type` leaves it unused
+            if !def.trolley.poles.is_empty() && def.trolley.drive.is_none() && def.trolley.typical_drive.is_none() {
+                let chopper = def.trolley.legacy.as_ref().is_some_and(|l| l.chopper);
+                def.trolley.typical_drive = Some(omsi_trolley::DriveKind::typical(def.mass_kg(), chopper));
+            }
             // the raised pole's own mesh follows the pole: two animations about its hinge
             if let Some(l) = def.trolley.legacy.as_ref() {
                 for (k, di) in l.mesh_defs.iter().enumerate() {
@@ -1075,6 +1081,37 @@ fn take_model_poles(model: &mut omsi_model::Model, meshes: &[VehicleMesh], boxes
     }
 }
 
+/// Whether nearly all of a mesh's vertices lie along the line from `base` to `tip`: a rod. A
+/// light assembly or a roof rail fills the same bounding box without following its diagonal.
+fn rod_along(positions: &[Vec3], base: Vec3, tip: Vec3) -> bool {
+    let axis = tip - base;
+    let len2 = axis.length_squared();
+    if positions.is_empty() || len2 <= f32::EPSILON {
+        return false;
+    }
+    let near = positions
+        .iter()
+        .filter(|p| {
+            let t = ((**p - base).dot(axis) / len2).clamp(0.0, 1.0);
+            (**p - (base + axis * t)).length() <= 0.4
+        })
+        .count();
+    near as f32 >= positions.len() as f32 * 0.85
+}
+
+/// Words for a lamp or a light in the languages the add-ons come in; a mesh named so is a light.
+const LIGHT_NAMES: &[&str] = &[
+    "light", "lamp", "licht", "leucht", "beleucht", "lumi", "luce", "luz", "lys", "ljus", "valo", "lampa", "swiatl", "światł", "svetil", "svetl", "fenyszoro",
+    "fény", "világít", "ışık", "isik", "свет", "ламп", "плафон", "фонар", "освещ", "підсвіт", "світл", "照明", "灯", "ライト", "라이트",
+];
+
+/// A mesh that is a light and never a pole: named like one, or lit by its own materials (a light
+/// map or a glow).
+fn is_light(md: &omsi_model::MeshDef, mesh: &VehicleMesh) -> bool {
+    file_named(&md.file, LIGHT_NAMES)
+        || mesh.overrides.iter().any(|m| !m.lightmaps.is_empty() || m.lightmap.is_some() || m.glow.is_some())
+}
+
 fn legacy_trolley(model: &omsi_model::Model, meshes: &[VehicleMesh], boxes: &[(Vec3, Vec3)], program: &Program, bus_file: &Path, static_poles: bool) -> omsi_trolley::TrolleyDef {
     use omsi_trolley::{LegacyDef, PoleDef, TrolleyDef};
     let mut poles: Vec<PoleDef> = Vec::new();
@@ -1089,6 +1126,10 @@ fn legacy_trolley(model: &omsi_model::Model, meshes: &[VehicleMesh], boxes: &[(V
         mesh_defs.clear();
         for (i, m) in meshes.iter().enumerate() {
             let Some(md) = model.meshes.get(m.def_index) else { continue };
+            if is_light(md, m) {
+                continue;
+            }
+            let mut unnamed = false;
             let var = if switched {
                 let Some((var, value)) = md.visible.as_ref() else { continue };
                 let low = var.to_ascii_lowercase();
@@ -1096,7 +1137,12 @@ fn legacy_trolley(model: &omsi_model::Model, meshes: &[VehicleMesh], boxes: &[(V
                     continue;
                 }
                 Some(var)
-            } else if (md.visible_any.is_empty() && md.animations.is_empty()) || file_named(&md.file, POLE_NAMES) {
+            } else if file_named(&md.file, POLE_NAMES) {
+                None
+            } else if md.visible_any.is_empty() && md.animations.is_empty() {
+                // (a plain trolleybus names nothing: its poles are two unanimated rods - the
+                // shape is checked below, since long interior lights fit the same box)
+                unnamed = true;
                 None
             } else {
                 continue;
@@ -1109,6 +1155,9 @@ fn legacy_trolley(model: &omsi_model::Model, meshes: &[VehicleMesh], boxes: &[(V
             let base = Vec3::new((lo.x + hi.x) * 0.5, hi.y, lo.z);
             let tip = Vec3::new((lo.x + hi.x) * 0.5, lo.y, hi.z);
             let boom = tip - base;
+            if unnamed && !meshes.get(i).is_some_and(|m| rod_along(&m.data.positions, base, tip)) {
+                continue;
+            }
             // (a pole is long and thin: a short or a wide mesh whose visibility variable has "pole" in
             // its name - an antenna, a flag - is no trolley pole)
             if boom.length() < 3.0 || hi.x - lo.x > 1.2 {
@@ -1221,17 +1270,38 @@ mod legacy_trolley_tests {
         }
     }
 
+    /// A rod from the box's rear-top corner to its front-bottom one, as a pole is.
+    fn rod_mesh(def_index: usize, (lo, hi): (Vec3, Vec3)) -> VehicleMesh {
+        let (base, tip) = (Vec3::new((lo.x + hi.x) * 0.5, hi.y, lo.z), Vec3::new((lo.x + hi.x) * 0.5, lo.y, hi.z));
+        let mut m = mesh(def_index);
+        m.data.positions = (0..=20).map(|k| base.lerp(tip, k as f32 / 20.0)).collect();
+        m
+    }
+
+    /// A light assembly: strips along the length at the lower and the upper edge of its box.
+    fn light_mesh(def_index: usize, (lo, hi): (Vec3, Vec3)) -> VehicleMesh {
+        let x = (lo.x + hi.x) * 0.5;
+        let mut m = mesh(def_index);
+        m.data.positions = (0..=20)
+            .flat_map(|k| {
+                let y = lo.y + (hi.y - lo.y) * k as f32 / 20.0;
+                [Vec3::new(x, y, lo.z), Vec3::new(x, y, hi.z)]
+            })
+            .collect();
+        m
+    }
+
     #[test]
     fn static_raised_pole_meshes_become_poles() {
         let mut model = omsi_model::Model::default();
         model.meshes = vec![Default::default(); 4];
-        let meshes: Vec<VehicleMesh> = (0..4).map(mesh).collect();
         let boxes = [
             (Vec3::new(-1.2, -5.8, 2.8), Vec3::new(1.2, 6.0, 3.0)),
             (Vec3::new(-0.34, -6.26, 3.17), Vec3::new(-0.11, 0.27, 5.35)),
             (Vec3::new(0.11, -6.26, 3.17), Vec3::new(0.34, 0.27, 5.35)),
             (Vec3::new(0.5, 4.0, 3.0), Vec3::new(0.55, 4.3, 3.8)),
         ];
+        let meshes: Vec<VehicleMesh> = (0..4).map(|i| rod_mesh(i, boxes[i])).collect();
         let program = omsi_script::Program::default();
         let bus = Path::new("/nonexistent/troll.bus");
         let def = legacy_trolley(&model, &meshes, &boxes, &program, bus, true);
@@ -1244,6 +1314,74 @@ mod legacy_trolley_tests {
         assert!(legacy_trolley(&model, &meshes, &boxes, &program, bus, false).poles.is_empty());
         model.meshes[2].animations.push(Default::default());
         assert!(legacy_trolley(&model, &meshes, &boxes, &program, bus, true).poles.is_empty());
+    }
+
+    #[test]
+    fn static_interior_meshes_do_not_identify_a_trolleybus() {
+        let mut model = omsi_model::Model::default();
+        model.meshes = ["interior_left.o3d", "interior_right.o3d"]
+            .into_iter()
+            .map(|file| omsi_model::MeshDef { file: file.into(), ..Default::default() })
+            .collect();
+        let boxes = [
+            (Vec3::new(-0.75, -5.67, 2.49), Vec3::new(-0.43, 4.38, 4.45)),
+            (Vec3::new(0.43, -5.67, 2.49), Vec3::new(0.75, 4.25, 4.45)),
+        ];
+        let meshes: Vec<VehicleMesh> = (0..2).map(|i| light_mesh(i, boxes[i])).collect();
+        let program = omsi_script::Program::default();
+        let bus = Path::new("/nonexistent/bus.bus");
+        let def = legacy_trolley(&model, &meshes, &boxes, &program, bus, true);
+        assert!(def.is_empty(), "interior geometry alone must not enable trolley traction");
+        take_model_poles(&mut model, &meshes, &boxes, &def);
+        assert!(model.meshes.iter().all(|md| md.animations.is_empty() && md.visible_any.is_empty()));
+    }
+
+    #[test]
+    fn lights_are_never_poles() {
+        let boxes = [
+            (Vec3::new(-0.34, -6.26, 3.17), Vec3::new(-0.11, 0.27, 5.35)),
+            (Vec3::new(0.11, -6.26, 3.17), Vec3::new(0.34, 0.27, 5.35)),
+        ];
+        let program = omsi_script::Program::default();
+        let bus = Path::new("/nonexistent/b.bus");
+        let run = |files: [&str; 2], lit: bool| {
+            let mut model = omsi_model::Model::default();
+            model.meshes = files.into_iter().map(|file| omsi_model::MeshDef { file: file.into(), ..Default::default() }).collect();
+            let meshes: Vec<VehicleMesh> = (0..2)
+                .map(|i| {
+                    let mut m = rod_mesh(i, boxes[i]);
+                    if lit {
+                        m.overrides = vec![omsi_model::MaterialDef { lightmap: Some(("l.bmp".into(), "v".into())), ..Default::default() }];
+                    }
+                    m
+                })
+                .collect();
+            legacy_trolley(&model, &meshes, &boxes, &program, bus, true).poles.len()
+        };
+        assert_eq!(run(["a.o3d", "b.o3d"], false), 2);
+        assert_eq!(run(["pole_light_l.o3d", "pole_light_r.o3d"], false), 0);
+        assert_eq!(run(["Лампа_л.o3d", "Лампа_п.o3d"], false), 0);
+        assert_eq!(run(["Leuchte_links.o3d", "Beleuchtung_rechts.o3d"], false), 0);
+        assert_eq!(run(["a.o3d", "b.o3d"], true), 0);
+    }
+
+    #[test]
+    fn pole_control_variables_still_identify_unnamed_meshes() {
+        let mut model = omsi_model::Model::default();
+        let names = ["cp_SHTANGALEV", "cp_SHTANGAPRAV"];
+        let mut program = omsi_script::Program::default();
+        for name in names {
+            program.declare_var(name);
+            model.meshes.push(omsi_model::MeshDef { visible: Some((name.into(), 1.0)), ..Default::default() });
+        }
+        let meshes: Vec<VehicleMesh> = (0..2).map(mesh).collect();
+        let boxes = [
+            (Vec3::new(-0.34, -6.26, 3.17), Vec3::new(-0.11, 0.27, 5.35)),
+            (Vec3::new(0.11, -6.26, 3.17), Vec3::new(0.34, 0.27, 5.35)),
+        ];
+        let def = legacy_trolley(&model, &meshes, &boxes, &program, Path::new("/nonexistent/b.bus"), false);
+        assert_eq!(def.poles.len(), 2);
+        assert_eq!(def.legacy.unwrap().switches, names);
     }
 
     #[test]

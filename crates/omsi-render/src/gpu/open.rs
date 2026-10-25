@@ -117,7 +117,7 @@ impl Renderer {
         };
         // a small or shared graphics chip gets a lighter picture (see `lighter_picture`)
         GL_BACKEND.store(info.backend == wgpu::Backend::Gl, std::sync::atomic::Ordering::Relaxed);
-        let (options, lighter) = gpu_memory::lighter_picture(&info, vram, options);
+        let options = gpu_memory::lighter_picture(&info, vram, options);
         let most = gpu_memory::ceiling(&info, vram);
         *CEILING.lock().unwrap_or_else(|e| e.into_inner()) = Some(if intel_vulkan_safe { gpu_memory::Ceiling { msaa: 1, ssao: false, shadow_size: most.shadow_size.min(2048), ..most } } else { most });
         let shadow_size = options
@@ -239,11 +239,15 @@ impl Renderer {
                 label: Some("omsi"),
                 required_features,
                 required_limits: limits,
-                // (a card of up to 4 GB gets the allocator's small blocks: the large ones
-                // left hundreds of MB reserved and unused, and 2 GB cards lost the device to
-                // "Out of memory" in the first frames with the textures well under budget,
-                // #332, #295)
-                memory_hints: if lighter || vram.is_some_and(|v| v <= 4200) { wgpu::MemoryHints::MemoryUsage } else { wgpu::MemoryHints::Performance },
+                // (the allocator's small blocks, 8-64 MB, for every card: a block goes back
+                // to the driver only once it is empty, and with the scenery's thousands of
+                // textures coming and going a 128-256 MB block of the performance hint hardly
+                // ever was. They left hundreds of MB reserved and unused, 2 GB cards lost the
+                // device to "Out of memory" in the first frames with the textures well under
+                // budget, #332, #295, and a 12 GB card held 13 GB in 63 blocks for 8 GB of
+                // textures and buffers and paged, #2295. A few hundred blocks are well under
+                // a driver's allocation limit, NVIDIA's 4096.)
+                memory_hints: wgpu::MemoryHints::MemoryUsage,
                 // (the ray queries are still an experimental feature of wgpu)
                 experimental_features: if ray_query { unsafe { wgpu::ExperimentalFeatures::enabled() } } else { wgpu::ExperimentalFeatures::disabled() },
                 ..Default::default()
@@ -528,7 +532,7 @@ impl Renderer {
         }
         let scene = scene::SceneBase::new(&device, leave_out_enhanced);
         let hdr_format = wgpu::TextureFormat::Rgba16Float;
-        let shadows = shadows::build(&device, &scene, shadow_size, !leave_out_enhanced);
+        let shadows = shadows::build(&device, &scene, shadow_size, !leave_out_enhanced && !options.no_enhanced);
         let defaults = defaults::build(&device, &queue, options.anisotropy);
         let (coronas, corona_texture) = coronas::Coronas::new(&device, &queue, &scene);
         let precip = crate::passes::PrecipMap::new(&device);
@@ -536,19 +540,28 @@ impl Renderer {
         let rain = coronas::Precip::rain(&device, &scene.camera_layout, &precip.view);
         drop(corona_texture);
         let sky = sky::SkyBase::new(&device, &queue, &scene.camera_layout, !leave_out_enhanced);
-        let passes = passes::PassKit { device: &device, scene: &scene, coronas: &coronas, snow: &snow, rain: &rain, sky: &sky, msaa }
-            .build(format, hdr_format, leave_out_enhanced);
+        let sky_pipelines = sky.pipeline_base();
+        let kit = passes::PassKit { device: &device, scene: &scene, coronas: &coronas, snow: &snow, rain: &rain, sky: &sky_pipelines, msaa };
+        let eye_pipeline_kit = (!leave_out_enhanced && options.ray_tracing).then(|| passes::EyePipelineKit::new(&kit));
+        let passes = kit.build(format, hdr_format, leave_out_enhanced);
         let (sky_sampler, sky_mesh) = sky::dome(&device, &queue);
         let overlays = overlays::Overlays::new(&device, format, msaa);
         let gl = GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed);
         let ssao = ssao::ssao(&device, gl);
         let fog_lamps = ssao::fog_lamps(&device, &scene.camera_layout, hdr_format, gl);
         let prepass = scene::prepass(&device, &scene, msaa, !leave_out_enhanced);
+        let ground_pipelines = (!gl && !leave_out_enhanced && !sixteen_texture_units()).then(|| std::array::from_fn(|i| scene.ground_pipeline_at(&device, i)));
         let mip = mip::build(&device);
         let post = post::build(&device, format, hdr_format, &defaults.white_texture);
         let enhanced = enhanced::build(&device, &queue, hdr_format, &defaults.camera_buf, &sky, !leave_out_enhanced);
         let (overlay_pipeline_1x, xr_ui_pipeline) = overlays.single_sampled(&device, format);
-        let upscale = upscale::build(&device, format);
+        let upscale = upscale::build(&device, format, options.fsr1 || crate::fsr1_enabled());
+        // (asked for at the start and refused: not tried again from the menu)
+        let fsr_refused = (options.fsr1 || crate::fsr1_enabled()) && upscale.fsr.is_none();
+        // (OMSI_FSR1: FSR 1 from the start whatever the settings say - the menu can still turn
+        // it off; what the settings asked for is kept, so that only a change of theirs does)
+        let upscaler_asked = (options.fsr1, options.fsr_sharpness, options.render_scale);
+        let options = RenderOptions { fsr1: (options.fsr1 || crate::fsr1_enabled()) && upscale.fsr.is_some(), ..options };
         let gpu_timers = [GpuTimers::new(&device), GpuTimers::new(&device)];
         // GLES cannot reliably read the depth buffer (the same limitation as SSAO).
         let puddles = (!gl && !passes.leave_out_enhanced).then(|| {
@@ -565,11 +578,18 @@ impl Renderer {
                 evicted_at: std::time::Instant::now(),
                 hdr_targets: HashMap::new(),
                 ao: None,
+                ground: None,
                 depth: None,
                 msaa_targets: HashMap::new(),
             },
             scale: Upscale {
                 upscale_pipeline: upscale.upscale_pipeline,
+                fsr: upscale.fsr,
+                fsr_target: std::cell::RefCell::new(Vec::new()),
+                fsr_refused,
+                upscaler_asked,
+                fsr_raw_bg: Default::default(),
+                fsr_mip_bias_off: Default::default(),
                 copy_pipeline: upscale.copy_pipeline,
                 panel_pipeline: upscale.panel_pipeline,
                 upscale_layout: upscale.layout,
@@ -630,6 +650,10 @@ impl Renderer {
                 view_lamps: None,
                 exposure: None,
                 enh_last: bytemuck::Zeroable::zeroed(),
+                lightning: crate::lighting::Lightning::new(7),
+                flash: Default::default(),
+                bounce_prev: None,
+                bounce_reproj: (Mat4::ZERO.to_cols_array_2d(), 0.0),
             },
             shadows: ShadowRes {
                 shadow_far_cache: std::cell::Cell::new((Mat4::IDENTITY, 0, DVec3::ZERO, Vec3::ZERO)),
@@ -650,6 +674,7 @@ impl Renderer {
             },
             history: ViewHistory {
                 triple_culling: Default::default(),
+                xr_culling: Default::default(),
                 flicker: std::cell::RefCell::new(HashMap::new()),
                 main_bundles: Default::default(),
                 mirror_bundles: Default::default(),
@@ -693,8 +718,13 @@ impl Renderer {
             ao_buf: ssao.buf,
             prepass_pipelines: prepass.pipelines,
             prepass_msaa_pipelines: prepass.msaa_pipelines,
+            prepass_eye_pipelines: prepass.eye_pipelines,
+            ground_pipelines,
+            ground_bound: std::cell::Cell::new(false),
             ssao_pipeline: ssao.ssao_pipeline,
             blur_pipeline: ssao.blur_pipeline,
+            plain_ssao_pipeline: ssao.plain_ssao_pipeline,
+            plain_blur_pipeline: ssao.plain_blur_pipeline,
             device,
             queue,
             adapter_name,
@@ -702,6 +732,8 @@ impl Renderer {
             material_layout: scene.material_layout,
             pass: passes.pass,
             hdr_pass: passes.hdr_pass,
+            hdr_eye_pass: passes.hdr_eye_pass,
+            eye_pipeline_kit,
             reflection_pass: passes.reflection_pass,
             overlay_pipeline: overlays.pipeline,
             overlay_layout: overlays.layout,

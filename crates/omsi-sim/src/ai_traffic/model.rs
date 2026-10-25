@@ -615,6 +615,13 @@ impl TrafficSim {
         } else {
             100.0
         };
+        // (with the realistic physics a tram or a train pulls as its class does: the pull falls
+        // with speed at the class's power; its brakes and its jerk stay the traffic's)
+        if kind == LaneKind::Rail && crate::rail::realistic() {
+            if let Some(class) = crate::rail::RailClass::of(&ty.def) {
+                state.rail_power = Some(class.performance().kw_per_tonne * 0.85);
+            }
+        }
         // lorries and vans take bends more gently than cars
         state.lat_accel = if kind == LaneKind::Air {
             50.0

@@ -260,8 +260,10 @@ export function Roadbook({ tour, trips, current, now }) {
     <div class="roadbook-trips" ref=${ref}>
       ${trips.map((x, i) => html`<button type="button" class=${'trip-row' + (i === current ? ' on' : '') + (x.arrival < now - 60 && i !== current ? ' past' : '')} onClick=${() => pickTrip(x)}>
         <span class="num time" title=${`${t('Trip duration')}: ${tripTime(x)}`}>${hms(x.departure)}<small>${hms(x.arrival)}</small><small>${tripTime(x)}</small></span>
-        <span class="kind">${depotRun(x) ? html`<span class="depot">${t('Depot run')}</span>` : html`<span class="line-badge">${x.line}</span>`}</span>
-        <span class="grow" title=${`${x.from} → ${x.terminus}`}><${TripEnds} trip=${x} stack />${x.km > 0 && html`<small class="muted">${x.km.toFixed(1)} km</small>`}</span>
+        <span class="grow" title=${`${x.from} → ${x.terminus}`}>
+          <span class="trip-tags">${depotRun(x) ? html`<span class="depot">${t('Depot run')}</span>` : html`<span class="line-badge">${x.line}</span>`}${x.km > 0 && html`<small class="muted">${x.km.toFixed(1)} km</small>`}</span>
+          <${TripEnds} trip=${x} stack />
+        </span>
       </button>
       ${i === current && x.stops?.length > 0 && html`<${TripStops} stops=${x.stops} />`}`)}
     </div>

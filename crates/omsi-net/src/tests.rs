@@ -2,6 +2,7 @@
 
 use super::*;
 mod bus_info;
+mod freetex;
 
 fn pose(x: f64) -> Pose {
     Pose {

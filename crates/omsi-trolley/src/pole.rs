@@ -610,13 +610,13 @@ impl Pole {
             self.in_gap = gap_now;
         }
         for (si, sw) in net.switches.iter().enumerate() {
-            if sw.toe.0 != c.span {
+            let (plate_span, plate_s, towards) = sw.plate;
+            if plate_span != c.span {
                 continue;
             }
-            let len_s = net.spans[c.span as usize].len();
-            let dist = |s: f64| if sw.toe.1 == 0 { s } else { len_s - s };
             if let Some((ps, pss)) = self.last_pos {
-                if ps == c.span && dist(pss) > sw.trigger as f64 && dist(c.s) <= sw.trigger as f64 {
+                let crossed = if towards == 0 { pss > plate_s && c.s <= plate_s } else { pss < plate_s && c.s >= plate_s };
+                if ps == c.span && crossed {
                     out.push(PoleEvent { pole, kind: PoleEventKind::Plate { switch: si as u32 }, pos: w, amps });
                 }
             }
@@ -998,5 +998,47 @@ mod switch_tests {
         let (p, ev) = run(true, 30);
         assert_ne!(p.mode, PoleMode::OnWire);
         assert!(ev.iter().any(|e| matches!(e.kind, PoleEventKind::Dewired(DewireCause::Lateral) | PoleEventKind::Dewired(DewireCause::OutOfReach))), "{:?}", ev.iter().map(|e| e.kind).collect::<Vec<_>>());
+    }
+
+    /// A toe cut into short spans (a map's junction by a crossover): the plate lies 9 m before
+    /// the frog over the joint, and a shoe passing it is told so once; ends drawn up to a metre
+    /// apart are still one frog.
+    #[test]
+    fn the_plate_is_found_over_a_joint_and_loose_ends_make_a_frog() {
+        let net = WireNet::parse(
+            "[trolley_section]\nid 1\nlive 1\n[trolley_span]\nsection 1\np -50 0 5.5\np -4 0 5.5\n\
+             [trolley_span]\nsection 1\np -4 0 5.5\np 0.4 0.3 5.5\n\
+             [trolley_span]\nsection 1\np -0.3 0.5 5.5\np 25 0 5.5\np 50 0 5.5\n\
+             [trolley_span]\nsection 1\np 0.2 -0.6 5.5\np 10 3 5.5\np 20 8 5.5\np 30 14 5.5\np 40 21 5.5\n\
+             [trolley_switch]\npos 0 0 5.5\nmode fixed\ntrigger 9\n",
+        );
+        assert_eq!(net.switches.len(), 1);
+        let (span, s, towards) = net.switches[0].plate;
+        assert_eq!((span, towards), (0, 1));
+        // (46 m of toe span, 4.6 m of the span after it: the plate is 4.4 m from the first one's end)
+        assert!((s - 41.6).abs() < 1.0, "{s}");
+        let rot = DMat3::from_rotation_z(-std::f64::consts::FRAC_PI_2);
+        let def = PoleDef { side: 1, base: glam::Vec3::new(0.3, 0.0, 3.0), length: 6.5, ..Default::default() };
+        let mut p = Pole::new(def, 7);
+        p.roughness = 0.0;
+        let mut ev = Vec::new();
+        let pos = DVec3::new(-20.0, 0.0, 0.0);
+        let goal = Contact { span: 0, s: 30.0, side: 0 };
+        for _ in 0..240 {
+            p.step(&net, &PoseSpan::still(pos, rot), 1.0 / 60.0, Rope::Aim { goal: Some(goal), auto: false }, 0.0, 0, &mut ev);
+        }
+        for _ in 0..120 {
+            p.step(&net, &PoseSpan::still(pos, rot), 1.0 / 60.0, Rope::Idle, 0.0, 0, &mut ev);
+        }
+        assert_eq!(p.mode, PoleMode::OnWire);
+        ev.clear();
+        let mut x = -20.0;
+        for _ in 0..8 * 60 {
+            let span = PoseSpan { pos0: DVec3::new(x, 0.0, 0.0), rot0: rot, pos1: DVec3::new(x + 3.0 / 60.0, 0.0, 0.0), rot1: rot, accel: glam::Vec3::ZERO };
+            x += 3.0 / 60.0;
+            p.step(&net, &span, 1.0 / 60.0, Rope::Idle, 0.0, 0, &mut ev);
+        }
+        let plates = ev.iter().filter(|e| matches!(e.kind, PoleEventKind::Plate { .. })).count();
+        assert_eq!(plates, 1, "{:?}", ev.iter().map(|e| e.kind).collect::<Vec<_>>());
     }
 }

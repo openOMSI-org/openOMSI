@@ -7,4 +7,5 @@ description = "Timetables: TTData (bus stops, station links, trips, tracks, line
 
 [dependencies]
 omsi-cfg = { path = "../omsi-cfg" }
+omsi-transit = { path = "../omsi-transit" }
 log.workspace = true

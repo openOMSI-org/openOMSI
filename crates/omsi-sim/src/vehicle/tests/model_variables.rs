@@ -213,3 +213,32 @@ fn a_setvar_on_a_model_only_name_switches_its_meshes() {
     v.update_visuals(0.0);
     assert_eq!(shown(&v), ["shared1.o3d"]);
 }
+
+/// A scheme's `[setvar]` wins over a script that writes the same variable every frame: the
+/// Kajosoft Jelcz's `cockpit_frame` sets `v_drzwi` from its constant (0) and its repaints
+/// choose the glazed doors with `[setvar] v_drzwi 1`, which Omsi.exe draws (#3183). The
+/// scripts still see the scheme's value when they start, as before.
+#[test]
+fn a_schemes_setvar_is_what_is_drawn_after_the_scripts() {
+    let dir = std::env::temp_dir().join(format!("omsi_scheme_after_scripts_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let script = dir.join("cockpit.osc");
+    std::fs::write(&script, "{frame}\n(L.L.v_drzwi) (S.L.seen)\n0 (S.L.v_drzwi)\n{end}\n").unwrap();
+    let vars = dir.join("vars.txt");
+    std::fs::write(&vars, "v_drzwi\nseen\n").unwrap();
+    let program = omsi_script::compile(&omsi_script::CompileInput { scripts: vec![script], varlists: vec![vars], ..Default::default() });
+    std::fs::remove_dir_all(&dir).ok();
+    assert!(program.errors.is_empty(), "{:?}", program.errors);
+    let mut ty = diagnostic_type(false);
+    ty.program = Arc::new(program);
+    ty.paint_schemes = vec![PaintScheme { set_vars: vec![("v_drzwi".into(), 1.0)], ..Default::default() }];
+    let mut host = VehicleHost::new(Default::default());
+    host.paint_scheme = Some(Some(0));
+    let mut v = VehicleInstance::new(Arc::new(ty), host);
+    v.update(1.0 / 30.0);
+    assert_eq!(v.var("v_drzwi"), Some(1.0), "drawn: the scheme's value");
+    assert_eq!(v.var("seen"), Some(1.0), "the scripts started with the scheme's value");
+    // a switch pressed: the scripts run alone, and the scheme's value is kept again
+    v.update_scripts_only(0.0);
+    assert_eq!(v.var("v_drzwi"), Some(1.0));
+}

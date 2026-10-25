@@ -113,6 +113,12 @@ impl ScheduleSim {
         }
         // the player's bus
         if let Some(duty) = duty {
+            // (a duty's times are its own day's: a night tour's 25:05 is 1:05 on the clock. The
+            // board is worked out in the duty's time and its arrivals handed back in the
+            // clock's - compared with the clock's 0:50, the player's next trip looked 24
+            // hours away and the bus was missing from every board after midnight)
+            let duty_ahead = duty.duty_time(now) - now;
+            let now = now + duty_ahead;
             // a trip not begun leaves on time at the earliest (the bus waits at its
             // first stop), one under way arrives as early or late as it runs
             let delay = duty.delay(now);
@@ -151,7 +157,7 @@ impl ScheduleSim {
                         extra.delay = Some(delay);
                     }
                     list.push((
-                        expected,
+                        expected - duty_ahead,
                         trip.line.trim().to_string(),
                         trip.terminus.clone(),
                         (s.dep - s.arr).max(0.0),
@@ -528,6 +534,20 @@ mod tests {
         assert_eq!(sim.depots["depot"][0].2.as_ref().unwrap().termini[0].strings[0], "     U Marktstraße   über Bahnhof");
     }
 
+    /// The player's night tour after midnight: its 25:05 trip is on the board at 0:50 and
+    /// shows 1:05 there; at 21:00 the same trip is hours off and on no board.
+    #[test]
+    fn the_players_night_trip_shows_on_the_board_in_clock_time() {
+        let sim = schedule();
+        let mut trip = crate::timetable_run::tests::planned(90_300.0, &[(0.0, 90_300.0, 90_300.0)]);
+        trip.line = "N7".into();
+        trip.stops[0].object_id = 9;
+        let duty = PlayerDuty::new("N7".into(), "3".into(), vec![trip], 0, 0, true);
+        let after_midnight = sim.stop_list(9, 3_000.0, &HashMap::new(), Some(&duty));
+        assert_eq!(after_midnight.iter().map(|r| (r.0.round(), r.1.as_str())).collect::<Vec<_>>(), [(3_900.0, "N7")]);
+        assert!(sim.stop_list(9, 75_600.0, &HashMap::new(), Some(&duty)).is_empty());
+    }
+
     /// A night tour of today (23:00, 24:30) and the same tour's 24:30 as yesterday's, at
     /// 00:30 (#2166).
     fn night_tour(sim: &mut ScheduleSim) {
@@ -612,6 +632,42 @@ mod tests {
                 sim.tour_next[k] = Some(i);
             }
         }
+    }
+
+    /// At the start every trip still under way comes out, however long ago it left (a bus
+    /// that stands on a detector from 20:00 to 04:00, the map opened at 23:30); once the
+    /// map is running, only the departures of the moment do, and a trip already over never.
+    #[test]
+    fn the_trips_under_way_at_the_start_all_come_out() {
+        let mut sim = schedule();
+        let (world, mut traffic) = (no_world(), no_traffic());
+        tours(&mut sim, &[(72_000.0, "1", None), (82_000.0, "2", None), (84_300.0, "3", None)]);
+        sim.times[0][0].duration = 8.0 * 3600.0;
+        sim.times.push(vec![TripTimes { stations: vec![(0.0, 0.0), (60.0, 60.0)], stops: vec![true, true], duration: 60.0, ..Default::default() }]);
+        sim.departures[1].trip = 1;
+        sim.queue_due(&world, &mut traffic, 84_600.0, 20.0 * 60.0);
+        assert_eq!(sim.pending.iter().copied().collect::<Vec<_>>(), [0, 2], "20:00's long trip and 23:25's, not 22:46's one-minute trip, over long ago");
+        let mut later = schedule();
+        tours(&mut later, &[(72_000.0, "1", None)]);
+        later.times[0][0].duration = 8.0 * 3600.0;
+        later.queue_due(&world, &mut traffic, 84_600.0, 2.5);
+        assert!(later.pending.is_empty(), "a running map does not put out a trip begun hours ago");
+    }
+
+    /// Opened in the small hours, the map gets yesterday's trip still on its long way since
+    /// 21:40 as well as the ones of the last minutes.
+    #[test]
+    fn a_trip_from_last_evening_comes_out_at_a_start_after_midnight() {
+        let mut sim = schedule();
+        let (world, mut traffic) = (no_world(), no_traffic());
+        tours(&mut sim, &[(78_000.0 - 86_400.0, "4", None), (6_900.0, "5", None)]);
+        sim.times[0][0].duration = 5.0 * 3600.0;
+        sim.departures[0].yesterday = true;
+        // `tours` uses today's calendar mask, but this departure belongs to yesterday.
+        sim.departures[0].mask = sim.yesterday_bits.0 | sim.yesterday_bits.1;
+        assert!(sim.runs(0), "the fixture's night tour must run on yesterday's calendar");
+        sim.queue_due(&world, &mut traffic, 7_200.0, 20.0 * 60.0);
+        assert_eq!(sim.pending.iter().copied().collect::<Vec<_>>(), [0, 1]);
     }
 
     /// A tour's bus is out only while its tour runs: the second trip of a tour whose bus is

@@ -1234,3 +1234,75 @@ fn physics_cost() {
         eprintln!("{} road model: {us:.1} us per step of 1/120 s", if realistic { "realistic" } else { "OMSI 2   " });
     }
 }
+
+fn with_strut(kind: omsi_vehicle::vehicle::SuspensionKind) -> Vehicle {
+    let mut v = bus();
+    v.suspensions.push(omsi_vehicle::vehicle::Suspension::parse(&[&format!("type {}", match kind {
+        omsi_vehicle::vehicle::SuspensionKind::Coil => "coil",
+        omsi_vehicle::vehicle::SuspensionKind::Leaf => "leaf",
+        omsi_vehicle::vehicle::SuspensionKind::Air => "air",
+        omsi_vehicle::vehicle::SuspensionKind::Progressive => "progressive",
+    }), "level_time 2"]));
+    v
+}
+
+/// An axle without a `[suspension]` block is OMSI 2's coil strut, step for step.
+#[test]
+fn a_coil_strut_is_the_unchanged_strut() {
+    use omsi_vehicle::vehicle::SuspensionKind::Coil;
+    let g = road(1e9, 0.0);
+    let mut a = RigidBody::from_definition(&bus(), &[]);
+    let mut b = RigidBody::from_definition(&with_strut(Coil), &[]);
+    a.place(DVec3::ZERO, 0.0);
+    b.place(DVec3::ZERO, 0.0);
+    run(&mut a, 2.0, 0.0, 0.0, &g);
+    run(&mut b, 2.0, 0.0, 0.0, &g);
+    assert_eq!(a.origin(), b.origin());
+    assert_eq!(a.wheels[0].compression, b.wheels[0].compression);
+}
+
+/// Leaf springs rub: after a drop of the body the swing that is left a second later is no
+/// larger than on a hydraulic damper alone.
+#[test]
+fn leaf_springs_damp_a_drop_with_their_friction() {
+    use omsi_vehicle::vehicle::SuspensionKind::{Coil, Leaf};
+    let late_swing = |kind| {
+        let mut rb = RigidBody::from_definition(&with_strut(kind), &[]);
+        rb.place(DVec3::ZERO, 0.0);
+        let g = road(1e9, 0.0);
+        run(&mut rb, 3.0, 0.0, 5000.0, &g);
+        let before = rb.origin().z;
+        rb.position.z += 0.06;
+        let mut late = 0.0f64;
+        for i in 0..240 {
+            rb.step(1.0 / 60.0, 0.0, &[5000.0; 4], 0.0, &g);
+            if i >= 60 {
+                late = late.max((rb.origin().z - before).abs());
+            }
+        }
+        late
+    };
+    let (coil, leaf) = (late_swing(Coil), late_swing(Leaf));
+    assert!(coil < 0.06 && leaf < 0.06, "coil {coil}, leaf {leaf}");
+    assert!(leaf <= coil + 1e-4, "friction does not add swing: coil {coil}, leaf {leaf}");
+}
+
+/// Air bellows hold the ride height when the bus is loaded; a coil spring sags.
+#[test]
+fn air_bellows_hold_the_ride_height_under_load() {
+    use omsi_vehicle::vehicle::SuspensionKind::{Air, Coil};
+    let height_after_load = |kind| {
+        let mut rb = RigidBody::from_definition(&with_strut(kind), &[]);
+        rb.place(DVec3::ZERO, 0.0);
+        let g = road(1e9, 0.0);
+        run(&mut rb, 3.0, 0.0, 5000.0, &g);
+        let empty = rb.origin().z;
+        rb.mass += 4000.0;
+        run(&mut rb, 40.0, 0.0, 5000.0, &g);
+        (empty, rb.origin().z)
+    };
+    let (coil_empty, coil_loaded) = height_after_load(Coil);
+    let (air_empty, air_loaded) = height_after_load(Air);
+    assert!(coil_empty - coil_loaded > 0.03, "a coil spring sags with 4 t: {coil_empty} -> {coil_loaded}");
+    assert!((air_empty - air_loaded).abs() < 0.02, "air holds the height: {air_empty} -> {air_loaded}");
+}

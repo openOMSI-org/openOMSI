@@ -32,6 +32,10 @@ impl ScheduleSim {
     ) -> Result<OnRoute, Placed> {
         let trip = &self.data.trips[self.departures[i].trip];
         let trip_name = trip.name.clone();
+        // a trip of a transport route has no track until the map's network has been read
+        if self.transit_unrouted.contains(&trip_name.to_ascii_lowercase()) {
+            return Err(Placed::Wait);
+        }
         // (the [station] records of a type-1 trip as well: Novi Sad's buses have no others,
         // and without them they drove past every stop)
         let stations = trip_stations(trip);

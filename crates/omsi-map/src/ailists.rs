@@ -256,6 +256,65 @@ impl AiLists {
     }
 }
 
+/// The file a player's own edits of a map's AI lists are kept in (the launcher's "AI Lists"
+/// page), in the map's folder of the content folder: the same format as `ailists_#upd.cfg`,
+/// read last, on top of whatever list the date's scenario gives - a group of it replaces the
+/// group of that name, so that a player's change holds on every date and "reset" is deleting
+/// the file. Not an OMSI 2 file: the original never reads it.
+pub const USER_LISTS_FILE: &str = "ailists_#user.cfg";
+
+impl AiGroup {
+    /// The group as the lines of an `ailists.cfg` (CR LF), which `AiLists::parse` reads back
+    /// as the same group.
+    pub fn to_cfg(&self) -> String {
+        let clean = |s: &str| s.replace(['\r', '\n', '\t'], " ");
+        let mut o = String::new();
+        if self.is_depot {
+            o.push_str(&format!("[aigroup_depot]\r\n{}\r\n{}\r\n", clean(&self.name), clean(self.hof.as_deref().unwrap_or(""))));
+            for tg in &self.typgroups {
+                o.push_str(&format!("[aigroup_depot_typgroup_2]\r\n{}\r\n", clean(&tg.file)));
+                for e in &tg.entries {
+                    let date = |d: Option<i32>| d.map(|d| d.to_string()).unwrap_or_default();
+                    let mut line = vec![clean(&e.number), clean(&e.registration), clean(&e.paint), date(e.from), date(e.to)];
+                    // (trailing empty fields are left out, as the original's files do)
+                    while line.len() > 1 && line.last().is_some_and(|l| l.is_empty()) {
+                        line.pop();
+                    }
+                    o.push_str(&line.join("\t"));
+                    o.push_str("\r\n");
+                }
+                o.push_str("[end]\r\n");
+            }
+        } else {
+            o.push_str(&format!("[aigroup_2]\r\n{}\r\n{}\r\n", clean(&self.name), clean(self.hof.as_deref().unwrap_or(""))));
+            for v in &self.vehicles {
+                o.push_str(&format!("{}\t{}\r\n", clean(&v.file), v.weight));
+            }
+            o.push_str("[end]\r\n");
+        }
+        o
+    }
+}
+
+impl AiLists {
+    /// The player's own groups of a map (`USER_LISTS_FILE`), none when there is no such file.
+    pub fn user_edits(map_dir: &Path) -> AiLists {
+        // (the file is in the content folder, the map in the OMSI folder or an archive: every
+        // copy of the map's folder is looked in)
+        let Some(file) = omsi_cfg::mirrored_dirs(map_dir)
+            .into_iter()
+            .map(|d| omsi_cfg::resolve_path(&d, USER_LISTS_FILE))
+            .find(|f| omsi_cfg::vfs::is_file(f))
+        else {
+            return AiLists::default();
+        };
+        AiLists::load(&file).unwrap_or_else(|e| {
+            log::warn!("AI lists: {} cannot be read ({e}), it is left out", file.display());
+            AiLists::default()
+        })
+    }
+}
+
 /// A plain list file (one entry per line, blank lines ignored).
 pub fn load_list(path: &Path) -> Vec<String> {
     match CfgFile::read(path) {
@@ -417,6 +476,14 @@ pub fn chrono_deactivated_lines(chrono_dirs: &[PathBuf]) -> Vec<(String, PathBuf
 /// longer mixes in the map's old cars (#2315); Berlin's buses change to "Spandau 1994" on
 /// 29 May 1994.
 pub fn ailists_with_chrono(map_dir: &Path, chrono_dirs: &[PathBuf]) -> AiLists {
+    let mut ailists = ailists_with_chrono_base(map_dir, chrono_dirs);
+    ailists.update(AiLists::user_edits(map_dir));
+    ailists
+}
+
+/// [`ailists_with_chrono`] without the player's own edits: what the map and its scenarios
+/// give, the "defaults" the launcher's AI Lists page resets to.
+pub fn ailists_with_chrono_base(map_dir: &Path, chrono_dirs: &[PathBuf]) -> AiLists {
     let mut files = Vec::new();
     for dir in chrono_dirs.iter().rev().map(|d| d.as_path()).chain(std::iter::once(map_dir)) {
         let full = omsi_cfg::resolve_path(dir, "ailists.cfg");
@@ -739,6 +806,43 @@ mod chrono_list_tests {
         // only the update: the map's list with the update's group added
         let b = ailists_with_chrono(&map, &[later]);
         assert_eq!(b.groups.len(), 4);
+        let _ = std::fs::remove_dir_all(&map);
+    }
+}
+
+#[cfg(test)]
+mod user_edit_tests {
+    use super::*;
+
+    const MAP: &str = "[aigroup_2]\nNormalCars\n\nold\\golf.bus\t7\nold\\bx.ovh\t4\n[end]\n[aigroup_2]\nTrucks\n\nold\\f90.bus\n[end]\n\
+        [aigroup_depot]\nBusses\nGrundorf\n[aigroup_depot_typgroup_2]\nold\\sd77.bus\n2701\tXX-1\tred\t19900101\t19991231\n2702\n[end]\n";
+
+    /// What the page writes comes back from the reader as the same groups.
+    #[test]
+    fn a_group_written_is_read_back() {
+        let a = AiLists::parse(&CfgFile::from_str("ailists.cfg", MAP));
+        let text: String = a.groups.iter().map(AiGroup::to_cfg).collect();
+        let b = AiLists::parse(&CfgFile::from_str(USER_LISTS_FILE, &text));
+        assert_eq!(a.groups, b.groups);
+    }
+
+    /// The player's file is read last: its groups replace the map's by name on any date, the
+    /// groups it does not name stay, and without the file the list is the map's own.
+    #[test]
+    fn the_players_file_goes_on_top() {
+        let map = std::env::temp_dir().join(format!("omsi-map-user-lists-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&map);
+        std::fs::create_dir_all(&map).unwrap();
+        std::fs::write(map.join("ailists.cfg"), MAP).unwrap();
+        assert_eq!(ailists_with_chrono(&map, &[]), ailists_with_chrono_base(&map, &[]));
+        let mine = AiGroup { name: "normalcars".into(), vehicles: vec![AiVehicleEntry { file: "new\\kipkw.bus".into(), weight: 25.0, ..Default::default() }], ..Default::default() };
+        std::fs::write(map.join(USER_LISTS_FILE), mine.to_cfg()).unwrap();
+        let on_top = ailists_with_chrono(&map, &[]);
+        assert_eq!(on_top.groups.len(), 3);
+        assert_eq!(on_top.groups[0].vehicles.iter().map(|v| (v.file.as_str(), v.weight)).collect::<Vec<_>>(), [("new\\kipkw.bus", 25.0)]);
+        assert_eq!(on_top.groups[1].name, "Trucks");
+        // the defaults are still the map's
+        assert_eq!(ailists_with_chrono_base(&map, &[]).groups[0].vehicles.len(), 2);
         let _ = std::fs::remove_dir_all(&map);
     }
 }

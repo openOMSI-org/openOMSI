@@ -116,6 +116,7 @@ impl crate::App {
         r.options.max_obj_dist = o.max_obj_dist;
         r.options.min_obj_size = o.min_obj_size;
         r.options.ssao = o.ssao && omsi_render::ceiling().is_none_or(|c| c.ssao);
+        r.options.street_light = o.street_light;
         if let (true, Some(scene)) = (rebuild, self.scene.as_mut()) {
             r.rebuild_with(scene, omsi_render::RenderOptions { msaa: o.msaa, shadow_size: o.shadow_size, ..r.options });
         }

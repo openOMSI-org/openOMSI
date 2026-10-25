@@ -1,6 +1,46 @@
 use super::Settings;
 
 #[test]
+fn fsr1_menu_settings_round_trip_into_renderer() {
+    let mut ui = omsi_launcher_lib::settings_from_text(None);
+    assert_eq!(ui["upscaler"], "default");
+    ui["upscaler"] = serde_json::json!("fsr1");
+    ui["fsr_quality"] = serde_json::json!("balanced");
+    ui["fsr_sharpness"] = serde_json::json!(0.45);
+    let saved = omsi_launcher_lib::settings_to_text(&ui, None);
+    let game = Settings::from_text(&saved);
+    assert_eq!(game.upscaler, "fsr1");
+    assert_eq!(game.fsr_quality, "balanced");
+    assert!((game.fsr_sharpness - 0.45).abs() < 0.0001);
+    let graphics = game.render_options();
+    assert!(graphics.fsr1);
+    assert!((graphics.render_scale - 0.59).abs() < 0.0001);
+    assert!((graphics.fsr_sharpness - 0.45).abs() < 0.0001);
+    assert_eq!(Settings::from_text(&game.to_text()), game);
+    assert_eq!(omsi_launcher_lib::settings_from_text(Some(&saved))["fsr_quality"], "balanced");
+
+    // A corrupt or future setting must not enable experimental shaders.
+    assert_eq!(Settings::from_text("upscaler=anything_else\\n").upscaler, "default");
+    assert_eq!(Settings::from_text("fsr_sharpness=nan\\n").fsr_sharpness, 0.8);
+}
+
+#[test]
+fn fsr1_presets_keep_the_render_scale_caps() {
+    let mut s = Settings::from_text("upscaler=fsr1\nfsr_quality=ultra\n");
+    assert!((s.scene_render_scale() - 0.77).abs() < 0.0001);
+    // (the optimiser's step down, or the safer graphics after a second lost device)
+    s.apply_safe_gpu(2);
+    assert!((s.scene_render_scale() - 0.75).abs() < 0.0001);
+    s.render_scale = 0.5;
+    assert!((s.render_options().render_scale - 0.5).abs() < 0.0001);
+    // (a cap above the preset leaves it as it is; auto stays with the frame-rate governor)
+    s.render_scale = 1.0;
+    assert!((s.scene_render_scale() - 0.77).abs() < 0.0001);
+    s.fsr_quality = "auto".into();
+    assert_eq!(s.scene_render_scale(), 0.0);
+}
+
+#[test]
 fn mobile_door_mode_defaults_and_round_trips() {
     assert_eq!(Settings::from_text("").touch_door_mode, "standard");
     assert_eq!(Settings::from_text("touch_door_mode=Direct\n").touch_door_mode, "direct");
@@ -47,6 +87,25 @@ fn gamepad_settings_round_trip_and_are_clamped() {
 }
 
 /// The enhanced clouds' quality is kept, `high` unless the file says `low`.
+#[test]
+fn street_light_round_trips_and_reaches_the_renderer() {
+    assert_eq!(Settings::default().street_light, "off");
+    assert_eq!(Settings::default().render_options().street_light, Some(false));
+    for phone in [false, true] {
+        let launcher = omsi_launcher_lib::settings_from_text_on(None, phone);
+        assert_eq!(launcher["street_light"], "off");
+        let game = Settings::from_text(&omsi_launcher_lib::settings_to_text(&launcher, None));
+        assert_eq!(game.render_options().street_light, Some(false));
+    }
+    for (q, want) in [("auto", None), ("on", Some(true)), ("off", Some(false))] {
+        let s = Settings::from_text(&format!("graphics=enhanced\nstreet_light={q}\n"));
+        assert_eq!(Settings::from_text(&s.to_text()).street_light, q);
+        assert_eq!(s.render_options().street_light, want);
+    }
+    assert_eq!(Settings::from_text("street_light=OFF\n").street_light, "off");
+    assert_eq!(Settings::from_text("street_light=broken\n").street_light, "auto");
+}
+
 #[test]
 fn cloud_quality_round_trips() {
     assert_eq!(Settings::default().cloud_quality, "high");
@@ -218,6 +277,8 @@ fn graphics_modes() {
     assert!(rt.enhanced && rt.ray_tracing() && rt.shadows && rt.ssao && rt.reflections == 1.0);
     assert_eq!(["1", "0", "true", "off", "0.35", "7", "x"].map(|v| Settings::from_text(&format!("reflections={v}\n")).reflections), [1.0, 0.0, 1.0, 0.0, 0.35, 1.0, 0.0]);
     assert!(rt.render_options().ray_tracing && !rt.render_options().no_enhanced);
+    let switched = crate::startup::SessionSettings { enhanced: true, ..Default::default() };
+    assert!(Settings::default().render_options().no_enhanced && !switched.render_options(&Settings::default()).no_enhanced);
     let s = Settings { graphics: "enhanced".into(), enhanced: true, ..Default::default() };
     assert_eq!(Settings::from_text(&s.to_text()), s);
 }
@@ -403,4 +464,27 @@ fn arrival_announcements_are_off_at_first_and_kept() {
     assert!(Settings::from_text(&saved).auto_announce, "{saved}");
     let on = Settings { auto_announce: true, ..Default::default() };
     assert_eq!(Settings::from_text(&on.to_text()), on);
+}
+
+#[test]
+fn quick_actions_settings_round_trip_and_launcher_preservation() {
+    let input = "pause_quick_actions=[\"save\",\"camera\"]\n";
+    let game = Settings::from_text(input);
+    assert_eq!(game.pause_quick_actions, "[\"save\",\"camera\"]");
+    assert_eq!(Settings::from_text(&game.to_text()).pause_quick_actions, game.pause_quick_actions);
+    let launcher = omsi_launcher_lib::settings_from_text(Some(input));
+    let saved = omsi_launcher_lib::settings_to_text(&launcher, Some(input));
+    assert_eq!(Settings::from_text(&saved).pause_quick_actions, game.pause_quick_actions);
+    let empty = omsi_launcher_lib::settings_from_text(Some("pause_quick_actions=[]\n"));
+    assert_eq!(Settings::from_text(&omsi_launcher_lib::settings_to_text(&empty, None)).pause_quick_actions, "[]");
+}
+
+#[test]
+fn quick_actions_pending_setting_is_not_lost_when_other_settings_are_saved() {
+    let mut launcher = omsi_launcher_lib::settings_from_text(None);
+    crate::game_lists::apply_pending(&mut launcher, &[("pause_quick_actions".into(), r#"["world","save"]"#.into())]);
+    launcher["volume"] = serde_json::json!(0.4);
+    let saved = omsi_launcher_lib::settings_to_text(&launcher, None);
+    assert_eq!(Settings::from_text(&saved).pause_quick_actions, r#"["world","save"]"#);
+    assert_eq!(saved.matches("pause_quick_actions=").count(), 1);
 }

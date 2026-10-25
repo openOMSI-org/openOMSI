@@ -223,6 +223,7 @@ pub(super) fn player_to_scene(cx: PlayerToSceneCx, dt: f32) {
     if let Some(tv) = p.trolley_view.as_mut() {
         tv.update(r, scene, dt, &mut p.vehicle);
     }
+    p.panto_fx.update(dt, &mut p.vehicle);
     let glass = p.sync_transforms(r, scene, inside, cx.world.world.as_ref().map_or(2, |w| w.settings.rain_quality()));
     cx.perf.profile.add(crate::profile_keys::ProfKey::PlayerGlass, glass);
     crate::scene::sync_vehicle_damage(r, scene, &mut p.vehicle, &mut p.render);

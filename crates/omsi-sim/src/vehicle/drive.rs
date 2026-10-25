@@ -64,6 +64,7 @@ impl VehicleInstance {
 
     pub(super) fn step_physics(&mut self, dt: f32) {
         self.step_trolley(dt);
+        self.step_pantograph(dt);
         let c = self.physics.controls;
         self.put(self.v_throttle, c.throttle);
         self.put(self.v_brake, c.brake);
@@ -391,9 +392,9 @@ impl VehicleInstance {
         for (i, w) in rb.wheels.iter_mut().enumerate() {
             w.spring_factor = self.spring_factor(i / 2, i % 2);
             // what each tyre rolls on (the map tells the scripts, and so us, every frame)
-            let side = if w.attach.x < 0.0 { "L" } else { "R" };
-            if let Some(id) = self.var(&format!("Axle_SurfaceID_{}_{side}", rb.wheel_axle.get(i).copied().unwrap_or(0))) {
-                w.surface = id.clamp(0.0, 255.0) as u8;
+            let side = usize::from(w.attach.x >= 0.0);
+            if let Some(k) = self.v_surface.get(rb.wheel_axle.get(i).copied().unwrap_or(0)).and_then(|a| a[side]) {
+                w.surface = self.state.vars[k as usize].clamp(0.0, 255.0) as u8;
             }
         }
         // and the weather it rolls in: the road's wetness and the air's density and motion

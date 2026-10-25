@@ -1,7 +1,7 @@
 //! The vehicle upload: a vehicle type's meshes and materials made into render instances.
 use super::*;
 
-mod lods;
+pub(crate) mod lods;
 mod night_coverage;
 use night_coverage::{load_night, night_coverage, static_diffuse};
 
@@ -245,6 +245,7 @@ impl World {
                         let Some(e) = shared.get_mut(p) else { continue };
                         e.1 = e.1.saturating_sub(1);
                         if e.1 == 0 {
+                            self.freetex_reloads.forget(e.0);
                             own_textures.push(e.0);
                             shared.remove(p);
                         }
@@ -252,11 +253,10 @@ impl World {
                 }
             }
             for v in render.variants {
+                for built in v.free_built.values() {
+                    own_materials.extend(built.materials());
+                }
                 for f in v.free {
-                    for (b, it) in f.cache.into_values() {
-                        own_materials.push(b);
-                        own_materials.push(it);
-                    }
                     // the pictures it showed: shared, gone with their last holder
                     let mut shared = f.shared.lock();
                     for p in f.held {
@@ -265,6 +265,7 @@ impl World {
                         };
                         e.1 = e.1.saturating_sub(1);
                         if e.1 == 0 {
+                            self.freetex_reloads.forget(e.0);
                             own_textures.push(e.0);
                             shared.remove(&p);
                         }
@@ -1237,10 +1238,11 @@ impl World {
         materials.extend(more.iter().copied());
         // [matl_freetex]: the file is only known at run time (the destination
         // roller builds its path from the map's depot and terminus strings)
-        let free: Vec<FreeTex> = free_texture_defs(&ov_all).into_iter().map(|(item_only, key, var)| {
+        let defs = free_texture_defs(&slot_halves(&ov, &first_item, &later_items, spec.item.is_some()));
+        let free: Vec<FreeTex> = defs.into_iter().map(|(halves, key, var)| {
             let diffuse = key.eq_ignore_ascii_case(&m.texture);
             let texture = tex!(&subst(&key), &dirs_ref);
-            self.free_texture_slot(var, texture, diffuse, item_only, dirs)
+            self.free_texture_slot(var, texture, diffuse, halves, dirs)
         }).collect();
         let multi_light = |base: MaterialId, item: MaterialId| -> Option<MultiLight> {
             let list = ov.iter().map(|o| &o.lightmaps).find(|l| !l.is_empty())?;
@@ -1260,39 +1262,58 @@ impl World {
         };
         if spec.item.is_some() || !entries.is_empty() || !free.is_empty() {
             let tex_var = master.map(|m| m.variable.clone()).unwrap_or_default();
-            variants.push(VariantSlot { mesh: instances.len(), slot, base, item, more, var: change_var.unwrap_or_default(), more_vars: change_vars.iter().skip(1).cloned().collect(), entries, tex_var, free, spec, base_tex, entry_tex, lights: multi_light(base, item) });
+            variants.push(VariantSlot { mesh: instances.len(), slot, base, item, more, var: change_var.unwrap_or_default(), more_vars: change_vars.iter().skip(1).cloned().collect(), entries, tex_var, free, free_built: HashMap::new(), free_lights: None, spec, base_tex, entry_tex, lights: multi_light(base, item) });
         } else if let Some(lights) = multi_light(base, item) {
-            variants.push(VariantSlot { mesh: instances.len(), slot, base, item, more: Vec::new(), var: String::new(), more_vars: Vec::new(), entries, tex_var: String::new(), free: Vec::new(), spec, base_tex, entry_tex, lights: Some(lights) });
+            variants.push(VariantSlot { mesh: instances.len(), slot, base, item, more: Vec::new(), var: String::new(), more_vars: Vec::new(), entries, tex_var: String::new(), free: Vec::new(), free_built: HashMap::new(), free_lights: None, spec, base_tex, entry_tex, lights: Some(lights) });
         } else if base_dyn.any() {
             dyn_slots.push(DynSlot { mesh: instances.len(), slot, text: text_slot, script: script_slot, script_trans, lit: script_slot.is_some_and(|i| vt.model.html_page_lit(i)), tex, alpha, transmap, night, lightmap, envmap, address, extra, color, emissive });
         }
         base
     }
 
-    /// Cache state and reload ownership shared by free textures in this world.
+    /// Cache state and reload ownership shared by free textures in this world: one
+    /// `[matl_freetex]` of a vehicle slot, standing in for `key` (`diffuse`: the slot's own
+    /// texture), on the halves its bits name (see `free_texture_defs`).
     fn free_texture_slot(
         &self,
         var: String,
         key: Option<TextureId>,
         diffuse: bool,
-        item_only: bool,
+        halves: u32,
         dirs: &[PathBuf],
     ) -> FreeTex {
         FreeTex {
+            remote: None,
+            remote_key: String::new(),
+            image: None,
             reloads: self.freetex_reloads.clone(),
             var,
             diffuse,
             key,
-            item_only,
+            halves,
             dirs: dirs.to_vec(),
             textures: self.textures.clone(),
-            cache: HashMap::new(),
+            pictures: HashMap::new(),
             current: None,
             shared: self.vehicle_textures.clone(),
             held: Vec::new(),
             wants_upgrade: self.freetex_upgrades.clone(),
         }
     }
+}
+
+/// The records of each half of a vehicle slot in `SlotSpec` order - the plain material, its
+/// first item, then the further items, each on its own - for `free_texture_defs`: an item
+/// lists the slot's free textures and its own (the NLC's switch stripes keep the white
+/// picture under their light map in item 1 while item 2 swaps it for the black one under
+/// its night map).
+fn slot_halves<'a>(plain: &[&'a MaterialDef], first_item: &[&'a MaterialDef], later_items: &[&'a MaterialDef], has_item: bool) -> Vec<Vec<&'a MaterialDef>> {
+    let mut halves = vec![plain.to_vec()];
+    if has_item {
+        halves.push(first_item.to_vec());
+        halves.extend(later_items.iter().map(|o| vec![*o]));
+    }
+    halves
 }
 
 /// One material slot of a vehicle mesh being uploaded (see [`World::vehicle_slot_material`]).

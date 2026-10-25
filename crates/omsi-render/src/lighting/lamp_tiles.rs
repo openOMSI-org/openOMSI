@@ -73,7 +73,7 @@ impl TileWants {
             if l.mode == LightMode::Enhanced && d < reach + LAMP_SHADOW_REACH && lights_the_view(eye, p, l.direction, reach) {
                 self.spots.push(Spot { index: idx, position: p, direction: l.direction, range: l.radius, score: strength / (d * d + 25.0) });
             }
-        } else if !aimed && d_ground < l.radius + LAMP_SHADOW_REACH {
+        } else if !aimed && !l.flash && d_ground < l.radius + LAMP_SHADOW_REACH {
             let core = l.core.max(l.radius * 0.125);
             let mut score = strength * core * core / (d_ground * d_ground + 25.0);
             // (a lamp that had a map keeps it until another is clearly stronger: the set
@@ -259,6 +259,16 @@ mod tests {
             wants.consider(&slots, &LightEye::at(Vec3::ZERO), &headlamp(*at, *dir), *at, k as u32, true);
         }
         assert_eq!(wants.spots.len(), 4);
+    }
+
+    #[test]
+    fn a_trolley_spark_takes_no_world_tile() {
+        let at = Vec3::new(0.0, 10.0, 5.0);
+        let lamp = PointLight { position: at.as_dvec3(), radius: 20.0, intensity: 4.0, ..Default::default() };
+        let mut wants = TileWants::default();
+        wants.consider(&WorldSlots::default(), &LightEye::at(Vec3::ZERO), &lamp, at, 0, true);
+        wants.consider(&WorldSlots::default(), &LightEye::at(Vec3::ZERO), &PointLight { flash: true, ..lamp }, at, 1, true);
+        assert_eq!(wants.world.iter().map(|w| w.2).collect::<Vec<_>>(), vec![0]);
     }
 
     /// A car's map is taken for a place and a heading to a half metre and two degrees: a car

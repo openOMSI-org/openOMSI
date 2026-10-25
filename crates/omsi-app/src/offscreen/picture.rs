@@ -204,6 +204,7 @@ impl Offscreen<'_> {
                 if let Some(tv) = p.trolley_view.as_ref() {
                     tv.push_effects(scene, &p.vehicle);
                 }
+                p.panto_fx.push_effects(scene);
             }
             let (kind, rate) = precip_of(weather);
             let mut rn = rain::Rain::new();
@@ -518,8 +519,25 @@ impl Offscreen<'_> {
         world.finish_texture_upgrades(renderer, scene);
         // OMSI_WARM_FRAMES=n: n frames drawn before the picture, for what reads the frame
         // before it (the rain on the glass looks through the last picture)
-        for _ in 0..omsi_cfg::flags::OMSI_WARM_FRAMES.parse::<usize>().unwrap_or(0) {
-            let _ = renderer.render_to_image(scene, w, h, camera, lighting)?;
+        // OMSI_CAM_SWEEP=yaw[,jump]: the warm frames come from a camera that turns `yaw`
+        // degrees a frame and ends in the picture's pose (so the picture follows frames of a
+        // pan, for what reads the last frame: the bounced light), or, with `jump` metres,
+        // from a place that far to the side (a cut)
+        let sweep = omsi_cfg::flags::OMSI_CAM_SWEEP.var().map(|v| {
+            let mut it = v.split(',').map(|x| x.trim().parse::<f64>().unwrap_or(0.0));
+            (it.next().unwrap_or(0.0), it.next().unwrap_or(0.0))
+        });
+        let warm = omsi_cfg::flags::OMSI_WARM_FRAMES.parse::<usize>().unwrap_or(0);
+        for k in 0..warm {
+            let mut cam = *camera;
+            if let Some((yaw, jump)) = sweep {
+                let behind = (warm - k) as f64;
+                cam.yaw -= (yaw * behind) as f32;
+                if jump != 0.0 && k + 1 < warm {
+                    cam.position.x += jump;
+                }
+            }
+            let _ = renderer.render_to_image(scene, w, h, &cam, lighting)?;
         }
         Ok(())
     }

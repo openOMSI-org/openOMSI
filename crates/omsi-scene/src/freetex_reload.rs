@@ -136,10 +136,36 @@ struct Worker {
 #[derive(Default)]
 pub struct FreeTextureReloads {
     worker: OnceLock<Option<Worker>>,
+    // Sources of uploaded freetex images, not arbitrary files requested by a peer.
+    snapshots: Mutex<HashMap<TextureId, Arc<TextureData>>>,
+    paths: Mutex<HashMap<TextureId, PathBuf>>,
 }
 
 impl FreeTextureReloads {
+    pub fn source_path(&self, id: TextureId) -> Option<PathBuf> {
+        self.paths.lock().get(&id).cloned()
+    }
+    pub fn snapshot(&self, id: TextureId) -> Option<Arc<TextureData>> {
+        self.snapshots.lock().get(&id).cloned()
+    }
+
+    pub fn remember(&self, id: TextureId, data: Arc<TextureData>) {
+        let mut images = self.snapshots.lock();
+        let used: usize = images.iter().filter(|(key, _)| **key != id).map(|(_, d)| d.cpu_bytes()).sum();
+        if used.saturating_add(data.cpu_bytes()) <= 64 * 1024 * 1024 {
+            images.insert(id, data);
+        } else {
+            images.remove(&id);
+        }
+    }
+
+    pub(crate) fn forget(&self, id: TextureId) {
+        self.snapshots.lock().remove(&id);
+        self.paths.lock().remove(&id);
+    }
+
     pub fn watch(&self, path: PathBuf, id: TextureId, shared: &Arc<Shared>, max_dimension: u32) {
+        self.paths.lock().insert(id, path.clone());
         let Some(worker) = self.worker.get_or_init(|| {
             let (watch, commands) = mpsc::channel();
             // At most two decoded pictures wait for upload, plus the worker's current one.
@@ -195,6 +221,28 @@ impl FreeTextureReloads {
             return false;
         };
         worker.versions.lock().contains_key(path)
+    }
+}
+
+#[cfg(test)]
+mod snapshot_tests {
+    use super::*;
+    #[test]
+    fn snapshots_follow_uploaded_pixels_and_keep_other_surfaces_separate() {
+        let snapshots = FreeTextureReloads::default();
+        let data = |color| Arc::new(TextureData::from_image(omsi_texture::Image::solid(color)));
+        let first = data([1, 2, 3, 255]);
+        let other = data([4, 5, 6, 255]);
+        snapshots.remember(1, first.clone());
+        snapshots.remember(2, other.clone());
+        assert!(Arc::ptr_eq(&snapshots.snapshot(1).unwrap(), &first));
+        let next = data([7, 8, 9, 255]);
+        snapshots.remember(1, next.clone());
+        assert!(Arc::ptr_eq(&snapshots.snapshot(1).unwrap(), &next));
+        assert!(Arc::ptr_eq(&snapshots.snapshot(2).unwrap(), &other));
+        snapshots.forget(1);
+        assert!(snapshots.snapshot(1).is_none());
+        assert!(snapshots.snapshot(2).is_some());
     }
 }
 
