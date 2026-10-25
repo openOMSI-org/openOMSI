@@ -388,6 +388,11 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **The launcher's bus preview is no longer misted over**: the bus is made for it (the
+  showroom and `--export-glb`) on a mild day (22 °C) instead of at 0 °C, the temperature a
+  vehicle starts at without a weather. The
+  Kajosoft Citaro, Citaro Facelift and 628 fog every window up in their {init} below 10 °C,
+  so the preview always showed them misted; in the game the map's weather still decides.
 - **Destination displays light up at night in Enhanced and Enhanced+**: a script's screen is
   never taken for a pane. The EMT Citaro's Krueger matrix (Mallorca) is blended, writes no
   depth and draws its letters through a `\S:n` transparency map - the layout of a window - so
