@@ -107,7 +107,7 @@ pub(super) fn divider() -> Element {
 
 /// The game's card: its dark colour, a little see-through over the picture (`alpha`).
 pub(super) fn card(anchor: omsi_plugin::ui::Anchor, x: f32, y: f32, width: f32, alpha: u8, children: Vec<Element>) -> Panel {
-    Panel { anchor, x, y, width, padding: 14.0, gap: 8.0, background: Some(Rgba([14, 16, 20, alpha])), radius: 12.0, accent: None, visible: true, clickable: false, draggable: false, grab: false, children }
+    Panel { anchor, x, y, width, padding: 14.0, gap: 8.0, background: Some(Rgba([14, 16, 20, alpha])), radius: 12.0, accent: None, visible: true, clickable: false, draggable: false, grab: false, frame: false, children }
 }
 
 // --- the frame -----------------------------------------------------------------------------

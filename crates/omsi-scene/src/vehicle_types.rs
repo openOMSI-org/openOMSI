@@ -228,6 +228,10 @@ impl FreeBuilt {
 
 #[derive(Clone)]
 pub struct FreeTex {
+    /// Remote pixels override local path lookup, even before the first image arrives.
+    pub remote: Option<Option<TextureId>>,
+    pub remote_key: String,
+    pub image: Option<TextureId>,
     pub reloads: Arc<crate::FreeTextureReloads>,
     pub var: String,
     /// The original named texture can be used by several stages (a display commonly

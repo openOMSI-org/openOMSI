@@ -451,7 +451,8 @@ impl Renderer {
 
     /// Render one OpenXR view using the headset's asymmetric projection matrix.
     /// The matrix uses the same reversed depth range as the desktop camera. The
-    /// second eye reuses the first eye's shadow atlas when both share an origin.
+    /// second eye reuses the first eye's shadow atlas when both share an origin,
+    /// while each eye keeps its own visibility and LOD history between frames.
     pub fn render_xr_eye(
         &mut self,
         scene: &mut Scene,
@@ -463,7 +464,18 @@ impl Renderer {
         projection: Mat4,
         second_eye: bool,
     ) {
+        self.swap_xr_culling(second_eye as usize);
         self.render_inner(scene, target, width, height, camera, lighting, false, None, Some(projection), second_eye);
+        self.swap_xr_culling(second_eye as usize);
+    }
+
+    fn swap_xr_culling(&mut self, eye: usize) {
+        // As with triple-screen panels, an eye must use its own previous view,
+        // and leave the desktop's history intact when returning from the draw.
+        let history = &mut self.history.xr_culling[eye];
+        std::mem::swap(self.history.cull_drawn.get_mut(), &mut history.drawn);
+        std::mem::swap(self.history.object_sizes.get_mut(), &mut history.sizes);
+        std::mem::swap(self.history.object_sizes_scratch.get_mut(), &mut history.scratch);
     }
 
     /// Composite the shared game menu and a world-positioned pointer into each eye.

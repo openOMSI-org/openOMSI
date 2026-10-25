@@ -104,12 +104,21 @@ impl Fixture {
     }
 }
 fn drive(host: &mut Plugins, game: &mut Game, done: impl Fn(&Game) -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(15);
+    // CI Windows runners sometimes need extra time to start a copy of the test
+    // executable as a child process (including antivirus scanning). The game
+    // remains nonblocking: only this integration test's completion wait grows.
+    // Keep the shorter limit on other platforms to catch actual stalls quickly.
+    let timeout = if cfg!(windows) { 45 } else { 15 };
+    let deadline = Instant::now() + Duration::from_secs(timeout);
     while !done(game) && Instant::now() < deadline {
         host.frame(game);
         std::thread::sleep(Duration::from_millis(2));
     }
-    assert!(done(game), "{:?}", game.messages);
+    assert!(
+        done(game),
+        "plugin process test timed out after {timeout}s (frames={}, messages={:?})",
+        game.frames, game.messages
+    );
 }
 fn prompt(host: &mut Plugins, game: &mut Game, broker: &ProcessPermissions) -> ProcessPrompt {
     drive(host, game, |_| broker.prompt().is_some());

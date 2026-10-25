@@ -670,6 +670,7 @@ impl Renderer {
             },
             history: ViewHistory {
                 triple_culling: Default::default(),
+                xr_culling: Default::default(),
                 flicker: std::cell::RefCell::new(HashMap::new()),
                 main_bundles: Default::default(),
                 mirror_bundles: Default::default(),

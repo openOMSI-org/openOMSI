@@ -246,7 +246,15 @@ fn quick_actions_empty_page_keeps_edit_entry_accessible() {
     let mut v = view(&rail);
     v.quick_actions = "[]";
     let mut sh = Shell::new(); sh.pause_hidden = false;
-    click(&mut sh, &v, Vec2::new(1360.0, 75.0));
+    // Look up the edit button's actual bounds rather than assuming a fixed
+    // position: the pause page changes width and alignment with the layout.
+    sh.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
+    draw(&mut sh, &v);
+    let edit = sh.ui.drawn.get(&omsi_ui::kit::id_of("pause-quick-edit"))
+        .expect("edit button should be accessible with an empty quick-actions page")
+        .center();
+    sh.finish();
+    click(&mut sh, &v, edit);
     assert!(sh.quick_edit);
     assert!(sh.actions.is_empty());
 }

@@ -128,6 +128,8 @@ jni = "0.21"
 ndk-context = "0.1"
 
 [dev-dependencies]
+# Test-only access to the actual clickable control rectangles in the pause menu.
+omsi-ui = { path = "../omsi-ui", features = ["test-support"] }
 # the control names from a table (`ControlNames::from_table`) for the key picker's tests
 omsi-input = { path = "../omsi-input", features = ["test-support"] }
 # the stages' declared groups held against what their code reaches (`frame_stages/access_tests.rs`)

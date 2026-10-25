@@ -487,6 +487,7 @@ pub(crate) struct ShadowRes {
 /// What the views drew in their last frames, which the next frame's culling and bundles go by.
 pub(crate) struct ViewHistory {
     pub(crate) triple_culling: [ViewCulling; 3],
+    pub(crate) xr_culling: [ViewCulling; 2],
     /// `OMSI_DEBUG_FLICKER`: which near instances in view were drawn last frame.
     pub(crate) flicker: std::cell::RefCell<HashMap<usize, bool>>,
     /// The window's main-pass bundles as last recorded, with what they were made of (see

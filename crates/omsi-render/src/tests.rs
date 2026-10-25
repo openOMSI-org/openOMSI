@@ -1465,3 +1465,4 @@ mod night_coverage;
 mod prepass_reach;
 mod transparency;
 mod vanilla_lighting;
+mod xr_culling;

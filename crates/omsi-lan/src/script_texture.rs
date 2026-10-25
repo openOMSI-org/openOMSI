@@ -10,7 +10,7 @@ pub fn script_texture_table(
     script_texture_table_for_vars(bus, var_table(program).hash, surfaces)
 }
 
-fn script_texture_table_for_vars(bus: &str, mut hash: u32, surfaces: &[(i32, i32)]) -> u32 {
+pub(crate) fn script_texture_table_for_vars(bus: &str, mut hash: u32, surfaces: &[(i32, i32)]) -> u32 {
     for b in bus
         .replace('\\', "/")
         .bytes()

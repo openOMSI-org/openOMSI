@@ -3,8 +3,9 @@
 use super::*;
 
 impl App {
-    /// Shift+N: the navigator, the navigator with the schedule, off. True in VR (where the
-    /// key is used up).
+    /// Shift+N: the navigator, the navigator with the schedule, off (with a plugin's panel in
+    /// its whole frame, which has no lower part: on, off). True in VR (where the key is used
+    /// up).
     pub(crate) fn cycle_navigator(&mut self) -> bool {
         if self.vr_active() {
             if !self.vr_nav_profile().enabled {
@@ -19,6 +20,10 @@ impl App {
         }
         if let Some(n) = self.menus.navigator.as_mut() {
             match (n.enabled, n.schedule) {
+                (true, _) if n.frame_panel.is_some() => {
+                    n.enabled = false;
+                    n.schedule = false;
+                }
                 (true, false) => n.schedule = true,
                 (true, true) => {
                     n.enabled = false;

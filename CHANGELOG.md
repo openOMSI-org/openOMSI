@@ -393,6 +393,16 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   vehicle starts at without a weather. The
   Kajosoft Citaro, Citaro Facelift and 628 fog every window up in their {init} below 10 °C,
   so the preview always showed them misted; in the game the map's weather still decides.
+- **Köln's houses on Engeldorfer Straße are back**: a binary `.x` string ended by a WORD
+  token, as PAD-Labs' exporter writes it, no longer swallows the `}` after it. Read as the
+  documented DWORD, the house's material never closed, the model failed to load and its 25
+  binary houses were missing since 0.3.38.
+- **Bus shelters show through a bus's windows** instead of a white shape in Enhanced and
+  Enhanced+, or nothing at all in Vanilla. Grundorf's shelter is drawn "after vehicles"
+  (`[rendertype] 4`) and the bus's panes write depth, so it failed the depth test behind them,
+  and the houses behind it were already gone. The blended draws of `[rendertype]` 3 and 4 are
+  now sorted far to near with the normal objects', after the opaque draws of all of them
+  ([#2852](https://github.com/openOMSI-org/openOMSI/issues/2852)).
 - **Destination displays light up at night in Enhanced and Enhanced+**: a script's screen is
   never taken for a pane. The EMT Citaro's Krueger matrix (Mallorca) is blended, writes no
   depth and draws its letters through a `\S:n` transparency map - the layout of a window - so

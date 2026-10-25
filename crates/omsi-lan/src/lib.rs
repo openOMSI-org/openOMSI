@@ -69,3 +69,7 @@ pub mod variable_schema;
 
 pub mod clock;
 pub mod script_texture;
+
+pub mod freetex;
+#[cfg(test)]
+mod freetex_tests;

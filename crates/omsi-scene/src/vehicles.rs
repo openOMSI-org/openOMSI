@@ -245,6 +245,7 @@ impl World {
                         let Some(e) = shared.get_mut(p) else { continue };
                         e.1 = e.1.saturating_sub(1);
                         if e.1 == 0 {
+                            self.freetex_reloads.forget(e.0);
                             own_textures.push(e.0);
                             shared.remove(p);
                         }
@@ -264,6 +265,7 @@ impl World {
                         };
                         e.1 = e.1.saturating_sub(1);
                         if e.1 == 0 {
+                            self.freetex_reloads.forget(e.0);
                             own_textures.push(e.0);
                             shared.remove(&p);
                         }
@@ -1281,6 +1283,9 @@ impl World {
         dirs: &[PathBuf],
     ) -> FreeTex {
         FreeTex {
+            remote: None,
+            remote_key: String::new(),
+            image: None,
             reloads: self.freetex_reloads.clone(),
             var,
             diffuse,

@@ -316,7 +316,8 @@ end)
 F10 gives the panels the mouse; a click on the button sounds the horn. The whole example is
 [`docs/examples/plugins/trip_panel.lua`](examples/plugins/trip_panel.lua).
 
-`omsi.ui.version` is `5` (`4` before `grab`, `3` before boxes, stop lists and the other
+`omsi.ui.version` is `6` (`5` before a navigator panel in the whole frame and the `map`
+element, `4` before `grab`, `3` before boxes, stop lists and the other
 elements and keys marked 4 below, `2` before the navigator's board, `1` before the controls):
 test `if omsi.ui and omsi.ui.version >= 2` in a plugin that should also run in an older openOMSI.
 The panels are the plugin's own: one plugin cannot change or remove another's, and when the
@@ -341,6 +342,7 @@ omsi.ui.set("trip", {
   clickable = false,          -- true: a click anywhere on it is ui_click(id, nil)
   draggable = false,          -- true: while the panels have the mouse it can be moved by its free parts
   grab = false,               -- true: it takes its clicks even while the panels do not have the mouse (ui.version 5)
+  frame = false,              -- with anchor = "navigator": the navigator's whole frame, not the board under its map (ui.version 6)
   children = { ... },         -- elements, top to bottom
 })
 ```
@@ -380,6 +382,31 @@ panel came to, in the panel's pixels, and whether the panel in the board is this
 panel taller than the room is cut off at the bottom (what is cut off takes no click either), so
 a plugin can leave out rows that do not fit.
 
+With `frame = true` (`omsi.ui.version` 6) the panel fills the navigator's whole frame instead:
+from its top, as wide as the navigator and as tall as the panel comes to (as far as the window
+has room), on the navigator's card with its rounded corners - in the panel's `background` where
+it gives one, which the navigator paints as its card (with its corners and its opacity setting),
+not the panel as a square of its own. The map, the place row and the
+stop list make way for it; the map shows only where the panel has a `map` element, with its
+own rounded corners, and the navigator's cards over it (the next turn, the clock, the speed,
+the next stop) unless the element says `cards = false`. The navigator stays the navigator: it
+is moved and sized as before, Shift+N shows and hides it (there is no lower part to open), and
+a press on the map or on a part of the panel that takes no click is the navigator's - a drag
+moves it, a click opens the city map. A `grab` panel there takes clicks without the mouse on
+its buttons and other clickable parts alone. `omsi.ui.dock()` then gives the whole frame: its
+width, the most height there is room for, the height the panel came to, and `true` as its
+fifth value (a game that does not know `frame` lays the panel out under the map, leaves the
+`map` element out and gives no fifth value: a plugin can test for it rather than for a
+version).
+
+```lua
+omsi.ui.set("phone", { anchor = "navigator", frame = true, grab = true, padding = 10, children = {
+  { type = "text", text = "Line 5 → Hauptbahnhof", weight = "bold" },
+  { type = "map", height = 200, cards = false },
+  { type = "button", id = "next", text = "Next stop: Markt 09:14" },
+} })
+```
+
 #### Elements
 
 Every element can have an `id`, a `color` and `visible = false` (left out, no room kept).
@@ -394,6 +421,7 @@ Every element can have an `id`, a `color` and `visible = false` (left out, no ro
 | `box` (4) | `children`, `gap` (default 4), `color` (default amber) | its children stacked in a box tinted with `color`, a stripe of it on the left: a note, an advice |
 | `stops` (4) | `stops` (`{ { name, time, expected, expected_color, state, tag }, ... }`, up to 128), `size` (13), `color` (the rail, default amber) | stops on a rail, a row each: `state` `"done"` (behind the bus: grey), `"now"` (the one it heads for: marked, bold) or `"ahead"` (the default); `time` on the right, `expected` before it in `expected_color`, and `tag` (`"terminus"`) before them |
 | `divider` | `color` | a thin line (in a row: upright) |
+| `map` (6) | `height` (default: the navigator's own map's, 0.8 times the width), `cards` (default `true`) | in a panel that fills the navigator's frame, the navigator's map there (with its cards over it unless `cards = false`); elsewhere empty room of its height |
 | `space` | `size` (default 8) | empty room (in a row: across) |
 | `button` | `id` (needed), `text`, `icon`, `color` | a button 34 high, across the panel (in a row as wide as its label, or what it grows to); a click on it is `ui_click(panel id, button id)` |
 | `image` | `src` (a PNG, JPEG, BMP or TGA of the plugin's folder), `width`, `height` (default 64) | the picture, made smaller to fit the width it has |
@@ -824,7 +852,7 @@ On macOS, helpers extracted from ZIP files may need their executable bit restore
 | --- | --- | --- | --- |
 | `omsi.message(text, [seconds])` | nil | A line of text on the screen (5 seconds when not given). *Permission: `ui`.* | 0.1.5 |
 | `omsi.ui.clear()` | nil | Removes every panel of the plugin. *Permission: `ui`.* | 0.2.21 |
-| `omsi.ui.dock()` | width, room, height, mine | The navigator's board, where a panel with `anchor = "navigator"` goes, in that panel's pixels: its width, the most height there is room for, the height the panel there came to (0 before it is laid out; more than `room`: it is cut off at the bottom), and whether that panel is this plugin's (the first one asked for has the board, another waits). Nothing while the navigator shows no board: it is off, or Shift+N put its lower part away. | 0.3.36 |
+| `omsi.ui.dock()` | width, room, height, mine, frame | The navigator's board, where a panel with `anchor = "navigator"` goes, in that panel's pixels: its width, the most height there is room for, the height the panel there came to (0 before it is laid out; more than `room`: it is cut off at the bottom), whether that panel is this plugin's (the first one asked for has the board, another waits), and whether it fills the navigator's whole frame (`frame = true`, ui version 6; false under the map, and nothing in an older game). Nothing while the navigator shows no board: it is off, or Shift+N put its lower part away. | 0.3.36 |
 | `omsi.ui.focus(on)` | boolean | `true`: the panels get the mouse (the cursor shows, a click goes to the panel under it and none to the bus); `false`, Esc or a menu of the game gives it back. Returns the new state. *Permission: `ui`.* | 0.2.21 |
 | `omsi.ui.focused()` | boolean | Whether the panels have the mouse. | 0.2.21 |
 | `omsi.ui.moved(panel)` | dx, dy | How far the player dragged a panel from where its table puts it (pixels). | 0.2.22 |

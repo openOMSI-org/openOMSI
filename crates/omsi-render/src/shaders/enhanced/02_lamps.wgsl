@@ -45,17 +45,28 @@ fn lamp_shadow_at(li: u32, p: vec3<f32>, n: vec3<f32>, thin: bool) -> f32 {
     let base = vec2<f32>(f32(k % u32(cols)) * tile, dims.x + f32(k / u32(cols)) * tile) + tx;
     // (nine taps; a saloon's lamp - tiles 28 on - four: its tile's texels are three centimetres
     // and every pixel of a saloon takes a handful of lamps)
+    // (two loops of fixed bounds: one bounded by the tile's kind was not unrolled)
     let saloon = k >= 28u;
-    let lo = select(-1, 0, saloon);
-    let shift = select(0.0, 0.5, saloon);
+    let zr = ndc.z - 0.00002;
     var sum = 0.0;
-    for (var y = lo; y <= 1; y = y + 1) {
-        for (var x = lo; x <= 1; x = x + 1) {
-            let a = (base + (vec2<f32>(f32(x), f32(y)) - vec2<f32>(shift)) * 1.25) / dims;
-            sum = sum + textureSampleCompareLevel(t_shadow_far, s_shadow, a, ndc.z - 0.00002);
+    var taps = 9.0;
+    if (saloon) {
+        for (var y = 0; y <= 1; y = y + 1) {
+            for (var x = 0; x <= 1; x = x + 1) {
+                let a = (base + (vec2<f32>(f32(x), f32(y)) - vec2<f32>(0.5)) * 1.25) / dims;
+                sum = sum + textureSampleCompareLevel(t_shadow_far, s_shadow, a, zr);
+            }
+        }
+        taps = 4.0;
+    } else {
+        for (var y = -1; y <= 1; y = y + 1) {
+            for (var x = -1; x <= 1; x = x + 1) {
+                let a = (base + vec2<f32>(f32(x), f32(y)) * 1.25) / dims;
+                sum = sum + textureSampleCompareLevel(t_shadow_far, s_shadow, a, zr);
+            }
         }
     }
-    let lit = sum / f32((2 - lo) * (2 - lo));
+    let lit = sum / taps;
     if (own) {
         own_shadow = lit;
     }

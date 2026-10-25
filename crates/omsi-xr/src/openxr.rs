@@ -6,17 +6,13 @@ use glam::{DVec3, Mat4, Quat, Vec3, Vec4};
 use openxr as xr;
 use std::time::{Duration, Instant};
 use windows::core::Interface;
-use windows::Win32::Graphics::Direct3D12::{
-    ID3D12CommandAllocator, ID3D12CommandList, ID3D12GraphicsCommandList, ID3D12PipelineState,
-    ID3D12Resource, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_RESOURCE_BARRIER,
-    D3D12_RESOURCE_BARRIER_0, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
-    D3D12_RESOURCE_BARRIER_FLAG_NONE, D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
-    D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_RENDER_TARGET,
-    D3D12_RESOURCE_TRANSITION_BARRIER,
-};
+use windows::Win32::Graphics::Direct3D12::ID3D12Resource;
 use windows::Win32::Graphics::Dxgi::Common::*;
 
 use omsi_render::{Camera, Lighting, Renderer, Scene};
+
+mod sync;
+use sync::SwapchainSync;
 
 pub struct Vr {
     instance: xr::Instance,
@@ -27,7 +23,6 @@ pub struct Vr {
     swapchain: xr::Swapchain<xr::D3D12>,
     images: Vec<wgpu::Texture>,
     resources: Vec<ID3D12Resource>,
-    prepared: Vec<bool>,
     width: u32,
     height: u32,
     blend: xr::EnvironmentBlendMode,
@@ -57,10 +52,19 @@ pub struct Vr {
     stats_wait: Duration,
     stats_image_wait: Duration,
     stats_render: Duration,
-    stats_gpu_wait: Duration,
     stats_eyes: [Duration; 2],
     stats_desktop_mirror: Duration,
     stats_stages_prev: std::collections::BTreeMap<&'static str, f64>,
+    // Drop last: keep the bound device/queue alive through XR destruction.
+    sync: SwapchainSync,
+}
+
+impl Drop for Vr {
+    fn drop(&mut self) {
+        // Field destruction follows this body. Finish application commands before
+        // xrDestroySwapchain, while retaining the device/queue until after it.
+        self.sync.finish();
+    }
 }
 
 struct Mirror {
@@ -317,7 +321,6 @@ impl Vr {
             })
             .collect::<Result<Vec<_>>>()?;
         let (images, resources): (Vec<_>, Vec<_>) = imported.into_iter().unzip();
-        let prepared = vec![false; images.len()];
         let blend = instance
             .enumerate_environment_blend_modes(system, view_type)?
             .into_iter()
@@ -337,6 +340,7 @@ impl Vr {
             log::info!("OpenXR bus mirror rate override: {rate} pictures/s (-1: every mirror each game frame)");
         }
         Ok(Self {
+            sync: SwapchainSync::new(&renderer.device, &renderer.queue, images.len()),
             instance,
             session,
             frame_waiter,
@@ -345,7 +349,6 @@ impl Vr {
             swapchain,
             images,
             resources,
-            prepared,
             width,
             height,
             blend,
@@ -375,7 +378,6 @@ impl Vr {
             stats_wait: Duration::ZERO,
             stats_image_wait: Duration::ZERO,
             stats_render: Duration::ZERO,
-            stats_gpu_wait: Duration::ZERO,
             stats_eyes: [Duration::ZERO; 2],
             stats_desktop_mirror: Duration::ZERO,
             stats_stages_prev: Default::default(),
@@ -656,11 +658,7 @@ impl Vr {
         // transition the actual resource to COMMON before wgpu's first barrier.
         // Later acquisitions need no fix: wgpu leaves both layers in
         // RENDER_TARGET, which is also the state OpenXR requires on release.
-        let first_use = if !self.prepared[index] {
-            Some(transition_first_use(renderer, &self.resources[index])?)
-        } else {
-            None
-        };
+        self.sync.prepare_image(index, &self.resources[index])?;
         let mut vr_base = *base;
         vr_base.roll = 0.0;
         // Driver cameras may look down at the dashboard by default. In VR the
@@ -762,16 +760,11 @@ impl Vr {
             navigator,
         );
         self.draw_desktop(renderer, index, desktop, desktop_size);
-        // The runtime may sample this image immediately after release. Wait for
-        // wgpu's submissions until explicit D3D12 fence handoff is implemented.
-        let gpu_wait_start = Instant::now();
-        renderer.device.poll(wgpu::PollType::Wait {
-            submission_index: None,
-            timeout: None,
-        })?;
-        let gpu_wait_time = gpu_wait_start.elapsed();
-        self.prepared[index] = true;
-        drop(first_use);
+        // All eye/UI/mirror commands have been submitted on the exact queue bound
+        // to OpenXR, with both layers restored to RENDER_TARGET. The D3D12 OpenXR
+        // contract orders runtime access on that queue; CPU completion is needed
+        // at swapchain destruction, not at release. Keep native first-use command
+        // objects alive in `sync` until that shutdown wait.
         self.swapchain.release_image()?;
         let rect = xr::Rect2Di {
             offset: xr::Offset2Di { x: 0, y: 0 },
@@ -796,7 +789,7 @@ impl Vr {
             .views(&projection_views);
         self.frame_stream
             .end(frame.predicted_display_time, self.blend, &[&layer])?;
-        self.record_frame_stats(renderer, wait_time, render_start, gpu_wait_time);
+        self.record_frame_stats(renderer, wait_time, render_start);
         Ok(true)
     }
 
@@ -953,16 +946,15 @@ impl Vr {
 
     /// The frame's times added to the statistics, logged every five seconds (with the
     /// renderer's mirror stages under `OMSI_PROFILE`).
-    fn record_frame_stats(&mut self, renderer: &Renderer, wait_time: Duration, render_start: Instant, gpu_wait_time: Duration) {
+    fn record_frame_stats(&mut self, renderer: &Renderer, wait_time: Duration, render_start: Instant) {
         self.stats_frames += 1;
         self.stats_wait += wait_time;
         self.stats_render += render_start.elapsed();
-        self.stats_gpu_wait += gpu_wait_time;
         let interval = self.stats_since.elapsed();
         if interval >= Duration::from_secs(5) {
             let count = self.stats_frames as f64;
             log::info!(
-                "OpenXR: {:.1} fps, frame wait {:.1} ms/frame, image wait {:.1}, render {:.1} (eyes {:.1}+{:.1}, desktop mirror {:.1}, GPU sync {:.1} ms/frame)",
+                "OpenXR: {:.1} fps, frame wait {:.1} ms/frame, image wait {:.1}, render {:.1} (eyes {:.1}+{:.1}, desktop mirror {:.1})",
                 count / interval.as_secs_f64(),
                 self.stats_wait.as_secs_f64() * 1000.0 / count,
                 self.stats_image_wait.as_secs_f64() * 1000.0 / count,
@@ -970,7 +962,6 @@ impl Vr {
                 self.stats_eyes[0].as_secs_f64() * 1000.0 / count,
                 self.stats_eyes[1].as_secs_f64() * 1000.0 / count,
                 self.stats_desktop_mirror.as_secs_f64() * 1000.0 / count,
-                self.stats_gpu_wait.as_secs_f64() * 1000.0 / count,
             );
             if omsi_cfg::flags::OMSI_PROFILE.is_set() {
                 let stages = renderer.stats.borrow();
@@ -1003,7 +994,6 @@ impl Vr {
             self.stats_wait = Duration::ZERO;
             self.stats_image_wait = Duration::ZERO;
             self.stats_render = Duration::ZERO;
-            self.stats_gpu_wait = Duration::ZERO;
             self.stats_eyes = [Duration::ZERO; 2];
             self.stats_desktop_mirror = Duration::ZERO;
         }
@@ -1183,52 +1173,6 @@ impl Mirror {
         }));
         renderer.queue.submit(Some(encoder.finish()));
     }
-}
-
-fn transition_first_use(
-    renderer: &Renderer,
-    resource: &ID3D12Resource,
-) -> Result<(ID3D12CommandAllocator, ID3D12GraphicsCommandList)> {
-    let device = unsafe { renderer.device.as_hal::<wgpu_hal::api::Dx12>() }
-        .ok_or_else(|| anyhow!("OpenXR lost the DX12 graphics device"))?;
-    let queue = unsafe { renderer.queue.as_hal::<wgpu_hal::api::Dx12>() }
-        .ok_or_else(|| anyhow!("OpenXR lost the DX12 command queue"))?;
-    // Submit on wgpu's own queue so its subsequent COMMON -> RENDER_TARGET
-    // transition executes after this barrier. Keep the command objects alive
-    // until the frame's device.poll completes.
-    let allocator: ID3D12CommandAllocator = unsafe {
-        device
-            .raw_device()
-            .CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT)
-    }?;
-    let list: ID3D12GraphicsCommandList = unsafe {
-        device.raw_device().CreateCommandList(
-            0,
-            D3D12_COMMAND_LIST_TYPE_DIRECT,
-            &allocator,
-            None::<&ID3D12PipelineState>,
-        )
-    }?;
-    let mut barrier = D3D12_RESOURCE_BARRIER {
-        Type: D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
-        Flags: D3D12_RESOURCE_BARRIER_FLAG_NONE,
-        Anonymous: D3D12_RESOURCE_BARRIER_0 {
-            Transition: std::mem::ManuallyDrop::new(D3D12_RESOURCE_TRANSITION_BARRIER {
-                pResource: std::mem::ManuallyDrop::new(Some(resource.clone())),
-                Subresource: D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
-                StateBefore: D3D12_RESOURCE_STATE_RENDER_TARGET,
-                StateAfter: D3D12_RESOURCE_STATE_COMMON,
-            }),
-        },
-    };
-    unsafe {
-        list.ResourceBarrier(std::slice::from_ref(&barrier));
-        std::mem::ManuallyDrop::drop(&mut (*barrier.Anonymous.Transition).pResource);
-        list.Close()?;
-        let command_list: ID3D12CommandList = list.cast()?;
-        queue.as_raw().ExecuteCommandLists(&[Some(command_list)]);
-    }
-    Ok((allocator, list))
 }
 
 fn xr_position(pose: xr::Posef) -> Vec3 {

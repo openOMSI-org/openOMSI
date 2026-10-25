@@ -357,6 +357,16 @@ impl Renderer {
             // OMSI draws each authored world phase as its own opaque/cutout pass followed
             // by that phase's blended draws. Keeping the phase boundary here lets later
             // surface markings compose over spline blends without changing the depth test.
+            // The blended draws of the scenery that comes after the map's own objects
+            // (`[rendertype]` 3 and 4) are sorted with the normal phase's, far to near,
+            // after the opaque draws of all three: a vehicle's panes write depth (unless
+            // its model says `[matl_noZwrite]`), so a bus shelter of `[rendertype] 4`
+            // drawn after the bus failed the depth test behind its windows - and with the
+            // depth prefilled, the houses behind the shelter were already gone, so the
+            // windows showed the sky's colour in its shape, white (Aachen, Grundorf: #2852).
+            let late_blend = |p: RenderPhase| matches!(p, RenderPhase::Normal | RenderPhase::AfterNormal);
+            let mut late_visible: Vec<(usize, f32, bool)> = Vec::new();
+            let mut late_blended: Vec<usize> = Vec::new();
             for phase in RenderPhase::DRAW_ORDER {
                 if phase == RenderPhase::Terrain { presurface_batch_end = main_batches.len(); }
                 // Finish surface composition before committing the fully covered ground
@@ -377,6 +387,17 @@ impl Renderer {
                 opaque_items(scene, visible, exclude_texture, &mut items, &mut blended);
                 main_draws[0] += items.len();
                 batch_items(scene, &mut items, true, list, &mut main_batches);
+                if late_blend(phase) {
+                    late_visible.extend_from_slice(visible);
+                    late_blended.append(&mut blended);
+                    continue;
+                }
+                if phase == RenderPhase::AfterVehicles {
+                    late_visible.extend_from_slice(visible);
+                    late_blended.append(&mut blended);
+                    blended = std::mem::take(&mut late_blended);
+                }
+                let visible = if phase == RenderPhase::AfterVehicles { &late_visible[..] } else { &visible[..] };
                 let keyed = self.blended_order(scene, f, visible, &blended);
                 items.clear();
                 blended_items(scene, keyed, exclude_texture, &mut items, &mut cab_items);

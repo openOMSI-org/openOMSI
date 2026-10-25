@@ -9,6 +9,7 @@ impl App {
         let walker = self.walker_pose();
         let radio_keyed = self.voice_radio_keyed();
         let Some(lan) = self.net.lan.as_mut() else {
+            self.gfx.sim_view.lan.stop_freetex();
             // (the session is over: voice chat with it)
             if let Some(mut v) = self.sound.voice.take() {
                 v.stop(self.sound.audio.as_ref());
@@ -22,6 +23,7 @@ impl App {
             }
             return;
         };
+        self.gfx.sim_view.lan.capture_freetex(self.player.as_ref(), &self.args.root);
         let duty = self
             .session.duty
             .as_ref()
@@ -87,6 +89,7 @@ impl App {
         );
         if let (Some(w), Some(r), Some(scene)) = (self.world.as_deref(), self.renderer.as_ref(), self.scene.as_mut()) {
             crate::view_sync::apply_lan(&mut self.net.remotes, &mut self.gfx.sim_view.lan, w, r, scene, self.sound.audio.as_ref(), &frame, dt);
+            self.gfx.sim_view.lan.sync_freetex(lan, &self.net.remotes, r, scene, &self.args.root);
         }
         for u in updates {
             self.apply_world_update(u);

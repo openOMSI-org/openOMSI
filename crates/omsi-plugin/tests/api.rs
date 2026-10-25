@@ -256,19 +256,23 @@ fn the_navigators_board_is_told_to_the_plugin() {
           local n = select("#", omsi.ui.dock())
           if n == 0 then omsi.message("no board") return end
           omsi.ui.set("board", { anchor = "navigator", children = {} })
-          local w, room, h, mine = omsi.ui.dock()
-          omsi.message(string.format("%d %d %d %s", w, room, h, tostring(mine)))
+          local w, room, h, mine, frame = omsi.ui.dock()
+          omsi.message(string.format("%d %d %d %s %s", w, room, h, tostring(mine), tostring(frame)))
         end
     "##;
     let mut p = run("dock", src, &mut g, 1);
-    let mut d = omsi_plugin::ui::Dock { width: 360.0, room: 420.0, height: 96.0, owner: Some(u64::MAX) };
+    let mut d = omsi_plugin::ui::Dock { width: 360.0, room: 420.0, height: 96.0, owner: Some(u64::MAX), frame: false };
     p.ui.borrow_mut().set_dock(Some(d));
     p.frame(&mut g);
     // (another plugin's panel in it, then this one's)
     d.owner = Some(p.ui.borrow().panels()[0].owner);
     p.ui.borrow_mut().set_dock(Some(d));
     p.frame(&mut g);
-    assert_eq!(g.messages, ["no board", "360 420 96 false", "360 420 96 true"]);
+    // (the navigator's whole frame, for a panel with `frame = true`)
+    d.frame = true;
+    p.ui.borrow_mut().set_dock(Some(d));
+    p.frame(&mut g);
+    assert_eq!(g.messages, ["no board", "360 420 96 false false", "360 420 96 true false", "360 420 96 true true"]);
 }
 
 #[test]

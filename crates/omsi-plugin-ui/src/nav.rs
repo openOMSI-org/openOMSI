@@ -1,11 +1,44 @@
 //! The panels' elements in the navigator's look (`omsi.ui` version 4): boxes - a tinted card
 //! with a stripe, for a note or an advice - and stop lists, the stops on a rail with their
 //! times, as the navigator's duty board drew them; and a bar's parts and a badge's weight.
+//! The navigator's map (`omsi.ui` version 6) is room the navigator fills: it is noted where
+//! it is ([`Laid::map`]), and nothing is drawn there.
 
 use super::{color, ink_on, Item, Layout, ACCENT, BADGE_H, BADGE_PAD, BADGE_PX};
 use glam::Vec2;
-use omsi_plugin::ui::{Element, Kind, Rgba, Stop, StopState};
+use omsi_plugin::ui::{Element, Kind, Panel, Rgba, Stop, StopState};
 use omsi_ui::{Color, Rect, Weight};
+
+/// The panel for the navigator as it was laid out, in physical pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Docked {
+    /// Its height (0 before it is laid out).
+    pub height: f32,
+    /// It fills the navigator's whole frame (`frame = true`), not the board under the map.
+    pub frame: bool,
+    /// Where the navigator's map goes in it (a `map` element), from the panel's top.
+    pub map: Option<DockedMap>,
+    /// The colour of the navigator's card under a panel in the whole frame (its `background`;
+    /// None: the navigator's own).
+    pub background: Option<Color>,
+}
+
+/// A panel as it is laid out for the navigator: as wide as it, flat (no accent, no corners)
+/// and see-through over the navigator's card. One in the board paints its `background` over
+/// the card; one in the whole frame has the navigator paint the card in it, rounded as the
+/// card is (a square of its own would stand out at the corners).
+pub(crate) fn in_navigator(p: &Panel, width: f32) -> Panel {
+    let background = if p.frame { None } else { p.background };
+    Panel { width, accent: None, radius: 0.0, background: Some(background.unwrap_or(Rgba([0, 0, 0, 0]))), ..p.clone() }
+}
+
+/// The navigator's map in a panel that fills its frame: where it goes (physical pixels, from
+/// the panel's top left: x, y, width, height) and whether the navigator's cards go over it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DockedMap {
+    pub rect: [f32; 4],
+    pub cards: bool,
+}
 
 /// A box's room round what is in it (the stripe's side, the others), and its stripe.
 const BOX_PAD: (f32, f32) = (12.0, 8.0);
@@ -24,6 +57,8 @@ const TEXT_SOFT: Color = Color::rgba(196, 202, 214, 1.0);
 const TEXT_DIM: Color = Color::rgba(149, 157, 176, 1.0);
 const TEXT_FAINT: Color = Color::rgba(110, 118, 136, 1.0);
 const TAG_FILL: Color = Color::rgba(255, 255, 255, 0.10);
+/// The navigator's own map: this share of its width high.
+const MAP_SHARE: f32 = 0.8;
 
 impl Layout<'_> {
     pub(crate) fn nav_natural(&self, e: &Element) -> f32 {
@@ -45,6 +80,9 @@ impl Layout<'_> {
                 h + gap * children.len().saturating_sub(1) as f32 + 2.0 * BOX_Y
             }
             Kind::Stops { stops, size } => stops.len() as f32 * STOP_ROW * size / 13.0,
+            // (as high as the navigator's own map unless it says: 0.8 times the width)
+            Kind::Map { height, .. } if *height > 0.0 => *height,
+            Kind::Map { .. } => (w * MAP_SHARE).round(),
             _ => 0.0,
         }
     }
@@ -73,6 +111,11 @@ impl Layout<'_> {
                 for (i, s) in stops.iter().enumerate() {
                     let rr = Rect::new(r.x, r.y + i as f32 * row, r.w, row);
                     self.stop(s, rr, *size, rail, i > 0, i + 1 < stops.len());
+                }
+            }
+            Kind::Map { cards, .. } => {
+                if self.out.map.is_none() {
+                    self.out.map = Some((r, *cards));
                 }
             }
             _ => {}
@@ -183,5 +226,59 @@ impl Layout<'_> {
         let name = self.fit(&s.name, px, wt, (right - nx).max(0.0));
         let base = self.baseline(r.y, lh, px, wt);
         self.text(name, px, wt, Vec2::new(nx, base), c);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::*;
+    use omsi_plugin::ui::panel_from_source;
+
+    fn panel(src: &str) -> Panel {
+        panel_from_source(src).unwrap()
+    }
+
+    /// A panel that fills the navigator's frame says where its map goes: the room of its
+    /// first `map` element (the navigator's own map's height unless it says), drawn empty;
+    /// cut off, as much of it as is left.
+    /// A panel in the navigator is laid out see-through; one in the whole frame leaves its
+    /// background to the navigator's card (rounded as the card is), one in the board paints it.
+    #[test]
+    fn the_whole_frame_s_background_is_the_navigators_card() {
+        let frame = panel(r##"{ anchor = "navigator", frame = true, background = "#141A26", accent = "#FF0000", radius = 8 }"##);
+        let p = super::in_navigator(&frame, 360.0);
+        assert_eq!((p.width, p.background, p.accent, p.radius), (360.0, Some(Rgba([0, 0, 0, 0])), None, 0.0));
+        let board = panel(r##"{ anchor = "navigator", background = "#141A26" }"##);
+        assert_eq!(super::in_navigator(&board, 360.0).background, Some(Rgba([0x14, 0x1A, 0x26, 255])));
+    }
+
+    #[test]
+    fn a_map_element_is_room_for_the_navigators_map() {
+        let fonts = Fonts::new();
+        let p = panel(r#"{ anchor = "navigator", frame = true, width = 360, padding = 10, gap = 6, children = {
+            { type = "text", text = "Line 5", size = 14 },
+            { type = "map", cards = false },
+            { type = "map", height = 40 },
+            { type = "button", id = "go", text = "Go" },
+        } }"#);
+        let mut l = layout(&p, &fonts, 1.0);
+        let (r, cards) = l.map.expect("the map");
+        assert!(!cards);
+        assert_eq!((r.x, r.w, r.h), (10.0, 340.0, (340.0 * 0.8f32).round()));
+        assert!((r.y - (10.0 + 14.0 * LINE + 6.0)).abs() < 0.01, "{r:?}");
+        let empty = |l: &Laid| l.items.iter().all(|i| match i {
+            Item::Rect { r: x, .. } | Item::Rounded { r: x, .. } => x.right() <= r.x || x.x >= r.right() || x.bottom() <= r.y || x.y >= r.bottom(),
+            _ => true,
+        });
+        assert!(empty(&l), "nothing is drawn where the map goes");
+        assert_eq!(l.h, (10.0 + 14.0 * LINE + 6.0 + r.h + 6.0 + 40.0 + 6.0 + BUTTON_H + 10.0).ceil());
+        // (a map with a height of its own, elsewhere: room of that height)
+        let q = panel(r#"{ children = { { type = "map", height = 50 } } }"#);
+        assert_eq!(layout(&q, &fonts, 1.0).map.unwrap().0.h, 50.0);
+        // cut off in the middle of the map: the part that is left
+        cut(&mut l, r.y + 30.0);
+        assert_eq!(l.map.unwrap().0.h, 30.0);
+        cut(&mut l, r.y);
+        assert!(l.map.is_none());
     }
 }
