@@ -11,6 +11,7 @@ omsi-cfg = { path = "../omsi-cfg" }
 omsi-content = { path = "../omsi-content" }
 omsi-geometry = { path = "../omsi-geometry" }
 omsi-htmlengine = { path = "../omsi-htmlengine" }
+omsi-htmlpage = { path = "../omsi-htmlpage" }
 omsi-map = { path = "../omsi-map" }
 omsi-model = { path = "../omsi-model" }
 omsi-o3d = { path = "../omsi-o3d" }

@@ -588,7 +588,13 @@ impl App {
         // (not while the wheel is zooming: the zoom moved the switches under the cursor, and
         // the wheel's next notch turned one instead of zooming on, #1224)
         let zooming = wheel_goes_on(self.input.wheel_zoomed_at, std::time::Instant::now());
-        if self.menus.hover.is_some() && self.view != "free" && !zooming {
+        // The headset pointer can move with the head without a CursorMoved event.
+        // Pick its current ray directly; a stale hover label or desktop zoom
+        // cooldown must not swallow the wheel over a VR cockpit control.
+        let vr_cockpit = self.vr_active()
+            && !self.input.mouse_drive
+            && matches!(self.view.as_str(), "driver" | "pax");
+        if self.view != "free" && ((self.menus.hover.is_some() && !zooming) || vr_cockpit) {
             let ray = self.camera.as_ref().zip(self.gfx.surface.as_ref())
                 .map(|(cam, s)| self.cockpit_cursor_ray(cam, (s.config.width, s.config.height)));
             if let (Some(p), Some((o, d, spread))) = (
@@ -600,7 +606,8 @@ impl App {
                     // a notch is worth a good push of the mouse: the scripts divide
                     // the movement by 10 (the ignition key), 200 (the parking brake)
                     // or 500 (the driver's window), so a few pixels would do nothing
-                    p.wheel(o, d, spread, -amount * 40.0);
+                    if vr_cockpit { p.wheel_precise(o, d, spread, -amount * 40.0); }
+                    else { p.wheel(o, d, spread, -amount * 40.0); }
                     return;
                 }
             }

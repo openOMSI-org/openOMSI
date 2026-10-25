@@ -211,8 +211,10 @@ impl App {
             return;
         }
         if let Some(previous) = self.xr.vr_cursor_physical {
-            self.input.cursor.0 += x - previous.0;
-            self.input.cursor.1 += y - previous.1;
+            let (dx, dy) = (x - previous.0, y - previous.1);
+            self.input.cursor.0 += dx;
+            self.input.cursor.1 += dy;
+            self.accumulate_cockpit_drag(dx, dy);
         }
         self.xr.vr_cursor_physical = Some((x, y));
         self.html_move();
@@ -396,16 +398,27 @@ impl App {
         // why the parking brake could not be pulled with the mouse. The movement is
         // collected here and handed to the script once a frame (`App::drag_frame`).
         if self.input.dragging {
+            self.accumulate_cockpit_drag(
+                self.input.cursor.0 - last.0,
+                self.input.cursor.1 - last.1,
+            );
+        }
+        true
+    }
+
+    /// Both desktop and VR mouse paths deliver logical pixels to the same held
+    /// control. Head movement and cursor-recentering events must not enter here.
+    fn accumulate_cockpit_drag(&mut self, dx: f32, dy: f32) {
+        if self.input.dragging {
             let scale = self
                 .window
                 .as_ref()
                 .map(|w| w.scale_factor() as f32)
                 .unwrap_or(1.0)
                 .max(0.1);
-            self.input.drag_delta.0 += (self.input.cursor.0 - last.0) / scale;
-            self.input.drag_delta.1 += (self.input.cursor.1 - last.1) / scale;
+            self.input.drag_delta.0 += dx / scale;
+            self.input.drag_delta.1 += dy / scale;
         }
-        true
     }
 
     pub(crate) fn on_left(&mut self, pressed: bool) {
@@ -566,6 +579,7 @@ impl App {
             }
             return;
         }
+        let precise_release = self.vr_active() && matches!(self.view.as_str(), "driver" | "pax");
         let ray = self.camera.as_ref().zip(self.gfx.surface.as_ref())
             .map(|(cam, s)| self.cockpit_cursor_ray(cam, (s.config.width, s.config.height)));
         if let (Some(p), Some((o, d, spread))) = (
@@ -596,9 +610,8 @@ impl App {
                     self.input.dragging = false;
                     return;
                 }
-                self.input.dragging = p
-                    .click(o, d, spread)
-                    .is_some();
+                self.input.dragging = if precise_release { p.click_precise(o, d, spread) } else { p
+                    .click(o, d, spread) }.is_some();
             } else {
                 if let Some((page, u, v)) = self.input.html_pressed.take() {
                     let (u, v) = p.html_hit(o, d, &self.integrations.plugin_pointer).filter(|h| h.0 == page).map_or((u, v), |h| (h.1, h.2));
@@ -614,6 +627,8 @@ impl App {
                 }
                 if self.input.dragging && self.input.buttons_held.1 {
                     p.release_keeping();
+                } else if precise_release {
+                    p.release_precise();
                 } else {
                     p.release();
                 }
@@ -839,5 +854,46 @@ impl App {
             }
         }
         true
+    }
+}
+
+#[cfg(all(test, windows))]
+mod vr_drag_tests {
+    use super::*;
+    use clap::Parser;
+
+    fn app() -> App {
+        crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default())
+    }
+
+    #[test]
+    fn headset_mouse_moves_reach_the_held_control() {
+        let mut app = app();
+        app.input.cursor = (400.0, 300.0);
+        app.input.dragging = true;
+        app.xr.vr_cursor_physical = Some((100.0, 100.0));
+        app.on_vr_cursor_moved(102.0, 97.0);
+        assert_eq!(app.input.cursor, (402.0, 297.0));
+        assert_eq!(app.input.drag_delta, (2.0, -3.0));
+        // Multiple moves before the frame are accumulated, never replaced.
+        app.on_vr_cursor_moved(103.0, 98.0);
+        assert_eq!(app.input.drag_delta, (3.0, -2.0));
+    }
+
+    #[test]
+    fn cursor_warp_does_not_turn_the_control_or_move_the_virtual_pointer() {
+        let mut app = app();
+        app.input.cursor = (400.0, 300.0);
+        app.input.dragging = true;
+        app.xr.vr_cursor_physical = Some((990.0, 700.0));
+        app.xr.vr_cursor_warp_pending = Some((500.0, 400.0));
+        app.on_vr_cursor_moved(500.0, 400.0);
+        assert_eq!(app.input.cursor, (400.0, 300.0));
+        assert_eq!(app.input.drag_delta, (0.0, 0.0));
+        app.on_vr_cursor_moved(503.0, 398.0);
+        assert_eq!(app.input.drag_delta, (3.0, -2.0));
+        app.input.dragging = false;
+        app.on_vr_cursor_moved(506.0, 399.0);
+        assert_eq!(app.input.drag_delta, (3.0, -2.0));
     }
 }

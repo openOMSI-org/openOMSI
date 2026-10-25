@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="omsi-engine" content="modern">
+  <title>Dashboard as a small site</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="bar">
+    <span class="title">Line <b id="line">-</b></span>
+    <span class="grow"></span>
+    <span id="clock">--:--</span>
+  </header>
+  <main class="cards">
+    <section class="card"><h3>Speed</h3><div class="big" id="speed">0</div><small>km/h</small></section>
+    <section class="card"><h3>Next stop</h3><div class="big small-text" id="stop">-</div></section>
+    <section class="card doors"><h3>Doors</h3><div id="doors"></div></section>
+  </main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

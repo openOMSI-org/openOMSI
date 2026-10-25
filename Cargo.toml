@@ -19,6 +19,7 @@ members = [
     "crates/omsi-render",
     "crates/omsi-sim",
     "crates/omsi-htmlengine",
+    "crates/omsi-htmlpage",
     "crates/omsi-audio",
     "crates/omsi-voice",
     "crates/omsi-net",

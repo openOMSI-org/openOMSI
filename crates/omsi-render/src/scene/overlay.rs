@@ -15,6 +15,13 @@ const FLATS_PER_SLOT: usize = 32;
 const PLANE_GAP: f32 = 2e-4;
 // Allow tiny display-layer offsets without merging genuinely separate 0.1 mm surfaces.
 const CENTRE_GAP: f32 = 5e-5;
+/// How far off an earlier surface's plane a later one may lie, without lying in it, and still
+/// take no step beyond that surface's (`near_on`). The step lifts a surface towards the eye by
+/// 3e-5 a level of its distance, so a surface lying nearer than that in front of a stepped one
+/// is overtaken by it far off, though it is in front - a windscreen's labels, a monitor's
+/// screen: half a millimetre covers the subsequent layers of a model's glass and body while
+/// leaving an instrument's glass, a few millimetres over its dial's print, to its own depth.
+const NEAR_GAP: f32 = 5e-4;
 /// How far apart two surfaces' boxes may be and still overlap.
 const BOX_GAP: f32 = 1e-3;
 /// The highest step: a surface on a surface on a surface ... is rare beyond that.
@@ -101,17 +108,31 @@ fn normal_key(n: Vec3) -> (i32, i32, i32) {
     ((n.x * 100.0).round() as i32, (n.y * 100.0).round() as i32, (n.z * 100.0).round() as i32)
 }
 
-/// Whether `f` lies on `g`: its middle within `CENTRE_GAP` of `g`'s plane, its tilt against
-/// it lifting no edge further than `PLANE_GAP`, and their boxes overlapping.
-fn lies_on(f: &Flat, g: &Flat) -> bool {
-    let overlap = (f.lo - Vec3::splat(BOX_GAP)).cmple(g.hi).all() && (g.lo - Vec3::splat(BOX_GAP)).cmple(f.hi).all();
+/// `f` against `g` when the two face the same way and their boxes overlap within `margin`: how
+/// far `f`'s middle lies off `g`'s plane, and how far `f`'s tilt lifts its corners off it.
+fn facing(f: &Flat, g: &Flat, margin: f32) -> Option<(f32, f32)> {
+    let overlap = (f.lo - Vec3::splat(margin)).cmple(g.hi).all() && (g.lo - Vec3::splat(margin)).cmple(f.hi).all();
     if !overlap || f.normal.dot(g.normal).abs() <= 0.9995 {
-        return false;
+        return None;
     }
     let c = (f.lo + f.hi) * 0.5;
     let c = c - f.normal * (f.normal.dot(c) - f.offset);
-    let lift = f.normal.cross(g.normal).length() * (f.hi - f.lo).length() * 0.5;
-    (g.normal.dot(c) - g.offset).abs() < CENTRE_GAP && lift < PLANE_GAP
+    let tilt = f.normal.cross(g.normal).length() * (f.hi - f.lo).length() * 0.5;
+    Some(((g.normal.dot(c) - g.offset).abs(), tilt))
+}
+
+/// Whether `f` lies on `g`: its middle within `CENTRE_GAP` of `g`'s plane, its tilt against
+/// it lifting no edge further than `PLANE_GAP`, and their boxes overlapping.
+fn lies_on(f: &Flat, g: &Flat) -> bool {
+    facing(f, g, BOX_GAP).is_some_and(|(gap, tilt)| gap < CENTRE_GAP && tilt < PLANE_GAP)
+}
+
+/// Whether `f` lies just off `g`'s plane, further than `CENTRE_GAP` but nearer than
+/// `NEAR_GAP`: a surface the step of `f` would pass far off, though they are really apart.
+/// (Their tilt is not asked here: a flat seen nearly edge-on lifts its own edge over a small
+/// angle by more than the gap, and it is the middle distance that the step's lift reaches.)
+fn near_on(f: &Flat, g: &Flat) -> bool {
+    facing(f, g, NEAR_GAP).is_some_and(|(gap, _)| (CENTRE_GAP..NEAR_GAP).contains(&gap))
 }
 
 impl ObjectRun {
@@ -133,9 +154,11 @@ impl ObjectRun {
     /// The steps of the slots (`slots` of them) of mesh `mesh` with surfaces `flats`, placed
     /// with `transform` at `origin` (its key) as instance number `draw_order`: a slot lying
     /// on an earlier surface of the same object (`lies_on`) takes one step more than the
-    /// highest of those, at most `MAX_LEVEL`; any other slot 0. Outside an object begun with
-    /// `begin` every slot is 0, and a mesh that is not the next one of the object (another
-    /// place, a gap in the order) ends it.
+    /// highest of those, at most `MAX_LEVEL`; a slot with another surface of the object lying
+    /// just off, but not in, its plane (`near_on`) takes no step beyond that surface's, so
+    /// that the step's lift never carries it past a surface that is really apart from it.
+    /// Any other slot 0. Outside an object begun with `begin` every slot is 0, and a mesh
+    /// that is not the next one of the object (another place, a gap in the order) ends it.
     pub(crate) fn levels(&mut self, origin: [u64; 3], draw_order: u64, mesh: usize, transform: Mat4, flats: &[Flat], slots: usize) -> Vec<u8> {
         if !self.fresh && (origin != self.origin || draw_order != self.next) {
             self.open = false;
@@ -173,6 +196,9 @@ impl ObjectRun {
         for slot in 0..slots {
             let mine: Vec<&Flat> = placed.iter().filter(|f| f.slot as usize == slot).collect();
             let mut level = 0u8;
+            let mut under: Vec<usize> = Vec::new();
+            // (the surfaces lying just off this slot's plane, with their steps)
+            let mut beside: Vec<(usize, u8)> = Vec::new();
             for f in &mine {
                 for (kx, ky, kz) in [normal_key(f.normal), normal_key(-f.normal)] {
                     for dx in -1..=1 { for dy in -1..=1 { for dz in -1..=1 {
@@ -181,11 +207,34 @@ impl ObjectRun {
                             let (g, gl) = &self.flats[i];
                             if lies_on(f, g) {
                                 level = level.max(gl.saturating_add(1).min(MAX_LEVEL));
+                                under.push(i);
+                            } else if near_on(f, g) {
+                                beside.push((i, *gl));
                             }
                         }
                     }}}
                 }
             }
+            // (a surface of the base this slot is printed on is that base: a neighbouring patch
+            // of it lying a little off the plane is no reason to drop the step over it)
+            beside.retain(|(i, _)| !under.contains(i));
+            let beside_lo = beside.iter().map(|b| b.1).min();
+            let beside_hi = beside.iter().map(|b| b.1).max();
+            // (a slot more than two steps above its base is a stack - a windscreen's own patches
+            // lying on each other, a lens on a display on a panel - and its lift outgrows what
+            // the step is for: it takes no more than the lowest step of the surfaces lying just
+            // off its plane, so that it cannot carry itself past one of them, but never less than
+            // two. A slot one or two steps above its base keeps its step, which is what orders
+            // a print over its base and a second print over the first, even with a pane just in
+            // front; a slot on nothing takes the highest step beside it, so the step does not
+            // decide that pair either.)
+            let level = if level == 0 {
+                beside_hi.unwrap_or(0)
+            } else if level > 2 {
+                level.min(beside_lo.unwrap_or(MAX_LEVEL).max(2))
+            } else {
+                level
+            };
             levels[slot] = level;
             for f in mine {
                 self.by_normal.entry(normal_key(f.normal)).or_default().push(self.flats.len());
@@ -277,6 +326,92 @@ mod tests {
         let mut run = ObjectRun::default();
         run.begin(None);
         assert_eq!(run.levels([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&m), 2), vec![0, 1]);
+    }
+
+    /// A step-by-step stack is where the lift outgrows its purpose: a slot three steps up, on a
+    /// windscreen's own patches or a lens on a display on a panel, takes no more than the
+    /// lowest step of the surfaces lying just off its plane (two at least), so that its lift
+    /// cannot carry it past one of them (#2790). A slot one or two steps above its base keeps its step - it is what
+    /// orders it over the base (#1488, #1536) - and a slot on nothing takes the highest step
+    /// beside it, so that the step does not decide that pair either. A print keeps the step that
+    /// orders it over its base even with a pane 0.2 mm in front of it, since without the step it
+    /// ties with the base and flickers against it at every distance; the stack is what is cut
+    /// back, so the glass cannot carry itself past the label in front of it.
+    #[test]
+    fn a_print_keeps_its_step_over_its_base_beside_a_surface_just_off_its_plane() {
+        // (the order-sensitive case: a pane 0.2 mm in front, added first, then a base and the
+        // print in its plane - the print stays one step above its base)
+        let pane = quad(0.0002, 0.5, 0, false);
+        let base = quad(0.0, 1.0, 0, false);
+        let print = quad(0.0, 0.5, 0, true);
+        assert_eq!(levels_of(&[pane, base, print]), vec![0, 0, 1], "the print keeps its step over its base");
+        // (the same pair without the pane, and with the pane 2 mm ahead - past the near window)
+        assert_eq!(levels_of(&[quad(0.0, 1.0, 0, false), quad(0.0, 0.5, 0, true)]), vec![0, 1]);
+        assert_eq!(levels_of(&[quad(0.002, 0.5, 0, false), quad(0.0, 1.0, 0, false), quad(0.0, 0.5, 0, true)]), vec![0, 0, 1]);
+        // (a print over a base of two patches a fraction of a millimetre apart, as a curved
+        // panel's: the patch is the base, not a surface to drop the step for)
+        let patch = quad(0.0002, 0.5, 0, false);
+        let base = quad(0.0, 1.0, 0, false);
+        let print = quad(0.0, 0.8, 0, true);
+        assert_eq!(levels_of(&[patch, base, print]), vec![0, 0, 1], "a patch of the base does not strip the step");
+    }
+
+    /// A stack of steps is cut back to (at least two) the surface lying just off it: a glass three steps up
+    /// because its own patches lie on each other must not lift itself past the fleet number
+    /// 0.2 mm in front of it (#2790).
+    #[test]
+    fn a_stack_of_steps_is_cut_back_to_the_surface_in_front_of_it() {
+        let label = quad(0.0002, 0.2, 0, false);
+        let base = quad(0.0, 1.0, 0, false);
+        let glass = quad(0.0, 0.5, 0, true);
+        assert_eq!(levels_of(&[label.clone(), base.clone(), glass.clone()]), vec![0, 0, 1], "one step above its base is kept, and the label stays in front by depth");
+        // (a glass three steps up - a windscreen's own patches, a lens on a display on a panel)
+        let deep = |z: f32, half: f32, cut: bool, slot: u32| quad(z, half, slot, cut);
+        let mut run = ObjectRun::default();
+        run.begin(None);
+        let label = quad(0.0002, 0.2, 0, false);
+        assert_eq!(run.levels([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&label), 1), vec![0]);
+        for (k, m) in [deep(0.0, 1.0, false, 0), deep(0.0, 0.5, true, 0), deep(0.0, 0.3, false, 0), deep(0.0, 0.2, true, 0)].iter().enumerate() {
+            run.levels([0; 3], k as u64 + 1, 0, Mat4::IDENTITY, &mesh_flats(m), 1);
+        }
+        assert!(run.flats.iter().all(|f| f.1 <= 2), "the stack is cut back to two steps");
+        // (a millimetre is past what the step's lift reaches: nothing is cut back)
+        let past = quad(-0.001, 0.2, 0, false);
+        assert_eq!(levels_of(&[past, base, glass]), vec![0, 0, 1]);
+    }
+
+    /// A print on a dial keeps its step when the instrument's glass lies a few millimetres
+    /// over it - far enough not to be a surface lying just off its plane (#1488, #1536).
+    #[test]
+    fn a_print_on_a_dial_keeps_its_step_under_a_glass() {
+        let dial = quad(0.0, 1.0, 0, false);
+        let print = quad(0.0, 0.5, 0, true);
+        let glass = quad(0.003, 0.2, 0, false);
+        assert_eq!(levels_of(&[dial, print, glass]), vec![0, 1, 0]);
+    }
+
+    /// A surface drawn after a stepped one, a fraction of a millimetre off its plane, takes
+    /// that step too: the step must not decide between the two (the same across meshes).
+    #[test]
+    fn a_surface_after_a_stepped_one_a_fraction_of_a_millimetre_off_takes_its_step() {
+        let base = quad(0.0, 1.0, 0, false);
+        let glass = quad(0.0, 0.5, 0, true);
+        let label = quad(0.0002, 0.2, 0, false);
+        assert_eq!(levels_of(&[base, glass, label]), vec![0, 1, 1]);
+    }
+    /// Two prints over one base keep their order with a pane just in front: a second print
+    /// lies on the first, so it stays above it instead of being cut back to the pane's step
+    /// (behind the first print), whatever order the pane was added in.
+    #[test]
+    fn a_second_print_stays_over_the_first_beside_a_pane() {
+        let pane = quad(0.0002, 0.5, 0, false);
+        let base = quad(0.0, 1.0, 0, false);
+        let a = quad(0.0, 0.6, 0, true);
+        let b = quad(0.0, 0.3, 0, false);
+        assert_eq!(levels_of(&[pane.clone(), base.clone(), a.clone(), b.clone()]), vec![0, 0, 1, 2]);
+        // (on a base of two patches a fraction of a millimetre apart, as a curved panel's)
+        let patch = quad(0.0002, 0.8, 0, false);
+        assert_eq!(levels_of(&[patch, base, a, b]), vec![0, 0, 1, 2]);
     }
 
     /// Another object starts afresh: a new place, or a gap in the creation order, ends it;

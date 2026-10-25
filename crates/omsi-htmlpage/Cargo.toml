@@ -1,0 +1,20 @@
+[package]
+name = "omsi-htmlpage"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The built-in [htmltexture] backend: a small HTML/CSS/JavaScript engine drawing a page's pixels (registered with omsi-sim's htmltex by the game)"
+
+[dependencies]
+omsi-cfg = { path = "../omsi-cfg" }
+omsi-sim = { path = "../omsi-sim" }
+ab_glyph.workspace = true
+log.workspace = true
+# the page scripts: a complete modern JavaScript (classes, template strings, Promise, Map ...)
+boa_engine = { version = "0.22", default-features = false, features = ["annex-b"] }
+
+[dev-dependencies]
+# (the tests read the pages' pictures with the game's decoder)
+omsi-texture = { path = "../omsi-texture" }
+# (the cost comparison example runs both engines)
+omsi-htmlengine = { path = "../omsi-htmlengine" }

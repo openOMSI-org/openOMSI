@@ -138,6 +138,8 @@ pub struct Painter {
     /// Physical pixels per unit (a Retina window draws in points at 2): text and icons are
     /// rasterised at this many times their size and snapped to physical pixels.
     pub scale: f32,
+    /// Optional per-painter geometry budget; navigation meshes must stay bounded.
+    vertex_budget: Option<usize>,
 }
 
 impl Default for Painter {
@@ -148,10 +150,20 @@ impl Default for Painter {
 
 impl Painter {
     pub fn new() -> Painter {
-        Painter { verts: Vec::new(), scale: 1.0 }
+        Painter { verts: Vec::new(), scale: 1.0, vertex_budget: None }
     }
     pub fn with_scale(scale: f32) -> Painter {
-        Painter { verts: Vec::new(), scale: scale.max(0.25) }
+        Painter { verts: Vec::new(), scale: scale.max(0.25), vertex_budget: None }
+    }
+    /// A bounded painter used by the map builders; general HUD painters remain unlimited.
+    pub fn with_vertex_budget(max_vertices: usize) -> Painter {
+        Painter { vertex_budget: Some(max_vertices), ..Painter::new() }
+    }
+    pub fn at_vertex_limit(&self) -> bool {
+        !self.room_for(3)
+    }
+    fn room_for(&self, count: usize) -> bool {
+        self.vertex_budget.is_none_or(|limit| self.verts.len().saturating_add(count) <= limit)
     }
     fn snap(&self, v: f32) -> f32 {
         (v * self.scale).round() / self.scale
@@ -386,6 +398,7 @@ impl Painter {
     /// round ends when `caps`. Gentle bends are mitred; sharper ones get a round joint (a
     /// clamped mitre left notches in hairpins and turning loops).
     pub fn ribbon(&mut self, pts: &[Vec3], w_m: f32, w_px: f32, c: Color, caps: bool) {
+        if !self.room_for(6) { return; }
         // (points closer than a centimetre make no direction)
         let mut clean: Vec<Vec3> = Vec::with_capacity(pts.len());
         for &q in pts {
@@ -427,6 +440,7 @@ impl Painter {
             let (na, nb) = (start_n[i], end_n[i + 1]);
             let (a0, a1) = (Self::wv(a, na, hm, hp, c), Self::wv(a, -na, hm, hp, c));
             let (b0, b1) = (Self::wv(b, nb, hm, hp, c), Self::wv(b, -nb, hm, hp, c));
+            if !self.room_for(6) { return; }
             self.verts.extend([a0, b0, b1, a0, b1, a1]);
         }
         // round joints: a fan on both sides from one segment's edge to the next one's
@@ -444,6 +458,7 @@ impl Painter {
                 for k in 0..steps {
                     let t0 = a0 + da * k as f32 / steps as f32;
                     let t1 = a0 + da * (k + 1) as f32 / steps as f32;
+                    if !self.room_for(3) { return; }
                     self.verts.extend([Self::wv(p, Vec2::ZERO, hm, hp, c), Self::wv(p, Vec2::new(t0.cos(), t0.sin()), hm, hp, c), Self::wv(p, Vec2::new(t1.cos(), t1.sin()), hm, hp, c)]);
                 }
             }
@@ -477,21 +492,25 @@ impl Painter {
 
     /// A half disc at `p` bulging towards `d`.
     fn cap(&mut self, p: Vec3, d: Vec2, hm: f32, hp: f32, c: Color) {
+        if !self.room_for(3) { return; }
         let n = 5;
         let base = d.y.atan2(d.x) - std::f32::consts::FRAC_PI_2;
         for k in 0..n {
             let a0 = base + std::f32::consts::PI * k as f32 / n as f32;
             let a1 = base + std::f32::consts::PI * (k + 1) as f32 / n as f32;
+            if !self.room_for(3) { return; }
             self.verts.extend([Self::wv(p, Vec2::ZERO, hm, hp, c), Self::wv(p, Vec2::new(a0.cos(), a0.sin()), hm, hp, c), Self::wv(p, Vec2::new(a1.cos(), a1.sin()), hm, hp, c)]);
         }
     }
 
     /// A disc on the ground: radius `r_m` metres but at least `r_px` pixels.
     pub fn world_disc(&mut self, p: Vec3, r_m: f32, r_px: f32, c: Color) {
+        if !self.room_for(3) { return; }
         let n = 24;
         for k in 0..n {
             let a0 = std::f32::consts::TAU * k as f32 / n as f32;
             let a1 = std::f32::consts::TAU * (k + 1) as f32 / n as f32;
+            if !self.room_for(3) { return; }
             self.verts.extend([Self::wv(p, Vec2::ZERO, r_m, r_px, c), Self::wv(p, Vec2::new(a0.cos(), a0.sin()), r_m, r_px, c), Self::wv(p, Vec2::new(a1.cos(), a1.sin()), r_m, r_px, c)]);
         }
     }
@@ -499,7 +518,9 @@ impl Painter {
     /// A flat shape standing on `p`: `shape` is its outline (convex, any unit), scaled by
     /// `s_m` metres but at least `s_px` pixels.
     pub fn world_shape(&mut self, p: Vec3, shape: &[Vec2], s_m: f32, s_px: f32, c: Color) {
+        if !self.room_for(3) { return; }
         for k in 1..shape.len().saturating_sub(1) {
+            if !self.room_for(3) { return; }
             self.verts.extend([Self::wv(p, shape[0], s_m, s_px, c), Self::wv(p, shape[k], s_m, s_px, c), Self::wv(p, shape[k + 1], s_m, s_px, c)]);
         }
     }
@@ -507,6 +528,7 @@ impl Painter {
     /// A triangle in the world at its own depth (a [`crate::Layer::depth`] layer: walls and
     /// roofs), one colour per corner.
     pub fn solid_tri(&mut self, a: Vec3, b: Vec3, c: Vec3, ca: Color, cb: Color, cc: Color) {
+        if !self.room_for(3) { return; }
         let v = |p: Vec3, col: Color| Vertex { pos: p.to_array(), color: col.0, mode: [2.0, 0.0], ..Default::default() };
         self.verts.extend([v(a, ca), v(b, cb), v(c, cc)]);
     }
@@ -514,6 +536,7 @@ impl Painter {
     /// A shadow triangle on the ground (see `Vertex::mode`): each corner a point and how far
     /// the shadow moves it (scaled with the layer's `height`).
     pub fn shadow_tri(&mut self, p: [(Vec2, Vec2); 3], col: Color) {
+        if !self.room_for(3) { return; }
         let v = |(q, d): (Vec2, Vec2)| Vertex { pos: [q.x, q.y, 0.0], uv: d.to_array(), color: col.0, mode: [3.0, 0.0], ..Default::default() };
         self.verts.extend([v(p[0]), v(p[1]), v(p[2])]);
     }
@@ -522,6 +545,7 @@ impl Painter {
     /// under the same triangles at their own size, a seamless outline of any shape made of
     /// triangles (the casing of the roads' surfaces).
     pub fn grown_tri(&mut self, p: [Vec3; 3], w_m: f32, w_px: f32, c: Color) {
+        if !self.room_for(3) { return; }
         let mut ext = [Vec2::ZERO; 3];
         for i in 0..3 {
             let (a, b, q) = (p[i].truncate(), p[(i + 1) % 3].truncate(), p[(i + 2) % 3].truncate());
@@ -539,7 +563,9 @@ impl Painter {
 
     /// A convex polygon on the ground (world points).
     pub fn world_poly(&mut self, pts: &[Vec3], c: Color) {
+        if !self.room_for(3) { return; }
         for k in 1..pts.len().saturating_sub(1) {
+            if !self.room_for(3) { return; }
             self.verts.extend([Self::wv(pts[0], Vec2::ZERO, 0.0, 0.0, c), Self::wv(pts[k], Vec2::ZERO, 0.0, 0.0, c), Self::wv(pts[k + 1], Vec2::ZERO, 0.0, 0.0, c)]);
         }
     }
@@ -548,6 +574,31 @@ impl Painter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bounded_world_geometry_never_exceeds_budget() {
+        let mut p = Painter::with_vertex_budget(30);
+        let c = Color::WHITE;
+        let tri = [Vec3::ZERO, Vec3::X, Vec3::Y];
+        for _ in 0..100 {
+            p.world_poly(&tri, c);
+            p.solid_tri(tri[0], tri[1], tri[2], c, c, c);
+            p.shadow_tri([(Vec2::ZERO, Vec2::ZERO); 3], c);
+            p.ribbon(&tri, 3.0, 3.0, c, true);
+        }
+        assert!(p.verts.len() <= 30);
+        assert_eq!(p.verts.len() % 3, 0);
+    }
+
+    #[test]
+    fn ordinary_painter_still_has_no_geometry_budget() {
+        let mut p = Painter::new();
+        let c = Color::WHITE;
+        for _ in 0..100 {
+            p.world_poly(&[Vec3::ZERO, Vec3::X, Vec3::Y], c);
+        }
+        assert_eq!(p.verts.len(), 300);
+    }
 
     #[test]
     fn shapes_make_whole_triangles() {

@@ -1,0 +1,15 @@
+:root { --bg: #14181f; --card: #1f2631; --accent: #3ddc84; --warn: #ff5252; --text: #e8edf4; }
+* { box-sizing: border-box; }
+body { margin: 0; width: 1024px; height: 512px; background: linear-gradient(135deg, #0d1117, var(--bg)); color: var(--text); font-size: 18px; }
+.bar { display: flex; align-items: center; gap: 12px; padding: 10px 20px; background: #0b0f14; border-bottom: 2px solid var(--accent); }
+.bar .grow { flex: 1; }
+.title { font-size: 26px; letter-spacing: 1px; text-transform: uppercase; }
+.cards { display: flex; gap: 16px; padding: 16px 20px; }
+.card { flex: 1; background: var(--card); border: 1px solid #2c3646; border-radius: 12px; padding: 14px; box-shadow: 0 4px 12px rgba(0, 0, 0, .5); position: relative; overflow: hidden; }
+.card h3 { margin: 0 0 8px; font-size: 16px; color: #8fa1b8; }
+.card .big { font-size: 72px; font-weight: bold; color: var(--accent); }
+.card .small-text { font-size: 36px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+.doors #doors { display: flex; flex-wrap: wrap; gap: 8px; }
+.door { width: 56px; height: 56px; border-radius: 50%; background: #2c3646; display: flex; align-items: center; justify-content: center; }
+.door.open { background: var(--warn); }
+.card::after { content: ''; }
