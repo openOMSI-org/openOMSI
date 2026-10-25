@@ -444,8 +444,10 @@ impl Renderer {
 /// two of an object's surfaces in one plane - a dashboard and the instruments printed on it,
 /// a plate and the lines on it - the one later in the model is seen, as Omsi.exe draws a
 /// model mesh by mesh and subset by subset (0x7c32c4) with LESSEQUAL. Only a slot lying on
-/// an earlier surface of its object takes a step (`Instance::slot_levels`, at most 3);
-/// everything else, and the ground, the roads and what lies on them, keep their depth -
+/// an earlier surface of its object takes a step (`Instance::slot_levels`, at most 3), and no
+/// more than any surface lying just off its plane takes, so that the step never decides
+/// between surfaces that are apart (#2790); everything else, and the ground, the roads and
+/// what lies on them, keep their depth -
 /// but for a spline laid on an earlier spline of its tile at the same height (a red bus
 /// lane over the road, `Renderer::set_spline_layer`): Omsi.exe draws a tile's splines in
 /// order with LESSEQUAL, so it is seen over the road, where the two fought for every pixel.

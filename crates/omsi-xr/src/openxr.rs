@@ -11,6 +11,8 @@ use windows::Win32::Graphics::Dxgi::Common::*;
 
 use omsi_render::{Camera, Lighting, Renderer, Scene};
 
+mod pointer;
+use pointer::HeadPointer;
 mod sync;
 use sync::SwapchainSync;
 
@@ -36,10 +38,7 @@ pub struct Vr {
     menu_anchor: Option<UiAnchor>,
     cursor_anchor: Option<UiAnchor>,
     cursor_surface_local: Option<Vec3>,
-    cockpit_cursor_anchor: Option<UiAnchor>,
-    cockpit_cursor_surface_local: Option<Vec3>,
-    last_cursor_position: Option<(f32, f32)>,
-    last_cursor_move: Option<Instant>,
+    head_pointer: HeadPointer,
     cursor_menu_open: bool,
     zoom_from: f32,
     zoom_to: f32,
@@ -142,11 +141,6 @@ impl UiAnchor {
     fn cursor_clip(&self, eye: &Camera, projection: Mat4) -> Vec4 {
         let position = (self.origin - eye.position).as_vec3();
         projection * Mat4::look_to_rh(Vec3::ZERO, eye.forward(), eye.up()) * position.extend(1.0)
-    }
-
-    fn cursor_on_screen(&self, eye: &Camera, projection: Mat4) -> bool {
-        let clip = self.cursor_clip(eye, projection);
-        clip.w > 0.0 && (clip.x / clip.w).abs() < 0.85 && (clip.y / clip.w).abs() < 0.85
     }
 }
 
@@ -366,10 +360,7 @@ impl Vr {
             menu_anchor: None,
             cursor_anchor: None,
             cursor_surface_local: None,
-            cockpit_cursor_anchor: None,
-            cockpit_cursor_surface_local: None,
-            last_cursor_position: None,
-            last_cursor_move: None,
+            head_pointer: HeadPointer::default(),
             cursor_menu_open: false,
             zoom_from: 0.0,
             zoom_to: 0.0,
@@ -432,10 +423,7 @@ impl Vr {
     pub fn recenter_pointer(&mut self) {
         self.cursor_anchor = None;
         self.cursor_surface_local = None;
-        self.cockpit_cursor_anchor = None;
-        self.cockpit_cursor_surface_local = None;
-        self.last_cursor_position = None;
-        self.last_cursor_move = Some(Instant::now());
+        self.head_pointer = HeadPointer::default();
     }
 
     pub fn toggle_desktop_mirror(&mut self) -> bool {
@@ -453,12 +441,8 @@ impl Vr {
         }
     }
 
-    pub fn needs_cursor_surface(&self, position: (f32, f32), menu_open: bool) -> bool {
+    pub fn needs_cursor_surface(&self, menu_open: bool) -> bool {
         !menu_open
-            && (self.cursor_menu_open
-                || self.last_cursor_position.is_none_or(|p| {
-                    (p.0 - position.0).abs() > 0.5 || (p.1 - position.1).abs() > 0.5
-                }))
     }
 
     pub fn set_cursor_surface(
@@ -494,17 +478,7 @@ impl Vr {
         camera: &Camera,
         projection: Mat4,
     ) -> DVec3 {
-        if !self.cursor_menu_open {
-            if let (Some(anchor), Some(previous)) = (self.cursor_anchor, self.last_cursor_position)
-            {
-                let dx = (position.0 - previous.0) * 2.0 / size.0.max(1) as f32;
-                let dy = (previous.1 - position.1) * 2.0 / size.1.max(1) as f32;
-                return anchor.origin
-                    + (camera.right() * (dx * anchor.half_width)
-                        + camera.up() * (dy * anchor.half_height))
-                        .as_dvec3();
-            }
-        }
+        let position = self.head_pointer.position(position, size);
         let direction = eye_ray(
             camera,
             projection,
@@ -526,13 +500,12 @@ impl Vr {
         let (camera, projection) = self.mirror_camera?;
         let h = size.1.max(1) as f32;
         let crop = self.desktop_crop(size);
-        let direction = if self.cursor_anchor.is_some() && !self.cursor_menu_open {
-            (self.cursor_target((x, y), size, &camera, projection) - camera.position)
-                .as_vec3()
-                .normalize_or_zero()
+        let position = if !self.cursor_menu_open {
+            self.head_pointer.position((x, y), size)
         } else {
-            eye_ray(&camera, projection, x, y, size, crop)
+            (x, y)
         };
+        let direction = eye_ray(&camera, projection, position.0, position.1, size, crop);
         let spread = 2.0 * (camera.fov_deg.to_radians() * 0.5).tan() * crop.1 / h;
         Some((camera.position, direction, spread))
     }
@@ -724,16 +697,13 @@ impl Vr {
         }
         renderer.set_env_heading(None);
         let menu_open = !menu_range.is_empty();
-        self.place_cursor(menu_open, cockpit_pointer_enabled, cursor_position, desktop_size, bus_pose, &eye_cameras, &eye_projections, &ui_cameras, views[0].fov);
+        self.place_cursor(menu_open, cursor_position, desktop_size, bus_pose, &eye_cameras, &eye_projections, &ui_cameras, views[0].fov);
         let menu_transforms = [0, 1].map(|eye| {
             self.menu_anchor
                 .map(|anchor| anchor.transform(&ui_cameras[eye], ui_projections[eye]))
                 .unwrap_or(Mat4::IDENTITY)
         });
-        let cursor_visible = (menu_open || cockpit_pointer_enabled)
-            && self
-                .last_cursor_move
-                .is_some_and(|t| t.elapsed() < Duration::from_secs(10));
+        let cursor_visible = self.head_pointer.visible(menu_open || cockpit_pointer_enabled, Instant::now());
         let cursor_transforms = [0, 1].map(|eye| {
             self.cursor_anchor
                 .filter(|_| cursor_visible)
@@ -797,31 +767,11 @@ impl Vr {
         Ok(true)
     }
 
-    /// Where the menu and the cursor hang in front of the eyes this frame: the menu before the
-    /// head while it is open, the cursor on the menu, on what it points at in the bus (kept in
-    /// the bus's frame as it drives on) or before the eyes, hidden after ten idle seconds.
+    /// Menus retain their existing placement. The cockpit pointer is reconstructed
+    /// from the current head pose and mouse offset every frame, so neither driving
+    /// nor looking elsewhere leaves the cursor attached to the old world position.
     #[allow(clippy::too_many_arguments)]
-    fn place_cursor(&mut self, menu_open: bool, cockpit_pointer_enabled: bool, cursor_position: (f32, f32), desktop_size: (u32, u32), bus_pose: Option<(DVec3, Mat4)>, eye_cameras: &[Camera; 2], eye_projections: &[Mat4; 2], ui_cameras: &[Camera; 2], fov: xr::Fovf) {
-        if !menu_open
-            && cockpit_pointer_enabled
-            && self
-                .last_cursor_move
-                .is_some_and(|t| t.elapsed() >= Duration::from_secs(10))
-        {
-            self.cursor_anchor = None;
-            self.cursor_surface_local = None;
-            self.last_cursor_move = None;
-        }
-        if menu_open && !self.cursor_menu_open {
-            self.cockpit_cursor_anchor = self.cursor_anchor;
-            self.cockpit_cursor_surface_local = self.cursor_surface_local;
-        } else if !menu_open && self.cursor_menu_open {
-            self.cursor_anchor = self.cockpit_cursor_anchor.take();
-            self.cursor_surface_local = self.cockpit_cursor_surface_local.take();
-            self.last_cursor_position = self.cursor_anchor.map(|_| cursor_position);
-            self.last_cursor_move = Some(Instant::now());
-            self.cursor_menu_open = false;
-        }
+    fn place_cursor(&mut self, menu_open: bool, cursor_position: (f32, f32), desktop_size: (u32, u32), bus_pose: Option<(DVec3, Mat4)>, eye_cameras: &[Camera; 2], eye_projections: &[Mat4; 2], ui_cameras: &[Camera; 2], fov: xr::Fovf) {
         if menu_open {
             let center = (ui_cameras[0].position + ui_cameras[1].position) * 0.5
                 + (ui_cameras[0].forward() * 2.0).as_dvec3();
@@ -835,69 +785,41 @@ impl Vr {
         } else {
             self.menu_anchor = None;
         }
-        let moved = self.last_cursor_position.is_none_or(|p| {
-            (p.0 - cursor_position.0).abs() > 0.5 || (p.1 - cursor_position.1).abs() > 0.5
-        }) || self.cursor_menu_open != menu_open;
-        let place_in_front = !menu_open
-            && (self.cursor_anchor.is_none()
-                || (moved
-                    && self.cursor_anchor.is_some_and(|anchor| {
-                        !anchor.cursor_on_screen(&eye_cameras[0], eye_projections[0])
-                    })));
-        let cursor_target = if place_in_front {
-            eye_cameras[0].position + (eye_cameras[0].forward() * 1.5).as_dvec3()
-        } else {
-            self.cursor_target(
-                cursor_position,
-                desktop_size,
-                &eye_cameras[0],
-                eye_projections[0],
-            )
-        };
-        if moved {
-            self.last_cursor_move = Some(Instant::now());
-            self.last_cursor_position = Some(cursor_position);
-        }
         if let Some(menu) = self.menu_anchor {
             let (w, h) = (desktop_size.0.max(1) as f32, desktop_size.1.max(1) as f32);
-            let x = cursor_position.0 / w * 2.0 - 1.0;
-            let y = 1.0 - cursor_position.1 / h * 2.0;
             self.cursor_anchor = Some(UiAnchor {
-                origin: menu.point(x, y),
+                origin: menu.point(
+                    cursor_position.0 / w * 2.0 - 1.0,
+                    1.0 - cursor_position.1 / h * 2.0,
+                ),
                 ..menu
             });
-        } else if moved {
-            if place_in_front {
-                self.cursor_surface_local = None;
-            }
-            let hit =
+        } else {
+            let camera = &eye_cameras[0];
+            let target =
+                self.cursor_target(cursor_position, desktop_size, camera, eye_projections[0]);
+            let direction = (target - camera.position).as_vec3().normalize_or_zero();
+            // A recent surface hit supplies binocular depth, never the aim. Project
+            // that depth onto the current ray so drawing and picking cannot diverge
+            // while the headset or vehicle moves between hover updates.
+            let distance =
                 self.cursor_surface_local
                     .zip(bus_pose)
                     .map(|(local, (position, rotation))| {
-                        position + rotation.transform_point3(local).as_dvec3()
-                    });
-            let point = hit.unwrap_or(cursor_target);
-            // Keep free-space cursor positions in the bus frame too. Otherwise a
-            // cursor without a surface hit stays in the world as the bus drives on.
-            self.cursor_surface_local = bus_pose.map(|(position, rotation)| {
-                rotation
-                    .inverse()
-                    .transform_point3((point - position).as_vec3())
-            });
-            let distance = (point - eye_cameras[0].position).length() as f32;
+                    let hit = position + rotation.transform_point3(local).as_dvec3();
+                    (hit - camera.position).as_vec3()
+                        .dot(direction)
+                        .clamp(0.3, 8.0)
+                })
+                .unwrap_or(1.5);
+            let point = camera.position + (direction * distance).as_dvec3();
             self.cursor_anchor = Some(UiAnchor::at(
-                point,
-                &eye_cameras[0],
+                point, camera,
                 fov,
-                distance.clamp(0.3, 8.0),
-            ));
-        } else if let (Some(local), Some((position, rotation)), Some(anchor)) = (
-            self.cursor_surface_local,
-            bus_pose,
-            self.cursor_anchor.as_mut(),
-        ) {
-            anchor.origin = position + rotation.transform_point3(local).as_dvec3();
+                distance));
         }
+        self.head_pointer
+            .update(cursor_position, desktop_size, menu_open);
         self.cursor_menu_open = menu_open;
     }
 

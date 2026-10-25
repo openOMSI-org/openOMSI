@@ -485,3 +485,9 @@ cargo test -p omsi-sim --release --lib bench_htmlengine -- --ignored --nocapture
 
 `HTMLBENCH_PAGE=path/to/page.html` measures your own page instead of `demo.html`, and
 `HTMLBENCH_RUNS=n` sets the number of timed runs (default 200).
+
+## The modern engine (opt-in)
+
+A second engine with flexbox, positioning, modern CSS and JavaScript (modules, `Promise`,
+`fetch`) is available for pages that ask for it with `<meta name="omsi-engine" content="modern">`.
+Pages that do not are unchanged. See [HTMLTEXTURE_MODERN.md](HTMLTEXTURE_MODERN.md).

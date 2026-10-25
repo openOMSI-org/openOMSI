@@ -15,6 +15,13 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   as before. Moving copies the folder first, in the background (leaving the page does not stop it),
   and switches only when the copy is whole; a copy that fails leaves the old folder as it was. The
   default `~/.openomsi` is kept after a move, because other copies of openOMSI may still use it.
+- **A modern engine for HTML screens (opt-in)**: a page that puts
+  `<meta name="omsi-engine" content="modern">` in its head runs on a second engine with flexbox,
+  `position` with `z-index`, borders, `calc()` and custom properties, attribute selectors,
+  combinators, gradients, shadows, and a full JavaScript engine (Boa): classes, `Promise`,
+  `async`/`await`, ES modules, `fetch` of the page's own files and a fuller DOM. Pages without
+  the line keep the classic engine and are not touched; `OMSI_HTML_ENGINE=modern` runs every page
+  on the modern one for comparing. See [docs/HTMLTEXTURE_MODERN.md](docs/HTMLTEXTURE_MODERN.md).
 - **Transport modes in the launcher**: maps and vehicles show their mode (tram, railway, metro,
   trolleybus), the map and vehicle pickers can filter by it, and a vehicle that does not fit the
   chosen map is marked with the reason and cannot be started (the game refuses it too).

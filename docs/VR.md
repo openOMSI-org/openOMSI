@@ -91,6 +91,26 @@ adjusts the navigator instead of operating cockpit controls. Losing window focus
 saves and ends placement. The display is an overlay, so place it in a clear spot:
 cockpit geometry does not hide it.
 
+## Headset-relative cabin input
+
+The VR pointer retains a mouse offset within the headset image. Drawing and
+picking use the same cropped eye ray, including pending mouse input; surface hits
+supply depth only. Head movement does not turn a held dial or reset mouse idle
+time. The pointer hides after ten idle seconds and returns with mouse movement or
+a menu transition. Cursor-warp events contribute no movement.
+
+VR interruption releases held controls at their current values and stops automatic
+motion with its authored stop event. Desktop release, Escape, missed clicks and
+wheel notches retain the existing automatic endpoint behaviour. VR hover refresh
+also follows head motion; it may refresh the cabin surface ray every six frames.
+Headset-free regressions cover ray alignment, pending input, idle visibility,
+precise cancellation, desktop auto movement and Escape. Mod-specific scripts and
+live headset/multiplayer behaviour are outside those tests.
+
+## Timetable controls
+
+The line-and-tour menu exposes its details pane in VR, including time arrows,
+stops and Start trip, using the same 760-pixel width threshold as desktop.
 ## Enhanced+ headset render targets
 
 With Enhanced+ (ray tracing) enabled, headset eyes keep HDR colour and screen masks

@@ -178,3 +178,120 @@ fn a_text_a_tenth_of_a_millimetre_over_a_later_board_stays_seen_from_far() {
         }
     }
 }
+
+/// The order-sensitive case from the review: a pane 0.2 mm in front of a base, added first,
+/// then the base and its coplanar print. The print keeps the step that orders it over its
+/// base, so the base shows through it nowhere - without that step the two tie and it does,
+/// at every distance.
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn a_print_behind_a_pane_added_first_stays_over_its_base() {
+    let mut renderer = renderer();
+    let mut scene = renderer.new_scene();
+    let red = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [1.0, 0.0, 0.0, 1.0], true);
+    let green = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [0.0, 1.0, 0.0, 1.0], true);
+    let blue = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [0.0, 0.0, 1.0, 1.0], true);
+    // (the pane 0.2 mm in front, over the left half of what follows)
+    let pane = renderer.add_mesh(&mut scene, &grid(-0.5, 0.0, 0.0002, 0.5, 4, 0.0, false));
+    // (the base, and its print in the same plane cut another way and larger, so that the print
+    // covers the base whole: no corner of the base is meant to show)
+    let base = renderer.add_mesh(&mut scene, &slotted(vec![
+        grid(0.0, 0.0, 0.0, 0.8, 4, 0.0, false),
+        grid(0.0, 0.0, 0.0, 1.3, 4, 33.0, true),
+    ]));
+    renderer.begin_object(&mut scene);
+    renderer.add_instance(&mut scene, pane, DVec3::ZERO, Mat4::IDENTITY, vec![blue]);
+    renderer.add_instance(&mut scene, base, DVec3::ZERO, Mat4::IDENTITY, vec![red, green]);
+    let lighting = Lighting { shadows: false, fog_density: 0.0, ..Default::default() };
+    for d in [2.0, 7.0, 15.0, 30.0] {
+        for pitch in [-90.0f64, -45.0] {
+            let (s, c) = pitch.to_radians().sin_cos();
+            let camera = Camera { position: DVec3::new(0.0, -d * c, -d * s), yaw: 0.0, pitch: pitch as f32, roll: 0.0, fov_deg: 60.0, near: 0.1, far: 3000.0 };
+            scene.dirty = true;
+            let rgba = renderer.render_to_image(&mut scene, 256, 256, &camera, &lighting).unwrap();
+            let green = rgba.chunks(4).filter(|p| p[1] > 150 && p[0] < 60 && p[2] < 60).count();
+            let red = rgba.chunks(4).filter(|p| p[0] > 150 && p[1] < 60 && p[2] < 60).count();
+            // (the print covers its base whole where the pane does not: the base shows through
+            // it nowhere)
+            assert!(red == 0 && green > 0, "at {d} m, pitch {pitch}: {green} pixels of the print, {red} of the base through it");
+        }
+    }
+}
+
+/// The same, with the print blended (`[matl_alpha] 2`, as prints on a dashboard are): blending
+/// does not bypass the depth test, so a blended print needs its step over its base just as an
+/// opaque one does, and keeps it beside a pane 0.2 mm off its plane.
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn a_blended_print_behind_a_pane_added_first_stays_over_its_base() {
+    let mut renderer = renderer();
+    let mut scene = renderer.new_scene();
+    let red = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [1.0, 0.0, 0.0, 1.0], true);
+    let green = renderer.add_material(&mut scene, None, AlphaMode::Blend, [0.0, 1.0, 0.0, 1.0], true);
+    let blue = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [0.0, 0.0, 1.0, 1.0], true);
+    let pane = renderer.add_mesh(&mut scene, &grid(-0.5, 0.0, 0.0002, 0.5, 4, 0.0, false));
+    let base = renderer.add_mesh(&mut scene, &slotted(vec![
+        grid(0.0, 0.0, 0.0, 0.8, 4, 0.0, false),
+        grid(0.0, 0.0, 0.0, 1.3, 4, 33.0, true),
+    ]));
+    renderer.begin_object(&mut scene);
+    renderer.add_instance(&mut scene, pane, DVec3::ZERO, Mat4::IDENTITY, vec![blue]);
+    renderer.add_instance(&mut scene, base, DVec3::ZERO, Mat4::IDENTITY, vec![red, green]);
+    let lighting = Lighting { shadows: false, fog_density: 0.0, ..Default::default() };
+    for d in [2.0, 7.0, 15.0, 30.0] {
+        for pitch in [-90.0f64, -45.0] {
+            let (s, c) = pitch.to_radians().sin_cos();
+            let camera = Camera { position: DVec3::new(0.0, -d * c, -d * s), yaw: 0.0, pitch: pitch as f32, roll: 0.0, fov_deg: 60.0, near: 0.1, far: 3000.0 };
+            scene.dirty = true;
+            let rgba = renderer.render_to_image(&mut scene, 256, 256, &camera, &lighting).unwrap();
+            let green = rgba.chunks(4).filter(|p| p[1] > 150 && p[0] < 60 && p[2] < 60).count();
+            let red = rgba.chunks(4).filter(|p| p[0] > 150 && p[1] < 60 && p[2] < 60).count();
+            // (the print covers its base whole where the pane does not: the base shows through
+            // it nowhere)
+            assert!(red == 0 && green > 0, "at {d} m, pitch {pitch}: {green} pixels of the print, {red} of the base through it");
+        }
+    }
+}
+
+/// A label a fraction of a millimetre in front of a glass three steps up - a windscreen's
+/// fleet number and its prints on the pane, each its own subset, the pane's own patches piling
+/// steps on each other (#2790) - stays seen at every distance: a stack of steps takes no more
+/// than the surface in front of it, so its lift cannot carry it past that surface.
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn a_label_a_fraction_of_a_millimetre_in_front_of_a_stack_of_steps_stays_seen() {
+    let mut renderer = renderer();
+    let mut scene = renderer.new_scene();
+    let red = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [1.0, 0.0, 0.0, 1.0], true);
+    let green = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [0.0, 1.0, 0.0, 1.0], true);
+    let blue = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [0.0, 0.0, 1.0, 1.0], true);
+    // (a base and three surfaces lying on it, each in its plane cut another way or smaller:
+    // the last, the glass, is three steps up)
+    let glass = renderer.add_mesh(&mut scene, &slotted(vec![
+        grid(0.0, 0.0, 0.0, 1.0, 4, 0.0, false),
+        grid(0.0, 0.0, 0.0, 1.0, 5, 33.0, true),
+        grid(0.0, 0.0, 0.0, 0.8, 6, 12.0, false),
+        grid(0.0, 0.0, 0.0, 1.0, 4, 47.0, true),
+    ]));
+    // (the label 0.2 mm in front of the glass, drawn before it - two subsets of one mesh, as a
+    // fleet number and the print beside it)
+    let label = renderer.add_mesh(&mut scene, &slotted(vec![
+        grid(0.0, 0.0, 0.0002, 0.5, 2, 0.0, false),
+        grid(0.0, 0.0, 0.0002, 0.4, 3, 21.0, true),
+    ]));
+    renderer.begin_object(&mut scene);
+    renderer.add_instance(&mut scene, label, DVec3::ZERO, Mat4::IDENTITY, vec![green, green]);
+    renderer.add_instance(&mut scene, glass, DVec3::ZERO, Mat4::IDENTITY, vec![blue, blue, blue, red]);
+    let lighting = Lighting { shadows: false, fog_density: 0.0, ..Default::default() };
+    for d in [2.0, 7.0, 15.0, 30.0] {
+        for pitch in [-90.0f64, -45.0] {
+            let (s, c) = pitch.to_radians().sin_cos();
+            let camera = Camera { position: DVec3::new(0.0, -d * c, -d * s), yaw: 0.0, pitch: pitch as f32, roll: 0.0, fov_deg: 60.0, near: 0.1, far: 3000.0 };
+            scene.dirty = true;
+            let rgba = renderer.render_to_image(&mut scene, 256, 256, &camera, &lighting).unwrap();
+            let green = rgba.chunks(4).filter(|p| p[1] > 150 && p[0] < 60 && p[2] < 60).count();
+            let red = rgba.chunks(4).filter(|p| p[0] > 150 && p[1] < 60 && p[2] < 60).count();
+            assert!(green * 4 > red, "at {d} m, pitch {pitch}: {green} pixels of the label, {red} of the glass");
+        }
+    }
+}

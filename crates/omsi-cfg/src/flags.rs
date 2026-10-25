@@ -314,6 +314,7 @@ flags! {
     OMSI_HIDE_MESH: Text, Test, Use, "-", "a|b: leave out the meshes whose file names contain one of the parts.";
     OMSI_HIDE_WINDOW: Text, Test, Use, "-", "from,to: treat the window as hidden between these seconds.";
     OMSI_HOLE_PHOTO: Bool, Test, Use, "off", "With OMSI_ROAD_PHOTO: photograph from above down to 25 m under the lane (holes in the world).";
+    OMSI_HTML_ENGINE: Text, Switch, Use, "classic", "`modern` runs every [htmltexture] page on the modern engine (flexbox, modern JavaScript) instead of only those that ask with <meta name=\"omsi-engine\" content=\"modern\">; for comparing the two.";
     OMSI_HTML_FALLBACK_FONT: Text, Switch, Use, "-", "Font file for the html pages' characters Inter lacks (Hangul, CJK); else Malgun Gothic (Windows) or AppleGothic (macOS).";
     OMSI_HTML_FALLBACK_FONT_BOLD: Text, Switch, Use, "-", "With OMSI_HTML_FALLBACK_FONT: its bold face.";
     OMSI_IBIS_BUDGET: Num, Tuning, Use, "10", "Seconds the IBIS typist may take per entry.";

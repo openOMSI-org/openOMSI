@@ -9,6 +9,13 @@ use super::*;
 use omsi_ui::Vertex;
 use std::sync::Arc;
 
+// Bound the CPU meshes before creating GPU vertex buffers. Four parts share the
+// budget: ground (roads/land) and houses (shadows/3D/flat). This applies to
+// the panel and the full city map, including fast mouse drags on huge maps.
+// Vertex is 60 bytes; together these caps use at most ~31 MiB per rebuild.
+const MAX_GROUND_VERTS: usize = 260_000;
+const MAX_HOUSE_VERTS: usize = 90_000;
+
 /// What a build reads: the network's carriageways (each with whether the map's paving covers
 /// it), the network for the switches, the map's layers and its package.
 #[derive(Clone)]
@@ -59,7 +66,7 @@ impl Built {
 /// Everything within `reach` of `anchor`. `paved`: the map's paving is the roads (else every
 /// carriageway is a band, as from far); `houses`: build them too.
 pub(super) fn build(parts: &GroundParts, anchor: DVec2, reach: f64, pal: &Palette, look: GroundLook, paved: bool, houses: Option<usize>) -> Built {
-    let mut p = Painter::new();
+    let mut p = Painter::with_vertex_budget(MAX_GROUND_VERTS);
     let mut layers = None;
     if let Some(sf) = parts.surface.as_deref() {
         layers = Some(super::surface::build_surface(&mut p, sf, anchor, Some((anchor, reach)), pal, parts.contours.is_some()));
@@ -102,9 +109,16 @@ pub(super) fn build(parts: &GroundParts, anchor: DVec2, reach: f64, pal: &Palett
     if let Some(md) = parts.md.as_deref() {
         md.build_lines(&mut p, anchor, anchor, reach, pal, look);
     }
-    let (mut sh, mut so, mut fl) = (Painter::new(), Painter::new(), Painter::new());
+    let (mut sh, mut so, mut fl) = (
+        Painter::with_vertex_budget(MAX_HOUSE_VERTS),
+        Painter::with_vertex_budget(MAX_HOUSE_VERTS),
+        Painter::with_vertex_budget(MAX_HOUSE_VERTS),
+    );
     if let (Some(models), Some(md)) = (houses, parts.md.as_deref()) {
         md.build_houses(&mut sh, &mut so, &mut fl, anchor, anchor, reach, models, pal);
+    }
+    if p.verts.len() >= MAX_GROUND_VERTS - 3 || [sh.verts.len(), so.verts.len(), fl.verts.len()].into_iter().any(|n| n >= MAX_HOUSE_VERTS - 3) {
+        log::warn!("navigator: map geometry reached its safety budget; distant detail may be omitted ({} ground, {} shadow, {} walls, {} flat vertices)", p.verts.len(), sh.verts.len(), so.verts.len(), fl.verts.len());
     }
     Built::new(anchor, [p.verts, sh.verts, so.verts, fl.verts])
 }

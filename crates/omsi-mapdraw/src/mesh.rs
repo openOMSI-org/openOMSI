@@ -205,6 +205,7 @@ impl MapData {
             for cell in &cells {
                 for t in cell.land[class].iter().map(|&i| tri(self.layers.land_of(class), i)) {
                     p.world_poly(&[v(t[0]), v(t[1]), v(t[2])], col);
+                    if p.at_vertex_limit() { return; }
                 }
             }
         }
@@ -214,6 +215,7 @@ impl MapData {
                     let t = self.layers.trees[i as usize];
                     let q = v(Vec2::new(t[0], t[1]));
                     crown(p, q, t[2] * 0.95, pal.tree, pal.tree_edge);
+                    if p.at_vertex_limit() { return; }
                 }
             }
         }
@@ -232,6 +234,7 @@ impl MapData {
                 for &class in classes {
                     for t in cell.paved[class].iter().map(|&i| tri(self.layers.paved_of(class), i)) {
                         p.world_poly(&[v(t[0]), v(t[1]), v(t[2])], fill);
+                        if p.at_vertex_limit() { return; }
                     }
                 }
             }
@@ -243,6 +246,7 @@ impl MapData {
                 for cell in &cells {
                     for t in cell.paint[class].iter().map(|&i| tri(self.layers.paint_of(class), i)) {
                         p.world_poly(&[v(t[0]), v(t[1]), v(t[2])], col);
+                        if p.at_vertex_limit() { return; }
                     }
                 }
             }
