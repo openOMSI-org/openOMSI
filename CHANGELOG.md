@@ -461,6 +461,11 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **The launcher's bus preview shows what the repaint chooses**: the showroom gives the bus
+  its paint scheme as the game does, so the scheme's `[setvar]`s are set again after the
+  scripts every frame (#3183). Set once when the bus was made, a script that writes them
+  itself overwrote them: the Kajosoft Jelcz M125M's JGSP Novi Sad repaint showed the
+  standard doors' white frames in the preview instead of the glazed doors.
 - **The headlights light the road as in OMSI 2 in Vanilla and Vanilla+**: the player's
   `[spotlight]` is Omsi.exe's Direct3D spot light - from the spotlight's own place, 0.3 x its
   colour as diffuse and 0.1 x as ambient light, attenuation 1 / (0.2 + d / R + 40 d² / R²),

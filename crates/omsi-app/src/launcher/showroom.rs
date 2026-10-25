@@ -403,13 +403,14 @@ impl Showroom {
                 let scheme = paint_scheme(&vt, Some(l2.paint.as_str()).filter(|p| !p.is_empty()));
                 // (on a mild day, not at the 0 °C of no weather: see `preview_weather`)
                 crate::services::preview_weather();
-                let host = omsi_sim::VehicleHost::new(start_clock(&args));
+                // (the scheme on the host, as the game and `--export-glb` give it: its
+                // [setvar]s are set again after the scripts every frame, which a script that
+                // writes them itself would overwrite - the Kajosoft Jelcz's glazed doors
+                // showed white in the preview, as they did in the game before #3183)
+                let mut host = omsi_sim::VehicleHost::new(start_clock(&args));
+                host.paint_scheme = Some(scheme);
                 let mut vehicle = omsi_sim::VehicleInstance::new(vt.clone(), host);
-                if let Some(i) = scheme {
-                    for (var, v) in vt.paint_schemes[i].set_vars.clone() {
-                        vehicle.set_var(&var, v);
-                    }
-                }
+                vehicle.apply_paint_vars(scheme);
                 load_coupled_parts(&root, &mut vehicle);
                 for _ in 0..3 {
                     vehicle.update(1.0 / 30.0);
