@@ -498,7 +498,7 @@ impl Navigator {
             let parts = self.ground_parts(net, band.map(|b| b.0));
             let pal2 = *pal;
             let houses = mpp < 6.0;
-            let job = move || super::build::build(&parts, centre, radius, &pal2, look, mpp < 2.2, houses.then_some(omsi_mapdraw::MODEL_TRIANGLES), true);
+            let job = move || super::build::build(&parts, centre, radius, &pal2, look, mpp < 2.2, houses.then_some(omsi_mapdraw::MODEL_TRIANGLES));
             if self.city.ground.is_none() {
                 // (the first picture at once: nothing to show meanwhile)
                 let b = job();
