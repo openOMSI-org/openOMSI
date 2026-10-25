@@ -18,6 +18,7 @@ impl App {
             self.paused = true;
         }
         self.shell.pause_category = Default::default();
+        self.shell.pause_hidden = true;
         self.shell.quick_edit = false;
         self.menus.game_menu = Some(0);
         self.menus.menu_top = None;
@@ -110,6 +111,7 @@ impl App {
         }
         self.close_list();
         self.shell.pause_category = category;
+        self.shell.pause_hidden = false;
         self.shell.quick_edit = false;
         self.menus.game_menu = Some(crate::shell::pause::quick_actions::indices(category, &menu, &self.settings.pause_quick_actions).first().copied().unwrap_or(0));
         self.shell.last_sel = None;

@@ -46,7 +46,7 @@ fn click(sh: &mut Shell, v: &PauseView, at: Vec2) {
 #[test]
 fn pause_navigation_card_keeps_the_original_action_index() {
     let rail = menu();
-    let mut sh = Shell::new();
+    let mut sh = Shell::new(); sh.pause_hidden = false;
     click(&mut sh, &view(&rail), Vec2::new(400.0, 225.0));
     assert_eq!(sh.actions, [Action::Choose(2)]);
 }
@@ -54,7 +54,7 @@ fn pause_navigation_card_keeps_the_original_action_index() {
 #[test]
 fn pause_navigation_category_click_is_not_a_game_action() {
     let rail = menu();
-    let mut sh = Shell::new();
+    let mut sh = Shell::new(); sh.pause_hidden = false;
     let categories = Category::available(&ids(&view(&rail)));
     let row = categories.iter().position(|c| *c == Category::Saves).unwrap();
     click(&mut sh, &view(&rail), Vec2::new(60.0, 202.0 + row as f32 * 60.0));
@@ -66,7 +66,7 @@ fn pause_navigation_disabled_card_does_not_dispatch() {
     let rail = menu();
     let mut v = view(&rail);
     v.disabled = &["camera"];
-    let mut sh = Shell::new();
+    let mut sh = Shell::new(); sh.pause_hidden = false;
     click(&mut sh, &v, Vec2::new(400.0, 225.0));
     assert!(sh.actions.is_empty());
 }
@@ -74,7 +74,7 @@ fn pause_navigation_disabled_card_does_not_dispatch() {
 #[test]
 fn pause_navigation_draws_each_category_at_small_and_large_sizes() {
     let rail = menu();
-    let mut sh = Shell::new();
+    let mut sh = Shell::new(); sh.pause_hidden = false;
     for (w, h) in [(320.0, 480.0), (480.0, 800.0), (1024.0, 600.0), (1920.0, 1080.0)] {
         for category in Category::available(&ids(&view(&rail))) {
             sh.pause_category = category;
@@ -127,7 +127,7 @@ fn pause_navigation_write_preview() {
         ("quick-actions-editor-short", Category::Home, 400, 320, None),
         ("quick-actions-custom", Category::Home, 1440, 900, None),
     ] {
-        let mut sh = Shell::new();
+        let mut sh = Shell::new(); sh.pause_hidden = false;
         sh.pause_category = category;
         sh.quick_edit = name.starts_with("quick-actions-editor");
         sh.begin(w as f32, h as f32, 1.0, 1.0 / 60.0);
@@ -149,7 +149,7 @@ fn pause_navigation_write_preview() {
 #[test]
 fn pause_navigation_short_window_keeps_cards_clickable() {
     let rail = menu();
-    let mut sh = Shell::new();
+    let mut sh = Shell::new(); sh.pause_hidden = false;
     sh.begin(400.0, 320.0, 1.0, 1.0 / 60.0);
     sh.ui.input.mouse = Vec2::new(100.0, 190.0);
     sh.ui.input.pressed = true;
@@ -165,7 +165,7 @@ fn pause_navigation_flat_cards_keep_keyboard_focus_visible() {
     let v = view(&rail);
     let mut counts = Vec::new();
     for selected in [false, true] {
-        let mut sh = Shell::new();
+        let mut sh = Shell::new(); sh.pause_hidden = false;
         sh.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
         assert!(sh.ui.flat);
         action_card(&mut sh.ui, &v, 2, Rect::new(350.0, 184.0, 480.0, 120.0), selected, false);
@@ -181,7 +181,7 @@ fn pause_navigation_quit_keeps_keyboard_focus_visible() {
     let mut v = view(&rail);
     v.kbd = true;
     v.rail_sel = rail.iter().position(|line| line.0 == "quit");
-    let mut sh = Shell::new();
+    let mut sh = Shell::new(); sh.pause_hidden = false;
     sh.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
     session_action(&mut sh, &v, "quit", Rect::new(16.0, 768.0, 204.0, 54.0), ButtonKind::Danger);
     assert!(sh.ui.p().verts.iter().any(|vertex| vertex.color == ACCENT.0));
@@ -190,7 +190,7 @@ fn pause_navigation_quit_keeps_keyboard_focus_visible() {
 #[test]
 fn pause_navigation_enlarged_quit_dispatches_original_action() {
     let rail = menu();
-    let mut sh = Shell::new();
+    let mut sh = Shell::new(); sh.pause_hidden = false;
     click(&mut sh, &view(&rail), Vec2::new(110.0, 815.0));
     assert_eq!(sh.actions, [Action::Choose(rail.len() - 1)]);
 }
@@ -200,7 +200,7 @@ fn pause_navigation_open_list_preserves_origin_category() {
     let rail = menu();
     for origin in [Category::Home, Category::Settings, Category::Driving] {
         for target in ["camera", "duty"] {
-            let mut sh = Shell::new();
+            let mut sh = Shell::new(); sh.pause_hidden = false;
             sh.pause_category = origin;
             let mut v = view(&rail);
             v.rail_open = Some(target);
@@ -225,7 +225,7 @@ fn quick_actions_custom_card_keeps_original_index() {
     let rail = menu();
     let mut v = view(&rail);
     v.quick_actions = r#"["save","camera"]"#;
-    let mut sh = Shell::new();
+    let mut sh = Shell::new(); sh.pause_hidden = false;
     click(&mut sh, &v, Vec2::new(400.0, 225.0));
     assert_eq!(sh.actions, [Action::Choose(5)]);
 }
@@ -233,7 +233,7 @@ fn quick_actions_custom_card_keeps_original_index() {
 #[test]
 fn quick_actions_editor_toggle_never_executes_action() {
     let rail = menu();
-    let mut sh = Shell::new();
+    let mut sh = Shell::new(); sh.pause_hidden = false;
     sh.quick_edit = true;
     click(&mut sh, &view(&rail), Vec2::new(400.0, 265.0));
     assert!(sh.actions.iter().any(|a| matches!(a, Action::QuickActions(_))));
@@ -245,8 +245,8 @@ fn quick_actions_empty_page_keeps_edit_entry_accessible() {
     let rail = menu();
     let mut v = view(&rail);
     v.quick_actions = "[]";
-    let mut sh = Shell::new();
-    click(&mut sh, &v, Vec2::new(1280.0, 105.0));
+    let mut sh = Shell::new(); sh.pause_hidden = false;
+    click(&mut sh, &v, Vec2::new(1360.0, 75.0));
     assert!(sh.quick_edit);
     assert!(sh.actions.is_empty());
 }
@@ -255,7 +255,7 @@ fn quick_actions_empty_page_keeps_edit_entry_accessible() {
 fn quick_actions_editor_draws_checkbox_and_footer_at_all_sizes() {
     let rail = menu();
     for (w, h, scale) in [(320.0, 480.0, 1.0), (400.0, 320.0, 1.0), (1366.0, 768.0, 1.5), (1920.0, 1080.0, 1.0)] {
-        let mut sh = Shell::new();
+        let mut sh = Shell::new(); sh.pause_hidden = false;
         sh.quick_edit = true;
         sh.begin(w, h, scale, 0.016);
         draw(&mut sh, &view(&rail));

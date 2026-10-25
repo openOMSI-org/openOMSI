@@ -209,7 +209,7 @@ impl Renderer {
             Some((i, z, inside))
         };
         let n = scene.instances.len();
-        let parts = (n / 8192).clamp(1, self.encoding_pool.as_ref().map_or(3, |p| p.current_num_threads()) + 1);
+        let parts = instance_parts(self.encoding_pool.as_ref(), n);
         let chunk = n.div_ceil(parts).div_ceil(CULL_BLOCK) * CULL_BLOCK;
         let blocks = Self::cull_blocks(scene);
         let block_seen = |b: usize| {

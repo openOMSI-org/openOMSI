@@ -177,8 +177,12 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // panes on the reflection/transmission path after the material-depth repair.
     // Painted terrain also blends a transmap without writing depth. It is never glass:
     // Fresnel opacity on its empty mask pixels darkens every lower layer at grazing angles.
+    // A script's screen is never a pane, though it is laid out as one - blended, not writing
+    // depth, its letters a `\S:n` transparency map: the EMT Citaro's Krueger matrix
+    // (Mallorca) was taken for glass, which gives no light of its own, and its letters stayed
+    // grey at night while its light map lit them in Vanilla+ (#2927).
     let glass = !terrain && mode > 1.5 && (material.bump.z > 0.5 || material.emissive.w > 0.5) &&
-        (has_env || material.params.z > 0.5 || material.emissive.w > 0.5);
+        (has_env || material.params.z > 0.5 || material.emissive.w > 0.5) && material.flags.x < 0.5;
     // An envmap on opaque vehicle paint is legacy material data, not a request to make
     // the whole body behave like glass. Keep the diffuse/sun response, but use the
     // ordinary rough dielectric path for the body.

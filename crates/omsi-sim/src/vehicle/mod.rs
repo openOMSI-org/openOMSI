@@ -30,6 +30,7 @@ mod pose;
 mod program_ids;
 mod props;
 mod radio;
+mod panto;
 mod rail;
 mod trailer;
 mod trolley;
@@ -48,6 +49,7 @@ pub use pose::*;
 pub use rail::RailEnv;
 pub use props::*;
 pub use trailer::*;
+pub use panto::{Catenary, PantoGear};
 pub use trolley::TrolleyGear;
 pub use types::*;
 use update::*;
@@ -245,6 +247,8 @@ pub struct VehicleInstance {
     program_ids: std::sync::OnceLock<program_ids::ProgramIds>,
     /// A trolleybus's poles and traction (see `trolley`); None for every other vehicle.
     pub trolley: Option<Box<TrolleyGear>>,
+    /// A rail vehicle's pantograph against the wire (see `panto`); None without one.
+    panto: Option<Box<PantoGear>>,
     /// The track a rail vehicle runs on (see `rail`); None for a road vehicle.
     rail_env: Option<RailEnv>,
     /// The vehicle's scripts have driven it (else pedals move it, see `rail`).

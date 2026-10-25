@@ -356,6 +356,7 @@ impl Offscreen<'_> {
         if let Some(tv) = player.trolley_view.as_mut() {
             tv.update(&self.renderer, &mut self.scene, dt, &mut player.vehicle);
         }
+        player.panto_fx.update(dt, &mut player.vehicle);
         let (vpos, vkmh) = (player.vehicle.position, player.vehicle.physics.velocity_kmh());
         if let Some(g) = player.vehicle.trolley.as_deref_mut() {
             for n in g.rig.take_notes() {

@@ -135,6 +135,15 @@ pub(crate) fn in_scope<'s, R>(pool: Option<&rayon::ThreadPool>, op: impl FnOnce(
     }
 }
 
+/// How many parts `run_parts` takes `n` instances in: many small ones, so a dense part holds up none.
+pub(crate) fn instance_parts(pool: Option<&rayon::ThreadPool>, n: usize) -> usize {
+    match pool {
+        Some(p) => (n / 1024).clamp(1, (p.current_num_threads() + 1) * 8),
+        // (a thread per part without a pool)
+        None => (n / 8192).clamp(1, 4),
+    }
+}
+
 pub(crate) fn run_parts<T: Send>(pool: Option<&rayon::ThreadPool>, parts: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
     let Some(pool) = pool else {
         return std::thread::scope(|s| {
@@ -353,5 +362,14 @@ mod run_parts_tests {
         assert_eq!(runs.into_inner(), 9);
         assert_eq!(super::run_parts(None, 3, |k| k), vec![0, 1, 2]);
         assert_eq!(super::run_parts(Some(&pool), 0, |k| k), vec![0]);
+    }
+
+    /// A city's instances in many parts with a pool, a few threads' worth without one.
+    #[test]
+    fn instance_parts_many_with_a_pool_few_without() {
+        let pool = rayon::ThreadPoolBuilder::new().num_threads(8).build().unwrap();
+        assert_eq!(super::instance_parts(Some(&pool), 140_000), 72);
+        assert_eq!(super::instance_parts(Some(&pool), 500), 1);
+        assert_eq!(super::instance_parts(None, 140_000), 4);
     }
 }

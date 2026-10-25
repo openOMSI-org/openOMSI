@@ -8,10 +8,20 @@
 //! its file declares, or an explicit `[rail_class]`), [`TrackClass`] for a piece of track,
 //! and [`dynamics`] moves a consist along its track by the forces on it.
 
+pub mod body;
 pub mod class;
 pub mod dynamics;
 pub mod track;
 
+/// Whether the rail physics beyond the original's are on: the pantograph against the wire, the
+/// body on its springs and the power curve of AI trams.
+/// They change how every existing vehicle drives, so they belong to the setting "Realistic
+/// road physics" (or `OMSI_REALISTIC_ROAD=1`), as the road model's tyres do.
+pub fn realistic() -> bool {
+    crate::rigid::realistic_default()
+}
+
+pub use body::{Body, BodyOut, BodyParams};
 pub use class::{RailClass, TrackClass, TrackFacts};
 pub use dynamics::{step, Conditions, Consist, Forces, Outcome};
 pub use track::{classify, RailMapConfig, TrackInfo, TrackRule};

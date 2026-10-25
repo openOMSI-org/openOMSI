@@ -137,7 +137,12 @@ impl App {
                 }
                 Action::PauseCategory(category) => {
                     if self.menus.game_menu.is_some() {
-                        self.switch_pause_category(category);
+                        if category == self.shell.pause_category && !self.shell.pause_hidden && self.menus.list_kind.is_none() {
+                            self.shell.pause_hidden = true;
+                            self.shell.quick_edit = false;
+                        } else {
+                            self.switch_pause_category(category);
+                        }
                     }
                 }
                 Action::Rail(k) => {

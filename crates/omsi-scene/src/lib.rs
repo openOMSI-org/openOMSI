@@ -40,6 +40,7 @@ pub mod rain;
 pub mod route_arrows;
 pub mod threads;
 pub mod trolley_derive;
+pub mod arc_fx;
 pub mod trolley_view;
 pub mod wheel_surface;
 pub mod window_wipers;

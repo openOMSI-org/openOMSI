@@ -204,6 +204,7 @@ impl Offscreen<'_> {
                 if let Some(tv) = p.trolley_view.as_ref() {
                     tv.push_effects(scene, &p.vehicle);
                 }
+                p.panto_fx.push_effects(scene);
             }
             let (kind, rate) = precip_of(weather);
             let mut rn = rain::Rain::new();

@@ -86,6 +86,9 @@ impl VehicleInstance {
         // no current, no drive in either direction (the brakes still work)
         let powered = self.rail_powered();
         let from_scripts = from_scripts.map(|f| without_current(f, powered));
+        if let Some(f) = from_scripts {
+            self.note_traction_current(f.drive, v0);
+        }
         self.rail_scripted |= from_scripts.is_some();
         let c = self.physics.controls;
         let forces = if self.rail_scripted {
@@ -173,7 +176,12 @@ impl VehicleInstance {
     /// Whether the vehicle's drive has current: a rail vehicle with a pantograph moves only with
     /// it raised.
     pub fn rail_powered(&self) -> bool {
-        !pantograph_binds(&self.ty.def) || self.pantograph_raised().unwrap_or(true)
+        if !pantograph_binds(&self.ty.def) {
+            return true;
+        }
+        // the pantograph as the wire sees it: raised AND touching a live wire. Where its travel
+        // could not be measured the variable alone says (raised: 1).
+        self.pantograph_current().unwrap_or_else(|| self.pantograph_raised().unwrap_or(true))
     }
 
     /// What the rail dynamics made of the last step (spinning or sliding wheels, resistance).
