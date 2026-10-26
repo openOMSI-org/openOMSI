@@ -27,6 +27,7 @@ mod nav;
 pub use nav::{Docked, DockedMap};
 #[cfg(test)]
 mod preview;
+mod square;
 mod widgets;
 
 // --- the game's look: the notifications' card, the menus' amber accent ------------------
@@ -60,6 +61,7 @@ const TILE_PAD: f32 = 6.0;
 const TILE_ICON: f32 = 22.0;
 const TILE_GAP: f32 = 4.0;
 const TILE_R: f32 = 8.0;
+/// A tile of its icon alone (OMSI 2's quick menu): a square this wide, the icon half of it.
 /// A bar in a row that does not grow.
 const BAR_W: f32 = 60.0;
 const STRIPE: f32 = 4.0;
@@ -305,7 +307,7 @@ impl Layout<'_> {
             Kind::Button { text, icon } => {
                 (self.button_content(text, icon) + 2.0 * BUTTON_PAD).ceil()
             }
-            Kind::Tile { text, .. } => {
+            Kind::Tile { text, .. } if !text.is_empty() => {
                 (self.width(text, TILE_PX, Weight::Medium).max(TILE_ICON) + 2.0 * TILE_PAD).ceil()
             }
             _ => self.widget_natural(e),
@@ -369,7 +371,7 @@ impl Layout<'_> {
             Kind::Bar { height, .. } => *height,
             Kind::Badge { .. } => BADGE_H,
             Kind::Button { .. } => BUTTON_H,
-            Kind::Tile { .. } => TILE_H,
+            Kind::Tile { text, .. } if !text.is_empty() => TILE_H,
             Kind::Divider => {
                 if in_row {
                     0.0
@@ -552,7 +554,7 @@ impl Layout<'_> {
                 let y = self.baseline(b.y, b.h, BUTTON_PX, Weight::Medium);
                 self.text(t, BUTTON_PX, Weight::Medium, Vec2::new(x + icon_w, y), ink);
             }
-            Kind::Tile { text, icon } => self.tile(e, r, text, icon),
+            Kind::Tile { text, icon, .. } if !text.is_empty() => self.tile(e, r, text, icon),
             _ => self.widget_emit(e, r),
         }
     }

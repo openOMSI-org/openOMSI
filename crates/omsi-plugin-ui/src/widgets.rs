@@ -1,5 +1,6 @@
 //! The panels' controls and pictures (`omsi.ui` version 2): checkboxes, sliders, text
-//! fields, tabs, charts, tables and images - their sizes and what they are drawn from.
+//! fields, tabs, charts, tables, images and the icon-only tiles - their sizes and what they
+//! are drawn from.
 
 use super::{color, ink_on, Hit, HitKind, Item, Layout, ACCENT, BUTTON, DIVIDER, INK, LINE, TRACK};
 use glam::Vec2;
@@ -26,6 +27,7 @@ const GREY: Color = Color::rgba(142, 142, 142, 1.0);
 impl Layout<'_> {
     pub fn widget_natural(&self, e: &Element) -> f32 {
         match &e.kind {
+            Kind::Tile { .. } => super::square::SQUARE,
             Kind::Image { width, .. } => *width,
             Kind::Checkbox { text, .. } => (CHECK + CHECK_GAP + self.width(text, CONTROL_PX, Weight::Regular)).ceil(),
             Kind::Slider { .. } => SLIDER_W,
@@ -39,6 +41,7 @@ impl Layout<'_> {
 
     pub fn widget_height(&self, e: &Element, w: f32) -> f32 {
         match &e.kind {
+            Kind::Tile { .. } => w,
             // (a picture wider than its room keeps its shape)
             Kind::Image { width, height, .. } => height * (w / width).min(1.0),
             Kind::Checkbox { .. } => CHECK.max(CONTROL_PX * LINE),
@@ -62,6 +65,7 @@ impl Layout<'_> {
     pub fn widget_emit(&mut self, e: &Element, r: Rect) {
         let accent = e.color.map(color).unwrap_or(ACCENT);
         match &e.kind {
+            Kind::Tile { icon, focus, off, .. } => self.square_tile(e, r, icon, *focus, *off),
             Kind::Image { path, width, height } => {
                 let k = (r.w / width).min(1.0);
                 let (w, h) = (width * k, height * k);
