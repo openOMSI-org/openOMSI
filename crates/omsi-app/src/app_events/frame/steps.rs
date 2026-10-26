@@ -301,11 +301,13 @@ pub(crate) fn humans_after_step(
             None => {
                 if let Some(p) = player.as_deref_mut() {
                     p.vehicle.host.fired_triggers.push("ev_Stamper".into());
+                    p.vehicle.trigger("PAX_Stamper_Used");
                 }
             }
             Some(id) => {
                 if let Some(c) = traffic.as_deref_mut().and_then(|t| t.cars.iter_mut().find(|c| c.id == id)) {
                     c.vehicle.host.fired_triggers.push("ev_Stamper".into());
+                    c.vehicle.trigger("PAX_Stamper_Used");
                 }
             }
         }
