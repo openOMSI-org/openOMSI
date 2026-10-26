@@ -1,6 +1,6 @@
 //! A tile of its icon alone, as OMSI 2's quick menu has them (`Kind::Tile` with no text):
 //! a square, the icon white on grey or on the tile's own colour, ringed in the accent when it
-//! has the keys, greyed when it is off.
+//! has the keys (`focus`), greyed and taking no clicks when it is `off`.
 
 use super::{color, Hit, HitKind, Item, Layout, ACCENT, INK, TILE};
 use omsi_plugin::ui::Element;

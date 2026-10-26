@@ -256,8 +256,6 @@ pub enum Kind {
     Divider,
     Space { size: f32 },
     Button { text: String, icon: Option<String> },
-    /// An icon over its label; with no label a square of the icon alone (the quick menu's).
-    /// `focus`: ringed in the accent (the keys' choice); `off`: greyed, taking no clicks.
     Tile { text: String, icon: String, focus: bool, off: bool },
     /// A picture of the plugin's folder (PNG, JPEG, BMP, TGA); `path` None: no such file.
     Image { path: Option<PathBuf>, width: f32, height: f32 },
