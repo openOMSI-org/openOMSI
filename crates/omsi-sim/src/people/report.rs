@@ -15,6 +15,10 @@ impl PeopleSim {
             })
             .collect()
     }
+    /// The index of the stamper in the passengercabin that was last stamped
+    pub fn get_stamper_index(&self) -> Option<usize> {
+        self.stamper_index
+    }
 
     /// Money-related events to be handled by the app.
     /// `None` identifies the player's bus; `Some(id)` identifies an AI bus.

@@ -300,8 +300,22 @@ pub(crate) fn humans_after_step(
         match bus {
             None => {
                 if let Some(p) = player.as_deref_mut() {
+                    // Check if the stamper index is an actual index, else return -1
+                    let mut stamper_index = -1;
+                    match h.get_stamper_index() {
+                        None => {stamper_index = -1},
+                        Some(n) => {stamper_index = n as i32},
+                    }
+                    // Fire the regular ev_Stamper event for compatibility with older buses
                     p.vehicle.host.fired_triggers.push("ev_Stamper".into());
                     p.vehicle.trigger("PAX_Stamper_Used");
+
+                    // If theres a valid index, fire the ev_StamperX sound event and PAX_StamperN_Used
+                    // script trigger for the specific stamper
+                    if stamper_index >= 0 {
+                        p.vehicle.host.fired_triggers.push(format!("ev_Stamper{}", stamper_index).into());
+                        p.vehicle.trigger(&format!("PAX_Stamper{}_Used", stamper_index));
+                    }
                 }
             }
             Some(id) => {

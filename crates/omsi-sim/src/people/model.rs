@@ -398,6 +398,8 @@ pub struct PeopleSim {
     pub duty: Option<(Arc<DutyTrip>, usize, bool)>,
     /// Buses whose validator somebody used since the app last looked (`take_stamped`).
     pub stamped: Vec<BusId>,
+    /// The index of the stamper in the passengercabin that was last stamped
+    pub stamper_index: Option<usize>,
     /// Pedestrians to keep strolling near the player (scaled by `density`).
     pub pedestrians: usize,
     /// Omsi.exe's people (`[AIMaxCountRandom]`'s second line, the `ai_max_humans` setting):
