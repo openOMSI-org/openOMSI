@@ -253,7 +253,7 @@ pub(crate) fn set_line_to(v: &mut crate::VehicleInstance, line: &str) {
     } else if v.ty.program.str_var("Matrix_Nmr").is_some() && !digits.is_empty() && digits.len() <= 3 {
         // the LiAZ's 4-character matrix shows three digits and a letter (see
         // omsi_script::compat): its AI path takes SetLineTo as it is
-        format!("{:0>3}{}", digits, &line.trim()[digits.len()..])
+        format!("{:>3}{}", digits, &line.trim()[digits.len()..])
     } else {
         line.trim().to_string()
     };

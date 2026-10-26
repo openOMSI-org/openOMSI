@@ -38,7 +38,7 @@ fn four_char_matrix(lines: &mut [String]) -> bool {
     for l in lines.iter_mut() {
         if l.split_whitespace().collect::<Vec<_>>().join(" ") == "l1 trunc $IntToStr" {
             let indent: String = l.chars().take_while(|c| c.is_whitespace()).collect();
-            *l = format!("{indent}l1 trunc \"03\" $IntToStrEnh");
+            *l = format!("{indent}l1 trunc \" 3\" $IntToStrEnh");
             changed = true;
         } else if let Some(letter) = letter_in_front(l) {
             let indent: String = l.chars().take_while(|c| c.is_whitespace()).collect();
@@ -673,7 +673,7 @@ mod tests {
         let src = "\t\t\t\t\t\tl1 trunc $IntToStr\n(L.$.Matrix_NewNr) $length 1 <=\n4 $SetLengthL\n\t(L.$.Matrix_NewNr) 3 $SetLengthR \"E\" $+";
         let mut lines: Vec<String> = src.lines().map(String::from).collect();
         assert_eq!(patch(&mut lines).len(), 1);
-        assert_eq!(lines[0], "\t\t\t\t\t\tl1 trunc \"03\" $IntToStrEnh");
+        assert_eq!(lines[0], "\t\t\t\t\t\tl1 trunc \" 3\" $IntToStrEnh");
         // the stock 3-character matrix is left alone
         let mut stock: Vec<String> = "l1 trunc $IntToStr\n(L.$.Matrix_NewNr) $length 1 <=\n2 $SetLengthL\n\"E\" (L.$.Matrix_NewNr) 2 $SetLengthR $+".lines().map(String::from).collect();
         assert!(patch(&mut stock).is_empty());

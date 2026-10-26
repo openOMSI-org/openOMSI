@@ -1067,8 +1067,8 @@ mod tests {
 }
 
 /// A line number as a display of three digit cells and a letter cell shows it: the digits
-/// right-aligned and padded with zeros, the one letter behind them ("E 5 " -> "005E",
-/// " E92" -> "092E", "52  " -> "052 "). Anything else (a symbol line, "BVG ", more than one
+/// right-aligned, the one letter behind them ("E 5 " -> "  5E",
+/// " E92" -> " 92E", "52  " -> " 52 "). Anything else (a symbol line, "BVG ", more than one
 /// letter) is left as it is. See `compat::four_char_matrix`.
 pub fn digits_first(text: &str) -> String {
     let digits: String = text.chars().filter(|c| c.is_ascii_digit()).collect();
@@ -1077,7 +1077,7 @@ pub fn digits_first(text: &str) -> String {
         return text.to_string();
     }
     let letter = others.first().copied().unwrap_or(' ');
-    format!("{:0>3}{}", digits, letter)
+    format!("{:>3}{}", digits, letter)
 }
 
 #[cfg(test)]
