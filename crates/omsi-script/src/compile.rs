@@ -554,6 +554,8 @@ impl<'a> Compiler<'a> {
         // reached `{else}` skips to the next `{endif}`, so it jumps there here too - the
         // Procity's dashboard blanked its odometer every frame through such an `{else}`
         let mut orphan_elses: Vec<usize> = Vec::new();
+        // the jumps of `{end}`s inside an open `{if}`: they go to the end of the block
+        let mut early_ends: Vec<usize> = Vec::new();
         for (ln, raw) in f.lines.iter().enumerate() {
             let line_no = ln + 1;
             let toks = tokenize(raw);
@@ -579,9 +581,9 @@ impl<'a> Compiler<'a> {
                                     // stack `{trigger:a}` `{trigger:b}` this way.
                                     Some((kinds, block, _)) if block.ops.is_empty() => kinds.push(kind),
                                     Some(_) => {
-                                        let (kinds, mut block, _) = cur.take().unwrap();
+                                        let (kinds, mut block, ifs) = cur.take().unwrap();
                                         let end = block.ops.len() as u32;
-                                        for idx in orphan_elses.drain(..).chain(extra_elses.drain(..).map(|(_, op)| op)) {
+                                        for idx in orphan_elses.drain(..).chain(extra_elses.drain(..).map(|(_, op)| op)).chain(early_ends.drain(..)).chain(ifs.into_iter().map(|(idx, _)| idx)) {
                                             patch(&mut block.ops[idx], end);
                                         }
                                         log::debug!("{}:{}: {{{b}}} starts while block {} is open (implicit end)", f.path.display(), line_no, block.name);
@@ -591,10 +593,20 @@ impl<'a> Compiler<'a> {
                                     None => cur = Some((vec![kind], Block { name, file: f.path.clone(), line: line_no, ..Default::default() }, Vec::new())),
                                 }
                             }
+                            "end" if cur.as_ref().is_some_and(|(_, _, ifs)| !ifs.is_empty()) => {
+                                // an `{end}` inside an `{if}`/`{else}` branch leaves the trigger
+                                // right there and the block goes on (Valiant Citybus Family
+                                // `doors_2D.osc`: `{if} {end} {else} <open the door> {endif}`
+                                // keeps keys and the wheel from opening doors in SETVAR 3)
+                                if let Some((_, block, _)) = cur.as_mut() {
+                                    early_ends.push(block.ops.len());
+                                    block.ops.push(Op::Jump(u32::MAX));
+                                }
+                            }
                             "end" => {
                                 if let Some((kinds, mut block, ifs)) = cur.take() {
                                     let end = block.ops.len() as u32;
-                                    for idx in orphan_elses.drain(..) {
+                                    for idx in orphan_elses.drain(..).chain(early_ends.drain(..)) {
                                         patch(&mut block.ops[idx], end);
                                     }
                                     for (idx, _) in ifs {
@@ -708,9 +720,9 @@ impl<'a> Compiler<'a> {
                 }
             }
         }
-        if let Some((kinds, mut block, _)) = cur.take() {
+        if let Some((kinds, mut block, ifs)) = cur.take() {
             let end = block.ops.len() as u32;
-            for idx in orphan_elses.drain(..).chain(extra_elses.drain(..).map(|(_, op)| op)) {
+            for idx in orphan_elses.drain(..).chain(extra_elses.drain(..).map(|(_, op)| op)).chain(early_ends.drain(..)).chain(ifs.into_iter().map(|(idx, _)| idx)) {
                 patch(&mut block.ops[idx], end);
             }
             log::debug!("{}: missing {{end}} at end of file", f.path.display());

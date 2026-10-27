@@ -511,6 +511,11 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **Doors 2 and 3 of the Valiant Citybus Family open.** The bus's door script ends a button press
+  early with an `{end}` inside an `{if}` branch and opens the door in the `{else}` branch after it;
+  openOMSI took that `{end}` for the end of the whole script and never ran the `{else}`. An `{end}`
+  inside an `{if}` now leaves the script right there, as in OMSI 2, and the rest still runs when
+  the condition is false.
 - **The launcher starts as it did in 0.3.41.** 0.3.42 made the launcher write a pointer file beside its
   program and copy data folders at start, and some antivirus programs and browsers took that for
   harmful behaviour and blocked the download or the program. That change (the data folder choice

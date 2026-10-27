@@ -666,6 +666,23 @@ mod tests {
         compile(&CompileInput { varlists: vec![vl], constfiles: vec![cf], scripts: vec![script], ..Default::default() })
     }
 
+    /// Valiant Citybus Family `doors_2D.osc`: an `{end}` inside an `{if}` branch ends the
+    /// trigger there (keys must not open the doors in SETVAR 3), and the `{else}` branch
+    /// after it still runs when the condition is false.
+    #[test]
+    fn an_end_inside_an_if_branch_leaves_the_trigger_and_keeps_the_else_branch() {
+        let p = prog("{trigger:t}\n(L.L.a) 3 =\n{if}\n    {end}\n{else}\n    1 (S.L.result)\n{endif}\n2 (S.L.b)\n{end}\n");
+        let run = |a: f32| {
+            let mut vm = Vm::new();
+            let mut st = State::new(&p);
+            st.set(p.var("a").unwrap(), a);
+            assert!(vm.run_trigger(&p, "t", &mut st, &mut NullHost));
+            (st.get(p.var("result").unwrap()), st.get(p.var("b").unwrap()))
+        };
+        assert_eq!(run(0.0), (1.0, 2.0), "condition false: the else branch and the rest run");
+        assert_eq!(run(3.0), (0.0, 0.0), "condition true: the trigger ends at the inner {{end}}");
+    }
+
     #[test]
     fn session_seed_gives_every_machine_its_own_numbers() {
         let p = prog("{init}\n500000 random 400000 + (S.L.result)\n{end}\n");
