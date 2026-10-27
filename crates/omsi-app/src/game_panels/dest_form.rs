@@ -8,6 +8,7 @@
 use super::{button, card, grow_row, input, note, text, title};
 use omsi_plugin::api::Value;
 use omsi_plugin::ui::{Anchor, Panel, Weight};
+use omsi_ui::theme::Palette;
 
 /// What is typed into the form.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -18,7 +19,7 @@ pub(crate) struct DestForm {
 }
 
 impl DestForm {
-    pub(crate) fn panel(&self, light: bool) -> Panel {
+    pub(crate) fn panel(&self, pal: Palette) -> Panel {
         let help = self.said.as_deref().map(str::to_owned).unwrap_or_else(|| omsi_ui::tr("A destination of the depot file is found by its name; any other text is shown as it is typed.").into_owned());
         let children = vec![
             title(&omsi_ui::tr("Destination display")),
@@ -30,9 +31,9 @@ impl DestForm {
             // (the depot file's destinations to pick from, as OMSI's form lists them, #2219)
             grow_row(vec![button("list", &omsi_ui::tr("Choose from the depot file"), Some("view_list"))]),
             grow_row(vec![button("clear", &omsi_ui::tr("Clear display"), Some("delete")), button("select", &omsi_ui::tr("Select"), Some("check")), button("close", &omsi_ui::tr("Close"), Some("close"))]),
-            note(&help, light),
+            note(&help, pal),
         ];
-        card(Anchor::Center, 0.0, 0.0, 420.0, 236, light, children)
+        card(Anchor::Center, 0.0, 0.0, 420.0, 236, pal, children)
     }
 }
 
@@ -162,7 +163,7 @@ mod tests {
             assert_eq!(omsi_ui::tr("<1 min"), "<1 分鐘");
             assert_eq!(omsi_ui::tr("Nothing to couple: back up to a trailer's coupling (within 2.5 m, in line)"), "沒有可連接的物件：請倒車至拖車掛鉤處（2.5 米以內，成一直線）");
 
-            let panel = format!("{:?}", DestForm::default().panel(false));
+            let panel = format!("{:?}", DestForm::default().panel(Palette::OPENOMSI));
             for text in ["目的地顯示", "路線編號", "目的地(兩行)", "第一行", "第二行(可留空)", "從車廠檔案選擇", "清除顯示", "選擇", "關閉", "車庫檔中的目的地依名稱尋找;其他文字依輸入內容顯示。"] {
                 assert!(panel.contains(text), "destination form is missing translated text: {text}");
             }

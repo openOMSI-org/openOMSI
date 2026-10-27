@@ -10,6 +10,7 @@
 //! on a panel goes to it, a click beside the quick menu closes it.
 
 use omsi_plugin::ui::{Align, Element, Kind, Panel, Rgba, RowAlign, UiState, Weight};
+use omsi_ui::theme::Palette;
 
 mod dest_form;
 mod move_here;
@@ -68,8 +69,8 @@ pub(super) fn title(t: &str) -> Element {
     text(t, 17.0, Weight::Bold)
 }
 
-pub(super) fn note(t: &str, light: bool) -> Element {
-    Element { color: Some(theme_color(theme(light).TEXT_DIM)), ..text(t, 12.0, Weight::Regular) }
+pub(super) fn note(t: &str, pal: Palette) -> Element {
+    Element { color: Some(theme_color(pal.text_dim)), ..text(t, 12.0, Weight::Regular) }
 }
 
 pub(super) fn button(id: &str, t: &str, icon: Option<&str>) -> Element {
@@ -105,22 +106,15 @@ pub(super) fn divider() -> Element {
     el(None, Kind::Divider)
 }
 
-pub(super) fn theme(light: bool) -> omsi_ui::theme::Theme {
-    omsi_ui::theme::palette(light)
-}
-
 pub(super) fn theme_color(c: omsi_ui::Color) -> Rgba {
     Rgba(c.0.map(|v| (v * 255.0 + 0.5) as u8))
 }
 
-/// 遊戲面板背景；`alpha` 控制透出後方畫面的程度。
-pub(super) fn card(anchor: omsi_plugin::ui::Anchor, x: f32, y: f32, width: f32, alpha: u8, light: bool, children: Vec<Element>) -> Panel {
-    let background = if light {
-        let c = theme_color(theme(true).PANEL);
-        Rgba([c.0[0], c.0[1], c.0[2], alpha])
-    } else {
-        Rgba([14, 16, 20, alpha])
-    };
+/// The game's card: the colour of the panels (openOMSI's own near black in its dark look), a
+/// little see-through over the picture (`alpha`).
+pub(super) fn card(anchor: omsi_plugin::ui::Anchor, x: f32, y: f32, width: f32, alpha: u8, pal: Palette, children: Vec<Element>) -> Panel {
+    let [r, g, b, _] = if pal == Palette::OPENOMSI { [14, 16, 20, 255] } else { theme_color(pal.panel).0 };
+    let background = Rgba([r, g, b, alpha]);
     Panel { anchor, x, y, width, padding: 14.0, gap: 8.0, background: Some(background), radius: 12.0, accent: None, visible: true, clickable: false, draggable: false, grab: false, frame: false, children }
 }
 
@@ -163,7 +157,7 @@ impl crate::App {
                 j.take_summary();
             }
         }
-        let light = self.settings.is_light_theme();
+        let pal = crate::themes::palette(self.settings.is_light_theme());
         // (the quick menu's tile under the mouse is the one chosen, its name shown)
         let gp = &mut self.menus.game_panels;
         if gp.quick.is_some() && gp.ui.focused() {
@@ -175,11 +169,11 @@ impl crate::App {
             }
         }
         let panels: Vec<(&str, Option<Panel>)> = vec![
-            ("view", self.menus.game_panels.view.as_ref().map(|v| v.panel(self, light))),
-            ("trip", self.menus.game_panels.trip.as_ref().map(|t| t.panel(light))),
-            ("dest", self.menus.game_panels.dest.as_ref().map(|d| d.panel(light))),
+            ("view", self.menus.game_panels.view.as_ref().map(|v| v.panel(self, pal))),
+            ("trip", self.menus.game_panels.trip.as_ref().map(|t| t.panel(pal))),
+            ("dest", self.menus.game_panels.dest.as_ref().map(|d| d.panel(pal))),
             ("quick", self.menus.game_panels.quick.as_ref().map(|q| q.panel(self))),
-            ("move", self.menus.game_panels.move_to.map(|at| move_here::panel(at, light))),
+            ("move", self.menus.game_panels.move_to.map(|at| move_here::panel(at, pal))),
         ];
         let gp = &mut self.menus.game_panels;
         for (id, p) in panels {
@@ -208,7 +202,7 @@ impl crate::App {
             cursor: self.input.cursor,
             dt,
             backdrop: crate::ui::backdrop(self.settings.ui_opacity),
-            light,
+            palette: pal,
             navigator: None,
             dock: None,
         };
