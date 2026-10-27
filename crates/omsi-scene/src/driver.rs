@@ -221,7 +221,10 @@ impl Default for ShiftState {
 struct Wheel {
     /// The steering wheel mesh (index into the vehicle's meshes).
     mesh: usize,
-    /// Its `[newanim]` variable and factor: the wheel's angle in degrees is their product.
+    /// Its `[newanim]` (index among the mesh's), variable and factor: the wheel's angle in
+    /// degrees is their product (the factor as the bus has it now, see
+    /// `DriverCar::anim_factor`: the player's own may be scaled by `cab_wheel_rotation`).
+    anim: usize,
     var: String,
     factor: f32,
     /// The turning axis, pointing at the driver.
@@ -861,7 +864,7 @@ impl DriverFigure {
         let (turn, _, _, up, right) = Self::wheel_frame(w, v);
         let up_now = turn.transform_vector3(w.up).normalize_or(w.up);
         let seen = up_now.dot(right).atan2(up_now.dot(up)).to_degrees();
-        let by_var = v.var(&w.var).unwrap_or(0.0) * w.factor;
+        let by_var = v.var(&w.var).unwrap_or(0.0) * v.anim_factor(w.mesh, w.anim).unwrap_or(w.factor);
         if seen.abs() > 10.0 && seen.abs() < 170.0 {
             self.sign = if wrap(by_var - seen).abs() <= wrap(-by_var - seen).abs() { 1.0 } else { -1.0 };
         }

@@ -96,8 +96,9 @@ fn stepped_in(ui: &mut Ui, name: &str, r: Rect, at: &mut usize, lo: usize, hi: u
 
 /// A setting the camera chose by itself, shown as a camera's display shows it.
 fn auto_row(ui: &mut Ui, r: Rect, label: &str, value: &str) {
+    let theme = ui.theme;
     ui.label(Rect::new(r.x, r.y, r.w * 0.5, r.h), label);
-    ui.text_in(value, Rect::new(r.x + r.w * 0.5, r.y, r.w * 0.5, r.h), 13.0, Weight::Bold, ACCENT, Align::Right);
+    ui.text_in(value, Rect::new(r.x + r.w * 0.5, r.y, r.w * 0.5, r.h), 13.0, Weight::Bold, theme.ACCENT, Align::Right);
 }
 
 /// The rows of the open page, from `y` down; returns where they end.
@@ -112,6 +113,7 @@ fn page(ui: &mut Ui, ph: &mut Photo, info: &Info, x: f32, y: f32, w: f32, acts: 
 /// The advanced mode's pages: a camera's body, the exposure, the lens, the colour, the
 /// darkroom and the scene.
 fn pro_page(ui: &mut Ui, ph: &mut Photo, info: &Info, x: f32, mut y: f32, w: f32, acts: &mut Vec<Request>) -> f32 {
+    let theme = ui.theme;
     let row = |y: &mut f32| {
         let r = Rect::new(x, *y, w, ROW - 2.0);
         *y += ROW + 4.0;
@@ -185,7 +187,7 @@ fn pro_page(ui: &mut Ui, ph: &mut Photo, info: &Info, x: f32, mut y: f32, w: f32
             ui.label(Rect::new(x, y, w * 0.30, ROW - 2.0), "Mode");
             ui.segmented("ph-xmode", Rect::new(x + w * 0.30, y, w * 0.70, ROW - 2.0), &mut e.mode, &exposure::MODES);
             y += ROW + 4.0;
-            note(ui, &mut y, ["Program: the camera sets the aperture and the time.", "Aperture priority: you set the aperture, the camera the time.", "Shutter priority: you set the time, the camera the aperture.", "Manual: you set everything; the meter shows how far off it is."][e.mode.min(3)], TEXT_DIM);
+            note(ui, &mut y, ["Program: the camera sets the aperture and the time.", "Aperture priority: you set the aperture, the camera the time.", "Shutter priority: you set the time, the camera the aperture.", "Manual: you set everything; the meter shows how far off it is."][e.mode.min(3)], theme.TEXT_DIM);
             if e.mode == 1 || e.mode == 3 {
                 stepped_in(ui, "ph-xap", row(&mut y), &mut e.aperture, lens_lo, lens_hi, "Aperture", &|k| format!("f/{}", exposure::APERTURES[k]));
             } else {
@@ -211,13 +213,13 @@ fn pro_page(ui: &mut Ui, ph: &mut Photo, info: &Info, x: f32, mut y: f32, w: f32
                 let r = row(&mut y);
                 meter_scale(ui, r, m.offset);
                 if m.offset.abs() > 0.5 && e.mode != 3 {
-                    note(ui, &mut y, "The lens or the shutter ran out of range: the photo comes out off the meter.", WARN);
+                    note(ui, &mut y, "The lens or the shutter ran out of range: the photo comes out off the meter.", theme.WARN);
                 }
             }
             section(ui, &mut y, "Shutter");
             motion_row(ui, row(&mut y), s);
             if s.motion && !info.bus_moving {
-                note(ui, &mut y, "The bus stands still: nothing to blur.", WARN);
+                note(ui, &mut y, "The bus stands still: nothing to blur.", theme.WARN);
             }
             let labels: Vec<&str> = BRACKETS.iter().map(|b| b.1).collect();
             select_row(ui, "ph-bracket", row(&mut y), "Exposure bracketing", &mut s.bracket, &labels);
@@ -257,7 +259,7 @@ fn pro_page(ui: &mut Ui, ph: &mut Photo, info: &Info, x: f32, mut y: f32, w: f32
             if ui.button("ph-hyper", row(&mut y), &omsi_ui::tr("Focus at the hyperfocal distance"), Some("landscape"), ButtonKind::Normal) {
                 acts.push(Request::Hyperfocal);
             }
-            note(ui, &mut y, "Click on the picture to focus on what is there.", TEXT_DIM);
+            note(ui, &mut y, "Click on the picture to focus on what is there.", theme.TEXT_DIM);
             section(ui, &mut y, "Bokeh");
             let labels: Vec<&str> = BLADES.iter().map(|b| b.1).collect();
             select_row(ui, "ph-blades", row(&mut y), "Aperture blades", &mut s.blades, &labels);
@@ -267,7 +269,7 @@ fn pro_page(ui: &mut Ui, ph: &mut Photo, info: &Info, x: f32, mut y: f32, w: f32
             ui.slider("ph-swing", row(&mut y), &mut s.tilt[1], -8.0, 8.0, 0.05, "Swing", &|v| format!("{v:+.2}°"));
             ui.slider("ph-shiftv", row(&mut y), &mut s.shift[1], -12.0, 12.0, 0.5, "Shift up / down", &|v| format!("{v:+.1} mm"));
             ui.slider("ph-shifth", row(&mut y), &mut s.shift[0], -12.0, 12.0, 0.5, "Shift right / left", &|v| format!("{v:+.1} mm"));
-            note(ui, &mut y, "Tilt leans the plane of focus (a miniature look, or the whole street sharp); shift keeps the verticals upright.", TEXT_DIM);
+            note(ui, &mut y, "Tilt leans the plane of focus (a miniature look, or the whole street sharp); shift keeps the verticals upright.", theme.TEXT_DIM);
             section(ui, &mut y, "Quality");
             let labels: Vec<&str> = QUALITY.iter().map(|q| q.1).collect();
             select_row(ui, "ph-quality", row(&mut y), "Samples", &mut s.quality, &labels);
@@ -322,7 +324,7 @@ fn pro_page(ui: &mut Ui, ph: &mut Photo, info: &Info, x: f32, mut y: f32, w: f32
             section(ui, &mut y, "Time of day");
             let r = row(&mut y);
             ui.label(Rect::new(r.x, r.y, r.w * 0.38, r.h), "Clock");
-            ui.text_in(&info.time, Rect::new(r.x + r.w * 0.38, r.y, r.w * 0.62, r.h), 15.0, Weight::Bold, ACCENT, Align::Center);
+            ui.text_in(&info.time, Rect::new(r.x + r.w * 0.38, r.y, r.w * 0.62, r.h), 15.0, Weight::Bold, theme.ACCENT, Align::Center);
             let r = row(&mut y);
             let bw = (r.w - 18.0) / 4.0;
             for (k, (text, secs)) in [("-1 h", -3600.0), ("-15 min", -900.0), ("+15 min", 900.0), ("+1 h", 3600.0)].into_iter().enumerate() {
@@ -334,7 +336,7 @@ fn pro_page(ui: &mut Ui, ph: &mut Photo, info: &Info, x: f32, mut y: f32, w: f32
             let labels: Vec<&str> = SIZES.iter().map(|z| z.1).collect();
             select_row(ui, "ph-size", row(&mut y), "Photo size", &mut s.size, &labels);
             ui.toggle("ph-png16", row(&mut y), &mut s.png16, "16 bits a channel (for editing)");
-            note(ui, &mut y, "Photos are saved as PNG into the Screenshots folder of the game, with the camera's settings (aperture, time, ISO, focal length) in their metadata.", TEXT_DIM);
+            note(ui, &mut y, "Photos are saved as PNG into the Screenshots folder of the game, with the camera's settings (aperture, time, ISO, focal length) in their metadata.", theme.TEXT_DIM);
             y += 18.0;
         }
     }
@@ -343,23 +345,25 @@ fn pro_page(ui: &mut Ui, ph: &mut Photo, info: &Info, x: f32, mut y: f32, w: f32
 
 /// The exposure meter: a scale from -3 to +3 stops, the needle where the exposure is.
 fn meter_scale(ui: &mut Ui, r: Rect, offset: f32) {
+    let theme = ui.theme;
     ui.label(Rect::new(r.x, r.y, r.w * 0.22, r.h), "Meter");
     let s = Rect::new(r.x + r.w * 0.24, r.y + r.h * 0.5 - 1.0, r.w * 0.62, 2.0);
-    ui.p().rect(s, TEXT_DIM.alpha(0.5));
+    ui.p().rect(s, theme.TEXT_DIM.alpha(0.5));
     for k in -3..=3 {
         let tx = s.x + s.w * (k as f32 + 3.0) / 6.0;
         let hgt = if k == 0 { 12.0 } else { 7.0 };
-        ui.p().rect(Rect::new(tx - 0.5, s.y - hgt * 0.5, 1.0, hgt), TEXT_DIM);
+        ui.p().rect(Rect::new(tx - 0.5, s.y - hgt * 0.5, 1.0, hgt), theme.TEXT_DIM);
     }
     let v = offset.clamp(-3.2, 3.2);
     let nx = s.x + s.w * (v + 3.0) / 6.0;
-    let c = if offset.abs() < 0.35 { OK } else if offset.abs() < 1.5 { WARN } else { DANGER };
+    let c = if offset.abs() < 0.35 { theme.OK } else if offset.abs() < 1.5 { theme.WARN } else { theme.DANGER };
     ui.p().rounded(Rect::new(nx - 3.0, s.y - 8.0, 6.0, 16.0), 3.0, c);
     ui.text_in(&format!("{offset:+.1}"), Rect::new(r.x + r.w * 0.88, r.y, r.w * 0.12, r.h), 12.0, Weight::Medium, c, Align::Right);
 }
 
 /// The simple mode's rows of the open page, from `y` down; returns where they end.
 fn simple_page(ui: &mut Ui, ph: &mut Photo, info: &Info, x: f32, mut y: f32, w: f32, acts: &mut Vec<Request>) -> f32 {
+    let theme = ui.theme;
     let row = |y: &mut f32| {
         let r = Rect::new(x, *y, w, ROW - 2.0);
         *y += ROW + 4.0;
@@ -415,7 +419,7 @@ fn simple_page(ui: &mut Ui, ph: &mut Photo, info: &Info, x: f32, mut y: f32, w: 
                 let d = ph.focus_distance();
                 let s = &mut ph.settings;
                 let _ = s;
-                ui.text_in(&format!("{d:.1} m"), Rect::new(r.x + r.w * 0.5, r.y, r.w * 0.5, r.h), 12.5, Weight::Medium, TEXT, Align::Right);
+                ui.text_in(&format!("{d:.1} m"), Rect::new(r.x + r.w * 0.5, r.y, r.w * 0.5, r.h), 12.5, Weight::Medium, theme.TEXT, Align::Right);
             } else {
                 // 0.3 .. 300 m on a log scale
                 let mut t = (s.focus / 0.3).ln() / 1000f32.ln();
@@ -427,7 +431,7 @@ fn simple_page(ui: &mut Ui, ph: &mut Photo, info: &Info, x: f32, mut y: f32, w: 
                 }
             }
             let r = Rect::new(x, y, w, 34.0);
-            ui.paragraph(&omsi_ui::tr("Click on the picture to focus on what is there."), Vec2::new(r.x, r.y), r.w, 11.5, Weight::Regular, TEXT_DIM);
+            ui.paragraph(&omsi_ui::tr("Click on the picture to focus on what is there."), Vec2::new(r.x, r.y), r.w, 11.5, Weight::Regular, theme.TEXT_DIM);
             y += 24.0;
             let s = &mut ph.settings;
             stepped(ui, "ph-fstop", row(&mut y), &mut s.fstop, FSTOPS.len(), "Aperture", &|k| format!("f/{}", FSTOPS[k]));
@@ -442,7 +446,7 @@ fn simple_page(ui: &mut Ui, ph: &mut Photo, info: &Info, x: f32, mut y: f32, w: 
             stepped(ui, "ph-shutter", row(&mut y), &mut s.shutter, SHUTTERS.len(), "Shutter speed", &|k| SHUTTERS[k].1.to_string());
             if s.motion && !info.bus_moving {
                 let r = row(&mut y);
-                ui.text_in("The bus stands still: nothing to blur.", r, 12.0, Weight::Regular, WARN, Align::Left);
+                ui.text_in("The bus stands still: nothing to blur.", r, 12.0, Weight::Regular, theme.WARN, Align::Left);
             }
             section(ui, &mut y, "Quality");
             let labels: Vec<&str> = QUALITY.iter().map(|q| q.1).collect();
@@ -482,7 +486,7 @@ fn simple_page(ui: &mut Ui, ph: &mut Photo, info: &Info, x: f32, mut y: f32, w: 
             section(ui, &mut y, "Time of day");
             let r = row(&mut y);
             ui.label(Rect::new(r.x, r.y, r.w * 0.38, r.h), "Clock");
-            ui.text_in(&info.time, Rect::new(r.x + r.w * 0.38, r.y, r.w * 0.62, r.h), 15.0, Weight::Bold, ACCENT, Align::Center);
+            ui.text_in(&info.time, Rect::new(r.x + r.w * 0.38, r.y, r.w * 0.62, r.h), 15.0, Weight::Bold, theme.ACCENT, Align::Center);
             let r = row(&mut y);
             let bw = (r.w - 18.0) / 4.0;
             for (k, (text, secs)) in [("-1 h", -3600.0), ("-15 min", -900.0), ("+15 min", 900.0), ("+1 h", 3600.0)].into_iter().enumerate() {
@@ -494,7 +498,7 @@ fn simple_page(ui: &mut Ui, ph: &mut Photo, info: &Info, x: f32, mut y: f32, w: 
             let labels: Vec<&str> = SIZES.iter().map(|z| z.1).collect();
             select_row(ui, "ph-size", row(&mut y), "Photo size", &mut s.size, &labels);
             let r = Rect::new(x, y, w, 40.0);
-            ui.paragraph("Photos are saved as PNG into the Screenshots folder of the game.", Vec2::new(r.x, r.y), r.w, 12.0, Weight::Regular, TEXT_DIM);
+            ui.paragraph("Photos are saved as PNG into the Screenshots folder of the game.", Vec2::new(r.x, r.y), r.w, 12.0, Weight::Regular, theme.TEXT_DIM);
             y += 44.0;
         }
     }
@@ -504,9 +508,10 @@ fn simple_page(ui: &mut Ui, ph: &mut Photo, info: &Info, x: f32, mut y: f32, w: 
 /// The spirit level: a line through the middle of the frame along the horizon as the camera
 /// rolls, green when level; the pitch beside it.
 fn level(ui: &mut Ui, f: Rect, roll: f32, pitch: f32) {
+    let theme = ui.theme;
     let m = f.center();
     let ok = roll.abs() < 0.3;
-    let c = if ok { OK } else { Color::WHITE.alpha(0.8) };
+    let c = if ok { theme.OK } else { Color::WHITE.alpha(0.8) };
     let (s, co) = (-roll.to_radians()).sin_cos();
     for k in -40i32..=40 {
         if k.abs() < 6 {
@@ -522,7 +527,8 @@ fn level(ui: &mut Ui, f: Rect, roll: f32, pitch: f32) {
 
 /// Where a click focused: the corners of a small square.
 fn focus_mark(ui: &mut Ui, at: Vec2, a: f32) {
-    let c = OK.alpha(a);
+    let theme = ui.theme;
+    let c = theme.OK.alpha(a);
     let (r, l) = (22.0, 8.0);
     for (sx, sy) in [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)] {
         let (cx, cy) = (at.x + sx * r, at.y + sy * r);
@@ -533,6 +539,7 @@ fn focus_mark(ui: &mut Ui, at: Vec2, a: f32) {
 
 /// The developed photo's histogram: red, green and blue over each other, the luma behind.
 fn histogram(ui: &mut Ui, r: Rect, h: &[[u32; 64]; 4]) {
+    let theme = ui.theme;
     ui.p().rounded(r, 8.0, Color::BLACK.alpha(0.55));
     let inner = Rect::new(r.x + 8.0, r.y + 8.0, r.w - 16.0, r.h - 16.0);
     let max = h.iter().flat_map(|c| c.iter().skip(1).take(62)).copied().max().unwrap_or(1).max(1) as f32;
@@ -547,7 +554,7 @@ fn histogram(ui: &mut Ui, r: Rect, h: &[[u32; 64]; 4]) {
     // (burnt out or black: a mark at the edge)
     let tot: u32 = h[3].iter().sum::<u32>().max(1);
     if h[3][63] as f32 / tot as f32 > 0.01 {
-        ui.p().rect(Rect::new(inner.right() - 3.0, inner.y, 3.0, inner.h), DANGER);
+        ui.p().rect(Rect::new(inner.right() - 3.0, inner.y, 3.0, inner.h), theme.DANGER);
     }
     if h[3][0] as f32 / tot as f32 > 0.01 {
         ui.p().rect(Rect::new(inner.x, inner.y, 3.0, inner.h), Color::rgba(77, 128, 255, 1.0));
@@ -584,6 +591,7 @@ fn guides(ui: &mut Ui, f: Rect, kind: usize) {
 }
 
 pub(crate) fn draw(sh: &mut Shell, ph: &mut Photo, info: &Info) {
+    let theme = sh.ui.theme;
     let mut acts: Vec<Request> = Vec::new();
     let size = sh.ui.size;
     let sh_scale = sh.scale;
@@ -628,15 +636,15 @@ pub(crate) fn draw(sh: &mut Shell, ph: &mut Photo, info: &Info) {
         }
         let a = left.clamp(0.0, 1.0);
         // (flat, as the launcher's toasts: lighter under the mouse, no edge)
-        let bg = if hover { SURFACE_3.alpha(a) } else { SURFACE_2.alpha(a) };
+        let bg = if hover { theme.SURFACE_3.alpha(a) } else { theme.SURFACE_2.alpha(a) };
         ui.p().rounded(r, 8.0, bg);
         let failed = text.starts_with(omsi_ui::tr("Not saved:").as_ref());
-        let (icon, tint) = if ph.saved.is_some() { ("check_circle", OK) } else if failed { ("error", DANGER) } else { ("info", TEXT_DIM) };
+        let (icon, tint) = if ph.saved.is_some() { ("check_circle", theme.OK) } else if failed { ("error", theme.DANGER) } else { ("info", theme.TEXT_DIM) };
         ui.icon(icon, Vec2::new(r.x + 20.0, r.y + 20.0), 18.0, tint.alpha(a));
-        ui.text_in(&text, Rect::new(r.x + 36.0, r.y, r.w - 44.0, 40.0), 13.0, Weight::Medium, TEXT.alpha(a), Align::Left);
+        ui.text_in(&text, Rect::new(r.x + 36.0, r.y, r.w - 44.0, 40.0), 13.0, Weight::Medium, theme.TEXT.alpha(a), Align::Left);
         if let (Some(place), Some(path)) = (place, path) {
-            ui.text_in(&place, Rect::new(r.x + 36.0, r.y + 30.0, r.w - 72.0, 18.0), 11.5, Weight::Regular, TEXT_DIM.alpha(a), Align::Left);
-            ui.icon("folder_open", Vec2::new(r.right() - 22.0, r.y + 39.0), 16.0, if hover { ACCENT.alpha(a) } else { TEXT_DIM.alpha(a) });
+            ui.text_in(&place, Rect::new(r.x + 36.0, r.y + 30.0, r.w - 72.0, 18.0), 11.5, Weight::Regular, theme.TEXT_DIM.alpha(a), Align::Left);
+            ui.icon("folder_open", Vec2::new(r.right() - 22.0, r.y + 39.0), 16.0, if hover { theme.ACCENT.alpha(a) } else { theme.TEXT_DIM.alpha(a) });
             if clicked {
                 acts.push(Request::Reveal(path));
             }
@@ -672,8 +680,8 @@ pub(crate) fn draw(sh: &mut Shell, ph: &mut Photo, info: &Info) {
     ph.panel_rect = touch.then(|| [r.x * sh_scale, r.y * sh_scale, r.w * sh_scale, r.h * sh_scale]);
     ui.panel(r);
     let inner = Rect::new(r.x + 18.0, r.y + 16.0, r.w - 36.0, r.h - 32.0);
-    ui.icon("photo_camera", Vec2::new(inner.x + 12.0, inner.y + 14.0), 20.0, ACCENT);
-    ui.text("Photo mode", Vec2::new(inner.x + 32.0, inner.y + 21.0), 18.0, Weight::Bold, TEXT, Align::Left);
+    ui.icon("photo_camera", Vec2::new(inner.x + 12.0, inner.y + 14.0), 20.0, theme.ACCENT);
+    ui.text("Photo mode", Vec2::new(inner.x + 32.0, inner.y + 21.0), 18.0, Weight::Bold, theme.TEXT, Align::Left);
     let mm = ph.settings.focal(ph.pro);
     let fnum = ph.fstop();
     let exif = if ph.pro {
@@ -685,7 +693,7 @@ pub(crate) fn draw(sh: &mut Shell, ph: &mut Photo, info: &Info) {
     } else {
         format!("{mm:.0} mm  |  {:.0}°", ph.settings.fov)
     };
-    ui.text_in(&exif, Rect::new(inner.x, inner.y + 32.0, inner.w, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
+    ui.text_in(&exif, Rect::new(inner.x, inner.y + 32.0, inner.w, 18.0), 12.0, Weight::Regular, theme.TEXT_DIM, Align::Left);
     let mut tab = ph.tab.min(tabs(ph.pro).len() - 1);
     if ui.segmented("ph-tabs", Rect::new(inner.x, inner.y + 58.0, inner.w, 34.0), &mut tab, tabs(ph.pro)) {
         ph.tab = tab;
@@ -712,7 +720,7 @@ pub(crate) fn draw(sh: &mut Shell, ph: &mut Photo, info: &Info) {
     }
     // the keys, over the buttons (going down was nowhere to be found)
     let keys = Rect::new(inner.x, inner.bottom() - 44.0 - 46.0 - 40.0, inner.w, 34.0);
-    ui.paragraph(&omsi_ui::tr("W A S D: move, Space: up, Ctrl: down, Shift: faster, drag or arrows: look"), Vec2::new(keys.x, keys.y), keys.w, 11.5, Weight::Regular, TEXT_DIM);
+    ui.paragraph(&omsi_ui::tr("W A S D: move, Space: up, Ctrl: down, Shift: faster, drag or arrows: look"), Vec2::new(keys.x, keys.y), keys.w, 11.5, Weight::Regular, theme.TEXT_DIM);
     let b = Rect::new(inner.x, inner.bottom() - 44.0 - 46.0, inner.w, 44.0);
     if ui.button("ph-take", b, &if busy { format!("{}  {n} / {target}", omsi_ui::tr("Taking...")) } else { omsi_ui::tr("Take photo").into_owned() }, Some("photo_camera"), ButtonKind::Primary) && !busy {
         acts.push(Request::Take);
@@ -741,6 +749,7 @@ pub(super) fn photo_panel(cx: &mut super::PhotoCx, dt: f32) {
     };
     let Some(ph) = cx.ui.photo.as_mut() else { return };
     cx.menus.shell.opaque = ph.render.showing_photo() && cx.menus.shell.picture_tex.is_some();
+    cx.menus.shell.set_theme(cx.common.settings.is_light_theme());
     cx.menus.shell.begin(w, h, scale, dt);
     draw(&mut *cx.menus.shell, ph, &info);
     cx.menus.shell.finish();

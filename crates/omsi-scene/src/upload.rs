@@ -301,6 +301,8 @@ impl World {
         };
         for (mesh, o3d_mats, overrides) in &ot.meshes {
             let mut mats: Vec<MaterialId> = Vec::new();
+            // (once a mesh: asked again for every slot, the 294 slots of a St-Servan crossing took 30 ms)
+            let override_slots: Vec<Option<usize>> = overrides.iter().map(|o| omsi_sim::vehicle::override_slot(o3d_mats, o)).collect();
             for (slot, m) in o3d_mats.iter().enumerate() {
                 let tex_of = |gpu: &mut GpuCache,
                               scene: &mut Scene,
@@ -311,8 +313,9 @@ impl World {
                     t.textures.push(path);
                     Some(id)
                 };
-                let for_slot =
-                    |o: &&MaterialDef| omsi_sim::vehicle::override_slot(o3d_mats, o) == Some(slot);
+                let for_slot = |o: &&MaterialDef| {
+                    overrides.iter().zip(&override_slots).any(|(x, s)| std::ptr::eq(x, *o) && *s == Some(slot))
+                };
                 // a slot fed by [useTextTexture] / [useScriptTexture] gets a generated picture:
                 // the name in the mesh is a placeholder (the stop poles' Textfeld_1.bmp, the
                 // street signs' StrSchild_Text1.bmp), and looking for it on disk only wrote

@@ -339,6 +339,7 @@ impl App {
             self.devtools = Some(Box::new(d));
         }
         self.shell.opaque = false;
+        self.shell.set_theme(self.settings.is_light_theme());
         self.shell.begin(w, h, scale, dt);
         let size = Vec2::new(w, h) / self.shell.scale;
         let requests = {

@@ -9,6 +9,21 @@ impl App {
     pub(crate) fn finish_session(&mut self) {
         crate::game_lists::flush_settings(true);
         self.exiting = true;
+        // Free-drive diagnostics also need the GPU summary when the player quits
+        // normally. The existing timed-run report alone required --exit-after.
+        // Print already collected timestamps; shutdown adds no profiling work or fence.
+        if !self.perf.gpu_reported && omsi_cfg::flags::OMSI_GPU_TIMERS.is_set() {
+            self.perf.gpu_reported = true;
+            if let Some(renderer) = self.renderer.as_ref() {
+                for (pass, ms, frames) in renderer.gpu_pass_times() {
+                    log::info!("session gpu pass {pass}: {ms:.2} ms ({frames} views measured)");
+                }
+                let frames = self.perf.total_frames.max(1) as f64;
+                for (key, count) in renderer.counts.borrow().iter() {
+                    log::info!("session draw count {key}: {:.1} per frame", count / frames);
+                }
+            }
+        }
         // (the tiles loaded on the way added to what the map lacks)
         if let Some(w) = self.world.clone() {
             let mut none = None;

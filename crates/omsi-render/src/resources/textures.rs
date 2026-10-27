@@ -488,20 +488,51 @@ impl Renderer {
         scene.textures.len() - 1
     }
 
-    pub fn add_blank_texture(&self, scene: &mut Scene, width: u32, height: u32) -> TextureId {
+    /// A transparent texture for a vehicle's displays; `mipmaps`: with the levels its text is drawn into.
+    pub fn add_blank_texture(&self, scene: &mut Scene, width: u32, height: u32, mipmaps: bool) -> TextureId {
         let (width, height) = fit_size(width.max(1), height.max(1), self.device.limits().max_texture_dimension_2d);
+        let mipmaps = mipmaps && width > 1 && height > 1;
         // A newly allocated GPU texture has undefined contents. Script displays may be
         // sampled before their first `STUnlock`, so initialise them as transparent rather
         // than briefly showing arbitrary solid pixels on new or AI vehicles.
-        let image = omsi_texture::Image {
-            width,
-            height,
-            rgba: vec![0; (width * height * 4) as usize],
-            has_alpha: true,
+        // (cleared on the GPU where it can: uploading the zeros was 10-35 ms per articulated AI bus)
+        let texture = if self.device.features().contains(wgpu::Features::CLEAR_TEXTURE) {
+            self.cleared_texture(width, height, mipmaps)
+        } else {
+            let image = omsi_texture::Image { width, height, rgba: vec![0; (width * height * 4) as usize], has_alpha: true };
+            if mipmaps { self.upload_texture_gpu_mips(&image) } else { upload_texture(&self.device, &self.queue, &image, false) }
         };
-        let texture = upload_texture(&self.device, &self.queue, &image, false);
         scene.textures.push(texture);
         scene.textures.len() - 1
+    }
+
+    /// An sRGB texture cleared to transparent on the GPU, made as `upload_texture` (`upload_texture_gpu_mips`) makes it.
+    fn cleared_texture(&self, width: u32, height: u32, mipmaps: bool) -> GpuTexture {
+        let mip_count = if mipmaps { (32 - width.max(height).leading_zeros()).max(1) } else { 1 };
+        let usage = if mipmaps {
+            wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::RENDER_ATTACHMENT
+        } else {
+            wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST
+        };
+        let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+        let Some(texture) = try_create_texture(&self.device, &wgpu::TextureDescriptor {
+            label: None,
+            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            mip_level_count: mip_count,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage,
+            view_formats: &[],
+        }) else {
+            return stand_in_texture(&self.device, &self.queue);
+        };
+        // (submitted now: a script's first picture, written after, then comes after the clear)
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("blank texture") });
+        encoder.clear_texture(&texture, &wgpu::ImageSubresourceRange::default());
+        self.queue.submit([encoder.finish()]);
+        let view = texture.create_view(&Default::default());
+        GpuTexture { texture, view, size: (width, height), bytes: texture_bytes(format, width, height, mip_count), generation: next_gen() }
     }
 
     /// The PBR set found beside diffuse texture `diffuse` (`omsi_texture::pbr`): its maps up

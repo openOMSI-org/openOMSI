@@ -66,6 +66,27 @@ fn the_games_options_survive_a_save() {
 }
 
 #[test]
+fn launcher_settings_bridge_unifies_ui_theme_with_legacy_nav_light() {
+    assert_eq!(settings_from_text(None)["ui_theme"], json!("dark"));
+    assert_eq!(settings_from_text(Some("ui_theme=light\n"))["ui_theme"], json!("light"));
+    assert_eq!(settings_from_text(Some("ui_theme=dark\n"))["ui_theme"], json!("dark"));
+    assert_eq!(settings_from_text(Some("ui_theme=blue\n"))["ui_theme"], json!("dark"));
+    assert_eq!(settings_from_text(Some("nav_light=1\n"))["ui_theme"], json!("light"));
+    assert_eq!(settings_from_text(Some("ui_theme=dark\nnav_light=1\n"))["ui_theme"], json!("dark"));
+
+    let saved = settings_to_text(&json!({ "ui_theme": "light", "nav_light": true }), None);
+    assert!(saved.lines().any(|line| line == "ui_theme=light"), "{saved}");
+    assert!(!saved.lines().any(|line| line.starts_with("nav_light=")), "{saved}");
+
+    let rewritten = settings_to_text(&json!({ "ui_theme": "light", "nav_light": true }), Some("nav_light=1\n"));
+    assert!(rewritten.lines().any(|line| line == "ui_theme=light"), "{rewritten}");
+    assert!(!rewritten.lines().any(|line| line.starts_with("nav_light=")), "{rewritten}");
+
+    let invalid = settings_to_text(&json!({ "ui_theme": "blue" }), None);
+    assert!(invalid.lines().any(|line| line == "ui_theme=dark"), "{invalid}");
+}
+
+#[test]
 fn dsc_files_give_name_and_description() {
     let d = super::parse_dsc("\r\n[friendlyname]\r\nMAN\r\nNL202 - EN92\r\nBeige\r\n\r\n[description]\r\nAlthough the BVG did not purchase\r\n\r\n-Technical specifications-\r\n[end]\r\n");
     assert_eq!(d.name, vec!["MAN", "NL202 - EN92", "Beige"]);
@@ -340,6 +361,26 @@ fn the_wheels_tremble_settings_round_trip() {
     assert_eq!(settings_from_text(Some("ff_road_vib=1.5\n"))["ff_road_vib"], 1.5);
     assert_eq!(settings_from_text(Some("ff_road_vib=9\n"))["ff_road_vib"], 4.0);
     assert_eq!(settings_from_text(Some("ff_fade=12\n"))["ff_fade"], 1.5);
+}
+
+#[test]
+fn the_cab_wheel_rotation_round_trips() {
+    // 0: the bus's own animation, as before the setting
+    let mut settings = settings_from_text(None);
+    assert_eq!(settings["cab_wheel_rotation"], json!(0));
+    assert!(settings_to_text(&settings, None).lines().any(|l| l == "cab_wheel_rotation=0"));
+    settings["cab_wheel_rotation"] = json!(1080);
+    let saved = settings_to_text(&settings, None);
+    assert!(saved.lines().any(|l| l == "cab_wheel_rotation=1080"), "{saved}");
+    assert_eq!(settings_from_text(Some(&saved))["cab_wheel_rotation"], json!(1080));
+    // below the slider's first step is Automatic; past a wheel's rotation is its most
+    for (line, kept) in [("40", 0), ("120", 180), ("900.4", 900), ("5000", 1800), ("-90", 0), ("x", 0)] {
+        assert_eq!(settings_from_text(Some(&format!("cab_wheel_rotation={line}\n")))["cab_wheel_rotation"], json!(kept), "{line}");
+    }
+    settings["cab_wheel_rotation"] = json!(60);
+    assert!(settings_to_text(&settings, None).lines().any(|l| l == "cab_wheel_rotation=0"));
+    settings["cab_wheel_rotation"] = json!(3600);
+    assert!(settings_to_text(&settings, None).lines().any(|l| l == "cab_wheel_rotation=1800"));
 }
 
 #[test]

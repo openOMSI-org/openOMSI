@@ -1,6 +1,6 @@
 //! In-game controller configuration. Edits are saved before installing mappings on the
 //! existing controller; opening this UI never creates another hardware connection.
-use crate::controllers::{DeviceCfg, Func};
+use crate::controllers::{DeviceCfg, FfTune, Func};
 use crate::gamepad_profile::{self, PadKind};
 use crate::game_lists::{ListKind, Move, HEADING};
 use crate::App;
@@ -55,6 +55,37 @@ pub(crate) const COMMON_TABS: [&str; 4] = ["Devices", "Driving", "Gamepad", "For
 const AXES: [&str; 8] = ["X axis", "Y axis", "Z axis", "X rotation", "Y rotation", "Z rotation", "Slider 1", "Slider 2"];
 const PAD_TYPES: [&str; 4] = ["auto", "xbox", "ps4", "ps5"];
 type Rows = Vec<(String, String)>;
+
+/// The fine tuning of a wheel's steering forces (#2103, #3289), as the Force feedback tab
+/// shows it: the action, the label, the help line, the steps in one unit of the value (20:
+/// 5 % steps), the steps to the top of its range, and the factor and unit it reads in. A
+/// value is a whole number of steps divided by the steps per unit, so the defaults (1 and 0)
+/// come out exact and a wheel put back to them is saved without the section.
+const TUNING: [(&str, &str, &str, f32, usize, f32, &str); 5] = [
+    ("centring", "Self-centring", "How strongly the moving bus turns the wheel back to straight after a turn; it never pulls while the bus is stopped.", 20.0, 40, 100.0, "%"),
+    ("damping", "Damping", "How much the wheel resists fast movement, so a released wheel settles at the centre instead of swinging past it; raise it if the wheel oscillates.", 20.0, 60, 100.0, "%"),
+    ("parking", "Parking resistance", "How heavy the wheel is to turn while the bus stands or crawls; it eases as the bus rolls.", 20.0, 40, 100.0, "%"),
+    ("min_force", "Minimum force", "Lifts the smallest forces above the point where your wheel starts to feel them; useful on belt and gear wheels with a dead centre, leave at 0 on direct drive.", 100.0, 20, 100.0, "%"),
+    ("smoothing", "Smoothing", "Softens sudden steps in the steering force that can feel grainy on strong wheels at low frame rates; higher values add a little delay.", 200.0, 10, 1000.0, "ms"),
+];
+
+/// The value of `t` a `TUNING` action changes (smoothing in seconds).
+fn tuning<'a>(t: &'a mut FfTune, verb: &str) -> Option<&'a mut f32> {
+    Some(match verb {
+        "centring" => &mut t.centring,
+        "damping" => &mut t.damping,
+        "parking" => &mut t.parking,
+        "min_force" => &mut t.min_force,
+        "smoothing" => &mut t.smoothing,
+        _ => return None,
+    })
+}
+
+/// The tuning as the device keeps it: none when every value is its default, so a wheel
+/// nobody tuned is saved without `[openOMSI.FFTuning]` and keeps today's feel.
+fn tuned(t: FfTune) -> Option<FfTune> {
+    (t != FfTune::default()).then_some(t)
+}
 
 /// The family the gamepad's buttons are named for: the setting, else the first pad found,
 /// else Xbox (what most players hold).
@@ -234,6 +265,15 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
                     out.push(row("Vibration", &format!("{:.0} %", ff.1 * 100.0), "Left/right adjusts in steps of 5 % (0-200 %)", "vibration".into()));
                     let invert = d.ff_invert.unwrap_or(app.settings.ff_invert);
                     out.push((crate::game_lists::row("Invert force feedback", 's', if invert { "on" } else { "off" }, "Motor direction for this device", None), "force_invert".into()));
+                    // what the wheel does on its own: centring, damping, the parked weight,
+                    // the dead centre of belt wheels, the grain of strong ones (#2103, #3289)
+                    out.push(("Fine tuning".into(), HEADING.into()));
+                    let mut t = d.ff_tune.unwrap_or_default();
+                    for (verb, label, help, _, _, scale, unit) in TUNING {
+                        let v = tuning(&mut t, verb).map(|v| *v).unwrap_or_default();
+                        out.push(row(label, &format!("{:.0} {unit}", v * scale), help, verb.into()));
+                    }
+                    out.push(crate::game_lists::button("Reset tuning", "Reset", "Return the fine tuning to its defaults", "reset_tuning"));
                 }
             }
         }
@@ -419,6 +459,15 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str, mv: Move) -> Opt
             *v = step((*v * 20.0).round().clamp(0.0, 40.0) as usize, 41, mv) as f32 / 20.0;
             d.ff_scale = Some(ff);
         }
+        "centring" | "damping" | "parking" | "min_force" | "smoothing" => {
+            let Some(&(_, _, _, per, top, _, _)) = TUNING.iter().find(|r| r.0 == verb) else { return Some(kind.clone()) };
+            let mut t = d.ff_tune.unwrap_or_default();
+            if let Some(v) = tuning(&mut t, verb) {
+                *v = step((*v * per).round().clamp(0.0, top as f32) as usize, top + 1, mv) as f32 / per;
+            }
+            d.ff_tune = tuned(t);
+        }
+        "reset_tuning" if matches!(mv, Move::Next) => d.ff_tune = None,
         "force_invert" => d.ff_invert = Some(switched(d.ff_invert.unwrap_or(app.settings.ff_invert), mv)),
         "continuous" => if let Some(b) = arg.parse::<usize>().ok().filter(|b| *b < crate::controllers::HAT_BUTTONS + 16) {
             let on = switched(d.continuous(b), mv);
@@ -552,5 +601,20 @@ mod tests {
         let rows = action_rows(vec![("horn".into(), "Horn".into()), ("door_front".into(), "Door".into()), ("door_rear".into(), "Door".into())]);
         assert_eq!(rows, vec![("Horn".into(), "bind horn".into()),
             ("Door | door_front".into(), "bind door_front".into()), ("Door | door_rear".into(), "bind door_rear".into())]);
+    }
+
+    #[test]
+    fn ffb_tuning_defaults_sit_on_a_step_and_save_no_section() {
+        // every default is a whole step and inside its range, so Left then Right comes back
+        // to it exactly, and a wheel put back to the defaults is saved as one never tuned
+        let mut t = FfTune::default();
+        for (verb, _, _, per, top, _, _) in TUNING {
+            let v = tuning(&mut t, verb).expect(verb);
+            assert_eq!((*v * per).round() / per, *v, "{verb}");
+            assert!((*v * per).round() as usize <= top, "{verb}");
+        }
+        assert!(tuned(FfTune::default()).is_none());
+        assert!(tuned(FfTune { min_force: 0.01, ..FfTune::default() }).is_some());
+        assert_eq!(TUNING.iter().map(|r| r.4 as f32 / r.3).collect::<Vec<_>>(), [2.0, 3.0, 2.0, 0.2, 0.05]);
     }
 }

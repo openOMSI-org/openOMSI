@@ -355,6 +355,8 @@ pub(crate) fn spawn_player_prepared(
     let loaded = crate::settings::Settings::load();
     // (the road model of new bodies: the setting, or `OMSI_REALISTIC_ROAD=1`)
     omsi_sim::rigid::set_realistic_default(loaded.realistic_road_physics);
+    // (the cab's steering wheel turned as far as the player's own, if asked: this bus only)
+    vehicle.set_cab_wheel_rotation(loaded.cab_wheel_rotation);
     let objects = loaded.collision_objects;
     vehicle.collision = objects.then(|| world.data.peek().lists.collision.clone());
     vehicle.wheel_walls = objects;

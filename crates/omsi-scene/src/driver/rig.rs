@@ -167,10 +167,10 @@ pub(super) fn find_shifter(v: &impl DriverCar, hip: Vec3, heading: f32) -> Optio
 /// road wheel turns by the steering angle itself, a steering wheel by 15-20 times it) that
 /// lies within arm's reach of the seat.
 pub(super) fn find_wheel(v: &impl DriverCar, hip: Vec3) -> Option<Wheel> {
-    let mut best: Option<(f32, usize, Mat4, String, f32)> = None;
+    let mut best: Option<(f32, usize, usize, Mat4, String, f32)> = None;
     for (i, vm) in v.ty().meshes.iter().enumerate() {
         let def = &v.ty().model.meshes[vm.def_index];
-        for a in &def.animations {
+        for (j, a) in def.animations.iter().enumerate() {
             if !a.variable.to_ascii_lowercase().starts_with("axle_steering")
                 || a.factor.abs() < 200.0
                 || a.kind != Some(omsi_model::AnimKind::Rot)
@@ -183,11 +183,11 @@ pub(super) fn find_wheel(v: &impl DriverCar, hip: Vec3) -> Option<Wheel> {
                 continue;
             }
             if best.as_ref().map(|b| a.factor.abs() > b.0).unwrap_or(true) {
-                best = Some((a.factor.abs(), i, origin, a.variable.clone(), a.factor));
+                best = Some((a.factor.abs(), i, j, origin, a.variable.clone(), a.factor));
             }
         }
     }
-    let (_, mesh, origin, var, factor) = best?;
+    let (_, mesh, anim, origin, var, factor) = best?;
     let origin_point = origin.transform_point3(Vec3::ZERO);
     let centre = origin_point;
     let mut axis = origin.transform_vector3(Vec3::X).normalize_or_zero();
@@ -251,5 +251,5 @@ pub(super) fn find_wheel(v: &impl DriverCar, hip: Vec3) -> Option<Wheel> {
     let centre = origin_point + axis * along.clamp(-0.3, 0.3);
     let radius = radius.clamp(0.14, 0.32);
     log::debug!("driver: steering wheel rim {radius:.3} m round the axis, tube {tube:.3} m thick (radius)");
-    Some(Wheel { mesh, var, factor, axis, centre, up, right, radius, tube })
+    Some(Wheel { mesh, anim, var, factor, axis, centre, up, right, radius, tube })
 }

@@ -185,6 +185,7 @@ impl FrameCtx<'_> {
 /// OMSI_GPU_TIMERS: the query set of this frame (when it is timed) and the passes timed
 /// so far.
 pub(crate) struct PassTimers {
+    pub view: usize,
     pub set: Option<wgpu::QuerySet>,
     pub timed: Vec<&'static str>,
 }

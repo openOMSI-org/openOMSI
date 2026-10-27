@@ -439,6 +439,30 @@ impl World {
             for p in prepared.iter_mut() {
                 p.images = decoded.clone();
             }
+            // (and how a surface object's pictures blend, which `type_gpu` reads from the whole
+            // file: 30-60 ms on the thread that draws for St-Servan's crossings and depot)
+            let mut surface: Vec<(String, Vec<PathBuf>)> = {
+                let gpu = self.gpu.lock();
+                let mut seen: hashbrown::HashSet<*const ObjectType> = hashbrown::HashSet::new();
+                prepared
+                    .iter()
+                    .flat_map(|p| &p.objects)
+                    .filter(|o| matches!(o.ot.sco.render_type, omsi_scenery::sco::RenderType::Surface | omsi_scenery::sco::RenderType::OnSurface))
+                    .filter(|o| !gpu.types.contains_key(&(Arc::as_ptr(&o.ot) as usize)) && seen.insert(Arc::as_ptr(&o.ot)))
+                    .flat_map(|o| {
+                        let dirs = o.ot.texture_dirs(&self.root);
+                        o.ot.meshes.iter().flat_map(|m| &m.1).filter(|m| !is_null_texture(&m.texture)).map(move |m| (m.texture.clone(), dirs.clone())).collect::<Vec<_>>()
+                    })
+                    .collect()
+            };
+            surface.sort();
+            surface.dedup();
+            surface.par_iter().for_each(|(name, dirs)| {
+                let dirs_ref: Vec<&Path> = dirs.iter().map(|d| d.as_path()).collect();
+                if let Some(path) = omsi_texture::find_texture(name, &dirs_ref) {
+                    super::staging::picture_blend_fade(&path);
+                }
+            });
         }
     }
 }

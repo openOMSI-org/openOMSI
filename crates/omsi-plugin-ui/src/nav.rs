@@ -4,7 +4,7 @@
 //! The navigator's map (`omsi.ui` version 6) is room the navigator fills: it is noted where
 //! it is ([`Laid::map`]), and nothing is drawn there.
 
-use super::{color, ink_on, Item, Layout, ACCENT, BADGE_H, BADGE_PAD, BADGE_PX};
+use super::{color, ink_on, Item, Layout, BADGE_H, BADGE_PAD, BADGE_PX};
 use glam::Vec2;
 use omsi_plugin::ui::{Element, Kind, Panel, Rgba, Stop, StopState};
 use omsi_ui::{Color, Rect, Weight};
@@ -51,12 +51,6 @@ const STOP_ROW: f32 = 22.0;
 const RAIL_X: f32 = 6.0;
 const NAME_X: f32 = 19.0;
 /// The rail where the bus has been, and the texts by where the stop is.
-const RAIL_DONE: Color = Color::rgba(74, 84, 98, 1.0);
-const TEXT_NOW: Color = Color::rgba(255, 255, 255, 1.0);
-const TEXT_SOFT: Color = Color::rgba(196, 202, 214, 1.0);
-const TEXT_DIM: Color = Color::rgba(149, 157, 176, 1.0);
-const TEXT_FAINT: Color = Color::rgba(110, 118, 136, 1.0);
-const TAG_FILL: Color = Color::rgba(255, 255, 255, 0.10);
 /// The navigator's own map: this share of its width high.
 const MAP_SHARE: f32 = 0.8;
 
@@ -90,7 +84,7 @@ impl Layout<'_> {
     pub(crate) fn nav_emit(&mut self, e: &Element, r: Rect) {
         match &e.kind {
             Kind::Box { children, gap } => {
-                let tint = e.color.map(color).unwrap_or(ACCENT);
+                let tint = e.color.map(color).unwrap_or(self.colors.accent);
                 self.rounded(r, BOX_R, tint.alpha(BOX_TINT), None);
                 self.rounded(Rect::new(r.x, r.y, BOX_STRIPE, r.h), BOX_STRIPE * 0.5, tint, None);
                 let x = r.x + BOX_STRIPE + BOX_PAD.0;
@@ -106,7 +100,7 @@ impl Layout<'_> {
                 }
             }
             Kind::Stops { stops, size } => {
-                let rail = e.color.map(color).unwrap_or(ACCENT);
+                let rail = e.color.map(color).unwrap_or(self.colors.accent);
                 let row = STOP_ROW * size / 13.0;
                 for (i, s) in stops.iter().enumerate() {
                     let rr = Rect::new(r.x, r.y + i as f32 * row, r.w, row);
@@ -149,12 +143,12 @@ impl Layout<'_> {
     pub(crate) fn badge(&mut self, e: &Element, r: Rect, text: &str, text_color: Option<Rgba>, wt: Weight) {
         let w = self.natural(e).min(r.w);
         let b = Rect::new(r.x, r.y + (r.h - BADGE_H) * 0.5, w, BADGE_H);
-        let fill = e.color.map(color).unwrap_or(ACCENT);
+        let fill = e.color.map(color).unwrap_or(self.colors.accent);
         self.rounded(b, BADGE_H * 0.5, fill, None);
         let t = self.fit(text, BADGE_PX, wt, w - 2.0 * BADGE_PAD);
         let tw = self.width(&t, BADGE_PX, wt);
         let y = self.baseline(b.y, b.h, BADGE_PX, wt);
-        self.text(t, BADGE_PX, wt, Vec2::new(b.x + (b.w - tw) * 0.5, y), text_color.map(color).unwrap_or(ink_on(fill)));
+        self.text(t, BADGE_PX, wt, Vec2::new(b.x + (b.w - tw) * 0.5, y), text_color.map(color).unwrap_or(ink_on(fill, self.colors)));
     }
 
     /// A circle (a rounded square as wide as it is high).
@@ -168,7 +162,7 @@ impl Layout<'_> {
     fn stop(&mut self, s: &Stop, r: Rect, size: f32, rail: Color, above: bool, below: bool) {
         let k = size / 13.0;
         let (x, cy) = (r.x + RAIL_X * k, r.y + r.h * 0.5);
-        let line = if s.state == StopState::Done { RAIL_DONE } else { rail };
+        let line = if s.state == StopState::Done { self.colors.rail_done } else { rail };
         if above {
             self.out.items.push(Item::Rect { r: Rect::new(x - 1.5 * k, r.y, 3.0 * k, r.h * 0.5), color: line });
         }
@@ -177,7 +171,7 @@ impl Layout<'_> {
         }
         let center = Vec2::new(x, cy);
         match s.state {
-            StopState::Done => self.dot(center, 4.0 * k, RAIL_DONE),
+                StopState::Done => self.dot(center, 4.0 * k, self.colors.rail_done),
             StopState::Now => {
                 self.dot(center, 9.0 * k, rail.alpha(0.25));
                 self.dot(center, 6.0 * k, rail);
@@ -193,9 +187,9 @@ impl Layout<'_> {
         let lh = r.h;
         if !s.time.is_empty() {
             let (wt, c) = match s.state {
-                StopState::Done => (Weight::Medium, TEXT_FAINT),
+                StopState::Done => (Weight::Medium, self.colors.faint),
                 StopState::Now => (Weight::Bold, rail),
-                StopState::Ahead => (Weight::Medium, TEXT_DIM),
+                StopState::Ahead => (Weight::Medium, self.colors.muted),
             };
             let tw = self.width(&s.time, tpx, wt);
             let base = self.baseline(r.y, lh, tpx, wt);
@@ -205,22 +199,22 @@ impl Layout<'_> {
         if !s.expected.is_empty() {
             let ew = self.width(&s.expected, tpx, Weight::Bold);
             let base = self.baseline(r.y, lh, tpx, Weight::Bold);
-            self.text(s.expected.clone(), tpx, Weight::Bold, Vec2::new(right - ew, base), s.expected_color.map(color).unwrap_or(TEXT_SOFT));
+            self.text(s.expected.clone(), tpx, Weight::Bold, Vec2::new(right - ew, base), s.expected_color.map(color).unwrap_or(self.colors.soft));
             right -= ew + 8.0 * k;
         }
         if !s.tag.is_empty() {
             let px = 10.0 * k;
             let w = self.width(&s.tag, px, Weight::Medium) + 10.0 * k;
             let t = Rect::new(right - w, cy - 8.0 * k, w, 16.0 * k);
-            self.rounded(t, 4.0 * k, TAG_FILL, None);
+            self.rounded(t, 4.0 * k, self.colors.tag_fill, None);
             let base = self.baseline(t.y, t.h, px, Weight::Medium);
-            self.text(s.tag.clone(), px, Weight::Medium, Vec2::new(t.x + 5.0 * k, base), TEXT_DIM);
+            self.text(s.tag.clone(), px, Weight::Medium, Vec2::new(t.x + 5.0 * k, base), self.colors.muted);
             right -= w + 8.0 * k;
         }
         let (px, wt, c) = match s.state {
-            StopState::Done => (12.5 * k, Weight::Regular, TEXT_FAINT),
-            StopState::Now => (14.0 * k, Weight::Bold, TEXT_NOW),
-            StopState::Ahead => (13.0 * k, Weight::Medium, TEXT_SOFT),
+            StopState::Done => (12.5 * k, Weight::Regular, self.colors.faint),
+            StopState::Now => (14.0 * k, Weight::Bold, self.colors.ink),
+            StopState::Ahead => (13.0 * k, Weight::Medium, self.colors.soft),
         };
         let nx = r.x + NAME_X * k;
         let name = self.fit(&s.name, px, wt, (right - nx).max(0.0));

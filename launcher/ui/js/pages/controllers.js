@@ -46,7 +46,17 @@ export function buttonName(n) {
   return t('Button {n}', { n: n + 1 });
 }
 
-export const newDevice = (name) => ({ name, second: '0', axes: Array.from({ length: 8 }, () => [-1, false, 0]), buttons: [], ff_scale: null, ff_invert: null, latching: [], more: [] });
+export const newDevice = (name) => ({ name, second: '0', axes: Array.from({ length: 8 }, () => [-1, false, 0]), buttons: [], ff_scale: null, ff_invert: null, ff_tune: null, latching: [], more: [] });
+// a wheel's force feedback tuning: multipliers of the self-centring, the damping and the parking
+// resistance, the minimum force (a share of full force) and the smoothing (seconds); none saved
+// (null) is these
+const FF_TUNE = { centring: 1, damping: 1, parking: 1, min_force: 0, smoothing: 0 };
+export const tuneOf = (c) => Object.fromEntries(Object.entries(FF_TUNE).map(([k, v]) => [k, Number.isFinite(c?.ff_tune?.[k]) ? c.ff_tune[k] : v]));
+/** Changes some of the tuning; all back at the defaults saves none, so the device stays as it was. */
+export function setTune(c, patch) {
+  const next = { ...(c.ff_tune || {}), ...tuneOf(c), ...patch };
+  c.ff_tune = Object.keys(FF_TUNE).every((k) => Math.abs(next[k] - FF_TUNE[k]) < 1e-6) ? null : next;
+}
 const offList = (s) => (s.ctrl_off || '').split('|').filter(Boolean);
 
 let saveTimer = 0;
@@ -391,7 +401,7 @@ function LiveAxes({ live }) {
 function DeviceDetail({ e, s, off, gears, actions, lit, capturing, padButtons, change, bind, assign, unbind, startCapture, stopCapture, setOn, setUp, remove, paused }) {
   const d = e.cfg;
   const kind = kindOf(e);
-  const ff = e.live?.ff || d.ff_invert != null || (d.ff_scale || [1, 1]).some((v) => v !== 1);
+  const ff = e.live?.ff || d.ff_invert != null || d.ff_tune != null || (d.ff_scale || [1, 1]).some((v) => v !== 1);
   const steers = d.axes.some((a) => a[0] === 0);
   return html`
     <${Card}>
@@ -660,29 +670,17 @@ function ByButton({ d, live, actions, fresh, hats: seen, change, bind, assign, u
 
 function WheelCard({ d, live, ff, change, paused }) {
   const [test, setTest] = useState(false);
-  const [steer, force] = d.ff_scale || [1, 1];
   const axis = d.axes.findIndex((a) => a[0] === 0);
   return html`<${Card} title="Steering wheel">
-    <div class="stack" style="gap:6px">
-      ${ff &&
-      html`<div class="setting-row full"><${Slider} label="Steering force" value=${steer} min=${0} max=${2} step=${0.05} format=${(v) => `${Math.round(v * 100)} %`} onChange=${(v) => change((c) => (c.ff_scale = [v, force]))} /></div>
-        <div class="setting-row full"><${Slider} label="Vibration" value=${force} min=${0} max=${2} step=${0.05} format=${(v) => `${Math.round(v * 100)} %`} onChange=${(v) => change((c) => (c.ff_scale = [steer, v]))} /></div>
-        <div class="setting-row">
-          <div class="name">${t('Invert force feedback')}</div>
-          <div class="row" style="gap:10px;justify-content:flex-end">
-            <${Button} small icon="play" label="Test the direction" disabled=${!live || axis < 0} onClick=${() => setTest(true)} />
-            <${Toggle} checked=${d.ff_invert ?? !!S.settings?.ff_invert} onChange=${(v) => change((c) => (c.ff_invert = v))} />
-          </div>
-        </div>`}
-      <div class="section-title">${t('For every wheel')}</div>
-      <${SettingRow} row=${settingRow('wheel_range')} />
-      <${SettingRow} row=${settingRow('wheel_lock')} />
-      ${ff &&
-      html`<${SettingRow} row=${settingRow('ff_enabled')} />
-        <${SettingRow} row=${settingRow('ff_road_vib')} />
-        <${SettingRow} row=${settingRow('ff_engine_vib')} />
-        <${SettingRow} row=${settingRow('ff_fade')} />`}
-    </div>
+      <div class="stack" style="gap:6px">
+        <div class="section-title">${t('For every wheel')}</div>
+        <${SettingRow} row=${settingRow('wheel_range')} />
+        <${SettingRow} row=${settingRow('wheel_lock')} />
+        <${SettingRow} row=${settingRow('cab_wheel_rotation')} />
+        ${ff && html`<${SettingRow} row=${settingRow('ff_enabled')} />`}
+      </div>
+    </${Card}>
+    ${ff && html`<${FeedbackCard} d=${d} live=${live} axis=${axis} change=${change} onTest=${() => setTest(true)} />`}
     ${test &&
     html`<${FeedbackTest}
       device=${d}
@@ -695,7 +693,62 @@ function WheelCard({ d, live, ff, change, paused }) {
         change((c) => (c.ff_invert = v));
         setTest(false);
       }}
-    />`}
+    />`}`;
+}
+
+const pct = (v) => `${Math.round(v * 100)} %`;
+const smoothMs = (v) => (v < 0.0005 ? t('Off') : `${Math.round(v * 1000)} ms`);
+
+/** A force feedback slider with a sentence on what it does. */
+function FeedbackSlider({ label, help, value, max, step = 0.05, format = pct, onChange }) {
+  return html`<div class="setting-row full"><${Slider} label=${label} help=${help} value=${value} min=${0} max=${max} step=${step} format=${format} onChange=${onChange} /></div>`;
+}
+
+/** This wheel's force feedback: its strengths and tuning (saved with the device), then the
+ * vibration every wheel shares and the direction. */
+function FeedbackCard({ d, live, axis, change, onTest }) {
+  const [steer, vib] = d.ff_scale || [1, 1];
+  const tune = tuneOf(d);
+  const scale = (i) => (v) =>
+    change((c) => {
+      const next = [...(c.ff_scale || [1, 1])];
+      next[i] = v;
+      c.ff_scale = next;
+    });
+  const tuned = (key) => (v) => change((c) => setTune(c, { [key]: v }));
+  // (the five tuning values only, as the game's own Reset tuning: the strengths have their sliders)
+  const reset = () => change((c) => (c.ff_tune = null));
+  const custom = d.ff_tune != null;
+  return html`<${Card} title="Force feedback" actions=${html`<${Button} small kind="ghost" icon="refresh" label="Reset tuning" disabled=${!custom} onClick=${reset} />`}>
+    <div class="stack" style="gap:6px">
+      ${!!S.poll?.instances?.length && html`<${Notice} kind="warn">${t("Changes take effect the next time you drive, or after Reload saved controllers in the game's controller menu.")}</${Notice}>`}
+      <div class="section-title">${t('Steering')}</div>
+      <div class="ff-grid">
+        <${FeedbackSlider} label="Steering force" help="Overall strength of the steering forces on this wheel; lower it on a strong direct-drive base, raise it on a weak wheel." value=${steer} max=${2} onChange=${scale(0)} />
+        <${FeedbackSlider} label="Self-centring" help="How strongly the moving bus turns the wheel back to straight after a turn; it never pulls while the bus is stopped." value=${tune.centring} max=${2} onChange=${tuned('centring')} />
+        <${FeedbackSlider} label="Damping" help="How much the wheel resists fast movement, so a released wheel settles at the centre instead of swinging past it; raise it if the wheel oscillates." value=${tune.damping} max=${3} onChange=${tuned('damping')} />
+        <${FeedbackSlider} label="Parking resistance" help="How heavy the wheel is to turn while the bus stands or crawls; it eases as the bus rolls." value=${tune.parking} max=${2} onChange=${tuned('parking')} />
+      </div>
+      <div class="section-title">${t('Fine tuning')}</div>
+      <div class="ff-grid">
+        <${FeedbackSlider} label="Minimum force" help="Lifts the smallest forces above the point where your wheel starts to feel them; useful on belt and gear wheels with a dead centre, leave at 0 on direct drive." value=${tune.min_force} max=${0.2} step=${0.01} onChange=${tuned('min_force')} />
+        <${FeedbackSlider} label="Smoothing" help="Softens sudden steps in the steering force that can feel grainy on strong wheels at low frame rates; higher values add a little delay." value=${tune.smoothing} max=${0.05} step=${0.005} format=${smoothMs} onChange=${tuned('smoothing')} />
+      </div>
+      <div class="section-title">${t('Vibration')}</div>
+      <div class="ff-grid">
+        <${FeedbackSlider} label="Vibration" help="Overall strength of shakes, kerb jolts and the road and engine tremble on this wheel." value=${vib} max=${2} onChange=${scale(1)} />
+        <${SettingRow} row=${settingRow('ff_road_vib')} />
+        <${SettingRow} row=${settingRow('ff_engine_vib')} />
+        <${SettingRow} row=${settingRow('ff_fade')} />
+      </div>
+      <div class="setting-row">
+        <div class="name">${t('Invert force feedback')}</div>
+        <div class="row" style="gap:10px;justify-content:flex-end">
+          <${Button} small icon="play" label="Test the direction" disabled=${!live || axis < 0} onClick=${onTest} />
+          <${Toggle} checked=${d.ff_invert ?? !!S.settings?.ff_invert} onChange=${(v) => change((c) => (c.ff_invert = v))} />
+        </div>
+      </div>
+    </div>
   </${Card}>`;
 }
 

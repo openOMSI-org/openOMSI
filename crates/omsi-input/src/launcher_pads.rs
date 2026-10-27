@@ -1,7 +1,7 @@
 type Reply = std::sync::Arc<dyn Fn(&serde_json::Value, serde_json::Value, &[u8]) + Send + Sync>;
 
 pub struct Paths { pub read_root: fn() -> std::path::PathBuf }
-use crate::controllers::{self, Connected, DeviceCfg, Devices, Func};
+use crate::controllers::{self, Connected, DeviceCfg, Devices, FfTune, Func};
 use crate::ffb_calibration::Calibration;
 use crate::gamepad_profile::{self, PadKind};
 use serde_json::{json, Value};
@@ -177,11 +177,15 @@ fn device_json(d: &DeviceCfg) -> Value {
         "axes": (0..8).map(|a| json!([Func::code(d.axes[a].map(|x| x.0)), d.axes[a].is_some_and(|x| x.1), d.axis_flags[a]])).collect::<Vec<_>>(),
         "buttons": d.buttons,
         "ff_scale": d.ff_scale.map(|(a, b)| [round3(a), round3(b)]),
+        "ff_tune": d.ff_tune.map(|t| TUNE_KEYS.iter().zip(t.values()).map(|(k, v)| (k.to_string(), json!(round3(v)))).collect::<serde_json::Map<_, _>>()),
         "ff_invert": d.ff_invert,
         "latching": d.latching,
         "more": d.more,
     })
 }
+
+/// `ff_tune`'s keys, in `FfTune::values`' order.
+const TUNE_KEYS: [&str; 5] = ["centring", "damping", "parking", "min_force", "smoothing"];
 
 fn round3(v: f32) -> f64 {
     (v as f64 * 1000.0).round() / 1000.0
@@ -204,6 +208,8 @@ fn device_from(v: &Value) -> Result<DeviceCfg, String> {
         d.buttons.push((action.to_string(), b.get(1).and_then(Value::as_str).unwrap_or("0").to_string()));
     }
     d.ff_scale = v.get("ff_scale").and_then(Value::as_array).and_then(|s| Some((s.first()?.as_f64()? as f32, s.get(1)?.as_f64()? as f32)));
+    // (a value missing or no number is its default, and each is brought into its range)
+    d.ff_tune = v.get("ff_tune").filter(|t| t.is_object()).map(|t| FfTune::from_values(&TUNE_KEYS.map(|k| t.get(k).and_then(Value::as_f64).map_or(f32::NAN, |v| v as f32))));
     d.ff_invert = v.get("ff_invert").and_then(Value::as_bool);
     d.latching = v.get("latching").and_then(Value::as_array).into_iter().flatten().filter_map(|b| b.as_u64().map(|b| b as usize)).filter(|b| *b < d.buttons.len()).collect();
     d.latching.sort_unstable();
@@ -287,6 +293,24 @@ mod tests {
         assert_eq!(back[0].more, d.more);
         assert_eq!(back[0].actions_of(0), ["door_1", "door_2"]);
         assert_eq!(device_json(&back[0])["more"], json!([[0, "door_2"]]));
+    }
+
+    #[test]
+    fn a_wheels_force_feedback_tuning_goes_to_the_page_and_back() {
+        let text = "\r\n[ctrl]\r\nWheel\r\n1\r\n\r\n[FFScale]\r\n1.000\r\n1.000\r\n\r\n[openOMSI.FFTuning]\r\n0.800\r\n2.500\r\n0.000\r\n0.050\r\n0.020\r\n\r\n";
+        let devices = controllers::parse_cfg(text);
+        let json = device_json(&devices[0]);
+        assert_eq!(json["ff_tune"], json!({ "centring": 0.8, "damping": 2.5, "parking": 0.0, "min_force": 0.05, "smoothing": 0.02 }));
+        let back = device_from(&json).unwrap();
+        assert_eq!(back, devices[0]);
+        assert_eq!(controllers::cfg_text(&[back]), controllers::cfg_text(&devices));
+        // a page that knows nothing of it, or has it at null, leaves the defaults
+        assert_eq!(device_json(&controllers::parse_cfg("[ctrl]\r\nWheel\r\n1\r\n")[0])["ff_tune"], Value::Null);
+        assert_eq!(device_from(&json!({ "name": "Wheel" })).unwrap().ff_tune, None);
+        assert_eq!(device_from(&json!({ "name": "Wheel", "ff_tune": null })).unwrap().ff_tune, None);
+        // and what it sends is kept in range, a value it left out at its default
+        let wild = device_from(&json!({ "name": "Wheel", "ff_tune": { "centring": 9.0, "damping": -1.0, "min_force": 0.5, "smoothing": "soft" } })).unwrap();
+        assert_eq!(wild.ff_tune, Some(FfTune { centring: 2.0, damping: 0.0, parking: 1.0, min_force: 0.2, smoothing: 0.0 }));
     }
 
     #[test]

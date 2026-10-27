@@ -219,6 +219,7 @@ struct SettingsPage: View {
             SettingSlider(label: "Wheel rotation", key: "wheel_range", range: 180 ... 1800, step: 30, fallback: 900, round: 1) { deg($0) }
             if !phone {
                 SettingSlider(label: "Full lock at", key: "wheel_lock", range: 0 ... 1800, step: 30, fallback: 0, round: 1, zeroBelow: 45) { $0 < 45 ? "OMSI" : deg($0) }
+                SettingSlider(label: "Cab wheel rotation", key: "cab_wheel_rotation", range: 0 ... 1800, step: 30, fallback: 0, round: 1, zeroBelow: 90) { $0 < 90 ? String(localized: "Automatic") : deg($0) }
                 SettingSlider(label: "Throttle pedal strength", key: "pedal_throttle", range: 0.5 ... 2, step: 0.05, fallback: 1, round: 0.01) { pedal($0) }
                 SettingSlider(label: "Brake pedal strength", key: "pedal_brake", range: 0.5 ... 2, step: 0.05, fallback: 1, round: 0.01) { pedal($0) }
             }
@@ -242,7 +243,7 @@ struct SettingsPage: View {
             SettingSlider(label: "Engine vibration", key: "ff_engine_vib", range: 0 ... 4, step: 0.05, fallback: 1) { vibration($0) }
             SettingSlider(label: "Vibration fade-out", key: "ff_fade", range: 0 ... 1.5, step: 0.05, fallback: 0.28, round: 0.01) { $0 < 0.01 ? off : "\(Int(($0 * 1000).rounded())) ms" }
             button("Reset wheel settings", "arrow.counterclockwise") {
-                patch(["wheel_range": 900, "wheel_lock": 0, "ff_invert": false, "ff_enabled": true, "ff_road_vib": 1, "ff_engine_vib": 1, "ff_fade": 0.28])
+                patch(["wheel_range": 900, "wheel_lock": 0, "cab_wheel_rotation": 0, "ff_invert": false, "ff_enabled": true, "ff_road_vib": 1, "ff_engine_vib": 1, "ff_fade": 0.28])
             }
         }
     }

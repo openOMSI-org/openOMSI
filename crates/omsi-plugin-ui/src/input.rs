@@ -124,7 +124,7 @@ mod tests {
     fn sized(panels: &mut PluginPanels, ui: &mut UiState, owner: u64, id: &str, src: &str, origin: Vec2, (w, h): (f32, f32), alpha: f32) {
         ui.set(owner, id, panel_from_source(src).unwrap()).unwrap();
         let laid = Laid { w, h, background: omsi_ui::Color::rgba(20, 20, 20, alpha), ..Laid::default() };
-        let card = Card { revision: 0, scale: 1.0, backdrop: 1.0, laid, tex: None, drawn: None, origin, y: None, seen: panels.frame, full_h: h, room: f32::INFINITY };
+        let card = Card { revision: 0, scale: 1.0, backdrop: 1.0, light: false, laid, tex: None, drawn: None, origin, y: None, seen: panels.frame, full_h: h, room: f32::INFINITY };
         panels.cards.insert(Key::Panel(owner, id.to_string()), card);
     }
 
@@ -171,7 +171,7 @@ mod tests {
         // screen)
         let p = omsi_plugin::ui::Panel { width: 1100.0, background: Some(omsi_plugin::ui::Rgba([0, 0, 0, 0])), ..panel_from_source(src).unwrap() };
         let laid = Laid { flat: true, ..super::super::layout(&p, &fonts, 1.0) };
-        let card = Card { revision: 0, scale: 1.0, backdrop: 1.0, laid, tex: None, drawn: None, origin: Vec2::new(0.0, 0.0), y: None, seen: panels.frame, full_h: 0.0, room: f32::INFINITY };
+        let card = Card { revision: 0, scale: 1.0, backdrop: 1.0, light: false, laid, tex: None, drawn: None, origin: Vec2::new(0.0, 0.0), y: None, seen: panels.frame, full_h: 0.0, room: f32::INFINITY };
         panels.cards.insert(Key::Panel(1, "phone".into()), card);
         assert!(panels.grabs_at(&ui, 20.0, 10.0), "its tab");
         assert!(!panels.grabs_at(&ui, 300.0, 300.0), "its map: the navigator's");

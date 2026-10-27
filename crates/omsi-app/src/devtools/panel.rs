@@ -19,16 +19,17 @@ const LISTED: usize = 200;
 
 /// The panel; what it asks of the game.
 pub(crate) fn draw(ui: &mut Ui, d: &mut DevTools, mut p: Option<&mut Player>, size: Vec2) -> Vec<Request> {
+    let theme = ui.theme;
     let mut out = Vec::new();
     let r = Rect::new((size.x - WIDTH - 12.0).max(0.0), 12.0, WIDTH.min(size.x), (size.y - 24.0).max(200.0));
     ui.panel(r);
     let inner = r.inset(14.0);
-    ui.text(&omsi_ui::tr("Developer tools"), Vec2::new(inner.x, inner.y + 15.0), 16.0, Weight::Bold, TEXT, Align::Left);
+    ui.text(&omsi_ui::tr("Developer tools"), Vec2::new(inner.x, inner.y + 15.0), 16.0, Weight::Bold, theme.TEXT, Align::Left);
     if ui.icon_button("dt-close", Vec2::new(inner.right() - 10.0, inner.y + 9.0), 12.0, "close", "Close (Ctrl+Shift+D)") {
         out.push(Request::Close);
     }
     let bus = p.as_ref().map(|p| p.vehicle.ty.def.path.file_name().unwrap_or_default().to_string_lossy().to_string()).unwrap_or_else(|| omsi_ui::tr("no bus of one's own").into_owned());
-    ui.text_in(&bus, Rect::new(inner.x, inner.y + 24.0, inner.w, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
+    ui.text_in(&bus, Rect::new(inner.x, inner.y + 24.0, inner.w, 18.0), 12.0, Weight::Regular, theme.TEXT_DIM, Align::Left);
     let tabs = TABS.map(|tab| omsi_ui::tr(tab).into_owned());
     let tab_labels = tabs.iter().map(|tab| tab.as_str()).collect::<Vec<_>>();
     ui.segmented("dt-tabs", Rect::new(inner.x, inner.y + 48.0, inner.w, 30.0), &mut d.tab, &tab_labels);
@@ -67,6 +68,7 @@ fn value_of(p: Option<&Player>, name: &str, string: bool) -> String {
 /// The watch list (click a line to edit it), the chosen variable's value, and the search
 /// through all of them.
 fn variables(ui: &mut Ui, d: &mut DevTools, mut p: Option<&mut Player>, r: Rect) {
+    let theme = ui.theme;
     let mut y = r.y;
     ui.heading(Rect::new(r.x, y, r.w, 26.0), "Watched", None);
     y += 26.0;
@@ -77,7 +79,7 @@ fn variables(ui: &mut Ui, d: &mut DevTools, mut p: Option<&mut Player>, r: Rect)
     let (watch, selected) = (&d.watch, d.selected);
     ui.scroll_area("dt-watch", Rect::new(r.x, y, r.w, watch_h), &mut |ui, area| {
         if watch.is_empty() {
-            ui.text_in(&omsi_ui::tr("Nothing watched: pick variables from the list below"), Rect::new(area.x, area.y, area.w, LINE), 12.0, Weight::Regular, TEXT_FAINT, Align::Left);
+            ui.text_in(&omsi_ui::tr("Nothing watched: pick variables from the list below"), Rect::new(area.x, area.y, area.w, LINE), 12.0, Weight::Regular, theme.TEXT_FAINT, Align::Left);
             return LINE;
         }
         for (k, w) in watch.iter().enumerate() {
@@ -89,9 +91,9 @@ fn variables(ui: &mut Ui, d: &mut DevTools, mut p: Option<&mut Player>, r: Rect)
                 choose = Some(k);
             }
             let name = if w.string { format!("${}", w.name) } else { w.name.clone() };
-            ui.text_in(&name, Rect::new(row.x + 8.0, row.y, row.w * 0.55, row.h), 12.5, Weight::Medium, TEXT, Align::Left);
+            ui.text_in(&name, Rect::new(row.x + 8.0, row.y, row.w * 0.55, row.h), 12.5, Weight::Medium, theme.TEXT, Align::Left);
             let held = if w.hold.is_some() { format!("  [{}]", omsi_ui::tr("held")) } else { String::new() };
-            ui.text_in(&format!("{}{held}", value_of(pv, &w.name, w.string)), Rect::new(row.x + row.w * 0.55, row.y, row.w * 0.45 - 34.0, row.h), 12.5, Weight::Regular, if w.hold.is_some() { ACCENT } else { TEXT_SOFT }, Align::Right);
+            ui.text_in(&format!("{}{held}", value_of(pv, &w.name, w.string)), Rect::new(row.x + row.w * 0.55, row.y, row.w * 0.45 - 34.0, row.h), 12.5, Weight::Regular, if w.hold.is_some() { theme.ACCENT } else { theme.TEXT_SOFT }, Align::Right);
             if ui.icon_button(&format!("dt-wx{k}"), Vec2::new(row.right() - 12.0, row.center().y), 10.0, "close", "Stop watching") {
                 remove = Some(k);
             }
@@ -152,8 +154,8 @@ fn variables(ui: &mut Ui, d: &mut DevTools, mut p: Option<&mut Player>, r: Rect)
             if ui.row(&format!("dt-a{k}"), row, false) {
                 add = Some(n.to_string());
             }
-            ui.text_in(n, Rect::new(row.x + 8.0, row.y, row.w * 0.6, row.h), 12.5, Weight::Regular, TEXT_SOFT, Align::Left);
-            ui.text_in(&value_of(Some(pl), n, strings), Rect::new(row.x + row.w * 0.6, row.y, row.w * 0.4 - 8.0, row.h), 12.5, Weight::Regular, TEXT_DIM, Align::Right);
+            ui.text_in(n, Rect::new(row.x + 8.0, row.y, row.w * 0.6, row.h), 12.5, Weight::Regular, theme.TEXT_SOFT, Align::Left);
+            ui.text_in(&value_of(Some(pl), n, strings), Rect::new(row.x + row.w * 0.6, row.y, row.w * 0.4 - 8.0, row.h), 12.5, Weight::Regular, theme.TEXT_DIM, Align::Right);
         }
         found.len() as f32 * LINE
     });
@@ -226,11 +228,12 @@ pub(crate) fn adjust_mirror(p: &mut Player, i: usize, shift: [f32; 3], turn: [f3
 }
 
 fn mirrors(ui: &mut Ui, d: &mut DevTools, p: Option<&mut Player>, r: Rect, out: &mut Vec<Request>) {
+    let theme = ui.theme;
     let Some(p) = p else { return };
     let n = p.vehicle.ty.def.cameras_reflexion.len();
     let mut y = r.y;
     if n == 0 {
-        ui.text_in(&omsi_ui::tr("This bus has no mirrors"), Rect::new(r.x, y, r.w, LINE), 13.0, Weight::Regular, TEXT_DIM, Align::Left);
+        ui.text_in(&omsi_ui::tr("This bus has no mirrors"), Rect::new(r.x, y, r.w, LINE), 13.0, Weight::Regular, theme.TEXT_DIM, Align::Left);
         return;
     }
     d.mirror = d.mirror.min(n - 1);
@@ -244,7 +247,7 @@ fn mirrors(ui: &mut Ui, d: &mut DevTools, p: Option<&mut Player>, r: Rect, out: 
         let yaw = omsi_ui::tr("yaw");
         let pitch = omsi_ui::tr("pitch");
         let fov = omsi_ui::tr("fov");
-        ui.text_in(&format!("{k}   {:.2}, {:.2}, {:.2}   {yaw} {:.0}  {pitch} {:.0}  {fov} {:.0}", c.pos[0], c.pos[1], c.pos[2], c.yaw, c.pitch, c.fov), row.pad(8.0, 0.0), 12.0, Weight::Regular, TEXT_SOFT, Align::Left);
+        ui.text_in(&format!("{k}   {:.2}, {:.2}, {:.2}   {yaw} {:.0}  {pitch} {:.0}  {fov} {:.0}", c.pos[0], c.pos[1], c.pos[2], c.yaw, c.pitch, c.fov), row.pad(8.0, 0.0), 12.0, Weight::Regular, theme.TEXT_SOFT, Align::Left);
         y += LINE;
     }
     y += 8.0;
@@ -283,13 +286,14 @@ fn mirrors(ui: &mut Ui, d: &mut DevTools, p: Option<&mut Player>, r: Rect, out: 
     y += 42.0;
     if let Some(block) = mirror_block(p, i) {
         for line in block.lines() {
-            ui.text_in(line, Rect::new(r.x + 4.0, y, r.w, 18.0), 12.0, Weight::Regular, TEXT_SOFT, Align::Left);
+            ui.text_in(line, Rect::new(r.x + 4.0, y, r.w, 18.0), 12.0, Weight::Regular, theme.TEXT_SOFT, Align::Left);
             y += 17.0;
         }
     }
 }
 
 fn files(ui: &mut Ui, d: &mut DevTools, r: Rect, out: &mut Vec<Request>) {
+    let theme = ui.theme;
     let mut y = r.y;
     let auto_reload = omsi_ui::tr("Read a file again when it changes");
     ui.toggle("dt-auto", Rect::new(r.x, y, r.w, ROW - 6.0), &mut d.auto_reload, &auto_reload);
@@ -315,7 +319,7 @@ fn files(ui: &mut Ui, d: &mut DevTools, r: Rect, out: &mut Vec<Request>) {
         if y + h > r.bottom() {
             break;
         }
-        ui.paragraph(m, Vec2::new(r.x, y), r.w, 12.0, Weight::Regular, TEXT_SOFT);
+        ui.paragraph(m, Vec2::new(r.x, y), r.w, 12.0, Weight::Regular, theme.TEXT_SOFT);
         y += h + 6.0;
     }
     if y + 26.0 < r.bottom() {
@@ -334,7 +338,7 @@ fn files(ui: &mut Ui, d: &mut DevTools, r: Rect, out: &mut Vec<Request>) {
                 Kind::Constfiles => "Constant files",
                 Kind::Scripts => "Scripts",
             };
-            ui.text_in(&format!("{name}  ({})", omsi_ui::tr(kind)), Rect::new(r.x, y, r.w, 16.0), 11.5, Weight::Regular, TEXT_DIM, Align::Left);
+            ui.text_in(&format!("{name}  ({})", omsi_ui::tr(kind)), Rect::new(r.x, y, r.w, 16.0), 11.5, Weight::Regular, theme.TEXT_DIM, Align::Left);
             y += 16.0;
         }
     }

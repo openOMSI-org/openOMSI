@@ -407,7 +407,7 @@ fn declared_transmap_ignores_slot_alpha() {
             ..Default::default()
         },
     );
-    let map = renderer.add_blank_texture(&mut scene, 1, 1);
+    let map = renderer.add_blank_texture(&mut scene, 1, 1, false);
     let bound = blended(&mut scene, Some((map, true)), MaterialExtra::default());
     // another bit of the same flags, no transmap
     let metal = blended(

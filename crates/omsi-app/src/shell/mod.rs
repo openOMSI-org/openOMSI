@@ -96,6 +96,10 @@ impl Shell {
         Shell { process_prompt: None, process_dialog: Default::default(), ui, pause_category: Default::default(), quick_edit: false, pause_hidden: true, quick_focus: 0, gpu: None, shot_gpu: None, drawn: None, actions: Vec::new(), picture: None, picture_tex: None, logo_tex: None, shot_logo: None, scale: 1.0, over_ui: false, last_sel: None, dd_anchor: None, opaque: false }
     }
 
+    pub(crate) fn set_theme(&mut self, light: bool) {
+        self.ui.set_theme(light);
+    }
+
     /// A frame of the screens begins: the window's size in physical pixels and how many of
     /// them make a point.
     pub(crate) fn begin(&mut self, width: f32, height: f32, scale: f32, dt: f32) {

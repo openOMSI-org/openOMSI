@@ -1469,3 +1469,4 @@ mod vanilla_lighting;
 
 mod xr_targets;
 mod xr_culling;
+mod xr_diagnostics;

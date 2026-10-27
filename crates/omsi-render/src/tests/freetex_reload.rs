@@ -154,3 +154,16 @@ fn read_first_texture_block(renderer: &Renderer, texture: &GpuTexture) -> Vec<u8
     let mapped = buffer.slice(..).get_mapped_range();
     mapped[..bytes].to_vec()
 }
+
+/// A vehicle's blank display texture is cleared on the GPU, and reads back transparent.
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn blank_display_textures_are_cleared_transparent() {
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let renderer = pollster::block_on(Renderer::new_with(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb), RenderOptions { msaa: 1, shadow_size: 1024, ..Default::default() })).expect("test renderer");
+    let mut scene = renderer.new_scene();
+    assert!(renderer.device.features().contains(wgpu::Features::CLEAR_TEXTURE));
+    let id = renderer.add_blank_texture(&mut scene, 256, 64, true);
+    assert_eq!(scene.textures[id].texture.mip_level_count(), 9);
+    assert_eq!(read_first_texture_block(&renderer, &scene.textures[id]), vec![0; 4]);
+}

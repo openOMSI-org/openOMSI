@@ -166,7 +166,7 @@ function SliderRow({ row }) {
   };
   const value = shown ?? (isNaN(stored) ? row.def : stored);
   return html`<div class="setting-row full">
-    <${Slider} label=${row.label} value=${value} min=${row.min} max=${row.max} step=${row.step} format=${row.format} onChange=${onChange} />
+    <${Slider} label=${row.label} help=${row.help} value=${value} min=${row.min} max=${row.max} step=${row.step} format=${row.format} onChange=${onChange} />
   </div>`;
 }
 
@@ -294,16 +294,21 @@ function ProfilesBlock() {
   `;
 }
 
-/** The launcher's own look; the game does not read it, so it stays in this window. */
+/** The shared UI look; the game stores the resolved look so both UIs follow it. */
 function ThemeRow() {
+  const s = useStore();
   const [theme, setTheme] = useState(() => remembered('theme', 'dark'));
+  useEffect(() => {
+    const pick = remembered('theme', 'dark');
+    if (pick !== theme) setTheme(pick);
+  }, [s.settings?.ui_theme]);
   return html`<div class="setting-row">
     <${Name} label="Launcher theme" />
-    <${Select} value=${theme} options=${[['dark', 'Dark'], ['light', 'Light theme'], ['system', 'System']]} onChange=${(v) => {
+    <${Select} value=${theme} options=${[['dark', 'Dark'], ['light', 'Light theme'], ['system', 'System']]} onChange=${async (v) => {
       setTheme(v);
       remember('theme', v);
       try {
-        applyTheme();
+        await applyTheme();
       } catch {
         /* storage blocked: the look stays as it is */
       }

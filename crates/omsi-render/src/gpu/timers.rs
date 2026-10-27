@@ -2,6 +2,18 @@
 
 use crate::*;
 
+/// Projection overrides also serve desktop panels, which keep overlays. Only
+/// headset views belong in the two eye buckets; physical mirrors have no override.
+pub(crate) fn view_index(with_overlays: bool, projection: bool, second_eye: bool) -> usize {
+    if with_overlays {
+        1
+    } else if projection {
+        2 + second_eye as usize
+    } else {
+        0
+    }
+}
+
 /// GPU time per render pass from timestamp queries (OMSI_GPU_TIMERS). One frame is timed
 /// at a time: its readback has to arrive before the next one is measured. The passes
 /// partition the frame: each counts from the end of the one the GPU finished before it, so
@@ -21,6 +33,7 @@ pub(crate) struct GpuTimers {
     pub(crate) failed: Arc<std::sync::atomic::AtomicBool>,
     /// pass → (seconds, frames)
     pub(crate) totals: std::collections::BTreeMap<&'static str, (f64, u32)>,
+    pub(crate) intervals: std::collections::BTreeMap<&'static str, (f64, u32)>,
 }
 
 pub(crate) const GPU_TIMER_PASSES: u32 = 16;
@@ -61,6 +74,7 @@ impl GpuTimers {
             ready: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             failed: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             totals: Default::default(),
+            intervals: Default::default(),
         })
     }
 }
@@ -216,6 +230,17 @@ impl GpuTimers {
                 e.0 += ticks as f64 * period * 1e-9;
                 e.1 += 1;
             }
+            // The partition includes gaps and untimed work. Report actual begin/end
+            // intervals separately: a long gap must not be attributed to the next shader.
+            // Intervals can overlap on tile GPUs and must not be summed as a frame time.
+            for (k, label) in t.pending.iter().enumerate() {
+                let (a, b) = (stamps[k * 2], stamps[k * 2 + 1]);
+                if a > 0 && b >= a {
+                    let e = t.intervals.entry(label).or_default();
+                    e.0 += (b - a) as f64 * period * 1e-9;
+                    e.1 += 1;
+                }
+            }
             if let Some(ticks) = all {
                 let e = t.totals.entry("(all passes)").or_default();
                 e.0 += ticks as f64 * period * 1e-9;
@@ -292,19 +317,24 @@ impl Renderer {
         for (k, t) in self.gpu_timers.iter().enumerate() {
             let Some(t) = t else { continue };
             for (label, v) in &t.totals {
-                let name = if k == 0 {
-                    format!("mirrors: {label}")
-                } else {
-                    label.to_string()
-                };
+                let prefix = ["mirrors: ", "", "left eye: ", "right eye: "][k];
+                let name = format!("{prefix}{label}");
                 out.push((name, v.0 / v.1.max(1) as f64 * 1000.0, v.1));
+            }
+            for (label, v) in &t.intervals {
+                let prefix = ["mirrors: ", "", "left eye: ", "right eye: "][k];
+                out.push((
+                    format!("{prefix}{label} (interval)"),
+                    v.0 / v.1.max(1) as f64 * 1000.0,
+                    v.1,
+                ));
             }
         }
         // the mirrors per frame, not per picture: a frame drawing two mirrors pays twice
-        let [mirrors, windows] = self.pictures.get();
+        let [mirrors, windows, left, _] = self.pictures.get();
         let mirror_all = out.iter().find(|(n, _, _)| n == "mirrors: (all passes)").map(|(_, ms, k)| (*ms, *k));
         if let Some((ms, k)) = mirror_all {
-            if let Some(f) = per_frame(ms, mirrors, windows) {
+            if let Some(f) = per_frame(ms, mirrors, windows + left) {
                 out.push(("mirrors: per frame".to_string(), f, k));
             }
         }
@@ -314,7 +344,17 @@ impl Renderer {
 
 #[cfg(test)]
 mod timer_tests {
-    use super::{partition, per_frame};
+    use super::{partition, per_frame, view_index};
+
+    #[test]
+    fn headset_eyes_never_share_mirror_or_desktop_timers() {
+        assert_eq!(view_index(false, false, false), 0);
+        assert_eq!(view_index(true, false, false), 1);
+        assert_eq!(view_index(true, true, true), 1); // desktop panel
+        assert_eq!(view_index(false, true, false), 2);
+        assert_eq!(view_index(false, true, true), 3);
+        assert_eq!(per_frame(5.0, 100, 200), Some(2.5)); // physical mirrors per stereo pair
+    }
 
     /// The first timed pass counts from its own begin; each other from the end of the one
     /// finished before it (the untimed work between them goes to it); the whole picture from

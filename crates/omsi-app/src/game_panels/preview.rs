@@ -97,11 +97,14 @@ fn summary() -> crate::journey::TripSummary {
 #[test]
 #[ignore]
 fn preview() {
-    picture("game-panels-quick.png", &[(quick_menu::QuickMenu.panel_of(true), Some("repair"))]);
-    picture("game-panels-trip.png", &[(trip_summary::TripPanel::new(summary()).panel(), Some("save"))]);
+    let state = quick_menu::TileState { off: vec!["map"], lit: vec!["arrows", "duty"] };
+    picture("game-panels-quick.png", &[(quick_menu::QuickMenu { focus: 7, ..Default::default() }.panel_of(&state, false), Some("refuel"))]);
+    let page2 = quick_menu::QuickMenu { page: 1, focus: 2, ..Default::default() };
+    picture("game-panels-quick-2.png", &[(page2.panel_of(&quick_menu::TileState { off: vec!["skipstop", "endduty", "players", "admin", "tobus"], lit: vec![] }, false), None)]);
+    picture("game-panels-trip.png", &[(trip_summary::TripPanel::new(summary()).panel(false), Some("save"))]);
     let form = dest_form::DestForm { route: "137".into(), lines: ["Sonderfahrt".into(), "Betriebshof".into()], ..Default::default() };
-    picture("game-panels-dest.png", &[(form.panel(), Some("select"))]);
+    picture("game-panels-dest.png", &[(form.panel(false), Some("select"))]);
     let values = view_editor::ViewValues { seat: [0.05, -0.12, 0.03], pitch: -4.0, yaw: 6.5, fov: Some(62.0), mirrors: vec![[2.5, -1.0], [-3.0, 0.5]] };
-    picture("game-panels-view.png", &[(view_editor::ViewEditor::default().panel_of(&values), None)]);
-    picture("game-panels-move.png", &[(move_here::panel(glam::DVec3::new(-1948.9, -174.7, 8.8)), Some("yes"))]);
+    picture("game-panels-view.png", &[(view_editor::ViewEditor::default().panel_of(&values, false), None)]);
+    picture("game-panels-move.png", &[(move_here::panel(glam::DVec3::new(-1948.9, -174.7, 8.8), false), Some("yes"))]);
 }

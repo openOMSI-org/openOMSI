@@ -321,7 +321,7 @@ impl Offscreen<'_> {
                 nav.schedule = omsi_cfg::flags::OMSI_NAV_SCHEDULE.is_set();
                 nav.show_ai = settings.nav_ai;
                 nav.show_surface = settings.nav_surface;
-                nav.light = settings.nav_light;
+                nav.light = settings.is_light_theme();
                 nav.show_3d = settings.nav_3d;
                 nav.classic_2d = settings.nav_classic_2d;
                 nav.widget = settings.nav_widget;
@@ -441,13 +441,56 @@ impl Offscreen<'_> {
                 view_formats: &[],
             });
             let view = target.create_view(&Default::default());
+            let stereo = omsi_cfg::flags::OMSI_BENCH_STEREO.is_set();
+            let right = stereo.then(|| {
+                renderer.device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("stereo bench right"),
+                    size: wgpu::Extent3d {
+                        width: w,
+                        height: h,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: renderer.format(),
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                    view_formats: &[],
+                })
+            });
+            let right_view = right.as_ref().map(|t| t.create_view(&Default::default()));
+            let mut cameras = [camera.clone(), camera.clone()];
+            for (eye, offset) in cameras.iter_mut().zip([-0.032, 0.032]) {
+                eye.position += camera.right().as_dvec3() * offset;
+                eye.fov_deg = 100.0;
+            }
+            let projections = cameras.each_ref().map(|c| {
+                glam::Mat4::perspective_rh(
+                    c.fov_deg.to_radians(),
+                    w as f32 / h as f32,
+                    c.far,
+                    c.near,
+                )
+            });
+            if stereo {
+                renderer.prepare_xr_eye_pipelines();
+                log::info!(
+                    "bench stereo: {w}x{h} per eye, symmetric vertical FOV 100, IPD 64 mm; fixed scene, no runtime or desktop pacing"
+                );
+            }
             let (mut cpu, mut gpu) = (Vec::with_capacity(n), Vec::with_capacity(n));
             for k in 0..n {
                 let t = Instant::now();
                 if let Some(p) = player_ref.as_ref() {
                     render_mirrors(renderer, scene, world, p, lighting, MirrorPick::Turn(k, &[]), None, &[]);
                 }
-                renderer.render(scene, &view, w, h, camera, lighting);
+                if let Some(right) = &right_view {
+                    for (eye, target) in [&view, right].into_iter().enumerate() {
+                        renderer.render_xr_eye(scene, target, w, h, &cameras[eye], lighting, projections[eye], eye == 1);
+                    }
+                } else {
+                    renderer.render(scene, &view, w, h, camera, lighting);
+                }
                 let drawn = t.elapsed().as_secs_f64();
                 let t = Instant::now();
                 let _ = omsi_render::wait_gpu(&renderer.device, None);

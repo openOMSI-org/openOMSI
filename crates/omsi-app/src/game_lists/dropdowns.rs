@@ -302,10 +302,37 @@ pub(super) fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
         // (OMSI's AIMaxHumans, #2087)
         "ai_max_humans" => vec![("50", "50"), ("100", "100"), ("200", "200"), ("400", "400"), ("720", "720"), ("1000", "1000")],
         "language" => omsi_launcher_lib::LANGUAGES.iter().map(|l| (l.0, l.1)).collect(),
+        "ui_theme" => vec![("dark", "Dark"), ("light", "Light theme")],
         "vr_scale" => vec![("0.5", "50%"), ("0.65", "65%"), ("0.8", "80%"), ("1", "100%")],
         "vr_head_smoothing_ms" => vec![("0", "Off"), ("5", "5 ms"), ("10", "10 ms"), ("20", "20 ms"), ("30", "30 ms")],
         "vr_mirror_rate" => vec![("0", "Off"), ("8", "8/s"), ("16", "16/s"), ("24", "24/s"), ("32", "32/s"), ("48", "48/s"), ("60", "60/s"), ("90", "90/s"), ("120", "120/s"), ("180", "180/s"), ("240", "240/s"), ("360", "360/s"), ("-1", "Every frame")],
         _ => Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn interface_theme_dropdown_uses_the_shared_dark_and_light_values() {
+        assert_eq!(select_options("ui_theme"), [("dark", "Dark"), ("light", "Light theme")]);
+    }
+
+    #[test]
+    fn live_interface_theme_updates_the_navigator_map() {
+        let args = crate::cli::Args::parse_from(["openomsi"]);
+        let mut app = crate::assemble_app(args, crate::settings::Settings::default());
+        app.menus.navigator = Some(omsi_navigator::Navigator::new(true, 0.85, "bottom-left"));
+
+        app.settings.ui_theme = "light".into();
+        sync_live(&mut app);
+        assert!(app.menus.navigator.as_ref().is_some_and(|n| n.light));
+
+        app.settings.ui_theme = "dark".into();
+        sync_live(&mut app);
+        assert!(app.menus.navigator.as_ref().is_some_and(|n| !n.light));
     }
 }
 
@@ -438,6 +465,7 @@ pub(super) fn sync_live(app: &mut App) {
     }
     if let Some(n) = app.menus.navigator.as_mut() {
         n.arrows = s.nav_arrows;
+        n.light = s.is_light_theme();
     }
     if let Some(h) = app.session.humans.as_mut() {
         h.exact_fare = s.exact_fare;

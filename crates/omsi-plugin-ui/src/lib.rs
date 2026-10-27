@@ -27,9 +27,10 @@ mod nav;
 pub use nav::{Docked, DockedMap};
 #[cfg(test)]
 mod preview;
+mod square;
 mod widgets;
 
-// --- the game's look: the notifications' card, the menus' amber accent ------------------
+// --- the game's look --------------------------------------------------------------------
 
 const CARD: Color = Color::rgba(14, 16, 20, 225.0 / 255.0);
 const INK: Color = Color::rgba(236, 236, 236, 1.0);
@@ -42,6 +43,45 @@ const DIVIDER: Color = Color::rgba(52, 52, 52, 1.0);
 const BUTTON: Color = Color::rgba(44, 44, 44, 1.0);
 const TILE: Color = Color::rgba(46, 48, 54, 0.6);
 const SHADOW: Color = Color::rgba(0, 0, 0, 0.35);
+
+#[derive(Clone, Copy)]
+struct ThemeColors {
+    card: Color,
+    ink: Color,
+    dark_ink: Color,
+    accent: Color,
+    track: Color,
+    divider: Color,
+    button: Color,
+    tile: Color,
+    muted: Color,
+    soft: Color,
+    faint: Color,
+    rail_done: Color,
+    tag_fill: Color,
+}
+
+impl ThemeColors {
+    fn new(light: bool) -> Self {
+        let theme = omsi_ui::theme::palette(light);
+        let color = |c: omsi_ui::Color| Color(c.0);
+        Self {
+            card: if light { Color::rgba(252, 252, 252, CARD.0[3]) } else { CARD },
+            ink: if light { color(theme.INK) } else { INK },
+            dark_ink: DARK_INK,
+            accent: if light { color(theme.ACCENT) } else { ACCENT },
+            track: if light { color(theme.SURFACE_3) } else { TRACK },
+            divider: if light { theme.EDGE } else { DIVIDER },
+            button: if light { color(theme.SURFACE_2) } else { BUTTON },
+            tile: if light { color(theme.SURFACE_3) } else { TILE },
+            muted: if light { color(theme.TEXT_DIM) } else { Color::rgba(142, 142, 142, 1.0) },
+            soft: if light { color(theme.INK_2) } else { Color::rgba(196, 202, 214, 1.0) },
+            faint: if light { color(theme.TEXT_FAINT) } else { Color::rgba(110, 118, 136, 1.0) },
+            rail_done: if light { color(theme.SURFACE_3) } else { Color::rgba(74, 84, 98, 1.0) },
+            tag_fill: if light { theme.EDGE } else { Color::rgba(255, 255, 255, 0.10) },
+        }
+    }
+}
 
 /// A text line's height, times its size.
 pub const LINE: f32 = 1.3;
@@ -60,6 +100,7 @@ const TILE_PAD: f32 = 6.0;
 const TILE_ICON: f32 = 22.0;
 const TILE_GAP: f32 = 4.0;
 const TILE_R: f32 = 8.0;
+/// A tile of its icon alone (OMSI 2's quick menu): a square this wide, the icon half of it.
 /// A bar in a row that does not grow.
 const BAR_W: f32 = 60.0;
 const STRIPE: f32 = 4.0;
@@ -96,12 +137,12 @@ fn lit(c: Color) -> Color {
 }
 
 /// Dark ink on a light fill, light ink on a dark one.
-fn ink_on(fill: Color) -> Color {
+fn ink_on(fill: Color, colors: ThemeColors) -> Color {
     let [r, g, b, _] = fill.0;
     if 0.299 * r + 0.587 * g + 0.114 * b > 0.6 {
-        DARK_INK
+        colors.dark_ink
     } else {
-        INK
+        colors.ink
     }
 }
 
@@ -178,6 +219,7 @@ pub enum HitKind {
 struct Layout<'a> {
     fonts: &'a Fonts,
     out: Laid,
+    colors: ThemeColors,
     /// The text field being typed into (it shows the caret).
     typing: Option<&'a str>,
 }
@@ -305,7 +347,7 @@ impl Layout<'_> {
             Kind::Button { text, icon } => {
                 (self.button_content(text, icon) + 2.0 * BUTTON_PAD).ceil()
             }
-            Kind::Tile { text, .. } => {
+            Kind::Tile { text, .. } if !text.is_empty() => {
                 (self.width(text, TILE_PX, Weight::Medium).max(TILE_ICON) + 2.0 * TILE_PAD).ceil()
             }
             _ => self.widget_natural(e),
@@ -369,7 +411,7 @@ impl Layout<'_> {
             Kind::Bar { height, .. } => *height,
             Kind::Badge { .. } => BADGE_H,
             Kind::Button { .. } => BUTTON_H,
-            Kind::Tile { .. } => TILE_H,
+            Kind::Tile { text, .. } if !text.is_empty() => TILE_H,
             Kind::Divider => {
                 if in_row {
                     0.0
@@ -438,7 +480,7 @@ impl Layout<'_> {
                 let lines = self.lines(e, r.w);
                 let lh = size * LINE;
                 let top = r.y + (r.h - lh * lines.len() as f32) * 0.5;
-                let c = e.color.map(color).unwrap_or(INK);
+                let c = e.color.map(color).unwrap_or(self.colors.ink);
                 for (k, line) in lines.into_iter().enumerate() {
                     let lw = self.width(&line, *size, wt);
                     let x = match align {
@@ -455,7 +497,7 @@ impl Layout<'_> {
                     name: name.clone(),
                     center: Vec2::new(r.x + size * 0.5, r.y + r.h * 0.5),
                     size: *size,
-                    color: e.color.map(color).unwrap_or(INK),
+                    color: e.color.map(color).unwrap_or(self.colors.ink),
                 });
             }
             Kind::Row {
@@ -496,7 +538,7 @@ impl Layout<'_> {
                 self.rounded(
                     track,
                     height * 0.5,
-                    background.map(color).unwrap_or(TRACK),
+                    background.map(color).unwrap_or(self.colors.track),
                     None,
                 );
                 if !self.bar_parts(track, segments) && *value > 0.0 {
@@ -504,14 +546,14 @@ impl Layout<'_> {
                     self.rounded(
                         Rect::new(track.x, track.y, fill, *height),
                         height * 0.5,
-                        e.color.map(color).unwrap_or(ACCENT),
+                        e.color.map(color).unwrap_or(self.colors.accent),
                         None,
                     );
                 }
             }
             Kind::Badge { text, text_color, weight: wt } => self.badge(e, r, text, *text_color, weight(*wt)),
             Kind::Divider => {
-                let c = e.color.map(color).unwrap_or(DIVIDER);
+                let c = e.color.map(color).unwrap_or(self.colors.divider);
                 let line = if in_row {
                     Rect::new(r.x + r.w * 0.5 - 0.5, r.y, 1.0, r.h)
                 } else {
@@ -528,10 +570,10 @@ impl Layout<'_> {
                     element: e.id.clone(),
                     kind: HitKind::Click,
                 });
-                let fill = e.color.map(color).unwrap_or(BUTTON);
+                let fill = e.color.map(color).unwrap_or(self.colors.button);
                 self.rounded(b, BUTTON_R, fill, Some(hit));
                 // (on the see-through default the card's own light ink; on a colour, what reads on it)
-                let ink = if e.color.is_some() { ink_on(fill) } else { INK };
+                let ink = if e.color.is_some() { ink_on(fill, self.colors) } else { self.colors.ink };
                 let room = (b.w - 2.0 * BUTTON_PAD).max(0.0);
                 let icon_w = if icon.is_some() {
                     BUTTON_ICON + if text.is_empty() { 0.0 } else { 6.0 }
@@ -552,7 +594,7 @@ impl Layout<'_> {
                 let y = self.baseline(b.y, b.h, BUTTON_PX, Weight::Medium);
                 self.text(t, BUTTON_PX, Weight::Medium, Vec2::new(x + icon_w, y), ink);
             }
-            Kind::Tile { text, icon } => self.tile(e, r, text, icon),
+            Kind::Tile { text, icon, .. } if !text.is_empty() => self.tile(e, r, text, icon),
             _ => self.widget_emit(e, r),
         }
     }
@@ -567,11 +609,11 @@ impl Layout<'_> {
             element: e.id.clone(),
             kind: HitKind::Click,
         });
-        let fill = e.color.map(color).unwrap_or(TILE);
+        let fill = e.color.map(color).unwrap_or(self.colors.tile);
         self.rounded(b, TILE_R, fill, Some(hit));
         let (ink, mark) = match e.color {
-            Some(_) => (ink_on(fill), ink_on(fill)),
-            None => (INK, ACCENT),
+            Some(_) => (ink_on(fill, self.colors), ink_on(fill, self.colors)),
+            None => (self.colors.ink, self.colors.accent),
         };
         let room = (b.w - 2.0 * TILE_PAD).max(1.0);
         let widest = text
@@ -618,14 +660,23 @@ impl Layout<'_> {
 /// Lay a panel out: its size, what it is drawn from and where it takes clicks.
 /// `backdrop`: the opacity setting's strength for the game's own card colour (`ui::backdrop`).
 pub fn layout(p: &Panel, fonts: &Fonts, backdrop: f32) -> Laid {
-    layout_typing(p, fonts, backdrop, None)
+    layout_with_theme(p, fonts, backdrop, false)
+}
+
+fn layout_with_theme(p: &Panel, fonts: &Fonts, backdrop: f32, light: bool) -> Laid {
+    layout_typing_with_theme(p, fonts, backdrop, None, light)
 }
 
 /// [`layout`], with the caret in the text field `typing` (the field's id).
 pub fn layout_typing(p: &Panel, fonts: &Fonts, backdrop: f32, typing: Option<&str>) -> Laid {
+    layout_typing_with_theme(p, fonts, backdrop, typing, false)
+}
+
+fn layout_typing_with_theme(p: &Panel, fonts: &Fonts, backdrop: f32, typing: Option<&str>, light: bool) -> Laid {
     let mut l = Layout {
         fonts,
         out: Laid::default(),
+        colors: ThemeColors::new(light),
         typing,
     };
     let stripe = if p.accent.is_some() { STRIPE } else { 0.0 };
@@ -657,7 +708,7 @@ pub fn layout_typing(p: &Panel, fonts: &Fonts, backdrop: f32, typing: Option<&st
     out.background = p
         .background
         .map(color)
-        .unwrap_or(CARD.alpha(backdrop.min(1.0 / CARD.0[3])));
+        .unwrap_or(l.colors.card.alpha(backdrop.min(1.0 / l.colors.card.0[3])));
     out.accent = p.accent.map(color);
     out
 }
@@ -665,7 +716,14 @@ pub fn layout_typing(p: &Panel, fonts: &Fonts, backdrop: f32, typing: Option<&st
 /// A notification as a panel: the stripe in its colour, the icon and the title in a row
 /// above the text.
 pub fn toast_panel(t: &Toast) -> Panel {
-    let accent = t.color.unwrap_or(Rgba([232, 160, 48, 255]));
+    toast_panel_with_theme(t, false)
+}
+
+fn toast_panel_with_theme(t: &Toast, light: bool) -> Panel {
+    let accent = t.color.unwrap_or_else(|| {
+        let [r, g, b, a] = ThemeColors::new(light).accent.0;
+        Rgba([(r * 255.0 + 0.5) as u8, (g * 255.0 + 0.5) as u8, (b * 255.0 + 0.5) as u8, (a * 255.0 + 0.5) as u8])
+    });
     let element = |kind: Kind, grow: bool, c: Option<Rgba>| Element {
         id: None,
         color: c,
@@ -938,6 +996,7 @@ struct Card {
     revision: u64,
     scale: f32,
     backdrop: f32,
+    light: bool,
     laid: Laid,
     tex: Option<(TextureId, u32, u32)>,
     /// The hit lit when it was drawn (None: to be drawn).
@@ -972,6 +1031,8 @@ pub struct PanelsFrame {
     pub dt: f32,
     /// `ui::backdrop` of the opacity setting.
     pub backdrop: f32,
+    /// 遊戲共用的淺色介面主題。
+    pub light: bool,
     /// The navigator's panel (physical x0, y0, x1, y1), which the notifications stay clear of.
     pub navigator: Option<[f32; 4]>,
     /// The navigator's board, where the panel with `anchor = "navigator"` goes (None: the
@@ -1114,6 +1175,7 @@ impl PluginPanels {
                 revision: u64::MAX,
                 scale: 0.0,
                 backdrop: 0.0,
+                light: false,
                 laid: Laid::default(),
                 tex: None,
                 drawn: None,
@@ -1125,13 +1187,13 @@ impl PluginPanels {
             });
             // (the most a panel in the board may be high, in its own pixels)
             let room = dock.map_or(f32::INFINITY, |d| (d.room / ck).floor().max(1.0));
-            if card.revision != e.revision || card.scale != ck || card.backdrop != f.backdrop || card.laid.w != width || card.room != room {
+            if card.revision != e.revision || card.scale != ck || card.backdrop != f.backdrop || card.light != f.light || card.laid.w != width || card.room != room {
                 let caret = typing.as_ref().filter(|t| t.0 == e.owner && t.1 == e.id).map(|t| t.2.as_str());
                 card.laid = match dock {
                     Some(_) => {
-                        Laid { flat: true, ..layout_typing(&nav::in_navigator(&e.panel, width), fonts, f.backdrop, caret) }
+                        Laid { flat: true, ..layout_typing_with_theme(&nav::in_navigator(&e.panel, width), fonts, f.backdrop, caret, f.light) }
                     }
-                    None => layout_typing(&e.panel, fonts, f.backdrop, caret),
+                    None => layout_typing_with_theme(&e.panel, fonts, f.backdrop, caret, f.light),
                 };
                 card.full_h = card.laid.h;
                 card.room = room;
@@ -1139,6 +1201,7 @@ impl PluginPanels {
                 card.revision = e.revision;
                 card.scale = ck;
                 card.backdrop = f.backdrop;
+                card.light = f.light;
                 card.drawn = None;
             }
             match dock {
@@ -1178,6 +1241,7 @@ impl PluginPanels {
                 revision: 0,
                 scale: 0.0,
                 backdrop: 0.0,
+                light: false,
                 laid: Laid::default(),
                 tex: None,
                 drawn: None,
@@ -1187,10 +1251,11 @@ impl PluginPanels {
                 full_h: 0.0,
                 room: f32::INFINITY,
             });
-            if card.scale != k || card.backdrop != f.backdrop {
-                card.laid = layout(&toast_panel(t), fonts, f.backdrop);
+            if card.scale != k || card.backdrop != f.backdrop || card.light != f.light {
+                card.laid = layout_with_theme(&toast_panel_with_theme(t, f.light), fonts, f.backdrop, f.light);
                 card.scale = k;
                 card.backdrop = f.backdrop;
+                card.light = f.light;
                 card.drawn = None;
             }
             if top + card.laid.h > screen.y {
@@ -1298,88 +1363,15 @@ pub fn focused(plugins: &Option<omsi_plugin::Plugins>) -> bool {
 }
 
 #[cfg(test)]
+mod theme_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use omsi_plugin::ui::{panel_from_source, Anchor};
 
     fn panel(src: &str) -> Panel {
         panel_from_source(src).unwrap()
-    }
-
-    /// A panel too tall for the navigator's board is cut off: drawn and clicked only down to
-    /// the room there (review of #2880).
-    #[test]
-    fn a_card_cut_off_takes_no_click_below() {
-        let fonts = Fonts::new();
-        let p = panel(r#"{ width = 200, padding = 0, gap = 0, children = {
-            { type = "button", id = "a", text = "A" },
-            { type = "button", id = "b", text = "B" },
-            { type = "button", id = "c", text = "C" },
-        } }"#);
-        let mut l = layout(&p, &fonts, 1.0);
-        let full = l.h;
-        let (n, hot) = (l.hits.len(), l.items.clone());
-        cut(&mut l, full * 0.5);
-        assert_eq!((l.h, l.hits.len(), &l.items), (full * 0.5, n, &hot), "the height only, and the hits keep their places");
-        assert_eq!(l.hits.iter().find(|h| h.element.as_deref() == Some("c")).unwrap().r.h, 0.0);
-        assert!(hit_at(&l, Vec2::new(10.0, full * 0.9)).is_none());
-        assert!(hit_at(&l, Vec2::new(10.0, 5.0)).is_some());
-        // (one that fits is left as it is)
-        let mut m = layout(&p, &fonts, 1.0);
-        cut(&mut m, full + 10.0);
-        assert_eq!(m.h, full);
-    }
-
-    #[test]
-    fn a_stack_wraps_its_texts_and_grows_down() {
-        let fonts = Fonts::new();
-        let p = panel(
-            r#"{ width = 200, padding = 10, gap = 5, children = {
-            { type = "text", text = "Ein ziemlich langer Satz, der umbrochen werden muss", size = 14 },
-            { type = "divider" },
-            { type = "button", id = "go", text = "Los" },
-        } }"#,
-        );
-        let l = layout(&p, &fonts, 1.0);
-        let texts = l
-            .items
-            .iter()
-            .filter(|i| matches!(i, Item::Text { .. }))
-            .count();
-        // several lines and the button's label
-        assert!(texts >= 3, "{:?}", l.items);
-        let lines = texts - 1;
-        let want = 10.0 + lines as f32 * 14.0 * LINE + 5.0 + 1.0 + 5.0 + BUTTON_H + 10.0;
-        assert!((l.h - want.ceil()).abs() < 1.0, "{} {want}", l.h);
-        for i in &l.items {
-            if let Item::Text {
-                text,
-                px,
-                weight,
-                at,
-                ..
-            } = i
-            {
-                assert!(
-                    at.x >= 10.0 && at.x + fonts.width_as_is(text, *px, *weight) <= 190.5,
-                    "{text} at {at}"
-                );
-            }
-        }
-        // (the card's height is whole pixels, rounded up)
-        let [b] = &l.hits[..] else {
-            panic!("{:?}", l.hits)
-        };
-        assert_eq!(
-            (b.r.x, b.r.w, b.r.h, b.element.as_deref()),
-            (10.0, 180.0, BUTTON_H, Some("go"))
-        );
-        assert!(
-            (b.r.bottom() + 10.0 - l.h).abs() < 1.0,
-            "{:?} in {}",
-            b.r,
-            l.h
-        );
     }
 
     #[test]
