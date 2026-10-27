@@ -357,3 +357,17 @@ fn nothing_owed_draws_where_the_ticks_say() {
     }
     assert_eq!(lag.behind(0.004, 0.0), 0.004);
 }
+
+#[test]
+fn ai_handover_keeps_occupied_seats_after_cabin_rebind() {
+    let (mut bus, mut people) = bus_and_people();
+    let occupied = vec![true, false, true, false, false, true];
+    people.seats.remove(&crate::people::BusId::Player);
+    people.seats.insert(crate::people::BusId::Ai(77), occupied.clone());
+    people.remap_bus(crate::people::BusId::Ai(77), crate::people::BusId::Player);
+    people.served_stop = Some(42);
+    people.rebind_player_cabin(&mut bus);
+    assert_eq!(people.seats[&crate::people::BusId::Player], occupied);
+    assert_eq!(people.served_stop, None);
+    assert!(people.player_cabin.is_some());
+}

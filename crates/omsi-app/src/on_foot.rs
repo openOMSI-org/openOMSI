@@ -367,6 +367,36 @@ impl App {
         vehicle_boxes(at, r, self.player.as_ref(), &self.session.placed, self.session.traffic.as_ref(), &self.net)
     }
 
+    /// A safe place outside the owned bus before its wheel goes to another driver.
+    pub(crate) fn handover_exit(&mut self) -> Option<DVec3> {
+        let p = self.player.as_ref()?;
+        let at = p.vehicle.position;
+        let own = p.vehicle.ty.def.bounding_box.map(|bb| Obb::from_box(bb, at, p.vehicle.heading));
+        let others: Vec<Obb> = self.vehicle_boxes(at.truncate(), 30.0).into_iter()
+            .filter(|b| own.map(|o| (o.center - b.center).length() > 0.01).unwrap_or(true)).collect();
+        if let Some(f) = self.session.on_foot.as_ref().filter(|f| f.inside.is_none() && f.seat.is_none() && f.transit.is_none()) {
+            if self.world.as_ref().and_then(|w| w.walk_height_near(f.pos.x, f.pos.y, f.pos.z))
+                .is_some_and(|z| (z - f.pos.z).abs() < 1.5)
+                && !self.vehicle_boxes(f.pos.truncate(), 3.0).iter()
+                .any(|b| (push_out(f.pos.truncate(), b, RADIUS) - f.pos.truncate()).length() > 0.05) {
+                return Some(f.pos);
+            }
+        }
+        if self.session.humans.is_none() {
+            let mut h = Humans::new(&self.args.root, &mut self.gfx.sim_view.people);
+            h.avatar_only = true;
+            self.session.humans = Some(h);
+        }
+        let v = &self.player.as_ref()?.vehicle;
+        let h = self.session.humans.as_mut()?;
+        let near = self.session.on_foot.as_ref().map_or(at, |f| f.pos);
+        let grounded = |p: &DVec3| self.world.as_ref()
+            .and_then(|w| w.walk_height_near(p.x, p.y, p.z))
+            .is_some_and(|z| (z - p.z).abs() < 0.1);
+        outside_spot(h, self.world.as_deref(), v, &others, 1.0, near).filter(grounded)
+            .or_else(|| outside_spot(h, self.world.as_deref(), v, &others, -1.0, near).filter(grounded))
+    }
+
     /// Ctrl+Shift+G at the wheel: up and out of the front door.
     pub(crate) fn get_up(&mut self) {
         if self.session.on_foot.is_some() {

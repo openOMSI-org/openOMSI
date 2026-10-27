@@ -193,12 +193,12 @@ impl TrafficSim {
         self.order_buf = order;
         self.stats_after(dt, &remove);
         for i in remove.into_iter().rev() {
+            if self.occupied_by_player == Some(self.cars[i].id) { continue; }
             let c = self.take_off(i, Removal::Finished);
             // its sounds stop and the renders go back to the world at the next sync
             self.retired.push(c.id);
         }
     }
-
     /// Where every car is: its lane with its lateral place (and the lane a passing car is
     /// over on, where it counts for the oncoming traffic), the cars coming to each junction
     /// lane, the junction lanes each has claimed and the room promised on the exits.

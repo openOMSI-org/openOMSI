@@ -12,6 +12,7 @@ pub mod berths;
 pub mod blocks;
 pub mod bus_service;
 pub mod control;
+pub mod handover;
 pub mod deadlock;
 pub mod fixed_step;
 pub mod horn;
@@ -119,6 +120,8 @@ pub struct TrafficSim {
     /// the second, and so on. It applies on the paths without a rule for the group.
     pub uvg_defaults: Arc<Vec<i32>>,
     pub cars: Vec<AiCar>,
+    /// The pedestrian rides this bus; ordinary traffic retirement must keep it alive.
+    pub occupied_by_player: Option<u64>,
     /// The random cars out of range (see `DormantCar`).
     pub dormant: Vec<DormantCar>,
     /// `time` when the dormant cars last moved on.

@@ -56,7 +56,10 @@ impl Schedule {
                     self.sim.not_taken_on(j);
                 }
             }
-            if !taken && next.is_none() {
+            if !taken && next.is_none() && traffic.occupied_by_player == Some(id) {
+                traffic.release(ci);
+                self.sim.forget_car(id);
+            } else if !taken && next.is_none() {
                 // the tour's last trip is over: Omsi takes the bus (and what is coupled to
                 // it) off the road at once rather than letting it drive on
                 traffic.remove_car(id);

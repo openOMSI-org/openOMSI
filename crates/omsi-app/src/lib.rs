@@ -131,6 +131,7 @@ mod memory;
 mod offscreen;
 pub(crate) use omsi_sim::ground_gap;
 mod on_foot;
+mod vehicle_handover;
 mod trolley_hands;
 mod trolley_mouse;
 pub(crate) mod trolley_net;

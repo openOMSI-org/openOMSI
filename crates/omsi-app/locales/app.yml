@@ -97504,3 +97504,129 @@ _version: 2
   it: "Torcia spenta"
   cs: "Baterka vypnuta"
   tr: "El feneri kapalı"
+
+"Hand bus to AI":
+  zh-tw: "交給 AI 駕駛"
+
+"Hand this bus to AI?":
+  zh-tw: "要把這輛巴士交給 AI 駕駛嗎？"
+
+"Take over this AI bus?":
+  zh-tw: "要接管這輛 AI 巴士嗎？"
+
+"You will become its driver. Your previous bus stays where it is.":
+  zh-tw: "你將成為這輛巴士的駕駛者，原本的巴士會保留在原處。"
+
+"AI will continue the timetable. You will stand safely outside the bus.":
+  zh-tw: "AI 將繼續目前班次，你會在車外安全位置進入行人模式。"
+
+"AI will drive away and leave traffic out of sight. You will be on foot.":
+  zh-tw: "AI 將自行駛離並按交通退場規則離場，你會進入行人模式。"
+
+"Vehicle handover is only available in single-player":
+  zh-tw: "車輛交接目前僅支援單人模式"
+
+"Enable Ability to get up before handing the bus to AI":
+  zh-tw: "請先啟用「允許離開駕駛座」，才可把巴士交給 AI"
+
+"There is no player bus to hand over":
+  zh-tw: "目前沒有可交給 AI 的玩家巴士"
+
+"Only driveable road buses can be handed over":
+  zh-tw: "目前只能交接可由玩家駕駛的道路巴士"
+
+"Stop the bus before handing it to AI":
+  zh-tw: "請先停穩巴士，再交給 AI 駕駛"
+
+"Wait for the vehicle start-up to finish":
+  zh-tw: "請等待車輛啟動程序完成"
+
+"The world and traffic must be ready before vehicle handover":
+  zh-tw: "地圖及交通系統載入完成後才可交接車輛"
+
+"A vehicle handover is already pending":
+  zh-tw: "另一項車輛交接仍在等待確認"
+
+"The world changed; vehicle handover was cancelled":
+  zh-tw: "地圖已變更，車輛交接已取消"
+
+"There is no safe place outside the bus to hand it over":
+  zh-tw: "車外沒有安全落腳位置，無法交接巴士"
+
+"AI is driving the bus. You are now on foot; F4 selects an AI bus to take over.":
+  zh-tw: "巴士已交給 AI 駕駛，你已進入行人模式；可按 F4 點選 AI 巴士接管。"
+
+"AI buses can only be taken over in F4 free view":
+  zh-tw: "只能在 F4 自由視角接管 AI 巴士"
+
+"The selected AI bus is no longer available":
+  zh-tw: "所選的 AI 巴士已不在場上"
+
+"This AI vehicle cannot be driven by a player":
+  zh-tw: "這輛 AI 車輛不具備玩家駕駛所需的資源"
+
+"The vehicle resources changed; reload the map before taking it over":
+  zh-tw: "車輛資源已變更，請重新載入地圖後再接管"
+
+"You are now driving the selected AI bus":
+  zh-tw: "你已接管所選的 AI 巴士"
+
+"No compatible road lane is close enough for AI to drive away":
+  zh-tw: "附近沒有適合 AI 接續行駛的道路路徑"
+
+"This road lane does not admit the bus":
+  zh-tw: "這段道路路徑不允許該巴士行駛"
+
+"The current timetable departure is no longer valid":
+  zh-tw: "目前的時刻表班次已失效"
+
+"The current timetable trip is no longer valid":
+  zh-tw: "目前的時刻表行程已失效"
+
+"Wait until the complete trip route is loaded before handing it to AI":
+  zh-tw: "第一版須等待整段行程路徑載入完成，才可交給 AI"
+
+"The bus is not on a compatible lane of its timetable route":
+  zh-tw: "巴士目前不在該班次可接續的行駛路徑上"
+
+"A remaining timetable stop has no loaded position":
+  zh-tw: "尚未服務的站點位置未載入"
+
+"A remaining timetable stop is not on the loaded route":
+  zh-tw: "尚未服務的站點不在已載入的行程路徑上"
+
+"A remaining timetable stop is too far from its route":
+  zh-tw: "尚未服務的站點距離行程路徑太遠"
+
+"The selected AI departure no longer matches its tour":
+  zh-tw: "所選的 AI 班次已不符合目前車務資料"
+
+"Traffic is not ready":
+  zh-tw: "交通系統尚未準備完成"
+
+"The timetable is not ready":
+  zh-tw: "時刻表尚未準備完成"
+
+"The world is not ready":
+  zh-tw: "地圖尚未準備完成"
+
+"The scene is not ready":
+  zh-tw: "場景尚未準備完成"
+
+"The renderer is not ready":
+  zh-tw: "繪圖系統尚未準備完成"
+
+"Drive this parked bus?":
+  zh-tw: "駕駛這輛已停放的巴士？"
+
+"You will return to its driver seat. Your current bus stays where it is.":
+  zh-tw: "你將返回這輛巴士的駕駛座，目前的巴士會保留在原處。"
+
+"Parked buses can only be selected in F4 free view":
+  zh-tw: "只能在 F4 自由視角點選已停放的巴士"
+
+"The selected parked bus is no longer available":
+  zh-tw: "所選的已停放巴士已不在場上"
+
+"This parked vehicle cannot be driven by a player":
+  zh-tw: "這輛已停放車輛不具備玩家駕駛所需的資源"

@@ -137,6 +137,7 @@ pub(crate) struct Player {
     /// Which vehicle this is, for as long as the session runs (the people riding in one
     /// the player left know it by this, see `Humans::player_bus_swapped`).
     pub(crate) uid: u64,
+    pub(crate) parked_duty: Option<crate::vehicle_handover::SavedDuty>,
     pub(crate) vehicle: omsi_sim::VehicleInstance,
     pub(crate) render: scene::VehicleRender,
     /// Renders of the coupled parts, parallel to `vehicle.trailers`.

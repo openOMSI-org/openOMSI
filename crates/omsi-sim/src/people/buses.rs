@@ -434,6 +434,11 @@ impl PeopleSim {
         self.remap_bus(BusId::Player, tmp);
         self.remap_bus(new, BusId::Player);
         self.remap_bus(tmp, old);
+        self.rebind_player_cabin(new_vehicle);
+    }
+
+    /// Bind driver-side cabin state without freeing the passengers' occupied seats.
+    pub fn rebind_player_cabin(&mut self, new_vehicle: &mut VehicleInstance) {
         let kept = self.seats.remove(&BusId::Player);
         self.player_cabin = None;
         self.served_stop = None;
