@@ -567,8 +567,7 @@ impl PeopleSim {
         if p.ticket == TICKET_STAMP {
             if p.sub == 1 && p.timer < 0.5 {
                 // the validator stamps
-                self.stamped.push(bn.id);
-                self.stamper_index = p.stamper;
+                self.stamped.push((bn.id, p.stamper));
                 let pp = self.pax_mut(i).unwrap();
                 pp.sub = 2;
                 pp.reach = false;

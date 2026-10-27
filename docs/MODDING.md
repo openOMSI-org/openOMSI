@@ -244,6 +244,13 @@ every `[stamper]` of every section, and a passenger with a ticket to stamp uses 
 nearest the door they came in by. Write one `[stamper]` block per validator (path point,
 then x, y, z of the device, as usual); OMSI 2 still takes the last of them.
 
+The validators count from 0 in the order the cabin file writes them. A stamp fires the
+sound trigger `ev_Stamper` (as in OMSI 2) and also `ev_StamperN` for validator N, so each
+one can have its own placed sound, and the script triggers `PAX_Stamper_Used` and
+`PAX_StamperN_Used` (for animations or ticket systems). OMSI 2 fires only `ev_Stamper`; a
+bus that gives each validator its own sound can mute the `ev_Stamper` one by a variable
+the `PAX_Stamper_Used` trigger sets.
+
 ## Scripts and plugins
 
 - Script variables and string variables have no count limit.

@@ -149,7 +149,6 @@ impl PeopleSim {
             dialog: None,
             duty: None,
             stamped: Vec::new(),
-            stamper_index: None,
             pedestrians: 14,
             max_people: people_limit,
             stroll_timer: 0.0,

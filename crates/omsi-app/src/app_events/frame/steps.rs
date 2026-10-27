@@ -295,49 +295,20 @@ pub(crate) fn humans_after_step(
     let mark = Instant::now();
     crate::view_sync::apply_people(h, view, world, r, scene);
     h.tick_done(dt, world, started, mark.elapsed().as_secs_f64() * 1000.0);
-    // validators used: the bus's `ev_Stamper` sound
-    for bus in h.take_stamped() {
-        match bus {
-            None => {
-                if let Some(p) = player.as_deref_mut() {
-                    // Check if the stamper index is an actual index, else return -1
-                    let mut stamper_index = -1;
-                    match h.get_stamper_index() {
-                        None => {stamper_index = -1},
-                        Some(n) => {stamper_index = n as i32},
-                    }
-                    // Fire the regular ev_Stamper event for compatibility with older buses
-                    p.vehicle.host.fired_triggers.push("ev_Stamper".into());
-                    p.vehicle.trigger("PAX_Stamper_Used");
-
-                    // If theres a valid index, fire the ev_StamperX sound event and PAX_StamperN_Used
-                    // script trigger for the specific stamper
-                    if stamper_index >= 0 {
-                        p.vehicle.host.fired_triggers.push(format!("ev_Stamper{}", stamper_index).into());
-                        p.vehicle.trigger(&format!("PAX_Stamper{}_Used", stamper_index));
-                    }
-                }
-            }
-            Some(id) => {
-                if let Some(c) = traffic.as_deref_mut().and_then(|t| t.cars.iter_mut().find(|c| c.id == id)) {
-                     // Check if the stamper index is an actual index, else return -1
-                    let mut stamper_index = -1;
-                    match h.get_stamper_index() {
-                        None => {stamper_index = -1},
-                        Some(n) => {stamper_index = n as i32},
-                    }
-                    // Fire the regular ev_Stamper event for compatibility with older buses
-                    c.vehicle.host.fired_triggers.push("ev_Stamper".into());
-                    c.vehicle.trigger("PAX_Stamper_Used");
-
-                    // If theres a valid index, fire the ev_StamperX sound event and PAX_StamperN_Used
-                    // script trigger for the specific stamper
-                    if stamper_index >= 0 {
-                        c.vehicle.host.fired_triggers.push(format!("ev_Stamper{}", stamper_index).into());
-                        c.vehicle.trigger(&format!("PAX_Stamper{}_Used", stamper_index));
-                    }
-                }
-            }
+    // validators used: the bus's `ev_Stamper` sound (every validator, as in OMSI 2) and
+    // `ev_StamperN` for the one used, with the script triggers `PAX_Stamper_Used` and
+    // `PAX_StamperN_Used`
+    for (bus, stamper) in h.take_stamped() {
+        let vehicle = match bus {
+            None => player.as_deref_mut().map(|p| &mut p.vehicle),
+            Some(id) => traffic.as_deref_mut().and_then(|t| t.cars.iter_mut().find(|c| c.id == id)).map(|c| &mut c.vehicle),
+        };
+        let Some(v) = vehicle else { continue };
+        v.host.fired_triggers.push("ev_Stamper".into());
+        v.trigger("PAX_Stamper_Used");
+        if let Some(k) = stamper {
+            v.host.fired_triggers.push(format!("ev_Stamper{k}").into());
+            v.trigger(&format!("PAX_Stamper{k}_Used"));
         }
     }
     for (bus, event) in h.take_money_events() {

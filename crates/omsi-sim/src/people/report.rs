@@ -5,19 +5,16 @@ use super::*;
 
 impl PeopleSim {
     /// The buses somebody stamped a ticket in since the last call (the app fires their
-    /// `ev_Stamper` sound trigger): `None` the player's, else the AI car's id.
-    pub fn take_stamped(&mut self) -> Vec<Option<u64>> {
+    /// `ev_Stamper` sound trigger): `None` the player's, else the AI car's id, with the
+    /// index of the `[stamper]` used (counted over the whole cabin, from 0).
+    pub fn take_stamped(&mut self) -> Vec<(Option<u64>, Option<usize>)> {
         std::mem::take(&mut self.stamped)
             .into_iter()
-            .map(|b| match b {
-                BusId::Ai(id) => Some(id),
-                _ => None,
+            .map(|(b, k)| match b {
+                BusId::Ai(id) => (Some(id), k),
+                _ => (None, k),
             })
             .collect()
-    }
-    /// The index of the stamper in the passengercabin that was last stamped
-    pub fn get_stamper_index(&self) -> Option<usize> {
-        self.stamper_index
     }
 
     /// Money-related events to be handled by the app.
