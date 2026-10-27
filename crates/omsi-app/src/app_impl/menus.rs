@@ -237,6 +237,29 @@ impl App {
         }
         let Some(id) = self.game_menu_items().get(k).map(|m| m.0) else { return };
         match id {
+            "load" => {
+                self.close_game_menu();
+                if self.load_quicksave() {
+                    self.finish_session();
+                    crate::platform::exit(event_loop);
+                }
+            }
+            "quit" => {
+                self.menus.game_menu = None;
+                self.finish_session();
+                crate::platform::exit(event_loop);
+            }
+            "plugin" => self.choose_plugin_line(k),
+            other => {
+                self.game_menu_action(other);
+            }
+        }
+    }
+
+    /// What a line of the game menu does, by its id (all but loading, leaving and the
+    /// plugins' lines): also the Alt quick menu's tiles. False when `id` is none of them.
+    pub(crate) fn game_menu_action(&mut self, id: &str) -> bool {
+        match id {
             "resume" => self.close_game_menu(),
             "options" => self.open_list(crate::game_lists::ListKind::Options(0)),
             "controls" => self.open_list(crate::game_lists::ListKind::Controls),
@@ -288,24 +311,10 @@ impl App {
                 self.close_game_menu();
                 self.back_to_bus();
             }
-            "load" => {
-                self.close_game_menu();
-                if self.load_quicksave() {
-                    self.finish_session();
-                    crate::platform::exit(event_loop);
-                }
-            }
-            "quit" => {
-                self.menus.game_menu = None;
-                self.finish_session();
-                crate::platform::exit(event_loop);
-            }
-            "plugin" => self.choose_plugin_line(k),
             // (the rest are the lines of the vehicle and world pages)
-            other => {
-                self.page_action(other);
-            }
+            other => return self.page_action(other),
         }
+        true
     }
 
     /// The actions of the vehicle and world pages (and of what the plugins and the input

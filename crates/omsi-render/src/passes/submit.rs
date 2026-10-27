@@ -86,7 +86,7 @@ impl Renderer {
         clock.stage(self, "submit", "mirror.submit");
         let timed = timers.timed;
         if let (Some(t), false) = (
-            self.gpu_timers[with_overlays as usize].as_mut(),
+            self.gpu_timers[timers.view].as_mut(),
             timed.is_empty(),
         ) {
             t.pending = timed;

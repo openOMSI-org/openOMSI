@@ -265,18 +265,25 @@ impl VehicleInstance {
         if self.ground.is_none() && self.contact.is_none() {
             return;
         }
-        let rot = self.body_rotation();
-        let pos = self.position;
+        self.host.ground_probe = self.height_probe_at(self.position, self.body_rotation());
+    }
+
+    /// `GetHeightAbovePoint` for a body standing at `pos` turned by `rot` on this vehicle's
+    /// ground (a coupled car asks it for its own place).
+    pub(super) fn height_probe_at(&self, pos: DVec3, rot: Mat4) -> Option<car_run::GroundHeightProbe> {
+        if self.ground.is_none() && self.contact.is_none() {
+            return None;
+        }
         let g = self.ground.clone();
         let contact = self.contact.clone();
-        self.host.ground_probe = Some(std::sync::Arc::new(move |x, y, z| {
+        Some(std::sync::Arc::new(move |x, y, z| {
             let w = pos + rot.transform_point3(glam::Vec3::new(x, y, z)).as_dvec3();
             let h = match &contact {
                 Some(c) => c.probe(w.x, w.y, w.z + 0.5).below,
                 None => g.as_ref().and_then(|g| g(w.x, w.y)),
             };
             h.map_or(0.0, |h| (w.z - h) as f32)
-        }));
+        }))
     }
 
     /// One frame of an AI-controlled vehicle: the pose is set by the traffic system
@@ -497,6 +504,7 @@ impl VehicleInstance {
         }
         let mut trailers = std::mem::take(&mut self.trailers);
         super::car_run::set_couplings(&mut trailers);
+        super::car_run::start_bus(self);
         let mut lead: Option<(DVec3, Mat4, f64)> = None;
         let mut turn = self.turning();
         for t in &mut trailers {
@@ -529,6 +537,7 @@ impl VehicleInstance {
         }
         let mut trailers = std::mem::take(&mut self.trailers);
         super::car_run::set_couplings(&mut trailers);
+        super::car_run::start_bus(self);
         let mut lead: Option<(DVec3, Mat4, f64)> = None;
         let mut turn = self.turning();
         if self.ty.def.is_rail() {

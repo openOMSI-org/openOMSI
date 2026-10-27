@@ -870,8 +870,11 @@ impl TrailerPart {
         // a car that reads its place in the train runs its own scripts first, and its
         // meshes show its values (see `car_run`)
         let place = self.place_in_train();
+        let (ahead, behind) = (&self.ty.def.control_cable_front, &self.ty.def.control_cable_back);
+        let plugs = if self.reversed { [behind.as_slice(), ahead.as_slice()] } else { [ahead.as_slice(), behind.as_slice()] };
+        let probe = main.height_probe_at(self.position, self.body_rotation());
         match self.run.as_deref_mut() {
-            Some(run) => run.frame(main, place),
+            Some(run) => run.frame(main, place, plugs, probe),
             None if self.runs_itself => {
                 let run = super::CarRun::start(&self.ty, main, place);
                 let slot_of = |n: &str| omsi_script::compile::with_lower(n, |k| run.names.get(k).copied());

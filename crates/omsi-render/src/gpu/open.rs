@@ -216,6 +216,8 @@ impl Renderer {
         // the driver's compiled pipelines kept for the next start (Vulkan, OpenGL)
         if !intel_vulkan_safe {
             required_features |= pipeline_cache::wanted(&adapter);
+            // (the vehicles' blank display textures cleared on the GPU, `add_blank_texture`)
+            required_features |= adapter.features() & wgpu::Features::CLEAR_TEXTURE;
         }
         // Enhanced+: hardware ray queries where the device has them (Apple silicon from the
         // M3/A17 on, RTX and RDNA 2 cards and newer through Vulkan and Direct3D 12 - with DXC,
@@ -562,7 +564,7 @@ impl Renderer {
         // it off; what the settings asked for is kept, so that only a change of theirs does)
         let upscaler_asked = (options.fsr1, options.fsr_sharpness, options.render_scale);
         let options = RenderOptions { fsr1: (options.fsr1 || crate::fsr1_enabled()) && upscale.fsr.is_some(), ..options };
-        let gpu_timers = [GpuTimers::new(&device), GpuTimers::new(&device)];
+        let gpu_timers = std::array::from_fn(|_| GpuTimers::new(&device));
         // GLES cannot reliably read the depth buffer (the same limitation as SSAO).
         let puddles = (!gl && !passes.leave_out_enhanced).then(|| {
             puddles::Pipelines::new(&device, &scene.shader, &scene.camera_layout, &scene.material_layout)

@@ -149,7 +149,7 @@ impl Renderer {
                 let mut part = lead.take().unwrap_or_else(|| self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("main part") }));
                 // (OMSI_GPU_TIMERS: the first part timed too - the sky and the first bundles;
                 // ahead of every other timed pass, it was counted nowhere)
-                let stamp = if first { pass_timer(timers.set.as_ref(), &mut timers.timed, if f.with_overlays { "main part" } else { "mirror part" }) } else { None };
+                let stamp = if first { pass_timer(timers.set.as_ref(), &mut timers.timed, if f.with_overlays || f.xr_view { "main part" } else { "mirror part" }) } else { None };
                 self.encode_main_part(&mut part, scene, f, plan, &mt, &main_bundles[g * per_part..((g + 1) * per_part).min(main_bundles.len())], first, stamp);
                 main_parts.push(part);
             }
@@ -311,7 +311,7 @@ impl Renderer {
             timestamp_writes: pass_timer(
                 timers.set.as_ref(),
                 &mut timers.timed,
-                if f.with_overlays { "main" } else { "mirror" },
+                if f.with_overlays || f.xr_view { "main" } else { "mirror" },
             ),
             occlusion_query_set: None,
             multiview_mask: None,

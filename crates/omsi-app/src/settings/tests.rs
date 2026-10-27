@@ -512,6 +512,28 @@ fn quick_actions_pending_setting_is_not_lost_when_other_settings_are_saved() {
 }
 
 #[test]
+fn ui_theme_uses_one_setting_and_migrates_the_old_map_switch() {
+    assert_eq!(Settings::default().ui_theme, "dark");
+    assert_eq!(Settings::from_text("ui_theme=light\n").ui_theme, "light");
+    assert_eq!(Settings::from_text("ui_theme=dark\n").ui_theme, "dark");
+    assert_eq!(Settings::from_text("ui_theme=neon\n").ui_theme, "dark");
+    assert_eq!(Settings::from_text("nav_light=1\n").ui_theme, "light");
+    assert_eq!(Settings::from_text("nav_light=1\nui_theme=dark\n").ui_theme, "dark");
+    let mut light = Settings::default();
+    light.ui_theme = "light".into();
+    let saved = light.to_text();
+    assert!(saved.lines().any(|line| line == "ui_theme=light"));
+    assert!(!saved.lines().any(|line| line.starts_with("nav_light=")));
+    assert_eq!(Settings::from_text(&saved).ui_theme, "light");
+}
+
+#[test]
+fn ui_theme_light_helper_is_the_only_runtime_boolean_conversion() {
+    assert!(!Settings::from_text("ui_theme=dark\n").is_light_theme());
+    assert!(Settings::from_text("ui_theme=light\n").is_light_theme());
+}
+
+#[test]
 fn lamp_shadows_on_by_default_and_round_trip_through_the_launcher() {
     assert!(Settings::from_text("").lamp_shadows);
     let mut ui = omsi_launcher_lib::settings_from_text(None);
@@ -520,4 +542,21 @@ fn lamp_shadows_on_by_default_and_round_trip_through_the_launcher() {
     let game = Settings::from_text(&omsi_launcher_lib::settings_to_text(&ui, None));
     assert!(!game.lamp_shadows);
     assert_eq!(Settings::from_text(&game.to_text()), game);
+}
+
+/// The cab wheel's rotation: the bus's own (0) at first and in a file from before it; under 90
+/// Automatic, else rounded within 180..=1800, as the launcher reads it; kept through both
+/// writers.
+#[test]
+fn cab_wheel_rotation_defaults_to_the_bus_and_is_clamped() {
+    assert_eq!(Settings::default().cab_wheel_rotation, 0);
+    assert_eq!(Settings::from_text("version=4\nwheel_range=1080\n").cab_wheel_rotation, 0);
+    for (text, want) in [("1080", 1080), ("0", 0), ("89", 0), ("-540", 0), ("nan", 0), ("bogus", 0), ("90", 180), ("120", 180), ("180", 180), ("900.4", 900), ("1800", 1800), ("5000", 1800)] {
+        assert_eq!(Settings::from_text(&format!("cab_wheel_rotation={text}\n")).cab_wheel_rotation, want, "{text}");
+    }
+    let s = Settings { cab_wheel_rotation: 1080, ..Default::default() };
+    assert_eq!(Settings::from_text(&s.to_text()), s);
+    let mut ui = omsi_launcher_lib::settings_from_text(None);
+    ui["cab_wheel_rotation"] = serde_json::json!(1080);
+    assert_eq!(Settings::from_text(&omsi_launcher_lib::settings_to_text(&ui, None)).cab_wheel_rotation, 1080);
 }

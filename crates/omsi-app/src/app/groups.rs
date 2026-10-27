@@ -148,6 +148,7 @@ pub(crate) struct PerfState {
     /// OMSI_PROFILE: the stages when the warm-up ended (15 s of play), and every frame's time
     /// since then (s), for the exit summary's percentiles (see `perf_report`).
     pub(crate) profile_mark: Option<crate::perf_report::ProfileMark>,
+    pub(crate) gpu_reported: bool,
     pub(crate) frame_times: Vec<f32>,
     /// Each kept frame's stage times, `ProfKey::ALL` in order (seconds; OMSI_PROFILE only).
     pub(crate) frame_stages: Vec<f32>,
@@ -181,6 +182,7 @@ impl PerfState {
             thread_cpu_mark: None,
             instructions_mark: None,
             profile_mark: None,
+            gpu_reported: false,
             profile_written: false,
             frame_times: Vec::new(),
             frame_stages: Vec::new(),

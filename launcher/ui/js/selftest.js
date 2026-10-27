@@ -97,6 +97,31 @@ export async function selftest() {
   }
   remember('launcher_layout', layout);
   applyTheme();
+  const theme = remembered('theme', 'dark');
+  const nativeMatchMedia = window.matchMedia;
+  let systemLight = false;
+  window.matchMedia = (query) => ({
+    matches: query === '(prefers-color-scheme: light)' && systemLight,
+  });
+  const checkTheme = async (name, pick, expected) => {
+    remember('theme', pick);
+    const saved = await applyTheme();
+    const dom = document.documentElement.dataset.theme;
+    const game = S.settings?.ui_theme;
+    check(`theme ${name}`, saved !== false && dom === expected && game === expected && game !== 'system', `${dom || 'unset'} / ${game || 'unset'} / saved=${saved}`);
+  };
+  try {
+    await checkTheme('dark', 'dark', 'dark');
+    await checkTheme('light', 'light', 'light');
+    systemLight = true;
+    await checkTheme('system light', 'system', 'light');
+    systemLight = false;
+    await checkTheme('system dark', 'system', 'dark');
+  } finally {
+    window.matchMedia = nativeMatchMedia;
+    remember('theme', theme);
+    await applyTheme();
+  }
   try {
     const [c, st] = [await call('controllers_load'), await call('controllers_state')];
     check('game controllers', Array.isArray(c.devices) && Array.isArray(st.connected), `${c.devices.length} set up, ${st.connected.length} connected`);

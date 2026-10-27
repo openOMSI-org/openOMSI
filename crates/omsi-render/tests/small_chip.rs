@@ -19,7 +19,7 @@ fn pictures_larger_than_the_chip_takes_are_made_to_fit() {
     let big = omsi_texture::Image { width: 4096, height: 64, rgba: vec![200; 4096 * 64 * 4], has_alpha: true };
     let a = renderer.add_texture(&mut scene, &big, false);
     let b = renderer.add_texture(&mut scene, &big, true);
-    let c = renderer.add_blank_texture(&mut scene, 4096, 64);
+    let c = renderer.add_blank_texture(&mut scene, 4096, 64, false);
     let d = renderer.add_render_texture(&mut scene, 3000, 3000);
     for id in [a, b, c] {
         renderer.update_texture(&scene, id, &big);

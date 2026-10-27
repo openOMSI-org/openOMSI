@@ -193,6 +193,8 @@ const driving = {
         // about two and a half turns)
         { type: 'slider', key: 'wheel_range', label: 'Wheel rotation', min: 180, max: 1800, step: 30, def: 900, format: deg, store: round },
         { type: 'slider', key: 'wheel_lock', label: 'Full lock at', min: 0, max: 1800, step: 30, def: 0, format: (v) => (v < 45 ? t('OMSI') : deg(v)), store: (v) => (v < 45 ? 0 : Math.round(v)) },
+        // how far the cab's own steering wheel model turns (0: as the bus's animation)
+        { type: 'slider', key: 'cab_wheel_rotation', label: 'Cab wheel rotation', min: 0, max: 1800, step: 30, def: 0, format: (v) => (v < 90 ? t('Automatic') : deg(v)), store: (v) => (v < 90 ? 0 : Math.round(v)), help: "How far the steering wheel in the cab turns, lock to lock. Automatic = as the bus's own model; set it to your wheel's rotation so both turn alike. Some mod buses animate their wheel from a script of their own and keep their own rotation." },
         { type: 'slider', key: 'pedal_throttle', label: 'Throttle pedal strength', min: 0.5, max: 2, step: 0.05, def: 1, format: pedal, store: r2 },
         { type: 'slider', key: 'pedal_brake', label: 'Brake pedal strength', min: 0.5, max: 2, step: 0.05, def: 1, format: pedal, store: r2 },
         { type: 'toggle', key: 'momentary_gears', label: 'H-pattern shifter: return to neutral when the gear is released' },
@@ -206,15 +208,15 @@ const driving = {
         { type: 'slider', key: 'pad_deadzone', label: 'Stick dead zone', min: 0, max: 0.4, step: 0.01, def: 0.08, format: (v) => `${(v * 100).toFixed(0)} %`, store: r2 },
         { type: 'toggle', key: 'pad_steer_linear', label: 'Stick steers like a wheel (a wheel seen as a gamepad)' },
         { type: 'section', title: 'Force feedback' },
-        { type: 'toggle', key: 'ff_enabled', label: 'Force feedback and vibration' },
+        { type: 'toggle', key: 'ff_enabled', label: 'Force feedback and vibration', help: "Off: the game sends the wheel no forces; any resistance left comes from the wheel's own driver software (for example the centre spring in Logitech G HUB)" },
         { type: 'toggle', key: 'ff_invert', label: 'Invert force feedback by default' },
         { type: 'note', text: 'Wheels with a saved direction use their own setting under Controls → Game controllers.' },
         // what the wheel feels all the time: the road's grain, the engine's buzz, and how
         // long a jolt eases away
         { type: 'slider', key: 'ff_road_vib', label: 'Road texture vibration', min: 0, max: 4, step: 0.05, def: 1, format: vibration, store: (v) => Math.round(v * 20) / 20 },
-        { type: 'slider', key: 'ff_engine_vib', label: 'Engine vibration', min: 0, max: 4, step: 0.05, def: 1, format: vibration, store: (v) => Math.round(v * 20) / 20 },
+        { type: 'slider', key: 'ff_engine_vib', label: 'Engine vibration', help: 'The running engine buzzes in the wheel, felt even at a standstill', min: 0, max: 4, step: 0.05, def: 1, format: vibration, store: (v) => Math.round(v * 20) / 20 },
         { type: 'slider', key: 'ff_fade', label: 'Vibration fade-out', min: 0, max: 1.5, step: 0.05, def: 0.28, format: (v) => (v < 0.01 ? t('Off') : `${Math.round(v * 1000)} ms`), store: r2 },
-        { type: 'button', label: 'Reset wheel settings', icon: 'refresh', patch: () => ({ wheel_range: 900, wheel_lock: 0, ff_invert: false, ff_enabled: true, ff_road_vib: 1, ff_engine_vib: 1, ff_fade: 0.28 }) },
+        { type: 'button', label: 'Reset wheel settings', icon: 'refresh', patch: () => ({ wheel_range: 900, wheel_lock: 0, cab_wheel_rotation: 0, ff_invert: false, ff_enabled: true, ff_road_vib: 1, ff_engine_vib: 1, ff_fade: 0.28 }) },
       ],
     },
   ],
@@ -435,7 +437,6 @@ const general = {
         { type: 'toggle', key: 'nav_arrows', label: 'Route arrows (as in OMSI 2)' },
         { type: 'toggle', key: 'nav_ai', label: 'AI vehicles on the map' },
         { type: 'toggle', key: 'nav_surface', label: 'Map surface under the roads' },
-        { type: 'toggle', key: 'nav_light', label: 'Light map' },
         { type: 'toggle', key: 'nav_classic_2d', label: 'Classic 2D navigator (lightweight)' },
         { type: 'toggle', key: 'nav_3d', label: '3D buildings on the map' },
         { type: 'toggle', key: 'nav_widget', label: 'Navigator as a widget (drag it anywhere, size it at its corner)' },

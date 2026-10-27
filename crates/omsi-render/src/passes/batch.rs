@@ -613,21 +613,63 @@ impl Renderer {
     }
 
     /// OMSI_PROFILE: the frame's counts, and every ten seconds what each asset costs.
-    pub(crate) fn count_draws(&mut self, scene: &Scene, with_overlays: bool, visible: usize, plan: &DrawPlan, shadow_batches: &[Vec<Batch>; SHADOW_LISTS]) {
+    pub(crate) fn count_draws(&mut self, scene: &Scene, with_overlays: bool, visible: &[(usize, f32, bool)], plan: &DrawPlan, shadow_batches: &[Vec<Batch>; SHADOW_LISTS],
+        timer_view: usize,
+    ) {
         let DrawPlan { main_batches, prepass_batches, main_draws, .. } = plan;
+        let visible_count = visible.len();
+        if self.profiling && timer_view >= 2 {
+            let keys = if timer_view == 2 {
+                [
+                    "left eye pictures",
+                    "left eye visible meshes",
+                    "left eye main batches",
+                    "left eye blended draws",
+                    "left eye main ktris",
+                    "left eye prepass ktris",
+                ]
+            } else {
+                [
+                    "right eye pictures",
+                    "right eye visible meshes",
+                    "right eye main batches",
+                    "right eye blended draws",
+                    "right eye main ktris",
+                    "right eye prepass ktris",
+                ]
+            };
+            let tris = |bs: &[Batch]| {
+                bs.iter()
+                    .map(|b| b.count as f64 / 3.0 * b.instances.len() as f64)
+                    .sum::<f64>()
+                    / 1000.0
+            };
+            let values = [
+                1.0,
+                visible_count as f64,
+                (main_batches.len() + plan.cab_batches.len()) as f64,
+                main_draws[1] as f64,
+                tris(main_batches) + tris(&plan.cab_batches),
+                tris(prepass_batches),
+            ];
+            let mut counts = self.counts.borrow_mut();
+            for (key, value) in keys.into_iter().zip(values) {
+                *counts.entry(key).or_default() += value;
+            }
+        }
         if with_overlays {
             self.frame_draws.0 += main_batches.len() + prepass_batches.len() + shadow_batches.iter().map(Vec::len).sum::<usize>();
-            self.frame_draws.1 += visible;
+            self.frame_draws.1 += visible_count;
         }
-        if self.profiling && !with_overlays {
+        if self.profiling && timer_view == 0 {
             let mut c = self.counts.borrow_mut();
             *c.entry("mirror pictures").or_default() += 1.0;
-            *c.entry("mirror visible instances").or_default() += visible as f64;
+            *c.entry("mirror visible instances").or_default() += visible_count as f64;
         }
         if self.profiling && with_overlays {
             let mut c = self.counts.borrow_mut();
             *c.entry("scene instances").or_default() += scene.instances.len() as f64;
-            *c.entry("visible instances").or_default() += visible as f64;
+            *c.entry("visible instances").or_default() += visible_count as f64;
             *c.entry("bounds users").or_default() += scene.bounds_users.len() as f64;
             *c.entry("main draws").or_default() += (main_draws[0] + main_draws[1]) as f64;
             *c.entry("opaque draws").or_default() += main_draws[0] as f64;

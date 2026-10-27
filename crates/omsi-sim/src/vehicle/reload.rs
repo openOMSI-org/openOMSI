@@ -113,6 +113,8 @@ impl VehicleInstance {
             .collect();
         crate::anim::link_parents(&mut animators, &ty.meshes.iter().map(|m| &ty.model.meshes[m.def_index]).collect::<Vec<_>>());
         self.animators = animators;
+        // (the cab wheel scaled again: the new animators have the model's factors)
+        self.apply_cab_wheel_rotation();
         Ok(())
     }
 

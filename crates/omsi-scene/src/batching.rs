@@ -188,7 +188,7 @@ impl GpuCache {
     }
 
     pub(super) fn add_blank(&mut self, renderer: &Renderer, scene: &mut Scene, width: u32, height: u32) -> TextureId {
-        let id = renderer.add_blank_texture(scene, width, height);
+        let id = renderer.add_blank_texture(scene, width, height, false);
         self.take_texture_slot(renderer, scene, id)
     }
 
@@ -196,18 +196,8 @@ impl GpuCache {
     /// viewed much smaller than their authored pixel size; without lower levels the sampler
     /// minifies level zero directly and thin glyph strokes break into unstable pixels.
     pub(super) fn add_blank_mips(&mut self, renderer: &Renderer, scene: &mut Scene, width: u32, height: u32) -> TextureId {
-        let (width, height) = (width.max(1), height.max(1));
-        self.add_image(
-            renderer,
-            scene,
-            &Image {
-                width,
-                height,
-                rgba: vec![0; (width * height * 4) as usize],
-                has_alpha: true,
-            },
-            true,
-        )
+        let id = renderer.add_blank_texture(scene, width, height, true);
+        self.take_texture_slot(renderer, scene, id)
     }
 
     pub(super) fn take_texture_slot(

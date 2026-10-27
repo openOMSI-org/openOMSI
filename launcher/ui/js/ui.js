@@ -146,8 +146,8 @@ export function Tabs({ value, options, onChange }) {
   return html`<div class="tabs">${options.map(([v, l]) => html`<button class=${v === value ? 'on' : ''} onClick=${() => onChange(v)}>${t(l)}</button>`)}</div>`;
 }
 
-/** A slider; `format` turns the value into what is shown beside the label. */
-export function Slider({ label, value, min, max, step, onChange, format }) {
+/** A slider; `format` turns the value into what is shown beside the label, `help` a line under it. */
+export function Slider({ label, value, min, max, step, onChange, format, help }) {
   const v = Number(value ?? min);
   // (the thumb's centre runs from half its width to the track's end less that: the fill ends
   // under it there, not at the plain percentage, which left the thumb beside the fill's end)
@@ -156,6 +156,7 @@ export function Slider({ label, value, min, max, step, onChange, format }) {
   return html`<div class="slider">
     <div class="top"><span>${t(label)}</span><span>${format ? format(v) : v}</span></div>
     <input type="range" min=${min} max=${max} step=${step} value=${v} style=${`--fill:${fill}`} onInput=${(e) => onChange(Number(e.currentTarget.value))} />
+    ${help && html`<div class="help">${t(help)}</div>`}
   </div>`;
 }
 

@@ -42,6 +42,7 @@ pub(super) fn option_now(app: &App, verb: &str, arg: &str) -> Option<f32> {
         "radio_speaker" | "radio_hiss" | "radio_dropouts" => *crate::radio::fx_setting(&mut s.radio_fx.clone(), verb).1,
         "wheel_range" => s.wheel_range,
         "wheel_lock" => s.wheel_lock,
+        "cab_wheel_rotation" => s.cab_wheel_rotation as f32,
         "triple_width_mm" => s.triple.width_mm,
         "triple_distance_mm" => s.triple.distance_mm,
         "triple_bezel_mm" => s.triple.bezel_mm,
@@ -225,6 +226,7 @@ pub(super) fn option_set(app: &mut App, verb: &str, arg: &str, v: f32) -> Option
             app.settings.wheel_lock = if v < 45.0 { 0.0 } else { v.round() };
             Some(("wheel_lock", app.settings.wheel_lock.to_string()))
         }
+        "cab_wheel_rotation" => Some(set_cab_wheel_rotation(app, v)),
         "triple_width_mm" => {
             app.settings.triple.width_mm = v.clamp(200.0, 2000.0);
             Some(("triple_width_mm", app.settings.triple.width_mm.to_string()))
@@ -380,6 +382,16 @@ pub(super) fn option_set(app: &mut App, verb: &str, arg: &str, v: f32) -> Option
     }
 }
 
+/// The cab wheel's rotation lock to lock (`cab_wheel_rotation`): the player's bus takes it at
+/// once, the AI buses keep their own wheels.
+fn set_cab_wheel_rotation(app: &mut App, v: f32) -> (&'static str, String) {
+    app.settings.cab_wheel_rotation = crate::settings::cab_wheel_rotation(v);
+    if let Some(p) = app.player.as_mut() {
+        p.vehicle.set_cab_wheel_rotation(app.settings.cab_wheel_rotation);
+    }
+    ("cab_wheel_rotation", app.settings.cab_wheel_rotation.to_string())
+}
+
 /// Whether the switch `id` is on (None: `id` is no switch).
 pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
     let s = &app.settings;
@@ -387,7 +399,6 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "navigator" => if app.vr_active() { app.vr_nav_profile().enabled } else { app.menus.navigator.as_ref().is_some_and(|n| n.enabled) },
         "nav_ai" => app.menus.navigator.as_ref().map_or(s.nav_ai, |n| n.show_ai),
         "nav_surface" => app.menus.navigator.as_ref().map_or(s.nav_surface, |n| n.show_surface),
-        "nav_light" => app.menus.navigator.as_ref().map_or(s.nav_light, |n| n.light),
         "nav_3d" => app.menus.navigator.as_ref().map_or(s.nav_3d, |n| n.show_3d),
         "nav_classic_2d" => app.menus.navigator.as_ref().map_or(s.nav_classic_2d, |n| n.classic_2d),
         "nav_widget" => app.menus.navigator.as_ref().map_or(s.nav_widget, |n| n.widget),
@@ -509,13 +520,6 @@ pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static 
             }
             app.settings.nav_surface = on;
             Some(("nav_surface", bit))
-        }
-        "nav_light" => {
-            if let Some(n) = app.menus.navigator.as_mut() {
-                n.light = on;
-            }
-            app.settings.nav_light = on;
-            Some(("nav_light", bit))
         }
         "nav_classic_2d" => {
             if let Some(n) = app.menus.navigator.as_mut() {

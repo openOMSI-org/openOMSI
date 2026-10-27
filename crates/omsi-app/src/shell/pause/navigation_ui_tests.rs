@@ -286,3 +286,48 @@ fn quick_actions_editor_draws_checkbox_and_footer_at_all_sizes() {
         assert!(sh.actions.is_empty());
     }
 }
+
+#[test]
+fn pause_navigation_uses_runtime_theme_palette() {
+    let rail = menu();
+    let v = view(&rail);
+    let mut dark = Shell::new();
+    dark.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
+    draw(&mut dark, &v);
+    dark.finish();
+
+    let mut light = Shell::new();
+    light.ui.set_theme(true);
+    light.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
+    draw(&mut light, &v);
+    light.finish();
+
+    assert!(dark.drawn.as_ref().unwrap().verts.iter().any(|v| v.color == DARK.SIDEBAR.0));
+    assert!(light.drawn.as_ref().unwrap().verts.iter().any(|v| v.color == LIGHT.SIDEBAR.0));
+}
+
+#[test]
+fn quick_actions_editor_uses_runtime_theme_palette() {
+    let rail = menu();
+    for (light_theme, surface) in [(false, DARK.SURFACE), (true, LIGHT.SURFACE)] {
+        let mut sh = Shell::new();
+        sh.ui.set_theme(light_theme);
+        sh.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
+        super::super::quick_actions_ui::editor(
+            &mut sh,
+            &view(&rail),
+            Rect::new(300.0, 120.0, 800.0, 650.0),
+        );
+        sh.finish();
+
+        assert!(
+            sh.drawn
+                .as_ref()
+                .unwrap()
+                .verts
+                .iter()
+                .any(|v| v.color == surface.0),
+            "quick actions editor should draw its themed surface in light={light_theme}"
+        );
+    }
+}

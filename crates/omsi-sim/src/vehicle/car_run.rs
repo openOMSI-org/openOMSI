@@ -22,8 +22,14 @@ fn is_place_var(name: &str) -> bool {
 /// Whether a coupled part needs a [`CarRun`]: its program reads its place in the train, or
 /// an animation, visibility or lamp of its model does.
 pub(super) fn uses_place_in_train(ty: &VehicleType) -> bool {
+    // (a car with a frame of its own and plugs of control cables reads what the cars ahead
+    // send down them)
+    let wired = !ty.def.script_share
+        && !ty.program.frame.is_empty()
+        && !(ty.def.control_cable_front.is_empty() && ty.def.control_cable_back.is_empty());
     let read_by_program = PLACE_IN_TRAIN.iter().filter_map(|n| ty.program.var(n)).any(|id| ty.program.reads(id));
-    read_by_program
+    wired
+        || read_by_program
         || ty.model.meshes.iter().any(|mesh| {
             let mut names = mesh.animations.iter().map(|a| a.variable.as_str());
             names.any(is_place_var)
@@ -39,6 +45,47 @@ pub(super) fn set_couplings(parts: &mut [TrailerPart]) {
     for (i, part) in parts.iter_mut().enumerate() {
         part.coupled_at = [true, i < last];
     }
+}
+
+/// How high a point of a car stands over the ground (`GetHeightAbovePoint`), at the car's place.
+pub(super) type GroundHeightProbe = Arc<dyn Fn(f32, f32, f32) -> f32 + Send + Sync>;
+
+/// What the control cables carry past one car, a signal per plug the car in front offers:
+/// `(plug, number, value)`, the plug being the one a car receiving it must have (`C` for
+/// `C`, `L` for the other's `R`).
+pub(super) type CableBus = Vec<(char, i32, f32)>;
+
+/// The plug `kind` meets: `L` and `R` pair up, `C` meets `C`.
+fn mate(kind: &str) -> char {
+    match kind.trim().chars().next().map(|c| c.to_ascii_uppercase()) {
+        Some('L') => 'R',
+        Some('R') => 'L',
+        _ => 'C',
+    }
+}
+
+fn plug(c: &omsi_vehicle::vehicle::ControlCable) -> Option<(char, i32)> {
+    let number = c.lines.get(1)?.trim().parse::<i32>().ok()?;
+    Some((c.lines.first()?.trim().chars().next()?.to_ascii_uppercase(), number))
+}
+
+/// The signals the leading vehicle sends down its back plug (what its script writes to the
+/// `write` variable of each cable, the cable's coupling variable above 0.5): the bus the
+/// first car behind it reads, set every frame before the cars run.
+pub(super) fn start_bus(lead: &mut VehicleInstance) {
+    let bus = lead
+        .ty
+        .def
+        .control_cable_back
+        .iter()
+        .filter_map(|c| {
+            let (kind, number) = plug(c)?;
+            let coupled = c.lines.get(4).and_then(|n| lead.var(n)).is_none_or(|v| v > 0.5);
+            let value = lead.var(c.lines.get(3)?)?;
+            coupled.then_some((mate(&kind.to_string()), number, value))
+        })
+        .collect();
+    lead.cable_bus = bus;
 }
 
 /// Per variable of `p`: whether {init}, {frame} or {frame_ai} (or a macro they call)
@@ -148,7 +195,62 @@ impl CarRun {
         run.write_place(place);
         let (prog, state, machine) = (run.prog.clone(), &mut run.state, &mut run.machine);
         quietly(lead, |host| machine.run_init(&prog, state, host));
+        // ({init} puts the defaults the paint's variables are meant to replace)
+        if let Some(scheme) = lead.host.paint_scheme {
+            run.apply_paint(ty, scheme);
+        }
         run
+    }
+
+    /// The paint scheme `scheme` of the leading vehicle, as this car's own variables take it:
+    /// `Colorscheme` and the scheme's `[setvar]`s of the car's own paints (the same number).
+    pub(super) fn apply_paint(&mut self, ty: &VehicleType, scheme: Option<usize>) {
+        let scheme = scheme.filter(|i| *i < ty.paint_schemes.len());
+        let mut put = |name: &str, v: f32| {
+            if let Some(slot) = omsi_script::compile::with_lower(name, |k| self.names.get(k).copied()) {
+                self.state.vars[slot as usize] = v;
+            }
+        };
+        put("Colorscheme", scheme.map(|i| i as f32).unwrap_or(-1.0));
+        if let Some(i) = scheme {
+            for (name, v) in &ty.paint_schemes[i].set_vars {
+                put(name, *v);
+            }
+        }
+    }
+
+    /// Whether this car's scripts store into `name` (what they leave alone is the leading
+    /// vehicle's, or what a cable brings).
+    fn stores(&self, name: &str) -> bool {
+        omsi_script::compile::with_lower(name, |k| self.names.get(k).copied())
+            .is_some_and(|slot| self.local.get(slot as usize) == Some(&true))
+    }
+
+    /// Put what the cars ahead send into this car's `read` variables: the plugs facing the
+    /// train's front (`facing`) take the bus's signals of their kind and number.
+    fn read_cables(&mut self, facing: &[omsi_vehicle::vehicle::ControlCable], bus: &CableBus) {
+        for c in facing {
+            let Some((kind, number)) = plug(c) else { continue };
+            let Some(&(_, _, value)) = bus.iter().find(|(k, n, _)| *k == kind && *n == number) else { continue };
+            if let Some(slot) = c.lines.get(2).and_then(|n| omsi_script::compile::with_lower(n, |k| self.names.get(k).copied())) {
+                self.state.vars[slot as usize] = value;
+            }
+        }
+    }
+
+    /// What this car sends on down its far plug: what its script wrote to a cable's `write`
+    /// variable, or - where the script leaves it alone, as a coupler does - what the cable
+    /// brought in.
+    fn write_cables(&self, far: &[omsi_vehicle::vehicle::ControlCable]) -> CableBus {
+        far.iter()
+            .filter_map(|c| {
+                let (kind, number) = plug(c)?;
+                let (read, write) = (c.lines.get(2)?, c.lines.get(3)?);
+                let coupled = c.lines.get(4).and_then(|n| self.get(n)).is_none_or(|v| v > 0.5);
+                let value = if self.stores(write) { self.get(write)? } else { self.get(read)? };
+                coupled.then_some((mate(&kind.to_string()), number, value))
+            })
+            .collect()
     }
 
     /// When the leading vehicle has gained variables: give this set the names it lacks and
@@ -188,15 +290,21 @@ impl CarRun {
 
     /// One frame of the car: refreshed from the leading vehicle, its place set, its
     /// {frame} run ({frame_ai} for an AI train that has one, as its leading car runs).
-    pub(super) fn frame(&mut self, lead: &mut VehicleInstance, place: [f32; 3]) {
+    ///
+    /// `plugs`: the car's control cable plugs, facing the train's front and away from it;
+    /// `probe`: `GetHeightAbovePoint` at the car's own place.
+    pub(super) fn frame(&mut self, lead: &mut VehicleInstance, place: [f32; 3], plugs: [&[omsi_vehicle::vehicle::ControlCable]; 2], probe: Option<GroundHeightProbe>) {
         self.sync_names(lead);
         let lead_vars = &lead.state.vars;
         for &(slot, from) in &self.shared {
             self.state.vars[slot as usize] = lead_vars[from as usize];
         }
         self.write_place(place);
+        let bus = std::mem::take(&mut lead.cable_bus);
+        self.read_cables(plugs[0], &bus);
         let as_ai = !self.prog.frame_ai.is_empty() && lead.ev(Ev::Ai).unwrap_or(0.0) > 0.5;
         let (prog, state, machine) = (self.prog.clone(), &mut self.state, &mut self.machine);
+        let own_probe = probe.map(|p| std::mem::replace(&mut lead.host.ground_probe, Some(p)));
         quietly(lead, |host| {
             if as_ai {
                 machine.run_frame_ai(&prog, state, host);
@@ -204,6 +312,18 @@ impl CarRun {
                 machine.run_frame(&prog, state, host);
             }
         });
+        if let Some(before) = own_probe {
+            lead.host.ground_probe = before;
+        }
+        lead.cable_bus = self.write_cables(plugs[1]);
+        if !self.has_cables(plugs) {
+            // (a car with no plugs lets the signals by)
+            lead.cable_bus = bus;
+        }
+    }
+
+    fn has_cables(&self, plugs: [&[omsi_vehicle::vehicle::ControlCable]; 2]) -> bool {
+        !(plugs[0].is_empty() && plugs[1].is_empty())
     }
 
     /// The car's value of variable `name`.

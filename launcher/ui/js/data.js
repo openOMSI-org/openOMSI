@@ -1,7 +1,7 @@
 // Loading the content and keeping the duty: what the pages share.
 
 import { call, on, onPhone, inTauri } from './api.js';
-import { S, set, toast, remembered } from './store.js';
+import { S, set, toast, remembered, remember } from './store.js';
 import { setLanguage, t, hhmm } from './i18n.js';
 
 /** The duty as the launcher remembers it (`launcher-duty.json`, shared with the game's own
@@ -25,7 +25,8 @@ export async function boot() {
   Object.assign(choice, clockPatch(choice, b.settings));
   set({ boot: b, settings: b.settings, config: b.config, choice, favourites: b.favourites || [], ready: true, page: b.root ? 'drive' : 'setup' });
   if (b.crash) set({ crash: b.crash });
-  applyTheme();
+  reconcileTheme(b.settings);
+  await applyTheme();
   if (b.root) {
     loadContent();
     readAhead();
@@ -58,11 +59,29 @@ export function fitWindow() {
   if (inTauri) call('fit_zoom', { size: Number(launcherSize()) || 1 }).catch(() => {});
 }
 
+export function resolvedTheme(pick = remembered('theme', 'dark')) {
+  return pick === 'light' || (pick === 'system' && matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+}
+
+// 啟動與重新載入皆以遊戲儲存值為準，避免舊的啟動器偏好覆寫它。
+// System 僅在目前解析值與儲存值一致時保留；不同時採用明確的 Light／Dark。
+function reconcileTheme(settings) {
+  const gameTheme = settings.ui_theme === 'light' ? 'light' : 'dark';
+  if (remembered('theme') !== 'system' || resolvedTheme() !== gameTheme) remember('theme', gameTheme);
+}
+
 export function applyTheme() {
-  const pick = localStorage.getItem('theme') || 'dark';
-  const light = pick === 'light' || (pick === 'system' && matchMedia('(prefers-color-scheme: light)').matches);
-  document.documentElement.dataset.theme = light ? 'light' : 'dark';
+  const resolved = resolvedTheme();
+  document.documentElement.dataset.theme = resolved;
   document.documentElement.dataset.layout = launcherLayout();
+  if (S.ready && S.settings && S.settings.ui_theme !== resolved) {
+    const previous = S.settings.ui_theme;
+    return saveSettings({ ui_theme: resolved }).then((saved) => {
+      if (saved === false) set({ settings: { ...S.settings, ui_theme: previous } });
+      return saved;
+    });
+  }
+  return Promise.resolve();
 }
 
 export async function loadContent() {
@@ -379,8 +398,10 @@ export function reloadSettings() {
     const now = await call('settings_get').catch(() => null);
     if (!now || mine !== settingsSeq) return;
     const before = S.settings?.language;
+    reconcileTheme(now);
     set({ settings: now });
     if (now.language !== before) await applyLanguage();
+    await applyTheme();
   });
   return settingsSaved;
 }

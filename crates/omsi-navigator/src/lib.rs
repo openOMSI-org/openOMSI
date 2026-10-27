@@ -397,7 +397,7 @@ pub struct Navigator {
     pub orient: u8,
     /// The package the worker of the contour marks was started for (its surface version + 1; 0 = none yet).
     marks_started: u64,
-    /// The light look of the maps (the `nav_light` setting).
+    /// The light look of the maps, shared with the game's UI theme.
     pub light: bool,
     /// The map's own layers (houses, ground, paving: `omsi_scene::mapgen`), once read, and a
     /// number that changes when they arrive.

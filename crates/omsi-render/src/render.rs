@@ -682,11 +682,13 @@ impl Renderer {
         }
         // OMSI_GPU_TIMERS: GPU time per pass, one frame at a time
         self.collect_gpu_timers();
+        let timer_view = view_index(with_overlays, projection.is_some(), second_eye);
         let mut pictures = self.pictures.get();
-        pictures[with_overlays as usize] += 1;
+        pictures[timer_view] += 1;
         self.pictures.set(pictures);
         let mut timers = PassTimers {
-            set: self.gpu_timers[with_overlays as usize]
+            view: timer_view,
+            set: self.gpu_timers[timer_view]
                 .as_ref()
                 .filter(|t| !t.waiting && !t.unresolved)
                 .map(|t| t.set.clone()),
@@ -719,7 +721,10 @@ impl Renderer {
             b.instances = b.instances.start + at..b.instances.end + at;
         }
         plan.list.extend_from_slice(&shadow_list);
-        self.count_draws(scene, with_overlays, visible.len(), &plan, &shadow_batches);
+        self.count_draws(scene, with_overlays,
+            &visible, &plan, &shadow_batches,
+            timer_view,
+        );
         clock.stage(self, "items", "mirror.items");
         plan.split_rain(scene, f.glass_on);
         self.upload_draw_list(scene, &plan.list);

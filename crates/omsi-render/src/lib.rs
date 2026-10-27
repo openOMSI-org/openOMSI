@@ -213,11 +213,10 @@ pub struct Renderer {
     /// Settable while the game runs, so the graphics list can switch it off at once.
     pub shadow_blobs: bool,
     /// GPU time per pass (OMSI_GPU_TIMERS, when the device has timestamp queries): the
-    /// mirrors and the window's picture apart, each timed on its own.
-    gpu_timers: [Option<GpuTimers>; 2],
-    /// Pictures drawn since start, the mirrors' and the window's (as `gpu_timers`): a mirror's
-    /// GPU time is measured one picture at a time, and a frame may draw two.
-    pictures: std::cell::Cell<[u64; 2]>,
+    /// physical mirrors, desktop and each headset eye timed independently.
+    gpu_timers: [Option<GpuTimers>; 4],
+    /// Pictures drawn since start: physical mirrors, desktop, left eye, right eye.
+    pictures: std::cell::Cell<[u64; 4]>,
     /// Seconds spent per stage of `render_inner` since start (OMSI_PROFILE).
     pub stats: std::cell::RefCell<std::collections::BTreeMap<&'static str, f64>>,
     /// What the window's pictures drew since start, summed (OMSI_PROFILE): instances that

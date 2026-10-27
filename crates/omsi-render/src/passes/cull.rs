@@ -68,6 +68,16 @@ impl Frustum {
     }
 }
 
+/// How far a mirror draws the objects smaller than a terrain tile (m).
+const MIRROR_REACH: f32 = 600.0;
+
+/// A mirror leaves out what is small past its reach: the Enhanced picture keeps every
+/// road piece and mark, and they were four fifths of a city street's mirror.
+/// (`r`: bounding radius, `z`: distance along the view direction)
+fn mirror_leaves_out(main_view: bool, inside: bool, r: f32, z: f32) -> bool {
+    !inside && !main_view && r <= 100.0 && z - r > MIRROR_REACH
+}
+
 impl Renderer {
     /// The instances the camera sees: (instance, distance along the view direction, the
     /// camera is inside its bounds).
@@ -133,6 +143,9 @@ impl Renderer {
             // left out for the fog let it show through, road-shaped holes in the
             // terrain seen from above, so the ground is always drawn there)
             if !inside && z - r > fog_far && !(enhanced_frame && (inst.surface || r > 100.0)) {
+                return None;
+            }
+            if mirror_leaves_out(main_view, inside, r, z) {
                 return None;
             }
             if !inside && (v.x.abs() > z * tan_x + r / cos_x || v.y.abs() > z * tan_y + r / cos_y) {
@@ -335,5 +348,28 @@ impl Renderer {
             }
             *prev = now;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::mirror_leaves_out;
+
+    #[test]
+    fn mirrors_leave_out_only_small_far_objects() {
+        // a mirror: a road piece past its reach goes, one within it stays
+        assert!(mirror_leaves_out(false, false, 10.0, 700.0));
+        assert!(!mirror_leaves_out(false, false, 10.0, 600.0));
+        assert!(!mirror_leaves_out(false, false, 10.0, 50.0));
+        // the boundary is the sphere's near side, not its centre
+        assert!(!mirror_leaves_out(false, false, 100.0, 699.0));
+        assert!(mirror_leaves_out(false, false, 100.0, 701.0));
+        // terrain-sized instances stay at any distance
+        assert!(!mirror_leaves_out(false, false, 100.5, 5000.0));
+        // the camera inside the bounds keeps it
+        assert!(!mirror_leaves_out(false, true, 10.0, 700.0));
+        // the window and the headset's eyes (main views) keep every distant surface
+        assert!(!mirror_leaves_out(true, false, 10.0, 5000.0));
+        assert!(!mirror_leaves_out(true, false, 1.0, 1e6));
     }
 }

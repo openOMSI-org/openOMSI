@@ -33,7 +33,7 @@ pub struct MzView {
     pub status: Option<String>,
     /// The mouse is over the card (or a request is being typed).
     pub hover: bool,
-    /// The light look (the map's `nav_light`).
+    /// The shared game UI theme's light look.
     pub light: bool,
 }
 

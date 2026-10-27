@@ -1,7 +1,8 @@
 //! The panels' controls and pictures (`omsi.ui` version 2): checkboxes, sliders, text
-//! fields, tabs, charts, tables and images - their sizes and what they are drawn from.
+//! fields, tabs, charts, tables, images and the icon-only tiles - their sizes and what they
+//! are drawn from.
 
-use super::{color, ink_on, Hit, HitKind, Item, Layout, ACCENT, BUTTON, DIVIDER, INK, LINE, TRACK};
+use super::{color, ink_on, Hit, HitKind, Item, Layout, LINE};
 use glam::Vec2;
 use hashbrown::HashMap;
 use omsi_plugin::ui::{Align, ChartStyle, Element, Kind, Rgba};
@@ -21,11 +22,10 @@ const TABS_H: f32 = 30.0;
 const CHART_W: f32 = 120.0;
 /// Largest picture side a plugin's image is drawn from (bigger ones are scaled down).
 const IMAGE_MAX: u32 = 1024;
-const GREY: Color = Color::rgba(142, 142, 142, 1.0);
-
 impl Layout<'_> {
     pub fn widget_natural(&self, e: &Element) -> f32 {
         match &e.kind {
+            Kind::Tile { .. } => super::square::SQUARE,
             Kind::Image { width, .. } => *width,
             Kind::Checkbox { text, .. } => (CHECK + CHECK_GAP + self.width(text, CONTROL_PX, Weight::Regular)).ceil(),
             Kind::Slider { .. } => SLIDER_W,
@@ -39,6 +39,7 @@ impl Layout<'_> {
 
     pub fn widget_height(&self, e: &Element, w: f32) -> f32 {
         match &e.kind {
+            Kind::Tile { .. } => w,
             // (a picture wider than its room keeps its shape)
             Kind::Image { width, height, .. } => height * (w / width).min(1.0),
             Kind::Checkbox { .. } => CHECK.max(CONTROL_PX * LINE),
@@ -60,8 +61,9 @@ impl Layout<'_> {
     }
 
     pub fn widget_emit(&mut self, e: &Element, r: Rect) {
-        let accent = e.color.map(color).unwrap_or(ACCENT);
+        let accent = e.color.map(color).unwrap_or(self.colors.accent);
         match &e.kind {
+            Kind::Tile { icon, focus, off, .. } => self.square_tile(e, r, icon, *focus, *off),
             Kind::Image { path, width, height } => {
                 let k = (r.w / width).min(1.0);
                 let (w, h) = (width * k, height * k);
@@ -72,31 +74,31 @@ impl Layout<'_> {
             Kind::Checkbox { text, checked } => {
                 let hot = self.hit(r, e, HitKind::Click);
                 let b = Rect::new(r.x, r.y + (r.h - CHECK) * 0.5, CHECK, CHECK);
-                self.rounded(b, 4.0, if *checked { accent } else { TRACK }, Some(hot));
+                self.rounded(b, 4.0, if *checked { accent } else { self.colors.track }, Some(hot));
                 if *checked {
-                    self.out.items.push(Item::Icon { name: "check".into(), center: Vec2::new(b.x + CHECK * 0.5, b.y + CHECK * 0.5), size: 16.0, color: ink_on(accent) });
+                    self.out.items.push(Item::Icon { name: "check".into(), center: Vec2::new(b.x + CHECK * 0.5, b.y + CHECK * 0.5), size: 16.0, color: ink_on(accent, self.colors) });
                 }
                 let x = b.right() + CHECK_GAP;
                 let t = self.fit(text, CONTROL_PX, Weight::Regular, (r.right() - x).max(0.0));
                 let y = self.baseline(r.y, r.h, CONTROL_PX, Weight::Regular);
-                self.text(t, CONTROL_PX, Weight::Regular, Vec2::new(x, y), INK);
+                self.text(t, CONTROL_PX, Weight::Regular, Vec2::new(x, y), self.colors.ink);
             }
             Kind::Slider { value, min, max, .. } => {
                 // (the knob stays inside the track's ends)
                 let track = Rect::new(r.x + KNOB * 0.5, r.y + r.h * 0.5 - 2.0, (r.w - KNOB).max(1.0), 4.0);
                 let hot = self.hit(Rect::new(track.x, r.y, track.w, r.h), e, HitKind::Slider);
                 let f = if max > min { ((value - min) / (max - min)).clamp(0.0, 1.0) } else { 0.0 };
-                self.rounded(track, 2.0, TRACK, None);
+                self.rounded(track, 2.0, self.colors.track, None);
                 if f > 0.0 {
                     self.rounded(Rect::new(track.x, track.y, track.w * f, track.h), 2.0, accent, None);
                 }
                 let cx = track.x + track.w * f;
-                self.rounded(Rect::new(cx - KNOB * 0.5, r.y + (r.h - KNOB) * 0.5, KNOB, KNOB), KNOB * 0.5, INK, Some(hot));
+                self.rounded(Rect::new(cx - KNOB * 0.5, r.y + (r.h - KNOB) * 0.5, KNOB, KNOB), KNOB * 0.5, self.colors.ink, Some(hot));
             }
             Kind::Input { text, placeholder, .. } => {
                 let b = Rect::new(r.x, r.y + (r.h - FIELD_H) * 0.5, r.w, FIELD_H);
                 let hot = self.hit(b, e, HitKind::Click);
-                self.rounded(b, 6.0, BUTTON, Some(hot));
+                self.rounded(b, 6.0, self.colors.button, Some(hot));
                 let typing = self.typing.is_some_and(|t| e.id.as_deref() == Some(t));
                 let room = (b.w - 2.0 * FIELD_PAD - 2.0).max(0.0);
                 let y = self.baseline(b.y, b.h, CONTROL_PX, Weight::Regular);
@@ -112,7 +114,7 @@ impl Layout<'_> {
                     t = chars[start..].iter().collect();
                 }
                 let tw = if text.is_empty() { 0.0 } else { self.width(&t, CONTROL_PX, Weight::Regular) };
-                self.text(t, CONTROL_PX, Weight::Regular, Vec2::new(b.x + FIELD_PAD, y), if text.is_empty() { GREY } else { INK });
+                self.text(t, CONTROL_PX, Weight::Regular, Vec2::new(b.x + FIELD_PAD, y), if text.is_empty() { self.colors.muted } else { self.colors.ink });
                 if typing {
                     self.out.items.push(Item::Rect { r: Rect::new(b.x + FIELD_PAD + tw + 1.0, b.y + 7.0, 1.5, b.h - 14.0), color: accent });
                     self.out.items.push(Item::Rect { r: Rect::new(b.x + 4.0, b.bottom() - 2.0, b.w - 8.0, 2.0), color: accent });
@@ -121,7 +123,7 @@ impl Layout<'_> {
             Kind::Tabs { tabs, selected } => {
                 let b = Rect::new(r.x, r.y + (r.h - TABS_H) * 0.5, r.w, TABS_H);
                 self.hit(b, e, HitKind::Tabs);
-                self.rounded(b, 8.0, TRACK, None);
+                self.rounded(b, 8.0, self.colors.track, None);
                 let n = tabs.len().max(1) as f32;
                 let w = b.w / n;
                 for (i, t) in tabs.iter().enumerate() {
@@ -133,7 +135,7 @@ impl Layout<'_> {
                     let t = self.fit(t, CONTROL_PX, Weight::Medium, (cell.w - 12.0).max(0.0));
                     let tw = self.width(&t, CONTROL_PX, Weight::Medium);
                     let y = self.baseline(cell.y, cell.h, CONTROL_PX, Weight::Medium);
-                    self.text(t, CONTROL_PX, Weight::Medium, Vec2::new(cell.x + (cell.w - tw) * 0.5, y), if on { ink_on(accent) } else { INK });
+                    self.text(t, CONTROL_PX, Weight::Medium, Vec2::new(cell.x + (cell.w - tw) * 0.5, y), if on { ink_on(accent, self.colors) } else { self.colors.ink });
                 }
             }
             Kind::Chart { values, min, max, style, fill, .. } => self.chart(r, values, *min, *max, *style, *fill, accent),
@@ -144,7 +146,7 @@ impl Layout<'_> {
 
     #[allow(clippy::too_many_arguments)]
     fn chart(&mut self, r: Rect, values: &[f32], min: Option<f32>, max: Option<f32>, style: ChartStyle, fill: bool, c: Color) {
-        self.out.items.push(Item::Rect { r, color: DIVIDER.alpha(0.6) });
+        self.out.items.push(Item::Rect { r, color: self.colors.divider.alpha(0.6) });
         if values.is_empty() {
             return;
         }
@@ -210,13 +212,13 @@ impl Layout<'_> {
             }
         };
         if !columns.is_empty() {
-            line(self, columns, None, y, Weight::Bold, GREY);
+            line(self, columns, None, y, Weight::Bold, self.colors.muted);
             y += lh + 1.0;
-            self.out.items.push(Item::Rect { r: Rect::new(r.x, y, r.w, 1.0), color: DIVIDER });
+            self.out.items.push(Item::Rect { r: Rect::new(r.x, y, r.w, 1.0), color: self.colors.divider });
             y += 2.0;
         }
         for (i, row) in rows.iter().enumerate() {
-            line(self, row, inks.get(i), y, Weight::Regular, c.unwrap_or(INK));
+            line(self, row, inks.get(i), y, Weight::Regular, c.unwrap_or(self.colors.ink));
             y += lh;
         }
     }

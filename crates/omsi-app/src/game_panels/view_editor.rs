@@ -36,17 +36,17 @@ pub(crate) struct ViewValues {
 }
 
 impl ViewEditor {
-    pub(crate) fn panel(&self, app: &crate::App) -> Panel {
+    pub(crate) fn panel(&self, app: &crate::App, light: bool) -> Panel {
         let mirrors = app.player.as_ref().map(|p| (0..p.vehicle.ty.def.cameras_reflexion.len()).map(|i| p.mirror_offsets.get(i).copied().unwrap_or([0.0; 2])).collect()).unwrap_or_default();
-        self.panel_of(&ViewValues { seat: app.settings.seat, pitch: app.settings.seat_pitch_deg, yaw: app.cam.view_yaw, fov: app.cam.view_fov, mirrors })
+        self.panel_of(&ViewValues { seat: app.settings.seat, pitch: app.settings.seat_pitch_deg, yaw: app.cam.view_yaw, fov: app.cam.view_fov, mirrors }, light)
     }
 
-    pub(crate) fn panel_of(&self, v: &ViewValues) -> Panel {
+    pub(crate) fn panel_of(&self, v: &ViewValues, light: bool) -> Panel {
         let cm = |v: f32| format!("{:+.0} cm", v * 100.0);
         let deg = |v: f32| format!("{v:+.1}°");
         let mut c = vec![
             title("View editor"),
-            note("The driver's view of this vehicle; the cab behind shows each change."),
+            note("The driver's view of this vehicle; the cab behind shows each change.", light),
             slider_row("seat0", "Eye left / right", &cm(v.seat[0]), v.seat[0], SEAT, 0.01),
             slider_row("seat1", "Eye forward / back", &cm(v.seat[1]), v.seat[1], SEAT, 0.01),
             slider_row("seat2", "Eye up / down", &cm(v.seat[2]), v.seat[2], SEAT, 0.01),
@@ -65,10 +65,10 @@ impl ViewEditor {
         }
         c.push(grow_row(vec![button("save", "Save for this vehicle", Some("save")), button("reset", "Reset", Some("restart_alt")), button("close", "Close", Some("close"))]));
         if let Some(said) = &self.said {
-            c.push(note(said));
+            c.push(note(said, light));
         }
         // (at the side, see-through: the view it changes is the picture behind it)
-        card(Anchor::Right, -12.0, 0.0, 440.0, 170, c)
+        card(Anchor::Right, -12.0, 0.0, 440.0, 170, light, c)
     }
 }
 

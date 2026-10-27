@@ -15,6 +15,11 @@ pub trait DriverCar {
     fn var(&self, name: &str) -> Option<f32>;
     /// The transform of mesh `i` in the vehicle's frame (`VehicleInstance::mesh_transforms`).
     fn mesh_transform(&self, i: usize) -> Option<Mat4>;
+    /// The factor animation `anim` of mesh `i` turns by now, when it is not the model's (the
+    /// player's cab wheel scaled by `cab_wheel_rotation`).
+    fn anim_factor(&self, _i: usize, _anim: usize) -> Option<f32> {
+        None
+    }
 }
 
 impl DriverCar for VehicleInstance {
@@ -36,6 +41,10 @@ impl DriverCar for VehicleInstance {
 
     fn mesh_transform(&self, i: usize) -> Option<Mat4> {
         self.mesh_transforms.get(i).copied()
+    }
+
+    fn anim_factor(&self, i: usize, anim: usize) -> Option<f32> {
+        self.animators.get(i)?.anims.get(anim).map(|a| a.0.factor)
     }
 }
 
