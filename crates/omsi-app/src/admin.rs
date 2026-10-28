@@ -219,6 +219,9 @@ fn teleport_beside(app: &mut App, pos: glam::DVec3, heading: f64) {
 
 /// Our bus put at `at` facing `heading` (stopped), with the walker back at its wheel.
 pub(crate) fn teleport(app: &mut App, at: glam::DVec3, heading: f64) {
+    if let (Some(renderer), Some(scene)) = (app.renderer.as_mut(), app.scene.as_mut()) {
+        renderer.reset_temporal_history(scene);
+    }
     if app.session.on_foot.is_some() {
         app.back_to_bus();
     }

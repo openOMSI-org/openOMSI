@@ -516,8 +516,14 @@ impl Navigator {
                 self.city.ground = Some(CityGround { key, anchor: b.anchor, centre, radius, mpp, verts, houses });
                 return Some(b.made_on(device));
             }
-            let device = device.clone();
-            self.city_job = Some(super::build::Job::start(CityJob { key, centre, radius, mpp }, move || job().made_on(&device)));
+            let worker_device = super::build::worker_device(device);
+            self.city_job = Some(super::build::Job::start(CityJob { key, centre, radius, mpp }, move || {
+                let built = job();
+                match worker_device.as_ref() {
+                    Some(device) => built.made_on(device),
+                    None => built,
+                }
+            }));
         }
         arrived
     }

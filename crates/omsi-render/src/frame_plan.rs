@@ -449,6 +449,7 @@ pub(crate) fn record_bundles(
 
 /// The sun's and the lamps' shadow maps, their pipelines, and the cascades as last drawn.
 pub(crate) struct ShadowRes {
+    pub(crate) precip_pipelines: [wgpu::RenderPipeline; 2],
     pub(crate) shadow_view: wgpu::TextureView,
     pub(crate) shadow_view_far: wgpu::TextureView,
     pub(crate) shadow_sampler: wgpu::Sampler,

@@ -1,0 +1,39 @@
+#!/bin/sh
+set -eu
+root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+[ "$(uname -s)" = Darwin ] || { echo "ANGLE/CGL must be built on macOS" >&2; exit 1; }
+xcodebuild -version >/dev/null 2>&1 || {
+    echo "ANGLE/CGL needs the full Xcode app selected as the active developer directory (Command Line Tools alone are insufficient)." >&2
+    exit 1
+}
+revision=36b74e4dd4
+checkout="${OPENOMSI_ANGLE_BUILD_ROOT:-$root/target/angle-macos}"
+mkdir -p "$checkout"
+if ! command -v gclient >/dev/null 2>&1; then
+    if [ ! -d "$checkout/depot_tools" ]; then
+        git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git "$checkout/depot_tools" >&2
+    fi
+    PATH="$checkout/depot_tools:$PATH"
+    export PATH
+fi
+if [ ! -f "$checkout/.gclient" ]; then
+    (cd "$checkout" && gclient config --name src https://chromium.googlesource.com/angle/angle) >&2
+fi
+(cd "$checkout" && gclient sync -D --revision "src@$revision") >&2
+src="$checkout/src"
+case "$(git -C "$src" rev-parse HEAD)" in
+    "$revision"*) ;;
+    *) echo "ANGLE checkout is not the pinned revision $revision" >&2; exit 1 ;;
+esac
+out="$src/out/openomsi-cgl-x64"
+(
+    cd "$src"
+    gn gen out/openomsi-cgl-x64 --args='target_os="mac" target_cpu="x64" is_debug=false is_component_build=false angle_build_tests=false angle_build_all=false angle_enable_gl=true angle_enable_cgl=true angle_enable_metal=false angle_enable_vulkan=false' >&2
+    autoninja -C out/openomsi-cgl-x64 libEGL libGLESv2 >&2
+)
+
+for lib in libEGL.dylib libGLESv2.dylib; do
+    [ -s "$out/$lib" ] || { echo "ANGLE did not build $lib" >&2; exit 1; }
+    lipo "$out/$lib" -verify_arch x86_64 >&2
+done
+printf '%s\n' "$out"

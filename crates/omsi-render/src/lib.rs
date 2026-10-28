@@ -17,6 +17,9 @@
 
 pub mod angle;
 pub mod atmosphere;
+pub mod nvidia;
+#[cfg(feature = "temporal-diagnostics")]
+mod temporal;
 pub mod clouds;
 mod cookies;
 pub use cookies::{Cookie, COOKIE_LAYERS};
@@ -121,6 +124,10 @@ struct PassPipelines {
 }
 
 pub struct Renderer {
+    #[cfg(feature = "neural-external")]
+    neural_external: nvidia::external::ExternalAdapter,
+    #[cfg(feature = "temporal-diagnostics")]
+    temporal: Option<temporal::MotionPass>,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub adapter_name: String,
@@ -269,6 +276,8 @@ pub const SHADOW_SIZE: u32 = 2048;
 /// What the renderer is built with: the user's graphics settings.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RenderOptions {
+    /// Engine temporal diagnostics. Requires `temporal-diagnostics`; never enables DLSS.
+    pub temporal_debug: nvidia::TemporalDebug,
     /// Samples per pixel: 1 (off), 2, 4 or 8.
     pub msaa: u32,
     /// Anisotropic filtering: 1 (off) .. 16.
@@ -359,6 +368,7 @@ pub struct RenderOptions {
 impl Default for RenderOptions {
     fn default() -> Self {
         Self {
+            temporal_debug: nvidia::TemporalDebug::Off,
             msaa: MSAA,
             anisotropy: 8,
             shadow_size: SHADOW_SIZE,

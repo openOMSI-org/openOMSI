@@ -209,6 +209,21 @@ fn triple_settings_round_trip_and_reject_nonfinite_geometry() {
 use super::*;
 
 #[test]
+fn temporal_diagnostics_round_trip_without_enabling_dlss() {
+    use omsi_render::nvidia::TemporalDebug;
+    assert_eq!(Settings::from_text("").render_options().temporal_debug, TemporalDebug::Off);
+    for mode in ["off", "motion", "depth", "validity"] {
+        let s = Settings::from_text(&format!("temporal_debug={mode}\n"));
+        assert_eq!(Settings::from_text(&s.to_text()).temporal_debug, mode);
+        assert_eq!(s.render_options().temporal_debug.as_setting(), mode);
+        let ui = omsi_launcher_lib::settings_from_text(Some(&s.to_text()));
+        assert_eq!(ui["temporal_debug"], mode);
+        assert_eq!(Settings::from_text(&omsi_launcher_lib::settings_to_text(&ui, None)).temporal_debug, mode);
+    }
+    assert_eq!(Settings::from_text("temporal_debug=dlss5\n").temporal_debug, "off");
+}
+
+#[test]
 fn old_files_board_automatically() {
     // the launcher's old default, written without a version
     assert_eq!(Settings::from_text("msaa=1\nboarding=pay\n").boarding, "auto");

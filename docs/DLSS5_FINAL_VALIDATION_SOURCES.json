@@ -1,0 +1,321 @@
+{
+  "date": "2026-10-28",
+  "hub": {
+    "repository": "SilyNoMeta/rtx-encore-hub",
+    "commit": "b384f0342f71281d7c86cb0b0b7e7bc3e618a500",
+    "files": [
+      {
+        "path": "README.fr.md",
+        "sha256": "2fe12b40a80a71493b505039d849954433f0db4a3b4faec3d26e519762f8307f"
+      },
+      {
+        "path": "README.md",
+        "sha256": "ddfd55027ca78a32e0434ee2509821acf20168f96666479bb1595f629d98851d"
+      },
+      {
+        "path": "README.zh-CN.md",
+        "sha256": "5d965612176938e0e4a934860669b92279d2d4dab6acc4b424ecb773e3ef7658"
+      },
+      {
+        "path": "docs/NOTICES.fr.md",
+        "sha256": "7599b7c68eabb9b18ead74a870491a5533b18b3170980fe966a9830d3a71a5b4"
+      },
+      {
+        "path": "docs/NOTICES.md",
+        "sha256": "01aa450bc5d6bc3d0e01baa9d31a98065054d7d714dfa232241cfab5c2f00945"
+      },
+      {
+        "path": "docs/NOTICES.zh-CN.md",
+        "sha256": "37bcf98ac3f7802a12c07ca26bd08aa82db6b03a2a1eb22a03f75337c79374ab"
+      },
+      {
+        "path": "docs/USER-GUIDE.fr.md",
+        "sha256": "9d65e79e01160043272075139b0226ae167e2913652ddae7e0b7c771d23556b4"
+      },
+      {
+        "path": "docs/USER-GUIDE.md",
+        "sha256": "8bad91f34679c5a9c2a33fe115e38b494f64eede94a2958f7587664d492da6eb"
+      },
+      {
+        "path": "docs/USER-GUIDE.zh-CN.md",
+        "sha256": "36d35667a05d3b8eeede6c68308a43d6f1f336d1f33987dd4812895b83f72c6b"
+      },
+      {
+        "path": "docs/notes/1.2.0-beta.1.fr.md",
+        "sha256": "b2099a197bcc0ff0e3cb76dc4a3498667c4b8a4e730fafafb87946657b0319eb"
+      },
+      {
+        "path": "docs/notes/1.2.0-beta.1.md",
+        "sha256": "a0f060f7ac63b03684ffcf5b745ee13425ec446a6c0c4e75d911af34d3584abd"
+      },
+      {
+        "path": "docs/notes/1.2.0-beta.1.zh-CN.md",
+        "sha256": "c054c7b4c48ca42f6079312f27f229dd9da73d5af852938479484db8784432b6"
+      },
+      {
+        "path": "docs/notes/1.2.0.fr.md",
+        "sha256": "e88f844181e0cbdad1cf64a064a539ff04aa32d620ec7bbb8ff38d46d7c6edf4"
+      },
+      {
+        "path": "docs/notes/1.2.0.md",
+        "sha256": "d3ab2c813530137663c6c9fcb1cd54100d85fd9256b7f91f4e82cebc4e3eaf65"
+      },
+      {
+        "path": "docs/notes/1.2.0.zh-CN.md",
+        "sha256": "824f12baaa86604e683338f2a4e69d9934417a460996baf8b50807adcc4addea"
+      },
+      {
+        "path": "docs/notes/1.2.1.fr.md",
+        "sha256": "45ad36f32f1722b97c11eb33fedd834a98056f4ab77de2115e9701f67bf0b1c4"
+      },
+      {
+        "path": "docs/notes/1.2.1.md",
+        "sha256": "fc4a995cc8431fcbaf3d21812a0ba9daa16cdd4e533240dcdcc5e9a33fcfbe91"
+      },
+      {
+        "path": "docs/notes/1.2.1.zh-CN.md",
+        "sha256": "097c8ad14044b59a9d6953b706e091b118af78d6e608285ae0ad719dd7006790"
+      },
+      {
+        "path": "docs/notes/1.2.2.fr.md",
+        "sha256": "0c65d3e130100733b397ef2b1d7825a51abb9620b672ba9b82534f64c8c26d7d"
+      },
+      {
+        "path": "docs/notes/1.2.2.md",
+        "sha256": "409678dc8fbea93e76b28fe5df0201b8567ea3494a1c34b75ee67ecc395fc75d"
+      },
+      {
+        "path": "docs/notes/1.2.2.zh-CN.md",
+        "sha256": "cb2a66cffbb58f24216dca922bf8c39f6b8feffb23569a7c55dde3eda4935d7b"
+      },
+      {
+        "path": "docs/notes/1.2.3.fr.md",
+        "sha256": "dccf5d891f4e4b6ef65ea180b95622df30b3c3c41941b328739cbda3436c8196"
+      },
+      {
+        "path": "docs/notes/1.2.3.md",
+        "sha256": "03814a9cb7e999d68829577ff7f4b8fbe7ee948e1b25d74d2205110af269d13a"
+      },
+      {
+        "path": "docs/notes/1.2.3.zh-CN.md",
+        "sha256": "57696f1d4bcf74ceb076b0c9ffabf492b8b2409097cd8f90f20776471352ad24"
+      },
+      {
+        "path": "docs/notes/1.2.4.fr.md",
+        "sha256": "15890e5dbb1b1acebf8d158227c790f063fbcaf294dfc9b235e3e338737a7ec8"
+      },
+      {
+        "path": "docs/notes/1.2.4.md",
+        "sha256": "a333cff1d27935224429a6a3561bc3ac80a648bb7f744c027aedd18953c4e145"
+      },
+      {
+        "path": "docs/notes/1.2.4.zh-CN.md",
+        "sha256": "a42c93e71a78ae8fc5c5977eb9ce6caf936507a421ecca16950bf8d6d3dc42fb"
+      },
+      {
+        "path": "docs/notes/1.3.0.fr.md",
+        "sha256": "8d879ba0a566885ec6487d9f6ea7ed68320b553c867c1139e6b84b6aecf878bf"
+      },
+      {
+        "path": "docs/notes/1.3.0.md",
+        "sha256": "cd02a62913625fc54a6454600c8c97a13c7d75787f8f17cd28a1437146cd0856"
+      },
+      {
+        "path": "docs/notes/1.3.0.zh-CN.md",
+        "sha256": "fca15b14a9715c3faa664131e8347eac9ee837f140f2b3b63b444dc83633646e"
+      },
+      {
+        "path": "docs/notes/1.3.1.fr.md",
+        "sha256": "7a061e55115f9af0edcce84da101504a2f8254fe58679ca30cb5b2267bbe1373"
+      },
+      {
+        "path": "docs/notes/1.3.1.md",
+        "sha256": "dfada996282cfa82fe8e040b1c0c870c691f3335a6790435dc2c8e584e7cb50a"
+      },
+      {
+        "path": "docs/notes/1.3.1.zh-CN.md",
+        "sha256": "28786ebd3fe20d308a0ac2b6079219532200b867fb1221a39f7ea3834a838864"
+      },
+      {
+        "path": "docs/notes/1.4.0.fr.md",
+        "sha256": "6ea2454e671489bbe83d5bc0fd007af1a6386c70ec2f74e9227dc666ba609526"
+      },
+      {
+        "path": "docs/notes/1.4.0.md",
+        "sha256": "140d01edb353ab9c80e18f2306c199108fbecf277f88838588deecc32a6d2c5f"
+      },
+      {
+        "path": "docs/notes/1.4.0.zh-CN.md",
+        "sha256": "2458d940332fe23bdfef4f1e0bade8949811f20c87f51c2413dcdeaec9760b99"
+      },
+      {
+        "path": "docs/notes/1.4.1.fr.md",
+        "sha256": "a65a39e344dde5aa439a55c421ee7c2c1e757caa54152cd4a7149ec31b4d675c"
+      },
+      {
+        "path": "docs/notes/1.4.1.md",
+        "sha256": "38e617d8e8272a0226897644bd84616d4f7ccd8b66964083d34049fdaa517e9c"
+      },
+      {
+        "path": "docs/notes/1.4.1.zh-CN.md",
+        "sha256": "f59f964e769697182211ca5731e88fa18337d026043a15f9d554784deb92ab18"
+      },
+      {
+        "path": "docs/notes/1.4.2.fr.md",
+        "sha256": "1621d02bd53537fa3719892b7fd45670e6131264fca184c7b91d7bbd2d2a5fd6"
+      },
+      {
+        "path": "docs/notes/1.4.2.md",
+        "sha256": "6f7cb3a11a99ea609b735c0b9af3614a349efa5661678c1a9aa6a51996c4adc1"
+      },
+      {
+        "path": "docs/notes/1.4.2.zh-CN.md",
+        "sha256": "26b115de4e8ccfbc52c75a3fcf9312d49522e3e827fb3f689d155906d2a759c5"
+      },
+      {
+        "path": "docs/notes/1.4.3.fr.md",
+        "sha256": "608064625724076c37880405a9a14d5cd2e35145bc11063a71fc22d5cf07574b"
+      },
+      {
+        "path": "docs/notes/1.4.3.md",
+        "sha256": "379cc504aab7ff8eb7d6161f1d568ad9a4fc38a967da4440f996f6be058b7b97"
+      },
+      {
+        "path": "docs/notes/1.4.3.zh-CN.md",
+        "sha256": "d20fcb1e4fa309d3d5f20cc44bd3870044bd1c4a26b22bbef9119fa0f6c8e758"
+      },
+      {
+        "path": "docs/notes/1.4.4.fr.md",
+        "sha256": "52b982514e872cda3096d74cd13e44e1c4a7d480fbf2d59861b8b09d3e38dd37"
+      },
+      {
+        "path": "docs/notes/1.4.4.md",
+        "sha256": "cb73d1daf318404034e72ce25ed9ec14f38216add72cecf44c9a2e5e3242206c"
+      },
+      {
+        "path": "docs/notes/1.4.4.zh-CN.md",
+        "sha256": "d8533607af3961741afd5b1da74402ae67e267b3872e3dcbdfa083686db7030b"
+      },
+      {
+        "path": "scripts/audit_public.py",
+        "sha256": "eadb738380d2b3837b93b956f24791d54f540b1029fb23826c4aee98317d86ee"
+      }
+    ]
+  },
+  "hub_source_public": false,
+  "hub_runtime_standalone_url_verified": false,
+  "runtime_downloaded": false,
+  "runtime_usage_rights_verified": false,
+  "sdk": {
+    "release": "https://github.com/NVIDIA-RTX/Streamline/releases/tag/v2.14.16",
+    "asset": "streamline-sdk-v2.14.16.zip",
+    "url": "https://github.com/NVIDIA-RTX/Streamline/releases/download/v2.14.16/streamline-sdk-v2.14.16.zip",
+    "github_digest": "sha256:32041e51db0cab709a271b72a352281b690c2abbd669a827809401a5dd23956b"
+  },
+  "native_windows_accessible": false,
+  "native_msvc_test_executed": false,
+  "github_actions_dispatched": false,
+  "nvidia_nr_executed": false,
+  "rhi_recent_releases_metadata_only": [
+    {
+      "tag": "streamline-2.14.16.0-v2",
+      "url": "https://github.com/RankFTW/rhi-repo/releases/tag/streamline-2.14.16.0-v2",
+      "assets": [
+        {
+          "name": "streamline_2.14.16.0-v2.zip",
+          "archive_digest": "sha256:72bd6b55920eef6ac624d1b253e3b1a06927e84a6e34f1c85ebec0aafd3ffa07"
+        }
+      ]
+    },
+    {
+      "tag": "renodx-dlss5-10.8.0",
+      "url": "https://github.com/RankFTW/rhi-repo/releases/tag/renodx-dlss5-10.8.0",
+      "assets": [
+        {
+          "name": "renodx-dlss5_10.8.0.zip",
+          "archive_digest": "sha256:faba7814fa90b6b21786c98a45732dbe80f01fa36745c46324472e14ac0f440d"
+        }
+      ]
+    },
+    {
+      "tag": "renodx-dlss-SF-26.1016.1304",
+      "url": "https://github.com/RankFTW/rhi-repo/releases/tag/renodx-dlss-SF-26.1016.1304",
+      "assets": [
+        {
+          "name": "renodx-dlss_SF_26.1016.1304.zip",
+          "archive_digest": "sha256:bc4ec58d31565f6919c4e0c1aad8d8ea6443199e12b54f9e019b2ffd8afaaabf"
+        }
+      ]
+    },
+    {
+      "tag": "dlssnr-310.9.16",
+      "url": "https://github.com/RankFTW/rhi-repo/releases/tag/dlssnr-310.9.16",
+      "assets": [
+        {
+          "name": "nvngx_dlssnr_310.9.16.zip",
+          "archive_digest": "sha256:dbeb1f2790b5c621887db99b1a56ac8bd5cb35207e8c074cbb806710f7460cab"
+        }
+      ]
+    },
+    {
+      "tag": "streamline-2.14.16.0",
+      "url": "https://github.com/RankFTW/rhi-repo/releases/tag/streamline-2.14.16.0",
+      "assets": [
+        {
+          "name": "streamline_2.14.16.0.zip",
+          "archive_digest": "sha256:89c820475866d4dcb744c569f73f5c2d5fb81d90ec23ec397e711c2a24c4d227"
+        }
+      ]
+    },
+    {
+      "tag": "dlssg-310.9.16",
+      "url": "https://github.com/RankFTW/rhi-repo/releases/tag/dlssg-310.9.16",
+      "assets": [
+        {
+          "name": "nvngx_dlssg_310.9.16.zip",
+          "archive_digest": "sha256:20f967c689e73803769df30a63b9d70fa6339257c1612d687b7414aabf847766"
+        }
+      ]
+    },
+    {
+      "tag": "dlssd-310.9.16",
+      "url": "https://github.com/RankFTW/rhi-repo/releases/tag/dlssd-310.9.16",
+      "assets": [
+        {
+          "name": "nvngx_dlssd_310.9.16.zip",
+          "archive_digest": "sha256:33470176d595838fb8751023c56e1e2b56e0da8d19c5c140b1bb325a53984ff2"
+        }
+      ]
+    },
+    {
+      "tag": "dlss-310.9.16",
+      "url": "https://github.com/RankFTW/rhi-repo/releases/tag/dlss-310.9.16",
+      "assets": [
+        {
+          "name": "nvngx_dlss_310.9.16.zip",
+          "archive_digest": "sha256:1823ec911c77482e6731447dfb0db3def8aa710e092f59f58c4c4c55285d492d"
+        }
+      ]
+    },
+    {
+      "tag": "DLSS-Enabler-4.10.0.8",
+      "url": "https://github.com/RankFTW/rhi-repo/releases/tag/DLSS-Enabler-4.10.0.8",
+      "assets": [
+        {
+          "name": "DLSS-Enabler-4.10.0.8.zip",
+          "archive_digest": "sha256:1e9e3248baaf340a49a0a4fbc4ba9d3ccc505aea4237ea4f4bff44fb11049fd6"
+        }
+      ]
+    },
+    {
+      "tag": "renodx-dlss-SF-26.1003.2350",
+      "url": "https://github.com/RankFTW/rhi-repo/releases/tag/renodx-dlss-SF-26.1003.2350",
+      "assets": [
+        {
+          "name": "renodx-dlss_SF_26.1003.2350.zip",
+          "archive_digest": "sha256:34ef92d6742bf6d05df42ff81c04b70f5138b0a0a970a93f1a04295ac83f7f0f"
+        }
+      ]
+    }
+  ]
+}

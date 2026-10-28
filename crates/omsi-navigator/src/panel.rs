@@ -595,4 +595,3 @@ pub(super) fn car_dot(p: &mut Painter, at: Vec3, light: bool) {
     p.world_disc(at, 1.9, 4.2, edge);
     p.world_disc(at, 1.35, 3.0, fill);
 }
-

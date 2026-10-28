@@ -538,8 +538,8 @@ impl Renderer {
         let defaults = defaults::build(&device, &queue, options.anisotropy);
         let (coronas, corona_texture) = coronas::Coronas::new(&device, &queue, &scene);
         let precip = crate::passes::PrecipMap::new(&device);
-        let snow = coronas::Precip::snow(&device, &scene.camera_layout, &precip.view);
-        let rain = coronas::Precip::rain(&device, &scene.camera_layout, &precip.view);
+        let snow = coronas::Precip::snow(&device, &scene.camera_layout, &precip.color_view);
+        let rain = coronas::Precip::rain(&device, &scene.camera_layout, &precip.color_view);
         drop(corona_texture);
         let sky = sky::SkyBase::new(&device, &queue, &scene.camera_layout, !leave_out_enhanced);
         let sky_pipelines = sky.pipeline_base();
@@ -572,6 +572,10 @@ impl Renderer {
         let rt = options.ray_tracing.then(|| rt::RayTracer::new(&device));
         let cookie_atlas = cookies::CookieAtlas::new();
         Renderer {
+            #[cfg(feature = "temporal-diagnostics")]
+            temporal: None,
+            #[cfg(feature = "neural-external")]
+            neural_external: Default::default(),
             targets: Targets {
                 scale_targets: HashMap::new(),
                 triple_targets: None,
@@ -674,6 +678,7 @@ impl Renderer {
                 shadow_sampler: shadows.sampler,
                 shadow_layout: scene.shadow_layout,
                 shadow_pipelines: shadows.pipelines,
+                precip_pipelines: shadows.precip_pipelines,
             },
             history: ViewHistory {
                 triple_culling: Default::default(),

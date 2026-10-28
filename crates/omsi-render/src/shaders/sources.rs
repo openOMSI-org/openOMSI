@@ -204,8 +204,15 @@ pub(crate) fn lean_rain(src: String) -> String {
 pub(crate) fn roof_as_float(src: String) -> String {
     const DECL: &str = "var roof_map: texture_depth_2d;";
     const LOAD: &str = "return textureLoad(roof_map, t, 0); }";
+    // Shader validation helpers may receive the already converted module.
+    if !src.contains(DECL) {
+        debug_assert!(src.contains("var roof_map: texture_2d<f32>;"));
+        return src;
+    }
     debug_assert_eq!((src.matches(DECL).count(), src.matches(LOAD).count()), (1, 1));
-    src.replace(DECL, "var roof_map: texture_2d<f32>;").replace(LOAD, "return textureLoad(roof_map, t, 0).x; }")
+    // The roof pass stores a 24-bit depth in RGB on every backend. Decode the bytes
+    // exactly as pack_precip_depth wrote them, including OpenGL's float texture path.
+    src.replace(DECL, "var roof_map: texture_2d<f32>;").replace(LOAD, "let bytes = round(textureLoad(roof_map, t, 0).rgb * 255.0); return dot(bytes, vec3<f32>(1.0, 256.0, 65536.0)) / 16777215.0; }")
 }
 
 pub(crate) fn precip_shader_source(own: &str) -> String {
@@ -218,7 +225,7 @@ pub(crate) fn precip_shader_source(own: &str) -> String {
         include_str!("../lamp_air.wgsl"),
     ]
     .join("\n");
-    let src = if gl_backend() { roof_as_float(src) } else { src };
+    let src = roof_as_float(src);
     if array_path().no_storage() {
         let src = src
             .replace("@group(0) @binding(3) var<storage, read> lights: array<PointLight>;", "fn lights_at(i: u32) -> PointLight { return PointLight(vec4<f32>(0.0), vec4<f32>(0.0), vec4<f32>(0.0), vec4<f32>(0.0)); }")

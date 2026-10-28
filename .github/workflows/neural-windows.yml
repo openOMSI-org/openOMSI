@@ -1,0 +1,81 @@
+# CPU/build validation only. No NR runtime, GPU inference or public SDK-linked executable artifact.
+name: Neural host MSVC validation
+on:
+  workflow_dispatch:
+    inputs:
+      accept_nvidia_sdk_license:
+        description: I have reviewed and accept the official NVIDIA SDK license for this build
+        type: boolean
+        required: true
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: neural-msvc-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  msvc:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      CARGO_TERM_COLOR: never
+      SDK_ARCHIVE_SHA256: 32041e51db0cab709a271b72a352281b690c2abbd669a827809401a5dd23956b
+    steps:
+      - name: Require explicit SDK license acceptance
+        if: ${{ !inputs.accept_nvidia_sdk_license }}
+        run: throw 'No SDK downloaded or built. Review its license and explicitly accept it when dispatching this workflow.'
+      - uses: actions/checkout@v7.0.1
+      - name: Rust MSVC
+        run: |
+          rustup toolchain install stable --profile minimal --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { throw 'Rust MSVC toolchain installation failed' }
+          rustup override set stable
+          if ($LASTEXITCODE -ne 0) { throw 'Rust toolchain selection failed' }
+      - name: Official pinned NVIDIA SDK
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force target/neural-ci-evidence | Out-Null
+          $url = 'https://github.com/NVIDIA-RTX/Streamline/releases/download/v2.14.16/streamline-sdk-v2.14.16.zip'
+          $archive = Join-Path $env:RUNNER_TEMP 'streamline-sdk-v2.14.16.zip'
+          Invoke-WebRequest -Uri $url -OutFile $archive
+          $digest = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant()
+          if ($digest -ne $env:SDK_ARCHIVE_SHA256) { throw 'Official SDK archive hash changed; review provenance before updating the pin' }
+          $destination = Join-Path $env:RUNNER_TEMP 'official-streamline'
+          Expand-Archive -LiteralPath $archive -DestinationPath $destination
+          $headers = @(Get-ChildItem $destination -Recurse -Filter sl.h | Where-Object { $_.Directory.Name -eq 'include' })
+          if ($headers.Count -ne 1) { throw 'Ambiguous SDK layout' }
+          $sdk = $headers[0].Directory.Parent.FullName
+          if (-not (Test-Path (Join-Path $sdk 'external/ngx-sdk/include/nvsdk_ngx.h'))) { throw 'NGX SDK absent in official archive' }
+          "STREAMLINE_SDK=$sdk" >> $env:GITHUB_ENV
+          @{ url=$url; sha256=$digest; version='2.14.16'; nr_runtime_downloaded=$false } | ConvertTo-Json | Set-Content target/neural-ci-evidence/sdk-provenance.json
+      - name: Build native MSVC x64 and link real NGX SDK
+        run: |
+          ./scripts/neural/build-windows.ps1 -StreamlineSdk $env:STREAMLINE_SDK -AcceptSdkLicense -BuildDirectory target/neural-ci-msvc
+      - name: CLI tests without GPU or NR runtime
+        run: |
+          python scripts/neural/test-host.py --host target/neural-ci-msvc/Release/openomsi-neural-host.exe --capture target/neural-ci-input-fixture --cpu-fixture --output target/neural-ci-evidence/cli
+          if ($LASTEXITCODE -ne 0) { throw 'CPU/CLI validation failed' }
+      - name: Check Rust Windows default build
+        run: |
+          cargo check --workspace --target x86_64-pc-windows-msvc --locked *> target/neural-ci-evidence/rust-default.log
+          if ($LASTEXITCODE -ne 0) { Get-Content target/neural-ci-evidence/rust-default.log -Tail 120; throw 'Default Rust check failed' }
+      - name: Check Rust Windows neural feature
+        run: |
+          cargo check --workspace --target x86_64-pc-windows-msvc --features omsi-app/neural-external --locked *> target/neural-ci-evidence/rust-neural.log
+          if ($LASTEXITCODE -ne 0) { Get-Content target/neural-ci-evidence/rust-neural.log -Tail 120; throw 'Neural Rust check failed' }
+      - name: Publish logs only
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: neural-msvc-build-evidence
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            target/neural-logs/**/*.log
+            target/neural-logs/**/host-build-info.json
+            target/neural-ci-evidence/**/*.log
+            target/neural-ci-evidence/**/*.json
+            target/neural-ci-msvc/Testing/Temporary/LastTest.log

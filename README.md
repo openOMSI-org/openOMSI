@@ -149,6 +149,10 @@ The documentation is on the website, **https://openomsi.org/**, and in [`docs/`]
 | [Routes](docs/ROUTES.md) | timetables, chrono, HOF files, IBIS |
 | [Building](docs/BUILDING.md) | building from source on every platform |
 | [Architecture](docs/ARCHITECTURE.md) | crates, threading, renderer |
+| [DLSS 5 integration status](docs/DLSS5_INTEGRATION.md) | temporal diagnostics, verified SDK availability and remaining native integration work |
+| [DLSS 5 community backends](docs/DLSS5_COMMUNITY_BACKENDS.md) | audited sources, optional external transport, compiled Windows evaluator and honest runtime limits |
+| [NR capture, replay and Windows validation](docs/DLSS5_RUNTIME_VALIDATION.md) | experimental independent NGX adapter, real renderer input exports, diagnostics and reproducible runtime tests |
+| [DLSS 5 next actions](docs/DLSS5_NEXT_ACTIONS.md) | standalone Windows kit, MSVC CI, runtime integrity checks and exact operator commands |
 | [Debug switches](docs/DEBUG_FLAGS.md) | environment variables for testing and bug reports |
 | [Versioning & releases](docs/VERSIONING.md) | version numbers, beta and stable releases |
 | [Changelog](CHANGELOG.md) | what changed in each version |

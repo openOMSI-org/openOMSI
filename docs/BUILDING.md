@@ -13,7 +13,10 @@ there.
 
 * The latest [Rust stable](https://rustup.rs) (`rustup update stable`): the builds use it,
   and the dependencies raise the oldest Rust they accept as they are updated.
-* **macOS**: Xcode Command Line Tools (`xcode-select --install`). Metal is used for drawing.
+* **macOS**: Xcode Command Line Tools (`xcode-select --install`). The Intel desktop build
+  additionally needs the full Xcode app selected with `xcode-select`, because it builds
+  and bundles ANGLE over CGL/OpenGL for Macs without Metal. This downloads Chromium
+  depot_tools and ANGLE's pinned source and dependencies. Metal is tried first.
 * **Windows**: Rust with the MSVC toolchain and Visual Studio Build Tools with *Desktop
   development with C++* and the Windows SDK (for ARM64 also its ARM64 build tools and LLVM's
   clang). CMake is needed to build the OpenXR dependency; it must be on `PATH`. Vulkan or

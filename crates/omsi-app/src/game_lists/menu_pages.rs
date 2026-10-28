@@ -76,6 +76,13 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         .collect();
     let at = graphics.iter().position(|r| r.1 == "sel render_scale").map_or(graphics.len(), |k| k + 1);
     graphics.splice(at..at, upscaler_rows(app, &file));
+    if let Some(r) = app.renderer.as_ref() {
+        graphics.push((format!("NVIDIA DLSS 5 Neural Rendering\n{}", r.neural_rendering_status()), String::new()));
+    }
+    #[cfg(feature = "temporal-diagnostics")]
+    if let Some(row) = select_row(&file, "temporal_debug", "Temporal diagnostics", "Engine motion, depth and history visualisation; does not enable DLSS 5") {
+        graphics.push(row);
+    }
     let mut display = vec![
         switch_row(app, "fullscreen", "Fullscreen", "Switches the window between windowed and fullscreen"),
         pick("resolution", "Window size", later),

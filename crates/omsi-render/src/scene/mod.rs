@@ -190,6 +190,8 @@ pub struct Rainfall {
 }
 
 pub struct Scene {
+    #[cfg(feature = "temporal-diagnostics")]
+    pub(crate) temporal: crate::temporal::History,
     pub meshes: Vec<GpuMesh>,
     pub textures: Vec<GpuTexture>,
     /// Texture slot read by procedural rain films.

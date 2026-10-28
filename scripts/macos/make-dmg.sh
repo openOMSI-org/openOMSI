@@ -47,17 +47,37 @@ APPLESCRIPT
 cp assets/icons/app/openomsi.icns "$tmp/mnt/.VolumeIcon.icns"
 xattr -wx com.apple.FinderInfo "0000000000000000040000000000000000000000000000000000000000000000" "$tmp/mnt"
 sync
-# Finder may keep the image busy briefly, even after its mount point disappears.
-if hdiutil detach "$device" >/dev/null || { sleep 5; hdiutil detach -force "$device" >/dev/null; }; then
-  device=
-else
-  hdiutil info > "$tmp/attached-now"
-  if awk -v device="$device" '$1 == device { found=1 } END { exit !found }' "$tmp/attached-now"; then
-    echo "Disk image is still attached after the detach retry" >&2
-    exit 1
+image_still_attached() {
+  hdiutil info > "$tmp/attached-now" || { echo "Could not check the attached disk images" >&2; exit 1; }
+  awk -v device="$device" '$1 == device { found=1 } END { exit !found }' "$tmp/attached-now"
+}
+detached=0
+for try in 1 2 3 4 5; do
+  hdiutil detach "$device" >/dev/null 2>&1 || true
+  if ! image_still_attached; then
+    detached=1
+    break
   fi
-  device=
+  [ "$try" = 5 ] || sleep 3
+done
+if [ "$detached" = 0 ]; then
+  # If something still holds the mounted filesystem, unmount it before retrying eject.
+  diskutil unmountDisk force "$device" >/dev/null 2>&1 || true
+  for try in 1 2 3 4 5; do
+    hdiutil detach -force "$device" >/dev/null 2>&1 || true
+    if ! image_still_attached; then
+      detached=1
+      break
+    fi
+    [ "$try" = 5 ] || sleep 3
+  done
 fi
+if [ "$detached" = 0 ]; then
+  echo "Disk image $device is still attached after detach and forced unmount retries" >&2
+  lsof -nP +D "$tmp/mnt" >&2 || true
+  exit 1
+fi
+device=
 mkdir -p "$(dirname "$out")"
 for try in 1 2 3; do
   hdiutil convert "$tmp/rw.dmg" -format UDZO -imagekey zlib-level=9 -ov -o "$out" >/dev/null && break

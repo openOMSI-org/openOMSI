@@ -10,7 +10,12 @@ ureq.workspace = true
 flate2.workspace = true
 sha2.workspace = true
 ring.workspace = true
-tungstenite = { version = "0.30", default-features = false, features = ["handshake", "rustls-tls-webpki-roots"] }
+tungstenite = { version = "0.30", default-features = false, features = ["handshake", "rustls-tls-native-roots"] }
+
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+# ureq 2's system TLS uses OpenSSL on these targets. Build it into the app so
+# Linux users and Android cross-builds need no system OpenSSL development files.
+native-tls = { version = "0.2", features = ["vendored"] }
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true

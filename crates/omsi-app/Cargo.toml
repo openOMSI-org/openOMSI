@@ -5,6 +5,10 @@ edition.workspace = true
 license.workspace = true
 description = "The openOMSI application: loads a map and renders it"
 
+[features]
+temporal-diagnostics = ["omsi-render/temporal-diagnostics"]
+neural-external = ["omsi-render/neural-external"]
+
 # The game is a library with a small `main` around it: the Android build takes the same
 # library as a shared object (`cargo rustc --lib --crate-type cdylib`, see
 # scripts/build-android.sh), which the phone's NativeActivity loads; the iPhone, iPad and
@@ -112,9 +116,15 @@ libc.workspace = true
 windows = { workspace = true, features = ["Win32_Devices_HumanInterfaceDevice", "Win32_Foundation", "Win32_Graphics_Direct3D12", "Win32_Graphics_Dxgi_Common", "Win32_Security", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_LibraryLoader", "Win32_System_Registry", "Win32_System_Memory", "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
 
 # Windows: wgpu's OpenGL ES backend on ANGLE's Direct3D 11 renderer (`GraphicsApi::Angle`,
-# tried last; Google's libEGL.dll and libGLESv2.dll beside the game). Only here: on a Mac
-# the feature would put wgpu's GL backend on ANGLE's Metal renderer
+# tried last; Google's libEGL.dll and libGLESv2.dll beside the game).
 [target.'cfg(windows)'.dependencies.wgpu]
+workspace = true
+features = ["angle"]
+
+# wgpu exposes its GL backend on macos through angle. The intel desktop bundle
+# ships angle built with clg/ogl only (scripts/build-angle-macos.sh) so
+# this path also works when the machine has no metal device
+[target.'cfg(target_os = "macos")'.dependencies.wgpu]
 workspace = true
 features = ["angle"]
 

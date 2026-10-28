@@ -367,6 +367,10 @@ impl Renderer {
             return;
         }
         m.pose = m.pose.wrapping_add(1);
+        #[cfg(feature = "temporal-diagnostics")]
+        if self.temporal_requested() {
+            scene.temporal.record_pose(id, m.generation, m.pose, positions);
+        }
         {
             // (a newer pose of the same mesh replaces one still waiting)
             let mut pending = self.pending_meshes.borrow_mut();

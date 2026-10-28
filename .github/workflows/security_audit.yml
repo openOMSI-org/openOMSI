@@ -9,6 +9,7 @@ on:
   push:
     branches:
       - main
+      - beta
     paths:
       - Cargo.lock
       - launcher/src-tauri/Cargo.lock

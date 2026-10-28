@@ -472,7 +472,8 @@ pace it is designed at), `collision_objects` (walls, poles and bridges stop the 
 option and is taken from OMSI's options when openOMSI starts the first time), `graphics_api`
 (`auto`, `vulkan`, `dx12` on Windows, `gl`, `angle` on Windows: which graphics interface the
 game asks first - with `auto` on Windows DirectX 12, then Vulkan, then OpenGL, then ANGLE;
-on Linux and Android Vulkan, then OpenGL; a Mac, iPhone and iPad always use Metal; see
+on Linux and Android Vulkan, then OpenGL; a Mac triyes metal then opengl (fixed by @becabdev), while an iPhone
+and iPad use Metal; see
 *Graphics API* below), `ctrl_off` (game controllers switched off on the Controls page, by
 name, separated by `|`) and `language` (the language of the interface - `ENG`, `DEU`, `FRA`,
 `RUS` and the others Settings → General lists; OMSI's own texts, such as the names of cockpit
@@ -492,6 +493,7 @@ are next to `openomsi.exe`; without them it is skipped (the log says so). The Wi
 package ships them, built from ANGLE's own source by
 [angle-openomsi](https://github.com/openOMSI-org/angle-openomsi) (there is no ARM64 build);
 with them the log names the adapter `ANGLE (…Direct3D11…)` on the `Gl` backend.
+On an intel macintosh the desktop bundle contains angle built with cgl/ogl and without metal or vulkan OMSI_BACKEND=gl tries it before metal for diagnosis the game log records graphics: opened (Gl) for gameplay once the renderer is ready. The OpenGL driver must still support the game required features
 
 `drive_keys` is a control preset: `simple` (W/S/A/D and Up/Down drive, Left/Right keep
 OMSI's interior camera switch; the default), `wasd` (W/S/A/D only), `arrows` (the four arrow

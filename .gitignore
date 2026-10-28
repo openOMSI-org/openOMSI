@@ -9,6 +9,7 @@
 .idea/
 .vscode/
 node_modules/
+__pycache__/
 
 # the Android build's signing key (made on the first build) and intermediate files
 /android/debug.keystore

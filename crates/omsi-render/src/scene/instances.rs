@@ -6,6 +6,8 @@ use crate::*;
 impl Renderer {
     pub fn new_scene(&self) -> Scene {
         Scene {
+            #[cfg(feature = "temporal-diagnostics")]
+            temporal: Default::default(),
             meshes: Vec::new(),
             textures: Vec::new(),
             glass_slot: None,

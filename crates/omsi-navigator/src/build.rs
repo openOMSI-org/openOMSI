@@ -9,6 +9,12 @@ use super::*;
 use omsi_ui::Vertex;
 use std::sync::Arc;
 
+/// GL/ANGLE must create map buffers on the render thread, where its context is active.
+/// Other backends can make the buffers on the mesh worker to avoid a frame hitch.
+pub(super) fn worker_device(device: &wgpu::Device) -> Option<wgpu::Device> {
+    (device.adapter_info().backend != wgpu::Backend::Gl).then(|| device.clone())
+}
+
 /// What a build reads: the network's carriageways (each with whether the map's paving covers
 /// it), the network for the switches, the map's layers and its package.
 #[derive(Clone)]

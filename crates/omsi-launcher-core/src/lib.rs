@@ -2213,6 +2213,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
 pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     let mut v = json!({ "msaa": 4, "anisotropy": 8, "ssao": true, "shadows": true, "shadow_size": 2048, "navigator": true, "ui_opacity": 0.85, "navigator_corner": "bottom-left", "boarding": "auto", "detail_textures": true, "exact_fare": true, "enhanced": false, "graphics": "vanilla_plus", "fullscreen": false, "vsync": true, "volume": 0.6, "drive_keys": "simple", "render_scale": "auto", "view_distance": "auto", "language": "ENG", "video_memory": 0, "texture_compression": true, "gpu_texture_compression": true, "chat": true, "tooltips": true, "name_tags": true, "show_fps": false, "clouds": true, "cloud_quality": "high", "rain_quality": "high", "pax_density": 1.0, "vol_ai": 1.0, "vol_scenery": 1.0, "ambient": true, "vol_ambient": 0.8, "mirror_size": 256, "doppler": true, "driver": true, "max_fps": 0, "min_obj_size": 0.013, "max_obj_dist": "auto" });
     v["upscaler"] = json!("default");
+    v["temporal_debug"] = json!("off");
     v["fsr_quality"] = json!("quality");
     v["fsr_sharpness"] = json!(0.8);
     v["street_light"] = json!("off");
@@ -2370,6 +2371,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "rain_quality" => v[&k] = json!(rain_quality(val)),
             "vehicle_smoke" => v[&k] = json!(vehicle_smoke(val)),
             "puddles" => v[&k] = json!(puddles(val)),
+            "temporal_debug" => v[&k] = json!(temporal_debug(val)),
             "upscaler" => v[&k] = json!(if val.eq_ignore_ascii_case("fsr1") { "fsr1" } else { "default" }),
             "fsr_quality" => v[&k] = json!(match val.to_ascii_lowercase().as_str() {
                 "ultra" => "ultra", "balanced" => "balanced", "performance" => "performance",
@@ -2885,6 +2887,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         head_tracking_value("head_tracking_smoothing", v.get("head_tracking_smoothing").and_then(|x| x.as_f64())),
         head_tracking_value("head_tracking_dead_zone", v.get("head_tracking_dead_zone").and_then(|x| x.as_f64())),
     ));
+    text.push_str(&format!("temporal_debug={}\n", temporal_debug(v.get("temporal_debug").and_then(|x| x.as_str()).unwrap_or("off"))));
     text.push_str(&format!("upscaler={}\nfsr_quality={}\nfsr_sharpness={}\n",
         if v.get("upscaler").and_then(|x| x.as_str()) == Some("fsr1") { "fsr1" } else { "default" },
         match v.get("fsr_quality").and_then(|x| x.as_str()).unwrap_or("quality") {
@@ -3492,3 +3495,8 @@ mod omsi_options_tests;
 mod right_stick_look_tests;
 #[cfg(test)]
 mod head_tracking_tests;
+
+/// Engine debug modes only; an unknown setting must not activate an effect.
+fn temporal_debug(value: &str) -> &str {
+    match value { "motion" => "motion", "depth" => "depth", "validity" => "validity", _ => "off" }
+}

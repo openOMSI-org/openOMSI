@@ -680,6 +680,14 @@ impl Renderer {
         if !self.frame_hooks(scene, &env, with_overlays) {
             return;
         }
+        #[cfg(feature = "neural-external")]
+        let neural_target = if with_overlays && projection.is_none() && !second_eye {
+            self.external_neural_target((width, height), target.texture().format())
+        } else { None };
+        #[cfg(feature = "neural-external")]
+        let original_target = target;
+        #[cfg(feature = "neural-external")]
+        let target = neural_target.as_ref().unwrap_or(target);
         // OMSI_GPU_TIMERS: GPU time per pass, one frame at a time
         self.collect_gpu_timers();
         let timer_view = view_index(with_overlays, projection.is_some(), second_eye);
@@ -698,6 +706,12 @@ impl Renderer {
         let mut clock = StageClock::new(with_overlays);
         let args = FrameArgs { target, width, height, camera, lighting, with_overlays, exclude_texture, projection, second_eye };
         let f = self.begin_frame(scene, env, args, &mut clock);
+        #[cfg(feature = "neural-external")]
+        let (f, neural_overlays) = {
+            let mut f = f;
+            let overlays = if neural_target.is_some() { std::mem::take(&mut f.overlays) } else { Vec::new() };
+            (f, overlays)
+        };
         let sh = self.plan_shadow_cache(scene, &f);
         let (vp_mat, cu, probe_redraw) = self.frame_uniforms(scene, &f, &sh, &mut clock);
         // --- what every pass draws, as batches over one draw list (see `Batch`): the shadow
@@ -781,6 +795,8 @@ impl Renderer {
             main_parts.push(std::mem::replace(&mut enc.picture, rest));
         }
         let puddles_on = self.encode_scene_reflections(&mut enc.picture, scene, &f, &plan, &cu, &mut timers);
+        #[cfg(feature = "temporal-diagnostics")]
+        let temporal_drawn = self.encode_temporal(&mut enc.picture, scene, &f, vp_mat, &cu, &plan, &mut timers);
         self.encode_fog_lamps(&mut enc.picture, scene, &f, vp_mat, puddles_on, &mut timers);
         self.encode_rain_film(&mut enc.picture, scene, &f, &plan.rain_batches, puddles_on);
         self.encode_classic_present(&mut enc.picture, scene, &f, puddles_on);
@@ -788,8 +804,16 @@ impl Renderer {
             self.encode_post(&mut enc.picture, scene, &f, puddles_on, &mut timers);
         }
         self.encode_upscale(&mut enc.picture, scene, &f, &mut timers);
+        #[cfg(feature = "temporal-diagnostics")]
+        if temporal_drawn {
+            self.encode_temporal_debug(&mut enc.picture, scene, &f);
+        }
         clock.stage(self, "encode", "mirror.encode");
         self.finish_and_submit(enc, main_parts, big, with_overlays, &mut clock, timers);
+        #[cfg(feature = "neural-external")]
+        if neural_target.is_some() {
+            self.external_neural_finish(scene, &f, original_target, &neural_overlays, vp_mat);
+        }
     }
 
     /// Render off-screen and return RGBA8 pixels.

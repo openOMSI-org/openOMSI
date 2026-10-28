@@ -1,0 +1,377 @@
+{
+  "audit_date": "2026-10-27",
+  "repositories": [
+    {
+      "repository": "SilyNoMeta/rtx-encore",
+      "commit": "c74655f71b930c3562267fddd9aca9d530cc3d08",
+      "tree_entries": 44,
+      "license_observation": "No root license or NR implementation in the inspected tree; third-party notices do not license an unavailable implementation"
+    },
+    {
+      "repository": "MotionflowOffical/UniversalDLSS5",
+      "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+      "tree_entries": 348,
+      "license_observation": "Apache-2.0; NR runtime separately licensed"
+    },
+    {
+      "repository": "SenjuWoo/dlss5-aio",
+      "commit": "c2803c9c8e92df11cc749f4971312ae38eff6179",
+      "tree_entries": 192,
+      "license_observation": "MIT wrapper; runtime separately licensed"
+    },
+    {
+      "repository": "RankFTW/RHI",
+      "commit": "c1076d38520dce8d69e006194aad86fece7c26d0",
+      "tree_entries": 731,
+      "license_observation": "GPL-3.0 project; asset/runtime licenses separate"
+    }
+  ],
+  "read_sources": [
+    {
+      "repository": "SilyNoMeta/rtx-encore",
+      "commit": "c74655f71b930c3562267fddd9aca9d530cc3d08",
+      "path": "README.md",
+      "sha256": "0a07fcc42da34385a3dddb0e2bf1a704dc683468d34171965a833ed10d9f9de3"
+    },
+    {
+      "repository": "SilyNoMeta/rtx-encore",
+      "commit": "c74655f71b930c3562267fddd9aca9d530cc3d08",
+      "path": "THIRD-PARTY-NOTICES.md",
+      "sha256": "6cc1699f0cb042601b1a508ad16abc17d6d099a7c1f52c417b5240fe968bf594"
+    },
+    {
+      "repository": "SilyNoMeta/rtx-encore",
+      "commit": "c74655f71b930c3562267fddd9aca9d530cc3d08",
+      "path": "docs/NEURAL-RENDERING.md",
+      "sha256": "512c62d3d21a0de5362b270e2e7883525c1f8fd308d03fe0f7cc1cf0a4af7985"
+    },
+    {
+      "repository": "SilyNoMeta/rtx-encore",
+      "commit": "c74655f71b930c3562267fddd9aca9d530cc3d08",
+      "path": "docs/INSTALLATION.md",
+      "sha256": "0274ffa0cf131f6b582e2bcdc6b162c94e5dde7526bb364c4df05695389cd066"
+    },
+    {
+      "repository": "SilyNoMeta/rtx-encore",
+      "commit": "c74655f71b930c3562267fddd9aca9d530cc3d08",
+      "path": "docs/COMPATIBILITY.md",
+      "sha256": "e1014fd96ed9bef86003359bc0cbf2cfad26e024818c06523215d5d46bb09baf"
+    },
+    {
+      "repository": "SilyNoMeta/rtx-encore",
+      "commit": "c74655f71b930c3562267fddd9aca9d530cc3d08",
+      "path": "docs/TROUBLESHOOTING.md",
+      "sha256": "2a6edb6ae9a00ae2ae046b87a5beea3abb4f6a9287522c891a5e75b25835d311"
+    },
+    {
+      "repository": "RankFTW/RHI",
+      "commit": "c1076d38520dce8d69e006194aad86fece7c26d0",
+      "path": "LICENSE",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+    },
+    {
+      "repository": "RankFTW/RHI",
+      "commit": "c1076d38520dce8d69e006194aad86fece7c26d0",
+      "path": "dlss_manifest.json",
+      "sha256": "f881d0b6c04d6fe383852d24ab6e2c1271718f427c25cfce53e94f191ddefc1a"
+    },
+    {
+      "repository": "RankFTW/RHI",
+      "commit": "c1076d38520dce8d69e006194aad86fece7c26d0",
+      "path": "RenoDXCommander/Services/DlssNrCostScalerService.cs",
+      "sha256": "e2d255f686a6b6bf15a7e7420a8a54feb7550fe450ed3b356b2f97be0d89c0f7"
+    },
+    {
+      "repository": "NVIDIA/DLSS",
+      "commit": "374959484e79a640feaba44c93ac8cfb0a03f5b5",
+      "path": "LICENSE.txt",
+      "sha256": "d4216e39ebef5f9b50a6712ebb37beeb5379862a67733a9999c651f21592aaf0"
+    },
+    {
+      "repository": "NVIDIA/DLSS",
+      "commit": "374959484e79a640feaba44c93ac8cfb0a03f5b5",
+      "path": "include/nvsdk_ngx.h",
+      "sha256": "dc38e7467cf415379c9d12ae1b6e4a494c453ed92720fb53e92aecb523e7b848"
+    },
+    {
+      "repository": "NVIDIA/DLSS",
+      "commit": "374959484e79a640feaba44c93ac8cfb0a03f5b5",
+      "path": "include/nvsdk_ngx_defs.h",
+      "sha256": "ea23f33497cd274860d1c25a97644fce807dcb0037c594547203343103fad03e"
+    },
+    {
+      "repository": "NVIDIA/DLSS",
+      "commit": "374959484e79a640feaba44c93ac8cfb0a03f5b5",
+      "path": "include/nvsdk_ngx_defs_dlssd.h",
+      "sha256": "2e97fe1595b1334f71b51724f2cb67496e8c296a7a2eec5606da53055882e716"
+    },
+    {
+      "repository": "NVIDIA/DLSS",
+      "commit": "374959484e79a640feaba44c93ac8cfb0a03f5b5",
+      "path": "include/nvsdk_ngx_defs_dlssg.h",
+      "sha256": "98ec3a6faa5aa250828c174bf8f3491aafac693dfe57cc798049c8918597fc60"
+    },
+    {
+      "repository": "NVIDIA/DLSS",
+      "commit": "374959484e79a640feaba44c93ac8cfb0a03f5b5",
+      "path": "include/nvsdk_ngx_defs_vk.h",
+      "sha256": "0a24d0861ace7d6b9362a67b7f08bea1b33ea123c5ce730b19133de8a891d031"
+    },
+    {
+      "repository": "NVIDIA/DLSS",
+      "commit": "374959484e79a640feaba44c93ac8cfb0a03f5b5",
+      "path": "include/nvsdk_ngx_helpers.h",
+      "sha256": "5bcbadfe7478b802cf6d3aca4dc5ddd7d0889b99726e69c63f9e9bd555f44471"
+    },
+    {
+      "repository": "NVIDIA/DLSS",
+      "commit": "374959484e79a640feaba44c93ac8cfb0a03f5b5",
+      "path": "include/nvsdk_ngx_helpers_cuda.h",
+      "sha256": "f2851a76107bdf4fbcb7b261f3c35573c312d8ecb4bc18fb02d9e2cec7705042"
+    },
+    {
+      "repository": "NVIDIA/DLSS",
+      "commit": "374959484e79a640feaba44c93ac8cfb0a03f5b5",
+      "path": "include/nvsdk_ngx_helpers_d3d.h",
+      "sha256": "ec75224f36ed6580baaf250fa83620405ad81a1d98c2c436654a0c9cf6a6b8ba"
+    },
+    {
+      "repository": "NVIDIA/DLSS",
+      "commit": "374959484e79a640feaba44c93ac8cfb0a03f5b5",
+      "path": "include/nvsdk_ngx_helpers_dlssd.h",
+      "sha256": "a25fdda925b479dfe869593aeba311ef08793da54e0391f2fe2fe756cbef5532"
+    },
+    {
+      "repository": "NVIDIA/DLSS",
+      "commit": "374959484e79a640feaba44c93ac8cfb0a03f5b5",
+      "path": "include/nvsdk_ngx_helpers_dlssd_cuda.h",
+      "sha256": "7e35cde214d905346a487b9a28c05d35e1c55b480e237fe3de69580a7e332730"
+    },
+    {
+      "repository": "NVIDIA/DLSS",
+      "commit": "374959484e79a640feaba44c93ac8cfb0a03f5b5",
+      "path": "include/nvsdk_ngx_helpers_dlssd_d3d.h",
+      "sha256": "6df9d02c6f47feee3afc8d12340a9f554a7ddce4ddacb1b6a13a42b26c2c6293"
+    },
+    {
+      "repository": "NVIDIA/DLSS",
+      "commit": "374959484e79a640feaba44c93ac8cfb0a03f5b5",
+      "path": "include/nvsdk_ngx_helpers_dlssd_vk.h",
+      "sha256": "11df8fbda532a97fe867c8ef2b40058b49b7898183710f3468e55b1eedb8f40b"
+    },
+    {
+      "repository": "NVIDIA/DLSS",
+      "commit": "374959484e79a640feaba44c93ac8cfb0a03f5b5",
+      "path": "include/nvsdk_ngx_helpers_dlssg.h",
+      "sha256": "6881d21419c40c78ec948b326902ece09fc112b0223144d51c4905f3fced7a1f"
+    },
+    {
+      "repository": "NVIDIA/DLSS",
+      "commit": "374959484e79a640feaba44c93ac8cfb0a03f5b5",
+      "path": "include/nvsdk_ngx_helpers_dlssg_d3d.h",
+      "sha256": "6335ebcb95de39a361e87fe0257d6ce0723e5d8deaa15db3b35afacf2b3f4220"
+    },
+    {
+      "repository": "NVIDIA/DLSS",
+      "commit": "374959484e79a640feaba44c93ac8cfb0a03f5b5",
+      "path": "include/nvsdk_ngx_helpers_dlssg_vk.h",
+      "sha256": "b371d90b9f4372b9a415e68a0afbdc2f31b7b552e219a9637d848749bc965316"
+    },
+    {
+      "repository": "NVIDIA/DLSS",
+      "commit": "374959484e79a640feaba44c93ac8cfb0a03f5b5",
+      "path": "include/nvsdk_ngx_helpers_vk.h",
+      "sha256": "c192bff72138f12f770db48e12c1d8f712dfc81ea0e8e055ebb27d8dd1b31623"
+    },
+    {
+      "repository": "NVIDIA/DLSS",
+      "commit": "374959484e79a640feaba44c93ac8cfb0a03f5b5",
+      "path": "include/nvsdk_ngx_loader.h",
+      "sha256": "abdf5f66a692620538357d29fdf78e3e2a677ee8140b7a638962ecb766585e75"
+    },
+    {
+      "repository": "NVIDIA/DLSS",
+      "commit": "374959484e79a640feaba44c93ac8cfb0a03f5b5",
+      "path": "include/nvsdk_ngx_params.h",
+      "sha256": "943bc8cc5cdae03b6303016fbad3183636f2335ae27a2d18776798c3b4efabbc"
+    },
+    {
+      "repository": "NVIDIA/DLSS",
+      "commit": "374959484e79a640feaba44c93ac8cfb0a03f5b5",
+      "path": "include/nvsdk_ngx_params_dlssd.h",
+      "sha256": "d41e3ba8f1d72583b55273092c99bf426dc4a0d46de827229e25d5b1325a370e"
+    },
+    {
+      "repository": "NVIDIA/DLSS",
+      "commit": "374959484e79a640feaba44c93ac8cfb0a03f5b5",
+      "path": "include/nvsdk_ngx_params_dlssg.h",
+      "sha256": "c24fa5aa68ffa2808c828b75cfa32843f1606f80a145f84055ac450d7e6c74ad"
+    },
+    {
+      "repository": "NVIDIA/DLSS",
+      "commit": "374959484e79a640feaba44c93ac8cfb0a03f5b5",
+      "path": "include/nvsdk_ngx_standalone_common.h",
+      "sha256": "38413c3338b0aea0202c07da95d426bfee7080a42913823fa2d9dd585b087b53"
+    },
+    {
+      "repository": "NVIDIA/DLSS",
+      "commit": "374959484e79a640feaba44c93ac8cfb0a03f5b5",
+      "path": "include/nvsdk_ngx_standalone_cuda.h",
+      "sha256": "b23436ed5040051ac8e81554c9af080f2463c941435bbc3b82222e5431a09499"
+    },
+    {
+      "repository": "NVIDIA/DLSS",
+      "commit": "374959484e79a640feaba44c93ac8cfb0a03f5b5",
+      "path": "include/nvsdk_ngx_vk.h",
+      "sha256": "2d364ce7132881eb669e9498fd570d74cba563b1fbebc82c235f8e1ad2dd8b6d"
+    }
+  ],
+  "rhi_releases_metadata_only": [
+    {
+      "tag": "streamline-2.14.16.0-v2",
+      "url": "https://github.com/RankFTW/rhi-repo/releases/tag/streamline-2.14.16.0-v2",
+      "published_at": "2026-10-26T16:23:03Z",
+      "assets": [
+        {
+          "name": "streamline_2.14.16.0-v2.zip",
+          "size": 4116590,
+          "github_archive_digest": "sha256:72bd6b55920eef6ac624d1b253e3b1a06927e84a6e34f1c85ebec0aafd3ffa07",
+          "downloaded": false,
+          "dll_integrity_verified": false
+        }
+      ]
+    },
+    {
+      "tag": "renodx-dlss5-10.8.0",
+      "url": "https://github.com/RankFTW/rhi-repo/releases/tag/renodx-dlss5-10.8.0",
+      "published_at": "2026-10-27T18:10:14Z",
+      "assets": [
+        {
+          "name": "renodx-dlss5_10.8.0.zip",
+          "size": 2635198,
+          "github_archive_digest": "sha256:faba7814fa90b6b21786c98a45732dbe80f01fa36745c46324472e14ac0f440d",
+          "downloaded": false,
+          "dll_integrity_verified": false
+        }
+      ]
+    },
+    {
+      "tag": "dlssnr-310.9.16",
+      "url": "https://github.com/RankFTW/rhi-repo/releases/tag/dlssnr-310.9.16",
+      "published_at": "2026-10-26T13:18:17Z",
+      "assets": [
+        {
+          "name": "nvngx_dlssnr_310.9.16.zip",
+          "size": 192378839,
+          "github_archive_digest": "sha256:dbeb1f2790b5c621887db99b1a56ac8bd5cb35207e8c074cbb806710f7460cab",
+          "downloaded": false,
+          "dll_integrity_verified": false
+        }
+      ]
+    },
+    {
+      "tag": "dlssnr-310.8.Lecram",
+      "url": "https://github.com/RankFTW/rhi-repo/releases/tag/dlssnr-310.8.Lecram",
+      "published_at": "2026-09-24T15:00:01Z",
+      "assets": [
+        {
+          "name": "nvngx_dlssnr_310.8.Lecram.zip",
+          "size": 116658260,
+          "github_archive_digest": "sha256:ddb64e5545ba3f217c32555d2eb8fdfe76b9510d2256f13e8a5ecb1a9650ca54",
+          "downloaded": false,
+          "dll_integrity_verified": false
+        }
+      ]
+    },
+    {
+      "tag": "dlssnr-310.8.SF-v2",
+      "url": "https://github.com/RankFTW/rhi-repo/releases/tag/dlssnr-310.8.SF-v2",
+      "published_at": "2026-08-30T21:18:05Z",
+      "assets": [
+        {
+          "name": "nvngx_dlssnr_310.8.SF-v2.zip",
+          "size": 116693212,
+          "github_archive_digest": "sha256:1da35941894994eb087e017577829e492454e9bae3a6a9397027069ceb74955c",
+          "downloaded": false,
+          "dll_integrity_verified": false
+        }
+      ]
+    },
+    {
+      "tag": "dlssnr-310.8.SF",
+      "url": "https://github.com/RankFTW/rhi-repo/releases/tag/dlssnr-310.8.SF",
+      "published_at": "2026-08-30T16:34:27Z",
+      "assets": [
+        {
+          "name": "nvngx_dlssnr_310.8.SF.zip",
+          "size": 114611736,
+          "github_archive_digest": "sha256:4de991bf3a1cf5ba95c6621c2a5203299e823ea11bf1702513281b85aa4dc449",
+          "downloaded": false,
+          "dll_integrity_verified": false
+        }
+      ]
+    },
+    {
+      "tag": "dlssnr-310.8.0-RTX40",
+      "url": "https://github.com/RankFTW/rhi-repo/releases/tag/dlssnr-310.8.0-RTX40",
+      "published_at": "2026-08-30T00:23:03Z",
+      "assets": [
+        {
+          "name": "nvngx_dlssnr_310.8.0-RTX40.zip",
+          "size": 110604522,
+          "github_archive_digest": "sha256:46124cfaef532ad5f6da07494772ea8c1b3e719f934e254385697f38d1289e3f",
+          "downloaded": false,
+          "dll_integrity_verified": false
+        }
+      ]
+    },
+    {
+      "tag": "dlssnr-310.8.0",
+      "url": "https://github.com/RankFTW/rhi-repo/releases/tag/dlssnr-310.8.0",
+      "published_at": "2026-08-27T10:42:02Z",
+      "assets": [
+        {
+          "name": "nvngx_dlssnr_310.8.0.zip",
+          "size": 109425288,
+          "github_archive_digest": "sha256:388c0a7912e15ec911b9c9e11a692142b11fe387ddf2b637d8c358138fffb3ac",
+          "downloaded": false,
+          "dll_integrity_verified": false
+        }
+      ]
+    }
+  ],
+  "local_sdk_files": [
+    {
+      "path": "include/sl.h",
+      "sha256": "e1e81a7428d15b30db37587e9469bd68a56d630d820a4accec0aee3b17e157dd",
+      "bytes": 2201
+    },
+    {
+      "path": "external/ngx-sdk/include/nvsdk_ngx.h",
+      "sha256": "96f21266a05ef06bb49f58c89de1a7845f2d9b1e0e0e069fe03740b8eaf0344d",
+      "bytes": 41001
+    },
+    {
+      "path": "external/ngx-sdk/include/nvsdk_ngx_defs.h",
+      "sha256": "a9481cbc78d53ee56639f0a573ec095c6c1ea1e5f296d139c20c42bf342c2e1b",
+      "bytes": 45172
+    },
+    {
+      "path": "external/ngx-sdk/include/nvsdk_ngx_params.h",
+      "sha256": "51a1f94116cf82f95c63a2c197371ed22e08bddb09918d36cc6e2ac712753c80",
+      "bytes": 7860
+    },
+    {
+      "path": "external/ngx-sdk/lib/Windows_x86_64/nvsdk_ngx_d.lib",
+      "sha256": "bc43df9ec032004fde681d3e3afd01cde239e03a0125b822e88674c84287f99c",
+      "bytes": 4090658
+    },
+    {
+      "path": "external/ngx-sdk/license.txt",
+      "sha256": "3027f23ca5a46dd9cb8183fbd522983a86f64d7daac5982912bf9f214671f294",
+      "bytes": 26727
+    }
+  ],
+  "local_nr_dlls_found": [],
+  "nvidia_nr_executed": false
+}

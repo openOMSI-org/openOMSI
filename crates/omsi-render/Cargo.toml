@@ -10,6 +10,14 @@ default = ["test-hooks"]
 # The fault-injection hook OMSI_FAKE_GPU_ERROR (see docs/DEBUG_FLAGS.md); a build without
 # it cannot be made to fail on purpose.
 test-hooks = []
+# Engine-owned temporal buffers and visualisations; does not enable NVIDIA inference.
+temporal-diagnostics = []
+# Slow, explicit external-host prototype. No NVIDIA libraries in the normal build.
+neural-external = ["temporal-diagnostics"]
+
+[[example]]
+name = "neural-capture"
+required-features = ["neural-external"]
 
 [dependencies]
 omsi-cfg = { path = "../omsi-cfg" }
@@ -36,6 +44,9 @@ env_logger.workspace = true
 
 [target.'cfg(windows)'.dev-dependencies.wgpu]
 # Standalone renderer tests do not inherit omsi-app's ANGLE feature.
+workspace = true
+features = ["angle"]
+[target.'cfg(target_os = "macos")'.dev-dependencies.wgpu]
 workspace = true
 features = ["angle"]
 

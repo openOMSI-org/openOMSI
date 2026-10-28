@@ -1,0 +1,350 @@
+[
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "README.md",
+    "sha256": "cb712e838ef641adac69e8b6b132347264b1a260e6e5c6097afe7a23dd8d85cd"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "LICENSE",
+    "sha256": "b3c43906fdfe00ff1669fd05fee370cdde5c4c742cf6e5da99bc47f9a7cdb985"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "THIRD_PARTY.md",
+    "sha256": "b3b97b66b8af110c8d926a65cac053d148d4aeb77df6eae22ab6ba922e5ae8df"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "CMakeLists.txt",
+    "sha256": "22e4c1a2b2217ca8d56b3cab9b2a68dec978273afd95d0aa6cca89ee24acc0f0"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "docs/NVIDIA_RUNTIME_SETUP.md",
+    "sha256": "125a4b32f6083883d2fb30aed2af41ebb8116e72fd167bc155204fa282c28e54"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "docs/HANDOFF_ARCHITECTURE.md",
+    "sha256": "52a072f889bd537558c9caa9420f3e352bd7e8a1469c8041b75b7aaa30787685"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "docs/HANDOFF_CURRENT_DEBUG_STATE.md",
+    "sha256": "52631f4ade496f85a148b488421aa79781f79908e72bd1544b919ebf3396c2e7"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "include/udlss/game_guides_api.hpp",
+    "sha256": "d40a902cc44f204ebd1540eaf803b08975cd1b274605e77d2f36a68742eb55be"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "include/udlss/temporal_frame.hpp",
+    "sha256": "d550ca61cdd0c67a2b85a57ed2e579df34123f34d5d0f5c980d997551f4d9edb"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "include/udlss/ngxnr_guide_contract.hpp",
+    "sha256": "53d99ed38c6862fc9ca1350dd5486a8e201fea8336600fe874437a46477f5384"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "include/udlss/external_host_policy.hpp",
+    "sha256": "04d62aea80012354b7799dff6134f5ddf5c5ca681390e4198edca646183fcc1f"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "include/udlss/runtime_diagnostics.hpp",
+    "sha256": "46b93d50d4d833eb863c00edd450dd7a69a07a0cf7523616fc79445731bcfd2d"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "include/udlss/shared_control.hpp",
+    "sha256": "3f025724d0c0aa1c1d0ac1c4e3ad5055b7c3f645c9a9ed2dadb60948ce8e14ec"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "src/neural/backend.hpp",
+    "sha256": "cfdb135069d3342fbf86fe61ae827802e09abe7978f4058514e8855705965c99"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "src/neural/external_host_protocol.hpp",
+    "sha256": "b6e945a088942c5ffa675b9f82f87ce5a4f086473da746e81ca56423786d3418"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "src/neural/external_host.cpp",
+    "sha256": "b1d0832292fca93a4cb4017f6458d94d16168915c89f18ed57ea639a75e13863"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "src/neural/ngx_nr.cpp",
+    "sha256": "0d06364c12d9b49858f2911ecc5cb70c92d766668175e518bc2a40791b490248"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "src/neural/streamline_nr.cpp",
+    "sha256": "7b8eae5dd18c53ebfe0a88fa2d2ac6b304246b17c8c31d17393ea5a39490fe96"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "src/neural/ingame_nr.cpp",
+    "sha256": "b34e676be75375e08593be9ee478f27bc9e3bd85b02bd5b25c1f4bc6a3676675"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "src/neural/passthrough.cpp",
+    "sha256": "460e078553257c84971c8073a842ea559a66cf9e564ff660f5ce7098be363a07"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "src/host/main.cpp",
+    "sha256": "c10ebc9ae73f7406db3f8b8caa489f4ad964316340eee68917bf39295e2c8c3e"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "src/host/nr_forwarder.cpp",
+    "sha256": "1eb417ad43bdc4c43aabd39a64a6e496b697dac68e109a063b2cd292d1c4fbc0"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "src/gpu/shared_guide_texture.hpp",
+    "sha256": "f555ed3a44d1fac8e2dfdd8c45c7be94fd5e5b99bf2788eb9e65a2205e852dce"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "src/gpu/d3d12_native_pipeline.cpp",
+    "sha256": "a3bbbaa692f3cd4c4dac1149096a1fe5e7279be1b597f5062f4ae283bbe174ad"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "src/compat/vulkan_frontend.cpp",
+    "sha256": "6cf1d95325fdb61c5012b17a63607da86b3628a530e5dddb6d314c7bcb5998a5"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "src/bridge/vulkan_hooks.cpp",
+    "sha256": "f96c19043e2951db47428921219d35f3ebbc521949186a37263043f24856c1cc"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "src/gpu/game_temporal_guides.cpp",
+    "sha256": "8443282b5b144e6e6b2a20d206623fecddee32f251f7535eaf97f46d5ac67789"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "examples/GameGuidesAdapter/README.md",
+    "sha256": "53b92699e1dc1ed39a22209c1e84aa711cd124217b3b1d793cf156e318228ca7"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "examples/GameGuidesAdapter/template.cpp",
+    "sha256": "b467f74f20af95dd7edf8836f5a7202071746eb5809df0f8fbc2e10325e4db9f"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "tests/v041_external_host_contract_tests.cpp",
+    "sha256": "81bc6c1dc4f8fe8be45550e5b566265a12fb77d116697b301a60138a6b5dfe92"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "tests/ngxnr_guide_contract_tests.cpp",
+    "sha256": "14ec898c2acff7aad5ad392e6c557ce417f4d45be573b36da9c3d6e7b1eae6a4"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "tests/native_pipeline_visual_tests.cpp",
+    "sha256": "c90be307a88081cc9f92d7d5d1b220123258163542f01a76af3601ca4b1acae5"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "docs/V0.2.8_FEATURE18_CONTRACT_FIX.md",
+    "sha256": "7f63ec1794bc800b3591e0391c4f0ba5c9137ed38838a95e8613ee5722bc8de4"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "include/udlss/ipc_security.hpp",
+    "sha256": "6adc2ce4b8627d1dc7ac520e81e0bf642b2fb91ff6ab05826cd704ef15a553a5"
+  },
+  {
+    "repository": "SenjuWoo/dlss5-aio",
+    "commit": "c2803c9c8e92df11cc749f4971312ae38eff6179",
+    "path": "README.md",
+    "sha256": "fd5b6026c5fcd7f1ce5e5a5cd50127fa7f12fa2751e23f4fb06c785049690a4f"
+  },
+  {
+    "repository": "SenjuWoo/dlss5-aio",
+    "commit": "c2803c9c8e92df11cc749f4971312ae38eff6179",
+    "path": "LICENSE",
+    "sha256": "7129faa6d1f36b8a602d64e31b9120c6eb413c169f475ddaf279607be2ff96c5"
+  },
+  {
+    "repository": "SenjuWoo/dlss5-aio",
+    "commit": "c2803c9c8e92df11cc749f4971312ae38eff6179",
+    "path": "LICENSE.md",
+    "sha256": "46a5f05581f448386919edefb9848136b8ce10939d3b592f349ea5da3ea94f70"
+  },
+  {
+    "repository": "SenjuWoo/dlss5-aio",
+    "commit": "c2803c9c8e92df11cc749f4971312ae38eff6179",
+    "path": "CREDITS.md",
+    "sha256": "f97a674f79c413c980b88d9fca41e7ca64d9ea7e038b3bdb6b4e7e3dc6bb129c"
+  },
+  {
+    "repository": "SenjuWoo/dlss5-aio",
+    "commit": "c2803c9c8e92df11cc749f4971312ae38eff6179",
+    "path": "app/UPSTREAM.md",
+    "sha256": "3a4347dc8ca95b8758d3cca144cce3d99f776805121c7961bb0d838cfb052c9b"
+  },
+  {
+    "repository": "SenjuWoo/dlss5-aio",
+    "commit": "c2803c9c8e92df11cc749f4971312ae38eff6179",
+    "path": "docs/AUDIT.md",
+    "sha256": "d6ae37c0ac5126cdcef692265e0ea997d08a83b4fbd04953d0579d632a58d1ba"
+  },
+  {
+    "repository": "SenjuWoo/dlss5-aio",
+    "commit": "c2803c9c8e92df11cc749f4971312ae38eff6179",
+    "path": "docs/RUNTIME-SOURCES.md",
+    "sha256": "9f05273fa8d3ddbebb424b8a5e423196298dd0ddf40db3ad3e8dfd84fcedb8e4"
+  },
+  {
+    "repository": "SenjuWoo/dlss5-aio",
+    "commit": "c2803c9c8e92df11cc749f4971312ae38eff6179",
+    "path": "02-DLSS5-Neural-Rendering/README.md",
+    "sha256": "ea13f38c79d09c39d29a4703411b5dfe3f00bc099c142a87f37597f49d1d4b87"
+  },
+  {
+    "repository": "SenjuWoo/dlss5-aio",
+    "commit": "c2803c9c8e92df11cc749f4971312ae38eff6179",
+    "path": "04-DLSS5-Feeder/README.md",
+    "sha256": "c077c18122f2ab9ce722b7f1f6023c0093b0abc1c76ce73bf3f37ec9e2b87336"
+  },
+  {
+    "repository": "SenjuWoo/dlss5-aio",
+    "commit": "c2803c9c8e92df11cc749f4971312ae38eff6179",
+    "path": "04-DLSS5-Feeder/host64/README.md",
+    "sha256": "281a488e98143467e1dedead100b8be8550012a290b0d33feefd831acd896494"
+  },
+  {
+    "repository": "SenjuWoo/dlss5-aio",
+    "commit": "c2803c9c8e92df11cc749f4971312ae38eff6179",
+    "path": "app/core/components.py",
+    "sha256": "868eb63d6bd1cef25d24130c084cc9fac3c70af84a9bf3deb1d65b6dc56d3fc9"
+  },
+  {
+    "repository": "SenjuWoo/dlss5-aio",
+    "commit": "c2803c9c8e92df11cc749f4971312ae38eff6179",
+    "path": "app/core/runtimecatalog.py",
+    "sha256": "dbb82b82b84ac810a996ad949cd5568a8cef7aa9cd1be3c57240cb110ab65b5f"
+  },
+  {
+    "repository": "SenjuWoo/dlss5-aio",
+    "commit": "c2803c9c8e92df11cc749f4971312ae38eff6179",
+    "path": "app/core/sources.py",
+    "sha256": "b132bd75246741db63609faf238041353ece533a48a808379b7e7b1183c434ea"
+  },
+  {
+    "repository": "SenjuWoo/dlss5-aio",
+    "commit": "c2803c9c8e92df11cc749f4971312ae38eff6179",
+    "path": "app/core/pe.py",
+    "sha256": "e7bfde157617670420dcc586acee80bfd929a2ca55a0966a9ab60d0fc46ea191"
+  },
+  {
+    "repository": "SenjuWoo/dlss5-aio",
+    "commit": "c2803c9c8e92df11cc749f4971312ae38eff6179",
+    "path": "app/core/installer.py",
+    "sha256": "b0683804fbf2b4c41400648e7334e7ef74e772a4dacdc1395df738db4810636f"
+  },
+  {
+    "repository": "SenjuWoo/dlss5-aio",
+    "commit": "c2803c9c8e92df11cc749f4971312ae38eff6179",
+    "path": "app/core/dlss.py",
+    "sha256": "aaad6d7926a5032f457ab08cfffbdd51d2eeffa9e76ee05deb73515444b308a8"
+  },
+  {
+    "repository": "SenjuWoo/dlss5-aio",
+    "commit": "c2803c9c8e92df11cc749f4971312ae38eff6179",
+    "path": "app/core/vulkan.py",
+    "sha256": "25a66dd88636c50196ed497e94b84f7c46274809d93f25ec80ce0b10e048286b"
+  },
+  {
+    "repository": "SenjuWoo/dlss5-aio",
+    "commit": "c2803c9c8e92df11cc749f4971312ae38eff6179",
+    "path": "app/core/diagnose/evidence.py",
+    "sha256": "fcc3cf8eecb0c55b31f3f02a2707a2fe42e64c59ca7efed994355b9f00d389f7"
+  },
+  {
+    "repository": "SenjuWoo/dlss5-aio",
+    "commit": "c2803c9c8e92df11cc749f4971312ae38eff6179",
+    "path": "app/core/diagnose/routes.py",
+    "sha256": "da37be3cff31e56bdcdb5a7fa76076b419b8ce7246a721c89224a438ae1a5e18"
+  },
+  {
+    "repository": "SenjuWoo/dlss5-aio",
+    "commit": "c2803c9c8e92df11cc749f4971312ae38eff6179",
+    "path": "app/core/diagnose/live.py",
+    "sha256": "f77a319fb6e01c4fe91be21bed453b06f1d405f572d78408ed7ffcaef9a23bb4"
+  },
+  {
+    "repository": "SenjuWoo/dlss5-aio",
+    "commit": "c2803c9c8e92df11cc749f4971312ae38eff6179",
+    "path": "app/core/verdicts.py",
+    "sha256": "ad8ff5a5f68081914bf99bf22f90f66e29cee7e1cbe62f69457ce343e7dc5074"
+  },
+  {
+    "repository": "SenjuWoo/dlss5-aio",
+    "commit": "c2803c9c8e92df11cc749f4971312ae38eff6179",
+    "path": "app/tests/test_aio_runtime.py",
+    "sha256": "3672970fa27382e4b07fccf45ea16b21e07c90c2993fab4d7584ecc5cc3f9360"
+  },
+  {
+    "repository": "MotionflowOffical/UniversalDLSS5",
+    "commit": "369872ffb80a2bd8a4f8e3469f5b40e515fcc0f6",
+    "path": "NOTICE",
+    "sha256": "08561a58d727ad619802fd760ba55949531eb512585bf0e20f3a77ae9b33fcd2"
+  },
+  {
+    "repository": "SenjuWoo/dlss5-aio",
+    "commit": "c2803c9c8e92df11cc749f4971312ae38eff6179",
+    "path": "app/UPSTREAM-LICENSE.txt",
+    "sha256": "94a87126e3723335ba03e0d4f9a4c0cd376a0cc264dd2011e3193cd036a16e1d"
+  }
+]
