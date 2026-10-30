@@ -140,6 +140,7 @@ impl App {
                 .unwrap_or_default();
         let mut p =
             crate::spawn::new_player(vehicle, render, trailer_renders, bindings, false, &ty);
+        p.driver = crate::driver::DriverFigure::new(&world, renderer, scene, &p.vehicle, 0);
         let previous = self.player.take();
         if let Some(mut old) = previous {
             old.parked_duty = Some(super::SavedDuty {
@@ -152,7 +153,7 @@ impl App {
             {
                 sounds.stop_all(audio);
             }
-            if let Some(mut driver) = old.driver.take() {
+            if let Some(driver) = old.driver.as_mut() {
                 driver.hide(renderer, scene);
             }
             if let Some(h) = self.session.humans.as_mut() {
@@ -196,5 +197,22 @@ impl App {
             5.0,
         ));
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn takeover_initializes_the_player_driver_like_normal_spawning() {
+        let source = include_str!("take.rs").split("#[cfg(test)]").next().unwrap();
+        let initialized = source.split("crate::spawn::new_player(").nth(1).unwrap();
+        assert!(initialized.contains("p.driver = crate::driver::DriverFigure::new("));
+    }
+
+    #[test]
+    fn retaining_a_bus_does_not_discard_its_driver_render_handle() {
+        let source = include_str!("take.rs").split("#[cfg(test)]").next().unwrap();
+        assert!(!source.contains("old.driver.take()"));
+        assert!(source.contains("old.driver.as_mut()"));
     }
 }

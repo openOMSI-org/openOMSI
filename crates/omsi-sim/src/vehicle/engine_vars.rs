@@ -72,6 +72,16 @@ const NAMES: [&str; COUNT] = [
 pub(crate) type EngineVarIds = [Option<VarId>; COUNT];
 
 impl VehicleInstance {
+    /// Player-driven frames must not replay commands left by the last AI frame.
+    /// Preserve the actual engine, doors and lamps; only release the AI inputs.
+    pub(super) fn release_ai_commands(&mut self) {
+        for ev in [Ev::Ai, Ev::AiEngine, Ev::AiBlinkerL, Ev::AiBlinkerR,
+            Ev::AiBrakelight, Ev::AiLight, Ev::AiInteriorlight,
+            Ev::AiAtStation, Ev::AiAtStationSide, Ev::PriorityWarning] {
+            self.set_ev(ev, 0.0);
+        }
+    }
+
     fn ev_id(&self, ev: Ev) -> Option<VarId> {
         self.engine_ids.get_or_init(|| NAMES.map(|n| omsi_script::compile::with_lower(n, |k| self.var_index.get(k).copied())))[ev as usize]
     }
@@ -113,6 +123,72 @@ mod tests {
         assert_eq!(NAMES[Ev::Ai as usize], "AI");
         assert_eq!(NAMES[Ev::AiAtStationSide as usize], "AI_Scheduled_AtStation_Side");
         assert_eq!(NAMES[Ev::PriorityWarning as usize], "TrafficPriorityWarningNeeded");
+    }
+
+    #[test]
+    fn player_frames_release_stale_ai_engine_commands() {
+        let script = "{frame}\n(L.L.AI_Engine) 0.5 > {if} 1 (S.L.engine_on) {endif}\n(L.L.AI_Engine) -0.5 < {if} 0 (S.L.engine_on) {endif}\n{end}\n";
+        for (command, running) in [(1.0, 0.0), (-1.0, 1.0)] {
+            let mut v = crate::timetable_run::tests::script_test_vehicle(
+                script, "AI\nAI_Engine\nengine_on\n", "",
+            );
+            v.set_var("AI", 1.0);
+            v.set_var("AI_Engine", command);
+            v.set_var("engine_on", running);
+            v.update(0.02);
+            assert_eq!(v.var("engine_on"), Some(running), "stale AI command {command}");
+            assert_eq!(v.var("AI"), Some(0.0));
+            assert_eq!(v.var("AI_Engine"), Some(0.0));
+        }
+    }
+
+    #[test]
+    fn player_script_refresh_releases_stale_ai_engine_commands() {
+        let mut v = crate::timetable_run::tests::script_test_vehicle(
+            "{frame}\n(L.L.AI_Engine) 0.5 > {if} 1 (S.L.engine_on) {endif}\n{end}\n",
+            "AI\nAI_Engine\nengine_on\n", "",
+        );
+        v.set_var("AI", 1.0);
+        v.set_var("AI_Engine", 1.0);
+        v.update_scripts_only(0.0);
+        assert_eq!(v.var("engine_on"), Some(0.0));
+        assert_eq!(v.var("AI"), Some(0.0));
+    }
+
+    #[test]
+    fn ai_frames_keep_engine_control_after_player_handover() {
+        let mut v = crate::timetable_run::tests::script_test_vehicle(
+            "{frame}\n(L.L.AI_Engine) 0.5 > {if} 1 (S.L.engine_on) {endif}\n(L.L.AI_Engine) -0.5 < {if} 0 (S.L.engine_on) {endif}\n{end}\n",
+            "AI\nAI_Engine\nengine_on\n", "",
+        );
+        for engine_off in [false, true] {
+            v.update_ai(0.02, &super::super::AiFrame { engine_off, ..Default::default() });
+            assert_eq!(v.var("AI"), Some(1.0));
+            assert_eq!(v.var("AI_Engine"), Some(if engine_off { -1.0 } else { 1.0 }));
+            assert_eq!(v.var("engine_on"), Some(if engine_off { 0.0 } else { 1.0 }));
+            let player_state = if engine_off { 1.0 } else { 0.0 };
+            v.set_var("engine_on", player_state);
+            v.update(0.02);
+            assert_eq!(v.var("engine_on"), Some(player_state));
+            assert_eq!(v.var("AI"), Some(0.0));
+        }
+    }
+
+    #[test]
+    fn releasing_ai_inputs_preserves_actual_vehicle_state() {
+        let mut v = crate::timetable_run::tests::script_test_vehicle(
+            "", "AI\nAI_Engine\nAI_Scheduled_AtStation\nAI_Scheduled_AtStation_Side\nengine_on\ndoor_0\nlights_stand\n", "",
+        );
+        for name in ["AI", "AI_Engine", "AI_Scheduled_AtStation", "AI_Scheduled_AtStation_Side", "engine_on", "door_0", "lights_stand"] {
+            v.set_var(name, 1.0);
+        }
+        v.release_ai_commands();
+        for name in ["AI", "AI_Engine", "AI_Scheduled_AtStation", "AI_Scheduled_AtStation_Side"] {
+            assert_eq!(v.var(name), Some(0.0), "{name}");
+        }
+        for name in ["engine_on", "door_0", "lights_stand"] {
+            assert_eq!(v.var(name), Some(1.0), "{name}");
+        }
     }
 
     #[test]

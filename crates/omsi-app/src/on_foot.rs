@@ -13,6 +13,9 @@
 
 mod door_requests;
 mod ground;
+mod placed;
+
+pub(crate) use placed::take_placed;
 
 use crate::humans::{AvatarCmd, BusId, Humans};
 use crate::App;
@@ -652,11 +655,6 @@ impl App {
         best.map(|b| b.0)
     }
 
-    /// Take the wheel of placed vehicle `k` (the one driven now, if any, stays placed).
-    pub(crate) fn take_placed(&mut self, k: usize) {
-        SeatCx::of(&mut self.parts()).take_placed(k);
-    }
-
     /// Esc → Back to my bus: wherever the walker has got to, back at the wheel.
     pub(crate) fn back_to_bus(&mut self) {
         if self.session.on_foot.is_some() && self.player.is_some() {
@@ -970,25 +968,14 @@ impl App {
 }
 
 crate::app::stage_ctx!(
-    /// Taking the wheel of a placed vehicle: its part of the game.
-    SeatCx { reads: [sound], writes: [people, player, ui, view] }
-);
-
-crate::app::stage_ctx!(
     /// Back at the own bus's wheel: its part of the game.
     WheelCx { reads: [player], writes: [people, ui, view] }
 );
 
 crate::app::stage_ctx!(
     /// The on-foot stage's part of the game: the walker, the other players' walkers.
-    OnFootCx { reads: [input, clock, world, traffic, sound, perf], writes: [people, player, ui, view, gfx, net] }
+    OnFootCx { reads: [input, clock, world, sound, perf], writes: [people, player, ui, view, gfx, net, duty, traffic] }
 );
-
-impl SeatCx<'_, '_> {
-    fn take_placed(self, k: usize) {
-        take_placed(k, self.player, self.people, self.view, self.ui, self.sound, self.common.settings);
-    }
-}
 
 impl WheelCx<'_, '_> {
     fn sit_at_the_wheel(self) {
@@ -1026,55 +1013,6 @@ fn vehicle_boxes(at: DVec2, r: f64, player: Option<&crate::player::Player>, plac
     boxes
 }
 
-/// Take the wheel of placed vehicle `k` (the one driven now, if any, stays placed).
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn take_placed(
-    k: usize,
-    player: &mut crate::app::PlayerPart,
-    people: &mut crate::app::PeoplePart,
-    view: &mut crate::app::ViewPart,
-    ui: &mut crate::app::UiPart,
-    sound: &crate::app::SoundState,
-    settings: &crate::settings::Settings,
-) {
-    if k >= player.placed.len() {
-        return;
-    }
-    let mut next = player.placed.remove(k);
-    if let Some(a) = sound.audio.as_ref() {
-        next.load_sounds(a);
-    }
-    next.vehicle.host.auto_clutch = if settings.auto_clutch { 1.0 } else { 0.0 };
-    if let Some(now) = player.player.take() {
-        let mut now = now;
-        if let (Some(a), Some(mut ss)) = (sound.audio.as_ref(), now.sounds.take()) {
-            ss.stop_all(a);
-        }
-        if let Some(h) = people.humans.as_mut() {
-            h.player_bus_swapped(now.uid, next.uid, &mut next.vehicle);
-        }
-        player.placed.push(now);
-    } else if let Some(h) = people.humans.as_mut() {
-        // (no bus driven before: whoever rides in this one is the player's bus's now)
-        h.player_bus_swapped(0, next.uid, &mut next.vehicle);
-    }
-    let name = format!("{} {}", next.vehicle.ty.def.manufacturer, next.vehicle.ty.def.type_name);
-    *player.player = Some(next);
-    if let Some(f) = people.on_foot.take() {
-        if let Some(h) = people.humans.as_mut() {
-            h.avatar_remove(AVATAR_KEY);
-        }
-        let _ = f;
-    }
-    *view.view = "driver".into();
-    crate::app_impl::sync_view_look(view.cam, view.view, player.player.as_ref());
-    view.cam.look = (0.0, 0.0);
-    if let (Some(cam), Some(p)) = (view.camera.as_ref(), player.player.as_ref()) {
-        *view.camera = Some(p.camera("driver", cam));
-    }
-    *ui.service_msg = Some((omsi_ui::i18n::tr_fill("Now driving: {name}", &[("{name}", &name.trim())]), 4.0));
-}
-
 /// Back at the wheel of the own bus.
 fn sit_at_the_wheel(people: &mut crate::app::PeoplePart, view: &mut crate::app::ViewPart, ui: &mut crate::app::UiPart, player: &crate::app::PlayerPart) {
     let Some(f) = people.on_foot.take() else { return };
@@ -1105,6 +1043,9 @@ pub(crate) fn tick(cx: &mut OnFootCx, dt: f32) {
         }
         Some(Then::Placed(uid)) => {
             if let Some(k) = cx.player.placed.iter().position(|q| q.uid == uid) {
+                crate::vehicle_handover::exchange_placed_duty(
+                    k, cx.player, cx.duty, cx.traffic.schedule.as_mut().map(|s| &mut s.sim),
+                );
                 take_placed(k, cx.player, cx.people, cx.view, cx.ui, cx.sound, cx.common.settings);
                 return;
             }

@@ -6,7 +6,7 @@ mod retained;
 mod selection;
 mod take;
 
-pub(crate) use retained::SavedDuty;
+pub(crate) use retained::{exchange_placed_duty, SavedDuty};
 use selection::Target;
 mod route;
 
