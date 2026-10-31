@@ -57,6 +57,11 @@ pub(crate) struct NetState {
     /// LAN session, and the other players' buses (drawn and heard like AI vehicles) with the
     /// chat line.
     pub(crate) lan: Option<omsi_net::LanSession>,
+    /// Negotiate once per welcome/reconnect; never poll old servers every 180 frames.
+    pub(crate) speed_limit_welcome: Option<u32>,
+    /// Set only by the dedicated server's teleport capability response.
+    /// None means an older server or a player-hosted LAN session.
+    pub(crate) dedicated_teleport: Option<bool>,
     pub(crate) remotes: lan::LanGame,
     /// The shared world: the host's traffic and people, sent (host) or mirrored (client).
     pub(crate) lan_world: crate::lan_world::LanWorld,
