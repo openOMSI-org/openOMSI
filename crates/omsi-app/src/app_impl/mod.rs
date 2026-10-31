@@ -15,6 +15,8 @@ pub(crate) use vehicles::{placement, PlacementCx};
 pub(crate) mod lan_tick;
 mod menu_lists;
 mod menus;
+pub(crate) mod rooms;
+mod room_world;
 mod quick_actions;
 mod mouse;
 mod mouse_grab;
