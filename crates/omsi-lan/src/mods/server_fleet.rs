@@ -6,7 +6,10 @@ use crate::server_cfg::SERVER_VEHICLES;
 /// The selected bus is offered only when its canonical path is explicitly configured.
 pub(super) fn package(root: &Path, base: &(Manifest, Vec<PathBuf>), bus: &str, paint: &str) -> Result<(Manifest, Vec<PathBuf>), String> {
     let bus = omsi_net::vehicle_path(bus).ok_or("invalid bus path")?;
-    if !SERVER_VEHICLES.get().is_some_and(|list| list.iter().any(|v| omsi_net::vehicle_path(v).is_some_and(|b| b.eq_ignore_ascii_case(&bus)))) {
+    let Some(allowed) = SERVER_VEHICLES.get().filter(|v| !v.is_empty()) else {
+        return Err("fleet not configured".into());
+    };
+    if !allowed.iter().any(|v| omsi_net::vehicle_path(v).is_some_and(|b| b.eq_ignore_ascii_case(&bus))) {
         return Err("that bus is not in the dedicated server's vehicles list".into());
     }
     if refuse_path(&bus).is_some() { return Err("refused vehicle path".into()); }
