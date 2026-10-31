@@ -417,8 +417,13 @@ pub struct PeopleSim {
     pub defer_populate: bool,
     /// Passengers pay the exact fare: no change is ever due.
     pub exact_fare: bool,
+    /// Percentage of eligible alighters allowed to continue as the same person.
+    /// Defaults OFF; multiplayer owner transfer is not enabled yet.
+    pub transfer_percent: f32,
     /// Compute visual-only boarding signals when requested by this client.
     pub visual_hailing: bool,
+    /// Optional visual-only response to an approaching full bus.
+    pub visual_full_bus_reaction: bool,
     pub bad_driving: bool,
     /// How passengers board (`boarding` in the settings): `auto` - pay and take the
     /// ticket by themselves after a moment; `pay` - wait at the desk for the driver to

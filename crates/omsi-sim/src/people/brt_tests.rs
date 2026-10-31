@@ -1,7 +1,7 @@
 //! Synthetic regressions for platform registration and actual boarding targets.
 use super::*;
 
-fn setup(name: &str, trailer: Option<f32>) -> (PeopleSim, BusNow) {
+pub(crate) fn setup(name: &str, trailer: Option<f32>) -> (PeopleSim, BusNow) {
     let dir = std::env::temp_dir().join(format!("omsi-brt-{name}-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     for (file, text) in [
@@ -331,4 +331,65 @@ fn optional_hailing_is_cosmetic_and_ignores_out_of_service_buses() {
     h.pax_mut(0).unwrap().task = Task::WaitingForBus;
     bus.takes = Takes::Nobody;
     assert_eq!(h.visual_hail_bus(0, std::slice::from_ref(&bus)), None);
+}
+
+#[test]
+fn full_bus_snapshot_counts_standing_and_disabled_places() {
+    let (mut h, mut bus) = setup("optional-full", None);
+    h.visual_full_bus_reaction = true;
+    h.pax_mut(0).unwrap().task = Task::WaitingForBus;
+    h.pax_mut(0).unwrap().line = Some(0);
+    h.stops.get_mut(&42).unwrap().lines = vec![("Elsewhere".into(), ["Elsewhere".into()].into_iter().collect())];
+    bus.pos = DVec3::new(-4.0, -20.0, 0.0);
+    bus.speed = 4.0;
+    let mut standing = bus.cabin.seats[0].clone();
+    standing.seated = false;
+    standing.height = 0.0;
+    Arc::get_mut(&mut bus.cabin).unwrap().seats.push(standing);
+    h.seats.insert(bus.id, vec![true, false]);
+    h.last_buses = Arc::new(vec![bus.clone()]);
+    let mut frame = crate::view_events::PeopleFrame::default();
+    h.snapshot_into(&mut frame);
+    assert!(!frame.people[0].hail_full, "a standing place is still available");
+    h.seats.get_mut(&bus.id).unwrap()[1] = true;
+    h.snapshot_into(&mut frame);
+    assert!(frame.people[0].hail_full);
+    bus.places_off = vec![false, true];
+    h.last_buses = Arc::new(vec![bus.clone()]);
+    h.seats.get_mut(&bus.id).unwrap()[1] = false;
+    h.snapshot_into(&mut frame);
+    assert!(frame.people[0].hail_full, "script-disabled places do not add capacity");
+    bus.places_off = vec![true, true];
+    h.last_buses = Arc::new(vec![bus]);
+    h.snapshot_into(&mut frame);
+    assert!(!frame.people[0].hail_full, "zero known capacity is not proof of a full bus");
+    h.visual_full_bus_reaction = false;
+    h.snapshot_into(&mut frame);
+    assert!(frame.people[0].hail_target.is_none());
+}
+
+#[test]
+fn full_bus_detection_respects_all_four_settings_combinations() {
+    let (mut h, mut bus) = setup("visual-combinations", None);
+    h.pax_mut(0).unwrap().task = Task::WaitingForBus;
+    h.pax_mut(0).unwrap().line = Some(0);
+    h.stops.get_mut(&42).unwrap().lines =
+        vec![("Elsewhere".into(), ["Elsewhere".into()].into_iter().collect())];
+    bus.pos = DVec3::new(-4.0, -20.0, 0.0);
+    bus.speed = 4.0;
+    h.last_buses = Arc::new(vec![bus.clone()]);
+    h.seats.insert(bus.id, vec![true; bus.cabin.seats.len()]);
+    let mut frame = crate::view_events::PeopleFrame::default();
+    for hailing in [false, true] {
+        for reaction in [false, true] {
+            h.visual_hailing = hailing;
+            h.visual_full_bus_reaction = reaction;
+            h.snapshot_into(&mut frame);
+            let p = &frame.people[0];
+            assert_eq!(p.hail_target.is_some(), hailing || reaction);
+            assert_eq!(p.hail_full, hailing || reaction);
+            assert_eq!(p.hail_signal_enabled, hailing);
+            assert_eq!(p.hail_reaction_enabled, reaction);
+        }
+    }
 }
