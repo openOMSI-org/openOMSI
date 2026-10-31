@@ -94,6 +94,15 @@ pub(crate) fn close(app: &mut crate::App, save: bool) {
     app.menus.game_panels.view = None;
 }
 
+/// Parse only slider IDs made by the mirror editor: m<index>x or m<index>y.
+fn mirror_axis_id(id: &str) -> Option<(usize, usize)> {
+    let rest = id.strip_prefix('m')?;
+    if let Some(index) = rest.strip_suffix('x').and_then(|s| s.parse().ok()) {
+        return Some((index, 0));
+    }
+    rest.strip_suffix('y').and_then(|s| s.parse().ok()).map(|index| (index, 1))
+}
+
 pub(crate) fn change(app: &mut crate::App, id: &str, value: &Value) {
     let Value::Num(v) = value else { return };
     let v = *v as f32;
@@ -107,7 +116,7 @@ pub(crate) fn change(app: &mut crate::App, id: &str, value: &Value) {
         "fov" => app.cam.view_fov = (v >= 20.0).then_some(v),
         m => {
             // a mirror's turn: `m<i>x` across, `m<i>y` up
-            let Some((i, axis)) = m.strip_prefix('m').and_then(|r| Some((r[..r.len() - 1].parse::<usize>().ok()?, r.as_bytes()[r.len() - 1]))) else { return };
+            let Some((i, axis)) = mirror_axis_id(m) else { return };
             let Some(p) = app.player.as_mut() else { return };
             let n = p.vehicle.ty.def.cameras_reflexion.len();
             if i >= n {
@@ -116,7 +125,7 @@ pub(crate) fn change(app: &mut crate::App, id: &str, value: &Value) {
             if p.mirror_offsets.len() < n {
                 p.mirror_offsets.resize(n, [0.0; 2]);
             }
-            p.mirror_offsets[i][if axis == b'x' { 0 } else { 1 }] = v;
+            p.mirror_offsets[i][axis] = v;
         }
     }
 }
@@ -270,5 +279,19 @@ mod tests {
         assert_eq!(stored_in(&text, "vehicles/a.bus", &std), (0.0, None));
         assert_eq!(stored_in(&text, "vehicles/c.bus", &std), (0.0, None));
         assert_eq!(blocks(&text).len(), 2);
+    }
+}
+
+#[cfg(test)]
+mod mirror_axis_tests {
+    use super::mirror_axis_id;
+
+    #[test]
+    fn accepts_only_valid_ascii_mirror_axes() {
+        assert_eq!(mirror_axis_id("m0x"), Some((0, 0)));
+        assert_eq!(mirror_axis_id("m12y"), Some((12, 1)));
+        for invalid in ["", "m", "m0", "m0z", "m🦊", "m0é", "mxy"] {
+            assert_eq!(mirror_axis_id(invalid), None, "{invalid}");
+        }
     }
 }

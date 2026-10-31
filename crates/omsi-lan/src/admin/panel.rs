@@ -189,6 +189,11 @@ impl Panel {
             out.push(noop(format!("{}: {}", tr("Weather"), crate::admin::unesc(self.get("weather")))));
         }
         out.push((format!("{} ({})...", tr("Players"), self.players.len()), "players".into()));
+        if self.may_world() && self.players.len() > 1 {
+            // Dedicated servers have no driver's seat: "bring" uses the authenticated
+            // administrator's network pose, not the server process's nonexistent bus.
+            out.push((tr("Bring everybody here"), "send bringall".into()));
+        }
         if !self.state.is_empty() {
             self.world_lines(&mut out, tr);
         }
@@ -262,13 +267,21 @@ impl Panel {
         let Some(p) = self.player(t) else {
             return vec![(tr("That player is no longer on the server (or came back on a new connection): pick them again"), "players".into())];
         };
-        vec![
+        let mut lines = vec![
             (format!("{} (#{}, {} {}) - {}", p.name, p.id, tr("connection"), p.conn, Self::describe(p, tr)), "noop".into()),
             (tr("Send away..."), format!("ask-kick {}", t.tag())),
             (tr("Send away for this server run..."), format!("ask-ban {}", t.tag())),
             (tr("Silence voice chat"), format!("send vmute {}", t.tag())),
             (tr("Allow voice chat again"), format!("send vunmute {}", t.tag())),
-        ]
+        ];
+        if p.state == PlayerState::Driving {
+            lines.push((tr("go to"), format!("send goto {}", t.tag())));
+            if self.may_world() {
+                lines.push((tr("bring here"), format!("send bring {}", t.tag())));
+            }
+            lines.push((tr("put their bus back on its wheels"), format!("send unstick {}", t.tag())));
+        }
+        lines
     }
 
     /// The question before sending a player away.
@@ -341,6 +354,19 @@ mod tests {
         feed(&mut p, &["admin-p 2 99 driving - - 1 - Pichau", "admin-end 1 1"]);
         assert_eq!(p.confirm_lines("kick", t, &tr).len(), 1);
         assert_eq!(AdminMenu::parse(&p.confirm_lines("kick", t, &tr)[0].1), AdminMenu::Players);
+    }
+
+    #[test]
+    fn dedicated_server_players_offer_tp_only_to_the_right_role() {
+        let mut p = Panel::default();
+        feed(&mut p, &["admin-ok moderator", "admin-p 2 17 driving - - 600 MAN_SD77 Pichau", "admin-end 1 1"]);
+        let t = Target { id: 2, conn: 17 };
+        let moderator = p.one_player_lines(t, &tr);
+        assert!(moderator.iter().any(|l| l.1 == "send goto 2#17"));
+        assert!(moderator.iter().any(|l| l.1 == "send unstick 2#17"));
+        assert!(!moderator.iter().any(|l| l.1 == "send bring 2#17"));
+        p.role = Some(Role::Admin);
+        assert!(p.one_player_lines(t, &tr).iter().any(|l| l.1 == "send bring 2#17"));
     }
 
     #[test]

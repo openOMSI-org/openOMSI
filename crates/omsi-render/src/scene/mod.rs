@@ -6,6 +6,8 @@ use crate::*;
 mod instances;
 pub(crate) mod overlay;
 mod upload;
+mod lod;
+pub(crate) use lod::object_screen_size;
 
 #[derive(Clone, Copy, Default)]
 pub(crate) struct InstanceBounds {

@@ -12,6 +12,7 @@ pub(super) fn option_now(app: &App, verb: &str, arg: &str) -> Option<f32> {
         "speed" => s.time_speed as f32,
         "traffic" => app.session.traffic.as_ref()?.target as f32,
         "pax" => s.pax_density,
+        "passenger_transfer_percent" => s.passenger_transfer_percent,
         "volume" => s.volume,
         "led_glow" => s.led_glow as f32,
         "night_brightness" => s.night_brightness,
@@ -108,6 +109,7 @@ pub(super) fn option_set(app: &mut App, verb: &str, arg: &str, v: f32) -> Option
             app.settings.pax_density = v;
             Some(("pax_density", v.to_string()))
         }
+        "passenger_transfer_percent" => set_connection_percent(app, v),
         "volume" => {
             app.settings.volume = v;
             Some(("volume", v.to_string()))
@@ -396,6 +398,9 @@ fn set_cab_wheel_rotation(app: &mut App, v: f32) -> (&'static str, String) {
 pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
     let s = &app.settings;
     Some(match id {
+        "passenger_connections" => s.passenger_connections,
+        "passenger_hailing" => s.passenger_hailing,
+        "passenger_full_bus_reaction" => s.passenger_full_bus_reaction,
         "navigator" => if app.vr_active() { app.vr_nav_profile().enabled } else { app.menus.navigator.as_ref().is_some_and(|n| n.enabled) },
         "nav_ai" => app.menus.navigator.as_ref().map_or(s.nav_ai, |n| n.show_ai),
         "nav_surface" => app.menus.navigator.as_ref().map_or(s.nav_surface, |n| n.show_surface),
@@ -497,6 +502,29 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
 pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static str, String)> {
     let bit = (on as u8).to_string();
     match id {
+        "passenger_connections" => {
+            app.settings.passenger_connections = on;
+            if let Some(h) = app.session.humans.as_mut() {
+                h.transfer_percent = if on && app.args.passenger_connections_allowed(app.net.lan.is_some()) {
+                    app.settings.passenger_transfer_percent
+                } else { 0.0 };
+            }
+            Some(("passenger_connections", bit))
+        }
+        "passenger_hailing" => {
+            app.settings.passenger_hailing = on;
+            if let Some(h) = app.session.humans.as_mut() {
+                h.visual_hailing = on && app.settings.passenger_animation == "enhanced";
+            }
+            Some(("passenger_hailing", bit))
+        },
+        "passenger_full_bus_reaction" => {
+            app.settings.passenger_full_bus_reaction = on;
+            if let Some(h) = app.session.humans.as_mut() {
+                h.visual_full_bus_reaction = on && app.settings.passenger_animation == "enhanced";
+            }
+            Some(("passenger_full_bus_reaction", bit))
+        },
         "navigator" => {
             if app.vr_active() {
                 if app.vr_nav_profile().enabled != on { app.vr_nav_adjust("enabled", 1.0); }
@@ -965,4 +993,15 @@ pub(crate) fn option_do(app: &mut App, verb: &str, arg: &str, mv: Move) -> bool 
         return true;
     }
     false
+}
+
+fn set_connection_percent(app: &mut App, value: f32) -> Option<(&'static str, String)> {
+    if !value.is_finite() { return None; }
+    app.settings.passenger_transfer_percent = value.round().clamp(0.0, 100.0);
+    if let Some(humans) = app.session.humans.as_mut() {
+        humans.transfer_percent = if app.args.passenger_connections_allowed(app.net.lan.is_some()) && app.settings.passenger_connections {
+            app.settings.passenger_transfer_percent
+        } else { 0.0 };
+    }
+    Some(("passenger_transfer_percent", app.settings.passenger_transfer_percent.to_string()))
 }

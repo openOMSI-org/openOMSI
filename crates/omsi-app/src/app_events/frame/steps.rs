@@ -342,6 +342,9 @@ pub(crate) fn humans_after_step(
         for (id, doors) in h.take_ai_requests() {
             t.set_pax_requests(id, &doors);
         }
+        for id in h.take_ai_stop_requests() {
+            t.sim.request_stop(id);
+        }
     }
 }
 

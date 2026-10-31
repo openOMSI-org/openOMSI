@@ -351,6 +351,11 @@ pub(crate) fn parse_triggers(args: &Args) -> Vec<(String, f32)> {
 }
 
 impl Args {
+    /// Connections are local until passenger ownership handback is synchronized.
+    pub(crate) fn passenger_connections_allowed(&self, connected: bool) -> bool {
+        !connected && self.server.is_none() && self.lan_host.is_none() && self.lan_join.is_none()
+    }
+
     pub(crate) fn is_resuming(&self) -> bool {
         self.situation.is_some()
             || self.situation_odometer_km.is_some()
@@ -370,4 +375,20 @@ pub(crate) struct SituationOther {
     pub vars: Vec<(String, f32)>,
     pub strvars: Vec<(String, String)>,
     pub odometer_km: Option<f64>,
+}
+
+#[cfg(test)]
+mod passenger_connection_authority_tests {
+    use super::*;
+    #[test]
+    fn connections_stay_off_for_every_network_entry_path() {
+        let solo = Args::parse_from(["openomsi"]);
+        assert!(solo.passenger_connections_allowed(false));
+        assert!(!solo.passenger_connections_allowed(true));
+        for flags in [vec!["--lan-host", "27015"], vec!["--lan-join", "127.0.0.1:27015"], vec!["--lan-join", "wss://localhost/ws"], vec!["--server", "server.cfg"]] {
+            let args = Args::parse_from(std::iter::once("openomsi").chain(flags));
+            assert!(!args.passenger_connections_allowed(false));
+            assert!(!args.passenger_connections_allowed(true));
+        }
+    }
 }

@@ -281,9 +281,21 @@ fn always_survives_restart_but_changes_reprompt_and_cannot_race_approval() {
         format!("{source}\n-- changed while dialog was open\n"),
     )
     .unwrap();
-    assert!(broker.respond(p.id, ProcessDecision::AlwaysAllow));
-    drive(&mut host, &mut game, |g| !g.messages.is_empty());
-    assert!(game.messages[0].contains("plugin content changed"));
+    // The approval is of what the dialog showed: the changed file never runs on it. Which
+    // of two safe ways it is refused depends on timing - the start finds the content
+    // changed, or the plugin's own reload (its files changed) comes first, drops the
+    // pending start and asks again for the new content.
+    let answered = broker.respond(p.id, ProcessDecision::AlwaysAllow);
+    drive(&mut host, &mut game, |g| {
+        g.messages.iter().any(|m| m.contains("plugin content changed"))
+            || broker.prompt().is_some_and(|q| q.id != p.id)
+    });
+    let refused = game.messages.iter().any(|m| m.contains("plugin content changed"));
+    assert!(refused || !answered || game.messages.iter().any(|m| m.contains("reloaded")), "{:?}", game.messages);
+    for _ in 0..64 {
+        host.frame(&mut game);
+    }
+    assert!(!game.messages.iter().any(|m| m.starts_with("exited:")), "{:?}", game.messages);
     assert!(!f.marker.exists());
     host.finalize();
     std::fs::remove_dir_all(f.root).unwrap();

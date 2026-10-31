@@ -114,6 +114,10 @@ pub struct Pax {
     /// opens a door.
     pub door_since: Option<f64>,
     pub shunned: Option<BusId>,
+    /// Prevent immediate re-boarding of the vehicle just left.
+    pub transfer_from: Option<BusId>,
+    /// Bound connections for the lifetime of this passenger.
+    pub transfer_count: u8,
     /// Walking to a door from outside (+0x5d0): keep 0.5 m off the bus side
     /// (`clamp_x`, +0x5cc) unless the door is open (+0x5d1) and they are level with it;
     /// a door on the left (+0x5d2).
@@ -220,6 +224,8 @@ impl Pax {
             short: false,
             door_since: None,
             shunned: None,
+            transfer_from: None,
+            transfer_count: 0,
             clamp: false,
             clamp_open: false,
             clamp_left: false,

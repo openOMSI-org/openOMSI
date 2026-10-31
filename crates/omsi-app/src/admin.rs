@@ -217,6 +217,31 @@ fn teleport_beside(app: &mut App, pos: glam::DVec3, heading: f64) {
     teleport(app, glam::DVec3::new(x, y, pos.z), heading);
 }
 
+/// Ask the host to move our own bus when connected. A client must never grant itself
+/// a teleport: dedicated servers decide using their RP policy and the player's admin role.
+/// The host's existing `teleport` reply applies the move and publishes the next LAN pose.
+pub(crate) fn request_teleport(app: &mut App, at: glam::DVec3, heading: f64) -> bool {
+    if !at.is_finite() || !heading.is_finite() {
+        app.service_msg = Some((omsi_ui::tr("Invalid teleport destination").into_owned(), 3.0));
+        return false;
+    }
+    if app.net.lan.as_ref().is_some_and(|l| l.role == Role::Client) {
+        if app.net.dedicated_teleport.is_none() {
+            // A player-hosted LAN game (or an older host) never advertises this
+            // dedicated-server feature; keep the original local explanation.
+            app.service_msg = Some((omsi_ui::tr("In a LAN session only the host moves vehicles on the map").into_owned(), 3.0));
+            return false;
+        }
+        if let Some(lan) = app.net.lan.as_mut() {
+            lan.command(1, &format!("tp-request {:.3} {:.3} {:.3} {:.3}", at.x, at.y, at.z, heading));
+        }
+        app.service_msg = Some((omsi_ui::tr("Request sent").into_owned(), 3.0));
+        return false;
+    }
+    teleport(app, at, heading);
+    true
+}
+
 /// Our bus put at `at` facing `heading` (stopped), with the walker back at its wheel.
 pub(crate) fn teleport(app: &mut App, at: glam::DVec3, heading: f64) {
     if app.session.on_foot.is_some() {
@@ -387,7 +412,7 @@ pub(crate) fn carry_out(app: &mut App, from: u32, command: Command) {
         // (a game hosting by code sent a notice: the player's game showed it)
         Command::NotifySeen(id) => log::info!("LAN: player {from} saw notice {id}"),
         // (the session's own: `lan_command`)
-        Command::Trigger(_) | Command::VoiceAsked | Command::Voice(_) | Command::VoiceMuted(_) => {}
+        Command::Trigger(_) | Command::SpeedLimitAsked | Command::SpeedLimit(_) | Command::VoiceAsked | Command::Voice(_) | Command::VoiceMuted(_) => {}
     }
 }
 

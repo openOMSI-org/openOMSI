@@ -297,6 +297,10 @@ pub struct PeopleSim {
     pub under_bus: hashbrown::HashSet<u32>,
     /// A rider pressed the stop button for the next stop (the app fires the vehicle trigger `int_haltewunsch`).
     pub stop_request: bool,
+    /// Timetable buses whose passenger asked for the next stop (`int_haltewunsch`, taken by
+    /// the app each frame): a bus's script responds to its own request, so the scripts
+    /// that check `haltewunsch` (e.g. `NSAC_City_2Door.bus`) open the exit.
+    pub ai_stop_requests: Vec<u64>,
     /// Tickets sold at the cash desk this session and what they were worth.
     pub tickets_sold: u32,
     pub ticket_cash: f32,
@@ -413,6 +417,13 @@ pub struct PeopleSim {
     pub defer_populate: bool,
     /// Passengers pay the exact fare: no change is ever due.
     pub exact_fare: bool,
+    /// Percentage of eligible alighters allowed to continue as the same person.
+    /// Defaults OFF; multiplayer owner transfer is not enabled yet.
+    pub transfer_percent: f32,
+    /// Compute visual-only boarding signals when requested by this client.
+    pub visual_hailing: bool,
+    /// Optional visual-only response to an approaching full bus.
+    pub visual_full_bus_reaction: bool,
     pub bad_driving: bool,
     /// How passengers board (`boarding` in the settings): `auto` - pay and take the
     /// ticket by themselves after a moment; `pay` - wait at the desk for the driver to

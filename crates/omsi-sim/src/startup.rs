@@ -51,6 +51,7 @@ const STARTER_VARIABLES: &[&str] = &[
     "motor_starter",
     "motor_anlasser",
 ];
+const RUNNING_VARIABLES: &[&str] = &["engine_on", "engine_running", "motor_on", "motor_running"];
 
 /// Seconds a key is held for an ordinary press, and between two presses.
 const PRESS: f32 = 0.2;
@@ -64,6 +65,8 @@ const DDU_LOGIN_DELAY: f32 = 7.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Step {
+    /// A separate battery isolator must be on before the ignition key can supply power.
+    BatteryMaster,
     Power,
     /// Vehicle systems such as the Hong Kong LECIP DDU must be logged in before cranking.
     Login,
@@ -407,8 +410,9 @@ pub fn engine_running(v: &VehicleInstance) -> bool {
         |name: &&str| flag(v, name) == Some(true) || running_flag_is_authoritative(v, name);
     any_flag(
         v,
-        ["engine_on", "engine_running", "motor_on", "motor_running"]
-            .into_iter()
+        RUNNING_VARIABLES
+            .iter()
+            .copied()
             .filter(authoritative),
     )
     .or_else(|| {
@@ -609,7 +613,7 @@ impl StartUp {
         if engine_running(v) {
             s.enter(v, bound, Step::Shutdown);
         } else {
-            s.enter(v, bound, Step::Power);
+            s.enter(v, bound, Step::BatteryMaster);
         }
         s
     }
@@ -626,6 +630,13 @@ impl StartUp {
         self.candidate = 0;
         self.presses = 0;
         self.candidates = match step {
+            Step::BatteryMaster if flag(v, "cp_elec_busbar_master_sw") == Some(false) => candidates(
+                v,
+                &["cp_elec_busbar_master_sw"],
+                &["cp_elec_busbar_master"],
+                bound,
+                &[],
+            ),
             Step::Power if !power_on(v) => candidates(
                 v,
                 POWER_VARIABLES,
@@ -638,13 +649,19 @@ impl StartUp {
                 bound,
                 &["zuendung", "zündung", "zundung", "ignition", "schluessel", "schlüssel"],
             ),
-            Step::Crank if !engine_running(v) => candidates(
-                v,
-                STARTER_VARIABLES,
-                STARTER_NAMES,
-                bound,
-                &["engine_start", "enginestart", "engine_starter", "starter", "anlass", "anlasser", "motor_start", "motorstart", "start_stop"],
-            ),
+            Step::Crank if !engine_running(v) => {
+                // Some staged keys start combustion directly without a starter flag. Use
+                // their enabling triggers too: the same E key continues past ignition,
+                // while M may only clear engine_on and turn the key backwards.
+                let vars: Vec<&str> = STARTER_VARIABLES.iter().chain(RUNNING_VARIABLES).copied().collect();
+                candidates(
+                    v,
+                    &vars,
+                    STARTER_NAMES,
+                    bound,
+                    &["engine_start", "enginestart", "engine_starter", "starter", "anlass", "anlasser", "motor_start", "motorstart", "start_stop"],
+                )
+            }
             // Shutting down: what stops the engine (a stop button, where a bus has one),
             // then what switches the electrics off - the very toggles that switched them on
             // (the stock buses and most mods stop the engine with the battery switch or the
@@ -701,17 +718,23 @@ impl StartUp {
         self.t += dt;
         match self.step {
             Step::Done => return false,
-            Step::Power => {
-                if power_on(v) && self.pressed.as_ref().map(|p| p.1).unwrap_or(true) {
+            Step::BatteryMaster | Step::Power => {
+                let (on, next, what) = if self.step == Step::BatteryMaster {
+                    (flag(v, "cp_elec_busbar_master_sw").unwrap_or(true), Step::Power, "battery master")
+                } else {
+                    (power_on(v), Step::Login, "electrics")
+                };
+                if on && self.pressed.as_ref().map(|p| p.1).unwrap_or(true) {
                     if self.presses > 0 {
                         self.report.push(format!(
-                            "electrics on ({} x {})",
+                            "{what} on ({} x {})",
                             self.presses, self.candidates[self.candidate]
                         ));
                     }
-                    self.enter(v, bound, Step::Login);
+                    self.enter(v, bound, next);
                 } else {
-                    self.press_loop(v, bound, Step::Ignition, "electrics");
+                    let failed_next = if self.step == Step::BatteryMaster { Step::Power } else { Step::Ignition };
+                    self.press_loop(v, bound, failed_next, what);
                 }
             }
             Step::Login => {
@@ -804,7 +827,11 @@ impl StartUp {
                         }
                     }
                 } else if engine_running(v) && self.pressed.as_ref().map(|p| p.1).unwrap_or(true) {
-                    self.step = Step::Displays;
+                    let name = self.candidates.get(self.candidate).cloned().unwrap_or_default();
+                    self.report.push(format!("engine started ({name})"));
+                    self.cranks += 1;
+                    self.step = Step::Verify;
+                    self.t = 0.0;
                 } else {
                     self.press_loop(v, bound, Step::Done, "starter");
                     // Also observe an immediate start request from a newly pressed key.

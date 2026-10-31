@@ -157,6 +157,58 @@ fn traffic_light_program_requires_a_placed_signal() {
     assert!(!traffic_light_program_enabled(&SceneryObject::default(), true));
 }
 
+#[test]
+fn freetex_without_item_uses_current_base_when_powered() {
+    let model = omsi_model::Model::parse(&omsi_cfg::CfgFile::from_str(
+        "model.cfg",
+        concat!(
+            "[mesh]\nLECIP\\bcp_.o3d\n[mouseevent]\nddu_login\n",
+            "[matl_change]\nbase_mon.tga\n0\nelec_busbar_main\n",
+            "[matl_freetex]\nbase_mon.tga\nBCP_mon_base\n[matl_lightmap]\npmonlm.bmp\n",
+            "[matl]\nreg.bmp\n0\n[useTextTexture]\n17\n[matl_alpha]\n2\n[matl_nightmap]\nblack.bmp\n",
+            "[matl]\nreg.bmp\n1\n[useTextTexture]\n18\n[matl_alpha]\n2\n[matl_nightmap]\npchangelm.tga\n",
+        ),
+    ));
+    let mats = &model.meshes[0].materials;
+    assert!(!mats.iter().any(|m| m.item));
+    let plain = mats.iter().filter(|m| m.texture == "base_mon.tga").collect();
+    assert_eq!(free_texture_defs(&[plain]), vec![(1, "base_mon.tga".into(), "BCP_mon_base".into())]);
+    let var = mats.iter().find_map(|m| m.change.as_ref().map(|c| c.2.clone())).unwrap();
+    let mut slot = VariantSlot {
+        mesh: 0, slot: 0, base: 10, item: 10, more: Vec::new(),
+        var, more_vars: Vec::new(), entries: Vec::new(), tex_var: String::new(),
+        free: Vec::new(), free_built: HashMap::new(), free_lights: None,
+        spec: SlotSpec { base: freetex_test_look(), item: None, more: Vec::new() },
+        base_tex: None, entry_tex: Vec::new(), lights: None,
+    };
+    // A selective free-texture rebuild changes only base; item still holds the placeholder.
+    for picture in [20, 30, 20, 10] {
+        slot.base = picture;
+        assert_eq!(slot.material(|_| Some(0.0)), picture);
+        assert_eq!(slot.material(|_| Some(1.0)), picture);
+    }
+    slot.more_vars.push("other_power".into());
+    slot.base = 20;
+    assert_eq!(slot.material(|n| Some(if n == "other_power" { 1.0 } else { 0.0 })), 20);
+    // Explicit items, further items, and texchanges retain their independent materials.
+    slot.more_vars.clear();
+    slot.spec.item = Some(freetex_test_look());
+    slot.item = 40;
+    assert_eq!(slot.material(|_| Some(0.0)), 20);
+    assert_eq!(slot.material(|_| Some(1.0)), 40);
+    slot.more.push(50);
+    assert_eq!(slot.material(|_| Some(2.0)), 50);
+    slot.spec.item = None;
+    slot.more.clear();
+    slot.entries = vec![(60, 60), (70, 70)];
+    slot.tex_var = "texture_index".into();
+    for (index, expected) in [(0.0, 60), (1.0, 70)] {
+        for power in [0.0, 1.0] {
+            assert_eq!(slot.material(|n| Some(if n == "texture_index" { index } else { power })), expected);
+        }
+    }
+}
+
 fn freetex_test_look() -> Look {
     Look {
         alpha: AlphaMode::Opaque,

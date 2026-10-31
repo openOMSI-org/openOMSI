@@ -9,6 +9,7 @@ mod gears;
 mod ibis;
 mod mouse;
 mod picking;
+mod rp_speed_limit;
 
 pub(crate) use cameras::*;
 pub(crate) use doors::*;
@@ -1032,9 +1033,17 @@ impl Player {
         }
         self.auto_clutch_bite(a.throttle.unwrap_or(0.0).max(self.axes.throttle));
         self.tick_auto_shift(dt, a.throttle.unwrap_or(0.0).max(self.axes.throttle), a.brake.unwrap_or(0.0).max(self.axes.brake));
+        let throttle = a.throttle.unwrap_or(self.axes.throttle).max(self.axes.throttle);
+        let brake = a.brake.unwrap_or(self.axes.brake).max(self.axes.brake);
+        let (throttle, brake) = rp_speed_limit::controls(
+            f64::from(self.vehicle.physics.velocity_kmh()),
+            omsi_lan::commands::speed_limit_kmh(),
+            throttle,
+            brake,
+        );
         self.vehicle.set_controls(omsi_sim::Controls {
-            throttle: a.throttle.unwrap_or(self.axes.throttle).max(self.axes.throttle),
-            brake: a.brake.unwrap_or(self.axes.brake).max(self.axes.brake),
+            throttle,
+            brake,
             clutch: a.clutch.unwrap_or(self.axes.clutch).max(self.axes.clutch),
             // (a wheel at rest does not hold against the keys)
             steering: match a.steering {

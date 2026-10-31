@@ -242,3 +242,39 @@ fn a_schemes_setvar_is_what_is_drawn_after_the_scripts() {
     v.update_scripts_only(0.0);
     assert_eq!(v.var("v_drzwi"), Some(1.0));
 }
+
+/// A value asked for with `--setvar` stays over the scheme's `[setvar]` of the same variable,
+/// which is written every frame: the launcher's doors and mirrors chosen over a repaint's
+/// were the repaint's again a frame later, and only what the repaint does not set was the
+/// player's. What the scheme does not set is still the scripts' to change.
+#[test]
+fn a_value_set_over_the_scheme_stays_the_one_set() {
+    let dir = std::env::temp_dir().join(format!("omsi_scheme_override_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let script = dir.join("cockpit.osc");
+    std::fs::write(&script, "{frame}\n(L.L.v_doors) (S.L.seen)\n(L.L.lamp) 1 + (S.L.lamp)\n{end}\n").unwrap();
+    let vars = dir.join("vars.txt");
+    std::fs::write(&vars, "v_doors\nv_mirrors\nseen\nlamp\n").unwrap();
+    let program = omsi_script::compile(&omsi_script::CompileInput { scripts: vec![script], varlists: vec![vars], ..Default::default() });
+    std::fs::remove_dir_all(&dir).ok();
+    assert!(program.errors.is_empty(), "{:?}", program.errors);
+    let mut ty = diagnostic_type(false);
+    ty.program = Arc::new(program);
+    ty.paint_schemes = vec![PaintScheme { set_vars: vec![("v_doors".into(), 1.0), ("v_mirrors".into(), 1.0)], ..Default::default() }];
+    let mut host = VehicleHost::new(Default::default());
+    host.paint_scheme = Some(Some(0));
+    let mut v = VehicleInstance::new(Arc::new(ty), host);
+    v.apply_paint_vars(Some(0));
+    assert!(v.set_var_over_scheme("V_Doors", 0.0), "the spelling does not matter");
+    assert!(v.set_var_over_scheme("lamp", 10.0));
+    assert!(!v.set_var_over_scheme("not_in_the_model", 1.0));
+    for _ in 0..3 {
+        v.update(1.0 / 30.0);
+    }
+    assert_eq!(v.var("v_doors"), Some(0.0), "the value set, not the scheme's");
+    assert_eq!(v.var("seen"), Some(0.0), "the scripts see the value set");
+    assert_eq!(v.var("v_mirrors"), Some(1.0), "what was not set over it is the scheme's");
+    assert_eq!(v.var("lamp"), Some(13.0), "a variable the scheme does not set is the scripts'");
+    v.update_scripts_only(0.0);
+    assert_eq!(v.var("v_doors"), Some(0.0));
+}

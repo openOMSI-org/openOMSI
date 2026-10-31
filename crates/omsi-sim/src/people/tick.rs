@@ -59,6 +59,9 @@ impl PeopleSim {
         bus: Option<&PlayerBusView>,
         traffic: Option<&TrafficSim>,
     ) -> bool {
+        // tick_done consumes the previous step's timings; start each step fresh.
+        // Otherwise this vector grows indefinitely and profiling re-sums old ticks.
+        self.tick_stages.clear();
         let mut mark = std::time::Instant::now();
         macro_rules! stage {
             ($name:expr) => {{

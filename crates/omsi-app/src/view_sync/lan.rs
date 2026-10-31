@@ -41,6 +41,13 @@ pub(crate) struct LanView {
 }
 
 impl LanView {
+    /// A new room may reuse the same ids: release the old renders and sounds first.
+    pub(crate) fn clear(&mut self, world: &World, renderer: &Renderer, scene: &mut Scene, audio: Option<&omsi_audio::AudioEngine>) {
+        self.stop_freetex();
+        for (_, remote) in self.remotes.drain() { release(renderer, scene, world, audio, remote); }
+        self.prefetching = None;
+    }
+
     /// The figure player `id` is drawn as: the one at their wheel, which their avatar on
     /// foot wears too (`sync_remote_walkers`).
     pub(crate) fn figure_type(&self, id: u32) -> Option<Arc<omsi_sim::human::HumanType>> {
@@ -148,6 +155,7 @@ fn release(r: &Renderer, scene: &mut Scene, world: &World, audio: Option<&omsi_a
         for mut s in v.sounds {
             s.stop_all(a);
         }
+        if let Some(mut sounds) = v.inside_sounds { sounds.stop_all(a); }
     }
     if let Some(mut d) = v.driver {
         d.hide(r, scene);

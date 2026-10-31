@@ -503,8 +503,10 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     };
     // a dedicated server without its session has nobody to serve: why, and the end (it went
     // on running alone, unreachable, with a warning among the log's lines)
-    if let (Some(cfg), None) = (server_cfg.as_ref(), lan.as_ref()) {
-        eprintln!("server: cannot open the session on UDP port {} (the line above says why): another server or program uses it, or the system refuses it. Stop the other one, or choose another `port` in {}", cfg.port, args.server.as_deref().map(|p| p.display().to_string()).unwrap_or_else(|| "server.cfg".into()));
+    if server_cfg.is_some() && lan.is_none() {
+        // Do not pass the password-bearing server configuration to diagnostics.
+        // The failed bind above already reports the candidate port and socket error.
+        eprintln!("server: cannot open the session (the line above says why): another server or program uses the UDP/TCP port, or the system refuses it. Stop the other one, or choose another `port` in the server configuration.");
         std::process::exit(3);
     }
     // turned away at the door (banned, full, another version): no game to play there
@@ -515,9 +517,10 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     // the host's mods: served by the host, fetched by a joining player before its world is
     // made (see `lan_mods`)
     lan_mods::remove_stale();
+    let mut mods_server = None;
     if let Some(l) = lan.as_mut() {
         let mut c = args.lan_config();
-        lan::share_mods(&mut c, l);
+        mods_server = lan::share_mods(&mut c, l);
         if let Some(why) = c.mod_fetch_error.take() {
             return Err(anyhow::anyhow!("The selected server bus could not be verified or downloaded: {why}"));
         }
@@ -574,6 +577,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     }
     let mut app = assemble_app(args, settings);
     app.net.lan = lan;
+    app.net.mods_server = mods_server;
     app.net.remotes = lan_game;
     // mouse steering as the player left it (the wheel eases to the cursor for a second)
     if app.settings.mouse_steering {

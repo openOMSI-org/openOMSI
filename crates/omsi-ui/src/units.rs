@@ -94,11 +94,11 @@ impl Units {
         }
     }
 
-    /// A temperature: `15 °C`, `59 °F`.
+    /// A temperature: `15.0 °C`, `59.0 °F`.
     pub fn temperature(self, celsius: f32) -> String {
         match self {
-            Units::American => format!("{:.0} °F", celsius * 1.8 + 32.0),
-            _ => format!("{celsius:.0} °C"),
+            Units::American => format!("{:.1} °F", celsius * 1.8 + 32.0),
+            _ => format!("{celsius:.1} °C"),
         }
     }
 }
@@ -121,8 +121,8 @@ mod tests {
         assert_eq!(American.distance(100.0), "350 ft");
         assert_eq!(American.distance(400.0), "0.2 mi");
         assert_eq!(British.long_distance(16.09344, 1), "10.0 mi");
-        assert_eq!(British.temperature(15.0), "15 °C");
-        assert_eq!(American.temperature(15.0), "59 °F");
+        assert_eq!(British.temperature(15.0), "15.0 °C");
+        assert_eq!(American.temperature(15.0), "59.0 °F");
     }
 
     #[test]

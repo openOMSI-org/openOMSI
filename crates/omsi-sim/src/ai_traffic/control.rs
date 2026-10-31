@@ -289,6 +289,15 @@ impl TrafficSim {
             }
         }
     }
+
+    /// A passenger of the timetable bus `id` asked for its next stop: its script gets the same
+    /// vehicle trigger as the player's bus (`int_haltewunsch`), which the stock AI door scripts
+    /// open the doors for.
+    pub fn request_stop(&mut self, id: u64) {
+        if let Some(c) = self.cars.iter_mut().find(|c| c.id == id) {
+            c.vehicle.trigger("int_haltewunsch");
+        }
+    }
 }
 
 pub(super) fn impact_zones(

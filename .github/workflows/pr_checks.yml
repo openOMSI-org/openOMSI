@@ -81,6 +81,6 @@ jobs:
         if: ${{ !cancelled() }}
         run: node launcher/tests/ai-lists-check.mjs
 
-      - name: Launcher theme startup
+      - name: Launcher settings startup
         if: ${{ !cancelled() }}
-        run: node --experimental-vm-modules --test launcher/tests/theme-startup.test.mjs
+        run: node --experimental-vm-modules --test launcher/tests/*.test.mjs

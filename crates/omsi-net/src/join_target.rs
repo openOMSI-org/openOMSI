@@ -58,7 +58,10 @@ pub fn describe_join(text: &str) -> Result<String, String> {
         return Ok(format!("the host at {a}"));
     }
     if let Ok(ip) = t.parse::<std::net::IpAddr>() {
-        return Ok(format!("the host at {ip}, port {DEFAULT_PORT}"));
+        return Ok(format!(
+            "the host at {ip}, ports {DEFAULT_PORT}-{}",
+            DEFAULT_PORT + PORT_RANGE - 1
+        ));
     }
     let (host, port) = match t.rsplit_once(':') {
         Some((h, p)) => match p.parse::<u16>() {
@@ -84,7 +87,14 @@ pub fn describe_join(text: &str) -> Result<String, String> {
                 .bytes()
                 .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()))
     {
-        return Ok(format!("the computer named {host}, port {port}"));
+        return Ok(if t.rsplit_once(':').is_some() {
+            format!("the computer named {host}, port {port}")
+        } else {
+            format!(
+                "the computer named {host}, ports {DEFAULT_PORT}-{}",
+                DEFAULT_PORT + PORT_RANGE - 1
+            )
+        });
     }
     Err(format!("the entry '{t}' is neither a session code (OMSI-XXXX-…), an address (192.168.1.20 or 192.168.1.20:27015), a port, nor empty (search)"))
 }
@@ -127,7 +137,7 @@ pub fn parse_join(text: &str) -> Result<JoinTarget, String> {
     }
     if let Ok(ip) = t.parse::<std::net::IpAddr>() {
         return Ok(JoinTarget::Direct {
-            addrs: vec![SocketAddr::new(ip, DEFAULT_PORT)],
+            addrs: default_addresses(ip),
             session: None,
             protocol: None,
         });
@@ -153,9 +163,57 @@ pub fn parse_join(text: &str) -> Result<JoinTarget, String> {
     }
     match (host, port).to_socket_addrs() {
         Ok(mut it) => match it.find(|a| a.is_ipv4()) {
-            Some(a) => Ok(JoinTarget::Direct { addrs: vec![a], session: None, protocol: None }),
+            Some(a) => Ok(JoinTarget::Direct {
+                addrs: if t.rsplit_once(':').is_some() {
+                    vec![a]
+                } else {
+                    default_addresses(a.ip())
+                },
+                session: None,
+                protocol: None,
+            }),
             None => Err(format!("the computer {host} has no IPv4 address")),
         },
         Err(e) => Err(format!("the entry '{t}' is neither a session code (OMSI-…), an address nor a port, and no computer of that name was found ({e})")),
+    }
+}
+
+fn default_addresses(ip: std::net::IpAddr) -> Vec<SocketAddr> {
+    (DEFAULT_PORT..DEFAULT_PORT + PORT_RANGE)
+        .map(|port| SocketAddr::new(ip, port))
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn portless_targets_cover_host_range() {
+        for target in ["192.168.1.20", "::1", "localhost"] {
+            let JoinTarget::Direct { addrs, .. } = parse_join(target).unwrap() else {
+                panic!("expected direct target");
+            };
+            assert_eq!(addrs.len(), usize::from(PORT_RANGE), "{target}");
+            let ports: Vec<_> = addrs.iter().map(SocketAddr::port).collect();
+            assert_eq!(
+                ports,
+                (DEFAULT_PORT..DEFAULT_PORT + PORT_RANGE).collect::<Vec<_>>()
+            );
+            assert!(describe_join(target).unwrap().contains("ports 27015-27024"));
+        }
+    }
+
+    #[test]
+    fn explicit_targets_remain_exact() {
+        for target in [
+            "27017", "127.0.0.1:27017", "[::1]:27017", "localhost:27017",
+        ] {
+            let JoinTarget::Direct { addrs, .. } = parse_join(target).unwrap() else {
+                panic!("expected direct target");
+            };
+            assert_eq!(addrs.len(), 1, "{target}");
+            assert_eq!(addrs[0].port(), 27017);
+        }
     }
 }

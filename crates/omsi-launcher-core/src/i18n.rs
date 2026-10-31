@@ -4,7 +4,6 @@ use omsi_cfg::template::Index;
 use std::sync::{Arc, Mutex, OnceLock};
 
 pub static TABLES: &str = include_str!("../../omsi-app/locales/app.yml");
-
 static PINNED: OnceLock<&'static str> = OnceLock::new();
 
 fn unquote(s: &str) -> Option<String> {
@@ -118,6 +117,21 @@ pub fn trf(text: &str, vars: &[(&str, &dyn Display)]) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn full_bus_labels_and_help_are_translated_in_all_29_languages() {
+        let langs = "ca ru de fr uk be kk pl cs hu es pt pt-pt it nl tr ja zh hi zh-tw ko th vi id ms tl sv sr ka";
+        let texts = [
+            "Passengers react to full buses",
+            "Optional visual acknowledgement when an approaching compatible bus is at passenger capacity",
+        ];
+        for lang in langs.split(' ') {
+            let table = super::table(super::TABLES, lang);
+            for text in texts {
+                assert!(table.get(text).is_some_and(|value| !value.is_empty() && value != text),
+                    "{lang}: missing translation for {text}");
+            }
+        }
+    }
     #[test]
     fn a_language_is_read_from_the_tables() {
         let yml = "_version: 2\n\n\"Mon\":\n  fr: \"lun.\"\n  de: \"Mo\"\n\"a \\\"b\\\"\":\n  fr: \"c\\n\"\n";

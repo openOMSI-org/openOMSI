@@ -408,10 +408,12 @@ pub(crate) fn spawn_player_prepared(
             None => log::info!("spawn: this vehicle has no fuel pump handling (veh_tank): its tank stays as its script set it"),
         }
     }
+    // (over the paint scheme's [setvar]s, which are written every frame: a door type asked
+    // for over the repaint's stays the one asked for)
     if let Some(sv) = &args.setvar {
         for kv in sv.split(',') {
             if let Some((k, v)) = kv.split_once('=') {
-                if !p.vehicle.set_var(k.trim(), omsi_cfg::parse_f32(v)) {
+                if !p.vehicle.set_var_over_scheme(k.trim(), omsi_cfg::parse_f32(v)) {
                     log::warn!("variable {k} not found");
                 }
             }

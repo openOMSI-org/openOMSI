@@ -563,7 +563,7 @@ fn mod_source(args: &LanConfig) -> crate::mods::ModSource {
     crate::mods::ModSource { root: args.root.clone(), map: args.map.clone(), bus: args.bus.clone(), weather: args.weather.clone() }
 }
 
-pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) {
+pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) -> Option<crate::mods::Server> {
     match lan.role {
         Role::Host => {
             // (a player's game hosting a session takes the joining players' buses as a server
@@ -572,8 +572,8 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) {
             if !args.server {
                 crate::mods::upload::accept(crate::mods::upload::a_hosting_game_takes_uploads());
             }
-            if let (Some(port), Some(key)) = (lan.local_addr().map(|a| a.port()), lan.host_key()) {
-                crate::mods::serve(port, key, &mod_source(args));
+            if let (Some(listener), Some(key)) = (lan.take_mods_listener(), lan.host_key()) {
+                return crate::mods::serve(listener, key, &mod_source(args));
             }
         }
         Role::Client => {
@@ -581,7 +581,7 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) {
             omsi_cfg::vfs::record_reads(true);
             let Some(mut host) = lan.host.filter(|_| lan.welcome.is_some()) else {
                 log::info!("LAN mods: no host to ask yet (its mods are not fetched)");
-                return;
+                return None;
             };
             let note = |lan: &mut LanSession, text: String| {
                 lan.warnings.retain(|w| !w.starts_with("Host's mods"));
@@ -612,7 +612,7 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) {
                         if args.allow_server_fleet && args.bus.is_some() {
                             args.mod_fetch_error = Some(why.into());
                         }
-                        return;
+                        return None;
                     }
                 }
             }
@@ -671,6 +671,7 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) {
             }
         }
     }
+    None
 }
 
 /// Do `work` (loading a world, which may take minutes on a big map) while the session is
@@ -2693,15 +2694,32 @@ fn admin_request(lan: &mut LanSession, game: &mut LanGame, password: &str) {
     lan.command(1, "auth?");
 }
 
+/// Recognise private admin commands without case-sensitive password leaks.
+fn admin_chat_arg(text: &str) -> Option<&str> {
+    let text = text.trim();
+    if !text.get(..6)?.eq_ignore_ascii_case("/admin") {
+        return None;
+    }
+    let rest = text.get(6..)?;
+    if rest.chars().next().is_some_and(|c| !c.is_whitespace()) {
+        return None;
+    }
+    Some(rest.trim())
+}
+
 /// Say `text` to everybody.
 pub fn chat_send(lan: &mut LanSession, game: &mut LanGame, text: &str) {
     if text.trim().is_empty() {
         return;
     }
-    // `/admin <password>`: a server's administration (see `admin`), never said aloud
-    if let Some(pw) = text.trim().strip_prefix("/admin ") {
-        admin_request(lan, game, pw.trim());
-        game.chat.push("* asked the server for its administration".into());
+    // Keep every case variant of /admin private: it must never reach lan.say().
+    if let Some(pw) = admin_chat_arg(text) {
+        if pw.is_empty() {
+            game.chat.push("* usage: /admin <password>".into());
+        } else {
+            admin_request(lan, game, pw);
+            game.chat.push("* asked the server for its administration".into());
+        }
         return;
     }
     // `/reconnect`: join the host again after a lost connection (no restart of the game)

@@ -221,8 +221,8 @@ impl Renderer {
         let lod_size = |inst: &Instance| -> f32 {
             let scale = Self::instance_scale(scene, inst);
             let radius = if inst.object_radius > 0.0 { inst.object_radius } else { scene.meshes[inst.mesh].bounds_radius } * scale;
-            let d = ((inst.origin - scene.render_origin).as_vec3() - cam_rel).length();
-            if d <= radius { f32::MAX } else { 2.0 * radius / (d.max(0.01) * lod_fov) }
+            let distance = ((inst.origin - scene.render_origin).as_vec3() - cam_rel).length();
+            object_screen_size(radius, distance, lod_fov)
         };
         let active = [draw_shadows && redraw_near, draw_shadows && redraw_far, draw_shadows];
         let boxes = [(SHADOW_RANGE, light_view_proj, 0.4f32), (SHADOW_RANGE_FAR, light_view_proj_far, 6.0), (SHADOW_RANGE_CLOSE, light_view_proj_close, 0.1)];

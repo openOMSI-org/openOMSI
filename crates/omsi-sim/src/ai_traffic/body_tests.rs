@@ -296,3 +296,17 @@ fn the_scenery_watch_drives_the_same_at_any_frame_rate() {
     assert_eq!(slow, run_at(60.0));
     assert_eq!(slow, run_at(144.0));
 }
+
+#[test]
+fn a_stop_request_fires_the_trigger_on_the_timetable_bus_only() {
+    let mut f = Fixture::new();
+    let scripted = crate::timetable_run::tests::script_test_vehicle("{trigger:int_haltewunsch}\n1 (S.L.stop_seen)\n{end}\n", "stop_seen\n", "");
+    Arc::get_mut(&mut f.ty).unwrap().program = scripted.ty.program.clone();
+    let lane = LaneBuilder::arc(DVec3::ZERO, 0.0, 1000.0, 0.0, 0.0, LaneKind::Street, 3.0);
+    let mut t = traffic(&f, Network { lanes: vec![lane], ..Default::default() });
+    let bus = add_car(&mut t, &f, 0, 10.0, 42, Some(0.0));
+    let other = add_car(&mut t, &f, 0, 50.0, 43, Some(0.0));
+    t.request_stop(bus);
+    assert_eq!(car(&t, bus).vehicle.var("stop_seen"), Some(1.0), "the bus's script hears its stop request");
+    assert_ne!(car(&t, other).vehicle.var("stop_seen"), Some(1.0), "another car's script does not");
+}

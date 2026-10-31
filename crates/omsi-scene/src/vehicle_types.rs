@@ -263,7 +263,9 @@ impl VariantSlot {
     /// then picks between the plain material and the `[matl_item]` variant.
     pub fn material(&self, var: impl Fn(&str) -> Option<f32>) -> MaterialId {
         let (base, item) = if self.entries.is_empty() {
-            (self.base, self.item)
+            // Without an explicit item, build() aliases it to base. A selective
+            // free-texture rebuild updates only base, so keep that fallback here.
+            (self.base, if self.spec.item.is_some() { self.item } else { self.base })
         } else {
             let v = var(&self.tex_var).unwrap_or(0.0);
             let i = if v.is_finite() { v.trunc() as i64 } else { 0 };

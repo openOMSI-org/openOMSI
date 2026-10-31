@@ -2049,7 +2049,7 @@ pub fn effective_mode(v: &Value) -> &'static str {
 /// The Graphics settings' quality presets: Low, Medium, High, Extra, Max and Ultra, shared by the
 /// launcher and the game's options. A preset sets the graphics mode as well - Low is Vanilla (as
 /// OMSI 2 draws), Medium Vanilla+ (the defaults), High and above Enhanced - and, in Enhanced, how
-/// much of its light is switched on: High the street lamps' shadows, Extra the clouds' shadow, the
+/// much of its light is switched on: High enables the street lamps' shadows, Extra the clouds' shadow, the
 /// glow of lights, the street light and the reflections in full, Max every light's shadows and the
 /// mirrors drawn as the picture, Ultra Real-Time Ray Tracing on top of all of it. Each is a step up in cost and the
 /// light's own shadows (cached tiles, a handful of passes) are far from the dearest of them. The
@@ -2067,7 +2067,7 @@ pub fn graphics_presets() -> [(&'static str, Value); 6] {
     let obj_size = [0.03, 0.013, 0.013, 0.01, 0.005, 0.005];
     let obj_dist = ["500", "auto", "auto", "auto", "1500", "1500"];
     let rain = ["low", "high", "high", "high", "high", "high"];
-    let light_shadows = ["off", "street", "street", "street", "all", "all"];
+    let light_shadows = ["off", "off", "street", "street", "all", "all"];
     let street_light = ["off", "off", "off", "auto", "on", "on"];
     let puddles = ["off", "high", "low", "high", "high", "high"];
     let mirror_quality = ["standard", "standard", "standard", "standard", "enhanced", "enhanced"];
@@ -2210,6 +2210,14 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     settings_from_text_on(text, cfg!(any(target_os = "android", target_os = "ios")))
 }
 
+// Keep independent opt-in defaults shared by desktop and phone settings.
+fn passenger_defaults(v: &mut Value) {
+    v["passenger_connections"] = json!(false);
+    v["passenger_transfer_percent"] = json!(20.0);
+    v["passenger_hailing"] = json!(false);
+    v["passenger_full_bus_reaction"] = json!(false);
+}
+
 pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     let mut v = json!({ "msaa": 4, "anisotropy": 8, "ssao": true, "shadows": true, "shadow_size": 2048, "navigator": true, "ui_opacity": 0.85, "navigator_corner": "bottom-left", "boarding": "auto", "detail_textures": true, "exact_fare": true, "enhanced": false, "graphics": "vanilla_plus", "fullscreen": false, "vsync": true, "volume": 0.6, "drive_keys": "simple", "render_scale": "auto", "view_distance": "auto", "language": "ENG", "video_memory": 0, "texture_compression": true, "gpu_texture_compression": true, "chat": true, "tooltips": true, "name_tags": true, "show_fps": false, "clouds": true, "cloud_quality": "high", "rain_quality": "high", "pax_density": 1.0, "vol_ai": 1.0, "vol_scenery": 1.0, "ambient": true, "vol_ambient": 0.8, "mirror_size": 256, "doppler": true, "driver": true, "max_fps": 0, "min_obj_size": 0.013, "max_obj_dist": "auto" });
     v["upscaler"] = json!("default");
@@ -2217,7 +2225,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     v["fsr_sharpness"] = json!(0.8);
     v["street_light"] = json!("off");
     v["ray_tracing"] = json!(false);
-    v["light_shadows"] = json!("street");
+    v["light_shadows"] = json!("off");
     v["cloud_shadows"] = json!(false);
     v["light_glow"] = json!(false);
     v["pause_quick_actions"] = json!("default");
@@ -2252,7 +2260,8 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     v["mirror_quality"] = json!("standard");
     v["vr_desktop_mirror"] = json!(true);
     v["discord_status"] = json!(true);
-    v["disable_plugins"] = json!(false);
+    // Only fresh installs opt in; existing settings files retain enabled plugins.
+    v["disable_plugins"] = json!(text.is_none());
     // a Tobii eye tracker read natively, beside opentrack (the game's menu switches these)
     v["head_tracking_source"] = json!("auto");
     v["tobii_edges"] = json!(false);
@@ -2293,7 +2302,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     v["units"] = json!("metric");
     // the trees' foliage bends and sways in the weather's wind
     v["windy_trees"] = json!(true);
-    v["road_snow"] = json!(true); // (the snow built up on the roads and roofs; off: the weather's snow on road)
+    v["road_snow"] = json!(false); // opt-in; off preserves the weather's classic snow on roads
     v["sim_thread"] = json!(false); // (switched in the game's Display menu, saved through this writer)
     v["mirror_hud_every_frame"] = json!(false);
     v["mirror_shadows"] = json!(false);
@@ -2303,6 +2312,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     // stop, as in OMSI; #1773)
     v["ai_wait_timed_stops_only"] = json!(false);
     v["pax_bad_driving"] = json!(true);
+    passenger_defaults(&mut v);
     // the arrival half of the stops of a depot file that keeps two recordings per stop
     v["auto_announce"] = json!(false);
     // OMSI's own options
@@ -2391,6 +2401,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "touch_door_mode" => v[&k] = json!(if val.eq_ignore_ascii_case("direct") { "direct" } else { "standard" }),
             "update_channel" => v[&k] = json!(if val.eq_ignore_ascii_case("beta") { "beta" } else { "stable" }),
             "photo_mode" => v[&k] = json!(if val.eq_ignore_ascii_case("advanced") { "advanced" } else { "simple" }),
+            "passenger_transfer_percent" => v[&k] = json!(val.parse::<f64>().ok().filter(|x|x.is_finite()).unwrap_or(20.0).clamp(0.0,100.0)),
             "passenger_animation" => v[&k] = json!(if val.eq_ignore_ascii_case("enhanced") { "enhanced" } else { "original" }),
             "character_models" => v[&k] = json!(if val.eq_ignore_ascii_case("improved") { "improved" } else { "original" }),
             "units" => v[&k] = json!(units_setting(val)),
@@ -2460,7 +2471,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "perf_overlay" => v[&k] = json!(perf_overlay_mode(val)),
             "sim_thread" => v[&k] = json!(b(val)),
             "mirror_hud" => v[&k] = json!(val.trim().parse::<u8>().map(|x| x.min(7)).unwrap_or(0)),
-            "windy_trees" | "road_snow" | "mirror_hud_every_frame" | "mirror_shadows" | "mirror_particles" | "ai_wait_timed_stops_only" | "pax_bad_driving" | "auto_announce" | "ambient" => v[&k] = json!(b(val)),
+            "windy_trees" | "road_snow" | "mirror_hud_every_frame" | "mirror_shadows" | "mirror_particles" | "ai_wait_timed_stops_only" | "pax_bad_driving" | "passenger_connections" | "passenger_hailing" | "passenger_full_bus_reaction" | "auto_announce" | "ambient" => v[&k] = json!(b(val)),
             "head_tracking_source" => v[&k] = json!(head_tracking_source(val)),
             "tobii_edges" => v[&k] = json!(b(val)),
             "head_tracking_smoothing" | "head_tracking_dead_zone" => v[&k] = json!(head_tracking_value(&k, val.parse::<f64>().ok())),
@@ -2823,7 +2834,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("touch_door_mode={}\n", if v.get("touch_door_mode").and_then(|x| x.as_str()) == Some("direct") { "direct" } else { "standard" }));
     text.push_str(&format!("update_channel={}\n", if v.get("update_channel").and_then(|x| x.as_str()) == Some("beta") { "beta" } else { "stable" }));
     text.push_str(&format!("arrows_switch_cams={}\n", b("arrows_switch_cams", true)));
-    text.push_str(&format!("disable_plugins={}\n", b("disable_plugins", false)));
+    text.push_str(&format!("disable_plugins={}\n", b("disable_plugins", true)));
     // voice chat (the game clamps again when it reads them)
     {
         let text_of = |k: &str, d: &str| v.get(k).and_then(|x| x.as_str()).map(|x| x.replace(['\n', '\r'], " ").trim().to_string()).unwrap_or_else(|| d.to_string());
@@ -2850,7 +2861,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("gpu_texture_compression={}\n", b("gpu_texture_compression", true)));
     text.push_str(&format!("cloud_quality={}\n", cloud_quality(v.get("cloud_quality").and_then(|x| x.as_str()).unwrap_or("high"))));
     text.push_str(&format!("street_light={}\n", street_light(v.get("street_light").and_then(|x| x.as_str()).unwrap_or("off"))));
-    text.push_str(&format!("ray_tracing={}\nlight_shadows={}\ncloud_shadows={}\nlight_glow={}\n", b("ray_tracing", false) | (graphics_mode(v.get("graphics").and_then(|x| x.as_str()).unwrap_or("vanilla_plus")) == "enhanced_plus") as u8, light_shadows(v.get("light_shadows").and_then(|x| x.as_str()).unwrap_or("street")), b("cloud_shadows", false), b("light_glow", false)));
+    text.push_str(&format!("ray_tracing={}\nlight_shadows={}\ncloud_shadows={}\nlight_glow={}\n", b("ray_tracing", false) | (graphics_mode(v.get("graphics").and_then(|x| x.as_str()).unwrap_or("vanilla_plus")) == "enhanced_plus") as u8, light_shadows(v.get("light_shadows").and_then(|x| x.as_str()).unwrap_or("off")), b("cloud_shadows", false), b("light_glow", false)));
     text.push_str(&format!("rain_quality={}\n", rain_quality(v.get("rain_quality").and_then(|x| x.as_str()).unwrap_or("high"))));
     text.push_str(&format!("vehicle_smoke={}\n", vehicle_smoke(v.get("vehicle_smoke").and_then(|x| x.as_str()).unwrap_or("all"))));
     text.push_str(&format!("puddles={}\n", puddles(v.get("puddles").and_then(|x| x.as_str()).unwrap_or("high"))));
@@ -2865,7 +2876,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("info_bar={}\nperf_overlay={}\n", b("info_bar", false), perf_overlay_mode(&v.get("perf_overlay").map(|x| x.as_str().map_or_else(|| x.to_string(), str::to_string)).unwrap_or_default())));
     text.push_str(&format!("info_size={}\ntimetable_size={}\nperf_size={}\n", f("info_size", 1.0).clamp(0.6, 2.0), f("timetable_size", 1.0).clamp(0.6, 2.0), f("perf_size", 1.0).clamp(0.6, 2.0)));
     text.push_str(&format!("windy_trees={}\n", b("windy_trees", true)));
-    text.push_str(&format!("road_snow={}\n", b("road_snow", true)));
+    text.push_str(&format!("road_snow={}\n", b("road_snow", false)));
     text.push_str(&format!("sim_thread={}\n", b("sim_thread", false)));
     text.push_str(&format!("mirror_hud_every_frame={}\n", b("mirror_hud_every_frame", false)));
     text.push_str(&format!("mirror_shadows={}\nmirror_particles={}\n", b("mirror_shadows", false), b("mirror_particles", false)));
@@ -2876,6 +2887,9 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("ai_wait_timed_stops_only={}\n", b("ai_wait_timed_stops_only", false)));
     text.push_str(&format!("trip_summary={}\nfull_tank={}\n", b("trip_summary", true), b("full_tank", true)));
     text.push_str(&format!("pax_bad_driving={}\n", b("pax_bad_driving", true)));
+    text.push_str(&format!("passenger_connections={}\npassenger_transfer_percent={}\n", b("passenger_connections",false), f("passenger_transfer_percent",20.0).clamp(0.0,100.0)));
+    text.push_str(&format!("passenger_hailing={}\n", b("passenger_hailing", false)));
+    text.push_str(&format!("passenger_full_bus_reaction={}\n", b("passenger_full_bus_reaction", false)));
     text.push_str(&format!("auto_announce={}\n", b("auto_announce", false)));
     text.push_str(&format!("triple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n", f("triple_left_angle_deg", 45.0).clamp(0.0, 90.0), f("triple_right_angle_deg", 45.0).clamp(0.0, 90.0), f("triple_eye_height_mm", 0.0).clamp(-500.0, 500.0)));
     text.push_str(&format!("photo_mode={}\n", if v.get("photo_mode").and_then(|x| x.as_str()) == Some("advanced") { "advanced" } else { "simple" }));
@@ -3160,7 +3174,7 @@ fn duty_args_for_root(d: &Duty, root: &Path) -> Result<Vec<String>> {
 
 fn duty_args_with_settings(d: &Duty, root: &Path, st: &Value) -> Result<Vec<String>> {
     let mut start = vec!["--root".into(), root.to_string_lossy().to_string(), "--no-menu".into()];
-    if st.get("disable_plugins").and_then(Value::as_bool).unwrap_or(false) {
+    if st.get("disable_plugins").and_then(Value::as_bool).unwrap_or(true) {
         start.push("--no-plugins".into());
     }
     if let Some(t) = d.tutorial {
@@ -3510,3 +3524,11 @@ mod omsi_options_tests;
 mod right_stick_look_tests;
 #[cfg(test)]
 mod head_tracking_tests;
+
+#[cfg(test)]
+#[path = "passenger_connections_tests.rs"]
+mod passenger_connections_tests;
+
+#[cfg(test)]
+#[path = "passenger_settings_tests.rs"]
+mod passenger_settings_tests;

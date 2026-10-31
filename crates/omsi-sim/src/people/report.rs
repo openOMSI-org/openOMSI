@@ -189,6 +189,12 @@ impl PeopleSim {
         std::mem::take(&mut self.ai_requests)
     }
 
+    /// Timetable buses whose passenger asked for the next stop, for the traffic to press
+    /// `int_haltewunsch` on.
+    pub fn take_ai_stop_requests(&mut self) -> Vec<u64> {
+        std::mem::take(&mut self.ai_stop_requests)
+    }
+
     /// A line for the HUD about something that just happened.
     pub fn take_message(&mut self) -> Option<String> {
         self.message.take()
