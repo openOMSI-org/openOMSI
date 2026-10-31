@@ -303,3 +303,6 @@ fn a_disappeared_walking_target_does_not_transfer_ownership_or_duty() {
 }
 
 mod reservations;
+
+#[path = "passenger_tests.rs"]
+mod passenger_tests;

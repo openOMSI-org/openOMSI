@@ -99,7 +99,7 @@ impl App {
             None => self.give_bus_to_ai(),
         };
         match result {
-            Ok(()) => {}
+            Ok(()) => self.sync_passenger_ownership(),
             Err(reason) => self.service_msg = Some((tr(&reason).into_owned(), 6.0)),
         }
     }

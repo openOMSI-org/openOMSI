@@ -11,6 +11,7 @@ impl App {
         self.join_sim_thread();
         if SeatCx::of(&mut self.parts()).take_placed(k) {
             self.sync_driven_duty_args();
+            self.sync_passenger_ownership();
         }
     }
 }

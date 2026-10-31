@@ -114,6 +114,7 @@ impl App {
         self.join_sim_thread();
         if SwitchCx::of(&mut self.parts()).switch_vehicle() {
             self.sync_driven_duty_args();
+            self.sync_passenger_ownership();
         }
     }
 

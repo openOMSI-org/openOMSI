@@ -371,3 +371,6 @@ fn ai_handover_keeps_occupied_seats_after_cabin_rebind() {
     assert_eq!(people.served_stop, None);
     assert!(people.player_cabin.is_some());
 }
+
+#[path = "handover_tests.rs"]
+mod handover_tests;

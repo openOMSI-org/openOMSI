@@ -390,7 +390,7 @@ impl PeopleSim {
         self.placed_now = out;
     }
 
-    /// A bus people may be in but do not board here (another player's, one the player left).
+    /// A retained bus: its riders stay aboard and nobody new boards it here.
     pub fn parked_bus(&mut self, id: BusId, v: &VehicleInstance) -> Option<BusNow> {
         let cabin = self.cabin_for(v)?;
         let bb = v.ty.def.bounding_box.unwrap_or([2.5, 11.0, 3.0, 0.0, 0.0, 1.5]);
@@ -398,7 +398,7 @@ impl PeopleSim {
         let walk_open = Self::doors_open(v, cabin.entries.len(), cabin.exits.len());
         Some(BusNow {
             terminus: None,
-            takes: Takes::Nobody,
+            takes: Takes::Retained,
             places_off: Vec::new(),
             served: None,
             route: None,
@@ -473,6 +473,9 @@ impl PeopleSim {
 
     /// Everyone and everything that belongs to bus `from` belongs to `to` now.
     pub fn remap_bus(&mut self, from: BusId, to: BusId) {
+        if from == to {
+            return;
+        }
         let fix = |b: &mut BusId| {
             if *b == from {
                 *b = to;
@@ -491,11 +494,29 @@ impl PeopleSim {
                 }
             }
         }
-        if let Some(v) = self.seats.remove(&from) {
-            self.seats.insert(to, v);
+        // Vehicle-local history must follow the riders, not the current driver slot.
+        macro_rules! move_state {
+            ($field:ident) => {
+                let value = self.$field.remove(&from);
+                self.$field.remove(&to);
+                if let Some(value) = value {
+                    self.$field.insert(to, value);
+                }
+            };
         }
-        if let Some(v) = self.bus_motion.remove(&from) {
-            self.bus_motion.insert(to, v);
+        move_state!(seats);
+        move_state!(odometer);
+        move_state!(bus_motion);
+        move_state!(pax_req);
+        move_state!(pax_busy);
+        move_state!(pax_places);
+        move_state!(last_door_open);
+        let rolls: Vec<_> = self.runner_rolls.keys().filter(|(_, bus)| *bus == from).copied().collect();
+        self.runner_rolls.retain(|(_, bus), _| *bus != to);
+        for (stop, bus) in rolls {
+            if let Some(value) = self.runner_rolls.remove(&(stop, bus)) {
+                self.runner_rolls.insert((stop, to), value);
+            }
         }
     }
 

@@ -192,6 +192,33 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "needs the original OMSI 2 install (OMSI_ROOT)"]
+    fn stock_ai_takeover_keeps_the_destination_after_player_frames() {
+        let root = std::path::PathBuf::from(std::env::var_os("OMSI_ROOT").expect("OMSI_ROOT"));
+        let file = root.join("Vehicles/MAN_SD202/MAN_D91_drucker.bus");
+        let ai = std::sync::Arc::new(VehicleType::load_ai(&root, &file).unwrap());
+        let player = std::sync::Arc::new(VehicleType::load(&root, &file).unwrap());
+        let hof = std::sync::Arc::new(omsi_vehicle::Hof::load(&root.join("Vehicles/MAN_SD202/Spandau 94.hof")).unwrap());
+        let mut host = VehicleHost::new(Default::default());
+        host.hof = Some(hof.clone());
+        let mut v = VehicleInstance::new(ai, host);
+        crate::timetable_run::set_ai_destination(&mut v, Some(&hof), "137", "Falkensee", &[]);
+        for _ in 0..2000 { v.update_ai(0.02, &super::super::AiFrame::default()); }
+        let before = crate::timetable_run::shown_destination(&v, &hof, None);
+        let sign = v.str_var("Matrix_Terminus");
+        let people = crate::people::PeopleSim::new(&root, 100);
+        let passenger_target = people.player_bus_view(&v).terminus;
+        assert!(before.is_some_and(|i| !hof.termini[i].all_exit && hof.termini[i].code != 0));
+        assert_eq!(v.ty.program.var_names, player.program.var_names);
+        v.ty = player;
+        for _ in 0..500 { v.update(0.02); }
+        assert_eq!(crate::timetable_run::shown_destination(&v, &hof, None), before);
+        assert_eq!(v.str_var("Matrix_Terminus"), sign);
+        assert_eq!(people.player_bus_view(&v).terminus, passenger_target);
+
+    }
+
+    #[test]
     fn cabin_temperature_initialization_preserves_humidity_and_then_evolves() {
         let mut v = VehicleInstance::new(
             crate::vehicle::tests::coupling_test_type(None),
