@@ -38,7 +38,7 @@ mod gesture;
 mod hail_look;
 mod hail_motion;
 pub use gesture::accessory_hail_arm;
-pub use hail_look::{hail_look_target, HailLook};
+pub use hail_look::{hail_look_target, HailLook, FullBusHail, visual_hail_action};
 pub use hail_motion::HailWrist;
 pub mod face;
 mod motion;

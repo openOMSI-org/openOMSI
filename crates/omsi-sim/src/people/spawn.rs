@@ -156,6 +156,7 @@ impl PeopleSim {
             defer_populate: false,
             exact_fare: true,
             visual_hailing: false,
+            visual_full_bus_reaction: false,
             bad_driving: true,
             boarding: "auto".into(),
             stand_chance: 0.05,

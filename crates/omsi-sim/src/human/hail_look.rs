@@ -282,3 +282,74 @@ mod hail_neck_body_tests {
         );
     }
 }
+
+/// Remember one completed request per full bus. A real free place resets it.
+pub struct FullBusHail<K> {
+    seen: Vec<(K, f32)>,
+}
+impl<K> Default for FullBusHail<K> {
+    fn default() -> Self {
+        Self { seen: Vec::new() }
+    }
+}
+impl<K: Copy + Eq> FullBusHail<K> {
+    pub fn allow(&mut self, bus: K, full: bool, active: bool, dt: f32) -> bool {
+        if !full {
+            self.seen.retain(|(id, _)| *id != bus);
+            return true;
+        }
+        if let Some((_, elapsed)) = self.seen.iter_mut().find(|(id, _)| *id == bus) {
+            if active {
+                *elapsed = (*elapsed + dt.clamp(0., 0.25)).min(2.);
+            }
+            return *elapsed < 1.4;
+        }
+        if active {
+            if self.seen.len() >= 8 {
+                self.seen.remove(0);
+            }
+            self.seen.push((bus, dt.clamp(0., 0.25)));
+        }
+        true
+    }
+}
+#[cfg(test)]
+mod full_hail_2212_tests {
+    use super::*;
+    #[test]
+    fn full_bus_only_one_request_until_a_place_is_free() {
+        let mut gate = FullBusHail::<u8>::default();
+        assert!(gate.allow(1, true, true, 0.1));
+        for _ in 0..20 {
+            gate.allow(1, true, true, 0.1);
+        }
+        assert!(!gate.allow(1, true, true, 0.1));
+        for _ in 0..40 {
+            assert!(!gate.allow(1, true, false, 0.1));
+        }
+        assert!(gate.allow(2, true, true, 0.1));
+        assert!(!gate.allow(1, true, true, 0.1));
+        assert!(gate.allow(1, false, false, 0.1));
+        assert!(gate.allow(1, true, true, 0.1));
+    }
+}
+
+/// A bus at capacity never receives a raised-arm hailing request.
+pub fn visual_hail_action(hailing: bool, reaction: bool, full: bool) -> (bool, bool) {
+    (hailing && !full, reaction && full)
+}
+
+#[cfg(test)]
+mod visual_action_combinations_tests {
+    use super::visual_hail_action;
+
+    #[test]
+    fn all_four_switch_combinations_leave_full_bus_arms_lowered() {
+        for hail in [false, true] {
+            for react in [false, true] {
+                assert_eq!(visual_hail_action(hail, react, false), (hail, false));
+                assert_eq!(visual_hail_action(hail, react, true), (false, react));
+            }
+        }
+    }
+}

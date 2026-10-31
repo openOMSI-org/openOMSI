@@ -470,6 +470,7 @@ pub(super) fn sync_live(app: &mut App) {
     if let Some(h) = app.session.humans.as_mut() {
         h.exact_fare = s.exact_fare;
         h.visual_hailing = s.passenger_hailing && s.passenger_animation == "enhanced";
+        h.visual_full_bus_reaction = s.passenger_full_bus_reaction && s.passenger_animation == "enhanced";
         h.bad_driving = s.pax_bad_driving;
         h.boarding = s.boarding.clone();
         h.stand_chance = s.standing_chance;

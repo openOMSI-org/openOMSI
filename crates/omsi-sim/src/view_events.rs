@@ -238,6 +238,8 @@ pub struct PeopleFrame {
     pub buses: Arc<Vec<crate::people::cabin::BusNow>>,
     /// Everybody, in the simulation's order.
     pub people: Vec<PersonFrame>,
+    /// Reused cache: capacity is checked only for targeted buses.
+    pub capacity_cache: Vec<(crate::people::BusId, bool)>,
 }
 
 /// One person of a [`PeopleFrame`].
@@ -268,6 +270,10 @@ pub struct PersonFrame {
     /// Optional visual target of an approaching compatible bus.
     pub hail_target: Option<glam::DVec3>,
     pub hail_moving: bool,
+    pub hail_bus: Option<crate::people::BusId>,
+    pub hail_full: bool,
+    pub hail_signal_enabled: bool,
+    pub hail_reaction_enabled: bool,
     /// `OMSI_CHECK_TPOSE`: the person's label and state, and a passenger's details.
     pub debug: Option<[String; 2]>,
 }
@@ -281,18 +287,43 @@ impl crate::people::PeopleSim {
         out.eye = self.eye;
         out.buses.clone_from(&self.last_buses);
         out.people.clear();
+        out.capacity_cache.clear();
+        let capacity_cache = &mut out.capacity_cache;
         // Keep the snapshot allocation-free apart from its reusable people buffer.
         // People beyond the view's 300 m limit need no per-frame bus lookup.
         out.people.extend(self.people.iter().enumerate().map(|(i, p)| {
-            let hail = if self.visual_hailing
+            let hail = if (self.visual_hailing || self.visual_full_bus_reaction)
                 && self.eye.is_none_or(|eye| {
                     (p.position - eye.pos).length_squared() <= 300.0 * 300.0
                 })
             {
-                // The match already contains the target position: avoid a
-                // second linear scan over the buses for each passenger.
                 self.visual_hail_bus(i, &self.last_buses)
-                    .map(|(_, moving, pos)| (pos, moving))
+                    .and_then(|(bus_id, moving, pos)| {
+                        let bus = self.last_buses.iter().find(|b| b.id == bus_id)?;
+                        let full = if let Some((_, value)) = capacity_cache.iter().find(|(id, _)| *id == bus_id) {
+                            *value
+                        } else {
+                            // [passpos] covers seats and standing places; scripts may disable either.
+                            let capacity = bus.cabin.seats.iter().enumerate()
+                                .filter(|(j, _)| !bus.places_off.get(*j).copied().unwrap_or(false))
+                                .count();
+                            let reserved = self.seats.get(&bus_id).map_or(0, |places| {
+                                places.iter().enumerate()
+                                    .filter(|(j, taken)| **taken
+                                        && !bus.places_off.get(*j).copied().unwrap_or(false))
+                                    .count()
+                            });
+                            // Fall back to the aboard-person scan only for a bus that is
+                            // actually targeted and not proven full by its reservations.
+                            let occupied = capacity > 0 && (reserved >= capacity ||
+                                self.people.iter().filter(|person| matches!(person.place,
+                                    crate::people::Place::Bus(id, _) if id == bus_id))
+                                    .take(capacity).count() >= capacity);
+                            capacity_cache.push((bus_id, occupied));
+                            occupied
+                        };
+                        Some((bus_id, pos, moving, full))
+                    })
             } else {
                 None
             };
@@ -311,8 +342,12 @@ impl crate::people::PeopleSim {
             hidden: self.avatar_hidden.get(&p.id).copied(),
             facts: p.pose_facts(),
             state: p.state.name(),
-            hail_target: hail.map(|(pos, _)| pos),
-            hail_moving: hail.is_some_and(|(_, moving)| moving),
+            hail_target: hail.map(|(_, pos, _, _)| pos),
+            hail_moving: hail.is_some_and(|(_, _, moving, _)| moving),
+            hail_bus: hail.map(|(bus, _, _, _)| bus),
+            hail_full: hail.is_some_and(|(_, _, _, full)| full),
+            hail_signal_enabled: self.visual_hailing,
+            hail_reaction_enabled: self.visual_full_bus_reaction,
             debug: debug.then(|| {
                 let pax = match &p.state {
                     crate::people::State::Pax(x) => format!("pax_state {} speed {:.2} seat_h {:.2} room {:.2} st {}", x.pax_state, x.speed, x.seat_h, x.room, x.st),

@@ -419,6 +419,8 @@ pub struct PeopleSim {
     pub exact_fare: bool,
     /// Compute visual-only boarding signals when requested by this client.
     pub visual_hailing: bool,
+    /// Optional visual-only response to an approaching full bus.
+    pub visual_full_bus_reaction: bool,
     pub bad_driving: bool,
     /// How passengers board (`boarding` in the settings): `auto` - pay and take the
     /// ticket by themselves after a moment; `pay` - wait at the desk for the driver to
