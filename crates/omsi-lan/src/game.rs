@@ -617,6 +617,7 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) {
             let froot = args.root.clone();
             let selected_bus = args.bus.clone();
             let selected_paint = args.paint.clone();
+            let selected_requested = selected_bus.is_some();
             let worker = std::thread::spawn(move || {
                 let mut last = Instant::now() - Duration::from_secs(1);
                 let r = crate::mods::fetch_selected(&froot, &mut fmap, host, session, selected_bus.as_deref(), selected_paint.as_deref(), &mut |done, total, file| {
@@ -653,6 +654,11 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) {
                 Err(e) => {
                     log::warn!("LAN mods: {e}");
                     note(lan, format!("Host's mods could not be fetched: {e}"));
+                    // A selected dedicated fleet package must match before spawning.
+                    // Do not silently use the player's incompatible local repaint.
+                    if selected_requested {
+                        args.mod_fetch_error = Some(e);
+                    }
                 }
             }
         }
