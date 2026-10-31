@@ -515,6 +515,12 @@ export async function duty(extra = {}) {
 export async function start(extra) {
   try {
     const d = await duty(extra);
+    const selectedFleetBus = S.choice?.lan_mode === 'join' && S.choice.lan_server?.fleet_version === 1
+      && (S.choice.lan_server.fleet || []).some((offer) =>
+        busFile(offer.bus) === busFile(d.bus));
+    if (selectedFleetBus && !window.confirm(
+      t('The server may transfer the selected bus and repaint to your PC if your files differ. Downloads are checked and stored in an isolated cache; your installed mods are not replaced. Allow this session to fetch the verified files?')
+    )) return null;
     const r = await call('launch', { duty: d });
     set({ gameStarted: true });
     if (d.lan !== 'off' && !d.tutorial) set({ page: 'games' });
