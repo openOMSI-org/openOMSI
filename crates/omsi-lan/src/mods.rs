@@ -1158,6 +1158,9 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
             log::warn!("LAN mods: {x}; {} files left, connecting again", left.len());
         }
     }
+    if selected_request.is_some() && !report.refused.is_empty() {
+        return Err(format!("selected server vehicle contains {} unsafe or refused files: {}", report.refused.len(), report.refused[0]));
+    }
     if again && mounted.len() <= MOUNTED.load(std::sync::atomic::Ordering::Relaxed) {
         upload::remember_host(host, session);
         return Ok(report);
