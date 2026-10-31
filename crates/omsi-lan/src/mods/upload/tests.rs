@@ -127,7 +127,8 @@ fn an_upload_that_broke_off_goes_on_where_it_stopped() {
         std::thread::spawn(move || {
             for s in listener.incoming().flatten() {
                 let (ready, key) = (ready.clone(), key.clone());
-                std::thread::spawn(move || super::super::handle(s, &key, &ready));
+                // Upload protocol tests use an empty fleet cache; they exercise OFFER/GET, not LISTBUS.
+                std::thread::spawn(move || super::super::handle(s, &key, &ready, &Mutex::new(Default::default()), &std::env::temp_dir()));
             }
         });
     }
@@ -200,7 +201,8 @@ fn a_file_the_bus_has_twice_never_ends_the_upload() {
         std::thread::spawn(move || {
             for s in listener.incoming().flatten() {
                 let (ready, key) = (ready.clone(), key.clone());
-                std::thread::spawn(move || super::super::handle(s, &key, &ready));
+                // Upload protocol tests use an empty fleet cache; they exercise OFFER/GET, not LISTBUS.
+                std::thread::spawn(move || super::super::handle(s, &key, &ready, &Mutex::new(Default::default()), &std::env::temp_dir()));
             }
         });
     }
@@ -268,7 +270,8 @@ fn two_versions_of_a_bus_are_kept_side_by_side_by_their_content() {
         std::thread::spawn(move || {
             for s in listener.incoming().flatten() {
                 let (ready, key) = (ready.clone(), key.clone());
-                std::thread::spawn(move || super::super::handle(s, &key, &ready));
+                // Upload protocol tests use an empty fleet cache; they exercise OFFER/GET, not LISTBUS.
+                std::thread::spawn(move || super::super::handle(s, &key, &ready, &Mutex::new(Default::default()), &std::env::temp_dir()));
             }
         });
     }
