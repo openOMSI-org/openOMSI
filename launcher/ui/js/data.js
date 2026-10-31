@@ -528,6 +528,7 @@ export async function start(extra) {
       toast(t('Confirm the server download before joining.'), 'error');
       return null;
     }
+    d.allow_server_fleet = approved && serverFleetSelection();
     const r = await call('launch', { duty: d });
     set({ gameStarted: true });
     if (d.lan !== 'off' && !d.tutorial) set({ page: 'games' });
