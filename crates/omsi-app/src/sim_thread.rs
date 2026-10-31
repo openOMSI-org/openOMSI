@@ -19,6 +19,18 @@ impl crate::App {
         }
     }
 
+    /// Ownership can change in a UI stage, after the humans stage queued its work.
+    /// Refresh both sides of the exchange before that work can observe the new riders.
+    pub(crate) fn sync_passenger_ownership(&mut self) {
+        let Some(h) = self.session.humans.as_mut() else { return };
+        h.set_placed_buses(self.session.placed.iter().map(|p| (p.uid, &p.vehicle)));
+        let duty = self.session.duty.as_ref().filter(|d| d.trip_index < d.trips.len());
+        h.set_duty(duty);
+        h.set_player_next_stop(duty.and_then(|d| d.trip().stops.get(d.next_stop)));
+        let bus = self.player.as_ref().map(|p| h.player_bus_view(&p.vehicle));
+        self.pipeline.rebind_people_bus(bus);
+    }
+
     /// Everything out on the sim thread back (right after the picture is presented; again at
     /// the end of the render stage, where it is nothing, for the frames drawing nothing).
     pub(crate) fn join_sim_thread(&mut self) {

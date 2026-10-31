@@ -1052,3 +1052,14 @@ fn a_later_stop_counts_only_with_the_doors_open() {
     assert_eq!(duty.next_stop, 4);
     assert_eq!(duty.take_skipped(), Some((3, 2, 5)), "stops 2 to 4 passed, at stop 5");
 }
+
+#[test]
+fn ai_handover_preserves_the_next_stop_and_delay_without_placement_catchup() {
+    let mut duty = PlayerDuty::new("L".into(), "T".into(), vec![planned(100.0, &[(0.0, 100.0, 100.0), (500.0, 200.0, 220.0)])], 0, 0, true);
+    duty.resume_from_ai(1, true, 15.0, glam::DVec3::new(0.0, 500.0, 0.0));
+    assert_eq!(duty.next_stop, 1);
+    assert!(duty.at_stop);
+    assert_eq!(duty.arrived_late, Some(15.0));
+    assert_eq!(duty.left_late, Some(15.0));
+    assert!(duty.placed && duty.held_back);
+}

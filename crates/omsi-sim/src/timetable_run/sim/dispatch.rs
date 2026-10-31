@@ -499,6 +499,9 @@ impl ScheduleSim {
                 car.state.plan_next(&traffic.net);
             }
             run.next += n;
+            if let Some(b) = traffic.cars[ci].bus.as_mut() {
+                b.waiting_tile = run.steps.get(run.next).and_then(|s| s.key.map(|k| k.tile));
+            }
             if run.next < run.steps.len() {
                 keep.push(run);
             } else {

@@ -545,6 +545,7 @@ impl App {
             }
             return;
         }
+        if pressed && !ctrl && self.pick_ai_bus() { return; }
         // a click on the chat opens its input box (and is the chat's, not the cockpit's)
         if pressed && self.net.lan.is_some() && self.settings.chat {
             if self.ui.as_ref().map(|u| u.chat.hovered).unwrap_or(false) {

@@ -355,6 +355,14 @@ impl Pipeline {
         self.owed_people.push(OwedPeople { dt, world, bus });
     }
 
+    /// Rebind deferred passenger steps after a synchronous vehicle ownership change.
+    /// Keep every step's elapsed time and world; only its player-slot snapshot changed.
+    pub fn rebind_people_bus(&mut self, bus: Option<PlayerBusView>) {
+        for step in &mut self.owed_people {
+            step.bus = bus.clone();
+        }
+    }
+
     /// The people came back from a step on the sim thread whose results (the people who
     /// came and went, the exchange with the bus and the traffic) the humans stage applies
     /// now, before it owes the next one.

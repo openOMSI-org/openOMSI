@@ -111,15 +111,20 @@ impl App {
 
     /// Drive another of the vehicles standing in the world (see [`switch_vehicle`]).
     pub(crate) fn switch_vehicle(&mut self) {
-        SwitchCx::of(&mut self.parts()).switch_vehicle();
+        self.join_sim_thread();
+        if SwitchCx::of(&mut self.parts()).switch_vehicle() {
+            self.sync_driven_duty_args();
+            self.sync_passenger_ownership();
+        }
     }
 
     /// Take the wheel of the `k`-th placed vehicle (`game_lists::ListKind::SwitchTo`): the
     /// others keep their turn after it.
     pub(crate) fn switch_vehicle_to(&mut self, k: usize) {
-        if k < self.session.placed.len() {
-            self.session.placed.rotate_left(k);
+        if k >= self.session.placed.len() {
+            return;
         }
+        self.session.placed.rotate_left(k);
         self.switch_vehicle();
     }
 
@@ -160,12 +165,24 @@ crate::app::stage_ctx!(
 
 crate::app::stage_ctx!(
     /// Driving the next placed vehicle: its part of the game.
-    SwitchCx { reads: [sound], writes: [player, people, view, ui] }
+    SwitchCx { reads: [sound], writes: [player, people, view, ui, duty, traffic] }
 );
 
 impl SwitchCx<'_, '_> {
-    fn switch_vehicle(self) {
-        switch_vehicle(self.player, self.people, self.view, self.ui, self.sound, self.common.settings);
+    fn switch_vehicle(self) -> bool {
+        if self.player.placed.is_empty() {
+            *self.ui.service_msg = Some(("There is no other vehicle to drive".into(), 3.0));
+            return false;
+        }
+        crate::vehicle_handover::exchange_placed_duty(
+            0, self.player, self.duty, self.traffic.schedule.as_mut().map(|s| &mut s.sim),
+        );
+        if self.people.on_foot.is_some() {
+            crate::on_foot::take_placed(0, self.player, self.people, self.view, self.ui, self.sound, self.common.settings);
+        } else {
+            switch_vehicle(self.player, self.people, self.view, self.ui, self.sound, self.common.settings);
+        }
+        true
     }
 }
 
@@ -254,6 +271,7 @@ pub(crate) fn placement(mut cx: PlacementCx) {
 
 /// Drive another of the vehicles standing in the world (a situation's): the one driven
 /// now stays where it is with everything as it was, and its sounds go to the next one.
+/// The caller exchanges duties for a different bus; a reload keeps the active duty.
 fn switch_vehicle(
     player: &mut crate::app::PlayerPart,
     people: &mut crate::app::PeoplePart,

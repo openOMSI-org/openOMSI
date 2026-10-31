@@ -25,7 +25,7 @@ pub(crate) const PER_PAGE: usize = 15;
 const WIDTH: f32 = 5.0 * 84.0 + 4.0 * 8.0 + 2.0 * 14.0;
 
 /// The tiles: id, label, icon - in OMSI's order, five to a row, fifteen to a page.
-pub(crate) const TILES: [(&str, &str, &str); 28] = [
+pub(crate) const TILES: [(&str, &str, &str); 29] = [
     ("place", "Place a vehicle", "add"),
     ("switch", "Change vehicle", "sync_alt"),
     ("remove", "Remove vehicle", "delete"),
@@ -55,6 +55,7 @@ pub(crate) const TILES: [(&str, &str, &str); 28] = [
     ("endduty", "End the tour", "sports_score"),
     ("players", "Player list", "group"),
     ("admin", "Administration", "dns"),
+    ("give_ai", "Hand bus to AI", "directions_bus"),
 ];
 
 /// The tiles that are the game menu's lines, offered only when it offers them now.
@@ -96,7 +97,8 @@ pub(crate) struct TileState {
 impl TileState {
     pub(crate) fn of(app: &crate::App) -> TileState {
         let offered: Vec<&'static str> = app.game_menu_items().iter().map(|l| l.0).collect();
-        let off = MENU_LINES.iter().copied().filter(|id| !offered.contains(id)).collect();
+        let mut off: Vec<_> = MENU_LINES.iter().copied().filter(|id| !offered.contains(id)).collect();
+        if app.give_ai_reason().is_some() { off.push("give_ai"); }
         let mut lit = Vec::new();
         if app.settings.nav_arrows {
             lit.push("arrows");
@@ -250,6 +252,7 @@ pub(crate) fn click(app: &mut crate::App, id: &str) {
     app.menus.game_panels.quick = None;
     match id {
         "dest" => super::dest_form::open(app),
+        "give_ai" => app.ask_give_ai(),
         "arrows" => {
             crate::game_lists::option_do(app, "nav_arrows", "", crate::game_lists::Move::Next);
         }
@@ -280,6 +283,14 @@ mod tests {
     fn app() -> crate::App {
         let args = <crate::cli::Args as clap::Parser>::parse_from(["openomsi"]);
         crate::assemble_app(args, Default::default())
+    }
+
+    #[test]
+    fn alt_handover_tile_preserves_the_map_and_is_disabled_without_a_bus() {
+        assert!(TILES.iter().any(|t| t.0 == "give_ai"));
+        assert!(TILES.iter().any(|t| t.0 == "map"));
+        let app = app();
+        assert!(TileState::of(&app).off.contains(&"give_ai"));
     }
 
     #[test]
@@ -317,7 +328,7 @@ mod tests {
         assert_eq!(q.focus, 11, "no row under the last");
         q.focus = 14;
         q.step(1, 0);
-        // the second page has 13 tiles: its third row ends at 12
+        // the second page has 14 tiles: its third row ends at 13
         assert_eq!((q.page, q.focus), (1, 10));
         q.step(-1, 0);
         assert_eq!((q.page, q.focus), (0, 14));

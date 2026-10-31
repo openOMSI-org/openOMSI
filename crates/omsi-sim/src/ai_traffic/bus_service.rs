@@ -133,6 +133,9 @@ pub struct BusService {
     /// The timetable still carries the route on as tiles bring their lanes: at the end of
     /// what it has, it waits for more.
     pub route_open: bool,
+    /// The next tile awaiting timetable continuation, not a broken route.
+    /// Kept until the timetable update, including the frame its lanes first arrive.
+    pub waiting_tile: Option<(i32, i32)>,
     /// The terminus of its trip, the name the waiting people read off it (Omsi.exe's bus
     /// +0x7bc) to see whether it goes their way.
     pub terminus: String,
@@ -407,6 +410,7 @@ impl BusService {
             delay: 0.0,
             layover: false,
             route_open: false,
+            waiting_tile: None,
             terminus: String::new(),
             near_d: f32::INFINITY,
             serve: None,
