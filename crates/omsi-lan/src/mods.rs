@@ -1241,7 +1241,7 @@ mod tests {
         std::thread::spawn(move || {
             for stream in listener.incoming().flatten() {
                 let (ready, key) = (ready.clone(), key.clone());
-                std::thread::spawn(move || handle(stream, &key, &ready));
+                std::thread::spawn(move || handle(stream, &key, &ready, &Mutex::new(Default::default()), &std::env::temp_dir()));
             }
         });
         (addr, dir, session)
