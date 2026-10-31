@@ -21,6 +21,11 @@ pub(super) fn package(root: &Path, base: &(Manifest, Vec<PathBuf>), bus: &str, p
     };
     let files = upload::listed(root, bus_files::of_type(root, &ty, scheme, None));
     let entries = upload::hashed(&files);
+    // Hashing skips files it cannot safely read. Never zip a shortened hash
+    // list with the original paths: that could serve the wrong bytes for a hash.
+    if entries.len() != files.len() {
+        return Err(format!("{} of {} selected vehicle files could not be verified", files.len() - entries.len(), files.len()));
+    }
     let manifest = identity::VehicleManifest { bus: bus.clone(), entries: entries.clone() }.validated()?;
     if manifest.entries.len() > MAX_FILES || manifest.size() > MAX_TOTAL {
         return Err("server vehicle package exceeds the download limits".into());
