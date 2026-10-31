@@ -29,10 +29,11 @@ fn fleet_paints(cfg: &ServerCfg, root: &Path) -> Vec<omsi_net::ws::FleetPaints> 
         let path = omsi_cfg::find_in_roots(&rel)
             .map(|(_, p)| p)
             .unwrap_or_else(|| omsi_cfg::resolve_path(root, &rel));
-        match omsi_vehicle::Vehicle::load(&path) {
+        match omsi_sim::VehicleType::load(root, &path) {
             Ok(vehicle) => {
-                let (mut paints, _) = omsi_launcher_core::paint_schemes(&vehicle);
-                paints.truncate(128);
+                // Use the same resolved scheme names as the authenticated LISTBUS
+                // transfer. A server build must not depend on launcher-only crates.
+                let paints = vehicle.paint_schemes.iter().take(128).map(|p| p.name.clone()).collect();
                 offers.push(omsi_net::ws::FleetPaints { bus: rel, paints });
             }
             Err(e) => log::warn!("server fleet: cannot load {}: {e}", path.display()),
