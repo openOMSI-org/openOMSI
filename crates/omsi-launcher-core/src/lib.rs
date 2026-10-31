@@ -999,7 +999,7 @@ fn missing_packs_of(model: &Path) -> Vec<String> {
 
 /// `[item]` names of every `.cti` in the model's `[CTC]` folders (in every content root):
 /// the paint schemes, and the folders they were read from.
-pub fn paint_schemes(vehicle: &omsi_vehicle::Vehicle) -> (Vec<String>, Vec<PathBuf>) {
+fn paint_schemes(vehicle: &omsi_vehicle::Vehicle) -> (Vec<String>, Vec<PathBuf>) {
     let mut names: Vec<String> = Vec::new();
     let mut dirs_read: Vec<PathBuf> = Vec::new();
     let Some(model_rel) = vehicle.model.as_ref() else { return (names, dirs_read) };
