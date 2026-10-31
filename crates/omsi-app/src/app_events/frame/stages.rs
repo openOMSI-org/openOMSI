@@ -222,7 +222,7 @@ impl frame_stages::Host<WindowStage> for WindowFrame<'_> {
             ShellActions => app.apply_shell_actions(el),
             Placement => crate::app_impl::placement(crate::app_impl::PlacementCx::of(&mut app.parts())),
             Menus => {
-                if !app.frame_menus(el, dt()) {
+                if !app.frame_menus(el, dt(), times.expect(NO_TIME).1) {
                     return Ok(Flow::Stop);
                 }
             }

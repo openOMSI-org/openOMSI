@@ -204,7 +204,8 @@ impl App {
 
     /// The start menu (drawn here, nothing else this frame) and the map's first area still
     /// loading: false when the frame ends here.
-    pub(super) fn frame_menus(&mut self, event_loop: &ActiveEventLoop, dt: f32) -> bool {
+    pub(super) fn frame_menus(&mut self, event_loop: &ActiveEventLoop, dt: f32, raw_dt: f32) -> bool {
+        self.tick_room_switch(raw_dt);
         // (the cursor over the game menu: a hand over what can be clicked)
         if self.menus.game_menu.is_some() {
             let kind = self.menu_cursor_kind();

@@ -511,6 +511,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **Force feedback reaches the MOZA R5's wheel again.** The base marks both its X and its Y axis
+  as having a motor and lists Y first, so the forces went to the pedals' axis and the wheel felt
+  nothing. The forces now go to the lowest axis with a motor (X before Y), whatever order the
+  driver lists them in.
 - **The map camera (F4) puts the bus down facing where it looks.** Moving the bus there kept the way
   it faced before, whichever way the camera was turned; it now stands facing the camera's direction.
 - **No more huge yellow glow at Lower Marsh (London).** The map's `GarageLights.sco` has a light
