@@ -85,6 +85,8 @@ impl Renderer {
         ADAPTER_TEXTURE_MB.store(guess_mb, std::sync::atomic::Ordering::Relaxed);
         let discrete_vram = gpu_memory::own_card_vram_mb(&info, vram);
         ADAPTER_VRAM_MB.store(discrete_vram, std::sync::atomic::Ordering::Relaxed);
+        let integrated = gpu_memory::integrated_room_mb(&info, vram, mem.as_ref().map(|m| m.shared_bytes >> 20));
+        ADAPTER_INTEGRATED_MB.store(integrated, std::sync::atomic::Ordering::Relaxed);
         *ADAPTER_INFO.lock().unwrap_or_else(|e| e.into_inner()) = Some(info.clone());
         log::info!("graphics adapter: {} ({:?}, {:?}{}), texture memory taken for it: {guess_mb} MB", info.name, info.device_type, info.backend, vram.map(|v| format!(", {v} MB of its own")).unwrap_or_default());
         if let Some(m) = mem {

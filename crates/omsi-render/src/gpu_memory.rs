@@ -142,6 +142,28 @@ pub(super) fn own_card_vram_mb(info: &wgpu::AdapterInfo, vram: Option<u64>) -> u
     vram.filter(|_| card).unwrap_or(0)
 }
 
+/// A chip that shares the system's memory (MB): its own memory and a quarter of what it
+/// shares, what it is taken to have room for; `u64::MAX` where the driver tells neither, 0
+/// for a card of its own. The driver's budget for such a chip is most of the shared memory -
+/// 8.3 GB of a 14.7 GB laptop's - and filling it lost the device (#3493). The driver says
+/// what the chip is (DirectX 12 by its memory architecture, Vulkan by its device type), for
+/// every maker alike; OpenGL often says "other", and there the name tells (see
+/// [`shared_chip_by_name`]). Apple's chips are meant to share, and a phone's are sized apart.
+pub(super) fn integrated_room_mb(info: &wgpu::AdapterInfo, own: Option<u64>, shared: Option<u64>) -> u64 {
+    let shares = match info.device_type {
+        wgpu::DeviceType::IntegratedGpu => info.backend != wgpu::Backend::Metal,
+        wgpu::DeviceType::Other => info.backend == wgpu::Backend::Gl && shared_chip_by_name(&info.name) == Some(true),
+        _ => false,
+    };
+    if !shares || cfg!(any(target_os = "android", target_os = "ios")) {
+        return 0;
+    }
+    match (own, shared) {
+        (None, None) => u64::MAX,
+        (own, shared) => own.unwrap_or(0) + shared.unwrap_or(0) / 4,
+    }
+}
+
 /// The largest device-local memory heap of a Vulkan adapter (MB).
 #[cfg(target_os = "linux")]
 fn vulkan_vram_mb(adapter: &wgpu::Adapter) -> Option<u64> {
@@ -538,6 +560,27 @@ mod tests {
         assert_eq!(picture(Backend::Gl, DeviceType::Other, "", Some(16304)), Picture::AsAsked);
         assert_eq!(picture(Backend::Gl, DeviceType::Other, "", Some(2048)), Picture::Weak);
         assert_eq!(picture(Backend::Dx12, DeviceType::IntegratedGpu, "", Some(8192)), Picture::Weak);
+    }
+
+    /// A chip that shares the system's memory is known by what its driver says, whatever its
+    /// maker, and on OpenGL by its name; a card of its own, Apple's chips and an unknown name
+    /// are left to the card's own rules.
+    #[test]
+    fn a_shared_chip_is_known_by_its_driver_or_on_opengl_by_its_name() {
+        let chip = |name: &str, device_type, backend| wgpu::AdapterInfo { name: name.into(), vendor: 0, device: 0, device_type, device_pci_bus_id: String::new(), driver: String::new(), driver_info: String::new(), backend, subgroup_min_size: 0, subgroup_max_size: 0, transient_saves_memory: false };
+        let room = |name, device_type, backend, own, shared| super::integrated_room_mb(&chip(name, device_type, backend), own, shared);
+        // (the laptop of #3493 on DirectX 12, and the same chip on Vulkan)
+        assert_eq!(room("AMD Radeon(TM) Graphics", DeviceType::IntegratedGpu, Backend::Dx12, Some(2019), Some(7010)), 2019 + 1752);
+        assert_eq!(room("AMD Radeon(TM) Graphics", DeviceType::IntegratedGpu, Backend::Vulkan, Some(6124), Some(2934)), 6124 + 733);
+        assert_eq!(room("Intel(R) Iris(R) Xe Graphics", DeviceType::IntegratedGpu, Backend::Dx12, Some(128), Some(8000)), 128 + 2000);
+        assert_eq!(room("Intel(R) UHD Graphics 620", DeviceType::IntegratedGpu, Backend::Vulkan, None, None), u64::MAX);
+        // (OpenGL: "other", told by the name)
+        assert_eq!(room("Intel(R) UHD Graphics 620", DeviceType::Other, Backend::Gl, None, None), u64::MAX);
+        assert_eq!(room("NVIDIA GeForce GTX 1060/PCIe/SSE2", DeviceType::Other, Backend::Gl, None, None), 0);
+        assert_eq!(room("", DeviceType::Other, Backend::Gl, None, None), 0);
+        // (a card of its own, and Apple's)
+        assert_eq!(room("NVIDIA GeForce RTX 3060", DeviceType::DiscreteGpu, Backend::Dx12, Some(12_288), Some(16_000)), 0);
+        assert_eq!(room("Apple M2", DeviceType::IntegratedGpu, Backend::Metal, None, None), 0);
     }
 
     /// The street-scale light is off on a small or shared chip unless the player asked for it.

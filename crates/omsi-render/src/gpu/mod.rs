@@ -17,6 +17,10 @@ pub static ADAPTER_TEXTURE_MB: std::sync::atomic::AtomicU64 = std::sync::atomic:
 /// The discrete card's own memory (MB) where the system tells it (0 = not known, or not a
 /// discrete card), see `Renderer::new`.
 pub static ADAPTER_VRAM_MB: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// A chip that shares the system's memory: its own memory and a quarter of what it shares
+/// (MB), `u64::MAX` where the driver tells neither; 0 = a card of its own (or Apple's, or a
+/// phone's), see `Renderer::new`.
+pub static ADAPTER_INTEGRATED_MB: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 /// The adapter the device was opened on (its name, ids, backend and driver), see `Renderer::new`.
 pub static ADAPTER_INFO: std::sync::Mutex<Option<wgpu::AdapterInfo>> = std::sync::Mutex::new(None);
 
