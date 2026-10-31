@@ -53,6 +53,11 @@ pub struct ServerInfo {
     /// The buses that may be driven there (vehicle files, `Vehicles/…/….bus`): what the
     /// host has installed, or a server's own list. Empty: not said (an older game).
     pub vehicles: Vec<String>,
+    /// Optional server-side catalogue of paint schemes for each offered bus. Names only;
+    /// no file paths outside the allowed bus and no download authority.
+    pub fleet: Vec<FleetPaints>,
+    /// Zero means the server did not announce a paint catalogue (older builds).
+    pub fleet_version: u32,
     /// Where it answered (`http(s)://…`), set by `query`: when using WebSocket, a
     /// server added by its bare address (`1.2.3.4`, `host:27025`) is joined there.
     pub reached_at: String,
@@ -71,6 +76,14 @@ pub struct ServerInfo {
     /// The public server list's challenge (`"list_challenge"` in `GET /status`): the list
     /// service lists the server once it finds it there. Empty: the server is not listed.
     pub list_challenge: String,
+}
+
+/// One bus and its named paints, as the dedicated server offers them. The catalogue
+/// is informative: secure mod transfer still requires an authenticated manifest.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct FleetPaints {
+    pub bus: String,
+    pub paints: Vec<String>,
 }
 
 /// What a dedicated server's shared world holds: the AI cars on the roads (`cars`), its
@@ -179,7 +192,7 @@ impl ServerInfo {
 
     fn to_json_base(&self) -> String {
         format!(
-            "{{\"name\":{},\"motd\":{},\"map\":{},\"players\":{},\"max_players\":{},\"version\":{},\"icon\":{},\"time\":{},\"weather\":{},\"password\":{},\"protocol\":{},\"vehicles\":{},\"world\":{}}}",
+            "{{\"name\":{},\"motd\":{},\"map\":{},\"players\":{},\"max_players\":{},\"version\":{},\"icon\":{},\"time\":{},\"weather\":{},\"password\":{},\"protocol\":{},\"vehicles\":{},\"fleet_version\":{},\"fleet\":{},\"world\":{}}}",
             json_str(&self.name),
             json_str(&self.motd),
             json_str(&self.map),
@@ -192,6 +205,8 @@ impl ServerInfo {
             self.password,
             crate::PROTOCOL,
             json_str(&self.vehicles.join(";")),
+            self.fleet_version,
+            serde_json::to_string(&self.fleet).unwrap_or_else(|_| "[]".into()),
             self.world.map(|w| w.to_json()).unwrap_or_else(|| "null".into())
         )
     }
@@ -212,6 +227,11 @@ impl ServerInfo {
             weather: text("weather").unwrap_or_default(),
             password: json_value(s, "password").map(|v| v.trim() == "true").unwrap_or(false),
             vehicles: text("vehicles").map(|v| v.split(';').map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect()).unwrap_or_default(),
+            fleet_version: num("fleet_version").unwrap_or(0).min(1) as u32,
+            fleet: serde_json::from_str::<serde_json::Value>(s).ok()
+                .and_then(|v| v.get("fleet").cloned())
+                .and_then(|v| serde_json::from_value::<Vec<FleetPaints>>(v).ok())
+                .unwrap_or_default(),
             reached_at: String::new(),
             ..Default::default()
         })
