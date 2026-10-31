@@ -23,6 +23,9 @@ impl PadKind {
     pub fn detect(name: &str, id: Option<(u16, u16)>) -> Option<PadKind> {
         let n = name.to_ascii_lowercase();
         if let Some((vendor, product)) = id {
+            if vendor == 0x045e {
+                return Some(PadKind::Xbox);
+            }
             if vendor == SONY {
                 return match product {
                     0x0ce6 | 0x0df2 => Some(PadKind::Ps5),
@@ -156,6 +159,33 @@ pub fn action_text(action: &str) -> &'static str {
 /// the buttons as the HID descriptor numbers them from 0, and the first hat after
 /// `controllers::HAT_BUTTONS` as up, right, down, left. Triggers are axes and not listed.
 #[cfg_attr(not(windows), allow(dead_code))]
+/// An Xbox button read through DirectInput (e.g. over Bluetooth LE on Windows):
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn xbox_direct_input_button(n: usize, hat_base: usize) -> Option<Button> {
+    if n >= hat_base {
+        return match n - hat_base {
+            0 => Some(Button::DPadUp),
+            1 => Some(Button::DPadRight),
+            2 => Some(Button::DPadDown),
+            3 => Some(Button::DPadLeft),
+            _ => None,
+        };
+    }
+    match n {
+        0 => Some(Button::South),
+        1 => Some(Button::East),
+        2 => Some(Button::West),
+        3 => Some(Button::North),
+        4 => Some(Button::LeftTrigger),
+        5 => Some(Button::RightTrigger),
+        6 => Some(Button::Select),
+        7 => Some(Button::Start),
+        8 => Some(Button::LeftThumb),
+        9 => Some(Button::RightThumb),
+        _ => None,
+    }
+}
+
 pub fn sony_direct_input_button(n: usize, hat_base: usize) -> Option<Button> {
     if n >= hat_base {
         return match n - hat_base {
