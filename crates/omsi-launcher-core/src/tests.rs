@@ -26,6 +26,7 @@ fn a_part_found_from_the_vehicle_folder_is_no_missing_pack() {
 }
 
 include!("passenger_animation_tests.rs");
+include!("plugin_launch_tests.rs");
 
 #[test]
 fn the_games_options_survive_a_save() {

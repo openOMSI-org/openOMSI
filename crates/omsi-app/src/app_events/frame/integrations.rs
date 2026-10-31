@@ -46,10 +46,10 @@ impl App {
         // (their main chunk already knows the interface themes: `ui.themes`, `ui.theme`)
         let mut plugins = self.integrations.plugins.take().unwrap_or_else(|| {
             omsi_plugin::ui::themes_for_load(theme_infos(), &self.settings.ui_theme_pack);
-            crate::plugins::load()
+            crate::plugins::load(self.args.no_plugins)
         });
         self.sync_vehicle_scripts(&mut plugins);
-        if !self.paused && !omsi_cfg::flags::OMSI_NO_PLUGINS.is_set() {
+        if !self.paused && !self.args.no_plugins && !omsi_cfg::flags::OMSI_NO_PLUGINS.is_set() {
             crate::plugin_io::object::drive(self, &mut plugins, dt);
         }
         if !plugins.is_empty() {

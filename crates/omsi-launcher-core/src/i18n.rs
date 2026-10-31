@@ -4,7 +4,6 @@ use omsi_cfg::template::Index;
 use std::sync::{Arc, Mutex, OnceLock};
 
 pub static TABLES: &str = include_str!("../../omsi-app/locales/app.yml");
-
 static PINNED: OnceLock<&'static str> = OnceLock::new();
 
 fn unquote(s: &str) -> Option<String> {
@@ -119,6 +118,21 @@ pub fn trf(text: &str, vars: &[(&str, &dyn Display)]) -> String {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn full_bus_labels_and_help_are_translated_in_all_29_languages() {
+        let langs = "ca ru de fr uk be kk pl cs hu es pt pt-pt it nl tr ja zh hi zh-tw ko th vi id ms tl sv sr ka";
+        let texts = [
+            "Passengers react to full buses",
+            "Optional visual acknowledgement when an approaching compatible bus is at passenger capacity",
+        ];
+        for lang in langs.split(' ') {
+            let table = super::table(super::TABLES, lang);
+            for text in texts {
+                assert!(table.get(text).is_some_and(|value| !value.is_empty() && value != text),
+                    "{lang}: missing translation for {text}");
+            }
+        }
+    }
+    #[test]
     fn a_language_is_read_from_the_tables() {
         let yml = "_version: 2\n\n\"Mon\":\n  fr: \"lun.\"\n  de: \"Mo\"\n\"a \\\"b\\\"\":\n  fr: \"c\\n\"\n";
         let fr = super::table(yml, "fr");
@@ -126,5 +140,28 @@ mod tests {
         assert_eq!(fr.get("a \"b\"").map(String::as_str), Some("c\n"));
         assert_eq!(super::table(yml, "de").len(), 1);
         assert!(super::table(super::TABLES, "fr").contains_key("Mon"));
+    }
+
+    /// The built-up snow switch's label and help (the Graphics page, the game's Settings)
+    /// are read in every language, each once in the tables.
+    #[test]
+    fn the_built_up_snow_switch_is_read_in_every_language() {
+        let texts = [
+            "Built-up snow on roads and roofs",
+            "While it snows, snow builds up on the roads and on the vehicles' roofs, with ruts and tyre tracks, and thaws again; off: the weather's own snow on road, as in OMSI 2",
+        ];
+        let langs = "de fr ru uk be kk pl cs hu es pt pt-pt it nl tr ja zh-tw ko th vi id ms tl zh hi ca sv sr ka";
+        for lang in langs.split(' ') {
+            let table = super::table(super::TABLES, lang);
+            for text in texts {
+                let got = table.get(text).map(String::as_str).unwrap_or("");
+                assert!(!got.is_empty() && got != text, "{lang}: {text}");
+            }
+        }
+        // (by lines: a Windows checkout has the tables with CRLF endings)
+        for text in texts {
+            let key = format!("\"{text}\":");
+            assert_eq!(super::TABLES.lines().filter(|l| *l == key).count(), 1, "{text}");
+        }
     }
 }

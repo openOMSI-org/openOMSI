@@ -14,3 +14,6 @@ tungstenite = { version = "0.30", default-features = false, features = ["handsha
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = ["Win32_Networking_WinSock"] }

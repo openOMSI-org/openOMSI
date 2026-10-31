@@ -12,6 +12,12 @@ use omsi_sim::{Daylight, VehicleInstance};
 /// street under a lamp, and less beyond.
 const HEADLIGHT_INTENSITY: f32 = 1800.0;
 
+/// The road-headlamp profile has a brighter high-beam core of its own. At the
+/// renderer's 55 lux per intensity unit, the old strength gave each lamp nearly
+/// 50,000 cd on low beam and 350,000 cd on high beam. This scale brings the generic
+/// pair to 33,000 / 231,000 cd, without dimming work lights or authored cookies.
+const ROAD_HEADLIGHT_GAIN: f32 = 1.0 / 3.0;
+
 /// A `[spotlight]` declaring this range or more is a full beam (the stock buses' 500, the
 /// Grand Paris-Moulon Citaro's 450), less a low beam (the stock 100, that Citaro's 200).
 const FULL_BEAM_RANGE: f32 = 300.0;
@@ -185,7 +191,8 @@ pub fn vehicle_lights(
                 if player && total > 0.0 {
                     let face = origins.iter().map(|(at, share)| *at * *share).sum::<Vec3>() / total;
                     let at = Vec3::new(vals[0], face.y, vals[2]);
-                    push_classic_spot(lights, v.position + body.transform_point3(at).as_dvec3(), d, &vals, 1.0, face.y - vals[1], 1.0);
+                    let source = v.position + body.transform_point3(Vec3::new(vals[0], vals[1], vals[2])).as_dvec3();
+                    push_classic_spot(lights, v.position + body.transform_point3(at).as_dvec3(), d, &vals, 1.0, source, true);
                 }
                 for (at, share) in origins {
                     push_enhanced_spot(lights, v.position + body.transform_point3(at).as_dvec3(), d, level, &vals, share);
@@ -348,7 +355,7 @@ fn push_cookie(lights: &mut Vec<PointLight>, at: DVec3, d: Vec3, c: &omsi_model:
         direction: d,
         cone: [inner, outer],
         mode: LightMode::Vanilla,
-        d3d_spot: Some([c.range.max(0.1), 0.0, 0.0]),
+        d3d_spot: Some(omsi_render::D3dSpot { range: c.range.max(0.1), source: at, player: false }),
         ..Default::default()
     });
     let reach = spot_reach(c.range, 60.0);
@@ -443,7 +450,7 @@ fn level_axis(rot: glam::Mat4, local: Vec3) -> Vec3 {
 /// (`vals`: colour 6-8, range 9, inner and outer cone 10 and 11) and `share` of its light;
 /// `level` its axis in the vehicle's floor (see [`level_axis`]).
 fn push_spot(lights: &mut Vec<PointLight>, at: DVec3, d: Vec3, level: Vec3, vals: &[f32; 12], share: f32) {
-    push_classic_spot(lights, at, d, vals, share, 0.0, 0.0);
+    push_classic_spot(lights, at, d, vals, share, at, false);
     push_enhanced_spot(lights, at, d, level, vals, share);
 }
 
@@ -458,11 +465,10 @@ fn classic_spot_reach(range: f32) -> f32 {
 /// (0..255, 0x5f3f71) times 0.3 as diffuse light and 0.1 as ambient light, its cone's full
 /// angles (degrees to radians, 0x7f1f30) with a falloff of 2, attenuation
 /// 1 / (0.2 + (1 / range) d + (40 / range²) d²) (0.01 x 100 / range and 0.004 x (100 /
-/// range)²); the shader's `point_lights` lights it so. `share` of its light; `setback` (m)
-/// how far behind `at` along the vehicle's axis the spotlight itself lies: its light leaves
-/// from the vehicle's face (`spot_origins` - the stock NL202's spot is 3.8 m inside the bus)
-/// but is as strong as Omsi.exe has it from the spotlight's place.
-fn push_classic_spot(lights: &mut Vec<PointLight>, at: DVec3, d: Vec3, vals: &[f32; 12], share: f32, setback: f32, kind: f32) {
+/// range)²). `source` is the declared position transformed with the vehicle body; `at`
+/// stays at the vehicle's face for occlusion (`spot_origins` - the stock NL202's spot
+/// is 3.8 m inside the bus). The player's spot is shaded through the camera uniform.
+fn push_classic_spot(lights: &mut Vec<PointLight>, at: DVec3, d: Vec3, vals: &[f32; 12], share: f32, source: DVec3, player: bool) {
     let color = [vals[6] / 255.0, vals[7] / 255.0, vals[8] / 255.0];
     // inner and outer cone as full angles (values 10 and 11)
     let (inner, outer) = (vals[10], vals[11]);
@@ -476,7 +482,7 @@ fn push_classic_spot(lights: &mut Vec<PointLight>, at: DVec3, d: Vec3, vals: &[f
         direction: d,
         cone,
         mode: LightMode::Vanilla,
-        d3d_spot: Some([vals[9].max(0.1), setback, kind]),
+        d3d_spot: Some(omsi_render::D3dSpot { range: vals[9].max(0.1), source, player }),
         ..Default::default()
     });
 }
@@ -639,7 +645,7 @@ fn push_enhanced_spot(lights: &mut Vec<PointLight>, at: DVec3, d: Vec3, level: V
         position: at,
         radius: reach,
         color,
-        intensity: HEADLIGHT_INTENSITY * share * weaker,
+        intensity: HEADLIGHT_INTENSITY * share * weaker * if beam != 0.0 { ROAD_HEADLIGHT_GAIN } else { 1.0 },
         direction: if beam != 0.0 { level } else { d },
         cone,
         core: 1.0,
@@ -756,11 +762,12 @@ mod spot_tests {
     fn a_spotlight_is_omsis_direct3d_spot_in_the_classic_picture() {
         let vals = [0.0, 2.0, 0.863, 0.0, 1.0, -0.3, 255.0, 255.0, 233.0, 100.0, 30.0, 70.0];
         let mut lights = Vec::new();
-        super::push_classic_spot(&mut lights, glam::DVec3::ZERO, glam::Vec3::Y, &vals, 1.0, 3.9, 1.0);
+        let source = glam::DVec3::new(0.0, -3.9, 0.0);
+        super::push_classic_spot(&mut lights, glam::DVec3::ZERO, glam::Vec3::Y, &vals, 1.0, source, true);
         assert_eq!(lights.len(), 1);
         let l = &lights[0];
         assert_eq!(l.mode, omsi_render::LightMode::Vanilla);
-        assert_eq!(l.d3d_spot, Some([100.0, 3.9, 1.0]));
+        assert_eq!(l.d3d_spot, Some(omsi_render::D3dSpot { range: 100.0, source, player: true }));
         assert_eq!((l.intensity, l.radius), (1.0, super::VANILLA_SPOT_REACH));
         assert_eq!(l.color, [1.0, 1.0, 233.0 / 255.0]);
         assert!((l.cone[0] - 15f32.to_radians().cos()).abs() < 1e-6 && (l.cone[1] - 35f32.to_radians().cos()).abs() < 1e-6, "{:?}", l.cone);
@@ -770,7 +777,7 @@ mod spot_tests {
         let mut lights = Vec::new();
         super::push_spot(&mut lights, glam::DVec3::ZERO, glam::Vec3::Y, glam::Vec3::Y, &short, 0.5);
         let van = lights.iter().find(|l| l.mode == omsi_render::LightMode::Vanilla).unwrap();
-        assert_eq!((van.radius, van.intensity, van.d3d_spot), (20.0, 0.5, Some([5.0, 0.0, 0.0])));
+        assert_eq!((van.radius, van.intensity, van.d3d_spot), (20.0, 0.5, Some(omsi_render::D3dSpot { range: 5.0, source: glam::DVec3::ZERO, player: false })));
     }
 
     /// A headlamp's beam lies about the vehicle's floor: on a bus pitched up a ramp its
@@ -1131,7 +1138,7 @@ pub fn flashlight(lights: &mut Vec<PointLight>, eye: DVec3, forward: Vec3, right
     // outer cone (degrees, full angles); a warm white, 50 m, 14 and 42 degrees
     let vals = [0.0, 0.0, 0.0, d.x, d.y, d.z, 255.0, 240.0, 215.0, 50.0, 14.0, 42.0];
     // (the classic picture's spot is Omsi.exe's Direct3D light, as bright by day as by night)
-    push_classic_spot(lights, at, d, &vals, FLASHLIGHT_CLASSIC_SHARE, 0.0, 0.0);
+    push_classic_spot(lights, at, d, &vals, FLASHLIGHT_CLASSIC_SHARE, at, false);
     push_enhanced_spot(lights, at, d, Vec3::ZERO, &vals, FLASHLIGHT_SHARE);
 }
 

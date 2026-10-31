@@ -91,6 +91,9 @@ impl App {
         let Ok(exe) = std::env::current_exe() else { return false };
         let mut cmd = std::process::Command::new(exe);
         cmd.arg("--root").arg(&self.args.root).arg("--no-menu").arg("--situation").arg(&file);
+        if self.args.no_plugins {
+            cmd.arg("--no-plugins");
+        }
         // (the duty typed by itself goes on being typed: `--autostart` with a situation)
         if self.player.as_ref().is_some_and(|p| p.duty_typed) {
             cmd.arg("--autostart");
@@ -183,6 +186,9 @@ impl App {
         let Ok(exe) = std::env::current_exe() else { return false };
         let mut cmd = std::process::Command::new(exe);
         cmd.arg("--root").arg(&self.args.root).arg("--no-menu").arg("--situation").arg(&file);
+        if self.args.no_plugins {
+            cmd.arg("--no-plugins");
+        }
         // (the duty typed by itself goes on being typed: `--autostart` with a situation)
         if self.player.as_ref().is_some_and(|p| p.duty_typed) {
             cmd.arg("--autostart");

@@ -75,6 +75,9 @@ struct Departure {
 /// What became of a departure that was due.
 pub enum Placed {
     Spawned,
+    /// The tour's bus stands where its trip ended until it is time to drive up to the next
+    /// trip's first stop (`ScheduleSim::tour_held`).
+    Early,
     /// The part of the route the bus is on now is not loaded: try again later.
     Wait,
     /// Nothing to do any more (the trip is over, or has no route or no vehicle).
@@ -193,6 +196,9 @@ pub struct ScheduleSim {
     /// Departures due while their tour's bus is still on its previous trip: that bus takes
     /// them on when it gets there, as in OMSI a tour keeps its bus from trip to trip.
     awaiting: std::collections::HashSet<usize>,
+    /// Tour buses standing where they set down, by car id, with when they drive up to the
+    /// first stop of their next trip.
+    tour_hold: HashMap<u64, f64>,
     /// The clock was set (`restart`): the next tick puts the buses out as a start does.
     restarted: bool,
     /// The map's holidays, for the day's tours.
@@ -237,6 +243,11 @@ pub struct ScheduleSim {
 /// tour's bus missing on its layover (the map just loaded) stands at the next trip's
 /// first stop as long before it (#2593).
 const TOUR_LAYOVER_MAX: f64 = 30.0 * 60.0;
+
+/// A tour's bus whose next trip begins at a stop further on drives up at this speed (m/s)
+/// and comes there this long (s) before its departure.
+const DRIVE_UP_SPEED: f32 = 5.0;
+const DRIVE_UP_AHEAD: f64 = 60.0;
 
 /// A layover bus whose stand was taken tries for it again after this many seconds.
 const STAND_RETRY: f64 = 20.0;

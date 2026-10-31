@@ -121,6 +121,7 @@ pub(crate) fn scene_shader_text(gl: bool) -> String {
     let src = [
         include_str!("../colour.wgsl"),
         shaders::SCENE,
+        if road_snow_supported_on(gl, omsi_cfg::flags::OMSI_GL_TEXTURE_UNITS.is_set(), array_path()) { include_str!("../road_snow.wgsl") } else { include_str!("../road_snow_off.wgsl") },
         include_str!("../enhanced_common.wgsl"),
         include_str!("../puddle_common.wgsl"),
         include_str!("../beam_shadow_none.wgsl"),
@@ -148,7 +149,7 @@ pub(crate) fn scene_shader_text(gl: bool) -> String {
         .replace("textureSampleBias(t_trans, s_tile, uv, bias)", &clamped("t_trans", "bias"))
         .replace("textureSampleBias(t_night, s_tile, uv, camera.lod.x)", &clamped("t_night", "camera.lod.x"))
         .replace("ao = ao_at(in.clip.xy, in.world);", "ao = 1.0;")
-        .replace("let ag = ao_gi_at(in.clip.xy, in.world);", "let ag = vec4<f32>(1.0, 0.0, 0.0, 0.0);")
+        .replace("let ag = ao_gi_at(in.clip.xy, in.world, surface_rt);", "let ag = vec4<f32>(1.0, 0.0, 0.0, 0.0);")
         .replace("rt_at(in.clip.xy, in.world)", "vec4<f32>(1.0, 0.0, -1.0, 0.0)");
     debug_assert!(!out.contains("s_tile, uv)") && !out.contains("s_tile, uv, "));
     debug_assert!(!out.contains("ao_at(in.") && !out.contains("ao_gi_at(in.") && !out.contains("rt_at(in."));

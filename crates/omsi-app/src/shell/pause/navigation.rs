@@ -23,7 +23,7 @@ impl Category {
             "vehicle" | "world" => Self::World,
             "save" | "saveslot" | "load" => Self::Saves,
             "shot" | "photo" => Self::Capture,
-            "players" | "copycode" | "admin" => Self::Online,
+            "multiplayer" | "players" | "copycode" | "admin" => Self::Online,
             "plugin" => Self::Plugins,
             _ => Self::Settings,
         })
@@ -128,6 +128,7 @@ mod tests {
             ("options", Category::Settings),
             ("controls", Category::Settings),
             ("camera", Category::Settings),
+            ("multiplayer", Category::Online),
             ("players", Category::Online),
             ("copycode", Category::Online),
             ("admin", Category::Online),

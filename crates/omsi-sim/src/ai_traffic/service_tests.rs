@@ -9,13 +9,13 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// A vehicle type with no model and no scripts, in a folder of its own (12 m as a bus,
 /// 4.5 m as a car).
-pub(super) struct Fixture {
+pub(crate) struct Fixture {
     dir: std::path::PathBuf,
-    pub(super) ty: Arc<VehicleType>,
+    pub(crate) ty: Arc<VehicleType>,
 }
 
 impl Fixture {
-    pub(super) fn new() -> Fixture {
+    pub(crate) fn new() -> Fixture {
         static NEXT: AtomicUsize = AtomicUsize::new(0);
         let dir = std::env::temp_dir().join(format!("omsi-traffic-service-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
         std::fs::create_dir_all(&dir).unwrap();
@@ -37,7 +37,7 @@ const STOP_S: f32 = 300.0;
 const STOP_ID: i64 = 77;
 
 /// One straight road north, 1.5 km long (lane 0), and the road back beside it (lane 1).
-pub(super) fn road(f: &Fixture) -> TrafficSim {
+pub(crate) fn road(f: &Fixture) -> TrafficSim {
     let north = LaneBuilder::arc(DVec3::ZERO, 0.0, 1500.0, 0.0, 0.0, LaneKind::Street, 3.0);
     let south = LaneBuilder::arc(DVec3::new(-3.5, 1500.0, 0.0), 180.0, 1500.0, 0.0, 0.0, LaneKind::Street, 3.0);
     let mut net = Network { lanes: vec![north, south], ..Default::default() };
@@ -231,6 +231,47 @@ fn a_layover_behind_moves_up_once_the_berth_is_free() {
     assert!((STOP_S - c.state.s).abs() < 2.5, "it stands {:.1} m before the point", STOP_S - c.state.s);
     assert!(b.at_stop() && !b.behind, "{:?} behind {}", b.phase, b.behind);
     assert!(b.held_berth().is_some());
+}
+
+/// Three buses set down at the stop their trips end at, close behind each other, while the
+/// first stands out its layover there (a tour's bus waiting to drive up to its next trip's
+/// first stop, #3142): it tells the berth so, and the third, too far back to serve beside
+/// it, serves the stop from where it waits instead of waiting in the road for the berth.
+#[test]
+fn buses_setting_down_behind_one_at_the_end_of_its_trip_serve_from_behind() {
+    const END_STOP: f32 = 1470.0;
+    let f = Fixture::new();
+    let mut t = road(&f);
+    let ids: Vec<u64> = [(1, 1390.0), (2, 1365.0), (3, 1340.0)]
+        .iter()
+        .map(|&(id, s)| {
+            let stops = vec![Stop { ri: 0, s: END_STOP, bay: 0.0, depart: t.day_time, id: STOP_ID, side: 0.0 }];
+            let setup = BusSetup { route: vec![0], stops, number: None, hof: None, timetable: AiTimetable { line: String::new(), terminus: String::new(), stops: Vec::new() } };
+            let vehicle = VehicleInstance::new(f.ty.clone(), crate::VehicleHost::new(crate::SimClock::default()));
+            t.place_car(vehicle, LaneKind::Street, 0, s, f.ty.clone(), id * 0x101, None, Some(id), Some(8.0), Some(setup))
+        })
+        .collect();
+    let mut opened: Vec<Vec<f32>> = vec![Vec::new(); 3];
+    let mut was_open = [false; 3];
+    let dt = super::fixed_step::SIM_DT;
+    let mut time = 0.0;
+    while time < 120.0 {
+        t.tick(dt, None);
+        time += dt;
+        for (k, &id) in ids.iter().enumerate() {
+            let c = car(&t, id);
+            if c.at_station() && !was_open[k] {
+                opened[k].push(END_STOP - c.state.s);
+            }
+            was_open[k] = c.at_station();
+        }
+    }
+    let first = car(&t, ids[0]);
+    assert!(first.trip_done() && first.bus.as_ref().unwrap().held_berth().is_some(), "the first stands at the berth at the end of its trip");
+    for (k, o) in opened.iter().enumerate() {
+        assert_eq!(o.len(), 1, "bus {} opened its doors {} times", ids[k], o.len());
+    }
+    assert!(opened[2][0] > berths::SERVE_QUEUED_REACH && opened[2][0] < berths::SERVE_BEHIND_REACH, "the third served from {:.1} m", opened[2][0]);
 }
 
 /// A bus too fast to stop at its stop runs past it: the stop is missed - the doors stay

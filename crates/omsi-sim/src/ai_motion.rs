@@ -266,13 +266,20 @@ impl AiBody {
                 inertia[j] = spring[i] / 38.0f32.powi(2);
             }
         }
+        // The heave as well: a tram's or a ship's `achse_feder` / `achse_daempfer` of 5000
+        // (Mainz's GT6M, Schiff1) gave c/m of ~3300/s, the 5 ms steps of `settle` ran away
+        // (vz inf, then NaN) and the car and its rear section went to NaN - which took the
+        // player's bus with it on contact (#3161).
+        spring[0] = spring[0].min(mass * 38.0f32.powi(2));
         // at least 0.8 of critical damping in every mode: a driven car settles after a
         // bump or a stop instead of swinging on (the files' dampers are tuned for the
-        // player's physics, which damps through the tyres as well)
-        let heave_c = 2.0 * 0.8 * (spring[0] * mass).sqrt();
-        damper[0] = damper[0].max(heave_c);
+        // player's physics, which damps through the tyres as well) - and at most twice
+        // critical, which the steps still integrate
+        let heave_c = 2.0 * (spring[0] * mass).sqrt();
+        damper[0] = damper[0].clamp(0.8 * heave_c, 2.0 * heave_c);
         for (i, j) in [(1usize, 0usize), (2, 1)] {
-            damper[i] = damper[i].max(2.0 * 0.8 * (spring[i] * inertia[j]).sqrt());
+            let crit = 2.0 * (spring[i] * inertia[j]).sqrt();
+            damper[i] = damper[i].clamp(0.8 * crit, 2.0 * crit);
         }
         let axle_count = def.axles.len().max(1);
         AiBody {
@@ -587,6 +594,14 @@ impl AiBody {
                 self.z = self.z.clamp(zg - 0.15, zg + 0.15);
                 self.pitch = self.pitch.clamp(pg - 0.07, pg + 0.07);
                 self.roll = self.roll.clamp(rg - 0.09, rg + 0.09);
+                // (should the springs still run away, the car stands on the ground again -
+                // the clamps above hid an inf velocity until it came out as NaN)
+                if !([self.vz, self.vpitch, self.vroll, self.pitch, self.roll].iter().all(|x| x.is_finite()) && self.z.is_finite()) {
+                    static ONCE: std::sync::Once = std::sync::Once::new();
+                    ONCE.call_once(|| log::warn!("ai car springs ran away (no number); the car is put back on the ground"));
+                    (self.z, self.pitch, self.roll) = (zg, pg, rg);
+                    (self.vz, self.vpitch, self.vroll) = (0.0, 0.0, 0.0);
+                }
             }
             _ => {
                 // first frame, or the ground under the car changed completely
@@ -805,6 +820,27 @@ mod tests {
         assert!(heavy > light * 1.5, "light striker {light:.3} m/s, heavy striker {heavy:.3} m/s");
         // momentum: a 12 t bus at 3 m/s gives a 1 t car at most (1 + e) 12/13 of it
         assert!((heavy - 1.2 * 12.0 / 13.0 * 3.0).abs() < 1e-3, "{heavy}");
+    }
+
+    /// A tram on OMSI's near-rigid springs (Mainz's GT6M: `achse_feder` and `achse_daempfer`
+    /// 5000 on every axle) driving over a road with small bumps and braking: its springs
+    /// stay numbers (they ran away within a minute and put the car at NaN, #3161).
+    #[test]
+    fn stiff_springs_stay_numbers() {
+        let mut def = Vehicle { mass: 12.0, moment_of_inertia: [1760.0, 54.0, 1803.0], cog_height: 0.6, rot_pnt_long: 0.0, inv_min_turn_radius: 0.1, ..Default::default() };
+        def.axles = [7.15, 4.65, -4.65, -7.15].iter().map(|&long| Axle { long, max_width: 1.606, spring: 5000.0, damper: 5000.0, wheel_diameter: 0.503, ..Default::default() }).collect();
+        let mut body = AiBody::new(&def, MotionKind::Road);
+        let bumpy = |_x: f64, y: f64| Some(10.0 + 0.02 * (y * 1.7).sin() + 0.01 * (y * 5.3).sin());
+        body.place(&|d| DVec3::new(0.0, d as f64, 10.0), Some(&bumpy), None, 10.0);
+        let dt = 0.02;
+        let mut at = 0.0f64;
+        for i in 0..3000 {
+            let speed = if (i / 250) % 2 == 0 { 10.0 } else { 2.0 };
+            at += speed as f64 * dt as f64;
+            let s = at;
+            body.step(dt, speed, &|d| DVec3::new(0.0, s + d as f64, 10.0), Some(&bumpy), None);
+            assert!(body.position.is_finite() && body.vz.is_finite() && body.vpitch.is_finite(), "step {i}: {:?} vz {} vpitch {}", body.position, body.vz, body.vpitch);
+        }
     }
 
     fn golf() -> Vehicle {

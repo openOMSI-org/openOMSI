@@ -22,7 +22,7 @@ pub(crate) fn season_folder_on(args: &Args, global: &omsi_map::GlobalCfg, day_of
     }
     let mut folder = omsi_map::global::Season::folder(kind).map(|f| f.to_string());
     if snow {
-        folder = Some(if snow_on_road { "WinterSnowfall" } else { "WinterSnow" }.to_string());
+        folder = Some(omsi_scene::road_snow::snow_folder(snow_on_road).to_string());
     }
     (kind, folder)
 }
@@ -112,8 +112,13 @@ pub(crate) fn spawn_point(args: &Args, world: Option<&World>) -> Option<DVec3> {
 }
 
 pub(crate) fn load_world(args: &Args, renderer: &Renderer, scene: &mut Scene) -> Result<(World, Camera)> {
+    load_open_world(args, renderer, scene, open_world(args)?)
+}
+
+/// Build an already-opened map without reopening it or ending the running game on failure.
+pub(crate) fn load_open_world(args: &Args, renderer: &Renderer, scene: &mut Scene, opened: (World, Camera, DVec3)) -> Result<(World, Camera)> {
     let t0 = Instant::now();
-    let (world, camera, center) = open_world(args)?;
+    let (world, camera, center) = opened;
     let tile_of = |p: DVec3| {
         (
             (p.x / omsi_map::tile_size()).floor() as i32,

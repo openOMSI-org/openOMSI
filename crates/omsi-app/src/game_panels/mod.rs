@@ -13,6 +13,7 @@ use omsi_plugin::ui::{Align, Element, Kind, Panel, Rgba, RowAlign, UiState, Weig
 use omsi_ui::theme::Palette;
 
 mod dest_form;
+mod multiplayer;
 mod move_here;
 pub(crate) use dest_form::open as open_dest_form;
 pub(crate) use move_here::ask as ask_move;
@@ -38,6 +39,7 @@ pub(crate) struct GamePanels {
     pub(crate) quick: Option<quick_menu::QuickMenu>,
     pub(crate) trip: Option<trip_summary::TripPanel>,
     pub(crate) dest: Option<dest_form::DestForm>,
+    pub(crate) multiplayer: Option<multiplayer::Multiplayer>,
     pub(crate) view: Option<view_editor::ViewEditor>,
     /// Where the map camera's click asks to move the bus to.
     pub(crate) move_to: Option<glam::DVec3>,
@@ -46,7 +48,7 @@ pub(crate) struct GamePanels {
 impl GamePanels {
     /// Whether any panel is open.
     pub(crate) fn any(&self) -> bool {
-        self.quick.is_some() || self.trip.is_some() || self.dest.is_some() || self.view.is_some() || self.move_to.is_some()
+        self.multiplayer.is_some() || self.quick.is_some() || self.trip.is_some() || self.dest.is_some() || self.view.is_some() || self.move_to.is_some()
     }
 
     /// Whether the panels have the mouse.
@@ -123,6 +125,11 @@ pub(super) fn card(anchor: omsi_plugin::ui::Anchor, x: f32, y: f32, width: f32, 
 impl crate::App {
     /// Work off what was clicked and changed, set the open panels and draw them.
     pub(crate) fn frame_game_panels(&mut self, dt: f32, hud: [f32; 4], vr_active: bool) {
+        let changes = self.menus.game_panels.ui.take_changes(GAME);
+        // Enter commits a field and clicks it in the same frame: use the new code first.
+        for c in changes.iter().filter(|c| c.panel == "multiplayer") {
+            multiplayer::change(self, &c.element, &c.value);
+        }
         let clicks = self.menus.game_panels.ui.take_clicks(GAME);
         for c in clicks {
             let el = c.element.as_deref().unwrap_or("");
@@ -130,16 +137,17 @@ impl crate::App {
                 "quick" => quick_menu::click(self, el),
                 "trip" => trip_summary::click(self, el),
                 "dest" => dest_form::click(self, el),
+                "multiplayer" => multiplayer::click(self, el),
                 "view" => view_editor::click(self, el),
                 "move" => move_here::click(self, el),
                 _ => {}
             }
         }
-        let changes = self.menus.game_panels.ui.take_changes(GAME);
         for c in changes {
             match c.panel.as_str() {
                 "view" => view_editor::change(self, &c.element, &c.value),
                 "dest" => dest_form::change(self, &c.element, &c.value),
+                "multiplayer" => {},
                 _ => {}
             }
         }
@@ -172,6 +180,7 @@ impl crate::App {
             ("view", self.menus.game_panels.view.as_ref().map(|v| v.panel(self, pal))),
             ("trip", self.menus.game_panels.trip.as_ref().map(|t| t.panel(pal))),
             ("dest", self.menus.game_panels.dest.as_ref().map(|d| d.panel(pal))),
+            ("multiplayer", self.menus.game_panels.multiplayer.as_ref().map(|f| f.panel(self, pal))),
             ("quick", self.menus.game_panels.quick.as_ref().map(|q| q.panel(self))),
             ("move", self.menus.game_panels.move_to.map(|at| move_here::panel(at, pal))),
         ];
@@ -253,7 +262,7 @@ impl crate::App {
             if gp.quick.take().is_some() {
                 return true;
             }
-            return gp.trip.is_some() || gp.dest.is_some() || gp.move_to.is_some();
+            return gp.multiplayer.is_some() || gp.trip.is_some() || gp.dest.is_some() || gp.move_to.is_some();
         };
         match (pr.kind, pr.element.as_deref()) {
             (crate::plugin_ui::HitKind::Slider, Some(el)) => {
@@ -303,6 +312,10 @@ impl crate::App {
     /// Esc: the panel on top closes (the quick menu, the question, the form, the summary,
     /// the view editor - which keeps what was set without saving it). True when one did.
     pub(crate) fn close_game_panel(&mut self) -> bool {
+        if self.menus.game_panels.multiplayer.take().is_some() {
+            self.net.room.cancel();
+            return true;
+        }
         let gp = &mut self.menus.game_panels;
         if gp.quick.take().is_some() || gp.move_to.take().is_some() || gp.dest.take().is_some() || gp.trip.take().is_some() {
             return true;

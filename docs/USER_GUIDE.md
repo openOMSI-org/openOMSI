@@ -270,6 +270,16 @@ from the cab with R and T. Details, the formats and the checks: [TROLLEYBUS.md](
 
 ## The launcher
 
+For stability, **Settings > General > Disable plugins** is **on by default** for new
+launcher installations. The next game starts without Lua plugins (including vehicle
+and scenery plugins) or legacy OMSI plugins. Normal OMSI bus scripts still run;
+plugin-dependent vehicle features may be unavailable. This preference is saved
+between launches: existing settings files, including older files with no `disable_plugins` key, keep their previous plugin behavior. Explicit `disable_plugins=0` or `1` is preserved.
+To use a trusted plugin, switch **Disable plugins** off and start a new session.
+The game's standalone command-line equivalent is `--no-plugins` (direct CLI runs
+still require this flag); `OMSI_NO_PLUGINS=1` forces plugins off even when the
+launcher preference allows them.
+
 The launcher is a program of its own beside the game, `openomsi-launcher-app` (a Tauri window,
 `launcher/`, see its README): `openomsi` started without arguments opens it, and where it is
 missing - or its window cannot open, for want of WebView2 on an old Windows (the game offers
@@ -543,7 +553,7 @@ less of the GPU's time (on an M4 at 1080p about 0.8 ms of a frame). The shade of
 moment, with a camera's middle-tone contrast; street lamps are bright points with a little
 glare in clear air and wide halos in mist and rain.
 
-Every light that lights the street casts a shadow (Enhanced; Graphics: *Light has shadows*, `light_shadows=off|street|all`, *Street lamps and vehicles* by default): the twenty street
+Every light that lights the street casts a shadow (Enhanced; Graphics: *Light has shadows*, `light_shadows=off|street|all`, *Off* by default): the twenty street
 lamps, floodlights and platform lights lighting the view most each have a shadow map that looks
 down from their head, the headlamps of the player's bus and of the cars in front of the camera
 one that looks along the road, and the lamps of the player's own saloon sixteen more, drawn in
@@ -590,13 +600,15 @@ apart.
 
 The quality presets (*Quality preset*: Low, Medium, High, Extra, Max, Ultra) set the graphics mode
 as well as the options: Low is Vanilla, Medium Vanilla+ (what the game starts with), High and above
-Enhanced - High with the street lamps' shadows, the clouds' and the glow, Extra with the street light
+Enhanced - High enabling the street lamps' shadows, the clouds' and the glow, Extra with the street light
 and the reflections in full, Max with every light's shadows, the mirrors drawn as the picture and
 shadow maps of 4096, Ultra with Real-Time Ray Tracing on top of all of it. It shares Enhanced's tone curve, with the light a shade warmer and a light
 vignette.
 `OMSI_NO_RT=1` opens no ray queries, `OMSI_NO_RT_GRADE=1` leaves its grade out,
 `OMSI_RT_REFL_HALF=1` traces the reflections at half size, `OMSI_DEBUG_RT=n` (see
 `crates/omsi-render/src/rt.rs`) shows its buffers.
+
+Built-up snow on roads and roofs (`road_snow=0|1`) is **off by default**; enabling it in Graphics adds gradual snow accumulation and tyre tracks. With it off, the weather's conventional OMSI 2 road snow remains available. Existing saved preferences are preserved.
 
 Vanilla, Vanilla+ and Enhanced reflect buses, buildings and scenery in wet road puddles
 when `reflections` is above 0, each with its own lighting; Enhanced also shades shallow rain

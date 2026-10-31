@@ -3,7 +3,7 @@
 use super::*;
 
 /// A passenger of the player's bus on the way to its door, about to buy ticket 1.
-fn boarding(ty: &Arc<HumanType>, id: u32, task: Task) -> Person {
+pub(super) fn boarding(ty: &Arc<HumanType>, id: u32, task: Task) -> Person {
     let mut pax = Pax::new(1.1, 0.5);
     pax.bus = Some(BusId::Player);
     pax.stop = Some(77);
@@ -115,7 +115,7 @@ fn plugins_hear_of_a_ticket_and_change_it_until_it_is_asked_for() {
     assert_eq!(h.set_ticket(1, &zones, "x"), Err("already asked for the ticket"));
 }
 
-fn human_type(tag: &str) -> Arc<HumanType> {
+pub(super) fn human_type(tag: &str) -> Arc<HumanType> {
     let dir = std::env::temp_dir().join(format!("omsi-ticket-hook-{tag}-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("person.hum"), "[model]\nmodel.cfg\n").unwrap();
@@ -129,7 +129,7 @@ fn human_type(tag: &str) -> Arc<HumanType> {
 /// desk, one seat.
 /// (`tag`: a folder of its own - the tests run at the same time, and one removing the files
 /// another is still reading left it without a cabin)
-fn player_bus(tag: &str) -> BusNow {
+pub(super) fn player_bus(tag: &str) -> BusNow {
     let dir = std::env::temp_dir().join(format!("omsi-ticket-hook-bus-{tag}-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("test.bus"), "[boundingbox]\n2.5\n12\n3\n0\n0\n1.5\n\n[passengercabin]\ncabin.cfg\n\n[paths]\npaths.cfg\n").unwrap();

@@ -16,3 +16,6 @@ pub(crate) mod shadows;
 pub(crate) mod sky;
 pub(crate) mod ssao;
 pub(crate) mod upscale;
+
+#[cfg(all(test, windows))]
+mod dx12_tests;

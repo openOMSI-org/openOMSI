@@ -111,6 +111,8 @@ mod ws_http;
 pub mod tunnel;
 pub mod official;
 pub mod hostkey;
+mod host_ports;
+mod discovery;
 pub mod remote_text;
 pub use remote_text::is_fingerprint;
 
@@ -1389,6 +1391,7 @@ pub struct LanSession {
     /// The code as a bridge over the internet (see `bridge`): STUN, UPnP, the rendezvous.
     bridge: Option<bridge::Bridge>,
     host_key: Option<std::sync::Arc<hostkey::HostKey>>,
+    host_mods: Option<std::net::TcpListener>,
     /// Players who went lately (host): (nonce, name, id, when). One who comes back soon
     /// keeps their number and is "back", not a newcomer.
     gone_lately: Vec<(Option<u64>, String, u32, Instant)>,
@@ -1514,6 +1517,7 @@ impl LanSession {
             world_received: 0,
             bridge: None,
             host_key: None,
+            host_mods: None,
             gone_lately: Vec::new(),
             banned: Vec::new(),
             hw_bans: Vec::new(),
@@ -1523,38 +1527,6 @@ impl LanSession {
             commands: Vec::new(),
             clock_speed: 1.0,
         }
-    }
-
-    /// Host a session on `port` (all interfaces). With `try_next` the next few ports are
-    /// tried when that one is taken (another session runs on this machine).
-    pub fn host(
-        port: u16,
-        name: &str,
-        world: WorldInfo,
-        try_next: bool,
-    ) -> std::io::Result<LanSession> {
-        let mut last_err = None;
-        let tries = if try_next { PORT_RANGE } else { 1 };
-        for p in port..port.saturating_add(tries) {
-            match UdpSocket::bind(("0.0.0.0", p)) {
-                Ok(socket) => {
-                    socket.set_nonblocking(true)?;
-                    socket.set_broadcast(true)?;
-                    let mut s = LanSession::new(socket, Role::Host, name, world);
-                    let key = std::sync::Arc::new(hostkey::HostKey::generate().ok_or_else(|| std::io::Error::other("no key for the session"))?);
-                    s.session = key.session();
-                    s.bridge = bridge::Bridge::start(true, s.session, Some(key.clone()), local_addrs(p), p);
-                    s.host_key = Some(key);
-                    log::info!("LAN: hosting session {} on port {p} as '{name}' (protocol {PROTOCOL}), code {}", session_hex(s.session), s.code().map(|c| c.encode()).unwrap_or_default());
-                    if p != port {
-                        log::info!("LAN: port {port} is taken (another session on this machine?), using {p}");
-                    }
-                    return Ok(s);
-                }
-                Err(e) => last_err = Some(e),
-            }
-        }
-        Err(last_err.unwrap_or_else(|| std::io::Error::other("no port")))
     }
 
     /// Join the host at one of `addrs` (tried all at once); `session` is the id from a
@@ -1613,7 +1585,7 @@ impl LanSession {
         match parse_join(target)? {
             JoinTarget::Discover => match Self::discover(DEFAULT_PORT, name, world, wait) {
                 Ok(Some(s)) => Ok(s),
-                Ok(None) => Err(format!("no host answered on the local network within {:.0} s (is a session hosted? a firewall may block UDP port {DEFAULT_PORT})", wait.as_secs_f32())),
+                Ok(None) => Err(format!("no host answered on the local network within {:.0} s (is a session hosted? a firewall may block UDP ports {DEFAULT_PORT}-{})", wait.as_secs_f32(), DEFAULT_PORT + PORT_RANGE - 1)),
                 Err(e) => Err(format!("searching the network failed: {e}")),
             },
             JoinTarget::Direct { addrs, session, protocol } => {
@@ -1639,24 +1611,7 @@ impl LanSession {
         socket.set_read_timeout(Some(Duration::from_millis(200)))?;
         let started = Instant::now();
         let mut buf = [0u8; 1024];
-        // the limited broadcast, the loopback (a host on this machine, on any port of its
-        // range), and this machine's own subnet broadcast (macOS does not always route
-        // 255.255.255.255)
-        let mut targets: Vec<SocketAddr> = vec![SocketAddr::from(([255, 255, 255, 255], port))];
-        for p in port..port.saturating_add(PORT_RANGE) {
-            targets.push(SocketAddr::from(([127, 0, 0, 1], p)));
-        }
-        // every subnet of this machine (a Hamachi or ZeroTier network carries broadcasts too)
-        for a in addrs::joinable_addresses() {
-            let b = a.broadcast.unwrap_or_else(|| {
-                let o = a.ip.octets();
-                Ipv4Addr::new(o[0], o[1], o[2], 255)
-            });
-            let t = SocketAddr::from((b, port));
-            if !targets.contains(&t) {
-                targets.push(t);
-            }
-        }
+        let targets = discovery::targets(port, addrs::joinable_addresses());
         let msg = format!("DISCOVER|{PROTOCOL}");
         while started.elapsed() < wait {
             for t in &targets {
@@ -2410,10 +2365,27 @@ impl LanSession {
     /// Why nobody may have answered, for the player.
     fn no_answer(&self, after: Duration) -> String {
         let tried: Vec<String> = self.candidates.iter().map(|a| a.to_string()).collect();
-        let port = self.candidates.first().map(|a| a.port()).unwrap_or(DEFAULT_PORT);
-        if self.refused >= 2 && self.candidates.len() == 1 {
+        let mut ports: Vec<_> = self.candidates.iter().map(|a| a.port()).collect();
+        if ports.is_empty() {
+            ports.push(DEFAULT_PORT);
+        }
+        ports.sort_unstable();
+        ports.dedup();
+        let first = ports[0];
+        let last = ports[ports.len() - 1];
+        let ports = if first == last {
+            format!("port {first}")
+        } else if usize::from(last - first) + 1 == ports.len() {
+            format!("ports {first}-{last}")
+        } else {
+            format!("ports {}", ports.iter().map(u16::to_string).collect::<Vec<_>>().join(", "))
+        };
+        let one_machine = self.candidates.first().is_some_and(|first| {
+            self.candidates.iter().all(|candidate| candidate.ip() == first.ip())
+        });
+        if self.refused >= 2 && one_machine {
             return format!(
-                "the address {} answers, but no session runs on port {port} there - check the port, or whether the host has started its game",
+                "the address {} answers, but no session runs on {ports} there - check the port, or whether the host has started its game",
                 self.candidates[0].ip()
             );
         }
@@ -2421,7 +2393,7 @@ impl LanSession {
             return format!("the host did not answer (another computer did: {r})");
         }
         format!(
-            "no answer from {} within {:.0} s. Is the session still running, and was the whole code copied? The host's firewall must let the game receive UDP on port {port} (on Windows allow it for public networks too). If both of you are behind a mobile or carrier network that changes the port for every connection, the way cannot be opened: the host can forward UDP port {port} on the router, or you both use a VPN",
+            "no answer from {} within {:.0} s. Is the session still running, and was the whole code copied? The host's firewall must let the game receive UDP on {ports} (on Windows allow it for public networks too). If both of you are behind a mobile or carrier network that changes the port for every connection, the way cannot be opened: the host can forward UDP {ports} on the router, or you both use a VPN",
             tried.join(" or "),
             after.as_secs_f32()
         )
@@ -2647,10 +2619,12 @@ impl LanSession {
                 ("CHALLENGE", Role::Client) if self.host == Some(from) || (self.host.is_none() && self.candidates.contains(&from)) => self.on_challenge(&parts),
                 ("REJECT", Role::Client) if self.host.is_none() || Some(from) == self.host => {
                     let reason = clean_text(field(&parts, 2), 300);
-                    // One of several addresses tried at once may belong to another computer
-                    // (a LAN address like ours in the friend's house): its "no" is kept for
-                    // the message, but the others may still answer.
-                    if self.host.is_none() && self.candidates.len() > 1 {
+                    // Different candidate IPs may belong to different computers. Keep
+                    // trying those, but a refusal from the one machine whose ports we
+                    // are scanning is final, just like an explicit-port refusal.
+                    if self.host.is_none()
+                        && self.candidates.iter().any(|candidate| candidate.ip() != from.ip())
+                    {
                         if self.other_reject.is_none() {
                             log::info!("LAN: {from} turned us away ({reason}); still trying the host's other addresses");
                         }

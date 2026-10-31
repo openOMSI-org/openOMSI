@@ -1084,10 +1084,6 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             None
         }
         ListKind::Spots => {
-            if app.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
-                app.service_msg = Some(("In a LAN session only the host moves vehicles on the map".into(), 4.0));
-                return None;
-            }
             let found = app.world.clone().and_then(|w| {
                 let first = arg.trim().parse::<usize>().ok().filter(|&i| i < w.global.entry_points.len())?;
                 // (the entry points of tiles that are not loaded come from the map index)
@@ -1100,9 +1096,10 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             });
             match found {
                 Some((pos, heading)) => {
-                    crate::admin::teleport(app, pos, heading);
-                    app.service_msg = Some(("The bus stands at the start point".into(), 3.0));
-                    app.service_event("teleport", app.menu_by(), None);
+                    if crate::admin::request_teleport(app, pos, heading) {
+                        app.service_msg = Some((omsi_ui::tr("The bus stands at the start point").into_owned(), 3.0));
+                        app.service_event("teleport", app.menu_by(), None);
+                    }
                 }
                 None => app.service_msg = Some(("That start point is not in the map".into(), 3.0)),
             }

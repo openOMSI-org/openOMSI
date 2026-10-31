@@ -12,6 +12,8 @@ pub(crate) struct SceneBase {
     pub camera_layout: wgpu::BindGroupLayout,
     pub lm_atlas: wgpu::Texture,
     pub lm_uniform: wgpu::Buffer,
+    pub snow_track: wgpu::Buffer,
+    pub snow_track_uniform: wgpu::Buffer,
     pub material_layout: wgpu::BindGroupLayout,
     pub corona_layout: wgpu::BindGroupLayout,
     layout: wgpu::PipelineLayout,
@@ -62,6 +64,16 @@ impl SceneBase {
             view_formats: &[],
         });
         let lm_uniform = uniform_buffer(device, "light map atlas place", 16);
+        let snow_track = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("snow track field"),
+            // (a token until the roads' snow first sends it ruts or tracks: the 16 MB field is
+            // made then, see `set_snow_track_rows` - not in a session without snow, nor where
+            // the device does not draw it)
+            size: SNOW_TRACK_TOKEN,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let snow_track_uniform = uniform_buffer(device, "snow track field place", 32);
         let material_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("material"),
             entries: &material_layout_entries(),
@@ -83,7 +95,7 @@ impl SceneBase {
         };
         let bias: i32 = omsi_cfg::flags::OMSI_SURFACE_BIAS.parse()
             .unwrap_or(-24);
-        SceneBase { shader, shadow_layout, camera_layout, lm_atlas, lm_uniform, material_layout, corona_layout, layout, vertex_layout, bias }
+        SceneBase { shader, shadow_layout, camera_layout, lm_atlas, lm_uniform, snow_track, snow_track_uniform, material_layout, corona_layout, layout, vertex_layout, bias }
     }
 
     #[allow(clippy::too_many_arguments)]

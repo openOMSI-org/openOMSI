@@ -16,6 +16,7 @@ pub mod config;
 pub mod game;
 pub mod gateway;
 pub mod host;
+pub mod handover;
 mod join;
 pub mod mirror;
 pub mod map_pack;

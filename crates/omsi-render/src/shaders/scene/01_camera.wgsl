@@ -212,7 +212,9 @@ fn weather_outside_n(world: vec3<f32>, n: vec3<f32>, terrain: bool, surface: f32
     // enhanced picture, dry in the rain - with a hard seam round the body 0.3 m under the
     // roof where the sky's light began, #805)
     if (surface < -500.0) {
-        let roof = -surface - 5000.0;
+        // (the code carries the roof's snow in its ten thousands, see scene/upload.rs)
+        let code = -surface;
+        let roof = code - 10000.0 * floor(code / 10000.0) - 5000.0;
         if (world.z < roof - 0.3 && n.z > 0.5) {
             return 0.0;
         }

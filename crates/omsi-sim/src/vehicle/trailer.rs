@@ -658,6 +658,13 @@ impl TrailerPart {
         let (lead_pos, lead_rot, lead_heading) =
             lead.unwrap_or((main.position, main.body_rotation(), main.heading));
         let c = lead_pos + lead_rot.transform_point3(self.coupling_back).as_dvec3();
+        // (a pivot at NaN never came back: every step after took its way from it, and the
+        // rear section stayed at NaN for good while the front drove on - it starts again)
+        if self.pivot.is_some_and(|p| !p.is_finite()) || self.axle_z.is_some_and(|z| !z.is_finite()) || !self.axle_vz.is_finite() {
+            self.pivot = None;
+            self.axle_z = None;
+            self.axle_vz = 0.0;
+        }
         // the height its axle had (the new one eases from it; nothing after a move)
         let prev_z = self.pivot.and(self.axle_z);
         let pivot = match self.pivot {

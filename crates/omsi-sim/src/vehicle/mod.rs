@@ -220,6 +220,9 @@ pub struct VehicleInstance {
     /// (`crate::view_events::CarLooks`), copied only when the vehicle gains a variable.
     var_index: std::sync::Arc<HashMap<String, omsi_script::VarId>>,
     model_only_vars: Vec<String>,
+    /// Values chosen over the paint scheme's own `[setvar]`s (`--setvar`): what
+    /// `apply_scheme_vars_each_frame` writes for those variables instead of the scheme's.
+    scheme_overrides: Vec<(String, f32)>,
     /// Where each mesh's material properties come from, resolved against `var_index`
     /// (rebuilt when the vehicle gains engine variables).
     props_plan: PropsPlan,

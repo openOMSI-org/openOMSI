@@ -559,8 +559,11 @@ fn format_objects(objects: &[InputObject]) -> (Vec<DIOBJECTDATAFORMAT>, [bool; 8
             }
             has_axis[slot] = true;
             let offset = (slot * 4) as u32;
-            if object.flags & DIDOI_FFACTUATOR != 0 {
-                ff_axis.get_or_insert(offset);
+            // (the forces go to the first slot with a motor, X before Y, whatever order the
+            // driver lists them in: a MOZA R5 lists its Y before its X, both with a motor,
+            // and its forces went to the pedals' axis instead of the wheel's)
+            if object.flags & DIDOI_FFACTUATOR != 0 && ff_axis.is_none_or(|a| offset < a) {
+                ff_axis = Some(offset);
             }
             (offset, DIDOI_ASPECTPOSITION)
         } else if object.ty & DIDFT_POV != 0 && pov < 4 {

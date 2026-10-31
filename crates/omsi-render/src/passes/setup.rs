@@ -290,6 +290,22 @@ impl Renderer {
             };
             self.queue.write_buffer(&self.sky.vanilla_sky_buf, 0, bytemuck::bytes_of(&u));
         }
+        // the snow track field: the render origin modulo its side (it wraps around the
+        // world), and how the roads' snow stands (road_snow.wgsl)
+        {
+            let side = SNOW_TRACK_SIDE;
+            let v: [f32; 8] = [
+                ro.x.rem_euclid(side) as f32,
+                ro.y.rem_euclid(side) as f32,
+                side as f32,
+                if lighting.snow_tracks { 1.0 } else { 0.0 },
+                lighting.road_snow.map(|r| r.clamp(0.0, 1.0)).unwrap_or(-1.0),
+                lighting.snow_fallen.rem_euclid(65536.0) as f32,
+                lighting.snow_ruts.clamp(0.0, 1.0),
+                0.0,
+            ];
+            self.queue.write_buffer(&self.lights.snow_track_uniform, 0, bytemuck::cast_slice(&v));
+        }
         let cu = CameraUniform {
             post: [
                 if enhanced { 1.0 } else { 0.0 },
@@ -428,7 +444,7 @@ impl Renderer {
                 std::array::from_fn(|r| std::array::from_fn(|c| at[r * 4 + c]))
             },
             lod: [self.fsr_mip_bias(f), 0.0, 0.0, 0.0],
-            spot: classic_spot(scene, ro),
+            spot: classic_spot(&scene.lights, ro),
         };
         self.queue
             .write_buffer(&self.camera_buf, 0, bytemuck::bytes_of(&cu));
@@ -484,22 +500,75 @@ impl Renderer {
     }
 }
 
-/// The camera uniform's `spot`: the player's `[spotlight]`, the one classic spot of kind 1
+/// The camera uniform's `spot`: the player's `[spotlight]`, the one classic player spot
 /// (the scene gives the player's alone, as Omsi.exe lights the road by it alone, 0x708acc);
 /// none while it is off or in a frame without a player's vehicle.
-fn classic_spot(scene: &Scene, ro: DVec3) -> [[f32; 4]; 4] {
-    let spot = scene.lights.iter().find_map(|l| {
-        let [range, setback, kind] = l.d3d_spot?;
-        (kind > 0.5 && l.mode == crate::LightMode::Vanilla && l.intensity > 0.0).then_some((l, range, setback))
+fn classic_spot(lights: &[crate::PointLight], ro: DVec3) -> [[f32; 4]; 4] {
+    let spot = lights.iter().find_map(|l| {
+        let s = l.d3d_spot?;
+        (s.player && l.mode == crate::LightMode::Vanilla && l.intensity > 0.0).then_some((l, s))
     });
-    let Some((l, range, setback)) = spot else { return [[0.0; 4]; 4] };
+    let Some((l, s)) = spot else { return [[0.0; 4]; 4] };
     let at = (l.position - ro).as_vec3();
+    let source = (s.source - ro).as_vec3();
     let d = l.direction.normalize_or_zero();
     let c = l.color;
     [
-        [at.x, at.y, at.z, range],
+        [at.x, at.y, at.z, s.range],
         [d.x, d.y, d.z, l.cone[1]],
         [c[0] * l.intensity, c[1] * l.intensity, c[2] * l.intensity, l.cone[0]],
-        [setback, 0.0, 0.0, 0.0],
+        [source.x, source.y, source.z, 0.0],
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{D3dSpot, LightMode, PointLight};
+
+    #[test]
+    fn classic_spot_keeps_the_declared_source_on_a_tilted_vehicle() {
+        let origin = DVec3::new(1_000_000.0, -2_000_000.0, 300.0);
+        let body = glam::Mat4::from_rotation_z(0.7) * glam::Mat4::from_rotation_x(0.2);
+        let source = origin + body.transform_point3(Vec3::new(0.4, 2.0, 0.8)).as_dvec3();
+        let face = origin + body.transform_point3(Vec3::new(0.4, 5.9, 0.8)).as_dvec3();
+        // Sideways aim and pitch must not be used to reconstruct the vehicle's Y axis.
+        let direction = body.transform_vector3(Vec3::new(0.2, 1.0, -0.3).normalize());
+        let lamp = PointLight {
+            position: face, direction, mode: LightMode::Vanilla,
+            color: [1.0, 0.9, 0.8], intensity: 0.5, cone: [0.95, 0.8],
+            d3d_spot: Some(D3dSpot { range: 100.0, source, player: true }),
+            ..Default::default()
+        };
+        let spot = classic_spot(&[lamp], origin);
+        let p = (face - origin).as_vec3();
+        let s = (source - origin).as_vec3();
+        assert_eq!(spot[0], [p.x, p.y, p.z, 100.0]);
+        assert_eq!(spot[3], [s.x, s.y, s.z, 0.0]);
+        assert_eq!(spot[2], [0.5, 0.45, 0.4, 0.95]);
+        let d = direction.normalize_or_zero();
+        assert_eq!(spot[1], [d.x, d.y, d.z, 0.8]);
+        // Both positions must be rebased, including a change of render origin.
+        let shift = DVec3::new(512.0, -256.0, 16.0);
+        let moved = classic_spot(&[lamp], origin + shift);
+        assert!((Vec3::from_slice(&moved[3]) - (s - shift.as_vec3())).length() < 1e-4);
+    }
+
+    #[test]
+    fn classic_spot_ignores_non_player_and_disabled_lights() {
+        let player = PointLight {
+            mode: LightMode::Vanilla,
+            d3d_spot: Some(D3dSpot { range: 100.0, source: DVec3::ZERO, player: true }),
+            ..Default::default()
+        };
+        let other = PointLight {
+            d3d_spot: Some(D3dSpot { player: false, ..player.d3d_spot.unwrap() }),
+            ..player
+        };
+        let off = PointLight { intensity: 0.0, ..player };
+        let enhanced = PointLight { mode: LightMode::Enhanced, ..player };
+        assert_eq!(classic_spot(&[], DVec3::ZERO), [[0.0; 4]; 4]);
+        assert_eq!(classic_spot(&[other, off, enhanced], DVec3::ZERO), [[0.0; 4]; 4]);
+        assert_eq!(classic_spot(&[other, off, enhanced, player], DVec3::ZERO)[0][3], 100.0);
+    }
 }

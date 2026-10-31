@@ -850,7 +850,9 @@ impl BusService {
     /// berth with a change of the network takes it again (it stands in it).
     fn keep_berth(&mut self, st: &AiState, ctx: &Ctx, berths: &mut Berths) {
         if let Some((key, ri, s)) = self.held {
-            if self.at_stop() {
+            // (at the end of its trip too: a tour's bus can stand there its whole layover
+            // before it drives up to its next trip's first stop, #3142)
+            if self.at_stop() || self.trip_done() {
                 berths.note_standing(key, ctx.id, self.standing_for(ctx.day_time));
             } else if self.phase == Phase::Running && past_by(st, ctx.net, ri, s) > super::berths::CLEAR_PAST {
                 berths.release(key, ctx.id);

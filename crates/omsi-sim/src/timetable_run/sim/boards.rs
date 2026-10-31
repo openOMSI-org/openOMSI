@@ -398,10 +398,10 @@ pub(super) struct StopExtra {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
-    struct EmptyWorld {
+    pub(crate) struct EmptyWorld {
         path: PathBuf,
         ai: omsi_map::AiLists,
         positions: crate::world_data::ObjectPlaces,
@@ -419,7 +419,7 @@ mod tests {
         fn stop_side(&self, _: i64) -> f32 { 0.0 }
     }
 
-    fn schedule() -> ScheduleSim {
+    pub(crate) fn schedule() -> ScheduleSim {
         let world = EmptyWorld {
             path: std::env::temp_dir().join(format!("omsi_empty_board_world_{}", std::process::id())),
             ai: Default::default(),
@@ -609,13 +609,13 @@ mod tests {
         )
     }
 
-    fn no_world() -> EmptyWorld {
+    pub(crate) fn no_world() -> EmptyWorld {
         EmptyWorld { path: std::env::temp_dir(), ai: Default::default(), positions: Default::default() }
     }
 
     /// One trip of two stations, 10 minutes long, and departures (time, tour, previous of
     /// the tour) all running today and not yet out.
-    fn tours(sim: &mut ScheduleSim, deps: &[(f64, &str, Option<usize>)]) {
+    pub(crate) fn tours(sim: &mut ScheduleSim, deps: &[(f64, &str, Option<usize>)]) {
         sim.data.trips.push(omsi_timetable::Trip { terminus: "Bahnhof".into(), line: "1".into(), stations: vec![42, 43], ..Default::default() });
         sim.times = vec![vec![TripTimes { stations: vec![(0.0, 0.0), (600.0, 600.0)], stops: vec![true, true], duration: 600.0, ..Default::default() }]];
         let mask = sim.day_bits.0 | sim.day_bits.1;

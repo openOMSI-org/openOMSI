@@ -1,6 +1,7 @@
 use super::*;
 
 mod freetex_reload;
+mod classic_spot;
 
 /// The night meter takes the street the picture shows: from 30 m over a lot lit by a
 /// grid of street lamps, looking down at it, the eye adapts to the lit lot - not, as
@@ -1464,6 +1465,7 @@ mod light;
 mod more;
 mod night_coverage;
 mod prepass_reach;
+mod snow_track_field;
 mod transparency;
 mod vanilla_lighting;
 

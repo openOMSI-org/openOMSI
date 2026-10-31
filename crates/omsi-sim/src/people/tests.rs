@@ -1210,3 +1210,27 @@ fn people_off_a_bus_without_a_pavement_step_away_from_the_door() {
     places.dedup();
     assert!(places.len() > 30, "a busload spreads out: {} places of 39", places.len());
 }
+
+/// A passenger of a timetable bus who gets off at the next stop asks for it on their own bus:
+/// the stop request is that bus's (once, however many ask), not the player's stop button.
+#[test]
+fn a_timetable_bus_passenger_asks_for_its_own_stop() {
+    use super::ticket_hook_tests::{boarding, human_type, player_bus};
+    let ty = human_type("ai-stop");
+    let world = crate::world_data::WorldData::default();
+    let mut bus = player_bus("ai-stop");
+    bus.id = BusId::Ai(5);
+    let buses = vec![bus];
+    let bus_ix: HashMap<BusId, usize> = [(BusId::Ai(5), 0)].into_iter().collect();
+    let mut h = PeopleSim::new(Path::new("/nonexistent"), 200);
+    h.people = vec![boarding(&ty, 1, Task::SittingInBus), boarding(&ty, 2, Task::SittingInBus)];
+    for i in 0..2 {
+        let p = h.pax_mut(i).unwrap();
+        p.bus = Some(BusId::Ai(5));
+        p.inside = Some(BusId::Ai(5));
+        h.set_task(i, Task::InBusToExit, &buses, &bus_ix, &world);
+    }
+    assert!(!h.stop_request, "the player's stop button is not this bus's request");
+    assert_eq!(h.take_ai_stop_requests(), vec![5]);
+    assert!(h.take_ai_stop_requests().is_empty());
+}

@@ -148,6 +148,9 @@ struct SettingsPage: View {
                 SettingSelect(label: enhanced ? "Real-Time Reflections" : "Puddles", key: "puddles", options: [("high", "High"), ("low", "Low"), ("off", "Off")])
             }
             SettingToggle(label: "Windy trees", key: "windy_trees", fallback: true)
+            if !classic {
+                SettingToggle(label: "Built-up snow on roads and roofs", key: "road_snow", fallback: false, help: "While it snows, snow builds up on the roads and on the vehicles' roofs, with ruts and tyre tracks, and thaws again; off: the weather's own snow on road, as in OMSI 2")
+            }
         }
     }
 
@@ -413,6 +416,7 @@ struct SettingsPage: View {
                 SettingToggle(label: "Discord Rich Presence", key: "discord_status", fallback: true, help: "Shows the launcher or your map, bus, line and multiplayer status in Discord.")
                 SettingToggle(label: "Voice chat in multiplayer", key: "voice_enabled", fallback: false, help: "Hold the nearby (V) or radio (B) key to talk. The microphone is used only while a key is held; nothing is recorded")
             }
+            SettingToggle(label: "Disable plugins", key: "disable_plugins", fallback: true, help: "Starts the next game without Lua or legacy OMSI plugins, including vehicle plugins. Plugin features will be unavailable. Normal bus scripts still run.")
             SettingSlider(label: "Game interface size", key: "ui_scale", range: 0.5 ... 2, step: 0.05, fallback: 1, round: 0.01) { pct($0) }
             SettingToggle(label: "Interface grows with the window", key: "ui_scale_window", fallback: true)
             SettingSlider(label: "Interface opacity", key: "ui_opacity", range: 0.2 ... 1, step: 0.05, fallback: 0.85, round: 0.01) { pct($0) }

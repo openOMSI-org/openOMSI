@@ -449,71 +449,8 @@ pub fn share_maps(on: bool) {
     SHARE_MAPS.store(on, std::sync::atomic::Ordering::Relaxed);
 }
 
-/// Serve the session's mods on TCP `port` (a thread; the list is made in the background).
-pub fn serve(port: u16, key: Arc<omsi_net::hostkey::HostKey>, args: &ModSource) {
-    if omsi_cfg::flags::OMSI_NO_LAN_MODS.is_set() {
-        return;
-    }
-    let listener = match TcpListener::bind(("0.0.0.0", port)) {
-        Ok(l) => l,
-        Err(e) => {
-            log::warn!("LAN mods: cannot serve on TCP port {port}: {e} (joining players need the host's mods installed)");
-            return;
-        }
-    };
-    let ready: Arc<Mutex<Option<Arc<(Manifest, Vec<PathBuf>)>>>> = Arc::new(Mutex::new(None));
-    // (a server that takes its players' buses opens those sent before: they are asked for by
-    // their fingerprint when their players are there, not put on everybody's list)
-    upload::open();
-    {
-        let ready = ready.clone();
-        let args = args.clone();
-        std::thread::Builder::new()
-            .name("lan-mods-list".into())
-            .spawn(move || {
-                // (no map passed on: an empty list, and no reading through it at the start)
-                let m = if SHARE_MAPS.load(std::sync::atomic::Ordering::Relaxed) {
-                    collect(&args)
-                } else {
-                    log::info!("LAN mods: the map is not passed on (share_maps = 0): players who join need {} installed", args.map);
-                    (Manifest { map: args.map.replace('\\', "/"), bus: String::new(), entries: Vec::new() }, Vec::new())
-                };
-                *ready.lock().unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(m));
-            })
-            .ok();
-    }
-    log::info!("LAN mods: serving this session's mods on TCP port {port}");
-    std::thread::Builder::new()
-        .name("lan-mods".into())
-        .spawn(move || {
-            // (one thread per connection, so only so many at once)
-            let open = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-            for conn in listener.incoming() {
-                let Ok(stream) = conn else { continue };
-                if open.load(std::sync::atomic::Ordering::Relaxed) >= MAX_CONNECTIONS {
-                    log::info!("LAN mods: {MAX_CONNECTIONS} connections open already; one more told to come back");
-                    // (said, not just closed: the player's game asks again in a moment instead
-                    // of taking the bus for one not to be had)
-                    let mut s = stream;
-                    let _ = s.write_all(b"ERR busy\n");
-                    continue;
-                }
-                open.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                let (ready, held, key) = (ready.clone(), open.clone(), key.clone());
-                let spawned = std::thread::Builder::new().name("lan-mods-conn".into()).spawn(move || {
-                    let peer = stream.peer_addr().ok();
-                    if let Err(e) = handle(stream, &key, &ready) {
-                        log::info!("LAN mods: connection from {peer:?} ended: {e}");
-                    }
-                    held.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
-                });
-                if spawned.is_err() {
-                    open.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
-                }
-            }
-        })
-        .ok();
-}
+mod server;
+pub use server::{Server, serve};
 
 /// Connections the mods server serves at once (players fetch and send buses over several
 /// each; one more is answered `ERR busy` and comes back). A new bus among 16 players: the
@@ -542,7 +479,7 @@ fn read_line_within(input: &mut impl BufRead, line: &mut String, max: u64) -> st
     Ok(n)
 }
 
-fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Option<Arc<(Manifest, Vec<PathBuf>)>>>) -> std::io::Result<()> {
+fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Option<Arc<(Manifest, Vec<PathBuf>)>>>, stopped: &std::sync::atomic::AtomicBool) -> std::io::Result<()> {
     let session = key.session();
     stream.set_read_timeout(Some(Duration::from_secs(120)))?;
     stream.set_nodelay(true).ok();
@@ -563,6 +500,7 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
     // the list may still be being made (hashing a big map takes a while)
     let t0 = Instant::now();
     let data = loop {
+        if stopped.load(std::sync::atomic::Ordering::Acquire) { return Ok(()); }
         if let Some(d) = ready.lock().unwrap_or_else(|e| e.into_inner()).clone() {
             break d;
         }
@@ -581,6 +519,7 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
     // (the players' buses on this connection: `upload::requests`)
     let mut buses = upload::BusRequests::default();
     loop {
+        if stopped.load(std::sync::atomic::Ordering::Acquire) { return Ok(()); }
         // (what was answered goes out before the next request is waited for)
         out.flush()?;
         line.clear();
@@ -1132,7 +1071,7 @@ mod tests {
         std::thread::spawn(move || {
             for stream in listener.incoming().flatten() {
                 let (ready, key) = (ready.clone(), key.clone());
-                std::thread::spawn(move || handle(stream, &key, &ready));
+                std::thread::spawn(move || handle(stream, &key, &ready, &std::sync::atomic::AtomicBool::new(false)));
             }
         });
         (addr, dir, session)

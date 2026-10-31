@@ -116,7 +116,7 @@ impl Font {
                 if c.is_whitespace() {
                     self.space_width()
                 } else {
-                    self.glyph(c).map(|g| (g.x1 - g.x0).max(0)).unwrap_or(0)
+                    self.glyph(c).map(|g| (g.x1 - g.x0).max(0)).unwrap_or(self.space_width())
                 }
             })
             .sum();
@@ -199,7 +199,7 @@ impl FontAtlas {
                 let w = if ch.is_whitespace() {
                     self.font.space_width()
                 } else {
-                    self.font.glyph(ch).map(|g| (g.x1 - g.x0).max(0)).unwrap_or(0)
+                    self.font.glyph(ch).map(|g| (g.x1 - g.x0).max(0)).unwrap_or(self.font.space_width())
                 };
                 w + self.font.gap
             })
@@ -257,7 +257,7 @@ impl FontAtlas {
                 continue;
             }
             let Some(g) = self.font.glyph(ch) else {
-                x += self.font.gap;
+                x += self.font.space_width() + self.font.gap;
                 continue;
             };
             let gw = (g.x1 - g.x0).max(0);
@@ -366,5 +366,24 @@ mod tests {
         // 48 the block starts at -6, so the first text line stands at 0, not lower
         let image = atlas.render("@A@A@A@A@A@A@A@A@", 1, 48, false, [255, 255, 255]);
         assert!(lit(&image, 1) && !lit(&image, 0));
+    }
+
+    #[test]
+    fn invalid_char_renders_as_space() {
+        let font = Font {
+            path: PathBuf::new(),
+            name: "LCD_Test".into(),
+            bitmap: "lcd.bmp".into(),
+            alpha: "lcd_alpha.bmp".into(),
+            height: 10,
+            gap: 1,
+            chars: vec![
+                FontChar { ch: '|', x0: 0, x1: 2, y: 0 },
+                FontChar { ch: '0', x0: 2, x1: 10, y: 0 },
+                FontChar { ch: '1', x0: 10, x1: 18, y: 0 },
+                FontChar { ch: ' ', x0: 18, x1: 28, y: 0 },
+            ],
+        };
+        assert_eq!(font.text_width("0x1"), font.text_width("0 1"))
     }
 }

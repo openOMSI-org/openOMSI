@@ -108,3 +108,15 @@ fn preview() {
     picture("game-panels-view.png", &[(view_editor::ViewEditor::default().panel_of(&values, Palette::OPENOMSI), None)]);
     picture("game-panels-move.png", &[(move_here::panel(glam::DVec3::new(-1948.9, -174.7, 8.8), Palette::OPENOMSI), Some("yes"))]);
 }
+
+#[test]
+#[ignore]
+fn multiplayer_preview() {
+    let form = multiplayer::Multiplayer { target: "OMSI-EXAMPLE-ROOM-CODE".into(), said: None };
+    for (name, pal) in [("dark", omsi_ui::theme::palette(false)), ("light", Palette::LIGHT)] {
+        picture(&format!("multiplayer-{name}.png"), &[(form.panel_of(false, None, Some(omsi_net::Role::Client), None, pal), Some("paste"))]);
+        picture(&format!("multiplayer-confirm-{name}.png"), &[(form.panel_of(false, Some(("maps/Grundorf/global.cfg", true)), Some(omsi_net::Role::Client), None, pal), Some("confirm"))]);
+        picture(&format!("multiplayer-host-{name}.png"), &[(form.panel_of(false, Some(("maps/Grundorf/global.cfg", false)), Some(omsi_net::Role::Host), None, pal), Some("back"))]);
+        picture(&format!("multiplayer-vehicle-warning-{name}.png"), &[(form.panel_of(false, Some(("maps/Grundorf/global.cfg", false)), Some(omsi_net::Role::Client), Some(false), pal), Some("back"))]);
+    }
+}

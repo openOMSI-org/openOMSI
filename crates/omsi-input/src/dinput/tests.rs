@@ -212,3 +212,31 @@ fn an_axis_is_read_in_the_range_the_driver_reports() {
     assert_eq!(axis_value(70_000, (0, 65_535)), 1.0);
     assert_eq!(axis_value(RANGE / 2, (0, 0)), 0.5);
 }
+
+/// The forces go to X when the driver lists Y first: a MOZA R5 Base marks both as having a
+/// motor and lists its axes backwards, and its forces went to the pedals' axis.
+#[test]
+fn the_force_goes_to_the_lowest_axis_with_a_motor_whatever_the_drivers_order() {
+    let axis = |guid, n: u32, motor: bool| InputObject {
+        guid,
+        ty: DIDFT_ABSAXIS | (n << 8),
+        flags: if motor { DIDOI_FFACTUATOR } else { 0 },
+    };
+    // (the order and the flags the MOZA R5 Base reports)
+    let moza = [
+        axis(GUID_Slider, 2, false),
+        axis(GUID_Slider, 6, false),
+        axis(GUID_RzAxis, 5, false),
+        axis(GUID_RyAxis, 4, false),
+        axis(GUID_RxAxis, 3, false),
+        axis(GUID_ZAxis, 7, false),
+        axis(GUID_YAxis, 1, true),
+        axis(GUID_XAxis, 0, true),
+    ];
+    let (_, has_axis, ff_axis) = format_objects(&moza);
+    assert_eq!(has_axis, [true; 8]);
+    assert_eq!(ff_axis, Some(0), "X steers");
+    // (a wheel whose only motor is on another axis keeps it)
+    let (_, _, ff_axis) = format_objects(&[axis(GUID_XAxis, 0, false), axis(GUID_RzAxis, 5, true)]);
+    assert_eq!(ff_axis, Some(5 * 4));
+}

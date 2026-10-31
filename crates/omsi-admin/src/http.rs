@@ -366,7 +366,13 @@ fn get(hub: &Hub, req: &Request, s: &SessionInfo, path: &str) -> Response {
             json_answer("200 OK", json!({ "ops": ops, "audit": audit, "after": after }))
         }
         p if p.starts_with("/api/admin/ops/") => match p["/api/admin/ops/".len()..].parse::<u64>().ok().and_then(|id| hub.record(id)) {
-            Some(r) => json_answer("200 OK", json!({ "op": r })),
+            Some(mut r) => {
+                // (the admins' addresses for the admins only, as in the events)
+                if s.role != Role::Admin {
+                    r.actor = without_address(&r.actor);
+                }
+                json_answer("200 OK", json!({ "op": r }))
+            }
             None => error("404 Not Found", "no such operation (or no longer kept: see the audit log)"),
         },
         _ => error("404 Not Found", "no such request"),
@@ -604,6 +610,14 @@ mod tests {
         let text = |t: &str| R::get("/api/admin/events").token(t).send(&h, &cfg).1.to_string();
         assert!(!text(&m).contains("203.0.113.9"), "{}", text(&m));
         assert!(text(&a).contains("203.0.113.9"), "{}", text(&a));
+        // nor does one operation's record, asked for by its number
+        let (st, v) = R::post("/api/admin/ops", json!({"op": "clock", "seconds": 30600})).token(&a).send(&h, &cfg);
+        assert_eq!(st, "202 Accepted", "{v}");
+        let op = |t: &str| R::get(&format!("/api/admin/ops/{}", v["op"]["id"])).token(t).send(&h, &cfg).1;
+        let admin_label = op(&a)["op"]["actor"].as_str().unwrap().to_string();
+        assert!(admin_label.contains('('), "the admin sees the address: {admin_label}");
+        let seen = op(&m)["op"]["actor"].as_str().unwrap().to_string();
+        assert_eq!(seen, without_address(&admin_label), "a moderator does not");
     }
 
     /// A page of another site whose name was turned to this machine (DNS rebinding) still

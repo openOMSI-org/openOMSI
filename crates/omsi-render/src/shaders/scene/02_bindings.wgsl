@@ -67,10 +67,9 @@ fn bounce_unpack(t: vec4<f32>) -> vec3<f32> {
 }
 
 // The occlusion (x) and the bounced light (yzw) at a pixel, upsampled by depth as `ao_at`.
-fn ao_gi_at(frag: vec2<f32>, world: vec3<f32>) -> vec4<f32> {
+fn ao_gi_at(frag: vec2<f32>, world: vec3<f32>, traced: vec4<f32>) -> vec4<f32> {
     if (camera.clouds.w > 1.5) {
-        let t = rt_at(frag, world);
-        return vec4<f32>(select(t.x, 1.0, t.w < 0.5), 0.0, 0.0, 0.0);
+        return vec4<f32>(select(traced.x, 1.0, traced.w < 0.5), 0.0, 0.0, 0.0);
     }
     let size = vec2<i32>(textureDimensions(t_ao));
     let z = (camera.view_proj * vec4<f32>(world, 1.0)).w;
