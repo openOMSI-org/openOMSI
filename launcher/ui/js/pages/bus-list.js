@@ -3,7 +3,7 @@ import { S, useStore, remembered, remember } from '../store.js';
 import { t } from '../i18n.js';
 import { Icon } from '../icons.js';
 import { Search, Segmented, Empty, Spinner, Notice, Field, Select, Input, Button, Tag } from '../ui.js';
-import { choose, curBus, busFile, serverBuses, noServerBus, curMap, transportRefusal } from '../data.js';
+import { choose, curBus, busFile, serverBuses, selectableVehicles, noServerBus, curMap, transportRefusal } from '../data.js';
 import { families, toggleFavourite } from './bus-picker.js';
 
 const favKey = (file) => file.replace(/\\/g, '/').toLowerCase();
@@ -20,7 +20,7 @@ function takeBus(file) {
   const c = S.choice;
   if (file === c.bus) return;
   // (a hand-picked depot file stays when the new bus has one of that name, as the game's own launcher kept it)
-  const v = (S.vehicles || []).find((x) => x.file === file);
+  const v = selectableVehicles().find((x) => x.file === file);
   const keep = c.hof_manual && v?.hofs?.some((h) => h.toLowerCase() === (c.hof || '').toLowerCase());
   choose({ bus: file, paint: '', number: '', ...(keep ? {} : { hof_manual: false }) });
 }
@@ -52,6 +52,7 @@ function BusRow({ v, label, sub, indent, chosen }) {
     ${curMapRefusal(v) && html`<span class="warn-fg" title=${curMapRefusal(v)}><${Icon} name="alert" size=${16} /></span>`}
     ${v.missing_packs?.length > 0 && html`<span class="warn-fg" title=${t('Parts missing')}><${Icon} name="alert" size=${16} /></span>`}
     ${v.installed && html`<${Tag}>${t('Mod')}</${Tag}>`}
+    ${v.server_only && html`<${Tag}>${t('Server')}</${Tag}>`}
     <${Star} file=${v.file} />
   </div>`;
 }
@@ -80,7 +81,7 @@ export function BusList() {
   const [q, setQ] = useState('');
   const [show, setShow] = useState('all');
   const joined = serverBuses(s.choice);
-  const all = (s.vehicles || []).filter((v) => !joined || joined.has(busFile(v.file)));
+  const all = selectableVehicles(s.choice);
   const ql = q.trim().toLowerCase();
   const list = all
     .filter((v) => show !== 'fav' || s.favourites.includes(favKey(v.file)))
@@ -168,7 +169,8 @@ export function BusOptions() {
     remember('bus-details', more ? '0' : '1');
   };
   return html`<div class="stack bus-options">
-    ${noServerBus() && html`<${Notice} kind="danger">${t('The server offers none of the vehicles installed here')}</${Notice}>`}
+    ${noServerBus() && html`<${Notice} kind="danger">${t('The server has no available vehicles')}</${Notice}>`}
+    ${v.server_only && html`<${Notice} kind="info">${t('Server-only bus: required files will be verified and fetched for this session when you start.')}</${Notice}>`}
     <${Field} label="Livery">
       <div class="row livery">
         <div class="grow"><${Select} raw value=${c.paint} options=${paints} onChange=${(paint) => choose({ paint })} /></div>
