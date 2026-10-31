@@ -957,6 +957,19 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
         }
         // a vehicle's file this machine has of its own is never covered by the host's: its
         // paints (`.cti`) and textures stay this player's, also on the bus it drives
+        if selected_request.is_some() && own_script(&e.path) {
+            // Replacing a global Scripts/ file in the session's first content root
+            // could change unrelated AI vehicles. A selected server bus may reuse
+            // that script only when the installed copy is byte-for-byte identical.
+            let exact = omsi_cfg::find_in_roots(&e.path)
+                .and_then(|(_, p)| omsi_cfg::vfs::read(&p).ok())
+                .is_some_and(|data| data.len() as u64 == e.size && sha256_of(&data) == e.sha256);
+            if !exact {
+                return Err(format!("{} differs from the local shared script; cannot safely replace it for one bus", e.path));
+            }
+            report.had += 1;
+            continue;
+        }
         if (selected_request.is_none() && own_vehicle_file(&e.path, root)) || own_script(&e.path) {
             report.kept_own += 1;
             continue;
