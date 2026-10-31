@@ -34,13 +34,13 @@ fn point_lights(p: vec3<f32>, n: vec3<f32>, map_k: f32) -> vec3<f32> {
             }
             if (l.dir.w >= -1.5 && l.extra.z != 0.0) {
                 // a Direct3D spot of the classic picture (lights.rs `push_classic_spot`): a
-                // vehicle's [spotlight] (its range negative) is the player's alone, lit at
-                // the vertices (see `classic_spot`); another - a [spotlight_2], a cookie's
+                // vehicle's [spotlight] (its range negative) is the player's alone, lit by
+                // `classic_spot` in the fragment shader; another - a [spotlight_2], a cookie's
                 // cone - is lit so here, its ambient light with the diffuse
                 if (l.extra.z < 0.0) {
                     continue;
                 }
-                let s = d3d_spot(p, n, l.pos.xyz, l.dir, l.extra.x, l.extra.y, l.extra.z, l.color.rgb * l.color.w);
+                let s = d3d_spot(p, n, l.pos.xyz, l.dir, l.extra.x, l.extra.z, l.color.rgb * l.color.w);
                 sum = sum + s[0] + s[1];
                 continue;
             }
@@ -97,17 +97,14 @@ fn interior_lamps(p: vec3<f32>, n: vec3<f32>, code: f32) -> vec3<f32> {
 
 
 // A Direct3D spot light of the classic picture at `p` (normal `n`), as Omsi.exe sets its
-// up for a vehicle's [spotlight] (0x708acc, see lights.rs `push_classic_spot`): its light
-// leaves from `at` (the vehicle's face) but is as strong as from the spotlight's own place,
-// `setback` behind it along the vehicle's axis; attenuation 1 / (0.2 + d / R + 40 d² / R²)
+// up for a vehicle's [spotlight] (0x708acc, see lights.rs `push_classic_spot`): `source`
+// is the spotlight's own world position; attenuation 1 / (0.2 + d / R + 40 d² / R²)
 // (R the declared range), the cone (`dir`: direction and the cosine of half the outer cone;
 // `inner` the inner one's) with a falloff of 2, 0.3 x `color` as diffuse light (times N.L)
 // and 0.1 x as ambient light, which lights the material's ambient colour whichever way the
 // surface faces. [0] the diffuse light, [1] the ambient light.
-fn d3d_spot(p: vec3<f32>, n: vec3<f32>, at: vec3<f32>, dir: vec4<f32>, inner: f32, setback: f32, range: f32, color: vec3<f32>) -> array<vec3<f32>, 2> {
-    let ahead = vec3<f32>(dir.xy, 0.0);
-    let fwd = select(dir.xyz, normalize(ahead), dot(ahead, ahead) > 1e-6);
-    let to_light = at - fwd * setback - p;
+fn d3d_spot(p: vec3<f32>, n: vec3<f32>, source: vec3<f32>, dir: vec4<f32>, inner: f32, range: f32, color: vec3<f32>) -> array<vec3<f32>, 2> {
+    let to_light = source - p;
     let dl = max(length(to_light), 0.01);
     let att = 1.0 / (0.2 + dl / range + 40.0 * dl * dl / (range * range));
     let rho = dot(-to_light / dl, dir.xyz);
@@ -116,17 +113,15 @@ fn d3d_spot(p: vec3<f32>, n: vec3<f32>, at: vec3<f32>, dir: vec4<f32>, inner: f3
     return array<vec3<f32>, 2>(lit * 0.3 * max(dot(n, to_light / dl), 0.0), lit * 0.1);
 }
 
-// The classic picture's headlight at a vertex: Omsi.exe's one Direct3D spot light, the
-// player's [spotlight] (`camera.spot`, see setup.rs `classic_spot`), lit at the vertices as
-// its fixed function lights them. Across a road, whose vertices lie at its edges, the pool
-// is spread as OMSI 2 spreads it: lit per pixel it was brightest on the crown of the road
-// in front of the bus and gone far sooner. Nothing on the player's own vehicle (the
-// spotlight stands inside it) or beyond 4 x its range, as Direct3D cuts it off.
+// The player's [spotlight] (`camera.spot`, see setup.rs `classic_spot`), evaluated per
+// fragment so large triangles cannot spread light outside the cone or across the bus.
+// [0] is the vehicle-face origin for occlusion; [3] is the declared source for lighting.
+// Nothing beyond 4 x its range, as Direct3D cuts it off.
 fn classic_spot(p: vec3<f32>, n: vec3<f32>) -> array<vec3<f32>, 2> {
     let s = camera.spot;
     let none = array<vec3<f32>, 2>(vec3<f32>(0.0), vec3<f32>(0.0));
-    if (s[0].w <= 0.0 || distance(s[0].xyz, p) >= 4.0 * s[0].w || own_vehicle_blocks(p, s[0].xyz)) {
+    if (s[0].w <= 0.0 || distance(s[3].xyz, p) >= 4.0 * s[0].w || own_vehicle_blocks(p, s[0].xyz)) {
         return none;
     }
-    return d3d_spot(p, n, s[0].xyz, s[1], s[2].w, s[3].x, s[0].w, s[2].rgb);
+    return d3d_spot(p, n, s[3].xyz, s[1], s[2].w, s[0].w, s[2].rgb);
 }

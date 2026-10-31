@@ -79,7 +79,8 @@ pub(crate) struct CameraUniform {
     /// `[spotlight]`, see the scene shader's `classic_spot`): [0] xyz where its light leaves
     /// from (render-origin relative), w its declared range (0: none); [1] xyz its direction,
     /// w the cosine of half its outer cone; [2] rgb its colour, w the cosine of half its inner
-    /// cone; [3] x how far behind [0] along the vehicle's axis the spotlight itself lies.
+    /// cone; [3] xyz the declared spotlight's position (render-origin relative), used for
+    /// its cone and attenuation; [0] remains at the vehicle's face for occlusion.
     /// (Every shader's copy of this struct carries it, read or not - see the test
     /// `shaders_validate_and_match_the_uniforms`.)
     pub(crate) spot: [[f32; 4]; 4],

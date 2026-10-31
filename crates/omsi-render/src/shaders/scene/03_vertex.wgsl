@@ -20,10 +20,6 @@ struct VsOut {
     // where a [matl_envmap] reads its sphere map, made at the vertex (see `sphere_map_uv`)
     @location(7) env_uv: vec2<f32>,
     @location(8) wipe_uv: vec3<f32>,
-    // the classic picture's headlight, lit at the vertex as Omsi.exe's fixed function lights
-    // it (see `classic_spot`): its diffuse and its ambient light
-    @location(9) spot_diffuse: vec3<f32>,
-    @location(10) spot_ambient: vec3<f32>,
     // the vertex as its mesh has it: a vehicle's snow lies on the vehicle, not on the
     // world it drives through (road_snow.wgsl `vehicle_snow`)
     @location(11) local: vec3<f32>,
@@ -42,8 +38,6 @@ struct FsIn {
     @location(6) spec_sky: vec3<f32>,
     @location(7) env_uv: vec2<f32>,
     @location(8) wipe_uv: vec3<f32>,
-    @location(9) spot_diffuse: vec3<f32>,
-    @location(10) spot_ambient: vec3<f32>,
     @location(11) local: vec3<f32>,
 };
 
@@ -264,9 +258,6 @@ fn vs_main(in: VsIn) -> VsOut {
     let sp = vertex_specular(wp.xyz, out.normal);
     out.spec_sun = sp[0];
     out.spec_sky = sp[1];
-    let spot = classic_spot(wp.xyz, out.normal);
-    out.spot_diffuse = spot[0];
-    out.spot_ambient = spot[1];
     out.env_uv = sphere_map_uv(wp.xyz, out.normal, camera.cam_pos.xyz);
     let pr = inst_params[e * 2u];
     out.uv = in.uv + pr.zw;
@@ -333,8 +324,6 @@ fn vs_puddle_vehicle(in: VsIn) -> VsOut {
     out.params2 = inst_params[e * 2u + 1u];
     out.spec_sun = vec3<f32>(0.0);
     out.spec_sky = vec3<f32>(0.0);
-    out.spot_diffuse = vec3<f32>(0.0);
-    out.spot_ambient = vec3<f32>(0.0);
     let plane = vehicle_reflection.plane;
     // the sphere map from the reflected eye fs_puddle_vehicle shades the vehicle from
     out.env_uv = sphere_map_uv(out.world, out.normal, camera.cam_pos.xyz - 2.0 * plane.xyz * (dot(plane.xyz, camera.cam_pos.xyz) - plane.w));

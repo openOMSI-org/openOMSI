@@ -98,14 +98,26 @@ mod tests {
     /// occlusion, the bounced light and the lightning's light, and the sun's share through the clouds' shadow field, and the cube maps of lamps that shine every way, and the wet roads' and the water's traced reflection), and the textures read with FSR 1's mip bias, `camera.lod`,
     /// and a script's screen never taken for a pane (#2927), and the lamp tiles' taps in loops of fixed bounds,
     /// and the colour/mask-only headset entry point, and a self-lit blended layer's alpha giving
-    /// Omsi.exe's encoded mix, and the headlight as Omsi.exe's Direct3D spot, lit at the vertices,
+    /// Omsi.exe's encoded mix, and the headlight's Direct3D attenuation evaluated per fragment,
     /// and the traced sample read once for FXC.
     /// (with Unix line ends: a Windows checkout may turn the parts' into CRLF, as it did the
     /// single files', and the 0.2.31 release's Windows test failed on that alone)
     #[test]
     fn assembled_shaders_are_the_old_files() {
         let (scene, enhanced) = (super::SCENE.replace("\r\n", "\n"), super::ENHANCED.replace("\r\n", "\n"));
-        assert_eq!((scene.len(), fnv1a(&scene)), (137_326, 0x8065_9ce3_ae11_d332));
+        assert_eq!((scene.len(), fnv1a(&scene)), (136_816, 11_305_426_729_053_454_484));
         assert_eq!((enhanced.len(), fnv1a(&enhanced)), (98_529, 0x93f8_5f93_8c18_2003));
+    }
+
+    #[test]
+    fn classic_spot_is_evaluated_per_fragment_not_interpolated() {
+        let vertex = include_str!("shaders/scene/03_vertex.wgsl");
+        let fragment = include_str!("shaders/scene/09_vanilla.wgsl");
+        assert!(!vertex.contains("classic_spot("));
+        assert!(!vertex.contains("spot_diffuse"));
+        assert!(!vertex.contains("spot_ambient"));
+        assert!(fragment.contains("spot = classic_spot(in.world, n);"));
+        assert!(fragment.contains("in.params2.w < -500.0 && near_player_vehicle(in.world) > 0.5"));
+        assert!(fragment.contains("camera.ambient.xyz * ao + spot[1]"));
     }
 }
