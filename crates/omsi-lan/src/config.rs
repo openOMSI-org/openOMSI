@@ -29,6 +29,8 @@ pub struct LanConfig {
     pub lan_join: Option<String>,
     /// Discovered gateway to try if an Auto UDP join gets no answer.
     pub lan_ws_fallback: Option<String>,
+    /// Per-session authorization to fetch a server-selected vehicle package.
+    pub allow_server_fleet: bool,
     /// A dedicated server (`--server`).
     pub server: bool,
     /// Fatal verification/download error for the selected server vehicle. Never
