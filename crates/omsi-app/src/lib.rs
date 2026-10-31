@@ -518,7 +518,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     if let Some(l) = lan.as_mut() {
         let mut c = args.lan_config();
         lan::share_mods(&mut c, l);
-        if let Some(why) = c.mod_fetch_error {
+        if let Some(why) = c.mod_fetch_error.take() {
             return Err(anyhow::anyhow!("The selected server bus could not be verified or downloaded: {why}"));
         }
         lan::take_host_map(&mut c, l);
