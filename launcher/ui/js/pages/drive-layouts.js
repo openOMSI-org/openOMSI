@@ -3,7 +3,7 @@ import { useStore, remembered, remember } from '../store.js';
 import { t } from '../i18n.js';
 import { Icon } from '../icons.js';
 import { Button, Select, Dialog, Notice, Spinner } from '../ui.js';
-import { choose, curBus, curTour, pickedTrip, weatherName, realTime, realDate, askJoined, noServerBus, depotBusOf } from '../data.js';
+import { choose, curBus, curTour, pickedTrip, weatherName, realTime, realDate, askJoined, noServerBus, depotBusOf, selectableVehicles } from '../data.js';
 import { BusPreview } from '../preview.js';
 import { RouteMap } from '../routemap.js';
 import { BusList, BusOptions, withoutMaker } from './bus-list.js';
@@ -94,7 +94,7 @@ function BusThumb({ compact }) {
   const paints = v ? [['', v.default_paint ? `${t('Standard')} (${v.default_paint})` : t('Standard')], ...v.paints.map((p) => [p, p])] : [];
   const at = Math.max(0, paints.findIndex(([p]) => p === c.paint));
   const step = (d) => choose({ paint: paints[(at + d + paints.length) % paints.length][0] });
-  const buttons = html`<${Button} small icon="bus" label=${compact ? undefined : 'Change bus'} title="Change bus" onClick=${() => setPick(true)} disabled=${!s.vehicles.length && !v} />
+  const buttons = html`<${Button} small icon="bus" label=${compact ? undefined : 'Change bus'} title="Change bus" onClick=${() => setPick(true)} disabled=${selectableVehicles(c).length === 0} />
     ${v && html`<${Button} small icon="sliders" title="Vehicle settings & details" onClick=${() => setMore(true)} />`}`;
   return html`<div class="bus-thumb">
     <div class="bt-view">${v && !pick && !v.server_only ? html`<${BusPreview} class="stage" look=${look(v, c)} />` : html`<div class="stage-empty"><${Icon} name="bus" size=${32} />${v?.server_only && html`<span>${t('Server vehicle: downloaded on start')}</span>`}</div>`}${compact && v && html`<div class="bt-tools">${buttons}</div>`}</div>
