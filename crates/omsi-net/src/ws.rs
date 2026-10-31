@@ -1029,6 +1029,34 @@ mod tests {
     use super::*;
 
     #[test]
+    fn server_fleet_catalog_roundtrips_with_paint_names() {
+        let info = ServerInfo {
+            name: "Test".into(),
+            vehicles: vec!["Vehicles/Test/test.bus".into()],
+            fleet_version: 1,
+            fleet: vec![FleetPaints {
+                bus: "Vehicles/Test/test.bus".into(),
+                paints: vec!["Base".into(), "Azul \"especial\"".into(), "São Paulo".into()],
+            }],
+            ..Default::default()
+        };
+        let encoded = info.to_json();
+        let read = ServerInfo::from_json(&encoded).expect("valid server status");
+        assert_eq!(read.fleet_version, 1);
+        assert_eq!(read.fleet, info.fleet);
+        assert_eq!(read.vehicles, info.vehicles);
+    }
+
+    #[test]
+    fn server_fleet_catalog_is_optional_for_old_servers() {
+        let old = r#"{"name":"Old Server","map":"maps/Test/global.cfg","vehicles":"Vehicles/Test/test.bus"}"#;
+        let read = ServerInfo::from_json(old).unwrap();
+        assert_eq!(read.fleet_version, 0);
+        assert!(read.fleet.is_empty());
+    }
+
+
+    #[test]
     fn status_round_trip() {
         let i = ServerInfo { name: "Spandau \"1\"".into(), motd: "hi".into(), map: "maps/Berlin-Spandau/global.cfg".into(), players: 2, max_players: 16, version: "0.1".into(), icon: vec![1, 2], time: "08:00".into(), weather: "Sommerlich".into(), password: false, vehicles: vec!["Vehicles/MAN_SD202/SD202.bus".into()], ..Default::default() };
         let j = i.to_json();
