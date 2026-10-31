@@ -3,7 +3,7 @@ import { useStore, set, remembered, remember, toast } from '../store.js';
 import { t, hhmm, longDate, language } from '../i18n.js';
 import { Icon } from '../icons.js';
 import { Button, Notice, useConfirm } from '../ui.js';
-import { choose, curMap, curBus, curLine, curTour, pickedTrip, start, loadSituations, weatherName, mapName, noServerBus, askJoined, transportRefusal } from '../data.js';
+import { choose, curMap, curBus, curLine, curTour, pickedTrip, start, loadSituations, weatherName, mapName, noServerBus, askJoined, transportRefusal, serverFleetSelection } from '../data.js';
 import { call } from '../api.js';
 import { BusPreview } from '../preview.js';
 import { BusList, BusOptions, withoutMaker } from './bus-list.js';
@@ -65,6 +65,7 @@ export function StartBar({ step, go }) {
   const line = curLine();
   const tour = curTour();
   const [busy, setBusy] = useState(false);
+  const [ask, dialog] = useConfirm();
   // a start while a game runs asks for a second click within 6 s (its window may be behind
   // this one), as the game's own launcher did
   const [armed, setArmed] = useState(0);
@@ -87,9 +88,17 @@ export function StartBar({ step, go }) {
       return;
     }
     setArmed(0);
+    if (serverFleetSelection()) {
+      const approved = await ask({
+        title: 'Download server vehicle',
+        text: 'The selected bus or repaint may need files from this server. Matching local files are reused; other files are checked and cached for this session without replacing your installed mods. Continue?',
+        yes: 'Download and join',
+      });
+      if (!approved) return;
+      extra = { ...extra, __fleetApproved: true };
+    }
     setBusy(true);
-    await start(extra);
-    setBusy(false);
+    try { await start(extra); } finally { setBusy(false); }
   };
   const entry = m && c.entry >= 0 ? m.entry_points[c.entry] : null;
   const where = joined && c.lan_map ? mapName(c.lan_map.replace(/\\/g, '/')) : m ? m.friendly || m.name : '';
@@ -120,7 +129,7 @@ export function StartBar({ step, go }) {
         ${busy ? t('Starting…') : another ? t('Start another game') : joined ? t('Join and drive') : c.free ? t('Start driving') : t('Start the duty')}
       </${Button}>
     </div>
-  </div>`;
+  </div>${dialog}`;
 }
 
 function Continue({ go, busy }) {
