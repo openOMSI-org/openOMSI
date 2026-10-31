@@ -605,7 +605,13 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) {
                         Err(e) => log::warn!("LAN mods: {e}"),
                     },
                     None => {
-                        note(lan, "Host's mods could not be downloaded; playing with what is installed here".into());
+                        let why = "no reachable TCP mod channel or WebSocket relay";
+                        note(lan, format!("Host's mods could not be downloaded: {why}"));
+                        // Never fall through to a different local bus version after
+                        // a player explicitly selected the server's fleet package.
+                        if args.allow_server_fleet && args.bus.is_some() {
+                            args.mod_fetch_error = Some(why.into());
+                        }
                         return;
                     }
                 }
