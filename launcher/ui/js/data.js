@@ -124,10 +124,11 @@ export function fixChoice() {
     c.entry = -1;
     mapChanged = true;
   }
-  if (S.vehicles?.length && !S.vehicles.some((v) => v.file === c.bus)) {
-    c.bus = S.vehicles[0].file;
+  const available = selectableVehicles(c);
+  if (available.length && !available.some((v) => busFile(v.file) === busFile(c.bus))) {
+    c.bus = available[0].file;
     c.paint = '';
-    c.number = randomFleetNumber(S.vehicles[0]);
+    c.number = available[0].server_only ? '' : randomFleetNumber(available[0]);
   }
   if (S.weather && c.weather && !weatherOfItsOwn(c.weather) && !S.weather.some((w) => w.file === c.weather)) c.weather = '';
   // (a date the player picked stays even outside the map's [years]; only a map that had
@@ -149,20 +150,48 @@ export function serverBuses(c = S.choice) {
   return c?.lan_mode === 'join' && c.lan_server?.vehicles?.length ? new Set(c.lan_server.vehicles.map(busFile)) : null;
 }
 
+/** Local buses are preferred; server-only entries are selectable after the server
+ * announces named paints. Actual bytes come through the verified session transfer. */
+export function selectableVehicles(c = S.choice) {
+  const allowed = serverBuses(c);
+  const local = (S.vehicles || []).filter((v) => !allowed || allowed.has(busFile(v.file)));
+  if (!allowed || c?.lan_server?.fleet_version !== 1) return local;
+  const byKey = new Map((c.lan_server.fleet || []).filter((f) => f?.bus && allowed.has(busFile(f.bus))).map((f) => [busFile(f.bus), f]));
+  const out = local.map((v) => {
+    const offer = byKey.get(busFile(v.file));
+    return offer ? { ...v, paints: offer.paints || [], server_catalog: true } : v;
+  });
+  const have = new Set(local.map((v) => busFile(v.file)));
+  for (const offer of byKey.values()) {
+    if (have.has(busFile(offer.bus))) continue;
+    const components = offer.bus.replace(/\\/g, '/').split('/');
+    const basename = (components.pop() || 'Bus').replace(/\.(bus|ovh)$/i, '').replace(/_/g, ' ');
+    const maker = (components[components.length - 1] || 'Server').replace(/_/g, ' ');
+    out.push({
+      name: basename, type_name: basename, manufacturer: maker, file: offer.bus,
+      folder: components.join('/'), description: 'Offered by the joined server; its verified version is downloaded for this session.',
+      default_paint: '', paints: offer.paints || [], hofs: [], numbers: [], installed: false,
+      server_only: true, server_catalog: true, transport: ['bus'], missing_packs: [],
+    });
+  }
+  return out;
+}
+
 export function allowedBus(c = S.choice) {
   const allowed = serverBuses(c);
   if (!allowed || allowed.has(busFile(c.bus))) return {};
-  const own = S.vehicles?.find((v) => allowed.has(busFile(v.file)));
-  return own ? { bus: own.file, paint: '', number: '', hof_manual: false } : {};
+  const offered = selectableVehicles(c).find((v) => allowed.has(busFile(v.file)));
+  return offered ? { bus: offered.file, paint: '', number: '', hof_manual: false } : {};
 }
 
-export const noServerBus = () => {
-  const allowed = serverBuses();
-  return !!allowed && !!S.vehicles && !S.vehicles.some((v) => allowed.has(busFile(v.file)));
-};
+export const noServerBus = () => !!serverBuses() && !!S.vehicles && selectableVehicles().length === 0;
 
 export const serverJoined = (answer) => ({
-  lan_server: { asked: !!answer, name: answer?.name || '', time: answer?.time || '', weather: answer?.weather || '', vehicles: answer?.vehicles || [] },
+  lan_server: {
+    asked: !!answer, name: answer?.name || '', time: answer?.time || '',
+    weather: answer?.weather || '', vehicles: answer?.vehicles || [],
+    fleet_version: answer?.fleet_version || 0, fleet: answer?.fleet || [],
+  },
 });
 
 export async function askJoined() {
@@ -204,7 +233,7 @@ export function transportRefusal(map, vehicle) {
 export const shownModes = (x) => (x?.transport || []).filter((m) => m !== 'bus' || (x.transport.length > 1));
 
 export const curMap = () => S.maps?.find((m) => m.file === S.choice?.map);
-export const curBus = () => S.vehicles?.find((v) => v.file === S.choice?.bus);
+export const curBus = () => selectableVehicles().find((v) => busFile(v.file) === busFile(S.choice?.bus));
 export const curLine = () => S.lines.list?.find((l) => l.name === S.choice?.line);
 // Old saved choices use the displayed number; new choices identify the variant.
 export const tourId = (tour) => tour?.id ?? tour?.number;
