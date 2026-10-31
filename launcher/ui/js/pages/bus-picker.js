@@ -8,7 +8,7 @@ import { t } from '../i18n.js';
 import { call } from '../api.js';
 import { Icon } from '../icons.js';
 import { Dialog, Search, Select, Segmented, Empty, Spinner, Button, Tag, Notice, Field } from '../ui.js';
-import { choose, busFile, serverBuses, MODES, modeLabel, shownModes, transportRefusal, curMap } from '../data.js';
+import { choose, busFile, serverBuses, selectableVehicles, MODES, modeLabel, shownModes, transportRefusal, curMap } from '../data.js';
 import { Notes } from './drive.js';
 
 const favKey = (file) => file.replace(/\\/g, '/').toLowerCase();
@@ -58,7 +58,7 @@ export function BusPicker({ onClose, onTake, title = 'Choose a bus', yes = 'Take
   const [sel, setSel] = useState(s.choice.bus);
   const [paint, setPaint] = useState(s.choice.bus === sel ? s.choice.paint : '');
   const joined = serverBuses(s.choice);
-  const all = (s.vehicles || []).filter((v) => !joined || joined.has(busFile(v.file)));
+  const all = selectableVehicles(s.choice);
   const modes = all.some((v) => v.transport?.some((m) => m !== 'bus')) ? MODES.filter((x) => all.some((v) => v.transport?.includes(x))) : [];
   const makers = useMemo(() => [...new Set(all.map((v) => v.manufacturer).filter(Boolean))].sort(), [all]);
   const ql = q.trim().toLowerCase();
@@ -131,14 +131,16 @@ export function BusPicker({ onClose, onTake, title = 'Choose a bus', yes = 'Take
         </div>
       </div>
       <div class="detail">
-        ${v ? html`<${BusPreview} look=${{ bus: v.file, paint, map: s.choice.map, weather: s.choice.weather, time: s.choice.time, date: s.choice.date }} />
+        ${v ? html`${v.server_only ? html`<div class="stage-empty"><${Icon} name="bus" size=${36} /><span>${t('Preview available after the server bus is downloaded')}</span></div>` : html`<${BusPreview} look=${{ bus: v.file, paint, map: s.choice.map, weather: s.choice.weather, time: s.choice.time, date: s.choice.date }} />`}
           <div class="card-body stack">
             <div class="row">
               <div class="grow"><h2 style="font-size:20px">${v.name}</h2><div class="muted">${[v.manufacturer, v.type_name, ...shownModes(v).map(modeLabel)].filter(Boolean).join(' - ')}</div></div>
               ${v.installed && html`<${Tag}>${t('Mod')}</${Tag}>`}
+              ${v.server_only && html`<${Tag}>${t('Server')}</${Tag}>`}
             </div>
             ${transportRefusal(map, v) && html`<${Notice} kind="warn">${transportRefusal(map, v)} ${t('Choose another map or vehicle.')}</${Notice}>`}
             ${v.missing_packs?.length > 0 && html`<${Notice} kind="warn">${t('Parts of this bus come from packs that are not installed: {packs}', { packs: v.missing_packs.join(', ') })}</${Notice}>`}
+            ${v.server_only && html`<${Notice} kind="info">${t('This bus and its selected paint will be checked against the server and downloaded when needed.')}</${Notice}>`}
             <${Field} label="Paint">
               <${Select} raw value=${paint} options=${[['', v.default_paint ? `${t('Standard')} (${v.default_paint})` : t('Standard')], ...v.paints.map((p) => [p, p])]} onChange=${setPaint} />
             </${Field}>
