@@ -24,6 +24,77 @@ mod tests {
     }
 
     #[test]
+    fn a_streaming_frontier_does_not_abandon_the_service_after_the_route_timeout() {
+        let f = Fixture::new();
+        let mut traffic = road(&f);
+        let end = traffic.net.lanes[0].length();
+        let mut vehicle = VehicleInstance::new(f.ty.clone(), crate::VehicleHost::new(crate::SimClock::default()));
+        vehicle.position = traffic.net.lanes[0].at(end - 1.0).0;
+        let bus = model::BusSetup {
+            route: vec![0], stops: Vec::new(), number: None, hof: None,
+            timetable: bus_service::AiTimetable { line: "L".into(), terminus: "End".into(), stops: Vec::new() },
+        };
+        let id = traffic.adopt_vehicle(vehicle, 0, end - 1.0, Some(bus));
+        let car = &mut traffic.cars[0];
+        car.stopped = super::super::tick::ROUTE_WAIT_MAX + 1.0;
+        let service = car.bus.as_mut().unwrap();
+        service.route_open = true;
+        service.waiting_tile = Some((99, 99));
+        traffic.tick(0.02, None);
+        let car = traffic.cars.iter().find(|c| c.id == id).unwrap();
+        assert!(!car.gone, "an unloaded tile is not an irreparable route gap");
+        assert!(car.bus.as_ref().unwrap().route_open);
+        assert!(!car.bus.as_ref().unwrap().trip_done());
+        assert_eq!(car.state.route, vec![0]);
+    }
+
+    #[test]
+    fn a_ready_tile_waits_for_the_timetable_update_before_leaving_the_frontier() {
+        let f = Fixture::new();
+        let mut traffic = road(&f);
+        let end = traffic.net.lanes[0].length();
+        let mut vehicle = VehicleInstance::new(f.ty.clone(), crate::VehicleHost::new(crate::SimClock::default()));
+        vehicle.position = traffic.net.lanes[0].at(end - 1.0).0;
+        let setup = model::BusSetup {
+            route: vec![0], stops: Vec::new(), number: None, hof: None,
+            timetable: bus_service::AiTimetable { line: "L".into(), terminus: "End".into(), stops: Vec::new() },
+        };
+        traffic.adopt_vehicle(vehicle, 0, end - 1.0, Some(setup));
+        traffic.lane_tiles.insert((99, 99));
+        let car = &mut traffic.cars[0];
+        car.stopped = super::super::tick::ROUTE_WAIT_MAX + 1.0;
+        let service = car.bus.as_mut().unwrap();
+        service.route_open = true;
+        service.waiting_tile = Some((99, 99));
+        traffic.tick(0.02, None);
+        assert!(!traffic.cars[0].gone);
+        assert!(traffic.cars[0].bus.as_ref().unwrap().route_open);
+        assert_eq!(traffic.cars[0].state.route, vec![0]);
+    }
+
+    #[test]
+    fn a_loaded_but_broken_route_still_uses_the_existing_timeout() {
+        let f = Fixture::new();
+        let mut traffic = road(&f);
+        let end = traffic.net.lanes[0].length();
+        let mut vehicle = VehicleInstance::new(f.ty.clone(), crate::VehicleHost::new(crate::SimClock::default()));
+        vehicle.position = traffic.net.lanes[0].at(end - 1.0).0;
+        let setup = model::BusSetup {
+            route: vec![0], stops: Vec::new(), number: None, hof: None,
+            timetable: bus_service::AiTimetable { line: "L".into(), terminus: "End".into(), stops: Vec::new() },
+        };
+        traffic.adopt_vehicle(vehicle, 0, end - 1.0, Some(setup));
+        let car = &mut traffic.cars[0];
+        car.stopped = super::super::tick::ROUTE_WAIT_MAX + 1.0;
+        let service = car.bus.as_mut().unwrap();
+        service.route_open = true;
+        service.waiting_tile = None;
+        traffic.tick(0.02, None);
+        assert!(traffic.cars[0].gone);
+        assert!(!traffic.cars[0].bus.as_ref().unwrap().route_open);
+    }
+
+    #[test]
     fn adoption_keeps_pose_physics_and_script_host() {
         let f = Fixture::new();
         let mut traffic = road(&f);

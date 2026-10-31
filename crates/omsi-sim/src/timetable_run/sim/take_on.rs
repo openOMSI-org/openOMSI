@@ -83,6 +83,7 @@ impl ScheduleSim {
         set_ai_destination(&mut car.vehicle, hof.as_deref(), &line, &terminus, &names);
         if let Some(b) = car.bus.as_mut() {
             b.route_open = end < slots.len();
+            b.waiting_tile = steps.get(end).and_then(|s| s.key.map(|k| k.tile));
             b.terminus = terminus.clone();
             b.last_stop = last_stop;
             b.always = always;

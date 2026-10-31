@@ -27,9 +27,11 @@ impl App {
         if let (Some(audio), Some(mut sounds)) = (self.sound.audio.as_ref(), p.sounds.take()) { sounds.stop_all(audio); }
         if let Some(mut driver) = p.driver.take() { driver.hide(renderer, scene); }
         let delay = p.vehicle.host.tt_delay;
+        let next_stop = self.session.duty.as_ref().map(|d| d.next_stop);
         if let Some(bus) = plan.bus.as_mut() {
             bus.timetable.install(&mut p.vehicle.host, bus.stops.first());
             p.vehicle.host.tt_delay = delay;
+            if let Some(next_stop) = next_stop { p.vehicle.host.tt_busstop_index = next_stop as i32; }
             p.vehicle.set_var("schedule_active", 1.0);
         }
         let scheme = p.vehicle.host.paint_scheme.flatten();
@@ -51,7 +53,9 @@ impl App {
         }
         self.gfx.sim_view.traffic.insert(id, CarRender { body: p.render, trailers: p.trailer_renders, strs: Vec::new() });
         if let Some(departure) = plan.departure {
-            self.session.schedule.as_mut().expect("preflight kept the timetable").handover_to_ai(id, departure);
+            let schedule = self.session.schedule.as_mut().expect("preflight kept the timetable");
+            schedule.handover_to_ai(id, departure);
+            schedule.resume_handover_route(&mut traffic.sim, id, plan.continuation);
         }
         self.session.duty = None;
         self.session.duty_places = false;

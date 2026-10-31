@@ -1039,7 +1039,7 @@ impl TrafficSim {
                     .unwrap_or(false);
                 let stops_left = service.as_ref().map(|b| !b.stops.is_empty() || b.at_stop()).unwrap_or(false);
                 let waited_out = car.stopped > ROUTE_WAIT_MAX
-                    && service.as_ref().map(|b| b.route_open).unwrap_or(false);
+                    && service.as_ref().map(|b| b.route_open && b.waiting_tile.is_none()).unwrap_or(false);
                 if waited_out && !air {
                     // it has waited long for more route where the tiles are loaded: the
                     // rest of its trip does not join what it has (a track the map does

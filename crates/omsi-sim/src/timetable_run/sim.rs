@@ -14,6 +14,8 @@ mod route;
 mod take_on;
 mod tours;
 mod handover;
+mod handover_route;
+pub use handover_route::{HandoverRoute, RouteContinuation};
 pub use handover::DutyReservation;
 pub mod transit;
 
