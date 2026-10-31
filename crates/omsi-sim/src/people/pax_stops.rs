@@ -175,12 +175,14 @@ impl PeopleSim {
         let p = self.pax(i)?;
         match p.line.and_then(|k| s.lines.get(k)) {
             None => s.buses.iter().find_map(|(id, _)| {
+                if p.transfer_from == Some(*id) { return None; }
                 let bn = bus_ix.get(id).map(|k| &buses[*k])?;
                 let side = self.preferred_entry_side(stop, bn, self.people[i].position);
                 bn.cabin.entries.iter().any(|door| door.point.is_some() && entry_on_platform(side, door.side))
                     .then_some((*id, Fit::Any))
             }),
             Some((_, termini)) => best_bus(s.buses.iter().filter_map(|(id, _)| {
+                if p.transfer_from == Some(*id) { return None; }
                 let bn = bus_ix.get(id).map(|k| &buses[*k])?;
                 let side = self.preferred_entry_side(stop, bn, self.people[i].position);
                 if !bn.cabin.entries.iter().any(|door| door.point.is_some() && entry_on_platform(side, door.side)) {
@@ -305,7 +307,7 @@ impl PeopleSim {
 
 #[cfg(test)]
 #[path = "brt_tests.rs"]
-mod brt_tests;
+pub(crate) mod brt_tests;
 
 #[cfg(test)]
 #[path = "visual_hail_tests.rs"]

@@ -2210,6 +2210,14 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     settings_from_text_on(text, cfg!(any(target_os = "android", target_os = "ios")))
 }
 
+// Keep independent opt-in defaults shared by desktop and phone settings.
+fn passenger_defaults(v: &mut Value) {
+    v["passenger_connections"] = json!(false);
+    v["passenger_transfer_percent"] = json!(20.0);
+    v["passenger_hailing"] = json!(false);
+    v["passenger_full_bus_reaction"] = json!(false);
+}
+
 pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     let mut v = json!({ "msaa": 4, "anisotropy": 8, "ssao": true, "shadows": true, "shadow_size": 2048, "navigator": true, "ui_opacity": 0.85, "navigator_corner": "bottom-left", "boarding": "auto", "detail_textures": true, "exact_fare": true, "enhanced": false, "graphics": "vanilla_plus", "fullscreen": false, "vsync": true, "volume": 0.6, "drive_keys": "simple", "render_scale": "auto", "view_distance": "auto", "language": "ENG", "video_memory": 0, "texture_compression": true, "gpu_texture_compression": true, "chat": true, "tooltips": true, "name_tags": true, "show_fps": false, "clouds": true, "cloud_quality": "high", "rain_quality": "high", "pax_density": 1.0, "vol_ai": 1.0, "vol_scenery": 1.0, "ambient": true, "vol_ambient": 0.8, "mirror_size": 256, "doppler": true, "driver": true, "max_fps": 0, "min_obj_size": 0.013, "max_obj_dist": "auto" });
     v["upscaler"] = json!("default");
@@ -2303,7 +2311,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     // stop, as in OMSI; #1773)
     v["ai_wait_timed_stops_only"] = json!(false);
     v["pax_bad_driving"] = json!(true);
-    v["passenger_hailing"] = json!(false);
+    passenger_defaults(&mut v);
     // the arrival half of the stops of a depot file that keeps two recordings per stop
     v["auto_announce"] = json!(false);
     // OMSI's own options
@@ -2392,6 +2400,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "touch_door_mode" => v[&k] = json!(if val.eq_ignore_ascii_case("direct") { "direct" } else { "standard" }),
             "update_channel" => v[&k] = json!(if val.eq_ignore_ascii_case("beta") { "beta" } else { "stable" }),
             "photo_mode" => v[&k] = json!(if val.eq_ignore_ascii_case("advanced") { "advanced" } else { "simple" }),
+            "passenger_transfer_percent" => v[&k] = json!(val.parse::<f64>().ok().filter(|x|x.is_finite()).unwrap_or(20.0).clamp(0.0,100.0)),
             "passenger_animation" => v[&k] = json!(if val.eq_ignore_ascii_case("enhanced") { "enhanced" } else { "original" }),
             "character_models" => v[&k] = json!(if val.eq_ignore_ascii_case("improved") { "improved" } else { "original" }),
             "units" => v[&k] = json!(units_setting(val)),
@@ -2461,7 +2470,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "perf_overlay" => v[&k] = json!(perf_overlay_mode(val)),
             "sim_thread" => v[&k] = json!(b(val)),
             "mirror_hud" => v[&k] = json!(val.trim().parse::<u8>().map(|x| x.min(7)).unwrap_or(0)),
-            "windy_trees" | "road_snow" | "mirror_hud_every_frame" | "mirror_shadows" | "mirror_particles" | "ai_wait_timed_stops_only" | "pax_bad_driving" | "passenger_hailing" | "auto_announce" | "ambient" => v[&k] = json!(b(val)),
+            "windy_trees" | "road_snow" | "mirror_hud_every_frame" | "mirror_shadows" | "mirror_particles" | "ai_wait_timed_stops_only" | "pax_bad_driving" | "passenger_connections" | "passenger_hailing" | "passenger_full_bus_reaction" | "auto_announce" | "ambient" => v[&k] = json!(b(val)),
             "head_tracking_source" => v[&k] = json!(head_tracking_source(val)),
             "tobii_edges" => v[&k] = json!(b(val)),
             "head_tracking_smoothing" | "head_tracking_dead_zone" => v[&k] = json!(head_tracking_value(&k, val.parse::<f64>().ok())),
@@ -2877,7 +2886,9 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("ai_wait_timed_stops_only={}\n", b("ai_wait_timed_stops_only", false)));
     text.push_str(&format!("trip_summary={}\nfull_tank={}\n", b("trip_summary", true), b("full_tank", true)));
     text.push_str(&format!("pax_bad_driving={}\n", b("pax_bad_driving", true)));
+    text.push_str(&format!("passenger_connections={}\npassenger_transfer_percent={}\n", b("passenger_connections",false), f("passenger_transfer_percent",20.0).clamp(0.0,100.0)));
     text.push_str(&format!("passenger_hailing={}\n", b("passenger_hailing", false)));
+    text.push_str(&format!("passenger_full_bus_reaction={}\n", b("passenger_full_bus_reaction", false)));
     text.push_str(&format!("auto_announce={}\n", b("auto_announce", false)));
     text.push_str(&format!("triple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n", f("triple_left_angle_deg", 45.0).clamp(0.0, 90.0), f("triple_right_angle_deg", 45.0).clamp(0.0, 90.0), f("triple_eye_height_mm", 0.0).clamp(-500.0, 500.0)));
     text.push_str(&format!("photo_mode={}\n", if v.get("photo_mode").and_then(|x| x.as_str()) == Some("advanced") { "advanced" } else { "simple" }));
@@ -3508,6 +3519,10 @@ mod omsi_options_tests;
 mod right_stick_look_tests;
 #[cfg(test)]
 mod head_tracking_tests;
+
+#[cfg(test)]
+#[path = "passenger_connections_tests.rs"]
+mod passenger_connections_tests;
 
 #[cfg(test)]
 #[path = "passenger_settings_tests.rs"]

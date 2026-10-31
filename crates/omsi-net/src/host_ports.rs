@@ -1,7 +1,7 @@
 //! Reserve the host's state and content transports before announcing the session.
 
 use super::{
-    LanSession, PORT_RANGE, PROTOCOL, Role, WorldInfo, bridge, hostkey, local_addrs, session_hex,
+    LanSession, PORT_RANGE, PROTOCOL, Role, WorldInfo, bridge, hostkey, local_addrs,
 };
 use std::io::{self, Read};
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream, UdpSocket};
@@ -147,11 +147,9 @@ impl LanSession {
                         p,
                     );
                     s.host_key = Some(key);
-                    log::info!(
-                        "LAN: hosting session {} on UDP/TCP port {p} as '{name}' (protocol {PROTOCOL}), code {}",
-                        session_hex(s.session),
-                        s.code().map(|c| c.encode()).unwrap_or_default()
-                    );
+                    // Logs are shared in support bundles: keep join codes and session
+                    // identity in the multiplayer UI, not in persistent diagnostics.
+                    log::info!("LAN: hosting on UDP/TCP port {p} (protocol {PROTOCOL})");
                     if port != 0 && p != port {
                         log::info!("LAN: UDP/TCP port {port} is unavailable; using {p}");
                     }

@@ -93,6 +93,7 @@ pub(super) fn steps_of(verb: &str) -> Option<Vec<f32>> {
         "speed" => SPEEDS.iter().map(|&v| v as f32).collect(),
         "traffic" => TRAFFIC.iter().map(|&v| v as f32).collect(),
         "pax" => PAX.to_vec(),
+        "passenger_transfer_percent" => (0..=100).map(|n|n as f32).collect(),
         "volume" => VOLUME.to_vec(),
         "led_glow" => (0..16).map(|v| v as f32).collect(),
         "night_brightness" => (0..=12).map(|v| v as f32 * 0.25).collect(),
