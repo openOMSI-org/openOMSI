@@ -887,7 +887,26 @@ fn store_dir() -> Option<PathBuf> {
 }
 
 pub fn fetch(root: &Path, map: &mut String, host: SocketAddr, session: u64, progress: &mut dyn FnMut(u64, u64, &str)) -> Result<Report, String> {
-    fetch_with(root, map, host, session, progress, false)
+    fetch_with(root, map, host, session, progress, false, None)
+}
+
+/// Join with a selected server bus and repaint. The authenticated host serves only
+/// content explicitly allowed in server.cfg. Old player-hosted sessions still use LIST.
+pub fn fetch_selected(root: &Path, map: &mut String, host: SocketAddr, session: u64, bus: Option<&str>, paint: Option<&str>, progress: &mut dyn FnMut(u64, u64, &str)) -> Result<Report, String> {
+    let selected = bus.filter(|v| !v.trim().is_empty()).map(|v| (v.to_string(), paint.unwrap_or("").to_string()));
+    fetch_with(root, map, host, session, progress, false, selected)
+}
+
+/// Request one manifest over the authenticated channel. Re-issued after reconnecting,
+/// so GET indexes always refer to the selected package, not the host's map-only list.
+fn request_mod_manifest(conn: &mut Connection, request: &str) -> Result<Manifest, String> {
+    let (_, out, input) = conn;
+    writeln!(out, "{request}").and_then(|_| out.flush()).map_err(|e| e.to_string())?;
+    let len = read_reply(input)?.ok_or("no list")?;
+    if len > 256 << 20 { return Err("the list is too large".into()); }
+    let mut body = vec![0u8; len as usize];
+    input.read_exact(&mut body).map_err(|e| format!("{CONNECTION_LOST}: {e}"))?;
+    serde_json::from_slice(&body).map_err(|e| format!("bad list: {e}"))
 }
 
 /// How many files the session's mount holds (a look again that finds no more leaves it).
@@ -896,19 +915,33 @@ static MOUNTED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize:
 /// `fetch`, or (`again`) a look at the host's list in the middle of the session: then the
 /// session's content is mounted again only when it has more files than before. `root` is
 /// the game's own root (its vehicles' files are never covered by the host's).
-fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, progress: &mut dyn FnMut(u64, u64, &str), again: bool) -> Result<Report, String> {
+fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, progress: &mut dyn FnMut(u64, u64, &str), again: bool, selected: Option<(String, String)>) -> Result<Report, String> {
     if omsi_cfg::flags::OMSI_NO_LAN_MODS.is_set() {
         return Err("switched off (OMSI_NO_LAN_MODS)".into());
     }
-    let (raw, mut out, mut input) = open(host, session)?;
-    writeln!(out, "LIST").and_then(|_| out.flush()).map_err(|e| e.to_string())?;
-    let len = read_reply(&mut input)?.ok_or("no list")?;
-    if len > 256 << 20 {
-        return Err("the list is too large".into());
+    let mut conn = open(host, session)?;
+    let mut selected_request = selected.as_ref().map(|(bus, paint)| format!(
+        "LISTBUS {} {}", server_fleet::hex_text(bus), server_fleet::hex_text(paint)
+    ));
+    let manifest = match request_mod_manifest(&mut conn, selected_request.as_deref().unwrap_or("LIST")) {
+        Ok(m) => m,
+        // A player-hosted game or an older server cannot publish selected fleet mods.
+        // Preserve their original LIST behavior, but do not bypass a dedicated
+        // server's explicit rejection of a model or repaint.
+        Err(e) if selected_request.is_some() && (e == "the host says: what" || e == "the host says: fleet not configured") => {
+            log::info!("LAN mods: host has no dedicated fleet catalogue; using original map mod list");
+            selected_request = None;
+            conn = open(host, session)?;
+            request_mod_manifest(&mut conn, "LIST")?
+        }
+        Err(e) => return Err(e),
+    };
+    if let (Some((bus, _)), Some(_)) = (selected.as_ref(), selected_request.as_ref()) {
+        if !omsi_net::vehicle_path(bus).is_some_and(|v| v.eq_ignore_ascii_case(&manifest.bus)) {
+            return Err("host returned the wrong selected bus package".into());
+        }
     }
-    let mut body = vec![0u8; len as usize];
-    input.read_exact(&mut body).map_err(|e| e.to_string())?;
-    let manifest: Manifest = serde_json::from_slice(&body).map_err(|e| format!("bad list: {e}"))?;
+    let (raw, out, input) = conn;
     if manifest.entries.len() > MAX_FILES {
         return Err(format!("{} files are too many", manifest.entries.len()));
     }
@@ -924,7 +957,7 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
         }
         // a vehicle's file this machine has of its own is never covered by the host's: its
         // paints (`.cti`) and textures stay this player's, also on the bus it drives
-        if own_vehicle_file(&e.path, root) || own_script(&e.path) {
+        if (selected_request.is_none() && own_vehicle_file(&e.path, root)) || own_script(&e.path) {
             report.kept_own += 1;
             continue;
         }
@@ -952,7 +985,7 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
                     }
                     let mtime = md.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
                     if let Some((sz, mt, h)) = cache.get(&key) {
-                        if *sz == md.len() && *mt == mtime {
+                        if selected_request.is_none() && *sz == md.len() && *mt == mtime {
                             return (k, *h == e.sha256, None);
                         }
                     }
@@ -992,6 +1025,11 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
         total += e.size;
     }
     save_hash_cache(&cache);
+    // A selected bus cannot be considered ready if even one required file was
+    // rejected; silently continuing can produce missing meshes or white paint.
+    if selected_request.is_some() && !report.refused.is_empty() {
+        return Err(format!("selected server bus has {} refused files, first: {}", report.refused.len(), report.refused[0]));
+    }
     if total > MAX_TOTAL {
         return Err(format!("the host's mods are {:.1} GB, more than a session takes ({:.0} GB)", total as f64 / 1e9, MAX_TOTAL as f64 / 1e9));
     }
@@ -1030,6 +1068,11 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
         }
         attempt += 1;
         let mut req = String::with_capacity(left.len() * 10);
+        // A new connection starts with its original map-only manifest. Re-select
+        // the exact fleet package before GET, and verify the indexes did not change.
+        if attempt > 1 {
+            if let Some(cmd) = &selected_request { req.push_str(cmd); req.push('\n'); }
+        }
         for k in &left {
             req.push_str(&format!("GET {k}\n"));
         }
@@ -1040,7 +1083,22 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
         });
         let mut got = 0usize;
         let mut failed: Option<String> = None;
+        if attempt > 1 && selected_request.is_some() {
+            let selected_again = (|| -> Result<Manifest, String> {
+                let n = read_reply(&mut input)?.ok_or("no selected list")?;
+                if n > 256 << 20 { return Err("selected list too large".into()); }
+                let mut b = vec![0u8; n as usize];
+                input.read_exact(&mut b).map_err(|e| e.to_string())?;
+                serde_json::from_slice(&b).map_err(|e| format!("bad selected list: {e}"))
+            })();
+            match selected_again {
+                Ok(next) if next.bus == manifest.bus && next.entries.iter().eq(manifest.entries.iter().map(|e| e)) => {}
+                Ok(_) => failed = Some("host changed the selected vehicle during download".into()),
+                Err(e) => failed = Some(e),
+            }
+        }
         for &k in &left {
+            if failed.is_some() { break; }
             let e = &manifest.entries[k];
             let r = (|| -> Result<Option<Vec<u8>>, String> {
                 let len = read_reply(&mut input)?.ok_or("no size")?;
