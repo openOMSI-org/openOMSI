@@ -70,8 +70,14 @@ impl TrafficSim {
         let car = &self.cars[i];
         let st = &car.state;
         let v = st.speed;
+        let amber_factor = st.amber_factor;
+        let seed = car.seed;
         let mut stop = None;
         let mut amber = car.amber;
+        let n = |a: Option<(usize, usize)>| match a {
+            Some((c, li)) => (c & li) as u64,
+            None => 0
+        };
         // (it stood at this light's line when it went green: it was the first in the queue)
         let mut started = car.amber_start;
         let waited_here = car.light_hold;
@@ -104,7 +110,7 @@ impl TrafficSim {
                     true
                 }
                 Aspect::Yellow | Aspect::GreenYellow => {
-                    if on_its_way && (amber == Some((c, li)) || gap < comfortable) {
+                    if (on_its_way && (amber == Some((c, li)) || gap < comfortable)) || random::draw(seed, n(amber)) < amber_factor  {
                         amber = Some((c, li));
                         true
                     } else {
@@ -115,7 +121,9 @@ impl TrafficSim {
                 // (a car that stands cannot fail to stop: with its nose over the line it
                 // stays where it is)
                 Aspect::Red | Aspect::RedYellow => {
-                    let go = (amber == Some((c, li)) && on_its_way && gap < comfortable) || (v > 1.0 && gap < possible - 0.5);
+                    let go = (amber == Some((c, li)) && on_its_way && gap < comfortable)
+                        || (v > 1.0 && gap < possible - 0.5)
+                        || random::draw(seed, n(amber)) < amber_factor * amber_factor;
                     if !go && amber == Some((c, li)) {
                         amber = None;
                         started = false;
