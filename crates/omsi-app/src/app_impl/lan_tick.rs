@@ -232,6 +232,7 @@ impl crate::Args {
             lan_host: self.lan_host,
             lan_join: self.lan_join.clone(),
             lan_ws_fallback: self.lan_ws_fallback.clone(),
+            allow_server_fleet: self.allow_server_fleet,
             server: self.server.is_some(),
             mod_fetch_error: None,
             entry: self.entry,
