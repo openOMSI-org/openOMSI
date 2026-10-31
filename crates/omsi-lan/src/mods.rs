@@ -45,6 +45,7 @@ mod paced;
 mod pieces;
 pub mod placeholder;
 mod quarantine;
+mod server_fleet;
 mod store;
 pub mod upload;
 pub mod vehicles;
@@ -462,6 +463,9 @@ pub fn serve(port: u16, key: Arc<omsi_net::hostkey::HostKey>, args: &ModSource) 
         }
     };
     let ready: Arc<Mutex<Option<Arc<(Manifest, Vec<PathBuf>)>>>> = Arc::new(Mutex::new(None));
+    // Cached by selected bus+paint; prevents dozens of joins hashing the same files.
+    let fleet_cache: Arc<Mutex<HashMap<String, Arc<(Manifest, Vec<PathBuf>)>>>> = Arc::new(Mutex::new(HashMap::new()));
+    let fleet_root = args.root.clone();
     // (a server that takes its players' buses opens those sent before: they are asked for by
     // their fingerprint when their players are there, not put on everybody's list)
     upload::open();
@@ -499,10 +503,10 @@ pub fn serve(port: u16, key: Arc<omsi_net::hostkey::HostKey>, args: &ModSource) 
                     continue;
                 }
                 open.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                let (ready, held, key) = (ready.clone(), open.clone(), key.clone());
+                let (ready, held, key, fleet_cache, fleet_root) = (ready.clone(), open.clone(), key.clone(), fleet_cache.clone(), fleet_root.clone());
                 let spawned = std::thread::Builder::new().name("lan-mods-conn".into()).spawn(move || {
                     let peer = stream.peer_addr().ok();
-                    if let Err(e) = handle(stream, &key, &ready) {
+                    if let Err(e) = handle(stream, &key, &ready, &fleet_cache, &fleet_root) {
                         log::info!("LAN mods: connection from {peer:?} ended: {e}");
                     }
                     held.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
@@ -526,7 +530,7 @@ const MAX_CONNECTIONS: usize = 160;
 /// player's language): asked again in a moment, never given up.
 pub(crate) const CONNECTION_LOST: &str = "connection lost";
 /// The longest request line (they are a few words).
-const MAX_LINE: u64 = 256;
+const MAX_LINE: u64 = 2048;
 const MAX_REPLY: u64 = 4096;
 
 /// One line of at most `MAX_LINE` bytes (a longer one ends the connection).
@@ -542,7 +546,7 @@ fn read_line_within(input: &mut impl BufRead, line: &mut String, max: u64) -> st
     Ok(n)
 }
 
-fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Option<Arc<(Manifest, Vec<PathBuf>)>>>) -> std::io::Result<()> {
+fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Option<Arc<(Manifest, Vec<PathBuf>)>>>, fleet_cache: &Mutex<HashMap<String, Arc<(Manifest, Vec<PathBuf>)>>>, root: &Path) -> std::io::Result<()> {
     let session = key.session();
     stream.set_read_timeout(Some(Duration::from_secs(120)))?;
     stream.set_nodelay(true).ok();
@@ -572,7 +576,6 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
         }
         std::thread::sleep(Duration::from_millis(100));
     };
-    let (manifest, sources) = (&data.0, &data.1);
     let keys = channel::Handshake::new()?;
     writeln!(out, "OK {} {}", keys.public_hex(), channel::prove(key, hello[2], &keys.public_hex()))?;
     let (send, receive) = keys.finish(session, false, hello[2])?;
@@ -580,6 +583,7 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
     let mut input = SecureReader::new(input, receive);
     // (the players' buses on this connection: `upload::requests`)
     let mut buses = upload::BusRequests::default();
+    let mut active = data.clone();
     loop {
         // (what was answered goes out before the next request is waited for)
         out.flush()?;
@@ -590,11 +594,40 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
         let req: Vec<&str> = line.split_whitespace().collect();
         match req.as_slice() {
             ["LIST"] => {
-                let body = serde_json::to_vec(manifest).unwrap_or_default();
+                active = data.clone();
+                let body = serde_json::to_vec(&active.0).unwrap_or_default();
                 writeln!(out, "OK {}", body.len())?;
                 out.write_all(&body)?;
             }
+            ["LISTBUS", bus_hex, paint_hex] => {
+                let Some((bus, paint)) = server_fleet::unhex_text(bus_hex).zip(server_fleet::unhex_text(paint_hex)) else {
+                    writeln!(out, "ERR invalid selected bus or paint")?;
+                    continue;
+                };
+                let key = format!("{bus}\u{1f}{paint}");
+                let selected = {
+                    let mut cache = fleet_cache.lock().unwrap_or_else(|e| e.into_inner());
+                    if let Some(hit) = cache.get(&key) { Ok(hit.clone()) }
+                    else {
+                        server_fleet::package(root, &data, &bus, &paint).map(|fresh| {
+                            let fresh = Arc::new(fresh);
+                            if cache.len() < 128 { cache.insert(key, fresh.clone()); }
+                            fresh
+                        })
+                    }
+                };
+                match selected {
+                    Ok(package) => {
+                        active = package;
+                        let body = serde_json::to_vec(&active.0).unwrap_or_default();
+                        writeln!(out, "OK {}", body.len())?;
+                        out.write_all(&body)?;
+                    }
+                    Err(why) => writeln!(out, "ERR {why}")?,
+                }
+            }
             ["GET", idx] => {
+                let sources = &active.1;
                 let Some(k) = idx.parse::<usize>().ok().filter(|k| *k < sources.len()) else {
                     writeln!(out, "ERR no such file")?;
                     continue;
