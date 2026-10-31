@@ -605,16 +605,18 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
                     continue;
                 };
                 let key = format!("{bus}\u{1f}{paint}");
-                let selected = {
-                    let mut cache = fleet_cache.lock().unwrap_or_else(|e| e.into_inner());
-                    if let Some(hit) = cache.get(&key) { Ok(hit.clone()) }
-                    else {
-                        server_fleet::package(root, &data, &bus, &paint).map(|fresh| {
-                            let fresh = Arc::new(fresh);
-                            if cache.len() < 128 { cache.insert(key, fresh.clone()); }
-                            fresh
-                        })
-                    }
+                // Never hash and inspect a vehicle while holding the fleet-wide
+                // cache lock: clients choosing different buses can join concurrently.
+                let cached = fleet_cache.lock().unwrap_or_else(|e| e.into_inner()).get(&key).cloned();
+                let selected = match cached {
+                    Some(hit) => Ok(hit),
+                    None => server_fleet::package(root, &data, &bus, &paint).map(|fresh| {
+                        let mut cache = fleet_cache.lock().unwrap_or_else(|e| e.into_inner());
+                        let fresh = Arc::new(fresh);
+                        if let Some(hit) = cache.get(&key) { return hit.clone(); }
+                        if cache.len() < 128 { cache.insert(key, fresh.clone()); }
+                        fresh
+                    }),
                 };
                 match selected {
                     Ok(package) => {
