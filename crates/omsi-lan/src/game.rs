@@ -615,9 +615,11 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) {
             let (tx, rx) = std::sync::mpsc::channel::<String>();
             let mut fmap = args.map.clone();
             let froot = args.root.clone();
+            let selected_bus = args.bus.clone();
+            let selected_paint = args.paint.clone();
             let worker = std::thread::spawn(move || {
                 let mut last = Instant::now() - Duration::from_secs(1);
-                let r = crate::mods::fetch(&froot, &mut fmap, host, session, &mut |done, total, file| {
+                let r = crate::mods::fetch_selected(&froot, &mut fmap, host, session, selected_bus.as_deref(), selected_paint.as_deref(), &mut |done, total, file| {
                     if last.elapsed() > Duration::from_millis(500) {
                         last = Instant::now();
                         let pct = if total > 0 { done * 100 / total } else { 100 };
