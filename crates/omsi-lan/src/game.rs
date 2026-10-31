@@ -615,7 +615,9 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) {
             let (tx, rx) = std::sync::mpsc::channel::<String>();
             let mut fmap = args.map.clone();
             let froot = args.root.clone();
-            let selected_bus = args.bus.clone();
+            // The old map-fetch path remains available, but selected bus
+            // downloads require an explicit opt-in from the launcher or CLI.
+            let selected_bus = args.bus.clone().filter(|_| args.allow_server_fleet);
             let selected_paint = args.paint.clone();
             let selected_requested = selected_bus.is_some();
             let worker = std::thread::spawn(move || {
