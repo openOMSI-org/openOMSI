@@ -716,6 +716,9 @@ impl State {
             profile: Some(self.config.profile.clone()).filter(|p| !p.is_empty()),
             lan: Some(lan),
             lan_ws_fallback: c.lan_ws_fallback.clone().filter(|_| c.lan_mode == "join" && self.joined_server.as_deref() == Some(c.lan_addr.as_str())),
+            // The native launcher has no server-fleet consent dialog yet. Never
+            // silently authorize a download from this entry point.
+            allow_server_fleet: false,
             lan_name: None,
             season: Some(c.season.clone()).filter(|s| s != "auto").map(|s| super::season::launcher_choice(&s, &c.phase).map(|x| x.word()).unwrap_or(s)),
             tutorial: None,
