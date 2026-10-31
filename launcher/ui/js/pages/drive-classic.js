@@ -49,7 +49,7 @@ export function BusStage() {
   const v = curBus();
   if (!v) return html`<div class="stage-empty"><${Icon} name="bus" size=${40} /></div>`;
   return html`<div class="bus-stage">
-    <${BusPreview} class="stage" look=${{ bus: v.file, paint: c.paint, map: c.map, weather: c.weather, time: c.time, date: c.date }} />
+    ${v.server_only ? html`<div class="stage-empty"><${Icon} name="bus" size=${40} /><span>${t('Server bus: preview is available after verified download')}</span></div>` : html`<${BusPreview} class="stage" look=${{ bus: v.file, paint: c.paint, map: c.map, weather: c.weather, time: c.time, date: c.date }} />`}
     <div class="stage-caption">
       <b>${withoutMaker(v.name, v.manufacturer)}</b>
       <span>${[v.manufacturer, c.paint || v.default_paint].filter(Boolean).join(' | ')}</span>
