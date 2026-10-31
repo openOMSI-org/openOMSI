@@ -424,6 +424,13 @@ fn model_lights_into(
             if !(b > 0.0) || !b.is_finite() {
                 continue;
             }
+            // a light left a number short in its file (London's GarageLights.sco has one with
+            // no height) reads every value after it a line along: a 120 m size, a yellow
+            // colour - a glow tens of metres across. No lamp is that big (the largest in the
+            // stock content is under 10 m): it is not drawn
+            if l.size > MAX_LAMP_SIZE {
+                continue;
+            }
             let p = xf.transform_point3(glam::Vec3::from(l.pos)).as_dvec3() + pos;
             let dir = if l.omni {
                 glam::Vec3::ZERO
@@ -480,6 +487,9 @@ fn model_lights_into(
         o.resize(out.len() - base, seq.wrapping_sub(1));
     }
 }
+
+/// The size (m) past which a `[light_enh_2]` is a damaged one, not a lamp.
+const MAX_LAMP_SIZE: f32 = 50.0;
 
 /// An object whose top stays this low (m over its foot) is no wall for a vehicle body; with
 /// a `[collision_mesh]` it is a step the wheels climb (a traffic island).

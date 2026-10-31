@@ -262,6 +262,7 @@ impl ScheduleSim {
             later_layover: Default::default(),
             tour_next,
             awaiting: Default::default(),
+            tour_hold: Default::default(),
             restarted: false,
             calendar,
             day: date,

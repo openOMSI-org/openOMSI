@@ -1306,3 +1306,21 @@ fn air_bellows_hold_the_ride_height_under_load() {
     assert!(coil_empty - coil_loaded > 0.03, "a coil spring sags with 4 t: {coil_empty} -> {coil_loaded}");
     assert!((air_empty - air_loaded).abs() < 0.02, "air holds the height: {air_empty} -> {air_loaded}");
 }
+
+/// An AI car whose box came out at NaN, standing on the bus: the bus stays where it is
+/// (it went to NaN with it, the camera too, and the screen went black).
+#[test]
+fn nan_obstacle_leaves_the_bus_alone() {
+    let def = bus();
+    let bb = def.bounding_box.unwrap();
+    let mut rb = RigidBody::from_definition(&def, &[]);
+    rb.place(DVec3::ZERO, 0.0);
+    let g = road(1e9, 0.0);
+    run(&mut rb, 1.0, 0.0, 5000.0, &g);
+    let car = Obb::from_box([2.0, 4.5, 1.5, 0.0, 0.0, 0.75], DVec3::new(f64::NAN, 0.0, 0.0), 0.0).moving(glam::DVec2::ZERO, 1500.0, 7);
+    for _ in 0..30 {
+        rb.step(1.0 / 30.0, 0.0, &[0.0; 4], 0.0, &g);
+        rb.collide(bb, &[car], &|_| false, 1.0 / 30.0);
+    }
+    assert!(rb.position.is_finite() && rb.velocity.is_finite(), "{:?}", rb.position);
+}

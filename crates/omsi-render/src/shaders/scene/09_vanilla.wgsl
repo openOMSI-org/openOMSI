@@ -333,18 +333,38 @@ fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) ->
     // (nor on a texture that is the season's snow picture: the map's own WinterSnow
     // textures show the snow as OMSI 2 does, and whitened over, the snowy grass and the
     // grey road went one flat white, the lane markings left standing in it, #879)
-    let snow = camera.ambient.w * outside * select(1.0, 0.0, in.params2.w > 1.5 || camera.sky_color.w > 0.5 || material.ambient.w > 0.5);
-    if (snow > 0.0) {
+    let snow_ok = outside * select(1.0, 0.0, in.params2.w > 1.5 || camera.sky_color.w > 0.5 || material.ambient.w > 0.5);
+    // a carriageway (a [moisture] texture that is not the terrain) under snow that builds
+    // up: its own cover, the ruts of the lanes and the tyres' tracks (road_snow.wgsl)
+    let carriageway = material.extra.x < 0.5 && material.params2.z > 0.0 && road_snow_dynamic();
+    var rs = vec3<f32>(0.0);
+    if (carriageway && snow_ok > 0.0) {
+        rs = road_snow(in.world);
+    }
+    // a vehicle's part: the snow its own roof has gathered, where that is kept (another
+    // player's bus keeps the weather's)
+    let vehicle = vehicle_snow_kept(in.params2.w);
+    var on_vehicle = 0.0;
+    if (vehicle && snow_ok > 0.0) {
+        on_vehicle = vehicle_snow(in.params2.w, in.local);
+    }
+    let snow = select(select(camera.ambient.w, rs.x, carriageway), on_vehicle, vehicle) * snow_ok;
+    if (snow > 0.0 || rs.y > 0.0) {
         let up = clamp(n.z, 0.0, 1.0);
         let ground = select(0.0, 1.0, material.extra.x > 0.5 || material.params2.z > 0.0);
-        // (a road kept clear - "snow on road" off - stays asphalt, #1362)
-        let cleared = select(1.0, 0.0, camera.post.z > 0.5 && material.extra.x < 0.5 && material.params2.z > 0.0);
+        // (a road kept clear - "snow on road" off - stays asphalt, #1362; built-up snow
+        // brings its own cover)
+        let cleared = select(1.0, 0.0, !carriageway && camera.post.z > 0.5 && material.extra.x < 0.5 && material.params2.z > 0.0);
         // only surfaces that really face up get a cover; a soft threshold keeps the snow
         // off the sides and off the grazing rims that showed as a white outline
         let cover = cleared * snow * clamp(max(ground, smoothstep(0.78, 0.95, up) * 0.8), 0.0, 1.0);
         let light = camera.sun_color.rgb * camera.sun_dir.w * ndl * shadow * 0.6 + camera.sky_color.rgb * 0.7 + camera.ambient.xyz;
         let white = vec3<f32>(0.92, 0.94, 0.98) * light * ao;
-        lit = mix(lit, white, cover * (0.55 + 0.35 * tex.a));
+        // (a vehicle's gathered snow lies thick enough to hide the paint: the ground's
+        // dusting lets the texture show through)
+        lit = mix(lit, white, min(cover * select(0.55 + 0.35 * tex.a, 1.2, vehicle), 1.0));
+        // the slush in the ruts and the tracks: wet, grey, darker than the snow beside it
+        lit = mix(lit, lit * 0.6 + white * 0.12, rs.y * snow_ok);
     }
     let dist = distance(in.world, camera.cam_pos.xyz);
     let f = 1.0 - exp(-fog_distance(in.world) * camera.fog.w);

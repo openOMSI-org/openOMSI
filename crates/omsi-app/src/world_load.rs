@@ -22,7 +22,7 @@ pub(crate) fn season_folder_on(args: &Args, global: &omsi_map::GlobalCfg, day_of
     }
     let mut folder = omsi_map::global::Season::folder(kind).map(|f| f.to_string());
     if snow {
-        folder = Some(if snow_on_road { "WinterSnowfall" } else { "WinterSnow" }.to_string());
+        folder = Some(omsi_scene::road_snow::snow_folder(snow_on_road).to_string());
     }
     (kind, folder)
 }

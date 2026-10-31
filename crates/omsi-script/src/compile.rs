@@ -554,6 +554,10 @@ impl<'a> Compiler<'a> {
         // reached `{else}` skips to the next `{endif}`, so it jumps there here too - the
         // Procity's dashboard blanked its odometer every frame through such an `{else}`
         let mut orphan_elses: Vec<usize> = Vec::new();
+        // `{end}` inside an open `{if}` (the Valiant Citybus doors: `{if} {end} {else} ... {endif}`)
+        // does not cut the block short in OMSI: the code after it still exists, so it only
+        // leaves the block when reached. These jumps go to the block's end.
+        let mut early_ends: Vec<usize> = Vec::new();
         for (ln, raw) in f.lines.iter().enumerate() {
             let line_no = ln + 1;
             let toks = tokenize(raw);
@@ -581,7 +585,7 @@ impl<'a> Compiler<'a> {
                                     Some(_) => {
                                         let (kinds, mut block, _) = cur.take().unwrap();
                                         let end = block.ops.len() as u32;
-                                        for idx in orphan_elses.drain(..).chain(extra_elses.drain(..).map(|(_, op)| op)) {
+                                        for idx in orphan_elses.drain(..).chain(early_ends.drain(..)).chain(extra_elses.drain(..).map(|(_, op)| op)) {
                                             patch(&mut block.ops[idx], end);
                                         }
                                         log::debug!("{}:{}: {{{b}}} starts while block {} is open (implicit end)", f.path.display(), line_no, block.name);
@@ -592,9 +596,14 @@ impl<'a> Compiler<'a> {
                                 }
                             }
                             "end" => {
-                                if let Some((kinds, mut block, ifs)) = cur.take() {
+                                if cur.as_ref().is_some_and(|(_, _, ifs)| !ifs.is_empty()) {
+                                    let (_, block, _) = cur.as_mut().unwrap();
+                                    log::debug!("{}:{}: {{end}} inside {{if}} leaves the block when reached", f.path.display(), line_no);
+                                    early_ends.push(block.ops.len());
+                                    block.ops.push(Op::Jump(u32::MAX));
+                                } else if let Some((kinds, mut block, ifs)) = cur.take() {
                                     let end = block.ops.len() as u32;
-                                    for idx in orphan_elses.drain(..) {
+                                    for idx in orphan_elses.drain(..).chain(early_ends.drain(..)) {
                                         patch(&mut block.ops[idx], end);
                                     }
                                     for (idx, _) in ifs {
@@ -710,7 +719,7 @@ impl<'a> Compiler<'a> {
         }
         if let Some((kinds, mut block, _)) = cur.take() {
             let end = block.ops.len() as u32;
-            for idx in orphan_elses.drain(..).chain(extra_elses.drain(..).map(|(_, op)| op)) {
+            for idx in orphan_elses.drain(..).chain(early_ends.drain(..)).chain(extra_elses.drain(..).map(|(_, op)| op)) {
                 patch(&mut block.ops[idx], end);
             }
             log::debug!("{}: missing {{end}} at end of file", f.path.display());
@@ -978,6 +987,15 @@ mod tests {
         assert!(plain.manual_gearbox());
         // a stock automatic: no gates
         assert!(!program_of("{trigger:automatic_D} 1 (S.L.d) {end}\n").manual_gearbox());
+    }
+
+    #[test]
+    fn an_end_inside_an_if_keeps_the_else_branch() {
+        // Valiant Citybus doors: `{if} {end} {else} ... {endif}` - the else code must exist
+        let prog = program_of("{trigger:a}\n1 {if}\n{end}\n{else}\n2 (S.L.x)\n{endif}\n{end}\n{trigger:b} 3 (S.L.y) {end}\n");
+        let id = *prog.triggers.get("a").unwrap();
+        assert!(prog.blocks[id as usize].ops.len() >= 6, "else branch was cut: {:?}", prog.blocks[id as usize].ops);
+        assert!(prog.triggers.contains_key("b"));
     }
 
     #[test]

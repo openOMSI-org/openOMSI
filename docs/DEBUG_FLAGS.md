@@ -227,6 +227,8 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_ROAD_PHOTO_N` | num | 400 | use | app | With OMSI_ROAD_PHOTO: number of sample points. |
 | `OMSI_ROAD_PHOTO_SIDE` | num | 0 | use | app | With OMSI_ROAD_PHOTO: metres to either side of the carriageway. |
 | `OMSI_ROAD_PHOTO_SLANT` | num | - | use | app | With OMSI_ROAD_PHOTO: from a driver's eye this far back instead of from above. |
+| `OMSI_ROAD_SNOW_GRID` | bool | off | use | scene | With the roads' snow: a 4 m grid in the track field instead of the lanes' ruts (to see it lie on the world). |
+| `OMSI_ROAD_SNOW_LOG` | bool | off | use | scene | With the roads' snow: log its cover, the snow fallen, the weather and what it costs a frame (mean, worst, rut texels drawn) every ten seconds. |
 | `OMSI_SCENE_DIGEST` | bool | off | use | app | Log a hash of the renderer's scene (its instances in order, their places, materials and parameters) before each offscreen picture: two runs whose renderers saw the same calls log the same digests. |
 | `OMSI_SEED` | num | random | use | app | Seed of the scripts' random numbers (repeat a session). |
 | `OMSI_SKIP_OBJECT` | text | - | use | scene | Leave out the objects whose file name contains this text. |
@@ -308,7 +310,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_NO_HARDWARE_ID` | bool | off | once | lan | LAN: the game sends no hardware identifier (a host can then turn the player away, and cannot ban the machine). |
 | `OMSI_NO_INTERP` | bool | off | once | lan | The old way without interpolation, for comparing. |
 | `OMSI_NO_LAMP_SIGHT` | bool | off | use | render | Enhanced by night: every lamp near the line of sight dazzles, hidden or not. |
-| `OMSI_NO_LAN_MODS` | bool | off | use | lan | LAN: do not exchange mods. |
+| `OMSI_NO_LAN_MODS` | bool | off | use | lan, net | LAN: do not exchange mods. |
 | `OMSI_NO_LAN_UPLOADS` | bool | off | use | lan | LAN: a game hosting a session takes no buses from the players who join. |
 | `OMSI_NO_LIGHT_MAP` | bool | off | use | scene | No night light maps on the tiles (A/B). |
 | `OMSI_NO_MAIN_SPLIT` | bool | off | frame | render | Do not split the main pass's bundles in two. |
@@ -349,6 +351,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_REALISTIC_ROAD` | bool | off | use | sim | The setting "Realistic road physics" on for this run (A/B against the OMSI 2 model: slip-angle tyres, surfaces, road roughness, wind). |
 | `OMSI_REPAIR_BODY_DEPTH` | bool | off | use | scene | The old guess for [matl_alpha] 2 vehicle bodies (A/B). |
 | `OMSI_ROAD_CUT` | bool | off | once | geometry | Take the ground away under every road surface (Omsi.exe does not). |
+| `OMSI_ROAD_SNOW` | text | settings | use | scene | Built-up snow on the roads and roofs, whatever the road_snow setting says: off for the weather's on/off snow on road, a number 0..1 for the cover to start with. |
 | `OMSI_RT_REFL_HALF` | bool | off | use | render | Trace reflections at half size. |
 | `OMSI_SERIAL_PIPELINES` | bool | off | use | render | Compile the renderer's pipelines one after the other on one thread, as before (A/B). |
 | `OMSI_SHADOW_FAR_EVERY_FRAME` | bool | off | frame | render | Redraw the far shadow map every frame. |

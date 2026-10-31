@@ -560,3 +560,31 @@ fn cab_wheel_rotation_defaults_to_the_bus_and_is_clamped() {
     ui["cab_wheel_rotation"] = serde_json::json!(1080);
     assert_eq!(Settings::from_text(&omsi_launcher_lib::settings_to_text(&ui, None)).cab_wheel_rotation, 1080);
 }
+
+#[test]
+fn passenger_hailing_disabled_for_new_and_legacy_settings() {
+    assert!(!Settings::default().passenger_hailing);
+    assert!(!Settings::phone().passenger_hailing);
+    assert!(!Settings::desktop().passenger_hailing);
+    assert!(!Settings::from_text("version=1\n").passenger_hailing);
+    assert!(Settings::from_text("passenger_hailing=1\n").passenger_hailing);
+    assert!(!Settings::from_text("passenger_hailing=0\n").passenger_hailing);
+}
+
+#[test]
+fn passenger_hailing_survives_both_settings_writers() {
+    let key = "passenger_hailing";
+    for phone in [false, true] {
+        assert_eq!(omsi_launcher_lib::settings_from_text_on(None, phone)[key], false);
+        for on in [false, true, false] {
+            let mut settings = Settings::default();
+            settings.passenger_hailing = on;
+            let native = settings.to_text();
+            let launcher = omsi_launcher_lib::settings_from_text_on(Some(&native), phone);
+            assert_eq!(launcher[key], on);
+            let text = omsi_launcher_lib::settings_to_text(&launcher, Some(&native));
+            assert_eq!(Settings::from_text(&text).passenger_hailing, on);
+            assert_eq!(text.lines().filter(|line| line.starts_with(&format!("{key}="))).count(), 1);
+        }
+    }
+}

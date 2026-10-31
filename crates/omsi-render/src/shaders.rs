@@ -98,13 +98,14 @@ mod tests {
     /// occlusion, the bounced light and the lightning's light, and the sun's share through the clouds' shadow field, and the cube maps of lamps that shine every way, and the wet roads' and the water's traced reflection), and the textures read with FSR 1's mip bias, `camera.lod`,
     /// and a script's screen never taken for a pane (#2927), and the lamp tiles' taps in loops of fixed bounds,
     /// and the colour/mask-only headset entry point, and a self-lit blended layer's alpha giving
-    /// Omsi.exe's encoded mix, and the headlight as Omsi.exe's Direct3D spot, lit at the vertices.
+    /// Omsi.exe's encoded mix, and the headlight as Omsi.exe's Direct3D spot, lit at the vertices,
+    /// and the traced sample read once for FXC.
     /// (with Unix line ends: a Windows checkout may turn the parts' into CRLF, as it did the
     /// single files', and the 0.2.31 release's Windows test failed on that alone)
     #[test]
     fn assembled_shaders_are_the_old_files() {
         let (scene, enhanced) = (super::SCENE.replace("\r\n", "\n"), super::ENHANCED.replace("\r\n", "\n"));
-        assert_eq!((scene.len(), fnv1a(&scene)), (135_763, 0x94e0_9979_b442_0578));
-        assert_eq!((enhanced.len(), fnv1a(&enhanced)), (96_882, 0xcc86_ebeb_d485_ea83));
+        assert_eq!((scene.len(), fnv1a(&scene)), (137_326, 0x8065_9ce3_ae11_d332));
+        assert_eq!((enhanced.len(), fnv1a(&enhanced)), (98_529, 0x93f8_5f93_8c18_2003));
     }
 }

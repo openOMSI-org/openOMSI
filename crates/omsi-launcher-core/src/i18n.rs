@@ -127,4 +127,27 @@ mod tests {
         assert_eq!(super::table(yml, "de").len(), 1);
         assert!(super::table(super::TABLES, "fr").contains_key("Mon"));
     }
+
+    /// The built-up snow switch's label and help (the Graphics page, the game's Settings)
+    /// are read in every language, each once in the tables.
+    #[test]
+    fn the_built_up_snow_switch_is_read_in_every_language() {
+        let texts = [
+            "Built-up snow on roads and roofs",
+            "While it snows, snow builds up on the roads and on the vehicles' roofs, with ruts and tyre tracks, and thaws again; off: the weather's own snow on road, as in OMSI 2",
+        ];
+        let langs = "de fr ru uk be kk pl cs hu es pt pt-pt it nl tr ja zh-tw ko th vi id ms tl zh hi ca sv sr ka";
+        for lang in langs.split(' ') {
+            let table = super::table(super::TABLES, lang);
+            for text in texts {
+                let got = table.get(text).map(String::as_str).unwrap_or("");
+                assert!(!got.is_empty() && got != text, "{lang}: {text}");
+            }
+        }
+        // (by lines: a Windows checkout has the tables with CRLF endings)
+        for text in texts {
+            let key = format!("\"{text}\":");
+            assert_eq!(super::TABLES.lines().filter(|l| *l == key).count(), 1, "{text}");
+        }
+    }
 }

@@ -157,6 +157,58 @@ fn traffic_light_program_requires_a_placed_signal() {
     assert!(!traffic_light_program_enabled(&SceneryObject::default(), true));
 }
 
+#[test]
+fn freetex_without_item_uses_current_base_when_powered() {
+    let model = omsi_model::Model::parse(&omsi_cfg::CfgFile::from_str(
+        "model.cfg",
+        concat!(
+            "[mesh]\nLECIP\\bcp_.o3d\n[mouseevent]\nddu_login\n",
+            "[matl_change]\nbase_mon.tga\n0\nelec_busbar_main\n",
+            "[matl_freetex]\nbase_mon.tga\nBCP_mon_base\n[matl_lightmap]\npmonlm.bmp\n",
+            "[matl]\nreg.bmp\n0\n[useTextTexture]\n17\n[matl_alpha]\n2\n[matl_nightmap]\nblack.bmp\n",
+            "[matl]\nreg.bmp\n1\n[useTextTexture]\n18\n[matl_alpha]\n2\n[matl_nightmap]\npchangelm.tga\n",
+        ),
+    ));
+    let mats = &model.meshes[0].materials;
+    assert!(!mats.iter().any(|m| m.item));
+    let plain = mats.iter().filter(|m| m.texture == "base_mon.tga").collect();
+    assert_eq!(free_texture_defs(&[plain]), vec![(1, "base_mon.tga".into(), "BCP_mon_base".into())]);
+    let var = mats.iter().find_map(|m| m.change.as_ref().map(|c| c.2.clone())).unwrap();
+    let mut slot = VariantSlot {
+        mesh: 0, slot: 0, base: 10, item: 10, more: Vec::new(),
+        var, more_vars: Vec::new(), entries: Vec::new(), tex_var: String::new(),
+        free: Vec::new(), free_built: HashMap::new(), free_lights: None,
+        spec: SlotSpec { base: freetex_test_look(), item: None, more: Vec::new() },
+        base_tex: None, entry_tex: Vec::new(), lights: None,
+    };
+    // A selective free-texture rebuild changes only base; item still holds the placeholder.
+    for picture in [20, 30, 20, 10] {
+        slot.base = picture;
+        assert_eq!(slot.material(|_| Some(0.0)), picture);
+        assert_eq!(slot.material(|_| Some(1.0)), picture);
+    }
+    slot.more_vars.push("other_power".into());
+    slot.base = 20;
+    assert_eq!(slot.material(|n| Some(if n == "other_power" { 1.0 } else { 0.0 })), 20);
+    // Explicit items, further items, and texchanges retain their independent materials.
+    slot.more_vars.clear();
+    slot.spec.item = Some(freetex_test_look());
+    slot.item = 40;
+    assert_eq!(slot.material(|_| Some(0.0)), 20);
+    assert_eq!(slot.material(|_| Some(1.0)), 40);
+    slot.more.push(50);
+    assert_eq!(slot.material(|_| Some(2.0)), 50);
+    slot.spec.item = None;
+    slot.more.clear();
+    slot.entries = vec![(60, 60), (70, 70)];
+    slot.tex_var = "texture_index".into();
+    for (index, expected) in [(0.0, 60), (1.0, 70)] {
+        for power in [0.0, 1.0] {
+            assert_eq!(slot.material(|n| Some(if n == "texture_index" { index } else { power })), expected);
+        }
+    }
+}
+
 fn freetex_test_look() -> Look {
     Look {
         alpha: AlphaMode::Opaque,
@@ -951,6 +1003,20 @@ fn a_light_enh_has_its_bitmap_z_offset_factor_and_effects() {
     assert!(coronas[1].halo);
     // switched off: nothing
     assert!(model_lights_faded(&model, &|_| Mat4::IDENTITY, DVec3::ZERO, &|_| 0.0, &[]).is_empty());
+}
+
+/// London's GarageLights.sco has a `[light_enh_2]` with no height: read on, its values come a
+/// line late and it is a yellow glow 120 m across over Lower Marsh. It is not drawn; the
+/// two sound lights of the file are.
+#[test]
+fn a_light_enh_2_left_a_number_short_is_not_drawn() {
+    let sound = |x: &str| format!("[light_enh_2]\n{x}\n-0.02046\n0.25409\n-0.07\n0\n-1\n-1\n0\n0.07\n0\n2\n255\n255\n235\n2.0\n120\n200\non\n0.8\n0.5\n1\n1\n0.2\n\n");
+    let short = "[light_enh_2]\n0.27022\n-0.02046\n-0.07\n0\n-1\n-1\n0\n0.07\n0\n2\n255\n255\n235\n2.0\n120\n200\non\n0.8\n0.5\n1\n1\n0.2\n\n";
+    let text = format!("[mesh]\nGarageLights.o3d\n{}{}{}[shadow]\n", sound("-1.25282"), sound("-0.343"), short);
+    let model = Model::parse(&omsi_cfg::CfgFile::from_str("GarageLights.sco", &text));
+    assert_eq!(model.meshes[0].light_enh_2.len(), 3);
+    let coronas = model_lights_faded(&model, &|_| Mat4::IDENTITY, DVec3::ZERO, &|_| 1.0, &[]);
+    assert!(!coronas.is_empty() && coronas.iter().all(|c| c.size < 10.0), "{coronas:?}");
 }
 
 /// A bridge deck high over the ground under it (London Bridge over the Thames) is

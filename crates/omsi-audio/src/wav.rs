@@ -253,6 +253,12 @@ mod tests {
     }
 
     #[test]
+    fn an_empty_sound_file_is_refused_without_probing() {
+        assert!(parse_any(&[]).err().is_some_and(|e| e.to_string().contains("empty")));
+        assert!(parse_any(&[0, 1]).is_err());
+    }
+
+    #[test]
     fn every_format_becomes_16_bit() {
         // 8-bit is unsigned around 128
         assert_eq!(parse_wav(&wav(1, 8, &[0, 128, 255])).unwrap().samples, vec![-32768, 0, 32512]);
@@ -303,6 +309,10 @@ pub fn parse_compressed(bytes: &[u8]) -> Result<WavData> {
     use symphonia::core::io::MediaSourceStream;
     use symphonia::core::meta::MetadataOptions;
     use symphonia::core::probe::Hint;
+    // an empty (or cut-off) file would only make symphonia's probe log an error of its own
+    if bytes.len() < 4 {
+        return Err(anyhow!("the sound file is empty ({} bytes)", bytes.len()));
+    }
     let mss = MediaSourceStream::new(Box::new(std::io::Cursor::new(bytes.to_vec())), Default::default());
     let mut hint = Hint::new();
     hint.with_extension(sniff(bytes).unwrap_or("ogg"));

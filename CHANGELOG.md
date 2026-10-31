@@ -511,6 +511,12 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **The map camera (F4) puts the bus down facing where it looks.** Moving the bus there kept the way
+  it faced before, whichever way the camera was turned; it now stands facing the camera's direction.
+- **No more huge yellow glow at Lower Marsh (London).** The map's `GarageLights.sco` has a light
+  with no height in its file, so every value after it was read a line late: a yellow glow 120 m
+  across. A `[light_enh_2]` larger than 50 m (the largest in the stock content is under 10 m) is
+  a damaged one and is no longer drawn.
 - **The launcher starts as it did in 0.3.41.** 0.3.42 made the launcher write a pointer file beside its
   program and copy data folders at start, and some antivirus programs and browsers took that for
   harmful behaviour and blocked the download or the program. That change (the data folder choice

@@ -453,14 +453,17 @@ impl App {
 }
 
 /// The game menu on a server (`--lan-join https://…`): the world's clock and weather are the
-/// server's, and the way out leaves the server.
-pub(crate) const SERVER_GAME_MENU: [(&str, &str); 9] = [
+/// server's, and the way out leaves the server. The player's own tour can still be changed
+/// or ended; the Alt menu uses these same offered actions.
+pub(crate) const SERVER_GAME_MENU: [(&str, &str); 11] = [
     ("resume", "Resume"),
     ("options", "Options..."),
     ("camera", "Camera..."),
     ("vehicle", "Vehicle options..."),
     ("world", "World options..."),
     ("map", "City map"),
+    ("duty", "Line and tour..."),
+    ("endduty", "End the tour"),
     ("shot", "Screenshot"),
     ("photo", "Photo mode"),
     ("quit", "Leave the server"),
@@ -629,3 +632,43 @@ pub(crate) const GAME_MENU: [(&str, &str); 16] = [
     ("photo", "Photo mode"),
     ("quit", "End the session"),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn websocket_server_menu_offers_the_players_tour_controls() {
+        for target in [
+            "https://localhost",
+            "http://localhost",
+            "wss://localhost/ws",
+            "ws://localhost/ws",
+        ] {
+            let args = Args::parse_from(["openomsi", "--lan-join", target]);
+            let menu = game_menu_for(&args);
+            assert!(menu.contains(&("duty", "Line and tour...")), "{target}");
+            assert!(menu.contains(&("endduty", "End the tour")), "{target}");
+            assert!(menu.contains(&("quit", "Leave the server")), "{target}");
+            for local_only in ["save", "saveslot", "load", "skipstop"] {
+                assert!(
+                    !menu.iter().any(|(id, _)| *id == local_only),
+                    "{target}: {local_only}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn solo_and_udp_menus_keep_their_existing_actions() {
+        for extra in [vec![], vec!["--lan-join", "127.0.0.1:27015"]] {
+            let args = Args::parse_from(std::iter::once("openomsi").chain(extra));
+            let menu = game_menu_for(&args);
+            assert_eq!(menu, &GAME_MENU);
+            assert!(menu.contains(&("duty", "Line and tour...")));
+            assert!(menu.contains(&("endduty", "End the tour")));
+            assert!(menu.contains(&("quit", "End the session")));
+        }
+    }
+}

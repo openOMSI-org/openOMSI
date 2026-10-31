@@ -12,6 +12,12 @@ use omsi_sim::{Daylight, VehicleInstance};
 /// street under a lamp, and less beyond.
 const HEADLIGHT_INTENSITY: f32 = 1800.0;
 
+/// The road-headlamp profile has a brighter high-beam core of its own. At the
+/// renderer's 55 lux per intensity unit, the old strength gave each lamp nearly
+/// 50,000 cd on low beam and 350,000 cd on high beam. This scale brings the generic
+/// pair to 33,000 / 231,000 cd, without dimming work lights or authored cookies.
+const ROAD_HEADLIGHT_GAIN: f32 = 1.0 / 3.0;
+
 /// A `[spotlight]` declaring this range or more is a full beam (the stock buses' 500, the
 /// Grand Paris-Moulon Citaro's 450), less a low beam (the stock 100, that Citaro's 200).
 const FULL_BEAM_RANGE: f32 = 300.0;
@@ -639,7 +645,7 @@ fn push_enhanced_spot(lights: &mut Vec<PointLight>, at: DVec3, d: Vec3, level: V
         position: at,
         radius: reach,
         color,
-        intensity: HEADLIGHT_INTENSITY * share * weaker,
+        intensity: HEADLIGHT_INTENSITY * share * weaker * if beam != 0.0 { ROAD_HEADLIGHT_GAIN } else { 1.0 },
         direction: if beam != 0.0 { level } else { d },
         cone,
         core: 1.0,

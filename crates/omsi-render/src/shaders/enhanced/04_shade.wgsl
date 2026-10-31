@@ -440,14 +440,37 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // (not on a shadow blob: whitened, it lit the snow under the bus instead of shading it)
     // (nor on a texture that is the season's snow picture, which shows the map's own snow
     // as OMSI 2 does: see the vanilla shader, #879)
-    let snow = enh.weather.y * outside * select(1.0, 0.0, in.params2.w > 1.5 || material.ambient.w > 0.5);
+    let snow_ok = outside * select(1.0, 0.0, in.params2.w > 1.5 || material.ambient.w > 0.5);
+    // a carriageway under snow that builds up: its own cover, ruts and tracks (road_snow.wgsl)
+    let carriageway = !terrain && material.params2.z > 0.0 && road_snow_dynamic();
+    var rs = vec3<f32>(0.0);
+    if (carriageway && snow_ok > 0.0) {
+        rs = road_snow(in.world);
+    }
+    // a vehicle's part: the snow its own roof has gathered, where that is kept (another
+    // player's bus keeps the weather's)
+    let vehicle = vehicle_snow_kept(in.params2.w);
+    var on_vehicle = 0.0;
+    if (vehicle && snow_ok > 0.0) {
+        on_vehicle = vehicle_snow(in.params2.w, in.local);
+    }
+    let snow = select(select(enh.weather.y, rs.x, carriageway), on_vehicle, vehicle) * snow_ok;
+    if (rs.y > 0.0) {
+        // the slush in the ruts and the tracks: wet and grey, darker than the snow, glossy
+        let slush = rs.y * snow_ok;
+        albedo = mix(albedo, albedo * 0.55 + vec3<f32>(0.08), slush);
+        ambient_albedo = mix(ambient_albedo, ambient_albedo * 0.55 + vec3<f32>(0.08), slush);
+        rough = mix(rough, 0.35, slush);
+    }
     if (snow > 0.0) {
         let up = clamp(n.z, 0.0, 1.0);
         let ground = select(0.0, 1.0, terrain || material.params2.z > 0.0);
         // (a road kept clear - "snow on road" off - stays asphalt: whitened, it turned the
-        // roads white exactly when the weather says they are cleared, #1362)
-        let cleared = select(1.0, 0.0, camera.post.z > 0.5 && !terrain && material.params2.z > 0.0);
-        let cover = cleared * snow * clamp(max(ground, smoothstep(0.78, 0.95, up) * 0.8), 0.0, 1.0) * (0.55 + 0.35 * tex.a);
+        // roads white exactly when the weather says they are cleared, #1362; built-up snow
+        // brings its own cover)
+        let cleared = select(1.0, 0.0, !carriageway && camera.post.z > 0.5 && !terrain && material.params2.z > 0.0);
+        // (a vehicle's gathered snow lies thick enough to hide the paint)
+        let cover = min(cleared * snow * clamp(max(ground, smoothstep(0.78, 0.95, up) * 0.8), 0.0, 1.0) * select(0.55 + 0.35 * tex.a, 1.2, vehicle), 1.0);
         albedo = mix(albedo, vec3<f32>(0.82, 0.84, 0.88), cover);
         ambient_albedo = mix(ambient_albedo, vec3<f32>(0.82, 0.84, 0.88), cover);
         // fresh snow is all but matte: it scatters the light and shows no highlight
@@ -474,6 +497,12 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     let nv = clamp(mix(face_v, dot(n, v), face_w), 1e-4, 1.0);
     // (how wide a patch of the surface the pixel covers, m: see `relief_masking`)
     let relief_footprint = length(dpdx(in.world)) + length(dpdy(in.world));
+    // The same depth-aware traced sample feeds the sun, AO and the debug view. Repeating
+    // rt_at here and inside ao_gi_at overflowed the optimizer's stack in the DX12 FXC
+    // fallback (used when dxcompiler.dll cannot be loaded); DXC compiles either form.
+    // Read it once after the early material returns, with the same taps and their order,
+    // so that the fallback can compile fs_enhanced too.
+    let surface_rt = rt_at(in.clip.xy, in.world);
     // --- the sun
     let s = camera.sun_dir.xyz;
     let nl = dot(n, s);
@@ -493,7 +522,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         } else if (nl > 0.0 || thin) {
             // Enhanced+: the traced shadow where there is one for this surface
             // (whose cut-out leaves and fences the shadow map holds alone: see `render_inner`)
-            let traced = rt_at(in.clip.xy, in.world);
+            let traced = surface_rt;
             shadow = sun_shadow_soft(in.world, n, thin);
             if (traced.w > 0.5 && traced.z >= 0.0) {
                 shadow = shadow * traced.z;
@@ -554,7 +583,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     var ao = 1.0;
     var bounce = vec3<f32>(0.0);
     if (camera.clouds.w > 0.5 && !capture) {
-        let ag = ao_gi_at(in.clip.xy, in.world);
+        let ag = ao_gi_at(in.clip.xy, in.world, surface_rt);
         ao = ag.x;
         bounce = ag.yzw;
     }
@@ -843,7 +872,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         var dc = vec3<f32>(0.0);
         switch dm {
             case 1: {
-                let tr = rt_at(in.clip.xy, in.world);
+                let tr = surface_rt;
                 let sm = sun_shadow_soft(in.world, n, thin);
                 dc = select(vec3<f32>(sm), vec3<f32>(tr.z * sm, tr.z * sm, tr.z * 0.6 + 0.4), tr.w > 0.5 && tr.z >= 0.0);
             }

@@ -505,7 +505,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     // a dedicated server without its session has nobody to serve: why, and the end (it went
     // on running alone, unreachable, with a warning among the log's lines)
     if let (Some(cfg), None) = (server_cfg.as_ref(), lan.as_ref()) {
-        eprintln!("server: cannot open the session on UDP port {} (the line above says why): another server or program uses it, or the system refuses it. Stop the other one, or choose another `port` in {}", cfg.port, args.server.as_deref().map(|p| p.display().to_string()).unwrap_or_else(|| "server.cfg".into()));
+        eprintln!("server: cannot open the session on UDP/TCP port {} (the line above says why): another server or program uses it, or the system refuses it. Stop the other one, or choose another `port` in {}", cfg.port, args.server.as_deref().map(|p| p.display().to_string()).unwrap_or_else(|| "server.cfg".into()));
         std::process::exit(3);
     }
     // turned away at the door (banned, full, another version): no game to play there

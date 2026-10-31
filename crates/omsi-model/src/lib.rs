@@ -1302,7 +1302,14 @@ pub fn load_texchanges(base: &Path, files: &[String]) -> Vec<TexChangeMaster> {
         let path = omsi_cfg::resolve_path(base, f);
         match CfgFile::read(&path) {
             Ok(cfg) => out.extend(parse_texchanges(&cfg)),
-            Err(e) => log::warn!("[texchanges] {}: {e}", path.display()),
+            Err(e) => {
+                // every vehicle of a kind refers to the same file: say it once
+                static REPORTED: std::sync::Mutex<Option<std::collections::HashSet<PathBuf>>> = std::sync::Mutex::new(None);
+                let first = REPORTED.lock().map(|mut r| r.get_or_insert_with(Default::default).insert(path.clone())).unwrap_or(true);
+                if first {
+                    log::warn!("[texchanges] {}: {e}", path.display());
+                }
+            }
         }
     }
     out

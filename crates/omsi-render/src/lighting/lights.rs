@@ -161,6 +161,33 @@ pub(crate) fn smoke_sprite(p: &SmokeParticle, ro: DVec3) -> Option<GpuCorona> {
 pub const LM_ATLAS_TILES: u32 = 5;
 pub const LM_TILE_PX: u32 = 256;
 
+/// The snow track field (road_snow.wgsl): texels a side, and the metres it spans before it
+/// wraps around (12.5 cm a texel), in tiles of `SNOW_TRACK_TILE` texels a side. It is a
+/// storage buffer, tile after tile, each row after row, a texel an RGBA8 word: the scene's
+/// fragment stage reads sixteen textures already, the most a device gives by default.
+pub const SNOW_TRACK_TEXELS: u32 = 2048;
+pub const SNOW_TRACK_TILE: u32 = 256;
+pub const SNOW_TRACK_SIDE: f64 = 256.0;
+/// The snow track field's buffer before the roads' snow first needs it (bytes).
+pub(crate) const SNOW_TRACK_TOKEN: u64 = 16;
+
+/// Whether this device draws the roads' built-up snow (road_snow.wgsl) - the one gate for
+/// all of it: the camera group's layout and bind group (the field, binding 20), the scene
+/// shader (road_snow_off.wgsl in its place), the field's buffer (a token one without it) and
+/// the game's side (`omsi_scene::road_snow::enabled`: no field kept, no frame's work, and
+/// the season's WinterSnowfall road textures as before). Known once the device is open.
+pub fn road_snow_supported() -> bool {
+    road_snow_supported_on(gl_backend(), omsi_cfg::flags::OMSI_GL_TEXTURE_UNITS.is_set(), array_path())
+}
+
+/// `road_snow_supported` on a device that is OpenGL (`gl`) or takes its layout (`gl_units`,
+/// `OMSI_GL_TEXTURE_UNITS`) and reads its arrays as `path` has them: not on OpenGL, whose
+/// sixteen texture units the scene's groups fill already and where the field might have no
+/// storage buffer to live in, nor where the fragment stage has no storage buffers at all.
+pub(crate) fn road_snow_supported_on(gl: bool, gl_units: bool, path: ArrayPath) -> bool {
+    !gl && !gl_units && path != ArrayPath::NoStorage
+}
+
 /// A light corona sprite (`[light_enh]`, `[light_enh_2]`).
 #[derive(Debug, Clone, Copy)]
 pub struct Corona {
@@ -770,6 +797,35 @@ impl Renderer {
         );
     }
 
+    /// Write whole rows of a tile of the snow track field (road_snow.wgsl): tile `tile`
+    /// (column + row * tiles a side), its rows from `row` on, `rgba` holding them (each
+    /// `SNOW_TRACK_TILE` texels of 4 bytes; rows along world y, see the shader).
+    pub fn set_snow_track_rows(&self, tile: u32, row: u32, rgba: &[u8]) {
+        if !road_snow_supported() {
+            return; // (a token buffer: see `road_snow_supported`)
+        }
+        let per_side = SNOW_TRACK_TEXELS / SNOW_TRACK_TILE;
+        let row_bytes = (SNOW_TRACK_TILE * 4) as usize;
+        let rows = (rgba.len() / row_bytes) as u32;
+        if tile >= per_side * per_side || rows == 0 || row + rows > SNOW_TRACK_TILE {
+            return;
+        }
+        let offset = ((tile * SNOW_TRACK_TILE + row) * SNOW_TRACK_TILE * 4) as u64;
+        // (the field made the first time the roads' snow has something for it: a session
+        // without snow keeps the token, 16 MB of the card less)
+        let full = SNOW_TRACK_TEXELS as u64 * SNOW_TRACK_TEXELS as u64 * 4;
+        if self.lights.snow_track.borrow().size() < full {
+            *self.lights.snow_track.borrow_mut() = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("snow track field"),
+                size: full,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            self.lights.snow_track_made.set(self.lights.snow_track_made.get() + 1);
+        }
+        self.queue.write_buffer(&self.lights.snow_track.borrow(), offset, &rgba[..rows as usize * row_bytes]);
+    }
+
     /// Where the light map atlas lies: its south-west corner (world x, y) and its side (m).
     pub fn set_light_map_place(&self, x: f64, y: f64, side: f64) {
         self.lights.lm_place.set((x, y, side));
@@ -935,6 +991,45 @@ pub(crate) struct LightRes {
     pub(crate) lm_atlas_view: wgpu::TextureView,
     pub(crate) lm_uniform: wgpu::Buffer,
     pub(crate) lm_place: std::cell::Cell<(f64, f64, f64)>,
+    /// The snow track field around the camera (road_snow.wgsl) and its place and state: a
+    /// token until the roads' snow first sends it rows, the field from then on, and how many
+    /// times it was made (a scene's camera bind group is made again when it changes).
+    pub(crate) snow_track: std::cell::RefCell<wgpu::Buffer>,
+    pub(crate) snow_track_made: std::cell::Cell<u32>,
+    pub(crate) snow_track_uniform: wgpu::Buffer,
+}
+
+#[cfg(test)]
+mod road_snow_gate_tests {
+    use super::*;
+
+    /// The roads' built-up snow is drawn only where the device can read its field: never
+    /// on OpenGL nor on its layout, nor without storage buffers in the fragment stage.
+    #[test]
+    fn the_road_snow_gate_leaves_out_opengl_and_devices_without_storage() {
+        for path in [ArrayPath::Storage, ArrayPath::VertexTextures, ArrayPath::NoStorage] {
+            assert!(!road_snow_supported_on(true, false, path), "{path:?} on OpenGL");
+            assert!(!road_snow_supported_on(false, true, path), "{path:?} with OMSI_GL_TEXTURE_UNITS");
+            assert_eq!(road_snow_supported_on(false, false, path), path != ArrayPath::NoStorage, "{path:?}");
+        }
+    }
+
+    /// The fallback: the OpenGL scene module takes road_snow_off.wgsl and reads nothing of
+    /// the field, the supported one road_snow.wgsl and the field (binding 20); and the camera
+    /// group's layout holds the field exactly when the gate says it is drawn, so the shader
+    /// and the layout never disagree.
+    #[test]
+    fn the_scene_shader_and_the_layout_follow_the_road_snow_gate() {
+        let gl = crate::shaders::scene_shader_text(true);
+        assert!(!gl.contains("snow_track_px") && !gl.contains("@binding(20)"), "the OpenGL module reads the field");
+        assert!(gl.contains("fn road_snow_dynamic()") && !gl.contains("snow_track.state"), "the OpenGL module draws the built-up snow");
+        let native = crate::shaders::scene_shader_text(false);
+        assert_eq!(native.contains("@group(0) @binding(20) var<storage, read> snow_track_px"), road_snow_supported());
+        for path in [ArrayPath::Storage, ArrayPath::VertexTextures, ArrayPath::NoStorage] {
+            let has_field = camera_layout_entries(path, false).iter().any(|e| e.binding == 20);
+            assert_eq!(has_field, road_snow_supported(), "{path:?}");
+        }
+    }
 }
 
 #[cfg(test)]

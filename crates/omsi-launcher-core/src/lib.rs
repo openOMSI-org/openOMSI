@@ -2252,6 +2252,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     v["mirror_quality"] = json!("standard");
     v["vr_desktop_mirror"] = json!(true);
     v["discord_status"] = json!(true);
+    v["disable_plugins"] = json!(false);
     // a Tobii eye tracker read natively, beside opentrack (the game's menu switches these)
     v["head_tracking_source"] = json!("auto");
     v["tobii_edges"] = json!(false);
@@ -2292,6 +2293,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     v["units"] = json!("metric");
     // the trees' foliage bends and sways in the weather's wind
     v["windy_trees"] = json!(true);
+    v["road_snow"] = json!(true); // (the snow built up on the roads and roofs; off: the weather's snow on road)
     v["sim_thread"] = json!(false); // (switched in the game's Display menu, saved through this writer)
     v["mirror_hud_every_frame"] = json!(false);
     v["mirror_shadows"] = json!(false);
@@ -2301,6 +2303,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     // stop, as in OMSI; #1773)
     v["ai_wait_timed_stops_only"] = json!(false);
     v["pax_bad_driving"] = json!(true);
+    v["passenger_hailing"] = json!(false);
     // the arrival half of the stops of a depot file that keeps two recordings per stop
     v["auto_announce"] = json!(false);
     // OMSI's own options
@@ -2453,12 +2456,12 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "nav_arrows" | "nav_ai" | "nav_surface" | "nav_3d" | "nav_widget" | "get_up" | "time_sync" | "metar_sync" | "ui_scale_window" | "notes" | "machine_translation" | "update_check" | "update_auto" | "update_notify" | "presence" | "steering_linear" | "old_steering" | "red_steer_spd" | "ff_invert" | "ff_enabled" | "brake_hold" | "auto_clutch" | "momentary_gears" | "auto_shift" | "mouse_steering" | "mouse_right_off" | "mouse_smooth" | "mouse_hold" | "mouse_pedals" | "blinker_cancel" => v[&k] = json!(b(val)),
             "nav_light" => v[&k] = json!(b(val)),
             "nav_classic_2d" => v[&k] = json!(b(val)),
-            "info_bar" => v[&k] = json!(b(val)),
+            "info_bar" | "disable_plugins" => v[&k] = json!(b(val)),
             "info_size" | "timetable_size" | "perf_size" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).unwrap_or(1.0).clamp(0.6, 2.0)),
             "perf_overlay" => v[&k] = json!(perf_overlay_mode(val)),
             "sim_thread" => v[&k] = json!(b(val)),
             "mirror_hud" => v[&k] = json!(val.trim().parse::<u8>().map(|x| x.min(7)).unwrap_or(0)),
-            "windy_trees" | "mirror_hud_every_frame" | "mirror_shadows" | "mirror_particles" | "ai_wait_timed_stops_only" | "pax_bad_driving" | "auto_announce" | "ambient" => v[&k] = json!(b(val)),
+            "windy_trees" | "road_snow" | "mirror_hud_every_frame" | "mirror_shadows" | "mirror_particles" | "ai_wait_timed_stops_only" | "pax_bad_driving" | "passenger_hailing" | "auto_announce" | "ambient" => v[&k] = json!(b(val)),
             "head_tracking_source" => v[&k] = json!(head_tracking_source(val)),
             "tobii_edges" => v[&k] = json!(b(val)),
             "head_tracking_smoothing" | "head_tracking_dead_zone" => v[&k] = json!(head_tracking_value(&k, val.parse::<f64>().ok())),
@@ -2579,8 +2582,8 @@ pub fn save_settings(v: &Value) -> Result<()> {
 
 /// The settings a graphics profile holds: what the Graphics tab shows, except the machine's
 /// own (fullscreen, graphics API).
-pub const GRAPHICS_PROFILE_KEYS: [&str; 41] = [
-    "graphics", "msaa", "render_scale", "upscaler", "fsr_quality", "fsr_sharpness", "anisotropy", "shadow_size", "ssao", "shadows", "shadow_casters", "detail_textures", "night_brightness", "led_glow", "led_mips", "shadow_blobs", "lamp_shadows", "reflections", "clouds", "cloud_quality", "street_light", "rain_quality", "vehicle_smoke", "puddles", "windy_trees", "ray_tracing", "light_shadows", "cloud_shadows", "light_glow",
+pub const GRAPHICS_PROFILE_KEYS: [&str; 42] = [
+    "graphics", "msaa", "render_scale", "upscaler", "fsr_quality", "fsr_sharpness", "anisotropy", "shadow_size", "ssao", "shadows", "shadow_casters", "detail_textures", "night_brightness", "led_glow", "led_mips", "shadow_blobs", "lamp_shadows", "reflections", "clouds", "cloud_quality", "street_light", "rain_quality", "vehicle_smoke", "puddles", "windy_trees", "road_snow", "ray_tracing", "light_shadows", "cloud_shadows", "light_glow",
     "vsync", "max_fps", "view_distance", "max_obj_dist", "min_obj_size", "mirror_size", "mirror_refresh", "mirror_quality", "mirror_hud_every_frame", "video_memory", "texture_compression", "gpu_texture_compression",
 ];
 
@@ -2821,6 +2824,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("touch_door_mode={}\n", if v.get("touch_door_mode").and_then(|x| x.as_str()) == Some("direct") { "direct" } else { "standard" }));
     text.push_str(&format!("update_channel={}\n", if v.get("update_channel").and_then(|x| x.as_str()) == Some("beta") { "beta" } else { "stable" }));
     text.push_str(&format!("arrows_switch_cams={}\n", b("arrows_switch_cams", true)));
+    text.push_str(&format!("disable_plugins={}\n", b("disable_plugins", false)));
     // voice chat (the game clamps again when it reads them)
     {
         let text_of = |k: &str, d: &str| v.get(k).and_then(|x| x.as_str()).map(|x| x.replace(['\n', '\r'], " ").trim().to_string()).unwrap_or_else(|| d.to_string());
@@ -2862,6 +2866,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("info_bar={}\nperf_overlay={}\n", b("info_bar", false), perf_overlay_mode(&v.get("perf_overlay").map(|x| x.as_str().map_or_else(|| x.to_string(), str::to_string)).unwrap_or_default())));
     text.push_str(&format!("info_size={}\ntimetable_size={}\nperf_size={}\n", f("info_size", 1.0).clamp(0.6, 2.0), f("timetable_size", 1.0).clamp(0.6, 2.0), f("perf_size", 1.0).clamp(0.6, 2.0)));
     text.push_str(&format!("windy_trees={}\n", b("windy_trees", true)));
+    text.push_str(&format!("road_snow={}\n", b("road_snow", true)));
     text.push_str(&format!("sim_thread={}\n", b("sim_thread", false)));
     text.push_str(&format!("mirror_hud_every_frame={}\n", b("mirror_hud_every_frame", false)));
     text.push_str(&format!("mirror_shadows={}\nmirror_particles={}\n", b("mirror_shadows", false), b("mirror_particles", false)));
@@ -2872,6 +2877,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("ai_wait_timed_stops_only={}\n", b("ai_wait_timed_stops_only", false)));
     text.push_str(&format!("trip_summary={}\nfull_tank={}\n", b("trip_summary", true), b("full_tank", true)));
     text.push_str(&format!("pax_bad_driving={}\n", b("pax_bad_driving", true)));
+    text.push_str(&format!("passenger_hailing={}\n", b("passenger_hailing", false)));
     text.push_str(&format!("auto_announce={}\n", b("auto_announce", false)));
     text.push_str(&format!("triple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n", f("triple_left_angle_deg", 45.0).clamp(0.0, 90.0), f("triple_right_angle_deg", 45.0).clamp(0.0, 90.0), f("triple_eye_height_mm", 0.0).clamp(-500.0, 500.0)));
     text.push_str(&format!("photo_mode={}\n", if v.get("photo_mode").and_then(|x| x.as_str()) == Some("advanced") { "advanced" } else { "simple" }));
@@ -3148,11 +3154,21 @@ pub fn duty_args(d: &Duty) -> Result<Vec<String>> {
 
 // The installation is validated by duty_args; argument tests supply their own path.
 fn duty_args_for_root(d: &Duty, root: &Path) -> Result<Vec<String>> {
+    duty_args_with_settings(d, root, &get_settings().unwrap_or_default())
+}
+
+fn duty_args_with_settings(d: &Duty, root: &Path, st: &Value) -> Result<Vec<String>> {
+    let mut start = vec!["--root".into(), root.to_string_lossy().to_string(), "--no-menu".into()];
+    if st.get("disable_plugins").and_then(Value::as_bool).unwrap_or(false) {
+        start.push("--no-plugins".into());
+    }
     if let Some(t) = d.tutorial {
-        return Ok(vec!["--root".into(), root.to_string_lossy().to_string(), "--no-menu".into(), "--tutorial".into(), t.to_string()]);
+        start.extend(["--tutorial".into(), t.to_string()]);
+        return Ok(start);
     }
     if let Some(sit) = d.situation.as_deref().filter(|s| !s.trim().is_empty()) {
-        let mut a = vec!["--root".into(), root.to_string_lossy().to_string(), "--no-menu".into(), "--situation".into(), sit.to_string()];
+        let mut a = start;
+        a.extend(["--situation".into(), sit.to_string()]);
         if let Some(p) = d.profile.as_deref().filter(|p| !p.trim().is_empty()) {
             a.extend(["--driver".into(), format!("Drivers/{}.odr", p.trim())]);
         }
@@ -3166,7 +3182,8 @@ fn duty_args_for_root(d: &Duty, root: &Path) -> Result<Vec<String>> {
         }
         return Ok(a);
     }
-    let mut a: Vec<String> = vec!["--root".into(), root.to_string_lossy().to_string(), "--no-menu".into(), "--map".into(), d.map.clone(), "--bus".into(), d.bus.clone(), "--time".into(), if d.time.trim().is_empty() { "09:00".into() } else { d.time.trim().to_string() }];
+    let mut a = start;
+    a.extend(["--map".into(), d.map.clone(), "--bus".into(), d.bus.clone(), "--time".into(), if d.time.trim().is_empty() { "09:00".into() } else { d.time.trim().to_string() }]);
     if let Some(p) = d.paint.as_deref().filter(|p| !p.trim().is_empty()) {
         a.extend(["--paint".into(), p.trim().to_string()]);
     }
@@ -3197,7 +3214,6 @@ fn duty_args_for_root(d: &Duty, root: &Path) -> Result<Vec<String>> {
     // OMSI's [useActTime] / [useActDate] / [useActYear]: the machine's clock and calendar
     // instead of the duty's (the year only on its own switch - a map's timetable is for
     // its years)
-    let st = get_settings().unwrap_or_default();
     let on = |k: &str| st.get(k).and_then(|v| v.as_bool()).unwrap_or(false);
     let now = local_now();
     if let (true, Some((_, _, _, h, m))) = (on("use_real_time"), now) {
@@ -3492,3 +3508,7 @@ mod omsi_options_tests;
 mod right_stick_look_tests;
 #[cfg(test)]
 mod head_tracking_tests;
+
+#[cfg(test)]
+#[path = "passenger_settings_tests.rs"]
+mod passenger_settings_tests;

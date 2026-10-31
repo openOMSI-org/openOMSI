@@ -125,9 +125,15 @@ impl PeopleSim {
             Task::InBusToExit => {
                 let bus = self.pax(i).unwrap().bus.or(self.pax(i).unwrap().inside);
                 let Some(bn) = bus.and_then(|b| bus_ix.get(&b).map(|k| &buses[*k])) else { return };
-                // the stop button
-                if bn.id == BusId::Player {
-                    self.stop_request = true;
+                // the stop button: the player's bus gets it here, a timetable bus its own
+                // request (the app presses `int_haltewunsch` on it)
+                match bn.id {
+                    BusId::Player => self.stop_request = true,
+                    BusId::Ai(id) => {
+                        if !self.ai_stop_requests.contains(&id) {
+                            self.ai_stop_requests.push(id);
+                        }
+                    }
                 }
                 let seat = self.pax(i).unwrap().seat;
                 let all = bn.cabin.all_points();
@@ -567,7 +573,7 @@ impl PeopleSim {
         if p.ticket == TICKET_STAMP {
             if p.sub == 1 && p.timer < 0.5 {
                 // the validator stamps
-                self.stamped.push(bn.id);
+                self.stamped.push((bn.id, p.stamper));
                 let pp = self.pax_mut(i).unwrap();
                 pp.sub = 2;
                 pp.reach = false;

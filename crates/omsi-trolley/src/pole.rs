@@ -168,6 +168,8 @@ pub struct Pole {
     last_pos: Option<(u32, f64)>,
     hand: Hand,
     lower_auto: bool,
+    /// How long a loose pole waits before the retriever pulls it down (s): counted from when
+    /// it came loose, so a hand letting it go starts the count afresh.
     retrieve_wait: f64,
     /// A motor's raising has let the pole go to spring on to its wire.
     auto_released: bool,
@@ -373,6 +375,7 @@ impl Pole {
             Rope::Idle => match self.mode {
                 PoleMode::Hand => {
                     self.mode = PoleMode::Free;
+                    self.retrieve_wait = 0.0;
                 }
                 PoleMode::Lowering if !self.lower_auto => {
                     self.mode = PoleMode::Free;
@@ -414,6 +417,7 @@ impl Pole {
                     // the motor lets the boom go, as a hand would, to spring up on to the wire
                     self.auto_released = true;
                     self.mode = PoleMode::Free;
+                    self.retrieve_wait = 0.0;
                     return;
                 }
                 let t = self.hand.held;
@@ -892,6 +896,27 @@ mod tests {
         assert!(kinds.iter().any(|k| matches!(k, PoleEventKind::Latched)));
         // pulling it off under 200 A struck an arc
         assert!(ev.iter().any(|e| matches!(e.kind, PoleEventKind::Dewired(_)) && e.amps > 100.0));
+    }
+
+    #[test]
+    fn a_retrieved_pole_can_be_put_on_the_wire_again() {
+        // a rope's tug pulls it off, the retriever takes it the rest of the way to its hook:
+        // the next time a hand lets it go under the wire it still gets there (#3473)
+        let net = straight();
+        let def = PoleDef { side: 1, base: glam::Vec3::new(0.3, 0.0, 3.0), length: 6.5, retriever: 35.0, motor: true, ..Default::default() };
+        let mut p = Pole::new(def, 7);
+        p.roughness = 0.0;
+        let mut ev = Vec::new();
+        let pos = DVec3::new(20.0, 0.0, 0.0);
+        let goal = Some(Contact { span: 0, s: 65.0, side: 0 });
+        for _ in 0..3 {
+            run(&mut p, &net, pos, 4.0, Rope::Aim { goal, auto: false }, 0.0, &mut ev);
+            run(&mut p, &net, pos, 2.0, Rope::Idle, 0.0, &mut ev);
+            assert_eq!(p.mode, PoleMode::OnWire);
+            run(&mut p, &net, pos, 0.1, Rope::Pull, 0.0, &mut ev);
+            run(&mut p, &net, pos, 5.0, Rope::Idle, 0.0, &mut ev);
+            assert_eq!(p.mode, PoleMode::Down);
+        }
     }
 
     #[test]

@@ -265,6 +265,9 @@ pub struct PersonFrame {
     pub facts: crate::people::PoseFacts,
     /// The state's name (`OMSI_TRACE_PAX`).
     pub state: &'static str,
+    /// Optional visual target of an approaching compatible bus.
+    pub hail_target: Option<glam::DVec3>,
+    pub hail_moving: bool,
     /// `OMSI_CHECK_TPOSE`: the person's label and state, and a passenger's details.
     pub debug: Option<[String; 2]>,
 }
@@ -276,9 +279,24 @@ impl crate::people::PeopleSim {
         let debug = omsi_cfg::flags::OMSI_CHECK_TPOSE.is_set();
         out.time = self.time;
         out.eye = self.eye;
-        out.buses = self.last_buses.clone();
+        out.buses.clone_from(&self.last_buses);
         out.people.clear();
-        out.people.extend(self.people.iter().map(|p| PersonFrame {
+        // Keep the snapshot allocation-free apart from its reusable people buffer.
+        // People beyond the view's 300 m limit need no per-frame bus lookup.
+        out.people.extend(self.people.iter().enumerate().map(|(i, p)| {
+            let hail = if self.visual_hailing
+                && self.eye.is_none_or(|eye| {
+                    (p.position - eye.pos).length_squared() <= 300.0 * 300.0
+                })
+            {
+                // The match already contains the target position: avoid a
+                // second linear scan over the buses for each passenger.
+                self.visual_hail_bus(i, &self.last_buses)
+                    .map(|(_, moving, pos)| (pos, moving))
+            } else {
+                None
+            };
+            PersonFrame {
             id: p.id,
             ty: p.ty.clone(),
             position: p.position,
@@ -293,6 +311,8 @@ impl crate::people::PeopleSim {
             hidden: self.avatar_hidden.get(&p.id).copied(),
             facts: p.pose_facts(),
             state: p.state.name(),
+            hail_target: hail.map(|(pos, _)| pos),
+            hail_moving: hail.is_some_and(|(_, moving)| moving),
             debug: debug.then(|| {
                 let pax = match &p.state {
                     crate::people::State::Pax(x) => format!("pax_state {} speed {:.2} seat_h {:.2} room {:.2} st {}", x.pax_state, x.speed, x.seat_h, x.room, x.st),
@@ -300,6 +320,7 @@ impl crate::people::PeopleSim {
                 };
                 [format!("{} {}", p.label(), p.state_name()), pax]
             }),
+            }
         }));
     }
 }

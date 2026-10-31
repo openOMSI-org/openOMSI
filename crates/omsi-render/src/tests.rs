@@ -1464,6 +1464,7 @@ mod light;
 mod more;
 mod night_coverage;
 mod prepass_reach;
+mod snow_track_field;
 mod transparency;
 mod vanilla_lighting;
 

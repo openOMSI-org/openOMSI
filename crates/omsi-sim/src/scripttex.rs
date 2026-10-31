@@ -226,7 +226,7 @@ impl ScriptTexture {
                 continue;
             }
             let Some(g) = atlas.font.glyph(ch) else {
-                cx += atlas.font.gap.max(1) + spacing;
+                cx += atlas.font.space_width() + atlas.font.gap + spacing;
                 continue;
             };
             let gw = (g.x1 - g.x0).max(0);

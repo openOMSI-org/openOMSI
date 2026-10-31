@@ -449,15 +449,15 @@ pub fn share_maps(on: bool) {
     SHARE_MAPS.store(on, std::sync::atomic::Ordering::Relaxed);
 }
 
-/// Serve the session's mods on TCP `port` (a thread; the list is made in the background).
-pub fn serve(port: u16, key: Arc<omsi_net::hostkey::HostKey>, args: &ModSource) {
+/// Serve the session's mods on its already-reserved TCP listener.
+pub fn serve(listener: TcpListener, key: Arc<omsi_net::hostkey::HostKey>, args: &ModSource) {
     if omsi_cfg::flags::OMSI_NO_LAN_MODS.is_set() {
         return;
     }
-    let listener = match TcpListener::bind(("0.0.0.0", port)) {
-        Ok(l) => l,
+    let port = match listener.local_addr() {
+        Ok(address) => address.port(),
         Err(e) => {
-            log::warn!("LAN mods: cannot serve on TCP port {port}: {e} (joining players need the host's mods installed)");
+            log::warn!("LAN mods: cannot inspect the reserved TCP listener: {e}");
             return;
         }
     };

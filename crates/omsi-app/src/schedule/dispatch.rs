@@ -41,15 +41,21 @@ impl Schedule {
         let done: Vec<u64> = traffic.cars.iter().filter(|c| c.trip_done()).map(|c| c.id).collect();
         for id in done {
             let Some(ci) = traffic.cars.iter().position(|c| c.id == id) else { continue };
+            if self.sim.tour_held(id, day_time) {
+                continue;
+            }
             let next = self.sim.next_of_car(id);
             let mut taken = false;
             if let Some(j) = next {
                 if self.sim.may_take_on(j, day_time) {
-                    if let Placed::Spawned =
-                        self.spawn_departure(j, world, traffic, day_time, Some(ci))
-                    {
-                        taken = true;
-                        self.sim.taken_on(j);
+                    match self.spawn_departure(j, world, traffic, day_time, Some(ci)) {
+                        Placed::Spawned => {
+                            taken = true;
+                            self.sim.taken_on(j);
+                        }
+                        // (it stands where it set down and takes the trip on later)
+                        Placed::Early => continue,
+                        _ => {}
                     }
                 }
                 if !taken {

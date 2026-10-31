@@ -368,7 +368,31 @@ pub(crate) fn camera_layout_entries(path: ArrayPath, omit_enhanced: bool) -> Vec
                 },
                 count: None,
             },
+            // the snow track field around the camera (road_snow.wgsl), and its place
+            wgpu::BindGroupLayoutEntry {
+                binding: 20,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 21,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
     ];
+    if !road_snow_supported() {
+        camera_entries.retain(|e| e.binding != 20);
+    }
     // the point lights and their grid (see `ArrayPath::NoStorage`)
     if path != ArrayPath::NoStorage {
         camera_entries.push(array_layout_entry_on(path, 3, wgpu::ShaderStages::FRAGMENT, true));

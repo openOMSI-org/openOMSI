@@ -571,8 +571,8 @@ impl Renderer {
             if inst.lod.0 > 0.0 || inst.lod.1 < f32::MAX {
                 let scale = Self::instance_scale(scene, inst);
                 let radius = if inst.object_radius > 0.0 { inst.object_radius } else { m.bounds_radius } * scale;
-                let dd = ((inst.origin - ro).as_vec3() - cam).length();
-                let size = if dd <= radius { f32::MAX } else { 2.0 * radius / (dd.max(0.01) * lod_fov) };
+                let distance = ((inst.origin - ro).as_vec3() - cam).length();
+                let size = object_screen_size(radius, distance, lod_fov);
                 if size < inst.lod.0 || (inst.lod.1 < f32::MAX && size >= inst.lod.1) {
                     continue;
                 }

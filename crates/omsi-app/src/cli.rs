@@ -191,6 +191,9 @@ pub(crate) struct Args {
     /// Start without the menu (the command line defines everything).
     #[arg(long)]
     pub(crate) no_menu: bool,
+    /// Do not load Lua, vehicle or legacy OMSI plugins for this game session.
+    #[arg(long)]
+    pub(crate) no_plugins: bool,
     /// Situation file (.osn): map, date/time, weather, the player's vehicle and its tour.
     #[arg(long)]
     pub(crate) situation: Option<String>,

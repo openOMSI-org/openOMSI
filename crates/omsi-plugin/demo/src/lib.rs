@@ -3,7 +3,9 @@
 //! `[triggers] 1 horn`: it doubles `throttle`, writes "seen at <Time>" into `note`,
 //! remembers `Time` as it last saw it, and holds `horn` down on odd whole seconds. With
 //! `[scripttexturelist]` it paints the first entry (see `AccessScriptTexture`), and it
-//! prices the passengers' tickets by the stops they ride (see `AccessTicketRequest`).
+//! prices the passengers' tickets by the stops they ride (see `AccessTicketRequest`). A
+//! negative `throttle` keeps it busy in its own code for that many seconds first, as a
+//! plugin waiting on the network does.
 use std::sync::atomic::{AtomicU32, Ordering};
 
 static TIME: AtomicU32 = AtomicU32::new(0);
@@ -23,6 +25,9 @@ pub extern "system" fn PluginFinalize() {}
 pub unsafe extern "system" fn AccessVariable(index: u16, value: *mut f32, write: *mut u8) {
     unsafe {
         if index == 0 {
+            if *value < 0.0 {
+                std::thread::sleep(std::time::Duration::from_secs_f32(-*value));
+            }
             *value *= 2.0;
             *write = 1;
         }

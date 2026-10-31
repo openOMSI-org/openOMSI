@@ -297,6 +297,10 @@ pub struct PeopleSim {
     pub under_bus: hashbrown::HashSet<u32>,
     /// A rider pressed the stop button for the next stop (the app fires the vehicle trigger `int_haltewunsch`).
     pub stop_request: bool,
+    /// Timetable buses whose passenger asked for the next stop (`int_haltewunsch`, taken by
+    /// the app each frame): a bus's script responds to its own request, so the scripts
+    /// that check `haltewunsch` (e.g. `NSAC_City_2Door.bus`) open the exit.
+    pub ai_stop_requests: Vec<u64>,
     /// Tickets sold at the cash desk this session and what they were worth.
     pub tickets_sold: u32,
     pub ticket_cash: f32,
@@ -396,8 +400,9 @@ pub struct PeopleSim {
     /// whether the trip has reached its last stop. None: free drive, and nobody waiting
     /// boards the player's bus.
     pub duty: Option<(Arc<DutyTrip>, usize, bool)>,
-    /// Buses whose validator somebody used since the app last looked (`take_stamped`).
-    pub stamped: Vec<BusId>,
+    /// Buses whose validator somebody used since the app last looked (`take_stamped`), with
+    /// the index of that `[stamper]` in the bus's cabin.
+    pub stamped: Vec<(BusId, Option<usize>)>,
     /// Pedestrians to keep strolling near the player (scaled by `density`).
     pub pedestrians: usize,
     /// Omsi.exe's people (`[AIMaxCountRandom]`'s second line, the `ai_max_humans` setting):
@@ -412,6 +417,8 @@ pub struct PeopleSim {
     pub defer_populate: bool,
     /// Passengers pay the exact fare: no change is ever due.
     pub exact_fare: bool,
+    /// Compute visual-only boarding signals when requested by this client.
+    pub visual_hailing: bool,
     pub bad_driving: bool,
     /// How passengers board (`boarding` in the settings): `auto` - pay and take the
     /// ticket by themselves after a moment; `pay` - wait at the desk for the driver to

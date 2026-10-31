@@ -5,13 +5,14 @@ use super::*;
 
 impl PeopleSim {
     /// The buses somebody stamped a ticket in since the last call (the app fires their
-    /// `ev_Stamper` sound trigger): `None` the player's, else the AI car's id.
-    pub fn take_stamped(&mut self) -> Vec<Option<u64>> {
+    /// `ev_Stamper` sound trigger): `None` the player's, else the AI car's id, with the
+    /// index of the `[stamper]` used (counted over the whole cabin, from 0).
+    pub fn take_stamped(&mut self) -> Vec<(Option<u64>, Option<usize>)> {
         std::mem::take(&mut self.stamped)
             .into_iter()
-            .map(|b| match b {
-                BusId::Ai(id) => Some(id),
-                _ => None,
+            .map(|(b, k)| match b {
+                BusId::Ai(id) => (Some(id), k),
+                _ => (None, k),
             })
             .collect()
     }
@@ -186,6 +187,12 @@ impl PeopleSim {
     /// Door requests for the timetable buses, for the traffic to hand to their scripts.
     pub fn take_ai_requests(&mut self) -> Vec<(u64, DoorWants)> {
         std::mem::take(&mut self.ai_requests)
+    }
+
+    /// Timetable buses whose passenger asked for the next stop, for the traffic to press
+    /// `int_haltewunsch` on.
+    pub fn take_ai_stop_requests(&mut self) -> Vec<u64> {
+        std::mem::take(&mut self.ai_stop_requests)
     }
 
     /// A line for the HUD about something that just happened.

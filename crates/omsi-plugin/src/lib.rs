@@ -44,7 +44,8 @@
 //! (same system and architecture) is loaded in-process; any other runs in
 //! `omsi-plugin-host`, a small program built for 32-bit Windows that loads the DLL and
 //! answers over its standard input and output (started directly on Windows and through
-//! Wine elsewhere). The frame is one round trip.
+//! Wine elsewhere). The frame is one round trip, which the game waits for only a little
+//! while (see [`Remote::frame`]): a plugin stuck in its own code no longer stops the game.
 
 pub mod api;
 pub mod data;
@@ -54,12 +55,13 @@ pub mod ui;
 pub mod oop;
 pub mod wasm;
 pub mod wasm_plugin;
+mod remote;
 
 pub use io::*;
+pub use remote::Remote;
 
-use std::io::{BufReader, BufWriter, Read, Write};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
 /// One `.opl` file.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -740,90 +742,6 @@ pub mod wire {
     }
 }
 
-/// A plugin library in `omsi-plugin-host`.
-pub struct Remote {
-    child: Child,
-    to: BufWriter<ChildStdin>,
-    from: BufReader<ChildStdout>,
-    procs: Procs,
-}
-
-impl Remote {
-    /// Start `host` (with `runner`, e.g. `wine`, in front when given) on the library in
-    /// `dir` and have it call `PluginStart`.
-    pub fn spawn(runner: Option<&Path>, host: &Path, dll: &Path, dir: &Path) -> Result<Remote, String> {
-        let mut cmd = match runner {
-            Some(r) => {
-                let mut c = Command::new(r);
-                c.arg(host);
-                c
-            }
-            None => Command::new(host),
-        };
-        cmd.arg(dll).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).current_dir(dir);
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            cmd.creation_flags(0x0800_0000);
-        }
-        let mut child = cmd.spawn().map_err(|e| format!("could not start {}: {e}", host.display()))?;
-        if let Some(err) = child.stderr.take() {
-            std::thread::spawn(move || {
-                for line in std::io::BufRead::lines(BufReader::new(err)).map_while(Result::ok) {
-                    log::warn!("plugin host: {line}");
-                }
-            });
-        }
-        let to = BufWriter::new(child.stdin.take().ok_or("no stdin")?);
-        let from = BufReader::new(child.stdout.take().ok_or("no stdout")?);
-        let mut r = Remote { child, to, from, procs: Procs::default() };
-        let answer = (|| -> std::io::Result<(u8, u8)> {
-            wire::put_u8(&mut r.to, wire::START)?;
-            r.to.flush()?;
-            Ok((wire::get_u8(&mut r.from)?, wire::get_u8(&mut r.from)?))
-        })();
-        match answer {
-            Ok((1, flags)) => {
-                r.procs = Procs::from_flags(flags);
-                Ok(r)
-            }
-            Ok(_) => {
-                let _ = r.child.kill();
-                Err(format!("the host could not load {}", dll.display()))
-            }
-            Err(e) => {
-                let _ = r.child.kill();
-                Err(format!("the host for {} ended: {e}", dll.display()))
-            }
-        }
-    }
-
-    pub fn procs(&self) -> Procs {
-        self.procs
-    }
-
-    pub fn frame(&mut self, f: &Frame) -> std::io::Result<Reply> {
-        wire::put_u8(&mut self.to, wire::FRAME)?;
-        let textures = self.procs.texture;
-        wire::put_frame(&mut self.to, f, textures, self.procs.pointer)?;
-        if self.procs.ticket {
-            wire::put_tickets(&mut self.to, &f.tickets)?;
-        }
-        self.to.flush()?;
-        let mut reply = wire::get_reply(&mut self.from, f, textures)?;
-        if self.procs.ticket {
-            reply.tickets = wire::get_ticket_answers(&mut self.from, f.tickets.len())?;
-        }
-        Ok(reply)
-    }
-
-    pub fn finalize(&mut self) {
-        let _ = wire::put_u8(&mut self.to, wire::FINALIZE).and_then(|_| self.to.flush());
-        let _ = wire::get_u8(&mut self.from);
-        let _ = self.child.wait();
-    }
-}
-
 /// How a plugin runs.
 pub enum Backend {
     Local(Library),
@@ -839,6 +757,25 @@ pub struct Plugin {
     /// Each trigger's state after the last frame.
     trigger_state: Vec<bool>,
     failed: bool,
+    /// The frame whose answer the plugin's host owes (`Remote::frame`): what was asked, to
+    /// take the answer by when it comes - a trigger pressed, a texture drawn or a ticket
+    /// changed in a late frame is not lost, though the frames meanwhile went without it.
+    owed: Option<Asked>,
+}
+
+/// A frame asked of a plugin, with the names its values stand for.
+struct Asked {
+    frame: Frame,
+    /// The bus it was asked of (`PluginIo::bus_ident`: its fleet number and file; None
+    /// without one): a late answer
+    /// is the old bus's - the player may have changed buses meanwhile - and only its system
+    /// variables are taken for another.
+    vehicle: Option<(String, String)>,
+    system: Vec<String>,
+    vars: Vec<String>,
+    strings: Vec<String>,
+    triggers: Vec<usize>,
+    textures: Vec<usize>,
 }
 
 const PATCHES_OMSI_EXE: &[&str] = &["omsipresentationtools.dll"];
@@ -931,7 +868,7 @@ impl Plugin {
             }
         }
         let n = opl.triggers.len();
-        Ok(Plugin { opl_path: opl_path.to_path_buf(), opl, backend, procs, trigger_state: vec![false; n], failed: false })
+        Ok(Plugin { opl_path: opl_path.to_path_buf(), opl, backend, procs, trigger_state: vec![false; n], failed: false, owed: None })
     }
 
     pub fn procs(&self) -> Procs {
@@ -945,6 +882,30 @@ impl Plugin {
     pub fn frame(&mut self, io: &mut dyn PluginIo, pointer: &[(usize, u8, f32, f32)]) {
         if self.failed {
             return;
+        }
+        // a host still busy with an earlier frame: its answer when it has come, and no new
+        // frame before (this one's mouse and passengers go without the plugin)
+        if let Backend::Remote(r) = &mut self.backend {
+            if r.owes() {
+                match r.late() {
+                    Ok(Some(reply)) => {
+                        if let Some(mut asked) = self.owed.take() {
+                            let now = io.has_vehicle().then(|| io.bus_ident()).flatten();
+                            if asked.vehicle != now {
+                                log::info!("plugin {}: its late answer was for another bus; only its system variables are taken", self.opl.dll);
+                                asked = Asked { frame: Frame { system: asked.frame.system, ..Default::default() }, vehicle: None, system: asked.system, vars: Vec::new(), strings: Vec::new(), triggers: Vec::new(), textures: Vec::new() };
+                            }
+                            self.take_reply(io, &asked, &reply);
+                        }
+                    }
+                    Ok(None) => return,
+                    Err(e) => {
+                        log::warn!("plugin {}: the host stopped answering ({e}); it is left out from now on", self.opl.dll);
+                        self.failed = true;
+                        return;
+                    }
+                }
+            }
         }
         let mut f = Frame::default();
         let mut sys_names = Vec::new();
@@ -1016,7 +977,7 @@ impl Plugin {
             }
         }
         let reply = match &mut self.backend {
-            Backend::Local(lib) => lib.frame(&f),
+            Backend::Local(lib) => Some(lib.frame(&f)),
             Backend::Remote(r) => match r.frame(&f) {
                 Ok(r) => r,
                 Err(e) => {
@@ -1026,6 +987,17 @@ impl Plugin {
                 }
             },
         };
+        let asked = Asked { frame: f, vehicle: None, system: sys_names, vars: var_names, strings: str_names, triggers: trig_idx, textures: tex_idx };
+        match reply {
+            Some(reply) => self.take_reply(io, &asked, &reply),
+            // (busy in its own code: the game goes on, the answer is taken when it comes)
+            None => self.owed = Some(Asked { vehicle: vehicle.then(|| io.bus_ident()).flatten(), ..asked }),
+        }
+    }
+
+    /// What the plugin wrote in its answer to `asked`.
+    fn take_reply(&mut self, io: &mut dyn PluginIo, asked: &Asked, reply: &Reply) {
+        let Asked { frame: f, system: sys_names, vars: var_names, strings: str_names, triggers: trig_idx, textures: tex_idx, .. } = asked;
         for (n, v) in sys_names.iter().zip(&reply.system) {
             if let Some(v) = v {
                 io.set_system(n, *v);

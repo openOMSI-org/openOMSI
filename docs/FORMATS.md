@@ -475,13 +475,17 @@ an object's own z = 0), and leaves out one wholly under it (`omsi_render::SmokeP
 model wherever it stands). With d the distance to the camera and z the depth along the view:
 the object is dropped when `d > R + maxObjDist` or `(z − R) / maxObjDist > 1` (both skipped by
 `[noDistanceCheck]`), and when `size / D < minObjSize` where
-`size = 2R / (z · fov · π/180)` - the object's diameter over its depth as a share of the
+`size = 2R / (d · fov · π/180)` - the object's diameter over its distance as a share of the
 camera's vertical field of view (degrees, camera +0x38). The same `size` (not divided by D)
 chooses the `[LOD]` level, so the `[LOD]` values of a model are in this measure. The values
 come from `options.cfg`: `[performance_maxObjDist]` (750 in the shipped file, 900 in the high
 presets, 1200 for Chicago), `[performance_minObjSize]` (0.013; 0.020 in "PC 2006") and, for
 reflections, `[performance_minObjSizeRefl]` (0.046). A detail factor above 1 therefore makes
 an object vanish sooner (clutter), below 1 keeps it longer.
+
+Rechecked on OMSI 2.2.032: 0x5fdde4 takes d with `D3DXVec3Length` and 0x5fde54..0x5fde89
+compute `size` from it; there is no exception for a camera inside the sphere, so `size` stays
+finite there.
 
 **`[LOD]` choice (OMSI 0x5ef860, Sept 2026).** Each `[LOD] x` appends x to the model's list and
 makes its index the level of the meshes after it. With that `size`, OMSI takes the *first*

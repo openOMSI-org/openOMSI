@@ -157,44 +157,45 @@ impl Renderer {
             // it stayed at the edge), as a share of the vertical field of view -
             // of the whole object when the mesh belongs to one (see
             // `set_object_culling`), else of the mesh alone. Surfaces and terrain
-            // are never dropped for it.
+            // are never dropped for it. A camera inside the object's sphere gets no
+            // size of its own either (OMSI has none, `object_screen_size`): taken as
+            // endless there, it held the top level of a backdrop whose picture
+            // stands a kilometre from its origin - ProjektKameniste's hills, a flat
+            // photograph meant for afar, stood blurred across the road as one drove
+            // up to it instead of giving way to the map's own hills.
             let size = if inst.object_radius > 0.0 {
                 let scale = Self::instance_scale(scene, inst);
                 let radius = inst.object_radius * scale;
                 let ov = view.transform_point3((inst.origin - scene.render_origin).as_vec3());
                 let (od, oz) = (ov.length(), -ov.z);
-                if od <= radius {
-                    f32::MAX
-                } else {
-                    // performance_maxObjDist, by the distance and by the depth
-                    let reach = if was_drawn(i) { max_obj_dist * 1.05 } else { max_obj_dist };
-                    if !inst.any_distance
-                        && max_obj_dist > 0.0
-                        && (od > radius + reach || oz - radius > reach)
-                    {
-                        return None;
-                    }
-                    // one size for the whole object, held while it moves less than
-                    // 6 % (the view's jitter); every mesh and level of it computes
-                    // the same key and the same size, so they decide alike
-                    let key = [
-                        inst.origin.x.to_bits(),
-                        inst.origin.y.to_bits(),
-                        inst.origin.z.to_bits(),
-                        radius.to_bits() as u64,
-                    ];
-                    let fresh = 2.0 * radius / (od.max(0.01) * fov_y);
-                    let size = match sizes_before.get(&key) {
-                        Some(&last) if fresh > last * 0.94 && fresh < last * 1.06 => last,
-                        _ => fresh,
-                    };
-                    if main_view {
-                        sizes.push((key, size));
-                    }
-                    size
+                // performance_maxObjDist, by the distance and by the depth
+                let reach = if was_drawn(i) { max_obj_dist * 1.05 } else { max_obj_dist };
+                if !inst.any_distance
+                    && max_obj_dist > 0.0
+                    && (od > radius + reach || oz - radius > reach)
+                {
+                    return None;
                 }
+                // one size for the whole object, held while it moves less than
+                // 6 % (the view's jitter); every mesh and level of it computes
+                // the same key and the same size, so they decide alike
+                let key = [
+                    inst.origin.x.to_bits(),
+                    inst.origin.y.to_bits(),
+                    inst.origin.z.to_bits(),
+                    radius.to_bits() as u64,
+                ];
+                let fresh = object_screen_size(radius, od, fov_y);
+                let size = match sizes_before.get(&key) {
+                    Some(&last) if fresh > last * 0.94 && fresh < last * 1.06 => last,
+                    _ => fresh,
+                };
+                if main_view {
+                    sizes.push((key, size));
+                }
+                size
             } else if m.bounds_radius > 0.0 {
-                2.0 * r / (v.length().max(0.01) * fov_y)
+                object_screen_size(r, v.length(), fov_y)
             } else {
                 f32::MAX
             };
@@ -208,9 +209,9 @@ impl Renderer {
                 }
                 return None;
             }
-            // (the top level runs to f32::MAX, and a camera inside the object's sphere
-            // measures it as f32::MAX: `>=` left out both levels of every object one
-            // stood next to - the parked cars, lamps and houses that vanished close by)
+            // (the top level runs to f32::MAX: `>=` against it left out both levels of
+            // every object one stood next to - the parked cars, lamps and houses that
+            // vanished close by)
             if (inst.lod.0 > 0.0 || inst.lod.1 < f32::MAX)
                 && (size < inst.lod.0 || (inst.lod.1 < f32::MAX && size >= inst.lod.1))
             {

@@ -3034,6 +3034,7 @@ dependencies = [
  "sha2 0.11.0",
  "tungstenite",
  "ureq",
+ "windows",
 ]
 
 [[package]]

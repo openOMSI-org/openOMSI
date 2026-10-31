@@ -212,6 +212,9 @@ impl Accum {
 
     /// One more picture of the shot (RGBA, sRGB, `w` x `h`).
     pub fn add(&mut self, rgba: &[u8]) {
+        if self.w == 0 || self.h == 0 {
+            return;
+        }
         let lut = lut();
         if rgba.len() < (self.w * self.h * 4) as usize {
             return;
@@ -577,6 +580,9 @@ pub fn histogram(rgba: &[u8], w: u32, crop: (u32, u32, u32, u32)) -> [[u32; 64];
 /// (red) or goes black (blue), and the edges in focus lit (`focus`: per pixel, the blur
 /// circle's radius in pixels).
 pub fn overlays(rgba: &mut [u8], w: u32, h: u32, zebra: bool, focus: Option<&[f32]>) {
+    if w == 0 || h == 0 {
+        return;
+    }
     let (wu, hu) = (w as usize, h as usize);
     let src = focus.map(|_| rgba.to_vec());
     rgba.par_chunks_mut(wu * 4).enumerate().for_each(|(y, row)| {
@@ -630,6 +636,18 @@ pub fn cropped(rgba: &[u8], w: u32, crop: (u32, u32, u32, u32)) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn zero_sized_photos_never_split_into_zero_sized_chunks() {
+        let mut zero_width = Accum::new(0, 2);
+        zero_width.add(&[]);
+        assert_eq!(zero_width.n, 0);
+        let mut zero_height = Accum::new(2, 0);
+        zero_height.add(&[]);
+        assert_eq!(zero_height.n, 0);
+        overlays(&mut [], 0, 2, true, None);
+        overlays(&mut [], 2, 0, true, None);
+    }
 
     fn flat(w: u32, h: u32, c: [u8; 3]) -> Vec<u8> {
         (0..w * h).flat_map(|_| [c[0], c[1], c[2], 255]).collect()

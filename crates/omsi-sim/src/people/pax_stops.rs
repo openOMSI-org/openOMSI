@@ -20,6 +20,42 @@ pub(super) fn entry_on_platform(side: Option<f32>, door_side: f32) -> bool {
 }
 
 impl PeopleSim {
+    pub(crate) fn visual_hail_range(d: DVec3, forward: DVec2) -> bool {
+        d.is_finite()
+            && d.length_squared() <= 60.0 * 60.0
+            && d.truncate().dot(forward) <= 12.0
+            && (d.x * forward.y - d.y * forward.x).abs() <= 14.0
+            && d.z.abs() < 8.0
+    }
+}
+impl PeopleSim {
+    /// Cosmetic recognition before door/path availability. Does not reserve a place,
+    /// choose a task or change which bus anybody actually boards.
+    pub fn visual_hail_bus(&self, i: usize, buses: &[BusNow]) -> Option<(BusId, bool, DVec3)> {
+        let p = self.pax(i)?;
+        // Only stationary waiting passengers can signal: once they start moving to
+        // a door, turning the whole pose would slide their feet sideways.
+        if p.inside.is_some() || p.task != Task::WaitingForBus { return None; }
+        let stop = p.stop?;
+        let s = self.stops.get(&stop)?;
+        let heading = s.heading.to_radians();
+        let forward = DVec2::new(heading.sin(), heading.cos());
+        // Resolve passenger route information once, before scanning candidate buses.
+        let (_, termini) = s.lines.get(p.line?)?;
+        buses.iter().filter(|b| {
+            if matches!(b.takes, Takes::Nobody) { return false; }
+            let d = b.pos - s.pos;
+            if !Self::visual_hail_range(d,forward) || (b.pos-self.people[i].position).length_squared()>60.0*60.0
+                || b.fwd().dot(forward) <= 0.0 || b.served.is_some_and(|id| id != stop) { return false; }
+            if b.route.as_ref().is_some_and(|r| r.is_last_stop(s)) { return false; }
+            b.terminus.as_deref().is_some_and(|term|
+                fit(stop, s, p.dest.as_deref(), termini, term, &b.takes)
+                    .or_else(|| b.route.as_ref().and_then(|r| r.takes_waiting_for(termini))).is_some())
+        }).min_by(|a,b| (a.pos-self.people[i].position).length_squared()
+            .total_cmp(&(b.pos-self.people[i].position).length_squared()))
+            .map(|b| (b.id, b.speed.abs() > 0.08, b.pos))
+    }
+
     /// Respect the map's side setting, as the vehicle's AI door scripts do.
     /// At two-sided stops, use this passenger's side rather than the stop box.
     pub(super) fn preferred_entry_side(&self, stop: i64, bn: &BusNow, position: DVec3) -> Option<f32> {
@@ -270,3 +306,7 @@ impl PeopleSim {
 #[cfg(test)]
 #[path = "brt_tests.rs"]
 mod brt_tests;
+
+#[cfg(test)]
+#[path = "visual_hail_tests.rs"]
+mod visual_hail_tests;

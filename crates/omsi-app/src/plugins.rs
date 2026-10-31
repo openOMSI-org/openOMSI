@@ -6,9 +6,12 @@ use omsi_plugin::{GameEvent, HostConfig, InfoValue, PluginIo, Plugins};
 use omsi_script::Host;
 use omsi_script::SysVar;
 
-/// Load every plugin of every content root (`OMSI_NO_PLUGINS=1` leaves them out).
-pub(crate) fn load() -> Plugins {
-    if omsi_cfg::flags::OMSI_NO_PLUGINS.is_set() {
+/// Load every plugin of every content root; a disabled session never scans those folders.
+pub(crate) fn load(disabled: bool) -> Plugins {
+    if disabled || omsi_cfg::flags::OMSI_NO_PLUGINS.is_set() {
+        if disabled {
+            log::info!("plugins disabled for this session (--no-plugins)");
+        }
         return Plugins::default();
     }
     // (never from content another machine sent: a LAN host's mods are data only)
@@ -143,7 +146,7 @@ impl crate::App {
             self.integrations.vehicle_scripts_of = now;
             return;
         }
-        if omsi_cfg::flags::OMSI_NO_PLUGINS.is_set() {
+        if self.args.no_plugins || omsi_cfg::flags::OMSI_NO_PLUGINS.is_set() {
             self.integrations.vehicle_scripts_of = now;
             return;
         }
@@ -1059,6 +1062,16 @@ impl PluginIo for Io<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn disabled_session_accepts_cli_flag_and_returns_no_plugins() {
+        use clap::Parser;
+        let normal = crate::cli::Args::try_parse_from(["openomsi"]).unwrap();
+        assert!(!normal.no_plugins);
+        let disabled = crate::cli::Args::try_parse_from(["openomsi", "--no-plugins"]).unwrap();
+        assert!(disabled.no_plugins);
+        assert!(load(disabled.no_plugins).is_empty());
+    }
 
     fn snapshot(info: Vec<(&'static str, InfoValue)>) -> Io<'static> {
         Io::snapshot(info)

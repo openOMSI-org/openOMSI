@@ -444,7 +444,9 @@ fn join_targets() {
     assert_eq!(
         parse_join("192.168.1.20").unwrap(),
         JoinTarget::Direct {
-            addrs: vec!["192.168.1.20:27015".parse().unwrap()],
+            addrs: (DEFAULT_PORT..DEFAULT_PORT + PORT_RANGE)
+                .map(|port| SocketAddr::from(([192, 168, 1, 20], port)))
+                .collect(),
             session: None,
             protocol: None
         }
@@ -1517,3 +1519,5 @@ mod connections;
 mod lifecycle;
 mod traffic;
 mod voice;
+
+mod join_rejections;

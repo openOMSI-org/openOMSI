@@ -41,7 +41,7 @@ mod scenario_tests;
 #[cfg(test)]
 mod junction_tests;
 #[cfg(test)]
-mod service_tests;
+pub(crate) mod service_tests;
 #[cfg(test)]
 mod population_tests;
 #[cfg(test)]

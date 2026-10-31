@@ -25,6 +25,7 @@ pub enum ProfKey {
     LightsAtlas,
     LightsCollect,
     LightsRain,
+    LightsSnow,
     LightsSoundscape,
     LightsSpray,
     Limiter,
@@ -72,11 +73,11 @@ pub enum ProfKey {
 
 impl ProfKey {
     /// Every key, in the order of their names.
-    pub const ALL: [ProfKey; 60] = {
+    pub const ALL: [ProfKey; 61] = {
         use ProfKey::*;
         [
             Acquire, Clock, Drive, Duty, Gpu, GroundGap, Hud, HudNavigator, Humans, Integrations, Lan, Lighting,
-            LightsAndRain, LightsAmbience, LightsAtlas, LightsCollect, LightsRain, LightsSoundscape, LightsSpray,
+            LightsAndRain, LightsAmbience, LightsAtlas, LightsCollect, LightsRain, LightsSnow, LightsSoundscape, LightsSpray,
             Limiter, Mirrors, OnFoot, Photo, Placement, Player, PlayerGlass, PlayerHover, Present, Record, Render, Scripted,
             ScriptedApply, ScriptedBoards, ScriptedInputs, ScriptedLamps, ScriptedLock, ScriptedScripts,
             ScriptedTextures, Server, Service, Shell, SimThreadStep, SimThreadWait, Snapshot, Startup, Streaming, Surroundings, Traffic,
@@ -106,6 +107,7 @@ impl ProfKey {
             LightsAtlas => "lights.atlas",
             LightsCollect => "lights.collect",
             LightsRain => "lights.rain",
+            LightsSnow => "lights.snow",
             LightsSoundscape => "lights.soundscape",
             LightsSpray => "lights.spray",
             Limiter => "limiter",

@@ -1629,7 +1629,7 @@ pub fn names_match(a: &str, b: &str) -> bool {
     // (letters of any script: a name of Cyrillic or Chinese letters only was empty here and
     // matched nothing)
     let (a, b) = (normalized_device_name(a), normalized_device_name(b));
-    !a.is_empty() && (a == b || a.contains(&b) || b.contains(&a))
+    !a.is_empty() && !b.is_empty() && (a == b || a.contains(&b) || b.contains(&a))
 }
 
 /// The connected device this name is set up as - its exact name first: an Xbox-type pad's
@@ -1894,6 +1894,9 @@ mod tests {
     fn names() {
         assert!(super::names_match("Logitech G25 Racing Wheel USB", "Logitech G25 Racing Wheel"));
         assert!(!super::names_match("", "x"));
+        assert!(!super::names_match("Logitech G25 Racing Wheel", ""));
+        assert!(!super::names_match("Logitech G25 Racing Wheel", " ... "));
+        assert!(!super::names_match("", ""));
         assert!(super::names_match("Кнопочная панель", "кнопочная  панель"));
         assert!(!super::names_match("Кнопочная панель", "Руль"));
     }

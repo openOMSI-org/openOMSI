@@ -41,6 +41,15 @@ use std::path::PathBuf;
 
 use journal::{End, Kind};
 
+/// Keep the newer half of a UTF-8 log without slicing through a character.
+fn log_tail(text: &str) -> &str {
+    let mut start = text.len() / 2;
+    while !text.is_char_boundary(start) {
+        start += 1;
+    }
+    &text[start..]
+}
+
 /// The guard's own log (append, small): what it saw and did.
 pub(crate) fn note(text: &str) {
     use std::io::Write;
@@ -48,7 +57,7 @@ pub(crate) fn note(text: &str) {
     // (kept short: half of it goes once it passes 256 kB)
     if std::fs::metadata(&path).map(|m| m.len() > 256 * 1024).unwrap_or(false) {
         if let Ok(t) = std::fs::read_to_string(&path) {
-            let _ = std::fs::write(&path, &t[t.len() / 2..]);
+            let _ = std::fs::write(&path, log_tail(&t));
         }
     }
     let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
@@ -199,5 +208,17 @@ pub fn test_break() {
             std::thread::sleep(std::time::Duration::from_secs(1));
         },
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod utf8_log_tests {
+    use super::log_tail;
+
+    #[test]
+    fn trims_at_a_valid_utf8_boundary() {
+        assert_eq!(log_tail("abcdef"), "def");
+        assert_eq!(log_tail("a€bb"), "bb");
+        assert_eq!(log_tail(""), "");
     }
 }

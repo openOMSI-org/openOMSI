@@ -270,6 +270,13 @@ from the cab with R and T. Details, the formats and the checks: [TROLLEYBUS.md](
 
 ## The launcher
 
+For troubleshooting, **Settings > General > Disable plugins** starts the next game
+without Lua plugins (including vehicle and scenery plugins) or legacy OMSI plugins.
+It is off by default and saved between launches. Plugin features will be unavailable;
+normal bus scripts still run. Switch it off and start another game to restore plugins.
+The game's command-line equivalent is `--no-plugins`; `OMSI_NO_PLUGINS=1` also keeps
+plugins disabled even when the launcher option is off.
+
 The launcher is a program of its own beside the game, `openomsi-launcher-app` (a Tauri window,
 `launcher/`, see its README): `openomsi` started without arguments opens it, and where it is
 missing - or its window cannot open, for want of WebView2 on an old Windows (the game offers

@@ -24,6 +24,7 @@ impl Renderer {
             corona_buf: None,
             corona_count: 0,
             corona_sent: Vec::new(),
+            snow_track_seen: 0,
             smoke: Vec::new(),
             smoke_buf: None,
             smoke_count: 0,
@@ -153,6 +154,7 @@ impl Renderer {
             casts_shadow: true,
             shadow_owner: None,
             roof: None,
+            roof_snow: None,
         });
         if scene.bounds_known.get(mesh).copied().unwrap_or(false) {
             scene.bounds_users.push(scene.instances.len() - 1);
@@ -214,6 +216,7 @@ impl Renderer {
             casts_shadow: false,
             shadow_owner: None,
             roof: None,
+            roof_snow: None,
         });
         if scene.bounds_known.get(mesh).copied().unwrap_or(false) {
             scene.bounds_users.push(scene.instances.len() - 1);
@@ -326,6 +329,16 @@ impl Renderer {
             let level = level.min(crate::scene::overlay::MAX_LEVEL);
             if i.slot_levels.iter().any(|l| *l != level) {
                 i.slot_levels.iter_mut().for_each(|l| *l = level);
+                Self::mark_changed(scene, instance);
+            }
+        }
+    }
+
+    /// How much snow lies on the roof of an instance's vehicle (see [`Instance::roof_snow`]).
+    pub fn set_roof_snow(&self, scene: &mut Scene, instance: usize, snow: Option<f32>) {
+        if let Some(i) = scene.instances.get_mut(instance) {
+            if i.roof_snow != snow {
+                i.roof_snow = snow;
                 Self::mark_changed(scene, instance);
             }
         }

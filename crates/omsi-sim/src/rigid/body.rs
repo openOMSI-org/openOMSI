@@ -840,6 +840,7 @@ impl RigidBody {
             }
         }
         let inside = self.spawned_inside.clone().unwrap_or_default();
+        let start_position = self.position;
         for _ in 0..4 {
             let me = self.body_box(bb);
             let mut deepest: Option<(usize, crate::collision::Contact)> = None;
@@ -848,6 +849,14 @@ impl RigidBody {
                     continue;
                 }
                 let Some(c) = me.contact(o) else { continue };
+                // An obstacle with no number (its box at NaN) gives a NaN depth that no test
+                // here throws out: the push put the bus at NaN after the step's own guard, and
+                // the next step kept it there - a black picture with the game running (#3161).
+                if !(c.depth.is_finite() && c.normal.is_finite() && c.point.is_finite()) {
+                    static ONCE: std::sync::Once = std::sync::Once::new();
+                    ONCE.call_once(|| log::warn!("vehicle physics: obstacle {i} (id {}) touches with no number (centre {:?}, heading {}); left out", o.id, o.center, o.heading));
+                    continue;
+                }
                 let rel = (glam::DVec2::new(self.velocity.x as f64, self.velocity.y as f64) - o.velocity).length() + self.omega.z.abs() as f64 * 6.0;
                 if c.depth > 0.5 + rel * dt as f64 * 2.0 {
                     continue;
@@ -928,6 +937,15 @@ impl RigidBody {
             // (the bus alone may even gain energy when the other one does the hitting)
             let energy = (before - self.kinetic_energy()).max(0.5 * vn_full * vn_full * (1.0 - e * e) / k_n);
             impacts.push(Impact { point, speed: -vn_full, energy, obstacle: i, broke: false, push: -n });
+        }
+        // (and should a crash still come out at NaN, the bus stays where it was before it -
+        // step() only guards its own motion)
+        if !(self.position.is_finite() && self.velocity.is_finite() && self.omega.is_finite()) {
+            static ONCE: std::sync::Once = std::sync::Once::new();
+            ONCE.call_once(|| log::warn!("vehicle physics: a crash put the body at no number; it stays where it was, at rest"));
+            self.position = start_position;
+            (self.velocity, self.omega) = (Vec3::ZERO, Vec3::ZERO);
+            impacts.clear();
         }
         // a blow the tyres have to catch: they slide until the body is back on its wheels
         if impacts.iter().any(|m| m.speed >= CRASH_SPEED) {

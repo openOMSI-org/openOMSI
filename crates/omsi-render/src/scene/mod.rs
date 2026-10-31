@@ -6,6 +6,8 @@ use crate::*;
 mod instances;
 pub(crate) mod overlay;
 mod upload;
+mod lod;
+pub(crate) use lod::object_screen_size;
 
 #[derive(Clone, Copy, Default)]
 pub(crate) struct InstanceBounds {
@@ -161,6 +163,9 @@ pub struct Instance {
     /// it. (Only the vehicle the camera is in was spared, by its box; every other bus showed
     /// its saloon under snow through the windows.)
     pub roof: Option<f32>,
+    /// How much snow lies on the vehicle's roof (0..1, see road_snow.wgsl `vehicle_snow`),
+    /// where the roads' built-up snow keeps it; None shows the weather's snow on it.
+    pub roof_snow: Option<f32>,
     /// Drawn with every slot in model order among the blended draws, as Omsi.exe draws a
     /// model: mesh after mesh, each material subset with its own states and depth write
     /// (0x7c32c4 -> 0x7fd6c4, DrawSubset), not its opaque parts first. Set on the models
@@ -231,6 +236,8 @@ pub struct Scene {
     /// The frame's draw list (see `Batch`), shared by the shadow, prepass and main passes.
     pub(crate) draw_buf: Option<GpuArray>,
     pub(crate) camera_bind_group: Option<wgpu::BindGroup>,
+    /// Which snow track field `camera_bind_group` binds (see `LightRes::snow_track_made`).
+    pub(crate) snow_track_seen: u32,
     /// The same with slot 8 not the ground albedo picture, for the pass that draws into it
     /// (a texture is not read and drawn into at once).
     pub(crate) ground_camera_bind_group: Option<wgpu::BindGroup>,
