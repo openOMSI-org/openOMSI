@@ -141,3 +141,14 @@ test('legacy unrestricted sessions are never implicitly treated as an official d
   assert.equal(data.serverFleetSelection(), false);
   assert.equal(data.selectableVehicles().length, 2, 'legacy local selection remains available');
 });
+
+
+test('a legacy server with a non-empty vehicle list still joins through LIST, without fleet authorization', async () => {
+  const { state, data, bus, launched } = await setup();
+  state.choice = { ...state.choice, bus,
+    lan_server: { asked: true, vehicles: [bus], fleet_version: 0, fleet: [] } };
+  assert.equal(data.serverFleetSelection(), false);
+  await data.start();
+  assert.equal(launched().length, 1, 'legacy join must not require LISTBUS consent');
+  assert.equal(launched()[0].args.duty.allow_server_fleet, false);
+});
