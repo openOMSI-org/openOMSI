@@ -291,8 +291,7 @@ impl TicketBlocks {
     }
 
     /// Remove one ticket of the requested type when the passenger takes it.
-    pub fn take_ticket( &mut self, ticket_type: usize, renderer: &Renderer, scene: &mut Scene,
-    ) -> bool {
+    pub fn take_ticket( &mut self, ticket_type: usize, renderer: &Renderer, scene: &mut Scene) -> bool {
         let Some(index) = self.desk_tickets.iter().position(|ticket| ticket.ticket_type == ticket_type)
         else {
             return false;

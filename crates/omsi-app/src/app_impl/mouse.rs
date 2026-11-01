@@ -597,10 +597,7 @@ impl App {
                     return;
                 }
                 // A tear-off ticket block: a ticket of its type torn off for the passenger.
-                let ticket = self.session.humans
-                    .as_ref()
-                    .and(self.gfx.sim_view.people.ticket_blocks.as_ref())
-                    .and_then(|b| b.hit(o, d, &p.vehicle));
+                let ticket = self.session.humans.as_ref().and(self.gfx.sim_view.people.ticket_blocks.as_ref()).and_then(|b| b.hit(o, d, &p.vehicle));
 
                 if let Some(n) = ticket {
                     log::info!("ticket block {n}: a ticket torn off");
