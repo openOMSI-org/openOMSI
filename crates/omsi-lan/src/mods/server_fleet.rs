@@ -56,6 +56,40 @@ pub(super) fn package(root: &Path, base: &(Manifest, Vec<PathBuf>), bus: &str, p
     Ok((Manifest { map: base.0.map.clone(), bus, entries }, sources))
 }
 
+/// The exact bus and selected paint used for remote-player fingerprint checks.
+/// Unlike LISTBUS (which offers every advertised repaint for the local driver),
+/// this must contain only the selected paint's dependencies. A different version
+/// must never be passed off as another player's fingerprint.
+pub(super) fn exact(root: &Path, bus: &str, paint: &str) -> Result<(Manifest, Vec<PathBuf>), String> {
+    let bus = omsi_net::vehicle_path(bus).ok_or("invalid bus path")?;
+    let Some(allowed) = SERVER_VEHICLES.get().filter(|v| !v.is_empty()) else {
+        return Err("fleet not configured".into());
+    };
+    if !allowed.iter().any(|v| omsi_net::vehicle_path(v).is_some_and(|b| b.eq_ignore_ascii_case(&bus))) {
+        return Err("that bus is not in the dedicated server's vehicles list".into());
+    }
+    if refuse_path(&bus).is_some() { return Err("refused vehicle path".into()); }
+    let path = omsi_cfg::find_in_roots(&bus).map(|(_, p)| p).unwrap_or_else(|| root.join(&bus));
+    let ty = omsi_sim::VehicleType::load(root, &path).map_err(|e| format!("{bus}: {e}"))?;
+    let scheme = if paint.is_empty() { None } else {
+        Some(ty.paint_schemes.iter().take(128).position(|p| p.name.eq_ignore_ascii_case(paint))
+            .ok_or("the selected repaint is not offered by the server")?)
+    };
+    let files = upload::listed(root, bus_files::of_type(root, &ty, scheme, None));
+    let entries = upload::hashed(&files);
+    if entries.len() != files.len() {
+        return Err(format!("{} of {} selected vehicle files could not be verified", files.len() - entries.len(), files.len()));
+    }
+    let m = identity::VehicleManifest { bus: bus.clone(), entries }.validated()?;
+    if m.entries.len() > MAX_FILES || m.size() > MAX_TOTAL {
+        return Err("server vehicle exceeds the transfer limits".into());
+    }
+    if let Some(e) = m.entries.iter().find(|e| refuse_path(&e.path).is_some() || e.size > MAX_FILE) {
+        return Err(format!("server vehicle contains a refused file: {}", e.path));
+    }
+    Ok((Manifest { map: String::new(), bus, entries: m.entries }, files.into_iter().map(|(_, p)| p).collect()))
+}
+
 /// A bounded ASCII request: paths and paint names are hex-encoded UTF-8 to preserve spaces.
 pub(super) fn hex_text(text: &str) -> String {
     if text.is_empty() { return "-".to_string(); }
