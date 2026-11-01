@@ -147,7 +147,7 @@ function Overview({ onCheck }) {
   // (a failed install stays in the installs' list until it is cleared: the way to resolve it)
   const clearInstalls = () => call('mods_clear_finished').then(pollNow).catch((e) => toast(t(e.message), 'error'));
   return html`<div class="stack">
-    <${StorageBlock} />
+    ${!["android", "ios"].includes(s.boot?.platform || "") && html`<${StorageBlock} />`}
     <${Card} title="Problems by content" actions=${html`<div class="row" style="gap:8px">
         ${s.scannedAt && html`<span class="muted small">${t('Last scan: {when}', { when: ago(s.scannedAt) })}</span>`}
         <${Button} kind="primary" icon="refresh" label=${busy ? 'Scanning...' : 'Scan again'} disabled=${busy} onClick=${scan} />
