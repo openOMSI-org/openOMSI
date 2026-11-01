@@ -75,6 +75,10 @@ test('server catalogue is authoritative, including the absence of preview and mi
   assert.equal(data.canPreviewBus(list[0], 'Local Red'), true);
   assert.equal(data.canPreviewBus(list[0], 'Official Blue'), false, 'server-only repaint has no local preview');
   assert.equal(data.serverFleetSelection(), true);
+  state.choice = { ...state.choice, paint: 'No longer on server' };
+  assert.equal(data.allowedBus().paint, '', 'removed server paint must fall back to default');
+  state.choice = { ...state.choice, paint: 'Official Blue' };
+  assert.equal(Object.keys(data.allowedBus()).length, 0, 'still-offered paint must remain');
   state.vehicles = state.vehicles.filter((v) => v.file !== bus);
   const remote = data.selectableVehicles();
   assert.equal(remote.length, 1);
@@ -83,6 +87,10 @@ test('server catalogue is authoritative, including the absence of preview and mi
   assert.equal(data.canPreviewBus(remote[0], 'Official Blue'), false);
   state.choice = { ...state.choice, bus: another };
   assert.equal(data.serverFleetSelection(), false, 'whitelisted but unadvertised buses cannot be downloaded');
+  assert.equal(data.allowedBus().bus, bus, 'an unavailable bus should switch to the first available offer');
+  state.choice = { ...state.choice, bus, lan_server: { asked: true, vehicles: [another],
+    fleet_version: 1, fleet: [{ bus, paints: [] }] } };
+  assert.equal(data.serverFleetSelection(), false, 'catalogue entries outside the whitelist cannot authorize downloads');
 });
 
 test('launch requires positive per-session consent and never serializes the UI consent marker', async () => {
@@ -111,7 +119,10 @@ test('refresh selects only a valid advertised bus and ignores a response for a p
   await data.askJoined({ refresh: true });
   assert.equal(state.choice.bus, bus);
   assert.equal(data.selectableVehicles()[0].paints[0], 'Blue');
-  assert.equal(calls.filter((c) => c.cmd === 'server_query').length, 1);
+  state.choice = { ...state.choice, paint: 'Retired paint' };
+  await data.askJoined({ refresh: true });
+  assert.equal(state.choice.paint, '', 'refresh must clear a removed repaint');
+  assert.equal(calls.filter((c) => c.cmd === 'server_query').length, 2);
   let finish;
   setServer(() => new Promise((resolve) => { finish = resolve; }));
   const pending = data.askJoined({ refresh: true });
