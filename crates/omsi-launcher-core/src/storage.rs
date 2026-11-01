@@ -67,21 +67,16 @@ pub fn cleanup(scope: &str, clear: bool) -> Result<Status, String> {
 /// The launcher invokes this on regular polls. Disk scanning is throttled, performed
 /// away from the UI thread, and deferred until no registered game is running.
 pub fn automatic_cleanup() {
+    if cfg!(any(target_os = "android", target_os = "ios")) { return; }
     static LAST: Mutex<Option<Instant>> = Mutex::new(None);
     let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
     if last.is_some_and(|t| t.elapsed() < Duration::from_secs(120)) { return; }
     if running() { return; }
     *last = Some(Instant::now());
     std::thread::spawn(|| {
-        if let Err(reason) = cleanup("both", false) {
-            // A game might have started since the idle check; retry on the next idle poll.
-            log_line(&reason);
-        }
+        // A game might have started since the idle check: cleanup re-checks.
+        let _ = cleanup("both", false);
     });
-}
-
-fn log_line(_msg: &str) {
-    // The cache is optional: a cleanup failure must not become a startup failure.
 }
 
 #[cfg(test)]
