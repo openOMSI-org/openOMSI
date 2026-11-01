@@ -404,7 +404,9 @@ async function serverOnlyBusPicker() {
     transport: ['bus'], server_only: true, server_catalog: true,
     installed: false, missing_packs: [],
   };
-  const b = { ...a, file: 'Vehicles/CI Test/B.bus', name: 'Test B', type_name: 'Test B' };
+  // Keep the test models in separate folders: the picker groups same-folder
+  // buses into one family and otherwise displays their shortened variant names.
+  const b = { ...a, file: 'Vehicles/CI Other/B.bus', folder: 'Vehicles/CI Other', name: 'Test B', type_name: 'Test B' };
   let closed = 0;
   const mount = async () => {
     render(html`<${BusPicker} onClose=${() => closed++} />`, host);
