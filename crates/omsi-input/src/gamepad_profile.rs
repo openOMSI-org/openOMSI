@@ -151,6 +151,32 @@ pub fn action_text(action: &str) -> &'static str {
     }
 }
 
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn xbox_direct_input_button(n: usize, hat_base: usize) -> Option<Button> {
+    if n >= hat_base {
+        return match n - hat_base {
+            0 => Some(Button::DPadUp),
+            1 => Some(Button::DPadRight),
+            2 => Some(Button::DPadDown),
+            3 => Some(Button::DPadLeft),
+            _ => None,
+        };
+    }
+    match n {
+        0 => Some(Button::South),
+        1 => Some(Button::East),
+        2 => Some(Button::West),
+        3 => Some(Button::North),
+        4 => Some(Button::LeftTrigger),
+        5 => Some(Button::RightTrigger),
+        6 => Some(Button::Select),
+        7 => Some(Button::Start),
+        8 => Some(Button::LeftThumb),
+        9 => Some(Button::RightThumb),
+        _ => None,
+    }
+}
+
 /// A button of a Sony pad read through DirectInput (Windows lists a DualShock 4 or a
 /// DualSense as a generic game controller, which gilrs - XInput only there - never sees):
 /// the buttons as the HID descriptor numbers them from 0, and the first hat after
