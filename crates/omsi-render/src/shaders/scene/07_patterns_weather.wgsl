@@ -39,7 +39,7 @@ fn vnoise_f(p: vec2<f32>, freq: f32, offset: vec2<f32>) -> f32 {
 }
 
 
-fn detail_noise(p: vec2<f32>) -> f32 {
+fn detail_noise(p: vec2<f32>, near: f32) -> f32 {
     // Anti-alias: point-sampling a lattice this fine aliases wherever one pixel's
     // footprint spans more than about one cell of it - looking down a street at a
     // grazing angle, or just driving away, constantly changes that footprint, and the
@@ -48,12 +48,22 @@ fn detail_noise(p: vec2<f32>) -> f32 {
     // octave fades to its own mean (0.5, the hash is uniform 0..1) once a pixel can no
     // longer resolve it, which is what an infinitely dense filter of it would give anyway.
     let w = max(fwidth(p).x, fwidth(p).y);
-    let fade0 = 1.0 - smoothstep(0.3, 1.2, w * 2.9);
-    let fade1 = 1.0 - smoothstep(0.3, 1.2, w * 0.73);
-    let fade2 = 1.0 - smoothstep(0.3, 1.2, w * 0.19);
-    let n0 = mix(0.5, vnoise_f(p, 2.9, vec2<f32>(0.0)), fade0);
-    let n1 = mix(0.5, vnoise_f(p, 0.73, vec2<f32>(0.0)), fade1);
-    let n2 = mix(0.5, vnoise_f(p, 0.19, vec2<f32>(0.0)), fade2);
+    let seen = select(0.0, 1.0, near > 0.0);
+    let fade0 = (1.0 - smoothstep(0.3, 1.2, w * 2.9)) * seen;
+    let fade1 = (1.0 - smoothstep(0.3, 1.2, w * 0.73)) * seen;
+    let fade2 = (1.0 - smoothstep(0.3, 1.2, w * 0.19)) * seen;
+    var n0 = 0.5;
+    var n1 = 0.5;
+    var n2 = 0.5;
+    if (fade0 > 0.0) {
+        n0 = mix(0.5, vnoise_f(p, 2.9, vec2<f32>(0.0)), fade0);
+    }
+    if (fade1 > 0.0) {
+        n1 = mix(0.5, vnoise_f(p, 0.73, vec2<f32>(0.0)), fade1);
+    }
+    if (fade2 > 0.0) {
+        n2 = mix(0.5, vnoise_f(p, 0.19, vec2<f32>(0.0)), fade2);
+    }
     return n0 * 0.5 + n1 * 0.3 + n2 * 0.2;
 }
 
