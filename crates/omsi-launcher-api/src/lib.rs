@@ -482,7 +482,7 @@ fn server_query(address: String) -> Answer {
     Ok(json!({
         "name": i.name, "motd": i.motd, "map": i.map, "players": i.players, "max_players": i.max_players,
         "version": i.version, "icon": icon, "time": i.time, "weather": i.weather, "password": i.password,
-        "vehicles": i.vehicles, "reached_at": i.reached_at,
+        "vehicles": i.vehicles, "fleet_version": i.fleet_version, "fleet": i.fleet, "reached_at": i.reached_at,
     }))
 }
 

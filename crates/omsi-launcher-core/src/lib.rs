@@ -2999,6 +2999,9 @@ pub struct Duty {
     pub lan_name: Option<String>,
     /// Discovered web gateway to try if the initial UDP join gets no answer (Auto only).
     pub lan_ws_fallback: Option<String>,
+    /// Explicit per-launch authorization for server-defined vehicle content.
+    #[serde(default)]
+    pub allow_server_fleet: bool,
     /// Season override: spring / summer / autumn / winter, with a phase `-early` / `-late`
     /// (`autumn-late`; none = the middle; empty = by date).
     pub season: Option<String>,
@@ -3303,6 +3306,7 @@ fn duty_args_with_settings(d: &Duty, root: &Path, st: &Value) -> Result<Vec<Stri
             omsi_net::describe_join(target).map_err(|e| anyhow!("LAN join: {e}"))?;
             a.extend(["--lan-join".into(), if target.is_empty() { "auto".into() } else { target.to_string() }]);
             if let Some(url) = d.lan_ws_fallback.as_deref().filter(|url| !url.is_empty()) { a.extend(["--lan-ws-fallback".into(), url.to_string()]); }
+            if d.allow_server_fleet { a.push("--allow-server-fleet".into()); }
         } else {
             return Err(anyhow!("LAN play: '{lan}' is neither host nor join:<code or address>"));
         }

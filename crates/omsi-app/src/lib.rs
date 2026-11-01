@@ -501,6 +501,10 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     } else {
         None
     };
+    // Match the actual session admission limit to the dedicated server configuration.
+    if let (Some(cfg), Some(l)) = (server_cfg.as_ref(), lan.as_mut()) {
+        l.set_peer_limit(cfg.max_players);
+    }
     // a dedicated server without its session has nobody to serve: why, and the end (it went
     // on running alone, unreachable, with a warning among the log's lines)
     if server_cfg.is_some() && lan.is_none() {
@@ -521,11 +525,14 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     if let Some(l) = lan.as_mut() {
         let mut c = args.lan_config();
         mods_server = lan::share_mods(&mut c, l);
+        if let Some(why) = c.mod_fetch_error.take() {
+            return Err(anyhow::anyhow!("The selected server bus could not be verified or downloaded: {why}"));
+        }
         lan::take_host_map(&mut c, l);
         args.take_lan_config(&c);
     }
     if let (Some(cfg), Some(l)) = (server_cfg.as_ref(), lan.as_ref()) {
-        lan::open_public_gateway(l, server::info_of(cfg), cfg.web_port, cfg.tunnel);
+        lan::open_public_gateway(l, server::info_of(cfg, &args.root), cfg.web_port, cfg.tunnel);
         lan::publish_vehicles(args.root.clone(), cfg.vehicles.clone());
         server::start_public_list(cfg);
         if cfg.tunnel {

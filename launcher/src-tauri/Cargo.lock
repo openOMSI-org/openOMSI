@@ -3031,6 +3031,8 @@ dependencies = [
  "log",
  "omsi-cfg",
  "ring",
+ "serde",
+ "serde_json",
  "sha2 0.11.0",
  "tungstenite",
  "ureq",

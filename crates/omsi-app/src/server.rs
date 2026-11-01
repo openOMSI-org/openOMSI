@@ -15,8 +15,36 @@ use std::path::Path;
 
 pub(crate) use omsi_lan::server_cfg::{enforce_vehicles, player_info, ServerCfg, SERVER_VEHICLES};
 
+/// Announce the server's own bus paints without allocating GPU resources. Only
+/// buses explicitly in server.cfg are indexed; an unrestricted fleet has no finite
+/// advertised catalogue. The launcher remains responsible for authenticated content
+/// checks before offering any remote-only vehicle for driving.
+fn fleet_paints(cfg: &ServerCfg, root: &Path) -> Vec<omsi_net::ws::FleetPaints> {
+    let mut offers = Vec::new();
+    for bus in cfg.vehicles.iter().take(256) {
+        let Some(rel) = omsi_net::vehicle_path(bus) else {
+            log::warn!("server fleet: ignoring invalid bus path {bus:?}");
+            continue;
+        };
+        let path = omsi_cfg::find_in_roots(&rel)
+            .map(|(_, p)| p)
+            .unwrap_or_else(|| omsi_cfg::resolve_path(root, &rel));
+        match omsi_sim::VehicleType::load(root, &path) {
+            Ok(vehicle) => {
+                // Use the same resolved scheme names as the authenticated LISTBUS
+                // transfer. A server build must not depend on launcher-only crates.
+                let paints = vehicle.paint_schemes.iter().take(128).map(|p| p.name.clone()).collect();
+                offers.push(omsi_net::ws::FleetPaints { bus: rel, paints });
+            }
+            Err(e) => log::warn!("server fleet: cannot load {}: {e}", path.display()),
+        }
+    }
+    log::info!("server fleet: announced {} models and {} paint schemes", offers.len(), offers.iter().map(|o| o.paints.len()).sum::<usize>());
+    offers
+}
+
 /// The server's status as the web gateway tells it (see `omsi_net::ws::ServerInfo`).
-pub(crate) fn info_of(cfg: &ServerCfg) -> omsi_net::ws::ServerInfo {
+pub(crate) fn info_of(cfg: &ServerCfg, root: &Path) -> omsi_net::ws::ServerInfo {
     omsi_net::ws::ServerInfo {
         name: cfg.name.clone(),
         motd: cfg.motd.clone(),
@@ -29,6 +57,8 @@ pub(crate) fn info_of(cfg: &ServerCfg) -> omsi_net::ws::ServerInfo {
         weather: cfg.weather.clone().unwrap_or_default(),
         password: false,
         vehicles: cfg.vehicles.clone(),
+        fleet: fleet_paints(cfg, root),
+        fleet_version: 1,
         reached_at: String::new(),
         players_public: cfg.share_positions,
         player_list: Vec::new(),
