@@ -119,6 +119,7 @@ struct JoinByCode: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Join friends").font(.inter(17, .semibold))
                         Text("Confirm the session first, then choose your bus on the Drive page. The game has not connected yet.").font(.inter(13)).foregroundStyle(Theme.muted)
+                        Text("Sessions and servers are run by players, not by openOMSI. The host receives your driver name, network address, chat and voice, and may keep logs.").font(.inter(13)).foregroundStyle(Theme.muted)
                     }
                     Field("Session code", help: String(localized: "Paste the complete code from your friend. Leading and trailing spaces are removed.")) {
                         HStack(spacing: 8) {
@@ -239,6 +240,7 @@ struct HostByCode: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Invite friends").font(.inter(17, .semibold))
                         Text("Start your hosted duty first. A session code appears only after the game starts.").font(.inter(13)).foregroundStyle(Theme.muted)
+                        Text("As the host, your game receives your players' driver names, network addresses, chat and voice. You are responsible for what you keep of it, such as logs and bans.").font(.inter(13)).foregroundStyle(Theme.muted)
                     }
                     if !code.isEmpty {
                         SessionCode(code: code)

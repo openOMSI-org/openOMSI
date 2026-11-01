@@ -58,6 +58,7 @@ struct MultiplayerPage: View {
 
     private var servers: some View {
         VStack(spacing: 16) {
+            Text("Sessions and servers are run by players, not by openOMSI. The host receives your driver name, network address, chat and voice, and may keep logs.").font(.inter(13)).foregroundStyle(Theme.muted).frame(maxWidth: .infinity, alignment: .leading)
             Card("Add server") {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 8) { nameField.frame(width: 180); addressField; addButton }
@@ -99,6 +100,7 @@ struct ServerCard: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
                     Text(server.info?.name?.isEmpty == false ? server.info!.name! : (server.name.isEmpty ? server.address : server.name)).font(.inter(15, .semibold)).lineLimit(1)
+                    Tag(text: server.official == true ? "Run by openOMSI" : "Community server")
                     if joined { Tag(text: "Joined", kind: .accent) }
                     if server.info?.password == true { Tag(text: "Password") }
                 }

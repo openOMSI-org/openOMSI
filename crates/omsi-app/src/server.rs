@@ -91,6 +91,7 @@ pub(crate) fn prepare(args: &mut Args, path: &Path) -> Result<ServerCfg> {
         args.offscreen = Some(std::env::temp_dir().join("omsi-server-unused.png"));
     }
     let density = cfg.passenger_density.map(|d| d.to_string()).unwrap_or_else(|| "as settings.cfg".into());
+    log::info!("server: you run this server, not openOMSI: you are responsible for the data your players send it (driver names, network addresses, chat, voice) and for what you keep of it, such as logs and bans");
     log::info!("server '{}': map {}, {} at {}, traffic {}, timetable {}, passengers {} (density {density}), UDP {} / web {}, at most {} players", cfg.name, cfg.map, cfg.date.as_deref().unwrap_or("today"), cfg.time, cfg.traffic, cfg.timetable, cfg.passengers, cfg.port, cfg.web_port, cfg.max_players);
     Ok(cfg)
 }
