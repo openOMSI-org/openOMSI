@@ -192,9 +192,20 @@ export function canPreviewBus(v, paint = '') {
 
 export function allowedBus(c = S.choice) {
   const allowed = serverBuses(c);
-  if (!allowed || allowed.has(busFile(c.bus))) return {};
-  const offered = selectableVehicles(c).find((v) => allowed.has(busFile(v.file)));
-  return offered ? { bus: offered.file, paint: '', number: '', hof_manual: false } : {};
+  if (!allowed) return {};
+  const offered = selectableVehicles(c);
+  const selected = offered.find((v) => busFile(v.file) === busFile(c.bus));
+  if (selected) {
+    // A server may have removed a repaint since the previous visit. Keep a
+    // still-offered paint, otherwise fall back to the bus's default look.
+    const names = selected.paints || [];
+    return c.paint && !names.some((p) => p.toLowerCase() === c.paint.toLowerCase())
+      ? { paint: '' } : {};
+  }
+  // The path can still be in vehicles but no longer have a loadable LISTBUS
+  // catalogue entry. Never leave such a stale bus selected if another works.
+  const first = offered[0];
+  return first ? { bus: first.file, paint: '', number: '', hof_manual: false } : {};
 }
 
 export const noServerBus = () => !!serverBuses() && !!S.vehicles && selectableVehicles().length === 0;
@@ -533,7 +544,8 @@ export async function duty(extra = {}) {
 
 /** A dedicated server's published fleet entry needs explicit consent before launch. */
 export function serverFleetSelection(c = S.choice) {
-  return c?.lan_mode === 'join' && c.lan_server?.fleet_version === 1
+  const allowed = serverBuses(c);
+  return !!allowed?.has(busFile(c.bus)) && c.lan_server?.fleet_version === 1
     && (c.lan_server.fleet || []).some((offer) => busFile(offer.bus) === busFile(c.bus));
 }
 
