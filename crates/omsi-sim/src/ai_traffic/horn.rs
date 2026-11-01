@@ -58,15 +58,6 @@ impl Default for Horn {
     }
 }
 
-/// A number in 0..1 drawn from `seed` and `n` (the same every time for the same two).
-pub fn draw(seed: u64, n: u64) -> f32 {
-    let mut z = seed ^ n.wrapping_mul(0x9E37_79B9_7F4A_7C15);
-    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-    z ^= z >> 31;
-    (z >> 11) as f32 / (1u64 << 53) as f32
-}
-
 /// Omsi.exe's braking distance with a second of reaction (m) at `v` m/s with deceleration
 /// `a` (m/s²).
 pub fn braking_distance(v: f32, a: f32) -> f32 {
@@ -84,18 +75,18 @@ pub fn sharp_stop(v: f32, a: f32, acc: f32, gap: f32, lead_v: f32, lead_acc: f32
 }
 
 /// Seconds a driver (`seed`) stands stuck before he honks the first time.
-pub fn patience(seed: u64, bus: bool) -> f32 {
-    let p = 20.0 + 25.0 * draw(seed, 1);
-    if bus {
+pub fn patience(seed: u64, honk_factor: f32, bus: bool) -> f32 {
+    let p = 20.0 + 25.0 * random::draw(seed, 1);
+    (if bus {
         p * 1.5
     } else {
-        p
-    }
+        p 
+    }) * honk_factor
 }
 
 /// Seconds until he honks again (his `n`-th honk).
-pub fn repeat(seed: u64, n: u32) -> f32 {
-    15.0 + 15.0 * draw(seed, 100 + n as u64)
+pub fn repeat(seed: u64, honk_factor: f32, n: u32) -> f32 {
+    (15.0 + 15.0 * random::draw(seed, 100 + n as u64)) * honk_factor
 }
 
 impl TrafficSim {
@@ -155,6 +146,7 @@ impl TrafficSim {
                 _ => None,
             };
             let st = &c.state;
+            let honk_factor: f32 = st.honk_factor;
             let sharp = ahead.is_some_and(|(gap, v, acc)| sharp_stop(st.speed, st.decel, st.acc, gap, v, acc));
             let stuck = self.stuck_behind(i, player_standing);
             let (seed, bus) = (c.seed, c.is_bus());
@@ -170,7 +162,7 @@ impl TrafficSim {
                 if let Some(who) = stuck {
                     h.stuck += dt;
                     // (the first honk once his patience has run out, then the repeats)
-                    let due = if h.again == f32::MAX { h.stuck >= patience(seed, bus) } else { now >= h.again };
+                    let due = if h.again == f32::MAX { h.stuck >= patience(seed, honk_factor, bus) } else { now >= h.again };
                     if due && ready {
                         honk = true;
                         at_whom = Some(who);
@@ -189,7 +181,7 @@ impl TrafficSim {
                     h.last = now;
                     h.honks += 1;
                     if at_whom.is_some() {
-                        h.again = now + repeat(seed, h.honks);
+                        h.again = now + repeat(seed, honk_factor, h.honks);
                     }
                 }
             }
@@ -214,8 +206,8 @@ impl TrafficSim {
             let oseed = o.seed;
             let h = &mut self.cars[j].horn;
             h.honked_at += 1;
-            if blocked && h.reply_at.is_none() && draw(oseed, 200 + n) < 0.4 {
-                h.reply_at = Some(now + 0.5 + draw(oseed, 300 + n));
+            if blocked && h.reply_at.is_none() && random::draw(oseed, 200 + n) < 0.4 {
+                h.reply_at = Some(now + 0.5 + random::draw(oseed, 300 + n));
             }
         }
     }
@@ -241,13 +233,11 @@ mod tests {
 
     #[test]
     fn draws_are_the_drivers_own() {
-        assert_eq!(draw(42, 1), draw(42, 1));
-        assert_ne!(draw(42, 1), draw(43, 1));
         for s in 0..200u64 {
-            let p = patience(s, false);
+            let p = patience(s, 1.0, false);
             assert!((20.0..=45.0).contains(&p));
-            assert!(patience(s, true) > p);
-            assert!((15.0..=30.0).contains(&repeat(s, 3)));
+            assert!(patience(s, 1.0, true) > p);
+            assert!((15.0..=30.0).contains(&repeat(s, 1.0, 3)));
         }
     }
 
@@ -326,7 +316,7 @@ mod tests {
         let h = honks(&mut t, &[blocker], me, 110.0);
         let seed = t.cars.iter().find(|c| c.id == me).unwrap().seed;
         assert!(h.len() >= 2, "honks at {h:?}");
-        assert!(h[0] >= patience(seed, false) && h[0] < patience(seed, false) + 10.0, "first honk at {:.1} s", h[0]);
+        assert!(h[0] >= patience(seed, 1.0, false) && h[0] < patience(seed, 1.0, false) + 10.0, "first honk at {:.1} s", h[0]);
         let gap = h[1] - h[0];
         assert!((15.0..=30.1).contains(&gap), "again after {gap:.1} s");
     }

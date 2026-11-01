@@ -497,26 +497,28 @@ pub fn extents(ty: &VehicleType, length: f32) -> (f32, f32, f32) {
 
 /// The driver of a random car: how fast, how close, how patient (see `AiState`).
 pub fn personality(state: &mut AiState, seed: u64, heavy: bool) {
-    let r = |k: u32| ((seed >> k) & 0xff) as f32 / 255.0;
+    let r = |k: u64| random::draw_gaussian(seed, 50000 + k);
+
     state.desire = if heavy {
-        0.88 + 0.1 * r(3)
+        0.93 + r(1) * 0.05
     } else {
-        0.9 + 0.22 * r(3)
+        1.01 + r(1) * 0.11
     };
-    state.headway = 1.0 + 0.8 * r(11);
-    state.min_gap = 1.6 + 1.4 * r(19);
+    state.headway = (1.4 + 0.4 * r(2)).max(0.5);
+    state.min_gap = (2.3 + 0.7 * r(3)).max(1.0);
     state.accel = if heavy {
-        0.8 + 0.4 * r(27)
+        1.0 + 0.1 * r(4)
     } else {
-        1.3 + 1.0 * r(27)
+        1.8 + 0.25 * r(4)
     };
-    state.decel = if heavy { 1.6 } else { 2.0 + 0.8 * r(35) };
-    state.accept_gap = 3.0 + 2.5 * r(43);
-    state.reaction = 0.4 + 0.8 * r(51);
+    state.decel = if heavy { 1.6 } else { 2.4 + 0.2 * r(5) };
+    state.accept_gap = (4.25 + 1.25 * r(6)).max(1.0);
+    state.reaction = (0.8 + 0.4 * r(7)).max(0.3);
+    state.honk_factor = 1.0 + 0.2 * r(8);
+    state.amber_factor = (0.03 + 0.01 * r(9)).max(0.0);
     // the hardest braking of ordinary driving: a lorry's or a bus's driver stays further
     // under the emergency stop's ceiling than a car's
-    let r2 = (((seed >> 7) ^ (seed >> 41)) & 0xff) as f32 / 255.0;
-    state.ordinary_brake = if heavy { 4.5 } else { 4.6 + 0.8 * r2 };
+    state.ordinary_brake = if heavy { 4.5 } else { 5.0 + 0.2 * r(10) };
 }
 
 /// Cruising speed of an AI aircraft where its flight path sets no limit (km/h): an
