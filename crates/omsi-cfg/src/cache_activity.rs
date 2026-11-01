@@ -8,6 +8,7 @@ pub struct Game {
     file: Option<File>,
     base: PathBuf,
     cleanup_allowed: fn() -> bool,
+    limits: (u64, u64),
 }
 
 impl Game {
@@ -31,16 +32,8 @@ impl Drop for Game {
             return;
         };
         use crate::cache_budget::{self, Kind};
-        cache_budget::trim(
-            &self.base.join("cache"),
-            Kind::Local,
-            cache_budget::LOCAL_LIMIT,
-        );
-        cache_budget::trim(
-            &self.base.join("lan-store"),
-            Kind::ClientLan,
-            cache_budget::LAN_LIMIT,
-        );
+        cache_budget::trim(&self.base.join("cache"), Kind::Local, self.limits.0);
+        cache_budget::trim(&self.base.join("lan-store"), Kind::ClientLan, self.limits.1);
     }
 }
 
@@ -62,6 +55,10 @@ pub fn game(base: &Path) -> std::io::Result<Game> {
         file: Some(file),
         base: base.to_path_buf(),
         cleanup_allowed: || true,
+        limits: (
+            crate::cache_budget::LOCAL_LIMIT,
+            crate::cache_budget::LAN_LIMIT,
+        ),
     })
 }
 
@@ -75,24 +72,28 @@ pub fn maintenance(base: &Path) -> Option<File> {
 
 #[cfg(test)]
 mod tests {
+    // Exercise real lease/drop behavior without multi-gigabyte temporary files,
+    // which are not necessarily sparse on every CI filesystem.
+    fn game(base: &std::path::Path) -> super::Game {
+        let mut lease = super::game(base).unwrap();
+        lease.limits = (8, 8);
+        lease
+    }
+
     #[test]
     fn an_application_can_defer_cleanup_for_an_older_game() {
-        use crate::cache_budget::LOCAL_LIMIT;
         let base = std::env::temp_dir().join(format!("omsi-cache-legacy-{}", std::process::id()));
         std::fs::create_dir_all(base.join("cache")).unwrap();
         let file = base.join("cache/old.tex");
-        std::fs::File::create(&file)
-            .unwrap()
-            .set_len(LOCAL_LIMIT + 1)
-            .unwrap();
-        let lease = super::game(&base).unwrap().only_cleanup_when(|| false);
+        std::fs::File::create(&file).unwrap().set_len(9).unwrap();
+        let lease = game(&base).only_cleanup_when(|| false);
         drop(lease);
         assert!(file.exists(), "an older game can still be using this cache");
         assert!(
             super::maintenance(&base).is_some(),
             "the shared lease was released"
         );
-        drop(super::game(&base).unwrap());
+        drop(game(&base));
         assert!(
             !file.exists(),
             "the cache is reclaimed once the older game has ended"
@@ -102,22 +103,18 @@ mod tests {
 
     #[test]
     fn only_the_last_game_reclaims_over_budget_data() {
-        use crate::cache_budget::{LAN_LIMIT, LOCAL_LIMIT};
         let base =
             std::env::temp_dir().join(format!("omsi-cache-last-game-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
-        for (dir, name, size) in [
-            ("cache", "old.tex", LOCAL_LIMIT + 1),
-            ("lan-store", "old.blob", LAN_LIMIT + 1),
-        ] {
+        for (dir, name, size) in [("cache", "old.tex", 9), ("lan-store", "old.blob", 9)] {
             std::fs::create_dir_all(base.join(dir)).unwrap();
             std::fs::File::create(base.join(dir).join(name))
                 .unwrap()
                 .set_len(size)
                 .unwrap();
         }
-        let first = super::game(&base).unwrap();
-        let second = super::game(&base).unwrap();
+        let first = game(&base);
+        let second = game(&base);
         drop(first);
         assert!(base.join("cache/old.tex").exists());
         assert!(base.join("lan-store/old.blob").exists());
