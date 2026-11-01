@@ -7,7 +7,7 @@
 //! machine: a host sends its realm (`REALM`, a random key kept in the owner's list), and the
 //! game sends `omsi_net::host_hardware_id` of the two. A host's sessions all get the same
 //! identifier, so a banned machine is known again; two owners get different ones, so they
-//! cannot compare notes on who joined them. No serial number of a disk or board is read. A
+//! cannot compare notes on who joined them unless they share one realm on purpose. No serial number of a disk or board is read. A
 //! player switches it off in the launcher (`hardware_id = 0`) or with `OMSI_NO_HARDWARE_ID=1`
 //! (a host may turn such players away, `require_hardware_id`). Bans made before the realm
 //! (protocol 15) name identifiers no game sends any more. It is a claim of the game, not a proof of the
@@ -203,9 +203,15 @@ impl BanStore {
         let mut s = BanStore { session, owner, realm, owner_stamp: None, session_path, owner_path, revision: 1 };
         if s.realm.is_empty() {
             s.realm = random_realm();
-            if readable {
+            if !s.session.is_empty() || !s.owner.is_empty() {
+                log::warn!("bans: hardware bans made before openOMSI's per-owner identifiers (LAN protocol 16) no longer match anybody; ban those players again");
+            }
+            let fresh = s.owner_path.as_deref().is_some_and(|p| !p.exists());
+            if fresh {
+                s.claim_realm();
+            } else if readable {
                 if let Err(e) = s.save(Scope::Owner) {
-                    log::warn!("bans: {e}");
+                    log::error!("bans: {e}; the identifiers players send will change at the next start");
                 }
             }
         }
@@ -295,6 +301,24 @@ impl BanStore {
         }
     }
 
+    /// A new owner's list with the realm in it, unless another process made one first: then
+    /// its realm is taken, so every session of the account asks for the same identifiers.
+    fn claim_realm(&mut self) {
+        let Some(p) = self.owner_path.clone() else { return };
+        if let Some(d) = p.parent() {
+            let _ = std::fs::create_dir_all(d);
+        }
+        let body = serde_json::to_vec_pretty(&File { version: 1, realm: self.realm.clone(), bans: Vec::new() }).unwrap_or_default();
+        let made = std::fs::OpenOptions::new().write(true).create_new(true).open(&p).and_then(|mut f| std::io::Write::write_all(&mut f, &body));
+        if made.is_err() {
+            let (owner, realm, _) = read(Some(&p));
+            if !realm.is_empty() {
+                self.owner = owner;
+                self.realm = realm;
+            }
+        }
+    }
+
     /// Read the owner's file again if another session of the account changed it.
     pub fn refresh_owner(&mut self) {
         let Some(p) = self.owner_path.clone() else { return };
@@ -356,7 +380,7 @@ fn write(path: &Path, bans: &[Ban], realm: &str) -> std::io::Result<()> {
     if let Some(d) = path.parent() {
         std::fs::create_dir_all(d)?;
     }
-    let tmp = path.with_extension("json.tmp");
+    let tmp = path.with_extension(format!("json.{}.tmp", std::process::id()));
     std::fs::write(&tmp, serde_json::to_vec_pretty(&File { version: 1, realm: realm.to_string(), bans: bans.to_vec() }).unwrap_or_default())?;
     std::fs::rename(&tmp, path)
 }

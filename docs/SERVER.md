@@ -459,10 +459,13 @@ or token is ever written to it; names, reasons and chat lines are kept as cleane
 ## Machine bans
 
 A ban by name or address does not say who somebody is, so the lasting ban is by **machine**.
-The game sends a *hardware identifier* when it joins: 128 bits of SHA-256 over a fixed text and
-the machine's own id (Windows `MachineGuid`, Linux `/etc/machine-id`, macOS `IOPlatformUUID`;
-on a system with none, a random number kept in `~/.openomsi/hardware-id`). The id itself never
-leaves the machine and cannot be got back from the hash; no disk or board serial number is read.
+The game sends a *hardware identifier* when it joins, made for this host's owner: the host
+answers the first hello with its *realm* (a random key kept in the owner's list, see below), and
+the game sends SHA-256 over a fixed text, the machine's own id (Windows `MachineGuid`, Linux
+`/etc/machine-id`, macOS `IOPlatformUUID`; on a system with none, a random number kept in
+`~/.openomsi/hardware-id`) and that realm, cut to 128 bits. The id itself never leaves the
+machine and cannot be got back from the hash; no disk or board serial number is read. Every
+session of one owner list gets the same identifier from a machine; another owner gets another.
 The host pins the identifier to the connection at its first hello (a later hello of the same
 connection cannot change it), shows it to nobody (the panels list bans by name, reason and
 time only), and turns a joining machine away if a ban holds it:
@@ -490,10 +493,14 @@ time only), and turns a joining machine away if a ban holds it:
   machine or another computer is another machine. A game before this feature, and a player who
   switched it off (`OMSI_NO_HARDWARE_ID=1`), send none: such a player cannot be banned by
   machine - `require_hardware_id = 1` turns them away, and a ban by `ban` still holds the run.
-  The same identifier goes to every server a player joins, so two hosts could compare who
-  joined them; the player can switch it off at the price of servers that require it.
-* **Wire.** The `HELLO` has one more, last field (`|<hardware id>`); the protocol number stays,
-  a host before the field ignores it and a game before it sends none.
+  Players switch it off in the launcher (*Send servers an identifier for bans*) or with
+  `OMSI_NO_HARDWARE_ID=1`. Two hosts with different owner lists get different identifiers
+  and cannot compare who joined them, unless they share the list (`owner_bans`) on purpose.
+  Bans made before LAN protocol 16 name identifiers no game sends any more (the server's log
+  says so at the start): ban those players again.
+* **Wire.** The `HELLO` ends with `|<hardware id>`: empty until the host's `REALM|<realm>`
+  came, `-` when the player sends none. A host with a ban list answers an empty one with
+  `REALM` and lets the player in only after the next hello.
 
 ## Public server list
 

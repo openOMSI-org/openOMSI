@@ -149,6 +149,7 @@ pub use wire::{
 /// 14: session-bound variable/schema/sound packets and acknowledged long strings.
 /// 15: the AI traffic as a table of rows under ids (`traffic_table`: `TRAF` datagrams the
 /// client acknowledges with `TACK`), no longer cars in `WORLD` or `DESC|c|…`.
+/// 16: `REALM`: the hardware identifier is made for each host owner, not the same everywhere.
 pub const PROTOCOL: u32 = 16;
 /// (omsi-plugin's `MULTIPLAYER_PORTS` keeps `omsi.send` off this one and the `PORT_RANGE` after it.)
 pub const DEFAULT_PORT: u16 = 27015;
@@ -3113,7 +3114,7 @@ impl LanSession {
                 return;
             }
             None if self.hw_required && hwid.is_none() => {
-                self.reject(from, "this session needs the game's identifier for bans: turn it on in the launcher (Settings, General), or update the game");
+                self.reject(from, "this session needs the game's identifier for bans: turn it on in the launcher's settings, or update the game");
                 return;
             }
             None if hwid.as_deref().is_some_and(|h| self.hw_bans.iter().any(|b| b.0 == h)) => {
