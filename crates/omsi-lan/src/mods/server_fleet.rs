@@ -15,11 +15,18 @@ pub(super) fn package(root: &Path, base: &(Manifest, Vec<PathBuf>), bus: &str, p
     if refuse_path(&bus).is_some() { return Err("refused vehicle path".into()); }
     let path = omsi_cfg::find_in_roots(&bus).map(|(_, p)| p).unwrap_or_else(|| root.join(&bus));
     let ty = omsi_sim::VehicleType::load(root, &path).map_err(|e| format!("{bus}: {e}"))?;
-    let scheme = if paint.is_empty() { None } else {
-        Some(ty.paint_schemes.iter().position(|p| p.name.eq_ignore_ascii_case(paint))
-            .ok_or("the selected repaint is not installed on the server")?)
-    };
-    let files = upload::listed(root, bus_files::of_type(root, &ty, scheme, None));
+    if !paint.is_empty() && !ty.paint_schemes.iter().take(128).any(|p| p.name.eq_ignore_ascii_case(paint)) {
+        return Err("the selected repaint is not offered by the server".into());
+    }
+    // The server offers the *complete configured model*, including the default
+    // and all advertised repaint dependencies. A player with the same bus but
+    // without a server repaint must obtain that repaint without replacing OMSI 2.
+    // BTreeSet deduplicates shared textures, models, scripts and sounds.
+    let mut all = std::collections::BTreeSet::new();
+    for scheme in std::iter::once(None).chain((0..ty.paint_schemes.len().min(128)).map(Some)) {
+        all.extend(bus_files::of_type(root, &ty, scheme, None));
+    }
+    let files = upload::listed(root, all.into_iter().collect());
     let entries = upload::hashed(&files);
     // Hashing skips files it cannot safely read. Never zip a shortened hash
     // list with the original paths: that could serve the wrong bytes for a hash.
