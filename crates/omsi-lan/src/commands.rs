@@ -14,8 +14,12 @@ pub enum Command {
     Trigger(String),
     /// A game asks the host what the session allows of voice chat.
     VoiceAsked,
+    /// A player asks the host for the optional RP speed limit.
+    SpeedLimitAsked,
     /// (host) what the session allows of voice chat.
     Voice(VoicePolicy),
+    /// The server's RP speed limit (0: no governor).
+    SpeedLimit(u32),
     /// (host) an administrator silenced our voice chat (true) or allowed it again.
     VoiceMuted(bool),
     /// (host) our bus put there, stopped.
@@ -63,6 +67,20 @@ pub enum Command {
     NotifySeen(String),
 }
 
+/// Last valid speed policy sent by the host. Only host-sourced commands set this.
+static ACTIVE_SPEED_LIMIT_KMH: std::sync::atomic::AtomicU32 =
+    std::sync::atomic::AtomicU32::new(0);
+
+pub fn speed_limit_kmh() -> u32 {
+    ACTIVE_SPEED_LIMIT_KMH.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+pub fn set_speed_limit_kmh(value: u32) {
+    if matches!(value, 0 | 60 | 75 | 80) {
+        ACTIVE_SPEED_LIMIT_KMH.store(value, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
 /// The host's number in every session.
 const HOST: u32 = 1;
 
@@ -71,6 +89,9 @@ impl Command {
     pub fn parse(from: u32, text: &str) -> Option<Command> {
         if let Some(ev) = text.strip_prefix("trigger ") {
             return Some(Command::Trigger(ev.trim().to_string()));
+        }
+        if text == "speed-limit?" {
+            return Some(Command::SpeedLimitAsked);
         }
         if text == "voice?" {
             return Some(Command::VoiceAsked);
@@ -87,6 +108,10 @@ impl Command {
         Some(match verb {
             "notify-seen" => Command::NotifySeen(arg.trim().to_string()),
             _ if !host => return None,
+            "speed-limit" => match arg.trim().parse::<u32>().ok() {
+                Some(v @ (0 | 60 | 75 | 80)) => Command::SpeedLimit(v),
+                _ => return None,
+            },
             "teleport" => match numbers(arg)[..] {
                 [x, y, z, heading] => Command::Teleport { at: DVec3::new(x, y, z), heading },
                 _ => return None,
@@ -140,6 +165,15 @@ mod tests {
     use super::*;
 
     /// The host's commands read as what they mean, and are not taken from anybody else.
+    #[test]
+    fn only_host_announces_valid_rp_limits() {
+        assert_eq!(Command::parse(2, "speed-limit?"), Some(Command::SpeedLimitAsked));
+        assert_eq!(Command::parse(1, "speed-limit 60"), Some(Command::SpeedLimit(60)));
+        assert_eq!(Command::parse(1, "speed-limit 0"), Some(Command::SpeedLimit(0)));
+        assert_eq!(Command::parse(2, "speed-limit 60"), None);
+        assert_eq!(Command::parse(1, "speed-limit 63"), None);
+    }
+
     #[test]
     fn the_hosts_commands_and_nobody_elses() {
         assert_eq!(Command::parse(1, "teleport 1.5 2 3 90"), Some(Command::Teleport { at: DVec3::new(1.5, 2.0, 3.0), heading: 90.0 }));

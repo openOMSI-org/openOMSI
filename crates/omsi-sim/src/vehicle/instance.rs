@@ -295,6 +295,7 @@ impl VehicleInstance {
             trailers_stepped: false,
             var_index: std::sync::Arc::new(var_index),
             model_only_vars,
+            scheme_overrides: Vec::new(),
             props_plan: PropsPlan::default(),
             pax_vars: std::sync::OnceLock::new(),
             engine_ids: std::sync::OnceLock::new(),
@@ -454,6 +455,7 @@ impl VehicleInstance {
     /// and its repaints choose the glazed doors with `[setvar] v_drzwi 1` - which Omsi.exe
     /// shows. Set before the scripts alone, the script's 0 was drawn: the JGSP Novi Sad
     /// Vectus had the standard doors' white frames where the original has black (#3183).
+    /// A variable chosen over the scheme ([`Self::set_var_over_scheme`]) gets the value chosen.
     pub(crate) fn apply_scheme_vars_each_frame(&mut self) {
         let Some(Some(i)) = self.host.paint_scheme else { return };
         if let Some(s) = self.ty.paint_schemes.get(i) {
@@ -462,9 +464,26 @@ impl VehicleInstance {
             }
             let vars = s.set_vars.clone();
             for (var, v) in vars {
+                let v = self.scheme_overrides.iter().find(|(n, _)| n.eq_ignore_ascii_case(&var)).map_or(v, |(_, o)| *o);
                 self.set_var(&var, v);
             }
         }
+    }
+
+    /// Set `name` to `v` and keep it over the paint scheme's own value (`--setvar`). A scheme
+    /// that sets the same variable writes it every frame (see
+    /// [`Self::apply_scheme_vars_each_frame`]), so a value set once lasted a frame: a
+    /// launcher's door or mirror type chosen over the repaint's was the repaint's again in the
+    /// game, and only the variables the repaint does not set were the player's. A variable
+    /// the scheme does not set is set once, as [`Self::set_var`] does, for the scripts to
+    /// change. False: the vehicle has no such variable.
+    pub fn set_var_over_scheme(&mut self, name: &str, v: f32) -> bool {
+        if !self.set_var(name, v) {
+            return false;
+        }
+        self.scheme_overrides.retain(|(n, _)| !n.eq_ignore_ascii_case(name));
+        self.scheme_overrides.push((name.to_string(), v));
+        true
     }
 }
 

@@ -370,7 +370,20 @@ jobs:
         run: |
           sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           yes | "$sdkmanager" --licenses >/dev/null || true
-          "$sdkmanager" "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358" >/dev/null
+          # A failed/corrupt NDK ZIP download is transient on hosted runners.
+          # Retry the installation and clear incomplete archives between attempts.
+          for attempt in 1 2 3; do
+            if "$sdkmanager" "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358" >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::Android SDK installation failed after three attempts"
+              exit 1
+            fi
+            echo "::warning::Android SDK download failed (attempt $attempt/3), retrying"
+            rm -rf "$ANDROID_HOME/ndk/28.2.13676358" "$ANDROID_HOME/.temp"
+            sleep $((attempt * 10))
+          done
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
       - name: Build
         run: scripts/build-android.sh
