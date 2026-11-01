@@ -7,6 +7,16 @@ use std::path::{Path, PathBuf};
 pub struct Game {
     file: Option<File>,
     base: PathBuf,
+    cleanup_allowed: fn() -> bool,
+}
+
+impl Game {
+    /// Let the application also protect older registered games that do not yet
+    /// hold a shared lease. Current games are always protected by the OS lock.
+    pub fn only_cleanup_when(mut self, allowed: fn() -> bool) -> Self {
+        self.cleanup_allowed = allowed;
+        self
+    }
 }
 
 impl Drop for Game {
@@ -14,7 +24,7 @@ impl Drop for Game {
         // Close our shared handle before asking for the exclusive lease. Another
         // game (or a newly starting game) still prevents maintenance atomically.
         self.file.take();
-        if cfg!(any(target_os = "android", target_os = "ios")) {
+        if cfg!(any(target_os = "android", target_os = "ios")) || !(self.cleanup_allowed)() {
             return;
         }
         let Some(_maintenance) = maintenance(&self.base) else {
@@ -51,6 +61,7 @@ pub fn game(base: &Path) -> std::io::Result<Game> {
     Ok(Game {
         file: Some(file),
         base: base.to_path_buf(),
+        cleanup_allowed: || true,
     })
 }
 
@@ -64,6 +75,31 @@ pub fn maintenance(base: &Path) -> Option<File> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn an_application_can_defer_cleanup_for_an_older_game() {
+        use crate::cache_budget::LOCAL_LIMIT;
+        let base = std::env::temp_dir().join(format!("omsi-cache-legacy-{}", std::process::id()));
+        std::fs::create_dir_all(base.join("cache")).unwrap();
+        let file = base.join("cache/old.tex");
+        std::fs::File::create(&file)
+            .unwrap()
+            .set_len(LOCAL_LIMIT + 1)
+            .unwrap();
+        let lease = super::game(&base).unwrap().only_cleanup_when(|| false);
+        drop(lease);
+        assert!(file.exists(), "an older game can still be using this cache");
+        assert!(
+            super::maintenance(&base).is_some(),
+            "the shared lease was released"
+        );
+        drop(super::game(&base).unwrap());
+        assert!(
+            !file.exists(),
+            "the cache is reclaimed once the older game has ended"
+        );
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
     #[test]
     fn only_the_last_game_reclaims_over_budget_data() {
         use crate::cache_budget::{LAN_LIMIT, LOCAL_LIMIT};

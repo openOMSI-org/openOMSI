@@ -690,6 +690,7 @@ pub fn clean_up() {
         // session resources are gone; the last game then returns to the budgets.
         if cfg!(any(target_os = "android", target_os = "ios")) { return; }
         if let Some(_maintenance) = sandbox_base().and_then(|p| {
+            if other_registered_game_running() { return None; }
             omsi_cfg::cache_activity::maintenance(p.parent()?)
         }) {
             if let Some(store_path) = store_dir() {
@@ -703,6 +704,19 @@ pub fn clean_up() {
             }
         }
     }
+}
+
+/// Older launcher-started games may not hold the shared cache lease yet.
+fn other_registered_game_running() -> bool {
+    let Some(base) = sandbox_base() else { return true };
+    let Some(data_dir) = base.parent() else { return true };
+    let Ok(entries) = std::fs::read_dir(data_dir.join("instances")) else { return false };
+    entries.flatten().any(|e| {
+        let Ok(bytes) = std::fs::read(e.path()) else { return false };
+        let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) else { return false };
+        let Some(pid) = json.get("pid").and_then(|x| x.as_u64()).and_then(|v| u32::try_from(v).ok()) else { return false };
+        pid != std::process::id() && process_alive(pid)
+    })
 }
 
 /// Free room on the disk `dir` is on (Windows too).

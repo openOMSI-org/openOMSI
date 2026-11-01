@@ -297,7 +297,10 @@ pub fn run() -> Result<()> {
         return open_app_launcher(fatal_message);
     }
     // Launcher helpers and the launcher itself must not count as a running game.
-    let _cache_activity = omsi_cfg::cache_activity::game(&omsi_launcher_lib::data_dir())?;
+    let _cache_activity = omsi_cfg::cache_activity::game(&omsi_launcher_lib::data_dir())?
+        .only_cleanup_when(|| !omsi_launcher_lib::instances::list().iter().any(|game| {
+            game.running && game.pid != std::process::id()
+        }));
     let Some(app) = make_app(args, server_cfg)? else { return Ok(()) };
     // a game session's start goes into the start guard's journal (a version whose sessions
     // keep failing before their first frames is healed at the launcher's next start)
