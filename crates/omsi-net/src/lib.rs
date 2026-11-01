@@ -204,6 +204,7 @@ use voice_net::VOICE_RATE;
 const MESSAGE_RATE: (f32, f32) = (10.0, 20.0);
 const CHAT_RATE: (f32, f32) = (1.0, 3.0);
 mod receive_budget;
+mod receive_world;
 mod join_queue;
 // ---------------------------------------------------------------------------------------
 // session codes
@@ -2589,36 +2590,7 @@ impl LanSession {
             }
             if self.on_table_or_voice(&data, from) { continue; }
             if data[0] == world::WORLD_MAGIC {
-                // a client takes the world from its host (above); a host takes the people of
-                // a client's own from that client (within its rate)
-                if self.role == Role::Host {
-                    let Some(id) = self
-                        .peers
-                        .iter()
-                        .find(|(_, p)| p.addr == Some(from))
-                        .map(|(id, _)| *id)
-                    else {
-                        continue;
-                    };
-                    if self.checked_peer(id, from, STATE_RATE, PeerTraffic::State).is_none() {
-                        continue;
-                    }
-                    if let Some(mut f) = world::decode(&data, PROTOCOL as u8) {
-                        self.world_received += n as u64;
-                        f.lights.clear();
-                        if self.world_up.len() < 256 {
-                            self.world_up.push((id, Instant::now(), f));
-                        }
-                    }
-                } else {
-                    if let Some(f) = world::decode(&data, PROTOCOL as u8) {
-                        self.world_received += n as u64;
-                        // (a game that stopped ticking does not pile them up without end)
-                        if self.world_in.len() < 256 {
-                            self.world_in.push((Instant::now(), f));
-                        }
-                    }
-                }
+                self.on_world_datagram(&data, from, n);
                 continue;
             }
             if data[0] == wire::STATE_MAGIC {
