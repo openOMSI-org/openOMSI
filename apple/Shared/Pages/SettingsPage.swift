@@ -452,7 +452,11 @@ struct SettingsPage: View {
                 SettingToggle(label: "Tell me about a new version during a session", key: "update_notify", fallback: true)
             }
             SettingToggle(label: "Count me in the website's \"playing now\" (anonymous)", key: "presence", fallback: true)
-            Text("openOMSI \(store.version) (\(store.build))").font(.inter(12)).foregroundStyle(Theme.muted)
+            HStack {
+                Text("openOMSI \(store.version) (\(store.build))").font(.inter(12)).foregroundStyle(Theme.muted)
+                Spacer()
+                Button("Privacy") { Platform.openURL("https://openomsi.org/privacy/") }.buttonStyle(.ghost)
+            }
             SectionTitle("Reset").padding(.top, 8)
             HStack {
                 Button { confirmReset = true } label: { Label("Reset all settings...", systemImage: "arrow.counterclockwise") }
