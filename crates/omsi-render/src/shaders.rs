@@ -84,25 +84,6 @@ mod tests {
         text.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3))
     }
 
-    /// The assembled modules are byte for byte the single files they were cut from (sizes
-    /// and hashes taken of `shader.wgsl` and `enhanced.wgsl` before the cut, updated for
-    /// 0.2.30's capped surface pull and the Vanilla/transparency fixes in both modules,
-    /// 0.2.42's night sphere map and lacquer, people lit as bodies, not leaves, the far
-    /// map's shadow where no traced one is found, 0.2.51's clear coat that stays sharp on
-    /// lacquer, the draw order's depth step of a surface lying on another of its object, and a
-    /// livery's tint above the alpha test, the painted lines' pull and the wet paint's water film, and the player's vehicle
-    /// standing between other vehicles' lamps and what lies behind it, and clear vehicle
-    /// lamps taking coverage from their active night map, and #3019's larger rain caps, and the tracked panes' snow laid out in the film mesh's own
-    /// metres, and the lamps' shadow maps by the tile their record names and the saloon's visibility term
-    /// with the ground no longer lit by the tile light map, and the street-scale
-    /// occlusion, the bounced light and the lightning's light, and the sun's share through the clouds' shadow field, and the cube maps of lamps that shine every way, and the wet roads' and the water's traced reflection), and the textures read with FSR 1's mip bias, `camera.lod`,
-    /// and a script's screen never taken for a pane (#2927), and the lamp tiles' taps in loops of fixed bounds,
-    /// and the colour/mask-only headset entry point, and a self-lit blended layer's alpha giving
-    /// Omsi.exe's encoded mix, and the vertex-lit Direct3D headlight excluding its own vehicle,
-    /// and the traced sample read once for FXC, the road glare in its own uniform lane,
-    /// and the detail grain's octaves left out where faded.
-    /// (with Unix line ends: a Windows checkout may turn the parts' into CRLF, as it did the
-    /// single files', and the 0.2.31 release's Windows test failed on that alone)
     /// Regression: road glare has its own lane, not the ground-prepass switch.
     /// Runs without a GPU and protects the Enhanced+ and MSAA/SSAO combinations.
     #[test]
@@ -127,6 +108,25 @@ mod tests {
         );
     }
 
+    /// The assembled modules are byte for byte the single files they were cut from (sizes
+    /// and hashes taken of `shader.wgsl` and `enhanced.wgsl` before the cut, updated for
+    /// 0.2.30's capped surface pull and the Vanilla/transparency fixes in both modules,
+    /// 0.2.42's night sphere map and lacquer, people lit as bodies, not leaves, the far
+    /// map's shadow where no traced one is found, 0.2.51's clear coat that stays sharp on
+    /// lacquer, the draw order's depth step of a surface lying on another of its object, and a
+    /// livery's tint above the alpha test, the painted lines' pull and the wet paint's water film, and the player's vehicle
+    /// standing between other vehicles' lamps and what lies behind it, and clear vehicle
+    /// lamps taking coverage from their active night map, and #3019's larger rain caps, and the tracked panes' snow laid out in the film mesh's own
+    /// metres, and the lamps' shadow maps by the tile their record names and the saloon's visibility term
+    /// with the ground no longer lit by the tile light map, and the street-scale
+    /// occlusion, the bounced light and the lightning's light, and the sun's share through the clouds' shadow field, and the cube maps of lamps that shine every way, and the wet roads' and the water's traced reflection), and the textures read with FSR 1's mip bias, `camera.lod`,
+    /// and a script's screen never taken for a pane (#2927), and the lamp tiles' taps in loops of fixed bounds,
+    /// and the colour/mask-only headset entry point, and a self-lit blended layer's alpha giving
+    /// Omsi.exe's encoded mix, and the vertex-lit Direct3D headlight excluding its own vehicle,
+    /// and the traced sample read once for FXC, the road glare in its own uniform lane,
+    /// and the detail grain's octaves left out where faded.
+    /// (with Unix line ends: a Windows checkout may turn the parts' into CRLF, as it did the
+    /// single files', and the 0.2.31 release's Windows test failed on that alone)
     #[test]
     fn assembled_shaders_are_the_old_files() {
         let (scene, enhanced) = (super::SCENE.replace("\r\n", "\n"), super::ENHANCED.replace("\r\n", "\n"));

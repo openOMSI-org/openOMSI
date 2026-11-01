@@ -1,17 +1,57 @@
 //! Process-held cache leases, also acquired by games started from the command line.
 use std::fs::{File, OpenOptions};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+/// A game's shared lease. The last game's orderly exit reclaims eligible cache
+/// data, including when the game was started without the launcher.
+pub struct Game {
+    file: Option<File>,
+    base: PathBuf,
+}
+
+impl Drop for Game {
+    fn drop(&mut self) {
+        // Close our shared handle before asking for the exclusive lease. Another
+        // game (or a newly starting game) still prevents maintenance atomically.
+        self.file.take();
+        if cfg!(any(target_os = "android", target_os = "ios")) {
+            return;
+        }
+        let Some(_maintenance) = maintenance(&self.base) else {
+            return;
+        };
+        use crate::cache_budget::{self, Kind};
+        cache_budget::trim(
+            &self.base.join("cache"),
+            Kind::Local,
+            cache_budget::LOCAL_LIMIT,
+        );
+        cache_budget::trim(
+            &self.base.join("lan-store"),
+            Kind::ClientLan,
+            cache_budget::LAN_LIMIT,
+        );
+    }
+}
 
 fn open(base: &Path) -> std::io::Result<File> {
     std::fs::create_dir_all(base)?;
-    OpenOptions::new().create(true).truncate(false).read(true).write(true).open(base.join("cache-use.lock"))
+    OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(base.join("cache-use.lock"))
 }
 
-/// Keep this file alive for the entire game run. The OS releases it after a crash.
-pub fn game(base: &Path) -> std::io::Result<File> {
+/// Keep this lease alive for the entire game run. The OS releases the lock after a crash.
+pub fn game(base: &Path) -> std::io::Result<Game> {
     let file = open(base)?;
     file.lock_shared()?;
-    Ok(file)
+    Ok(Game {
+        file: Some(file),
+        base: base.to_path_buf(),
+    })
 }
 
 /// Exclusive maintenance lease: the game waits until cleanup finishes; cleanup
@@ -24,6 +64,33 @@ pub fn maintenance(base: &Path) -> Option<File> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn only_the_last_game_reclaims_over_budget_data() {
+        use crate::cache_budget::{LAN_LIMIT, LOCAL_LIMIT};
+        let base =
+            std::env::temp_dir().join(format!("omsi-cache-last-game-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        for (dir, name, size) in [
+            ("cache", "old.tex", LOCAL_LIMIT + 1),
+            ("lan-store", "old.blob", LAN_LIMIT + 1),
+        ] {
+            std::fs::create_dir_all(base.join(dir)).unwrap();
+            std::fs::File::create(base.join(dir).join(name))
+                .unwrap()
+                .set_len(size)
+                .unwrap();
+        }
+        let first = super::game(&base).unwrap();
+        let second = super::game(&base).unwrap();
+        drop(first);
+        assert!(base.join("cache/old.tex").exists());
+        assert!(base.join("lan-store/old.blob").exists());
+        drop(second);
+        assert!(!base.join("cache/old.tex").exists());
+        assert!(!base.join("lan-store/old.blob").exists());
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
     #[test]
     fn shared_games_exclude_cleanup_and_release_on_drop() {
         let base = std::env::temp_dir().join(format!("omsi-cache-lease-{}", std::process::id()));

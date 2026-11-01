@@ -40,10 +40,10 @@ function StorageBlock() {
   };
   return html`<${Card} title="Disk cache and multiplayer downloads" hint="Soft limits: active downloads may temporarily exceed them, then older files are removed when safe.">
     ${usage ? html`<div class="stack" style="gap:12px">
-      <div><b>${t('Local cache')}</b> — ${size(usage.local_bytes)} / ${size(usage.local_limit)}
+      <div><b>${t('Local cache')}</b>: ${size(usage.local_bytes)} / ${size(usage.local_limit)}
         <div class="muted small">${t('Maps, processed textures and other rebuildable data')}</div>
       </div>
-      <div><b>${t('Multiplayer downloads')}</b> — ${size(usage.lan_bytes)} / ${size(usage.lan_limit)}
+      <div><b>${t('Multiplayer downloads')}</b>: ${size(usage.lan_bytes)} / ${size(usage.lan_limit)}
         <div class="muted small">${t('Sealed files reused across sessions')}</div>
       </div>
       ${usage.busy && html`<${Notice} kind="info">${t('Close all running games to clean cached files.')}</${Notice}>`}

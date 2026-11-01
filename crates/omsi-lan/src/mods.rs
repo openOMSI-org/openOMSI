@@ -685,10 +685,13 @@ pub fn clean_up() {
         omsi_cfg::remove_content_root(&dir);
         omsi_cfg::vfs::unmount_sealed(&dir);
         log::info!("LAN mods: the host's mods of this session were taken away (they stay sealed in the store)");
-        // Client-only: once the mount is gone, the cache can return toward 4 GB.
-        // Never trim if another launcher-managed game may still use the shared blobs;
-        // a dedicated server's own vehicle manifests are protected by the budget helper.
-        if !other_registered_game_running() {
+        // A process-held lease also protects games started outside the launcher.
+        // Our own game lease defers this trim until its final drop, after all
+        // session resources are gone; the last game then returns to the budgets.
+        if cfg!(any(target_os = "android", target_os = "ios")) { return; }
+        if let Some(_maintenance) = sandbox_base().and_then(|p| {
+            omsi_cfg::cache_activity::maintenance(p.parent()?)
+        }) {
             if let Some(store_path) = store_dir() {
                 let usage = omsi_cfg::cache_budget::trim(
                     &store_path, omsi_cfg::cache_budget::Kind::ClientLan,
@@ -700,19 +703,6 @@ pub fn clean_up() {
             }
         }
     }
-}
-
-/// A second game may be using the same sealed store: never evict its backing files.
-fn other_registered_game_running() -> bool {
-    let Some(base) = sandbox_base() else { return true };
-    let Some(data_dir) = base.parent() else { return true };
-    let Ok(entries) = std::fs::read_dir(data_dir.join("instances")) else { return false };
-    entries.flatten().any(|e| {
-        let Ok(bytes) = std::fs::read(e.path()) else { return false };
-        let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) else { return false };
-        let Some(pid) = json.get("pid").and_then(|x| x.as_u64()).and_then(|v| u32::try_from(v).ok()) else { return false };
-        pid != std::process::id() && process_alive(pid)
-    })
 }
 
 /// Free room on the disk `dir` is on (Windows too).
