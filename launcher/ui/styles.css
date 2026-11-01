@@ -726,6 +726,16 @@ table.table { width: 100%; border-collapse: collapse; }
 .picker .left .tools { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
 .picker .left .list { overflow: auto; padding: 8px; flex: 1; }
 .picker .detail { display: flex; flex-direction: column; min-height: 0; overflow: auto; }
+/* The generic .stage-empty is absolute for the drive stage. In the picker it
+   must remain in normal layout: otherwise it positions against .overlay and
+   covers the modal's controls, swallowing bus/paint selection and buttons. */
+.picker .detail > .stage-empty {
+  position: relative;
+  inset: auto;
+  flex: 0 0 250px;
+  min-height: 180px;
+  pointer-events: none;
+}
 .viewer { position: relative; height: 340px; background: #1a1a1a; flex: none; overflow: hidden; touch-action: none; }
 .viewer.in-card { width: 100%; height: auto; aspect-ratio: 2 / 1; min-height: 250px; max-height: 40vh; border-radius: var(--radius-sm); }
 .viewer .state.corner { inset: auto 12px 12px auto; }
