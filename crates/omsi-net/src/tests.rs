@@ -1413,9 +1413,32 @@ fn too_many_loading_players_wait() {
     assert!(
         answers
             .iter()
-            .any(|a| a.starts_with("REJECT") && a.contains("try again")),
+            .any(|a| a.starts_with(&format!("WAIT|{PROTOCOL}|2"))),
         "{answers:?}"
     );
+}
+
+#[test]
+fn a_busy_host_keeps_the_client_waiting_without_permanent_rejection() {
+    let host = raw();
+    let at = host.local_addr().unwrap();
+    let mut client =
+        LanSession::join(&at.to_string(), "waiting", world("m"), Duration::from_secs(10)).unwrap();
+    let from = client.local_addr().unwrap();
+    host.send_to(format!("WAIT|{PROTOCOL}|2").as_bytes(), from).unwrap();
+    client.tick(0.02, &pose(0.0));
+    assert!(client.waiting_for_slot);
+    assert!(client.rejected.is_none());
+    assert!(client.turned_away.is_none());
+    assert!(!client.connected);
+
+    // A different socket cannot put the client in the wait state.
+    let other = raw();
+    let mut fresh =
+        LanSession::join(&at.to_string(), "fresh", world("m"), Duration::from_secs(10)).unwrap();
+    other.send_to(format!("WAIT|{PROTOCOL}|2").as_bytes(), fresh.local_addr().unwrap()).unwrap();
+    fresh.tick(0.02, &pose(0.0));
+    assert!(!fresh.waiting_for_slot);
 }
 
 #[test]

@@ -1268,6 +1268,8 @@ pub struct LanSession {
     /// its map between two ticks does not count), and since when it lost a host it had (see
     /// `JOIN_TIMEOUT`, `RECONNECT_TIMEOUT`).
     trying: f32,
+    /// The host is currently admitting its bounded batch of loading peers.
+    waiting_for_slot: bool,
     lost_at: Option<Instant>,
     /// The client gave up (no answer / host lost) but keeps saying hello now and then: a
     /// welcome brings it back without restarting the game (see `reconnect`).
@@ -1439,6 +1441,7 @@ impl LanSession {
             host: None,
             candidates: Vec::new(),
             trying: 0.0,
+            waiting_for_slot: false,
             lost_at: None,
             timed_out: false,
             join_timeout: omsi_cfg::flags::OMSI_LAN_JOIN_TIMEOUT.live_var()
@@ -2252,7 +2255,8 @@ impl LanSession {
         }
         if self.role == Role::Client
             && !self.connected
-            && (self.rejected.is_none() && self.hello_acc >= 1.0
+            && (self.rejected.is_none()
+                    && self.hello_acc >= (if self.waiting_for_slot { 2.0 } else { 1.0 })
                 || self.timed_out && self.hello_acc >= 5.0)
         {
             self.hello_acc = 0.0;
@@ -2346,7 +2350,7 @@ impl LanSession {
             return;
         }
         let why = match (self.welcome.is_some(), self.lost_at) {
-            (false, _) if self.trying >= self.join_timeout.as_secs_f32() => {
+            (false, _) if self.trying >= self.join_timeout.as_secs_f32() + (if self.waiting_for_slot { 50.0 } else { 0.0 }) => {
                 self.no_answer(self.join_timeout)
             }
             (true, Some(at)) if at.elapsed() >= RECONNECT_TIMEOUT => format!(
@@ -2651,6 +2655,22 @@ impl LanSession {
                 ("HELLO", Role::Host) => self.on_hello(&parts, from),
                 ("WELCOME", Role::Client) => self.on_welcome(&parts, from),
                 ("CHALLENGE", Role::Client) if self.host == Some(from) || (self.host.is_none() && self.candidates.contains(&from)) => self.on_challenge(&parts),
+                // A temporary admission bottleneck is not a permanent rejection.
+                // Old clients ignore WAIT and still retry HELLO without a protocol bump.
+                ("WAIT", Role::Client)
+                    if !self.connected
+                        && field(&parts, 1).parse::<u32>().ok() == Some(PROTOCOL)
+                        && (self.host == Some(from)
+                            || (self.host.is_none() && self.candidates.contains(&from))) =>
+                {
+                    if !self.waiting_for_slot {
+                        log::info!("LAN: {from} is admitting other players; retrying automatically");
+                        self.events.push(LanEvent::Notice(
+                            "the host is admitting other players; waiting for a loading slot".into(),
+                        ));
+                    }
+                    self.waiting_for_slot = true;
+                }
                 ("REJECT", Role::Client) if self.host.is_none() || Some(from) == self.host => {
                     let reason = clean_text(field(&parts, 2), 300);
                     // Different candidate IPs may belong to different computers. Keep
@@ -3109,10 +3129,9 @@ impl LanSession {
                 return;
             }
             None if self.peers.values().filter(|p| !p.has_pose).count() >= MAX_JOINING => {
-                self.reject(
-                    from,
-                    "the host is letting other players in - try again in a minute",
-                );
+                // Protect the loading budget without permanently kicking simultaneous
+                // joiners. They retry HELLO when an earlier player has finished loading.
+                self.send(format!("WAIT|{PROTOCOL}|2").as_bytes(), from);
                 return;
             }
             None if self.hw_required && hwid.is_none() => {
@@ -3302,6 +3321,7 @@ impl LanSession {
         self.answer = None;
         self.session = session;
         self.connected = true;
+        self.waiting_for_slot = false;
         self.lost_at = None;
         if was_timed_out {
             // the host is back after we had given up
