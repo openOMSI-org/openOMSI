@@ -23,7 +23,7 @@ const serverQuery = {
   vehicles: ['Vehicles/MAN_NL_NG/MAN_EN92_main.bus', 'Vehicles/ABCoach_O560/O560_E5.bus', 'Vehicles/HC_Volvo7900H/Volvo_12.bus', SERVER_ONLY],
   fleet_version: 1,
   fleet: [
-    { bus: 'Vehicles/MAN_NL_NG/MAN_EN92_main.bus', paints: ['Server Night Line', 'Server Airport Shuttle'] },
+    { bus: 'Vehicles/MAN_NL_NG/MAN_EN92_main.bus', paints: ['Beige', 'Server Night Line', 'Server Airport Shuttle'] },
     { bus: 'Vehicles/ABCoach_O560/O560_E5.bus', paints: [] },
     { bus: 'Vehicles/HC_Volvo7900H/Volvo_12.bus', paints: ['Server City Blue'] },
     { bus: SERVER_ONLY, paints: ['Server Night Line', 'Server City Blue'] },

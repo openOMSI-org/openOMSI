@@ -150,6 +150,18 @@ export function serverBuses(c = S.choice) {
   return c?.lan_mode === 'join' && c.lan_server?.vehicles?.length ? new Set(c.lan_server.vehicles.map(busFile)) : null;
 }
 
+/** A server's paint names for a bus, each once (whatever its case or spaces) and without
+ * the bus's own standard look, which the paint lists already offer as "Standard". */
+function offeredPaints(names, standard = '') {
+  const seen = new Set([String(standard || '').trim().toLowerCase()].filter(Boolean));
+  return (names || []).filter((name) => {
+    const key = String(name || '').trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 /** Local buses are preferred; server-only entries are selectable after the server
  * announces named paints. Actual bytes come through the verified session transfer. */
 export function selectableVehicles(c = S.choice) {
@@ -162,7 +174,7 @@ export function selectableVehicles(c = S.choice) {
   // copy of a broken/non-advertised bus to bypass version verification.
   const out = local.filter((v) => byKey.has(busFile(v.file))).map((v) => {
     const offer = byKey.get(busFile(v.file));
-    return { ...v, local_paints: v.paints || [], paints: offer.paints || [], server_catalog: true };
+    return { ...v, local_paints: v.paints || [], paints: offeredPaints(offer.paints, v.default_paint), server_catalog: true };
   });
   const have = new Set(out.map((v) => busFile(v.file)));
   for (const offer of byKey.values()) {
@@ -173,7 +185,7 @@ export function selectableVehicles(c = S.choice) {
     out.push({
       name: basename, type_name: basename, manufacturer: maker, file: offer.bus,
       folder: components.join('/'), description: 'Offered by the joined server; its verified version is downloaded for this session.',
-      default_paint: '', paints: offer.paints || [], hofs: [], numbers: [], installed: false,
+      default_paint: '', paints: offeredPaints(offer.paints), hofs: [], numbers: [], installed: false,
       server_only: true, server_catalog: true, transport: ['bus'], missing_packs: [],
     });
   }

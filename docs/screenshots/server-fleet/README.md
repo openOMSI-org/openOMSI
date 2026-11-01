@@ -27,7 +27,7 @@ After joining a fleet v1 server, the picker lists only the buses the server publ
 
 **2. Paints published by the server**
 ![Server paint selection](https://github.com/isaacsa2/openOMSI/blob/test/server-fleet-auto-sync/docs/screenshots/server-fleet/02-server-paint-selection.png?raw=true)
-The paint list is the server's: the bus's standard look plus each repaint the server announces, each listed once.
+The paint list is the server's: the bus's standard look plus each repaint the server announces, each listed once. The server also announces *Beige*, the bus's standard look, which is folded into *Standard (Beige)* instead of being listed twice.
 
 **3. Server-only bus without a preview**
 ![Server-only bus without preview](https://github.com/isaacsa2/openOMSI/blob/test/server-fleet-auto-sync/docs/screenshots/server-fleet/03-server-only-bus-no-preview.png?raw=true)

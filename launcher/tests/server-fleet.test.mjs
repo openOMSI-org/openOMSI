@@ -93,6 +93,17 @@ test('server catalogue is authoritative, including the absence of preview and mi
   assert.equal(data.serverFleetSelection(), false, 'catalogue entries outside the whitelist cannot authorize downloads');
 });
 
+test('server paints are listed once, never repeating the standard look', async () => {
+  const { state, data, bus } = await setup();
+  state.vehicles = state.vehicles.map((v) => (v.file === bus ? { ...v, default_paint: 'Beige' } : v));
+  state.choice = { ...state.choice, lan_server: { ...state.choice.lan_server,
+    fleet: [{ bus, paints: ['Beige', ' beige ', 'Official Blue', 'OFFICIAL BLUE', '', 'Night Line'] }] } };
+  assert.deepEqual([...data.selectableVehicles()[0].paints], ['Official Blue', 'Night Line']);
+  state.vehicles = state.vehicles.filter((v) => v.file !== bus);
+  assert.deepEqual([...data.selectableVehicles()[0].paints], ['Beige', 'Official Blue', 'Night Line'],
+    'a server-only bus has no local standard look to fold its paints into');
+});
+
 test('launch requires positive per-session consent and never serializes the UI consent marker', async () => {
   const { state, data, launched, another } = await setup();
   assert.equal(await data.start(), null, 'no automatic download without consent');
