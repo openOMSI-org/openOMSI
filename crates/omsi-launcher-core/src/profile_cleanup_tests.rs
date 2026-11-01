@@ -251,7 +251,6 @@ fn graphics_profiles_are_a_file_each() {
     assert_eq!(files, 4);
     let all = graphics_profiles_in(&dir);
     assert_eq!(all.keys().map(String::as_str).collect::<Vec<_>>(), ["High", "a/b", "a_b", "high"]);
-    // (only what a profile may hold)
     assert_eq!(all["High"], json!({ "graphics": "enhanced", "msaa": 4 }));
     save_graphics_profile_in(&dir, "High", &json!({ "msaa": 8 })).unwrap();
     assert_eq!(graphics_profiles_in(&dir)["High"], json!({ "msaa": 8 }));
@@ -292,14 +291,32 @@ fn the_single_graphics_profiles_file_is_split_into_files() {
     assert_eq!(all["Fast"], json!({ "msaa": 1 }));
     assert!(!old_graphics_profiles_path(&dir).exists());
     assert!(old_graphics_profiles_path(&dir).with_extension("json.migrated").exists());
-    // (kept a profile since, the second look does not put the old one back)
     save_graphics_profile_in(&dir, "Cinema", &json!({ "msaa": 2 })).unwrap();
     assert_eq!(graphics_profiles_in(&dir)["Cinema"], json!({ "msaa": 2 }));
-    // (damaged: left where it is, nothing made of it)
     let bad = graphics_profile_dir("migrate-bad");
     std::fs::write(old_graphics_profiles_path(&bad), "{ broken").unwrap();
     assert!(graphics_profiles_in(&bad).is_empty());
     assert!(old_graphics_profiles_path(&bad).exists());
     let _ = std::fs::remove_dir_all(&dir);
     let _ = std::fs::remove_dir_all(&bad);
+}
+
+#[test]
+fn a_graphics_profile_copied_under_another_file_name_is_one_profile() {
+    let dir = graphics_profile_dir("copied");
+    save_graphics_profile_in(&dir, "Shared", &json!({ "msaa": 4 })).unwrap();
+    let own = graphics_profile_file(&dir, "Shared");
+    let copy = graphics_profiles_dir(&dir).join("from a friend.json");
+    std::fs::rename(&own, &copy).unwrap();
+    assert_eq!(graphics_profiles_in(&dir)["Shared"], json!({ "msaa": 4 }));
+    assert!(own.exists() && !copy.exists());
+    save_graphics_profile_in(&dir, "Shared", &json!({ "msaa": 8 })).unwrap();
+    assert_eq!(std::fs::read_dir(graphics_profiles_dir(&dir)).unwrap().count(), 1);
+    std::fs::copy(&own, &copy).unwrap();
+    assert_eq!(graphics_profiles_in(&dir)["Shared"], json!({ "msaa": 8 }));
+    assert!(copy.exists());
+    delete_graphics_profile_in(&dir, "Shared").unwrap();
+    std::fs::remove_file(&copy).unwrap();
+    assert!(graphics_profiles_in(&dir).is_empty());
+    let _ = std::fs::remove_dir_all(&dir);
 }

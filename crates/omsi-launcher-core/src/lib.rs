@@ -2638,7 +2638,6 @@ fn write_graphics_profile(base: &Path, name: &str, profile: &Value) -> Result<()
 fn migrate_graphics_profiles(base: &Path) {
     let old = old_graphics_profiles_path(base);
     let Some(all) = std::fs::read_to_string(&old).ok().and_then(|t| serde_json::from_str::<std::collections::BTreeMap<String, Value>>(&t).ok()) else { return };
-    // (one of the new files already there is the newer: a profile kept since is not put back)
     if all.iter().all(|(name, profile)| graphics_profile_file(base, name).exists() || write_graphics_profile(base, name, profile).is_ok()) {
         let _ = std::fs::rename(&old, old.with_extension("json.migrated"));
     }
@@ -2661,7 +2660,9 @@ fn graphics_profiles_in(base: &Path) -> std::collections::BTreeMap<String, Value
         }
         let Some(file) = std::fs::read_to_string(&path).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()) else { continue };
         if let (Some(name), Some(profile)) = (file.get("name").and_then(Value::as_str), file.get("graphics")) {
-            if profile.is_object() {
+            let own = graphics_profile_file(base, name);
+            let is_own = path.file_name().zip(own.file_name()).is_some_and(|(a, b)| a.eq_ignore_ascii_case(b));
+            if profile.is_object() && (is_own || (!own.exists() && std::fs::rename(&path, &own).is_ok())) {
                 all.insert(name.to_string(), profile.clone());
             }
         }
@@ -2686,7 +2687,6 @@ fn save_graphics_profile_in(base: &Path, name: &str, settings: &Value) -> Result
             profile.insert(k.to_string(), x.clone());
         }
     }
-    // (the single file of an older version is split first, so that none is left behind)
     migrate_graphics_profiles(base);
     write_graphics_profile(base, &name, &Value::Object(profile))?;
     Ok(name)
