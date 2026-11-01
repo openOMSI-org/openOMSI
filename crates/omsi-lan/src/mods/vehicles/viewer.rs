@@ -121,8 +121,8 @@ pub(crate) fn audit(fp: &str, root: &Path, reads: &[PathBuf]) -> Vec<PathBuf> {
     viewer().audit(fp, root, reads)
 }
 
-pub(crate) fn want(root: &Path, player: u32, fp: &str, bus: &str, paint: &str) -> Wanted {
-    viewer().want(root, player, fp, bus, paint)
+pub(crate) fn want(root: &Path, player: u32, fp: &str, bus: &str, paint: &str, allow_server_fleet: bool) -> Wanted {
+    viewer().want(root, player, fp, bus, paint, allow_server_fleet)
 }
 
 impl Viewer {
@@ -246,7 +246,7 @@ impl Viewer {
     ///
     /// `player` is who drives it: a player whose bus changes more often than a player changes
     /// bus (`driven_by`) is drawn as a box - each made-up fingerprint started a download here.
-    pub(crate) fn want(&'static self, root: &Path, player: u32, fp: &str, bus: &str, paint: &str) -> Wanted {
+    pub(crate) fn want(&'static self, root: &Path, player: u32, fp: &str, bus: &str, paint: &str, allow_server_fleet: bool) -> Wanted {
         if !omsi_net::is_fingerprint(fp) {
             return Wanted::Failed("no fingerprint".into());
         }
@@ -271,7 +271,7 @@ impl Viewer {
         let (root, key, bus, paint) = (root.to_path_buf(), fp.to_string(), bus.to_string(), paint.to_string());
         let fp = key.clone();
         let spawned = std::thread::Builder::new().name("bus-by-content".into()).spawn(move || {
-            let w = self.make_sure(&root, &fp, &bus, &paint);
+            let w = self.make_sure(&root, &fp, &bus, &paint, allow_server_fleet);
             match &w {
                 Wanted::Local(_) => log::info!("vehicles: {bus} ({paint}) is the same here ({fp})"),
                 Wanted::Mounted(_) => log::info!("vehicles: {bus} ({paint}) fetched by its content ({fp})"),
@@ -286,7 +286,7 @@ impl Viewer {
         Wanted::Pending(0, 0)
     }
 
-    pub(super) fn make_sure(&self, root: &Path, fp: &str, bus: &str, paint: &str) -> Wanted {
+    pub(super) fn make_sure(&self, root: &Path, fp: &str, bus: &str, paint: &str, allow_server_fleet: bool) -> Wanted {
         // kept here already (fetched before, or sent by this machine's own player)
         if !is_open() && !open() {
             return Wanted::Failed("no store".into());
@@ -311,6 +311,14 @@ impl Viewer {
                 Some(p) => Wanted::Mounted(p),
                 None => Wanted::Failed(Failure::NotHereYet),
             };
+        }
+        if allow_server_fleet {
+            // A closed dedicated server has its own bus package even when it
+            // refuses arbitrary player uploads. Try that exact content first.
+            match self.fetch_official(fp, bus, paint) {
+                Ok(()) => return bus_file(fp).map(Wanted::Mounted).unwrap_or_else(|| Wanted::Failed("server fleet downloaded, but not mounted".into())),
+                Err(e) => log::info!("vehicles: official server copy of {bus} ({paint}) did not match {fp}: {e}; trying normal content lookup"),
+            }
         }
         match self.fetch(fp) {
             Ok(()) => bus_file(fp).map(Wanted::Mounted).unwrap_or_else(|| Wanted::Failed("fetched, but not to be mounted".into())),
