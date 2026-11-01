@@ -461,10 +461,10 @@ fn carriageway(lanes: usize) -> Network {
 fn the_cars_on_its_way_make_way_a_road_beside_does_not() {
     let f = Fixture::new();
     let mut t = sim(&f, carriageway(2), 0);
-    let e = siren(&mut t, &f, 1, 40.0, 1, 12.0);
-    let outer = car(&mut t, &f, 1, 95.0, 2, 9.0);
-    let inner = car(&mut t, &f, 0, 90.0, 3, 9.0);
-    let beside = car(&mut t, &f, 2, 95.0, 4, 9.0);
+    let e = siren(&mut t, &f, 1, 40.0, 101, 12.0);
+    let outer = car(&mut t, &f, 1, 95.0, 102, 9.0);
+    let inner = car(&mut t, &f, 0, 90.0, 103, 9.0);
+    let beside = car(&mut t, &f, 2, 95.0, 104, 9.0);
     let (mut outer_out, mut inner_in, mut corridor) = (0.0f32, 0.0f32, 0.0f32);
     let mut passed = false;
     for _ in 0..(30.0 / super::fixed_step::SIM_DT) as usize {
