@@ -74,7 +74,9 @@ export function BusPicker({ onClose, onTake, title = 'Choose a bus', yes = 'Take
     .filter((v) => show !== 'mods' || v.installed)
     .filter((v) => !ql || `${v.name} ${v.manufacturer} ${v.type_name} ${v.folder}`.toLowerCase().includes(ql))
     .sort((a, b) => (a.manufacturer || '').localeCompare(b.manufacturer || '') || a.name.localeCompare(b.name));
-  const fams = useMemo(() => families(list), [list.map((x) => x.file).join('|')]);
+  // A refreshed server can change the paints of the same .bus path; do not
+  // keep stale family rows just because the filenames did not change.
+  const fams = families(list);
   const [open, setOpen] = useState(() => new Set(fams.filter((f) => f.versions.some((x) => x.v.file === s.choice.bus)).map((f) => f.key)));
   const toggle = (key) => setOpen((o) => {
     const n = new Set(o);
@@ -83,6 +85,20 @@ export function BusPicker({ onClose, onTake, title = 'Choose a bus', yes = 'Take
     return n;
   });
   const v = all.find((x) => x.file === sel);
+  const fleetKey = s.choice.lan_mode === 'join'
+    ? JSON.stringify([s.choice.lan_server?.vehicles, s.choice.lan_server?.fleet])
+    : '';
+  useEffect(() => {
+    // The picker can stay open while the server query updates its catalogue.
+    // Discard a selection or repaint that the refreshed server no longer offers.
+    if (s.choice.lan_mode !== 'join' || !s.choice.lan_server?.asked) return;
+    if (!v) {
+      if (all.length) { setSel(all[0].file); setPaint(''); }
+    } else if (v.server_catalog && paint
+        && !(v.paints || []).some((name) => name.toLowerCase() === paint.toLowerCase())) {
+      setPaint('');
+    }
+  }, [fleetKey, s.choice.lan_mode, s.choice.lan_addr]);
   const take = (bus = sel, scheme = paint) => {
     if (!all.some((x) => x.file === bus)) return;
     if (onTake) {
