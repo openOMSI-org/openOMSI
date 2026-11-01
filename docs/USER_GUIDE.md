@@ -608,7 +608,7 @@ vignette.
 `OMSI_RT_REFL_HALF=1` traces the reflections at half size, `OMSI_DEBUG_RT=n` (see
 `crates/omsi-render/src/rt.rs`) shows its buffers.
 
-*Road sunlight glare* (`road_glare=0..2`, default 1) scales direct sun highlights on roads and ground in Enhanced without changing diffuse daylight or puddle reflections. *Traffic headlight brightness* (`traffic_headlights=0..2`, default 1) changes white headlamp glows and beams on other vehicles in Vanilla and Vanilla+, not the player's lamps or the street lamps. Both controls apply while driving.
+*Road sunlight glare* (`road_glare=0..2`, default 1) scales direct sun highlights on roads and ground in Enhanced without changing diffuse daylight or puddle reflections. *Traffic headlight brightness* (`traffic_headlights=0..2`, default 1) changes white headlamp glows and projected road beams on other vehicles in Vanilla, Vanilla+ and Enhanced, not the player's lamps or the street lamps. Both controls apply while driving.
 
 Built-up snow on roads and roofs (`road_snow=0|1`) is **off by default**; enabling it in Graphics adds gradual snow accumulation and tyre tracks. With it off, the weather's conventional OMSI 2 road snow remains available. Existing saved preferences are preserved.
 

@@ -920,11 +920,9 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             _ => None,
         };
     }
-    if let ListKind::GraphicsConfirm(tab) = kind {
-        return graphics_confirmation_action(app, *tab, action, mv);
-    }
     let (verb, arg) = action.split_once(' ').unwrap_or((action, ""));
     match kind {
+        ListKind::GraphicsConfirm(tab) => graphics_confirmation_action(app, *tab, action, mv),
         ListKind::ControllerDevices(_) | ListKind::Controller(..) | ListKind::ControllerAxis(..) | ListKind::ControllerButtons(_) | ListKind::ControllerButtonSettings(..) | ListKind::ControllerButton(..) | ListKind::ControllerCapture(_) => unreachable!("controller lists handled above"),
         ListKind::PlayerList | ListKind::PlayerPage(_) | ListKind::PlayerDo(..) | ListKind::BanList => crate::player_list::run(app, kind, action),
         ListKind::Admin | ListKind::AdminPlayers | ListKind::AdminPlayer(_) | ListKind::AdminConfirm(..) if crate::admin_panel::remote(app) => crate::admin_panel::run(app, kind, action),

@@ -105,7 +105,7 @@ const graphics = {
         { type: 'toggle', key: 'shadow_blobs', label: "OMSI's shadow meshes (under vehicles)" },
         { type: 'slider', key: 'reflections', label: 'Reflective objects reflect', min: 0, max: 1, step: 0.05, def: 1, format: (v) => (v < 0.005 ? t('Off') : pct(v)), store: snap(0.05), when: (s) => !traced(s) },
         { type: 'slider', key: 'road_glare', label: 'Road sunlight glare', help: 'Enhanced: direct sunlight highlights on roads and ground; 100% keeps the original appearance. Puddle reflections stay separate.', min: 0, max: 2, step: 0.05, def: 1, format: pct, store: snap(0.05), when: enhanced },
-        { type: 'slider', key: 'traffic_headlights', label: 'Traffic headlight brightness', help: 'Vanilla and Vanilla+: scale other vehicles\' white headlights without changing the player bus or street lamps.', min: 0, max: 2, step: 0.05, def: 1, format: pct, store: snap(0.05), when: (s) => !enhanced(s) },
+        { type: 'slider', key: 'traffic_headlights', label: 'Traffic headlight brightness', help: 'All graphics modes: other vehicles\' white headlamp glow and beam illumination on the road; does not change the player bus or street lamps.', min: 0, max: 2, step: 0.05, def: 1, format: pct, store: snap(0.05) },
         { type: 'toggle', key: 'clouds', label: 'Clouds' },
         // (only the enhanced modes march volumetric clouds; the vanilla ones are a texture)
         { type: 'select', key: 'cloud_quality', label: 'Cloud quality', options: [['high', 'High'], ['low', 'Low']], when: (s) => enhanced(s) && s.clouds !== false },

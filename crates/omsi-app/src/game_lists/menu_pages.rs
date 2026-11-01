@@ -66,7 +66,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         slider_row(app, "led_mips", "LED mip strength", "Lower: sharper LED dots that shimmer from a distance; higher: calmer, softer dots", &|v| format!("{v:.2}")).filter(|_| shown("led_mips")),
         slider_row(app, "reflections", "Reflective objects reflect", "Changes show at once; turned up from Off, they come back when the game starts the next time", &|v| if v < 0.005 { "Off".to_string() } else { format!("{:.0}%", v * 100.0) }).filter(|_| shown("reflections")),
         slider_row(app, "road_glare", "Road sunlight glare", "Enhanced: direct sunlight highlights on roads and ground; 100% is the original look", &pct).filter(|_| shown("road_glare")),
-        slider_row(app, "traffic_headlights", "Traffic headlight brightness", "Vanilla and Vanilla+: the white headlights of other vehicles, not the player bus", &pct).filter(|_| shown("traffic_headlights")),
+        slider_row(app, "traffic_headlights", "Traffic headlight brightness", "All graphics modes: other vehicles' white headlamp glow and road illumination, not the player bus or street lights", &pct).filter(|_| shown("traffic_headlights")),
         switch_row(app, "clouds", "Clouds", later),
         pick("cloud_quality", "Cloud quality", "Enhanced: the volumetric clouds marched in fewer steps - faster, a little grainier").filter(|_| shown("cloud_quality") && app.settings.clouds),
         pick("street_light", "Street light", "Enhanced: shade over a whole street and light bounced between surfaces; Auto turns it off on a small or shared graphics chip (about half a millisecond a frame)").filter(|_| shown("street_light")),
@@ -519,7 +519,6 @@ fn shown_in_mode(mode: &str, key: &str) -> bool {
         "night_brightness" | "led_glow" | "led_mips" | "mirror_quality" | "cloud_quality" => matches!(mode, "enhanced" | "enhanced_plus"),
         // (the ray-traced picture has its own occlusion)
         "street_light" | "road_glare" => matches!(mode, "enhanced" | "enhanced_plus"),
-        "traffic_headlights" => matches!(mode, "vanilla" | "vanilla_plus"),
         "ray_tracing" | "light_shadows" | "cloud_shadows" | "light_glow" => matches!(mode, "enhanced" | "enhanced_plus"),
         _ => true,
     }
