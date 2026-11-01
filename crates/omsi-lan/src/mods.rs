@@ -607,6 +607,13 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
                 // a plain file goes as it is read (never all of it in memory); one in a
                 // mounted archive is read whole (archives hold small files)
                 let src = &sources[k];
+                // Re-check before every GET: files may have been replaced by a
+                // symlink since the fleet manifest was built. Never serve files
+                // that resolve outside the declared content roots.
+                if !server_fleet::trusted_source(root, src) {
+                    writeln!(out, "ERR file outside trusted content roots")?;
+                    continue;
+                }
                 if omsi_cfg::vfs::archive_of(src).is_none() && !omsi_cfg::vfs::is_sealed(src) {
                     match std::fs::File::open(src).and_then(|f| f.metadata().map(|m| (f, m.len()))) {
                         Ok((f, len)) => {

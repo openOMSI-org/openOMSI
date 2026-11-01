@@ -3,6 +3,32 @@
 use super::*;
 use crate::server_cfg::SERVER_VEHICLES;
 
+// A name inside Vehicles/ or another content folder is not enough to make a
+// disk file safe to serve: a mod can include a symlink into a private directory.
+// Check the resolved file against the *declared* content root, not just its
+// textual path. Virtual entries in sealed stores/archives do not have a normal
+// on-disk path and remain subject to the manifest and quarantine checks.
+pub(super) fn trusted_source(root: &Path, source: &Path) -> bool {
+    let mut roots = omsi_cfg::content_roots();
+    roots.push(root.to_path_buf());
+    let Some(declared) = roots
+        .iter()
+        .filter(|r| source.starts_with(r))
+        .max_by_key(|r| r.components().count())
+    else {
+        return false;
+    };
+    // Physical files, including symlinks, must resolve inside their declared
+    // content root. Do not let an existing symlink use the virtual-file bypass.
+    if std::fs::symlink_metadata(source).is_ok() {
+        let (Ok(file), Ok(base)) = (source.canonicalize(), declared.canonicalize()) else {
+            return false;
+        };
+        return file.is_file() && file.starts_with(base);
+    }
+    omsi_cfg::vfs::is_virtual(source)
+}
+
 /// The selected bus is offered only when its canonical path is explicitly configured.
 pub(super) fn package(root: &Path, base: &(Manifest, Vec<PathBuf>), bus: &str, paint: &str) -> Result<(Manifest, Vec<PathBuf>), String> {
     let bus = omsi_net::vehicle_path(bus).ok_or("invalid bus path")?;
@@ -14,6 +40,9 @@ pub(super) fn package(root: &Path, base: &(Manifest, Vec<PathBuf>), bus: &str, p
     }
     if refuse_path(&bus).is_some() { return Err("refused vehicle path".into()); }
     let path = omsi_cfg::find_in_roots(&bus).map(|(_, p)| p).unwrap_or_else(|| root.join(&bus));
+    if !trusted_source(root, &path) {
+        return Err("the selected bus resolves outside the trusted content roots".into());
+    }
     let ty = omsi_sim::VehicleType::load(root, &path).map_err(|e| format!("{bus}: {e}"))?;
     if !paint.is_empty() && !ty.paint_schemes.iter().take(128).any(|p| p.name.eq_ignore_ascii_case(paint)) {
         return Err("the selected repaint is not offered by the server".into());
@@ -25,6 +54,9 @@ pub(super) fn package(root: &Path, base: &(Manifest, Vec<PathBuf>), bus: &str, p
     let mut all = std::collections::BTreeSet::new();
     for scheme in std::iter::once(None).chain((0..ty.paint_schemes.len().min(128)).map(Some)) {
         all.extend(bus_files::of_type(root, &ty, scheme, None));
+    }
+    if all.iter().any(|path| !trusted_source(root, path)) {
+        return Err("selected vehicle dependencies resolve outside the trusted content roots".into());
     }
     let files = upload::listed(root, all.into_iter().collect());
     let entries = upload::hashed(&files);
@@ -70,12 +102,19 @@ pub(super) fn exact(root: &Path, bus: &str, paint: &str) -> Result<(Manifest, Ve
     }
     if refuse_path(&bus).is_some() { return Err("refused vehicle path".into()); }
     let path = omsi_cfg::find_in_roots(&bus).map(|(_, p)| p).unwrap_or_else(|| root.join(&bus));
+    if !trusted_source(root, &path) {
+        return Err("the selected bus resolves outside the trusted content roots".into());
+    }
     let ty = omsi_sim::VehicleType::load(root, &path).map_err(|e| format!("{bus}: {e}"))?;
     let scheme = if paint.is_empty() { None } else {
         Some(ty.paint_schemes.iter().take(128).position(|p| p.name.eq_ignore_ascii_case(paint))
             .ok_or("the selected repaint is not offered by the server")?)
     };
-    let files = upload::listed(root, bus_files::of_type(root, &ty, scheme, None));
+    let dependencies = bus_files::of_type(root, &ty, scheme, None);
+    if dependencies.iter().any(|path| !trusted_source(root, path)) {
+        return Err("selected vehicle dependencies resolve outside the trusted content roots".into());
+    }
+    let files = upload::listed(root, dependencies);
     let entries = upload::hashed(&files);
     if entries.len() != files.len() {
         return Err(format!("{} of {} selected vehicle files could not be verified", files.len() - entries.len(), files.len()));
@@ -106,6 +145,31 @@ pub(super) fn unhex_text(text: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn refuses_untrusted_files_outside_content_roots() {
+        let base = std::env::temp_dir().join(format!("openomsi-fleet-sources-{}", std::process::id()));
+        let root = base.join("game");
+        let inside = root.join("Vehicles").join("Bus");
+        std::fs::create_dir_all(&inside).unwrap();
+        let regular = inside.join("safe.dds");
+        std::fs::write(&regular, b"safe texture").unwrap();
+        let outside = base.join("private.dds");
+        std::fs::write(&outside, b"private contents").unwrap();
+        assert!(trusted_source(&root, &regular));
+        assert!(!trusted_source(&root, &outside));
+        #[cfg(unix)]
+        {
+            let link = inside.join("linked.dds");
+            std::os::unix::fs::symlink(&outside, &link).unwrap();
+            assert!(
+                !trusted_source(&root, &link),
+                "a mod symlink must not expose a private file"
+            );
+            std::fs::remove_file(link).unwrap();
+        }
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
     #[test]
     fn selected_names_round_trip_and_reject_malformed_encoding() {
         for text in ["", "Vehicles/Marcopolo Torino 1999/torino.bus", "Bahia - São João"] {
