@@ -61,6 +61,14 @@ const evaluate = async (expression) => {
   if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text);
   return r.result.value;
 };
+// A function of this script run in the page, its values passed as arguments: no code is
+// built from strings. (`fn` is source code of this file, never data.)
+const run = async (fn, ...args) => {
+  const { result } = await page('Runtime.evaluate', { expression: 'globalThis' });
+  const r = await page('Runtime.callFunctionOn', { objectId: result.objectId, functionDeclaration: fn.toString(), arguments: args.map((value) => ({ value })), awaitPromise: true, returnByValue: true });
+  if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text);
+  return r.result.value;
+};
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const shot = async (name) => {
   await wait(600);
@@ -76,10 +84,21 @@ try {
   await page('Page.navigate', { url: `${origin}/ui/` });
   for (let i = 0; i < 300 && !(await evaluate("!!document.querySelector('.page-drive') && document.fonts.status === 'loaded'").catch(() => false)); i++) await wait(100);
   const open = async () => {
-    await evaluate(`(async () => { const st = await import('${origin}/ui/js/store.js'); st.set({ page: 'drive' }); await new Promise((r) => setTimeout(r, 200)); st.set({ page: 'troubleshoot', toasts: [] }); })()`);
+    await run(async () => {
+      const st = await import(new URL('/ui/js/store.js', location.href).href);
+      st.set({ page: 'drive' });
+      await new Promise((r) => setTimeout(r, 200));
+      st.set({ page: 'troubleshoot', toasts: [] });
+    });
     await wait(1200);
   };
-  const button = (label) => evaluate(`(() => { const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim().startsWith(${JSON.stringify(label)})); if (!b) return 'missing'; if (b.disabled) return 'disabled'; b.click(); return 'ok'; })()`);
+  const button = (label) => run((label) => {
+    const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim().startsWith(label));
+    if (!b) return 'missing';
+    if (b.disabled) return 'disabled';
+    b.click();
+    return 'ok';
+  }, label);
 
   // 1. Usage under both limits
   await open();
@@ -96,7 +115,7 @@ try {
   console.log(`Clear local cache: ${await button('Clear local cache')}`);
   await wait(600);
   await shot('03-clear-local-cache-confirmation.png');
-  await evaluate(`(() => { const b = [...document.querySelectorAll('.dialog button, .overlay button')].find((x) => x.textContent.trim() === 'Cancel'); b?.click(); })()`);
+  await run(() => [...document.querySelectorAll('.dialog button, .overlay button')].find((x) => x.textContent.trim() === 'Cancel')?.click());
 
   // 4. Clean to limits: older multiplayer files go back under 4 GB, the freed size shown
   afterCleanup = { ...status, lan_bytes: 3.91 * GB, reclaimed_lan: 0.46 * GB };
