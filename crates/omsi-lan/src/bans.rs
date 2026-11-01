@@ -7,10 +7,11 @@
 //! machine: a host sends its realm (`REALM`, a random key kept in the owner's list), and the
 //! game sends `omsi_net::host_hardware_id` of the two. A host's sessions all get the same
 //! identifier, so a banned machine is known again; two owners get different ones, so they
-//! cannot compare notes on who joined them unless they share one realm on purpose. No serial number of a disk or board is read. A
-//! player switches it off in the launcher (`hardware_id = 0`) or with `OMSI_NO_HARDWARE_ID=1`
-//! (a host may turn such players away, `require_hardware_id`). Bans made before the realm
-//! (protocol 15) name identifiers no game sends any more. It is a claim of the game, not a proof of the
+//! cannot compare notes on who joined them unless they share one realm on purpose. No serial
+//! number of a disk or board is read. A player switches it off in the launcher
+//! (`hardware_id = 0`) or with `OMSI_NO_HARDWARE_ID=1` (a host may turn such players away,
+//! `require_hardware_id`). Bans made before the realm (protocol 15) name identifiers no game
+//! sends any more. It is a claim of the game, not a proof of the
 //! machine: a changed game, a reinstalled system, a virtual machine or a new machine id gives
 //! another identifier, so a hardware ban stops the casual returner, not someone who works at
 //! it (SERVER.md says so too).
@@ -85,7 +86,6 @@ fn random_realm() -> String {
 
 static ALLOWED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
-/// Whether this game sends hosts an identifier at all (the launcher's `hardware_id`).
 pub fn allow_hardware_id(on: bool) {
     ALLOWED.store(on, std::sync::atomic::Ordering::Relaxed);
     if !on {
@@ -189,7 +189,6 @@ pub struct BanStore {
     owner_path: Option<PathBuf>,
     session: Vec<Ban>,
     owner: Vec<Ban>,
-    /// The key players make this host's identifier with (`REALM`), kept in the owner's file.
     pub realm: String,
     owner_stamp: Option<(std::time::SystemTime, u64)>,
     /// Counted up at every change (and when the owner's file changed under us), for the host
@@ -305,8 +304,6 @@ impl BanStore {
         }
     }
 
-    /// A new owner's list with the realm in it, unless another process made one first: then
-    /// its realm is taken, so every session of the account asks for the same identifiers.
     fn claim_realm(&mut self) {
         let Some(p) = self.owner_path.clone() else { return };
         if let Some(d) = p.parent() {

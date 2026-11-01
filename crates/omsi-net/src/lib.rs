@@ -568,17 +568,14 @@ pub fn set_hardware_id(id: &str) {
     }
 }
 
-/// Sessions made from now on send no hardware identifier.
 pub fn clear_hardware_id() {
     *HARDWARE_ID.write().unwrap_or_else(|e| e.into_inner()) = None;
 }
 
-/// The identifier the next session takes (`set_hardware_id`).
 pub fn hardware_id() -> Option<String> {
     HARDWARE_ID.read().unwrap_or_else(|e| e.into_inner()).clone()
 }
 
-/// The identifier a machine sends to the host whose realm (`REALM`) is `realm`.
 pub fn host_hardware_id(machine: &str, realm: &str) -> String {
     use sha2::{Digest, Sha256};
     let h = Sha256::new().chain_update(b"openOMSI hardware id v2\0").chain_update(machine.as_bytes()).chain_update(b"\0").chain_update(realm.as_bytes()).finalize();
@@ -1428,11 +1425,8 @@ pub struct LanSession {
     pub hw_ban_revision: u64,
     /// This game's identifier for the host it joins (`host_hardware_id`), once its `REALM` came.
     pub hardware_id: Option<String>,
-    /// The machine's identifier the host's one is made of (`set_hardware_id`; None: not sent).
     hardware_base: Option<String>,
-    /// Whether the host's `REALM` came (client): the hello then says `-` without an identifier.
     realm_answered: bool,
-    /// The key players make this host's identifier with (host; `set_ban_realm`).
     ban_realm: Option<String>,
     /// Commands for this game (`command`): (from, text).
     commands: Vec<(u32, String)>,
@@ -1894,7 +1888,6 @@ impl LanSession {
         }
     }
 
-    /// Host: the key a joining game makes its identifier for this host with (32 hex digits).
     pub fn set_ban_realm(&mut self, realm: &str) {
         self.ban_realm = Some(realm.to_string()).filter(|r| is_hardware_id(r));
     }
