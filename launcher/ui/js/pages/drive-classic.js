@@ -3,7 +3,7 @@ import { useStore, set, remembered, remember, toast } from '../store.js';
 import { t, hhmm, longDate, language } from '../i18n.js';
 import { Icon } from '../icons.js';
 import { Button, Notice, useConfirm } from '../ui.js';
-import { choose, curMap, curBus, curLine, curTour, pickedTrip, start, loadSituations, weatherName, mapName, noServerBus, askJoined, transportRefusal } from '../data.js';
+import { choose, curMap, curBus, curLine, curTour, pickedTrip, start, loadSituations, weatherName, mapName, noServerBus, askJoined, transportRefusal, serverFleetSelection, canPreviewBus } from '../data.js';
 import { call } from '../api.js';
 import { BusPreview } from '../preview.js';
 import { BusList, BusOptions, withoutMaker } from './bus-list.js';
@@ -49,7 +49,7 @@ export function BusStage() {
   const v = curBus();
   if (!v) return html`<div class="stage-empty"><${Icon} name="bus" size=${40} /></div>`;
   return html`<div class="bus-stage">
-    <${BusPreview} class="stage" look=${{ bus: v.file, paint: c.paint, map: c.map, weather: c.weather, time: c.time, date: c.date }} />
+    ${!canPreviewBus(v, c.paint) ? html`<div class="stage-empty"><${Icon} name="bus" size=${40} /><span>${t('Server bus: preview is available after verified download')}</span></div>` : html`<${BusPreview} class="stage" look=${{ bus: v.file, paint: c.paint, map: c.map, weather: c.weather, time: c.time, date: c.date }} />`}
     <div class="stage-caption">
       <b>${withoutMaker(v.name, v.manufacturer)}</b>
       <span>${[v.manufacturer, c.paint || v.default_paint].filter(Boolean).join(' | ')}</span>
@@ -65,6 +65,7 @@ export function StartBar({ step, go }) {
   const line = curLine();
   const tour = curTour();
   const [busy, setBusy] = useState(false);
+  const [ask, dialog] = useConfirm();
   // a start while a game runs asks for a second click within 6 s (its window may be behind
   // this one), as the game's own launcher did
   const [armed, setArmed] = useState(0);
@@ -88,8 +89,23 @@ export function StartBar({ step, go }) {
     }
     setArmed(0);
     setBusy(true);
-    await start(extra);
-    setBusy(false);
+    try {
+      if (c.lan_mode === 'join') {
+        // A previously saved server response may lack the new fleet metadata.
+        // Re-query before deciding whether an authenticated download is needed.
+        await askJoined({ refresh: true });
+      }
+      if (serverFleetSelection()) {
+        const approved = await ask({
+          title: t('Download server vehicle'),
+          text: t('The selected bus or repaint may need files from this server. Matching local files are reused; other files are checked and cached for this session without replacing your installed mods. Continue?'),
+          yes: t('Download and join'),
+        });
+        if (!approved) return;
+        extra = { ...extra, __fleetApproved: true };
+      }
+      await start(extra);
+    } finally { setBusy(false); }
   };
   const entry = m && c.entry >= 0 ? m.entry_points[c.entry] : null;
   const where = joined && c.lan_map ? mapName(c.lan_map.replace(/\\/g, '/')) : m ? m.friendly || m.name : '';
@@ -120,7 +136,7 @@ export function StartBar({ step, go }) {
         ${busy ? t('Starting…') : another ? t('Start another game') : joined ? t('Join and drive') : c.free ? t('Start driving') : t('Start the duty')}
       </${Button}>
     </div>
-  </div>`;
+  </div>${dialog}`;
 }
 
 function Continue({ go, busy }) {

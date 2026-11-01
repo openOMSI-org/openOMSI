@@ -926,6 +926,33 @@ impl VehicleSmoke {
     }
 }
 
+/// Gain for white headlights on *other* vehicles in every graphics mode.
+/// This is applied only to the new per-vehicle slice, never the map's street lamps.
+/// In Enhanced the beam profile (or an authored cookie) lights the pavement itself,
+/// so changing only the corona would leave the bright patch on the road unchanged.
+fn scale_traffic_headlights(coronas: &mut [Corona], lights: &mut [PointLight], gain: f32) {
+    let gain = if gain.is_finite() { gain.clamp(0.0, 2.0) } else { 1.0 };
+    if gain == 1.0 { return; }
+    for corona in coronas {
+        if corona.color.iter().all(|c| *c >= 0.65) {
+            corona.brightness *= gain;
+        }
+    }
+    for light in lights {
+        if !light.color.iter().all(|c| *c >= 0.65) {
+            continue;
+        }
+        let headlamp = match light.mode {
+            LightMode::Vanilla => light.d3d_spot.is_some(),
+            LightMode::Enhanced => light.beam != 0.0 || light.cookie.is_some(),
+            LightMode::Both => false,
+        };
+        if headlamp {
+            light.intensity *= gain;
+        }
+    }
+}
+
 /// Fill the scene's lights for this frame, the lamps' cones in the weather `cone`.
 pub fn collect(
     world: &World,
@@ -936,6 +963,7 @@ pub fn collect(
     cone: ConeWeather,
     smoke_mode: VehicleSmoke,
     player_first: bool,
+    traffic_headlights: f32,
 ) {
     scene.lights.clear();
     scene.coronas.clear();
@@ -1040,7 +1068,14 @@ pub fn collect(
         if d > CORONA_RANGE || (!v.ai_visuals && d > UNSEEN_LIGHT_RANGE) {
             continue;
         }
+        let corona_start = scene.coronas.len();
+        let light_start = scene.lights.len();
         vehicle_lights(v, &mut scene.coronas, &mut scene.lights, player_first && k == 0, &world.cookie_fades, beams.contains(&k));
+        // Include Enhanced's physically shaded road beams, not just Vanilla's D3D spots.
+        // Never scale the driven bus, stationary lamps or colored brake/indicator lamps.
+        if !(player_first && k == 0) {
+            scale_traffic_headlights(&mut scene.coronas[corona_start..], &mut scene.lights[light_start..], traffic_headlights);
+        }
         // light_vehicles puts the player's bus first (if any). LAN guests and AI
         // traffic must not be mistaken for it when no bus is driven locally.
         let vehicle_smoke_enabled = match smoke_mode {
@@ -1382,3 +1417,34 @@ impl ConeWeather {
 }
 
 pub use omsi_weather::conditions::vehicle_velocity;
+
+#[cfg(test)]
+mod traffic_headlight_brightness_tests {
+    use super::*;
+
+    #[test]
+    fn traffic_brightness_scales_classic_and_enhanced_beams_but_not_other_lamps() {
+        let mut coronas = [
+            Corona { color: [1.0, 0.95, 0.90], brightness: 1.0, ..Default::default() },
+            Corona { color: [1.0, 0.2, 0.1], brightness: 1.0, ..Default::default() },
+        ];
+        let mut lights = [
+            PointLight { color: [1.0; 3], mode: LightMode::Vanilla, d3d_spot: Some(omsi_render::D3dSpot { range: 100.0, source: DVec3::ZERO, player: false }), intensity: 3.0, ..Default::default() },
+            PointLight { color: [1.0; 3], mode: LightMode::Enhanced, beam: 1.0, intensity: 10.0, ..Default::default() },
+            PointLight { color: [1.0, 0.2, 0.1], mode: LightMode::Enhanced, beam: 1.0, intensity: 7.0, ..Default::default() },
+            PointLight { color: [1.0; 3], mode: LightMode::Enhanced, intensity: 9.0, ..Default::default() },
+        ];
+        scale_traffic_headlights(&mut coronas, &mut lights, 0.25);
+        assert_eq!([coronas[0].brightness, coronas[1].brightness], [0.25, 1.0]);
+        assert_eq!(lights.map(|l| l.intensity), [0.75, 2.5, 7.0, 9.0]);
+    }
+
+    #[test]
+    fn traffic_brightness_zero_disables_road_beams_and_invalid_gain_is_neutral() {
+        let mut beam = [PointLight { color: [1.0; 3], mode: LightMode::Enhanced, beam: -1.0, intensity: 10.0, ..Default::default() }];
+        scale_traffic_headlights(&mut [], &mut beam, f32::NAN);
+        assert_eq!(beam[0].intensity, 10.0);
+        scale_traffic_headlights(&mut [], &mut beam, 0.0);
+        assert_eq!(beam[0].intensity, 0.0);
+    }
+}

@@ -3,7 +3,12 @@ use std::fmt::Display;
 use omsi_cfg::template::Index;
 use std::sync::{Arc, Mutex, OnceLock};
 
-pub static TABLES: &str = include_str!("../../omsi-app/locales/app.yml");
+pub static TABLES: &str = concat!(
+    include_str!("../../omsi-app/locales/app.yml"), "\n",
+    include_str!("../../omsi-app/locales/storage.yml"), "\n",
+    include_str!("../../omsi-app/locales/graphics.yml"), "\n",
+    include_str!("../../omsi-app/locales/server_fleet.yml"),
+);
 static PINNED: OnceLock<&'static str> = OnceLock::new();
 
 fn unquote(s: &str) -> Option<String> {
@@ -117,6 +122,17 @@ pub fn trf(text: &str, vars: &[(&str, &dyn Display)]) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn storage_and_graphics_messages_reach_every_launcher_language() {
+        for lang in "ca ru de fr uk be kk pl cs hu es pt pt-pt it nl tr ja zh hi zh-tw ko th vi id ms tl sv sr ka".split(' ') {
+            let table = super::table(super::TABLES, lang);
+            for key in ["Road sunlight glare", "Traffic headlight brightness", "Apply graphics changes?", "Disk cache and multiplayer downloads", "Unknown cache scope."] {
+                assert!(table.get(key).is_some_and(|value| !value.is_empty() && value != key), "{lang}: {key}");
+            }
+            assert_eq!(table.get("AMD FSR 1.0").map(String::as_str), Some("AMD FSR 1.0"));
+        }
+    }
+
     #[test]
     fn full_bus_labels_and_help_are_translated_in_all_29_languages() {
         let langs = "ca ru de fr uk be kk pl cs hu es pt pt-pt it nl tr ja zh hi zh-tw ko th vi id ms tl sv sr ka";

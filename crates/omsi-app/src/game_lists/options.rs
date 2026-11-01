@@ -18,6 +18,8 @@ pub(super) fn option_now(app: &App, verb: &str, arg: &str) -> Option<f32> {
         "night_brightness" => s.night_brightness,
         "fsr_sharpness" => s.fsr_sharpness,
         "reflections" => s.reflections,
+        "road_glare" => s.road_glare,
+        "traffic_headlights" => s.traffic_headlights,
         "led_mips" => s.led_mips,
         "ctrl_deadzone" => s.ctrl_deadzone,
         "pedal_t" => s.pedal_throttle,
@@ -379,6 +381,22 @@ pub(super) fn option_set(app: &mut App, verb: &str, arg: &str, v: f32) -> Option
         "wind_dir" => {
             app.edit_weather(|w| w.wind.0 = v);
             None
+        }
+        _ => set_graphics_brightness(app, verb, v),
+    }
+}
+
+/// The two new graphics sliders, kept separate to avoid growing the already-long
+/// general settings handler past the size budget.
+fn set_graphics_brightness(app: &mut App, verb: &str, v: f32) -> Option<(&'static str, String)> {
+    match verb {
+        "road_glare" => {
+            app.settings.road_glare = v.clamp(0.0, 2.0);
+            Some(("road_glare", app.settings.road_glare.to_string()))
+        }
+        "traffic_headlights" => {
+            app.settings.traffic_headlights = v.clamp(0.0, 2.0);
+            Some(("traffic_headlights", app.settings.traffic_headlights.to_string()))
         }
         _ => None,
     }
@@ -970,6 +988,7 @@ pub(crate) fn option_do(app: &mut App, verb: &str, arg: &str, mv: Move) -> bool 
             Move::To(f) => f >= 0.5,
         };
         if on != cur {
+            if is_graphics_setting(verb) { begin_graphics_change(app); }
             if let Some((k, v)) = toggle_set(app, verb, on) {
                 remember_setting(k, &v);
             }
@@ -983,6 +1002,7 @@ pub(crate) fn option_do(app: &mut App, verb: &str, arg: &str, mv: Move) -> bool 
             let to = step_move(&steps, now, mv);
             // (a slider dragged sends the same value many times over)
             if (to - now).abs() > 1e-6 {
+                if is_graphics_setting(verb) { begin_graphics_change(app); }
                 if let Some((k, v)) = option_set(app, verb, arg, to) {
                     remember_setting(k, &v);
                 }

@@ -231,6 +231,22 @@ fn expensive_effects_default_off_and_manual_choices_survive() {
     assert_eq!(restored["road_snow"], true);
 }
 
+#[test]
+fn road_and_traffic_brightness_survive_launcher_roundtrip_and_profiles() {
+    let mut settings = settings_from_text(Some("road_glare=0.35\ntraffic_headlights=1.6\n"));
+    assert_eq!(settings["road_glare"], 0.35);
+    assert_eq!(settings["traffic_headlights"], 1.6);
+    let saved = settings_to_text(&settings, None);
+    let again = settings_from_text(Some(&saved));
+    assert_eq!(again["road_glare"], 0.35);
+    assert_eq!(again["traffic_headlights"], 1.6);
+    let profile = settings.clone();
+    settings["road_glare"] = json!(2.0);
+    apply_graphics_profile(&profile, &mut settings);
+    assert_eq!(settings["road_glare"], 0.35);
+    assert_eq!(settings["traffic_headlights"], 1.6);
+}
+
 fn graphics_profile_dir(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("openomsi-gfx-profiles-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);

@@ -65,6 +65,8 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         slider_row(app, "led_glow", "LED glow", "How strongly the dots of LED destination displays glow", &|v| format!("{}/15", v as i64)).filter(|_| shown("led_glow")),
         slider_row(app, "led_mips", "LED mip strength", "Lower: sharper LED dots that shimmer from a distance; higher: calmer, softer dots", &|v| format!("{v:.2}")).filter(|_| shown("led_mips")),
         slider_row(app, "reflections", "Reflective objects reflect", "Changes show at once; turned up from Off, they come back when the game starts the next time", &|v| if v < 0.005 { "Off".to_string() } else { format!("{:.0}%", v * 100.0) }).filter(|_| shown("reflections")),
+        slider_row(app, "road_glare", "Road sunlight glare", "Enhanced: direct sunlight highlights on roads and ground; 100% is the original look", &pct).filter(|_| shown("road_glare")),
+        slider_row(app, "traffic_headlights", "Traffic headlight brightness", "All graphics modes: other vehicles' white headlamp glow and road illumination, not the player bus or street lights", &pct).filter(|_| shown("traffic_headlights")),
         switch_row(app, "clouds", "Clouds", later),
         pick("cloud_quality", "Cloud quality", "Enhanced: the volumetric clouds marched in fewer steps - faster, a little grainier").filter(|_| shown("cloud_quality") && app.settings.clouds),
         pick("street_light", "Street light", "Enhanced: shade over a whole street and light bounced between surfaces; Auto turns it off on a small or shared graphics chip (about half a millisecond a frame)").filter(|_| shown("street_light")),
@@ -79,8 +81,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         .into_iter()
         .flatten()
         .collect();
-    let at = graphics.iter().position(|r| r.1 == "sel render_scale").map_or(graphics.len(), |k| k + 1);
-    graphics.splice(at..at, upscaler_rows(app, &file));
+    add_graphics_action_rows(app, &file, &mut graphics);
     let mut display = vec![
         switch_row(app, "fullscreen", "Fullscreen", "Switches the window between windowed and fullscreen"),
         pick("resolution", "Window size", later),
@@ -302,6 +303,16 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
     pages
 }
 
+/// Append actions after sliders so their presence does not change other option tabs.
+fn add_graphics_action_rows(app: &App, file: &serde_json::Value, graphics: &mut Vec<(String, String)>) {
+    if app.menus.graphics_before.is_some() {
+        graphics.push(button("Apply graphics changes...", "Confirm", "Apply compatible graphics options in-game. Renderer mode and device formats require restart.", "graphics_apply"));
+        graphics.push(button("Discard graphics changes", "Revert", "Restore the graphics settings from before editing.", "graphics_discard"));
+    }
+    let at = graphics.iter().position(|r| r.1 == "sel render_scale").map_or(graphics.len(), |k| k + 1);
+    graphics.splice(at..at, upscaler_rows(app, file));
+}
+
 pub(super) fn vehicle_pages(app: &App) -> Vec<Page> {
     let has = app.player.is_some();
     let server = crate::input_script::on_server(&app.args);
@@ -508,7 +519,7 @@ fn shown_in_mode(mode: &str, key: &str) -> bool {
         "reflections" => mode != "enhanced_plus",
         "night_brightness" | "led_glow" | "led_mips" | "mirror_quality" | "cloud_quality" => matches!(mode, "enhanced" | "enhanced_plus"),
         // (the ray-traced picture has its own occlusion)
-        "street_light" => mode == "enhanced",
+        "street_light" | "road_glare" => matches!(mode, "enhanced" | "enhanced_plus"),
         "ray_tracing" | "light_shadows" | "cloud_shadows" | "light_glow" => matches!(mode, "enhanced" | "enhanced_plus"),
         _ => true,
     }
@@ -550,12 +561,12 @@ mod tests {
 
     #[test]
     fn graphics_rows_follow_the_sessions_mode() {
-        let keys = ["shadows", "shadow_size", "ssao", "shadow_casters", "detail_textures", "night_brightness", "led_glow", "led_mips", "reflections", "mirror_quality", "cloud_quality", "street_light", "msaa", "ray_tracing", "light_shadows", "cloud_shadows", "light_glow", "road_snow"];
+        let keys = ["shadows", "shadow_size", "ssao", "shadow_casters", "detail_textures", "night_brightness", "led_glow", "led_mips", "reflections", "road_glare", "traffic_headlights", "mirror_quality", "cloud_quality", "street_light", "msaa", "ray_tracing", "light_shadows", "cloud_shadows", "light_glow", "road_snow"];
         let shown = |mode: &str| keys.iter().filter(|k| shown_in_mode(mode, k)).copied().collect::<Vec<_>>();
-        assert_eq!(shown("vanilla"), ["reflections", "msaa"]);
-        assert_eq!(shown("vanilla_plus"), ["shadows", "shadow_size", "ssao", "shadow_casters", "detail_textures", "reflections", "msaa", "road_snow"]);
+        assert_eq!(shown("vanilla"), ["reflections", "traffic_headlights", "msaa"]);
+        assert_eq!(shown("vanilla_plus"), ["shadows", "shadow_size", "ssao", "shadow_casters", "detail_textures", "reflections", "traffic_headlights", "msaa", "road_snow"]);
         assert_eq!(shown("enhanced"), keys);
-        assert_eq!(shown("Enhanced+"), ["shadow_size", "shadow_casters", "detail_textures", "night_brightness", "led_glow", "led_mips", "mirror_quality", "cloud_quality", "msaa", "ray_tracing", "light_shadows", "cloud_shadows", "light_glow", "road_snow"]);
+        assert_eq!(shown("Enhanced+"), ["shadow_size", "shadow_casters", "detail_textures", "night_brightness", "led_glow", "led_mips", "road_glare", "traffic_headlights", "mirror_quality", "cloud_quality", "street_light", "msaa", "ray_tracing", "light_shadows", "cloud_shadows", "light_glow", "road_snow"]);
     }
     #[test]
     fn the_running_sessions_mode_decides_what_it_forces() {
@@ -589,7 +600,7 @@ fn upscaler_rows(app: &App, file: &serde_json::Value) -> Vec<(String, String)> {
     let fsr = app.settings.upscaler == "fsr1";
     let pct = |v: f32| format!("{:.0} %", v * 100.0);
     [
-        select_row(file, "upscaler", "Upscaling", "Standard Catmull-Rom or experimental FSR 1; changes show at once"),
+        select_row(file, "upscaler", "Upscaling", "Standard Catmull-Rom or AMD FSR 1.0; changes show at once"),
         select_row(file, "fsr_quality", "FSR quality", &fsr_size(app)).filter(|_| fsr),
         slider_row(app, "fsr_sharpness", "FSR sharpness", "RCAS sharpening strength", &pct).filter(|_| fsr),
     ]

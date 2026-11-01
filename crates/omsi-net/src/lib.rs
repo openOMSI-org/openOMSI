@@ -176,7 +176,7 @@ pub const INFO_MIN_GAP: f32 = 0.25;
 /// Seconds between two CLOCK messages of the host.
 pub const CLOCK_EVERY: f32 = 5.0;
 /// At most this many other players: a host turns away the next one, a client ignores more.
-pub const MAX_PEERS: usize = 32;
+pub const MAX_PEERS: usize = 64;
 /// At most this many players may be loading at the same time (joined, no state yet).
 pub const MAX_JOINING: usize = 8;
 /// How far around the requested spawn a host lists the vehicles standing there (m).
@@ -203,6 +203,9 @@ const SOUND_RATE: (f32, f32) = (512.0, 2048.0);
 use voice_net::VOICE_RATE;
 const MESSAGE_RATE: (f32, f32) = (10.0, 20.0);
 const CHAT_RATE: (f32, f32) = (1.0, 3.0);
+mod receive_budget;
+mod receive_world;
+mod join_queue;
 // ---------------------------------------------------------------------------------------
 // session codes
 
@@ -1126,6 +1129,7 @@ enum PeerTraffic {
     Voice,
     Tack,
     Message,
+    Chat,
 }
 
 /// A token bucket: `rate` a second, at most `burst` at once.
@@ -1180,6 +1184,8 @@ pub struct Peer {
     chat: Bucket,
     /// Datagrams of this player the host threw away (too many at once).
     pub dropped: u32,
+    /// Rate-limit rejections by PeerTraffic category (no payloads stored).
+    drop_counts: [u32; 9],
     /// The nonce of the player's hellos (host side).
     nonce: Option<u64>,
     secret: [u8; 16],
@@ -1223,6 +1229,7 @@ impl Peer {
             messages: Bucket::new(MESSAGE_RATE.1),
             chat: Bucket::new(CHAT_RATE.1),
             dropped: 0,
+            drop_counts: [0; 9],
             history: std::collections::VecDeque::new(),
             nonce: None,
             secret: admission::random_bytes(),
@@ -1263,6 +1270,8 @@ pub struct LanSession {
     /// its map between two ticks does not count), and since when it lost a host it had (see
     /// `JOIN_TIMEOUT`, `RECONNECT_TIMEOUT`).
     trying: f32,
+    /// The host is currently admitting its bounded batch of loading peers.
+    waiting_for_slot: bool,
     lost_at: Option<Instant>,
     /// The client gave up (no answer / host lost) but keeps saying hello now and then: a
     /// welcome brings it back without restarting the game (see `reconnect`).
@@ -1294,6 +1303,10 @@ pub struct LanSession {
     /// keeps its time up to date with `set_clock`).
     pub world: WorldInfo,
     peers: HashMap<u32, Peer>,
+    max_peers: usize,
+    /// FIFO admission for joiners beyond the eight parallel loading slots.
+    /// Each candidate must keep retrying HELLO or the reservation expires.
+    waiting_joins: std::collections::VecDeque<(SocketAddr, Instant)>,
     next_id: u32,
     send_acc: f32,
     hello_acc: f32,
@@ -1342,6 +1355,8 @@ pub struct LanSession {
     /// Bytes sent and received so far.
     sent: Cell<u64>,
     pub received: u64,
+    recv_budget_hits: u32,
+    recv_budget_last_log: Option<Instant>,
     /// The shared world (see `world`): frames, descriptions and handed-over passengers
     /// the host sent (client), and what the clients asked for (host).
     world_in: Vec<(Instant, world::WorldFrame)>,
@@ -1431,6 +1446,7 @@ impl LanSession {
             host: None,
             candidates: Vec::new(),
             trying: 0.0,
+            waiting_for_slot: false,
             lost_at: None,
             timed_out: false,
             join_timeout: omsi_cfg::flags::OMSI_LAN_JOIN_TIMEOUT.live_var()
@@ -1455,6 +1471,8 @@ impl LanSession {
             strangers_told: false,
             world,
             peers: HashMap::new(),
+            max_peers: MAX_PEERS,
+            waiting_joins: std::collections::VecDeque::new(),
             next_id: 2,
             send_acc: 0.0,
             hello_acc: 1.0,
@@ -1486,6 +1504,8 @@ impl LanSession {
             buf: vec![0; 8192],
             sent: Cell::new(0),
             received: 0,
+            recv_budget_hits: 0,
+            recv_budget_last_log: None,
             world_in: Vec::new(),
             traffic: Default::default(),
             var_sender: vars::VarSender::default(),
@@ -1704,6 +1724,12 @@ impl LanSession {
             self.world.date = date.to_string();
         }
         self.world.time = time;
+    }
+
+    /// Host: cap remote players independently of the protocol's hard ceiling.
+    /// Dedicated servers use server.cfg's max_players; reconnects of existing peers remain allowed.
+    pub fn set_peer_limit(&mut self, players: usize) {
+        if self.role == Role::Host { self.max_peers = players.clamp(1, MAX_PEERS); }
     }
 
     /// Our world after the game took over the host's (a client): only what still differs
@@ -2126,13 +2152,11 @@ impl LanSession {
         );
         if let (Some(secret), Some(c)) = (self.rebind_secret, self.answer) {
             msg.push_str(&format!("|{c:016x}|{:016x}", admission::proof(&secret, c)));
-        } else if self.hardware_id.is_some() {
+        } else {
             msg.push_str("||");
         }
         // (after the rebind proof; a host before the identifier ignores a field it does not know)
-        if let Some(hw) = &self.hardware_id {
-            msg.push_str(&format!("|{hw}"));
-        }
+        msg.push_str(&format!("|{}|wait-v1", self.hardware_id.as_deref().unwrap_or("")));
         for h in to {
             self.send(msg.as_bytes(), h);
         }
@@ -2235,7 +2259,8 @@ impl LanSession {
         }
         if self.role == Role::Client
             && !self.connected
-            && (self.rejected.is_none() && self.hello_acc >= 1.0
+            && (self.rejected.is_none()
+                    && self.hello_acc >= (if self.waiting_for_slot { 2.0 } else { 1.0 })
                 || self.timed_out && self.hello_acc >= 5.0)
         {
             self.hello_acc = 0.0;
@@ -2282,7 +2307,21 @@ impl LanSession {
             let Some(p) = self.peers.remove(&id) else {
                 continue;
             };
-            log::info!("LAN: player {id} timed out");
+            log::warn!(
+                "LAN: player {id} timed out after {:.1} s without an accepted datagram (loading={}, rate-limited total={}, state={}, variables={}, animations={}, textures={}, sounds={}, voice={}, tack={}, messages={}, chat={})",
+                now.duration_since(p.last_seen).as_secs_f32(),
+                !p.has_pose,
+                p.dropped,
+                p.drop_counts[0],
+                p.drop_counts[1],
+                p.drop_counts[2],
+                p.drop_counts[3],
+                p.drop_counts[4],
+                p.drop_counts[5],
+                p.drop_counts[6],
+                p.drop_counts[7],
+                p.drop_counts[8]
+            );
             gone.push(id);
             self.gone_lately.push((p.nonce, p.pose.name.clone(), id, now));
             if self.role == Role::Host {
@@ -2294,7 +2333,10 @@ impl LanSession {
             && self.connected
             && now.duration_since(self.host_seen) > self.timeout
         {
-            log::warn!("LAN: the host has gone quiet; trying to reach it again");
+            log::warn!(
+                "LAN: the host has gone quiet for {:.1} s; trying to reach it again",
+                now.duration_since(self.host_seen).as_secs_f32()
+            );
             self.events.push(LanEvent::Notice(
                 "the host has gone quiet; trying to reach it again".into(),
             ));
@@ -2312,7 +2354,7 @@ impl LanSession {
             return;
         }
         let why = match (self.welcome.is_some(), self.lost_at) {
-            (false, _) if self.trying >= self.join_timeout.as_secs_f32() => {
+            (false, _) if self.trying >= self.join_timeout.as_secs_f32() + (if self.waiting_for_slot { 300.0 } else { 0.0 }) => {
                 self.no_answer(self.join_timeout)
             }
             (true, Some(at)) if at.elapsed() >= RECONNECT_TIMEOUT => format!(
@@ -2480,7 +2522,10 @@ impl LanSession {
     }
 
     fn receive(&mut self, gone: &mut Vec<u32>) {
+        let started = Instant::now();
+        let mut packets = 0usize;
         loop {
+            if self.receive_budget_yield(packets, started) { break; }
             let (n, from) = match self.socket.recv_from(&mut self.buf) {
                 Ok(x) => x,
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
@@ -2494,6 +2539,7 @@ impl LanSession {
                 }
                 Err(_) => break,
             };
+            packets += 1;
             self.received += n as u64;
             // the bridge's own datagrams (a STUN answer, a punch): not the game's
             if bridge::is_bridge_packet(&self.buf[..n]) {
@@ -2519,9 +2565,7 @@ impl LanSession {
                     self.host_seen = Instant::now();
                 }
             }
-            if n == 0 || n > MAX_DATAGRAM {
-                continue;
-            }
+            if n == 0 || n > MAX_DATAGRAM { continue; }
             let mut data = self.buf[..n].to_vec();
             if data[0] == 0xEA {
                 let expected = match self.role {
@@ -2542,40 +2586,9 @@ impl LanSession {
                 }
                 continue;
             }
-            if self.on_table_or_voice(&data, from) {
-                continue;
-            }
+            if self.on_table_or_voice(&data, from) { continue; }
             if data[0] == world::WORLD_MAGIC {
-                // a client takes the world from its host (above); a host takes the people of
-                // a client's own from that client (within its rate)
-                if self.role == Role::Host {
-                    let Some(id) = self
-                        .peers
-                        .iter()
-                        .find(|(_, p)| p.addr == Some(from))
-                        .map(|(id, _)| *id)
-                    else {
-                        continue;
-                    };
-                    if self.checked_peer(id, from, STATE_RATE, PeerTraffic::State).is_none() {
-                        continue;
-                    }
-                    if let Some(mut f) = world::decode(&data, PROTOCOL as u8) {
-                        self.world_received += n as u64;
-                        f.lights.clear();
-                        if self.world_up.len() < 256 {
-                            self.world_up.push((id, Instant::now(), f));
-                        }
-                    }
-                } else {
-                    if let Some(f) = world::decode(&data, PROTOCOL as u8) {
-                        self.world_received += n as u64;
-                        // (a game that stopped ticking does not pile them up without end)
-                        if self.world_in.len() < 256 {
-                            self.world_in.push((Instant::now(), f));
-                        }
-                    }
-                }
+                self.on_world_datagram(&data, from, n);
                 continue;
             }
             if data[0] == wire::STATE_MAGIC {
@@ -2615,9 +2628,19 @@ impl LanSession {
                     self.send(msg.as_bytes(), from);
                 }
                 ("HELLO", Role::Host) => self.on_hello(&parts, from),
-                ("WELCOME", Role::Client) => self.on_welcome(&parts, from),
+                // Ignore unexpected addresses: they must not impersonate a host or
+                // end an in-progress join by injecting a fabricated welcome.
+                ("WELCOME", Role::Client) if self.accepts_host_source(from) => self.on_welcome(&parts, from),
                 ("CHALLENGE", Role::Client) if self.host == Some(from) || (self.host.is_none() && self.candidates.contains(&from)) => self.on_challenge(&parts),
-                ("REJECT", Role::Client) if self.host.is_none() || Some(from) == self.host => {
+                // Temporary server-side capacity limits are not permanent rejections.
+                ("WAIT", Role::Client)
+                    if !self.connected
+                        && field(&parts, 1).parse::<u32>().ok() == Some(PROTOCOL)
+                        && self.accepts_host_source(from) =>
+                {
+                    self.on_waiting_slot(from);
+                }
+                ("REJECT", Role::Client) if self.accepts_host_source(from) => {
                     let reason = clean_text(field(&parts, 2), 300);
                     // Different candidate IPs may belong to different computers. Keep
                     // trying those, but a refusal from the one machine whose ports we
@@ -2800,13 +2823,17 @@ impl LanSession {
             PeerTraffic::Voice => peer.voice.take(rate),
             PeerTraffic::Tack => peer.tacks.take(rate),
             PeerTraffic::Message => peer.messages.take(rate),
+            PeerTraffic::Chat => peer.chat.take(rate),
         };
         if !ok {
-            peer.dropped += 1;
-            if peer.dropped.is_power_of_two() {
+            peer.dropped = peer.dropped.saturating_add(1);
+            let category_drops = &mut peer.drop_counts[traffic as usize];
+            *category_drops = category_drops.saturating_add(1);
+            let category_count = *category_drops;
+            if category_count.is_power_of_two() {
                 log::warn!(
-                    "LAN: player {id} sends too much; {} datagram(s) dropped so far",
-                    peer.dropped
+                    "LAN: player {id} exceeded {traffic:?} rate ({:.0}/s, burst {:.0}); {} {traffic:?} datagram(s) dropped, {} total",
+                    rate.0, rate.1, category_count, peer.dropped
                 );
             }
             return None;
@@ -2955,7 +2982,15 @@ impl LanSession {
             return;
         }
         if !peer.chat.take(CHAT_RATE) {
-            peer.dropped += 1;
+            peer.dropped = peer.dropped.saturating_add(1);
+            let chat_drops = &mut peer.drop_counts[PeerTraffic::Chat as usize];
+            *chat_drops = chat_drops.saturating_add(1);
+            if chat_drops.is_power_of_two() {
+                log::warn!(
+                    "LAN: player {id} exceeded Chat rate ({:.0}/s, burst {:.0}); {} Chat datagram(s) dropped, {} total",
+                    CHAT_RATE.0, CHAT_RATE.1, chat_drops, peer.dropped
+                );
+            }
             return;
         }
         let name = peer.label();
@@ -3029,6 +3064,12 @@ impl LanSession {
         // a returning client keeps its id; so does one that tried several of our addresses
         // at once, and the address its latest hello came from is the one it has chosen
         let same = |p: &Peer| p.addr == Some(from) || (nonce.is_some() && p.nonce == nonce);
+        if !self.peers.values().any(|p| same(p))
+            && self.peers.len() < self.max_peers
+            && self.defer_new_join(from, field(parts, 14) == "wait-v1")
+        {
+            return;
+        }
         let (id, here) = match self.peers.iter().find(|(_, p)| same(p)) {
             Some((id, _)) => {
                 let id = *id;
@@ -3054,19 +3095,17 @@ impl LanSession {
                 }
                 (id, None)
             }
-            None if self.peers.len() >= MAX_PEERS => {
-                log::warn!("LAN: '{name}' at {from} wants to join, but {MAX_PEERS} players are here already; turned away");
+            None if self.peers.len() >= self.max_peers => {
+                log::warn!("LAN: '{name}' at {from} wants to join, but {} players are here already; turned away", self.max_peers);
                 self.reject(
                     from,
-                    &format!("the session is full ({} players)", MAX_PEERS + 1),
+                    &format!("the session is full ({} players)", self.max_peers),
                 );
                 return;
             }
             None if self.peers.values().filter(|p| !p.has_pose).count() >= MAX_JOINING => {
-                self.reject(
-                    from,
-                    "the host is letting other players in - try again in a minute",
-                );
+                // Defensive fallback; normally the bounded FIFO above handles this.
+                self.send(format!("WAIT|{PROTOCOL}|2").as_bytes(), from);
                 return;
             }
             None if self.hw_required && hwid.is_none() => {
@@ -3256,6 +3295,7 @@ impl LanSession {
         self.answer = None;
         self.session = session;
         self.connected = true;
+        self.waiting_for_slot = false;
         self.lost_at = None;
         if was_timed_out {
             // the host is back after we had given up

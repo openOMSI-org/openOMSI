@@ -35,6 +35,10 @@ use crate::ws_http::{header, last_header, peek_head, read_body, read_head, refus
 use tungstenite::protocol::WebSocketConfig;
 use tungstenite::{Message, WebSocket};
 
+// Give both directions and the keepalive timer a chance under sustained traffic.
+// Unlike a per-second rate limit, this only shares work between loop iterations.
+const WS_PUMP_BURST: usize = 128;
+
 /// What a server tells about itself (`GET /status`, and the launcher's list).
 #[derive(Debug, Clone, Default)]
 pub struct ServerInfo {
@@ -53,6 +57,11 @@ pub struct ServerInfo {
     /// The buses that may be driven there (vehicle files, `Vehicles/…/….bus`): what the
     /// host has installed, or a server's own list. Empty: not said (an older game).
     pub vehicles: Vec<String>,
+    /// Optional server-side catalogue of paint schemes for each offered bus. Names only;
+    /// no file paths outside the allowed bus and no download authority.
+    pub fleet: Vec<FleetPaints>,
+    /// Zero means the server did not announce a paint catalogue (older builds).
+    pub fleet_version: u32,
     /// Where it answered (`http(s)://…`), set by `query`: when using WebSocket, a
     /// server added by its bare address (`1.2.3.4`, `host:27025`) is joined there.
     pub reached_at: String,
@@ -71,6 +80,18 @@ pub struct ServerInfo {
     /// The public server list's challenge (`"list_challenge"` in `GET /status`): the list
     /// service lists the server once it finds it there. Empty: the server is not listed.
     pub list_challenge: String,
+}
+
+/// One bus and its named paints, as the dedicated server offers them. The catalogue
+/// is informative: secure mod transfer still requires an authenticated manifest.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct FleetPaints {
+    pub bus: String,
+    pub paints: Vec<String>,
+    /// Whole model, including every advertised paint. Informational only: clients
+    /// may compare local bytes, but may not download based on this status alone.
+    #[serde(default)]
+    pub content: String,
 }
 
 /// What a dedicated server's shared world holds: the AI cars on the roads (`cars`), its
@@ -179,7 +200,7 @@ impl ServerInfo {
 
     fn to_json_base(&self) -> String {
         format!(
-            "{{\"name\":{},\"motd\":{},\"map\":{},\"players\":{},\"max_players\":{},\"version\":{},\"icon\":{},\"time\":{},\"weather\":{},\"password\":{},\"protocol\":{},\"vehicles\":{},\"world\":{}}}",
+            "{{\"name\":{},\"motd\":{},\"map\":{},\"players\":{},\"max_players\":{},\"version\":{},\"icon\":{},\"time\":{},\"weather\":{},\"password\":{},\"protocol\":{},\"vehicles\":{},\"fleet_version\":{},\"fleet\":{},\"world\":{}}}",
             json_str(&self.name),
             json_str(&self.motd),
             json_str(&self.map),
@@ -192,6 +213,8 @@ impl ServerInfo {
             self.password,
             crate::PROTOCOL,
             json_str(&self.vehicles.join(";")),
+            self.fleet_version,
+            serde_json::to_string(&self.fleet).unwrap_or_else(|_| "[]".into()),
             self.world.map(|w| w.to_json()).unwrap_or_else(|| "null".into())
         )
     }
@@ -212,6 +235,11 @@ impl ServerInfo {
             weather: text("weather").unwrap_or_default(),
             password: json_value(s, "password").map(|v| v.trim() == "true").unwrap_or(false),
             vehicles: text("vehicles").map(|v| v.split(';').map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect()).unwrap_or_default(),
+            fleet_version: num("fleet_version").unwrap_or(0).min(1) as u32,
+            fleet: serde_json::from_str::<serde_json::Value>(s).ok()
+                .and_then(|v| v.get("fleet").cloned())
+                .and_then(|v| serde_json::from_value::<Vec<FleetPaints>>(v).ok())
+                .unwrap_or_default(),
             reached_at: String::new(),
             ..Default::default()
         })
@@ -308,9 +336,16 @@ pub fn query(target: &str, with_icon: bool) -> Result<ServerInfo, String> {
 /// `HEAD_WAIT` (and one source has its own ceiling, `PER_SOURCE`).
 const MAX_CONNECTIONS: usize = MAX_ORDINARY + MAX_TUNNELS;
 
-/// Players, status requests and the icon carried at once: the 64 the hardening set for
-/// everything. One more is answered `503`. Mod streams never take one of these places.
-const MAX_ORDINARY: usize = if cfg!(test) { 3 } else { 64 };
+/// At most 64 player WebSockets plus 16 shared slots for HTTP/admin requests.
+/// Admission is scaled to the configured player count. Mod streams stay separate.
+const MAX_ORDINARY: usize = if cfg!(test) { 3 } else { 80 };
+const GATEWAY_HEADROOM: usize = 16;
+
+/// Shared slots are not a hard HTTP reservation: a short request can still be
+/// refused if too many ordinary connections are open at the same time.
+fn ordinary_slots(players: usize) -> usize {
+    players.clamp(1, 64) + GATEWAY_HEADROOM
+}
 
 /// Mod streams (`/tcp`) carried at once, apart from the players' places; one more is told
 /// the mods server's `ERR busy` and its game asks again in a moment. With 64 for
@@ -603,10 +638,15 @@ fn serve(stream: TcpStream, slot: Option<SourceSlot>, target: SocketAddr, info: 
     let _place = if tunnel {
         None
     } else {
-        match admission.ordinary.take(MAX_ORDINARY) {
+        let slots = if cfg!(test) {
+            MAX_ORDINARY
+        } else {
+            ordinary_slots(info.lock().unwrap_or_else(|e| e.into_inner()).max_players)
+        };
+        match admission.ordinary.take(slots) {
             Some(place) => Some(place),
             None => {
-                log::debug!("ws gateway: {source}: {MAX_ORDINARY} players and requests carried already; one more told to come back");
+                log::debug!("ws gateway: {source}: {slots} player and request connections open; one more told to come back");
                 refuse(stream, "503 Service Unavailable", "Retry-After: 2\r\n");
                 return Ok(());
             }
@@ -711,14 +751,22 @@ fn html(s: &str) -> String {
 
 /// Carry datagrams both ways between a WebSocket and a UDP socket until either side goes.
 /// `send` hands a message from the WebSocket to the UDP side.
+fn flush_ws<S: Read + Write>(ws: &mut WebSocket<S>) -> Result<(), String> {
+    match ws.flush() {
+        Ok(()) => Ok(()),
+        Err(tungstenite::Error::Io(e)) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => Ok(()),
+        Err(e) => Err(format!("WebSocket flush failed: {e}")),
+    }
+}
+
 fn pump<S: Read + Write>(ws: &mut WebSocket<S>, udp: &UdpSocket, mut send: impl FnMut(&UdpSocket, &[u8]) -> std::io::Result<()>, stop: &AtomicBool) -> Result<(), String> {
     let mut buf = vec![0u8; 2048];
     let mut last_in = Instant::now();
     let mut last_ping = Instant::now();
     while !stop.load(Ordering::Relaxed) {
         let mut idle = true;
-        // WebSocket → UDP
-        loop {
+        // WebSocket → UDP. Stop before starving UDP responses or pings.
+        for _ in 0..WS_PUMP_BURST {
             match ws.read() {
                 Ok(Message::Binary(d)) => {
                     last_in = Instant::now();
@@ -732,8 +780,8 @@ fn pump<S: Read + Write>(ws: &mut WebSocket<S>, udp: &UdpSocket, mut send: impl 
                 Err(e) => return Err(e.to_string()),
             }
         }
-        // UDP → WebSocket
-        loop {
+        // UDP → WebSocket. Bound the reverse direction as well.
+        for _ in 0..WS_PUMP_BURST {
             match udp.recv_from(&mut buf) {
                 Ok((n, _)) => {
                     idle = false;
@@ -748,7 +796,7 @@ fn pump<S: Read + Write>(ws: &mut WebSocket<S>, udp: &UdpSocket, mut send: impl 
                 Err(e) => return Err(e.to_string()),
             }
         }
-        let _ = ws.flush();
+        flush_ws(ws)?;
         // (proxies close a WebSocket that stays quiet for a minute or two)
         if last_ping.elapsed() > Duration::from_secs(20) {
             last_ping = Instant::now();
@@ -913,7 +961,8 @@ impl WsClient {
                     let r: Result<(), String> = (|| {
                         while !st.load(Ordering::Relaxed) {
                             let mut idle = true;
-                            loop {
+                            // Share time fairly between incoming WS traffic and outgoing UDP.
+                            for _ in 0..WS_PUMP_BURST {
                                 match ws.read() {
                                     Ok(Message::Binary(d)) => {
                                         last_in = Instant::now();
@@ -929,7 +978,7 @@ impl WsClient {
                                     Err(e) => return Err(e.to_string()),
                                 }
                             }
-                            loop {
+                            for _ in 0..WS_PUMP_BURST {
                                 match udp.recv_from(&mut buf) {
                                     Ok((n, from)) => {
                                         idle = false;
@@ -945,7 +994,7 @@ impl WsClient {
                                     Err(e) => return Err(e.to_string()),
                                 }
                             }
-                            let _ = ws.flush();
+                            flush_ws(&mut ws)?;
                             if last_ping.elapsed() > Duration::from_secs(20) {
                                 last_ping = Instant::now();
                                 let _ = ws.send(Message::Ping(Vec::new().into()));
@@ -1007,6 +1056,44 @@ impl WsClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gateway_keeps_sixteen_spare_slots_above_configured_capacity() {
+        assert_eq!(ordinary_slots(1), 17);
+        assert_eq!(ordinary_slots(16), 32);
+        assert_eq!(ordinary_slots(32), 48);
+        assert_eq!(ordinary_slots(64), 80);
+        assert_eq!(ordinary_slots(256), 80);
+    }
+
+    #[test]
+    fn server_fleet_catalog_roundtrips_with_paint_names() {
+        let info = ServerInfo {
+            name: "Test".into(),
+            vehicles: vec!["Vehicles/Test/test.bus".into()],
+            fleet_version: 1,
+            fleet: vec![FleetPaints {
+                bus: "Vehicles/Test/test.bus".into(),
+                paints: vec!["Base".into(), "Azul \"especial\"".into(), "São Paulo".into()],
+                content: String::new(),
+            }],
+            ..Default::default()
+        };
+        let encoded = info.to_json();
+        let read = ServerInfo::from_json(&encoded).expect("valid server status");
+        assert_eq!(read.fleet_version, 1);
+        assert_eq!(read.fleet, info.fleet);
+        assert_eq!(read.vehicles, info.vehicles);
+    }
+
+    #[test]
+    fn server_fleet_catalog_is_optional_for_old_servers() {
+        let old = r#"{"name":"Old Server","map":"maps/Test/global.cfg","vehicles":"Vehicles/Test/test.bus"}"#;
+        let read = ServerInfo::from_json(old).unwrap();
+        assert_eq!(read.fleet_version, 0);
+        assert!(read.fleet.is_empty());
+    }
+
 
     #[test]
     fn status_round_trip() {

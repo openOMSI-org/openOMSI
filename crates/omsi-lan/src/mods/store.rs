@@ -125,7 +125,20 @@ impl Store {
     /// `e`'s file, if a join before fetched it.
     pub(crate) fn has(&self, e: &Entry) -> Option<SealedFile> {
         let f = self.file(e);
-        std::fs::metadata(&f.blob).ok().filter(|m| m.len() == omsi_cfg::vfs::sealed_len(e.size)).map(|_| f)
+        let md = std::fs::metadata(&f.blob).ok()?;
+        if md.len() != omsi_cfg::vfs::sealed_len(e.size) {
+            return None;
+        }
+        // Eviction is oldest-accessed-first, not oldest-downloaded-first:
+        // an old bus/map used regularly should not be fetched again unnecessarily.
+        // Touch at most once an hour to avoid per-read disk writes.
+        if md.modified().ok().and_then(|t| t.elapsed().ok())
+            .is_none_or(|age| age > std::time::Duration::from_secs(3600))
+        {
+            let _ = std::fs::File::options().write(true).open(&f.blob)
+                .and_then(|file| file.set_modified(std::time::SystemTime::now()));
+        }
+        Some(f)
     }
 
     /// `e`'s file read back (unsealed and checked: the seal is bound to its SHA-256).
@@ -374,6 +387,32 @@ mod tests {
         assert!(!store.has_piece(&old, 0, piece.len() as u64));
         assert!(store.has_piece(&young, 0, piece.len() as u64), "a piece written a minute ago is spared");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn reused_blob_updates_eviction_age_without_changing_content() {
+        let dir = std::env::temp_dir().join(format!("openomsi-lan-reuse-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = Store::open(&dir).unwrap();
+        let old_data = b"bus file used again";
+        let other_data = b"another bus file";
+        let old = Entry { path: "vehicles/old.bus".into(), size: old_data.len() as u64,
+            sha256: super::super::sha256_of(old_data) };
+        let other = Entry { path: "vehicles/other.bus".into(), size: other_data.len() as u64,
+            sha256: super::super::sha256_of(other_data) };
+        let old_file = store.put(&old, old_data).unwrap();
+        let other_file = store.put(&other, other_data).unwrap();
+        let now = std::time::SystemTime::now();
+        std::fs::File::options().write(true).open(&old_file.blob).unwrap()
+            .set_modified(now - std::time::Duration::from_secs(7200)).unwrap();
+        std::fs::File::options().write(true).open(&other_file.blob).unwrap()
+            .set_modified(now - std::time::Duration::from_secs(3700)).unwrap();
+        assert!(store.has(&old).is_some());
+        let used = std::fs::metadata(&old_file.blob).unwrap().modified().unwrap();
+        let unused = std::fs::metadata(&other_file.blob).unwrap().modified().unwrap();
+        assert!(used > unused, "recently reused blob must survive before an unused blob");
+        assert_eq!(store.read(&old).unwrap(), old_data);
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

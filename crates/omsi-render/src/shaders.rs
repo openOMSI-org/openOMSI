@@ -84,6 +84,35 @@ mod tests {
         text.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3))
     }
 
+    /// Regression: road glare has its own lane, not the ground-prepass switch.
+    /// Runs without a GPU and protects the Enhanced+ and MSAA/SSAO combinations.
+    #[test]
+    fn road_glare_uses_dedicated_lod_lane() {
+        let shader = super::ENHANCED;
+        let setup = include_str!("passes/setup.rs");
+        assert!(
+            shader.contains("let from_ground = camera.lod.y > 0.5"),
+            "lod.y must remain the ground-prepass flag"
+        );
+        assert!(
+            shader.contains("spec = spec * camera.lod.z;"),
+            "road glare must use lod.z, never lod.y"
+        );
+        assert!(
+            !shader.contains("spec = spec * camera.lod.y;"),
+            "multiplying by the ground flag corrupts road glare"
+        );
+        assert!(
+            setup.contains("lod: [self.fsr_mip_bias(f), 0.0, lighting.road_glare.clamp(0.0, 2.0), 0.0]"),
+            "camera uniform must initialize the ground-pass flag to zero and glare in z"
+        );
+        let render = include_str!("render.rs");
+        assert!(
+            render.contains("(std::mem::offset_of!(CameraUniform, lod) + 4) as u64, bytemuck::bytes_of(&flag)"),
+            "the ground pass must set lod.y alone and keep the glare in lod.z"
+        );
+    }
+
     /// The assembled modules are byte for byte the single files they were cut from (sizes
     /// and hashes taken of `shader.wgsl` and `enhanced.wgsl` before the cut, updated for
     /// 0.2.30's capped surface pull and the Vanilla/transparency fixes in both modules,
@@ -99,13 +128,14 @@ mod tests {
     /// and a script's screen never taken for a pane (#2927), and the lamp tiles' taps in loops of fixed bounds,
     /// and the colour/mask-only headset entry point, and a self-lit blended layer's alpha giving
     /// Omsi.exe's encoded mix, and the vertex-lit Direct3D headlight excluding its own vehicle,
-    /// and the traced sample read once for FXC, and the detail grain's octaves left out where faded.
+    /// and the traced sample read once for FXC, the road glare in its own uniform lane,
+    /// and the detail grain's octaves left out where faded.
     /// (with Unix line ends: a Windows checkout may turn the parts' into CRLF, as it did the
     /// single files', and the 0.2.31 release's Windows test failed on that alone)
     #[test]
     fn assembled_shaders_are_the_old_files() {
         let (scene, enhanced) = (super::SCENE.replace("\r\n", "\n"), super::ENHANCED.replace("\r\n", "\n"));
-        assert_eq!((scene.len(), fnv1a(&scene)), (137_683, 17_708_513_878_730_958_890));
-        assert_eq!((enhanced.len(), fnv1a(&enhanced)), (98_591, 17_595_267_747_640_518_696));
+        assert_eq!((scene.len(), fnv1a(&scene)), (137753, 5786162142115336763));
+        assert_eq!((enhanced.len(), fnv1a(&enhanced)), (98_868, 13_233_949_170_819_530_482));
     }
 }
