@@ -320,6 +320,10 @@ impl App {
 
     /// The open list is closed: back to the game menu.
     pub(crate) fn close_list(&mut self) {
+        // A programmatic close cannot silently keep an unconfirmed graphics preview.
+        if self.menus.graphics_before.is_some() {
+            crate::game_lists::cancel_graphics_changes(self);
+        }
         self.menus.key_capture = None;
         self.menus.dropdown = None;
         if self.menus.menu_edit_icao { if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);} }
@@ -459,6 +463,23 @@ impl App {
                 if let Some(kind) = self.menus.list_kind.clone() {
                     if let Some(back) = crate::game_lists::run(self, &kind, "back") {
                         self.open_list(back);
+                    }
+                }
+            }
+            KeyCode::Escape if self.menus.graphics_before.is_some() => {
+                let kind = self.menus.list_kind.clone();
+                match kind {
+                    Some(crate::game_lists::ListKind::GraphicsConfirm(tab)) => {
+                        crate::game_lists::cancel_graphics_changes(self);
+                        self.open_list(crate::game_lists::ListKind::Options(tab));
+                    }
+                    Some(crate::game_lists::ListKind::Options(tab)) => {
+                        self.open_list(crate::game_lists::ListKind::GraphicsConfirm(tab));
+                    }
+                    _ => {
+                        self.open_list(crate::game_lists::ListKind::GraphicsConfirm(
+                            crate::game_lists::tab_of(self, crate::game_lists::ListKind::Options(0), "Graphics")
+                        ));
                     }
                 }
             }
