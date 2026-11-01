@@ -91,9 +91,7 @@ impl App {
         let Ok(exe) = std::env::current_exe() else { return false };
         let mut cmd = std::process::Command::new(exe);
         cmd.arg("--root").arg(&self.args.root).arg("--no-menu").arg("--situation").arg(&file);
-        if self.args.no_plugins {
-            cmd.arg("--no-plugins");
-        }
+        self.pass_session_args(&mut cmd);
         // (the duty typed by itself goes on being typed: `--autostart` with a situation)
         if self.player.as_ref().is_some_and(|p| p.duty_typed) {
             cmd.arg("--autostart");
@@ -172,6 +170,22 @@ impl App {
         }
     }
 
+    fn pass_session_args(&self, cmd: &mut std::process::Command) {
+        if self.args.no_plugins {
+            cmd.arg("--no-plugins");
+        }
+        cmd.arg("--traffic").arg(self.args.traffic.to_string());
+        if self.args.passengers {
+            cmd.arg("--passengers");
+        }
+        if self.args.no_timetable_buses {
+            cmd.arg("--no-timetable-buses");
+        }
+        if let Some(d) = &self.args.driver {
+            cmd.arg("--driver").arg(d);
+        }
+    }
+
     /// The graphics device was lost (the driver reset the card: it ran out of memory, or a
     /// frame took it too long): the game starts again by itself on the situation just
     /// saved, with lighter graphics (`Settings::apply_safe_gpu`), and on Windows with the
@@ -186,12 +200,13 @@ impl App {
         let Ok(exe) = std::env::current_exe() else { return false };
         let mut cmd = std::process::Command::new(exe);
         cmd.arg("--root").arg(&self.args.root).arg("--no-menu").arg("--situation").arg(&file);
-        if self.args.no_plugins {
-            cmd.arg("--no-plugins");
-        }
+        self.pass_session_args(&mut cmd);
         // (the duty typed by itself goes on being typed: `--autostart` with a situation)
         if self.player.as_ref().is_some_and(|p| p.duty_typed) {
             cmd.arg("--autostart");
+        }
+        if let Some(d) = &self.args.depot {
+            cmd.arg("--depot").arg(d);
         }
         cmd.env("OMSI_SAFE_GPU", (n + 1).to_string());
         // (on Windows the other interface: DirectX 12 after Vulkan, Vulkan after DirectX 12 -

@@ -237,6 +237,13 @@ impl Money {
         }
     }
 
+    pub fn coin_worth(&self, coin: usize, worth: f32) -> usize {
+        if worth <= 0.0 || (self.value_of(&[coin]) - worth).abs() < 0.001 {
+            return coin;
+        }
+        self.denominations().into_iter().find(|(_, v)| (v - worth).abs() < 0.001).map_or(coin, |(i, _)| i)
+    }
+
     pub fn change_value(&self) -> f32 {
         let coins: Vec<usize> = self.placed.iter().filter(|p| p.3).map(|p| p.2).collect();
         self.value_of(&coins)
@@ -293,6 +300,16 @@ mod tests {
         m.placed.push((3, Mat4::IDENTITY, 4, true, None));
         assert!(m.change_left_coins(3.0).is_empty());
         assert!(m.change_left_coins(2.9).is_empty());
+    }
+
+    #[test]
+    fn a_change_key_gives_the_coin_it_names() {
+        let m = money_with_currency(&[0.05, 0.1, 0.2, 0.5, 1.0, 2.0], &[5.0]);
+        assert_eq!(m.coin_worth(2, 0.5), 3);
+        assert_eq!(m.coin_worth(2, 0.2), 2);
+        assert_eq!(m.coin_worth(2, 0.0), 2);
+        assert_eq!(m.coin_worth(5, 5.0), 6);
+        assert_eq!(m.coin_worth(5, 0.3), 5);
     }
 
     fn money_with_currency(coins: &[f32], bills: &[f32]) -> Money {

@@ -111,6 +111,7 @@ mod ui;
 // the game itself, split by what each part does
 mod app;
 mod applog;
+mod logmask;
 mod app_events;
 mod bus_service;
 mod camera_util;
@@ -248,7 +249,8 @@ pub fn run() -> Result<()> {
         let rest: Vec<String> = std::env::args().skip(2).collect();
         return check::run(&rest, crate::startup::find_root);
     }
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    // (the players' internet addresses cut to their network, see `logmask`)
+    logmask::init();
     // a panic goes into the log (which the launcher keeps per session) with where it
     // happened and a backtrace, not only to a terminal that may not be there
     let default_hook = std::panic::take_hook();

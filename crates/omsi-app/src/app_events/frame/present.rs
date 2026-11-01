@@ -558,10 +558,10 @@ impl App {
         // a display's pace instead of spinning a core a thousand times a
         // second. What it uploaded (traffic instances, streamed tiles,
         // people, the navigator) waits in wgpu's staging buffers until the
-        // next submit, so submit nothing to let them go: without it a hidden
+        // next submit, so submit the deferred commands alone to let them go: without it a hidden
         // window on Ahlheim grew by 100 MB a second (5.6 GB after 55 s).
         let __t = Instant::now();
-        r.queue.submit(std::iter::empty::<wgpu::CommandBuffer>());
+        r.queue.submit(r.take_deferred_commands());
         let _ = r.device.poll(wgpu::PollType::Poll);
         self.perf.profile.add(crate::profile_keys::ProfKey::Present, __t.elapsed().as_secs_f64());
         if let Some(rest) =

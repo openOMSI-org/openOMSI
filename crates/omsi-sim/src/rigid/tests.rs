@@ -629,6 +629,22 @@ fn brakes_slide_on_ice() {
     assert!(ice > dry * 4.0, "ice {ice} dry {dry}");
 }
 
+#[test]
+fn a_standing_bus_spins_its_driven_wheels_on_ice() {
+    let spins = |mu: f32| {
+        let flat = road(1e9, 0.0);
+        let mut rb = RigidBody::from_definition(&bus(), &[]);
+        rb.place(DVec3::ZERO, 0.0);
+        run(&mut rb, 0.5, 0.0, 0.0, &flat);
+        rb.friction = mu;
+        run(&mut rb, 0.5, 12_000.0, 0.0, &flat);
+        let v = rb.forward_speed();
+        rb.wheels.iter().filter(|w| w.driven).all(|w| w.spin * w.radius > v + 1.0)
+    };
+    assert!(spins(crate::vehicle::road_grip(0.4, -6.0)), "no wheelspin on ice");
+    assert!(!spins(crate::vehicle::road_grip(0.0, 15.0)), "wheelspin on a dry road");
+}
+
 /// Straight into a wall at 40 km/h: the bus stops at the wall, bounces off a little, and
 /// drives away backwards straight after.
 #[test]

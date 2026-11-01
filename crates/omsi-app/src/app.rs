@@ -355,7 +355,7 @@ impl App {
             if surface.config.width != size.width.max(1) || surface.config.height != size.height.max(1) {
                 surface.resize(&renderer, size.width, size.height);
             }
-            surface.set_vsync(&renderer, vsync);
+            surface.set_vsync(&renderer, vsync, (1..1000).contains(&self.settings.max_fps) && !cfg!(target_os = "android"));
             let (sw, sh) = renderer.scene_size(size.width, size.height);
             log::info!(
                 "window: {}x{} pixels (scale factor {:.2}), 3D picture {sw}x{sh}, present mode {:?}",
