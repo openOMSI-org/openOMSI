@@ -11,13 +11,19 @@ pub(crate) fn draw(seed: u64, n: u64) -> f32 {
 /// Uses Acklam's algorithm (requires logarithms and square roots only in about 4.85% of cases)
 /// The same every time for each pair of `seed` and `n`.
 pub(crate) fn draw_gaussian(seed: u64, n: u64) -> f32 {
+    let quantile = draw(seed, n);
+    inverse_cdf(quantile)
+}
+
+
+fn inverse_cdf(quantile: f32) -> f32 {
     const A1: f32 = -3.969683028665376e+01;
     const A2: f32 = 2.209460984245205e+02;
     const A3: f32 = -2.759285104469687e+02;
     const A4: f32 = 1.383577518672690e+02;
     const A5: f32 = -3.066479806614716e+01;
     const A6: f32 = 2.506628277459239e+00;
-    const B1: f32 = 5.447609879822406e+01;
+    const B1: f32 = -5.447609879822406e+01;
     const B2: f32 = 1.615858368580409e+02;
     const B3: f32 = -1.556989798598866e+02;
     const B4: f32 = 6.680131188771972e+01;
@@ -35,10 +41,11 @@ pub(crate) fn draw_gaussian(seed: u64, n: u64) -> f32 {
 
     const LOWER_THRESHOLD: f32 = 0.02425;
     const UPPER_THRESHOLD: f32 = 0.97575;
-    let quantile = draw(seed, n);
+    const EPSILON_CUTOFF: f32 = 5.1665773;
 
     match quantile {
-        p if (0.0..LOWER_THRESHOLD).contains(&quantile) => {
+        _ if (0.0..f32::EPSILON).contains(&quantile) => -EPSILON_CUTOFF,
+        p if (f32::EPSILON..LOWER_THRESHOLD).contains(&quantile) => {
             let q = (-2.0 * p.ln()).sqrt();
             (((((C1 * q + C2) * q + C3) * q + C4) * q + C5) * q + C6)
                 / ((((D1 * q + D2) * q + D3) * q + D4) * q + 1.0)
@@ -49,11 +56,12 @@ pub(crate) fn draw_gaussian(seed: u64, n: u64) -> f32 {
             (((((A1 * r + A2) * r + A3) * r + A4) * r + A5) * r + A6) * q
                 / (((((B1 * r + B2) * r + B3) * r + B4) * r + B5) * r + 1.0)
         }
-        p if (UPPER_THRESHOLD..=1.0).contains(&quantile) => {
+        p if (UPPER_THRESHOLD..1.0).contains(&quantile) => {
             let q = (-2.0 * (1.0 - p).ln()).sqrt();
-            (((((C1 * q + C2) * q + C3) * q + C4) * q + C5) * q + C6)
+            -(((((C1 * q + C2) * q + C3) * q + C4) * q + C5) * q + C6)
                 / ((((D1 * q + D2) * q + D3) * q + D4) * q + 1.0)
         }
+        1.0 => EPSILON_CUTOFF,
         _ => 0.0,
     }
 }
@@ -65,4 +73,29 @@ fn draws_are_predictable() {
 
     assert_eq!(draw_gaussian(42, 1), draw_gaussian(42, 1));
     assert_ne!(draw_gaussian(42, 1), draw_gaussian(43, 1));
+}
+
+#[test]
+fn inverse_cdf_works_as_expected() {
+    let seed = 42;
+    let mut random_data = vec![];
+    const SAMPLE_SIZE: u64 = 10000;
+    for n in 0..SAMPLE_SIZE {
+        let quantile = draw(seed, n);
+        let gaussian = inverse_cdf(quantile);
+        // crude symmetry test: we don't need higher accuracy
+        assert!((inverse_cdf(1.0 - quantile) + gaussian).abs() < 0.001);
+        random_data.push(gaussian);
+    }
+    let s: f32 = random_data.iter().sum();
+    let sample_average = s / SAMPLE_SIZE as f32;
+    let q: f32 = random_data.iter().map(|x| (x - sample_average) * (x - sample_average)).sum();
+    let sample_variance = q / (SAMPLE_SIZE - 1) as f32;
+
+    // use 95% confidence intervals
+    let confidence_threshold = 1.96 / (SAMPLE_SIZE as f32).sqrt();
+    assert!((sample_average-confidence_threshold..sample_average+confidence_threshold).contains(&0.0));
+    // chi-squared coefficients are hard-coded for n=10000; must be recalculated upon changing SAMPLE_TEST
+    let variance_interval = 0.9728*sample_variance..1.0283*sample_variance;
+    assert!(variance_interval.contains(&1.0));
 }
