@@ -7,7 +7,7 @@ fn configured_player_capacity_limits_new_remote_peers() {
     let mut host = LanSession::host(0, "dedicated", world("m"), false).unwrap();
     host.set_peer_limit(1);
     assert_eq!(host.max_peers, 1);
-    let at = host.local_addr().unwrap();
+    let at = to_client(&host);
     let hello = format!("HELLO|{PROTOCOL}|-|p|Vehicles/x.bus|m|1989-05-30|32400||");
     let first = raw();
     first.send_to(hello.as_bytes(), at).unwrap();
@@ -56,7 +56,7 @@ fn too_many_loading_players_wait() {
 fn twenty_simultaneous_hellos_eventually_admit_every_player() {
     let mut host = LanSession::host(0, "dedicated", world("m"), false).unwrap();
     host.set_peer_limit(20);
-    let at = host.local_addr().unwrap();
+    let at = to_client(&host);
     let hello = format!("HELLO|{PROTOCOL}|-|p|Vehicles/x.bus|m|1989-05-30|32400||");
     let clients: Vec<UdpSocket> = (0..20).map(|_| raw()).collect();
     let mut welcomed = [false; 20];
@@ -137,7 +137,7 @@ fn unrecognized_source_cannot_inject_wait_reject_or_welcome() {
     let attacker = raw();
     let mut client =
         LanSession::join(&from.to_string(), "player", world("m"), Duration::from_secs(10)).unwrap();
-    let target = client.local_addr().unwrap();
+    let target = to_client(&client);
     for text in [
         format!("WAIT|{PROTOCOL}|2"),
         format!("REJECT|{PROTOCOL}|permanent denial"),
@@ -158,7 +158,7 @@ fn a_busy_host_keeps_the_client_waiting_without_permanent_rejection() {
     let at = host.local_addr().unwrap();
     let mut client =
         LanSession::join(&at.to_string(), "waiting", world("m"), Duration::from_secs(10)).unwrap();
-    let from = client.local_addr().unwrap();
+    let from = to_client(&client);
     host.send_to(format!("WAIT|{PROTOCOL}|2").as_bytes(), from).unwrap();
     client.tick(0.02, &pose(0.0));
     assert!(client.waiting_for_slot);
@@ -170,7 +170,7 @@ fn a_busy_host_keeps_the_client_waiting_without_permanent_rejection() {
     let other = raw();
     let mut fresh =
         LanSession::join(&at.to_string(), "fresh", world("m"), Duration::from_secs(10)).unwrap();
-    other.send_to(format!("WAIT|{PROTOCOL}|2").as_bytes(), fresh.local_addr().unwrap()).unwrap();
+    other.send_to(format!("WAIT|{PROTOCOL}|2").as_bytes(), to_client(&fresh)).unwrap();
     fresh.tick(0.02, &pose(0.0));
     assert!(!fresh.waiting_for_slot);
 }
