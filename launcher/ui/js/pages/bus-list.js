@@ -52,7 +52,7 @@ function BusRow({ v, label, sub, indent, chosen }) {
     ${curMapRefusal(v) && html`<span class="warn-fg" title=${curMapRefusal(v)}><${Icon} name="alert" size=${16} /></span>`}
     ${v.missing_packs?.length > 0 && html`<span class="warn-fg" title=${t('Parts missing')}><${Icon} name="alert" size=${16} /></span>`}
     ${v.installed && html`<${Tag}>${t('Mod')}</${Tag}>`}
-    ${v.server_only && html`<${Tag}>${t('Server')}</${Tag}>`}
+    ${v.server_catalog && html`<${Tag}>${t('Server')}</${Tag}>`}
     <${Star} file=${v.file} />
   </div>`;
 }
