@@ -26,7 +26,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '["rust", "javascript-typescript", "actions"]' || '["javascript-typescript", "actions"]') }}
+        # Rust is expensive on shared runners: scan main, daily and manual runs,
+        # while keeping pull requests on the two lightweight languages.
+        language: ${{ fromJSON((github.event_name == 'pull_request') && '["javascript-typescript", "actions"]' || '["rust", "javascript-typescript", "actions"]') }}
     steps:
       - uses: actions/checkout@v7
       - uses: github/codeql-action/init@v4

@@ -102,3 +102,17 @@ fn walking_with_an_owned_bus_still_allows_a_map_move() {
     assert_eq!(app.player.as_ref().unwrap().vehicle.position, DVec3::ONE);
     assert!(app.session.on_foot.is_none());
 }
+
+#[test]
+fn dedicated_client_requests_a_move_without_applying_it_locally() {
+    let mut app = app(true);
+    let before = app.player.as_ref().unwrap().vehicle.position;
+    app.net.lan = Some(omsi_net::LanSession::join_addr(vec![], None, "test", Default::default()).unwrap());
+    app.net.dedicated_teleport = Some(false);
+    ask(&mut app, DVec3::ONE);
+    assert!(app.menus.game_panels.move_to.is_some());
+    click(&mut app, "yes");
+    assert_eq!(app.player.as_ref().unwrap().vehicle.position, before);
+    assert!(app.menus.game_panels.move_to.is_none());
+    assert!(app.service_msg.is_some());
+}

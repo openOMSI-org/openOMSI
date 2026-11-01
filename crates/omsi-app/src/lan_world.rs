@@ -1449,6 +1449,7 @@ mod display;
 pub(crate) use display::car_display;
 use display::show_car_destination;
 
+mod lifecycle;
 mod context;
 pub(crate) use context::apply_ai_context;
 use context::ai_context;

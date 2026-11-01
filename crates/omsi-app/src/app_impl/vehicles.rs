@@ -132,10 +132,6 @@ impl App {
     /// facing along it.
     pub(crate) fn place_bus_at(&mut self, at: glam::DVec2) {
         if self.player.is_none() { return; }
-        if self.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
-            self.service_msg = Some(("In a LAN session only the host moves vehicles on the map".into(), 4.0));
-            return;
-        }
         let p = glam::DVec3::new(at.x, at.y, 0.0);
         // the traffic's lanes (the tiles loaded around the bus), else the navigator's of the
         // whole map: a street far off on a big map was "no street" until the bus had been
@@ -153,9 +149,10 @@ impl App {
         let l = &net.lanes[lane];
         let (pos, heading) = l.at(s);
         let heading = heading as f64;
-        crate::admin::teleport(self, pos, heading);
-        self.service_msg = Some(("The bus stands where the map was clicked".into(), 3.0));
-        self.service_event("teleport", "player", None);
+        if crate::admin::request_teleport(self, pos, heading) {
+            self.service_msg = Some((omsi_ui::tr("The bus stands where the map was clicked").into_owned(), 3.0));
+            self.service_event("teleport", "player", None);
+        }
     }
 }
 

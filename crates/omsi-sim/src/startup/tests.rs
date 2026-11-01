@@ -613,3 +613,140 @@ fn reachable_nested_running_flag_still_blocks_cranking_rpm() {
     v.update(1.0 / 60.0);
     assert!(engine_running(&v));
 }
+
+/// Independent staged-key fixture: forward presses start the engine, M only turns it
+/// backwards. The battery isolator and the ignition rail are separate switches.
+fn staged_key(stages: u32, master_on: bool, forward: &str) -> Fixture {
+    Fixture::new(&format!(
+        r#"
+{{init}}
+{} (S.L.cp_elec_busbar_master_sw)
+1 (S.L.selected_gear)
+0 (S.L.key_mode) (S.L.elec_busbar_main_sw) (S.L.engine_on)
+{{end}}
+{{trigger:cp_elec_busbar_master}}
+(L.L.cp_elec_busbar_master_sw) ! (S.L.cp_elec_busbar_master_sw)
+(L.L.master_presses) 1 + (S.L.master_presses)
+{{end}}
+{{trigger:automatic_N}}
+0 (S.L.selected_gear)
+{{end}}
+{{trigger:{forward}}}
+(L.L.forward_presses) 1 + (S.L.forward_presses)
+(L.L.key_mode) 1 + {stages} min (S.L.key_mode)
+(L.L.key_mode) 2 = {{if}}
+    (L.L.cp_elec_busbar_master_sw) (S.L.elec_busbar_main_sw)
+{{endif}}
+(L.L.key_mode) {stages} = (L.L.elec_busbar_main_sw) &&
+(L.L.selected_gear) 0 = && {{if}}
+    1 (S.L.engine_on) 650 (S.L.engine_n)
+{{endif}}
+{{end}}
+{{trigger:{forward}_off}}
+(L.L.forward_releases) 1 + (S.L.forward_releases)
+(L.L.key_mode) {stages} = {{if}} {} (S.L.key_mode) {{endif}}
+{{end}}
+{{trigger:kw_m_enginestart}}
+(L.L.reverse_presses) 1 + (S.L.reverse_presses)
+(L.L.key_mode) 1 - 0 max (S.L.key_mode)
+0 (S.L.engine_on) (S.L.engine_n) (S.L.elec_busbar_main_sw)
+{{end}}
+{{frame}}
+{{end}}
+"#,
+        u32::from(master_on),
+        stages - 1,
+    ))
+}
+
+#[test]
+fn starts_staged_keys_after_the_battery_master_without_pressing_reverse() {
+    for (stages, master_on, forward) in [
+        (4, false, "cp_batterietrennschalter_toggle"),
+        (3, true, "advance_key"),
+    ] {
+        let fixture = staged_key(stages, master_on, forward);
+        // A bound stock name must not outrank the script's actual enabling command.
+        let bound = vec!["kw_m_enginestart".to_string(), forward.to_string()];
+        for dt in [1.0 / 30.0, 1.0 / 60.0] {
+            let mut v = fixture.vehicle();
+            assert!(
+                !power_on(&v),
+                "the battery master alone is not ignition power"
+            );
+            let mut start = StartUp::new(&v, &bound);
+            for _ in 0..(8.0 / dt) as usize {
+                if start.running() {
+                    start.tick(&mut v, &bound, dt);
+                }
+                v.update(dt);
+            }
+            assert!(engine_running(&v), "{:?}", start.report);
+            assert!(!start.running(), "{:?}", start.report);
+            assert!(power_on(&v));
+            assert_eq!(
+                v.var("master_presses"),
+                Some(if master_on { 0.0 } else { 1.0 })
+            );
+            assert_eq!(v.var("reverse_presses"), Some(0.0));
+            assert_eq!(v.var("forward_presses"), Some(stages as f32));
+            assert_eq!(v.var("forward_releases"), v.var("forward_presses"));
+            assert_eq!(v.var("key_mode"), Some((stages - 1) as f32));
+            for _ in 0..120 {
+                v.update(dt);
+                assert!(engine_caught(&v));
+            }
+        }
+    }
+}
+
+#[test]
+fn restarts_a_stalled_staged_key_without_toggling_the_live_battery_master() {
+    let fixture = staged_key(3, true, "advance_key");
+    let mut v = fixture.vehicle();
+    // A driver has already advanced the key to the powered position.
+    for _ in 0..2 {
+        v.trigger("advance_key");
+        v.trigger("advance_key_off");
+    }
+    assert!(power_on(&v));
+    assert!(!engine_running(&v));
+    let mut start = StartUp::new(&v, &[]);
+    assert!(!start.shutting_down());
+    advance(&mut v, &mut start, 1.0 / 30.0, 5.0);
+    assert!(engine_caught(&v), "{:?}", start.report);
+    assert!(!start.running());
+    assert_eq!(v.var("master_presses"), Some(0.0));
+    assert_eq!(v.var("reverse_presses"), Some(0.0));
+    assert_eq!(v.var("forward_presses"), Some(3.0));
+    assert_eq!(v.var("forward_releases"), Some(3.0));
+}
+
+#[test]
+fn direct_start_stalls_stop_after_three_released_attempts() {
+    let fixture = staged_key(3, true, "advance_key");
+    let mut v = fixture.vehicle();
+    let mut start = StartUp::new(&v, &[]);
+    for _ in 0..1200 {
+        let running = start.tick(&mut v, &[], 1.0 / 60.0);
+        v.update(1.0 / 60.0);
+        if start.step == Step::Verify {
+            v.set_var("engine_on", 0.0);
+            v.set_var("engine_n", 0.0);
+        }
+        if !running {
+            break;
+        }
+    }
+    assert!(!start.running(), "{:?}", start.report);
+    assert!(!engine_running(&v));
+    assert_eq!(start.cranks, 3);
+    assert_eq!(v.var("forward_presses"), v.var("forward_releases"));
+    assert_eq!(v.var("reverse_presses"), Some(0.0));
+    assert!(
+        start
+            .report
+            .iter()
+            .any(|s| s == "the engine died again after starting")
+    );
+}

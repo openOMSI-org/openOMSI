@@ -58,12 +58,19 @@ pub struct PointLight {
     /// `cookies`) within its cone, when a layer is free for the picture that frame.
     pub cookie: Option<Cookie>,
     pub flash: bool,
-    /// A classic-picture spot lit as Omsi.exe's Direct3D spot light: its declared range, how
-    /// far behind `position`, along the vehicle's axis, the spot itself lies, and 1 for a
-    /// vehicle's `[spotlight]` (Omsi.exe's light 3: the player's alone, lit at the vertices
-    /// through the camera uniform's `spot`), 0 for another (lit per pixel, see the shader's
-    /// `point_lights`).
-    pub d3d_spot: Option<[f32; 3]>,
+    /// A classic-picture spot with Direct3D's attenuation (the player's is vertex-lit).
+    pub d3d_spot: Option<D3dSpot>,
+}
+
+/// A classic spot's source can lie inside the bus while `PointLight::position` stays at
+/// its face for occlusion. Keep the actual source, not a setback along the beam direction:
+/// the beam need not follow the vehicle's axis, especially on slopes.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct D3dSpot {
+    pub range: f32,
+    pub source: DVec3,
+    /// The player's `[spotlight]`, shaded through the camera uniform instead of the grid.
+    pub player: bool,
 }
 
 impl Default for PointLight {
@@ -479,11 +486,10 @@ pub(crate) fn gpu_light(l: &PointLight, p: Vec3) -> GpuPointLight {
     } else {
         l.radius
     };
-    // (a Direct3D spot of the classic picture: y how far behind it the spot lies, z its
-    // declared range - the classic shader reads neither from any other spot)
+    // A Direct3D spot's declared range; negative for the player's, shaded through the
+    // camera uniform instead of the grid. Other spots use `position` as their source.
     let extra = match l.d3d_spot.filter(|_| spot && l.mode == LightMode::Vanilla) {
-        // (a [spotlight]: its range negative, the shader's per-pixel lights pass it by)
-        Some([range, setback, kind]) => [l.cone[0], setback, if kind > 0.5 { -range } else { range }, l.radius],
+        Some(s) => [l.cone[0], 0.0, if s.player { -s.range } else { s.range }, l.radius],
         None => [l.cone[0], l.core, l.beam, l.radius],
     };
     GpuPointLight {

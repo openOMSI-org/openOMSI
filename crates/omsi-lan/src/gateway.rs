@@ -42,6 +42,14 @@ pub fn close_public_gateway() {
     drop(path);
 }
 
+/// Replace the active transport only after a candidate room has been accepted.
+pub(crate) fn replace_join_transport(client: Option<(omsi_net::ws::WsClient, String)>) {
+    let next = client.map(|(client, url)| WsPath {
+        gateway: None, tunnel: None, _client: Some(client), url: Some(url), seen: 0,
+    });
+    let previous = WS_PATH.lock().ok().and_then(|mut path| std::mem::replace(&mut *path, next));
+    drop(previous);
+}
 /// The public address the session is reached at through the tunnel (host), if it has one.
 pub fn tunnel_url() -> Option<String> {
     WS_PATH.lock().ok()?.as_ref()?.tunnel.as_ref()?.url.lock().ok()?.clone()
@@ -264,6 +272,12 @@ pub fn ask_server_offers(target: &str, session: u64) {
         Ok(_) => {}
         Err(e) => log::warn!("LAN: the server did not say which buses it offers ({e}); every bus is offered"),
     });
+}
+
+/// Inspect a candidate without changing the active room's server offers.
+pub(crate) fn candidate_bus_allowed(target: &str, bus: &str) -> Option<bool> {
+    let info = omsi_net::ws::query(&offers_query_target(target)?, false).ok()?;
+    (!info.vehicles.is_empty()).then(|| offers(&offered_keys(&info.vehicles), bus))
 }
 
 /// The buses the server we joined offers, as `bus_key`s (None: any, see `ServerOffers`).

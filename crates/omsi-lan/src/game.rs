@@ -563,7 +563,7 @@ fn mod_source(args: &LanConfig) -> crate::mods::ModSource {
     crate::mods::ModSource { root: args.root.clone(), map: args.map.clone(), bus: args.bus.clone(), weather: args.weather.clone() }
 }
 
-pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) {
+pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) -> Option<crate::mods::Server> {
     match lan.role {
         Role::Host => {
             // (a player's game hosting a session takes the joining players' buses as a server
@@ -573,7 +573,7 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) {
                 crate::mods::upload::accept(crate::mods::upload::a_hosting_game_takes_uploads());
             }
             if let (Some(listener), Some(key)) = (lan.take_mods_listener(), lan.host_key()) {
-                crate::mods::serve(listener, key, &mod_source(args));
+                return crate::mods::serve(listener, key, &mod_source(args));
             }
         }
         Role::Client => {
@@ -581,7 +581,7 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) {
             omsi_cfg::vfs::record_reads(true);
             let Some(mut host) = lan.host.filter(|_| lan.welcome.is_some()) else {
                 log::info!("LAN mods: no host to ask yet (its mods are not fetched)");
-                return;
+                return None;
             };
             let note = |lan: &mut LanSession, text: String| {
                 lan.warnings.retain(|w| !w.starts_with("Host's mods"));
@@ -606,7 +606,7 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) {
                     },
                     None => {
                         note(lan, "Host's mods could not be downloaded; playing with what is installed here".into());
-                        return;
+                        return None;
                     }
                 }
             }
@@ -655,6 +655,7 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) {
             }
         }
     }
+    None
 }
 
 /// Do `work` (loading a world, which may take minutes on a big map) while the session is

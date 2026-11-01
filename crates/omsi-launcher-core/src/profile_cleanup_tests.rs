@@ -72,7 +72,7 @@ fn low_then_back_to_vanilla_plus_keeps_the_shadows() {
     assert_eq!((&back["shadows"], &back["ssao"]), (&json!(true), &json!(true)));
     // the options that cost most are off in the defaults and in every preset below Extra
     let defaults = settings_from_text(None);
-    assert_eq!((&defaults["light_glow"], &defaults["cloud_shadows"], &defaults["light_shadows"]), (&json!(false), &json!(false), &json!("street")));
+    assert_eq!((&defaults["light_glow"], &defaults["cloud_shadows"], &defaults["light_shadows"]), (&json!(false), &json!(false), &json!("off")));
     for (name, p) in &graphics_presets()[..3] {
         assert_eq!((&p["light_glow"], &p["cloud_shadows"]), (&json!(false), &json!(false)), "{name}");
     }
@@ -211,4 +211,22 @@ fn the_reflections_are_a_strength_and_older_files_read_as_on_or_off() {
     let mut v = settings_from_text(None);
     v["reflections"] = json!(false);
     assert_eq!(settings_from_text(Some(&settings_to_text(&v, None)))["reflections"], 0.0);
+}
+
+/// Expensive transitional lighting and accumulated snow should be opt-in in a new install,
+/// without overriding existing player selections or switching on with a quality preset.
+#[test]
+fn expensive_effects_default_off_and_manual_choices_survive() {
+    let defaults = settings_from_text(None);
+    assert_eq!(defaults["light_shadows"], "off");
+    assert_eq!(defaults["road_snow"], false);
+    assert_eq!(graphics_presets()[1].1["light_shadows"], "off");
+    for (name, preset) in graphics_presets() {
+        assert!(preset.get("road_snow").is_none(), "{name}: changing presets must not re-enable snow");
+    }
+    let enabled = settings_from_text(Some("graphics=enhanced\nlight_shadows=street\nroad_snow=1\n"));
+    let saved = settings_to_text(&enabled, None);
+    let restored = settings_from_text(Some(&saved));
+    assert_eq!(restored["light_shadows"], "street");
+    assert_eq!(restored["road_snow"], true);
 }

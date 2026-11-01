@@ -294,11 +294,11 @@ fn enhanced_options_and_ray_tracing() {
     let text = on.to_text();
     assert!(text.contains("graphics=enhanced\n") && text.contains("ray_tracing=1\n") && text.contains("light_shadows=all\n"), "{text}");
     assert_eq!(Settings::from_text(&text), on);
-    // without Enhanced it traces nothing, and the defaults keep the street lamps' shadows
+    // without Enhanced it traces nothing; expensive light shadows are off by default
     let plain = Settings::from_text("graphics=vanilla_plus\nray_tracing=1\n");
     assert!(!plain.ray_tracing() && !plain.render_options().ray_tracing && plain.mode() == "vanilla_plus");
     let d = Settings::default().render_options();
-    assert_eq!((d.light_shadows, d.cloud_shadows, d.light_glow, d.ray_tracing), (1, false, false, false));
+    assert_eq!((d.light_shadows, d.cloud_shadows, d.light_glow, d.ray_tracing), (0, false, false, false));
     assert_eq!(["off", "street", "all", "every", "x", "0"].map(|v| Settings::from_text(&format!("light_shadows={v}\n")).light_shadows), ["off", "street", "all", "all", "street", "off"]);
     // a file of the days of Enhanced+ is written back as Enhanced with ray tracing
     let old = Settings::from_text("graphics=enhanced_plus\n");
@@ -585,6 +585,32 @@ fn passenger_hailing_survives_both_settings_writers() {
             let text = omsi_launcher_lib::settings_to_text(&launcher, Some(&native));
             assert_eq!(Settings::from_text(&text).passenger_hailing, on);
             assert_eq!(text.lines().filter(|line| line.starts_with(&format!("{key}="))).count(), 1);
+        }
+    }
+}
+
+#[test]
+fn full_bus_reaction_defaults_off_for_desktop_phone_and_old_settings() {
+    assert!(!Settings::desktop().passenger_full_bus_reaction);
+    assert!(!Settings::phone().passenger_full_bus_reaction);
+    assert!(!Settings::from_text("version=1\n").passenger_full_bus_reaction);
+    assert!(Settings::from_text("passenger_full_bus_reaction=1\n").passenger_full_bus_reaction);
+    assert!(!Settings::from_text("passenger_full_bus_reaction=0\n").passenger_full_bus_reaction);
+}
+#[test]
+fn full_bus_reaction_round_trips_through_both_settings_writers() {
+    let key = "passenger_full_bus_reaction";
+    for phone in [false, true] {
+        for enabled in [false, true, false] {
+            let mut settings = Settings::default();
+            settings.passenger_full_bus_reaction = enabled;
+            let text = settings.to_text();
+            let mut ui = omsi_launcher_lib::settings_from_text_on(Some(&text), phone);
+            assert_eq!(ui[key], enabled);
+            ui[key] = serde_json::json!(enabled);
+            let serialized = omsi_launcher_lib::settings_to_text(&ui, Some(&text));
+            assert_eq!(Settings::from_text(&serialized).passenger_full_bus_reaction, enabled);
+            assert_eq!(serialized.lines().filter(|line| line.starts_with("passenger_full_bus_reaction=")).count(), 1);
         }
     }
 }
