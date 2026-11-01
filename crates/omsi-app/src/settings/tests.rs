@@ -294,11 +294,11 @@ fn enhanced_options_and_ray_tracing() {
     let text = on.to_text();
     assert!(text.contains("graphics=enhanced\n") && text.contains("ray_tracing=1\n") && text.contains("light_shadows=all\n"), "{text}");
     assert_eq!(Settings::from_text(&text), on);
-    // without Enhanced it traces nothing, and the defaults keep the street lamps' shadows
+    // without Enhanced it traces nothing; expensive light shadows are off by default
     let plain = Settings::from_text("graphics=vanilla_plus\nray_tracing=1\n");
     assert!(!plain.ray_tracing() && !plain.render_options().ray_tracing && plain.mode() == "vanilla_plus");
     let d = Settings::default().render_options();
-    assert_eq!((d.light_shadows, d.cloud_shadows, d.light_glow, d.ray_tracing), (1, false, false, false));
+    assert_eq!((d.light_shadows, d.cloud_shadows, d.light_glow, d.ray_tracing), (0, false, false, false));
     assert_eq!(["off", "street", "all", "every", "x", "0"].map(|v| Settings::from_text(&format!("light_shadows={v}\n")).light_shadows), ["off", "street", "all", "all", "street", "off"]);
     // a file of the days of Enhanced+ is written back as Enhanced with ray tracing
     let old = Settings::from_text("graphics=enhanced_plus\n");
@@ -381,9 +381,10 @@ fn interface_size_is_read_within_its_range() {
 }
 
 #[test]
-fn discord_settings_round_trip_and_default_enabled() {
-    assert!(Settings::default().discord_status);
-    let settings = Settings { discord_status: false, discord_app_id: "123456".into(), ..Default::default() };
+fn discord_settings_round_trip_and_default_off() {
+    // (Discord's status tells friends the map, bus, line and multiplayer: only when asked)
+    assert!(!Settings::default().discord_status);
+    let settings = Settings { discord_status: true, discord_app_id: "123456".into(), ..Default::default() };
     assert_eq!(Settings::from_text(&settings.to_text()), settings);
 }
 

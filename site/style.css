@@ -154,7 +154,8 @@ img, video { max-width: 100%; height: auto; }
 main { margin-left: var(--drawer-w); padding-top: 64px; min-height: 100vh; display: flex; flex-direction: column; min-width: 0; }
 #view { flex: 1; min-width: 0; }
 .content { max-width: 960px; margin: 0 auto; padding: 32px 24px 48px; }
-.footer { padding: 24px; text-align: center; font-size: 13px; color: var(--secondary-text); border-top: 1px solid var(--divider); }
+/* room for the Donate pill, which floats over the end of the page */
+.footer { padding: 24px 24px 80px; text-align: center; font-size: 13px; color: var(--secondary-text); border-top: 1px solid var(--divider); }
 
 /* hero */
 .hero {
@@ -239,8 +240,6 @@ h1 { line-height: 1.25; }
   .hero-actions .btn { width: min(100%, 280px); justify-content: center; }
   .card-warning { flex-direction: column; gap: 4px; padding: 16px; }
   .grid { grid-template-columns: 1fr; }
-  /* room for the Donate pill, which floats over the end of the page */
-  .footer { padding-bottom: 80px; }
   .release summary .spacer { display: none; }
 }
 

@@ -480,7 +480,8 @@ impl RigidBody {
                 let f_world = c.base + c.fwd * f_long;
                 long_sum += f_long * c.fwd.dot(body_fwd);
                 if let Some(i) = c.wheel {
-                    self.wheels[i].advance_spin(c, f_long, c.mu, h);
+                    let wanted = if standing.contains(&k) { c.drive.signum() * (c.drive.abs() - c.brake).max(0.0) } else { f_long };
+                    self.wheels[i].advance_spin(c, wanted, c.mu, h);
                 }
                 force += f_world;
                 torque += rot.inverse().mul_vec3(c.r).cross(rot.inverse().mul_vec3(f_world));

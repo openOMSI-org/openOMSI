@@ -110,6 +110,7 @@ mod ui;
 // the game itself, split by what each part does
 mod app;
 mod applog;
+mod logmask;
 mod app_events;
 mod bus_service;
 mod camera_util;
@@ -247,7 +248,8 @@ pub fn run() -> Result<()> {
         let rest: Vec<String> = std::env::args().skip(2).collect();
         return check::run(&rest, crate::startup::find_root);
     }
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    // (the players' internet addresses cut to their network, see `logmask`)
+    logmask::init();
     // a panic goes into the log (which the launcher keeps per session) with where it
     // happened and a backtrace, not only to a terminal that may not be there
     let default_hook = std::panic::take_hook();
@@ -517,9 +519,10 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     // the host's mods: served by the host, fetched by a joining player before its world is
     // made (see `lan_mods`)
     lan_mods::remove_stale();
+    let mut mods_server = None;
     if let Some(l) = lan.as_mut() {
         let mut c = args.lan_config();
-        lan::share_mods(&mut c, l);
+        mods_server = lan::share_mods(&mut c, l);
         lan::take_host_map(&mut c, l);
         args.take_lan_config(&c);
     }
@@ -573,6 +576,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     }
     let mut app = assemble_app(args, settings);
     app.net.lan = lan;
+    app.net.mods_server = mods_server;
     app.net.remotes = lan_game;
     // mouse steering as the player left it (the wheel eases to the cursor for a second)
     if app.settings.mouse_steering {

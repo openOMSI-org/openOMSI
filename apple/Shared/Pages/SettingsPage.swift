@@ -149,7 +149,7 @@ struct SettingsPage: View {
             }
             SettingToggle(label: "Windy trees", key: "windy_trees", fallback: true)
             if !classic {
-                SettingToggle(label: "Built-up snow on roads and roofs", key: "road_snow", fallback: true, help: "While it snows, snow builds up on the roads and on the vehicles' roofs, with ruts and tyre tracks, and thaws again; off: the weather's own snow on road, as in OMSI 2")
+                SettingToggle(label: "Built-up snow on roads and roofs", key: "road_snow", fallback: false, help: "While it snows, snow builds up on the roads and on the vehicles' roofs, with ruts and tyre tracks, and thaws again; off: the weather's own snow on road, as in OMSI 2")
             }
         }
     }
@@ -413,9 +413,10 @@ struct SettingsPage: View {
             if !phone {
                 SettingToggle(label: "Translate the remaining texts automatically (offline, downloads 620 MB once)", key: "machine_translation")
                 SettingToggle(label: "The launcher rests while a game runs (gives the graphics card to the game)", key: "launcher_rest", fallback: true)
-                SettingToggle(label: "Discord Rich Presence", key: "discord_status", fallback: true, help: "Shows the launcher or your map, bus, line and multiplayer status in Discord.")
+                SettingToggle(label: "Discord Rich Presence", key: "discord_status", fallback: false, help: "Shows the launcher or your map, bus, line and multiplayer status in Discord.")
                 SettingToggle(label: "Voice chat in multiplayer", key: "voice_enabled", fallback: false, help: "Hold the nearby (V) or radio (B) key to talk. The microphone is used only while a key is held; nothing is recorded")
             }
+            SettingToggle(label: "Disable plugins", key: "disable_plugins", fallback: true, help: "Starts the next game without Lua or legacy OMSI plugins, including vehicle plugins. Plugin features will be unavailable. Normal bus scripts still run.")
             SettingSlider(label: "Game interface size", key: "ui_scale", range: 0.5 ... 2, step: 0.05, fallback: 1, round: 0.01) { pct($0) }
             SettingToggle(label: "Interface grows with the window", key: "ui_scale_window", fallback: true)
             SettingSlider(label: "Interface opacity", key: "ui_opacity", range: 0.2 ... 1, step: 0.05, fallback: 0.85, round: 0.01) { pct($0) }
@@ -451,7 +452,11 @@ struct SettingsPage: View {
                 SettingToggle(label: "Tell me about a new version during a session", key: "update_notify", fallback: true)
             }
             SettingToggle(label: "Count me in the website's \"playing now\" (anonymous)", key: "presence", fallback: true)
-            Text("openOMSI \(store.version) (\(store.build))").font(.inter(12)).foregroundStyle(Theme.muted)
+            HStack {
+                Text("openOMSI \(store.version) (\(store.build))").font(.inter(12)).foregroundStyle(Theme.muted)
+                Spacer()
+                Button("Privacy") { Platform.openURL("https://openomsi.org/privacy/") }.buttonStyle(.ghost)
+            }
             SectionTitle("Reset").padding(.top, 8)
             HStack {
                 Button { confirmReset = true } label: { Label("Reset all settings...", systemImage: "arrow.counterclockwise") }

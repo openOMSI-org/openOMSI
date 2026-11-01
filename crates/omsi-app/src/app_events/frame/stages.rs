@@ -121,7 +121,7 @@ impl frame_stages::Stage for WindowStage {
             PlayerTick => stage("player_tick", P::Sim, Role::Player, super::driving::PlayerStepCx::READS, super::driving::PlayerStepCx::WRITES, Profile::Key(K::Player)),
             PlayerView => stage("player_view", P::Present, Role::Own, &[G::Player, G::View, G::Clock, G::Input, G::World, G::Menus, G::People, G::Duty, G::Net, G::Sound, G::Ui, G::Integrations], &[G::Player, G::View, G::Gfx, G::Perf], Profile::Key(K::Player)),
             Audio => stage("audio", P::Present, Role::Own, super::driving::AudioCx::READS, super::driving::AudioCx::WRITES, Profile::Key(K::Player)),
-            Lan => stage("lan", P::Sim, Role::Lan, &[G::Net, G::Player, G::Clock, G::Duty, G::Input, G::Menus, G::Weather, G::World, G::Integrations, G::View, G::Ui], &[G::Net, G::Traffic, G::People, G::Gfx, G::Sound], Profile::Key(K::Lan)),
+            Lan => stage("lan", P::Sim, Role::Lan, &[G::Net, G::Player, G::Clock, G::Duty, G::Input, G::Menus, G::Weather, G::World, G::Integrations, G::View, G::Ui, G::Perf], &[G::Net, G::Traffic, G::People, G::Gfx, G::Sound], Profile::Key(K::Lan)),
             OnFoot => stage("on_foot", P::Sim, Role::Own, crate::on_foot::OnFootCx::READS, crate::on_foot::OnFootCx::WRITES, Profile::Key(K::OnFoot)),
             Humans => stage("humans", P::Sim, Role::People, super::people::HumansCx::READS, super::people::HumansCx::WRITES, Profile::Key(K::Humans)),
             AfterHumans => stage("after_humans", P::Sim, Role::Own, super::people::AfterHumansCx::READS, super::people::AfterHumansCx::WRITES, Profile::Key(K::Service)),
@@ -222,7 +222,7 @@ impl frame_stages::Host<WindowStage> for WindowFrame<'_> {
             ShellActions => app.apply_shell_actions(el),
             Placement => crate::app_impl::placement(crate::app_impl::PlacementCx::of(&mut app.parts())),
             Menus => {
-                if !app.frame_menus(el, dt()) {
+                if !app.frame_menus(el, dt(), times.expect(NO_TIME).1) {
                     return Ok(Flow::Stop);
                 }
             }

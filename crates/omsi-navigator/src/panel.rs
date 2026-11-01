@@ -92,14 +92,15 @@ impl Navigator {
                 GroundLook { surfaces: true, trees: true, dashes: true, tol: 0.0 }
             };
             let reach = PANEL_REACH;
+            let mpp = (2.0 * self.zoom * (FOV.to_radians() as f64 * 0.5).tan() / map.h.max(1.0) as f64) as f32;
             let paved = !self.classic_2d;
             let models = (!self.classic_2d).then_some(PANEL_MODELS);
             if self.global.is_some() {
                 let pal2 = pal;
                 let device = renderer.device.clone();
-                self.panel_job = Some(super::build::Job::start((look_key, lanes_now), move || super::build::build(&parts, anchor, reach, &pal2, look, paved, models).made_on(&device)));
+                self.panel_job = Some(super::build::Job::start((look_key, lanes_now), move || super::build::build(&parts, anchor, reach, &pal2, look, paved, models, true, mpp).made_on(&device)));
             } else {
-                let mut b = super::build::build(&parts, anchor, reach, &pal, look, paved, models);
+                let mut b = super::build::build(&parts, anchor, reach, &pal, look, paved, models, true, mpp);
                 let [_, houses @ ..] = b.counts;
                 self.roads = Some(Roads { look: look_key, anchor, lanes_seen: lanes_now, houses, runs: std::mem::take(&mut b.runs), built_at: self.time });
                 built = Some(b);
@@ -264,7 +265,7 @@ impl Navigator {
         ]);
         let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("navigator") });
         gpu.render(device, queue, &mut enc, target, size, Some(wgpu::Color::TRANSPARENT), &layers, &draws);
-        queue.submit([enc.finish()]);
+        renderer.submit_with_frame(enc.finish());
     }
 
     /// The corner to pull for another size, on a navigator that is a widget.
@@ -302,7 +303,7 @@ impl Navigator {
         let draws = [Draw { buffer: 2, range: 0..n_bg, layer: 1, texture: 0 }, Draw { buffer: 2, range: n_bg..all.len() as u32, layer: 0, texture: 0 }];
         let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("navigator") });
         gpu.render(device, queue, &mut enc, target, size, Some(wgpu::Color::TRANSPARENT), &layers, &draws);
-        queue.submit([enc.finish()]);
+        renderer.submit_with_frame(enc.finish());
     }
 
     /// The marks over the map: the stops ahead, the other players, the public transport's line

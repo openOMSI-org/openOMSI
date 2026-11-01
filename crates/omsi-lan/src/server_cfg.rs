@@ -22,6 +22,8 @@ pub struct ServerCfg {
     /// file (or not a valid number), and the server goes on using its machine's
     /// `settings.cfg` `pax_density`, as it always did.
     pub passenger_density: Option<f32>,
+    /// Optional RP road speed limit (0 = off; 60, 75 or 80 km/h).
+    pub speed_limit_kmh: u32,
     pub port: u16,
     pub web_port: u16,
     pub max_players: usize,
@@ -33,6 +35,9 @@ pub struct ServerCfg {
     /// The same with this password gives the moderator's role: the players and the chat,
     /// not the world (empty: none; one equal to `admin_password` is the admin's).
     pub moderator_password: String,
+    /// Whether ordinary players may teleport their own bus via F4, minimap and entrypoints.
+    /// Admins and moderators may always request self-teleports on a dedicated server.
+    pub allow_player_teleport: bool,
     /// Who may reach the web panel and its API (`admin_web`: `local`, `remote`, `off`).
     pub admin_web: omsi_admin::WebMode,
     /// Pages of these origins may act besides the server's own (`admin_web_origins`).
@@ -83,6 +88,9 @@ pub struct ServerCfg {
     pub owner_bans: Option<std::path::PathBuf>,
     /// A player whose game sends no hardware identifier is turned away.
     pub require_hardware_id: bool,
+    /// The players' internet addresses go into the log whole (`log_addresses`); off, a
+    /// public one keeps only its network (`203.0.113.x`).
+    pub log_addresses: bool,
     /// Where `server.cfg` is (its folder keeps the session's ban list).
     pub dir: std::path::PathBuf,
 }
@@ -114,6 +122,9 @@ passengers = 1
 # The admins can change it while the server runs; the people already there stay
 passenger_density = 1
 
+# Optional multiplayer RP road-speed governor, 0 = off (default), or 60/75/80.
+speed_limit_kmh = 0
+
 # UDP port of the session, TCP port of the web gateway (status, icon, WebSocket players)
 port = 27015
 web_port = 27025
@@ -134,6 +145,10 @@ admin_password =
 # players to their bus alone
 # (at least 12 characters; empty: no moderators)
 moderator_password =
+
+# Allow ordinary players to teleport their OWN bus (F4, minimap, entrypoints).
+# 0 = only authenticated moderators/admins; 1 = everyone. Never moves another player.
+allow_player_teleport = 0
 
 # the web panel (http://127.0.0.1:<web_port>/admin/) and its API: local = from this machine
 # only (not through the tunnel or a proxy); remote = also over HTTPS through the proxies in
@@ -212,6 +227,23 @@ public_server = 0
 # (older games, or players who switched it off)
 owner_bans =
 require_hardware_id = 0
+
+# What this server keeps and passes on about its players - tell them, e.g. in the motd:
+# - server.log (beside this file, written by run-server and start.sh): who joined and left
+#   and their names, the chat (every message), the admins' actions and errors. Their
+#   internet addresses keep only their network (203.0.113.x) unless log_addresses = 1
+#   (whole: for an abuse report); the local network's addresses are written whole.
+# - log_keep: how many earlier server.log files are kept (server.1.log the newest); a new
+#   one is begun at every start and when it passes log_max_mb (0: no size limit). log_keep
+#   = 0 keeps none.
+# - admin-audit.log: what the admins and moderators did (put aside at 1 MB).
+# - bans.json and the owner_bans list: the banned players' machine identifiers.
+# - with public_server = 1 the public list gets the name, icon, map, players and motd;
+#   with share_positions = 1 anyone who asks the web port sees names, buses and positions;
+#   voice is passed on, never recorded; the players' buses are kept uploads_keep_days.
+log_addresses = 0
+log_keep = 5
+log_max_mb = 20
 ";
 
 impl ServerCfg {
@@ -259,6 +291,7 @@ impl ServerCfg {
             passenger_density: kv.get("passenger_density").filter(|v| !v.is_empty()).and_then(|v| {
                 passenger_density(v).map_err(|e| log::warn!("server.cfg: passenger_density = {v}: {e}; the machine's own passengers setting is used")).ok()
             }),
+            speed_limit_kmh: parse_speed_limit(kv.get("speed_limit_kmh").map(String::as_str)),
             port: num("port", 27015).clamp(1, 65535) as u16,
             web_port: num("web_port", 27025).clamp(1, 65535) as u16,
             max_players: num("max_players", 16).clamp(1, 64) as usize,
@@ -267,6 +300,7 @@ impl ServerCfg {
             icon,
             admin_password: admin_password(kv.get("admin_password").cloned().unwrap_or_default()),
             moderator_password: checked_password(kv.get("moderator_password").cloned().unwrap_or_default(), "moderator_password"),
+            allow_player_teleport: flag("allow_player_teleport", false),
             admin_web: web_mode(kv.get("admin_web").map(String::as_str)),
             admin_web_origins: kv.get("admin_web_origins").map(|v| v.split(';').map(|o| o.trim().trim_end_matches('/').to_string()).filter(|o| o.starts_with("https://") || o.starts_with("http://")).collect()).unwrap_or_default(),
             admin_trusted_proxies: trusted_proxies(kv.get("admin_trusted_proxies").map(String::as_str).unwrap_or("")),
@@ -286,9 +320,33 @@ impl ServerCfg {
             public_list_url: kv.get("public_list_url").cloned().unwrap_or_default(),
             owner_bans: kv.get("owner_bans").filter(|v| !v.is_empty()).map(std::path::PathBuf::from),
             require_hardware_id: flag("require_hardware_id", false),
+            log_addresses: flag("log_addresses", false),
             dir: dir.to_path_buf(),
         }))
     }
+}
+
+/// The only supported RP presets; invalid configuration is safely disabled.
+pub fn parse_speed_limit(value: Option<&str>) -> u32 {
+    match value.unwrap_or("0").trim().parse::<u32>() {
+        Ok(v @ (0 | 60 | 75 | 80)) => v,
+        _ => {
+            log::warn!("server.cfg: speed_limit_kmh must be 0, 60, 75 or 80; limiter is disabled");
+            0
+        }
+    }
+}
+
+/// Published by the dedicated host to clients; not a preference clients may set.
+static SERVER_SPEED_LIMIT_KMH: std::sync::atomic::AtomicU32 =
+    std::sync::atomic::AtomicU32::new(0);
+
+pub fn set_server_speed_limit_kmh(value: u32) {
+    SERVER_SPEED_LIMIT_KMH.store(value, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn server_speed_limit_kmh() -> u32 {
+    SERVER_SPEED_LIMIT_KMH.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// `admin_web = remote` puts the login on the internet: its passwords need
@@ -476,6 +534,13 @@ mod passenger_density_tests {
         assert_eq!(d.admin_web, omsi_admin::WebMode::Local);
         assert_eq!(d.admin_trusted_proxies, omsi_admin::WebCfg::default().trusted_proxies);
         assert_eq!(d.admin_proxy_header, omsi_admin::ProxyHeader::ForwardedFor);
+        // the players' addresses are cut in the log unless the owner asks for them whole
+        assert!(!d.log_addresses);
+        assert!(load("log_addresses = 1\n").log_addresses);
+        // (the file says what the log keeps; the scripts read log_keep and log_max_mb)
+        for key in ["log_addresses = 0", "log_keep = 5", "log_max_mb = 20", "the chat (every message)"] {
+            assert!(super::DEFAULT_CFG.contains(key), "{key}");
+        }
     }
 
     /// The web administration's keys: a wrong word is never the open door.
@@ -624,5 +689,20 @@ mod players_tests {
         assert_eq!((oa.x, oa.y, oa.on_foot, oa.aboard), (100.0, 200.0, true, Some(2)));
         // neither a bus nor a walker: not listed
         assert!(player_info(&Pose { id: 4, ..Default::default() }, none).is_none());
+    }
+}
+
+#[cfg(test)]
+mod rp_speed_limit_tests {
+    use super::parse_speed_limit;
+    #[test]
+    fn only_declared_speed_presets_are_accepted() {
+        for speed in [0, 60, 75, 80] {
+            assert_eq!(parse_speed_limit(Some(&speed.to_string())), speed);
+        }
+        for bad in ["-1", "59", "65", "81", "unlimited", "NaN", ""] {
+            assert_eq!(parse_speed_limit(Some(bad)), 0, "{bad}");
+        }
+        assert_eq!(parse_speed_limit(None), 0);
     }
 }

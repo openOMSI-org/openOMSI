@@ -2049,7 +2049,7 @@ pub fn effective_mode(v: &Value) -> &'static str {
 /// The Graphics settings' quality presets: Low, Medium, High, Extra, Max and Ultra, shared by the
 /// launcher and the game's options. A preset sets the graphics mode as well - Low is Vanilla (as
 /// OMSI 2 draws), Medium Vanilla+ (the defaults), High and above Enhanced - and, in Enhanced, how
-/// much of its light is switched on: High the street lamps' shadows, Extra the clouds' shadow, the
+/// much of its light is switched on: High enables the street lamps' shadows, Extra the clouds' shadow, the
 /// glow of lights, the street light and the reflections in full, Max every light's shadows and the
 /// mirrors drawn as the picture, Ultra Real-Time Ray Tracing on top of all of it. Each is a step up in cost and the
 /// light's own shadows (cached tiles, a handful of passes) are far from the dearest of them. The
@@ -2067,7 +2067,7 @@ pub fn graphics_presets() -> [(&'static str, Value); 6] {
     let obj_size = [0.03, 0.013, 0.013, 0.01, 0.005, 0.005];
     let obj_dist = ["500", "auto", "auto", "auto", "1500", "1500"];
     let rain = ["low", "high", "high", "high", "high", "high"];
-    let light_shadows = ["off", "street", "street", "street", "all", "all"];
+    let light_shadows = ["off", "off", "street", "street", "all", "all"];
     let street_light = ["off", "off", "off", "auto", "on", "on"];
     let puddles = ["off", "high", "low", "high", "high", "high"];
     let mirror_quality = ["standard", "standard", "standard", "standard", "enhanced", "enhanced"];
@@ -2225,7 +2225,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     v["fsr_sharpness"] = json!(0.8);
     v["street_light"] = json!("off");
     v["ray_tracing"] = json!(false);
-    v["light_shadows"] = json!("street");
+    v["light_shadows"] = json!("off");
     v["cloud_shadows"] = json!(false);
     v["light_glow"] = json!(false);
     v["pause_quick_actions"] = json!("default");
@@ -2259,8 +2259,9 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     v["mirror_refresh"] = json!("full");
     v["mirror_quality"] = json!("standard");
     v["vr_desktop_mirror"] = json!(true);
-    v["discord_status"] = json!(true);
-    v["disable_plugins"] = json!(false);
+    v["discord_status"] = json!(false); // (it tells friends the map, bus and line: only when asked)
+    // Only fresh installs opt in; existing settings files retain enabled plugins.
+    v["disable_plugins"] = json!(text.is_none());
     // a Tobii eye tracker read natively, beside opentrack (the game's menu switches these)
     v["head_tracking_source"] = json!("auto");
     v["tobii_edges"] = json!(false);
@@ -2301,7 +2302,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     v["units"] = json!("metric");
     // the trees' foliage bends and sways in the weather's wind
     v["windy_trees"] = json!(true);
-    v["road_snow"] = json!(true); // (the snow built up on the roads and roofs; off: the weather's snow on road)
+    v["road_snow"] = json!(false); // opt-in; off preserves the weather's classic snow on roads
     v["sim_thread"] = json!(false); // (switched in the game's Display menu, saved through this writer)
     v["mirror_hud_every_frame"] = json!(false);
     v["mirror_shadows"] = json!(false);
@@ -2821,7 +2822,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     let vr_scale = v.get("vr_scale").and_then(|x| x.as_f64().or_else(|| x.as_str().and_then(|s| s.parse().ok()))).filter(|x| x.is_finite()).unwrap_or(0.65).clamp(0.5, 1.0);
     let vr_head_smoothing_ms = v.get("vr_head_smoothing_ms").and_then(|x| x.as_f64().or_else(|| x.as_str().and_then(|s| s.parse().ok()))).filter(|x| x.is_finite()).unwrap_or(0.0).clamp(0.0, 30.0);
     let vr_mirror_rate = v.get("vr_mirror_rate").and_then(|x| x.as_f64().or_else(|| x.as_str().and_then(|s| s.parse().ok()))).filter(|x| x.is_finite()).unwrap_or(16.0).clamp(-1.0, 360.0);
-    let text = format!("{text}vr={}\nvr_scale={vr_scale}\nvr_head_smoothing_ms={vr_head_smoothing_ms}\nvr_mirror_rate={vr_mirror_rate}\nvr_desktop_mirror={}\ndiscord_status={}\nlauncher_rest={}\ncross_platform_launcher={}\n", b("vr", false), b("vr_desktop_mirror", true), b("discord_status", true), b("launcher_rest", true), b("cross_platform_launcher", false));
+    let text = format!("{text}vr={}\nvr_scale={vr_scale}\nvr_head_smoothing_ms={vr_head_smoothing_ms}\nvr_mirror_rate={vr_mirror_rate}\nvr_desktop_mirror={}\ndiscord_status={}\nlauncher_rest={}\ncross_platform_launcher={}\n", b("vr", false), b("vr_desktop_mirror", true), b("discord_status", false), b("launcher_rest", true), b("cross_platform_launcher", false));
     // what the page does not manage (keys of newer games, hand-written ones) stays as it
     // was in the file; other spellings of the keys just written go
     let mut text = text;
@@ -2833,7 +2834,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("touch_door_mode={}\n", if v.get("touch_door_mode").and_then(|x| x.as_str()) == Some("direct") { "direct" } else { "standard" }));
     text.push_str(&format!("update_channel={}\n", if v.get("update_channel").and_then(|x| x.as_str()) == Some("beta") { "beta" } else { "stable" }));
     text.push_str(&format!("arrows_switch_cams={}\n", b("arrows_switch_cams", true)));
-    text.push_str(&format!("disable_plugins={}\n", b("disable_plugins", false)));
+    text.push_str(&format!("disable_plugins={}\n", b("disable_plugins", true)));
     // voice chat (the game clamps again when it reads them)
     {
         let text_of = |k: &str, d: &str| v.get(k).and_then(|x| x.as_str()).map(|x| x.replace(['\n', '\r'], " ").trim().to_string()).unwrap_or_else(|| d.to_string());
@@ -2860,7 +2861,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("gpu_texture_compression={}\n", b("gpu_texture_compression", true)));
     text.push_str(&format!("cloud_quality={}\n", cloud_quality(v.get("cloud_quality").and_then(|x| x.as_str()).unwrap_or("high"))));
     text.push_str(&format!("street_light={}\n", street_light(v.get("street_light").and_then(|x| x.as_str()).unwrap_or("off"))));
-    text.push_str(&format!("ray_tracing={}\nlight_shadows={}\ncloud_shadows={}\nlight_glow={}\n", b("ray_tracing", false) | (graphics_mode(v.get("graphics").and_then(|x| x.as_str()).unwrap_or("vanilla_plus")) == "enhanced_plus") as u8, light_shadows(v.get("light_shadows").and_then(|x| x.as_str()).unwrap_or("street")), b("cloud_shadows", false), b("light_glow", false)));
+    text.push_str(&format!("ray_tracing={}\nlight_shadows={}\ncloud_shadows={}\nlight_glow={}\n", b("ray_tracing", false) | (graphics_mode(v.get("graphics").and_then(|x| x.as_str()).unwrap_or("vanilla_plus")) == "enhanced_plus") as u8, light_shadows(v.get("light_shadows").and_then(|x| x.as_str()).unwrap_or("off")), b("cloud_shadows", false), b("light_glow", false)));
     text.push_str(&format!("rain_quality={}\n", rain_quality(v.get("rain_quality").and_then(|x| x.as_str()).unwrap_or("high"))));
     text.push_str(&format!("vehicle_smoke={}\n", vehicle_smoke(v.get("vehicle_smoke").and_then(|x| x.as_str()).unwrap_or("all"))));
     text.push_str(&format!("puddles={}\n", puddles(v.get("puddles").and_then(|x| x.as_str()).unwrap_or("high"))));
@@ -2875,7 +2876,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("info_bar={}\nperf_overlay={}\n", b("info_bar", false), perf_overlay_mode(&v.get("perf_overlay").map(|x| x.as_str().map_or_else(|| x.to_string(), str::to_string)).unwrap_or_default())));
     text.push_str(&format!("info_size={}\ntimetable_size={}\nperf_size={}\n", f("info_size", 1.0).clamp(0.6, 2.0), f("timetable_size", 1.0).clamp(0.6, 2.0), f("perf_size", 1.0).clamp(0.6, 2.0)));
     text.push_str(&format!("windy_trees={}\n", b("windy_trees", true)));
-    text.push_str(&format!("road_snow={}\n", b("road_snow", true)));
+    text.push_str(&format!("road_snow={}\n", b("road_snow", false)));
     text.push_str(&format!("sim_thread={}\n", b("sim_thread", false)));
     text.push_str(&format!("mirror_hud_every_frame={}\n", b("mirror_hud_every_frame", false)));
     text.push_str(&format!("mirror_shadows={}\nmirror_particles={}\n", b("mirror_shadows", false), b("mirror_particles", false)));
@@ -3170,7 +3171,7 @@ fn duty_args_for_root(d: &Duty, root: &Path) -> Result<Vec<String>> {
 
 fn duty_args_with_settings(d: &Duty, root: &Path, st: &Value) -> Result<Vec<String>> {
     let mut start = vec!["--root".into(), root.to_string_lossy().to_string(), "--no-menu".into()];
-    if st.get("disable_plugins").and_then(Value::as_bool).unwrap_or(false) {
+    if st.get("disable_plugins").and_then(Value::as_bool).unwrap_or(true) {
         start.push("--no-plugins".into());
     }
     if let Some(t) = d.tutorial {

@@ -57,7 +57,102 @@ pub fn crash_of(log: &std::path::Path) -> Option<(String, String)> {
     let machine: Vec<&str> = MACHINE_LINES.iter().filter_map(|k| whole.lines().rfind(|l| l.contains(k))).collect();
     let end = all[all.len().saturating_sub(150)..].join("\n");
     let tail = if machine.is_empty() { end } else { format!("{}\n{CRASH_TAIL_GAP}\n{end}", machine.join("\n")) };
-    Some((what.chars().take(600).collect(), tail))
+    let what = redact(&what);
+    Some((what.chars().take(600).collect(), redact(&tail)))
+}
+
+/// A crash report without what names the player: their account's folder (the home folder
+/// becomes `~`, any other account's name in a path `<user>`), their driver
+/// (`Drivers/<name>.odr`, often the player's own name, on the command line), the other
+/// players' names in the multiplayer lines and the chat. The report goes to a public GitHub
+/// issue.
+pub fn redact(text: &str) -> String {
+    let home = ["USERPROFILE", "HOME"].iter().find_map(|k| std::env::var(k).ok());
+    redact_with(text, home.as_deref())
+}
+
+fn redact_with(text: &str, home: Option<&str>) -> String {
+    let mut out = text.to_string();
+    // (a home folder that is a drive or the root names nobody)
+    if let Some(home) = home.map(|h| h.trim_end_matches(['/', '\\'])).filter(|h| h.len() > 3) {
+        for h in [home.to_string(), home.replace('\\', "/"), home.replace('/', "\\")] {
+            out = replace_whole(&out, &h, "~");
+        }
+    }
+    let user_end = |rest: &str| {
+        let end = rest.find(['\\', '/', '"', '\'', '\n', '\r']).unwrap_or(rest.len());
+        // (a name at the end of a path stops at the next word: "C:\\Users\\x exited")
+        if rest[end..].starts_with(['\\', '/']) { end } else { rest[..end].find(char::is_whitespace).unwrap_or(end) }
+    };
+    out = replace_segments(&out, &["\\users\\", "/users/", "/home/"], user_end, "<user>");
+    let driver_end = |rest: &str| {
+        let line = &rest[..rest.find(['\n', '\r', '"', '\'', '/', '\\']).unwrap_or(rest.len())];
+        line.to_ascii_lowercase().find(".odr").unwrap_or(0)
+    };
+    out = replace_segments(&out, &["drivers/", "drivers\\"], driver_end, "<driver>");
+    // the other players: their names in the multiplayer lines, and the chat left out
+    let quoted = |rest: &str| rest.find(['\'', '\n']).filter(|&n| rest[n..].starts_with('\'')).unwrap_or(0);
+    out = replace_segments(&out, &["lan: '", "connected to '"], quoted, "<player>");
+    out = player_names(&out);
+    out.lines().map(|l| match l.find("LAN chat") {
+        Some(i) => format!("{} (left out of the report)", &l[..i + "LAN chat".len()]),
+        None => l.to_string(),
+    }).collect::<Vec<_>>().join("\n")
+        + if out.ends_with('\n') { "\n" } else { "" }
+}
+
+/// `player 3 'Name'` as `player 3 '<player>'`.
+fn player_names(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut at = 0;
+    while let Some(i) = text[at..].find("player ").map(|i| at + i + "player ".len()) {
+        let digits = text[i..].find(|c: char| !c.is_ascii_digit()).unwrap_or(text.len() - i);
+        let open = i + digits;
+        let name = (digits > 0 && text[open..].starts_with(" '")).then(|| &text[open + 2..]).and_then(|r| r.find(['\'', '\n']).filter(|&n| r[n..].starts_with('\'')));
+        out.push_str(&text[at..i]);
+        match name {
+            Some(n) => {
+                out.push_str(&text[i..open + 2]);
+                out.push_str("<player>");
+                at = open + 2 + n;
+            }
+            None => at = i,
+        }
+    }
+    out.push_str(&text[at..]);
+    out
+}
+
+/// `text` with `what` replaced where it is a whole name (`/root`, not the start of `/rootfs`).
+fn replace_whole(text: &str, what: &str, with: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut at = 0;
+    while let Some(i) = text[at..].find(what).map(|i| at + i) {
+        let after = &text[i + what.len()..];
+        let whole = !after.starts_with(|c: char| c.is_alphanumeric() || c == '_' || c == '-');
+        out.push_str(&text[at..i]);
+        out.push_str(if whole { with } else { what });
+        at = i + what.len();
+    }
+    out.push_str(&text[at..]);
+    out
+}
+
+/// `text` with the part after each of `markers` (any case) that `end` measures replaced by `with`.
+fn replace_segments(text: &str, markers: &[&str], end: impl Fn(&str) -> usize, with: &str) -> String {
+    let lower = text.to_ascii_lowercase();
+    let mut out = String::with_capacity(text.len());
+    let mut at = 0;
+    while let Some((start, m)) = markers.iter().filter_map(|m| lower[at..].find(m).map(|i| (at + i, m.len()))).min() {
+        let from = start + m;
+        let n = end(&text[from..]);
+        out.push_str(&text[at..from]);
+        let seg = &text[from..from + n];
+        out.push_str(if n == 0 || seg == with { seg } else { with });
+        at = from + n;
+    }
+    out.push_str(&text[at..]);
+    out
 }
 
 /// The log lines that tell what a game ran on (see `crash_of`).
@@ -104,6 +199,44 @@ mod hint_tests {
         assert!(!super::died_compiling_on_vulkan(&format!("{compiled}[t INFO g] status: 63 fps, view driver\n[t INFO m] loading tiles 75 %\n")));
         // on OpenGL it is never the Vulkan driver
         assert!(!super::died_compiling_on_vulkan("[t INFO r] opening graphics device: Mali (Gl, vendor 0x13b5)\n[t INFO r] renderer: compiling the scene shaders\n"));
+    }
+}
+
+#[cfg(test)]
+mod redact_tests {
+    use super::redact_with;
+
+    #[test]
+    fn a_report_names_neither_the_account_nor_the_driver() {
+        let log = "[t INFO a] command line: C:\\Users\\Isaac Santana\\openomsi.exe --root D:\\OMSI 2 --driver Drivers/Isaac S.odr\n\
+            [t INFO a] working folder: C:/Users/Isaac Santana/AppData\n\
+            [t WARN a] /home/rafa/.openomsi/x.cfg and /Users/ana/Library\n\
+            [t ERROR a] panicked at C:\\Users\\other\n\
+            [t INFO a] DRIVERS\\Joao.ODR read; vehicle Vehicles/MAN/MAN.bus";
+        let r = redact_with(log, Some("C:\\Users\\Isaac Santana"));
+        for gone in ["Isaac", "rafa", "ana/", "other", "Joao"] {
+            assert!(!r.contains(gone), "{gone}: {r}");
+        }
+        assert!(r.contains("command line: ~\\openomsi.exe --root D:\\OMSI 2 --driver Drivers/<driver>.odr"), "{r}");
+        assert!(r.contains("working folder: ~/AppData"), "{r}");
+        assert!(r.contains("/home/<user>/.openomsi/x.cfg and /Users/<user>/Library"), "{r}");
+        assert!(r.contains("panicked at C:\\Users\\<user>\n"), "{r}");
+        assert!(r.contains("DRIVERS\\<driver>.ODR read; vehicle Vehicles/MAN/MAN.bus"), "{r}");
+        // what names nobody stays as it is
+        let plain = "[t ERROR omsi_render] the graphics device was lost (Unknown)\n[t INFO a] maps/Grundorf/global.cfg";
+        assert_eq!(redact_with(plain, Some("/")), plain);
+        assert_eq!(redact_with("Drivers are fine", None), "Drivers are fine");
+        // the other players: no names, no chat
+        let lan = "[t INFO omsi_net] LAN: player 3 'Ana Maria' left\n[t INFO omsi_net] LAN chat <Ana> meu numero 9999\n[t INFO omsi_net] LAN: connected to 'Isaac host' (session 1f), we are player 2; weather 'rain'\n[t WARN omsi_net] LAN: 'Bob' at 203.0.113.x wants to join\n[t INFO a] player 4 skipped\n";
+        let r = redact_with(lan, None);
+        for gone in ["Ana", "9999", "Isaac", "Bob"] {
+            assert!(!r.contains(gone), "{gone}: {r}");
+        }
+        assert!(r.contains("LAN: player 3 '<player>' left\n") && r.contains("] LAN chat (left out of the report)\n"), "{r}");
+        assert!(r.contains("connected to '<player>' (session 1f), we are player 2; weather 'rain'") && r.contains("LAN: '<player>' at"), "{r}");
+        assert!(r.ends_with("player 4 skipped\n"), "{r}");
+        // (the home folder itself, not a longer name it begins)
+        assert_eq!(redact_with("/root/a /rootfs/b", Some("/root")), "~/a /rootfs/b");
     }
 }
 

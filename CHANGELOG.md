@@ -511,6 +511,16 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **Vehicles with staged ignition and separate battery-master switches start correctly**, without pressing reverse or engine-stop triggers, including recovery after a stalled engine (#3481).
+- **Dedicated servers can authorize F4, city-map and entry-point relocation** through authenticated server commands. Administrators can go to, bring or recover players' buses; `allow_player_teleport=0` remains the default, and `1` permits ordinary players to relocate only themselves. Player-hosted LAN keeps the host-only restriction (#3481).
+- **Optional RP speed limits for dedicated servers**: `speed_limit_kmh=60`, `75` or `80` smooth throttle/braking near the limit, and `0` disables it (default). This is cooperative client-side roleplay, not server-enforced anti-cheat. Policy is fetched on join/reconnect, not periodically (#3481).
+- **Safer defaults and plugin compatibility**: accumulated snow and Enhanced light shadows default off when their keys are absent (including older settings files), but explicit choices remain selectable and saved. Optional OMSI plugins require opt-in only on a *brand-new* settings file; existing files without the key keep plugins enabled, and explicit preferences remain respected (#3481).
+- **Android NDK download resilience**: the Release workflow retries interrupted SDK/NDK installations. Windows networking tests retry ephemeral ports excluded for TCP as well as already-occupied ports (#3481).
+- **Dense navigator keeps dense maps intact**: exact ground and buildings render until a pathological geometry budget is exceeded; approximately 4.25 million vertices in total (2M ground and 750k each for shadows, walls and roofs). Later roads are composited instead of dropped if the ground is reduced; the launcher's map remains uncapped (#3249, #3481).
+- **Force feedback reaches the MOZA R5's wheel again.** The base marks both its X and its Y axis
+  as having a motor and lists Y first, so the forces went to the pedals' axis and the wheel felt
+  nothing. The forces now go to the lowest axis with a motor (X before Y), whatever order the
+  driver lists them in.
 - **The map camera (F4) puts the bus down facing where it looks.** Moving the bus there kept the way
   it faced before, whichever way the camera was turned; it now stands facing the camera's direction.
 - **No more huge yellow glow at Lower Marsh (London).** The map's `GarageLights.sco` has a light

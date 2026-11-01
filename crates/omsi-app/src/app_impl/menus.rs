@@ -269,6 +269,7 @@ impl App {
             }
             "vehicle" => self.open_list(crate::game_lists::ListKind::Vehicle(0)),
             "world" => self.open_list(crate::game_lists::ListKind::World(0)),
+            "multiplayer" => self.open_multiplayer(),
             "copycode" => {
                 self.close_game_menu();
                 self.copy_server_code();
@@ -521,6 +522,9 @@ impl crate::App {
                 v.insert(w + 1, ("copycode", "Copy server code".into(), None));
                 at = at.max(w + 2);
             }
+        }
+        if let Some(before) = v.iter().position(|line| line.0 == "quit") {
+            v.insert(before, ("multiplayer", "Multiplayer...".into(), None));
         }
         // everybody in a multiplayer session may see who is there
         if self.net.lan.is_some() {

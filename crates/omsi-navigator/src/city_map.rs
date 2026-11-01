@@ -508,7 +508,7 @@ impl Navigator {
             let pal2 = *pal;
             let houses = !self.classic_2d && mpp < 6.0;
             let paved = !self.classic_2d && mpp < 2.2;
-            let job = move || super::build::build(&parts, centre, radius, &pal2, look, paved, houses.then_some(omsi_mapdraw::MODEL_TRIANGLES));
+            let job = move || super::build::build(&parts, centre, radius, &pal2, look, paved, houses.then_some(omsi_mapdraw::MODEL_TRIANGLES), true, mpp as f32);
             if self.city.ground.is_none() {
                 // (the first picture at once: nothing to show meanwhile)
                 let b = job();
@@ -843,7 +843,7 @@ impl Navigator {
         ];
         let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("city map") });
         gpu.render(device, queue, &mut enc, &view, (tw, th), Some(wgpu::Color::TRANSPARENT), &layers, &draws);
-        queue.submit([enc.finish()]);
+        renderer.submit_with_frame(enc.finish());
         scene.overlays.push((tex, [x0, y0, x0 + w, y0 + h]));
     }
 
