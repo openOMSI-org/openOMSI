@@ -150,7 +150,7 @@ export function BusPicker({ onClose, onTake, title = 'Choose a bus', yes = 'Take
             <${Field} label="Paint">
               <${Select} raw value=${paint} options=${[['', v.default_paint ? `${t('Standard')} (${v.default_paint})` : t('Standard')], ...v.paints.map((p) => [p, p])]} onChange=${setPaint} />
             </${Field}>
-            ${v.description && html`<p class="dim selectable" style="white-space:pre-line;max-height:220px;overflow:auto">${v.description}</p>`}
+            ${v.description && html`<p class="dim selectable" style="white-space:pre-line;max-height:220px;overflow:auto">${v.server_only ? t(v.description) : v.description}</p>`}
             <${Notes} kind="bus" file=${v.file} />
             <div class="muted small selectable">${v.file}</div>
           </div>`
