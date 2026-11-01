@@ -99,23 +99,14 @@ mod tests {
     /// and a script's screen never taken for a pane (#2927), and the lamp tiles' taps in loops of fixed bounds,
     /// and the colour/mask-only headset entry point, and a self-lit blended layer's alpha giving
     /// Omsi.exe's encoded mix, and the vertex-lit Direct3D headlight excluding its own vehicle,
-<<<<<<< merge/ours/crates/omsi-render/src/shaders.rs
-    /// and the traced sample read once for FXC. The graphics options now carry an
-    /// additional road-glare uniform and a tunable Enhanced reflection contribution.
-=======
-    /// and the traced sample read once for FXC, and the detail grain's octaves left out where faded.
->>>>>>> merge/main/crates/omsi-render/src/shaders.rs
+    /// and the traced sample read once for FXC, the road glare in its own uniform lane,
+    /// and the detail grain's octaves left out where faded.
     /// (with Unix line ends: a Windows checkout may turn the parts' into CRLF, as it did the
     /// single files', and the 0.2.31 release's Windows test failed on that alone)
     #[test]
     fn assembled_shaders_are_the_old_files() {
         let (scene, enhanced) = (super::SCENE.replace("\r\n", "\n"), super::ENHANCED.replace("\r\n", "\n"));
-<<<<<<< merge/ours/crates/omsi-render/src/shaders.rs
-        assert_eq!((scene.len(), fnv1a(&scene)), (137_521, 5_797_524_561_593_996_949));
-        assert_eq!((enhanced.len(), fnv1a(&enhanced)), (99_016, 0x86b9_263f_ea2a_2d64));
-=======
-        assert_eq!((scene.len(), fnv1a(&scene)), (137_683, 17_708_513_878_730_958_890));
-        assert_eq!((enhanced.len(), fnv1a(&enhanced)), (98_532, 0xf736_4204_3e2d_5e1e));
->>>>>>> merge/main/crates/omsi-render/src/shaders.rs
+        assert_eq!((scene.len(), fnv1a(&scene)), (137753, 5786162142115336763));
+        assert_eq!((enhanced.len(), fnv1a(&enhanced)), (98809, 16825011571454174768));
     }
 }

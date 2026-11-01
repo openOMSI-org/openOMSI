@@ -58,9 +58,8 @@ pub(crate) fn apply_graphics_changes(app: &mut App) {
     if let Some(draft) = draft {
         store_with(app, |v| overlay(v, &draft));
     }
-    let changed = rebuild_session_graphics(app);
+    rebuild_session_graphics(app);
     app.menus.list_dirty = true;
-    let _ = changed;
     app.service_msg = Some((omsi_ui::tr("Graphics settings applied. Restart to change renderer mode or device formats.").into_owned(), 6.0));
 }
 

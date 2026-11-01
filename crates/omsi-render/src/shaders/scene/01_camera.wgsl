@@ -44,7 +44,7 @@ struct Camera {
     // light buffer, 4 a vector, -1 for none): see `cabin_visibility`
     cabin_lamps: array<vec4<f32>, 4>,
     // x: the textures' mip bias (FSR 1: negative, see `CameraUniform::lod`)
-    lod: vec4<f32>,           // x mip bias, y Enhanced road sunlight glare strength
+    lod: vec4<f32>,           // x mip bias, y ground-prepass flag, z road sunlight glare
     // the classic picture's headlight (`CameraUniform::spot`, see `classic_spot`)
     spot: array<vec4<f32>, 4>,
 };
