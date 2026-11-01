@@ -980,6 +980,7 @@ pub(crate) fn option_do(app: &mut App, verb: &str, arg: &str, mv: Move) -> bool 
             Move::To(f) => f >= 0.5,
         };
         if on != cur {
+            if is_graphics_setting(verb) { begin_graphics_change(app); }
             if let Some((k, v)) = toggle_set(app, verb, on) {
                 remember_setting(k, &v);
             }
@@ -993,6 +994,7 @@ pub(crate) fn option_do(app: &mut App, verb: &str, arg: &str, mv: Move) -> bool 
             let to = step_move(&steps, now, mv);
             // (a slider dragged sends the same value many times over)
             if (to - now).abs() > 1e-6 {
+                if is_graphics_setting(verb) { begin_graphics_change(app); }
                 if let Some((k, v)) = option_set(app, verb, arg, to) {
                     remember_setting(k, &v);
                 }

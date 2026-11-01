@@ -81,6 +81,10 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         .into_iter()
         .flatten()
         .collect();
+    if app.menus.graphics_before.is_some() {
+        graphics.push(button("Apply graphics changes...", "Confirm", "Confirm the changes and rebuild the GPU pipelines now", "graphics_apply"));
+        graphics.push(button("Discard graphics changes", "Revert", "Restore the graphics settings before this edit", "graphics_discard"));
+    }
     let at = graphics.iter().position(|r| r.1 == "sel render_scale").map_or(graphics.len(), |k| k + 1);
     graphics.splice(at..at, upscaler_rows(app, &file));
     let mut display = vec![

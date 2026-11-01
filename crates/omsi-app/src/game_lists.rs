@@ -27,6 +27,8 @@ pub(crate) enum ListKind {
     BanList,
     /// The options of the game, on this page of the settings window.
     Options(usize),
+    /// Confirmation of graphical settings in the active session.
+    GraphicsConfirm(usize),
     /// What can be done with the vehicle, on this page.
     Vehicle(usize),
     /// The clock, the weather and the traffic, on this page.
@@ -500,6 +502,11 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
         ListKind::Admin | ListKind::AdminClassic => return crate::admin::items(app),
         ListKind::AdminPlayers | ListKind::AdminPlayer(_) | ListKind::AdminConfirm(..) => out = crate::admin_panel::items(app, kind),
         ListKind::PlayerList | ListKind::PlayerPage(_) | ListKind::PlayerDo(..) | ListKind::BanList => return crate::player_list::items(app, kind),
+        ListKind::GraphicsConfirm(_) => return vec![
+            (row("Apply graphics changes?", 'i', "", "Current Vanilla/Vanilla+/Enhanced mode stays active; device-format options need a restart.", None), "noop".into()),
+            button("Apply now", "Confirm", "Keep the edited settings and rebuild compatible GPU pipelines", "graphics_confirm"),
+            button("Cancel changes", "Revert", "Restore the graphics settings from before editing", "graphics_cancel"),
+        ],
         ListKind::Options(_) | ListKind::Vehicle(_) | ListKind::World(_) => {
             let Some((mut pages, tab)) = pages_of(app, kind) else { return out };
             if pages.is_empty() {
@@ -782,6 +789,7 @@ pub(crate) fn menu_extras(
     let Some(kind) = kind else { return (MenuKind::List, head("Place a vehicle..."), None) };
     match kind {
         ListKind::Options(_) => (MenuKind::Options, head("Options..."), None),
+        ListKind::GraphicsConfirm(_) => (MenuKind::List, head("Confirm graphics changes"), None),
         ListKind::Vehicle(_) => (MenuKind::Options, head("Vehicle options..."), None),
         ListKind::World(_) => (MenuKind::Options, head("World options..."), None),
         ListKind::Controls => (MenuKind::Options, head("Controls..."), None),
@@ -898,6 +906,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             ListKind::AdminPlayers | ListKind::AdminClassic => Some(ListKind::Admin),
             ListKind::AdminPlayer(_) => Some(ListKind::AdminPlayers),
             ListKind::AdminConfirm(_, t) => Some(ListKind::AdminPlayer(*t)),
+            ListKind::GraphicsConfirm(tab) => { cancel_graphics_changes(app); Some(ListKind::Options(*tab)) },
             _ => None,
         };
     }
@@ -912,6 +921,15 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
         }
         // (the server's pages when it no longer lets us administer: back to the game menu)
         ListKind::AdminPlayers | ListKind::AdminPlayer(_) | ListKind::AdminConfirm(..) => None,
+        ListKind::GraphicsConfirm(tab) => {
+            if !matches!(mv, Move::Next) { return Some(kind.clone()); }
+            match action {
+                "graphics_confirm" => apply_graphics_changes(app),
+                "graphics_cancel" => cancel_graphics_changes(app),
+                _ => return Some(kind.clone()),
+            }
+            Some(ListKind::Options(*tab))
+        }
         ListKind::Options(_) | ListKind::World(_) => {
             if verb == "noop" || option_do(app, verb, arg, mv) {
                 return Some(kind.clone());
@@ -919,6 +937,10 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             // (the arrows and a click on a stepper only change values: no buttons)
             let step = matches!(mv, Move::Next);
             match verb {
+                "graphics_apply" if step => {
+                    return Some(ListKind::GraphicsConfirm(match kind { ListKind::Options(tab) => *tab, _ => 0 }));
+                }
+                "graphics_discard" if step => { cancel_graphics_changes(app); }
                 "vr_nav_edit" if step && app.vr_active() && app.player.is_some() => {
                     app.start_vr_nav_edit();
                     return None;
@@ -1192,6 +1214,71 @@ pub(crate) fn set_identity_to_player_vehicle(p: &mut crate::player::Player, numb
         }
     }
 
+}
+
+/// Values before the first edit in a graphics batch. Cancel restores graphics only,
+/// not keyboard or gameplay settings edited in the meantime.
+pub(crate) struct GraphicsBefore {
+    saved: serde_json::Value,
+}
+
+pub(crate) fn begin_graphics_change(app: &mut App) {
+    if app.menus.graphics_before.is_none() {
+        // Finish earlier pending writes before capturing the undo snapshot.
+        if let Some(saved) = saved_settings() {
+            app.menus.graphics_before = Some(GraphicsBefore { saved });
+        }
+    }
+}
+
+pub(crate) fn is_graphics_setting(key: &str) -> bool {
+    omsi_launcher_lib::GRAPHICS_PROFILE_KEYS.contains(&key)
+        || matches!(key, "mirror_shadows" | "mirror_particles")
+}
+
+/// Rebuild shader pipelines/targets once after confirmation, not for every slider step.
+/// Never replace the renderer mode or device-dependent texture formats during a drive.
+fn rebuild_session_graphics(app: &mut App) -> bool {
+    let mut options = app.args.session_settings.render_options(&app.settings);
+    if let Some(r) = app.renderer.as_ref() {
+        options.no_enhanced = r.options.no_enhanced;
+        options.gpu_texture_compression = r.options.gpu_texture_compression;
+        options.compress_textures = r.options.compress_textures;
+        options.xr_scale = r.options.xr_scale;
+        options.max_scene = r.options.max_scene;
+        if !app.args.session_settings.enhanced { options.ray_tracing = false; }
+    }
+    let changed = if let (Some(renderer), Some(scene)) = (app.gfx.renderer.as_mut(), app.gfx.scene.as_mut()) {
+        renderer.rebuild_with(scene, options)
+    } else { false };
+    sync_live(app);
+    changed
+}
+
+pub(crate) fn apply_graphics_changes(app: &mut App) {
+    if app.menus.graphics_before.take().is_none() { return; }
+    let changed = rebuild_session_graphics(app);
+    app.menus.list_dirty = true;
+    app.service_msg = Some((if changed {
+        "Graphics applied in-game. Renderer mode and device/texture format changes need restart."
+    } else {
+        "Graphics settings kept. Renderer mode stays active until restart."
+    }.into(), 6.0));
+}
+
+pub(crate) fn cancel_graphics_changes(app: &mut App) {
+    let Some(before) = app.menus.graphics_before.take() else { return };
+    store_with(app, |v| {
+        for key in omsi_launcher_lib::GRAPHICS_PROFILE_KEYS {
+            if let Some(x) = before.saved.get(key) { v[key] = x.clone(); }
+        }
+        for key in ["mirror_shadows", "mirror_particles"] {
+            if let Some(x) = before.saved.get(key) { v[key] = x.clone(); }
+        }
+    });
+    rebuild_session_graphics(app);
+    app.menus.list_dirty = true;
+    app.service_msg = Some(("Graphics changes cancelled; previous values restored.".into(), 4.0));
 }
 
 // the settings windows (options, vehicle, world), one concern a file

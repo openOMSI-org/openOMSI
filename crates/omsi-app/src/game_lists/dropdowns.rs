@@ -141,6 +141,7 @@ pub(crate) fn dropdown_apply(app: &mut App, action: &str) {
         "pick" => {
             if let Some((key, value)) = arg.split_once(' ') {
                 let before = app.settings.mirror_hud;
+                if key != "graphics" && is_graphics_setting(key) { begin_graphics_change(app); }
                 remember_setting(key, value);
                 reload_settings(app);
                 if key == "light_shadows" && value == "all" && app.renderer.as_ref().is_some_and(|r| !r.lamp_cube_maps()) {
@@ -161,6 +162,7 @@ pub(crate) fn dropdown_apply(app: &mut App, action: &str) {
         }
         "preset" => {
             if let Some(i) = arg.trim().parse::<usize>().ok().filter(|i| *i < 6) {
+                begin_graphics_change(app);
                 store_with(app, |v| {
                     // (a preset sets the mode as well)
                     let Some(p) = presets(v).into_iter().nth(i) else { return };
@@ -170,13 +172,14 @@ pub(crate) fn dropdown_apply(app: &mut App, action: &str) {
                         }
                     }
                 });
-                app.service_msg = Some((omsi_ui::tr("Takes effect when the game starts the next time").into_owned(), 5.0));
+                app.service_msg = Some(("Preset selected. Confirm to apply compatible options in-game; changing renderer mode still requires restart.".into(), 5.0));
             }
         }
         "gfxprofile" => {
             let name = arg.trim();
             match omsi_launcher_lib::graphics_profiles().get(name) {
                 Some(p) => {
+                    begin_graphics_change(app);
                     store_with(app, |v| omsi_launcher_lib::apply_graphics_profile(p, v));
                     sync_live(app);
                     app.menus.list_dirty = true;
