@@ -3,12 +3,14 @@
 //!
 //! **The identifier.** 128 bits: SHA-256 over a fixed text and the machine's own id (the
 //! platform's machine GUID / `machine-id` / `IOPlatformUUID`; on a system with none, a random
-//! number kept in `~/.openomsi/hardware-id`), cut to 16 bytes. The raw id never leaves the
-//! machine and cannot be got back from the hash; no serial number of a disk or board is read.
-//! It is the same in every session, so a host can tell that a banned machine is back - and,
-//! as with any identifier that is the same everywhere, two hosts could compare notes on who
-//! joined them. A player switches it off with `OMSI_NO_HARDWARE_ID=1` (a host may turn such
-//! players away, `require_hardware_id`). It is a claim of the game, not a proof of the
+//! number kept in `~/.openomsi/hardware-id`), cut to 16 bytes. That one never leaves the
+//! machine: a host sends its realm (`REALM`, a random key kept in the owner's list), and the
+//! game sends `omsi_net::host_hardware_id` of the two. A host's sessions all get the same
+//! identifier, so a banned machine is known again; two owners get different ones, so they
+//! cannot compare notes on who joined them. No serial number of a disk or board is read. A
+//! player switches it off in the launcher (`hardware_id = 0`) or with `OMSI_NO_HARDWARE_ID=1`
+//! (a host may turn such players away, `require_hardware_id`). Bans made before the realm
+//! (protocol 15) name identifiers no game sends any more. It is a claim of the game, not a proof of the
 //! machine: a changed game, a reinstalled system, a virtual machine or a new machine id gives
 //! another identifier, so a hardware ban stops the casual returner, not someone who works at
 //! it (SERVER.md says so too).
@@ -70,8 +72,22 @@ impl Ban {
 struct File {
     #[serde(default)]
     version: u32,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    realm: String,
     #[serde(default)]
     bans: Vec<Ban>,
+}
+
+fn random_realm() -> String {
+    let (a, b) = (omsi_net::random_session_id(), omsi_net::random_session_id());
+    format!("{:016x}{:016x}", a ^ (b << 16), b ^ (a << 24))
+}
+
+static ALLOWED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// Whether this game sends hosts an identifier at all (the launcher's `hardware_id`).
+pub fn allow_hardware_id(on: bool) {
+    ALLOWED.store(on, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// The identifier a machine id makes (see the module's text).
@@ -141,6 +157,9 @@ pub fn local_hardware_id() -> Option<String> {
 
 /// Tell the sessions of this process the machine's identifier (once, at the start).
 pub fn announce_local_hardware_id() {
+    if !ALLOWED.load(std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
     if let Some(id) = local_hardware_id() {
         omsi_net::set_hardware_id(&id);
     }
@@ -166,6 +185,8 @@ pub struct BanStore {
     owner_path: Option<PathBuf>,
     session: Vec<Ban>,
     owner: Vec<Ban>,
+    /// The key players make this host's identifier with (`REALM`), kept in the owner's file.
+    pub realm: String,
     owner_stamp: Option<(std::time::SystemTime, u64)>,
     /// Counted up at every change (and when the owner's file changed under us), for the host
     /// loop to pass the lists on to the session only when they differ.
@@ -177,7 +198,18 @@ impl BanStore {
     /// cannot be read is an empty list, said in the log - and never overwritten by an
     /// empty one unless a ban is made (a `.bak` of an unreadable file is kept).
     pub fn open(session_path: Option<PathBuf>, owner_path: Option<PathBuf>) -> BanStore {
-        let mut s = BanStore { session: read(session_path.as_deref()), owner: read(owner_path.as_deref()), owner_stamp: owner_path.as_deref().and_then(stamp), session_path, owner_path, revision: 1 };
+        let (session, _, _) = read(session_path.as_deref());
+        let (owner, realm, readable) = read(owner_path.as_deref());
+        let mut s = BanStore { session, owner, realm, owner_stamp: None, session_path, owner_path, revision: 1 };
+        if s.realm.is_empty() {
+            s.realm = random_realm();
+            if readable {
+                if let Err(e) = s.save(Scope::Owner) {
+                    log::warn!("bans: {e}");
+                }
+            }
+        }
+        s.owner_stamp = s.owner_path.as_deref().and_then(stamp);
         s.prune(omsi_admin::unix_now());
         s
     }
@@ -268,19 +300,23 @@ impl BanStore {
         let Some(p) = self.owner_path.clone() else { return };
         let now = stamp(&p);
         if now != self.owner_stamp {
-            self.owner = read(Some(&p));
+            let (owner, realm, _) = read(Some(&p));
+            self.owner = owner;
+            if !realm.is_empty() {
+                self.realm = realm;
+            }
             self.owner_stamp = now;
             self.revision += 1;
         }
     }
 
     fn save(&mut self, scope: Scope) -> Result<(), String> {
-        let (path, list) = match scope {
-            Scope::Session => (&self.session_path, &self.session),
-            Scope::Owner => (&self.owner_path, &self.owner),
+        let (path, list, realm) = match scope {
+            Scope::Session => (&self.session_path, &self.session, ""),
+            Scope::Owner => (&self.owner_path, &self.owner, self.realm.as_str()),
         };
         let Some(path) = path.clone() else { return Ok(()) };
-        write(&path, list).map_err(|e| format!("the ban list {} could not be saved: {e}", path.display()))?;
+        write(&path, list, realm).map_err(|e| format!("the ban list {} could not be saved: {e}", path.display()))?;
         if scope == Scope::Owner {
             self.owner_stamp = stamp(&path);
         }
@@ -303,25 +339,25 @@ fn stamp(p: &Path) -> Option<(std::time::SystemTime, u64)> {
     Some((m.modified().ok()?, m.len()))
 }
 
-fn read(path: Option<&Path>) -> Vec<Ban> {
-    let Some(path) = path else { return Vec::new() };
-    let Ok(text) = std::fs::read_to_string(path) else { return Vec::new() };
+fn read(path: Option<&Path>) -> (Vec<Ban>, String, bool) {
+    let Some(path) = path else { return (Vec::new(), String::new(), true) };
+    let Ok(text) = std::fs::read_to_string(path) else { return (Vec::new(), String::new(), !path.exists()) };
     match serde_json::from_str::<File>(&text) {
-        Ok(f) => f.bans.into_iter().filter(|b| omsi_net::is_hardware_id(&b.hw)).collect(),
+        Ok(f) => (f.bans.into_iter().filter(|b| omsi_net::is_hardware_id(&b.hw)).collect(), Some(f.realm).filter(|r| omsi_net::is_hardware_id(r)).unwrap_or_default(), true),
         Err(e) => {
             log::warn!("bans: {} cannot be read ({e}): no bans from it; a copy is kept beside it", path.display());
             let _ = std::fs::copy(path, path.with_extension("json.bak"));
-            Vec::new()
+            (Vec::new(), String::new(), false)
         }
     }
 }
 
-fn write(path: &Path, bans: &[Ban]) -> std::io::Result<()> {
+fn write(path: &Path, bans: &[Ban], realm: &str) -> std::io::Result<()> {
     if let Some(d) = path.parent() {
         std::fs::create_dir_all(d)?;
     }
     let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, serde_json::to_vec_pretty(&File { version: 1, bans: bans.to_vec() }).unwrap_or_default())?;
+    std::fs::write(&tmp, serde_json::to_vec_pretty(&File { version: 1, realm: realm.to_string(), bans: bans.to_vec() }).unwrap_or_default())?;
     std::fs::rename(&tmp, path)
 }
 
@@ -348,6 +384,7 @@ pub fn sync(lan: &mut omsi_net::LanSession, seen: &mut u64) -> bool {
         return false;
     }
     *seen = s.revision;
+    lan.set_ban_realm(&s.realm);
     lan.set_hardware_bans(s.door(omsi_admin::unix_now()));
     true
 }
@@ -416,6 +453,20 @@ mod tests {
         assert_eq!(s.active(1010).len(), 1);
         assert_eq!(s.active(1010)[0].reason, "again");
         assert!(s.add(Scope::Session, "nonsense", "x", "", "", None, 0).is_err());
+    }
+
+    #[test]
+    fn the_realm_is_kept_in_the_owners_list_and_never_overwrites_an_unreadable_one() {
+        let d = dir("realm");
+        let owner = d.join("bans-owner.json");
+        let realm = BanStore::open(None, Some(owner.clone())).realm;
+        assert!(omsi_net::is_hardware_id(&realm));
+        assert_eq!(BanStore::open(None, Some(owner.clone())).realm, realm);
+        assert_ne!(BanStore::open(None, None).realm, realm);
+        let broken = d.join("broken.json");
+        std::fs::write(&broken, "{ not json").unwrap();
+        assert!(omsi_net::is_hardware_id(&BanStore::open(None, Some(broken.clone())).realm));
+        assert_eq!(std::fs::read_to_string(&broken).unwrap(), "{ not json");
     }
 
     #[test]

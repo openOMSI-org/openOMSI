@@ -28,10 +28,13 @@
 //! HELLO|<proto>|<session or ->|<name>|<bus>|<map>|<date>|<time>|<weather>|<season>|<nonce>|<challenge>|<proof>|<hardware id>
 //!                                                client → host (every second until answered; the last
 //!                                                three are empty unless the host challenged the move of
-//!                                                an address, and a host before the hardware id ignores it)
+//!                                                an address; the hardware id is empty until the host's
+//!                                                REALM came, `-` when the player does not send one)
 //! WELCOME|<proto>|<id>|<session>|<host name>|<map>|<date>|<time>|<weather>|<season>|<players>|<secret>|<nonce>
 //!                                                host → client
 //! CHALLENGE|<challenge>                          host → client (a known nonce from a new address)
+//! REALM|<realm>                                  host → client (a hello with an empty hardware id): the
+//!                                                key the client makes this host's own identifier with
 //! REJECT|<proto>|<reason>                        host → client
 //! DISCOVER|<proto>                               broadcast, client → any host
 //! HERE|<proto>|<host name>|<session>|<map>|<players>
@@ -146,7 +149,7 @@ pub use wire::{
 /// 14: session-bound variable/schema/sound packets and acknowledged long strings.
 /// 15: the AI traffic as a table of rows under ids (`traffic_table`: `TRAF` datagrams the
 /// client acknowledges with `TACK`), no longer cars in `WORLD` or `DESC|c|…`.
-pub const PROTOCOL: u32 = 15;
+pub const PROTOCOL: u32 = 16;
 /// (omsi-plugin's `MULTIPLAYER_PORTS` keeps `omsi.send` off this one and the `PORT_RANGE` after it.)
 pub const DEFAULT_PORT: u16 = 27015;
 /// Ports a host tries after the default one when that is taken (a second session on the
@@ -551,8 +554,9 @@ fn parse_session_hex(s: &str) -> Option<u64> {
     u64::from_str_radix(s.trim(), 16).ok()
 }
 
-/// This machine's hardware identifier as the game sends it in its hello (see `omsi-lan`'s
-/// `bans::local_hardware_id`): set once at the start, read by every session made after.
+/// This machine's hardware identifier (see `omsi-lan`'s `bans::local_hardware_id`): set once
+/// at the start, read by every session made after. It never goes over the wire: a host gets
+/// `host_hardware_id` of it and the host's realm, so two hosts cannot match their players.
 static HARDWARE_ID: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
 /// Tell the sessions this machine's hardware identifier (32 lower-case hex digits; anything
@@ -561,6 +565,13 @@ pub fn set_hardware_id(id: &str) {
     if is_hardware_id(id) {
         let _ = HARDWARE_ID.set(id.to_string());
     }
+}
+
+/// The identifier a machine sends to the host whose realm (`REALM`) is `realm`.
+pub fn host_hardware_id(machine: &str, realm: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let h = Sha256::new().chain_update(b"openOMSI hardware id v2\0").chain_update(machine.as_bytes()).chain_update(b"\0").chain_update(realm.as_bytes()).finalize();
+    h[..16].iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// A hardware identifier as it goes over the wire: 128 bits in 32 lower-case hex digits.
@@ -1404,8 +1415,14 @@ pub struct LanSession {
     hw_required: bool,
     /// The revision of the ban lists this session was last given (kept by `omsi-lan`'s `bans`).
     pub hw_ban_revision: u64,
-    /// This game's hardware identifier, sent in its hellos (`set_hardware_id`).
+    /// This game's identifier for the host it joins (`host_hardware_id`), once its `REALM` came.
     pub hardware_id: Option<String>,
+    /// The machine's identifier the host's one is made of (`set_hardware_id`; None: not sent).
+    hardware_base: Option<String>,
+    /// Whether the host's `REALM` came (client): the hello then says `-` without an identifier.
+    realm_answered: bool,
+    /// The key players make this host's identifier with (host; `set_ban_realm`).
+    ban_realm: Option<String>,
     /// Commands for this game (`command`): (from, text).
     commands: Vec<(u32, String)>,
     /// How fast the session's clock runs (the host's time speed; a client: the host's as
@@ -1523,7 +1540,10 @@ impl LanSession {
             hw_bans: Vec::new(),
             hw_required: false,
             hw_ban_revision: 0,
-            hardware_id: HARDWARE_ID.get().cloned(),
+            hardware_id: None,
+            hardware_base: HARDWARE_ID.get().cloned(),
+            realm_answered: false,
+            ban_realm: None,
             commands: Vec::new(),
             clock_speed: 1.0,
         }
@@ -1863,6 +1883,11 @@ impl LanSession {
         }
     }
 
+    /// Host: the key a joining game makes its identifier for this host with (32 hex digits).
+    pub fn set_ban_realm(&mut self, realm: &str) {
+        self.ban_realm = Some(realm.to_string()).filter(|r| is_hardware_id(r));
+    }
+
     /// Host: whether a hello without a hardware identifier is turned away.
     pub fn require_hardware_id(&mut self, on: bool) {
         self.hw_required = on;
@@ -2124,18 +2149,31 @@ impl LanSession {
             self.world.fields(),
             self.nonce
         );
+        let hw = match (&self.hardware_id, self.realm_answered) {
+            (Some(h), _) => h.as_str(),
+            (None, true) => "-",
+            (None, false) => "",
+        };
         if let (Some(secret), Some(c)) = (self.rebind_secret, self.answer) {
             msg.push_str(&format!("|{c:016x}|{:016x}", admission::proof(&secret, c)));
-        } else if self.hardware_id.is_some() {
+        } else if !hw.is_empty() {
             msg.push_str("||");
         }
-        // (after the rebind proof; a host before the identifier ignores a field it does not know)
-        if let Some(hw) = &self.hardware_id {
+        if !hw.is_empty() {
             msg.push_str(&format!("|{hw}"));
         }
         for h in to {
             self.send(msg.as_bytes(), h);
         }
+    }
+
+    fn on_realm(&mut self, parts: &[&str]) {
+        let realm = field(parts, 1).trim();
+        if is_hardware_id(realm) {
+            self.hardware_id = self.hardware_base.as_deref().map(|m| host_hardware_id(m, realm));
+        }
+        self.realm_answered = true;
+        self.hello_acc = self.hello_acc.max(1.0);
     }
 
     fn on_challenge(&mut self, parts: &[&str]) {
@@ -2617,6 +2655,7 @@ impl LanSession {
                 ("HELLO", Role::Host) => self.on_hello(&parts, from),
                 ("WELCOME", Role::Client) => self.on_welcome(&parts, from),
                 ("CHALLENGE", Role::Client) if self.host == Some(from) || (self.host.is_none() && self.candidates.contains(&from)) => self.on_challenge(&parts),
+                ("REALM", Role::Client) if self.host == Some(from) || (self.host.is_none() && self.candidates.contains(&from)) => self.on_realm(&parts),
                 ("REJECT", Role::Client) if self.host.is_none() || Some(from) == self.host => {
                     let reason = clean_text(field(&parts, 2), 300);
                     // Different candidate IPs may belong to different computers. Keep
@@ -3069,8 +3108,12 @@ impl LanSession {
                 );
                 return;
             }
+            None if field(parts, 13).is_empty() && self.ban_realm.is_some() => {
+                self.send(format!("REALM|{}", self.ban_realm.as_deref().unwrap_or_default()).as_bytes(), from);
+                return;
+            }
             None if self.hw_required && hwid.is_none() => {
-                self.reject(from, "this session needs the game's hardware identifier: update the game");
+                self.reject(from, "this session needs the game's identifier for bans: turn it on in the launcher (Settings, General), or update the game");
                 return;
             }
             None if hwid.as_deref().is_some_and(|h| self.hw_bans.iter().any(|b| b.0 == h)) => {
