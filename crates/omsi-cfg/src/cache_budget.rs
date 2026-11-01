@@ -61,8 +61,12 @@ fn scan(root: &Path, kind: Kind) -> (Usage, Vec<Candidate>) {
             }
             let modified = md.modified().unwrap_or(UNIX_EPOCH);
             usage.bytes = usage.bytes.saturating_add(md.len());
+            let incomplete = matches!(path.extension().and_then(|x| x.to_str()),
+                Some("piece" | "partpiece" | "part"));
+            // Complete sealed blobs may be evicted when idle, even if just downloaded.
+            // Only unfinished transfer pieces require the grace period.
             let eligible = !usage.server_store &&
-                (kind == Kind::Local ||
+                (kind == Kind::Local || !incomplete ||
                  modified.elapsed().is_ok_and(|age| age >= TRANSFER_GRACE));
             files.push(Candidate { path, bytes: md.len(), modified, eligible });
         }
@@ -89,7 +93,9 @@ pub fn trim(root: &Path, kind: Kind, budget: u64) -> Usage {
         let Ok(md) = fs::symlink_metadata(&item.path) else { continue };
         if !md.file_type().is_file() || md.len() != item.bytes ||
             md.modified().ok() != Some(item.modified) { continue; }
-        if kind == Kind::ClientLan &&
+        let incomplete = matches!(item.path.extension().and_then(|x| x.to_str()),
+            Some("piece" | "partpiece" | "part"));
+        if kind == Kind::ClientLan && incomplete &&
             md.modified().ok().and_then(|t| t.elapsed().ok()).is_none_or(|d| d < TRANSFER_GRACE) {
             continue;
         }
