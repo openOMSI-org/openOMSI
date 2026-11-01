@@ -1248,7 +1248,7 @@ fn rebuild_session_graphics(app: &mut App) -> bool {
         options.max_scene = r.options.max_scene;
         if !app.args.session_settings.enhanced { options.ray_tracing = false; }
     }
-    let changed = if let (Some(renderer), Some(scene)) = (app.gfx.renderer.as_mut(), app.gfx.scene.as_mut()) {
+    let changed = if let (Some(renderer), Some(scene)) = (app.renderer.as_mut(), app.scene.as_mut()) {
         renderer.rebuild_with(scene, options)
     } else { false };
     sync_live(app);
