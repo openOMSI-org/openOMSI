@@ -1764,8 +1764,14 @@ fn new_remote(
         },
         if matched {
             "lamps, switches and sound values follow theirs".to_string()
+        } else if theirs {
+            // The table hash describes the runtime's variable/animation indices;
+            // it is NOT the SHA-256 manifest of the vehicle's files.
+            // Preserve safe name-based schema negotiation, but never blindly
+            // interpret different variable tables as interchangeable indices.
+            format!("sync variable tables differ (remote {:08X}, local {:08X}): safe fallback, not a file-hash mismatch", pose.table, table.hash)
         } else {
-            format!("their vehicle files differ from ours (table {:08X}, ours {:08X}): lights and doors only", pose.table, table.hash)
+            "the exact remote vehicle is not verified here: safe placeholder/stand-in state".to_string()
         }
     );
     let animations = animation_sync::Animations::new(table.animations.clone());
