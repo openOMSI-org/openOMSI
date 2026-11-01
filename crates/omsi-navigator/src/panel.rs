@@ -265,7 +265,7 @@ impl Navigator {
         ]);
         let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("navigator") });
         gpu.render(device, queue, &mut enc, target, size, Some(wgpu::Color::TRANSPARENT), &layers, &draws);
-        queue.submit([enc.finish()]);
+        renderer.submit_with_frame(enc.finish());
     }
 
     /// The corner to pull for another size, on a navigator that is a widget.
@@ -303,7 +303,7 @@ impl Navigator {
         let draws = [Draw { buffer: 2, range: 0..n_bg, layer: 1, texture: 0 }, Draw { buffer: 2, range: n_bg..all.len() as u32, layer: 0, texture: 0 }];
         let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("navigator") });
         gpu.render(device, queue, &mut enc, target, size, Some(wgpu::Color::TRANSPARENT), &layers, &draws);
-        queue.submit([enc.finish()]);
+        renderer.submit_with_frame(enc.finish());
     }
 
     /// The marks over the map: the stops ahead, the other players, the public transport's line

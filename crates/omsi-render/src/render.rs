@@ -775,7 +775,7 @@ impl Renderer {
         // frame (wgpu checks every draw): the shadow maps, the prepass, the main pass and
         // the passes after it are finished side by side on helper threads and this one.
         let big =
-            shadow_batches.iter().map(|b| b.len()).sum::<usize>() + plan.prepass_batches.len() > 64 || !main_parts.is_empty();
+            shadow_batches.iter().map(|b| b.len()).sum::<usize>() + plan.prepass_batches.len() > 64 || !main_parts.is_empty() || (!cfg!(any(target_os = "macos", target_os = "ios")) && main_bundles.len() >= 2);
         if big && !f.env.no_post_split {
             let rest = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("after the main pass") });
             main_parts.push(std::mem::replace(&mut enc.picture, rest));
