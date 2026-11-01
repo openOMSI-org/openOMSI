@@ -113,7 +113,7 @@ fn serve_with_accept(
                         .connections
                         .lock()
                         .unwrap_or_else(|e| e.into_inner());
-                    if connections.len() >= MAX_CONNECTIONS || connections.keys().filter(|addr| addr.ip() == peer.ip()).count() >= 8 {
+                    if connections.len() >= MAX_CONNECTIONS {
                         log::info!(
                             "LAN mods: {MAX_CONNECTIONS} connections open already; try again later"
                         );

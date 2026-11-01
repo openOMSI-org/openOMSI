@@ -131,7 +131,17 @@ fn model_manifest(root: &Path, bus: &str, ty: &omsi_sim::VehicleType) -> Result<
     if let Some(e) = manifest.entries.iter().find(|e| refuse_path(&e.path).is_some() || e.size > MAX_FILE) {
         return Err(format!("server vehicle contains a refused file: {}", e.path));
     }
-    Ok((manifest, files.into_iter().map(|(_, p)| p).collect()))
+    let sources = sources_in_order(&manifest, files)?;
+    Ok((manifest, sources))
+}
+
+// validated() sorts by normalized identity keys, whereas listed() sorts by the
+// displayed path. Preserve GET indexes even with mixed-case or Unicode names.
+fn sources_in_order(manifest: &identity::VehicleManifest, files: Vec<(String, PathBuf)>) -> Result<Vec<PathBuf>, String> {
+    let mut sources: HashMap<_, _> = files.into_iter().filter_map(|(name, path)| identity::key(&name).map(|key| (key, path))).collect();
+    manifest.entries.iter().map(|entry| {
+        identity::key(&entry.path).and_then(|key| sources.remove(&key)).ok_or_else(|| format!("{}: no verified source", entry.path))
+    }).collect()
 }
 
 /// The exact bus and selected paint used for remote-player fingerprint checks.
@@ -172,7 +182,8 @@ pub(super) fn exact(root: &Path, bus: &str, paint: &str) -> Result<(Manifest, Ve
     if let Some(e) = m.entries.iter().find(|e| refuse_path(&e.path).is_some() || e.size > MAX_FILE) {
         return Err(format!("server vehicle contains a refused file: {}", e.path));
     }
-    Ok((Manifest { map: String::new(), bus, entries: m.entries }, files.into_iter().map(|(_, p)| p).collect()))
+    let sources = sources_in_order(&m, files)?;
+    Ok((Manifest { map: String::new(), bus, entries: m.entries }, sources))
 }
 
 /// A bounded ASCII request: paths and paint names are hex-encoded UTF-8 to preserve spaces.
@@ -191,6 +202,18 @@ pub(super) fn unhex_text(text: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn normalized_manifest_order_keeps_get_sources_aligned() {
+        let names = ["Vehicles/Test/main.bus", "Vehicles/Test/Z.dds", "Vehicles/Test/a.dds"];
+        let entries = names.iter().map(|path| Entry { path: path.to_string(), size: 1, sha256: "ab".repeat(32) }).collect();
+        let manifest = identity::VehicleManifest { bus: names[0].into(), entries }.validated().unwrap();
+        let files = names.iter().map(|name| (name.to_string(), PathBuf::from(name))).collect();
+        let sources = sources_in_order(&manifest, files).unwrap();
+        for (entry, source) in manifest.entries.iter().zip(sources) {
+            assert_eq!(Path::new(&entry.path), source);
+        }
+    }
+
     #[test]
     fn cache_deduplicates_case_variants_and_negative_results() {
         let cache = Cache::default();
