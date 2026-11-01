@@ -592,6 +592,9 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) -> Option<crate::m
             let session = lan.session;
             let local_fleet = local_fleet::verified(args, lan);
             if local_fleet { log::info!("LAN: installed fleet matches the announced content; no bus download needed"); }
+            let needs_selected_download = local_fleet::requires_server_download(
+                args.allow_server_fleet, args.bus.is_some(), local_fleet,
+            );
             // the host's TCP port is not always reachable (a router forwards the UDP session
             // only, or we came in over a WebSocket): the files go through its tunnel then
             let joined_url = crate::gateway::joined_url();
@@ -611,7 +614,7 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) -> Option<crate::m
                         note(lan, format!("Host's mods could not be downloaded: {why}"));
                         // Never fall through to a different local bus version after
                         // a player explicitly selected the server's fleet package.
-                        if args.allow_server_fleet && args.bus.is_some() && !local_fleet {
+                        if needs_selected_download {
                             args.mod_fetch_error = Some(why.into());
                         }
                         return None;
@@ -625,7 +628,7 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) -> Option<crate::m
             let froot = args.root.clone();
             // The old map-fetch path remains available, but selected bus
             // downloads require an explicit opt-in from the launcher or CLI.
-            let selected_bus = args.bus.clone().filter(|_| args.allow_server_fleet && !local_fleet);
+            let selected_bus = args.bus.clone().filter(|_| needs_selected_download);
             let selected_paint = args.paint.clone();
             let selected_requested = selected_bus.is_some();
             let worker = std::thread::spawn(move || {
