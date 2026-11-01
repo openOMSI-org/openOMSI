@@ -614,3 +614,22 @@ fn full_bus_reaction_round_trips_through_both_settings_writers() {
         }
     }
 }
+
+#[test]
+fn graphics_brightness_defaults_clamp_and_roundtrip() {
+    let defaults = Settings::from_text("");
+    assert_eq!((defaults.road_glare, defaults.traffic_headlights), (1.0, 1.0));
+    let value = Settings::from_text("graphics=enhanced\nroad_glare=0.25\ntraffic_headlights=1.75\n");
+    assert_eq!((value.road_glare, value.traffic_headlights), (0.25, 1.75));
+    let clamped = Settings::from_text("road_glare=-5\ntraffic_headlights=999\n");
+    assert_eq!((clamped.road_glare, clamped.traffic_headlights), (0.0, 2.0));
+    let invalid = Settings::from_text("road_glare=NaN\ntraffic_headlights=inf\n");
+    assert_eq!((invalid.road_glare, invalid.traffic_headlights), (1.0, 1.0));
+    let mut ui = omsi_launcher_lib::settings_from_text(None);
+    ui["road_glare"] = serde_json::json!(0.3);
+    ui["traffic_headlights"] = serde_json::json!(1.6);
+    let game = Settings::from_text(&omsi_launcher_lib::settings_to_text(&ui, None));
+    assert!((game.road_glare - 0.3).abs() < 0.0001);
+    assert!((game.traffic_headlights - 1.6).abs() < 0.0001);
+}
+

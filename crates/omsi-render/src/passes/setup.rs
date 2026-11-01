@@ -443,7 +443,7 @@ impl Renderer {
                 }
                 std::array::from_fn(|r| std::array::from_fn(|c| at[r * 4 + c]))
             },
-            lod: [self.fsr_mip_bias(f), 0.0, 0.0, 0.0],
+            lod: [self.fsr_mip_bias(f), lighting.road_glare.clamp(0.0, 2.0), 0.0, 0.0],
             spot: classic_spot(&scene.lights, ro),
         };
         self.queue

@@ -18,6 +18,8 @@ pub(super) fn option_now(app: &App, verb: &str, arg: &str) -> Option<f32> {
         "night_brightness" => s.night_brightness,
         "fsr_sharpness" => s.fsr_sharpness,
         "reflections" => s.reflections,
+        "road_glare" => s.road_glare,
+        "traffic_headlights" => s.traffic_headlights,
         "led_mips" => s.led_mips,
         "ctrl_deadzone" => s.ctrl_deadzone,
         "pedal_t" => s.pedal_throttle,
@@ -129,6 +131,14 @@ pub(super) fn option_set(app: &mut App, verb: &str, arg: &str, v: f32) -> Option
         "reflections" => {
             app.settings.reflections = v.clamp(0.0, 1.0);
             Some(("reflections", app.settings.reflections.to_string()))
+        }
+        "road_glare" => {
+            app.settings.road_glare = v.clamp(0.0, 2.0);
+            Some(("road_glare", app.settings.road_glare.to_string()))
+        }
+        "traffic_headlights" => {
+            app.settings.traffic_headlights = v.clamp(0.0, 2.0);
+            Some(("traffic_headlights", app.settings.traffic_headlights.to_string()))
         }
         "led_mips" => {
             app.settings.led_mips = v.clamp(0.0, 4.0);

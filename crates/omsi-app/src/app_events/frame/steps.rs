@@ -559,6 +559,7 @@ pub(crate) fn dress_lighting(
     lighting.windy_trees = settings.windy_trees();
     lighting.night_brightness = settings.night_brightness;
     lighting.reflection_strength = settings.reflections;
+    lighting.road_glare = settings.road_glare;
     lighting.puddles = match settings.puddles.as_str() { "off" => 0, "low" => 1, _ => 2 };
 }
 

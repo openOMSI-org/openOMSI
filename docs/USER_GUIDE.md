@@ -600,13 +600,15 @@ apart.
 
 The quality presets (*Quality preset*: Low, Medium, High, Extra, Max, Ultra) set the graphics mode
 as well as the options: Low is Vanilla, Medium Vanilla+ (what the game starts with), High and above
-Enhanced - High enabling the street lamps' shadows, the clouds' and the glow, Extra with the street light
+Enhanced - High enabling the street lamps' shadows, Extra adding cloud shadows and light glow along with the street light
 and the reflections in full, Max with every light's shadows, the mirrors drawn as the picture and
 shadow maps of 4096, Ultra with Real-Time Ray Tracing on top of all of it. It shares Enhanced's tone curve, with the light a shade warmer and a light
 vignette.
 `OMSI_NO_RT=1` opens no ray queries, `OMSI_NO_RT_GRADE=1` leaves its grade out,
 `OMSI_RT_REFL_HALF=1` traces the reflections at half size, `OMSI_DEBUG_RT=n` (see
 `crates/omsi-render/src/rt.rs`) shows its buffers.
+
+*Road sunlight glare* (`road_glare=0..2`, default 1) scales direct sun highlights on roads and ground in Enhanced without changing diffuse daylight or puddle reflections. *Traffic headlight brightness* (`traffic_headlights=0..2`, default 1) changes white headlamp glows and beams on other vehicles in Vanilla and Vanilla+, not the player's lamps or the street lamps. Both controls apply while driving.
 
 Built-up snow on roads and roofs (`road_snow=0|1`) is **off by default**; enabling it in Graphics adds gradual snow accumulation and tyre tracks. With it off, the weather's conventional OMSI 2 road snow remains available. Existing saved preferences are preserved.
 

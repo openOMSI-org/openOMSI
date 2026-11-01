@@ -74,6 +74,7 @@ pub(crate) struct CameraUniform {
     /// x: the textures' mip bias - negative (log2 of the scale) while FSR 1 scales the picture
     /// up, as AMD advises for it: its textures as detailed as the window's size wants, not
     /// the smaller picture's (letters, gauges and signs came out soft); 0 otherwise.
+    /// y: Enhanced road sunlight glare strength, default 1.
     pub(crate) lod: [f32; 4],
     /// The classic picture's headlight, Omsi.exe's one Direct3D spot light (the player's
     /// `[spotlight]`, see the scene shader's `classic_spot`): [0] xyz where its light leaves

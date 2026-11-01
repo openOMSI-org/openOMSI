@@ -94,6 +94,7 @@ pub(super) fn lights(cx: LightsCx, dt: f32, daylight: omsi_sim::Daylight, behind
             w, scene, &daylight, cam.position, &vehicles, cone,
             lights::VehicleSmoke::from_setting(&cx.common.settings.vehicle_smoke),
             cx.player.player.is_some(),
+            cx.common.settings.traffic_headlights,
         );
         drop(vehicles);
         if cx.view.cam.flashlight {

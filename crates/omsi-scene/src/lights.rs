@@ -936,6 +936,7 @@ pub fn collect(
     cone: ConeWeather,
     smoke_mode: VehicleSmoke,
     player_first: bool,
+    traffic_headlights: f32,
 ) {
     scene.lights.clear();
     scene.coronas.clear();
@@ -1040,7 +1041,24 @@ pub fn collect(
         if d > CORONA_RANGE || (!v.ai_visuals && d > UNSEEN_LIGHT_RANGE) {
             continue;
         }
+        let corona_start = scene.coronas.len();
+        let light_start = scene.lights.len();
         vehicle_lights(v, &mut scene.coronas, &mut scene.lights, player_first && k == 0, &world.cookie_fades, beams.contains(&k));
+        // Only other vehicles, only Vanilla and Vanilla+: leave the driven bus's beam,
+        // the street lamps and all amber/red traffic lights as they were.
+        if !cone.enhanced && !(player_first && k == 0) {
+            let gain = traffic_headlights.clamp(0.0, 2.0);
+            for corona in &mut scene.coronas[corona_start..] {
+                if corona.color.iter().all(|c| *c >= 0.65) {
+                    corona.brightness *= gain;
+                }
+            }
+            for light in &mut scene.lights[light_start..] {
+                if light.mode == LightMode::Vanilla && light.d3d_spot.is_some() {
+                    light.intensity *= gain;
+                }
+            }
+        }
         // light_vehicles puts the player's bus first (if any). LAN guests and AI
         // traffic must not be mistaken for it when no bus is driven locally.
         let vehicle_smoke_enabled = match smoke_mode {
