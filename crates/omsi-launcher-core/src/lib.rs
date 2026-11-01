@@ -13,6 +13,7 @@ pub mod depot;
 pub mod index;
 pub mod install;
 pub mod instances;
+pub mod storage;
 pub mod mods;
 pub mod optimise;
 mod hof_sync;

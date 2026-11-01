@@ -1,0 +1,92 @@
+# Cache manager translations used by the launcher (English source is the key).
+_version: 2
+
+"Disk cache and multiplayer downloads":
+  pt: "Cache em disco e downloads do multiplayer"
+  es: "Caché de disco y descargas multijugador"
+  pt-pt: "Cache em disco e downloads do multiplayer"
+
+"Soft limits: active downloads may temporarily exceed them, then older files are removed when safe.":
+  pt: "Limites flexíveis: downloads ativos podem ultrapassá-los temporariamente; os arquivos antigos são removidos quando for seguro."
+  es: "Límites flexibles: las descargas activas pueden superarlos temporalmente; los archivos antiguos se eliminan cuando sea seguro."
+  pt-pt: "Limites flexíveis: downloads ativos podem ultrapassá-los temporariamente; os arquivos antigos são removidos quando for seguro."
+
+"Local cache":
+  pt: "Cache local"
+  es: "Caché local"
+  pt-pt: "Cache local"
+
+"Maps, processed textures and other rebuildable data":
+  pt: "Mapas, texturas processadas e outros dados que podem ser recriados"
+  es: "Mapas, texturas procesadas y otros datos regenerables"
+  pt-pt: "Mapas, texturas processadas e outros dados que podem ser recriados"
+
+"Multiplayer downloads":
+  pt: "Downloads do multiplayer"
+  es: "Descargas multijugador"
+  pt-pt: "Downloads do multiplayer"
+
+"Sealed files reused across sessions":
+  pt: "Arquivos protegidos reutilizados entre sessões"
+  es: "Archivos protegidos reutilizados entre sesiones"
+  pt-pt: "Arquivos protegidos reutilizados entre sessões"
+
+"Close all running games to clean cached files.":
+  pt: "Feche todas as partidas em execução para limpar o cache."
+  es: "Cierra todas las partidas en ejecución para limpiar la caché."
+  pt-pt: "Feche todas as partidas em execução para limpar o cache."
+
+"Server vehicle files are protected by the server retention policy.":
+  pt: "Os arquivos de veículos do servidor são protegidos pela política de retenção do servidor."
+  es: "Los vehículos del servidor están protegidos por su política de retención."
+  pt-pt: "Os arquivos de veículos do servidor são protegidos pela política de retenção do servidor."
+
+"Refresh usage":
+  pt: "Atualizar uso"
+  es: "Actualizar uso"
+  pt-pt: "Atualizar uso"
+
+"Clean to limits":
+  pt: "Limpar até os limites"
+  es: "Limpiar hasta los límites"
+  pt-pt: "Limpar até os limites"
+
+"Clear local cache...":
+  pt: "Limpar cache local..."
+  es: "Borrar caché local..."
+  pt-pt: "Limpar cache local..."
+
+"Clear multiplayer downloads...":
+  pt: "Limpar downloads do multiplayer..."
+  es: "Borrar descargas multijugador..."
+  pt-pt: "Limpar downloads do multiplayer..."
+
+"Freed":
+  pt: "Espaço liberado"
+  es: "Espacio liberado"
+  pt-pt: "Espaço liberado"
+
+"Checking cache size...":
+  pt: "Verificando tamanho do cache..."
+  es: "Comprobando tamaño de caché..."
+  pt-pt: "Verificando tamanho do cache..."
+
+"Clear downloaded cache?":
+  pt: "Limpar os arquivos em cache?"
+  es: "¿Borrar archivos en caché?"
+  pt-pt: "Limpar os arquivos em cache?"
+
+"Cached files can be downloaded or rebuilt again. Installed mods, saves and settings will not be removed. Close the game first.":
+  pt: "Os arquivos em cache podem ser baixados ou recriados novamente. Mods instalados, jogos salvos e configurações não serão apagados. Feche o jogo antes."
+  es: "Los archivos en caché se pueden descargar o reconstruir. No se borrarán mods instalados, partidas guardadas ni ajustes. Cierra el juego primero."
+  pt-pt: "Os arquivos em cache podem ser baixados ou recriados novamente. Mods instalados, jogos salvos e configurações não serão apagados. Feche o jogo antes."
+
+"Clear cache":
+  pt: "Limpar cache"
+  es: "Borrar caché"
+  pt-pt: "Limpar cache"
+
+"Cache cleanup completed.":
+  pt: "Limpeza do cache concluída."
+  es: "Limpieza de caché completada."
+  pt-pt: "Limpeza do cache concluída."

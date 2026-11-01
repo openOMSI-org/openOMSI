@@ -9,7 +9,11 @@ use std::sync::{Arc, Mutex};
 pub fn table(lang: &str) -> Arc<HashMap<String, String>> {
     static READ: Mutex<Option<HashMap<String, Arc<HashMap<String, String>>>>> = Mutex::new(None);
     let mut g = READ.lock().unwrap_or_else(|e| e.into_inner());
-    g.get_or_insert_with(HashMap::new).entry(lang.to_string()).or_insert_with(|| Arc::new(omsi_launcher_lib::i18n::table(omsi_launcher_lib::i18n::TABLES, lang))).clone()
+    g.get_or_insert_with(HashMap::new).entry(lang.to_string()).or_insert_with(|| {
+        let mut merged = omsi_launcher_lib::i18n::table(omsi_launcher_lib::i18n::TABLES, lang);
+        merged.extend(omsi_launcher_lib::i18n::table(include_str!("../../omsi-app/locales/storage.yml"), lang));
+        Arc::new(merged)
+    }).clone()
 }
 
 #[cfg(test)]
