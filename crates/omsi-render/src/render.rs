@@ -6,13 +6,14 @@ use crate::*;
 /// One single-sampled full-screen pass.
 pub(crate) fn post_pass(
     encoder: &mut wgpu::CommandEncoder,
+    label: &'static str,
     view: &wgpu::TextureView,
     timer: Option<wgpu::RenderPassTimestampWrites<'_>>,
     pipeline: &wgpu::RenderPipeline,
     bg: &wgpu::BindGroup,
 ) {
     let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("post"),
+        label: Some(label),
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
             view,
             depth_slice: None,

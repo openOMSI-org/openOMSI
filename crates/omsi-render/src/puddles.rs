@@ -768,6 +768,7 @@ impl Renderer {
         }
         post_pass(
             encoder,
+            "puddle rays",
             &targets.trace,
             pass_timer(queries, timed, "puddle rays"),
             &pipelines.trace,
@@ -776,6 +777,7 @@ impl Renderer {
         let filter_timer = pass_timer(queries, timed, "puddle filter");
         post_pass(
             encoder,
+            "puddle filter x",
             &targets.blur,
             filter_timer
                 .as_ref()
@@ -789,6 +791,7 @@ impl Renderer {
         );
         post_pass(
             encoder,
+            "puddle filter y",
             &targets.filtered,
             filter_timer.map(|t| wgpu::RenderPassTimestampWrites {
                 query_set: t.query_set,
@@ -800,6 +803,7 @@ impl Renderer {
         );
         post_pass(
             encoder,
+            "puddle resolve",
             &targets.view,
             pass_timer(queries, timed, "puddle resolve"),
             &pipelines.resolve,

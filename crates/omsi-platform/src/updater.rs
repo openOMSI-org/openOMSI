@@ -69,7 +69,7 @@ pub struct Release {
     pub asset_name: String,
     pub asset_url: String,
     pub size: u64,
-    /// `sha256:<hex>` as GitHub lists it for the asset (None for releases older than that).
+    /// The verified SHA-256 digest of the release asset.
     pub sha256: Option<String>,
 }
 
@@ -412,8 +412,7 @@ fn latest_on(beta: bool) -> anyhow::Result<Option<Release>> {
 }
 
 /// The latest release as github.com's `releases/latest` redirect names it, with this
-/// platform's file at the address `release.yml` publishes it (no SHA-256: GitHub's TLS is
-/// all that vouches for it then, and the size is checked by the download itself).
+/// platform's file at the address `release.yml` publishes it.
 fn latest_from_site() -> anyhow::Result<Option<Release>> {
     let page = format!("{REPO_URL}/releases/latest");
     let r = with_retries("asking github.com", || agent().head(&page).call()).map_err(|e| anyhow::anyhow!("{}", short_error(&e)))?;
@@ -433,7 +432,14 @@ fn latest_from_site() -> anyhow::Result<Option<Release>> {
         Err(ureq::Error::Status(404, _)) => return Ok(None),
         Err(e) => anyhow::bail!("{}", short_error(&e)),
     };
-    Ok(Some(Release { version, page: format!("{REPO_URL}/releases/tag/{tag}"), notes: String::new(), asset_name: name, asset_url: url, size, sha256: None }))
+    let sums_url = format!("{REPO_URL}/releases/download/{tag}/SHA256SUMS");
+    let sums = match fetch_text(&sums_url) {
+        Ok(s) => s,
+        Err(ureq::Error::Status(404, _)) => return Ok(None),
+        Err(e) => anyhow::bail!("{}", short_error(&e)),
+    };
+    let Some(sha256) = sha256sum_for(&sums, &name) else { return Ok(None) };
+    Ok(Some(Release { version, page: format!("{REPO_URL}/releases/tag/{tag}"), notes: String::new(), asset_name: name, asset_url: url, size, sha256: Some(sha256) }))
 }
 
 pub fn beta_channel() -> bool {
@@ -489,6 +495,7 @@ fn release_of(v: &serde_json::Value) -> anyhow::Result<Option<Release>> {
     let version = tag.trim_start_matches(['v', 'V']).to_string();
     let Some(want) = asset_name(&version) else { return Ok(None) };
     let Some(a) = v["assets"].as_array().and_then(|a| a.iter().find(|a| a["name"].as_str() == Some(want.as_str()))) else { return Ok(None) };
+    let Some(sha256) = parse_sha256(a["digest"].as_str()) else { return Ok(None) };
     Ok(Some(Release {
         version,
         page: v["html_url"].as_str().map(str::to_string).unwrap_or_else(|| format!("{REPO_URL}/releases/tag/{tag}")),
@@ -496,8 +503,22 @@ fn release_of(v: &serde_json::Value) -> anyhow::Result<Option<Release>> {
         asset_name: want,
         asset_url: a["browser_download_url"].as_str().ok_or_else(|| anyhow::anyhow!("the release file has no address"))?.to_string(),
         size: a["size"].as_u64().unwrap_or(0),
-        sha256: a["digest"].as_str().and_then(|d| d.strip_prefix("sha256:")).map(|h| h.to_ascii_lowercase()),
+        sha256: Some(sha256),
     }))
+}
+
+fn parse_sha256(digest: Option<&str>) -> Option<String> {
+    let hash = digest?.strip_prefix("sha256:")?;
+    (hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit())).then(|| hash.to_ascii_lowercase())
+}
+
+fn sha256sum_for(sums: &str, name: &str) -> Option<String> {
+    sums.lines().find_map(|line| {
+        let mut fields = line.split_whitespace();
+        let hash = fields.next()?;
+        let listed_name = fields.next()?.trim_start_matches(['*', ' ']);
+        if listed_name == name { parse_sha256(Some(&format!("sha256:{hash}"))) } else { None }
+    })
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -569,6 +590,7 @@ fn checked_note(file: &Path) -> PathBuf {
 /// now when `r` brings one.
 pub fn downloaded(r: &Release) -> bool {
     use sha2::Digest;
+    let Some(want) = r.sha256.as_deref() else { return false };
     let file = download_dir().join(&r.asset_name);
     let note = std::fs::read_to_string(checked_note(&file)).unwrap_or_default();
     let len = std::fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
@@ -576,10 +598,9 @@ pub fn downloaded(r: &Release) -> bool {
     if len == 0 || n.parse::<u64>().ok() != Some(len) || (r.size > 0 && r.size != len) {
         return false;
     }
-    match (r.sha256.as_deref(), sha) {
-        (None, _) => true,
-        (Some(want), got) if got == want => true,
-        (Some(want), "-") => {
+    match sha {
+        got if got == want => true,
+        "-" => {
             let Ok(mut f) = std::fs::File::open(&file) else { return false };
             // (read in blocks: sha2 0.11's hasher is no `io::Write` any more)
             let mut h = sha2::Sha256::new();
@@ -604,6 +625,7 @@ pub fn downloaded(r: &Release) -> bool {
 /// times, before the download counts as failed.
 fn download(r: &Release, to: &Path, status: &Mutex<Status>) -> anyhow::Result<()> {
     use sha2::Digest;
+    let Some(want) = r.sha256.as_deref() else { anyhow::bail!("the release has no verified SHA-256") };
     if downloaded(r) {
         return Ok(());
     }
@@ -679,15 +701,13 @@ fn download(r: &Release, to: &Path, status: &Mutex<Status>) -> anyhow::Result<()
     if r.size > 0 && done != r.size {
         anyhow::bail!("the download stopped at {} of {} bytes", done, r.size);
     }
-    if let Some(want) = &r.sha256 {
-        let got: String = hasher.finalize().iter().map(|b| format!("{b:02x}")).collect();
-        if &got != want {
-            let _ = std::fs::remove_file(&part);
-            anyhow::bail!("the downloaded file is damaged (SHA-256 {got}, GitHub lists {want})");
-        }
+    let got: String = hasher.finalize().iter().map(|b| format!("{b:02x}")).collect();
+    if got != want {
+        let _ = std::fs::remove_file(&part);
+        anyhow::bail!("the downloaded file is damaged (SHA-256 {got}, GitHub lists {want})");
     }
     std::fs::rename(&part, to)?;
-    let _ = std::fs::write(checked_note(to), format!("{} {}", done, r.sha256.as_deref().unwrap_or("-")));
+    let _ = std::fs::write(checked_note(to), format!("{} {}", done, want));
     Ok(())
 }
 
@@ -1105,11 +1125,17 @@ mod tests {
             "tag_name": "v0.1.9", "html_url": "https://github.com/openOMSI-org/openOMSI/releases/tag/v0.1.9", "body": "notes",
             "assets": [
                 {"name": "openOMSI-0.1.9-server-linux-x64.zip", "browser_download_url": "https://x/server", "size": 5},
-                {"name": name, "browser_download_url": "https://x/mine", "size": 42, "digest": "sha256:ABCDEF"}
+                {"name": name, "browser_download_url": "https://x/mine", "size": 42, "digest": format!("sha256:{}", "0".repeat(64))}
             ]
         });
         let r = parse_release(&v, "0.1.7", false).unwrap().unwrap();
-        assert_eq!((r.version.as_str(), r.asset_url.as_str(), r.size, r.sha256.as_deref()), ("0.1.9", "https://x/mine", 42, Some("abcdef")));
+        assert_eq!((r.version.as_str(), r.asset_url.as_str(), r.size, r.sha256.as_deref()), ("0.1.9", "https://x/mine", 42, Some("0000000000000000000000000000000000000000000000000000000000000000")));
+        let mut malformed = v.clone();
+        malformed["assets"][1]["digest"] = serde_json::json!("sha256:ABCDEF");
+        assert!(parse_release(&malformed, "0.1.7", false).unwrap().is_none());
+        let mut missing = v.clone();
+        missing["assets"][1]["digest"] = serde_json::Value::Null;
+        assert!(parse_release(&missing, "0.1.7", false).unwrap().is_none());
         // not newer, a draft, or without this platform's file: nothing to offer
         assert!(parse_release(&v, "0.1.9", false).unwrap().is_none());
         let mut d = v.clone();
@@ -1129,7 +1155,7 @@ mod tests {
             let version = tag.trim_start_matches('v');
             serde_json::json!({
                 "tag_name": tag, "published_at": date, "html_url": format!("https://x/{tag}"),
-                "assets": [{"name": asset_name(version).unwrap(), "browser_download_url": format!("https://x/{tag}.zip"), "size": 7}]
+                "assets": [{"name": asset_name(version).unwrap(), "browser_download_url": format!("https://x/{tag}.zip"), "size": 7, "digest": format!("sha256:{}", "0".repeat(64))}]
             })
         };
         let mut draft = release("v0.2.40", "2026-10-13T01:00:00Z");
@@ -1166,7 +1192,7 @@ mod tests {
             let tag = format!("v0.{minor}.{n}");
             serde_json::json!({
                 "tag_name": tag, "prerelease": prerelease, "published_at": "2026-10-20T00:00:00Z",
-                "assets": [{"name": asset_name(&tag[1..]).unwrap(), "browser_download_url": format!("https://x/{tag}.zip"), "size": 7}]
+                "assets": [{"name": asset_name(&tag[1..]).unwrap(), "browser_download_url": format!("https://x/{tag}.zip"), "size": 7, "digest": format!("sha256:{}", "0".repeat(64))}]
             })
         };
         let release = |n: u32, prerelease: bool| release_of_minor(3, n, prerelease);
@@ -1212,7 +1238,7 @@ mod tests {
             let asset = asset_name(version).unwrap_or_default();
             serde_json::json!({
                 "tag_name": tag, "prerelease": prerelease, "draft": draft, "published_at": "2026-10-20T00:00:00Z",
-                "assets": [{"name": asset, "browser_download_url": format!("https://x/{tag}.zip"), "size": 7}]
+                "assets": [{"name": asset, "browser_download_url": format!("https://x/{tag}.zip"), "size": 7, "digest": format!("sha256:{}", "0".repeat(64))}]
             })
         };
         let beta = release("v0.3.7", true, false);

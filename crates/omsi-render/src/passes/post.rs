@@ -69,12 +69,13 @@ impl Renderer {
             // the picture for the next frame's bounced light (the window's only)
             if lead_view && crate::lighting::bounce_wanted(f.ao_on, f.enhanced_frame, self.street_light()) {
                 if let Some(ao) = self.targets.ao.as_ref() {
-                    post_pass(encoder, &ao.hist_view, None, &self.tone.post.history, puddles.map(|p| &p.down_bg).unwrap_or(&h.down_bg[0]));
+                    post_pass(encoder, "exposure history", &ao.hist_view, None, &self.tone.post.history, puddles.map(|p| &p.down_bg).unwrap_or(&h.down_bg[0]));
                 }
             }
             for i in 0..levels {
                 post_pass(
                     encoder,
+                    "glow downsample",
                     &h.down[i],
                     None,
                     if i == 0 {
@@ -91,6 +92,7 @@ impl Renderer {
             if lead_view {
                 post_pass(
                     encoder,
+                    "exposure meter",
                     &self.tone.meter_view,
                     None,
                     &self.tone.post.meter,
@@ -99,6 +101,7 @@ impl Renderer {
                 let front = self.tone.adapt_front;
                 post_pass(
                     encoder,
+                    "exposure adapt",
                     &self.tone.adapt_views[1 - front],
                     None,
                     &self.tone.post.adapt,
@@ -119,7 +122,7 @@ impl Renderer {
                 } else {
                     None
                 };
-                post_pass(encoder, &h.up[i], timer, &self.tone.post.up, &h.up_bg[i]);
+                post_pass(encoder, "glow upscale", &h.up[i], timer, &self.tone.post.up, &h.up_bg[i]);
             }
             let final_view = if fxaa { &h.ldr } else { scene_view };
             let tonemap_bg = &puddles.map(|p| &p.tonemap_bg).unwrap_or(&h.tonemap_bg)[self.tone.adapt_front];
