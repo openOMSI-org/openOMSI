@@ -54,8 +54,10 @@ pub struct DoorWants {
 }
 
 /// Sale events to play money sounds
+#[derive(Debug, PartialEq)]
 pub enum SaleEvent {
     PassengerGaveMoney,
+    PassengerTookTicket(usize),
 }
 
 /// A bus as the passengers know it.

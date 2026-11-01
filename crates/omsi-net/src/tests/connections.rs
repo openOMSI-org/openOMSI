@@ -1,4 +1,5 @@
 use super::*;
+use crate::receive_budget::{receive_budget_reached, RECEIVE_PACKET_LIMIT, RECEIVE_TIME_BUDGET};
 
 #[test]
 fn players_without_a_bus_stay_in_the_session() {
@@ -472,4 +473,30 @@ fn each_host_owner_gets_its_own_identifier_of_the_machine() {
     }
     assert_ne!(ids[0], ids[1]);
     assert!(!ids.iter().any(|i| i == machine));
+}
+
+#[test]
+fn receive_budget_bounds_each_tick() {
+    assert!(!receive_budget_reached(0, Duration::ZERO));
+    assert!(!receive_budget_reached(RECEIVE_PACKET_LIMIT - 1, Duration::ZERO));
+    assert!(receive_budget_reached(RECEIVE_PACKET_LIMIT, Duration::ZERO));
+    assert!(receive_budget_reached(0, RECEIVE_TIME_BUDGET));
+}
+
+#[test]
+fn rate_limit_diagnostics_preserve_packet_categories() {
+    let mut host = LanSession::host(0, "host", WorldInfo::default(), false).unwrap();
+    let from = SocketAddr::from(([127, 0, 0, 1], 30000));
+    host.peers.insert(2, Peer::new(Some(from), Pose::default()));
+    let seen = host.peers[&2].last_seen;
+
+    // Rejected flood packets must not renew liveness.
+    assert!(host.checked_peer(2, from, (0.0, 0.0), PeerTraffic::Sounds).is_none());
+    assert!(host.checked_peer(2, from, (0.0, 0.0), PeerTraffic::Variables).is_none());
+    let peer = &host.peers[&2];
+    assert_eq!(peer.dropped, 2);
+    assert_eq!(peer.drop_counts[PeerTraffic::Sounds as usize], 1);
+    assert_eq!(peer.drop_counts[PeerTraffic::Variables as usize], 1);
+    assert_eq!(peer.drop_counts[PeerTraffic::State as usize], 0);
+    assert_eq!(peer.last_seen, seen);
 }

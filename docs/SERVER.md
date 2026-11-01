@@ -50,7 +50,8 @@ settings of `server.cfg` - name, players at most, the UDP and web ports, the tun
 password (typed hidden; 12 characters at least) - with what the file has in brackets, kept
 with Enter. Every time, it lists the installed maps by number (the last one marked, taken
 with Enter) and starts the server on the one picked, without changing `map` in `server.cfg`;
-the output goes to the window and to `server.log`, and when the server stops on an error it
+the output goes to the window and to `server.log` (begun anew at every start, see [What the
+server keeps about its players](#what-the-server-keeps-about-its-players)), and when the server stops on an error it
 says what the exit code means. Asked once per map, it makes `start-<map>.cmd` (or `.sh`)
 beside it: that starts the same map again with no question. `run-server.cmd -Setup`
 (`run-server.sh --setup`) asks for the folder and the settings again; `-Map maps/<folder>/global.cfg`
@@ -453,7 +454,10 @@ commands go the same way as the others and are in the audit log, with what becam
 **The audit log.** Every login, refused password, operation and what became of it is written to
 `admin-audit.log` beside `server.cfg` (a JSON object a line: when, who - `player 3 'Name'`,
 `local tool (POST /admin)`, `web#2 (address)` -, the role, the action, the player, the result),
-put aside as `admin-audit.log.1` past 1 MB, so it never takes more than about 2 MB. No password
+put aside as `admin-audit.log.1` past 1 MB, keeping the previous backup as `admin-audit.log.2`
+(about 3 MB total). Web logins and refused passwords keep their **whole source addresses**
+in this audit file, regardless of `log_addresses`; that setting controls only the general
+game/server log. No password
 or token is ever written to it; names, reasons and chat lines are kept as cleaned text.
 
 ## Machine bans
@@ -532,6 +536,26 @@ and **icons are not cleared at all yet**: no image classifier is bundled, so eve
 is "unchecked" and the public list shows the default one. An open-licence classifier (a small
 Apache-2.0 or MIT model run by `tract`, downloaded to the content folder with a checksum, not
 committed) plugs in with `set_image_classifier` and nothing else changes.
+
+## What the server keeps about its players
+
+Tell your players what is kept (the motd is a good place). `server.cfg` lists the same at its
+end.
+
+| What | Where | How long |
+|---|---|---|
+| Who joined and left, their names, **the chat (every message)**, the admins' actions, errors | `server.log` beside `server.cfg` (`run-server` and `start.sh`; Docker: `docker compose logs`) | A new file at every start and past `log_max_mb` (20 MB; 0: no limit); `log_keep` (5) earlier ones as `server.1.log` (the newest) … `server.5.log`; `log_keep = 0` keeps none. Docker: five files of 20 MB (`docker-compose.yml`) |
+| The players' internet addresses | the same log | A public address keeps only its network (`203.0.113.x`, `2001:db8:85a3::x`); the local network's and this machine's are written whole. `log_addresses = 1` writes them whole (for an abuse report) |
+| Logins, refused passwords, the admins' and moderators' operations; **whole source addresses** for web logins and refused passwords, regardless of `log_addresses` | `admin-audit.log` | Rotated past 1 MB, keeping `admin-audit.log.1` and `.2`: about 3 MB total |
+| Banned machines (their hardware identifier) | `bans.json`, `owner_bans` | Until the ban is lifted |
+| The players' buses (with `accept_uploads = 1`) | `~/.openomsi/lan-store` | `uploads_keep_days` (30) after the last use |
+| Name, icon, map, players, motd (not the players' names) | the public list, with `public_server = 1` | Forgotten three minutes after the server stops |
+| Names, buses, lines and positions | anyone who asks `GET /players`, with `share_positions = 1` | Live only |
+
+Voice is passed on and never recorded or decoded. The address cut is the game's own logger, so
+a game hosting a session from the launcher (`game.log`, written again at every start) cuts them
+the same way. Before a crash report is turned into a GitHub issue, the launcher also takes the
+account's folder and name out of it (`~`, `<user>`) and the driver's name (`Drivers/<driver>.odr`).
 
 ## License
 

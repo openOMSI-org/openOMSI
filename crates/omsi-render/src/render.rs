@@ -711,8 +711,8 @@ impl Renderer {
         let mut plan = self.batch_draws(scene, &f, &visible, Vec::new());
         if plan.ground.active() {
             // (the frame's uniform was written with the flag off: the base is lit from the ground picture)
-            let lod = [self.fsr_mip_bias(&f), 1.0, 0.0, 0.0];
-            self.queue.write_buffer(&self.camera_buf, std::mem::offset_of!(CameraUniform, lod) as u64, bytemuck::bytes_of(&lod));
+            let flag = 1.0f32;
+            self.queue.write_buffer(&self.camera_buf, (std::mem::offset_of!(CameraUniform, lod) + 4) as u64, bytemuck::bytes_of(&flag));
         }
         // (the shadow casters' entries after the passes' own: the main pass's batches keep
         // their places in the list while only the shadows change, and its bundles are kept)

@@ -20,6 +20,7 @@ use hashbrown::HashMap;
 use omsi_plugin::ui::{self as pui, Align, Element, Kind, Panel, Rgba, RowAlign, Toast, UiState};
 use omsi_render::{Renderer, Scene, TextureId};
 use omsi_ui::paint::Align as TextAlign;
+use omsi_ui::theme::Palette;
 use omsi_ui::{Atlas, Color, Draw, Fonts, Gpu, Layer, Painter, Rect, Vertex, Weight};
 
 pub mod input;
@@ -29,59 +30,9 @@ pub use nav::{Docked, DockedMap};
 mod preview;
 mod square;
 mod widgets;
+mod look;
+use look::*;
 
-// --- the game's look --------------------------------------------------------------------
-
-const CARD: Color = Color::rgba(14, 16, 20, 225.0 / 255.0);
-const INK: Color = Color::rgba(236, 236, 236, 1.0);
-const DARK_INK: Color = Color::rgba(18, 14, 8, 1.0);
-const ACCENT: Color = Color::rgba(232, 160, 48, 1.0);
-// (solid greys, the menus' own: the pipeline blends in linear light, where a tenth of white
-// over the dark card came out a light grey)
-const TRACK: Color = Color::rgba(62, 62, 62, 1.0);
-const DIVIDER: Color = Color::rgba(52, 52, 52, 1.0);
-const BUTTON: Color = Color::rgba(44, 44, 44, 1.0);
-const TILE: Color = Color::rgba(46, 48, 54, 0.6);
-const SHADOW: Color = Color::rgba(0, 0, 0, 0.35);
-
-#[derive(Clone, Copy)]
-struct ThemeColors {
-    card: Color,
-    ink: Color,
-    dark_ink: Color,
-    accent: Color,
-    track: Color,
-    divider: Color,
-    button: Color,
-    tile: Color,
-    muted: Color,
-    soft: Color,
-    faint: Color,
-    rail_done: Color,
-    tag_fill: Color,
-}
-
-impl ThemeColors {
-    fn new(light: bool) -> Self {
-        let theme = omsi_ui::theme::palette(light);
-        let color = |c: omsi_ui::Color| Color(c.0);
-        Self {
-            card: if light { Color::rgba(252, 252, 252, CARD.0[3]) } else { CARD },
-            ink: if light { color(theme.INK) } else { INK },
-            dark_ink: DARK_INK,
-            accent: if light { color(theme.ACCENT) } else { ACCENT },
-            track: if light { color(theme.SURFACE_3) } else { TRACK },
-            divider: if light { theme.EDGE } else { DIVIDER },
-            button: if light { color(theme.SURFACE_2) } else { BUTTON },
-            tile: if light { color(theme.SURFACE_3) } else { TILE },
-            muted: if light { color(theme.TEXT_DIM) } else { Color::rgba(142, 142, 142, 1.0) },
-            soft: if light { color(theme.INK_2) } else { Color::rgba(196, 202, 214, 1.0) },
-            faint: if light { color(theme.TEXT_FAINT) } else { Color::rgba(110, 118, 136, 1.0) },
-            rail_done: if light { color(theme.SURFACE_3) } else { Color::rgba(74, 84, 98, 1.0) },
-            tag_fill: if light { theme.EDGE } else { Color::rgba(255, 255, 255, 0.10) },
-        }
-    }
-}
 
 /// A text line's height, times its size.
 pub const LINE: f32 = 1.3;
@@ -660,23 +611,23 @@ impl Layout<'_> {
 /// Lay a panel out: its size, what it is drawn from and where it takes clicks.
 /// `backdrop`: the opacity setting's strength for the game's own card colour (`ui::backdrop`).
 pub fn layout(p: &Panel, fonts: &Fonts, backdrop: f32) -> Laid {
-    layout_with_theme(p, fonts, backdrop, false)
+    layout_with_theme(p, fonts, backdrop, omsi_ui::theme::th())
 }
 
-fn layout_with_theme(p: &Panel, fonts: &Fonts, backdrop: f32, light: bool) -> Laid {
-    layout_typing_with_theme(p, fonts, backdrop, None, light)
+fn layout_with_theme(p: &Panel, fonts: &Fonts, backdrop: f32, pal: Palette) -> Laid {
+    layout_typing_with_theme(p, fonts, backdrop, None, pal)
 }
 
 /// [`layout`], with the caret in the text field `typing` (the field's id).
 pub fn layout_typing(p: &Panel, fonts: &Fonts, backdrop: f32, typing: Option<&str>) -> Laid {
-    layout_typing_with_theme(p, fonts, backdrop, typing, false)
+    layout_typing_with_theme(p, fonts, backdrop, typing, omsi_ui::theme::th())
 }
 
-fn layout_typing_with_theme(p: &Panel, fonts: &Fonts, backdrop: f32, typing: Option<&str>, light: bool) -> Laid {
+fn layout_typing_with_theme(p: &Panel, fonts: &Fonts, backdrop: f32, typing: Option<&str>, pal: Palette) -> Laid {
     let mut l = Layout {
         fonts,
         out: Laid::default(),
-        colors: ThemeColors::new(light),
+        colors: ThemeColors::of(pal),
         typing,
     };
     let stripe = if p.accent.is_some() { STRIPE } else { 0.0 };
@@ -716,12 +667,12 @@ fn layout_typing_with_theme(p: &Panel, fonts: &Fonts, backdrop: f32, typing: Opt
 /// A notification as a panel: the stripe in its colour, the icon and the title in a row
 /// above the text.
 pub fn toast_panel(t: &Toast) -> Panel {
-    toast_panel_with_theme(t, false)
+    toast_panel_with_theme(t, omsi_ui::theme::th())
 }
 
-fn toast_panel_with_theme(t: &Toast, light: bool) -> Panel {
+fn toast_panel_with_theme(t: &Toast, pal: Palette) -> Panel {
     let accent = t.color.unwrap_or_else(|| {
-        let [r, g, b, a] = ThemeColors::new(light).accent.0;
+        let [r, g, b, a] = ThemeColors::of(pal).accent.0;
         Rgba([(r * 255.0 + 0.5) as u8, (g * 255.0 + 0.5) as u8, (b * 255.0 + 0.5) as u8, (a * 255.0 + 0.5) as u8])
     });
     let element = |kind: Kind, grow: bool, c: Option<Rgba>| Element {
@@ -996,7 +947,7 @@ struct Card {
     revision: u64,
     scale: f32,
     backdrop: f32,
-    light: bool,
+    pal: Palette,
     laid: Laid,
     tex: Option<(TextureId, u32, u32)>,
     /// The hit lit when it was drawn (None: to be drawn).
@@ -1031,8 +982,9 @@ pub struct PanelsFrame {
     pub dt: f32,
     /// `ui::backdrop` of the opacity setting.
     pub backdrop: f32,
-    /// 遊戲共用的淺色介面主題。
-    pub light: bool,
+    /// The palette in force (`omsi_ui::theme::th`): openOMSI's dark or light look, a
+    /// theme's over it.
+    pub palette: Palette,
     /// The navigator's panel (physical x0, y0, x1, y1), which the notifications stay clear of.
     pub navigator: Option<[f32; 4]>,
     /// The navigator's board, where the panel with `anchor = "navigator"` goes (None: the
@@ -1175,7 +1127,7 @@ impl PluginPanels {
                 revision: u64::MAX,
                 scale: 0.0,
                 backdrop: 0.0,
-                light: false,
+                pal: Palette::OPENOMSI,
                 laid: Laid::default(),
                 tex: None,
                 drawn: None,
@@ -1187,13 +1139,13 @@ impl PluginPanels {
             });
             // (the most a panel in the board may be high, in its own pixels)
             let room = dock.map_or(f32::INFINITY, |d| (d.room / ck).floor().max(1.0));
-            if card.revision != e.revision || card.scale != ck || card.backdrop != f.backdrop || card.light != f.light || card.laid.w != width || card.room != room {
+            if card.revision != e.revision || card.scale != ck || card.backdrop != f.backdrop || card.pal != f.palette || card.laid.w != width || card.room != room {
                 let caret = typing.as_ref().filter(|t| t.0 == e.owner && t.1 == e.id).map(|t| t.2.as_str());
                 card.laid = match dock {
                     Some(_) => {
-                        Laid { flat: true, ..layout_typing_with_theme(&nav::in_navigator(&e.panel, width), fonts, f.backdrop, caret, f.light) }
+                        Laid { flat: true, ..layout_typing_with_theme(&nav::in_navigator(&e.panel, width), fonts, f.backdrop, caret, f.palette) }
                     }
-                    None => layout_typing_with_theme(&e.panel, fonts, f.backdrop, caret, f.light),
+                    None => layout_typing_with_theme(&e.panel, fonts, f.backdrop, caret, f.palette),
                 };
                 card.full_h = card.laid.h;
                 card.room = room;
@@ -1201,7 +1153,7 @@ impl PluginPanels {
                 card.revision = e.revision;
                 card.scale = ck;
                 card.backdrop = f.backdrop;
-                card.light = f.light;
+                card.pal = f.palette;
                 card.drawn = None;
             }
             match dock {
@@ -1241,7 +1193,7 @@ impl PluginPanels {
                 revision: 0,
                 scale: 0.0,
                 backdrop: 0.0,
-                light: false,
+                pal: Palette::OPENOMSI,
                 laid: Laid::default(),
                 tex: None,
                 drawn: None,
@@ -1251,11 +1203,11 @@ impl PluginPanels {
                 full_h: 0.0,
                 room: f32::INFINITY,
             });
-            if card.scale != k || card.backdrop != f.backdrop || card.light != f.light {
-                card.laid = layout_with_theme(&toast_panel_with_theme(t, f.light), fonts, f.backdrop, f.light);
+            if card.scale != k || card.backdrop != f.backdrop || card.pal != f.palette {
+                card.laid = layout_with_theme(&toast_panel_with_theme(t, f.palette), fonts, f.backdrop, f.palette);
                 card.scale = k;
                 card.backdrop = f.backdrop;
-                card.light = f.light;
+                card.pal = f.palette;
                 card.drawn = None;
             }
             if top + card.laid.h > screen.y {

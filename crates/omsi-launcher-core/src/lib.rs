@@ -13,11 +13,14 @@ pub mod depot;
 pub mod index;
 pub mod install;
 pub mod instances;
+pub mod storage;
 pub mod mods;
 pub mod optimise;
 mod hof_sync;
 mod file_dialog;
 pub mod i18n;
+mod graphics_profiles;
+pub use graphics_profiles::*;
 
 pub use file_dialog::{pick_file, pick_folder, pick_hofs, pick_mod};
 pub use hof_sync::{add_shared_hofs, share_map_hofs, MapHofOffer};
@@ -2078,7 +2081,7 @@ pub fn graphics_presets() -> [(&'static str, Value); 6] {
             "shadow_size": shadow[i], "clouds": true, "rain_quality": rain[i], "windy_trees": !low,
             "view_distance": view[i], "min_obj_size": obj_size[i], "max_obj_dist": obj_dist[i],
             "mirror_size": mirror[i], "mirror_refresh": refresh[i], "mirror_quality": mirror_quality[i], "render_scale": scale[i],
-            "detail_textures": !low, "ssao": !low, "shadows": !low, "reflections": 1.0,
+            "detail_textures": !low, "ssao": !low, "shadows": !low, "reflections": 1.0, "road_glare": 1.0, "traffic_headlights": 1.0,
             "light_shadows": light_shadows[i], "cloud_shadows": i >= 3, "light_glow": i >= 3,
             "street_light": street_light[i], "puddles": puddles[i],
         });
@@ -2210,6 +2213,22 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     settings_from_text_on(text, cfg!(any(target_os = "android", target_os = "ios")))
 }
 
+// Voice chat in multiplayer: off until switched on (the microphone is then used with a
+// talk key held, or open).
+fn voice_defaults(v: &mut Value) {
+    v["voice_enabled"] = json!(false);
+    v["voice_mode"] = json!("ptt");
+    v["voice_mic_gain"] = json!(1.0);
+    v["voice_threshold_db"] = json!(-45);
+    v["voice_input_device"] = json!("");
+    v["voice_volume"] = json!(1.0);
+    v["voice_volume_nearby"] = json!(1.0);
+    v["voice_volume_radio"] = json!(1.0);
+    v["voice_range"] = json!(75);
+    v["voice_talker_list"] = json!(true);
+    v["voice_all_off"] = json!(false);
+}
+
 // Keep independent opt-in defaults shared by desktop and phone settings.
 fn passenger_defaults(v: &mut Value) {
     v["passenger_connections"] = json!(false);
@@ -2218,8 +2237,8 @@ fn passenger_defaults(v: &mut Value) {
     v["passenger_full_bus_reaction"] = json!(false);
 }
 
-pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
-    let mut v = json!({ "msaa": 4, "anisotropy": 8, "ssao": true, "shadows": true, "shadow_size": 2048, "navigator": true, "ui_opacity": 0.85, "navigator_corner": "bottom-left", "boarding": "auto", "detail_textures": true, "exact_fare": true, "enhanced": false, "graphics": "vanilla_plus", "fullscreen": false, "vsync": true, "volume": 0.6, "drive_keys": "simple", "render_scale": "auto", "view_distance": "auto", "language": "ENG", "video_memory": 0, "texture_compression": true, "gpu_texture_compression": true, "chat": true, "tooltips": true, "name_tags": true, "show_fps": false, "clouds": true, "cloud_quality": "high", "rain_quality": "high", "pax_density": 1.0, "vol_ai": 1.0, "vol_scenery": 1.0, "ambient": true, "vol_ambient": 0.8, "mirror_size": 256, "doppler": true, "driver": true, "max_fps": 0, "min_obj_size": 0.013, "max_obj_dist": "auto" });
+/// Initial values shared by desktop and phone, kept outside the long settings parser.
+fn graphics_and_interface_defaults(v: &mut Value) {
     v["upscaler"] = json!("default");
     v["fsr_quality"] = json!("quality");
     v["fsr_sharpness"] = json!(0.8);
@@ -2229,9 +2248,18 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     v["cloud_shadows"] = json!(false);
     v["light_glow"] = json!(false);
     v["pause_quick_actions"] = json!("default");
+    // (the interface theme's id: "openomsi" is openOMSI's own look)
+    v["ui_theme_pack"] = json!("openomsi");
     v["ui_theme"] = json!("dark");
+    v["road_glare"] = json!(1.0);
+    v["traffic_headlights"] = json!(1.0);
     v["puddles"] = json!("high"); // (apart: the literal above is at the json! macro's recursion limit)
     v["vehicle_smoke"] = json!("all");
+}
+
+pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
+    let mut v = json!({ "msaa": 4, "anisotropy": 8, "ssao": true, "shadows": true, "shadow_size": 2048, "navigator": true, "ui_opacity": 0.85, "navigator_corner": "bottom-left", "boarding": "auto", "detail_textures": true, "exact_fare": true, "enhanced": false, "graphics": "vanilla_plus", "fullscreen": false, "vsync": true, "volume": 0.6, "drive_keys": "simple", "render_scale": "auto", "view_distance": "auto", "language": "ENG", "video_memory": 0, "texture_compression": true, "gpu_texture_compression": true, "chat": true, "tooltips": true, "name_tags": true, "show_fps": false, "clouds": true, "cloud_quality": "high", "rain_quality": "high", "pax_density": 1.0, "vol_ai": 1.0, "vol_scenery": 1.0, "ambient": true, "vol_ambient": 0.8, "mirror_size": 256, "doppler": true, "driver": true, "max_fps": 0, "min_obj_size": 0.013, "max_obj_dist": "auto" });
+    graphics_and_interface_defaults(&mut v);
     if phone {
         for (k, d) in [("msaa", json!(2)), ("anisotropy", json!(4)), ("ssao", json!(false)), ("shadow_size", json!(1024)), ("mirror_size", json!(128)), ("max_fps", json!(60)), ("max_obj_dist", json!("900")), ("pax_density", json!(0.7)), ("navigator_corner", json!("top-center"))] {
             v[k] = d;
@@ -2259,7 +2287,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     v["mirror_refresh"] = json!("full");
     v["mirror_quality"] = json!("standard");
     v["vr_desktop_mirror"] = json!(true);
-    v["discord_status"] = json!(true);
+    v["discord_status"] = json!(false); // (it tells friends the map, bus and line: only when asked)
     // Only fresh installs opt in; existing settings files retain enabled plugins.
     v["disable_plugins"] = json!(text.is_none());
     // a Tobii eye tracker read natively, beside opentrack (the game's menu switches these)
@@ -2271,19 +2299,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     // system's own (SwiftUI); elsewhere there is only this one
     v["cross_platform_launcher"] = json!(false);
     v["discord_app_id"] = json!("");
-    // voice chat in multiplayer: off until switched on (the microphone is then used with a
-    // talk key held, or open)
-    v["voice_enabled"] = json!(false);
-    v["voice_mode"] = json!("ptt");
-    v["voice_mic_gain"] = json!(1.0);
-    v["voice_threshold_db"] = json!(-45);
-    v["voice_input_device"] = json!("");
-    v["voice_volume"] = json!(1.0);
-    v["voice_volume_nearby"] = json!(1.0);
-    v["voice_volume_radio"] = json!(1.0);
-    v["voice_range"] = json!(75);
-    v["voice_talker_list"] = json!(true);
-    v["voice_all_off"] = json!(false);
+    voice_defaults(&mut v);
     // the launcher gives the graphics card up while a game runs (off: it stays drawn)
     v["launcher_rest"] = json!(true);
     // the window's size in pixels, "auto" to fit the screen (#904)
@@ -2356,7 +2372,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
         let (k, val) = (setting_key(k), val.trim());
         let b = |x: &str| matches!(x.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes");
         match k.as_str() {
-            "pause_quick_actions" => v[&k] = json!(val),
+            "pause_quick_actions" | "ui_theme_pack" => v[&k] = json!(val),
             "anisotropy" => v[&k] = json!(val.parse::<i64>().unwrap_or(8).clamp(1, 16)),
             "msaa" | "shadow_size" => v[&k] = json!(val.parse::<i64>().unwrap_or(0)),
             "ui_opacity" | "volume" | "vol_ai" | "vol_scenery" | "vol_ambient" | "min_obj_size" | "radio_speaker" | "radio_hiss" | "radio_dropouts" => v[&k] = json!(val.parse::<f64>().unwrap_or(0.0)),
@@ -2449,6 +2465,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "led_glow" => v[&k] = json!(val.parse::<i64>().map(|x| x.clamp(0, 15)).unwrap_or(6)),
             "night_brightness" => v[&k] = json!(val.trim().parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 3.0)).unwrap_or(0.0)),
             "reflections" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map_or_else(|| if b(val) { 1.0 } else { 0.0 }, |x| x.clamp(0.0, 1.0))),
+            "road_glare" | "traffic_headlights" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).unwrap_or(1.0).clamp(0.0, 2.0)),
             "look_sens" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.1, 2.0)).unwrap_or(1.0)),
             "look_smoothing_ms" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 200.0)).unwrap_or(0.0)),
             "pad_steer_smooth" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 300.0)).unwrap_or(120.0)),
@@ -2588,58 +2605,6 @@ pub fn save_settings(v: &Value) -> Result<()> {
     let old = std::fs::read_to_string(&p).ok();
     std::fs::write(p, settings_to_text(v, old.as_deref()))?;
     Ok(())
-}
-
-/// The settings a graphics profile holds: what the Graphics tab shows, except the machine's
-/// own (fullscreen, graphics API).
-pub const GRAPHICS_PROFILE_KEYS: [&str; 42] = [
-    "graphics", "msaa", "render_scale", "upscaler", "fsr_quality", "fsr_sharpness", "anisotropy", "shadow_size", "ssao", "shadows", "shadow_casters", "detail_textures", "night_brightness", "led_glow", "led_mips", "shadow_blobs", "lamp_shadows", "reflections", "clouds", "cloud_quality", "street_light", "rain_quality", "vehicle_smoke", "puddles", "windy_trees", "road_snow", "ray_tracing", "light_shadows", "cloud_shadows", "light_glow",
-    "vsync", "max_fps", "view_distance", "max_obj_dist", "min_obj_size", "mirror_size", "mirror_refresh", "mirror_quality", "mirror_hud_every_frame", "video_memory", "texture_compression", "gpu_texture_compression",
-];
-
-fn graphics_profiles_path() -> PathBuf {
-    data_dir().join("graphics_profiles.json")
-}
-
-/// The saved graphics profiles by name (`~/.openomsi/graphics_profiles.json`).
-pub fn graphics_profiles() -> std::collections::BTreeMap<String, Value> {
-    std::fs::read_to_string(graphics_profiles_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
-}
-
-/// Keep the graphics of `settings` as profile `name` (an existing one of that name is
-/// replaced). Returns the name as kept.
-pub fn save_graphics_profile(name: &str, settings: &Value) -> Result<String> {
-    let name: String = name.chars().filter(|c| !c.is_control()).collect::<String>().trim().chars().take(40).collect();
-    if name.is_empty() {
-        return Err(anyhow!("Give the profile a name."));
-    }
-    let mut profile = serde_json::Map::new();
-    for k in GRAPHICS_PROFILE_KEYS {
-        if let Some(x) = settings.get(k) {
-            profile.insert(k.to_string(), x.clone());
-        }
-    }
-    let mut all = graphics_profiles();
-    all.insert(name.clone(), Value::Object(profile));
-    std::fs::write(graphics_profiles_path(), serde_json::to_string_pretty(&all)?)?;
-    Ok(name)
-}
-
-/// Remove profile `name`.
-pub fn delete_graphics_profile(name: &str) -> Result<()> {
-    let mut all = graphics_profiles();
-    all.remove(name);
-    std::fs::write(graphics_profiles_path(), serde_json::to_string_pretty(&all)?)?;
-    Ok(())
-}
-
-/// Put a profile's values into the page's `settings` (only the keys a profile may hold).
-pub fn apply_graphics_profile(profile: &Value, settings: &mut Value) {
-    for k in GRAPHICS_PROFILE_KEYS {
-        if let Some(x) = profile.get(k) {
-            settings[k] = x.clone();
-        }
-    }
 }
 
 /// The `settings.cfg` text for the page's values `v`; the lines of the `old` file that the
@@ -2823,7 +2788,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     let vr_scale = v.get("vr_scale").and_then(|x| x.as_f64().or_else(|| x.as_str().and_then(|s| s.parse().ok()))).filter(|x| x.is_finite()).unwrap_or(0.65).clamp(0.5, 1.0);
     let vr_head_smoothing_ms = v.get("vr_head_smoothing_ms").and_then(|x| x.as_f64().or_else(|| x.as_str().and_then(|s| s.parse().ok()))).filter(|x| x.is_finite()).unwrap_or(0.0).clamp(0.0, 30.0);
     let vr_mirror_rate = v.get("vr_mirror_rate").and_then(|x| x.as_f64().or_else(|| x.as_str().and_then(|s| s.parse().ok()))).filter(|x| x.is_finite()).unwrap_or(16.0).clamp(-1.0, 360.0);
-    let text = format!("{text}vr={}\nvr_scale={vr_scale}\nvr_head_smoothing_ms={vr_head_smoothing_ms}\nvr_mirror_rate={vr_mirror_rate}\nvr_desktop_mirror={}\ndiscord_status={}\nlauncher_rest={}\ncross_platform_launcher={}\n", b("vr", false), b("vr_desktop_mirror", true), b("discord_status", true), b("launcher_rest", true), b("cross_platform_launcher", false));
+    let text = format!("{text}vr={}\nvr_scale={vr_scale}\nvr_head_smoothing_ms={vr_head_smoothing_ms}\nvr_mirror_rate={vr_mirror_rate}\nvr_desktop_mirror={}\ndiscord_status={}\nlauncher_rest={}\ncross_platform_launcher={}\n", b("vr", false), b("vr_desktop_mirror", true), b("discord_status", false), b("launcher_rest", true), b("cross_platform_launcher", false));
     // what the page does not manage (keys of newer games, hand-written ones) stays as it
     // was in the file; other spellings of the keys just written go
     let mut text = text;
@@ -2855,6 +2820,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         ));
     }
     text.push_str(&format!("pause_quick_actions={}\n", v.get("pause_quick_actions").and_then(|x| x.as_str()).unwrap_or("default").replace(['\r', '\n'], "")));
+    text.push_str(&format!("ui_theme_pack={}\n", v.get("ui_theme_pack").and_then(|x| x.as_str()).filter(|x| !x.trim().is_empty()).unwrap_or("openomsi").replace(['\r', '\n'], "")));
     text.push_str(&format!("mouse_pedals={}\n", b("mouse_pedals", true)));
     text.push_str(&format!("key_pedal_speed={}\n", f("key_pedal_speed", 1.0).clamp(0.25, 2.0)));
     text.push_str(&format!("touch_pedal_length={}\ntouch_pedal_deadzone={}\n", f("touch_pedal_length", 1.0).clamp(0.8, 1.6), f("touch_pedal_deadzone", 0.15).clamp(0.0, 0.4)));
@@ -2866,6 +2832,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("rain_quality={}\n", rain_quality(v.get("rain_quality").and_then(|x| x.as_str()).unwrap_or("high"))));
     text.push_str(&format!("vehicle_smoke={}\n", vehicle_smoke(v.get("vehicle_smoke").and_then(|x| x.as_str()).unwrap_or("all"))));
     text.push_str(&format!("puddles={}\n", puddles(v.get("puddles").and_then(|x| x.as_str()).unwrap_or("high"))));
+    text.push_str(&format!("road_glare={}\ntraffic_headlights={}\n", f("road_glare", 1.0).clamp(0.0, 2.0), f("traffic_headlights", 1.0).clamp(0.0, 2.0)));
     text.push_str(&format!("mirror_refresh={}\n", mirror_refresh(v.get("mirror_refresh").and_then(|x| x.as_str()).unwrap_or("full"))));
     text.push_str(&format!("mirror_quality={}\n", mirror_quality(v.get("mirror_quality").and_then(|x| x.as_str()).unwrap_or("standard"))));
     text.push_str(&format!("look_sens={}\nlook_smoothing_ms={}\nsteer_look_angle={}\nsteer_look_response={}\nhead_idle={}\nhead_idle_pace={}\ntime_sync={}\nmetar_sync={}\nmetar_station={}\n", f("look_sens", 1.0).clamp(0.1, 2.0), f("look_smoothing_ms", 0.0).clamp(0.0, 200.0), f("steer_look_angle", 30.0).clamp(0.0, 60.0), f("steer_look_response", 0.25).clamp(0.05, 1.0), f("head_idle", 0.0).clamp(0.0, 1.0), f("head_idle_pace", 1.0).clamp(0.5, 2.0), b("time_sync", false), b("metar_sync", false), v.get("metar_station").and_then(|x| x.as_str()).unwrap_or("").chars().filter(|c| c.is_ascii_alphabetic()).take(4).collect::<String>().to_ascii_uppercase()));
@@ -3000,6 +2967,9 @@ pub struct Duty {
     pub lan_name: Option<String>,
     /// Discovered web gateway to try if the initial UDP join gets no answer (Auto only).
     pub lan_ws_fallback: Option<String>,
+    /// Explicit per-launch authorization for server-defined vehicle content.
+    #[serde(default)]
+    pub allow_server_fleet: bool,
     /// Season override: spring / summer / autumn / winter, with a phase `-early` / `-late`
     /// (`autumn-late`; none = the middle; empty = by date).
     pub season: Option<String>,
@@ -3304,6 +3274,7 @@ fn duty_args_with_settings(d: &Duty, root: &Path, st: &Value) -> Result<Vec<Stri
             omsi_net::describe_join(target).map_err(|e| anyhow!("LAN join: {e}"))?;
             a.extend(["--lan-join".into(), if target.is_empty() { "auto".into() } else { target.to_string() }]);
             if let Some(url) = d.lan_ws_fallback.as_deref().filter(|url| !url.is_empty()) { a.extend(["--lan-ws-fallback".into(), url.to_string()]); }
+            if d.allow_server_fleet { a.push("--allow-server-fleet".into()); }
         } else {
             return Err(anyhow!("LAN play: '{lan}' is neither host nor join:<code or address>"));
         }

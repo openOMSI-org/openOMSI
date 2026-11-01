@@ -3,7 +3,7 @@ import { useStore, remembered, remember } from '../store.js';
 import { t } from '../i18n.js';
 import { Icon } from '../icons.js';
 import { Button, Select, Dialog, Notice, Spinner } from '../ui.js';
-import { choose, curBus, curTour, pickedTrip, weatherName, realTime, realDate, askJoined, noServerBus, depotBusOf } from '../data.js';
+import { choose, curBus, curTour, pickedTrip, weatherName, realTime, realDate, askJoined, noServerBus, depotBusOf, selectableVehicles, canPreviewBus } from '../data.js';
 import { BusPreview } from '../preview.js';
 import { RouteMap } from '../routemap.js';
 import { BusList, BusOptions, withoutMaker } from './bus-list.js';
@@ -94,10 +94,10 @@ function BusThumb({ compact }) {
   const paints = v ? [['', v.default_paint ? `${t('Standard')} (${v.default_paint})` : t('Standard')], ...v.paints.map((p) => [p, p])] : [];
   const at = Math.max(0, paints.findIndex(([p]) => p === c.paint));
   const step = (d) => choose({ paint: paints[(at + d + paints.length) % paints.length][0] });
-  const buttons = html`<${Button} small icon="bus" label=${compact ? undefined : 'Change bus'} title="Change bus" onClick=${() => setPick(true)} disabled=${!s.vehicles.length} />
+  const buttons = html`<${Button} small icon="bus" label=${compact ? undefined : 'Change bus'} title="Change bus" onClick=${() => setPick(true)} disabled=${selectableVehicles(c).length === 0} />
     ${v && html`<${Button} small icon="sliders" title="Vehicle settings & details" onClick=${() => setMore(true)} />`}`;
   return html`<div class="bus-thumb">
-    <div class="bt-view">${v && !pick ? html`<${BusPreview} class="stage" look=${look(v, c)} />` : html`<div class="stage-empty"><${Icon} name="bus" size=${32} /></div>`}${compact && v && html`<div class="bt-tools">${buttons}</div>`}</div>
+    <div class="bt-view">${v && !pick && canPreviewBus(v, c.paint) ? html`<${BusPreview} class="stage" look=${look(v, c)} />` : html`<div class="stage-empty"><${Icon} name="bus" size=${32} />${v && !canPreviewBus(v, c.paint) && html`<span>${t('Server vehicle: downloaded on start')}</span>`}</div>`}${compact && v && html`<div class="bt-tools">${buttons}</div>`}</div>
     <div class="bt-info">
       <div class="row bt-head">
         <div class="grow"><b class="ellipsis bt-name">${v ? withoutMaker(v.name, v.manufacturer) : t('No bus is installed.')}</b><div class="muted small ellipsis">${v?.manufacturer || ''}</div></div>
@@ -179,7 +179,7 @@ function ClassicPlus() {
     <div class="drive-stage">
       ${bus ? html`<${BusStage} />` : html`<div class=${'duty-stage' + (c.free || !tour ? ' alone' : '')}><${TripMap} /><${Book} /></div>`}
       <button type="button" class="cp-pip" title=${t(bus ? 'Map & duty' : 'Bus')} onClick=${() => go(bus ? 'duty' : 'bus')}>
-        ${bus ? html`<${TripMap} />` : v && html`<${BusPreview} class="stage" look=${look(v, c)} />`}
+        ${bus ? html`<${TripMap} />` : v && canPreviewBus(v, c.paint) && html`<${BusPreview} class="stage" look=${look(v, c)} />`}
         <span class="cp-pip-tag"><${Icon} name=${bus ? 'map' : 'bus'} size=${14} />${bus ? t('Map & duty') : v ? withoutMaker(v.name, v.manufacturer) : t('Bus')}</span>
       </button>
     </div>

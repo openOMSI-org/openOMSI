@@ -100,6 +100,7 @@ mod photo;
 mod depot_bus;
 mod devtools;
 mod telemetry;
+mod themes;
 use omsi_scene::threads;
 use omsi_scene::tiles;
 mod traffic;
@@ -110,6 +111,7 @@ mod ui;
 // the game itself, split by what each part does
 mod app;
 mod applog;
+mod logmask;
 mod app_events;
 mod bus_service;
 mod camera_util;
@@ -247,7 +249,8 @@ pub fn run() -> Result<()> {
         let rest: Vec<String> = std::env::args().skip(2).collect();
         return check::run(&rest, crate::startup::find_root);
     }
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    // (the players' internet addresses cut to their network, see `logmask`)
+    logmask::init();
     // a panic goes into the log (which the launcher keeps per session) with where it
     // happened and a backtrace, not only to a terminal that may not be there
     let default_hook = std::panic::take_hook();
@@ -294,6 +297,11 @@ pub fn run() -> Result<()> {
         }
         return open_app_launcher(fatal_message);
     }
+    // Launcher helpers and the launcher itself must not count as a running game.
+    let _cache_activity = omsi_cfg::cache_activity::game(&omsi_launcher_lib::data_dir())?
+        .only_cleanup_when(|| !omsi_launcher_lib::instances::list().iter().any(|game| {
+            game.running && game.pid != std::process::id()
+        }));
     let Some(app) = make_app(args, server_cfg)? else { return Ok(()) };
     // a game session's start goes into the start guard's journal (a version whose sessions
     // keep failing before their first frames is healed at the launcher's next start)
@@ -503,6 +511,10 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     } else {
         None
     };
+    // Match the actual session admission limit to the dedicated server configuration.
+    if let (Some(cfg), Some(l)) = (server_cfg.as_ref(), lan.as_mut()) {
+        l.set_peer_limit(cfg.max_players);
+    }
     // a dedicated server without its session has nobody to serve: why, and the end (it went
     // on running alone, unreachable, with a warning among the log's lines)
     if server_cfg.is_some() && lan.is_none() {
@@ -523,11 +535,14 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     if let Some(l) = lan.as_mut() {
         let mut c = args.lan_config();
         mods_server = lan::share_mods(&mut c, l);
+        if let Some(why) = c.mod_fetch_error.take() {
+            return Err(anyhow::anyhow!("The selected server bus could not be verified or downloaded: {why}"));
+        }
         lan::take_host_map(&mut c, l);
         args.take_lan_config(&c);
     }
     if let (Some(cfg), Some(l)) = (server_cfg.as_ref(), lan.as_ref()) {
-        lan::open_public_gateway(l, server::info_of(cfg), cfg.web_port, cfg.tunnel);
+        lan::open_public_gateway(l, server::info_of(cfg, &args.root), cfg.web_port, cfg.tunnel);
         lan::publish_vehicles(args.root.clone(), cfg.vehicles.clone());
         server::start_public_list(cfg);
         if cfg.tunnel {
@@ -706,6 +721,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
         },
         menus: MenuState {
             list_dirty: false,
+            graphics_before: None,
             page_titles: Default::default(),
             chooser: None,
             editor: None,

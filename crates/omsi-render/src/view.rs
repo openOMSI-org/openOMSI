@@ -187,6 +187,8 @@ pub struct Lighting {
     /// How much brighter the night is shown, in exposure steps after sunset (the settings' 0 .. 3).
     pub night_brightness: f32,
     pub reflection_strength: f32,
+    /// Enhanced: direct road and ground sunlight glare, 1 = original appearance.
+    pub road_glare: f32,
     /// The wet roads' reflections (`puddles`): 0 none, 1 low (a quarter of the rays, within
     /// 40 m, no capture of the player's vehicle), 2 high (as they were). Read every frame.
     pub puddles: u8,
@@ -295,6 +297,7 @@ impl Default for Lighting {
             envir_tint: [Vec3::ONE; 3],
             night_brightness: 0.0,
             reflection_strength: 1.0,
+            road_glare: 1.0,
             puddles: 2,
             led_glow: 1.5,
             led_mips: 1.3,

@@ -33,6 +33,7 @@ pub(super) struct FrameTime {
 impl App {
     /// One frame of the window: its stages in their lists and ticks (see `ticked`).
     pub(super) fn frame(&mut self, event_loop: &ActiveEventLoop) {
+        crate::game_lists::tick_graphics_confirmation(self);
         // (the window's stages do not fail)
         if let Err(e) = self.frame_ticked(event_loop) {
             log::error!("frame: {e:#}");

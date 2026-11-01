@@ -205,7 +205,7 @@ fn pause_settings_headings_draw_accent_markers_without_actions() {
             let marker: Vec<_> = verts
                 .iter()
                 .filter(|v| {
-                    v.color == ACCENT.0
+                    v.color == th().accent.0
                         && (318.0..=321.0).contains(&v.pos[0])
                         && (top..=top + 20.0).contains(&v.pos[1])
                 })

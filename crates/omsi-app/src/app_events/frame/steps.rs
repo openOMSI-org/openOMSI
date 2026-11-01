@@ -311,11 +311,24 @@ pub(crate) fn humans_after_step(
             v.trigger(&format!("PAX_Stamper{k}_Used"));
         }
     }
-    for (bus, event) in h.take_money_events() {
-        let trigger = match event {
-            SaleEvent::PassengerGaveMoney => "ev_ticketsale_givemoney",
+    for (bus, event) in h.take_sale_events() {
+        let (trigger, ticket_type) = match event {
+            SaleEvent::PassengerGaveMoney => { ("ev_ticketsale_givemoney", None) },
+            SaleEvent::PassengerTookTicket(ticket_type) => { ("ev_ticketsale_taketicket", Some(ticket_type)) },
         };
-
+        // The player's passenger has taken the ticket from the desk.
+        if bus.is_none() {
+            if let Some(ticket_type) = ticket_type {
+                if let Some(blocks) = view.ticket_blocks.as_mut() {
+                    if !blocks.take_ticket(ticket_type, r, scene) {
+                        log::warn!(
+                            "Passenger took ticket type {ticket_type}, \
+                            but no matching ticket was found on the desk"
+                        );
+                    }
+                }
+            }
+        }
         match bus {
             None => {
                 if let Some(p) = player.as_deref_mut() {
@@ -323,9 +336,7 @@ pub(crate) fn humans_after_step(
                 }
             }
             Some(id) => {
-                if let Some(c) = traffic
-                    .as_deref_mut()
-                    .and_then(|t| t.cars.iter_mut().find(|c| c.id == id))
+                if let Some(c) = traffic.as_deref_mut().and_then(|t| t.cars.iter_mut().find(|c| c.id == id))
                 {
                     c.vehicle.host.fired_triggers.push(trigger.into());
                 }
@@ -521,6 +532,11 @@ pub(crate) fn picture_lighting(
         None => lights::lighting_from(daylight, 50000.0),
     };
     lighting.lamp_shadows &= settings.lamp_shadows;
+    // Cloud rendering follows the live menu option; the weather/precipitation remains.
+    if !settings.clouds {
+        lighting.cloud_density = 0.0;
+        lighting.cloud_layer = None;
+    }
     lighting.wetness = omsi_cfg::flags::OMSI_WETNESS.parse()
         .unwrap_or(wetness);
     dress_lighting(&mut lighting, world, inside, settings);
@@ -559,6 +575,7 @@ pub(crate) fn dress_lighting(
     lighting.windy_trees = settings.windy_trees();
     lighting.night_brightness = settings.night_brightness;
     lighting.reflection_strength = settings.reflections;
+    lighting.road_glare = settings.road_glare;
     lighting.puddles = match settings.puddles.as_str() { "off" => 0, "low" => 1, _ => 2 };
 }
 

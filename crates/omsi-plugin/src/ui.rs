@@ -15,6 +15,10 @@ use std::rc::Rc;
 
 mod menu;
 pub use menu::{MenuItem, MAX_MENU_ITEMS, MAX_MENU_LABEL};
+mod theme;
+pub use theme::{themes_for_load, ThemeInfo};
+mod dock;
+pub use dock::Dock;
 
 /// `omsi.ui.version`: raised when something is added a plugin may want to test for.
 /// 2: images, checkboxes, sliders, text fields, tabs, charts, tables, draggable panels.
@@ -24,7 +28,8 @@ pub use menu::{MenuItem, MAX_MENU_ITEMS, MAX_MENU_LABEL};
 /// 5: panels that take a click without the mouse (`grab`).
 /// 6: a navigator panel that fills the navigator's whole frame (`frame`), and the navigator's
 /// map as an element of it (`map`).
-pub const VERSION: i64 = 6;
+/// 7: the interface themes (`ui.themes`, `ui.theme`, `ui.set_theme`).
+pub const VERSION: i64 = 7;
 /// Most panels of one plugin.
 pub const MAX_PANELS: usize = 16;
 /// Most elements of one panel, those in rows included.
@@ -354,28 +359,17 @@ pub struct UiState {
     menu_picks: Vec<(u64, String)>,
     /// The navigator's board (None: the navigator shows none).
     dock: Option<Dock>,
-}
-
-/// The navigator's board as the plugins see it (`ui.dock`), in the panel's pixels.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Dock {
-    pub width: f32,
-    /// The most height there is room for.
-    pub room: f32,
-    /// The height the panel in it came to (more than `room`: it is cut off there; 0 before
-    /// it is laid out).
-    pub height: f32,
-    /// The plugin whose panel is in it.
-    pub owner: Option<u64>,
-    /// It is the navigator's whole frame (a panel with `frame = true` is in it), not the board
-    /// under its map.
-    pub frame: bool,
+    /// The game's interface themes, the one in use, and the one a plugin asked for.
+    themes: Vec<ThemeInfo>,
+    theme_now: String,
+    theme_ask: Option<String>,
 }
 
 impl Default for UiState {
     fn default() -> Self {
+        let (themes, theme_now) = theme::for_load();
         // (until the game has drawn a frame: a 1080p screen)
-        UiState { panels: Vec::new(), toasts: Vec::new(), clicks: Vec::new(), changes: Vec::new(), focus: None, shown: true, screen: [1920.0, 1080.0, 1.0], serial: 0, typing: None, menu: Vec::new(), menu_picks: Vec::new(), dock: None }
+        UiState { panels: Vec::new(), toasts: Vec::new(), clicks: Vec::new(), changes: Vec::new(), focus: None, shown: true, screen: [1920.0, 1080.0, 1.0], serial: 0, typing: None, menu: Vec::new(), menu_picks: Vec::new(), dock: None, themes, theme_now, theme_ask: None }
     }
 }
 
@@ -544,17 +538,6 @@ impl UiState {
     /// `omsi.ui.screen()`: logical width, height, and the interface's scale.
     pub fn screen(&self) -> [f32; 3] {
         self.screen
-    }
-
-    /// The game says where the navigator's board is and whose panel is in it, or that it
-    /// shows none.
-    pub fn set_dock(&mut self, dock: Option<Dock>) {
-        self.dock = dock;
-    }
-
-    /// `omsi.ui.dock()`: the navigator's board, None while it shows none.
-    pub fn dock(&self) -> Option<Dock> {
-        self.dock
     }
 
     pub fn panels(&self) -> &[PanelEntry] {

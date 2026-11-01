@@ -59,6 +59,9 @@ fn serve_with_accept(
     }
     let ready: Arc<Mutex<Option<Arc<(Manifest, Vec<PathBuf>)>>>> = Arc::new(Mutex::new(None));
     let state = Arc::new(State::default());
+    // Fleet manifests are immutable for this session and shared by all request handlers.
+    let fleet_cache: Arc<server_fleet::Cache> = Arc::new(Mutex::new(HashMap::new()));
+    let fleet_root = args.root.clone();
     upload::open();
     {
         let (ready, state, args) = (ready.clone(), state.clone(), args.clone());
@@ -123,11 +126,11 @@ fn serve_with_accept(
                     }
                     connections.insert(peer, socket);
                 }
-                let (ready, key, state) = (ready.clone(), key.clone(), serving.clone());
+                let (ready, key, state, fleet_cache, root) = (ready.clone(), key.clone(), serving.clone(), fleet_cache.clone(), fleet_root.clone());
                 let spawned = std::thread::Builder::new()
                     .name("lan-mods-conn".into())
                     .spawn(move || {
-                        if let Err(e) = handle(stream, &key, &ready, &state.stopped) {
+                        if let Err(e) = handle(stream, &key, &ready, &state.stopped, &fleet_cache, &root) {
                             log::info!("LAN mods: connection from {peer} ended: {e}");
                         }
                         state

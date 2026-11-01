@@ -19,7 +19,7 @@ impl PeopleSim {
 
     /// Money-related events to be handled by the app.
     /// `None` identifies the player's bus; `Some(id)` identifies an AI bus.
-    pub fn take_money_events(&mut self) -> Vec<(Option<u64>, SaleEvent)> {
+    pub fn take_sale_events(&mut self) -> Vec<(Option<u64>, SaleEvent)> {
         std::mem::take(&mut self.sale_events)
             .into_iter()
             .map(|(b, event)| {

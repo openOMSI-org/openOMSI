@@ -29,6 +29,14 @@ services:
     environment:
       OMSI_CONTENT: /content
     stop_grace_period: 20s
+    # the server's log is Docker's (`docker compose logs`): it names the players and holds
+    # the chat, so it is kept to five files of 20 MB, not for ever (server.cfg's log_keep is
+    # for run-server and start.sh)
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
 
 volumes:
   openomsi-data:

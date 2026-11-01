@@ -596,10 +596,32 @@ impl App {
                     self.input.dragging = false;
                     return;
                 }
-                // a tear-off ticket block: a ticket of its type torn off for the passenger
-                if let Some(n) = self.session.humans.as_ref().and(self.gfx.sim_view.people.ticket_blocks.as_ref()).and_then(|b| b.hit(o, d, &p.vehicle)) {
+                // A tear-off ticket block: a ticket of its type torn off for the passenger.
+                let ticket = self.session.humans.as_ref().and(self.gfx.sim_view.people.ticket_blocks.as_ref()).and_then(|b| b.hit(o, d, &p.vehicle));
+
+                if let Some(n) = ticket {
                     log::info!("ticket block {n}: a ticket torn off");
+
+                    // Queue a physical ticket for the desk.
+                    if let Some(blocks) = self.gfx.sim_view.people.ticket_blocks.as_mut() {
+                        blocks.request_ticket(n);
+                    }
+
                     p.vehicle.set_engine_var("GivenTicket", n as f32);
+                    p.vehicle.host.fired_triggers.push("ev_ticketsale_giveticket".into());
+
+                    self.input.dragging = false;
+                    return;
+                }
+                // An individual ticket on the desk: picked up by the driver.
+                let desk_ticket = self.session.humans.as_ref().and(self.gfx.sim_view.people.ticket_blocks.as_ref()).and_then(|b| b.hit_desk_ticket(o, d, &p.vehicle));
+                if let Some(instance) = desk_ticket {
+                    log::info!("individual ticket picked up by the driver");
+
+                    if let Some(blocks) = self.gfx.sim_view.people.ticket_blocks.as_mut() {
+                        blocks.request_remove_ticket(instance);
+                    }
+
                     self.input.dragging = false;
                     return;
                 }
