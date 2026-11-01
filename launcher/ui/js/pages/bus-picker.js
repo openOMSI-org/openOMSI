@@ -8,7 +8,7 @@ import { t } from '../i18n.js';
 import { call } from '../api.js';
 import { Icon } from '../icons.js';
 import { Dialog, Search, Select, Segmented, Empty, Spinner, Button, Tag, Notice, Field } from '../ui.js';
-import { choose, busFile, serverBuses, selectableVehicles, MODES, modeLabel, shownModes, transportRefusal, curMap, askJoined } from '../data.js';
+import { choose, busFile, serverBuses, selectableVehicles, MODES, modeLabel, shownModes, transportRefusal, curMap, askJoined, canPreviewBus } from '../data.js';
 import { Notes } from './drive.js';
 
 const favKey = (file) => file.replace(/\\/g, '/').toLowerCase();
@@ -136,7 +136,7 @@ export function BusPicker({ onClose, onTake, title = 'Choose a bus', yes = 'Take
         </div>
       </div>
       <div class="detail">
-        ${v ? html`${v.server_catalog ? html`<div class="stage-empty"><${Icon} name="bus" size=${36} /><span>${t('Preview available after the server bus is downloaded')}</span></div>` : html`<${BusPreview} look=${{ bus: v.file, paint, map: s.choice.map, weather: s.choice.weather, time: s.choice.time, date: s.choice.date }} />`}
+        ${v ? html`${!canPreviewBus(v, paint) ? html`<div class="stage-empty"><${Icon} name="bus" size=${36} /><span>${t('Preview available after the server bus is downloaded')}</span></div>` : html`<${BusPreview} look=${{ bus: v.file, paint, map: s.choice.map, weather: s.choice.weather, time: s.choice.time, date: s.choice.date }} />`}
           <div class="card-body stack">
             <div class="row">
               <div class="grow"><h2 style="font-size:20px">${v.name}</h2><div class="muted">${[v.manufacturer, v.type_name, ...shownModes(v).map(modeLabel)].filter(Boolean).join(' - ')}</div></div>
