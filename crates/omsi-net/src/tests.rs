@@ -1419,6 +1419,52 @@ fn too_many_loading_players_wait() {
 }
 
 #[test]
+fn twenty_simultaneous_hellos_eventually_admit_every_player() {
+    let mut host = LanSession::host(0, "dedicated", world("m"), false).unwrap();
+    host.set_peer_limit(20);
+    let at = host.local_addr().unwrap();
+    let hello = format!("HELLO|{PROTOCOL}|-|p|Vehicles/x.bus|m|1989-05-30|32400||");
+    let clients: Vec<UdpSocket> = (0..20).map(|_| raw()).collect();
+    let mut welcomed = [false; 20];
+    let mut saw_wait = false;
+    let mut buf = [0u8; 2048];
+
+    // Send the first batch together rather than pacing clients one by one.
+    for client in &clients {
+        client.send_to(hello.as_bytes(), at).unwrap();
+    }
+    for _ in 0..150 {
+        host.tick(0.02, &pose(0.0));
+        for (i, client) in clients.iter().enumerate() {
+            while let Ok((n, _)) = client.recv_from(&mut buf) {
+                let message = String::from_utf8_lossy(&buf[..n]);
+                if message.starts_with("WAIT|") {
+                    saw_wait = true;
+                }
+                if let Some(id) = message
+                    .strip_prefix(&format!("WELCOME|{PROTOCOL}|"))
+                    .and_then(|rest| rest.split('|').next())
+                    .and_then(|s| s.parse::<u32>().ok())
+                {
+                    welcomed[i] = true;
+                    client.send_to(&state_of(id, i as f64), at).unwrap();
+                }
+            }
+            if !welcomed[i] {
+                client.send_to(hello.as_bytes(), at).unwrap();
+            }
+        }
+        if welcomed.iter().all(|done| *done) && host.peer_count() == 20 {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert!(saw_wait, "the loading limit must temporarily defer a burst");
+    assert!(welcomed.iter().all(|done| *done), "welcome state: {welcomed:?}");
+    assert_eq!(host.peer_count(), 20);
+}
+
+#[test]
 fn a_busy_host_keeps_the_client_waiting_without_permanent_rejection() {
     let host = raw();
     let at = host.local_addr().unwrap();
