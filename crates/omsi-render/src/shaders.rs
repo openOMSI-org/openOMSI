@@ -99,13 +99,14 @@ mod tests {
     /// and a script's screen never taken for a pane (#2927), and the lamp tiles' taps in loops of fixed bounds,
     /// and the colour/mask-only headset entry point, and a self-lit blended layer's alpha giving
     /// Omsi.exe's encoded mix, and the vertex-lit Direct3D headlight excluding its own vehicle,
-    /// and the traced sample read once for FXC.
+    /// and the traced sample read once for FXC. The graphics options now carry an
+    /// additional road-glare uniform and a tunable Enhanced reflection contribution.
     /// (with Unix line ends: a Windows checkout may turn the parts' into CRLF, as it did the
     /// single files', and the 0.2.31 release's Windows test failed on that alone)
     #[test]
     fn assembled_shaders_are_the_old_files() {
         let (scene, enhanced) = (super::SCENE.replace("\r\n", "\n"), super::ENHANCED.replace("\r\n", "\n"));
-        assert_eq!((scene.len(), fnv1a(&scene)), (137_456, 15_832_357_634_684_102_981));
-        assert_eq!((enhanced.len(), fnv1a(&enhanced)), (98_529, 0x93f8_5f93_8c18_2003));
+        assert_eq!((scene.len(), fnv1a(&scene)), (137_521, 5_797_524_561_593_996_949));
+        assert_eq!((enhanced.len(), fnv1a(&enhanced)), (99_016, 0x86b9_263f_ea2a_2d64));
     }
 }

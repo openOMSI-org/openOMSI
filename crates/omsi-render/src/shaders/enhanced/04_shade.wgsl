@@ -292,7 +292,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         // the pane mirrors as much as there and rises towards grazing as glass does; 4 to
         // 12 % at the normal, and three quarters of that, left the windows showing the
         // saloon where the vanilla picture shows the street.
-        let share = clamp(alpha * min(material.params2.y, 1.0), 0.0, 1.0) * camera.cam_pos.w;
+        let share = clamp(alpha * min(material.params2.y, 1.0), 0.0, 1.0);
         f0 = vec3<f32>(select(clamp((share - 1.0 / 21.0) * 21.0 / 20.0, 0.04, 0.9), 0.04, probe_only));
     } else if (reflective_env) {
         // Paint reflects its few per cent through a smooth clear coat; much more than a few
@@ -557,6 +557,11 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
             if (!glass && !reflective_env && !is_water && metal < 0.5) {
                 spec = spec * relief_masking(nl, nv, rough, relief_footprint);
             }
+            // Optional road glare: only the specular sun highlight on terrain or roads.
+            // Diffuse sunlight, wet reflections and vehicle paint remain unchanged.
+            if ((terrain || material.params2.z > 0.0) && !is_water) {
+                spec = spec * camera.lod.y;
+            }
             direct = e_sun * nl * (sf.albedo / PI * (vec3<f32>(1.0) - f_schlick(f0, nl)) + spec);
         }
     }
@@ -717,7 +722,9 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         // viewpoint; opaque paint must never receive this boost.
         refl_f = refl_f * (1.0 - 0.85 * own_pane);
     }
-    refl_f = refl_f * env_share;
+    // The normal Enhanced path left glass at its fixed 4% reflectance.
+    // Scale the reflected light (not the diffuse lighting or glass transmission).
+    refl_f = refl_f * select(env_share, camera.cam_pos.w, glass || pbr_reflects);
     var reflection = select(vec3<f32>(0.0), env * refl_f, reflects);
     // Enhanced+: traced instead (rough surfaces keep the probe, which is as good as a
     // ray there): the windows, the chrome and the paint's clear coat mirror the real street

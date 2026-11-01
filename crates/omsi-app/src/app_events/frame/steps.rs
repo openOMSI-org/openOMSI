@@ -521,6 +521,11 @@ pub(crate) fn picture_lighting(
         None => lights::lighting_from(daylight, 50000.0),
     };
     lighting.lamp_shadows &= settings.lamp_shadows;
+    // Cloud rendering follows the live menu option; the weather/precipitation remains.
+    if !settings.clouds {
+        lighting.cloud_density = 0.0;
+        lighting.cloud_layer = None;
+    }
     lighting.wetness = omsi_cfg::flags::OMSI_WETNESS.parse()
         .unwrap_or(wetness);
     dress_lighting(&mut lighting, world, inside, settings);
@@ -559,6 +564,7 @@ pub(crate) fn dress_lighting(
     lighting.windy_trees = settings.windy_trees();
     lighting.night_brightness = settings.night_brightness;
     lighting.reflection_strength = settings.reflections;
+    lighting.road_glare = settings.road_glare;
     lighting.puddles = match settings.puddles.as_str() { "off" => 0, "low" => 1, _ => 2 };
 }
 

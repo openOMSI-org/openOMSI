@@ -711,6 +711,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
         },
         menus: MenuState {
             list_dirty: false,
+            graphics_before: None,
             page_titles: Default::default(),
             chooser: None,
             editor: None,
