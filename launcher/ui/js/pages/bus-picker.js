@@ -136,16 +136,16 @@ export function BusPicker({ onClose, onTake, title = 'Choose a bus', yes = 'Take
         </div>
       </div>
       <div class="detail">
-        ${v ? html`${v.server_only ? html`<div class="stage-empty"><${Icon} name="bus" size=${36} /><span>${t('Preview available after the server bus is downloaded')}</span></div>` : html`<${BusPreview} look=${{ bus: v.file, paint, map: s.choice.map, weather: s.choice.weather, time: s.choice.time, date: s.choice.date }} />`}
+        ${v ? html`${v.server_catalog ? html`<div class="stage-empty"><${Icon} name="bus" size=${36} /><span>${t('Preview available after the server bus is downloaded')}</span></div>` : html`<${BusPreview} look=${{ bus: v.file, paint, map: s.choice.map, weather: s.choice.weather, time: s.choice.time, date: s.choice.date }} />`}
           <div class="card-body stack">
             <div class="row">
               <div class="grow"><h2 style="font-size:20px">${v.name}</h2><div class="muted">${[v.manufacturer, v.type_name, ...shownModes(v).map(modeLabel)].filter(Boolean).join(' - ')}</div></div>
               ${v.installed && html`<${Tag}>${t('Mod')}</${Tag}>`}
-              ${v.server_only && html`<${Tag}>${t('Server')}</${Tag}>`}
+              ${v.server_catalog && html`<${Tag}>${t('Server')}</${Tag}>`}
             </div>
             ${transportRefusal(map, v) && html`<${Notice} kind="warn">${transportRefusal(map, v)} ${t('Choose another map or vehicle.')}</${Notice}>`}
             ${v.missing_packs?.length > 0 && html`<${Notice} kind="warn">${t('Parts of this bus come from packs that are not installed: {packs}', { packs: v.missing_packs.join(', ') })}</${Notice}>`}
-            ${v.server_only && html`<${Notice} kind="info">${t('This bus and its selected paint will be checked against the server and downloaded when needed.')}</${Notice}>`}
+            ${v.server_catalog && html`<${Notice} kind="info">${t('This bus and its selected paint will be checked against the server and downloaded when needed.')}</${Notice}>`}
             <${Field} label="Paint">
               <${Select} raw value=${paint} options=${[['', v.default_paint ? `${t('Standard')} (${v.default_paint})` : t('Standard')], ...v.paints.map((p) => [p, p])]} onChange=${setPaint} />
             </${Field}>
