@@ -319,7 +319,7 @@ fn a_car_at_a_merge_gets_its_turn_in_a_rolling_queue() {
     // other lane lets it in
     for (v, spacing) in [(1.5, 7.0), (3.0, 7.0), (4.0, 9.0)] {
         let at = zip_merge(v, spacing, 120.0);
-        assert!(at.is_some_and(|t| t < 60.0), "queue at {v} m/s: merged after {at:?} s");
+        assert!(at.is_some_and(|t| t < 30.0), "queue at {v} m/s: merged after {at:?} s");
     }
 }
 
