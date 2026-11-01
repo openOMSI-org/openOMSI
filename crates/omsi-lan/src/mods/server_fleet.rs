@@ -11,8 +11,11 @@ use crate::server_cfg::SERVER_VEHICLES;
 pub(super) fn trusted_source(root: &Path, source: &Path) -> bool {
     let mut roots = omsi_cfg::content_roots();
     roots.push(root.to_path_buf());
-    let Some(declared) = roots.iter().filter(|r| source.starts_with(r))
-        .max_by_key(|r| r.components().count()) else {
+    let Some(declared) = roots
+        .iter()
+        .filter(|r| source.starts_with(r))
+        .max_by_key(|r| r.components().count())
+    else {
         return false;
     };
     // Physical files, including symlinks, must resolve inside their declared
@@ -158,7 +161,10 @@ mod tests {
         {
             let link = inside.join("linked.dds");
             std::os::unix::fs::symlink(&outside, &link).unwrap();
-            assert!(!trusted_source(&root, &link), "a mod symlink must not expose a private file");
+            assert!(
+                !trusted_source(&root, &link),
+                "a mod symlink must not expose a private file"
+            );
             std::fs::remove_file(link).unwrap();
         }
         std::fs::remove_dir_all(base).unwrap();
