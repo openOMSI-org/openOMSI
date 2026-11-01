@@ -56,6 +56,7 @@ pub struct DoorWants {
 /// Sale events to play money sounds
 pub enum SaleEvent {
     PassengerGaveMoney,
+    PassengerTookTicket(usize),
 }
 
 /// A bus as the passengers know it.

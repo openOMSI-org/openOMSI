@@ -271,6 +271,13 @@ impl PeopleSim {
             self.ticket_cash += value;
             self.sales.push((name, value));
             *taken_ticket = true;
+            // The passenger took a manually issued ticket from the driver.
+            // The passenger has physically taken the manually issued ticket.
+            if let Some(given) = player_bus.and_then(|b| b.given_ticket).filter(|n| n.is_finite() && *n >= 0.0)
+            {
+                let ticket_type = given.round() as usize;
+                self.sale_events.push((bn.id, SaleEvent::PassengerTookTicket(ticket_type)));
+            }
             if auto {
                 if let Some(m) = self.money.as_mut() {
                     m.clear(false);

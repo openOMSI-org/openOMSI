@@ -396,13 +396,14 @@ impl Humans {
         }
     }
 
-    pub(crate) fn sync_money(&mut self, view: &mut PeopleView, world: &World, renderer: &Renderer, scene: &mut Scene, bus: &VehicleInstance) {
+    pub(crate) fn sync_money(&mut self, view: &mut PeopleView, world: &World, renderer: &Renderer, scene: &mut Scene, bus: &VehicleInstance,
+    ) {
         if let Some(m) = self.sim.money.as_mut() {
             crate::money::sync(m, renderer, scene, bus);
         }
         if let Some(pack) = self.sim.tickets.as_ref().map(|t| &t.path) {
             // (compared in place: both paths were copied for it every frame)
-            let fresh = view.ticket_blocks.as_ref().is_none_or(|b| b.made_for.0 != bus.ty.def.path || b.made_for.1 != *pack);
+            let fresh = view.ticket_blocks.as_ref().is_none_or(|b| { b.made_for.0 != bus.ty.def.path || b.made_for.1 != *pack });
             if fresh {
                 // (the blocks of the bus driven before go: they stayed in the air where it was)
                 drop_ticket_blocks(view, renderer, scene);
@@ -413,7 +414,25 @@ impl Humans {
         } else {
             drop_ticket_blocks(view, renderer, scene);
         }
-        if let Some(b) = view.ticket_blocks.as_ref() {
+
+        // The same sale-money point used by passenger payments.
+        let sale_point = self.sim.player_cabin.as_ref().and_then(|c| c.money_var.clone());
+        if let Some(b) = view.ticket_blocks.as_mut() {
+            if let Some((point, var, parent)) = sale_point.as_ref() {
+                while let Some(n) = b.take_ticket_request() {
+                    // Use the same random placement algorithm as coins.
+                    let r = self.sim.money.as_mut().map(|m| [
+                        m.rand_f(),
+                        m.rand_f(),
+                        m.rand_f(),
+                    ]).unwrap_or([0.5, 0.5, 0.0]);
+
+                    b.place_ticket(n, renderer, scene, *point, *var, parent.as_deref(), r);
+                }
+            }
+            while let Some(instance) = b.take_ticket_removal_request() {
+                b.remove_ticket_instance(instance, renderer, scene);
+            }
             b.sync(renderer, scene, bus);
         }
     }

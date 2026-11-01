@@ -311,11 +311,24 @@ pub(crate) fn humans_after_step(
             v.trigger(&format!("PAX_Stamper{k}_Used"));
         }
     }
-    for (bus, event) in h.take_money_events() {
-        let trigger = match event {
-            SaleEvent::PassengerGaveMoney => "ev_ticketsale_givemoney",
+    for (bus, event) in h.take_sale_events() {
+        let (trigger, ticket_type) = match event {
+            SaleEvent::PassengerGaveMoney => { ("ev_ticketsale_givemoney", None) },
+            SaleEvent::PassengerTookTicket(ticket_type) => { ("ev_ticketsale_taketicket", Some(ticket_type)) },
         };
-
+        // The player's passenger has taken the ticket from the desk.
+        if bus.is_none() {
+            if let Some(ticket_type) = ticket_type {
+                if let Some(blocks) = view.ticket_blocks.as_mut() {
+                    if !blocks.take_ticket(ticket_type, r, scene) {
+                        log::warn!(
+                            "Passenger took ticket type {ticket_type}, \
+                            but no matching ticket was found on the desk"
+                        );
+                    }
+                }
+            }
+        }
         match bus {
             None => {
                 if let Some(p) = player.as_deref_mut() {
@@ -323,9 +336,7 @@ pub(crate) fn humans_after_step(
                 }
             }
             Some(id) => {
-                if let Some(c) = traffic
-                    .as_deref_mut()
-                    .and_then(|t| t.cars.iter_mut().find(|c| c.id == id))
+                if let Some(c) = traffic.as_deref_mut().and_then(|t| t.cars.iter_mut().find(|c| c.id == id))
                 {
                     c.vehicle.host.fired_triggers.push(trigger.into());
                 }
