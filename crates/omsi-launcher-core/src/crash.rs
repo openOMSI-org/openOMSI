@@ -75,23 +75,23 @@ fn redact_with(text: &str, home: Option<&str>) -> String {
     let mut out = text.to_string();
     // (a home folder that is a drive or the root names nobody)
     if let Some(home) = home.map(|h| h.trim_end_matches(['/', '\\'])).filter(|h| h.len() > 3) {
-        for h in [home.to_string(), home.replace('\\', "/"), home.replace('/', "\\")] {
+        for h in [home.replace('\\', "\\\\"), home.to_string(), home.replace('\\', "/"), home.replace('/', "\\")] {
             out = replace_whole(&out, &h, "~");
         }
     }
     let user_end = |rest: &str| {
-        let end = rest.find(['\\', '/', '"', '\'', '\n', '\r']).unwrap_or(rest.len());
+        let end = rest.find(['\\', '/', '"', '\n', '\r']).unwrap_or(rest.len());
         // (a name at the end of a path stops at the next word: "C:\\Users\\x exited")
         if rest[end..].starts_with(['\\', '/']) { end } else { rest[..end].find(char::is_whitespace).unwrap_or(end) }
     };
-    out = replace_segments(&out, &["\\users\\", "/users/", "/home/"], user_end, "<user>");
+    out = replace_segments(&out, &["\\\\users\\\\", "\\users\\", "/users/", "/home/"], user_end, "<user>");
     let driver_end = |rest: &str| {
-        let line = &rest[..rest.find(['\n', '\r', '"', '\'', '/', '\\']).unwrap_or(rest.len())];
+        let line = &rest[..rest.find(['\n', '\r', '"', '/', '\\']).unwrap_or(rest.len())];
         line.to_ascii_lowercase().find(".odr").unwrap_or(0)
     };
-    out = replace_segments(&out, &["drivers/", "drivers\\"], driver_end, "<driver>");
+    out = replace_segments(&out, &["drivers/", "drivers\\\\", "drivers\\"], driver_end, "<driver>");
     // the other players: their names in the multiplayer lines, and the chat left out
-    let quoted = |rest: &str| rest.find(['\'', '\n']).filter(|&n| rest[n..].starts_with('\'')).unwrap_or(0);
+    let quoted = |rest: &str| quoted_name_end(rest).unwrap_or(0);
     out = replace_segments(&out, &["lan: '", "connected to '"], quoted, "<player>");
     out = player_names(&out);
     out.lines().map(|l| match l.find("LAN chat") {
@@ -108,7 +108,7 @@ fn player_names(text: &str) -> String {
     while let Some(i) = text[at..].find("player ").map(|i| at + i + "player ".len()) {
         let digits = text[i..].find(|c: char| !c.is_ascii_digit()).unwrap_or(text.len() - i);
         let open = i + digits;
-        let name = (digits > 0 && text[open..].starts_with(" '")).then(|| &text[open + 2..]).and_then(|r| r.find(['\'', '\n']).filter(|&n| r[n..].starts_with('\'')));
+        let name = (digits > 0 && text[open..].starts_with(" '")).then(|| &text[open + 2..]).and_then(quoted_name_end);
         out.push_str(&text[at..i]);
         match name {
             Some(n) => {
@@ -121,6 +121,14 @@ fn player_names(text: &str) -> String {
     }
     out.push_str(&text[at..]);
     out
+}
+
+/// Apostrophes belong to a name too. Prefer the boundary of known log fields, then
+/// conservatively remove through the last quote on the line if the wording is unknown.
+fn quoted_name_end(rest: &str) -> Option<usize> {
+    let line = rest.split(['\n', '\r']).next().unwrap_or("");
+    ["' (session ", "' at ", "' left", "' joined", "' is back", "' shows ", "' in ", "': "]
+        .iter().filter_map(|suffix| line.find(suffix)).min().or_else(|| line.rfind('\''))
 }
 
 /// `text` with `what` replaced where it is a whole name (`/root`, not the start of `/rootfs`).
@@ -143,7 +151,7 @@ fn replace_segments(text: &str, markers: &[&str], end: impl Fn(&str) -> usize, w
     let lower = text.to_ascii_lowercase();
     let mut out = String::with_capacity(text.len());
     let mut at = 0;
-    while let Some((start, m)) = markers.iter().filter_map(|m| lower[at..].find(m).map(|i| (at + i, m.len()))).min() {
+    while let Some((start, m)) = markers.iter().filter_map(|m| lower[at..].find(m).map(|i| (at + i, m.len()))).min_by_key(|&(start, len)| (start, std::cmp::Reverse(len))) {
         let from = start + m;
         let n = end(&text[from..]);
         out.push_str(&text[at..from]);
@@ -205,6 +213,26 @@ mod hint_tests {
 #[cfg(test)]
 mod redact_tests {
     use super::redact_with;
+
+    #[test]
+    fn debug_paths_and_names_with_apostrophes_are_redacted_in_full() {
+        let path = r"C:\Users\O'Brien\AppData\game.log";
+        let debug = format!("{path:?}");
+        let redacted = redact_with(&debug, None);
+        assert_eq!(redacted, r#""C:\\Users\\<user>\\AppData\\game.log""#);
+        assert_eq!(redact_with(&debug, Some(r"C:\Users\O'Brien")), r#""~\\AppData\\game.log""#);
+        for text in [
+            r"C:\Users\O'Brien\AppData /home/O'Brien/game.log /Users/O' Brien/Library",
+            r"Drivers/O'Brien.odr Drivers\\O'Brien.odr",
+            "LAN: player 3 'O'Brien' left\nLAN: player 4 'O' Brien' joined from 203.0.113.x",
+            "LAN: 'O'Brien' at 203.0.113.x wants to join",
+            "LAN: connected to 'O'Brien' (session 1f), we are player 2; weather 'rain'",
+        ] {
+            let redacted = redact_with(text, None);
+            assert!(!redacted.contains("Brien"), "{redacted}");
+        }
+        assert!(redact_with("LAN: connected to 'O'Brien' (session 1f); weather 'rain'", None).contains("weather 'rain'"));
+    }
 
     #[test]
     fn a_report_names_neither_the_account_nor_the_driver() {
