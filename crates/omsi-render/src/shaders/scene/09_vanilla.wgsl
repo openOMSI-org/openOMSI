@@ -129,7 +129,7 @@ fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) ->
         // detail texturing (setting): procedural grain on the ground and the roads, fading out with distance
         let dist0 = distance(in.world, camera.cam_pos.xyz);
         let k = clamp(1.0 - (dist0 - 25.0) / 120.0, 0.0, 1.0);
-        let nz = detail_noise(world_pattern_xy(in.world));
+        let nz = detail_noise(world_pattern_xy(in.world), k);
         albedo = albedo * (1.0 + (nz - 0.5) * 0.42 * k);
     }
     // ([nomaplighting]: params.y 0.25 - not lit by the map's lamps)

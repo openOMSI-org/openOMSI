@@ -222,6 +222,7 @@ pub struct Renderer {
     /// What the window's pictures drew since start, summed (OMSI_PROFILE): instances that
     /// passed the culling and draws per pass.
     pub counts: std::cell::RefCell<std::collections::BTreeMap<&'static str, f64>>,
+    deferred: std::cell::RefCell<Vec<wgpu::CommandBuffer>>,
     pub frame_draws: (usize, usize),
     profiling: bool,
     draw_audit_at: std::time::Instant,
@@ -469,6 +470,17 @@ pub const SHADOW_RANGE_CLOSE: f32 = 32.0;
 const SHADOW_CLOSE_MAX: u32 = 2048;
 
 impl Renderer {
+    pub fn submit_with_frame(&self, commands: wgpu::CommandBuffer) {
+        let mut deferred = self.deferred.borrow_mut();
+        deferred.push(commands);
+        if deferred.len() >= 4 {
+            self.queue.submit(deferred.drain(..));
+        }
+    }
+
+    pub fn take_deferred_commands(&self) -> Vec<wgpu::CommandBuffer> {
+        self.deferred.take()
+    }
 
     /// Compile Enhanced+ colour-only pipelines once, when a headset session starts.
     /// Desktop-only renderers never compile the headset variants.

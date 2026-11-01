@@ -336,6 +336,7 @@ flags! {
     OMSI_LAUNCHER: Text, Setup, Use, "-", "Program a plain start opens as the launcher instead of the desktop launcher (openomsi-launcher-app) beside the game.";
     OMSI_LIGHT_GRID_SQUARES: Bool, Switch, Frame, "off", "A light goes into every cell of the light grid's square round its range, the corners its range misses too (A/B).";
     OMSI_LIST_ALIGNED: Bool, Debug, Use, "off", "Log the splines aligned to the terrain.";
+    OMSI_MAIN_SPLIT: Bool, Switch, Frame, "off", "Split the main pass's bundles in two (encoded apart, the second part loads what the first stored).";
     OMSI_MAX_FPS: Num, Tuning, Use, "settings", "Frame rate limit for this run.";
     OMSI_METER: Text, Tuning, Use, "-", "gain,target,dark,bright,bias,night: the exposure metering.";
     OMSI_MIRROR_ENHANCED: Bool, Switch, Frame, "off", "Draw the mirrors with the enhanced shading again.";
@@ -384,7 +385,6 @@ flags! {
     OMSI_NO_LAN_MODS: Bool, Switch, Use, "off", "LAN: do not exchange mods.";
     OMSI_NO_LAN_UPLOADS: Bool, Switch, Use, "off", "LAN: a game hosting a session takes no buses from the players who join.";
     OMSI_NO_LIGHT_MAP: Bool, Switch, Use, "off", "No night light maps on the tiles (A/B).";
-    OMSI_NO_MAIN_SPLIT: Bool, Switch, Frame, "off", "Do not split the main pass's bundles in two.";
     OMSI_NO_MAP_CACHE: Bool, Test, Use, "off", "Read the map's navigator layers (houses, ground, paving) again instead of from the cache.";
     OMSI_NO_MATERIAL_SPLINE_BATCHING: Bool, Switch, Use, "off", "No batching of splines by material.";
     OMSI_NO_MODEL_ORDER: Bool, Switch, Use, "off", "Draw the opaque parts of ordered models first again (A/B).";

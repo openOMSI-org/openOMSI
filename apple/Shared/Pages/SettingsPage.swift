@@ -453,7 +453,11 @@ struct SettingsPage: View {
             }
             SettingToggle(label: "Count me in the website's \"playing now\" (anonymous)", key: "presence", fallback: true)
             SettingToggle(label: "Send servers an identifier for bans", key: "hardware_id", fallback: true, help: "Made from this computer's ID, different for each server owner, so servers cannot match you with each other. Some servers turn away players without it.")
-            Text("openOMSI \(store.version) (\(store.build))").font(.inter(12)).foregroundStyle(Theme.muted)
+            HStack {
+                Text("openOMSI \(store.version) (\(store.build))").font(.inter(12)).foregroundStyle(Theme.muted)
+                Spacer()
+                Button("Privacy") { Platform.openURL("https://openomsi.org/privacy/") }.buttonStyle(.ghost)
+            }
             SectionTitle("Reset").padding(.top, 8)
             HStack {
                 Button { confirmReset = true } label: { Label("Reset all settings...", systemImage: "arrow.counterclockwise") }
