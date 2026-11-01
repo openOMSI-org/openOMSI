@@ -190,17 +190,23 @@ export const serverJoined = (answer) => ({
   lan_server: {
     asked: !!answer, name: answer?.name || '', time: answer?.time || '',
     weather: answer?.weather || '', vehicles: answer?.vehicles || [],
-    fleet_version: answer?.fleet_version || 0, fleet: answer?.fleet || [],
+    fleet_version: Number(answer?.fleet_version) || 0,
+    fleet: Array.isArray(answer?.fleet) ? answer.fleet : [],
   },
 });
 
-export async function askJoined() {
+/** Refresh once when opening the picker: saved server status can predate the
+ * fleet catalogue, even when the game server is now running the latest build. */
+export async function askJoined({ refresh = false } = {}) {
   const c = S.choice;
-  if (c?.lan_mode !== 'join' || c.lan_server?.asked) return;
-  const r = await call('server_query', { address: c.lan_addr.trim() }).catch(() => null);
-  if (!r || S.choice.lan_mode !== 'join' || S.choice.lan_addr !== c.lan_addr) return;
+  if (c?.lan_mode !== 'join' || (!refresh && c.lan_server?.asked)) return c?.lan_server || null;
+  const address = c.lan_addr?.trim();
+  if (!address) return null;
+  const r = await call('server_query', { address }).catch(() => null);
+  if (!r || S.choice.lan_mode !== 'join' || S.choice.lan_addr?.trim() !== address) return null;
   choose({ ...serverJoined({ ...r, name: c.lan_server?.name || r.name }), lan_map: c.lan_map || r.map || '' });
   choose(allowedBus());
+  return r;
 }
 
 /** A bus as people call it (its [friendlyname]), from its file: never "MAN_SD77.bus". */
