@@ -595,6 +595,7 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) -> Option<crate::m
             let needs_selected_download = local_fleet::requires_server_download(
                 args.allow_server_fleet, args.bus.is_some(), local_fleet,
             );
+            let server_only = needs_selected_download && !args.bus.as_deref().is_some_and(|b| local_fleet::installed(&args.root, b));
             // the host's TCP port is not always reachable (a router forwards the UDP session
             // only, or we came in over a WebSocket): the files go through its tunnel then
             let joined_url = crate::gateway::joined_url();
@@ -612,9 +613,7 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) -> Option<crate::m
                     None => {
                         let why = "no reachable TCP mod channel or WebSocket relay";
                         note(lan, format!("Host's mods could not be downloaded: {why}"));
-                        // Never fall through to a different local bus version after
-                        // a player explicitly selected the server's fleet package.
-                        if needs_selected_download {
+                        if server_only {
                             args.mod_fetch_error = Some(why.into());
                         }
                         return None;
@@ -667,9 +666,7 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) -> Option<crate::m
                 Err(e) => {
                     log::warn!("LAN mods: {e}");
                     note(lan, format!("Host's mods could not be fetched: {e}"));
-                    // A selected dedicated fleet package must match before spawning.
-                    // Do not silently use the player's incompatible local repaint.
-                    if selected_requested {
+                    if selected_requested && server_only {
                         args.mod_fetch_error = Some(e);
                     }
                 }

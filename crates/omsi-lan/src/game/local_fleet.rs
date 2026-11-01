@@ -19,6 +19,10 @@ pub(super) fn verified(args: &LanConfig, lan: &mut LanSession) -> bool {
     }
     worker.join().ok().flatten() == Some(true)
 }
+pub(super) fn installed(root: &std::path::Path, bus: &str) -> bool {
+    omsi_net::vehicle_path(bus).is_some_and(|bus| omsi_cfg::find_in_roots(&bus).map(|(_, p)| p).unwrap_or_else(|| root.join(&bus)).is_file())
+}
+
 /// A selected server fleet vehicle requires a download unless its installed bytes
 /// were verified against the server's complete model fingerprint.
 pub(super) fn requires_server_download(allowed: bool, selected: bool, verified: bool) -> bool {
@@ -88,6 +92,17 @@ mod tests {
         assert!(!matches_announced(&offered, "Vehicles/Other/test.bus", "", || {
             panic!("wrong bus must not be accepted by fingerprint alone")
         }));
+    }
+
+    #[test]
+    fn only_a_bus_missing_here_is_server_only() {
+        let root = std::env::temp_dir().join(format!("omsi-local-fleet-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("Vehicles/Here")).unwrap();
+        std::fs::write(root.join("Vehicles/Here/here.bus"), b"").unwrap();
+        assert!(installed(&root, "Vehicles\\Here\\here.bus"));
+        assert!(!installed(&root, "Vehicles/Gone/gone.bus"));
+        assert!(!installed(&root, "../outside.bus"));
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
