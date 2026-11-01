@@ -462,6 +462,9 @@ pub(super) fn sync_live(app: &mut App) {
     let s = &app.settings;
     if let Some(w) = app.world.as_ref() {
         w.settings.set_sound_scenery(s.vol_scenery);
+        // The world reads these atomically during drawing, no map or bus reload required.
+        w.settings.set_mirror_size(s.mirror_size);
+        w.settings.set_rain_quality(crate::rain::quality_of(&s.rain_quality));
     }
     if let Some(a) = app.sound.audio.as_ref() {
         a.set_doppler(s.doppler);
