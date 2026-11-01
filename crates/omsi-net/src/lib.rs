@@ -555,17 +555,27 @@ fn parse_session_hex(s: &str) -> Option<u64> {
     u64::from_str_radix(s.trim(), 16).ok()
 }
 
-/// This machine's hardware identifier (see `omsi-lan`'s `bans::local_hardware_id`): set once
-/// at the start, read by every session made after. It never goes over the wire: a host gets
+/// This machine's hardware identifier (see `omsi-lan`'s `bans::local_hardware_id`), read by
+/// every session made after it is set. It never goes over the wire: a host gets
 /// `host_hardware_id` of it and the host's realm, so two hosts cannot match their players.
-static HARDWARE_ID: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+static HARDWARE_ID: std::sync::RwLock<Option<String>> = std::sync::RwLock::new(None);
 
 /// Tell the sessions this machine's hardware identifier (32 lower-case hex digits; anything
 /// else is ignored).
 pub fn set_hardware_id(id: &str) {
     if is_hardware_id(id) {
-        let _ = HARDWARE_ID.set(id.to_string());
+        *HARDWARE_ID.write().unwrap_or_else(|e| e.into_inner()) = Some(id.to_string());
     }
+}
+
+/// Sessions made from now on send no hardware identifier.
+pub fn clear_hardware_id() {
+    *HARDWARE_ID.write().unwrap_or_else(|e| e.into_inner()) = None;
+}
+
+/// The identifier the next session takes (`set_hardware_id`).
+pub fn hardware_id() -> Option<String> {
+    HARDWARE_ID.read().unwrap_or_else(|e| e.into_inner()).clone()
 }
 
 /// The identifier a machine sends to the host whose realm (`REALM`) is `realm`.
@@ -1542,7 +1552,7 @@ impl LanSession {
             hw_required: false,
             hw_ban_revision: 0,
             hardware_id: None,
-            hardware_base: HARDWARE_ID.get().cloned(),
+            hardware_base: hardware_id(),
             realm_answered: false,
             ban_realm: None,
             commands: Vec::new(),

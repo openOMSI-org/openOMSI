@@ -88,6 +88,9 @@ static ALLOWED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::n
 /// Whether this game sends hosts an identifier at all (the launcher's `hardware_id`).
 pub fn allow_hardware_id(on: bool) {
     ALLOWED.store(on, std::sync::atomic::Ordering::Relaxed);
+    if !on {
+        omsi_net::clear_hardware_id();
+    }
 }
 
 /// The identifier a machine id makes (see the module's text).
@@ -155,9 +158,10 @@ pub fn local_hardware_id() -> Option<String> {
     .clone()
 }
 
-/// Tell the sessions of this process the machine's identifier (once, at the start).
+/// Tell the sessions made from now on the machine's identifier, or none when switched off.
 pub fn announce_local_hardware_id() {
     if !ALLOWED.load(std::sync::atomic::Ordering::Relaxed) {
+        omsi_net::clear_hardware_id();
         return;
     }
     if let Some(id) = local_hardware_id() {
@@ -551,5 +555,19 @@ mod tests {
         assert_eq!(Scope::parse("session"), Some(Scope::Session));
         assert_eq!(Scope::parse("ALL"), Some(Scope::Owner));
         assert_eq!(Scope::parse("run"), None);
+    }
+
+    #[test]
+    fn switching_the_hardware_id_off_holds_for_the_next_session_of_the_same_process() {
+        let (a, b) = ("ab".repeat(16), "cd".repeat(16));
+        allow_hardware_id(true);
+        omsi_net::set_hardware_id(&a);
+        assert_eq!(omsi_net::hardware_id(), Some(a));
+        allow_hardware_id(false);
+        announce_local_hardware_id();
+        assert_eq!(omsi_net::hardware_id(), None);
+        allow_hardware_id(true);
+        omsi_net::set_hardware_id(&b);
+        assert_eq!(omsi_net::hardware_id(), Some(b));
     }
 }
