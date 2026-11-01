@@ -103,6 +103,30 @@ mod tests {
     /// and the detail grain's octaves left out where faded.
     /// (with Unix line ends: a Windows checkout may turn the parts' into CRLF, as it did the
     /// single files', and the 0.2.31 release's Windows test failed on that alone)
+    /// Regression: road glare has its own lane, not the ground-prepass switch.
+    /// Runs without a GPU and protects the Enhanced+ and MSAA/SSAO combinations.
+    #[test]
+    fn road_glare_uses_dedicated_lod_lane() {
+        let shader = super::ENHANCED;
+        let setup = include_str!("passes/setup.rs");
+        assert!(
+            shader.contains("let from_ground = camera.lod.y > 0.5"),
+            "lod.y must remain the ground-prepass flag"
+        );
+        assert!(
+            shader.contains("spec = spec * camera.lod.z;"),
+            "road glare must use lod.z, never lod.y"
+        );
+        assert!(
+            !shader.contains("spec = spec * camera.lod.y;"),
+            "multiplying by the ground flag corrupts road glare"
+        );
+        assert!(
+            setup.contains("lod: [self.fsr_mip_bias(f), 0.0, lighting.road_glare.clamp(0.0, 2.0), 0.0]"),
+            "camera uniform must initialize the ground-pass flag to zero and glare in z"
+        );
+    }
+
     #[test]
     fn assembled_shaders_are_the_old_files() {
         let (scene, enhanced) = (super::SCENE.replace("\r\n", "\n"), super::ENHANCED.replace("\r\n", "\n"));
