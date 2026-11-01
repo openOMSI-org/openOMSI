@@ -1302,6 +1302,9 @@ pub struct LanSession {
     pub world: WorldInfo,
     peers: HashMap<u32, Peer>,
     max_peers: usize,
+    /// FIFO admission for joiners beyond the eight parallel loading slots.
+    /// Each candidate must keep retrying HELLO or the reservation expires.
+    waiting_joins: std::collections::VecDeque<(SocketAddr, Instant)>,
     next_id: u32,
     send_acc: f32,
     hello_acc: f32,
@@ -1467,6 +1470,7 @@ impl LanSession {
             world,
             peers: HashMap::new(),
             max_peers: MAX_PEERS,
+            waiting_joins: std::collections::VecDeque::new(),
             next_id: 2,
             send_acc: 0.0,
             hello_acc: 1.0,
@@ -2350,7 +2354,7 @@ impl LanSession {
             return;
         }
         let why = match (self.welcome.is_some(), self.lost_at) {
-            (false, _) if self.trying >= self.join_timeout.as_secs_f32() + (if self.waiting_for_slot { 50.0 } else { 0.0 }) => {
+            (false, _) if self.trying >= self.join_timeout.as_secs_f32() + (if self.waiting_for_slot { 300.0 } else { 0.0 }) => {
                 self.no_answer(self.join_timeout)
             }
             (true, Some(at)) if at.elapsed() >= RECONNECT_TIMEOUT => format!(
@@ -2653,7 +2657,14 @@ impl LanSession {
                     self.send(msg.as_bytes(), from);
                 }
                 ("HELLO", Role::Host) => self.on_hello(&parts, from),
-                ("WELCOME", Role::Client) => self.on_welcome(&parts, from),
+                // Ignore unexpected addresses: they must not impersonate a host or
+                // end an in-progress join by injecting a fabricated welcome.
+                ("WELCOME", Role::Client)
+                    if self.host == Some(from)
+                        || (self.host.is_none() && self.candidates.contains(&from)) =>
+                {
+                    self.on_welcome(&parts, from);
+                },
                 ("CHALLENGE", Role::Client) if self.host == Some(from) || (self.host.is_none() && self.candidates.contains(&from)) => self.on_challenge(&parts),
                 // A temporary admission bottleneck is not a permanent rejection.
                 // Old clients ignore WAIT and still retry HELLO without a protocol bump.
@@ -2671,7 +2682,10 @@ impl LanSession {
                     }
                     self.waiting_for_slot = true;
                 }
-                ("REJECT", Role::Client) if self.host.is_none() || Some(from) == self.host => {
+                ("REJECT", Role::Client)
+                    if self.host == Some(from)
+                        || (self.host.is_none() && self.candidates.contains(&from)) =>
+                {
                     let reason = clean_text(field(&parts, 2), 300);
                     // Different candidate IPs may belong to different computers. Keep
                     // trying those, but a refusal from the one machine whose ports we
@@ -3095,6 +3109,34 @@ impl LanSession {
         // a returning client keeps its id; so does one that tried several of our addresses
         // at once, and the address its latest hello came from is the one it has chosen
         let same = |p: &Peer| p.addr == Some(from) || (nonce.is_some() && p.nonce == nonce);
+        if !self.peers.values().any(same) && self.peers.len() < self.max_peers {
+            // FIFO waiting list, bounded and refreshed only by another HELLO from the
+            // same source. A disconnected client cannot reserve a slot indefinitely.
+            let now = Instant::now();
+            self.waiting_joins.retain(|(_, seen)| now.duration_since(*seen) < Duration::from_secs(6));
+            let queued = self.waiting_joins.iter().position(|(addr, _)| *addr == from);
+            if let Some(i) = queued {
+                self.waiting_joins[i].1 = now;
+            } else if self.peers.values().filter(|p| !p.has_pose).count() >= MAX_JOINING
+                || !self.waiting_joins.is_empty()
+            {
+                if self.waiting_joins.len() >= MAX_PEERS {
+                    self.reject(from, "the host has too many players waiting to join - retry later");
+                    return;
+                }
+                self.waiting_joins.push_back((from, now));
+            }
+            let active_loading = self.peers.values().filter(|p| !p.has_pose).count();
+            if active_loading >= MAX_JOINING
+                || self.waiting_joins.front().is_some_and(|(addr, _)| *addr != from)
+            {
+                self.send(format!("WAIT|{PROTOCOL}|2").as_bytes(), from);
+                return;
+            }
+            if self.waiting_joins.front().is_some_and(|(addr, _)| *addr == from) {
+                self.waiting_joins.pop_front();
+            }
+        }
         let (id, here) = match self.peers.iter().find(|(_, p)| same(p)) {
             Some((id, _)) => {
                 let id = *id;
@@ -3129,8 +3171,7 @@ impl LanSession {
                 return;
             }
             None if self.peers.values().filter(|p| !p.has_pose).count() >= MAX_JOINING => {
-                // Protect the loading budget without permanently kicking simultaneous
-                // joiners. They retry HELLO when an earlier player has finished loading.
+                // Defensive fallback; normally the bounded FIFO above handles this.
                 self.send(format!("WAIT|{PROTOCOL}|2").as_bytes(), from);
                 return;
             }

@@ -1465,6 +1465,60 @@ fn twenty_simultaneous_hellos_eventually_admit_every_player() {
 }
 
 #[test]
+fn burst_waiters_are_admitted_in_first_in_first_out_order() {
+    let mut host = LanSession::host(0, "host", world("m"), false).unwrap();
+    host.set_peer_limit(20);
+    for id in 100..100 + MAX_JOINING as u32 {
+        let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, id as u16 + 30000));
+        host.peers.insert(id, Peer::new(Some(addr), Pose::default()));
+    }
+    let a = SocketAddr::from((Ipv4Addr::LOCALHOST, 42001));
+    let b = SocketAddr::from((Ipv4Addr::LOCALHOST, 42002));
+    let hello = format!("HELLO|{PROTOCOL}|-|queued|Vehicles/x.bus|m|1989-05-30|32400||");
+    let fields: Vec<&str> = hello.split('|').collect();
+    host.on_hello(&fields, a);
+    host.on_hello(&fields, b);
+    assert_eq!(host.waiting_joins.len(), 2);
+    assert_eq!(host.waiting_joins.front().unwrap().0, a);
+
+    // One incumbent finishes loading. B cannot skip the earlier waiter A.
+    host.peers.get_mut(&100).unwrap().has_pose = true;
+    host.on_hello(&fields, b);
+    assert_eq!(host.peer_count(), MAX_JOINING);
+    assert_eq!(host.waiting_joins.front().unwrap().0, a);
+    host.on_hello(&fields, a);
+    assert_eq!(host.peer_count(), MAX_JOINING + 1);
+    assert_eq!(host.waiting_joins.front().unwrap().0, b);
+
+    host.peers.get_mut(&101).unwrap().has_pose = true;
+    host.on_hello(&fields, b);
+    assert_eq!(host.peer_count(), MAX_JOINING + 2);
+    assert!(host.waiting_joins.is_empty());
+}
+
+#[test]
+fn unrecognized_source_cannot_inject_wait_reject_or_welcome() {
+    let intended = raw();
+    let from = intended.local_addr().unwrap();
+    let attacker = raw();
+    let mut client =
+        LanSession::join(&from.to_string(), "player", world("m"), Duration::from_secs(10)).unwrap();
+    let target = client.local_addr().unwrap();
+    for text in [
+        format!("WAIT|{PROTOCOL}|2"),
+        format!("REJECT|{PROTOCOL}|permanent denial"),
+        format!("WELCOME|{PROTOCOL}|2|AAAAAAAAAAAA|attacker|m|1989-05-30|32400||||"),
+    ] {
+        attacker.send_to(text.as_bytes(), target).unwrap();
+        client.tick(0.01, &pose(0.0));
+    }
+    assert!(!client.waiting_for_slot);
+    assert!(!client.connected);
+    assert!(client.rejected.is_none());
+    assert!(client.turned_away.is_none());
+}
+
+#[test]
 fn a_busy_host_keeps_the_client_waiting_without_permanent_rejection() {
     let host = raw();
     let at = host.local_addr().unwrap();
