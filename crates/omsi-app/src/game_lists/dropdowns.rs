@@ -308,6 +308,8 @@ pub(super) fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
         // (OMSI's AIMaxHumans, #2087)
         "ai_max_humans" => vec![("50", "50"), ("100", "100"), ("200", "200"), ("400", "400"), ("720", "720"), ("1000", "1000")],
         "language" => omsi_launcher_lib::LANGUAGES.iter().map(|l| (l.0, l.1)).collect(),
+        // (openOMSI's own look as "openomsi": the setting reads it as "")
+        "ui_theme_pack" => crate::themes::choices().iter().map(|(id, name)| (if id.is_empty() { crate::themes::OWN } else { id.as_str() }, name.as_str())).collect(),
         "ui_theme" => vec![("dark", "Dark"), ("light", "Light theme")],
         "vr_scale" => vec![("0.5", "50%"), ("0.65", "65%"), ("0.8", "80%"), ("1", "100%")],
         "vr_head_smoothing_ms" => vec![("0", "Off"), ("5", "5 ms"), ("10", "10 ms"), ("20", "20 ms"), ("30", "30 ms")],

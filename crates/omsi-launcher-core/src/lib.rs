@@ -19,6 +19,8 @@ pub mod optimise;
 mod hof_sync;
 mod file_dialog;
 pub mod i18n;
+mod graphics_profiles;
+pub use graphics_profiles::*;
 
 pub use file_dialog::{pick_file, pick_folder, pick_hofs, pick_mod};
 pub use hof_sync::{add_shared_hofs, share_map_hofs, MapHofOffer};
@@ -2211,6 +2213,22 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     settings_from_text_on(text, cfg!(any(target_os = "android", target_os = "ios")))
 }
 
+// Voice chat in multiplayer: off until switched on (the microphone is then used with a
+// talk key held, or open).
+fn voice_defaults(v: &mut Value) {
+    v["voice_enabled"] = json!(false);
+    v["voice_mode"] = json!("ptt");
+    v["voice_mic_gain"] = json!(1.0);
+    v["voice_threshold_db"] = json!(-45);
+    v["voice_input_device"] = json!("");
+    v["voice_volume"] = json!(1.0);
+    v["voice_volume_nearby"] = json!(1.0);
+    v["voice_volume_radio"] = json!(1.0);
+    v["voice_range"] = json!(75);
+    v["voice_talker_list"] = json!(true);
+    v["voice_all_off"] = json!(false);
+}
+
 // Keep independent opt-in defaults shared by desktop and phone settings.
 fn passenger_defaults(v: &mut Value) {
     v["passenger_connections"] = json!(false);
@@ -2230,6 +2248,8 @@ fn graphics_and_interface_defaults(v: &mut Value) {
     v["cloud_shadows"] = json!(false);
     v["light_glow"] = json!(false);
     v["pause_quick_actions"] = json!("default");
+    // (the interface theme's id: "openomsi" is openOMSI's own look)
+    v["ui_theme_pack"] = json!("openomsi");
     v["ui_theme"] = json!("dark");
     v["road_glare"] = json!(1.0);
     v["traffic_headlights"] = json!(1.0);
@@ -2279,19 +2299,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     // system's own (SwiftUI); elsewhere there is only this one
     v["cross_platform_launcher"] = json!(false);
     v["discord_app_id"] = json!("");
-    // voice chat in multiplayer: off until switched on (the microphone is then used with a
-    // talk key held, or open)
-    v["voice_enabled"] = json!(false);
-    v["voice_mode"] = json!("ptt");
-    v["voice_mic_gain"] = json!(1.0);
-    v["voice_threshold_db"] = json!(-45);
-    v["voice_input_device"] = json!("");
-    v["voice_volume"] = json!(1.0);
-    v["voice_volume_nearby"] = json!(1.0);
-    v["voice_volume_radio"] = json!(1.0);
-    v["voice_range"] = json!(75);
-    v["voice_talker_list"] = json!(true);
-    v["voice_all_off"] = json!(false);
+    voice_defaults(&mut v);
     // the launcher gives the graphics card up while a game runs (off: it stays drawn)
     v["launcher_rest"] = json!(true);
     // the window's size in pixels, "auto" to fit the screen (#904)
@@ -2364,7 +2372,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
         let (k, val) = (setting_key(k), val.trim());
         let b = |x: &str| matches!(x.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes");
         match k.as_str() {
-            "pause_quick_actions" => v[&k] = json!(val),
+            "pause_quick_actions" | "ui_theme_pack" => v[&k] = json!(val),
             "anisotropy" => v[&k] = json!(val.parse::<i64>().unwrap_or(8).clamp(1, 16)),
             "msaa" | "shadow_size" => v[&k] = json!(val.parse::<i64>().unwrap_or(0)),
             "ui_opacity" | "volume" | "vol_ai" | "vol_scenery" | "vol_ambient" | "min_obj_size" | "radio_speaker" | "radio_hiss" | "radio_dropouts" => v[&k] = json!(val.parse::<f64>().unwrap_or(0.0)),
@@ -2599,58 +2607,6 @@ pub fn save_settings(v: &Value) -> Result<()> {
     Ok(())
 }
 
-/// The settings a graphics profile holds: what the Graphics tab shows, except the machine's
-/// own (fullscreen, graphics API).
-pub const GRAPHICS_PROFILE_KEYS: [&str; 44] = [
-    "graphics", "msaa", "render_scale", "upscaler", "fsr_quality", "fsr_sharpness", "anisotropy", "shadow_size", "ssao", "shadows", "shadow_casters", "detail_textures", "night_brightness", "led_glow", "led_mips", "shadow_blobs", "lamp_shadows", "reflections", "road_glare", "traffic_headlights", "clouds", "cloud_quality", "street_light", "rain_quality", "vehicle_smoke", "puddles", "windy_trees", "road_snow", "ray_tracing", "light_shadows", "cloud_shadows", "light_glow",
-    "vsync", "max_fps", "view_distance", "max_obj_dist", "min_obj_size", "mirror_size", "mirror_refresh", "mirror_quality", "mirror_hud_every_frame", "video_memory", "texture_compression", "gpu_texture_compression",
-];
-
-fn graphics_profiles_path() -> PathBuf {
-    data_dir().join("graphics_profiles.json")
-}
-
-/// The saved graphics profiles by name (`~/.openomsi/graphics_profiles.json`).
-pub fn graphics_profiles() -> std::collections::BTreeMap<String, Value> {
-    std::fs::read_to_string(graphics_profiles_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
-}
-
-/// Keep the graphics of `settings` as profile `name` (an existing one of that name is
-/// replaced). Returns the name as kept.
-pub fn save_graphics_profile(name: &str, settings: &Value) -> Result<String> {
-    let name: String = name.chars().filter(|c| !c.is_control()).collect::<String>().trim().chars().take(40).collect();
-    if name.is_empty() {
-        return Err(anyhow!("Give the profile a name."));
-    }
-    let mut profile = serde_json::Map::new();
-    for k in GRAPHICS_PROFILE_KEYS {
-        if let Some(x) = settings.get(k) {
-            profile.insert(k.to_string(), x.clone());
-        }
-    }
-    let mut all = graphics_profiles();
-    all.insert(name.clone(), Value::Object(profile));
-    std::fs::write(graphics_profiles_path(), serde_json::to_string_pretty(&all)?)?;
-    Ok(name)
-}
-
-/// Remove profile `name`.
-pub fn delete_graphics_profile(name: &str) -> Result<()> {
-    let mut all = graphics_profiles();
-    all.remove(name);
-    std::fs::write(graphics_profiles_path(), serde_json::to_string_pretty(&all)?)?;
-    Ok(())
-}
-
-/// Put a profile's values into the page's `settings` (only the keys a profile may hold).
-pub fn apply_graphics_profile(profile: &Value, settings: &mut Value) {
-    for k in GRAPHICS_PROFILE_KEYS {
-        if let Some(x) = profile.get(k) {
-            settings[k] = x.clone();
-        }
-    }
-}
-
 /// The `settings.cfg` text for the page's values `v`; the lines of the `old` file that the
 /// page does not manage (keys of newer games, hand-written switches) are kept.
 /// The `units` setting's value: `metric`, `uk` or `us` (the game's `units` module).
@@ -2863,6 +2819,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         ));
     }
     text.push_str(&format!("pause_quick_actions={}\n", v.get("pause_quick_actions").and_then(|x| x.as_str()).unwrap_or("default").replace(['\r', '\n'], "")));
+    text.push_str(&format!("ui_theme_pack={}\n", v.get("ui_theme_pack").and_then(|x| x.as_str()).filter(|x| !x.trim().is_empty()).unwrap_or("openomsi").replace(['\r', '\n'], "")));
     text.push_str(&format!("mouse_pedals={}\n", b("mouse_pedals", true)));
     text.push_str(&format!("key_pedal_speed={}\n", f("key_pedal_speed", 1.0).clamp(0.25, 2.0)));
     text.push_str(&format!("touch_pedal_length={}\ntouch_pedal_deadzone={}\n", f("touch_pedal_length", 1.0).clamp(0.8, 1.6), f("touch_pedal_deadzone", 0.15).clamp(0.0, 0.4)));

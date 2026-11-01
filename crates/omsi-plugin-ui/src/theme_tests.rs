@@ -13,12 +13,12 @@ fn light_theme_uses_shared_surface_ink_and_control_colors() {
         { type = "input", id = "name", placeholder = "Name" },
         { type = "button", id = "ok", text = "OK" },
     } }"#);
-    let light = layout_typing_with_theme(&p, &fonts, 1.0, None, true);
+    let light = layout_typing_with_theme(&p, &fonts, 1.0, None, Palette::LIGHT);
     assert!(light.background.0[0] > 0.95 && light.background.0[1] > 0.95 && light.background.0[2] > 0.95);
     assert!(light.items.iter().any(|item| matches!(item, Item::Text { color, .. } if color.0[0] < 0.2)));
     assert!(light.items.iter().any(|item| matches!(item, Item::Rounded { color, .. } if color.0[0] > 0.9)));
 
-    let dark = layout_typing_with_theme(&p, &fonts, 1.0, None, false);
+    let dark = layout_typing_with_theme(&p, &fonts, 1.0, None, Palette::OPENOMSI);
     assert_eq!(dark.background.0[..3], [14.0 / 255.0, 16.0 / 255.0, 20.0 / 255.0]);
     assert!(dark.items.iter().any(|item| matches!(item, Item::Text { color, .. } if color.0[0] > 0.9)));
     assert!(dark.items.iter().any(|item| matches!(item, Item::Rounded { color, .. } if color.0[0] < 0.3)));
@@ -116,7 +116,7 @@ fn square_tiles_follow_the_palette_without_losing_lit_or_disabled_states() {
         tile("off", "map", false, true, None),
     ];
     for light in [false, true] {
-        let laid = layout_with_theme(&p, &fonts, 1.0, light);
+        let laid = layout_with_theme(&p, &fonts, 1.0, omsi_ui::theme::palette(light));
         assert!(laid.hits.iter().any(|h| h.element.as_deref() == Some("plain")));
         assert!(!laid.hits.iter().any(|h| h.element.as_deref() == Some("off")));
         let icons: Vec<_> = laid.items.iter().filter_map(|i| match i {
@@ -125,7 +125,7 @@ fn square_tiles_follow_the_palette_without_losing_lit_or_disabled_states() {
         assert_eq!(icons.len(), 3);
         assert_eq!(icons[1], INK, "a lit tile keeps its white icon");
         assert_eq!(icons[0].0[0] < 0.2, light, "the ordinary icon follows the theme");
-        let accent = ThemeColors::new(light).accent;
+        let accent = ThemeColors::of(omsi_ui::theme::palette(light)).accent;
         assert!(laid.items.iter().any(|i| matches!(i, Item::Rounded { color, .. } if *color == accent)));
     }
 }

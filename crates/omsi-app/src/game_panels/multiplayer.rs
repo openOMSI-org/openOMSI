@@ -1,6 +1,7 @@
 //! Multiplayer controls use the same fields and cards as the other in-game forms.
 
-use super::{button, card, grow_row, input, note, title};
+use super::{button, card, grow_row, input, note, theme_color, title};
+use omsi_ui::theme::Palette;
 use omsi_plugin::api::Value;
 use omsi_plugin::ui::{Anchor, Panel};
 
@@ -11,7 +12,7 @@ pub(crate) struct Multiplayer {
 }
 
 impl Multiplayer {
-    pub(super) fn panel(&self, app: &crate::App, light: bool) -> Panel {
+    pub(super) fn panel(&self, app: &crate::App, pal: Palette) -> Panel {
         let map = app
             .net
             .room
@@ -33,7 +34,7 @@ impl Multiplayer {
                 .ready
                 .as_ref()
                 .and_then(|room| room.vehicle_allowed),
-            light,
+            pal,
         )
     }
 
@@ -43,16 +44,16 @@ impl Multiplayer {
         map: Option<(&str, bool)>,
         role: Option<omsi_net::Role>,
         vehicle_allowed: Option<bool>,
-        light: bool,
+        pal: Palette,
     ) -> Panel {
         let tr = omsi_ui::tr;
         let mut heading = title(&tr("Multiplayer"));
-        heading.color = Some(super::theme_color(super::theme(light).TEXT));
+        heading.color = Some(theme_color(pal.text));
         let mut children = vec![heading];
         if role == Some(omsi_net::Role::Host) {
             children.push(note(
                 &tr("Leaving or switching rooms closes your hosted room for all other players."),
-                light,
+                pal,
             ));
         }
         if busy {
@@ -61,17 +62,17 @@ impl Multiplayer {
                     .said
                     .as_deref()
                     .unwrap_or("Connecting to the new room; the current game stays open")),
-                light,
+                pal,
             ));
         } else if let Some((map, different)) = map {
-            children.push(note(&format!("{} {map}", tr("Room map:")), light));
+            children.push(note(&format!("{} {map}", tr("Room map:")), pal));
             children.push(note(&tr(if different {
                 "This room uses a different map. Joining reloads the world and ends the current drive."
             } else {
                 "Joining leaves the current room. Your vehicle and position are kept on this map."
-            }), light));
+            }), pal));
             if vehicle_allowed == Some(false) {
-                children.push(note(&tr("This room does not allow your current vehicle. Joining may disconnect you."), light));
+                children.push(note(&tr("This room does not allow your current vehicle. Joining may disconnect you."), pal));
             }
             children.push(grow_row(vec![
                 button("confirm", &tr("Join this room"), Some("check")),
@@ -110,11 +111,11 @@ impl Multiplayer {
                 )]));
             }
             if let Some(said) = &self.said {
-                children.push(note(&tr(said), light));
+                children.push(note(&tr(said), pal));
             }
         }
         children.push(grow_row(vec![button("close", &tr("Close"), Some("close"))]));
-        card(Anchor::Center, 0.0, 0.0, 460.0, 245, light, children)
+        card(Anchor::Center, 0.0, 0.0, 460.0, 245, pal, children)
     }
 }
 

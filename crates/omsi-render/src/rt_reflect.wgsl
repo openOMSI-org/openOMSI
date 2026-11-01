@@ -225,7 +225,7 @@ fn cs_reflect(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     // (a reflection that hardly shows - a pane seen from the cab, a matt surface at a steep
     // angle - is as good from the sky probe: the composite takes that where no ray went)
-    if (g.w < 0.012) {
+    if (g.w < 0.012 || length(g.xyz) < 1e-4) {
         textureStore(t_out, hp, vec4<f32>(0.0));
         return;
     }
@@ -337,7 +337,7 @@ fn vs_full(@builtin(vertex_index) i: u32) -> VsOut {
 fn fs_composite(in: VsOut) -> @location(0) vec4<f32> {
     let px = vec2<i32>(in.clip.xy);
     let g = textureLoad(t_gbuf, px, 0);
-    if (g.w < 0.002) {
+    if (g.w < 0.002 || length(g.xyz) < 1e-4) {
         discard;
     }
     let aux = textureLoad(t_aux, px, 0);

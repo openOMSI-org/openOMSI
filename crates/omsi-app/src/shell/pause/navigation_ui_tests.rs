@@ -169,7 +169,7 @@ fn pause_navigation_flat_cards_keep_keyboard_focus_visible() {
         sh.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
         assert!(sh.ui.flat);
         action_card(&mut sh.ui, &v, 2, Rect::new(350.0, 184.0, 480.0, 120.0), selected, false);
-        counts.push(sh.ui.p().verts.iter().filter(|vertex| vertex.color == ACCENT.0).count());
+        counts.push(sh.ui.p().verts.iter().filter(|vertex| vertex.color == th().accent.0).count());
     }
     assert_eq!(counts[0], 0);
     assert!(counts[1] > 0, "Keyboard focus must survive the flat theme");
@@ -184,7 +184,7 @@ fn pause_navigation_quit_keeps_keyboard_focus_visible() {
     let mut sh = Shell::new(); sh.pause_hidden = false;
     sh.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
     session_action(&mut sh, &v, "quit", Rect::new(16.0, 768.0, 204.0, 54.0), ButtonKind::Danger);
-    assert!(sh.ui.p().verts.iter().any(|vertex| vertex.color == ACCENT.0));
+    assert!(sh.ui.p().verts.iter().any(|vertex| vertex.color == th().accent.0));
 }
 
 #[test]
@@ -297,28 +297,30 @@ fn pause_navigation_uses_runtime_theme_palette() {
     dark.finish();
 
     let mut light = Shell::new();
-    light.ui.set_theme(true);
-    light.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
-    draw(&mut light, &v);
-    light.finish();
+    omsi_ui::theme::with_palette(Palette::LIGHT, || {
+        light.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
+        draw(&mut light, &v);
+        light.finish();
+    });
 
-    assert!(dark.drawn.as_ref().unwrap().verts.iter().any(|v| v.color == DARK.SIDEBAR.0));
-    assert!(light.drawn.as_ref().unwrap().verts.iter().any(|v| v.color == LIGHT.SIDEBAR.0));
+    assert!(dark.drawn.as_ref().unwrap().verts.iter().any(|v| v.color == Palette::OPENOMSI.sidebar.0));
+    assert!(light.drawn.as_ref().unwrap().verts.iter().any(|v| v.color == Palette::LIGHT.sidebar.0));
 }
 
 #[test]
 fn quick_actions_editor_uses_runtime_theme_palette() {
     let rail = menu();
-    for (light_theme, surface) in [(false, DARK.SURFACE), (true, LIGHT.SURFACE)] {
+    for (light_theme, surface) in [(false, Palette::OPENOMSI.surface), (true, Palette::LIGHT.surface)] {
         let mut sh = Shell::new();
-        sh.ui.set_theme(light_theme);
-        sh.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
-        super::super::quick_actions_ui::editor(
-            &mut sh,
-            &view(&rail),
-            Rect::new(300.0, 120.0, 800.0, 650.0),
-        );
-        sh.finish();
+        omsi_ui::theme::with_palette(omsi_ui::theme::palette(light_theme), || {
+            sh.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
+            super::super::quick_actions_ui::editor(
+                &mut sh,
+                &view(&rail),
+                Rect::new(300.0, 120.0, 800.0, 650.0),
+            );
+            sh.finish();
+        });
 
         assert!(
             sh.drawn

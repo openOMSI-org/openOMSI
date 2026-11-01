@@ -5,48 +5,112 @@ use super::*;
 // ---------------------------------------------------------------------------------------
 // the game menu and its lists: flat near-black greys and one amber accent, as the launcher
 
+/// openOMSI's colour `c`, or the palette's in force (Light, a theme pack: `themes`) in its
+/// place - for the inks as for the fills, so a text and what it is drawn on share one look.
+fn own(c: [u8; 4], themed: impl Fn(omsi_ui::theme::Palette) -> omsi_ui::Color) -> [u8; 4] {
+    let p = omsi_ui::theme::th();
+    if p == omsi_ui::theme::Palette::OPENOMSI {
+        c
+    } else {
+        omsi_ui::theme::rgba8(themed(p))
+    }
+}
+
 /// How long a fade of the menu takes (a line lit, a switch turned over): a short moment.
 pub(super) const FADE_SECS: f32 = 0.15;
 pub(super) const BAR_SECS: f32 = 0.19;
 
 // (the launcher's values, see `launcher/theme.rs`: neutral greys, no tint)
-pub(super) const PANEL: [u8; 4] = [22, 22, 22, 255];
-pub(super) const PANEL_ALT: [u8; 4] = [31, 31, 31, 255];
-pub(super) const BORDER: [u8; 4] = [255, 255, 255, 15];
-pub(super) const ACCENT: [u8; 4] = [232, 160, 48, 255];
-pub(super) const ACCENT_SOFT: [u8; 4] = [232, 160, 48, 34];
-pub(super) const DANGER: [u8; 4] = [222, 78, 68, 255];
+pub(super) fn panel() -> [u8; 4] {
+    own([22, 22, 22, 255], |p| p.panel)
+}
+pub(super) fn panel_alt() -> [u8; 4] {
+    own([31, 31, 31, 255], |p| p.field)
+}
+pub(super) fn border() -> [u8; 4] {
+    own([255, 255, 255, 15], |p| p.edge)
+}
+pub(super) fn accent() -> [u8; 4] {
+    own([232, 160, 48, 255], |p| p.accent)
+}
+pub(super) fn accent_soft() -> [u8; 4] {
+    fade(self::accent(), 34.0 / 255.0)
+}
+pub(super) fn danger() -> [u8; 4] {
+    own([222, 78, 68, 255], |p| p.danger)
+}
 /// A line under the mouse, and the line chosen: the launcher's `HOVER` and `SELECTED`, as
 /// solid greys. (They were white at 6 % and 9 %, which the overlays blend in linear light:
 /// on the 22-grey card that came out 73 and 92, twice as light as the launcher's 38 and 44.)
-pub(super) const LIT: [u8; 4] = [38, 38, 38, 255];
-pub(super) const SELECTED: [u8; 4] = [44, 44, 44, 255];
+pub(super) fn lit() -> [u8; 4] {
+    own([38, 38, 38, 255], |p| p.hover)
+}
+pub(super) fn selected() -> [u8; 4] {
+    own([44, 44, 44, 255], |p| p.selected)
+}
 /// "End the session" under the mouse: the danger colour at 14 % on the card, solid.
-pub(super) const LIT_DANGER: [u8; 4] = [50, 30, 28, 255];
+pub(super) fn lit_danger() -> [u8; 4] {
+    own([50, 30, 28, 255], |p| p.panel.mix(p.danger, 0.14))
+}
 /// A stepper's or a button's field: the launcher's `FIELD`.
-pub(super) const CHIP: [u8; 4] = [31, 31, 31, 255];
-/// A switch's track when off, a slider's empty track, their knob (the launcher's).
-pub(super) const TRACK_OFF: [u8; 4] = [62, 62, 62, 255];
-pub(super) const SLIDER_TRACK: [u8; 4] = [58, 58, 58, 255];
+pub(super) fn chip_fill() -> [u8; 4] {
+    own([31, 31, 31, 255], |p| p.field)
+}
+/// A switch's track when off, a slider's empty track, their knob (the launcher's; a theme's
+/// tracks are its text a little over its panel, as openOMSI's greys are on its own).
+pub(super) fn track_off() -> [u8; 4] {
+    own([62, 62, 62, 255], |p| p.panel.mix(p.text, 0.19))
+}
+pub(super) fn slider_track() -> [u8; 4] {
+    own([58, 58, 58, 255], |p| p.panel.mix(p.text, 0.17))
+}
 pub(super) const KNOB: [u8; 4] = [240, 240, 240, 255];
 /// A scroll bar's thumb, idle and with the mouse over its list (the launcher's white at
 /// 10 % and 35 %; no track, no accent).
-pub(super) const THUMB: [u8; 4] = [255, 255, 255, 26];
-pub(super) const THUMB_HOT: [u8; 4] = [255, 255, 255, 90];
+pub(super) fn thumb() -> [u8; 4] {
+    own([255, 255, 255, 26], |p| p.text.alpha(0.10))
+}
+pub(super) fn thumb_hot() -> [u8; 4] {
+    own([255, 255, 255, 90], |p| p.text.alpha(0.35))
+}
 /// The small capitals over a title (the launcher's section headings: 11 px, bold, dim).
-pub(super) const DIM: [u8; 4] = [142, 142, 142, 0];
+pub(super) fn dim() -> [u8; 4] {
+    txt(own([142, 142, 142, 0], |p| p.text_dim))
+}
 /// The accent's fill under the mouse, and the ink on it (the launcher's primary button).
-pub(super) const ACCENT_HOT: [u8; 4] = [246, 182, 84, 255];
-pub(super) const ON_ACCENT: [u8; 4] = [18, 14, 8, 0];
+pub(super) fn accent_hot() -> [u8; 4] {
+    own([246, 182, 84, 255], |p| p.accent_hover)
+}
+pub(super) fn on_accent() -> [u8; 4] {
+    txt(own([18, 14, 8, 0], |p| p.accent_ink))
+}
 /// Text colours (alpha 0: no outline on the flat panel).
-pub(super) const WHITE: [u8; 4] = [236, 236, 236, 0];
-pub(super) const SOFT: [u8; 4] = [200, 200, 200, 0];
-pub(super) const MUTED: [u8; 4] = [142, 142, 142, 0];
-pub(super) const AMBER: [u8; 4] = [255, 200, 110, 0];
+pub(super) fn white() -> [u8; 4] {
+    txt(own([236, 236, 236, 0], |p| p.text))
+}
+pub(super) fn soft() -> [u8; 4] {
+    txt(own([200, 200, 200, 0], |p| p.text_soft))
+}
+pub(super) fn muted() -> [u8; 4] {
+    txt(own([142, 142, 142, 0], |p| p.text_dim))
+}
+/// The accent as a text: lighter on a dark panel, darker on a light one.
+pub(super) fn amber() -> [u8; 4] {
+    txt(own([255, 200, 110, 0], |p| if bright(p.panel) { p.accent.darken(0.2) } else { p.accent.lighten(0.35) }))
+}
+
+/// Whether `c` is a light colour (the panel of a light look).
+fn bright(c: omsi_ui::Color) -> bool {
+    c.0[0] + c.0[1] + c.0[2] > 1.5
+}
 
 /// The ink of a greyed-out line and its small hint.
-pub(super) const OFF_INK: [u8; 4] = [96, 96, 96, 0];
-pub(super) const OFF_HINT: [u8; 4] = [96, 96, 96, 0];
+pub(super) fn off_ink() -> [u8; 4] {
+    txt(own([96, 96, 96, 0], |p| p.text_faint))
+}
+pub(super) fn off_hint() -> [u8; 4] {
+    self::off_ink()
+}
 
 /// The card's radius, a line's, and the inset of lines from the card's edge and of their
 /// text from the line's edge (all times the scale).
@@ -191,7 +255,7 @@ impl Ui {
         let t0 = track[1] + (th - len) * (first as f32 / (n - shown as f32).max(1.0)).clamp(0.0, 1.0);
         let thumb = [track[0], t0, track[2], t0 + len];
         let a = self.easeq((16, "thumb", track[0] as usize), if hot { 1.0 } else { 0.0 }, 1.0 / FADE_SECS);
-        self.text.rounded(r, scene, thumb, 2.0 * s, mix(THUMB, THUMB_HOT, a));
+        self.text.rounded(r, scene, thumb, 2.0 * s, mix(self::thumb(), self::thumb_hot(), a));
         thumb
     }
 
@@ -200,7 +264,7 @@ impl Ui {
         let full = (rect[3] - rect[1] - 20.0 * s).max(10.0 * s);
         let bh = full * (0.4 + 0.6 * k);
         let by = (rect[1] + rect[3]) * 0.5 - bh * 0.5;
-        self.text.rounded(r, scene, [rect[0], by, rect[0] + 2.0 * s, by + bh], 1.0 * s, fade(if danger { DANGER } else { ACCENT }, k));
+        self.text.rounded(r, scene, [rect[0], by, rect[0] + 2.0 * s, by + bh], 1.0 * s, fade(if danger { self::danger() } else { self::accent() }, k));
     }
 
     /// The header of the card at (`x`, `y`) of `w` wide: what the list is of, small and in
@@ -213,9 +277,9 @@ impl Ui {
         let eyebrow = if sub.is_empty() { "OPENOMSI".to_string() } else { sub.to_uppercase() };
         let room = w - (PAD + TEXT_IN) * 2.0 * s;
         let eyebrow = clip_bold(&self.text, &eyebrow, 11.0 * s, room);
-        let e = self.text.label(r, scene, &eyebrow, (11.0 * s) as u32 | BOLD, DIM);
+        let e = self.text.label(r, scene, &eyebrow, (11.0 * s) as u32 | BOLD, self::dim());
         let title = clip_bold(&self.text, title, 22.0 * s, room);
-        let t = self.text.label(r, scene, &title, (22.0 * s) as u32 | BOLD, WHITE);
+        let t = self.text.label(r, scene, &title, (22.0 * s) as u32 | BOLD, self::white());
         let band = header_h - 6.0 * s;
         let top = y + (band - (e.h as f32 + t.h as f32 - 2.0 * s)) * 0.5;
         scene.overlays.push((e.tex, [left, top, left + e.w as f32, top + e.h as f32]));
@@ -232,7 +296,7 @@ impl Ui {
         let x0 = right - cw;
         if cap {
             // (a key cap: a fine light edge round it)
-            self.text.rounded(r, scene, [x0 - 1.0, cy - ch * 0.5 - 1.0, right + 1.0, cy + ch * 0.5 + 1.0], 5.0 * s, [96, 96, 96, 255]);
+            self.text.rounded(r, scene, [x0 - 1.0, cy - ch * 0.5 - 1.0, right + 1.0, cy + ch * 0.5 + 1.0], 5.0 * s, own([96, 96, 96, 255], |p| p.text_faint));
         }
         self.text.rounded(r, scene, [x0, cy - ch * 0.5, right, cy + ch * 0.5], if cap { 4.0 * s } else { ROW_R * s }, fill);
         let (tx, ty) = (x0 + 9.0 * s, cy - l.h as f32 * 0.5);
@@ -341,8 +405,8 @@ impl Ui {
         let radius = CARD_R * s;
         // the card: a soft shadow, a 1 px hairline round it, the flat panel
         self.text.shadow(r, scene, [x, y, x + w, y + h], radius, 28.0 * s, 10.0 * s, 110);
-        self.text.rounded(r, scene, [x - 1.0, y - 1.0, x + w + 1.0, y + h + 1.0], radius + 1.0, BORDER);
-        self.text.rounded(r, scene, [x, y, x + w, y + h], radius, PANEL);
+        self.text.rounded(r, scene, [x - 1.0, y - 1.0, x + w + 1.0, y + h + 1.0], radius + 1.0, self::border());
+        self.text.rounded(r, scene, [x, y, x + w, y + h], radius, self::panel());
         // the header: what the list is of (or the game's name), and the title
         let (title, sub): (String, String) = match f.menu_head.as_ref() {
             Some((t, u)) => (t.clone(), u.clone()),
@@ -420,22 +484,22 @@ impl Ui {
             let a_act = self.easeq((14, id, k), if active { 1.0 } else { 0.0 }, 1.0 / FADE_SECS);
             let bar = self.easeq((8, id, k), if lit || active { 1.0 } else { 0.0 }, 1.0 / BAR_SECS);
             if a_act > 0.0 {
-                self.text.rounded(r, scene, rect, ROW_R * s, fade(SELECTED, a_act));
+                self.text.rounded(r, scene, rect, ROW_R * s, fade(self::selected(), a_act));
             }
             if glow > 0.0 {
-                self.text.rounded(r, scene, rect, ROW_R * s, fade(if danger { LIT_DANGER } else { LIT }, glow));
+                self.text.rounded(r, scene, rect, ROW_R * s, fade(if danger { self::lit_danger() } else { self::lit() }, glow));
             }
             if bar > 0.0 {
                 // the accent bar at the left edge of the lit line, growing from its middle
                 self.accent_bar(r, scene, rect, bar, danger, s);
             }
             let ink = if off {
-                OFF_INK
+                self::off_ink()
             } else {
                 if danger {
-                    mix([232, 138, 128, 0], [255, 176, 166, 0], glow)
+                    mix(txt(own([232, 138, 128, 0], |p| p.danger)), txt(own([255, 176, 166, 0], |p| p.danger_2)), glow)
                 } else {
-                    mix(SOFT, WHITE, glow.max(a_act))
+                    mix(self::soft(), self::white(), glow.max(a_act))
                 }
             };
             let cy = (rect[1] + rect[3]) * 0.5;
@@ -447,18 +511,18 @@ impl Ui {
                 MenuKind::Lines => {
                     let parsed = label.strip_prefix(line_pre.as_str()).and_then(|rest| rest.rsplit_once("  (")).map(|(n, t)| (n, t.trim_end_matches(')')));
                     if let Some((name, info)) = parsed {
-                        let bl = self.text.label(r, scene, name, (15.0 * s) as u32, ON_ACCENT);
+                        let bl = self.text.label(r, scene, name, (15.0 * s) as u32, self::on_accent());
                         let (bw, bh) = (sign_w, 28.0 * s);
                         let bx = lx;
-                        let sign = mix(mix(ACCENT, [150, 104, 30, 255], 0.30), ACCENT_HOT, glow);
+                        let sign = mix(mix(self::accent(), [150, 104, 30, 255], 0.30), self::accent_hot(), glow);
                         self.text.rounded(r, scene, [bx, cy - bh * 0.5, bx + bw, cy + bh * 0.5], 7.0 * s, sign);
                         let (lx0, ly0) = (bx + (bw - bl.w as f32) * 0.5, cy - bl.h as f32 * 0.5);
                         scene.overlays.push((bl.tex, [lx0, ly0, lx0 + bl.w as f32, ly0 + bl.h as f32]));
                         let tx = bx + bw + 14.0 * s;
                         let d = 22.0 * s;
-                        self.text.rounded(r, scene, [rx - d, cy - d * 0.5, rx, cy + d * 0.5], d * 0.5, fade(ACCENT, 0.10 + 0.30 * glow));
+                        self.text.rounded(r, scene, [rx - d, cy - d * 0.5, rx, cy + d * 0.5], d * 0.5, fade(self::accent(), 0.10 + 0.30 * glow));
                         let aw = self.text.width("›", (px + 2) as f32);
-                        self.put(r, scene, "›", px + 2, mix(MUTED, ACCENT_HOT, glow), rx - d * 0.5 - aw * 0.5, cy - 1.0 * s);
+                        self.put(r, scene, "›", px + 2, mix(self::muted(), self::accent_hot(), glow), rx - d * 0.5 - aw * 0.5, cy - 1.0 * s);
                         let info = clip_to(&self.text, info, px as f32, rx - d - 12.0 * s - tx);
                         self.put(r, scene, &info, px, ink, tx, cy);
                         done = true;
@@ -466,7 +530,7 @@ impl Ui {
                 }
                 MenuKind::List if code_w > 0.0 => {
                     if let Some((code, name)) = code_and_name(label) {
-                        self.put_right(r, scene, code, px, mix(MUTED, ACCENT_HOT, glow), lx + code_w, cy);
+                        self.put_right(r, scene, code, px, mix(self::muted(), self::accent_hot(), glow), lx + code_w, cy);
                         let nx = lx + code_w + 12.0 * s;
                         let name = clip_to(&self.text, name, px as f32, rx - nx);
                         self.put(r, scene, &name, px, ink, nx, cy);
@@ -490,23 +554,23 @@ impl Ui {
                 if is_back {
                     let plain = matches!(kind, MenuKind::Lines | MenuKind::Tours);
                     if plain {
-                        self.text.rounded(r, scene, rect, ROW_R * s, fade(LIT, 0.55));
+                        self.text.rounded(r, scene, rect, ROW_R * s, fade(self::lit(), 0.55));
                     }
-                    let idle = if plain { SOFT } else { MUTED };
-                    self.put(r, scene, &format!("‹  {text}"), px, if lit { WHITE } else { idle }, lx, cy);
+                    let idle = if plain { self::soft() } else { self::muted() };
+                    self.put(r, scene, &format!("‹  {text}"), px, if lit { self::white() } else { idle }, lx, cy);
                 } else {
                     if off {
                         // (why the line cannot be chosen)
-                        let cw = self.put_right(r, scene, "No active route", (12.0 * s) as u32, OFF_HINT, rx, cy);
+                        let cw = self.put_right(r, scene, "No active route", (12.0 * s) as u32, self::off_hint(), rx, cy);
                         avail -= cw + 10.0 * s;
                     }
                     if more {
                         // (the line opens another list)
-                        let cw = self.put_right(r, scene, "›", px + 6, if lit { WHITE } else { MUTED }, rx, cy);
+                        let cw = self.put_right(r, scene, "›", px + 6, if lit { self::white() } else { self::muted() }, rx, cy);
                         avail -= cw + 10.0 * s;
                     } else if id == "resume" && keys {
                         // ("Resume" shows the key that does the same)
-                        let left = self.chip(r, scene, "Esc", (12.0 * s) as u32, WHITE, [52, 52, 52, 255], true, rx, cy, s);
+                        let left = self.chip(r, scene, "Esc", (12.0 * s) as u32, self::white(), own([52, 52, 52, 255], |p| p.surface_3), true, rx, cy, s);
                         avail = left - 10.0 * s - lx;
                     }
                     let text = clip_to(&self.text, text, px as f32, avail);
@@ -522,12 +586,12 @@ impl Ui {
             let fr = [x + pad, y + h - pad - 36.0 * s, right, y + h - pad];
             let lit = over(fr) || (sel == bk && f.menu_kbd && !any_hovered);
             let glow = self.easeq((7, "back", bk), if lit { 1.0 } else { 0.0 }, 1.0 / FADE_SECS);
-            self.text.rounded(r, scene, fr, ROW_R * s, fade(LIT, 0.55 + 0.45 * glow));
+            self.text.rounded(r, scene, fr, ROW_R * s, fade(self::lit(), 0.55 + 0.45 * glow));
             if glow > 0.0 {
                 self.accent_bar(r, scene, fr, glow, false, s);
             }
             let (text, _) = strip_more(back_txt.as_str());
-            self.put(r, scene, &format!("‹  {text}"), px, mix(SOFT, WHITE, glow), fr[0] + tin, (fr[1] + fr[3]) * 0.5);
+            self.put(r, scene, &format!("‹  {text}"), px, mix(self::soft(), self::white(), glow), fr[0] + tin, (fr[1] + fr[3]) * 0.5);
             while self.menu_rects.len() < bk - start {
                 self.menu_rects.push([-1.0e9; 4]);
             }
@@ -551,16 +615,16 @@ impl Ui {
         let over = |rect: [f32; 4]| f.cursor.0 >= rect[0] && f.cursor.0 <= rect[2] && f.cursor.1 >= rect[1] && f.cursor.1 <= rect[3];
         let (px0, py0) = (list_r + 4.0 * s, y + header_h);
         let (px1, py1) = (x + w - pad, y + h - pad);
-        self.text.rounded(r, scene, [px0 - 1.0, py0 - 1.0, px1 + 1.0, py1 + 1.0], CARD_R * s + 1.0, BORDER);
-        self.text.rounded(r, scene, [px0, py0, px1, py1], CARD_R * s, PANEL_ALT);
+        self.text.rounded(r, scene, [px0 - 1.0, py0 - 1.0, px1 + 1.0, py1 + 1.0], CARD_R * s + 1.0, self::border());
+        self.text.rounded(r, scene, [px0, py0, px1, py1], CARD_R * s, self::panel_alt());
         let pad = tin;
         let inner = px1 - px0 - pad * 2.0;
         let mut cy = py0 + 28.0 * s;
         let head = clip_to(&self.text, &p.title, 16.0 * s, inner);
-        self.put(r, scene, &head, (16.0 * s) as u32, WHITE, px0 + pad, cy);
+        self.put(r, scene, &head, (16.0 * s) as u32, self::white(), px0 + pad, cy);
         cy += 22.0 * s;
         let meta = clip_to(&self.text, &p.meta, 11.0 * s, inner);
-        self.put(r, scene, &meta, (11.0 * s) as u32, MUTED, px0 + pad, cy);
+        self.put(r, scene, &meta, (11.0 * s) as u32, self::muted(), px0 + pad, cy);
         cy += 18.0 * s;
         scene.overlays.push((sep, [px0 + pad, cy.round(), px1 - pad, cy.round() + 1.0]));
         let rpx = (13.0 * s) as u32;
@@ -577,8 +641,8 @@ impl Ui {
             for j in 0..2usize {
                 let rect = if j == 0 { [left, by, left + bw, by + bh] } else { [right - bw, by, right, by + bh] };
                 let a = self.easeq((14, "time", j + base), if over(rect) { 1.0 } else { 0.0 }, 1.0 / FADE_SECS);
-                self.text.rounded(r, scene, rect, ROW_R * s, mix([232, 160, 48, 60], ACCENT, a * 0.7));
-                let col = mix(ACCENT_HOT, [18, 14, 8, 255], a);
+                self.text.rounded(r, scene, rect, ROW_R * s, mix(fade(self::accent(), 60.0 / 255.0), self::accent(), a * 0.7));
+                let col = mix(self::accent_hot(), [18, 14, 8, 255], a);
                 let (cx, cy) = ((rect[0] + rect[2]) * 0.5, (rect[1] + rect[3]) * 0.5);
                 // (a real arrow: a shaft and a head of stacked strips)
                 let dir = if j == 0 { -1.0 } else { 1.0 };
@@ -600,7 +664,7 @@ impl Ui {
             let mid_r = right - bw - 10.0 * s;
             let time = clip_to(&self.text, time, fs * s, mid_r - mid_l);
             let tw = self.text.width(&time, fs * s);
-            self.put(r, scene, &time, (fs * s) as u32, if base == 0 { AMBER } else { WHITE }, mid_l + (mid_r - mid_l - tw) * 0.5, by + bh * 0.5);
+            self.put(r, scene, &time, (fs * s) as u32, if base == 0 { self::amber() } else { self::white() }, mid_l + (mid_r - mid_l - tw) * 0.5, by + bh * 0.5);
             top = by + bh + 8.0 * s;
         }
         let n = p.rows.len();
@@ -632,21 +696,21 @@ impl Ui {
                 let a_on = self.easeq((11, "stop", i), if on { 1.0 } else { 0.0 }, 1.0 / FADE_SECS);
                 let a_hov = self.easeq((12, "stop", i), if hov { 1.0 } else { 0.0 }, 1.0 / FADE_SECS);
                 if a_hov > 0.0 {
-                    self.text.rounded(r, scene, rect, ROW_R * s, fade(LIT, a_hov));
+                    self.text.rounded(r, scene, rect, ROW_R * s, fade(self::lit(), a_hov));
                 }
                 if a_on > 0.0 {
-                    self.text.rounded(r, scene, rect, ROW_R * s, fade(SELECTED, a_on));
-                    self.text.rounded(r, scene, [rect[0], rect[1] + 7.0 * s, rect[0] + 2.0 * s, rect[3] - 7.0 * s], 1.0 * s, fade(ACCENT, a_on));
+                    self.text.rounded(r, scene, rect, ROW_R * s, fade(self::selected(), a_on));
+                    self.text.rounded(r, scene, [rect[0], rect[1] + 7.0 * s, rect[0] + 2.0 * s, rect[3] - 7.0 * s], 1.0 * s, fade(self::accent(), a_on));
                 }
-                self.put_right(r, scene, when, rpx, AMBER, px1 - pad, ry);
+                self.put_right(r, scene, when, rpx, self::amber(), px1 - pad, ry);
                 let what = clip_to(&self.text, what, rpx as f32, inner - time_w - 14.0 * s);
-                self.put(r, scene, &what, rpx, mix(SOFT, WHITE, a_on), px0 + pad, ry);
+                self.put(r, scene, &what, rpx, mix(self::soft(), self::white(), a_on), px0 + pad, ry);
                 self.menu_pane.push(rect);
             }
             // the button that starts the trip
             let a_go = self.easeq((13, "go", 0), if over(go) { 1.0 } else { 0.0 }, 1.0 / FADE_SECS);
-            self.text.rounded(r, scene, go, ROW_R * s, mix(ACCENT, ACCENT_HOT, a_go));
-            let l = self.text.label(r, scene, button, (14.0 * s) as u32 | BOLD, ON_ACCENT);
+            self.text.rounded(r, scene, go, ROW_R * s, mix(self::accent(), self::accent_hot(), a_go));
+            let l = self.text.label(r, scene, button, (14.0 * s) as u32 | BOLD, self::on_accent());
             let (gx, gy) = (go[0] + (go[2] - go[0] - l.w as f32) * 0.5, (go[1] + go[3]) * 0.5 - l.h as f32 * 0.5);
             scene.overlays.push((l.tex, [gx, gy, gx + l.w as f32, gy + l.h as f32]));
             self.menu_pane_go = Some(go);
@@ -660,32 +724,36 @@ impl Ui {
             let tile_w = p.rows.iter().take(shown).filter_map(|row| row.0.strip_prefix(tp.as_str()).and_then(|x| x.split_once("  ›  ").map(|(n, _)| n).or(Some(x)))).map(|n| self.text.width(n.trim(), rpx as f32) + 16.0 * s).fold(30.0 * s, f32::max);
             for (i, (what, when)) in p.rows.iter().take(shown).enumerate() {
                 let ry = top + lh * i as f32 + lh * 0.5;
-                self.put_right(r, scene, when, rpx, AMBER, px1 - pad, ry);
+                self.put_right(r, scene, when, rpx, self::amber(), px1 - pad, ry);
                 if let Some(rest) = what.strip_prefix(tp.as_str()) {
                     let (num, dest) = rest.split_once("  ›  ").unwrap_or((rest, ""));
                     let th = lh - 6.0 * s;
-                    self.text.rounded(r, scene, [px0 + pad, ry - th * 0.5, px0 + pad + tile_w, ry + th * 0.5], 5.0 * s, ACCENT_SOFT);
+                    self.text.rounded(r, scene, [px0 + pad, ry - th * 0.5, px0 + pad + tile_w, ry + th * 0.5], 5.0 * s, self::accent_soft());
                     let nw = self.text.width(num.trim(), rpx as f32);
-                    self.put(r, scene, num.trim(), rpx, txt(ACCENT), px0 + pad + (tile_w - nw) * 0.5, ry);
+                    self.put(r, scene, num.trim(), rpx, txt(self::accent()), px0 + pad + (tile_w - nw) * 0.5, ry);
                     let dx = px0 + pad + tile_w + 10.0 * s;
                     let dest = clip_to(&self.text, dest, rpx as f32, px1 - pad - time_w - 14.0 * s - dx);
-                    self.put(r, scene, &dest, rpx, SOFT, dx, ry);
+                    self.put(r, scene, &dest, rpx, self::soft(), dx, ry);
                 } else {
                     let what = clip_to(&self.text, what, rpx as f32, inner - time_w - 14.0 * s);
-                    self.put(r, scene, &what, rpx, SOFT, px0 + pad, ry);
+                    self.put(r, scene, &what, rpx, self::soft(), px0 + pad, ry);
                 }
             }
             if n > shown {
                 let ry = top + lh * shown as f32 + lh * 0.5;
-                self.put(r, scene, &omsi_ui::tr("+{} more").replacen("{}", &(n - shown).to_string(), 1), (12.0 * s) as u32, MUTED, px0 + pad, ry);
+                self.put(r, scene, &omsi_ui::tr("+{} more").replacen("{}", &(n - shown).to_string(), 1), (12.0 * s) as u32, self::muted(), px0 + pad, ry);
             }
         }
     }
 }
 
 /// The launcher's rail and its separator line (`launcher/theme.rs` `RAIL`, `EDGE`).
-pub(super) const RAIL: [u8; 4] = [18, 18, 18, 255];
-pub(super) const EDGE: [u8; 4] = [255, 255, 255, 15];
+pub(super) fn rail() -> [u8; 4] {
+    own([18, 18, 18, 255], |p| p.rail)
+}
+pub(super) fn edge() -> [u8; 4] {
+    own([255, 255, 255, 15], |p| p.edge)
+}
 
 /// The Material icon of a line of the game menu (the launcher's icon set).
 pub(super) fn game_menu_icon(id: &str) -> &'static str {
@@ -728,19 +796,19 @@ impl Ui {
         let rail_w = (264.0 * s + cut).min(f.width * 0.86).round();
         // the rail: flat, a hairline at its edge, a soft shadow over the picture
         self.text.shadow(r, scene, [-40.0 * s, -40.0 * s, rail_w, f.height + 40.0 * s], 0.0, 30.0 * s, 0.0, 120);
-        self.text.rounded(r, scene, [0.0, 0.0, rail_w, f.height], 0.0, RAIL);
-        self.text.rounded(r, scene, [rail_w - 1.0, 0.0, rail_w, f.height], 0.0, EDGE);
+        self.text.rounded(r, scene, [0.0, 0.0, rail_w, f.height], 0.0, self::rail());
+        self.text.rounded(r, scene, [rail_w - 1.0, 0.0, rail_w, f.height], 0.0, self::edge());
         // the game's name and version, as at the top of the launcher's rail
         let bx = 24.0 * s + cut;
-        let name_w = self.put(r, scene, "openOMSI", (20.0 * s) as u32 | BOLD, WHITE, bx, 34.0 * s);
-        self.put(r, scene, crate::startup::VERSION, (12.0 * s) as u32, MUTED, bx, 54.0 * s);
+        let name_w = self.put(r, scene, "openOMSI", (20.0 * s) as u32 | BOLD, self::white(), bx, 34.0 * s);
+        self.put(r, scene, crate::startup::VERSION, (12.0 * s) as u32, self::muted(), bx, 54.0 * s);
         // what state the game is in, a small amber tag beside the name
         let tag = if f.paused { "PAUSED" } else { "MENU" };
-        let tl = self.text.label(r, scene, tag, (10.0 * s) as u32 | BOLD, txt(ACCENT));
+        let tl = self.text.label(r, scene, tag, (10.0 * s) as u32 | BOLD, txt(self::accent()));
         let (tw, th) = (tl.w as f32 + 12.0 * s, tl.h as f32 + 4.0 * s);
         let tx = (bx + name_w + 10.0 * s).min(rail_w - tw - 12.0 * s);
         let ty = 34.0 * s - th * 0.5;
-        self.text.rounded(r, scene, [tx, ty, tx + tw, ty + th], 4.0 * s, ACCENT_SOFT);
+        self.text.rounded(r, scene, [tx, ty, tx + tw, ty + th], 4.0 * s, self::accent_soft());
         scene.overlays.push((tl.tex, [tx + 6.0 * s, ty + 2.0 * s, tx + 6.0 * s + tl.w as f32, ty + 2.0 * s + tl.h as f32]));
         // the lines: as many as fit at the launcher's 42 px pitch (down to 32), the rest
         // scrolled to
@@ -783,26 +851,26 @@ impl Ui {
             // a hairline between the groups: the everyday lines, saving, the way out
             if k > start && matches!(id, "save" | "admin" | "quit") {
                 let sy = (ry - 2.0 * s).round();
-                self.text.rounded(r, scene, [x0 + 8.0 * s, sy, x1 - 8.0 * s, sy + 1.0], 0.0, EDGE);
+                self.text.rounded(r, scene, [x0 + 8.0 * s, sy, x1 - 8.0 * s, sy + 1.0], 0.0, self::edge());
             }
             let glow = self.easeq((7, id, k), if lit { 1.0 } else { 0.0 }, 1.0 / FADE_SECS);
             let cy = (rect[1] + rect[3]) * 0.5;
             let (ink, icon_ink) = if primary {
                 // the launcher's primary button: amber, dark bold text, lighter under the mouse
-                self.text.rounded(r, scene, rect, 6.0 * s, mix(ACCENT, ACCENT_HOT, glow));
+                self.text.rounded(r, scene, rect, 6.0 * s, mix(self::accent(), self::accent_hot(), glow));
                 ([18, 14, 8, 0], [18, 14, 8, 255])
             } else {
                 if glow > 0.0 {
-                    let fill = if danger { LIT_DANGER } else if chosen { SELECTED } else { LIT };
+                    let fill = if danger { self::lit_danger() } else if chosen { self::selected() } else { self::lit() };
                     self.text.rounded(r, scene, rect, 6.0 * s, fade(fill, glow));
                     self.accent_bar(r, scene, rect, glow, danger, s);
                 }
                 let c = if off {
-                    OFF_INK
+                    self::off_ink()
                 } else if danger {
-                    mix([222, 110, 100, 0], [255, 176, 166, 0], glow)
+                    mix(txt(own([222, 110, 100, 0], |p| p.danger)), txt(own([255, 176, 166, 0], |p| p.danger_2)), glow)
                 } else {
-                    mix(MUTED, WHITE, glow)
+                    mix(self::muted(), self::white(), glow)
                 };
                 (c, [c[0], c[1], c[2], 255])
             };
@@ -824,7 +892,7 @@ impl Ui {
                 let left = self.chip(r, scene, "Esc", (11.0 * s) as u32, [18, 14, 8, 0], [255, 214, 150, 255], false, right + 4.0 * s, cy, s);
                 right = left - 6.0 * s;
             } else if off {
-                let cw = self.put_right(r, scene, "No active route", (11.0 * s) as u32, OFF_HINT, right, cy);
+                let cw = self.put_right(r, scene, "No active route", (11.0 * s) as u32, self::off_hint(), right, cy);
                 right -= cw + 8.0 * s;
             }
             let size = if primary { (14.0 * s).round() as u32 | BOLD } else { px };
@@ -836,7 +904,7 @@ impl Ui {
         if keys {
             let hint = omsi_ui::tr("Esc resumes  |  P pauses").into_owned();
             let hint = clip_to(&self.text, &hint, 11.0 * s, rail_w - bx * 2.0);
-            self.put(r, scene, &hint, (11.0 * s) as u32, OFF_INK, bx, f.height - 20.0 * s);
+            self.put(r, scene, &hint, (11.0 * s) as u32, self::off_ink(), bx, f.height - 20.0 * s);
         }
     }
 }
@@ -886,8 +954,8 @@ impl Ui {
         let y = ((f.height - h) * 0.5).round();
         let radius = CARD_R * s;
         self.text.shadow(r, scene, [x, y, x + w, y + h], radius, 28.0 * s, 10.0 * s, 110);
-        self.text.rounded(r, scene, [x - 1.0, y - 1.0, x + w + 1.0, y + h + 1.0], radius + 1.0, BORDER);
-        self.text.rounded(r, scene, [x, y, x + w, y + h], radius, PANEL);
+        self.text.rounded(r, scene, [x - 1.0, y - 1.0, x + w + 1.0, y + h + 1.0], radius + 1.0, self::border());
+        self.text.rounded(r, scene, [x, y, x + w, y + h], radius, self::panel());
         // the header: the game's name small, the title large
         let (title, sub): (String, String) = match f.menu_head.as_ref() {
             Some((t, u)) => (t.clone(), u.clone()),
@@ -898,8 +966,8 @@ impl Ui {
         // the sidebar: the pages, and the way back at its foot
         if side_w > 0.0 {
             let (sx0, sx1) = (x + pad, x + side_w);
-            self.text.rounded(r, scene, [sx0 - 1.0, y + header_h - 1.0, sx1 + 1.0, y + h - pad + 1.0], CARD_R * s + 1.0, BORDER);
-            self.text.rounded(r, scene, [sx0, y + header_h, sx1, y + h - pad], CARD_R * s, PANEL_ALT);
+            self.text.rounded(r, scene, [sx0 - 1.0, y + header_h - 1.0, sx1 + 1.0, y + h - pad + 1.0], CARD_R * s + 1.0, self::border());
+            self.text.rounded(r, scene, [sx0, y + header_h, sx1, y + h - pad], CARD_R * s, self::panel_alt());
             let inset = 6.0 * s;
             let bottom = y + h - pad - inset;
             let pages_top = y + header_h + inset;
@@ -920,15 +988,15 @@ impl Ui {
                 let a_hov = self.easeq((2, title.as_str(), 0), if hov { 1.0 } else { 0.0 }, 1.0 / FADE_SECS);
                 let a_bar = self.easeq((9, title.as_str(), 0), if on { 1.0 } else { 0.0 }, 1.0 / BAR_SECS);
                 if a_hov > 0.0 {
-                    self.text.rounded(r, scene, rect, ROW_R * s, fade(LIT, a_hov));
+                    self.text.rounded(r, scene, rect, ROW_R * s, fade(self::lit(), a_hov));
                 }
                 if a_on > 0.0 {
-                    self.text.rounded(r, scene, rect, ROW_R * s, fade(SELECTED, a_on));
+                    self.text.rounded(r, scene, rect, ROW_R * s, fade(self::selected(), a_on));
                 }
                 if a_bar > 0.0 {
                     self.accent_bar(r, scene, rect, a_bar, false, s);
                 }
-                let ink = mix(mix(MUTED, SOFT, a_hov), WHITE, a_on);
+                let ink = mix(mix(self::muted(), self::soft(), a_hov), self::white(), a_on);
                 let text = clip_to(&self.text, title, spx as f32, rect[2] - rect[0] - tin * 2.0);
                 self.put(r, scene, &text, spx, ink, rect[0] + tin, (rect[1] + rect[3]) * 0.5);
                 self.menu_side.push(rect);
@@ -936,10 +1004,10 @@ impl Ui {
             let rect = [sx0 + inset, bottom - 38.0 * s, sx1 - inset, bottom];
             let a_back = self.easeq((3, "back", 0), if over(rect) { 1.0 } else { 0.0 }, 1.0 / FADE_SECS);
             if a_back > 0.0 {
-                self.text.rounded(r, scene, rect, ROW_R * s, fade(LIT, a_back));
+                self.text.rounded(r, scene, rect, ROW_R * s, fade(self::lit(), a_back));
             }
             let back = format!("‹  {}", omsi_ui::tr("Back"));
-            self.put(r, scene, &back, spx, mix(MUTED, WHITE, a_back), rect[0] + tin, (rect[1] + rect[3]) * 0.5);
+            self.put(r, scene, &back, spx, mix(self::muted(), self::white(), a_back), rect[0] + tin, (rect[1] + rect[3]) * 0.5);
             self.menu_side.push(rect);
         }
         // the scroll bar of a long page
@@ -969,7 +1037,7 @@ impl Ui {
             let a = self.easeq((4, id, k), if lit { 1.0 } else { 0.0 }, 1.0 / FADE_SECS);
             let a_bar = self.easeq((10, id, k), if lit { 1.0 } else { 0.0 }, 1.0 / BAR_SECS);
             if a > 0.0 {
-                self.text.rounded(r, scene, rect, ROW_R * s, fade(LIT, a));
+                self.text.rounded(r, scene, rect, ROW_R * s, fade(self::lit(), a));
             }
             if a_bar > 0.0 {
                 self.accent_bar(r, scene, rect, a_bar, false, s);
@@ -979,7 +1047,7 @@ impl Ui {
                 scene.overlays.push((sep, [rect[0] + tin, sy, rect[2] - tin, sy + 1.0]));
             }
             prev_a = a;
-            let ink = mix(SOFT, WHITE, a);
+            let ink = mix(self::soft(), self::white(), a);
             let cy = (rect[1] + rect[3]) * 0.5;
             let nx = rect[0] + tin;
             let rx = rect[2] - tin;
@@ -1002,7 +1070,7 @@ impl Ui {
                     // (the knob slides over and the track changes its colour)
                     let t = self.ease((5, id, k), if on { 1.0 } else { 0.0 }, 1.0 / FADE_SECS);
                     let tq = quant(t);
-                    self.text.rounded(r, scene, track, th * 0.5, mix(TRACK_OFF, ACCENT, tq));
+                    self.text.rounded(r, scene, track, th * 0.5, mix(self::track_off(), self::accent(), tq));
                     let kn = th - 6.0 * s;
                     let kx = tx + 3.0 * s + (tw - kn - 6.0 * s) * t;
                     self.text.rounded(r, scene, [kx, cy - kn * 0.5, kx + kn, cy + kn * 0.5], kn * 0.5, KNOB);
@@ -1011,17 +1079,17 @@ impl Ui {
                 // a slider: the track with its knob, the value right of it
                 "v" => {
                     let vw = 64.0 * s;
-                    self.put_right(r, scene, value, (14.0 * s) as u32, mix(SOFT, WHITE, a), rx, cy);
+                    self.put_right(r, scene, value, (14.0 * s) as u32, mix(self::soft(), self::white(), a), rx, cy);
                     let tw = (200.0 * s).min((rx - nx) * 0.45);
                     let x1 = rx - vw - 10.0 * s;
                     let x0 = x1 - tw;
                     let th = 4.0 * s;
-                    self.text.rounded(r, scene, [x0, cy - th * 0.5, x1, cy + th * 0.5], th * 0.5, SLIDER_TRACK);
+                    self.text.rounded(r, scene, [x0, cy - th * 0.5, x1, cy + th * 0.5], th * 0.5, self::slider_track());
                     // (the knob glides to its place and grows a little under the mouse)
                     let fr = self.ease((6, id, k), frac.unwrap_or(0.0).clamp(0.0, 1.0), 2.0 / FADE_SECS);
                     let fx = x0 + tw * fr;
                     if fx - x0 >= 1.0 {
-                        self.text.rounded(r, scene, [x0, cy - th * 0.5, fx, cy + th * 0.5], th * 0.5, ACCENT);
+                        self.text.rounded(r, scene, [x0, cy - th * 0.5, fx, cy + th * 0.5], th * 0.5, self::accent());
                     }
                     let kn = (13.0 + 2.0 * a) * s;
                     self.text.rounded(r, scene, [fx - kn * 0.5, cy - kn * 0.5, fx + kn * 0.5, cy + kn * 0.5], kn * 0.5, KNOB);
@@ -1031,33 +1099,33 @@ impl Ui {
                 // a stepper: the value between two arrows, the left half steps back
                 "c" => {
                     let text = format!("‹  {value}  ›");
-                    let l = self.chip(r, scene, &text, (13.0 * s) as u32, mix(SOFT, WHITE, a), mix(CHIP, SELECTED, a), false, rx, cy, s);
+                    let l = self.chip(r, scene, &text, (13.0 * s) as u32, mix(self::soft(), self::white(), a), mix(self::chip_fill(), self::selected(), a), false, rx, cy, s);
                     ctl = Some([l, rect[1], rx, rect[3]]);
                     l
                 }
                 // opens another list
                 "o" => {
-                    let cw = self.put_right(r, scene, "›", px + 6, mix(MUTED, WHITE, a), rx, cy);
+                    let cw = self.put_right(r, scene, "›", px + 6, mix(self::muted(), self::white(), a), rx, cy);
                     if value.is_empty() {
                         rx - cw
                     } else {
                         // (the value now, as the stepper showed it)
-                        let vw = self.put_right(r, scene, value, (14.0 * s) as u32, SOFT, rx - cw - 8.0 * s, cy);
+                        let vw = self.put_right(r, scene, value, (14.0 * s) as u32, self::soft(), rx - cw - 8.0 * s, cy);
                         rx - cw - 8.0 * s - vw
                     }
                 }
                 "i" => {
-                    let cw = self.put_right(r, scene, value, (14.0 * s) as u32, SOFT, rx, cy);
+                    let cw = self.put_right(r, scene, value, (14.0 * s) as u32, self::soft(), rx, cy);
                     rx - cw
                 }
                 // a value being typed: lit in the accent
-                "E" => self.chip(r, scene, value, (13.0 * s) as u32, AMBER, ACCENT_SOFT, false, rx, cy, s),
+                "E" => self.chip(r, scene, value, (13.0 * s) as u32, self::amber(), self::accent_soft(), false, rx, cy, s),
                 // a button
                 _ => {
                     if value.is_empty() {
                         rx
                     } else {
-                        self.chip(r, scene, value, (13.0 * s) as u32, mix(SOFT, AMBER, a), mix(CHIP, ACCENT_SOFT, a), false, rx, cy, s)
+                        self.chip(r, scene, value, (13.0 * s) as u32, mix(self::soft(), self::amber(), a), mix(self::chip_fill(), self::accent_soft(), a), false, rx, cy, s)
                     }
                 }
             };
@@ -1070,7 +1138,7 @@ impl Ui {
                 self.put(r, scene, &n, px, ink, nx, cy - 9.0 * s);
                 let dpx = (12.0 * s) as u32;
                 let d = clip_to(&self.text, desc, dpx as f32, avail);
-                self.put(r, scene, &d, dpx, MUTED, nx, cy + 10.0 * s);
+                self.put(r, scene, &d, dpx, self::muted(), nx, cy + 10.0 * s);
             }
             if f.menu_peek == Some(k) {
                 peek = Some((row_from..scene.overlays.len(), rect));
@@ -1084,8 +1152,8 @@ impl Ui {
             let m = 6.0 * s;
             let card = [rect[0] - m, rect[1] - m, rect[2] + m, rect[3] + m];
             self.text.shadow(r, scene, card, CARD_R * s, 18.0 * s, 6.0 * s, 110);
-            self.text.rounded(r, scene, [card[0] - 1.0, card[1] - 1.0, card[2] + 1.0, card[3] + 1.0], CARD_R * s + 1.0, BORDER);
-            self.text.rounded(r, scene, card, CARD_R * s, PANEL);
+            self.text.rounded(r, scene, [card[0] - 1.0, card[1] - 1.0, card[2] + 1.0, card[3] + 1.0], CARD_R * s + 1.0, self::border());
+            self.text.rounded(r, scene, card, CARD_R * s, self::panel());
             scene.overlays.extend(line);
             return;
         }
@@ -1113,8 +1181,8 @@ impl Ui {
             let rad = (CARD_R * s).min(10.0 * s);
             self.text.shadow(r, scene, panel, rad, 18.0 * s, 6.0 * s, 150);
             // (the launcher's popup: the field's grey, a hairline round it)
-            self.text.rounded(r, scene, [panel[0] - 1.0, panel[1] - 1.0, panel[2] + 1.0, panel[3] + 1.0], rad + 1.0, BORDER);
-            self.text.rounded(r, scene, panel, rad, PANEL_ALT);
+            self.text.rounded(r, scene, [panel[0] - 1.0, panel[1] - 1.0, panel[2] + 1.0, panel[3] + 1.0], rad + 1.0, self::border());
+            self.text.rounded(r, scene, panel, rad, self::panel_alt());
             let more = dd.items.len() > n_vis;
             let dpx = (14.0 * s) as u32;
             let tin = TEXT_IN * s;
@@ -1125,16 +1193,16 @@ impl Ui {
                 let hot = over(rect) || (idx == dd.sel && f.menu_kbd && !over(panel));
                 let a = self.easeq((15, "dropdown", idx), if hot { 1.0 } else { 0.0 }, 1.0 / FADE_SECS);
                 if cur {
-                    self.text.rounded(r, scene, rect, ROW_R * s, LIT);
+                    self.text.rounded(r, scene, rect, ROW_R * s, self::lit());
                 }
                 if a > 0.0 {
-                    self.text.rounded(r, scene, rect, ROW_R * s, fade(SELECTED, a));
+                    self.text.rounded(r, scene, rect, ROW_R * s, fade(self::selected(), a));
                 }
                 if cur {
                     self.accent_bar(r, scene, rect, 1.0, false, s);
                 }
                 let text = clip_to(&self.text, dd.items[idx], dpx as f32, rect[2] - rect[0] - tin * 2.0);
-                self.put(r, scene, &text, dpx, if cur { WHITE } else { mix(SOFT, WHITE, a) }, rect[0] + tin, (rect[1] + rect[3]) * 0.5);
+                self.put(r, scene, &text, dpx, if cur { self::white() } else { mix(self::soft(), self::white(), a) }, rect[0] + tin, (rect[1] + rect[3]) * 0.5);
                 self.dd_rects.push(rect);
             }
             if more {
@@ -1142,6 +1210,50 @@ impl Ui {
                 let thumb = self.thumb(r, scene, track, top, n_vis, dd.items.len(), over(panel), s);
                 self.dd_scroll = Some((track, [thumb[0] - 6.0 * s, thumb[1], thumb[2] + 4.0 * s, thumb[3]]));
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use omsi_ui::theme::{with_palette, Palette};
+
+    /// How far apart two colours are in brightness (0 to 255).
+    fn apart(a: [u8; 4], b: [u8; 4]) -> i32 {
+        let l = |c: [u8; 4]| (c[0] as i32 + c[1] as i32 + c[2] as i32) / 3;
+        (l(a) - l(b)).abs()
+    }
+
+    /// openOMSI's own look is drawn with the colours it always had.
+    #[test]
+    fn the_own_look_keeps_its_colours() {
+        with_palette(Palette::OPENOMSI, || {
+            assert_eq!(self::white(), [236, 236, 236, 0]);
+            assert_eq!(self::selected(), [44, 44, 44, 255]);
+            assert_eq!(self::rail(), [18, 18, 18, 255]);
+            assert_eq!(self::amber(), [255, 200, 110, 0]);
+        });
+    }
+
+    /// In Light, and in a theme over it that keeps its panels, the title, the lines and the
+    /// chosen line stand out from what they are drawn on (they were near-white on near-white).
+    #[test]
+    fn the_inks_stand_out_in_the_light_look() {
+        let mut pack = Palette::LIGHT;
+        pack.accent = omsi_ui::Color::rgba(40, 120, 200, 1.0);
+        for p in [Palette::LIGHT, pack] {
+            with_palette(p, || {
+                for ground in [self::panel(), self::panel_alt(), self::rail(), self::lit(), self::selected()] {
+                    assert!(apart(self::white(), ground) > 150, "title on {ground:?}");
+                    assert!(apart(self::soft(), ground) > 100, "line on {ground:?}");
+                    assert!(apart(self::muted(), ground) > 70, "hint on {ground:?}");
+                }
+                assert!(apart(self::amber(), self::panel()) > 70);
+                assert!(apart(self::off_ink(), self::panel()) > 50);
+                assert_ne!(self::selected(), self::panel());
+                assert_ne!(self::lit(), self::panel());
+            });
         }
     }
 }
