@@ -69,6 +69,14 @@ const evaluate = async (expression) => {
   if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text);
   return r.result.value;
 };
+// A function of this script run in the page, its values passed as arguments: no code is
+// built from strings. (`fn` is source code of this file, never data.)
+const run = async (fn, ...args) => {
+  const { result } = await page('Runtime.evaluate', { expression: 'globalThis' });
+  const r = await page('Runtime.callFunctionOn', { objectId: result.objectId, functionDeclaration: fn.toString(), arguments: args.map((value) => ({ value })), awaitPromise: true, returnByValue: true });
+  if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text);
+  return r.result.value;
+};
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const shot = async (name) => {
   await wait(600);
@@ -84,31 +92,44 @@ try {
   await page('Page.navigate', { url: `${origin}/ui/` });
   for (let i = 0; i < 300 && !(await evaluate("!!document.querySelector('.page-drive') && document.fonts.status === 'loaded'").catch(() => false)); i++) await wait(100);
   // Join the server as the launcher does after its query (data.js serverJoined/askJoined).
-  await evaluate(`(async () => {
-    const d = await import('${origin}/ui/js/data.js');
+  await run(async () => {
+    const d = await import(new URL('/ui/js/data.js', location.href).href);
     d.choose({ lan_mode: 'join', lan_addr: 'fleet.example:27015', free: true, bus: 'Vehicles/MAN_NL_NG/MAN_EN92_main.bus', paint: '' });
     await d.askJoined({ refresh: true });
-  })()`);
+  });
   await wait(800);
   // The picker, as the drive page opens it.
-  const openPicker = (bus, paint = '') => evaluate(`(async () => {
-    const { html, render } = await import('${origin}/ui/vendor/preact-htm.js');
-    const { BusPicker } = await import('${origin}/ui/js/pages/bus-picker.js');
-    const d = await import('${origin}/ui/js/data.js');
-    d.choose({ bus: ${JSON.stringify(bus)}, paint: ${JSON.stringify(paint)} });
+  const openPicker = (bus, paint = '') => run(async (bus, paint) => {
+    const at = (path) => new URL(path, location.href).href;
+    const { html, render } = await import(at('/ui/vendor/preact-htm.js'));
+    const { BusPicker } = await import(at('/ui/js/pages/bus-picker.js'));
+    const d = await import(at('/ui/js/data.js'));
+    d.choose({ bus, paint });
     let host = document.getElementById('shot-host');
-    if (host) render(null, host); else { host = document.createElement('div'); host.id = 'shot-host'; document.body.append(host); }
-    render(html\`<\${BusPicker} onClose=\${() => render(null, host)} />\`, host);
-  })()`);
-  const closePicker = () => evaluate(`(async () => { const { render } = await import('${origin}/ui/vendor/preact-htm.js'); const h = document.getElementById('shot-host'); if (h) render(null, h); })()`);
+    if (host) render(null, host);
+    else {
+      host = document.createElement('div');
+      host.id = 'shot-host';
+      document.body.append(host);
+    }
+    render(html`<${BusPicker} onClose=${() => render(null, host)} />`, host);
+  }, bus, paint);
+  const closePicker = () => run(async () => {
+    const { render } = await import(new URL('/ui/vendor/preact-htm.js', location.href).href);
+    const h = document.getElementById('shot-host');
+    if (h) render(null, h);
+  });
 
   await openPicker('Vehicles/MAN_NL_NG/MAN_EN92_main.bus');
   await wait(1500);
   await shot('01-server-bus-catalogue.png');
 
-  await evaluate(`document.querySelector('.picker .detail .field .select')?.click()`);
+  await run(() => document.querySelector('.picker .detail .field .select')?.click());
   await shot('02-server-paint-selection.png');
-  await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); document.body.click()`);
+  await run(() => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    document.body.click();
+  });
   await closePicker();
 
   await openPicker(SERVER_ONLY);
@@ -117,9 +138,17 @@ try {
   await closePicker();
 
   // Join and drive with a server bus: the launcher asks before anything is downloaded.
-  await evaluate(`(async () => { const d = await import('${origin}/ui/js/data.js'); d.choose({ bus: ${JSON.stringify(SERVER_ONLY)}, paint: 'Server Night Line' }); })()`);
+  await run(async (bus) => {
+    const d = await import(new URL('/ui/js/data.js', location.href).href);
+    d.choose({ bus, paint: 'Server Night Line' });
+  }, SERVER_ONLY);
   await wait(500);
-  const clicked = await evaluate(`(() => { const b = [...document.querySelectorAll('.btn.primary')].find((x) => /Join and drive/.test(x.textContent)); if (!b || b.disabled) return b ? 'disabled' : 'missing'; b.click(); return 'ok'; })()`);
+  const clicked = await run(() => {
+    const b = [...document.querySelectorAll('.btn.primary')].find((x) => /Join and drive/.test(x.textContent));
+    if (!b || b.disabled) return b ? 'disabled' : 'missing';
+    b.click();
+    return 'ok';
+  });
   console.log(`Join and drive: ${clicked}`);
   await wait(1200);
   await shot('04-download-consent.png');
