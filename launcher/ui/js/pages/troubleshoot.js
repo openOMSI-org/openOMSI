@@ -2,14 +2,62 @@
 // or pack it concerns, with a fresh look on request - and the model test, which loads one
 // piece the way the game does (it was a tab of Settings up to here).
 
-import { html, useState } from '../../vendor/preact-htm.js';
+import { html, useState, useEffect } from '../../vendor/preact-htm.js';
 import { S, useStore, set, toast, remembered, remember } from '../store.js';
 import { t, ago, language } from '../i18n.js';
 import { call } from '../api.js';
 import { fixChoice, updateHof, pollNow } from '../data.js';
 import { Icon } from '../icons.js';
-import { Button, Card, Empty, Notice, PageHead, Search, Spinner, Tabs, Tag } from '../ui.js';
+import { Button, Card, Empty, Notice, PageHead, Search, Spinner, Tabs, Tag, useConfirm } from '../ui.js';
 import { ContentTest } from './content-test.js';
+
+
+/** Two independent soft disk budgets: never delete active mods or saved settings. */
+function StorageBlock() {
+  const [usage, setUsage] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [ask, dialog] = useConfirm();
+  const refresh = () => call('storage_status').then(setUsage).catch((e) => toast(t(e.message), 'error'));
+  useEffect(() => { refresh(); }, []);
+  const size = (bytes) => (bytes / 1e9).toFixed(2) + ' GB';
+  const clean = async (scope, clear) => {
+    if (busy || usage?.busy) return;
+    if (clear) {
+      const yes = await ask({
+        title: 'Clear downloaded cache?',
+        text: 'Cached files can be downloaded or rebuilt again. Installed mods, saves and settings will not be removed. Close the game first.',
+        yes: 'Clear cache', danger: true,
+      });
+      if (!yes) return;
+    }
+    setBusy(true);
+    try {
+      const next = await call('storage_cleanup', { scope, clear });
+      setUsage(next);
+      toast(t('Cache cleanup completed.'), 'ok');
+    } catch (e) { toast(t(e.message), 'error'); }
+    setBusy(false);
+  };
+  return html`<${Card} title="Disk cache and multiplayer downloads" hint="Soft limits: active downloads may temporarily exceed them, then older files are removed when safe.">
+    ${usage ? html`<div class="stack" style="gap:12px">
+      <div><b>${t('Local cache')}</b> — ${size(usage.local_bytes)} / ${size(usage.local_limit)}
+        <div class="muted small">${t('Maps, processed textures and other rebuildable data')}</div>
+      </div>
+      <div><b>${t('Multiplayer downloads')}</b> — ${size(usage.lan_bytes)} / ${size(usage.lan_limit)}
+        <div class="muted small">${t('Sealed files reused across sessions')}</div>
+      </div>
+      ${usage.busy && html`<${Notice} kind="info">${t('Close all running games to clean cached files.')}</${Notice}>`}
+      ${usage.server_store && html`<${Notice} kind="info">${t('Server vehicle files are protected by the server retention policy.')}</${Notice}>`}
+      <div class="row wrap" style="gap:8px">
+        <${Button} small icon="refresh" label="Refresh usage" disabled=${busy} onClick=${refresh} />
+        <${Button} small icon="check" label="Clean to limits" disabled=${busy || usage.busy} onClick=${() => clean('both', false)} />
+        <${Button} small kind="danger" icon="x" label="Clear local cache..." disabled=${busy || usage.busy} onClick=${() => clean('local', true)} />
+        <${Button} small kind="danger" icon="x" label="Clear multiplayer downloads..." disabled=${busy || usage.busy || usage.server_store} onClick=${() => clean('lan', true)} />
+      </div>
+      ${(usage.reclaimed_local || usage.reclaimed_lan) && html`<div class="muted small">${t('Freed')}: ${size((usage.reclaimed_local || 0) + (usage.reclaimed_lan || 0))}</div>`}
+    </div>` : html`<div class="row muted"><${Spinner} /> ${t('Checking cache size...')}</div>`}
+  </${Card}>${dialog}`;
+}
 
 const KIND_ICON = { bus: 'bus', pack: 'puzzle', mod: 'download', general: 'alert' };
 const LEVEL_TAG = { error: 'danger', warn: 'accent', info: '' };
@@ -99,6 +147,7 @@ function Overview({ onCheck }) {
   // (a failed install stays in the installs' list until it is cleared: the way to resolve it)
   const clearInstalls = () => call('mods_clear_finished').then(pollNow).catch((e) => toast(t(e.message), 'error'));
   return html`<div class="stack">
+    <${StorageBlock} />
     <${Card} title="Problems by content" actions=${html`<div class="row" style="gap:8px">
         ${s.scannedAt && html`<span class="muted small">${t('Last scan: {when}', { when: ago(s.scannedAt) })}</span>`}
         <${Button} kind="primary" icon="refresh" label=${busy ? 'Scanning...' : 'Scan again'} disabled=${busy} onClick=${scan} />
