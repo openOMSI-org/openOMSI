@@ -433,8 +433,8 @@ fn latest_from_site() -> anyhow::Result<Option<Release>> {
         Err(e) => anyhow::bail!("{}", short_error(&e)),
     };
     let sums_url = format!("{REPO_URL}/releases/download/{tag}/SHA256SUMS");
-    let sums = match fetch_text(&sums_url) {
-        Ok(s) => s,
+    let sums = match with_retries("looking for checksums", || agent().get(&sums_url).call()) {
+        Ok(r) => r.into_string()?,
         Err(ureq::Error::Status(404, _)) => return Ok(None),
         Err(e) => anyhow::bail!("{}", short_error(&e)),
     };
