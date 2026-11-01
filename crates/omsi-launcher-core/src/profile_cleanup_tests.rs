@@ -230,3 +230,93 @@ fn expensive_effects_default_off_and_manual_choices_survive() {
     assert_eq!(restored["light_shadows"], "street");
     assert_eq!(restored["road_snow"], true);
 }
+
+fn graphics_profile_dir(tag: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("openomsi-gfx-profiles-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+/// Each graphics profile is a file of its own: kept, listed, replaced and removed one by one,
+/// and the names that look alike - another capital, a slash - stay apart.
+#[test]
+fn graphics_profiles_are_a_file_each() {
+    let dir = graphics_profile_dir("each");
+    let mine = json!({ "graphics": "enhanced", "msaa": 4, "language": "PTB" });
+    for name in ["High", "high", "a/b", "a_b"] {
+        assert_eq!(save_graphics_profile_in(&dir, name, &mine).unwrap(), name);
+    }
+    let files = std::fs::read_dir(graphics_profiles_dir(&dir)).unwrap().count();
+    assert_eq!(files, 4);
+    let all = graphics_profiles_in(&dir);
+    assert_eq!(all.keys().map(String::as_str).collect::<Vec<_>>(), ["High", "a/b", "a_b", "high"]);
+    assert_eq!(all["High"], json!({ "graphics": "enhanced", "msaa": 4 }));
+    save_graphics_profile_in(&dir, "High", &json!({ "msaa": 8 })).unwrap();
+    assert_eq!(graphics_profiles_in(&dir)["High"], json!({ "msaa": 8 }));
+    delete_graphics_profile_in(&dir, "a/b").unwrap();
+    delete_graphics_profile_in(&dir, "nobody").unwrap();
+    assert_eq!(graphics_profiles_in(&dir).len(), 3);
+    assert!(save_graphics_profile_in(&dir, "  ", &mine).is_err());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A file that cannot be read loses only its own profile, and the next profile kept does not
+/// take the others with it (the single file did: it read as none, and was written again with
+/// the one new profile).
+#[test]
+fn a_damaged_graphics_profile_file_costs_only_that_profile() {
+    let dir = graphics_profile_dir("damaged");
+    save_graphics_profile_in(&dir, "Low", &json!({ "msaa": 1 })).unwrap();
+    save_graphics_profile_in(&dir, "Ultra", &json!({ "msaa": 8 })).unwrap();
+    std::fs::write(graphics_profile_file(&dir, "Low"), "{ not json").unwrap();
+    assert_eq!(graphics_profiles_in(&dir).keys().collect::<Vec<_>>(), ["Ultra"]);
+    save_graphics_profile_in(&dir, "Medium", &json!({ "msaa": 4 })).unwrap();
+    assert_eq!(graphics_profiles_in(&dir).keys().collect::<Vec<_>>(), ["Medium", "Ultra"]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The one file of 0.3.44 and before is split into files the first time the profiles are
+/// asked for, and put aside; a file that is not readable is left alone.
+#[test]
+fn the_single_graphics_profiles_file_is_split_into_files() {
+    let dir = graphics_profile_dir("migrate");
+    std::fs::write(
+        old_graphics_profiles_path(&dir),
+        serde_json::to_string(&json!({ "Cinema": { "msaa": 8, "shadows": true }, "Fast": { "msaa": 1 } })).unwrap(),
+    )
+    .unwrap();
+    let all = graphics_profiles_in(&dir);
+    assert_eq!(all["Cinema"], json!({ "msaa": 8, "shadows": true }));
+    assert_eq!(all["Fast"], json!({ "msaa": 1 }));
+    assert!(!old_graphics_profiles_path(&dir).exists());
+    assert!(old_graphics_profiles_path(&dir).with_extension("json.migrated").exists());
+    save_graphics_profile_in(&dir, "Cinema", &json!({ "msaa": 2 })).unwrap();
+    assert_eq!(graphics_profiles_in(&dir)["Cinema"], json!({ "msaa": 2 }));
+    let bad = graphics_profile_dir("migrate-bad");
+    std::fs::write(old_graphics_profiles_path(&bad), "{ broken").unwrap();
+    assert!(graphics_profiles_in(&bad).is_empty());
+    assert!(old_graphics_profiles_path(&bad).exists());
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(&bad);
+}
+
+#[test]
+fn a_graphics_profile_copied_under_another_file_name_is_one_profile() {
+    let dir = graphics_profile_dir("copied");
+    save_graphics_profile_in(&dir, "Shared", &json!({ "msaa": 4 })).unwrap();
+    let own = graphics_profile_file(&dir, "Shared");
+    let copy = graphics_profiles_dir(&dir).join("from a friend.json");
+    std::fs::rename(&own, &copy).unwrap();
+    assert_eq!(graphics_profiles_in(&dir)["Shared"], json!({ "msaa": 4 }));
+    assert!(own.exists() && !copy.exists());
+    save_graphics_profile_in(&dir, "Shared", &json!({ "msaa": 8 })).unwrap();
+    assert_eq!(std::fs::read_dir(graphics_profiles_dir(&dir)).unwrap().count(), 1);
+    std::fs::copy(&own, &copy).unwrap();
+    assert_eq!(graphics_profiles_in(&dir)["Shared"], json!({ "msaa": 8 }));
+    assert!(copy.exists());
+    delete_graphics_profile_in(&dir, "Shared").unwrap();
+    std::fs::remove_file(&copy).unwrap();
+    assert!(graphics_profiles_in(&dir).is_empty());
+    let _ = std::fs::remove_dir_all(&dir);
+}
