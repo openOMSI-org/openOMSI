@@ -88,17 +88,24 @@ export function StartBar({ step, go }) {
       return;
     }
     setArmed(0);
-    if (serverFleetSelection()) {
-      const approved = await ask({
-        title: 'Download server vehicle',
-        text: 'The selected bus or repaint may need files from this server. Matching local files are reused; other files are checked and cached for this session without replacing your installed mods. Continue?',
-        yes: 'Download and join',
-      });
-      if (!approved) return;
-      extra = { ...extra, __fleetApproved: true };
-    }
     setBusy(true);
-    try { await start(extra); } finally { setBusy(false); }
+    try {
+      if (c.lan_mode === 'join') {
+        // A previously saved server response may lack the new fleet metadata.
+        // Re-query before deciding whether an authenticated download is needed.
+        await askJoined({ refresh: true });
+      }
+      if (serverFleetSelection()) {
+        const approved = await ask({
+          title: t('Download server vehicle'),
+          text: t('The selected bus or repaint may need files from this server. Matching local files are reused; other files are checked and cached for this session without replacing your installed mods. Continue?'),
+          yes: t('Download and join'),
+        });
+        if (!approved) return;
+        extra = { ...extra, __fleetApproved: true };
+      }
+      await start(extra);
+    } finally { setBusy(false); }
   };
   const entry = m && c.entry >= 0 ? m.entry_points[c.entry] : null;
   const where = joined && c.lan_map ? mapName(c.lan_map.replace(/\\/g, '/')) : m ? m.friendly || m.name : '';
