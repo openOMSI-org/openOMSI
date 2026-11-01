@@ -61,17 +61,23 @@ fn scan(root: &Path, kind: Kind) -> (Usage, Vec<Candidate>) {
             }
             let modified = md.modified().unwrap_or(UNIX_EPOCH);
             usage.bytes = usage.bytes.saturating_add(md.len());
-            let incomplete = matches!(path.extension().and_then(|x| x.to_str()),
-                Some("piece" | "partpiece" | "part"));
-            // Complete sealed blobs may be evicted when idle, even if just downloaded.
-            // Only unfinished transfer pieces require the grace period.
+            // In-progress files are never reaped immediately. The packed zpiece is
+            // itself a partial transfer artifact and must receive the same grace.
+            let temporary = temporary(&path, kind);
             let eligible = !usage.server_store &&
-                (kind == Kind::Local || !incomplete ||
-                 modified.elapsed().is_ok_and(|age| age >= TRANSFER_GRACE));
+                (!temporary || modified.elapsed().is_ok_and(|age| age >= TRANSFER_GRACE));
             files.push(Candidate { path, bytes: md.len(), modified, eligible });
         }
     }
     (usage, files)
+}
+
+fn temporary(path: &Path, kind: Kind) -> bool {
+    let ext = path.extension().and_then(|x| x.to_str());
+    match kind {
+        Kind::Local => matches!(ext, Some("tmp" | "part")),
+        Kind::ClientLan => matches!(ext, Some("piece" | "zpiece" | "partpiece" | "part")),
+    }
 }
 
 pub fn usage(root: &Path, kind: Kind) -> Usage {
@@ -93,9 +99,7 @@ pub fn trim(root: &Path, kind: Kind, budget: u64) -> Usage {
         let Ok(md) = fs::symlink_metadata(&item.path) else { continue };
         if !md.file_type().is_file() || md.len() != item.bytes ||
             md.modified().ok() != Some(item.modified) { continue; }
-        let incomplete = matches!(item.path.extension().and_then(|x| x.to_str()),
-            Some("piece" | "partpiece" | "part"));
-        if kind == Kind::ClientLan && incomplete &&
+        if temporary(&item.path, kind) &&
             md.modified().ok().and_then(|t| t.elapsed().ok()).is_none_or(|d| d < TRANSFER_GRACE) {
             continue;
         }
@@ -168,6 +172,36 @@ mod tests {
         age(&blob, 7200);
         let result = trim(&root, Kind::ClientLan, 0);
         assert!(result.server_store && blob.exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn temporary_lan_download_can_exceed_then_returns_to_budget_after_grace() {
+        let root = temp("lan-grace");
+        let older = root.join("older.blob");
+        let incoming = root.join("incoming.zpiece");
+        fs::write(&older, [1; 8]).unwrap();
+        fs::write(&incoming, [2; 8]).unwrap();
+        age(&older, 3600);
+        let early = trim(&root, Kind::ClientLan, 0);
+        assert_eq!(early.freed, 8);
+        assert_eq!(early.bytes, 8);
+        assert!(incoming.exists());
+        age(&incoming, TRANSFER_GRACE.as_secs() + 5);
+        let later = trim(&root, Kind::ClientLan, 0);
+        assert_eq!(later.bytes, 0);
+        assert_eq!(later.freed, 8);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn local_partial_cache_write_is_kept_until_safe() {
+        let root = temp("local-grace");
+        let file = root.join("active.tmp");
+        fs::write(&file, [9; 10]).unwrap();
+        assert_eq!(trim(&root, Kind::Local, 0).bytes, 10);
+        age(&file, TRANSFER_GRACE.as_secs() + 5);
+        assert_eq!(trim(&root, Kind::Local, 0).bytes, 0);
         let _ = fs::remove_dir_all(root);
     }
 
