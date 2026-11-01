@@ -23,6 +23,7 @@
 
 use std::path::{Path, PathBuf};
 
+pub mod cache_budget;
 pub mod codepage;
 pub mod collate;
 pub mod flags;
