@@ -1,6 +1,6 @@
 //! User-visible cache budgets. These apply to the *cache* and the joining player's
 //! *sealed LAN store*, not the full ~/.openomsi folder (settings, saves and mods live there).
-//! Cleanup is suspended while a launcher-managed game is running.
+//! Cleanup is suspended while any game holds a cache lease, including CLI runs.
 
 use serde::Serialize;
 use omsi_cfg::cache_budget::{self, Kind};
@@ -21,6 +21,7 @@ pub struct Status {
 
 fn running() -> bool {
     crate::instances::list().iter().any(|game| game.running)
+        || omsi_cfg::cache_activity::maintenance(&crate::data_dir()).is_none()
 }
 
 pub fn status() -> Status {
@@ -40,12 +41,14 @@ pub fn status() -> Status {
 /// modifies the two dedicated cache directories. Explicit "clear" sets budget to zero.
 pub fn cleanup(scope: &str, clear: bool) -> Result<Status, String> {
     if !matches!(scope, "local" | "lan" | "both") {
-        return Err("unknown cache scope".into());
+        return Err(crate::i18n::tr("Unknown cache scope."));
     }
     if running() {
-        return Err("Close all running openOMSI games before cleaning the cache.".into());
+        return Err(crate::i18n::tr("Close all running openOMSI games before cleaning the cache."));
     }
     let base = crate::data_dir();
+    let _maintenance = omsi_cfg::cache_activity::maintenance(&base)
+        .ok_or_else(|| crate::i18n::tr("Close all running openOMSI games before cleaning the cache."))?;
     let mut reclaimed_local = 0;
     let mut reclaimed_lan = 0;
     if matches!(scope, "local" | "both") {
@@ -58,6 +61,7 @@ pub fn cleanup(scope: &str, clear: bool) -> Result<Status, String> {
             if clear { 0 } else { cache_budget::LAN_LIMIT });
         reclaimed_lan = u.freed;
     }
+    drop(_maintenance);
     let mut state = status();
     state.reclaimed_local = reclaimed_local;
     state.reclaimed_lan = reclaimed_lan;

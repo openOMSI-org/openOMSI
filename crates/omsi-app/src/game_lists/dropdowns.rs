@@ -141,7 +141,7 @@ pub(crate) fn dropdown_apply(app: &mut App, action: &str) {
         "pick" => {
             if let Some((key, value)) = arg.split_once(' ') {
                 let before = app.settings.mirror_hud;
-                if key != "graphics" && is_graphics_setting(key) { begin_graphics_change(app); }
+                if is_graphics_setting(key) { begin_graphics_change(app); }
                 remember_setting(key, value);
                 reload_settings(app);
                 if key == "light_shadows" && value == "all" && app.renderer.as_ref().is_some_and(|r| !r.lamp_cube_maps()) {
@@ -172,7 +172,7 @@ pub(crate) fn dropdown_apply(app: &mut App, action: &str) {
                         }
                     }
                 });
-                app.service_msg = Some(("Preset selected. Confirm to apply compatible options in-game; changing renderer mode still requires restart.".into(), 5.0));
+                app.service_msg = Some((omsi_ui::tr("Graphics preset selected. Confirm to apply.").into_owned(), 5.0));
             }
         }
         "gfxprofile" => {
@@ -248,6 +248,9 @@ pub(super) fn settings_file() -> serde_json::Value {
         .clone();
     let pending = PENDING_SETTINGS.lock().unwrap_or_else(|e| e.into_inner());
     apply_pending(&mut v, &pending.0);
+    if let Some(draft) = GRAPHICS_DRAFT.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+        graphics::overlay(&mut v, draft);
+    }
     v
 }
 
@@ -380,7 +383,19 @@ pub(crate) fn saved_settings() -> Option<serde_json::Value> {
 pub(crate) fn store_with(app: &mut App, change: impl FnOnce(&mut serde_json::Value)) {
     flush_settings(true);
     let Ok(mut v) = omsi_launcher_lib::get_settings() else { return };
+    let before = v.clone();
+    if let Some(draft) = GRAPHICS_DRAFT.lock().unwrap_or_else(|e| e.into_inner()).as_ref() { graphics::overlay(&mut v, draft); }
     change(&mut v);
+    {
+        let mut draft = GRAPHICS_DRAFT.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(draft) = draft.as_mut() {
+            // Only graphics enter the transaction; unrelated settings still save normally.
+            for (key, value) in v.as_object().into_iter().flatten() {
+                if is_graphics_setting(key) && before.get(key) != Some(value) { draft[key] = value.clone(); }
+            }
+            graphics::overlay(&mut v, &before);
+        }
+    }
     *SETTINGS_CACHE.lock().unwrap_or_else(|e| e.into_inner()) = None;
     match omsi_launcher_lib::save_settings(&v) {
         Ok(()) => reload_settings(app),
@@ -416,11 +431,8 @@ pub(super) fn mode_of_session(session: &crate::startup::SessionSettings, graphic
 }
 
 fn settings_in_mode(mode: &str) -> crate::settings::Settings {
-    let s = crate::settings::Settings::load();
-    if s.mode() == mode {
-        return s;
-    }
-    let text = crate::settings::Settings::path().and_then(|p| std::fs::read_to_string(p).ok()).unwrap_or_default();
+    let file = settings_file();
+    let text = omsi_launcher_lib::settings_to_text(&file, None);
     let mut s = text_in_mode(&text, mode);
     if let Some(n) = omsi_cfg::flags::OMSI_SAFE_GPU.parse::<u32>().filter(|n| *n > 0) {
         s.apply_safe_gpu(n);

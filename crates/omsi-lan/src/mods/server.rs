@@ -60,7 +60,7 @@ fn serve_with_accept(
     let ready: Arc<Mutex<Option<Arc<(Manifest, Vec<PathBuf>)>>>> = Arc::new(Mutex::new(None));
     let state = Arc::new(State::default());
     // Fleet manifests are immutable for this session and shared by all request handlers.
-    let fleet_cache: Arc<Mutex<HashMap<String, Arc<(Manifest, Vec<PathBuf>)>>>> = Arc::new(Mutex::new(HashMap::new()));
+    let fleet_cache: Arc<server_fleet::Cache> = Arc::new(Mutex::new(HashMap::new()));
     let fleet_root = args.root.clone();
     upload::open();
     {
@@ -113,7 +113,7 @@ fn serve_with_accept(
                         .connections
                         .lock()
                         .unwrap_or_else(|e| e.into_inner());
-                    if connections.len() >= MAX_CONNECTIONS {
+                    if connections.len() >= MAX_CONNECTIONS || connections.keys().filter(|addr| addr.ip() == peer.ip()).count() >= 8 {
                         log::info!(
                             "LAN mods: {MAX_CONNECTIONS} connections open already; try again later"
                         );

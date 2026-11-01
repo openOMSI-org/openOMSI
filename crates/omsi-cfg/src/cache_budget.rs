@@ -38,7 +38,8 @@ fn scan(root: &Path, kind: Kind) -> (Usage, Vec<Candidate>) {
     let mut usage = Usage::default();
     let Ok(meta) = fs::symlink_metadata(root) else { return (usage, vec![]) };
     if !meta.file_type().is_dir() { return (usage, vec![]) }
-    usage.server_store = kind == Kind::ClientLan && root.join("vehicles").is_dir();
+    let pins = if kind == Kind::ClientLan { server_pins(root) } else { Some(std::collections::HashSet::new()) };
+    usage.server_store = pins.as_ref().is_none_or(|p| !p.is_empty());
     let mut dirs = vec![root.to_path_buf()];
     let mut files = Vec::new();
     while let Some(dir) = dirs.pop() {
@@ -55,21 +56,42 @@ fn scan(root: &Path, kind: Kind) -> (Usage, Vec<Candidate>) {
             if kind == Kind::ClientLan {
                 // The client store's sealed objects; never the encryption key, a manifest,
                 // metadata or an unknown file. The server also uses this directory, so
-                // when vehicle manifests exist we report the usage but never evict.
+                // only blobs named in the server retention index are protected.
                 if !matches!(path.extension().and_then(|x| x.to_str()),
                     Some("blob" | "piece" | "zpiece" | "partpiece" | "part")) { continue; }
             }
+            // Server-retained blobs are outside the joining player's cache budget.
+            if kind == Kind::ClientLan && pins.as_ref().is_none_or(|pins| path.file_name().is_some_and(|n| pins.contains(n.to_string_lossy().as_ref()))) { continue; }
             let modified = md.modified().unwrap_or(UNIX_EPOCH);
             usage.bytes = usage.bytes.saturating_add(md.len());
             // In-progress files are never reaped immediately. The packed zpiece is
             // itself a partial transfer artifact and must receive the same grace.
             let temporary = temporary(&path, kind);
-            let eligible = !usage.server_store &&
-                (!temporary || modified.elapsed().is_ok_and(|age| age >= TRANSFER_GRACE));
+            let eligible = !temporary || modified.elapsed().is_ok_and(|age| age >= TRANSFER_GRACE);
             files.push(Candidate { path, bytes: md.len(), modified, eligible });
         }
     }
     (usage, files)
+}
+
+/// None protects an old server store until its next run writes the opaque blob index.
+/// A directory created by merely opening uploads does not disable cleanup.
+fn server_pins(root: &Path) -> Option<std::collections::HashSet<String>> {
+    let dir = root.join("vehicles");
+    let Ok(md) = fs::symlink_metadata(&dir) else { return Some(Default::default()) };
+    if !md.is_dir() || md.file_type().is_symlink() { return None; }
+    let has_manifests = fs::read_dir(&dir).ok()?.flatten().any(|e| e.path().extension().is_some_and(|x| x == "json"));
+    if !has_manifests { return Some(Default::default()); }
+    let file = dir.join("cache-pins");
+    if !fs::symlink_metadata(&file).ok()?.file_type().is_file() { return None; }
+    let text = fs::read_to_string(file).ok()?;
+    let mut pins = std::collections::HashSet::new();
+    for line in text.lines() {
+        let hex = line.strip_suffix(".blob")?;
+        if hex.len() != 64 || !hex.bytes().all(|c| c.is_ascii_hexdigit()) { return None; }
+        pins.insert(line.to_string());
+    }
+    Some(pins)
 }
 
 fn temporary(path: &Path, kind: Kind) -> bool {
@@ -90,7 +112,7 @@ pub fn usage(root: &Path, kind: Kind) -> Usage {
 /// when it is safe; for a large session, exceeding the limit is explicitly allowed.
 pub fn trim(root: &Path, kind: Kind, budget: u64) -> Usage {
     let (mut usage, mut candidates) = scan(root, kind);
-    if usage.server_store || usage.bytes <= budget { return usage }
+    if usage.bytes <= budget { return usage }
     candidates.retain(|c| c.eligible);
     candidates.sort_by_key(|c| c.modified);
     for item in candidates {
@@ -164,14 +186,14 @@ mod tests {
     }
 
     #[test]
-    fn server_manifests_disable_client_eviction() {
+    fn empty_upload_directory_does_not_disable_client_eviction() {
         let root = temp("server");
         fs::create_dir(root.join("vehicles")).unwrap();
         let blob = root.join("old.blob");
         fs::write(&blob, [1; 20]).unwrap();
         age(&blob, 7200);
         let result = trim(&root, Kind::ClientLan, 0);
-        assert!(result.server_store && blob.exists());
+        assert!(!result.server_store && !blob.exists());
         let _ = fs::remove_dir_all(root);
     }
 
@@ -192,6 +214,24 @@ mod tests {
         assert_eq!(later.bytes, 0);
         assert_eq!(later.freed, 8);
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn server_pins_protect_only_retained_blobs_and_not_client_downloads() {
+        let root = temp("pins");
+        fs::create_dir(root.join("vehicles")).unwrap();
+        fs::write(root.join("vehicles/bus.json"), "manifest").unwrap();
+        let pinned = format!("{}.blob", "a".repeat(64));
+        fs::write(root.join(&pinned), [1; 20]).unwrap();
+        fs::write(root.join("client.blob"), [2; 10]).unwrap();
+        // Old stores without an index fail closed until opened by the new game.
+        assert_eq!(trim(&root, Kind::ClientLan, 0).freed, 0);
+        fs::write(root.join("vehicles/cache-pins"), format!("{pinned}\n")).unwrap();
+        let result = trim(&root, Kind::ClientLan, 0);
+        assert!(result.server_store && root.join(pinned).exists());
+        assert_eq!(result.freed, 10);
+        assert_eq!(result.bytes, 0, "retained server files have a separate policy");
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

@@ -173,6 +173,7 @@ impl Buses {
             }
         }
         if out.buses > 0 {
+            write_cache_pins(v);
             log::info!("vehicles: {} buses nobody uses let go - {} files, {:.1} MB", out.buses, out.files, out.bytes as f64 / 1e6);
         }
         out

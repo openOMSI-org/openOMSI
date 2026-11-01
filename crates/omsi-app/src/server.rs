@@ -34,7 +34,8 @@ fn fleet_paints(cfg: &ServerCfg, root: &Path) -> Vec<omsi_net::ws::FleetPaints> 
                 // Use the same resolved scheme names as the authenticated LISTBUS
                 // transfer. A server build must not depend on launcher-only crates.
                 let paints = vehicle.paint_schemes.iter().take(128).map(|p| p.name.clone()).collect();
-                offers.push(omsi_net::ws::FleetPaints { bus: rel, paints });
+                let content = omsi_lan::mods::fleet_fingerprint(root, &rel).unwrap_or_default();
+                offers.push(omsi_net::ws::FleetPaints { bus: rel, paints, content });
             }
             Err(e) => log::warn!("server fleet: cannot load {}: {e}", path.display()),
         }
@@ -58,7 +59,7 @@ pub(crate) fn info_of(cfg: &ServerCfg, root: &Path) -> omsi_net::ws::ServerInfo 
         password: false,
         vehicles: cfg.vehicles.clone(),
         fleet: fleet_paints(cfg, root),
-        fleet_version: 1,
+        fleet_version: if omsi_cfg::flags::OMSI_NO_LAN_MODS.is_set() || cfg.vehicles.is_empty() { 0 } else { 1 },
         reached_at: String::new(),
         players_public: cfg.share_positions,
         player_list: Vec::new(),

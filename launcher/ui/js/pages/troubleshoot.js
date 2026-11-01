@@ -52,7 +52,7 @@ function StorageBlock() {
         <${Button} small icon="refresh" label="Refresh usage" disabled=${busy} onClick=${refresh} />
         <${Button} small icon="check" label="Clean to limits" disabled=${busy || usage.busy} onClick=${() => clean('both', false)} />
         <${Button} small kind="danger" icon="x" label="Clear local cache..." disabled=${busy || usage.busy} onClick=${() => clean('local', true)} />
-        <${Button} small kind="danger" icon="x" label="Clear multiplayer downloads..." disabled=${busy || usage.busy || usage.server_store} onClick=${() => clean('lan', true)} />
+        <${Button} small kind="danger" icon="x" label="Clear multiplayer downloads..." disabled=${busy || usage.busy} onClick=${() => clean('lan', true)} />
       </div>
       ${(usage.reclaimed_local || 0) + (usage.reclaimed_lan || 0) > 0 && html`<div class="muted small">${t('Freed')}: ${size((usage.reclaimed_local || 0) + (usage.reclaimed_lan || 0))}</div>`}
     </div>` : html`<div class="row muted"><${Spinner} /> ${t('Checking cache size...')}</div>`}

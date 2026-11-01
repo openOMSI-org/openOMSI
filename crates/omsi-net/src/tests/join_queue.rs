@@ -3,12 +3,36 @@
 use super::*;
 
 #[test]
+fn one_ip_cannot_fill_the_whole_waiting_queue() {
+    let mut host = LanSession::host(0, "host", world("m"), false).unwrap();
+    // Seed queued entries so admission stays in FIFO mode without creating peers.
+    for port in 10000..10032 {
+        host.waiting_joins.push_back((SocketAddr::from(([127, 0, 0, 1], port)), Instant::now()));
+    }
+    assert!(host.defer_new_join(SocketAddr::from(([127, 0, 0, 1], 11000)), true));
+    assert_eq!(host.waiting_joins.len(), 32);
+    assert!(host.defer_new_join(SocketAddr::from(([127, 0, 0, 2], 11000)), true));
+    assert_eq!(host.waiting_joins.len(), 33);
+}
+
+#[test]
+fn legacy_client_is_told_to_retry_instead_of_silently_ignoring_wait() {
+    let mut host = LanSession::host(0, "host", world("m"), false).unwrap();
+    host.waiting_joins.push_back((SocketAddr::from(([127, 0, 0, 2], 10000)), Instant::now()));
+    let client = raw();
+    assert!(host.defer_new_join(SocketAddr::from((Ipv4Addr::LOCALHOST, client.local_addr().unwrap().port())), false));
+    let mut buf = [0; 1024];
+    let (n, _) = client.recv_from(&mut buf).unwrap();
+    assert!(String::from_utf8_lossy(&buf[..n]).contains("try again in a minute"));
+}
+
+#[test]
 fn configured_player_capacity_limits_new_remote_peers() {
     let mut host = LanSession::host(0, "dedicated", world("m"), false).unwrap();
     host.set_peer_limit(1);
     assert_eq!(host.max_peers, 1);
     let at = to_client(&host);
-    let hello = format!("HELLO|{PROTOCOL}|-|p|Vehicles/x.bus|m|1989-05-30|32400||");
+    let hello = format!("HELLO|{PROTOCOL}|-|p|Vehicles/x.bus|m|1989-05-30|32400|||||||wait-v1");
     let first = raw();
     first.send_to(hello.as_bytes(), at).unwrap();
     host.tick(0.02, &pose(0.0));
@@ -29,7 +53,7 @@ fn configured_player_capacity_limits_new_remote_peers() {
 fn too_many_loading_players_wait() {
     let mut host = LanSession::host(28180, "host", world("m"), true).unwrap();
     let at = SocketAddr::from((Ipv4Addr::LOCALHOST, host.local_addr().unwrap().port()));
-    let hello = format!("HELLO|{PROTOCOL}|-|p|Vehicles/x.bus|m|1989-05-30|32400||");
+    let hello = format!("HELLO|{PROTOCOL}|-|p|Vehicles/x.bus|m|1989-05-30|32400|||||||wait-v1");
     let players: Vec<UdpSocket> = (0..MAX_JOINING + 1).map(|_| raw()).collect();
     for p in &players {
         p.send_to(hello.as_bytes(), at).unwrap();
@@ -57,7 +81,7 @@ fn twenty_simultaneous_hellos_eventually_admit_every_player() {
     let mut host = LanSession::host(0, "dedicated", world("m"), false).unwrap();
     host.set_peer_limit(20);
     let at = to_client(&host);
-    let hello = format!("HELLO|{PROTOCOL}|-|p|Vehicles/x.bus|m|1989-05-30|32400||");
+    let hello = format!("HELLO|{PROTOCOL}|-|p|Vehicles/x.bus|m|1989-05-30|32400|||||||wait-v1");
     let clients: Vec<UdpSocket> = (0..20).map(|_| raw()).collect();
     let mut welcomed = [false; 20];
     let mut saw_wait = false;
@@ -108,7 +132,7 @@ fn burst_waiters_are_admitted_in_first_in_first_out_order() {
     }
     let a = SocketAddr::from((Ipv4Addr::LOCALHOST, 42001));
     let b = SocketAddr::from((Ipv4Addr::LOCALHOST, 42002));
-    let hello = format!("HELLO|{PROTOCOL}|-|queued|Vehicles/x.bus|m|1989-05-30|32400||");
+    let hello = format!("HELLO|{PROTOCOL}|-|queued|Vehicles/x.bus|m|1989-05-30|32400|||||||wait-v1");
     let fields: Vec<&str> = hello.split('|').collect();
     host.on_hello(&fields, a);
     host.on_hello(&fields, b);

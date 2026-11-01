@@ -305,8 +305,8 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
 /// Append actions after sliders so their presence does not change other option tabs.
 fn add_graphics_action_rows(app: &App, file: &serde_json::Value, graphics: &mut Vec<(String, String)>) {
     if app.menus.graphics_before.is_some() {
-        graphics.push(button("Apply graphics changes...", "Confirm", "Confirm the changes and rebuild the GPU pipelines now", "graphics_apply"));
-        graphics.push(button("Discard graphics changes", "Revert", "Restore the graphics settings before this edit", "graphics_discard"));
+        graphics.push(button("Apply graphics changes...", "Confirm", "Apply compatible graphics options in-game. Renderer mode and device formats require restart.", "graphics_apply"));
+        graphics.push(button("Discard graphics changes", "Revert", "Restore the graphics settings from before editing.", "graphics_discard"));
     }
     let at = graphics.iter().position(|r| r.1 == "sel render_scale").map_or(graphics.len(), |k| k + 1);
     graphics.splice(at..at, upscaler_rows(app, file));

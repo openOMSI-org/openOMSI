@@ -1726,14 +1726,14 @@ impl LanSession {
         self.world.time = time;
     }
 
-    /// Our world after the game took over the host's (a client): only what still differs
-    /// is warned about.
     /// Host: cap remote players independently of the protocol's hard ceiling.
     /// Dedicated servers use server.cfg's max_players; reconnects of existing peers remain allowed.
     pub fn set_peer_limit(&mut self, players: usize) {
         if self.role == Role::Host { self.max_peers = players.clamp(1, MAX_PEERS); }
     }
 
+    /// Our world after the game took over the host's (a client): only what still differs
+    /// is warned about.
     pub fn set_world(&mut self, world: WorldInfo) {
         self.world = world;
         if let Some(w) = self.welcome.as_ref().map(|w| w.world.clone()) {
@@ -2152,13 +2152,11 @@ impl LanSession {
         );
         if let (Some(secret), Some(c)) = (self.rebind_secret, self.answer) {
             msg.push_str(&format!("|{c:016x}|{:016x}", admission::proof(&secret, c)));
-        } else if self.hardware_id.is_some() {
+        } else {
             msg.push_str("||");
         }
         // (after the rebind proof; a host before the identifier ignores a field it does not know)
-        if let Some(hw) = &self.hardware_id {
-            msg.push_str(&format!("|{hw}"));
-        }
+        msg.push_str(&format!("|{}|wait-v1", self.hardware_id.as_deref().unwrap_or("")));
         for h in to {
             self.send(msg.as_bytes(), h);
         }
@@ -3068,7 +3066,7 @@ impl LanSession {
         let same = |p: &Peer| p.addr == Some(from) || (nonce.is_some() && p.nonce == nonce);
         if !self.peers.values().any(|p| same(p))
             && self.peers.len() < self.max_peers
-            && self.defer_new_join(from)
+            && self.defer_new_join(from, field(parts, 14) == "wait-v1")
         {
             return;
         }

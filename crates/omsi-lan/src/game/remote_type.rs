@@ -72,11 +72,9 @@ pub(super) fn remote_type(args: &LanConfig, pose: &Pose, player: Option<&omsi_si
     };
     // not to be had as itself (for now): another bus, as before there were boxes
     let hopeless = !by_content || read_failed.is_some() || hopeless_by_now;
-    // With an explicitly authorized server fleet, never display a locally
-    // installed *different* bus as though it were the verified remote version.
-    // Keep the neutral placeholder until the exact fingerprint can be fetched;
-    // legacy/open multiplayer retains its historic stand-in behavior.
-    if hopeless && reading.is_none() && !(args.allow_server_fleet && by_content) {
+    // A substitute is explicitly marked fallback: it never claims the remote
+    // fingerprint and never receives that bus's variable/animation tables.
+    if hopeless && reading.is_none() {
         match fallback_type(args, pose, player) {
             Fallback::Ready(ty, which) => {
                 log::info!("LAN: player {} drives {:?}, not to be had here as that bus ({e}); {which} stands in for it", pose.id, pose.bus);

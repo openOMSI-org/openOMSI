@@ -533,7 +533,7 @@ pub fn start(args: &LanConfig, host: &dyn LanHost) -> Option<LanSession> {
     }
     if session.role == Role::Host && !args.server {
         // the way in over the internet that always works (see `open_public_gateway`)
-        let info = omsi_net::ws::ServerInfo { name: format!("{}'s game", player_name(args)), map: args.map.clone(), max_players: 16, version: host.version(), ..Default::default() };
+        let info = omsi_net::ws::ServerInfo { name: format!("{}'s game", player_name(args)), map: args.map.clone(), max_players: 64, version: host.version(), ..Default::default() };
         open_public_gateway(&session, info, 0, true);
         host.publish_vehicles(Vec::new());
     }
@@ -590,6 +590,8 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) -> Option<crate::m
             };
             note(lan, "Host's mods: looking what is needed...".into());
             let session = lan.session;
+            let local_fleet = local_fleet::verified(args, lan);
+            if local_fleet { log::info!("LAN: installed fleet matches the announced content; no bus download needed"); }
             // the host's TCP port is not always reachable (a router forwards the UDP session
             // only, or we came in over a WebSocket): the files go through its tunnel then
             let joined_url = crate::gateway::joined_url();
@@ -609,7 +611,7 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) -> Option<crate::m
                         note(lan, format!("Host's mods could not be downloaded: {why}"));
                         // Never fall through to a different local bus version after
                         // a player explicitly selected the server's fleet package.
-                        if args.allow_server_fleet && args.bus.is_some() {
+                        if args.allow_server_fleet && args.bus.is_some() && !local_fleet {
                             args.mod_fetch_error = Some(why.into());
                         }
                         return None;
@@ -623,7 +625,7 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) -> Option<crate::m
             let froot = args.root.clone();
             // The old map-fetch path remains available, but selected bus
             // downloads require an explicit opt-in from the launcher or CLI.
-            let selected_bus = args.bus.clone().filter(|_| args.allow_server_fleet);
+            let selected_bus = args.bus.clone().filter(|_| args.allow_server_fleet && !local_fleet);
             let selected_paint = args.paint.clone();
             let selected_requested = selected_bus.is_some();
             let worker = std::thread::spawn(move || {
@@ -2818,6 +2820,7 @@ thread_local! {
 }
 
 mod remote_type;
+mod local_fleet;
 use remote_type::{remote_type, RemoteType};
 mod tag;
 pub use tag::tag_text;

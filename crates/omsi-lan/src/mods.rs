@@ -46,6 +46,7 @@ mod pieces;
 pub mod placeholder;
 mod quarantine;
 mod server_fleet;
+pub use server_fleet::fingerprint as fleet_fingerprint;
 mod store;
 pub mod upload;
 pub mod vehicles;
@@ -464,7 +465,7 @@ const MAX_CONNECTIONS: usize = 160;
 /// player's language): asked again in a moment, never given up.
 pub(crate) const CONNECTION_LOST: &str = "connection lost";
 /// The longest request line (they are a few words).
-const MAX_LINE: u64 = 2048;
+const MAX_LINE: u64 = 4096;
 const MAX_REPLY: u64 = 4096;
 
 /// One line of at most `MAX_LINE` bytes (a longer one ends the connection).
@@ -480,7 +481,7 @@ fn read_line_within(input: &mut impl BufRead, line: &mut String, max: u64) -> st
     Ok(n)
 }
 
-fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Option<Arc<(Manifest, Vec<PathBuf>)>>>, stopped: &std::sync::atomic::AtomicBool, fleet_cache: &Mutex<HashMap<String, Arc<(Manifest, Vec<PathBuf>)>>>, root: &Path) -> std::io::Result<()> {
+fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Option<Arc<(Manifest, Vec<PathBuf>)>>>, stopped: &std::sync::atomic::AtomicBool, fleet_cache: &server_fleet::Cache, root: &Path) -> std::io::Result<()> {
     let session = key.session();
     stream.set_read_timeout(Some(Duration::from_secs(120)))?;
     stream.set_nodelay(true).ok();
@@ -540,20 +541,8 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
                     writeln!(out, "ERR invalid selected bus or paint")?;
                     continue;
                 };
-                let key = format!("{bus}\u{1f}{paint}");
-                // Never hash and inspect a vehicle while holding the fleet-wide
-                // cache lock: clients choosing different buses can join concurrently.
-                let cached = fleet_cache.lock().unwrap_or_else(|e| e.into_inner()).get(&key).cloned();
-                let selected = match cached {
-                    Some(hit) => Ok(hit),
-                    None => server_fleet::package(root, &data, &bus, &paint).map(|fresh| {
-                        let mut cache = fleet_cache.lock().unwrap_or_else(|e| e.into_inner());
-                        let fresh = Arc::new(fresh);
-                        if let Some(hit) = cache.get(&key) { return hit.clone(); }
-                        if cache.len() < 128 { cache.insert(key, fresh.clone()); }
-                        fresh
-                    }),
-                };
+                let key = server_fleet::cache_key(false, &bus, &paint);
+                let selected = server_fleet::cached(fleet_cache, key, || server_fleet::package(root, &data, &bus, &paint));
                 match selected {
                     Ok(package) => {
                         active = package;
@@ -573,18 +562,8 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
                     writeln!(out, "ERR invalid selected bus or paint")?;
                     continue;
                 };
-                let key = format!("exact:{bus}\u{1f}{paint}");
-                let cached = fleet_cache.lock().unwrap_or_else(|e| e.into_inner()).get(&key).cloned();
-                let selected = match cached {
-                    Some(hit) => Ok(hit),
-                    None => server_fleet::exact(root, &bus, &paint).map(|fresh| {
-                        let mut cache = fleet_cache.lock().unwrap_or_else(|e| e.into_inner());
-                        let fresh = Arc::new(fresh);
-                        if let Some(hit) = cache.get(&key) { return hit.clone(); }
-                        if cache.len() < 128 { cache.insert(key, fresh.clone()); }
-                        fresh
-                    }),
-                };
+                let key = server_fleet::cache_key(true, &bus, &paint);
+                let selected = server_fleet::cached(fleet_cache, key, || server_fleet::exact(root, &bus, &paint));
                 match selected {
                     Ok(package) => {
                         let m = identity::VehicleManifest {
@@ -996,7 +975,7 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
                     }
                     let mtime = md.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
                     if let Some((sz, mt, h)) = cache.get(&key) {
-                        if selected_request.is_none() && *sz == md.len() && *mt == mtime {
+                        if *sz == md.len() && *mt == mtime {
                             return (k, *h == e.sha256, None);
                         }
                     }

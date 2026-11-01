@@ -88,6 +88,10 @@ pub struct ServerInfo {
 pub struct FleetPaints {
     pub bus: String,
     pub paints: Vec<String>,
+    /// Whole model, including every advertised paint. Informational only: clients
+    /// may compare local bytes, but may not download based on this status alone.
+    #[serde(default)]
+    pub content: String,
 }
 
 /// What a dedicated server's shared world holds: the AI cars on the roads (`cars`), its
@@ -1071,6 +1075,7 @@ mod tests {
             fleet: vec![FleetPaints {
                 bus: "Vehicles/Test/test.bus".into(),
                 paints: vec!["Base".into(), "Azul \"especial\"".into(), "São Paulo".into()],
+                content: String::new(),
             }],
             ..Default::default()
         };

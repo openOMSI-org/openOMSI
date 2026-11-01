@@ -3,7 +3,12 @@ use std::fmt::Display;
 use omsi_cfg::template::Index;
 use std::sync::{Arc, Mutex, OnceLock};
 
-pub static TABLES: &str = include_str!("../../omsi-app/locales/app.yml");
+pub static TABLES: &str = concat!(
+    include_str!("../../omsi-app/locales/app.yml"), "\n",
+    include_str!("../../omsi-app/locales/storage.yml"), "\n",
+    include_str!("../../omsi-app/locales/graphics.yml"), "\n",
+    include_str!("../../omsi-app/locales/server_fleet.yml"),
+);
 static PINNED: OnceLock<&'static str> = OnceLock::new();
 
 fn unquote(s: &str) -> Option<String> {
