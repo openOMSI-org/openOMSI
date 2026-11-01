@@ -998,6 +998,25 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
             report.had += 1;
             continue;
         }
+        // A server-owned bus may have already been downloaded to view another
+        // player. That content-addressed store is separate from lan-store, so
+        // reuse its verified bytes before requesting the same blob again.
+        // Authorization is still required and the selected bus must be on the
+        // server's allowlist; cached content never grants driving permission.
+        if selected_request.is_some() {
+            if let Some(bytes) = vehicles::blob(&e.sha256) {
+                if bytes.len() as u64 == e.size
+                    && sha256_of(&bytes) == e.sha256
+                    && quarantine::screen(&e.path, &bytes).is_ok()
+                {
+                    let file = store.put(e, &bytes)
+                        .map_err(|err| format!("{}: could not reuse the remote vehicle cache: {err}", e.path))?;
+                    mounted.push(file);
+                    report.had += 1;
+                    continue;
+                }
+            }
+        }
         todo.push(k);
         total += e.size;
     }
