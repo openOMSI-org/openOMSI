@@ -204,6 +204,7 @@ use voice_net::VOICE_RATE;
 const MESSAGE_RATE: (f32, f32) = (10.0, 20.0);
 const CHAT_RATE: (f32, f32) = (1.0, 3.0);
 mod receive_budget;
+mod join_queue;
 // ---------------------------------------------------------------------------------------
 // session codes
 
@@ -2659,33 +2660,17 @@ impl LanSession {
                 ("HELLO", Role::Host) => self.on_hello(&parts, from),
                 // Ignore unexpected addresses: they must not impersonate a host or
                 // end an in-progress join by injecting a fabricated welcome.
-                ("WELCOME", Role::Client)
-                    if self.host == Some(from)
-                        || (self.host.is_none() && self.candidates.contains(&from)) =>
-                {
-                    self.on_welcome(&parts, from);
-                },
+                ("WELCOME", Role::Client) if self.accepts_host_source(from) => self.on_welcome(&parts, from),
                 ("CHALLENGE", Role::Client) if self.host == Some(from) || (self.host.is_none() && self.candidates.contains(&from)) => self.on_challenge(&parts),
-                // A temporary admission bottleneck is not a permanent rejection.
-                // Old clients ignore WAIT and still retry HELLO without a protocol bump.
+                // Temporary server-side capacity limits are not permanent rejections.
                 ("WAIT", Role::Client)
                     if !self.connected
                         && field(&parts, 1).parse::<u32>().ok() == Some(PROTOCOL)
-                        && (self.host == Some(from)
-                            || (self.host.is_none() && self.candidates.contains(&from))) =>
+                        && self.accepts_host_source(from) =>
                 {
-                    if !self.waiting_for_slot {
-                        log::info!("LAN: {from} is admitting other players; retrying automatically");
-                        self.events.push(LanEvent::Notice(
-                            "the host is admitting other players; waiting for a loading slot".into(),
-                        ));
-                    }
-                    self.waiting_for_slot = true;
+                    self.on_waiting_slot(from);
                 }
-                ("REJECT", Role::Client)
-                    if self.host == Some(from)
-                        || (self.host.is_none() && self.candidates.contains(&from)) =>
-                {
+                ("REJECT", Role::Client) if self.accepts_host_source(from) => {
                     let reason = clean_text(field(&parts, 2), 300);
                     // Different candidate IPs may belong to different computers. Keep
                     // trying those, but a refusal from the one machine whose ports we
@@ -3109,33 +3094,11 @@ impl LanSession {
         // a returning client keeps its id; so does one that tried several of our addresses
         // at once, and the address its latest hello came from is the one it has chosen
         let same = |p: &Peer| p.addr == Some(from) || (nonce.is_some() && p.nonce == nonce);
-        if !self.peers.values().any(same) && self.peers.len() < self.max_peers {
-            // FIFO waiting list, bounded and refreshed only by another HELLO from the
-            // same source. A disconnected client cannot reserve a slot indefinitely.
-            let now = Instant::now();
-            self.waiting_joins.retain(|(_, seen)| now.duration_since(*seen) < Duration::from_secs(6));
-            let queued = self.waiting_joins.iter().position(|(addr, _)| *addr == from);
-            if let Some(i) = queued {
-                self.waiting_joins[i].1 = now;
-            } else if self.peers.values().filter(|p| !p.has_pose).count() >= MAX_JOINING
-                || !self.waiting_joins.is_empty()
-            {
-                if self.waiting_joins.len() >= MAX_PEERS {
-                    self.reject(from, "the host has too many players waiting to join - retry later");
-                    return;
-                }
-                self.waiting_joins.push_back((from, now));
-            }
-            let active_loading = self.peers.values().filter(|p| !p.has_pose).count();
-            if active_loading >= MAX_JOINING
-                || self.waiting_joins.front().is_some_and(|(addr, _)| *addr != from)
-            {
-                self.send(format!("WAIT|{PROTOCOL}|2").as_bytes(), from);
-                return;
-            }
-            if self.waiting_joins.front().is_some_and(|(addr, _)| *addr == from) {
-                self.waiting_joins.pop_front();
-            }
+        if !self.peers.values().any(|p| same(p))
+            && self.peers.len() < self.max_peers
+            && self.defer_new_join(from)
+        {
+            return;
         }
         let (id, here) = match self.peers.iter().find(|(_, p)| same(p)) {
             Some((id, _)) => {
