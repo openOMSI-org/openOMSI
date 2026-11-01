@@ -89,6 +89,10 @@ pub(crate) fn prepare(args: &mut Args, path: &Path) -> Result<ServerCfg> {
     crate::real_time::set_server_real(cfg.real_time);
     let _ = SERVER_VEHICLES.set(cfg.vehicles.clone());
     cfg.apply_to_mods();
+    crate::logmask::keep_whole(cfg.log_addresses);
+    if cfg.log_addresses {
+        log::info!("server: log_addresses = 1: the players' internet addresses are logged whole");
+    }
     args.map = cfg.map.clone();
     args.time = cfg.time.clone();
     if let Some(d) = &cfg.date {

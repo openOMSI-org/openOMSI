@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>openOMSI - Privacy</title>
-<meta name="description" content="What openOMSI does and does not do with your data.">
+<meta name="description" content="How openOMSI handles information in the game, on openomsi.org and in its community services.">
 <link rel="icon" type="image/svg+xml" href="../assets/icon.svg">
 <meta name="color-scheme" content="light dark">
 <style>
@@ -14,51 +14,322 @@
   main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
   h1 { font-size: 32px; margin: 8px 0 4px; }
   h2 { font-size: 20px; margin: 32px 0 8px; }
+  h3 { font-size: 17px; margin: 24px 0 6px; }
   p, li { color: var(--fg); }
   .muted { color: var(--muted); }
-  a { color: var(--accent); }
+  a { color: var(--accent); overflow-wrap: anywhere; }
+  code { font-size: 14px; overflow-wrap: anywhere; }
   hr { border: 0; border-top: 1px solid var(--line); margin: 32px 0; }
 </style>
 </head>
 <body>
 <main>
 <p><a href="../">openOMSI</a></p>
-<h1>Privacy</h1>
-<p class="muted">Applies to openOMSI on every platform, including the iPhone, iPad and Mac apps. Last changed 12 October 2026.</p>
+<h1>Privacy Policy</h1>
+<p class="muted">Last updated: 1 November 2026. Applies to openOMSI on every platform (Windows, macOS, Linux, Android, iPhone and iPad), to openomsi.org, to project-operated online services, and to community services and forms.</p>
 
-<p>openOMSI has no accounts, no advertising, no analytics SDKs and no tracking. Your settings, saved games,
-screenshots and the OMSI 2 content you add stay on your device.</p>
+<p>openOMSI is an independent, open-source project. It has no advertising, does not sell personal information,
+and does not use personal information for advertising or commercial profiling.</p>
+<p>We try to collect as little information as possible. Most openOMSI data, including your settings, saved games,
+screenshots, logs and the OMSI 2 content you add, stays on your device. The sections below list every case where
+something leaves it.</p>
 
-<h2>"Playing now" counter</h2>
-<p>While a drive runs, the game tells the project's counter service every few minutes that one more copy of
-openOMSI is being played, and says goodbye when the drive ends. It sends a random id made for that session alone
-(a new one every start, not stored on your device), the game's version and the kind of system (for example
-iOS). It sends no name, no device identifier and nothing about what you play. The service forgets an id 25 minutes
-after its last message and does not store IP addresses. The website shows the resulting count. You can switch this
-off in the launcher: Settings, General, "Count me on the website's 'playing now'".</p>
+<h2>1. Who is responsible for your data?</h2>
+<p>openOMSI is an independent open-source project operated by its project owner in the United States.</p>
+<p>For privacy questions or requests, contact the openOMSI team by opening a private support ticket on the
+<a href="https://discord.gg/openomsi">official openOMSI Discord server</a>.</p>
+<p>Please do not post personal information, or privacy requests containing personal information, in public Discord
+channels or public GitHub issues.</p>
+<p>Because openOMSI is a community project rather than a company or incorporated organisation, some services described
+below are operated through accounts belonging to individual project maintainers.</p>
 
-<h2>Online features you choose to use</h2>
+<h2>2. Information handled by the openOMSI game</h2>
+<p>The game does not require an openOMSI account. Your settings, saved games, screenshots, installed content, logs and
+other local game data normally remain on your device, in the openOMSI data folder (<code>.openomsi</code> in your
+home folder on desktop systems).</p>
+<p>The game communicates with online services in the cases described below.</p>
+
+<h3>"Playing now" counter</h3>
+<p>While the game is running, openOMSI tells the project's presence service that another copy of the game is being
+played. About every 10 minutes, it sends:</p>
 <ul>
-  <li><b>Multiplayer:</b> when you host or join a session, the other players' games receive what the session needs:
-  the driver name you chose, your vehicle, its position and your network address. Sessions are run by players, not by
-  the project; finding a session may go through a public message relay (ntfy.sh) and Cloudflare tunnels.</li>
-  <li><b>Real weather and internet radio:</b> if you turn them on, the game fetches weather reports
-  (aviationweather.gov) and radio streams directly from those services. They see an ordinary request from your
-  network address.</li>
-  <li><b>Downloads:</b> mods, translation models or other files you choose to download come from the sites they are
-  hosted on (for example GitHub or Hugging Face).</li>
+  <li>a random session identifier of 32 hexadecimal characters, made anew each time the game starts and not stored on your device;</li>
+  <li>the openOMSI version; and</li>
+  <li>the operating system category, such as Windows, macOS, Linux, Android or iOS.</li>
 </ul>
+<p>The presence service does not receive your name, Discord account, device identifier, saved games, installed
+content, map, vehicle or information about what you are playing.</p>
+<p>The service runs on Cloudflare Workers with a Cloudflare Durable Object. Active sessions are kept in memory only;
+openOMSI does not write them to persistent storage. A session is removed as soon as the game says goodbye, or
+automatically 25 minutes after its last message. If the Durable Object restarts, its session list is lost.</p>
+<p>The openOMSI Worker does not read or record your IP address. Your connection does pass through Cloudflare's
+network, and Cloudflare may process network and request information, including IP addresses, to provide its
+infrastructure and security services.</p>
+<p>The resulting total player count may be shown publicly on the openOMSI website.</p>
+<p>You can turn this off in the launcher: Settings, General, <em>Count me in the website's "playing now"
+(anonymous)</em>. It can also be turned off with the environment variable <code>OMSI_NO_PRESENCE=1</code>.</p>
+<p>Where data protection law requires a lawful basis, openOMSI relies on its legitimate interest in a simple, total
+indication of project usage while collecting as little as possible. Turning the feature off stops all future presence
+messages.</p>
 
-<h2>Children</h2>
-<p>openOMSI does not knowingly collect personal information from anyone, children included.</p>
+<h3>Update checks</h3>
+<p>The launcher checks for a new version when it starts, and the game checks again during a session (one minute in,
+then every hour). These checks ask GitHub (<code>api.github.com</code>, <code>github.com</code> and
+<code>raw.githubusercontent.com</code>) for the latest release and for a list of releases known to be broken. When an
+update is available it may be downloaded in the background from GitHub. These requests carry no identifier: GitHub
+sees an ordinary request from your IP address with the openOMSI version in the user agent. You can turn update checks
+off in the launcher: Settings, General, <em>Look for updates when the launcher starts</em>. The list of broken
+releases is still fetched at each start, so the launcher can protect you from a faulty version.</p>
 
-<h2>Contact</h2>
-<p>Questions about privacy: open an issue at
-<a href="https://github.com/openOMSI-org/openOMSI/issues">github.com/openOMSI-org/openOMSI/issues</a>
-or ask on <a href="https://discord.gg/openomsi">Discord</a>.</p>
+<h3>Discord and Steam status</h3>
+<p><strong>Discord Rich Presence</strong> is on by default on desktop systems. If the Discord app is running on your
+computer, openOMSI tells it, through a local connection, that you are in the launcher or which map, bus, line and duty
+you are driving and whether you are in multiplayer. Discord may show this on your profile to other Discord users.
+Turn it off in the launcher: Settings, General, <em>Discord Rich Presence</em>.</p>
+<p><strong>Steam.</strong> On Windows, macOS and Linux, if the Steam client is running and you own OMSI 2 on Steam, openOMSI
+connects to Steam as OMSI 2. Steam may then record and show that you are playing OMSI 2. openOMSI sends Steam no
+other information about your game.</p>
+
+<h3>Crash reports and diagnostics</h3>
+<p>Nothing is sent automatically when the game crashes. The crash window offers to copy a report or to open a new
+GitHub issue with the report filled in. A GitHub issue is <strong>public</strong>. The report contains the error,
+the last lines of the game log, your system, number of processor threads, memory and graphics card, and the command line the game was
+started with. That command line can include folder paths (which often contain your computer's user name), your
+multiplayer driver name and the session you joined, and the log lines can include multiplayer chat and network
+addresses. Read the report and remove anything you do not want to publish before you submit the issue.</p>
+<p>The launcher's support package (Settings, General, <em>Support package</em>) makes a ZIP on your device. It contains
+only system and hardware details (including device vendor and product identifiers), controller names, the names of
+the maps and buses you used, the number and size of installed archives, and log events reduced to names and numbers. It is never
+sent anywhere unless you attach it yourself.</p>
+
+<h3>Permissions on phones, tablets and Macs</h3>
+<p>openOMSI asks for the microphone (voice chat), motion sensors (tilt steering), the local network (finding and
+hosting multiplayer sessions) and, on Android, storage access including access to all files (to read your OMSI 2 folder) and the permission to install
+updates. It does not use the camera, your location or your contacts. Microphone audio is used only for voice chat,
+which is off until you turn it on.</p>
+
+<h2>3. Multiplayer</h2>
+<p>Multiplayer is optional. When you host, join or use a multiplayer session, information needed to make multiplayer
+work is exchanged between participating systems. Depending on the session and its configuration, this includes:</p>
+<ul>
+  <li>the driver name you choose;</li>
+  <li>your vehicle, its paint and the files it needs: if the server accepts uploads (the default), the bus or mod files
+    you drive that other players lack are uploaded to the server, which passes them to the other players and keeps
+    them for up to 30 days after their last use;</li>
+  <li>vehicle position, speed, duty and other synchronisation information;</li>
+  <li>chat messages, and your voice if you turn voice chat on (voice is relayed live and not recorded);</li>
+  <li>a hardware identifier: a one-way hash of your computer's system identifier (on Android and iOS, a random value
+    kept on your device). It is the same in every session, so hosts can enforce bans. Hosts keep the identifiers of
+    players they ban. You can withhold it with the environment variable <code>OMSI_NO_HARDWARE_ID=1</code>, but some
+    servers then refuse the connection;</li>
+  <li>network information such as your IP address and port; and</li>
+  <li>technical information needed to establish and maintain the connection.</li>
+</ul>
+<p>Sessions and servers are run by players, not by the project. Server software records joins with driver names and
+IP addresses, chat and administrator actions in its logs, and server operators decide how long they keep them.
+A server can also choose to publish the names, buses and positions of the players on it.</p>
+<p>Connecting may involve third-party infrastructure:</p>
+<ul>
+  <li>STUN servers from Google and Cloudflare, to learn your public address;</li>
+  <li>your router, through UPnP, to open a port;</li>
+  <li>the public message relay ntfy.sh, where a session code's host and player addresses are posted to a topic derived
+    from a hash of the session code and kept by ntfy.sh for some hours; and</li>
+  <li>Cloudflare tunnels (<code>trycloudflare.com</code>), through which session traffic passes. The tunnel program is
+    downloaded from GitHub the first time you host.</li>
+</ul>
+<p><strong>Public server list.</strong> A server owner can choose to list their server in the project's public server
+list (a Cloudflare Worker). The list shows the server's name, message, map, player count, version and address. When
+the server has no tunnel, that address is the IP address the server registered from, and it is shown publicly. The
+list keeps only the server's information, in memory, and forgets a server 3 minutes after its last heartbeat.
+Separately, it keeps a hash of the sender's IP address for rate limiting.</p>
+<p>Other players and server operators therefore receive information needed for multiplayer. openOMSI cannot control
+how independently operated servers or other players handle it. Do not use your real name as your driver name if you
+do not want other players to see it.</p>
+
+<h2>4. Real weather, radio and downloads</h2>
+<p>Some optional features connect directly to external services:</p>
+<ul>
+  <li><strong>Real weather.</strong> When turned on, the game requests weather reports from aviationweather.gov for the
+    station you pick. If you add a Tomorrow.io key, the game sends that key and the map's coordinates to Tomorrow.io.</li>
+  <li><strong>Internet radio.</strong> When you turn on the bus radio, your device connects to the station's broadcaster.
+    The MileZero station (<code>milezero.live</code>), when you turn it on, also receives the song requests you type, and
+    the title and artist of the current song are looked up on Apple's iTunes search to get its length.</li>
+  <li><strong>Downloads.</strong> Mods, translation models, high-quality characters, ambient sound packs and other files you
+    choose to download come from their hosts, such as GitHub or Hugging Face. On Windows, the WebView2 runtime is
+    downloaded from Microsoft if it is missing.</li>
+</ul>
+<p>These providers receive ordinary network requests from your device, including your IP address, user agent and
+request metadata. Their processing is governed by their own privacy practices and applicable law.</p>
+<p><strong>Plugins.</strong> Lua and openOMSI plugins cannot reach the internet. Native OMSI plugins (DLLs) and helper
+programs you install run as ordinary programs on your computer; openOMSI cannot limit what they do, so install them only
+from sources you trust.</p>
+
+<h2>5. Support</h2>
+<p>If you ask for help, you may choose to share diagnostic information through Discord, GitHub Issues or another
+support channel. It can contain technical information about your system, game configuration, installed content,
+errors and other information relevant to troubleshooting. Check it before posting it publicly.</p>
+<p>Information posted in a public GitHub issue or public Discord channel should be considered public. Public
+contributions may remain available as part of the project's development or community history.</p>
+
+<h2>6. openomsi.org</h2>
+<p>The website is hosted on GitHub Pages and served through Cloudflare. It sets no cookies, has no forms and runs no
+analytics. It stores only your light or dark theme choice in your browser.</p>
+<p>When you visit it, your browser also fetches fonts from Google Fonts, a script from jsDelivr, release and
+documentation information from GitHub, and the player count from the presence service. Cloudflare, GitHub and these
+providers may process technical information to deliver and protect the site, such as your IP address, browser and
+device information and request information.</p>
+<p>openOMSI does not sell website visitor information or use it for targeted advertising.</p>
+
+<h2>7. Forms and applications</h2>
+<p>openOMSI may occasionally use forms to manage community programs, applications or similar activities. For example,
+the Official Content Creator Program currently uses Google Forms. Its application may request:</p>
+<ul>
+  <li>your email address;</li>
+  <li>your name or handle;</li>
+  <li>your age;</li>
+  <li>your Discord username;</li>
+  <li>links to your content channels or social profiles;</li>
+  <li>information about the type of content you create;</li>
+  <li>your primary audience language; and</li>
+  <li>your preferences regarding collaboration or co-streaming.</li>
+</ul>
+<p>You provide this information directly. It is used to review applications, communicate with applicants, run the
+program and, for successful applicants, manage the project's relationship with participating creators. Applying is
+voluntary; without the required information, openOMSI may be unable to review your application.</p>
+<p>Responses are stored with Google and are accessible through the account that controls the form. Google may also
+process technical and account information when you use Google Forms, under its own privacy practices.</p>
+<p>Where applicable, the lawful basis is the project's legitimate interest in reviewing and running voluntary community
+programs, and taking steps an applicant asks for. Application information is kept only as long as reasonably needed
+to review the application, run the program, resolve disputes, enforce project rules or meet legal obligations. You may
+contact the project to ask about, or ask for the deletion of, a submission.</p>
+
+<h2>8. Discord and community moderation</h2>
+<p>The official openOMSI community is hosted on Discord, which processes information about its users under its own
+privacy practices.</p>
+<p>The server also uses third-party moderation, security, utility and ticketing bots, such as Wick, Tickets v2,
+Loritta and Dyno. Depending on the features you use and the moderation functions active, they may process:</p>
+<ul>
+  <li>your Discord user ID and username;</li>
+  <li>messages and message metadata, including edits and deletions;</li>
+  <li>moderation actions and warnings;</li>
+  <li>anti-spam, anti-raid and security events;</li>
+  <li>server activity;</li>
+  <li>support ticket titles, messages and attachments; and</li>
+  <li>other information needed for moderation or community features.</li>
+</ul>
+<p>These services are run by third parties and may keep their own records under their configurations, terms and
+privacy policies. openOMSI uses moderation information to run the community, prevent abuse and spam, enforce community
+rules, protect users and the project, and provide support. Where applicable, this is based on openOMSI's legitimate
+interest in running and protecting its community and services.</p>
+<p>Do not send sensitive personal information through Discord unless it is necessary.</p>
+
+<h2>9. Third-party services</h2>
+<p>Depending on the features you use, openOMSI may interact with:</p>
+<ul>
+  <li>Cloudflare (presence service, server list, tunnels, STUN, website);</li>
+  <li>GitHub (updates, downloads, issues, website);</li>
+  <li>Google (Forms, Google Fonts, STUN);</li>
+  <li>Discord (community, Rich Presence) and Discord bot providers;</li>
+  <li>Valve (Steam);</li>
+  <li>Hugging Face (translation models);</li>
+  <li>Microsoft (WebView2 on Windows);</li>
+  <li>jsDelivr (website);</li>
+  <li>ntfy.sh (multiplayer relay);</li>
+  <li>aviationweather.gov and Tomorrow.io (weather);</li>
+  <li>radio broadcasters, MileZero and Apple iTunes search (radio); and</li>
+  <li>multiplayer server operators.</li>
+</ul>
+<p>Using a feature that connects to a provider may send information directly to that provider. Providers may operate in
+countries other than yours, including the United States, and process information under their own privacy policies and
+legal obligations. openOMSI does not control their independent processing.</p>
+
+<h2>10. International data transfers</h2>
+<p>openOMSI is an international project and uses services operated in several countries, so information you provide or
+that an online feature needs may be processed outside your country, including in the United States. Where data
+protection laws set requirements for international transfers, the relevant provider or controller is responsible for
+the safeguards required for the processing it performs. Because many features connect directly to independent
+services, also review their privacy information if this matters to you.</p>
+
+<h2>11. How long information is kept</h2>
+<p>Personal information should not be kept longer than reasonably necessary for its purpose:</p>
+<ul>
+  <li>presence sessions expire at most about 25 minutes after the last message;</li>
+  <li>public server list entries expire 3 minutes after the server's last heartbeat;</li>
+  <li>local game information, including logs, stays under your control on your device;</li>
+  <li>multiplayer information exists for the session; uploaded vehicle files are kept by a server for up to 30 days after
+    their last use by default, and independently operated servers set their own logging and ban practices;</li>
+  <li>support and community information may be kept as long as reasonably needed to provide support, keep moderation
+    records, protect the community or preserve project history;</li>
+  <li>application information may be kept while an application or community relationship is active and for a reasonable
+    period afterwards; and</li>
+  <li>third-party providers apply their own retention periods.</li>
+</ul>
+<p>Where a period cannot reasonably be stated in advance, retention depends on the purpose of the information, whether
+it is still needed, security and abuse prevention, community management and legal obligations.</p>
+
+<h2>12. Your privacy rights</h2>
+<p>Privacy rights depend on where you live and on the circumstances. Depending on applicable law, including the GDPR,
+UK GDPR and the privacy laws of some U.S. states and other jurisdictions, you may have the right to:</p>
+<ul>
+  <li>know whether information about you is processed;</li>
+  <li>access information about you;</li>
+  <li>correct inaccurate information;</li>
+  <li>have information deleted;</li>
+  <li>restrict certain processing;</li>
+  <li>object to certain processing;</li>
+  <li>receive certain information in a portable format;</li>
+  <li>withdraw consent where processing is based on consent; and</li>
+  <li>complain to a competent privacy or data protection authority.</li>
+</ul>
+<p>Not every right applies to every processing or in every jurisdiction. openOMSI will not discriminate against you for
+exercising a privacy right.</p>
+<p>To make a request about information controlled by the openOMSI project, open a private support ticket on the official
+Discord server and say that it concerns privacy or personal data. We may need enough information to find the relevant
+records and, where appropriate, to check that the request concerns you; we will not ask for more than necessary. For
+information held only by an independent provider or server operator, you may need to contact them directly.</p>
+
+<h2>13. Children and younger users</h2>
+<p>openOMSI does not use personal information from children for advertising, profiling or sale. The game does not
+require an account or a date of birth.</p>
+<p>External services used alongside openOMSI, including Discord, Google and GitHub, have their own minimum ages, which
+apply when you use them. Some voluntary openOMSI programs may ask for your age where it matters for participation or
+community safety.</p>
+<p>If you are a parent or guardian and believe openOMSI controls personal information about a child that should not be
+kept, contact the project through a private Discord support ticket.</p>
+
+<h2>14. Sale, sharing and advertising</h2>
+<p>openOMSI does not sell personal information, does not share it for cross-context behavioural or targeted
+advertising, does not run an advertising network and does not build advertising profiles.</p>
+<p>Information may be disclosed where needed to provide a feature you ask for, run or protect project services, comply
+with applicable law, respond to valid legal process, investigate abuse or security incidents, or protect the rights and
+safety of users and the project.</p>
+
+<h2>15. Automated decision-making</h2>
+<p>openOMSI does not use personal information to make solely automated decisions with legal or similarly significant
+effects. The game automatically checks the names, messages and icons of public servers before listing or showing them,
+and community anti-spam systems may flag or block activity; human moderators may review these matters where
+appropriate.</p>
+
+<h2>16. Security</h2>
+<p>openOMSI keeps the information it handles to a minimum and uses reasonable technical measures for an open-source
+community project. Its source code is public, so anyone can check what it sends. No internet service or storage can be
+guaranteed completely secure. Report security problems as described in the project's
+<a href="https://github.com/openOMSI-org/openOMSI/blob/main/SECURITY.md">security policy</a>.</p>
+
+<h2>17. Changes to this policy</h2>
+<p>This policy changes when openOMSI adds, removes or changes features, services or data practices, or when legal
+requirements change. The date at the top shows the last update. Material changes to how personal information is
+handled should appear here when the feature or change becomes available.</p>
+
+<h2>18. Contact</h2>
+<p>For privacy questions, requests to access or delete information, or other concerns, open a private support ticket on
+the <a href="https://discord.gg/openomsi">official openOMSI Discord server</a>. Please do not include personal
+information in public GitHub issues or public Discord channels.</p>
+<p>If you believe your privacy rights have been violated, you may also contact the data protection, privacy or
+consumer-protection authority for your jurisdiction.</p>
 
 <hr>
-<p class="muted">openOMSI is an independent project and is not affiliated with MR Software or Aerosoft.</p>
+<p class="muted">openOMSI is an independent open-source project and is not affiliated with MR Software or Aerosoft.</p>
 </main>
 </body>
 </html>

@@ -413,7 +413,7 @@ struct SettingsPage: View {
             if !phone {
                 SettingToggle(label: "Translate the remaining texts automatically (offline, downloads 620 MB once)", key: "machine_translation")
                 SettingToggle(label: "The launcher rests while a game runs (gives the graphics card to the game)", key: "launcher_rest", fallback: true)
-                SettingToggle(label: "Discord Rich Presence", key: "discord_status", fallback: true, help: "Shows the launcher or your map, bus, line and multiplayer status in Discord.")
+                SettingToggle(label: "Discord Rich Presence", key: "discord_status", fallback: false, help: "Shows the launcher or your map, bus, line and multiplayer status in Discord.")
                 SettingToggle(label: "Voice chat in multiplayer", key: "voice_enabled", fallback: false, help: "Hold the nearby (V) or radio (B) key to talk. The microphone is used only while a key is held; nothing is recorded")
             }
             SettingToggle(label: "Disable plugins", key: "disable_plugins", fallback: true, help: "Starts the next game without Lua or legacy OMSI plugins, including vehicle plugins. Plugin features will be unavailable. Normal bus scripts still run.")
@@ -452,7 +452,11 @@ struct SettingsPage: View {
                 SettingToggle(label: "Tell me about a new version during a session", key: "update_notify", fallback: true)
             }
             SettingToggle(label: "Count me in the website's \"playing now\" (anonymous)", key: "presence", fallback: true)
-            Text("openOMSI \(store.version) (\(store.build))").font(.inter(12)).foregroundStyle(Theme.muted)
+            HStack {
+                Text("openOMSI \(store.version) (\(store.build))").font(.inter(12)).foregroundStyle(Theme.muted)
+                Spacer()
+                Button("Privacy") { Platform.openURL("https://openomsi.org/privacy/") }.buttonStyle(.ghost)
+            }
             SectionTitle("Reset").padding(.top, 8)
             HStack {
                 Button { confirmReset = true } label: { Label("Reset all settings...", systemImage: "arrow.counterclockwise") }
