@@ -1,14 +1,14 @@
 // The bus picker: the buses in a list (search, makers, favourites), the chosen one turning in
 // a 3D picture beside it with its paints and description.
 
-import { html, useState, useMemo } from '../../vendor/preact-htm.js';
+import { html, useState, useMemo, useEffect } from '../../vendor/preact-htm.js';
 import { BusPreview } from '../preview.js';
 import { S, useStore, set } from '../store.js';
 import { t } from '../i18n.js';
 import { call } from '../api.js';
 import { Icon } from '../icons.js';
 import { Dialog, Search, Select, Segmented, Empty, Spinner, Button, Tag, Notice, Field } from '../ui.js';
-import { choose, busFile, serverBuses, selectableVehicles, MODES, modeLabel, shownModes, transportRefusal, curMap } from '../data.js';
+import { choose, busFile, serverBuses, selectableVehicles, MODES, modeLabel, shownModes, transportRefusal, curMap, askJoined } from '../data.js';
 import { Notes } from './drive.js';
 
 const favKey = (file) => file.replace(/\\/g, '/').toLowerCase();
@@ -50,6 +50,11 @@ export function toggleFavourite(file) {
 
 export function BusPicker({ onClose, onTake, title = 'Choose a bus', yes = 'Take this bus' }) {
   const s = useStore();
+  // Server status may have been saved before the dedicated fleet catalogue was
+  // published. Query it again when the chooser opens, not on every render.
+  useEffect(() => {
+    if (s.choice.lan_mode === 'join') askJoined({ refresh: true });
+  }, [s.choice.lan_mode, s.choice.lan_addr]);
   const [q, setQ] = useState('');
   const [maker, setMaker] = useState('');
   const [show, setShow] = useState('all');
