@@ -9,15 +9,96 @@ pub(super) fn verified(args: &LanConfig, lan: &mut LanSession) -> bool {
     let planned = Pose { bus: bus.clone(), ..Default::default() };
     let worker = std::thread::spawn(move || {
         let info = omsi_net::ws::query(&target, false).ok()?;
-        let announced = info.fleet.iter().find(|f| f.bus.eq_ignore_ascii_case(&bus.replace('\\', "/")))?;
-        if !paint.is_empty() && !announced.paints.iter().any(|p| p.eq_ignore_ascii_case(&paint)) { return None; }
-        if !omsi_net::is_fingerprint(&announced.content) { return None; }
-        let local = crate::mods::fleet_fingerprint(&root, &bus).ok()?;
-        Some(local == announced.content)
+        Some(matches_announced(&info.fleet, &bus, &paint, || {
+            crate::mods::fleet_fingerprint(&root, &bus).ok()
+        }))
     });
     while !worker.is_finished() {
         lan.keepalive(0.05, &planned);
         std::thread::sleep(Duration::from_millis(50));
     }
     worker.join().ok().flatten() == Some(true)
+}
+/// A selected server fleet vehicle requires a download unless its installed bytes
+/// were verified against the server's complete model fingerprint.
+pub(super) fn requires_server_download(allowed: bool, selected: bool, verified: bool) -> bool {
+    allowed && selected && !verified
+}
+
+/// Check the announced model *before* hashing the local installation. Matching a
+/// filename alone never grants a bypass when the mod channel is unavailable.
+fn matches_announced(
+    fleet: &[omsi_net::ws::FleetPaints],
+    bus: &str,
+    paint: &str,
+    local_fingerprint: impl FnOnce() -> Option<String>,
+) -> bool {
+    let normalized = bus.replace('\\', "/");
+    let Some(announced) = fleet.iter().find(|f| f.bus.eq_ignore_ascii_case(&normalized)) else {
+        return false;
+    };
+    if !paint.is_empty() && !announced.paints.iter().any(|p| p.eq_ignore_ascii_case(paint)) {
+        return false;
+    }
+    if !omsi_net::is_fingerprint(&announced.content) {
+        return false;
+    }
+    local_fingerprint().is_some_and(|local| local == announced.content)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fleet() -> Vec<omsi_net::ws::FleetPaints> {
+        vec![omsi_net::ws::FleetPaints {
+            bus: "Vehicles/Test Bus/test.bus".into(),
+            paints: vec!["Bahia Blue".into()],
+            content: format!("v2-{}", "a".repeat(64)),
+        }]
+    }
+
+    #[test]
+    fn matching_local_model_can_join_without_a_reachable_mod_port() {
+        let offered = fleet();
+        let hash = offered[0].content.clone();
+        // Simulate a server with UDP/status reachable but TCP mods/relay blocked.
+        let mod_port_reachable = false;
+        let verified = matches_announced(
+            &offered, "vehicles\\Test Bus\\test.bus", "bahia blue",
+            || Some(hash),
+        );
+        assert!(verified);
+        assert!(
+            !requires_server_download(true, true, verified) && !mod_port_reachable,
+            "matching local files must not trigger a fatal download requirement"
+        );
+    }
+
+    #[test]
+    fn different_bytes_or_missing_repaint_must_not_bypass_download() {
+        let offered = fleet();
+        let other = format!("v2-{}", "b".repeat(64));
+        assert!(!matches_announced(&offered, "Vehicles/Test Bus/test.bus", "Bahia Blue", || Some(other)));
+        assert!(requires_server_download(true, true, false), "different bytes require an authenticated transfer");
+
+        assert!(!matches_announced(&offered, "Vehicles/Test Bus/test.bus", "Missing paint", || {
+            panic!("unadvertised repaint must be rejected before hashing files")
+        }));
+        assert!(!matches_announced(&offered, "Vehicles/Other/test.bus", "", || {
+            panic!("wrong bus must not be accepted by fingerprint alone")
+        }));
+    }
+
+    #[test]
+    fn invalid_catalogue_hash_and_disabled_fleet_do_not_force_a_download() {
+        let mut offered = fleet();
+        offered[0].content = "not-a-fingerprint".into();
+        assert!(!matches_announced(&offered, "Vehicles/Test Bus/test.bus", "", || {
+            panic!("untrusted catalogue hashes must be discarded before reading local files")
+        }));
+        assert!(!requires_server_download(false, true, false));
+        assert!(!requires_server_download(true, false, false));
+        assert!(!requires_server_download(true, true, true));
+    }
 }
