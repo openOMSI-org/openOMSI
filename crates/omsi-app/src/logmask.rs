@@ -36,28 +36,33 @@ impl log::Log for Masked {
         if !self.0.matches(r) {
             return;
         }
-        // (a line without arguments has no address put in it)
-        if WHOLE.load(Ordering::Relaxed) || r.args().as_str().is_some() {
-            return self.0.log(r);
-        }
-        let text = r.args().to_string();
-        match mask(&text) {
-            Cow::Borrowed(_) => self.0.log(r),
-            Cow::Owned(m) => self.0.log(
-                &log::Record::builder()
-                    .args(format_args!("{m}"))
-                    .level(r.level())
-                    .target(r.target())
-                    .module_path(r.module_path())
-                    .file(r.file())
-                    .line(r.line())
-                    .build(),
-            ),
-        }
+        with_record(r, |r| self.0.log(r));
     }
 
     fn flush(&self) {
         self.0.flush()
+    }
+}
+
+/// Give each logger sink the same masked message, including Android's system logger and
+/// the mobile log files used by crash reports. Keep the record's source and severity.
+pub(crate) fn with_record(r: &log::Record, write: impl FnOnce(&log::Record)) {
+    if WHOLE.load(Ordering::Relaxed) {
+        return write(r);
+    }
+    let text = r.args().to_string();
+    match mask(&text) {
+        Cow::Borrowed(_) => write(r),
+        Cow::Owned(m) => write(
+            &log::Record::builder()
+                .args(format_args!("{m}"))
+                .level(r.level())
+                .target(r.target())
+                .module_path(r.module_path())
+                .file(r.file())
+                .line(r.line())
+                .build(),
+        ),
     }
 }
 
@@ -71,7 +76,7 @@ pub(crate) fn mask(text: &str) -> Cow<'_, str> {
     while i < text.len() {
         let c = bytes[i] as char;
         // (a run starts where a word does not: "v1.2.3.4" is no address)
-        let starts = addressy(c) && (i == 0 || !(bytes[i - 1] as char).is_alphanumeric() && bytes[i - 1] != b'.' && bytes[i - 1] != b':');
+        let starts = addressy(c) && (i == 0 || !(bytes[i - 1] as char).is_alphanumeric() && bytes[i - 1] != b'.');
         if !starts {
             i += 1;
             continue;
@@ -79,12 +84,18 @@ pub(crate) fn mask(text: &str) -> Cow<'_, str> {
         let end = text[i..].find(|c: char| !addressy(c)).map_or(text.len(), |n| i + n);
         let run = &text[i..end];
         if let Some((len, masked)) = address(run) {
-            let o = out.get_or_insert_with(|| String::with_capacity(text.len()));
-            o.push_str(&text[at..i]);
-            o.push_str(&masked);
-            at = i + len;
+            if let Some(masked) = masked {
+                let o = out.get_or_insert_with(|| String::with_capacity(text.len()));
+                o.push_str(&text[at..i]);
+                o.push_str(&masked);
+                at = i + len;
+            }
+            i = end;
+        } else {
+            // A label can end in hex letters ("face:203.0.113.5"). Retry after its
+            // colon, while still rejecting addresses embedded in words or versions.
+            i += 1;
         }
-        i = end.max(i + 1);
     }
     match out {
         None => Cow::Borrowed(text),
@@ -96,19 +107,20 @@ pub(crate) fn mask(text: &str) -> Cow<'_, str> {
 }
 
 /// The address at the start of `run` (a run of hex digits, dots and colons) and how it is
-/// logged; None when it is no public address. A port after an IPv4 address (`:27015`) and a
+/// logged; None when it is no address, and an empty mask for a local address. A port after
+/// an IPv4 address (`:27015`) and a
 /// sentence's full stop stay outside it.
-fn address(run: &str) -> Option<(usize, String)> {
+fn address(run: &str) -> Option<(usize, Option<String>)> {
     if run.matches(':').count() >= 2 {
         // (a whole IPv6 address; "08:00:12" and the like do not parse)
         let a = run.trim_end_matches(['.', ':']);
         if let Ok(ip) = a.parse::<Ipv6Addr>() {
-            return masked(IpAddr::V6(ip)).map(|m| (a.len(), m));
+            return Some((a.len(), masked(IpAddr::V6(ip))));
         }
     }
     let v4 = run.split(':').next().unwrap_or("").trim_end_matches('.');
     let ip = v4.parse::<Ipv4Addr>().ok()?;
-    masked(IpAddr::V4(ip)).map(|m| (v4.len(), m))
+    Some((v4.len(), masked(IpAddr::V4(ip))))
 }
 
 fn masked(ip: IpAddr) -> Option<String> {
@@ -144,6 +156,7 @@ mod tests {
             ("gateway: player WebSocket from [2001:db8:85a3:1:2:3:4:5]:443 on 0.0.0.0:27025", "gateway: player WebSocket from [2001:db8:85a3::x]:443 on 0.0.0.0:27025"),
             ("peer ::ffff:203.0.113.5 joined", "peer ::ffff:203.0.113.x joined"),
             ("from 203.0.113.1, 203.0.113.2", "from 203.0.113.x, 203.0.113.x"),
+            ("addr:203.0.113.5 face:198.51.100.7:443", "addr:203.0.113.x face:198.51.100.x:443"),
         ];
         for (line, want) in cases {
             assert_eq!(mask(line), want);
@@ -151,10 +164,28 @@ mod tests {
     }
 
     #[test]
+    fn every_sink_gets_the_masked_record_even_for_literal_messages() {
+        let check = |r: &log::Record| {
+            super::with_record(r, |masked| {
+                assert_eq!(masked.args().to_string(), "peer 203.0.113.x");
+                assert_eq!(masked.level(), log::Level::Warn);
+                assert_eq!(masked.target(), "mobile");
+                assert_eq!(masked.module_path(), Some("game"));
+                assert_eq!(masked.file(), Some("game.rs"));
+                assert_eq!(masked.line(), Some(42));
+            });
+        };
+        check(&log::Record::builder().args(format_args!("peer 203.0.113.5")).level(log::Level::Warn).target("mobile").module_path(Some("game")).file(Some("game.rs")).line(Some(42)).build());
+        let address = "203.0.113.5";
+        check(&log::Record::builder().args(format_args!("peer {address}")).level(log::Level::Warn).target("mobile").module_path(Some("game")).file(Some("game.rs")).line(Some(42)).build());
+    }
+
+    #[test]
     fn local_addresses_times_and_versions_stay_as_they_are() {
         for line in [
             "web administration at http://127.0.0.1:27025/admin/",
             "LAN: host at 192.168.1.20:27015 and 10.0.0.5, 172.16.4.1, 169.254.3.3, [::1]:80, fe80::1, fd00::2",
+            "local fe80::203.0.113.5 and fd00::198.51.100.7, ::ffff:192.168.1.5",
             "game time 08:00, at 12:34:56, build 0.2.50, Windows 10.0.22631, driver 31.0.15.5244",
             "version v1.2.3.4 and 1.2.3.4.5, mac aa:bb:cc:dd:ee:ff, tile 3.5",
             "no address at all",

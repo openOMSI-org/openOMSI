@@ -236,7 +236,9 @@ require_hardware_id = 0
 # - log_keep: how many earlier server.log files are kept (server.1.log the newest); a new
 #   one is begun at every start and when it passes log_max_mb (0: no size limit). log_keep
 #   = 0 keeps none.
-# - admin-audit.log: what the admins and moderators did (put aside at 1 MB).
+# - admin-audit.log: logins, refused passwords and the admins' and moderators' actions.
+#   Web logins and refused passwords include their whole source addresses, regardless of
+#   log_addresses. Rotated at 1 MB, keeping .1 and .2 (about 3 MB total).
 # - bans.json and the owner_bans list: the banned players' machine identifiers.
 # - with public_server = 1 the public list gets the name, icon, map, players and motd;
 #   with share_positions = 1 anyone who asks the web port sees names, buses and positions;

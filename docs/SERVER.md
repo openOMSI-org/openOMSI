@@ -454,7 +454,10 @@ commands go the same way as the others and are in the audit log, with what becam
 **The audit log.** Every login, refused password, operation and what became of it is written to
 `admin-audit.log` beside `server.cfg` (a JSON object a line: when, who - `player 3 'Name'`,
 `local tool (POST /admin)`, `web#2 (address)` -, the role, the action, the player, the result),
-put aside as `admin-audit.log.1` past 1 MB, so it never takes more than about 2 MB. No password
+put aside as `admin-audit.log.1` past 1 MB, keeping the previous backup as `admin-audit.log.2`
+(about 3 MB total). Web logins and refused passwords keep their **whole source addresses**
+in this audit file, regardless of `log_addresses`; that setting controls only the general
+game/server log. No password
 or token is ever written to it; names, reasons and chat lines are kept as cleaned text.
 
 ## Machine bans
@@ -536,7 +539,7 @@ end.
 |---|---|---|
 | Who joined and left, their names, **the chat (every message)**, the admins' actions, errors | `server.log` beside `server.cfg` (`run-server` and `start.sh`; Docker: `docker compose logs`) | A new file at every start and past `log_max_mb` (20 MB; 0: no limit); `log_keep` (5) earlier ones as `server.1.log` (the newest) … `server.5.log`; `log_keep = 0` keeps none. Docker: five files of 20 MB (`docker-compose.yml`) |
 | The players' internet addresses | the same log | A public address keeps only its network (`203.0.113.x`, `2001:db8:85a3::x`); the local network's and this machine's are written whole. `log_addresses = 1` writes them whole (for an abuse report) |
-| Logins, refused passwords, the admins' and moderators' operations | `admin-audit.log` | Put aside as `admin-audit.log.1` past 1 MB: about 2 MB at most |
+| Logins, refused passwords, the admins' and moderators' operations; **whole source addresses** for web logins and refused passwords, regardless of `log_addresses` | `admin-audit.log` | Rotated past 1 MB, keeping `admin-audit.log.1` and `.2`: about 3 MB total |
 | Banned machines (their hardware identifier) | `bans.json`, `owner_bans` | Until the ban is lifted |
 | The players' buses (with `accept_uploads = 1`) | `~/.openomsi/lan-store` | `uploads_keep_days` (30) after the last use |
 | Name, icon, map, players, motd (not the players' names) | the public list, with `public_server = 1` | Forgotten three minutes after the server stops |
