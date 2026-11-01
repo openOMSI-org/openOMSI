@@ -858,22 +858,14 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
         return Err("switched off (OMSI_NO_LAN_MODS)".into());
     }
     let mut conn = open(host, session)?;
-    let mut selected_request = selected.as_ref().map(|(bus, paint)| format!(
+    let selected_request = selected.as_ref().map(|(bus, paint)| format!(
         "LISTBUS {} {}", server_fleet::hex_text(bus), server_fleet::hex_text(paint)
     ));
-    let manifest = match request_mod_manifest(&mut conn, selected_request.as_deref().unwrap_or("LIST")) {
-        Ok(m) => m,
-        // A player-hosted game or an older server cannot publish selected fleet mods.
-        // Preserve their original LIST behavior, but do not bypass a dedicated
-        // server's explicit rejection of a model or repaint.
-        Err(e) if selected_request.is_some() && (e == "the host says: what" || e == "the host says: fleet not configured") => {
-            log::info!("LAN mods: host has no dedicated fleet catalogue; using original map mod list");
-            selected_request = None;
-            conn = open(host, session)?;
-            request_mod_manifest(&mut conn, "LIST")?
-        }
-        Err(e) => return Err(e),
-    };
+    // A selected server bus is authoritative: never turn a failed LISTBUS into
+    // a successful map-only LIST. That would spawn a missing or different bus.
+    // The ordinary LIST remains the default for player-hosted/legacy sessions
+    // that did not request server fleet downloads.
+    let manifest = request_mod_manifest(&mut conn, selected_request.as_deref().unwrap_or("LIST"))?;
     if let (Some((bus, _)), Some(_)) = (selected.as_ref(), selected_request.as_ref()) {
         if !omsi_net::vehicle_path(bus).is_some_and(|v| v.eq_ignore_ascii_case(&manifest.bus)) {
             return Err("host returned the wrong selected bus package".into());
