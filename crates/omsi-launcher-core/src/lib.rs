@@ -2597,18 +2597,85 @@ pub const GRAPHICS_PROFILE_KEYS: [&str; 42] = [
     "vsync", "max_fps", "view_distance", "max_obj_dist", "min_obj_size", "mirror_size", "mirror_refresh", "mirror_quality", "mirror_hud_every_frame", "video_memory", "texture_compression", "gpu_texture_compression",
 ];
 
-fn graphics_profiles_path() -> PathBuf {
-    data_dir().join("graphics_profiles.json")
+/// The folder of the saved graphics profiles, a file each (`~/.openomsi/graphics_profiles/`).
+fn graphics_profiles_dir(base: &Path) -> PathBuf {
+    base.join("graphics_profiles")
 }
 
-/// The saved graphics profiles by name (`~/.openomsi/graphics_profiles.json`).
+/// What 0.3.44 and before kept them in, all in one file.
+fn old_graphics_profiles_path(base: &Path) -> PathBuf {
+    base.join("graphics_profiles.json")
+}
+
+/// The file of profile `name`: the name with what a file name cannot hold taken out, and a
+/// number worked out from the whole name - "a/b" and "a_b", or "High" and "high" on a file
+/// system that does not tell capitals apart, are two profiles.
+fn graphics_profile_file(base: &Path, name: &str) -> PathBuf {
+    let readable: String = name
+        .chars()
+        .map(|c| if c.is_control() || ['<', '>', ':', '"', '/', '\\', '|', '?', '*'].contains(&c) { '_' } else { c })
+        .collect::<String>()
+        .trim_matches(|c: char| c == '.' || c.is_whitespace())
+        .to_string();
+    let hash = name.bytes().fold(0xcbf2_9ce4_8422_2325_u64, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3));
+    graphics_profiles_dir(base).join(format!("{readable}-{:08x}.json", hash as u32))
+}
+
+/// Write `profile` as `name`'s file: whole or not at all (written beside it and moved into
+/// place, so that a game closed half way leaves the old one).
+fn write_graphics_profile(base: &Path, name: &str, profile: &Value) -> Result<()> {
+    let path = graphics_profile_file(base, name);
+    std::fs::create_dir_all(graphics_profiles_dir(base))?;
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, serde_json::to_string_pretty(&serde_json::json!({ "name": name, "graphics": profile }))?)?;
+    std::fs::rename(&tmp, &path)?;
+    Ok(())
+}
+
+/// The profiles of the single file 0.3.44 and before kept: each into a file of its own, and
+/// the old file put aside (`graphics_profiles.json.migrated`) once they are all there. A file
+/// that cannot be read is left where it is, to be looked at.
+fn migrate_graphics_profiles(base: &Path) {
+    let old = old_graphics_profiles_path(base);
+    let Some(all) = std::fs::read_to_string(&old).ok().and_then(|t| serde_json::from_str::<std::collections::BTreeMap<String, Value>>(&t).ok()) else { return };
+    // (one of the new files already there is the newer: a profile kept since is not put back)
+    if all.iter().all(|(name, profile)| graphics_profile_file(base, name).exists() || write_graphics_profile(base, name, profile).is_ok()) {
+        let _ = std::fs::rename(&old, old.with_extension("json.migrated"));
+    }
+}
+
+/// The saved graphics profiles by name (`~/.openomsi/graphics_profiles/`, a file each). A
+/// file that cannot be read is left out; the others are not lost with it.
 pub fn graphics_profiles() -> std::collections::BTreeMap<String, Value> {
-    std::fs::read_to_string(graphics_profiles_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+    graphics_profiles_in(&data_dir())
+}
+
+fn graphics_profiles_in(base: &Path) -> std::collections::BTreeMap<String, Value> {
+    migrate_graphics_profiles(base);
+    let mut all = std::collections::BTreeMap::new();
+    let Ok(dir) = std::fs::read_dir(graphics_profiles_dir(base)) else { return all };
+    for entry in dir.flatten() {
+        let path = entry.path();
+        if path.extension().is_none_or(|e| e != "json") {
+            continue;
+        }
+        let Some(file) = std::fs::read_to_string(&path).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()) else { continue };
+        if let (Some(name), Some(profile)) = (file.get("name").and_then(Value::as_str), file.get("graphics")) {
+            if profile.is_object() {
+                all.insert(name.to_string(), profile.clone());
+            }
+        }
+    }
+    all
 }
 
 /// Keep the graphics of `settings` as profile `name` (an existing one of that name is
-/// replaced). Returns the name as kept.
+/// replaced), in a file of its own. Returns the name as kept.
 pub fn save_graphics_profile(name: &str, settings: &Value) -> Result<String> {
+    save_graphics_profile_in(&data_dir(), name, settings)
+}
+
+fn save_graphics_profile_in(base: &Path, name: &str, settings: &Value) -> Result<String> {
     let name: String = name.chars().filter(|c| !c.is_control()).collect::<String>().trim().chars().take(40).collect();
     if name.is_empty() {
         return Err(anyhow!("Give the profile a name."));
@@ -2619,18 +2686,23 @@ pub fn save_graphics_profile(name: &str, settings: &Value) -> Result<String> {
             profile.insert(k.to_string(), x.clone());
         }
     }
-    let mut all = graphics_profiles();
-    all.insert(name.clone(), Value::Object(profile));
-    std::fs::write(graphics_profiles_path(), serde_json::to_string_pretty(&all)?)?;
+    // (the single file of an older version is split first, so that none is left behind)
+    migrate_graphics_profiles(base);
+    write_graphics_profile(base, &name, &Value::Object(profile))?;
     Ok(name)
 }
 
 /// Remove profile `name`.
 pub fn delete_graphics_profile(name: &str) -> Result<()> {
-    let mut all = graphics_profiles();
-    all.remove(name);
-    std::fs::write(graphics_profiles_path(), serde_json::to_string_pretty(&all)?)?;
-    Ok(())
+    delete_graphics_profile_in(&data_dir(), name)
+}
+
+fn delete_graphics_profile_in(base: &Path, name: &str) -> Result<()> {
+    migrate_graphics_profiles(base);
+    match std::fs::remove_file(graphics_profile_file(base, name)) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.into()),
+        _ => Ok(()),
+    }
 }
 
 /// Put a profile's values into the page's `settings` (only the keys a profile may hold).

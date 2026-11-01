@@ -511,6 +511,13 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **Each graphics profile is a file of its own.** The launcher kept them all in one
+  `graphics_profiles.json`: a file that could not be read counted as having none, and the next
+  profile kept was written alone over the file, taking the rest with it. They are now in
+  `~/.openomsi/graphics_profiles/`, a file each, written whole or not at all, so a damaged file
+  costs only its own profile, and one can be copied, shared or backed up by itself. The profiles
+  of the old file are moved into files the first time they are asked for, and the old file is
+  kept as `graphics_profiles.json.migrated`.
 - **Vehicles with staged ignition and separate battery-master switches start correctly**, without pressing reverse or engine-stop triggers, including recovery after a stalled engine (#3481).
 - **Dedicated servers can authorize F4, city-map and entry-point relocation** through authenticated server commands. Administrators can go to, bring or recover players' buses; `allow_player_teleport=0` remains the default, and `1` permits ordinary players to relocate only themselves. Player-hosted LAN keeps the host-only restriction (#3481).
 - **Optional RP speed limits for dedicated servers**: `speed_limit_kmh=60`, `75` or `80` smooth throttle/braking near the limit, and `0` disables it (default). This is cooperative client-side roleplay, not server-enforced anti-cheat. Policy is fetched on join/reconnect, not periodically (#3481).
