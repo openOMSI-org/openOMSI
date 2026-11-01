@@ -97705,20 +97705,11 @@ _version: 2
 "The current timetable trip is no longer valid":
   zh-tw: "目前的時刻表行程已失效"
 
-"Wait until the complete trip route is loaded before handing it to AI":
-  zh-tw: "第一版須等待整段行程路徑載入完成，才可交給 AI"
-
 "The bus is not on a compatible lane of its timetable route":
   zh-tw: "巴士目前不在該班次可接續的行駛路徑上"
 
-"A remaining timetable stop has no loaded position":
-  zh-tw: "尚未服務的站點位置未載入"
-
 "A remaining timetable stop is not on the loaded route":
   zh-tw: "尚未服務的站點不在已載入的行程路徑上"
-
-"A remaining timetable stop is too far from its route":
-  zh-tw: "尚未服務的站點距離行程路徑太遠"
 
 "The selected AI departure no longer matches its tour":
   zh-tw: "所選的 AI 班次已不符合目前車務資料"

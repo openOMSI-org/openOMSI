@@ -120,12 +120,7 @@ impl App {
         if let Some(d) = duty.as_mut() {
             d.resume_from_ai(next_stop, at_stop, delay, vehicle.position);
         }
-        // Replacement GPU textures must receive the unchanged destination strings too.
-        for texture in vehicle.text_textures.iter_mut().chain(
-            vehicle.trailers.iter_mut().flat_map(|part| part.text_textures.iter_mut()),
-        ) {
-            texture.invalidate_upload();
-        }
+        vehicle.invalidate_display_uploads();
         let render = world.add_vehicle(renderer, scene, &ty, scheme);
         let trailer_renders = vehicle
             .trailers

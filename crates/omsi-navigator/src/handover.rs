@@ -58,8 +58,6 @@ mod tests {
         assert!(handed_over_camera_pose(DVec3::NAN, 0.0).is_none());
     }
 
-
-
     #[test]
     fn handed_over_markers_do_not_depend_on_ai_layer_or_timetable() {
         let mut nav = Navigator::new(true, 0.85, "bottom-left");
@@ -140,5 +138,12 @@ mod tests {
         assert!(marker.1.is_some());
         nav.set_handed_over_buses([]);
         assert!(nav.map_traffic_kind(car).is_none());
+    }
+    #[test]
+    fn handed_over_marker_label_fits_without_truncation() {
+        let fonts = Fonts::new();
+        let label = "Handed-over bus #123";
+        let fitted = fonts.fit(label, 11.5, Weight::Bold, TRANSIT_LABEL_MAX);
+        assert_eq!(fitted, label);
     }
 }

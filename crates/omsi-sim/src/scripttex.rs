@@ -182,6 +182,16 @@ impl ScriptTexture {
         }
     }
 
+    /// Queue the existing image for a replacement GPU texture without redrawing it.
+    /// Pending releases survive locked edits; unfinished drawing waits for STUnlock.
+    pub fn invalidate_upload(&mut self) {
+        if !self.locked {
+            self.dirty = true;
+        } else if self.pending.is_none() && !self.dirty {
+            self.pending = Some(self.rgba.clone());
+        }
+    }
+
     pub fn put(&mut self, x: i32, y: i32, c: [u8; 4]) {
         if x < 0 || y < 0 || x >= self.width as i32 || y >= self.height as i32 {
             return;
@@ -427,6 +437,26 @@ mod tests {
         // A distant vehicle can release several pictures before its next upload.
         assert_eq!(t.take_upload().unwrap(), vec![2; 4]);
         assert!(t.take_upload().is_none());
+    }
+
+    #[test]
+    fn render_replacement_preserves_locked_release_boundaries() {
+        let mut t = ScriptTexture::new(1, 1);
+        t.put(0, 0, [1; 4]);
+        t.unlock();
+        t.locked = true;
+        t.put(0, 0, [2; 4]);
+        t.invalidate_upload();
+        assert!(t.locked);
+        assert_eq!(t.take_upload(), Some(vec![1; 4]));
+        t.invalidate_upload();
+        assert_eq!(t.take_upload(), None);
+        t.unlock();
+        assert_eq!(t.take_upload(), Some(vec![2; 4]));
+        t.locked = true;
+        t.invalidate_upload();
+        assert!(t.locked);
+        assert_eq!(t.take_upload(), Some(vec![2; 4]));
     }
 
     #[test]

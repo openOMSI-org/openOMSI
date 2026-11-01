@@ -971,3 +971,22 @@ fn a_trolleybus_moves_only_on_current() {
     assert!(up.trolley.as_ref().unwrap().rig.circuit);
     assert!(up.var("Trolley_Powered").is_some());
 }
+
+#[test]
+fn replacing_vehicle_render_reuploads_unchanged_script_displays() {
+    let mut v = restored_display_vehicle();
+    v.set_var("power", 1.0);
+    v.set_var("IBIS_Linie_Complex", 10900.0);
+    v.set_var("IBIS_TerminusIndex", 9.0);
+    v.attach_trailer(v.ty.clone());
+    v.update(0.02);
+    let main = v.host.script_textures[0].take_upload().unwrap();
+    assert!(main.iter().any(|p| *p != 0));
+    assert!(v.host.script_textures[0].take_upload().is_none());
+    v.invalidate_display_uploads();
+    v.update(0.02);
+    assert_eq!(v.var("IBIS_Linie_Complex"), Some(10900.0));
+    assert_eq!(v.var("IBIS_TerminusIndex"), Some(9.0));
+    assert_eq!(v.host.script_textures[0].take_upload(), Some(main));
+    assert!(v.host.script_textures[0].take_upload().is_none());
+}
