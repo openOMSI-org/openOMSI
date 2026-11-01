@@ -261,21 +261,20 @@ impl PeopleSim {
             pp.sub = 6;
             pp.timer = 0.5;
             pp.reach = true;
+            pp.taking_ticket = player_bus.and_then(|b| b.given_ticket).filter(|n| n.is_finite() && *n >= 0.0).map(|n| n.round() as usize);
             if let Some((_, t)) = bn.cabin.sale {
                 pp.reach_at = t;
             }
             self.pardons = 0;
         } else if p.sub == 6 && p.timer <= 0.0 {
-            self.pax_mut(i).unwrap().reach = false;
+            let pp = self.pax_mut(i).unwrap();
+            pp.reach = false;
+            pp.taking_ticket = None;
             self.tickets_sold += 1;
             self.ticket_cash += value;
             self.sales.push((name, value));
             *taken_ticket = true;
-            // The passenger took a manually issued ticket from the driver.
-            // The passenger has physically taken the manually issued ticket.
-            if let Some(given) = player_bus.and_then(|b| b.given_ticket).filter(|n| n.is_finite() && *n >= 0.0)
-            {
-                let ticket_type = given.round() as usize;
+            if let Some(ticket_type) = p.taking_ticket {
                 self.sale_events.push((bn.id, SaleEvent::PassengerTookTicket(ticket_type)));
             }
             if auto {

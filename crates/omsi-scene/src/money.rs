@@ -292,15 +292,7 @@ impl TicketBlocks {
 
     /// Remove one ticket of the requested type when the passenger takes it.
     pub fn take_ticket( &mut self, ticket_type: usize, renderer: &Renderer, scene: &mut Scene) -> bool {
-        let Some(index) = self.desk_tickets.iter().position(|ticket| ticket.ticket_type == ticket_type)
-        else {
-            return false;
-        };
-
-        let ticket = self.desk_tickets.remove(index);
-        renderer.remove_instance(scene, ticket.instance);
-
-        true
+        take_of_type(&mut self.desk_tickets, ticket_type).map(|instance| renderer.remove_instance(scene, instance)).is_some()
     }
 
     /// The individual ticket hit by a ray from the mouse.
@@ -332,14 +324,50 @@ impl TicketBlocks {
     }
 
     pub fn remove_ticket_instance(&mut self, instance: usize, renderer: &Renderer, scene: &mut Scene) -> bool {
-        let Some(index) = self.desk_tickets.iter().position(|ticket| ticket.instance == instance)
-        else {
-            return false;
-        };
+        take_instance(&mut self.desk_tickets, instance).map(|instance| renderer.remove_instance(scene, instance)).is_some()
+    }
+}
 
-        let ticket = self.desk_tickets.remove(index);
-        renderer.remove_instance(scene, ticket.instance);
+fn take_of_type(desk: &mut Vec<DeskTicket>, ticket_type: usize) -> Option<usize> {
+    let index = desk.iter().position(|ticket| ticket.ticket_type == ticket_type)?;
+    Some(desk.remove(index).instance)
+}
 
-        true
+fn take_instance(desk: &mut Vec<DeskTicket>, instance: usize) -> Option<usize> {
+    let index = desk.iter().position(|ticket| ticket.instance == instance)?;
+    Some(desk.remove(index).instance)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn desk(tickets: &[(usize, usize)]) -> Vec<DeskTicket> {
+        tickets.iter().enumerate().map(|(layer, &(instance, ticket_type))| DeskTicket { instance, ticket_type, local: Mat4::IDENTITY, parent: None, layer: layer as u32 }).collect()
+    }
+
+    fn left(desk: &[DeskTicket]) -> Vec<(usize, usize)> {
+        desk.iter().map(|t| (t.instance, t.ticket_type)).collect()
+    }
+
+    #[test]
+    fn the_passenger_takes_the_accepted_type_and_leaves_a_later_one() {
+        let mut d = desk(&[(10, 0), (11, 1)]);
+        assert_eq!(take_of_type(&mut d, 0), Some(10));
+        assert_eq!(left(&d), vec![(11, 1)]);
+    }
+
+    #[test]
+    fn a_ticket_the_driver_took_back_is_not_taken_again_nor_swapped_for_another_type() {
+        let mut d = desk(&[(10, 0), (11, 1)]);
+        assert_eq!(take_instance(&mut d, 10), Some(10));
+        assert_eq!(take_instance(&mut d, 10), None);
+        assert_eq!(take_of_type(&mut d, 0), None);
+        assert_eq!(left(&d), vec![(11, 1)]);
+
+        let mut d = desk(&[(10, 0), (11, 1), (12, 0)]);
+        assert_eq!(take_instance(&mut d, 10), Some(10));
+        assert_eq!(take_of_type(&mut d, 0), Some(12));
+        assert_eq!(left(&d), vec![(11, 1)]);
     }
 }
