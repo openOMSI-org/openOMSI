@@ -533,6 +533,13 @@ export async function start(extra) {
     // UI-only consent: do not serialize this ephemeral flag into the launch duty.
     const { __fleetApproved: _consent, ...dutyExtra } = extra || {};
     const d = await duty(dutyExtra);
+    if (serverBuses() && !serverFleetSelection()) {
+      // A restricted server cannot supply this bus's verified package (older
+      // status data, unreadable .bus on the host, or a stale saved choice).
+      // Never launch a different local copy as if it were approved by the host.
+      toast(t('The server has not announced a downloadable version of this bus. Choose another bus or contact the server owner.'), 'error');
+      return null;
+    }
     if (serverFleetSelection() && !approved) {
       toast(t('Confirm the server download before joining.'), 'error');
       return null;
