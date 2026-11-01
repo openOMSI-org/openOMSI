@@ -3,7 +3,7 @@ import { useStore, set, remembered, remember, toast } from '../store.js';
 import { t, hhmm, longDate, language } from '../i18n.js';
 import { Icon } from '../icons.js';
 import { Button, Notice, useConfirm } from '../ui.js';
-import { choose, curMap, curBus, curLine, curTour, pickedTrip, start, loadSituations, weatherName, mapName, noServerBus, askJoined, transportRefusal, serverFleetSelection } from '../data.js';
+import { choose, curMap, curBus, curLine, curTour, pickedTrip, start, loadSituations, weatherName, mapName, noServerBus, askJoined, transportRefusal, serverFleetSelection, canPreviewBus } from '../data.js';
 import { call } from '../api.js';
 import { BusPreview } from '../preview.js';
 import { BusList, BusOptions, withoutMaker } from './bus-list.js';
@@ -49,7 +49,7 @@ export function BusStage() {
   const v = curBus();
   if (!v) return html`<div class="stage-empty"><${Icon} name="bus" size=${40} /></div>`;
   return html`<div class="bus-stage">
-    ${v.server_catalog ? html`<div class="stage-empty"><${Icon} name="bus" size=${40} /><span>${t('Server bus: preview is available after verified download')}</span></div>` : html`<${BusPreview} class="stage" look=${{ bus: v.file, paint: c.paint, map: c.map, weather: c.weather, time: c.time, date: c.date }} />`}
+    ${!canPreviewBus(v, c.paint) ? html`<div class="stage-empty"><${Icon} name="bus" size=${40} /><span>${t('Server bus: preview is available after verified download')}</span></div>` : html`<${BusPreview} class="stage" look=${{ bus: v.file, paint: c.paint, map: c.map, weather: c.weather, time: c.time, date: c.date }} />`}
     <div class="stage-caption">
       <b>${withoutMaker(v.name, v.manufacturer)}</b>
       <span>${[v.manufacturer, c.paint || v.default_paint].filter(Boolean).join(' | ')}</span>
