@@ -507,6 +507,36 @@ fn a_queue_behind_a_bus_at_its_stop_goes_round_it() {
 }
 
 #[test]
+fn a_timetable_bus_goes_round_a_parked_car_on_a_two_lane_road_and_back_onto_its_route() {
+    let f = Fixture::new();
+    let lanes = vec![street(0.0, 0.0, 0.0, 200.0), street(-3.5, 0.0, 0.0, 200.0), street(0.0, 200.0, 0.0, 300.0), street(-3.5, 200.0, 0.0, 300.0)];
+    let mut t = traffic(&f, net_of(lanes, &[(1, 0), (3, 2)]));
+    t.parked.entry(0).or_default().push((120.0, 0.0));
+    let me = add_car(&mut t, &f, 0, 60.0, 0x1420, Some(6.0));
+    set_route(&mut t, me, vec![0, 2], 60.0);
+    {
+        let day = t.day_time;
+        let stop = bus_service::Stop { ri: 1, s: 250.0, bay: 0.0, depart: day + 600.0, id: 1, side: 0.0 };
+        car_mut(&mut t, me).bus = Some(Box::new(bus_service::BusService::new(vec![stop])));
+    }
+    let mut round = false;
+    for _ in 0..(60.0 / DT) as usize {
+        t.tick(DT, None);
+        let c = car(&t, me).expect("on the road");
+        assert!(!hits_parked(&t, me, 0, 120.0, 0.0), "it ran into the parked car");
+        round |= c.state.lane == 1;
+        if c.state.lane == 2 {
+            break;
+        }
+    }
+    let c = car(&t, me).unwrap();
+    assert!(round && c.state.lane == 2, "on lane {} at s {:.1} (went round: {round})", c.state.lane, c.state.s);
+    let (ri, _) = c.next_stop().expect("its stop is still ahead");
+    assert_eq!(c.state.route.get(ri), Some(&2), "its stop moved off lane 2");
+    assert_eq!(c.state.route.get(c.state.route_index), Some(&2));
+}
+
+#[test]
 fn a_queue_at_a_red_light_is_no_stop_to_go_round() {
     let f = Fixture::new();
     let lanes = vec![street(0.0, 0.0, 0.0, 200.0), street(-3.5, 0.0, 0.0, 200.0), street(0.0, 200.0, 0.0, 300.0), street(-3.5, 200.0, 0.0, 300.0)];
