@@ -256,7 +256,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     if (camera.flags.x > 0.5 && (terrain || in.params2.w > 0.5)) {
         let k = clamp(1.0 - (dist - 25.0) / 120.0, 0.0, 1.0);
         let pattern_xy = world_pattern_xy(in.world);
-        detail_factor = 1.0 + (detail_noise(pattern_xy) - 0.5) * 0.42 * k;
+        detail_factor = 1.0 + (detail_noise(pattern_xy, k) - 0.5) * 0.42 * k;
         albedo = albedo * detail_factor;
         ambient_albedo = ambient_albedo * detail_factor;
     }

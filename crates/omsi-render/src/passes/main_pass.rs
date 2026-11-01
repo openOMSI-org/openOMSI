@@ -59,7 +59,7 @@ impl Renderer {
         // depth before cutouts/blends saved more hidden shading than the pass cost.
         let msaa_prepass = plan.msaa_prepass(self, f);
         let presurface_prefill = plan.presurface_prefill(self, f);
-        let parts = if !cfg!(any(target_os = "macos", target_os = "ios")) && main_bundles.len() >= 2 && !f.env.no_main_split {
+        let parts = if !cfg!(any(target_os = "macos", target_os = "ios")) && main_bundles.len() >= 2 && f.env.main_split {
             main_bundles.len().min(2)
         } else { 1 };
         let mut lead = (parts > 1).then(|| self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("main part") }));
