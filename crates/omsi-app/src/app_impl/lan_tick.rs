@@ -6,6 +6,7 @@ impl App {
     /// LAN play, once a frame: send our bus, take in the others', and keep a drawn
     /// vehicle for each of them.
     pub(crate) fn tick_lan(&mut self, dt: f32) {
+        let lan_tick_started = std::time::Instant::now();
         if self.net.lan.is_none() {
             omsi_lan::commands::set_speed_limit_kmh(0);
             self.net.speed_limit_welcome = None;
@@ -72,11 +73,15 @@ impl App {
                 }
             }
         }
+        let setup_ms = lan_tick_started.elapsed().as_secs_f64() * 1000.0;
+        let phase = std::time::Instant::now();
         let sent = {
             let traffic = self.session.traffic.as_ref();
             let cars = || traffic.map(|t| t.cars.iter().map(|c| lan::car_footprint(&c.vehicle)).collect()).unwrap_or_default();
             lan::tick_send(lan, &mut self.net.remotes, dt, &config, self.player.as_mut().map(|p| &mut p.vehicle), &cars, duty, &frame)
         };
+        let send_ms = phase.elapsed().as_secs_f64() * 1000.0;
+        let phase = std::time::Instant::now();
         self.net.lan_world.tick(
             lan,
             dt,
@@ -89,12 +94,16 @@ impl App {
             &mut self.gfx.sim_view,
             self.player.as_ref().map(|p| p.vehicle.position),
         );
+        let world_ms = phase.elapsed().as_secs_f64() * 1000.0;
+        let phase = std::time::Instant::now();
         if let Some(t) = self.session.traffic.as_mut().filter(|t| t.sim.mirror) {
             let ready: Vec<_> = t.sim.cars.iter().filter(|c| t.has_sound_set(c.id)).map(|c| c.id).collect();
             for c in &mut t.sim.cars {
                 if ready.contains(&c.id) { self.net.remotes.apply_ai_sounds(&mut c.vehicle, c.id, &config.root); }
             }
         }
+        let receive_started = std::time::Instant::now();
+        let mirror_audio_ms = phase.elapsed().as_secs_f64() * 1000.0;
         let updates = lan::tick_receive(
             lan,
             &mut self.net.remotes,
@@ -106,6 +115,8 @@ impl App {
             self.session.traffic.as_ref().map(|t| &t.net),
             &frame,
         );
+        let receive_ms = receive_started.elapsed().as_secs_f64() * 1000.0;
+        let phase = std::time::Instant::now();
         if let (Some(w), Some(r), Some(scene)) = (self.world.as_deref(), self.renderer.as_ref(), self.scene.as_mut()) {
             crate::view_sync::apply_lan(&mut self.net.remotes, &mut self.gfx.sim_view.lan, w, r, scene, self.sound.audio.as_ref(), &frame, dt);
             self.gfx.sim_view.lan.sync_freetex(lan, &self.net.remotes, r, scene, &self.args.root);
@@ -113,6 +124,8 @@ impl App {
         for u in updates {
             self.apply_world_update(u);
         }
+        let apply_ms = phase.elapsed().as_secs_f64() * 1000.0;
+        let phase = std::time::Instant::now();
         let cmds = self.net.lan.as_mut().map(|l| l.take_commands()).unwrap_or_default();
         for (from, text) in cmds {
             self.lan_command(from, &text);
@@ -120,6 +133,15 @@ impl App {
         crate::admin_panel::tick(self);
         crate::player_list::tick(self);
         self.tick_voice(dt);
+        let tail_ms = phase.elapsed().as_secs_f64() * 1000.0;
+        // Log only pathological stalls: per-frame logging would amplify overload.
+        if lan_tick_started.elapsed() >= std::time::Duration::from_secs(1) {
+            log::warn!(
+                "LAN: slow tick {:.0} ms (setup {:.0}, send {:.0}, shared_world {:.0}, mirror_audio {:.0}, receive {:.0}, apply {:.0}, admin_voice {:.0})",
+                lan_tick_started.elapsed().as_secs_f64() * 1000.0,
+                setup_ms, send_ms, world_ms, mirror_audio_ms, receive_ms, apply_ms, tail_ms
+            );
+        }
     }
 
     /// A command another player's game sent ours (`LanSession::command`): read by the session

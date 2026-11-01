@@ -176,7 +176,7 @@ pub const INFO_MIN_GAP: f32 = 0.25;
 /// Seconds between two CLOCK messages of the host.
 pub const CLOCK_EVERY: f32 = 5.0;
 /// At most this many other players: a host turns away the next one, a client ignores more.
-pub const MAX_PEERS: usize = 32;
+pub const MAX_PEERS: usize = 64;
 /// At most this many players may be loading at the same time (joined, no state yet).
 pub const MAX_JOINING: usize = 8;
 /// How far around the requested spawn a host lists the vehicles standing there (m).
@@ -203,6 +203,7 @@ const SOUND_RATE: (f32, f32) = (512.0, 2048.0);
 use voice_net::VOICE_RATE;
 const MESSAGE_RATE: (f32, f32) = (10.0, 20.0);
 const CHAT_RATE: (f32, f32) = (1.0, 3.0);
+mod receive_budget;
 // ---------------------------------------------------------------------------------------
 // session codes
 
@@ -1126,6 +1127,7 @@ enum PeerTraffic {
     Voice,
     Tack,
     Message,
+    Chat,
 }
 
 /// A token bucket: `rate` a second, at most `burst` at once.
@@ -1180,6 +1182,8 @@ pub struct Peer {
     chat: Bucket,
     /// Datagrams of this player the host threw away (too many at once).
     pub dropped: u32,
+    /// Rate-limit rejections by PeerTraffic category (no payloads stored).
+    drop_counts: [u32; 9],
     /// The nonce of the player's hellos (host side).
     nonce: Option<u64>,
     secret: [u8; 16],
@@ -1223,6 +1227,7 @@ impl Peer {
             messages: Bucket::new(MESSAGE_RATE.1),
             chat: Bucket::new(CHAT_RATE.1),
             dropped: 0,
+            drop_counts: [0; 9],
             history: std::collections::VecDeque::new(),
             nonce: None,
             secret: admission::random_bytes(),
@@ -1294,6 +1299,7 @@ pub struct LanSession {
     /// keeps its time up to date with `set_clock`).
     pub world: WorldInfo,
     peers: HashMap<u32, Peer>,
+    max_peers: usize,
     next_id: u32,
     send_acc: f32,
     hello_acc: f32,
@@ -1342,6 +1348,8 @@ pub struct LanSession {
     /// Bytes sent and received so far.
     sent: Cell<u64>,
     pub received: u64,
+    recv_budget_hits: u32,
+    recv_budget_last_log: Option<Instant>,
     /// The shared world (see `world`): frames, descriptions and handed-over passengers
     /// the host sent (client), and what the clients asked for (host).
     world_in: Vec<(Instant, world::WorldFrame)>,
@@ -1455,6 +1463,7 @@ impl LanSession {
             strangers_told: false,
             world,
             peers: HashMap::new(),
+            max_peers: MAX_PEERS,
             next_id: 2,
             send_acc: 0.0,
             hello_acc: 1.0,
@@ -1486,6 +1495,8 @@ impl LanSession {
             buf: vec![0; 8192],
             sent: Cell::new(0),
             received: 0,
+            recv_budget_hits: 0,
+            recv_budget_last_log: None,
             world_in: Vec::new(),
             traffic: Default::default(),
             var_sender: vars::VarSender::default(),
@@ -1708,6 +1719,12 @@ impl LanSession {
 
     /// Our world after the game took over the host's (a client): only what still differs
     /// is warned about.
+    /// Host: cap remote players independently of the protocol's hard ceiling.
+    /// Dedicated servers use server.cfg's max_players; reconnects of existing peers remain allowed.
+    pub fn set_peer_limit(&mut self, players: usize) {
+        if self.role == Role::Host { self.max_peers = players.clamp(1, MAX_PEERS); }
+    }
+
     pub fn set_world(&mut self, world: WorldInfo) {
         self.world = world;
         if let Some(w) = self.welcome.as_ref().map(|w| w.world.clone()) {
@@ -2282,7 +2299,21 @@ impl LanSession {
             let Some(p) = self.peers.remove(&id) else {
                 continue;
             };
-            log::info!("LAN: player {id} timed out");
+            log::warn!(
+                "LAN: player {id} timed out after {:.1} s without an accepted datagram (loading={}, rate-limited total={}, state={}, variables={}, animations={}, textures={}, sounds={}, voice={}, tack={}, messages={}, chat={})",
+                now.duration_since(p.last_seen).as_secs_f32(),
+                !p.has_pose,
+                p.dropped,
+                p.drop_counts[0],
+                p.drop_counts[1],
+                p.drop_counts[2],
+                p.drop_counts[3],
+                p.drop_counts[4],
+                p.drop_counts[5],
+                p.drop_counts[6],
+                p.drop_counts[7],
+                p.drop_counts[8]
+            );
             gone.push(id);
             self.gone_lately.push((p.nonce, p.pose.name.clone(), id, now));
             if self.role == Role::Host {
@@ -2294,7 +2325,10 @@ impl LanSession {
             && self.connected
             && now.duration_since(self.host_seen) > self.timeout
         {
-            log::warn!("LAN: the host has gone quiet; trying to reach it again");
+            log::warn!(
+                "LAN: the host has gone quiet for {:.1} s; trying to reach it again",
+                now.duration_since(self.host_seen).as_secs_f32()
+            );
             self.events.push(LanEvent::Notice(
                 "the host has gone quiet; trying to reach it again".into(),
             ));
@@ -2480,7 +2514,10 @@ impl LanSession {
     }
 
     fn receive(&mut self, gone: &mut Vec<u32>) {
+        let started = Instant::now();
+        let mut packets = 0usize;
         loop {
+            if self.receive_budget_yield(packets, started) { break; }
             let (n, from) = match self.socket.recv_from(&mut self.buf) {
                 Ok(x) => x,
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
@@ -2494,6 +2531,7 @@ impl LanSession {
                 }
                 Err(_) => break,
             };
+            packets += 1;
             self.received += n as u64;
             // the bridge's own datagrams (a STUN answer, a punch): not the game's
             if bridge::is_bridge_packet(&self.buf[..n]) {
@@ -2519,9 +2557,7 @@ impl LanSession {
                     self.host_seen = Instant::now();
                 }
             }
-            if n == 0 || n > MAX_DATAGRAM {
-                continue;
-            }
+            if n == 0 || n > MAX_DATAGRAM { continue; }
             let mut data = self.buf[..n].to_vec();
             if data[0] == 0xEA {
                 let expected = match self.role {
@@ -2542,9 +2578,7 @@ impl LanSession {
                 }
                 continue;
             }
-            if self.on_table_or_voice(&data, from) {
-                continue;
-            }
+            if self.on_table_or_voice(&data, from) { continue; }
             if data[0] == world::WORLD_MAGIC {
                 // a client takes the world from its host (above); a host takes the people of
                 // a client's own from that client (within its rate)
@@ -2800,13 +2834,17 @@ impl LanSession {
             PeerTraffic::Voice => peer.voice.take(rate),
             PeerTraffic::Tack => peer.tacks.take(rate),
             PeerTraffic::Message => peer.messages.take(rate),
+            PeerTraffic::Chat => peer.chat.take(rate),
         };
         if !ok {
-            peer.dropped += 1;
-            if peer.dropped.is_power_of_two() {
+            peer.dropped = peer.dropped.saturating_add(1);
+            let category_drops = &mut peer.drop_counts[traffic as usize];
+            *category_drops = category_drops.saturating_add(1);
+            let category_count = *category_drops;
+            if category_count.is_power_of_two() {
                 log::warn!(
-                    "LAN: player {id} sends too much; {} datagram(s) dropped so far",
-                    peer.dropped
+                    "LAN: player {id} exceeded {traffic:?} rate ({:.0}/s, burst {:.0}); {} {traffic:?} datagram(s) dropped, {} total",
+                    rate.0, rate.1, category_count, peer.dropped
                 );
             }
             return None;
@@ -2955,7 +2993,15 @@ impl LanSession {
             return;
         }
         if !peer.chat.take(CHAT_RATE) {
-            peer.dropped += 1;
+            peer.dropped = peer.dropped.saturating_add(1);
+            let chat_drops = &mut peer.drop_counts[PeerTraffic::Chat as usize];
+            *chat_drops = chat_drops.saturating_add(1);
+            if chat_drops.is_power_of_two() {
+                log::warn!(
+                    "LAN: player {id} exceeded Chat rate ({:.0}/s, burst {:.0}); {} Chat datagram(s) dropped, {} total",
+                    CHAT_RATE.0, CHAT_RATE.1, chat_drops, peer.dropped
+                );
+            }
             return;
         }
         let name = peer.label();
@@ -3054,11 +3100,11 @@ impl LanSession {
                 }
                 (id, None)
             }
-            None if self.peers.len() >= MAX_PEERS => {
-                log::warn!("LAN: '{name}' at {from} wants to join, but {MAX_PEERS} players are here already; turned away");
+            None if self.peers.len() >= self.max_peers => {
+                log::warn!("LAN: '{name}' at {from} wants to join, but {} players are here already; turned away", self.max_peers);
                 self.reject(
                     from,
-                    &format!("the session is full ({} players)", MAX_PEERS + 1),
+                    &format!("the session is full ({} players)", self.max_peers),
                 );
                 return;
             }

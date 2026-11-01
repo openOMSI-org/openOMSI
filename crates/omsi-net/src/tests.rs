@@ -1369,6 +1369,29 @@ fn a_full_session_turns_the_next_player_away() {
 }
 
 #[test]
+fn configured_player_capacity_limits_new_remote_peers() {
+    let mut host = LanSession::host(0, "dedicated", world("m"), false).unwrap();
+    host.set_peer_limit(1);
+    assert_eq!(host.max_peers, 1);
+    let at = host.local_addr().unwrap();
+    let hello = format!("HELLO|{PROTOCOL}|-|p|Vehicles/x.bus|m|1989-05-30|32400||");
+    let first = raw();
+    first.send_to(hello.as_bytes(), at).unwrap();
+    host.tick(0.02, &pose(0.0));
+    assert_eq!(host.peer_count(), 1);
+
+    let second = raw();
+    second.send_to(hello.as_bytes(), at).unwrap();
+    host.tick(0.02, &pose(0.0));
+    assert_eq!(host.peer_count(), 1, "the configured limit rejects new joins");
+
+    host.set_peer_limit(100);
+    assert_eq!(host.max_peers, MAX_PEERS);
+    host.set_peer_limit(0);
+    assert_eq!(host.max_peers, 1);
+}
+
+#[test]
 fn too_many_loading_players_wait() {
     let mut host = LanSession::host(28180, "host", world("m"), true).unwrap();
     let at = SocketAddr::from((Ipv4Addr::LOCALHOST, host.local_addr().unwrap().port()));

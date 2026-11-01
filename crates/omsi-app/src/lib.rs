@@ -501,6 +501,10 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     } else {
         None
     };
+    // Match the actual session admission limit to the dedicated server configuration.
+    if let (Some(cfg), Some(l)) = (server_cfg.as_ref(), lan.as_mut()) {
+        l.set_peer_limit(cfg.max_players);
+    }
     // a dedicated server without its session has nobody to serve: why, and the end (it went
     // on running alone, unreachable, with a warning among the log's lines)
     if server_cfg.is_some() && lan.is_none() {
