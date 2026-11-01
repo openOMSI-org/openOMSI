@@ -51,6 +51,26 @@ impl ScheduleSim {
         log::info!("timetable: the clock was set to {}: {n} timetable buses taken off, the trips under way put out again", hhmm(day_time - self.day_base));
     }
 
+    /// Keep explicitly retained physical buses in place while other traffic restarts.
+    pub fn restart_clock_preserving(&mut self, day_time: f64, removed: usize, retained: &[u64]) {
+        let mut running = std::mem::take(&mut self.running);
+        let mut holds = std::mem::take(&mut self.tour_hold);
+        running.retain(|r| retained.contains(&r.car));
+        holds.retain(|id, _| retained.contains(id));
+        self.car_departure.retain(|id, _| retained.contains(id));
+        self.restart_clock(day_time, removed);
+        self.running = running;
+        self.tour_hold = holds;
+        // Calendar changes may remap night departures; use the resulting indices.
+        for &i in self.car_departure.values() {
+            let mut previous = Some(i);
+            while let Some(j) = previous {
+                self.departures[j].spawned = true;
+                previous = self.tour_prev[j];
+            }
+        }
+    }
+
     /// The timetable buses on the road (by car id).
     pub fn car_ids(&self) -> Vec<u64> {
         self.car_departure.keys().copied().collect()
@@ -499,6 +519,9 @@ impl ScheduleSim {
                 car.state.plan_next(&traffic.net);
             }
             run.next += n;
+            if let Some(b) = traffic.cars[ci].bus.as_mut() {
+                b.waiting_tile = run.steps.get(run.next).and_then(|s| s.key.map(|k| k.tile));
+            }
             if run.next < run.steps.len() {
                 keep.push(run);
             } else {

@@ -193,12 +193,12 @@ impl TrafficSim {
         self.order_buf = order;
         self.stats_after(dt, &remove);
         for i in remove.into_iter().rev() {
+            if self.occupied_by_player == Some(self.cars[i].id) { continue; }
             let c = self.take_off(i, Removal::Finished);
             // its sounds stop and the renders go back to the world at the next sync
             self.retired.push(c.id);
         }
     }
-
     /// Where every car is: its lane with its lateral place (and the lane a passing car is
     /// over on, where it counts for the oncoming traffic), the cars coming to each junction
     /// lane, the junction lanes each has claimed and the room promised on the exits.
@@ -1039,7 +1039,7 @@ impl TrafficSim {
                     .unwrap_or(false);
                 let stops_left = service.as_ref().map(|b| !b.stops.is_empty() || b.at_stop()).unwrap_or(false);
                 let waited_out = car.stopped > ROUTE_WAIT_MAX
-                    && service.as_ref().map(|b| b.route_open).unwrap_or(false);
+                    && service.as_ref().map(|b| b.route_open && b.waiting_tile.is_none()).unwrap_or(false);
                 if waited_out && !air {
                     // it has waited long for more route where the tiles are loaded: the
                     // rest of its trip does not join what it has (a track the map does

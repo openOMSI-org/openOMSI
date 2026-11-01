@@ -111,6 +111,14 @@ fn preview() {
 
 #[test]
 #[ignore]
+fn handed_over_buses_preview() {
+    let menu = quick_menu::QuickMenu { page: 1, focus: 14, ..Default::default() };
+    let state = quick_menu::TileState { off: vec![], lit: vec![] };
+    picture("game-panels-bus-locator.png", &[(menu.panel_of(&state, false), Some("find_ai"))]);
+}
+
+#[test]
+#[ignore]
 fn multiplayer_preview() {
     let form = multiplayer::Multiplayer { target: "OMSI-EXAMPLE-ROOM-CODE".into(), said: None };
     for (name, light) in [("dark", false), ("light", true)] {

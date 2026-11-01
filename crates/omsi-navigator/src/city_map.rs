@@ -614,9 +614,9 @@ impl Navigator {
         let mut transit: Vec<(DVec3, f64, Option<String>)> = Vec::new();
         // (from far the cars are left out; the map's own timetabled trains always)
         let far = self.city.mpp > 1.6;
-        if let Some(t) = f.traffic.filter(|_| self.show_ai) {
-            for car in t.cars.iter().filter(|c| !c.gone && !c.is_rail() && !in_the_air(c, &t.net)) {
-                let (color, line) = traffic_kind(car);
+        if let Some(t) = f.traffic {
+            for car in t.cars.iter().filter(|c| !c.is_rail() && !in_the_air(c, &t.net)) {
+                let Some((color, line)) = self.map_traffic_kind(car) else { continue };
                 let at = self.smoothed_position(car);
                 if color == DOT {
                     if !far {

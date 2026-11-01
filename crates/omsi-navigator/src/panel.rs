@@ -171,12 +171,12 @@ impl Navigator {
         // the public transport as drops with their lines (over the map's marks, on the screen);
         // the map's own timetabled trains are left out
         let mut transit: Vec<(DVec3, f64, Option<String>)> = Vec::new();
-        if let Some(t) = f.traffic.filter(|_| self.show_ai) {
+        if let Some(t) = f.traffic {
             for c in &t.cars {
-                if c.gone || c.is_rail() || in_the_air(c, &t.net) || (c.vehicle.position - f.bus).truncate().length() > self.zoom * 3.5 + 150.0 {
+                if c.is_rail() || in_the_air(c, &t.net) || (c.vehicle.position - f.bus).truncate().length() > self.zoom * 3.5 + 150.0 {
                     continue;
                 }
-                let (color, line) = traffic_kind(c);
+                let Some((color, line)) = self.map_traffic_kind(c) else { continue };
                 let at = self.smoothed_position(c);
                 if color == DOT {
                     car_dot(&mut dy, rel(at), self.light);

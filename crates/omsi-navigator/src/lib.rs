@@ -88,6 +88,8 @@ fn traffic_kind(c: &omsi_sim::ai_traffic::model::AiCar) -> (Color, Option<String
 /// in it, its point the way the vehicle heads (`dir`, on the screen), and the line beside it
 /// in green on a dark tag where there is room (`taken`: what is drawn there already).
 #[allow(clippy::too_many_arguments)]
+const TRANSIT_LABEL_MAX: f32 = 160.0;
+
 fn transit_drop(ui: &mut Painter, atlas: &mut Atlas, fonts: &Fonts, p: Vec2, dir: Vec2, line: Option<&str>, s: f32, taken: &mut Vec<Rect>, pal: &style::Palette) {
     let r = 8.5 * s;
     let d = dir.normalize_or(Vec2::new(0.0, -1.0));
@@ -110,7 +112,7 @@ fn transit_drop(ui: &mut Painter, atlas: &mut Atlas, fonts: &Fonts, p: Vec2, dir
     taken.push(Rect::new(p.x - r, p.y - r, 2.0 * r, 2.0 * r));
     let Some(line) = line.map(str::trim).filter(|l| !l.is_empty()) else { return };
     let px = 11.5 * s;
-    let l = fonts.fit(line, px, Weight::Bold, 54.0 * s);
+    let l = fonts.fit(line, px, Weight::Bold, TRANSIT_LABEL_MAX * s);
     let w = fonts.width(&l, px, Weight::Bold) + 10.0 * s;
     let h = 17.0 * s;
     // (beside the drop, away from its point)
@@ -424,6 +426,7 @@ pub struct Navigator {
     roads_version: u64,
     /// Where each car was drawn last (eased towards where it is, so they glide).
     drawn_cars: HashMap<u64, (DVec3, f32)>,
+    handed_over_buses: hashbrown::HashSet<u64>,
     /// The timetable's vehicles the traffic does not drive: where they are, where they are
     /// drawn, when to look again, and the trips' routes worked out so far.
     live: Vec<live::LiveVehicle>,
@@ -607,6 +610,7 @@ impl Navigator {
             size: 1.0,
             resizing: None,
             drawn_cars: HashMap::new(),
+            handed_over_buses: Default::default(),
             panel_job: None,
             city_job: None,
             road_cache: None,
@@ -1444,6 +1448,8 @@ pub use omsi_mapdraw::style;
 pub use omsi_mapdraw as mapmesh;
 mod panel;
 mod live;
+mod handover;
+pub use handover::handed_over_camera_pose;
 mod build;
 pub use build::{Built, MapGround};
 mod cull;

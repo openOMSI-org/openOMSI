@@ -42,12 +42,13 @@ pub(crate) struct GamePanels {
     pub(crate) view: Option<view_editor::ViewEditor>,
     /// Where the map camera's click asks to move the bus to.
     pub(crate) move_to: Option<glam::DVec3>,
+    pub(crate) handover: Option<crate::vehicle_handover::Request>,
 }
 
 impl GamePanels {
     /// Whether any panel is open.
     pub(crate) fn any(&self) -> bool {
-        self.multiplayer.is_some() || self.quick.is_some() || self.trip.is_some() || self.dest.is_some() || self.view.is_some() || self.move_to.is_some()
+        self.handover.is_some() || self.multiplayer.is_some() || self.quick.is_some() || self.trip.is_some() || self.dest.is_some() || self.view.is_some() || self.move_to.is_some()
     }
 
     /// Whether the panels have the mouse.
@@ -146,6 +147,7 @@ impl crate::App {
                 "multiplayer" => multiplayer::click(self, el),
                 "view" => view_editor::click(self, el),
                 "move" => move_here::click(self, el),
+                "handover" => self.handover_click(el),
                 _ => {}
             }
         }
@@ -183,6 +185,7 @@ impl crate::App {
             }
         }
         let panels: Vec<(&str, Option<Panel>)> = vec![
+            ("handover", self.menus.game_panels.handover.as_ref().map(|q| crate::vehicle_handover::panel(self, q, light))),
             ("view", self.menus.game_panels.view.as_ref().map(|v| v.panel(self, light))),
             ("trip", self.menus.game_panels.trip.as_ref().map(|t| t.panel(light))),
             ("dest", self.menus.game_panels.dest.as_ref().map(|d| d.panel(light))),
@@ -268,7 +271,7 @@ impl crate::App {
             if gp.quick.take().is_some() {
                 return true;
             }
-            return gp.multiplayer.is_some() || gp.trip.is_some() || gp.dest.is_some() || gp.move_to.is_some();
+            return gp.handover.is_some() || gp.multiplayer.is_some() || gp.trip.is_some() || gp.dest.is_some() || gp.move_to.is_some();
         };
         match (pr.kind, pr.element.as_deref()) {
             (crate::plugin_ui::HitKind::Slider, Some(el)) => {
@@ -323,7 +326,7 @@ impl crate::App {
             return true;
         }
         let gp = &mut self.menus.game_panels;
-        if gp.quick.take().is_some() || gp.move_to.take().is_some() || gp.dest.take().is_some() || gp.trip.take().is_some() {
+        if gp.handover.take().is_some() || gp.quick.take().is_some() || gp.move_to.take().is_some() || gp.dest.take().is_some() || gp.trip.take().is_some() {
             return true;
         }
         if gp.view.is_some() {

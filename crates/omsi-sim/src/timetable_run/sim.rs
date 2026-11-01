@@ -13,6 +13,10 @@ mod place;
 mod route;
 mod take_on;
 mod tours;
+mod handover;
+mod handover_route;
+pub use handover_route::{HandoverRoute, RouteContinuation};
+pub use handover::DutyReservation;
 pub mod transit;
 
 pub use tours::{TourPlan, TourPlanTrip};
@@ -173,6 +177,7 @@ pub struct ScheduleSim {
     boards_made: f64,
     /// The tour the player drives (line, tour): the timetable does not run it as well.
     player_tour: Option<(String, String)>,
+    retained_reservations: Vec<DutyReservation>,
     /// With a single trip picked: the departure (s of the day) of that trip; the rest of
     /// the tour stays the AI's.
     player_departure: Option<f64>,

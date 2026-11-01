@@ -268,6 +268,7 @@ impl ScheduleSim {
     /// Does a player drive departure `i` (we, or another LAN player)?
     pub(super) fn is_player_tour(&self, i: usize) -> bool {
         if let Some(d) = self.departures.get(i) {
+            if self.retained_reservations.iter().any(|r| r.owns(d)) { return true; }
             if self.lan_tours.iter().any(|t| d.line.eq_ignore_ascii_case(&t.0) && d.tour.eq_ignore_ascii_case(&t.1)) {
                 return true;
             }
@@ -435,7 +436,7 @@ impl ScheduleSim {
 
     /// The trips of `trips` without a line number that one of the map's depot files runs as
     /// public trips ([`ibis::serves_unnumbered`]).
-    fn unnumbered_public(&self, trips: &[PlannedTrip]) -> Vec<String> {
+    pub(super) fn unnumbered_public(&self, trips: &[PlannedTrip]) -> Vec<String> {
         let mut hofs: Vec<&Arc<omsi_vehicle::Hof>> = Vec::new();
         for h in self.depots.values().flatten().filter_map(|v| v.2.as_ref()) {
             if !hofs.iter().any(|x| Arc::ptr_eq(x, h)) {

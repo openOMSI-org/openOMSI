@@ -131,6 +131,7 @@ mod memory;
 mod offscreen;
 pub(crate) use omsi_sim::ground_gap;
 mod on_foot;
+mod vehicle_handover;
 mod trolley_hands;
 mod trolley_mouse;
 pub(crate) mod trolley_net;
@@ -663,6 +664,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
         camera: None,
         player: None,
         session: SessionState {
+            handed_over: Default::default(),
             placed: Vec::new(),
             scenery: Default::default(),
             traffic: None,

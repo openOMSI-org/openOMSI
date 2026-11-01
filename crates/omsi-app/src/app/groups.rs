@@ -525,6 +525,7 @@ pub(crate) struct SessionState {
     /// `follow_date`).
     pub(crate) world_day: Option<(i32, Option<String>)>,
     pub(crate) traffic: Option<traffic::Traffic>,
+    pub(crate) handed_over: crate::vehicle_handover::Tracker,
     /// The scripts and variables of the map's scripted scenery objects (the world's tile
     /// loader hands them over, see `World::scenery_sync`).
     pub(crate) scenery: omsi_sim::scenery::SceneryState,

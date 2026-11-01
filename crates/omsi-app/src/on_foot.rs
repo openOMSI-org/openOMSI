@@ -13,6 +13,10 @@
 
 mod door_requests;
 mod ground;
+mod handover;
+mod placed;
+
+pub(crate) use placed::take_placed;
 
 use crate::humans::{AvatarCmd, BusId, Humans};
 use crate::App;
@@ -367,6 +371,52 @@ impl App {
         vehicle_boxes(at, r, self.player.as_ref(), &self.session.placed, self.session.traffic.as_ref(), &self.net)
     }
 
+    /// A safe place outside the owned bus before its wheel goes to another driver.
+    pub(crate) fn handover_exit(&mut self) -> Option<DVec3> {
+        let p = self.player.as_ref()?;
+        let at = p.vehicle.position;
+        let own = p.vehicle.ty.def.bounding_box.map(|bb| Obb::from_box(bb, at, p.vehicle.heading));
+        let others: Vec<Obb> = self.vehicle_boxes(at.truncate(), 30.0).into_iter()
+            .filter(|b| own.map(|o| (o.center - b.center).length() > 0.01).unwrap_or(true)).collect();
+        if let Some(f) = self.session.on_foot.as_ref().filter(|f| f.inside.is_none() && f.seat.is_none() && f.transit.is_none()) {
+            if self.world.as_ref().and_then(|w| w.walk_height_near(f.pos.x, f.pos.y, f.pos.z))
+                .is_some_and(|z| (z - f.pos.z).abs() < 1.5)
+                && !self.vehicle_boxes(f.pos.truncate(), 3.0).iter()
+                .any(|b| (push_out(f.pos.truncate(), b, RADIUS) - f.pos.truncate()).length() > 0.05) {
+                return Some(f.pos);
+            }
+        }
+        if self.session.humans.is_none() {
+            let mut h = Humans::new(&self.args.root, &mut self.gfx.sim_view.people);
+            h.avatar_only = true;
+            self.session.humans = Some(h);
+        }
+        let v = &self.player.as_ref()?.vehicle;
+        let h = self.session.humans.as_mut()?;
+        let near = self.session.on_foot.as_ref().map(|f| f.pos)
+            .or_else(|| h.vehicle_driver_door(v)).unwrap_or(at);
+        let doors = h.vehicle_doors(v);
+        let count = doors.len();
+        let (mut blocked, mut ungrounded) = (0, 0);
+        let exit = omsi_sim::vehicle_transfer::exit::find_exit(doors, near, |door| {
+            let Some(p) = outside_at(self.world.as_deref(), v, &others, door) else {
+                blocked += 1;
+                return None;
+            };
+            if self.world.as_ref().and_then(|w| w.walk_height_near(p.x, p.y, p.z))
+                .is_some_and(|z| (z - p.z).abs() < 0.1) {
+                Some(p)
+            } else {
+                ungrounded += 1;
+                None
+            }
+        });
+        if exit.is_none() {
+            log::warn!("handover exit: no safe position among {count} doors at {at:?}; {blocked} blocked or height-rejected, {ungrounded} without ground");
+        }
+        exit
+    }
+
     /// Ctrl+Shift+G at the wheel: up and out of the front door.
     pub(crate) fn get_up(&mut self) {
         if self.session.on_foot.is_some() {
@@ -620,11 +670,6 @@ impl App {
             }
         }
         best.map(|b| b.0)
-    }
-
-    /// Take the wheel of placed vehicle `k` (the one driven now, if any, stays placed).
-    pub(crate) fn take_placed(&mut self, k: usize) {
-        SeatCx::of(&mut self.parts()).take_placed(k);
     }
 
     /// Esc → Back to my bus: wherever the walker has got to, back at the wheel.
@@ -940,25 +985,14 @@ impl App {
 }
 
 crate::app::stage_ctx!(
-    /// Taking the wheel of a placed vehicle: its part of the game.
-    SeatCx { reads: [sound], writes: [people, player, ui, view] }
-);
-
-crate::app::stage_ctx!(
     /// Back at the own bus's wheel: its part of the game.
     WheelCx { reads: [player], writes: [people, ui, view] }
 );
 
 crate::app::stage_ctx!(
     /// The on-foot stage's part of the game: the walker, the other players' walkers.
-    OnFootCx { reads: [input, clock, world, traffic, sound, perf], writes: [people, player, ui, view, gfx, net] }
+    OnFootCx { reads: [input, clock, world, sound, perf], writes: [people, player, ui, view, gfx, net, duty, traffic] }
 );
-
-impl SeatCx<'_, '_> {
-    fn take_placed(self, k: usize) {
-        take_placed(k, self.player, self.people, self.view, self.ui, self.sound, self.common.settings);
-    }
-}
 
 impl WheelCx<'_, '_> {
     fn sit_at_the_wheel(self) {
@@ -996,55 +1030,6 @@ fn vehicle_boxes(at: DVec2, r: f64, player: Option<&crate::player::Player>, plac
     boxes
 }
 
-/// Take the wheel of placed vehicle `k` (the one driven now, if any, stays placed).
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn take_placed(
-    k: usize,
-    player: &mut crate::app::PlayerPart,
-    people: &mut crate::app::PeoplePart,
-    view: &mut crate::app::ViewPart,
-    ui: &mut crate::app::UiPart,
-    sound: &crate::app::SoundState,
-    settings: &crate::settings::Settings,
-) {
-    if k >= player.placed.len() {
-        return;
-    }
-    let mut next = player.placed.remove(k);
-    if let Some(a) = sound.audio.as_ref() {
-        next.load_sounds(a);
-    }
-    next.vehicle.host.auto_clutch = if settings.auto_clutch { 1.0 } else { 0.0 };
-    if let Some(now) = player.player.take() {
-        let mut now = now;
-        if let (Some(a), Some(mut ss)) = (sound.audio.as_ref(), now.sounds.take()) {
-            ss.stop_all(a);
-        }
-        if let Some(h) = people.humans.as_mut() {
-            h.player_bus_swapped(now.uid, next.uid, &mut next.vehicle);
-        }
-        player.placed.push(now);
-    } else if let Some(h) = people.humans.as_mut() {
-        // (no bus driven before: whoever rides in this one is the player's bus's now)
-        h.player_bus_swapped(0, next.uid, &mut next.vehicle);
-    }
-    let name = format!("{} {}", next.vehicle.ty.def.manufacturer, next.vehicle.ty.def.type_name);
-    *player.player = Some(next);
-    if let Some(f) = people.on_foot.take() {
-        if let Some(h) = people.humans.as_mut() {
-            h.avatar_remove(AVATAR_KEY);
-        }
-        let _ = f;
-    }
-    *view.view = "driver".into();
-    crate::app_impl::sync_view_look(view.cam, view.view, player.player.as_ref());
-    view.cam.look = (0.0, 0.0);
-    if let (Some(cam), Some(p)) = (view.camera.as_ref(), player.player.as_ref()) {
-        *view.camera = Some(p.camera("driver", cam));
-    }
-    *ui.service_msg = Some((omsi_ui::i18n::tr_fill("Now driving: {name}", &[("{name}", &name.trim())]), 4.0));
-}
-
 /// Back at the wheel of the own bus.
 fn sit_at_the_wheel(people: &mut crate::app::PeoplePart, view: &mut crate::app::ViewPart, ui: &mut crate::app::UiPart, player: &crate::app::PlayerPart) {
     let Some(f) = people.on_foot.take() else { return };
@@ -1075,6 +1060,9 @@ pub(crate) fn tick(cx: &mut OnFootCx, dt: f32) {
         }
         Some(Then::Placed(uid)) => {
             if let Some(k) = cx.player.placed.iter().position(|q| q.uid == uid) {
+                crate::vehicle_handover::exchange_placed_duty(
+                    k, cx.net.lan.is_some(), cx.player, cx.duty, cx.traffic.schedule.as_mut().map(|s| &mut s.sim),
+                );
                 take_placed(k, cx.player, cx.people, cx.view, cx.ui, cx.sound, cx.common.settings);
                 return;
             }

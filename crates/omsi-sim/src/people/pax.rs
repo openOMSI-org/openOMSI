@@ -552,9 +552,10 @@ pub enum Takes {
     /// however the bus's depot file spells the terminus. `next` is the stop of the trip the
     /// duty is due at, `done` that the trip has reached its last stop.
     Duty { trip: Arc<DutyTrip>, next: usize, done: bool },
-    /// Nobody waiting: another player's bus (their game boards it), a bus the player left
-    /// standing (its riders get off as ever).
+    /// Nobody waiting: another player's bus (their game boards it).
     Nobody,
+    /// A retained vehicle: nobody boards or ends their ride just because its driver left.
+    Retained,
 }
 
 /// The IBIS route a bus is set to (`IBIS_RouteIndex`, a trip of its depot file), as the
@@ -639,6 +640,9 @@ pub enum AtStop {
 /// What a bus showing `terminus` (None: no destination, or one of `[addterminus_allexit]`)
 /// and taking `takes` does at stop `id`.
 pub fn at_stop(id: i64, stop: &PaxStop, terminus: Option<&str>, takes: &Takes) -> AtStop {
+    if matches!(takes, Takes::Retained) {
+        return AtStop::Passes;
+    }
     let Some(t) = terminus else { return AtStop::Empties };
     if stop.is_named(t) || without_route(t).is_some_and(|t| stop.is_named(t)) {
         return AtStop::Empties;
@@ -693,6 +697,9 @@ pub fn best_bus(buses: impl Iterator<Item = (BusId, Fit, f64)>) -> Option<(BusId
 /// map) left the people at every stop of a duty waiting for another bus. The duty knows
 /// the trip: whoever it takes where they are going gets on.
 pub fn fit(id: i64, stop: &PaxStop, dest: Option<&str>, termini: &HashSet<String>, terminus: &str, takes: &Takes) -> Option<Fit> {
+    if matches!(takes, Takes::Retained) {
+        return None;
+    }
     if termini.contains(terminus.trim()) || without_route(terminus).is_some_and(|t| termini.contains(t)) {
         return Some(Fit::Terminus);
     }

@@ -72,6 +72,7 @@ impl TrafficSim {
             group_uvg,
             uvg_defaults: Arc::new(uvg_defaults),
             cars: Vec::new(),
+            occupied_by_player: None,
             dormant: Vec::new(),
             dormant_time: 0.0,
             lane_weight_sums: (0, Vec::new()),
