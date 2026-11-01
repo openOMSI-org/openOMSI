@@ -39,7 +39,7 @@ pub(super) fn remote_type(args: &LanConfig, pose: &Pose, player: Option<&omsi_si
         // no fingerprint, an older one: the bus of that path here, as before.)
         let path = if by_content {
             use crate::mods::vehicles::Wanted;
-            match crate::mods::vehicles::want(&args.root, pose.id, &pose.content, &pose.bus, &pose.paint) {
+            match crate::mods::vehicles::want(&args.root, pose.id, &pose.content, &pose.bus, &pose.paint, args.allow_server_fleet) {
                 Wanted::Local(p) | Wanted::Mounted(p) => Ok(p),
                 Wanted::Pending(..) => Err("being made sure of by its content".to_string()),
                 Wanted::Failed(e) => Err(e.to_string()),
