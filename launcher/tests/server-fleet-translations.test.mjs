@@ -11,6 +11,8 @@ const sources = [
   '../ui/js/data.js',
   '../ui/js/pages/bus-picker.js',
   '../ui/js/pages/drive-classic.js',
+  '../ui/js/pages/drive-layouts.js',
+  '../ui/js/pages/bus-list.js',
 ].map((path) => readFileSync(new URL(path, import.meta.url), 'utf8')).join('\n');
 const languages = [
   'es', 'zh-tw', 'pt', 'ca', 'fr', 'sr', 'ru', 'de', 'pt-pt', 'ka',
@@ -26,6 +28,10 @@ const required = [
   'Confirm the server download before joining.',
   'The server has not announced a downloadable version of this bus. Choose another bus or contact the server owner.',
   'Offered by the joined server; its verified version is downloaded for this session.',
+  'Server bus: preview is available after verified download',
+  'Server vehicle: downloaded on start',
+  'Server-only bus: required files will be verified and fetched for this session when you start.',
+  'The server has no available vehicles',
 ];
 const placeholders = (value) => [...value.matchAll(/%\{[\w]+\}|\{[^{}]*\}/g)].map((m) => m[0]).sort();
 
@@ -53,8 +59,8 @@ function parse() {
   return entries;
 }
 
-test('all eight fleet messages are referenced by real launcher code', () => {
-  assert.equal(required.length, 8);
+test('all fleet messages are referenced by real launcher code', () => {
+  assert.equal(required.length, 12);
   for (const key of required) {
     assert(sources.includes(key), 'missing runtime string: ' + key);
   }
@@ -71,5 +77,5 @@ test('fleet translations cover exactly 29 locales with no missing keys or invali
       assert.deepEqual(placeholders(translated), placeholders(key), lang + ': invalid placeholders for ' + key);
     }
   }
-  assert.equal([...entries.values()].reduce((sum, translations) => sum + translations.size, 0), 232);
+  assert.equal([...entries.values()].reduce((sum, translations) => sum + translations.size, 0), required.length * languages.length);
 });
