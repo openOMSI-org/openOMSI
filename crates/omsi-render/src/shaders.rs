@@ -106,6 +106,11 @@ mod tests {
             setup.contains("lod: [self.fsr_mip_bias(f), 0.0, lighting.road_glare.clamp(0.0, 2.0), 0.0]"),
             "camera uniform must initialize the ground-pass flag to zero and glare in z"
         );
+        let render = include_str!("render.rs");
+        assert!(
+            render.contains("(std::mem::offset_of!(CameraUniform, lod) + 4) as u64, bytemuck::bytes_of(&flag)"),
+            "the ground pass must set lod.y alone and keep the glare in lod.z"
+        );
     }
 
     /// The assembled modules are byte for byte the single files they were cut from (sizes
