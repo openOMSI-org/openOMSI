@@ -1238,16 +1238,26 @@ pub(crate) fn is_graphics_setting(key: &str) -> bool {
 
 /// Rebuild shader pipelines/targets once after confirmation, not for every slider step.
 /// Never replace the renderer mode or device-dependent texture formats during a drive.
+fn session_graphics_options(
+    session: &crate::startup::SessionSettings,
+    settings: &crate::settings::Settings,
+    active: omsi_render::RenderOptions,
+) -> omsi_render::RenderOptions {
+    let mut options = session.render_options(settings);
+    options.no_enhanced = active.no_enhanced;
+    options.gpu_texture_compression = active.gpu_texture_compression;
+    options.compress_textures = active.compress_textures;
+    options.xr_scale = active.xr_scale;
+    options.max_scene = active.max_scene;
+    // Never switch the active Vanilla/Vanilla+/Enhanced renderer during the drive.
+    if !session.enhanced { options.ray_tracing = false; }
+    options
+}
+
 fn rebuild_session_graphics(app: &mut App) -> bool {
-    let mut options = app.args.session_settings.render_options(&app.settings);
-    if let Some(r) = app.renderer.as_ref() {
-        options.no_enhanced = r.options.no_enhanced;
-        options.gpu_texture_compression = r.options.gpu_texture_compression;
-        options.compress_textures = r.options.compress_textures;
-        options.xr_scale = r.options.xr_scale;
-        options.max_scene = r.options.max_scene;
-        if !app.args.session_settings.enhanced { options.ray_tracing = false; }
-    }
+    let options = app.renderer.as_ref().map(|r| {
+        session_graphics_options(&app.args.session_settings, &app.settings, r.options)
+    }).unwrap_or_else(|| app.args.session_settings.render_options(&app.settings));
     let changed = if let (Some(renderer), Some(scene)) = (app.renderer.as_mut(), app.scene.as_mut()) {
         renderer.rebuild_with(scene, options)
     } else { false };
@@ -1266,16 +1276,19 @@ pub(crate) fn apply_graphics_changes(app: &mut App) {
     }.into(), 6.0));
 }
 
+/// Restore graphic keys but preserve unrelated settings saved while the preview was open.
+fn restore_graphics_values(current: &mut serde_json::Value, before: &serde_json::Value) {
+    for key in omsi_launcher_lib::GRAPHICS_PROFILE_KEYS {
+        if let Some(value) = before.get(key) { current[key] = value.clone(); }
+    }
+    for key in ["mirror_shadows", "mirror_particles"] {
+        if let Some(value) = before.get(key) { current[key] = value.clone(); }
+    }
+}
+
 pub(crate) fn cancel_graphics_changes(app: &mut App) {
     let Some(before) = app.menus.graphics_before.take() else { return };
-    store_with(app, |v| {
-        for key in omsi_launcher_lib::GRAPHICS_PROFILE_KEYS {
-            if let Some(x) = before.saved.get(key) { v[key] = x.clone(); }
-        }
-        for key in ["mirror_shadows", "mirror_particles"] {
-            if let Some(x) = before.saved.get(key) { v[key] = x.clone(); }
-        }
-    });
+    store_with(app, |v| restore_graphics_values(v, &before.saved));
     rebuild_session_graphics(app);
     app.menus.list_dirty = true;
     app.service_msg = Some(("Graphics changes cancelled; previous values restored.".into(), 4.0));
@@ -1436,5 +1449,47 @@ mod tests {
         assert!(!super::numeric_ibis_line("-10"));
         assert!(!super::numeric_ibis_line("10-"));
         assert!(!super::numeric_ibis_line("EXP"));
+    }
+}
+
+#[cfg(test)]
+mod graphics_confirm_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn cancellation_restores_graphics_without_undoing_gameplay_settings() {
+        let old = json!({"graphics":"enhanced", "msaa":2, "road_glare":0.35, "language":"PTB", "passenger_hailing":false});
+        let mut edited = json!({"graphics":"vanilla", "msaa":8, "road_glare":1.6, "language":"ENG", "passenger_hailing":true});
+        restore_graphics_values(&mut edited, &old);
+        assert_eq!(edited["graphics"], "enhanced");
+        assert_eq!(edited["msaa"], 2);
+        assert_eq!(edited["road_glare"], 0.35);
+        assert_eq!(edited["language"], "ENG");
+        assert_eq!(edited["passenger_hailing"], true);
+    }
+
+    #[test]
+    fn rebuild_preserves_active_renderer_mode_and_device_formats() {
+        let mut settings = crate::settings::Settings::from_text("graphics=enhanced\nray_tracing=1\nmsaa=8\n");
+        let active = omsi_render::RenderOptions {
+            no_enhanced: true,
+            gpu_texture_compression: false,
+            compress_textures: false,
+            max_scene: Some((1280, 720)),
+            ..Default::default()
+        };
+        let session = crate::startup::SessionSettings::default();
+        let result = session_graphics_options(&session, &settings, active);
+        assert!(result.no_enhanced);
+        assert!(!result.ray_tracing, "Vanilla+ cannot acquire Enhanced+ while playing");
+        assert!(!result.gpu_texture_compression);
+        assert!(!result.compress_textures);
+        assert_eq!(result.max_scene, Some((1280, 720)));
+
+        settings.msaa = 2;
+        let enhanced = crate::startup::SessionSettings { enhanced: true, ..session };
+        let result = session_graphics_options(&enhanced, &settings, active);
+        assert_eq!(result.msaa, 2, "MSAA is an option that can be rebuilt in-game");
     }
 }
