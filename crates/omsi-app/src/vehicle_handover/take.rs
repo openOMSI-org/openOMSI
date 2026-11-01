@@ -195,6 +195,7 @@ impl App {
         if let Some(camera) = self.camera.as_ref() {
             self.camera = Some(p.camera("driver", camera));
         }
+        self.session.handed_over.remove(id);
         self.player = Some(p);
         self.sync_retained_reservations();
         self.input.dragging = false;

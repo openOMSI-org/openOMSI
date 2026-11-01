@@ -29,7 +29,7 @@ fn field_group(field: &str) -> Option<Option<Group>> {
         "gfx" | "window" | "renderer" | "scene" | "xr" => Some(Gfx),
         "perf" => Some(Perf),
         "session.placed" | "session.seat_bus" | "session.safe_pose" | "session.safe_age" | "session.pumping" => Some(Player),
-        "session.traffic" | "session.schedule" | "session.timetable_book" | "session.populate_t"
+        "session.handed_over" | "session.traffic" | "session.schedule" | "session.timetable_book" | "session.populate_t"
         | "session.traffic_heavy_frame" | "session.first_populate" | "pipeline" => Some(Traffic),
         "session.humans" | "session.humans_populate_t" | "session.on_foot" => Some(People),
         "session.duty" | "session.duty_places" | "session.career" | "session.journey" => Some(Duty),

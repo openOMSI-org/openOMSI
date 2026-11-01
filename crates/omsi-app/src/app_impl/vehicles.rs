@@ -131,6 +131,7 @@ impl App {
     /// Put the bus on the street nearest the world point `at` (the city map's Ctrl+click),
     /// facing along it.
     pub(crate) fn place_bus_at(&mut self, at: glam::DVec2) {
+        if self.player.is_none() { return; }
         if self.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
             self.service_msg = Some(("In a LAN session only the host moves vehicles on the map".into(), 4.0));
             return;
@@ -165,7 +166,7 @@ crate::app::stage_ctx!(
 
 crate::app::stage_ctx!(
     /// Driving the next placed vehicle: its part of the game.
-    SwitchCx { reads: [sound], writes: [player, people, view, ui, duty, traffic] }
+    SwitchCx { reads: [sound, net], writes: [player, people, view, ui, duty, traffic] }
 );
 
 impl SwitchCx<'_, '_> {
@@ -175,7 +176,7 @@ impl SwitchCx<'_, '_> {
             return false;
         }
         crate::vehicle_handover::exchange_placed_duty(
-            0, self.player, self.duty, self.traffic.schedule.as_mut().map(|s| &mut s.sim),
+            0, self.net.lan.is_some(), self.player, self.duty, self.traffic.schedule.as_mut().map(|s| &mut s.sim),
         );
         if self.people.on_foot.is_some() {
             crate::on_foot::take_placed(0, self.player, self.people, self.view, self.ui, self.sound, self.common.settings);

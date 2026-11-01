@@ -25,7 +25,7 @@ pub(crate) const PER_PAGE: usize = 15;
 const WIDTH: f32 = 5.0 * 84.0 + 4.0 * 8.0 + 2.0 * 14.0;
 
 /// The tiles: id, label, icon - in OMSI's order, five to a row, fifteen to a page.
-pub(crate) const TILES: [(&str, &str, &str); 29] = [
+pub(crate) const TILES: [(&str, &str, &str); 30] = [
     ("place", "Place a vehicle", "add"),
     ("switch", "Change vehicle", "sync_alt"),
     ("remove", "Remove vehicle", "delete"),
@@ -56,6 +56,7 @@ pub(crate) const TILES: [(&str, &str, &str); 29] = [
     ("players", "Player list", "group"),
     ("admin", "Administration", "dns"),
     ("give_ai", "Hand bus to AI", "directions_bus"),
+    ("find_ai", "Find handed-over buses", "search"),
 ];
 
 /// The tiles that are the game menu's lines, offered only when it offers them now.
@@ -99,6 +100,7 @@ impl TileState {
         let offered: Vec<&'static str> = app.game_menu_items().iter().map(|l| l.0).collect();
         let mut off: Vec<_> = MENU_LINES.iter().copied().filter(|id| !offered.contains(id)).collect();
         if app.give_ai_reason().is_some() { off.push("give_ai"); }
+        if app.session.handed_over.is_empty() || app.net.lan.is_some() { off.push("find_ai"); }
         let mut lit = Vec::new();
         if app.settings.nav_arrows {
             lit.push("arrows");
@@ -253,6 +255,7 @@ pub(crate) fn click(app: &mut crate::App, id: &str) {
     match id {
         "dest" => super::dest_form::open(app),
         "give_ai" => app.ask_give_ai(),
+        "find_ai" => app.open_handed_over_buses(),
         "arrows" => {
             crate::game_lists::option_do(app, "nav_arrows", "", crate::game_lists::Move::Next);
         }
@@ -291,6 +294,15 @@ mod tests {
         assert!(TILES.iter().any(|t| t.0 == "map"));
         let app = app();
         assert!(TileState::of(&app).off.contains(&"give_ai"));
+    }
+
+    #[test]
+    fn locator_tile_is_available_only_after_a_bus_has_been_handed_over() {
+        let mut app = app();
+        assert!(TileState::of(&app).off.contains(&"find_ai"));
+        app.session.handed_over.record(7, "Bus".into());
+        assert!(!TileState::of(&app).off.contains(&"find_ai"));
+        assert!(TILES.iter().any(|t| t.0 == "find_ai"));
     }
 
     #[test]

@@ -660,6 +660,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
         camera: None,
         player: None,
         session: SessionState {
+            handed_over: Default::default(),
             placed: Vec::new(),
             scenery: Default::default(),
             traffic: None,

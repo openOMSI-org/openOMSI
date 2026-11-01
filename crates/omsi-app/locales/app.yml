@@ -97814,3 +97814,30 @@ _version: 2
   vi: "Hành khách vẫy tay ra hiệu cho xe buýt đang đến"
   zh: "乘客向驶近的公交车招手示意"
   zh-tw: "乘客向接近的公車招手示意"
+
+"Find handed-over buses":
+  zh-tw: "尋找已交給 AI 的巴士"
+
+"Handed-over buses":
+  zh-tw: "已交給 AI 的巴士"
+
+"In traffic":
+  zh-tw: "仍在行駛"
+
+"Left traffic":
+  zh-tw: "已退場"
+
+"This bus has left traffic and can no longer be located":
+  zh-tw: "這輛巴士已退場，無法再定位。"
+
+"The camera is not ready":
+  zh-tw: "鏡頭尚未準備完成"
+
+"Located the bus. Click it in F4 free view to take over":
+  zh-tw: "已定位巴士。在 F4 自由視角點擊車輛即可接管。"
+
+"No buses have been handed to AI in this session":
+  zh-tw: "本次遊戲尚未有巴士交給 AI 駕駛"
+
+"Handed-over bus #{id}":
+  zh-tw: "已交給 AI 的巴士 #{id}"

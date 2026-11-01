@@ -13,6 +13,7 @@
 
 mod door_requests;
 mod ground;
+mod handover;
 mod placed;
 
 pub(crate) use placed::take_placed;
@@ -392,12 +393,28 @@ impl App {
         }
         let v = &self.player.as_ref()?.vehicle;
         let h = self.session.humans.as_mut()?;
-        let near = self.session.on_foot.as_ref().map_or(at, |f| f.pos);
-        let grounded = |p: &DVec3| self.world.as_ref()
-            .and_then(|w| w.walk_height_near(p.x, p.y, p.z))
-            .is_some_and(|z| (z - p.z).abs() < 0.1);
-        outside_spot(h, self.world.as_deref(), v, &others, 1.0, near).filter(grounded)
-            .or_else(|| outside_spot(h, self.world.as_deref(), v, &others, -1.0, near).filter(grounded))
+        let near = self.session.on_foot.as_ref().map(|f| f.pos)
+            .or_else(|| h.vehicle_driver_door(v)).unwrap_or(at);
+        let doors = h.vehicle_doors(v);
+        let count = doors.len();
+        let (mut blocked, mut ungrounded) = (0, 0);
+        let exit = handover::find_exit(doors, near, |door| {
+            let Some(p) = outside_at(self.world.as_deref(), v, &others, door) else {
+                blocked += 1;
+                return None;
+            };
+            if self.world.as_ref().and_then(|w| w.walk_height_near(p.x, p.y, p.z))
+                .is_some_and(|z| (z - p.z).abs() < 0.1) {
+                Some(p)
+            } else {
+                ungrounded += 1;
+                None
+            }
+        });
+        if exit.is_none() {
+            log::warn!("handover exit: no safe position among {count} doors at {at:?}; {blocked} blocked or height-rejected, {ungrounded} without ground");
+        }
+        exit
     }
 
     /// Ctrl+Shift+G at the wheel: up and out of the front door.
@@ -1044,7 +1061,7 @@ pub(crate) fn tick(cx: &mut OnFootCx, dt: f32) {
         Some(Then::Placed(uid)) => {
             if let Some(k) = cx.player.placed.iter().position(|q| q.uid == uid) {
                 crate::vehicle_handover::exchange_placed_duty(
-                    k, cx.player, cx.duty, cx.traffic.schedule.as_mut().map(|s| &mut s.sim),
+                    k, cx.net.lan.is_some(), cx.player, cx.duty, cx.traffic.schedule.as_mut().map(|s| &mut s.sim),
                 );
                 take_placed(k, cx.player, cx.people, cx.view, cx.ui, cx.sound, cx.common.settings);
                 return;

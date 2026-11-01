@@ -147,7 +147,12 @@ pub(crate) fn timetable_after_clock_jump(cx: JumpCx) {
     }
     if let (Some(s), Some(w), Some(t), Some(r), Some(scene)) = (cx.traffic.schedule.as_mut(), cx.world.world.as_ref(), cx.traffic.traffic.as_mut(), cx.gfx.renderer.as_ref(), cx.gfx.scene.as_mut()) {
         let day_time = t.day_time;
-        s.restart(t, day_time);
+        let retained: Vec<_> = cx.traffic.handed_over.entries()
+            .map(|(id, _)| id)
+            .filter(|id| t.cars.iter().any(|c| c.id == *id))
+            .chain(t.occupied_by_player)
+            .collect();
+        s.restart(t, day_time, &retained);
         crate::view_sync::apply_traffic(t, &mut cx.gfx.gfx.sim_view.traffic, w, r, scene);
     }
 }

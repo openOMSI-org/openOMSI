@@ -18,13 +18,14 @@ impl App {
 
 crate::app::stage_ctx!(
     /// Taking the wheel of a placed vehicle: its part of the game.
-    SeatCx { reads: [sound], writes: [people, player, ui, view, duty, traffic] }
+    SeatCx { reads: [sound, net], writes: [people, player, ui, view, duty, traffic] }
 );
 
 impl SeatCx<'_, '_> {
     fn take_placed(self, k: usize) -> bool {
         if !crate::vehicle_handover::exchange_placed_duty(
             k,
+            self.net.lan.is_some(),
             self.player,
             self.duty,
             self.traffic.schedule.as_mut().map(|s| &mut s.sim),

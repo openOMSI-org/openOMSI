@@ -71,6 +71,7 @@ pub(crate) struct WorldPart<'p> {
 /// `Group::Traffic`: the AI traffic and the timetable.
 pub(crate) struct TrafficPart<'p> {
     pub(crate) traffic: &'p mut Option<traffic::Traffic>,
+    pub(crate) handed_over: &'p mut crate::vehicle_handover::Tracker,
     pub(crate) schedule: &'p mut Option<schedule::Schedule>,
     pub(crate) timetable_book: &'p mut Option<schedule::Schedule>,
     pub(crate) populate_t: &'p mut f32,
@@ -172,6 +173,7 @@ impl App {
             settings, exiting, shell, photo, photo_settings, devtools, pipeline, fixed_tick,
         } = self;
         let SessionState {
+            handed_over,
             placed, world_day, traffic, schedule, timetable_book, humans, duty, duty_places, rain,
             cabin_air, spray, lamps_on, populate_t, humans_populate_t, traffic_heavy_frame,
             first_populate, envir, weather, clock_jump, seat_bus, on_foot, safe_pose, safe_age,
@@ -188,7 +190,7 @@ impl App {
                 weather_blend, weather_cycle, metar_rx, metar_once, metar_next, sky, tomorrow,
             },
             world: WorldPart { world, scenery },
-            traffic: TrafficPart { traffic, schedule, timetable_book, populate_t, traffic_heavy_frame, first_populate, pipeline },
+            traffic: TrafficPart { traffic, handed_over, schedule, timetable_book, populate_t, traffic_heavy_frame, first_populate, pipeline },
             player: PlayerPart { player, placed, seat_bus, safe_pose, safe_age, pumping },
             people: PeoplePart { humans, humans_populate_t, on_foot },
             duty: DutyPart { duty, duty_places, career, journey },

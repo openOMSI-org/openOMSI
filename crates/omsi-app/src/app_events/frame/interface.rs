@@ -249,6 +249,7 @@ impl App {
             self.gfx.surface.as_ref(),
             p.is_some() || walking,
         ) {
+            nav.set_handed_over_buses(self.session.handed_over.entries().map(|(id, _)| id));
             let old_enabled = nav.enabled;
             let old_opacity = nav.opacity;
             nav.cockpit_display = vr_active;

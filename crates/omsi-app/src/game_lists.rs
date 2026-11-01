@@ -52,6 +52,7 @@ pub(crate) enum ListKind {
     Numbers,
     /// The vehicles placed in the world, to take the wheel of one of them (#2026).
     SwitchTo,
+    HandedOverBuses,
     /// The termini of the bus's depot file, for its destination display.
     Destinations,
     /// The route numbers (lines) for the destination display: the depot file's and the
@@ -698,6 +699,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
                 }
             }
         }
+        ListKind::HandedOverBuses => out = app.handed_over_items(),
         ListKind::SwitchTo => {
             // (the nearest first; the line's action is its place in `placed`)
             let here = app.player.as_ref().map(|p| p.vehicle.position).or_else(|| app.camera.as_ref().map(|c| c.position));
@@ -857,6 +859,7 @@ pub(crate) fn menu_extras(
         }
         ListKind::Drivers => (MenuKind::List, head("Driver..."), None),
         ListKind::Numbers => (MenuKind::List, head("Fleet number..."), None),
+        ListKind::HandedOverBuses => (MenuKind::List, head("Handed-over buses"), None),
         ListKind::SwitchTo => (MenuKind::List, head("Drive another vehicle..."), None),
         ListKind::Destinations => (MenuKind::List, head("Destination display..."), None),
         ListKind::RouteNumbers => (MenuKind::List, Some((tr("Route number"), String::new())), None),
@@ -1158,6 +1161,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             }
             None
         }
+        ListKind::HandedOverBuses => app.choose_handed_over_bus(action),
         ListKind::SwitchTo => {
             if let Ok(k) = arg.trim().parse::<usize>() {
                 app.close_game_menu();

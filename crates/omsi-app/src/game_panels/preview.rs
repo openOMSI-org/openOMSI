@@ -108,3 +108,11 @@ fn preview() {
     picture("game-panels-view.png", &[(view_editor::ViewEditor::default().panel_of(&values, false), None)]);
     picture("game-panels-move.png", &[(move_here::panel(glam::DVec3::new(-1948.9, -174.7, 8.8), false), Some("yes"))]);
 }
+
+#[test]
+#[ignore]
+fn handed_over_buses_preview() {
+    let menu = quick_menu::QuickMenu { page: 1, focus: 14, ..Default::default() };
+    let state = quick_menu::TileState { off: vec![], lit: vec![] };
+    picture("game-panels-bus-locator.png", &[(menu.panel_of(&state, false), Some("find_ai"))]);
+}

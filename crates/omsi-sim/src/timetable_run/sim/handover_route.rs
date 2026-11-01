@@ -11,6 +11,7 @@ pub struct HandoverRoute {
     pub s: f32,
     pub route: Vec<usize>,
     pub stops: Vec<Stop>,
+    pub layover: bool,
     pub continuation: Option<RouteContinuation>,
 }
 
@@ -159,6 +160,7 @@ impl ScheduleSim {
             s,
             route,
             stops,
+            layover: duty.next_stop == 0,
             continuation,
         })
     }

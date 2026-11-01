@@ -5,6 +5,9 @@ mod picking;
 mod retained;
 mod selection;
 mod take;
+mod tracking;
+mod locator;
+pub(crate) use tracking::Tracker;
 
 pub(crate) use retained::{exchange_placed_duty, SavedDuty};
 use selection::Target;

@@ -306,3 +306,49 @@ mod reservations;
 
 #[path = "passenger_tests.rs"]
 mod passenger_tests;
+
+#[test]
+fn lan_vehicle_entries_keep_the_network_players_active_duty() {
+    for host in [false, true] {
+        for entry in 0..3 {
+            let (mut app, _, b) = two_buses();
+            app.session.placed[0].parked_duty = None;
+            app.sync_driven_duty_args();
+            app.net.lan = Some(if host {
+                omsi_net::LanSession::host(0, "test", Default::default(), false).unwrap()
+            } else {
+                omsi_net::LanSession::join_addr(vec![], None, "test", Default::default()).unwrap()
+            });
+            match entry {
+                0 => app.switch_vehicle(),
+                1 => app.take_placed(0),
+                _ => {
+                    app.start_on_foot(glam::DVec3::ZERO, 0.0);
+                    app.session.on_foot.as_mut().unwrap().arrive = Some(crate::on_foot::Then::Placed(b));
+                    app.frame_on_foot(0.0);
+                }
+            }
+            assert_driving(&app, b, "A", 3);
+            assert!(app.session.placed[0].parked_duty.is_none());
+        }
+    }
+}
+
+#[test]
+fn lan_roles_reject_ai_ownership_changes_before_mutation() {
+    for host in [false, true] {
+        let (mut app, a, b) = two_buses();
+        app.sync_driven_duty_args();
+        app.net.lan = Some(if host {
+            omsi_net::LanSession::host(0, "test", Default::default(), false).unwrap()
+        } else {
+            omsi_net::LanSession::join_addr(vec![], None, "test", Default::default()).unwrap()
+        });
+        let reason = "Vehicle handover is only available in single-player";
+        assert_eq!(app.give_bus_to_ai(), Err(reason.into()));
+        assert_eq!(app.take_ai_bus(1), Err(reason.into()));
+        assert_eq!(app.take_retained_bus(b), Err(reason.into()));
+        assert_driving(&app, a, "A", 3);
+        assert_eq!(app.session.placed[0].uid, b);
+    }
+}

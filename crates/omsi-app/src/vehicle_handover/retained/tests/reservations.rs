@@ -19,6 +19,7 @@ fn swap(app: &mut App, schedule: &mut ScheduleSim) {
     let mut parts = app.parts();
     assert!(exchange_placed_duty(
         0,
+        false,
         &mut parts.player,
         &mut parts.duty,
         Some(schedule)
@@ -100,6 +101,7 @@ fn an_invalid_target_cannot_release_an_existing_reservation() {
     let mut parts = app.parts();
     assert!(!exchange_placed_duty(
         usize::MAX,
+        false,
         &mut parts.player,
         &mut parts.duty,
         Some(&mut schedule)
@@ -107,4 +109,19 @@ fn an_invalid_target_cannot_release_an_existing_reservation() {
     assert!(schedule.duty_reservation() == before);
     assert_eq!(parts.duty.duty.as_ref().unwrap().line, "A");
     assert!(parts.player.placed[0].parked_duty.is_some());
+}
+
+#[test]
+fn lan_exchange_keeps_the_active_reservation_and_does_not_park_it() {
+    let (mut app, _, _) = two_buses();
+    app.session.placed[0].parked_duty = None;
+    let mut schedule = schedule();
+    schedule.reserve_tour("A", "tour");
+    let before = schedule.duty_reservation();
+    let mut parts = app.parts();
+    assert!(exchange_placed_duty(0, true, &mut parts.player, &mut parts.duty, Some(&mut schedule)));
+    assert!(schedule.duty_reservation() == before);
+    assert_eq!(parts.duty.duty.as_ref().unwrap().line, "A");
+    assert!(parts.player.player.as_ref().unwrap().parked_duty.is_none());
+    assert!(parts.player.placed[0].parked_duty.is_none());
 }

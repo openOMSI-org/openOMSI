@@ -11,6 +11,7 @@ pub(super) struct Plan {
     pub s: f32,
     pub bus: Option<BusSetup>,
     pub departure: Option<usize>,
+    pub layover: bool,
     pub continuation: Option<RouteContinuation>,
 }
 
@@ -29,7 +30,7 @@ pub(super) fn prepare(app: &mut App) -> Result<Plan, String> {
             route: vec![lane], stops: Vec::new(), number: None, hof: p.vehicle.host.hof.clone(),
             timetable: AiTimetable { line: String::new(), terminus: String::new(), stops: Vec::new() },
         };
-        return Ok(Plan { lane, s, bus: Some(bus), departure: None, continuation: None });
+        return Ok(Plan { lane, s, bus: Some(bus), departure: None, layover: false, continuation: None });
     };
     let schedule = app.session.schedule.as_ref().ok_or("The timetable is not ready")?;
     let world = app.world.as_ref().ok_or("The world is not ready")?;
@@ -41,5 +42,5 @@ pub(super) fn prepare(app: &mut App) -> Result<Plan, String> {
         stops: trip.stops.iter().map(|s| (s.object_id, s.name.clone(), s.arr as f32, s.dep as f32)).collect(),
     };
     let bus = BusSetup { route: plan.route, stops: plan.stops, number: None, hof: p.vehicle.host.hof.clone(), timetable };
-    Ok(Plan { lane: plan.lane, s: plan.s, bus: Some(bus), departure: Some(departure), continuation: plan.continuation })
+    Ok(Plan { lane: plan.lane, s: plan.s, bus: Some(bus), departure: Some(departure), layover: plan.layover, continuation: plan.continuation })
 }

@@ -13,6 +13,8 @@ mod population;
 mod setup;
 mod table;
 mod trains;
+#[cfg(test)]
+mod locator_tests;
 
 use anyhow::Result;
 use glam::DVec3;

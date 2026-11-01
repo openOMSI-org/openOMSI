@@ -12,6 +12,7 @@ pub(crate) struct SavedDuty {
 /// Reloading/replacing the driven vehicle deliberately bypasses this ownership change.
 pub(crate) fn exchange_placed_duty(
     k: usize,
+    multiplayer: bool,
     player: &mut crate::app::PlayerPart,
     duty: &mut crate::app::DutyPart,
     mut schedule: Option<&mut omsi_sim::timetable_run::ScheduleSim>,
@@ -19,6 +20,9 @@ pub(crate) fn exchange_placed_duty(
     let Some(next) = player.placed.get_mut(k) else {
         return false;
     };
+    // LAN advertises only the driver's active tour, not reservations on parked buses.
+    // Keep the existing LAN duty when switching vehicles until that ownership is replicated.
+    if multiplayer { return true; }
     let saved = next.parked_duty.take().unwrap_or_default();
     if let Some(now) = player.player.as_mut() {
         now.axes.release_all();

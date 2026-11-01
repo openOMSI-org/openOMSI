@@ -640,6 +640,7 @@ impl App {
                             }
                             t.day_time = parse_time(&self.args.time);
                             self.gfx.sim_view.traffic = Default::default();
+                            self.session.handed_over.clear();
                             self.session.traffic = Some(t);
                         }
                         Err(e) => log::error!("traffic: {e:#}"),

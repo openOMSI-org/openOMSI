@@ -157,6 +157,7 @@ fn adopt(
         },
     };
     let id = traffic.adopt_vehicle(vehicle, p.lane, p.s, Some(setup));
+    traffic.cars.last_mut().unwrap().bus.as_mut().unwrap().layover = p.layover;
     schedule.resume_handover_route(traffic, id, p.continuation);
     id
 }
@@ -327,4 +328,37 @@ fn authored_station_entries_survive_until_their_own_tile_is_loaded() {
             .collect::<Vec<_>>(),
         vec![(11, 1), (12, 2), (13, 3)]
     );
+}
+
+#[test]
+fn terminal_handover_restores_the_departure_hold() {
+    let (world, mut schedule, mut traffic, mut duty, vehicle) = fixture(&[0, 1, 2, 3]);
+    duty.resume_from_ai(0, true, -300.0, vehicle.position);
+    let plan = schedule.prepare_handover_route(&world, &mut traffic, &duty, &vehicle).unwrap();
+    assert_eq!(plan.stops.first().unwrap().id, 10);
+    adopt(&mut schedule, &mut traffic, vehicle, plan);
+    assert!(traffic.cars[0].bus.as_ref().unwrap().layover,
+        "a handed-back terminal bus must not use the intermediate-stop early departure rule");
+}
+
+#[test]
+fn clock_jump_preserves_a_handed_over_streaming_route() {
+    let (mut world, mut schedule, mut traffic, duty, vehicle) = fixture(&[0, 1]);
+    let plan = schedule.prepare_handover_route(&world, &mut traffic, &duty, &vehicle).unwrap();
+    let id = adopt(&mut schedule, &mut traffic, vehicle, plan);
+    schedule.restart_clock_preserving(3700.0, 0, &[id]);
+    assert!(schedule.running.iter().any(|r| r.car == id),
+        "clock changes must not abandon a retained bus at the streaming frontier");
+    load(&mut traffic, &mut world, 2);
+    schedule.queue_due(&world, &mut traffic, 3700.0, 0.0);
+    assert!(traffic.cars[0].bus.as_ref().unwrap().stops.iter().any(|stop| stop.id == 12));
+    assert_eq!(traffic.cars[0].id, id);
+}
+
+#[test]
+fn an_intermediate_handover_does_not_become_a_terminal_layover() {
+    let (world, mut schedule, mut traffic, duty, vehicle) = fixture(&[0, 1, 2, 3]);
+    let plan = schedule.prepare_handover_route(&world, &mut traffic, &duty, &vehicle).unwrap();
+    adopt(&mut schedule, &mut traffic, vehicle, plan);
+    assert!(!traffic.cars[0].bus.as_ref().unwrap().layover);
 }

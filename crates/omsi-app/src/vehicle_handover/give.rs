@@ -34,6 +34,8 @@ impl App {
             if let Some(next_stop) = next_stop { p.vehicle.host.tt_busstop_index = next_stop as i32; }
             p.vehicle.set_var("schedule_active", 1.0);
         }
+        let def = &p.vehicle.ty.def;
+        let name = format!("{} {}", def.manufacturer.trim(), def.type_name.trim()).trim().to_owned();
         let scheme = p.vehicle.host.paint_scheme.flatten();
         let traffic = self.session.traffic.as_mut().expect("preflight kept traffic");
         let id = traffic.sim.adopt_vehicle(p.vehicle, plan.lane, plan.s, plan.bus);
@@ -46,6 +48,7 @@ impl App {
             bus.serve_early = early;
             bus.holds = holds;
             bus.delay = delay as f64;
+            bus.layover = plan.layover;
         }
         if plan.departure.is_none() {
             let ci = traffic.cars.len() - 1;
@@ -57,6 +60,7 @@ impl App {
             schedule.handover_to_ai(id, departure);
             schedule.resume_handover_route(&mut traffic.sim, id, plan.continuation);
         }
+        self.session.handed_over.record(id, name);
         self.session.duty = None;
         self.session.duty_places = false;
         self.session.journey = None;

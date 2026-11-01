@@ -386,4 +386,51 @@ mod tests {
         assert!(s.player_tour.is_none());
         assert_eq!(s.car_departure.get(&77), Some(&1));
     }
+    #[test]
+    fn clock_jump_does_not_requeue_an_existing_handover_departure() {
+        let (_, mut s) = fixture();
+        s.handover_to_ai(88, 1);
+        s.restart_clock_preserving(7200.0, 0, &[88]);
+        assert_eq!(s.car_departure.get(&88), Some(&1));
+        assert!(s.departures[1].spawned, "the retained physical bus already owns this departure");
+    }
+
+    #[test]
+    fn clock_jump_preserves_only_explicit_live_buses_and_their_holds() {
+        let (_, mut s) = fixture();
+        s.car_departure.insert(88, 1);
+        s.car_departure.insert(99, 2);
+        s.tour_hold.insert(88, 7250.0);
+        s.tour_hold.insert(99, 10900.0);
+        s.restart_clock_preserving(7200.0, 1, &[88]);
+        assert_eq!(s.car_ids(), vec![88]);
+        assert!(s.tour_held(88, 7200.0));
+        assert!(!s.tour_held(99, 7200.0));
+        assert!(s.departures[0].spawned && s.departures[1].spawned);
+        assert!(!s.departures[2].spawned);
+        assert_eq!(s.next_of_car(88), Some(2));
+        assert!(s.pending.is_empty() && s.waiting.is_empty());
+    }
+
+    #[test]
+    fn an_empty_clock_retention_list_keeps_the_normal_traffic_restart() {
+        let (_, mut s) = fixture();
+        s.car_departure.insert(88, 1);
+        s.restart_clock_preserving(7200.0, 1, &[]);
+        assert!(s.car_ids().is_empty());
+        assert!(s.departures.iter().all(|d| !d.spawned));
+    }
+
+    #[test]
+    fn rewinding_the_clock_keeps_the_handed_over_bus_and_reservations() {
+        let (_, mut s) = fixture();
+        s.day_base = DAY;
+        s.car_departure.insert(88, 1);
+        s.restart_clock_preserving(7100.0, 0, &[88]);
+        assert_eq!(s.day_base, 0.0);
+        assert_eq!(s.car_departure.get(&88), Some(&1));
+        assert!(s.departures[1].spawned);
+        assert!(!s.departures[2].spawned);
+    }
+
 }

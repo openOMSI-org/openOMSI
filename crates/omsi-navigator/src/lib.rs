@@ -424,6 +424,7 @@ pub struct Navigator {
     roads_version: u64,
     /// Where each car was drawn last (eased towards where it is, so they glide).
     drawn_cars: HashMap<u64, (DVec3, f32)>,
+    handed_over_buses: hashbrown::HashSet<u64>,
     /// The timetable's vehicles the traffic does not drive: where they are, where they are
     /// drawn, when to look again, and the trips' routes worked out so far.
     live: Vec<live::LiveVehicle>,
@@ -607,6 +608,7 @@ impl Navigator {
             size: 1.0,
             resizing: None,
             drawn_cars: HashMap::new(),
+            handed_over_buses: Default::default(),
             panel_job: None,
             city_job: None,
             road_cache: None,
@@ -1444,6 +1446,7 @@ pub use omsi_mapdraw::style;
 pub use omsi_mapdraw as mapmesh;
 mod panel;
 mod live;
+mod handover;
 mod build;
 pub use build::{Built, MapGround};
 mod cull;
