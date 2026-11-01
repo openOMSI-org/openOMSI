@@ -701,7 +701,7 @@ impl Devices {
                         // unless an Xbox-type pad is there as well: Steam Input or DS4Windows
                         // then hands the same pad to the game as that one, and its buttons and
                         // stick counted twice, a door button opening and closing the doors)
-                        gamepad: (sony_pad(&d.name, d.hardware_id) || PadKind::detect(&d.name, d.hardware_id).is_some()) && !xinput_pads,
+                        gamepad: (sony_pad(&d.name, d.hardware_id) || xbox_direct_input_pad(d.hardware_id, d.ff_capable())) && !xinput_pads,
                         ff: d.has_ff(),
                         ff_capable: d.ff_capable(),
                         buttons: d.buttons.min(128),
@@ -852,6 +852,11 @@ fn mac_axis_code(code: u32) -> bool {
 #[cfg_attr(not(windows), allow(dead_code))]
 fn sony_pad(name: &str, id: Option<(u16, u16)>) -> bool {
     matches!(PadKind::detect(name, id), Some(PadKind::Ps4 | PadKind::Ps5))
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+fn xbox_direct_input_pad(id: Option<(u16, u16)>, ff_capable: bool) -> bool {
+    !ff_capable && matches!(id, Some((0x045e, 0x02e0 | 0x02ea | 0x02fd | 0x0b00 | 0x0b05 | 0x0b12 | 0x0b13 | 0x0b20 | 0x0b21 | 0x0b22)))
 }
 
 fn use_gilrs_buttons(direct_input: bool, system_gamepad: bool) -> bool {
@@ -1134,7 +1139,7 @@ impl Controllers {
         for (name, n, down) in &self.raw_buttons {
             let conn = find_connected(&connected, name);
             let sony = conn.is_some_and(|c| c.gamepad && sony_pad(&c.name, c.hardware_id));
-            let xbox = conn.is_some_and(|c| c.gamepad && matches!(PadKind::detect(&c.name, c.hardware_id), Some(PadKind::Xbox)));
+            let xbox = conn.is_some_and(|c| c.gamepad && xbox_direct_input_pad(c.hardware_id, c.ff_capable));
             let btn = if sony {
                 gamepad_profile::sony_direct_input_button(*n, HAT_BUTTONS)
             } else if xbox {
@@ -1192,7 +1197,7 @@ impl Controllers {
         #[cfg(windows)]
         let sony: Vec<Connected> = pads.iter().filter(|(cfg, c)| cfg.is_none() && c.gamepad && sony_pad(&c.name, c.hardware_id)).map(|(_, c)| c.clone()).collect();
         #[cfg(windows)]
-        let xbox_di: Vec<Connected> = pads.iter().filter(|(cfg, c)| cfg.is_none() && c.gamepad && matches!(PadKind::detect(&c.name, c.hardware_id), Some(PadKind::Xbox))).map(|(_, c)| c.clone()).collect();
+        let xbox_di: Vec<Connected> = pads.iter().filter(|(cfg, c)| cfg.is_none() && c.gamepad && xbox_direct_input_pad(c.hardware_id, c.ff_capable)).map(|(_, c)| c.clone()).collect();
         let mut steer: Option<(String, f32, bool)> = None;
         // (a device set up to steer has the wheel; one nobody set up only lends its X axis)
         let mut steering_set_up = false;
@@ -1926,6 +1931,16 @@ mod tests {
         assert!(!super::names_match("", ""));
         assert!(super::names_match("Кнопочная панель", "кнопочная  панель"));
         assert!(!super::names_match("Кнопочная панель", "Руль"));
+    }
+
+    #[test]
+    fn only_real_xbox_pads_are_read_as_direct_input_pads() {
+        assert!(super::xbox_direct_input_pad(Some((0x045e, 0x0b13)), false));
+        assert!(!super::xbox_direct_input_pad(Some((0x046d, 0xc261)), true));
+        assert!(!super::xbox_direct_input_pad(Some((0x046d, 0xc261)), false));
+        assert!(!super::xbox_direct_input_pad(Some((0x045e, 0x0034)), true));
+        assert!(!super::xbox_direct_input_pad(Some((0x045e, 0x0b13)), true));
+        assert!(!super::xbox_direct_input_pad(None, false));
     }
 
     #[test]

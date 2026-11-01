@@ -23,9 +23,6 @@ impl PadKind {
     pub fn detect(name: &str, id: Option<(u16, u16)>) -> Option<PadKind> {
         let n = name.to_ascii_lowercase();
         if let Some((vendor, product)) = id {
-            if vendor == 0x045e {
-                return Some(PadKind::Xbox);
-            }
             if vendor == SONY {
                 return match product {
                     0x0ce6 | 0x0df2 => Some(PadKind::Ps5),
@@ -154,12 +151,6 @@ pub fn action_text(action: &str) -> &'static str {
     }
 }
 
-/// A button of a Sony pad read through DirectInput (Windows lists a DualShock 4 or a
-/// DualSense as a generic game controller, which gilrs - XInput only there - never sees):
-/// the buttons as the HID descriptor numbers them from 0, and the first hat after
-/// `controllers::HAT_BUTTONS` as up, right, down, left. Triggers are axes and not listed.
-#[cfg_attr(not(windows), allow(dead_code))]
-/// An Xbox button read through DirectInput (e.g. over Bluetooth LE on Windows):
 #[cfg_attr(not(windows), allow(dead_code))]
 pub fn xbox_direct_input_button(n: usize, hat_base: usize) -> Option<Button> {
     if n >= hat_base {
@@ -186,6 +177,11 @@ pub fn xbox_direct_input_button(n: usize, hat_base: usize) -> Option<Button> {
     }
 }
 
+/// A button of a Sony pad read through DirectInput (Windows lists a DualShock 4 or a
+/// DualSense as a generic game controller, which gilrs - XInput only there - never sees):
+/// the buttons as the HID descriptor numbers them from 0, and the first hat after
+/// `controllers::HAT_BUTTONS` as up, right, down, left. Triggers are axes and not listed.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn sony_direct_input_button(n: usize, hat_base: usize) -> Option<Button> {
     if n >= hat_base {
         return match n - hat_base {
