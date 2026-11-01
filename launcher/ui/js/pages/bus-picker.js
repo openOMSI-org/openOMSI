@@ -83,18 +83,19 @@ export function BusPicker({ onClose, onTake, title = 'Choose a bus', yes = 'Take
     return n;
   });
   const v = all.find((x) => x.file === sel);
-  const take = () => {
+  const take = (bus = sel, scheme = paint) => {
+    if (!all.some((x) => x.file === bus)) return;
     if (onTake) {
-      onTake({ bus: sel, paint });
+      onTake({ bus, paint: scheme });
       return onClose();
     }
-    choose({ bus: sel, paint, number: sel === s.choice.bus ? s.choice.number : '', hof_manual: sel === s.choice.bus ? s.choice.hof_manual : false });
+    choose({ bus, paint: scheme, number: bus === s.choice.bus ? s.choice.number : '', hof_manual: bus === s.choice.bus ? s.choice.hof_manual : false });
     onClose();
   };
   return html`<${Dialog} wide title=${title} onClose=${onClose} footer=${html`
       <span class="muted small" style="margin-right:auto">${t('{n} buses', { n: list.length })}</span>
       <${Button} label="Cancel" onClick=${onClose} />
-      <${Button} kind="primary" icon="check" label=${yes} disabled=${!v} onClick=${take} />`}>
+      <${Button} kind="primary" icon="check" label=${yes} disabled=${!v} onClick=${() => take()} />`}>
     <div class="picker" style="margin:-18px -20px;height:calc(100% + 36px)">
       <div class="left">
         <div class="tools">
@@ -111,7 +112,7 @@ export function BusPicker({ onClose, onTake, title = 'Choose a bus', yes = 'Take
             const one = f.versions.length === 1;
             const shown = one || open.has(f.key) || !!ql;
             const has = f.versions.some((x) => x.v.file === sel);
-            const row = (x, sub, indent) => html`<div class=${'list-item' + (x.file === sel ? ' on' : '')} style=${indent ? 'padding-left:30px' : ''} onClick=${() => (setSel(x.file), setPaint(x.file === s.choice.bus ? s.choice.paint : ''))} onDblClick=${() => (setSel(x.file), setTimeout(take))}>
+            const row = (x, sub, indent) => html`<div class=${'list-item' + (x.file === sel ? ' on' : '')} style=${indent ? 'padding-left:30px' : ''} onClick=${() => (setSel(x.file), setPaint(x.file === s.choice.bus ? s.choice.paint : ''))} onDblClick=${() => take(x.file, x.file === s.choice.bus ? s.choice.paint : '')}>
               <div class="grow" style="min-width:0">
                 <div class="title" style="overflow-wrap:anywhere" title=${sub}>${sub}</div>
                 <div class="sub ellipsis">${[indent ? null : x.manufacturer, shownModes(x).map(modeLabel).join(', ') || null, x.paints.length ? t('{n} paints', { n: x.paints.length + 1 }) : null].filter(Boolean).join(' - ')}</div>
