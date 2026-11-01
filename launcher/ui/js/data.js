@@ -555,10 +555,11 @@ export async function start(extra) {
     // UI-only consent: do not serialize this ephemeral flag into the launch duty.
     const { __fleetApproved: _consent, ...dutyExtra } = extra || {};
     const d = await duty(dutyExtra);
-    if (serverBuses() && !serverFleetSelection()) {
-      // A restricted server cannot supply this bus's verified package (older
-      // status data, unreadable .bus on the host, or a stale saved choice).
-      // Never launch a different local copy as if it were approved by the host.
+    if (serverBuses() && S.choice?.lan_server?.fleet_version === 1 && !serverFleetSelection()) {
+      // Only the new authoritative catalogue requires a verified LISTBUS offer.
+      // Older player-hosted and dedicated sessions still use their original
+      // map-only LIST protocol and must remain joinable with local vehicles.
+      // A v1 catalogue with an unreadable/removed bus must fail closed.
       toast(t('The server has not announced a downloadable version of this bus. Choose another bus or contact the server owner.'), 'error');
       return null;
     }
