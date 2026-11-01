@@ -97,7 +97,7 @@ function BusThumb({ compact }) {
   const buttons = html`<${Button} small icon="bus" label=${compact ? undefined : 'Change bus'} title="Change bus" onClick=${() => setPick(true)} disabled=${selectableVehicles(c).length === 0} />
     ${v && html`<${Button} small icon="sliders" title="Vehicle settings & details" onClick=${() => setMore(true)} />`}`;
   return html`<div class="bus-thumb">
-    <div class="bt-view">${v && !pick && !v.server_only ? html`<${BusPreview} class="stage" look=${look(v, c)} />` : html`<div class="stage-empty"><${Icon} name="bus" size=${32} />${v?.server_only && html`<span>${t('Server vehicle: downloaded on start')}</span>`}</div>`}${compact && v && html`<div class="bt-tools">${buttons}</div>`}</div>
+    <div class="bt-view">${v && !pick && !v.server_catalog ? html`<${BusPreview} class="stage" look=${look(v, c)} />` : html`<div class="stage-empty"><${Icon} name="bus" size=${32} />${v?.server_catalog && html`<span>${t('Server vehicle: downloaded on start')}</span>`}</div>`}${compact && v && html`<div class="bt-tools">${buttons}</div>`}</div>
     <div class="bt-info">
       <div class="row bt-head">
         <div class="grow"><b class="ellipsis bt-name">${v ? withoutMaker(v.name, v.manufacturer) : t('No bus is installed.')}</b><div class="muted small ellipsis">${v?.manufacturer || ''}</div></div>
@@ -179,7 +179,7 @@ function ClassicPlus() {
     <div class="drive-stage">
       ${bus ? html`<${BusStage} />` : html`<div class=${'duty-stage' + (c.free || !tour ? ' alone' : '')}><${TripMap} /><${Book} /></div>`}
       <button type="button" class="cp-pip" title=${t(bus ? 'Map & duty' : 'Bus')} onClick=${() => go(bus ? 'duty' : 'bus')}>
-        ${bus ? html`<${TripMap} />` : v && !v.server_only && html`<${BusPreview} class="stage" look=${look(v, c)} />`}
+        ${bus ? html`<${TripMap} />` : v && !v.server_catalog && html`<${BusPreview} class="stage" look=${look(v, c)} />`}
         <span class="cp-pip-tag"><${Icon} name=${bus ? 'map' : 'bus'} size=${14} />${bus ? t('Map & duty') : v ? withoutMaker(v.name, v.manufacturer) : t('Bus')}</span>
       </button>
     </div>
