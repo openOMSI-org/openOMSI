@@ -132,14 +132,6 @@ pub(super) fn option_set(app: &mut App, verb: &str, arg: &str, v: f32) -> Option
             app.settings.reflections = v.clamp(0.0, 1.0);
             Some(("reflections", app.settings.reflections.to_string()))
         }
-        "road_glare" => {
-            app.settings.road_glare = v.clamp(0.0, 2.0);
-            Some(("road_glare", app.settings.road_glare.to_string()))
-        }
-        "traffic_headlights" => {
-            app.settings.traffic_headlights = v.clamp(0.0, 2.0);
-            Some(("traffic_headlights", app.settings.traffic_headlights.to_string()))
-        }
         "led_mips" => {
             app.settings.led_mips = v.clamp(0.0, 4.0);
             Some(("led_mips", app.settings.led_mips.to_string()))
@@ -389,6 +381,22 @@ pub(super) fn option_set(app: &mut App, verb: &str, arg: &str, v: f32) -> Option
         "wind_dir" => {
             app.edit_weather(|w| w.wind.0 = v);
             None
+        }
+        _ => set_graphics_brightness(app, verb, v),
+    }
+}
+
+/// The two new graphics sliders, kept separate to avoid growing the already-long
+/// general settings handler past the size budget.
+fn set_graphics_brightness(app: &mut App, verb: &str, v: f32) -> Option<(&'static str, String)> {
+    match verb {
+        "road_glare" => {
+            app.settings.road_glare = v.clamp(0.0, 2.0);
+            Some(("road_glare", app.settings.road_glare.to_string()))
+        }
+        "traffic_headlights" => {
+            app.settings.traffic_headlights = v.clamp(0.0, 2.0);
+            Some(("traffic_headlights", app.settings.traffic_headlights.to_string()))
         }
         _ => None,
     }

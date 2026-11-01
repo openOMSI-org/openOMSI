@@ -885,6 +885,16 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str) -> Option<ListKi
 
 /// Do a line of the list, a setting changed as `mv` says (Enter and a click on a line are
 /// `Move::Next`; the arrows and a click on a slider or a stepper the others).
+fn graphics_confirmation_action(app: &mut App, tab: usize, action: &str, mv: Move) -> Option<ListKind> {
+    if !matches!(mv, Move::Next) { return Some(ListKind::GraphicsConfirm(tab)); }
+    match action {
+        "graphics_confirm" => apply_graphics_changes(app),
+        "graphics_cancel" => cancel_graphics_changes(app),
+        _ => return Some(ListKind::GraphicsConfirm(tab)),
+    }
+    Some(ListKind::Options(tab))
+}
+
 pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -> Option<ListKind> {
     if crate::game_controller_menu::is_controller_list(Some(kind)) {
         return crate::game_controller_menu::run(app, kind, action, mv);
@@ -910,6 +920,9 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             _ => None,
         };
     }
+    if let ListKind::GraphicsConfirm(tab) = kind {
+        return graphics_confirmation_action(app, *tab, action, mv);
+    }
     let (verb, arg) = action.split_once(' ').unwrap_or((action, ""));
     match kind {
         ListKind::ControllerDevices(_) | ListKind::Controller(..) | ListKind::ControllerAxis(..) | ListKind::ControllerButtons(_) | ListKind::ControllerButtonSettings(..) | ListKind::ControllerButton(..) | ListKind::ControllerCapture(_) => unreachable!("controller lists handled above"),
@@ -921,15 +934,6 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
         }
         // (the server's pages when it no longer lets us administer: back to the game menu)
         ListKind::AdminPlayers | ListKind::AdminPlayer(_) | ListKind::AdminConfirm(..) => None,
-        ListKind::GraphicsConfirm(tab) => {
-            if !matches!(mv, Move::Next) { return Some(kind.clone()); }
-            match action {
-                "graphics_confirm" => apply_graphics_changes(app),
-                "graphics_cancel" => cancel_graphics_changes(app),
-                _ => return Some(kind.clone()),
-            }
-            Some(ListKind::Options(*tab))
-        }
         ListKind::Options(_) | ListKind::World(_) => {
             if verb == "noop" || option_do(app, verb, arg, mv) {
                 return Some(kind.clone());
@@ -937,9 +941,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             // (the arrows and a click on a stepper only change values: no buttons)
             let step = matches!(mv, Move::Next);
             match verb {
-                "graphics_apply" if step => {
-                    return Some(ListKind::GraphicsConfirm(match kind { ListKind::Options(tab) => *tab, _ => 0 }));
-                }
+                "graphics_apply" if step => return Some(ListKind::GraphicsConfirm(match kind { ListKind::Options(tab) => *tab, _ => 0 })),
                 "graphics_discard" if step => { cancel_graphics_changes(app); }
                 "vr_nav_edit" if step && app.vr_active() && app.player.is_some() => {
                     app.start_vr_nav_edit();
