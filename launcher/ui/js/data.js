@@ -162,7 +162,7 @@ export function selectableVehicles(c = S.choice) {
   // copy of a broken/non-advertised bus to bypass version verification.
   const out = local.filter((v) => byKey.has(busFile(v.file))).map((v) => {
     const offer = byKey.get(busFile(v.file));
-    return { ...v, paints: offer.paints || [], server_catalog: true };
+    return { ...v, local_paints: v.paints || [], paints: offer.paints || [], server_catalog: true };
   });
   const have = new Set(out.map((v) => busFile(v.file)));
   for (const offer of byKey.values()) {
@@ -178,6 +178,16 @@ export function selectableVehicles(c = S.choice) {
     });
   }
   return out;
+}
+
+/** A server-only bus has no local preview. If a local bus exists, show only
+ * paints actually installed here; a server-only repaint remains a placeholder
+ * until the verified server content is mounted. The preview of a local model
+ * is not proof that its script/content version matches the server. */
+export function canPreviewBus(v, paint = '') {
+  if (!v || v.server_only) return false;
+  if (!v.server_catalog || !paint) return true;
+  return (v.local_paints || []).some((name) => name.toLowerCase() === paint.toLowerCase());
 }
 
 export function allowedBus(c = S.choice) {
