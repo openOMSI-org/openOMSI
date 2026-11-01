@@ -59,6 +59,36 @@ cfg_set() {
     END { if (!done) print k " = " v }' "$cfg" > "$tmp" && mv "$tmp" "$cfg"
 }
 
+# server.log: begun anew at every start and past log_max_mb (server.cfg), the earlier ones
+# kept as server.1.log (the newest) .. server.<log_keep>.log; it names the players and holds
+# the chat, so it is not kept for ever
+log_number() { v="$(cfg_get "$1")"; case "$v" in ''|*[!0-9]*) echo "$2" ;; *) echo "$v" ;; esac; }
+rotate_log() {
+  base="${log%.log}"
+  k=$((keep + 1))
+  while [ -f "$base.$k.log" ]; do rm -f "$base.$k.log"; k=$((k + 1)); done
+  [ -f "$log" ] || return 0
+  if [ "$keep" -le 0 ]; then rm -f "$log"; return 0; fi
+  k=$keep
+  while [ "$k" -gt 1 ]; do
+    if [ -f "$base.$((k - 1)).log" ]; then mv -f "$base.$((k - 1)).log" "$base.$k.log"; fi
+    k=$((k - 1))
+  done
+  mv -f "$log" "$base.1.log"
+}
+# (the server's output to this window and to server.log; Ctrl+C is the server's, as tee -i
+# left it, and its last lines still reach the log)
+log_lines() {
+  trap '' INT
+  size=0
+  while IFS= read -r line || [ -n "$line" ]; do
+    printf '%s\n' "$line"
+    printf '%s\n' "$line" >> "$log"
+    size=$((size + ${#line} + 1))
+    if [ "$max_bytes" -gt 0 ] && [ "$size" -gt "$max_bytes" ]; then rotate_log; size=0; fi
+  done
+}
+
 maps_file="$(mktemp)"
 err_file="$(mktemp)"
 status_file="$(mktemp)"
@@ -223,10 +253,14 @@ fi
 
 say "" ""
 say "Starting on $map (the log also goes to server.log; Ctrl+C stops the server)." "Iniciando em $map (o log também vai para server.log; Ctrl+C para o servidor)."
-# (Ctrl+C is the server's: it stops cleanly and says so through tee, which -i keeps alive,
+# (Ctrl+C is the server's: it stops cleanly and says so through log_lines, which ignores it,
 # and this script tells what became of it)
 trap ':' INT
-{ "$exe" --root "$root" --server "$cfg" --server-map "$map" 2>&1; echo $? > "$status_file"; } | tee -i -a "$log"
+keep="$(log_number log_keep 5)"
+[ "$keep" -le 1000 ] || keep=1000
+max_bytes=$(( $(log_number log_max_mb 20) * 1048576 ))
+rotate_log
+{ "$exe" --root "$root" --server "$cfg" --server-map "$map" 2>&1; echo $? > "$status_file"; } | log_lines
 code="$(cat "$status_file" 2>/dev/null)"
 case "$code" in
   0|130|143|"") ;;
