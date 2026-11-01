@@ -564,6 +564,40 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
                     Err(why) => writeln!(out, "ERR {why}")?,
                 }
             }
+            ["FLEETINFO", bus_hex, paint_hex] => {
+                // A remote player can request the server's exact official bus
+                // without requiring other players to upload their own files.
+                // The viewer MUST independently compare the returned fingerprint
+                // to the one that player announced before requesting any GETs.
+                let Some((bus, paint)) = server_fleet::unhex_text(bus_hex).zip(server_fleet::unhex_text(paint_hex)) else {
+                    writeln!(out, "ERR invalid selected bus or paint")?;
+                    continue;
+                };
+                let key = format!("exact:{bus}\u{1f}{paint}");
+                let cached = fleet_cache.lock().unwrap_or_else(|e| e.into_inner()).get(&key).cloned();
+                let selected = match cached {
+                    Some(hit) => Ok(hit),
+                    None => server_fleet::exact(root, &bus, &paint).map(|fresh| {
+                        let mut cache = fleet_cache.lock().unwrap_or_else(|e| e.into_inner());
+                        let fresh = Arc::new(fresh);
+                        if let Some(hit) = cache.get(&key) { return hit.clone(); }
+                        if cache.len() < 128 { cache.insert(key, fresh.clone()); }
+                        fresh
+                    }),
+                };
+                match selected {
+                    Ok(package) => {
+                        let m = identity::VehicleManifest {
+                            bus: package.0.bus.clone(), entries: package.0.entries.clone()
+                        };
+                        active = package;
+                        let body = serde_json::to_vec(&m).unwrap_or_default();
+                        writeln!(out, "OK {}", body.len())?;
+                        out.write_all(&body)?;
+                    }
+                    Err(why) => writeln!(out, "ERR {why}")?,
+                }
+            }
             ["GET", idx] => {
                 let sources = &active.1;
                 let Some(k) = idx.parse::<usize>().ok().filter(|k| *k < sources.len()) else {
