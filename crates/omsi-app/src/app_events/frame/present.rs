@@ -46,6 +46,10 @@ impl App {
     ) {
         let mut finish = false;
         let mut reconfigure = false;
+        crate::themes::sync(&self.settings.ui_theme_pack, self.settings.is_light_theme());
+        if let (Some(s), Some(r)) = (self.gfx.surface.as_mut(), self.renderer.as_ref()) {
+            s.set_glass(r, omsi_ui::theme::th().glass.is_some());
+        }
         let shot = self.perf.shot.take();
         if let Some(s) = self.gfx.surface.as_ref() {
             let (w, h) = (s.config.width, s.config.height);
@@ -347,6 +351,17 @@ impl App {
                 cam,
                 lighting,
             );
+        }
+        // a glass theme's pause menu: the picture under it, as the scene left it, blurred on the
+        // graphics card for its panels (where the window's picture can be copied)
+        match omsi_ui::theme::th().glass.filter(|_| self.menus.game_menu.is_some() && !photo && !mirrored) {
+            Some(glass) if self.shell.glass_due(self.paused) => {
+                if let Some(picture) = frame.as_ref().and_then(|f| s.picture(f)) {
+                    self.shell.capture_backdrop(r, &picture, glass.blur * self.shell.scale);
+                }
+            }
+            Some(_) => {}
+            None => self.shell.glass_closed(),
         }
         // the pause menu and the photo mode's panel
         self.shell.render(r, &view, s.config.width, s.config.height);

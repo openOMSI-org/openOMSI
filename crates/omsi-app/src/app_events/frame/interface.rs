@@ -400,7 +400,7 @@ impl App {
                 cursor: self.input.cursor,
                 dt,
                 backdrop: ui::backdrop(settings.ui_opacity),
-                light: settings.is_light_theme(),
+                palette: crate::themes::palette(settings.is_light_theme()),
                 navigator: self.menus.navigator.as_ref().and_then(|n| n.screen_rect()),
                 dock: self.menus.navigator.as_ref().and_then(|n| n.dock_slot).map(|(r, scale, placed, frame)| crate::plugin_ui::Dock { width: r[2], room: r[3], scale, at: placed.then(|| glam::Vec2::new(r[0], r[1])), frame }),
             };

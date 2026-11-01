@@ -100,6 +100,7 @@ mod photo;
 mod depot_bus;
 mod devtools;
 mod telemetry;
+mod themes;
 use omsi_scene::threads;
 use omsi_scene::tiles;
 mod traffic;
