@@ -1447,6 +1447,7 @@ pub use omsi_mapdraw as mapmesh;
 mod panel;
 mod live;
 mod handover;
+pub use handover::handed_over_camera_pose;
 mod build;
 pub use build::{Built, MapGround};
 mod cull;

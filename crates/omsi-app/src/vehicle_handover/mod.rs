@@ -3,9 +3,9 @@
 mod give;
 mod picking;
 mod retained;
-mod selection;
+use omsi_sim::vehicle_transfer::selection;
 mod take;
-mod tracking;
+use omsi_sim::vehicle_transfer::tracking;
 mod locator;
 pub(crate) use tracking::Tracker;
 

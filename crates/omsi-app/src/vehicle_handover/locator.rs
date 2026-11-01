@@ -3,17 +3,7 @@
 use crate::App;
 use glam::DVec3;
 use omsi_ui::tr;
-
-fn camera_pose(position: DVec3, heading: f64) -> Option<(DVec3, f32)> {
-    if !position.is_finite() || !heading.is_finite() {
-        return None;
-    }
-    let radians = heading.to_radians();
-    Some((
-        position + DVec3::new(-radians.sin() * 25.0, -radians.cos() * 25.0, 30.0),
-        heading as f32,
-    ))
-}
+use omsi_navigator::handed_over_camera_pose;
 
 impl App {
     pub(crate) fn choose_handed_over_bus(
@@ -75,7 +65,7 @@ impl App {
         }
         let Some((position, heading)) = self
             .handed_over_pose(id)
-            .and_then(|(p, h)| camera_pose(p, h))
+            .and_then(|(p, h)| handed_over_camera_pose(p, h))
         else {
             self.service_msg = Some((
                 tr("This bus has left traffic and can no longer be located").into_owned(),
@@ -105,16 +95,6 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn locator_camera_stays_behind_and_above_the_bus() {
-        let p = DVec3::new(100.0, 200.0, 4.0);
-        let (camera, yaw) = camera_pose(p, 90.0).unwrap();
-        assert!((camera - DVec3::new(75.0, 200.0, 34.0)).length() < 1e-6);
-        assert_eq!(yaw, 90.0);
-        assert!(camera_pose(p, f64::NAN).is_none());
-        assert!(camera_pose(DVec3::NAN, 0.0).is_none());
-    }
 
     #[test]
     fn missing_bus_is_reported_without_changing_player_or_camera_mode() {

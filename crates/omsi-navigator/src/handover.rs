@@ -2,6 +2,17 @@
 
 use super::*;
 
+pub fn handed_over_camera_pose(position: DVec3, heading: f64) -> Option<(DVec3, f32)> {
+    if !position.is_finite() || !heading.is_finite() {
+        return None;
+    }
+    let radians = heading.to_radians();
+    Some((
+        position + DVec3::new(-radians.sin() * 25.0, -radians.cos() * 25.0, 30.0),
+        heading as f32,
+    ))
+}
+
 impl Navigator {
     pub fn set_handed_over_buses(&mut self, ids: impl IntoIterator<Item = u64>) {
         self.handed_over_buses.clear();
@@ -37,6 +48,17 @@ impl Navigator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn locator_camera_stays_behind_and_above_the_bus() {
+        let p = DVec3::new(100.0, 200.0, 4.0);
+        let (camera, yaw) = handed_over_camera_pose(p, 90.0).unwrap();
+        assert!((camera - DVec3::new(75.0, 200.0, 34.0)).length() < 1e-6);
+        assert_eq!(yaw, 90.0);
+        assert!(handed_over_camera_pose(p, f64::NAN).is_none());
+        assert!(handed_over_camera_pose(DVec3::NAN, 0.0).is_none());
+    }
+
+
 
     #[test]
     fn handed_over_markers_do_not_depend_on_ai_layer_or_timetable() {

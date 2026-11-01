@@ -32,6 +32,7 @@ pub mod timetable_run;
 pub mod traffic;
 pub mod vehicle;
 pub mod vehicle_api;
+pub mod vehicle_transfer;
 pub mod view_events;
 pub mod world_data;
 pub mod ground_gap;

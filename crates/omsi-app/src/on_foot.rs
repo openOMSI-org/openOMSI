@@ -398,7 +398,7 @@ impl App {
         let doors = h.vehicle_doors(v);
         let count = doors.len();
         let (mut blocked, mut ungrounded) = (0, 0);
-        let exit = handover::find_exit(doors, near, |door| {
+        let exit = omsi_sim::vehicle_transfer::exit::find_exit(doors, near, |door| {
             let Some(p) = outside_at(self.world.as_deref(), v, &others, door) else {
                 blocked += 1;
                 return None;

@@ -1,12 +1,12 @@
 //! Stable vehicle identities and the nearest visible-body selection policy.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Target {
+pub enum Target {
     Ai(u64),
     Placed(u64),
 }
 
-pub(super) fn nearest(
+pub fn nearest(
     hits: impl IntoIterator<Item = (Option<Target>, f64, bool)>,
 ) -> Option<(Target, f64)> {
     let (target, distance, driveable) = hits.into_iter().min_by(|a, b| a.1.total_cmp(&b.1))?;

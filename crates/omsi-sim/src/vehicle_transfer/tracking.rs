@@ -1,12 +1,12 @@
 //! Session-local identities of buses handed to AI, independent of timetable ownership.
 
 #[derive(Default)]
-pub(crate) struct Tracker {
+pub struct Tracker {
     buses: Vec<(u64, String)>,
 }
 
 impl Tracker {
-    pub(crate) fn record(&mut self, id: u64, name: String) {
+    pub fn record(&mut self, id: u64, name: String) {
         if let Some(bus) = self.buses.iter_mut().find(|bus| bus.0 == id) {
             bus.1 = name;
         } else {
@@ -14,28 +14,28 @@ impl Tracker {
         }
     }
 
-    pub(crate) fn entries(&self) -> impl Iterator<Item = (u64, &str)> {
+    pub fn entries(&self) -> impl Iterator<Item = (u64, &str)> {
         self.buses.iter().map(|(id, name)| (*id, name.as_str()))
     }
 
-    pub(crate) fn contains(&self, id: u64) -> bool {
+    pub fn contains(&self, id: u64) -> bool {
         self.buses.iter().any(|bus| bus.0 == id)
     }
 
-    pub(crate) fn remove(&mut self, id: u64) {
+    pub fn remove(&mut self, id: u64) {
         self.buses.retain(|bus| bus.0 != id);
     }
 
-    pub(crate) fn clear(&mut self) {
+    pub fn clear(&mut self) {
         self.buses.clear();
     }
 
-    pub(crate) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.buses.is_empty()
     }
 }
 
-pub(crate) fn locate<T>(id: u64, vehicles: impl IntoIterator<Item = (u64, T)>) -> Option<T> {
+pub fn locate<T>(id: u64, vehicles: impl IntoIterator<Item = (u64, T)>) -> Option<T> {
     vehicles
         .into_iter()
         .find_map(|(key, vehicle)| (key == id).then_some(vehicle))
