@@ -157,11 +157,14 @@ export function selectableVehicles(c = S.choice) {
   const local = (S.vehicles || []).filter((v) => !allowed || allowed.has(busFile(v.file)));
   if (!allowed || c?.lan_server?.fleet_version !== 1) return local;
   const byKey = new Map((c.lan_server.fleet || []).filter((f) => f?.bus && allowed.has(busFile(f.bus))).map((f) => [busFile(f.bus), f]));
-  const out = local.map((v) => {
+  // A configured server may list a .bus that it cannot load. Only the actual
+  // authenticated-package catalogue can be selected; never allow a local-only
+  // copy of a broken/non-advertised bus to bypass version verification.
+  const out = local.filter((v) => byKey.has(busFile(v.file))).map((v) => {
     const offer = byKey.get(busFile(v.file));
-    return offer ? { ...v, paints: offer.paints || [], server_catalog: true } : v;
+    return { ...v, paints: offer.paints || [], server_catalog: true };
   });
-  const have = new Set(local.map((v) => busFile(v.file)));
+  const have = new Set(out.map((v) => busFile(v.file)));
   for (const offer of byKey.values()) {
     if (have.has(busFile(offer.bus))) continue;
     const components = offer.bus.replace(/\\/g, '/').split('/');
