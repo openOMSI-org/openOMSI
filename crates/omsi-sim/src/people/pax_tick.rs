@@ -33,11 +33,16 @@ impl PeopleSim {
         for r in self.entry_req.iter_mut().chain(self.exit_req.iter_mut()) {
             *r = false;
         }
-        let mut ai_req: HashMap<BusId, (Vec<bool>, Vec<bool>)> = HashMap::new();
+        // Keep allocations for doors of buses that remain present, resetting their
+        // contents every step (including after a bus changes its door configuration).
+        self.pax_req.retain(|id, _| bus_ix.contains_key(id));
         for bn in buses {
-            ai_req.insert(bn.id, (vec![false; bn.cabin.entries.len()], vec![false; bn.cabin.exits.len()]));
+            let (entry, exit) = self.pax_req.entry(bn.id).or_default();
+            entry.resize(bn.cabin.entries.len(), false);
+            exit.resize(bn.cabin.exits.len(), false);
+            entry.fill(false);
+            exit.fill(false);
         }
-        self.pax_req = ai_req;
         // (`remove` as a mask, brought up to date with what was added to it before each
         // look: a search of the list per person was quadratic)
         let mut gone = std::mem::take(&mut self.scratch.gone);
@@ -70,16 +75,43 @@ impl PeopleSim {
         // walking the pavement, among them a rider who has just stepped off, still on the
         // step until they are clear of the door. Not those who stand where they got off
         // with no pavement to go on along: they would hold the door open for good.)
-        let at: Vec<(Option<BusId>, DVec3)> = self
-            .people
+        const DOOR_CELL: f64 = 50.0;
+        let mut aboard: HashMap<BusId, Vec<DVec3>> = HashMap::new();
+        let mut outside_cells: HashMap<(i32, i32), Vec<DVec3>> = HashMap::new();
+        for p in &self.people {
+            let (inside, pos) = match &p.state {
+                State::Pax(x) => (x.inside, x.pos),
+                State::Strolling(_) | State::Leaving { .. } => (None, p.position),
+                _ => continue,
+            };
+            if let Some(id) = inside {
+                aboard.entry(id).or_default().push(pos);
+            } else {
+                let cell = ((pos.x / DOOR_CELL).floor() as i32, (pos.y / DOOR_CELL).floor() as i32);
+                outside_cells.entry(cell).or_default().push(pos);
+            }
+        }
+        let busy: HashMap<BusId, (Vec<bool>, Vec<bool>)> = buses
             .iter()
-            .filter_map(|p| match &p.state {
-                State::Pax(x) => Some((x.inside, x.pos)),
-                State::Strolling(_) | State::Leaving { .. } => Some((None, p.position)),
-                _ => None,
+            .map(|bn| {
+                let reach = bn.half.length()
+                    + bn.centre.length()
+                    + bn.trailers.iter().map(|t| t.offset.length() as f64).fold(0.0, f64::max)
+                    + 2.0;
+                let min_x = ((bn.pos.x - reach) / DOOR_CELL).floor() as i32;
+                let max_x = ((bn.pos.x + reach) / DOOR_CELL).floor() as i32;
+                let min_y = ((bn.pos.y - reach) / DOOR_CELL).floor() as i32;
+                let max_y = ((bn.pos.y + reach) / DOOR_CELL).floor() as i32;
+                let cells = &outside_cells;
+                let outside = (min_x..=max_x).flat_map(|x| {
+                    (min_y..=max_y).filter_map(move |y| cells.get(&(x, y))).flat_map(|v| v.iter())
+                });
+                (
+                    bn.id,
+                    doorways_taken_partitioned(bn, aboard.get(&bn.id).map_or(&[][..], Vec::as_slice), outside),
+                )
             })
             .collect();
-        let busy: HashMap<BusId, (Vec<bool>, Vec<bool>)> = buses.iter().map(|bn| (bn.id, doorways_taken(bn, &at))).collect();
         if debug_pax() {
             for (b, (e, x)) in &busy {
                 let before = self.pax_busy.get(b);
@@ -95,7 +127,7 @@ impl PeopleSim {
         self.pax_busy = busy;
         // the places' own occupancy variables (#721): the riders at their places, and the
         // players' figures sitting on one (a player on foot, a LAN player's)
-        let sitting: Vec<(BusId, usize)> = self
+        let sitting: hashbrown::HashSet<(BusId, usize)> = self
             .people
             .iter()
             .filter_map(|p| match &p.state {
@@ -104,7 +136,7 @@ impl PeopleSim {
             })
             .chain(self.avatar_cmds.values().filter_map(|c| c.seat))
             .collect();
-        self.pax_places = buses.iter().map(|bn| (bn.id, places_taken(bn, &sitting))).collect();
+        self.pax_places = buses.iter().map(|bn| (bn.id, places_taken_indexed(bn, &sitting))).collect();
         // the player's bus reads its requests from `entry_req` / `exit_req`
         if let Some((e, x)) = self.pax_req.get(&BusId::Player) {
             self.entry_req = e.clone();
@@ -128,26 +160,35 @@ impl PeopleSim {
         // still on their way to the gather point do not hold it: they walk up to the doors
         // as soon as the bus has a place for them, and with the bus full they stood there
         // and kept it at the stop with its doors open for good (#767)
+        // One ordered scan of people, not a fresh scan for every stopped AI bus.
+        // Preserve the order of stop requests in passenger order for determinism.
+        let mut holds_by_bus: HashMap<BusId, (bool, Vec<i64>)> = HashMap::new();
+        for p in &self.people {
+            let State::Pax(x) = &p.state else { continue };
+            let Some(bus) = x.bus else { continue };
+            match holds_bus(x, bus) {
+                Some(None) => holds_by_bus.entry(bus).or_default().0 = true,
+                Some(Some(stop)) => {
+                    let stops = &mut holds_by_bus.entry(bus).or_default().1;
+                    if !stops.contains(&stop) {
+                        stops.push(stop);
+                    }
+                }
+                None => {}
+            }
+        }
         for bn in buses {
             let BusId::Ai(id) = bn.id else { continue };
             if bn.speed.abs() > 0.5 {
                 continue;
             }
-            let mut any_exit = false;
-            let mut stops: Vec<i64> = Vec::new();
-            for p in &self.people {
-                let State::Pax(x) = &p.state else { continue };
-                match holds_bus(x, bn.id) {
-                    Some(None) => any_exit = true,
-                    Some(Some(s)) if !stops.contains(&s) => stops.push(s),
-                    _ => {}
+            if let Some((any_exit, stops)) = holds_by_bus.get(&bn.id) {
+                if *any_exit {
+                    self.holds.push((id, None, 2.5));
                 }
-            }
-            if any_exit {
-                self.holds.push((id, None, 2.5));
-            }
-            for s in stops {
-                self.holds.push((id, Some(s), 2.5));
+                for &s in stops {
+                    self.holds.push((id, Some(s), 2.5));
+                }
             }
         }
     }

@@ -917,6 +917,11 @@ fn a_doorway_is_busy_while_somebody_stands_in_it() {
     // a rider of another bus, somebody waiting further out on the pavement: nobody here
     let waiting = bn.world(Vec3::new(2.6, 4.0, 0.0));
     assert_eq!(doorways_taken(&bn, &[(Some(BusId::Player), rear), (None, waiting)]), (vec![false], vec![false]));
+    // The indexed hot path and the generic API must agree, including other buses'
+    // occupants and pedestrians close to (but not inside) the door.
+    let all = [(None, step_in), (Some(BusId::Ai(3)), rear), (Some(BusId::Player), rear), (None, waiting)];
+    let indexed = doorways_taken_partitioned(&bn, [&rear], [&step_in, &waiting]);
+    assert_eq!(doorways_taken(&bn, &all), indexed);
     // into the script's variables, a door past the eighth with the eighth's
     std::fs::write(dir.join("vars.bus"), "[model]\nmodel.cfg\n[varnamelist]\n1\nvars.txt\n[script]\n1\nmain.osc\n").unwrap();
     std::fs::write(dir.join("model.cfg"), "").unwrap();
