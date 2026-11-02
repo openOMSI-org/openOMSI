@@ -426,23 +426,25 @@ impl Traffic {
                     }
                 }
             }
-            let raw_value = |lamp: &crate::scene::LightObject, var: &str| -> f32 {
+            let scripted = |lamp: &crate::scene::LightObject, var: &str| -> Option<f32> {
                 // Custom signals can shift phases or blink the standard channels (Numazu
                 // pedestrian lamps). Use their script outputs whenever they are available.
-                let scripted = lamp.script.and_then(|k| lamps.get(k)).and_then(|s| {
+                lamp.script.and_then(|k| lamps.get(k)).and_then(|s| {
                     // A failed/missing script can still have a varlist of zeroes. Keep
                     // stock fallback behaviour if it has no runnable frame block.
                     if s.program.frame.is_empty() { None } else { s.var(var) }
-                });
+                })
+            };
+            let raw_value = |lamp: &crate::scene::LightObject, var: &str| -> f32 {
                 crate::scene::traffic_lamp_value(
                     var,
-                    scripted,
+                    scripted(lamp, var),
                     crate::scene::standard_traffic_lamp(var, r, y, g, request),
                 )
             };
-            // A scripted lamp can leave both standard channels on at once. A road signal
-            // must never show green together with red; keep the stop aspect in that case.
-            let red_on = raw_value(lamp, "red") >= 0.5;
+            // A lamp mixing a scripted channel with the phase's can show red and green at
+            // once; keep the stop aspect in that case.
+            let red_on = raw_value(lamp, "red") >= 0.5 && !(scripted(lamp, "red").is_some() && scripted(lamp, "green").is_some());
             let value = |lamp: &crate::scene::LightObject, var: &str| -> f32 {
                 let green = matches!(var.trim().to_ascii_lowercase().as_str(), "green" | "gruen" | "grün");
                 let v = raw_value(lamp, var);
