@@ -475,12 +475,14 @@ impl App {
                 if pressed && ctrl {
                     // Ctrl+click: the bus to the street nearest that point, as OMSI's map
                     // window places vehicles
-                    if let Some(at) = n.map_point(x, y) {
-                        if std::mem::take(&mut self.menus.teleport_pick) {
-                            n.toggle_map();
-                        }
-                        self.place_bus_at(at);
+                    self.menus.map_place_from = n.map_point(x, y).map(|at| (at, [x, y]));
+                } else if let Some((from, press)) = self.menus.map_place_from.take().filter(|_| !pressed) {
+                    let dragged = (x - press[0]).hypot(y - press[1]) > 12.0;
+                    let towards = n.map_point(x, y).map(|to| to - from).filter(|_| dragged);
+                    if std::mem::take(&mut self.menus.teleport_pick) {
+                        n.toggle_map();
                     }
+                    self.place_bus_facing(from, towards.map(|d| d.x.atan2(d.y).to_degrees()));
                 } else if pressed {
                     n.map_press(x, y);
                 } else if n.map_release() {
@@ -540,7 +542,7 @@ impl App {
                 .zip(self.world.clone())
                 .and_then(|((o, d, _), w)| crate::placing::ground_hit(&w, o, d.as_dvec3(), 2000.0));
             match hit {
-                Some(at) => self.place_bus_at(at.truncate()),
+                Some(at) => self.place_bus_facing(at.truncate(), self.camera.as_ref().map(|c| c.yaw as f64)),
                 None => self.service_msg = Some(("Ctrl+click on the ground to move the bus there".into(), 3.0)),
             }
             return;

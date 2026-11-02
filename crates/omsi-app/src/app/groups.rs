@@ -477,6 +477,7 @@ pub(crate) struct MenuState {
     pub(crate) menu_kbd: bool,
     /// The next click on the city map puts the bus there (Esc → Move the bus on the map).
     pub(crate) teleport_pick: bool,
+    pub(crate) map_place_from: Option<(glam::DVec2, [f32; 2])>,
     /// The game's own panels: the quick menu, the trip summary, the destination form, the
     /// view editor (`game_panels`).
     pub(crate) game_panels: crate::game_panels::GamePanels,
