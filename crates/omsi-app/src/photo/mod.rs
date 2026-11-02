@@ -321,9 +321,10 @@ impl Photo {
         // W A S D move, Space (or E) rises and Ctrl (or C, Q) sinks, as in a game's free camera
         let up = k(KeyCode::Space) || k(KeyCode::KeyE);
         let down = k(KeyCode::ControlLeft) || k(KeyCode::ControlRight) || k(KeyCode::KeyC) || k(KeyCode::KeyQ);
-        let mut m = Vec3::new(axis(k(KeyCode::KeyD), k(KeyCode::KeyA)), axis(k(KeyCode::KeyW), k(KeyCode::KeyS)), axis(up, down) * 0.5);
+        let mut m = Vec3::new(axis(k(KeyCode::KeyD), k(KeyCode::KeyA)), axis(k(KeyCode::KeyW), k(KeyCode::KeyS)), axis(up, down));
         m += self.pad.moves();
         m += Vec3::new(self.touch_move.x, self.touch_move.y, self.touch_z);
+        m.z *= 0.5;
         let fast = if k(KeyCode::ShiftLeft) || k(KeyCode::ShiftRight) || self.touch_fast { 4.0 } else if k(KeyCode::AltLeft) || k(KeyCode::AltRight) { 0.25 } else { 1.0 };
         // the arrows and the right stick turn the view; Z and X roll it
         let turn = 70.0 * dt * (self.cam.fov_deg / 60.0).clamp(0.15, 1.5);
