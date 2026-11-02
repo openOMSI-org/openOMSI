@@ -32,7 +32,8 @@ impl App {
             self.menus.pending_placement = None;
         }
         let Some((_, _, old)) = &self.session.depot_prev else { return };
-        let now = self.player.as_ref().map(|p| (p.uid, self.args.bus.as_deref().is_some_and(|b| crate::depot_bus::is_this_bus(&p.vehicle, b))));
+        let swapped_in = self.menus.swapped_in;
+        let now = self.player.as_ref().map(|p| (p.uid, swapped_in == Some(p.uid) && self.args.bus.as_deref().is_some_and(|b| crate::depot_bus::is_this_bus(&p.vehicle, b))));
         let Some(landed) = crate::depot_bus::switch_landed(self.menus.pending_placement.is_some(), *old, now) else { return };
         let Some((depot, bus, _)) = self.session.depot_prev.take() else { return };
         if !landed {
@@ -54,6 +55,9 @@ impl App {
         self.args.depot = Some(b.id.clone());
         self.args.bus = Some(b.bus.clone());
         let idle = self.menus.pending_placement.is_none();
+        if idle {
+            self.menus.swapped_in = None;
+        }
         self.menus.swap_pending = self.player.is_some();
         self.place_vehicle(&b.bus, Some(b.paint.clone()).filter(|p| !p.trim().is_empty()), None);
         (self.args.number, self.args.plate) = (before.0, before.1);
@@ -274,6 +278,7 @@ pub(crate) fn placement(mut cx: PlacementCx) {
     match result {
         Ok(Some(q)) if pending.replace.is_some() => {
             let name = format!("{} {}", q.vehicle.ty.def.manufacturer, q.vehicle.ty.def.type_name);
+            cx.menus.menus.swapped_in = Some(q.uid);
             replace_driven_vehicle(q, &mut cx);
             *cx.ui.service_msg = Some(if pending.reload {
                 (format!("Reloaded {} from its files", name.trim()), 4.0)

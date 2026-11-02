@@ -468,6 +468,7 @@ pub(crate) struct MenuState {
     /// The vehicle being chosen in "Place a vehicle" takes the place of the one driven
     /// (the game menu's "Swap for another vehicle", #728).
     pub(crate) swap_pending: bool,
+    pub(crate) swapped_in: Option<u64>,
     /// The vehicle chosen being read on a worker thread (see `App::place_vehicle`).
     pub(crate) pending_placement: Option<crate::spawn::PendingPlacement>,
     /// The line of the open list whose slider the mouse button holds (it follows the cursor).

@@ -769,6 +769,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             menu_edit_search: false,
             menu_search: String::new(),
             swap_pending: false,
+            swapped_in: None,
             pending_placement: None,
             menu_drag: None,
             menu_kbd: true,
