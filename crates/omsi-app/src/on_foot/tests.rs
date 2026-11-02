@@ -125,6 +125,25 @@ fn kneeling_lowers_the_eyes_and_slows_the_walk() {
 }
 
 #[test]
+fn an_ai_bus_is_ridden_from_its_inside_only_in_the_walkers_own_eyes() {
+    let mut f = walker();
+    assert_eq!(f.ridden_ai(), None);
+    f.inside = Some((BusId::Ai(7), glam::Vec3::ZERO));
+    assert_eq!(f.ridden_ai(), Some(7));
+    f.inside = None;
+    f.seat = Some((BusId::Ai(7), 2));
+    assert_eq!(f.ridden_ai(), Some(7), "seated");
+    f.cam = FootCam::Free;
+    assert_eq!(f.ridden_ai(), None, "the free camera flies outside");
+    f.cam = FootCam::First;
+    f.settle = 0.5;
+    assert_eq!(f.ridden_ai(), None, "still settling");
+    f.settle = 0.0;
+    f.seat = Some((BusId::Player, 2));
+    assert_eq!(f.ridden_ai(), None, "the own bus");
+}
+
+#[test]
 fn the_walker_gets_up_to_pace_and_stops_over_steps_not_at_once() {
     let mut v = DVec2::ZERO;
     let want = DVec2::new(0.0, 1.4);

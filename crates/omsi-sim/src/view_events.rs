@@ -117,7 +117,7 @@ pub struct PartFrame {
 }
 
 /// How one mesh of a vehicle is drawn: its transform relative to the vehicle's position,
-/// whether it shows (its `[visible]` variable and the views it is drawn in), and its
+/// whether it shows (its `[visible]` variable; its `[viewpoint]` says from where), and its
 /// per-material-slot values (see `MeshProps`).
 #[derive(Clone, Copy, Debug)]
 pub struct MeshFrame {

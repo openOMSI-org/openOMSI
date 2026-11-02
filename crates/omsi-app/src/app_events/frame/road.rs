@@ -122,10 +122,7 @@ pub(super) fn traffic(cx: TrafficCx, dt: f32) {
         // fire wait in them until then, and only the last tick's state is drawn)
         let view_due = cx.clock.fixed_tick.view_due();
         // (riding in an AI bus on foot, standing or seated: that bus is heard and drawn from inside, #1286)
-        t.ridden = cx.people.on_foot.as_ref().and_then(|f| match f.seat.map(|s| s.0).or(f.inside.map(|i| i.0)) {
-            Some(omsi_sim::people::BusId::Ai(id)) => Some(id),
-            _ => None,
-        });
+        t.ridden = cx.people.on_foot.as_ref().and_then(|f| f.ridden_ai());
         let __t3 = Instant::now();
         if let Some(a) = cx.sound.audio.as_ref().filter(|_| view_due) {
             let street = cx.weather.weather
