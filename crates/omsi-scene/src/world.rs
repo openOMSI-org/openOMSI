@@ -3,6 +3,7 @@ use super::*;
 
 pub struct World {
     pub root: PathBuf,
+    pub(super) _publisher_mounts: omsi_cfg::publisher::DependencyMounts,
     pub global: GlobalCfg,
     /// The map's `transport` folder: stations, routes, wires, switches, depots, signals (empty
     /// for a map without one).

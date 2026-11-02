@@ -22,6 +22,219 @@ fn lanes(text: &str, pos: DVec3, heading: f64) -> Vec<Lane> {
     object_lanes(&sco, pos, [heading, 0.0, 0.0], None, (0, 0), 1, &[])
 }
 
+static PUBLISHER_WORLD_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+struct PublisherMapFixture {
+    root: PathBuf,
+    signer: omsi_pack::SigningKey,
+    trusted: omsi_pack::TrustedPublishers,
+    encrypted_packs: Vec<PathBuf>,
+}
+
+impl PublisherMapFixture {
+    fn new() -> Self {
+        static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let root = std::env::temp_dir().join(format!(
+            "openomsi-scene-publisher-map-{}-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos(),
+        ));
+        std::fs::create_dir_all(root.join("Packs")).unwrap();
+        let signer = omsi_pack::SigningKey::generate(&ring::rand::SystemRandom::new()).unwrap();
+        let mut trust = omsi_pack::TrustedPublishers::default();
+        trust.insert("fixture", signer.key_id(), signer.public_key());
+        trust.save_file(&root.join("Publishers.json")).unwrap();
+        let mut fixture = Self { root, signer, trusted: trust, encrypted_packs: Vec::new() };
+        fixture.add_map("Fixture", "scene-types", "plain map alias", 10.0, 0.0, 4, None);
+        omsi_cfg::add_content_root(fixture.root.clone());
+        fixture
+    }
+
+    fn add_map(
+        &mut self,
+        map_name: &str,
+        pack_id: &str,
+        friendly_name: &str,
+        spline_length: f32,
+        path_offset: f32,
+        texture_surface: u8,
+        protected_key: Option<[u8; 32]>,
+    ) {
+        let map = self.root.join("maps").join(map_name);
+        std::fs::create_dir_all(&map).unwrap();
+        std::fs::write(
+            map.join("global.cfg"),
+            "[name]\nPublisher alias fixture\n[map]\n0\n0\ntile_0_0.map\n",
+        )
+        .unwrap();
+        std::fs::write(
+            map.join("tile_0_0.map"),
+            "[version]\n14\n\n[spline]\n0\nSplines\\Fixture\\renamed.sli\n1\n0\n0\n0\n0\n0\n0\n10\n0\n0\n0\n0\n0\n0\n0\n0\n\n",
+        )
+        .unwrap();
+        let pack = self.root.join("Packs").join(format!("{pack_id}.oopp"));
+        let key_id = protected_key.as_ref().map(|key| omsi_pack::sha256_hex(key));
+        let spline = format!(
+            "[length]\n{spline_length}\n[path]\n0\n{path_offset}\n0\n3\n1\n[texture]\nroad.bmp\n"
+        );
+        let texture_cfg = format!("[surface]\n{texture_surface}\n");
+        let assets = [
+            omsi_pack::AssetInput {
+                id: "object".into(),
+                path: "Sceneryobjects/Fixture/original.sco".into(),
+                source_sha256: "11".repeat(32),
+                bytes: format!("[friendlyname]\n{friendly_name}\n").into_bytes(),
+            },
+            omsi_pack::AssetInput {
+                id: "spline".into(),
+                path: "Splines/Fixture/original.sli".into(),
+                source_sha256: "22".repeat(32),
+                bytes: spline.into_bytes(),
+            },
+            omsi_pack::AssetInput {
+                id: "spline-texture".into(),
+                path: "Splines/Fixture/texture/road.bmp".into(),
+                source_sha256: "33".repeat(32),
+                bytes: b"synthetic texture placeholder".to_vec(),
+            },
+            omsi_pack::AssetInput {
+                id: "spline-texture-cfg".into(),
+                path: "Splines/Fixture/texture/road.bmp.cfg".into(),
+                source_sha256: "44".repeat(32),
+                bytes: texture_cfg.into_bytes(),
+            },
+        ];
+        let manifest = omsi_pack::create_pack(
+            &pack,
+            omsi_pack::PackMetadata {
+                publisher_id: "fixture".into(),
+                author: "Fixture".into(),
+                pack_id: pack_id.into(),
+                version: "1.0.0".into(),
+                license: "CC0-1.0".into(),
+                redistribution: false,
+                key_id,
+                dependencies: Vec::new(),
+            },
+            &assets,
+            &self.signer,
+            protected_key.as_ref(),
+            &std::sync::atomic::AtomicBool::new(false),
+        )
+        .unwrap();
+        if let Some(key) = protected_key {
+            let expires = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+                + 3600;
+            let entitlement = omsi_pack::issue_entitlement(&manifest, key, expires, &self.signer).unwrap();
+            omsi_pack::unlock(&pack, &entitlement, &self.trusted, &omsi_pack::SystemKeyStore).unwrap();
+            // The native entitlement is unique to this disposable fixture pack.
+            self.encrypted_packs.push(pack);
+        }
+        std::fs::write(
+            map.join("dependencies.json"),
+            serde_json::json!({
+                "format_version": 1,
+                "dependencies": [{"publisher_id":"fixture","pack_id":pack_id,"version":"1.0.0"}],
+                "assets": [
+                    {"path":"Sceneryobjects/Fixture/renamed.sco","dependency":{"publisher_id":"fixture","pack_id":pack_id,"version":"1.0.0"},"asset_id":"object"},
+                    {"path":"Splines/Fixture/renamed.sli","dependency":{"publisher_id":"fixture","pack_id":pack_id,"version":"1.0.0"},"asset_id":"spline"}
+                ]
+            })
+            .to_string(),
+        )
+        .unwrap();
+    }
+
+    fn map_dir(&self) -> PathBuf {
+        self.root.join("maps/Fixture")
+    }
+
+    fn map_dir_named(&self, name: &str) -> PathBuf {
+        self.root.join("maps").join(name)
+    }
+}
+
+impl Drop for PublisherMapFixture {
+    fn drop(&mut self) {
+        omsi_cfg::remove_content_root(&self.root);
+        for pack in &self.encrypted_packs {
+            let _ = omsi_pack::forget_unlock(pack, &self.trusted, &omsi_pack::SystemKeyStore);
+        }
+        let _ = std::fs::remove_dir_all(&self.root);
+    }
+}
+
+#[test]
+fn world_loaders_resolve_publisher_aliases_from_the_map_scope() {
+    let _guard = PUBLISHER_WORLD_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let fixture = PublisherMapFixture::new();
+    let map_dir = fixture.map_dir();
+    let world = World::open(&fixture.root, &map_dir.join("global.cfg"), 20261001).unwrap();
+
+    assert_eq!(
+        world.object_type("Sceneryobjects/Fixture/renamed.sco").unwrap().sco.friendly_name,
+        "plain map alias"
+    );
+    let spline = world.spline_type("Splines/Fixture/renamed.sli").unwrap();
+    assert_eq!(spline.def.length, 10.0);
+    assert_eq!(spline.surface, vec![4]);
+    assert!(!world.navigation_map().lanes.is_empty(), "navigation must load map-scoped signed splines");
+
+    let fallback = fixture.root.join("Sceneryobjects/Ordinary/fallback.sco");
+    std::fs::create_dir_all(fallback.parent().unwrap()).unwrap();
+    std::fs::write(&fallback, "[friendlyname]\nordinary physical fallback\n").unwrap();
+    assert_eq!(
+        world.object_type("Sceneryobjects/Ordinary/fallback.sco").unwrap().sco.friendly_name,
+        "ordinary physical fallback"
+    );
+}
+
+#[cfg(any(target_os = "macos", windows))]
+#[test]
+fn encrypted_and_plain_publisher_aliases_are_isolated_by_world_map_scope() {
+    let _guard = PUBLISHER_WORLD_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut fixture = PublisherMapFixture::new();
+    let key = omsi_pack::random_content_key().unwrap();
+    fixture.add_map("Encrypted", "encrypted-scene", "encrypted map alias", 22.0, 4.0, 5, Some(key));
+
+    let plain_dir = fixture.map_dir();
+    let encrypted_dir = fixture.map_dir_named("Encrypted");
+    let plain = World::open(&fixture.root, &plain_dir.join("global.cfg"), 20261001).unwrap();
+    let encrypted = World::open(&fixture.root, &encrypted_dir.join("global.cfg"), 20261001).unwrap();
+
+    assert_eq!(
+        plain.object_type("Sceneryobjects/Fixture/renamed.sco").unwrap().sco.friendly_name,
+        "plain map alias"
+    );
+    assert_eq!(
+        encrypted.object_type("Sceneryobjects/Fixture/renamed.sco").unwrap().sco.friendly_name,
+        "encrypted map alias"
+    );
+    let plain_spline = plain.spline_type("Splines/Fixture/renamed.sli").unwrap();
+    let encrypted_spline = encrypted.spline_type("Splines/Fixture/renamed.sli").unwrap();
+    assert_eq!(plain_spline.def.length, 10.0);
+    assert_eq!(encrypted_spline.def.length, 22.0);
+    assert_eq!(plain_spline.surface, vec![4]);
+    assert_eq!(encrypted_spline.surface, vec![5]);
+    let plain_navigation = plain.navigation_map();
+    let encrypted_navigation = encrypted.navigation_map();
+    assert!(!plain_navigation.lanes.is_empty());
+    assert!(!encrypted_navigation.lanes.is_empty());
+    assert!((plain_navigation.lanes[0].points[0].x - 0.0).abs() < 1e-6);
+    assert!((encrypted_navigation.lanes[0].points[0].x - 4.0).abs() < 1e-6);
+}
+
 #[test]
 fn object_path_gradients_preserve_heights_and_reverse_samples() {
     // The expected heights are independent hand-calculated checkpoints, including

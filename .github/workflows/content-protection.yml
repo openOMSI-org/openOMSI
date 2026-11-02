@@ -1,0 +1,79 @@
+name: Content protection
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/content-protection]
+  pull_request:
+    paths: ["crates/omsi-pack/**", "crates/omsi-cfg/**", "crates/omsi-scene/**", "crates/omsi-app/**", "Cargo.*", ".github/workflows/content-protection.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: content-protection-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    env:
+      CARGO_BUILD_JOBS: 4
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: content-protection-${{ matrix.os }}
+          cache-on-failure: true
+          cache-workspace-crates: true
+      - name: Format inputs
+        shell: bash
+        run: cargo metadata --no-deps --format-version 1 > /dev/null
+      - name: Publisher loader contract
+        run: cargo test --locked -p omsi-cfg --test publisher
+      - name: Publisher manifest invariants
+        if: always()
+        run: cargo test --locked -p omsi-pack --lib
+      - name: Publisher pack contract
+        if: always()
+        run: cargo test --locked -p omsi-pack --test pack
+      - name: Offline publisher CLI
+        if: always()
+        run: cargo test --locked -p omsi-pack --test cli
+      - name: Native format and loader tests
+        run: cargo test --locked -p omsi-cfg -p omsi-map -p omsi-o3d -p omsi-texture
+
+      - name: World publisher asset contract
+        run: cargo test --locked -p omsi-scene publisher -- --nocapture
+
+      - name: Architecture and size guards
+        if: runner.os == 'macOS'
+        run: |
+          bash scripts/arch-guard.sh
+          bash scripts/size-budget.sh
+
+      - name: Workspace regression tests
+        env:
+          CARGO_PROFILE_DEV_DEBUG: line-tables-only
+        run: cargo test --locked --workspace --no-fail-fast
+      - name: Release build
+        run: cargo build --locked --release
+
+      - name: Runtime type check
+        if: always()
+        run: cargo check --locked -p omsi-app
+
+      - name: Resolved dependency lock
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: dependency-lock-${{ matrix.os }}
+          path: Cargo.lock
+          retention-days: 2
