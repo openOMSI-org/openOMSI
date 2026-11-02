@@ -841,11 +841,7 @@ impl Navigator {
         }
         r.note = (r.note - f.dt).max(0.0);
         // where the next stop is on the route: the way to the route must not skip it
-        let stop_at = f.stops.first().and_then(|st| {
-            (r.progress..r.lanes.len().min(r.progress + 1500)).find(|&k| {
-                net.lanes.get(r.lanes[k]).and_then(|l| l.nearest_point(st.position)).map(|p| p.1 < 25.0).unwrap_or(false)
-            })
-        });
+        let stop_at = f.stops.first().and_then(|st| stop_on_route(net, &r.lanes, r.progress, st.position, |_, _| true)).map(|(k, _)| k);
         // the nearest route lane near the bus that runs its way, a little back to a lot ahead
         // (before the bus first reached the route: only the stretch up to the next stop)
         let (from, to) = match (r.joined, stop_at) {
@@ -1142,20 +1138,20 @@ impl Navigator {
     fn route_distance(&self, net: &Network, stop: DVec3) -> Option<f64> {
         if self.destination.is_some() { return None; }
         let r = &self.route;
-        let mut acc = -(r.s as f64);
+        if r.progress >= r.lanes.len() {
+            return None;
+        }
+        let mut acc = vec![-(r.s as f64)];
         for &l in r.lanes.iter().skip(r.progress) {
-            let lane = net.lanes.get(l)?;
-            if let Some((s, d)) = lane.nearest_point(stop) {
-                if d < 25.0 && (acc + s as f64) >= -5.0 {
-                    return Some((acc + s as f64).max(0.0));
-                }
-            }
-            acc += lane.length() as f64;
-            if acc > 30_000.0 {
+            let next = acc[acc.len() - 1] + net.lanes.get(l)?.length() as f64;
+            if next > 30_000.0 {
                 break;
             }
+            acc.push(next);
         }
-        None
+        let ahead = |k: usize| acc[k - r.progress];
+        let (k, s) = stop_on_route(net, &r.lanes[..r.progress + acc.len().min(r.lanes.len() - r.progress)], r.progress, stop, |k, s| ahead(k) + s as f64 >= -5.0)?;
+        Some((ahead(k) + s as f64).max(0.0))
     }
 
     /// Advance, draw into the texture and put it on the screen.
@@ -1458,3 +1454,13 @@ mod tests;
 #[cfg(test)]
 #[path = "destination/tests.rs"]
 mod destination_tests;
+
+fn stop_on_route(net: &Network, lanes: &[usize], from: usize, stop: DVec3, ok: impl Fn(usize, f32) -> bool) -> Option<(usize, f32)> {
+    let near = |k: usize| net.lanes.get(lanes[k]).and_then(|l| l.nearest_point(stop)).filter(|&(s, d)| d < 25.0 && ok(k, s));
+    let first = (from..lanes.len().min(from + 1500)).find(|&k| near(k).is_some())?;
+    let on_its_side = (first..lanes.len().min(first + 60))
+        .filter(|&k| passes_on_its_side(net, lanes[k], stop, 25.0))
+        .filter_map(|k| near(k).map(|(s, d)| (k, s, d)))
+        .min_by(|a, b| a.2.total_cmp(&b.2));
+    on_its_side.map(|(k, s, _)| (k, s)).or_else(|| near(first).map(|(s, _)| (first, s)))
+}
