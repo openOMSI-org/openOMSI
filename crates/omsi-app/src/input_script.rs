@@ -481,10 +481,6 @@ impl App {
                     self.toggle_flashlight();
                     return true;
                 }
-                KeyCode::KeyU if alt && !ctrl && !shift_now && !self.chord_bound(code, shift_now, ctrl, alt) && !self.input.game_keys.iter().any(|b| b.action.eq_ignore_ascii_case("clean_screen")) => {
-                    self.toggle_clean_screen();
-                    return true;
-                }
                 // OMSI's `view_toggle_informationdisplay` (Ctrl+Y)
                 // OMSI's `view_toggle_informationdisplay` (Shift+Y: 21 / 2)
                 KeyCode::KeyY if shift_now && !ctrl => {

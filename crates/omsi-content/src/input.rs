@@ -295,6 +295,16 @@ mod tests {
     }
 
     #[test]
+    fn the_clean_screen_takes_alt_u_only_when_u_is_free() {
+        let key = |c: &KeyboardCfg| c.game.iter().filter(|b| b.action == "clean_screen").map(|b| (b.scan_code, b.modifier)).collect::<Vec<_>>();
+        assert_eq!(key(&KeyboardCfg::default().with_game_defaults().with_game_defaults()), vec![(22, KEY_ALT)]);
+        let mine = KeyBinding { action: "kw_lights".into(), scan_code: 22, modifier: 0 };
+        let cfg = KeyboardCfg { vehicles: vec![mine.clone()], ..Default::default() }.with_game_defaults();
+        assert_eq!(key(&cfg), vec![(0, 0)]);
+        assert!(cfg.vehicles.contains(&mine));
+    }
+
+    #[test]
     fn the_chat_keys_are_in_the_list_and_a_moved_one_stays_moved() {
         let cfg = KeyboardCfg::default().with_game_defaults();
         let key = |c: &KeyboardCfg, a: &str| c.game.iter().filter(|b| b.action == a).map(|b| (b.scan_code, b.modifier)).collect::<Vec<_>>();
