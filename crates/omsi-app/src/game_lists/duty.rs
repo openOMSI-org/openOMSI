@@ -174,6 +174,9 @@ pub(super) fn switch_driver(app: &mut App, name: &str) {
     next.seconds = app.session.career.seconds;
     next.go_on_from(&mut app.session.career);
     crate::depot_bus::shift_base(&mut app.session.depot_base, &app.session.career, &next);
+    if let Some(sw) = app.session.depot_prev.as_mut() {
+        crate::depot_bus::shift_base(&mut sw.base, &app.session.career, &next);
+    }
     app.session.career = next;
     app.args.driver = Some(rel);
     app.service_msg = Some((omsi_ui::i18n::tr_fill("Driver: {name}", &[("{name}", &name)]), 3.0));
