@@ -114,6 +114,9 @@ impl KeyboardCfg {
                 self.game.push(KeyBinding { action: action.into(), scan_code, modifier: KEY_CTRL });
             }
         }
+        if !self.game.iter().any(|b| b.action.eq_ignore_ascii_case("get_up")) {
+            self.game.push(KeyBinding { action: "get_up".into(), scan_code: 34, modifier: KEY_CTRL | KEY_SHIFT });
+        }
         for action in ["blinker_left_toggle", "blinker_right_toggle"] {
             if !self.vehicles.iter().any(|b| b.action.eq_ignore_ascii_case(action)) {
                 self.vehicles.push(KeyBinding { action: action.into(), scan_code: 0, modifier: 0 });

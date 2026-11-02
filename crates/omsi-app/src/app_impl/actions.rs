@@ -146,6 +146,11 @@ impl App {
             }
             "screenshot" => self.take_screenshot(),
             "flashlight" => self.toggle_flashlight(),
+            "get_up" => {
+                if self.session.on_foot.is_none() && self.player.is_some() {
+                    self.get_up();
+                }
+            }
             "photo_mode" => self.enter_photo(),
             "quicksave" => self.quick_save(),
             "view_set_ego" => {
