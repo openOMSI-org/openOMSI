@@ -11,8 +11,8 @@ struct VsOut {
     @location(0) world: vec3<f32>,
     @location(1) normal: vec3<f32>,
     @location(2) uv: vec2<f32>,
-    @location(3) params: vec4<f32>,
-    @location(4) params2: vec4<f32>,
+    @location(3) @interpolate(flat) params: vec4<f32>,
+    @location(4) @interpolate(flat) params2: vec4<f32>,
     // the D3D material's highlight, lit at the vertex as Omsi.exe's fixed function lights
     // it: from the sun (light A) and from the light above (light B)
     @location(5) spec_sun: vec3<f32>,
@@ -35,8 +35,8 @@ struct FsIn {
     @location(0) world: vec3<f32>,
     @location(1) normal: vec3<f32>,
     @location(2) uv: vec2<f32>,
-    @location(3) params: vec4<f32>,
-    @location(4) params2: vec4<f32>,
+    @location(3) @interpolate(flat) params: vec4<f32>,
+    @location(4) @interpolate(flat) params2: vec4<f32>,
     @location(5) spec_sun: vec3<f32>,
     @location(6) spec_sky: vec3<f32>,
     @location(7) env_uv: vec2<f32>,
@@ -294,14 +294,14 @@ fn vs_main(in: VsIn) -> VsOut {
 struct DepthOut {
     @builtin(position) @invariant clip: vec4<f32>,
     @location(2) uv: vec2<f32>,
-    @location(3) params: vec4<f32>,
+    @location(3) @interpolate(flat) params: vec4<f32>,
     // the instance's surface code (`inst_params` w, see `scene_clip`)
     @location(4) surf: f32,
 };
 struct DepthIn {
     @builtin(position) clip: vec4<f32>,
     @location(2) uv: vec2<f32>,
-    @location(3) params: vec4<f32>,
+    @location(3) @interpolate(flat) params: vec4<f32>,
     @location(4) surf: f32,
 };
 

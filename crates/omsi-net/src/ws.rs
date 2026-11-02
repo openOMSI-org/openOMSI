@@ -24,6 +24,8 @@ pub use session::query_session;
 
 #[path = "ws/urls.rs"]
 mod urls;
+#[path = "ws/bridge_close.rs"]
+mod bridge_close;
 pub use urls::{http_base, web_bases, ws_url};
 
 use std::io::{ErrorKind, Read, Write};
@@ -1006,7 +1008,7 @@ impl WsClient {
                                 std::thread::sleep(Duration::from_millis(2));
                             }
                         }
-                        let _ = ws.close(None);
+                        bridge_close::close(&mut ws, &udp, &mut buf);
                         Ok(())
                     })();
                     if st.load(Ordering::Relaxed) {
