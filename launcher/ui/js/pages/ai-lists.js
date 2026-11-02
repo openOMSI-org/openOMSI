@@ -135,11 +135,13 @@ function Picker({ title, kinds, onPick, onClose, hint, multi }) {
         ${!a.lib && html`<div class="row muted" style="padding:16px"><${Spinner} /> ${t('Reading the vehicles…')}</div>`}
         ${a.lib && !list.length && html`<${Empty} icon="search" title="Nothing found" />`}
         <div class="ail-picker-list">
-          ${list.slice(0, 300).map((v) => html`<button class=${'ail-pick' + (sel && sel.file === v.file ? ' on' : '')} onClick=${() => setSel(v)} onDblClick=${() => onPick([v])}>
-            ${multi && html`<span role="checkbox" aria-checked=${ticked.some((y) => y.file === v.file)} class=${'ail-tick' + (ticked.some((y) => y.file === v.file) ? ' on' : '')} title=${t('Tick to add several at once')} tabindex="0" onClick=${(e) => { e.stopPropagation(); tick(v); }} onDblClick=${(e) => e.stopPropagation()} onKeyDown=${(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); tick(v); } }}>${ticked.some((y) => y.file === v.file) && html`<${Icon} name="check" size=${14} />`}</span>`}
-            <span class="grow"><b>${v.name}</b><small>${v.folder}</small></span>
-            <${Tag}>${t(v.kind === 'bus' ? 'Bus' : v.kind === 'aircraft' ? 'Aircraft' : 'AI vehicle')}</${Tag}>
-          </button>`)}
+          ${list.slice(0, 300).map((v) => html`<div class="ail-pick-row">
+            ${multi && html`<button type="button" role="checkbox" aria-checked=${ticked.some((y) => y.file === v.file)} aria-label=${v.name} class=${'ail-tick' + (ticked.some((y) => y.file === v.file) ? ' on' : '')} title=${t('Tick to add several at once')} onClick=${() => tick(v)}>${ticked.some((y) => y.file === v.file) && html`<${Icon} name="check" size=${14} />`}</button>`}
+            <button class=${'ail-pick' + (sel && sel.file === v.file ? ' on' : '')} onClick=${() => setSel(v)} onDblClick=${() => onPick([v])}>
+              <span class="grow"><b>${v.name}</b><small>${v.folder}</small></span>
+              <${Tag}>${t(v.kind === 'bus' ? 'Bus' : v.kind === 'aircraft' ? 'Aircraft' : 'AI vehicle')}</${Tag}>
+            </button>
+          </div>`)}
           ${list.length > 300 && html`<p class="muted" style="padding:8px 4px">${t('Type to narrow the list down.')}</p>`}
         </div>
       </div>
@@ -340,14 +342,16 @@ function onPick(vs) {
   } else if (p.kind === 'rule') {
     const rules = clone(a.rules);
     const r = rules.find((x) => same(x.line, p.line.name));
+    const notes = [];
     for (const w of vs) {
       if (r && !r.types.some((f) => norm(f) === norm(w.file))) {
         r.types.push(w.file);
         // a type the line's depots do not have is added to them
         const added = p.line.groups.filter((n) => ensureInDepot(groups, n, w.file));
-        if (added.length) toast(t('{type} was added to {depot}, with a few buses.', { type: w.name, depot: added.join(', ') }), 'info');
+        if (added.length) notes.push(t('{type} was added to {depot}, with a few buses.', { type: w.name, depot: added.join(', ') }));
       }
     }
+    if (notes.length) toast(notes.join(' '), 'info');
     change({ groups, rules, pick: null });
     return;
   }
