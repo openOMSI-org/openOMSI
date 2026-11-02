@@ -360,13 +360,13 @@ impl App {
             nav.opacity = old_opacity;
             self.perf.profile.add(crate::profile_keys::ProfKey::HudNavigator, __tn.elapsed().as_secs_f64());
             // OMSI 2's dynamic route arrows over the junctions ahead
-            if nav.arrows {
+            if nav.arrows && self.photo.is_none() {
                 if let Some(w) = self.world.as_ref() {
                     let spots = nav.arrow_spots(self.session.traffic.as_ref().map(|t| &t.net), 350.0, &|id| w.data.peek().objects.get(&id).map(|p| (p.0, p.1[0])));
                     self.gfx.route_arrows.tick(dt, w, r, scene, &spots);
                 }
             } else if self.gfx.route_arrows.any() {
-                // (switched off in the menu: the ones standing go too)
+                // (switched off in the menu or out of the photo: the ones standing go too)
                 if let Some(w) = self.world.as_ref() {
                     self.gfx.route_arrows.clear(w, r, scene);
                 }
