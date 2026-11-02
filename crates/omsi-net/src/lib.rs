@@ -2857,6 +2857,17 @@ impl LanSession {
         Some(peer)
     }
 
+    /// The peer `id` sent this from the address it was welcomed from: it is alive.
+    fn alive_from(&mut self, id: u32, from: SocketAddr) -> bool {
+        match self.peers.get_mut(&id) {
+            Some(p) if p.addr == Some(from) => {
+                p.last_seen = Instant::now();
+                true
+            }
+            _ => false,
+        }
+    }
+
     fn on_state(&mut self, data: &[u8], from: SocketAddr) {
         let Some((id, seq, state)) = wire::decode_state(data, PROTOCOL as u8) else {
             return;
