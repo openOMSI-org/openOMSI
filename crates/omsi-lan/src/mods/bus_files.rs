@@ -229,6 +229,8 @@ pub(crate) fn add_fonts<'a>(root: &Path, fonts: impl Iterator<Item = &'a str>, o
     }
     let before = out.len();
     let mut seen: Vec<String> = Vec::new();
+    // (.oft, its text, its bitmaps) of every file naming a wanted font, by folder
+    let mut found: Vec<(PathBuf, String, Vec<PathBuf>)> = Vec::new();
     for dir in &dirs {
         let dir = dir.clone();
         let list = omsi_cfg::vfs::list_dir(&dir);
@@ -244,21 +246,48 @@ pub(crate) fn add_fonts<'a>(root: &Path, fonts: impl Iterator<Item = &'a str>, o
                 continue;
             };
             let lines: Vec<&str> = text.lines().map(|l| l.trim()).collect();
+            let mut bitmaps = Vec::new();
             for (i, l) in lines.iter().enumerate() {
                 if l.eq_ignore_ascii_case("[newfont]") && lines.get(i + 1).is_some_and(|n| wanted.contains(&n.to_lowercase())) {
-                    add(out, path.clone());
-                    for b in lines.iter().skip(i + 2).take(2) {
-                        add(out, omsi_cfg::resolve_path(&dir, b));
-                    }
+                    bitmaps.extend(lines.iter().skip(i + 2).take(2).map(|b| omsi_cfg::resolve_path(&dir, b)));
                 }
+            }
+            if !bitmaps.is_empty() {
+                found.push((path, text, bitmaps));
             }
         }
         seen.push(format!("{} ({} entries, {ofts} .oft, {unread} unreadable)", dir.display(), list.map(|l| l.len()).unwrap_or(0)));
+    }
+    for (path, _, bitmaps) in without_copies(found) {
+        add(out, path);
+        for b in bitmaps {
+            add(out, b);
+        }
     }
     // (a display's font that is nowhere: its sign stays blank for the others too)
     if out.len() == before {
         log::warn!("bus files: no font of {wanted:?} in {seen:?}: its signs stay blank for the other players");
     }
+}
+
+/// `found` without the copies of a file beside it: an `.oft` with the very text of another in
+/// its folder (Windows' `LCD_7-Segment (2).oft` next to `LCD_7-Segment.oft`) draws the same
+/// letters, yet it made the bus another version for every player and server without the copy.
+/// Of the same text, the shortest name is kept (then the first by name).
+pub(super) fn without_copies(found: Vec<(PathBuf, String, Vec<PathBuf>)>) -> Vec<(PathBuf, String, Vec<PathBuf>)> {
+    let rank = |p: &Path| {
+        let n = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        (n.chars().count(), n)
+    };
+    let mut kept: Vec<(PathBuf, String, Vec<PathBuf>)> = Vec::new();
+    for f in found {
+        match kept.iter().position(|k| k.0.parent() == f.0.parent() && k.1 == f.1) {
+            Some(i) if rank(&f.0) < rank(&kept[i].0) => kept[i] = f,
+            Some(_) => {}
+            None => kept.push(f),
+        }
+    }
+    kept
 }
 
 /// `path` from the root it lies in - the content folder, a mounted archive or the original
@@ -309,6 +338,12 @@ mod tests {
         add_fonts(&d, ["matrix 16"].into_iter(), &mut out);
         let got: Vec<String> = out.iter().map(|p| p.file_name().unwrap().to_string_lossy().into_owned()).collect();
         assert_eq!(got, vec!["matrix.oft", "matrix16.bmp", "matrix16_a.bmp"]);
+        // a copy of it Windows made beside it changes nothing
+        std::fs::copy(d.join("Fonts/matrix.oft"), d.join("Fonts/matrix (2).oft")).unwrap();
+        let mut again = BTreeSet::new();
+        add_fonts(&d, ["Matrix 16"].into_iter(), &mut again);
+        let names: Vec<String> = again.iter().map(|p| p.file_name().unwrap().to_string_lossy().into_owned()).collect();
+        assert_eq!(names, vec!["matrix.oft", "matrix16.bmp", "matrix16_a.bmp"]);
         let _ = std::fs::remove_dir_all(&d);
     }
 

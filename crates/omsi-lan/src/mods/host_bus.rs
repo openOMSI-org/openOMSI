@@ -31,7 +31,7 @@ pub(super) fn compare(bus: &str, paint: &str, ours: &[Entry]) {
     }
     let names = |v: &[String]| v.iter().take(NAMED).cloned().collect::<Vec<_>>().join(", ");
     log::warn!(
-        "bus identity: {bus} ({paint}) is not the server's list ({} files there, {} here): {} only on the server [{}]; {} only here [{}]; {} with other content [{}]",
+        "bus identity: {bus} ({paint}) is not the server's list ({} files there, {} here; the server's holds every paint, so other paints' files show as only there): {} only on the server [{}]; {} only here [{}]; {} with other content [{}]",
         theirs.len(), ours.len(), only_there.len(), names(&only_there), only_here.len(), names(&only_here), differ.len(), names(&differ)
     );
 }
