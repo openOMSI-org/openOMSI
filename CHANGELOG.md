@@ -523,6 +523,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **The map's own sounds are quieter inside the bus**: birds, church bells, fountains and the
+  other sounds of the scenery are heard through the bus's bodywork in a cab view, louder as the
+  doors and windows open, as the AI traffic already was; outside they keep their full volume.
 - **Each graphics profile is a file of its own.** The launcher kept them all in one
   `graphics_profiles.json`: a file that could not be read counted as having none, and the next
   profile kept was written alone over the file, taking the rest with it. They are now in
