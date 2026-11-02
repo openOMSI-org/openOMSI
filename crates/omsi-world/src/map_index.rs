@@ -800,7 +800,7 @@ pub fn tile_row_objects(att: &SplineAttachment, splines: &[MapSpline], origin: D
     let Some(own) = splines.get(si).filter(|s| !s.deleted) else { return Vec::new() };
     let Some(start) = row_start(att, own, index) else { return Vec::new() };
     let interval = att.interval.max(0.0);
-    let last = start.d0 + if interval > 0.0 { (att.range.max(0.0) / interval + 1e-6).floor() * interval } else { 0.0 };
+    let last = start.d0 + if interval > 0.0 { ((att.range.max(0.0) + JOINT_TOLERANCE) / interval).floor() * interval } else { 0.0 };
     let mut out: Vec<(usize, RowObject)> = place_on(att, own, origin, index, start).into_iter().map(|o| (si, o)).collect();
     let (mut cur, mut acc, mut backwards) = (si, start.acc, start.backwards);
     let mut seen = vec![si];
@@ -1130,6 +1130,17 @@ mod tests {
         let objs = tile_row_objects(&master, &[a, b], DVec2::ZERO, Some(&ix));
         let idx: Vec<usize> = objs.iter().map(|(_, o)| o.index).collect();
         assert_eq!(idx, vec![0, 1, 2, 3, 4], "the object 0.2 mm past the joint at 400 m once: {idx:?}");
+    }
+
+    #[test]
+    fn a_row_s_last_object_just_past_its_range_is_drawn_on_every_spline_alike() {
+        let long = spline(1, 0, 0, 1000.0);
+        assert_eq!(row_objects(&row(130.0, 389.9995, 10.0, None), &long, DVec2::ZERO, None).len(), 4, "390 m against a range written as 389.9995");
+        let ix = buffer_stop_chain();
+        let a = spline(10, 0, 11, 300.0);
+        let b = MapSpline { pos: [0.0, 600.0, 10.0], heading: 180.0, ..spline(11, 12, 10, 200.0) };
+        let objs = tile_row_objects(&SplineAttachment { id: 9, ..row(130.0, 389.9995, 10.0, None) }, &[a, b], DVec2::ZERO, Some(&ix));
+        assert_eq!(objs.iter().map(|(_, o)| o.index).collect::<Vec<_>>(), vec![0, 1, 2, 3], "the fourth, on the next spline, too");
     }
 
     #[test]
