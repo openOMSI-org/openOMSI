@@ -114,8 +114,10 @@ impl KeyboardCfg {
                 self.game.push(KeyBinding { action: action.into(), scan_code, modifier: KEY_CTRL });
             }
         }
+        let g_taken = self.game.iter().chain(self.vehicles.iter()).any(|b| b.scan_code == 34 && b.chord() & (KEY_SHIFT | KEY_CTRL) == KEY_SHIFT | KEY_CTRL);
         if !self.game.iter().any(|b| b.action.eq_ignore_ascii_case("get_up")) {
-            self.game.push(KeyBinding { action: "get_up".into(), scan_code: 34, modifier: KEY_CTRL | KEY_SHIFT });
+            let (scan_code, modifier) = if g_taken { (0, 0) } else { (34, KEY_CTRL | KEY_SHIFT) };
+            self.game.push(KeyBinding { action: "get_up".into(), scan_code, modifier });
         }
         for action in ["blinker_left_toggle", "blinker_right_toggle"] {
             if !self.vehicles.iter().any(|b| b.action.eq_ignore_ascii_case(action)) {
@@ -290,6 +292,16 @@ mod tests {
         assert_eq!(key(&cfg, "gear_down"), vec![(208, KEY_CTRL)]);
         let cleared = KeyboardCfg { game: vec![KeyBinding { action: "gear_up".into(), scan_code: 0, modifier: 0 }], ..Default::default() }.with_game_defaults();
         assert_eq!(key(&cleared, "gear_up"), vec![(0, 0)]);
+    }
+
+    #[test]
+    fn getting_up_takes_ctrl_shift_g_only_when_it_is_free() {
+        let key = |c: &KeyboardCfg| c.game.iter().filter(|b| b.action == "get_up").map(|b| (b.scan_code, b.modifier)).collect::<Vec<_>>();
+        assert_eq!(key(&KeyboardCfg::default().with_game_defaults().with_game_defaults()), vec![(34, KEY_CTRL | KEY_SHIFT)]);
+        let mine = KeyBinding { action: "kw_tuer".into(), scan_code: 34, modifier: KEY_CTRL | KEY_SHIFT };
+        let cfg = KeyboardCfg { vehicles: vec![mine.clone()], ..Default::default() }.with_game_defaults();
+        assert_eq!(key(&cfg), vec![(0, 0)]);
+        assert!(cfg.vehicles.contains(&mine));
     }
 
     #[test]
