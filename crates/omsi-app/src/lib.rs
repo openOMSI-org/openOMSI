@@ -136,7 +136,6 @@ mod on_foot;
 mod trolley_hands;
 mod trolley_mouse;
 pub(crate) mod trolley_net;
-mod trolley_sound;
 mod optimiser;
 use omsi_scene::route_arrows;
 mod server;

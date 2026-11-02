@@ -6,7 +6,7 @@ import { html, useState, useEffect, useRef } from '../../vendor/preact-htm.js';
 import { S, useStore, set, toast, remembered, remember } from '../store.js';
 import { t } from '../i18n.js';
 import { call, onPhone, inTauri } from '../api.js';
-import { Button, Card, Select, Input, Toggle, Tabs, Slider, PageHead, useConfirm } from '../ui.js';
+import { Button, Card, Select, Input, Toggle, Tabs, Slider, PageHead, Search, useConfirm } from '../ui.js';
 import { saveSettings, applyTheme, fitWindow, launcherSize, LAUNCHER_SIZES, launcherLayout, LAUNCHER_LAYOUTS } from '../data.js';
 import { UpdateRow, checkUpdates } from '../updates.js';
 import { SETTINGS_TABS, GRAPHICS_PROFILE_KEYS } from './settings-schema.js';
@@ -48,6 +48,25 @@ function asStored(cur, v) {
 
 const visible = (row, s, platform) => !row.when || row.when(s, platform);
 
+const fold = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+function matches(row, words) {
+  if (!row.label) return false;
+  const text = fold([row.label, t(row.label), row.help, row.help && t(row.help), typeof row.key === 'string' && row.key].join(' '));
+  return words.every((w) => text.includes(w));
+}
+
+function SearchResults({ tabs, words, platform, ask }) {
+  const s = S.settings;
+  const groups = tabs.filter((tab) => tab.cols).map((tab) => [tab, tab.cols.flatMap((col) => col.rows.filter((row) => visible(row, s, platform) && matches(row, words)))]).filter(([, rows]) => rows.length);
+  if (!groups.length) return html`<p class="muted" style="margin:16px 0">${t('No setting matches this search')}</p>`;
+  return html`<div class="settings-grid">
+    ${groups.map(([tab, rows]) => html`<${Card} key=${tab.id} title=${tab.label}>
+      ${rows.map((row, i) => html`<${Row} key=${i + (row.key || row.label)} row=${row} ask=${ask} />`)}
+    </${Card}>`)}
+  </div>`;
+}
+
 export function SettingsPage() {
   const s = useStore();
   const [tab, setTab] = useState(() => {
@@ -55,12 +74,24 @@ export function SettingsPage() {
     return SETTINGS_TABS.some((x) => x.id === id) ? id : 'graphics';
   });
   const [ask, dialog] = useConfirm();
+  const [q, setQ] = useState('');
+  useEffect(() => {
+    const key = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        document.querySelector('.settings-search input')?.focus();
+      } else if (e.key === 'Escape' && document.activeElement?.closest?.('.settings-search')) setQ('');
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, []);
   if (!s.settings) return null;
   const platform = s.boot?.platform || '';
   // (the model test runs the game program: not on a phone)
   const phone = ['android', 'ios'].includes(platform);
   const tabs = SETTINGS_TABS.filter((x) => visible(x, s.settings, platform));
   const current = tabs.find((x) => x.id === tab) || tabs[0];
+  const words = fold(q).split(/\s+/).filter(Boolean);
   const pick = (id) => {
     // (Troubleshooting is no tab of its own: it opens that page at its model test)
     if (id === 'troubleshoot') {
@@ -72,14 +103,17 @@ export function SettingsPage() {
   };
   return html`
     <${PageHead} title="Settings" text="Every change is saved at once; the game reads them when it starts." />
-    <${Tabs} value=${current.id} options=${[...tabs.map((x) => [x.id, x.label]), ...(phone ? [] : [['troubleshoot', 'Troubleshooting']])]} onChange=${pick} />
+    <div class="settings-search" style="margin-bottom:12px"><${Search} value=${q} onInput=${setQ} placeholder="Search all settings (Ctrl+F)" /></div>
+    ${words.length
+      ? html`<${SearchResults} tabs=${tabs} words=${words} platform=${platform} ask=${ask} />`
+      : html`<${Tabs} value=${current.id} options=${[...tabs.map((x) => [x.id, x.label]), ...(phone ? [] : [['troubleshoot', 'Troubleshooting']])]} onChange=${pick} />
     ${current.page === 'ailists'
       ? html`<div key=${tab}><${AiListsPage} /></div>`
       : html`<div class="settings-grid" key=${tab}>
       ${current.cols.map((col) => html`<${Card} title=${col.title}>
         ${col.rows.filter((row) => visible(row, s.settings, platform)).map((row, i) => html`<${Row} key=${i + (row.key || row.id || row.label || row.title || '')} row=${row} ask=${ask} />`)}
       </${Card}>`)}
-    </div>`}
+    </div>`}`}
     ${dialog}
   `;
 }

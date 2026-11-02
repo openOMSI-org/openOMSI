@@ -295,7 +295,9 @@ pub(super) fn audio(cx: AudioCx, dt: f32) {
         match cx.player.player.as_mut() {
             Some(p) => {
                 let inside = cx.view.cam.in_cab;
-                p.trolley_sound.update(a, &mut p.vehicle, &[], *cx.clock.paused);
+                if let Some(g) = p.vehicle.trolley.as_deref_mut() {
+                    p.trolley_sound.update(a, &mut g.rig, p.vehicle.position.as_vec3(), &[], *cx.clock.paused);
+                }
                 cx.sound.radio.set_map(&cx.common.args.root, &cx.common.args.map);
                 cx.sound.radio.fx = cx.common.settings.radio_fx;
                 if let Some(m) = cx.sound.radio.update(a, &p.vehicle, inside) {
