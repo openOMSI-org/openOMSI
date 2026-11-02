@@ -44,16 +44,19 @@ impl App {
         }
         self.shell.quick_edit = false;
         self.menus.key_capture = None;
+        if self.menus.menu_edit.is_some() {
+            crate::platform::text_input(self.window.as_deref(), false);
+        }
         if self.menus.menu_edit_number {
-            if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);}
+            crate::platform::text_input(self.window.as_deref(),false);
             self.menus.menu_edit_number=false; self.menus.menu_edit=None;
         }
         if self.menus.menu_edit_ident {
-            if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);}
+            crate::platform::text_input(self.window.as_deref(),false);
             self.menus.menu_edit_ident=false; self.menus.menu_edit=None;
         }
         if self.menus.menu_edit_icao {
-            if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);}
+            crate::platform::text_input(self.window.as_deref(),false);
             self.menus.menu_edit_icao=false; self.menus.menu_edit=None;
         }
         let was_open = self.menus.game_menu.take().is_some();

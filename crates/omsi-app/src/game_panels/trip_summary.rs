@@ -29,6 +29,15 @@ fn grade(percent: Option<f64>, pal: Palette) -> Rgba {
     }
 }
 
+fn status_color(status: &str, pal: Palette) -> Option<Rgba> {
+    match status {
+        "On time" => Some(theme_color(pal.ok)),
+        "Delayed" | "Left early" => Some(theme_color(pal.warn)),
+        "Not served" => Some(theme_color(pal.danger)),
+        _ => None,
+    }
+}
+
 fn columns(children: Vec<Element>) -> Element {
     let children = children.into_iter().map(|c| Element { grow: true, ..c }).collect();
     el(None, Kind::Row { children, gap: 24.0, align: RowAlign::Start })
@@ -98,16 +107,17 @@ impl TripPanel {
             children.push(columns(gauges.iter().map(|(_, p, _)| Element { color: Some(grade(*p, pal)), ..el(None, Kind::Bar { value: p.map_or(0.0, |p| (p / 100.0).clamp(0.0, 1.0) as f32), height: 6.0, background: None, segments: Vec::new() }) }).collect()));
         }
         children.push(divider());
-        let rows: Vec<Vec<String>> = s.rows.iter().map(|r| r.to_vec()).collect();
+        let rows: Vec<Vec<String>> = s.rows.iter().map(|r| r.iter().enumerate().map(|(k, c)| if k == 4 { tr(c).into_owned() } else { c.clone() }).collect()).collect();
+        let inks = s.rows.iter().map(|r| (0..6).map(|k| (k == 4).then(|| status_color(&r[4], pal)).flatten()).collect()).collect();
         children.push(el(
             None,
             Kind::Table {
-                columns: ["Bus stop", "Plan", "Actual", "Diff", "Odometer"].map(|c| tr(c).into_owned()).to_vec(),
+                columns: ["Bus stop", "Plan", "Actual", "Diff", "Status", "Odometer"].map(|c| tr(c).into_owned()).to_vec(),
                 rows,
-                widths: vec![0.36, 0.15, 0.15, 0.16, 0.18],
+                widths: vec![0.29, 0.13, 0.13, 0.14, 0.15, 0.16],
                 size: 13.0,
                 aligns: Vec::new(),
-                inks: Vec::new(),
+                inks,
             },
         ));
         children.push(grow_row(vec![button("copy", &tr("Copy"), Some("content_copy")), button("save", &tr("Save"), Some("save")), button("close", &tr("Close"), Some("close"))]));
@@ -115,14 +125,14 @@ impl TripPanel {
             children.push(note(said, pal));
         }
         children.push(row(vec![note(&tr("Settings → Gameplay → Trip summary turns it off."), pal)], RowAlign::Start));
-        card(Anchor::Center, 0.0, 0.0, 620.0, 236, pal, children)
+        card(Anchor::Center, 0.0, 0.0, 660.0, 236, pal, children)
     }
 
     /// About how much room the card takes at scale 1 (width, height), so that a small screen
     /// (a phone) can draw it smaller instead of past its edges.
     pub(crate) fn extent(&self) -> (f32, f32) {
         let table = (self.summary.rows.len() + 1) as f32 * 13.0 * crate::plugin_ui::LINE + 3.0;
-        (650.0, table + 380.0)
+        (680.0, table + 380.0)
     }
 }
 
