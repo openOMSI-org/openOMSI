@@ -38,6 +38,7 @@ impl App {
     }
 
     pub(crate) fn close_game_menu(&mut self) {
+        self.shell.ui.dismiss_popups();
         // Never keep unconfirmed graphics changes after dismissing the entire menu.
         if self.menus.graphics_before.is_some() {
             crate::game_lists::cancel_graphics_changes(self);
@@ -68,6 +69,9 @@ impl App {
 
     pub(crate) fn menu_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode) {
         self.menus.menu_kbd = true;
+        if code == KeyCode::Escape && self.shell.ui.dismiss_date_popup() {
+            return;
+        }
         if self.menus.key_capture.is_some() {
             match code {
                 KeyCode::ShiftLeft | KeyCode::ShiftRight | KeyCode::ControlLeft | KeyCode::ControlRight | KeyCode::AltLeft | KeyCode::AltRight => {}
