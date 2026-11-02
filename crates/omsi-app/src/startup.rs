@@ -407,7 +407,7 @@ impl Opener {
                 self.k += 1;
                 continue;
             }
-            let surface = match inst.create_surface(self.window.clone()) {
+            let surface = match omsi_render::create_surface(&inst, &self.window) {
                 Ok(s) => s,
                 Err(e) => {
                     self.failures.push(format!("{}: no surface ({e})", b.map(|b| format!("{b:?}")).unwrap_or_else(|| "first choice".into())));
