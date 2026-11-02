@@ -107,7 +107,7 @@ export function Select({ value, options, onChange, disabled, raw, placeholder })
     else if (searchable && e.key === 'Backspace') {
       e.preventDefault();
       setQ((x) => x.slice(0, -1));
-    } else if (searchable && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key !== ' ' || q)) {
+    } else if (searchable && e.key.length === 1 && (e.getModifierState?.('AltGraph') || (!e.ctrlKey && !e.metaKey && !e.altKey)) && (e.key !== ' ' || q)) {
       e.preventDefault();
       setQ((x) => x + e.key);
     }
