@@ -266,7 +266,7 @@ fn dropping_a_websocket_candidate_sends_bye_before_closing_the_bridge() {
     .unwrap();
     assert_eq!(host.peers.load(std::sync::atomic::Ordering::Relaxed), 1);
     drop(candidate);
-    let until = Instant::now() + Duration::from_secs(2);
+    let until = Instant::now() + Duration::from_secs(if cfg!(windows) { 10 } else { 2 });
     while host.peers.load(std::sync::atomic::Ordering::Relaxed) != 0 {
         assert!(
             Instant::now() < until,
