@@ -438,6 +438,10 @@ const general = {
         { type: 'toggle', key: 'show_fps', label: 'Frame rate in the corner' },
         { type: 'select', key: 'perf_overlay', label: 'Performance details', options: [['off', 'Off'], ['compact', 'Compact'], ['detailed', 'Detailed']] },
         { type: 'toggle', key: 'notes', label: 'Notes in the top-left corner' },
+        { type: 'toggle', key: 'notes_driving', label: 'Notes: why the bus does not move', when: (s) => s.notes !== false },
+        { type: 'toggle', key: 'notes_script', label: "Notes: the bus's own messages", when: (s) => s.notes !== false },
+        { type: 'toggle', key: 'notes_trip', label: 'Notes: the end of a trip', when: (s) => s.notes !== false },
+        { type: 'toggle', key: 'notes_tickets', label: 'Notes: tickets and change', when: (s) => s.notes !== false },
         { type: 'toggle', key: 'chat', label: 'Chat in online games' },
         // (on top of the interface's size; Ctrl + the wheel over it in the game)
         { type: 'slider', key: 'chat_size', label: 'Chat size', min: 0.5, max: 3, step: 0.1, def: 1, format: pct, store: r1 },
@@ -447,6 +451,7 @@ const general = {
         { type: 'toggle', key: 'navigator', label: 'Navigator (Shift+N: map, schedule, off)' },
         { type: 'toggle', key: 'nav_arrows', label: 'Route arrows (as in OMSI 2)' },
         { type: 'toggle', key: 'nav_ai', label: 'AI vehicles on the map' },
+        { type: 'toggle', key: 'nav_ai_cars', label: 'Cars on the map too', when: (s) => s.nav_ai !== false },
         { type: 'toggle', key: 'nav_surface', label: 'Map surface under the roads' },
         { type: 'toggle', key: 'nav_classic_2d', label: 'Classic 2D navigator (lightweight)' },
         { type: 'toggle', key: 'nav_3d', label: '3D buildings on the map' },

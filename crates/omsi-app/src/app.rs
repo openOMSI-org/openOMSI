@@ -579,6 +579,7 @@ impl App {
                 if let Some(n) = self.menus.navigator.as_mut() {
                     n.arrows = self.settings.nav_arrows;
                     n.show_ai = self.settings.nav_ai;
+                    n.show_cars = self.settings.nav_ai_cars;
                     n.show_surface = self.settings.nav_surface;
                     n.light = self.settings.is_light_theme();
                     n.show_3d = self.settings.nav_3d;

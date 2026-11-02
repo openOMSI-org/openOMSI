@@ -38,6 +38,7 @@ impl App {
         }
         // the situation to continue next time (OMSI writes it when a map is left; once, as
         // the rest: `career.seconds` is zero after the first time)
+        self.settle_depot_switch(true);
         self.save_last_situation();
         if self.session.career.path.is_some() {
             if let Err(e) = self.session.career.save() {
@@ -54,18 +55,7 @@ impl App {
             log::warn!("writing the session summary: {e}");
         }
         if let (Some(id), Some(p)) = (self.args.depot.as_deref(), self.player.as_ref()) {
-            let c = &self.session.career;
-            let outing = omsi_launcher_lib::depot::Outing {
-                map: self.args.map.clone(),
-                line: self.args.line.clone().unwrap_or_default(),
-                tour: self.args.tour.clone().unwrap_or_default(),
-                metres: c.metres,
-                seconds: c.seconds,
-                stops: c.stops[0],
-                tickets: c.tickets.0,
-                takings: c.tickets.1,
-                crashes: c.crashes[0],
-            };
+            let outing = crate::depot_bus::outing_since(&self.session.career, &self.args, &self.session.depot_base);
             crate::depot_bus::record(&p.vehicle, id, &outing);
         }
         self.session.career.seconds = 0.0;
@@ -196,6 +186,7 @@ impl App {
         if n >= 2 {
             return false;
         }
+        self.settle_depot_switch(true);
         let Some(file) = self.save_last_situation() else { return false };
         let Ok(exe) = std::env::current_exe() else { return false };
         let mut cmd = std::process::Command::new(exe);

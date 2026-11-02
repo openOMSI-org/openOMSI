@@ -321,8 +321,8 @@ impl VehicleInstance {
         for ai in 0..self.v_wheels.len() {
             let axle = self.v_wheels[ai];
             for (si, w) in axle.iter().enumerate() {
+                self.put_turn(w[0], ai, si);
                 let ws = self.physics.wheels[ai][si].clone();
-                self.put(w[0], ws.rotation_deg.to_radians());
                 self.put(w[1], ws.rpm);
                 if !self.ty.def.is_rail() {
                     self.put(w[2], if ai == self.steered_axle() { steer } else { 0.0 });
@@ -586,7 +586,6 @@ impl VehicleInstance {
             let axle = self.v_wheels[ai];
             for (si, w) in axle.iter().enumerate() {
                 if let Some(rw) = rb.wheels.get(ai * 2 + si) {
-                    self.put(w[0], rw.rotation_deg.to_radians());
                     self.put(w[1], rw.rpm);
                     // (each axle's own angle: OMSI turns every axle towards the centre of
                     // the bend on the `[rot_pnt_long]` line - one angle for both sides)
@@ -605,10 +604,12 @@ impl VehicleInstance {
                     let shown = -rw.compression.max(0.0);
                     self.put(w[3], shown);
                     if let Some(ws) = self.physics.wheels.get_mut(ai).and_then(|a| a.get_mut(si)) {
+                        ws.turned = rw.turned;
                         ws.rotation_deg = rw.rotation_deg;
                         ws.rpm = rw.rpm;
                         ws.suspension = shown;
                     }
+                    self.put_turn(w[0], ai, si);
                 }
             }
         }

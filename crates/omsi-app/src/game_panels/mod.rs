@@ -15,6 +15,7 @@ use omsi_ui::theme::Palette;
 mod dest_form;
 mod multiplayer;
 mod move_here;
+pub(crate) mod radio_panel;
 pub(crate) use dest_form::open as open_dest_form;
 pub(crate) use move_here::ask as ask_move;
 pub(crate) mod quick_menu;
@@ -41,6 +42,7 @@ pub(crate) struct GamePanels {
     pub(crate) dest: Option<dest_form::DestForm>,
     pub(crate) multiplayer: Option<multiplayer::Multiplayer>,
     pub(crate) view: Option<view_editor::ViewEditor>,
+    pub(crate) radio: Option<radio_panel::RadioPanel>,
     /// Where the map camera's click asks to move the bus to.
     pub(crate) move_to: Option<glam::DVec3>,
 }
@@ -48,7 +50,7 @@ pub(crate) struct GamePanels {
 impl GamePanels {
     /// Whether any panel is open.
     pub(crate) fn any(&self) -> bool {
-        self.multiplayer.is_some() || self.quick.is_some() || self.trip.is_some() || self.dest.is_some() || self.view.is_some() || self.move_to.is_some()
+        self.multiplayer.is_some() || self.quick.is_some() || self.trip.is_some() || self.dest.is_some() || self.view.is_some() || self.radio.is_some() || self.move_to.is_some()
     }
 
     /// Whether the panels have the mouse.
@@ -140,6 +142,7 @@ impl crate::App {
                 "multiplayer" => multiplayer::click(self, el),
                 "view" => view_editor::click(self, el),
                 "move" => move_here::click(self, el),
+                "radio" => radio_panel::click(self, el),
                 _ => {}
             }
         }
@@ -183,6 +186,7 @@ impl crate::App {
             ("multiplayer", self.menus.game_panels.multiplayer.as_ref().map(|f| f.panel(self, pal))),
             ("quick", self.menus.game_panels.quick.as_ref().map(|q| q.panel(self))),
             ("move", self.menus.game_panels.move_to.map(|at| move_here::panel(at, pal))),
+            ("radio", self.menus.game_panels.radio.as_ref().map(|r| r.panel(self, pal))),
         ];
         let gp = &mut self.menus.game_panels;
         for (id, p) in panels {
@@ -195,6 +199,7 @@ impl crate::App {
                 }
             }
         }
+        let clean = self.clean_screen_shown();
         let (Some(r), Some(scene)) = (self.renderer.as_ref(), self.scene.as_mut()) else { return };
         let dpi = self.window.as_ref().map_or(1.0, |w| w.scale_factor() as f32);
         let mut size = crate::ui::size_factor(hud[3], dpi, self.settings.ui_scale, self.settings.ui_scale_window);
@@ -203,7 +208,7 @@ impl crate::App {
             size = size.min(hud[2] * 0.96 / (w * dpi)).min(hud[3] * 0.96 / (h * dpi));
         }
         let map_open = self.menus.navigator.as_ref().is_some_and(|n| n.map_open());
-        let hidden = vr_active || self.menus.game_menu.is_some() || self.menus.chooser.is_some() || map_open || self.photo.is_some();
+        let hidden = vr_active || self.menus.game_menu.is_some() || self.menus.chooser.is_some() || map_open || self.photo.is_some() || clean;
         let frame = crate::plugin_ui::PanelsFrame {
             hud,
             scale: dpi * size,
@@ -317,7 +322,7 @@ impl crate::App {
             return true;
         }
         let gp = &mut self.menus.game_panels;
-        if gp.quick.take().is_some() || gp.move_to.take().is_some() || gp.dest.take().is_some() || gp.trip.take().is_some() {
+        if gp.quick.take().is_some() || gp.move_to.take().is_some() || gp.dest.take().is_some() || gp.trip.take().is_some() || gp.radio.take().is_some() {
             return true;
         }
         if gp.view.is_some() {

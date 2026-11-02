@@ -240,6 +240,7 @@ impl VehicleInstance {
             w.locked = false;
             w.rpm = w.spin * 60.0 / std::f32::consts::TAU;
             w.rotation_deg = (w.rotation_deg + w.spin.to_degrees() * dt).rem_euclid(360.0);
+            w.turned += w.spin * dt;
         }
         rb.accel_body = glam::Vec3::new(0.0, out.accel, 9.81);
     }
@@ -254,6 +255,7 @@ impl VehicleInstance {
             let omega = out.speed / w.radius.max(0.05);
             w.rpm = omega * 60.0 / std::f32::consts::TAU;
             w.rotation_deg = (w.rotation_deg + omega.to_degrees() * dt).rem_euclid(360.0);
+            w.turned += omega * dt;
         }
         Some(out.speed * dt)
     }
