@@ -281,3 +281,14 @@ fn windows_dll_under_wine() {
     assert_eq!(reply.triggers_active, [true]);
     r.finalize();
 }
+
+#[test]
+fn a_plugin_printing_on_its_standard_output_still_talks_to_the_game() {
+    let dir = plugins_dir("printing");
+    let host = Path::new(env!("CARGO_BIN_EXE_omsi-plugin-host"));
+    std::fs::write(dir.join("print-on-stdout"), "").unwrap();
+    let mut r = Remote::spawn(None, host, &dir.join("Demo/demo.dll"), &dir).expect("the host starts");
+    let f = omsi_plugin::Frame { system: vec![(0, 3.0)], vars: vec![(0, 1.5)], ..Default::default() };
+    let reply = r.frame(&f).unwrap().expect("the host answers");
+    assert_eq!(reply.vars, [Some(3.0)]);
+}

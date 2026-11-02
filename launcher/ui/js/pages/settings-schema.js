@@ -399,6 +399,7 @@ const gameplay = {
         { type: 'toggle', key: 'collision_vehicles', label: 'Collisions with vehicles' },
         { type: 'toggle', key: 'collision_objects', label: 'Collisions with objects (walls, poles)' },
         { type: 'toggle', key: 'collision_pedestrians', label: 'Collisions with people' },
+        { type: 'toggle', key: 'realistic_road_physics', label: 'Realistic road physics' },
         { type: 'toggle', key: 'use_real_time', label: 'Start at the real time' },
         { type: 'toggle', key: 'use_real_date', label: "Start on today's date" },
         // the game's clock follows this device's (the host's in multiplayer)
