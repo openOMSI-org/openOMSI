@@ -804,7 +804,8 @@ impl World {
             v.mesh_xf.clear();
             v.mesh_xf.extend_from_slice(xfs);
             v.mesh_visible.clear();
-            v.mesh_visible.extend_from_slice(shown);
+            let hidden = !arrows && v.ty.sco.is_help_arrow;
+            v.mesh_visible.extend(shown.iter().map(|&s| s && !hidden));
             updated += 1;
         }
         (updated, texture_updates)
