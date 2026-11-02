@@ -100,10 +100,7 @@ impl ScheduleSim {
                 .position(|s| s.name.trim_end() == e.paint.trim_end())
                 .or_else(|| (ty.def.default_paint.trim() == "<nouse>").then_some(0))
         } else {
-            Some(
-                ((h >> 42) % ty.paint_schemes.len().min(crate::ai_traffic::AI_SCHEMES) as u64)
-                    as usize,
-            )
+            crate::ai_traffic::ai_scheme(&ty, h >> 42)
         };
         Some(Choice {
             ty,

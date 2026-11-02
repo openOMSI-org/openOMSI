@@ -635,7 +635,7 @@ impl Traffic {
         let scheme = match scheme {
             Some(s) => s,
             None if ty.paint_schemes.is_empty() => None,
-            None => Some((seed >> 8) as usize % ty.paint_schemes.len().min(AI_SCHEMES)),
+            None => omsi_sim::ai_traffic::ai_scheme(&ty, seed >> 8),
         };
         host.paint_scheme = Some(scheme);
         let mut vehicle = VehicleInstance::new(ty.clone(), host);
@@ -723,8 +723,8 @@ impl Traffic {
     pub fn random_sets(&self) -> Vec<(Arc<VehicleType>, Option<usize>)> {
         let mut sets: Vec<(Arc<VehicleType>, Option<usize>)> = Vec::new();
         for (ty, ..) in &self.sim.types {
-            let n = ty.paint_schemes.len().min(AI_SCHEMES);
-            let schemes: Vec<Option<usize>> = if n == 0 { vec![None] } else { (0..n).map(Some).collect() };
+            let set = omsi_sim::ai_traffic::ai_schemes(ty);
+            let schemes: Vec<Option<usize>> = if set.is_empty() { vec![None] } else { set.into_iter().map(Some).collect() };
             for scheme in schemes {
                 if !sets.iter().any(|(t, s)| t.def.path == ty.def.path && *s == scheme) {
                     sets.push((ty.clone(), scheme));

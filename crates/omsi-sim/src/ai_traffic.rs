@@ -86,6 +86,34 @@ use viewer::*;
 /// each and a minute of stutter after loading Spandau.
 pub const AI_SCHEMES: usize = 4;
 
+pub fn ai_schemes(ty: &VehicleType) -> Vec<usize> {
+    use std::hash::{Hash, Hasher};
+    static SALT: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    let salt = *SALT.get_or_init(|| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64));
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    (salt, &ty.def.path).hash(&mut h);
+    spread_schemes(ty.paint_schemes.len(), h.finish() as usize)
+}
+
+pub fn ai_scheme(ty: &VehicleType, pick: u64) -> Option<usize> {
+    let set = ai_schemes(ty);
+    (!set.is_empty()).then(|| set[(pick % set.len() as u64) as usize])
+}
+
+fn spread_schemes(n: usize, h: usize) -> Vec<usize> {
+    let gcd = |mut a: usize, mut b: usize| {
+        while b != 0 {
+            (a, b) = (b, a % b);
+        }
+        a
+    };
+    let mut stride = 1 + (h >> 16) % n.max(1);
+    while gcd(stride, n) != 1 {
+        stride += 1;
+    }
+    (0..n.min(AI_SCHEMES)).map(|i| (h % n + i * stride) % n).collect()
+}
+
 pub struct TrafficSim {
     pub net: Network,
     /// Sum of the spawn weights of every street lane, updated only as tiles add lanes.
