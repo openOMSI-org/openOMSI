@@ -10,13 +10,10 @@ pub(crate) fn tour_start(tour: &omsi_timetable::Tour) -> Option<f64> {
 /// Whether a tour is listed now: it runs on this day and is current at `now` (seconds of the
 /// day) - under way, or leaving within half an hour; one that has finished is not.
 pub(super) fn tour_listed(sch: &crate::schedule::Schedule, line: &str, tour: &omsi_timetable::Tour, now: f64) -> bool {
-    if !sch.tour_available(tour) {
-        return false;
-    }
     let start = tour_start(tour).unwrap_or(0.0);
     let end = sch.tour_stops(line, &tour.number).iter().map(|s| s.3).fold(start, f64::max);
-    // (a night tour's times go on past 24:00: the early hours of the next day count too)
-    [now, now + 86400.0].iter().any(|n| *n >= start - 1800.0 && *n <= end + 60.0)
+    let current = |n: f64| n >= start - 1800.0 && n <= end + 60.0;
+    (sch.tour_today(tour) && current(now)) || (sch.tour_from_yesterday(tour) && current(now + 86400.0))
 }
 
 /// The line number a line's trips carry (`.ttp` line), else the name of the line's file.

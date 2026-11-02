@@ -753,4 +753,29 @@ pub(crate) mod tests {
         assert_eq!(sim.pending.iter().copied().collect::<Vec<_>>(), [1]);
     }
 
+
+    #[test]
+    fn a_friday_night_tour_is_yesterdays_on_saturday() {
+        let day = |doy: i32| crate::SimClock { year: 2022, day_of_year: doy, ..Default::default() };
+        let (friday, saturday) = (day(287), day(288));
+        let mut sim = schedule();
+        sim.date_clock = friday.clone();
+        sim.set_day(&friday);
+        let bits = sim.day_bits;
+        let tour = omsi_timetable::Tour {
+            number: "12".into(),
+            extra: (bits.0 | bits.1).to_string(),
+            trips: vec![
+                omsi_timetable::TourTrip { departure: 5.0 * 60.0, ..Default::default() },
+                omsi_timetable::TourTrip { departure: 25.0 * 60.0, ..Default::default() },
+            ],
+            ..Default::default()
+        };
+        assert!(sim.tour_today(&tour) && !sim.tour_from_yesterday(&tour));
+        sim.date_clock = saturday.clone();
+        sim.set_day(&saturday);
+        assert!(!sim.tour_today(&tour), "a Friday tour is no Saturday tour");
+        assert!(sim.tour_from_yesterday(&tour), "its trip after midnight is tonight's");
+        assert!(sim.tour_available(&tour));
+    }
 }
