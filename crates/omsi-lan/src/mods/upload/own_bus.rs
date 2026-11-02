@@ -358,11 +358,18 @@ fn hashed_one(rel: &str, p: &Path, cache: &std::collections::HashMap<String, (u6
 /// Size and SHA-256 of each file. A private two-worker pool streams disk files;
 /// virtual entries are buffered one at a time and never use Rayon's global pool.
 pub(in crate::mods) fn hashed(files: &[(String, PathBuf)]) -> Vec<Entry> {
+    hashed_counted(files).0
+}
+
+/// `hashed`, and how many of the files the hash cache answered and how many bytes were read
+/// to hash the others (the server's fleet check logs them).
+pub(in crate::mods) fn hashed_counted(files: &[(String, PathBuf)]) -> (Vec<Entry>, usize, u64) {
     use rayon::prelude::*;
     let pool = rayon::ThreadPoolBuilder::new().num_threads(2).thread_name(|n| format!("mod-hash-{n}")).build();
     let mut cache = crate::mods::hash_cache();
     let mut entries = Vec::with_capacity(files.len());
     let mut dirty = false;
+    let (mut cached, mut read) = (0usize, 0u64);
     let mut last_save = std::time::Instant::now();
     // Bounded result batches keep memory low while preserving manifest order.
     for batch in files.chunks(16) {
@@ -372,8 +379,11 @@ pub(in crate::mods) fn hashed(files: &[(String, PathBuf)]) -> Vec<Entry> {
         };
         for (entry, fresh) in done.into_iter().flatten() {
             if let Some((key, value)) = fresh {
+                read += value.0;
                 cache.insert(key, value);
                 dirty = true;
+            } else {
+                cached += 1;
             }
             entries.push(entry);
         }
@@ -384,7 +394,7 @@ pub(in crate::mods) fn hashed(files: &[(String, PathBuf)]) -> Vec<Entry> {
         }
     }
     if dirty { crate::mods::save_hash_cache(&cache); }
-    entries
+    (entries, cached, read)
 }
 
 #[cfg(test)]

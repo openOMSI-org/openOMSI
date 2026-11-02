@@ -55,6 +55,7 @@ fn fleet_paints(cfg: &ServerCfg, root: &Path) -> Vec<omsi_net::ws::FleetPaints> 
         };
         // Use the same resolved scheme names as the authenticated LISTBUS
         // transfer. A server build must not depend on launcher-only crates.
+        let loaded = t.elapsed().as_secs_f64();
         let paints: Vec<String> = vehicle.paint_schemes.iter().take(128).map(|p| p.name.clone()).collect();
         let content = match omsi_lan::mods::fleet_fingerprint_loaded(root, &rel, &path, &vehicle) {
             Ok(c) => c,
@@ -65,7 +66,7 @@ fn fleet_paints(cfg: &ServerCfg, root: &Path) -> Vec<omsi_net::ws::FleetPaints> 
         };
         if !content.is_empty() {
             let n = done.fetch_add(1, Ordering::Relaxed) + 1;
-            log::info!("server fleet: {n}/{total}: {rel}: {} paints ({:.1} s)", paints.len(), t.elapsed().as_secs_f64());
+            log::info!("server fleet: {n}/{total}: {rel}: {} paints ({:.1} s, loading the bus {loaded:.1} s)", paints.len(), t.elapsed().as_secs_f64());
         }
         Some(omsi_net::ws::FleetPaints { bus: rel, paints, content })
     };
