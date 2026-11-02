@@ -3,6 +3,11 @@
 
 use super::*;
 
+pub(super) fn counted_turn(old: f32, angle: f32) -> f32 {
+    use std::f32::consts::{PI, TAU};
+    old + (angle - old + PI).rem_euclid(TAU) - PI
+}
+
 impl VehicleInstance {
     pub(super) fn get(&self, id: Option<omsi_script::VarId>) -> f32 {
         id.map(|i| self.state.vars[i as usize]).unwrap_or(0.0)
@@ -11,6 +16,13 @@ impl VehicleInstance {
     pub(super) fn put(&mut self, id: Option<omsi_script::VarId>, v: f32) {
         if let Some(i) = id {
             self.state.vars[i as usize] = v;
+        }
+    }
+
+    pub(super) fn put_turn(&mut self, id: Option<omsi_script::VarId>, angle: f32) {
+        if let Some(i) = id {
+            let v = &mut self.state.vars[i as usize];
+            *v = counted_turn(*v, angle);
         }
     }
 
@@ -273,5 +285,24 @@ mod tests {
         assert_eq!(changer_value("ticket_give"), None);
         assert_eq!(changer_value("cashdesk_change_0500"), Some(5.0));
         assert_eq!(changer_value("cashdesk_change_1000_off"), None);
+    }
+}
+
+#[cfg(test)]
+mod turn_tests {
+    use super::counted_turn;
+
+    #[test]
+    fn a_wheel_turn_counts_on_past_a_full_turn_and_back() {
+        let mut v = 0.0;
+        for k in 1..=40 {
+            v = counted_turn(v, (k as f32 * 0.5).rem_euclid(std::f32::consts::TAU));
+        }
+        assert!((v - 20.0).abs() < 1e-3, "{v}");
+        for k in (0..40).rev() {
+            v = counted_turn(v, (k as f32 * 0.5).rem_euclid(std::f32::consts::TAU));
+        }
+        assert!(v.abs() < 1e-3, "{v}");
+        assert!((counted_turn(0.0, 0.3) - 0.3).abs() < 1e-6);
     }
 }

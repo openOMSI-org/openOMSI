@@ -867,7 +867,7 @@ impl TrailerPart {
                     main.state.vars[id as usize] = s;
                 }
                 if let Some(id) = self.axle_ids.rotation[a][side] {
-                    main.state.vars[id as usize] = rot;
+                    main.state.vars[id as usize] = super::vars::counted_turn(main.state.vars[id as usize], rot);
                 }
                 if let Some(id) = self.axle_ids.rotation_speed[a][side] {
                     main.state.vars[id as usize] = rpm;
