@@ -164,8 +164,6 @@ impl TrafficSim {
     /// the module). Read from what every car noted in its plan, so the order the cars plan
     /// in decides nothing.
     pub fn resolve_waits(&mut self) {
-        // No recorded junction holds means no wait cycle can require resolution.
-        // Check before allocating an adjacency list for every car, fifty times a second.
         if !self.cars.iter().any(|car| !car.holds.is_empty()) {
             return;
         }

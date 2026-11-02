@@ -141,13 +141,10 @@ pub fn places_off(v: &VehicleInstance, cabin: &Cabin) -> Vec<bool> {
 /// The occupancy variables of the places of bus `bn` that name one (#721), and whether
 /// somebody is on each: a rider at that place (`sitting`: the places of its riders there).
 pub fn places_taken(bn: &BusNow, sitting: &[(BusId, usize)]) -> Vec<(String, bool)> {
-    let occupied: hashbrown::HashSet<(BusId, usize)> = sitting.iter().copied().collect();
-    places_taken_indexed(bn, &occupied)
+    places_taken_in(bn, &sitting.iter().copied().collect())
 }
 
-/// Reuse an occupancy index across all buses of the same simulation step, instead of
-/// searching the complete passenger list for every seat of every bus.
-pub fn places_taken_indexed(bn: &BusNow, occupied: &hashbrown::HashSet<(BusId, usize)>) -> Vec<(String, bool)> {
+pub fn places_taken_in(bn: &BusNow, occupied: &HashSet<(BusId, usize)>) -> Vec<(String, bool)> {
     bn.cabin
         .seats
         .iter()
@@ -167,8 +164,11 @@ pub fn doorways_taken(bn: &BusNow, at: &[(Option<BusId>, DVec3)]) -> (Vec<bool>,
     )
 }
 
-/// The frame supplies occupants of this bus and only pedestrians from nearby spatial
-/// cells. Keep the exact doorway test for the final narrow phase.
+pub fn door_reach(bn: &BusNow) -> f64 {
+    // (beyond the bus's own length round its origin nobody outside can be in a doorway)
+    bn.half.length() + bn.centre.length() + bn.trailers.iter().map(|t| t.offset.length() as f64).fold(0.0, f64::max) + 2.0
+}
+
 pub fn doorways_taken_partitioned<'a>(
     bn: &BusNow,
     aboard: impl IntoIterator<Item = &'a DVec3>,
@@ -176,7 +176,7 @@ pub fn doorways_taken_partitioned<'a>(
 ) -> (Vec<bool>, Vec<bool>) {
     let mut entries = vec![false; bn.cabin.entries.len()];
     let mut exits = vec![false; bn.cabin.exits.len()];
-    let reach = bn.half.length() + bn.centre.length() + bn.trailers.iter().map(|t| t.offset.length() as f64).fold(0.0, f64::max) + 2.0;
+    let reach = door_reach(bn);
     let mut mark = |local: Vec3| {
         for (k, d) in bn.cabin.entries.iter().enumerate() {
             entries[k] |= d.in_doorway(local);
