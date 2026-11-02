@@ -377,6 +377,33 @@ fn articulated_cabins_are_joined_through_the_bellows() {
     assert!(
         (train_heading(0.0, &frames, Vec3::new(0.0, back.y, 0.5)) - bent * 0.5).abs() < 1e-9
     );
+    // a walker in the rear section turns and steps with it, not with the front (#2785)
+    let mut people = PeopleSim::new(Path::new("/nonexistent"), 0);
+    Arc::make_mut(&mut people.last_buses).push(BusNow {
+        id: BusId::Player,
+        cabin: Arc::new(cabin),
+        pos: DVec3::ZERO,
+        rot: lead_rot,
+        heading: 0.0,
+        speed: 0.0,
+        entry_open: Vec::new(),
+        exit_open: Vec::new(),
+        walk_open: None,
+        interior: 0.0,
+        air: CabinAir::default(),
+        half: DVec2::new(1.25, 4.5),
+        centre: DVec2::ZERO,
+        accel: DVec2::ZERO,
+        trailers: frames.to_vec(),
+        terminus: None,
+        takes: Takes::Terminus,
+        next_stop: None,
+        places_off: Vec::new(),
+        served: None,
+        route: None,
+    });
+    assert!((people.cabin_world(BusId::Player, behind_joint).unwrap().1 - bent).abs() < 1e-9);
+    assert!(people.cabin_world(BusId::Player, Vec3::new(1.0, -1.0, 0.5)).unwrap().1.abs() < 1e-9);
 }
 
 /// The SD200's footsteps as its paths.cfg gives them to the links (#311): the stairs
