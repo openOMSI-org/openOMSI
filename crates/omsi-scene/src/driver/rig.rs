@@ -60,8 +60,8 @@ pub(super) fn find_shifter(v: &impl DriverCar, hip: Vec3, heading: f32) -> Optio
         "antrieb_hebel",
     ];
     // "Antrieb" is what OMSI models usually call the gearbox / its lever.
-    const WEAK: &[&str] = &["antrieb", "gear", "shift", "schalt", "getriebe"];
-    const NOT: &[&str] = &["light", "lamp", "display", "indic", "sound", "retard", "park", "door", "wiper", "text", "warn", "oil", "temp", "rpm", "tacho", "taster", "button", "btn"];
+    const WEAK: &[&str] = &["antrieb", "gear", "shift", "schalt", "getriebe", "transmission", "кпп"];
+    const NOT: &[&str] = &["light", "lamp", "display", "indic", "sound", "retard", "park", "door", "wiper", "wisch", "blink", "drehschalt", "kippschalt", "text", "warn", "oil", "temp", "rpm", "tacho", "taster", "button", "btn"];
     let forced = omsi_cfg::flags::OMSI_DRIVER_SHIFTER
         .var()
         .map(|s| s.trim().to_ascii_lowercase())
