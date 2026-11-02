@@ -38,6 +38,7 @@ impl App {
     }
 
     pub(crate) fn close_game_menu(&mut self) {
+        self.shell.ui.dismiss_popups();
         // Never keep unconfirmed graphics changes after dismissing the entire menu.
         if self.menus.graphics_before.is_some() {
             crate::game_lists::cancel_graphics_changes(self);
@@ -68,6 +69,9 @@ impl App {
 
     pub(crate) fn menu_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode) {
         self.menus.menu_kbd = true;
+        if code == KeyCode::Escape && self.shell.ui.dismiss_date_popup() {
+            return;
+        }
         if self.menus.key_capture.is_some() {
             match code {
                 KeyCode::ShiftLeft | KeyCode::ShiftRight | KeyCode::ControlLeft | KeyCode::ControlRight | KeyCode::AltLeft | KeyCode::AltRight => {}
@@ -284,6 +288,7 @@ impl App {
             "admin" => self.open_list(crate::game_lists::ListKind::Admin),
             "players" => self.open_list(crate::game_lists::ListKind::PlayerList),
             "duty" => self.open_list(crate::game_lists::ListKind::Lines),
+            "streets" => self.open_list(crate::game_lists::ListKind::Streets),
             "map" => {
                 self.close_game_menu();
                 if let Some(n) = self.menus.navigator.as_mut() {
@@ -624,7 +629,7 @@ impl crate::App {
 
 /// The lines of the game menu: (what, label). What can be set is on the pages behind
 /// "Options", "Vehicle options" and "World options" (see `game_lists`).
-pub(crate) const GAME_MENU: [(&str, &str); 16] = [
+pub(crate) const GAME_MENU: [(&str, &str); 17] = [
     ("resume", "Resume"),
     ("options", "Options..."),
     ("controls", "Controls..."),
@@ -634,6 +639,7 @@ pub(crate) const GAME_MENU: [(&str, &str); 16] = [
     ("vehicle", "Vehicle options..."),
     ("world", "World options..."),
     ("map", "City map"),
+    ("streets", "Find a street..."),
     ("duty", "Line and tour..."),
     ("skipstop", "Skip the next stop"),
     ("endduty", "End the tour"),

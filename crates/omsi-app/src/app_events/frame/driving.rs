@@ -258,7 +258,7 @@ pub(super) fn audio(cx: AudioCx, dt: f32) {
     if cx.player.player.is_none() && matches!(cx.view.view.as_str(), "free" | "foot") {
         if let Some(cam) = cx.view.camera.as_mut() {
             let base = if cx.common.settings.fov >= 20.0 { cx.common.settings.fov.min(120.0) } else { 60.0 };
-            cam.fov_deg = (base * cx.view.cam.view_zoom.get(cx.view.view.as_str()).copied().unwrap_or(1.0)).clamp(8.0, 120.0);
+            cam.fov_deg = (base * cx.view.cam.view_zoom.get(cx.view.view.as_str()).copied().unwrap_or(1.0) * cx.view.cam.zoom_hold.factor).clamp(8.0, 120.0);
         }
     }
     if let Some(a) = cx.sound.audio.as_ref() {
