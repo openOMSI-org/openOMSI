@@ -472,7 +472,13 @@ impl App {
         if let Some(n) = self.menus.navigator.as_mut() {
             if n.map_open() {
                 let ctrl = self.input.keys.contains(&KeyCode::ControlLeft) || self.input.keys.contains(&KeyCode::ControlRight);
-                if pressed && ctrl {
+                let alt = self.input.keys.contains(&KeyCode::AltLeft) || self.input.keys.contains(&KeyCode::AltRight);
+                if pressed && alt && !ctrl {
+                    if let Some(at) = n.map_point(x, y) {
+                        n.toggle_map();
+                        self.walk_to(at);
+                    }
+                } else if pressed && ctrl {
                     // Ctrl+click: the bus to the street nearest that point, as OMSI's map
                     // window places vehicles
                     if let Some(at) = n.map_point(x, y) {

@@ -123,6 +123,25 @@ impl App {
         self.switch_vehicle();
     }
 
+    pub(crate) fn walk_to(&mut self, at: glam::DVec2) {
+        if self.session.on_foot.is_none() {
+            self.get_up();
+        }
+        let top = glam::DVec3::new(at.x, at.y, 3000.0);
+        let street_height = || {
+            let p = glam::DVec3::new(at.x, at.y, 0.0);
+            let nets = [self.session.traffic.as_ref().map(|t| &t.net), self.menus.navigator.as_ref().and_then(|n| n.map_net())];
+            nets.into_iter().flatten().find_map(|net| net.nearest_lane(p, omsi_sim::traffic::LaneKind::Street).filter(|(_, _, d)| *d <= 300.0).map(|(l, s, _)| net.lanes[l].at(s).0.z))
+        };
+        let ground = self.world.clone().and_then(|w| crate::placing::ground_hit(&w, top, glam::DVec3::NEG_Z, 6000.0)).or_else(|| street_height().map(|z| glam::DVec3::new(at.x, at.y, z)));
+        let (Some(f), Some(g)) = (self.session.on_foot.as_mut(), ground) else { return };
+        f.pos = g;
+        f.vel = glam::DVec2::ZERO;
+        (f.lift, f.vz) = (0.0, 0.0);
+        (f.seat, f.inside, f.transit, f.arrive) = (None, None, None, None);
+        self.service_msg = Some((omsi_ui::tr("You are on foot where the map was clicked").into_owned(), 3.0));
+    }
+
     /// Put the bus on the street nearest the world point `at` (the city map's Ctrl+click),
     /// facing along it.
     pub(crate) fn place_bus_at(&mut self, at: glam::DVec2) {
