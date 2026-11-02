@@ -8,6 +8,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **Mouse steering keeps the system cursor in the window**: with *Hold the cursor while steering*
+  off, the cursor is the system's own (no frame of delay) and now stays inside the game window
+  while the mouse steers, so a hard turn no longer lets it slip onto another screen (Windows and
+  Linux; macOS keeps it free as before).
 - **Place the bus facing the way you want**: on the city map, Ctrl+drag from the place towards
   the way the bus should face (a plain Ctrl+click keeps the nearest street's direction); in the
   map camera (F4), Ctrl+click puts the bus on the street facing the way the camera looks, as in
@@ -42,6 +46,20 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   a second and a half) and for six seconds the cars that were waiting for your bus - at a junction,
   or holding back for where the bus is about to go - take their turn first. They still stop for
   the bus itself.
+- **The Alt menu stays open**, as in OMSI 2: a tile that does its work in place (route arrows,
+  refuel, repair, wash, reset, a screenshot...) leaves the menu open on its page, so the next
+  tile is one click away; Alt or Esc closes it. A tile that opens a list, a panel, the city map
+  or the photo mode still hands over to it.
+- **Set the world to the time it is now**: World options › Traffic and people has *Set to the time it
+  is now*: the timetable buses are put out again for the current time and the people waiting at
+  the stops are taken off; the stops fill again as people walk up, as many as the hour wants -
+  after changing the time by a little, or whenever the stops are fuller than the hour wants.
+- **Finer moves in the photo mode**: Alt now slows the turning as well as the moving (to a
+  quarter), for the small adjustments of a zoomed-in shot, and the camera rises and sinks at half
+  the speed it moves along, so it can be lowered to a kneeling height without overshooting.
+- **Several AI vehicles at once**: in Settings › AI Lists, the vehicle picker for adding to a group,
+  a depot or a line has a tick box on each vehicle; tick several and *Add the n ticked* adds them
+  all in one go (one click still previews, a double click still adds one).
 - **Long lists in the launcher filter as you type**: a drop-down with more than twelve entries
   (the liveries, the depot files, the languages...) shows a search line at its top; typing
   narrows it down, Backspace and Esc undo the search.
@@ -639,6 +657,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   junction). The standing car now drives on after a few seconds. And a route's lane change that
   the bus missed its window for (the two lanes no longer run side by side) is made all the same
   after 12 s of waiting instead of never. `OMSI_DEBUG_STUCK` also says why a lane change waits.
+- **Short rides stand by a door.** With *Short rides stand by a door* on (Options › Gameplay and
+  the launcher's passenger settings, `pax_short_rides_stand`, off by default), a passenger with
+  no set stop who rides under about three kilometres takes the free standing place nearest an exit
+  of their car instead of a seat; with no standing place free, they board as before (#2242).
 - **On foot, the player walks wherever the passengers' paths lead**: a staircase, a ramp, a gate
   through a fence or a doorway the map gives the AI passengers is now walkable by hand too, at
   the path's height (the step and slope limits and the walls no longer stop the walker on a

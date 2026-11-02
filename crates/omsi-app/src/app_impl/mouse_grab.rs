@@ -197,6 +197,9 @@ impl App {
                 if let Some(win) = self.window.as_ref() {
                     let _ = win.set_cursor_grab(winit::window::CursorGrabMode::None);
                 }
+                if self.input.mouse_grab.mode == Some(GrabMode::Plain) && !self.settings.mouse_hold {
+                    self.confine_cursor();
+                }
             }
             Some(false) | None => {}
         }
@@ -259,9 +262,9 @@ impl App {
                 Some(GrabMode::Plain) => {}
                 Some(mode) => {
                     self.free_cursor(mode);
-                    self.input.mouse_grab.mode = Some(GrabMode::Plain);
+                    self.confine_cursor();
                 }
-                None => self.input.mouse_grab.mode = Some(GrabMode::Plain),
+                None => self.confine_cursor(),
             }
             return;
         }
@@ -269,6 +272,13 @@ impl App {
             (None, true) => self.catch_cursor(),
             (Some(mode), false) => self.free_cursor(mode),
             _ => {}
+        }
+    }
+
+    fn confine_cursor(&mut self) {
+        self.input.mouse_grab.mode = Some(GrabMode::Plain);
+        if let Some(win) = self.window.as_ref() {
+            let _ = win.set_cursor_grab(winit::window::CursorGrabMode::Confined);
         }
     }
 

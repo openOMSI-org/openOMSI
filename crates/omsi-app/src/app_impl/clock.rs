@@ -145,9 +145,20 @@ pub(crate) fn timetable_after_clock_jump(cx: JumpCx) {
     if jump.abs() < 120.0 {
         return;
     }
-    if let (Some(s), Some(w), Some(t), Some(r), Some(scene)) = (cx.traffic.schedule.as_mut(), cx.world.world.as_ref(), cx.traffic.traffic.as_mut(), cx.gfx.renderer.as_ref(), cx.gfx.scene.as_mut()) {
-        let day_time = t.day_time;
-        s.restart(t, day_time);
-        crate::view_sync::apply_traffic(t, &mut cx.gfx.gfx.sim_view.traffic, w, r, scene);
-    }
+    restart_timetable(cx.traffic.schedule.as_mut(), cx.traffic.traffic.as_mut(), cx.world.world.as_deref(), cx.gfx.renderer.as_ref(), cx.gfx.scene.as_mut(), &mut cx.gfx.gfx.sim_view.traffic);
+}
+
+pub(crate) fn restart_timetable(
+    schedule: Option<&mut crate::schedule::Schedule>,
+    traffic: Option<&mut crate::traffic::Traffic>,
+    world: Option<&World>,
+    renderer: Option<&Renderer>,
+    scene: Option<&mut Scene>,
+    view: &mut crate::view_sync::traffic::TrafficView,
+) -> bool {
+    let (Some(s), Some(t), Some(w), Some(r), Some(scene)) = (schedule, traffic, world, renderer, scene) else { return false };
+    let day_time = t.day_time;
+    s.restart(t, day_time);
+    crate::view_sync::apply_traffic(t, view, w, r, scene);
+    true
 }
