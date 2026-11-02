@@ -127,14 +127,14 @@ fn set(app: &mut crate::App, form: &DestForm, clear: bool) -> String {
     }
     match named(&hof, &lines) {
         Some(ti) => {
-            p.set_destination_by_hand(&hof, &line, ti);
+            p.set_destination_by_hand(&hof, &line, ti, form.route.trim().is_empty());
             format!("{} {}", omsi_ui::tr("Destination:"), hof.termini[ti].menu_name())
         }
         None => {
             let (free, ti) = hof.with_free_text([&lines[0], &lines[1]]);
             let free = std::sync::Arc::new(free);
             p.vehicle.host.hof = Some(free.clone());
-            p.set_destination_by_hand(&free, &line, ti);
+            p.set_destination_by_hand(&free, &line, ti, form.route.trim().is_empty());
             log::info!("destination display set to free text: {:?} / {:?}", lines[0], lines[1]);
             if clear { omsi_ui::tr("Display cleared").into_owned() } else { omsi_ui::tr("Destination set as typed").into_owned() }
         }

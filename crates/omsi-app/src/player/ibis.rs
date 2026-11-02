@@ -224,7 +224,7 @@ impl Player {
                     if let Some((mut old, ..)) = self.ibis_typist.take() {
                         old.abandon(&mut self.vehicle);
                     }
-                    self.set_destination_by_hand(&hof, &line, ti);
+                    self.set_destination_by_hand(&hof, &line, ti, true);
                 }
             }
         }
@@ -233,10 +233,10 @@ impl Player {
     /// Row `ti` of the depot file on the destination display, set by hand (the destination
     /// list, a bus page): on the IBIS now, on a roller blind once it can be turned
     /// (`schedule::turn_roller_blind`).
-    pub(crate) fn set_destination_by_hand(&mut self, hof: &omsi_vehicle::hof::Hof, line: &str, ti: usize) {
-        let shown = self.vehicle.str_var("SetLineTo").trim().to_string();
+    pub(crate) fn set_destination_by_hand(&mut self, hof: &omsi_vehicle::hof::Hof, line: &str, ti: usize, keep_shown: bool) {
+        let shown = crate::game_lists::kept_blind_line(&self.vehicle.str_var("SetLineTo"), keep_shown);
         self.blind_pick = schedule::set_player_destination_at(&mut self.vehicle, hof, line, ti, &[]);
-        if let Some(p) = self.blind_pick.as_mut().filter(|_| !shown.is_empty() && !crate::game_lists::numeric_ibis_line(&shown)) {
+        if let (Some(p), Some(shown)) = (self.blind_pick.as_mut(), shown) {
             p.line = shown;
         }
         schedule::turn_roller_blind(&mut self.vehicle, &mut self.blind_pick, self.startup.is_some());

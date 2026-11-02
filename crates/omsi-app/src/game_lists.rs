@@ -171,7 +171,7 @@ pub(crate) fn set_route_by_hand(app: &mut App, line: &str) {
             let hof = p.vehicle.host.hof.clone();
             if let Some(hof) = hof.as_deref() {
                 if let Some(ti) = crate::schedule::shown_destination(&p.vehicle, hof, p.blind_pick.as_ref()) {
-                    p.set_destination_by_hand(hof, line, ti);
+                    p.set_destination_by_hand(hof, line, ti, false);
                 }
             }
         } else {
@@ -195,6 +195,11 @@ pub(crate) fn set_route_by_hand(app: &mut App, line: &str) {
         );
         app.service_msg = Some((omsi_ui::i18n::said(format!("{} {line}", omsi_ui::tr("Route")), format!("Route {line}")), 3.0));
     }
+}
+
+pub(crate) fn kept_blind_line(shown: &str, keep: bool) -> Option<String> {
+    let shown = shown.trim();
+    (keep && !shown.is_empty() && !numeric_ibis_line(shown)).then(|| shown.to_string())
 }
 
 fn blind_with_line(pick: Option<crate::schedule::BlindPick>, shown: Option<usize>, line: &str) -> Option<crate::schedule::BlindPick> {
@@ -1190,7 +1195,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                     // (the line on the IBIS stays; only the destination changes)
                     let line = destination_line(&p.vehicle);
                     let name = t.menu_name();
-                    p.set_destination_by_hand(hof, &line, ti);
+                    p.set_destination_by_hand(hof, &line, ti, true);
                     log::info!("destination display set by hand: {} {} (terminus code now {:?})", t.code, name.trim(), p.vehicle.var("IBIS_TerminusCode"));
                     app.service_msg = Some((omsi_ui::i18n::said(format!("{} {}", omsi_ui::tr("Destination:"), name.trim()), format!("Destination: {}", name.trim())), 3.0));
                 }
@@ -1259,6 +1264,9 @@ mod tests {
         assert_eq!(super::blind_with_line(pending, Some(7), "92A"), Some(BlindPick { row: 3, line: "92A".into() }));
         assert_eq!(super::blind_with_line(None, Some(7), "4X"), Some(BlindPick { row: 7, line: "4X".into() }));
         assert_eq!(super::blind_with_line(None, None, "1A"), None);
+        assert_eq!(super::kept_blind_line("92A", true), Some("92A".into()), "a destination picked: the letter stays");
+        assert_eq!(super::kept_blind_line("92A", false), None, "92A then 41 typed: the new number goes up");
+        assert_eq!(super::kept_blind_line("41", true), None);
     }
 
     /// "Random livery" draws among all liveries (#2410: it always gave the same one).
