@@ -52,6 +52,7 @@ pub(crate) enum ListKind {
     Tours(String, Option<(String, usize, usize)>),
     Drivers,
     Numbers,
+    Streets,
     /// The vehicles placed in the world, to take the wheel of one of them (#2026).
     SwitchTo,
     /// The termini of the bus's depot file, for its destination display.
@@ -76,7 +77,7 @@ pub(crate) enum ListKind {
 /// The lists with a search line on top: the vehicles to place, the depot files and the
 /// destinations.
 pub(crate) fn searchable(kind: &ListKind) -> bool {
-    matches!(kind, ListKind::Hofs | ListKind::Destinations | ListKind::PlaceMaker | ListKind::PlaceType(_) | ListKind::PlaceHof(..) | ListKind::AdminPlayers)
+    matches!(kind, ListKind::Hofs | ListKind::Streets | ListKind::Destinations | ListKind::PlaceMaker | ListKind::PlaceType(_) | ListKind::PlaceHof(..) | ListKind::AdminPlayers)
 }
 
 /// The search typed (while it is) or set for the open list.
@@ -763,6 +764,15 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
                 out.push((tr("There is no other vehicle to drive"), "back".into()));
             }
         }
+        ListKind::Streets => {
+            let names = app.menus.navigator.as_ref().map(|n| n.street_names()).unwrap_or_default();
+            let mut order: Vec<usize> = (0..names.len()).collect();
+            order.sort_by(|a, b| natural(&names[*a], &names[*b]));
+            out.extend(order.into_iter().map(|i| (names[i].clone(), format!("street {i}"))));
+            if out.is_empty() {
+                out.push((tr("This map has no street names on its signs"), "back".into()));
+            }
+        }
         ListKind::Numbers => {
             if let Some(p) = app.player.as_ref() {
                 let mut numbers = fleet_numbers(&p.vehicle);
@@ -897,6 +907,7 @@ pub(crate) fn menu_extras(
         }
         ListKind::Drivers => (MenuKind::List, head("Driver..."), None),
         ListKind::Numbers => (MenuKind::List, head("Fleet number..."), None),
+        ListKind::Streets => (MenuKind::List, head("Find a street..."), None),
         ListKind::SwitchTo => (MenuKind::List, head("Drive another vehicle..."), None),
         ListKind::Destinations => (MenuKind::List, head("Destination display..."), None),
         ListKind::RouteNumbers => (MenuKind::List, Some((tr("Route number"), String::new())), None),
@@ -1200,6 +1211,16 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             if let Ok(k) = arg.trim().parse::<usize>() {
                 app.close_game_menu();
                 app.switch_vehicle_to(k);
+            }
+            None
+        }
+        ListKind::Streets => {
+            let names = app.menus.navigator.as_ref().map(|n| n.street_names()).unwrap_or_default();
+            if let Some(name) = arg.trim().parse::<usize>().ok().and_then(|i| names.get(i)) {
+                app.close_game_menu();
+                if let Some(n) = app.menus.navigator.as_mut() {
+                    n.show_street(name);
+                }
             }
             None
         }
