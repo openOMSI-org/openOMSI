@@ -243,7 +243,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         slider_row(app, "mouse_pedal_strength", "Mouse pedal strength", "Adjust how much mouse travel is needed to reach full throttle or braking", &|v| if (v - 1.0).abs() < 0.01 { "OMSI".to_string() } else { format!("{:.0}%", v * 100.0) }),
         switch_row(app, "mouse_smooth", "Smooth mouse steering", "The wheel eases after the cursor; off: it follows at once, as in OMSI"),
         switch_row(app, "mouse_pedals", "The mouse works the pedals", "Up the throttle, down the brake, as in OMSI; off: the mouse only steers, the pedals stay on the keys"),
-        switch_row(app, "mouse_hold", "Hold the cursor while steering", "The wheel reaches its lock past the window's edges; off: the crosshair stays free and without delay, as in OMSI"),
+        switch_row(app, "mouse_hold", "Hold the cursor while steering", "The wheel reaches its lock past the window's edges; off: the system's crosshair, without delay, kept inside the window, as in OMSI"),
         slider_row(app, "key_pedal_speed", "Pedal keys speed", "How fast the throttle and brake keys press their pedals; slower is finer", &|v| if (v - 1.0).abs() < 0.01 { "OMSI".to_string() } else { format!("{:.0}%", v * 100.0) }),
         switch_row(app, "steering_linear", "Steering linearity (keys at OMSI's steady pace)", "Keyboard steering at OMSI's steady pace"),
         switch_row(app, "old_steering", "Old Steering (the wheel stays, turn it back yourself)", "The wheel stays where the keys left it"),

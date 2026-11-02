@@ -178,7 +178,7 @@ const driving = {
         { type: 'slider', key: 'mouse_pedal_strength', label: 'Mouse pedal strength', min: 0.5, max: 2, step: 0.05, def: 1, format: omsiPct, store: r2 },
         { type: 'toggle', key: 'mouse_smooth', label: 'Smooth mouse steering (off: the wheel follows the cursor at once, as in OMSI)' },
         { type: 'toggle', key: 'mouse_pedals', label: 'The mouse works the pedals', help: 'Up the throttle, down the brake, as in OMSI; off: the mouse only steers, the pedals stay on the keys' },
-        { type: 'toggle', key: 'mouse_hold', label: "Hold the cursor while the mouse steers (off: the crosshair stays free, the window's edges are the lock)" },
+        { type: 'toggle', key: 'mouse_hold', label: "Hold the cursor while the mouse steers (off: the system's crosshair, kept inside the window whose edges are the lock)" },
         { type: 'toggle', key: 'mouse_right_off', label: 'A right click ends the mouse steering (as in OMSI)' },
         { type: 'toggle', key: 'blinker_cancel', label: "Indicators cancel themselves (as the bus's script does)" },
         { type: 'toggle', key: 'brake_hold', label: 'The keyboard brake stays on until the throttle (as in OMSI)' },
