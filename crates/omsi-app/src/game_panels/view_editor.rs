@@ -16,9 +16,12 @@ use omsi_ui::theme::Palette;
 #[derive(Default)]
 pub(crate) struct ViewEditor {
     said: Option<String>,
+    aimed: Option<usize>,
+    look_before: Option<(f32, f32)>,
 }
 
 const SEAT: (f32, f32) = (-0.8, 0.8);
+const WIDTH: f32 = 440.0;
 const TURN: (f32, f32) = (-45.0, 45.0);
 const TILT: (f32, f32) = (-30.0, 30.0);
 /// The field of view: below 20 the bus's own camera's.
@@ -69,7 +72,7 @@ impl ViewEditor {
             c.push(note(said, pal));
         }
         // (at the side, see-through: the view it changes is the picture behind it)
-        card(Anchor::Right, -12.0, 0.0, 440.0, 170, pal, c)
+        card(Anchor::Right, -12.0, 0.0, WIDTH, 170, pal, c)
     }
 }
 
@@ -92,7 +95,55 @@ pub(crate) fn close(app: &mut crate::App, save: bool) {
     if save {
         save_view(app);
     }
+    look_back(app);
     app.menus.game_panels.view = None;
+}
+
+fn look_back(app: &mut crate::App) {
+    if let Some(e) = app.menus.game_panels.view.as_mut() {
+        e.aimed = None;
+        if let Some(l) = e.look_before.take() {
+            app.cam.look = l;
+        }
+    }
+}
+
+fn look_at_mirror(app: &mut crate::App, i: usize) {
+    if app.menus.game_panels.view.as_ref().is_some_and(|e| e.aimed == Some(i)) || app.view != "driver" {
+        return;
+    }
+    let (Some(p), Some(fallback)) = (app.player.as_ref(), app.camera.clone()) else { return };
+    let Some(c) = p.vehicle.ty.def.cameras_reflexion.get(i) else { return };
+    let target = p.vehicle.camera_world_full(c).0;
+    let (screen_x, aspect) = match app.menus.game_panels.laid_out {
+        Some((hud, scale)) if hud[2] > 0.0 && hud[3] > 0.0 => ((1.0 - (WIDTH + 12.0) * scale / hud[2]).clamp(0.2, 1.0) - 1.0, hud[2] / hud[3]),
+        _ => (0.0, 16.0 / 9.0),
+    };
+    let Some(look) = aim_look(|l| p.camera_look("driver", &fallback, l, app.cam.orbit), target, app.cam.look, screen_x, aspect) else { return };
+    let before = app.cam.look;
+    if let Some(e) = app.menus.game_panels.view.as_mut() {
+        e.look_before.get_or_insert(before);
+        e.aimed = Some(i);
+    }
+    app.cam.look = look;
+}
+
+fn aim_look(camera: impl Fn((f32, f32)) -> omsi_render::Camera, target: glam::DVec3, start: (f32, f32), screen_x: f32, aspect: f32) -> Option<(f32, f32)> {
+    let angles = |v: glam::Vec3| (v.x.atan2(v.y).to_degrees(), v.z.clamp(-1.0, 1.0).asin().to_degrees());
+    let wrap = |a: f32| (a + 540.0).rem_euclid(360.0) - 180.0;
+    let mut look = start;
+    for _ in 0..6 {
+        let cam = camera(look);
+        let (mut want, have) = (angles((target - cam.position).as_vec3().normalize_or_zero()), angles(cam.forward()));
+        want.0 -= (screen_x * (cam.fov_deg.to_radians() * 0.5).tan() * aspect).atan().to_degrees();
+        let probe = angles(camera((look.0 + 1.0, look.1 + 1.0)).forward());
+        let (sy, sp) = (wrap(probe.0 - have.0).signum(), (probe.1 - have.1).signum());
+        if sy == 0.0 || sp == 0.0 {
+            return None;
+        }
+        look = (look.0 + sy * wrap(want.0 - have.0), (look.1 + sp * (want.1 - have.1)).clamp(-85.0, 85.0));
+    }
+    Some(look)
 }
 
 /// Parse only slider IDs made by the mirror editor: m<index>x or m<index>y.
@@ -108,6 +159,10 @@ pub(crate) fn change(app: &mut crate::App, id: &str, value: &Value) {
     let Value::Num(v) = value else { return };
     let v = *v as f32;
     match id {
+        "seat0" | "seat1" | "seat2" | "pitch" | "yaw" | "fov" if app.menus.game_panels.view.as_ref().is_some_and(|e| e.aimed.is_some()) => {
+            look_back(app);
+            change(app, id, value);
+        }
         "seat0" | "seat1" | "seat2" => {
             let k = (id.as_bytes()[4] - b'0') as usize;
             app.settings.seat[k] = v;
@@ -127,6 +182,7 @@ pub(crate) fn change(app: &mut crate::App, id: &str, value: &Value) {
                 p.mirror_offsets.resize(n, [0.0; 2]);
             }
             p.mirror_offsets[i][axis] = v;
+            look_at_mirror(app, i);
         }
     }
 }
@@ -294,5 +350,27 @@ mod mirror_axis_tests {
         for invalid in ["", "m", "m0", "m0z", "m🦊", "m0é", "mxy"] {
             assert_eq!(mirror_axis_id(invalid), None, "{invalid}");
         }
+    }
+}
+
+#[cfg(test)]
+mod aim_tests {
+    use super::aim_look;
+
+    fn cam(yaw: f32, pitch: f32) -> omsi_render::Camera {
+        omsi_render::Camera { position: glam::DVec3::ZERO, yaw, pitch, roll: 0.0, fov_deg: 60.0, near: 0.1, far: 100.0 }
+    }
+
+    #[test]
+    fn the_head_turns_to_the_mirror_whichever_way_the_bus_counts_its_angles() {
+        let (sy, cy) = 60f32.to_radians().sin_cos();
+        let (sp, cp) = (-8f32).to_radians().sin_cos();
+        let target = glam::DVec3::new((sy * cp) as f64, (cy * cp) as f64, sp as f64) * 3.0;
+        let along = aim_look(|l| cam(10.0 + l.0, l.1), target, (0.0, 0.0), 0.0, 1.0).unwrap();
+        assert!((along.0 - 50.0).abs() < 0.1 && (along.1 + 8.0).abs() < 0.1, "{along:?}");
+        let against = aim_look(|l| cam(10.0 - l.0, -l.1), target, (0.0, 0.0), 0.0, 1.0).unwrap();
+        assert!((against.0 + 50.0).abs() < 0.1 && (against.1 - 8.0).abs() < 0.1, "{against:?}");
+        let beside = aim_look(|l| cam(10.0 + l.0, l.1), target, (0.0, 0.0), -0.5, 1.0).unwrap();
+        assert!((beside.0 - 50.0 - (0.5 * 30f32.to_radians().tan()).atan().to_degrees()).abs() < 0.1, "left of the panel: the head turns further, {beside:?}");
     }
 }
