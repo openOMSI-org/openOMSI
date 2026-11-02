@@ -569,3 +569,31 @@ fn comfortable_cabin_is_an_independent_opt_in_launch_flag() {
     assert!(enabled.iter().any(|a| a == "--comfortable-cabin-on-start"));
     assert!(!enabled.iter().any(|a| a == "--autostart"));
 }
+
+/// `--page settings` (or `--page=settings`) names the page the launcher opens on; the other
+/// arguments, a missing value and a name that is no page id are no page.
+#[test]
+fn the_launcher_is_asked_for_a_page_by_its_id() {
+    let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    assert_eq!(start_page(&args(&["launcher", "--page", "settings"])), Some("settings".into()));
+    assert_eq!(start_page(&args(&["launcher", "--page=Controls"])), Some("controls".into()));
+    assert_eq!(start_page(&args(&["launcher", "--other", "x", "--page", "setup"])), Some("setup".into()));
+    assert_eq!(start_page(&args(&["launcher"])), None);
+    assert_eq!(start_page(&args(&["launcher", "--page"])), None);
+    assert_eq!(start_page(&args(&["launcher", "--page", ""])), None);
+    assert_eq!(start_page(&args(&["launcher", "--page", "../x\"; alert(1)"])), None);
+    assert_eq!(start_page(&args(&["launcher", "--cli", "lines", "{}"])), None);
+}
+
+/// `--no-sidebar` asks for the page alone; it goes with `--page` or without it, and only as an
+/// argument of its own (not the program's name, not the value of another).
+#[test]
+fn the_launcher_is_asked_to_leave_out_its_sidebar() {
+    let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    assert!(no_sidebar(&args(&["launcher", "--no-sidebar"])));
+    assert!(no_sidebar(&args(&["launcher", "--page", "mods", "--no-sidebar"])));
+    assert!(!no_sidebar(&args(&["launcher", "--page", "mods"])));
+    assert!(!no_sidebar(&args(&["--no-sidebar"])));
+    assert!(!no_sidebar(&args(&["launcher", "--no-sidebar-please"])));
+    assert_eq!(start_page(&args(&["launcher", "--no-sidebar", "--page", "setup"])), Some("setup".into()));
+}

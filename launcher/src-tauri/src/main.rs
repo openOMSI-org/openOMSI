@@ -106,15 +106,24 @@ fn main() {
     omsi_launcher_lib::log_to_file(&format!("launcher (Tauri) {} starting", omsi_platform::VERSION));
     omsi_launcher_lib::cleanup();
 
+    let start_page = omsi_launcher_lib::start_page(&args);
+    let no_sidebar = omsi_launcher_lib::no_sidebar(&args);
     let result = tauri::Builder::default()
         .register_asynchronous_uri_scheme_protocol("omsi", protocol::handle)
         .invoke_handler(commands::handler())
-        .setup(|app| {
+        .setup(move |app| {
             #[cfg(target_os = "macos")]
             if selftest() {
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             }
             let mut builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()));
+            // (`--page settings`: the page that opens first, see `omsi_launcher_lib::start_page`)
+            if let Some(page) = &start_page {
+                builder = builder.initialization_script(format!("window.__openomsiPage = {page:?};"));
+            }
+            if no_sidebar {
+                builder = builder.initialization_script("window.__openomsiNoSidebar = true;");
+            }
             if let Some(dir) = fresh_webview_profile(app) {
                 builder = builder.data_directory(dir);
             }

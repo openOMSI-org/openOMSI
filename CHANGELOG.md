@@ -8,6 +8,11 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **The launcher opens on the page it is asked for.** `openomsi-launcher-app --page settings`
+  (or `--page=settings`) starts it on that page of the sidebar - `settings`, `controls`, `setup`,
+  `mods`, `timetable`, `profile` and the others - instead of Drive; a name that is no page
+  opens Drive. With `--no-sidebar` the sidebar is left out and the window holds that page alone.
+  For programs that have a menu of their own and start the launcher on one of its pages.
 - **Enhanced has options of its own, and the quality presets cross the modes.** Enhanced+ is no
   longer a mode: it is Enhanced with *Real-Time Ray Tracing* switched on (`ray_tracing=1`; a
   `graphics=enhanced_plus` file reads as that, and `--enhanced-plus` still asks for it for a run).
