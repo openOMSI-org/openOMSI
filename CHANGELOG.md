@@ -19,6 +19,8 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   volume knob or no switch of its own.
 - **Seat, view and mirrors from the Alt menu**: the quick menu has a tile that opens the panel
   for the driver's eye, view and mirrors of the bus, without going through the options.
+- **Cleaner photos**: the photo mode hides the route arrows by itself (they come back when you
+  leave it) and its panel has a Hide (H) button at the top.
 - **Long lists in the launcher filter as you type**: a drop-down with more than twelve entries
   (the liveries, the depot files, the languages...) shows a search line at its top; typing
   narrows it down, Backspace and Esc undo the search.

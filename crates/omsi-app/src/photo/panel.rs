@@ -674,6 +674,9 @@ pub(crate) fn draw(sh: &mut Shell, ph: &mut Photo, info: &Info) {
     let inner = Rect::new(r.x + 18.0, r.y + 16.0, r.w - 36.0, r.h - 32.0);
     ui.icon("photo_camera", Vec2::new(inner.x + 12.0, inner.y + 14.0), 20.0, th().accent);
     ui.text("Photo mode", Vec2::new(inner.x + 32.0, inner.y + 21.0), 18.0, Weight::Bold, th().text, Align::Left);
+    if !touch && ui.button("ph-hide", Rect::new(inner.right() - 112.0, inner.y, 112.0, 30.0), &omsi_ui::tr("Hide (H)"), None, ButtonKind::Ghost) {
+        acts.push(Request::HideUi);
+    }
     let mm = ph.settings.focal(ph.pro);
     let fnum = ph.fstop();
     let exif = if ph.pro {
