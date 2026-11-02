@@ -480,12 +480,11 @@ impl App {
                     // window places vehicles
                     self.menus.map_place_from = n.map_point(x, y).map(|at| (at, [x, y]));
                 } else if let Some((from, press)) = self.menus.map_place_from.take().filter(|_| !pressed) {
-                    let dragged = (x - press[0]).hypot(y - press[1]) > 12.0;
-                    let towards = n.map_point(x, y).map(|to| to - from).filter(|_| dragged);
+                    let facing = drag_heading(press, [x, y], from, n.map_point(x, y));
                     if std::mem::take(&mut self.menus.teleport_pick) {
                         n.toggle_map();
                     }
-                    self.place_bus_facing(from, towards.map(|d| d.x.atan2(d.y).to_degrees()));
+                    self.place_bus_facing(from, facing);
                 } else if pressed {
                     n.map_press(x, y);
                 } else if n.map_release() {
@@ -821,6 +820,26 @@ impl App {
 
 fn look_deg_per_px(fov_deg: f32) -> f32 {
     fov_deg / 78.75
+}
+
+fn drag_heading(press: [f32; 2], release: [f32; 2], from: glam::DVec2, to: Option<glam::DVec2>) -> Option<f64> {
+    let d = to.filter(|_| (release[0] - press[0]).hypot(release[1] - press[1]) > 12.0)? - from;
+    Some(d.x.atan2(d.y).to_degrees())
+}
+
+#[cfg(test)]
+mod drag_tests {
+    use super::drag_heading;
+    use glam::DVec2;
+
+    #[test]
+    fn a_ctrl_drag_gives_the_heading_and_a_click_none() {
+        let from = DVec2::new(10.0, 10.0);
+        assert_eq!(drag_heading([100.0, 100.0], [105.0, 104.0], from, Some(DVec2::new(30.0, 10.0))), None, "under 12 px: a click");
+        assert_eq!(drag_heading([100.0, 100.0], [140.0, 100.0], from, Some(DVec2::new(30.0, 10.0))), Some(90.0), "east");
+        assert_eq!(drag_heading([100.0, 100.0], [100.0, 60.0], from, Some(DVec2::new(10.0, 40.0))), Some(0.0), "north");
+        assert_eq!(drag_heading([100.0, 100.0], [140.0, 100.0], from, None), None, "let go off the map");
+    }
 }
 
 #[cfg(test)]
