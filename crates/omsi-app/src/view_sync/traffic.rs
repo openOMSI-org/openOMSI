@@ -444,7 +444,7 @@ impl Traffic {
             };
             // A lamp mixing a scripted channel with the phase's can show red and green at
             // once; keep the stop aspect in that case.
-            let red_on = raw_value(lamp, "red") >= 0.5 && !(scripted(lamp, "red").is_some() && scripted(lamp, "green").is_some());
+            let red_on = red_masks_green(scripted(lamp, "red").is_some(), scripted(lamp, "green").is_some(), raw_value(lamp, "red"));
             let value = |lamp: &crate::scene::LightObject, var: &str| -> f32 {
                 let green = matches!(var.trim().to_ascii_lowercase().as_str(), "green" | "gruen" | "grün");
                 let v = raw_value(lamp, var);
@@ -673,6 +673,10 @@ const LAMP_TURNS: u32 = 4;
 
 /// Is it the turn of the far lamp `key` in frame `turn`? (Spread by the key, so that every
 /// frame updates about the same share of them.)
+fn red_masks_green(scripted_red: bool, scripted_green: bool, red: f32) -> bool {
+    red >= 0.5 && !(scripted_red && scripted_green)
+}
+
 fn lamp_turn_now(key: usize, turn: u32) -> bool {
     let spread = (key as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 60;
     (turn.wrapping_add(spread as u32)) % LAMP_TURNS == 0
@@ -693,5 +697,14 @@ mod tests {
             per_frame[due[0] as usize] += 1;
         }
         assert!(per_frame.iter().all(|&n| n > 700), "{per_frame:?}");
+    }
+
+    #[test]
+    fn red_hides_green_only_when_the_two_come_from_different_places() {
+        assert!(red_masks_green(true, false, 1.0), "scripted red, green from the phase");
+        assert!(red_masks_green(false, true, 1.0), "red from the phase, scripted green");
+        assert!(red_masks_green(false, false, 1.0));
+        assert!(!red_masks_green(true, true, 1.0), "a script lighting both is shown as it says");
+        assert!(!red_masks_green(false, false, 0.0), "no red, nothing hidden");
     }
 }
