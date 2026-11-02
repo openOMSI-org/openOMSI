@@ -67372,6 +67372,17 @@ _version: 2
   pt: "Online: conectando ..."
   pt-pt: "Online: a ligar ..."
   ka: "ონლაინ: დაკავშირება ..."
+"Waiting for the server to let this game in (it admits a few players at a time)...":
+  es: "Esperando a que el servidor deje entrar a esta partida (admite a pocos jugadores a la vez)..."
+  zh-tw: "正在等待伺服器讓此遊戲加入（伺服器一次只接納少數玩家）..."
+  pt: "Aguardando o servidor deixar este jogo entrar (ele admite poucos jogadores por vez)..."
+  ca: "S'està esperant que el servidor deixi entrar aquesta partida (admet pocs jugadors alhora)..."
+  fr: "En attente que le serveur laisse entrer cette partie (il admet quelques joueurs à la fois)..."
+  sr: "Čeka se da server pusti ovu igru (prima nekoliko igrača odjednom)..."
+  ru: "Ожидание, пока сервер впустит эту игру (он принимает по несколько игроков за раз)..."
+  de: "Warte darauf, dass der Server dieses Spiel hereinlässt (er lässt wenige Spieler auf einmal herein) ..."
+  pt-pt: "À espera que o servidor deixe entrar este jogo (admite poucos jogadores de cada vez)..."
+  ka: "ველოდებით, სანამ სერვერი ამ თამაშს შემოუშვებს (ის ერთდროულად რამდენიმე მოთამაშეს იღებს)..."
 "Online: not connected: {reason} (chat /reconnect)":
   zh-tw: "線上：尚未連線：{reason}（在聊天室輸入 /reconnect）"
   sr: "Onlajn: nije povezano: {reason} (u čet unesite /reconnect)"

@@ -61,6 +61,10 @@ pub(super) fn server_version(bus: &str, paint: &str) -> Option<(super::identity:
         let mut body = vec![0u8; len as usize];
         input.read_exact(&mut body).map_err(|e| e.to_string())?;
         let m: super::identity::VehicleManifest = serde_json::from_slice(&body).map_err(|e| e.to_string())?;
+        let asked = omsi_net::vehicle_path(bus).ok_or("invalid bus path")?;
+        if m.bus.to_ascii_lowercase() != asked.to_ascii_lowercase() {
+            return Err(format!("the server answered with another bus ({})", m.bus));
+        }
         m.validated()
     })();
     let m = match asked {
