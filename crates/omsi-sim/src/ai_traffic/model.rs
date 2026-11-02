@@ -96,6 +96,9 @@ pub struct AiCar {
     /// That decision was taken standing first at the light's line as it went green.
     pub amber_start: bool,
     pub passing: Option<Passing>,
+    /// The current light this car has decision about (passing on amber/red) and a random factor variable
+    pub current_light: Option<(usize, usize)>,
+    pub amber_decision: f32,
     /// Finished (a dead end, the end of a timetable trip, given up): taken off the road as
     /// soon as nobody can see it.
     pub gone: bool,
@@ -497,28 +500,31 @@ pub fn extents(ty: &VehicleType, length: f32) -> (f32, f32, f32) {
 
 /// The driver of a random car: how fast, how close, how patient (see `AiState`).
 pub fn personality(state: &mut AiState, seed: u64, heavy: bool) {
-    let r = |k: u64| random::draw_gaussian(seed, 50000 + k);
+    let ru = |k: u32| ((seed >> k) & 0xff) as f32 / 255.0;
+    let rg = |k: u64| random::draw_gaussian(seed, 50000 + k);
 
     state.desire = if heavy {
-        0.93 + r(1) * 0.05
+        0.93 + 0.05 * rg(3)
     } else {
-        1.01 + r(1) * 0.11
+        1.01 + 0.11 * rg(3)
     };
-    state.headway = (1.4 + 0.4 * r(2)).max(0.5);
-    state.min_gap = (2.3 + 0.7 * r(3)).max(1.0);
+    state.headway = 1.4 + 0.2 * rg(11);
+    state.min_gap = 1.6 + 1.4 * ru(19);
     state.accel = if heavy {
-        1.0 + 0.1 * r(4)
+        0.8 + 0.4 * ru(27)
     } else {
-        1.8 + 0.25 * r(4)
+        1.3 + 1.0 * ru(27)
     };
-    state.decel = if heavy { 1.6 } else { 2.4 + 0.2 * r(5) };
-    state.accept_gap = (4.25 + 1.25 * r(6)).max(1.0);
-    state.reaction = (0.8 + 0.4 * r(7)).max(0.3);
-    state.honk_factor = 1.0 + 0.2 * r(8);
-    state.amber_factor = (0.03 + 0.01 * r(9)).max(0.0);
+    state.decel = if heavy { 1.6 } else { 2.0 + 0.8 * ru(35) };
+    state.accept_gap = (4.0 + 1.0 * rg(43)).max(2.0);
+    state.reaction = (0.8 + 0.2 * rg(51)).max(0.2);
+
+    state.honk_factor = 1.0 + 0.2 * rg(8);
+    state.amber_factor = (0.03 + 0.01 * rg(9)).max(0.0);
     // the hardest braking of ordinary driving: a lorry's or a bus's driver stays further
     // under the emergency stop's ceiling than a car's
-    state.ordinary_brake = if heavy { 4.5 } else { 5.0 + 0.2 * r(10) };
+    let r2 = (((seed >> 7) ^ (seed >> 41)) & 0xff) as f32 / 255.0;
+    state.ordinary_brake = if heavy { 4.5 } else { 4.6 + 0.8 * r2 };
 }
 
 /// Cruising speed of an AI aircraft where its flight path sets no limit (km/h): an
@@ -719,6 +725,8 @@ impl TrafficSim {
             amber: None,
             amber_start: false,
             passing: None,
+            current_light: None,
+            amber_decision: 0.0,
             gone: false,
             fresh: 1.5,
             merge_after: None,
