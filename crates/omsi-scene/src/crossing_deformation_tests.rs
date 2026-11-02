@@ -600,3 +600,29 @@ fn aligned_overhead_only_spline_keeps_saved_ground() {
     assert!(prepared[0].cut.is_none());
     assert!(prepared[0].hole_walls.is_empty());
 }
+
+#[test]
+fn aligned_spline_with_its_own_terrain_hole_profile_keeps_the_hole() {
+    let fixture = Fixture::new();
+    fixture.write("global.cfg", "[name]\nAligned ramp\n[map]\n0\n0\ntile_0_0.map\n");
+    fixture.write("ramp.sli", "[texture]\ngras1.bmp\n[profile]\n0\n[profilepnt]\n2.92\n0.10\n0.7\n0.167\n[profilepnt]\n4.23\n-0.47\n0.7\n0.167\n[profilepnt]\n5.35\n0.04\n0.2\n0.167\n[terrainholeprofile]\n[terrainholeprofilepnt]\n-5\n0\n0\n[terrainholeprofilepnt]\n5\n0\n0\n");
+    fixture.write("tile_0_0.map", "[version]\n14\n[spline]\n0\nramp.sli\n1\n0\n0\n40\n0\n40\n0\n20\n0\n0\n0\n0\n0\n0\n0\n0\n\n[spline_terrain_align]\n");
+    let world = World::open(&fixture.0, &fixture.0.join("global.cfg"), 20261001).unwrap();
+    let (prepared, _) = world.prepare_tiles(&[(0, 0, fixture.0.join("tile_0_0.map"))]);
+    let p = &prepared[0];
+    assert!(!p.splines.is_empty());
+    assert!(p.cut.is_some(), "a [terrainholeprofile] cuts the ground away, as in Omsi.exe");
+}
+
+#[test]
+fn aligned_spline_drawn_with_alpha_textures_keeps_its_hole() {
+    let fixture = Fixture::new();
+    fixture.write("global.cfg", "[name]\nAligned box cut\n[map]\n0\n0\ntile_0_0.map\n");
+    fixture.write("boxcut.sli", "[texture]\nwall.bmp\n[matl]\nwall.bmp\n0\n[matl_alpha]\n2\n[profile]\n0\n[profilepnt]\n-4.5\n0.5\n0\n0\n[profilepnt]\n-4.5\n-7\n1\n0\n[profile]\n0\n[profilepnt]\n4.5\n-7\n0\n0\n[profilepnt]\n4.5\n0.5\n1\n0\n[terrainholeprofile]\n[terrainholeprofilepnt]\n-5\n0\n0\n[terrainholeprofilepnt]\n5\n0\n0\n");
+    fixture.write("tile_0_0.map", "[version]\n14\n[spline]\n0\nboxcut.sli\n1\n0\n0\n40\n0\n40\n0\n20\n0\n0\n0\n0\n0\n0\n0\n0\n\n[spline_terrain_align]\n");
+    let world = World::open(&fixture.0, &fixture.0.join("global.cfg"), 20261001).unwrap();
+    let (prepared, _) = world.prepare_tiles(&[(0, 0, fixture.0.join("tile_0_0.map"))]);
+    let p = &prepared[0];
+    assert!(!p.splines.is_empty());
+    assert!(p.cut.is_some(), "an aligned box cut drawn with alpha textures still cuts the ground");
+}
