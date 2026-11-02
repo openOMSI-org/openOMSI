@@ -621,16 +621,20 @@ fn a_route_arrow_shows_the_turn_of_a_junction_path_drawn_in_two_parts() {
         straight((0.0, 110.0), (30.0, 110.0)),
         straight((0.0, 100.0), (0.0, 200.0)),
     ];
-    let mut net = Network { lanes, ..Default::default() };
-    for (a, n) in [(0, vec![1, 3]), (1, vec![2])] {
-        net.lanes[a].next = n;
-    }
-    let mut nav = Navigator::new(true, 0.85, "bottom-left");
-    nav.arrows = true;
-    nav.global = Some(std::sync::Arc::new(net));
-    nav.route.lanes = vec![0, 1, 2];
-    nav.route.on_route = true;
-    let spots = nav.arrow_spots(None, 1000.0, &|_| None);
-    let kinds: Vec<(u64, &str)> = spots.iter().map(|s| (s.0, s.3)).collect();
-    assert_eq!(kinds, vec![(1, "R")], "{spots:?}");
+    let kinds = |second_object: i64| {
+        let mut net = Network { lanes: lanes.clone(), ..Default::default() };
+        for (a, n) in [(0, vec![1, 3]), (1, vec![2])] {
+            net.lanes[a].next = n;
+        }
+        let key = |id, path| Some(omsi_sim::traffic::LaneKey { tile: (0, 0), id, path });
+        (net.lanes[1].key, net.lanes[2].key) = (key(7, 0), key(second_object, 1));
+        let mut nav = Navigator::new(true, 0.85, "bottom-left");
+        nav.arrows = true;
+        nav.global = Some(std::sync::Arc::new(net));
+        nav.route.lanes = vec![0, 1, 2];
+        nav.route.on_route = true;
+        nav.arrow_spots(None, 1000.0, &|_| None).iter().map(|s| (s.0, s.3)).collect::<Vec<(u64, &str)>>()
+    };
+    assert_eq!(kinds(7), vec![(1, "R")], "one crossing object");
+    assert!(kinds(8).is_empty(), "straight on, then a bend of the road beyond");
 }

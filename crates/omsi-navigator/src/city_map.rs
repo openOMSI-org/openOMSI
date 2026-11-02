@@ -121,7 +121,8 @@ impl Navigator {
             let choice = j > 0 && net.lanes.get(r.lanes[j - 1]).is_some_and(|p| p.next.len() > 1);
             let (mut d, mut span, mut end, mut last) = (d, len, h1, l);
             for &k in r.lanes.iter().skip(j + 1).take_while(|_| choice) {
-                let Some(next) = net.lanes.get(k).filter(|n| net.lanes[last].next.len() == 1 && span + n.length() <= 60.0) else { break };
+                let same = |a: Option<omsi_sim::traffic::LaneKey>, b: Option<omsi_sim::traffic::LaneKey>| a.zip(b).is_some_and(|(a, b)| (a.tile, a.id) == (b.tile, b.id));
+                let Some(next) = net.lanes.get(k).filter(|n| net.lanes[last].next.len() == 1 && same(net.lanes[last].key, n.key) && span + n.length() <= 60.0) else { break };
                 d += omsi_sim::traffic::wrap_deg(next.end_heading() - next.start_heading()) + omsi_sim::traffic::wrap_deg(next.start_heading() - end);
                 (span, end, last) = (span + next.length(), next.end_heading(), k);
             }
