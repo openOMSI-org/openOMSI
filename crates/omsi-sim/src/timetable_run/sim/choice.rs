@@ -79,8 +79,7 @@ impl ScheduleSim {
         // the plate of that line, else - unless the bus's plates are free - the plate the bus
         // gives the number ([registration_list] / [registration_automatic]); and the repaint
         // that line names, else the model's own paint (the first repaint when the default
-        // paint is "<nouse>"). Another tour's bus draws a repaint at random, as random
-        // traffic does.
+        // paint is "<nouse>"). Another tour's bus draws any of its repaints at random.
         let entry = numbers.first().cloned();
         let number = entry.as_ref().map(|e| {
             let plate = if !e.registration.trim().is_empty() {
@@ -100,10 +99,7 @@ impl ScheduleSim {
                 .position(|s| s.name.trim_end() == e.paint.trim_end())
                 .or_else(|| (ty.def.default_paint.trim() == "<nouse>").then_some(0))
         } else {
-            Some(
-                ((h >> 42) % ty.paint_schemes.len().min(crate::ai_traffic::AI_SCHEMES) as u64)
-                    as usize,
-            )
+            Some(((h >> 42) % ty.paint_schemes.len() as u64) as usize)
         };
         Some(Choice {
             ty,

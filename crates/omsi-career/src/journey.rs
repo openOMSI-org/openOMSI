@@ -31,6 +31,15 @@ impl Row {
         self.arrived.is_some() || self.left.is_some()
     }
 
+    fn status(&self) -> &'static str {
+        match (self.served(), self.late_early()) {
+            (false, _) => "Not served",
+            (true, (true, _)) => "Delayed",
+            (true, (_, true)) => "Left early",
+            _ => "On time",
+        }
+    }
+
     fn late_early(&self) -> (bool, bool) {
         let late = !self.first && self.arrived.is_some_and(|a| (a - self.plan.0).round() > LATE_ARRIVAL);
         let early = !self.last && self.left.is_some_and(|l| (l - self.plan.1).round() < EARLY_DEPARTURE);
@@ -66,7 +75,7 @@ pub struct TripSummary {
     pub title: String,
     pub head: String,
     /// Stop, planned, actual, difference, odometer (km); blank where it was passed by.
-    pub rows: Vec<[String; 5]>,
+    pub rows: Vec<[String; 6]>,
     /// Kilometres from the first stop to the last, and the stops served of all.
     pub km: Option<f64>,
     pub served: (usize, usize),
@@ -85,21 +94,22 @@ impl TripSummary {
     }
 
     pub fn text_in(&self, tr: impl Fn(&str) -> String) -> String {
-        let head = ["Bus stop", "Plan", "Actual", "Diff", "Odometer"].map(&tr);
-        let width = |k: usize| self.rows.iter().map(|r| r[k].chars().count()).chain([head[k].chars().count()]).max().unwrap_or(0);
-        let w: Vec<usize> = (0..5).map(width).collect();
-        let line = |cells: [&str; 5]| -> String {
+        let head = ["Bus stop", "Plan", "Actual", "Diff", "Status", "Odometer"].map(&tr);
+        let width = |k: usize| self.rows.iter().map(|r| if k == 4 { tr(&r[k]).chars().count() } else { r[k].chars().count() }).chain([head[k].chars().count()]).max().unwrap_or(0);
+        let w: Vec<usize> = (0..6).map(width).collect();
+        let line = |cells: [&str; 6]| -> String {
             let mut out = format!("{:<w0$}", cells[0], w0 = w[0]);
-            for k in 1..5 {
+            for k in 1..6 {
                 out.push_str(&format!("  {:>wk$}", cells[k], wk = w[k]));
             }
             out.trim_end().to_string()
         };
         let mut out = format!("{}\n{}\n\n{}\n", self.head, self.title, line(head.each_ref().map(String::as_str)));
-        out.push_str(&"-".repeat(w.iter().sum::<usize>() + 8));
+        out.push_str(&"-".repeat(w.iter().sum::<usize>() + 10));
         out.push('\n');
         for r in &self.rows {
-            out.push_str(&line([&r[0], &r[1], &r[2], &r[3], &r[4]]));
+            let status = tr(&r[4]);
+            out.push_str(&line([&r[0], &r[1], &r[2], &r[3], &status, &r[5]]));
             out.push('\n');
         }
         out.push('\n');
@@ -232,7 +242,7 @@ impl Journey {
             .map(|r| {
                 let (plan, real) = if r.first { (r.plan.1, r.left) } else { (r.plan.0, r.arrived) };
                 let [p, a, d] = times(plan, real);
-                [r.name.clone(), p, a, d, r.odo.map(&distance).unwrap_or_default()]
+                [r.name.clone(), p, a, d, r.status().to_string(), r.odo.map(&distance).unwrap_or_default()]
             })
             .collect();
         let served = rows.iter().filter(|r| r.served()).count();
@@ -555,8 +565,9 @@ mod tests {
         let s = j.take_summary().expect("a summary");
         assert!(j.take_summary().is_none() && j.last_summary().is_some());
         assert_eq!(s.rows.len(), 4);
-        assert_eq!(s.rows[0], ["Metro Mlociny".to_string(), "08:00:00".into(), "08:00:57".into(), "+00:00:57".into(), "1234.0 km".into()]);
+        assert_eq!(s.rows[0], ["Metro Mlociny".to_string(), "08:00:00".into(), "08:00:57".into(), "+00:00:57".into(), "On time".into(), "1234.0 km".into()]);
         assert_eq!(s.rows[2][2], "", "passed by");
+        assert_eq!((s.rows[1][4].as_str(), s.rows[2][4].as_str(), s.rows[3][4].as_str()), ("Delayed", "Not served", "On time"));
         assert_eq!(s.served, (3, 4));
         assert_eq!(s.on_time, 2, "late at Zajezdnia");
         assert_eq!(s.driven, Some(813.0));
