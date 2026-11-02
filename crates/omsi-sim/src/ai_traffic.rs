@@ -142,6 +142,7 @@ pub struct TrafficSim {
     pub(crate) lane_weight_sums: (usize, Vec<f64>),
     pub rng: u64,
     pub scheme_salt: u64,
+    scheme_sets: std::sync::Mutex<HashMap<std::path::PathBuf, Vec<usize>>>,
     /// Target number of cars around the camera.
     pub target: usize,
     /// Made only so that the light programs run (no traffic, no timetable): nobody is put
