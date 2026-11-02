@@ -178,6 +178,7 @@ impl App {
             first_populate, envir, weather, clock_jump, seat_bus, on_foot, safe_pose, safe_age,
             pending_time, autosave_t, pumping, career, journey, wetness, cloud_drift, weather_blend,
             weather_cycle, metar_rx, metar_once, metar_next, sky, scenery, tomorrow, depot_base,
+            depot_prev: _,
         } = session;
         Parts {
             common: Common { args, settings, started: *started, last: *last, exiting: *exiting },
