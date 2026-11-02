@@ -554,7 +554,7 @@ impl Traffic {
             // where the body and its coupled parts stand and how their meshes are drawn: from
             // the snapshot (the body first, then the parts, as their renders go)
             for (part, r) in snap.parts(frame).iter().zip(std::iter::once(&r.body).chain(r.trailers.iter())) {
-                pose_part(renderer, scene, snap, part, r, &mut alpha);
+                pose_part(renderer, scene, snap, part, r, self.ridden == Some(frame.id), &mut alpha);
             }
         }
     }
@@ -632,7 +632,7 @@ fn show_looks(renderer: &Renderer, scene: &mut Scene, snap: &FrameSnapshot, part
 
 /// Bring one vehicle part's instances (`r`) to `part` of the snapshot: their transforms and
 /// per-slot values. `alpha`: a buffer for the slots' alpha, kept by the caller.
-fn pose_part(renderer: &Renderer, scene: &mut Scene, snap: &FrameSnapshot, part: &PartFrame, r: &VehicleRender, alpha: &mut Vec<f32>) {
+fn pose_part(renderer: &Renderer, scene: &mut Scene, snap: &FrameSnapshot, part: &PartFrame, r: &VehicleRender, inside: bool, alpha: &mut Vec<f32>) {
     let meshes = snap.meshes(part);
     // the lower levels of detail stand where the body does; the renderer draws them or the
     // full model by the vehicle's size on the screen
@@ -661,11 +661,24 @@ fn pose_part(renderer: &Renderer, scene: &mut Scene, snap: &FrameSnapshot, part:
                 }
             }
         }
-        renderer.set_params(scene, *inst, alpha, m.visible, snap.slot_uv(m));
+        let (shown, mirror) = mesh_shown(m.viewpoint, inside);
+        renderer.set_params(scene, *inst, alpha, m.visible && shown, snap.slot_uv(m));
+        renderer.set_mirror_only(scene, *inst, mirror);
         renderer.set_slot_light(scene, *inst, snap.slot_light(m));
         renderer.set_slot_night(scene, *inst, snap.slot_night(m));
         renderer.set_interior(scene, *inst, m.interior);
     }
+}
+
+fn mesh_shown(vp: i32, inside: bool) -> (bool, bool) {
+    if vp == 0 {
+        return (true, false);
+    }
+    if !inside {
+        return (vp & 4 != 0, false);
+    }
+    let mirror = vp & 1 != 0 && vp & 2 == 0;
+    (vp & 2 != 0 || mirror, mirror)
 }
 
 /// Lamps further than this from the viewer (m) are updated in turns (see `sync_lamps`).
@@ -708,5 +721,16 @@ mod tests {
         assert!(red_masks_green(false, false, 1.0));
         assert!(!red_masks_green(true, true, 1.0), "a script lighting both is shown as it says");
         assert!(!red_masks_green(false, false, 0.0), "no red, nothing hidden");
+    }
+
+    #[test]
+    fn the_bus_ridden_in_shows_its_inside() {
+        assert_eq!(mesh_shown(0, false), (true, false));
+        assert_eq!(mesh_shown(2, false), (false, false), "a cab mesh, from outside");
+        assert_eq!(mesh_shown(4, false), (true, false));
+        assert_eq!(mesh_shown(2, true), (true, false), "the mirrors and buttons inside");
+        assert_eq!(mesh_shown(1, true), (true, true), "the outside, in the mirrors only");
+        assert_eq!(mesh_shown(3, true), (true, false));
+        assert_eq!(mesh_shown(4, true), (false, false), "the AI stand-in, not from inside");
     }
 }

@@ -123,6 +123,7 @@ pub struct PartFrame {
 pub struct MeshFrame {
     pub local: glam::Mat4,
     pub visible: bool,
+    pub viewpoint: i32,
     pub interior: f32,
     alpha: Span,
     light: Span,
@@ -165,11 +166,10 @@ impl FrameSnapshot {
     fn add_part<'a>(&mut self, position: glam::DVec3, ty: &Arc<VehicleType>, rotation: glam::Mat4, meshes: impl Iterator<Item = (glam::Mat4, &'a crate::vehicle::MeshProps)>) {
         let start = self.meshes.len() as u32;
         for (i, (local, p)) in meshes.enumerate() {
-            // (a mesh drawn only from some views: an AI car is seen from outside)
-            let vp = ty.meshes.get(i).map(|m| ty.model.meshes[m.def_index].viewpoint).unwrap_or(0);
             let frame = MeshFrame {
                 local,
-                visible: p.visible && (vp == 0 || vp & 4 != 0),
+                visible: p.visible,
+                viewpoint: ty.meshes.get(i).map(|m| ty.model.meshes[m.def_index].viewpoint).unwrap_or(0),
                 interior: p.interior,
                 alpha: Span::push(&mut self.alpha, &p.slot_alpha),
                 light: Span::push(&mut self.light, &p.slot_light),
