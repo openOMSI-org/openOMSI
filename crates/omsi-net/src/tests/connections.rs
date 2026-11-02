@@ -1,4 +1,5 @@
 use super::*;
+use crate::receive_budget::{receive_budget_reached, RECEIVE_PACKET_LIMIT, RECEIVE_TIME_BUDGET};
 
 #[test]
 fn players_without_a_bus_stay_in_the_session() {
@@ -446,4 +447,56 @@ fn restarting_client_on_the_same_socket_invalidates_host_receive_state() {
     host.tick(0.1, &poses[0]);
     assert!(host.take_vars().iter().any(|v| v.strings == vec![(0, "new".into())]));
     assert!(host.take_var_schemas().iter().any(|v| v.strings == vec![(0, "new schema".into())]));
+}
+
+#[test]
+fn each_host_owner_gets_its_own_identifier_of_the_machine() {
+    let machine = "0123456789abcdef0123456789abcdef";
+    let mut ids = Vec::new();
+    for (first_port, realm) in [(28310, "aa".repeat(16)), (28320, "bb".repeat(16))] {
+        let mut host = LanSession::host(first_port, "host", world("m"), true).unwrap();
+        host.set_ban_realm(&realm);
+        let port = host.local_addr().unwrap().port();
+        let mut c = LanSession::join(&port.to_string(), "c", world("m"), Duration::from_secs(1)).unwrap();
+        c.hardware_base = Some(machine.to_string());
+        let none = Pose::default();
+        let t0 = Instant::now();
+        while !c.connected && t0.elapsed() < Duration::from_secs(4) {
+            host.tick(0.05, &none);
+            c.tick(0.05, &none);
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(c.connected);
+        let id = host.peer_hardware_id(c.my_id).unwrap().to_string();
+        assert_eq!(id, host_hardware_id(machine, &realm));
+        ids.push(id);
+    }
+    assert_ne!(ids[0], ids[1]);
+    assert!(!ids.iter().any(|i| i == machine));
+}
+
+#[test]
+fn receive_budget_bounds_each_tick() {
+    assert!(!receive_budget_reached(0, Duration::ZERO));
+    assert!(!receive_budget_reached(RECEIVE_PACKET_LIMIT - 1, Duration::ZERO));
+    assert!(receive_budget_reached(RECEIVE_PACKET_LIMIT, Duration::ZERO));
+    assert!(receive_budget_reached(0, RECEIVE_TIME_BUDGET));
+}
+
+#[test]
+fn rate_limit_diagnostics_preserve_packet_categories() {
+    let mut host = LanSession::host(0, "host", WorldInfo::default(), false).unwrap();
+    let from = SocketAddr::from(([127, 0, 0, 1], 30000));
+    host.peers.insert(2, Peer::new(Some(from), Pose::default()));
+    let seen = host.peers[&2].last_seen;
+
+    // Rejected flood packets must not renew liveness.
+    assert!(host.checked_peer(2, from, (0.0, 0.0), PeerTraffic::Sounds).is_none());
+    assert!(host.checked_peer(2, from, (0.0, 0.0), PeerTraffic::Variables).is_none());
+    let peer = &host.peers[&2];
+    assert_eq!(peer.dropped, 2);
+    assert_eq!(peer.drop_counts[PeerTraffic::Sounds as usize], 1);
+    assert_eq!(peer.drop_counts[PeerTraffic::Variables as usize], 1);
+    assert_eq!(peer.drop_counts[PeerTraffic::State as usize], 0);
+    assert_eq!(peer.last_seen, seen);
 }

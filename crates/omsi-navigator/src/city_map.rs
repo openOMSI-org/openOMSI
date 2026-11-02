@@ -843,7 +843,7 @@ impl Navigator {
         ];
         let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("city map") });
         gpu.render(device, queue, &mut enc, &view, (tw, th), Some(wgpu::Color::TRANSPARENT), &layers, &draws);
-        queue.submit([enc.finish()]);
+        renderer.submit_with_frame(enc.finish());
         scene.overlays.push((tex, [x0, y0, x0 + w, y0 + h]));
     }
 

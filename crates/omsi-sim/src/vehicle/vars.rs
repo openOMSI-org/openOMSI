@@ -113,9 +113,17 @@ impl VehicleInstance {
         let rear_was_open = self.var("doorTarget_23").is_some_and(|target| target > 0.0)
             || self.var("door_2").is_some_and(|door| door > 0.05)
             || self.var("door_3").is_some_and(|door| door > 0.05);
+        let coins_before = self.host.change_coins.len();
         let mut fired = self
             .vm
             .run_trigger(&p, name, &mut self.state, &mut self.host);
+        if let Some(value) = changer_value(name) {
+            let given = &mut self.host.change_coins[coins_before..];
+            let each = value / given.len().max(1) as f32;
+            for coin in given {
+                coin.1 = each;
+            }
+        }
         // Several Volvo Wright door scripts expose the actual force-close operation as
         // `bus_dooraft1_external_CL`, while the dashboard `bus_dooraftclose` trigger only
         // sounds the button when its handbrake guard rejects the request.  Use that explicit
@@ -240,5 +248,30 @@ impl VehicleInstance {
     /// Repair everything (the engine fires this once the driver accepts the waiting time).
     pub fn repair(&mut self) -> bool {
         self.trigger("malfunction_reset")
+    }
+}
+
+fn changer_value(name: &str) -> Option<f32> {
+    let name = name.to_ascii_lowercase();
+    if let Some(cents) = name.strip_prefix("cashdesk_change_").filter(|c| c.len() == 4) {
+        return Some(cents.parse::<u32>().ok()? as f32 / 100.0);
+    }
+    let (units, cents) = name.strip_prefix("cashdesk_changer_")?.split_once('_').filter(|(_, c)| c.len() == 2)?;
+    Some(units.parse::<u32>().ok()? as f32 + cents.parse::<u32>().ok()? as f32 / 100.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::changer_value;
+
+    #[test]
+    fn a_change_key_names_its_value() {
+        assert_eq!(changer_value("cashdesk_changer_0_50"), Some(0.5));
+        assert_eq!(changer_value("Cashdesk_Changer_15_00"), Some(15.0));
+        assert_eq!(changer_value("cashdesk_changer_0_50_off"), None);
+        assert_eq!(changer_value("cashdesk_changer_0_5"), None);
+        assert_eq!(changer_value("ticket_give"), None);
+        assert_eq!(changer_value("cashdesk_change_0500"), Some(5.0));
+        assert_eq!(changer_value("cashdesk_change_1000_off"), None);
     }
 }

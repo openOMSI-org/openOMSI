@@ -66,6 +66,7 @@ pub(super) fn natural(a: &str, b: &str) -> std::cmp::Ordering {
 // like the file itself (written on exit by `flush_settings(true)`).
 pub(super) static PENDING_SETTINGS: std::sync::Mutex<(Vec<(String, String)>, Option<std::time::Instant>)> =
     std::sync::Mutex::new((Vec::new(), None));
+pub(super) static GRAPHICS_DRAFT: std::sync::Mutex<Option<serde_json::Value>> = std::sync::Mutex::new(None);
 pub(super) const SETTINGS_FLUSH_MS: u128 = 250;
 pub(super) static SETTINGS_CACHE: std::sync::Mutex<Option<serde_json::Value>> = std::sync::Mutex::new(None);
 
@@ -90,6 +91,13 @@ pub(super) fn remember_bus_seat(app: &App) {
 }
 
 pub(crate) fn remember_setting(key: &str, value: &str) {
+    if is_graphics_setting(key) {
+        let mut draft = GRAPHICS_DRAFT.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(v) = draft.as_mut() {
+            apply_pending(v, &[(key.to_string(), value.to_string())]);
+            return;
+        }
+    }
     {
         let mut p = PENDING_SETTINGS.lock().unwrap_or_else(|e| e.into_inner());
         match p.0.iter_mut().find(|(k, _)| k == key) {

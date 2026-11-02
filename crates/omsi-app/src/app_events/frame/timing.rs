@@ -55,7 +55,7 @@ impl App {
         }
         let desktop_vsync = self.settings.vsync && !self.vr_active() && !self.optimiser_holds_frame_rate();
         if let (Some(surface), Some(renderer)) = (self.gfx.surface.as_mut(), self.renderer.as_ref()) {
-            surface.set_vsync(renderer, desktop_vsync);
+            surface.set_vsync(renderer, desktop_vsync, (1..1000).contains(&self.settings.max_fps) && !cfg!(target_os = "android"));
         }
         // in the own bus's cab: at the wheel, a passenger's view, or sitting in a
         // seat of it after getting up (its inside is drawn and heard from inside)

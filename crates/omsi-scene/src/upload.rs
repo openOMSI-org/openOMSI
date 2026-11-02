@@ -758,15 +758,7 @@ impl World {
                         }
                         gpu.textures.insert(
                             path.clone(),
-                            TexEntry {
-                                id,
-                                alpha: img.has_alpha,
-                                users: 1,
-                                texels: img.width as u64 * img.height as u64,
-                                bytes: renderer.texture_size_bytes(scene, id),
-                                format: img.format,
-                                dropped: 0,
-                            },
+                            TexEntry::uploaded(id, img, scene),
                         );
                         // the tile holds the texture until its object types take it over
                         if slow && t_item.elapsed().as_millis() > 8 { log::info!("upload: texture {} ({}x{} {:?}) took {} ms", path.display(), img.width, img.height, img.format, t_item.elapsed().as_millis()); }

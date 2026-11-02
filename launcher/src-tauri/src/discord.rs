@@ -1,5 +1,5 @@
 //! The launcher's Discord status ("In launcher - Preparing a drive"), as the game's own launcher
-//! window kept it: on while the setting `discord_status` is (on by default), off while a game
+//! window kept it: on while the setting `discord_status` is (off by default: it tells friends what is driven), off while a game
 //! starts or runs (the game then shows its own, see the game's `integrations`). A thread looks
 //! every two seconds; Discord not running is tried again every five.
 
@@ -22,7 +22,7 @@ fn run() {
 
 fn keep(discord: &mut Option<Discord>, next_try: &mut Instant) {
     let settings = omsi_launcher_lib::get_settings().unwrap_or_default();
-    let enabled = settings.get("discord_status").and_then(|v| v.as_bool()).unwrap_or(true);
+    let enabled = settings.get("discord_status").and_then(|v| v.as_bool()).unwrap_or(false);
     let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     let games = omsi_launcher_lib::instances::list();
     let game_running = games.iter().any(|g| g.running);

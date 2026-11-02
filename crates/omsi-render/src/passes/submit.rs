@@ -82,7 +82,7 @@ impl Renderer {
         }
         clock.stage(self, "finish", "mirror.finish");
         self.queue
-            .submit([shadow_commands, prepass_commands].into_iter().chain(part_commands).chain([commands]));
+            .submit(self.take_deferred_commands().into_iter().chain([shadow_commands, prepass_commands]).chain(part_commands).chain([commands]));
         clock.stage(self, "submit", "mirror.submit");
         let timed = timers.timed;
         if let (Some(t), false) = (

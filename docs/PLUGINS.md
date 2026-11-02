@@ -338,7 +338,7 @@ end)
 F10 gives the panels the mouse; a click on the button sounds the horn. The whole example is
 [`docs/examples/plugins/trip_panel.lua`](examples/plugins/trip_panel.lua).
 
-`omsi.ui.version` is `6` (`5` before a navigator panel in the whole frame and the `map`
+`omsi.ui.version` is `7` (`6` before the interface themes, `5` before a navigator panel in the whole frame and the `map`
 element, `4` before `grab`, `3` before boxes, stop lists and the other
 elements and keys marked 4 below, `2` before the navigator's board, `1` before the controls):
 test `if omsi.ui and omsi.ui.version >= 2` in a plugin that should also run in an older openOMSI.
@@ -480,6 +480,24 @@ The label is shown as the plugin gives it, so the plugin writes it in the player
 The icon is one of the game's Material Symbols; without one, or with one the game does not
 have, the line gets the plugins' own icon. The lines go when the plugin stops
 (`ui.remove_menu_item` takes one out before that).
+
+#### An interface theme
+
+A plugin can bring a look for the game's own screens - the colours of the menus, their panels as
+frosted glass over the picture, the loading screen with the plugin's logo, which may itself be the
+loading bar: a `theme.json` in the plugin's folder makes it a theme of the plugin's name (see
+[THEMES.md](THEMES.md)). The player chooses it in Options › Interface; the plugin may switch to
+it, once and after asking, with `ui.set_theme`:
+
+```lua
+if omsi.ui.set_theme and not omsi.data.theme_offered then
+  omsi.data.theme_offered = true
+  if omsi.ui.theme() == "" then omsi.ui.set_theme("myplugin") end
+end
+```
+
+The choice is the player's setting from then on, kept for the next start; `ui.themes()` lists
+the themes there are.
 
 ### Example plugins
 
@@ -900,7 +918,10 @@ On macOS, helpers extracted from ZIP files may need their executable bit restore
 | `omsi.ui.screen()` | width, height, scale | The screen in the panels' pixels, and how many of the screen's own pixels one of them is. | 0.2.21 |
 | `omsi.ui.set(id, panel)` | true, or false and the reason | Creates the panel `id` or replaces it; a table that is not right gives `false` and where (`"children[2].size: a number is expected"`). The same table again changes nothing. *Permission: `ui`.* | 0.2.21 |
 | `omsi.ui.set_menu_item(id, label, [icon])` | true, or false and the reason | Puts a line in the game's pause menu, or changes the plugin's line `id`: its label (40 characters at most, shown as it is) and a Material Symbols icon of the game's (`"departure_board"`; the plugins' own icon without one). Choosing it closes the menu and sends `menu_item` with `id` - to open the plugin's panel, say. A plugin has 3 lines at most; they go when it stops. *Permission: `ui`.* | 0.3.36 |
+| `omsi.ui.set_theme(id)` | true, or false and the reason | Switches the game's interface to theme `id` (`""` or `"openomsi"`: openOMSI's own look), as if the player chose it in Options › Interface: it is kept for the next start. Ask the player first; they can switch back there. *Permission: `ui`.* | 0.3.42 |
 | `omsi.ui.show(panel, [on])` | boolean | Shows a panel (or hides it with `false`; it is kept); `false` when there is none. *Permission: `ui`.* | 0.2.22 |
+| `omsi.ui.theme()` | string | The id of the interface theme in use (`""`: openOMSI's own look). | 0.3.42 |
+| `omsi.ui.themes()` | list of tables | The game's interface themes: each `{ id, name }`, openOMSI's own look first (its id `""`). A theme is a folder with a `theme.json` (`Themes/<id>/`, or a plugin's own folder: see docs/THEMES.md). | 0.3.42 |
 | `omsi.ui.toast(text, [opts])` | true, or false and the reason | A notification card at the top right, newest at the top; it goes after `opts.seconds` (1 to 60, default 5). `opts`: `title`, `icon`, `color`. A plugin shows 8 at most: a ninth makes its oldest go. *Permission: `ui`.* | 0.2.21 |
 | `omsi.ui.toggle(panel)` | boolean | Shows a hidden panel or hides a shown one; whether it shows now. *Permission: `ui`.* | 0.2.22 |
 | `omsi.ui.typing()` | boolean | Whether the player types into a text field of a plugin now (the keys then go to the field, not to the bus). | 0.2.22 |

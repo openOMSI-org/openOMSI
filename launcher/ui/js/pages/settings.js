@@ -16,6 +16,7 @@ import { AiListsPage } from './ai-lists.js';
 import { OptimiseBlock } from './optimise.js';
 
 const REPO_URL = 'https://github.com/openOmsi-project/openOMSI';
+const PRIVACY_URL = 'https://openomsi.org/privacy/';
 
 /** A number, also of the text a select keeps ("0.65"); NaN for anything else. */
 function num(x) {
@@ -368,6 +369,7 @@ function VersionRow() {
       <span class="muted small grow">${t('This is openOMSI {version}', { version: S.boot?.version || '' })}</span>
       ${S.boot?.versions && html`<${Button} small icon="history" label="Choose a version…" onClick=${() => setOpen(true)} />`}
       <${Button} small kind="ghost" icon="external" onClick=${() => call('open_url', { url: REPO_URL }).catch((e) => toast(t(e.message), 'error'))}>github.com/openOmsi-project/openOMSI</${Button}>
+      <${Button} small kind="ghost" label="Privacy" onClick=${() => call('open_url', { url: PRIVACY_URL }).catch((e) => toast(t(e.message), 'error'))} />
     </div>
     ${open && html`<${VersionsDialog} onClose=${() => setOpen(false)} />`}
   </div>`;

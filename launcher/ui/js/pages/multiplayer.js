@@ -101,7 +101,7 @@ function JoinByCode() {
     <${Card} body=${false}>
       <${FlowSteps} labels=${['Enter session code', 'Confirm session', 'Choose a bus and start']} current=${ready ? 2 : 0} />
       <div class="card-body stack">
-        <div><h2>${t('Join friends')}</h2><p class="muted small">${t('Confirm the session first, then choose your bus on the Drive page. The game has not connected yet.')}</p></div>
+        <div><h2>${t('Join friends')}</h2><p class="muted small">${t('Confirm the session first, then choose your bus on the Drive page. The game has not connected yet.')}</p><p class="muted small">${t("Sessions and servers are run by players, not by openOMSI. The host receives your driver name, network address, chat and voice, and may keep logs.")}</p></div>
         <div class="field">
           <label for="multiplayer-code">${t('Session code')}</label>
           <div class="row multiplayer-code-row">
@@ -153,7 +153,7 @@ function HostByCode() {
     <${Card} body=${false}>
       <${FlowSteps} labels=${['Set up a hosted duty', 'Start the duty', 'Copy code']} current=${session?.code ? 2 : hosting ? 1 : 0} />
       <div class="card-body stack">
-        <div><h2>${t('Invite friends')}</h2><p class="muted small">${t('Start your hosted duty first. A session code appears only after the game starts.')}</p></div>
+        <div><h2>${t('Invite friends')}</h2><p class="muted small">${t('Start your hosted duty first. A session code appears only after the game starts.')}</p><p class="muted small">${t("As the host, your game receives your players' driver names, network addresses, chat and voice. You are responsible for what you keep of it, such as logs and bans.")}</p></div>
         ${session?.code ? html`
           <div class="session-code"><div class="grow"><div class="section-title">${t('Session code')}</div><div class="code selectable">${session.code}</div></div>
             <${Button} kind="primary" icon="copy" label="Copy code" onClick=${copy} />
@@ -263,6 +263,7 @@ function Servers() {
     }
   };
   return html`<div class="stack">
+    <p class="muted small" style="margin:0">${t("Sessions and servers are run by players, not by openOMSI. The host receives your driver name, network address, chat and voice, and may keep logs.")}</p>
     <${PublicServers} onJoin=${joinPublic} onAdd=${(e) => { if (!list.some((y) => y.address === e.address)) { save([...list, { name: e.covered ? '' : e.name, address: e.address }]); ask(e.address); } }} />
     <${Card} title="Add server">
       <div class="row">
@@ -285,7 +286,7 @@ function Servers() {
             return html`<${Card} body=${false}><div class="card-body row" style="align-items:flex-start;gap:14px">
               ${i?.icon ? html`<img src=${i.icon} width="48" height="48" style="border-radius:8px" />` : html`<div class="avatar" style="width:48px;height:48px;border-radius:8px"><${Icon} name="globe" /></div>`}
               <div class="grow stack" style="gap:4px;min-width:0">
-                <div class="row"><b style="font-size:15px">${own || i?.name || x.name || x.address}</b>${i?.password && html`<${Tag}>${t('Password')}</${Tag}>`}</div>
+                <div class="row"><b style="font-size:15px">${own || i?.name || x.name || x.address}</b><${Tag}>${t(official ? 'Run by openOMSI' : 'Community server')}</${Tag}>${i?.password && html`<${Tag}>${t('Password')}</${Tag}>`}</div>
                 ${st.loading && html`<div class="row muted small"><${Spinner} /> ${t('Asking the server...')}</div>`}
                 ${st.err && html`<div class="small" style="color:var(--danger)">${t("Can't reach the server: {err}", { err: st.err })}</div>`}
                 ${st.err && !official && html`<div class="muted small selectable">${x.address}</div>`}
@@ -323,7 +324,7 @@ function PublicServers({ onJoin, onAdd }) {
       ${(list || []).map((e) => html`<div class="row" style="align-items:flex-start;gap:14px" key=${e.id}>
         ${e.icon ? html`<img src=${e.icon} width="40" height="40" style="border-radius:8px" />` : html`<div class="avatar" style="width:40px;height:40px;border-radius:8px"><${Icon} name="globe" /></div>`}
         <div class="grow stack" style="gap:2px;min-width:0">
-          <b>${e.name}</b>
+          <div class="row"><b>${e.name}</b><${Tag}>${t('Community server')}</${Tag}></div>
           <div class="muted small">${[e.map && mapName(e.map), t('{n} of {max} players', { n: e.players, max: e.max_players }), e.version].filter(Boolean).join(' - ')}</div>
           ${e.motd && html`<div class="dim small">${e.motd}</div>`}
         </div>

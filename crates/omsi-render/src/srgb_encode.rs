@@ -93,7 +93,8 @@ impl SrgbEncode {
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: self.format,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                // (copied from as well: the glass behind the game's screens, see `SurfaceState::picture`)
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
                 view_formats: &[],
             });
             let view = texture.create_view(&Default::default());
@@ -105,6 +106,11 @@ impl SrgbEncode {
             *stand_in = Some((texture, view, group));
         }
         stand_in.as_ref().map(|(_, v, _)| v.clone()).expect("stand-in")
+    }
+
+    /// The stand-in the frame is drawn into, when there is one.
+    pub(crate) fn texture(&self) -> Option<wgpu::Texture> {
+        self.stand_in.borrow().as_ref().map(|(t, _, _)| t.clone())
     }
 
     /// Encodes the stand-in into the window's `frame`.

@@ -131,7 +131,7 @@ impl VehicleHost {
             Some(Cb::GiveChangeCoin) => {
                 let i = arg_i32(stacks.pop());
                 if i >= 0 {
-                    self.change_coins.push(i as usize);
+                    self.change_coins.push((i as usize, 0.0));
                 }
             }
             // OMSI's number-specific random value: the same for a fleet

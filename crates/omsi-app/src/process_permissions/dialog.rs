@@ -135,7 +135,7 @@ pub(super) fn draw(
         Vec2::new(r.x + 20.0, r.y + 32.0),
         title_size,
         Weight::Bold,
-        TEXT,
+        th().text,
         Align::Left,
     );
     let footer = if narrow { 132.0 } else { 92.0 };
@@ -152,7 +152,7 @@ pub(super) fn draw(
                 body.w - 16.0,
                 14.0,
                 Weight::Regular,
-                TEXT,
+                th().text,
             )
         },
     );

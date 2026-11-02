@@ -4,6 +4,10 @@
 use crate::*;
 use crate::pipelines::mip::MipAverage;
 
+#[cfg(test)]
+#[path = "texture_memory_tests.rs"]
+mod memory_tests;
+
 /// An RGBA picture borrowed for an upload.
 pub(crate) struct RgbaRef<'a> {
     pub(crate) width: u32,
@@ -103,9 +107,28 @@ fn first_short_mip(data: &omsi_texture::TextureData) -> Option<(usize, usize, us
 /// the menus went on (#2472). A texture that cannot be made is drawn as a plain stand-in
 /// instead, and when memory ran short the game keeps fewer textures from then on.
 pub(crate) fn try_create_texture(device: &wgpu::Device, desc: &wgpu::TextureDescriptor) -> Option<wgpu::Texture> {
+    create_texture_checked(device, desc).ok()
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TextureCreationError {
+    OutOfMemory,
+    Invalid,
+}
+
+#[cfg(test)]
+thread_local! {
+    static TEXTURE_TEST_MAX_BYTES: std::cell::Cell<Option<u64>> = const { std::cell::Cell::new(None) };
+}
+
+fn create_texture_checked(device: &wgpu::Device, desc: &wgpu::TextureDescriptor) -> Result<wgpu::Texture, TextureCreationError> {
     if desc.size.width == 0 || desc.size.height == 0 {
         log::warn!("texture {}x{}: drawn plain instead", desc.size.width, desc.size.height);
-        return None;
+        return Err(TextureCreationError::Invalid);
+    }
+    #[cfg(test)]
+    if TEXTURE_TEST_MAX_BYTES.get().is_some_and(|max| texture_bytes(desc.format, desc.size.width, desc.size.height, desc.mip_level_count) > max) {
+        return Err(TextureCreationError::OutOfMemory);
     }
     let memory = device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
     let validation = device.push_error_scope(wgpu::ErrorFilter::Validation);
@@ -115,13 +138,14 @@ pub(crate) fn try_create_texture(device: &wgpu::Device, desc: &wgpu::TextureDesc
     if out_of_memory.is_some() {
         TEXTURE_OUT_OF_MEMORY.store(true, std::sync::atomic::Ordering::Relaxed);
     }
+    let reason = if out_of_memory.is_some() { TextureCreationError::OutOfMemory } else { TextureCreationError::Invalid };
     let Some(e) = out_of_memory.or(invalid) else {
-        return Some(texture);
+        return Ok(texture);
     };
     let n = FAILED_TEXTURE_CREATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     if n < 5 || n % 1000 == 0 {
         log::warn!(
-            "texture {}x{} ({:?}, {} levels) could not be made, drawn plain instead (#{}): {e}",
+            "texture {}x{} ({:?}, {} levels) could not be made (#{}): {e}",
             desc.size.width,
             desc.size.height,
             desc.format,
@@ -129,7 +153,31 @@ pub(crate) fn try_create_texture(device: &wgpu::Device, desc: &wgpu::TextureDesc
             n + 1
         );
     }
-    None
+    Err(reason)
+}
+
+fn smaller_upload(data: &omsi_texture::TextureData) -> Option<omsi_texture::TextureData> {
+    let side = data.width.max(data.height);
+    if side <= 1 {
+        return None;
+    }
+    let mut small = fit_texture(data, side / 2)?;
+    if small.format.is_compressed() && (small.width % 4 != 0 || small.height % 4 != 0) {
+        let rgba = small.format.decode_level(small.levels.first()?, small.width, small.height, true);
+        small.format = omsi_texture::PixelFormat::Rgba8;
+        small.levels = vec![rgba];
+        small.gpu_mips = true;
+    }
+    if small.format == omsi_texture::PixelFormat::Rgba8 && small.levels.len() == 1 && small.gpu_mips {
+        let (mut w, mut h) = (small.width, small.height);
+        while w > 1 || h > 1 {
+            let (rgba, nw, nh) = omsi_texture::bc::downsample_alpha_weighted(small.levels.last()?, w, h);
+            small.levels.push(rgba);
+            (w, h) = (nw, nh);
+        }
+        small.gpu_mips = false;
+    }
+    Some(small)
 }
 
 /// A texture that could not be made, drawn as one plain grey texel (its slot counts no
@@ -222,7 +270,7 @@ pub fn prepare_texture(
         height: h,
         depth_or_array_layers: 1,
     };
-    let Some(texture) = try_create_texture(device, &wgpu::TextureDescriptor {
+    let made = create_texture_checked(device, &wgpu::TextureDescriptor {
         label: None,
         size,
         mip_level_count: levels,
@@ -233,8 +281,16 @@ pub fn prepare_texture(
             | wgpu::TextureUsages::COPY_DST
             | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[],
-    }) else {
-        return Some(PreparedTexture(stand_in_texture(device, queue)));
+    });
+    let texture = match made {
+        Ok(texture) => texture,
+        Err(TextureCreationError::OutOfMemory) => {
+            drop(_turn);
+            return smaller_upload(data)
+                .and_then(|small| prepare_texture(device, queue, &small))
+                .or_else(|| Some(PreparedTexture(stand_in_texture(device, queue))));
+        }
+        Err(TextureCreationError::Invalid) => return Some(PreparedTexture(stand_in_texture(device, queue))),
     };
     let (bw, bh) = format.block_dimensions();
     let block = format.block_copy_size(None).unwrap_or(4);
@@ -393,7 +449,11 @@ pub fn fit_texture(data: &omsi_texture::TextureData, max: u32) -> Option<omsi_te
         k += 1;
     }
     if (k as usize) < data.levels.len() {
-        return Some(omsi_texture::TextureData { width: (w >> k).max(1), height: (h >> k).max(1), levels: data.levels[k as usize..].to_vec(), ..data.clone() });
+        return Some(omsi_texture::TextureData {
+            width: (w >> k).max(1), height: (h >> k).max(1),
+            levels: data.levels[k as usize..].to_vec(), format: data.format,
+            has_alpha: data.has_alpha, gpu_mips: data.gpu_mips,
+        });
     }
     // one level only: decode it and halve it
     let mut rgba = match data.levels.first() {
@@ -652,7 +712,7 @@ impl Renderer {
             height: img.height,
             depth_or_array_layers: 1,
         };
-        let Some(texture) = try_create_texture(&self.device, &wgpu::TextureDescriptor {
+        let made = create_texture_checked(&self.device, &wgpu::TextureDescriptor {
             label: None,
             size,
             mip_level_count: mip_count,
@@ -664,8 +724,14 @@ impl Renderer {
                 | wgpu::TextureUsages::COPY_SRC
                 | wgpu::TextureUsages::RENDER_ATTACHMENT,
             view_formats: &[],
-        }) else {
-            return stand_in_texture(&self.device, &self.queue);
+        });
+        let texture = match made {
+            Ok(texture) => texture,
+            Err(TextureCreationError::OutOfMemory) if average == MipAverage::ByCoverage && width.max(height) > 1 => {
+                let (small, w, h) = omsi_texture::bc::downsample_alpha_weighted(rgba, width, height);
+                return self.upload_rgba_mips_with(w, h, &small, average);
+            }
+            Err(_) => return stand_in_texture(&self.device, &self.queue),
         };
         self.queue.write_texture(
             wgpu::TexelCopyTextureInfo {
@@ -928,18 +994,26 @@ impl Renderer {
         false
     }
 
-    /// Put `data` into texture slot `id` in place of what is there (a picture uploaded as
-    /// RGBA to spare a frame, compressed since), and point the materials using it at it.
+    /// Put `data` into texture slot `id`. A failed upgrade keeps the working picture;
+    /// callers rebind materials only when this returns true.
     pub fn replace_texture(
         &self,
         scene: &mut Scene,
         id: TextureId,
         data: &omsi_texture::TextureData,
-    ) {
+    ) -> bool {
         if id >= scene.textures.len() {
-            return;
+            return false;
         }
-        scene.textures[id] = self.upload_texture_data(data);
+        let texture = self.upload_texture_data(data);
+        let old = &scene.textures[id];
+        let lost_detail = data.width >= old.size.0 && data.height >= old.size.1
+            && (texture.size.0 < old.size.0 || texture.size.1 < old.size.1);
+        if texture.bytes == 0 || (old.bytes > 0 && lost_detail) {
+            return false;
+        }
+        scene.textures[id] = texture;
+        true
     }
 
     /// Refresh a changed file in its existing slot. Reuse the GPU allocation and all
@@ -978,8 +1052,7 @@ impl Renderer {
             || old.texture.format() != format
             || old.texture.mip_level_count() != levels
         {
-            self.replace_texture(scene, id, data);
-            return true;
+            return self.replace_texture(scene, id, data);
         }
         let (bw, bh) = format.block_dimensions();
         let block = format.block_copy_size(None).unwrap_or(4);

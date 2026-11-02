@@ -533,7 +533,7 @@ pub fn start(args: &LanConfig, host: &dyn LanHost) -> Option<LanSession> {
     }
     if session.role == Role::Host && !args.server {
         // the way in over the internet that always works (see `open_public_gateway`)
-        let info = omsi_net::ws::ServerInfo { name: format!("{}'s game", player_name(args)), map: args.map.clone(), max_players: 16, version: host.version(), ..Default::default() };
+        let info = omsi_net::ws::ServerInfo { name: format!("{}'s game", player_name(args)), map: args.map.clone(), max_players: 64, version: host.version(), ..Default::default() };
         open_public_gateway(&session, info, 0, true);
         host.publish_vehicles(Vec::new());
     }
@@ -590,6 +590,12 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) -> Option<crate::m
             };
             note(lan, "Host's mods: looking what is needed...".into());
             let session = lan.session;
+            let local_fleet = local_fleet::verified(args, lan);
+            if local_fleet { log::info!("LAN: installed fleet matches the announced content; no bus download needed"); }
+            let needs_selected_download = local_fleet::requires_server_download(
+                args.allow_server_fleet, args.bus.is_some(), local_fleet,
+            );
+            let server_only = needs_selected_download && !args.bus.as_deref().is_some_and(|b| local_fleet::installed(&args.root, b));
             // the host's TCP port is not always reachable (a router forwards the UDP session
             // only, or we came in over a WebSocket): the files go through its tunnel then
             let joined_url = crate::gateway::joined_url();
@@ -605,7 +611,11 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) -> Option<crate::m
                         Err(e) => log::warn!("LAN mods: {e}"),
                     },
                     None => {
-                        note(lan, "Host's mods could not be downloaded; playing with what is installed here".into());
+                        let why = "no reachable TCP mod channel or WebSocket relay";
+                        note(lan, format!("Host's mods could not be downloaded: {why}"));
+                        if server_only {
+                            args.mod_fetch_error = Some(why.into());
+                        }
                         return None;
                     }
                 }
@@ -615,9 +625,14 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) -> Option<crate::m
             let (tx, rx) = std::sync::mpsc::channel::<String>();
             let mut fmap = args.map.clone();
             let froot = args.root.clone();
+            // The old map-fetch path remains available, but selected bus
+            // downloads require an explicit opt-in from the launcher or CLI.
+            let selected_bus = args.bus.clone().filter(|_| needs_selected_download);
+            let selected_paint = args.paint.clone();
+            let selected_requested = selected_bus.is_some();
             let worker = std::thread::spawn(move || {
                 let mut last = Instant::now() - Duration::from_secs(1);
-                let r = crate::mods::fetch(&froot, &mut fmap, host, session, &mut |done, total, file| {
+                let r = crate::mods::fetch_selected(&froot, &mut fmap, host, session, selected_bus.as_deref(), selected_paint.as_deref(), &mut |done, total, file| {
                     if last.elapsed() > Duration::from_millis(500) {
                         last = Instant::now();
                         let pct = if total > 0 { done * 100 / total } else { 100 };
@@ -651,6 +666,9 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) -> Option<crate::m
                 Err(e) => {
                     log::warn!("LAN mods: {e}");
                     note(lan, format!("Host's mods could not be fetched: {e}"));
+                    if selected_requested && server_only {
+                        args.mod_fetch_error = Some(e);
+                    }
                 }
             }
         }
@@ -1748,8 +1766,14 @@ fn new_remote(
         },
         if matched {
             "lamps, switches and sound values follow theirs".to_string()
+        } else if theirs {
+            // The table hash describes the runtime's variable/animation indices;
+            // it is NOT the SHA-256 manifest of the vehicle's files.
+            // Preserve safe name-based schema negotiation, but never blindly
+            // interpret different variable tables as interchangeable indices.
+            format!("sync variable tables differ (remote {:08X}, local {:08X}): safe fallback, not a file-hash mismatch", pose.table, table.hash)
         } else {
-            format!("their vehicle files differ from ours (table {:08X}, ours {:08X}): lights and doors only", pose.table, table.hash)
+            "the exact remote vehicle is not verified here: safe placeholder/stand-in state".to_string()
         }
     );
     let animations = animation_sync::Animations::new(table.animations.clone());
@@ -2362,7 +2386,7 @@ pub fn tick_receive(
         // (a bus another stands in for is still asked for, in the background, when it is time
         // - the one standing in is not made again each time: only once theirs is here)
         if game.remotes.get(&pose.id).is_some_and(|rv| rv.fallback && rv.read_failed.is_none()) && omsi_net::is_fingerprint(&pose.content) && crate::mods::vehicles::retry_due(&pose.content) {
-            crate::mods::vehicles::want(&args.root, pose.id, &pose.content, &pose.bus, &pose.paint);
+            crate::mods::vehicles::want(&args.root, pose.id, &pose.content, &pose.bus, &pose.paint, args.allow_server_fleet);
         }
         // another vehicle than before (the player changed buses), or another paint scheme on
         // it: made again
@@ -2796,6 +2820,7 @@ thread_local! {
 }
 
 mod remote_type;
+mod local_fleet;
 use remote_type::{remote_type, RemoteType};
 mod tag;
 pub use tag::tag_text;

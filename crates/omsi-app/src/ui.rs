@@ -16,6 +16,7 @@ mod menu;
 mod information_bar;
 mod perf_panel;
 mod text;
+mod loading;
 
 pub use text::TextCache;
 mod mz;
@@ -457,6 +458,9 @@ pub struct Ui {
     hud: hud::Hud,
     grips: [Option<([f32; 4], f32, f32)>; 3],
     caps: [f32; 3],
+    /// When the loading reached each mark of a theme's loading logo (by the loading screen's
+    /// clock): they pop in from then (`omsi_ui::icons::Stage`).
+    logo_marks: hashbrown::HashMap<String, f32>,
 }
 
 impl Ui {
@@ -514,7 +518,7 @@ impl Ui {
         }
     }
     pub fn new() -> Option<Ui> {
-        Some(Ui { origin_x: 0.0, text: TextCache::new()?, chat: ChatWidget::default(), menu_rects: Vec::new(), menu_arrows: Vec::new(), menu_scroll_thumb: None, menu_scroll_track: None, menu_ctl: Vec::new(), dd_rects: Vec::new(), dd_top: 0, dd_rows: 8, dd_scroll: None, menu_side: Vec::new(), menu_pane: Vec::new(), menu_pane_start: 0, menu_pane_go: None, menu_pane_box: None, menu_pane_scroll: None, menu_time: Vec::new(), anim: Default::default(), anim_dt: 0.0, menu_overlay_range: 0..0, vr_cursor_overlay: None, vr_tooltip_overlay: None, menu_start: 0, menu_rows: 0, menu_row_h: 1.0, images: Default::default(), info_rect: None, perf: Default::default(), mz: Default::default(), hud: hud::Hud::new(false), grips: [None; 3], caps: [f32::MAX; 3] })
+        Some(Ui { origin_x: 0.0, text: TextCache::new()?, chat: ChatWidget::default(), menu_rects: Vec::new(), menu_arrows: Vec::new(), menu_scroll_thumb: None, menu_scroll_track: None, menu_ctl: Vec::new(), dd_rects: Vec::new(), dd_top: 0, dd_rows: 8, dd_scroll: None, menu_side: Vec::new(), menu_pane: Vec::new(), menu_pane_start: 0, menu_pane_go: None, menu_pane_box: None, menu_pane_scroll: None, menu_time: Vec::new(), anim: Default::default(), anim_dt: 0.0, menu_overlay_range: 0..0, vr_cursor_overlay: None, vr_tooltip_overlay: None, menu_start: 0, menu_rows: 0, menu_row_h: 1.0, images: Default::default(), info_rect: None, perf: Default::default(), mz: Default::default(), hud: hud::Hud::new(false), grips: [None; 3], caps: [f32::MAX; 3], logo_marks: Default::default() })
     }
 
     /// Draw the frame's interface: its overlays go after the HUD's in `scene.overlays`.
@@ -1210,107 +1214,6 @@ impl LoadTimes {
 fn expected_of(v: &serde_json::Value) -> Option<f32> {
     let t: Vec<f32> = v.as_array()?.iter().filter_map(|x| x.as_f64()).map(|x| x as f32).filter(|x| x.is_finite() && *x > 0.0).collect();
     (!t.is_empty()).then(|| t.iter().sum::<f32>() / t.len() as f32)
-}
-
-/// The openOMSI wordmark (white letters, the orange "OMSI"), for the loading screen.
-const WORDMARK: &str = include_str!("../../../assets/logos/openomsi-wordmark-light.svg");
-
-/// The pixels of a stretch of the loading bar `w` x `h` with its stripes: 45 degree bands of
-/// the accent and a lighter one, `period` pixels apart along the bar, moved `phase` pixels on.
-fn stripe_pixels(w: u32, h: u32, period: u32, phase: u32, alpha: u8) -> Vec<u8> {
-    let mut px = Vec::with_capacity((w * h * 4) as usize);
-    for y in 0..h {
-        for x in 0..w {
-            let light = (x + period * 4 + phase - y % period) % period < period / 2;
-            let c = if light { [244, 182, 82] } else { [232, 160, 48] };
-            px.extend_from_slice(&[c[0], c[1], c[2], alpha]);
-        }
-    }
-    px
-}
-
-impl Ui {
-    /// The loading screen: the openOMSI wordmark large in the middle and the map's name under
-    /// it; along the bottom a square amber bar whose stripes slide on (it is working), over
-    /// it a rotating tip on the left and how far on the right. All of it `opacity` (fading
-    /// over the first pictures of the session); `clock` moves the stripes and the tips.
-    #[allow(clippy::too_many_arguments)]
-    pub fn loading_screen(&mut self, r: &Renderer, scene: &mut Scene, width: f32, height: f32, scale: f32, title: &str, progress: f32, opacity: f32, clock: f32, tip: (&str, f32)) {
-        let s = scale.max(0.5);
-        let k = (opacity.clamp(0.0, 1.0) * 16.0).round() / 16.0;
-        if k <= 0.0 {
-            return;
-        }
-        let a = |v: f32| (v * k).round().clamp(0.0, 255.0) as u8;
-        let bg = self.text.solid(r, scene, [18, 18, 18, a(255.0)]);
-        scene.overlays.push((bg, [0.0, 0.0, width, height]));
-        // the wordmark, large, a little above the middle
-        let lw = (560.0 * s).min(width * 0.6).round() as u32;
-        let lh = (lw as f32 * 303.0 / 1142.0).round() as u32;
-        let ka = a(255.0);
-        let logo = self.text.cached(r, scene, ("\u{0}wordmark".to_string(), lw, [255, 255, 255, ka]), (lw, lh), || {
-            let mut px = omsi_ui::icons::rasterize_rgba(WORDMARK, lw, lh).unwrap_or_else(|| vec![0; (lw * lh * 4) as usize]);
-            for p in px.chunks_mut(4) {
-                p[3] = (p[3] as u32 * ka as u32 / 255) as u8;
-            }
-            px
-        });
-        let lx = ((width - lw as f32) * 0.5).round();
-        let ly = (height * 0.42 - lh as f32 * 0.5).round();
-        scene.overlays.push((logo, [lx, ly, lx + lw as f32, ly + lh as f32]));
-        // the map's name under it
-        let tpx = (24.0 * s).round() as u32;
-        let title = clip_to(&self.text, title, tpx as f32, width - 64.0 * s);
-        let t = self.text.label_op(r, scene, &title, tpx, [184, 184, 184, 0], k);
-        let tx = ((width - t.w as f32) * 0.5).round();
-        let ty = (ly + lh as f32 + 18.0 * s).round();
-        scene.overlays.push((t.tex, [tx, ty, tx + t.w as f32, ty + t.h as f32]));
-        // the bar along the bottom: square, the track and the striped fill
-        let margin = (48.0 * s).round();
-        let bw = (width - margin * 2.0).min(1100.0 * s).round();
-        let bx = ((width - bw) * 0.5).round();
-        let bh = (14.0 * s).round().max(6.0);
-        let by = (height - margin - bh).round();
-        let track = self.text.solid(r, scene, [42, 42, 42, a(255.0)]);
-        scene.overlays.push((track, [bx, by, bx + bw, by + bh]));
-        let p = progress.clamp(0.0, 1.0);
-        let fill_w = (bw * p).round() as u32;
-        if fill_w > 0 {
-            // (tiles of one period with the stripes moved on, a cut one at the end: the
-            // overlays cannot move a texture's pixels, so the moving is in which tile is drawn)
-            let period = (bh as u32 * 2).max(8);
-            let phase = ((clock * 40.0 * s) as u32) % period;
-            let (h, fa) = (bh as u32, a(255.0));
-            let mut x = 0u32;
-            while x < fill_w {
-                let w = period.min(fill_w - x);
-                let key = (format!("\u{0}stripes{period}x{h}p{phase}"), w, [232, 160, 48, fa]);
-                let tex = self.text.cached(r, scene, key, (w, h), || stripe_pixels(w, h, period, phase, fa));
-                scene.overlays.push((tex, [bx + x as f32, by, bx + (x + w) as f32, by + bh]));
-                x += w;
-            }
-        }
-        // over the bar: a tip on the left, how far on the right
-        let small = (11.0 * s).round() as u32 | BOLD;
-        let tip_px = (14.0 * s).round() as u32;
-        let pct = self.text.label_op(r, scene, &format!("{:.0} %", p * 100.0), (15.0 * s).round() as u32 | BOLD, [237, 237, 237, 0], k);
-        let row_y = by - 12.0 * s;
-        scene.overlays.push((pct.tex, [bx + bw - pct.w as f32, row_y - pct.h as f32, bx + bw, row_y]));
-        let (tip, tk) = tip;
-        let tip = clip_to(&self.text, &omsi_ui::tr(tip), tip_px as f32, bw - pct.w as f32 - 40.0 * s);
-        let tl = self.text.label_op(r, scene, &tip, tip_px, [184, 184, 184, 0], k * tk);
-        scene.overlays.push((tl.tex, [bx, row_y - tl.h as f32, bx + tl.w as f32, row_y]));
-        let head = self.text.label_op(r, scene, &omsi_ui::tr("Tips").to_uppercase(), small, [232, 160, 48, 0], k);
-        let hy = row_y - tl.h as f32 - head.h as f32 + 2.0 * s;
-        scene.overlays.push((head.tex, [bx, hy, bx + head.w as f32, hy + head.h as f32]));
-    }
-
-    /// The loading screen alone, before the session's first picture.
-    #[allow(clippy::too_many_arguments)]
-    pub fn loading(&mut self, r: &Renderer, scene: &mut Scene, width: f32, height: f32, scale: f32, title: &str, progress: f32, clock: f32, tip: (&str, f32)) {
-        self.loading_screen(r, scene, width, height, scale, title, progress, 1.0, clock, tip);
-        self.text.end_frame(r, scene);
-    }
 }
 
 /// `text` broken into lines of at most `width` pixels, between words.

@@ -7,6 +7,7 @@ use crate::api::{ApiError, ApiFn, Ctx, Value};
 
 const NEW: &str = crate::api::VERSION;
 const V36: &str = "0.3.36";
+const V42: &str = "0.3.42";
 /// Longest `lan.send` text: the session's command messages carry 160 characters, and the
 /// plugin's name goes with it.
 pub const LAN_MAX: usize = 120;
@@ -142,6 +143,18 @@ pub static FNS: &[ApiFn] = &[
         let s = c.state();
         let owner = s.owner;
         let r = s.ui().set_menu_item(owner, &id, &label, icon);
+        Ok::<_, ApiError>(super::core::ok_or_reason(r))
+    }),
+    def!("ui.themes", "ui", [], "list of tables", "The game's interface themes: each `{ id, name }`, openOMSI's own look first (its id `\"\"`). A theme is a folder with a `theme.json` (`Themes/<id>/`, or a plugin's own folder: see docs/THEMES.md).", V42, None, false, |c, a| {
+        let s = c.state();
+        let list: Vec<Value> = s.ui().themes().iter().map(|t| Value::map([("id", Value::from(t.id.clone())), ("name", Value::from(t.name.clone()))])).collect();
+        Value::List(list)
+    }),
+    def!("ui.theme", "ui", [], "string", "The id of the interface theme in use (`\"\"`: openOMSI's own look).", V42, None, false, |c, a| c.state().ui().theme().to_string()),
+    def!("ui.set_theme", "ui", [p("id", "string")], "true, or false and the reason", "Switches the game's interface to theme `id` (`\"\"` or `\"openomsi\"`: openOMSI's own look), as if the player chose it in Options › Interface: it is kept for the next start. Ask the player first; they can switch back there.", V42, Ui, true, |c, a| {
+        let id = a.str(0)?;
+        let s = c.state();
+        let r = s.ui().ask_theme(&id);
         Ok::<_, ApiError>(super::core::ok_or_reason(r))
     }),
     def!("ui.remove_menu_item", "ui", [p("id", "string")], "boolean", "Takes the plugin's line `id` out of the pause menu; `true` when there was one.", V36, Ui, false, |c, a| {

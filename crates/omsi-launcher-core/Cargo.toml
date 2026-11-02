@@ -22,8 +22,8 @@ serde_json.workspace = true
 anyhow.workspace = true
 rayon.workspace = true
 zip.workspace = true
-sevenz-rust2 = { version = "0.23", default-features = false, features = ["util", "deflate"] }
-unrar-rs = { version = "0.10", default-features = false, features = ["crypto-rust"] }
+sevenz-rust2 = { version = "0.24", default-features = false, features = ["util", "deflate"] }
+unrar-rs = { version = "0.14", default-features = false, features = ["crypto-rust"] }
 omsi-cfg = { path = "../omsi-cfg" }
 omsi-map = { path = "../omsi-map" }
 omsi-vehicle = { path = "../omsi-vehicle" }

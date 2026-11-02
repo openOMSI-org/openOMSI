@@ -151,6 +151,7 @@ pub struct Pax {
     pub paid: f32,
     pub bad_change: bool,
     pub sub: u8,
+    pub taking_ticket: Option<usize>,
     /// A plugin's say in the ticket (`ticket_hook`), boxed: most passengers have none, and a
     /// `Pax` is cloned several times a frame.
     pub plugin: Option<Box<super::ticket_hook::PluginTicket>>,
@@ -246,6 +247,7 @@ impl Pax {
             paid: 0.0,
             bad_change: false,
             sub: 0,
+            taking_ticket: None,
             plugin: None,
             ticket_hold: None,
             door: None,

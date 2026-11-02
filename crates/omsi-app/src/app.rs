@@ -355,7 +355,7 @@ impl App {
             if surface.config.width != size.width.max(1) || surface.config.height != size.height.max(1) {
                 surface.resize(&renderer, size.width, size.height);
             }
-            surface.set_vsync(&renderer, vsync);
+            surface.set_vsync(&renderer, vsync, (1..1000).contains(&self.settings.max_fps) && !cfg!(target_os = "android"));
             let (sw, sh) = renderer.scene_size(size.width, size.height);
             log::info!(
                 "window: {}x{} pixels (scale factor {:.2}), 3D picture {sw}x{sh}, present mode {:?}",
@@ -843,6 +843,7 @@ impl App {
     /// One loading screen picture (the map, or our bus going to the server): `title`, bar at `shown`.
     fn loading_frame(&mut self, renderer: omsi_render::Renderer, mut scene: Scene, title: &str, shown: f32) {
         let mut reconfigure = false;
+        crate::themes::sync(&self.settings.ui_theme_pack, self.settings.is_light_theme());
         if let (Some(ui), Some(s), Some(win)) = (
             self.ui.as_mut(),
             self.gfx.surface.as_ref(),

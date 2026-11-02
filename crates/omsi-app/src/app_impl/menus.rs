@@ -38,6 +38,10 @@ impl App {
     }
 
     pub(crate) fn close_game_menu(&mut self) {
+        // Never keep unconfirmed graphics changes after dismissing the entire menu.
+        if self.menus.graphics_before.is_some() {
+            crate::game_lists::cancel_graphics_changes(self);
+        }
         self.shell.quick_edit = false;
         self.menus.key_capture = None;
         if self.menus.menu_edit_number {

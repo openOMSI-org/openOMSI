@@ -511,7 +511,7 @@ impl TrafficSim {
         }
         let st = &self.cars[i].state;
         if st.change.is_some()
-            || !st.route.is_empty()
+            || self.cars[i].is_rail()
             || st.change_cooldown > 0.0
             || stuck < 4.0
             || !standing
@@ -534,6 +534,10 @@ impl TrafficSim {
         if lane.length() - st.s < 9.0 && st.planned_next.is_none() {
             return;
         }
+        let route = (!st.route.is_empty()).then(|| (st.route_index + 1, st.route.get(st.route_index + 1).copied()));
+        if route.is_some() && self.cars[i].next_stop().is_some_and(|(ri, _)| ri <= st.route_index) {
+            return;
+        }
         let frac = st.s / lane.length().max(1.0);
         let (lane_idx, planned) = (st.lane, st.planned_next);
         let turn = planned.map(|n| self.net.lanes[n].turn).unwrap_or(0);
@@ -547,6 +551,14 @@ impl TrafficSim {
                 continue;
             }
             let side_lane = &self.net.lanes[side];
+            let rejoin = match route {
+                None => None,
+                Some((_, Some(b))) if !self.net.parallel(lane_idx, b) => {
+                    let Some(n) = side_lane.next.iter().copied().find(|&n| self.net.parallel(n, b)) else { continue };
+                    Some(n)
+                }
+                Some(_) => continue,
+            };
             let s_side = frac * side_lane.length();
             // the lane beside runs on for 30 m (through its joint), and stays open to the car
             // that long (not into a lane that closes to it, #125)
@@ -555,19 +567,44 @@ impl TrafficSim {
                 && self.open_run(st, side, s_side, 30.0) >= 30.0
                 && self.lane_clear(i, side, s_side, 12.0, 30.0, by_lane)
             {
-                sides.push((side, dir));
+                sides.push((side, dir, rejoin));
             }
         }
         // (the whole way over is checked, against everything but what it pulls out round)
         let skip = lead.and_then(|l| l.1);
-        for (side, dir) in sides {
-            if self.try_change(i, side, dir, super::lateral::ChangeKind::Bypass, ts, skip) {
+        for (side, dir, rejoin) in sides {
+            let at = route.map_or(0, |r| r.0);
+            if let Some(n) = rejoin {
+                self.splice_route(i, at, Some([side, n]));
+            }
+            if !self.try_change(i, side, dir, super::lateral::ChangeKind::Bypass, ts, skip) {
+                if rejoin.is_some() {
+                    self.splice_route(i, at, None);
+                }
+            } else {
                 self.cars[i].stopped = 0.0;
                 if omsi_cfg::flags::OMSI_DEBUG_TRAFFIC.is_set() {
                     log::info!("t={:.1}: car {} pulls out round an obstacle {d:.0} m ahead after {stuck:.0} s: lane {} -> {}", self.time, self.cars[i].id, lane_idx, side);
                 }
                 return;
             }
+        }
+    }
+
+    fn splice_route(&mut self, i: usize, at: usize, lanes: Option<[usize; 2]>) {
+        let car = &mut self.cars[i];
+        let added = match lanes {
+            Some(l) => {
+                car.state.route.splice(at..at, l);
+                true
+            }
+            None => {
+                car.state.route.drain(at..at + 2);
+                false
+            }
+        };
+        for stop in car.bus.iter_mut().flat_map(|b| b.stops.iter_mut()).filter(|s| s.ri >= at) {
+            stop.ri = if added { stop.ri + 2 } else { stop.ri - 2 };
         }
     }
 

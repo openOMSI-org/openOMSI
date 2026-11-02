@@ -1,14 +1,14 @@
 // The bus picker: the buses in a list (search, makers, favourites), the chosen one turning in
 // a 3D picture beside it with its paints and description.
 
-import { html, useState, useMemo } from '../../vendor/preact-htm.js';
+import { html, useState, useMemo, useEffect } from '../../vendor/preact-htm.js';
 import { BusPreview } from '../preview.js';
 import { S, useStore, set } from '../store.js';
 import { t } from '../i18n.js';
 import { call } from '../api.js';
 import { Icon } from '../icons.js';
 import { Dialog, Search, Select, Segmented, Empty, Spinner, Button, Tag, Notice, Field } from '../ui.js';
-import { choose, busFile, serverBuses, MODES, modeLabel, shownModes, transportRefusal, curMap } from '../data.js';
+import { choose, busFile, serverBuses, selectableVehicles, MODES, modeLabel, shownModes, transportRefusal, curMap, askJoined, canPreviewBus } from '../data.js';
 import { Notes } from './drive.js';
 
 const favKey = (file) => file.replace(/\\/g, '/').toLowerCase();
@@ -50,6 +50,11 @@ export function toggleFavourite(file) {
 
 export function BusPicker({ onClose, onTake, title = 'Choose a bus', yes = 'Take this bus' }) {
   const s = useStore();
+  // Server status may have been saved before the dedicated fleet catalogue was
+  // published. Query it again when the chooser opens, not on every render.
+  useEffect(() => {
+    if (s.choice.lan_mode === 'join') askJoined({ refresh: true });
+  }, [s.choice.lan_mode, s.choice.lan_addr]);
   const [q, setQ] = useState('');
   const [maker, setMaker] = useState('');
   const [show, setShow] = useState('all');
@@ -58,7 +63,7 @@ export function BusPicker({ onClose, onTake, title = 'Choose a bus', yes = 'Take
   const [sel, setSel] = useState(s.choice.bus);
   const [paint, setPaint] = useState(s.choice.bus === sel ? s.choice.paint : '');
   const joined = serverBuses(s.choice);
-  const all = (s.vehicles || []).filter((v) => !joined || joined.has(busFile(v.file)));
+  const all = selectableVehicles(s.choice);
   const modes = all.some((v) => v.transport?.some((m) => m !== 'bus')) ? MODES.filter((x) => all.some((v) => v.transport?.includes(x))) : [];
   const makers = useMemo(() => [...new Set(all.map((v) => v.manufacturer).filter(Boolean))].sort(), [all]);
   const ql = q.trim().toLowerCase();
@@ -69,7 +74,9 @@ export function BusPicker({ onClose, onTake, title = 'Choose a bus', yes = 'Take
     .filter((v) => show !== 'mods' || v.installed)
     .filter((v) => !ql || `${v.name} ${v.manufacturer} ${v.type_name} ${v.folder}`.toLowerCase().includes(ql))
     .sort((a, b) => (a.manufacturer || '').localeCompare(b.manufacturer || '') || a.name.localeCompare(b.name));
-  const fams = useMemo(() => families(list), [list.map((x) => x.file).join('|')]);
+  // A refreshed server can change the paints of the same .bus path; do not
+  // keep stale family rows just because the filenames did not change.
+  const fams = families(list);
   const [open, setOpen] = useState(() => new Set(fams.filter((f) => f.versions.some((x) => x.v.file === s.choice.bus)).map((f) => f.key)));
   const toggle = (key) => setOpen((o) => {
     const n = new Set(o);
@@ -78,18 +85,33 @@ export function BusPicker({ onClose, onTake, title = 'Choose a bus', yes = 'Take
     return n;
   });
   const v = all.find((x) => x.file === sel);
-  const take = () => {
+  const fleetKey = s.choice.lan_mode === 'join'
+    ? JSON.stringify([s.choice.lan_server?.vehicles, s.choice.lan_server?.fleet])
+    : '';
+  useEffect(() => {
+    // The picker can stay open while the server query updates its catalogue.
+    // Discard a selection or repaint that the refreshed server no longer offers.
+    if (s.choice.lan_mode !== 'join' || !s.choice.lan_server?.asked) return;
+    if (!v) {
+      if (all.length) { setSel(all[0].file); setPaint(''); }
+    } else if (v.server_catalog && paint
+        && !(v.paints || []).some((name) => name.toLowerCase() === paint.toLowerCase())) {
+      setPaint('');
+    }
+  }, [fleetKey, s.choice.lan_mode, s.choice.lan_addr]);
+  const take = (bus = sel, scheme = paint) => {
+    if (!all.some((x) => x.file === bus)) return;
     if (onTake) {
-      onTake({ bus: sel, paint });
+      onTake({ bus, paint: scheme });
       return onClose();
     }
-    choose({ bus: sel, paint, number: sel === s.choice.bus ? s.choice.number : '', hof_manual: sel === s.choice.bus ? s.choice.hof_manual : false });
+    choose({ bus, paint: scheme, number: bus === s.choice.bus ? s.choice.number : '', hof_manual: bus === s.choice.bus ? s.choice.hof_manual : false });
     onClose();
   };
   return html`<${Dialog} wide title=${title} onClose=${onClose} footer=${html`
       <span class="muted small" style="margin-right:auto">${t('{n} buses', { n: list.length })}</span>
       <${Button} label="Cancel" onClick=${onClose} />
-      <${Button} kind="primary" icon="check" label=${yes} disabled=${!v} onClick=${take} />`}>
+      <${Button} kind="primary" icon="check" label=${yes} disabled=${!v} onClick=${() => take()} />`}>
     <div class="picker" style="margin:-18px -20px;height:calc(100% + 36px)">
       <div class="left">
         <div class="tools">
@@ -106,7 +128,7 @@ export function BusPicker({ onClose, onTake, title = 'Choose a bus', yes = 'Take
             const one = f.versions.length === 1;
             const shown = one || open.has(f.key) || !!ql;
             const has = f.versions.some((x) => x.v.file === sel);
-            const row = (x, sub, indent) => html`<div class=${'list-item' + (x.file === sel ? ' on' : '')} style=${indent ? 'padding-left:30px' : ''} onClick=${() => (setSel(x.file), setPaint(x.file === s.choice.bus ? s.choice.paint : ''))} onDblClick=${() => (setSel(x.file), setTimeout(take))}>
+            const row = (x, sub, indent) => html`<div class=${'list-item' + (x.file === sel ? ' on' : '')} style=${indent ? 'padding-left:30px' : ''} onClick=${() => (setSel(x.file), setPaint(x.file === s.choice.bus ? s.choice.paint : ''))} onDblClick=${() => take(x.file, x.file === s.choice.bus ? s.choice.paint : '')}>
               <div class="grow" style="min-width:0">
                 <div class="title" style="overflow-wrap:anywhere" title=${sub}>${sub}</div>
                 <div class="sub ellipsis">${[indent ? null : x.manufacturer, shownModes(x).map(modeLabel).join(', ') || null, x.paints.length ? t('{n} paints', { n: x.paints.length + 1 }) : null].filter(Boolean).join(' - ')}</div>
@@ -131,18 +153,20 @@ export function BusPicker({ onClose, onTake, title = 'Choose a bus', yes = 'Take
         </div>
       </div>
       <div class="detail">
-        ${v ? html`<${BusPreview} look=${{ bus: v.file, paint, map: s.choice.map, weather: s.choice.weather, time: s.choice.time, date: s.choice.date }} />
+        ${v ? html`${!canPreviewBus(v, paint) ? html`<div class="stage-empty"><${Icon} name="bus" size=${36} /><span>${t('Preview available after the server bus is downloaded')}</span></div>` : html`<${BusPreview} look=${{ bus: v.file, paint, map: s.choice.map, weather: s.choice.weather, time: s.choice.time, date: s.choice.date }} />`}
           <div class="card-body stack">
             <div class="row">
               <div class="grow"><h2 style="font-size:20px">${v.name}</h2><div class="muted">${[v.manufacturer, v.type_name, ...shownModes(v).map(modeLabel)].filter(Boolean).join(' - ')}</div></div>
               ${v.installed && html`<${Tag}>${t('Mod')}</${Tag}>`}
+              ${v.server_catalog && html`<${Tag}>${t('Server')}</${Tag}>`}
             </div>
             ${transportRefusal(map, v) && html`<${Notice} kind="warn">${transportRefusal(map, v)} ${t('Choose another map or vehicle.')}</${Notice}>`}
             ${v.missing_packs?.length > 0 && html`<${Notice} kind="warn">${t('Parts of this bus come from packs that are not installed: {packs}', { packs: v.missing_packs.join(', ') })}</${Notice}>`}
+            ${v.server_catalog && html`<${Notice} kind="info">${t('This bus and its selected paint will be checked against the server and downloaded when needed.')}</${Notice}>`}
             <${Field} label="Paint">
               <${Select} raw value=${paint} options=${[['', v.default_paint ? `${t('Standard')} (${v.default_paint})` : t('Standard')], ...v.paints.map((p) => [p, p])]} onChange=${setPaint} />
             </${Field}>
-            ${v.description && html`<p class="dim selectable" style="white-space:pre-line;max-height:220px;overflow:auto">${v.description}</p>`}
+            ${v.description && html`<p class="dim selectable" style="white-space:pre-line;max-height:220px;overflow:auto">${v.server_only ? t(v.description) : v.description}</p>`}
             <${Notes} kind="bus" file=${v.file} />
             <div class="muted small selectable">${v.file}</div>
           </div>`

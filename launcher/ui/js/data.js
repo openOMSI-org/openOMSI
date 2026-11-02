@@ -124,10 +124,11 @@ export function fixChoice() {
     c.entry = -1;
     mapChanged = true;
   }
-  if (S.vehicles?.length && !S.vehicles.some((v) => v.file === c.bus)) {
-    c.bus = S.vehicles[0].file;
+  const available = selectableVehicles(c);
+  if (available.length && !available.some((v) => busFile(v.file) === busFile(c.bus))) {
+    c.bus = available[0].file;
     c.paint = '';
-    c.number = randomFleetNumber(S.vehicles[0]);
+    c.number = available[0].server_only ? '' : randomFleetNumber(available[0]);
   }
   if (S.weather && c.weather && !weatherOfItsOwn(c.weather) && !S.weather.some((w) => w.file === c.weather)) c.weather = '';
   // (a date the player picked stays even outside the map's [years]; only a map that had
@@ -149,29 +150,99 @@ export function serverBuses(c = S.choice) {
   return c?.lan_mode === 'join' && c.lan_server?.vehicles?.length ? new Set(c.lan_server.vehicles.map(busFile)) : null;
 }
 
-export function allowedBus(c = S.choice) {
-  const allowed = serverBuses(c);
-  if (!allowed || allowed.has(busFile(c.bus))) return {};
-  const own = S.vehicles?.find((v) => allowed.has(busFile(v.file)));
-  return own ? { bus: own.file, paint: '', number: '', hof_manual: false } : {};
+/** A server's paint names for a bus, each once (whatever its case or spaces) and without
+ * the bus's own standard look, which the paint lists already offer as "Standard". */
+function offeredPaints(names, standard = '') {
+  const seen = new Set([String(standard || '').trim().toLowerCase()].filter(Boolean));
+  return (names || []).filter((name) => {
+    const key = String(name || '').trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
-export const noServerBus = () => {
-  const allowed = serverBuses();
-  return !!allowed && !!S.vehicles && !S.vehicles.some((v) => allowed.has(busFile(v.file)));
-};
+/** Local buses are preferred; server-only entries are selectable after the server
+ * announces named paints. Actual bytes come through the verified session transfer. */
+export function selectableVehicles(c = S.choice) {
+  const allowed = serverBuses(c);
+  const local = (S.vehicles || []).filter((v) => !allowed || allowed.has(busFile(v.file)));
+  if (!allowed || c?.lan_server?.fleet_version !== 1) return local;
+  const byKey = new Map((c.lan_server.fleet || []).filter((f) => f?.bus && allowed.has(busFile(f.bus))).map((f) => [busFile(f.bus), f]));
+  // A configured server may list a .bus that it cannot load. Only the actual
+  // authenticated-package catalogue can be selected; never allow a local-only
+  // copy of a broken/non-advertised bus to bypass version verification.
+  const out = local.filter((v) => byKey.has(busFile(v.file))).map((v) => {
+    const offer = byKey.get(busFile(v.file));
+    return { ...v, local_paints: v.paints || [], paints: offeredPaints(offer.paints, v.default_paint), server_catalog: true };
+  });
+  const have = new Set(out.map((v) => busFile(v.file)));
+  for (const offer of byKey.values()) {
+    if (have.has(busFile(offer.bus))) continue;
+    const components = offer.bus.replace(/\\/g, '/').split('/');
+    const basename = (components.pop() || 'Bus').replace(/\.(bus|ovh)$/i, '').replace(/_/g, ' ');
+    const maker = (components[components.length - 1] || 'Server').replace(/_/g, ' ');
+    out.push({
+      name: basename, type_name: basename, manufacturer: maker, file: offer.bus,
+      folder: components.join('/'), description: 'Offered by the joined server; its verified version is downloaded for this session.',
+      default_paint: '', paints: offeredPaints(offer.paints), hofs: [], numbers: [], installed: false,
+      server_only: true, server_catalog: true, transport: ['bus'], missing_packs: [],
+    });
+  }
+  return out;
+}
+
+/** A server-only bus has no local preview. If a local bus exists, show only
+ * paints actually installed here; a server-only repaint remains a placeholder
+ * until the verified server content is mounted. The preview of a local model
+ * is not proof that its script/content version matches the server. */
+export function canPreviewBus(v, paint = '') {
+  if (!v || v.server_only) return false;
+  if (!v.server_catalog || !paint) return true;
+  return (v.local_paints || []).some((name) => name.toLowerCase() === paint.toLowerCase());
+}
+
+export function allowedBus(c = S.choice) {
+  const allowed = serverBuses(c);
+  if (!allowed) return {};
+  const offered = selectableVehicles(c);
+  const selected = offered.find((v) => busFile(v.file) === busFile(c.bus));
+  if (selected) {
+    // A server may have removed a repaint since the previous visit. Keep a
+    // still-offered paint, otherwise fall back to the bus's default look.
+    const names = selected.paints || [];
+    return c.paint && !names.some((p) => p.toLowerCase() === c.paint.toLowerCase())
+      ? { paint: '' } : {};
+  }
+  // The path can still be in vehicles but no longer have a loadable LISTBUS
+  // catalogue entry. Never leave such a stale bus selected if another works.
+  const first = offered[0];
+  return first ? { bus: first.file, paint: '', number: '', hof_manual: false } : {};
+}
+
+export const noServerBus = () => !!serverBuses() && !!S.vehicles && selectableVehicles().length === 0;
 
 export const serverJoined = (answer) => ({
-  lan_server: { asked: !!answer, name: answer?.name || '', time: answer?.time || '', weather: answer?.weather || '', vehicles: answer?.vehicles || [] },
+  lan_server: {
+    asked: !!answer, name: answer?.name || '', time: answer?.time || '',
+    weather: answer?.weather || '', vehicles: answer?.vehicles || [],
+    fleet_version: Number(answer?.fleet_version) || 0,
+    fleet: Array.isArray(answer?.fleet) ? answer.fleet : [],
+  },
 });
 
-export async function askJoined() {
+/** Refresh once when opening the picker: saved server status can predate the
+ * fleet catalogue, even when the game server is now running the latest build. */
+export async function askJoined({ refresh = false } = {}) {
   const c = S.choice;
-  if (c?.lan_mode !== 'join' || c.lan_server?.asked) return;
-  const r = await call('server_query', { address: c.lan_addr.trim() }).catch(() => null);
-  if (!r || S.choice.lan_mode !== 'join' || S.choice.lan_addr !== c.lan_addr) return;
+  if (c?.lan_mode !== 'join' || (!refresh && c.lan_server?.asked)) return c?.lan_server || null;
+  const address = c.lan_addr?.trim();
+  if (!address) return null;
+  const r = await call('server_query', { address }).catch(() => null);
+  if (!r || S.choice.lan_mode !== 'join' || S.choice.lan_addr?.trim() !== address) return null;
   choose({ ...serverJoined({ ...r, name: c.lan_server?.name || r.name }), lan_map: c.lan_map || r.map || '' });
   choose(allowedBus());
+  return r;
 }
 
 /** A bus as people call it (its [friendlyname]), from its file: never "MAN_SD77.bus". */
@@ -204,7 +275,7 @@ export function transportRefusal(map, vehicle) {
 export const shownModes = (x) => (x?.transport || []).filter((m) => m !== 'bus' || (x.transport.length > 1));
 
 export const curMap = () => S.maps?.find((m) => m.file === S.choice?.map);
-export const curBus = () => S.vehicles?.find((v) => v.file === S.choice?.bus);
+export const curBus = () => selectableVehicles().find((v) => busFile(v.file) === busFile(S.choice?.bus));
 export const curLine = () => S.lines.list?.find((l) => l.name === S.choice?.line);
 // Old saved choices use the displayed number; new choices identify the variant.
 export const tourId = (tour) => tour?.id ?? tour?.number;
@@ -483,9 +554,32 @@ export async function duty(extra = {}) {
   };
 }
 
+/** A dedicated server's published fleet entry needs explicit consent before launch. */
+export function serverFleetSelection(c = S.choice) {
+  const allowed = serverBuses(c);
+  return !!allowed?.has(busFile(c.bus)) && c.lan_server?.fleet_version === 1
+    && (c.lan_server.fleet || []).some((offer) => busFile(offer.bus) === busFile(c.bus));
+}
+
 export async function start(extra) {
   try {
-    const d = await duty(extra);
+    const approved = extra?.__fleetApproved === true;
+    // UI-only consent: do not serialize this ephemeral flag into the launch duty.
+    const { __fleetApproved: _consent, ...dutyExtra } = extra || {};
+    const d = await duty(dutyExtra);
+    if (serverBuses() && S.choice?.lan_server?.fleet_version === 1 && !serverFleetSelection()) {
+      // Only the new authoritative catalogue requires a verified LISTBUS offer.
+      // Older player-hosted and dedicated sessions still use their original
+      // map-only LIST protocol and must remain joinable with local vehicles.
+      // A v1 catalogue with an unreadable/removed bus must fail closed.
+      toast(t('The server has not announced a downloadable version of this bus. Choose another bus or contact the server owner.'), 'error');
+      return null;
+    }
+    if (serverFleetSelection() && !approved) {
+      toast(t('Confirm the server download before joining.'), 'error');
+      return null;
+    }
+    d.allow_server_fleet = approved && serverFleetSelection();
     const r = await call('launch', { duty: d });
     set({ gameStarted: true });
     if (d.lan !== 'off' && !d.tutorial) set({ page: 'games' });

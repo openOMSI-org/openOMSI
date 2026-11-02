@@ -3,6 +3,7 @@
 use super::*;
 mod bus_info;
 mod freetex;
+mod join_queue;
 
 fn pose(x: f64) -> Pose {
     Pose {
@@ -1366,33 +1367,6 @@ fn a_full_session_turns_the_next_player_away() {
         "{answer}"
     );
     assert_eq!(host.peer_count(), MAX_PEERS);
-}
-
-#[test]
-fn too_many_loading_players_wait() {
-    let mut host = LanSession::host(28180, "host", world("m"), true).unwrap();
-    let at = SocketAddr::from((Ipv4Addr::LOCALHOST, host.local_addr().unwrap().port()));
-    let hello = format!("HELLO|{PROTOCOL}|-|p|Vehicles/x.bus|m|1989-05-30|32400||");
-    let players: Vec<UdpSocket> = (0..MAX_JOINING + 1).map(|_| raw()).collect();
-    for p in &players {
-        p.send_to(hello.as_bytes(), at).unwrap();
-    }
-    for _ in 0..10 {
-        host.tick(0.01, &pose(0.0));
-        std::thread::sleep(Duration::from_millis(5));
-    }
-    assert_eq!(host.peer_count(), MAX_JOINING);
-    let mut buf = [0u8; 512];
-    let mut answers = Vec::new();
-    while let Ok((n, _)) = players[MAX_JOINING].recv_from(&mut buf) {
-        answers.push(String::from_utf8_lossy(&buf[..n]).to_string());
-    }
-    assert!(
-        answers
-            .iter()
-            .any(|a| a.starts_with("REJECT") && a.contains("try again")),
-        "{answers:?}"
-    );
 }
 
 #[test]

@@ -39,7 +39,7 @@ pub(super) fn remote_type(args: &LanConfig, pose: &Pose, player: Option<&omsi_si
         // no fingerprint, an older one: the bus of that path here, as before.)
         let path = if by_content {
             use crate::mods::vehicles::Wanted;
-            match crate::mods::vehicles::want(&args.root, pose.id, &pose.content, &pose.bus, &pose.paint) {
+            match crate::mods::vehicles::want(&args.root, pose.id, &pose.content, &pose.bus, &pose.paint, args.allow_server_fleet) {
                 Wanted::Local(p) | Wanted::Mounted(p) => Ok(p),
                 Wanted::Pending(..) => Err("being made sure of by its content".to_string()),
                 Wanted::Failed(e) => Err(e.to_string()),
@@ -72,6 +72,8 @@ pub(super) fn remote_type(args: &LanConfig, pose: &Pose, player: Option<&omsi_si
     };
     // not to be had as itself (for now): another bus, as before there were boxes
     let hopeless = !by_content || read_failed.is_some() || hopeless_by_now;
+    // A substitute is explicitly marked fallback: it never claims the remote
+    // fingerprint and never receives that bus's variable/animation tables.
     if hopeless && reading.is_none() {
         match fallback_type(args, pose, player) {
             Fallback::Ready(ty, which) => {
