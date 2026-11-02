@@ -469,8 +469,11 @@ impl App {
             bus_turn: None,
         });
         self.view = "foot".into();
-        let out = crate::situation::key_name(&self.args.root, &self.input.game_keys, "get_up").map(|k| format!(", {k} steps out of the bus")).unwrap_or_default();
-        self.service_msg = Some((format!("On foot: W A S D walk, Shift runs, C kneels, F4 free camera / F1 back, G sits down (by the driver's place: back at the wheel){out}"), 7.0));
+        let help = match crate::situation::key_name(&self.args.root, &self.input.game_keys, "get_up") {
+            Some(k) => omsi_ui::i18n::tr_fill("On foot: W A S D walk, Shift runs, C kneels, F4 free camera / F1 back, G sits down (by the driver's place: back at the wheel), {key} steps out of the bus", &[("{key}", &k)]),
+            None => omsi_ui::tr("On foot: W A S D walk, Shift runs, C kneels, F4 free camera / F1 back, G sits down (by the driver's place: back at the wheel)").into_owned(),
+        };
+        self.service_msg = Some((help, 7.0));
     }
 
     /// The get-up key inside a bus: out by its nearest door, open or shut (getting up now
@@ -839,7 +842,7 @@ impl App {
             // the free camera's keys are its own
             _ if self.session.on_foot.as_ref().map(|f| f.cam == FootCam::Free).unwrap_or(false) => false,
             KeyCode::KeyG => {
-                if ctrl || shift {
+                if get_up_chord(&self.input.game_keys, ctrl, shift) {
                     return false;
                 }
                 if pressed && !repeat {
@@ -1448,6 +1451,12 @@ impl App {
         self.sound.foot_in = now;
         now
     }
+}
+
+fn get_up_chord(game: &[omsi_content::KeyBinding], ctrl: bool, shift: bool) -> bool {
+    use omsi_content::input::{KEY_ALT, KEY_CTRL, KEY_SHIFT};
+    let want = if ctrl { KEY_CTRL } else { 0 } | if shift { KEY_SHIFT } else { 0 };
+    want != 0 && game.iter().any(|b| b.action.eq_ignore_ascii_case("get_up") && b.scan_code == 34 && b.modifier & (KEY_CTRL | KEY_SHIFT | KEY_ALT) == want)
 }
 
 #[cfg(test)]
