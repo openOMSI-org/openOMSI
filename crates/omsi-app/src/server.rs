@@ -20,50 +20,64 @@ pub(crate) use omsi_lan::server_cfg::{enforce_vehicles, player_info, ServerCfg, 
 /// advertised catalogue. The launcher remains responsible for authenticated content
 /// checks before offering any remote-only vehicle for driving.
 fn fleet_paints(cfg: &ServerCfg, root: &Path) -> Vec<omsi_net::ws::FleetPaints> {
-    let mut offers = Vec::new();
+    use rayon::prelude::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     let total = cfg.vehicles.len().min(256);
     if cfg.vehicles.len() > 256 {
         log::warn!("server fleet: {} buses in `vehicles`: only the first 256 are announced", cfg.vehicles.len());
     }
-    if total > 0 {
-        // (every file of every bus and paint is read and hashed here, before the web port
-        // opens: on a first start a large fleet takes minutes, and nothing else was said)
-        log::info!("server fleet: checking {total} buses and their paints (the web port opens once this is done; later starts are faster)");
+    if total == 0 {
+        return Vec::new();
     }
-    let (t0, mut failed) = (std::time::Instant::now(), 0usize);
-    for (i, bus) in cfg.vehicles.iter().take(256).enumerate() {
-        let n = i + 1;
+    // (every file of every bus and paint is read and hashed - their hashes are kept for the
+    // next start - four buses at a time; the web port is open meanwhile)
+    log::info!("server fleet: checking {total} buses and their paints (a first start reads every file; later starts are faster)");
+    let (t0, done, failed) = (std::time::Instant::now(), AtomicUsize::new(0), AtomicUsize::new(0));
+    let one = |bus: &String| -> Option<omsi_net::ws::FleetPaints> {
+        let fail = |why: String| {
+            failed.fetch_add(1, Ordering::Relaxed);
+            let n = done.fetch_add(1, Ordering::Relaxed) + 1;
+            log::warn!("server fleet: {n}/{total}: {why}");
+        };
         let Some(rel) = omsi_net::vehicle_path(bus) else {
-            log::warn!("server fleet: {n}/{total}: ignoring invalid bus path {bus:?}");
-            failed += 1;
-            continue;
+            fail(format!("ignoring invalid bus path {bus:?}"));
+            return None;
         };
         let found = omsi_cfg::find_in_roots(&rel).map(|(_, p)| p);
         let path = found.clone().unwrap_or_else(|| omsi_cfg::resolve_path(root, &rel));
         let t = std::time::Instant::now();
-        match omsi_sim::VehicleType::load(root, &path) {
-            Ok(vehicle) => {
-                // Use the same resolved scheme names as the authenticated LISTBUS
-                // transfer. A server build must not depend on launcher-only crates.
-                let paints: Vec<String> = vehicle.paint_schemes.iter().take(128).map(|p| p.name.clone()).collect();
-                let content = match omsi_lan::mods::fleet_fingerprint(root, &rel) {
-                    Ok(c) => c,
-                    Err(e) => {
-                        log::warn!("server fleet: {n}/{total}: {rel}: its files cannot be offered to the players ({e})");
-                        failed += 1;
-                        String::new()
-                    }
-                };
-                log::info!("server fleet: {n}/{total}: {rel}: {} paints ({:.1} s)", paints.len(), t.elapsed().as_secs_f64());
-                offers.push(omsi_net::ws::FleetPaints { bus: rel, paints, content });
-            }
+        let vehicle = match omsi_sim::VehicleType::load(root, &path) {
+            Ok(v) => v,
             Err(e) => {
                 let why = if found.is_none() { " (not found in the content folders)" } else { "" };
-                log::warn!("server fleet: {n}/{total}: cannot load {}{why}: {e}", path.display());
-                failed += 1;
+                fail(format!("cannot load {}{why}: {e}", path.display()));
+                return None;
             }
+        };
+        // Use the same resolved scheme names as the authenticated LISTBUS
+        // transfer. A server build must not depend on launcher-only crates.
+        let paints: Vec<String> = vehicle.paint_schemes.iter().take(128).map(|p| p.name.clone()).collect();
+        let content = match omsi_lan::mods::fleet_fingerprint_loaded(root, &rel, &path, &vehicle) {
+            Ok(c) => c,
+            Err(e) => {
+                fail(format!("{rel}: its files cannot be offered to the players ({e})"));
+                String::new()
+            }
+        };
+        if !content.is_empty() {
+            let n = done.fetch_add(1, Ordering::Relaxed) + 1;
+            log::info!("server fleet: {n}/{total}: {rel}: {} paints ({:.1} s)", paints.len(), t.elapsed().as_secs_f64());
         }
-    }
+        Some(omsi_net::ws::FleetPaints { bus: rel, paints, content })
+    };
+    let buses = &cfg.vehicles[..total];
+    let pool = rayon::ThreadPoolBuilder::new().num_threads(4).thread_name(|n| format!("server-fleet-{n}")).build();
+    let checked: Vec<Option<omsi_net::ws::FleetPaints>> = match &pool {
+        Ok(pool) => pool.install(|| buses.par_iter().map(one).collect()),
+        Err(_) => buses.iter().map(one).collect(),
+    };
+    let offers: Vec<_> = checked.into_iter().flatten().collect();
+    let failed = failed.load(Ordering::Relaxed);
     log::info!(
         "server fleet: announced {} models and {} paint schemes in {:.1} s{}",
         offers.len(),
@@ -74,8 +88,26 @@ fn fleet_paints(cfg: &ServerCfg, root: &Path) -> Vec<omsi_net::ws::FleetPaints> 
     offers
 }
 
+/// Check the server's fleet on a thread of its own and announce it when done: the web port
+/// (status page, players' WebSockets, admin) is open meanwhile, telling no fleet as the
+/// servers before 0.3.47 did - a first check of a large fleet took minutes, and the web port
+/// refused every connection until it was over.
+pub(crate) fn announce_fleet(cfg: &ServerCfg, root: &Path) {
+    if cfg.vehicles.is_empty() || omsi_cfg::flags::OMSI_NO_LAN_MODS.is_set() {
+        return;
+    }
+    let (cfg, root) = (cfg.clone(), root.to_path_buf());
+    let spawned = std::thread::Builder::new().name("server fleet".into()).spawn(move || {
+        let fleet = fleet_paints(&cfg, &root);
+        omsi_lan::game::update_server_fleet(fleet, 1);
+    });
+    if let Err(e) = spawned {
+        log::warn!("server fleet: cannot check the fleet: {e}");
+    }
+}
+
 /// The server's status as the web gateway tells it (see `omsi_net::ws::ServerInfo`).
-pub(crate) fn info_of(cfg: &ServerCfg, root: &Path) -> omsi_net::ws::ServerInfo {
+pub(crate) fn info_of(cfg: &ServerCfg, _root: &Path) -> omsi_net::ws::ServerInfo {
     omsi_net::ws::ServerInfo {
         name: cfg.name.clone(),
         motd: cfg.motd.clone(),
@@ -88,8 +120,9 @@ pub(crate) fn info_of(cfg: &ServerCfg, root: &Path) -> omsi_net::ws::ServerInfo 
         weather: cfg.weather.clone().unwrap_or_default(),
         password: false,
         vehicles: cfg.vehicles.clone(),
-        fleet: fleet_paints(cfg, root),
-        fleet_version: if omsi_cfg::flags::OMSI_NO_LAN_MODS.is_set() || cfg.vehicles.is_empty() { 0 } else { 1 },
+        // (announced once checked: `announce_fleet`)
+        fleet: Vec::new(),
+        fleet_version: 0,
         reached_at: String::new(),
         players_public: cfg.share_positions,
         player_list: Vec::new(),

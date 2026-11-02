@@ -105,6 +105,14 @@ pub fn fingerprint(root: &Path, bus: &str) -> Result<String, String> {
     model_manifest(root, &bus, &ty).map(|(m, _)| m.fingerprint())
 }
 
+/// `fingerprint` of a bus already loaded from `path` (the server's fleet check loads each
+/// once, not twice).
+pub fn fingerprint_loaded(root: &Path, bus: &str, path: &Path, ty: &omsi_sim::VehicleType) -> Result<String, String> {
+    let bus = omsi_net::vehicle_path(bus).ok_or("invalid bus path")?;
+    if !trusted_source(root, path) { return Err("untrusted bus path".into()); }
+    model_manifest(root, &bus, ty).map(|(m, _)| m.fingerprint())
+}
+
 fn model_manifest(root: &Path, bus: &str, ty: &omsi_sim::VehicleType) -> Result<(identity::VehicleManifest, Vec<PathBuf>), String> {
     // The server offers the *complete configured model*, including the default
     // and all advertised repaint dependencies. A player with the same bus but

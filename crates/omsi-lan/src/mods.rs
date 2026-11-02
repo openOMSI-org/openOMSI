@@ -46,7 +46,7 @@ mod pieces;
 pub mod placeholder;
 mod quarantine;
 mod server_fleet;
-pub use server_fleet::fingerprint as fleet_fingerprint;
+pub use server_fleet::{fingerprint as fleet_fingerprint, fingerprint_loaded as fleet_fingerprint_loaded};
 mod store;
 pub mod upload;
 pub mod vehicles;
@@ -786,13 +786,22 @@ fn hash_cache_path() -> Option<std::path::PathBuf> {
     sandbox_base().map(|b| b.with_file_name("lan-hash-cache.json"))
 }
 
+/// The cache as this process knows it: read from disk once (a server's fleet check asked for
+/// it once a bus and parsed the whole file each time), and the one every save merges into
+/// (buses checked at once saved over each other's new hashes).
+static HASH_CACHE: Mutex<Option<HashCache>> = Mutex::new(None);
+
 fn hash_cache() -> HashCache {
-    hash_cache_path().and_then(|p| std::fs::read(p).ok()).and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+    let mut c = HASH_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    c.get_or_insert_with(|| hash_cache_path().and_then(|p| std::fs::read(p).ok()).and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()).clone()
 }
 
 fn save_hash_cache(c: &HashCache) {
+    let mut all = HASH_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    let all = all.get_or_insert_with(Default::default);
+    all.extend(c.iter().map(|(k, v)| (k.clone(), v.clone())));
     if let Some(p) = hash_cache_path() {
-        if let Err(e) = write_hash_cache(&p, c) {
+        if let Err(e) = write_hash_cache(&p, all) {
             log::warn!("LAN mods: could not save hash cache: {e}");
         }
     }
