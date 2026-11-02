@@ -8,6 +8,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **Long lists in the launcher filter as you type**: a drop-down with more than twelve entries
+  (the liveries, the depot files, the languages...) shows a search line at its top; typing
+  narrows it down, Backspace and Esc undo the search.
 - **Enhanced has options of its own, and the quality presets cross the modes.** Enhanced+ is no
   longer a mode: it is Enhanced with *Real-Time Ray Tracing* switched on (`ray_tracing=1`; a
   `graphics=enhanced_plus` file reads as that, and `--enhanced-plus` still asks for it for a run).
