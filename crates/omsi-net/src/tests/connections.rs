@@ -450,6 +450,32 @@ fn restarting_client_on_the_same_socket_invalidates_host_receive_state() {
 }
 
 #[test]
+fn each_host_owner_gets_its_own_identifier_of_the_machine() {
+    let machine = "0123456789abcdef0123456789abcdef";
+    let mut ids = Vec::new();
+    for (first_port, realm) in [(28310, "aa".repeat(16)), (28320, "bb".repeat(16))] {
+        let mut host = LanSession::host(first_port, "host", world("m"), true).unwrap();
+        host.set_ban_realm(&realm);
+        let port = host.local_addr().unwrap().port();
+        let mut c = LanSession::join(&port.to_string(), "c", world("m"), Duration::from_secs(1)).unwrap();
+        c.hardware_base = Some(machine.to_string());
+        let none = Pose::default();
+        let t0 = Instant::now();
+        while !c.connected && t0.elapsed() < Duration::from_secs(4) {
+            host.tick(0.05, &none);
+            c.tick(0.05, &none);
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(c.connected);
+        let id = host.peer_hardware_id(c.my_id).unwrap().to_string();
+        assert_eq!(id, host_hardware_id(machine, &realm));
+        ids.push(id);
+    }
+    assert_ne!(ids[0], ids[1]);
+    assert!(!ids.iter().any(|i| i == machine));
+}
+
+#[test]
 fn receive_budget_bounds_each_tick() {
     assert!(!receive_budget_reached(0, Duration::ZERO));
     assert!(!receive_budget_reached(RECEIVE_PACKET_LIMIT - 1, Duration::ZERO));

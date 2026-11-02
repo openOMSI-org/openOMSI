@@ -347,6 +347,33 @@ mod tests {
         assert!(knock_hw(&back, &mut host, 0x7777, "Griefer", &hw(1)).unwrap().starts_with("WELCOME|"));
     }
 
+    #[test]
+    fn a_host_with_a_realm_sends_it_and_lets_in_a_player_who_sends_no_identifier() {
+        let realm = "cd".repeat(16);
+        let mut host = LanSession::host(28330, "host", WorldInfo::default(), true).unwrap();
+        host.set_ban_realm(&realm);
+        let s = raw();
+        let port = host.local_addr().unwrap().port();
+        let msg = format!("HELLO|{PROTOCOL}|-|p||m|1989-05-30|32400|||{:016x}", 0x8888);
+        let mut buf = [0u8; 1500];
+        let mut got = String::new();
+        for _ in 0..20 {
+            let _ = s.send_to(msg.as_bytes(), ("127.0.0.1", port));
+            host.tick(0.02, &Pose::default());
+            if let Ok((n, _)) = s.recv_from(&mut buf) {
+                got = String::from_utf8_lossy(&buf[..n]).to_string();
+                break;
+            }
+        }
+        assert_eq!(got, format!("REALM|{realm}"));
+        let welcome = knock_hw(&s, &mut host, 0x8888, "p", "-").unwrap();
+        assert!(welcome.starts_with("WELCOME|"), "{welcome}");
+        let id: u32 = welcome.split('|').nth(2).unwrap().parse().unwrap();
+        assert!(host.peer_hardware_id(id).is_none());
+        host.require_hardware_id(true);
+        assert!(knock_hw(&raw(), &mut host, 0x9999, "q", "-").unwrap().starts_with("REJECT|"));
+    }
+
     /// Two players behind the web gateway count as two sources (their own addresses), not
     /// as the gateway's one loopback; a socket of this machine counts as none.
     #[test]

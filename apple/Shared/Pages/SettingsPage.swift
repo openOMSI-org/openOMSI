@@ -452,6 +452,7 @@ struct SettingsPage: View {
                 SettingToggle(label: "Tell me about a new version during a session", key: "update_notify", fallback: true)
             }
             SettingToggle(label: "Count me in the website's \"playing now\" (anonymous)", key: "presence", fallback: true)
+            SettingToggle(label: "Send servers an identifier for bans", key: "hardware_id", fallback: true, help: "Made from this computer's ID, different for each server owner, so servers cannot match you with each other. Some servers turn away players without it.")
             HStack {
                 Text("openOMSI \(store.version) (\(store.build))").font(.inter(12)).foregroundStyle(Theme.muted)
                 Spacer()

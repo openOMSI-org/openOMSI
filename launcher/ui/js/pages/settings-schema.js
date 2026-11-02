@@ -462,6 +462,7 @@ const general = {
         { type: 'toggle', key: 'update_auto', label: 'Install updates without asking' },
         { type: 'toggle', key: 'update_notify', label: 'Tell me about a new version during a session' },
         { type: 'toggle', key: 'presence', label: 'Count me in the website\'s "playing now" (anonymous)' },
+        { type: 'toggle', key: 'hardware_id', label: 'Send servers an identifier for bans', help: "Made from this computer's ID, different for each server owner, so servers cannot match you with each other. Some servers turn away players without it." },
         { type: 'custom', id: 'version' },
         // every setting at once: at the end, not the first control one sees
         { type: 'section', title: 'Reset' },

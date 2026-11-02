@@ -504,6 +504,8 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     args.session_settings = startup::SessionSettings::for_session(&settings, &args);
     // the LAN session (offscreen too, so that one game's view of another can be rendered);
     // a joining player's world is the host's (taken over again when the window loads it)
+    let settings_text = std::fs::read_to_string(omsi_launcher_lib::data_dir().join("settings.cfg")).ok();
+    omsi_lan::bans::allow_hardware_id(omsi_launcher_lib::settings_from_text(settings_text.as_deref()).get("hardware_id").and_then(|v| v.as_bool()).unwrap_or(true));
     let mut lan = if args.export_glb.is_none() {
         lan::start(&args.lan_config(), &lan::AppLanHost { args: &args, world: None })
     } else {
