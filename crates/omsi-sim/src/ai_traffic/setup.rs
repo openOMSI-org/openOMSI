@@ -64,7 +64,7 @@ impl TrafficSim {
             street_weight: 0.0,
             parked,
             parked_waiting: Vec::new(),
-            stop_for_parked: false,
+            drive_through_parked: false,
             lane_tiles: lane_tiles.into_iter().collect(),
             lanes_generation: 0,
             types,

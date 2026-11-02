@@ -143,11 +143,11 @@ pub(crate) struct Args {
     /// buses (the launcher's "Disable timetable buses" with a line chosen).
     #[arg(long)]
     pub(crate) no_timetable_buses: bool,
-    /// The AI stops behind a parked car standing in its lane (by default it drives on
-    /// through it, as Omsi.exe's traffic does: on some maps one stands in the lane and the
-    /// traffic behind it froze).
+    /// The AI drives on through a parked car standing in its lane, as Omsi.exe's traffic
+    /// does, instead of stopping behind it and going round it when it can (on some maps one
+    /// stands in the lane where there is no way round, and the traffic behind it froze).
     #[arg(long)]
-    pub(crate) ai_stop_for_parked: bool,
+    pub(crate) ai_drive_through_parked: bool,
     /// Date at start, YYYY-MM-DD (default 1989-05-30).
     #[arg(long)]
     pub(crate) date: Option<String>,

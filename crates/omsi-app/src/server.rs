@@ -197,9 +197,9 @@ pub(crate) fn prepare(args: &mut Args, path: &Path) -> Result<ServerCfg> {
     let _ = SERVER_METAR.set(station);
     args.traffic = cfg.traffic;
     args.schedule = cfg.timetable;
-    args.ai_stop_for_parked = cfg.ai_stop_for_parked;
-    if cfg.ai_stop_for_parked {
-        log::info!("server: ai_stop_for_parked = 1: the AI stops behind a parked car standing in its lane");
+    args.ai_drive_through_parked = cfg.ai_drive_through_parked;
+    if cfg.ai_drive_through_parked {
+        log::info!("server: ai_drive_through_parked = 1: the AI drives on through a parked car standing in its lane, as OMSI 2's does");
     }
     args.passengers = cfg.passengers;
     let _ = SERVER_PASSENGERS.set((cfg.passengers, cfg.passenger_density));

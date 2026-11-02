@@ -596,7 +596,7 @@ impl TrafficSim {
             let car = &self.cars[i];
             let st = &car.state;
             let near_way = self.way_lanes(st, 100.0);
-            let (passing, stop_for_parked) = (car.passing.map(|p| !p.aborted).unwrap_or(false), self.stop_for_parked);
+            let (passing, drive_through) = (car.passing.map(|p| !p.aborted).unwrap_or(false), self.drive_through_parked);
             let mut swerve: Option<f32> = None;
             let mut stand: Option<(f32, usize, f32, f32)> = None;
             let mut check = |along: f32, lat: f32, lane: usize, at: f32| {
@@ -612,7 +612,7 @@ impl TrafficSim {
                     a < 0.9
                 };
                 if blocks {
-                    if along > 0.0 && stop_for_parked {
+                    if along > 0.0 && !drive_through {
                         let gap = along - 2.3 - st.front;
                         if stand.map(|o| gap < o.0).unwrap_or(true) {
                             stand = Some((gap, lane, at, lat));

@@ -26,6 +26,7 @@ nothing is drawn. `server.cfg` is written with a comment for every key on the fi
 | `time_speed`, `real_time` | how fast the clock runs (1 to 30), or the machine's real date and time |
 | `metar_sync`, `metar_station` | the weather follows an airport's METAR report (ICAO code; empty: the one nearest the map), downloaded every ten minutes and passed on to the players |
 | `traffic`, `timetable`, `passengers`, `passenger_density` | AI cars, timetable buses, waiting passengers and how many of them (below) |
+| `ai_drive_through_parked` | `1`: the AI drives on through a parked car standing in its lane, as OMSI 2's does, instead of stopping behind it and going round it when it can (for maps where a parked car stands in the lane with no way round); `0` (default) keeps the stop |
 | `port`, `web_port`, `max_players` | UDP port of the session (27015), TCP port of the web gateway (27025), player limit (16) |
 | `gateway_proxy_header` | the header a proxy of this machine names a WebSocket player's address in (below) |
 | `tunnel` | start a free Cloudflare quick tunnel (needs `cloudflared`) |
