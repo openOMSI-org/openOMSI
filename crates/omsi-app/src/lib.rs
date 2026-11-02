@@ -756,6 +756,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             menu_prev_pause: false,
             info_bar,
             timetable: false,
+            clean_screen: false,
             hud_resize: None,
             notices: Vec::new(),
             note_watch: Default::default(),

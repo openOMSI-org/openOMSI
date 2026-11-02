@@ -195,6 +195,7 @@ impl crate::App {
                 }
             }
         }
+        let clean = self.clean_screen_shown();
         let (Some(r), Some(scene)) = (self.renderer.as_ref(), self.scene.as_mut()) else { return };
         let dpi = self.window.as_ref().map_or(1.0, |w| w.scale_factor() as f32);
         let mut size = crate::ui::size_factor(hud[3], dpi, self.settings.ui_scale, self.settings.ui_scale_window);
@@ -203,7 +204,7 @@ impl crate::App {
             size = size.min(hud[2] * 0.96 / (w * dpi)).min(hud[3] * 0.96 / (h * dpi));
         }
         let map_open = self.menus.navigator.as_ref().is_some_and(|n| n.map_open());
-        let hidden = vr_active || self.menus.game_menu.is_some() || self.menus.chooser.is_some() || map_open || self.photo.is_some();
+        let hidden = vr_active || self.menus.game_menu.is_some() || self.menus.chooser.is_some() || map_open || self.photo.is_some() || clean;
         let frame = crate::plugin_ui::PanelsFrame {
             hud,
             scale: dpi * size,

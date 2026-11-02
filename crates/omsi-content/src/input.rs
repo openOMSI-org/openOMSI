@@ -114,6 +114,11 @@ impl KeyboardCfg {
                 self.game.push(KeyBinding { action: action.into(), scan_code, modifier: KEY_CTRL });
             }
         }
+        let u_taken = self.game.iter().chain(self.vehicles.iter()).any(|b| b.scan_code == 22 && b.chord() & (KEY_SHIFT | KEY_CTRL) == 0);
+        if !self.game.iter().any(|b| b.action.eq_ignore_ascii_case("clean_screen")) {
+            let (scan_code, modifier) = if u_taken { (0, 0) } else { (22, KEY_ALT) };
+            self.game.push(KeyBinding { action: "clean_screen".into(), scan_code, modifier });
+        }
         for action in ["blinker_left_toggle", "blinker_right_toggle"] {
             if !self.vehicles.iter().any(|b| b.action.eq_ignore_ascii_case(action)) {
                 self.vehicles.push(KeyBinding { action: action.into(), scan_code: 0, modifier: 0 });
@@ -287,6 +292,16 @@ mod tests {
         assert_eq!(key(&cfg, "gear_down"), vec![(208, KEY_CTRL)]);
         let cleared = KeyboardCfg { game: vec![KeyBinding { action: "gear_up".into(), scan_code: 0, modifier: 0 }], ..Default::default() }.with_game_defaults();
         assert_eq!(key(&cleared, "gear_up"), vec![(0, 0)]);
+    }
+
+    #[test]
+    fn the_clean_screen_takes_alt_u_only_when_u_is_free() {
+        let key = |c: &KeyboardCfg| c.game.iter().filter(|b| b.action == "clean_screen").map(|b| (b.scan_code, b.modifier)).collect::<Vec<_>>();
+        assert_eq!(key(&KeyboardCfg::default().with_game_defaults().with_game_defaults()), vec![(22, KEY_ALT)]);
+        let mine = KeyBinding { action: "kw_lights".into(), scan_code: 22, modifier: 0 };
+        let cfg = KeyboardCfg { vehicles: vec![mine.clone()], ..Default::default() }.with_game_defaults();
+        assert_eq!(key(&cfg), vec![(0, 0)]);
+        assert!(cfg.vehicles.contains(&mine));
     }
 
     #[test]

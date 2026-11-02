@@ -51,7 +51,8 @@ impl App {
             .unwrap_or([0.0, 0.0, 1.0, 1.0]);
         // (not under the open game menu: the pause menu's rail covers the left
         // edge, and the navigator's panel stood out from under it)
-        let nav_hidden = !vr_active && self.menus.game_menu.is_some();
+        let clean = self.clean_screen_shown();
+        let nav_hidden = (!vr_active && self.menus.game_menu.is_some()) || clean;
         // (a plugin's panel for the navigator's board, as tall as it was laid out last: the
         // navigator makes room for it and says where it goes - under its map, or the whole
         // frame for one that fills it, its map where the panel has it)
@@ -80,6 +81,11 @@ impl App {
             }
         }
         self.frame_ui_draw(dt, hud, vr_active, plugin_focus, &notes, tooltip, menu_lines, menu_tabs);
+        if clean {
+            if let Some(scene) = self.scene.as_mut() {
+                scene.overlays.clear();
+            }
+        }
         // the loading screen fading over the first pictures, over all of the interface
         self.frame_loading_fade();
         // the pause menu, drawn with the launcher's toolkit over all of it
