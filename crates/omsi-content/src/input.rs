@@ -114,6 +114,10 @@ impl KeyboardCfg {
                 self.game.push(KeyBinding { action: action.into(), scan_code, modifier: KEY_CTRL });
             }
         }
+        let u_taken = self.game.iter().chain(self.vehicles.iter()).any(|b| b.scan_code == 22 && b.chord() & (KEY_SHIFT | KEY_CTRL) == 0);
+        if !u_taken && !self.game.iter().any(|b| b.action.eq_ignore_ascii_case("clean_screen")) {
+            self.game.push(KeyBinding { action: "clean_screen".into(), scan_code: 22, modifier: KEY_ALT });
+        }
         for action in ["blinker_left_toggle", "blinker_right_toggle"] {
             if !self.vehicles.iter().any(|b| b.action.eq_ignore_ascii_case(action)) {
                 self.vehicles.push(KeyBinding { action: action.into(), scan_code: 0, modifier: 0 });

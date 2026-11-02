@@ -34,8 +34,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   lit windows and lamps of a street stream down a wet road at night.
 - **A clean screen (Alt+U)**: the navigator, the virtual mirrors, the notes and the panels go away
   while you drive, for a free view of the road or a quick picture; Alt+U again brings them back.
-  The menu, the city map and a plugin's permission question still show over it. `clean_screen` in
-  keyboard.cfg's `[game]` (or a controller button) switches it as well.
+  The menu, the city map and a plugin's permission question still show over it. It is in the
+  Controls' list as *Hide / show the whole interface*, so it can be moved to another key or a
+  controller button (`clean_screen` in keyboard.cfg's `[game]`).
 - **A flashlight (Alt+F)**: a hand lamp held beside the eye that shines where the view looks, a
   warm white cone reaching 50 m with a soft edge, in the Vanilla and the Enhanced pictures, in
   every view, by night in the dark or by day inside a dim cab. `flashlight` in keyboard.cfg's
