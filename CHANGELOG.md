@@ -8,6 +8,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **Finer moves in the photo mode**: Alt now slows the turning as well as the moving (to a
+  quarter), for the small adjustments of a zoomed-in shot, and the camera rises and sinks at half
+  the speed it moves along, so it can be lowered to a kneeling height without overshooting.
 - **Enhanced has options of its own, and the quality presets cross the modes.** Enhanced+ is no
   longer a mode: it is Enhanced with *Real-Time Ray Tracing* switched on (`ray_tracing=1`; a
   `graphics=enhanced_plus` file reads as that, and `--enhanced-plus` still asks for it for a run).
