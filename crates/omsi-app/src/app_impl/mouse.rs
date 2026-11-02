@@ -470,6 +470,9 @@ impl App {
         }
         let vr_active = self.vr_active();
         if let Some(n) = self.menus.navigator.as_mut() {
+            if !n.map_open() {
+                self.menus.map_place_from = None;
+            }
             if n.map_open() {
                 let ctrl = self.input.keys.contains(&KeyCode::ControlLeft) || self.input.keys.contains(&KeyCode::ControlRight);
                 if pressed && ctrl {
