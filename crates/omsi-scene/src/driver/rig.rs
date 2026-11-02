@@ -36,56 +36,59 @@ pub(super) fn lever_knob(positions: &[Vec3], pivot: Option<Vec3>) -> Option<(Vec
     Some((tip - axis * 0.02, axis))
 }
 
+const STRONG: &[&str] = &[
+    "gearlever",
+    "gear_lever",
+    "gearshift",
+    "gear_shift",
+    "shiftlever",
+    "shift_lever",
+    "shifter",
+    "gearstick",
+    "gear_stick",
+    "schalthebel",
+    "schaltknueppel",
+    "schaltung",
+    "antriebshebel",
+    "antriebhebel",
+    "antrieb_hebel",
+];
+// "Antrieb" is what OMSI models usually call the gearbox / its lever.
+const WEAK: &[&str] = &["antrieb", "gear", "shift", "schalt", "getriebe", "transmission", "кпп"];
+const NOT: &[&str] = &["light", "lamp", "display", "indic", "sound", "retard", "park", "door", "wiper", "wisch", "blink", "drehschalt", "kippschalt", "text", "warn", "oil", "temp", "rpm", "tacho", "taster", "button", "btn"];
+const BY_FILE: &[&str] = &["antrieb", "transmission", "кпп"];
+
+fn grade(name: &str, forced: Option<&str>) -> u8 {
+    let n = name.to_lowercase();
+    if let Some(f) = forced {
+        return if n.contains(f) { 3 } else { 0 };
+    }
+    if NOT.iter().any(|w| n.contains(w)) {
+        0
+    } else if STRONG.iter().any(|w| n.contains(w)) {
+        2
+    } else if WEAK.iter().any(|w| n.contains(w)) {
+        1
+    } else {
+        0
+    }
+}
+
 /// The gear lever of a manual bus: the mesh near the seat that a gear/shift variable animates
 /// (or, failing that, one whose file name says it is a gear lever), the one best named and
 /// nearest winning. `OMSI_DRIVER_SHIFTER=<part of a variable or file name>` forces the pick.
 /// The hand that works it is the one on the lever's side of the seat (the lever stands right
 /// of a left-hand-drive driver and left of a right-hand-drive one).
 pub(super) fn find_shifter(v: &impl DriverCar, hip: Vec3, heading: f32) -> Option<Shifter> {
-    const STRONG: &[&str] = &[
-        "gearlever",
-        "gear_lever",
-        "gearshift",
-        "gear_shift",
-        "shiftlever",
-        "shift_lever",
-        "shifter",
-        "gearstick",
-        "gear_stick",
-        "schalthebel",
-        "schaltknueppel",
-        "schaltung",
-        "antriebshebel",
-        "antriebhebel",
-        "antrieb_hebel",
-    ];
-    // "Antrieb" is what OMSI models usually call the gearbox / its lever.
-    const WEAK: &[&str] = &["antrieb", "gear", "shift", "schalt", "getriebe", "transmission", "кпп"];
-    const NOT: &[&str] = &["light", "lamp", "display", "indic", "sound", "retard", "park", "door", "wiper", "wisch", "blink", "drehschalt", "kippschalt", "text", "warn", "oil", "temp", "rpm", "tacho", "taster", "button", "btn"];
     let forced = omsi_cfg::flags::OMSI_DRIVER_SHIFTER
         .var()
-        .map(|s| s.trim().to_ascii_lowercase())
+        .map(|s| s.trim().to_lowercase())
         .filter(|s| !s.is_empty());
     // OMSI_DRIVER_SHIFTER=off: no lever, both hands on the wheel
     if matches!(forced.as_deref(), Some("off") | Some("none") | Some("0")) {
         return None;
     }
-    // How well a variable name says "gear lever": 0 not at all .. 3 forced.
-    let grade = |name: &str| -> u8 {
-        let n = name.to_ascii_lowercase();
-        if let Some(f) = &forced {
-            return if n.contains(f.as_str()) { 3 } else { 0 };
-        }
-        if NOT.iter().any(|w| n.contains(w)) {
-            0
-        } else if STRONG.iter().any(|w| n.contains(w)) {
-            2
-        } else if WEAK.iter().any(|w| n.contains(w)) {
-            1
-        } else {
-            0
-        }
-    };
+    let grade = |name: &str| grade(name, forced.as_deref());
     let positions_of = |i: usize| -> Vec<Vec3> {
         let vm = &v.ty().meshes[i];
         let have: &[Vec3] = &vm.data.positions;
@@ -121,10 +124,10 @@ pub(super) fn find_shifter(v: &impl DriverCar, hip: Vec3, heading: f32) -> Optio
         }
         if grade_of_mesh == 0 {
             // No variable says so: the mesh's own file name may.
-            let file = format!("{:?}", vm.file).to_ascii_lowercase();
+            let file = format!("{:?}", vm.file).to_lowercase();
             let by_file = match &forced {
                 Some(f) => file.contains(f.as_str()),
-                None => STRONG.iter().any(|w| file.contains(w)) || file.contains("antrieb"),
+                None => STRONG.iter().chain(BY_FILE).any(|w| file.contains(w)),
             };
             if !by_file {
                 continue;
@@ -252,4 +255,19 @@ pub(super) fn find_wheel(v: &impl DriverCar, hip: Vec3) -> Option<Wheel> {
     let radius = radius.clamp(0.14, 0.32);
     log::debug!("driver: steering wheel rim {radius:.3} m round the axis, tube {tube:.3} m thick (radius)");
     Some(Wheel { mesh, anim, var, factor, axis, centre, up, right, radius, tube })
+}
+
+#[cfg(test)]
+mod grade_tests {
+    use super::grade;
+
+    #[test]
+    fn a_gear_lever_is_told_from_the_switches_beside_it() {
+        assert_eq!(grade("cockpit_wischer_drehschalter", None), 0);
+        assert_eq!(grade("cockpit_blinker_schalter", None), 0);
+        assert_eq!(grade("рычаг_КПП", None), 1);
+        assert_eq!(grade("transmission_lever", None), 1);
+        assert_eq!(grade("Schalthebel_x", None), 2);
+        assert_eq!(grade("my_lever", Some("my_lever")), 3);
+    }
 }
