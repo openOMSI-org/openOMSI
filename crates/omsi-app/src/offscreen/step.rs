@@ -60,7 +60,6 @@ impl Offscreen<'_> {
             ..
         } = *self;
         *srv_clock += dt as f64 * lan_off.as_ref().map(|l| l.clock_speed).unwrap_or(1.0);
-        let shift_before = srv_admin.shift;
         // a server on the real time (server.cfg): its clock reads this machine's
         if i.is_multiple_of(super::steps_in(1.0)) && crate::real_time::server_real() {
             if let Some(n) = crate::real_time::now() {
@@ -138,12 +137,12 @@ impl Offscreen<'_> {
                 }
             }
         }
-        let jump = srv_admin.shift - shift_before;
-        if let (Some(t), true) = (traffic.as_mut(), jump != 0.0) {
-            t.day_time += jump;
-            if let (Some(s), true) = (schedule.as_mut(), jump.abs() >= 120.0) {
+        if let Some(t) = traffic.as_mut() {
+            let (day_time, jump) = follow_server_clock(t.day_time, parse_time(&args.time) + *srv_clock + srv_admin.shift);
+            t.day_time = day_time;
+            if let (Some(s), Some(jump)) = (schedule.as_mut(), jump) {
                 log::info!("server: clock moved {:+.0} min, the timetable buses put out again", jump / 60.0);
-                s.restart(t, t.day_time);
+                s.restart(t, day_time);
                 view_sync::apply_traffic(t, &mut sim_view.traffic, world, renderer, scene);
             }
         }
@@ -983,5 +982,25 @@ impl<F: FnMut(&mut crate::traffic::Traffic)> omsi_lan::admin::world::ServerTraff
         }
         (self.1)(self.0);
         ids.len()
+    }
+}
+
+fn follow_server_clock(day_time: f64, want: f64) -> (f64, Option<f64>) {
+    let jump = want - day_time;
+    (want, (jump.abs() >= 120.0).then_some(jump))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::follow_server_clock;
+
+    #[test]
+    fn the_traffic_follows_the_servers_clock_and_a_jump_restarts_the_timetable() {
+        assert_eq!(follow_server_clock(54_000.0, 54_000.5), (54_000.5, None));
+        assert_eq!(follow_server_clock(54_000.0, 54_119.0), (54_119.0, None));
+        let (t, jump) = follow_server_clock(54_000.0, 94_560.0);
+        assert_eq!((t, jump), (94_560.0, Some(40_560.0)), "15:00 set to 02:16 the next day");
+        let (t, jump) = follow_server_clock(54_000.0 + 3_600.0, 54_000.0 + 7_200.0);
+        assert_eq!((t, jump), (61_200.0, Some(3_600.0)), "an hour at x2 caught up");
     }
 }
