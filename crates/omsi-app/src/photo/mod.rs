@@ -273,8 +273,8 @@ impl Photo {
     /// The camera turned by (dx, dy) degrees (right, down).
     pub(crate) fn look(&mut self, dx: f32, dy: f32) {
         let fine = if self.keys.contains(&KeyCode::AltLeft) || self.keys.contains(&KeyCode::AltRight) { 0.25 } else { 1.0 };
-        let (dx, dy) = (dx * fine, dy * fine);
         self.dragged += dx.abs() + dy.abs();
+        let (dx, dy) = (dx * fine, dy * fine);
         if self.settings.orbit {
             self.orbit.1 += dx;
             self.orbit.2 = (self.orbit.2 + dy).clamp(-10.0, 85.0);
