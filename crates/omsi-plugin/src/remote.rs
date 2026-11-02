@@ -55,10 +55,16 @@ const GIVE_UP: Duration = Duration::from_secs(20);
 /// again once it answers within this.
 const SLOW_WAIT: Duration = Duration::from_millis(4);
 
+const START_WAIT: Duration = Duration::from_secs(15);
+
 impl Remote {
     /// Start `host` (with `runner`, e.g. `wine`, in front when given) on the library in
     /// `dir` and have it call `PluginStart`.
     pub fn spawn(runner: Option<&Path>, host: &Path, dll: &Path, dir: &Path) -> Result<Remote, String> {
+        Self::spawn_waiting(runner, host, dll, dir, START_WAIT)
+    }
+
+    fn spawn_waiting(runner: Option<&Path>, host: &Path, dll: &Path, dir: &Path, start_wait: Duration) -> Result<Remote, String> {
         let mut cmd = match runner {
             Some(r) => {
                 let mut c = Command::new(r);
@@ -83,11 +89,20 @@ impl Remote {
         }
         let mut to = BufWriter::new(child.stdin.take().ok_or("no stdin")?);
         let mut from = BufReader::new(child.stdout.take().ok_or("no stdout")?);
-        let answer = (|| -> std::io::Result<(u8, u8)> {
-            wire::put_u8(&mut to, wire::START)?;
-            to.flush()?;
-            Ok((wire::get_u8(&mut from)?, wire::get_u8(&mut from)?))
-        })();
+        let (started, start) = mpsc::channel();
+        std::thread::spawn(move || {
+            let answer = (|| -> std::io::Result<(u8, u8)> {
+                wire::put_u8(&mut to, wire::START)?;
+                to.flush()?;
+                Ok((wire::get_u8(&mut from)?, wire::get_u8(&mut from)?))
+            })();
+            let _ = started.send((answer, to, from));
+        });
+        let Ok((answer, to, from)) = start.recv_timeout(start_wait) else {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!("{} did not finish starting within {} s and is left out (a message box of its own may be waiting behind the game's window)", dll.display(), start_wait.as_secs()));
+        };
         let procs = match answer {
             Ok((1, flags)) => Procs::from_flags(flags),
             Ok(_) => {
@@ -211,5 +226,18 @@ fn exchange(mut to: BufWriter<ChildStdin>, mut from: BufReader<ChildStdout>, pro
                 return;
             }
         }
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_plugin_that_never_finishes_starting_is_left_out() {
+        let started = Instant::now();
+        let r = Remote::spawn_waiting(None, Path::new("sleep"), Path::new("30"), Path::new("."), Duration::from_millis(300));
+        assert!(r.is_err());
+        assert!(started.elapsed() < Duration::from_secs(5));
     }
 }
