@@ -18,7 +18,7 @@ fn main() {
     #[cfg(windows)]
     steam_error_dialog::watch(&path);
     let mut input = BufReader::new(std::io::stdin().lock());
-    let mut out = BufWriter::new(std::io::stdout().lock());
+    let mut out = BufWriter::new(protocol_out());
     let mut lib = match Library::load(std::path::Path::new(&path)) {
         Ok(l) => Some(l),
         Err(e) => {
@@ -67,6 +67,32 @@ fn main() {
             return;
         }
     }
+}
+
+#[cfg(windows)]
+fn protocol_out() -> Box<dyn Write> {
+    use std::os::windows::io::AsHandle;
+    use windows_sys::Win32::System::Console::{GetStdHandle, SetStdHandle, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE};
+    unsafe extern "C" {
+        fn _dup2(from: i32, to: i32) -> i32;
+    }
+    let Ok(own) = std::io::stdout().as_handle().try_clone_to_owned() else { return Box::new(std::io::stdout()) };
+    unsafe {
+        SetStdHandle(STD_OUTPUT_HANDLE, GetStdHandle(STD_ERROR_HANDLE));
+        _dup2(2, 1);
+    }
+    Box::new(std::fs::File::from(own))
+}
+
+#[cfg(unix)]
+fn protocol_out() -> Box<dyn Write> {
+    use std::os::fd::FromRawFd;
+    let fd = unsafe { libc::dup(1) };
+    if fd < 0 {
+        return Box::new(std::io::stdout());
+    }
+    unsafe { libc::dup2(2, 1) };
+    Box::new(unsafe { std::fs::File::from_raw_fd(fd) })
 }
 
 /// Homebrew's i686 MinGW links no unwinder the prebuilt standard library can use; built
