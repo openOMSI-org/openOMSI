@@ -46,7 +46,7 @@ impl TrafficSim {
                 let parts: Vec<String> = ty.def.path.components().map(|c| c.as_os_str().to_string_lossy().to_lowercase()).collect();
                 let from = parts.iter().rposition(|p| p == "vehicles").unwrap_or(parts.len().saturating_sub(1));
                 let fnv = parts[from..].join("/").bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3));
-                spread_schemes(ty.paint_schemes.len(), omsi_script::mix_seed(self.scheme_salt ^ fnv) as usize)
+                spread_schemes(ty.paint_schemes.len(), omsi_script::mix_seed(self.scheme_salt ^ fnv))
             })
             .clone()
     }

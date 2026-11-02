@@ -86,18 +86,19 @@ use viewer::*;
 /// each and a minute of stutter after loading Spandau.
 pub const AI_SCHEMES: usize = 4;
 
-fn spread_schemes(n: usize, h: usize) -> Vec<usize> {
+fn spread_schemes(n: usize, h: u64) -> Vec<usize> {
     let gcd = |mut a: usize, mut b: usize| {
         while b != 0 {
             (a, b) = (b, a % b);
         }
         a
     };
-    let mut stride = 1 + (h >> 16) % n.max(1);
+    let mut stride = 1 + ((h >> 16) % n.max(1) as u64) as usize;
     while gcd(stride, n) != 1 {
         stride += 1;
     }
-    (0..n.min(AI_SCHEMES)).map(|i| (h % n + i * stride) % n).collect()
+    let start = (h % n.max(1) as u64) as usize;
+    (0..n.min(AI_SCHEMES)).map(|i| (start + i * stride) % n).collect()
 }
 
 pub struct TrafficSim {
