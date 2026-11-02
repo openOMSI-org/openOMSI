@@ -118,8 +118,14 @@ impl Navigator {
                 d += omsi_sim::traffic::wrap_deg(h0 - pe);
             }
             let junction = net.crossings.get(l).map(|c| !c.is_empty()).unwrap_or(false) || lane.turn != 0;
-            let turn = d.abs() > 35.0 && (len < 60.0 || d.abs() > 70.0);
             let choice = j > 0 && net.lanes.get(r.lanes[j - 1]).is_some_and(|p| p.next.len() > 1);
+            let (mut d, mut span, mut end, mut last) = (d, len, h1, l);
+            for &k in r.lanes.iter().skip(j + 1).take_while(|_| choice) {
+                let Some(next) = net.lanes.get(k).filter(|n| net.lanes[last].next.len() == 1 && span + n.length() <= 60.0) else { break };
+                d += omsi_sim::traffic::wrap_deg(next.end_heading() - next.start_heading()) + omsi_sim::traffic::wrap_deg(next.start_heading() - end);
+                (span, end, last) = (span + next.length(), next.end_heading(), k);
+            }
+            let turn = d.abs() > 35.0 && (span < 60.0 || d.abs() > 70.0);
             if (turn || junction) && choice && acc + len as f64 > 5.0 {
                 let kind = if !turn { "dn" } else if d > 0.0 { "R" } else { "L" };
                 // ten metres on from where the path begins, as OMSI puts it (the original:
