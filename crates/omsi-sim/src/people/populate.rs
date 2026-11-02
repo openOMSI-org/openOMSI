@@ -4,6 +4,22 @@
 use super::*;
 
 impl PeopleSim {
+    pub fn clear_waiting(&mut self) -> usize {
+        let waiting = |p: &Person| {
+            p.puppet.is_none() && !p.remote && matches!(p.place, Place::Ground) && matches!(&p.state, State::Pax(x) if x.inside.is_none() && x.bus.is_none())
+        };
+        let gone: Vec<Person> = {
+            let (go, keep): (Vec<Person>, Vec<Person>) = std::mem::take(&mut self.people).into_iter().partition(|p| waiting(p));
+            self.people = keep;
+            go
+        };
+        for p in &gone {
+            self.retire(p);
+        }
+        self.started = false;
+        gone.len()
+    }
+
     /// Put people at the bus stops near `center`: at the start everywhere, later only at
     /// stops out of sight (the others fill with people walking up).
     pub fn populate(

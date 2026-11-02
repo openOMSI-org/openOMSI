@@ -395,6 +395,7 @@ impl App {
             }
             // (the game's own panels, by name for the plugins and the input script)
             "view_editor" => crate::game_panels::view_editor::open(self),
+            "refresh_now" => crate::admin::refresh_for_the_time(self),
             "mirror_hud_edit" => {
                 self.close_game_menu();
                 self.view = "driver".into();

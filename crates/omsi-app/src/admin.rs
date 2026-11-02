@@ -211,6 +211,20 @@ pub(crate) fn clear_ai_traffic(app: &mut App) {
     }
 }
 
+pub(crate) fn refresh_for_the_time(app: &mut App) {
+    if app.net.lan.as_ref().is_some_and(|l| l.role == Role::Client) {
+        app.service_msg = Some(("In a LAN session the host sets the clock".into(), 3.0));
+        return;
+    }
+    if let (Some(s), Some(t), Some(w), Some(r), Some(scene)) = (app.session.schedule.as_mut(), app.session.traffic.as_mut(), app.world.as_ref(), app.renderer.as_ref(), app.scene.as_mut()) {
+        let day_time = t.day_time;
+        s.restart(t, day_time);
+        crate::view_sync::apply_traffic(t, &mut app.gfx.sim_view.traffic, w, r, scene);
+    }
+    let gone = app.session.humans.as_mut().map_or(0, |h| h.sim.clear_waiting());
+    app.service_msg = Some((omsi_ui::i18n::tr_fill("Timetable buses put out again; {n} waiting people replaced", &[("{n}", &gone.to_string())]), 4.0));
+}
+
 /// The own bus (or the walker) put beside another vehicle.
 fn teleport_beside(app: &mut App, pos: glam::DVec3, heading: f64) {
     let (x, y) = beside(pos, heading, 8.0);

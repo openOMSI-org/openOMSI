@@ -109,3 +109,55 @@ fn a_dedicated_server_keeps_people_around_its_players_not_its_camera() {
     assert!(h.far_from_players(camera, 1.0));
     assert!(h.far_from_players(player, 1.0));
 }
+
+#[test]
+fn clearing_the_waiting_keeps_riders_avatars_and_strollers() {
+    let dir = std::env::temp_dir().join(format!("omsi-clear-waiting-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("person.hum"), "[model]\nmodel.cfg\n").unwrap();
+    std::fs::write(dir.join("model.cfg"), "").unwrap();
+    let ty = Arc::new(HumanType::load(&dir.join("person.hum")).unwrap());
+    std::fs::remove_dir_all(&dir).unwrap();
+    let person = |id, state: State, puppet: Option<Puppet>| Person {
+        id,
+        ty: ty.clone(),
+        variant: 0,
+        position: DVec3::ZERO,
+        heading: 0.0,
+        lheading: 0.0,
+        place: Place::Ground,
+        vel: DVec2::ZERO,
+        pace: 1.1,
+        activity: Activity::Stand,
+        anim: OmsiAnim::default(),
+        state,
+        t_state: 0.0,
+        interior: 0.0,
+        tilt: Mat4::IDENTITY,
+        age: 40.0,
+        stuck: 0.0,
+        ghost: 0.0,
+        car_wait: 0.0,
+        detour: 0.0,
+        detour_side: 0.0,
+        why: "",
+        puppet,
+        remote: false,
+    };
+    let waiting = || State::Pax(Box::new(Pax::new(1.1, 0.5)));
+    let mut boarding = Pax::new(1.1, 0.5);
+    boarding.bus = Some(BusId::Player);
+    let mut h = PeopleSim::new(Path::new("/nonexistent"), 200);
+    h.started = true;
+    h.people = vec![
+        person(1, waiting(), None),
+        person(2, waiting(), None),
+        person(3, State::Pax(Box::new(boarding)), None),
+        person(4, State::Standing, None),
+        person(5, waiting(), Some(Puppet { mode: PuppetMode::Avatar })),
+    ];
+    assert_eq!(h.clear_waiting(), 2);
+    let left: Vec<u32> = h.people.iter().map(|p| p.id).collect();
+    assert_eq!(left, vec![3, 4, 5]);
+    assert!(!h.started, "the stops fill again for the time it is now");
+}

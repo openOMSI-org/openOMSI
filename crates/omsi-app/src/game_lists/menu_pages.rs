@@ -485,6 +485,7 @@ pub(super) fn world_pages(app: &App) -> Vec<Page> {
     people.extend(slider_row(app, "traffic", "Traffic", "How many vehicles drive around the map.", &|v| omsi_ui::tr("{n} vehicles").replace("{n}", &(v as i64).to_string())));
     if !client && app.session.traffic.is_some() {
         people.push(button("Clear AI traffic", "Clear", "Remove the current AI cars from the road; random traffic will return automatically.", "traffic_clear"));
+        people.push(button("Set to the time it is now", "Refresh", "Put the timetable buses out again for the time it is now, and the people waiting at the stops anew.", "refresh_now"));
     }
     people.extend(slider_row(app, "pax", "Passengers", "How many passengers wait at the stops and ride.", &pct));
     vec![
