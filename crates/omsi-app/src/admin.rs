@@ -212,6 +212,23 @@ pub(crate) fn clear_ai_traffic(app: &mut App) {
     }
 }
 
+pub(crate) fn refresh_for_the_time(app: &mut App) {
+    if app.net.lan.as_ref().is_some_and(|l| l.role == Role::Client) {
+        app.service_msg = Some(("In a LAN session the host sets the clock".into(), 3.0));
+        return;
+    }
+    let buses = crate::app_impl::restart_timetable(app.session.schedule.as_mut(), app.session.traffic.as_mut(), app.world.as_deref(), app.renderer.as_ref(), app.scene.as_mut(), &mut app.gfx.sim_view.traffic);
+    let people = app.session.humans.as_mut().map(|h| h.sim.clear_waiting());
+    let n = people.unwrap_or(0).to_string();
+    let msg = match (buses, people.is_some()) {
+        (true, true) => omsi_ui::i18n::tr_fill("Timetable buses put out again; {n} waiting people taken off the stops", &[("{n}", &n)]),
+        (true, false) => omsi_ui::tr("Timetable buses put out again").into_owned(),
+        (false, true) => omsi_ui::i18n::tr_fill("{n} waiting people taken off the stops", &[("{n}", &n)]),
+        (false, false) => omsi_ui::tr("No timetable buses or passengers to set").into_owned(),
+    };
+    app.service_msg = Some((msg, 4.0));
+}
+
 /// The own bus (or the walker) put beside another vehicle.
 fn teleport_beside(app: &mut App, pos: glam::DVec3, heading: f64) {
     let (x, y) = beside(pos, heading, 8.0);

@@ -497,6 +497,7 @@ pub(super) fn sync_live(app: &mut App) {
         h.bad_driving = s.pax_bad_driving;
         h.boarding = s.boarding.clone();
         h.stand_chance = s.standing_chance;
+        h.short_rides_stand = s.pax_short_rides_stand;
         h.voices = match s.pax_voices.as_str() {
             "off" => 2,
             "tickets" => 1,

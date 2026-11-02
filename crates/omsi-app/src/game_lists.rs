@@ -1007,6 +1007,9 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                 "traffic_clear" if step => {
                     crate::admin::clear_ai_traffic(app);
                 }
+                "refresh_now" if step => {
+                    crate::admin::refresh_for_the_time(app);
+                }
                 "optimise" if step => {
                     app.start_optimiser(omsi_launcher_lib::optimise::chosen_target());
                     return None;
