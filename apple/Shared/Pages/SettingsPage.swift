@@ -424,6 +424,10 @@ struct SettingsPage: View {
             SettingToggle(label: "Frame rate in the corner", key: "show_fps")
             SettingSelect(label: "Performance details", key: "perf_overlay", options: [("off", "Off"), ("compact", "Compact"), ("detailed", "Detailed")])
             SettingToggle(label: "Notes in the top-left corner", key: "notes", fallback: true)
+            SettingToggle(label: "Notes: why the bus does not move", key: "notes_driving", fallback: true)
+            SettingToggle(label: "Notes: the bus's own messages", key: "notes_script", fallback: true)
+            SettingToggle(label: "Notes: the end of a trip", key: "notes_trip", fallback: true)
+            SettingToggle(label: "Notes: tickets and change", key: "notes_tickets", fallback: true)
             SettingToggle(label: "Chat in online games", key: "chat", fallback: true)
             SettingSlider(label: "Chat size", key: "chat_size", range: 0.5 ... 3, step: 0.1, fallback: 1, round: 0.1) { pct($0) }
             SettingToggle(label: "Other players' names above their buses", key: "name_tags", fallback: true)
