@@ -917,6 +917,15 @@ fn a_doorway_is_busy_while_somebody_stands_in_it() {
     // a rider of another bus, somebody waiting further out on the pavement: nobody here
     let waiting = bn.world(Vec3::new(2.6, 4.0, 0.0));
     assert_eq!(doorways_taken(&bn, &[(Some(BusId::Player), rear), (None, waiting)]), (vec![false], vec![false]));
+    let mut scratch = super::scratch::Scratch::default();
+    for i in -40..=40 {
+        for j in -40..=40 {
+            let p = bn.pos + DVec3::new(i as f64 * 0.25, j as f64 * 0.25, 0.0);
+            let at = [(None, p), (Some(BusId::Ai(3)), rear), (Some(BusId::Player), p - bn.pos)];
+            scratch.file_doorways(at.iter().map(|(b, q)| (*b, *q)));
+            assert_eq!(scratch.doorways(&bn), doorways_taken(&bn, &at), "{p:?}");
+        }
+    }
     // into the script's variables, a door past the eighth with the eighth's
     std::fs::write(dir.join("vars.bus"), "[model]\nmodel.cfg\n[varnamelist]\n1\nvars.txt\n[script]\n1\nmain.osc\n").unwrap();
     std::fs::write(dir.join("model.cfg"), "").unwrap();

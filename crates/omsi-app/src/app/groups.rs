@@ -468,6 +468,7 @@ pub(crate) struct MenuState {
     /// The vehicle being chosen in "Place a vehicle" takes the place of the one driven
     /// (the game menu's "Swap for another vehicle", #728).
     pub(crate) swap_pending: bool,
+    pub(crate) swapped_in: Option<u64>,
     /// The vehicle chosen being read on a worker thread (see `App::place_vehicle`).
     pub(crate) pending_placement: Option<crate::spawn::PendingPlacement>,
     /// The line of the open list whose slider the mouse button holds (it follows the cursor).
@@ -477,6 +478,7 @@ pub(crate) struct MenuState {
     pub(crate) menu_kbd: bool,
     /// The next click on the city map puts the bus there (Esc → Move the bus on the map).
     pub(crate) teleport_pick: bool,
+    pub(crate) map_place_from: Option<(glam::DVec2, [f32; 2])>,
     /// The game's own panels: the quick menu, the trip summary, the destination form, the
     /// view editor (`game_panels`).
     pub(crate) game_panels: crate::game_panels::GamePanels,
@@ -505,6 +507,7 @@ pub(crate) struct MenuState {
     /// air and cabin temperatures, the passengers aboard, the trip and its next stop along
     /// the top of the picture.
     pub(crate) info_bar: bool,
+    pub(crate) clean_screen: bool,
     /// OMSI's timetable window (`view_set_schedule`, Insert).
     pub(crate) timetable: bool,
     pub(crate) hud_resize: Option<(usize, f32, [f32; 2], f32)>,
@@ -574,6 +577,8 @@ pub(crate) struct SessionState {
     pub(crate) pumping: Option<Pumping>,
     /// The driver's personnel file and this session's statistics.
     pub(crate) career: career::Career,
+    pub(crate) depot_base: omsi_launcher_lib::depot::Outing,
+    pub(crate) depot_prev: Option<crate::depot_bus::DepotSwitch>,
     /// The duty's stops with their times as driven, kept in a file (`journey`).
     pub(crate) journey: Option<crate::journey::Journey>,
     /// How wet the roads are (0..1), built up by rain and dried by the sun.

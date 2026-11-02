@@ -12,6 +12,9 @@ impl App {
     /// The player's duty, the personnel file's step, the placing of vehicles, the host's map
     /// edits and `--on-foot`.
     pub(super) fn frame_duty(&mut self, dt: f32) {
+        if self.session.depot_prev.is_some() {
+            self.settle_depot_switch(false);
+        }
         if self.session.duty.is_none() {
             self.session.career.no_trip();
         }
