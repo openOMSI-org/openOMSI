@@ -1006,6 +1006,10 @@ impl WsClient {
                                 std::thread::sleep(Duration::from_millis(2));
                             }
                         }
+                        while let Ok((n, _)) = udp.recv_from(&mut buf) {
+                            let _ = ws.send(Message::Binary(buf[..n].to_vec().into()));
+                        }
+                        let _ = flush_ws(&mut ws);
                         let _ = ws.close(None);
                         Ok(())
                     })();
