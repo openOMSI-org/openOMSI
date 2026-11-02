@@ -588,3 +588,27 @@ fn a_frame_panel_s_map_stays_inside_the_navigator() {
     let n = Navigator::new(true, 0.85, "bottom-left");
     assert_eq!((n.frame_panel, n.framed, n.frame_card), (None, None, None));
 }
+
+#[test]
+fn route_arrows_stand_only_where_the_route_has_a_choice() {
+    let lanes = vec![
+        straight((0.0, 0.0), (0.0, 100.0)),
+        straight((0.0, 100.0), (0.0, 130.0)),
+        straight((0.0, 130.0), (60.0, 130.0)),
+        straight((60.0, 130.0), (160.0, 130.0)),
+        straight((0.0, 130.0), (0.0, 230.0)),
+        straight((160.0, 130.0), (160.0, 30.0)),
+    ];
+    let mut net = Network { lanes, ..Default::default() };
+    for (a, n) in [(0, vec![1]), (1, vec![2, 4]), (2, vec![3]), (3, vec![5])] {
+        net.lanes[a].next = n;
+    }
+    let mut nav = Navigator::new(true, 0.85, "bottom-left");
+    nav.arrows = true;
+    nav.global = Some(std::sync::Arc::new(net));
+    nav.route.lanes = vec![0, 1, 2, 3, 5];
+    nav.route.on_route = true;
+    let spots = nav.arrow_spots(None, 1000.0, &|_| None);
+    let at: Vec<u64> = spots.iter().map(|s| s.0).collect();
+    assert_eq!(at, vec![2], "{spots:?}");
+}
