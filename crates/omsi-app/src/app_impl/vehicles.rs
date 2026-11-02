@@ -31,14 +31,19 @@ impl App {
         if quitting {
             self.menus.pending_placement = None;
         }
-        let Some((_, _, old)) = &self.session.depot_prev else { return };
+        let Some(sw) = &self.session.depot_prev else { return };
         let swapped_in = self.menus.swapped_in;
         let now = self.player.as_ref().map(|p| (p.uid, swapped_in == Some(p.uid) && self.args.bus.as_deref().is_some_and(|b| crate::depot_bus::is_this_bus(&p.vehicle, b))));
-        let Some(landed) = crate::depot_bus::switch_landed(self.menus.pending_placement.is_some(), *old, now) else { return };
-        let Some((depot, bus, _)) = self.session.depot_prev.take() else { return };
-        if !landed {
-            log::warn!("depot bus {:?}: not driven, back to {:?}", self.args.depot, depot);
-            (self.args.depot, self.args.bus) = (depot, bus);
+        let Some(landed) = crate::depot_bus::switch_landed(self.menus.pending_placement.is_some(), Some(sw.old_uid), now) else { return };
+        let Some(sw) = self.session.depot_prev.take() else { return };
+        if landed {
+            if let Some((old, outing, wear)) = sw.record {
+                crate::depot_bus::record_wear(&old, &outing, wear);
+            }
+            self.session.depot_base = sw.base;
+        } else {
+            log::warn!("depot bus {:?}: not driven, back to {:?}", self.args.depot, sw.prev.0);
+            (self.args.depot, self.args.bus) = sw.prev;
         }
     }
 
@@ -49,7 +54,11 @@ impl App {
             return;
         };
         let before = (self.args.number.clone(), self.args.plate.clone(), self.args.depot.clone(), self.args.bus.clone());
-        let outing = crate::depot_bus::outing_since(&self.session.career, &self.args, &self.session.depot_base);
+        let driven = self.player.as_ref().map(|p| p.uid);
+        let record = match (before.2.clone(), self.player.as_ref()) {
+            (Some(old), Some(p)) => Some((old, crate::depot_bus::outing_since(&self.session.career, &self.args, &self.session.depot_base), crate::depot_bus::wear(&p.vehicle))),
+            _ => None,
+        };
         self.args.number = Some(b.number.clone()).filter(|n| !n.trim().is_empty());
         self.args.plate = Some(b.plate.clone()).filter(|n| !n.trim().is_empty());
         self.args.depot = Some(b.id.clone());
@@ -58,19 +67,17 @@ impl App {
         if idle {
             self.menus.swapped_in = None;
         }
-        self.menus.swap_pending = self.player.is_some();
+        self.menus.swap_pending = driven.is_some();
         self.place_vehicle(&b.bus, Some(b.paint.clone()).filter(|p| !p.trim().is_empty()), None);
         (self.args.number, self.args.plate) = (before.0, before.1);
-        if !idle || self.menus.pending_placement.is_none() {
+        let started = idle && self.menus.pending_placement.is_some();
+        let Some(old_uid) = driven.filter(|_| started) else {
             (self.args.depot, self.args.bus) = (before.2, before.3);
             return;
-        }
-        if let (Some(old), Some(p)) = (before.2.as_deref(), self.player.as_ref()) {
-            crate::depot_bus::record(&p.vehicle, old, &outing);
-        }
-        self.session.depot_prev = Some((before.2, before.3, self.player.as_ref().map(|p| p.uid)));
+        };
         let c = &self.session.career;
-        self.session.depot_base = omsi_launcher_lib::depot::Outing { metres: c.metres, seconds: c.seconds, stops: c.stops[0], tickets: c.tickets.0, takings: c.tickets.1, crashes: c.crashes[0], ..Default::default() };
+        let base = omsi_launcher_lib::depot::Outing { metres: c.metres, seconds: c.seconds, stops: c.stops[0], tickets: c.tickets.0, takings: c.tickets.1, crashes: c.crashes[0], ..Default::default() };
+        self.session.depot_prev = Some(crate::depot_bus::DepotSwitch { prev: (before.2, before.3), old_uid, record, base });
     }
 
     /// The vehicle is read and its meshes and textures made on a worker thread; the next

@@ -47,16 +47,27 @@ pub(crate) fn wear(v: &VehicleInstance) -> Vec<(String, f32)> {
     out
 }
 
+pub(crate) struct DepotSwitch {
+    pub(crate) prev: (Option<String>, Option<String>),
+    pub(crate) old_uid: u64,
+    pub(crate) record: Option<(String, depot::Outing, Vec<(String, f32)>)>,
+    pub(crate) base: depot::Outing,
+}
+
+pub(crate) fn record_wear(id: &str, outing: &depot::Outing, wear: Vec<(String, f32)>) {
+    match depot::record(id, outing, wear) {
+        Ok(true) => log::info!("depot bus {id}: {:.1} km and its wear recorded", outing.metres / 1000.0),
+        Ok(false) => log::warn!("depot bus {id} is no longer in the depot"),
+        Err(e) => log::warn!("depot: {e:#}"),
+    }
+}
+
 /// Adds the session to bus `id`, if the player still drives it.
 pub(crate) fn record(v: &VehicleInstance, id: &str, outing: &depot::Outing) {
     let bus = depot::load().ok().and_then(|d| d.get(id).map(|b| b.bus.clone()));
     match bus {
         Some(b) if !is_this_bus(v, &b) => log::info!("depot bus {id}: the session ended in another vehicle, not recorded"),
-        _ => match depot::record(id, outing, wear(v)) {
-            Ok(true) => log::info!("depot bus {id}: {:.1} km and its wear recorded", outing.metres / 1000.0),
-            Ok(false) => log::warn!("depot bus {id} is no longer in the depot"),
-            Err(e) => log::warn!("depot: {e:#}"),
-        },
+        _ => record_wear(id, outing, wear(v)),
     }
 }
 
