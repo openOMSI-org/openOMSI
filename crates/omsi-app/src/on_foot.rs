@@ -1,4 +1,4 @@
-//! Getting up from the driver's seat (the `get_up` setting, Ctrl+Shift+G) and walking about
+//! Getting up from the driver's seat (the `get_up` setting) and walking about
 //! as the passengers do: W A S D walk (relative to where the camera looks), Shift runs,
 //! Space jumps, C kneels (and stands up again), the right mouse button looks round; the view
 //! is out of the walker's eyes
