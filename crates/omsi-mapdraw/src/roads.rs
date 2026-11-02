@@ -52,6 +52,13 @@ pub struct MapRoad {
 /// actual road footprint to distinguish those paths from invisible scenery helpers. This
 /// changes only the navigator's copy of the network; driving still uses the original data.
 pub fn confirm_road_surfaces(net: &mut Network, surfaces: &[(Vec<DVec3>, f32)]) {
+    let streets = || net.lanes.iter().filter(|l| l.kind == LaneKind::Street);
+    if surfaces.is_empty() && streets().next().is_some() && streets().all(|l| l.invisible) {
+        for lane in net.lanes.iter_mut().filter(|l| l.kind == LaneKind::Street) {
+            lane.invisible = false;
+        }
+        return;
+    }
     let mut segments = Vec::new();
     let mut grid: HashMap<(i32, i32), Vec<usize>> = HashMap::new();
     for (pts, width) in surfaces {

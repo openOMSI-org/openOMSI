@@ -262,6 +262,9 @@ impl World {
             let Some(Pose { pos, rot: xf }) = *fp else {
                 continue;
             };
+            if o.parked && self.parked_max > 0 && self.parked_live.load(std::sync::atomic::Ordering::Relaxed) as i64 >= self.parked_max {
+                continue;
+            }
             if let (true, Placement::Ground { x, y, .. }) = (debug_float, &o.place) {
                 // how far the object stood off the ground when it was placed before the
                 // roads and crossings had pulled the ground about
