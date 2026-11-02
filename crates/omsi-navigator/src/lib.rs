@@ -1457,10 +1457,14 @@ mod destination_tests;
 
 fn stop_on_route(net: &Network, lanes: &[usize], from: usize, stop: DVec3, ok: impl Fn(usize, f32) -> bool) -> Option<(usize, f32)> {
     let near = |k: usize| net.lanes.get(lanes[k]).and_then(|l| l.nearest_point(stop)).filter(|&(s, d)| d < 25.0 && ok(k, s));
+    let kerb = |k: usize| near(k).filter(|_| passes_on_its_side(net, lanes[k], stop, 25.0));
     let first = (from..lanes.len().min(from + 1500)).find(|&k| near(k).is_some())?;
-    let on_its_side = (first..lanes.len().min(first + 60))
-        .filter(|&k| passes_on_its_side(net, lanes[k], stop, 25.0))
-        .filter_map(|k| near(k).map(|(s, d)| (k, s, d)))
-        .min_by(|a, b| a.2.total_cmp(&b.2));
-    on_its_side.map(|(k, s, _)| (k, s)).or_else(|| near(first).map(|(s, _)| (first, s)))
+    if let Some((s, _)) = kerb(first).filter(|&(_, d)| d < 6.0) {
+        return Some((first, s));
+    }
+    (first..lanes.len().min(first + 60))
+        .filter_map(|k| kerb(k).map(|(s, d)| (k, s, d)))
+        .min_by(|a, b| a.2.total_cmp(&b.2))
+        .map(|(k, s, _)| (k, s))
+        .or_else(|| near(first).map(|(s, _)| (first, s)))
 }

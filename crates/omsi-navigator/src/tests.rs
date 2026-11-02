@@ -665,4 +665,7 @@ fn the_next_stop_is_on_the_loop_that_serves_it_not_on_the_main_road_beside_it() 
     assert_eq!(stop_on_route(&net, &[0, 1], 0, stop, |_, _| true).map(|x| x.0), Some(0), "only the main road: the stop is on it");
     assert_eq!(stop_on_route(&net, &[1], 0, DVec3::new(500.0, 0.0, 0.0), |_, _| true), None);
     assert_eq!(stop_on_route(&net, &[0, 1, 2, 3], 0, stop, |k, _| k != 2).map(|x| x.0), Some(3), "a lane ruled out is passed over");
+    let side = Network { lanes: vec![straight((0.0, 0.0), (0.0, 100.0)), straight((0.0, 100.0), (6.0, 100.0)), straight((6.0, 100.0), (6.0, 0.0))], ..Default::default() };
+    assert_eq!(stop_on_route(&side, &[0, 1, 2], 0, DVec3::new(4.0, 70.0, 0.0), |_, _| true).map(|x| x.0), Some(0), "a stop at the main road's kerb stays there, a closer lane beyond notwithstanding");
+    assert_eq!(stop_on_route(&net, &[0, 9], 0, DVec3::new(500.0, 0.0, 0.0), |_, _| true), None, "a lane missing from the network is no stop");
 }
