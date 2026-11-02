@@ -33,7 +33,8 @@ struct Enhanced {
     eye: vec4<f32>,
     // x how bright an LED panel's dots burn (0 = off), y whether the LED panels' `\S:n`
     // masks keep their mip chain (0: at full resolution, the dots stay visible when small), z 1
-    // when lights glare and glow in the night air (the settings' `light_glow`)
+    // when lights glare and glow in the night air (the settings' `light_glow`), w 1 when the
+    // stars twinkle and shooting stars cross a clear night (`sky_life`)
     led: vec4<f32>,
     // xyz towards the moon, w its angular radius (rad)
     moon: vec4<f32>,

@@ -566,7 +566,15 @@ fn night_sky(d: vec3<f32>, cover: f32, pix: vec3<f32>) -> vec3<f32> {
             let size = clamp(length(pix) * 0.6, 1e-5, 0.004);
             let spot = exp(-ang * ang / (size * size));
             // brightness: many faint ones, a few bright (a power law of the magnitudes)
-            let b = pow(1.0 - h.x / density, 4.0);
+            var b = pow(1.0 - h.x / density, 4.0);
+            if (enh.led.w > 0.5) {
+                // the air's shimmer: faster and deeper near the horizon, where the light
+                // crosses more of it
+                let low = 1.0 - smoothstep(0.05, 0.6, d.z);
+                let t = camera.post.y;
+                let wave = sin(t * (5.0 + 7.0 * h.y) + h.z * 6.2832) * 0.6 + sin(t * (11.0 + 13.0 * h.w) + h.y * 6.2832) * 0.4;
+                b = b * max(1.0 + (0.12 + 0.38 * low) * wave, 0.0);
+            }
             let tint = mix(vec3<f32>(1.0, 0.86, 0.72), vec3<f32>(0.8, 0.88, 1.0), h.w);
             // the faintest that shows against the sky behind it (in the picture's own
             // units): a dark country sky shows thousands, a city's glow the few dozen
@@ -577,7 +585,38 @@ fn night_sky(d: vec3<f32>, cover: f32, pix: vec3<f32>) -> vec3<f32> {
             col = col + tint * (0.04 + 1.4 * b) * spot * shows * through / max(enh.exposure.x, 1e-6) * smoothstep(0.0, 0.15, d.z);
         }
     }
+    if (enh.led.w > 0.5 && vis > 0.0 && d.z > 0.05) {
+        col = col + shooting_star(d, pix) * through / max(enh.exposure.x, 1e-6);
+    }
     return col;
+}
+
+// Now and then (one slot in three of 12 s) a short bright streak crossing part of the
+// sky, fading in and out over a second.
+fn shooting_star(d: vec3<f32>, pix: vec3<f32>) -> vec3<f32> {
+    let t = camera.post.y;
+    let slot = floor(t / 12.0);
+    let h = star_hash(vec3<i32>(i32(slot), 7, 13));
+    if (h.x > 0.33) {
+        return vec3<f32>(0.0);
+    }
+    let age = fract(t / 12.0) * 12.0 - h.y * 8.0;
+    if (age < 0.0 || age > 1.0) {
+        return vec3<f32>(0.0);
+    }
+    let az = h.z * 6.2832;
+    let el = 0.5 + h.w * 0.6;
+    let start = vec3<f32>(cos(az) * cos(el), sin(az) * cos(el), sin(el));
+    let side = normalize(cross(start, vec3<f32>(0.0, 0.0, 1.0)) + vec3<f32>(1e-5, 0.0, 0.0));
+    let along = normalize(side * (h.y - 0.5) * 2.0 - vec3<f32>(0.0, 0.0, 0.6));
+    let head = normalize(start + along * 0.35 * age);
+    let tail = normalize(start + along * 0.35 * max(age - 0.25, 0.0));
+    let seg = head - tail;
+    let k = clamp(dot(d - tail, seg) / max(dot(seg, seg), 1e-6), 0.0, 1.0);
+    let off = length(d - (tail + seg * k));
+    let width = clamp(length(pix) * 0.8, 1e-5, 0.003);
+    let glow = exp(-off * off / (width * width)) * k * k * sin(age * 3.1416);
+    return vec3<f32>(0.9, 0.95, 1.0) * 1.6 * glow;
 }
 
 // --- the reflection probe: a cube map of the sky seen from the camera, drawn now and then

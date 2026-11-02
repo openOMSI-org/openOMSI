@@ -115,6 +115,7 @@ const graphics = {
         { type: 'select', key: 'light_shadows', label: 'Light has shadows', options: [['off', 'Off'], ['street', 'Street lamps and vehicles'], ['all', 'Every light']], help: 'Enhanced: which lights cast shadows - the street lamps and the vehicles\' headlamps, or every light: spots along their own axis and the lamps that shine every way in cube maps. Cached maps, a few passes a frame', when: enhanced },
         { type: 'toggle', key: 'cloud_shadows', label: 'Cloud shadows and light shafts', help: 'Enhanced: the clouds\' shadow moving over the land and the sun\'s shafts through the gaps of a broken sky', when: enhanced },
         { type: 'toggle', key: 'light_glow', label: 'Glow of lights', help: 'Enhanced: the glare round bright lights and the lamps\' halo in the night air', when: enhanced },
+        { type: 'toggle', key: 'sky_life', label: 'Twinkling stars', help: 'Enhanced: on clear nights the stars twinkle a little, more near the horizon, and now and then a shooting star crosses the sky', when: enhanced },
         { type: 'select', key: 'rain_quality', label: 'Rain quality', options: [['high', 'High'], ['medium', 'Medium'], ['low', 'Low']] },
         { type: 'select', key: 'vehicle_smoke', label: 'Vehicle smoke', options: [['all', 'All vehicles'], ['player', 'Player only'], ['off', 'Off']], help: 'Controls the vehicles\' smoke particles, not scenery effects or glowing particles.' },
         // (the wet roads' reflections need the reflection maps on)

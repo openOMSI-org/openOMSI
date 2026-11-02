@@ -527,6 +527,7 @@ pub(super) fn sync_live(app: &mut App) {
         r.options.light_shadows = live.light_shadows;
         r.options.cloud_shadows = live.cloud_shadows;
         r.options.light_glow = live.light_glow;
+        r.options.sky_life = live.sky_life;
     }
     let s = &app.settings;
     if let Some(w) = app.world.as_ref() {

@@ -850,7 +850,7 @@ impl Renderer {
             // x how bright an LED panel's dots burn (see `MaterialExtra::led`; the settings'
             // 16 levels give 0 = off .. 3.75), y whether the LED panels' `\S:n` masks keep
             // their mip chain (0: at full resolution, the dots stay visible when small)
-            led: [lighting.led_glow, lighting.led_mips, if self.options.light_glow { 1.0 } else { 0.0 }, 0.0],
+            led: [lighting.led_glow, lighting.led_mips, if self.options.light_glow { 1.0 } else { 0.0 }, if self.options.sky_life { 1.0 } else { 0.0 }],
             moon: lighting.moon_dir.normalize_or_zero().extend(MOON_RADIUS).to_array(),
             // (w of the first: the veil's optical depth, which the sky draws as the high
             // layer; of the second: how far the veil spreads the sun, which softens shadows)

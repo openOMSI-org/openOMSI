@@ -354,6 +354,7 @@ pub struct RenderOptions {
     /// The glare round bright lights and the lamps' halo in the night air (the settings'
     /// `light_glow`).
     pub light_glow: bool,
+    pub sky_life: bool,
     pub max_scene: Option<(u32, u32)>,
 }
 
@@ -386,6 +387,7 @@ impl Default for RenderOptions {
             light_shadows: 1,
             cloud_shadows: false,
             light_glow: false,
+            sky_life: true,
             max_scene: None,
         }
     }
