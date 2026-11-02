@@ -8,6 +8,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **Several AI vehicles at once**: in Settings › AI Lists, the vehicle picker for adding to a group,
+  a depot or a line has a tick box on each vehicle; tick several and *Add the n ticked* adds them
+  all in one go (one click still previews, a double click still adds one).
 - **Enhanced has options of its own, and the quality presets cross the modes.** Enhanced+ is no
   longer a mode: it is Enhanced with *Real-Time Ray Tracing* switched on (`ray_tracing=1`; a
   `graphics=enhanced_plus` file reads as that, and `--enhanced-plus` still asks for it for a run).

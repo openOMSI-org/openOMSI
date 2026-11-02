@@ -1191,6 +1191,8 @@ html.phone, html.phone body { font-size: 15px; -webkit-tap-highlight-color: tran
 .ail-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--text); text-align: left; cursor: pointer; font: inherit; }
 .ail-item:hover { background: var(--surface-2); }
 .ail-item.on { background: var(--surface-3); }
+.ail-tick { flex: none; width: 18px; height: 18px; margin-right: 10px; border: 1.5px solid var(--muted); border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; }
+.ail-tick.on { background: var(--accent); border-color: var(--accent); color: #111; }
 .ail-item b, .ail-row b, .ail-type b, .ail-pick b { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ail-item small, .ail-row small, .ail-type small, .ail-pick small { display: block; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ail-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
