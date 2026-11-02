@@ -524,14 +524,15 @@ impl TrafficSim {
         let out = if self.net.left_hand { 1.0 } else { -1.0 };
         let centre = centre + (right * (out * widen * 0.5)).extend(0.0);
         let half_w = half_w + (widen * 0.5) as f32;
-        let horizon = if self.player_priority { 5.0 } else { 1.5 };
+        let own = player.0 == self.player.map_or(DVec3::NAN, |p| p.0);
+        let horizon = if self.player_priority { 5.0 } else if own && self.player_waving() { 0.3 } else { 1.5 };
         let way_dir = (st.way_point(&self.net, 3.0) - st.way_point(&self.net, 0.0)).truncate();
         let ahead = player_reach_ahead(half_len, speed, horizon, fwd, way_dir);
         let behind = half_len as f64 + ((-speed).max(0.0) * horizon) as f64;
         let wide = (half_w + half_width + 0.35) as f64;
         let margin = PLAYER_BOX_MARGIN as f64;
         // (the player's own bus bends its reach along its turn; a LAN player's goes straight)
-        let turn = if player.0 == self.player.map_or(DVec3::NAN, |p| p.0) { self.player_turn } else { 0.0 };
+        let turn = if own { self.player_turn } else { 0.0 };
         let body = half_len as f64 + margin;
         let inside = |p: DVec3| in_player_sweep(p, centre, fwd, right, wide, body, ahead + margin, behind + margin, turn);
         let look = (st.speed * st.speed / (2.0 * st.decel) + st.speed * 2.0 + 15.0)

@@ -38,6 +38,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 - **Getting up has a key of its own**: *Get up from the seat (on foot)* is in the Controls'
   list (keyboard and controllers), on Ctrl+Shift+G as before; it can be moved to another key or a
   controller button, and the old built-in Ctrl+Shift+G gives way to it.
+- **A flash of the high beam waves the traffic on**: flash the headlights (high beam on for under
+  a second and a half) and for six seconds the cars that were waiting for your bus - at a junction,
+  or holding back for where the bus is about to go - take their turn first. They still stop for
+  the bus itself.
 - **Long lists in the launcher filter as you type**: a drop-down with more than twelve entries
   (the liveries, the depot files, the languages...) shows a search line at its top; typing
   narrows it down, Backspace and Esc undo the search.
