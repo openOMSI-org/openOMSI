@@ -60,7 +60,7 @@ pub(crate) fn record(v: &VehicleInstance, id: &str, outing: &depot::Outing) {
     }
 }
 
-fn is_this_bus(v: &VehicleInstance, bus: &str) -> bool {
+pub(crate) fn is_this_bus(v: &VehicleInstance, bus: &str) -> bool {
     let norm = |s: &str| s.replace('\\', "/").to_ascii_lowercase();
     norm(&v.ty.def.path.to_string_lossy()).ends_with(&norm(bus.trim_start_matches(['/', '\\'])))
 }
@@ -88,6 +88,13 @@ pub(crate) fn shift_base(base: &mut depot::Outing, old: &crate::career::Career, 
     base.crashes += new.crashes[0] - old.crashes[0];
 }
 
+pub(crate) fn switch_landed(loading: bool, old: Option<u64>, now: Option<(u64, bool)>) -> Option<bool> {
+    if loading {
+        return None;
+    }
+    Some(matches!(now, Some((uid, new_bus)) if Some(uid) != old && new_bus))
+}
+
 pub(crate) fn listed() -> Vec<depot::DepotBus> {
     depot::load().map(|d| d.buses).unwrap_or_default()
 }
@@ -113,5 +120,15 @@ mod tests {
         let o = outing_since(&next, &args, &base);
         assert_eq!((o.metres, o.seconds, o.stops, o.tickets, o.takings, o.crashes), (6000.0, 500.0, 5, 2, 4.0, 1));
         assert_eq!(o.map, "maps/Grundorf");
+    }
+
+    #[test]
+    fn a_depot_bus_counts_as_taken_only_once_it_is_driven() {
+        assert_eq!(switch_landed(true, Some(1), Some((1, false))), None, "still loading");
+        assert_eq!(switch_landed(false, Some(1), Some((2, true))), Some(true));
+        assert_eq!(switch_landed(false, Some(1), Some((1, false))), Some(false), "the load failed");
+        assert_eq!(switch_landed(false, Some(1), Some((3, false))), Some(false), "another vehicle taken meanwhile");
+        assert_eq!(switch_landed(false, None, None), Some(false), "on foot, nothing driven");
+        assert_eq!(switch_landed(false, None, Some((2, true))), Some(true));
     }
 }

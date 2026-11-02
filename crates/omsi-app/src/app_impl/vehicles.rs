@@ -27,19 +27,22 @@ impl App {
         }
     }
 
-    pub(crate) fn settle_depot_switch(&mut self) {
-        if self.menus.pending_placement.is_some() {
-            return;
+    pub(crate) fn settle_depot_switch(&mut self, quitting: bool) {
+        if quitting {
+            self.menus.pending_placement = None;
         }
-        let Some((depot, bus, old)) = self.session.depot_prev.take() else { return };
-        if self.player.as_ref().is_some_and(|p| p.uid == old) {
-            log::warn!("depot bus {:?}: not loaded, {:?} is still driven", self.args.depot, depot);
+        let Some((_, _, old)) = &self.session.depot_prev else { return };
+        let now = self.player.as_ref().map(|p| (p.uid, self.args.bus.as_deref().is_some_and(|b| crate::depot_bus::is_this_bus(&p.vehicle, b))));
+        let Some(landed) = crate::depot_bus::switch_landed(self.menus.pending_placement.is_some(), *old, now) else { return };
+        let Some((depot, bus, _)) = self.session.depot_prev.take() else { return };
+        if !landed {
+            log::warn!("depot bus {:?}: not driven, back to {:?}", self.args.depot, depot);
             (self.args.depot, self.args.bus) = (depot, bus);
         }
     }
 
     pub(crate) fn take_depot_bus(&mut self, id: &str) {
-        self.settle_depot_switch();
+        self.settle_depot_switch(false);
         let Some(b) = crate::depot_bus::listed().into_iter().find(|b| b.id == id) else {
             self.service_msg = Some(("That bus is no longer in the depot".into(), 3.0));
             return;
@@ -61,7 +64,7 @@ impl App {
         if let (Some(old), Some(p)) = (before.2.as_deref(), self.player.as_ref()) {
             crate::depot_bus::record(&p.vehicle, old, &outing);
         }
-        self.session.depot_prev = self.player.as_ref().map(|p| (before.2, before.3, p.uid));
+        self.session.depot_prev = Some((before.2, before.3, self.player.as_ref().map(|p| p.uid)));
         let c = &self.session.career;
         self.session.depot_base = omsi_launcher_lib::depot::Outing { metres: c.metres, seconds: c.seconds, stops: c.stops[0], tickets: c.tickets.0, takings: c.tickets.1, crashes: c.crashes[0], ..Default::default() };
     }
