@@ -437,6 +437,10 @@ const general = {
         { type: 'toggle', key: 'show_fps', label: 'Frame rate in the corner' },
         { type: 'select', key: 'perf_overlay', label: 'Performance details', options: [['off', 'Off'], ['compact', 'Compact'], ['detailed', 'Detailed']] },
         { type: 'toggle', key: 'notes', label: 'Notes in the top-left corner' },
+        { type: 'toggle', key: 'notes_driving', label: 'Notes: why the bus does not move', when: (s) => s.notes !== false },
+        { type: 'toggle', key: 'notes_script', label: "Notes: the bus's own messages", when: (s) => s.notes !== false },
+        { type: 'toggle', key: 'notes_trip', label: 'Notes: the end of a trip', when: (s) => s.notes !== false },
+        { type: 'toggle', key: 'notes_tickets', label: 'Notes: tickets and change', when: (s) => s.notes !== false },
         { type: 'toggle', key: 'chat', label: 'Chat in online games' },
         // (on top of the interface's size; Ctrl + the wheel over it in the game)
         { type: 'slider', key: 'chat_size', label: 'Chat size', min: 0.5, max: 3, step: 0.1, def: 1, format: pct, store: r1 },

@@ -29,6 +29,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   first (*My depot: name | plate*). One taken replaces the bus driven, with its livery, fleet
   number, plate, odometer and wear; the session is written back to it when it ends, and the time
   spent in the bus driven before goes to that one (when it was a depot bus too).
+- **Choose which notes show**: under *Notes in the top-left corner* (launcher, game options, Apple
+  app) four switches turn off one kind each - why the bus does not move, the bus's own messages
+  (the announcements among them), the end of a trip, tickets and change - while the rest stay.
 - **Long lists in the launcher filter as you type**: a drop-down with more than twelve entries
   (the liveries, the depot files, the languages...) shows a search line at its top; typing
   narrows it down, Backspace and Esc undo the search.

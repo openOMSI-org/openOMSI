@@ -105,7 +105,7 @@ impl App {
         let mut say = |key: String, text: String, kind: NoticeKind| said.push((key, text, kind));
         // why the bus is not moving, whenever the throttle is pressed and nothing
         // happens: the things a driver checks first
-        if let Some(p) = self.player.as_ref() {
+        if let Some(p) = self.player.as_ref().filter(|_| self.settings.notes_driving) {
             for t in standing_reasons(&p.vehicle, &|a| crate::diagnostics::rebound_key(&p.bindings, a)) {
                 say(note_key(&t), t, NoticeKind::Action);
             }
@@ -113,7 +113,7 @@ impl App {
         // the latest `$msg` of the player's bus scripts, which OMSI writes on the screen: a
         // note while the script keeps saying it and for a few seconds after (AI vehicles'
         // messages are not shown)
-        let script_says = self.player.as_ref().and_then(|p| p.vehicle.host.fresh_message(SCRIPT_MESSAGE_SECS));
+        let script_says = self.player.as_ref().filter(|_| self.settings.notes_script).and_then(|p| p.vehicle.host.fresh_message(SCRIPT_MESSAGE_SECS));
         // (one note whose text follows the script: a value it prints changes every frame)
         if let Some(text) = script_says {
             say("bus script message".to_string(), text.to_string(), NoticeKind::Info);
@@ -129,7 +129,7 @@ impl App {
         if self.menus.editor.is_some() {
             lines.push("Object editor: click picks | drag moves | wheel turns (Shift lifts) | Del | C copy | V variant | Backspace undo | Ctrl+S save | Esc".into());
         }
-        if let Some(d) = self.session.duty.as_ref().filter(|d| d.trip_done()) {
+        if let Some(d) = self.session.duty.as_ref().filter(|d| d.trip_done() && self.settings.notes_trip) {
             let text = match d.trips.get(d.trip_index + 1) {
                 Some(next) => format!(
                     "End of the trip. Next: {} to {}, from {} at {} (it starts by itself a minute before)",
@@ -179,7 +179,7 @@ impl App {
                 }
             }
         }
-        if let Some(h) = self.session.humans.as_ref() {
+        if let Some(h) = self.session.humans.as_ref().filter(|_| self.settings.notes_tickets) {
             if let Some(hint) = h.hint() {
                 say(hint.clone(), hint, NoticeKind::Action);
             } else if let Some((name, value)) = &h.request {

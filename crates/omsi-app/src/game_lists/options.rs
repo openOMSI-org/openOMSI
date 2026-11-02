@@ -507,6 +507,10 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "ui_scale_window" => s.ui_scale_window,
         "tooltips" => s.tooltips,
         "notes" => s.notes,
+        "notes_driving" => s.notes_driving,
+        "notes_script" => s.notes_script,
+        "notes_trip" => s.notes_trip,
+        "notes_tickets" => s.notes_tickets,
         "chat" => s.chat,
         "name_tags" => s.name_tags,
         "voice_enabled" => s.voice_enabled,
@@ -948,6 +952,22 @@ fn toggle_set_graphics_and_controls(app: &mut App, id: &str, on: bool, bit: Stri
         "notes" => {
             app.settings.notes = on;
             Some(("notes", bit))
+        }
+        "notes_driving" => {
+            app.settings.notes_driving = on;
+            Some(("notes_driving", bit))
+        }
+        "notes_script" => {
+            app.settings.notes_script = on;
+            Some(("notes_script", bit))
+        }
+        "notes_trip" => {
+            app.settings.notes_trip = on;
+            Some(("notes_trip", bit))
+        }
+        "notes_tickets" => {
+            app.settings.notes_tickets = on;
+            Some(("notes_tickets", bit))
         }
         "chat" => {
             app.settings.chat = on;
