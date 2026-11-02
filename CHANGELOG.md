@@ -50,6 +50,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   is now*: the timetable buses are put out again for the current time and the people waiting at
   the stops are taken off; the stops fill again as people walk up, as many as the hour wants -
   after changing the time by a little, or whenever the stops are fuller than the hour wants.
+- **Finer moves in the photo mode**: Alt now slows the turning as well as the moving (to a
+  quarter), for the small adjustments of a zoomed-in shot, and the camera rises and sinks at half
+  the speed it moves along, so it can be lowered to a kneeling height without overshooting.
 - **Long lists in the launcher filter as you type**: a drop-down with more than twelve entries
   (the liveries, the depot files, the languages...) shows a search line at its top; typing
   narrows it down, Backspace and Esc undo the search.
