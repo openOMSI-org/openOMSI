@@ -276,6 +276,18 @@ fn junction_helpers_between_roads_remain_connected() {
 }
 
 #[test]
+fn a_map_whose_streets_are_all_editor_only_paths_on_object_roads_still_shows_them() {
+    let mut a = straight((0.0, 0.0), (0.0, 100.0));
+    let mut b = straight((30.0, 0.0), (30.0, 100.0));
+    a.invisible = true;
+    b.invisible = true;
+    let mut net = Network { lanes: vec![a, b], ..Default::default() };
+    confirm_road_surfaces(&mut net, &[]);
+    assert!(net.lanes.iter().all(|l| !l.invisible));
+    assert_eq!(road_geometry(&net).len(), 2);
+}
+
+#[test]
 fn placement_gaps_are_bridged_only_where_the_graph_connects() {
     let mut lanes = vec![straight((0.0, 0.0), (0.0, 40.0)), straight((0.0, 41.0), (0.0, 80.0)), straight((2.0, 41.0), (2.0, 80.0))];
     lanes[0].next = vec![1];
