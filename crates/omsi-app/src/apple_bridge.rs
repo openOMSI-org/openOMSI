@@ -413,7 +413,7 @@ fn act(s: &mut State, a: &Value) -> anyhow::Result<Value> {
             s.touched();
         }
         "traffic" => {
-            s.choice.traffic = a.get("value").and_then(|v| v.as_f64()).unwrap_or(30.0).clamp(0.0, 120.0) as f32;
+            s.choice.traffic = a.get("value").and_then(|v| v.as_f64()).unwrap_or(30.0).clamp(0.0, if cfg!(target_os = "ios") { 120.0 } else { 300.0 }) as f32;
             s.touched();
         }
         "flag" => {
