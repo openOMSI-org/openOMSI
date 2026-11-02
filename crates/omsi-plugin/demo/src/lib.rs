@@ -14,6 +14,9 @@ static STARTED: AtomicU32 = AtomicU32::new(0);
 #[unsafe(no_mangle)]
 pub extern "system" fn PluginStart(_owner: *mut std::ffi::c_void) {
     STARTED.fetch_add(1, Ordering::SeqCst);
+    if std::path::Path::new("print-on-stdout").exists() {
+        println!("{}", "demo plugin says hello ".repeat(400));
+    }
 }
 
 #[unsafe(no_mangle)]

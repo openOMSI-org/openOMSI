@@ -106,6 +106,7 @@ fn android_main(app: AndroidApp) {
     let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(1) % 1_000_000_000;
     omsi_script::set_session_seed(seed);
 
+    let _ = APP.set(app.clone());
     let event_loop = match EventLoop::builder().with_android_app(app).build() {
         Ok(e) => e,
         Err(e) => {
@@ -497,6 +498,18 @@ static TILT_THREAD: std::sync::Once = std::sync::Once::new();
 
 pub(crate) fn tilt() -> Option<f32> {
     (TILT_ON.load(Ordering::Relaxed) && TILT_SEEN.load(Ordering::Relaxed)).then(|| f32::from_bits(TILT.load(Ordering::Relaxed)))
+}
+
+static APP: std::sync::OnceLock<AndroidApp> = std::sync::OnceLock::new();
+
+pub(crate) fn soft_keyboard(show: bool) {
+    if let Some(app) = APP.get() {
+        if show {
+            app.show_soft_input(false);
+        } else {
+            app.hide_soft_input(false);
+        }
+    }
 }
 
 pub(crate) fn set_tilt(on: bool) {
