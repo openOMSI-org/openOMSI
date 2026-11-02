@@ -132,7 +132,7 @@ fn route_numbers(app: &App) -> Vec<String> {
 /// Whether a line can be represented by the numeric IBIS line/suffix variables openOMSI
 /// already knows how to encode. Everything else must stay as display text: turning "-10"
 /// or "EXP" into a number loses information.
-fn numeric_ibis_line(line: &str) -> bool {
+pub(crate) fn numeric_ibis_line(line: &str) -> bool {
     let line = line.trim();
     if line.is_empty() {
         return false;
@@ -171,7 +171,7 @@ pub(crate) fn set_route_by_hand(app: &mut App, line: &str) {
             let hof = p.vehicle.host.hof.clone();
             if let Some(hof) = hof.as_deref() {
                 if let Some(ti) = crate::schedule::shown_destination(&p.vehicle, hof, p.blind_pick.as_ref()) {
-                    p.set_destination_by_hand(hof, line, ti);
+                    p.set_destination_by_hand(hof, line, ti, false);
                 }
             }
         } else {
@@ -183,6 +183,10 @@ pub(crate) fn set_route_by_hand(app: &mut App, line: &str) {
                     p.vehicle.state.str_vars[i as usize] = line.to_string();
                 }
             }
+            if crate::schedule::has_roller_blind(&p.vehicle) {
+                let shown = p.vehicle.host.hof.clone().and_then(|hof| crate::schedule::shown_destination(&p.vehicle, &hof, p.blind_pick.as_ref()));
+                p.blind_pick = blind_with_line(p.blind_pick.take(), shown, line);
+            }
         }
         log::info!(
             "route number set by hand: {line} (IBIS_LinieKurs {:?}, Matrix_Nr {:?})",
@@ -191,6 +195,25 @@ pub(crate) fn set_route_by_hand(app: &mut App, line: &str) {
         );
         app.service_msg = Some((omsi_ui::i18n::said(format!("{} {line}", omsi_ui::tr("Route")), format!("Route {line}")), 3.0));
     }
+}
+
+pub(crate) fn route_keeps_blind(route: &str) -> bool {
+    route.trim().is_empty() || !numeric_ibis_line(route.trim())
+}
+
+pub(crate) fn form_route(v: &omsi_sim::VehicleInstance, pick: Option<&crate::schedule::BlindPick>) -> String {
+    let blind = crate::schedule::has_roller_blind(v).then(|| pick.map(|p| p.line.trim().to_string()).unwrap_or_else(|| v.str_var("SetLineTo").trim().to_string()));
+    [blind, Some(v.str_var("Matrix_Nr").trim().to_string())].into_iter().flatten().find(|l| !l.is_empty() && !numeric_ibis_line(l)).unwrap_or_else(|| destination_line(v))
+}
+
+pub(crate) fn kept_blind_line(shown: &str, keep: bool) -> Option<String> {
+    let shown = shown.trim();
+    (keep && !shown.is_empty() && !numeric_ibis_line(shown)).then(|| shown.to_string())
+}
+
+fn blind_with_line(pick: Option<crate::schedule::BlindPick>, shown: Option<usize>, line: &str) -> Option<crate::schedule::BlindPick> {
+    let row = pick.map(|p| p.row).or(shown)?;
+    Some(crate::schedule::BlindPick { row, line: line.to_string() })
 }
 
 /// The route number the bus shows: its matrix's (`Matrix_Nr`), else the one it was set to
@@ -358,10 +381,10 @@ fn hof_label(p: &std::path::Path) -> String {
 
 /// The time speeds, traffic amounts and passenger shares the options step through.
 const SPEEDS: [f64; 5] = [1.0, 2.0, 4.0, 8.0, 15.0];
-pub(crate) const TRAFFIC: [usize; 7] = [0, 10, 20, 30, 50, 80, 120];
-/// The most traffic anything may ask for: the menu's top step, the server's `traffic <n>`
-/// and server.cfg's `traffic` alike (#1327).
-pub(crate) const TRAFFIC_MAX: usize = TRAFFIC[TRAFFIC.len() - 1];
+pub(crate) const TRAFFIC: [usize; 10] = [0, 10, 20, 30, 50, 80, 120, 160, 220, 300];
+/// The most traffic anything may ask for: the server's `traffic <n>` and server.cfg's
+/// `traffic` alike (#1327).
+pub(crate) const TRAFFIC_MAX: usize = 120;
 const PAX: [f32; 6] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0];
 const VOLUME: [f32; 6] = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0];
 /// The pedal strengths the options step through (see `settings::pedal_curve`).
@@ -637,6 +660,14 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
             }
         }
         ListKind::PlaceMaker => {
+            if search_query(app).trim().is_empty() {
+                let offered = crate::lan::server_offers();
+                let driven = app.args.depot.clone().filter(|_| app.player.is_some());
+                for b in crate::depot_bus::listed().into_iter().filter(|b| offered.as_ref().is_none_or(|o| crate::lan::offers(o, &b.bus)) && driven.as_deref() != Some(b.id.as_str())) {
+                    let plate = if b.plate.trim().is_empty() { String::new() } else { format!("  |  {}", b.plate.trim()) };
+                    out.push((format!("{} {}{plate}", tr("My depot:"), b.name.trim()), format!("depot {}", b.id)));
+                }
+            }
             let all = place_vehicles(app, &tr("Unknown manufacturer"));
             let mut groups: Vec<(String, String, Vec<&(String, String, String, String)>)> = Vec::new();
             for v in &all {
@@ -1110,6 +1141,11 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             None
         }
         ListKind::PlaceMaker | ListKind::PlaceType(_) if verb == "maker" => Some(ListKind::PlaceType(arg.to_string())),
+        ListKind::PlaceMaker if verb == "depot" => {
+            app.close_game_menu();
+            app.take_depot_bus(arg.trim());
+            None
+        }
         ListKind::PlaceMaker | ListKind::PlaceType(_) => Some(ListKind::PlaceLivery(arg.to_string())),
         ListKind::PlaceLivery(bus) => Some(ListKind::PlaceHof(bus.clone(), arg.to_string())),
         ListKind::PlaceHof(bus, paint) => {
@@ -1153,7 +1189,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                     // (the line on the IBIS stays; only the destination changes)
                     let line = destination_line(&p.vehicle);
                     let name = t.menu_name();
-                    p.set_destination_by_hand(hof, &line, ti);
+                    p.set_destination_by_hand(hof, &line, ti, true);
                     log::info!("destination display set by hand: {} {} (terminus code now {:?})", t.code, name.trim(), p.vehicle.var("IBIS_TerminusCode"));
                     app.service_msg = Some((omsi_ui::i18n::said(format!("{} {}", omsi_ui::tr("Destination:"), name.trim()), format!("Destination: {}", name.trim())), 3.0));
                 }
@@ -1253,6 +1289,20 @@ pub(crate) use graphics::*;
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_typed_route_with_a_letter_goes_onto_the_roller_blind() {
+        use crate::schedule::BlindPick;
+        let pending = Some(BlindPick { row: 3, line: "41".into() });
+        assert_eq!(super::blind_with_line(pending, Some(7), "92A"), Some(BlindPick { row: 3, line: "92A".into() }));
+        assert_eq!(super::blind_with_line(None, Some(7), "4X"), Some(BlindPick { row: 7, line: "4X".into() }));
+        assert_eq!(super::blind_with_line(None, None, "1A"), None);
+        assert_eq!(super::kept_blind_line("92A", true), Some("92A".into()), "a destination picked: the letter stays");
+        assert_eq!(super::kept_blind_line("92A", false), None, "92A then 41 typed: the new number goes up");
+        assert_eq!(super::kept_blind_line("41", true), None);
+        assert!(super::route_keeps_blind("") && super::route_keeps_blind("92A"), "a route the IBIS cannot take leaves the blind's text");
+        assert!(!super::route_keeps_blind("41") && !super::route_keeps_blind("92E"), "a number the IBIS takes goes up");
+    }
+
     /// "Random livery" draws among all liveries (#2410: it always gave the same one).
     #[test]
     fn random_livery_reaches_every_livery() {
@@ -1339,6 +1389,20 @@ mod tests {
         set_str(&mut blind, "SetLineTo", "  5");
         blind.set_var("IBIS_LinieKurs", 145.0);
         assert_eq!(super::destination_line(&blind), "5");
+        // a blind on 92A over an IBIS on 41: the form offers 92A, Select keeps it (#2799)
+        set_str(&mut blind, "SetLineTo", "92A");
+        blind.set_var("IBIS_LinieKurs", 41.0);
+        let route = super::form_route(&blind, None);
+        assert_eq!(route, "92A");
+        assert!(super::route_keeps_blind(&route));
+        assert_eq!(super::kept_blind_line(&blind.str_var("SetLineTo"), super::route_keeps_blind(&route)), Some("92A".into()));
+        set_str(&mut v, "Matrix_Nr", "92A");
+        assert_eq!(super::form_route(&v, None), "92A", "a matrix showing 92A: the form offers it, not the IBIS's 145");
+        set_str(&mut v, "Matrix_Nr", "");
+        assert_eq!(super::form_route(&v, None), super::destination_line(&v), "nothing lettered shown: the form offers the IBIS's line");
+        set_str(&mut blind, "SetLineTo", " 41");
+        let pending = crate::schedule::BlindPick { row: 2, line: "92A".into() };
+        assert_eq!(super::form_route(&blind, Some(&pending)), "92A", "a bus still off: the pick waiting for it, not what the IBIS wrote");
     }
 
     #[test]

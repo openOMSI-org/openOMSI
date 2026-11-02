@@ -188,7 +188,8 @@ fn host_action(app: &mut App, action: &str) {
         (Action::Traffic(arg), _) if arg == "clear" => clear_ai_traffic(app),
         (Action::Traffic(_), _) => {
             if let Some(t) = app.session.traffic.as_mut() {
-                t.target = crate::game_lists::next_step(&crate::game_lists::TRAFFIC, t.target);
+                let steps: Vec<usize> = crate::game_lists::TRAFFIC.iter().copied().filter(|&v| v <= crate::game_lists::TRAFFIC_MAX).collect();
+                t.target = crate::game_lists::next_step(&steps, t.target);
                 app.args.traffic = t.target;
                 app.service_msg = Some((omsi_ui::i18n::said(format!("{}: {}", omsi_ui::tr("Traffic"), t.target), format!("Traffic: {}", t.target)), 3.0));
             }

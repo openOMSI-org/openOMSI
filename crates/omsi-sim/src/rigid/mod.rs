@@ -207,6 +207,7 @@ pub struct RigidWheel {
     pub touch: Option<f32>,
     pub on_ground: bool,
     pub rotation_deg: f32,
+    pub turned: f32,
     pub rpm: f32,
     /// Load on the tyre this step (N).
     pub load: f32,
@@ -364,6 +365,7 @@ impl RigidWheel {
         }
         self.rpm = self.spin * 60.0 / std::f32::consts::TAU;
         self.rotation_deg = (self.rotation_deg + self.spin.to_degrees() * h).rem_euclid(360.0);
+        self.turned += self.spin * h;
     }
 
     /// Compression the static load gives with the current spring factor.

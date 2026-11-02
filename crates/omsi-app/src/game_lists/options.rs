@@ -421,6 +421,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "passenger_full_bus_reaction" => s.passenger_full_bus_reaction,
         "navigator" => if app.vr_active() { app.vr_nav_profile().enabled } else { app.menus.navigator.as_ref().is_some_and(|n| n.enabled) },
         "nav_ai" => app.menus.navigator.as_ref().map_or(s.nav_ai, |n| n.show_ai),
+        "nav_ai_cars" => app.menus.navigator.as_ref().map_or(s.nav_ai_cars, |n| n.show_cars),
         "nav_surface" => app.menus.navigator.as_ref().map_or(s.nav_surface, |n| n.show_surface),
         "nav_3d" => app.menus.navigator.as_ref().map_or(s.nav_3d, |n| n.show_3d),
         "nav_classic_2d" => app.menus.navigator.as_ref().map_or(s.nav_classic_2d, |n| n.classic_2d),
@@ -507,6 +508,10 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "ui_scale_window" => s.ui_scale_window,
         "tooltips" => s.tooltips,
         "notes" => s.notes,
+        "notes_driving" => s.notes_driving,
+        "notes_script" => s.notes_script,
+        "notes_trip" => s.notes_trip,
+        "notes_tickets" => s.notes_tickets,
         "chat" => s.chat,
         "name_tags" => s.name_tags,
         "voice_enabled" => s.voice_enabled,
@@ -560,6 +565,13 @@ pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static 
             }
             app.settings.nav_ai = on;
             Some(("nav_ai", bit))
+        }
+        "nav_ai_cars" => {
+            if let Some(n) = app.menus.navigator.as_mut() {
+                n.show_cars = on;
+            }
+            app.settings.nav_ai_cars = on;
+            Some(("nav_ai_cars", bit))
         }
         "nav_surface" => {
             if let Some(n) = app.menus.navigator.as_mut() {
@@ -948,6 +960,22 @@ fn toggle_set_graphics_and_controls(app: &mut App, id: &str, on: bool, bit: Stri
         "notes" => {
             app.settings.notes = on;
             Some(("notes", bit))
+        }
+        "notes_driving" => {
+            app.settings.notes_driving = on;
+            Some(("notes_driving", bit))
+        }
+        "notes_script" => {
+            app.settings.notes_script = on;
+            Some(("notes_script", bit))
+        }
+        "notes_trip" => {
+            app.settings.notes_trip = on;
+            Some(("notes_trip", bit))
+        }
+        "notes_tickets" => {
+            app.settings.notes_tickets = on;
+            Some(("notes_tickets", bit))
         }
         "chat" => {
             app.settings.chat = on;

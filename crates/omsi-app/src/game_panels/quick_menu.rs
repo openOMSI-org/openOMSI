@@ -26,7 +26,7 @@ pub(crate) const PER_PAGE: usize = 15;
 const WIDTH: f32 = 5.0 * 84.0 + 4.0 * 8.0 + 2.0 * 14.0;
 
 /// The tiles: id, label, icon - in OMSI's order, five to a row, fifteen to a page.
-pub(crate) const TILES: [(&str, &str, &str); 28] = [
+pub(crate) const TILES: [(&str, &str, &str); 30] = [
     ("place", "Place a vehicle", "add"),
     ("switch", "Change vehicle", "sync_alt"),
     ("remove", "Remove vehicle", "delete"),
@@ -44,6 +44,7 @@ pub(crate) const TILES: [(&str, &str, &str); 28] = [
     ("stats", "Statistics", "receipt_long"),
     // the second page: the game menu's lines
     ("camera", "Camera", "videocam"),
+    ("view_editor", "Seat, view and mirrors", "airline_seat_recline_normal"),
     ("vehicle", "Vehicle options...", "tune"),
     ("world", "World options...", "public"),
     ("options", "Options", "settings"),
@@ -56,6 +57,7 @@ pub(crate) const TILES: [(&str, &str, &str); 28] = [
     ("endduty", "End the tour", "sports_score"),
     ("players", "Player list", "group"),
     ("admin", "Administration", "dns"),
+    ("radio", "Radio", "radio"),
 ];
 
 /// The tiles that are the game menu's lines, offered only when it offers them now.
@@ -97,13 +99,16 @@ pub(crate) struct TileState {
 impl TileState {
     pub(crate) fn of(app: &crate::App) -> TileState {
         let offered: Vec<&'static str> = app.game_menu_items().iter().map(|l| l.0).collect();
-        let off = MENU_LINES.iter().copied().filter(|id| !offered.contains(id)).collect();
+        let mut off: Vec<&'static str> = MENU_LINES.iter().copied().filter(|id| !offered.contains(id)).collect();
         let mut lit = Vec::new();
         if app.settings.nav_arrows {
             lit.push("arrows");
         }
         if app.session.duty.is_some() {
             lit.push("duty");
+        }
+        if app.player.is_none() || app.session.on_foot.is_some() || app.vr_active() {
+            off.push("view_editor");
         }
         TileState { off, lit }
     }
@@ -251,6 +256,7 @@ pub(crate) fn click(app: &mut crate::App, id: &str) {
     app.menus.game_panels.quick = None;
     match id {
         "dest" => super::dest_form::open(app),
+        "radio" => super::radio_panel::open(app),
         "arrows" => {
             crate::game_lists::option_do(app, "nav_arrows", "", crate::game_lists::Move::Next);
         }
@@ -318,7 +324,7 @@ mod tests {
         assert_eq!(q.focus, 11, "no row under the last");
         q.focus = 14;
         q.step(1, 0);
-        // the second page has 13 tiles: its third row ends at 12
+        // the second page has 14 tiles: its third row ends at 13
         assert_eq!((q.page, q.focus), (1, 10));
         q.step(-1, 0);
         assert_eq!((q.page, q.focus), (0, 14));

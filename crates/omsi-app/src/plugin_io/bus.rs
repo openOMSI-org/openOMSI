@@ -98,7 +98,7 @@ pub(crate) fn set_destination(app: &mut App, ti: usize) -> bool {
     let Some(t) = hof.termini.get(ti) else { return false };
     let line = crate::game_lists::destination_line(&p.vehicle);
     let name = t.menu_name();
-    p.set_destination_by_hand(&hof, &line, ti);
+    p.set_destination_by_hand(&hof, &line, ti, true);
     log::info!("destination display set by a plugin: {} {}", t.code, name.trim());
     true
 }
