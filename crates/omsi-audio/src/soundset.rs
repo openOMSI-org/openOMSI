@@ -487,6 +487,17 @@ impl SoundSet {
         def.is_loop.then(|| def.sample_rate.trunc() * var(&def.pitch_variable).unwrap_or(0.0).abs() / def.pitch_ref)
     }
 
+    /// An entry plays on sound trigger `name`.
+    pub fn has_trigger(&self, name: &str) -> bool {
+        self.sounds.iter().any(|s| s.def.triggers.iter().any(|t| t.trim().eq_ignore_ascii_case(name)))
+    }
+
+    /// An entry's volume curve or condition reads variable `name`.
+    pub fn reads_var(&self, name: &str) -> bool {
+        let is = |v: &str| v.trim().eq_ignore_ascii_case(name);
+        self.sounds.iter().any(|s| s.def.vol_curves.iter().any(|c| is(&c.variable)) || s.def.conditions.iter().any(|c| is(&c.variable)))
+    }
+
     /// The triggers (lower case) whose entries read script variables in a volume curve:
     /// what [`SoundSet::update_fired`] wants the values of at the moment they fire.
     pub fn curve_triggers(&self) -> Vec<String> {

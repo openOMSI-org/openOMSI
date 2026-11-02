@@ -795,6 +795,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
         sound: SoundState {
             radio,
             milezero: Default::default(),
+            switch_sound: Default::default(),
             audio: None,
             ambience: None,
             soundscape: None,

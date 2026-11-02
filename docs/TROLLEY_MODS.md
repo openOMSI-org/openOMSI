@@ -143,7 +143,9 @@ Images read: `real/evidence/ev_13.5.png` (ZiU, poles on the map's wire), `h_13.0
 * The Optima's own gearbox script did not go into D with the triggers I could fire offscreen
   (`automatic_N/D` need a state of its own scripts), so it was not driven under power: its poles,
   circuit and current were checked standing. This is a test-recipe gap, not a trolley one.
-* The map's frog is a graphical junction; our frog body, tongue and lamp are drawn over it.
+* With an explicit `trolley.txt`, the game leaves the map's switch models alone; only
+  `OMSI_DEBUG_TROLLEY` adds a marker, tongue and lamp. Spline-derived networks retain those
+  generated switch visuals without the debug flag.
 * No add-on here has real sections or insulators; they are tested with `OMSI_TROLLEY_DEAD_AT`.
 * AI trolleybuses (the map's route 1 is run by AI vehicles) are not powered by the wire.
 * The engine of these plain buses keeps running with the poles down (their scripts are diesel

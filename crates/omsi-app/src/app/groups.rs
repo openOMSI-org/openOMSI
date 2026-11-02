@@ -8,6 +8,7 @@ pub(crate) struct SoundState {
     pub(crate) radio: radio::Radio,
     /// The MileZero card on the navigator (settings `milezero`).
     pub(crate) milezero: crate::milezero::Milezero,
+    pub(crate) switch_sound: omsi_audio::trolley::SwitchSound,
     pub(crate) audio: Option<omsi_audio::AudioEngine>,
     /// Sounds of the world around the camera (rain, footsteps).
     pub(crate) ambience: Option<ambience::Ambience>,

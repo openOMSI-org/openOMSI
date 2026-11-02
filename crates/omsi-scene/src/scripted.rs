@@ -556,8 +556,10 @@ impl World {
             let t = std::time::Instant::now();
             let boards = self.timetable_boards.lock();
             let controllers = self.controller_of_object.lock();
+            let trolley_net = self.trolley_net.lock().clone();
             times.lock += t.elapsed().as_secs_f64();
             let inputs = omsi_sim::scenery::SceneryInputs {
+                trolley_net: trolley_net.as_deref(),
                 clock: boards.clock.as_ref(),
                 time: now.time,
                 day,
@@ -597,6 +599,7 @@ impl World {
         let controllers = self.controller_of_object.lock();
         times.lock += t.elapsed().as_secs_f64();
         omsi_sim::scenery::OwnedSceneryInputs {
+            trolley_net: self.trolley_net.lock().clone(),
             clock: boards.clock.clone(),
             time: now.time,
             day,

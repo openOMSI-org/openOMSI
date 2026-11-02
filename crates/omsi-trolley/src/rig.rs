@@ -5,7 +5,7 @@
 use crate::def::TrolleyDef;
 use crate::pole::{rotate_tip_pub, Pole, PoleEvent, PoleEventKind, PoleMode, PoseSpan, Rope, G};
 use crate::traction::{Traction, TractionIn, TractionOut};
-use crate::wire::{Contact, WireNet};
+use crate::wire::{Contact, SwitchRequest, WireNet};
 use glam::{DMat3, DVec3, Vec3};
 
 /// Inductance of the motor circuit and its choke (H): the energy `L I^2 / 2` of the current
@@ -79,6 +79,11 @@ pub struct RigInput<'a> {
     pub dir: f32,
     /// -1 left indicator, +1 right, 0 none.
     pub blinker: i8,
+    /// For radio switches: the cab's request (-1 left, +1 right, 0 none), the route code
+    /// (0 none) and the channel sent on.
+    pub radio: i8,
+    pub route_code: u32,
+    pub channel: u32,
     /// One per pole.
     pub ropes: &'a [RopeCmd],
     /// A modelled drive supplies the force; without one the script's torque is only gated.
@@ -114,6 +119,7 @@ pub struct TrolleyRig {
     /// Every event of the poles goes into the notes (for logs).
     pub verbose: bool,
     events: Vec<PoleEvent>,
+    radio_previous: Option<(usize, DVec3, i8, u32, u32)>,
 }
 
 /// The point a ray reaches at `len` metres from `base` (the farthest, where it crosses that
@@ -152,6 +158,7 @@ impl TrolleyRig {
             notes: Vec::new(),
             verbose: false,
             events: Vec::new(),
+            radio_previous: None,
         }
     }
 
@@ -206,6 +213,13 @@ impl TrolleyRig {
         self.events.clear();
         static EMPTY: std::sync::OnceLock<WireNet> = std::sync::OnceLock::new();
         let net = inp.net.unwrap_or_else(|| EMPTY.get_or_init(|| WireNet::parse("")));
+        let request = SwitchRequest { current: self.amps - self.out.charge_amps, blinker: inp.blinker, radio: inp.radio, code: inp.route_code, channel: inp.channel };
+        let network = net as *const WireNet as usize;
+        let previous = self.radio_previous.and_then(|(last_net, pos, radio, code, channel)| {
+            (last_net == network && radio == inp.radio && code == inp.route_code && channel == inp.channel).then_some(pos)
+        });
+        net.receive_radio_since(inp.pos, &request, previous);
+        self.radio_previous = Some((network, inp.pos, inp.radio, inp.route_code, inp.channel));
         let amps_before = self.amps;
         for k in 0..self.poles.len() {
             let cmd = inp.ropes.get(k).copied().unwrap_or(RopeCmd::Idle);
@@ -376,7 +390,12 @@ impl TrolleyRig {
                     }
                 }
                 PoleEventKind::Plate { switch } => {
-                    net.trigger_switch(switch as usize, amps - self.out.charge_amps, inp.blinker);
+                    let definition = &net.switches[switch as usize];
+                    if definition.mode == crate::wire::SwitchMode::Radio {
+                        continue;
+                    }
+                    let request = SwitchRequest { current: amps - self.out.charge_amps, blinker: inp.blinker, radio: inp.radio, code: inp.route_code, channel: inp.channel };
+                    net.trigger_switch(switch as usize, &request);
                 }
             }
         }
@@ -457,6 +476,9 @@ mod tests {
                 brake,
                 dir: 1.0,
                 blinker: 0,
+                radio: 0,
+                route_code: 0,
+                channel: 0,
                 ropes,
                 drive: true,
                 script_force: 0.0,
@@ -482,6 +504,45 @@ mod tests {
 
     fn line() -> WireNet {
         WireNet::parse("[trolley_section]\nid 1\nlive 1\n[trolley_span]\nsection 1\np -50 0 5.5\np 100 0 5.5\np 250 0 5.5\n")
+    }
+
+    #[test]
+    fn radio_requests_reach_a_receiver_without_poles_on_the_wire() {
+        let net = WireNet::parse(concat!(
+            "[trolley_span]\np 0 0 5.5\np 50 0 5.5\n",
+            "[trolley_span]\np 50 0 5.5\np 100 0 5.5\n",
+            "[trolley_span]\np 50 0 5.5\np 90 20 5.5\n",
+            "[trolley_switch]\npos 50 0 5.5\nmode radio\nrange 20\nchannel 1\n",
+        ));
+        let mut rig = TrolleyRig::new(&def(), 3);
+        let mut input = RigInput {
+            net: Some(&net), dt: 1.0 / 60.0, pos: DVec3::ZERO, rot: rot(),
+            accel: Vec3::ZERO, speed: 0.0, wheel_radius: 0.5, pedal: 0.0,
+            brake: 0.0, dir: 1.0, blinker: 0, radio: -1, route_code: 0, channel: 1,
+            ropes: &[RopeCmd::Idle; 2], drive: false, script_force: 0.0,
+        };
+        rig.step(&input);
+        assert!(!net.switch_branch(0));
+        input.pos = DVec3::new(50.0, 10.0, 0.0);
+        rig.step(&input);
+        assert!(net.switch_branch(0));
+        assert!(!rig.circuit);
+        assert!(rig.poles.iter().all(|pole| pole.mode == PoleMode::Down));
+        input.radio = 1;
+        rig.step(&input);
+        assert!(!net.switch_branch(0));
+        assert_eq!(net.switch_display(0).map(|display| display.0), Some(2.0));
+        assert_eq!(net.receive_radio(input.pos, &SwitchRequest { radio: -1, channel: 1, ..Default::default() }), 1);
+        rig.step(&input);
+        assert!(net.switch_branch(0));
+        input.pos = DVec3::ZERO;
+        rig.step(&input);
+        assert!(net.switch_branch(0));
+        net.end_step(86400.0);
+        assert!(net.switch_branch(0));
+        input.pos = DVec3::new(50.0, 10.0, 0.0);
+        rig.step(&input);
+        assert!(!net.switch_branch(0));
     }
 
     #[test]
