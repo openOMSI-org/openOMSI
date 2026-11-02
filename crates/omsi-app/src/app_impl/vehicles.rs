@@ -124,6 +124,10 @@ impl App {
     }
 
     pub(crate) fn walk_to(&mut self, at: glam::DVec2) {
+        if self.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
+            self.service_msg = Some((omsi_ui::tr("In a LAN session the city map does not move you").into_owned(), 3.0));
+            return;
+        }
         let top = glam::DVec3::new(at.x, at.y, 3000.0);
         let street_height = || {
             let p = glam::DVec3::new(at.x, at.y, 0.0);
@@ -143,6 +147,7 @@ impl App {
         f.vel = glam::DVec2::ZERO;
         (f.lift, f.vz) = (0.0, 0.0);
         (f.seat, f.inside, f.transit, f.arrive) = (None, None, None, None);
+        (f.footing, f.bus_turn) = (None, None);
         self.service_msg = Some((omsi_ui::tr("You are on foot where the map was clicked").into_owned(), 3.0));
     }
 
