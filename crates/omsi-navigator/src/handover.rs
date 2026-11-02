@@ -32,15 +32,18 @@ impl Navigator {
     pub(super) fn map_traffic_kind(
         &self,
         car: &omsi_sim::ai_traffic::model::AiCar,
-    ) -> Option<(Color, Option<String>)> {
+    ) -> Option<(Color, Option<String>, bool)> {
         if !self.visible_traffic(car.id, car.gone) {
             return None;
         }
         if let Some(label) = self.handed_over_label(car.id) {
             let (_, line) = traffic_kind(car);
-            Some((BUS, line.or(Some(label))))
+            Some((BUS, line.or(Some(label)), true))
         } else {
-            self.show_ai.then(|| traffic_kind(car))
+            self.show_ai.then(|| {
+                let (color, line) = traffic_kind(car);
+                (color, line, false)
+            })
         }
     }
 }
@@ -136,6 +139,7 @@ mod tests {
             .expect("a physical bus, even without a line or timetable");
         assert_eq!(marker.0, BUS);
         assert!(marker.1.is_some());
+        assert!(marker.2);
         nav.set_handed_over_buses([]);
         assert!(nav.map_traffic_kind(car).is_none());
     }
@@ -143,7 +147,12 @@ mod tests {
     fn handed_over_marker_label_fits_without_truncation() {
         let fonts = Fonts::new();
         let label = "Handed-over bus #123";
-        let fitted = fonts.fit(label, 11.5, Weight::Bold, TRANSIT_LABEL_MAX);
+        let fitted = fonts.fit(label, 11.5, Weight::Bold, super::transit_label_max(true));
         assert_eq!(fitted, label);
+    }
+
+    #[test]
+    fn normal_transit_labels_keep_the_existing_width_limit() {
+        assert_eq!(super::transit_label_max(false), 54.0);
     }
 }

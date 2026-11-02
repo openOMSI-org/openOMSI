@@ -611,29 +611,30 @@ impl Navigator {
         let n_bg = bg.len();
         // the traffic: every car, the public transport in its colours with its line
         let mut dots = Painter::new();
-        let mut transit: Vec<(DVec3, f64, Option<String>)> = Vec::new();
+        let mut transit: Vec<(DVec3, f64, Option<String>, bool)> = Vec::new();
         // (from far the cars are left out; the map's own timetabled trains always)
         let far = self.city.mpp > 1.6;
         if let Some(t) = f.traffic {
             for car in t.cars.iter().filter(|c| !c.is_rail() && !in_the_air(c, &t.net)) {
-                let Some((color, line)) = self.map_traffic_kind(car) else { continue };
+                let Some((color, line, wide_label)) = self.map_traffic_kind(car) else { continue };
                 let at = self.smoothed_position(car);
                 if color == DOT {
                     if !far {
                         car_dot(&mut dots, rel(at), self.light);
                     }
                 } else {
-                    transit.push((at, car.vehicle.heading, line));
+                    transit.push((at, car.vehicle.heading, line, wide_label));
                 }
             }
         }
         if self.show_ai {
             for v in self.live_vehicles().into_iter().filter(|v| !v.rail) {
-                transit.push((v.pos, v.heading, Some(v.line.clone())));
+                transit.push((v.pos, v.heading, Some(v.line.clone()), false));
             }
         }
         // the vehicles on a ticked line ringed in that line's colour (and counted for its card)
-        let on_line = self.ring_ticked_lines(&transit, anchor, &mut dots);
+        let ticked_transit: Vec<_> = transit.iter().map(|(p, h, l, _)| (*p, *h, l.clone())).collect();
+        let on_line = self.ring_ticked_lines(&ticked_transit, anchor, &mut dots);
         // (over the route in their order, no depth: see the small map)
         let dots_solid = dots.verts;
         // marks, names, cards
@@ -659,11 +660,11 @@ impl Navigator {
             }
         }
         transit.sort_by(|a, b| (a.0 - f.bus).length().total_cmp(&(b.0 - f.bus).length()));
-        for (pos, heading, line) in &transit {
+        for (pos, heading, line, wide_label) in &transit {
             let Some(p) = to_screen(*pos).filter(|p| win.contains(*p)) else { continue };
             let h = heading.to_radians();
             let Some(ahead) = to_screen(*pos + DVec3::new(h.sin(), h.cos(), 0.0) * 5.0) else { continue };
-            transit_drop(&mut ui, &mut self.atlas, &self.fonts, p, ahead - p, line.as_deref(), s, &mut taken, &pal);
+            transit_drop(&mut ui, &mut self.atlas, &self.fonts, p, ahead - p, line.as_deref(), *wide_label, s, &mut taken, &pal);
         }
         if let Some(sf) = self.surface.as_deref().filter(|_| self.show_surface) {
             self.place.draw_names(&mut ui, &mut self.atlas, &self.fonts, sf, self.light, self.city.mpp, &mut taken, win, s, &on_screen);
