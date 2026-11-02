@@ -774,6 +774,15 @@ fn places_follow_their_own_variables() {
     let k = h.reserve_place(BusId::Player, &cabin.seats, &[false; 4]).unwrap();
     assert!(k >= 2, "one who wants to stand stands");
     h.free_seat(BusId::Player, k);
+    let mut door = cabin.entries[0].clone();
+    door.inside = Vec3::new(0.0, -1.2, 0.5);
+    assert_eq!(h.reserve_by_a_door(BusId::Player, &cabin.seats, &[false; 4], std::slice::from_ref(&door)), Some(3), "a short ride stands by the door");
+    door.inside = Vec3::new(0.0, 0.2, 0.5);
+    assert_eq!(h.reserve_by_a_door(BusId::Player, &cabin.seats, &[false; 4], std::slice::from_ref(&door)), Some(2), "the nearest free one");
+    assert_eq!(h.reserve_by_a_door(BusId::Player, &cabin.seats, &[false; 4], std::slice::from_ref(&door)), None, "no standing place left: a seat as usual");
+    assert_eq!(h.reserve_by_a_door(BusId::Player, &cabin.seats, &[false; 4], &[]), None, "no exit known");
+    h.free_seat(BusId::Player, 2);
+    h.free_seat(BusId::Player, 3);
     v.set_var("layout_long", 1.0);
     assert_eq!(places_off(&v, &cabin), [false; 4]);
     // somebody sits on the tip-up seat (place 1) of this bus, somebody on place 1 of another

@@ -597,6 +597,11 @@ fn full_bus_reaction_defaults_off_for_desktop_phone_and_old_settings() {
     assert!(!Settings::from_text("version=1\n").passenger_full_bus_reaction);
     assert!(Settings::from_text("passenger_full_bus_reaction=1\n").passenger_full_bus_reaction);
     assert!(!Settings::from_text("passenger_full_bus_reaction=0\n").passenger_full_bus_reaction);
+    assert!(!Settings::desktop().pax_short_rides_stand);
+    assert!(Settings::from_text("pax_short_rides_stand=1\n").pax_short_rides_stand);
+    let mut on = Settings::desktop();
+    on.pax_short_rides_stand = true;
+    assert!(Settings::from_text(&on.to_text()).pax_short_rides_stand);
 }
 #[test]
 fn full_bus_reaction_round_trips_through_both_settings_writers() {
