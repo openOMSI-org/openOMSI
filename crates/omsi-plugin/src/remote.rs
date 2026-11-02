@@ -100,6 +100,7 @@ impl Remote {
         });
         let Ok((answer, to, from)) = start.recv_timeout(start_wait) else {
             let _ = child.kill();
+            let _ = child.wait();
             return Err(format!("{} did not finish starting within {} s and is left out (a message box of its own may be waiting behind the game's window)", dll.display(), start_wait.as_secs()));
         };
         let procs = match answer {
