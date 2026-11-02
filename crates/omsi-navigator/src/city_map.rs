@@ -619,7 +619,7 @@ impl Navigator {
                 let (color, line) = traffic_kind(car);
                 let at = self.smoothed_position(car);
                 if color == DOT {
-                    if !far {
+                    if !far && self.show_cars {
                         car_dot(&mut dots, rel(at), self.light);
                     }
                 } else {
