@@ -15,6 +15,13 @@ pub(crate) struct SoundPlan {
 
 /// The `SoundPlan` of `def`, made the first time it is asked for (None, remembered too: the
 /// definition names no sound, or its configuration does not load).
+fn own_horn(cfg: &omsi_vehicle::SoundCfg) -> Option<&str> {
+    cfg.sounds.iter().map(|s| s.file.trim()).find(|f| {
+        let f = f.to_ascii_lowercase();
+        f.contains("hupe") || f.contains("horn")
+    })
+}
+
 fn sound_plan(
     plans: &mut HashMap<std::path::PathBuf, Option<Arc<SoundPlan>>>,
     cfgs: &mut HashMap<std::path::PathBuf, Option<Arc<omsi_vehicle::SoundCfg>>>,
@@ -148,13 +155,16 @@ impl Traffic {
             if (*position - listener).length() > 250.0 {
                 continue;
             }
-            let own = sound_plan(&mut self.sound_plans, &mut self.sound_cfgs, &ty.def)
-                .is_some_and(|p| p.cfg.sounds.iter().any(|s| s.triggers.iter().any(|t| t.trim().eq_ignore_ascii_case("ev_AI_Horn"))));
-            if own {
+            let plan = sound_plan(&mut self.sound_plans, &mut self.sound_cfgs, &ty.def);
+            if plan.as_ref().is_some_and(|p| p.cfg.sounds.iter().any(|s| s.triggers.iter().any(|t| t.trim().eq_ignore_ascii_case("ev_AI_Horn")))) {
                 continue;
             }
             let file = if *heavy { "Sounds/AI_Cars/Hupe_Lkw.wav" } else { "Sounds/AI_Cars/hupe.wav" };
-            let path = omsi_cfg::resolve_path(&self.sim.root, file);
+            let path = plan
+                .as_ref()
+                .and_then(|p| own_horn(&p.cfg).map(|f| omsi_cfg::resolve_path(&p.dir, f)))
+                .filter(|p| omsi_cfg::vfs::is_file(p))
+                .unwrap_or_else(|| omsi_cfg::resolve_path(&self.sim.root, file));
             let Some(clip) = audio.load_clip(&path) else { continue };
             let at = *position + DVec3::Z * 0.8;
             audio.play(
@@ -232,5 +242,19 @@ impl Traffic {
                 ss.play_file_trigger(audio, t, f, &|n| v.var(n), &xf);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod horn_tests {
+    #[test]
+    fn an_ai_bus_honks_with_the_horn_of_its_own_sound_set() {
+        let dir = std::env::temp_dir().join(format!("openomsi_horn_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let cfg = dir.join("sound_AI.cfg");
+        std::fs::write(&cfg, "[sound]\nengine.wav\n1\n\n[sound]\nSD_hupe_lang.wav\n1\n\n[volcurve]\ncockpit_hupe_volume\n").unwrap();
+        let loaded = omsi_vehicle::SoundCfg::load(&cfg).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(super::own_horn(&loaded), Some("SD_hupe_lang.wav"));
     }
 }
