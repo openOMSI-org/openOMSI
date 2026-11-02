@@ -3,14 +3,6 @@
 
 use super::*;
 
-pub(super) fn counted_turn(value: f32, last: Option<f32>, angle: f32) -> f32 {
-    use std::f32::consts::{PI, TAU};
-    match last {
-        Some(last) => value + (angle - last + PI).rem_euclid(TAU) - PI,
-        None => angle,
-    }
-}
-
 impl VehicleInstance {
     pub(super) fn get(&self, id: Option<omsi_script::VarId>) -> f32 {
         id.map(|i| self.state.vars[i as usize]).unwrap_or(0.0)
@@ -22,11 +14,12 @@ impl VehicleInstance {
         }
     }
 
-    pub(super) fn put_turn(&mut self, id: Option<omsi_script::VarId>, angle: f32) {
+    pub(super) fn put_turn(&mut self, id: Option<omsi_script::VarId>, axle: usize, side: usize) {
+        let Some(w) = self.physics.wheels.get_mut(axle).and_then(|a| a.get_mut(side)) else { return };
+        let step = w.turned - w.turned_put;
+        w.turned_put = w.turned;
         if let Some(i) = id {
-            let last = self.turn_last.insert(i, angle);
-            let v = &mut self.state.vars[i as usize];
-            *v = counted_turn(*v, last, angle);
+            self.state.vars[i as usize] += step;
         }
     }
 
@@ -292,32 +285,21 @@ mod tests {
     }
 }
 
+
 #[cfg(test)]
 mod turn_tests {
-    use super::counted_turn;
-
     #[test]
-    fn a_wheel_turn_counts_on_past_a_full_turn_and_back() {
-        let (mut v, mut last) = (0.0, None);
-        let mut step = |v: &mut f32, k: i32| {
-            let angle = (k as f32 * 0.5).rem_euclid(std::f32::consts::TAU);
-            *v = counted_turn(*v, last.replace(angle), angle);
-        };
-        for k in 0..=40 {
-            step(&mut v, k);
-        }
-        assert!((v - 20.0).abs() < 1e-3, "{v}");
-        for k in (0..40).rev() {
-            step(&mut v, k);
-        }
-        assert!(v.abs() < 1e-3, "{v}");
-        for k in 0..=6 {
-            step(&mut v, k);
-        }
-        v = 0.0;
-        for k in 7..=10 {
-            step(&mut v, k);
-        }
-        assert!((v - 2.0).abs() < 1e-3, "a script's reset counts on from 0: {v}");
+    fn a_wheel_turn_counts_on_by_its_whole_step_and_from_a_script_s_reset() {
+        let mut v = crate::timetable_run::tests::script_test_vehicle("", "Wheel_Rotation_0_L\n", "");
+        let id = v.ty.program.var("Wheel_Rotation_0_L");
+        let w = crate::physics::WheelState { long: 0.0, lat: 0.0, radius: 0.5, driven: true, rotation_deg: 0.0, turned: 0.0, turned_put: 0.0, rpm: 0.0, suspension: 0.0 };
+        v.physics.wheels = vec![[w.clone(), w]];
+        v.physics.wheels[0][0].turned += 3.3;
+        v.put_turn(id, 0, 0);
+        assert!((v.get(id) - 3.3).abs() < 1e-5, "a step over half a turn counts forward: {}", v.get(id));
+        v.put(id, 0.0);
+        v.physics.wheels[0][0].turned += 0.5;
+        v.put_turn(id, 0, 0);
+        assert!((v.get(id) - 0.5).abs() < 1e-5, "a script's reset counts on from 0: {}", v.get(id));
     }
 }
