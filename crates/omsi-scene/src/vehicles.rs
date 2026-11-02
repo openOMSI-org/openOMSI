@@ -759,8 +759,7 @@ impl World {
             let shadow = vt
                 .meshes
                 .get(mi)
-                .map(|m| vt.model.meshes[m.def_index].is_shadow)
-                .unwrap_or(false);
+                .is_some_and(|m| shadow_blob(&vt.model.meshes[m.def_index], m));
             let inst = if shadow {
                 renderer.add_shadow_blob_instance(scene, *id, DVec3::ZERO, Mat4::IDENTITY, mats)
             } else {
@@ -1317,6 +1316,11 @@ fn slot_halves<'a>(plain: &[&'a MaterialDef], first_item: &[&'a MaterialDef], la
 }
 
 /// One material slot of a vehicle mesh being uploaded (see [`World::vehicle_slot_material`]).
+fn shadow_blob(def: &MeshDef, vm: &omsi_sim::vehicle::VehicleMesh) -> bool {
+    let (lo, hi) = vm.data.positions.iter().fold((f32::MAX, f32::MIN), |(lo, hi), p| (lo.min(p.z), hi.max(p.z)));
+    def.is_shadow && (vm.data.positions.is_empty() || hi - lo <= 0.3)
+}
+
 #[derive(Clone, Copy)]
 struct SlotCx<'s> {
     vt: &'s omsi_sim::VehicleType,
@@ -1373,7 +1377,7 @@ fn slot_alpha(cx: &SlotCx, ov: &[&MaterialDef], tex: Option<TextureId>, transmap
     // override of its own (most shadow blobs have none) it defaulted to
     // opaque, so the decal's square base texture painted a solid (often
     // white or grey) tile under the bus instead of a soft shadow.
-    if def.is_shadow {
+    if shadow_blob(def, vm) {
         alpha = AlphaMode::Blend;
     }
     // A few bus packs mark a solid body mesh as `[matl_alpha] 2` and leave
@@ -1537,7 +1541,7 @@ fn slot_extra(
     // depth buffer, the stacked panes of a door blended over each other
     // whichever lay in front, #211.)
     if (transparent_layer_hint || see_through) && !cover && alpha == AlphaMode::Blend {
-        extra.writes_depth = declared_alpha == AlphaMode::Blend && !ov.iter().any(|o| o.no_z_write) && !def.is_shadow;
+        extra.writes_depth = declared_alpha == AlphaMode::Blend && !ov.iter().any(|o| o.no_z_write) && !shadow_blob(def, vm);
         extra.no_z_write = true;
     }
     // Name the pane explicitly for the shader. A plain blended window has
