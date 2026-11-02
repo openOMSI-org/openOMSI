@@ -132,7 +132,7 @@ fn route_numbers(app: &App) -> Vec<String> {
 /// Whether a line can be represented by the numeric IBIS line/suffix variables openOMSI
 /// already knows how to encode. Everything else must stay as display text: turning "-10"
 /// or "EXP" into a number loses information.
-fn numeric_ibis_line(line: &str) -> bool {
+pub(crate) fn numeric_ibis_line(line: &str) -> bool {
     let line = line.trim();
     if line.is_empty() {
         return false;
@@ -183,6 +183,10 @@ pub(crate) fn set_route_by_hand(app: &mut App, line: &str) {
                     p.vehicle.state.str_vars[i as usize] = line.to_string();
                 }
             }
+            if crate::schedule::has_roller_blind(&p.vehicle) {
+                let shown = p.vehicle.host.hof.clone().and_then(|hof| crate::schedule::shown_destination(&p.vehicle, &hof, p.blind_pick.as_ref()));
+                p.blind_pick = blind_with_line(p.blind_pick.take(), shown, line);
+            }
         }
         log::info!(
             "route number set by hand: {line} (IBIS_LinieKurs {:?}, Matrix_Nr {:?})",
@@ -191,6 +195,11 @@ pub(crate) fn set_route_by_hand(app: &mut App, line: &str) {
         );
         app.service_msg = Some((omsi_ui::i18n::said(format!("{} {line}", omsi_ui::tr("Route")), format!("Route {line}")), 3.0));
     }
+}
+
+fn blind_with_line(pick: Option<crate::schedule::BlindPick>, shown: Option<usize>, line: &str) -> Option<crate::schedule::BlindPick> {
+    let row = pick.map(|p| p.row).or(shown)?;
+    Some(crate::schedule::BlindPick { row, line: line.to_string() })
 }
 
 /// The route number the bus shows: its matrix's (`Matrix_Nr`), else the one it was set to
@@ -1243,6 +1252,15 @@ pub(crate) use graphics::*;
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_typed_route_with_a_letter_goes_onto_the_roller_blind() {
+        use crate::schedule::BlindPick;
+        let pending = Some(BlindPick { row: 3, line: "41".into() });
+        assert_eq!(super::blind_with_line(pending, Some(7), "92A"), Some(BlindPick { row: 3, line: "92A".into() }));
+        assert_eq!(super::blind_with_line(None, Some(7), "4X"), Some(BlindPick { row: 7, line: "4X".into() }));
+        assert_eq!(super::blind_with_line(None, None, "1A"), None);
+    }
+
     /// "Random livery" draws among all liveries (#2410: it always gave the same one).
     #[test]
     fn random_livery_reaches_every_livery() {

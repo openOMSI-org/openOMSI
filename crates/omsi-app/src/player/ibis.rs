@@ -234,7 +234,11 @@ impl Player {
     /// list, a bus page): on the IBIS now, on a roller blind once it can be turned
     /// (`schedule::turn_roller_blind`).
     pub(crate) fn set_destination_by_hand(&mut self, hof: &omsi_vehicle::hof::Hof, line: &str, ti: usize) {
+        let shown = self.vehicle.str_var("SetLineTo").trim().to_string();
         self.blind_pick = schedule::set_player_destination_at(&mut self.vehicle, hof, line, ti, &[]);
+        if let Some(p) = self.blind_pick.as_mut().filter(|_| !shown.is_empty() && !crate::game_lists::numeric_ibis_line(&shown)) {
+            p.line = shown;
+        }
         schedule::turn_roller_blind(&mut self.vehicle, &mut self.blind_pick, self.startup.is_some());
         if let Some(p) = &self.blind_pick {
             log::info!("roller blind: destination {} kept until the bus is switched on", p.row);
