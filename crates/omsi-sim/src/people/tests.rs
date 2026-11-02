@@ -781,6 +781,16 @@ fn places_follow_their_own_variables() {
     assert_eq!(h.reserve_by_a_door(BusId::Player, &cabin.seats, &[false; 4], std::slice::from_ref(&door)), Some(2), "the nearest free one");
     assert_eq!(h.reserve_by_a_door(BusId::Player, &cabin.seats, &[false; 4], std::slice::from_ref(&door)), None, "no standing place left: a seat as usual");
     assert_eq!(h.reserve_by_a_door(BusId::Player, &cabin.seats, &[false; 4], &[]), None, "no exit known");
+    let mut elsewhere = door.clone();
+    elsewhere.group += 1;
+    assert_eq!(h.reserve_by_a_door(BusId::Player, &cabin.seats, &[false; 4], &[elsewhere]), None, "an exit of another car does not count");
+    let mut pathless = door.clone();
+    pathless.point = None;
+    assert_eq!(h.reserve_by_a_door(BusId::Player, &cabin.seats, &[false; 4], &[pathless]), None, "nor one with no path to it");
+    assert!(super::pax_task::short_ride(None, 2.0));
+    assert!(!super::pax_task::short_ride(None, 5.0));
+    assert!(!super::pax_task::short_ride(Some("Rathaus"), 2.0), "a rider with a stop to go to rides to it");
+    assert!(!super::pax_task::short_ride(None, 0.0), "no ride drawn (a runner)");
     h.free_seat(BusId::Player, 2);
     h.free_seat(BusId::Player, 3);
     v.set_var("layout_long", 1.0);

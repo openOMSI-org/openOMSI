@@ -248,7 +248,7 @@ impl PeopleSim {
     pub fn reserve_by_a_door(&mut self, bus: BusId, places: &[Seat], off: &[bool], doors: &[Door]) -> Option<usize> {
         let taken = self.seats.get(&bus);
         let free = |k: usize| !taken.is_some_and(|t| t.get(k).copied().unwrap_or(false)) && !off.get(k).copied().unwrap_or(false);
-        let gap = |s: &Seat| doors.iter().map(|d| d.inside.truncate().distance(s.pos.truncate())).fold(f32::INFINITY, f32::min);
+        let gap = |s: &Seat| doors.iter().filter(|d| d.point.is_some() && d.group == s.group).map(|d| d.inside.truncate().distance(s.pos.truncate())).fold(f32::INFINITY, f32::min);
         let k = (0..places.len()).filter(|&k| !places[k].seated && free(k)).min_by(|&a, &b| gap(&places[a]).total_cmp(&gap(&places[b])))?;
         if !gap(&places[k]).is_finite() {
             return None;

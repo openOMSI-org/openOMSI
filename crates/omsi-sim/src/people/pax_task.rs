@@ -5,6 +5,10 @@ use super::pax_stops::entry_on_platform;
 
 const SHORT_RIDE_KM: f32 = 3.0;
 
+pub(super) fn short_ride(dest: Option<&str>, ride_km: f32) -> bool {
+    dest.is_none() && ride_km > 0.0 && ride_km < SHORT_RIDE_KM
+}
+
 // A direct connection must have loaded walking ground all the way, not just a clear ray
 // above a fence. Keep unsupported stairs/gaps out until actual pavement routing is added.
 fn connection_walkable(from: DVec3, to: DVec3, height: impl Fn(f64, f64, f64) -> Option<f64>) -> bool {
@@ -360,7 +364,7 @@ impl PeopleSim {
                                 || !bn.cabin.entries.iter().any(|door| door.point.is_some()
                                     && door.group == seat.group && entry_on_platform(side, door.side))
                         }).collect();
-                        let short = self.short_rides_stand && p.ride_km < SHORT_RIDE_KM;
+                        let short = self.short_rides_stand && short_ride(p.dest.as_deref(), p.ride_km);
                         let place = if short { self.reserve_by_a_door(bn.id, &bn.cabin.seats, &off, &bn.cabin.exits) } else { None };
                         if let Some(k) = place.or_else(|| self.reserve_place(bn.id, &bn.cabin.seats, &off)) {
                             let (tk, id) = self.decide_pax_ticket(i, bn);
