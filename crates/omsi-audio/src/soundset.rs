@@ -122,6 +122,7 @@ pub struct SoundSet {
     amount: f32,
     /// This set belongs to an AI vehicle or another player's (Omsi.exe's view 4).
     ai: bool,
+    scenery: bool,
     /// The player's own vehicle moves with its listener; its 3D sounds still pan and fade,
     /// but frame timing must not turn their fixed cabin positions into Doppler pitch shifts.
     listener_vehicle: bool,
@@ -265,6 +266,7 @@ impl SoundSet {
             inside: false,
             amount: 0.0,
             ai: false,
+            scenery: false,
             listener_vehicle: false,
             muffled: false,
             parts: Vec::new(),
@@ -374,11 +376,19 @@ impl SoundSet {
     fn view_mask(&self) -> i32 {
         if self.ai {
             4
+        } else if self.scenery {
+            5
         } else if self.inside {
             2
         } else {
             1
         }
+    }
+
+    pub fn new_scenery(engine: &AudioEngine, cfg: &SoundCfg, dir: &Path) -> SoundSet {
+        let mut s = Self::new(engine, cfg, dir);
+        s.scenery = true;
+        s
     }
 
     /// A sound set heard from outside: an AI vehicle's or another player's (view 4). Its
@@ -1040,6 +1050,19 @@ mod tests {
     }
 
     #[test]
+    fn scenery_is_heard_through_the_bodywork_from_a_cab() {
+        let _turn = globals();
+        let none = |_: &str| None;
+        set_outside_open(Some(0.5));
+        let bells = SoundEntry { volume: 0.8, ..Default::default() };
+        assert!((eval(&ctx(5, true), bells.clone(), &none).gain - 0.56).abs() < 1e-3);
+        assert!((eval(&ctx(5, false), bells, &none).gain - 0.8).abs() < 1e-3, "from the street: as it is");
+        assert!(!eval(&ctx(5, false), SoundEntry { volume: 1.0, viewpoint: 1, ..Default::default() }, &none).wrong_view);
+        assert!(eval(&ctx(5, true), SoundEntry { volume: 1.0, viewpoint: 2, ..Default::default() }, &none).wrong_view);
+        set_outside_open(None);
+    }
+
+    #[test]
     fn the_cab_hears_outside_through_what_is_open() {
         let _turn = globals();
         let none = |_: &str| None;
@@ -1171,7 +1194,7 @@ mod tests {
             ..Default::default()
         };
         let sounds = (0..3).map(|_| RuntimeSound::new(entry.clone(), Some(clip.clone()))).collect();
-        let mut set = SoundSet { sounds, master: 1.0, dir: Default::default(), inside: false, amount: 0.0, ai: false, listener_vehicle: false, muffled: false, parts: Vec::new(), vars: None };
+        let mut set = SoundSet { sounds, master: 1.0, dir: Default::default(), inside: false, amount: 0.0, ai: false, scenery: false, listener_vehicle: false, muffled: false, parts: Vec::new(), vars: None };
         let reads = std::cell::Cell::new(0);
         let var = |n: &str| {
             reads.set(reads.get() + 1);
@@ -1197,7 +1220,7 @@ mod tests {
         assert_eq!(eval(&ctx(2, true), hit.clone(), &now).gain, 0.0, "read at the frame's end: silent");
         let fired = |n: &str| at_fire("ev_doorhitclose_0", n).or_else(|| now(n));
         assert_eq!(eval(&ctx(2, true), hit.clone(), &fired).gain, 1.0);
-        let set = SoundSet { sounds: vec![RuntimeSound::new(hit.clone(), None)], master: 1.0, dir: Default::default(), inside: true, amount: 1.0, ai: false, listener_vehicle: true, muffled: false, parts: Vec::new(), vars: None };
+        let set = SoundSet { sounds: vec![RuntimeSound::new(hit.clone(), None)], master: 1.0, dir: Default::default(), inside: true, amount: 1.0, ai: false, scenery: false, listener_vehicle: true, muffled: false, parts: Vec::new(), vars: None };
         assert_eq!(set.curve_triggers(), vec!["ev_doorhitclose_0".to_string()]);
     }
 
@@ -1214,7 +1237,7 @@ mod tests {
             ..Default::default()
         };
         let make = || SoundSet { sounds: vec![RuntimeSound::new(entry.clone(), Some(clip.clone()))], master: 1.0,
-            dir: Default::default(), inside: false, amount: 0.0, ai: false, listener_vehicle: false,
+            dir: Default::default(), inside: false, amount: 0.0, ai: false, scenery: false, listener_vehicle: false,
             muffled: false, parts: Vec::new(), vars: None };
         let mut set = make();
         set.add_part(0, make());
