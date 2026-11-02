@@ -28,12 +28,63 @@ pub(crate) fn of_type(root: &Path, ty: &VehicleType, scheme: Option<usize>, hof:
 /// those are taken as they are instead of being read from the disk again - an articulated
 /// bus's trailer was loaded a second time for its list.
 pub(crate) fn of_parts(root: &Path, ty: &VehicleType, parts: &[&VehicleType], scheme: Option<usize>, hof: Option<&Path>) -> Vec<PathBuf> {
+    let _listing = Listing::start();
     let mut out = BTreeSet::new();
     add_type(root, ty, parts, scheme, &mut out, 0, false);
     if let Some(h) = hof {
         add(&mut out, h.to_path_buf());
     }
     out.into_iter().collect()
+}
+
+type Folder = Option<Vec<(std::ffi::OsString, bool)>>;
+
+thread_local! {
+    /// The folders read during one listing (`Listing`): each texture's `variants` read its
+    /// whole folder and the season folders beside it, so a bus of ten paints read the same
+    /// big texture folders hundreds of times (a fleet check spent up to 98 s on one bus).
+    static DIRS: std::cell::RefCell<Option<std::collections::HashMap<PathBuf, Folder>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Keeps the folders read until the outermost one is dropped: only within one listing, so a
+/// later listing sees the files added meanwhile.
+struct Listing(bool);
+
+impl Listing {
+    fn start() -> Listing {
+        Listing(DIRS.with(|d| {
+            let mut d = d.borrow_mut();
+            let first = d.is_none();
+            d.get_or_insert_with(Default::default);
+            first
+        }))
+    }
+}
+
+impl Drop for Listing {
+    fn drop(&mut self) {
+        if self.0 {
+            DIRS.with(|d| *d.borrow_mut() = None);
+        }
+    }
+}
+
+/// `vfs::list_dir`, read once per folder within a `Listing`.
+fn list_dir(dir: &Path) -> Folder {
+    let kept = DIRS.with(|d| d.borrow().as_ref().map(|m| m.get(dir).cloned()));
+    match kept {
+        Some(Some(hit)) => hit,
+        Some(None) => {
+            let read = omsi_cfg::vfs::list_dir(dir);
+            DIRS.with(|d| {
+                if let Some(m) = d.borrow_mut().as_mut() {
+                    m.insert(dir.to_path_buf(), read.clone());
+                }
+            });
+            read
+        }
+        None => omsi_cfg::vfs::list_dir(dir),
+    }
 }
 
 fn add(out: &mut BTreeSet<PathBuf>, p: PathBuf) {
@@ -47,6 +98,7 @@ fn add(out: &mut BTreeSet<PathBuf>, p: PathBuf) {
 /// is gathered once, and for each other paint only its textures. The server's fleet check
 /// went through all of a bus once per paint: 40 to 90 s for a bus of ten.
 pub(crate) fn of_type_paints(root: &Path, ty: &VehicleType, schemes: &[Option<usize>]) -> Vec<PathBuf> {
+    let _listing = Listing::start();
     let mut out = BTreeSet::new();
     for (i, scheme) in schemes.iter().enumerate() {
         add_type(root, ty, &[], *scheme, &mut out, 0, i > 0);
@@ -122,7 +174,7 @@ fn add_sounds(cfg: &Path, out: &mut BTreeSet<PathBuf>) {
     }
     folders.insert(dir.to_path_buf());
     for f in folders {
-        for (name, is_dir) in omsi_cfg::vfs::list_dir(&f).unwrap_or_default() {
+        for (name, is_dir) in list_dir(&f).unwrap_or_default() {
             let n = name.to_string_lossy().to_ascii_lowercase();
             if !is_dir && (n.ends_with(".wav") || n.ends_with(".ogg")) {
                 add(out, f.join(&name));
@@ -140,7 +192,7 @@ fn add_textures(root: &Path, ty: &VehicleType, scheme: Option<usize>, out: &mut 
             let (m, d) = ty.scheme_substitutions(i, omsi_texture::find_texture);
             if let Some(d) = d {
                 // the scheme's own description (`.cti`): which of them it is
-                for (name, is_dir) in omsi_cfg::vfs::list_dir(&d).unwrap_or_default() {
+                for (name, is_dir) in list_dir(&d).unwrap_or_default() {
                     if !is_dir && name.to_string_lossy().to_ascii_lowercase().ends_with(".cti") {
                         add(out, d.join(&name));
                     }
@@ -218,14 +270,14 @@ pub(crate) fn variants(found: &Path) -> Vec<PathBuf> {
     let (Some(dir), Some(stem)) = (found.parent(), found.file_stem()) else { return vec![found.to_path_buf()] };
     let stem = stem.to_string_lossy().to_ascii_lowercase();
     let mut folders = vec![dir.to_path_buf()];
-    for (name, is_dir) in omsi_cfg::vfs::list_dir(dir).unwrap_or_default() {
+    for (name, is_dir) in list_dir(dir).unwrap_or_default() {
         if is_dir && SEASONS.contains(&name.to_string_lossy().to_ascii_lowercase().as_str()) {
             folders.push(dir.join(&name));
         }
     }
     let mut out = vec![found.to_path_buf()];
     for f in folders {
-        for (name, is_dir) in omsi_cfg::vfs::list_dir(&f).unwrap_or_default() {
+        for (name, is_dir) in list_dir(&f).unwrap_or_default() {
             let n = name.to_string_lossy().to_ascii_lowercase();
             let goes = n.strip_prefix(&stem).and_then(|rest| rest.chars().next()).is_some_and(|c| matches!(c, '.' | '_' | '-'));
             if !is_dir && goes {
@@ -258,7 +310,7 @@ pub(crate) fn add_fonts<'a>(root: &Path, fonts: impl Iterator<Item = &'a str>, o
     let mut found: Vec<(PathBuf, String, Vec<PathBuf>)> = Vec::new();
     for dir in &dirs {
         let dir = dir.clone();
-        let list = omsi_cfg::vfs::list_dir(&dir);
+        let list = list_dir(&dir);
         let (mut ofts, mut unread) = (0, 0);
         for (name, is_dir) in list.clone().unwrap_or_default() {
             if is_dir || !name.to_string_lossy().to_ascii_lowercase().ends_with(".oft") {
@@ -266,7 +318,7 @@ pub(crate) fn add_fonts<'a>(root: &Path, fonts: impl Iterator<Item = &'a str>, o
             }
             ofts += 1;
             let path = dir.join(&name);
-            let Ok(text) = omsi_cfg::vfs::read_text(&path) else {
+            let Some(text) = oft_text(&path) else {
                 unread += 1;
                 continue;
             };
@@ -293,6 +345,25 @@ pub(crate) fn add_fonts<'a>(root: &Path, fonts: impl Iterator<Item = &'a str>, o
     if out.len() == before {
         log::warn!("bus files: no font of {wanted:?} in {seen:?}: its signs stay blank for the other players");
     }
+}
+
+/// The text of an `.oft`, read once per process while it stays the same file (its size and
+/// time): every bus of a fleet check read every `.oft` of every Fonts folder again.
+fn oft_text(path: &Path) -> Option<String> {
+    type Texts = std::collections::HashMap<PathBuf, (u64, Option<std::time::SystemTime>, String)>;
+    static TEXTS: std::sync::Mutex<Option<Texts>> = std::sync::Mutex::new(None);
+    let Ok(meta) = std::fs::metadata(path) else { return omsi_cfg::vfs::read_text(path).ok() };
+    let stamp = (meta.len(), meta.modified().ok());
+    let mut texts = TEXTS.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((len, time, text)) = texts.get_or_insert_with(Default::default).get(path) {
+        if (*len, *time) == stamp {
+            return Some(text.clone());
+        }
+    }
+    drop(texts);
+    let text = omsi_cfg::vfs::read_text(path).ok()?;
+    TEXTS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(Default::default).insert(path.to_path_buf(), (stamp.0, stamp.1, text.clone()));
+    Some(text)
 }
 
 /// `found` without the copies of a file beside it: an `.oft` with the very text of another in
@@ -334,6 +405,30 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    #[test]
+    fn a_folder_is_read_once_within_a_listing_and_afresh_after_it() {
+        let d = temp("listing");
+        std::fs::write(d.join("a.dds"), "a").unwrap();
+        let names = |l: Folder| l.unwrap_or_default().len();
+        {
+            let _outer = Listing::start();
+            assert_eq!(names(list_dir(&d)), 1);
+            std::fs::write(d.join("b.dds"), "b").unwrap();
+            {
+                let _inner = Listing::start();
+                assert_eq!(names(list_dir(&d)), 1, "a listing within one keeps what it read");
+            }
+            assert_eq!(names(list_dir(&d)), 1, "the inner one's end does not end the outer");
+        }
+        assert_eq!(names(list_dir(&d)), 2, "after the listing the folder is read again");
+        let oft = d.join("f.oft");
+        std::fs::write(&oft, "[newfont]\nA\n").unwrap();
+        assert_eq!(oft_text(&oft).as_deref(), Some("[newfont]\nA\n"));
+        std::fs::write(&oft, "[newfont]\nBB\n").unwrap();
+        assert_eq!(oft_text(&oft).as_deref(), Some("[newfont]\nBB\n"), "a changed file is read again");
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]
