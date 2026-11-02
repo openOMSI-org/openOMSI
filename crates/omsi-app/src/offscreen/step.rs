@@ -49,6 +49,7 @@ impl Offscreen<'_> {
             ref mut lan_off,
             ref remotes_off,
             ref mut traffic,
+            ref mut schedule,
             ref world,
             ref renderer,
             ref mut scene,
@@ -59,6 +60,7 @@ impl Offscreen<'_> {
             ..
         } = *self;
         *srv_clock += dt as f64 * lan_off.as_ref().map(|l| l.clock_speed).unwrap_or(1.0);
+        let shift_before = srv_admin.shift;
         // a server on the real time (server.cfg): its clock reads this machine's
         if i.is_multiple_of(super::steps_in(1.0)) && crate::real_time::server_real() {
             if let Some(n) = crate::real_time::now() {
@@ -134,6 +136,15 @@ impl Offscreen<'_> {
                     let out = omsi_lan::admin::world::apply(&mut w, &job.action);
                     omsi_lan::admin::report(w.lan, hub, &job.actor, job.record, &out);
                 }
+            }
+        }
+        let jump = srv_admin.shift - shift_before;
+        if let (Some(t), true) = (traffic.as_mut(), jump != 0.0) {
+            t.day_time += jump;
+            if let (Some(s), true) = (schedule.as_mut(), jump.abs() >= 120.0) {
+                log::info!("server: clock moved {:+.0} min, the timetable buses put out again", jump / 60.0);
+                s.restart(t, t.day_time);
+                view_sync::apply_traffic(t, &mut sim_view.traffic, world, renderer, scene);
             }
         }
         if quit::requested().is_some() {
