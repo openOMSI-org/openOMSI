@@ -408,6 +408,28 @@ fn a_car_passes_on_the_oncoming_lane_of_its_own_carriageway_only() {
     assert!(car(&t, me).unwrap().passing.is_none());
 }
 
+/// `stop_for_parked` off (`ai_stop_for_parked = 0`): where it cannot go round the parked
+/// car standing in its lane, the car drives on instead of waiting behind it for good.
+#[test]
+fn with_parked_cars_ignored_the_car_does_not_freeze_behind_one() {
+    let f = Fixture::new();
+    // (the other carriageway of a divided road: no way round, it waits)
+    let (mut t, me) = parked_scene(&f, two_way(5.5, None));
+    assert!(!passes_parked(&mut t, me, 30.0));
+    let (mut t, me) = parked_scene(&f, two_way(5.5, None));
+    t.stop_for_parked = false;
+    let mut past = false;
+    for _ in 0..(30.0 / DT) as usize {
+        t.tick(DT, None);
+        let Some(c) = car(&t, me) else { past = true; break };
+        if c.state.lane == 0 && c.state.s > 110.0 {
+            past = true;
+            break;
+        }
+    }
+    assert!(past, "it still waits behind the parked car");
+}
+
 #[test]
 fn an_island_beginning_after_the_pull_out_forbids_the_pass() {
     // the oncoming lane runs beside at 3.5 m where the car stands, but an island takes it

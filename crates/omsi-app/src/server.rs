@@ -196,6 +196,10 @@ pub(crate) fn prepare(args: &mut Args, path: &Path) -> Result<ServerCfg> {
     let _ = SERVER_METAR.set(station);
     args.traffic = cfg.traffic;
     args.schedule = cfg.timetable;
+    args.ai_ignore_parked = !cfg.ai_stop_for_parked;
+    if !cfg.ai_stop_for_parked {
+        log::info!("server: ai_stop_for_parked = 0: the AI drives on past a parked car standing in its lane");
+    }
     args.passengers = cfg.passengers;
     let _ = SERVER_PASSENGERS.set((cfg.passengers, cfg.passenger_density));
     args.lan_host = Some(cfg.port);

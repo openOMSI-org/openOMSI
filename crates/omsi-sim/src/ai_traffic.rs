@@ -98,6 +98,10 @@ pub struct TrafficSim {
     /// not loaded yet (a road spline often starts in the next tile). Most stand in car parks
     /// and stay here.
     pub parked_waiting: Vec<DVec3>,
+    /// A car stops behind a parked car standing in the middle of its lane (the default).
+    /// Off (`--ai-ignore-parked`, `server.cfg`'s `ai_stop_for_parked = 0`), it drives on:
+    /// on some maps a parked car stands in the lane and the traffic behind it waited for good.
+    pub stop_for_parked: bool,
     /// Tiles whose lanes the network has (lanes stay once they are in).
     pub lane_tiles: hashbrown::HashSet<(i32, i32)>,
     /// Counts the times tiles brought their lanes: whoever resolved something against the

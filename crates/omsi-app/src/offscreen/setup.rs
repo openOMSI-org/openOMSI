@@ -317,6 +317,7 @@ fn new_traffic(
     let mut t = traffic::Traffic::new(&args.root, world, args.traffic)?;
     t.lights_only = !(args.traffic > 0 || args.schedule || crate::rail_drive::args_rail(args) || args.lan_join.is_some());
     t.no_timetable_buses = args.no_timetable_buses;
+    t.stop_for_parked = !args.ai_ignore_parked;
     if let Some(seed) = lan_seed {
         t.set_lan_seed(seed);
     }
