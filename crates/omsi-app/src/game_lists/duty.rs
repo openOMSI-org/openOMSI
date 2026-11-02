@@ -10,13 +10,14 @@ pub(crate) fn tour_start(tour: &omsi_timetable::Tour) -> Option<f64> {
 /// Whether a tour is listed now: it runs on this day and is current at `now` (seconds of the
 /// day) - under way, or leaving within half an hour; one that has finished is not.
 pub(super) fn tour_listed(sch: &crate::schedule::Schedule, line: &str, tour: &omsi_timetable::Tour, now: f64) -> bool {
-    if !sch.tour_available(tour) {
-        return false;
-    }
     let start = tour_start(tour).unwrap_or(0.0);
     let end = sch.tour_stops(line, &tour.number).iter().map(|s| s.3).fold(start, f64::max);
-    // (a night tour's times go on past 24:00: the early hours of the next day count too)
-    [now, now + 86400.0].iter().any(|n| *n >= start - 1800.0 && *n <= end + 60.0)
+    listed_at(start, end, now, sch.tour_today(tour), sch.tour_from_yesterday(tour))
+}
+
+fn listed_at(start: f64, end: f64, now: f64, today: bool, from_yesterday: bool) -> bool {
+    let current = |n: f64| n >= start - 1800.0 && n <= end + 60.0;
+    (today && current(now)) || (from_yesterday && current(now + 86400.0))
 }
 
 /// The line number a line's trips carry (`.ttp` line), else the name of the line's file.
@@ -271,5 +272,19 @@ pub(super) fn start_duty(app: &mut App, line: &str, tour: &str) {
             app.service_msg = Some((format!("Line {line}, tour {}", tour.trim()), 4.0));
         }
         Err(e) => app.service_msg = Some((omsi_ui::i18n::tr_fill_words("No duty ({e})", &[("{e}", &e)]), 8.0)),
+    }
+}
+
+#[cfg(test)]
+mod listed_tests {
+    use super::listed_at;
+
+    #[test]
+    fn yesterdays_night_tour_is_listed_only_for_its_trips_past_midnight() {
+        let (start, end) = (5.0 * 3600.0, 25.5 * 3600.0);
+        assert!(listed_at(start, end, 12.0 * 3600.0, true, false), "on its own day");
+        assert!(!listed_at(start, end, 12.0 * 3600.0, false, true), "a Friday tour at Saturday noon");
+        assert!(listed_at(start, end, 0.5 * 3600.0, false, true), "its trip after midnight, on Saturday at 00:30");
+        assert!(!listed_at(start, end, 2.0 * 3600.0, false, true), "after its last trip");
     }
 }
