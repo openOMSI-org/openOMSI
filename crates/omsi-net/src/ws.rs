@@ -26,6 +26,8 @@ pub use session::query_session;
 mod urls;
 #[path = "ws/bridge_close.rs"]
 mod bridge_close;
+#[cfg(test)]
+mod rebind_tests;
 pub use urls::{http_base, web_bases, ws_url};
 
 use std::io::{ErrorKind, Read, Write};
