@@ -58,6 +58,14 @@ const WEAK: &[&str] = &["antrieb", "gear", "shift", "schalt", "getriebe", "trans
 const NOT: &[&str] = &["light", "lamp", "display", "indic", "sound", "retard", "park", "door", "wiper", "wisch", "blink", "drehschalt", "kippschalt", "text", "warn", "oil", "temp", "rpm", "tacho", "taster", "button", "btn"];
 const BY_FILE: &[&str] = &["antrieb", "transmission", "кпп"];
 
+fn lever_file(path: &std::path::Path, forced: Option<&str>) -> bool {
+    let file = path.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+    match forced {
+        Some(f) => file.contains(f),
+        None => STRONG.iter().chain(BY_FILE).any(|w| file.contains(w)),
+    }
+}
+
 fn grade(name: &str, forced: Option<&str>) -> u8 {
     let n = name.to_lowercase();
     if let Some(f) = forced {
@@ -124,12 +132,7 @@ pub(super) fn find_shifter(v: &impl DriverCar, hip: Vec3, heading: f32) -> Optio
         }
         if grade_of_mesh == 0 {
             // No variable says so: the mesh's own file name may.
-            let file = vm.file.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
-            let by_file = match &forced {
-                Some(f) => file.contains(f.as_str()),
-                None => STRONG.iter().chain(BY_FILE).any(|w| file.contains(w)),
-            };
-            if !by_file {
+            if !lever_file(&vm.file, forced.as_deref()) {
                 continue;
             }
             grade_of_mesh = 1;
@@ -259,7 +262,8 @@ pub(super) fn find_wheel(v: &impl DriverCar, hip: Vec3) -> Option<Wheel> {
 
 #[cfg(test)]
 mod grade_tests {
-    use super::grade;
+    use super::{grade, lever_file};
+    use std::path::Path;
 
     #[test]
     fn a_gear_lever_is_told_from_the_switches_beside_it() {
@@ -269,5 +273,9 @@ mod grade_tests {
         assert_eq!(grade("transmission_lever", None), 1);
         assert_eq!(grade("Schalthebel_x", None), 2);
         assert_eq!(grade("my_lever", Some("my_lever")), 3);
+        assert!(lever_file(Path::new("model/рычаг_КПП.o3d"), None));
+        assert!(lever_file(Path::new("model/Transmission_lever.o3d"), None));
+        assert!(!lever_file(Path::new("Vehicles/Bus_КПП/model/wiper.o3d"), None));
+        assert!(lever_file(Path::new("model/x_hebel.o3d"), Some("x_hebel")));
     }
 }
