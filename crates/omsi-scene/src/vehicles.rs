@@ -19,7 +19,9 @@ impl World {
         self.mirror_aspect.lock().clear();
         self.mirror_glass.lock().clear();
         let set = self.upload_vehicle(renderer, scene, vt, scheme, true);
+        self.player_textures.lock().clear();
         let mut render = self.instantiate_vehicle(renderer, scene, vt, &set, None, None, false);
+        self.protect_player_textures(&set, &mut render);
         own_skinned_meshes(renderer, scene, vt, &mut render);
         render
     }
@@ -43,6 +45,7 @@ impl World {
             None
         };
         let mut render = self.instantiate_vehicle(renderer, scene, vt, &set, None, shared, false);
+        self.protect_player_textures(&set, &mut render);
         own_skinned_meshes(renderer, scene, vt, &mut render);
         render
     }
@@ -1283,6 +1286,7 @@ impl World {
         dirs: &[PathBuf],
     ) -> FreeTex {
         FreeTex {
+            player_textures: None,
             remote: None,
             remote_key: String::new(),
             image: None,

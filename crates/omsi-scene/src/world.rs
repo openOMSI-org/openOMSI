@@ -39,6 +39,7 @@ pub struct World {
     /// its whole texture set twenty times (200 ms a spawn, 1.5 fps on Spandau).
     /// (With the number of sets holding each.)
     pub(super) vehicle_textures: Arc<Mutex<HashMap<PathBuf, (TextureId, usize)>>>,
+    pub(super) player_textures: Arc<Mutex<hashbrown::HashSet<PathBuf>>>,
     pub(super) freetex_reloads: Arc<FreeTextureReloads>,
     /// GPU meshes of vehicles by (bus file, mesh index), shared across paint schemes.
     pub(super) vehicle_meshes: Arc<Mutex<HashMap<(PathBuf, usize), (MeshId, usize)>>>,

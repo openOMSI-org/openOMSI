@@ -368,3 +368,36 @@ fn a_retry_due_before_the_last_look_lets_the_budget_rest() {
     world.update_texture_budget(&renderer, &mut scene, &moved, false);
     assert_eq!(world.budget_checked.lock().centers, moved.to_vec());
 }
+
+#[test]
+fn player_textures_keep_full_detail_while_ai_keeps_1024_floor() {
+    let (_fixture, world) = Fixture::world();
+    let renderer = renderer();
+    let mut scene = renderer.new_scene();
+    let picture = data(2048);
+    let player = renderer.add_texture_data(&mut scene, &picture);
+    let ai = renderer.add_texture_data(&mut scene, &picture);
+    let path = world.root.join("player.png");
+    world
+        .vehicle_textures
+        .lock()
+        .insert(path.clone(), (player, 2));
+    world
+        .vehicle_textures
+        .lock()
+        .insert(world.root.join("ai.png"), (ai, 1));
+    world.player_textures.lock().insert(path.clone());
+    world.set_texture_budget(1);
+    for _ in 0..3 {
+        world.update_texture_budget(&renderer, &mut scene, &[DVec3::ZERO], true);
+    }
+    assert_eq!(scene.texture_size_of(player), Some((2048, 2048)));
+    assert_eq!(scene.texture_size_of(ai), Some((1024, 1024)));
+    assert!(renderer.drop_top_levels(&mut scene, player, 1));
+    world
+        .upgrades_done
+        .lock()
+        .push((path, Arc::new(picture), None));
+    world.apply_texture_upgrades(&renderer, &mut scene, None);
+    assert_eq!(scene.texture_size_of(player), Some((2048, 2048)));
+}

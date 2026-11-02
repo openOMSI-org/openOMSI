@@ -244,6 +244,9 @@ pub(crate) fn sync_materials(
                         log::warn!("vehicle [matl_freetex] '{}' = {:?}: texture not found", f.var, current);
                     }
                     resolved.and_then(|path| {
+                        if let Some(player) = &f.player_textures {
+                            player.lock().insert(path.clone());
+                        }
                         let mut shared = f.shared.lock();
                         // (a picture a display generator rewrites is reloaded in place,
                         // under the same id, see `FreeTextureReloads`)

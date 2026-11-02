@@ -837,7 +837,12 @@ impl World {
                 texture_restore_room(self.texture_budget_bytes(), usage, video_limit, card)
             };
             let before = scene.texture_bytes_of(id);
-            let Some(upload) = fit_upgrade(&data, before.saturating_add(room)) else { continue };
+            let upload = if vid.is_some() {
+                data.clone()
+            } else {
+                let Some(upload) = fit_upgrade(&data, before.saturating_add(room)) else { continue };
+                upload
+            };
             let replaced = renderer.replace_texture(scene, id, &upload);
             usage = (usage + scene.texture_bytes_of(id)).saturating_sub(before);
             if self.freetex_reloads.snapshot(id).is_some() {
@@ -942,6 +947,7 @@ impl World {
             }
         }
         let t0 = std::time::Instant::now();
+        let player = self.player_textures.lock();
         let vehicle_bytes: u64 = self
             .vehicle_textures
             .lock()
@@ -1098,8 +1104,9 @@ impl World {
                 let mut own: Vec<(TextureId, u64)> = self
                     .vehicle_textures
                     .lock()
-                    .values()
-                    .map(|(t, _)| (*t, scene.texture_bytes_of(*t)))
+                    .iter()
+                    .filter(|(p, _)| !player.contains(*p))
+                    .map(|(_, (t, _))| (*t, scene.texture_bytes_of(*t)))
                     .collect();
                 own.sort_by(|a, b| b.1.cmp(&a.1));
                 for (id, before) in own {
@@ -1124,7 +1131,9 @@ impl World {
                 let mut emergency: Vec<(TextureId, Option<PathBuf>)> = entries.iter()
                     .filter_map(|(_, p)| gpu.textures.get(p).map(|e| (e.id, Some(p.clone()))))
                     .collect();
-                emergency.extend(self.vehicle_textures.lock().values().map(|(id, _)| (*id, None)));
+                emergency.extend(self.vehicle_textures.lock().iter()
+                    .filter(|(p, _)| !player.contains(*p))
+                    .map(|(_, (id, _))| (*id, None)));
                 for (id, path) in emergency {
                     if over == 0 || shrunk.len() >= 96 {
                         break;

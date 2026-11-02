@@ -224,15 +224,7 @@ impl Renderer {
         log::error!("ray tracing failed on {}; Enhanced+ draws as Enhanced from now on", self.adapter_name);
         let options = RenderOptions { ray_tracing: false, ..self.options };
         RT_BUFFERS.store(false, std::sync::atomic::Ordering::Relaxed);
-        // (the meshes' shared pages stay on, as after the multisampling fallback below)
-        let mesh_pages = self.mesh_pages;
-        *self = Renderer { mesh_pages, ..self.rebuilt(options) };
-        scene.dirty = true;
-        scene.model_buf = None;
-        scene.params_buf = None;
-        scene.camera_bind_group = None;
-        scene.shadow_bind_group = None;
-        scene.precip_bind_group = None;
+        self.rebuild_in_place(scene, options);
     }
 
     /// Rebuild the pipelines and targets without multisampling after a GPU error with it.

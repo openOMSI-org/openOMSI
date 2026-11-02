@@ -228,6 +228,7 @@ impl FreeBuilt {
 
 #[derive(Clone)]
 pub struct FreeTex {
+    pub player_textures: Option<Arc<Mutex<hashbrown::HashSet<PathBuf>>>>,
     /// Remote pixels override local path lookup, even before the first image arrives.
     pub remote: Option<Option<TextureId>>,
     pub remote_key: String,
@@ -815,5 +816,14 @@ impl VehicleRender {
         let set = lamp_set(lamps, n);
         let blocks = self.interior_blocks.get()?;
         blocks.iter().find(|b| b.1 == set).map(|b| (b.0, set.len() as u32))
+    }
+}
+
+impl World {
+    pub(super) fn protect_player_textures(&self, set: &VehicleSet, render: &mut VehicleRender) {
+        self.player_textures.lock().extend(set.textures.iter().cloned());
+        for f in render.variants.iter_mut().flat_map(|v| &mut v.free) {
+            f.player_textures = Some(self.player_textures.clone());
+        }
     }
 }
