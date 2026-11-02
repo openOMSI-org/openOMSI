@@ -43162,19 +43162,6 @@ _version: 2
   hi: "माउस से स्टीयरिंग करते समय कर्सर रोकें (बंद: सिस्टम का क्रॉसहेयर विंडो के अंदर रहता है, जिसके किनारे सीमा हैं)"
   ka: "კურსორის დაჭერა, როცა მაუსი მართავს (გამორთული: სისტემის ჯვარედინი კურსორი ფანჯარაში რჩება, რომლის კიდეები ზღვარია)"
 
-"Hold the cursor while the mouse steers (off: the crosshair stays free, the window's edges are the lock)":
-  es: "Retener el cursor al dirigir con el ratón (desactivado: la cruceta queda libre y los bordes de la ventana limitan el giro)"
-  zh-tw: "滑鼠轉向時鎖定游標（關閉時準星可自由移動，視窗邊緣為轉向極限）"
-  de: "Cursor beim Lenken mit der Maus festhalten (aus: das Fadenkreuz bleibt frei, die Fensterränder sind der Anschlag)"
-  ru: "Удерживать курсор при рулении мышью (выкл.: перекрестие свободно, края окна служат упором)"
-  sv: "Håll markören medan musen styr (av: hårkorset är fritt, fönstrets kanter är ändlägena)"
-  pt: "Prender o cursor enquanto o mouse esterça (desligado: a mira fica livre e as bordas da janela são o batente)"
-  ca: "Retén el cursor mentre dirigeixes amb el ratolí (desactivat: la creu queda lliure i els límits de la finestra fan de topall)"
-  fr: "Retenir le curseur pendant la direction à la souris (désactivé : le viseur reste libre, les bords de la fenêtre font la butée)"
-  sr: "Držite kursor dok miš upravlja (isključeno: krstić ostaje slobodan, ivice prozora su brava)"
-  pt-pt: "Prender o cursor enquanto o rato controla a direção (desativado: a mira fica livre, as bordas da janela são o batente)"
-  ka: "კურსორის დაკავება მაუსით მართვისას (გამორთული: სამიზნე თავისუფალია, ფანჯრის კიდეები ზღვარია)"
-
 "Stick steering speed":
   de: "Lenkgeschwindigkeit des Sticks"
   ru: "Скорость руления стиком"
@@ -54651,18 +54638,6 @@ _version: 2
   pt: "Prender o cursor ao dirigir"
   pt-pt: "Prender o cursor ao conduzir"
   ka: "კურსორის დაკავება მართვისას"
-
-"The wheel reaches its lock past the window's edges; off: the crosshair stays free and without delay, as in OMSI":
-  fr: "Le volant atteint la butée au-delà des bords de la fenêtre ; désactivé : le viseur reste libre et sans délai, comme dans OMSI"
-  es: "El volante alcanza su tope más allá de los bordes de la ventana; desactivado: la cruceta queda libre y sin retardo, como en OMSI"
-  zh-tw: "超出視窗邊緣時方向盤達到轉向極限；關閉時準星可自由移動且沒有延遲，如同 OMSI"
-  ca: "El volant arriba al límit més enllà de les vores de la finestra; desactivat: la creu queda lliure i sense retard, com a OMSI"
-  sr: "Točak doseže svoju bravu preko ivica prozora; isključeno: nišanac ostaje slobodan i bez odlaganja, kao u OMSI-ju"
-  ru: "Руль достигает упора за краями окна; выкл.: прицел остаётся свободным и без задержки, как в OMSI"
-  de: "Das Lenkrad erreicht den Anschlag jenseits der Fensterränder; aus: das Fadenkreuz bleibt frei und ohne Verzögerung, wie in OMSI"
-  pt: "O volante chega ao batente além das bordas da janela; desligado: a mira fica livre e sem atraso, como no OMSI"
-  pt-pt: "O volante chega ao batente para lá das bordas da janela; desativado: a mira fica livre e sem atraso, como no OMSI"
-  ka: "საჭე ზღვარს ფანჯრის კიდეების მიღმა აღწევს; გამორთული: სამიზნე თავისუფალია და დაყოვნების გარეშე, როგორც OMSI-ში"
 
 "Steering and view":
   fr: "Direction et vue"
