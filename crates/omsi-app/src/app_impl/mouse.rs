@@ -475,7 +475,9 @@ impl App {
                 let alt = self.input.keys.contains(&KeyCode::AltLeft) || self.input.keys.contains(&KeyCode::AltRight);
                 if pressed && alt && !ctrl {
                     if let Some(at) = n.map_point(x, y) {
-                        n.toggle_map();
+                        if !self.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
+                            n.toggle_map();
+                        }
                         self.walk_to(at);
                     }
                 } else if pressed && ctrl {

@@ -139,6 +139,10 @@ impl App {
             self.service_msg = Some((omsi_ui::tr("No ground to stand on there").into_owned(), 3.0));
             return;
         };
+        if self.session.on_foot.is_none() && self.player.is_none() {
+            self.service_msg = Some((omsi_ui::tr("There is no bus of your own to get up from").into_owned(), 3.0));
+            return;
+        }
         if self.session.on_foot.is_none() {
             self.get_up();
         }
