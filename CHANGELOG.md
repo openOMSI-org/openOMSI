@@ -8,6 +8,40 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **Place the bus facing the way you want**: on the city map, Ctrl+drag from the place towards
+  the way the bus should face (a plain Ctrl+click keeps the nearest street's direction); in the
+  map camera (F4), Ctrl+click puts the bus on the street facing the way the camera looks, as in
+  OMSI 2.
+- **Go anywhere on foot from the city map**: Alt+click a place on the city map and you stand
+  there on foot; from the driver's seat you get up first, and the bus stays where it is.
+- **The radio from the Alt menu**: a Radio tile opens a small panel with what plays, the volume,
+  on and off, the station before and after, quieter and louder - for buses whose radio has no
+  volume knob or no switch of its own.
+- **Seat, view and mirrors from the Alt menu**: the quick menu has a tile that opens the panel
+  for the driver's eye, view and mirrors of the bus, without going through the options.
+- **Cleaner photos**: the photo mode hides the route arrows by itself (they come back when you
+  leave it) and its panel has a Hide (H) button at the top.
+- **More traffic for strong computers**: the game's Traffic slider (World options) and the launcher's
+  *Cars around* go on past 120 to 160, 220 and 300 vehicles, for busy maps and rush hours; more
+  cars cost frames and can jam junctions, so 120 stays the top of the usual range. Dedicated
+  servers keep their limit of 120.
+- **Your depot buses in the game**: the game menu's *Place a vehicle* lists the buses of your depot
+  first (*My depot: name | plate*). One taken replaces the bus driven, with its livery, fleet
+  number, plate, odometer and wear; the session is written back to it when it ends, and the time
+  spent in the bus driven before goes to that one (when it was a depot bus too).
+- **Choose which notes show**: under *Notes in the top-left corner* (launcher, game options, Apple
+  app) four switches turn off one kind each - why the bus does not move, the bus's own messages
+  (the announcements among them), the end of a trip, tickets and change - while the rest stay.
+- **Only the buses on the map, if you like**: under "AI vehicles on the map", *Cars on the map too*
+  (`nav_ai_cars`, launcher and game options) can be switched off: the navigator and the city map
+  then show the traffic's buses and trolleybuses, not the cars.
+- **Getting up has a key of its own**: *Get up from the seat (on foot)* is in the Controls'
+  list (keyboard and controllers), on Ctrl+Shift+G as before; it can be moved to another key or a
+  controller button, and the old built-in Ctrl+Shift+G gives way to it.
+- **A flash of the high beam waves the traffic on**: flash the headlights (high beam on for under
+  a second and a half) and for six seconds the cars that were waiting for your bus - at a junction,
+  or holding back for where the bus is about to go - take their turn first. They still stop for
+  the bus itself.
 - **Long lists in the launcher filter as you type**: a drop-down with more than twelve entries
   (the liveries, the depot files, the languages...) shows a search line at its top; typing
   narrows it down, Backspace and Esc undo the search.
@@ -35,6 +69,11 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 - **Wet roads and water mirror the street** (Enhanced): the sheen of a wet road and still water
   trace what stands round them in screen space at their Fresnel share, not only the pools - the
   lit windows and lamps of a street stream down a wet road at night.
+- **A clean screen (Alt+U)**: the navigator, the virtual mirrors, the notes and the panels go away
+  while you drive, for a free view of the road or a quick picture; Alt+U again brings them back.
+  The menu, the city map and a plugin's permission question still show over it. It is in the
+  Controls' list as *Hide / show the whole interface*, so it can be moved to another key or a
+  controller button (`clean_screen` in keyboard.cfg's `[game]`).
 - **A flashlight (Alt+F)**: a hand lamp held beside the eye that shines where the view looks, a
   warm white cone reaching 50 m with a soft edge, in the Vanilla and the Enhanced pictures, in
   every view, by night in the dark or by day inside a dim cab. `flashlight` in keyboard.cfg's

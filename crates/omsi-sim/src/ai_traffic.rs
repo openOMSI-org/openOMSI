@@ -34,6 +34,7 @@ pub mod setup;
 pub mod stats;
 pub mod tick;
 pub mod viewer;
+pub mod waving;
 #[cfg(test)]
 mod body_tests;
 #[cfg(test)]
@@ -254,6 +255,8 @@ pub struct TrafficSim {
     pub player_signal_age: f32,
     /// ... and for how long it has been indicating so (s).
     pub player_signalling: f32,
+    pub player_beam_on: f32,
+    pub player_waved: f32,
     /// The player's vehicle and the LAN players' as the junctions see them (`way_user_on`),
     /// as of this tick.
     pub way_users: Vec<WayUser>,

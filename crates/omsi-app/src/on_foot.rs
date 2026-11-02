@@ -1,4 +1,4 @@
-//! Getting up from the driver's seat (the `get_up` setting, Ctrl+Shift+G) and walking about
+//! Getting up from the driver's seat (the `get_up` setting) and walking about
 //! as the passengers do: W A S D walk (relative to where the camera looks), Shift runs,
 //! Space jumps, C kneels (and stands up again), the right mouse button looks round; the view
 //! is out of the walker's eyes
@@ -367,7 +367,7 @@ impl App {
         vehicle_boxes(at, r, self.player.as_ref(), &self.session.placed, self.session.traffic.as_ref(), &self.net)
     }
 
-    /// Ctrl+Shift+G at the wheel: up and out of the front door.
+    /// The get-up key (`get_up`, Ctrl+Shift+G by default) at the wheel: up and out of the front door.
     pub(crate) fn get_up(&mut self) {
         if self.session.on_foot.is_some() {
             return;
@@ -412,7 +412,7 @@ impl App {
         let face = (right * away).x.atan2((right * away).y).to_degrees();
         let kind = Self::figure_kind(self.world.as_deref(), self.session.humans.as_mut(), &self.args.root, driver_ty);
         // up beside the seat inside, facing where the driver looks, as in OMSI 2 - a second
-        // Ctrl+Shift+G steps out (`step_out`). Only a bus with no standing place by the seat
+        // press of the get-up key steps out (`step_out`). Only a bus with no standing place by the seat
         // puts the driver out of the side looked at (by a door there, else beside the cab):
         // with the camera turned, getting up pushed the driver out of the door (#1725).
         let look_yaw = self.camera.as_ref().map(|c| c.yaw as f64).unwrap_or(v.heading);
@@ -469,12 +469,16 @@ impl App {
             bus_turn: None,
         });
         self.view = "foot".into();
-        self.service_msg = Some(("On foot: W A S D walk, Shift runs, C kneels, F4 free camera / F1 back, G sits down (by the driver's place: back at the wheel), Ctrl+Shift+G steps out of the bus".into(), 7.0));
+        let help = match crate::situation::key_name(&self.args.root, &self.input.game_keys, "get_up") {
+            Some(k) => omsi_ui::i18n::tr_fill("On foot: W A S D walk, Shift runs, C kneels, F4 free camera / F1 back, G sits down (by the driver's place: back at the wheel), {key} steps out of the bus", &[("{key}", &k)]),
+            None => omsi_ui::tr("On foot: W A S D walk, Shift runs, C kneels, F4 free camera / F1 back, G sits down (by the driver's place: back at the wheel)").into_owned(),
+        };
+        self.service_msg = Some((help, 7.0));
     }
 
-    /// Ctrl+Shift+G inside a bus: out by its nearest door, open or shut (getting up now
+    /// The get-up key inside a bus: out by its nearest door, open or shut (getting up now
     /// stands the driver up inside, and a shut door kept them in).
-    fn step_out(&mut self) {
+    pub(crate) fn step_out(&mut self) {
         let Some(f) = self.session.on_foot.as_ref() else { return };
         let Some((bus, _)) = f.inside else { return };
         let (pos, yaw) = (f.pos, f.yaw as f64);
@@ -789,14 +793,9 @@ impl App {
         }
     }
 
-    /// The keys on foot (and Ctrl+Shift+G at the wheel); true when the key was taken.
+    /// The keys on foot; true when the key was taken.
     pub(crate) fn foot_key(&mut self, code: KeyCode, pressed: bool, repeat: bool, ctrl: bool, shift: bool) -> bool {
         if self.session.on_foot.is_none() {
-            // (not where the player bound Ctrl+Shift+G to something, #2478)
-            if pressed && !repeat && code == KeyCode::KeyG && ctrl && shift && self.player.is_some() && !self.chord_bound(code, shift, ctrl, false) {
-                self.get_up();
-                return true;
-            }
             return false;
         }
         match code {
@@ -843,12 +842,11 @@ impl App {
             // the free camera's keys are its own
             _ if self.session.on_foot.as_ref().map(|f| f.cam == FootCam::Free).unwrap_or(false) => false,
             KeyCode::KeyG => {
+                if get_up_chord(&self.input.game_keys, ctrl, shift) {
+                    return false;
+                }
                 if pressed && !repeat {
-                    if ctrl && shift && self.session.on_foot.as_ref().map(|f| f.inside.is_some()).unwrap_or(false) {
-                        self.step_out();
-                    } else {
-                        self.use_seat();
-                    }
+                    self.use_seat();
                 }
                 true
             }
@@ -1453,6 +1451,12 @@ impl App {
         self.sound.foot_in = now;
         now
     }
+}
+
+fn get_up_chord(game: &[omsi_content::KeyBinding], ctrl: bool, shift: bool) -> bool {
+    use omsi_content::input::{KEY_ALT, KEY_CTRL, KEY_SHIFT};
+    let want = if ctrl { KEY_CTRL } else { 0 } | if shift { KEY_SHIFT } else { 0 };
+    want != 0 && game.iter().any(|b| b.action.eq_ignore_ascii_case("get_up") && b.scan_code == 34 && b.modifier & (KEY_CTRL | KEY_SHIFT | KEY_ALT) == want)
 }
 
 #[cfg(test)]
