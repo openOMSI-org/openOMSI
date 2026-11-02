@@ -147,7 +147,7 @@ impl TrafficSim {
                 continue;
             };
             let seed = self.rand();
-            let scheme = if ty.paint_schemes.is_empty() { None } else { Some((seed >> 8) as usize % ty.paint_schemes.len().min(AI_SCHEMES)) };
+            let scheme = self.ai_scheme(&ty, seed >> 8);
             let id = self.next_id;
             self.next_id += 1;
             self.dormant.push(DormantCar { id, ty, kind: LaneKind::Street, lane, s, speed: 8.0, seed, scheme, walk: seed | 1 });

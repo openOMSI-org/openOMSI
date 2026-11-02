@@ -87,6 +87,21 @@ use viewer::*;
 /// each and a minute of stutter after loading Spandau.
 pub const AI_SCHEMES: usize = 4;
 
+fn spread_schemes(n: usize, h: u64) -> Vec<usize> {
+    let gcd = |mut a: usize, mut b: usize| {
+        while b != 0 {
+            (a, b) = (b, a % b);
+        }
+        a
+    };
+    let mut stride = 1 + ((h >> 16) % n.max(1) as u64) as usize;
+    while gcd(stride, n) != 1 {
+        stride += 1;
+    }
+    let start = (h % n.max(1) as u64) as usize;
+    (0..n.min(AI_SCHEMES)).map(|i| (start + i * stride) % n).collect()
+}
+
 pub struct TrafficSim {
     pub net: Network,
     /// Sum of the spawn weights of every street lane, updated only as tiles add lanes.
@@ -128,6 +143,8 @@ pub struct TrafficSim {
     /// (`fill_map`), with the number of lanes they were made for.
     pub(crate) lane_weight_sums: (usize, Vec<f64>),
     pub rng: u64,
+    pub scheme_salt: u64,
+    scheme_sets: std::sync::Mutex<HashMap<std::path::PathBuf, Vec<usize>>>,
     /// Target number of cars around the camera.
     pub target: usize,
     /// Made only so that the light programs run (no traffic, no timetable): nobody is put
