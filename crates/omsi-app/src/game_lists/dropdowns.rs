@@ -329,6 +329,45 @@ mod tests {
     }
 
     #[test]
+    fn selecting_custom_controls_releases_the_arrow_driving_preset() {
+        use winit::keyboard::KeyCode;
+        let args = crate::cli::Args::parse_from(["openomsi", "--drive-keys", "arrows"]);
+        let settings = crate::settings::Settings { drive_keys: "arrows".into(), ..Default::default() };
+        let mut app = crate::assemble_app(args, settings);
+        app.input.keys.insert(KeyCode::ArrowLeft);
+        assert!(crate::player::fallback_action(KeyCode::ArrowLeft, &app.args.drive_keys).is_some());
+
+        app.settings.drive_keys = "omsi".into();
+        sync_driving_keys(&mut app, "arrows");
+        assert_eq!(app.args.drive_keys, "omsi");
+        assert!(app.input.keys.is_empty());
+        for (key, scan, action) in [
+            (KeyCode::ArrowLeft, 203, "view_interiorcam_minus"),
+            (KeyCode::ArrowRight, 205, "view_interiorcam_plus"),
+        ] {
+            assert_eq!(crate::player::fallback_action(key, &app.args.drive_keys), None);
+            let binding = omsi_content::KeyBinding { action: action.into(), scan_code: scan, modifier: 0 };
+            assert!(crate::input_script::binding_is_key(&binding, key, scan, 0), "no Alt needed");
+        }
+
+        app.settings.drive_keys = "arrows".into();
+        sync_driving_keys(&mut app, "omsi");
+        assert!(crate::player::fallback_action(KeyCode::ArrowRight, &app.args.drive_keys).is_some());
+    }
+
+    #[test]
+    fn reloading_other_settings_keeps_the_command_line_driving_layout() {
+        use winit::keyboard::KeyCode;
+        let args = crate::cli::Args::parse_from(["openomsi", "--drive-keys", "arrows"]);
+        let mut app = crate::assemble_app(args, crate::settings::Settings::default());
+        app.input.keys.insert(KeyCode::ArrowRight);
+
+        sync_driving_keys(&mut app, "simple");
+        assert_eq!(app.args.drive_keys, "arrows");
+        assert!(app.input.keys.contains(&KeyCode::ArrowRight));
+    }
+
+    #[test]
     fn live_interface_theme_updates_the_navigator_map() {
         let args = crate::cli::Args::parse_from(["openomsi"]);
         let mut app = crate::assemble_app(args, crate::settings::Settings::default());
@@ -408,11 +447,27 @@ pub(crate) fn store_with(app: &mut App, change: impl FnOnce(&mut serde_json::Val
 pub(super) fn reload_settings(app: &mut App) {
     flush_settings(true);
     // (the seat is the bus's, see `bus_seats`: it is read again for the bus)
+    let previous_drive_keys = app.settings.drive_keys.clone();
     app.settings = settings_in_mode(session_mode(app));
+    sync_driving_keys(app, &previous_drive_keys);
     app.session.seat_bus.clear();
     crate::ui_language(&app.settings.language);
     crate::units::Units::from_setting(&app.settings.units).set();
     sync_live(app);
+}
+
+/// A layout picked during the drive must reach the key handlers too. Keeping the old
+/// `args.drive_keys` left plain arrows steering after selecting Custom controls; Alt
+/// happened to bypass that preset and let the interior-camera bindings through.
+fn sync_driving_keys(app: &mut App, previous: &str) {
+    if app.settings.drive_keys == previous {
+        return;
+    }
+    // The key-up must not be interpreted through a different layout: release the old
+    // vehicle actions first, then wait for a fresh press with the new layout.
+    app.release_vehicle_keys();
+    app.input.keys.clear();
+    app.args.drive_keys.clone_from(&app.settings.drive_keys);
 }
 
 pub(crate) fn session_mode(app: &App) -> &'static str {
