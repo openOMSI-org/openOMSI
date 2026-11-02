@@ -108,7 +108,7 @@ enum Keys {
         "vr_recenter": "VR: Reset view", "vr_toggle_desktop_mirror": "VR: Monitor preview", "vr_toggle_mode": "VR: Switch VR / desktop", "vr_toggle_navigator": "VR: Toggle navigator",
         "vr_position_navigator": "VR: Position navigator", "exit": "Quit", "pax_door_request": "Passenger: request entry / exit", "chat_open": "Multiplayer: write in the chat",
         "chat_toggle": "Multiplayer: show / hide the chat", "voice_radio": "Multiplayer voice: radio, whole session (hold)", "voice_nearby": "Multiplayer voice: nearby players (hold)", "sim_pause": "Pause", "open_menu": "Open / close the main menu",
-        "open_menue": "Open / close the quick menu (OMSI: Alt)", "view_zoom_in": "Zoom in", "view_zoom_out": "Zoom out",
+        "open_menue": "Open / close the quick menu (OMSI: Alt)", "view_zoom_in": "Zoom in", "view_zoom_out": "Zoom out", "view_zoom_hold": "Zoom while held",
         "view_camera_keys_toggle": "Free camera keys on/off (off: they work the bus)", "radio_power": "Radio: on / off", "radio_next": "Radio: next station",
         "radio_previous": "Radio: previous station", "radio_volume_up": "Radio: louder", "radio_volume_down": "Radio: quieter", "screenshot": "Screenshot", "photo_mode": "Photo mode",
         "quicksave": "Quicksave", "toggel_mouse_ctrl": "Toggle mouse steering", "toggel_ctrler": "Toggle game controllers",
