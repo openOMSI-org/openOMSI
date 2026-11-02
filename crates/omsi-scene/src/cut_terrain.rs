@@ -109,14 +109,20 @@ impl World {
                     })
                     .collect();
                 // A spline whose rim lies well under the saved hill (a cutting, a tunnel
-                // approach) keeps Omsi.exe's hole and soil walls; the rest are fitted.
+                // approach), or whose `.sli` gives its own `[terrainholeprofile]`, keeps
+                // Omsi.exe's hole and soil walls; the rest are fitted.
                 let mut profiles = Vec::new();
                 let mut cuttings: Vec<&Vec<Vec<DVec3>>> = Vec::new();
                 for q in &order {
                     for s in &q.splines {
-                        let Some(profile) = s.terrain_profile.as_ref() else { continue };
+                        let Some(profile) = s.terrain_profile.as_ref() else {
+                            if s.cuts_terrain {
+                                cuttings.push(&s.hole_rims);
+                            }
+                            continue;
+                        };
                         let offset = q.origin - origin;
-                        if omsi_geometry::profile_in_cutting(profile, offset, terrain, &neighbors) {
+                        if !s.ty.def.terrain_hole_profiles.is_empty() || omsi_geometry::profile_in_cutting(profile, offset, terrain, &neighbors) {
                             cuttings.push(&s.hole_rims);
                         } else {
                             profiles.push((profile, offset));
