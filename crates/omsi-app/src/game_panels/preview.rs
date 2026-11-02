@@ -73,16 +73,16 @@ fn picture(name: &str, panels: &[(Panel, Option<&str>)]) {
 }
 
 fn summary() -> crate::journey::TripSummary {
-    let row = |s: &str, p: &str, a: &str, d: &str, o: &str| [s, p, a, d, o].map(String::from);
+    let row = |s: &str, p: &str, a: &str, d: &str, st: &str, o: &str| [s, p, a, d, st, o].map(String::from);
     crate::journey::TripSummary {
         title: "Trip 3  |  137 to S+U Rathaus Spandau  |  08:20:00".into(),
         head: "Driver Test  |  Berlin-Spandau  |  MAN NL202  |  1989-05-30\nLine 137, tour 2".into(),
         rows: vec![
-            row("Hahneberg", "08:20:00", "08:20:41", "+00:00:41", "75556.6 km"),
-            row("Heerstr./Wilhelmstr.", "08:23:00", "08:24:10", "+00:01:10", "75557.9 km"),
-            row("Melanchthonplatz", "08:25:00", "08:26:02", "+00:01:02", "75558.4 km"),
-            row("Am Juliusturm", "08:28:00", "", "", ""),
-            row("S+U Rathaus Spandau", "08:32:00", "08:31:30", "-00:00:30", "75560.2 km"),
+            row("Hahneberg", "08:20:00", "08:20:41", "+00:00:41", "On time", "75556.6 km"),
+            row("Heerstr./Wilhelmstr.", "08:23:00", "08:24:10", "+00:01:10", "On time", "75557.9 km"),
+            row("Melanchthonplatz", "08:25:00", "08:29:10", "+00:04:10", "Delayed", "75558.4 km"),
+            row("Am Juliusturm", "08:28:00", "", "", "Not served", ""),
+            row("S+U Rathaus Spandau", "08:32:00", "08:31:30", "-00:00:30", "On time", "75560.2 km"),
         ],
         km: Some(3.6),
         served: (4, 5),

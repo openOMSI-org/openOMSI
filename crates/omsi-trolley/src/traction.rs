@@ -47,6 +47,7 @@ pub struct TractionOut {
     pub mech_brake: f32,
     /// Current from the line (A, negative: given back).
     pub line_amps: f32,
+    pub charge_amps: f32,
     /// Heat in the resistors (kW).
     pub heat_kw: f32,
     pub notch: f32,
@@ -270,7 +271,8 @@ impl Traction {
                         let charge_kw = 12.0f32.min((b.kwh - self.battery_kwh) * 3600.0 / i.dt.max(1e-3)) .min(12.0);
                         self.battery_kwh = (self.battery_kwh + charge_kw * i.dt / 3600.0).min(b.kwh);
                         if i.volts > 1.0 {
-                            o.line_amps += charge_kw * 1e3 / i.volts;
+                            o.charge_amps = charge_kw * 1e3 / i.volts;
+                            o.line_amps += o.charge_amps;
                         }
                     }
                     self.battery_kwh = self.battery_kwh.max(0.0);
@@ -427,6 +429,14 @@ mod tests {
         let mut n = Traction::new(&DriveKind::Async(AsyncDef::default()), None);
         i.speed = 2.0;
         assert_eq!(n.step(&i).wheel_force, 0.0);
+    }
+
+    #[test]
+    fn a_coasting_bus_charging_its_battery_draws_no_traction_current() {
+        let mut t = inverter();
+        let o = t.step(&input(8.0, 0.0));
+        assert!(o.charge_amps > 15.0, "{}", o.charge_amps);
+        assert!((o.line_amps - o.charge_amps).abs() < 1.0, "{} {}", o.line_amps, o.charge_amps);
     }
 
     #[test]
