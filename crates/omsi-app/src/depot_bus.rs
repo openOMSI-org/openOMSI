@@ -72,8 +72,20 @@ pub(crate) fn record(v: &VehicleInstance, id: &str, outing: &depot::Outing) {
 }
 
 pub(crate) fn is_this_bus(v: &VehicleInstance, bus: &str) -> bool {
+    same_file(&v.ty.def.path.to_string_lossy(), bus)
+}
+
+fn same_file(path: &str, bus: &str) -> bool {
     let norm = |s: &str| s.replace('\\', "/").to_ascii_lowercase();
-    norm(&v.ty.def.path.to_string_lossy()).ends_with(&norm(bus.trim_start_matches(['/', '\\'])))
+    norm(path).ends_with(&norm(bus.trim_start_matches(['/', '\\'])))
+}
+
+pub(crate) fn bus_of(id: &str) -> Option<String> {
+    depot::load().ok().and_then(|d| d.get(id).map(|b| b.bus.clone()))
+}
+
+pub(crate) fn drives(vehicle_path: &str, depot_bus: Option<&str>) -> bool {
+    depot_bus.is_some_and(|b| same_file(vehicle_path, b))
 }
 
 pub(crate) fn outing_since(c: &crate::career::Career, args: &crate::cli::Args, base: &depot::Outing) -> depot::Outing {
@@ -131,6 +143,13 @@ mod tests {
         let o = outing_since(&next, &args, &base);
         assert_eq!((o.metres, o.seconds, o.stops, o.tickets, o.takings, o.crashes), (6000.0, 500.0, 5, 2, 4.0, 1));
         assert_eq!(o.map, "maps/Grundorf");
+    }
+
+    #[test]
+    fn the_old_depot_bus_is_recorded_only_from_itself() {
+        assert!(drives("/omsi/Vehicles/MAN_NL202/MAN_NL202.bus", Some("Vehicles\\MAN_NL202\\MAN_NL202.bus")));
+        assert!(!drives("/omsi/Vehicles/MAN_SD200/MAN_SD80.bus", Some("Vehicles/MAN_NL202/MAN_NL202.bus")), "another bus taken meanwhile");
+        assert!(!drives("/omsi/Vehicles/MAN_NL202/MAN_NL202.bus", None), "no longer in the depot");
     }
 
     #[test]

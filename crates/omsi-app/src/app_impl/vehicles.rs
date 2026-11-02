@@ -56,7 +56,9 @@ impl App {
         let before = (self.args.number.clone(), self.args.plate.clone(), self.args.depot.clone(), self.args.bus.clone());
         let driven = self.player.as_ref().map(|p| p.uid);
         let record = match (before.2.clone(), self.player.as_ref()) {
-            (Some(old), Some(p)) => Some((old, crate::depot_bus::outing_since(&self.session.career, &self.args, &self.session.depot_base), crate::depot_bus::wear(&p.vehicle))),
+            (Some(old), Some(p)) if crate::depot_bus::drives(&p.vehicle.ty.def.path.to_string_lossy(), crate::depot_bus::bus_of(&old).as_deref()) => {
+                Some((old, crate::depot_bus::outing_since(&self.session.career, &self.args, &self.session.depot_base), crate::depot_bus::wear(&p.vehicle)))
+            }
             _ => None,
         };
         self.args.number = Some(b.number.clone()).filter(|n| !n.trim().is_empty());
