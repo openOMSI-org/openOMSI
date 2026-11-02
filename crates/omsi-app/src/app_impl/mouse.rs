@@ -475,7 +475,15 @@ impl App {
             }
             if n.map_open() {
                 let ctrl = self.input.keys.contains(&KeyCode::ControlLeft) || self.input.keys.contains(&KeyCode::ControlRight);
-                if pressed && ctrl {
+                let alt = self.input.keys.contains(&KeyCode::AltLeft) || self.input.keys.contains(&KeyCode::AltRight);
+                if pressed && alt && !ctrl {
+                    if let Some(at) = n.map_point(x, y) {
+                        if !self.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
+                            n.toggle_map();
+                        }
+                        self.walk_to(at);
+                    }
+                } else if pressed && ctrl {
                     // Ctrl+click: the bus to the street nearest that point, as OMSI's map
                     // window places vehicles
                     self.menus.map_place_from = n.map_point(x, y).map(|at| (at, [x, y]));
