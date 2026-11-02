@@ -44,7 +44,13 @@ pub(crate) fn click(app: &mut crate::App, id: &str) {
         "power" => app.sound.radio.toggle_power(app.player.as_ref().map(|p| &p.vehicle)),
         "previous" => app.sound.radio.previous_station(),
         "next" => app.sound.radio.next_station(),
-        "up" | "down" => app.sound.radio.step_volume(id == "up"),
+        "up" | "down" => {
+            app.sound.radio.step_volume(id == "up");
+            if let Some(r) = app.menus.game_panels.radio.as_mut() {
+                r.said = None;
+            }
+            return;
+        }
         "close" => {
             app.menus.game_panels.radio = None;
             return;
@@ -52,6 +58,6 @@ pub(crate) fn click(app: &mut crate::App, id: &str) {
         _ => return,
     };
     if let Some(r) = app.menus.game_panels.radio.as_mut() {
-        r.said = Some(tr(&msg).into_owned());
+        r.said = Some(msg);
     }
 }
