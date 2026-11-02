@@ -28,6 +28,8 @@ pub struct WheelState {
     pub radius: f32,
     pub driven: bool,
     pub rotation_deg: f32,
+    pub turned: f32,
+    pub turned_put: f32,
     pub rpm: f32,
     pub suspension: f32,
 }
@@ -62,7 +64,7 @@ impl VehiclePhysics {
             .axles
             .iter()
             .map(|a| {
-                let mk = |lat: f32| WheelState { long: a.long, lat, radius: (a.wheel_diameter / 2.0).max(0.1), driven: a.driven, rotation_deg: 0.0, rpm: 0.0, suspension: 0.0 };
+                let mk = |lat: f32| WheelState { long: a.long, lat, radius: (a.wheel_diameter / 2.0).max(0.1), driven: a.driven, rotation_deg: 0.0, turned: 0.0, turned_put: 0.0, rpm: 0.0, suspension: 0.0 };
                 [mk(-a.max_width / 2.0), mk(a.max_width / 2.0)]
             })
             .collect();
@@ -123,6 +125,7 @@ impl VehiclePhysics {
                 let omega = self.speed / w.radius; // rad/s
                 w.rpm = omega * 60.0 / std::f32::consts::TAU;
                 w.rotation_deg = (w.rotation_deg + omega.to_degrees() * dt).rem_euclid(360.0);
+                w.turned += omega * dt;
             }
         }
         (ds, dheading)

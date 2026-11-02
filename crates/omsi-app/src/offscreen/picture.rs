@@ -320,6 +320,7 @@ impl Offscreen<'_> {
                 let mut nav = navigator::Navigator::new(true, settings.ui_opacity, &settings.navigator_corner);
                 nav.schedule = omsi_cfg::flags::OMSI_NAV_SCHEDULE.is_set();
                 nav.show_ai = settings.nav_ai;
+                nav.show_cars = settings.nav_ai_cars;
                 nav.show_surface = settings.nav_surface;
                 nav.light = settings.is_light_theme();
                 nav.show_3d = settings.nav_3d;

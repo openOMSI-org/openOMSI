@@ -634,3 +634,10 @@ fn graphics_brightness_defaults_clamp_and_roundtrip() {
     assert!((game.traffic_headlights - 1.6).abs() < 0.0001);
 }
 
+#[test]
+fn the_note_kinds_go_round_the_file() {
+    let mut s = Settings::desktop();
+    (s.notes_driving, s.notes_script, s.notes_trip, s.notes_tickets) = (false, true, false, true);
+    let back = Settings::from_text(&s.to_text());
+    assert_eq!((back.notes_driving, back.notes_script, back.notes_trip, back.notes_tickets), (false, true, false, true));
+}

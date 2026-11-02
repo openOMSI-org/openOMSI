@@ -507,6 +507,10 @@ impl Radio {
         Some(marquee(&p.line.0, DISPLAY_WIDTH, p.line.1.elapsed().as_secs_f32()))
     }
 
+    pub fn volume(&self) -> f32 {
+        self.volume
+    }
+
     /// What plays, for the scripts' `GetRadioName` and `GetRadioSong`: the station's name
     /// (as it gives it, else as the list has it) and the title it gives; both empty while
     /// the radio is off.

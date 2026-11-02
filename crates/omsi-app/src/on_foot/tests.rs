@@ -158,3 +158,16 @@ fn a_turn_is_a_curve_with_no_speed_lost_to_a_snap() {
     }
     assert!((v - want).length() < 1e-9);
 }
+
+#[test]
+fn g_on_foot_sits_down_unless_it_is_the_get_up_chord() {
+    use omsi_content::input::{KEY_CTRL, KEY_SHIFT};
+    let bind = |modifier| vec![omsi_content::KeyBinding { action: "get_up".into(), scan_code: 34, modifier }];
+    let default = bind(KEY_CTRL | KEY_SHIFT);
+    assert!(super::get_up_chord(&default, true, true), "Ctrl+Shift+G steps out");
+    assert!(!super::get_up_chord(&default, false, true), "Shift+G while running sits down");
+    assert!(!super::get_up_chord(&default, true, false));
+    assert!(!super::get_up_chord(&default, false, false));
+    assert!(super::get_up_chord(&bind(KEY_CTRL), true, false), "moved to Ctrl+G");
+    assert!(!super::get_up_chord(&[], true, true), "unbound: the walker keeps G");
+}
