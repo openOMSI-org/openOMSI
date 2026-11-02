@@ -749,7 +749,7 @@ impl Devices {
                 let buttons = 0;
                 v.push(Connected { name: pad.name().to_string(), hardware_id: id, axes: {
                     let mut slots = di_slots(&axes);
-                    if (cfg!(windows) && xinput_name(pad.name())) || (cfg!(target_os = "linux") && mapped) {
+                    if (cfg!(windows) && xinput_name(pad.name())) || (cfg!(target_os = "linux") && gamepad) {
                         let trigger = |b| pad.button_data(b).map(|d| d.value()).unwrap_or(0.0);
                         gamepad_triggers(&mut slots, trigger(gilrs::Button::LeftTrigger2), trigger(gilrs::Button::RightTrigger2));
                     }
