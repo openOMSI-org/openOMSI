@@ -326,6 +326,7 @@ impl App {
 
     /// The open list is closed: back to the game menu.
     pub(crate) fn close_list(&mut self) {
+        self.shell.ui.dismiss_popups();
         // A programmatic close cannot silently keep an unconfirmed graphics preview.
         if self.menus.graphics_before.is_some() {
             crate::game_lists::cancel_graphics_changes(self);
@@ -371,6 +372,7 @@ impl App {
             crate::platform::text_input(self.window.as_deref(),false);
             self.menus.menu_edit_ident=false; self.menus.menu_edit=None;
         }
+        self.shell.ui.dismiss_popups();
         self.open_list(next);
     }
 
