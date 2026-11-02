@@ -638,7 +638,7 @@ impl App {
                         Ok(mut t) => {
                             t.lights_only = !populated;
                             t.no_timetable_buses = self.args.no_timetable_buses;
-                            t.stop_for_parked = !self.args.ai_ignore_parked;
+                            t.stop_for_parked = self.args.ai_stop_for_parked;
                             if let Some(lan) = self.net.lan.as_ref() {
                                 t.set_lan_seed(lan::population_seed(lan));
                             }

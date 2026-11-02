@@ -392,6 +392,8 @@ fn passes_parked(t: &mut TrafficSim, me: u64, secs: f32) -> bool {
 
 fn parked_scene(f: &Fixture, net: Network) -> (TrafficSim, u64) {
     let mut t = traffic(f, net);
+    // (the stop behind it and the pass round it are asked for: by default it drives through)
+    t.stop_for_parked = true;
     t.parked.entry(0).or_default().push((100.0, 0.0));
     let me = add_car(&mut t, f, 0, 40.0, 0xa0a, Some(6.0));
     (t, me)
@@ -408,11 +410,13 @@ fn a_car_passes_on_the_oncoming_lane_of_its_own_carriageway_only() {
     assert!(car(&t, me).unwrap().passing.is_none());
 }
 
-/// `stop_for_parked` off (`ai_stop_for_parked = 0`): where it cannot go round the parked
-/// car standing in its lane, the car drives on instead of waiting behind it for good.
+/// By default (`stop_for_parked` off, as Omsi.exe) a car drives on through a parked car
+/// standing in its lane instead of waiting behind it for good where it cannot go round it;
+/// asked to stop (`ai_stop_for_parked = 1`), it waits there.
 #[test]
-fn with_parked_cars_ignored_the_car_does_not_freeze_behind_one() {
+fn by_default_the_car_does_not_freeze_behind_a_parked_one() {
     let f = Fixture::new();
+    assert!(!traffic(&f, two_way(5.5, None)).stop_for_parked, "stopping is opt-in");
     // (the other carriageway of a divided road: no way round, it waits)
     let (mut t, me) = parked_scene(&f, two_way(5.5, None));
     assert!(!passes_parked(&mut t, me, 30.0));
@@ -533,6 +537,7 @@ fn a_timetable_bus_goes_round_a_parked_car_on_a_two_lane_road_and_back_onto_its_
     let f = Fixture::new();
     let lanes = vec![street(0.0, 0.0, 0.0, 200.0), street(-3.5, 0.0, 0.0, 200.0), street(0.0, 200.0, 0.0, 300.0), street(-3.5, 200.0, 0.0, 300.0)];
     let mut t = traffic(&f, net_of(lanes, &[(1, 0), (3, 2)]));
+    t.stop_for_parked = true;
     t.parked.entry(0).or_default().push((120.0, 0.0));
     let me = add_car(&mut t, &f, 0, 60.0, 0x1420, Some(6.0));
     set_route(&mut t, me, vec![0, 2], 60.0);
