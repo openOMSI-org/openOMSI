@@ -98,25 +98,25 @@ fn summary() -> crate::journey::TripSummary {
 #[ignore]
 fn preview() {
     let state = quick_menu::TileState { off: vec!["map"], lit: vec!["arrows", "duty"] };
-    picture("game-panels-quick.png", &[(quick_menu::QuickMenu { focus: 7, ..Default::default() }.panel_of(&state, false), Some("refuel"))]);
+    picture("game-panels-quick.png", &[(quick_menu::QuickMenu { focus: 7, ..Default::default() }.panel_of(&state, Palette::OPENOMSI), Some("refuel"))]);
     let page2 = quick_menu::QuickMenu { page: 1, focus: 2, ..Default::default() };
-    picture("game-panels-quick-2.png", &[(page2.panel_of(&quick_menu::TileState { off: vec!["skipstop", "endduty", "players", "admin", "tobus"], lit: vec![] }, false), None)]);
-    picture("game-panels-trip.png", &[(trip_summary::TripPanel::new(summary()).panel(false), Some("save"))]);
+    picture("game-panels-quick-2.png", &[(page2.panel_of(&quick_menu::TileState { off: vec!["skipstop", "endduty", "players", "admin", "tobus"], lit: vec![] }, Palette::OPENOMSI), None)]);
+    picture("game-panels-trip.png", &[(trip_summary::TripPanel::new(summary()).panel(Palette::OPENOMSI), Some("save"))]);
     let form = dest_form::DestForm { route: "137".into(), lines: ["Sonderfahrt".into(), "Betriebshof".into()], ..Default::default() };
-    picture("game-panels-dest.png", &[(form.panel(false), Some("select"))]);
+    picture("game-panels-dest.png", &[(form.panel(Palette::OPENOMSI), Some("select"))]);
     let values = view_editor::ViewValues { seat: [0.05, -0.12, 0.03], pitch: -4.0, yaw: 6.5, fov: Some(62.0), mirrors: vec![[2.5, -1.0], [-3.0, 0.5]] };
-    picture("game-panels-view.png", &[(view_editor::ViewEditor::default().panel_of(&values, false), None)]);
-    picture("game-panels-move.png", &[(move_here::panel(glam::DVec3::new(-1948.9, -174.7, 8.8), false), Some("yes"))]);
+    picture("game-panels-view.png", &[(view_editor::ViewEditor::default().panel_of(&values, Palette::OPENOMSI), None)]);
+    picture("game-panels-move.png", &[(move_here::panel(glam::DVec3::new(-1948.9, -174.7, 8.8), Palette::OPENOMSI), Some("yes"))]);
 }
 
 #[test]
 #[ignore]
 fn multiplayer_preview() {
     let form = multiplayer::Multiplayer { target: "OMSI-EXAMPLE-ROOM-CODE".into(), said: None };
-    for (name, light) in [("dark", false), ("light", true)] {
-        picture(&format!("multiplayer-{name}.png"), &[(form.panel_of(false, None, Some(omsi_net::Role::Client), None, light), Some("paste"))]);
-        picture(&format!("multiplayer-confirm-{name}.png"), &[(form.panel_of(false, Some(("maps/Grundorf/global.cfg", true)), Some(omsi_net::Role::Client), None, light), Some("confirm"))]);
-        picture(&format!("multiplayer-host-{name}.png"), &[(form.panel_of(false, Some(("maps/Grundorf/global.cfg", false)), Some(omsi_net::Role::Host), None, light), Some("back"))]);
-        picture(&format!("multiplayer-vehicle-warning-{name}.png"), &[(form.panel_of(false, Some(("maps/Grundorf/global.cfg", false)), Some(omsi_net::Role::Client), Some(false), light), Some("back"))]);
+    for (name, pal) in [("dark", omsi_ui::theme::palette(false)), ("light", Palette::LIGHT)] {
+        picture(&format!("multiplayer-{name}.png"), &[(form.panel_of(false, None, Some(omsi_net::Role::Client), None, pal), Some("paste"))]);
+        picture(&format!("multiplayer-confirm-{name}.png"), &[(form.panel_of(false, Some(("maps/Grundorf/global.cfg", true)), Some(omsi_net::Role::Client), None, pal), Some("confirm"))]);
+        picture(&format!("multiplayer-host-{name}.png"), &[(form.panel_of(false, Some(("maps/Grundorf/global.cfg", false)), Some(omsi_net::Role::Host), None, pal), Some("back"))]);
+        picture(&format!("multiplayer-vehicle-warning-{name}.png"), &[(form.panel_of(false, Some(("maps/Grundorf/global.cfg", false)), Some(omsi_net::Role::Client), Some(false), pal), Some("back"))]);
     }
 }

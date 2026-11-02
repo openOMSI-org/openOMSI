@@ -132,6 +132,31 @@ function Cfg-Set([string]$key, [string]$value) {
     [IO.File]::WriteAllLines($cfg, $out.ToArray(), $utf8)
 }
 
+# server.log: begun anew at every start and past log_max_mb (server.cfg), the earlier ones
+# kept as server.1.log (the newest) .. server.<log_keep>.log; it names the players and holds
+# the chat, so it is not kept for ever
+function Log-Number([string]$key, [int]$default, [int]$most) {
+    $n = 0
+    if ([int]::TryParse((Cfg-Get $key), [ref]$n) -and $n -ge 0) { return [Math]::Min($n, $most) }
+    return $default
+}
+function Rotate-Log([string]$path, [int]$keep) {
+    $base = $path.Substring(0, $path.Length - 4)
+    $k = $keep + 1
+    while ([IO.File]::Exists("$base.$k.log")) { [IO.File]::Delete("$base.$k.log"); $k++ }
+    if (-not [IO.File]::Exists($path)) { return }
+    if ($keep -le 0) { [IO.File]::Delete($path); return }
+    for ($k = $keep; $k -gt 1; $k--) {
+        $from = "$base.$($k - 1).log"
+        if ([IO.File]::Exists($from)) {
+            [IO.File]::Delete("$base.$k.log")
+            [IO.File]::Move($from, "$base.$k.log")
+        }
+    }
+    [IO.File]::Delete("$base.1.log")
+    [IO.File]::Move($path, "$base.1.log")
+}
+
 # the installed maps of a folder (server.cfg written with its defaults when missing); $null
 # with the reason shown when the folder is not a complete OMSI 2
 function List-Maps([string]$root) {
@@ -330,14 +355,31 @@ if ($askShortcut) {
 Write-Host ''
 Say "Starting on $Map (the log also goes to server.log; Ctrl+C stops the server)." "Iniciando em $Map (o log também vai para server.log; Ctrl+C para o servidor)."
 Join-WindowJob
-$writer = New-Object System.IO.StreamWriter($log, $true, $utf8)
-$writer.AutoFlush = $true
+$keep = Log-Number 'log_keep' 5 1000
+$maxBytes = [int64](Log-Number 'log_max_mb' 20 100000) * 1MB
+# (a server.log another server still writes is not moved: this one adds to it)
+try { Rotate-Log $log $keep } catch { Say "server.log could not be put aside ($($_.Exception.Message)): the log goes on in it." "O server.log não pôde ser guardado ($($_.Exception.Message)): o log continua nele." }
+$script:writer = New-Object System.IO.StreamWriter($log, $true, $utf8)
+$script:writer.AutoFlush = $true
+$script:written = [int64]0
 $code = 0
 $p = Start-Openomsi @('--root', $root, '--server', $cfg, '--server-map', $Map)
 try {
-    $code = Pump-Openomsi $p { param($line, $err) Write-Host $line; $writer.WriteLine($line) }
+    $code = Pump-Openomsi $p {
+        param($line, $err)
+        Write-Host $line
+        $script:writer.WriteLine($line)
+        $script:written += $line.Length + 2
+        if ($maxBytes -gt 0 -and $script:written -gt $maxBytes) {
+            $script:writer.Dispose()
+            try { Rotate-Log $log $keep } catch { }
+            $script:writer = New-Object System.IO.StreamWriter($log, $true, $utf8)
+            $script:writer.AutoFlush = $true
+            $script:written = [int64]0
+        }
+    }
 } finally {
-    $writer.Dispose()
+    $script:writer.Dispose()
     # (Ctrl+C: the server ends with this script)
     if (-not $p.HasExited) { try { $p.Kill() } catch { } }
 }

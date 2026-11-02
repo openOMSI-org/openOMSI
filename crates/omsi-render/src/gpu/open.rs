@@ -757,6 +757,7 @@ impl Renderer {
             pictures: Default::default(),
             stats: Default::default(),
             counts: Default::default(),
+            deferred: Default::default(),
             frame_draws: (0, 0),
             profiling: omsi_cfg::flags::OMSI_PROFILE.is_set(),
             draw_audit_at: std::time::Instant::now(),

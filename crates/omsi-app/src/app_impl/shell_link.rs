@@ -96,7 +96,7 @@ impl App {
             keys: !crate::platform::touch_controls(),
             summary: self.pause_summary(),
         };
-        self.shell.set_theme(self.settings.is_light_theme());
+        crate::themes::sync(&self.settings.ui_theme_pack, self.settings.is_light_theme());
         self.shell.begin(w, h, scale, dt);
         crate::shell::pause::draw(&mut self.shell, &view);
         self.shell.finish();

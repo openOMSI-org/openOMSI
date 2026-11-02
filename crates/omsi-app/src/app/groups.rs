@@ -421,6 +421,8 @@ pub(crate) struct MenuState {
     /// A value of the open settings window really changed (set by `option_do` and the
     /// like): its list is out of date (see `App::list_adjust`).
     pub(crate) list_dirty: bool,
+    /// Original graphics values until the player confirms or cancels.
+    pub(crate) graphics_before: Option<crate::game_lists::GraphicsBefore>,
     /// The open settings window's page titles, kept for a moment (asked every frame, see
     /// `game_lists::page_titles`).
     pub(crate) page_titles: std::cell::RefCell<crate::game_lists::TitlesCache>,

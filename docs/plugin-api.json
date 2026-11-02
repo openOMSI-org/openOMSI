@@ -3802,6 +3802,22 @@
       "permission": "ui"
     },
     {
+      "name": "ui.set_theme",
+      "group": "ui",
+      "since": "0.3.42",
+      "doc": "Switches the game's interface to theme `id` (`\"\"` or `\"openomsi\"`: openOMSI's own look), as if the player chose it in Options › Interface: it is kept for the next start. Ask the player first; they can switch back there.",
+      "params": [
+        {
+          "name": "id",
+          "type": "string",
+          "optional": false
+        }
+      ],
+      "returns": "true, or false and the reason",
+      "multi": true,
+      "permission": "ui"
+    },
+    {
       "name": "ui.show",
       "group": "ui",
       "since": "0.2.22",
@@ -3821,6 +3837,26 @@
       "returns": "boolean",
       "multi": false,
       "permission": "ui"
+    },
+    {
+      "name": "ui.theme",
+      "group": "ui",
+      "since": "0.3.42",
+      "doc": "The id of the interface theme in use (`\"\"`: openOMSI's own look).",
+      "params": [],
+      "returns": "string",
+      "multi": false,
+      "permission": null
+    },
+    {
+      "name": "ui.themes",
+      "group": "ui",
+      "since": "0.3.42",
+      "doc": "The game's interface themes: each `{ id, name }`, openOMSI's own look first (its id `\"\"`). A theme is a folder with a `theme.json` (`Themes/<id>/`, or a plugin's own folder: see docs/THEMES.md).",
+      "params": [],
+      "returns": "list of tables",
+      "multi": false,
+      "permission": null
     },
     {
       "name": "ui.toast",

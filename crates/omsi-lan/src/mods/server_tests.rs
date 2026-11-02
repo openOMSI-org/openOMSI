@@ -110,3 +110,37 @@ fn accept_errors_back_off_and_keep_the_room_server_alive() {
         std::thread::sleep(Duration::from_millis(5));
     }
 }
+
+
+/// Loopback protocol regression: a valid secure session must reject a selected
+/// bus outside the dedicated server's fleet. Ordinary LIST remains available,
+/// but the client's selected path must not silently substitute it for LISTBUS.
+#[test]
+fn selected_bus_request_is_rejected_without_an_authorized_fleet() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let address = listener.local_addr().unwrap();
+    let key = Arc::new(omsi_net::hostkey::HostKey::generate().unwrap());
+    let session = key.session();
+    let source = ModSource {
+        root: std::env::temp_dir().join("openomsi-no-test-content"),
+        map: String::new(),
+        bus: None,
+        weather: None,
+    };
+    let server = serve_with_accept(listener, key, &source, TcpListener::accept)
+        .expect("local test server starts");
+    let mut client = open_waiting(address, session, Duration::from_secs(10))
+        .expect("client establishes an authenticated channel");
+    let bus = server_fleet::hex_text("Vehicles/Unauthorized/test.bus");
+    let error = request_mod_manifest(&mut client, &format!("LISTBUS {bus} -"))
+        .expect_err("server must not provide a downloadable unauthorized bus");
+    assert!(
+        error.contains("fleet not configured") || error.contains("not in the dedicated server's vehicles list"),
+        "unexpected rejection: {error}"
+    );
+    let ordinary = request_mod_manifest(&mut client, "LIST")
+        .expect("ordinary map-only LIST still works");
+    assert!(ordinary.bus.is_empty(), "LIST must not smuggle a selected bus");
+    drop(client);
+    drop(server);
+}

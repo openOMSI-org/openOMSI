@@ -397,6 +397,7 @@ fn mod_install(path: String, mode: String) -> Answer {
 /// What the page asks every few seconds: the content's stamp (a new one: the lists are read
 /// again), the install jobs and the running games.
 fn poll() -> Answer {
+    core::storage::automatic_cleanup();
     to_json(core::poll().map_err(err)?)
 }
 
@@ -482,7 +483,7 @@ fn server_query(address: String) -> Answer {
     Ok(json!({
         "name": i.name, "motd": i.motd, "map": i.map, "players": i.players, "max_players": i.max_players,
         "version": i.version, "icon": icon, "time": i.time, "weather": i.weather, "password": i.password,
-        "vehicles": i.vehicles, "reached_at": i.reached_at,
+        "vehicles": i.vehicles, "fleet_version": i.fleet_version, "fleet": i.fleet, "reached_at": i.reached_at,
     }))
 }
 
@@ -855,6 +856,8 @@ fn answer(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "update_check" => Ok(updates::check(arg::<Option<bool>>(args, "again")?.unwrap_or(false))),
         "update_install" => Ok(updates::install(p)),
         "update_dismiss" => Ok(updates::dismiss()),
+        "storage_status" => to_json(core::storage::status()),
+        "storage_cleanup" => to_json(core::storage::cleanup(&arg::<String>(args, "scope")?, arg::<Option<bool>>(args, "clear")?.unwrap_or(false))?),
         "settings_get" => settings_get(),
         "settings_save" => settings_save(arg::<Value>(args, "settings")?),
         "settings_patch" => settings_patch(arg::<Value>(args, "patch")?),

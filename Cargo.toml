@@ -70,7 +70,7 @@ walkdir = "2"
 clap = { version = "4", features = ["derive"] }
 hashbrown = "0.17"
 smallvec = "1"
-parking_lot = "0.12"
+parking_lot = "0.13"
 # (the world snapshot the simulation reads without a lock: `omsi-sim::world_data`)
 arc-swap = "1.7"
 rand = "0.10"

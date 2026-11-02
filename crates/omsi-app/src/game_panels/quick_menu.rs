@@ -13,7 +13,8 @@
 //! greyed and takes no clicks. The statistics tile shows the last trip's summary again, or
 //! the personnel file when there is none.
 
-use super::{card, el, note, text, theme, theme_color};
+use super::{card, el, note, text, theme_color};
+use omsi_ui::theme::Palette;
 use omsi_plugin::ui::{Align, Anchor, Element, Kind, Panel, Rgba, RowAlign, Weight};
 use omsi_ui::tr;
 
@@ -110,7 +111,7 @@ impl TileState {
 
 impl QuickMenu {
     pub(crate) fn panel(&self, app: &crate::App) -> Panel {
-        self.panel_of(&TileState::of(app), app.settings.is_light_theme())
+        self.panel_of(&TileState::of(app), crate::themes::palette(app.settings.is_light_theme()))
     }
 
     /// The tile chosen: its id.
@@ -119,8 +120,8 @@ impl QuickMenu {
     }
 
     /// The page shown, with the tiles as `state` has them.
-    pub(crate) fn panel_of(&self, state: &TileState, light: bool) -> Panel {
-        let muted = theme_color(theme(light).TEXT_DIM);
+    pub(crate) fn panel_of(&self, state: &TileState, pal: Palette) -> Panel {
+        let muted = theme_color(pal.text_dim);
         let tiles = page_tiles(self.page);
         let mut children: Vec<Element> = tiles
             .chunks(COLUMNS)
@@ -155,8 +156,8 @@ impl QuickMenu {
             foot.push(el(Some("next"), Kind::Button { text: String::new(), icon: Some("chevron_right".into()) }));
         }
         children.push(el(None, Kind::Row { children: foot, gap: 10.0, align: RowAlign::Start }));
-        children.push(note(&tr("Alt or Esc closes the menu; the game goes on."), light));
-        Panel { padding: 14.0, gap: 8.0, ..card(Anchor::BottomRight, 32.0, 32.0, WIDTH, 215, light, children) }
+        children.push(note(&tr("Alt or Esc closes the menu; the game goes on."), pal));
+        Panel { padding: 14.0, gap: 8.0, ..card(Anchor::BottomRight, 32.0, 32.0, WIDTH, 215, pal, children) }
     }
 
     /// The next page (after the last, the first), its first tile chosen.
@@ -343,7 +344,7 @@ mod tests {
     #[test]
     fn the_panel_shows_the_chosen_tiles_name_and_the_lit_and_greyed_ones() {
         let q = QuickMenu { focus: 7, ..Default::default() };
-        let p = q.panel_of(&TileState { off: vec!["map"], lit: vec!["arrows"] }, false);
+        let p = q.panel_of(&TileState { off: vec!["map"], lit: vec!["arrows"] }, Palette::OPENOMSI);
         let tiles: Vec<&Element> = p.children.iter().take(3).flat_map(|r| match &r.kind {
             Kind::Row { children, .. } => children.iter().collect::<Vec<_>>(),
             _ => vec![],

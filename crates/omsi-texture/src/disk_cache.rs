@@ -10,7 +10,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 const MAGIC: &[u8; 4] = b"OOTC";
 pub const FORMAT_VERSION: u32 = 1;
 const BUILD: &str = env!("TEXTURE_SOURCE_HASH");
-pub const DEFAULT_CAP: u64 = if cfg!(any(target_os = "ios", target_os = "android")) { 512 << 20 } else { 2 << 30 };
+// Leave room in the shared local budget for indexes, translations and map data.
+pub const DEFAULT_CAP: u64 = if cfg!(any(target_os = "ios", target_os = "android")) { 512 << 20 } else { 700_000_000 };
 const MAX_ENTRY: u64 = 1 << 30;
 const TOUCH_AFTER: Duration = Duration::from_secs(3600);
 const STALE_TEMP: Duration = Duration::from_secs(600);

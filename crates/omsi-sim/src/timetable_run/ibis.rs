@@ -237,9 +237,14 @@ pub fn ibis_target(
 
 /// A hand-cranked roller blind (SD79 or SD83 type), known by its own keys.
 pub fn has_roller_blind(v: &crate::VehicleInstance) -> bool {
-    ["rollband_sync", "rlbnd_ziel_start"]
-        .iter()
-        .any(|t| v.ty.program.trigger(t).is_some())
+    [
+        "rollband_sync",
+        "rlbnd_ziel_start",
+        //Likino 677 & ikarus i200 rollbands:
+        "bus_rollband_setL1",
+        "bus_rollband_setL2",
+        "bus_rollband_setL3",
+    ].iter().any(|t| v.ty.program.trigger(t).is_some())
 }
 
 /// `SetLineTo` for the AI trigger. A roller blind turns one roller per character -

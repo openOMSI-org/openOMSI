@@ -443,7 +443,8 @@ impl Renderer {
                 }
                 std::array::from_fn(|r| std::array::from_fn(|c| at[r * 4 + c]))
             },
-            lod: [self.fsr_mip_bias(f), 0.0, 0.0, 0.0],
+            // y belongs to the ground prepass and is set only by render_inner.
+            lod: [self.fsr_mip_bias(f), 0.0, lighting.road_glare.clamp(0.0, 2.0), 0.0],
             spot: classic_spot(&scene.lights, ro),
         };
         self.queue

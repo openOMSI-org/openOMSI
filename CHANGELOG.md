@@ -137,6 +137,18 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   (`ailists_#user.cfg` and `car_use/!openomsi-ai-lists-*.ocu` of the map's folder, the format OMSI
   itself reads), a group or a line can be reset on its own, and *Reset the map* deletes them, which
   gives the map's defaults back. Translated into every language of the launcher.
+- **Interface themes**: a mod or a plugin can give the game's own screens a look of their own,
+  chosen in Options › Interface › Theme pack ([docs/THEMES.md](docs/THEMES.md)). A theme is a
+  folder with a `theme.json` (`Themes/<id>/` of a content folder, or a plugin's own folder): the
+  colours of the pause menu, its settings windows and lists, the photo mode, the developer tools
+  and the plugins' panels and notifications; the corners of the panels; the panels as frosted
+  glass over the game's picture (blurred on the graphics card every frame the menu is open); the
+  logo and the name at the top of the pause menu; and the
+  loading screen's colours and logo, which can itself be the loading bar - its path
+  `id="progress"` drawn along, or the logo filled from the left, as far as the loading is - and
+  parts of the logo marked `data-at` pop up (or, `data-blink`, flash) as the loading reaches them.
+  openOMSI's own look is unchanged and stays the default. Plugins see the themes with
+  `ui.themes` and `ui.theme` and can switch to one with `ui.set_theme` (`omsi.ui.version` 7).
 - **LAN protocol 15**: a game of this version cannot join a session of an older one, nor the
   other way round (the AI traffic goes as a table, see below). Update the game on both sides.
 - **Every light casts a shadow** (Enhanced and Enhanced+): the lamps' shadow maps were four, now
@@ -511,6 +523,13 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **Each graphics profile is a file of its own.** The launcher kept them all in one
+  `graphics_profiles.json`: a file that could not be read counted as having none, and the next
+  profile kept was written alone over the file, taking the rest with it. They are now in
+  `~/.openomsi/graphics_profiles/`, a file each, written whole or not at all, so a damaged file
+  costs only its own profile, and one can be copied, shared or backed up by itself. The profiles
+  of the old file are moved into files the first time they are asked for, and the old file is
+  kept as `graphics_profiles.json.migrated`.
 - **Vehicles with staged ignition and separate battery-master switches start correctly**, without pressing reverse or engine-stop triggers, including recovery after a stalled engine (#3481).
 - **Dedicated servers can authorize F4, city-map and entry-point relocation** through authenticated server commands. Administrators can go to, bring or recover players' buses; `allow_player_teleport=0` remains the default, and `1` permits ordinary players to relocate only themselves. Player-hosted LAN keeps the host-only restriction (#3481).
 - **Optional RP speed limits for dedicated servers**: `speed_limit_kmh=60`, `75` or `80` smooth throttle/braking near the limit, and `0` disables it (default). This is cooperative client-side roleplay, not server-enforced anti-cheat. Policy is fetched on join/reconnect, not periodically (#3481).

@@ -27,6 +27,8 @@ pub(crate) enum ListKind {
     BanList,
     /// The options of the game, on this page of the settings window.
     Options(usize),
+    /// Confirmation of graphical settings in the active session.
+    GraphicsConfirm(usize),
     /// What can be done with the vehicle, on this page.
     Vehicle(usize),
     /// The clock, the weather and the traffic, on this page.
@@ -500,6 +502,11 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
         ListKind::Admin | ListKind::AdminClassic => return crate::admin::items(app),
         ListKind::AdminPlayers | ListKind::AdminPlayer(_) | ListKind::AdminConfirm(..) => out = crate::admin_panel::items(app, kind),
         ListKind::PlayerList | ListKind::PlayerPage(_) | ListKind::PlayerDo(..) | ListKind::BanList => return crate::player_list::items(app, kind),
+        ListKind::GraphicsConfirm(_) => return vec![
+            (row("Apply graphics changes?", 'i', "", "Confirm within 20 seconds; otherwise the previous values are restored.", None), "noop".into()),
+            button("Apply now", "Confirm", "Apply compatible graphics options in-game. Renderer mode and device formats require restart.", "graphics_confirm"),
+            button("Cancel changes", "Revert", "Restore the graphics settings from before editing.", "graphics_cancel"),
+        ],
         ListKind::Options(_) | ListKind::Vehicle(_) | ListKind::World(_) => {
             let Some((mut pages, tab)) = pages_of(app, kind) else { return out };
             if pages.is_empty() {
@@ -782,6 +789,7 @@ pub(crate) fn menu_extras(
     let Some(kind) = kind else { return (MenuKind::List, head("Place a vehicle..."), None) };
     match kind {
         ListKind::Options(_) => (MenuKind::Options, head("Options..."), None),
+        ListKind::GraphicsConfirm(_) => (MenuKind::List, head("Confirm graphics changes"), None),
         ListKind::Vehicle(_) => (MenuKind::Options, head("Vehicle options..."), None),
         ListKind::World(_) => (MenuKind::Options, head("World options..."), None),
         ListKind::Controls => (MenuKind::Options, head("Controls..."), None),
@@ -875,6 +883,24 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str) -> Option<ListKi
     run_move(app, kind, action, Move::Next)
 }
 
+fn graphics_back(app: &App, kind: &ListKind) -> Option<ListKind> {
+    match kind {
+        ListKind::Options(tab) if app.menus.graphics_before.is_some() => Some(ListKind::GraphicsConfirm(*tab)),
+        _ => None,
+    }
+}
+
+/// Handle the two buttons of the graphics confirmation.
+fn graphics_confirmation_action(app: &mut App, tab: usize, action: &str, mv: Move) -> Option<ListKind> {
+    if !matches!(mv, Move::Next) { return Some(ListKind::GraphicsConfirm(tab)); }
+    match action {
+        "graphics_confirm" => apply_graphics_changes(app),
+        "graphics_cancel" => cancel_graphics_changes(app),
+        _ => return Some(ListKind::GraphicsConfirm(tab)),
+    }
+    Some(ListKind::Options(tab))
+}
+
 /// Do a line of the list, a setting changed as `mv` says (Enter and a click on a line are
 /// `Move::Next`; the arrows and a click on a slider or a stepper the others).
 pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -> Option<ListKind> {
@@ -890,6 +916,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
         return crate::player_list::back(kind);
     }
     if action == "back" {
+        if let Some(next) = graphics_back(app, kind) { return Some(next); }
         return match kind {
             ListKind::Tours(..) => Some(ListKind::Lines),
             ListKind::Events => Some(ListKind::Keyboard(0)),
@@ -898,11 +925,13 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             ListKind::AdminPlayers | ListKind::AdminClassic => Some(ListKind::Admin),
             ListKind::AdminPlayer(_) => Some(ListKind::AdminPlayers),
             ListKind::AdminConfirm(_, t) => Some(ListKind::AdminPlayer(*t)),
+            ListKind::GraphicsConfirm(tab) => { cancel_graphics_changes(app); Some(ListKind::Options(*tab)) },
             _ => None,
         };
     }
     let (verb, arg) = action.split_once(' ').unwrap_or((action, ""));
     match kind {
+        ListKind::GraphicsConfirm(tab) => graphics_confirmation_action(app, *tab, action, mv),
         ListKind::ControllerDevices(_) | ListKind::Controller(..) | ListKind::ControllerAxis(..) | ListKind::ControllerButtons(_) | ListKind::ControllerButtonSettings(..) | ListKind::ControllerButton(..) | ListKind::ControllerCapture(_) => unreachable!("controller lists handled above"),
         ListKind::PlayerList | ListKind::PlayerPage(_) | ListKind::PlayerDo(..) | ListKind::BanList => crate::player_list::run(app, kind, action),
         ListKind::Admin | ListKind::AdminPlayers | ListKind::AdminPlayer(_) | ListKind::AdminConfirm(..) if crate::admin_panel::remote(app) => crate::admin_panel::run(app, kind, action),
@@ -919,6 +948,8 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             // (the arrows and a click on a stepper only change values: no buttons)
             let step = matches!(mv, Move::Next);
             match verb {
+                "graphics_apply" if step => return Some(ListKind::GraphicsConfirm(match kind { ListKind::Options(tab) => *tab, _ => 0 })),
+                "graphics_discard" if step => { cancel_graphics_changes(app); }
                 "vr_nav_edit" if step && app.vr_active() && app.player.is_some() => {
                     app.start_vr_nav_edit();
                     return None;
@@ -1200,11 +1231,13 @@ mod options;
 mod dropdowns;
 mod menu_pages;
 mod duty;
+mod graphics;
 pub(crate) use rows::*;
 pub(crate) use options::*;
 pub(crate) use dropdowns::*;
 pub(crate) use menu_pages::*;
 pub(crate) use duty::*;
+pub(crate) use graphics::*;
 
 #[cfg(test)]
 mod tests {
@@ -1351,3 +1384,4 @@ mod tests {
         assert!(!super::numeric_ibis_line("EXP"));
     }
 }
+

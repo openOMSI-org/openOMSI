@@ -206,13 +206,15 @@ impl log::Log for TeeLogger {
         if !self.enabled(r.metadata()) {
             return;
         }
-        self.system.log(r);
-        use std::io::Write;
-        let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
-        if let Some(f) = self.file.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
-            // (the desktop's env_logger layout: the launcher's `crash_of` reads it)
-            let _ = writeln!(f, "[{secs:.3} {:<5} {}] {}", r.level(), r.target(), r.args());
-        }
+        crate::logmask::with_record(r, |r| {
+            self.system.log(r);
+            use std::io::Write;
+            let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
+            if let Some(f) = self.file.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
+                // (the desktop's env_logger layout: the launcher's `crash_of` reads it)
+                let _ = writeln!(f, "[{secs:.3} {:<5} {}] {}", r.level(), r.target(), r.args());
+            }
+        });
     }
 
     fn flush(&self) {

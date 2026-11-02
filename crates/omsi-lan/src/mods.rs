@@ -45,6 +45,8 @@ mod paced;
 mod pieces;
 pub mod placeholder;
 mod quarantine;
+mod server_fleet;
+pub use server_fleet::fingerprint as fleet_fingerprint;
 mod store;
 pub mod upload;
 pub mod vehicles;
@@ -463,7 +465,7 @@ const MAX_CONNECTIONS: usize = 160;
 /// player's language): asked again in a moment, never given up.
 pub(crate) const CONNECTION_LOST: &str = "connection lost";
 /// The longest request line (they are a few words).
-const MAX_LINE: u64 = 256;
+const MAX_LINE: u64 = 4096;
 const MAX_REPLY: u64 = 4096;
 
 /// One line of at most `MAX_LINE` bytes (a longer one ends the connection).
@@ -479,7 +481,7 @@ fn read_line_within(input: &mut impl BufRead, line: &mut String, max: u64) -> st
     Ok(n)
 }
 
-fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Option<Arc<(Manifest, Vec<PathBuf>)>>>, stopped: &std::sync::atomic::AtomicBool) -> std::io::Result<()> {
+fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Option<Arc<(Manifest, Vec<PathBuf>)>>>, stopped: &std::sync::atomic::AtomicBool, fleet_cache: &server_fleet::Cache, root: &Path) -> std::io::Result<()> {
     let session = key.session();
     stream.set_read_timeout(Some(Duration::from_secs(120)))?;
     stream.set_nodelay(true).ok();
@@ -510,7 +512,6 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
         }
         std::thread::sleep(Duration::from_millis(100));
     };
-    let (manifest, sources) = (&data.0, &data.1);
     let keys = channel::Handshake::new()?;
     writeln!(out, "OK {} {}", keys.public_hex(), channel::prove(key, hello[2], &keys.public_hex()))?;
     let (send, receive) = keys.finish(session, false, hello[2])?;
@@ -518,6 +519,7 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
     let mut input = SecureReader::new(input, receive);
     // (the players' buses on this connection: `upload::requests`)
     let mut buses = upload::BusRequests::default();
+    let mut active = data.clone();
     loop {
         if stopped.load(std::sync::atomic::Ordering::Acquire) { return Ok(()); }
         // (what was answered goes out before the next request is waited for)
@@ -529,11 +531,54 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
         let req: Vec<&str> = line.split_whitespace().collect();
         match req.as_slice() {
             ["LIST"] => {
-                let body = serde_json::to_vec(manifest).unwrap_or_default();
+                active = data.clone();
+                let body = serde_json::to_vec(&active.0).unwrap_or_default();
                 writeln!(out, "OK {}", body.len())?;
                 out.write_all(&body)?;
             }
+            ["LISTBUS", bus_hex, paint_hex] => {
+                let Some((bus, paint)) = server_fleet::unhex_text(bus_hex).zip(server_fleet::unhex_text(paint_hex)) else {
+                    writeln!(out, "ERR invalid selected bus or paint")?;
+                    continue;
+                };
+                let key = server_fleet::cache_key(false, &bus, &paint);
+                let selected = server_fleet::cached(fleet_cache, key, || server_fleet::package(root, &data, &bus, &paint));
+                match selected {
+                    Ok(package) => {
+                        active = package;
+                        let body = serde_json::to_vec(&active.0).unwrap_or_default();
+                        writeln!(out, "OK {}", body.len())?;
+                        out.write_all(&body)?;
+                    }
+                    Err(why) => writeln!(out, "ERR {why}")?,
+                }
+            }
+            ["FLEETINFO", bus_hex, paint_hex] => {
+                // A remote player can request the server's exact official bus
+                // without requiring other players to upload their own files.
+                // The viewer MUST independently compare the returned fingerprint
+                // to the one that player announced before requesting any GETs.
+                let Some((bus, paint)) = server_fleet::unhex_text(bus_hex).zip(server_fleet::unhex_text(paint_hex)) else {
+                    writeln!(out, "ERR invalid selected bus or paint")?;
+                    continue;
+                };
+                let key = server_fleet::cache_key(true, &bus, &paint);
+                let selected = server_fleet::cached(fleet_cache, key, || server_fleet::exact(root, &bus, &paint));
+                match selected {
+                    Ok(package) => {
+                        let m = identity::VehicleManifest {
+                            bus: package.0.bus.clone(), entries: package.0.entries.clone()
+                        };
+                        active = package;
+                        let body = serde_json::to_vec(&m).unwrap_or_default();
+                        writeln!(out, "OK {}", body.len())?;
+                        out.write_all(&body)?;
+                    }
+                    Err(why) => writeln!(out, "ERR {why}")?,
+                }
+            }
             ["GET", idx] => {
+                let sources = &active.1;
                 let Some(k) = idx.parse::<usize>().ok().filter(|k| *k < sources.len()) else {
                     writeln!(out, "ERR no such file")?;
                     continue;
@@ -541,6 +586,13 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
                 // a plain file goes as it is read (never all of it in memory); one in a
                 // mounted archive is read whole (archives hold small files)
                 let src = &sources[k];
+                // Re-check before every GET: files may have been replaced by a
+                // symlink since the fleet manifest was built. Never serve files
+                // that resolve outside the declared content roots.
+                if !server_fleet::trusted_source(root, src) {
+                    writeln!(out, "ERR file outside trusted content roots")?;
+                    continue;
+                }
                 if omsi_cfg::vfs::archive_of(src).is_none() && !omsi_cfg::vfs::is_sealed(src) {
                     match std::fs::File::open(src).and_then(|f| f.metadata().map(|m| (f, m.len()))) {
                         Ok((f, len)) => {
@@ -633,7 +685,38 @@ pub fn clean_up() {
         omsi_cfg::remove_content_root(&dir);
         omsi_cfg::vfs::unmount_sealed(&dir);
         log::info!("LAN mods: the host's mods of this session were taken away (they stay sealed in the store)");
+        // A process-held lease also protects games started outside the launcher.
+        // Our own game lease defers this trim until its final drop, after all
+        // session resources are gone; the last game then returns to the budgets.
+        if cfg!(any(target_os = "android", target_os = "ios")) { return; }
+        if let Some(_maintenance) = sandbox_base().and_then(|p| {
+            if other_registered_game_running() { return None; }
+            omsi_cfg::cache_activity::maintenance(p.parent()?)
+        }) {
+            if let Some(store_path) = store_dir() {
+                let usage = omsi_cfg::cache_budget::trim(
+                    &store_path, omsi_cfg::cache_budget::Kind::ClientLan,
+                    omsi_cfg::cache_budget::LAN_LIMIT,
+                );
+                if usage.freed > 0 {
+                    log::info!("LAN mods: reclaimed {} bytes of old client downloads", usage.freed);
+                }
+            }
+        }
     }
+}
+
+/// Older launcher-started games may not hold the shared cache lease yet.
+fn other_registered_game_running() -> bool {
+    let Some(base) = sandbox_base() else { return true };
+    let Some(data_dir) = base.parent() else { return true };
+    let Ok(entries) = std::fs::read_dir(data_dir.join("instances")) else { return false };
+    entries.flatten().any(|e| {
+        let Ok(bytes) = std::fs::read(e.path()) else { return false };
+        let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) else { return false };
+        let Some(pid) = json.get("pid").and_then(|x| x.as_u64()).and_then(|v| u32::try_from(v).ok()) else { return false };
+        pid != std::process::id() && process_alive(pid)
+    })
 }
 
 /// Free room on the disk `dir` is on (Windows too).
@@ -793,7 +876,26 @@ fn store_dir() -> Option<PathBuf> {
 }
 
 pub fn fetch(root: &Path, map: &mut String, host: SocketAddr, session: u64, progress: &mut dyn FnMut(u64, u64, &str)) -> Result<Report, String> {
-    fetch_with(root, map, host, session, progress, false)
+    fetch_with(root, map, host, session, progress, false, None)
+}
+
+/// Join with a selected server bus and repaint. The authenticated host serves only
+/// content explicitly allowed in server.cfg. Old player-hosted sessions still use LIST.
+pub fn fetch_selected(root: &Path, map: &mut String, host: SocketAddr, session: u64, bus: Option<&str>, paint: Option<&str>, progress: &mut dyn FnMut(u64, u64, &str)) -> Result<Report, String> {
+    let selected = bus.filter(|v| !v.trim().is_empty()).map(|v| (v.to_string(), paint.unwrap_or("").to_string()));
+    fetch_with(root, map, host, session, progress, false, selected)
+}
+
+/// Request one manifest over the authenticated channel. Re-issued after reconnecting,
+/// so GET indexes always refer to the selected package, not the host's map-only list.
+fn request_mod_manifest(conn: &mut Connection, request: &str) -> Result<Manifest, String> {
+    let (_, out, input) = conn;
+    writeln!(out, "{request}").and_then(|_| out.flush()).map_err(|e| e.to_string())?;
+    let len = read_reply(input)?.ok_or("no list")?;
+    if len > 256 << 20 { return Err("the list is too large".into()); }
+    let mut body = vec![0u8; len as usize];
+    input.read_exact(&mut body).map_err(|e| format!("{CONNECTION_LOST}: {e}"))?;
+    serde_json::from_slice(&body).map_err(|e| format!("bad list: {e}"))
 }
 
 /// How many files the session's mount holds (a look again that finds no more leaves it).
@@ -802,19 +904,25 @@ static MOUNTED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize:
 /// `fetch`, or (`again`) a look at the host's list in the middle of the session: then the
 /// session's content is mounted again only when it has more files than before. `root` is
 /// the game's own root (its vehicles' files are never covered by the host's).
-fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, progress: &mut dyn FnMut(u64, u64, &str), again: bool) -> Result<Report, String> {
+fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, progress: &mut dyn FnMut(u64, u64, &str), again: bool, selected: Option<(String, String)>) -> Result<Report, String> {
     if omsi_cfg::flags::OMSI_NO_LAN_MODS.is_set() {
         return Err("switched off (OMSI_NO_LAN_MODS)".into());
     }
-    let (raw, mut out, mut input) = open(host, session)?;
-    writeln!(out, "LIST").and_then(|_| out.flush()).map_err(|e| e.to_string())?;
-    let len = read_reply(&mut input)?.ok_or("no list")?;
-    if len > 256 << 20 {
-        return Err("the list is too large".into());
+    let mut conn = open(host, session)?;
+    let selected_request = selected.as_ref().map(|(bus, paint)| format!(
+        "LISTBUS {} {}", server_fleet::hex_text(bus), server_fleet::hex_text(paint)
+    ));
+    // A selected server bus is authoritative: never turn a failed LISTBUS into
+    // a successful map-only LIST. That would spawn a missing or different bus.
+    // The ordinary LIST remains the default for player-hosted/legacy sessions
+    // that did not request server fleet downloads.
+    let manifest = request_mod_manifest(&mut conn, selected_request.as_deref().unwrap_or("LIST"))?;
+    if let (Some((bus, _)), Some(_)) = (selected.as_ref(), selected_request.as_ref()) {
+        if !omsi_net::vehicle_path(bus).is_some_and(|v| v.eq_ignore_ascii_case(&manifest.bus)) {
+            return Err("host returned the wrong selected bus package".into());
+        }
     }
-    let mut body = vec![0u8; len as usize];
-    input.read_exact(&mut body).map_err(|e| e.to_string())?;
-    let manifest: Manifest = serde_json::from_slice(&body).map_err(|e| format!("bad list: {e}"))?;
+    let (raw, out, input) = conn;
     if manifest.entries.len() > MAX_FILES {
         return Err(format!("{} files are too many", manifest.entries.len()));
     }
@@ -830,7 +938,20 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
         }
         // a vehicle's file this machine has of its own is never covered by the host's: its
         // paints (`.cti`) and textures stay this player's, also on the bus it drives
-        if own_vehicle_file(&e.path, root) || own_script(&e.path) {
+        if selected_request.is_some() && own_script(&e.path) {
+            // Replacing a global Scripts/ file in the session's first content root
+            // could change unrelated AI vehicles. A selected server bus may reuse
+            // that script only when the installed copy is byte-for-byte identical.
+            let exact = omsi_cfg::find_in_roots(&e.path)
+                .and_then(|(_, p)| omsi_cfg::vfs::read(&p).ok())
+                .is_some_and(|data| data.len() as u64 == e.size && sha256_of(&data) == e.sha256);
+            if !exact {
+                return Err(format!("{} differs from the local shared script; cannot safely replace it for one bus", e.path));
+            }
+            report.had += 1;
+            continue;
+        }
+        if (selected_request.is_none() && own_vehicle_file(&e.path, root)) || own_script(&e.path) {
             report.kept_own += 1;
             continue;
         }
@@ -894,10 +1015,34 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
             report.had += 1;
             continue;
         }
+        // A server-owned bus may have already been downloaded to view another
+        // player. That content-addressed store is separate from lan-store, so
+        // reuse its verified bytes before requesting the same blob again.
+        // Authorization is still required and the selected bus must be on the
+        // server's allowlist; cached content never grants driving permission.
+        if selected_request.is_some() {
+            if let Some(bytes) = vehicles::blob(&e.sha256) {
+                if bytes.len() as u64 == e.size
+                    && sha256_of(&bytes) == e.sha256
+                    && quarantine::screen(&e.path, &bytes).is_ok()
+                {
+                    let file = store.put(e, &bytes)
+                        .map_err(|err| format!("{}: could not reuse the remote vehicle cache: {err}", e.path))?;
+                    mounted.push(file);
+                    report.had += 1;
+                    continue;
+                }
+            }
+        }
         todo.push(k);
         total += e.size;
     }
     save_hash_cache(&cache);
+    // A selected bus cannot be considered ready if even one required file was
+    // rejected; silently continuing can produce missing meshes or white paint.
+    if selected_request.is_some() && !report.refused.is_empty() {
+        return Err(format!("selected server bus has {} refused files, first: {}", report.refused.len(), report.refused[0]));
+    }
     if total > MAX_TOTAL {
         return Err(format!("the host's mods are {:.1} GB, more than a session takes ({:.0} GB)", total as f64 / 1e9, MAX_TOTAL as f64 / 1e9));
     }
@@ -936,6 +1081,11 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
         }
         attempt += 1;
         let mut req = String::with_capacity(left.len() * 10);
+        // A new connection starts with its original map-only manifest. Re-select
+        // the exact fleet package before GET, and verify the indexes did not change.
+        if attempt > 1 {
+            if let Some(cmd) = &selected_request { req.push_str(cmd); req.push('\n'); }
+        }
         for k in &left {
             req.push_str(&format!("GET {k}\n"));
         }
@@ -946,7 +1096,22 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
         });
         let mut got = 0usize;
         let mut failed: Option<String> = None;
+        if attempt > 1 && selected_request.is_some() {
+            let selected_again = (|| -> Result<Manifest, String> {
+                let n = read_reply(&mut input)?.ok_or("no selected list")?;
+                if n > 256 << 20 { return Err("selected list too large".into()); }
+                let mut b = vec![0u8; n as usize];
+                input.read_exact(&mut b).map_err(|e| e.to_string())?;
+                serde_json::from_slice(&b).map_err(|e| format!("bad selected list: {e}"))
+            })();
+            match selected_again {
+                Ok(next) if next.bus == manifest.bus && next.entries.iter().eq(manifest.entries.iter().map(|e| e)) => {}
+                Ok(_) => failed = Some("host changed the selected vehicle during download".into()),
+                Err(e) => failed = Some(e),
+            }
+        }
         for &k in &left {
+            if failed.is_some() { break; }
             let e = &manifest.entries[k];
             let r = (|| -> Result<Option<Vec<u8>>, String> {
                 let len = read_reply(&mut input)?.ok_or("no size")?;
@@ -992,6 +1157,9 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
             }
             log::warn!("LAN mods: {x}; {} files left, connecting again", left.len());
         }
+    }
+    if selected_request.is_some() && !report.refused.is_empty() {
+        return Err(format!("selected server vehicle contains {} unsafe or refused files: {}", report.refused.len(), report.refused[0]));
     }
     if again && mounted.len() <= MOUNTED.load(std::sync::atomic::Ordering::Relaxed) {
         upload::remember_host(host, session);
@@ -1071,7 +1239,7 @@ mod tests {
         std::thread::spawn(move || {
             for stream in listener.incoming().flatten() {
                 let (ready, key) = (ready.clone(), key.clone());
-                std::thread::spawn(move || handle(stream, &key, &ready, &std::sync::atomic::AtomicBool::new(false)));
+                std::thread::spawn(move || handle(stream, &key, &ready, &std::sync::atomic::AtomicBool::new(false), &Mutex::new(Default::default()), &std::env::temp_dir()));
             }
         });
         (addr, dir, session)

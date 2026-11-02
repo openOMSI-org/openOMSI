@@ -88,6 +88,9 @@ pub struct ServerCfg {
     pub owner_bans: Option<std::path::PathBuf>,
     /// A player whose game sends no hardware identifier is turned away.
     pub require_hardware_id: bool,
+    /// The players' internet addresses go into the log whole (`log_addresses`); off, a
+    /// public one keeps only its network (`203.0.113.x`).
+    pub log_addresses: bool,
     /// Where `server.cfg` is (its folder keeps the session's ban list).
     pub dir: std::path::PathBuf,
 }
@@ -224,6 +227,25 @@ public_server = 0
 # (older games, or players who switched it off)
 owner_bans =
 require_hardware_id = 0
+
+# What this server keeps and passes on about its players - tell them, e.g. in the motd:
+# - server.log (beside this file, written by run-server and start.sh): who joined and left
+#   and their names, the chat (every message), the admins' actions and errors. Their
+#   internet addresses keep only their network (203.0.113.x) unless log_addresses = 1
+#   (whole: for an abuse report); the local network's addresses are written whole.
+# - log_keep: how many earlier server.log files are kept (server.1.log the newest); a new
+#   one is begun at every start and when it passes log_max_mb (0: no size limit). log_keep
+#   = 0 keeps none.
+# - admin-audit.log: logins, refused passwords and the admins' and moderators' actions.
+#   Web logins and refused passwords include their whole source addresses, regardless of
+#   log_addresses. Rotated at 1 MB, keeping .1 and .2 (about 3 MB total).
+# - bans.json and the owner_bans list: the banned players' machine identifiers.
+# - with public_server = 1 the public list gets the name, icon, map, players and motd;
+#   with share_positions = 1 anyone who asks the web port sees names, buses and positions;
+#   voice is passed on, never recorded; the players' buses are kept uploads_keep_days.
+log_addresses = 0
+log_keep = 5
+log_max_mb = 20
 ";
 
 impl ServerCfg {
@@ -300,6 +322,7 @@ impl ServerCfg {
             public_list_url: kv.get("public_list_url").cloned().unwrap_or_default(),
             owner_bans: kv.get("owner_bans").filter(|v| !v.is_empty()).map(std::path::PathBuf::from),
             require_hardware_id: flag("require_hardware_id", false),
+            log_addresses: flag("log_addresses", false),
             dir: dir.to_path_buf(),
         }))
     }
@@ -513,6 +536,13 @@ mod passenger_density_tests {
         assert_eq!(d.admin_web, omsi_admin::WebMode::Local);
         assert_eq!(d.admin_trusted_proxies, omsi_admin::WebCfg::default().trusted_proxies);
         assert_eq!(d.admin_proxy_header, omsi_admin::ProxyHeader::ForwardedFor);
+        // the players' addresses are cut in the log unless the owner asks for them whole
+        assert!(!d.log_addresses);
+        assert!(load("log_addresses = 1\n").log_addresses);
+        // (the file says what the log keeps; the scripts read log_keep and log_max_mb)
+        for key in ["log_addresses = 0", "log_keep = 5", "log_max_mb = 20", "the chat (every message)"] {
+            assert!(super::DEFAULT_CFG.contains(key), "{key}");
+        }
     }
 
     /// The web administration's keys: a wrong word is never the open door.

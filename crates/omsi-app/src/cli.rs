@@ -81,6 +81,9 @@ pub(crate) struct Args {
     /// Discovered gateway to try if a direct UDP join gets no answer.
     #[arg(long)]
     pub(crate) lan_ws_fallback: Option<String>,
+    /// Explicitly allow selected server-owned bus/repaint downloads for this run.
+    #[arg(long)]
+    pub(crate) allow_server_fleet: bool,
     /// Dedicated server: host a session from this server.cfg (written with the defaults when
     /// missing), with no window, no sound and no graphics card.
     #[arg(long)]

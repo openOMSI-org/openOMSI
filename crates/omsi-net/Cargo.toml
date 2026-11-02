@@ -6,6 +6,8 @@ edition.workspace = true
 [dependencies]
 omsi-cfg = { path = "../omsi-cfg" }
 log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 ureq.workspace = true
 flate2.workspace = true
 sha2.workspace = true
