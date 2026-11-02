@@ -464,6 +464,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
         log::info!("sim thread: {}", if sim_thread { "the AI traffic, the people and the scenery scripts step beside the picture" } else { "off: every step on the main thread" });
     }
     let _lan_status = lan::StatusFileGuard;
+    // (a resumed bus loads its saved sheet by full path before any sheet is made this run)
     omsi_scene::schedule_paper::trust_cache_dir();
     // OMSI's tutorials: the lesson's own situation
     if let Some(n) = args.tutorial.filter(|n| (1..=4).contains(n)) {
