@@ -32,9 +32,6 @@ impl App {
             self.service_msg = Some(("That bus is no longer in the depot".into(), 3.0));
             return;
         };
-        if crate::lan::server_offers().is_some_and(|o| !crate::lan::offers(&o, &b.bus)) {
-            return;
-        }
         let before = (self.args.number.clone(), self.args.plate.clone(), self.args.depot.clone(), self.args.bus.clone());
         let outing = crate::depot_bus::outing_since(&self.session.career, &self.args, &self.session.depot_base);
         self.args.number = Some(b.number.clone()).filter(|n| !n.trim().is_empty());
@@ -235,10 +232,12 @@ pub(crate) fn placement(mut cx: PlacementCx) {
             return;
         }
         Err(TryRecvError::Disconnected) => {
+            log::warn!("placing {}: the loading stopped", pending.name);
             *cx.ui.service_msg = Some(("Vehicle loading stopped unexpectedly".into(), 5.0));
             return;
         }
         Ok(Err(e)) => {
+            log::warn!("placing {}: {e:#}", pending.name);
             *cx.ui.service_msg = Some((format!("Could not place {} ({e:#})", pending.name), 5.0));
             return;
         }

@@ -66,9 +66,6 @@ fn is_this_bus(v: &VehicleInstance, bus: &str) -> bool {
 }
 
 pub(crate) fn outing_since(c: &crate::career::Career, args: &crate::cli::Args, base: &depot::Outing) -> depot::Outing {
-    let reset = c.metres < base.metres || c.seconds < base.seconds || c.stops[0] < base.stops || c.tickets.0 < base.tickets || c.crashes[0] < base.crashes;
-    let none = depot::Outing::default();
-    let base = if reset { &none } else { base };
     depot::Outing {
         map: args.map.clone(),
         line: args.line.clone().unwrap_or_default(),
@@ -82,6 +79,39 @@ pub(crate) fn outing_since(c: &crate::career::Career, args: &crate::cli::Args, b
     }
 }
 
+pub(crate) fn shift_base(base: &mut depot::Outing, old: &crate::career::Career, new: &crate::career::Career) {
+    base.metres += new.metres - old.metres;
+    base.seconds += new.seconds - old.seconds;
+    base.stops += new.stops[0] - old.stops[0];
+    base.tickets += new.tickets.0 - old.tickets.0;
+    base.takings += new.tickets.1 - old.tickets.1;
+    base.crashes += new.crashes[0] - old.crashes[0];
+}
+
 pub(crate) fn listed() -> Vec<depot::DepotBus> {
     depot::load().map(|d| d.buses).unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::career::Career;
+
+    #[test]
+    fn the_outing_goes_on_across_a_driver_change() {
+        let mut args = <crate::cli::Args as clap::Parser>::parse_from(["openomsi"]);
+        args.map = "maps/Grundorf".into();
+        let mut old = Career::default();
+        (old.metres, old.seconds, old.stops[0], old.tickets, old.crashes[0]) = (5000.0, 600.0, 4, (3, 6.0), 1);
+        let mut base = depot::Outing { metres: 1000.0, seconds: 100.0, stops: 1, tickets: 1, takings: 2.0, crashes: 0, ..Default::default() };
+        let mut next = Career::default();
+        next.seconds = old.seconds;
+        next.go_on_from(&mut old);
+        shift_base(&mut base, &old, &next);
+        next.metres += 2000.0;
+        next.stops[0] += 2;
+        let o = outing_since(&next, &args, &base);
+        assert_eq!((o.metres, o.seconds, o.stops, o.tickets, o.takings, o.crashes), (6000.0, 500.0, 5, 2, 4.0, 1));
+        assert_eq!(o.map, "maps/Grundorf");
+    }
 }
