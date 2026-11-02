@@ -124,7 +124,7 @@ pub(super) fn find_shifter(v: &impl DriverCar, hip: Vec3, heading: f32) -> Optio
         }
         if grade_of_mesh == 0 {
             // No variable says so: the mesh's own file name may.
-            let file = format!("{:?}", vm.file).to_lowercase();
+            let file = vm.file.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
             let by_file = match &forced {
                 Some(f) => file.contains(f.as_str()),
                 None => STRONG.iter().chain(BY_FILE).any(|w| file.contains(w)),
