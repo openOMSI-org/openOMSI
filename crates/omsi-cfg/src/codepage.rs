@@ -293,7 +293,7 @@ impl Single {
 /// one: `name` turned back into bytes in a code page it may have been read in wrongly
 /// (the zip OEM pages 437 and 852, Windows 1252 and 1250) and read again in the one it
 /// may have been written in (CP866, the Russian OEM page zip tools use, Windows 1251, 1250,
-/// 1252, and the double-byte pages of a Korean, Chinese or Japanese system, where Omsi.exe
+/// 1252, the Turkish 1254, and the double-byte pages of a Korean, Chinese or Japanese system, where Omsi.exe
 /// reads an .o3d's texture names in that page). ASCII names have no other spelling; `name`
 /// itself is not in the list.
 pub fn name_variants(name: &str) -> Vec<String> {
@@ -312,6 +312,7 @@ pub fn name_variants(name: &str) -> Vec<String> {
         Single::Enc(encoding_rs::WINDOWS_1251),
         Single::Enc(encoding_rs::WINDOWS_1250),
         Single::Enc(encoding_rs::WINDOWS_1252),
+        Single::Enc(encoding_rs::WINDOWS_1254),
         Single::Table(&CP437_HIGH),
         Single::Enc(encoding_rs::EUC_KR),
         Single::Enc(encoding_rs::GBK),
@@ -389,6 +390,17 @@ mod tests {
         assert_eq!(detect(&cp1252("Volumenstrom in m³/s, Dichte in g/m³")), CodePage::Windows1252);
         assert_eq!(detect("Überlandbus".as_bytes()), CodePage::Utf8);
         assert_eq!(decode(&cp1251("ЛиАЗ")), "ЛиАЗ");
+    }
+
+    #[test]
+    fn a_turkish_file_name_read_as_1252_is_found() {
+        assert!(name_variants("ÝÞIKLAR_ðüneþ.bmp").contains(&"İŞIKLAR_ğüneş.bmp".to_string()));
+        let dir = std::env::temp_dir().join(format!("openomsi_cp1254_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("İŞIKLAR_ğüneş.bmp"), b"x").unwrap();
+        let found = crate::resolve_path(&dir, "ÝÞIKLAR_ðüneþ.bmp");
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(found.ends_with("İŞIKLAR_ğüneş.bmp"), "{}", found.display());
     }
 
     #[test]
