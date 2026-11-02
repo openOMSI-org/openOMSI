@@ -25,6 +25,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   *Cars around* go on past 120 to 160, 220 and 300 vehicles, for busy maps and rush hours; more
   cars cost frames and can jam junctions, so 120 stays the top of the usual range. Dedicated
   servers keep their limit of 120.
+- **Your depot buses in the game**: the game menu's *Place a vehicle* lists the buses of your depot
+  first (*My depot: name | plate*). One taken replaces the bus driven, with its livery, fleet
+  number, plate, odometer and wear; the session is written back to it when it ends, and the time
+  spent in the bus driven before goes to that one (when it was a depot bus too).
 - **Long lists in the launcher filter as you type**: a drop-down with more than twelve entries
   (the liveries, the depot files, the languages...) shows a search line at its top; typing
   narrows it down, Backspace and Esc undo the search.

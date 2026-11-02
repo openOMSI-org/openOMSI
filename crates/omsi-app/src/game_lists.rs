@@ -637,6 +637,14 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
             }
         }
         ListKind::PlaceMaker => {
+            if search_query(app).trim().is_empty() {
+                let offered = crate::lan::server_offers();
+                let driven = app.args.depot.clone().filter(|_| app.player.is_some());
+                for b in crate::depot_bus::listed().into_iter().filter(|b| offered.as_ref().is_none_or(|o| crate::lan::offers(o, &b.bus)) && driven.as_deref() != Some(b.id.as_str())) {
+                    let plate = if b.plate.trim().is_empty() { String::new() } else { format!("  |  {}", b.plate.trim()) };
+                    out.push((format!("{} {}{plate}", tr("My depot:"), b.name.trim()), format!("depot {}", b.id)));
+                }
+            }
             let all = place_vehicles(app, &tr("Unknown manufacturer"));
             let mut groups: Vec<(String, String, Vec<&(String, String, String, String)>)> = Vec::new();
             for v in &all {
@@ -964,18 +972,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                 "metar_icao_edit" if step => {
                     if app.menus.menu_edit_icao { app.apply_icao_edit(); } else { app.start_icao_edit(); }
                 }
-                // the exact time: Enter starts typing it, and sets it when typed
-                "time_edit" if step => {
-                    if app.menus.menu_edit.is_some() {
-                        app.apply_time_edit();
-                    } else if app.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
-                        app.service_msg = Some(("In a LAN session the host sets the clock".into(), 3.0));
-                    } else if app.real_time_locked() {
-                        app.service_msg = Some(("The time cannot be changed while the real-time sync is on".into(), 3.0));
-                    } else {
-                        app.menus.menu_edit = Some(String::new());
-                    }
-                }
+                "time_edit" | "clock_ontime" | "clock_set" | "clock_shift" if step => clock_action(app, verb, arg),
                 "view_editor" if step => { crate::game_panels::view_editor::open(app); return None; }
                 "mirror_hud_edit" if step => { app.page_action(verb); return None; }
                 "seat_reset" if step => {
@@ -983,26 +980,6 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                     app.settings.seat = [0.0; 3];
                     app.settings.seat_pitch_deg = 0.0;
                     remember_bus_seat(app);
-                }
-                "clock_ontime" if step => {
-                    if app.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
-                        app.service_msg = Some(("In a LAN session the host sets the clock".into(), 3.0));
-                    } else if let Some(d) = app.player.as_ref().map(|p| p.vehicle.host.tt_delay as f64).filter(|d| d.abs() >= 1.0) {
-                        // (the delay as it is now, not as the button was drawn: a second click
-                        // would otherwise move the clock by the old amount again)
-                        app.shift_clock(-d);
-                        if let Some(p) = app.player.as_mut() {
-                            p.vehicle.host.tt_delay = 0.0;
-                        }
-                    }
-                }
-                "clock_set" | "clock_shift" if step => {
-                    if app.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
-                        app.service_msg = Some(("In a LAN session the host sets the clock".into(), 3.0));
-                    } else if let Ok(secs) = arg.trim().parse::<f64>() {
-                        let by = if verb == "clock_set" { secs - app.clock.time } else { secs };
-                        app.shift_clock(by);
-                    }
                 }
                 "traffic_clear" if step => {
                     crate::admin::clear_ai_traffic(app);
@@ -1138,6 +1115,11 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             None
         }
         ListKind::PlaceMaker | ListKind::PlaceType(_) if verb == "maker" => Some(ListKind::PlaceType(arg.to_string())),
+        ListKind::PlaceMaker if verb == "depot" => {
+            app.close_game_menu();
+            app.take_depot_bus(arg.trim());
+            None
+        }
         ListKind::PlaceMaker | ListKind::PlaceType(_) => Some(ListKind::PlaceLivery(arg.to_string())),
         ListKind::PlaceLivery(bus) => Some(ListKind::PlaceHof(bus.clone(), arg.to_string())),
         ListKind::PlaceHof(bus, paint) => {
@@ -1202,6 +1184,44 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             }
             None
         }
+    }
+}
+
+fn clock_action(app: &mut App, verb: &str, arg: &str) {
+    match verb {
+        // the exact time: Enter starts typing it, and sets it when typed
+        "time_edit" => {
+            if app.menus.menu_edit.is_some() {
+                app.apply_time_edit();
+            } else if app.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
+                app.service_msg = Some(("In a LAN session the host sets the clock".into(), 3.0));
+            } else if app.real_time_locked() {
+                app.service_msg = Some(("The time cannot be changed while the real-time sync is on".into(), 3.0));
+            } else {
+                app.menus.menu_edit = Some(String::new());
+            }
+        }
+        "clock_ontime" => {
+            if app.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
+                app.service_msg = Some(("In a LAN session the host sets the clock".into(), 3.0));
+            } else if let Some(d) = app.player.as_ref().map(|p| p.vehicle.host.tt_delay as f64).filter(|d| d.abs() >= 1.0) {
+                // (the delay as it is now, not as the button was drawn: a second click
+                // would otherwise move the clock by the old amount again)
+                app.shift_clock(-d);
+                if let Some(p) = app.player.as_mut() {
+                    p.vehicle.host.tt_delay = 0.0;
+                }
+            }
+        }
+        "clock_set" | "clock_shift" => {
+            if app.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
+                app.service_msg = Some(("In a LAN session the host sets the clock".into(), 3.0));
+            } else if let Ok(secs) = arg.trim().parse::<f64>() {
+                let by = if verb == "clock_set" { secs - app.clock.time } else { secs };
+                app.shift_clock(by);
+            }
+        }
+        _ => {}
     }
 }
 

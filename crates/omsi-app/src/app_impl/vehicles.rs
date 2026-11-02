@@ -27,6 +27,61 @@ impl App {
         }
     }
 
+    pub(crate) fn settle_depot_switch(&mut self, quitting: bool) {
+        if quitting {
+            self.menus.pending_placement = None;
+        }
+        let Some(sw) = &self.session.depot_prev else { return };
+        let swapped_in = self.menus.swapped_in;
+        let now = self.player.as_ref().map(|p| (p.uid, swapped_in == Some(p.uid) && self.args.bus.as_deref().is_some_and(|b| crate::depot_bus::is_this_bus(&p.vehicle, b))));
+        let Some(landed) = crate::depot_bus::switch_landed(self.menus.pending_placement.is_some(), Some(sw.old_uid), now) else { return };
+        let Some(sw) = self.session.depot_prev.take() else { return };
+        if landed {
+            if let Some((old, outing, wear)) = sw.record {
+                crate::depot_bus::record_wear(&old, &outing, wear);
+            }
+            self.session.depot_base = sw.base;
+        } else {
+            log::warn!("depot bus {:?}: not driven, back to {:?}", self.args.depot, sw.prev.0);
+            (self.args.depot, self.args.bus) = sw.prev;
+        }
+    }
+
+    pub(crate) fn take_depot_bus(&mut self, id: &str) {
+        self.settle_depot_switch(false);
+        let Some(b) = crate::depot_bus::listed().into_iter().find(|b| b.id == id) else {
+            self.service_msg = Some(("That bus is no longer in the depot".into(), 3.0));
+            return;
+        };
+        let before = (self.args.number.clone(), self.args.plate.clone(), self.args.depot.clone(), self.args.bus.clone());
+        let driven = self.player.as_ref().map(|p| p.uid);
+        let record = match (before.2.clone(), self.player.as_ref()) {
+            (Some(old), Some(p)) if crate::depot_bus::drives(&p.vehicle.ty.def.path.to_string_lossy(), crate::depot_bus::bus_of(&old).as_deref()) => {
+                Some((old, crate::depot_bus::outing_since(&self.session.career, &self.args, &self.session.depot_base), crate::depot_bus::wear(&p.vehicle)))
+            }
+            _ => None,
+        };
+        self.args.number = Some(b.number.clone()).filter(|n| !n.trim().is_empty());
+        self.args.plate = Some(b.plate.clone()).filter(|n| !n.trim().is_empty());
+        self.args.depot = Some(b.id.clone());
+        self.args.bus = Some(b.bus.clone());
+        let idle = self.menus.pending_placement.is_none();
+        if idle {
+            self.menus.swapped_in = None;
+        }
+        self.menus.swap_pending = driven.is_some();
+        self.place_vehicle(&b.bus, Some(b.paint.clone()).filter(|p| !p.trim().is_empty()), None);
+        (self.args.number, self.args.plate) = (before.0, before.1);
+        let started = idle && self.menus.pending_placement.is_some();
+        let Some(old_uid) = driven.filter(|_| started) else {
+            (self.args.depot, self.args.bus) = (before.2, before.3);
+            return;
+        };
+        let c = &self.session.career;
+        let base = omsi_launcher_lib::depot::Outing { metres: c.metres, seconds: c.seconds, stops: c.stops[0], tickets: c.tickets.0, takings: c.tickets.1, crashes: c.crashes[0], ..Default::default() };
+        self.session.depot_prev = Some(crate::depot_bus::DepotSwitch { prev: (before.2, before.3), old_uid, record, base });
+    }
+
     /// The vehicle is read and its meshes and textures made on a worker thread; the next
     /// frames go on and `placement` puts it into the world when it is ready.
     pub(crate) fn place_vehicle(&mut self, bus: &str, paint: Option<String>, hof: Option<String>) {
@@ -245,10 +300,12 @@ pub(crate) fn placement(mut cx: PlacementCx) {
             return;
         }
         Err(TryRecvError::Disconnected) => {
+            log::warn!("placing {}: the loading stopped", pending.name);
             *cx.ui.service_msg = Some(("Vehicle loading stopped unexpectedly".into(), 5.0));
             return;
         }
         Ok(Err(e)) => {
+            log::warn!("placing {}: {e:#}", pending.name);
             *cx.ui.service_msg = Some((format!("Could not place {} ({e:#})", pending.name), 5.0));
             return;
         }
@@ -269,6 +326,7 @@ pub(crate) fn placement(mut cx: PlacementCx) {
     match result {
         Ok(Some(q)) if pending.replace.is_some() => {
             let name = format!("{} {}", q.vehicle.ty.def.manufacturer, q.vehicle.ty.def.type_name);
+            cx.menus.menus.swapped_in = Some(q.uid);
             replace_driven_vehicle(q, &mut cx);
             *cx.ui.service_msg = Some(if pending.reload {
                 (format!("Reloaded {} from its files", name.trim()), 4.0)

@@ -468,6 +468,7 @@ pub(crate) struct MenuState {
     /// The vehicle being chosen in "Place a vehicle" takes the place of the one driven
     /// (the game menu's "Swap for another vehicle", #728).
     pub(crate) swap_pending: bool,
+    pub(crate) swapped_in: Option<u64>,
     /// The vehicle chosen being read on a worker thread (see `App::place_vehicle`).
     pub(crate) pending_placement: Option<crate::spawn::PendingPlacement>,
     /// The line of the open list whose slider the mouse button holds (it follows the cursor).
@@ -576,6 +577,8 @@ pub(crate) struct SessionState {
     pub(crate) pumping: Option<Pumping>,
     /// The driver's personnel file and this session's statistics.
     pub(crate) career: career::Career,
+    pub(crate) depot_base: omsi_launcher_lib::depot::Outing,
+    pub(crate) depot_prev: Option<crate::depot_bus::DepotSwitch>,
     /// The duty's stops with their times as driven, kept in a file (`journey`).
     pub(crate) journey: Option<crate::journey::Journey>,
     /// How wet the roads are (0..1), built up by rain and dried by the sun.
