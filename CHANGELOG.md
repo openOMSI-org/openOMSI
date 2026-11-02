@@ -53,6 +53,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 - **Finer moves in the photo mode**: Alt now slows the turning as well as the moving (to a
   quarter), for the small adjustments of a zoomed-in shot, and the camera rises and sinks at half
   the speed it moves along, so it can be lowered to a kneeling height without overshooting.
+- **Several AI vehicles at once**: in Settings › AI Lists, the vehicle picker for adding to a group,
+  a depot or a line has a tick box on each vehicle; tick several and *Add the n ticked* adds them
+  all in one go (one click still previews, a double click still adds one).
 - **Long lists in the launcher filter as you type**: a drop-down with more than twelve entries
   (the liveries, the depot files, the languages...) shows a search line at its top; typing
   narrows it down, Backspace and Esc undo the search.
