@@ -487,7 +487,7 @@ impl TrafficSim {
         // the player's vehicle and the LAN players' on the lanes, for the right of way (the
         // rear sections and the vehicles placed by hand stand, they do not come)
         let mut users: Vec<WayUser> = Vec::new();
-        if let Some(p) = player.as_ref() {
+        if let Some(p) = player.as_ref().filter(|_| !self.player_waving()) {
             users.extend(way_user_on(&self.net, p, self.player_blinker, player_standing, self.player_priority));
         }
         for (id, b) in others.iter().filter(|(id, _)| *id < 0xFFF0_0000) {
