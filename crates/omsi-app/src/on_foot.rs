@@ -179,6 +179,13 @@ impl OnFoot {
         }
     }
 
+    pub(crate) fn ridden_ai(&self) -> Option<u64> {
+        match self.seat.map(|s| s.0).or(self.inside.map(|i| i.0)).or(self.transit.and_then(|t| t.after).map(|a| a.0)) {
+            Some(BusId::Ai(id)) if self.settle <= 0.0 && self.cam == FootCam::First => Some(id),
+            _ => None,
+        }
+    }
+
     pub(crate) fn eye_aboard(&self) -> Option<DVec3> {
         let aboard = self.settle <= 0.0 && self.cam == FootCam::First && (self.seat.is_some() || self.inside.is_some());
         self.eye.filter(|_| aboard)

@@ -63,6 +63,7 @@ pub struct Traffic {
     /// The bus the player rides in on foot, heard from inside: its whole `[sound]` set as
     /// the player's own bus is heard from its cab (#1286).
     pub(crate) riding_sounds: Option<(u64, omsi_audio::SoundSet)>,
+    pub(crate) ridden: Option<u64>,
     /// `[sound_ai]` configurations by file.
     pub(crate) sound_cfgs: HashMap<std::path::PathBuf, Option<Arc<omsi_vehicle::SoundCfg>>>,
     /// Shared script environment for existing AI and for their next `{init}`.
@@ -112,6 +113,7 @@ impl Traffic {
             sounds: HashMap::new(),
             orphan_sounds: Vec::new(),
             riding_sounds: None,
+            ridden: None,
             sound_cfgs: HashMap::new(),
             script_environment: None,
             sound_plans: HashMap::new(),

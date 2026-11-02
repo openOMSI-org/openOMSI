@@ -121,6 +121,8 @@ pub(super) fn traffic(cx: TrafficCx, dt: f32) {
         // (the sounds and the picture only in the frame's last tick: the triggers the cars
         // fire wait in them until then, and only the last tick's state is drawn)
         let view_due = cx.clock.fixed_tick.view_due();
+        // (riding in an AI bus on foot, standing or seated: that bus is heard and drawn from inside, #1286)
+        t.ridden = cx.people.on_foot.as_ref().and_then(|f| f.ridden_ai());
         let __t3 = Instant::now();
         if let Some(a) = cx.sound.audio.as_ref().filter(|_| view_due) {
             let street = cx.weather.weather
@@ -132,12 +134,7 @@ pub(super) fn traffic(cx: TrafficCx, dt: f32) {
             // heard round the camera (the ear), not round the player's bus: a
             // free camera following an AI bus lost its sound 250 m from the bus
             let ear = cx.view.camera.as_ref().map(|c| c.position).unwrap_or(center);
-            // (riding in an AI bus on foot: that bus is heard from inside, #1286)
-            let riding = cx.people.on_foot.as_ref().and_then(|f| match f.inside {
-                Some((omsi_sim::people::BusId::Ai(id), _)) => Some(id),
-                _ => None,
-            });
-            t.update_audio(a, ear, street, muffled || riding.is_some(), riding, cx.common.settings.vol_ai);
+            t.update_audio(a, ear, street, muffled || t.ridden.is_some(), t.ridden, cx.common.settings.vol_ai);
         }
         cx.perf.profile.add(crate::profile_keys::ProfKey::TrafficAudio, __t3.elapsed().as_secs_f64());
         let __t4 = Instant::now();
