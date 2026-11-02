@@ -231,6 +231,7 @@ pub struct VehicleInstance {
     v_velocity_ground: Option<omsi_script::VarId>,
     v_n_wheel: Option<omsi_script::VarId>,
     v_m_wheel: Option<omsi_script::VarId>,
+    turn_last: HashMap<omsi_script::VarId, f32>,
     v_throttle: Option<omsi_script::VarId>,
     v_brake: Option<omsi_script::VarId>,
     /// `Brakeforce`: the scripts' brake force for the whole vehicle (N), shared out over its

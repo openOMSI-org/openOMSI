@@ -238,6 +238,7 @@ impl VehicleInstance {
             v_velocity_ground: v("Velocity_Ground"),
             v_n_wheel: v("n_Wheel"),
             v_m_wheel: v("M_Wheel"),
+            turn_last: HashMap::new(),
             v_throttle: v("Throttle").or_else(|| v("throttle_pedal")),
             v_brake: v("Brake").or_else(|| v("brake_pedal")),
             v_brakeforce: v("Brakeforce"),

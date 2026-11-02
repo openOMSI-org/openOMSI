@@ -3,9 +3,12 @@
 
 use super::*;
 
-pub(super) fn counted_turn(old: f32, angle: f32) -> f32 {
+pub(super) fn counted_turn(value: f32, last: Option<f32>, angle: f32) -> f32 {
     use std::f32::consts::{PI, TAU};
-    old + (angle - old + PI).rem_euclid(TAU) - PI
+    match last {
+        Some(last) => value + (angle - last + PI).rem_euclid(TAU) - PI,
+        None => angle,
+    }
 }
 
 impl VehicleInstance {
@@ -21,8 +24,9 @@ impl VehicleInstance {
 
     pub(super) fn put_turn(&mut self, id: Option<omsi_script::VarId>, angle: f32) {
         if let Some(i) = id {
+            let last = self.turn_last.insert(i, angle);
             let v = &mut self.state.vars[i as usize];
-            *v = counted_turn(*v, angle);
+            *v = counted_turn(*v, last, angle);
         }
     }
 
@@ -294,15 +298,26 @@ mod turn_tests {
 
     #[test]
     fn a_wheel_turn_counts_on_past_a_full_turn_and_back() {
-        let mut v = 0.0;
-        for k in 1..=40 {
-            v = counted_turn(v, (k as f32 * 0.5).rem_euclid(std::f32::consts::TAU));
+        let (mut v, mut last) = (0.0, None);
+        let mut step = |v: &mut f32, k: i32| {
+            let angle = (k as f32 * 0.5).rem_euclid(std::f32::consts::TAU);
+            *v = counted_turn(*v, last.replace(angle), angle);
+        };
+        for k in 0..=40 {
+            step(&mut v, k);
         }
         assert!((v - 20.0).abs() < 1e-3, "{v}");
         for k in (0..40).rev() {
-            v = counted_turn(v, (k as f32 * 0.5).rem_euclid(std::f32::consts::TAU));
+            step(&mut v, k);
         }
         assert!(v.abs() < 1e-3, "{v}");
-        assert!((counted_turn(0.0, 0.3) - 0.3).abs() < 1e-6);
+        for k in 0..=6 {
+            step(&mut v, k);
+        }
+        v = 0.0;
+        for k in 7..=10 {
+            step(&mut v, k);
+        }
+        assert!((v - 2.0).abs() < 1e-3, "a script's reset counts on from 0: {v}");
     }
 }
