@@ -124,9 +124,6 @@ impl App {
     }
 
     pub(crate) fn walk_to(&mut self, at: glam::DVec2) {
-        if self.session.on_foot.is_none() {
-            self.get_up();
-        }
         let top = glam::DVec3::new(at.x, at.y, 3000.0);
         let street_height = || {
             let p = glam::DVec3::new(at.x, at.y, 0.0);
@@ -134,7 +131,14 @@ impl App {
             nets.into_iter().flatten().find_map(|net| net.nearest_lane(p, omsi_sim::traffic::LaneKind::Street).filter(|(_, _, d)| *d <= 300.0).map(|(l, s, _)| net.lanes[l].at(s).0.z))
         };
         let ground = self.world.clone().and_then(|w| crate::placing::ground_hit(&w, top, glam::DVec3::NEG_Z, 6000.0)).or_else(|| street_height().map(|z| glam::DVec3::new(at.x, at.y, z)));
-        let (Some(f), Some(g)) = (self.session.on_foot.as_mut(), ground) else { return };
+        let Some(g) = ground else {
+            self.service_msg = Some((omsi_ui::tr("No ground to stand on there").into_owned(), 3.0));
+            return;
+        };
+        if self.session.on_foot.is_none() {
+            self.get_up();
+        }
+        let Some(f) = self.session.on_foot.as_mut() else { return };
         f.pos = g;
         f.vel = glam::DVec2::ZERO;
         (f.lift, f.vz) = (0.0, 0.0);
