@@ -306,6 +306,13 @@ impl World {
                     continue;
                 }
                 for h in &ot.holes {
+                    // (a cutter far under the ground leaves it whole: see `cutter_is_buried`)
+                    let top = h.positions.iter().map(|v| pose.rot.transform_point3(*v).z as f64 + pose.pos.z).fold(f64::MIN, f64::max);
+                    let local = pose.pos - q.origin;
+                    let ground = q.base_terrain.sample(local.x.clamp(0.0, tile_size()) as f32, local.y.clamp(0.0, tile_size()) as f32) as f64;
+                    if cutter_is_buried(top, ground) {
+                        continue;
+                    }
                     if !outside(&mesh_bounds(h, &pose.rot, pose.pos)) {
                         ts.rasterize_hole(h, &pose.rot, pose.pos, tx, ty);
                         // and cut exactly along its rim, as along a spline's outline:
@@ -704,6 +711,31 @@ const BUILDING_HEIGHT: f32 = 4.0;
 const BUILDING_WIDTH: f32 = 4.0;
 /// Cells per tile edge where the ambience looks for water (some 19 m on a Berlin tile).
 const WATER_CELLS: usize = 16;
+
+/// How far under the ground (m) the top of a `[terrainhole]` cutter may lie and still cut it.
+const BURIED_CUTTER: f64 = 20.0;
+
+/// Whether a cutter lies so far under the ground that OMSI 2 leaves the ground over it whole.
+/// Berlin-Spandau's tile (2382, 11287) has a junction saved at (0, 0, 0), 31 m under the ground
+/// there: in OMSI 2 the junction is under the grass and nothing is cut, while a cut made for it
+/// was a 31 m pit whose walls were drawn as long streaks. (The limit is a guess between that
+/// and the 12 m a cutter may be under the ground and still cut it.)
+pub(super) fn cutter_is_buried(top: f64, ground: f64) -> bool {
+    ground - top > BURIED_CUTTER
+}
+
+#[cfg(test)]
+mod buried_cutter_tests {
+    use super::cutter_is_buried;
+
+    #[test]
+    fn a_cutter_31_m_under_the_ground_does_not_cut_it_but_a_tunnel_cutter_does() {
+        assert!(cutter_is_buried(0.0, 30.9));
+        assert!(!cutter_is_buried(20.0, 30.9));
+        assert!(!cutter_is_buried(-12.0, 2.0));
+        assert!(!cutter_is_buried(35.0, 30.9));
+    }
+}
 
 /// Restore the original projected cuts only for a tile whose fitting failed.
 fn restore_spline_holes(

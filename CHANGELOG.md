@@ -523,6 +523,17 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **No more 31 m pit with streaked walls at a corner of Berlin-Spandau.** A junction of the
+  map (`Einm_Poststr_Poststr`, tile 2382/11287) was saved at the editor's default (0, 0, 0). A
+  crossing's height counts as absolute, so it lies 31 m under the ground, as in OMSI 2. There
+  the ground over it stays whole; here the ground was cut out over it and the cut's walls were
+  drawn as stretched streaks. A `[terrainhole]` cutter whose top lies more than 20 m under the
+  ground no longer cuts it.
+- **No more ground thrown a kilometre up or down beside Berlin-Spandau's railway.** A sliver of
+  a triangle in a spline's cross-section (the 15 cm rail profiles) gave the ground fitted beside
+  it a slope of 100 or more, and the blend pulled ground vertices far above or below the map. The
+  slope a sliver gives its rim is now limited to about 70 degrees; a real steep face keeps its
+  own.
 - **Each graphics profile is a file of its own.** The launcher kept them all in one
   `graphics_profiles.json`: a file that could not be read counted as having none, and the next
   profile kept was written alone over the file, taking the rest with it. They are now in

@@ -78,6 +78,11 @@ pub(super) fn profiles(def: &Spline) -> Vec<Vec<[f32; 3]>> {
     out
 }
 
+/// The steepest slope (rise over run) a rim's blend may continue from a sliver: about 70 degrees.
+const MAX_RIM_GRADIENT: f64 = 3.0;
+/// The sine of the angle under which a triangle seen from above is a sliver.
+const SLIVER: f64 = 0.01;
+
 /// Each boundary edge carries the adjacent surface's horizontal gradient. This
 /// lets the exterior blend match both the rim elevation and the slope at that rim.
 pub(super) fn boundary(mesh: &MeshData, offset: DVec3) -> Vec<([DVec3; 2], DVec2)> {
@@ -89,7 +94,16 @@ pub(super) fn boundary(mesh: &MeshData, offset: DVec3) -> Vec<([DVec3; 2], DVec2
         if det.abs() < 1e-8 {
             continue;
         }
-        let gradient = DVec2::new(d.z * e.y - e.z * d.y, d.x * e.z - e.x * d.z) / det;
+        let mut gradient = DVec2::new(d.z * e.y - e.z * d.y, d.x * e.z - e.x * d.z) / det;
+        // A sliver of a triangle (the 15 cm rail profiles of Berlin-Spandau's railway) has
+        // a determinant barely above the cut-off and a gradient of 100 or more; the blend
+        // multiplies it by a distance and pulled ground vertices a kilometre up or down,
+        // drawn as long streaked walls. Only such a sliver (thinner than 0.6 degrees seen from
+        // above) is limited; a real steep face keeps its slope.
+        let sliver = det.abs() < SLIVER * d.truncate().length() * e.truncate().length();
+        if sliver && gradient.length() > MAX_RIM_GRADIENT {
+            gradient *= MAX_RIM_GRADIENT / gradient.length();
+        }
         for j in 0..3 {
             let (u, v) = (t[j], t[(j + 1) % 3]);
             let entry = edges.entry((u.min(v), u.max(v))).or_insert((
