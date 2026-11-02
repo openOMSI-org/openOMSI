@@ -408,12 +408,11 @@ pub(crate) fn situation_heading(q: &[f64; 9]) -> f64 {
 
 /// The key `Inputs/keyboard.cfg` gives `ticket_give`, as the key names file spells it.
 pub(crate) fn ticket_key_name(root: &Path, bindings: &[omsi_content::KeyBinding]) -> String {
-    let Some(b) = bindings
-        .iter()
-        .find(|b| b.action.eq_ignore_ascii_case("ticket_give"))
-    else {
-        return "T".into();
-    };
+    key_name(root, bindings, "ticket_give").unwrap_or_else(|| "T".into())
+}
+
+pub(crate) fn key_name(root: &Path, bindings: &[omsi_content::KeyBinding], action: &str) -> Option<String> {
+    let b = bindings.iter().find(|b| b.action.eq_ignore_ascii_case(action) && b.scan_code != 0)?;
     let names =
         omsi_content::input::load_key_names(&root.join("Inputs/ENG.kyb")).unwrap_or_default();
     let key = names
@@ -422,12 +421,12 @@ pub(crate) fn ticket_key_name(root: &Path, bindings: &[omsi_content::KeyBinding]
         .map(|(_, n)| n.clone())
         .unwrap_or_else(|| format!("key {}", b.scan_code));
     let mut out = String::new();
-    for (bit, name) in [(omsi_content::input::KEY_SHIFT, "Shift+"), (omsi_content::input::KEY_CTRL, "Ctrl+"), (omsi_content::input::KEY_ALT, "Alt+")] {
+    for (bit, name) in [(omsi_content::input::KEY_CTRL, "Ctrl+"), (omsi_content::input::KEY_SHIFT, "Shift+"), (omsi_content::input::KEY_ALT, "Alt+")] {
         if b.modifier & bit != 0 {
             out.push_str(name);
         }
     }
-    out + &key
+    Some(out + &key)
 }
 
 /// A content path saved whole (a map or bus from an archive or the content folder:

@@ -136,7 +136,7 @@ impl App {
                 self.request_passenger_door();
                 return;
             }
-            // getting up (Ctrl+Shift+G) and, on foot, the walker's keys
+            // on foot, the walker's keys
             if self.foot_key(code, pressed, repeat, ctrl, shift_now) {
                 return;
             }

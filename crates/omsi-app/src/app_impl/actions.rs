@@ -147,7 +147,9 @@ impl App {
             "screenshot" => self.take_screenshot(),
             "flashlight" => self.toggle_flashlight(),
             "get_up" => {
-                if self.session.on_foot.is_none() && self.player.is_some() {
+                if self.session.on_foot.as_ref().is_some_and(|f| f.inside.is_some()) {
+                    self.step_out();
+                } else if self.session.on_foot.is_none() && self.player.is_some() {
                     self.get_up();
                 }
             }
