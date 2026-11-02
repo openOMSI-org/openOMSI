@@ -162,6 +162,7 @@ fn numeric_ibis_line(line: &str) -> bool {
 /// list (the destination stays: the one on the display now, else the first -
 /// `schedule::shown_destination`).
 pub(crate) fn set_route_by_hand(app: &mut App, line: &str) {
+    crate::platform::text_input(app.window.as_deref(), false);
     let line = line.trim();
     if line.is_empty() {
         return;
@@ -904,6 +905,21 @@ fn graphics_confirmation_action(app: &mut App, tab: usize, action: &str, mv: Mov
     Some(ListKind::Options(tab))
 }
 
+fn route_number_input(app: &mut App) -> Option<ListKind> {
+    // The first press starts typing; the next one (Enter) sets what is typed.
+    match app.menus.menu_edit.take() {
+        Some(t) => {
+            set_route_by_hand(app, &t);
+            None
+        }
+        None => {
+            app.menus.menu_edit = Some(String::new());
+            crate::platform::text_input(app.window.as_deref(), true);
+            Some(ListKind::RouteNumbers)
+        }
+    }
+}
+
 /// Do a line of the list, a setting changed as `mv` says (Enter and a click on a line are
 /// `Move::Next`; the arrows and a click on a slider or a stepper the others).
 pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -> Option<ListKind> {
@@ -1157,19 +1173,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             None
         }
         ListKind::Destinations if verb == "routes" => Some(ListKind::RouteNumbers),
-        ListKind::RouteNumbers if verb == "route_type" => {
-            // the first press starts typing, the next one (Enter) sets what is typed
-            match app.menus.menu_edit.take() {
-                Some(t) => {
-                    set_route_by_hand(app, &t);
-                    None
-                }
-                None => {
-                    app.menus.menu_edit = Some(String::new());
-                    Some(ListKind::RouteNumbers)
-                }
-            }
-        }
+        ListKind::RouteNumbers if verb == "route_type" => route_number_input(app),
         ListKind::RouteNumbers => {
             set_route_by_hand(app, arg);
             None

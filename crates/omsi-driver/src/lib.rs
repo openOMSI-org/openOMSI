@@ -16,7 +16,6 @@ use winit::keyboard::KeyCode;
 
 pub mod auto_announce;
 pub mod rail_drive;
-pub mod trolley_sound;
 pub mod control;
 #[cfg(test)]
 mod test_support;
@@ -264,7 +263,7 @@ pub struct Player {
     pub trolley_view: Option<Box<omsi_scene::trolley_view::TrolleyView>>,
     /// The sparks of a rail vehicle's pantograph (see `omsi_scene::arc_fx`).
     pub panto_fx: omsi_scene::arc_fx::ArcFx,
-    pub trolley_sound: crate::trolley_sound::TrolleySound,
+    pub trolley_sound: omsi_audio::trolley::TrolleySound,
     /// The stop announcements the game presses the IBIS on for (see `auto_announce`).
     pub announce: crate::auto_announce::AutoAnnounce,
 }

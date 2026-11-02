@@ -5,8 +5,8 @@
 //! happen.
 
 use glam::Vec3;
-use omsi_audio::{AudioEngine, Clip, VoiceId, VoiceParams};
-use omsi_trolley::RigSound;
+use crate::{AudioEngine, Clip, VoiceId, VoiceParams};
+use omsi_trolley::{RigSound, TrolleyRig};
 use std::sync::Arc;
 
 const RATE: u32 = 44100;
@@ -28,7 +28,7 @@ fn clip(samples: Vec<f32>) -> Arc<Clip> {
 
 /// Sliding contact: noise tilted towards the highs, a loop of one second, with the six-pulse
 /// rectifier's 300 Hz ripple riding on its level.
-pub fn hiss() -> Arc<Clip> {
+fn hiss() -> Arc<Clip> {
     let n = RATE as usize;
     let mut r = Rng(0x9e37_79b9_7f4a_7c15);
     let raw: Vec<f32> = (0..n).map(|_| r.next()).collect();
@@ -44,7 +44,7 @@ pub fn hiss() -> Arc<Clip> {
 }
 
 /// An arc's crack: a burst of noise falling in a few milliseconds over a sharp tone.
-pub fn snap() -> Arc<Clip> {
+fn snap() -> Arc<Clip> {
     let n = (RATE as f32 * 0.22) as usize;
     let mut r = Rng(0x1234_5678_9abc_def1);
     clip(
@@ -60,7 +60,7 @@ pub fn snap() -> Arc<Clip> {
 }
 
 /// A hollow knock: a shoe dropping on a wire, a pole on its hook.
-pub fn thud() -> Arc<Clip> {
+fn thud() -> Arc<Clip> {
     let n = (RATE as f32 * 0.3) as usize;
     let mut r = Rng(0x0bad_cafe_0bad_cafe);
     clip(
@@ -74,7 +74,7 @@ pub fn thud() -> Arc<Clip> {
 }
 
 /// A contactor closing: a click and a short low thump.
-pub fn click() -> Arc<Clip> {
+fn click() -> Arc<Clip> {
     let n = (RATE as f32 * 0.09) as usize;
     let mut r = Rng(0x5555_aaaa_5555_aaaa);
     clip(
@@ -88,7 +88,7 @@ pub fn click() -> Arc<Clip> {
 }
 
 /// A shoe crossing a frog: three quick knocks.
-pub fn frog() -> Arc<Clip> {
+fn frog() -> Arc<Clip> {
     let n = (RATE as f32 * 0.25) as usize;
     let mut r = Rng(0x7777_1111_7777_1111);
     clip(
@@ -109,7 +109,7 @@ pub fn frog() -> Arc<Clip> {
 }
 
 /// The pole latching on its hook or the hook letting go: a metallic clack.
-pub fn clack() -> Arc<Clip> {
+fn clack() -> Arc<Clip> {
     let n = (RATE as f32 * 0.16) as usize;
     clip(
         (0..n)
@@ -137,18 +137,17 @@ struct Clips {
 }
 
 impl TrolleySound {
-    /// One frame of the gear's sounds, heard from `listener` (the camera).
-    pub fn update(&mut self, audio: &AudioEngine, v: &mut omsi_sim::VehicleInstance, sparks_at: &[Vec3], paused: bool) {
-        let Some(g) = v.trolley.as_deref_mut() else { return };
+    /// One frame of the gear's sounds; `bus` is where the vehicle stands.
+    pub fn update(&mut self, audio: &AudioEngine, rig: &mut TrolleyRig, bus: Vec3, sparks_at: &[Vec3], paused: bool) {
         let c = self.clips.get_or_insert_with(|| Clips { hiss: hiss(), snap: snap(), thud: thud(), click: click(), frog: frog(), clack: clack() });
-        let sounds = g.rig.take_sounds();
-        let tip = g.rig.hiss_pos.as_vec3();
-        let roof = v.position.as_vec3() + Vec3::new(0.0, 0.0, 3.0);
+        let sounds = rig.take_sounds();
+        let tip = rig.hiss_pos.as_vec3();
+        let roof = bus + Vec3::new(0.0, 0.0, 3.0);
         if paused {
             return;
         }
         // the hiss: a loop kept running, its level following the current and the speed
-        let level = g.rig.hiss;
+        let level = rig.hiss;
         match self.hiss_voice {
             Some(id) if audio.is_playing(id) => {
                 audio.set_params(id, VoiceParams { gain: level * 0.5, pitch: 0.85 + 0.35 * level, looping: true, position: Some(tip), doppler: false, range: 10.0, lowpass_hz: 0.0, important: false });
