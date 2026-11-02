@@ -13,6 +13,7 @@ pub fn is_game_action(name: &str) -> bool {
                 | "photo_mode"
                 | "flashlight"
                 | "clean_screen"
+                | "get_up"
                 | "quicksave"
                 | "toggel_mouse_ctrl"
                 | "toggel_ctrler"

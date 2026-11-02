@@ -111,7 +111,7 @@ enum Keys {
         "open_menue": "Open / close the quick menu (OMSI: Alt)", "view_zoom_in": "Zoom in", "view_zoom_out": "Zoom out",
         "view_camera_keys_toggle": "Free camera keys on/off (off: they work the bus)", "radio_power": "Radio: on / off", "radio_next": "Radio: next station",
         "radio_previous": "Radio: previous station", "radio_volume_up": "Radio: louder", "radio_volume_down": "Radio: quieter", "screenshot": "Screenshot", "photo_mode": "Photo mode",
-        "quicksave": "Quicksave", "clean_screen": "Hide / show the whole interface", "toggel_mouse_ctrl": "Toggle mouse steering", "toggel_ctrler": "Toggle game controllers",
+        "quicksave": "Quicksave", "clean_screen": "Hide / show the whole interface", "get_up": "Get up from the seat (on foot)", "toggel_mouse_ctrl": "Toggle mouse steering", "toggel_ctrler": "Toggle game controllers",
     ]
 
     static let hGears = ["R", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"].map { "kw_s_\($0)_fest" }
@@ -135,7 +135,7 @@ enum Keys {
     }
 
     static func gameOnly(_ a: String) -> Bool {
-        a.range(of: "^(vr_|chat_|view_|door_[1-4]$|doors_all$|doors_release$|gear_(up|down)$|sim_pause$|open_menu$|screenshot$|photo_mode$|clean_screen$|quicksave$|toggel_|exit$|voice_radio$|voice_nearby$|pax_door_request$)", options: .regularExpression) != nil
+        a.range(of: "^(vr_|chat_|view_|door_[1-4]$|doors_all$|doors_release$|gear_(up|down)$|sim_pause$|open_menu$|screenshot$|photo_mode$|clean_screen$|get_up$|quicksave$|toggel_|exit$|voice_radio$|voice_nearby$|pax_door_request$)", options: .regularExpression) != nil
     }
 }
 

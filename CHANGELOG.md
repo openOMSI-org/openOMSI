@@ -35,6 +35,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 - **Only the buses on the map, if you like**: under "AI vehicles on the map", *Cars on the map too*
   (`nav_ai_cars`, launcher and game options) can be switched off: the navigator and the city map
   then show the traffic's buses and trolleybuses, not the cars.
+- **Getting up has a key of its own**: *Get up from the seat (on foot)* is in the Controls'
+  list (keyboard and controllers), on Ctrl+Shift+G as before; it can be moved to another key or a
+  controller button, and the old built-in Ctrl+Shift+G gives way to it.
 - **Long lists in the launcher filter as you type**: a drop-down with more than twelve entries
   (the liveries, the depot files, the languages...) shows a search line at its top; typing
   narrows it down, Backspace and Esc undo the search.

@@ -147,6 +147,13 @@ impl App {
             "screenshot" => self.take_screenshot(),
             "flashlight" => self.toggle_flashlight(),
             "clean_screen" => self.toggle_clean_screen(),
+            "get_up" => {
+                if self.session.on_foot.as_ref().is_some_and(|f| f.inside.is_some()) {
+                    self.step_out();
+                } else if self.session.on_foot.is_none() && self.player.is_some() {
+                    self.get_up();
+                }
+            }
             "photo_mode" => self.enter_photo(),
             "quicksave" => self.quick_save(),
             "view_set_ego" => {
