@@ -510,6 +510,10 @@ impl Radio {
     /// What plays, for the scripts' `GetRadioName` and `GetRadioSong`: the station's name
     /// (as it gives it, else as the list has it) and the title it gives; both empty while
     /// the radio is off.
+    pub fn volume(&self) -> f32 {
+        self.volume
+    }
+
     pub fn now_playing(&self) -> (String, String) {
         let Some(p) = self.playing.as_ref() else { return Default::default() };
         let name = p.buf.station_name();

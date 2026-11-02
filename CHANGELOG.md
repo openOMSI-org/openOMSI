@@ -8,6 +8,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **The radio from the Alt menu**: a Radio tile opens a small panel with what plays, the volume,
+  on and off, the station before and after, quieter and louder - for buses whose radio has no
+  volume knob or no switch of its own.
 - **Enhanced has options of its own, and the quality presets cross the modes.** Enhanced+ is no
   longer a mode: it is Enhanced with *Real-Time Ray Tracing* switched on (`ray_tracing=1`; a
   `graphics=enhanced_plus` file reads as that, and `--enhanced-plus` still asks for it for a run).

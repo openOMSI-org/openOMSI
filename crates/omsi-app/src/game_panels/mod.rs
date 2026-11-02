@@ -15,6 +15,7 @@ use omsi_ui::theme::Palette;
 mod dest_form;
 mod multiplayer;
 mod move_here;
+pub(crate) mod radio_panel;
 pub(crate) use dest_form::open as open_dest_form;
 pub(crate) use move_here::ask as ask_move;
 pub(crate) mod quick_menu;
@@ -41,6 +42,7 @@ pub(crate) struct GamePanels {
     pub(crate) dest: Option<dest_form::DestForm>,
     pub(crate) multiplayer: Option<multiplayer::Multiplayer>,
     pub(crate) view: Option<view_editor::ViewEditor>,
+    pub(crate) radio: Option<radio_panel::RadioPanel>,
     /// Where the map camera's click asks to move the bus to.
     pub(crate) move_to: Option<glam::DVec3>,
 }
@@ -48,7 +50,7 @@ pub(crate) struct GamePanels {
 impl GamePanels {
     /// Whether any panel is open.
     pub(crate) fn any(&self) -> bool {
-        self.multiplayer.is_some() || self.quick.is_some() || self.trip.is_some() || self.dest.is_some() || self.view.is_some() || self.move_to.is_some()
+        self.multiplayer.is_some() || self.quick.is_some() || self.trip.is_some() || self.dest.is_some() || self.view.is_some() || self.radio.is_some() || self.move_to.is_some()
     }
 
     /// Whether the panels have the mouse.
@@ -140,6 +142,7 @@ impl crate::App {
                 "multiplayer" => multiplayer::click(self, el),
                 "view" => view_editor::click(self, el),
                 "move" => move_here::click(self, el),
+                "radio" => radio_panel::click(self, el),
                 _ => {}
             }
         }
@@ -183,6 +186,7 @@ impl crate::App {
             ("multiplayer", self.menus.game_panels.multiplayer.as_ref().map(|f| f.panel(self, pal))),
             ("quick", self.menus.game_panels.quick.as_ref().map(|q| q.panel(self))),
             ("move", self.menus.game_panels.move_to.map(|at| move_here::panel(at, pal))),
+            ("radio", self.menus.game_panels.radio.as_ref().map(|r| r.panel(self, pal))),
         ];
         let gp = &mut self.menus.game_panels;
         for (id, p) in panels {
