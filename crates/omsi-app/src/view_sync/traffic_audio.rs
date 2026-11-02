@@ -13,8 +13,6 @@ pub(crate) struct SoundPlan {
     clips: Vec<std::path::PathBuf>,
 }
 
-/// The `SoundPlan` of `def`, made the first time it is asked for (None, remembered too: the
-/// definition names no sound, or its configuration does not load).
 fn own_horn(cfg: &omsi_vehicle::SoundCfg) -> Option<&str> {
     cfg.sounds.iter().map(|s| s.file.trim()).find(|f| {
         let f = f.to_ascii_lowercase();
@@ -22,6 +20,8 @@ fn own_horn(cfg: &omsi_vehicle::SoundCfg) -> Option<&str> {
     })
 }
 
+/// The `SoundPlan` of `def`, made the first time it is asked for (None, remembered too: the
+/// definition names no sound, or its configuration does not load).
 fn sound_plan(
     plans: &mut HashMap<std::path::PathBuf, Option<Arc<SoundPlan>>>,
     cfgs: &mut HashMap<std::path::PathBuf, Option<Arc<omsi_vehicle::SoundCfg>>>,
