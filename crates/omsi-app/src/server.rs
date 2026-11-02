@@ -20,7 +20,6 @@ pub(crate) use omsi_lan::server_cfg::{enforce_vehicles, player_info, ServerCfg, 
 /// advertised catalogue. The launcher remains responsible for authenticated content
 /// checks before offering any remote-only vehicle for driving.
 fn fleet_paints(cfg: &ServerCfg, root: &Path) -> Vec<omsi_net::ws::FleetPaints> {
-    use rayon::prelude::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
     let total = cfg.vehicles.len().min(256);
     if cfg.vehicles.len() > 256 {
@@ -70,13 +69,33 @@ fn fleet_paints(cfg: &ServerCfg, root: &Path) -> Vec<omsi_net::ws::FleetPaints> 
         }
         Some(omsi_net::ws::FleetPaints { bus: rel, paints, content })
     };
+    // four plain threads taking the next bus in turn - not a Rayon pool: the hashing inside
+    // runs on a pool of its own, and a Rayon worker waiting on another pool takes more of its
+    // own work meanwhile, so all 54 buses of a server were begun at once and ended together
     let buses = &cfg.vehicles[..total];
-    let pool = rayon::ThreadPoolBuilder::new().num_threads(4).thread_name(|n| format!("server-fleet-{n}")).build();
-    let checked: Vec<Option<omsi_net::ws::FleetPaints>> = match &pool {
-        Ok(pool) => pool.install(|| buses.par_iter().map(one).collect()),
-        Err(_) => buses.iter().map(one).collect(),
-    };
-    let offers: Vec<_> = checked.into_iter().flatten().collect();
+    let next = AtomicUsize::new(0);
+    let checked: Vec<(usize, omsi_net::ws::FleetPaints)> = std::thread::scope(|s| {
+        let workers: Vec<_> = (0..4.min(total))
+            .map(|_| {
+                s.spawn(|| {
+                    let mut mine = Vec::new();
+                    loop {
+                        let k = next.fetch_add(1, Ordering::Relaxed);
+                        let Some(bus) = buses.get(k) else { break };
+                        if let Some(offer) = one(bus) {
+                            mine.push((k, offer));
+                        }
+                    }
+                    mine
+                })
+            })
+            .collect();
+        workers.into_iter().flat_map(|w| w.join().unwrap_or_default()).collect()
+    });
+    let mut checked = checked;
+    // (in the order of `vehicles`, as before)
+    checked.sort_by_key(|(k, _)| *k);
+    let offers: Vec<_> = checked.into_iter().map(|(_, o)| o).collect();
     let failed = failed.load(Ordering::Relaxed);
     log::info!(
         "server fleet: announced {} models and {} paint schemes in {:.1} s{}",
