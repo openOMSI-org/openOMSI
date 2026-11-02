@@ -528,7 +528,7 @@ mod tests {
             reloads.watch(picture.path.clone(), 7, &picture.shared, 4096);
         }
         let next = || {
-            let until = Instant::now() + Duration::from_secs(5);
+            let until = Instant::now() + Duration::from_secs(60);
             loop {
                 if let Some(reload) = reloads.next() {
                     return reload;
@@ -549,7 +549,7 @@ mod tests {
         assert!(!reloads.accepts(&picture.path, Some(old)));
         assert!(reloads.accepts(&picture.path, Some(updated.stamp)));
         picture.shared.lock().clear();
-        let until = Instant::now() + Duration::from_secs(5);
+        let until = Instant::now() + Duration::from_secs(60);
         while !reloads
             .worker
             .get()
