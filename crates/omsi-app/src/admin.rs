@@ -216,13 +216,16 @@ pub(crate) fn refresh_for_the_time(app: &mut App) {
         app.service_msg = Some(("In a LAN session the host sets the clock".into(), 3.0));
         return;
     }
-    if let (Some(s), Some(t), Some(w), Some(r), Some(scene)) = (app.session.schedule.as_mut(), app.session.traffic.as_mut(), app.world.as_ref(), app.renderer.as_ref(), app.scene.as_mut()) {
-        let day_time = t.day_time;
-        s.restart(t, day_time);
-        crate::view_sync::apply_traffic(t, &mut app.gfx.sim_view.traffic, w, r, scene);
-    }
-    let gone = app.session.humans.as_mut().map_or(0, |h| h.sim.clear_waiting());
-    app.service_msg = Some((omsi_ui::i18n::tr_fill("Timetable buses put out again; {n} waiting people replaced", &[("{n}", &gone.to_string())]), 4.0));
+    let buses = crate::app_impl::restart_timetable(app.session.schedule.as_mut(), app.session.traffic.as_mut(), app.world.as_deref(), app.renderer.as_ref(), app.scene.as_mut(), &mut app.gfx.sim_view.traffic);
+    let people = app.session.humans.as_mut().map(|h| h.sim.clear_waiting());
+    let n = people.unwrap_or(0).to_string();
+    let msg = match (buses, people.is_some()) {
+        (true, true) => omsi_ui::i18n::tr_fill("Timetable buses put out again; {n} waiting people replaced", &[("{n}", &n)]),
+        (true, false) => omsi_ui::tr("Timetable buses put out again").into_owned(),
+        (false, true) => omsi_ui::i18n::tr_fill("{n} waiting people replaced", &[("{n}", &n)]),
+        (false, false) => omsi_ui::tr("No timetable buses or passengers to set").into_owned(),
+    };
+    app.service_msg = Some((msg, 4.0));
 }
 
 /// The own bus (or the walker) put beside another vehicle.

@@ -144,8 +144,15 @@ fn clearing_the_waiting_keeps_riders_avatars_and_strollers() {
         puppet,
         remote: false,
     };
-    let waiting = || State::Pax(Box::new(Pax::new(1.1, 0.5)));
+    let waiting = || {
+        let mut p = Pax::new(1.1, 0.5);
+        p.task = Task::WalkingToBusstop;
+        State::Pax(Box::new(p))
+    };
+    let mut just_off = Pax::new(1.1, 0.5);
+    just_off.task = Task::Nothing;
     let mut at_stop = Pax::new(1.1, 0.5);
+    at_stop.task = Task::WaitingForBus;
     at_stop.stop = Some(42);
     at_stop.spot = Some(0);
     let mut boarding = Pax::new(1.1, 0.5);
@@ -157,6 +164,7 @@ fn clearing_the_waiting_keeps_riders_avatars_and_strollers() {
         person(3, State::Pax(Box::new(boarding)), None),
         person(4, State::Standing, None),
         person(5, waiting(), Some(Puppet { mode: PuppetMode::Avatar })),
+        person(6, State::Pax(Box::new(just_off)), None),
     ];
     h.stops.insert(
         42,
@@ -187,5 +195,5 @@ fn clearing_the_waiting_keeps_riders_avatars_and_strollers() {
     assert_eq!(h.stops[&42].taken, vec![false, false], "the place of the one who waited is free again");
     let mut left: Vec<u32> = h.people.iter().map(|p| p.id).collect();
     left.sort();
-    assert_eq!(left, vec![3, 4, 5]);
+    assert_eq!(left, vec![3, 4, 5, 6], "riders, strollers, avatars and people just off a bus stay");
 }

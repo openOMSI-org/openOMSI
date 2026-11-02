@@ -6,7 +6,7 @@ use super::*;
 impl PeopleSim {
     pub fn clear_waiting(&mut self) -> usize {
         let waiting = |p: &Person| {
-            p.puppet.is_none() && !p.remote && matches!(p.place, Place::Ground) && matches!(&p.state, State::Pax(x) if x.inside.is_none() && x.bus.is_none())
+            p.puppet.is_none() && !p.remote && matches!(p.place, Place::Ground) && matches!(&p.state, State::Pax(x) if x.inside.is_none() && x.bus.is_none() && matches!(x.task, Task::WaitingForBus | Task::WalkingToBusstop))
         };
         let mut gone = 0;
         for i in (0..self.people.len()).rev() {
