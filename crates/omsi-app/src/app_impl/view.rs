@@ -115,6 +115,21 @@ mod look_tests {
     }
 
     #[test]
+    fn the_zoom_key_zooms_while_held_or_until_pressed_again() {
+        let mut z = super::ZoomHold::default();
+        for _ in 0..60 { z.step(true, 0.5, false, 1.0 / 60.0); }
+        assert_eq!(z.factor, 0.5, "held: zoomed in");
+        for _ in 0..60 { z.step(false, 0.5, false, 1.0 / 60.0); }
+        assert_eq!(z.factor, 1.0, "let go: back");
+        z.step(true, 0.4, true, 1.0 / 60.0);
+        for _ in 0..60 { z.step(false, 0.4, true, 1.0 / 60.0); }
+        assert_eq!(z.factor, 0.4, "latching: stays after one press");
+        z.step(true, 0.4, true, 1.0 / 60.0);
+        for _ in 0..60 { z.step(false, 0.4, true, 1.0 / 60.0); }
+        assert_eq!(z.factor, 1.0, "a second press zooms out");
+    }
+
+    #[test]
     fn precision_zoom_follows_the_fov_curve_and_never_widens() {
         // a full 364 px drag down takes z 0 to 0.70: m = 1/(1+5.5*0.70).
         let m = super::precision_zoom_step(1.0, 364.0, super::ZOOM_INTENT);
@@ -158,6 +173,37 @@ pub(crate) fn look_key_is(key: &str, view: &str, cam: Option<(usize, usize)>) ->
 }
 
 /// [`App::zoom_by`] on the view's state `cam` and the view `view`.
+pub(crate) fn with_zoom_hold(zoom: Option<f32>, hold: f32) -> Option<f32> {
+    if (hold - 1.0).abs() < 1e-3 { zoom } else { Some(zoom.unwrap_or(1.0) * hold) }
+}
+
+pub(crate) struct ZoomHold {
+    pub(crate) factor: f32,
+    latched: bool,
+    was: bool,
+}
+
+impl Default for ZoomHold {
+    fn default() -> Self {
+        ZoomHold { factor: 1.0, latched: false, was: false }
+    }
+}
+
+impl ZoomHold {
+    pub(crate) fn step(&mut self, held: bool, amount: f32, latch: bool, dt: f32) {
+        if held && !self.was {
+            self.latched = latch && !self.latched;
+        }
+        self.was = held;
+        let on = if latch { self.latched } else { held };
+        let target = if on { amount.clamp(0.15, 1.0) } else { 1.0 };
+        self.factor += (target - self.factor) * (1.0 - (-dt / 0.08).exp());
+        if (self.factor - target).abs() < 1e-3 {
+            self.factor = target;
+        }
+    }
+}
+
 pub(crate) fn zoom_view(cam: &mut ViewState, view: &str, notches: f32) {
     // a hand on the zoom cancels an eased Space return.
     cam.f1_reset = None;

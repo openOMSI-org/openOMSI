@@ -1208,6 +1208,11 @@ impl Ui {
         self.input.double_click = false;
     }
 
+    /// Close the calendar without committing a date; return whether it was open.
+    pub fn dismiss_date_popup(&mut self) -> bool {
+        self.date_popup.take().is_some()
+    }
+
     /// A host-owned modal takes precedence over existing select/date dropdowns.
     pub fn dismiss_popups(&mut self) {
         self.popup = None;
@@ -1407,10 +1412,11 @@ fn popup_rect(p: &Popup, size: Vec2) -> Rect {
 
 fn date_rect(p: &DatePopup, size: Vec2) -> Rect {
     let h = 62.0 + 6.0 * 30.0 + 8.0;
-    let w = 280.0;
+    let w = 280.0_f32.min((size.x - 20.0).max(1.0));
+    let x = p.anchor.x.clamp(10.0, (size.x - w - 10.0).max(10.0));
     let below = p.anchor.bottom() + 6.0;
     let y = if below + h > size.y - 10.0 { (p.anchor.y - 6.0 - h).max(10.0) } else { below };
-    Rect::new(p.anchor.x, y, w, h)
+    Rect::new(x, y, w, h)
 }
 
 pub const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -1459,15 +1465,6 @@ mod tests {
         assert!(ui.rect_visible(Rect::new(10.0, 90.0, 200.0, 54.0)));
         ui.pop_clip();
         assert!(ui.rect_visible(Rect::new(10.0, 50.0, 200.0, 20.0)));
-    }
-
-    #[test]
-    fn calendar_arithmetic() {
-        assert_eq!(weekday(2026, 9, 24), 3); // a Thursday
-        assert_eq!(weekday(1989, 5, 30), 1); // a Tuesday
-        assert_eq!(days_in_month(2024, 2), 29);
-        assert_eq!(days_in_month(1900, 2), 28);
-        assert_eq!(parse_date("1989-05-30"), (1989, 5, 30));
     }
 
     #[test]
@@ -1681,3 +1678,7 @@ mod tests {
         assert_eq!(sel, 1);
     }
 }
+
+#[cfg(test)]
+#[path = "kit/date_tests.rs"]
+mod date_tests;
