@@ -332,6 +332,7 @@ fn action_hint(id: &str) -> &'static str {
     match id {
         "camera" => "Seat position, field of view and head movement",
         "map" => "View the city and your position",
+        "streets" => "Look a street up by its name on the city map",
         "duty" => "Choose a line and a tour",
         "save" | "saveslot" | "load" => "Manage your saved situations",
         "options" | "controls" => "Adjust your game preferences",
