@@ -655,9 +655,9 @@ struct RowStart {
 /// index).
 fn first_after(d0: f64, acc: f64, interval: f64) -> Option<(f64, usize)> {
     if interval > 0.0 {
-        let j = ((acc - d0) / interval + 1e-6).ceil().max(0.0) as usize;
+        let j = ((acc + JOINT_TOLERANCE - d0) / interval).ceil().max(0.0) as usize;
         Some((d0 + j as f64 * interval - acc, j))
-    } else if d0 >= acc - 1e-6 {
+    } else if d0 > acc + JOINT_TOLERANCE {
         Some((d0 - acc, 0))
     } else {
         None
@@ -744,7 +744,7 @@ fn place_on(att: &SplineAttachment, spline: &MapSpline, origin: DVec2, index: Op
     let from = if att.repeater.is_some() { JOINT_TOLERANCE } else { -1e-6 };
     let mut out = Vec::new();
     loop {
-        if interval > 0.0 && j as f64 * interval > range + 1e-6 {
+        if interval > 0.0 && j as f64 * interval > range + JOINT_TOLERANCE {
             break;
         }
         if s > end {
@@ -1119,6 +1119,17 @@ mod tests {
         let repeater = SplineAttachment { repeater: Some((3, 3)), ..master.clone() };
         let at: Vec<usize> = row_objects(&repeater, &next, DVec2::ZERO, None).iter().map(|o| o.index).collect();
         assert_eq!(at, vec![4, 5, 6], "the joint's object, 0.2 mm before this spline, is the first spline's");
+    }
+
+    #[test]
+    fn an_object_on_a_joint_inside_a_tile_is_drawn_once() {
+        let ix = buffer_stop_chain();
+        let a = spline(10, 0, 11, 400.0);
+        let b = MapSpline { pos: [0.0, 600.0, 10.0], heading: 180.0, ..spline(11, 12, 10, 200.0) };
+        let master = SplineAttachment { id: 9, ..row(130.0, 600.0, 10.0002, None) };
+        let objs = tile_row_objects(&master, &[a, b], DVec2::ZERO, Some(&ix));
+        let idx: Vec<usize> = objs.iter().map(|(_, o)| o.index).collect();
+        assert_eq!(idx, vec![0, 1, 2, 3, 4], "the object 0.2 mm past the joint at 400 m once: {idx:?}");
     }
 
     #[test]
