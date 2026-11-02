@@ -687,7 +687,7 @@ struct ConditionsCard: View {
         let c = store.choice
         Card("On the road") {
             VStack(alignment: .leading, spacing: 6) {
-                SliderField(label: "Cars around", value: c.traffic, range: 0 ... 120, step: 1, format: { $0 < 0.5 ? String(localized: "None") : "\(Int($0))" }) {
+                SliderField(label: "Cars around", value: c.traffic, range: 0 ... 300, step: 1, format: { $0 < 0.5 ? String(localized: "None") : "\(Int($0))" }) {
                     store.act("traffic", ["value": $0])
                 }
                 ToggleRow(label: "Passengers", help: "People wait at the stops and ride along", isOn: c.passengers) { flag("passengers", $0) }

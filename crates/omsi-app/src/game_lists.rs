@@ -357,10 +357,10 @@ fn hof_label(p: &std::path::Path) -> String {
 
 /// The time speeds, traffic amounts and passenger shares the options step through.
 const SPEEDS: [f64; 5] = [1.0, 2.0, 4.0, 8.0, 15.0];
-pub(crate) const TRAFFIC: [usize; 7] = [0, 10, 20, 30, 50, 80, 120];
-/// The most traffic anything may ask for: the menu's top step, the server's `traffic <n>`
-/// and server.cfg's `traffic` alike (#1327).
-pub(crate) const TRAFFIC_MAX: usize = TRAFFIC[TRAFFIC.len() - 1];
+pub(crate) const TRAFFIC: [usize; 10] = [0, 10, 20, 30, 50, 80, 120, 160, 220, 300];
+/// The most traffic anything may ask for: the server's `traffic <n>` and server.cfg's
+/// `traffic` alike (#1327).
+pub(crate) const TRAFFIC_MAX: usize = 120;
 const PAX: [f32; 6] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0];
 const VOLUME: [f32; 6] = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0];
 /// The pedal strengths the options step through (see `settings::pedal_curve`).

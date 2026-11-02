@@ -114,7 +114,7 @@ export function DayStep() {
           <${Segmented} full value=${c.season} options=${SEASONS} onChange=${(v) => setSeason(v, c.phase)} />
         </${Field}>
         ${c.season !== 'auto' && html`<${Segmented} full value=${c.phase} options=${PHASES} onChange=${(p) => setSeason(c.season, p)} />`}`}
-    <${Slider} label="Cars around" value=${c.traffic} min=${0} max=${120} step=${1} onChange=${(traffic) => choose({ traffic })} format=${(v) => (v ? String(Math.round(v)) : t('None'))} />
+    <${Slider} label="Cars around" value=${c.traffic} min=${0} max=${300} step=${1} onChange=${(traffic) => choose({ traffic })} format=${(v) => (v ? String(Math.round(v)) : t('None'))} />
     <div class="toggles-2">
       ${[
         ['passengers', 'Passengers', 'People wait at the stops and ride along'],

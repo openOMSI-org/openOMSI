@@ -8,6 +8,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **More traffic for strong computers**: the game's Traffic slider (World options) and the launcher's
+  *Cars around* go on past 120 to 160, 220 and 300 vehicles, for busy maps and rush hours; more
+  cars cost frames and can jam junctions, so 120 stays the top of the usual range. Dedicated
+  servers keep their limit of 120.
 - **Enhanced has options of its own, and the quality presets cross the modes.** Enhanced+ is no
   longer a mode: it is Enhanced with *Real-Time Ray Tracing* switched on (`ray_tracing=1`; a
   `graphics=enhanced_plus` file reads as that, and `--enhanced-plus` still asks for it for a run).
