@@ -26,7 +26,7 @@ pub(crate) const PER_PAGE: usize = 15;
 const WIDTH: f32 = 5.0 * 84.0 + 4.0 * 8.0 + 2.0 * 14.0;
 
 /// The tiles: id, label, icon - in OMSI's order, five to a row, fifteen to a page.
-pub(crate) const TILES: [(&str, &str, &str); 28] = [
+pub(crate) const TILES: [(&str, &str, &str); 29] = [
     ("place", "Place a vehicle", "add"),
     ("switch", "Change vehicle", "sync_alt"),
     ("remove", "Remove vehicle", "delete"),
@@ -44,6 +44,7 @@ pub(crate) const TILES: [(&str, &str, &str); 28] = [
     ("stats", "Statistics", "receipt_long"),
     // the second page: the game menu's lines
     ("camera", "Camera", "videocam"),
+    ("view_editor", "Seat, view and mirrors", "airline_seat_recline_normal"),
     ("vehicle", "Vehicle options...", "tune"),
     ("world", "World options...", "public"),
     ("options", "Options", "settings"),
@@ -97,13 +98,16 @@ pub(crate) struct TileState {
 impl TileState {
     pub(crate) fn of(app: &crate::App) -> TileState {
         let offered: Vec<&'static str> = app.game_menu_items().iter().map(|l| l.0).collect();
-        let off = MENU_LINES.iter().copied().filter(|id| !offered.contains(id)).collect();
+        let mut off: Vec<&'static str> = MENU_LINES.iter().copied().filter(|id| !offered.contains(id)).collect();
         let mut lit = Vec::new();
         if app.settings.nav_arrows {
             lit.push("arrows");
         }
         if app.session.duty.is_some() {
             lit.push("duty");
+        }
+        if app.player.is_none() || app.vr_active() {
+            off.push("view_editor");
         }
         TileState { off, lit }
     }
