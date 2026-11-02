@@ -14,7 +14,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
     let game: Vec<(String, String)> = vec![
         switch_row(app, "navigator", "Navigator", "Enables/Disables the Minimap"),
         switch_row(app, "nav_ai", "AI vehicles on the map", "Shows/hides the other (AI) vehicles on the Minimap and the city map"),
-        switch_row(app, "nav_ai_cars", "Cars on the map too", "Off: only the buses, trams and trains of the traffic are shown on the maps, not the cars"),
+        switch_row(app, "nav_ai_cars", "Cars on the map too", "Off: only the traffic's buses and trolleybuses are shown on the maps, not the cars").filter(|_| s.nav_ai),
         switch_row(app, "nav_surface", "Map surface under the roads", "Shows the map's ground, water, woods, houses and paved surfaces on the Minimap and the city map (and the map's package, when it has one)"),
         switch_row(app, "nav_classic_2d", "Classic 2D navigator", "A lightweight top-down route map with streets and vehicles, without detailed surfaces, buildings or shadows"),
         switch_row(app, "nav_3d", "3D buildings on the map", "The houses stand in 3D with their shadows on the Minimap, and the city map tilts into 3D when zoomed in"),
