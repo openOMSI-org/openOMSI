@@ -12,6 +12,12 @@ crate::app::stage_ctx!(
 /// The keys held this frame that turn the head, aim the mirrors, run the clock, zoom
 /// and fly the free camera.
 pub(super) fn view_keys(mut cx: ViewKeysCx, dt: f32) {
+    let free = cx.input.look_lock.is_none() && cx.input.mouse_grab.mode.is_none() && !cx.input.mouse_look;
+    let size = cx.gfx.gfx.surface.as_ref().map(|s| (s.config.width as f32, s.config.height as f32));
+    cx.view.cam.flashlight_aim = match (cx.common.settings.flashlight_cursor && cx.view.cam.flashlight && free, cx.view.camera.as_ref(), size) {
+        (true, Some(cam), Some(size)) => Some(cursor_ray(cam, cx.input.cursor, size)),
+        _ => None,
+    };
     // looking around and zooming work in every view, not only the free camera
     crate::app_impl::sync_view_look(cx.view.cam, cx.view.view, cx.player.player.as_ref());
     if cx.player.player.is_some() && *cx.view.view != "free" {
@@ -360,5 +366,24 @@ mod tests {
         // an entry with no key (cleared) leaves the defaults
         let cleared = [kb("view_zoom_in", 0, 0)];
         assert_eq!(zoom_keys("view_zoom_in", &[13], 0, &cleared, &[], &none, 13, 78), (true, false));
+    }
+}
+
+fn cursor_ray(cam: &omsi_render::Camera, cursor: (f32, f32), size: (f32, f32)) -> glam::Vec3 {
+    let t = (cam.fov_deg.to_radians() * 0.5).tan();
+    let nx = (cursor.0 / size.0.max(1.0) * 2.0 - 1.0).clamp(-1.0, 1.0) * t * size.0 / size.1.max(1.0);
+    let ny = (1.0 - cursor.1 / size.1.max(1.0) * 2.0).clamp(-1.0, 1.0) * t;
+    (cam.forward() + cam.right() * nx + cam.up() * ny).normalize_or_zero()
+}
+
+#[cfg(test)]
+mod cursor_ray_tests {
+    #[test]
+    fn the_ray_goes_through_the_cursor() {
+        let cam = omsi_render::Camera { position: glam::DVec3::ZERO, yaw: 0.0, pitch: 0.0, roll: 0.0, fov_deg: 90.0, near: 0.1, far: 100.0 };
+        let mid = super::cursor_ray(&cam, (500.0, 250.0), (1000.0, 500.0));
+        assert!((mid - cam.forward()).length() < 1e-4);
+        let corner = super::cursor_ray(&cam, (1000.0, 0.0), (1000.0, 500.0));
+        assert!(corner.x > 0.8 && corner.z > 0.3, "right and up: {corner:?}");
     }
 }

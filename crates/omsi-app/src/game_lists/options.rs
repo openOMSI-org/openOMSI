@@ -488,6 +488,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "driver" => s.driver,
         "alt_view" => s.alt_view,
         "precision_zoom" => s.precision_zoom,
+        "flashlight_cursor" => s.flashlight_cursor,
         "triple_screen" => s.triple.enabled,
         "triple_hud_center" => s.triple_hud_center,
         "triple_span" => s.triple_span,
@@ -872,6 +873,10 @@ fn toggle_set_graphics_and_controls(app: &mut App, id: &str, on: bool, bit: Stri
         "alt_view" => {
             app.settings.alt_view = on;
             Some(("alt_view", bit))
+        }
+        "flashlight_cursor" => {
+            app.settings.flashlight_cursor = on;
+            Some(("flashlight_cursor", bit))
         }
         "precision_zoom" => {
             app.settings.precision_zoom = on;
