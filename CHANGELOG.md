@@ -8,6 +8,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **Your depot buses in the game**: the game menu's *Place a vehicle* lists the buses of your depot
+  first (*My depot: name | plate*). One taken replaces the bus driven, with its livery, fleet
+  number, plate, odometer and wear; the session is written back to it when it ends, and the time
+  spent in the bus driven before goes to that one (when it was a depot bus too).
 - **Enhanced has options of its own, and the quality presets cross the modes.** Enhanced+ is no
   longer a mode: it is Enhanced with *Real-Time Ray Tracing* switched on (`ray_tracing=1`; a
   `graphics=enhanced_plus` file reads as that, and `--enhanced-plus` still asks for it for a run).

@@ -636,6 +636,12 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
             }
         }
         ListKind::PlaceMaker => {
+            if search_query(app).trim().is_empty() {
+                for b in crate::depot_bus::listed() {
+                    let plate = if b.plate.trim().is_empty() { String::new() } else { format!("  |  {}", b.plate.trim()) };
+                    out.push((format!("{} {}{plate}", tr("My depot:"), b.name.trim()), format!("depot {}", b.id)));
+                }
+            }
             let all = place_vehicles(app, &tr("Unknown manufacturer"));
             let mut groups: Vec<(String, String, Vec<&(String, String, String, String)>)> = Vec::new();
             for v in &all {
@@ -1137,6 +1143,11 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             None
         }
         ListKind::PlaceMaker | ListKind::PlaceType(_) if verb == "maker" => Some(ListKind::PlaceType(arg.to_string())),
+        ListKind::PlaceMaker if verb == "depot" => {
+            app.close_game_menu();
+            app.take_depot_bus(arg.trim());
+            None
+        }
         ListKind::PlaceMaker | ListKind::PlaceType(_) => Some(ListKind::PlaceLivery(arg.to_string())),
         ListKind::PlaceLivery(bus) => Some(ListKind::PlaceHof(bus.clone(), arg.to_string())),
         ListKind::PlaceHof(bus, paint) => {

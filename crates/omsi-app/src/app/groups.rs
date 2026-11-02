@@ -574,6 +574,7 @@ pub(crate) struct SessionState {
     pub(crate) pumping: Option<Pumping>,
     /// The driver's personnel file and this session's statistics.
     pub(crate) career: career::Career,
+    pub(crate) depot_base: omsi_launcher_lib::depot::Outing,
     /// The duty's stops with their times as driven, kept in a file (`journey`).
     pub(crate) journey: Option<crate::journey::Journey>,
     /// How wet the roads are (0..1), built up by rain and dried by the sun.

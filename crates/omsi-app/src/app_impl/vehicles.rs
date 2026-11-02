@@ -27,6 +27,27 @@ impl App {
         }
     }
 
+    pub(crate) fn take_depot_bus(&mut self, id: &str) {
+        let Some(b) = crate::depot_bus::listed().into_iter().find(|b| b.id == id) else {
+            self.service_msg = Some(("That bus is no longer in the depot".into(), 3.0));
+            return;
+        };
+        if let (Some(old), Some(p)) = (self.args.depot.clone(), self.player.as_ref()) {
+            let outing = crate::depot_bus::outing_since(&self.session.career, &self.args, &self.session.depot_base);
+            crate::depot_bus::record(&p.vehicle, &old, &outing);
+        }
+        let c = &self.session.career;
+        self.session.depot_base = omsi_launcher_lib::depot::Outing { metres: c.metres, seconds: c.seconds, stops: c.stops[0], tickets: c.tickets.0, takings: c.tickets.1, crashes: c.crashes[0], ..Default::default() };
+        let kept = (self.args.number.clone(), self.args.plate.clone());
+        self.args.number = Some(b.number.clone()).filter(|n| !n.trim().is_empty());
+        self.args.plate = Some(b.plate.clone()).filter(|n| !n.trim().is_empty());
+        self.args.depot = Some(b.id.clone());
+        self.args.bus = Some(b.bus.clone());
+        self.menus.swap_pending = self.player.is_some();
+        self.place_vehicle(&b.bus, Some(b.paint.clone()).filter(|p| !p.trim().is_empty()), None);
+        (self.args.number, self.args.plate) = kept;
+    }
+
     /// The vehicle is read and its meshes and textures made on a worker thread; the next
     /// frames go on and `placement` puts it into the world when it is ready.
     pub(crate) fn place_vehicle(&mut self, bus: &str, paint: Option<String>, hof: Option<String>) {

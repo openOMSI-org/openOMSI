@@ -64,3 +64,21 @@ fn is_this_bus(v: &VehicleInstance, bus: &str) -> bool {
     let norm = |s: &str| s.replace('\\', "/").to_ascii_lowercase();
     norm(&v.ty.def.path.to_string_lossy()).ends_with(&norm(bus.trim_start_matches(['/', '\\'])))
 }
+
+pub(crate) fn outing_since(c: &crate::career::Career, args: &crate::cli::Args, base: &depot::Outing) -> depot::Outing {
+    depot::Outing {
+        map: args.map.clone(),
+        line: args.line.clone().unwrap_or_default(),
+        tour: args.tour.clone().unwrap_or_default(),
+        metres: c.metres - base.metres,
+        seconds: c.seconds - base.seconds,
+        stops: c.stops[0] - base.stops,
+        tickets: c.tickets.0 - base.tickets,
+        takings: c.tickets.1 - base.takings,
+        crashes: c.crashes[0] - base.crashes,
+    }
+}
+
+pub(crate) fn listed() -> Vec<depot::DepotBus> {
+    depot::load().map(|d| d.buses).unwrap_or_default()
+}

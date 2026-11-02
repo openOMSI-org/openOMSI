@@ -708,6 +708,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             autosave_t: 0.0,
             pumping: None,
             career: Default::default(),
+            depot_base: Default::default(),
             journey: None,
             wetness: 0.0,
             cloud_drift: [0.0; 4],
