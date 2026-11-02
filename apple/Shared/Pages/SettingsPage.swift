@@ -436,6 +436,9 @@ struct SettingsPage: View {
             SettingToggle(label: "Navigator (Shift+N: map, schedule, off)", key: "navigator", fallback: true)
             SettingToggle(label: "Route arrows (as in OMSI 2)", key: "nav_arrows")
             SettingToggle(label: "AI vehicles on the map", key: "nav_ai", fallback: true)
+            if store.flag("nav_ai", true) {
+                SettingToggle(label: "Cars on the map too", key: "nav_ai_cars", fallback: true)
+            }
             SettingToggle(label: "Map surface under the roads", key: "nav_surface", fallback: true)
             SettingToggle(label: "Light map", key: "nav_light")
             SettingToggle(label: "Classic 2D navigator (lightweight)", key: "nav_classic_2d")

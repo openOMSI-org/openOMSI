@@ -421,6 +421,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "passenger_full_bus_reaction" => s.passenger_full_bus_reaction,
         "navigator" => if app.vr_active() { app.vr_nav_profile().enabled } else { app.menus.navigator.as_ref().is_some_and(|n| n.enabled) },
         "nav_ai" => app.menus.navigator.as_ref().map_or(s.nav_ai, |n| n.show_ai),
+        "nav_ai_cars" => app.menus.navigator.as_ref().map_or(s.nav_ai_cars, |n| n.show_cars),
         "nav_surface" => app.menus.navigator.as_ref().map_or(s.nav_surface, |n| n.show_surface),
         "nav_3d" => app.menus.navigator.as_ref().map_or(s.nav_3d, |n| n.show_3d),
         "nav_classic_2d" => app.menus.navigator.as_ref().map_or(s.nav_classic_2d, |n| n.classic_2d),
@@ -564,6 +565,13 @@ pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static 
             }
             app.settings.nav_ai = on;
             Some(("nav_ai", bit))
+        }
+        "nav_ai_cars" => {
+            if let Some(n) = app.menus.navigator.as_mut() {
+                n.show_cars = on;
+            }
+            app.settings.nav_ai_cars = on;
+            Some(("nav_ai_cars", bit))
         }
         "nav_surface" => {
             if let Some(n) = app.menus.navigator.as_mut() {

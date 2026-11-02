@@ -383,6 +383,7 @@ pub struct Navigator {
     pub arrows: bool,
     /// The other (AI) vehicles are drawn on the maps (the `nav_ai` setting).
     pub show_ai: bool,
+    pub show_cars: bool,
     /// The map's own surface (`Maps/<Map>/openomsi-realmap`), once read, and a number that changes
     /// when it arrives (the meshes are built again).
     surface: Option<std::sync::Arc<omsi_map::package::Package>>,
@@ -591,6 +592,7 @@ impl Navigator {
             next_dist: None,
             arrows: false,
             show_ai: true,
+            show_cars: true,
             surface: None,
             surface_version: 0,
             show_surface: true,

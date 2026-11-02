@@ -32,6 +32,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 - **Choose which notes show**: under *Notes in the top-left corner* (launcher, game options, Apple
   app) four switches turn off one kind each - why the bus does not move, the bus's own messages
   (the announcements among them), the end of a trip, tickets and change - while the rest stay.
+- **Only the buses on the map, if you like**: under "AI vehicles on the map", *Cars on the map too*
+  (`nav_ai_cars`, launcher and game options) can be switched off: the navigator and the city map
+  then show the traffic's buses and trolleybuses, not the cars.
 - **Long lists in the launcher filter as you type**: a drop-down with more than twelve entries
   (the liveries, the depot files, the languages...) shows a search line at its top; typing
   narrows it down, Backspace and Esc undo the search.

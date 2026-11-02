@@ -450,6 +450,7 @@ const general = {
         { type: 'toggle', key: 'navigator', label: 'Navigator (Shift+N: map, schedule, off)' },
         { type: 'toggle', key: 'nav_arrows', label: 'Route arrows (as in OMSI 2)' },
         { type: 'toggle', key: 'nav_ai', label: 'AI vehicles on the map' },
+        { type: 'toggle', key: 'nav_ai_cars', label: 'Cars on the map too', when: (s) => s.nav_ai !== false },
         { type: 'toggle', key: 'nav_surface', label: 'Map surface under the roads' },
         { type: 'toggle', key: 'nav_classic_2d', label: 'Classic 2D navigator (lightweight)' },
         { type: 'toggle', key: 'nav_3d', label: '3D buildings on the map' },
