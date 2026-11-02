@@ -197,6 +197,15 @@ pub(crate) fn set_route_by_hand(app: &mut App, line: &str) {
     }
 }
 
+pub(crate) fn route_keeps_blind(route: &str) -> bool {
+    route.trim().is_empty() || !numeric_ibis_line(route.trim())
+}
+
+pub(crate) fn form_route(v: &omsi_sim::VehicleInstance) -> String {
+    let blind = crate::schedule::has_roller_blind(v).then(|| v.str_var("SetLineTo").trim().to_string());
+    blind.filter(|l| !l.is_empty() && !numeric_ibis_line(l)).unwrap_or_else(|| destination_line(v))
+}
+
 pub(crate) fn kept_blind_line(shown: &str, keep: bool) -> Option<String> {
     let shown = shown.trim();
     (keep && !shown.is_empty() && !numeric_ibis_line(shown)).then(|| shown.to_string())
@@ -1267,6 +1276,8 @@ mod tests {
         assert_eq!(super::kept_blind_line("92A", true), Some("92A".into()), "a destination picked: the letter stays");
         assert_eq!(super::kept_blind_line("92A", false), None, "92A then 41 typed: the new number goes up");
         assert_eq!(super::kept_blind_line("41", true), None);
+        assert!(super::route_keeps_blind("") && super::route_keeps_blind("92A"), "a route the IBIS cannot take leaves the blind's text");
+        assert!(!super::route_keeps_blind("41") && !super::route_keeps_blind("92E"), "a number the IBIS takes goes up");
     }
 
     /// "Random livery" draws among all liveries (#2410: it always gave the same one).
@@ -1355,6 +1366,15 @@ mod tests {
         set_str(&mut blind, "SetLineTo", "  5");
         blind.set_var("IBIS_LinieKurs", 145.0);
         assert_eq!(super::destination_line(&blind), "5");
+        // the destination form on a blind showing 92A over an IBIS on 41: the form offers 92A
+        // and a Select untouched keeps it (#2799)
+        set_str(&mut blind, "SetLineTo", "92A");
+        blind.set_var("IBIS_LinieKurs", 41.0);
+        let route = super::form_route(&blind);
+        assert_eq!(route, "92A");
+        assert!(super::route_keeps_blind(&route));
+        assert_eq!(super::kept_blind_line(&blind.str_var("SetLineTo"), super::route_keeps_blind(&route)), Some("92A".into()));
+        assert_eq!(super::form_route(&v), super::destination_line(&v), "no roller blind: the form offers the IBIS's line");
     }
 
     #[test]

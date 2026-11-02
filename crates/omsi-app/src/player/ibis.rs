@@ -206,6 +206,7 @@ impl Player {
                         log::info!("HTML page: depot file {} has no destination {ti}", hof.name);
                         continue;
                     };
+                    let keep = self.vehicle.host.tt_line.trim().is_empty();
                     let line = {
                         let l = self.vehicle.host.tt_line.trim().to_string();
                         if !l.is_empty() {
@@ -224,7 +225,7 @@ impl Player {
                     if let Some((mut old, ..)) = self.ibis_typist.take() {
                         old.abandon(&mut self.vehicle);
                     }
-                    self.set_destination_by_hand(&hof, &line, ti, true);
+                    self.set_destination_by_hand(&hof, &line, ti, keep);
                 }
             }
         }
