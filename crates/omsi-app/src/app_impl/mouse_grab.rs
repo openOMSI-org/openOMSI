@@ -197,6 +197,9 @@ impl App {
                 if let Some(win) = self.window.as_ref() {
                     let _ = win.set_cursor_grab(winit::window::CursorGrabMode::None);
                 }
+                if self.input.mouse_grab.mode == Some(GrabMode::Plain) {
+                    self.confine_cursor();
+                }
             }
             Some(false) | None => {}
         }
