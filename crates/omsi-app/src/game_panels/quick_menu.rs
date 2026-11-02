@@ -248,7 +248,7 @@ pub(crate) fn click(app: &mut crate::App, id: &str) {
         }
         return;
     }
-    app.menus.game_panels.quick = None;
+    let kept = app.menus.game_panels.quick.take();
     match id {
         "dest" => super::dest_form::open(app),
         "arrows" => {
@@ -271,6 +271,19 @@ pub(crate) fn click(app: &mut crate::App, id: &str) {
     }
     if app.menus.chooser.is_some() && app.menus.game_menu.is_none() {
         app.open_game_menu();
+    }
+    let gp = &app.menus.game_panels;
+    let elsewhere = app.menus.game_menu.is_some()
+        || app.menus.chooser.is_some()
+        || app.photo.is_some()
+        || app.menus.navigator.as_ref().is_some_and(|n| n.map_open())
+        || gp.trip.is_some()
+        || gp.dest.is_some()
+        || gp.view.is_some()
+        || gp.move_to.is_some()
+        || gp.multiplayer.is_some();
+    if !elsewhere {
+        app.menus.game_panels.quick = kept;
     }
 }
 
@@ -402,6 +415,18 @@ mod tests {
             app.close_list();
             app.close_game_menu();
         }
+    }
+
+    #[test]
+    fn a_tile_done_in_place_keeps_the_menu_open_on_its_page() {
+        let mut app = app();
+        toggle(&mut app);
+        click(&mut app, "next");
+        click(&mut app, "arrows");
+        assert!(app.menus.game_panels.quick.as_ref().is_some_and(|q| q.page == 1), "the menu stays, as in OMSI 2");
+        assert!(app.settings.nav_arrows);
+        click(&mut app, "time");
+        assert!(app.menus.game_panels.quick.is_none(), "a list takes over");
     }
 
     #[test]
