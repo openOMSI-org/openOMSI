@@ -321,7 +321,7 @@ impl crate::App {
             return true;
         }
         let gp = &mut self.menus.game_panels;
-        if gp.quick.take().is_some() || gp.move_to.take().is_some() || gp.dest.take().is_some() || gp.trip.take().is_some() {
+        if gp.quick.take().is_some() || gp.move_to.take().is_some() || gp.dest.take().is_some() || gp.trip.take().is_some() || gp.radio.take().is_some() {
             return true;
         }
         if gp.view.is_some() {
