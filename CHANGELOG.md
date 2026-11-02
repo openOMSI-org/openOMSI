@@ -46,6 +46,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   refuel, repair, wash, reset, a screenshot...) leaves the menu open on its page, so the next
   tile is one click away; Alt or Esc closes it. A tile that opens a list, a panel, the city map
   or the photo mode still hands over to it.
+- **Set the world to the time it is now**: World options › Traffic and people has *Set to the time it
+  is now*: the timetable buses are put out again for the current time and the people waiting at
+  the stops are taken off; the stops fill again as people walk up, as many as the hour wants -
+  after changing the time by a little, or whenever the stops are fuller than the hour wants.
 - **Long lists in the launcher filter as you type**: a drop-down with more than twelve entries
   (the liveries, the depot files, the languages...) shows a search line at its top; typing
   narrows it down, Backspace and Esc undo the search.
