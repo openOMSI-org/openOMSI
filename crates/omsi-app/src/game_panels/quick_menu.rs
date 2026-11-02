@@ -106,7 +106,7 @@ impl TileState {
         if app.session.duty.is_some() {
             lit.push("duty");
         }
-        if app.player.is_none() || app.vr_active() {
+        if app.player.is_none() || app.session.on_foot.is_some() || app.vr_active() {
             off.push("view_editor");
         }
         TileState { off, lit }
@@ -322,7 +322,7 @@ mod tests {
         assert_eq!(q.focus, 11, "no row under the last");
         q.focus = 14;
         q.step(1, 0);
-        // the second page has 13 tiles: its third row ends at 12
+        // the second page has 14 tiles: its third row ends at 13
         assert_eq!((q.page, q.focus), (1, 10));
         q.step(-1, 0);
         assert_eq!((q.page, q.focus), (0, 14));
