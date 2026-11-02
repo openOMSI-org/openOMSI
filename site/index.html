@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https:; connect-src 'self' https://api.github.com https://raw.githubusercontent.com https://openomsi.savvabestbrother.workers.dev; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https:; connect-src 'self' https://api.github.com https://raw.githubusercontent.com; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>openOMSI</title>
 <meta name="description" content="openOMSI: OMSI 2 recreated from scratch in Rust. Plays your OMSI 2 maps, buses and mods on a new 64-bit engine.">
@@ -86,7 +86,6 @@
     </div>
     <div class="chip chip-warn"><span class="material-icons">construction</span><span>Early development: expect bugs</span></div>
     <div class="chip" id="version-chip"><span class="material-icons">sell</span><span>latest version…</span></div>
-    <div class="chip chip-live" id="players-chip" hidden><span class="material-icons">sports_esports</span><span></span></div>
   </section>
 
   <div class="content">

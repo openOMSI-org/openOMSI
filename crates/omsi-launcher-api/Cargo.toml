@@ -16,6 +16,4 @@ omsi-timetable = { path = "../omsi-timetable" }
 # (the version the release was built as: OPENOMSI_VERSION, as the game's)
 omsi-platform = { path = "../omsi-platform" }
 omsi-net = { path = "../omsi-net" }
-# the public server list: fetched and moderated here, shown by the Multiplayer page
-omsi-serverlist = { path = "../omsi-serverlist" }
 omsi-weather = { path = "../omsi-weather" }

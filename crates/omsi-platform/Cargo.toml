@@ -3,7 +3,7 @@ name = "omsi-platform"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "openOMSI's platform services: updates, Discord's and the project's presence, the version stamp"
+description = "openOMSI's platform services: updates, Discord, recovery, and the version stamp"
 
 [dependencies]
 omsi-cfg = { path = "../omsi-cfg" }

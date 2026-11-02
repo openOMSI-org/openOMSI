@@ -41,7 +41,6 @@ mod placing;
 use omsi_mt as mt;
 use omsi_platform::updater;
 mod update_watch;
-use omsi_platform::presence;
 use omsi_soundscape::ambience;
 mod soundscape;
 use omsi_scene::wheel_surface;
@@ -527,7 +526,6 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     if let (Some(cfg), Some(l)) = (server_cfg.as_ref(), lan.as_ref()) {
         lan::open_public_gateway(l, server::info_of(cfg), cfg.web_port, cfg.tunnel);
         lan::publish_vehicles(args.root.clone(), cfg.vehicles.clone());
-        server::start_public_list(cfg);
         if cfg.tunnel {
             // the address to give the players, as soon as cloudflared says it
             std::thread::spawn(|| {
@@ -625,7 +623,6 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
     let fps_t = Instant::now();
     let update_watch = crate::update_watch::UpdateWatch::new();
     // (a server counts its players by their own games, not itself)
-    let presence = if is_server || cfg!(test) { None } else { crate::presence::Presence::start() };
     let touch = touch::Touch::new();
     App {
         args,
@@ -855,7 +852,6 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             #[cfg(steam)]
             steam,
             update_watch,
-            presence,
             plugins: None,
             vehicle_scripts_of: None,
             object_scripts: Default::default(),

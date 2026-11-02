@@ -31,7 +31,6 @@ members = [
     "crates/omsi-launcher-model",
     "crates/omsi-admin",
     "crates/omsi-lan",
-    "crates/omsi-serverlist",
     "crates/omsi-platform",
     "crates/omsi-guard",
     "crates/omsi-input",

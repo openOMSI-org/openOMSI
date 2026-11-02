@@ -492,8 +492,6 @@ impl ApplicationHandler for App {
         self.finish_session();
         // (with the pipelines made since the start: puddles, Enhanced+)
         omsi_render::pipeline_cache::save();
-        // ("playing now" ends with the game)
-        self.integrations.presence = None;
         if let Some(lan) = self.net.lan.take() {
             // dropping the session says goodbye (BYE) to the host or the players
             drop(lan);

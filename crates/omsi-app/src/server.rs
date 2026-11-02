@@ -191,24 +191,3 @@ pub(crate) fn tick_status(lan: &omsi_net::LanSession, time: f64, weather: &str) 
     crate::lan::update_server_players(list);
 }
 
-/// The public server list's publisher while the server runs (`public_server = 1`).
-static PUBLIC_LIST: std::sync::Mutex<Option<omsi_lan::public_list::Handle>> = std::sync::Mutex::new(None);
-
-/// List the server in the public list if `server.cfg` says so; the log says why it is not.
-pub(crate) fn start_public_list(cfg: &ServerCfg) {
-    if !cfg.public_server {
-        return;
-    }
-    match omsi_lan::public_list::start(cfg, &format!("{} ({})", omsi_platform::VERSION, BUILD)) {
-        Ok(h) => {
-            log::info!("server: public_server = 1: listing in the public server list (checked first; it appears once the list service has reached the web port or the tunnel)");
-            if let Ok(mut p) = PUBLIC_LIST.lock() {
-                *p = Some(h);
-            }
-        }
-        Err(why) => {
-            log::warn!("server: not listed in the public server list: {why}");
-            eprintln!("  Not listed in the public server list: {why}");
-        }
-    }
-}

@@ -307,7 +307,6 @@ h1 { line-height: 1.25; }
 .dl-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .dl-badge { white-space: nowrap; font-size: 12px; font-weight: 600; line-height: 1; padding: 5px 10px; border-radius: 999px; background: var(--primary); color: #fff; }
 
-/* "playing now": a green dot in front of the count */
 .chip-live .material-icons { color: #2ea043; }
 .release-channels { display: flex; gap: 12px; flex-wrap: wrap; margin: 20px 0; }
 

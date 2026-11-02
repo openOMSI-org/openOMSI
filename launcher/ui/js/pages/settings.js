@@ -212,12 +212,23 @@ function PresetRow() {
   const s = S.settings;
   const matched = presets.find((p) => Object.entries(p.settings).every(([k, v]) => same(s[k], v)));
   const options = [...presets.map((p) => [p.name, p.name]), ['', 'Custom']];
+  const guidance = {
+    Low: 'Fastest rendering with the classic OMSI-style picture.',
+    Medium: 'Balanced picture quality and performance for most systems.',
+    High: 'Enhanced lighting and effects with a higher GPU cost.',
+    Extra: 'More detailed shadows and effects for stronger GPUs.',
+    Max: 'Very demanding lighting and shadow settings.',
+    Ultra: 'Highest quality, including the most demanding rendering features.',
+  }[matched?.name] || 'Custom settings: adjust individual graphics options below.';
   return html`<div class="setting-row">
     <${Name} label="Quality preset" />
-    <${Select} value=${matched ? matched.name : ''} options=${options} onChange=${(name) => {
-      const p = presets.find((x) => x.name === name);
-      if (p) saveSettings(p.settings);
-    }} />
+    <div>
+      <${Select} value=${matched ? matched.name : ''} options=${options} onChange=${(name) => {
+        const p = presets.find((x) => x.name === name);
+        if (p) saveSettings(p.settings);
+      }} />
+      <div class="muted small" style="margin-top:5px">${t(guidance)}</div>
+    </div>
   </div>`;
 }
 

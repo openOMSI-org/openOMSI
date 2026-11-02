@@ -7,7 +7,6 @@
 
 <p align="center">
   <a href="https://github.com/openOMSI-org/openOMSI/releases/latest"><img alt="Version" src="https://img.shields.io/github/v/release/openOMSI-org/openOMSI?label=version&color=f47f30&style=for-the-badge"></a>
-  <a href="https://openomsi.org/"><img alt="Playing now" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fopenomsi.savvabestbrother.workers.dev%2Fbadge&label=playing%20now&style=for-the-badge&logo=steam&logoColor=white"></a>
   <a href="https://github.com/openOMSI-org/openOMSI/actions/workflows/release.yml"><img alt="Build" src="https://img.shields.io/github/actions/workflow/status/openOMSI-org/openOMSI/release.yml?branch=main&style=for-the-badge&label=build"></a>
   <a href="https://openomsi.org/"><img alt="Docs" src="https://img.shields.io/badge/docs-website-2d3138?style=for-the-badge"></a>
   <a href="https://discord.gg/openomsi"><img alt="Discord" src="https://img.shields.io/badge/discord-join%20us-5865F2?style=for-the-badge&logo=discord&logoColor=white"></a>
@@ -176,7 +175,7 @@ openOMSI/
 ├── launcher/      the launcher window (Tauri; web UI in launcher/ui)
 ├── android/       the Android app wrapper
 ├── apple/         the iPhone, iPad and Mac app wrapper (SwiftUI, not released yet)
-├── services/      the "playing now" counter
+├── services/      optional self-hosted integrations
 ├── tools/         omsi-check (format coverage), avatar and ambience pack builders, voice chat plugin
 ├── scripts/       build scripts for every platform, version.sh, release notes
 ├── assets/        fonts, icons, logos

@@ -24,6 +24,7 @@ export const S = {
   situations: [],
   profiles: null,
   profile: null,
+  company: null,
   poll: { stamp: '', jobs: [], instances: [] },
   toasts: [],
   errors: {},

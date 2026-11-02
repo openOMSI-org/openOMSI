@@ -49,29 +49,6 @@ other local game data normally remain on your device, in the openOMSI data folde
 home folder on desktop systems).</p>
 <p>The game communicates with online services in the cases described below.</p>
 
-<h3>"Playing now" counter</h3>
-<p>While the game is running, openOMSI tells the project's presence service that another copy of the game is being
-played. About every 10 minutes, it sends:</p>
-<ul>
-  <li>a random session identifier of 32 hexadecimal characters, made anew each time the game starts and not stored on your device;</li>
-  <li>the openOMSI version; and</li>
-  <li>the operating system category, such as Windows, macOS, Linux, Android or iOS.</li>
-</ul>
-<p>The presence service does not receive your name, Discord account, device identifier, saved games, installed
-content, map, vehicle or information about what you are playing.</p>
-<p>The service runs on Cloudflare Workers with a Cloudflare Durable Object. Active sessions are kept in memory only;
-openOMSI does not write them to persistent storage. A session is removed as soon as the game says goodbye, or
-automatically 25 minutes after its last message. If the Durable Object restarts, its session list is lost.</p>
-<p>The openOMSI Worker does not read or record your IP address. Your connection does pass through Cloudflare's
-network, and Cloudflare may process network and request information, including IP addresses, to provide its
-infrastructure and security services.</p>
-<p>The resulting total player count may be shown publicly on the openOMSI website.</p>
-<p>You can turn this off in the launcher: Settings, General, <em>Count me in the website's "playing now"
-(anonymous)</em>. It can also be turned off with the environment variable <code>OMSI_NO_PRESENCE=1</code>.</p>
-<p>Where data protection law requires a lawful basis, openOMSI relies on its legitimate interest in a simple, total
-indication of project usage while collecting as little as possible. Turning the feature off stops all future presence
-messages.</p>
-
 <h3>Update checks</h3>
 <p>The launcher checks for a new version when it starts, and the game checks again during a session (one minute in,
 then every hour). These checks ask GitHub (<code>api.github.com</code>, <code>github.com</code> and
@@ -137,11 +114,6 @@ A server can also choose to publish the names, buses and positions of the player
   <li>Cloudflare tunnels (<code>trycloudflare.com</code>), through which session traffic passes. The tunnel program is
     downloaded from GitHub the first time you host.</li>
 </ul>
-<p><strong>Public server list.</strong> A server owner can choose to list their server in the project's public server
-list (a Cloudflare Worker). The list shows the server's name, message, map, player count, version and address. When
-the server has no tunnel, that address is the IP address the server registered from, and it is shown publicly. The
-list keeps only the server's information, in memory, and forgets a server 3 minutes after its last heartbeat.
-Separately, it keeps a hash of the sender's IP address for rate limiting.</p>
 <p>Other players and server operators therefore receive information needed for multiplayer. openOMSI cannot control
 how independently operated servers or other players handle it. Do not use your real name as your driver name if you
 do not want other players to see it.</p>
@@ -175,9 +147,8 @@ contributions may remain available as part of the project's development or commu
 <p>The website is hosted on GitHub Pages and served through Cloudflare. It sets no cookies, has no forms and runs no
 analytics. It stores only your light or dark theme choice in your browser.</p>
 <p>When you visit it, your browser also fetches fonts from Google Fonts, a script from jsDelivr, release and
-documentation information from GitHub, and the player count from the presence service. Cloudflare, GitHub and these
-providers may process technical information to deliver and protect the site, such as your IP address, browser and
-device information and request information.</p>
+documentation information from GitHub. Cloudflare, GitHub and these providers may process technical information to
+deliver and protect the site, such as your IP address, browser and device information and request information.</p>
 <p>openOMSI does not sell website visitor information or use it for targeted advertising.</p>
 
 <h2>7. Forms and applications</h2>
@@ -226,7 +197,7 @@ interest in running and protecting its community and services.</p>
 <h2>9. Third-party services</h2>
 <p>Depending on the features you use, openOMSI may interact with:</p>
 <ul>
-  <li>Cloudflare (presence service, server list, tunnels, STUN, website);</li>
+  <li>Cloudflare (tunnels, STUN and website);</li>
   <li>GitHub (updates, downloads, issues, website);</li>
   <li>Google (Forms, Google Fonts, STUN);</li>
   <li>Discord (community, Rich Presence) and Discord bot providers;</li>
@@ -253,8 +224,6 @@ services, also review their privacy information if this matters to you.</p>
 <h2>11. How long information is kept</h2>
 <p>Personal information should not be kept longer than reasonably necessary for its purpose:</p>
 <ul>
-  <li>presence sessions expire at most about 25 minutes after the last message;</li>
-  <li>public server list entries expire 3 minutes after the server's last heartbeat;</li>
   <li>local game information, including logs, stays under your control on your device;</li>
   <li>multiplayer information exists for the session; uploaded vehicle files are kept by a server for up to 30 days after
     their last use by default, and independently operated servers set their own logging and ban practices;</li>

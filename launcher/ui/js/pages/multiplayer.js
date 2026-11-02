@@ -250,20 +250,7 @@ function Servers() {
     toast(t('Joined {} - choose your bus and duty, then Start the duty', [x.name || i?.name || x.address]), 'ok');
     set({ page: 'drive' });
   };
-  // a server of the public list: asked first (the list says nothing a launcher joins on), then
-  // kept in the list and joined like any other
-  const joinPublic = async (e) => {
-    try {
-      const i = await call('server_query', { address: e.address });
-      const x = list.find((y) => y.address === e.address) || { name: e.covered ? '' : e.name, address: e.address };
-      if (!list.some((y) => y.address === e.address)) save([...list, x]);
-      join(x, i);
-    } catch (err) {
-      toast(t("Can't reach the server: {err}", { err: err.message }), 'error');
-    }
-  };
   return html`<div class="stack">
-    <${PublicServers} onJoin=${joinPublic} onAdd=${(e) => { if (!list.some((y) => y.address === e.address)) { save([...list, { name: e.covered ? '' : e.name, address: e.address }]); ask(e.address); } }} />
     <${Card} title="Add server">
       <div class="row">
         <div class="grow"><${Field} label="Server address"><${Input} value=${address} placeholder="play.example.org" onInput=${setAddress} onKeyDown=${(e) => e.key === 'Enter' && add()} /></${Field}></div>
@@ -301,35 +288,3 @@ function Servers() {
   </div>`;
 }
 
-/** The public server list: names and messages are checked by the launcher before they are shown (a flagged one is covered); a custom icon only when the launcher's own check cleared it. */
-function PublicServers({ onJoin, onAdd }) {
-  const [state, setState] = useState({ list: null, error: '', loading: false });
-  const load = () => {
-    setState((x) => ({ ...x, loading: true, error: '' }));
-    call('public_servers')
-      .then((list) => setState({ list, error: '', loading: false }))
-      .catch((e) => setState({ list: null, error: e.message, loading: false }));
-  };
-  const { list, error, loading } = state;
-  return html`<${Card} title="Public servers">
-    <div class="stack">
-      <div class="row">
-        <div class="grow muted small">${t('Servers whose owners chose to list them. Names, messages and pictures are checked here before they are shown.')}</div>
-        <${Button} icon="refresh" label=${list ? 'Refresh' : 'Show the public list'} disabled=${loading} onClick=${load} />
-      </div>
-      ${loading && html`<div class="row muted"><${Spinner} /></div>`}
-      ${error && html`<div class="small" style="color:var(--danger)">${t('The public list could not be loaded: {err}', { err: error })}</div>`}
-      ${list && list.length === 0 && html`<${Empty} icon="globe" text="No public servers right now." />`}
-      ${(list || []).map((e) => html`<div class="row" style="align-items:flex-start;gap:14px" key=${e.id}>
-        ${e.icon ? html`<img src=${e.icon} width="40" height="40" style="border-radius:8px" />` : html`<div class="avatar" style="width:40px;height:40px;border-radius:8px"><${Icon} name="globe" /></div>`}
-        <div class="grow stack" style="gap:2px;min-width:0">
-          <b>${e.name}</b>
-          <div class="muted small">${[e.map && mapName(e.map), t('{n} of {max} players', { n: e.players, max: e.max_players }), e.version].filter(Boolean).join(' - ')}</div>
-          ${e.motd && html`<div class="dim small">${e.motd}</div>`}
-        </div>
-        <${Button} small kind="ghost" icon="plus" title="Add to my servers" onClick=${() => onAdd(e)} />
-        <${Button} kind="primary" icon="play" label="Join" onClick=${() => onJoin(e)} />
-      </div>`)}
-    </div>
-  </${Card}>`;
-}

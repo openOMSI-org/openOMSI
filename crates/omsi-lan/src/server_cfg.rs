@@ -80,10 +80,6 @@ pub struct ServerCfg {
     /// Voice chat of the players: on or off, the session-wide radio, how far a player is
     /// heard (`voice`, `voice_radio`, `voice_range`).
     pub voice: omsi_net::VoicePolicy,
-    /// The server is listed in the public server list (`public_list`): name, icon, map, players.
-    pub public_server: bool,
-    /// The public list's address (`public_list_url`; empty: openOMSI's own).
-    pub public_list_url: String,
     /// The owner's ban list (`owner_bans`; None: `~/.openomsi/bans-owner.json`).
     pub owner_bans: Option<std::path::PathBuf>,
     /// A player whose game sends no hardware identifier is turned away.
@@ -214,7 +210,6 @@ voice_range = 75
 # map, players, the message of the day). Your name, message and icon are checked first by the
 # same filters the players' games use: what they flag is refused (the log says why) or, for
 # the icon, replaced by the default one. 0 = private (the default), 1 = public
-public_server = 0
 
 # bans by the player's machine (not by name): the session's own list is bans.json beside this
 # file. owner_bans is the list of ALL your sessions - the admin's \"ban in all my sessions\"
@@ -296,8 +291,6 @@ impl ServerCfg {
             uploads_keep_days: num("uploads_keep_days", 30).clamp(1, 3650) as u64,
             share_maps: flag("share_maps", true),
             voice: voice_policy(&kv),
-            public_server: flag("public_server", false),
-            public_list_url: kv.get("public_list_url").cloned().unwrap_or_default(),
             owner_bans: kv.get("owner_bans").filter(|v| !v.is_empty()).map(std::path::PathBuf::from),
             require_hardware_id: flag("require_hardware_id", false),
             dir: dir.to_path_buf(),

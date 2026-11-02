@@ -459,7 +459,6 @@ const general = {
         { type: 'select', key: 'update_channel', label: 'Update channel', options: [['stable', 'Stable'], ['beta', 'Beta (for testers)']], help: 'Beta: every new version as soon as it is built, before it is tested. Back on Stable, the beta you have stays until a newer stable version comes out.', recheckUpdates: true },
         { type: 'toggle', key: 'update_auto', label: 'Install updates without asking' },
         { type: 'toggle', key: 'update_notify', label: 'Tell me about a new version during a session' },
-        { type: 'toggle', key: 'presence', label: 'Count me in the website\'s "playing now" (anonymous)' },
         { type: 'custom', id: 'version' },
         // every setting at once: at the end, not the first control one sees
         { type: 'section', title: 'Reset' },

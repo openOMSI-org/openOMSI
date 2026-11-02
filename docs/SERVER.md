@@ -37,11 +37,10 @@ nothing is drawn. `server.cfg` is written with a comment for every key on the fi
 | `accept_uploads`, `uploads_keep_days` | players' buses (below) |
 | `share_maps` | a player who joins without the server's map gets it from the server (the map and everything it uses, gigabytes for a big map); off (the written default), players install it themselves and are told which one is missing |
 | `voice_*` | voice chat (below) |
-| `public_server`, `public_list_url` | list the server in the public server list ([below](#public-server-list)); the list service's address (empty: openOMSI's own) |
 | `owner_bans`, `require_hardware_id` | machine bans ([below](#machine-bans)): the file of the owner's list shared by all your sessions (empty: `~/.openomsi/bans-owner.json`), and turning away players whose game sends no machine identifier |
 
-`server-icon.png` beside `server.cfg` (64x64, a PNG under 256 KB) is the icon the players'
-list shows.
+`server-icon.png` beside `server.cfg` (64x64, a PNG under 256 KB) is shown to players who
+connect directly when supported by the client.
 
 **The start script that asks** (`run-server.cmd` on Windows, a double click; `run-server.sh`
 on Linux, both beside `openomsi` in the server's zip): the first time it asks for the OMSI 2
@@ -494,37 +493,6 @@ time only), and turns a joining machine away if a ban holds it:
   joined them; the player can switch it off at the price of servers that require it.
 * **Wire.** The `HELLO` has one more, last field (`|<hardware id>`); the protocol number stays,
   a host before the field ignores it and a game before it sends none.
-
-## Public server list
-
-`public_server = 1` lists the server in the list that the launcher (*Multiplayer -> Servers ->
-Public servers*) shows. The server registers with the list service (`public_list_url`, default
-openOMSI's own, a Cloudflare Worker in `services/serverlist`), is listed once the service has
-read the server's `GET /status` and found the challenge it gave there (so the web port or the
-tunnel must be reachable from the internet; a tunnel is the sure way), says it is alive every
-minute, and is forgotten three minutes after its last word. Listed: name, message of the day,
-map, players, maximum, version and where to join. Nothing about the players is sent. `name`,
-`motd` and `server-icon.png` are checked before the first word (a name or message that is
-flagged - profanity and the usual ways round a filter, addresses, hidden characters - refuses
-the listing, and the log says which key to change; a flagged icon too) and every launcher
-checks each listing again before showing it: a flagged text is covered, a custom icon is shown
-only if the viewer's own image check cleared it. The service filters too (no addresses or
-invitations, limits per source), but no client takes its word.
-
-**About OpenLB.** The feature was planned with the OpenLB library (ImgCleaner / TxtCleaner),
-and it cannot be used here: its licence is the MIT text with one line added - the software "may
-not be used for anything but its original purpose" - which is a limit on use that the AGPL
-this project is under does not allow in a part of it (and crates.io files it as
-"non-standard"); its models (a 99 MB text model and 10 to 47 MB image models) come with no
-licence and with training data that "cannot be released"; and it needs a native ONNX runtime
-library (`ort`, pinned to a release candidate, loaded dynamically) shipped for every platform,
-which the dedicated server, Android and iOS builds would each have to carry. So the moderation
-is behind a small trait (`omsi-serverlist`, `Moderator`): text is checked by
-[`rustrict`](https://crates.io/crates/rustrict) (MIT, already the chat's filter) and our rules,
-and **icons are not cleared at all yet**: no image classifier is bundled, so every custom icon
-is "unchecked" and the public list shows the default one. An open-licence classifier (a small
-Apache-2.0 or MIT model run by `tract`, downloaded to the content folder with a checksum, not
-committed) plugs in with `set_image_classifier` and nothing else changes.
 
 ## License
 

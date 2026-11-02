@@ -31,6 +31,7 @@ export async function boot() {
     loadContent();
     readAhead();
     loadDepot();
+    loadCompany();
     // (the bus preview's helper and renderer get ready while the page is read)
     call('preview_warm').catch(() => {});
   }
@@ -389,6 +390,12 @@ export async function loadProfiles() {
   if (name) set({ profile: await call('profile', { name }).catch(() => null) });
 }
 
+export async function loadCompany() {
+  const company = await call('company').catch(() => null);
+  set({ company });
+  return company;
+}
+
 let settingsSaved = Promise.resolve();
 let settingsSeq = 0;
 
@@ -560,6 +567,7 @@ function startPolling() {
     set({ gameStarted: false });
     pollNow();
     loadProfiles();
+    loadCompany();
     loadSituations();
     loadDepot();
     reloadSettings();

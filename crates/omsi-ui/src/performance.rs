@@ -291,6 +291,7 @@ impl PerfOverlay {
         } else {
             0.0
         };
+        let (p95_ms, low_fps) = frame_percentiles(&self.frames);
         let worst = self.frames.iter().map(|s| s.total).fold(0.0f32, f32::max) * 1000.0;
         let mut r = Readout {
             title: crate::tr("Performance").into_owned(),
@@ -308,6 +309,11 @@ impl PerfOverlay {
         r.lines.push(format!(
             "Slowest frame of the graph: {} ms",
             worst.round() as i32
+        ));
+        r.lines.push(format!(
+            "Frame time p95: {:.1} ms, 1% low: {} fps",
+            p95_ms,
+            low_fps.round() as i32
         ));
         let (by, share) = limiting(&recent, m.vsync_bound);
         r.lines.push(format!(
@@ -370,7 +376,7 @@ impl PerfOverlay {
                 *line = t;
             }
         }
-        r.brief = r.lines[1..3].to_vec();
+        r.brief = vec![r.lines[1].clone(), r.lines[2].clone()];
         if !m.gpu.is_empty() {
             r.lines.push(m.gpu.clone());
         }
@@ -399,6 +405,19 @@ fn average<'a>(samples: impl Iterator<Item = &'a Sample>) -> Sample {
 
 fn tenths(x: f32) -> f32 {
     (x * 10.0).round() / 10.0
+}
+
+/// Return the 95th-percentile frame time and the equivalent 1% low FPS from the history.
+pub fn frame_percentiles(frames: &VecDeque<Sample>) -> (f32, f32) {
+    if frames.is_empty() {
+        return (0.0, 0.0);
+    }
+    let mut totals: Vec<f32> = frames.iter().map(|s| s.total).collect();
+    totals.sort_unstable_by(f32::total_cmp);
+    let index = |percent: usize| (totals.len() - 1) * percent / 100;
+    let p95 = totals[index(95)] * 1000.0;
+    let p99 = totals[index(99)];
+    (p95, if p99 > 0.0 { 1.0 / p99 } else { 0.0 })
 }
 
 pub fn limiting(recent: &Sample, vsync_bound: bool) -> (&'static str, f32) {
@@ -540,5 +559,20 @@ mod tests {
         assert_eq!(graph_scale(&f), 0.1);
         f.extend(std::iter::repeat_n(Sample::new(0.9, [0.0; 8]), 10));
         assert_eq!(graph_scale(&f), 0.2);
+    }
+
+    #[test]
+    fn frame_percentiles_report_tail_latency() {
+        let frames: VecDeque<Sample> = (1..=100)
+            .map(|ms| Sample::new(ms as f32 / 1000.0, [0.0; 8]))
+            .collect();
+        let (p95, low_fps) = frame_percentiles(&frames);
+        assert_eq!(p95, 95.0);
+        assert!((low_fps - 1.0 / 0.99).abs() < 1e-6);
+    }
+
+    #[test]
+    fn empty_frame_percentiles_are_zero() {
+        assert_eq!(frame_percentiles(&VecDeque::new()), (0.0, 0.0));
     }
 }

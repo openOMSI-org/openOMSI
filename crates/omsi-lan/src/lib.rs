@@ -22,7 +22,6 @@ pub mod mirror;
 pub mod map_pack;
 pub mod mods;
 pub mod passenger;
-pub mod public_list;
 pub mod remote;
 pub mod remote_load;
 pub mod server_cfg;

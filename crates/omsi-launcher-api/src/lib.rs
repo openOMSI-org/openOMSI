@@ -263,6 +263,16 @@ fn profile_select(name: String) -> Answer {
     to_json(c)
 }
 
+// --- company ---------------------------------------------------------------------------
+
+fn company() -> Answer {
+    to_json(core::company::get().map_err(err)?)
+}
+
+fn company_create(name: String) -> Answer {
+    to_json(core::company::create(&name).map_err(err)?)
+}
+
 // --- settings --------------------------------------------------------------------------
 
 fn settings_get() -> Answer {
@@ -484,22 +494,6 @@ fn server_query(address: String) -> Answer {
         "version": i.version, "icon": icon, "time": i.time, "weather": i.weather, "password": i.password,
         "vehicles": i.vehicles, "reached_at": i.reached_at,
     }))
-}
-
-/// The public server list, moderated here (a flagged name or message is covered, an icon
-/// shown only if this launcher cleared it): the page shows what this returns and nothing the
-/// service said that was not checked (`omsi-serverlist`).
-fn public_servers() -> Answer {
-    let m = omsi_serverlist::BuiltinModerator;
-    let list = omsi_serverlist::client::fetch(omsi_serverlist::DEFAULT_SERVICE, &m)?;
-    Ok(json!(list
-        .into_iter()
-        .map(|e| json!({
-            "id": e.id, "address": e.address, "name": e.name, "motd": e.motd, "map": e.map,
-            "players": e.players, "max_players": e.max_players, "version": e.version, "covered": e.covered,
-            "icon": e.icon.as_deref().map(|i| format!("data:image/png;base64,{}", base64(i))),
-        }))
-        .collect::<Vec<_>>()))
 }
 
 /// A code host's first responsive status endpoint, including its tunnel.
@@ -851,6 +845,8 @@ fn answer(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "profile_create" => profile_create(arg::<String>(args, "name")?, arg::<String>(args, "sex")?),
         "profile_delete" => profile_delete(arg::<String>(args, "name")?),
         "profile_select" => profile_select(arg::<String>(args, "name")?),
+        "company" => company(),
+        "company_create" => company_create(arg::<String>(args, "name")?),
         "update_status" => Ok(updates::status()),
         "update_check" => Ok(updates::check(arg::<Option<bool>>(args, "again")?.unwrap_or(false))),
         "update_install" => Ok(updates::install(p)),
@@ -898,7 +894,6 @@ fn answer(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "servers_get" => servers_get(),
         "servers_save" => servers_save(arg::<Value>(args, "list")?),
         "server_query" => server_query(arg::<String>(args, "address")?),
-        "public_servers" => public_servers(),
         "choice_save" => choice_save(arg::<Value>(args, "choice")?),
         "favourites_save" => favourites_save(arg::<Vec<String>>(args, "list")?),
         "depot_get" => depot_get(),

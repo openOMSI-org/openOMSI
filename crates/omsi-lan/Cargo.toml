@@ -9,8 +9,6 @@ description = "openOMSI's multiplayer on top of omsi-net: the host's mods for jo
 omsi-model = { path = "../omsi-model" }
 omsi-cfg = { path = "../omsi-cfg" }
 omsi-admin = { path = "../omsi-admin" }
-# the public server list: moderation of its names and icons, the service's client
-omsi-serverlist = { path = "../omsi-serverlist" }
 omsi-net = { path = "../omsi-net" }
 omsi-map = { path = "../omsi-map" }
 omsi-sim = { path = "../omsi-sim" }
@@ -36,7 +34,6 @@ serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 ring.workspace = true
-# the chat's word filter, and the public server list's (`moderation`)
 rustrict = "0.7"
 
 [target.'cfg(unix)'.dependencies]

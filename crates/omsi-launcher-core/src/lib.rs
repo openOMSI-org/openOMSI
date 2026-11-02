@@ -9,6 +9,7 @@
 
 pub mod ai_lists;
 pub mod crash;
+pub mod company;
 pub mod depot;
 pub mod index;
 pub mod install;
@@ -2338,8 +2339,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     v["head_idle"] = json!(0.0);
     v["head_idle_pace"] = json!(1.0);
     // updates from the GitHub releases: looked for when the launcher starts (and during a
-    // session, said over the navigator), installed after asking (or at once); and whether
-    // the game is counted on the website's "playing now"
+    // session, said over the navigator), installed after asking (or at once)
     for (k, d) in [("update_check", json!(true)), ("update_auto", json!(false)), ("update_notify", json!(true)), ("update_channel", json!("stable")), ("presence", json!(true))] {
         v[k] = d;
     }

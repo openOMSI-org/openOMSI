@@ -3993,7 +3993,6 @@ dependencies = [
  "omsi-net",
  "omsi-o3d",
  "omsi-script",
- "omsi-serverlist",
  "omsi-sim",
  "omsi-texture",
  "omsi-vehicle",
@@ -4018,7 +4017,6 @@ dependencies = [
  "omsi-launcher-core",
  "omsi-net",
  "omsi-platform",
- "omsi-serverlist",
  "omsi-timetable",
  "omsi-weather",
  "serde",
@@ -4305,20 +4303,6 @@ dependencies = [
  "log",
  "omsi-cfg",
  "thiserror 2.0.21",
-]
-
-[[package]]
-name = "omsi-serverlist"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "image",
- "log",
- "rustrict",
- "serde",
- "serde_json",
- "sha2",
- "ureq",
 ]
 
 [[package]]
