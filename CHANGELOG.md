@@ -8,10 +8,6 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
-- **Short rides stand by a door.** With *Short rides stand by a door* on (Options › Gameplay and
-  the launcher's passenger settings, `pax_short_rides_stand`, off by default), a passenger who
-  gets off within about three kilometres takes the free standing place nearest an exit instead of
-  a seat; with no standing place free, they board as before (#2242).
 - **Enhanced has options of its own, and the quality presets cross the modes.** Enhanced+ is no
   longer a mode: it is Enhanced with *Real-Time Ray Tracing* switched on (`ray_tracing=1`; a
   `graphics=enhanced_plus` file reads as that, and `--enhanced-plus` still asks for it for a run).
@@ -595,6 +591,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   junction). The standing car now drives on after a few seconds. And a route's lane change that
   the bus missed its window for (the two lanes no longer run side by side) is made all the same
   after 12 s of waiting instead of never. `OMSI_DEBUG_STUCK` also says why a lane change waits.
+- **Short rides stand by a door.** With *Short rides stand by a door* on (Options › Gameplay and
+  the launcher's passenger settings, `pax_short_rides_stand`, off by default), a passenger who
+  gets off within about three kilometres takes the free standing place nearest an exit instead of
+  a seat; with no standing place free, they board as before (#2242).
 - **On foot, the player walks wherever the passengers' paths lead**: a staircase, a ramp, a gate
   through a fence or a doorway the map gives the AI passengers is now walkable by hand too, at
   the path's height (the step and slope limits and the walls no longer stop the walker on a
