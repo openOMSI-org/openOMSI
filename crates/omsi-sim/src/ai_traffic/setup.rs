@@ -41,7 +41,9 @@ impl TrafficSim {
     pub fn ai_schemes(&self, ty: &VehicleType) -> Vec<usize> {
         use std::hash::{Hash, Hasher};
         let mut h = std::collections::hash_map::DefaultHasher::new();
-        (self.scheme_salt, &ty.def.path).hash(&mut h);
+        let parts: Vec<String> = ty.def.path.components().map(|c| c.as_os_str().to_string_lossy().to_lowercase()).collect();
+        let from = parts.iter().rposition(|p| p == "vehicles").unwrap_or(parts.len().saturating_sub(1));
+        (self.scheme_salt, parts[from..].join("/")).hash(&mut h);
         spread_schemes(ty.paint_schemes.len(), h.finish() as usize)
     }
 
