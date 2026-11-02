@@ -8,6 +8,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **Place the bus facing the way you want**: on the city map, Ctrl+drag from the place towards
+  the way the bus should face (a plain Ctrl+click keeps the nearest street's direction); in the
+  map camera (F4), Ctrl+click puts the bus on the street facing the way the camera looks, as in
+  OMSI 2.
 - **Long lists in the launcher filter as you type**: a drop-down with more than twelve entries
   (the liveries, the depot files, the languages...) shows a search line at its top; typing
   narrows it down, Backspace and Esc undo the search.

@@ -126,6 +126,10 @@ impl App {
     /// Put the bus on the street nearest the world point `at` (the city map's Ctrl+click),
     /// facing along it.
     pub(crate) fn place_bus_at(&mut self, at: glam::DVec2) {
+        self.place_bus_facing(at, None);
+    }
+
+    pub(crate) fn place_bus_facing(&mut self, at: glam::DVec2, facing: Option<f64>) {
         let p = glam::DVec3::new(at.x, at.y, 0.0);
         // the traffic's lanes (the tiles loaded around the bus), else the navigator's of the
         // whole map: a street far off on a big map was "no street" until the bus had been
@@ -135,7 +139,10 @@ impl App {
         let Some((net, (lane, s, _))) = nets
             .into_iter()
             .flatten()
-            .find_map(|net| net.nearest_lane(p, omsi_sim::traffic::LaneKind::Street).filter(|(_, _, d)| *d <= 300.0).map(|f| (net, f)))
+            .find_map(|net| {
+                let along = facing.and_then(|h| net.lane_along(p, h, omsi_sim::traffic::LaneKind::Street, 25.0, 75.0));
+                along.or_else(|| net.nearest_lane(p, omsi_sim::traffic::LaneKind::Street)).filter(|(_, _, d)| *d <= 300.0).map(|f| (net, f))
+            })
         else {
             self.service_msg = Some(("No street near that point".into(), 3.0));
             return;

@@ -741,6 +741,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             pane_scroll_drag: None,
             pane_scroll: None,
             teleport_pick: false,
+            map_place_from: None,
             game_panels: Default::default(),
             tutorial: None,
             wheel_acc: 0.0,
