@@ -203,7 +203,7 @@ struct SettingsPage: View {
                 SettingSlider(label: "Mouse pedal strength", key: "mouse_pedal_strength", range: 0.5 ... 2, step: 0.05, fallback: 1, round: 0.01) { omsiPct($0) }
                 SettingToggle(label: "Smooth mouse steering (off: the wheel follows the cursor at once, as in OMSI)", key: "mouse_smooth", fallback: true)
                 SettingToggle(label: "The mouse works the pedals", key: "mouse_pedals", fallback: true, help: "Up the throttle, down the brake, as in OMSI; off: the mouse only steers, the pedals stay on the keys")
-                SettingToggle(label: "Hold the cursor while the mouse steers (off: the system's crosshair, kept inside the window whose edges are the lock)", key: "mouse_hold", fallback: true)
+                SettingToggle(label: "Hold the cursor while the mouse steers (off: the system's crosshair, kept inside the window whose edges are the lock; Windows, Linux)", key: "mouse_hold", fallback: true)
                 SettingToggle(label: "A right click ends the mouse steering (as in OMSI)", key: "mouse_right_off")
             }
             SettingToggle(label: "Indicators cancel themselves (as the bus's script does)", key: "blinker_cancel", fallback: true)
