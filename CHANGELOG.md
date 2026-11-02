@@ -657,6 +657,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   junction). The standing car now drives on after a few seconds. And a route's lane change that
   the bus missed its window for (the two lanes no longer run side by side) is made all the same
   after 12 s of waiting instead of never. `OMSI_DEBUG_STUCK` also says why a lane change waits.
+- **A zoom on a key.** *Zoom while held* (Controls › Views, no key by default, a controller
+  button too) narrows the view while it is held - to read a far sign, a mirror or the
+  dashboard - and lets go when released; *Zoom on a key* sets how far (1.25x to 5x, 2x by
+  default) and *Zoom key stays* makes one press zoom in and the next zoom out (#3114).
 - **Short rides stand by a door.** With *Short rides stand by a door* on (Options › Gameplay and
   the launcher's passenger settings, `pax_short_rides_stand`, off by default), a passenger with
   no set stop who rides under about three kilometres takes the free standing place nearest an exit

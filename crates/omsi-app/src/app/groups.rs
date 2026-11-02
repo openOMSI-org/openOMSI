@@ -274,6 +274,7 @@ pub(crate) struct ViewState {
     /// The zoom of the views inside the bus (driver, passenger): their field of view is
     /// the camera's times this (the mouse wheel, + and -, a pinch), per view.
     pub(crate) view_zoom: std::collections::HashMap<String, f32>,
+    pub(crate) zoom_hold: crate::app_impl::ZoomHold,
     /// The zoom each camera of a view was left with (by `App::look_key`), put back when it
     /// is taken again: each of Omsi.exe's cameras keeps its own (#2183).
     pub(crate) cam_zooms: std::collections::HashMap<String, f32>,
@@ -318,6 +319,7 @@ pub(crate) struct InputState {
     pub(crate) pad_repeat: Vec<String>,
     /// A controller button held for the multiplayer bus radio (`voice_radio`).
     pub(crate) pad_voice_radio: bool,
+    pub(crate) pad_zoom_hold: bool,
     /// The same for the nearby talk key (`voice_nearby`).
     pub(crate) pad_voice_nearby: bool,
     /// The arrow keys turned the head (a glance that comes back when they are let go).
