@@ -659,7 +659,7 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   after 12 s of waiting instead of never. `OMSI_DEBUG_STUCK` also says why a lane change waits.
 - **A zoom on a key.** *Zoom while held* (Controls › Views, no key by default, a controller
   button too) narrows the view while it is held - to read a far sign, a mirror or the
-  dashboard - and lets go when released; *Zoom on a key* sets how far (1.3x to 5x, 2x by
+  dashboard - and lets go when released; *Zoom on a key* sets how far (1.25x to 5x, 2x by
   default) and *Zoom key stays* makes one press zoom in and the next zoom out (#3114).
 - **Short rides stand by a door.** With *Short rides stand by a door* on (Options › Gameplay and
   the launcher's passenger settings, `pax_short_rides_stand`, off by default), a passenger with
