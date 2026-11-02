@@ -15,6 +15,7 @@ mod route;
 
 use crate::App;
 use omsi_ui::tr;
+use omsi_ui::theme::Palette;
 use std::sync::Arc;
 
 pub(crate) struct Request {
@@ -108,7 +109,7 @@ impl App {
     }
 }
 
-pub(crate) fn panel(app: &App, request: &Request, light: bool) -> omsi_plugin::ui::Panel {
+pub(crate) fn panel(app: &App, request: &Request, pal: Palette) -> omsi_plugin::ui::Panel {
     use crate::game_panels::{button, card, grow_row, note, title};
     let (heading, detail) = match request.target {
         Some(Target::Placed(_)) => (
@@ -128,7 +129,7 @@ pub(crate) fn panel(app: &App, request: &Request, light: bool) -> omsi_plugin::u
             "AI will drive away and leave traffic out of sight. You will be on foot.",
         ),
     };
-    let mut children = vec![title(&tr(heading)), note(&tr(detail), light)];
+    let mut children = vec![title(&tr(heading)), note(&tr(detail), pal)];
     if let Some(car) = request.target.and_then(|target| match target {
         Target::Ai(id) => app
             .session
@@ -146,7 +147,7 @@ pub(crate) fn panel(app: &App, request: &Request, light: bool) -> omsi_plugin::u
                 car.vehicle.ty.def.type_name,
                 car.vehicle.host.tt_line
             ),
-            light,
+            pal,
         ));
     }
     if let Some(Target::Placed(uid)) = request.target {
@@ -156,7 +157,7 @@ pub(crate) fn panel(app: &App, request: &Request, light: bool) -> omsi_plugin::u
                     "{} {}",
                     p.vehicle.ty.def.manufacturer, p.vehicle.ty.def.type_name
                 ),
-                light,
+                pal,
             ));
         }
     }
@@ -170,7 +171,7 @@ pub(crate) fn panel(app: &App, request: &Request, light: bool) -> omsi_plugin::u
         0.0,
         440.0,
         240,
-        light,
+        pal,
         children,
     )
 }

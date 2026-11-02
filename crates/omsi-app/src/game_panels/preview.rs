@@ -114,7 +114,7 @@ fn preview() {
 fn handed_over_buses_preview() {
     let menu = quick_menu::QuickMenu { page: 1, focus: 14, ..Default::default() };
     let state = quick_menu::TileState { off: vec![], lit: vec![] };
-    picture("game-panels-bus-locator.png", &[(menu.panel_of(&state, false), Some("find_ai"))]);
+    picture("game-panels-bus-locator.png", &[(menu.panel_of(&state, Palette::OPENOMSI), Some("find_ai"))]);
 }
 
 #[test]
