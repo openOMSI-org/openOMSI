@@ -250,6 +250,7 @@ img { -webkit-user-drag: none; }
 .dropdown-item { padding: 7px 10px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .dropdown-item.hi { background: var(--surface-3); }
 .dropdown-item.on { color: var(--accent); font-weight: 500; }
+.dropdown-search { position: sticky; top: -4px; padding: 7px 10px; margin: -4px -4px 4px; background: var(--surface-2); border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; z-index: 1; }
 textarea.input { height: auto; padding: 9px 11px; resize: vertical; }
 .search { position: relative; }
 .search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--muted); }
