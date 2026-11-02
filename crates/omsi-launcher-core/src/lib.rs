@@ -3359,6 +3359,27 @@ pub const IN_PROCESS_GAMES: bool = cfg!(any(target_os = "android", target_os = "
 
 pub use instances::{list as list_instances, log_tail, stop as stop_instance, Instance};
 
+/// The page the launcher is asked to open on: `--page settings` or `--page=settings` (an id
+/// of the sidebar's pages, as the launcher's own page names them). Only letters, digits, `-`
+/// and `_` count, in lower case; anything else is no page and the launcher opens on Drive.
+pub fn start_page(args: &[String]) -> Option<String> {
+    let mut rest = args.iter().skip(1);
+    while let Some(a) = rest.next() {
+        let value = if a == "--page" { rest.next().map(String::as_str) } else { a.strip_prefix("--page=") };
+        let Some(value) = value else { continue };
+        let page = value.trim().to_ascii_lowercase();
+        let fits = !page.is_empty() && page.len() <= 30 && page.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+        return fits.then_some(page);
+    }
+    None
+}
+
+/// Whether the launcher is asked to leave out its sidebar (`--no-sidebar`): the page alone, for
+/// a program that has a menu of its own and opens the launcher on one page (`--page`).
+pub fn no_sidebar(args: &[String]) -> bool {
+    args.iter().skip(1).any(|a| a == "--no-sidebar")
+}
+
 /// Terminal access to the same functions: `--cli lines '{"map":"maps/Grundorf/global.cfg"}'`.
 pub fn cli(cmd: &str, arg: &str) -> Result<Value> {
     let a: Value = serde_json::from_str(arg).unwrap_or(json!({}));

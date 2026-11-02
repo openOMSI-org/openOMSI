@@ -2,9 +2,17 @@
 
 import { useEffect, useState } from '../vendor/preact-htm.js';
 
+/** The page the launcher opens on: the one asked for with `--page <id>` (the program hands it
+ * over as `window.__openomsiPage`, or `?page=<id>` in a browser), else Drive. An id that is
+ * no page shows Drive, as `App` does. */
+function startPage() {
+  const asked = window.__openomsiPage || new URLSearchParams(location.search).get('page');
+  return typeof asked === 'string' && /^[a-z0-9_-]{1,30}$/.test(asked) ? asked : 'drive';
+}
+
 export const S = {
   ready: false,
-  page: 'drive',
+  page: startPage(),
   boot: null,
   settings: null,
   config: null,
