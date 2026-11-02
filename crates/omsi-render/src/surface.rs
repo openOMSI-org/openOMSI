@@ -31,6 +31,12 @@ impl Drop for SurfaceState<'_> {
     }
 }
 
+pub fn create_surface(instance: &wgpu::Instance, window: &Arc<winit_window::Window>) -> Result<wgpu::Surface<'static>> {
+    crate::catch(|| instance.create_surface(window.clone()))
+        .ok_or_else(|| anyhow!("the graphics driver refused the window (still held after a lost graphics device? restarting the game frees it)"))?
+        .context("create_surface")
+}
+
 /// The present mode for the window's vsync setting: `AutoVsync` / `AutoNoVsync`, as ever
 /// (`Fifo` for everybody would make a game that runs just below the refresh rate wait a whole
 /// blank for each late frame, where `AutoVsync` tears a little). `OMSI_PRESENT_MODE` picks a
@@ -84,7 +90,7 @@ impl<'w> SurfaceState<'w> {
         height: u32,
         vsync: bool,
     ) -> Result<Self> {
-        let surface = instance.create_surface(window).context("create_surface")?;
+        let surface = create_surface(instance, &window)?;
         let encode = srgb_encode::SrgbEncode::wanted(renderer, renderer.format());
         let modes = listed_modes(&surface, renderer);
         // (copied from only for a glass theme: `set_glass`)
@@ -113,7 +119,7 @@ impl<'w> SurfaceState<'w> {
     /// device and format): pictures without the renderer (a clear, an interface) can be
     /// shown until [`Self::adopt`] hands it over.
     pub fn early(instance: &wgpu::Instance, window: Arc<winit_window::Window>, device: &wgpu::Device, format: wgpu::TextureFormat, width: u32, height: u32, vsync: bool) -> Result<Self> {
-        let surface = instance.create_surface(window).context("create_surface")?;
+        let surface = create_surface(instance, &window)?;
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,

@@ -10,6 +10,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 - **Go anywhere on foot from the city map**: Alt+click a place on the city map and you stand
   there on foot; from the driver's seat you get up first, and the bus stays where it is.
+- **Long lists in the launcher filter as you type**: a drop-down with more than twelve entries
+  (the liveries, the depot files, the languages...) shows a search line at its top; typing
+  narrows it down, Backspace and Esc undo the search.
 - **Enhanced has options of its own, and the quality presets cross the modes.** Enhanced+ is no
   longer a mode: it is Enhanced with *Real-Time Ray Tracing* switched on (`ray_tracing=1`; a
   `graphics=enhanced_plus` file reads as that, and `--enhanced-plus` still asks for it for a run).
@@ -525,6 +528,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **Yesterday's night tours are offered only for their trips past midnight**: a Friday tour that
+  runs into the night was listed and drivable all Saturday, and a Sunday one all Monday; now it
+  counts by Friday's (Sunday's) clock, so it shows only until its last trip after midnight ends.
 - **Each graphics profile is a file of its own.** The launcher kept them all in one
   `graphics_profiles.json`: a file that could not be read counted as having none, and the next
   profile kept was written alone over the file, taking the rest with it. They are now in
