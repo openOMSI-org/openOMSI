@@ -3840,6 +3840,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "log",
  "omsi-cfg",
+ "omsi-trolley",
  "omsi-vehicle",
  "parking_lot 0.13.0",
  "symphonia",
