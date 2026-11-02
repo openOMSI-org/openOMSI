@@ -197,7 +197,7 @@ impl App {
                 if let Some(win) = self.window.as_ref() {
                     let _ = win.set_cursor_grab(winit::window::CursorGrabMode::None);
                 }
-                if self.input.mouse_grab.mode == Some(GrabMode::Plain) {
+                if self.input.mouse_grab.mode == Some(GrabMode::Plain) && !self.settings.mouse_hold {
                     self.confine_cursor();
                 }
             }
@@ -278,9 +278,7 @@ impl App {
     fn confine_cursor(&mut self) {
         self.input.mouse_grab.mode = Some(GrabMode::Plain);
         if let Some(win) = self.window.as_ref() {
-            if win.set_cursor_grab(winit::window::CursorGrabMode::Confined).is_ok() {
-                log::info!("mouse steering: the cursor kept in the window");
-            }
+            let _ = win.set_cursor_grab(winit::window::CursorGrabMode::Confined);
         }
     }
 
