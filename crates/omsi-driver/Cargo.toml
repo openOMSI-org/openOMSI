@@ -1,0 +1,30 @@
+[package]
+name = "omsi-driver"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Player vehicle state, controls, cameras and local effects independent of the app"
+
+[dependencies]
+omsi-sim = { path = "../omsi-sim" }
+omsi-input = { path = "../omsi-input" }
+omsi-scene = { path = "../omsi-scene" }
+omsi-render = { path = "../omsi-render" }
+omsi-audio = { path = "../omsi-audio" }
+omsi-content = { path = "../omsi-content" }
+omsi-vehicle = { path = "../omsi-vehicle" }
+omsi-script = { path = "../omsi-script" }
+omsi-cfg = { path = "../omsi-cfg" }
+omsi-plugin = { path = "../omsi-plugin" }
+omsi-trolley = { path = "../omsi-trolley" }
+glam.workspace = true
+hashbrown.workspace = true
+log.workspace = true
+winit.workspace = true
+omsi-geometry = { path = "../omsi-geometry" }
+omsi-transit = { path = "../omsi-transit" }
+omsi-texture = { path = "../omsi-texture" }
+
+[dev-dependencies]
+omsi-model = { path = "../omsi-model" }
+omsi-o3d = { path = "../omsi-o3d" }

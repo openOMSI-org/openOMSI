@@ -5,7 +5,7 @@ use super::*;
 /// The `[mouseevent]` mesh a ray picks, and whether the ray through the cursor itself found
 /// it (not the rings around it). `reach`: how far along the ray through the cursor and along
 /// the rings a switch may be and still be reached ([`Reach`]).
-pub(crate) fn pick_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3, dir: Vec3, spread: f32, reach: Reach) -> Option<(usize, bool)> {
+pub fn pick_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3, dir: Vec3, spread: f32, reach: Reach) -> Option<(usize, bool)> {
     let o = (origin - vehicle.position).as_vec3();
     let right = Vec3::new(-dir.y, dir.x, 0.0).normalize_or_zero();
     let up = dir.cross(right).normalize_or_zero();
@@ -74,21 +74,21 @@ pub(crate) fn pick_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3, dir: V
 /// How far a switch may stand behind the nearest part that hides it, along the ray through
 /// the cursor, and still take the click: a button flush with its panel, or a hair behind its
 /// face where the two were modelled as one surface, stays reachable.
-pub(crate) const FLUSH_SLACK: f32 = 0.01;
+pub const FLUSH_SLACK: f32 = 0.01;
 
 /// The same for the rings of rays around the cursor, measured against the part the ray
 /// through the cursor meets: a ring ray lands on a switch beside it at another depth than the
 /// middle ray on a tilted panel, so it is given more room; a switch modelled well behind a
 /// panel (an engine hatch behind the dashboard) is still out of reach.
-pub(crate) const RING_SLACK: f32 = 0.05;
+pub const RING_SLACK: f32 = 0.05;
 
 /// How far along a ray into a vehicle a switch can be reached: up to the nearest part that
 /// hides what is behind it (infinite: nothing does).
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct Reach(pub f32);
+pub struct Reach(pub f32);
 
 impl Reach {
-    pub(crate) const ANY: Reach = Reach(f32::INFINITY);
+    pub const ANY: Reach = Reach(f32::INFINITY);
 
     /// The farthest hit ring `ring` (0: the ray through the cursor) may take.
     fn limit(self, ring: usize) -> f32 {
@@ -101,7 +101,7 @@ impl Reach {
 /// put seats, ticket machines and body panels in front of switches that are clicked through
 /// them (the O560's stop request behind the driver's seat, the Lion's City G's roof hatches
 /// behind its body). From outside (`outside`) any part of the body hides what is behind it.
-pub(crate) fn reach_into(ty: &omsi_sim::VehicleType, props: &[omsi_sim::vehicle::MeshProps], xf_of: impl Fn(usize) -> glam::Mat4, o: Vec3, dir: Vec3, outside: bool) -> Reach {
+pub fn reach_into(ty: &omsi_sim::VehicleType, props: &[omsi_sim::vehicle::MeshProps], xf_of: impl Fn(usize) -> glam::Mat4, o: Vec3, dir: Vec3, outside: bool) -> Reach {
     if !outside {
         return Reach::ANY;
     }
@@ -113,7 +113,7 @@ pub(crate) fn reach_into(ty: &omsi_sim::VehicleType, props: &[omsi_sim::vehicle:
 /// (`[mouseevent]` meshes) are left out - among them the nearest wins anyway - and so are
 /// shadow meshes, meshes the outside view does not draw (`[viewpoint]`) and slots a script
 /// has faded out; walls and windows alike hide.
-pub(crate) fn hiding_part(ty: &omsi_sim::VehicleType, props: &[omsi_sim::vehicle::MeshProps], xf_of: impl Fn(usize) -> glam::Mat4, o: Vec3, dir: Vec3) -> Option<(usize, f32)> {
+pub fn hiding_part(ty: &omsi_sim::VehicleType, props: &[omsi_sim::vehicle::MeshProps], xf_of: impl Fn(usize) -> glam::Mat4, o: Vec3, dir: Vec3) -> Option<(usize, f32)> {
     let mut nearest: Option<(usize, f32)> = None;
     for (i, vm) in ty.meshes.iter().enumerate() {
         let def = &ty.model.meshes[vm.def_index];
@@ -142,11 +142,11 @@ pub(crate) fn hiding_part(ty: &omsi_sim::VehicleType, props: &[omsi_sim::vehicle
 /// Depth band (m) inside which overlapping cockpit `[mouseevent]` meshes are disambiguated
 /// by aim (lateral distance to the mesh centre) rather than by which face is a hair closer.
 /// Sized for the Aachen ibox digit row (D10/D11/D12 centres ~16 mm apart on a tilted pad).
-pub(crate) const MOUSEEVENT_PICK_DEPTH_BAND: f32 = 0.03;
+pub const MOUSEEVENT_PICK_DEPTH_BAND: f32 = 0.03;
 
 /// Among ray hits `(t, lateral², id)`, pick the aimed mesh: nearest surface first, then the
 /// smallest lateral distance among hits within [`MOUSEEVENT_PICK_DEPTH_BAND`] of that nearest.
-pub(crate) fn best_mouseevent_hit(hits: &[(f32, f32, usize)]) -> Option<usize> {
+pub fn best_mouseevent_hit(hits: &[(f32, f32, usize)]) -> Option<usize> {
     let min_t = hits.iter().map(|h| h.0).fold(f32::INFINITY, f32::min);
     if !min_t.is_finite() {
         return None;
@@ -201,7 +201,7 @@ mod mouseevent_pick_tests {
 /// (`u`/`v` from 0 to 1, `v` down from the top), for the nearest such surface. The nearest
 /// triangle of a mesh decides: a bezel of the same mesh in front of the screen takes the click
 /// away from it. `also`: script textures clicked like pages (those `.opl` plugins draw).
-pub(crate) fn pick_html_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3, dir: Vec3, also: &[usize]) -> Option<(usize, f32, f32)> {
+pub fn pick_html_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3, dir: Vec3, also: &[usize]) -> Option<(usize, f32, f32)> {
     let pages: Vec<usize> = vehicle.html_textures.iter().map(|t| t.script_index).chain(also.iter().copied()).collect();
     if pages.is_empty() {
         return None;
@@ -244,7 +244,7 @@ pub(crate) fn pick_html_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3, d
 /// The same forgiving pick as `pick`, but for the coupled sections of an articulated
 /// bus.  The old picker only searched the lead vehicle, so GN92's rear door opener and
 /// every other button in the second section could never receive a click.
-pub(crate) fn pick_trailer_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3, dir: Vec3, spread: f32, reach: Reach) -> Option<((usize, usize), bool)> {
+pub fn pick_trailer_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3, dir: Vec3, spread: f32, reach: Reach) -> Option<((usize, usize), bool)> {
     let right = Vec3::new(-dir.y, dir.x, 0.0).normalize_or_zero();
     let up = dir.cross(right).normalize_or_zero();
     let mut rings: Vec<Vec<Vec3>> = vec![vec![dir]];

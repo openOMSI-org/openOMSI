@@ -3774,6 +3774,7 @@ dependencies = [
  "omsi-career",
  "omsi-cfg",
  "omsi-content",
+ "omsi-driver",
  "omsi-geometry",
  "omsi-guard",
  "omsi-htmlengine",
@@ -3908,6 +3909,32 @@ dependencies = [
 [[package]]
 name = "omsi-demo-plugin"
 version = "0.1.0"
+
+[[package]]
+name = "omsi-driver"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "hashbrown 0.17.1",
+ "log",
+ "omsi-audio",
+ "omsi-cfg",
+ "omsi-content",
+ "omsi-geometry",
+ "omsi-input",
+ "omsi-model",
+ "omsi-o3d",
+ "omsi-plugin",
+ "omsi-render",
+ "omsi-scene",
+ "omsi-script",
+ "omsi-sim",
+ "omsi-texture",
+ "omsi-transit",
+ "omsi-trolley",
+ "omsi-vehicle",
+ "winit",
+]
 
 [[package]]
 name = "omsi-geometry"

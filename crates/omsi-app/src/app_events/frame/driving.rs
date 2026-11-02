@@ -91,6 +91,7 @@ pub(super) fn player_step(cx: PlayerStepCx, dt: f32) {
             cx.sound.audio.as_ref(),
             cx.view.cam.in_cab,
             !matches!(cx.view.view.as_str(), "free" | "foot"),
+            omsi_lan::commands::speed_limit_kmh(),
         );
         crate::devtools::apply_holds(cx.ui.devtools.as_deref(), &mut p.vehicle);
         if let Some(g) = p.vehicle.trolley.as_deref_mut() {

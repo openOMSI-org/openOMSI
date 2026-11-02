@@ -42,7 +42,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_DEBUG_FOOT` | bool | off | use | app | Log where the walking avatar is drawn. |
 | `OMSI_DEBUG_HUMANS` | bool | off | use | app, sim | Log the people (passengers, pedestrians) and their placement. |
 | `OMSI_DEBUG_IBIS` | bool | off | use | sim | Log the IBIS typist's reasoning. |
-| `OMSI_DEBUG_INTERIOR` | bool | off | use | app | Log the interior lamps of each vehicle type. |
+| `OMSI_DEBUG_INTERIOR` | bool | off | use | driver | Log the interior lamps of each vehicle type. |
 | `OMSI_DEBUG_JUNCTION` | bool | off | use | sim | Log why AI cars wait at a junction. |
 | `OMSI_DEBUG_LAMPS` | bool | off | use | app, scene | Log traffic lights without a crossing, and the moving lamps (barriers). |
 | `OMSI_DEBUG_LAN` | bool | off | use | app, lan | LAN: every few seconds what we know of every player, counts and bytes a second. |
@@ -77,7 +77,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_DEBUG_SHADOW_FAR` | bool | off | frame | render | Log each redraw of the far shadow map. |
 | `OMSI_DEBUG_SIGNALS` | bool | off | use | sim | Log what each railway signal shows. |
 | `OMSI_DEBUG_SKY` | bool | off | frame | render | Log the sky and sun values per frame. |
-| `OMSI_DEBUG_SOUND` | num | 5 | once | app | Log which sounds were heard (number: the interval in seconds). |
+| `OMSI_DEBUG_SOUND` | num | 5 | once | app, driver | Log which sounds were heard (number: the interval in seconds). |
 | `OMSI_DEBUG_SPLINES` | bool | off | use | scene | Log the splines and lanes built per tile. |
 | `OMSI_DEBUG_STARTUP` | bool | off | use | sim | Log the start-up steps of a vehicle's systems. |
 | `OMSI_DEBUG_STOPS` | bool | off | use | sim | Log the bus stops a bus missed. |
@@ -93,7 +93,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_DEBUG_TROLLEY` | num | off | use | app, scene, sim | Log the trolleybus gear (offscreen: =secs, the interval): voltage, current, controller position, the poles, and every event of the poles (frogs, insulators, dewirings). |
 | `OMSI_DEBUG_UNLINKED` | bool | off | use | sim | Log lane ends with an untaken lane start near them. |
 | `OMSI_DEBUG_UPLOAD` | bool | off | use | scene | Log slow GPU uploads item by item. |
-| `OMSI_DEBUG_VARIANTS` | text | - | use | app | Log material variants whose variable name contains this text. |
+| `OMSI_DEBUG_VARIANTS` | text | - | use | driver | Log material variants whose variable name contains this text. |
 | `OMSI_DEBUG_VARS` | num | - | use | app | Offscreen: log these script variables of the player's bus (comma-separated). |
 | `OMSI_DEBUG_VARS_EVERY` | num | - | use | app | With OMSI_DEBUG_VARS: log them every this many seconds through the drive. |
 | `OMSI_DEBUG_VAR_SYNC` | text | - | use | lan | LAN: log this variable, ours every two seconds and theirs as it comes. |
@@ -120,7 +120,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_PROFILE_GPU` | bool | off | use | app | Profile: wait for the GPU so its time shows as a stage of its own. |
 | `OMSI_PROFILE_JSON` | text | - | use | app | With OMSI_PROFILE: the session summary written after --exit-after or when the game is closed (after the 15 s warm-up) as JSON into this file, see scripts/compare-performance.py. |
 | `OMSI_SUSP_TRACE` | text | - | use | app | Offscreen CSV: body height and each wheel's travel and load every frame. |
-| `OMSI_SUSP_TRACE_WINDOW` | text | - | use | app | Window CSV: each wheel's travel every frame. |
+| `OMSI_SUSP_TRACE_WINDOW` | text | - | use | driver | Window CSV: each wheel's travel every frame. |
 | `OMSI_TRACE_AI` | text | - | use | sim | CSV: every AI car's pose, steering and speed every frame. |
 | `OMSI_TRACE_AI_BUSES` | bool | off | use | sim | With OMSI_TRACE_AI: the timetable buses only. |
 | `OMSI_TRACE_FFB` | text | - | use | input | CSV: the force feedback frame by frame (Windows): the wheel's position and the force sent. |
@@ -215,7 +215,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_PAX_CROSS` | text | - | use | sim | x,y: send pedestrians across the signalised crossing nearest that point. |
 | `OMSI_PAX_WAITING` | num | - | use | sim | Number of passengers waiting at each stop. |
 | `OMSI_PHOTO` | text | - | use | app | Photo mode settings for a test, key=value by commas: orbit (dist, around, up), kmh (the bus moving), focal (mm), dof, fstop (f-number), focus (m; none: on the bus), motion, shutter (1/s), filter (0..10), vignette, grain, exposure (EV), aspect (0..7), grid (0..3), quality (0..3). |
-| `OMSI_PICK_BUSES` | text | - | use | app | cargo test -p omsi-app installed_switches_stay_reachable_from_inside: more .bus files to check, by commas (under the root, or absolute). |
+| `OMSI_PICK_BUSES` | text | - | use | driver | cargo test -p omsi-driver installed_switches_stay_reachable_from_inside: more .bus files to check, by commas (under the root, or absolute). |
 | `OMSI_POPULATION_SHOTS` | bool | off | use | app | Offscreen: pictures of the framed population spawns. |
 | `OMSI_PROBE` | text | - | use | app | x0,y0,x1,y1[,n]: print terrain and road surface heights along a line. |
 | `OMSI_PROBE_GRID` | text | - | use | app | x,y,half,step: the wheels' ground on a grid around a point. |
@@ -417,7 +417,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_PLUGIN_HOST32` | text | beside the game | use | plugin | Path of omsi-plugin-host32.exe. |
 | `OMSI_PLUGIN_PROCESS_ALLOW` | text | none | use | plugin | Optional native process preapproval: absolute path to a JSON manifest binding plugin content and in-folder helpers to SHA256 hashes. The interactive game otherwise asks the player. Changes revoke consent; packages must declare process. Approved programs run with the game account permissions. |
 | `OMSI_PRESENCE_URL` | text | built-in | use | platform | Base URL of the presence ("playing now") service. |
-| `OMSI_ROOT` | text | found | use | app, lan, launcher-core, o3d, sim | The OMSI 2 installation folder (also the content root for tests that need real content). |
+| `OMSI_ROOT` | text | found | use | app, driver, lan, launcher-core, o3d, sim | The OMSI 2 installation folder (also the content root for tests that need real content). |
 | `OMSI_SAFE_GPU` | num | 0 | use | app | Restarts after a lost graphics device: lighter on the card each time. Set at runtime on Android and by the restart. |
 | `OMSI_SAFE_MODE` | bool | off | use | guard, launcher-api, render | Safe mode, set by the start guard after failed starts: the basic render pipelines and no plugins. |
 | `OMSI_SCREEN_AT` | text | - | once | app, launcher-core | x,y: the screen (a point on the desktop, pixels) the game window opens on; the launcher sets it to where it stands. |

@@ -2,11 +2,7 @@
 
 use crate::App;
 
-#[derive(Default)]
-pub(crate) struct SavedDuty {
-    pub(super) duty: Option<crate::schedule::PlayerDuty>,
-    pub(crate) reservation: Option<omsi_sim::timetable_run::DutyReservation>,
-}
+pub(crate) use omsi_sim::vehicle_transfer::duty::SavedDuty;
 
 /// Exchange the duty before any entry point moves the corresponding vehicle bodies.
 /// Reloading/replacing the driven vehicle deliberately bypasses this ownership change.

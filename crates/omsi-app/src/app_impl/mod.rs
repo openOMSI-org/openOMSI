@@ -27,7 +27,6 @@ mod view;
 mod voice_tick;
 mod weather;
 
-pub(crate) use actions::gate_gear_var;
 pub(crate) use menu_lists::dropdown_top_at;
 pub(crate) use menus::{on_server, MenuLine, GAME_MENU};
 pub(crate) use mouse_grab::{steer_reach as mouse_grab_reach, GrabMode, MouseGrab};

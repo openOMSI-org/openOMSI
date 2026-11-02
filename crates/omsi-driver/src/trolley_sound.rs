@@ -28,7 +28,7 @@ fn clip(samples: Vec<f32>) -> Arc<Clip> {
 
 /// Sliding contact: noise tilted towards the highs, a loop of one second, with the six-pulse
 /// rectifier's 300 Hz ripple riding on its level.
-pub(crate) fn hiss() -> Arc<Clip> {
+pub fn hiss() -> Arc<Clip> {
     let n = RATE as usize;
     let mut r = Rng(0x9e37_79b9_7f4a_7c15);
     let raw: Vec<f32> = (0..n).map(|_| r.next()).collect();
@@ -44,7 +44,7 @@ pub(crate) fn hiss() -> Arc<Clip> {
 }
 
 /// An arc's crack: a burst of noise falling in a few milliseconds over a sharp tone.
-pub(crate) fn snap() -> Arc<Clip> {
+pub fn snap() -> Arc<Clip> {
     let n = (RATE as f32 * 0.22) as usize;
     let mut r = Rng(0x1234_5678_9abc_def1);
     clip(
@@ -60,7 +60,7 @@ pub(crate) fn snap() -> Arc<Clip> {
 }
 
 /// A hollow knock: a shoe dropping on a wire, a pole on its hook.
-pub(crate) fn thud() -> Arc<Clip> {
+pub fn thud() -> Arc<Clip> {
     let n = (RATE as f32 * 0.3) as usize;
     let mut r = Rng(0x0bad_cafe_0bad_cafe);
     clip(
@@ -74,7 +74,7 @@ pub(crate) fn thud() -> Arc<Clip> {
 }
 
 /// A contactor closing: a click and a short low thump.
-pub(crate) fn click() -> Arc<Clip> {
+pub fn click() -> Arc<Clip> {
     let n = (RATE as f32 * 0.09) as usize;
     let mut r = Rng(0x5555_aaaa_5555_aaaa);
     clip(
@@ -88,7 +88,7 @@ pub(crate) fn click() -> Arc<Clip> {
 }
 
 /// A shoe crossing a frog: three quick knocks.
-pub(crate) fn frog() -> Arc<Clip> {
+pub fn frog() -> Arc<Clip> {
     let n = (RATE as f32 * 0.25) as usize;
     let mut r = Rng(0x7777_1111_7777_1111);
     clip(
@@ -109,7 +109,7 @@ pub(crate) fn frog() -> Arc<Clip> {
 }
 
 /// The pole latching on its hook or the hook letting go: a metallic clack.
-pub(crate) fn clack() -> Arc<Clip> {
+pub fn clack() -> Arc<Clip> {
     let n = (RATE as f32 * 0.16) as usize;
     clip(
         (0..n)
@@ -122,7 +122,7 @@ pub(crate) fn clack() -> Arc<Clip> {
 }
 
 #[derive(Default)]
-pub(crate) struct TrolleySound {
+pub struct TrolleySound {
     clips: Option<Clips>,
     hiss_voice: Option<VoiceId>,
 }
@@ -138,7 +138,7 @@ struct Clips {
 
 impl TrolleySound {
     /// One frame of the gear's sounds, heard from `listener` (the camera).
-    pub(crate) fn update(&mut self, audio: &AudioEngine, v: &mut omsi_sim::VehicleInstance, sparks_at: &[Vec3], paused: bool) {
+    pub fn update(&mut self, audio: &AudioEngine, v: &mut omsi_sim::VehicleInstance, sparks_at: &[Vec3], paused: bool) {
         let Some(g) = v.trolley.as_deref_mut() else { return };
         let c = self.clips.get_or_insert_with(|| Clips { hiss: hiss(), snap: snap(), thud: thud(), click: click(), frog: frog(), clack: clack() });
         let sounds = g.rig.take_sounds();

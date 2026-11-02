@@ -5,7 +5,7 @@ use super::*;
 impl Player {
     /// Type on into the IBIS; when the typing could not be done, the IBIS variables are
     /// written directly.
-    pub(crate) fn tick_ibis(&mut self, dt: f32) {
+    pub fn tick_ibis(&mut self, dt: f32) {
         let Some((mut typist, line, terminus, stops)) = self.ibis_typist.take() else {
             return;
         };
@@ -39,7 +39,7 @@ impl Player {
     /// A page moved the duty to stop `stop` of `trip` (`omsi.setNextStop`): the IBIS follows,
     /// forwards or backwards, by `IBIS_busstop` / `ibox_busstop` (its keys only count up, so
     /// the typist cannot do this). Without a route in the IBIS there is nothing to move.
-    pub(crate) fn ibis_to_stop(&mut self, trip: &schedule::PlannedTrip, stop: usize) {
+    pub fn ibis_to_stop(&mut self, trip: &schedule::PlannedTrip, stop: usize) {
         let Some(hof) = self.vehicle.host.hof.clone() else { return };
         let Some(route) = self
             .vehicle
@@ -66,14 +66,14 @@ impl Player {
     }
 
     /// The game types the duty into the IBIS by itself: no plugin leaves it to the driver.
-    pub(crate) fn ibis_auto(&self) -> bool {
+    pub fn ibis_auto(&self) -> bool {
         self.ibis_holds.is_empty()
     }
 
     /// Put the duty's trip on the IBIS, at the stop the bus is at: now, or when the running
     /// auto-start is done. Not while a plugin leaves the IBIS to the driver
     /// (`duty.set_auto_ibis`): the driver types line, route and destination.
-    pub(crate) fn set_duty_destination(&mut self, trip: &schedule::PlannedTrip, stop: usize) {
+    pub fn set_duty_destination(&mut self, trip: &schedule::PlannedTrip, stop: usize) {
         if !duty_selected(&mut self.duty_typed, &self.ibis_holds) {
             log::info!("IBIS: line {} to {} left for the driver to type", trip.line.trim(), trip.terminus.trim());
             return;
@@ -96,7 +96,7 @@ impl Player {
         }
     }
 
-    pub(crate) fn type_destination(
+    pub fn type_destination(
         &mut self,
         line: &str,
         terminus: &str,
@@ -151,7 +151,7 @@ impl Player {
     /// What the bus's HTML pages asked of the IBIS (`omsi.setRoute`, `omsi.setLine`,
     /// `omsi.setDestination`, `omsi.setNextStop`): a route is typed as a driver does (line, route, destination),
     /// a destination alone is written to the sign.
-    pub(crate) fn apply_html_requests(&mut self) {
+    pub fn apply_html_requests(&mut self) {
         let requests = self.vehicle.take_html_requests();
         if requests.is_empty() {
             return;
@@ -233,7 +233,7 @@ impl Player {
     /// Row `ti` of the depot file on the destination display, set by hand (the destination
     /// list, a bus page): on the IBIS now, on a roller blind once it can be turned
     /// (`schedule::turn_roller_blind`).
-    pub(crate) fn set_destination_by_hand(&mut self, hof: &omsi_vehicle::hof::Hof, line: &str, ti: usize) {
+    pub fn set_destination_by_hand(&mut self, hof: &omsi_vehicle::hof::Hof, line: &str, ti: usize) {
         self.blind_pick = schedule::set_player_destination_at(&mut self.vehicle, hof, line, ti, &[]);
         schedule::turn_roller_blind(&mut self.vehicle, &mut self.blind_pick, self.startup.is_some());
         if let Some(p) = &self.blind_pick {

@@ -22,6 +22,7 @@ path = "src/main.rs"
 winresource.workspace = true
 
 [dependencies]
+omsi-driver = { path = "../omsi-driver" }
 omsi-cfg = { path = "../omsi-cfg" }
 omsi-map = { path = "../omsi-map" }
 omsi-mapdraw = { path = "../omsi-mapdraw" }

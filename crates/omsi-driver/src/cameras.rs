@@ -6,7 +6,7 @@ impl Player {
     /// `inside`: the camera is one of the vehicle's interior cameras. `[viewpoint]` bits:
     /// 1 = visible from outside, 2 = visible from inside, 4 = visible on AI vehicles; 0 = always.
     /// `rain_quality`: the rain's (see `rain::quality_of`), for the films on the panes.
-    pub(crate) fn sync_transforms(&mut self, renderer: &Renderer, scene: &mut Scene, inside: bool, rain_quality: u8) -> f64 {
+    pub fn sync_transforms(&mut self, renderer: &Renderer, scene: &mut Scene, inside: bool, rain_quality: u8) -> f64 {
         sync_vehicle_transforms(renderer, scene, &mut self.vehicle, &mut self.render, &mut self.trailer_renders, inside);
         if self.render.window_wipers.is_none() {
             self.render.window_wipers = Some(crate::window_wipers::WindowWipers::new(renderer, scene, &self.vehicle, &self.render));
@@ -17,7 +17,7 @@ impl Player {
         start.elapsed().as_secs_f64()
     }
 
-    pub(crate) fn finish_window_paints(&mut self, renderer: &Renderer, scene: &mut Scene) {
+    pub fn finish_window_paints(&mut self, renderer: &Renderer, scene: &mut Scene) {
         if let Some(wipers) = self.render.window_wipers.as_mut() {
             wipers.finish_paints(renderer, scene);
         }
@@ -25,13 +25,13 @@ impl Player {
 
     /// Pose and place the driver at the wheel; `show` false hides the figure (the `driver`
     /// setting off), `mirror_only` keeps it to the mirrors (the cab view).
-    pub(crate) fn sync_driver(&mut self, renderer: &Renderer, scene: &mut Scene, dt: f32, show: bool, mirror_only: bool) {
+    pub fn sync_driver(&mut self, renderer: &Renderer, scene: &mut Scene, dt: f32, show: bool, mirror_only: bool) {
         self.sync_driver_hands(renderer, scene, dt, show, mirror_only, false);
     }
 
     /// As [`Player::sync_driver`], with the driver's hands shown in the cab view or not
     /// (Settings → "Driver's hands in the cab view").
-    pub(crate) fn sync_driver_hands(&mut self, renderer: &Renderer, scene: &mut Scene, dt: f32, show: bool, mirror_only: bool, hands: bool) {
+    pub fn sync_driver_hands(&mut self, renderer: &Renderer, scene: &mut Scene, dt: f32, show: bool, mirror_only: bool, hands: bool) {
         if let Some(d) = self.driver.as_mut() {
             d.show_hands_in_cab = hands;
             d.update(renderer, scene, &self.vehicle, &self.render, dt, show, mirror_only);
@@ -40,7 +40,7 @@ impl Player {
 
     /// The driver's chosen camera as it is fixed in the bus (before the bus's own motion), turned
     /// by the look and the steering: what a glide between two cameras mixes.
-    pub(crate) fn driver_local(&self, look: (f32, f32)) -> Option<omsi_vehicle::Camera> {
+    pub fn driver_local(&self, look: (f32, f32)) -> Option<omsi_vehicle::Camera> {
         // (no glide onto a coupled part's camera: it is not in the front's frame)
         if self.trailer_driver_camera().is_some() {
             return None;
@@ -56,7 +56,7 @@ impl Player {
 
     /// `driver_local`'s camera in the world, with the bus's pitch and bank and the head on it
     /// (the same as `camera_look` makes of the driver's camera).
-    pub(crate) fn driver_world(&self, turned: &omsi_vehicle::Camera) -> Camera {
+    pub fn driver_world(&self, turned: &omsi_vehicle::Camera) -> Camera {
         let (eye, yaw, pitch, roll) = self.vehicle.camera_world_full(turned);
         // the driver's eye sits a touch forward of the authored seat point.
         let eye = eye + self.vehicle.body_rotation().transform_vector3(self.head_offset() + self.seat + EYE_NUDGE).as_dvec3();
@@ -64,7 +64,7 @@ impl Player {
     }
 
     /// Where a camera in the world (the walker's eyes) is in the bus's frame.
-    pub(crate) fn local_of_world(&self, cam: &Camera) -> omsi_vehicle::Camera {
+    pub fn local_of_world(&self, cam: &Camera) -> omsi_vehicle::Camera {
         let inv = self.vehicle.body_rotation().inverse();
         let pos = inv.transform_vector3((cam.position - self.vehicle.position).as_vec3());
         let f = inv.transform_vector3(cam.forward());
@@ -77,7 +77,7 @@ impl Player {
         }
     }
 
-    pub(crate) fn camera(&self, view: &str, fallback: &Camera) -> Camera {
+    pub fn camera(&self, view: &str, fallback: &Camera) -> Camera {
         self.camera_look(view, fallback, (0.0, 0.0), ORBIT_DEFAULT)
     }
 
@@ -85,7 +85,7 @@ impl Player {
     /// the first building, wall or canopy between it and the point it orbits, and above the
     /// ground (see `camera_arm`). `dt` 0 is a single picture: the arm is where it would
     /// settle, without easing.
-    pub(crate) fn camera_clipped(
+    pub fn camera_clipped(
         &mut self,
         mut cam: Camera,
         world: &scene::World,
@@ -122,14 +122,14 @@ impl Player {
     }
 
     /// How many passenger cameras the bus has, its coupled parts' included.
-    pub(crate) fn pax_camera_count(&self) -> usize {
+    pub fn pax_camera_count(&self) -> usize {
         self.vehicle.ty.def.cameras_pax.len() + self.vehicle.trailers.iter().map(|t| t.ty.def.cameras_pax.len()).sum::<usize>()
     }
 
     /// How many driver cameras the bus has, its coupled parts' included: Omsi.exe's
     /// interior-camera keys go on from the last of one part's into the next part's
     /// (0x706278 @0x7067d1, @0x706a3c).
-    pub(crate) fn driver_camera_count(&self) -> usize {
+    pub fn driver_camera_count(&self) -> usize {
         self.vehicle.ty.def.cameras_driver.len() + self.vehicle.trailers.iter().map(|t| t.ty.def.cameras_driver.len()).sum::<usize>()
     }
 
@@ -140,13 +140,13 @@ impl Player {
     /// the vehicle's own index and crosses to the coupled one only below 0 or past its
     /// last). Counted from the standard camera over the whole bus, the key to the left of
     /// the Urbino IV's standard camera took the rear section's camera first (#2503).
-    pub(crate) fn driver_camera_slot(&self) -> usize {
+    pub fn driver_camera_slot(&self) -> usize {
         driver_camera_slot(self.vehicle.ty.def.camera_std, self.vehicle.ty.def.cameras_driver.len(), self.cam_choice.0, self.driver_camera_count())
     }
 
     /// The driver camera chosen past the front's own: the coupled part it is on and the
     /// camera (None while one of the front's is chosen).
-    pub(crate) fn trailer_driver_camera(&self) -> Option<(&omsi_sim::vehicle::TrailerPart, &omsi_vehicle::Camera)> {
+    pub fn trailer_driver_camera(&self) -> Option<(&omsi_sim::vehicle::TrailerPart, &omsi_vehicle::Camera)> {
         let front = self.vehicle.ty.def.cameras_driver.len();
         let mut k = self.driver_camera_slot();
         if k < front {
@@ -164,13 +164,13 @@ impl Player {
 
     /// `look`: yaw/pitch the player has turned the head (or the orbit) by; `dist`: how far
     /// the outside camera sits from the vehicle.
-    pub(crate) fn camera_look(&self, view: &str, fallback: &Camera, look: (f32, f32), dist: f32) -> Camera {
+    pub fn camera_look(&self, view: &str, fallback: &Camera, look: (f32, f32), dist: f32) -> Camera {
         let def = &self.vehicle.ty.def;
         // `mirror<n>`: what the n-th mirror's camera sees, as it is drawn into the mirror's
         // picture (a check of the mirrors against OMSI's own `reflexion<n>.bmp`)
         if let Some(c) = view.strip_prefix("mirror").and_then(|n| n.parse::<usize>().ok()).and_then(|n| def.cameras_reflexion.get(n)) {
             let k = def.cameras_reflexion.iter().position(|x| std::ptr::eq(x, c)).unwrap_or(0);
-            let aimed = crate::camera_util::mirror_view(&self.vehicle, &crate::camera_util::adjusted(c, self.mirror_shifts.get(k).copied().unwrap_or([0.0; 3]), self.mirror_fovs.get(k).copied().unwrap_or(0.0)), crate::camera_util::driver_eye(self), self.mirror_offsets.get(k).copied().unwrap_or([0.0; 2]));
+            let aimed = omsi_scene::camera_util::mirror_view(&self.vehicle, &omsi_scene::camera_util::adjusted(c, self.mirror_shifts.get(k).copied().unwrap_or([0.0; 3]), self.mirror_fovs.get(k).copied().unwrap_or(0.0)), crate::driver_eye(self), self.mirror_offsets.get(k).copied().unwrap_or([0.0; 2]));
             let (eye, yaw, pitch, roll) = self.vehicle.camera_world_full(&aimed);
             return Camera { position: eye, yaw, pitch, roll, fov_deg: if c.fov > 1.0 { c.fov } else { 50.0 }, near: 0.1, far: 450.0 };
         }
@@ -260,7 +260,7 @@ impl Player {
 /// Outside-camera pivot: the `.bus` centre rotated by heading alone. Body pitch
 /// and bank (suspension bounce, cornering roll) would swing the camera if they
 /// reached the pivot; the view only ever yaws with the bus.
-pub(crate) fn orbit_pivot(position: DVec3, heading_deg: f64, center: [f32; 3]) -> DVec3 {
+pub fn orbit_pivot(position: DVec3, heading_deg: f64, center: [f32; 3]) -> DVec3 {
     position
         + glam::Mat4::from_rotation_z((-(heading_deg as f32)).to_radians())
             .transform_point3(Vec3::new(center[0], center[1], center[2]))
@@ -270,11 +270,11 @@ pub(crate) fn orbit_pivot(position: DVec3, heading_deg: f64, center: [f32; 3]) -
 /// Driver eye forward offset, currently zeroed: how OMSI 2 keeps the turning
 /// head from clipping inside the seat mesh still needs figuring out (per-bus
 /// mesh handling), so no global offset until then. Kept as the single knob.
-pub(crate) const EYE_NUDGE: Vec3 = Vec3::ZERO;
+pub const EYE_NUDGE: Vec3 = Vec3::ZERO;
 
 /// Put a vehicle's meshes where its state says (animations, visibility, lights, the
 /// matrix textures) - the player's bus, and the launcher's showroom bus.
-pub(crate) fn sync_vehicle_transforms(
+pub fn sync_vehicle_transforms(
     renderer: &Renderer,
     scene: &mut Scene,
     vehicle: &mut omsi_sim::VehicleInstance,
