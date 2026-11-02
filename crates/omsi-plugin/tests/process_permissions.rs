@@ -103,6 +103,7 @@ impl Fixture {
         )
     }
 }
+#[track_caller]
 fn drive(host: &mut Plugins, game: &mut Game, done: impl Fn(&Game) -> bool) {
     // CI Windows runners sometimes need extra time to start a copy of the test
     // executable as a child process (including antivirus scanning). The game
@@ -120,6 +121,7 @@ fn drive(host: &mut Plugins, game: &mut Game, done: impl Fn(&Game) -> bool) {
         game.frames, game.messages
     );
 }
+#[track_caller]
 fn prompt(host: &mut Plugins, game: &mut Game, broker: &ProcessPermissions) -> ProcessPrompt {
     drive(host, game, |_| broker.prompt().is_some());
     broker.prompt().unwrap()
