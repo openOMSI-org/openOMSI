@@ -693,6 +693,7 @@ impl World {
     ) -> (usize, Vec<TextureUpdate>) {
         let mut updated = 0;
         let mut texture_updates: Vec<TextureUpdate> = Vec::new();
+        let arrows = self.help_arrows_shown.load(std::sync::atomic::Ordering::Relaxed);
         let mut scripted = self.scripted.lock();
         let views = &mut scripted.views;
         let omsi_sim::scenery::SceneryOutputs { cmds, vars, transforms, visible, .. } = out;
@@ -778,6 +779,7 @@ impl World {
             }
             let (xfs, shown) = (&transforms[s.meshes.0 as usize..s.meshes.1 as usize], &visible[s.meshes.0 as usize..s.meshes.1 as usize]);
             for (k, ((inst, xf), &visible)) in v.instances.iter().zip(xfs).zip(shown).enumerate() {
+                let visible = visible && (arrows || !v.ty.sco.is_help_arrow);
                 renderer.set_transform(scene, *inst, v.pos, v.xf * *xf);
                 // (the slots its `[alphascale]` variables fade, see `ScriptedObject::alpha_slots`)
                 let alpha = v.alpha_slots.get(k).filter(|l| !l.alpha.is_empty()).map(|l| l.values(&|n| n.trim().parse::<f32>().ok().or_else(|| var(n))).0);
@@ -802,7 +804,8 @@ impl World {
             v.mesh_xf.clear();
             v.mesh_xf.extend_from_slice(xfs);
             v.mesh_visible.clear();
-            v.mesh_visible.extend_from_slice(shown);
+            let hidden = !arrows && v.ty.sco.is_help_arrow;
+            v.mesh_visible.extend(shown.iter().map(|&s| s && !hidden));
             updated += 1;
         }
         (updated, texture_updates)
