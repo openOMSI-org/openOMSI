@@ -789,7 +789,7 @@ impl App {
         }
     }
 
-    /// The keys on foot (and Ctrl+Shift+G at the wheel); true when the key was taken.
+    /// The keys on foot; true when the key was taken.
     pub(crate) fn foot_key(&mut self, code: KeyCode, pressed: bool, repeat: bool, ctrl: bool, shift: bool) -> bool {
         if self.session.on_foot.is_none() {
             return false;
