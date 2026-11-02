@@ -35,6 +35,19 @@ impl TrafficSim {
     /// initial cars instead of each process inventing a different world.
     pub fn set_lan_seed(&mut self, seed: u64) {
         self.rng = seed | 1;
+        self.scheme_salt = seed;
+    }
+
+    pub fn ai_schemes(&self, ty: &VehicleType) -> Vec<usize> {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        (self.scheme_salt, &ty.def.path).hash(&mut h);
+        spread_schemes(ty.paint_schemes.len(), h.finish() as usize)
+    }
+
+    pub fn ai_scheme(&self, ty: &VehicleType, pick: u64) -> Option<usize> {
+        let set = self.ai_schemes(ty);
+        (!set.is_empty()).then(|| set[(pick % set.len() as u64) as usize])
     }
 
     /// The traffic made of its parts: the linked network, the random traffic's types,
@@ -83,6 +96,7 @@ impl TrafficSim {
             rng: omsi_script::session_seed()
                 .map(|s| omsi_script::mix_seed(s ^ 0x7472_6166_6669_6321) | 1)
                 .unwrap_or(0x9E37_79B9_7F4A_7C15),
+            scheme_salt: omsi_script::session_seed().unwrap_or(0),
             target,
             lights_only: false,
             spawn_radius: 400.0,

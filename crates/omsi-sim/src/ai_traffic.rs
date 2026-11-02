@@ -86,20 +86,6 @@ use viewer::*;
 /// each and a minute of stutter after loading Spandau.
 pub const AI_SCHEMES: usize = 4;
 
-pub fn ai_schemes(ty: &VehicleType) -> Vec<usize> {
-    use std::hash::{Hash, Hasher};
-    static SALT: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
-    let salt = *SALT.get_or_init(|| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64));
-    let mut h = std::collections::hash_map::DefaultHasher::new();
-    (salt, &ty.def.path).hash(&mut h);
-    spread_schemes(ty.paint_schemes.len(), h.finish() as usize)
-}
-
-pub fn ai_scheme(ty: &VehicleType, pick: u64) -> Option<usize> {
-    let set = ai_schemes(ty);
-    (!set.is_empty()).then(|| set[(pick % set.len() as u64) as usize])
-}
-
 fn spread_schemes(n: usize, h: usize) -> Vec<usize> {
     let gcd = |mut a: usize, mut b: usize| {
         while b != 0 {
@@ -155,6 +141,7 @@ pub struct TrafficSim {
     /// (`fill_map`), with the number of lanes they were made for.
     pub(crate) lane_weight_sums: (usize, Vec<f64>),
     pub rng: u64,
+    pub scheme_salt: u64,
     /// Target number of cars around the camera.
     pub target: usize,
     /// Made only so that the light programs run (no traffic, no timetable): nobody is put
