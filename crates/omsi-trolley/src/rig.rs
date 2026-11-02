@@ -376,7 +376,7 @@ impl TrolleyRig {
                     }
                 }
                 PoleEventKind::Plate { switch } => {
-                    net.trigger_switch(switch as usize, amps, inp.blinker);
+                    net.trigger_switch(switch as usize, amps - self.out.charge_amps, inp.blinker);
                 }
             }
         }

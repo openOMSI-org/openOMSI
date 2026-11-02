@@ -29,7 +29,10 @@ pub(super) fn view_keys(mut cx: ViewKeysCx, dt: f32) {
             // at most, or no further than the mouse had it); let go, it comes back
             // to the road - held, it went round and round, and the other key never
             // brought it back straight
-            let (l, r) = (cx.input.keys.contains(&KeyCode::ArrowLeft), cx.input.keys.contains(&KeyCode::ArrowRight));
+            let uses = |p: &crate::player::Player, a: &str| omsi_sim::input::engine_action(a).is_some() || omsi_input::actions::bus_uses_action(&p.vehicle.ty.program, a, crate::player::ACTION_ALIASES);
+            let bus_key = |k: KeyCode| crate::keys::dik_code(k).is_some_and(|sc| cx.player.player.as_ref().is_some_and(|p| p.bindings.iter().any(|b| b.scan_code == sc && b.chord() == 0 && uses(p, &b.action))));
+            let held = |k: KeyCode| cx.input.keys.contains(&k) && !bus_key(k);
+            let (l, r) = (held(KeyCode::ArrowLeft), held(KeyCode::ArrowRight));
             if l || r {
                 let y = cx.view.cam.look.0 + step * 1.5 * (r as i32 - l as i32) as f32;
                 cx.view.cam.look.0 = if *cx.view.view == "pax" { y } else { y.clamp(cx.view.cam.look.0.min(-140.0), cx.view.cam.look.0.max(140.0)) };
@@ -43,10 +46,10 @@ pub(super) fn view_keys(mut cx: ViewKeysCx, dt: f32) {
                     cx.input.arrow_glance = false;
                 }
             }
-            if cx.input.keys.contains(&KeyCode::ArrowUp) {
+            if held(KeyCode::ArrowUp) {
                 cx.view.cam.look.1 = (cx.view.cam.look.1 + step * 0.7).min(85.0);
             }
-            if cx.input.keys.contains(&KeyCode::ArrowDown) {
+            if held(KeyCode::ArrowDown) {
                 cx.view.cam.look.1 = (cx.view.cam.look.1 - step * 0.7).max(-85.0);
             }
         }

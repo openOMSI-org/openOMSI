@@ -371,3 +371,13 @@ fn a_pictures_alpha_decides_how_a_blend_is_drawn() {
     assert_eq!(picture_blend_fade(&dir.join("absent.tga")), BlendFade::Partial);
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn only_a_flat_shadow_mesh_is_drawn_as_a_shadow_blob() {
+    use glam::Vec3;
+    use crate::vehicles::shadow_blob;
+    assert!(shadow_blob(true, &[]));
+    assert!(shadow_blob(true, &[Vec3::new(0.0, 0.0, 0.02), Vec3::new(2.0, 5.0, 0.05)]));
+    assert!(!shadow_blob(true, &[Vec3::new(0.0, 0.0, 0.3), Vec3::new(0.5, 1.7, 1.4)]));
+    assert!(!shadow_blob(false, &[]));
+}
