@@ -161,6 +161,7 @@ fn numeric_ibis_line(line: &str) -> bool {
 /// list (the destination stays: the one on the display now, else the first -
 /// `schedule::shown_destination`).
 pub(crate) fn set_route_by_hand(app: &mut App, line: &str) {
+    crate::platform::text_input(app.window.as_deref(), false);
     let line = line.trim();
     if line.is_empty() {
         return;
@@ -1144,6 +1145,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                 }
                 None => {
                     app.menus.menu_edit = Some(String::new());
+                    crate::platform::text_input(app.window.as_deref(), true);
                     Some(ListKind::RouteNumbers)
                 }
             }
