@@ -461,7 +461,8 @@ impl App {
                 return;
             }
         }
-        if pressed && self.menus.game_menu.is_none() {
+        let clean = self.clean_screen_shown();
+        if pressed && self.menus.game_menu.is_none() && !clean {
             if let Some((k, w0, shown)) = self.ui.as_ref().and_then(|u| u.grip_at(x, y)) {
                 self.settings.hud_sizes[k] = shown;
                 self.menus.hud_resize = Some((k, shown, [x, y], w0));
@@ -501,7 +502,7 @@ impl App {
                 return;
             }
             // (a click opens the city map, a drag moves the navigator: #940)
-            if pressed && !vr_active && n.over_panel(x, y) {
+            if pressed && !vr_active && !clean && n.over_panel(x, y) {
                 n.panel_press(x, y);
                 return;
             }

@@ -435,6 +435,8 @@ impl App {
             && !self.menus.navigator.as_ref().is_some_and(|n| n.map_open())
             && self.net.remotes.chat.typing.is_none()
             && !self.menus.game_panels.any()
+            && !self.gfx.mirror_hud.editing()
+            && self.menus.editor.is_none()
     }
 
     pub(crate) fn toggle_pause(&mut self) {
