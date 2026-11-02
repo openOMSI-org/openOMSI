@@ -1023,6 +1023,19 @@ mod tests {
     }
 
     #[test]
+    fn scenery_is_heard_through_the_bodywork_from_a_cab() {
+        let _turn = globals();
+        let none = |_: &str| None;
+        set_outside_open(Some(0.5));
+        let bells = SoundEntry { volume: 0.8, ..Default::default() };
+        assert!((eval(&ctx(5, true), bells.clone(), &none).gain - 0.56).abs() < 1e-3);
+        assert!((eval(&ctx(5, false), bells, &none).gain - 0.8).abs() < 1e-3, "from the street: as it is");
+        assert!(!eval(&ctx(5, false), SoundEntry { volume: 1.0, viewpoint: 1, ..Default::default() }, &none).wrong_view);
+        assert!(eval(&ctx(5, true), SoundEntry { volume: 1.0, viewpoint: 2, ..Default::default() }, &none).wrong_view);
+        set_outside_open(None);
+    }
+
+    #[test]
     fn curves_are_linear_and_held_at_the_ends() {
         let p = [(0.0, 0.0), (1.0, 1.0), (1.0, 0.5), (3.0, 0.0)];
         assert_eq!(curve(&p, -1.0), 0.0);
