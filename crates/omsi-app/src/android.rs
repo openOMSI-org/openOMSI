@@ -505,9 +505,9 @@ static APP: std::sync::OnceLock<AndroidApp> = std::sync::OnceLock::new();
 pub(crate) fn soft_keyboard(show: bool) {
     if let Some(app) = APP.get() {
         if show {
-            app.show_soft_input(true);
+            app.show_soft_input(false);
         } else {
-            app.hide_soft_input(true);
+            app.hide_soft_input(false);
         }
     }
 }

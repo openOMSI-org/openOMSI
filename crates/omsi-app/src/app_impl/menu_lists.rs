@@ -171,7 +171,10 @@ impl App {
             _ => None,
         };
         match code {
-            KeyCode::Escape => self.menus.menu_edit = None,
+            KeyCode::Escape => {
+                self.menus.menu_edit = None;
+                crate::platform::text_input(self.window.as_deref(), false);
+            }
             KeyCode::Backspace | KeyCode::Delete => {
                 if let Some(d) = self.menus.menu_edit.as_mut() {
                     d.pop();

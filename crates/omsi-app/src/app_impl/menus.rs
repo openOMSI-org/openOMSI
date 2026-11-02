@@ -44,6 +44,9 @@ impl App {
         }
         self.shell.quick_edit = false;
         self.menus.key_capture = None;
+        if self.menus.menu_edit.is_some() {
+            crate::platform::text_input(self.window.as_deref(), false);
+        }
         if self.menus.menu_edit_number {
             crate::platform::text_input(self.window.as_deref(),false);
             self.menus.menu_edit_number=false; self.menus.menu_edit=None;
