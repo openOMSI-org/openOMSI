@@ -1007,6 +1007,23 @@ mod locale_tests {
     }
 
     #[test]
+    fn handover_messages_are_translated_in_every_supported_locale() {
+        let start = super::_LOCALES.find("\"Hand bus to AI\":").unwrap();
+        let end = start + super::_LOCALES[start..].find("\"Connection chance\":").unwrap();
+        let keys: Vec<_> = super::_LOCALES[start..end]
+            .lines()
+            .filter_map(|line| line.strip_prefix('\"').and_then(|key| key.strip_suffix("\":")))
+            .collect();
+        assert_eq!(keys.len(), 37);
+        for language in super::_rust_i18n_available_locales().into_iter().filter(|lang| lang != "en") {
+            for key in &keys {
+                let translated = super::_rust_i18n_try_translate(&language, key).map(|text| text.into_owned());
+                assert!(translated.as_deref().is_some_and(|text| !text.trim().is_empty() && text != *key), "{language}: {key}");
+            }
+        }
+    }
+
+    #[test]
     fn a_translated_template_is_left_as_it_is_when_translated_again() {
         let t = templates(super::locale_keys(super::_LOCALES));
         for lang in super::_rust_i18n_available_locales() {
