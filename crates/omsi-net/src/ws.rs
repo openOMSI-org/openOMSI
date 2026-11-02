@@ -24,6 +24,8 @@ pub use session::query_session;
 
 #[path = "ws/urls.rs"]
 mod urls;
+#[path = "ws/bridge_close.rs"]
+mod bridge_close;
 pub use urls::{http_base, web_bases, ws_url};
 
 use std::io::{ErrorKind, Read, Write};
@@ -1006,27 +1008,7 @@ impl WsClient {
                                 std::thread::sleep(Duration::from_millis(2));
                             }
                         }
-                        loop {
-                            match udp.recv_from(&mut buf) {
-                                Ok((n, _)) => {
-                                    let _ = ws.send(Message::Binary(buf[..n].to_vec().into()));
-                                }
-                                Err(e) if e.kind() == ErrorKind::ConnectionReset => continue,
-                                Err(_) => break,
-                            }
-                        }
-                        let _ = flush_ws(&mut ws);
-                        let _ = ws.close(None);
-                        let until = Instant::now() + Duration::from_secs(1);
-                        while Instant::now() < until {
-                            match ws.read() {
-                                Ok(_) => {}
-                                Err(tungstenite::Error::Io(e)) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
-                                    let _ = flush_ws(&mut ws);
-                                }
-                                Err(_) => break,
-                            }
-                        }
+                        bridge_close::close(&mut ws, &udp, &mut buf);
                         Ok(())
                     })();
                     if st.load(Ordering::Relaxed) {
