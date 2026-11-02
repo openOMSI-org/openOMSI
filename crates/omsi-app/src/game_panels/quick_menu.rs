@@ -26,7 +26,7 @@ pub(crate) const PER_PAGE: usize = 15;
 const WIDTH: f32 = 5.0 * 84.0 + 4.0 * 8.0 + 2.0 * 14.0;
 
 /// The tiles: id, label, icon - in OMSI's order, five to a row, fifteen to a page.
-pub(crate) const TILES: [(&str, &str, &str); 28] = [
+pub(crate) const TILES: [(&str, &str, &str); 29] = [
     ("place", "Place a vehicle", "add"),
     ("switch", "Change vehicle", "sync_alt"),
     ("remove", "Remove vehicle", "delete"),
@@ -56,6 +56,7 @@ pub(crate) const TILES: [(&str, &str, &str); 28] = [
     ("endduty", "End the tour", "sports_score"),
     ("players", "Player list", "group"),
     ("admin", "Administration", "dns"),
+    ("radio", "Radio", "radio"),
 ];
 
 /// The tiles that are the game menu's lines, offered only when it offers them now.
@@ -251,6 +252,7 @@ pub(crate) fn click(app: &mut crate::App, id: &str) {
     app.menus.game_panels.quick = None;
     match id {
         "dest" => super::dest_form::open(app),
+        "radio" => super::radio_panel::open(app),
         "arrows" => {
             crate::game_lists::option_do(app, "nav_arrows", "", crate::game_lists::Move::Next);
         }
