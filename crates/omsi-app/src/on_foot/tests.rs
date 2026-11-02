@@ -171,4 +171,3 @@ fn g_on_foot_sits_down_unless_it_is_the_get_up_chord() {
     assert!(super::get_up_chord(&bind(KEY_CTRL), true, false), "moved to Ctrl+G");
     assert!(!super::get_up_chord(&[], true, true), "unbound: the walker keeps G");
 }
-
