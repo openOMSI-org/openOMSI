@@ -21,26 +21,56 @@ pub(crate) use omsi_lan::server_cfg::{enforce_vehicles, player_info, ServerCfg, 
 /// checks before offering any remote-only vehicle for driving.
 fn fleet_paints(cfg: &ServerCfg, root: &Path) -> Vec<omsi_net::ws::FleetPaints> {
     let mut offers = Vec::new();
-    for bus in cfg.vehicles.iter().take(256) {
+    let total = cfg.vehicles.len().min(256);
+    if cfg.vehicles.len() > 256 {
+        log::warn!("server fleet: {} buses in `vehicles`: only the first 256 are announced", cfg.vehicles.len());
+    }
+    if total > 0 {
+        // (every file of every bus and paint is read and hashed here, before the web port
+        // opens: on a first start a large fleet takes minutes, and nothing else was said)
+        log::info!("server fleet: checking {total} buses and their paints (the web port opens once this is done; later starts are faster)");
+    }
+    let (t0, mut failed) = (std::time::Instant::now(), 0usize);
+    for (i, bus) in cfg.vehicles.iter().take(256).enumerate() {
+        let n = i + 1;
         let Some(rel) = omsi_net::vehicle_path(bus) else {
-            log::warn!("server fleet: ignoring invalid bus path {bus:?}");
+            log::warn!("server fleet: {n}/{total}: ignoring invalid bus path {bus:?}");
+            failed += 1;
             continue;
         };
-        let path = omsi_cfg::find_in_roots(&rel)
-            .map(|(_, p)| p)
-            .unwrap_or_else(|| omsi_cfg::resolve_path(root, &rel));
+        let found = omsi_cfg::find_in_roots(&rel).map(|(_, p)| p);
+        let path = found.clone().unwrap_or_else(|| omsi_cfg::resolve_path(root, &rel));
+        let t = std::time::Instant::now();
         match omsi_sim::VehicleType::load(root, &path) {
             Ok(vehicle) => {
                 // Use the same resolved scheme names as the authenticated LISTBUS
                 // transfer. A server build must not depend on launcher-only crates.
-                let paints = vehicle.paint_schemes.iter().take(128).map(|p| p.name.clone()).collect();
-                let content = omsi_lan::mods::fleet_fingerprint(root, &rel).unwrap_or_default();
+                let paints: Vec<String> = vehicle.paint_schemes.iter().take(128).map(|p| p.name.clone()).collect();
+                let content = match omsi_lan::mods::fleet_fingerprint(root, &rel) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        log::warn!("server fleet: {n}/{total}: {rel}: its files cannot be offered to the players ({e})");
+                        failed += 1;
+                        String::new()
+                    }
+                };
+                log::info!("server fleet: {n}/{total}: {rel}: {} paints ({:.1} s)", paints.len(), t.elapsed().as_secs_f64());
                 offers.push(omsi_net::ws::FleetPaints { bus: rel, paints, content });
             }
-            Err(e) => log::warn!("server fleet: cannot load {}: {e}", path.display()),
+            Err(e) => {
+                let why = if found.is_none() { " (not found in the content folders)" } else { "" };
+                log::warn!("server fleet: {n}/{total}: cannot load {}{why}: {e}", path.display());
+                failed += 1;
+            }
         }
     }
-    log::info!("server fleet: announced {} models and {} paint schemes", offers.len(), offers.iter().map(|o| o.paints.len()).sum::<usize>());
+    log::info!(
+        "server fleet: announced {} models and {} paint schemes in {:.1} s{}",
+        offers.len(),
+        offers.iter().map(|o| o.paints.len()).sum::<usize>(),
+        t0.elapsed().as_secs_f64(),
+        if failed > 0 { format!(", {failed} with problems (the lines above say which)") } else { String::new() }
+    );
     offers
 }
 
