@@ -841,7 +841,7 @@ impl Navigator {
         }
         r.note = (r.note - f.dt).max(0.0);
         // where the next stop is on the route: the way to the route must not skip it
-        let stop_at = f.stops.first().and_then(|st| stop_on_route(net, &r.lanes, r.progress, st.position, |_, _| true)).map(|(k, _)| k);
+        let stop_at = f.stops.first().and_then(|st| stop_on_route(net, &r.lanes[..r.lanes.len().min(r.progress + 1500)], r.progress, st.position, |_, _| true)).map(|(k, _)| k);
         // the nearest route lane near the bus that runs its way, a little back to a lot ahead
         // (before the bus first reached the route: only the stretch up to the next stop)
         let (from, to) = match (r.joined, stop_at) {
@@ -1458,7 +1458,7 @@ mod destination_tests;
 fn stop_on_route(net: &Network, lanes: &[usize], from: usize, stop: DVec3, ok: impl Fn(usize, f32) -> bool) -> Option<(usize, f32)> {
     let near = |k: usize| net.lanes.get(lanes[k]).and_then(|l| l.nearest_point(stop)).filter(|&(s, d)| d < 25.0 && ok(k, s));
     let kerb = |k: usize| near(k).filter(|_| passes_on_its_side(net, lanes[k], stop, 25.0));
-    let first = (from..lanes.len().min(from + 1500)).find(|&k| near(k).is_some())?;
+    let first = (from..lanes.len()).find(|&k| near(k).is_some())?;
     if let Some((s, _)) = kerb(first).filter(|&(_, d)| d < 6.0) {
         return Some((first, s));
     }
