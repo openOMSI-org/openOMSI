@@ -255,6 +255,12 @@ fn a_timetable_route_steps_over_to_the_parallel_path_of_the_next_piece() {
     assert!(car.advance(&net, 0.0, None, None), "a side step of one lane is no missing piece");
     assert_eq!(car.lane, 2);
     assert!((car.lateral + 3.75).abs() < 0.01, "it glides over from where it was: {}", car.lateral);
+    let mut rails = Network { lanes: net.lanes.iter().map(|l| Lane { kind: LaneKind::Rail, next: Vec::new(), ..l.clone() }).collect(), ..Default::default() };
+    rails.link(1.5);
+    let mut tram = AiState::new(0, 10.0, 7);
+    tram.route = vec![0, 2];
+    tram.plan_next(&rails);
+    assert!(!tram.advance(&rails, 0.0, None, None), "a track beside is no lane change");
 }
 
 #[test]

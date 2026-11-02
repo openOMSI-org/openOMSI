@@ -1164,8 +1164,7 @@ impl AiState {
                 }
                 return false; // dead end: despawn
             };
-            // A timetable may name a path whose intervening map piece is missing.
-            // Never move the vehicle directly to the next path across that gap.
+            // (a missing map piece ends the drive; a step onto the parallel path of the next piece does not)
             let mut side_step = None;
             if !self.route.is_empty() && !l.next.contains(&next) && (net.lanes[next].start() - l.end()).truncate().length() >= 2.0 {
                 side_step = beside_successor(net, self.lane, next);
@@ -1201,6 +1200,9 @@ impl AiState {
 
 fn beside_successor(net: &Network, lane: usize, next: usize) -> Option<f32> {
     let (from, to) = (&net.lanes[lane], &net.lanes[next]);
+    if to.kind != LaneKind::Street {
+        return None;
+    }
     let h = to.start_heading().to_radians();
     let right = DVec3::new(h.cos() as f64, -h.sin() as f64, 0.0);
     from.next.iter().map(|&n| &net.lanes[n]).find(|n| {
