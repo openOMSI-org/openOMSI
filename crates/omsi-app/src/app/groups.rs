@@ -505,6 +505,7 @@ pub(crate) struct MenuState {
     /// air and cabin temperatures, the passengers aboard, the trip and its next stop along
     /// the top of the picture.
     pub(crate) info_bar: bool,
+    pub(crate) clean_screen: bool,
     /// OMSI's timetable window (`view_set_schedule`, Insert).
     pub(crate) timetable: bool,
     pub(crate) hud_resize: Option<(usize, f32, [f32; 2], f32)>,

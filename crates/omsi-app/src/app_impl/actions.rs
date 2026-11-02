@@ -146,6 +146,7 @@ impl App {
             }
             "screenshot" => self.take_screenshot(),
             "flashlight" => self.toggle_flashlight(),
+            "clean_screen" => self.toggle_clean_screen(),
             "photo_mode" => self.enter_photo(),
             "quicksave" => self.quick_save(),
             "view_set_ego" => {
@@ -420,6 +421,18 @@ impl App {
             self.settings.info_bar = on;
             crate::game_lists::remember_setting("info_bar", if on { "1" } else { "0" });
         }
+    }
+
+    pub(crate) fn toggle_clean_screen(&mut self) {
+        self.menus.clean_screen = !self.menus.clean_screen;
+    }
+
+    pub(crate) fn clean_screen_shown(&self) -> bool {
+        self.menus.clean_screen
+            && self.menus.game_menu.is_none()
+            && self.menus.chooser.is_none()
+            && !self.has_process_permission_prompt()
+            && !self.menus.navigator.as_ref().is_some_and(|n| n.map_open())
     }
 
     pub(crate) fn toggle_pause(&mut self) {
