@@ -1090,3 +1090,37 @@ fn a_spline_in_a_cutting_is_left_to_the_hole_but_a_trough_is_not() {
     }
     assert!(profile_in_cutting(&profile, DVec3::ZERO, &hill, &[]), "a 5 m cutting");
 }
+
+#[test]
+fn a_sliver_triangle_in_a_profile_does_not_give_its_rim_a_runaway_slope() {
+    // (the 15 cm rail profiles of Berlin-Spandau: a determinant of 1e-5 over a rise of 0.15 m
+    // is a gradient of 100, which pulled the ground a kilometre up beside the track's end)
+    let mesh = MeshData {
+        positions: vec![Vec3::new(0.0, 0.0, 30.0), Vec3::new(1.0, 0.0, 30.15), Vec3::new(0.5, 1e-5, 30.0)],
+        indices: vec![0, 1, 2],
+        ..Default::default()
+    };
+    let edges = terrain_fit_surface::boundary(&mesh, DVec3::ZERO);
+    assert_eq!(edges.len(), 3);
+    assert!(edges.iter().all(|(_, g)| g.length() <= 3.0 + 1e-9));
+    let mut field = Field::new(60);
+    for (points, gradient) in edges {
+        field.add_rim(points, None, gradient, 5.0);
+    }
+    let terrain = |_: DVec2| 30.0;
+    for p in [DVec2::new(0.5, 0.5), DVec2::new(0.9, -0.3), DVec2::new(-0.4, 0.1)] {
+        assert!((field.height(p, 30.0, &terrain) - 30.0).abs() < 1.0, "{p:?}");
+    }
+}
+
+#[test]
+fn a_real_steep_face_keeps_its_slope_at_the_rim() {
+    // a retaining wall's face, 5 m tall over 1 m, is not a sliver: its slope is its own
+    let mesh = MeshData {
+        positions: vec![Vec3::new(0.0, 0.0, 30.0), Vec3::new(1.0, 0.0, 35.0), Vec3::new(0.0, 1.0, 30.0)],
+        indices: vec![0, 1, 2],
+        ..Default::default()
+    };
+    let edges = terrain_fit_surface::boundary(&mesh, DVec3::ZERO);
+    assert!(edges.iter().any(|(_, g)| (g.length() - 5.0).abs() < 1e-9));
+}
