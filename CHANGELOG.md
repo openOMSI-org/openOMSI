@@ -565,6 +565,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **The map's own sounds are quieter inside the bus**: birds, church bells, fountains and the
+  other sounds of the scenery are heard through the bus's bodywork in a cab view, louder as the
+  doors and windows open, as the AI traffic already was; outside they keep their full volume.
 - **Yesterday's night tours are offered only for their trips past midnight**: a Friday tour that
   runs into the night was listed and drivable all Saturday, and a Sunday one all Monday; now it
   counts by Friday's (Sunday's) clock, so it shows only until its last trip after midnight ends.
