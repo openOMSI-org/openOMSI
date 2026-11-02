@@ -136,7 +136,7 @@ function Picker({ title, kinds, onPick, onClose, hint, multi }) {
         ${a.lib && !list.length && html`<${Empty} icon="search" title="Nothing found" />`}
         <div class="ail-picker-list">
           ${list.slice(0, 300).map((v) => html`<button class=${'ail-pick' + (sel && sel.file === v.file ? ' on' : '')} onClick=${() => setSel(v)} onDblClick=${() => onPick([v])}>
-            ${multi && html`<span role="checkbox" aria-checked=${ticked.some((y) => y.file === v.file)} class=${'ail-tick' + (ticked.some((y) => y.file === v.file) ? ' on' : '')} title=${t('Tick to add several at once')} onClick=${(e) => { e.stopPropagation(); tick(v); }}>${ticked.some((y) => y.file === v.file) && html`<${Icon} name="check" size=${14} />`}</span>`}
+            ${multi && html`<span role="checkbox" aria-checked=${ticked.some((y) => y.file === v.file)} class=${'ail-tick' + (ticked.some((y) => y.file === v.file) ? ' on' : '')} title=${t('Tick to add several at once')} tabindex="0" onClick=${(e) => { e.stopPropagation(); tick(v); }} onDblClick=${(e) => e.stopPropagation()} onKeyDown=${(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); tick(v); } }}>${ticked.some((y) => y.file === v.file) && html`<${Icon} name="check" size=${14} />`}</span>`}
             <span class="grow"><b>${v.name}</b><small>${v.folder}</small></span>
             <${Tag}>${t(v.kind === 'bus' ? 'Bus' : v.kind === 'aircraft' ? 'Aircraft' : 'AI vehicle')}</${Tag}>
           </button>`)}
