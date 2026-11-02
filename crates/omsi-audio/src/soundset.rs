@@ -1036,6 +1036,18 @@ mod tests {
     }
 
     #[test]
+    fn a_scenery_set_is_heard_as_scenery_through_a_cab() {
+        let engine = AudioEngine::silent();
+        let mut set = SoundSet::new_scenery(&engine, &omsi_vehicle::sound::SoundCfg::default(), Path::new("/nonexistent"));
+        set.set_muffled(true);
+        let c = set.ctx(&engine);
+        assert_eq!((c.view, c.cab), (5, true));
+        let mut ai = SoundSet::new_exterior(&engine, &omsi_vehicle::sound::SoundCfg::default(), Path::new("/nonexistent"));
+        ai.set_muffled(true);
+        assert_eq!(ai.ctx(&engine).view, 4, "an AI vehicle stays view 4");
+    }
+
+    #[test]
     fn curves_are_linear_and_held_at_the_ends() {
         let p = [(0.0, 0.0), (1.0, 1.0), (1.0, 0.5), (3.0, 0.0)];
         assert_eq!(curve(&p, -1.0), 0.0);
