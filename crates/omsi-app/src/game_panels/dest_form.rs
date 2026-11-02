@@ -43,7 +43,7 @@ pub(crate) fn open(app: &mut crate::App) {
         app.service_msg = Some(("No vehicle to set a destination for".into(), 3.0));
         return;
     };
-    let route = crate::game_lists::form_route(&p.vehicle);
+    let route = crate::game_lists::form_route(&p.vehicle, p.blind_pick.as_ref());
     let shown = p.vehicle.host.hof.as_deref().and_then(|hof| {
         let ti = crate::schedule::shown_destination(&p.vehicle, hof, p.blind_pick.as_ref())?;
         hof.termini.get(ti).map(|t| t.menu_name())
