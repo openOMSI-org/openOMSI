@@ -1017,6 +1017,16 @@ impl WsClient {
                         }
                         let _ = flush_ws(&mut ws);
                         let _ = ws.close(None);
+                        let until = Instant::now() + Duration::from_secs(1);
+                        while Instant::now() < until {
+                            match ws.read() {
+                                Ok(_) => {}
+                                Err(tungstenite::Error::Io(e)) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
+                                    let _ = flush_ws(&mut ws);
+                                }
+                                Err(_) => break,
+                            }
+                        }
                         Ok(())
                     })();
                     if st.load(Ordering::Relaxed) {
