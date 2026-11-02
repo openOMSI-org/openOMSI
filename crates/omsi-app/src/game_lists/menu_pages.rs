@@ -94,64 +94,8 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         ),
     ];
     // (the rig's own settings only while it is on)
-    let triple = vec![
-        switch_row(
-            app,
-            "triple_hud_center",
-            "HUD on centre screen",
-            "Keep the navigator, menus and information on the centre screen",
-        ),
-        switch_row(
-            app,
-            "triple_span",
-            "Span three monitors at startup",
-            "Borderless across three equal monitors in one horizontal row; restart required",
-        ),
-        slider_row(
-            app,
-            "triple_width_mm",
-            "Visible panel width",
-            "Width of one screen without its frame",
-            &|v| format!("{v:.0} mm"),
-        ),
-        slider_row(
-            app,
-            "triple_distance_mm",
-            "Eye distance",
-            "Eye to the centre screen",
-            &|v| format!("{v:.0} mm"),
-        ),
-        slider_row(
-            app,
-            "triple_bezel_mm",
-            "Frame width at each join",
-            "Combined width of both adjacent frames",
-            &|v| format!("{v:.0} mm"),
-        ),
-        slider_row(
-            app,
-            "triple_left_angle_deg",
-            "Left screen angle",
-            "Inward angle from a flat row",
-            &|v| format!("{v:.0}°"),
-        ),
-        slider_row(
-            app,
-            "triple_right_angle_deg",
-            "Right screen angle",
-            "Inward angle from a flat row",
-            &|v| format!("{v:.0}°"),
-        ),
-        slider_row(
-            app,
-            "triple_eye_height_mm",
-            "Eye above screen centre",
-            "Vertical eye offset",
-            &|v| format!("{v:.0} mm"),
-        ),
-    ];
     if app.settings.triple.enabled {
-        display.extend(triple);
+        display.extend(triple_rows(app));
     }
     let display: Vec<(String, String)> = display.into_iter().chain([
         switch_row(app, "vsync", "V-sync", "Waits for the screen's refresh"),
@@ -723,5 +667,64 @@ fn head_tracking_rows(app: &App, pct: &dyn Fn(f32) -> String) -> Vec<Option<(Str
         switch_row(app, "head_tracking_invert_x", "Invert TrackIR X", "Reverse left / right head movement"),
         switch_row(app, "head_tracking_invert_y", "Invert TrackIR Y", "Reverse up / down head movement"),
         switch_row(app, "head_tracking_invert_z", "Invert TrackIR Z", "Reverse forward / back head movement"),
+    ]
+}
+
+fn triple_rows(app: &App) -> Vec<Option<(String, String)>> {
+    vec![
+        switch_row(
+            app,
+            "triple_hud_center",
+            "HUD on centre screen",
+            "Keep the navigator, menus and information on the centre screen",
+        ),
+        switch_row(
+            app,
+            "triple_span",
+            "Span three monitors at startup",
+            "Borderless across three equal monitors in one horizontal row; restart required",
+        ),
+        slider_row(
+            app,
+            "triple_width_mm",
+            "Visible panel width",
+            "Width of one screen without its frame",
+            &|v| format!("{v:.0} mm"),
+        ),
+        slider_row(
+            app,
+            "triple_distance_mm",
+            "Eye distance",
+            "Eye to the centre screen",
+            &|v| format!("{v:.0} mm"),
+        ),
+        slider_row(
+            app,
+            "triple_bezel_mm",
+            "Frame width at each join",
+            "Combined width of both adjacent frames",
+            &|v| format!("{v:.0} mm"),
+        ),
+        slider_row(
+            app,
+            "triple_left_angle_deg",
+            "Left screen angle",
+            "Inward angle from a flat row",
+            &|v| format!("{v:.0}°"),
+        ),
+        slider_row(
+            app,
+            "triple_right_angle_deg",
+            "Right screen angle",
+            "Inward angle from a flat row",
+            &|v| format!("{v:.0}°"),
+        ),
+        slider_row(
+            app,
+            "triple_eye_height_mm",
+            "Eye above screen centre",
+            "Vertical eye offset",
+            &|v| format!("{v:.0} mm"),
+        ),
     ]
 }
