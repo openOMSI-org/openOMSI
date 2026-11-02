@@ -433,6 +433,8 @@ impl App {
             && self.menus.chooser.is_none()
             && !self.has_process_permission_prompt()
             && !self.menus.navigator.as_ref().is_some_and(|n| n.map_open())
+            && self.net.remotes.chat.typing.is_none()
+            && !self.menus.game_panels.any()
     }
 
     pub(crate) fn toggle_pause(&mut self) {
