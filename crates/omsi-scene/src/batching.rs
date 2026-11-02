@@ -306,15 +306,7 @@ impl GpuCache {
         attach_pbr(renderer, scene, &path, id);
         self.textures.insert(
             path.clone(),
-            TexEntry {
-                id,
-                alpha: img.has_alpha,
-                users: 1,
-                texels: img.width as u64 * img.height as u64,
-                bytes: renderer.texture_size_bytes(scene, id),
-                format: img.format,
-                dropped: 0,
-            },
+            TexEntry::uploaded(id, &img, scene),
         );
         Some((id, path))
     }
@@ -453,15 +445,7 @@ impl GpuCache {
         let id = self.add_data(renderer, scene, &data);
         self.textures.insert(
             key.clone(),
-            TexEntry {
-                id,
-                alpha: true,
-                users: 1,
-                texels: data.width as u64 * data.height as u64,
-                bytes: renderer.texture_size_bytes(scene, id),
-                format: data.format,
-                dropped: 0,
-            },
+            TexEntry { alpha: true, ..TexEntry::uploaded(id, &data, scene) },
         );
         Some((id, key))
     }

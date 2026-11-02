@@ -1164,9 +1164,41 @@ pub(super) struct TexEntry {
     pub(super) texels: u64,
     /// Bytes on the GPU (all levels, as they are now).
     pub(super) bytes: u64,
+    pub(super) full_bytes: u64,
     pub(super) format: omsi_texture::PixelFormat,
     /// Finest mip levels let go while the textures are over their budget.
     pub(super) dropped: u32,
+    pub(super) retry_after: Option<std::time::Instant>,
+    pub(super) squeezed: bool,
+    pub(super) near_restore: bool,
+}
+
+impl TexEntry {
+    pub(super) fn uploaded(id: TextureId, data: &TextureData, scene: &Scene) -> Self {
+        let mut entry = Self {
+            id, alpha: data.has_alpha, users: 1,
+            texels: data.width as u64 * data.height as u64,
+            bytes: 0, full_bytes: data.gpu_bytes(), format: data.format, dropped: 0, retry_after: None,
+            squeezed: false, near_restore: false,
+        };
+        entry.record_upload(data, scene);
+        entry
+    }
+
+    pub(super) fn record_upload(&mut self, source: &TextureData, scene: &Scene) {
+        self.bytes = scene.texture_bytes_of(self.id);
+        self.full_bytes = source.gpu_bytes();
+        self.format = source.format;
+        self.texels = source.width as u64 * source.height as u64;
+        self.squeezed = false;
+        self.near_restore = false;
+        let (w, h) = scene.texture_size_of(self.id).unwrap_or((1, 1));
+        self.dropped = omsi_texture::gpu::mip_count(source.width, source.height)
+            .saturating_sub(omsi_texture::gpu::mip_count(w, h));
+        if self.bytes == 0 {
+            self.dropped = self.dropped.max(1);
+        }
+    }
 }
 
 /// An object type on the GPU.
