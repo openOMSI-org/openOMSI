@@ -597,6 +597,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   junction). The standing car now drives on after a few seconds. And a route's lane change that
   the bus missed its window for (the two lanes no longer run side by side) is made all the same
   after 12 s of waiting instead of never. `OMSI_DEBUG_STUCK` also says why a lane change waits.
+- **A zoom on a key.** *Zoom while held* (Controls › Views, no key by default, a controller
+  button too) narrows the view while it is held - to read a far sign, a mirror or the
+  dashboard - and lets go when released; *Zoom on a key* sets how far (1.3x to 5x, 2x by
+  default) and *Zoom key stays* makes one press zoom in and the next zoom out (#3114).
 - **On foot, the player walks wherever the passengers' paths lead**: a staircase, a ramp, a gate
   through a fence or a doorway the map gives the AI passengers is now walkable by hand too, at
   the path's height (the step and slope limits and the walls no longer stop the walker on a

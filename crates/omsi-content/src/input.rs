@@ -114,6 +114,9 @@ impl KeyboardCfg {
                 self.game.push(KeyBinding { action: action.into(), scan_code, modifier: KEY_CTRL });
             }
         }
+        if !self.game.iter().any(|b| b.action.eq_ignore_ascii_case("view_zoom_hold")) {
+            self.game.push(KeyBinding { action: "view_zoom_hold".into(), scan_code: 0, modifier: 0 });
+        }
         for action in ["blinker_left_toggle", "blinker_right_toggle"] {
             if !self.vehicles.iter().any(|b| b.action.eq_ignore_ascii_case(action)) {
                 self.vehicles.push(KeyBinding { action: action.into(), scan_code: 0, modifier: 0 });

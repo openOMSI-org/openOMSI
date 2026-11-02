@@ -335,7 +335,7 @@ impl App {
                 self.service_msg = Some((msg.into(), 4.0));
             }
             // the zoom keys work while held: the frame reads them (`view_keys::zoom_keys`)
-            "view_zoom_in" | "view_zoom_out" => {}
+            "view_zoom_in" | "view_zoom_out" | "view_zoom_hold" => {}
             "toggel_mouse_ctrl" => {
                 self.set_mouse_drive(!self.input.mouse_drive);
                 let msg = if self.input.mouse_drive { "Mouse steering on: across steers, up is the throttle, down the brake (O turns it off)" } else { "Mouse steering off" };

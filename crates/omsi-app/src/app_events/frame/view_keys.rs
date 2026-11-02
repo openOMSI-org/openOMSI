@@ -114,6 +114,8 @@ pub(super) fn view_keys(mut cx: ViewKeysCx, dt: f32) {
         let bus_keys = cx.player.player.as_ref().map(|p| p.bindings.as_slice()).unwrap_or_default();
         let (zoom_in, pad_in) = zoom_keys("view_zoom_in", &pressed, chord, &cx.input.game_keys, bus_keys, &cx.input.own_keys, 13, 78);
         let (zoom_out, pad_out) = zoom_keys("view_zoom_out", &pressed, chord, &cx.input.game_keys, bus_keys, &cx.input.own_keys, 12, 74);
+        let zoom_held = cx.input.pad_zoom_hold || zoom_keys("view_zoom_hold", &pressed, chord, &cx.input.game_keys, bus_keys, &cx.input.own_keys, 0, 0).0;
+        cx.view.cam.zoom_hold.step(zoom_held, cx.common.settings.zoom_hold_amount, cx.common.settings.zoom_hold_latch, dt);
         if matches!(cx.view.view.as_str(), "driver" | "pax") {
             if zoom_in {
                 crate::app_impl::zoom_view(cx.view.cam, cx.view.view, 3.0 * dt);
