@@ -129,6 +129,7 @@ struct Worker {
     watch: mpsc::Sender<Watch>,
     ready: Mutex<mpsc::Receiver<Reload>>,
     versions: Arc<Mutex<HashMap<PathBuf, FileStamp>>>,
+    sampled: Arc<std::sync::atomic::AtomicUsize>,
 }
 
 /// Shared by the world's freetex slots. Starts no thread until a slot loads a file.
@@ -172,16 +173,19 @@ impl FreeTextureReloads {
             let (done, ready) = mpsc::sync_channel(2);
             let versions = Arc::new(Mutex::new(HashMap::new()));
             let seen = versions.clone();
+            let sampled = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let counted = sampled.clone();
             match std::thread::Builder::new()
                 .name("freetex reload".into())
                 .spawn(move || {
                     crate::threads::lower_thread_priority();
-                    run(commands, done, seen);
+                    run(commands, done, seen, counted);
                 }) {
                 Ok(_) => Some(Worker {
                     watch,
                     ready: Mutex::new(ready),
                     versions,
+                    sampled,
                 }),
                 Err(e) => {
                     log::warn!("Cannot watch free textures: {e}");
@@ -250,6 +254,7 @@ fn run(
     commands: mpsc::Receiver<Watch>,
     done: mpsc::SyncSender<Reload>,
     versions: Arc<Mutex<HashMap<PathBuf, FileStamp>>>,
+    sampled: Arc<std::sync::atomic::AtomicUsize>,
 ) {
     let mut watched: HashMap<PathBuf, Watched> = HashMap::new();
     let mut order = VecDeque::new();
@@ -314,7 +319,12 @@ fn run(
                 continue;
             }
             order.push_back(path.clone());
-            if let Some(reload) = file.poll(now) {
+            let first = !file.initialized;
+            let reload = file.poll(now);
+            if first && file.initialized {
+                sampled.fetch_add(1, std::sync::atomic::Ordering::Release);
+            }
+            if let Some(reload) = reload {
                 versions.lock().insert(path, reload.stamp);
                 match done.try_send(reload) {
                     Ok(()) => {}
@@ -511,12 +521,32 @@ mod tests {
             .set(Some(Worker {
                 watch,
                 ready: Mutex::new(ready),
-                versions
+                versions,
+                sampled: Default::default(),
             }))
             .is_ok());
         assert!(!reloads.accepts(&picture.path, Some(old)));
         assert!(!reloads.accepts(&picture.path, None));
         assert!(reloads.accepts(&picture.path, Some(new)));
+    }
+
+    fn wait_until_sampled(reloads: &FreeTextureReloads, files: usize) {
+        let until = Instant::now() + Duration::from_secs(60);
+        while reloads.worker.get().unwrap().as_ref().unwrap().sampled.load(std::sync::atomic::Ordering::Acquire) < files {
+            assert!(Instant::now() < until, "the worker never sampled the original file");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    fn next_reload(reloads: &FreeTextureReloads) -> Reload {
+        let until = Instant::now() + Duration::from_secs(60);
+        loop {
+            if let Some(reload) = reloads.next() {
+                return reload;
+            }
+            assert!(Instant::now() < until, "background reload did not arrive");
+            std::thread::sleep(Duration::from_millis(5));
+        }
     }
 
     #[test]
@@ -527,16 +557,7 @@ mod tests {
         for _ in 0..3 {
             reloads.watch(picture.path.clone(), 7, &picture.shared, 4096);
         }
-        let next = || {
-            let until = Instant::now() + Duration::from_secs(5);
-            loop {
-                if let Some(reload) = reloads.next() {
-                    return reload;
-                }
-                assert!(Instant::now() < until, "background reload did not arrive");
-                std::thread::sleep(Duration::from_millis(5));
-            }
-        };
+        wait_until_sampled(&reloads, 1);
         std::thread::sleep(POLL * 3);
         assert!(
             reloads.next().is_none(),
@@ -544,12 +565,12 @@ mod tests {
         );
         let old = FileStamp::read(&picture.path).unwrap();
         picture.write([0, 255, 0], 2);
-        let updated = next();
+        let updated = next_reload(&reloads);
         assert_eq!(pixel(&updated), [0, 255, 0, 255]);
         assert!(!reloads.accepts(&picture.path, Some(old)));
         assert!(reloads.accepts(&picture.path, Some(updated.stamp)));
         picture.shared.lock().clear();
-        let until = Instant::now() + Duration::from_secs(5);
+        let until = Instant::now() + Duration::from_secs(60);
         while !reloads
             .worker
             .get()
@@ -563,5 +584,29 @@ mod tests {
             assert!(Instant::now() < until, "an unloaded path was retained");
             std::thread::sleep(Duration::from_millis(5));
         }
+    }
+
+    #[test]
+    fn a_worker_that_starts_late_still_reloads_a_file_changed_after_its_first_sample() {
+        let picture = Picture::new();
+        picture.write([255, 0, 0], 1);
+        let reloads = FreeTextureReloads::default();
+        let (watch, commands) = mpsc::channel();
+        let (done, ready) = mpsc::sync_channel(2);
+        let versions = Arc::new(Mutex::new(HashMap::new()));
+        let sampled = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let (seen, counted) = (versions.clone(), sampled.clone());
+        assert!(reloads
+            .worker
+            .set(Some(Worker { watch, ready: Mutex::new(ready), versions, sampled }))
+            .is_ok());
+        reloads.watch(picture.path.clone(), 7, &picture.shared, 4096);
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(1));
+            run(commands, done, seen, counted);
+        });
+        wait_until_sampled(&reloads, 1);
+        picture.write([0, 255, 0], 2);
+        assert_eq!(pixel(&next_reload(&reloads)), [0, 255, 0, 255]);
     }
 }
