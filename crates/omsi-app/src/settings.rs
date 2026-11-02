@@ -638,6 +638,22 @@ impl Settings {
             }
         }
     }
+    fn read_voice(&mut self, k: &str, v: &str) {
+        match k {
+            "voice_enabled" => self.voice_enabled = matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes"),
+            "voice_mode" => self.voice_mode = if v.trim().eq_ignore_ascii_case("open") { "open".into() } else { "ptt".into() },
+            "voice_mic_gain" => self.voice_mic_gain = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 4.0)).unwrap_or(self.voice_mic_gain),
+            "voice_threshold_db" => self.voice_threshold_db = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(-80.0, -10.0)).unwrap_or(self.voice_threshold_db),
+            "voice_input_device" => self.voice_input_device = v.trim().to_string(),
+            "voice_volume" => self.voice_volume = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 2.0)).unwrap_or(self.voice_volume),
+            "voice_volume_nearby" => self.voice_volume_nearby = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 2.0)).unwrap_or(self.voice_volume_nearby),
+            "voice_volume_radio" => self.voice_volume_radio = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 2.0)).unwrap_or(self.voice_volume_radio),
+            "voice_range" => self.voice_range = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(5.0, 1000.0)).unwrap_or(self.voice_range),
+            "voice_talker_list" => self.voice_talker_list = matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes"),
+            "voice_all_off" => self.voice_all_off = matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes"),
+            _ => {}
+        }
+    }
     /// The settings a `settings.cfg` text describes (anything missing keeps its default).
     /// The upscaler's lines of settings.cfg (`from_text`): unknown values fall back to the
     /// standard upscaler, the Quality preset and 80 % sharpening.
@@ -911,17 +927,7 @@ impl Settings {
                 "head_tracking_source" | "tobii_edges" | "head_tracking_smoothing" | "head_tracking_dead_zone" | "pause_quick_actions" | "ui_theme_pack" => s.read_extra(&k, v),
                 "discord_status" => s.discord_status = b(v),
                 "discord_app_id" => s.discord_app_id = v.trim().to_string(),
-                "voice_enabled" => s.voice_enabled = b(v),
-                "voice_mode" => s.voice_mode = if v.trim().eq_ignore_ascii_case("open") { "open".into() } else { "ptt".into() },
-                "voice_mic_gain" => s.voice_mic_gain = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 4.0)).unwrap_or(s.voice_mic_gain),
-                "voice_threshold_db" => s.voice_threshold_db = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(-80.0, -10.0)).unwrap_or(s.voice_threshold_db),
-                "voice_input_device" => s.voice_input_device = v.trim().to_string(),
-                "voice_volume" => s.voice_volume = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 2.0)).unwrap_or(s.voice_volume),
-                "voice_volume_nearby" => s.voice_volume_nearby = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 2.0)).unwrap_or(s.voice_volume_nearby),
-                "voice_volume_radio" => s.voice_volume_radio = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 2.0)).unwrap_or(s.voice_volume_radio),
-                "voice_range" => s.voice_range = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(5.0, 1000.0)).unwrap_or(s.voice_range),
-                "voice_talker_list" => s.voice_talker_list = b(v),
-                "voice_all_off" => s.voice_all_off = b(v),
+                "voice_enabled" | "voice_mode" | "voice_mic_gain" | "voice_threshold_db" | "voice_input_device" | "voice_volume" | "voice_volume_nearby" | "voice_volume_radio" | "voice_range" | "voice_talker_list" | "voice_all_off" => s.read_voice(&k, v),
                 "head_tracking_port" => s.head_tracking_port = v.parse::<u16>().ok().filter(|p| *p > 0).unwrap_or(s.head_tracking_port),
                 "pedal_throttle" => s.pedal_throttle = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.25, 4.0)).unwrap_or(s.pedal_throttle),
                 "pedal_brake" => s.pedal_brake = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.25, 4.0)).unwrap_or(s.pedal_brake),
