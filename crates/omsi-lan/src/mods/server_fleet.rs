@@ -118,10 +118,8 @@ fn model_manifest(root: &Path, bus: &str, ty: &omsi_sim::VehicleType) -> Result<
     // and all advertised repaint dependencies. A player with the same bus but
     // without a server repaint must obtain that repaint without replacing OMSI 2.
     // BTreeSet deduplicates shared textures, models, scripts and sounds.
-    let mut all = std::collections::BTreeSet::new();
-    for scheme in std::iter::once(None).chain((0..ty.paint_schemes.len().min(128)).map(Some)) {
-        all.extend(bus_files::of_type(root, &ty, scheme, None));
-    }
+    let schemes: Vec<Option<usize>> = std::iter::once(None).chain((0..ty.paint_schemes.len().min(128)).map(Some)).collect();
+    let all = bus_files::of_type_paints(root, ty, &schemes);
     if all.iter().any(|path| !trusted_source(root, path)) {
         return Err("selected vehicle dependencies resolve outside the trusted content roots".into());
     }

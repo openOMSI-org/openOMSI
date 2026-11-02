@@ -29,7 +29,7 @@ pub(crate) fn of_type(root: &Path, ty: &VehicleType, scheme: Option<usize>, hof:
 /// bus's trailer was loaded a second time for its list.
 pub(crate) fn of_parts(root: &Path, ty: &VehicleType, parts: &[&VehicleType], scheme: Option<usize>, hof: Option<&Path>) -> Vec<PathBuf> {
     let mut out = BTreeSet::new();
-    add_type(root, ty, parts, scheme, &mut out, 0);
+    add_type(root, ty, parts, scheme, &mut out, 0, false);
     if let Some(h) = hof {
         add(&mut out, h.to_path_buf());
     }
@@ -42,8 +42,33 @@ fn add(out: &mut BTreeSet<PathBuf>, p: PathBuf) {
     }
 }
 
-fn add_type(root: &Path, ty: &VehicleType, parts: &[&VehicleType], scheme: Option<usize>, out: &mut BTreeSet<PathBuf>, depth: usize) {
+/// `of_type` of each of `schemes`, together: the same files as their union, but what no
+/// paint changes (scripts, meshes, sounds and their folders, the fonts - every `.oft` read)
+/// is gathered once, and for each other paint only its textures. The server's fleet check
+/// went through all of a bus once per paint: 40 to 90 s for a bus of ten.
+pub(crate) fn of_type_paints(root: &Path, ty: &VehicleType, schemes: &[Option<usize>]) -> Vec<PathBuf> {
+    let mut out = BTreeSet::new();
+    for (i, scheme) in schemes.iter().enumerate() {
+        add_type(root, ty, &[], *scheme, &mut out, 0, i > 0);
+    }
+    out.into_iter().collect()
+}
+
+/// (`textures_only`: the paint's textures, of it and its rear sections - the rest was taken)
+fn add_type(root: &Path, ty: &VehicleType, parts: &[&VehicleType], scheme: Option<usize>, out: &mut BTreeSet<PathBuf>, depth: usize, textures_only: bool) {
     let def = &ty.def;
+    if textures_only {
+        add_textures(root, ty, scheme, out);
+        if depth < MAX_COUPLED_PARTS {
+            if let Some(p) = def.couple_back_path() {
+                match VehicleType::load(root, &p) {
+                    Ok(part) => add_type(root, &part, &[], scheme.filter(|i| *i < part.paint_schemes.len()), out, depth + 1, true),
+                    Err(e) => log::warn!("bus files: {}: {e}", p.display()),
+                }
+            }
+        }
+        return;
+    }
     let here = def.dir();
     add(out, def.path.clone());
     let s = &def.scripts;
@@ -70,9 +95,9 @@ fn add_type(root: &Path, ty: &VehicleType, parts: &[&VehicleType], scheme: Optio
         if let Some(p) = def.couple_back_path().filter(|p| !out.contains(p)) {
             // (the section the vehicle has loaded already, when it is that file)
             match parts.split_first().filter(|(part, _)| part.def.path == p) {
-                Some((part, rest)) => add_type(root, part, rest, scheme.filter(|i| *i < part.paint_schemes.len()), out, depth + 1),
+                Some((part, rest)) => add_type(root, part, rest, scheme.filter(|i| *i < part.paint_schemes.len()), out, depth + 1, false),
                 None => match VehicleType::load(root, &p) {
-                    Ok(part) => add_type(root, &part, &[], scheme.filter(|i| *i < part.paint_schemes.len()), out, depth + 1),
+                    Ok(part) => add_type(root, &part, &[], scheme.filter(|i| *i < part.paint_schemes.len()), out, depth + 1, false),
                     Err(e) => log::warn!("bus files: {}: {e}", p.display()),
                 },
             }
@@ -377,6 +402,17 @@ mod tests {
         let fonts: Vec<&String> = names.iter().filter(|n| n.starts_with("fonts/")).collect();
         eprintln!("{} files for MAN_SD77, fonts {:?} of {:?}", names.len(), fonts, ty.model.text_textures.iter().map(|t| &t.font).collect::<Vec<_>>());
         assert!(ty.model.text_textures.is_empty() || fonts.iter().any(|n| n.ends_with(".oft")), "no font of its displays: {fonts:?}");
+    }
+
+    /// Every paint at once is the union of each paint on its own (`OMSI_ROOT`, a stock bus).
+    #[test]
+    fn all_paints_at_once_are_each_paint_together() {
+        let Some(root) = std::env::var_os("OMSI_ROOT").map(PathBuf::from) else { return };
+        let bus = omsi_cfg::resolve_path(&root, "Vehicles/MAN_SD200/MAN_SD77.bus");
+        let Ok(ty) = VehicleType::load(&root, &bus) else { return };
+        let schemes: Vec<Option<usize>> = std::iter::once(None).chain((0..ty.paint_schemes.len()).map(Some)).collect();
+        let union: BTreeSet<PathBuf> = schemes.iter().flat_map(|s| of_type(&root, &ty, *s, None)).collect();
+        assert_eq!(of_type_paints(&root, &ty, &schemes), union.into_iter().collect::<Vec<_>>());
     }
 }
 
