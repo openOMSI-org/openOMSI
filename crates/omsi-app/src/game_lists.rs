@@ -637,7 +637,8 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
         }
         ListKind::PlaceMaker => {
             if search_query(app).trim().is_empty() {
-                for b in crate::depot_bus::listed() {
+                let offered = crate::lan::server_offers();
+                for b in crate::depot_bus::listed().into_iter().filter(|b| offered.as_ref().is_none_or(|o| crate::lan::offers(o, &b.bus))) {
                     let plate = if b.plate.trim().is_empty() { String::new() } else { format!("  |  {}", b.plate.trim()) };
                     out.push((format!("{} {}{plate}", tr("My depot:"), b.name.trim()), format!("depot {}", b.id)));
                 }

@@ -66,6 +66,9 @@ fn is_this_bus(v: &VehicleInstance, bus: &str) -> bool {
 }
 
 pub(crate) fn outing_since(c: &crate::career::Career, args: &crate::cli::Args, base: &depot::Outing) -> depot::Outing {
+    let reset = c.metres < base.metres || c.seconds < base.seconds || c.stops[0] < base.stops || c.tickets.0 < base.tickets || c.crashes[0] < base.crashes;
+    let none = depot::Outing::default();
+    let base = if reset { &none } else { base };
     depot::Outing {
         map: args.map.clone(),
         line: args.line.clone().unwrap_or_default(),

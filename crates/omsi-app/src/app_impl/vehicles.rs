@@ -32,20 +32,28 @@ impl App {
             self.service_msg = Some(("That bus is no longer in the depot".into(), 3.0));
             return;
         };
-        if let (Some(old), Some(p)) = (self.args.depot.clone(), self.player.as_ref()) {
-            let outing = crate::depot_bus::outing_since(&self.session.career, &self.args, &self.session.depot_base);
-            crate::depot_bus::record(&p.vehicle, &old, &outing);
+        if crate::lan::server_offers().is_some_and(|o| !crate::lan::offers(&o, &b.bus)) {
+            return;
         }
-        let c = &self.session.career;
-        self.session.depot_base = omsi_launcher_lib::depot::Outing { metres: c.metres, seconds: c.seconds, stops: c.stops[0], tickets: c.tickets.0, takings: c.tickets.1, crashes: c.crashes[0], ..Default::default() };
-        let kept = (self.args.number.clone(), self.args.plate.clone());
+        let before = (self.args.number.clone(), self.args.plate.clone(), self.args.depot.clone(), self.args.bus.clone());
+        let outing = crate::depot_bus::outing_since(&self.session.career, &self.args, &self.session.depot_base);
         self.args.number = Some(b.number.clone()).filter(|n| !n.trim().is_empty());
         self.args.plate = Some(b.plate.clone()).filter(|n| !n.trim().is_empty());
         self.args.depot = Some(b.id.clone());
         self.args.bus = Some(b.bus.clone());
+        let idle = self.menus.pending_placement.is_none();
         self.menus.swap_pending = self.player.is_some();
         self.place_vehicle(&b.bus, Some(b.paint.clone()).filter(|p| !p.trim().is_empty()), None);
-        (self.args.number, self.args.plate) = kept;
+        (self.args.number, self.args.plate) = (before.0, before.1);
+        if !idle || self.menus.pending_placement.is_none() {
+            (self.args.depot, self.args.bus) = (before.2, before.3);
+            return;
+        }
+        if let (Some(old), Some(p)) = (before.2.as_deref(), self.player.as_ref()) {
+            crate::depot_bus::record(&p.vehicle, old, &outing);
+        }
+        let c = &self.session.career;
+        self.session.depot_base = omsi_launcher_lib::depot::Outing { metres: c.metres, seconds: c.seconds, stops: c.stops[0], tickets: c.tickets.0, takings: c.tickets.1, crashes: c.crashes[0], ..Default::default() };
     }
 
     /// The vehicle is read and its meshes and textures made on a worker thread; the next
