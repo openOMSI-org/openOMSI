@@ -247,3 +247,22 @@ impl Network {
         cells
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_lane_along_a_heading_is_the_one_going_that_way() {
+        let north = LaneBuilder::arc(DVec3::new(0.0, 0.0, 0.0), 0.0, 100.0, 0.0, 0.0, LaneKind::Street, 3.0);
+        let south = LaneBuilder::arc(DVec3::new(3.5, 100.0, 0.0), 180.0, 100.0, 0.0, 0.0, LaneKind::Street, 3.0);
+        let mut net = Network { lanes: vec![north, south], ..Default::default() };
+        net.build_grid();
+        let p = DVec3::new(3.0, 50.0, 0.0);
+        assert_eq!(net.nearest_lane(p, LaneKind::Street).map(|f| f.0), Some(1), "the nearest is the southbound");
+        assert_eq!(net.lane_along(p, 0.0, LaneKind::Street, 25.0, 75.0).map(|f| f.0), Some(0), "dragged north: the northbound");
+        assert_eq!(net.lane_along(p, 180.0, LaneKind::Street, 25.0, 75.0).map(|f| f.0), Some(1));
+        assert_eq!(net.lane_along(p, 90.0, LaneKind::Street, 25.0, 75.0), None, "across the road: none");
+        assert_eq!(net.lane_along(DVec3::new(60.0, 50.0, 0.0), 0.0, LaneKind::Street, 25.0, 75.0), None, "too far");
+    }
+}

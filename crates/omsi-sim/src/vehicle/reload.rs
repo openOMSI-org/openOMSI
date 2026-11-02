@@ -55,6 +55,7 @@ impl VehicleInstance {
         for (new, old) in physics.wheels.iter_mut().zip(&old.wheels) {
             for (n, o) in new.iter_mut().zip(old) {
                 n.rotation_deg = o.rotation_deg;
+                (n.turned, n.turned_put) = (o.turned, o.turned_put);
                 n.rpm = o.rpm;
                 n.suspension = o.suspension;
             }
@@ -86,6 +87,7 @@ impl VehicleInstance {
                 n.touch = o.touch;
                 n.on_ground = o.on_ground;
                 n.rotation_deg = o.rotation_deg;
+                n.turned = o.turned;
                 n.rpm = o.rpm;
                 n.load = o.load;
                 n.ground_z = o.ground_z;

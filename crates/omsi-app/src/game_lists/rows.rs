@@ -91,7 +91,7 @@ pub(super) fn steps_of(verb: &str) -> Option<Vec<f32>> {
         "vr_nav_tilt" => (-40..=40).map(|v| v as f32 * 2.0).collect(),
         "vr_nav_opacity" => (6..=20).map(|v| v as f32 * 0.05).collect(),
         "speed" => SPEEDS.iter().map(|&v| v as f32).collect(),
-        "traffic" => TRAFFIC.iter().map(|&v| v as f32).collect(),
+        "traffic" => TRAFFIC.iter().filter(|&&v| !cfg!(any(target_os = "android", target_os = "ios")) || v <= super::TRAFFIC_MAX).map(|&v| v as f32).collect(),
         "pax" => PAX.to_vec(),
         "passenger_transfer_percent" => (0..=100).map(|n|n as f32).collect(),
         "volume" => VOLUME.to_vec(),

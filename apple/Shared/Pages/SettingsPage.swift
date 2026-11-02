@@ -426,6 +426,10 @@ struct SettingsPage: View {
             SettingToggle(label: "Frame rate in the corner", key: "show_fps")
             SettingSelect(label: "Performance details", key: "perf_overlay", options: [("off", "Off"), ("compact", "Compact"), ("detailed", "Detailed")])
             SettingToggle(label: "Notes in the top-left corner", key: "notes", fallback: true)
+            SettingToggle(label: "Notes: why the bus does not move", key: "notes_driving", fallback: true)
+            SettingToggle(label: "Notes: the bus's own messages", key: "notes_script", fallback: true)
+            SettingToggle(label: "Notes: the end of a trip", key: "notes_trip", fallback: true)
+            SettingToggle(label: "Notes: tickets and change", key: "notes_tickets", fallback: true)
             SettingToggle(label: "Chat in online games", key: "chat", fallback: true)
             SettingSlider(label: "Chat size", key: "chat_size", range: 0.5 ... 3, step: 0.1, fallback: 1, round: 0.1) { pct($0) }
             SettingToggle(label: "Other players' names above their buses", key: "name_tags", fallback: true)
@@ -434,6 +438,9 @@ struct SettingsPage: View {
             SettingToggle(label: "Navigator (Shift+N: map, schedule, off)", key: "navigator", fallback: true)
             SettingToggle(label: "Route arrows (as in OMSI 2)", key: "nav_arrows")
             SettingToggle(label: "AI vehicles on the map", key: "nav_ai", fallback: true)
+            if store.flag("nav_ai", true) {
+                SettingToggle(label: "Cars on the map too", key: "nav_ai_cars", fallback: true)
+            }
             SettingToggle(label: "Map surface under the roads", key: "nav_surface", fallback: true)
             SettingToggle(label: "Light map", key: "nav_light")
             SettingToggle(label: "Classic 2D navigator (lightweight)", key: "nav_classic_2d")

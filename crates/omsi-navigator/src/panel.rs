@@ -179,7 +179,9 @@ impl Navigator {
                 let (color, line) = traffic_kind(c);
                 let at = self.smoothed_position(c);
                 if color == DOT {
-                    car_dot(&mut dy, rel(at), self.light);
+                    if self.show_cars {
+                        car_dot(&mut dy, rel(at), self.light);
+                    }
                 } else {
                     transit.push((at, c.vehicle.heading, line));
                 }

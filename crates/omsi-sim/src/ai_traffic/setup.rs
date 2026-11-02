@@ -138,6 +138,8 @@ impl TrafficSim {
             switch_board: Default::default(),
             player_signal_age: f32::MAX,
             player_signalling: 0.0,
+            player_beam_on: 0.0,
+            player_waved: 0.0,
             way_users: Vec::new(),
             others: Vec::new(),
             other_blinkers: HashMap::new(),

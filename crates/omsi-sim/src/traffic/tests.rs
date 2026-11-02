@@ -243,6 +243,27 @@ fn timetable_route_does_not_jump_across_an_unbridged_gap() {
 }
 
 #[test]
+fn a_timetable_route_steps_over_to_the_parallel_path_of_the_next_piece() {
+    let lane = |x: f64, y0, y1| LaneBuilder::polyline(vec![DVec3::new(x, y0, 0.0), DVec3::new(x, y1, 0.0)], LaneKind::Street, 3.0);
+    let mut net = Network { lanes: vec![lane(0.0, 0.0, 10.0), lane(0.0, 10.0, 40.0), lane(3.75, 10.0, 40.0)], ..Default::default() };
+    net.link(1.5);
+    assert!(!net.lanes[0].next.contains(&2));
+    let mut car = AiState::new(0, 10.0, 7);
+    car.route = vec![0, 2];
+    car.plan_next(&net);
+    assert_eq!(car.planned_next, Some(2));
+    assert!(car.advance(&net, 0.0, None, None), "a side step of one lane is no missing piece");
+    assert_eq!(car.lane, 2);
+    assert!((car.lateral + 3.75).abs() < 0.01, "it glides over from where it was: {}", car.lateral);
+    let mut rails = Network { lanes: net.lanes.iter().map(|l| Lane { kind: LaneKind::Rail, next: Vec::new(), ..l.clone() }).collect(), ..Default::default() };
+    rails.link(1.5);
+    let mut tram = AiState::new(0, 10.0, 7);
+    tram.route = vec![0, 2];
+    tram.plan_next(&rails);
+    assert!(!tram.advance(&rails, 0.0, None, None), "a track beside is no lane change");
+}
+
+#[test]
 fn timetable_change_stops_at_a_diverged_junction_branch() {
     let lane = |points| LaneBuilder::polyline(points, LaneKind::Street, 3.0);
     let mut main = lane(vec![DVec3::new(0.0, 0.0, 0.0), DVec3::new(0.0, 60.0, 0.0)]);
