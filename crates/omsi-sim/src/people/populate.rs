@@ -8,16 +8,16 @@ impl PeopleSim {
         let waiting = |p: &Person| {
             p.puppet.is_none() && !p.remote && matches!(p.place, Place::Ground) && matches!(&p.state, State::Pax(x) if x.inside.is_none() && x.bus.is_none())
         };
-        let gone: Vec<Person> = {
-            let (go, keep): (Vec<Person>, Vec<Person>) = std::mem::take(&mut self.people).into_iter().partition(|p| waiting(p));
-            self.people = keep;
-            go
-        };
-        for p in &gone {
-            self.retire(p);
+        let mut gone = 0;
+        for i in (0..self.people.len()).rev() {
+            if waiting(&self.people[i]) {
+                self.release(i);
+                let p = self.people.swap_remove(i);
+                self.retire(&p);
+                gone += 1;
+            }
         }
-        self.started = false;
-        gone.len()
+        gone
     }
 
     /// Put people at the bus stops near `center`: at the start everywhere, later only at

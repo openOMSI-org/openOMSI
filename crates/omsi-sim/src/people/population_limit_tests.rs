@@ -145,19 +145,47 @@ fn clearing_the_waiting_keeps_riders_avatars_and_strollers() {
         remote: false,
     };
     let waiting = || State::Pax(Box::new(Pax::new(1.1, 0.5)));
+    let mut at_stop = Pax::new(1.1, 0.5);
+    at_stop.stop = Some(42);
+    at_stop.spot = Some(0);
     let mut boarding = Pax::new(1.1, 0.5);
     boarding.bus = Some(BusId::Player);
     let mut h = PeopleSim::new(Path::new("/nonexistent"), 200);
-    h.started = true;
     h.people = vec![
-        person(1, waiting(), None),
+        person(1, State::Pax(Box::new(at_stop)), None),
         person(2, waiting(), None),
         person(3, State::Pax(Box::new(boarding)), None),
         person(4, State::Standing, None),
         person(5, waiting(), Some(Puppet { mode: PuppetMode::Avatar })),
     ];
+    h.stops.insert(
+        42,
+        PaxStop {
+            name: "Stop".into(),
+            alias: String::new(),
+            pos: DVec3::ZERO,
+            heading: 0.0,
+            side: 0,
+            gather: DVec3::ZERO,
+            spots: Vec::new(),
+            taken: vec![true, false],
+            enter_max: 1.0,
+            enter_min: 0.0,
+            length: 10.0,
+            lane: None,
+            was_near: false,
+            near: false,
+            clock_ms: 0.0,
+            want: 0,
+            factor: 1.0,
+            buses: Vec::new(),
+            dests: Vec::new(),
+            lines: Vec::new(),
+        },
+    );
     assert_eq!(h.clear_waiting(), 2);
-    let left: Vec<u32> = h.people.iter().map(|p| p.id).collect();
+    assert_eq!(h.stops[&42].taken, vec![false, false], "the place of the one who waited is free again");
+    let mut left: Vec<u32> = h.people.iter().map(|p| p.id).collect();
+    left.sort();
     assert_eq!(left, vec![3, 4, 5]);
-    assert!(!h.started, "the stops fill again for the time it is now");
 }
