@@ -10,8 +10,8 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 - **Set the world to the time it is now**: World options › Traffic and people has *Set to the time it
   is now*: the timetable buses are put out again for the current time and the people waiting at
-  the stops are replaced by the ones the timetable has there now - after changing the time by a
-  little, or whenever the stops are fuller than the hour wants.
+  the stops are taken off; the stops fill again as people walk up, as many as the hour wants -
+  after changing the time by a little, or whenever the stops are fuller than the hour wants.
 - **Long lists in the launcher filter as you type**: a drop-down with more than twelve entries
   (the liveries, the depot files, the languages...) shows a search line at its top; typing
   narrows it down, Backspace and Esc undo the search.

@@ -220,9 +220,9 @@ pub(crate) fn refresh_for_the_time(app: &mut App) {
     let people = app.session.humans.as_mut().map(|h| h.sim.clear_waiting());
     let n = people.unwrap_or(0).to_string();
     let msg = match (buses, people.is_some()) {
-        (true, true) => omsi_ui::i18n::tr_fill("Timetable buses put out again; {n} waiting people replaced", &[("{n}", &n)]),
+        (true, true) => omsi_ui::i18n::tr_fill("Timetable buses put out again; {n} waiting people taken off the stops", &[("{n}", &n)]),
         (true, false) => omsi_ui::tr("Timetable buses put out again").into_owned(),
-        (false, true) => omsi_ui::i18n::tr_fill("{n} waiting people replaced", &[("{n}", &n)]),
+        (false, true) => omsi_ui::i18n::tr_fill("{n} waiting people taken off the stops", &[("{n}", &n)]),
         (false, false) => omsi_ui::tr("No timetable buses or passengers to set").into_owned(),
     };
     app.service_msg = Some((msg, 4.0));
