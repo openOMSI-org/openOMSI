@@ -216,6 +216,7 @@ impl Traffic {
         let mut off_ground = 0usize;
         let mut asleep = 0usize;
         while i < self.sim.cars.len() {
+            if self.sim.occupied_by_player == Some(self.sim.cars[i].id) { i += 1; continue; }
             let c = &self.sim.cars[i];
             let p = c.vehicle.position;
             // (the nearest player: a LAN host keeps the traffic around the others too)

@@ -3,6 +3,18 @@
 use super::*;
 
 impl VehicleInstance {
+    /// Rebind a live vehicle to new GPU textures without changing its script state.
+    pub fn invalidate_display_uploads(&mut self) {
+        for texture in self.text_textures.iter_mut().chain(
+            self.trailers.iter_mut().flat_map(|part| part.text_textures.iter_mut()),
+        ) {
+            texture.invalidate_upload();
+        }
+        for texture in &mut self.host.script_textures {
+            texture.invalidate_upload();
+        }
+    }
+
     /// Brightest `[interiorlight]` of the vehicle right now (0..1), for the passengers.
     pub fn interior_light(&self) -> f32 {
         self.ty

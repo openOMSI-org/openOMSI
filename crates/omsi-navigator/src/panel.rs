@@ -170,18 +170,18 @@ impl Navigator {
         }
         // the public transport as drops with their lines (over the map's marks, on the screen);
         // the map's own timetabled trains are left out
-        let mut transit: Vec<(DVec3, f64, Option<String>)> = Vec::new();
-        if let Some(t) = f.traffic.filter(|_| self.show_ai) {
+        let mut transit: Vec<(DVec3, f64, Option<String>, bool)> = Vec::new();
+        if let Some(t) = f.traffic {
             for c in &t.cars {
-                if c.gone || c.is_rail() || in_the_air(c, &t.net) || (c.vehicle.position - f.bus).truncate().length() > self.zoom * 3.5 + 150.0 {
+                if c.is_rail() || in_the_air(c, &t.net) || (c.vehicle.position - f.bus).truncate().length() > self.zoom * 3.5 + 150.0 {
                     continue;
                 }
-                let (color, line) = traffic_kind(c);
+                let Some((color, line, wide_label)) = self.map_traffic_kind(c) else { continue };
                 let at = self.smoothed_position(c);
                 if color == DOT {
                     car_dot(&mut dy, rel(at), self.light);
                 } else {
-                    transit.push((at, c.vehicle.heading, line));
+                    transit.push((at, c.vehicle.heading, line, wide_label));
                 }
             }
         }
@@ -309,7 +309,7 @@ impl Navigator {
     /// The marks over the map: the stops ahead, the other players, the public transport's line
     /// tags and the bus itself.
     #[allow(clippy::too_many_arguments)]
-    fn draw_map_marks(&mut self, ui: &mut Painter, f: &NavFrame, map: Rect, vpm: Mat4, vp: [f32; 4], anchor: DVec2, s: f32, mut transit: Vec<(DVec3, f64, Option<String>)>, pal: &Palette) {
+    fn draw_map_marks(&mut self, ui: &mut Painter, f: &NavFrame, map: Rect, vpm: Mat4, vp: [f32; 4], anchor: DVec2, s: f32, mut transit: Vec<(DVec3, f64, Option<String>, bool)>, pal: &Palette) {
         let rel = |p: DVec3| Vec3::new((p.x - anchor.x) as f32, (p.y - anchor.y) as f32, 0.0);
         let n_stops = f.stops.len();
         let markers = spaced_markers(f.stops.iter().enumerate().filter_map(|(k, st)| project(vpm, vp, rel(st.position)).filter(|p| map.contains(*p)).map(|p| (k, p))), 20.0 * s);
@@ -333,11 +333,11 @@ impl Navigator {
             ui.rounded(r, 7.0 * s, PLAYER);
             ui.text_in(&mut self.atlas, &self.fonts, &name, px, Weight::Bold, r, Align::Center, Color::WHITE);
         }
-        for (pos, heading, line) in &transit {
+        for (pos, heading, line, wide_label) in &transit {
             let Some(p) = project(vpm, vp, rel(*pos)).filter(|p| map.contains(*p)) else { continue };
             let h = heading.to_radians();
             let Some(ahead) = project(vpm, vp, rel(*pos + DVec3::new(h.sin(), h.cos(), 0.0) * 5.0)) else { continue };
-            transit_drop(ui, &mut self.atlas, &self.fonts, p, ahead - p, line.as_deref(), s, &mut taken, pal);
+            transit_drop(ui, &mut self.atlas, &self.fonts, p, ahead - p, line.as_deref(), *wide_label, s, &mut taken, pal);
         }
         if let Some(bp) = project(vpm, vp, rel(f.bus)) {
             let a = (angle_diff(self.cam_heading, f.heading) as f32).to_radians();

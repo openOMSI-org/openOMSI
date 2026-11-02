@@ -754,6 +754,23 @@ impl AiBody {
         self.moved = 0.0;
     }
 
+    /// Start following from an existing vehicle rather than snapping it onto the lane.
+    pub fn adopt_pose(&mut self, v: &VehicleInstance) {
+        let lift = if self.kind == MotionKind::Road { v.ai_rest_offset().0 } else { 0.0 };
+        self.position = v.position - DVec3::new(0.0, 0.0, lift as f64);
+        self.heading = v.heading;
+        self.rear = self.position.truncate() + dir(v.heading) * self.rot_long as f64;
+        self.z = self.position.z;
+        self.pitch = v.pitch.to_radians();
+        self.roll = v.bank.to_radians();
+        self.pitch_deg = v.pitch;
+        self.bank_deg = v.bank;
+        self.steer = v.physics.steer_deg;
+        self.steer_cmd = self.steer;
+        self.last_speed = v.physics.speed;
+        self.started = true;
+    }
+
     /// Hand the pose to the vehicle: position and attitude, the accelerations its scripts
     /// read and each wheel's travel.
     pub fn apply(&self, v: &mut VehicleInstance) {

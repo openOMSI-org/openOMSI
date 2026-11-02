@@ -181,16 +181,7 @@ const MIRROR_ASPECT: f32 = 1.6;
 
 
 /// Where the driver's eye is (for a mirror drawn with no view to aim it by).
-pub(crate) fn driver_eye(p: &Player) -> DVec3 {
-    if let Some((t, c)) = p.trailer_driver_camera() {
-        return t.camera_world_full(c).0;
-    }
-    let def = &p.vehicle.ty.def;
-    match def.cameras_driver.get(p.driver_camera_slot()) {
-        Some(c) => p.vehicle.camera_world(c).0 + p.vehicle.body_rotation().transform_vector3(p.head_offset() + p.seat).as_dvec3(),
-        None => p.vehicle.position + DVec3::Z * 2.0,
-    }
-}
+pub(crate) use omsi_driver::driver_eye;
 
 /// Which of the vehicle's mirrors [`render_mirrors`] draws.
 #[derive(Clone, Copy, Debug)]

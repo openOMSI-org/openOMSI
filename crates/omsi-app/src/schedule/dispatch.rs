@@ -10,24 +10,25 @@ pub(crate) const RETRIES_PER_CALL: usize = 6;
 
 impl Schedule {
     /// The clock was set to another time (by hand, the menu, Ctrl+Shift+Page Up/Down): every
-    /// timetable bus goes, and at the next tick each trip under way at the new time is put
+    /// unretained timetable bus goes, and at the next tick each trip under way at the new time is put
     /// out where its timetable has it then, as when the game starts - as Omsi.exe does when
     /// the time is changed. They stayed where they were, the whole timetable running hours
     /// early or late: buses queued at stops, waiting there for their time (#1607, #1455).
     /// (The renders of the buses taken off go with `view_sync::apply_traffic` after it.)
-    pub fn restart(&mut self, traffic: &mut Traffic, day_time: f64) {
+    pub fn restart(&mut self, traffic: &mut Traffic, day_time: f64, retained: &[u64]) {
         if traffic.is_mirror() {
             return;
         }
         let gone: Vec<u64> = self.sim.car_ids();
         let mut n = 0;
         for id in gone {
+            if retained.contains(&id) { continue; }
             self.sim.forget_car(id);
             if traffic.remove_car(id) {
                 n += 1;
             }
         }
-        self.sim.restart_clock(day_time, n);
+        self.sim.restart_clock_preserving(day_time, n, retained);
     }
 
     /// The timetable buses at the end of their trip: each takes its tour's next trip on
@@ -62,7 +63,10 @@ impl Schedule {
                     self.sim.not_taken_on(j);
                 }
             }
-            if !taken && next.is_none() {
+            if !taken && next.is_none() && traffic.occupied_by_player == Some(id) {
+                traffic.release(ci);
+                self.sim.forget_car(id);
+            } else if !taken && next.is_none() {
                 // the tour's last trip is over: Omsi takes the bus (and what is coupled to
                 // it) off the road at once rather than letting it drive on
                 traffic.remove_car(id);

@@ -162,6 +162,18 @@ impl PlayerDuty {
         }
     }
 
+    /// Continue the service state already reached by the AI, without placement catch-up.
+    pub fn resume_from_ai(&mut self, next_stop: usize, at_stop: bool, delay: f64, position: glam::DVec3) {
+        self.next_stop = next_stop.min(self.trip().stops.len());
+        self.at_stop = at_stop;
+        self.arrived_late = at_stop.then_some(delay);
+        self.left_late = Some(delay);
+        self.position = Some(position);
+        self.placed = true;
+        self.picked = true;
+        self.held_back = true;
+    }
+
     pub fn trip(&self) -> &PlannedTrip {
         &self.trips[self.trip_index]
     }

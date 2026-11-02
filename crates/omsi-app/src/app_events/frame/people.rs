@@ -3,6 +3,15 @@
 use super::*;
 
 impl App {
+    pub(crate) fn frame_on_foot(&mut self, dt: f32) {
+        let before = self.player.as_ref().map(|p| p.uid);
+        on_foot(crate::on_foot::OnFootCx::of(&mut self.parts()), dt);
+        if before != self.player.as_ref().map(|p| p.uid) {
+            // Common arguments are read-only inside a stage context.
+            self.sync_driven_duty_args();
+        }
+    }
+
     /// The LAN session (a stage of its own: a joining player's bus is loaded here, and that
     /// frame was counted as the people's).
     pub(super) fn frame_lan(&mut self, dt: f32) {

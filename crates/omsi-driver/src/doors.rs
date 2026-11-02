@@ -2,12 +2,12 @@
 
 use super::*;
 
-pub(crate) use omsi_sim::door_keys::{door_keys, door_trigger_target, trigger_leaves};
+pub use omsi_sim::door_keys::{door_keys, door_trigger_target, trigger_leaves};
 
 /// Which triggers of a door key's group to fire so that its leaves end up together: when
 /// any is open (by its target), only the open ones (to close them), else all. Toggling
 /// every leaf of a group made a closed leaf open while an open one closed.
-pub(crate) fn door_group_to_fire(v: &mut omsi_sim::VehicleInstance, group: &[String]) -> Vec<String> {
+pub fn door_group_to_fire(v: &mut omsi_sim::VehicleInstance, group: &[String]) -> Vec<String> {
     let fire = door_group_plan(v, group);
     if fire.len() < 2 {
         return fire;
@@ -42,7 +42,7 @@ pub(crate) fn door_group_to_fire(v: &mut omsi_sim::VehicleInstance, group: &[Str
 /// `bus_doorfront1` names the rear doors' target (`doorTarget_23`, for a bus whose rear
 /// door the front buttons work) before its own leaf's, so with both front leaves open
 /// the second Shift+1 shut only one of them.
-pub(crate) fn door_trigger_open(v: &mut omsi_sim::VehicleInstance, name: &str) -> Option<bool> {
+pub fn door_trigger_open(v: &mut omsi_sim::VehicleInstance, name: &str) -> Option<bool> {
     let targets: Vec<usize> = v
         .ty
         .program
@@ -95,7 +95,7 @@ fn door_group_plan(v: &mut omsi_sim::VehicleInstance, group: &[String]) -> Vec<S
 
 /// `Digit1`..`Digit9` as 1..9 (`Digit0` and the numpad digits are left for whatever
 /// `Inputs/keyboard.cfg` already puts on them).
-pub(crate) fn digit_of(code: KeyCode) -> Option<usize> {
+pub fn digit_of(code: KeyCode) -> Option<usize> {
     Some(match code {
         KeyCode::Digit1 => 1,
         KeyCode::Digit2 => 2,
@@ -111,4 +111,4 @@ pub(crate) fn digit_of(code: KeyCode) -> Option<usize> {
 }
 
 // (the game's own door actions by name live with the controllers: `omsi-input`)
-pub(crate) use omsi_input::actions::door_action;
+pub use omsi_input::actions::door_action;

@@ -268,6 +268,7 @@ impl Schedule {
                 && b.stops.front().map(|st| st.ri == 0 && (st.s - s).abs() < 2.0).unwrap_or(false);
             b.put_out = b.layover;
             b.route_open = end < slots.len();
+            b.waiting_tile = steps.get(end).and_then(|s| s.key.map(|k| k.tile));
             b.terminus = terminus.clone();
             b.last_stop = last_stop;
             b.always = always;

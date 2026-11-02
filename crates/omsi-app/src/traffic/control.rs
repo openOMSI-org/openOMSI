@@ -74,6 +74,7 @@ impl Traffic {
     /// Take a car off the road now (the player took over its tour); its renders follow with
     /// `view_sync::apply_traffic`.
     pub fn remove_car(&mut self, id: u64) -> bool {
+        if self.sim.occupied_by_player == Some(id) { return false; }
         let Some(c) = self.sim.take_off_id(id, omsi_sim::ai_traffic::control::Removal::TakenOver) else {
             return false;
         };

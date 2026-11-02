@@ -253,6 +253,12 @@ impl TextTextureState {
         Self { def, atlas, last_text: None, pending: None }
     }
 
+    /// A new render has no uploaded pixels, even when the script text is unchanged.
+    pub fn invalidate_upload(&mut self) {
+        self.last_text = None;
+        self.pending = None;
+    }
+
     /// Re-render when the string variable changed. Returns true when a new image is pending.
     pub fn update(&mut self, text: &str) -> bool {
         if self.last_text.as_deref() == Some(text) {
@@ -289,6 +295,18 @@ mod tests {
             chars: vec![omsi_content::font::FontChar { ch: 'A', x0: 0, x1: 1, y: 0 }],
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn unchanged_destination_is_uploaded_again_after_render_replacement() {
+        let mut texture = TextTextureState::new(TextTexture::default(), None);
+        assert!(texture.update("137 Falkensee"));
+        texture.pending.take();
+        assert!(!texture.update("137 Falkensee"));
+        texture.invalidate_upload();
+        assert!(texture.update("137 Falkensee"));
+        assert!(texture.pending.is_some());
+        assert!(!texture.update("137 Falkensee"));
     }
 
     #[test]

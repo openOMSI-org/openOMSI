@@ -3,7 +3,7 @@
 use super::*;
 
 // (moved to `app_impl` with the methods they serve; kept reachable at their old path)
-pub(crate) use crate::app_impl::{cab_look_yaw, chase_orbit_step, ease_look, gate_gear_var, look_key_is, look_key_of, on_server, reset_blend, swap_view_look};
+pub(crate) use crate::app_impl::{cab_look_yaw, chase_orbit_step, ease_look, look_key_is, look_key_of, on_server, reset_blend, swap_view_look};
 
 
 // (the game's own action names live with the controllers: `omsi-input`)

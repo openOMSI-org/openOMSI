@@ -17,7 +17,7 @@ impl Player {
     ///
     /// From outside, a switch behind another part of the bus cannot be reached through it
     /// ([`Self::reach`]); from the cab nothing hides one, as in Omsi.exe.
-    pub(crate) fn pick(&self, origin: DVec3, dir: Vec3, spread: f32) -> Option<usize> {
+    pub fn pick(&self, origin: DVec3, dir: Vec3, spread: f32) -> Option<usize> {
         let (i, centre) = pick_in(&self.vehicle, origin, dir, spread, self.reach(origin, dir))?;
         if !centre && self.occlude_controls && self.control_hidden(origin, dir, None, i) {
             return None;
@@ -41,20 +41,20 @@ impl Player {
 
     /// The page (`[htmltexture]`, or a script texture an `.opl` plugin draws) under a ray and
     /// where it lands on it: the script texture index and `u`/`v` from 0 to 1, `v` down.
-    pub(crate) fn html_hit(&self, origin: DVec3, dir: Vec3, plugins: &omsi_plugin::TexturePointer) -> Option<(usize, f32, f32)> {
+    pub fn html_hit(&self, origin: DVec3, dir: Vec3, plugins: &omsi_plugin::TexturePointer) -> Option<(usize, f32, f32)> {
         pick_html_in(&self.vehicle, origin, dir, &plugins.pages)
     }
 
     /// A press, release or move on a page. What the page does with it (`omsi.setVar`,
     /// `omsi.trigger`) reaches the bus at once; on a plugin's texture it waits for the plugin.
-    pub(crate) fn html_pointer(&mut self, page: usize, u: f32, v: f32, kind: omsi_sim::htmltex::PointerKind, plugins: &mut omsi_plugin::TexturePointer) -> bool {
+    pub fn html_pointer(&mut self, page: usize, u: f32, v: f32, kind: omsi_sim::htmltex::PointerKind, plugins: &mut omsi_plugin::TexturePointer) -> bool {
         use omsi_sim::htmltex::PointerKind as K;
         let k = match kind { K::Down => omsi_plugin::POINTER_DOWN, K::Move => omsi_plugin::POINTER_MOVE, K::Up => omsi_plugin::POINTER_UP };
         plugins.push(page, k, u, v) || self.vehicle.html_pointer(page, u, v, kind)
     }
 
     /// The same forgiving pick as `pick`, for the coupled sections of an articulated bus.
-    pub(crate) fn pick_trailer(&self, origin: DVec3, dir: Vec3, spread: f32) -> Option<(usize, usize)> {
+    pub fn pick_trailer(&self, origin: DVec3, dir: Vec3, spread: f32) -> Option<(usize, usize)> {
         let ((ti, i), centre) = pick_trailer_in(&self.vehicle, origin, dir, spread, self.reach(origin, dir))?;
         if !centre && self.occlude_controls && self.control_hidden(origin, dir, Some(ti), i) {
             return None;
@@ -65,7 +65,7 @@ impl Player {
     /// Exact surface under a VR pointer, including meshes without a mouse event.
     /// This runs when the mouse moves, not for every headset frame.
     #[cfg_attr(not(windows), allow(dead_code))]
-    pub(crate) fn surface_hit(&self, origin: DVec3, dir: Vec3) -> Option<DVec3> {
+    pub fn surface_hit(&self, origin: DVec3, dir: Vec3) -> Option<DVec3> {
         let (mut nearest, nearest_control) = self.nearest_hits(origin, dir);
         if nearest_control.is_finite() { nearest = nearest_control; }
         (nearest.is_finite() && nearest < 8.0)
@@ -73,12 +73,12 @@ impl Player {
     }
 
     /// How far along a ray the bus (any visible mesh, trailers too) is.
-    pub(crate) fn body_hit(&self, origin: DVec3, dir: Vec3) -> Option<f32> {
+    pub fn body_hit(&self, origin: DVec3, dir: Vec3) -> Option<f32> {
         Some(self.nearest_hits(origin, dir).0).filter(|t| t.is_finite())
     }
 
     /// Whether a mesh of the vehicle is glass / transparent (windows, windshield).
-    pub(crate) fn is_mesh_glass(&self, trailer: Option<usize>, i: usize) -> bool {
+    pub fn is_mesh_glass(&self, trailer: Option<usize>, i: usize) -> bool {
         let (ty, def_idx) = match trailer {
             None => (&self.vehicle.ty, self.vehicle.ty.meshes[i].def_index),
             Some(ti) => (&self.vehicle.trailers[ti].ty, self.vehicle.trailers[ti].ty.meshes[i].def_index),
@@ -92,7 +92,7 @@ impl Player {
     }
 
     /// How far along a ray the nearest opaque (non-glass) body part of the vehicle is.
-    pub(crate) fn opaque_body_hit(&self, origin: DVec3, dir: Vec3) -> Option<f32> {
+    pub fn opaque_body_hit(&self, origin: DVec3, dir: Vec3) -> Option<f32> {
         let mut nearest = f32::INFINITY;
         let o = (origin - self.vehicle.position).as_vec3();
         for (i, mesh) in self.vehicle.ty.meshes.iter().enumerate() {
@@ -185,7 +185,7 @@ impl Player {
     /// "this is not a control" from "the cursor is not hitting anything".
     /// The flag beside it: a `[mouseevent]` mesh is under the ray, named or not - Omsi.exe
     /// shows the hand cursor over any of them (0x6f34c0 @0x6f45b4).
-    pub(crate) fn hovered_part(&self, origin: DVec3, dir: Vec3, spread: f32) -> (Option<(String, bool)>, bool) {
+    pub fn hovered_part(&self, origin: DVec3, dir: Vec3, spread: f32) -> (Option<(String, bool)>, bool) {
         if let Some(i) = self.pick(origin, dir, spread) {
             let def = &self.vehicle.ty.model.meshes[self.vehicle.ty.meshes[i].def_index];
             if let Some(ev) = def.mouse_event.clone() {
@@ -236,7 +236,7 @@ impl Player {
         Some((name, false))
     }
 
-    pub(crate) fn click(&mut self, origin: DVec3, dir: Vec3, spread: f32) -> Option<usize> {
+    pub fn click(&mut self, origin: DVec3, dir: Vec3, spread: f32) -> Option<usize> {
         self.release();
         if let Some(i) = self.pick(origin, dir, spread) {
             let ev = self.vehicle.ty.model.meshes[self.vehicle.ty.meshes[i].def_index]
@@ -300,7 +300,7 @@ impl Player {
     /// Mouse moved with the button down on a switch: OMSI fires `<event>_drag` with the
     /// movement in `mouse_x` / `mouse_y`, which is how the rotary knobs, the sun blind, the
     /// driver's window and the ignition key are operated.
-    pub(crate) fn drag(&mut self, dx: f32, dy: f32) {
+    pub fn drag(&mut self, dx: f32, dy: f32) {
         let (ev, trailer) = if let Some(i) = self.pressed_mesh {
             let Some(ev) = self.vehicle.ty.model.meshes[self.vehicle.ty.meshes[i].def_index]
                 .mouse_event
@@ -331,7 +331,7 @@ impl Player {
 
     /// One notch of the mouse wheel over a switch: `<event>_drag` with the notch as the
     /// movement, and the `_off` the script expects when the hand lets go again.
-    pub(crate) fn wheel(&mut self, origin: DVec3, dir: Vec3, spread: f32, amount: f32) {
+    pub fn wheel(&mut self, origin: DVec3, dir: Vec3, spread: f32, amount: f32) {
         let Some(i) = self.pick(origin, dir, spread) else {
             return;
         };
@@ -353,7 +353,7 @@ impl Player {
     /// The left button let go while the right one is held: Omsi.exe sends no `_off`, so a
     /// momentary switch stays where the hand left it (a pedal held down for the steering
     /// column's adjustment, #769) until it is clicked and let go again.
-    pub(crate) fn release_keeping(&mut self) {
+    pub fn release_keeping(&mut self) {
         if let Some(i) = self.pressed_mesh.take() {
             let def = &self.vehicle.ty.model.meshes[self.vehicle.ty.meshes[i].def_index];
             log::info!("mouse event {:?}: let go with the right button held, the switch stays", def.mouse_event);
@@ -361,28 +361,28 @@ impl Player {
         self.pressed_trailer_mesh = None;
     }
 
-    pub(crate) fn release(&mut self) {
+    pub fn release(&mut self) {
         self.release_mouse(true);
     }
 
     /// Precise headset manipulation must stop at the current value, including a
     /// tiny drag or no movement. Ordinary press/release button triggers still run.
-    pub(crate) fn release_precise(&mut self) {
+    pub fn release_precise(&mut self) {
         self.release_mouse(false);
         self.cancel_auto_drag();
     }
 
-    pub(crate) fn click_precise(&mut self, origin: DVec3, dir: Vec3, spread: f32) -> Option<usize> {
+    pub fn click_precise(&mut self, origin: DVec3, dir: Vec3, spread: f32) -> Option<usize> {
         self.release_precise();
         self.click(origin, dir, spread)
     }
 
-    pub(crate) fn wheel_precise(&mut self, origin: DVec3, dir: Vec3, spread: f32, amount: f32) {
+    pub fn wheel_precise(&mut self, origin: DVec3, dir: Vec3, spread: f32, amount: f32) {
         self.cancel_auto_drag();
         self.wheel(origin, dir, spread, amount);
     }
 
-    pub(crate) fn release_for_menu(&mut self, vr_active: bool) {
+    pub fn release_for_menu(&mut self, vr_active: bool) {
         if vr_active { self.release_precise(); } else { self.release(); }
     }
 
@@ -437,9 +437,9 @@ fn auto_drag_click(event: &str, plain: bool, movement: f32) -> bool {
 
 #[cfg(test)]
 mod roller_blind_tests {
-    include!("../../../../tools/test-support/original_root.rs");
+    include!("../../../tools/test-support/original_root.rs");
     use super::auto_drag_click;
-    use crate::schedule::tests::script_test_vehicle;
+    use crate::test_support::script_test_vehicle;
 
     /// A blind as the stock cab scripts build it: the drag moves it while the hand holds
     /// it, the ratchet (`rastpos`) remembers the lowest point, and once let go the frame
@@ -571,7 +571,7 @@ mod roller_blind_tests {
 
 /// See `Player::auto_drag`.
 #[derive(Debug, Clone)]
-pub(crate) struct AutoDrag {
+pub struct AutoDrag {
     ev: String,
     var: String,
     target: f32,
@@ -585,7 +585,7 @@ pub(crate) struct AutoDrag {
 
 impl Player {
     /// Drag a clicked drag-only control (see `auto_drag`) a step towards its other end.
-    pub(crate) fn tick_auto_drag(&mut self, dt: f32) {
+    pub fn tick_auto_drag(&mut self, dt: f32) {
         let Some(mut a) = self.auto_drag.take() else { return };
         let now = self.vehicle.var(&a.var).unwrap_or(a.last);
         a.t += dt;

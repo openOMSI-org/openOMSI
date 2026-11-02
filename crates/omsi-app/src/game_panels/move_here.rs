@@ -24,12 +24,15 @@ pub(crate) fn panel(at: glam::DVec3, pal: Palette) -> Panel {
 
 /// A click of the map camera on the ground: the question.
 pub(crate) fn ask(app: &mut crate::App, at: glam::DVec3) {
-    app.menus.game_panels.move_to = Some(at);
+    app.menus.game_panels.move_to = (app.player.is_some()
+        && (!app.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client)
+            || app.net.dedicated_teleport.is_some()))
+        .then_some(at);
 }
 
 pub(crate) fn click(app: &mut crate::App, id: &str) {
     let Some(at) = app.menus.game_panels.move_to.take() else { return };
-    if id != "yes" {
+    if id != "yes" || app.player.is_none() {
         return;
     }
     let Some(heading) = app.camera.as_ref().map(|c| c.yaw as f64).or_else(|| app.player.as_ref().map(|p| p.vehicle.heading)) else { return };
@@ -38,3 +41,6 @@ pub(crate) fn click(app: &mut crate::App, id: &str) {
         app.service_event("teleport", "player", None);
     }
 }
+
+#[cfg(test)]
+mod tests;

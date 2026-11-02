@@ -9,7 +9,7 @@ impl Player {
     /// in neutral at a standstill, the next gear up once the engine turns well above its idle
     /// (later the more throttle), and the next down when it falls back towards it. The
     /// clutch is worked as for a shift by key.
-    pub(crate) fn tick_auto_shift(&mut self, dt: f32, throttle: f32, brake: f32) {
+    pub fn tick_auto_shift(&mut self, dt: f32, throttle: f32, brake: f32) {
         self.auto_shift_wait = (self.auto_shift_wait - dt).max(0.0);
         let read = self.script_gate_gear();
         if self.gates.tick(dt, read) {

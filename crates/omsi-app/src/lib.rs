@@ -13,7 +13,7 @@
 
 mod admin;
 mod admin_panel;
-mod auto_announce;
+use omsi_driver::auto_announce;
 mod player_list;
 mod voice_chat;
 use omsi_scene::check;
@@ -45,7 +45,6 @@ use omsi_platform::presence;
 use omsi_soundscape::ambience;
 mod soundscape;
 use omsi_scene::wheel_surface;
-use omsi_scene::camera_arm;
 use omsi_vehicle::cam_approach;
 use omsi_career::career;
 use omsi_input::describe;
@@ -79,7 +78,7 @@ mod radio;
 use omsi_scene::puddles;
 use omsi_platform::quit;
 use omsi_weather::condensation;
-use omsi_scene::{rain, window_wipers};
+use omsi_scene::rain;
 mod scene;
 mod season_phase;
 mod schedule;
@@ -116,7 +115,7 @@ mod app_events;
 mod bus_service;
 mod camera_util;
 // the game controllers, their mappings and force feedback (`omsi-input`), at their old paths
-use omsi_input::{controllers, gamepad_profile, hpattern};
+use omsi_input::{controllers, gamepad_profile};
 mod cli;
 use omsi_input::diagnostics;
 mod perf_overlay;
@@ -133,6 +132,7 @@ mod memory;
 mod offscreen;
 pub(crate) use omsi_sim::ground_gap;
 mod on_foot;
+mod vehicle_handover;
 mod trolley_hands;
 mod trolley_mouse;
 pub(crate) mod trolley_net;
@@ -679,6 +679,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
         camera: None,
         player: None,
         session: SessionState {
+            handed_over: Default::default(),
             placed: Vec::new(),
             scenery: Default::default(),
             traffic: None,
@@ -1000,6 +1001,23 @@ mod locale_tests {
         ] {
             let translated = super::_rust_i18n_try_translate("zh-tw", key).map(|text| text.into_owned());
             assert!(translated.as_ref().is_some_and(|text| !text.trim().is_empty() && text != key), "zh-tw: {key}");
+        }
+    }
+
+    #[test]
+    fn handover_messages_are_translated_in_every_supported_locale() {
+        let start = super::_LOCALES.find("\"Hand bus to AI\":").unwrap();
+        let end = start + super::_LOCALES[start..].find("\"Connection chance\":").unwrap();
+        let keys: Vec<_> = super::_LOCALES[start..end]
+            .lines()
+            .filter_map(|line| line.strip_prefix('\"').and_then(|key| key.strip_suffix("\":")))
+            .collect();
+        assert_eq!(keys.len(), 37);
+        for language in super::_rust_i18n_available_locales().into_iter().filter(|lang| lang != "en") {
+            for key in &keys {
+                let translated = super::_rust_i18n_try_translate(&language, key).map(|text| text.into_owned());
+                assert!(translated.as_deref().is_some_and(|text| !text.trim().is_empty() && text != *key), "{language}: {key}");
+            }
         }
     }
 

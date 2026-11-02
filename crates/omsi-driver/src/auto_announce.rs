@@ -60,7 +60,7 @@ struct Want {
 
 /// The announcements of one bus, a frame at a time.
 #[derive(Default)]
-pub(crate) struct AutoAnnounce {
+pub struct AutoAnnounce {
     /// The trip of the last frame (0-based) and whether the bus stood at its stop. The first
     /// frame sets them; a bus spawned standing at a stop announces it as it would any other,
     /// since that is where it stands (and nothing is pressed where the counter is too far
@@ -92,13 +92,13 @@ pub(crate) struct AutoAnnounce {
 }
 
 impl AutoAnnounce {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self::default()
     }
 
     /// One frame of the player's duty, after it was updated: `now` is the seconds of play
     /// (`SimClock::run_time`, which never wraps - a night line runs past midnight).
-    pub(crate) fn step(&mut self, d: &PlayerDuty, bus: &mut VehicleInstance, now: f64) {
+    pub fn step(&mut self, d: &PlayerDuty, bus: &mut VehicleInstance, now: f64) {
         if self.off {
             return;
         }

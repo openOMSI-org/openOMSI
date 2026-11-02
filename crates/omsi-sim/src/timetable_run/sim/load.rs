@@ -252,6 +252,7 @@ impl ScheduleSim {
             trip_departures,
             boards_made: f64::NEG_INFINITY,
             player_tour: None,
+            retained_reservations: Vec::new(),
             player_departure: None,
             purge_player_tour: false,
             lan_tours: HashSet::new(),

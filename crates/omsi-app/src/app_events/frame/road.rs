@@ -19,6 +19,8 @@ pub(super) fn traffic(cx: TrafficCx, dt: f32) {
         cx.gfx.renderer.as_ref(),
         cx.gfx.scene.as_mut(),
     ) {
+        t.sim.occupied_by_player = cx.people.on_foot.as_ref().and_then(|f| f.seat.map(|b| b.0).or_else(|| f.inside.map(|b| b.0)).or_else(|| f.transit.and_then(|t| t.after.map(|b| b.0))))
+            .and_then(|b| match b { crate::humans::BusId::Ai(id) => Some(id), _ => None });
         let center = cx.player.player
             .as_ref()
             .map(|p| p.vehicle.position)
@@ -70,6 +72,8 @@ pub(super) fn traffic(cx: TrafficCx, dt: f32) {
             // (the first look goes with the first population: the trips under way are put
             // out at the start)
             if (first || (s.tick_t <= 0.0 && !heavy)) && !*cx.clock.paused {
+                s.set_retained_reservations(cx.player.placed.iter()
+                    .filter_map(|p| p.parked_duty.as_ref()?.reservation.clone()).collect());
                 s.tick_t = if s.pending() > 0 { 0.1 } else { 2.0 };
                 heavy = true;
                 steps::set_keep_clear(t, cx.player.player.as_ref(), &cx.net.remotes);

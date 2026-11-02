@@ -191,6 +191,7 @@ impl VehicleInstance {
 
     /// Run one simulation frame: physics, scripts, then animations.
     pub fn update(&mut self, dt: f32) {
+        self.release_ai_commands();
         self.host.clock.advance(dt);
         self.step_physics(dt);
         self.update_ground_probe();
@@ -237,6 +238,7 @@ impl VehicleInstance {
     /// Run the scripts' frame once with no time passing (no physics, no clock): what a
     /// switch just pressed makes of the variables the scripts derive from it.
     pub fn update_scripts_only(&mut self, _dt: f32) {
+        self.release_ai_commands();
         crate::timetable_run::apply_pending_destination(self);
         let p = self.ty.program.clone();
         let gap = self.host.clock.timegap;
