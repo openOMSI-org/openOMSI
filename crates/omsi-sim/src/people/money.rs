@@ -239,7 +239,8 @@ impl Money {
 
     pub fn coin_worth(&self, coin: usize, worth: f32) -> usize {
         let have = self.value_of(&[coin]);
-        if worth <= 0.0 || (have - worth).abs() < 0.001 || (have > 0.0 && (have / worth).max(worth / have) > 5.0) {
+        let note = self.currency.as_ref().and_then(|c| c.bills.iter().map(|b| b.1).filter(|v| *v > 0.0).reduce(f32::min)).is_some_and(|b| worth >= b - 0.001);
+        if worth <= 0.0 || (have - worth).abs() < 0.001 || (!note && have > 0.0 && (have / worth).max(worth / have) > 5.0) {
             return coin;
         }
         self.denominations().into_iter().find(|(_, v)| (v - worth).abs() < 0.001).map_or(coin, |(i, _)| i)
@@ -316,10 +317,17 @@ mod tests {
     #[test]
     fn a_change_key_named_in_another_currency_keeps_the_scripts_coin() {
         let m = money_with_currency(&[0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0], &[100.0]);
-        assert_eq!(m.coin_worth(6, 0.1), 6, "10 Kc on a key named 0.10");
-        assert_eq!(m.coin_worth(7, 0.2), 7);
-        assert_eq!(m.coin_worth(8, 0.5), 8);
+        assert_eq!(m.coin_worth(6, 0.05), 6, "10 Kc on a key named 0.05");
+        assert_eq!(m.coin_worth(7, 0.1), 7, "20 Kc on a key named 0.10");
+        assert_eq!(m.coin_worth(8, 0.5), 8, "50 Kc on a key named 0.50");
         assert_eq!(m.coin_worth(3, 1.0), 3);
+    }
+
+    #[test]
+    fn a_note_key_gives_the_note_whatever_coin_the_script_names() {
+        let m = money_with_currency(&[0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 0.1, 0.2, 0.5, 1.0, 2.0], &[5.0, 10.0, 20.0]);
+        assert_eq!(m.coin_worth(6, 5.0), 11, "a doubled coin list: index 6 is a second 0.10");
+        assert_eq!(m.coin_worth(7, 10.0), 12);
     }
 
     fn money_with_currency(coins: &[f32], bills: &[f32]) -> Money {
