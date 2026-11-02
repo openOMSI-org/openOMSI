@@ -732,5 +732,7 @@ mod tests {
         assert_eq!(mesh_shown(1, true), (true, true), "the outside, in the mirrors only");
         assert_eq!(mesh_shown(3, true), (true, false));
         assert_eq!(mesh_shown(4, true), (false, false), "the AI stand-in, not from inside");
+        assert_eq!(mesh_shown(1, false), (false, false));
+        assert_eq!(mesh_shown(5, true), (true, true), "outside and AI: in the mirrors only");
     }
 }

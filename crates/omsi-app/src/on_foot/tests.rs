@@ -139,6 +139,12 @@ fn an_ai_bus_is_ridden_from_its_inside_only_in_the_walkers_own_eyes() {
     f.settle = 0.5;
     assert_eq!(f.ridden_ai(), None, "still settling");
     f.settle = 0.0;
+    f.seat = None;
+    f.transit = Some(Transit::walk(DVec3::ZERO, DVec3::X, Some((BusId::Ai(7), glam::Vec3::ZERO))));
+    assert_eq!(f.ridden_ai(), Some(7), "walking up the aisle");
+    f.transit = Some(Transit::walk(DVec3::ZERO, DVec3::X, None));
+    assert_eq!(f.ridden_ai(), None, "stepping out");
+    f.transit = None;
     f.seat = Some((BusId::Player, 2));
     assert_eq!(f.ridden_ai(), None, "the own bus");
 }
