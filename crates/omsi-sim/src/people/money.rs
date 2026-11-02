@@ -238,7 +238,8 @@ impl Money {
     }
 
     pub fn coin_worth(&self, coin: usize, worth: f32) -> usize {
-        if worth <= 0.0 || (self.value_of(&[coin]) - worth).abs() < 0.001 {
+        let have = self.value_of(&[coin]);
+        if worth <= 0.0 || (have - worth).abs() < 0.001 || (have > 0.0 && (have / worth).max(worth / have) > 5.0) {
             return coin;
         }
         self.denominations().into_iter().find(|(_, v)| (v - worth).abs() < 0.001).map_or(coin, |(i, _)| i)
@@ -310,6 +311,15 @@ mod tests {
         assert_eq!(m.coin_worth(2, 0.0), 2);
         assert_eq!(m.coin_worth(5, 5.0), 6);
         assert_eq!(m.coin_worth(5, 0.3), 5);
+    }
+
+    #[test]
+    fn a_change_key_named_in_another_currency_keeps_the_scripts_coin() {
+        let m = money_with_currency(&[0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0], &[100.0]);
+        assert_eq!(m.coin_worth(6, 0.1), 6, "10 Kc on a key named 0.10");
+        assert_eq!(m.coin_worth(7, 0.2), 7);
+        assert_eq!(m.coin_worth(8, 0.5), 8);
+        assert_eq!(m.coin_worth(3, 1.0), 3);
     }
 
     fn money_with_currency(coins: &[f32], bills: &[f32]) -> Money {
