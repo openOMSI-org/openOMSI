@@ -52,6 +52,7 @@ pub(crate) enum ListKind {
     Tours(String, Option<(String, usize, usize)>),
     Drivers,
     Numbers,
+    Liveries,
     /// The vehicles placed in the world, to take the wheel of one of them (#2026).
     SwitchTo,
     /// The termini of the bus's depot file, for its destination display.
@@ -76,7 +77,7 @@ pub(crate) enum ListKind {
 /// The lists with a search line on top: the vehicles to place, the depot files and the
 /// destinations.
 pub(crate) fn searchable(kind: &ListKind) -> bool {
-    matches!(kind, ListKind::Hofs | ListKind::Destinations | ListKind::PlaceMaker | ListKind::PlaceType(_) | ListKind::PlaceHof(..) | ListKind::AdminPlayers)
+    matches!(kind, ListKind::Hofs | ListKind::Liveries | ListKind::Destinations | ListKind::PlaceMaker | ListKind::PlaceType(_) | ListKind::PlaceHof(..) | ListKind::AdminPlayers)
 }
 
 /// The search typed (while it is) or set for the open list.
@@ -776,6 +777,16 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
                 out.push((tr("This bus has no list of fleet numbers"), "back".into()));
             }
         }
+        ListKind::Liveries => {
+            if let Some(p) = app.player.as_ref() {
+                let now = p.vehicle.host.paint_scheme.flatten();
+                let mark = |on: bool, name: String| if on { format!("● {name}") } else { name };
+                out.push((mark(now.is_none(), tr("Default paint")), "livery -1".into()));
+                for (i, s) in p.vehicle.ty.paint_schemes.iter().enumerate() {
+                    out.push((mark(now == Some(i), s.name.clone()), format!("livery {i}")));
+                }
+            }
+        }
     }
     if searchable(kind) {
         let query = search_query(app);
@@ -897,6 +908,7 @@ pub(crate) fn menu_extras(
         }
         ListKind::Drivers => (MenuKind::List, head("Driver..."), None),
         ListKind::Numbers => (MenuKind::List, head("Fleet number..."), None),
+        ListKind::Liveries => (MenuKind::List, head("Livery..."), None),
         ListKind::SwitchTo => (MenuKind::List, head("Drive another vehicle..."), None),
         ListKind::Destinations => (MenuKind::List, head("Destination display..."), None),
         ListKind::RouteNumbers => (MenuKind::List, Some((tr("Route number"), String::new())), None),
@@ -1202,6 +1214,12 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                 app.switch_vehicle_to(k);
             }
             None
+        }
+        ListKind::Liveries => {
+            if let Ok(i) = arg.trim().parse::<i64>() {
+                app.repaint_driven(usize::try_from(i).ok());
+            }
+            Some(kind.clone())
         }
         ListKind::Numbers => {
             if let (Some((n, reg)), Some(p)) = (arg.split_once('\u{1}'), app.player.as_mut()) {
