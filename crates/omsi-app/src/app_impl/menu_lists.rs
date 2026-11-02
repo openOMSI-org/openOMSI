@@ -171,10 +171,7 @@ impl App {
             _ => None,
         };
         match code {
-            KeyCode::Escape => {
-                self.menus.menu_edit = None;
-                crate::platform::text_input(self.window.as_deref(), false);
-            }
+            KeyCode::Escape => self.menus.menu_edit = None,
             KeyCode::Backspace | KeyCode::Delete => {
                 if let Some(d) = self.menus.menu_edit.as_mut() {
                     d.pop();
@@ -228,7 +225,10 @@ impl App {
     /// physical key codes remain a fallback for platforms that do not provide text.
     fn route_edit_key(&mut self, code: KeyCode) {
         match code {
-            KeyCode::Escape => self.menus.menu_edit = None,
+            KeyCode::Escape => {
+                self.menus.menu_edit = None;
+                crate::platform::text_input(self.window.as_deref(), false);
+            }
             KeyCode::Backspace | KeyCode::Delete => {
                 if let Some(t) = self.menus.menu_edit.as_mut() {
                     t.pop();
@@ -332,6 +332,7 @@ impl App {
         }
         self.menus.key_capture = None;
         self.menus.dropdown = None;
+        if self.menus.menu_edit.is_some() { crate::platform::text_input(self.window.as_deref(),false); }
         if self.menus.menu_edit_icao { crate::platform::text_input(self.window.as_deref(),false); }
         self.menus.menu_edit_icao=false;
         if self.menus.menu_edit_number { crate::platform::text_input(self.window.as_deref(),false); }
