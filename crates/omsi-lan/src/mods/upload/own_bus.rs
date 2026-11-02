@@ -105,6 +105,7 @@ impl OwnBus {
         };
         let fingerprint = manifest.fingerprint();
         log::info!("bus identity: {bus} ({paint}) is {fingerprint}: {} files, {:.1} MB", manifest.entries.len(), manifest.size() as f64 / 1e6);
+        crate::mods::host_bus::compare(bus, paint, &manifest.entries);
         *self.fp.lock().unwrap_or_else(|e| e.into_inner()) = (key.clone(), fingerprint.clone());
         self.failed.lock().unwrap_or_else(|e| e.into_inner()).clear();
         *guard = Some(Own { key, manifest: manifest.clone(), fingerprint: fingerprint.clone(), files: files.clone() });

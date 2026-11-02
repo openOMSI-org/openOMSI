@@ -40,6 +40,7 @@ mod budget;
 mod bus_files;
 mod channel;
 pub(crate) mod failure;
+mod host_bus;
 pub mod identity;
 mod paced;
 mod pieces;
@@ -926,10 +927,11 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
     // The ordinary LIST remains the default for player-hosted/legacy sessions
     // that did not request server fleet downloads.
     let manifest = request_mod_manifest(&mut conn, selected_request.as_deref().unwrap_or("LIST"))?;
-    if let (Some((bus, _)), Some(_)) = (selected.as_ref(), selected_request.as_ref()) {
+    if let (Some((bus, paint)), Some(_)) = (selected.as_ref(), selected_request.as_ref()) {
         if !omsi_net::vehicle_path(bus).is_some_and(|v| v.eq_ignore_ascii_case(&manifest.bus)) {
             return Err("host returned the wrong selected bus package".into());
         }
+        host_bus::remember(bus, paint, &manifest.entries);
     }
     let (raw, out, input) = conn;
     if manifest.entries.len() > MAX_FILES {
