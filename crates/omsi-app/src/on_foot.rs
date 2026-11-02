@@ -1290,7 +1290,7 @@ pub(crate) fn tick(cx: &mut OnFootCx, dt: f32) {
     }
     // riding, the view is fixed to the bus, not to the world: it turns with the bus (the
     // walker's own look stays an offset from the bus's heading)
-    let riding = f.inside.or_else(|| f.seat.and_then(|(b, k)| cx.people.humans.as_ref()?.seat_stand(b, k).map(|l| (b, l))));
+    let riding = f.inside.or_else(|| f.seat.and_then(|(b, k)| cx.people.humans.as_ref()?.seat_floor(b, k).map(|l| (b, l))));
     let bus_heading = riding.and_then(|(b, l)| cx.people.humans.as_ref()?.cabin_world(b, l).map(|(_, h)| (b, h)));
     turn_with_bus(&mut f, bus_heading);
     // the camera, out of the eyes (the free camera moves by itself)

@@ -391,6 +391,11 @@ impl PeopleSim {
             .map(|x| x.0)
     }
 
+    /// Where seat `seat` of bus `bus` has its floor (cabin frame).
+    pub fn seat_floor(&self, bus: BusId, seat: usize) -> Option<Vec3> {
+        self.last_buses.iter().find(|b| b.id == bus)?.cabin.seats.get(seat).map(|s| s.floor)
+    }
+
     /// The cabin path point nearest seat `seat` of bus `bus` (where one stands up to).
     pub fn seat_stand(&self, bus: BusId, seat: usize) -> Option<Vec3> {
         let bn = self.last_buses.iter().find(|b| b.id == bus)?;

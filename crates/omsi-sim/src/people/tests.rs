@@ -404,6 +404,8 @@ fn articulated_cabins_are_joined_through_the_bellows() {
     });
     assert!((people.cabin_world(BusId::Player, behind_joint).unwrap().1 - bent).abs() < 1e-9);
     assert!(people.cabin_world(BusId::Player, Vec3::new(1.0, -1.0, 0.5)).unwrap().1.abs() < 1e-9);
+    let rear_seat = people.seat_floor(BusId::Player, 1).unwrap();
+    assert!((people.cabin_world(BusId::Player, rear_seat).unwrap().1 - bent).abs() < 1e-9);
 }
 
 /// The SD200's footsteps as its paths.cfg gives them to the links (#311): the stairs
