@@ -275,7 +275,7 @@ pub(crate) struct Player {
     pub(crate) trolley_view: Option<Box<omsi_scene::trolley_view::TrolleyView>>,
     /// The sparks of a rail vehicle's pantograph (see `omsi_scene::arc_fx`).
     pub(crate) panto_fx: omsi_scene::arc_fx::ArcFx,
-    pub(crate) trolley_sound: crate::trolley_sound::TrolleySound,
+    pub(crate) trolley_sound: omsi_audio::trolley::TrolleySound,
     /// The stop announcements the game presses the IBIS on for (see `auto_announce`).
     pub(crate) announce: crate::auto_announce::AutoAnnounce,
 }
