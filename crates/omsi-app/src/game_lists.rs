@@ -203,7 +203,7 @@ pub(crate) fn route_keeps_blind(route: &str) -> bool {
 
 pub(crate) fn form_route(v: &omsi_sim::VehicleInstance, pick: Option<&crate::schedule::BlindPick>) -> String {
     let blind = crate::schedule::has_roller_blind(v).then(|| pick.map(|p| p.line.trim().to_string()).unwrap_or_else(|| v.str_var("SetLineTo").trim().to_string()));
-    blind.filter(|l| !l.is_empty() && !numeric_ibis_line(l)).unwrap_or_else(|| destination_line(v))
+    [blind, Some(v.str_var("Matrix_Nr").trim().to_string())].into_iter().flatten().find(|l| !l.is_empty() && !numeric_ibis_line(l)).unwrap_or_else(|| destination_line(v))
 }
 
 pub(crate) fn kept_blind_line(shown: &str, keep: bool) -> Option<String> {
@@ -1373,7 +1373,10 @@ mod tests {
         assert_eq!(route, "92A");
         assert!(super::route_keeps_blind(&route));
         assert_eq!(super::kept_blind_line(&blind.str_var("SetLineTo"), super::route_keeps_blind(&route)), Some("92A".into()));
-        assert_eq!(super::form_route(&v, None), super::destination_line(&v), "no roller blind: the form offers the IBIS's line");
+        set_str(&mut v, "Matrix_Nr", "92A");
+        assert_eq!(super::form_route(&v, None), "92A", "a matrix showing 92A: the form offers it, not the IBIS's 145");
+        set_str(&mut v, "Matrix_Nr", "");
+        assert_eq!(super::form_route(&v, None), super::destination_line(&v), "nothing lettered shown: the form offers the IBIS's line");
         set_str(&mut blind, "SetLineTo", " 41");
         let pending = crate::schedule::BlindPick { row: 2, line: "92A".into() };
         assert_eq!(super::form_route(&blind, Some(&pending)), "92A", "a bus still off: the pick waiting for it, not what the IBIS wrote");
