@@ -8,6 +8,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **Mouse steering keeps the system cursor in the window**: with *Hold the cursor while steering*
+  off, the cursor is the system's own (no frame of delay) and now stays inside the game window
+  while the mouse steers, so a hard turn no longer lets it slip onto another screen (Windows and
+  Linux; macOS keeps it free as before).
 - **Place the bus facing the way you want**: on the city map, Ctrl+drag from the place towards
   the way the bus should face (a plain Ctrl+click keeps the nearest street's direction); in the
   map camera (F4), Ctrl+click puts the bus on the street facing the way the camera looks, as in
