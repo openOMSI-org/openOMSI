@@ -51,7 +51,8 @@ impl App {
             .unwrap_or([0.0, 0.0, 1.0, 1.0]);
         // (not under the open game menu: the pause menu's rail covers the left
         // edge, and the navigator's panel stood out from under it)
-        let nav_hidden = !vr_active && self.menus.game_menu.is_some();
+        let clean = self.clean_screen_shown();
+        let nav_hidden = (!vr_active && self.menus.game_menu.is_some()) || clean;
         // (a plugin's panel for the navigator's board, as tall as it was laid out last: the
         // navigator makes room for it and says where it goes - under its map, or the whole
         // frame for one that fills it, its map where the panel has it)
@@ -80,6 +81,11 @@ impl App {
             }
         }
         self.frame_ui_draw(dt, hud, vr_active, plugin_focus, &notes, tooltip, menu_lines, menu_tabs);
+        if clean {
+            if let Some(scene) = self.scene.as_mut() {
+                scene.overlays.clear();
+            }
+        }
         // the loading screen fading over the first pictures, over all of the interface
         self.frame_loading_fade();
         // the pause menu, drawn with the launcher's toolkit over all of it
@@ -99,7 +105,7 @@ impl App {
         let mut say = |key: String, text: String, kind: NoticeKind| said.push((key, text, kind));
         // why the bus is not moving, whenever the throttle is pressed and nothing
         // happens: the things a driver checks first
-        if let Some(p) = self.player.as_ref() {
+        if let Some(p) = self.player.as_ref().filter(|_| self.settings.notes_driving) {
             for t in standing_reasons(&p.vehicle, &|a| crate::diagnostics::rebound_key(&p.bindings, a)) {
                 say(note_key(&t), t, NoticeKind::Action);
             }
@@ -107,7 +113,7 @@ impl App {
         // the latest `$msg` of the player's bus scripts, which OMSI writes on the screen: a
         // note while the script keeps saying it and for a few seconds after (AI vehicles'
         // messages are not shown)
-        let script_says = self.player.as_ref().and_then(|p| p.vehicle.host.fresh_message(SCRIPT_MESSAGE_SECS));
+        let script_says = self.player.as_ref().filter(|_| self.settings.notes_script).and_then(|p| p.vehicle.host.fresh_message(SCRIPT_MESSAGE_SECS));
         // (one note whose text follows the script: a value it prints changes every frame)
         if let Some(text) = script_says {
             say("bus script message".to_string(), text.to_string(), NoticeKind::Info);
@@ -123,7 +129,7 @@ impl App {
         if self.menus.editor.is_some() {
             lines.push("Object editor: click picks | drag moves | wheel turns (Shift lifts) | Del | C copy | V variant | Backspace undo | Ctrl+S save | Esc".into());
         }
-        if let Some(d) = self.session.duty.as_ref().filter(|d| d.trip_done()) {
+        if let Some(d) = self.session.duty.as_ref().filter(|d| d.trip_done() && self.settings.notes_trip) {
             let text = match d.trips.get(d.trip_index + 1) {
                 Some(next) => format!(
                     "End of the trip. Next: {} to {}, from {} at {} (it starts by itself a minute before)",
@@ -173,7 +179,7 @@ impl App {
                 }
             }
         }
-        if let Some(h) = self.session.humans.as_ref() {
+        if let Some(h) = self.session.humans.as_ref().filter(|_| self.settings.notes_tickets) {
             if let Some(hint) = h.hint() {
                 say(hint.clone(), hint, NoticeKind::Action);
             } else if let Some((name, value)) = &h.request {
@@ -360,13 +366,13 @@ impl App {
             nav.opacity = old_opacity;
             self.perf.profile.add(crate::profile_keys::ProfKey::HudNavigator, __tn.elapsed().as_secs_f64());
             // OMSI 2's dynamic route arrows over the junctions ahead
-            if nav.arrows {
+            if nav.arrows && self.photo.is_none() {
                 if let Some(w) = self.world.as_ref() {
                     let spots = nav.arrow_spots(self.session.traffic.as_ref().map(|t| &t.net), 350.0, &|id| w.data.peek().objects.get(&id).map(|p| (p.0, p.1[0])));
                     self.gfx.route_arrows.tick(dt, w, r, scene, &spots);
                 }
             } else if self.gfx.route_arrows.any() {
-                // (switched off in the menu: the ones standing go too)
+                // (switched off in the menu or out of the photo: the ones standing go too)
                 if let Some(w) = self.world.as_ref() {
                     self.gfx.route_arrows.clear(w, r, scene);
                 }

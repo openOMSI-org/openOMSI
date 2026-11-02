@@ -141,11 +141,15 @@ pub fn places_off(v: &VehicleInstance, cabin: &Cabin) -> Vec<bool> {
 /// The occupancy variables of the places of bus `bn` that name one (#721), and whether
 /// somebody is on each: a rider at that place (`sitting`: the places of its riders there).
 pub fn places_taken(bn: &BusNow, sitting: &[(BusId, usize)]) -> Vec<(String, bool)> {
+    places_taken_in(bn, &sitting.iter().copied().collect())
+}
+
+pub fn places_taken_in(bn: &BusNow, occupied: &HashSet<(BusId, usize)>) -> Vec<(String, bool)> {
     bn.cabin
         .seats
         .iter()
         .enumerate()
-        .filter_map(|(k, s)| s.taken_var.as_ref().map(|n| (n.clone(), sitting.contains(&(bn.id, k)))))
+        .filter_map(|(k, s)| s.taken_var.as_ref().map(|n| (n.clone(), occupied.contains(&(bn.id, k)))))
         .collect()
 }
 
@@ -153,22 +157,40 @@ pub fn places_taken(bn: &BusNow, sitting: &[(BusId, usize)]) -> Vec<(String, boo
 /// of the people `at` (inside a bus and where in its frame, or where in the world), its
 /// riders and those outside close enough to it.
 pub fn doorways_taken(bn: &BusNow, at: &[(Option<BusId>, DVec3)]) -> (Vec<bool>, Vec<bool>) {
+    doorways_taken_partitioned(
+        bn,
+        at.iter().filter_map(|(bus, pos)| (*bus == Some(bn.id)).then_some(pos)),
+        at.iter().filter_map(|(bus, pos)| bus.is_none().then_some(pos)),
+    )
+}
+
+pub fn door_reach(bn: &BusNow) -> f64 {
+    // (beyond the bus's own length round its origin nobody outside can be in a doorway)
+    bn.half.length() + bn.centre.length() + bn.trailers.iter().map(|t| t.offset.length() as f64).fold(0.0, f64::max) + 2.0
+}
+
+pub fn doorways_taken_partitioned<'a>(
+    bn: &BusNow,
+    aboard: impl IntoIterator<Item = &'a DVec3>,
+    outside: impl IntoIterator<Item = &'a DVec3>,
+) -> (Vec<bool>, Vec<bool>) {
     let mut entries = vec![false; bn.cabin.entries.len()];
     let mut exits = vec![false; bn.cabin.exits.len()];
-    // (beyond the bus's own length round its origin nobody outside can be in a doorway)
-    let reach = bn.half.length() + bn.centre.length() + bn.trailers.iter().map(|t| t.offset.length() as f64).fold(0.0, f64::max) + 2.0;
-    for (inside, pos) in at {
-        let local = match inside {
-            Some(b) if *b == bn.id => pos.as_vec3(),
-            Some(_) => continue,
-            None if (*pos - bn.pos).truncate().length() < reach => bn.to_local(*pos),
-            None => continue,
-        };
+    let reach = door_reach(bn);
+    let mut mark = |local: Vec3| {
         for (k, d) in bn.cabin.entries.iter().enumerate() {
             entries[k] |= d.in_doorway(local);
         }
         for (k, d) in bn.cabin.exits.iter().enumerate() {
             exits[k] |= d.in_doorway(local);
+        }
+    };
+    for pos in aboard {
+        mark(pos.as_vec3());
+    }
+    for pos in outside {
+        if (*pos - bn.pos).truncate().length() < reach {
+            mark(bn.to_local(*pos));
         }
     }
     (entries, exits)

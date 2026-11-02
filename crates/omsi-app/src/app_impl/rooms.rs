@@ -173,6 +173,7 @@ impl App {
     }
 
     fn load_room(&mut self, room: PreparedJoin) {
+        self.settle_depot_switch(true);
         let mut args = self.args.clone();
         args.lan_host = None;
         args.lan_join = Some(room.target().to_string());

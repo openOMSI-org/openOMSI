@@ -367,10 +367,10 @@ impl VehicleInstance {
                 let r = ws.radius.max(0.05);
                 ws.rotation_deg =
                     (ws.rotation_deg + (ds * travel / r).to_degrees()).rem_euclid(360.0);
+                ws.turned += ds * travel / r;
                 ws.rpm = ai.speed * travel / (std::f32::consts::TAU * r) * 60.0;
-                let (rotation, rpm, suspension) =
-                    (ws.rotation_deg.to_radians(), ws.rpm, ws.suspension);
-                self.put(w[0], rotation);
+                let (rpm, suspension) = (ws.rpm, ws.suspension);
+                self.put_turn(w[0], ai_idx, si);
                 self.put(w[1], rpm);
                 self.put(w[2], steer);
                 // the travel `AiBody` works out on its springs, about the static sag of an AI

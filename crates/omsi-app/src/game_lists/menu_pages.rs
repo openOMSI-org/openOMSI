@@ -14,6 +14,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
     let game: Vec<(String, String)> = vec![
         switch_row(app, "navigator", "Navigator", "Enables/Disables the Minimap"),
         switch_row(app, "nav_ai", "AI vehicles on the map", "Shows/hides the other (AI) vehicles on the Minimap and the city map"),
+        switch_row(app, "nav_ai_cars", "Cars on the map too", "Off: only the traffic's buses and trolleybuses are shown on the maps, not the cars").filter(|_| s.nav_ai),
         switch_row(app, "nav_surface", "Map surface under the roads", "Shows the map's ground, water, woods, houses and paved surfaces on the Minimap and the city map (and the map's package, when it has one)"),
         switch_row(app, "nav_classic_2d", "Classic 2D navigator", "A lightweight top-down route map with streets and vehicles, without detailed surfaces, buildings or shadows"),
         switch_row(app, "nav_3d", "3D buildings on the map", "The houses stand in 3D with their shadows on the Minimap, and the city map tilts into 3D when zoomed in"),
@@ -93,64 +94,8 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         ),
     ];
     // (the rig's own settings only while it is on)
-    let triple = vec![
-        switch_row(
-            app,
-            "triple_hud_center",
-            "HUD on centre screen",
-            "Keep the navigator, menus and information on the centre screen",
-        ),
-        switch_row(
-            app,
-            "triple_span",
-            "Span three monitors at startup",
-            "Borderless across three equal monitors in one horizontal row; restart required",
-        ),
-        slider_row(
-            app,
-            "triple_width_mm",
-            "Visible panel width",
-            "Width of one screen without its frame",
-            &|v| format!("{v:.0} mm"),
-        ),
-        slider_row(
-            app,
-            "triple_distance_mm",
-            "Eye distance",
-            "Eye to the centre screen",
-            &|v| format!("{v:.0} mm"),
-        ),
-        slider_row(
-            app,
-            "triple_bezel_mm",
-            "Frame width at each join",
-            "Combined width of both adjacent frames",
-            &|v| format!("{v:.0} mm"),
-        ),
-        slider_row(
-            app,
-            "triple_left_angle_deg",
-            "Left screen angle",
-            "Inward angle from a flat row",
-            &|v| format!("{v:.0}°"),
-        ),
-        slider_row(
-            app,
-            "triple_right_angle_deg",
-            "Right screen angle",
-            "Inward angle from a flat row",
-            &|v| format!("{v:.0}°"),
-        ),
-        slider_row(
-            app,
-            "triple_eye_height_mm",
-            "Eye above screen centre",
-            "Vertical eye offset",
-            &|v| format!("{v:.0} mm"),
-        ),
-    ];
     if app.settings.triple.enabled {
-        display.extend(triple);
+        display.extend(triple_rows(app));
     }
     let display: Vec<(String, String)> = display.into_iter().chain([
         switch_row(app, "vsync", "V-sync", "Waits for the screen's refresh"),
@@ -275,6 +220,10 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         slider_row(app, "ui_opacity", "Interface opacity", "How much of the interface's backgrounds shows", &pct),
         switch_row(app, "tooltips", "Name of the button under the mouse", "Shows the name of what the cursor points at"),
         switch_row(app, "notes", "Driving hints", "Why the vehicle does not move, the change due, what a service did: as short notifications"),
+        switch_row(app, "notes_driving", "Notes: why the bus does not move", "The handbrake, the engine, a door: what keeps the bus standing").filter(|_| s.notes),
+        switch_row(app, "notes_script", "Notes: the bus's own messages", "What the bus's scripts write on the screen, the announcements among them").filter(|_| s.notes),
+        switch_row(app, "notes_trip", "Notes: the end of a trip", "The trip's end and the next one").filter(|_| s.notes),
+        switch_row(app, "notes_tickets", "Notes: tickets and change", "What a passenger asks for, what they paid and the change due").filter(|_| s.notes),
         switch_row(app, "chat", "Chat in online games", "Shows the chat of a LAN session"),
         slider_row(app, "chat_size", "Chat size", "The chat's texts on top of the interface size (also Ctrl + the mouse wheel over the chat)", &pct),
         switch_row(app, "name_tags", "Other players' names above their buses", "Shows the names of the other players"),
@@ -722,5 +671,64 @@ fn head_tracking_rows(app: &App, pct: &dyn Fn(f32) -> String) -> Vec<Option<(Str
         switch_row(app, "head_tracking_invert_x", "Invert TrackIR X", "Reverse left / right head movement"),
         switch_row(app, "head_tracking_invert_y", "Invert TrackIR Y", "Reverse up / down head movement"),
         switch_row(app, "head_tracking_invert_z", "Invert TrackIR Z", "Reverse forward / back head movement"),
+    ]
+}
+
+fn triple_rows(app: &App) -> Vec<Option<(String, String)>> {
+    vec![
+        switch_row(
+            app,
+            "triple_hud_center",
+            "HUD on centre screen",
+            "Keep the navigator, menus and information on the centre screen",
+        ),
+        switch_row(
+            app,
+            "triple_span",
+            "Span three monitors at startup",
+            "Borderless across three equal monitors in one horizontal row; restart required",
+        ),
+        slider_row(
+            app,
+            "triple_width_mm",
+            "Visible panel width",
+            "Width of one screen without its frame",
+            &|v| format!("{v:.0} mm"),
+        ),
+        slider_row(
+            app,
+            "triple_distance_mm",
+            "Eye distance",
+            "Eye to the centre screen",
+            &|v| format!("{v:.0} mm"),
+        ),
+        slider_row(
+            app,
+            "triple_bezel_mm",
+            "Frame width at each join",
+            "Combined width of both adjacent frames",
+            &|v| format!("{v:.0} mm"),
+        ),
+        slider_row(
+            app,
+            "triple_left_angle_deg",
+            "Left screen angle",
+            "Inward angle from a flat row",
+            &|v| format!("{v:.0}°"),
+        ),
+        slider_row(
+            app,
+            "triple_right_angle_deg",
+            "Right screen angle",
+            "Inward angle from a flat row",
+            &|v| format!("{v:.0}°"),
+        ),
+        slider_row(
+            app,
+            "triple_eye_height_mm",
+            "Eye above screen centre",
+            "Vertical eye offset",
+            &|v| format!("{v:.0} mm"),
+        ),
     ]
 }

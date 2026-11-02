@@ -84,6 +84,7 @@ pub struct TrailerPart {
     pub(super) v_alpha: Option<omsi_script::VarId>,
     pub(super) v_beta: Option<omsi_script::VarId>,
     pub(super) odometer: f32,
+    pub(super) turned_put: f32,
     /// Placed by another game (a LAN player's rear section, `set_remote_pose`): it stays
     /// where that game has it, and is not walked on behind its coupling here.
     pub(super) remote: bool,
@@ -368,6 +369,7 @@ impl TrailerPart {
             first_axle,
             wheel_radius,
             odometer: 0.0,
+            turned_put: 0.0,
             remote: false,
             reversed,
             text_textures: Vec::new(),
@@ -859,7 +861,9 @@ impl TrailerPart {
         let rpm =
             main.physics.velocity_kmh() / 3.6 / (2.0 * std::f32::consts::PI * self.wheel_radius)
                 * 60.0;
-        let rot = (self.odometer / self.wheel_radius).rem_euclid(std::f32::consts::TAU);
+        let turned = self.odometer / self.wheel_radius;
+        let step = turned - self.turned_put;
+        self.turned_put = turned;
         for a in 0..self.axle_count {
             let steer = self.axle_steer(a);
             for side in 0..2 {
@@ -867,7 +871,7 @@ impl TrailerPart {
                     main.state.vars[id as usize] = s;
                 }
                 if let Some(id) = self.axle_ids.rotation[a][side] {
-                    main.state.vars[id as usize] = rot;
+                    main.state.vars[id as usize] += step;
                 }
                 if let Some(id) = self.axle_ids.rotation_speed[a][side] {
                     main.state.vars[id as usize] = rpm;
