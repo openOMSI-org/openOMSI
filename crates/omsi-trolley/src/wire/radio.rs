@@ -8,6 +8,7 @@ impl WireNet {
             && horizontal(self.nodes[switch.node as usize].pos - pos).length_squared() <= (switch.radio_range as f64).powi(2)
     }
 
+    /// Send a radio request now to every matching receiver in horizontal range; the number moved.
     pub fn receive_radio(&self, pos: DVec3, request: &SwitchRequest) -> usize {
         let mut dynamic = self.dynamic.lock().unwrap();
         let mut changed = 0;

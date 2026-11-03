@@ -101,7 +101,12 @@ the constants are in the vehicle's file, not in the game.
 * **Arcs and sound.** Where current is broken - the shoe leaving the wire, a pole coming off,
   an insulator or a frog crossed under power - an arc burns `L I^2 / 2` of the motor circuit's
   inductance (12 mH): the game draws a flash with sparks, lights the wire and the roof and
-  cracks. Coasting through an insulator strikes none; power on through it a loud one. The
+  cracks. Coasting through an insulator strikes none; power on through it a loud one. A frog
+  or an insulator crossed with more than 3 A (a coasting bus's auxiliaries often draw more)
+  arcs every time by default; a map's `[trolley_net]` can make those arcs rarer, weaker or need
+  more current (`frog_arc_*`, `insulator_arc_*` below). The chance is drawn per frog crossing
+  and per insulator entry and exit, from the vehicle's seed (repeatable). Arcs of a shoe
+  leaving the wire (see `roughness`) and of a pole coming off are not affected. The
   shoes hiss on the wire, louder with the current and the speed (a loop with the rectifier's
   300 Hz ripple); the contactors click, a shoe landing on the wire and a pole on its hook
   thud, a frog clatters. The sounds are made in the game unless the vehicle or the map gives
@@ -156,6 +161,9 @@ roughness 0.0012       unevenness of the contact wire (m); worn or icy wire: 0.0
 frog_arc_chance 1      chance (0..1) that a frog crossed under current arcs; 0: never
 frog_arc_scale 1       multiplier of a frog arc's energy (0..10): its flash and crack
 frog_arc_min_amps 3    least current (A) a frog crossing arcs with
+insulator_arc_chance 1    the same for each entry into and exit from a section insulator
+insulator_arc_scale 1
+insulator_arc_min_amps 3
 
 [trolley_section]
 id 1
@@ -326,8 +334,8 @@ The gear makes six sounds of its own, from noise and decaying tones (no files):
 | switch mechanism | the selected leg actually changes, not when a shoe crosses it | - (map-owned) | `switch` |
 
 The built-in hiss is located at each touching shoe, not the bus
-centre. Their maximum gain is 0.035: beyond 1 m a steep fade is added to the normal distance
-falloff, and they are completely silent at 5 m and beyond. They are also silent in the cab.
+centre. Its maximum gain is 0.035: beyond 1 m a steep fade is added to the normal distance
+falloff, and it is completely silent at 5 m and beyond. It is also silent in the cab.
 A bus-authored `sound.cfg` hiss keeps its own volume, viewpoint and 3-D settings; old sliding
 loops should not be played over the native hiss as well.
 

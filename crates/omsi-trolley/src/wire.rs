@@ -12,8 +12,10 @@ use glam::DVec3;
 use hashbrown::HashMap;
 use std::sync::Mutex;
 
+mod arcs;
 mod radio;
 mod sounds;
+pub use arcs::ArcRule;
 pub use sounds::{SoundChoice, WireSounds};
 
 /// Where a shoe's contact point lies: on this span, this far (m) from its first point, on the
@@ -247,10 +249,9 @@ pub struct WireNet {
     /// How uneven the contact wire is (m): wear, ice, dirt. The shoe leaves it where it rises
     /// faster than the pole can follow.
     pub roughness: f32,
-    /// Of a frog crossed above `frog_arc_min_amps` (A): the chance it arcs and its energy's scale.
-    pub frog_arc_chance: f32,
-    pub frog_arc_scale: f32,
-    pub frog_arc_min_amps: f32,
+    /// When a shoe crossing a frog, or entering or leaving a section insulator, under current arcs.
+    pub frog_arc: ArcRule,
+    pub insulator_arc: ArcRule,
     /// The wire was read off splines the map draws itself: the game draws no wire of its own.
     pub drawn_by_map: bool,
     /// `[trolley_sounds]`: the overhead line's sounds, and the folder their files are in.
@@ -323,6 +324,7 @@ impl WireNet {
     /// frog_arc_chance 1      chance a frog crossed under current arcs (0..1)
     /// frog_arc_scale 1       scale of a frog arc's energy
     /// frog_arc_min_amps 3    least current a frog arcs with (A)
+    /// insulator_arc_chance 1 the same for each entry into and exit from an insulator
     ///
     /// [trolley_section]
     /// id 1
@@ -355,7 +357,7 @@ impl WireNet {
         let mut nominal = 600.0f32;
         let mut spacing = 0.6f32;
         let mut roughness = 0.0012f32;
-        let (mut frog_arc_chance, mut frog_arc_scale, mut frog_arc_min_amps) = (1.0f32, 1.0f32, 3.0f32);
+        let (mut frog_arc, mut insulator_arc) = (ArcRule::default(), ArcRule::default());
         let mut sections: Vec<Section> = Vec::new();
         struct RawSpan {
             section: i32,
@@ -413,10 +415,13 @@ impl WireNet {
                     "voltage" => nominal = n.first().copied().unwrap_or(600.0).clamp(100.0, 3000.0) as f32,
                     "spacing" => spacing = n.first().copied().unwrap_or(0.6).clamp(0.2, 2.0) as f32,
                     "roughness" => roughness = n.first().copied().unwrap_or(0.0012).clamp(0.0, 0.05) as f32,
-                    "frog_arc_chance" => frog_arc_chance = n.first().copied().filter(|x| x.is_finite()).unwrap_or(1.0).clamp(0.0, 1.0) as f32,
-                    "frog_arc_scale" => frog_arc_scale = n.first().copied().filter(|x| x.is_finite()).unwrap_or(1.0).clamp(0.0, 10.0) as f32,
-                    "frog_arc_min_amps" => frog_arc_min_amps = n.first().copied().filter(|x| x.is_finite()).unwrap_or(3.0).clamp(0.0, 2000.0) as f32,
-                    _ => {}
+                    other => {
+                        if let Some(rest) = other.strip_prefix("frog_arc_") {
+                            frog_arc.set(rest, n.first().copied());
+                        } else if let Some(rest) = other.strip_prefix("insulator_arc_") {
+                            insulator_arc.set(rest, n.first().copied());
+                        }
+                    }
                 },
                 "trolley_section" => {
                     if let Some(s) = sec.as_mut() {
@@ -495,9 +500,8 @@ impl WireNet {
         let mut net = WireNet {
             nominal_volts: nominal,
             roughness,
-            frog_arc_chance,
-            frog_arc_scale,
-            frog_arc_min_amps,
+            frog_arc,
+            insulator_arc,
             drawn_by_map: false,
             sounds,
             dir: None,

@@ -5,7 +5,7 @@
 use crate::def::TrolleyDef;
 use crate::pole::{rotate_tip_pub, Pole, PoleEvent, PoleEventKind, PoleMode, PoseSpan, Rope, G};
 use crate::traction::{Traction, TractionIn, TractionOut};
-use crate::wire::{Contact, SwitchRequest, WireNet};
+use crate::wire::{ArcRule, Contact, SwitchRequest, WireNet};
 use glam::{DMat3, DVec3, Vec3};
 
 /// Inductance of the motor circuit and its choke (H): the energy `L I^2 / 2` of the current
@@ -169,6 +169,11 @@ impl TrolleyRig {
         self.rng ^= self.rng >> 7;
         self.rng ^= self.rng << 17;
         (self.rng >> 40) as f32 / (1u64 << 24) as f32
+    }
+
+    /// Whether a crossing with `amps` arcs under the map's `rule` (no draw at chance 1).
+    fn strikes(&mut self, rule: ArcRule, amps: f32) -> bool {
+        amps > rule.min_amps && (rule.chance >= 1.0 || self.rand() < rule.chance)
     }
 
     /// The wire side a pole of `side` takes where the span's tangent is `t`, for a vehicle
@@ -384,19 +389,19 @@ impl TrolleyRig {
                     self.sounds.push(RigSound::Thud(0.5));
                 }
                 PoleEventKind::GapEntered => {
-                    if live {
-                        self.spark(e.pos, ind(a), a, SparkKind::Insulator);
+                    if self.strikes(net.insulator_arc, a) {
+                        self.spark(e.pos, net.insulator_arc.scale * ind(a), a, SparkKind::Insulator);
                     }
                 }
                 PoleEventKind::GapLeft => {
-                    if live {
-                        self.spark(e.pos, a * 60.0 * 0.002, a, SparkKind::Insulator);
+                    if self.strikes(net.insulator_arc, a) {
+                        self.spark(e.pos, net.insulator_arc.scale * a * 60.0 * 0.002, a, SparkKind::Insulator);
                     }
                 }
                 PoleEventKind::FrogPassed { .. } => {
                     self.sounds.push(RigSound::Frog);
-                    if a > net.frog_arc_min_amps && (net.frog_arc_chance >= 1.0 || self.rand() < net.frog_arc_chance) {
-                        self.spark(e.pos, net.frog_arc_scale * (0.15 * ind(a) + 0.5 * a), a, SparkKind::Frog);
+                    if self.strikes(net.frog_arc, a) {
+                        self.spark(e.pos, net.frog_arc.scale * (0.15 * ind(a) + 0.5 * a), a, SparkKind::Frog);
                     }
                 }
                 PoleEventKind::Plate { switch } => {
@@ -670,8 +675,8 @@ mod tests {
     }
 
     #[test]
-    fn frog_arcs_follow_the_net_settings() {
-        let frogs = |settings: &str, amps: f32| {
+    fn frog_and_insulator_arcs_follow_the_net_settings() {
+        let arcs = |settings: &str, kind: PoleEventKind, amps: f32| {
             let net = WireNet::parse(&format!("[trolley_net]\n{settings}\n[trolley_span]\np 0 0 5.5\np 50 0 5.5\n"));
             let mut rig = TrolleyRig::new(&def(), 7);
             let input = RigInput {
@@ -683,17 +688,21 @@ mod tests {
             let (mut count, mut energy) = (0, 0.0f32);
             for _ in 0..1000 {
                 rig.events.clear();
-                rig.events.push(PoleEvent { pole: 0, kind: PoleEventKind::FrogPassed { switch: 0, branch: false }, pos: DVec3::ZERO, amps });
+                rig.events.push(PoleEvent { pole: 0, kind, pos: DVec3::ZERO, amps });
                 rig.handle_events(&net, &input, amps);
+                let frog = matches!(kind, PoleEventKind::FrogPassed { .. });
                 for spark in rig.take_sparks() {
-                    assert_eq!(spark.kind, SparkKind::Frog);
+                    assert_eq!(spark.kind, if frog { SparkKind::Frog } else { SparkKind::Insulator });
                     count += 1;
                     energy = spark.energy;
                 }
-                assert!(rig.sounds.drain(..).any(|sound| sound == RigSound::Frog));
+                assert_eq!(rig.sounds.drain(..).any(|sound| sound == RigSound::Frog), frog);
             }
             (count, energy)
         };
+        let frogs = |settings: &str, amps: f32| arcs(settings, PoleEventKind::FrogPassed { switch: 0, branch: false }, amps);
+        let entries = |settings: &str, amps: f32| arcs(settings, PoleEventKind::GapEntered, amps);
+        let exits = |settings: &str, amps: f32| arcs(settings, PoleEventKind::GapLeft, amps);
         let (count, full) = frogs("", 100.0);
         assert_eq!(count, 1000);
         assert!((full - 59.0).abs() < 1e-3, "{full}");
@@ -707,6 +716,20 @@ mod tests {
         assert!((half - full / 2.0).abs() < 1e-3, "{half}");
         assert_eq!(frogs("frog_arc_min_amps 150", 100.0).0, 0);
         assert_eq!(frogs("frog_arc_min_amps 50", 100.0).0, 1000);
+        assert_eq!(frogs("insulator_arc_chance 0", 100.0).0, 1000);
+        let (count, entry) = entries("", 100.0);
+        assert_eq!(count, 1000);
+        assert!((entry - 60.0).abs() < 1e-3, "{entry}");
+        assert!((exits("", 100.0).1 - 12.0).abs() < 1e-3);
+        assert_eq!(entries("", 2.0).0, 0);
+        assert_eq!(entries("frog_arc_chance 0", 100.0).0, 1000);
+        assert_eq!(entries("insulator_arc_chance 0", 100.0).0, 0);
+        assert_eq!(exits("insulator_arc_chance 0", 100.0).0, 0);
+        let (some, _) = entries("insulator_arc_chance 0.25", 100.0);
+        assert!((150..350).contains(&some), "{some}");
+        assert!((entries("insulator_arc_scale 0.5", 100.0).1 - 30.0).abs() < 1e-3);
+        assert_eq!(entries("insulator_arc_min_amps 20", 13.0).0, 0);
+        assert_eq!(exits("insulator_arc_min_amps 20", 25.0).0, 1000);
     }
 
     #[test]
