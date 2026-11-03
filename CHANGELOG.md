@@ -1065,6 +1065,11 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   others' downloads wait their turn, and a piece packed is kept for the next player. A bus a
   player sends a dedicated server is packed at its smallest at once, in the background, so the
   others fetch it ready.
+- **A server's fleet bus is listed once, not once per player.** A player asking for a bus of
+  the server's fleet had the server load it and read every file of every paint again (the
+  seconds a bus takes in the fleet check), once for each paint asked for: many players at once
+  took every core. The list the fleet check made at the start is given instead, while the bus's
+  files are as they were; a list to make again is made by one request at a time.
 - **Multiplayer protocol 17.** A game of this version and a server of this version play
   together; older ones are turned away at the door, as at every protocol change.
 - **A dedicated server opens its web port at once, before checking its fleet.** With a
