@@ -280,7 +280,7 @@ pub(super) fn vehicle_pages(app: &App) -> Vec<Page> {
         display.push(opens("Destination display", "Change the current destination", "dest"));
         display.push(opens("Depot file (HOF)", "Change the current depot file (used for the timetable)", "hof"));
         display.push(opens("Fleet number", "Change the vehicle's current fleet number", "number"));
-        if !app.player.as_ref().unwrap().vehicle.ty.paint_schemes.is_empty() {
+        if app.net.lan.is_none() && !app.player.as_ref().unwrap().vehicle.ty.paint_schemes.is_empty() {
             display.push(opens("Livery", "Repaint the vehicle you drive where it stands: same bus, same passengers", "livery"));
         }
         display.push((row("Custom fleet number", if app.menus.menu_edit_number{'E'}else{'e'}, &typed_number, "Enter custom fleet number (not from the list)", None), "custom_number_edit".to_string()));

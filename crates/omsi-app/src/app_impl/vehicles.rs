@@ -59,13 +59,14 @@ impl App {
             return;
         }
         let render = w.add_vehicle(r, scene, &ty, scheme);
-        let trailers: Vec<_> = p.vehicle.trailers.iter().map(|t| w.add_vehicle_part(r, scene, &t.ty, scheme.filter(|i| *i < t.ty.paint_schemes.len()), &render)).collect();
-        let old = std::mem::replace(&mut p.render, render);
+        let own = p.vehicle.trailers.len().saturating_sub(p.hand_coupled);
+        let trailers: Vec<_> = p.vehicle.trailers.iter().enumerate().map(|(k, t)| w.add_vehicle_part(r, scene, &t.ty, scheme.filter(|i| k < own && *i < t.ty.paint_schemes.len()), &render)).collect();
+        let mut old = std::mem::replace(&mut p.render, render);
+        crate::view_sync::vehicle_damage::carry_damage(r, scene, &mut old, &mut p.render);
         w.release_vehicle(r, scene, old);
         for t in std::mem::replace(&mut p.trailer_renders, trailers) {
             w.release_vehicle(r, scene, t);
         }
-        p.finish_window_paints(r, scene);
         p.vehicle.text_textures.iter_mut().for_each(|t| t.last_text = None);
         p.vehicle.trailers.iter_mut().flat_map(|t| t.text_textures.iter_mut()).for_each(|t| t.last_text = None);
         p.vehicle.host.script_textures.iter_mut().for_each(|t| t.dirty = true);

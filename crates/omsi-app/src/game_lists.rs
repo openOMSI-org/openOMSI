@@ -787,16 +787,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
                 out.push((tr("This bus has no list of fleet numbers"), "back".into()));
             }
         }
-        ListKind::Liveries => {
-            if let Some(p) = app.player.as_ref() {
-                let now = p.vehicle.host.paint_scheme.flatten();
-                let mark = |on: bool, name: String| if on { format!("● {name}") } else { name };
-                out.push((mark(now.is_none(), tr("Default paint")), "livery -1".into()));
-                for (i, s) in p.vehicle.ty.paint_schemes.iter().enumerate() {
-                    out.push((mark(now == Some(i), s.name.clone()), format!("livery {i}")));
-                }
-            }
-        }
+        ListKind::Liveries => out.extend(app.player.iter().flat_map(|p| liveries::items(p.vehicle.host.paint_scheme.flatten(), &p.vehicle.ty.paint_schemes))),
     }
     if searchable(kind) {
         let query = search_query(app);
@@ -1227,8 +1218,8 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             None
         }
         ListKind::Liveries => {
-            if let Ok(i) = arg.trim().parse::<i64>() {
-                app.repaint_driven(usize::try_from(i).ok());
+            if let Some(scheme) = liveries::chosen(arg) {
+                app.repaint_driven(scheme);
             }
             Some(kind.clone())
         }
@@ -1282,6 +1273,7 @@ mod menu_pages;
 mod clock_lines;
 mod duty;
 mod graphics;
+mod liveries;
 pub(crate) use rows::*;
 pub(crate) use options::*;
 pub(crate) use dropdowns::*;
