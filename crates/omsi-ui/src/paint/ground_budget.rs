@@ -95,7 +95,6 @@ impl GroundBudget {
             grid.triangle(t);
         }
         if starting {
-            // The exact buffer is no longer needed; do not keep its capacity until finish.
             *exact = Vec::new();
         }
     }

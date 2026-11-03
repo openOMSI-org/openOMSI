@@ -533,6 +533,7 @@ mod tests {
         assert!(p.verts.iter().any(|v| v.pos[0] == 50.0 && v.pos[1] == 40.0));
         assert!(p.verts.iter().any(|v| v.pos[0] == 20.0 && v.pos[1] == 10.0));
     }
+
     #[test]
     fn a_remote_oversized_triangle_does_not_expand_local_candidates() {
         let mut l = Layers::empty(DVec2::ZERO);
@@ -541,15 +542,41 @@ mod tests {
             l.land[layers::LAND_GRASS].extend([a, a + Vec2::X, a + Vec2::Y]);
             l.paved[layers::PAVE_INNER].extend([a, a + Vec2::X, a + Vec2::Y]);
         }
-        let huge = [Vec2::splat(50_000.0), Vec2::new(150_000.0,50_000.0), Vec2::new(50_000.0,150_000.0)];
+        let huge = [
+            Vec2::splat(50_000.0),
+            Vec2::new(150_000.0, 50_000.0),
+            Vec2::new(50_000.0, 150_000.0),
+        ];
         l.land[layers::LAND_GRASS].extend(huge);
         l.paved[layers::PAVE_INNER].extend(huge);
         let md = MapData::new(std::sync::Arc::new(l));
         let mut p = Painter::new();
-        let look = GroundLook { surfaces: true, trees: false, dashes: false, tol: 0.0 };
-        md.build_land(&mut p,DVec2::ZERO,DVec2::ZERO,20.0,crate::style::palette(false),look);
-        md.build_paved(&mut p,DVec2::ZERO,DVec2::ZERO,20.0,crate::style::palette(false),look);
-        assert_eq!(p.verts.len(),6,"remote triangles must not be submitted by a local rebuild");
+        let look = GroundLook {
+            surfaces: true,
+            trees: false,
+            dashes: false,
+            tol: 0.0,
+        };
+        md.build_land(
+            &mut p,
+            DVec2::ZERO,
+            DVec2::ZERO,
+            20.0,
+            crate::style::palette(false),
+            look,
+        );
+        md.build_paved(
+            &mut p,
+            DVec2::ZERO,
+            DVec2::ZERO,
+            20.0,
+            crate::style::palette(false),
+            look,
+        );
+        assert_eq!(
+            p.verts.len(),
+            6,
+            "remote triangles must not be submitted by a local rebuild"
+        );
     }
-
 }
