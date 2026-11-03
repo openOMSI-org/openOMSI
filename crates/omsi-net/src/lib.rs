@@ -152,7 +152,10 @@ pub use wire::{
 /// 15: the AI traffic as a table of rows under ids (`traffic_table`: `TRAF` datagrams the
 /// client acknowledges with `TACK`), no longer cars in `WORLD` or `DESC|c|…`.
 /// 16: `REALM`: the hardware identifier is made for each host owner, not the same everywhere.
-pub const PROTOCOL: u32 = 16;
+/// 17: the timetable buses' fleet number, plate and depot file in `TRAF` (`meta numbers`),
+/// a server's world clock kept to the wall, people not taken from in front of a player: a
+/// game of 16 drew the map's buses without numbers and with another depot's signs.
+pub const PROTOCOL: u32 = 17;
 /// (omsi-plugin's `MULTIPLAYER_PORTS` keeps `omsi.send` off this one and the `PORT_RANGE` after it.)
 pub const DEFAULT_PORT: u16 = 27015;
 /// Ports a host tries after the default one when that is taken (a second session on the
@@ -652,7 +655,7 @@ impl WorldInfo {
 }
 
 /// `YYYY-MM-DD`, or empty for anything else.
-fn clean_date(s: &str) -> String {
+pub(crate) fn clean_date(s: &str) -> String {
     let v: Vec<&str> = s.trim().split('-').collect();
     let ok = v.len() == 3
         && v[0].len() == 4

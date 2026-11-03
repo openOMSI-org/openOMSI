@@ -1038,6 +1038,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   behind the day for good, silently: at half its steps, half a day's timetable in a day. It
   follows the wall now, at most twice as fast while it takes back what it lost; the physics
   still take their fixed steps, and the log says when the machine cannot keep up.
+- **The launcher shows a server's date** beside its time and weather (in the list and before
+  joining), from the server's status page (`date`); an older server shows none.
+- **Multiplayer protocol 17.** A game of this version and a server of this version play
+  together; older ones are turned away at the door, as at every protocol change.
 - **Voice chat, built in** - off until switched on (Settings → Sound → *Voice chat*, or the game
   menu's Sound page). Hold a talk key to speak: *nearby* (V) is heard by the players within
   the session's range (75 m by default) from where you stand, quieter with the distance and
