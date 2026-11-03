@@ -23,6 +23,7 @@ pub struct FfInput {
     pub vib_period: f32,
     /// `StreetCond` of the road under the wheels: 0 dry, 1 wet, 2 covered in snow.
     pub street_cond: f32,
+    pub surface: Option<u8>,
     /// The engine's speed (rpm; 0 while it is not running).
     pub engine_rpm: f32,
     /// How hard the engine is working (0..1).
@@ -31,6 +32,17 @@ pub struct FfInput {
     /// (see `Micro`); the caller leaves it at 0.
     pub micro: f32,
     pub dt: f32,
+}
+
+pub(super) fn surface_rumble(surface: Option<u8>) -> f32 {
+    match surface {
+        None | Some(1) | Some(6..) => 1.0,
+        Some(0) => 0.4,
+        Some(2) => 1.8,
+        Some(3) => 1.4,
+        Some(4) => 1.2,
+        Some(_) => 1.6,
+    }
 }
 
 /// How long (s) a jolt's or a script's vibration eases away once it stops, unless the
