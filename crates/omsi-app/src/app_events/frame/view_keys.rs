@@ -12,16 +12,8 @@ crate::app::stage_ctx!(
 /// The keys held this frame that turn the head, aim the mirrors, run the clock, zoom
 /// and fly the free camera.
 pub(super) fn view_keys(mut cx: ViewKeysCx, dt: f32) {
-    let free = cx.input.look_lock.is_none() && cx.input.mouse_grab.mode.is_none() && !cx.input.mouse_look;
     let size = cx.gfx.gfx.surface.as_ref().map(|s| (s.config.width, s.config.height));
-    let wanted = cx.common.settings.flashlight_cursor && cx.view.cam.flashlight && free && !cx.common.settings.vr_requested();
-    cx.view.cam.flashlight_aim = match (wanted, cx.view.camera.as_ref(), size) {
-        (true, Some(cam), Some(size)) => {
-            let rig = crate::app_impl::triple_rig(cx.common.settings, cx.view.cam, cx.view.view, size);
-            Some(cursor_ray(cam, rig.as_ref(), cx.input.cursor, size))
-        }
-        _ => None,
-    };
+    aim_flashlight(&mut cx, size);
     // looking around and zooming work in every view, not only the free camera
     crate::app_impl::sync_view_look(cx.view.cam, cx.view.view, cx.player.player.as_ref());
     zoom_hold_keys(&mut cx, dt);
@@ -156,6 +148,18 @@ pub(super) fn view_keys(mut cx: ViewKeysCx, dt: f32) {
         cx.view.cam.ego = false;
     }
     free_camera(&mut cx, dt);
+}
+
+fn aim_flashlight(cx: &mut ViewKeysCx, size: Option<(u32, u32)>) {
+    let free = cx.input.look_lock.is_none() && cx.input.mouse_grab.mode.is_none() && !cx.input.mouse_look && cx.input.cursor_hidden.is_none();
+    let wanted = cx.common.settings.flashlight_cursor && cx.view.cam.flashlight && free && !cx.common.settings.vr_requested();
+    cx.view.cam.flashlight_aim = match (wanted, cx.view.camera.as_ref(), size) {
+        (true, Some(cam), Some(size)) => {
+            let rig = crate::app_impl::triple_rig(cx.common.settings, cx.view.cam, cx.view.view, size);
+            Some(cursor_ray(cam, rig.as_ref(), cx.input.cursor, size))
+        }
+        _ => None,
+    };
 }
 
 fn zoom_hold_keys(cx: &mut ViewKeysCx, dt: f32) {
@@ -440,6 +444,28 @@ mod tests {
         app.input.pad_zoom_hold = false;
         frames(&mut app, 40);
         assert_eq!(app.cam.zoom_hold.factor, 1.0);
+    }
+
+    fn aim(app: &mut crate::App) -> Option<glam::Vec3> {
+        super::aim_flashlight(&mut super::ViewKeysCx::of(&mut app.parts()), Some((1920, 1080)));
+        app.cam.flashlight_aim
+    }
+
+    #[test]
+    fn the_flashlight_follows_only_a_shown_cursor() {
+        let mut app = app();
+        app.camera = Some(omsi_render::Camera { position: glam::DVec3::ZERO, yaw: 0.0, pitch: 0.0, roll: 0.0, fov_deg: 60.0, near: 0.1, far: 100.0 });
+        app.settings.flashlight_cursor = true;
+        app.cam.flashlight = true;
+        app.input.cursor = (100.0, 80.0);
+        let shown = aim(&mut app).expect("the beam follows the shown cursor");
+        let ahead = app.camera.as_ref().map(|c| c.forward()).unwrap_or_default();
+        assert!((shown - ahead).length() > 0.1);
+        app.input.cursor_hidden = Some(app.input.cursor);
+        assert_eq!(aim(&mut app), None);
+        app.input.cursor_hidden = None;
+        app.settings.flashlight_cursor = false;
+        assert_eq!(aim(&mut app), None);
     }
 }
 
