@@ -710,6 +710,11 @@ fn a_bus_that_does_not_come_is_stood_in_for_until_it_does() {
     v.asked_at(soon, std::time::Instant::now());
     v.set(soon, Wanted::Failed(Failure::NotHereYet));
     assert!(!v.hopeless(soon));
+    // a dedicated server that takes no uploads: its own bus stands in at once, never asked again
+    let own = "v1-hopeless-test-own-buses-only";
+    v.asked_at(own, std::time::Instant::now());
+    v.set(own, Wanted::Failed(Failure::OwnBusesOnly));
+    assert!(v.hopeless(own) && !may_retry(&Failure::OwnBusesOnly, std::time::Duration::from_secs(3600), 0));
     // on its way since long ago and not come: hopeless
     let late = "v1-hopeless-test-asked-long-ago";
     v.asked_at(late, long_ago);

@@ -405,7 +405,7 @@ pub fn world_info(args: &LanConfig) -> omsi_net::WorldInfo {
     }
 }
 
-pub use crate::gateway::{close_public_gateway, offers, open_public_gateway, server_offers, take_local_admin, tunnel_url, update_server_info, update_server_players, update_server_world};
+pub use crate::gateway::{close_public_gateway, offers, open_public_gateway, server_offers, take_local_admin, tunnel_url, update_server_fleet, update_server_info, update_server_players, update_server_world};
 use crate::gateway::{ask_server_offers, ws_came_back, ws_join_target};
 
 /// Host or join as the command line says (`--lan-host`, `--lan-join`). A session that
@@ -579,8 +579,12 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) -> Option<crate::m
         Role::Client => {
             // (a joining player notes what it reads: what its bus uses, `mods::upload`)
             omsi_cfg::vfs::record_reads(true);
+            local_fleet::wait_for_welcome(args, lan);
             let Some(mut host) = lan.host.filter(|_| lan.welcome.is_some()) else {
                 log::info!("LAN mods: no host to ask yet (its mods are not fetched)");
+                if local_fleet::needs_fleet_bus(args) && lan.rejected.is_none() {
+                    args.mod_fetch_error = Some("the server did not let this game in, so its bus could not be asked for: it may be busy admitting other players, try again in a minute".into());
+                }
                 return None;
             };
             let note = |lan: &mut LanSession, text: String| {
