@@ -733,6 +733,24 @@ mod tests {
     }
 
     #[test]
+    fn shoes_keep_contact_through_joints_and_frogs_under_power() {
+        let frog = "[trolley_span]\np -50 0 5.5\np 100 0 5.5\n[trolley_span]\np 100 0 5.5\np 400 0 5.5\n[trolley_span]\np 100 0 5.5\np 300 80 5.5\n";
+        let joint = "[trolley_span]\np -50 0 5.5\np 100 0 5.5\n[trolley_span]\np 100 0 5.5\np 400 0 5.5\n";
+        for (wire, roughness) in [(frog, "0"), (frog, "0.0012"), (joint, "0"), (joint, "0.0012")] {
+            let net = WireNet::parse(&format!("[trolley_net]\nroughness {roughness}\nfrog_arc_chance 0\n{wire}[trolley_switch]\npos 100 0 5.5\nmode fixed\n"));
+            let mut s = Sim::new();
+            s.raise_both(&net);
+            let mut sparks = Vec::new();
+            for _ in 0..(60 * 20) {
+                s.step(&net, if s.v < 8.0 { 1.0 } else { 0.4 }, 0.0, &[RopeCmd::Idle; 2]);
+                sparks.extend(s.rig.take_sparks().into_iter().map(|spark| (spark.kind, spark.pos.x.round())));
+            }
+            assert!(s.x > 150.0 && s.rig.all_on_wire() && s.rig.amps > 20.0);
+            assert!(sparks.is_empty(), "roughness {roughness}: {sparks:?}");
+        }
+    }
+
+    #[test]
     fn a_bus_without_poles_up_has_no_power() {
         let net = line();
         let mut s = Sim::new();
