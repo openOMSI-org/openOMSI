@@ -265,6 +265,9 @@ impl TrafficSim {
             return None;
         }
         if !st.route.is_empty() {
+            if car.next_stop().is_some_and(|(ri, _)| ri == st.route_index) {
+                return None;
+            }
             let (to, dir) = st.route_change_due(&self.net)?;
             return Some(Required { need: Need::Route, to: Some((to, dir)), end: f32::MAX });
         }

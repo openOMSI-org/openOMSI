@@ -706,3 +706,25 @@ fn cars_drive_straight_to_the_end_of_a_two_lane_road() {
     assert!(t.cars.iter().all(|c| !ids.contains(&c.id)), "cars still stand at the end");
     }
 }
+
+#[test]
+fn a_bus_serves_its_stop_before_moving_over_to_the_lane_its_route_goes_on() {
+    let f = Fixture::new();
+    let lanes = vec![street(-3.5, 0.0, 0.0, 300.0), street(0.0, 0.0, 0.0, 300.0)];
+    let mut t = traffic(&f, net_of(lanes, &[(0, 1)]));
+    let me = add_car(&mut t, &f, 1, 20.0, 0xb27, Some(8.0));
+    set_route(&mut t, me, vec![1, 0], 20.0);
+    {
+        let day = t.day_time;
+        let c = car_mut(&mut t, me);
+        let stop = bus_service::Stop { ri: 0, s: 150.0, bay: 0.0, depart: day + 600.0, id: 1, side: 0.0 };
+        c.bus = Some(Box::new(bus_service::BusService::new(vec![stop])));
+    }
+    for _ in 0..(15.0 / DT) as usize {
+        t.tick(DT, None);
+        let c = car(&t, me).expect("on the road");
+        if c.state.s < 140.0 {
+            assert!(c.state.change.is_none(), "moved over at s {:.1}, before its stop", c.state.s);
+        }
+    }
+}
