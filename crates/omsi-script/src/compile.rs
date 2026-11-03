@@ -531,6 +531,7 @@ fn tokenize(line: &str) -> Vec<Tok> {
     out
 }
 
+#[derive(PartialEq)]
 enum BlockKind {
     Init,
     Frame,
@@ -591,7 +592,7 @@ impl<'a> Compiler<'a> {
                                             patch(&mut block.ops[idx], end);
                                         }
                                         log::debug!("{}:{}: {{{b}}} starts while block {} is open (implicit end)", f.path.display(), line_no, block.name);
-                                        self.finish_block(kinds, block);
+                                        self.finish_block(kinds, block, false);
                                         cur = Some((vec![kind], Block { name, file: f.path.clone(), line: line_no, ..Default::default() }, Vec::new()));
                                     }
                                     None => cur = Some((vec![kind], Block { name, file: f.path.clone(), line: line_no, ..Default::default() }, Vec::new())),
@@ -615,7 +616,7 @@ impl<'a> Compiler<'a> {
                                     for (_, op) in extra_elses.drain(..) {
                                         patch(&mut block.ops[op], end);
                                     }
-                                    self.finish_block(kinds, block);
+                                    self.finish_block(kinds, block, true);
                                 } else {
                                     // Surplus {end} tokens are common in stock content; ignored.
                                     log::debug!("{}:{}: {{end}} without block", f.path.display(), line_no);
@@ -725,7 +726,7 @@ impl<'a> Compiler<'a> {
                 patch(&mut block.ops[idx], end);
             }
             log::debug!("{}: missing {{end}} at end of file", f.path.display());
-            self.finish_block(kinds, block);
+            self.finish_block(kinds, block, false);
         }
     }
 
@@ -735,24 +736,31 @@ impl<'a> Compiler<'a> {
         self.pending.push((block_idx, op_idx, name));
     }
 
-    fn finish_block(&mut self, kinds: Vec<BlockKind>, block: Block) {
+    fn finish_block(&mut self, mut kinds: Vec<BlockKind>, block: Block, ended: bool) {
         let id = self.p.blocks.len() as BlockId;
         self.p.blocks.push(block);
+        kinds.dedup();
         for kind in kinds {
-            self.register(kind, id);
+            self.register(kind, id, ended);
         }
     }
 
-    fn register(&mut self, kind: BlockKind, id: BlockId) {
+    fn register(&mut self, kind: BlockKind, id: BlockId, ended: bool) {
         match kind {
             BlockKind::Init => self.p.init.push(id),
             BlockKind::Frame => {
                 self.p.frame.truncate(self.file_frames.0);
                 self.p.frame.push(id);
+                if !ended {
+                    self.file_frames.0 = self.p.frame.len();
+                }
             }
             BlockKind::FrameAi => {
                 self.p.frame_ai.truncate(self.file_frames.1);
                 self.p.frame_ai.push(id);
+                if !ended {
+                    self.file_frames.1 = self.p.frame_ai.len();
+                }
             }
             BlockKind::Macro(n) => {
                 self.p.macros.insert(n, id);
@@ -1041,6 +1049,8 @@ mod tests {
         assert_eq!(twice.frame.len(), 1);
         let stacked = program_of("{frame}\n{frame}\n3 (S.L.c)\n{end}\n");
         assert_eq!(stacked.frame.len(), 1);
+        let cut_short = program_of("{frame}\n1 (S.L.a)\n{frame}\n2 (S.L.b)\n{end}\n");
+        assert_eq!(cut_short.frame.len(), 2, "a frame block without its end, cut short by the next header, still runs");
     }
 
     #[test]
