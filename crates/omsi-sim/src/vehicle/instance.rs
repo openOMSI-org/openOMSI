@@ -476,6 +476,28 @@ impl VehicleInstance {
     /// launcher's door or mirror type chosen over the repaint's was the repaint's again in the
     /// game, and only the variables the repaint does not set were the player's. A variable
     /// the scheme does not set is set once, as [`Self::set_var`] does, for the scripts to
+    pub fn repaint(&mut self, scheme: Option<usize>) {
+        let scheme = scheme.filter(|i| *i < self.ty.paint_schemes.len());
+        let names = |s: Option<usize>| s.and_then(|i| self.ty.paint_schemes.get(i)).map(|p| p.set_vars.iter().map(|(n, _)| n.to_ascii_lowercase()).collect::<Vec<_>>()).unwrap_or_default();
+        let incoming = names(scheme);
+        let released: Vec<String> = names(self.host.paint_scheme.flatten())
+            .into_iter()
+            .filter(|n| !incoming.contains(n) && !self.scheme_overrides.iter().any(|(o, _)| o.eq_ignore_ascii_case(n)))
+            .collect();
+        if !released.is_empty() {
+            let mut host = VehicleHost::new(Default::default());
+            host.paint_scheme = Some(scheme);
+            let fresh = VehicleInstance::new(self.ty.clone(), host);
+            for n in &released {
+                if let Some(v) = fresh.var(n) {
+                    self.set_var(n, v);
+                }
+            }
+        }
+        self.host.paint_scheme = Some(scheme);
+        self.apply_paint_vars(scheme);
+    }
+
     /// change. False: the vehicle has no such variable.
     pub fn set_var_over_scheme(&mut self, name: &str, v: f32) -> bool {
         if !self.set_var(name, v) {

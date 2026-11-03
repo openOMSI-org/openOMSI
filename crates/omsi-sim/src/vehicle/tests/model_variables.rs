@@ -278,3 +278,39 @@ fn a_value_set_over_the_scheme_stays_the_one_set() {
     v.update_scripts_only(0.0);
     assert_eq!(v.var("v_doors"), Some(0.0));
 }
+
+#[test]
+fn a_repaint_lets_go_of_what_the_last_livery_set() {
+    let dir = std::env::temp_dir().join(format!("omsi_repaint_release_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let script = dir.join("init.osc");
+    std::fs::write(&script, "{init}\n3 (S.L.v_font)\n{end}\n").unwrap();
+    let vars = dir.join("vars.txt");
+    std::fs::write(&vars, "v_font\nv_door\nv_seat\n").unwrap();
+    let program = omsi_script::compile(&omsi_script::CompileInput { scripts: vec![script], varlists: vec![vars], ..Default::default() });
+    std::fs::remove_dir_all(&dir).ok();
+    assert!(program.errors.is_empty(), "{:?}", program.errors);
+    let mut ty = diagnostic_type(false);
+    ty.program = Arc::new(program);
+    ty.paint_schemes = vec![
+        PaintScheme { name: "A".into(), set_vars: vec![("v_font".into(), 7.0), ("v_seat".into(), 2.0)], ..Default::default() },
+        PaintScheme { name: "B".into(), set_vars: vec![("v_door".into(), 1.0)], ..Default::default() },
+    ];
+    let mut host = VehicleHost::new(Default::default());
+    host.paint_scheme = Some(Some(0));
+    let mut v = VehicleInstance::new(Arc::new(ty), host);
+    assert!(v.set_var_over_scheme("v_seat", 5.0));
+    v.update(1.0 / 30.0);
+    assert_eq!((v.var("v_font"), v.var("v_seat")), (Some(7.0), Some(5.0)));
+    v.repaint(Some(1));
+    v.update(1.0 / 30.0);
+    assert_eq!(v.var("v_font"), Some(3.0), "B does not set it: back to what a new bus has");
+    assert_eq!(v.var("v_door"), Some(1.0));
+    assert_eq!(v.var("v_seat"), Some(5.0), "the player's own value stays");
+    assert_eq!(v.var("Colorscheme"), Some(1.0));
+    v.repaint(None);
+    v.update(1.0 / 30.0);
+    assert_eq!((v.var("v_font"), v.var("v_door")), (Some(3.0), Some(0.0)), "the default paint: nothing of A or B");
+    assert_eq!(v.var("Colorscheme"), Some(-1.0));
+}
+
