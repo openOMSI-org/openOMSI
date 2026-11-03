@@ -128,7 +128,33 @@ impl LanSession {
                 break;
             };
             match bind(candidate) {
-                Ok((socket, listener)) => return start(socket, listener, name, world, port),
+                Ok((socket, listener)) => {
+                    let p = socket.local_addr()?.port();
+                    socket.set_nonblocking(true)?;
+                    socket.set_broadcast(true)?;
+                    let mut s = LanSession::new(socket, Role::Host, name, world);
+                    s.host_mods = listener;
+                    let key = std::sync::Arc::new(
+                        hostkey::HostKey::generate()
+                            .ok_or_else(|| std::io::Error::other("no key for the session"))?,
+                    );
+                    s.session = key.session();
+                    s.bridge = bridge::Bridge::start(
+                        true,
+                        s.session,
+                        Some(key.clone()),
+                        local_addrs(p),
+                        p,
+                    );
+                    s.host_key = Some(key);
+                    // Logs are shared in support bundles: keep join codes and session
+                    // identity in the multiplayer UI, not in persistent diagnostics.
+                    log::info!("LAN: hosting on UDP/TCP port {p} (protocol {PROTOCOL})");
+                    if port != 0 && p != port {
+                        log::info!("LAN: UDP/TCP port {port} is unavailable; using {p}");
+                    }
+                    return Ok(s);
+                }
                 Err(e)
                     if matches!(
                         e.kind(),
@@ -141,48 +167,9 @@ impl LanSession {
                 Err(e) => return Err(e),
             }
         }
-        // Every candidate failed on its TCP side or its loopback probe (a firewall or an
-        // antivirus holding connections to this machine, Windows' excluded ports): the game
-        // hosted nothing and showed no code. Host on UDP alone: the session plays, only the
-        // host's mods are not passed on.
-        if !omsi_cfg::flags::OMSI_NO_LAN_MODS.is_set() {
-            for offset in 0..tries {
-                let Some(candidate) = candidate(port, offset, seed) else { break };
-                if let Ok(socket) = udp_socket(candidate) {
-                    log::warn!(
-                        "LAN: no port took the host's mods transfer too ({}); hosting on UDP alone: joining players get no mods from this game",
-                        last_err.as_ref().map(|e| e.to_string()).unwrap_or_default()
-                    );
-                    return start(socket, None, name, world, port);
-                }
-            }
-        }
         Err(last_err.unwrap_or_else(|| std::io::Error::other("no host port available")))
     }
-}
 
-/// A host session on `socket` (and the mods transfer's `listener`, if it has one).
-fn start(socket: UdpSocket, listener: Option<TcpListener>, name: &str, world: WorldInfo, port: u16) -> std::io::Result<LanSession> {
-    let p = socket.local_addr()?.port();
-    socket.set_nonblocking(true)?;
-    socket.set_broadcast(true)?;
-    let transports = if listener.is_some() { "UDP/TCP" } else { "UDP" };
-    let mut s = LanSession::new(socket, Role::Host, name, world);
-    s.host_mods = listener;
-    let key = std::sync::Arc::new(hostkey::HostKey::generate().ok_or_else(|| std::io::Error::other("no key for the session"))?);
-    s.session = key.session();
-    s.bridge = bridge::Bridge::start(true, s.session, Some(key.clone()), local_addrs(p), p);
-    s.host_key = Some(key);
-    // Logs are shared in support bundles: keep join codes and session
-    // identity in the multiplayer UI, not in persistent diagnostics.
-    log::info!("LAN: hosting on {transports} port {p} (protocol {PROTOCOL})");
-    if port != 0 && p != port {
-        log::info!("LAN: {transports} port {port} is unavailable; using {p}");
-    }
-    Ok(s)
-}
-
-impl LanSession {
     /// Transfer the reserved TCP listener without releasing its port between services.
     pub fn take_mods_listener(&mut self) -> Option<std::net::TcpListener> {
         self.host_mods.take()

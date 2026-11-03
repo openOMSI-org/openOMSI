@@ -1070,12 +1070,11 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   seconds a bus takes in the fleet check), once for each paint asked for: many players at once
   took every core. The list the fleet check made at the start is given instead, while the bus's
   files are as they were; a list to make again is made by one request at a time.
-- **Hosting by code works where the mods transfer cannot open.** Since 0.3.47 a game hosting
-  reserves a TCP port for its mods beside the UDP one and checks it reaches itself there; where
-  every port tried failed that check (a firewall or antivirus, Windows' excluded ports), the
-  game hosted nothing and no code appeared. It now hosts on UDP alone (its mods are not passed
-  on) and says so in its log, and the launcher's Invite friends shows why a game could not open
-  a session instead of waiting for a code.
+- **The launcher says why a game could not host.** When a game started to host by code could
+  not open its session (its port taken by another program, or refused by a firewall or an
+  antivirus: since 0.3.47 it reserves a TCP port for its mods beside the UDP one, and checks
+  it reaches itself there), Invite friends waited for a code that never came, without a word.
+  It now shows the game's reason.
 - **Multiplayer protocol 17.** A game of this version and a server of this version play
   together; older ones are turned away at the door, as at every protocol change.
 - **A dedicated server opens its web port at once, before checking its fleet.** With a
