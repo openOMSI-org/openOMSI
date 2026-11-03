@@ -241,6 +241,24 @@ fn stopped_car_does_not_sets_off_on_red() {
     assert!(c.state.speed < 0.1, "car is moving at {} m/s", c.state.speed);
 }
 
+#[test]
+fn slow_moving_car_does_not_run_the_red() {
+    let f = Fixture::new();
+    let mut t = with_lights(&f, signalled(false, false), 1);
+    show(&mut t, 0, 0);
+    let id = car(&mut t, &f, 0, 0.0, 0x3c, 2.0);
+    let front = get(&t, id).state.front;
+    // at 5 m before the line
+    t.cars.iter_mut().find(|c| c.id == id).unwrap().state.s = 150.0 - 5.0 - front;
+    ticks(&mut t, 0.1);
+    t.cars.iter_mut().find(|c| c.id == id).unwrap().amber_decision = 0.0;
+    ticks(&mut t, 15.0);
+    let c = get(&t, id);
+    assert!(over_line(&t, id) < 0.3, "car passed on red: {}", over_line(&t, id));
+    assert_eq!(c.state.lane, 0, "car moved onto lane {}", c.state.lane);
+    assert!(c.state.speed < 0.1, "car is moving at {} m/s", c.state.speed);
+}
+
 /// `lane` as path `path` of junction object `id`.
 fn object(mut lane: crate::traffic::Lane, id: i64, path: u16) -> crate::traffic::Lane {
     lane.source = 2;

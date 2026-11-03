@@ -83,7 +83,6 @@ fn inverse_cdf_works_as_expected() {
     for n in 0..SAMPLE_SIZE {
         let quantile = draw(seed, n);
         let gaussian = inverse_cdf(quantile);
-        // crude symmetry test: we don't need higher accuracy
         assert!((inverse_cdf(1.0 - quantile) + gaussian).abs() < 0.001);
         random_data.push(gaussian);
     }
@@ -92,10 +91,9 @@ fn inverse_cdf_works_as_expected() {
     let q: f32 = random_data.iter().map(|x| (x - sample_average) * (x - sample_average)).sum();
     let sample_variance = q / (SAMPLE_SIZE - 1) as f32;
 
-    // use 95% confidence intervals
     let confidence_threshold = 1.96 / (SAMPLE_SIZE as f32).sqrt();
     assert!((sample_average-confidence_threshold..sample_average+confidence_threshold).contains(&0.0));
-    // chi-squared coefficients are hard-coded for n=10000; must be recalculated upon changing SAMPLE_TEST
-    let variance_interval = 0.9728*sample_variance..1.0283*sample_variance;
+    // chi-squared coefficients are hard-coded for n=10000; must be recalculated upon changing SAMPLE_SIZE
+    let variance_interval = 0.9728 * sample_variance..1.0283 * sample_variance;
     assert!(variance_interval.contains(&1.0));
 }
