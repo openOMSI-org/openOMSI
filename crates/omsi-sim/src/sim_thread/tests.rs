@@ -103,6 +103,7 @@ fn scenery_step(dt: f32, center: glam::DVec3) -> impl FnOnce(&mut SceneryState, 
     move |s: &mut SceneryState, phase_of: PhaseOf| {
         let (controllers, by_stop, departures) = (hashbrown::HashMap::new(), hashbrown::HashMap::new(), Default::default());
         let inputs = crate::scenery::SceneryInputs {
+            trolley_net: None,
             clock: None,
             time: 3600.0,
             day: Default::default(),
