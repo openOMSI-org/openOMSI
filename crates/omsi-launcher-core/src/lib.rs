@@ -1519,7 +1519,7 @@ pub fn trip_path(map: &str, date: &str, trip: &str) -> Result<TripPath> {
     let off = omsi_map::chrono_deactivated_lines(&chrono);
     let data = omsi_timetable::TimetableData::load_with_chrono(&map_dir, &chrono, &off);
     let mut out = TripPath::default();
-    let Some(t) = data.trips.iter().find(|x| x.name.eq_ignore_ascii_case(trip.trim())) else { return Ok(out) };
+    let Some(t) = data.trips.iter().find(|x| x.is_named(trip.trim())) else { return Ok(out) };
     // a type-1 trip's stations are its own `[station]` records (all of Novi Sad)
     out.stops = if t.stations.is_empty() {
         t.stations_legacy.iter().filter_map(|r| r.first()?.trim().parse::<i64>().ok()).collect()
@@ -1616,7 +1616,7 @@ fn lines_on(map_dir: &Path, date: &str) -> Result<Vec<LineInfo>> {
             let next_run = (0..400).map(|k| add_days(code, k)).find(|c| runs_on(*c)).map(|c| format!("{:04}-{:02}-{:02}", c / 10000, c / 100 % 100, c % 100));
             let mut trips = Vec::new();
             for tt in &t.trips {
-                let Some(trip) = data.trips.iter().find(|x| x.name.eq_ignore_ascii_case(&tt.trip)) else { continue };
+                let Some(trip) = data.trips.iter().find(|x| x.is_named(&tt.trip)) else { continue };
                 let departure = tt.departure as f64 * 60.0;
                 let duration = trip.profiles.get(tt.profile.max(0) as usize).or(trip.profiles.first()).map(|p| p.factor as f64 * 60.0).filter(|d| *d > 0.0).unwrap_or(600.0);
                 // its stations: [station_typ2] objects, or the [station] records of a type-1
