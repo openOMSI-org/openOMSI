@@ -141,6 +141,9 @@ impl KeyboardCfg {
         if !self.game.iter().any(|b| b.action.eq_ignore_ascii_case("view_toggle_interior")) {
             self.game.push(KeyBinding { action: "view_toggle_interior".into(), scan_code: 0, modifier: 0 });
         }
+        if !self.game.iter().any(|b| b.action.eq_ignore_ascii_case("head_tracking_recenter")) {
+            self.game.push(KeyBinding { action: "head_tracking_recenter".into(), scan_code: 0, modifier: 0 });
+        }
         if !self.game.iter().any(|b| b.action.eq_ignore_ascii_case("pax_door_request")) {
             self.game.push(KeyBinding { action: "pax_door_request".into(), scan_code: 31, modifier: KEY_CTRL | KEY_ALT });
         }
@@ -288,6 +291,19 @@ mod tests {
         let cfg = KeyboardCfg { game: vec![custom.clone()], ..Default::default() }.with_game_defaults();
         assert_eq!(cfg.game.iter().filter(|b| b.action.eq_ignore_ascii_case("view_toggle_interior")).count(), 1);
         assert!(cfg.game.contains(&custom));
+    }
+
+    /// Head tracking's recentre is on the list with no key, for the player to give one (or a
+    /// wheel's button); one they gave it stays.
+    #[test]
+    fn the_head_tracking_recentre_is_unbound_and_a_players_own_key_wins() {
+        let cfg = KeyboardCfg::default().with_game_defaults().with_game_defaults();
+        let b = cfg.game.iter().find(|b| b.action == "head_tracking_recenter").unwrap();
+        assert_eq!((b.scan_code, b.modifier), (0, 0));
+        assert_eq!(cfg.game.iter().filter(|b| b.action == "head_tracking_recenter").count(), 1);
+        let custom = KeyBinding { action: "head_tracking_recenter".into(), scan_code: 59, modifier: KEY_SHIFT };
+        let cfg = KeyboardCfg { game: vec![custom.clone()], ..Default::default() }.with_game_defaults();
+        assert_eq!(cfg.game.iter().filter(|b| b.action == "head_tracking_recenter").collect::<Vec<_>>(), vec![&custom]);
     }
 
     /// The manual gearbox's Ctrl+Up / Ctrl+Down are entries of the list, which stay as the
