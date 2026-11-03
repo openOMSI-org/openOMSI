@@ -102,6 +102,10 @@ pub struct TrolleyView {
     pub sparks_seen: u32,
 }
 
+fn show_default_switches(splines: bool, debug: bool) -> bool {
+    splines || debug
+}
+
 impl TrolleyView {
     pub fn new(renderer: &Renderer, scene: &mut Scene, net: Arc<WireNet>) -> TrolleyView {
         let mat_wire = renderer.add_material(scene, None, AlphaMode::Opaque, [0.2, 0.17, 0.15, 1.0], false);
@@ -144,7 +148,8 @@ impl TrolleyView {
         let mat_body = renderer.add_material(scene, None, AlphaMode::Opaque, [0.1, 0.1, 0.11, 1.0], false);
         let mat_tongue = renderer.add_material(scene, None, AlphaMode::Opaque, [0.75, 0.55, 0.12, 1.0], false);
         let mat_ins = renderer.add_material(scene, None, AlphaMode::Opaque, [0.62, 0.6, 0.55, 1.0], false);
-        for sw in &net.switches {
+        let mark_frogs = show_default_switches(net.drawn_by_map, omsi_cfg::flags::OMSI_DEBUG_TROLLEY.is_set());
+        for sw in net.switches.iter().filter(|_| mark_frogs) {
             let node = &net.nodes[sw.node as usize];
             let toe = net.end_dir(sw.toe);
             let (straight, branch) = (net.end_dir(sw.straight), net.end_dir(sw.branch));
@@ -397,5 +402,16 @@ impl TrolleyView {
 
     pub fn pole_instances(&self) -> Vec<usize> {
         self.poles.iter().map(|p| p.boom).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn spline_switch_visuals_stay_visible_without_debug() {
+        assert!(super::show_default_switches(true, false));
+        assert!(super::show_default_switches(true, true));
+        assert!(super::show_default_switches(false, true));
+        assert!(!super::show_default_switches(false, false));
     }
 }

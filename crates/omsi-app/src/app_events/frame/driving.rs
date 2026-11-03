@@ -258,7 +258,7 @@ pub(super) fn audio(cx: AudioCx, dt: f32) {
     if cx.player.player.is_none() && matches!(cx.view.view.as_str(), "free" | "foot") {
         if let Some(cam) = cx.view.camera.as_mut() {
             let base = if cx.common.settings.fov >= 20.0 { cx.common.settings.fov.min(120.0) } else { 60.0 };
-            cam.fov_deg = (base * cx.view.cam.view_zoom.get(cx.view.view.as_str()).copied().unwrap_or(1.0)).clamp(8.0, 120.0);
+            cam.fov_deg = (base * cx.view.cam.view_zoom.get(cx.view.view.as_str()).copied().unwrap_or(1.0) * cx.view.cam.zoom_hold.factor).clamp(8.0, 120.0);
         }
     }
     if let Some(a) = cx.sound.audio.as_ref() {
@@ -292,11 +292,18 @@ pub(super) fn audio(cx: AudioCx, dt: f32) {
     }
     if let Some(a) = cx.sound.audio.as_ref() {
         cx.sound.milezero.update(a, cx.common.settings.milezero, cx.common.settings.volume);
+        if let Some(world) = cx.world.world.as_ref() {
+            if let Some(net) = world.trolley_net.lock().clone() {
+                cx.sound.switch_sound.update(a, &net, *cx.clock.paused);
+            }
+        }
         match cx.player.player.as_mut() {
             Some(p) => {
                 let inside = cx.view.cam.in_cab;
                 if let Some(g) = p.vehicle.trolley.as_deref_mut() {
-                    p.trolley_sound.update(a, &mut g.rig, p.vehicle.position.as_vec3(), &[], *cx.clock.paused);
+                    let net = g.net.clone();
+                    let at = p.vehicle.position.as_vec3();
+                    p.trolley_sound.update(a, &mut g.rig, net.as_deref(), p.sounds.as_ref(), &mut p.vehicle.host.fired_triggers, at, &[], inside, *cx.clock.paused);
                 }
                 cx.sound.radio.set_map(&cx.common.args.root, &cx.common.args.map);
                 cx.sound.radio.fx = cx.common.settings.radio_fx;

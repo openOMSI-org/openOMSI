@@ -156,6 +156,8 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         slider_row(app, "look_smoothing_ms", "Smooth the mouse look", "How long the view takes to come round to where the mouse or the stick turned it (off: at once, as OMSI)", &|v| if v <= 0.0 { "Off".to_string() } else { format!("{v:.0} ms") }),
         switch_row(app, "alt_view", "Right mouse button turns the view", "Shift+right zooms; off: right zooms as in OMSI, the wheel button turns"),
         switch_row(app, "precision_zoom", "Precision mouse zoom", "The mouse zoom follows the FOV curve instead of OMSI's linear way"),
+        slider_row(app, "zoom_hold_amount", "Zoom on a key", "How far the view zooms while the zoom key is held (Controls: Zoom while held)", &|v| format!("{}x", format!("{:.2}", 1.0 / v.max(0.15)).trim_end_matches('0').trim_end_matches('.'))),
+        switch_row(app, "zoom_hold_latch", "Zoom key stays", "One press zooms in, the next zooms out; off: only while the key is held"),
         slider_row(app, "fov", "Field of view", "Vertical field of view; in triple screen Default uses physical measurements, an override moves the virtual eye", &|v| if v < 20.0 { "Default".to_string() } else { format!("{v:.0}°") }),
         slider_row(app, "seat 1", "Seat forward and back", "Adjust the driver's seat position forward or backward", &cm),
         slider_row(app, "seat 2", "Seat height", "Adjust the driver's seat height", &cm),

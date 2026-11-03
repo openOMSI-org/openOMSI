@@ -14,6 +14,7 @@ crate::app::stage_ctx!(
 pub(super) fn view_keys(mut cx: ViewKeysCx, dt: f32) {
     // looking around and zooming work in every view, not only the free camera
     crate::app_impl::sync_view_look(cx.view.cam, cx.view.view, cx.player.player.as_ref());
+    zoom_hold_keys(&mut cx, dt);
     if cx.player.player.is_some() && *cx.view.view != "free" {
         // looking around with the keyboard: Alt + I/J/K/L (the plain letters
         // belong to the bus - L is the headlights in Inputs/keyboard.cfg)
@@ -145,6 +146,18 @@ pub(super) fn view_keys(mut cx: ViewKeysCx, dt: f32) {
         cx.view.cam.ego = false;
     }
     free_camera(&mut cx, dt);
+}
+
+fn zoom_hold_keys(cx: &mut ViewKeysCx, dt: f32) {
+    let pressed: Vec<i32> = cx.input.keys.iter().filter_map(|k| crate::keys::dik_code(*k)).collect();
+    let chord = omsi_content::input::chord(
+        cx.input.keys.contains(&KeyCode::ShiftLeft) || cx.input.keys.contains(&KeyCode::ShiftRight),
+        cx.input.keys.contains(&KeyCode::ControlLeft) || cx.input.keys.contains(&KeyCode::ControlRight),
+        cx.input.keys.contains(&KeyCode::AltLeft) || cx.input.keys.contains(&KeyCode::AltRight),
+    );
+    let bus_keys = cx.player.player.as_ref().map(|p| p.bindings.as_slice()).unwrap_or_default();
+    let held = cx.input.pad_zoom_hold || zoom_keys("view_zoom_hold", &pressed, chord, &cx.input.game_keys, bus_keys, &cx.input.own_keys, 0, 0).0;
+    cx.view.cam.zoom_hold.step(held, cx.common.settings.zoom_hold_amount, cx.common.settings.zoom_hold_latch, dt);
 }
 
 /// Whether the keys held (`held`: their scan codes, `chord`: the modifiers) zoom: `action`'s
@@ -360,5 +373,62 @@ mod tests {
         // an entry with no key (cleared) leaves the defaults
         let cleared = [kb("view_zoom_in", 0, 0)];
         assert_eq!(zoom_keys("view_zoom_in", &[13], 0, &cleared, &[], &none, 13, 78), (true, false));
+    }
+
+    fn app() -> crate::App {
+        use clap::Parser;
+        let mut app = crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
+        app.settings.zoom_hold_amount = 0.5;
+        app
+    }
+
+    fn frames(app: &mut crate::App, n: usize) {
+        for _ in 0..n {
+            super::view_keys(super::ViewKeysCx::of(&mut app.parts()), 0.05);
+        }
+    }
+
+    #[test]
+    fn the_zoom_key_works_in_the_free_view_without_a_bus() {
+        let mut app = app();
+        app.view = "free".into();
+        app.input.game_keys = vec![kb("view_zoom_hold", 44, 0)];
+        app.input.keys.insert(winit::keyboard::KeyCode::KeyZ);
+        frames(&mut app, 40);
+        assert_eq!(app.cam.zoom_hold.factor, 0.5);
+        app.input.keys.clear();
+        frames(&mut app, 40);
+        assert_eq!(app.cam.zoom_hold.factor, 1.0);
+    }
+
+    #[test]
+    fn letting_go_after_a_switch_to_the_free_view_ends_the_zoom() {
+        let mut app = app();
+        app.view = "driver".into();
+        app.input.pad_zoom_hold = true;
+        frames(&mut app, 40);
+        assert_eq!(app.cam.zoom_hold.factor, 0.5);
+        app.view = "free".into();
+        app.input.pad_zoom_hold = false;
+        frames(&mut app, 40);
+        assert_eq!(app.cam.zoom_hold.factor, 1.0);
+    }
+
+    #[test]
+    fn a_latched_zoom_turns_off_with_a_press_in_the_free_view() {
+        let mut app = app();
+        app.settings.zoom_hold_latch = true;
+        app.view = "driver".into();
+        app.input.pad_zoom_hold = true;
+        frames(&mut app, 1);
+        app.input.pad_zoom_hold = false;
+        frames(&mut app, 40);
+        assert_eq!(app.cam.zoom_hold.factor, 0.5);
+        app.view = "free".into();
+        app.input.pad_zoom_hold = true;
+        frames(&mut app, 1);
+        app.input.pad_zoom_hold = false;
+        frames(&mut app, 40);
+        assert_eq!(app.cam.zoom_hold.factor, 1.0);
     }
 }
