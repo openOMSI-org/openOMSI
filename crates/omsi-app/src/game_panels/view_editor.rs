@@ -16,8 +16,8 @@ use omsi_ui::theme::Palette;
 #[derive(Default)]
 pub(crate) struct ViewEditor {
     said: Option<String>,
-    aimed: Option<usize>,
-    look_before: Option<(String, (f32, f32))>,
+    aimed: Option<(usize, (f32, f32))>,
+    look_before: Option<(String, String, (f32, f32))>,
 }
 
 const SEAT: (f32, f32) = (-0.8, 0.8);
@@ -102,8 +102,8 @@ pub(crate) fn close(app: &mut crate::App, save: bool) {
 fn look_back(app: &mut crate::App) {
     if let Some(e) = app.menus.game_panels.view.as_mut() {
         e.aimed = None;
-        if let Some(before) = e.look_before.take() {
-            restore_look(&mut app.cam.look, &mut app.cam.view_looks, &app.cam.look_view, before);
+        if let Some((_, key, l)) = e.look_before.take().filter(|b| b.0 == app.session.seat_bus) {
+            restore_look(&mut app.cam.look, &mut app.cam.view_looks, &app.cam.look_view, (key, l));
         }
     }
 }
@@ -117,29 +117,57 @@ fn restore_look(look: &mut (f32, f32), looks: &mut std::collections::HashMap<Str
 }
 
 fn look_at_mirror(app: &mut crate::App, i: usize) {
-    if app.menus.game_panels.view.as_ref().and_then(|e| e.look_before.as_ref()).is_some_and(|(k, _)| *k != app.cam.look_view) {
+    if app.menus.game_panels.view.as_ref().and_then(|e| e.look_before.as_ref()).is_some_and(|(b, k, _)| *b != app.session.seat_bus || *k != app.cam.look_view) {
         look_back(app);
     }
-    if app.menus.game_panels.view.as_ref().is_some_and(|e| e.aimed == Some(i)) || app.view != "driver" {
+    let tracked = app.settings.head_tracking && app.input.headtrack.is_some();
+    if app.menus.game_panels.view.as_ref().is_some_and(|e| stays_aimed(e.aimed, i, app.cam.look)) || app.view != "driver" || tracked {
         return;
     }
-    let (Some(p), Some(fallback)) = (app.player.as_ref(), app.camera.clone()) else { return };
+    if let Some((.., key)) = app.cam.f1_reset.take() {
+        if key == app.cam.look_view {
+            app.cam.look = (0.0, 0.0);
+        } else {
+            app.cam.view_looks.insert(key, (0.0, 0.0));
+        }
+        app.cam.view_zoom.remove("driver");
+    }
+    let vr = app.vr_active();
+    let own_view = app.player.as_ref().is_some_and(|p| p.cam_choice.0 == 0) && !vr;
+    let offset = (if own_view { app.cam.view_yaw } else { 0.0 }, if vr { 0.0 } else { app.settings.seat_pitch_deg });
+    let zoom = crate::app_impl::with_zoom_hold(app.cam.view_zoom.get(&app.view).copied(), app.cam.zoom_hold.factor);
+    let (view_fov, fov_setting) = (app.cam.view_fov.filter(|_| own_view), app.settings.fov);
+    let window = app.gfx.surface.as_ref().map(|s| (s.config.width as f32, s.config.height as f32));
+    let (Some(p), Some(fallback)) = (app.player.as_ref(), app.camera.map(|c| omsi_render::Camera { fov_deg: 60.0, ..c })) else { return };
     let Some(c) = p.vehicle.ty.def.cameras_reflexion.get(i) else { return };
     let target = p.vehicle.camera_world_full(c).0;
-    let (screen_x, aspect) = match app.menus.game_panels.laid_out {
-        Some((hud, scale)) if hud[2] > 0.0 && hud[3] > 0.0 => ((1.0 - (WIDTH + 12.0) * scale / hud[2]).clamp(0.2, 1.0) - 1.0, hud[2] / hud[3]),
+    let (screen_x, aspect) = match (app.menus.game_panels.laid_out, window) {
+        (Some((hud, scale)), Some((w, h))) if w > 0.0 && h > 0.0 => ((((hud[0] + hud[2] - (WIDTH + 12.0) * scale) * 2.0 / w - 2.0) * 0.5).clamp(-0.8, 0.0), w / h),
         _ => (0.0, 16.0 / 9.0),
     };
-    let Some(look) = aim_look(|l| p.camera_look("driver", &fallback, l, app.cam.orbit), target, app.cam.look, screen_x, aspect) else { return };
-    let before = (app.cam.look_view.clone(), app.cam.look);
+    let camera = |l: (f32, f32)| {
+        let mut c = p.camera_look("driver", &fallback, l, app.cam.orbit);
+        c.fov_deg = crate::app_impl::drawn_fov(c.fov_deg, view_fov, fov_setting, zoom);
+        c
+    };
+    let Some(look) = aim_look(camera, offset, target, app.cam.look, screen_x, aspect) else {
+        look_back(app);
+        return;
+    };
+    let before = (app.session.seat_bus.clone(), app.cam.look_view.clone(), app.cam.look);
     if let Some(e) = app.menus.game_panels.view.as_mut() {
         e.look_before.get_or_insert(before);
-        e.aimed = Some(i);
+        e.aimed = Some((i, look));
     }
     app.cam.look = look;
 }
 
-fn aim_look(camera: impl Fn((f32, f32)) -> omsi_render::Camera, target: glam::DVec3, start: (f32, f32), screen_x: f32, aspect: f32) -> Option<(f32, f32)> {
+fn stays_aimed(aimed: Option<(usize, (f32, f32))>, i: usize, look: (f32, f32)) -> bool {
+    aimed == Some((i, look))
+}
+
+fn aim_look(camera: impl Fn((f32, f32)) -> omsi_render::Camera, offset: (f32, f32), target: glam::DVec3, start: (f32, f32), screen_x: f32, aspect: f32) -> Option<(f32, f32)> {
+    let camera = |l: (f32, f32)| camera((l.0 + offset.0, l.1 + offset.1));
     let angles = |v: glam::Vec3| (v.x.atan2(v.y).to_degrees(), v.z.clamp(-1.0, 1.0).asin().to_degrees());
     let wrap = |a: f32| (a + 540.0).rem_euclid(360.0) - 180.0;
     let mut look = start;
@@ -368,7 +396,7 @@ mod mirror_axis_tests {
 
 #[cfg(test)]
 mod aim_tests {
-    use super::{aim_look, restore_look};
+    use super::{aim_look, restore_look, stays_aimed};
 
     fn cam(yaw: f32, pitch: f32) -> omsi_render::Camera {
         omsi_render::Camera { position: glam::DVec3::ZERO, yaw, pitch, roll: 0.0, fov_deg: 60.0, near: 0.1, far: 100.0 }
@@ -379,11 +407,11 @@ mod aim_tests {
         let (sy, cy) = 60f32.to_radians().sin_cos();
         let (sp, cp) = (-8f32).to_radians().sin_cos();
         let target = glam::DVec3::new((sy * cp) as f64, (cy * cp) as f64, sp as f64) * 3.0;
-        let along = aim_look(|l| cam(10.0 + l.0, l.1), target, (0.0, 0.0), 0.0, 1.0).unwrap();
+        let along = aim_look(|l| cam(10.0 + l.0, l.1), (0.0, 0.0), target, (0.0, 0.0), 0.0, 1.0).unwrap();
         assert!((along.0 - 50.0).abs() < 0.1 && (along.1 + 8.0).abs() < 0.1, "{along:?}");
-        let against = aim_look(|l| cam(10.0 - l.0, -l.1), target, (0.0, 0.0), 0.0, 1.0).unwrap();
+        let against = aim_look(|l| cam(10.0 - l.0, -l.1), (0.0, 0.0), target, (0.0, 0.0), 0.0, 1.0).unwrap();
         assert!((against.0 + 50.0).abs() < 0.1 && (against.1 - 8.0).abs() < 0.1, "{against:?}");
-        let beside = aim_look(|l| cam(10.0 + l.0, l.1), target, (0.0, 0.0), -0.5, 1.0).unwrap();
+        let beside = aim_look(|l| cam(10.0 + l.0, l.1), (0.0, 0.0), target, (0.0, 0.0), -0.5, 1.0).unwrap();
         assert!((beside.0 - 50.0 - (0.5 * 30f32.to_radians().tan()).atan().to_degrees()).abs() < 0.1, "left of the panel: the head turns further, {beside:?}");
     }
 
@@ -405,16 +433,33 @@ mod aim_tests {
     fn a_mirror_behind_the_driver_is_not_aimed_at() {
         let (sy, cy) = 170f32.to_radians().sin_cos();
         let target = glam::DVec3::new(sy as f64, cy as f64, 0.0) * 3.0;
-        assert_eq!(aim_look(|l| cam(10.0 + l.0, l.1), target, (0.0, 0.0), 0.0, 1.0), None);
+        assert_eq!(aim_look(|l| cam(10.0 + l.0, l.1), (0.0, 0.0), target, (0.0, 0.0), 0.0, 1.0), None);
     }
 
     #[test]
     fn the_aim_keeps_the_yaw_in_range_and_works_from_the_pitch_stop() {
         let (sy, cy) = 60f32.to_radians().sin_cos();
         let target = glam::DVec3::new(sy as f64, cy as f64, 0.0) * 3.0;
-        let wrapped = aim_look(|l| cam(10.0 + l.0, l.1), target, (350.0, 0.0), 0.0, 1.0).unwrap();
+        let wrapped = aim_look(|l| cam(10.0 + l.0, l.1), (0.0, 0.0), target, (350.0, 0.0), 0.0, 1.0).unwrap();
         assert!((wrapped.0 - 50.0).abs() < 0.1, "{wrapped:?}");
-        let stopped = aim_look(|l| cam(10.0 + l.0, l.1.clamp(-30.0, 30.0)), target, (0.0, 30.0), 0.0, 1.0).unwrap();
+        let stopped = aim_look(|l| cam(10.0 + l.0, l.1.clamp(-30.0, 30.0)), (0.0, 0.0), target, (0.0, 30.0), 0.0, 1.0).unwrap();
         assert!((stopped.0 - 50.0).abs() < 0.1 && stopped.1.abs() < 0.1, "{stopped:?}");
+    }
+
+    #[test]
+    fn the_aim_counts_the_editors_own_turn_and_tilt() {
+        let (sy, cy) = 60f32.to_radians().sin_cos();
+        let (sp, cp) = (-8f32).to_radians().sin_cos();
+        let target = glam::DVec3::new((sy * cp) as f64, (cy * cp) as f64, sp as f64) * 3.0;
+        let look = aim_look(|l| cam(10.0 + l.0, l.1), (20.0, -5.0), target, (0.0, 0.0), 0.0, 1.0).unwrap();
+        assert!((look.0 - 30.0).abs() < 0.1 && (look.1 + 3.0).abs() < 0.1, "{look:?}");
+    }
+
+    #[test]
+    fn a_mirror_aimed_at_is_aimed_at_again_once_the_head_has_moved() {
+        let aimed = Some((0, (50.0, -8.0)));
+        assert!(stays_aimed(aimed, 0, (50.0, -8.0)));
+        assert!(!stays_aimed(aimed, 0, (0.0, 0.0)));
+        assert!(!stays_aimed(aimed, 1, (50.0, -8.0)));
     }
 }

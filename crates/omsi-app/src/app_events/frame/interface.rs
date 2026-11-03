@@ -378,6 +378,7 @@ impl App {
                 }
             }
         }
+        crate::game_lists::refresh_streets_when_read(self);
     }
 
     /// The Lua plugins' panels (`omsi.ui`).

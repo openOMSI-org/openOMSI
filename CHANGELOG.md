@@ -583,6 +583,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **The flashlight no longer follows a hidden cursor**: with *Flashlight follows the cursor* on,
+  the cursor hidden while a controller drives still steered the beam; now the beam shines
+  straight ahead until the mouse brings the cursor back.
 - **The map's own sounds are quieter inside the bus**: birds, church bells, fountains and the
   other sounds of the scenery are heard through the bus's bodywork in a cab view, louder as the
   doors and windows open, as the AI traffic already was; outside they keep their full volume.
@@ -668,6 +671,13 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 - **A new livery without a new bus.** Vehicle options › *Livery* lists the bus's liveries (with a
   search, as the launcher's list); the one chosen is painted onto the bus you drive where it
   stands, with its passengers, trip, odometer and fuel as they were (#3638).
+- **Graphics that fit the computer from the first start.** On a first start (no settings file,
+  no drive and no map loaded before), the game
+  picks a quality preset from its best graphics chip before it opens the window's renderer: Low
+  for software renderers, Intel HD / UHD chips and cards under 3 GB, Medium for other integrated
+  chips and cards of 3 to 6 GB, High for 6 GB cards and Apple chips, Extra from 10 GB - and says
+  so once. A player's
+  own settings are never touched (#3643).
 - **The view editor looks at the mirror being set.** Moving a mirror's slider turns the driver's
   head to that mirror, so it shows beside the editor while it is set; another line or closing
   the editor brings the head back to where it was (#3640).
@@ -675,12 +685,6 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   Camera, the launcher; off by default), the flashlight lights where the mouse cursor points while
   the cursor is free - on foot, or in the cab while the mouse does not steer - and straight ahead
   otherwise (#3641).
-- **Graphics that fit the computer from the first start.** With no settings file yet, the game
-  picks a quality preset from its best graphics chip before it opens the window's renderer: Low
-  for software renderers, Intel HD / UHD chips and cards under 3 GB, Medium for other integrated
-  chips and cards of 3 to 6 GB, High for 6 GB cards and Apple chips, Extra from 10 GB - and says
-  so once. A player's
-  own settings are never touched (#3643).
 - **Find a street by its name.** The game menu has *Find a street...*: the map's streets (named
   from its street name signs) in a list with a search; the one picked opens the city map centred
   on it, its name drawn larger in orange (#3639).
