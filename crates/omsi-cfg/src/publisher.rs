@@ -475,12 +475,10 @@ fn register_aliases(
     }
     let map = map_scope_path(map_dir)?;
     let mut scopes = MAP_ALIASES.write().unwrap_or_else(|e| e.into_inner());
-    if let Some(existing) = scopes.iter_mut().find(|s| s.map == map) {
-        if existing.declarations != declarations {
-            return Err(invalid(
-                "the same map is already open with different publisher dependencies",
-            ));
-        }
+    if let Some(existing) = scopes
+        .iter_mut()
+        .find(|s| s.map == map && s.declarations == declarations)
+    {
         existing.leases = existing
             .leases
             .checked_add(1)
@@ -523,6 +521,12 @@ pub(crate) fn resolve_alias(base: &Path, rel: &str) -> Option<PathBuf> {
                 .find_map(|mount| base.strip_prefix(mount).ok())
         });
         let Some(suffix) = suffix else { continue };
+        // A path without a lease must not choose between conflicting map authorities.
+        if scopes.iter().any(|other| {
+            other.map == scope.map && other.declarations != scope.declarations
+        }) {
+            return None;
+        }
         let key = alias_key(suffix, rel)?;
         if let Some(path) = scope.aliases.get(&key) {
             return Some(path.clone());

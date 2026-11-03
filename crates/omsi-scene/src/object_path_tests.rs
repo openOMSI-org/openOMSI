@@ -244,6 +244,14 @@ fn publisher_worlds_keep_their_lease_when_the_same_map_is_reopened() {
     assert_eq!(second.object_type(alias).unwrap().sco.friendly_name, "second map session");
     assert_eq!(first.spline_type("Splines/Fixture/renamed.sli").unwrap().def.length, 10.0);
     assert_eq!(second.spline_type("Splines/Fixture/renamed.sli").unwrap().def.length, 30.0);
+
+    let first_path = first._publisher_mounts.resolve_map_alias(&fixture.map_dir(), alias).unwrap();
+    let second_path = second._publisher_mounts.resolve_map_alias(&fixture.map_dir(), alias).unwrap();
+    assert_ne!(first_path, second_path);
+    let unscoped = omsi_cfg::resolve_path(&fixture.map_dir(), alias);
+    assert!(!omsi_cfg::vfs::is_file(&unscoped), "an unleased lookup must not select a conflicting authority");
+    drop(second);
+    assert_eq!(omsi_cfg::resolve_path(&fixture.map_dir(), alias), first_path);
 }
 
 #[cfg(any(target_os = "macos", windows))]
