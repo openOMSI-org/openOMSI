@@ -1023,7 +1023,7 @@ pub fn set_outside_open(v: Option<f32>) {
     OUTSIDE_VOL.store(v.to_bits(), std::sync::atomic::Ordering::Relaxed);
 }
 
-fn outside_vol() -> f32 {
+pub(crate) fn outside_vol() -> f32 {
     f32::from_bits(OUTSIDE_VOL.load(std::sync::atomic::Ordering::Relaxed))
 }
 
