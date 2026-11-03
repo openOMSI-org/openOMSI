@@ -15,7 +15,6 @@ pub(crate) fn draw_gaussian(seed: u64, n: u64) -> f32 {
     inverse_cdf(quantile)
 }
 
-
 fn inverse_cdf(quantile: f32) -> f32 {
     const A1: f32 = -3.969683028665376e+01;
     const A2: f32 = 2.209460984245205e+02;
