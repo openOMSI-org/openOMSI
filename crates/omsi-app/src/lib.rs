@@ -51,6 +51,7 @@ use omsi_career::career;
 use omsi_input::describe;
 pub(crate) use omsi_scene::editor;
 mod duty_book;
+mod first_graphics;
 mod game_lists;
 mod game_panels;
 mod game_controller_menu;
