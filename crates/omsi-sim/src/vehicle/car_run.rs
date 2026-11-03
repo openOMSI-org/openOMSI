@@ -159,7 +159,7 @@ pub struct CarRun {
     lead_len: Option<usize>,
     /// Slots of [`PLACE_IN_TRAIN`] here.
     place_slots: [Option<VarId>; 3],
-    paint_base: Vec<(VarId, f32)>,
+    paint_base: Vec<(String, VarId, f32)>,
 }
 
 impl CarRun {
@@ -197,7 +197,15 @@ impl CarRun {
         run.write_place(place);
         let (prog, state, machine) = (run.prog.clone(), &mut run.state, &mut run.machine);
         quietly(lead, |host| machine.run_init(&prog, state, host));
-        run.paint_base = super::instance::scheme_var_names(ty).iter().filter_map(|k| run.names.get(k).map(|&slot| (slot, run.state.vars[slot as usize]))).collect();
+        run.paint_base = super::instance::scheme_var_names(ty)
+            .into_iter()
+            .filter_map(|k| {
+                let slot = *run.names.get(&k)?;
+                let now = run.state.vars[slot as usize];
+                let lead_base = lead.paint_base.iter().find(|(n, _)| *n == k).map(|(_, v)| *v);
+                Some((k, slot, if run.prog.init_stores(slot) { now } else { lead_base.unwrap_or(now) }))
+            })
+            .collect();
         // ({init} puts the defaults the paint's variables are meant to replace)
         if let Some(scheme) = lead.host.paint_scheme {
             run.apply_paint(ty, scheme);
@@ -209,9 +217,6 @@ impl CarRun {
     /// `Colorscheme` and the scheme's `[setvar]`s of the car's own paints (the same number).
     pub(super) fn apply_paint(&mut self, ty: &VehicleType, scheme: Option<usize>) {
         let scheme = scheme.filter(|i| *i < ty.paint_schemes.len());
-        for &(slot, v) in &self.paint_base {
-            self.state.vars[slot as usize] = v;
-        }
         let mut put = |name: &str, v: f32| {
             if let Some(slot) = omsi_script::compile::with_lower(name, |k| self.names.get(k).copied()) {
                 self.state.vars[slot as usize] = v;
@@ -221,6 +226,14 @@ impl CarRun {
         if let Some(i) = scheme {
             for (name, v) in &ty.paint_schemes[i].set_vars {
                 put(name, *v);
+            }
+        }
+    }
+
+    pub(super) fn release_paint(&mut self, ty: &VehicleType, old: Option<usize>, new: Option<usize>) {
+        for (name, slot, v) in &self.paint_base {
+            if super::instance::scheme_sets(ty, old, name) && !super::instance::scheme_sets(ty, new, name) {
+                self.state.vars[*slot as usize] = *v;
             }
         }
     }

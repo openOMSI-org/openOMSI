@@ -150,7 +150,7 @@ impl VehicleInstance {
             state.vars[*i as usize] = host.schedule_active;
         }
         vm.run_init(&program, &mut state, &mut host);
-        let paint_base = unpainted_values(&ty, host.paint_scheme.flatten(), before_paint, &var_index, &state.vars);
+        let paint_base = unpainted_values(&program, before_paint, &var_index, &state.vars);
         let mut animators: Vec<MeshAnimator> = ty
             .meshes
             .iter()
@@ -434,15 +434,10 @@ impl VehicleInstance {
         let scheme = scheme.filter(|i| *i < self.ty.paint_schemes.len());
         // (an engine variable: a model may switch meshes by it without declaring it)
         self.set_engine_var("Colorscheme", scheme.map(|i| i as f32).unwrap_or(-1.0));
-        let set_vars = scheme.map(|i| self.ty.paint_schemes[i].set_vars.clone()).unwrap_or_default();
-        let sets = |list: &[(String, f32)], k: &str| list.iter().any(|(n, _)| n.eq_ignore_ascii_case(k));
-        for (k, v) in self.paint_base.clone() {
-            if !sets(&set_vars, &k) && !sets(&self.scheme_overrides, &k) {
-                self.set_var(&k, v);
+        if let Some(i) = scheme {
+            for (var, v) in self.ty.paint_schemes[i].set_vars.clone() {
+                self.set_var(&var, v);
             }
-        }
-        for (var, v) in set_vars {
-            self.set_var(&var, v);
         }
         // the cars that run their scripts themselves wear it too
         for part in &mut self.trailers {
@@ -479,7 +474,19 @@ impl VehicleInstance {
     }
 
     pub fn repaint(&mut self, scheme: Option<usize>) {
-        self.host.paint_scheme = Some(scheme.filter(|i| *i < self.ty.paint_schemes.len()));
+        let scheme = scheme.filter(|i| *i < self.ty.paint_schemes.len());
+        let old = self.host.paint_scheme.flatten();
+        for (k, v) in self.paint_base.clone() {
+            if scheme_sets(&self.ty, old, &k) && !scheme_sets(&self.ty, scheme, &k) && !self.scheme_overrides.iter().any(|(n, _)| n.eq_ignore_ascii_case(&k)) {
+                self.set_var(&k, v);
+            }
+        }
+        for part in &mut self.trailers {
+            if let Some(run) = part.run.as_deref_mut() {
+                run.release_paint(&part.ty, old, scheme);
+            }
+        }
+        self.host.paint_scheme = Some(scheme);
         self.apply_paint_vars(scheme);
     }
 
@@ -514,17 +521,18 @@ fn scheme_values(ty: &VehicleType, var_index: &HashMap<String, omsi_script::VarI
     }).collect()
 }
 
-fn unpainted_values(ty: &VehicleType, worn: Option<usize>, before: Vec<(String, Option<f32>)>, var_index: &HashMap<String, omsi_script::VarId>, vars: &[f32]) -> Vec<(String, f32)> {
-    let worn = worn.and_then(|i| ty.paint_schemes.get(i));
+fn unpainted_values(program: &omsi_script::Program, before: Vec<(String, Option<f32>)>, var_index: &HashMap<String, omsi_script::VarId>, vars: &[f32]) -> Vec<(String, f32)> {
     before
         .into_iter()
         .map(|(k, before)| {
-            let now = var_index.get(&k).map(|id| vars[*id as usize]);
-            let put = worn.and_then(|s| s.set_vars.iter().find(|(n, _)| n.eq_ignore_ascii_case(&k))).map(|(_, v)| *v);
-            let base = if put.is_some() && now == put { before } else { now.or(before) };
-            (k, base.unwrap_or(0.0))
+            let after_init = program.var(&k).filter(|id| program.init_stores(*id)).and_then(|_| var_index.get(&k)).map(|id| vars[*id as usize]);
+            (k, after_init.or(before).unwrap_or(0.0))
         })
         .collect()
+}
+
+pub(super) fn scheme_sets(ty: &VehicleType, scheme: Option<usize>, name: &str) -> bool {
+    scheme.and_then(|i| ty.paint_schemes.get(i)).is_some_and(|s| s.set_vars.iter().any(|(n, _)| n.eq_ignore_ascii_case(name)))
 }
 
 pub(super) fn control_cables(ty: &VehicleType) -> Vec<(omsi_script::VarId, omsi_script::VarId)> {
