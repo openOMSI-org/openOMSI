@@ -78,7 +78,7 @@ struct CityGround {
 
 /// The city map's camera: its view-projection (relative to `centre`) and its inverse.
 pub(super) struct CityCam {
-    vp: Mat4,
+    pub(super) vp: Mat4,
     inv: Mat4,
 }
 
@@ -515,7 +515,9 @@ impl Navigator {
         let tilt = self.city.tilt;
         let centre = self.city.center;
         // (tilted, the far part of the view reaches well beyond the middle's scale)
-        let radius = (w.max(h) as f64 * mpp * (0.8 + 1.4 * tilt as f64)).max(500.0);
+        let cam = Self::city_cam(mpp, tilt, self.city.phi, w, h);
+        let visible_reach = super::build::view::ground_reach(cam.vp).unwrap_or_else(|| (w.max(h) as f64 * mpp * (0.8 + 1.4 * tilt as f64)).max(500.0));
+        let radius = super::build::view::padded(visible_reach);
         let detail = (mpp < 0.7) as u64 | ((mpp < 2.2) as u64) << 1 | ((mpp < 3.5) as u64) << 2 | ((mpp < 6.0) as u64) << 3;
         let band = self.contour_band();
         let key = self.look_key() ^ detail << 40 ^ self.global_version << 48 ^ band.map_or(0, |b| 1 + b.1) << 60;
@@ -535,7 +537,7 @@ impl Navigator {
         }
         let stale = match self.city.ground {
             None => true,
-            Some(g) => g.key != key || (g.centre - centre).length() > g.radius * 0.35 || g.mpp / mpp > 1.7 || mpp / g.mpp > 1.7,
+            Some(g) => g.key != key || (g.centre - centre).length() + visible_reach > g.radius || g.mpp / mpp > 1.7 || mpp / g.mpp > 1.7,
         };
         if stale && arrived.is_none() {
             let look = if self.classic_2d {
@@ -544,6 +546,7 @@ impl Navigator {
                 GroundLook { surfaces: mpp < 0.7, trees: mpp < 0.7, dashes: mpp < 3.5, tol: 0.0 }
             };
             let mut parts = self.ground_parts(net, band.map(|b| b.0));
+            parts.house_reach = Some((w.max(h) as f64 * mpp * (0.8 + 1.4 * tilt as f64)).max(500.0));
             if self.classic_2d {
                 parts.md = None;
                 parts.surface = None;

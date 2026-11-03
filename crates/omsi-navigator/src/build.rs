@@ -18,6 +18,8 @@ use std::sync::Arc;
 const MAX_GROUND_VERTS: usize = 2_000_000;
 const MAX_HOUSE_VERTS: usize = 750_000;
 
+pub(super) mod view;
+
 #[cfg(test)]
 mod tests;
 
@@ -31,6 +33,8 @@ pub(super) struct GroundParts {
     pub surface: Option<Arc<omsi_map::package::Package>>,
     /// The terrain view: how strong the contour lines are (None: off).
     pub contours: Option<f32>,
+    /// Tall buildings can project into the view from beyond the ground footprint.
+    pub house_reach: Option<f64>,
 }
 
 /// What a build makes, relative to `anchor`: the ground, and the houses' shadows, standing
@@ -73,17 +77,7 @@ impl Built {
 /// budget above; `mpp`: world metres per pixel at the build's centre (ribbon width in a fallback).
 pub(super) fn build(parts: &GroundParts, anchor: DVec2, reach: f64, pal: &Palette, look: GroundLook, paved: bool, houses: Option<usize>, capped: bool, mpp: f32) -> Built {
     let painter = |max| if capped { Painter::with_vertex_budget(max) } else { Painter::new() };
-    let mut p = if capped { Painter::with_ground_budget(MAX_GROUND_VERTS, reach as f32, mpp) } else { Painter::new() };
-    let mut layers = None;
-    if let Some(sf) = parts.surface.as_deref() {
-        layers = Some(super::surface::build_surface(&mut p, sf, anchor, Some((anchor, reach)), pal, parts.contours.is_some()));
-    }
-    if let Some(md) = parts.md.as_deref() {
-        md.build_land(&mut p, anchor, anchor, reach, pal, look);
-    }
-    if let (Some(layers), Some(k)) = (layers.as_ref(), parts.contours) {
-        super::surface::build_contours(&mut p, layers, anchor, pal, k);
-    }
+    let mut p = if capped { Painter::with_ground_budget(MAX_GROUND_VERTS - 6, reach as f32, mpp) } else { Painter::new() };
     let paved = paved && parts.md.is_some();
     let rel = |q: DVec3| Vec3::new((q.x - anchor.x) as f32, (q.y - anchor.y) as f32, 0.0);
     // the network's carriageways where the map has no paving of its own for them (else the
@@ -96,7 +90,14 @@ pub(super) fn build(parts: &GroundParts, anchor: DVec2, reach: f64, pal: &Palett
     let near: Vec<(&MapRoad, Vec<Vec3>)> = parts
         .roads
         .iter()
-        .filter(|(l, covered)| !(paved && *covered) && l.points.iter().any(|q| (q.truncate() - anchor).length() < reach))
+        .filter(|(l, covered)| !(paved && *covered) && l.points.windows(2).any(|segment| {
+            let a = segment[0].truncate() - anchor;
+            let b = segment[1].truncate() - anchor;
+            let margin = l.width as f64 + 1.0;
+            let lo = a.min(b);
+            let hi = a.max(b);
+            lo.x <= reach + margin && lo.y <= reach + margin && hi.x >= -reach - margin && hi.y >= -reach - margin
+        }))
         .map(|(l, _)| (l, simplify(&l.points.iter().map(|q| rel(*q)).collect::<Vec<_>>(), tol)))
         // (a road shorter than a pixel is a dot its neighbours' ends already cover)
         .filter(|(_, pts)| look.tol == 0.0 || span(pts) >= look.tol * 2.0)
@@ -116,14 +117,30 @@ pub(super) fn build(parts: &GroundParts, anchor: DVec2, reach: f64, pal: &Palett
     if let Some(md) = parts.md.as_deref() {
         md.build_lines(&mut p, anchor, anchor, reach, pal, look);
     }
+    // Build the roads first so dense terrain cannot spend their geometry budget.
+    // Draw order stays background, then roads; only the remaining budget goes to terrain.
+    let roads_reduced = p.ground_reduced();
+    let roads = p.finish_ground();
+    let mut p = if capped { Painter::with_ground_budget(MAX_GROUND_VERTS - roads.len(), reach as f32, mpp) } else { Painter::new() };
+    let mut layers = None;
+    if let Some(sf) = parts.surface.as_deref() {
+        layers = Some(super::surface::build_surface(&mut p, sf, anchor, Some((anchor, reach)), pal, parts.contours.is_some()));
+    }
+    if let Some(md) = parts.md.as_deref() {
+        md.build_land(&mut p, anchor, anchor, reach, pal, look);
+    }
+    if let (Some(layers), Some(k)) = (layers.as_ref(), parts.contours) {
+        super::surface::build_contours(&mut p, layers, anchor, pal, k);
+    }
     let (mut sh, mut so, mut fl) = (painter(MAX_HOUSE_VERTS), painter(MAX_HOUSE_VERTS), painter(MAX_HOUSE_VERTS));
     if let (Some(models), Some(md)) = (houses, parts.md.as_deref()) {
-        md.build_houses(&mut sh, &mut so, &mut fl, anchor, anchor, reach, models, pal);
+        md.build_houses(&mut sh, &mut so, &mut fl, anchor, anchor, reach.max(parts.house_reach.unwrap_or(reach)), models, pal);
     }
     let reduced = p.ground_reduced();
-    let ground = p.finish_ground();
-    if capped && (reduced || [sh.verts.len(), so.verts.len(), fl.verts.len()].into_iter().any(|n| n >= MAX_HOUSE_VERTS - 3)) {
-        log::warn!("navigator: map geometry reached its safety budget; ground coarsened: {reduced} ({} ground, {} shadow, {} walls, {} flat vertices)", ground.len(), sh.verts.len(), so.verts.len(), fl.verts.len());
+    let mut ground = p.finish_ground();
+    ground.extend(roads);
+    if capped && (reduced || roads_reduced || [sh.verts.len(), so.verts.len(), fl.verts.len()].into_iter().any(|n| n >= MAX_HOUSE_VERTS - 3)) {
+        log::warn!("navigator: map geometry reached its safety budget; ground coarsened: {reduced}, roads coarsened: {roads_reduced} ({} ground, {} shadow, {} walls, {} flat vertices)", ground.len(), sh.verts.len(), so.verts.len(), fl.verts.len());
     }
     Built::new(anchor, [ground, sh.verts, so.verts, fl.verts])
 }
@@ -145,7 +162,7 @@ impl MapGround {
                 (l, c)
             })
             .collect();
-        MapGround { parts: GroundParts { roads: Arc::new(roads), net: Some(net), md, surface: package.map(Arc::new), contours: None } }
+        MapGround { parts: GroundParts { roads: Arc::new(roads), net: Some(net), md, surface: package.map(Arc::new), contours: None, house_reach: None } }
     }
 
     /// Everything within `reach` of `anchor` as the city map shows it at `mpp` metres a pixel
@@ -254,6 +271,7 @@ impl Navigator {
             md: self.map_data.clone(),
             surface: self.surface.clone().filter(|_| self.show_surface),
             contours,
+            house_reach: None,
         }
     }
 }
