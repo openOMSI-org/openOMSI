@@ -7,6 +7,7 @@
 //! overhead line's own (frog, switch) off or give a file for them (see `docs/TROLLEYBUS.md`, Sounds).
 
 use glam::Vec3;
+use crate::soundset::{cab_lowpass_hz, outside_vol};
 use crate::{AudioEngine, Clip, SoundSet, VoiceId, VoiceParams};
 use omsi_trolley::{PoleMode, RigSound, SoundChoice, TrolleyRig, WireNet};
 use std::path::{Path, PathBuf};
@@ -17,6 +18,18 @@ const RATE: u32 = 44100;
 const HISS_GAIN: f32 = 0.035;
 const HISS_NEAR: f32 = 1.0;
 const HISS_FAR: f32 = 5.0;
+
+/// How a sound is heard from the player's cab, with `open` its `Snd_OutsideVol`: (gain factor,
+/// low-pass Hz). Knocks carried down the pole into the roof come through the body; an airborne
+/// sound only through what is open, as Omsi.exe hears outside sounds from a cab.
+fn cab(inside: bool, roof_borne: bool, open: f32) -> (f32, f32) {
+    let open = if open.is_finite() { open.clamp(0.0, 1.0) } else { 0.0 };
+    match (inside, roof_borne) {
+        (false, _) => (1.0, 0.0),
+        (true, true) => (0.5 + 0.5 * open, cab_lowpass_hz(0.4 + 0.6 * open)),
+        (true, false) => ((0.2 + open).min(1.0), cab_lowpass_hz(open)),
+    }
+}
 
 struct Rng(u64);
 
@@ -141,8 +154,9 @@ pub struct SwitchSound {
 }
 
 impl SwitchSound {
-    /// Drain each actual switch movement once and play the map's sound at the frog.
-    pub fn update(&mut self, audio: &AudioEngine, net: &Arc<WireNet>, paused: bool) -> usize {
+    /// Drain each actual switch movement once and play the map's sound at the frog; `inside`:
+    /// the listener is in the player's cab.
+    pub fn update(&mut self, audio: &AudioEngine, net: &Arc<WireNet>, inside: bool, paused: bool) -> usize {
         let events = net.take_switch_sounds();
         if paused || events.is_empty() {
             return 0;
@@ -154,10 +168,11 @@ impl SwitchSound {
         }
         let Some(clip) = &self.clip else { return 0 };
         let count = events.len();
+        let (through, lowpass_hz) = cab(inside, false, outside_vol());
         for position in events {
             audio.play(clip.clone(), VoiceParams {
-                gain: 0.6, pitch: 1.0, looping: false, position: Some(position.as_vec3()),
-                doppler: false, range: 2.0, lowpass_hz: 0.0, important: true,
+                gain: 0.6 * through, pitch: 1.0, looping: false, position: Some(position.as_vec3()),
+                doppler: false, range: 3.0, lowpass_hz, important: true,
             });
         }
         count
@@ -260,9 +275,10 @@ impl TrolleySound {
                 _ => *voice = Some(audio.play_from_random_place(c.hiss.clone().unwrap(), params)),
             }
         }
-        let one = |clip: &Option<Arc<Clip>>, gain: f32, at: Vec3, range: f32| {
+        let open = outside_vol();
+        let one = |clip: &Option<Arc<Clip>>, gain: f32, at: Vec3, range: f32, heard: (f32, f32)| {
             let Some(clip) = clip else { return };
-            audio.play(clip.clone(), VoiceParams { gain, pitch: 1.0, looping: false, position: Some(at), doppler: false, range, lowpass_hz: 0.0, important: true });
+            audio.play(clip.clone(), VoiceParams { gain: gain * heard.0, pitch: 1.0, looping: false, position: Some(at), doppler: false, range, lowpass_hz: heard.1, important: true });
         };
         let mut sp = sparks_at.iter().copied();
         for s in sounds {
@@ -272,11 +288,11 @@ impl TrolleySound {
                 continue;
             }
             match s {
-                RigSound::Click => one(&c.click, 0.5, roof - Vec3::Y * 2.0, 6.0),
-                RigSound::Thud(l) => one(&c.thud, 0.3 + 0.5 * l, tip, 12.0),
-                RigSound::Snap(l) => one(&c.snap, 0.3 + 0.7 * l, sp.next().unwrap_or(tip), 40.0),
-                RigSound::Frog => one(&c.frog, 0.7, tip, 20.0),
-                RigSound::Release | RigSound::Latch => one(&c.clack, 0.5, roof - Vec3::Y * 4.0, 10.0),
+                RigSound::Click => one(&c.click, 0.5, roof - Vec3::Y * 2.0, 1.5, (1.0, 0.0)),
+                RigSound::Thud(l) => one(&c.thud, 0.3 + 0.5 * l, tip, 2.0, cab(inside, true, open)),
+                RigSound::Snap(l) => one(&c.snap, 0.3 + 0.7 * l, sp.next().unwrap_or(tip), 3.0, cab(inside, false, open)),
+                RigSound::Frog => one(&c.frog, 0.7, tip, 2.0, cab(inside, true, open)),
+                RigSound::Release | RigSound::Latch => one(&c.clack, 0.5, roof - Vec3::Y * 4.0, 1.5, cab(inside, true, open)),
             }
         }
     }
@@ -301,6 +317,19 @@ mod tests {
         assert_eq!(hiss_params(1.0, true, contact, contact).gain, 0.0);
         assert_eq!(hiss_params(0.0, false, contact, contact).gain, 0.0);
         assert_eq!(hiss_params(1.0, false, contact, Vec3::splat(f32::NAN)).gain, 0.0);
+    }
+
+    #[test]
+    fn cab_muffles_airborne_sounds_more_than_roof_knocks() {
+        assert_eq!(cab(false, false, 0.0), (1.0, 0.0));
+        assert_eq!(cab(false, true, 0.0), (1.0, 0.0));
+        let (air, air_lp) = cab(true, false, 0.0);
+        let (roof, roof_lp) = cab(true, true, 0.0);
+        assert!((air - 0.2).abs() < 1e-6 && (air_lp - 500.0).abs() < 1e-3);
+        assert!(roof > air && roof_lp > air_lp);
+        assert_eq!(cab(true, false, 1.0), (1.0, 0.0));
+        assert_eq!(cab(true, true, 1.0), (1.0, 0.0));
+        assert_eq!(cab(true, false, f32::NAN), cab(true, false, 0.0));
     }
 
     #[test]
@@ -342,16 +371,16 @@ mod tests {
         let audio = AudioEngine::capture(44100);
         let mut sound = SwitchSound::default();
         let net = network("on");
-        assert_eq!(sound.update(&audio, &net, false), 0);
+        assert_eq!(sound.update(&audio, &net, false, false), 0);
         net.set_switch(0, true);
-        assert_eq!(sound.update(&audio, &net, false), 1);
-        assert_eq!(sound.update(&audio, &net, false), 0);
+        assert_eq!(sound.update(&audio, &net, false, false), 1);
+        assert_eq!(sound.update(&audio, &net, false, false), 0);
         net.set_switch(0, false);
-        assert_eq!(sound.update(&audio, &net, true), 0);
-        assert_eq!(sound.update(&audio, &net, false), 0);
+        assert_eq!(sound.update(&audio, &net, false, true), 0);
+        assert_eq!(sound.update(&audio, &net, false, false), 0);
         let off = network("off");
         off.set_switch(0, true);
-        assert_eq!(sound.update(&audio, &off, false), 0);
+        assert_eq!(sound.update(&audio, &off, false, false), 0);
         assert!(off.take_switch_sounds().is_empty());
     }
 }

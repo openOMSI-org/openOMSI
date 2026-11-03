@@ -294,7 +294,7 @@ pub(super) fn audio(cx: AudioCx, dt: f32) {
         cx.sound.milezero.update(a, cx.common.settings.milezero, cx.common.settings.volume);
         if let Some(world) = cx.world.world.as_ref() {
             if let Some(net) = world.trolley_net.lock().clone() {
-                cx.sound.switch_sound.update(a, &net, *cx.clock.paused);
+                cx.sound.switch_sound.update(a, &net, cx.view.cam.in_cab && cx.player.player.is_some(), *cx.clock.paused);
             }
         }
         match cx.player.player.as_mut() {

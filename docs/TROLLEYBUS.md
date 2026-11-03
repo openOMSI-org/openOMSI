@@ -331,6 +331,13 @@ falloff, and they are completely silent at 5 m and beyond. They are also silent 
 A bus-authored `sound.cfg` hiss keeps its own volume, viewpoint and 3-D settings; old sliding
 loops should not be played over the native hiss as well.
 
+The other built-in sounds are at full volume within a few metres (`[3d]`-style: arc crack 3 m,
+switch mechanism 3 m, frog and thud 2 m, hook and contactors 1.5 m) and fall off as 1/d beyond.
+In the player's cab the arc crack and the switch mechanism are heard like other outside sounds:
+quieter and dull with doors and windows shut, clear as they open (`Snd_OutsideVol`). The frog,
+the thud and the hook carry down the pole into the roof and stay clearer; the contactors are in
+the bus and are not muffled.
+
 **A vehicle** plays its own the OMSI way, in its `sound.cfg`: an entry with `[trigger]` on one
 of the triggers above plays each time that happens (the game fires the trigger as a script's
 `(T.L.trolley_thud)` would), and the game's own sound is not played; an entry whose volume
