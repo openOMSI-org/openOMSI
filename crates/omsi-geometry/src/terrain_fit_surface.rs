@@ -2,6 +2,10 @@
 use super::*;
 use std::collections::HashMap;
 
+// The road shoulder may be steep, but an almost vertical spline face must not
+// extrapolate its tangent into kilometer-high terrain spikes.
+const MAX_SHOULDER_GRADIENT: f64 = 8.0;
+
 pub(super) fn profiles(def: &Spline) -> Vec<Vec<[f32; 3]>> {
     if !def.terrain_hole_profiles.is_empty() {
         return def.terrain_hole_profiles.clone();
@@ -90,6 +94,11 @@ pub(super) fn boundary(mesh: &MeshData, offset: DVec3) -> Vec<([DVec3; 2], DVec2
             continue;
         }
         let gradient = DVec2::new(d.z * e.y - e.z * d.y, d.x * e.z - e.x * d.z) / det;
+        let gradient = if gradient.is_finite() {
+            gradient.clamp_length_max(MAX_SHOULDER_GRADIENT)
+        } else {
+            DVec2::ZERO
+        };
         for j in 0..3 {
             let (u, v) = (t[j], t[(j + 1) % 3]);
             let entry = edges.entry((u.min(v), u.max(v))).or_insert((
@@ -110,3 +119,49 @@ pub(super) fn boundary(mesh: &MeshData, offset: DVec3) -> Vec<([DVec3; 2], DVec2
         .map(|(_, (_, points, gradient))| (points, gradient))
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn steep_narrow_spline_face_has_a_bounded_shoulder_tangent() {
+        // The XY projection is a 1 mm sliver, but the surface climbs 1 km.
+        // Extrapolating that gradient into the adjacent terrain creates spikes.
+        let mesh = MeshData {
+            positions: vec![
+                Vec3::new(0.0, 0.0, 0.0),
+                Vec3::new(0.001, 0.0, 1000.0),
+                Vec3::new(0.0, 0.001, 0.0),
+            ],
+            indices: vec![0, 1, 2],
+            ..Default::default()
+        };
+        let edges = boundary(&mesh, DVec3::ZERO);
+        assert_eq!(edges.len(), 3);
+        for (_, tangent) in edges {
+            assert!(tangent.is_finite());
+            assert!(tangent.length() <= MAX_SHOULDER_GRADIENT + 1e-6);
+        }
+    }
+
+    #[test]
+    fn ordinary_road_slope_keeps_its_tangent() {
+        let mesh = MeshData {
+            positions: vec![
+                Vec3::new(0.0, 0.0, 0.0),
+                Vec3::new(1.0, 0.0, 0.5),
+                Vec3::new(0.0, 1.0, 0.0),
+            ],
+            indices: vec![0, 1, 2],
+            ..Default::default()
+        };
+        let edges = boundary(&mesh, DVec3::ZERO);
+        assert_eq!(edges.len(), 3);
+        for (_, tangent) in edges {
+            assert!((tangent.length() - 0.5).abs() < 1e-6);
+        }
+    }
+}
+
+[executed on device: Gaming PC (5e20e136-803f-4de7-b45c-6cae00d89d56)]
