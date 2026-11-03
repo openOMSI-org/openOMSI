@@ -583,6 +583,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **The flashlight no longer follows a hidden cursor**: with *Flashlight follows the cursor* on,
+  the cursor hidden while a controller drives still steered the beam; now the beam shines
+  straight ahead until the mouse brings the cursor back.
 - **The map's own sounds are quieter inside the bus**: birds, church bells, fountains and the
   other sounds of the scenery are heard through the bus's bodywork in a cab view, louder as the
   doors and windows open, as the AI traffic already was; outside they keep their full volume.
