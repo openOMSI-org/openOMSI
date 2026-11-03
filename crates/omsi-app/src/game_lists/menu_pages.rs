@@ -156,6 +156,8 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         slider_row(app, "look_smoothing_ms", "Smooth the mouse look", "How long the view takes to come round to where the mouse or the stick turned it (off: at once, as OMSI)", &|v| if v <= 0.0 { "Off".to_string() } else { format!("{v:.0} ms") }),
         switch_row(app, "alt_view", "Right mouse button turns the view", "Shift+right zooms; off: right zooms as in OMSI, the wheel button turns"),
         switch_row(app, "precision_zoom", "Precision mouse zoom", "The mouse zoom follows the FOV curve instead of OMSI's linear way"),
+        slider_row(app, "zoom_hold_amount", "Zoom on a key", "How far the view zooms while the zoom key is held (Controls: Zoom while held)", &|v| format!("{}x", format!("{:.2}", 1.0 / v.max(0.15)).trim_end_matches('0').trim_end_matches('.'))),
+        switch_row(app, "zoom_hold_latch", "Zoom key stays", "One press zooms in, the next zooms out; off: only while the key is held"),
         slider_row(app, "fov", "Field of view", "Vertical field of view; in triple screen Default uses physical measurements, an override moves the virtual eye", &|v| if v < 20.0 { "Default".to_string() } else { format!("{v:.0}°") }),
         slider_row(app, "seat 1", "Seat forward and back", "Adjust the driver's seat position forward or backward", &cm),
         slider_row(app, "seat 2", "Seat height", "Adjust the driver's seat height", &cm),
@@ -371,9 +373,8 @@ pub(super) fn world_pages(app: &App) -> Vec<Page> {
             // the date: by a day, a week or a month, the time of day kept (the timetable's
             // day, the season and the map's chrono changes follow it as at midnight)
             let (d, m) = app.clock.day_month();
-            let day = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][app.clock.weekday().rem_euclid(7) as usize];
-            let date = format!("{:04}-{m:02}-{d:02}  {}", app.clock.year, omsi_ui::tr(day));
-            time.push((row("Date", 'i', &date, "The day the timetable, the season and the map's changes follow", None), "noop".to_string()));
+            let date = format!("{:04}-{m:02}-{d:02}", app.clock.year);
+            time.push((row("Date", 'd', &date, "The day the timetable, the season and the map's changes follow", None), "date".to_string()));
             for (name, text, secs) in [
                 ("Date -1 month", "-1 month", app.clock.months_away(-1)),
                 ("Date -1 week", "-1 week", -7.0 * 86400.0),
@@ -442,7 +443,7 @@ pub(super) fn world_pages(app: &App) -> Vec<Page> {
     }
     people.extend(slider_row(app, "pax", "Passengers", "How many passengers wait at the stops and ride.", &pct));
     vec![
-        ("Time", sectioned_rows(time, "Clock and time speed", &[("clock_shift -3600", "Quick time changes"), ("clock_set 21600", "Time presets"), ("noop", "Date"), ("clock_ontime", "Timetable"), ("speed", "Time speed")])),
+        ("Time", sectioned_rows(time, "Clock and time speed", &[("clock_shift -3600", "Quick time changes"), ("clock_set 21600", "Time presets"), ("date", "Date"), ("noop", "Date"), ("clock_ontime", "Timetable"), ("speed", "Time speed")])),
         ("Weather", weather_rows(weather, climate)),
         ("Traffic and people", sectioned_rows(people, "Traffic", &[("pax", "Passengers")])),
         ("Tools", tools),

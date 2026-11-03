@@ -211,7 +211,7 @@ impl App {
 /// The triple screen's panels as the view's zoom has them (None: no triple screen).
 pub(crate) fn triple_rig(settings: &settings::Settings, cam: &ViewState, view: &str, size: (u32, u32)) -> Option<omsi_render::TripleScreen> {
     (settings.triple.enabled && !settings.vr_requested())
-        .then(|| settings.triple.zoomed(size.0, size.1, cam.view_zoom.get(view).copied().unwrap_or(1.0)))
+        .then(|| settings.triple.zoomed(size.0, size.1, cam.view_zoom.get(view).copied().unwrap_or(1.0) * cam.zoom_hold.factor))
 }
 
 /// With a triple screen, the frustum around all three panels for "nothing appears or

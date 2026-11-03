@@ -53,6 +53,7 @@ pub(crate) enum ListKind {
     Drivers,
     Numbers,
     Liveries,
+    Streets,
     /// The vehicles placed in the world, to take the wheel of one of them (#2026).
     SwitchTo,
     /// The termini of the bus's depot file, for its destination display.
@@ -77,7 +78,7 @@ pub(crate) enum ListKind {
 /// The lists with a search line on top: the vehicles to place, the depot files and the
 /// destinations.
 pub(crate) fn searchable(kind: &ListKind) -> bool {
-    matches!(kind, ListKind::Hofs | ListKind::Liveries | ListKind::Destinations | ListKind::PlaceMaker | ListKind::PlaceType(_) | ListKind::PlaceHof(..) | ListKind::AdminPlayers)
+    matches!(kind, ListKind::Hofs | ListKind::Liveries | ListKind::Streets | ListKind::Destinations | ListKind::PlaceMaker | ListKind::PlaceType(_) | ListKind::PlaceHof(..) | ListKind::AdminPlayers)
 }
 
 /// The search typed (while it is) or set for the open list.
@@ -764,6 +765,15 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
                 out.push((tr("There is no other vehicle to drive"), "back".into()));
             }
         }
+        ListKind::Streets => {
+            let names = app.menus.navigator.as_ref().map(|n| n.street_names()).unwrap_or_default();
+            let mut order: Vec<usize> = (0..names.len()).collect();
+            order.sort_by(|a, b| natural(&names[*a], &names[*b]));
+            out.extend(order.into_iter().map(|i| (names[i].clone(), format!("street {i}"))));
+            if out.is_empty() {
+                out.push((tr("This map has no street names on its signs"), "back".into()));
+            }
+        }
         ListKind::Numbers => {
             if let Some(p) = app.player.as_ref() {
                 let mut numbers = fleet_numbers(&p.vehicle);
@@ -909,6 +919,7 @@ pub(crate) fn menu_extras(
         ListKind::Drivers => (MenuKind::List, head("Driver..."), None),
         ListKind::Numbers => (MenuKind::List, head("Fleet number..."), None),
         ListKind::Liveries => (MenuKind::List, head("Livery..."), None),
+        ListKind::Streets => (MenuKind::List, head("Find a street..."), None),
         ListKind::SwitchTo => (MenuKind::List, head("Drive another vehicle..."), None),
         ListKind::Destinations => (MenuKind::List, head("Destination display..."), None),
         ListKind::RouteNumbers => (MenuKind::List, Some((tr("Route number"), String::new())), None),
@@ -1007,7 +1018,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                 "metar_icao_edit" if step => {
                     if app.menus.menu_edit_icao { app.apply_icao_edit(); } else { app.start_icao_edit(); }
                 }
-                "time_edit" | "clock_ontime" | "clock_set" | "clock_shift" if step => clock_action(app, verb, arg),
+                "time_edit" | "clock_ontime" | "clock_set" | "clock_shift" if step => clock_lines::clock_action(app, verb, arg),
                 "view_editor" if step => { crate::game_panels::view_editor::open(app); return None; }
                 "mirror_hud_edit" if step => { app.page_action(verb); return None; }
                 "seat_reset" if step => {
@@ -1221,6 +1232,16 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             }
             Some(kind.clone())
         }
+        ListKind::Streets => {
+            let names = app.menus.navigator.as_ref().map(|n| n.street_names()).unwrap_or_default();
+            if let Some(name) = arg.trim().parse::<usize>().ok().and_then(|i| names.get(i)) {
+                app.close_game_menu();
+                if let Some(n) = app.menus.navigator.as_mut() {
+                    n.show_street(name);
+                }
+            }
+            None
+        }
         ListKind::Numbers => {
             if let (Some((n, reg)), Some(p)) = (arg.split_once('\u{1}'), app.player.as_mut()) {
                 set_identity_to_player_vehicle(p, n, Some(reg));
@@ -1228,44 +1249,6 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             }
             None
         }
-    }
-}
-
-fn clock_action(app: &mut App, verb: &str, arg: &str) {
-    match verb {
-        // the exact time: Enter starts typing it, and sets it when typed
-        "time_edit" => {
-            if app.menus.menu_edit.is_some() {
-                app.apply_time_edit();
-            } else if app.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
-                app.service_msg = Some(("In a LAN session the host sets the clock".into(), 3.0));
-            } else if app.real_time_locked() {
-                app.service_msg = Some(("The time cannot be changed while the real-time sync is on".into(), 3.0));
-            } else {
-                app.menus.menu_edit = Some(String::new());
-            }
-        }
-        "clock_ontime" => {
-            if app.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
-                app.service_msg = Some(("In a LAN session the host sets the clock".into(), 3.0));
-            } else if let Some(d) = app.player.as_ref().map(|p| p.vehicle.host.tt_delay as f64).filter(|d| d.abs() >= 1.0) {
-                // (the delay as it is now, not as the button was drawn: a second click
-                // would otherwise move the clock by the old amount again)
-                app.shift_clock(-d);
-                if let Some(p) = app.player.as_mut() {
-                    p.vehicle.host.tt_delay = 0.0;
-                }
-            }
-        }
-        "clock_set" | "clock_shift" => {
-            if app.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
-                app.service_msg = Some(("In a LAN session the host sets the clock".into(), 3.0));
-            } else if let Ok(secs) = arg.trim().parse::<f64>() {
-                let by = if verb == "clock_set" { secs - app.clock.time } else { secs };
-                app.shift_clock(by);
-            }
-        }
-        _ => {}
     }
 }
 
@@ -1296,6 +1279,7 @@ mod rows;
 mod options;
 mod dropdowns;
 mod menu_pages;
+mod clock_lines;
 mod duty;
 mod graphics;
 pub(crate) use rows::*;
