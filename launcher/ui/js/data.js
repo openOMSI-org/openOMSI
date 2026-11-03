@@ -307,7 +307,7 @@ export const realDate = () => !!S.settings?.use_real_date;
  * 28th where that year has none. Inside the span, or not a date: kept. The launcher core
  * fits the game's date the same way (`fit_date_to_years`). */
 export function fitDateToMap(date, file) {
-  const span = !S.settings?.use_real_year && S.maps?.find((m) => m.file === file)?.year_span;
+  const span = !(S.settings?.use_real_date && S.settings?.use_real_year) && S.maps?.find((m) => m.file === file)?.year_span;
   const parts = /^(\d+)-(\d+)-(\d+)$/.exec((date || '').trim());
   if (!span || !parts) return date;
   const [, y, mm, dd] = parts;

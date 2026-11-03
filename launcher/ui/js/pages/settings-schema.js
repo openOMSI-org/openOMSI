@@ -405,7 +405,7 @@ const gameplay = {
         { type: 'toggle', key: 'realistic_road_physics', label: 'Realistic road physics' },
         { type: 'toggle', key: 'use_real_time', label: 'Start at the real time' },
         { type: 'toggle', key: 'use_real_date', label: "Start on today's date" },
-        { type: 'toggle', key: 'use_real_year', label: "Keep today's year, even outside the map's years" },
+        { type: 'toggle', key: 'use_real_year', label: "Keep today's year, even outside the map's years", when: (s) => s.use_real_date },
         // the game's clock follows this device's (the host's in multiplayer)
         { type: 'toggle', key: 'time_sync', label: 'Sync the clock with the real time (locks the time)' },
         // the weather follows the METAR report of the airport nearest the map

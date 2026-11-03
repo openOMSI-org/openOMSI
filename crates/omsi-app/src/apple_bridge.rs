@@ -314,7 +314,7 @@ fn act(s: &mut State, a: &Value) -> anyhow::Result<Value> {
         "select_map" => {
             let file = st("file");
             if s.choice.map != file {
-                let span = s.maps.iter().find(|m| m.file == file).and_then(|m| m.year_span).filter(|_| !s.settings.get("use_real_year").and_then(|v| v.as_bool()).unwrap_or(false));
+                let span = s.maps.iter().find(|m| m.file == file).and_then(|m| m.year_span).filter(|_| !["use_real_date", "use_real_year"].iter().all(|k| s.settings.get(*k).and_then(|v| v.as_bool()).unwrap_or(false)));
                 s.choice.date = core::fit_date_to_years(&s.choice.date, span);
             }
             s.select_map(&file);
