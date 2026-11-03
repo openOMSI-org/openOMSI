@@ -8,6 +8,35 @@ use std::ops::Range;
 use crate::atlas::Atlas;
 use crate::paint::Vertex;
 
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct Packed {
+    pos: [f32; 3],
+    ext: [u16; 2],
+    width: [u16; 2],
+    uv: [f32; 2],
+    color: [u8; 4],
+    mode: [u16; 2],
+}
+
+fn half(v: [f32; 2]) -> [u16; 2] {
+    v.map(|x| half::f16::from_f32(x.clamp(-65504.0, 65504.0)).to_bits())
+}
+
+fn pack(verts: &[Vertex]) -> Vec<Packed> {
+    verts
+        .iter()
+        .map(|v| Packed {
+            pos: v.pos,
+            ext: half(v.ext),
+            width: half(v.width),
+            uv: v.uv,
+            color: v.color.map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8),
+            mode: half(v.mode),
+        })
+        .collect()
+}
+
 /// How one group of draws is seen.
 #[derive(Clone, Copy, Debug)]
 pub struct Layer {
@@ -145,14 +174,14 @@ impl Gpu {
             ],
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("omsi-ui"), bind_group_layouts: &[Some(&u_layout), Some(&tex_layout)], immediate_size: 0 });
-        let attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2, 2 => Float32x2, 3 => Float32x2, 4 => Float32x4, 5 => Float32x2];
+        let attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float16x2, 2 => Float16x2, 3 => Float32x2, 4 => Unorm8x4, 5 => Float16x2];
         let make_pipeline = |depth: Option<wgpu::DepthStencilState>| device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("omsi-ui"),
             layout: Some(&layout),
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_main"),
-                buffers: &[wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Vertex>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &attrs }],
+                buffers: &[wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Packed>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &attrs }],
                 compilation_options: Default::default(),
             },
             primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleList, cull_mode: None, ..Default::default() },
@@ -329,7 +358,8 @@ impl Gpu {
 
     /// Put `verts` into vertex buffer `id` (grown as needed).
     pub fn upload(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, id: usize, verts: &[Vertex]) {
-        let bytes = std::mem::size_of_val(verts) as u64;
+        let verts = pack(verts);
+        let bytes = std::mem::size_of_val(verts.as_slice()) as u64;
         while self.buffers.len() <= id {
             self.buffers.push((None, 0));
         }
@@ -338,18 +368,19 @@ impl Gpu {
             self.buffers[id] = (Self::vertex_buffer(device, cap, false), cap);
         }
         if let (Some(buf), true) = (&self.buffers[id].0, bytes > 0) {
-            queue.write_buffer(buf, 0, bytemuck::cast_slice(verts));
+            queue.write_buffer(buf, 0, bytemuck::cast_slice(&verts));
         }
     }
 
     pub fn vertices(device: &wgpu::Device, verts: &[Vertex]) -> Vertices {
-        let bytes = std::mem::size_of_val(verts) as u64;
+        let verts = pack(verts);
+        let bytes = std::mem::size_of_val(verts.as_slice()) as u64;
         if bytes == 0 {
             return Vertices(None, 0);
         }
         let buf = Self::vertex_buffer(device, bytes, true);
         if let Some(b) = &buf {
-            b.slice(..).get_mapped_range_mut().copy_from_slice(bytemuck::cast_slice(verts));
+            b.slice(..).get_mapped_range_mut().copy_from_slice(bytemuck::cast_slice(&verts));
             b.unmap();
         }
         Vertices(buf, bytes)
@@ -512,6 +543,21 @@ impl Gpu {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn packed_vertices_keep_their_values_in_36_bytes() {
+        let v = crate::Vertex { pos: [1234.5, -987.25, 3.5], ext: [-0.7071, 1.0], width: [3.4, 2.5], uv: [0.123456, 0.987654], color: [0.2, 0.5, 1.0, 0.02], mode: [3.0, 1.0] };
+        let p = super::pack(&[v])[0];
+        assert_eq!(std::mem::size_of::<super::Packed>(), 36);
+        let f = |b: [u16; 2]| b.map(|x| half::f16::from_bits(x).to_f32());
+        assert_eq!(p.pos, v.pos);
+        assert_eq!(p.uv, v.uv);
+        assert_eq!(f(p.mode), v.mode);
+        for (a, b) in f(p.ext).iter().chain(&f(p.width)).zip(v.ext.iter().chain(&v.width)) {
+            assert!((a - b).abs() <= b.abs() * 1e-3, "{a} {b}");
+        }
+        assert_eq!(p.color, [51, 128, 255, 5]);
+    }
+
     #[test]
     fn shader_validates() {
         let m = naga::front::wgsl::parse_str(include_str!("ui.wgsl")).expect("parse");
