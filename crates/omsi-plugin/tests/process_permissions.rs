@@ -41,6 +41,14 @@ impl PluginIo for Game {
         self.messages.push(s.into());
     }
 }
+fn helper() -> &'static str {
+    if cfg!(windows) {
+        "helper.exe"
+    } else {
+        "helper"
+    }
+}
+
 struct Fixture {
     root: PathBuf,
     folder: PathBuf,
@@ -57,11 +65,7 @@ impl Fixture {
         ));
         let folder = root.join("plugins");
         std::fs::create_dir_all(&folder).unwrap();
-        let helper = if cfg!(windows) {
-            "helper.exe"
-        } else {
-            "helper"
-        };
+        let helper = helper();
         std::fs::copy(std::env::current_exe().unwrap(), folder.join(helper)).unwrap();
         let fixture = Self {
             marker: root.join("child-started"),
@@ -82,8 +86,7 @@ impl Fixture {
     }
     fn script_with_wait(&self, helper: &str, poll_before_wait: bool) {
         let quote = |s: &str| serde_json::to_string(s).unwrap();
-        // Loading uses NoVehicle IO, which drops messages from immediately completed waits.
-        // Start once on a frame so both pending and already-finished results reach Game.
+        // Start on a frame because loading's NoVehicle IO discards messages.
         let source = format!(
             r#"
             local handle
@@ -183,14 +186,7 @@ fn process_fixture_starts_with_frame_io() {
 #[test]
 fn completed_denial_is_reported_once_after_reload() {
     let f = Fixture::new();
-    f.script_with_wait(
-        if cfg!(windows) {
-            "helper.exe"
-        } else {
-            "helper"
-        },
-        true,
-    );
+    f.script_with_wait(helper(), true);
     let broker = f.broker();
     let mut host = f.load(broker.clone());
     let mut game = Game::default();
@@ -262,7 +258,7 @@ fn once_waits_without_blocking_frames_then_prompts_again_and_deny_stays_denied()
     let source = std::fs::read_to_string(&entry).unwrap();
     std::fs::write(&entry, format!("{source}\n-- content changed after denial\n")).unwrap();
     std::fs::write(f.folder.join("a_plugin.save.lua"), "return { counter = 2 }").unwrap();
-    std::fs::write(f.folder.join(if cfg!(windows) { "helper.exe" } else { "helper" }), "changed helper").unwrap();
+    std::fs::write(f.folder.join(helper()), "changed helper").unwrap();
     let mut host = f.load(broker.clone());
     let mut game = Game::default();
     drive(&mut host, &mut game, |g| !g.messages.is_empty());
@@ -282,7 +278,7 @@ fn saving_plugin_data_while_awaiting_consent_and_after_restart_preserves_approva
         let folder = if folder_plugin {
             let folder = f.folder.join("a_plugin");
             std::fs::create_dir(&folder).unwrap();
-            let helper = if cfg!(windows) { "helper.exe" } else { "helper" };
+            let helper = helper();
             std::fs::copy(f.folder.join(helper), folder.join(helper)).unwrap();
             std::fs::remove_file(&old_entry).unwrap();
             folder
@@ -429,11 +425,7 @@ fn waiting_dialogs_do_not_occupy_preparation_workers() {
         std::thread::sleep(Duration::from_millis(2));
     }
     assert!(!f.marker.exists());
-    let helper = if cfg!(windows) {
-        "helper.exe"
-    } else {
-        "helper"
-    };
+    let helper = helper();
     let grant =
         ProcessGrant::capture(&f.folder.join("a_plugin.lua"), &f.folder, &[helper.into()]).unwrap();
     let mut approved = Plugins::load_with_process_grants(
