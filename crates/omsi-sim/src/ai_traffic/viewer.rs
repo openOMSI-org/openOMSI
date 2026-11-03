@@ -153,6 +153,29 @@ impl Viewer {
 }
 
 impl TrafficSim {
+    /// Who can be seen: a car out of the view (and farther than the mirrors and the
+    /// shadows reach) leaves its animations as they are and is not drawn at all.
+    pub(super) fn set_visibility(&mut self) {
+        if let Some(v) = self.viewer {
+            for c in &mut self.cars {
+                let p = c.vehicle.position;
+                let r = (c.state.front + c.state.rear).abs().max(4.0) as f64 + 2.0;
+                let d = (p - v.pos).length();
+                let seen = d < UNSEEN_NEAR || v.frames(p, r);
+                let in_mirrors = d < MIRROR_REACH && (p - v.pos).dot(v.forward) < -0.7 * d;
+                c.vehicle.ai_visuals = seen || in_mirrors;
+                // (a car nobody sees, well out of earshot of the mirrors: its script runs a
+                // few times a second, not every frame - each car at its own beat, so the
+                // runs do not all fall in one frame; a bus keeps its stop handshake)
+                c.vehicle.ai_script_period = if !seen && d > UNSEEN_SCRIPT_RANGE && c.bus.is_none() {
+                    0.2 + 0.05 * (c.id % 5) as f32
+                } else {
+                    0.0
+                };
+            }
+        }
+    }
+
     /// Could neither the player nor any LAN player (`lan_eyes`, host) see a vehicle of
     /// radius `r` at `p` appear or vanish? `occluded(v)`: buildings or the ground hide it
     /// from `v`. Asked of the host's own camera alone, a dedicated server's (where the map
