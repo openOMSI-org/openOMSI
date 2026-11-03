@@ -34,6 +34,8 @@ pub(crate) enum Action {
     /// The control of line `k` of a settings window: a slider `fx` of the way along, a
     /// stepper's left (`fx` < 0.5) or right half.
     Control(usize, f32),
+    /// The simulation date selected in the pause calendar, as YYYY-MM-DD.
+    Date(String),
     /// Page `i` of the open settings window, or (one past the last) the way back.
     Side(usize),
     /// A click in the timetable beside a line's tours (see `App::tour_pane_click`).

@@ -121,7 +121,7 @@ impl App {
                 // leaving the view drops it the same way.
                 self.f1_return(dt);
                 let Some(p) = self.player.as_mut() else { return };
-                let zoom = self.cam.view_zoom.get(&self.view).copied();
+                let zoom = crate::app_impl::with_zoom_hold(self.cam.view_zoom.get(&self.view).copied(), self.cam.zoom_hold.factor);
                 // The sway's own turn of the view: the driver's view only, for it is
                 // his head (and nothing at all while the sway is off or driven by a
                 // head tracker - `head_idle` is still then).
@@ -169,7 +169,7 @@ impl App {
             // the free camera and the view on foot follow the setting too (they
             // stayed at 60 degrees whatever it said)
             let base = if self.settings.fov >= 20.0 { self.settings.fov.min(120.0) } else { 60.0 };
-            cam.fov_deg = (base * self.cam.view_zoom.get(&self.view).copied().unwrap_or(1.0)).clamp(8.0, 120.0);
+            cam.fov_deg = (base * self.cam.view_zoom.get(&self.view).copied().unwrap_or(1.0) * self.cam.zoom_hold.factor).clamp(8.0, 120.0);
         }
     }
 

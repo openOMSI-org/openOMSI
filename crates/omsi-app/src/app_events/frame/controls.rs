@@ -290,6 +290,10 @@ impl App {
                     self.input.pad_voice_nearby = *down;
                     return false;
                 }
+                if n == "view_zoom_hold" {
+                    self.input.pad_zoom_hold = *down;
+                    return false;
+                }
                 if gear_step(&n).is_some() {
                     if *down {
                         game.push(n);
