@@ -120,6 +120,7 @@ function JoinByCode() {
         ${host && html`<section class="multiplayer-session-summary" aria-label=${t('Session details')}>
           <div class="row wrap"><${Icon} name="users" /><b>${host.name}</b><${Tag}>${t('{n} of {max} players', { n: host.players, max: host.max_players })}</${Tag}></div>
           <dl><div><dt>${t('Map')}</dt><dd>${s.maps?.find((m) => m.file.toLowerCase() === (host.map || '').replace(/\\/g, '/').toLowerCase())?.name || host.map || t('Unknown')}</dd></div>
+          ${host.date && html`<div><dt>${t('Date')}</dt><dd>${host.date}</dd></div>`}
           ${host.time && html`<div><dt>${t('Time')}</dt><dd>${host.time}</dd></div>`}
           ${host.weather && html`<div><dt>${t('Weather')}</dt><dd>${host.weather}</dd></div>`}</dl>
           <p class="muted small">${t('Choose your bus next. The game connects only when you start driving.')}</p>
@@ -290,7 +291,7 @@ function Servers() {
                 ${st.loading && html`<div class="row muted small"><${Spinner} /> ${t('Asking the server...')}</div>`}
                 ${st.err && html`<div class="small" style="color:var(--danger)">${t("Can't reach the server: {err}", { err: st.err })}</div>`}
                 ${st.err && !official && html`<div class="muted small selectable">${x.address}</div>`}
-                ${i && html`<div class="muted small">${[i.map && mapName(i.map), t('{n} of {max} players', { n: i.players, max: i.max_players }), i.time, i.weather].filter(Boolean).join(' - ')}</div>`}
+                ${i && html`<div class="muted small">${[i.map && mapName(i.map), t('{n} of {max} players', { n: i.players, max: i.max_players }), i.date, i.time, i.weather].filter(Boolean).join(' - ')}</div>`}
                 ${i?.motd && html`<div class="dim small">${i.motd}</div>`}
               </div>
               <div style="width:130px"><${Select} raw value=${x.protocol || 'auto'} options=${[['auto', autoLabel], ['udp', t('UDP')], ['websocket', t('WebSocket')]]} onChange=${(protocol) => save(list.map((y) => y === x ? { ...y, protocol } : y))} /></div>
