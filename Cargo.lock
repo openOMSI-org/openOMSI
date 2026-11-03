@@ -4433,6 +4433,7 @@ dependencies = [
  "ab_glyph",
  "bytemuck",
  "glam",
+ "half",
  "hashbrown 0.17.1",
  "image",
  "log",
