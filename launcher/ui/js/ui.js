@@ -197,15 +197,42 @@ export function Tag({ kind = '', children }) {
 }
 
 /** A dialog over the page; Escape and a click beside it close it. */
-export function Dialog({ title, onClose, children, footer, wide, class: cls = '' }) {
+export function Dialog({ title, onClose, children, footer, wide, modal = false, class: cls = '' }) {
   const box = useRef();
   useEffect(() => {
     const k = (e) => e.key === 'Escape' && [...document.querySelectorAll('.overlay')].pop() === box.current && onClose?.();
     window.addEventListener('keydown', k);
     return () => window.removeEventListener('keydown', k);
   }, [onClose]);
+  useEffect(() => {
+    if (!modal) return;
+    const previous = document.activeElement;
+    const layer = box.current;
+    const hidden = [];
+    for (let node = layer; node?.parentElement; node = node.parentElement) {
+      for (const sibling of node.parentElement.children) {
+        if (sibling !== node && !sibling.inert) { hidden.push(sibling); sibling.inert = true; }
+      }
+      if (node.parentElement === document.body) break;
+    }
+    const controls = () => [...layer.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], summary')].filter((el) => el.getClientRects().length);
+    (layer.querySelector('input') || controls()[0])?.focus();
+    const trap = (e) => {
+      if (e.key !== 'Tab' || [...document.querySelectorAll('.overlay')].pop() !== layer) return;
+      const items = controls(), first = items[0], last = items[items.length - 1];
+      if (!layer.contains(document.activeElement) || (e.shiftKey && document.activeElement === first) || (!e.shiftKey && document.activeElement === last)) {
+        e.preventDefault(); (e.shiftKey ? last : first)?.focus();
+      }
+    };
+    window.addEventListener('keydown', trap);
+    return () => {
+      window.removeEventListener('keydown', trap);
+      hidden.forEach((el) => { el.inert = false; });
+      if (previous?.isConnected) previous.focus();
+    };
+  }, [modal]);
   return html`<div class="overlay" ref=${box} onMouseDown=${(e) => e.target === e.currentTarget && onClose?.()}>
-    <div class=${'dialog' + (wide ? ' wide' : '') + (cls ? ' ' + cls : '')} role="dialog">
+    <div class=${'dialog' + (wide ? ' wide' : '') + (cls ? ' ' + cls : '')} role="dialog" aria-label=${t(title)} aria-modal=${modal || undefined}>
       <div class="dialog-head"><h2>${t(title)}</h2>${onClose && html`<${Button} kind="ghost" icon="x" title="Close" onClick=${onClose} />`}</div>
       <div class="dialog-body">${children}</div>
       ${footer && html`<div class="dialog-foot">${footer}</div>`}

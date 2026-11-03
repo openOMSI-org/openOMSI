@@ -582,7 +582,7 @@ export async function start(extra) {
     d.allow_server_fleet = approved && serverFleetSelection();
     const r = await call('launch', { duty: d });
     set({ gameStarted: true });
-    if (d.lan !== 'off' && !d.tutorial) set({ page: 'games' });
+    if (d.lan !== 'off' && d.lan !== 'host' && !d.tutorial) set({ page: 'games' });
     toast(r.others ? t('The game is starting ({n} already running)', { n: r.others }) : t('The game is starting…'), 'ok');
     pollNow();
     return r;
