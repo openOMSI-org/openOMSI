@@ -1024,6 +1024,11 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   copy showed no number and read the destination in the depot file that player chose for their
   own bus, so it showed another sign. Older games joining a newer server, and newer games
   joining an older one, still play together (without the numbers, as before).
+- **People no longer vanish in front of the players of a server.** When the pool of people
+  (`ai_max_humans`) is full, somebody walking or standing out of sight is taken to make room,
+  as in OMSI 2. A dedicated server judged "out of sight" from its own camera, where nobody
+  plays, so it took people standing beside the players - passengers who had just got off a
+  bus among them. Now nobody near any player is taken.
 - **Voice chat, built in** - off until switched on (Settings → Sound → *Voice chat*, or the game
   menu's Sound page). Hold a talk key to speak: *nearby* (V) is heard by the players within
   the session's range (75 m by default) from where you stand, quieter with the distance and

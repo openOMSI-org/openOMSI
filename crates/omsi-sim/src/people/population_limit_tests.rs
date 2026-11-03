@@ -87,6 +87,58 @@ fn the_pool_counts_local_people_and_never_recycles_riders_or_avatars() {
     assert!(h.people.iter().any(|p| p.id == 1));
 }
 
+/// A dedicated server takes nobody for its pool from in front of a player: its own view
+/// (`seen`) is its camera, where nobody plays, and the people it took vanished before the
+/// players' eyes - passengers who had just got off among them.
+#[test]
+fn the_pool_takes_nobody_a_lan_player_could_see() {
+    let dir = std::env::temp_dir().join(format!("omsi-pool-lan-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("person.hum"), "[model]\nmodel.cfg\n").unwrap();
+    std::fs::write(dir.join("model.cfg"), "").unwrap();
+    let ty = Arc::new(HumanType::load(&dir.join("person.hum")).unwrap());
+    std::fs::remove_dir_all(&dir).unwrap();
+    let player = DVec3::new(-219.9, -995.5, 0.0);
+    let standing = |id, position| Person {
+        id,
+        ty: ty.clone(),
+        variant: 0,
+        position,
+        heading: 0.0,
+        lheading: 0.0,
+        place: Place::Ground,
+        vel: DVec2::ZERO,
+        pace: 1.1,
+        activity: Activity::Stand,
+        anim: OmsiAnim::default(),
+        state: State::Standing,
+        t_state: 0.0,
+        interior: 0.0,
+        tilt: Mat4::IDENTITY,
+        age: 40.0,
+        stuck: 0.0,
+        ghost: 0.0,
+        car_wait: 0.0,
+        detour: 0.0,
+        detour_side: 0.0,
+        why: "",
+        puppet: None,
+        remote: false,
+    };
+    let mut h = PeopleSim::new(Path::new("/nonexistent"), 200);
+    h.center = DVec3::new(-1948.9, -174.7, 8.8);
+    h.players_only = true;
+    h.lan_centers = vec![player];
+    h.max_people = 1;
+    h.people = vec![standing(1, player + DVec3::X * 20.0)];
+    assert!(!h.pool_room(), "the pool is full and its only person stands beside a player");
+    assert_eq!(h.people.len(), 1, "nobody vanishes in front of a player");
+    // out of every player's sight they may be taken
+    h.people = vec![standing(2, player + DVec3::X * 1000.0)];
+    assert!(h.pool_room());
+    assert!(h.people.is_empty());
+}
+
 /// A dedicated server's own place is the map's camera, where nobody plays: the stops and
 /// pavements there get no people (they took the whole pool, and the players around
 /// town met nobody); those around the LAN players do, and with nobody joined nowhere.
