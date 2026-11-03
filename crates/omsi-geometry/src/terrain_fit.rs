@@ -189,8 +189,28 @@ impl Field {
 
     fn height(&self, p: DVec2, base: f64, terrain_at: &impl Fn(DVec2) -> f64) -> f64 {
         let h = self.raw_height(p, base, terrain_at);
-        // Limit the new fill, without excavating pre-existing terrain over an
-        // underpass or tunnel. The small clearance avoids coplanar road flicker.
+        // Opt-in extra road/ground clearance (metres, capped at 0.25).
+        // Keep the original 3 mm behavior when unset; avoid lowering terrain
+        // for roads well above or below the saved ground.
+        static SEAM_CLEARANCE: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
+        let clearance = *SEAM_CLEARANCE.get_or_init(|| {
+            std::env::var("OMSI_SEAM_CLEARANCE_M")
+                .ok()
+                .and_then(|s| s.parse::<f64>().ok())
+                .filter(|v| v.is_finite())
+                .unwrap_or(0.0)
+                .clamp(0.0, 0.25)
+        });
+        if let Some(roads) = &self.roads {
+            if clearance > 0.0 {
+                if let Some(road_height) = roads.surface(p) {
+                    if let Some(limit) = near_grade_road_clearance(base, road_height, clearance) {
+                        return h.min(limit);
+                    }
+                }
+            }
+        }
+        // Original underpass / tunnel guard remains unchanged by default.
         self.roads
             .as_ref()
             .map_or(h, |roads| h.min(roads.road_limit(p, h).max(base - 0.003)))
@@ -290,6 +310,19 @@ impl Field {
         }
         base + sum / weights
     }
+}
+
+/// An additional near-grade safety gap only belongs under actual road faces.
+/// A road far below the saved terrain may be an underpass; a road high above
+/// it may be a bridge. Leave those unchanged to avoid cutting open the world.
+fn near_grade_road_clearance(base: f64, road_height: f64, clearance: f64) -> Option<f64> {
+    (base.is_finite()
+        && road_height.is_finite()
+        && clearance.is_finite()
+        && clearance > 0.0
+        && road_height >= base - 0.5
+        && road_height <= base + 1.0)
+        .then_some(road_height - clearance)
 }
 
 fn insert(

@@ -1090,3 +1090,28 @@ fn a_spline_in_a_cutting_is_left_to_the_hole_but_a_trough_is_not() {
     }
     assert!(profile_in_cutting(&profile, DVec3::ZERO, &hill, &[]), "a 5 m cutting");
 }
+
+#[test]
+fn near_grade_road_clearance_protects_underpasses_and_bridges() {
+    let base = 33.4;
+    let gap = 0.12;
+    let road = near_grade_road_clearance(base, 33.4, gap).unwrap();
+    assert!((road - 33.28).abs() < 1e-10);
+    assert!(near_grade_road_clearance(base, 33.0, gap).is_some());
+    assert!(near_grade_road_clearance(base, 34.3, gap).is_some());
+    assert!(
+        near_grade_road_clearance(base, 31.9, gap).is_none(),
+        "underpass well below the original terrain must not be excavated"
+    );
+    assert!(
+        near_grade_road_clearance(base, 36.0, gap).is_none(),
+        "bridge above the original terrain must not alter the ground"
+    );
+    assert!(
+        near_grade_road_clearance(base, base, 0.0).is_none(),
+        "the default, disabled option must preserve the old calculation"
+    );
+    assert!(near_grade_road_clearance(base, f64::NAN, gap).is_none());
+    assert!(near_grade_road_clearance(f64::NAN, base, gap).is_none());
+    assert!(near_grade_road_clearance(base, base, f64::NAN).is_none());
+}
