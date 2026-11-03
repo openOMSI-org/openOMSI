@@ -765,3 +765,33 @@ fn a_bus_whose_stop_lies_near_its_lane_end_still_gets_onto_its_route() {
     let c = car(&t, me).unwrap();
     assert!(matches!(c.state.lane, 0 | 2), "ended on lane {}", c.state.lane);
 }
+
+#[test]
+fn a_bus_whose_stop_lies_at_its_lane_end_neither_stands_nor_jumps() {
+    let f = Fixture::new();
+    let lanes = vec![street(-3.5, 0.0, 0.0, 300.0), street(0.0, 0.0, 0.0, 300.0), street(-3.5, 300.0, 0.0, 300.0), street(0.0, 300.0, 0.0, 300.0)];
+    let mut t = traffic(&f, net_of(lanes, &[(0, 1), (2, 3)]));
+    let me = add_car(&mut t, &f, 1, 200.0, 0xb29, Some(8.0));
+    set_route(&mut t, me, vec![1, 0, 2], 200.0);
+    {
+        let day = t.day_time;
+        let c = car_mut(&mut t, me);
+        let stop = bus_service::Stop { ri: 0, s: 297.0, bay: 0.0, depart: day + 5.0, id: 1, side: 0.0 };
+        c.bus = Some(Box::new(bus_service::BusService::new(vec![stop])));
+    }
+    let (mut prev, mut still, mut longest_still, mut served) = (car(&t, me).unwrap().vehicle.position, 0.0f32, 0.0f32, false);
+    for _ in 0..(35.0 / DT) as usize {
+        t.tick(DT, None);
+        let c = car(&t, me).expect("on the road");
+        let p = c.vehicle.position;
+        let step = (p - prev).truncate();
+        assert!(step.x.abs() < 0.3, "the body jumped {:.2} m sideways on lane {} at s {:.1}", step.x, c.state.lane, c.state.s);
+        prev = p;
+        served |= c.bus.as_ref().is_some_and(|b| b.stops.is_empty());
+        if c.state.speed.abs() < 0.1 && served { still += DT } else { still = 0.0 }
+        longest_still = longest_still.max(still);
+    }
+    let c = car(&t, me).unwrap();
+    assert!(longest_still < 2.0, "stood {longest_still:.1} s after its stop");
+    assert!(matches!(c.state.lane, 0 | 2), "ended on lane {}", c.state.lane);
+}
