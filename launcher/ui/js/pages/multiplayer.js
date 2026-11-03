@@ -31,6 +31,12 @@ function runningHost(s) {
   return (s.poll.instances || []).filter((i) => i.running !== false).map((i) => i.lan_status).find((x) => x?.role === 'host');
 }
 
+// A running game that was to host and could not (its status says why): without it the page
+// only went on waiting for a code that never came.
+function hostFailure(s) {
+  return (s.poll.instances || []).filter((i) => i.running !== false).map((i) => i.lan_status).find((x) => x?.role === 'none' && x.error)?.error;
+}
+
 function ByCode() {
   const s = useStore();
   const [mode, setMode] = useState(() => runningHost(s) || s.choice.lan_mode === 'host' ? 'host' : 'join');
@@ -141,6 +147,7 @@ function JoinByCode() {
 function HostByCode() {
   const s = useStore();
   const session = runningHost(s);
+  const failed = !session?.code && hostFailure(s);
   const hosting = s.choice.lan_mode === 'host';
   const prepare = () => {
     choose({ lan_mode: 'host' });
@@ -163,6 +170,7 @@ function HostByCode() {
           <p class="muted small">${t('Your friends paste it into Multiplayer → Connect by Code.')}</p>
           <div><${Button} icon="gamepad" label="Running games" onClick=${() => set({ page: 'games' })} /></div>
         ` : html`
+          ${failed && html`<${Notice} kind="danger"><b>${t('The game could not open a session')}</b><div class="muted small">${t('Another program may use the port, or a firewall or antivirus blocks it. Close the game and start the duty again.')}</div><${ErrorDetails} text=${failed} /></${Notice}>`}
           <p class="muted small">${t('Choose your map, bus and duty on the Drive page. No game starts until you press Start the duty.')}</p>
           <div class="row"><${Button} kind="primary" icon="bus" label="Set up a hosted duty" onClick=${prepare} />
             ${hosting && html`<${Button} kind="ghost" label="Cancel" onClick=${() => choose({ lan_mode: 'off' })} />`}</div>
