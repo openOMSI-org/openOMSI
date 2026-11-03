@@ -98,6 +98,8 @@ impl Traffic {
             amber: None,
             amber_start: false,
             passing: None,
+            current_light: None,
+            amber_decision: 0.0,
             gone: false,
             fresh: 0.0,
             merge_after: None,

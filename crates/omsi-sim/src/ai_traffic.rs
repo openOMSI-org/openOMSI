@@ -28,6 +28,7 @@ pub mod obstacles;
 pub mod foot_grid;
 pub mod parked;
 pub mod planning;
+pub mod random;
 pub mod scenery;
 pub mod setup;
 pub mod stats;
