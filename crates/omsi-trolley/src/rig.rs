@@ -79,7 +79,7 @@ pub struct RigInput<'a> {
     pub dir: f32,
     /// -1 left indicator, +1 right, 0 none.
     pub blinker: i8,
-    /// For radio switches: the cab's request (-1 left, +1 right, 0 none), the route code
+    /// For radio switches: the cab's request (-1 left, +1 right, 2 toggle, 0 none), the route code
     /// (0 none) and the channel sent on.
     pub radio: i8,
     pub route_code: u32,
@@ -218,7 +218,10 @@ impl TrolleyRig {
         let previous = self.radio_previous.and_then(|(last_net, pos, radio, code, channel)| {
             (last_net == network && radio == inp.radio && code == inp.route_code && channel == inp.channel).then_some(pos)
         });
-        net.receive_radio_since(inp.pos, &request, previous);
+        let toggle_pressed = inp.radio == 2 && self.radio_previous.is_some_and(|(_, _, radio, _, _)| radio != 2);
+        if inp.radio != 2 || toggle_pressed {
+            net.receive_radio_since(inp.pos, &request, previous);
+        }
         self.radio_previous = Some((network, inp.pos, inp.radio, inp.route_code, inp.channel));
         let amps_before = self.amps;
         for k in 0..self.poles.len() {
@@ -543,6 +546,63 @@ mod tests {
         input.pos = DVec3::new(50.0, 10.0, 0.0);
         rig.step(&input);
         assert!(!net.switch_branch(0));
+    }
+
+    #[test]
+    fn radio_toggle_requires_a_new_press_not_range_entry_or_channel_change() {
+        let net = WireNet::parse(concat!(
+            "[trolley_span]\np 0 0 5.5\np 50 0 5.5\n",
+            "[trolley_span]\np 50 0 5.5\np 100 0 5.5\n",
+            "[trolley_span]\np 50 0 5.5\np 90 20 5.5\n",
+            "[trolley_switch]\npos 50 0 5.5\nmode radio\nrange 20\nchannel 1\n",
+        ));
+        let mut rig = TrolleyRig::new(&def(), 3);
+        let mut input = RigInput {
+            net: Some(&net), dt: 1.0 / 60.0, pos: DVec3::new(50.0, 0.0, 0.0), rot: rot(),
+            accel: Vec3::ZERO, speed: 0.0, wheel_radius: 0.5, pedal: 0.0,
+            brake: 0.0, dir: 1.0, blinker: 0, radio: 2, route_code: 0, channel: 1,
+            ropes: &[RopeCmd::Idle; 2], drive: false, script_force: 0.0,
+        };
+        rig.step(&input);
+        assert!(!net.switch_branch(0));
+        input.radio = 0;
+        rig.step(&input);
+        input.radio = 2;
+        rig.step(&input);
+        assert!(net.switch_branch(0));
+        rig.step(&input);
+        assert!(net.switch_branch(0));
+        net.set_switch(0, false);
+        rig.step(&input);
+        assert!(!net.switch_branch(0));
+        input.radio = 0;
+        rig.step(&input);
+        input.radio = 2;
+        rig.step(&input);
+        assert!(net.switch_branch(0));
+        input.pos = DVec3::ZERO;
+        input.radio = 0;
+        rig.step(&input);
+        input.radio = 2;
+        rig.step(&input);
+        input.pos = DVec3::new(50.0, 0.0, 0.0);
+        rig.step(&input);
+        assert!(net.switch_branch(0));
+        input.channel = 2;
+        input.radio = 0;
+        rig.step(&input);
+        input.radio = 2;
+        rig.step(&input);
+        input.channel = 1;
+        input.route_code = 158;
+        rig.step(&input);
+        assert!(net.switch_branch(0));
+        input.radio = 0;
+        rig.step(&input);
+        input.radio = 2;
+        rig.step(&input);
+        assert!(!net.switch_branch(0));
+        assert!(rig.poles.iter().all(|pole| pole.mode == PoleMode::Down));
     }
 
     #[test]

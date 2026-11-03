@@ -87,6 +87,15 @@ the constants are in the vehicle's file, not in the game.
   The last matching transmission sets the switch; another bus's stale selection does not
   immediately undo it. An unchanged position does not reset the display's change timer. Leaving the circle,
   sending an unknown route or selecting another channel leaves the frog as it was.
+  A momentary button can instead send `Trolley_Switch_Request = 2` while pressed and `0`
+  when released. Each press toggles the actual retained position of every matching receiver,
+  not a remembered cab selection. Holding it does not repeat; entering range, changing the
+  channel or changing the route while held does not toggle. Release and press again to send
+  another toggle. A request already held when the vehicle is first stepped is not a press.
+  Absolute left/right requests and route codes retain the entry/selection behavior above.
+  For manual-only radio control, keep the route code at `0` and use a momentary toggle
+  button. The driver reads the actual position from the roadside switch display. Range is
+  configurable reception coverage, not a model of antenna propagation or a safety interlock.
 * **Arcs and sound.** Where current is broken - the shoe leaving the wire, a pole coming off,
   an insulator or a frog crossed under power - an arc burns `L I^2 / 2` of the motor circuit's
   inductance (12 mH): the game draws a flash with sparks, lights the wire and the roof and
@@ -266,7 +275,7 @@ direction Trolley_Direction     > 0.5 forward, < -0.5 reverse, else neutral (def
 indicator_left Blinker_Left     for switches in `indicator` mode
 indicator_right Blinker_Right
 raise_request Trolley_Poles_Raise   +1 raise, -1 lower the poles that have a motor
-switch_request Trolley_Switch_Request   radio switches: < -0.5 left, > 0.5 right (without it: the indicator)
+switch_request Trolley_Switch_Request   radio: -1 left, +1 right, 2 momentary toggle, 0 none (without it: indicator)
 switch_code Trolley_Switch_Code         radio switches: the route code, 0 none
 switch_channel Trolley_Switch_Channel   radio switches: the channel sent on
 ```

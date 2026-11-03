@@ -12,6 +12,7 @@ use glam::DVec3;
 use hashbrown::HashMap;
 use std::sync::Mutex;
 
+mod radio;
 mod sounds;
 pub use sounds::{SoundChoice, WireSounds};
 
@@ -135,7 +136,7 @@ pub struct SwitchRequest {
     pub current: f32,
     /// The indicator, for `indicator` switches: -1 left, +1 right, 0 none.
     pub blinker: i8,
-    /// The cab's switch request, for `radio` switches: -1 left, +1 right, 0 none.
+    /// The cab's switch request: -1 left, +1 right, 2 toggle, 0 none.
     pub radio: i8,
     /// The route code the vehicle sends (0 none) and the radio channel it sends on.
     pub code: u32,
@@ -199,7 +200,7 @@ impl SwitchDef {
             SwitchMode::Power => Some((r.current.abs() > self.sense_amps) != self.invert),
             SwitchMode::Indicator => Some(side(r.blinker)),
             SwitchMode::Radio => {
-                if self.channel.is_some_and(|c| c != r.channel) {
+                if r.radio == 2 || self.channel.is_some_and(|c| c != r.channel) {
                     return None;
                 }
                 if r.radio != 0 {
@@ -910,33 +911,6 @@ impl WireNet {
         d.move_switch(sw, want, self.nodes[self.switches[sw].node as usize].pos)
     }
 
-    /// Send a radio request immediately to every matching receiver in horizontal range.
-    pub fn receive_radio(&self, pos: DVec3, request: &SwitchRequest) -> usize {
-        self.receive_radio_since(pos, request, None)
-    }
-
-    pub(crate) fn receive_radio_since(&self, pos: DVec3, request: &SwitchRequest, previous: Option<DVec3>) -> usize {
-        let mut dynamic = self.dynamic.lock().unwrap();
-        let mut changed = 0;
-        for (index, switch) in self.switches.iter().enumerate() {
-            if switch.mode != SwitchMode::Radio || switch.radio_range <= 0.0 {
-                continue;
-            }
-            let distance = horizontal(self.nodes[switch.node as usize].pos - pos).length_squared();
-            if distance > (switch.radio_range as f64).powi(2) {
-                continue;
-            }
-            if previous.is_some_and(|previous| horizontal(self.nodes[switch.node as usize].pos - previous).length_squared() <= (switch.radio_range as f64).powi(2)) {
-                continue;
-            }
-            let Some(want) = switch.wanted(request) else { continue };
-            if dynamic.move_switch(index, want, self.nodes[switch.node as usize].pos) {
-                changed += 1;
-            }
-        }
-        changed
-    }
-
     /// Where a shoe arriving at `from` of a node leaves it.
     fn exit_at(&self, node: u32, from: (u32, u8)) -> Option<(u32, u8)> {
         let n = &self.nodes[node as usize];
@@ -1318,7 +1292,7 @@ mod tests {
         assert!(!n.switch_branch(0));
     }
 
-    fn radio_net(extra: &str) -> WireNet {
+    pub(super) fn radio_net(extra: &str) -> WireNet {
         let text = format!(
             "[trolley_section]\nid 1\nlive 1\n\
              [trolley_span]\nsection 1\np 0 0 5.5\np 25 0 5.5\np 50 0 5.5\n\
