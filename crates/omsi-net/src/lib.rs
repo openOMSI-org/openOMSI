@@ -3221,6 +3221,7 @@ impl LanSession {
         if self.peers.get(&id).is_some_and(|p| p.nonce != nonce) {
             if let Some(old) = self.peers.get(&id).and_then(|p| p.nonce) { self.retired_nonces.insert(old); }
             self.reset_peer_sync(id);
+            self.broadcast(format!("BYE|{id}").as_bytes(), Some(id));
             let mut peer = Peer::new(Some(from), Pose::placeholder(id, &name, &bus));
             peer.nonce = nonce;
             peer.hwid = hwid.clone();
