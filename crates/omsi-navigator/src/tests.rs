@@ -673,11 +673,7 @@ fn the_next_stop_is_on_the_loop_that_serves_it_not_on_the_main_road_beside_it() 
 #[test]
 fn only_streets_written_on_the_city_map_are_offered_and_found() {
     let mut n = Navigator::new(true, 0.85, "bottom-left");
-    let (_tx, rx) = std::sync::mpsc::channel();
-    n.building = Some(rx);
     assert_eq!(n.street_names(), None);
-    n.building = None;
-    assert_eq!(n.street_names(), Some(Vec::new()));
     let labels = vec![(DVec2::new(100.0, 0.0), 0.0, 0), (DVec2::new(300.0, 0.0), 0.0, 0), (DVec2::new(900.0, 0.0), 0.0, 0)];
     n.streets = Some(std::sync::Arc::new(Streets { names: vec!["Hauptstr.".into(), "Am Hafen".into()], of_lane: vec![1], labels }));
     assert_eq!(n.street_names(), Some(vec!["Hauptstr.".to_string()]));

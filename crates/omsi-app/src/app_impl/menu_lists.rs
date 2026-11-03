@@ -12,7 +12,7 @@ impl App {
         crate::game_lists::forget_page_titles(self);
         // (a search belongs to its list; `chooser_pick` has taken the kind when it goes on)
         if self.menus.list_kind.as_ref().is_some_and(|k| *k != kind) {
-            self.menus.forget_search();
+            self.forget_search();
             if self.menus.menu_edit_number {
                 crate::platform::text_input(self.window.as_deref(),false);
                 self.menus.menu_edit_number=false; self.menus.menu_edit=None;
@@ -196,13 +196,10 @@ impl App {
     /// typed (the search before stays); the text comes through `route_edit_text`.
     fn search_edit_key(&mut self, code: KeyCode) {
         match code {
-            KeyCode::Escape => {
-                self.menus.menu_edit = None;
-                self.menus.menu_edit_search = false;
-            }
+            KeyCode::Escape => self.stop_search_typing(),
             KeyCode::Enter | KeyCode::NumpadEnter => {
                 self.menus.menu_search = self.menus.menu_edit.take().unwrap_or_default();
-                self.menus.menu_edit_search = false;
+                self.stop_search_typing();
             }
             KeyCode::Backspace | KeyCode::Delete => {
                 if let Some(text) = self.menus.menu_edit.as_mut() {
@@ -255,6 +252,10 @@ impl App {
     /// Text entered in OMSI's free route-number field. It is intentionally not restricted
     /// to letters and digits: add-on displays use values such as `-10` and other symbols.
     pub(crate) fn route_edit_text(&mut self, text: &str) {
+        if self.menus.menu_edit_search && text.contains('\n') {
+            self.search_edit_key(KeyCode::Enter);
+            return;
+        }
         if self.menus.menu_edit_search {
             if let Some(query) = self.menus.menu_edit.as_mut() {
                 for c in text.chars().filter(|c| !c.is_control()) {
@@ -443,7 +444,7 @@ impl App {
 
 
     /// A key while the vehicle chooser is open.
-    pub(super) fn chooser_key(&mut self, code: KeyCode) {
+    pub(crate) fn chooser_key(&mut self, code: KeyCode) {
         if self.menus.dropdown.is_some() {
             self.dropdown_key(code);
             return;
@@ -646,7 +647,7 @@ impl App {
                     let keep = next == kind;
                     if !keep {
                         self.menus.menu_top = None;
-                        self.menus.forget_search();
+                        self.forget_search();
                     }
                     self.open_list(next);
                     if keep {
@@ -743,19 +744,26 @@ mod dropdown_tests {
     }
 }
 
-impl MenuState {
-    /// A line's tours are open, with the stops of the tour chosen beside them.
-    fn tours_list(&self) -> bool {
-        self.chooser.is_some() && matches!(self.list_kind, Some(crate::game_lists::ListKind::Tours(..)))
+impl App {
+    pub(crate) fn stop_search_typing(&mut self) {
+        if self.menus.menu_edit_search {
+            crate::platform::text_input(self.window.as_deref(), false);
+            self.menus.menu_edit = None;
+            self.menus.menu_edit_search = false;
+        }
     }
 
     /// The search of the list shown is over (another list is shown).
     fn forget_search(&mut self) {
-        self.menu_search.clear();
-        if self.menu_edit_search {
-            self.menu_edit = None;
-            self.menu_edit_search = false;
-        }
+        self.menus.menu_search.clear();
+        self.stop_search_typing();
+    }
+}
+
+impl MenuState {
+    /// A line's tours are open, with the stops of the tour chosen beside them.
+    fn tours_list(&self) -> bool {
+        self.chooser.is_some() && matches!(self.list_kind, Some(crate::game_lists::ListKind::Tours(..)))
     }
 
     /// The line `step` lines on from `sel` (round the list; `n - 1` is one back), over the

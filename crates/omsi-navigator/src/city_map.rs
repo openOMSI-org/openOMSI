@@ -158,7 +158,7 @@ impl Navigator {
     }
 
     pub fn street_names(&self) -> Option<Vec<String>> {
-        let Some(st) = self.streets.as_deref() else { return self.building.is_none().then(Vec::new) };
+        let st = self.streets.as_deref()?;
         let mut labelled = vec![false; st.names.len()];
         for l in &st.labels {
             if let Some(b) = labelled.get_mut(l.2 as usize) {

@@ -48,6 +48,8 @@ impl App {
         if self.menus.menu_edit.is_some() {
             crate::platform::text_input(self.window.as_deref(), false);
         }
+        self.stop_search_typing();
+        self.menus.menu_search.clear();
         if self.menus.menu_edit_number {
             crate::platform::text_input(self.window.as_deref(),false);
             self.menus.menu_edit_number=false; self.menus.menu_edit=None;

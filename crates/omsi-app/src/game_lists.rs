@@ -1207,10 +1207,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             }
             None
         }
-        ListKind::Streets => {
-            show_street(app, arg);
-            None
-        }
+        ListKind::Streets => show_street(app, arg),
         ListKind::Numbers => {
             if let (Some((n, reg)), Some(p)) = (arg.split_once('\u{1}'), app.player.as_mut()) {
                 set_identity_to_player_vehicle(p, n, Some(reg));
@@ -1295,7 +1292,7 @@ pub(crate) use dropdowns::*;
 pub(crate) use menu_pages::*;
 pub(crate) use duty::*;
 pub(crate) use graphics::*;
-use streets::*;
+pub(crate) use streets::*;
 
 #[cfg(test)]
 mod tests {
