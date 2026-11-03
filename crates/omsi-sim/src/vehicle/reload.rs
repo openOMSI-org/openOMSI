@@ -131,6 +131,7 @@ impl VehicleInstance {
             stringvarlists: def.scripts.stringvarlists.clone(),
             constfiles: def.scripts.constfiles.clone(),
             scripts: def.scripts.scripts.clone(),
+            declare_unknown: !super::types::has_program_varlist(root),
             ..Default::default()
         };
         compile(&input)

@@ -61,7 +61,7 @@ pub fn builtin_vars(root: &Path) -> Vec<String> {
                 .map(|l| l.trim().to_string())
                 .filter(|l| !l.is_empty())
                 .collect(),
-            Err(_) => include_str!("varlist_roadvehicle.txt").lines().map(str::trim).filter(|l| !l.is_empty()).map(String::from).collect(),
+            Err(_) => ["Velocity", "Velocity_Ground", "Throttle", "Brake", "Clutch", "M_Wheel", "n_Wheel", "Brakeforce", "A_Trans_X", "A_Trans_Y", "A_Trans_Z"].into_iter().chain(super::engine_vars::NAMES).map(String::from).collect(),
         };
     for a in 0..8 {
         for side in ["L", "R"] {
@@ -104,6 +104,10 @@ pub fn builtin_vars(root: &Path) -> Vec<String> {
         v.push(format!("PAX_Exit{a}_Busy"));
     }
     v
+}
+
+pub fn has_program_varlist(root: &Path) -> bool {
+    omsi_cfg::vfs::is_file(&omsi_cfg::resolve_path(root, "program/varlist_roadvehicle.txt"))
 }
 
 pub fn builtin_str_vars(root: &Path) -> Vec<String> {
@@ -373,6 +377,7 @@ impl VehicleType {
         let mut input = CompileInput {
             builtin_vars: builtin_vars(root),
             builtin_str_vars: builtin_str_vars(root),
+            declare_unknown: !has_program_varlist(root),
             ..Default::default()
         };
         input.varlists = def.scripts.varlists.clone();
