@@ -334,6 +334,9 @@ fn backend_instance(api: GraphicsApi) -> wgpu::Instance {
     let mut d = wgpu::InstanceDescriptor::new_without_display_handle();
     d.backend_options.gl.context_lock_timeout = Some(GL_CONTEXT_LOCK_TIMEOUT);
     d.backends = api.backends();
+    if d.backends == wgpu::Backends::GL {
+        d.flags.remove(wgpu::InstanceFlags::VALIDATION_INDIRECT_CALL);
+    }
     if api == GraphicsApi::Angle {
         return omsi_render::angle::instance(d);
     }
