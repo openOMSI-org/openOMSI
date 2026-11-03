@@ -9,17 +9,10 @@ impl WireNet {
     }
 
     pub fn receive_radio(&self, pos: DVec3, request: &SwitchRequest) -> usize {
-        self.receive_radio_since(pos, request, None)
-    }
-
-    pub(crate) fn receive_radio_since(&self, pos: DVec3, request: &SwitchRequest, previous: Option<DVec3>) -> usize {
         let mut dynamic = self.dynamic.lock().unwrap();
         let mut changed = 0;
         for (index, switch) in self.switches.iter().enumerate() {
             if !self.radio_matches(switch, pos, request.channel) {
-                continue;
-            }
-            if previous.is_some_and(|previous| horizontal(self.nodes[switch.node as usize].pos - previous).length_squared() <= (switch.radio_range as f64).powi(2)) {
                 continue;
             }
             let want = if request.radio == 2 {

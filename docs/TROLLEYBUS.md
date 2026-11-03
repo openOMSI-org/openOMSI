@@ -82,8 +82,10 @@ the constants are in the vehicle's file, not in the game.
   Radio range is a circle around the frog measured from the vehicle's trolley reference
   position, not along the wire. There is no heading or approach filter: every radio switch
   in range on a matching channel can respond, even on a neighbouring road. Use channels to
-  separate nearby receivers. A vehicle transmits when entering a circle or changing its
-  direction request, route code or channel, not continuously while holding the same selection.
+  separate nearby receivers. After its initial step, a vehicle transmits only on a change
+  of direction request or route code, not continuously while holding the same selection.
+  Loading a vehicle, entering or re-entering range, and changing the channel alone never
+  transmit. A selection made outside reception range is not queued for later delivery.
   The last matching transmission sets the switch; another bus's stale selection does not
   immediately undo it. An unchanged position does not reset the display's change timer. Leaving the circle,
   sending an unknown route or selecting another channel leaves the frog as it was.
@@ -92,7 +94,7 @@ the constants are in the vehicle's file, not in the game.
   not a remembered cab selection. Holding it does not repeat; entering range, changing the
   channel or changing the route while held does not toggle. Release and press again to send
   another toggle. A request already held when the vehicle is first stepped is not a press.
-  Absolute left/right requests and route codes retain the entry/selection behavior above.
+  Absolute left/right requests and route codes use the selection-change behavior above.
   For manual-only radio control, keep the route code at `0` and use a momentary toggle
   button. The driver reads the actual position from the roadside switch display. Range is
   configurable reception coverage, not a model of antenna propagation or a safety interlock.

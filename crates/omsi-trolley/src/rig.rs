@@ -119,7 +119,7 @@ pub struct TrolleyRig {
     /// Every event of the poles goes into the notes (for logs).
     pub verbose: bool,
     events: Vec<PoleEvent>,
-    radio_previous: Option<(usize, DVec3, i8, u32, u32)>,
+    radio_previous: Option<(i8, u32)>,
 }
 
 /// The point a ray reaches at `len` metres from `base` (the farthest, where it crosses that
@@ -214,15 +214,13 @@ impl TrolleyRig {
         static EMPTY: std::sync::OnceLock<WireNet> = std::sync::OnceLock::new();
         let net = inp.net.unwrap_or_else(|| EMPTY.get_or_init(|| WireNet::parse("")));
         let request = SwitchRequest { current: self.amps - self.out.charge_amps, blinker: inp.blinker, radio: inp.radio, code: inp.route_code, channel: inp.channel };
-        let network = net as *const WireNet as usize;
-        let previous = self.radio_previous.and_then(|(last_net, pos, radio, code, channel)| {
-            (last_net == network && radio == inp.radio && code == inp.route_code && channel == inp.channel).then_some(pos)
+        let transmit = self.radio_previous.is_some_and(|(radio, code)| {
+            if inp.radio == 2 { radio != 2 } else { (radio, code) != (inp.radio, inp.route_code) }
         });
-        let toggle_pressed = inp.radio == 2 && self.radio_previous.is_some_and(|(_, _, radio, _, _)| radio != 2);
-        if inp.radio != 2 || toggle_pressed {
-            net.receive_radio_since(inp.pos, &request, previous);
+        if transmit {
+            net.receive_radio(inp.pos, &request);
         }
-        self.radio_previous = Some((network, inp.pos, inp.radio, inp.route_code, inp.channel));
+        self.radio_previous = Some((inp.radio, inp.route_code));
         let amps_before = self.amps;
         for k in 0..self.poles.len() {
             let cmd = inp.ropes.get(k).copied().unwrap_or(RopeCmd::Idle);
@@ -528,6 +526,11 @@ mod tests {
         assert!(!net.switch_branch(0));
         input.pos = DVec3::new(50.0, 10.0, 0.0);
         rig.step(&input);
+        assert!(!net.switch_branch(0));
+        input.radio = 0;
+        rig.step(&input);
+        input.radio = -1;
+        rig.step(&input);
         assert!(net.switch_branch(0));
         assert!(!rig.circuit);
         assert!(rig.poles.iter().all(|pole| pole.mode == PoleMode::Down));
@@ -545,7 +548,59 @@ mod tests {
         assert!(net.switch_branch(0));
         input.pos = DVec3::new(50.0, 10.0, 0.0);
         rig.step(&input);
+        assert!(net.switch_branch(0));
+        input.channel = 2;
+        rig.step(&input);
+        input.channel = 1;
+        rig.step(&input);
+        assert!(net.switch_branch(0));
+        input.radio = 0;
+        rig.step(&input);
+        input.radio = 1;
+        rig.step(&input);
         assert!(!net.switch_branch(0));
+    }
+
+    #[test]
+    fn radio_route_selection_is_not_replayed_on_entry_or_channel_change() {
+        let net = WireNet::parse(concat!(
+            "[trolley_span]\np 0 0 5.5\np 50 0 5.5\n",
+            "[trolley_span]\np 50 0 5.5\np 100 0 5.5\n",
+            "[trolley_span]\np 50 0 5.5\np 90 20 5.5\n",
+            "[trolley_switch]\npos 50 0 5.5\nmode radio\nrange 20\nchannel 1\nroute 158 left\nroute 159 right\n",
+        ));
+        let mut rig = TrolleyRig::new(&def(), 3);
+        let mut input = RigInput {
+            net: Some(&net), dt: 1.0 / 60.0, pos: DVec3::new(50.0, 0.0, 0.0), rot: rot(),
+            accel: Vec3::ZERO, speed: 0.0, wheel_radius: 0.5, pedal: 0.0,
+            brake: 0.0, dir: 1.0, blinker: 0, radio: 0, route_code: 158, channel: 1,
+            ropes: &[RopeCmd::Idle; 2], drive: false, script_force: 0.0,
+        };
+        rig.step(&input);
+        assert!(!net.switch_branch(0));
+        input.route_code = 159;
+        rig.step(&input);
+        input.route_code = 158;
+        rig.step(&input);
+        assert!(net.switch_branch(0));
+        input.pos = DVec3::ZERO;
+        input.route_code = 159;
+        rig.step(&input);
+        input.pos = DVec3::new(50.0, 0.0, 0.0);
+        rig.step(&input);
+        assert!(net.switch_branch(0));
+        net.set_switch(0, false);
+        input.channel = 2;
+        input.route_code = 158;
+        rig.step(&input);
+        input.channel = 1;
+        rig.step(&input);
+        assert!(!net.switch_branch(0));
+        input.route_code = 159;
+        rig.step(&input);
+        input.route_code = 158;
+        rig.step(&input);
+        assert!(net.switch_branch(0));
     }
 
     #[test]
