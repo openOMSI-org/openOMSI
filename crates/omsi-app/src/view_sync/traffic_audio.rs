@@ -112,10 +112,10 @@ impl Traffic {
                     if ready {
                         let number = &c.number;
                         let mut ss = omsi_audio::SoundSet::new_exterior(audio, &plan.cfg.chosen_for(number), &plan.dir);
+                        ss.master = volume;
                         for (i, part) in &parts {
                             ss.add_part(*i, omsi_audio::SoundSet::new_exterior(audio, &part.cfg.chosen_for(number), &part.dir));
                         }
-                        ss.master = volume;
                         triggers.push((c.id, ss.curve_triggers().into_iter().collect()));
                         self.sounds.insert(c.id, ss);
                     }
@@ -217,10 +217,10 @@ impl Traffic {
             }
             let number = c.vehicle.number();
             let mut ss = omsi_audio::SoundSet::new(audio, &cfg.chosen_for(&number), &dir);
+            ss.master = volume;
             for (i, (pc, pd)) in &parts {
                 ss.add_part(*i, omsi_audio::SoundSet::new(audio, &pc.chosen_for(&number), pd));
             }
-            ss.master = volume;
             self.riding_sounds = Some((id, ss));
         }
         if let Some((_, ss)) = self.riding_sounds.as_mut() {
