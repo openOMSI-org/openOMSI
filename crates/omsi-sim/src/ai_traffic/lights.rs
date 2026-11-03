@@ -87,7 +87,7 @@ impl TrafficSim {
                 continue;
             };
             match current_light {
-                Some((cc, cli)) if cc == c && cli == li => { },
+                Some((cc, cli)) if cc == c && cli == li => {},
                 _ => {
                     current_light = Some((c, li));
                     let n = ((c as u64) << 32) | li as u64;
@@ -128,7 +128,7 @@ impl TrafficSim {
                 // stays where it is)
                 Aspect::Red | Aspect::RedYellow => {
                     let go = (amber == Some((c, li)) && on_its_way && gap < comfortable)
-                        || (v > 1.0 && gap < possible - 0.5) 
+                        || (v > 1.0 && gap < possible - 0.5)
                         || (amber_holds(v, gap) && ad < amber_factor * amber_factor);
                     if !go && amber == Some((c, li)) {
                         amber = None;

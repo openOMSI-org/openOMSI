@@ -315,7 +315,7 @@ mod tests {
         let me = put(&mut t, &f, 80.0, 0x16, 5.0);
         let h = honks(&mut t, &[blocker], me, 110.0);
         let seed = t.cars.iter().find(|c| c.id == me).unwrap().seed;
-        let factor = t.cars.iter().find(|c| c.id == blocker).unwrap().state.honk_factor;
+        let factor = t.cars.iter().find(|c| c.id == me).unwrap().state.honk_factor;
         assert!(h.len() >= 2, "honks at {h:?}");
         assert!(h[0] >= patience(seed, factor, false) && h[0] < patience(seed, factor, false) + 10.0, "first honk at {:.1} s", h[0]);
         let gap = (h[1] - h[0]) / factor;
