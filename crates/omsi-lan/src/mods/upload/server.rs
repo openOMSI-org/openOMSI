@@ -290,6 +290,7 @@ impl Incoming {
         };
         let bus = m.bus.clone();
         let got = got + uploads().take_came(&bus);
+        let files: Vec<String> = m.entries.iter().map(|e| e.sha256.clone()).collect();
         let kept = crate::mods::vehicles::commit(m);
         self.lease = None;
         let (fp, new) = match kept {
@@ -298,6 +299,14 @@ impl Incoming {
         };
         if new {
             log::info!("uploads: {bus} is kept as {fp} ({got} files came), for every player who draws it");
+            // (a dedicated server packs it at its smallest at once, in the background, one file
+            // at a time: every other player fetches it, and they get it ready rather than packed
+            // as they ask. A player's hosting game waits to be asked, its machine is playing.)
+            if crate::server_cfg::SERVER_VEHICLES.get().is_some() {
+                for sha in &files {
+                    crate::mods::vehicles::recompress_later(sha);
+                }
+            }
         } else {
             log::info!("uploads: {bus} is kept already as {fp}");
         }
