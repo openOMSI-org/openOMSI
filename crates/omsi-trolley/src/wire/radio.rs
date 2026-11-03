@@ -28,6 +28,25 @@ impl WireNet {
         }
         changed
     }
+
+    /// Send route `code` to the receivers whose range a vehicle entered between `from` and `to`;
+    /// the number moved. Direction requests are never sent this way.
+    pub(crate) fn receive_route_on_entry(&self, from: DVec3, to: DVec3, code: u32, channel: u32) -> usize {
+        let request = SwitchRequest { code, channel, ..Default::default() };
+        let mut dynamic = None;
+        let mut changed = 0;
+        for (index, switch) in self.switches.iter().enumerate() {
+            if !self.radio_matches(switch, to, channel) || self.radio_matches(switch, from, channel) {
+                continue;
+            }
+            let Some(want) = switch.wanted(&request) else { continue };
+            let dynamic = dynamic.get_or_insert_with(|| self.dynamic.lock().unwrap());
+            if dynamic.move_switch(index, want, self.nodes[switch.node as usize].pos) {
+                changed += 1;
+            }
+        }
+        changed
+    }
 }
 
 #[cfg(test)]

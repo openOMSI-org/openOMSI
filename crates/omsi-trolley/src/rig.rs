@@ -120,6 +120,8 @@ pub struct TrolleyRig {
     pub verbose: bool,
     events: Vec<PoleEvent>,
     radio_previous: Option<(i8, u32)>,
+    /// Where the vehicle was last step while sending a route code.
+    route_from: Option<DVec3>,
     rng: u64,
 }
 
@@ -160,6 +162,7 @@ impl TrolleyRig {
             verbose: false,
             events: Vec::new(),
             radio_previous: None,
+            route_from: None,
             rng: seed.wrapping_add(0x5bd1_e995).wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1,
         }
     }
@@ -235,6 +238,15 @@ impl TrolleyRig {
             net.receive_radio(inp.pos, &request);
         }
         self.radio_previous = Some((inp.radio, inp.route_code));
+        // (a route code sets each switch as the bus arrives, as a VETRA-like system does)
+        if inp.route_code != 0 {
+            if let Some(from) = self.route_from {
+                net.receive_route_on_entry(from, inp.pos, inp.route_code, inp.channel);
+            }
+            self.route_from = Some(inp.pos);
+        } else {
+            self.route_from = None;
+        }
         let amps_before = self.amps;
         for k in 0..self.poles.len() {
             let cmd = inp.ropes.get(k).copied().unwrap_or(RopeCmd::Idle);
@@ -583,7 +595,7 @@ mod tests {
     }
 
     #[test]
-    fn radio_route_selection_is_not_replayed_on_entry_or_channel_change() {
+    fn radio_route_codes_are_sent_on_entry_but_not_on_a_channel_change() {
         let net = radio_y("route 158 left\nroute 159 right\n");
         let mut rig = TrolleyRig::new(&def(), 3);
         let mut input = RigInput { route_code: 158, ..standing(&net, DVec3::new(50.0, 0.0, 0.0)) };
@@ -597,9 +609,21 @@ mod tests {
         input.pos = DVec3::ZERO;
         input.route_code = 159;
         rig.step(&input);
+        assert!(net.switch_branch(0));
+        input.pos = DVec3::new(50.0, 0.0, 0.0);
+        rig.step(&input);
+        assert!(!net.switch_branch(0));
+        net.set_switch(0, true);
+        rig.step(&input);
+        assert!(net.switch_branch(0));
+        input.pos = DVec3::ZERO;
+        input.route_code = 0;
+        rig.step(&input);
         input.pos = DVec3::new(50.0, 0.0, 0.0);
         rig.step(&input);
         assert!(net.switch_branch(0));
+        input.route_code = 159;
+        rig.step(&input);
         net.set_switch(0, false);
         input.channel = 2;
         input.route_code = 158;
