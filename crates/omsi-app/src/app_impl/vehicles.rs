@@ -71,8 +71,8 @@ impl App {
         p.vehicle.trailers.iter_mut().flat_map(|t| t.text_textures.iter_mut()).for_each(|t| t.last_text = None);
         p.vehicle.host.script_textures.iter_mut().for_each(|t| t.dirty = true);
         p.vehicle.repaint(scheme);
-        self.args.paint = scheme.map(|i| ty.paint_schemes[i].name.clone());
-        let name = self.args.paint.clone().unwrap_or_else(|| omsi_ui::tr("Default paint").into_owned());
+        self.args.paint = scheme.map(|i| i.to_string());
+        let name = scheme.map_or_else(|| omsi_ui::tr("Default paint").into_owned(), |i| ty.paint_schemes[i].name.clone());
         self.service_msg = Some((omsi_ui::i18n::tr_fill("Livery: {name}", &[("{name}", &name)]), 3.0));
     }
 
