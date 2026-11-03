@@ -522,3 +522,18 @@ fn a_control_cable_hands_what_the_scripts_write_to_what_they_read() {
         assert_eq!(v.var("seen"), Some(expected), "cabled {cabled}");
     }
 }
+
+#[test]
+fn road_vehicle_variables_are_known_without_the_program_folder_and_in_any_case() {
+    let has = |v: &[String], n: &str| v.iter().any(|x| x == n);
+    let dir = std::env::temp_dir().join(format!("omsi_builtin_vars_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("bare")).unwrap();
+    std::fs::create_dir_all(dir.join("upper/Program")).unwrap();
+    std::fs::write(dir.join("upper/Program/VarList_RoadVehicle.txt"), "Throttle\r\nOwnVar\r\n").unwrap();
+    let missing = builtin_vars(&dir.join("bare"));
+    assert!(["Throttle", "Brake", "Velocity", "M_Wheel", "Cabinair_Temp"].iter().all(|n| has(&missing, n)));
+    let read = builtin_vars(&dir.join("upper"));
+    assert!(has(&read, "OwnVar") && !has(&read, "Velocity"));
+    let _ = std::fs::remove_dir_all(&dir);
+}

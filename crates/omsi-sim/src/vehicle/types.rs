@@ -54,14 +54,14 @@ impl WindingVotes {
 /// Built-in variables every road vehicle has (`program/varlist_roadvehicle.txt` + generated).
 pub fn builtin_vars(root: &Path) -> Vec<String> {
     let mut v: Vec<String> =
-        match omsi_cfg::CfgFile::read(root.join("program/varlist_roadvehicle.txt")) {
+        match omsi_cfg::CfgFile::read(omsi_cfg::resolve_path(root, "program/varlist_roadvehicle.txt")) {
             Ok(f) => f
                 .lines
                 .iter()
                 .map(|l| l.trim().to_string())
                 .filter(|l| !l.is_empty())
                 .collect(),
-            Err(_) => Vec::new(),
+            Err(_) => include_str!("varlist_roadvehicle.txt").lines().map(str::trim).filter(|l| !l.is_empty()).map(String::from).collect(),
         };
     for a in 0..8 {
         for side in ["L", "R"] {
@@ -107,7 +107,7 @@ pub fn builtin_vars(root: &Path) -> Vec<String> {
 }
 
 pub fn builtin_str_vars(root: &Path) -> Vec<String> {
-    match omsi_cfg::CfgFile::read(root.join("program/stringvarlist_roadvehicle.txt")) {
+    match omsi_cfg::CfgFile::read(omsi_cfg::resolve_path(root, "program/stringvarlist_roadvehicle.txt")) {
         Ok(f) => f
             .lines
             .iter()
