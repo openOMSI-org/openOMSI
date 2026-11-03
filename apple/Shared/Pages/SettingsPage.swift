@@ -282,6 +282,8 @@ struct SettingsPage: View {
             SettingSelect(label: "Mirror panels on the screen", key: "mirror_hud", options: [("0", "Off"), ("2", "Left mirror"), ("1", "Right mirror"), ("3", "Left and right"), ("7", "Left, right and front")])
             if !phone {
                 SettingToggle(label: "Precision mouse zoom (FOV curve instead of the linear way)", key: "precision_zoom")
+                SettingSlider(label: "Zoom on a key", key: "zoom_hold_amount", range: 0.2 ... 0.8, step: 0.05, fallback: 0.5) { String(format: "%.2f", 1 / max($0, 0.15)).replacingOccurrences(of: #"\.?0+$"#, with: "", options: .regularExpression) + "x" }
+                SettingToggle(label: "Zoom key stays", key: "zoom_hold_latch", help: "One press zooms in, the next zooms out; off: only while the key is held")
             }
         }
     }

@@ -795,6 +795,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             look_view: String::new(),
             cam_blend: Default::default(),
             view_zoom: Default::default(),
+            zoom_hold: Default::default(),
             cam_zooms: Default::default(),
             orbit: ORBIT_DEFAULT,
         },
@@ -803,6 +804,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
         sound: SoundState {
             radio,
             milezero: Default::default(),
+            switch_sound: Default::default(),
             audio: None,
             ambience: None,
             soundscape: None,
@@ -828,6 +830,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             pad_look: [false; 4],
             pad_repeat: Vec::new(),
             pad_voice_radio: false,
+            pad_zoom_hold: false,
             pad_voice_nearby: false,
             arrow_glance: false,
             headtrack: None,

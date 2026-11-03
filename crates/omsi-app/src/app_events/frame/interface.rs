@@ -463,7 +463,7 @@ impl App {
                     self.settings.triple.zoomed(
                         s.config.width,
                         s.config.height,
-                        self.cam.view_zoom.get(&self.view).copied().unwrap_or(1.0),
+                        self.cam.view_zoom.get(&self.view).copied().unwrap_or(1.0) * self.cam.zoom_hold.factor,
                     )
                 });
                 self.camera

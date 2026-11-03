@@ -24,6 +24,7 @@ pub struct CityMap {
     pub(super) mpp: f64,
     /// The view stays on the bus until the map is dragged.
     pub(super) follow: bool,
+    pub(super) found: Option<u32>,
     pub(super) drag: Option<(f32, f32)>,
     /// How far the mouse has moved (pixels) since it was pressed on the map: a press let go
     /// without moving is a click.
@@ -157,7 +158,31 @@ impl Navigator {
     }
 
     /// Open or close the city map.
+    pub fn street_names(&self) -> Vec<String> {
+        self.streets.as_deref().map(|st| st.names.clone()).unwrap_or_default()
+    }
+
+    pub fn show_street(&mut self, name: &str) -> bool {
+        let Some(st) = self.streets.clone() else { return false };
+        let Some(id) = st.names.iter().position(|n| n == name) else { return false };
+        let points: Vec<DVec2> = st.labels.iter().filter(|l| l.2 as usize == id).map(|l| l.0).collect();
+        if points.is_empty() {
+            return false;
+        }
+        let mid = points.iter().copied().sum::<DVec2>() / points.len() as f64;
+        let at = points.iter().copied().min_by(|a, b| a.distance(mid).total_cmp(&b.distance(mid))).unwrap_or(mid);
+        if !self.city.open {
+            self.toggle_map();
+        }
+        self.city.follow = false;
+        self.city.center = at;
+        self.city.mpp = self.city.mpp.min(1.2);
+        self.city.found = Some(id as u32);
+        true
+    }
+
     pub fn toggle_map(&mut self) {
+        self.city.found = None;
         self.city.open = !self.city.open;
         if self.city.open {
             self.city.follow = true;
@@ -695,17 +720,19 @@ impl Navigator {
                     ang += std::f32::consts::PI;
                 }
                 let name = &st.names[*id as usize];
+                let found = self.city.found == Some(*id);
+                let px = if found { px * 1.3 } else { px };
                 let tw = self.fonts.width(name, px, Weight::Medium);
                 let (hx, hy) = ((ang.cos() * tw * 0.5).abs() + (ang.sin() * px * 0.6).abs(), (ang.sin() * tw * 0.5).abs() + (ang.cos() * px * 0.6).abs());
                 let bb = Rect::new(p.x - hx, p.y - hy, hx * 2.0, hy * 2.0);
-                if taken.iter().any(|t| rects_overlap(t, &bb)) {
+                if !found && taken.iter().any(|t| rects_overlap(t, &bb)) {
                     continue;
                 }
                 taken.push(bb);
                 for o in [Vec2::new(1.2, 0.0), Vec2::new(-1.2, 0.0), Vec2::new(0.0, 1.2), Vec2::new(0.0, -1.2)] {
                     ui.text_rotated(&mut self.atlas, &self.fonts, name, px, Weight::Medium, p + o * s, ang, pal.label_halo);
                 }
-                ui.text_rotated(&mut self.atlas, &self.fonts, name, px, Weight::Medium, p, ang, pal.label);
+                ui.text_rotated(&mut self.atlas, &self.fonts, name, px, Weight::Medium, p, ang, if found { Color::hex(0xf5a623) } else { pal.label });
             }
         }
         self.terrain_labels(&mut ui, &on_screen, win, s, &mut taken);
