@@ -109,6 +109,7 @@ impl SceneryObject {
 /// before they run: the time and day, the daylight, the traffic lights and the timetable's
 /// boards.
 pub struct SceneryInputs<'a> {
+    pub trolley_net: Option<&'a omsi_trolley::WireNet>,
     /// The scripts' time of day, the timetable's clock (None: they keep their own).
     pub clock: Option<&'a SimClock>,
     /// The time of day the buildings' hours and lights go by.
@@ -136,6 +137,7 @@ pub struct SceneryInputs<'a> {
 /// come from the traffic of the same step.
 #[derive(Clone, Default)]
 pub struct OwnedSceneryInputs {
+    pub trolley_net: Option<Arc<omsi_trolley::WireNet>>,
     pub clock: Option<SimClock>,
     pub time: f64,
     pub day: DayKind,
@@ -151,6 +153,7 @@ pub struct OwnedSceneryInputs {
 impl OwnedSceneryInputs {
     pub fn as_inputs<'a>(&'a self, phase_of: &'a dyn Fn(usize, usize) -> (f32, f32)) -> SceneryInputs<'a> {
         SceneryInputs {
+            trolley_net: self.trolley_net.as_deref(),
             clock: self.clock.as_ref(),
             time: self.time,
             day: self.day,
@@ -388,6 +391,9 @@ impl SceneryState {
     /// (side by side on the worker threads, each on its own variables); the commands for
     /// the view come back in object order, as they did when the view walked the list.
     pub fn step(&mut self, dt: f32, inputs: &SceneryInputs, times: &mut StepTimes) {
+        if let Some(net) = inputs.trolley_net {
+            net.step_switch_displays(dt);
+        }
         let t = std::time::Instant::now();
         let out = &mut self.out;
         out.cmds.clear();
@@ -582,6 +588,15 @@ fn gather(o: &mut SceneryObject, dist: f64, inputs: &SceneryInputs, out: &mut Sc
             o.inst.host.html_departures_gen = inputs.departures_gen;
         }
     }
+    if o.inst.program.var("Trolley_Frog_State").is_some() {
+        let shown = inputs.trolley_net.and_then(|net| {
+            net.switch_for_display(o.pos, &o.inst.state.str_vars).and_then(|switch| net.switch_display(switch))
+        });
+        let (state, straight, since) = shown.unwrap_or((0.0, 0.0, 1.0e6));
+        o.inst.set_var("Trolley_Frog_State", state);
+        o.inst.set_var("Trolley_Frog_Straight", straight);
+        o.inst.set_var("Trolley_Frog_Changed", since);
+    }
     vars
 }
 
@@ -612,10 +627,45 @@ mod tests {
 
     static KEY: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
+    #[test]
+    fn trolley_displays_receive_actual_switch_feedback_and_clear_without_a_network() {
+        let net = Arc::new(omsi_trolley::WireNet::parse(concat!(
+            "[trolley_span]\np 0 0 5\np 50 0 5\n",
+            "[trolley_span]\np 50 0 5\np 100 0 5\n",
+            "[trolley_span]\np 50 0 5\np 90 20 5\n",
+            "[trolley_switch]\nname Junction A\npos 50 0 5\nmode radio\n",
+        )));
+        let program = Arc::new(omsi_script::compile(&omsi_script::CompileInput {
+            builtin_vars: ["Trolley_Frog_State", "Trolley_Frog_Straight", "Trolley_Frog_Changed"].into_iter().map(String::from).collect(),
+            builtin_str_vars: vec!["Junction".into()],
+            ..Default::default()
+        }));
+        assert!(program.errors.is_empty(), "{:?}", program.errors);
+        let inst = SceneryInstance::new(program, &[], SimClock::default(), &["Junction A".into()]);
+        let mut scenery = SceneryState::default();
+        scenery.push(SceneryObject::new(1, 1, DVec3::ZERO, (0, 0), inst, 0));
+        let phase = |_: usize, _: usize| (0.0, 0.0);
+        let mut inputs = OwnedSceneryInputs { trolley_net: Some(net.clone()), ..Default::default() };
+        scenery.step(0.25, &inputs.as_inputs(&phase), &mut StepTimes::default());
+        assert_eq!(scenery.objects()[0].inst.var("Trolley_Frog_State"), Some(2.0));
+        assert_eq!(scenery.objects()[0].inst.var("Trolley_Frog_Straight"), Some(1.0));
+        net.set_switch(0, true);
+        scenery.step(0.25, &inputs.as_inputs(&phase), &mut StepTimes::default());
+        assert_eq!(scenery.objects()[0].inst.var("Trolley_Frog_State"), Some(1.0));
+        assert_eq!(scenery.objects()[0].inst.var("Trolley_Frog_Straight"), Some(0.0));
+        assert_eq!(scenery.objects()[0].inst.var("Trolley_Frog_Changed"), Some(0.25));
+        inputs.trolley_net = None;
+        scenery.step(0.25, &inputs.as_inputs(&phase), &mut StepTimes::default());
+        assert_eq!(scenery.objects()[0].inst.var("Trolley_Frog_State"), Some(0.0));
+        assert_eq!(scenery.objects()[0].inst.var("Trolley_Frog_Straight"), Some(0.0));
+        assert_eq!(scenery.objects()[0].inst.var("Trolley_Frog_Changed"), Some(1.0e6));
+    }
+
     fn step(s: &mut SceneryState, center: DVec3) -> (Vec<u32>, Vec<u32>) {
         let phase = |_: usize, _: usize| (0.0, 0.0);
         let (controllers, by_stop, departures) = (HashMap::new(), HashMap::new(), Default::default());
         let inputs = SceneryInputs {
+            trolley_net: None,
             clock: None,
             time: 0.0,
             day: DayKind::default(),
