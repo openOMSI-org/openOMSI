@@ -314,3 +314,45 @@ fn a_repaint_lets_go_of_what_the_last_livery_set() {
     assert_eq!(v.var("Colorscheme"), Some(-1.0));
 }
 
+fn a_livery_changed_puts_back_what_the_old_one_set() {
+    let painted = |init: &str| {
+        let mut ty = (*crate::timetable_run::tests::script_test_vehicle(init, "v_drzwi\nv_font\n", "").ty).clone();
+        ty.paint_schemes = vec![
+            PaintScheme { set_vars: vec![("v_drzwi".into(), 1.0), ("V_Font".into(), 7.0)], ..Default::default() },
+            PaintScheme::default(),
+        ];
+        Arc::new(ty)
+    };
+    let mut host = VehicleHost::new(Default::default());
+    host.paint_scheme = Some(Some(0));
+    let mut v = VehicleInstance::new(painted("{init}\n3 (S.L.v_font)\n{end}\n"), host);
+    v.apply_paint_vars(Some(0));
+    let car = painted("{init}\n5 (S.L.v_font)\n{end}\n");
+    v.attach_trailer(car.clone());
+    v.trailers[0].run = Some(Box::new(crate::vehicle::car_run::CarRun::start(&car, &mut v, [1.0, 0.0, 0.0])));
+    assert_eq!((v.var("v_drzwi"), v.var("v_font")), (Some(1.0), Some(7.0)));
+    assert_eq!(v.trailers[0].run_var("v_font"), Some(7.0));
+    for (scheme, drzwi, font, car_font) in [(Some(1), 0.0, 3.0, 5.0), (Some(0), 1.0, 7.0, 7.0), (None, 0.0, 3.0, 5.0)] {
+        v.repaint(scheme);
+        v.update(1.0 / 30.0);
+        assert_eq!((v.var("v_drzwi"), v.var("v_font")), (Some(drzwi), Some(font)), "{scheme:?}");
+        assert_eq!(v.trailers[0].run_var("v_font"), Some(car_font), "{scheme:?}");
+    }
+}
+
+#[test]
+fn a_livery_let_go_of_gives_back_this_buss_own_init_value() {
+    let mut ty = (*crate::timetable_run::tests::script_test_vehicle("{init}\n(L.$.yard) $length (S.L.v_font)\n{end}\n", "v_font\n", "yard\n").ty).clone();
+    ty.paint_schemes = vec![PaintScheme { set_vars: vec![("v_font".into(), 7.0)], ..Default::default() }, PaintScheme::default()];
+    let mut host = VehicleHost::new(Default::default());
+    host.hof = Some(Arc::new(omsi_vehicle::hof::Hof { name: "Lichtenberg".into(), ..Default::default() }));
+    host.paint_scheme = Some(Some(0));
+    let mut v = VehicleInstance::new(Arc::new(ty), host);
+    v.apply_paint_vars(Some(0));
+    assert_eq!(v.var("v_font"), Some(7.0));
+    for scheme in [Some(1), None] {
+        v.repaint(scheme);
+        v.update(1.0 / 30.0);
+        assert_eq!(v.var("v_font"), Some(11.0), "{scheme:?}: the length of this bus's yard, not a new bus's");
+    }
+}

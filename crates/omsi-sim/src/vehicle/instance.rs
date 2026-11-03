@@ -125,6 +125,7 @@ impl VehicleInstance {
         if let (Some(i), Some(h)) = (program.str_var("yard"), host.hof.as_ref()) {
             state.str_vars[i as usize] = h.name.clone();
         }
+        let before_paint = scheme_values(&ty, &var_index, &state.vars);
         if let Some(scheme) = host.paint_scheme {
             let scheme = scheme.filter(|i| *i < ty.paint_schemes.len());
             let mut put = |name: &str, v: f32| {
@@ -149,6 +150,7 @@ impl VehicleInstance {
             state.vars[*i as usize] = host.schedule_active;
         }
         vm.run_init(&program, &mut state, &mut host);
+        let paint_base = unpainted_values(&ty, host.paint_scheme.flatten(), before_paint, &var_index, &state.vars);
         let mut animators: Vec<MeshAnimator> = ty
             .meshes
             .iter()
@@ -296,6 +298,7 @@ impl VehicleInstance {
             var_index: std::sync::Arc::new(var_index),
             model_only_vars,
             scheme_overrides: Vec::new(),
+            paint_base,
             props_plan: PropsPlan::default(),
             pax_vars: std::sync::OnceLock::new(),
             engine_ids: std::sync::OnceLock::new(),
@@ -431,10 +434,15 @@ impl VehicleInstance {
         let scheme = scheme.filter(|i| *i < self.ty.paint_schemes.len());
         // (an engine variable: a model may switch meshes by it without declaring it)
         self.set_engine_var("Colorscheme", scheme.map(|i| i as f32).unwrap_or(-1.0));
-        if let Some(i) = scheme {
-            for (var, v) in self.ty.paint_schemes[i].set_vars.clone() {
-                self.set_var(&var, v);
+        let set_vars = scheme.map(|i| self.ty.paint_schemes[i].set_vars.clone()).unwrap_or_default();
+        let sets = |list: &[(String, f32)], k: &str| list.iter().any(|(n, _)| n.eq_ignore_ascii_case(k));
+        for (k, v) in self.paint_base.clone() {
+            if !sets(&set_vars, &k) && !sets(&self.scheme_overrides, &k) {
+                self.set_var(&k, v);
             }
+        }
+        for (var, v) in set_vars {
+            self.set_var(&var, v);
         }
         // the cars that run their scripts themselves wear it too
         for part in &mut self.trailers {
@@ -470,34 +478,17 @@ impl VehicleInstance {
         }
     }
 
+    pub fn repaint(&mut self, scheme: Option<usize>) {
+        self.host.paint_scheme = Some(scheme.filter(|i| *i < self.ty.paint_schemes.len()));
+        self.apply_paint_vars(scheme);
+    }
+
     /// Set `name` to `v` and keep it over the paint scheme's own value (`--setvar`). A scheme
     /// that sets the same variable writes it every frame (see
     /// [`Self::apply_scheme_vars_each_frame`]), so a value set once lasted a frame: a
     /// launcher's door or mirror type chosen over the repaint's was the repaint's again in the
     /// game, and only the variables the repaint does not set were the player's. A variable
     /// the scheme does not set is set once, as [`Self::set_var`] does, for the scripts to
-    pub fn repaint(&mut self, scheme: Option<usize>) {
-        let scheme = scheme.filter(|i| *i < self.ty.paint_schemes.len());
-        let names = |s: Option<usize>| s.and_then(|i| self.ty.paint_schemes.get(i)).map(|p| p.set_vars.iter().map(|(n, _)| n.to_ascii_lowercase()).collect::<Vec<_>>()).unwrap_or_default();
-        let incoming = names(scheme);
-        let released: Vec<String> = names(self.host.paint_scheme.flatten())
-            .into_iter()
-            .filter(|n| !incoming.contains(n) && !self.scheme_overrides.iter().any(|(o, _)| o.eq_ignore_ascii_case(n)))
-            .collect();
-        if !released.is_empty() {
-            let mut host = VehicleHost::new(Default::default());
-            host.paint_scheme = Some(scheme);
-            let fresh = VehicleInstance::new(self.ty.clone(), host);
-            for n in &released {
-                if let Some(v) = fresh.var(n) {
-                    self.set_var(n, v);
-                }
-            }
-        }
-        self.host.paint_scheme = Some(scheme);
-        self.apply_paint_vars(scheme);
-    }
-
     /// change. False: the vehicle has no such variable.
     pub fn set_var_over_scheme(&mut self, name: &str, v: f32) -> bool {
         if !self.set_var(name, v) {
@@ -507,6 +498,33 @@ impl VehicleInstance {
         self.scheme_overrides.push((name.to_string(), v));
         true
     }
+}
+
+pub(super) fn scheme_var_names(ty: &VehicleType) -> Vec<String> {
+    let mut names: Vec<String> = ty.paint_schemes.iter().flat_map(|s| &s.set_vars).map(|(n, _)| n.to_ascii_lowercase()).collect();
+    names.sort_unstable();
+    names.dedup();
+    names
+}
+
+fn scheme_values(ty: &VehicleType, var_index: &HashMap<String, omsi_script::VarId>, vars: &[f32]) -> Vec<(String, Option<f32>)> {
+    scheme_var_names(ty).into_iter().map(|k| {
+        let v = var_index.get(&k).map(|id| vars[*id as usize]);
+        (k, v)
+    }).collect()
+}
+
+fn unpainted_values(ty: &VehicleType, worn: Option<usize>, before: Vec<(String, Option<f32>)>, var_index: &HashMap<String, omsi_script::VarId>, vars: &[f32]) -> Vec<(String, f32)> {
+    let worn = worn.and_then(|i| ty.paint_schemes.get(i));
+    before
+        .into_iter()
+        .map(|(k, before)| {
+            let now = var_index.get(&k).map(|id| vars[*id as usize]);
+            let put = worn.and_then(|s| s.set_vars.iter().find(|(n, _)| n.eq_ignore_ascii_case(&k))).map(|(_, v)| *v);
+            let base = if put.is_some() && now == put { before } else { now.or(before) };
+            (k, base.unwrap_or(0.0))
+        })
+        .collect()
 }
 
 pub(super) fn control_cables(ty: &VehicleType) -> Vec<(omsi_script::VarId, omsi_script::VarId)> {
