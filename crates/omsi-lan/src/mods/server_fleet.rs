@@ -105,20 +105,45 @@ pub fn fingerprint(root: &Path, bus: &str) -> Result<String, String> {
     model_manifest(root, &bus, &ty).map(|(m, _)| m.fingerprint())
 }
 
+/// `fingerprint` of a bus already loaded from `path` (the server's fleet check loads each
+/// once, not twice).
+pub fn fingerprint_loaded(root: &Path, bus: &str, path: &Path, ty: &omsi_sim::VehicleType) -> Result<String, String> {
+    let bus = omsi_net::vehicle_path(bus).ok_or("invalid bus path")?;
+    if !trusted_source(root, path) { return Err("untrusted bus path".into()); }
+    let t = std::time::Instant::now();
+    let gathered = gathered(root, ty)?;
+    let listed = t.elapsed().as_secs_f64();
+    let (entries, cached, read) = upload::hashed_counted(&gathered);
+    log::info!(
+        "server fleet: {bus}: {} files listed in {listed:.1} s, hashed in {:.1} s ({cached} known from the hash cache, {:.1} MB read)",
+        gathered.len(),
+        t.elapsed().as_secs_f64() - listed,
+        read as f64 / 1e6
+    );
+    manifest_of(&bus, gathered, entries).map(|(m, _)| m.fingerprint())
+}
+
+/// Every file of the bus in every paint it offers (the first 128), as `listed` names them.
+fn gathered(root: &Path, ty: &omsi_sim::VehicleType) -> Result<Vec<(String, PathBuf)>, String> {
+    let schemes: Vec<Option<usize>> = std::iter::once(None).chain((0..ty.paint_schemes.len().min(128)).map(Some)).collect();
+    let all = bus_files::of_type_paints(root, ty, &schemes);
+    if all.iter().any(|path| !trusted_source(root, path)) {
+        return Err("selected vehicle dependencies resolve outside the trusted content roots".into());
+    }
+    Ok(upload::listed(root, all.into_iter().collect()))
+}
+
 fn model_manifest(root: &Path, bus: &str, ty: &omsi_sim::VehicleType) -> Result<(identity::VehicleManifest, Vec<PathBuf>), String> {
     // The server offers the *complete configured model*, including the default
     // and all advertised repaint dependencies. A player with the same bus but
     // without a server repaint must obtain that repaint without replacing OMSI 2.
     // BTreeSet deduplicates shared textures, models, scripts and sounds.
-    let mut all = std::collections::BTreeSet::new();
-    for scheme in std::iter::once(None).chain((0..ty.paint_schemes.len().min(128)).map(Some)) {
-        all.extend(bus_files::of_type(root, &ty, scheme, None));
-    }
-    if all.iter().any(|path| !trusted_source(root, path)) {
-        return Err("selected vehicle dependencies resolve outside the trusted content roots".into());
-    }
-    let files = upload::listed(root, all.into_iter().collect());
+    let files = gathered(root, ty)?;
     let entries = upload::hashed(&files);
+    manifest_of(bus, files, entries)
+}
+
+fn manifest_of(bus: &str, files: Vec<(String, PathBuf)>, entries: Vec<Entry>) -> Result<(identity::VehicleManifest, Vec<PathBuf>), String> {
     // Hashing skips files it cannot safely read. Never zip a shortened hash
     // list with the original paths: that could serve the wrong bytes for a hash.
     if entries.len() != files.len() {

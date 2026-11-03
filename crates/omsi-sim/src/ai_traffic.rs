@@ -114,6 +114,12 @@ pub struct TrafficSim {
     /// not loaded yet (a road spline often starts in the next tile). Most stand in car parks
     /// and stay here.
     pub parked_waiting: Vec<DVec3>,
+    /// A car drives on through a parked car standing in the middle of its lane, as Omsi.exe's
+    /// traffic does - only when asked (`--ai-drive-through-parked`, `server.cfg`'s
+    /// `ai_drive_through_parked = 1`). By default it stops behind it and goes round it when it
+    /// can; on some maps a parked car stands in the lane with no way round, and the traffic
+    /// behind it waits for good.
+    pub drive_through_parked: bool,
     /// Tiles whose lanes the network has (lanes stay once they are in).
     pub lane_tiles: hashbrown::HashSet<(i32, i32)>,
     /// Counts the times tiles brought their lanes: whoever resolved something against the

@@ -259,6 +259,7 @@ const camera = {
         { type: 'toggle', key: 'precision_zoom', label: 'Precision mouse zoom (FOV curve instead of the linear way)' },
         { type: 'slider', key: 'zoom_hold_amount', label: 'Zoom on a key', help: 'How far the view zooms while the zoom key is held (Controls: Zoom while held)', min: 0.2, max: 0.8, step: 0.05, def: 0.5, format: (v) => `${+(1 / v).toFixed(2)}x` },
         { type: 'toggle', key: 'zoom_hold_latch', label: 'Zoom key stays', help: 'One press zooms in, the next zooms out; off: only while the key is held' },
+        { type: 'toggle', key: 'flashlight_cursor', label: 'Flashlight follows the cursor', help: 'With the cursor free (on foot, or in the cab while the mouse does not steer) the flashlight lights where it points; otherwise straight ahead' },
       ],
     },
     {
