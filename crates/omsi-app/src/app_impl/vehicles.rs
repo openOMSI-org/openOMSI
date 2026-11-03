@@ -47,6 +47,35 @@ impl App {
         }
     }
 
+    pub(crate) fn repaint_driven(&mut self, scheme: Option<usize>) {
+        if self.net.lan.is_some() {
+            self.service_msg = Some((omsi_ui::tr("In a LAN session the livery is chosen before the bus is placed").into_owned(), 3.0));
+            return;
+        }
+        let (Some(p), Some(w), Some(r), Some(scene)) = (self.player.as_mut(), self.world.clone(), self.renderer.as_ref(), self.scene.as_mut()) else { return };
+        let ty = p.vehicle.ty.clone();
+        let scheme = scheme.filter(|i| *i < ty.paint_schemes.len());
+        if p.vehicle.host.paint_scheme.flatten() == scheme {
+            return;
+        }
+        let render = w.add_vehicle(r, scene, &ty, scheme);
+        let own = p.vehicle.trailers.len().saturating_sub(p.hand_coupled);
+        let trailers: Vec<_> = p.vehicle.trailers.iter().enumerate().map(|(k, t)| w.add_vehicle_part(r, scene, &t.ty, scheme.filter(|i| k < own && *i < t.ty.paint_schemes.len()), &render)).collect();
+        let mut old = std::mem::replace(&mut p.render, render);
+        crate::view_sync::vehicle_damage::carry_damage(r, scene, &mut old, &mut p.render);
+        w.release_vehicle(r, scene, old);
+        for t in std::mem::replace(&mut p.trailer_renders, trailers) {
+            w.release_vehicle(r, scene, t);
+        }
+        p.vehicle.text_textures.iter_mut().for_each(|t| t.last_text = None);
+        p.vehicle.trailers.iter_mut().flat_map(|t| t.text_textures.iter_mut()).for_each(|t| t.last_text = None);
+        p.vehicle.host.script_textures.iter_mut().for_each(|t| t.dirty = true);
+        p.vehicle.repaint(scheme);
+        self.args.paint = scheme.map(|i| i.to_string());
+        let name = scheme.map_or_else(|| omsi_ui::tr("Default paint").into_owned(), |i| ty.paint_schemes[i].name.clone());
+        self.service_msg = Some((omsi_ui::i18n::tr_fill("Livery: {name}", &[("{name}", &name)]), 3.0));
+    }
+
     pub(crate) fn take_depot_bus(&mut self, id: &str) {
         self.settle_depot_switch(false);
         let Some(b) = crate::depot_bus::listed().into_iter().find(|b| b.id == id) else {

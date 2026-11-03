@@ -668,6 +668,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   the launcher's passenger settings, `pax_short_rides_stand`, off by default), a passenger with
   no set stop who rides under about three kilometres takes the free standing place nearest an exit
   of their car instead of a seat; with no standing place free, they board as before (#2242).
+- **A new livery without a new bus.** Vehicle options › *Livery* lists the bus's liveries (with a
+  search, as the launcher's list); the one chosen is painted onto the bus you drive where it
+  stands, with its passengers, trip, odometer and fuel as they were (#3638).
 - **Graphics that fit the computer from the first start.** On a first start (no settings file,
   no drive and no map loaded before), the game
   picks a quality preset from its best graphics chip before it opens the window's renderer: Low
