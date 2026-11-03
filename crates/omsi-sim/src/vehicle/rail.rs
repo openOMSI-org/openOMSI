@@ -84,13 +84,10 @@ impl VehicleInstance {
     /// the driven wheels, `brakes` the per-wheel brake forces of the vehicle's own axles and
     /// the coupled cars' come from theirs. `None` for a vehicle whose scripts give neither
     /// (the stock trains are scripted for the AI only).
-    fn rail_script_forces(&self, m_wheel: f32, brakes: &[f32]) -> Option<Forces> {
+    fn rail_script_forces(&mut self, m_wheel: f32, brakes: &[f32]) -> Option<Forces> {
         let own: f32 = brakes.iter().sum();
-        let towed: f32 = self
-            .trailers
-            .iter()
-            .map(|t| t.v_brakes.iter().map(|&id| self.get(id).max(0.0)).sum::<f32>() + t.run.as_ref().and_then(|r| r.get("Brakeforce")).unwrap_or(0.0).max(0.0))
-            .sum();
+        let towed: f32 = self.trailers.iter().flat_map(|t| t.v_brakes.iter()).map(|&id| self.get(id).max(0.0)).sum::<f32>()
+            + self.trailers.iter_mut().filter_map(|t| t.run.as_deref_mut()).map(|r| r.take_own_brakeforce()).sum::<f32>();
         let brake = own + towed;
         if m_wheel.abs() < 1.0 && brake < 1.0 {
             return None;
