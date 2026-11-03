@@ -88,6 +88,11 @@ pub struct ServerCfg {
     pub owner_bans: Option<std::path::PathBuf>,
     /// A player whose game sends no hardware identifier is turned away.
     pub require_hardware_id: bool,
+    /// The AI drives on through a parked car standing in its lane (`ai_drive_through_parked
+    /// = 1`), as Omsi.exe's traffic does; by default it stops behind it and goes round it when
+    /// it can (on maps whose parked cars stand in the lane with no way round, that froze the
+    /// traffic).
+    pub ai_drive_through_parked: bool,
     /// The players' internet addresses go into the log whole (`log_addresses`); off, a
     /// public one keeps only its network (`203.0.113.x`).
     pub log_addresses: bool,
@@ -115,6 +120,10 @@ weather =
 traffic = 30
 timetable = 1
 passengers = 1
+# the AI stops behind a parked car standing in its lane and goes round it when it can (0);
+# 1 = it drives on through it, as OMSI 2's does - for maps where a parked car stands in the
+# lane with no way round and holds the traffic for good
+ai_drive_through_parked = 0
 
 # how many people the map's stops and pavements get: a factor on the map's own demand for
 # the time of day (1 = as the map says, 0.5 = half, 2 = twice; 0 to 3). 0 brings no new
@@ -322,6 +331,7 @@ impl ServerCfg {
             public_list_url: kv.get("public_list_url").cloned().unwrap_or_default(),
             owner_bans: kv.get("owner_bans").filter(|v| !v.is_empty()).map(std::path::PathBuf::from),
             require_hardware_id: flag("require_hardware_id", false),
+            ai_drive_through_parked: flag("ai_drive_through_parked", false),
             log_addresses: flag("log_addresses", false),
             dir: dir.to_path_buf(),
         }))

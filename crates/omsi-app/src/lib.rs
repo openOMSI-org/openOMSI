@@ -51,6 +51,7 @@ use omsi_career::career;
 use omsi_input::describe;
 pub(crate) use omsi_scene::editor;
 mod duty_book;
+mod first_graphics;
 mod game_lists;
 mod game_panels;
 mod game_controller_menu;
@@ -544,6 +545,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     }
     if let (Some(cfg), Some(l)) = (server_cfg.as_ref(), lan.as_ref()) {
         lan::open_public_gateway(l, server::info_of(cfg, &args.root), cfg.web_port, cfg.tunnel);
+        server::announce_fleet(cfg, &args.root);
         lan::publish_vehicles(args.root.clone(), cfg.vehicles.clone());
         server::start_public_list(cfg);
         if cfg.tunnel {
