@@ -78,13 +78,27 @@ impl Fixture {
         fixture
     }
     fn script(&self, helper: &str) {
+        self.script_with_wait(helper, false);
+    }
+    fn script_with_wait(&self, helper: &str, poll_before_wait: bool) {
         let quote = |s: &str| serde_json::to_string(s).unwrap();
+        // Loading uses NoVehicle IO, which drops messages from immediately completed waits.
+        // Start once on a frame so both pending and already-finished results reach Game.
         let source = format!(
             r#"
-            local handle = assert(omsi.process.start({}, {{"--exact", "permission_child", "--ignored"}}, {{env={{PLUGIN_CONSENT_TEST_MARKER={}}}}}))
-            local code, state, reason = omsi.process.wait(handle)
-            assert(omsi.process.forget(handle))
-            omsi.message(state .. ":" .. tostring(code) .. ":" .. tostring(reason))
+            local handle
+            local reported = false
+            function on_frame()
+                if reported then return end
+                if not handle then
+                    handle = assert(omsi.process.start({}, {{"--exact", "permission_child", "--ignored"}}, {{env={{PLUGIN_CONSENT_TEST_MARKER={}}}}}))
+                end
+                if {poll_before_wait} and omsi.process.status(handle).running then return end
+                reported = true
+                local code, state, reason = omsi.process.wait(handle)
+                assert(omsi.process.forget(handle))
+                omsi.message(state .. ":" .. tostring(code) .. ":" .. tostring(reason))
+            end
         "#,
             quote(helper),
             quote(self.marker.to_str().unwrap())
@@ -136,6 +150,74 @@ fn permission_child() {
     .unwrap();
     std::process::exit(42);
 }
+#[test]
+fn process_fixture_starts_with_frame_io() {
+    let f = Fixture::new();
+    let entry = f.folder.join("a_plugin.lua");
+    let source = std::fs::read_to_string(&entry).unwrap();
+    let call = source
+        .lines()
+        .find(|line| line.contains("omsi.process.start("))
+        .unwrap();
+    let guarded = source.replace(
+        call,
+        &format!("assert(omsi.var('frames') ~= nil, 'process fixture requires frame IO')\n{call}"),
+    );
+    std::fs::write(&entry, guarded).unwrap();
+    let broker = f.broker();
+    let mut host = f.load(broker.clone());
+    assert!(
+        host.has("a_plugin"),
+        "the fixture must not use frame IO during loading"
+    );
+    let mut game = Game::default();
+    let p = prompt(&mut host, &mut game, &broker);
+    assert!(broker.respond(p.id, ProcessDecision::Deny));
+    drive(&mut host, &mut game, |g| !g.messages.is_empty());
+    assert!(game.messages[0].contains("denied"));
+    assert!(!f.marker.exists());
+    host.finalize();
+    std::fs::remove_dir_all(f.root).unwrap();
+}
+
+#[test]
+fn completed_denial_is_reported_once_after_reload() {
+    let f = Fixture::new();
+    f.script_with_wait(
+        if cfg!(windows) {
+            "helper.exe"
+        } else {
+            "helper"
+        },
+        true,
+    );
+    let broker = f.broker();
+    let mut host = f.load(broker.clone());
+    let mut game = Game::default();
+    let p = prompt(&mut host, &mut game, &broker);
+    assert!(broker.respond(p.id, ProcessDecision::Deny));
+    drive(&mut host, &mut game, |g| !g.messages.is_empty());
+    assert!(game.messages[0].contains("denied by the player"));
+    host.finalize();
+
+    let mut host = f.load(broker.clone());
+    let mut game = Game::default();
+    drive(&mut host, &mut game, |g| !g.messages.is_empty());
+    assert!(game.messages[0].contains("denied by the player for this session"));
+    assert!(broker.prompt().is_none());
+    assert!(!f.marker.exists());
+    for _ in 0..64 {
+        host.frame(&mut game);
+    }
+    assert_eq!(
+        game.messages.len(),
+        1,
+        "a completed request must only be reported once"
+    );
+    host.finalize();
+    std::fs::remove_dir_all(f.root).unwrap();
+}
+
 #[test]
 fn once_waits_without_blocking_frames_then_prompts_again_and_deny_stays_denied() {
     let f = Fixture::new();
@@ -207,12 +289,18 @@ fn saving_plugin_data_while_awaiting_consent_and_after_restart_preserves_approva
         } else { f.folder.clone() };
         let entry = folder.join(if folder_plugin { "main.lua" } else { "a_plugin.lua" });
         // Keep ordinary frame callbacks alive while native preparation/consent is pending.
-        let start = source.split("local code, state, reason").next().unwrap();
+        let start = source
+            .lines()
+            .find(|line| line.contains("omsi.process.start("))
+            .unwrap();
         let source = format!(r#"
-            {start}
+            local handle
             local done = false
             function on_frame()
                 if done then return end
+                if not handle then
+                    {start}
+                end
                 omsi.data.counter = (omsi.data.counter or 0) + 1
                 omsi.save()
                 assert(omsi.files.write("state.txt", tostring(omsi.data.counter)))
