@@ -41,6 +41,7 @@ impl Offscreen<'_> {
         let (args, dt) = (self.args, self.dt);
         let Self {
             ref mut srv_clock,
+            ref mut srv_wall,
             ref mut srv_admin,
             ref srv_metar,
             ref mut srv_metar_due,
@@ -59,7 +60,8 @@ impl Offscreen<'_> {
             ref settings,
             ..
         } = *self;
-        *srv_clock += dt as f64 * lan_off.as_ref().map(|l| l.clock_speed).unwrap_or(1.0);
+        // (the world clock follows the wall, not the steps: see `world_clock`)
+        *srv_clock += srv_wall.step(Instant::now(), dt as f64, lan_off.as_ref().map(|l| l.clock_speed as f64).unwrap_or(1.0));
         // a server on the real time (server.cfg): its clock reads this machine's
         if i.is_multiple_of(super::steps_in(1.0)) && crate::real_time::server_real() {
             if let Some(n) = crate::real_time::now() {

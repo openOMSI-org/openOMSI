@@ -13,6 +13,7 @@ mod report;
 mod setup;
 mod stages;
 mod step;
+mod world_clock;
 
 pub(crate) use stages::OFFSCREEN_STEP;
 #[cfg(test)]
@@ -78,6 +79,8 @@ struct Offscreen<'a> {
     /// a dedicated server's administration and clock (see `admin`)
     srv_admin: crate::admin::ServerAdmin,
     srv_clock: f64,
+    /// the server's world clock against the wall (see `world_clock`)
+    srv_wall: world_clock::WorldClock,
     srv_metar: Option<String>,
     srv_metar_due: std::time::Instant,
     srv_metar_rx: Option<std::sync::mpsc::Receiver<Option<omsi_content::weather::Weather>>>,
