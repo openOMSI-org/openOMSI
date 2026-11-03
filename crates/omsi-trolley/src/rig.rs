@@ -231,8 +231,11 @@ impl TrolleyRig {
         static EMPTY: std::sync::OnceLock<WireNet> = std::sync::OnceLock::new();
         let net = inp.net.unwrap_or_else(|| EMPTY.get_or_init(|| WireNet::parse("")));
         let request = SwitchRequest { current: self.amps - self.out.charge_amps, blinker: inp.blinker, radio: inp.radio, code: inp.route_code, channel: inp.channel };
-        let transmit = self.radio_previous.is_some_and(|(radio, code)| {
-            if inp.radio == 2 { radio != 2 } else { (radio, code) != (inp.radio, inp.route_code) }
+        // (a release sends nothing: it would hand a toggled or chosen switch back to the route)
+        let transmit = self.radio_previous.is_some_and(|(radio, code)| match inp.radio {
+            2 => radio != 2,
+            0 => code != inp.route_code,
+            direction => (radio, code) != (direction, inp.route_code),
         });
         if transmit {
             net.receive_radio(inp.pos, &request);
@@ -631,6 +634,29 @@ mod tests {
         input.channel = 1;
         rig.step(&input);
         assert!(!net.switch_branch(0));
+        input.route_code = 159;
+        rig.step(&input);
+        input.route_code = 158;
+        rig.step(&input);
+        assert!(net.switch_branch(0));
+    }
+
+    #[test]
+    fn releasing_a_toggle_or_a_direction_does_not_hand_the_switch_back_to_the_route() {
+        let net = radio_y("route 158 left\n");
+        let mut rig = TrolleyRig::new(&def(), 3);
+        let mut input = RigInput { route_code: 158, ..standing(&net, DVec3::new(50.0, 0.0, 0.0)) };
+        rig.step(&input);
+        net.set_switch(0, true);
+        for (press, after) in [(2, false), (2, true), (1, false), (-1, true)] {
+            input.radio = press;
+            rig.step(&input);
+            assert_eq!(net.switch_branch(0), after, "press {press}");
+            input.radio = 0;
+            rig.step(&input);
+            assert_eq!(net.switch_branch(0), after, "release of {press}");
+        }
+        net.set_switch(0, false);
         input.route_code = 159;
         rig.step(&input);
         input.route_code = 158;

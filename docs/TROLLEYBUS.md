@@ -84,6 +84,8 @@ the constants are in the vehicle's file, not in the game.
   in range on a matching channel can respond, even on a neighbouring road. Use channels to
   separate nearby receivers. After its initial step, a vehicle transmits only on a change
   of direction request or route code, not continuously while holding the same selection.
+  Releasing a request to `0` transmits nothing, so a toggled or chosen switch is not handed
+  back to the route code.
   A route code other than `0` is also sent to each receiver as the vehicle enters its range,
   so the switches on a route set themselves as the bus arrives. Direction requests are never
   sent on entry. Loading a vehicle and changing the channel alone never transmit, and a
