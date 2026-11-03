@@ -103,11 +103,19 @@ struct Offscreen<'a> {
 pub(crate) fn run_offscreen(
     args: &Args,
     out: &PathBuf,
-    lan_off: Option<omsi_net::LanSession>,
+    mut lan_off: Option<omsi_net::LanSession>,
     remotes_off: lan::LanGame,
 ) -> Result<()> {
     crate::frame_stages::log_order();
+    // (a dedicated server lets nobody new in before its world is there: see `set_starting`)
+    let server = args.server.is_some();
+    if let Some(l) = lan_off.as_mut().filter(|_| server) {
+        l.set_starting(true);
+    }
     let mut run = Offscreen::setup(args, out, lan_off, remotes_off)?;
+    if let Some(l) = run.lan_off.as_mut().filter(|_| server) {
+        l.set_starting(false);
+    }
     let mut steps = 0;
     // OMSI_PROFILE: the steps that took long (a stutter the window would show), by name
     let profile = omsi_cfg::flags::OMSI_PROFILE.is_set();

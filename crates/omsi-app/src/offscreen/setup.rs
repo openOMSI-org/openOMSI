@@ -34,12 +34,6 @@ impl<'a> Offscreen<'a> {
         crate::lights::load_smoke_texture(&mut renderer, &args.root);
         crate::lights::set_corona_root(&args.root);
         let mut scene = renderer.new_scene();
-        // (a dedicated server lets nobody new in before its world is there: see `set_starting`)
-        if args.server.is_some() {
-            if let Some(l) = lan_off.as_mut() {
-                l.set_starting(true);
-            }
-        }
         let (world, camera) = lan::answering_while(&mut lan_off, args.bus.as_deref(), || load_world(args, &renderer, &mut scene))?;
         // the map's own route arrows, with OMSI 2's route arrows
         world.show_help_arrows(&renderer, &mut scene, settings.nav_arrows);
@@ -143,9 +137,6 @@ impl<'a> Offscreen<'a> {
         if server {
             quit::install(|_| {});
             log::info!("server: running; Ctrl+C or SIGTERM stops it");
-            if let Some(l) = lan_off.as_mut() {
-                l.set_starting(false);
-            }
         }
         let timed: Vec<(String, f32)> = parse_triggers(args)
             .into_iter()
