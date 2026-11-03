@@ -93,7 +93,8 @@ impl VehicleInstance {
         }
         let driven = self.ty.def.axles.iter().filter(|a| a.driven).map(|a| a.wheel_diameter / 2.0).collect::<Vec<_>>();
         let radius = if driven.is_empty() { 0.45 } else { driven.iter().sum::<f32>() / driven.len() as f32 }.max(0.15);
-        Some(Forces { drive: m_wheel / radius, brake, track_brake: 0.0 })
+        let shared: Vec<&omsi_vehicle::Vehicle> = self.trailers.iter().map(|t| &t.ty.def).collect();
+        Some(Forces { drive: m_wheel / radius * sections_driving(&self.ty.def, &shared), brake, track_brake: 0.0 })
     }
 
     /// The speed along the rails after `dt` as the rail dynamics make it (`v0` the speed
@@ -304,6 +305,11 @@ impl VehicleInstance {
 /// the game found from the model does when it also found the switch that raises it - else a
 /// pantograph found wrongly (or spawned down with no way to raise it) would keep the vehicle
 /// from ever moving.
+pub(super) fn sections_driving(lead: &omsi_vehicle::Vehicle, parts: &[&omsi_vehicle::Vehicle]) -> f32 {
+    let drives = |d: &omsi_vehicle::Vehicle| d.axles.iter().any(|a| a.driven);
+    (usize::from(drives(lead)) + parts.iter().filter(|d| d.script_share && drives(d)).count()).max(1) as f32
+}
+
 pub(super) fn pantograph_binds(def: &omsi_vehicle::Vehicle) -> bool {
     def.pantograph_var.is_some() && (!def.pantograph_detected || def.pantograph_trigger.is_some())
 }
@@ -326,6 +332,15 @@ mod tests {
         let fwd = without_current(Forces { drive: 5000.0, ..f }, false);
         assert_eq!(fwd.drive, 0.0);
         assert_eq!(without_current(f, true).drive, -5000.0);
+    }
+
+    #[test]
+    fn every_section_sharing_the_scripts_drives_its_own_axles() {
+        let driven = |share| omsi_vehicle::Vehicle { script_share: share, axles: vec![omsi_vehicle::vehicle::Axle { driven: true, ..Default::default() }], ..Default::default() };
+        let bogie = omsi_vehicle::Vehicle::default();
+        assert_eq!(sections_driving(&driven(false), &[&bogie, &driven(true), &bogie]), 2.0, "a KT4D: both halves");
+        assert_eq!(sections_driving(&driven(false), &[&driven(false)]), 1.0, "a car with scripts of its own is not the lead's");
+        assert_eq!(sections_driving(&bogie, &[&driven(true)]), 1.0, "only the rear section drives");
     }
 
     #[test]
