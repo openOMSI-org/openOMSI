@@ -180,7 +180,7 @@ pub fn decode_bytes(bytes: &[u8], path: &Path) -> Result<Image, TextureError> {
         Err(e) => return Err(TextureError::Decode(path.to_path_buf(), e.to_string())),
     };
     let mut has_alpha = img.color().has_alpha();
-    let rgba = img.into_rgba8();
+    let rgba = omsi_cfg::panic_guard::catch(|| img.into_rgba8()).ok_or_else(|| TextureError::Decode(path.to_path_buf(), "out of memory converting the picture".into()))?;
     let (width, height) = (rgba.width(), rgba.height());
     let mut rgba = rgba.into_raw();
     if format == image::ImageFormat::Bmp && !has_alpha {

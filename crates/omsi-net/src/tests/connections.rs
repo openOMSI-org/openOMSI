@@ -526,3 +526,26 @@ fn relayed_sound_acknowledgements_have_a_rate_of_their_own() {
     host.on_sound(&ack, SocketAddr::from(([127, 0, 0, 1], 30002)));
     assert_eq!(host.peers[&2].drop_counts[PeerTraffic::SoundAcks as usize] as usize, dropped);
 }
+
+#[test]
+fn a_player_who_left_and_came_back_is_heard_again() {
+    let mut c = LanSession::join("127.0.0.1:28990", "c", world("m"), Duration::from_millis(10)).unwrap();
+    c.my_id = 2;
+    let from: SocketAddr = "127.0.0.1:28990".parse().unwrap();
+    let ev = |n: &str| sounds::Event { ai: 0, bus: "Vehicles/t.bus".into(), trigger: n.into(), file: None, values: Vec::new() };
+    let heard = |c: &mut LanSession, s: &mut sounds::Sync| {
+        for d in s.tick(PROTOCOL as u8, 5, 0.0) {
+            c.sounds.receive(PROTOCOL as u8, 2, &d);
+        }
+        c.sounds.take_incoming().len()
+    };
+    c.peers.insert(5, Peer::new(None, Pose::placeholder(5, "p", "b")));
+    let mut before = sounds::Sync::default();
+    before.publish(&[2], ev("door"));
+    assert_eq!(heard(&mut c, &mut before), 1);
+    c.on_bye(&["BYE", "5"], from, "BYE|5", &mut Vec::new());
+    c.peers.insert(5, Peer::new(None, Pose::placeholder(5, "p", "b")));
+    let mut after = sounds::Sync::default();
+    after.publish(&[2], ev("horn"));
+    assert_eq!(heard(&mut c, &mut after), 1, "the returning player's new sound stream was refused");
+}
