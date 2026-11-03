@@ -668,6 +668,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 - **The view editor looks at the mirror being set.** Moving a mirror's slider turns the driver's
   head to that mirror, so it shows beside the editor while it is set; another line or closing
   the editor brings the head back to where it was (#3640).
+- **A flashlight that follows the cursor.** With *Flashlight follows the cursor* on (Options ›
+  Camera, the launcher; off by default), the flashlight lights where the mouse cursor points while
+  the cursor is free - on foot, or in the cab while the mouse does not steer - and straight ahead
+  otherwise (#3641).
 - **Graphics that fit the computer from the first start.** With no settings file yet, the game
   picks a quality preset from its best graphics chip before it opens the window's renderer: Low
   for software renderers, Intel HD / UHD chips and cards under 3 GB, Medium for other integrated
