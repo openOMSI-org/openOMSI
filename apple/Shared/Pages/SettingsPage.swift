@@ -399,7 +399,9 @@ struct SettingsPage: View {
             SettingToggle(label: "Collisions with people", key: "collision_pedestrians", fallback: true)
             SettingToggle(label: "Start at the real time", key: "use_real_time")
             SettingToggle(label: "Start on today's date", key: "use_real_date")
-            SettingToggle(label: "Keep today's year, even outside the map's years", key: "use_real_year")
+            if store.flag("use_real_date") {
+                SettingToggle(label: "Keep today's year, even outside the map's years", key: "use_real_year")
+            }
             SettingToggle(label: "Sync the clock with the real time (locks the time)", key: "time_sync")
             SettingToggle(label: "Sync the weather with METAR (locks the weather)", key: "metar_sync")
             SettingSelect(label: "Time speed (not in multiplayer or with the real-time sync)", key: "time_speed", options: [("1", "Real time"), ("2", "x2"), ("4", "x4"), ("8", "x8"), ("15", "x15"), ("30", "x30")])

@@ -219,8 +219,6 @@ impl CarRun {
         }
     }
 
-    /// Whether this car's scripts store into `name` (what they leave alone is the leading
-    /// vehicle's, or what a cable brings).
     pub(super) fn take_own_brakeforce(&mut self) -> f32 {
         if !self.stores("Brakeforce") {
             return 0.0;
@@ -229,6 +227,8 @@ impl CarRun {
         std::mem::take(&mut self.state.vars[slot as usize]).max(0.0)
     }
 
+    /// Whether this car's scripts store into `name` (what they leave alone is the leading
+    /// vehicle's, or what a cable brings).
     fn stores(&self, name: &str) -> bool {
         omsi_script::compile::with_lower(name, |k| self.names.get(k).copied())
             .is_some_and(|slot| self.local.get(slot as usize) == Some(&true))
