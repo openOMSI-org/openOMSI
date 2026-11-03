@@ -147,6 +147,10 @@ pub struct Manifest {
     pub signing_key_id: String,
     /// Present only for AES-GCM protected packs.
     pub key_id: Option<String>,
+    /// Opaque licence ID of the one sale this protected pack was built for. Absent from
+    /// shared packs, so their canonical manifests and signatures are unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub licence_id: Option<String>,
     pub dependencies: Vec<Dependency>,
     pub assets: Vec<Asset>,
 }
@@ -354,10 +358,55 @@ pub fn create_pack(
     content_key: Option<&[u8; 32]>,
     cancelled: &AtomicBool,
 ) -> Result<Manifest> {
+    build_pack(
+        destination,
+        metadata,
+        None,
+        inputs,
+        signer,
+        content_key,
+        cancelled,
+    )
+}
+
+/// Build a protected pack for one sale. The signed manifest names `licence_id`, and only a
+/// licence issued for that manifest, which repeats the same ID, unlocks it.
+pub fn create_licensed_pack(
+    destination: &Path,
+    metadata: PackMetadata,
+    licence_id: &str,
+    inputs: &[AssetInput],
+    signer: &SigningKey,
+    content_key: &[u8; 32],
+    cancelled: &AtomicBool,
+) -> Result<Manifest> {
+    build_pack(
+        destination,
+        metadata,
+        Some(licence_id),
+        inputs,
+        signer,
+        Some(content_key),
+        cancelled,
+    )
+}
+
+fn build_pack(
+    destination: &Path,
+    metadata: PackMetadata,
+    licence_id: Option<&str>,
+    inputs: &[AssetInput],
+    signer: &SigningKey,
+    content_key: Option<&[u8; 32]>,
+    cancelled: &AtomicBool,
+) -> Result<Manifest> {
     if destination.exists() {
         return Err(PackError::Invalid("destination already exists"));
     }
     validate_metadata(&metadata)?;
+    if let Some(id) = licence_id {
+        validate_licence_id(id)?;
+    }
     if inputs.is_empty() || inputs.len() > MAX_ASSETS {
         return Err(PackError::Invalid(
             "asset count is outside the supported limit",
@@ -423,6 +472,7 @@ pub fn create_pack(
         redistribution: metadata.redistribution,
         signing_key_id: signer.key_id(),
         key_id: metadata.key_id,
+        licence_id: licence_id.map(str::to_owned),
         dependencies: metadata.dependencies,
         assets,
     };
@@ -737,6 +787,9 @@ pub struct Entitlement {
     pub pack_version: String,
     pub manifest_sha256: String,
     pub key_id: String,
+    /// The pack manifest's licence ID, when the pack was built for one sale.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub licence_id: Option<String>,
     pub expires_unix: u64,
     /// This signed key grant is a bearer secret. Deliver it confidentially; anyone who obtains
     /// it can copy it to another account/device, even after the original recipient unlocks it.
@@ -780,6 +833,7 @@ pub fn issue_entitlement(
         pack_version: manifest.version.clone(),
         manifest_sha256: sha256_hex(&serde_json::to_vec(manifest)?),
         key_id: manifest.key_id.clone().unwrap(),
+        licence_id: manifest.licence_id.clone(),
         expires_unix,
         content_key: *content_key,
     };
@@ -862,10 +916,11 @@ fn verify_entitlement(
         || e.pack_id != manifest.pack_id
         || e.pack_version != manifest.version
         || e.key_id != manifest.key_id.as_deref().unwrap_or("")
+        || e.licence_id != manifest.licence_id
         || e.manifest_sha256 != sha256_hex(&serde_json::to_vec(manifest)?)
     {
         return Err(PackError::Invalid(
-            "offline entitlement is for another pack, version, or signing key",
+            "offline entitlement is for another pack, version, licence, or signing key",
         ));
     }
     Ok(signed.entitlement)
@@ -914,6 +969,12 @@ fn validate_manifest(m: &Manifest) -> Result<()> {
     validate_sha_field(&m.signing_key_id)?;
     if let Some(k) = &m.key_id {
         validate_identity(k)?;
+    }
+    if let Some(id) = &m.licence_id {
+        validate_licence_id(id)?;
+        if m.key_id.is_none() {
+            return Err(PackError::Invalid("a licence ID needs a protected pack"));
+        }
     }
     if m.dependencies.len() > MAX_DEPENDENCIES || m.assets.is_empty() || m.assets.len() > MAX_ASSETS
     {
@@ -1133,6 +1194,21 @@ fn validate_identity(value: &str) -> Result<()> {
     if value.is_empty() || value.len() > 256 || value.chars().any(|c| c.is_control()) {
         return Err(PackError::Invalid(
             "metadata identity is empty, too long, or contains control bytes",
+        ));
+    }
+    Ok(())
+}
+
+/// Licence IDs are opaque and use the same format as placement-watermark buyer IDs.
+fn validate_licence_id(value: &str) -> Result<()> {
+    if value.is_empty()
+        || value.len() > 128
+        || !value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+    {
+        return Err(PackError::Invalid(
+            "licence ID must be 1 to 128 ASCII letters, digits, dots, underscores or hyphens",
         ));
     }
     Ok(())

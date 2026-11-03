@@ -28,12 +28,13 @@ fn run() -> Result<(), String> {
     let args: Vec<OsString> = env::args_os().collect();
     match args.get(1).and_then(|s| s.to_str()) {
         Some("keygen") if args.len() == 5 => keygen(Path::new(&args[2]), Path::new(&args[3]), &text_arg(&args[4])?),
-        Some("issue") if args.len() == 7 => issue(
+        Some("issue") if args.len() == 7 || (args.len() == 9 && args[7] == "--licence-id") => issue(
             Path::new(&args[2]),
             Path::new(&args[3]),
             Path::new(&args[4]),
             &text_arg(&args[5])?,
             Path::new(&args[6]),
+            args.get(8).map(text_arg).transpose()?,
         ),
         Some("unlock") if args.len() == 5 => unlock_pack(
             Path::new(&args[2]),
@@ -41,7 +42,7 @@ fn run() -> Result<(), String> {
             Path::new(&args[4]),
         ),
         Some("inspect") if args.len() == 4 => inspect_pack(Path::new(&args[2]), Path::new(&args[3])),
-        _ => Err("usage: omsi-pack keygen <signing.pk8> <Publishers.json> <publisher-id> | issue <pack.oopp> <signing.pk8> <pack-key.bin> <expires-unix> <entitlement.json> | unlock <pack.oopp> <entitlement.json> <Publishers.json> | inspect <pack.oopp> <Publishers.json>".into()),
+        _ => Err("usage: omsi-pack keygen <signing.pk8> <Publishers.json> <publisher-id> | issue <pack.oopp> <signing.pk8> <pack-key.bin> <expires-unix> <entitlement.json> [--licence-id <id>] | unlock <pack.oopp> <entitlement.json> <Publishers.json> | inspect <pack.oopp> <Publishers.json>".into()),
     }
 }
 
@@ -70,6 +71,7 @@ fn issue(
     key_path: &Path,
     expires: &str,
     output: &Path,
+    licence_id: Option<&str>,
 ) -> Result<(), String> {
     let expires = expires
         .parse::<u64>()
@@ -84,13 +86,34 @@ fn issue(
         .map_err(|_| "pack key must contain exactly 32 bytes".to_string())?;
     let key = Zeroizing::new(key);
     let manifest = load_manifest_signed_by(pack, &signer).map_err(show)?;
+    // A per-sale pack only takes the licence it was built for; naming it guards against
+    // sending one buyer's licence with another buyer's pack.
+    match (manifest.licence_id.as_deref(), licence_id) {
+        (None, None) => {}
+        (Some(built), Some(named)) if built == named => {}
+        (Some(_), _) => {
+            return Err(
+                "this pack was built for a licence ID; pass the same --licence-id to issue it"
+                    .into(),
+            )
+        }
+        (None, Some(_)) => {
+            return Err("this pack has no licence ID; issue it without --licence-id".into())
+        }
+    }
     let entitlement =
         Zeroizing::new(issue_entitlement(&manifest, *key, expires, &signer).map_err(show)?);
     write_private_file(output, &entitlement).map_err(show)?;
-    println!(
-        "Created publisher-signed offline entitlement for {} {}.",
-        manifest.pack_id, manifest.version
-    );
+    match &manifest.licence_id {
+        Some(id) => println!(
+            "Created publisher-signed offline entitlement for {} {}, licence {id}.",
+            manifest.pack_id, manifest.version
+        ),
+        None => println!(
+            "Created publisher-signed offline entitlement for {} {}.",
+            manifest.pack_id, manifest.version
+        ),
+    }
     Ok(())
 }
 

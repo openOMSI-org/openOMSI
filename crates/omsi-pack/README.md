@@ -21,6 +21,12 @@ using pack data.
 For a protected pack, the publisher assigns `key_id` as the lowercase SHA-256 of the fresh
 32-byte AES key. Generate a new random content key for each new pack or version.
 
+A protected pack built for one sale also has `licence_id`: 1 to 128 ASCII letters, digits,
+dots, underscores or hyphens, the same format as openMapper's placement-watermark buyer IDs.
+The ID is opaque, for example 32 random hexadecimal characters. A `licence_id` without a
+`key_id` is rejected. The field is omitted when absent, so shared packs keep their existing
+canonical bytes and signatures.
+
 ## Protected assets
 
 `assets/<opaque-asset-id>/<chunk-number>.bin` stores one 12-byte random nonce followed by the
@@ -44,7 +50,7 @@ removed after the publisher tool has stopped.
 ## Offline entitlement
 
 The publisher signs an entitlement binding the exact canonical manifest hash, publisher signing
-key, pack ID/version, content-key ID and expiry. It contains the 32-byte pack key, so it is a
+key, pack ID/version, content-key ID, licence ID when the pack has one, and expiry. It contains the 32-byte pack key, so it is a
 bearer secret: deliver the file confidentially. Anyone who copies it can unlock the same pack.
 openOMSI stores the signed envelope in the macOS Keychain or user-scoped Windows DPAPI storage
 and rechecks its signature, expiry and manifest binding whenever the pack opens. An expired or
@@ -59,9 +65,12 @@ keys stay with the publisher; only public keys belong in the player's trust list
 
 The publisher creates a fresh `SigningKey`, chooses a new random content key when protection is
 enabled, hashes source bytes before conversion, and passes the converted outputs and those source
-hashes to `create_pack`. The returned public key is added to a trusted publisher list through an
+hashes to `create_pack`, or to `create_licensed_pack` with a fresh content key and licence ID
+for each sale. The returned public key is added to a trusted publisher list through an
 explicit distribution channel. After a purchase decision, the publisher makes an entitlement with
-`issue_entitlement` and transfers that bearer file confidentially.
+`issue_entitlement` and transfers that bearer file confidentially. `omsi-pack issue` requires
+`--licence-id <id>` for a per-sale pack and refuses an ID that differs from the manifest's, so
+one buyer's licence can't be issued for another buyer's pack.
 
 The player imports the pack directory, verifies and unlocks an entitlement with `unlock`, and
 mounts it with `VerifiedPack::open_unlocked`. The latter re-verifies every chunk before returning;

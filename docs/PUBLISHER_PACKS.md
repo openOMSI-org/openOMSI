@@ -65,6 +65,13 @@ or Windows user-scoped DPAPI, without a plaintext fallback. A new version or cha
 requires a corresponding entitlement. Copying application settings is not a supported key
 backup; obtain another entitlement from the publisher when native storage cannot be restored.
 
+A publisher may also build one protected pack per sale. Its signed manifest then carries an
+opaque `licence_id`, and only an entitlement that repeats the same ID unlocks it. A leaked
+pack or entitlement therefore names the sale it came from, and buyers' packs and entitlements
+are not interchangeable. The ID holds no personal data; only the publisher's own records link
+it to a buyer. Shared packs have no `licence_id`, and their manifests and entitlements are
+byte-for-byte unchanged.
+
 Offline issuance requires a trusted publisher decision. The client cannot independently
 discover purchases, and a client-controlled ownership flag is never proof of purchase.
 Offline operation cannot enforce immediate revocation or prevent deliberate system-clock
