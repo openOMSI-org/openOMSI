@@ -347,6 +347,7 @@ impl SoundSet {
     /// Attach the sound set of coupled part `index` (built like this one: [`SoundSet::new`]
     /// for the player's bus, [`SoundSet::new_exterior`] for the others).
     pub fn add_part(&mut self, index: usize, mut part: SoundSet) {
+        part.master = self.master;
         part.inside = self.inside;
         part.amount = self.amount;
         part.muffled = self.muffled;

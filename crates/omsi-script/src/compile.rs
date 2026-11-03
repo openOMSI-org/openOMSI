@@ -418,7 +418,7 @@ pub fn compile(input: &CompileInput) -> Program {
         }
     }
     let mut pending: Vec<(usize, usize, String)> = Vec::new(); // (block, op index, macro name)
-    let mut c = Compiler { p: &mut p, consts: &consts, curves: &curve_index, pending: &mut pending, missing_curve: None, declare_unknown: input.declare_unknown };
+    let mut c = Compiler { p: &mut p, consts: &consts, curves: &curve_index, pending: &mut pending, missing_curve: None, declare_unknown: input.declare_unknown, file_frames: (0, 0) };
     for f in &files {
         c.compile_file(f);
     }
@@ -447,6 +447,7 @@ struct Compiler<'a> {
     /// The empty curve an unknown `(F.L.name)` evaluates (see `compile_access`).
     missing_curve: Option<u32>,
     declare_unknown: bool,
+    file_frames: (usize, usize),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -532,6 +533,7 @@ fn tokenize(line: &str) -> Vec<Tok> {
     out
 }
 
+#[derive(PartialEq)]
 enum BlockKind {
     Init,
     Frame,
@@ -546,6 +548,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn compile_file(&mut self, f: &CfgFile) {
+        self.file_frames = (self.p.frame.len(), self.p.frame_ai.len());
         let mut cur: Option<(Vec<BlockKind>, Block, Vec<(usize, bool)>)> = None; // kinds (aliases), block, if-stack: (jump op index, has_else)
         // the jumps of `{else}`s after an `{if}`'s first, with the depth of their `{if}` in
         // the if-stack: in OMSI every `{else}` reached goes on at the `{endif}`, so
@@ -591,7 +594,7 @@ impl<'a> Compiler<'a> {
                                             patch(&mut block.ops[idx], end);
                                         }
                                         log::debug!("{}:{}: {{{b}}} starts while block {} is open (implicit end)", f.path.display(), line_no, block.name);
-                                        self.finish_block(kinds, block);
+                                        self.finish_block(kinds, block, false);
                                         cur = Some((vec![kind], Block { name, file: f.path.clone(), line: line_no, ..Default::default() }, Vec::new()));
                                     }
                                     None => cur = Some((vec![kind], Block { name, file: f.path.clone(), line: line_no, ..Default::default() }, Vec::new())),
@@ -615,7 +618,7 @@ impl<'a> Compiler<'a> {
                                     for (_, op) in extra_elses.drain(..) {
                                         patch(&mut block.ops[op], end);
                                     }
-                                    self.finish_block(kinds, block);
+                                    self.finish_block(kinds, block, true);
                                 } else {
                                     // Surplus {end} tokens are common in stock content; ignored.
                                     log::debug!("{}:{}: {{end}} without block", f.path.display(), line_no);
@@ -725,7 +728,7 @@ impl<'a> Compiler<'a> {
                 patch(&mut block.ops[idx], end);
             }
             log::debug!("{}: missing {{end}} at end of file", f.path.display());
-            self.finish_block(kinds, block);
+            self.finish_block(kinds, block, false);
         }
     }
 
@@ -735,19 +738,32 @@ impl<'a> Compiler<'a> {
         self.pending.push((block_idx, op_idx, name));
     }
 
-    fn finish_block(&mut self, kinds: Vec<BlockKind>, block: Block) {
+    fn finish_block(&mut self, mut kinds: Vec<BlockKind>, block: Block, ended: bool) {
         let id = self.p.blocks.len() as BlockId;
         self.p.blocks.push(block);
+        kinds.dedup();
         for kind in kinds {
-            self.register(kind, id);
+            self.register(kind, id, ended);
         }
     }
 
-    fn register(&mut self, kind: BlockKind, id: BlockId) {
+    fn register(&mut self, kind: BlockKind, id: BlockId, ended: bool) {
         match kind {
             BlockKind::Init => self.p.init.push(id),
-            BlockKind::Frame => self.p.frame.push(id),
-            BlockKind::FrameAi => self.p.frame_ai.push(id),
+            BlockKind::Frame => {
+                self.p.frame.truncate(self.file_frames.0);
+                self.p.frame.push(id);
+                if !ended {
+                    self.file_frames.0 = self.p.frame.len();
+                }
+            }
+            BlockKind::FrameAi => {
+                self.p.frame_ai.truncate(self.file_frames.1);
+                self.p.frame_ai.push(id);
+                if !ended {
+                    self.file_frames.1 = self.p.frame_ai.len();
+                }
+            }
             BlockKind::Macro(n) => {
                 self.p.macros.insert(n, id);
             }
@@ -1035,6 +1051,16 @@ mod tests {
                 Tok::Paren("L.L.c".into()),
             ]
         );
+    }
+
+    #[test]
+    fn a_file_keeps_one_frame_block_as_it_keeps_one_macro_of_a_name() {
+        let twice = program_of("{frame}\n1 (S.L.a)\n{end}\n{frame}\n2 (S.L.b)\n{end}\n");
+        assert_eq!(twice.frame.len(), 1);
+        let stacked = program_of("{frame}\n{frame}\n3 (S.L.c)\n{end}\n");
+        assert_eq!(stacked.frame.len(), 1);
+        let cut_short = program_of("{frame}\n1 (S.L.a)\n{frame}\n2 (S.L.b)\n{end}\n");
+        assert_eq!(cut_short.frame.len(), 2, "a frame block without its end, cut short by the next header, still runs");
     }
 
     #[test]

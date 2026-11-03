@@ -1283,27 +1283,6 @@ impl TrafficSim {
         })
     }
 
-    /// Who can be seen: a car out of the view (and farther than the mirrors and the
-    /// shadows reach) leaves its animations as they are and is not drawn at all.
-    fn set_visibility(&mut self) {
-        if let Some(v) = self.viewer {
-            for c in &mut self.cars {
-                let p = c.vehicle.position;
-                let r = (c.state.front + c.state.rear).abs().max(4.0) as f64 + 2.0;
-                let d = (p - v.pos).length();
-                c.vehicle.ai_visuals = d < UNSEEN_NEAR || v.frames(p, r);
-                // (a car nobody sees, well out of earshot of the mirrors: its script runs a
-                // few times a second, not every frame - each car at its own beat, so the
-                // runs do not all fall in one frame; a bus keeps its stop handshake)
-                c.vehicle.ai_script_period = if !c.vehicle.ai_visuals && d > UNSEEN_SCRIPT_RANGE && c.bus.is_none() {
-                    0.2 + 0.05 * (c.id % 5) as f32
-                } else {
-                    0.0
-                };
-            }
-        }
-    }
-
     /// The bodies and the scripts of the AI vehicles: on the frame's own thread while they
     /// are little work, shared with the workers when there is more.
     fn step_bodies(&mut self, dt: f32, frames: &mut [Option<AiFrame>]) {

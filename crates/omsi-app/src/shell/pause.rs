@@ -89,6 +89,7 @@ pub(crate) fn rail_icon(id: &str) -> &'static str {
         "vehicle" => "airport_shuttle",
         "world" => "partly_cloudy_day",
         "map" => "map",
+        "streets" => "search",
         "duty" => "departure_board",
         "skipstop" => "near_me",
         "endduty" => "sports_score",

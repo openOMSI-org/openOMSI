@@ -61,7 +61,11 @@ impl App {
                 // `crate::head_filter`; with head tracking switched off or the tracker lost the
                 // view glides home - then the sensitivities and inversions)
                 let sample = self.input.headtrack.as_ref().and_then(|h| h.sample()).filter(|_| self.settings.head_tracking);
-                let calm = crate::head_filter::Params::tobii(self.settings.head_tracking_smoothing, self.settings.head_tracking_dead_zone);
+                let calm = if self.settings.head_tracking_source == "opentrack" {
+                    crate::head_filter::Params::OPENTRACK
+                } else {
+                    crate::head_filter::Params::tobii(self.settings.head_tracking_smoothing, self.settings.head_tracking_dead_zone)
+                };
                 let tracked = self.input.head_filter.step(sample.as_ref(), std::time::Instant::now(), calm).filter(|_| matches!(self.view.as_str(), "driver" | "pax"));
                 #[cfg(windows)]
                 let vr_on = self.xr.vr.is_some();
@@ -139,14 +143,7 @@ impl App {
                     }
                     // Settings → Field of view (0: the bus's own cameras); the view editor's for
                     // this bus before it
-                    if let Some(f) = view_fov {
-                        c.fov_deg = f.min(120.0);
-                    } else if fov_setting >= 20.0 {
-                        c.fov_deg = fov_setting.min(120.0);
-                    }
-                    if let Some(z) = zoom {
-                        c.fov_deg = (c.fov_deg * z).clamp(8.0, 120.0);
-                    }
+                    c.fov_deg = crate::app_impl::drawn_fov(c.fov_deg, view_fov, fov_setting, zoom);
                 };
                 let mut cam = p.camera_look(&self.view, &base, head_look, self.cam.orbit);
                 finish(&mut cam);

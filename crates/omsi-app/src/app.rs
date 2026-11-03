@@ -230,7 +230,7 @@ impl App {
                 }
             },
         };
-        if let Some(preset) = crate::first_graphics::choose(&mut self.settings, &self.gfx.instance) {
+        if let Some(preset) = crate::first_graphics::choose(self) {
             self.service_msg = Some((omsi_ui::i18n::tr_fill("Graphics set to {preset} for this computer (Options › Graphics changes it)", &[("{preset}", &omsi_ui::tr(preset))]), 8.0));
         }
         let start = match crate::startup::RendererStart::begin(&mut self.gfx.instance, &window, omsi_render::RenderOptions { max_scene: crate::settings::fullscreen_scene_cap(self.settings.fullscreen, self.gfx.spanned, resolution), ..self.args.session_settings.render_options(&self.settings) }) {
