@@ -177,8 +177,15 @@ fn mean_color(texture: &str, dirs: &[&Path]) -> Option<Vec3> {
 }
 
 /// What an object type gives the map (see the module's notes).
-fn type_info(root: &Path, file: &str, paints: &crate::road_paint::PaintCache) -> Option<TypeInfo> {
-    let path = omsi_cfg::resolve_path(root, file);
+fn type_info(
+    root: &Path,
+    map_dir: &Path,
+    mounts: &omsi_cfg::publisher::DependencyMounts,
+    publisher_texture_dirs: &[PathBuf],
+    file: &str,
+    paints: &crate::road_paint::PaintCache,
+) -> Option<TypeInfo> {
+    let path = crate::world::map_asset_path(root, map_dir, mounts, file);
     let sco = omsi_scenery::sco::SceneryObject::load(&path).ok()?;
     let mut info = TypeInfo::default();
     if sco.only_editor {
@@ -263,6 +270,7 @@ fn type_info(root: &Path, file: &str, paints: &crate::road_paint::PaintCache) ->
             dirs.push(omsi_cfg::resolve_path(d, "texture"));
         }
         dirs.extend(crate::terrain_paint::texture_dirs(root, &model_dir));
+        crate::world::insert_publisher_texture_dirs(&mut dirs, publisher_texture_dirs, root);
         info.paint = crate::road_paint::face_paint(&flats, &texs, &dirs, paints);
     }
     if sco.surface || !sco.paths.is_empty() || sco.is_traffic_light || sco.is_bus_stop || never_a_house(file) {
@@ -578,8 +586,20 @@ struct Part {
     lines: Vec<Line>,
 }
 
-/// The map's layers, read now (see the module's notes). `tiles`: (x, y, path) of every tile.
+/// The map's layers from physical installation paths only. Use `cached_with_mounts` when a
+/// validated publisher map scope is active. `tiles`: (x, y, path) of every tile.
 pub fn generate(root: &Path, map_dir: &Path, ground_textures: &[omsi_map::global::GroundTex], tiles: &[(i32, i32, PathBuf)], chrono_dirs: &[PathBuf]) -> Layers {
+    generate_with_mounts(root, map_dir, &omsi_cfg::publisher::DependencyMounts::default(), ground_textures, tiles, chrono_dirs)
+}
+
+fn generate_with_mounts(
+    root: &Path,
+    map_dir: &Path,
+    mounts: &omsi_cfg::publisher::DependencyMounts,
+    ground_textures: &[omsi_map::global::GroundTex],
+    tiles: &[(i32, i32, PathBuf)],
+    chrono_dirs: &[PathBuf],
+) -> Layers {
     use rayon::prelude::*;
     let t0 = std::time::Instant::now();
     let ts = tile_size();
@@ -589,18 +609,19 @@ pub fn generate(root: &Path, map_dir: &Path, ground_textures: &[omsi_map::global
     let base_class = ground.first().copied().unwrap_or(layers::LAND_GRASS);
     // (the pictures' paint is read once for this generation, and let go of with it)
     let paints = crate::road_paint::PaintCache::default();
+    let publisher_texture_dirs = mounts.texture_dirs();
     type Once<T> = Arc<OnceLock<Option<Arc<T>>>>;
     let types: Mutex<HashMap<String, Once<TypeInfo>>> = Mutex::new(HashMap::new());
     let type_of = |file: &str| -> Option<Arc<TypeInfo>> {
         let key = stem(file.trim());
         let cell = types.lock().entry(key).or_default().clone();
-        cell.get_or_init(|| type_info(root, file, &paints).map(Arc::new)).clone()
+        cell.get_or_init(|| type_info(root, map_dir, mounts, &publisher_texture_dirs, file, &paints).map(Arc::new)).clone()
     };
     let slis: Mutex<HashMap<String, Once<omsi_scenery::sli::Spline>>> = Mutex::new(HashMap::new());
     let sli_of = |file: &str| -> Option<Arc<omsi_scenery::sli::Spline>> {
         let key = stem(file.trim());
         let cell = slis.lock().entry(key).or_default().clone();
-        cell.get_or_init(|| omsi_scenery::sli::Spline::load(&omsi_cfg::resolve_path(root, file)).ok().map(Arc::new)).clone()
+        cell.get_or_init(|| omsi_scenery::sli::Spline::load(&crate::world::map_asset_path(root, map_dir, mounts, file)).ok().map(Arc::new)).clone()
     };
     let mut parts: Vec<Part> = tiles
         .par_iter()
@@ -621,7 +642,7 @@ pub fn generate(root: &Path, map_dir: &Path, ground_textures: &[omsi_map::global
                 if def.only_editor || sp.length < 0.5 {
                     continue;
                 }
-                spline_of(&mut part, root, sp, &def, o2, origin, &paints);
+                spline_of(&mut part, root, &publisher_texture_dirs, sp, &def, o2, origin, &paints);
             }
             // objects and the rows along splines
             let mut placed: Vec<(String, DVec2, f64)> = Vec::new();
@@ -1114,7 +1135,7 @@ fn water_of(part: &mut Part, tile: &omsi_map::Tile, path: &Path, terrain: &omsi_
 }
 
 /// A spline's paved profile sections, water and tracks.
-fn spline_of(part: &mut Part, root: &Path, sp: &omsi_map::tile::MapSpline, def: &omsi_scenery::sli::Spline, o2: DVec2, origin: DVec2, paints: &crate::road_paint::PaintCache) {
+fn spline_of(part: &mut Part, root: &Path, publisher_texture_dirs: &[PathBuf], sp: &omsi_map::tile::MapSpline, def: &omsi_scenery::sli::Spline, o2: DVec2, origin: DVec2, paints: &crate::road_paint::PaintCache) {
     // (the cross-sections the game builds the spline with, shifted by its skew: the map's road
     // is the road's own mesh, pressed flat)
     let raw = omsi_geometry::SplineCurve::from_map(sp, o2);
@@ -1129,7 +1150,8 @@ fn spline_of(part: &mut Part, root: &Path, sp: &omsi_map::tile::MapSpline, def: 
     let has_cars = def.paths.iter().any(|p| p.kind == 0);
     let rails: Vec<f32> = def.paths.iter().filter(|p| p.kind == 2).map(|p| p.start[0]).collect();
     let file = stem(&def.path.to_string_lossy());
-    let tex_dirs: Vec<PathBuf> = crate::terrain_paint::texture_dirs(root, def.path.parent().unwrap_or(root));
+    let mut tex_dirs = crate::terrain_paint::texture_dirs(root, def.path.parent().unwrap_or(root));
+    crate::world::insert_publisher_texture_dirs(&mut tex_dirs, publisher_texture_dirs, root);
     let tex_dirs: Vec<&Path> = tex_dirs.iter().map(|d| d.as_path()).collect();
     for profile in &def.profiles {
         let tex = def.textures.get(profile.texture).map(|t| t.file.as_str()).unwrap_or("");
@@ -1229,16 +1251,29 @@ fn key_of(map_dir: &Path, tiles: &[(i32, i32, PathBuf)]) -> u64 {
     h.finish()
 }
 
-/// The map's layers from the cache, else read now and kept there.
+/// The map's layers from physical installation paths. Use `cached_with_mounts` for publisher maps.
 pub fn cached(root: &Path, map_dir: &Path, ground_textures: &[omsi_map::global::GroundTex], tiles: &[(i32, i32, PathBuf)], chrono_dirs: &[PathBuf]) -> Layers {
+    cached_with_mounts(root, map_dir, &omsi_cfg::publisher::DependencyMounts::default(), ground_textures, tiles, chrono_dirs)
+}
+
+pub fn cached_with_mounts(
+    root: &Path,
+    map_dir: &Path,
+    mounts: &omsi_cfg::publisher::DependencyMounts,
+    ground_textures: &[omsi_map::global::GroundTex],
+    tiles: &[(i32, i32, PathBuf)],
+    chrono_dirs: &[PathBuf],
+) -> Layers {
     let key = key_of(map_dir, tiles);
     let name = map_dir.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "map".into());
-    let path = layers::cache_path(&name).filter(|_| !omsi_cfg::flags::OMSI_NO_MAP_CACHE.is_set());
+    // shortcut: publisher maps skip disk caching, revisit if cache keys bind every dependency revision.
+    let has_publisher_metadata = omsi_cfg::vfs::is_file(&map_dir.join("dependencies.json"));
+    let path = layers::cache_path(&name).filter(|_| !has_publisher_metadata && !omsi_cfg::flags::OMSI_NO_MAP_CACHE.is_set());
     if let Some(l) = path.as_ref().and_then(|p| Layers::open(p, key)) {
         log::info!("map layers: {} houses from the cache", l.buildings.len());
         return l;
     }
-    let l = generate(root, map_dir, ground_textures, tiles, chrono_dirs);
+    let l = generate_with_mounts(root, map_dir, mounts, ground_textures, tiles, chrono_dirs);
     if let Some(p) = path {
         let _ = std::fs::create_dir_all(p.parent().unwrap_or(Path::new(".")));
         let tmp = p.with_extension(format!("{}.tmp", std::process::id()));
@@ -1256,7 +1291,7 @@ impl crate::World {
     /// The map's layers (`mapgen`): from the cache or read now - call it off the main thread.
     pub fn map_layers(&self) -> Layers {
         let tiles: Vec<(i32, i32, PathBuf)> = self.map_tiles().into_iter().map(|(_, x, y, p)| (x, y, p)).collect();
-        cached(&self.root, &self.map_dir, &self.global.ground_textures, &tiles, &self.chrono_dirs())
+        cached_with_mounts(&self.root, &self.map_dir, &self._publisher_mounts, &self.global.ground_textures, &tiles, &self.chrono_dirs())
     }
 }
 

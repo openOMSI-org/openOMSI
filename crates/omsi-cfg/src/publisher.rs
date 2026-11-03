@@ -304,6 +304,32 @@ pub struct DependencyMounts {
     alias_scope: Option<u64>,
 }
 
+impl DependencyMounts {
+    /// Resolve a signed alias only within this lease's map scope.
+    pub fn resolve_map_alias(&self, map_dir: &Path, rel: &str) -> Option<PathBuf> {
+        let id = self.alias_scope?;
+        let map = map_scope_path(map_dir).ok()?;
+        let scopes = MAP_ALIASES.read().unwrap_or_else(|e| e.into_inner());
+        let scope = scopes.iter().find(|scope| scope.id == id && scope.map == map)?;
+        resolve_alias_in_scope(scope, &map, rel)
+    }
+
+    /// The `Texture` folders mounted for this map's verified publisher dependencies.
+    pub fn texture_dirs(&self) -> Vec<PathBuf> {
+        let scopes = MAP_ALIASES.read().unwrap_or_else(|e| e.into_inner());
+        let roots: Vec<&PathBuf> = if let Some(id) = self.alias_scope {
+            scopes
+                .iter()
+                .find(|scope| scope.id == id)
+                .map(|scope| scope.mounts.iter().collect())
+                .unwrap_or_default()
+        } else {
+            self.mounts.iter().collect()
+        };
+        roots.into_iter().map(|root| root.join("Texture")).collect()
+    }
+}
+
 impl Drop for DependencyMounts {
     fn drop(&mut self) {
         if let Some(id) = self.alias_scope.take() {
@@ -497,29 +523,44 @@ pub(crate) fn resolve_alias(base: &Path, rel: &str) -> Option<PathBuf> {
                 .find_map(|mount| base.strip_prefix(mount).ok())
         });
         let Some(suffix) = suffix else { continue };
-        let mut parts: Vec<String> = suffix
-            .components()
-            .filter_map(|c| match c {
-                std::path::Component::Normal(p) => Some(p.to_string_lossy().into_owned()),
-                _ => None,
-            })
-            .collect();
-        for part in rel.split(['\\', '/']) {
-            match part {
-                "" | "." => {}
-                ".." if !parts.is_empty() => {
-                    parts.pop();
-                }
-                ".." => return None,
-                p if p.starts_with('/') || p.contains(':') => return None,
-                p => parts.push(p.to_string()),
-            }
-        }
-        if let Some(path) = scope.aliases.get(&path_key(&parts.join("/"))) {
+        let key = alias_key(suffix, rel)?;
+        if let Some(path) = scope.aliases.get(&key) {
             return Some(path.clone());
         }
     }
     None
+}
+
+fn resolve_alias_in_scope(scope: &MapAliasScope, base: &Path, rel: &str) -> Option<PathBuf> {
+    let suffix = base.strip_prefix(&scope.map).ok().or_else(|| {
+        scope
+            .mounts
+            .iter()
+            .find_map(|mount| base.strip_prefix(mount).ok())
+    })?;
+    scope.aliases.get(&alias_key(suffix, rel)?).cloned()
+}
+
+fn alias_key(suffix: &Path, rel: &str) -> Option<String> {
+    let mut parts: Vec<String> = suffix
+        .components()
+        .filter_map(|c| match c {
+            std::path::Component::Normal(p) => Some(p.to_string_lossy().into_owned()),
+            _ => None,
+        })
+        .collect();
+    for part in rel.split(['\\', '/']) {
+        match part {
+            "" | "." => {}
+            ".." if !parts.is_empty() => {
+                parts.pop();
+            }
+            ".." => return None,
+            p if p.starts_with('/') || p.contains(':') => return None,
+            p => parts.push(p.to_string()),
+        }
+    }
+    Some(path_key(&parts.join("/")))
 }
 
 fn dependency_closure(

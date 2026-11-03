@@ -723,166 +723,7 @@ mod bitmap_tests {
 }
 
 #[cfg(test)]
-mod spot_tests {
-    #[test]
-    fn a_full_beam_reaches_further_than_the_low_beam() {
-        // the stock buses: low beam 100, full beam 500 (#941)
-        assert_eq!(super::spot_reach(100.0, 45.0), 45.0);
-        assert_eq!(super::spot_reach(500.0, 45.0), 225.0);
-        assert_eq!(super::spot_reach(500.0, 60.0), 300.0);
-        // short ranges as declared, as before
-        assert_eq!(super::spot_reach(30.0, 45.0), 30.0);
-        assert_eq!(super::spot_reach(2.0, 45.0), 2.0);
-        assert_eq!(super::spot_reach(0.1, 45.0), 0.5);
-        assert_eq!(super::spot_reach(5000.0, 45.0), 225.0);
-    }
-
-    /// The enhanced picture lights a `[spotlight]` as a low beam below the full beam's range
-    /// (the stock 100, the Grand Paris-Moulon Citaro's 200) and as a full beam from it on.
-    #[test]
-    fn a_spotlight_is_a_low_or_a_full_beam_by_its_range() {
-        let beam = |range: f32| {
-            let vals = [0.0, 6.5, 0.76, 0.0, 1.0, -0.3, 255.0, 255.0, 233.0, range, 30.0, 80.0];
-            let mut lights = Vec::new();
-            super::push_spot(&mut lights, glam::DVec3::ZERO, glam::Vec3::Y, glam::Vec3::Y, &vals, 0.5);
-            lights.iter().find(|l| l.mode == omsi_render::LightMode::Enhanced).map(|l| l.beam)
-        };
-        assert_eq!([100.0, 200.0, 450.0, 500.0].map(beam), [Some(1.0), Some(1.0), Some(-1.0), Some(-1.0)]);
-        // a lamp over a door, pointing down, keeps its cone
-        let vals = [0.0, 6.5, 2.5, 0.0, 0.0, -1.0, 255.0, 255.0, 233.0, 100.0, 30.0, 80.0];
-        let mut lights = Vec::new();
-        super::push_spot(&mut lights, glam::DVec3::ZERO, glam::Vec3::NEG_Z, glam::Vec3::ZERO, &vals, 0.5);
-        assert_eq!(lights.iter().find(|l| l.mode == omsi_render::LightMode::Enhanced).map(|l| l.beam), Some(0.0));
-    }
-
-    /// The classic picture's `[spotlight]` is Omsi.exe's Direct3D spot (0x708acc): one light,
-    /// its colour 0..1, its range as declared for the shader's attenuation, its cone's half
-    /// angles, as strong by day as by night; a `[spotlight_2]` is lit the same way per pixel.
-    #[test]
-    fn a_spotlight_is_omsis_direct3d_spot_in_the_classic_picture() {
-        let vals = [0.0, 2.0, 0.863, 0.0, 1.0, -0.3, 255.0, 255.0, 233.0, 100.0, 30.0, 70.0];
-        let mut lights = Vec::new();
-        let source = glam::DVec3::new(0.0, -3.9, 0.0);
-        super::push_classic_spot(&mut lights, glam::DVec3::ZERO, glam::Vec3::Y, &vals, 1.0, source, true);
-        assert_eq!(lights.len(), 1);
-        let l = &lights[0];
-        assert_eq!(l.mode, omsi_render::LightMode::Vanilla);
-        assert_eq!(l.d3d_spot, Some(omsi_render::D3dSpot { range: 100.0, source, player: true }));
-        assert_eq!((l.intensity, l.radius), (1.0, super::VANILLA_SPOT_REACH));
-        assert_eq!(l.color, [1.0, 1.0, 233.0 / 255.0]);
-        assert!((l.cone[0] - 15f32.to_radians().cos()).abs() < 1e-6 && (l.cone[1] - 35f32.to_radians().cos()).abs() < 1e-6, "{:?}", l.cone);
-        // (a short range: four times it, as Direct3D cuts the light off)
-        let mut short = vals;
-        short[9] = 5.0;
-        let mut lights = Vec::new();
-        super::push_spot(&mut lights, glam::DVec3::ZERO, glam::Vec3::Y, glam::Vec3::Y, &short, 0.5);
-        let van = lights.iter().find(|l| l.mode == omsi_render::LightMode::Vanilla).unwrap();
-        assert_eq!((van.radius, van.intensity, van.d3d_spot), (20.0, 0.5, Some(omsi_render::D3dSpot { range: 5.0, source: glam::DVec3::ZERO, player: false })));
-    }
-
-    /// A headlamp's beam lies about the vehicle's floor: on a bus pitched up a ramp its
-    /// Enhanced light is aimed along the ramp, whatever the lamp's own aim down (#1897).
-    #[test]
-    fn a_headlamp_beam_pitches_with_its_vehicle() {
-        let vals = [0.0, 6.5, 0.76, 0.0, 1.0, -0.3, 255.0, 255.0, 233.0, 100.0, 30.0, 80.0];
-        let pitch = 8f32.to_radians();
-        let body = glam::Mat4::from_rotation_x(pitch);
-        let dl = glam::Vec3::new(0.0, 1.0, -0.3).normalize();
-        let d = body.transform_vector3(dl);
-        let mut lights = Vec::new();
-        super::push_spot(&mut lights, glam::DVec3::ZERO, d, super::level_axis(body, dl), &vals, 0.5);
-        let enh = lights.iter().find(|l| l.mode == omsi_render::LightMode::Enhanced).unwrap();
-        assert_eq!(enh.beam, 1.0);
-        assert!((enh.direction.z - pitch.sin()).abs() < 1e-4 && (enh.direction.y - pitch.cos()).abs() < 1e-4, "{:?}", enh.direction);
-        // (the classic spot keeps the lamp's own aim)
-        let van = lights.iter().find(|l| l.mode == omsi_render::LightMode::Vanilla).unwrap();
-        assert!((van.direction - d).length() < 1e-5);
-    }
-
-    /// `[spotlight_2]`: a pair mirrored across the axis sharing the light, or one lamp, as
-    /// bright as its variable says, and nothing while that is off.
-    #[test]
-    fn a_spotlight_2_is_a_mirrored_pair_or_one_lamp() {
-        use glam::Vec3;
-        let mut sp = omsi_model::Spotlight2 {
-            values: [0.9, 5.9, 0.65, 0.2, 1.0, -0.3, 255.0, 255.0, 233.0, 200.0, 30.0, 80.0],
-            variable: "lights_fern".into(),
-            mirrored: true,
-        };
-        let pair = super::spotlight_2_lamps(&sp, 1.0);
-        assert_eq!(
-            pair,
-            [
-                (Vec3::new(0.9, 5.9, 0.65), Vec3::new(0.2, 1.0, -0.3), 0.5),
-                (Vec3::new(-0.9, 5.9, 0.65), Vec3::new(-0.2, 1.0, -0.3), 0.5),
-            ]
-        );
-        assert!(super::spotlight_2_lamps(&sp, 0.0).is_empty());
-        assert!(super::spotlight_2_lamps(&sp, -1.0).is_empty());
-        sp.mirrored = false;
-        assert_eq!(super::spotlight_2_lamps(&sp, 0.5), [(Vec3::new(0.9, 5.9, 0.65), Vec3::new(0.2, 1.0, -0.3), 0.5)]);
-        assert_eq!(super::spotlight_2_lamps(&sp, 3.0)[0].2, 1.0);
-    }
-    #[test]
-    fn a_spotlight_shines_from_its_headlamps() {
-        use glam::Vec3;
-        let lamp = |x: f32, y: f32, z: f32, variable: &str| omsi_model::LightEnh2 {
-            pos: [x, y, z],
-            dir: [0.0, 1.0, 0.0],
-            color: [255.0, 255.0, 240.0],
-            variable: variable.into(),
-            ..Default::default()
-        };
-        let mesh = |light_enh_2: Vec<omsi_model::LightEnh2>| omsi_model::Model { meshes: vec![omsi_model::MeshDef { light_enh_2, ..Default::default() }], ..Default::default() };
-        let model = mesh(vec![
-            lamp(-0.8, 5.8, 1.05, "abbl_l"),
-            lamp(0.8, 5.8, 1.05, "abbl_r"),
-            lamp(-0.8, 5.8, 1.2, "fern"),
-            lamp(0.8, 5.8, 1.2, "fern"),
-            lamp(-0.7, 5.8, 0.6, "nebel"),
-            lamp(0.7, 5.8, 0.6, "nebel"),
-            lamp(0.0, 5.8, 1.0, "logo"),
-            lamp(-1.1, -5.8, 1.4, "stand"),
-            lamp(1.1, -5.8, 1.4, "stand"),
-            omsi_model::LightEnh2 { color: [255.0, 160.0, 0.0], ..lamp(-1.1, 5.8, 1.05, "abbl_l") },
-        ]);
-        let bb = Some([2.5, 12.0, 3.0, 0.0, 0.0, 1.5]);
-        let low = [0.0, 2.0, 0.76, 0.0, 1.0, -0.3, 255.0, 255.0, 233.0, 100.0, 30.0, 80.0];
-        let at = |model: &omsi_model::Model, on: &[&str], fades: &[f32], vals: &[f32; 12]| {
-            let on: Vec<String> = on.iter().map(|s| s.to_string()).collect();
-            let mut at = super::spot_origins(model, bb, vals, fades, &|name: &str| if on.iter().any(|o| o == name) { 1.0 } else { 0.0 });
-            at.sort_by(|a, b| a.0.x.total_cmp(&b.0.x));
-            at
-        };
-        let near = |got: &[(Vec3, f32)], want: &[(Vec3, f32)]| got.len() == want.len() && got.iter().zip(want).all(|(g, w)| (g.0 - w.0).length() < 1e-4 && g.1 == w.1);
-        let pair = |z: f32| [(Vec3::new(-0.8, 5.9, z), 0.5), (Vec3::new(0.8, 5.9, z), 0.5)];
-        let got = at(&model, &["abbl_l", "abbl_r", "stand"], &[], &low);
-        assert!(near(&got, &pair(1.05)), "low beam, rear markers lit: {got:?}");
-        let got = at(&model, &["stand"], &[], &low);
-        assert!(near(&got, &pair(1.2)), "rear markers alone: {got:?}");
-        let got = at(&model, &["abbl_l", "abbl_r", "nebel"], &[], &low);
-        assert!(near(&got, &pair(1.05)), "fog lamps on: {got:?}");
-        let got = at(&model, &["abbl_l", "abbl_r", "fern"], &[], &low);
-        assert!(near(&got, &pair(1.2)), "full beam: {got:?}");
-        let got = at(&model, &["abbl_l"], &[], &low);
-        assert!(near(&got, &pair(1.05)), "one bulb out: {got:?}");
-        let got = at(&model, &[], &[0.4, 0.4, 0.0, 0.0, 0.0, 0.0, 0.0], &low);
-        assert!(near(&got, &pair(1.05)), "low beam fading in: {got:?}");
-        let got = at(&model, &["abbl_l", "abbl_r"], &[0.0, 0.0, 1.0, 1.0], &low);
-        assert!(near(&got, &pair(1.2)), "the fades rule over the variables: {got:?}");
-        let dim = mesh(vec![omsi_model::LightEnh2 { factor: 0.3, ..lamp(-0.8, 5.8, 1.05, "abbl") }, omsi_model::LightEnh2 { factor: 0.3, ..lamp(0.8, 5.8, 1.05, "abbl") }, lamp(-0.7, 5.8, 0.6, "drl"), lamp(0.7, 5.8, 0.6, "drl")]);
-        let got = at(&dim, &["abbl", "drl"], &[], &low);
-        assert!(near(&got, &pair(1.05)), "a faint headlamp glow over a DRL: {got:?}");
-        let rear = [0.0, -5.0, 0.76, 0.0, -1.0, -0.3, 255.0, 255.0, 233.0, 100.0, 30.0, 80.0];
-        let got = at(&model, &["abbl_l", "abbl_r"], &[], &rear);
-        assert!(got.iter().all(|(p, _)| p.z == 0.76 && (p.y + 5.85).abs() < 1e-4), "a rear spot keeps its own height: {got:?}");
-        let inside = mesh(vec![lamp(-0.5, 2.0, 1.0, "x"), lamp(0.5, 2.0, 1.0, "x"), omsi_model::LightEnh2 { color: [255.0, 190.0, 0.0], ..lamp(0.9, 5.8, 0.9, "x") }]);
-        let got = at(&inside, &["x"], &[], &low);
-        assert!(got.iter().all(|(p, _)| p.z == 0.76 && (p.y - 5.85).abs() < 1e-4), "white lamps far behind the nose: {got:?}");
-        let got = super::spot_origins(&omsi_model::Model::default(), bb, &low, &[], &|_| 0.0);
-        assert!(near(&got, &[(Vec3::new(0.0, 3.55, 0.76), 1.0)]), "no lamps: {got:?}");
-    }
-}
+mod spot_tests;
 
 /// Map lights and scenery coronas are only drawn this close to the camera.
 const MAP_LIGHT_RANGE: f64 = 600.0;
@@ -1254,11 +1095,30 @@ pub fn load_smoke_texture(renderer: &mut omsi_render::Renderer, root: &std::path
 /// Process-wide on purpose: it only numbers picture files (the numbers live on in the
 /// world's lights); which of them a renderer holds is the renderer's
 /// (`Renderer::pictures_taken`), so a second session's renderer gets them all again.
+#[derive(Clone)]
+enum CoronaSource {
+    File(std::path::PathBuf),
+    Memory {
+        path: std::path::PathBuf,
+        bytes: std::sync::Arc<[u8]>,
+    },
+}
+
+// Pack reads are bounded to 64 MiB per asset; this cap bounds retained bytes, not the read peak.
+// Retained source bytes only; authenticated pack reads may transiently reach the pack asset limit.
+const MAX_SCOPED_CORONA_BYTES: usize = 8 * 1024 * 1024;
+const MAX_SCOPED_CORONA_PATHS: usize = 4096;
+
+#[derive(Default)]
 struct CoronaTextures {
     ids: std::collections::HashMap<std::path::PathBuf, u16>,
+    scoped_ids: std::collections::HashMap<std::path::PathBuf, u16>,
+    // Arc<[u8]> hashes and compares by contents, so hash collisions never alias pictures.
+    bytes_ids: std::collections::HashMap<std::sync::Arc<[u8]>, u16>,
     /// Every picture numbered, in the order it was numbered.
-    listed: Vec<(u16, std::path::PathBuf)>,
+    listed: Vec<(u16, CoronaSource)>,
     root: Option<std::path::PathBuf>,
+    scoped_bytes: usize,
 }
 
 static CORONA_TEXTURES: std::sync::Mutex<Option<CoronaTextures>> = std::sync::Mutex::new(None);
@@ -1266,7 +1126,7 @@ static CORONA_TEXTURES: std::sync::Mutex<Option<CoronaTextures>> = std::sync::Mu
 /// The game folder the standard pictures (`Texture\…`) are found in.
 pub fn set_corona_root(root: &std::path::Path) {
     let mut g = CORONA_TEXTURES.lock().unwrap_or_else(|e| e.into_inner());
-    let t = g.get_or_insert_with(|| CoronaTextures { ids: Default::default(), listed: Vec::new(), root: None });
+    let t = g.get_or_insert_with(CoronaTextures::default);
     t.root = Some(root.to_path_buf());
     // (the game's own pictures are looked for in the new folder)
     for id in [&CONE_ID, &GLOW_ID, &STAR_ID] {
@@ -1276,13 +1136,56 @@ pub fn set_corona_root(root: &std::path::Path) {
 
 fn texture_id_of(path: std::path::PathBuf) -> u16 {
     let mut g = CORONA_TEXTURES.lock().unwrap_or_else(|e| e.into_inner());
-    let t = g.get_or_insert_with(|| CoronaTextures { ids: Default::default(), listed: Vec::new(), root: None });
+    let t = g.get_or_insert_with(CoronaTextures::default);
     if let Some(id) = t.ids.get(&path) {
         return *id;
     }
-    let id = (t.ids.len() + 1).min(u16::MAX as usize) as u16;
+    let Some(id) = next_corona_id(t.listed.len()) else { return 0; };
     t.ids.insert(path.clone(), id);
-    t.listed.push((id, path));
+    t.listed.push((id, CoronaSource::File(path)));
+    id
+}
+
+fn next_corona_id(used: usize) -> Option<u16> {
+    u16::try_from(used.checked_add(1)?).ok()
+}
+
+fn scoped_texture_id(path: std::path::PathBuf, source: Vec<u8>) -> u16 {
+    let mut g = CORONA_TEXTURES.lock().unwrap_or_else(|e| e.into_inner());
+    let t = g.get_or_insert_with(CoronaTextures::default);
+    register_scoped_corona_bytes(t, path, source)
+}
+
+fn memo_scoped_id(t: &mut CoronaTextures, path: std::path::PathBuf, id: u16) -> u16 {
+    if t.scoped_ids.len() >= MAX_SCOPED_CORONA_PATHS && !t.scoped_ids.contains_key(&path) {
+        // Byte IDs remain stable; only the bounded path-to-ID memo is cleared.
+        t.scoped_ids.clear();
+    }
+    t.scoped_ids.insert(path, id);
+    id
+}
+
+fn register_scoped_corona_bytes(t: &mut CoronaTextures, path: std::path::PathBuf, source: Vec<u8>) -> u16 {
+    if let Some(id) = t.scoped_ids.get(&path) {
+        return *id;
+    }
+    if source.len() > MAX_SCOPED_CORONA_BYTES {
+        return memo_scoped_id(t, path, 0);
+    }
+    let bytes: std::sync::Arc<[u8]> = std::sync::Arc::from(source);
+    if let Some(&id) = t.bytes_ids.get(&bytes) {
+        return memo_scoped_id(t, path, id);
+    }
+    if t.scoped_bytes.saturating_add(bytes.len()) > MAX_SCOPED_CORONA_BYTES {
+        return memo_scoped_id(t, path, 0);
+    }
+    let Some(id) = next_corona_id(t.listed.len()) else {
+        return memo_scoped_id(t, path, 0);
+    };
+    t.scoped_bytes += bytes.len();
+    t.bytes_ids.insert(bytes.clone(), id);
+    memo_scoped_id(t, path.clone(), id);
+    t.listed.push((id, CoronaSource::Memory { path, bytes }));
     id
 }
 
@@ -1313,6 +1216,45 @@ pub fn corona_texture_id(model_dir: &std::path::Path, name: &str) -> u16 {
         .or_default()
         .insert(name.to_string(), id);
     id
+}
+
+pub(super) fn corona_texture_id_with_texture_dirs(
+    model_dir: &std::path::Path,
+    name: &str,
+    publisher_texture_dirs: &[std::path::PathBuf],
+) -> u16 {
+    if publisher_texture_dirs.is_empty() {
+        return corona_texture_id(model_dir, name);
+    }
+    let root = CORONA_TEXTURES.lock().unwrap_or_else(|e| e.into_inner()).as_ref()
+        .and_then(|t| t.root.clone()).unwrap_or_default();
+    let mut search = crate::texture_dirs(&root, model_dir);
+    crate::world::insert_publisher_texture_dirs(&mut search, publisher_texture_dirs, &root);
+    let search: Vec<&std::path::Path> = search.iter().map(|dir| dir.as_path()).collect();
+    // The lower-level memo includes the full search path vector, so map scopes do not share hits.
+    let Some(path) = omsi_texture::find_texture(name, &search) else { return 0; };
+    let in_publisher_mount = publisher_texture_dirs
+        .iter()
+        .filter_map(|dir| dir.parent())
+        .any(|mount| path.starts_with(mount));
+    if in_publisher_mount || omsi_cfg::vfs::is_sealed(&path) {
+        if let Some(id) = CORONA_TEXTURES
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .and_then(|textures| textures.scoped_ids.get(&path).copied())
+        {
+            return id;
+        }
+        return match omsi_cfg::vfs::read(&path) {
+            Ok(bytes) => scoped_texture_id(path, bytes),
+            Err(_) => {
+                let mut g = CORONA_TEXTURES.lock().unwrap_or_else(|e| e.into_inner());
+                memo_scoped_id(g.get_or_insert_with(CoronaTextures::default), path, 0)
+            }
+        };
+    }
+    texture_id_of(path)
 }
 
 /// The id of a game picture not looked for yet in the current game folder. (The ids below
@@ -1366,8 +1308,15 @@ pub fn upload_corona_textures(renderer: &mut omsi_render::Renderer) {
         }
     };
     let taken = taken + pending.len();
-    for (id, path) in pending {
-        match omsi_texture::decode_file(&path) {
+    for (id, source) in pending {
+        let (path, decoded) = match source {
+            CoronaSource::File(path) => (path.clone(), omsi_texture::decode_file(&path)),
+            CoronaSource::Memory { path, bytes } => (
+                path.clone(),
+                omsi_texture::decode_bytes(&bytes, &path),
+            ),
+        };
+        match decoded {
             Ok(img) => renderer.set_corona_texture(id, &img),
             Err(e) => log::warn!("corona picture {}: {e}", path.display()),
         }
@@ -1446,5 +1395,65 @@ mod traffic_headlight_brightness_tests {
         assert_eq!(beam[0].intensity, 10.0);
         scale_traffic_headlights(&mut [], &mut beam, 0.0);
         assert_eq!(beam[0].intensity, 0.0);
+    }
+}
+
+#[cfg(test)]
+mod scoped_corona_cache_tests {
+    use super::*;
+
+    #[test]
+    fn scoped_images_deduplicate_by_bytes_and_survive_their_virtual_path() {
+        let mut cache = CoronaTextures::default();
+        let bytes = b"authenticated image bytes".to_vec();
+        let first = register_scoped_corona_bytes(&mut cache, "/map/.publisher-world/1/1/Texture/a.png".into(), bytes.clone());
+        let second = register_scoped_corona_bytes(&mut cache, "/map/.publisher-world/2/2/Texture/b.png".into(), bytes.clone());
+        assert_ne!(first, 0);
+        assert_eq!(second, first);
+        assert_eq!(cache.listed.len(), 1);
+        cache.scoped_ids.clear(); // the mount lease may end; renderer replay still has bytes
+        assert!(matches!(&cache.listed[0].1, CoronaSource::Memory { bytes: saved, .. } if saved.as_ref() == bytes.as_slice()));
+        assert_eq!(register_scoped_corona_bytes(&mut cache, "/map/reopened/Texture/c.png".into(), bytes), first);
+        assert_eq!(cache.listed.len(), 1);
+    }
+
+    #[test]
+    fn scoped_images_and_picture_ids_fail_closed_at_their_limits() {
+        let mut cache = CoronaTextures::default();
+        let oversized = vec![0; MAX_SCOPED_CORONA_BYTES + 1];
+        let rejected = std::path::PathBuf::from("/map/Texture/large.png");
+        assert_eq!(register_scoped_corona_bytes(&mut cache, rejected.clone(), oversized), 0);
+        assert_eq!(cache.scoped_ids.get(&rejected), Some(&0));
+        assert!(cache.listed.is_empty());
+        assert_eq!(next_corona_id(u16::MAX as usize - 1), Some(u16::MAX));
+        assert_eq!(next_corona_id(u16::MAX as usize), None);
+    }
+
+    #[test]
+    fn scoped_corona_total_byte_budget_memoizes_rejection() {
+        let mut cache = CoronaTextures::default();
+        let half = MAX_SCOPED_CORONA_BYTES / 2;
+        assert_ne!(register_scoped_corona_bytes(&mut cache, "/map/Texture/a.png".into(), vec![1; half]), 0);
+        assert_ne!(register_scoped_corona_bytes(&mut cache, "/map/Texture/b.png".into(), vec![2; half]), 0);
+        let rejected = std::path::PathBuf::from("/map/Texture/c.png");
+        assert_eq!(register_scoped_corona_bytes(&mut cache, rejected.clone(), vec![3]), 0);
+        assert_eq!(cache.scoped_ids.get(&rejected), Some(&0));
+        assert_eq!(cache.listed.len(), 2);
+    }
+
+    #[test]
+    fn scoped_path_memo_evicts_reopened_aliases_without_changing_content_ids() {
+        let mut cache = CoronaTextures::default();
+        let bytes = b"same authenticated image";
+        let first = register_scoped_corona_bytes(&mut cache, "/map/Texture/0.png".into(), bytes.to_vec());
+        for index in 1..=MAX_SCOPED_CORONA_PATHS {
+            assert_eq!(
+                register_scoped_corona_bytes(&mut cache, format!("/map-{index}/Texture/reopened.png").into(), bytes.to_vec()),
+                first
+            );
+        }
+        assert!(cache.scoped_ids.len() <= MAX_SCOPED_CORONA_PATHS);
+        assert_eq!(cache.bytes_ids.len(), 1);
+        assert_eq!(cache.listed.len(), 1);
     }
 }

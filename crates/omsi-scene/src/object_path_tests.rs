@@ -68,20 +68,28 @@ impl PublisherMapFixture {
         std::fs::create_dir_all(&map).unwrap();
         std::fs::write(
             map.join("global.cfg"),
-            "[name]\nPublisher alias fixture\n[map]\n0\n0\ntile_0_0.map\n",
+            "[name]\nPublisher alias fixture\n[map]\n0\n0\ntiles\\sector\\tile_0_0.map\n",
         )
         .unwrap();
+        let tile = map.join("tiles/sector/tile_0_0.map");
+        std::fs::create_dir_all(tile.parent().unwrap()).unwrap();
         std::fs::write(
-            map.join("tile_0_0.map"),
+            tile,
             "[version]\n14\n\n[spline]\n0\nSplines\\Fixture\\renamed.sli\n1\n0\n0\n0\n0\n0\n0\n10\n0\n0\n0\n0\n0\n0\n0\n0\n\n",
         )
         .unwrap();
         let pack = self.root.join("Packs").join(format!("{pack_id}.oopp"));
         let key_id = protected_key.as_ref().map(|key| omsi_pack::sha256_hex(key));
         let spline = format!(
-            "[length]\n{spline_length}\n[path]\n0\n{path_offset}\n0\n3\n1\n[texture]\nroad.bmp\n"
+            "[length]\n{spline_length}\n[path]\n0\n{path_offset}\n0\n3\n1\n[texture]\nroad.bmp\n[texture]\nglobal.png\n"
         );
         let texture_cfg = format!("[surface]\n{texture_surface}\n");
+        let global_texture_cfg = format!("[surface]\n{}\n", texture_surface + 1);
+        let global_texel = [180, 32, 76, 255];
+        let mut global_png = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(2, 2, image::Rgba(global_texel)))
+            .write_to(&mut global_png, image::ImageFormat::Png)
+            .unwrap();
         let assets = [
             omsi_pack::AssetInput {
                 id: "object".into(),
@@ -106,6 +114,18 @@ impl PublisherMapFixture {
                 path: "Splines/Fixture/texture/road.bmp.cfg".into(),
                 source_sha256: "44".repeat(32),
                 bytes: texture_cfg.into_bytes(),
+            },
+            omsi_pack::AssetInput {
+                id: "global-texture".into(),
+                path: "Texture/global.png".into(),
+                source_sha256: "55".repeat(32),
+                bytes: global_png.into_inner(),
+            },
+            omsi_pack::AssetInput {
+                id: "global-texture-cfg".into(),
+                path: "Texture/global.png.cfg".into(),
+                source_sha256: "66".repeat(32),
+                bytes: global_texture_cfg.into_bytes(),
             },
         ];
         let manifest = omsi_pack::create_pack(
@@ -186,7 +206,16 @@ fn world_loaders_resolve_publisher_aliases_from_the_map_scope() {
     );
     let spline = world.spline_type("Splines/Fixture/renamed.sli").unwrap();
     assert_eq!(spline.def.length, 10.0);
-    assert_eq!(spline.surface, vec![4]);
+    assert_eq!(spline.surface, vec![4, 5]);
+    let object = world.object_type("Sceneryobjects/Fixture/renamed.sco").unwrap();
+    let dirs = world.object_texture_dirs(&object);
+    let dirs: Vec<&Path> = dirs.iter().map(PathBuf::as_path).collect();
+    let texture = omsi_texture::find_texture("global.png", &dirs).unwrap();
+    assert_eq!(texture, omsi_cfg::resolve_path(&map_dir, "Texture/global.png"));
+    let decoded = omsi_texture::decode_file(&texture).unwrap();
+    assert_eq!((decoded.width, decoded.height), (2, 2));
+    assert_eq!(&decoded.rgba[..4], &[180, 32, 76, 255]);
+    assert!(!texture.exists(), "global publisher texture must remain virtual");
     assert!(!world.navigation_map().lanes.is_empty(), "navigation must load map-scoped signed splines");
 
     let fallback = fixture.root.join("Sceneryobjects/Ordinary/fallback.sco");
@@ -196,6 +225,25 @@ fn world_loaders_resolve_publisher_aliases_from_the_map_scope() {
         world.object_type("Sceneryobjects/Ordinary/fallback.sco").unwrap().sco.friendly_name,
         "ordinary physical fallback"
     );
+}
+
+#[test]
+fn publisher_worlds_keep_their_lease_when_the_same_map_is_reopened() {
+    let _guard = PUBLISHER_WORLD_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut fixture = PublisherMapFixture::new();
+    let map = fixture.map_dir().join("global.cfg");
+    let first = World::open(&fixture.root, &map, 20261001).unwrap();
+    fixture.add_map("Fixture", "second-session", "second map session", 30.0, 6.0, 8, None);
+    let second = World::open(&fixture.root, &map, 20261001).unwrap();
+
+    // Load after both leases exist so a cache cannot hide resolution through the wrong lease.
+    let alias = "Sceneryobjects/Fixture/renamed.sco";
+    assert_eq!(first.object_type(alias).unwrap().sco.friendly_name, "plain map alias");
+    assert_eq!(second.object_type(alias).unwrap().sco.friendly_name, "second map session");
+    assert_eq!(first.spline_type("Splines/Fixture/renamed.sli").unwrap().def.length, 10.0);
+    assert_eq!(second.spline_type("Splines/Fixture/renamed.sli").unwrap().def.length, 30.0);
 }
 
 #[cfg(any(target_os = "macos", windows))]
@@ -225,8 +273,19 @@ fn encrypted_and_plain_publisher_aliases_are_isolated_by_world_map_scope() {
     let encrypted_spline = encrypted.spline_type("Splines/Fixture/renamed.sli").unwrap();
     assert_eq!(plain_spline.def.length, 10.0);
     assert_eq!(encrypted_spline.def.length, 22.0);
-    assert_eq!(plain_spline.surface, vec![4]);
-    assert_eq!(encrypted_spline.surface, vec![5]);
+    assert_eq!(plain_spline.surface, vec![4, 5]);
+    assert_eq!(encrypted_spline.surface, vec![5, 6]);
+    let encrypted_object = encrypted.object_type("Sceneryobjects/Fixture/renamed.sco").unwrap();
+    let dirs = encrypted.object_texture_dirs(&encrypted_object);
+    let dirs: Vec<&Path> = dirs.iter().map(PathBuf::as_path).collect();
+    assert_eq!(
+        omsi_texture::find_texture("global.png", &dirs),
+        Some(omsi_cfg::resolve_path(&encrypted_dir, "Texture/global.png"))
+    );
+    let texture = omsi_cfg::resolve_path(&encrypted_dir, "Texture/global.png");
+    let decoded = omsi_texture::decode_file(&texture).unwrap();
+    assert_eq!(&decoded.rgba[..4], &[180, 32, 76, 255]);
+    assert!(!texture.exists(), "encrypted global texture must remain virtual");
     let plain_navigation = plain.navigation_map();
     let encrypted_navigation = encrypted.navigation_map();
     assert!(!plain_navigation.lanes.is_empty());

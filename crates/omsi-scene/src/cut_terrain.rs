@@ -364,7 +364,7 @@ impl World {
                     ts.rasterize_kind(mesh, &pose.rot, pose.pos, tx, ty, true);
                     if Some(k) == ground_mesh {
                         // (its textures' `.surf` maps: cobbled junctions shake the bus too)
-                        let dirs = ot.texture_dirs(&self.root);
+                        let dirs = self.object_texture_dirs(ot);
                         let dirs: Vec<&Path> = dirs.iter().map(|p| p.as_path()).collect();
                         let maps: Vec<_> = ot.meshes.get(k).map(|m| m.1.iter().map(|m| surf_map(&m.texture, &dirs)).collect()).unwrap_or_default();
                         let ids: Vec<u8> = ot.meshes.get(k).map(|m| m.1.iter().map(|m| surface_id(&m.texture, &dirs)).collect()).unwrap_or_default();
@@ -450,7 +450,7 @@ impl World {
                     .filter(|o| matches!(o.ot.sco.render_type, omsi_scenery::sco::RenderType::Surface | omsi_scenery::sco::RenderType::OnSurface))
                     .filter(|o| !gpu.types.contains_key(&(Arc::as_ptr(&o.ot) as usize)) && seen.insert(Arc::as_ptr(&o.ot)))
                     .flat_map(|o| {
-                        let dirs = o.ot.texture_dirs(&self.root);
+                        let dirs = self.object_texture_dirs(&o.ot);
                         o.ot.meshes.iter().flat_map(|m| &m.1).filter(|m| !is_null_texture(&m.texture)).map(move |m| (m.texture.clone(), dirs.clone())).collect::<Vec<_>>()
                     })
                     .collect()
