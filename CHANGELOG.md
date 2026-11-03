@@ -1029,6 +1029,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   as in OMSI 2. A dedicated server judged "out of sight" from its own camera, where nobody
   plays, so it took people standing beside the players - passengers who had just got off a
   bus among them. Now nobody near any player is taken.
+- **A server sets its own AI limits** in `server.cfg`: `ai_unsched_factor` (the random
+  traffic, percent of the map's density), `ai_max_scheduled`, `ai_max_parked` and
+  `ai_max_humans`, as the game's options have them. Left empty, the machine's `settings.cfg`
+  says, as before. They count for the whole server, so a busy one can raise them.
 - **Voice chat, built in** - off until switched on (Settings → Sound → *Voice chat*, or the game
   menu's Sound page). Hold a talk key to speak: *nearby* (V) is heard by the players within
   the session's range (75 m by default) from where you stand, quieter with the distance and

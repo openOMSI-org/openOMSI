@@ -116,6 +116,11 @@ pub(crate) fn prepare(args: &mut Args, path: &Path) -> Result<ServerCfg> {
     args.schedule = cfg.timetable;
     args.passengers = cfg.passengers;
     let _ = SERVER_PASSENGERS.set((cfg.passengers, cfg.passenger_density));
+    let limits = cfg.ai_limits.settings_lines();
+    if !limits.is_empty() {
+        log::info!("server: AI limits of server.cfg over settings.cfg: {}", limits.trim_end().replace('\n', ", "));
+        let _ = crate::settings::SERVER_AI_LIMITS.set(limits);
+    }
     args.lan_host = Some(cfg.port);
     args.lan_join = None;
     args.lan_name = cfg.name.clone();

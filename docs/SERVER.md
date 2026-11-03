@@ -26,6 +26,7 @@ nothing is drawn. `server.cfg` is written with a comment for every key on the fi
 | `time_speed`, `real_time` | how fast the clock runs (1 to 30), or the machine's real date and time |
 | `metar_sync`, `metar_station` | the weather follows an airport's METAR report (ICAO code; empty: the one nearest the map), downloaded every ten minutes and passed on to the players |
 | `traffic`, `timetable`, `passengers`, `passenger_density` | AI cars, timetable buses, waiting passengers and how many of them (below) |
+| `ai_unsched_factor`, `ai_max_scheduled`, `ai_max_parked`, `ai_max_humans` | the AI limits of the game's options, for this server over its machine's `settings.cfg` (empty: that file says): the random traffic in percent of the map's density (0 to 300), timetable vehicles at once (0 = no limit), parked cars (0 = every space, -1 = none), people at once (1 to 4096). They are for the whole server, not for each player |
 | `port`, `web_port`, `max_players` | UDP port of the session (27015), TCP port of the web gateway (27025), player limit (16) |
 | `gateway_proxy_header` | the header a proxy of this machine names a WebSocket player's address in (below) |
 | `tunnel` | start a free Cloudflare quick tunnel (needs `cloudflared`) |
