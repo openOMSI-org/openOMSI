@@ -1106,14 +1106,15 @@ impl TrafficSim {
                     // A driver going into a slow queue that lets him in, and the driver of
                     // that queue letting him: both judge it by `lets_in` of the queue's car.
                     // (between equals as well: the one who waits gave way by coming later)
-                    let other_lets_in = long_waiter && (must_yield || equals) && !o_prio && lets_in(o.state.speed, o.state.decel, theirs);
+                    let ring_entry = self.net.lanes[l].ring != self.net.lanes[m].ring;
+                    let other_lets_in = long_waiter && !ring_entry && (must_yield || equals) && !o_prio && lets_in(o.state.speed, o.state.decel, theirs);
                     if other_lets_in {
                         let_in = true;
                         continue;
                     }
                     let waiter = (o.courtesy && claimed)
                         || (o.yielding && o.state.yield_time > COURTESY_WAIT && !queued && o.wait_at.is_some_and(|w| w - o.state.front < 3.0));
-                    if waiter && !must_yield && (self.net.must_yield(m, l) || equals) && !me_prio && lets_in(v, st.decel, my_room) {
+                    if waiter && !ring_entry && !must_yield && (self.net.must_yield(m, l) || equals) && !me_prio && lets_in(v, st.decel, my_room) {
                         courtesy = true;
                         by = by.or(Some(o.id));
                         hold(false, o.id, Hold::Courtesy, &mut holds, &mut stop_at);

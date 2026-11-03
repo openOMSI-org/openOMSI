@@ -26,7 +26,7 @@ pub fn query_session(code: &str) -> Result<ServerInfo, String> {
         let url = crate::bridge::lookup_tunnel(code.session).ok_or("the host did not answer")?;
         super::query(&url, false)
     }));
-    first_success(jobs, Duration::from_secs(15))
+    first_success(jobs, Duration::from_secs(30))
 }
 
 fn first_success<T: Send + 'static>(jobs: Vec<Query<T>>, timeout: Duration) -> Result<T, String> {

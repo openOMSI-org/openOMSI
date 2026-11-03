@@ -706,3 +706,92 @@ fn cars_drive_straight_to_the_end_of_a_two_lane_road() {
     assert!(t.cars.iter().all(|c| !ids.contains(&c.id)), "cars still stand at the end");
     }
 }
+
+#[test]
+fn a_bus_serves_its_stop_before_moving_over_to_the_lane_its_route_goes_on() {
+    let f = Fixture::new();
+    let lanes = vec![street(-3.5, 0.0, 0.0, 300.0), street(0.0, 0.0, 0.0, 300.0)];
+    let mut t = traffic(&f, net_of(lanes, &[(0, 1)]));
+    let me = add_car(&mut t, &f, 1, 20.0, 0xb27, Some(8.0));
+    set_route(&mut t, me, vec![1, 0], 20.0);
+    {
+        let day = t.day_time;
+        let c = car_mut(&mut t, me);
+        let stop = bus_service::Stop { ri: 0, s: 150.0, bay: 0.0, depart: day + 600.0, id: 1, side: 0.0 };
+        c.bus = Some(Box::new(bus_service::BusService::new(vec![stop])));
+    }
+    for _ in 0..(15.0 / DT) as usize {
+        t.tick(DT, None);
+        let c = car(&t, me).expect("on the road");
+        if c.state.s < 140.0 {
+            assert!(c.state.change.is_none(), "moved over at s {:.1}, before its stop", c.state.s);
+        }
+    }
+}
+
+#[test]
+fn a_car_behind_the_camera_is_drawn_as_far_as_the_mirrors_see() {
+    let f = Fixture::new();
+    let mut t = traffic(&f, net_of(vec![street(0.0, -400.0, 0.0, 800.0)], &[]));
+    let near = add_car(&mut t, &f, 0, 250.0, 0xd01, Some(0.0));
+    let far = add_car(&mut t, &f, 0, 50.0, 0xd02, Some(0.0));
+    t.viewer = Some(viewer::Viewer::lan_player(DVec3::new(0.0, 0.0, 0.0), 0.0));
+    t.tick(DT, None);
+    assert!(car(&t, near).unwrap().vehicle.ai_visuals, "150 m behind the camera, in the mirrors' reach");
+    assert!(!car(&t, far).unwrap().vehicle.ai_visuals, "350 m behind the camera");
+}
+
+#[test]
+fn a_bus_whose_stop_lies_near_its_lane_end_still_gets_onto_its_route() {
+    let f = Fixture::new();
+    let lanes = vec![street(-3.5, 0.0, 0.0, 300.0), street(0.0, 0.0, 0.0, 300.0), street(-3.5, 300.0, 0.0, 300.0), street(0.0, 300.0, 0.0, 300.0)];
+    let mut t = traffic(&f, net_of(lanes, &[(0, 1), (2, 3)]));
+    let me = add_car(&mut t, &f, 1, 200.0, 0xb28, Some(8.0));
+    set_route(&mut t, me, vec![1, 0, 2], 200.0);
+    {
+        let day = t.day_time;
+        let c = car_mut(&mut t, me);
+        let stop = bus_service::Stop { ri: 0, s: 290.0, bay: 0.0, depart: day + 5.0, id: 1, side: 0.0 };
+        c.bus = Some(Box::new(bus_service::BusService::new(vec![stop])));
+    }
+    let mut prev = car(&t, me).unwrap().vehicle.position;
+    for _ in 0..(60.0 / DT) as usize {
+        t.tick(DT, None);
+        let c = car(&t, me).expect("on the road");
+        let p = c.vehicle.position;
+        assert!((p - prev).truncate().length() < 1.0, "the body jumped {:.2} m on lane {}", (p - prev).truncate().length(), c.state.lane);
+        prev = p;
+    }
+    let c = car(&t, me).unwrap();
+    assert!(matches!(c.state.lane, 0 | 2), "ended on lane {}", c.state.lane);
+}
+
+#[test]
+fn a_bus_whose_stop_lies_at_its_lane_end_neither_stands_nor_jumps() {
+    let f = Fixture::new();
+    let lanes = vec![street(-3.5, 0.0, 0.0, 300.0), street(0.0, 0.0, 0.0, 300.0), street(-3.5, 300.0, 0.0, 300.0), street(0.0, 300.0, 0.0, 300.0)];
+    let mut t = traffic(&f, net_of(lanes, &[(0, 1), (2, 3)]));
+    let me = add_car(&mut t, &f, 1, 200.0, 0xb29, Some(8.0));
+    set_route(&mut t, me, vec![1, 0, 2], 200.0);
+    {
+        let day = t.day_time;
+        let c = car_mut(&mut t, me);
+        let stop = bus_service::Stop { ri: 0, s: 297.0, bay: 0.0, depart: day + 5.0, id: 1, side: 0.0 };
+        c.bus = Some(Box::new(bus_service::BusService::new(vec![stop])));
+    }
+    let (mut prev, mut still, mut longest_still, mut served) = (car(&t, me).unwrap().vehicle.position, 0.0f32, 0.0f32, false);
+    for _ in 0..(35.0 / DT) as usize {
+        t.tick(DT, None);
+        let c = car(&t, me).expect("on the road");
+        let p = c.vehicle.position;
+        let step = (p - prev).truncate();
+        assert!(step.x.abs() < 0.3, "the body jumped {:.2} m sideways on lane {} at s {:.1}", step.x, c.state.lane, c.state.s);
+        prev = p;
+        served |= c.bus.as_ref().is_some_and(|b| b.stops.is_empty());
+        if c.state.speed.abs() < 0.1 && served { still += DT } else { still = 0.0 }
+        longest_still = longest_still.max(still);
+    }
+    let c = car(&t, me).unwrap();
+    assert!(longest_still < 2.0, "stood {longest_still:.1} s after its stop");
+    assert!(matches!(c.state.lane, 0 | 2), "ended on lane {}", c.state.lane);
+}

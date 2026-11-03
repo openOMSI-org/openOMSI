@@ -146,6 +146,7 @@ function MobileDrive() {
         ${row('map', 'map', 'Map', mapLabel, joined ? t('Set by {server}', { server: srv.name || c.lan_addr }) : null, joined)}
         ${row('bus', 'bus', 'Bus', v ? v.name : s.vehicles || !s.boot?.root ? '-' : html`<${Spinner} />`)}
         ${v && row('paint', 'sun', 'Paint', c.paint || v.default_paint || t('Standard'))}
+        ${v && row('plate', 'badge', 'Number plate', c.plate || t('Automatic'))}
       </div>
       <div class="m-seg">
         <button class=${!c.free ? 'on' : ''} onClick=${() => choose({ free: false })}>${t('Timetable')}</button>
@@ -185,8 +186,8 @@ const rt = (c) => (realTime() || realDate() ? t('Follows the computer\'s clock (
 
 /** A full-screen sheet: a title bar with Back, and what to choose from. */
 function Sheet({ which, close }) {
-  const titles = { map: 'Choose a map', bus: 'Choose a bus', paint: 'Paint', line: 'Line', tour: 'Tour', trip: 'Trips of the tour', entry: 'Start at', time: 'Time and date', weather: 'Weather' };
-  const Body = { map: MapSheet, bus: BusSheet, paint: PaintSheet, line: LineSheet, tour: TourSheet, trip: TripSheet, entry: EntrySheet, time: TimeSheet, weather: WeatherSheet }[which];
+  const titles = { map: 'Choose a map', bus: 'Choose a bus', paint: 'Paint', line: 'Line', tour: 'Tour', trip: 'Trips of the tour', entry: 'Start at', time: 'Time and date', weather: 'Weather', plate: 'Number plate' };
+  const Body = { map: MapSheet, bus: BusSheet, paint: PaintSheet, line: LineSheet, tour: TourSheet, trip: TripSheet, entry: EntrySheet, time: TimeSheet, weather: WeatherSheet, plate: PlateSheet }[which];
   useEffect(() => {
     // the phone's Back closes the sheet
     const k = (e) => (e.key === 'Escape' || e.key === 'GoBack' || e.key === 'BrowserBack') && close();
@@ -320,6 +321,11 @@ function TimeSheet() {
     <div class="m-seg">${SEASONS.map(([v, l]) => html`<button class=${c.season === v ? 'on' : ''} onClick=${() => setSeason(v, c.phase)}>${t(l)}</button>`)}</div>
     ${c.season !== 'auto' && html`<div class="m-seg">${PHASES.map(([v, l]) => html`<button class=${c.phase === v ? 'on' : ''} onClick=${() => setSeason(c.season, v)}>${t(l)}</button>`)}</div>`}
   </div>`;
+}
+
+function PlateSheet() {
+  const c = useStore().choice;
+  return html`<input class="m-search" value=${c.plate || ''} placeholder=${t('Automatic')} onInput=${(e) => choose({ plate: e.currentTarget.value })} />`;
 }
 
 function WeatherSheet({ close }) {
