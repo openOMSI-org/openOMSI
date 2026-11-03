@@ -247,6 +247,10 @@ pub struct WireNet {
     /// How uneven the contact wire is (m): wear, ice, dirt. The shoe leaves it where it rises
     /// faster than the pole can follow.
     pub roughness: f32,
+    /// Of a frog crossed above `frog_arc_min_amps` (A): the chance it arcs and its energy's scale.
+    pub frog_arc_chance: f32,
+    pub frog_arc_scale: f32,
+    pub frog_arc_min_amps: f32,
     /// The wire was read off splines the map draws itself: the game draws no wire of its own.
     pub drawn_by_map: bool,
     /// `[trolley_sounds]`: the overhead line's sounds, and the folder their files are in.
@@ -316,6 +320,9 @@ impl WireNet {
     /// voltage 600            nominal line voltage (V)
     /// spacing 0.6            default distance between the two wires (m)
     /// roughness 0.0012      unevenness of the contact wire (m)
+    /// frog_arc_chance 1      chance a frog crossed under current arcs (0..1)
+    /// frog_arc_scale 1       scale of a frog arc's energy
+    /// frog_arc_min_amps 3    least current a frog arcs with (A)
     ///
     /// [trolley_section]
     /// id 1
@@ -348,6 +355,7 @@ impl WireNet {
         let mut nominal = 600.0f32;
         let mut spacing = 0.6f32;
         let mut roughness = 0.0012f32;
+        let (mut frog_arc_chance, mut frog_arc_scale, mut frog_arc_min_amps) = (1.0f32, 1.0f32, 3.0f32);
         let mut sections: Vec<Section> = Vec::new();
         struct RawSpan {
             section: i32,
@@ -407,6 +415,9 @@ impl WireNet {
                     "voltage" => nominal = n.first().copied().unwrap_or(600.0).clamp(100.0, 3000.0) as f32,
                     "spacing" => spacing = n.first().copied().unwrap_or(0.6).clamp(0.2, 2.0) as f32,
                     "roughness" => roughness = n.first().copied().unwrap_or(0.0012).clamp(0.0, 0.05) as f32,
+                    "frog_arc_chance" => frog_arc_chance = n.first().copied().filter(|x| x.is_finite()).unwrap_or(1.0).clamp(0.0, 1.0) as f32,
+                    "frog_arc_scale" => frog_arc_scale = n.first().copied().filter(|x| x.is_finite()).unwrap_or(1.0).clamp(0.0, 10.0) as f32,
+                    "frog_arc_min_amps" => frog_arc_min_amps = n.first().copied().filter(|x| x.is_finite()).unwrap_or(3.0).clamp(0.0, 2000.0) as f32,
                     _ => {}
                 },
                 "trolley_section" => {
@@ -486,6 +497,9 @@ impl WireNet {
         let mut net = WireNet {
             nominal_volts: nominal,
             roughness,
+            frog_arc_chance,
+            frog_arc_scale,
+            frog_arc_min_amps,
             drawn_by_map: false,
             sounds,
             dir: None,

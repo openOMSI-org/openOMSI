@@ -120,6 +120,7 @@ pub struct TrolleyRig {
     pub verbose: bool,
     events: Vec<PoleEvent>,
     radio_previous: Option<(i8, u32)>,
+    rng: u64,
 }
 
 /// The point a ray reaches at `len` metres from `base` (the farthest, where it crosses that
@@ -159,7 +160,15 @@ impl TrolleyRig {
             verbose: false,
             events: Vec::new(),
             radio_previous: None,
+            rng: seed.wrapping_add(0x5bd1_e995).wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1,
         }
+    }
+
+    fn rand(&mut self) -> f32 {
+        self.rng ^= self.rng << 13;
+        self.rng ^= self.rng >> 7;
+        self.rng ^= self.rng << 17;
+        (self.rng >> 40) as f32 / (1u64 << 24) as f32
     }
 
     /// The wire side a pole of `side` takes where the span's tangent is `t`, for a vehicle
@@ -386,8 +395,8 @@ impl TrolleyRig {
                 }
                 PoleEventKind::FrogPassed { .. } => {
                     self.sounds.push(RigSound::Frog);
-                    if live {
-                        self.spark(e.pos, 0.15 * ind(a) + 0.5 * a, a, SparkKind::Frog);
+                    if a > net.frog_arc_min_amps && (net.frog_arc_chance >= 1.0 || self.rand() < net.frog_arc_chance) {
+                        self.spark(e.pos, net.frog_arc_scale * (0.15 * ind(a) + 0.5 * a), a, SparkKind::Frog);
                     }
                 }
                 PoleEventKind::Plate { switch } => {
@@ -658,6 +667,46 @@ mod tests {
         rig.step(&input);
         assert!(!net.switch_branch(0));
         assert!(rig.poles.iter().all(|pole| pole.mode == PoleMode::Down));
+    }
+
+    #[test]
+    fn frog_arcs_follow_the_net_settings() {
+        let frogs = |settings: &str, amps: f32| {
+            let net = WireNet::parse(&format!("[trolley_net]\n{settings}\n[trolley_span]\np 0 0 5.5\np 50 0 5.5\n"));
+            let mut rig = TrolleyRig::new(&def(), 7);
+            let input = RigInput {
+                net: Some(&net), dt: 1.0 / 60.0, pos: DVec3::ZERO, rot: rot(),
+                accel: Vec3::ZERO, speed: 0.0, wheel_radius: 0.5, pedal: 0.0,
+                brake: 0.0, dir: 1.0, blinker: 0, radio: 0, route_code: 0, channel: 0,
+                ropes: &[RopeCmd::Idle; 2], drive: false, script_force: 0.0,
+            };
+            let (mut count, mut energy) = (0, 0.0f32);
+            for _ in 0..1000 {
+                rig.events.clear();
+                rig.events.push(PoleEvent { pole: 0, kind: PoleEventKind::FrogPassed { switch: 0, branch: false }, pos: DVec3::ZERO, amps });
+                rig.handle_events(&net, &input, amps);
+                for spark in rig.take_sparks() {
+                    assert_eq!(spark.kind, SparkKind::Frog);
+                    count += 1;
+                    energy = spark.energy;
+                }
+                assert!(rig.sounds.drain(..).any(|sound| sound == RigSound::Frog));
+            }
+            (count, energy)
+        };
+        let (count, full) = frogs("", 100.0);
+        assert_eq!(count, 1000);
+        assert!((full - 59.0).abs() < 1e-3, "{full}");
+        assert_eq!(frogs("", 2.0).0, 0);
+        assert_eq!(frogs("frog_arc_chance 0", 100.0).0, 0);
+        assert_eq!(frogs("frog_arc_chance 5", 100.0).0, 1000);
+        let (some, _) = frogs("frog_arc_chance 0.25", 100.0);
+        assert!((150..350).contains(&some), "{some}");
+        let (count, half) = frogs("frog_arc_scale 0.5", 100.0);
+        assert_eq!(count, 1000);
+        assert!((half - full / 2.0).abs() < 1e-3, "{half}");
+        assert_eq!(frogs("frog_arc_min_amps 150", 100.0).0, 0);
+        assert_eq!(frogs("frog_arc_min_amps 50", 100.0).0, 1000);
     }
 
     #[test]

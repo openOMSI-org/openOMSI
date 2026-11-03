@@ -153,6 +153,9 @@ are the map's (x east, y north, z up, metres).
 voltage 600            nominal line voltage (V)
 spacing 0.6            distance between the two wires (m)
 roughness 0.0012       unevenness of the contact wire (m); worn or icy wire: 0.003 and more
+frog_arc_chance 1      chance (0..1) that a frog crossed under current arcs; 0: never
+frog_arc_scale 1       multiplier of a frog arc's energy (0..10): its flash and crack
+frog_arc_min_amps 3    least current (A) a frog crossing arcs with
 
 [trolley_section]
 id 1
