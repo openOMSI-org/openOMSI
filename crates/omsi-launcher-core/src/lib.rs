@@ -3226,7 +3226,7 @@ fn duty_args_with_settings(d: &Duty, root: &Path, st: &Value) -> Result<Vec<Stri
     if let Some(dt) = date {
         // (only the machine's calendar is fitted to the map's [years], so that its AI lists,
         // chrono and timetables fit; the date the player chose in the launcher stays)
-        let real_date = on("use_real_date");
+        let real_date = on("use_real_date") && !on("use_real_year");
         let span = if real_date {
             let file = root.join(&d.map);
             let file = if file.is_file() { file } else { resolve_content(&d.map).unwrap_or(file) };
