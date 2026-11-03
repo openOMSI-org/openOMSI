@@ -188,6 +188,10 @@ pub const CLOCK_EVERY: f32 = 5.0;
 pub const MAX_PEERS: usize = 64;
 /// At most this many players may be loading at the same time (joined, no state yet).
 pub const MAX_JOINING: usize = 8;
+/// A loading player heard from less than this long ago holds a loading slot; one silent
+/// longer (its game closed or stuck) no longer keeps the others waiting - it is still timed
+/// out after `LOAD_TIMEOUT`.
+pub const LOADING_ALIVE: Duration = Duration::from_secs(15);
 /// How far around the requested spawn a host lists the vehicles standing there (m).
 pub const FOOTPRINT_RADIUS: f64 = 250.0;
 /// At most this many footprints go into a NEAR (it has to fit into one datagram).
@@ -1264,6 +1268,8 @@ pub struct LanSession {
     trying: f32,
     /// The host is currently admitting its bounded batch of loading peers.
     waiting_for_slot: bool,
+    /// A server still loading its world: new players wait (`set_starting`).
+    starting: bool,
     lost_at: Option<Instant>,
     /// The client gave up (no answer / host lost) but keeps saying hello now and then: a
     /// welcome brings it back without restarting the game (see `reconnect`).
@@ -1442,6 +1448,7 @@ impl LanSession {
             candidates: Vec::new(),
             trying: 0.0,
             waiting_for_slot: false,
+            starting: false,
             lost_at: None,
             timed_out: false,
             join_timeout: omsi_cfg::flags::OMSI_LAN_JOIN_TIMEOUT.live_var()
@@ -2655,7 +2662,7 @@ impl LanSession {
                         && field(&parts, 1).parse::<u32>().ok() == Some(PROTOCOL)
                         && self.accepts_host_source(from) =>
                 {
-                    self.on_waiting_slot(from);
+                    self.on_waiting_slot(from, field(&parts, 3) == "starting");
                 }
                 ("REJECT", Role::Client) if self.accepts_host_source(from) => {
                     let reason = clean_text(field(&parts, 2), 300);
@@ -3120,7 +3127,7 @@ impl LanSession {
                 );
                 return;
             }
-            None if self.peers.values().filter(|p| !p.has_pose).count() >= MAX_JOINING => {
+            None if self.loading_now() >= MAX_JOINING => {
                 // Defensive fallback; normally the bounded FIFO above handles this.
                 self.send(format!("WAIT|{PROTOCOL}|2").as_bytes(), from);
                 return;

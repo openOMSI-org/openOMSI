@@ -1040,6 +1040,11 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   still take their fixed steps, and the log says when the machine cannot keep up.
 - **The launcher shows a server's date** beside its time and weather (in the list and before
   joining), from the server's status page (`date`); an older server shows none.
+- **Joining a busy server is quicker.** A player loading holds one of the eight loading
+  slots only while their game is heard from: one closed or stuck no longer keeps the others
+  waiting for two minutes.
+- **A server still loading its world lets players in once it is ready**, telling them it is
+  loading (an older game is told to try again); before, one let in met an empty world.
 - **Multiplayer protocol 17.** A game of this version and a server of this version play
   together; older ones are turned away at the door, as at every protocol change.
 - **Voice chat, built in** - off until switched on (Settings → Sound → *Voice chat*, or the game
