@@ -665,6 +665,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   the launcher's passenger settings, `pax_short_rides_stand`, off by default), a passenger with
   no set stop who rides under about three kilometres takes the free standing place nearest an exit
   of their car instead of a seat; with no standing place free, they board as before (#2242).
+- **The view editor looks at the mirror being set.** Moving a mirror's slider turns the driver's
+  head to that mirror, so it shows beside the editor while it is set; another line or closing
+  the editor brings the head back to where it was (#3640).
 - **A flashlight that follows the cursor.** With *Flashlight follows the cursor* on (Options ›
   Camera, the launcher; off by default), the flashlight lights where the mouse cursor points while
   the cursor is free - on foot, or in the cab while the mouse does not steer - and straight ahead
