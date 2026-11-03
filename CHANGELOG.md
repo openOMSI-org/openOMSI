@@ -1045,6 +1045,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   waiting for two minutes.
 - **A server still loading its world lets players in once it is ready**, telling them it is
   loading (an older game is told to try again); before, one let in met an empty world.
+- **`public_address`** (`server.cfg`): a server's owner may give the address its web port is
+  reached at without the tunnel. A game joining through a quick tunnel, which breaks its
+  connections now and then, tries that address first and keeps the tunnel if it does not
+  answer within three seconds. Empty by default: the address is told to nobody.
 - **Multiplayer protocol 17.** A game of this version and a server of this version play
   together; older ones are turned away at the door, as at every protocol change.
 - **Voice chat, built in** - off until switched on (Settings → Sound → *Voice chat*, or the game

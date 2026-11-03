@@ -64,6 +64,7 @@ pub(crate) fn info_of(cfg: &ServerCfg, root: &Path) -> omsi_net::ws::ServerInfo 
         players_public: cfg.share_positions,
         player_list: Vec::new(),
         local_admin_password: cfg.admin_password.clone(),
+        direct: cfg.public_address.clone(),
         ..Default::default()
     }
 }

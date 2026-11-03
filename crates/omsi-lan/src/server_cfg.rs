@@ -32,6 +32,9 @@ pub struct ServerCfg {
     pub web_port: u16,
     pub max_players: usize,
     pub tunnel: bool,
+    /// The address players may reach the web port at without the tunnel (`host:port`; empty:
+    /// none told). A game that joins through the tunnel tries it first.
+    pub public_address: String,
     pub radius: i32,
     pub icon: Vec<u8>,
     /// Players who say `/admin <password>` in the chat administer the server (empty: nobody).
@@ -149,6 +152,11 @@ max_players = 16
 
 # start a free Cloudflare quick tunnel (needs cloudflared) and print its https address
 tunnel = 1
+# this server's address on the internet with its web port (1.2.3.4:27025, or a name), if the
+# players can reach it there: a game joining through the tunnel tries it first, as a quick
+# tunnel breaks its connections now and then. It is told to whoever asks the server's status:
+# leave it empty to keep the address to yourself
+public_address =
 
 # how many tiles round the map's first entry point are kept loaded (0: all of them)
 radius = 0
@@ -316,6 +324,13 @@ impl ServerCfg {
             web_port: num("web_port", 27025).clamp(1, 65535) as u16,
             max_players: num("max_players", 16).clamp(1, 64) as usize,
             tunnel: flag("tunnel", true),
+            public_address: kv.get("public_address").map(|v| v.trim().trim_start_matches("http://").trim_end_matches('/').to_string()).filter(|v| {
+                let ok = v.is_empty() || (v.len() <= 200 && omsi_net::ws::http_base(&format!("http://{v}")).is_some());
+                if !ok {
+                    log::warn!("server.cfg: public_address = {v} is not an address (host:port); none is told");
+                }
+                ok
+            }).unwrap_or_default(),
             radius: num("radius", 0) as i32,
             icon,
             admin_password: admin_password(kv.get("admin_password").cloned().unwrap_or_default()),
@@ -609,6 +624,16 @@ mod passenger_density_tests {
         assert_eq!(set.settings_lines(), "ai_unsched_factor=25\nai_max_scheduled=256\nai_max_parked=-1\nai_max_humans=720\n");
         let bad = load("ai_unsched_factor = 400\nai_max_humans = 0\nai_max_parked = -2\nai_max_scheduled = many\n").ai_limits;
         assert_eq!(bad, super::AiLimits::default());
+    }
+
+    /// `public_address`: told as it is written (`http://` and a last `/` aside), none when it
+    /// is no address, none by default.
+    #[test]
+    fn the_public_address_is_an_address_or_none() {
+        assert_eq!(load(super::DEFAULT_CFG).public_address, "");
+        assert_eq!(load("public_address = 203.0.113.7:27025\n").public_address, "203.0.113.7:27025");
+        assert_eq!(load("public_address = http://bus.example.org:27025/\n").public_address, "bus.example.org:27025");
+        assert_eq!(load("public_address = not an address\n").public_address, "");
     }
 
     #[test]

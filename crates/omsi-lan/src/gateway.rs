@@ -404,9 +404,28 @@ pub fn take_local_admin() -> Vec<String> {
     Vec::new()
 }
 
+/// The server's own direct address for a tunnel's `url`, when its owner gives one
+/// (`public_address`) and it answers from here within a few seconds: a quick tunnel breaks
+/// its WebSockets now and then, the direct way does not. None: the tunnel it is.
+fn direct_of(url: &str) -> Option<String> {
+    let info = omsi_net::ws::query(url, false).ok()?;
+    let base = omsi_net::ws::http_base(&format!("http://{}", info.direct)).filter(|_| !info.direct.is_empty())?;
+    if omsi_net::ws::http_base(url).as_deref() == Some(base.as_str()) {
+        return None;
+    }
+    if !omsi_net::ws::reachable(&base, std::time::Duration::from_secs(3)) {
+        log::info!("LAN: the server's direct address {} does not answer from here; through {url}", info.direct);
+        return None;
+    }
+    log::info!("LAN: joining by the server's direct address {} rather than {url}", info.direct);
+    omsi_net::ws::ws_url(&base)
+}
+
 /// Joining game: reach `url` (a server's or a host's tunnel) over a WebSocket; the local
 /// address to join instead.
 pub fn ws_join_target(url: &str) -> Result<String, String> {
+    let direct = direct_of(url);
+    let url = direct.as_deref().unwrap_or(url);
     let c = omsi_net::ws::WsClient::connect(url)?;
     let local = c.local;
     if let Ok(mut w) = WS_PATH.lock() {
@@ -418,6 +437,25 @@ pub fn ws_join_target(url: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A game joining through a tunnel takes the server's direct address when the server tells
+    /// one and it answers; the tunnel when it tells none, or one that does not answer.
+    #[test]
+    fn a_tunnel_gives_way_to_the_servers_direct_address_that_answers() {
+        use omsi_net::ws::{ServerInfo, WsGateway};
+        let any = std::net::SocketAddr::from(([127, 0, 0, 1], 0));
+        let target = std::net::SocketAddr::from(([127, 0, 0, 1], 9));
+        let direct = WsGateway::start(any, target, ServerInfo { name: "direct".into(), ..Default::default() }).unwrap();
+        let tunnel = WsGateway::start(any, target, ServerInfo { name: "tunnel".into(), direct: direct.addr.to_string(), ..Default::default() }).unwrap();
+        let via = format!("http://{}", tunnel.addr);
+        assert_eq!(direct_of(&via), Some(format!("ws://{}/ws", direct.addr)));
+        // (told none, or one nobody answers at: the tunnel)
+        let plain = WsGateway::start(any, target, ServerInfo { name: "plain".into(), ..Default::default() }).unwrap();
+        assert_eq!(direct_of(&format!("http://{}", plain.addr)), None);
+        let closed = std::net::TcpListener::bind(any).unwrap().local_addr().unwrap();
+        let dead = WsGateway::start(any, target, ServerInfo { name: "dead".into(), direct: closed.to_string(), ..Default::default() }).unwrap();
+        assert_eq!(direct_of(&format!("http://{}", dead.addr)), None);
+    }
 
     /// Every session starts with every bus offered: a server joined before (on a phone the
     /// launcher and the game share one process) no longer limits a drive alone or the next
