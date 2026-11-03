@@ -1,4 +1,4 @@
-use super::frame::{halton, jitter_phases, sl_matrix, temporal_mip_bias};
+use super::frame::{halton, jitter_phases, opaque, sl_matrix, temporal_mip_bias};
 use super::*;
 use glam::{Mat4, Vec3};
 
@@ -37,6 +37,11 @@ fn jitter_and_matrix_layout() {
     assert_eq!(jitter_phases(640, 3840), 64);
     let m = sl_matrix(Mat4::from_translation(Vec3::new(4.0, 5.0, 6.0)));
     assert_eq!(m[3], [4.0, 5.0, 6.0, 1.0]);
+}
+
+#[test]
+fn a_screenshot_keeps_the_colours_and_is_opaque() {
+    assert_eq!(opaque(vec![1, 2, 3, 0, 4, 5, 6, 128]), [1, 2, 3, 255, 4, 5, 6, 255]);
 }
 
 /// The mip bias sharpens the textures by what is scaled up and never blurs them at native size.

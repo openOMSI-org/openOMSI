@@ -147,6 +147,14 @@ pub(super) fn jitter_phases(render_w: u32, full_w: u32) -> u32 {
     ((8.0 * ratio * ratio).round() as u32).clamp(8, 64)
 }
 
+/// The upscalers' alpha is not the picture's: a screenshot's pixels made opaque.
+pub(super) fn opaque(mut rgba: Vec<u8>) -> Vec<u8> {
+    for px in rgba.chunks_exact_mut(4) {
+        px[3] = 255;
+    }
+    rgba
+}
+
 /// The textures' mip bias of an upscaled frame: log2(render width / window width), as NVIDIA's
 /// guide and AMD's docs give it (-0.79 at Balanced). Without it the textures are sampled for the
 /// small picture and the cab goes soft.
@@ -194,6 +202,19 @@ impl Renderer {
                 false
             }
         }
+    }
+
+    /// The last upscaled picture of a window of this size, as RGBA8, before the HUD went over it:
+    /// what a player's screenshot should show (`render_to_image` draws the scene again, without
+    /// the upscaler). None when no frame has been upscaled, so that it is drawn after all. It
+    /// holds the sRGB-encoded numbers, as a picture file does, without DLSS's light sharpening.
+    pub fn temporal_picture(&self, width: u32, height: u32) -> Option<anyhow::Result<Vec<u8>>> {
+        if self.temporal_failed {
+            return None;
+        }
+        let d = self.temporal.as_ref().filter(|d| d.prev.is_some())?;
+        let t = d.targets.as_ref().filter(|t| t.output == (width, height))?;
+        Some(self.read_texture(&t.output_tex, wgpu::TextureAspect::All).map(opaque))
     }
 
     fn temporal_quality(&self) -> TemporalQuality {
@@ -245,7 +266,8 @@ impl Renderer {
         });
         let motion = tex("temporal motion vectors", render, TEMPORAL_MOTION_FORMAT, targets);
         let mask = tex("temporal transparency mask", render, TEMPORAL_MASK_FORMAT, targets);
-        let output_tex = tex("temporal output", output, TEMPORAL_OUTPUT_FORMAT, targets | wgpu::TextureUsages::STORAGE_BINDING);
+        // (COPY_SRC: a player's screenshot is read from it, `temporal_picture`)
+        let output_tex = tex("temporal output", output, TEMPORAL_OUTPUT_FORMAT, targets | wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_SRC);
         let color_view = color.create_view(&wgpu::TextureViewDescriptor { format: Some(self.format), ..Default::default() });
         let motion_view = motion.create_view(&Default::default());
         let mask_view = mask.create_view(&Default::default());
