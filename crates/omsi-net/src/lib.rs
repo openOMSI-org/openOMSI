@@ -1669,6 +1669,12 @@ impl LanSession {
         self.host_key.clone()
     }
 
+    /// This machine's address as the internet sees it (STUN, or the router's forwarding),
+    /// once the bridge has found it out.
+    pub fn public_addr(&self) -> Option<SocketAddr> {
+        self.bridge.as_ref().and_then(|b| b.public())
+    }
+
     /// The code other players join this session with (hosts only).
     pub fn code(&self) -> Option<SessionCode> {
         if self.role != Role::Host {

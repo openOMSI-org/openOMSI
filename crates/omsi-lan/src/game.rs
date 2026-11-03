@@ -405,7 +405,7 @@ pub fn world_info(args: &LanConfig) -> omsi_net::WorldInfo {
     }
 }
 
-pub use crate::gateway::{close_public_gateway, offers, open_public_gateway, server_offers, take_local_admin, tunnel_url, update_server_info, update_server_players, update_server_world};
+pub use crate::gateway::{close_public_gateway, offers, open_public_gateway, server_offers, take_local_admin, tunnel_url, update_server_direct, update_server_info, update_server_players, update_server_world};
 use crate::gateway::{ask_server_offers, ws_came_back, ws_join_target};
 
 /// Host or join as the command line says (`--lan-host`, `--lan-join`). A session that

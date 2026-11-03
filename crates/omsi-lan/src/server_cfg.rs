@@ -32,8 +32,9 @@ pub struct ServerCfg {
     pub web_port: u16,
     pub max_players: usize,
     pub tunnel: bool,
-    /// The address players may reach the web port at without the tunnel (`host:port`; empty:
-    /// none told). A game that joins through the tunnel tries it first.
+    /// The address players may reach the web port at without the tunnel (`host:port`), which
+    /// a game joining through the tunnel tries first. Empty: found by itself (`server::direct`);
+    /// `off`: none told.
     pub public_address: String,
     pub radius: i32,
     pub icon: Vec<u8>,
@@ -152,10 +153,12 @@ max_players = 16
 
 # start a free Cloudflare quick tunnel (needs cloudflared) and print its https address
 tunnel = 1
-# this server's address on the internet with its web port (1.2.3.4:27025, or a name), if the
-# players can reach it there: a game joining through the tunnel tries it first, as a quick
-# tunnel breaks its connections now and then. It is told to whoever asks the server's status:
-# leave it empty to keep the address to yourself
+# the address players reach this server's web port at without the tunnel: a game joining
+# through the tunnel tries it first, as a quick tunnel breaks its connections now and then.
+# Empty: found by itself - this machine's internet address when it has one, else the one the
+# internet sees if the server reaches itself there (not behind a carrier's NAT, CGNAT).
+# Or an address of your own (1.2.3.4:27025, a name), or off: told to nobody. It is told to
+# whoever asks the server's status, as the join code tells it already
 public_address =
 
 # how many tiles round the map's first entry point are kept loaded (0: all of them)
@@ -324,12 +327,12 @@ impl ServerCfg {
             web_port: num("web_port", 27025).clamp(1, 65535) as u16,
             max_players: num("max_players", 16).clamp(1, 64) as usize,
             tunnel: flag("tunnel", true),
-            public_address: kv.get("public_address").map(|v| v.trim().trim_start_matches("http://").trim_end_matches('/').to_string()).filter(|v| {
-                let ok = v.is_empty() || (v.len() <= 200 && omsi_net::ws::http_base(&format!("http://{v}")).is_some());
-                if !ok {
-                    log::warn!("server.cfg: public_address = {v} is not an address (host:port); none is told");
+            public_address: kv.get("public_address").map(|v| v.trim().trim_start_matches("http://").trim_end_matches('/').to_string()).map(|v| {
+                let ok = v.is_empty() || v.eq_ignore_ascii_case("off") || (v.len() <= 200 && omsi_net::ws::http_base(&format!("http://{v}")).is_some());
+                if ok { if v.eq_ignore_ascii_case("off") { "off".into() } else { v } } else {
+                    log::warn!("server.cfg: public_address = {v} is not an address (host:port); it is found by itself");
+                    String::new()
                 }
-                ok
             }).unwrap_or_default(),
             radius: num("radius", 0) as i32,
             icon,
@@ -626,14 +629,15 @@ mod passenger_density_tests {
         assert_eq!(bad, super::AiLimits::default());
     }
 
-    /// `public_address`: told as it is written (`http://` and a last `/` aside), none when it
-    /// is no address, none by default.
+    /// `public_address`: as it is written (`http://` and a last `/` aside), `off`, or empty
+    /// (found by itself: the default, and what an address that is none falls back to).
     #[test]
     fn the_public_address_is_an_address_or_none() {
         assert_eq!(load(super::DEFAULT_CFG).public_address, "");
         assert_eq!(load("public_address = 203.0.113.7:27025\n").public_address, "203.0.113.7:27025");
         assert_eq!(load("public_address = http://bus.example.org:27025/\n").public_address, "bus.example.org:27025");
-        assert_eq!(load("public_address = not an address\n").public_address, "");
+        assert_eq!(load("public_address = not an address\n").public_address, "", "found by itself");
+        assert_eq!(load("public_address = OFF\n").public_address, "off");
     }
 
     #[test]

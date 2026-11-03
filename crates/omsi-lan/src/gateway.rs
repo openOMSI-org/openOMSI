@@ -317,6 +317,17 @@ fn port_of_gateway() -> Option<u16> {
 }
 
 /// A server run: what its status page says now.
+/// The server's direct address as it found it (see `public_address`), for its status page.
+pub fn update_server_direct(direct: &str) {
+    if let Ok(w) = WS_PATH.lock() {
+        if let Some(g) = w.as_ref().and_then(|w| w.gateway.as_ref()) {
+            if let Ok(mut i) = g.info.lock() {
+                i.direct = direct.to_string();
+            }
+        }
+    }
+}
+
 pub fn update_server_info(players: usize, date: &str, time: &str, weather: &str) {
     if let Ok(w) = WS_PATH.lock() {
         if let Some(g) = w.as_ref().and_then(|w| w.gateway.as_ref()) {
