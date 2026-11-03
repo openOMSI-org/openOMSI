@@ -754,7 +754,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // milky veil over the windows at night, over everything seen through them.
     var sf_lit = sf;
     if (glass) {
-        sf_lit.albedo = vec3<f32>(0.0);
+        sf_lit.albedo = sf.albedo * smoothstep(0.85, 0.98, alpha);
     }
     let lamps = lamp_light(in.world, n, v, sf_lit, thin, !capture, film) * select(1.0, 0.0, material.params.y > 0.2 && material.params.y < 0.3);
     // [interiorlight]: OMSI adds its lamps' light to the lit meshes whatever the daylight,
