@@ -133,6 +133,9 @@ fn fs_motion_sky(in: SkyMotionOut) -> @location(0) vec4<f32> {
 // prepass's depth, writing the most of what lands on each pixel.
 const MASK_RAIN: f32 = 0.5;
 const MASK_SCREEN: f32 = 0.8;
+// FSR 3 gives up the history faster than DLSS for the same mask: at full strength the view
+// through the windscreen went soft, so it takes the panes at this share of it.
+const FSR_GLASS_SHARE: f32 = 0.4;
 
 struct MaskOut {
     @builtin(position) @invariant clip: vec4<f32>,
@@ -161,11 +164,20 @@ fn vs_mask(in: VsIn) -> MaskOut {
     return out;
 }
 
-@fragment
-fn fs_glass_mask(in: MaskIn) -> @location(0) vec4<f32> {
+fn glass_mask(in: MaskIn) -> f32 {
     let a = diffuse_border(textureSampleBias(t_diffuse, s_diffuse, tex_address(in.uv), camera.lod.x), in.uv).a
         * material.color.a * in.params.x;
-    return vec4<f32>(clamp(a, 0.0, 1.0));
+    return clamp(a, 0.0, 1.0);
+}
+
+@fragment
+fn fs_glass_mask(in: MaskIn) -> @location(0) vec4<f32> {
+    return vec4<f32>(glass_mask(in));
+}
+
+@fragment
+fn fs_glass_mask_fsr(in: MaskIn) -> @location(0) vec4<f32> {
+    return vec4<f32>(glass_mask(in) * FSR_GLASS_SHARE);
 }
 
 @fragment

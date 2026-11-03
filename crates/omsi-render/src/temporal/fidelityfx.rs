@@ -361,7 +361,7 @@ impl Upscaler {
             motion_vectors,
             exposure: Resource::NONE,
             // (glass, its reflections, the rain on it: FSR leans on this frame there instead of
-            // the history, see `vs_mask`)
+            // the history, see `vs_mask` and `fs_glass_mask_fsr`)
             reactive,
             transparency_and_composition: Resource::NONE,
             output,

@@ -51,3 +51,14 @@ fn the_mip_bias_is_the_log_of_the_scale() {
     assert_eq!(temporal_mip_bias(1280, 2560), -1.0);
     assert_eq!(temporal_mip_bias(1, 3840), -3.0);
 }
+
+/// FSR 3 has its own, weaker mask on the panes and none on the screens: at DLSS's strength the
+/// digits of a bus's displays came out with doubled edges and the view through the glass soft.
+#[test]
+fn fsr3_masks_the_glass_less_and_leaves_the_screens_out() {
+    let motion = include_str!("motion.wgsl");
+    assert!(motion.contains("fn fs_glass_mask_fsr("));
+    assert!(motion.contains("const FSR_GLASS_SHARE: f32 = 0.4;"));
+    assert!(include_str!("../pipelines/temporal.rs").contains(r#"TemporalUpscaler::Fsr3) { "fs_glass_mask_fsr" }"#));
+    assert!(include_str!("../passes/temporal.rs").contains("dlss && scene.materials"));
+}

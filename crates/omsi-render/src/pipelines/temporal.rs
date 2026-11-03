@@ -10,10 +10,8 @@ use super::common::*;
 use super::scene::SceneBase;
 use crate::*;
 
-pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, on: bool) -> Option<TemporalPipelines> {
-    if !on {
-        return None;
-    }
+pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, upscaler: Option<TemporalUpscaler>) -> Option<TemporalPipelines> {
+    let upscaler = upscaler?;
     // (last frame's matrices are read as a storage buffer, as `models` is on such a device)
     if array_path() != ArrayPath::Storage {
         log::warn!("temporal upscaling: this device reads the scene's arrays from textures; drawing without it");
@@ -163,12 +161,13 @@ pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, on: bool) -> Optio
             cache: crate::pipeline_cache::get(device).as_ref(),
         })
     };
+    let glass = if matches!(upscaler, TemporalUpscaler::Fsr3) { "fs_glass_mask_fsr" } else { "fs_glass_mask" };
     Some(TemporalPipelines {
         prepass: [make(0, false, true), make(0, true, true), make(1, false, true), make(1, true, true), make(2, false, true), make(2, true, true)],
         late_motion: [make(0, false, false), make(0, true, false), make(1, false, false), make(1, true, false), make(2, false, false), make(2, true, false)],
         sky,
         motion_layout,
-        glass_mask: [mask("fs_glass_mask", false), mask("fs_glass_mask", true)],
+        glass_mask: [mask(glass, false), mask(glass, true)],
         rain_mask: [mask("fs_rain_mask", false), mask("fs_rain_mask", true)],
         screen_mask: [mask("fs_screen_mask", false), mask("fs_screen_mask", true)],
     })

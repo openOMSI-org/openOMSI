@@ -564,7 +564,7 @@ impl Renderer {
         let fog_lamps = ssao::fog_lamps(&device, &scene.camera_layout, hdr_format, gl);
         let prepass = scene::prepass(&device, &scene, msaa, !leave_out_enhanced);
         // (the prepass with motion vectors: only when temporal upscaling is asked for)
-        let temporal_pipes = pipelines::temporal::build(&device, &scene, options.temporal.is_some());
+        let temporal_pipes = pipelines::temporal::build(&device, &scene, options.temporal.map(|t| t.upscaler));
         let ground_pipelines = (!gl && !leave_out_enhanced && !sixteen_texture_units()).then(|| std::array::from_fn(|i| scene.ground_pipeline_at(&device, i)));
         let mip = mip::build(&device);
         let post = post::build(&device, format, hdr_format, &defaults.white_texture);
