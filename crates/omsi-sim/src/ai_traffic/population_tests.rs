@@ -155,3 +155,22 @@ fn a_lane_open_only_to_a_rare_group_spawns_little() {
     t.groups[2].factor = 0.0004;
     assert_eq!(t.spawn_density(&l), Some(super::density::SPAWN_DENSITY_FLOOR));
 }
+
+#[test]
+fn the_ai_paints_are_drawn_from_every_scheme_of_the_type() {
+    let mut seen = std::collections::HashSet::new();
+    for h in 0..200u64 {
+        let set = super::spread_schemes(11, h.wrapping_mul(0x9E37_79B9_7F4A_7C15));
+        assert_eq!(set.len(), super::AI_SCHEMES);
+        assert!(set.iter().all(|&i| i < 11));
+        assert_eq!(set.iter().collect::<std::collections::HashSet<_>>().len(), set.len());
+        seen.extend(set);
+    }
+    assert_eq!(seen.len(), 11);
+    assert_eq!(super::spread_schemes(3, 7).len(), 3);
+    assert!(super::spread_schemes(0, 7).is_empty());
+    let salted = |salt: u64| super::spread_schemes(11, omsi_script::mix_seed(salt ^ 0xcbf2_9ce4_8422_2325));
+    assert_eq!(salted(1), salted(1), "the same salt gives the same four");
+    assert!((2..20).any(|s| salted(s) != salted(1)), "another salt gives others");
+    assert_eq!(super::spread_schemes(11, 0x1_0000_0003), vec![7, 6, 5, 4], "the same on 32 and 64 bits: the hash is reduced as a u64");
+}

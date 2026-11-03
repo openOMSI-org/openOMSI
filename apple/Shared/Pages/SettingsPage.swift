@@ -203,7 +203,7 @@ struct SettingsPage: View {
                 SettingSlider(label: "Mouse pedal strength", key: "mouse_pedal_strength", range: 0.5 ... 2, step: 0.05, fallback: 1, round: 0.01) { omsiPct($0) }
                 SettingToggle(label: "Smooth mouse steering (off: the wheel follows the cursor at once, as in OMSI)", key: "mouse_smooth", fallback: true)
                 SettingToggle(label: "The mouse works the pedals", key: "mouse_pedals", fallback: true, help: "Up the throttle, down the brake, as in OMSI; off: the mouse only steers, the pedals stay on the keys")
-                SettingToggle(label: "Hold the cursor while the mouse steers (off: the crosshair stays free, the window's edges are the lock)", key: "mouse_hold", fallback: true)
+                SettingToggle(label: "Hold the cursor while the mouse steers (off: the system's crosshair, kept inside the window whose edges are the lock; Windows, Linux)", key: "mouse_hold", fallback: true)
                 SettingToggle(label: "A right click ends the mouse steering (as in OMSI)", key: "mouse_right_off")
             }
             SettingToggle(label: "Indicators cancel themselves (as the bus's script does)", key: "blinker_cancel", fallback: true)
@@ -282,6 +282,8 @@ struct SettingsPage: View {
             SettingSelect(label: "Mirror panels on the screen", key: "mirror_hud", options: [("0", "Off"), ("2", "Left mirror"), ("1", "Right mirror"), ("3", "Left and right"), ("7", "Left, right and front")])
             if !phone {
                 SettingToggle(label: "Precision mouse zoom (FOV curve instead of the linear way)", key: "precision_zoom")
+                SettingSlider(label: "Zoom on a key", key: "zoom_hold_amount", range: 0.2 ... 0.8, step: 0.05, fallback: 0.5) { String(format: "%.2f", 1 / max($0, 0.15)).replacingOccurrences(of: #"\.?0+$"#, with: "", options: .regularExpression) + "x" }
+                SettingToggle(label: "Zoom key stays", key: "zoom_hold_latch", help: "One press zooms in, the next zooms out; off: only while the key is held")
             }
         }
     }

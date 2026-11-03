@@ -150,6 +150,7 @@ impl World {
         Ok(World {
             root: root.to_path_buf(),
             transit,
+            trolley_net: Mutex::new(None),
             global,
             map_dir,
             parklist: Mutex::new(HashMap::new()),

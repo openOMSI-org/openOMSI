@@ -19,6 +19,40 @@ pub(super) fn verified(args: &LanConfig, lan: &mut LanSession) -> bool {
     }
     worker.join().ok().flatten() == Some(true)
 }
+/// How long a game whose bus must come from the server's fleet waits to be let in. Over a
+/// tunnel the first wait is 6 s, but a busy server admits a few players at a time (a join
+/// on a real one took two minutes): without the welcome the bus is never asked for, and the
+/// game went on without it, stuck loading until the server dropped it.
+const FLEET_WELCOME_WAIT: Duration = Duration::from_secs(120);
+
+/// The bus this game must take from the server's fleet: asked for, and not here.
+pub(super) fn needs_fleet_bus(args: &LanConfig) -> bool {
+    args.allow_server_fleet && args.bus.as_deref().is_some_and(|b| !installed(&args.root, b))
+}
+
+/// Wait (up to `FLEET_WELCOME_WAIT`) for the host's welcome when the game's bus may come from
+/// the server's fleet: one installed here can still be another version than the server's.
+pub(super) fn wait_for_welcome(args: &LanConfig, lan: &mut LanSession) {
+    if !args.allow_server_fleet || args.bus.is_none() || lan.welcome.is_some() || lan.rejected.is_some() {
+        return;
+    }
+    log::info!("LAN: waiting to be let in: this game's bus comes from the server");
+    lan.warnings.push("Waiting for the server to let this game in (it admits a few players at a time)...".into());
+    write_status(lan, &Default::default(), None);
+    let planned = Pose { bus: args.bus.clone().unwrap_or_default(), ..Default::default() };
+    let t0 = Instant::now();
+    while t0.elapsed() < FLEET_WELCOME_WAIT && lan.welcome.is_none() && lan.rejected.is_none() {
+        lan.keepalive(0.05, &planned);
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    lan.warnings.retain(|w| !w.starts_with("Waiting for the server"));
+    match (&lan.welcome, &lan.rejected) {
+        (Some(_), _) => log::info!("LAN: let in after {:.0} s more", t0.elapsed().as_secs_f32()),
+        (None, Some(why)) => log::warn!("LAN: turned away: {why}"),
+        (None, None) => log::warn!("LAN: not let in within {} s more", FLEET_WELCOME_WAIT.as_secs()),
+    }
+}
+
 pub(super) fn installed(root: &std::path::Path, bus: &str) -> bool {
     omsi_net::vehicle_path(bus).is_some_and(|bus| omsi_cfg::find_in_roots(&bus).map(|(_, p)| p).unwrap_or_else(|| root.join(&bus)).is_file())
 }
@@ -60,6 +94,18 @@ mod tests {
             paints: vec!["Bahia Blue".into()],
             content: format!("v2-{}", "a".repeat(64)),
         }]
+    }
+
+    #[test]
+    fn only_a_fleet_bus_that_is_not_here_waits_for_the_welcome() {
+        let root = std::env::temp_dir().join(format!("omsi-fleet-wait-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("Vehicles/Here")).unwrap();
+        std::fs::write(root.join("Vehicles/Here/here.bus"), "[name]\nx\n").unwrap();
+        let args = |bus: &str, allow: bool| LanConfig { root: root.clone(), bus: Some(bus.into()), allow_server_fleet: allow, ..Default::default() };
+        assert!(needs_fleet_bus(&args("Vehicles/Away/away.bus", true)));
+        assert!(!needs_fleet_bus(&args("Vehicles/Here/here.bus", true)), "an installed bus is checked as before");
+        assert!(!needs_fleet_bus(&args("Vehicles/Away/away.bus", false)), "without the fleet opt-in nothing changes");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

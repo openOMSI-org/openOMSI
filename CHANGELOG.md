@@ -8,6 +8,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **Mouse steering keeps the system cursor in the window**: with *Hold the cursor while steering*
+  off, the cursor is the system's own (no frame of delay) and now stays inside the game window
+  while the mouse steers, so a hard turn no longer lets it slip onto another screen (Windows and
+  Linux; macOS keeps it free as before).
 - **Place the bus facing the way you want**: on the city map, Ctrl+drag from the place towards
   the way the bus should face (a plain Ctrl+click keeps the nearest street's direction); in the
   map camera (F4), Ctrl+click puts the bus on the street facing the way the camera looks, as in
@@ -42,6 +46,20 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   a second and a half) and for six seconds the cars that were waiting for your bus - at a junction,
   or holding back for where the bus is about to go - take their turn first. They still stop for
   the bus itself.
+- **The Alt menu stays open**, as in OMSI 2: a tile that does its work in place (route arrows,
+  refuel, repair, wash, reset, a screenshot...) leaves the menu open on its page, so the next
+  tile is one click away; Alt or Esc closes it. A tile that opens a list, a panel, the city map
+  or the photo mode still hands over to it.
+- **Set the world to the time it is now**: World options › Traffic and people has *Set to the time it
+  is now*: the timetable buses are put out again for the current time and the people waiting at
+  the stops are taken off; the stops fill again as people walk up, as many as the hour wants -
+  after changing the time by a little, or whenever the stops are fuller than the hour wants.
+- **Finer moves in the photo mode**: Alt now slows the turning as well as the moving (to a
+  quarter), for the small adjustments of a zoomed-in shot, and the camera rises and sinks at half
+  the speed it moves along, so it can be lowered to a kneeling height without overshooting.
+- **Several AI vehicles at once**: in Settings › AI Lists, the vehicle picker for adding to a group,
+  a depot or a line has a tick box on each vehicle; tick several and *Add the n ticked* adds them
+  all in one go (one click still previews, a double click still adds one).
 - **Long lists in the launcher filter as you type**: a drop-down with more than twelve entries
   (the liveries, the depot files, the languages...) shows a search line at its top; typing
   narrows it down, Backspace and Esc undo the search.
@@ -565,6 +583,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **The map's own sounds are quieter inside the bus**: birds, church bells, fountains and the
+  other sounds of the scenery are heard through the bus's bodywork in a cab view, louder as the
+  doors and windows open, as the AI traffic already was; outside they keep their full volume.
 - **Yesterday's night tours are offered only for their trips past midnight**: a Friday tour that
   runs into the night was listed and drivable all Saturday, and a Sunday one all Monday; now it
   counts by Friday's (Sunday's) clock, so it shows only until its last trip after midnight ends.
@@ -636,6 +657,30 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   junction). The standing car now drives on after a few seconds. And a route's lane change that
   the bus missed its window for (the two lanes no longer run side by side) is made all the same
   after 12 s of waiting instead of never. `OMSI_DEBUG_STUCK` also says why a lane change waits.
+- **A zoom on a key.** *Zoom while held* (Controls › Views, no key by default, a controller
+  button too) narrows the view while it is held - to read a far sign, a mirror or the
+  dashboard - and lets go when released; *Zoom on a key* sets how far (1.25x to 5x, 2x by
+  default) and *Zoom key stays* makes one press zoom in and the next zoom out (#3114).
+- **Short rides stand by a door.** With *Short rides stand by a door* on (Options › Gameplay and
+  the launcher's passenger settings, `pax_short_rides_stand`, off by default), a passenger with
+  no set stop who rides under about three kilometres takes the free standing place nearest an exit
+  of their car instead of a seat; with no standing place free, they board as before (#2242).
+- **The view editor looks at the mirror being set.** Moving a mirror's slider turns the driver's
+  head to that mirror, so it shows beside the editor while it is set; another line or closing
+  the editor brings the head back to where it was (#3640).
+- **A flashlight that follows the cursor.** With *Flashlight follows the cursor* on (Options ›
+  Camera, the launcher; off by default), the flashlight lights where the mouse cursor points while
+  the cursor is free - on foot, or in the cab while the mouse does not steer - and straight ahead
+  otherwise (#3641).
+- **Graphics that fit the computer from the first start.** With no settings file yet, the game
+  picks a quality preset from its best graphics chip before it opens the window's renderer: Low
+  for software renderers, Intel HD / UHD chips and cards under 3 GB, Medium for other integrated
+  chips and cards of 3 to 6 GB, High for 6 GB cards and Apple chips, Extra from 10 GB - and says
+  so once. A player's
+  own settings are never touched (#3643).
+- **Find a street by its name.** The game menu has *Find a street...*: the map's streets (named
+  from its street name signs) in a list with a search; the one picked opens the city map centred
+  on it, its name drawn larger in orange (#3639).
 - **On foot, the player walks wherever the passengers' paths lead**: a staircase, a ramp, a gate
   through a fence or a doorway the map gives the AI passengers is now walkable by hand too, at
   the path's height (the step and slope limits and the walls no longer stop the walker on a
@@ -979,6 +1024,30 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 - Shader tests cover OpenGL ES 3.1/3.2 per entry point and catch the nested constant-array
   lookups the Adreno 710 refused ([#2009](https://github.com/openOMSI-org/openOMSI/issues/2009)).
 ### Multiplayer
+
+- **A dedicated server opens its web port at once, before checking its fleet.** With a
+  `vehicles` list, the server read and hashed every file of every bus and paint before the
+  WebSocket gateway opened, so for minutes `/status`, the players and the admin page were
+  refused. The gateway now opens first and the fleet is announced when the check is done (players
+  who join meanwhile see a server without one, as before 0.3.47). The check itself is faster:
+  four buses at a time, each `.bus` loaded once, the hash cache read once, a bus's files gathered
+  once for all its paints and each folder read once (on a real server a list of 15 buses with
+  113 paints took about 26 s). The log tells per bus its paints and where its time went, and
+  names every bus it could not offer and why.
+- **`ai_drive_through_parked`** (`server.cfg`, `--ai-drive-through-parked` for a game): the AI
+  traffic drives on through a parked car standing in its lane, as OMSI 2's does, instead of
+  stopping behind it and going round it when it can. For maps where a parked car stands in the
+  lane with no way round and holds the traffic behind it for good. Off by default: nothing
+  changes unless it is set.
+- **A game taking its bus from the server's fleet waits to be let in** (up to two minutes more)
+  instead of starting without the bus while a busy server admits other players first, and says
+  so if it is never let in.
+- **Sound events no longer flood a server through a tunnel**: one not acknowledged is sent again
+  ever less often (0.1 s doubling up to 2 s), and acknowledgements have a rate of their own on the
+  server.
+- **A bus taken from the server's fleet is known by the server's version of it**, a copy of a font
+  file beside the original no longer makes a bus another version, and a refused upload names the
+  files that differ.
 
 - **Voice chat, built in** - off until switched on (Settings → Sound → *Voice chat*, or the game
   menu's Sound page). Hold a talk key to speak: *nearby* (V) is heard by the players within

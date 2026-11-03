@@ -105,12 +105,14 @@ function ensureInDepot(groups, name, file) {
 
 // --- the vehicle picker ---------------------------------------------------------------
 
-function Picker({ title, kinds, onPick, onClose, hint }) {
+function Picker({ title, kinds, onPick, onClose, hint, multi }) {
   const s = useStore();
   const a = s.ai;
   const [q, setQ] = useState('');
   const [kind, setKind] = useState(kinds[0][0]);
   const [sel, setSel] = useState(null);
+  const [ticked, setTicked] = useState([]);
+  const tick = (v) => setTicked((x) => (x.some((y) => y.file === v.file) ? x.filter((y) => y.file !== v.file) : [...x, v]));
   useEffect(() => {
     readLibrary();
   }, []);
@@ -120,7 +122,9 @@ function Picker({ title, kinds, onPick, onClose, hint }) {
   }, [a.lib, q, kind]);
   const c = s.choice || {};
   return html`<${Dialog} title=${title} onClose=${onClose} wide class="ail-dialog"
-    footer=${html`<${Button} label="Cancel" onClick=${onClose} /><${Button} kind="primary" label="Use this vehicle" disabled=${!sel} onClick=${() => sel && onPick(sel)} />`}>
+    footer=${html`<${Button} label="Cancel" onClick=${onClose} />${multi && ticked.length > 0
+      ? html`<${Button} kind="primary" icon="plus" label=${t('Add the {n} ticked', { n: ticked.length })} onClick=${() => onPick(ticked)} />`
+      : html`<${Button} kind="primary" label="Use this vehicle" disabled=${!sel} onClick=${() => sel && onPick([sel])} />`}`}>
     ${hint && html`<p class="dim" style="margin-bottom:10px">${t(hint)}</p>`}
     <div class="ail-picker">
       <div class="ail-picker-left">
@@ -131,10 +135,13 @@ function Picker({ title, kinds, onPick, onClose, hint }) {
         ${!a.lib && html`<div class="row muted" style="padding:16px"><${Spinner} /> ${t('Reading the vehicles…')}</div>`}
         ${a.lib && !list.length && html`<${Empty} icon="search" title="Nothing found" />`}
         <div class="ail-picker-list">
-          ${list.slice(0, 300).map((v) => html`<button class=${'ail-pick' + (sel && sel.file === v.file ? ' on' : '')} onClick=${() => setSel(v)} onDblClick=${() => onPick(v)}>
-            <span class="grow"><b>${v.name}</b><small>${v.folder}</small></span>
-            <${Tag}>${t(v.kind === 'bus' ? 'Bus' : v.kind === 'aircraft' ? 'Aircraft' : 'AI vehicle')}</${Tag}>
-          </button>`)}
+          ${list.slice(0, 300).map((v) => html`<div class="ail-pick-row">
+            ${multi && html`<button type="button" role="checkbox" aria-checked=${ticked.some((y) => y.file === v.file)} aria-label=${v.name} class=${'ail-tick' + (ticked.some((y) => y.file === v.file) ? ' on' : '')} title=${t('Tick to add several at once')} onClick=${() => tick(v)}>${ticked.some((y) => y.file === v.file) && html`<${Icon} name="check" size=${14} />`}</button>`}
+            <button class=${'ail-pick' + (sel && sel.file === v.file ? ' on' : '')} onClick=${() => setSel(v)} onDblClick=${() => onPick([v])}>
+              <span class="grow"><b>${v.name}</b><small>${v.folder}</small></span>
+              <${Tag}>${t(v.kind === 'bus' ? 'Bus' : v.kind === 'aircraft' ? 'Aircraft' : 'AI vehicle')}</${Tag}>
+            </button>
+          </div>`)}
           ${list.length > 300 && html`<p class="muted" style="padding:8px 4px">${t('Type to narrow the list down.')}</p>`}
         </div>
       </div>
@@ -316,30 +323,35 @@ function LinesTab() {
 
 // --- the page -------------------------------------------------------------------------
 
-function onPick(v) {
+function onPick(vs) {
   const a = ai();
-  if (a.busy) return;
+  if (a.busy || !vs.length) return;
+  const v = vs[0];
   const p = a.pick;
   const groups = clone(a.groups);
   const g = p.group && groups.find((x) => key(x) === key(p.group));
   if (p.kind === 'replace') g.vehicles[p.index].file = v.file;
   else if (p.kind === 'add') {
-    if (!g.vehicles.some((x) => norm(x.file) === norm(v.file))) g.vehicles.push({ file: v.file, weight: 1 });
+    for (const w of vs) if (!g.vehicles.some((x) => norm(x.file) === norm(w.file))) g.vehicles.push({ file: w.file, weight: 1 });
   } else if (p.kind === 'type') {
     // the buses keep their numbers; a repaint of another model does not exist on this one
     g.typgroups[p.index].file = v.file;
     g.typgroups[p.index].entries.forEach((e) => (e.paint = ''));
   } else if (p.kind === 'newtype') {
-    if (!g.typgroups.some((x) => norm(x.file) === norm(v.file))) g.typgroups.push({ file: v.file, entries: newEntries(g, 3) });
+    for (const w of vs) if (!g.typgroups.some((x) => norm(x.file) === norm(w.file))) g.typgroups.push({ file: w.file, entries: newEntries(g, 3) });
   } else if (p.kind === 'rule') {
     const rules = clone(a.rules);
     const r = rules.find((x) => same(x.line, p.line.name));
-    if (r && !r.types.some((f) => norm(f) === norm(v.file))) {
-      r.types.push(v.file);
-      // a type the line's depots do not have is added to them
-      const added = p.line.groups.filter((n) => ensureInDepot(groups, n, v.file));
-      if (added.length) toast(t('{type} was added to {depot}, with a few buses.', { type: v.name, depot: added.join(', ') }), 'info');
+    const notes = [];
+    for (const w of vs) {
+      if (r && !r.types.some((f) => norm(f) === norm(w.file))) {
+        r.types.push(w.file);
+        // a type the line's depots do not have is added to them
+        const added = p.line.groups.filter((n) => ensureInDepot(groups, n, w.file));
+        if (added.length) notes.push(t('{type} was added to {depot}, with a few buses.', { type: w.name, depot: added.join(', ') }));
+      }
     }
+    if (notes.length) toast(notes.join(' '), 'info');
     change({ groups, rules, pick: null });
     return;
   }
@@ -390,6 +402,7 @@ export function AiListsPage() {
       title=${pk.kind === 'replace' ? 'Replace with' : pk.kind === 'rule' ? 'Add a type to the line' : pk.kind === 'add' ? 'Add a vehicle' : pk.kind === 'type' ? 'Replace the type with' : 'Add a type to the depot'}
       kinds=${pk.kind === 'type' || pk.kind === 'newtype' || pk.kind === 'rule' ? BUS_KINDS : CAR_KINDS}
       hint=${pk.kind === 'rule' ? 'A type the depot does not have yet is added to it with a few buses.' : ''}
+      multi=${pk.kind === 'add' || pk.kind === 'newtype' || pk.kind === 'rule'}
       onPick=${onPick} onClose=${() => up({ pick: null })} />`}
     ${confirm}
   </div>`;

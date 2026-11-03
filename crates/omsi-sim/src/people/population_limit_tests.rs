@@ -109,3 +109,91 @@ fn a_dedicated_server_keeps_people_around_its_players_not_its_camera() {
     assert!(h.far_from_players(camera, 1.0));
     assert!(h.far_from_players(player, 1.0));
 }
+
+#[test]
+fn clearing_the_waiting_keeps_riders_avatars_and_strollers() {
+    let dir = std::env::temp_dir().join(format!("omsi-clear-waiting-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("person.hum"), "[model]\nmodel.cfg\n").unwrap();
+    std::fs::write(dir.join("model.cfg"), "").unwrap();
+    let ty = Arc::new(HumanType::load(&dir.join("person.hum")).unwrap());
+    std::fs::remove_dir_all(&dir).unwrap();
+    let person = |id, state: State, puppet: Option<Puppet>| Person {
+        id,
+        ty: ty.clone(),
+        variant: 0,
+        position: DVec3::ZERO,
+        heading: 0.0,
+        lheading: 0.0,
+        place: Place::Ground,
+        vel: DVec2::ZERO,
+        pace: 1.1,
+        activity: Activity::Stand,
+        anim: OmsiAnim::default(),
+        state,
+        t_state: 0.0,
+        interior: 0.0,
+        tilt: Mat4::IDENTITY,
+        age: 40.0,
+        stuck: 0.0,
+        ghost: 0.0,
+        car_wait: 0.0,
+        detour: 0.0,
+        detour_side: 0.0,
+        why: "",
+        puppet,
+        remote: false,
+    };
+    let waiting = || {
+        let mut p = Pax::new(1.1, 0.5);
+        p.task = Task::WalkingToBusstop;
+        State::Pax(Box::new(p))
+    };
+    let mut just_off = Pax::new(1.1, 0.5);
+    just_off.task = Task::Nothing;
+    let mut at_stop = Pax::new(1.1, 0.5);
+    at_stop.task = Task::WaitingForBus;
+    at_stop.stop = Some(42);
+    at_stop.spot = Some(0);
+    let mut boarding = Pax::new(1.1, 0.5);
+    boarding.bus = Some(BusId::Player);
+    let mut h = PeopleSim::new(Path::new("/nonexistent"), 200);
+    h.people = vec![
+        person(1, State::Pax(Box::new(at_stop)), None),
+        person(2, waiting(), None),
+        person(3, State::Pax(Box::new(boarding)), None),
+        person(4, State::Standing, None),
+        person(5, waiting(), Some(Puppet { mode: PuppetMode::Avatar })),
+        person(6, State::Pax(Box::new(just_off)), None),
+    ];
+    h.stops.insert(
+        42,
+        PaxStop {
+            name: "Stop".into(),
+            alias: String::new(),
+            pos: DVec3::ZERO,
+            heading: 0.0,
+            side: 0,
+            gather: DVec3::ZERO,
+            spots: Vec::new(),
+            taken: vec![true, false],
+            enter_max: 1.0,
+            enter_min: 0.0,
+            length: 10.0,
+            lane: None,
+            was_near: false,
+            near: false,
+            clock_ms: 0.0,
+            want: 0,
+            factor: 1.0,
+            buses: Vec::new(),
+            dests: Vec::new(),
+            lines: Vec::new(),
+        },
+    );
+    assert_eq!(h.clear_waiting(), 2);
+    assert_eq!(h.stops[&42].taken, vec![false, false], "the place of the one who waited is free again");
+    let mut left: Vec<u32> = h.people.iter().map(|p| p.id).collect();
+    left.sort();
+    assert_eq!(left, vec![3, 4, 5, 6], "riders, strollers, avatars and people just off a bus stay");
+}

@@ -158,8 +158,10 @@ the cursor smoothly (a short easing, no steps). With *Smooth mouse steering* off
 Driving) the wheel and the pedals are where the cursor says at once, as in OMSI. While the mouse
 steers the cursor is held, so the wheel reaches its full lock past the window's edges and a
 cross shows where it steers; with *Hold the cursor while the mouse steers* off the system's
-crosshair stays free (it follows the hand without the frame's delay, and a graphics tablet's
-pen works with it) and the window's edges are the lock, as in OMSI.
+crosshair is shown (it follows the hand without the frame's delay, and a graphics tablet's
+pen works with it), kept inside the window while the mouse steers, and the window's edges are
+the lock, as in OMSI (on Windows and Linux: macOS does not let a game keep the cursor inside
+its window).
 
 Three switches there change the steering keys (all off by default): *Steering linearity* turns
 the wheel at OMSI's own steady pace (the curvature grows by the same amount every millisecond

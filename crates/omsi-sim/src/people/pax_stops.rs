@@ -245,6 +245,23 @@ impl PeopleSim {
         Some(k)
     }
 
+    pub fn reserve_by_a_door(&mut self, bus: BusId, places: &[Seat], off: &[bool], doors: &[Door]) -> Option<usize> {
+        let taken = self.seats.get(&bus);
+        let free = |k: usize| !taken.is_some_and(|t| t.get(k).copied().unwrap_or(false)) && !off.get(k).copied().unwrap_or(false);
+        let gap = |s: &Seat| doors.iter().filter(|d| d.point.is_some() && d.group == s.group).map(|d| d.inside.truncate().distance(s.pos.truncate())).fold(f32::INFINITY, f32::min);
+        let k = (0..places.len()).filter(|&k| !places[k].seated && free(k)).min_by(|&a, &b| gap(&places[a]).total_cmp(&gap(&places[b])))?;
+        if !gap(&places[k]).is_finite() {
+            return None;
+        }
+        let n = places.len();
+        let seats = self.seats.entry(bus).or_insert_with(|| vec![false; n]);
+        if seats.len() < n {
+            seats.resize(n, false);
+        }
+        seats[k] = true;
+        Some(k)
+    }
+
     /// sub_5ce4e0: stamp (stamper_prop) or buy (ticketbuy_prop) at a bus that has a
     /// validator / a cash desk, else nothing to do; the ticket bought (sub_5ce2dc).
     pub fn decide_pax_ticket(&mut self, i: usize, bn: &BusNow) -> (u8, u8) {

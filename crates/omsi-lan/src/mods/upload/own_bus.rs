@@ -95,14 +95,23 @@ impl OwnBus {
         omsi_cfg::vfs::record_reads(false);
         let bus_rel = omsi_net::vehicle_path(bus).unwrap_or_else(|| bus.to_string());
         let made = crate::mods::identity::VehicleManifest { bus: bus_rel, entries: hashed(&files) }.validated();
-        let manifest = match made {
-            Ok(m) => m,
+        let (mut manifest, mut files) = match made {
+            Ok(m) => (m, files),
             Err(e) => {
                 log::warn!("bus identity: {bus}: {e}");
                 *self.failed.lock().unwrap_or_else(|e| e.into_inner()) = key;
                 return None;
             }
         };
+        // a bus taken from the server's fleet: the server's version of it, when all of it is
+        // here (ours or the multiplayer cache) - what it knows it by, whatever else we keep
+        if crate::mods::host_bus::from_server(bus, paint) {
+            crate::mods::host_bus::compare(bus, paint, &manifest.entries);
+            if let Some((theirs, at)) = crate::mods::host_bus::server_version(bus, paint).filter(|(m, _)| m.fingerprint() != manifest.fingerprint()) {
+                log::info!("bus identity: {bus} ({paint}): the server's version is all here; the others know it by that ({} files, ours {})", theirs.entries.len(), manifest.entries.len());
+                (manifest, files) = (theirs, at);
+            }
+        }
         let fingerprint = manifest.fingerprint();
         log::info!("bus identity: {bus} ({paint}) is {fingerprint}: {} files, {:.1} MB", manifest.entries.len(), manifest.size() as f64 / 1e6);
         *self.fp.lock().unwrap_or_else(|e| e.into_inner()) = (key.clone(), fingerprint.clone());
@@ -349,11 +358,18 @@ fn hashed_one(rel: &str, p: &Path, cache: &std::collections::HashMap<String, (u6
 /// Size and SHA-256 of each file. A private two-worker pool streams disk files;
 /// virtual entries are buffered one at a time and never use Rayon's global pool.
 pub(in crate::mods) fn hashed(files: &[(String, PathBuf)]) -> Vec<Entry> {
+    hashed_counted(files).0
+}
+
+/// `hashed`, and how many of the files the hash cache answered and how many bytes were read
+/// to hash the others (the server's fleet check logs them).
+pub(in crate::mods) fn hashed_counted(files: &[(String, PathBuf)]) -> (Vec<Entry>, usize, u64) {
     use rayon::prelude::*;
     let pool = rayon::ThreadPoolBuilder::new().num_threads(2).thread_name(|n| format!("mod-hash-{n}")).build();
     let mut cache = crate::mods::hash_cache();
     let mut entries = Vec::with_capacity(files.len());
     let mut dirty = false;
+    let (mut cached, mut read) = (0usize, 0u64);
     let mut last_save = std::time::Instant::now();
     // Bounded result batches keep memory low while preserving manifest order.
     for batch in files.chunks(16) {
@@ -363,8 +379,11 @@ pub(in crate::mods) fn hashed(files: &[(String, PathBuf)]) -> Vec<Entry> {
         };
         for (entry, fresh) in done.into_iter().flatten() {
             if let Some((key, value)) = fresh {
+                read += value.0;
                 cache.insert(key, value);
                 dirty = true;
+            } else {
+                cached += 1;
             }
             entries.push(entry);
         }
@@ -375,7 +394,7 @@ pub(in crate::mods) fn hashed(files: &[(String, PathBuf)]) -> Vec<Entry> {
         }
     }
     if dirty { crate::mods::save_hash_cache(&cache); }
-    entries
+    (entries, cached, read)
 }
 
 #[cfg(test)]

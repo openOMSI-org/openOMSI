@@ -36,6 +36,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         slider_row(app, "passenger_transfer_percent", "Connection chance", "Probability for eligible transfers; default 20%", &|v|format!("{v:.0}%")).filter(|_|s.passenger_connections),
         switch_row(app, "passenger_hailing", "Passengers signal approaching buses", "Optional visual hailing; only effective with supported natural animations"),
         switch_row(app, "passenger_full_bus_reaction", "Passengers react to full buses", "Optional visual acknowledgement when an approaching compatible bus is at passenger capacity"),
+        switch_row(app, "pax_short_rides_stand", "Short rides stand by a door", "Passengers with no set stop who ride only a few kilometres take a free standing place near an exit rather than a seat"),
         switch_row(app, "auto_announce", "Arrival announcements at the stop", "On depot files that keep two recordings per stop (the Chinese maps), the arrival one is played as the bus reaches the stop: the IBIS's next stop key, pressed as the driver would"),
         pick("boarding", "Boarding", "How passengers get their tickets"),
         pick("standing_chance", "Standing passengers", "The chance a passenger stands although a seat is free"),
@@ -155,6 +156,9 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         slider_row(app, "look_smoothing_ms", "Smooth the mouse look", "How long the view takes to come round to where the mouse or the stick turned it (off: at once, as OMSI)", &|v| if v <= 0.0 { "Off".to_string() } else { format!("{v:.0} ms") }),
         switch_row(app, "alt_view", "Right mouse button turns the view", "Shift+right zooms; off: right zooms as in OMSI, the wheel button turns"),
         switch_row(app, "precision_zoom", "Precision mouse zoom", "The mouse zoom follows the FOV curve instead of OMSI's linear way"),
+        slider_row(app, "zoom_hold_amount", "Zoom on a key", "How far the view zooms while the zoom key is held (Controls: Zoom while held)", &|v| format!("{}x", format!("{:.2}", 1.0 / v.max(0.15)).trim_end_matches('0').trim_end_matches('.'))),
+        switch_row(app, "zoom_hold_latch", "Zoom key stays", "One press zooms in, the next zooms out; off: only while the key is held"),
+        switch_row(app, "flashlight_cursor", "Flashlight follows the cursor", "With the cursor free (on foot, or in the cab while the mouse does not steer) the flashlight lights where it points; otherwise straight ahead"),
         slider_row(app, "fov", "Field of view", "Vertical field of view; in triple screen Default uses physical measurements, an override moves the virtual eye", &|v| if v < 20.0 { "Default".to_string() } else { format!("{v:.0}°") }),
         slider_row(app, "seat 1", "Seat forward and back", "Adjust the driver's seat position forward or backward", &cm),
         slider_row(app, "seat 2", "Seat height", "Adjust the driver's seat height", &cm),
@@ -188,7 +192,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         slider_row(app, "mouse_pedal_strength", "Mouse pedal strength", "Adjust how much mouse travel is needed to reach full throttle or braking", &|v| if (v - 1.0).abs() < 0.01 { "OMSI".to_string() } else { format!("{:.0}%", v * 100.0) }),
         switch_row(app, "mouse_smooth", "Smooth mouse steering", "The wheel eases after the cursor; off: it follows at once, as in OMSI"),
         switch_row(app, "mouse_pedals", "The mouse works the pedals", "Up the throttle, down the brake, as in OMSI; off: the mouse only steers, the pedals stay on the keys"),
-        switch_row(app, "mouse_hold", "Hold the cursor while steering", "The wheel reaches its lock past the window's edges; off: the crosshair stays free and without delay, as in OMSI"),
+        switch_row(app, "mouse_hold", "Hold the cursor while steering", "The wheel reaches its lock past the window's edges; off: the system's crosshair, without delay, kept inside the window (Windows, Linux), as in OMSI"),
         slider_row(app, "key_pedal_speed", "Pedal keys speed", "How fast the throttle and brake keys press their pedals; slower is finer", &|v| if (v - 1.0).abs() < 0.01 { "OMSI".to_string() } else { format!("{:.0}%", v * 100.0) }),
         switch_row(app, "steering_linear", "Steering linearity (keys at OMSI's steady pace)", "Keyboard steering at OMSI's steady pace"),
         switch_row(app, "old_steering", "Old Steering (the wheel stays, turn it back yourself)", "The wheel stays where the keys left it"),
@@ -367,9 +371,8 @@ pub(super) fn world_pages(app: &App) -> Vec<Page> {
             // the date: by a day, a week or a month, the time of day kept (the timetable's
             // day, the season and the map's chrono changes follow it as at midnight)
             let (d, m) = app.clock.day_month();
-            let day = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][app.clock.weekday().rem_euclid(7) as usize];
-            let date = format!("{:04}-{m:02}-{d:02}  {}", app.clock.year, omsi_ui::tr(day));
-            time.push((row("Date", 'i', &date, "The day the timetable, the season and the map's changes follow", None), "noop".to_string()));
+            let date = format!("{:04}-{m:02}-{d:02}", app.clock.year);
+            time.push((row("Date", 'd', &date, "The day the timetable, the season and the map's changes follow", None), "date".to_string()));
             for (name, text, secs) in [
                 ("Date -1 month", "-1 month", app.clock.months_away(-1)),
                 ("Date -1 week", "-1 week", -7.0 * 86400.0),
@@ -434,10 +437,11 @@ pub(super) fn world_pages(app: &App) -> Vec<Page> {
     people.extend(slider_row(app, "traffic", "Traffic", "How many vehicles drive around the map.", &|v| omsi_ui::tr("{n} vehicles").replace("{n}", &(v as i64).to_string())));
     if !client && app.session.traffic.is_some() {
         people.push(button("Clear AI traffic", "Clear", "Remove the current AI cars from the road; random traffic will return automatically.", "traffic_clear"));
+        people.push(button("Set to the time it is now", "Refresh", "Put the timetable buses out again for the time it is now, and the people waiting at the stops anew.", "refresh_now"));
     }
     people.extend(slider_row(app, "pax", "Passengers", "How many passengers wait at the stops and ride.", &pct));
     vec![
-        ("Time", sectioned_rows(time, "Clock and time speed", &[("clock_shift -3600", "Quick time changes"), ("clock_set 21600", "Time presets"), ("noop", "Date"), ("clock_ontime", "Timetable"), ("speed", "Time speed")])),
+        ("Time", sectioned_rows(time, "Clock and time speed", &[("clock_shift -3600", "Quick time changes"), ("clock_set 21600", "Time presets"), ("date", "Date"), ("noop", "Date"), ("clock_ontime", "Timetable"), ("speed", "Time speed")])),
         ("Weather", weather_rows(weather, climate)),
         ("Traffic and people", sectioned_rows(people, "Traffic", &[("pax", "Passengers")])),
         ("Tools", tools),

@@ -112,6 +112,10 @@ fn input_key(duty: &PlayerDuty) -> u64 {
     hasher.finish()
 }
 
+pub fn trust_cache_dir() {
+    let _ = cache_dir();
+}
+
 fn cache_dir() -> Result<PathBuf> {
     let home = std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))

@@ -556,8 +556,10 @@ impl World {
             let t = std::time::Instant::now();
             let boards = self.timetable_boards.lock();
             let controllers = self.controller_of_object.lock();
+            let trolley_net = self.trolley_net.lock().clone();
             times.lock += t.elapsed().as_secs_f64();
             let inputs = omsi_sim::scenery::SceneryInputs {
+                trolley_net: trolley_net.as_deref(),
                 clock: boards.clock.as_ref(),
                 time: now.time,
                 day,
@@ -597,6 +599,7 @@ impl World {
         let controllers = self.controller_of_object.lock();
         times.lock += t.elapsed().as_secs_f64();
         omsi_sim::scenery::OwnedSceneryInputs {
+            trolley_net: self.trolley_net.lock().clone(),
             clock: boards.clock.clone(),
             time: now.time,
             day,
@@ -893,7 +896,7 @@ impl World {
                 let sdir = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
                 if a.clips_ready(&omsi_audio::SoundSet::clip_paths(&cfg, &sdir)) {
                     log::info!("scenery sound {}: {} sounds ({:.0} m away)", path.display(), cfg.sounds.len(), dist);
-                    let mut ss = omsi_audio::SoundSet::new(a, &cfg, &sdir);
+                    let mut ss = omsi_audio::SoundSet::new_scenery(a, &cfg, &sdir);
                     ss.master = self.settings.sound_scenery();
                     *sounds = Some(ss);
                 }

@@ -114,6 +114,9 @@ impl KeyboardCfg {
                 self.game.push(KeyBinding { action: action.into(), scan_code, modifier: KEY_CTRL });
             }
         }
+        if !self.game.iter().any(|b| b.action.eq_ignore_ascii_case("view_zoom_hold")) {
+            self.game.push(KeyBinding { action: "view_zoom_hold".into(), scan_code: 0, modifier: 0 });
+        }
         let u_taken = self.game.iter().chain(self.vehicles.iter()).any(|b| b.scan_code == 22 && b.chord() & (KEY_SHIFT | KEY_CTRL) == 0);
         if !self.game.iter().any(|b| b.action.eq_ignore_ascii_case("clean_screen")) {
             let (scan_code, modifier) = if u_taken { (0, 0) } else { (22, KEY_ALT) };

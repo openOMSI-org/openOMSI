@@ -123,6 +123,7 @@ pub(super) fn steps_of(verb: &str) -> Option<Vec<f32>> {
         "mouse_pedal_strength" => (10..=40).map(|v| v as f32 * 0.05).collect(),
         "look_sens" => (2..=40).map(|v| v as f32 * 0.05).collect(),
         "look_smoothing_ms" => (0..=20).map(|v| v as f32 * 10.0).collect(),
+        "zoom_hold_amount" => (4..=16).map(|v| v as f32 * 0.05).collect(),
         "pad_steer_smooth" => (0..=30).map(|v| v as f32 * 10.0).collect(),
         "pad_steer_speed" => (8..=50).map(|v| v as f32 / 10.0).collect(),
         "pad_deadzone" => (0..=40).map(|v| v as f32 * 0.01).collect(),

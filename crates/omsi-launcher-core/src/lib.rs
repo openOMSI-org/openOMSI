@@ -2235,6 +2235,7 @@ fn passenger_defaults(v: &mut Value) {
     v["passenger_transfer_percent"] = json!(20.0);
     v["passenger_hailing"] = json!(false);
     v["passenger_full_bus_reaction"] = json!(false);
+    v["pax_short_rides_stand"] = json!(false);
 }
 
 /// Initial values shared by desktop and phone, kept outside the long settings parser.
@@ -2342,6 +2343,9 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     v["steer_look_angle"] = json!(30.0);
     v["look_sens"] = json!(1.0);
     v["look_smoothing_ms"] = json!(0.0);
+    v["zoom_hold_amount"] = json!(0.5);
+    v["zoom_hold_latch"] = json!(false);
+    v["flashlight_cursor"] = json!(false);
     v["pad_steer_smooth"] = json!(120.0);
     v["pad_steer_linear"] = json!(false);
     v["ctrl_background"] = json!(false);
@@ -2468,6 +2472,9 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "road_glare" | "traffic_headlights" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).unwrap_or(1.0).clamp(0.0, 2.0)),
             "look_sens" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.1, 2.0)).unwrap_or(1.0)),
             "look_smoothing_ms" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 200.0)).unwrap_or(0.0)),
+            "zoom_hold_amount" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.15, 1.0)).unwrap_or(0.5)),
+            "zoom_hold_latch" => v[&k] = json!(b(val)),
+            "flashlight_cursor" => v[&k] = json!(b(val)),
             "pad_steer_smooth" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 300.0)).unwrap_or(120.0)),
             "steer_look_angle" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 60.0)).unwrap_or(30.0)),
             "steer_look_response" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.05, 1.0)).unwrap_or(0.25)),
@@ -2488,7 +2495,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "perf_overlay" => v[&k] = json!(perf_overlay_mode(val)),
             "sim_thread" => v[&k] = json!(b(val)),
             "mirror_hud" => v[&k] = json!(val.trim().parse::<u8>().map(|x| x.min(7)).unwrap_or(0)),
-            "windy_trees" | "road_snow" | "mirror_hud_every_frame" | "mirror_shadows" | "mirror_particles" | "ai_wait_timed_stops_only" | "pax_bad_driving" | "passenger_connections" | "passenger_hailing" | "passenger_full_bus_reaction" | "auto_announce" | "ambient" => v[&k] = json!(b(val)),
+            "windy_trees" | "road_snow" | "mirror_hud_every_frame" | "mirror_shadows" | "mirror_particles" | "ai_wait_timed_stops_only" | "pax_bad_driving" | "passenger_connections" | "passenger_hailing" | "passenger_full_bus_reaction" | "pax_short_rides_stand" | "auto_announce" | "ambient" => v[&k] = json!(b(val)),
             "head_tracking_source" => v[&k] = json!(head_tracking_source(val)),
             "tobii_edges" => v[&k] = json!(b(val)),
             "head_tracking_smoothing" | "head_tracking_dead_zone" => v[&k] = json!(head_tracking_value(&k, val.parse::<f64>().ok())),
@@ -2840,6 +2847,8 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("road_glare={}\ntraffic_headlights={}\n", f("road_glare", 1.0).clamp(0.0, 2.0), f("traffic_headlights", 1.0).clamp(0.0, 2.0)));
     text.push_str(&format!("mirror_refresh={}\n", mirror_refresh(v.get("mirror_refresh").and_then(|x| x.as_str()).unwrap_or("full"))));
     text.push_str(&format!("mirror_quality={}\n", mirror_quality(v.get("mirror_quality").and_then(|x| x.as_str()).unwrap_or("standard"))));
+    text.push_str(&format!("zoom_hold_amount={}\nzoom_hold_latch={}\n", f("zoom_hold_amount", 0.5).clamp(0.15, 1.0), b("zoom_hold_latch", false)));
+    text.push_str(&format!("flashlight_cursor={}\n", b("flashlight_cursor", false)));
     text.push_str(&format!("look_sens={}\nlook_smoothing_ms={}\nsteer_look_angle={}\nsteer_look_response={}\nhead_idle={}\nhead_idle_pace={}\ntime_sync={}\nmetar_sync={}\nmetar_station={}\n", f("look_sens", 1.0).clamp(0.1, 2.0), f("look_smoothing_ms", 0.0).clamp(0.0, 200.0), f("steer_look_angle", 30.0).clamp(0.0, 60.0), f("steer_look_response", 0.25).clamp(0.05, 1.0), f("head_idle", 0.0).clamp(0.0, 1.0), f("head_idle_pace", 1.0).clamp(0.5, 2.0), b("time_sync", false), b("metar_sync", false), v.get("metar_station").and_then(|x| x.as_str()).unwrap_or("").chars().filter(|c| c.is_ascii_alphabetic()).take(4).collect::<String>().to_ascii_uppercase()));
     text.push_str(&format!("pad_steer_smooth={}\n", f("pad_steer_smooth", 120.0).clamp(0.0, 300.0)));
     let triple_fov = f("triple_fov_deg", 0.0);
@@ -2863,6 +2872,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("passenger_connections={}\npassenger_transfer_percent={}\n", b("passenger_connections",false), f("passenger_transfer_percent",20.0).clamp(0.0,100.0)));
     text.push_str(&format!("passenger_hailing={}\n", b("passenger_hailing", false)));
     text.push_str(&format!("passenger_full_bus_reaction={}\n", b("passenger_full_bus_reaction", false)));
+    text.push_str(&format!("pax_short_rides_stand={}\n", b("pax_short_rides_stand", false)));
     text.push_str(&format!("auto_announce={}\n", b("auto_announce", false)));
     text.push_str(&format!("triple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n", f("triple_left_angle_deg", 45.0).clamp(0.0, 90.0), f("triple_right_angle_deg", 45.0).clamp(0.0, 90.0), f("triple_eye_height_mm", 0.0).clamp(-500.0, 500.0)));
     text.push_str(&format!("photo_mode={}\n", if v.get("photo_mode").and_then(|x| x.as_str()) == Some("advanced") { "advanced" } else { "simple" }));
