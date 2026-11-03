@@ -58,10 +58,10 @@ impl Navigator {
         let lanes_now = net.map(|n| n.lanes.len()).unwrap_or(0);
         let look_key = self.look_key();
         let visible_reach = super::build::view::panel_reach(self.zoom, map.w, map.h).unwrap_or(PANEL_REACH);
-        let reach = super::build::view::padded(visible_reach);
+        let reach = super::build::view::panel_build_reach(map.w, map.h).unwrap_or(PANEL_REACH + 150.0);
         let rebuild = match &self.roads {
             None => lanes_now > 0 || self.map_data.is_some(),
-            Some(r) => r.look != look_key || (r.anchor - f.bus.truncate()).length() + visible_reach > r.reach || r.reach / reach > 1.7 || (r.lanes_seen != lanes_now && self.time - r.built_at > 1.5),
+            Some(r) => r.look != look_key || super::build::view::panel_moved(r.reach, visible_reach, (r.anchor - f.bus.truncate()).length()) || (r.lanes_seen != lanes_now && self.time - r.built_at > 1.5),
         };
         // (on a worker when the map's network is there; the picture keeps the old part meanwhile)
         let mut built = None;

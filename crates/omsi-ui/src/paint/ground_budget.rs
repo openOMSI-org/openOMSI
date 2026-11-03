@@ -12,7 +12,7 @@ pub(super) struct GroundBudget {
     reach: f32,
     mpp: f32,
     grid: Option<Grid>,
-    detail: Option<Grid>,
+    coarse_side: usize,
 }
 
 impl GroundBudget {
@@ -27,7 +27,7 @@ impl GroundBudget {
             },
             mpp: if mpp.is_finite() { mpp.max(0.0) } else { 0.0 },
             grid: None,
-            detail: None,
+            coarse_side: Grid::side_for(limit),
         }
     }
 
@@ -37,7 +37,6 @@ impl GroundBudget {
 
     pub fn clear(&mut self) {
         self.grid = None;
-        self.detail = None;
     }
 
     pub fn push(&mut self, exact: &mut Vec<Vertex>, vertices: &[Vertex]) {
@@ -73,34 +72,42 @@ impl GroundBudget {
             exact.extend_from_slice(vertices);
             return;
         }
-        if self.grid.is_none() {
-            let grid = Grid::new(self.limit, self.reach, self.mpp);
-            // At most four times finer per axis, with at most 64 MiB of extra cells.
-            let side = (2.0 * self.reach / self.mpp).ceil() as usize;
-            let side = side.min(grid.side * 4).min(2048);
-            if self.mpp > 0.0 && side > grid.side {
-                self.detail = Some(Grid::with_side(side, self.reach, self.mpp));
-            }
-            self.grid = Some(grid);
+        let starting = self.grid.is_none();
+        if starting {
+            // One raster only: at most 16 MiB of colors and 4 MiB of draw-order tags.
+            // Integer scale factors let the bounded fallback be derived without rerasterizing.
+            let wanted = if self.mpp > 0.0 {
+                (2.0 * self.reach / self.mpp).ceil() as usize
+            } else {
+                0
+            };
+            let factor = wanted
+                .div_ceil(self.coarse_side)
+                .clamp(1, 4.min(1024 / self.coarse_side));
+            self.grid = Some(Grid::with_side(
+                self.coarse_side * factor,
+                self.reach,
+                self.mpp,
+            ));
         }
-        for grid in self.grid.iter_mut().chain(self.detail.iter_mut()) {
-            for t in exact.chunks_exact(3).chain(vertices.chunks_exact(3)) {
-                grid.triangle(t);
-            }
+        let grid = self.grid.as_mut().unwrap();
+        for t in exact.chunks_exact(3).chain(vertices.chunks_exact(3)) {
+            grid.triangle(t);
         }
-        exact.clear();
+        if starting {
+            // The exact buffer is no longer needed; do not keep its capacity until finish.
+            *exact = Vec::new();
+        }
     }
 
     pub fn finish(self, exact: Vec<Vertex>) -> Vec<Vertex> {
         match self.grid {
             Some(grid) => {
                 drop(exact);
-                match self
-                    .detail
-                    .filter(|detail| detail.vertex_count() <= self.limit)
-                {
-                    Some(detail) => detail.vertices(),
-                    None => grid.vertices(),
+                if grid.side > self.coarse_side && grid.vertex_count() > self.limit {
+                    grid.coarsened(self.coarse_side).vertices()
+                } else {
+                    grid.vertices()
                 }
             }
             None => exact,
@@ -114,14 +121,48 @@ struct Grid {
     mpp: f32,
     /// Linear, premultiplied RGBA; transparent cells have no ground to draw.
     cells: Vec<[f32; 4]>,
+    /// Last triangle touching each cell, so reduction retains late, narrow road markings.
+    stamps: Vec<u32>,
+    stamp: u32,
     /// Land classes and road passes repeat one colour over many thousands of triangles.
     last_color: Option<([[f32; 4]; 3], [f32; 4])>,
 }
 
 impl Grid {
+    #[cfg(test)]
     fn new(limit: usize, reach: f32, mpp: f32) -> Self {
-        let side = ((limit / 6) as f64).sqrt().floor().clamp(1.0, 512.0) as usize;
-        Self::with_side(side, reach, mpp)
+        Self::with_side(Self::side_for(limit), reach, mpp)
+    }
+
+    fn side_for(limit: usize) -> usize {
+        ((limit / 6) as f64).sqrt().floor().clamp(1.0, 512.0) as usize
+    }
+
+    fn coarsened(mut self, side: usize) -> Self {
+        debug_assert_eq!(self.side % side, 0);
+        let scale = self.side / side;
+        // Keep the latest painted sample instead of averaging a narrow late road into
+        // its background. Colors are already composited; do not blend alpha a second time.
+        for y in 0..side {
+            for x in 0..side {
+                let mut sample = y * scale * self.side + x * scale;
+                for dy in 0..scale {
+                    for dx in 0..scale {
+                        let i = (y * scale + dy) * self.side + x * scale + dx;
+                        if self.stamps[i] > self.stamps[sample] {
+                            sample = i;
+                        }
+                    }
+                }
+                // Destination precedes unread source blocks; no second grid is allocated.
+                self.cells[y * side + x] = self.cells[sample];
+                self.stamps[y * side + x] = self.stamps[sample];
+            }
+        }
+        self.cells.truncate(side * side);
+        self.stamps.truncate(side * side);
+        self.side = side;
+        self
     }
 
     fn with_side(side: usize, reach: f32, mpp: f32) -> Self {
@@ -130,6 +171,8 @@ impl Grid {
             reach,
             mpp,
             cells: vec![[0.0; 4]; side * side],
+            stamps: vec![0; side * side],
+            stamp: 0,
             last_color: None,
         }
     }
@@ -181,6 +224,10 @@ impl Grid {
                 })
             });
         self.last_color = Some((key, color));
+        if color[3] == 0.0 {
+            return;
+        }
+        self.stamp = self.stamp.saturating_add(1);
         // Conservative coverage keeps a narrow road even when no cell centre falls in it.
         // Clip each triangle to a row's slab before finding its x span, not its whole box.
         for y in low..high {
@@ -189,6 +236,7 @@ impl Grid {
             };
             let a = a.floor().clamp(0.0, self.side as f32) as usize;
             let b = b.ceil().clamp(0.0, self.side as f32) as usize;
+            self.stamps[y * self.side + a..y * self.side + b].fill(self.stamp);
             let cells = &mut self.cells[y * self.side + a..y * self.side + b];
             if color[3] == 1.0 {
                 cells.fill(color);

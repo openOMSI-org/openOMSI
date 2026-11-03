@@ -168,7 +168,7 @@ fn a_detailed_checkerboard_falls_back_without_exceeding_the_budget() {
     for _ in 0..17 {
         quad(&mut p, Vec2::splat(-8.0), Vec2::splat(8.0), green);
     }
-    let detail = p.ground_budget.as_mut().unwrap().detail.as_mut().unwrap();
+    let detail = p.ground_budget.as_mut().unwrap().grid.as_mut().unwrap();
     for y in 0..detail.side {
         for x in 0..detail.side {
             detail.cells[y * detail.side + x] = if (x + y) % 2 == 0 {
@@ -181,28 +181,28 @@ fn a_detailed_checkerboard_falls_back_without_exceeding_the_budget() {
     assert!(detail.vertex_count() > 96);
     let verts = p.finish_ground();
     assert!(verts.len() <= 96);
-    assert!(covers(&verts, Vec2::ZERO, green));
+    assert!(verts.iter().all(|v| v.color[3] == 1.0));
 }
 
 #[test]
 fn detailed_cells_are_bounded_and_follow_the_screen_scale() {
     for (mpp, expected) in [
         (0.1, Some(124)),
-        (0.25, Some(80)),
-        (1.0, None),
-        (0.0, None),
-        (f32::NAN, None),
+        (0.25, Some(93)),
+        (1.0, Some(31)),
+        (0.0, Some(31)),
+        (f32::NAN, Some(31)),
     ] {
         let mut b = GroundBudget::new(6_000, 10.0, mpp);
         b.push(&mut vec![Vertex::default(); 6_000], &[Vertex::default(); 3]);
-        assert_eq!(b.detail.as_ref().map(|g| g.side), expected);
+        assert_eq!(b.grid.as_ref().map(|g| g.side), expected);
     }
     let mut b = GroundBudget::new(2_000_000, 500.0, f32::MIN_POSITIVE);
     b.push(
         &mut vec![Vertex::default(); 2_000_000],
         &[Vertex::default(); 3],
     );
-    assert_eq!(b.detail.unwrap().cells.len(), 2048 * 2048);
+    assert_eq!(b.grid.unwrap().cells.len(), 1024 * 1024);
 }
 
 #[test]
@@ -259,4 +259,31 @@ fn pixel_width_roads_remain_conservative_without_camera_depth() {
         !p.finish_ground().is_empty(),
         "screen-width extrusion at a distant depth must not be culled using the centre scale"
     );
+}
+
+#[test]
+fn overflowing_ground_has_at_most_one_16_mib_raster() {
+    let mut b = GroundBudget::new(2_000_000, 500.0, 0.1);
+    b.push(
+        &mut vec![Vertex::default(); 2_000_000],
+        &[Vertex::default(); 3],
+    );
+    let cells: usize = b.grid.iter().map(|g| g.cells.len()).sum();
+    assert!(
+        cells * std::mem::size_of::<[f32; 4]>() <= 16 * 1024 * 1024,
+        "only one capped raster should be allocated, got {} bytes",
+        cells * 16
+    );
+}
+
+#[test]
+fn coarse_grid_keeps_late_premultiplied_alpha_without_double_compositing() {
+    let mut fine = Grid::with_side(4, 10.0, 0.1);
+    fine.cells[0] = [0.5, 0.0, 0.0, 0.5];
+    fine.cells[1] = [0.0, 0.0, 1.0, 1.0];
+    fine.stamps[0] = 2;
+    fine.stamps[1] = 1;
+    let coarse = fine.coarsened(2);
+    assert_eq!(coarse.cells[0], [0.5, 0.0, 0.0, 0.5]);
+    assert_eq!(coarse.cells[1], [0.0; 4]);
 }

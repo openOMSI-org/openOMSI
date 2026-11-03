@@ -20,8 +20,8 @@ pub struct MapData {
     paved_cells: hashbrown::HashSet<(i32, i32)>,
     /// The middle of each house model, in its own frame (walls face away from it).
     model_centre: Vec<Vec2>,
-    /// Centroid-indexed triangles may reach into a view from neighbouring cells.
-    triangle_padding: [f32; 3],
+    /// Triangles reaching more than one cell from their centroid are queried separately.
+    oversized: Cell,
 }
 
 /// The most triangles of house models one build of the city map draws (nearest first); the other
@@ -54,6 +54,13 @@ fn tri(all: &[Vec2], i: u32) -> &[Vec2] {
     &all[i as usize * 3..i as usize * 3 + 3]
 }
 
+// The box test also keeps a crossing triangle when all three corners are outside.
+fn triangle_near(t: &[Vec2], c: Vec2, radius: f32) -> bool {
+    let lo = t[0].min(t[1]).min(t[2]);
+    let hi = t[0].max(t[1]).max(t[2]);
+    lo.x <= c.x + radius && lo.y <= c.y + radius && hi.x >= c.x - radius && hi.y >= c.y - radius
+}
+
 /// What to draw of the ground.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct GroundLook {
@@ -69,33 +76,30 @@ pub struct GroundLook {
 impl MapData {
     pub fn new(layers: std::sync::Arc<Layers>) -> MapData {
         let mut cells: HashMap<(i32, i32), Cell> = HashMap::new();
-        let mut triangle_padding = [0.0f32; 3];
-        let mut take_padding = |group: usize, t: &[Vec2]| {
-            let centre = (t[0] + t[1] + t[2]) / 3.0;
-            for p in t {
-                triangle_padding[group] = triangle_padding[group].max((*p - centre).abs().max_element());
-            }
-        };
         let new_cell = || Cell { land: vec![Vec::new(); layers::LAND_CLASSES], paved: vec![Vec::new(); layers::PAVE_CLASSES], paint: vec![Vec::new(); layers::PAINT_CLASSES], ..Default::default() };
+        let mut oversized = new_cell();
         for (class, tris) in (0..layers::LAND_CLASSES).map(|c| (c, layers.land_of(c))) {
             for (i, t) in tris.chunks_exact(3).enumerate() {
-                let c = cell_of((t[0] + t[1] + t[2]) / 3.0);
-                take_padding(0, t);
-                cells.entry(c).or_insert_with(new_cell).land[class].push(i as u32);
+                let centre = (t[0] + t[1] + t[2]) / 3.0;
+                let large = t.iter().any(|p| (*p - centre).abs().max_element() > CELL);
+                let cell = if large { &mut oversized } else { cells.entry(cell_of(centre)).or_insert_with(new_cell) };
+                cell.land[class].push(i as u32);
             }
         }
         for (class, tris) in (0..layers::PAVE_CLASSES).map(|c| (c, layers.paved_of(c))) {
             for (i, t) in tris.chunks_exact(3).enumerate() {
-                let c = cell_of((t[0] + t[1] + t[2]) / 3.0);
-                take_padding(1, t);
-                cells.entry(c).or_insert_with(new_cell).paved[class].push(i as u32);
+                let centre = (t[0] + t[1] + t[2]) / 3.0;
+                let large = t.iter().any(|p| (*p - centre).abs().max_element() > CELL);
+                let cell = if large { &mut oversized } else { cells.entry(cell_of(centre)).or_insert_with(new_cell) };
+                cell.paved[class].push(i as u32);
             }
         }
         for (class, tris) in (0..layers::PAINT_CLASSES).map(|c| (c, layers.paint_of(c))) {
             for (i, t) in tris.chunks_exact(3).enumerate() {
-                let c = cell_of((t[0] + t[1] + t[2]) / 3.0);
-                take_padding(2, t);
-                cells.entry(c).or_insert_with(new_cell).paint[class].push(i as u32);
+                let centre = (t[0] + t[1] + t[2]) / 3.0;
+                let large = t.iter().any(|p| (*p - centre).abs().max_element() > CELL);
+                let cell = if large { &mut oversized } else { cells.entry(cell_of(centre)).or_insert_with(new_cell) };
+                cell.paint[class].push(i as u32);
             }
         }
         for (i, b) in layers.buildings.iter().enumerate() {
@@ -152,7 +156,7 @@ impl MapData {
                 }
             }
         }
-        MapData { layers, cells, lines, paved_cells, model_centre, triangle_padding }
+        MapData { layers, cells, lines, paved_cells, model_centre, oversized }
     }
 
     /// The map's paving lies under most of a road along `points` (its middle sampled every
@@ -213,7 +217,7 @@ impl MapData {
         let k = self.shift(anchor);
         let c = (centre - self.layers.origin).as_vec2();
         let v = |q: Vec2| (q + k).extend(0.0);
-        let cells: Vec<&Cell> = self.cells_near(c, radius as f32 + self.triangle_padding[0]).collect();
+        let cells: Vec<&Cell> = self.cells_near(c, radius as f32 + CELL).chain(std::iter::once(&self.oversized)).collect();
         let land_order = [
             (layers::LAND_GRASS, pal.grass),
             (layers::LAND_FIELD, pal.field),
@@ -224,7 +228,7 @@ impl MapData {
         ];
         for (class, col) in land_order {
             for cell in &cells {
-                for t in cell.land[class].iter().map(|&i| tri(self.layers.land_of(class), i)) {
+                for t in cell.land[class].iter().map(|&i| tri(self.layers.land_of(class), i)).filter(|t| triangle_near(t, c, radius as f32)) {
                     p.world_poly(&[v(t[0]), v(t[1]), v(t[2])], col);
                 }
             }
@@ -247,11 +251,11 @@ impl MapData {
         let k = self.shift(anchor);
         let c = (centre - self.layers.origin).as_vec2();
         let v = |q: Vec2| (q + k).extend(0.0);
-        let cells: Vec<&Cell> = self.cells_near(c, radius as f32 + self.triangle_padding[1].max(self.triangle_padding[2])).collect();
+        let cells: Vec<&Cell> = self.cells_near(c, radius as f32 + CELL).chain(std::iter::once(&self.oversized)).collect();
         for (classes, fill) in [(&[layers::PAVE_GREEN][..], pal.grass), (&[layers::PAVE_AREA][..], pal.area), (&[layers::PAVE_FOOT, layers::PAVE_ROAD][..], pal.foot), (&[layers::PAVE_INNER][..], pal.road)] {
             for cell in &cells {
                 for &class in classes {
-                    for t in cell.paved[class].iter().map(|&i| tri(self.layers.paved_of(class), i)) {
+                    for t in cell.paved[class].iter().map(|&i| tri(self.layers.paved_of(class), i)).filter(|t| triangle_near(t, c, radius as f32)) {
                         p.world_poly(&[v(t[0]), v(t[1]), v(t[2])], fill);
                     }
                 }
@@ -262,7 +266,7 @@ impl MapData {
         if look.surfaces {
             for (class, col) in [(layers::PAINT_WHITE, pal.lane_paint), (layers::PAINT_AMBER, pal.lane_amber)] {
                 for cell in &cells {
-                    for t in cell.paint[class].iter().map(|&i| tri(self.layers.paint_of(class), i)) {
+                    for t in cell.paint[class].iter().map(|&i| tri(self.layers.paint_of(class), i)).filter(|t| triangle_near(t, c, radius as f32)) {
                         p.world_poly(&[v(t[0]), v(t[1]), v(t[2])], col);
                     }
                 }
@@ -529,4 +533,23 @@ mod tests {
         assert!(p.verts.iter().any(|v| v.pos[0] == 50.0 && v.pos[1] == 40.0));
         assert!(p.verts.iter().any(|v| v.pos[0] == 20.0 && v.pos[1] == 10.0));
     }
+    #[test]
+    fn a_remote_oversized_triangle_does_not_expand_local_candidates() {
+        let mut l = Layers::empty(DVec2::ZERO);
+        for x in [0.0, 2000.0, 4000.0] {
+            let a = Vec2::new(x, 0.0);
+            l.land[layers::LAND_GRASS].extend([a, a + Vec2::X, a + Vec2::Y]);
+            l.paved[layers::PAVE_INNER].extend([a, a + Vec2::X, a + Vec2::Y]);
+        }
+        let huge = [Vec2::splat(50_000.0), Vec2::new(150_000.0,50_000.0), Vec2::new(50_000.0,150_000.0)];
+        l.land[layers::LAND_GRASS].extend(huge);
+        l.paved[layers::PAVE_INNER].extend(huge);
+        let md = MapData::new(std::sync::Arc::new(l));
+        let mut p = Painter::new();
+        let look = GroundLook { surfaces: true, trees: false, dashes: false, tol: 0.0 };
+        md.build_land(&mut p,DVec2::ZERO,DVec2::ZERO,20.0,crate::style::palette(false),look);
+        md.build_paved(&mut p,DVec2::ZERO,DVec2::ZERO,20.0,crate::style::palette(false),look);
+        assert_eq!(p.verts.len(),6,"remote triangles must not be submitted by a local rebuild");
+    }
+
 }

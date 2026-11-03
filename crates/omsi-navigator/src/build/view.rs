@@ -48,6 +48,15 @@ pub(crate) fn panel_reach(zoom: f64, w: f32, h: f32) -> Option<f64> {
     ground_reach(proj * view)
 }
 
+/// Cache enough ground for the entire automatic zoom range and the original driving interval.
+pub(crate) fn panel_build_reach(w: f32, h: f32) -> Option<f64> {
+    panel_reach(super::super::MAX_ZOOM, w, h).map(|r| r + 150.0)
+}
+
+pub(crate) fn panel_moved(built: f64, visible: f64, distance: f64) -> bool {
+    distance > 150.0 || distance + visible > built
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -97,5 +106,26 @@ mod tests {
         }
         assert!(padded(panel_reach(120.0, 400.0, 300.0).unwrap()) < 300.0);
         assert!(ground_reach(Mat4::ZERO).is_none());
+    }
+    #[test]
+    fn stop_start_zoom_cycles_keep_the_original_150_metre_rebuild_interval() {
+        for (w, h) in [(400.0, 300.0), (1000.0, 250.0), (200.0, 800.0)] {
+            let built = panel_build_reach(w, h).unwrap();
+            for cycle in 0..4 {
+                for zoom in (150..=320).chain((150..320).rev()) {
+                    let visible = panel_reach(zoom as f64, w, h).unwrap();
+                    assert!(
+                        !panel_moved(built, visible, 149.0),
+                        "stop/start cycle {cycle}, zoom {zoom}"
+                    );
+                    assert!(panel_moved(built, visible, 151.0));
+                }
+            }
+            let smaller = panel_build_reach(w * 0.5, h).unwrap();
+            assert!(
+                panel_moved(smaller, panel_reach(320.0, w * 100.0, h).unwrap(), 0.0),
+                "resize must rebuild uncovered ground"
+            );
+        }
     }
 }
