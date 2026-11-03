@@ -188,8 +188,6 @@ pos 300 -185.4 6.1
 length 1.0             dead stretch (m)
 
 [trolley_sounds]       the overhead line's sounds (see Sounds): on | off | a file beside trolley.txt
-hiss off
-snap on
 frog sounds\frog.wav
 switch sounds\switch.wav
 ```
@@ -319,15 +317,15 @@ The gear makes six sounds of its own, from noise and decaying tones (no files):
 
 | Sound | When | Sound trigger | Map key |
 |---|---|---|---|
-| hiss (a loop) | the shoes sliding on the wire, louder with the current and the speed | - (`Trolley_Hiss`, 0..1) | `hiss` |
-| arc crack | current broken: a shoe leaving the wire or a pole coming off under load, an insulator or a frog crossed under power | `trolley_snap` | `snap` |
+| hiss (a loop) | the shoes sliding on the wire, louder with the current and the speed | - (`Trolley_Hiss`, 0..1) | - |
+| arc crack | current broken: a shoe leaving the wire or a pole coming off under load, an insulator or a frog crossed under power | `trolley_snap` | - |
 | frog clatter | a shoe going through a frog | `trolley_frog` | `frog` |
 | contactor click | the rheostat controller stepping | `trolley_click` | - |
 | thud | a shoe landing on the wire, a pole on its hook or coming off | `trolley_thud` | - |
 | hook | a pole's hook letting go or catching it | `trolley_clack` | - |
 | switch mechanism | the selected leg actually changes, not when a shoe crosses it | - (map-owned) | `switch` |
 
-The built-in hiss and a map replacement hiss are located at each touching shoe, not the bus
+The built-in hiss is located at each touching shoe, not the bus
 centre. Their maximum gain is 0.035: beyond 1 m a steep fade is added to the normal distance
 falloff, and they are completely silent at 5 m and beyond. They are also silent in the cab.
 A bus-authored `sound.cfg` hiss keeps its own volume, viewpoint and 3-D settings; old sliding
@@ -359,10 +357,10 @@ Trolley_Hiss
 1
 ```
 
-**A map** chooses the overhead line's sounds (hiss, arcs, frog crossings and switch movements) in a `[trolley_sounds]` block of
+**A map** chooses the overhead line's own sounds (frog crossings and switch movements) in a `[trolley_sounds]` block of
 its `trolley.txt`: each key `on` (the game's own), `off`, or a sound file beside `trolley.txt`
-(a file that cannot be read leaves the game's own). The vehicle's own equipment (contactors,
-thud, hook) is the vehicle's: those keys are ignored there with a warning.
+(a file that cannot be read leaves the game's own). The vehicle's sounds (hiss, arc crack,
+contactors, thud, hook) are the vehicle's: those keys are ignored there with a warning.
 
 Which plays: the vehicle's `sound.cfg` entry, else the map's choice, else the game's own. A
 vehicle and a map that say nothing hear the game's own sounds, as before.

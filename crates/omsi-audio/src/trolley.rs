@@ -4,11 +4,11 @@
 //! from noise and decaying tones when first wanted, not read from files, and played where they
 //! happen. A vehicle plays its own instead where its `sound.cfg` has an entry on the sound's
 //! trigger (`trolley_thud`...) or reads `Trolley_Hiss`; the map's `trolley.txt` can switch the
-//! overhead line's off or give a file for them (see `docs/TROLLEYBUS.md`, Sounds).
+//! overhead line's own (frog, switch) off or give a file for them (see `docs/TROLLEYBUS.md`, Sounds).
 
 use glam::Vec3;
 use crate::{AudioEngine, Clip, SoundSet, VoiceId, VoiceParams};
-use omsi_trolley::{PoleMode, RigSound, SoundChoice, TrolleyRig, WireNet, WireSounds};
+use omsi_trolley::{PoleMode, RigSound, SoundChoice, TrolleyRig, WireNet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 
@@ -217,17 +217,15 @@ fn pick(audio: &AudioEngine, choice: &SoundChoice, dir: Option<&Path>, own: fn()
 
 impl TrolleySound {
     /// One frame of the gear's sounds; `bus` is where the vehicle stands, `net` the wire it runs
-    /// on (its `[trolley_sounds]` choose the overhead line's clips). A sound the vehicle's own
+    /// on (its `[trolley_sounds]` choose the frog's clip). A sound the vehicle's own
     /// `sound_set` has an entry for is fired into `fired` (its sound triggers) instead.
     #[allow(clippy::too_many_arguments)]
     pub fn update(&mut self, audio: &AudioEngine, rig: &mut TrolleyRig, net: Option<&WireNet>, sound_set: Option<&SoundSet>, fired: &mut Vec<String>, bus: Vec3, sparks_at: &[Vec3], inside: bool, paused: bool) {
         let c = self.clips.get_or_insert_with(|| {
-            let w = net.map(|n| (&n.sounds, n.dir.as_deref()));
-            let wire = |f: fn(&WireSounds) -> &SoundChoice, own: fn() -> Arc<Clip>| w.map_or_else(|| Some(own()), |(s, d)| pick(audio, f(s), d, own));
             Clips {
-                hiss: wire(|s| &s.hiss, hiss),
-                snap: wire(|s| &s.snap, snap),
-                frog: wire(|s| &s.frog, frog),
+                hiss: Some(hiss()),
+                snap: Some(snap()),
+                frog: net.map_or_else(|| Some(frog()), |n| pick(audio, &n.sounds.frog, n.dir.as_deref(), frog)),
                 thud: Some(thud()),
                 click: Some(click()),
                 clack: Some(clack()),

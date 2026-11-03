@@ -404,11 +404,9 @@ impl WireNet {
             let first = w.get(1).copied().unwrap_or("");
             match block.as_str() {
                 "trolley_sounds" => match key.as_str() {
-                    "hiss" => sounds.hiss = SoundChoice::parse(&w[1..]),
-                    "snap" => sounds.snap = SoundChoice::parse(&w[1..]),
                     "frog" => sounds.frog = SoundChoice::parse(&w[1..]),
                     "switch" => sounds.switch = SoundChoice::parse(&w[1..]),
-                    "click" | "thud" | "clack" => log::warn!("trolley.txt [trolley_sounds]: '{key}' is the vehicle's sound: its sound.cfg plays trolley_{key}"),
+                    "hiss" | "snap" | "click" | "thud" | "clack" => log::warn!("trolley.txt [trolley_sounds]: '{key}' is the vehicle's sound, set in its sound.cfg; ignored here"),
                     _ => {}
                 },
                 "trolley_net" => match key.as_str() {
@@ -1436,9 +1434,8 @@ mod tests {
 
     #[test]
     fn the_map_chooses_only_the_overhead_lines_sounds() {
-        let n = WireNet::parse("[trolley_sounds]\nhiss off\nfrog sounds/frog clatter.wav\nclick off\n[trolley_span]\np 0 0 5\np 50 0 5\n");
-        assert_eq!(n.sounds.hiss, SoundChoice::Off);
-        assert_eq!(n.sounds.snap, SoundChoice::Builtin);
+        let n = WireNet::parse("[trolley_sounds]\nhiss off\nsnap off\nfrog sounds/frog clatter.wav\nclick off\n[trolley_span]\np 0 0 5\np 50 0 5\n");
+        assert_eq!(n.sounds, WireSounds { frog: SoundChoice::File("sounds/frog clatter.wav".into()), switch: SoundChoice::Off });
         assert_eq!(n.sounds.frog, SoundChoice::File("sounds/frog clatter.wav".into()));
         assert_eq!(n.sounds.switch, SoundChoice::Off);
         assert_eq!(n.spans.len(), 1);
