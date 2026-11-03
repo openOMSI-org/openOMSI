@@ -27,6 +27,8 @@ mod urls;
 #[path = "ws/bridge_close.rs"]
 mod bridge_close;
 #[cfg(test)] #[path = "ws/status_tests.rs"] mod status_tests;
+#[cfg(test)]
+mod rebind_tests;
 pub use urls::{http_base, reachable, web_bases, ws_url};
 
 use std::io::{ErrorKind, Read, Write};

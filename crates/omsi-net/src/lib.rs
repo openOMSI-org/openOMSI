@@ -188,10 +188,6 @@ pub const CLOCK_EVERY: f32 = 5.0;
 pub const MAX_PEERS: usize = 64;
 /// At most this many players may be loading at the same time (joined, no state yet).
 pub const MAX_JOINING: usize = 8;
-/// A loading player heard from less than this long ago holds a loading slot; one silent
-/// longer (its game closed or stuck) no longer keeps the others waiting - it is still timed
-/// out after `LOAD_TIMEOUT`.
-pub const LOADING_ALIVE: Duration = Duration::from_secs(15);
 /// How far around the requested spawn a host lists the vehicles standing there (m).
 pub const FOOTPRINT_RADIUS: f64 = 250.0;
 /// At most this many footprints go into a NEAR (it has to fit into one datagram).
@@ -213,12 +209,16 @@ const VAR_RATE: (f32, f32) = (60.0, 60.0);
 const ANIMATION_RATE: (f32, f32) = (25.0, 320.0);
 const TEXTURE_RATE: (f32, f32) = (2048.0, 2048.0);
 const SOUND_RATE: (f32, f32) = (512.0, 2048.0);
+// Sound acknowledgements (36-byte headers) have their own bucket: one dropped made its event be
+// sent again past SOUND_RATE, but the host relays them, so they are not unlimited either.
+const SOUND_ACK_RATE: (f32, f32) = (2048.0, 8192.0);
 use voice_net::VOICE_RATE;
 const MESSAGE_RATE: (f32, f32) = (10.0, 20.0);
 const CHAT_RATE: (f32, f32) = (1.0, 3.0);
 mod receive_budget;
 mod receive_world;
 mod join_queue;
+pub use join_queue::LOADING_ALIVE;
 // ---------------------------------------------------------------------------------------
 // session codes
 
@@ -1126,6 +1126,7 @@ enum PeerTraffic {
     Tack,
     Message,
     Chat,
+    SoundAcks,
 }
 
 /// A token bucket: `rate` a second, at most `burst` at once.
@@ -1178,10 +1179,11 @@ pub struct Peer {
     tacks: Bucket,
     messages: Bucket,
     chat: Bucket,
+    sound_acks: Bucket,
     /// Datagrams of this player the host threw away (too many at once).
     pub dropped: u32,
     /// Rate-limit rejections by PeerTraffic category (no payloads stored).
-    drop_counts: [u32; 9],
+    drop_counts: [u32; 10],
     /// The nonce of the player's hellos (host side).
     nonce: Option<u64>,
     secret: [u8; 16],
@@ -1224,8 +1226,9 @@ impl Peer {
             tacks: Bucket::new(traffic_net::TACK_RATE.1),
             messages: Bucket::new(MESSAGE_RATE.1),
             chat: Bucket::new(CHAT_RATE.1),
+            sound_acks: Bucket::new(SOUND_ACK_RATE.1),
             dropped: 0,
-            drop_counts: [0; 9],
+            drop_counts: [0; 10],
             history: std::collections::VecDeque::new(),
             nonce: None,
             secret: admission::random_bytes(),
@@ -1667,12 +1670,6 @@ impl LanSession {
 
     pub fn host_key(&self) -> Option<std::sync::Arc<hostkey::HostKey>> {
         self.host_key.clone()
-    }
-
-    /// This machine's address as the internet sees it (STUN, or the router's forwarding),
-    /// once the bridge has found it out.
-    pub fn public_addr(&self) -> Option<SocketAddr> {
-        self.bridge.as_ref().and_then(|b| b.public())
     }
 
     /// The code other players join this session with (hosts only).
@@ -2337,7 +2334,7 @@ impl LanSession {
                 continue;
             };
             log::warn!(
-                "LAN: player {id} timed out after {:.1} s without an accepted datagram (loading={}, rate-limited total={}, state={}, variables={}, animations={}, textures={}, sounds={}, voice={}, tack={}, messages={}, chat={})",
+                "LAN: player {id} timed out after {:.1} s without an accepted datagram (loading={}, rate-limited total={}, state={}, variables={}, animations={}, textures={}, sounds={}, voice={}, tack={}, messages={}, chat={}, sound acks={})",
                 now.duration_since(p.last_seen).as_secs_f32(),
                 !p.has_pose,
                 p.dropped,
@@ -2349,7 +2346,8 @@ impl LanSession {
                 p.drop_counts[5],
                 p.drop_counts[6],
                 p.drop_counts[7],
-                p.drop_counts[8]
+                p.drop_counts[8],
+                p.drop_counts[9]
             );
             gone.push(id);
             self.gone_lately.push((p.nonce, p.pose.name.clone(), id, now));
@@ -2854,6 +2852,7 @@ impl LanSession {
             PeerTraffic::Tack => peer.tacks.take(rate),
             PeerTraffic::Message => peer.messages.take(rate),
             PeerTraffic::Chat => peer.chat.take(rate),
+            PeerTraffic::SoundAcks => peer.sound_acks.take(rate),
         };
         if !ok {
             peer.dropped = peer.dropped.saturating_add(1);

@@ -3,6 +3,11 @@
 
 use super::*;
 
+/// A loading player heard from less than this long ago holds a loading slot; one silent
+/// longer (its game closed or stuck) no longer keeps the others waiting - it is still timed
+/// out after `LOAD_TIMEOUT`.
+pub const LOADING_ALIVE: Duration = Duration::from_secs(15);
+
 impl LanSession {
     /// Only the address currently being contacted (or an advertised rendezvous
     /// candidate before an address wins) may answer a joining player.
@@ -34,6 +39,12 @@ impl LanSession {
             log::info!("LAN: the world is ready: letting players in");
         }
         self.starting = on;
+    }
+
+    /// This machine's address as the internet sees it (STUN, or the router's forwarding),
+    /// once the bridge has found it out.
+    pub fn public_addr(&self) -> Option<SocketAddr> {
+        self.bridge.as_ref().and_then(|b| b.public())
     }
 
     /// The players loading now that hold a loading slot: those heard from lately.
