@@ -1440,8 +1440,6 @@ mod tests {
     fn the_map_chooses_only_the_overhead_lines_sounds() {
         let n = WireNet::parse("[trolley_sounds]\nhiss off\nsnap off\nfrog sounds/frog clatter.wav\nclick off\n[trolley_span]\np 0 0 5\np 50 0 5\n");
         assert_eq!(n.sounds, WireSounds { frog: SoundChoice::File("sounds/frog clatter.wav".into()), switch: SoundChoice::Off });
-        assert_eq!(n.sounds.frog, SoundChoice::File("sounds/frog clatter.wav".into()));
-        assert_eq!(n.sounds.switch, SoundChoice::Off);
         assert_eq!(n.spans.len(), 1);
     }
 

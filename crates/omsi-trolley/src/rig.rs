@@ -521,21 +521,28 @@ mod tests {
         WireNet::parse("[trolley_section]\nid 1\nlive 1\n[trolley_span]\nsection 1\np -50 0 5.5\np 100 0 5.5\np 250 0 5.5\n")
     }
 
+    /// A radio switch at (50, 0) on channel 1, range 20, its branch leaving to the north-east.
+    fn radio_y(extra: &str) -> WireNet {
+        WireNet::parse(&format!(
+            "[trolley_span]\np 0 0 5.5\np 50 0 5.5\n[trolley_span]\np 50 0 5.5\np 100 0 5.5\n[trolley_span]\np 50 0 5.5\np 90 20 5.5\n\
+             [trolley_switch]\npos 50 0 5.5\nmode radio\nrange 20\nchannel 1\n{extra}"
+        ))
+    }
+
+    /// A bus standing at `pos` with its poles down, sending nothing on channel 1.
+    fn standing(net: &WireNet, pos: DVec3) -> RigInput<'_> {
+        RigInput {
+            net: Some(net), dt: 1.0 / 60.0, pos, rot: rot(), accel: Vec3::ZERO, speed: 0.0,
+            wheel_radius: 0.5, pedal: 0.0, brake: 0.0, dir: 1.0, blinker: 0, radio: 0,
+            route_code: 0, channel: 1, ropes: &[RopeCmd::Idle; 2], drive: false, script_force: 0.0,
+        }
+    }
+
     #[test]
     fn radio_requests_reach_a_receiver_without_poles_on_the_wire() {
-        let net = WireNet::parse(concat!(
-            "[trolley_span]\np 0 0 5.5\np 50 0 5.5\n",
-            "[trolley_span]\np 50 0 5.5\np 100 0 5.5\n",
-            "[trolley_span]\np 50 0 5.5\np 90 20 5.5\n",
-            "[trolley_switch]\npos 50 0 5.5\nmode radio\nrange 20\nchannel 1\n",
-        ));
+        let net = radio_y("");
         let mut rig = TrolleyRig::new(&def(), 3);
-        let mut input = RigInput {
-            net: Some(&net), dt: 1.0 / 60.0, pos: DVec3::ZERO, rot: rot(),
-            accel: Vec3::ZERO, speed: 0.0, wheel_radius: 0.5, pedal: 0.0,
-            brake: 0.0, dir: 1.0, blinker: 0, radio: -1, route_code: 0, channel: 1,
-            ropes: &[RopeCmd::Idle; 2], drive: false, script_force: 0.0,
-        };
+        let mut input = RigInput { radio: -1, ..standing(&net, DVec3::ZERO) };
         rig.step(&input);
         assert!(!net.switch_branch(0));
         input.pos = DVec3::new(50.0, 10.0, 0.0);
@@ -577,19 +584,9 @@ mod tests {
 
     #[test]
     fn radio_route_selection_is_not_replayed_on_entry_or_channel_change() {
-        let net = WireNet::parse(concat!(
-            "[trolley_span]\np 0 0 5.5\np 50 0 5.5\n",
-            "[trolley_span]\np 50 0 5.5\np 100 0 5.5\n",
-            "[trolley_span]\np 50 0 5.5\np 90 20 5.5\n",
-            "[trolley_switch]\npos 50 0 5.5\nmode radio\nrange 20\nchannel 1\nroute 158 left\nroute 159 right\n",
-        ));
+        let net = radio_y("route 158 left\nroute 159 right\n");
         let mut rig = TrolleyRig::new(&def(), 3);
-        let mut input = RigInput {
-            net: Some(&net), dt: 1.0 / 60.0, pos: DVec3::new(50.0, 0.0, 0.0), rot: rot(),
-            accel: Vec3::ZERO, speed: 0.0, wheel_radius: 0.5, pedal: 0.0,
-            brake: 0.0, dir: 1.0, blinker: 0, radio: 0, route_code: 158, channel: 1,
-            ropes: &[RopeCmd::Idle; 2], drive: false, script_force: 0.0,
-        };
+        let mut input = RigInput { route_code: 158, ..standing(&net, DVec3::new(50.0, 0.0, 0.0)) };
         rig.step(&input);
         assert!(!net.switch_branch(0));
         input.route_code = 159;
@@ -619,19 +616,9 @@ mod tests {
 
     #[test]
     fn radio_toggle_requires_a_new_press_not_range_entry_or_channel_change() {
-        let net = WireNet::parse(concat!(
-            "[trolley_span]\np 0 0 5.5\np 50 0 5.5\n",
-            "[trolley_span]\np 50 0 5.5\np 100 0 5.5\n",
-            "[trolley_span]\np 50 0 5.5\np 90 20 5.5\n",
-            "[trolley_switch]\npos 50 0 5.5\nmode radio\nrange 20\nchannel 1\n",
-        ));
+        let net = radio_y("");
         let mut rig = TrolleyRig::new(&def(), 3);
-        let mut input = RigInput {
-            net: Some(&net), dt: 1.0 / 60.0, pos: DVec3::new(50.0, 0.0, 0.0), rot: rot(),
-            accel: Vec3::ZERO, speed: 0.0, wheel_radius: 0.5, pedal: 0.0,
-            brake: 0.0, dir: 1.0, blinker: 0, radio: 2, route_code: 0, channel: 1,
-            ropes: &[RopeCmd::Idle; 2], drive: false, script_force: 0.0,
-        };
+        let mut input = RigInput { radio: 2, ..standing(&net, DVec3::new(50.0, 0.0, 0.0)) };
         rig.step(&input);
         assert!(!net.switch_branch(0));
         input.radio = 0;
@@ -679,12 +666,7 @@ mod tests {
         let arcs = |settings: &str, kind: PoleEventKind, amps: f32| {
             let net = WireNet::parse(&format!("[trolley_net]\n{settings}\n[trolley_span]\np 0 0 5.5\np 50 0 5.5\n"));
             let mut rig = TrolleyRig::new(&def(), 7);
-            let input = RigInput {
-                net: Some(&net), dt: 1.0 / 60.0, pos: DVec3::ZERO, rot: rot(),
-                accel: Vec3::ZERO, speed: 0.0, wheel_radius: 0.5, pedal: 0.0,
-                brake: 0.0, dir: 1.0, blinker: 0, radio: 0, route_code: 0, channel: 0,
-                ropes: &[RopeCmd::Idle; 2], drive: false, script_force: 0.0,
-            };
+            let input = standing(&net, DVec3::ZERO);
             let (mut count, mut energy) = (0, 0.0f32);
             for _ in 0..1000 {
                 rig.events.clear();
