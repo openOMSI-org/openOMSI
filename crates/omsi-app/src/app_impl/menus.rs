@@ -469,13 +469,14 @@ impl App {
 /// The game menu on a server (`--lan-join https://…`): the world's clock and weather are the
 /// server's, and the way out leaves the server. The player's own tour can still be changed
 /// or ended; the Alt menu uses these same offered actions.
-pub(crate) const SERVER_GAME_MENU: [(&str, &str); 11] = [
+pub(crate) const SERVER_GAME_MENU: [(&str, &str); 12] = [
     ("resume", "Resume"),
     ("options", "Options..."),
     ("camera", "Camera..."),
     ("vehicle", "Vehicle options..."),
     ("world", "World options..."),
     ("map", "City map"),
+    ("streets", "Find a street..."),
     ("duty", "Line and tour..."),
     ("endduty", "End the tour"),
     ("shot", "Screenshot"),

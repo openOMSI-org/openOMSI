@@ -764,15 +764,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
                 out.push((tr("There is no other vehicle to drive"), "back".into()));
             }
         }
-        ListKind::Streets => {
-            let names = app.menus.navigator.as_ref().map(|n| n.street_names()).unwrap_or_default();
-            let mut order: Vec<usize> = (0..names.len()).collect();
-            order.sort_by(|a, b| natural(&names[*a], &names[*b]));
-            out.extend(order.into_iter().map(|i| (names[i].clone(), format!("street {i}"))));
-            if out.is_empty() {
-                out.push((tr("This map has no street names on its signs"), "back".into()));
-            }
-        }
+        ListKind::Streets => out = street_rows(app.menus.navigator.as_ref().map_or(Some(Vec::new()), |n| n.street_names())),
         ListKind::Numbers => {
             if let Some(p) = app.player.as_ref() {
                 let mut numbers = fleet_numbers(&p.vehicle);
@@ -789,7 +781,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
     }
     if searchable(kind) {
         let query = search_query(app);
-        out.retain(|(label, action)| search_matches(label, action, query));
+        out.retain(|(label, action)| search_matches(label, if matches!(kind, ListKind::Streets) { "" } else { action }, query));
         let label = if app.menus.menu_edit_search {
             format!("{}: {query}_  ({})", tr("Search..."), tr("Enter sets it, Esc cancels"))
         } else if query.is_empty() {
@@ -953,6 +945,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
     if action == "search" && searchable(kind) {
         app.menus.menu_edit = Some(app.menus.menu_search.clone());
         app.menus.menu_edit_search = true;
+        crate::platform::text_input(app.window.as_deref(), true);
         return Some(kind.clone());
     }
     if action == "back" && crate::player_list::is_page(Some(kind)) {
@@ -1215,13 +1208,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             None
         }
         ListKind::Streets => {
-            let names = app.menus.navigator.as_ref().map(|n| n.street_names()).unwrap_or_default();
-            if let Some(name) = arg.trim().parse::<usize>().ok().and_then(|i| names.get(i)) {
-                app.close_game_menu();
-                if let Some(n) = app.menus.navigator.as_mut() {
-                    n.show_street(name);
-                }
-            }
+            show_street(app, arg);
             None
         }
         ListKind::Numbers => {
@@ -1301,12 +1288,14 @@ mod dropdowns;
 mod menu_pages;
 mod duty;
 mod graphics;
+mod streets;
 pub(crate) use rows::*;
 pub(crate) use options::*;
 pub(crate) use dropdowns::*;
 pub(crate) use menu_pages::*;
 pub(crate) use duty::*;
 pub(crate) use graphics::*;
+use streets::*;
 
 #[cfg(test)]
 mod tests {

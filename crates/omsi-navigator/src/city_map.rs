@@ -157,9 +157,15 @@ impl Navigator {
         out
     }
 
-    /// Open or close the city map.
-    pub fn street_names(&self) -> Vec<String> {
-        self.streets.as_deref().map(|st| st.names.clone()).unwrap_or_default()
+    pub fn street_names(&self) -> Option<Vec<String>> {
+        let Some(st) = self.streets.as_deref() else { return self.building.is_none().then(Vec::new) };
+        let mut labelled = vec![false; st.names.len()];
+        for l in &st.labels {
+            if let Some(b) = labelled.get_mut(l.2 as usize) {
+                *b = true;
+            }
+        }
+        Some(st.names.iter().zip(labelled).filter(|(_, l)| *l).map(|(n, _)| n.clone()).collect())
     }
 
     pub fn show_street(&mut self, name: &str) -> bool {
@@ -181,6 +187,7 @@ impl Navigator {
         true
     }
 
+    /// Open or close the city map.
     pub fn toggle_map(&mut self) {
         self.city.found = None;
         self.city.open = !self.city.open;
