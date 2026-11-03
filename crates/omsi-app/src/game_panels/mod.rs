@@ -30,6 +30,7 @@ const GAME: u64 = 1;
 /// The panels and what they show.
 #[derive(Default)]
 pub(crate) struct GamePanels {
+    pub(crate) laid_out: Option<([f32; 4], f32)>,
     ui: UiState,
     draw: crate::plugin_ui::PluginPanels,
     /// A slider the left button holds: its panel, id and track on the window (physical
@@ -207,6 +208,7 @@ impl crate::App {
         if let Some((w, h)) = self.menus.game_panels.trip.as_ref().map(|t| t.extent()) {
             size = size.min(hud[2] * 0.96 / (w * dpi)).min(hud[3] * 0.96 / (h * dpi));
         }
+        self.menus.game_panels.laid_out = Some((hud, dpi * size));
         let map_open = self.menus.navigator.as_ref().is_some_and(|n| n.map_open());
         let hidden = vr_active || self.menus.game_menu.is_some() || self.menus.chooser.is_some() || map_open || self.photo.is_some() || clean;
         let frame = crate::plugin_ui::PanelsFrame {

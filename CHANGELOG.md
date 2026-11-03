@@ -667,6 +667,14 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   of their car instead of a seat; with no standing place free, they board as before (#2242).
 - **Graphics that fit the computer from the first start.** On a first start (no settings file,
   no drive and no map loaded before), the game
+- **The view editor looks at the mirror being set.** Moving a mirror's slider turns the driver's
+  head to that mirror, so it shows beside the editor while it is set; another line or closing
+  the editor brings the head back to where it was (#3640).
+- **A flashlight that follows the cursor.** With *Flashlight follows the cursor* on (Options ›
+  Camera, the launcher; off by default), the flashlight lights where the mouse cursor points while
+  the cursor is free - on foot, or in the cab while the mouse does not steer - and straight ahead
+  otherwise (#3641).
+- **Graphics that fit the computer from the first start.** With no settings file yet, the game
   picks a quality preset from its best graphics chip before it opens the window's renderer: Low
   for software renderers, Intel HD / UHD chips and cards under 3 GB, Medium for other integrated
   chips and cards of 3 to 6 GB, High for 6 GB cards and Apple chips, Extra from 10 GB - and says
@@ -1018,6 +1026,30 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 - Shader tests cover OpenGL ES 3.1/3.2 per entry point and catch the nested constant-array
   lookups the Adreno 710 refused ([#2009](https://github.com/openOMSI-org/openOMSI/issues/2009)).
 ### Multiplayer
+
+- **A dedicated server opens its web port at once, before checking its fleet.** With a
+  `vehicles` list, the server read and hashed every file of every bus and paint before the
+  WebSocket gateway opened, so for minutes `/status`, the players and the admin page were
+  refused. The gateway now opens first and the fleet is announced when the check is done (players
+  who join meanwhile see a server without one, as before 0.3.47). The check itself is faster:
+  four buses at a time, each `.bus` loaded once, the hash cache read once, a bus's files gathered
+  once for all its paints and each folder read once (on a real server a list of 15 buses with
+  113 paints took about 26 s). The log tells per bus its paints and where its time went, and
+  names every bus it could not offer and why.
+- **`ai_drive_through_parked`** (`server.cfg`, `--ai-drive-through-parked` for a game): the AI
+  traffic drives on through a parked car standing in its lane, as OMSI 2's does, instead of
+  stopping behind it and going round it when it can. For maps where a parked car stands in the
+  lane with no way round and holds the traffic behind it for good. Off by default: nothing
+  changes unless it is set.
+- **A game taking its bus from the server's fleet waits to be let in** (up to two minutes more)
+  instead of starting without the bus while a busy server admits other players first, and says
+  so if it is never let in.
+- **Sound events no longer flood a server through a tunnel**: one not acknowledged is sent again
+  ever less often (0.1 s doubling up to 2 s), and acknowledgements have a rate of their own on the
+  server.
+- **A bus taken from the server's fleet is known by the server's version of it**, a copy of a font
+  file beside the original no longer makes a bus another version, and a refused upload names the
+  files that differ.
 
 - **Voice chat, built in** - off until switched on (Settings → Sound → *Voice chat*, or the game
   menu's Sound page). Hold a talk key to speak: *nearby* (V) is heard by the players within

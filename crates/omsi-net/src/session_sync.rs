@@ -56,7 +56,10 @@ impl LanSession {
         if a.from == self.my_id || a.from == 0 || a.to == 0 { return; }
         match self.role {
             Role::Host => {
-                if self.checked_peer(a.from, from, SOUND_RATE, PeerTraffic::Sounds).is_none() { return; }
+                // (an acknowledgement is a bare header with a bucket of its own: charged to the
+                // sound rate, one dropped made its event be sent again, and again, past it)
+                let (rate, traffic) = if sounds::is_ack(data, PROTOCOL as u8) { (SOUND_ACK_RATE, PeerTraffic::SoundAcks) } else { (SOUND_RATE, PeerTraffic::Sounds) };
+                if self.checked_peer(a.from, from, rate, traffic).is_none() { return; }
                 if a.to != self.my_id { self.route_sound(data); return; }
             }
             Role::Client => if a.to != self.my_id || !self.peers.contains_key(&a.from) { return; },
