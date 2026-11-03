@@ -96,14 +96,32 @@ export async function loadContent() {
   fixChoice();
   loadLines();
   loadSituations();
+  loadVehicles();
+  loadProfiles();
+}
+
+let vehiclesBusy = false;
+let vehiclesAgain = false;
+function loadVehicles() {
+  if (vehiclesBusy) {
+    vehiclesAgain = true;
+    return;
+  }
+  vehiclesBusy = true;
   call('vehicles')
     .then((vehicles) => {
       set({ vehicles, vehiclesProgress: null });
       fixChoice();
       updateHof();
     })
-    .catch((e) => set({ vehicles: [], errors: { ...S.errors, vehicles: e.message } }));
-  loadProfiles();
+    .catch((e) => set({ vehicles: [], errors: { ...S.errors, vehicles: e.message } }))
+    .finally(() => {
+      vehiclesBusy = false;
+      if (vehiclesAgain) {
+        vehiclesAgain = false;
+        loadVehicles();
+      }
+    });
 }
 
 export const weatherOfItsOwn = (w) => /^(cycle$|tomorrow$|metar:|custom:)/i.test(w || '');
