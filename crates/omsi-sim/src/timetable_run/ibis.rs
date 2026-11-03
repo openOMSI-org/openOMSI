@@ -560,7 +560,7 @@ pub(crate) fn set_destination_at(
     // the original's way: SetLineTo + AI_target_index, then the ai_scheduled_settarget trigger
     set_line_to(v, line);
     v.set_var("AI_target_index", ti as f32);
-    let pending_blind = player.then(|| v.var("rlbnd_ziel_target")).flatten();
+    let pending_blind = (player && has_roller_blind(v)).then(|| v.var("rlbnd_ziel_target")).flatten();
     let target_triggered = v.trigger("ai_scheduled_settarget");
     // The trigger also feeds destination displays, but a hand-cranked blind must remain
     // pending until `turn_roller_blind` applies the driver's selection.

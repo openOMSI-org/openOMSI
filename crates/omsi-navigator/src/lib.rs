@@ -849,6 +849,7 @@ impl Navigator {
         let (from, to) = match (r.joined, stop_at) {
             (false, Some(k)) if r.approach => (r.progress.saturating_sub(3), (k + 2).min(r.lanes.len())),
             (false, Some(k)) => (k.saturating_sub(40).max(r.progress), (k + 2).min(r.lanes.len())),
+            (true, Some(k)) => (r.progress.saturating_sub(3), (r.progress + 60).min(k.max(r.progress) + 2).min(r.lanes.len())),
             _ => (r.progress.saturating_sub(3), (r.progress + 60).min(r.lanes.len())),
         };
         let mut best: Option<(usize, f32, f64)> = None;

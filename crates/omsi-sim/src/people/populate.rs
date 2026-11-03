@@ -32,8 +32,9 @@ impl PeopleSim {
         }
         // whoever stands under the surface there (its tile's pavements and roads came
         // after them), or anyone standing still off it: onto it
-        for p in self.people.iter_mut() {
-            if matches!(p.place, Place::Ground) {
+        let waiting: Vec<bool> = (0..self.people.len()).map(|i| self.waiting_height(i).is_some()).collect();
+        for (p, waiting) in self.people.iter_mut().zip(waiting) {
+            if matches!(p.place, Place::Ground) && !waiting {
                 if let Some(z) = world.walk_height_near(p.position.x, p.position.y, p.position.z) {
                     let d = z - p.position.z;
                     let still = p.vel.length() < 0.05;
