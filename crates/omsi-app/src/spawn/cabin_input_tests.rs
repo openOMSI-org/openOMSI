@@ -49,6 +49,7 @@ fn player() -> Player {
         hidden: false,
         interior_lamps: Default::default(),
         interior_blocks: Default::default(),
+        own_set: None,
     };
     let mut player = new_player(vehicle, render, vec![], vec![], false, &ty);
     player.pressed_mesh = Some(0);

@@ -667,6 +667,15 @@ mod tests {
     }
 
     #[test]
+    fn init_stores_follows_the_macros_init_calls() {
+        let p = prog("{init}\n(M.L.m)\n{end}\n{macro:m}\n1 (S.L.a)\n{end}\n{frame}\n1 (S.L.b)\n{end}\n");
+        assert!(p.errors.is_empty(), "{:?}", p.errors);
+        assert!(p.init_stores(p.var("a").unwrap()));
+        assert!(!p.init_stores(p.var("b").unwrap()));
+        assert!(!p.init_stores(p.var("result").unwrap()));
+    }
+
+    #[test]
     fn session_seed_gives_every_machine_its_own_numbers() {
         let p = prog("{init}\n500000 random 400000 + (S.L.result)\n{end}\n");
         let draw = || {

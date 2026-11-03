@@ -205,8 +205,8 @@ pub(crate) fn apply_situation_parsed(sit: &omsi_content::situation::Situation, a
         args.situation_odometer_km = saved_odometer_km(v, legacy_odometer_ids);
         // the livery it was driven in: the scheme's index is the `Colorscheme` variable (the
         // bus came back in its default paint - the variable alone repaints nothing)
-        if let Some((_, c)) = v.vars.iter().find(|(n, _)| n.eq_ignore_ascii_case("Colorscheme")).filter(|(_, c)| *c >= 0.0) {
-            args.paint = Some(format!("{}", *c as i64));
+        if let Some((_, c)) = v.vars.iter().find(|(n, _)| n.eq_ignore_ascii_case("Colorscheme")) {
+            args.paint = (*c >= 0.0).then(|| format!("{}", *c as i64));
         }
         args.situation_strvars = v.string_vars.clone();
         log::info!(
@@ -495,6 +495,22 @@ mod tests {
         sit.vehicles[0].vars.clear();
         apply_situation_parsed(&sit, &mut args);
         assert_eq!(args.situation_odometer_km, None);
+    }
+
+    #[test]
+    fn a_bus_saved_in_its_default_paint_comes_back_in_it() {
+        let sit = omsi_content::situation::Situation {
+            vehicles: vec![omsi_content::situation::SituationVehicle {
+                file: "Vehicles/MAN_NL_NG/MAN_EN92.bus".into(),
+                is_my_vehicle: true,
+                vars: vec![("Colorscheme".into(), -1.0)],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let mut args = crate::cli::Args::parse_from(["openomsi", "--paint", "InterEssonne"]);
+        apply_situation_parsed(&sit, &mut args);
+        assert_eq!(args.paint, None);
     }
 
     #[test]

@@ -180,6 +180,22 @@ impl Program {
         id
     }
 
+    pub fn init_stores(&self, var: VarId) -> bool {
+        let mut seen = vec![false; self.blocks.len()];
+        let mut todo = self.init.clone();
+        while let Some(b) = todo.pop() {
+            let Some(block) = self.blocks.get(b as usize).filter(|_| !std::mem::replace(&mut seen[b as usize], true)) else { continue };
+            for op in &block.ops {
+                match op {
+                    Op::Store(v) if *v == var => return true,
+                    Op::Macro(m) => todo.push(*m),
+                    _ => {}
+                }
+            }
+        }
+        false
+    }
+
     /// Whether any block of the program stores into `var`.
     pub fn stores(&self, var: VarId) -> bool {
         match self.var_use() {

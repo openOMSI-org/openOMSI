@@ -159,6 +159,7 @@ pub struct CarRun {
     lead_len: Option<usize>,
     /// Slots of [`PLACE_IN_TRAIN`] here.
     place_slots: [Option<VarId>; 3],
+    paint_base: Vec<(String, VarId, f32)>,
 }
 
 impl CarRun {
@@ -185,6 +186,7 @@ impl CarRun {
             shared: Vec::new(),
             lead_len: None,
             place_slots: [None; 3],
+            paint_base: Vec::new(),
         };
         run.sync_names(lead);
         let starting: Vec<(VarId, VarId)> =
@@ -195,6 +197,15 @@ impl CarRun {
         run.write_place(place);
         let (prog, state, machine) = (run.prog.clone(), &mut run.state, &mut run.machine);
         quietly(lead, |host| machine.run_init(&prog, state, host));
+        run.paint_base = super::instance::scheme_var_names(ty)
+            .into_iter()
+            .filter_map(|k| {
+                let slot = *run.names.get(&k)?;
+                let now = run.state.vars[slot as usize];
+                let lead_base = lead.paint_base.iter().find(|(n, _)| *n == k).map(|(_, v)| *v);
+                Some((k, slot, if run.prog.init_stores(slot) { now } else { lead_base.unwrap_or(now) }))
+            })
+            .collect();
         // ({init} puts the defaults the paint's variables are meant to replace)
         if let Some(scheme) = lead.host.paint_scheme {
             run.apply_paint(ty, scheme);
@@ -225,6 +236,14 @@ impl CarRun {
         }
         let Some(slot) = omsi_script::compile::with_lower("Brakeforce", |k| self.names.get(k).copied()) else { return 0.0 };
         std::mem::take(&mut self.state.vars[slot as usize]).max(0.0)
+    }
+
+    pub(super) fn release_paint(&mut self, ty: &VehicleType, old: Option<usize>, new: Option<usize>) {
+        for (name, slot, v) in &self.paint_base {
+            if super::instance::scheme_sets(ty, old, name) && !super::instance::scheme_sets(ty, new, name) {
+                self.state.vars[*slot as usize] = *v;
+            }
+        }
     }
 
     /// Whether this car's scripts store into `name` (what they leave alone is the leading
