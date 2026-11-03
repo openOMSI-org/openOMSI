@@ -237,6 +237,15 @@ pub(crate) fn look_key_of(view: &str, cam: Option<(usize, usize)>) -> String {
 /// yaw with no stop. Capped at 140 degrees each way, a quarter of the coach stayed out of
 /// sight (#909). The turn is kept within -180..180 so that letting go of a glance still
 /// swings the short way back.
+pub(crate) fn drawn_fov(fov: f32, view_fov: Option<f32>, setting: f32, zoom: Option<f32>) -> f32 {
+    let fov = match view_fov {
+        Some(f) => f.min(120.0),
+        None if setting >= 20.0 => setting.min(120.0),
+        None => fov,
+    };
+    zoom.map_or(fov, |z| (fov * z).clamp(8.0, 120.0))
+}
+
 pub(crate) fn cab_look_yaw(yaw: f32) -> f32 {
     (yaw + 180.0).rem_euclid(360.0) - 180.0
 }
