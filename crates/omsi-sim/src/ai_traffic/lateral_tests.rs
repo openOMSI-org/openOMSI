@@ -408,6 +408,30 @@ fn a_car_passes_on_the_oncoming_lane_of_its_own_carriageway_only() {
     assert!(car(&t, me).unwrap().passing.is_none());
 }
 
+/// By default a car stops behind a parked car standing in its lane (where it cannot go round
+/// it, it waits); asked to drive through (`ai_drive_through_parked = 1`, as Omsi.exe), it does
+/// not freeze there.
+#[test]
+fn a_car_drives_through_a_parked_one_only_when_asked() {
+    let f = Fixture::new();
+    assert!(!traffic(&f, two_way(5.5, None)).drive_through_parked, "driving through is opt-in");
+    // (the other carriageway of a divided road: no way round, it waits)
+    let (mut t, me) = parked_scene(&f, two_way(5.5, None));
+    assert!(!passes_parked(&mut t, me, 30.0));
+    let (mut t, me) = parked_scene(&f, two_way(5.5, None));
+    t.drive_through_parked = true;
+    let mut past = false;
+    for _ in 0..(30.0 / DT) as usize {
+        t.tick(DT, None);
+        let Some(c) = car(&t, me) else { past = true; break };
+        if c.state.lane == 0 && c.state.s > 110.0 {
+            past = true;
+            break;
+        }
+    }
+    assert!(past, "asked to drive through, it still waits behind the parked car");
+}
+
 #[test]
 fn an_island_beginning_after_the_pull_out_forbids_the_pass() {
     // the oncoming lane runs beside at 3.5 m where the car stands, but an island takes it

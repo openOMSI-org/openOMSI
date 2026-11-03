@@ -500,3 +500,29 @@ fn rate_limit_diagnostics_preserve_packet_categories() {
     assert_eq!(peer.drop_counts[PeerTraffic::State as usize], 0);
     assert_eq!(peer.last_seen, seen);
 }
+
+#[test]
+fn relayed_sound_acknowledgements_have_a_rate_of_their_own() {
+    let mut host = LanSession::host(0, "host", WorldInfo::default(), false).unwrap();
+    let (from, to) = (SocketAddr::from(([127, 0, 0, 1], 30000)), SocketAddr::from(([127, 0, 0, 1], 30001)));
+    host.peers.insert(2, Peer::new(Some(from), Pose::default()));
+    host.peers.insert(3, Peer::new(Some(to), Pose::default()));
+    // an acknowledgement from player 2 to player 3: a bare 36-byte header
+    let mut ack = vec![sounds::MAGIC, PROTOCOL as u8, 1, 0];
+    ack.extend(2u32.to_le_bytes());
+    ack.extend(3u32.to_le_bytes());
+    ack.extend(1u64.to_le_bytes());
+    ack.extend(1u64.to_le_bytes());
+    ack.resize(36, 0);
+    let n = SOUND_ACK_RATE.1 as usize + 1000;
+    for _ in 0..n {
+        host.on_sound(&ack, from);
+    }
+    let peer = &host.peers[&2];
+    let dropped = peer.drop_counts[PeerTraffic::SoundAcks as usize] as usize;
+    assert!(dropped >= 500 && dropped < n, "a flood of acknowledgements is cut at the burst, not relayed on: {dropped} of {n} dropped");
+    assert_eq!(peer.drop_counts[PeerTraffic::Sounds as usize], 0, "acknowledgements are not charged to the sound rate");
+    // from another address they are not taken at all
+    host.on_sound(&ack, SocketAddr::from(([127, 0, 0, 1], 30002)));
+    assert_eq!(host.peers[&2].drop_counts[PeerTraffic::SoundAcks as usize] as usize, dropped);
+}

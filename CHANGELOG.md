@@ -1018,6 +1018,30 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   lookups the Adreno 710 refused ([#2009](https://github.com/openOMSI-org/openOMSI/issues/2009)).
 ### Multiplayer
 
+- **A dedicated server opens its web port at once, before checking its fleet.** With a
+  `vehicles` list, the server read and hashed every file of every bus and paint before the
+  WebSocket gateway opened, so for minutes `/status`, the players and the admin page were
+  refused. The gateway now opens first and the fleet is announced when the check is done (players
+  who join meanwhile see a server without one, as before 0.3.47). The check itself is faster:
+  four buses at a time, each `.bus` loaded once, the hash cache read once, a bus's files gathered
+  once for all its paints and each folder read once (on a real server a list of 15 buses with
+  113 paints took about 26 s). The log tells per bus its paints and where its time went, and
+  names every bus it could not offer and why.
+- **`ai_drive_through_parked`** (`server.cfg`, `--ai-drive-through-parked` for a game): the AI
+  traffic drives on through a parked car standing in its lane, as OMSI 2's does, instead of
+  stopping behind it and going round it when it can. For maps where a parked car stands in the
+  lane with no way round and holds the traffic behind it for good. Off by default: nothing
+  changes unless it is set.
+- **A game taking its bus from the server's fleet waits to be let in** (up to two minutes more)
+  instead of starting without the bus while a busy server admits other players first, and says
+  so if it is never let in.
+- **Sound events no longer flood a server through a tunnel**: one not acknowledged is sent again
+  ever less often (0.1 s doubling up to 2 s), and acknowledgements have a rate of their own on the
+  server.
+- **A bus taken from the server's fleet is known by the server's version of it**, a copy of a font
+  file beside the original no longer makes a bus another version, and a refused upload names the
+  files that differ.
+
 - **Voice chat, built in** - off until switched on (Settings → Sound → *Voice chat*, or the game
   menu's Sound page). Hold a talk key to speak: *nearby* (V) is heard by the players within
   the session's range (75 m by default) from where you stand, quieter with the distance and
