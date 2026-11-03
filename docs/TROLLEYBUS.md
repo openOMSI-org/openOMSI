@@ -339,12 +339,13 @@ falloff, and it is completely silent at 5 m and beyond. It is also silent in the
 A bus-authored `sound.cfg` hiss keeps its own volume, viewpoint and 3-D settings; old sliding
 loops should not be played over the native hiss as well.
 
-The other built-in sounds are at full volume within a few metres (`[3d]`-style: arc crack 3 m,
-switch mechanism 3 m, frog and thud 2 m, hook and contactors 1.5 m) and fall off as 1/d beyond.
-In the player's cab the arc crack and the switch mechanism are heard like other outside sounds:
-quieter and dull with doors and windows shut, clear as they open (`Snd_OutsideVol`). The frog,
-the thud and the hook carry down the pole into the roof and stay clearer; the contactors are in
-the bus and are not muffled.
+The other built-in sounds are at full volume within a set distance (`[3d]`-style: switch
+mechanism 15 m, arc crack 10 m, frog 8 m, thud and hook 6 m, contactors 4 m) and fall off as
+1/d beyond. In the player's cab the sounds on the roof come through the body at half volume
+and somewhat dull with doors and windows shut, a switch out on the line at a fifth and duller,
+both clear as doors and windows open (`Snd_OutsideVol`); the contactors are in the bus and are
+not muffled. How a sound is heard is
+fixed when it starts: one started in the cab stays muffled if the view changes while it plays.
 
 **A vehicle** plays its own the OMSI way, in its `sound.cfg`: an entry with `[trigger]` on one
 of the triggers above plays each time that happens (the game fires the trigger as a script's
