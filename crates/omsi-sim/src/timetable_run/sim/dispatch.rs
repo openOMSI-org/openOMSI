@@ -141,7 +141,7 @@ impl ScheduleSim {
         let name_of = |id: i64| names.get(&id).cloned().unwrap_or_else(|| id.to_string());
         let tod = day_time - self.day_base;
         let longest = self.times.iter().flatten().map(|t| t.duration).fold(0.0, f64::max);
-        let from = self.departures.partition_point(|d| d.time < tod - longest - 60.0);
+        let from = self.departures.partition_point(|d| d.time < tod - longest - PAX_LATE_WAIT);
         let mut out: HashMap<i64, HashSet<String>> = HashMap::new();
         for i in from..self.departures.len() {
             let d = &self.departures[i];
@@ -155,7 +155,7 @@ impl ScheduleSim {
             let stations = trip_stations(&self.data.trips[d.trip]);
             for (k, sid) in stations.iter().enumerate() {
                 let due = d.time + tt.stations.get(k).map(|s| s.0).unwrap_or(0.0);
-                if !(tod - 60.0..=tod + PAX_SPAWN_AHEAD).contains(&due) || !tt.stops.get(k).copied().unwrap_or(true) {
+                if !pax_turn_up_for(due, tod) || !tt.stops.get(k).copied().unwrap_or(true) {
                     continue;
                 }
                 let here = name_of(*sid);
