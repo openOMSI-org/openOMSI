@@ -388,7 +388,12 @@ pub(in crate::mods) fn send_piece(out: &mut impl Write, sha: &Sha256, i: u64, zs
         if pack_later {
             crate::mods::vehicles::recompress_later(sha);
         }
-        let (codec, wire) = crate::mods::pieces::pack_zstd(piece, crate::mods::pieces::ZSTD_FAST);
+        // (a few at a time, and kept for the next player who asks)
+        let (codec, wire) = {
+            let _slot = crate::mods::pieces::packing_slot();
+            crate::mods::pieces::pack_zstd(piece, crate::mods::pieces::ZSTD_FAST)
+        };
+        crate::mods::vehicles::keep_packed(sha, i, codec, &wire);
         return crate::mods::pieces::send_packed(out, len, codec, &wire);
     }
     crate::mods::pieces::send(out, piece)

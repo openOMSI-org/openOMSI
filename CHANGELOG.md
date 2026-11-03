@@ -1058,6 +1058,11 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   one the internet sees if it reaches itself there - never behind a carrier's NAT (CGNAT), so
   nobody waits on an address that cannot answer. `public_address` in `server.cfg` names
   another, or `off` tells none.
+- **Many players fetching buses at once no longer take a server's CPU.** Every piece of a bus
+  was packed the moment it was asked for, on the thread of its connection (up to 160 of them),
+  and once more for every player who asked: players downloading together packed on every core,
+  and the server's traffic and people fell behind. A quarter of the cores pack at most, the
+  others' downloads wait their turn, and a piece packed is kept for the next player.
 - **Multiplayer protocol 17.** A game of this version and a server of this version play
   together; older ones are turned away at the door, as at every protocol change.
 - **A dedicated server opens its web port at once, before checking its fleet.** With a

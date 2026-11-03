@@ -6,6 +6,14 @@ pub(in crate::mods) fn packed(sha: &str, i: u64) -> Option<(u64, char, Vec<u8>)>
     buses().packed(sha, i)
 }
 
+/// Piece `i` of the kept file `sha` as it was just packed on request (at the speed of the
+/// moment): kept, so that the next player who asks for it does not pack it again - with a
+/// whole session fetching the same bus, every piece was packed once per player. Packing it at
+/// its smallest (`recompress`) replaces it.
+pub(in crate::mods) fn keep_packed(sha: &str, i: u64, codec: char, wire: &[u8]) {
+    buses().keep_packed(sha, i, codec, wire)
+}
+
 pub(in crate::mods) fn recompress_later(sha: &str) {
     buses().recompress_later(sha)
 }
@@ -31,6 +39,17 @@ impl Buses {
         }
         let (codec, wire) = v.store.packed(&sha, i)?;
         Some((pieces::span(size, i).1, codec, wire))
+    }
+
+    pub(super) fn keep_packed(&self, sha: &str, i: u64, codec: char, wire: &[u8]) {
+        let sha = sha.to_ascii_lowercase();
+        let g = self.lock();
+        let Some(v) = g.as_ref().filter(|v| v.sizes.get(&sha).is_some_and(|size| i < pieces::count(*size))) else { return };
+        // (one that does not get smaller is kept as a mark: it goes as it is)
+        let kept = if codec == '-' { v.store.put_packed(&sha, i, '-', &[]) } else { v.store.put_packed(&sha, i, codec, wire) };
+        if let Err(e) = kept {
+            log::warn!("vehicles: a packed piece not kept: {e}");
+        }
     }
 
     fn recompressing(&self) -> std::sync::MutexGuard<'_, Recompressing> {
