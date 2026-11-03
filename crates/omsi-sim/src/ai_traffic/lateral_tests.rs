@@ -740,3 +740,28 @@ fn a_car_behind_the_camera_is_drawn_as_far_as_the_mirrors_see() {
     assert!(car(&t, near).unwrap().vehicle.ai_visuals, "150 m behind the camera, in the mirrors' reach");
     assert!(!car(&t, far).unwrap().vehicle.ai_visuals, "350 m behind the camera");
 }
+
+#[test]
+fn a_bus_whose_stop_lies_near_its_lane_end_still_gets_onto_its_route() {
+    let f = Fixture::new();
+    let lanes = vec![street(-3.5, 0.0, 0.0, 300.0), street(0.0, 0.0, 0.0, 300.0), street(-3.5, 300.0, 0.0, 300.0), street(0.0, 300.0, 0.0, 300.0)];
+    let mut t = traffic(&f, net_of(lanes, &[(0, 1), (2, 3)]));
+    let me = add_car(&mut t, &f, 1, 200.0, 0xb28, Some(8.0));
+    set_route(&mut t, me, vec![1, 0, 2], 200.0);
+    {
+        let day = t.day_time;
+        let c = car_mut(&mut t, me);
+        let stop = bus_service::Stop { ri: 0, s: 290.0, bay: 0.0, depart: day + 5.0, id: 1, side: 0.0 };
+        c.bus = Some(Box::new(bus_service::BusService::new(vec![stop])));
+    }
+    let mut prev = car(&t, me).unwrap().vehicle.position;
+    for _ in 0..(60.0 / DT) as usize {
+        t.tick(DT, None);
+        let c = car(&t, me).expect("on the road");
+        let p = c.vehicle.position;
+        assert!((p - prev).truncate().length() < 1.0, "the body jumped {:.2} m on lane {}", (p - prev).truncate().length(), c.state.lane);
+        prev = p;
+    }
+    let c = car(&t, me).unwrap();
+    assert!(matches!(c.state.lane, 0 | 2), "ended on lane {}", c.state.lane);
+}
