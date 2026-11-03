@@ -1440,7 +1440,7 @@ impl Controllers {
         // the trembling of the tarmac and of the engine, which never stops while the bus
         // runs and needs no fade of its own
         let micro = if on {
-            self.ff_micro.sample(f.dt, f.kmh, f.street_cond, f.engine_rpm, f.engine_load, self.ff_road, self.ff_engine)
+            self.ff_micro.sample(f.dt, f.kmh, f.street_cond, f.engine_rpm, f.engine_load, self.ff_road * ffb::surface_rumble(f.surface), self.ff_engine)
         } else {
             0.0
         };

@@ -104,7 +104,7 @@ const graphics = {
         // (the `[isshadow]` blob under a vehicle is drawn in every mode, the vanilla one included)
         { type: 'toggle', key: 'shadow_blobs', label: "OMSI's shadow meshes (under vehicles)" },
         { type: 'slider', key: 'reflections', label: 'Reflective objects reflect', min: 0, max: 1, step: 0.05, def: 1, format: (v) => (v < 0.005 ? t('Off') : pct(v)), store: snap(0.05), when: (s) => !traced(s) },
-        { type: 'slider', key: 'road_glare', label: 'Road sunlight glare', help: 'Enhanced: direct sunlight highlights on roads and ground; 100% keeps the original appearance. Puddle reflections stay separate.', min: 0, max: 2, step: 0.05, def: 1, format: pct, store: snap(0.05), when: enhanced },
+        { type: 'slider', key: 'road_glare', label: 'Road glare', help: 'Enhanced: highlights of the sun, the headlights and the street lamps on roads and ground; 100% keeps the original appearance.', min: 0, max: 2, step: 0.05, def: 1, format: pct, store: snap(0.05), when: enhanced },
         { type: 'slider', key: 'traffic_headlights', label: 'Traffic headlight brightness', help: 'All graphics modes: other vehicles\' white headlamp glow and beam illumination on the road; does not change the player bus or street lamps.', min: 0, max: 2, step: 0.05, def: 1, format: pct, store: snap(0.05) },
         { type: 'toggle', key: 'clouds', label: 'Clouds' },
         // (only the enhanced modes march volumetric clouds; the vanilla ones are a texture)
@@ -405,6 +405,7 @@ const gameplay = {
         { type: 'toggle', key: 'realistic_road_physics', label: 'Realistic road physics' },
         { type: 'toggle', key: 'use_real_time', label: 'Start at the real time' },
         { type: 'toggle', key: 'use_real_date', label: "Start on today's date" },
+        { type: 'toggle', key: 'use_real_year', label: "Keep today's year, even outside the map's years", when: (s) => s.use_real_date },
         // the game's clock follows this device's (the host's in multiplayer)
         { type: 'toggle', key: 'time_sync', label: 'Sync the clock with the real time (locks the time)' },
         // the weather follows the METAR report of the airport nearest the map

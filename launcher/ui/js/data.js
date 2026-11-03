@@ -96,14 +96,32 @@ export async function loadContent() {
   fixChoice();
   loadLines();
   loadSituations();
+  loadVehicles();
+  loadProfiles();
+}
+
+let vehiclesBusy = false;
+let vehiclesAgain = false;
+function loadVehicles() {
+  if (vehiclesBusy) {
+    vehiclesAgain = true;
+    return;
+  }
+  vehiclesBusy = true;
   call('vehicles')
     .then((vehicles) => {
       set({ vehicles, vehiclesProgress: null });
       fixChoice();
       updateHof();
     })
-    .catch((e) => set({ vehicles: [], errors: { ...S.errors, vehicles: e.message } }));
-  loadProfiles();
+    .catch((e) => set({ vehicles: [], errors: { ...S.errors, vehicles: e.message } }))
+    .finally(() => {
+      vehiclesBusy = false;
+      if (vehiclesAgain) {
+        vehiclesAgain = false;
+        loadVehicles();
+      }
+    });
 }
 
 export const weatherOfItsOwn = (w) => /^(cycle$|tomorrow$|metar:|custom:)/i.test(w || '');
@@ -289,7 +307,7 @@ export const realDate = () => !!S.settings?.use_real_date;
  * 28th where that year has none. Inside the span, or not a date: kept. The launcher core
  * fits the game's date the same way (`fit_date_to_years`). */
 export function fitDateToMap(date, file) {
-  const span = S.maps?.find((m) => m.file === file)?.year_span;
+  const span = !(S.settings?.use_real_date && S.settings?.use_real_year) && S.maps?.find((m) => m.file === file)?.year_span;
   const parts = /^(\d+)-(\d+)-(\d+)$/.exec((date || '').trim());
   if (!span || !parts) return date;
   const [, y, mm, dd] = parts;

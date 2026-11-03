@@ -498,6 +498,22 @@ fn a_chosen_duty_date_keeps_its_year() {
 }
 
 #[test]
+fn todays_year_is_kept_when_the_player_asks_for_it() {
+    let dir = std::env::temp_dir().join(format!("openomsi-real-year-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("maps/x")).unwrap();
+    std::fs::write(dir.join("maps/x/global.cfg"), "[years]\n1988\n2000\n").unwrap();
+    let d = Duty { map: "maps/x/global.cfg".into(), bus: "Vehicles/x.bus".into(), time: "09:00".into(), date: Some("1995-01-01".into()), ..Default::default() };
+    let year = |st: serde_json::Value| {
+        let a = duty_args_with_settings(&d, &dir, &st).unwrap();
+        a[a.iter().position(|x| x == "--date").unwrap() + 1][..4].to_string()
+    };
+    let (y, ..) = local_now().unwrap();
+    assert_eq!(year(serde_json::json!({"use_real_date": true})), "1995");
+    assert_eq!(year(serde_json::json!({"use_real_date": true, "use_real_year": true})), format!("{y:04}"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn a_depot_bus_is_handed_to_the_game() {
     let d = Duty { map: "maps/x/global.cfg".into(), bus: "Vehicles/x.bus".into(), time: "09:00".into(), depot: Some("6703c1a0".into()), ..Default::default() };
     let a = duty_args_for_root(&d, Path::new("test-omsi")).unwrap();

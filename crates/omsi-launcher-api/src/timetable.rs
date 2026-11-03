@@ -224,7 +224,7 @@ fn write_trip(place: &Place, e: TripNew) -> Result<String, String> {
         return Err(core::i18n::tr("A trip needs two stops at least."));
     }
     let data = TimetableData::load(&place.map_dir);
-    if data.trips.iter().any(|t| t.name.eq_ignore_ascii_case(&name)) {
+    if data.trips.iter().any(|t| t.is_named(&name)) {
         return Err(core::i18n::trf("A trip named {name} is there already", &[("name", &name)]));
     }
     let name_of = |id: i64| data.bus_stops.iter().find(|b| b.object_id == id).map(|b| b.name.trim().to_string());
