@@ -118,6 +118,17 @@ impl Renderer {
         // a small or shared graphics chip gets a lighter picture (see `lighter_picture`)
         GL_BACKEND.store(info.backend == wgpu::Backend::Gl, std::sync::atomic::Ordering::Relaxed);
         let options = gpu_memory::lighter_picture(&info, vram, options);
+        // Temporal upscaling needs DirectX 12; DLSS an NVIDIA card too (whether it is an RTX one
+        // with a recent enough driver, Streamline tells at the first frame). It replaces the MSAA
+        let can_upscale = |t: Temporal| cfg!(windows) && info.backend == wgpu::Backend::Dx12 && (t.upscaler == TemporalUpscaler::Fsr3 || info.vendor == 0x10de);
+        let options = match options.temporal {
+            Some(t) if can_upscale(t) => RenderOptions { msaa: 1, ..options },
+            Some(t) => {
+                log::warn!("{} upscaling asked for, but {} on {:?} cannot do it (DirectX 12 is needed, and for DLSS an NVIDIA RTX card); drawing without it", t.upscaler.as_str(), info.name, info.backend);
+                RenderOptions { temporal: None, ..options }
+            }
+            None => options,
+        };
         let most = gpu_memory::ceiling(&info, vram);
         *CEILING.lock().unwrap_or_else(|e| e.into_inner()) = Some(if intel_vulkan_safe { gpu_memory::Ceiling { msaa: 1, ssao: false, shadow_size: most.shadow_size.min(2048), ..most } } else { most });
         let shadow_size = options
@@ -552,6 +563,8 @@ impl Renderer {
         let ssao = ssao::ssao(&device, gl);
         let fog_lamps = ssao::fog_lamps(&device, &scene.camera_layout, hdr_format, gl);
         let prepass = scene::prepass(&device, &scene, msaa, !leave_out_enhanced);
+        // (the prepass with motion vectors: only when temporal upscaling is asked for)
+        let temporal_pipes = pipelines::temporal::build(&device, &scene, options.temporal.is_some());
         let ground_pipelines = (!gl && !leave_out_enhanced && !sixteen_texture_units()).then(|| std::array::from_fn(|i| scene.ground_pipeline_at(&device, i)));
         let mip = mip::build(&device);
         let post = post::build(&device, format, hdr_format, &defaults.white_texture);
@@ -723,6 +736,11 @@ impl Renderer {
             ao_layout: ssao.layout,
             ao_buf: ssao.buf,
             prepass_pipelines: prepass.pipelines,
+            temporal_pipes,
+            temporal: None,
+            temporal_failed: false,
+            temporal_window: false,
+            temporal_pending: None,
             prepass_msaa_pipelines: prepass.msaa_pipelines,
             prepass_eye_pipelines: prepass.eye_pipelines,
             ground_pipelines,

@@ -99,7 +99,8 @@ impl GpuArray {
             return GpuArray::Buffer(device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some(label),
                 size: size.max(16).next_multiple_of(wgpu::COPY_BUFFER_ALIGNMENT),
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                // (copied from too: temporal upscaling keeps last frame's matrices)
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC,
                 mapped_at_creation: false,
             }));
         }

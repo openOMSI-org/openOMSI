@@ -1,0 +1,808 @@
+// The Streamline structures, constants and identifiers below are transcribed from NVIDIA's
+// Streamline SDK headers (https://github.com/NVIDIA-RTX/Streamline), which come under this
+// licence:
+//
+// Copyright (c) 2022-2024 NVIDIA CORPORATION. All rights reserved
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+//! NVIDIA DLSS (Super Resolution, and DLAA at full size) by way of NVIDIA Streamline: Windows,
+//! DirectX 12, a GeForce RTX card.
+//!
+//! Nothing of NVIDIA's is linked in or shipped. `sl.interposer.dll` is opened when the first
+//! DLSS frame asks for it, from the game's folder, and it brings in `sl.common.dll`,
+//! `sl.dlss.dll` and `nvngx_dlss.dll` from there. The `#[repr(C)]` structs mirror Streamline
+//! 2.14's public headers (`sl_core_types.h`, `sl_consts.h`, `sl_dlss.h`); their sizes are
+//! asserted below as the SDK's own ABI test does.
+//!
+//! wgpu records and submits its own D3D12 command lists, so DLSS gets a list of ours, run on
+//! wgpu's queue after the submit that drew the scene and before the one that draws the HUD
+//! (`frame.rs`): the queue's order is all the synchronisation needed. Each texture is handed
+//! over in the state wgpu left it in after its last pass, and Streamline puts it back in that
+//! state.
+
+use super::d3d12::{game_dir, wide, ListRing};
+use super::{fallback_render_size, FrameConstants, Inputs, TemporalQuality};
+use anyhow::{anyhow, bail, Context, Result};
+use std::ffi::{c_char, c_void, CStr};
+use windows::core::{Interface, PCSTR, PCWSTR};
+use windows::Win32::Foundation::{FreeLibrary, HMODULE};
+use windows::Win32::Graphics::Direct3D12::*;
+use windows::Win32::Graphics::Dxgi::Common::*;
+use windows::Win32::Graphics::Dxgi::{IDXGIDeviceSubObject_Impl, IDXGIObject_Impl, IDXGIOutput, IDXGISwapChain, IDXGISwapChain_Impl, DXGI_FRAME_STATISTICS, DXGI_PRESENT, DXGI_SWAP_CHAIN_DESC, DXGI_SWAP_CHAIN_FLAG};
+use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryExW, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR};
+
+// --- Streamline's structs and constants, as its 2.14 headers lay them out
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct StructType {
+    data1: u32,
+    data2: u16,
+    data3: u16,
+    data4: [u8; 8],
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct Base {
+    next: *mut c_void,
+    struct_type: StructType,
+    struct_version: usize,
+}
+
+impl Base {
+    const fn new(struct_type: StructType, struct_version: usize) -> Base {
+        Base { next: std::ptr::null_mut(), struct_type, struct_version }
+    }
+}
+
+const PREFERENCES: StructType = StructType { data1: 0x1ca10965, data2: 0xbf8e, data3: 0x432b, data4: [0x8d, 0xa1, 0x67, 0x16, 0xd8, 0x79, 0xfb, 0x14] };
+const RESOURCE: StructType = StructType { data1: 0x3a9d70cf, data2: 0x2418, data3: 0x4b72, data4: [0x83, 0x91, 0x13, 0xf8, 0x72, 0x1c, 0x72, 0x61] };
+const RESOURCE_TAG: StructType = StructType { data1: 0x4c6a5aad, data2: 0xb445, data3: 0x496c, data4: [0x87, 0xff, 0x1a, 0xf3, 0x84, 0x5b, 0xe6, 0x53] };
+const VIEWPORT_HANDLE: StructType = StructType { data1: 0x171b6435, data2: 0x9b3c, data3: 0x4fc8, data4: [0x99, 0x94, 0xfb, 0xe5, 0x25, 0x69, 0xaa, 0xa4] };
+const ADAPTER_INFO: StructType = StructType { data1: 0x0677315f, data2: 0xa746, data3: 0x4492, data4: [0x9f, 0x42, 0xcb, 0x61, 0x42, 0xc9, 0xc3, 0xd4] };
+const CONSTANTS: StructType = StructType { data1: 0xdcd35ad7, data2: 0x4e4a, data3: 0x4bad, data4: [0xa9, 0x0c, 0xe0, 0xc4, 0x9e, 0xb2, 0x3a, 0xfe] };
+const DLSS_OPTIONS: StructType = StructType { data1: 0x6ac826e4, data2: 0x4c61, data3: 0x4101, data4: [0xa9, 0x2d, 0x63, 0x8d, 0x42, 0x10, 0x57, 0xb8] };
+const DLSS_OPTIMAL_SETTINGS: StructType = StructType { data1: 0xef1d0957, data2: 0xfd58, data3: 0x4df7, data4: [0xb5, 0x04, 0x8b, 0x69, 0xd8, 0xaa, 0x6b, 0x76] };
+
+/// `sl::kSDKVersion` the structs above match: 2.14.1.
+const SDK_VERSION: u64 = (2 << 48) | (14 << 32) | (1 << 16) | 0xfedc;
+const FEATURE_DLSS: u32 = 0;
+const BUFFER_DEPTH: u32 = 0;
+const BUFFER_MOTION_VECTORS: u32 = 1;
+// sl::DLSSPreset
+const PRESET_K: u32 = 11;
+const PRESET_L: u32 = 12;
+const PRESET_M: u32 = 13;
+// kBufferTypeBiasCurrentColorHint
+const BUFFER_BIAS_CURRENT_COLOR: u32 = 29;
+const BUFFER_SCALING_INPUT_COLOR: u32 = 3;
+const BUFFER_SCALING_OUTPUT_COLOR: u32 = 4;
+/// `ResourceLifecycle::eValidUntilEvaluate`
+const VALID_UNTIL_EVALUATE: u32 = 2;
+const FLAG_DISABLE_CL_STATE_TRACKING: u64 = 1 << 0;
+const FLAG_DISABLE_DEBUG_TEXT: u64 = 1 << 1;
+const FLAG_USE_MANUAL_HOOKING: u64 = 1 << 2;
+const FLAG_FRAME_BASED_TAGGING: u64 = 1 << 7;
+const FALSE: u8 = 0;
+const TRUE: u8 = 1;
+/// The project id NGX is given: a custom engine has to name one (any GUID of its own).
+const PROJECT_ID: &CStr = c"08d79c23-3148-4b8e-b9cd-1bbcaefa49a1";
+
+#[repr(C)]
+struct Preferences {
+    base: Base,
+    show_console: bool,
+    log_level: u32,
+    paths_to_plugins: *const *const u16,
+    num_paths_to_plugins: u32,
+    path_to_logs_and_data: *const u16,
+    allocate_callback: *const c_void,
+    release_callback: *const c_void,
+    log_message_callback: Option<unsafe extern "C" fn(u32, *const c_char)>,
+    flags: u64,
+    features_to_load: *const u32,
+    num_features_to_load: u32,
+    application_id: u32,
+    engine: u32,
+    engine_version: *const c_char,
+    project_id: *const c_char,
+    render_api: u32,
+}
+
+#[repr(C)]
+struct Resource {
+    base: Base,
+    kind: u8,
+    native: *mut c_void,
+    memory: *mut c_void,
+    view: *mut c_void,
+    state: u32,
+    width: u32,
+    height: u32,
+    native_format: u32,
+    mip_levels: u32,
+    array_layers: u32,
+    gpu_virtual_address: u64,
+    flags: u32,
+    usage: u32,
+    internal_flags: u16,
+    reserved: u16,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct Extent {
+    top: u32,
+    left: u32,
+    width: u32,
+    height: u32,
+}
+
+#[repr(C)]
+struct ResourceTag {
+    base: Base,
+    resource: *mut Resource,
+    kind: u32,
+    lifecycle: u32,
+    extent: Extent,
+}
+
+#[repr(C)]
+struct ViewportHandle {
+    base: Base,
+    value: u32,
+}
+
+#[repr(C)]
+struct AdapterInfo {
+    base: Base,
+    device_luid: *mut u8,
+    device_luid_size_in_bytes: u32,
+    vk_physical_device: *mut c_void,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct Float2 {
+    x: f32,
+    y: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct Float3 {
+    x: f32,
+    y: f32,
+    z: f32,
+}
+
+#[repr(C)]
+struct Constants {
+    base: Base,
+    camera_view_to_clip: [[f32; 4]; 4],
+    clip_to_camera_view: [[f32; 4]; 4],
+    clip_to_lens_clip: [[f32; 4]; 4],
+    clip_to_prev_clip: [[f32; 4]; 4],
+    prev_clip_to_clip: [[f32; 4]; 4],
+    jitter_offset: Float2,
+    mvec_scale: Float2,
+    camera_pinhole_offset: Float2,
+    camera_pos: Float3,
+    camera_up: Float3,
+    camera_right: Float3,
+    camera_fwd: Float3,
+    camera_near: f32,
+    camera_far: f32,
+    camera_fov: f32,
+    camera_aspect_ratio: f32,
+    motion_vectors_invalid_value: f32,
+    depth_inverted: u8,
+    camera_motion_included: u8,
+    motion_vectors_3d: u8,
+    reset: u8,
+    orthographic_projection: u8,
+    motion_vectors_dilated: u8,
+    motion_vectors_jittered: u8,
+    min_relative_linear_depth_object_separation: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct DlssOptions {
+    base: Base,
+    mode: u32,
+    output_width: u32,
+    output_height: u32,
+    sharpness: f32,
+    pre_exposure: f32,
+    exposure_scale: f32,
+    color_buffers_hdr: u8,
+    indicator_invert_axis_x: u8,
+    indicator_invert_axis_y: u8,
+    dlaa_preset: u32,
+    quality_preset: u32,
+    balanced_preset: u32,
+    performance_preset: u32,
+    ultra_performance_preset: u32,
+    ultra_quality_preset: u32,
+    use_auto_exposure: u8,
+    alpha_upscaling_enabled: u8,
+}
+
+#[repr(C)]
+#[derive(Default)]
+struct DlssOptimalSettings {
+    optimal_render_width: u32,
+    optimal_render_height: u32,
+    optimal_sharpness: f32,
+    render_width_min: u32,
+    render_height_min: u32,
+    render_width_max: u32,
+    render_height_max: u32,
+}
+
+#[repr(C)]
+struct DlssOptimalSettingsS {
+    base: Base,
+    s: DlssOptimalSettings,
+}
+
+// (the sizes Streamline's own `sl::test::AbiValidation` expects: a field off by a byte
+// fails the build here, not in NVIDIA's DLL)
+const _: () = {
+    assert!(std::mem::size_of::<Base>() == 32);
+    assert!(std::mem::size_of::<Preferences>() == 144);
+    assert!(std::mem::size_of::<Resource>() == 112);
+    assert!(std::mem::size_of::<ResourceTag>() == 64);
+    assert!(std::mem::size_of::<ViewportHandle>() == 40);
+    assert!(std::mem::size_of::<Constants>() == 456);
+    assert!(std::mem::size_of::<DlssOptions>() == 88);
+};
+
+type Fn0 = unsafe extern "C" fn() -> i32;
+type FnInit = unsafe extern "C" fn(*const Preferences, u64) -> i32;
+type FnIsFeatureSupported = unsafe extern "C" fn(u32, *const AdapterInfo) -> i32;
+type FnIsFeatureLoaded = unsafe extern "C" fn(u32, *mut bool) -> i32;
+type FnSetD3DDevice = unsafe extern "C" fn(*mut c_void) -> i32;
+type FnGetFeatureFunction = unsafe extern "C" fn(u32, *const c_char, *mut *mut c_void) -> i32;
+type FnGetNewFrameToken = unsafe extern "C" fn(*mut *const c_void, *const u32) -> i32;
+type FnSetTagForFrame = unsafe extern "C" fn(*const c_void, *const ViewportHandle, *const ResourceTag, u32, *mut c_void) -> i32;
+type FnSetConstants = unsafe extern "C" fn(*const Constants, *const c_void, *const ViewportHandle) -> i32;
+type FnEvaluateFeature = unsafe extern "C" fn(u32, *const c_void, *const *const Base, u32, *mut c_void) -> i32;
+type FnFreeResources = unsafe extern "C" fn(u32, *const ViewportHandle) -> i32;
+type FnUpgradeInterface = unsafe extern "C" fn(*mut *mut c_void) -> i32;
+type FnDlssGetOptimalSettings = unsafe extern "C" fn(*const DlssOptions, *mut DlssOptimalSettingsS) -> i32;
+type FnDlssSetOptions = unsafe extern "C" fn(*const ViewportHandle, *const DlssOptions) -> i32;
+
+/// `sl::Result::eWarnOutOfVRAM`: a warning. The call did its work, the card is just over its
+/// memory budget; treated as a failure it would switch DLSS off on a card that is merely full.
+const WARN_OUT_OF_VRAM: i32 = 39;
+
+/// The name of an `sl::Result` code, for the log.
+fn result_name(r: i32) -> &'static str {
+    const NAMES: [&str; 41] = [
+        "eOk", "eErrorIO", "eErrorDriverOutOfDate", "eErrorOSOutOfDate", "eErrorOSDisabledHWS", "eErrorDeviceNotCreated",
+        "eErrorNoSupportedAdapterFound", "eErrorAdapterNotSupported", "eErrorNoPlugins", "eErrorVulkanAPI", "eErrorDXGIAPI",
+        "eErrorD3DAPI", "eErrorNRDAPI", "eErrorNVAPI", "eErrorReflexAPI", "eErrorNGXFailed", "eErrorJSONParsing",
+        "eErrorMissingProxy", "eErrorMissingResourceState", "eErrorInvalidIntegration", "eErrorMissingInputParameter",
+        "eErrorNotInitialized", "eErrorComputeFailed", "eErrorInitNotCalled", "eErrorExceptionHandler",
+        "eErrorInvalidParameter", "eErrorMissingConstants", "eErrorDuplicatedConstants", "eErrorMissingOrInvalidAPI",
+        "eErrorCommonConstantsMissing", "eErrorUnsupportedInterface", "eErrorFeatureMissing", "eErrorFeatureNotSupported",
+        "eErrorFeatureMissingHooks", "eErrorFeatureFailedToLoad", "eErrorFeatureWrongPriority",
+        "eErrorFeatureMissingDependency", "eErrorFeatureManagerInvalidState", "eErrorInvalidState", "eWarnOutOfVRAM", "?",
+    ];
+    NAMES.get(r as usize).copied().unwrap_or("?")
+}
+
+
+
+/// A Streamline call's result as an error naming the call.
+fn check(what: &str, r: i32) -> Result<()> {
+    static VRAM_WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    match r {
+        0 => Ok(()),
+        WARN_OUT_OF_VRAM => {
+            if !VRAM_WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                log::warn!("{what}: Streamline says the graphics card is over its memory budget; expect stutter, or lower the video memory or the window size");
+            }
+            Ok(())
+        }
+        _ => Err(anyhow!("{what} failed in Streamline: {} ({r})", result_name(r))),
+    }
+}
+
+/// Streamline's log lines into the game's log (errors, warnings; the rest at debug).
+unsafe extern "C" fn sl_log(kind: u32, msg: *const c_char) {
+    if msg.is_null() {
+        return;
+    }
+    let text = unsafe { CStr::from_ptr(msg) }.to_string_lossy();
+    let text = text.trim_end();
+    match kind {
+        2 => log::error!("Streamline: {text}"),
+        1 => log::warn!("Streamline: {text}"),
+        _ => log::debug!("Streamline: {text}"),
+    }
+}
+
+/// The quality as `sl::DLSSMode` numbers it (0 off, 1 max performance, 2 balanced, 3 max
+/// quality, 4 ultra performance, 5 ultra quality, 6 DLAA).
+fn mode_code(quality: TemporalQuality) -> u32 {
+    match quality {
+        TemporalQuality::Performance => 1,
+        TemporalQuality::Balanced => 2,
+        TemporalQuality::Quality => 3,
+        TemporalQuality::UltraPerformance => 4,
+        TemporalQuality::Native => 6,
+    }
+}
+
+/// The DXGI format Streamline is told for a texture (the formats DLSS gets here only).
+fn dxgi_format(f: wgpu::TextureFormat) -> u32 {
+    use wgpu::TextureFormat as Tf;
+    (match f {
+        Tf::Bgra8UnormSrgb => DXGI_FORMAT_B8G8R8A8_UNORM_SRGB,
+        Tf::Bgra8Unorm => DXGI_FORMAT_B8G8R8A8_UNORM,
+        Tf::Rgba8UnormSrgb => DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
+        Tf::Rgba8Unorm => DXGI_FORMAT_R8G8B8A8_UNORM,
+        Tf::Rgb10a2Unorm => DXGI_FORMAT_R10G10B10A2_UNORM,
+        Tf::Rgba16Float => DXGI_FORMAT_R16G16B16A16_FLOAT,
+        Tf::Rg16Float => DXGI_FORMAT_R16G16_FLOAT,
+        Tf::Rg32Float => DXGI_FORMAT_R32G32_FLOAT,
+        Tf::R8Unorm => DXGI_FORMAT_R8_UNORM,
+        // (wgpu creates a sampled depth texture typeless; read as a float it is this)
+        Tf::Depth32Float => DXGI_FORMAT_R32_FLOAT,
+        _ => DXGI_FORMAT_UNKNOWN,
+    })
+    .0 as u32
+}
+
+/// A stand-in swap chain whose `Present` does nothing. Streamline does its per-frame
+/// housekeeping (frame counting, freeing old resources, the VRAM budget) when its proxy of
+/// a swap chain is presented, but the window's real swap chain is wgpu's and Streamline
+/// never sees it (manual hooking). So it wraps this one, and its proxy is "presented"
+/// once after every DLSS frame.
+#[windows::core::implement(IDXGISwapChain)]
+struct NullSwapChain {
+    device: ID3D12Device,
+}
+
+fn not_implemented<T>() -> windows::core::Result<T> {
+    Err(windows::Win32::Foundation::E_NOTIMPL.into())
+}
+
+impl IDXGIObject_Impl for NullSwapChain_Impl {
+    fn SetPrivateData(&self, _: *const windows::core::GUID, _: u32, _: *const c_void) -> windows::core::Result<()> {
+        not_implemented()
+    }
+    fn SetPrivateDataInterface(&self, _: *const windows::core::GUID, _: windows::core::Ref<windows::core::IUnknown>) -> windows::core::Result<()> {
+        not_implemented()
+    }
+    fn GetPrivateData(&self, _: *const windows::core::GUID, _: *mut u32, _: *mut c_void) -> windows::core::Result<()> {
+        not_implemented()
+    }
+    fn GetParent(&self, _: *const windows::core::GUID, _: *mut *mut c_void) -> windows::core::Result<()> {
+        not_implemented()
+    }
+}
+
+impl IDXGIDeviceSubObject_Impl for NullSwapChain_Impl {
+    fn GetDevice(&self, riid: *const windows::core::GUID, device: *mut *mut c_void) -> windows::core::Result<()> {
+        unsafe { self.device.query(riid, device) }.ok()
+    }
+}
+
+impl IDXGISwapChain_Impl for NullSwapChain_Impl {
+    fn Present(&self, _: u32, _: DXGI_PRESENT) -> windows::core::HRESULT {
+        windows::Win32::Foundation::S_OK
+    }
+    fn GetBuffer(&self, _: u32, _: *const windows::core::GUID, _: *mut *mut c_void) -> windows::core::Result<()> {
+        not_implemented()
+    }
+    fn SetFullscreenState(&self, _: windows::core::BOOL, _: windows::core::Ref<IDXGIOutput>) -> windows::core::Result<()> {
+        not_implemented()
+    }
+    fn GetFullscreenState(&self, _: *mut windows::core::BOOL, _: windows::core::OutRef<IDXGIOutput>) -> windows::core::Result<()> {
+        not_implemented()
+    }
+    fn GetDesc(&self) -> windows::core::Result<DXGI_SWAP_CHAIN_DESC> {
+        not_implemented()
+    }
+    fn ResizeBuffers(&self, _: u32, _: u32, _: u32, _: DXGI_FORMAT, _: &DXGI_SWAP_CHAIN_FLAG) -> windows::core::Result<()> {
+        Ok(())
+    }
+    fn ResizeTarget(&self, _: *const DXGI_MODE_DESC) -> windows::core::Result<()> {
+        not_implemented()
+    }
+    fn GetContainingOutput(&self) -> windows::core::Result<IDXGIOutput> {
+        not_implemented()
+    }
+    fn GetFrameStatistics(&self, _: *mut DXGI_FRAME_STATISTICS) -> windows::core::Result<()> {
+        not_implemented()
+    }
+    fn GetLastPresentCount(&self) -> windows::core::Result<u32> {
+        not_implemented()
+    }
+}
+
+/// An export of `sl.interposer.dll` as the function type `T`.
+fn load_fn<T: Copy>(module: HMODULE, name: &CStr) -> Result<T> {
+    debug_assert_eq!(std::mem::size_of::<T>(), std::mem::size_of::<usize>());
+    let f = unsafe { GetProcAddress(module, PCSTR(name.as_ptr().cast())) }
+        .ok_or_else(|| anyhow!("{} is not exported by sl.interposer.dll (an older Streamline?)", name.to_string_lossy()))?;
+    Ok(unsafe { std::mem::transmute_copy::<_, T>(&f) })
+}
+
+/// `slInit` with these features, the plugins taken from `dir`. Gives back the strings
+/// Streamline was handed pointers to (keep them alive).
+fn init(module: HMODULE, dir: &std::path::Path, features: &'static [u32]) -> Result<(Vec<u16>, Vec<*const u16>)> {
+    let init: FnInit = load_fn(module, c"slInit")?;
+    let plugin_dir = wide(dir);
+    let plugin_paths = vec![plugin_dir.as_ptr()];
+    let engine_version = concat!("openOMSI ", env!("CARGO_PKG_VERSION"), "\0");
+    let prefs = Preferences {
+        base: Base::new(PREFERENCES, 1),
+        show_console: false,
+        // (LogLevel::eDefault)
+        log_level: 1,
+        paths_to_plugins: plugin_paths.as_ptr(),
+        num_paths_to_plugins: 1,
+        path_to_logs_and_data: std::ptr::null(),
+        allocate_callback: std::ptr::null(),
+        release_callback: std::ptr::null(),
+        log_message_callback: Some(sl_log),
+        // (Streamline keeps out of wgpu's way: it neither hooks the device nor tracks
+        // the command lists' states, and the inputs are tagged frame by frame)
+        flags: FLAG_DISABLE_CL_STATE_TRACKING | FLAG_DISABLE_DEBUG_TEXT | FLAG_USE_MANUAL_HOOKING | FLAG_FRAME_BASED_TAGGING,
+        features_to_load: features.as_ptr(),
+        num_features_to_load: features.len() as u32,
+        application_id: 0,
+        // (a custom engine on Direct3D 12)
+        engine: 0,
+        engine_version: engine_version.as_ptr().cast(),
+        project_id: PROJECT_ID.as_ptr(),
+        render_api: 1,
+    };
+    check("slInit", unsafe { init(&prefs, SDK_VERSION) })?;
+    Ok((plugin_dir, plugin_paths))
+}
+
+/// A function a Streamline plugin offers (`slGetFeatureFunction`).
+fn feature_fn(module: HMODULE, feature: u32, name: &CStr) -> Result<*mut c_void> {
+    let get_feature_function: FnGetFeatureFunction = load_fn(module, c"slGetFeatureFunction")?;
+    let mut f: *mut c_void = std::ptr::null_mut();
+    check(&format!("slGetFeatureFunction({})", name.to_string_lossy()), unsafe { get_feature_function(feature, name.as_ptr(), &mut f) })?;
+    if f.is_null() {
+        bail!("Streamline does not offer {}", name.to_string_lossy());
+    }
+    Ok(f)
+}
+
+pub struct Runtime {
+    module: HMODULE,
+    shutdown: Fn0,
+    get_new_frame_token: FnGetNewFrameToken,
+    set_tag_for_frame: FnSetTagForFrame,
+    set_constants: FnSetConstants,
+    evaluate_feature: FnEvaluateFeature,
+    free_resources: FnFreeResources,
+    get_optimal_settings: FnDlssGetOptimalSettings,
+    set_options: FnDlssSetOptions,
+    /// (kept alive: `slInit` was given pointers into them)
+    _paths: (Vec<u16>, Vec<*const u16>),
+    viewport: ViewportHandle,
+    /// Quality and window size `slDLSSSetOptions` was last called with.
+    options_set: Option<(TemporalQuality, (u32, u32))>,
+    /// Streamline's answers to "how big to draw": (quality, window size) to picture size.
+    optimal: Vec<((TemporalQuality, (u32, u32)), (u32, u32))>,
+    frame: u32,
+    ring: ListRing,
+    /// DLSS has made its resources for the viewport, to be freed when this is dropped.
+    allocated: bool,
+    /// Streamline's proxy of a `NullSwapChain`, if it made one.
+    pacer: Option<IDXGISwapChain>,
+}
+
+// (only the render thread ever calls into Streamline; what is held are raw handles)
+unsafe impl Send for Runtime {}
+
+impl Runtime {
+    /// Starts Streamline and its DLSS plugin on wgpu's D3D12 device. The error, when there is
+    /// one, is meant for the player's log: which DLL is missing, that the card or its driver
+    /// cannot do DLSS, or that the game is not on DirectX 12.
+    pub fn load(device: &wgpu::Device) -> Result<Runtime> {
+        let hal = unsafe { device.as_hal::<wgpu_hal::api::Dx12>() }.ok_or_else(|| anyhow!("the game is not running on DirectX 12 (Settings: Graphics API)"))?;
+        let raw_device = hal.raw_device().clone();
+        drop(hal);
+        let dir = game_dir();
+        let missing = omsi_cfg::upscaler_files::missing(&dir, "dlss");
+        if !missing.is_empty() {
+            bail!("{} not found in {} (they come with NVIDIA's Streamline SDK, bin/x64)", missing.join(", "), dir.display());
+        }
+        let interposer = wide(&dir.join("sl.interposer.dll"));
+        let module = unsafe { LoadLibraryExW(PCWSTR(interposer.as_ptr()), None, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS) }.context("opening sl.interposer.dll")?;
+        Self::start(module, &dir, raw_device).inspect_err(|_| unsafe {
+            let _ = FreeLibrary(module);
+        })
+    }
+
+    fn start(module: HMODULE, dir: &std::path::Path, device: ID3D12Device) -> Result<Runtime> {
+        let shutdown: Fn0 = load_fn(module, c"slShutdown")?;
+        let is_supported: FnIsFeatureSupported = load_fn(module, c"slIsFeatureSupported")?;
+        let is_loaded: FnIsFeatureLoaded = load_fn(module, c"slIsFeatureLoaded")?;
+        let set_device: FnSetD3DDevice = load_fn(module, c"slSetD3DDevice")?;
+        let get_new_frame_token: FnGetNewFrameToken = load_fn(module, c"slGetNewFrameToken")?;
+        let set_tag_for_frame: FnSetTagForFrame = load_fn(module, c"slSetTagForFrame")?;
+        let set_constants: FnSetConstants = load_fn(module, c"slSetConstants")?;
+        let evaluate_feature: FnEvaluateFeature = load_fn(module, c"slEvaluateFeature")?;
+        let free_resources: FnFreeResources = load_fn(module, c"slFreeResources")?;
+        let upgrade_interface: FnUpgradeInterface = load_fn(module, c"slUpgradeInterface")?;
+
+        static FEATURES: [u32; 1] = [FEATURE_DLSS];
+        let paths = init(module, dir, &FEATURES)?;
+        // Streamline is running now: any failure below shuts it down before returning
+        (|| {
+            check("slSetD3DDevice", unsafe { set_device(device.as_raw()) })?;
+            let mut luid = unsafe { device.GetAdapterLuid() };
+            let adapter = AdapterInfo {
+                base: Base::new(ADAPTER_INFO, 1),
+                device_luid: (&mut luid as *mut windows::Win32::Foundation::LUID).cast(),
+                device_luid_size_in_bytes: std::mem::size_of::<windows::Win32::Foundation::LUID>() as u32,
+                vk_physical_device: std::ptr::null_mut(),
+            };
+            check("the DLSS check of this card (it takes a GeForce RTX and an up-to-date driver)", unsafe { is_supported(FEATURE_DLSS, &adapter) })?;
+            let mut loaded = false;
+            check("slIsFeatureLoaded", unsafe { is_loaded(FEATURE_DLSS, &mut loaded) })?;
+            if !loaded {
+                bail!("sl.dlss.dll was not loaded by Streamline");
+            }
+            let get_optimal_settings: FnDlssGetOptimalSettings = unsafe { std::mem::transmute(feature_fn(module, FEATURE_DLSS, c"slDLSSGetOptimalSettings")?) };
+            let set_options: FnDlssSetOptions = unsafe { std::mem::transmute(feature_fn(module, FEATURE_DLSS, c"slDLSSSetOptions")?) };
+            let ring = ListRing::new(&device).context("DLSS's command lists")?;
+            let pacer: IDXGISwapChain = NullSwapChain { device: device.clone() }.into();
+            let mut raw = pacer.as_raw();
+            let r = unsafe { upgrade_interface(&mut raw) };
+            let pacer = if r == 0 && !raw.is_null() && raw != pacer.as_raw() {
+                // (Streamline's proxy; the reference it handed back is ours to release)
+                Some(unsafe { IDXGISwapChain::from_raw(raw) })
+            } else {
+                log::warn!("DLSS: no swap-chain proxy from Streamline ({}), so its per-frame housekeeping is skipped", result_name(r));
+                None
+            };
+            log::info!("DLSS: Streamline {}.{}.{} and its DLSS plugin loaded from {}", SDK_VERSION >> 48, (SDK_VERSION >> 32) & 0xffff, (SDK_VERSION >> 16) & 0xffff, dir.display());
+            Ok(Runtime {
+                module,
+                shutdown,
+                get_new_frame_token,
+                set_tag_for_frame,
+                set_constants,
+                evaluate_feature,
+                free_resources,
+                get_optimal_settings,
+                set_options,
+                _paths: paths,
+                viewport: ViewportHandle { base: Base::new(VIEWPORT_HANDLE, 1), value: 0 },
+                options_set: None,
+                optimal: Vec::new(),
+                frame: 0,
+                ring,
+                allocated: false,
+                pacer,
+            })
+        })()
+        .inspect_err(|_| {
+            unsafe { shutdown() };
+        })
+    }
+
+    /// `sl::DLSSOptions` for a quality and window size. The presets are set by hand to what
+    /// NVIDIA's newer SDK makes the default anyway (the transformer models): an older
+    /// nvngx_dlss.dll whose default is still the CNN one gets them too, and one that does not
+    /// know a preset takes its default.
+    fn options(quality: TemporalQuality, (w, h): (u32, u32)) -> DlssOptions {
+        DlssOptions {
+            base: Base::new(DLSS_OPTIONS, 3),
+            mode: mode_code(quality),
+            output_width: w,
+            output_height: h,
+            sharpness: 0.0,
+            pre_exposure: 1.0,
+            exposure_scale: 1.0,
+            // (DLSS works on the finished, tone-mapped picture: low range, no HUD yet)
+            color_buffers_hdr: FALSE,
+            indicator_invert_axis_x: FALSE,
+            indicator_invert_axis_y: FALSE,
+            dlaa_preset: PRESET_K,
+            quality_preset: PRESET_K,
+            balanced_preset: PRESET_K,
+            performance_preset: PRESET_M,
+            ultra_performance_preset: PRESET_L,
+            ultra_quality_preset: PRESET_K,
+            use_auto_exposure: TRUE,
+            alpha_upscaling_enabled: FALSE,
+        }
+    }
+
+    /// How big to draw the picture for this quality and window: Streamline's optimal size
+    /// (asked once per quality and size), NVIDIA's ratio if it gives none.
+    pub fn render_size(&mut self, quality: TemporalQuality, out: (u32, u32)) -> (u32, u32) {
+        if quality == TemporalQuality::Native {
+            return out;
+        }
+        if let Some((_, s)) = self.optimal.iter().find(|(k, _)| *k == (quality, out)) {
+            return *s;
+        }
+        let options = Self::options(quality, out);
+        let mut settings = DlssOptimalSettingsS { base: Base::new(DLSS_OPTIMAL_SETTINGS, 1), s: DlssOptimalSettings::default() };
+        let r = unsafe { (self.get_optimal_settings)(&options, &mut settings) };
+        let size = if r == 0 && settings.s.optimal_render_width > 0 && settings.s.optimal_render_height > 0 {
+            (settings.s.optimal_render_width.min(out.0), settings.s.optimal_render_height.min(out.1))
+        } else {
+            log::warn!("DLSS: Streamline gave no picture size for {quality:?} in a {}x{} window ({}); taking NVIDIA's ratio", out.0, out.1, result_name(r));
+            fallback_render_size(quality, out)
+        };
+        log::info!("DLSS {quality:?}: the {}x{} window is drawn at {}x{}", out.0, out.1, size.0, size.1);
+        self.optimal.push(((quality, out), size));
+        size
+    }
+
+    /// Runs DLSS on this frame: records it into the next of our command lists and puts that
+    /// on wgpu's queue. It belongs after the submit that drew `inputs` and before any submit
+    /// that reads `inputs.output`.
+    pub fn evaluate(&mut self, queue: &wgpu::Queue, quality: TemporalQuality, inputs: &Inputs, c: &FrameConstants) -> Result<()> {
+        let queue_hal = unsafe { queue.as_hal::<wgpu_hal::api::Dx12>() }.ok_or_else(|| anyhow!("no Direct3D 12 queue under wgpu's"))?;
+        let raw_queue = queue_hal.as_raw().clone();
+        drop(queue_hal);
+        if self.options_set != Some((quality, inputs.output_size)) {
+            // (a new quality or window size: resizing the proxy makes Streamline drop what it
+            // made for the old one)
+            if let (Some(p), Some(_)) = (&self.pacer, self.options_set) {
+                let _ = unsafe { p.ResizeBuffers(0, inputs.output_size.0, inputs.output_size.1, DXGI_FORMAT_UNKNOWN, DXGI_SWAP_CHAIN_FLAG(0)) };
+            }
+            let options = Self::options(quality, inputs.output_size);
+            check("slDLSSSetOptions", unsafe { (self.set_options)(&self.viewport, &options) })?;
+            self.options_set = Some((quality, inputs.output_size));
+        }
+        let raw = |t: &wgpu::Texture| -> Result<ID3D12Resource> {
+            let h = unsafe { t.as_hal::<wgpu_hal::api::Dx12>() }.ok_or_else(|| anyhow!("no Direct3D 12 resource under a DLSS texture"))?;
+            Ok(unsafe { h.raw_resource() }.clone())
+        };
+        let (color, depth, motion, output, mask) = (raw(inputs.color)?, raw(inputs.depth)?, raw(inputs.motion)?, raw(inputs.output)?, raw(inputs.mask)?);
+        let (rw, rh) = inputs.render_size;
+        let (ow, oh) = inputs.output_size;
+        // (the states the scene's submit leaves them in: `temporal_end_of_scene` makes sure the
+        // last pass on each is a render pass)
+        let resource = |r: &ID3D12Resource, state: D3D12_RESOURCE_STATES, format: wgpu::TextureFormat, (w, h): (u32, u32)| Resource {
+            base: Base::new(RESOURCE, 1),
+            // ResourceType::eTex2d
+            kind: 0,
+            native: r.as_raw(),
+            memory: std::ptr::null_mut(),
+            view: std::ptr::null_mut(),
+            state: state.0 as u32,
+            width: w,
+            height: h,
+            native_format: dxgi_format(format),
+            mip_levels: 1,
+            array_layers: 1,
+            gpu_virtual_address: 0,
+            flags: 0,
+            usage: 0,
+            internal_flags: 0,
+            reserved: 0,
+        };
+        let mut res = [
+            // (the picture's resource is plain UNORM and drawn through an sRGB view: see
+            // `temporal_targets`. DLSS reads it as that view)
+            resource(&color, D3D12_RESOURCE_STATE_RENDER_TARGET, inputs.color.format().add_srgb_suffix(), (rw, rh)),
+            resource(&depth, D3D12_RESOURCE_STATE_DEPTH_WRITE, inputs.depth.format(), (rw, rh)),
+            resource(&motion, D3D12_RESOURCE_STATE_RENDER_TARGET, inputs.motion.format(), (rw, rh)),
+            resource(&output, D3D12_RESOURCE_STATE_RENDER_TARGET, inputs.output.format(), (ow, oh)),
+            resource(&mask, D3D12_RESOURCE_STATE_RENDER_TARGET, inputs.mask.format(), (rw, rh)),
+        ];
+        let render_extent = Extent { top: 0, left: 0, width: rw, height: rh };
+        let output_extent = Extent { top: 0, left: 0, width: ow, height: oh };
+        let [c0, c1, c2, c3, c4] = &mut res;
+        let tag = |r: &mut Resource, kind: u32, extent: Extent| ResourceTag { base: Base::new(RESOURCE_TAG, 1), resource: r, kind, lifecycle: VALID_UNTIL_EVALUATE, extent };
+        let tags = [
+            tag(c0, BUFFER_SCALING_INPUT_COLOR, render_extent),
+            tag(c1, BUFFER_DEPTH, render_extent),
+            tag(c2, BUFFER_MOTION_VECTORS, render_extent),
+            tag(c3, BUFFER_SCALING_OUTPUT_COLOR, output_extent),
+            tag(c4, BUFFER_BIAS_CURRENT_COLOR, render_extent),
+        ];
+        let mut token: *const c_void = std::ptr::null();
+        self.frame = self.frame.wrapping_add(1);
+        check("slGetNewFrameToken", unsafe { (self.get_new_frame_token)(&mut token, &self.frame) })?;
+        if token.is_null() {
+            bail!("slGetNewFrameToken returned no token");
+        }
+        let f2 = |v: [f32; 2]| Float2 { x: v[0], y: v[1] };
+        let f3 = |v: [f32; 3]| Float3 { x: v[0], y: v[1], z: v[2] };
+        let identity = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]];
+        let constants = Constants {
+            base: Base::new(CONSTANTS, 2),
+            camera_view_to_clip: c.view_to_clip,
+            clip_to_camera_view: c.clip_to_view,
+            clip_to_lens_clip: identity,
+            clip_to_prev_clip: c.clip_to_prev_clip,
+            prev_clip_to_clip: c.prev_clip_to_clip,
+            jitter_offset: f2(c.jitter),
+            // (scales our pixel offsets to the 0..1 of the picture DLSS expects)
+            mvec_scale: f2([1.0 / rw as f32, 1.0 / rh as f32]),
+            camera_pinhole_offset: f2([0.0, 0.0]),
+            camera_pos: f3(c.camera_pos),
+            camera_up: f3(c.camera_up),
+            camera_right: f3(c.camera_right),
+            camera_fwd: f3(c.camera_fwd),
+            camera_near: c.near,
+            camera_far: c.far,
+            camera_fov: c.fov,
+            camera_aspect_ratio: c.aspect,
+            motion_vectors_invalid_value: 0.0,
+            depth_inverted: TRUE,
+            camera_motion_included: TRUE,
+            motion_vectors_3d: FALSE,
+            reset: if c.reset { TRUE } else { FALSE },
+            orthographic_projection: FALSE,
+            motion_vectors_dilated: FALSE,
+            motion_vectors_jittered: FALSE,
+            min_relative_linear_depth_object_separation: 40.0,
+        };
+        let list = self.ring.begin()?;
+        let list_ptr = list.as_raw();
+        let recorded = (|| -> Result<()> {
+            check("slSetConstants", unsafe { (self.set_constants)(&constants, token, &self.viewport) })?;
+            check("slSetTagForFrame", unsafe { (self.set_tag_for_frame)(token, &self.viewport, tags.as_ptr(), tags.len() as u32, list_ptr) })?;
+            let inputs: [*const Base; 1] = [&self.viewport.base];
+            check("slEvaluateFeature(DLSS)", unsafe { (self.evaluate_feature)(FEATURE_DLSS, token, inputs.as_ptr(), 1, list_ptr) })?;
+            Ok(())
+        })();
+        // (closed and submitted even when a call above failed: an empty list does no harm, and
+        // the fence then still says when this slot is free)
+        self.ring.submit(&raw_queue)?;
+        recorded?;
+        self.allocated = true;
+        // (tells Streamline the frame is over: see `NullSwapChain`)
+        if let Some(p) = &self.pacer {
+            let _ = unsafe { p.Present(0, DXGI_PRESENT(0)) };
+        }
+        Ok(())
+    }
+}
+
+impl Drop for Runtime {
+    fn drop(&mut self) {
+        // (let the GPU finish the last DLSS frame before its resources go)
+        self.ring.wait();
+        unsafe {
+            if self.allocated {
+                let _ = (self.free_resources)(FEATURE_DLSS, &self.viewport);
+            }
+            self.pacer = None;
+            let r = (self.shutdown)();
+            if r != 0 {
+                log::warn!("DLSS: Streamline did not shut down cleanly: {}", result_name(r));
+            }
+            let _ = FreeLibrary(self.module);
+        }
+    }
+}

@@ -86,7 +86,8 @@ const graphics = {
         { type: 'custom', id: 'preset' },
         { type: 'custom', id: 'optimise' },
         { type: 'select', key: 'msaa', label: 'Anti-aliasing', options: [['1', 'Off'], ['2', '2x MSAA'], ['4', '4x MSAA'], ['8', '8x MSAA']], heavy: (v, s) => v === '8' && !traced(s) },
-        { type: 'select', key: 'upscaler', label: 'Upscaling', options: [['default', 'Standard (Catmull-Rom)'], ['fsr1', 'AMD FSR 1.0']], help: 'Standard Catmull-Rom or AMD FSR 1.0; changes show at once' },
+        { type: 'select', key: 'upscaler', label: 'Upscaling', options: (s) => [['default', 'Standard (Catmull-Rom)'], ['fsr1', 'AMD FSR 1.0'], ...(s.temporal_upscalers || []).map((u) => (u === 'dlss' ? ['dlss', 'NVIDIA DLSS'] : ['fsr3', 'AMD FSR 3']))], help: 'Standard Catmull-Rom or AMD FSR 1.0; changes show at once' },
+        { type: 'select', key: 'upscale_quality', label: 'Upscaling quality', options: [['native', 'Native'], ['quality', 'Quality'], ['balanced', 'Balanced'], ['performance', 'Performance'], ['ultra_performance', 'Ultra performance']], help: "Native keeps the window's resolution and only smooths the edges; the lower the quality, the smaller the picture is drawn and the higher the frame rate", when: (s) => s.upscaler === 'dlss' || s.upscaler === 'fsr3' },
         { type: 'select', key: 'fsr_quality', label: 'FSR quality', options: [['ultra', 'Ultra Quality (77%)'], ['quality', 'Quality (67%)'], ['balanced', 'Balanced (59%)'], ['performance', 'Performance (50%)'], ['auto', 'Automatic (keeps the frame rate)'], ['custom', 'Use render scale']], when: (s) => s.upscaler === 'fsr1' },
         { type: 'slider', key: 'fsr_sharpness', label: 'FSR sharpness', help: 'RCAS sharpening strength', min: 0, max: 1, step: 0.05, def: 0.8, store: snap(0.05), format: pct, when: (s) => s.upscaler === 'fsr1' },
         { type: 'select', key: 'render_scale', label: 'Render scale', options: [['auto', 'Auto'], ['1', '100%'], ['0.85', '85%'], ['0.75', '75%'], ['0.67', '67%'], ['0.5', '50%']] },
@@ -494,6 +495,6 @@ export const SETTINGS_TABS = [graphics, driving, camera, sound, gameplay, genera
 
 /** The settings a saved graphics profile holds (`GRAPHICS_PROFILE_KEYS`). */
 export const GRAPHICS_PROFILE_KEYS = [
-  'graphics', 'msaa', 'render_scale', 'upscaler', 'fsr_quality', 'fsr_sharpness', 'anisotropy', 'shadow_size', 'ssao', 'shadows', 'shadow_casters', 'detail_textures', 'night_brightness', 'led_glow', 'led_mips', 'shadow_blobs', 'lamp_shadows', 'reflections', 'road_glare', 'traffic_headlights', 'clouds', 'cloud_quality', 'street_light', 'rain_quality', 'vehicle_smoke', 'puddles', 'windy_trees', 'road_snow', 'ray_tracing', 'light_shadows', 'cloud_shadows', 'light_glow',
+  'graphics', 'msaa', 'render_scale', 'upscaler', 'upscale_quality', 'fsr_quality', 'fsr_sharpness', 'anisotropy', 'shadow_size', 'ssao', 'shadows', 'shadow_casters', 'detail_textures', 'night_brightness', 'led_glow', 'led_mips', 'shadow_blobs', 'lamp_shadows', 'reflections', 'road_glare', 'traffic_headlights', 'clouds', 'cloud_quality', 'street_light', 'rain_quality', 'vehicle_smoke', 'puddles', 'windy_trees', 'road_snow', 'ray_tracing', 'light_shadows', 'cloud_shadows', 'light_glow',
   'vsync', 'max_fps', 'view_distance', 'max_obj_dist', 'min_obj_size', 'mirror_size', 'mirror_refresh', 'mirror_quality', 'mirror_hud_every_frame', 'video_memory', 'texture_compression', 'gpu_texture_compression',
 ];

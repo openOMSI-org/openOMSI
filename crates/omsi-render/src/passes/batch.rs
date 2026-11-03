@@ -22,6 +22,10 @@ pub(crate) struct DrawPlan {
     pub cab_batches: Vec<Batch>,
     pub prepass_batches: Vec<Batch>,
     pub prefill: Option<Vec<Batch>>,
+    /// what `prefill` leaves out of `prepass_batches` (the parts of a model drawn in its own
+    /// order after its first depth-writing pane): temporal upscaling draws their motion after
+    /// the main pass. Only on its frames.
+    pub cut_batches: Vec<Batch>,
     pub msaa_safe_batches: Vec<Batch>,
     pub presurface_batch_end: usize,
     /// the rain films on the panes, drawn over the finished picture (see `glass_on`)
@@ -70,11 +74,12 @@ impl DrawPlan {
 }
 
 // the depth prepass: opaque and alpha-tested, single-sampled
-fn prepass_items(pool: Option<&rayon::ThreadPool>, scene: &Scene, visible: &[(usize, f32, bool)], deferred: bool, reach: f32) -> (Vec<u32>, Vec<Batch>, Option<Vec<Batch>>, Vec<Batch>) {
+fn prepass_items(pool: Option<&rayon::ThreadPool>, scene: &Scene, visible: &[(usize, f32, bool)], deferred: bool, reach: f32, want_cut: bool) -> (Vec<u32>, Vec<Batch>, Option<Vec<Batch>>, Vec<Batch>, Vec<Batch>) {
     let mut items: Vec<DrawItem> = Vec::new();
     let mut kept: Vec<DrawItem> = Vec::new();
     let mut any_cut = false;
     let mut safe_items = Vec::new();
+    let mut cut_items: Vec<DrawItem> = Vec::new();
     let first_panes = first_depth_panes(scene, visible);
     for &(i, z, _) in visible {
         let inst = &scene.instances[i];
@@ -123,6 +128,9 @@ fn prepass_items(pool: Option<&rayon::ThreadPool>, scene: &Scene, visible: &[(us
                 }
                 if cut {
                     any_cut = true;
+                    if want_cut {
+                        cut_items.push(item);
+                    }
                 } else {
                     kept.push(item);
                 }
@@ -138,10 +146,15 @@ fn prepass_items(pool: Option<&rayon::ThreadPool>, scene: &Scene, visible: &[(us
     };
     let sort = &sort;
     let (mut all, mut kept_sorted, mut safe_sorted) = ((Vec::new(), Vec::new()), None, (Vec::new(), Vec::new()));
+    let mut cut_sorted = (Vec::new(), Vec::new());
     in_scope(pool, |s| {
         if any_cut {
             let (k, out) = (&mut kept, &mut kept_sorted);
             s.spawn(move |_| *out = Some(sort(k)));
+        }
+        if want_cut {
+            let (k, out) = (&mut cut_items, &mut cut_sorted);
+            s.spawn(move |_| *out = sort(k));
         }
         let (k, out) = (&mut safe_items, &mut safe_sorted);
         s.spawn(move |_| *out = sort(k));
@@ -158,7 +171,8 @@ fn prepass_items(pool: Option<&rayon::ThreadPool>, scene: &Scene, visible: &[(us
     };
     let prefill = kept_sorted.map(&mut append);
     let safe_batches = append(safe_sorted);
-    (list, batches, prefill, safe_batches)
+    let cut_batches = append(cut_sorted);
+    (list, batches, prefill, safe_batches, cut_batches)
 }
 
 fn blend_writes_depth(mat: &Material) -> bool {
@@ -353,10 +367,11 @@ impl Renderer {
         let has_presurface = visible.iter().any(|&(i, _, _)| scene.instances[i].presurface);
         let mut prepass_batches: Vec<Batch> = Vec::new();
         let mut prefill = None;
+        let mut cut_batches = Vec::new();
         let mut msaa_safe_batches = Vec::new();
         let deferred = has_presurface && f.enhanced;
         let pool = self.encoding_pool.as_ref();
-        let prepass_job = || { prepass_items(pool, scene, visible, deferred, f.prepass_reach) };
+        let prepass_job = || { prepass_items(pool, scene, visible, deferred, f.prepass_reach, f.temporal_frame) };
         // The main pass follows the authored world phases. Each phase keeps its
         // opaque/cutout draws followed by its blended draws, far to near. Transparent
         // ground layers never write depth while composing: an alpha-zero junction
@@ -459,14 +474,15 @@ impl Renderer {
             batch_items(scene, &mut cab_items, false, list, &mut cab_batches);
             take_prepass();
         });
-        if let Some((pre_list, mut pre_batches, mut pre_prefill, mut safe_batches)) = prepass_found.into_inner().unwrap_or_else(|e| e.into_inner()) {
+        if let Some((pre_list, mut pre_batches, mut pre_prefill, mut safe_batches, mut pre_cut)) = prepass_found.into_inner().unwrap_or_else(|e| e.into_inner()) {
             let offset = list.len() as u32;
-            for b in pre_batches.iter_mut().chain(pre_prefill.iter_mut().flatten()).chain(&mut safe_batches) {
+            for b in pre_batches.iter_mut().chain(pre_prefill.iter_mut().flatten()).chain(&mut safe_batches).chain(&mut pre_cut) {
                 b.instances = b.instances.start + offset..b.instances.end + offset;
             }
             list.extend(pre_list);
             prepass_batches = pre_batches;
             prefill = pre_prefill;
+            cut_batches = pre_cut;
             msaa_safe_batches = safe_batches;
         }
         // OMSI_SKIP_PIPE=3,1: leave pipeline kinds out of the main pass (0 opaque, 1 alpha
@@ -490,7 +506,7 @@ impl Renderer {
         // (the terrain's paint into one picture: not with an excavation, nor with draws left out
         // by a debug switch, which would move the places `terrain_blends` keeps)
         let ground = if has_presurface || f.env.skip_pipe.is_some() { GroundPlan::default() } else { self.plan_ground(scene, f, &mut main_batches, terrain_blends) };
-        DrawPlan { list: draw_list, main_batches, cab_batches, prepass_batches, prefill, msaa_safe_batches, presurface_batch_end, rain_batches: Vec::new(), main_draws, has_presurface, ground }
+        DrawPlan { list: draw_list, main_batches, cab_batches, prepass_batches, prefill, cut_batches, msaa_safe_batches, presurface_batch_end, rain_batches: Vec::new(), main_draws, has_presurface, ground }
     }
 
     /// The order a phase's blended draws are drawn in: (rank, distance, instance), far
@@ -945,6 +961,6 @@ mod tests {
         super::opaque_items(&scene, &visible, None, &mut a, &mut ab);
         super::opaque_items_parts(Some(&pool), &scene, &visible, None, &mut b, &mut bb);
         assert_eq!((a.iter().map(key).collect::<Vec<_>>(), ab), (b.iter().map(key).collect::<Vec<_>>(), bb));
-        assert!(super::prepass_items(None, &scene, &visible, true, 1e9) == super::prepass_items(Some(&pool), &scene, &visible, true, 1e9));
+        assert!(super::prepass_items(None, &scene, &visible, true, 1e9, true) == super::prepass_items(Some(&pool), &scene, &visible, true, 1e9, true));
     }
 }

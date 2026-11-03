@@ -18,6 +18,7 @@ impl Renderer {
             interior_free: Vec::new(),
             coronas: Vec::new(),
             model_buf: None,
+            model_epoch: 0,
             params_buf: None,
             light_buf: None,
             grid_buf: None,

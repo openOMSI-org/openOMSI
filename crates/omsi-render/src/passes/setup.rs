@@ -71,7 +71,15 @@ impl Renderer {
         // from here on `width` and `height` are the size of the picture, `full_*` the
         // window's (the HUD is drawn at that size). Mirrors keep their own size.
         let (full_w, full_h) = (width, height);
-        let (width, height) = if with_overlays {
+        // With temporal upscaling the window's picture (only it: no mirror, headset eye or
+        // texture) is drawn at the size the upscaler asks for, and the upscaler does what FXAA
+        // and the render scale would
+        let temporal_frame = with_overlays && projection.is_none() && self.temporal_window && self.texture_aspect.is_none() && self.temporal_start();
+        let (width, height) = if temporal_frame {
+            let size = self.temporal_render_size((full_w, full_h));
+            self.temporal_targets(size, (full_w, full_h));
+            size
+        } else if with_overlays {
             self.scene_size(full_w, full_h)
         } else if let Some(s) = self.xr_fsr_scale().filter(|_| projection.is_some()) {
             // (a VR eye with FSR 1: drawn smaller, scaled up to the headset's image)
@@ -83,6 +91,7 @@ impl Renderer {
         // edges (the Enhanced path has it in its post passes): the picture is drawn into a
         // texture of the window's size and smoothed on its way to the window, the HUD after
         let vanilla_fxaa = with_overlays
+            && !temporal_frame
             && (width, height) == (full_w, full_h)
             && self.options.fxaa
             && self.options.msaa <= 1
@@ -95,8 +104,11 @@ impl Renderer {
             && scene.glass_slot.is_some()
             && (lighting.rain > 0.001 || lighting.wetness > 0.02)
             && !env.no_glass_picture;
-        let scaled = (width, height) != (full_w, full_h) || vanilla_fxaa || (glass_on && !enhanced_view);
-        let scene_target: Option<(wgpu::TextureView, wgpu::BindGroup)> = if scaled {
+        let scaled = (width, height) != (full_w, full_h) || vanilla_fxaa || (glass_on && !enhanced_view) || temporal_frame;
+        let scene_target: Option<(wgpu::TextureView, wgpu::BindGroup)> = if temporal_frame {
+            // (the picture goes into the upscaler's input, not into the render scale's target)
+            self.temporal.as_ref().and_then(|d| d.targets.as_ref()).map(|t| (t.color_view.clone(), t.color_bg.clone()))
+        } else if scaled {
             Some(self.scale_target(width, height))
         } else {
             None
@@ -152,7 +164,7 @@ impl Renderer {
         let ao_on = with_overlays && self.rt.is_none() && self.options.ssao && self.ssao_pipeline.is_some() && !env.no_ao;
         // the enhanced path's shading is costly: the depth prepass keeps it to the visible
         // surface (without multisampling, see `share_depth`)
-        let depth_wanted = puddles_wanted || glass_on || (enhanced && (with_overlays || xr_view)) || (self.depth_readback && projection.is_none());
+        let depth_wanted = puddles_wanted || glass_on || (enhanced && (with_overlays || xr_view)) || (self.depth_readback && projection.is_none()) || temporal_frame;
         let prepass_on = ao_on || depth_wanted;
         // the terrain's paint laid into one albedo picture first: the window's enhanced
         // picture, single-sampled, with the camera group's slot 8 free of the AO
@@ -218,6 +230,7 @@ impl Renderer {
             second_eye,
             ro,
             full_w,
+            temporal_frame,
             width,
             height,
             vanilla_fxaa,
@@ -266,6 +279,9 @@ impl Renderer {
             .projection
             .map(|p| p * Mat4::look_to_rh((camera.position - ro).as_vec3(), camera.forward(), camera.up()))
             .unwrap_or_else(|| camera.view_proj(aspect, ro));
+        // (temporal upscaling: the projection moved by this frame's sub-pixel offset)
+        self.temporal_pending = None;
+        let vp_mat = if f.temporal_frame { self.temporal_jitter(scene, f, vp_mat) } else { vp_mat };
         // the last frame's picture for the bounced light, found again under this frame's view
         if lead_view {
             let size = (f.width, f.height);

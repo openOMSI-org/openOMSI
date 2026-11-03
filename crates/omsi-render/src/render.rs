@@ -305,7 +305,10 @@ impl Renderer {
         if self.targets.triple_targets.take().is_some() {
             self.history.triple_culling = Default::default();
         }
+        // (temporal upscaling only ever draws this picture: the window's own)
+        self.temporal_window = true;
         self.render_inner(scene, target, width, height, camera, lighting, true, None, None, false);
+        self.temporal_window = false;
     }
 
     /// Three independently culled and shaded physical panels, composited into a
@@ -782,6 +785,8 @@ impl Renderer {
         }
         let puddles_on = self.encode_scene_reflections(&mut enc.picture, scene, &f, &plan, &cu, &mut timers);
         self.encode_fog_lamps(&mut enc.picture, scene, &f, vp_mat, puddles_on, &mut timers);
+        self.encode_temporal_late_motion(&mut enc.picture, scene, &f, &plan);
+        self.encode_temporal_mask(&mut enc.picture, scene, &f, &plan);
         self.encode_rain_film(&mut enc.picture, scene, &f, &plan.rain_batches, puddles_on);
         self.encode_classic_present(&mut enc.picture, scene, &f, puddles_on);
         if f.enhanced {
@@ -790,6 +795,10 @@ impl Renderer {
         self.encode_upscale(&mut enc.picture, scene, &f, &mut timers);
         clock.stage(self, "encode", "mirror.encode");
         self.finish_and_submit(enc, main_parts, big, with_overlays, &mut clock, timers);
+        // the picture is on the queue now: the upscaler brings it up into the window, the HUD after
+        if let Some(frame) = self.temporal_pending.take().filter(|_| f.temporal_frame) {
+            self.temporal_present(scene, &f, frame);
+        }
     }
 
     /// Render off-screen and return RGBA8 pixels.

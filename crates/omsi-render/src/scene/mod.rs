@@ -225,6 +225,9 @@ pub struct Scene {
     /// (and whether the run belongs to the vehicle the camera is in, drawn after it)
     pub(crate) corona_runs: Vec<(u16, u32, u32, bool)>,
     pub(crate) model_buf: Option<GpuArray>,
+    /// Bumped each time every entry is laid out again (`prepare`): an entry's matrix of the
+    /// last frame is its own only while this stays (temporal upscaling's motion vectors).
+    pub(crate) model_epoch: u64,
     pub(crate) params_buf: Option<GpuArray>,
     pub(crate) light_buf: Option<GpuArray>,
     pub(crate) grid_buf: Option<GpuArray>,
