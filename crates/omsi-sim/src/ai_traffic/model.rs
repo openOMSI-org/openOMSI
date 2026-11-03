@@ -504,9 +504,9 @@ pub fn personality(state: &mut AiState, seed: u64, heavy: bool) {
     let rg = |k: u64| random::draw_gaussian(seed, 50000 + k);
 
     state.desire = if heavy {
-        0.93 + 0.05 * rg(3)
+        (0.93 + 0.05 * rg(3)).clamp(0.8, 1.2)
     } else {
-        1.01 + 0.11 * rg(3)
+        (1.01 + 0.11 * rg(3)).clamp(0.7, 1.3)
     };
     state.headway = 1.4 + 0.2 * rg(11);
     state.min_gap = 1.6 + 1.4 * ru(19);
@@ -519,7 +519,7 @@ pub fn personality(state: &mut AiState, seed: u64, heavy: bool) {
     state.accept_gap = (4.0 + 1.0 * rg(43)).max(2.0);
     state.reaction = (0.8 + 0.2 * rg(51)).max(0.2);
 
-    state.honk_factor = 1.0 + 0.2 * rg(8);
+    state.honk_factor = (1.0 + 0.2 * rg(8)).max(0.2);
     state.amber_factor = (0.03 + 0.01 * rg(9)).max(0.0);
     // the hardest braking of ordinary driving: a lorry's or a bus's driver stays further
     // under the emergency stop's ceiling than a car's

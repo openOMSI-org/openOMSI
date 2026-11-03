@@ -117,7 +117,7 @@ impl TrafficSim {
                     true
                 }
                 Aspect::Yellow | Aspect::GreenYellow => {
-                    if (on_its_way && (amber == Some((c, li)) || gap < comfortable)) || ad < amber_factor  {
+                    if on_its_way && ((amber == Some((c, li)) || gap < comfortable) || ad < amber_factor)  {
                         amber = Some((c, li));
                         true
                     } else {
@@ -129,8 +129,7 @@ impl TrafficSim {
                 // stays where it is)
                 Aspect::Red | Aspect::RedYellow => {
                     let go = (amber == Some((c, li)) && on_its_way && gap < comfortable)
-                        || (v > 1.0 && gap < possible - 0.5)
-                        || ad < amber_factor * amber_factor;
+                        || (v > 1.0 && (gap < possible - 0.5 || ad < amber_factor * amber_factor));
                     if !go && amber == Some((c, li)) {
                         amber = None;
                         started = false;
