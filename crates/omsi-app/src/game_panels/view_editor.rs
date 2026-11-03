@@ -16,7 +16,7 @@ use omsi_ui::theme::Palette;
 #[derive(Default)]
 pub(crate) struct ViewEditor {
     said: Option<String>,
-    aimed: Option<usize>,
+    aimed: Option<(usize, (f32, f32))>,
     look_before: Option<(String, String, (f32, f32))>,
 }
 
@@ -121,8 +121,16 @@ fn look_at_mirror(app: &mut crate::App, i: usize) {
         look_back(app);
     }
     let tracked = app.settings.head_tracking && app.input.headtrack.is_some();
-    if app.menus.game_panels.view.as_ref().is_some_and(|e| e.aimed == Some(i)) || app.view != "driver" || tracked {
+    if app.menus.game_panels.view.as_ref().is_some_and(|e| stays_aimed(e.aimed, i, app.cam.look)) || app.view != "driver" || tracked {
         return;
+    }
+    if let Some((.., key)) = app.cam.f1_reset.take() {
+        if key == app.cam.look_view {
+            app.cam.look = (0.0, 0.0);
+        } else {
+            app.cam.view_looks.insert(key, (0.0, 0.0));
+        }
+        app.cam.view_zoom.remove("driver");
     }
     let vr = app.vr_active();
     let own_view = app.player.as_ref().is_some_and(|p| p.cam_choice.0 == 0) && !vr;
@@ -130,7 +138,7 @@ fn look_at_mirror(app: &mut crate::App, i: usize) {
     let zoom = crate::app_impl::with_zoom_hold(app.cam.view_zoom.get(&app.view).copied(), app.cam.zoom_hold.factor);
     let (view_fov, fov_setting) = (app.cam.view_fov.filter(|_| own_view), app.settings.fov);
     let window = app.gfx.surface.as_ref().map(|s| (s.config.width as f32, s.config.height as f32));
-    let (Some(p), Some(fallback)) = (app.player.as_ref(), app.camera.clone()) else { return };
+    let (Some(p), Some(fallback)) = (app.player.as_ref(), app.camera.map(|c| omsi_render::Camera { fov_deg: 60.0, ..c })) else { return };
     let Some(c) = p.vehicle.ty.def.cameras_reflexion.get(i) else { return };
     let target = p.vehicle.camera_world_full(c).0;
     let (screen_x, aspect) = match (app.menus.game_panels.laid_out, window) {
@@ -149,10 +157,13 @@ fn look_at_mirror(app: &mut crate::App, i: usize) {
     let before = (app.session.seat_bus.clone(), app.cam.look_view.clone(), app.cam.look);
     if let Some(e) = app.menus.game_panels.view.as_mut() {
         e.look_before.get_or_insert(before);
-        e.aimed = Some(i);
+        e.aimed = Some((i, look));
     }
-    app.cam.f1_reset = None;
     app.cam.look = look;
+}
+
+fn stays_aimed(aimed: Option<(usize, (f32, f32))>, i: usize, look: (f32, f32)) -> bool {
+    aimed == Some((i, look))
 }
 
 fn aim_look(camera: impl Fn((f32, f32)) -> omsi_render::Camera, offset: (f32, f32), target: glam::DVec3, start: (f32, f32), screen_x: f32, aspect: f32) -> Option<(f32, f32)> {
@@ -385,7 +396,7 @@ mod mirror_axis_tests {
 
 #[cfg(test)]
 mod aim_tests {
-    use super::{aim_look, restore_look};
+    use super::{aim_look, restore_look, stays_aimed};
 
     fn cam(yaw: f32, pitch: f32) -> omsi_render::Camera {
         omsi_render::Camera { position: glam::DVec3::ZERO, yaw, pitch, roll: 0.0, fov_deg: 60.0, near: 0.1, far: 100.0 }
@@ -442,5 +453,13 @@ mod aim_tests {
         let target = glam::DVec3::new((sy * cp) as f64, (cy * cp) as f64, sp as f64) * 3.0;
         let look = aim_look(|l| cam(10.0 + l.0, l.1), (20.0, -5.0), target, (0.0, 0.0), 0.0, 1.0).unwrap();
         assert!((look.0 - 30.0).abs() < 0.1 && (look.1 + 3.0).abs() < 0.1, "{look:?}");
+    }
+
+    #[test]
+    fn a_mirror_aimed_at_is_aimed_at_again_once_the_head_has_moved() {
+        let aimed = Some((0, (50.0, -8.0)));
+        assert!(stays_aimed(aimed, 0, (50.0, -8.0)));
+        assert!(!stays_aimed(aimed, 0, (0.0, 0.0)));
+        assert!(!stays_aimed(aimed, 1, (50.0, -8.0)));
     }
 }
