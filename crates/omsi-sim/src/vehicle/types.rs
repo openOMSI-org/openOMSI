@@ -61,7 +61,7 @@ pub fn builtin_vars(root: &Path) -> Vec<String> {
                 .map(|l| l.trim().to_string())
                 .filter(|l| !l.is_empty())
                 .collect(),
-            Err(_) => ["Velocity", "Velocity_Ground", "Throttle", "Brake", "Clutch", "M_Wheel", "n_Wheel", "Brakeforce", "A_Trans_X", "A_Trans_Y", "A_Trans_Z"].into_iter().chain(super::engine_vars::NAMES).map(String::from).collect(),
+            Err(_) => ["Velocity", "Velocity_Ground", "Throttle", "Brake", "Clutch", "M_Wheel", "n_Wheel", "Brakeforce", "A_Trans_X", "A_Trans_Y", "A_Trans_Z", "Spot_Select", "Snd_OutsideVol"].into_iter().chain(super::engine_vars::NAMES).map(String::from).collect(),
         };
     for a in 0..8 {
         for side in ["L", "R"] {

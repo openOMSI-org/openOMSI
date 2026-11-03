@@ -771,7 +771,10 @@ impl<'a> Compiler<'a> {
         match (kind, scope) {
             (b'L', b'L') => match self.p.var(&lname) {
                 Some(id) => Some(Op::Load(id)),
-                None if self.declare_unknown => Some(Op::Load(self.p.declare_var(name))),
+                None if self.declare_unknown => {
+                    log::debug!("{}:{line}: variable \"{name}\" declared as the script uses it", file.display());
+                    Some(Op::Load(self.p.declare_var(name)))
+                }
                 None => {
                     self.err(file, line, format!("SC_ErrorInCommand_varinvalid: variable \"{name}\" not found"));
                     Some(Op::Push(0.0))
@@ -779,7 +782,10 @@ impl<'a> Compiler<'a> {
             },
             (b'S', b'L') => match self.p.var(&lname) {
                 Some(id) => Some(Op::Store(id)),
-                None if self.declare_unknown => Some(Op::Store(self.p.declare_var(name))),
+                None if self.declare_unknown => {
+                    log::debug!("{}:{line}: variable \"{name}\" declared as the script uses it", file.display());
+                    Some(Op::Store(self.p.declare_var(name)))
+                }
                 None => {
                     self.err(file, line, format!("SC_ErrorInCommand_varinvalid: variable \"{name}\" not found"));
                     None
