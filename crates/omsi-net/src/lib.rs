@@ -3041,6 +3041,10 @@ impl LanSession {
         }
         if let Some(p) = self.peers.remove(&id) {
             log::info!("LAN: player {id} '{}' left", p.pose.name);
+            let keep: Vec<u32> = self.peers.keys().copied().collect();
+            self.sounds.retain_peers(&keep);
+            self.var_receiver.retain_peers(&keep);
+            self.schema_receiver.retain_peers(&keep);
             gone.push(id);
             self.gone_lately.push((p.nonce, p.pose.name.clone(), id, Instant::now()));
             if self.role == Role::Host {
