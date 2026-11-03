@@ -63,7 +63,7 @@ impl ScheduleSim {
                 .data
                 .trips
                 .iter()
-                .position(|x| x.name.eq_ignore_ascii_case(&tt.trip))
+                .position(|x| x.is_named(&tt.trip))
             else {
                 continue;
             };

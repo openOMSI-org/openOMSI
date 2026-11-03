@@ -189,7 +189,7 @@ impl ScheduleSim {
             .data
             .trips
             .iter()
-            .find(|x| x.name.eq_ignore_ascii_case(trip_name))
+            .find(|x| x.is_named(trip_name))
         else {
             return (Vec::new(), true);
         };
