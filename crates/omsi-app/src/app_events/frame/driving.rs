@@ -266,6 +266,7 @@ pub(super) fn audio(cx: AudioCx, dt: f32) {
     }
     if let (Some(a), Some(cam)) = (cx.sound.audio.as_ref(), cx.view.camera.as_ref()) {
         let (reverb_time, reverb_mix) = cx.world.world.as_ref().map(|w| w.reverb_at(cam.position)).unwrap_or((0.0, 0.0));
+        omsi_audio::soundset::set_master_volume(cx.common.settings.volume);
         a.set_listener(omsi_audio::Listener {
             position: cam.position.as_vec3(),
             forward: cam.forward(),

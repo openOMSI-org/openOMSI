@@ -59,7 +59,7 @@ impl ScheduleSim {
                     if let Some(ti) = data
                         .trips
                         .iter()
-                        .position(|x| x.name.eq_ignore_ascii_case(&t.trip))
+                        .position(|x| x.is_named(&t.trip))
                     {
                         let profile = usize::try_from(t.profile)
                             .unwrap_or(0)

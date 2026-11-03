@@ -108,7 +108,6 @@ impl TrafficSim {
             target,
             lights_only: false,
             spawn_radius: 400.0,
-            starved_since: None,
             time: 0.0,
             camera: None,
             lights,

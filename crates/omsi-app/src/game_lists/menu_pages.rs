@@ -67,7 +67,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         slider_row(app, "led_glow", "LED glow", "How strongly the dots of LED destination displays glow", &|v| format!("{}/15", v as i64)).filter(|_| shown("led_glow")),
         slider_row(app, "led_mips", "LED mip strength", "Lower: sharper LED dots that shimmer from a distance; higher: calmer, softer dots", &|v| format!("{v:.2}")).filter(|_| shown("led_mips")),
         slider_row(app, "reflections", "Reflective objects reflect", "Changes show at once; turned up from Off, they come back when the game starts the next time", &|v| if v < 0.005 { "Off".to_string() } else { format!("{:.0}%", v * 100.0) }).filter(|_| shown("reflections")),
-        slider_row(app, "road_glare", "Road sunlight glare", "Enhanced: direct sunlight highlights on roads and ground; 100% is the original look", &pct).filter(|_| shown("road_glare")),
+        slider_row(app, "road_glare", "Road glare", "Enhanced: highlights of the sun, the headlights and the street lamps on roads and ground; 100% keeps the original appearance.", &pct).filter(|_| shown("road_glare")),
         slider_row(app, "traffic_headlights", "Traffic headlight brightness", "All graphics modes: other vehicles' white headlamp glow and road illumination, not the player bus or street lights", &pct).filter(|_| shown("traffic_headlights")),
         switch_row(app, "clouds", "Clouds", later),
         pick("cloud_quality", "Cloud quality", "Enhanced: the volumetric clouds marched in fewer steps - faster, a little grainier").filter(|_| shown("cloud_quality") && app.settings.clouds),

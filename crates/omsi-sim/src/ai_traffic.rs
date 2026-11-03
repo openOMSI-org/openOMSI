@@ -157,10 +157,6 @@ pub struct TrafficSim {
     /// on the roads - no aircraft, no parked car pulling out - while `target` is 0.
     pub lights_only: bool,
     pub spawn_radius: f64,
-    /// Since when (sim time) fewer than half the cars asked for drive about the player: open
-    /// country, where nothing within `NEAR_HIDE` is ever out of sight and a car coming along
-    /// the road could never be woken (see `omsi-app`'s `wake_dormant`).
-    pub starved_since: Option<f32>,
     pub time: f32,
     /// Where the camera is (the window sets it before `sync`): far cars show their script
     /// textures as stand-ins.

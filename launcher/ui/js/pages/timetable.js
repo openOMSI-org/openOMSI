@@ -96,7 +96,7 @@ function indexOf(data) {
     if (!next.has(a)) next.set(a, []);
     next.get(a).push([b, m]);
   }
-  const trips = new Map(data.trips.map((x) => [x.name.toLowerCase(), x]));
+  const trips = new Map(data.trips.map((x) => [x.name.trim().toLowerCase(), x]));
   return (data._ix = { names, calls, depots, next, trips });
 }
 
@@ -265,7 +265,7 @@ async function saveBuild(line, tour, addToTour) {
   const name = (b.named ? b.name : autoName(ix, b)).trim();
   if (!fileNameOk(name)) return toast(t('Type the trip\'s name (it becomes the file name, so no / \\ : * ? " < > |)'), 'error');
   if (b.stops.length < 2) return toast(t('A trip needs two stops at least.'), 'error');
-  if (ix.trips.has(name.toLowerCase())) return toast(t('A trip named {name} is there already', { name }), 'error');
+  if (ix.trips.has(name.trim().toLowerCase())) return toast(t('A trip named {name} is there already', { name }), 'error');
   up({ busy: true });
   try {
     await call('timetable_trip_save', { map: s.map, trip: { name, line: b.line, terminus: b.to, stops: b.stops } });
@@ -376,7 +376,7 @@ function TourTools({ s, line, tour }) {
 }
 
 function TripRow({ s, ix, x, i, line, tour }) {
-  const info = ix.trips.get(x.trip.toLowerCase());
+  const info = ix.trips.get(x.trip.trim().toLowerCase());
   const [from, to] = ends(ix, info);
   const draft = s.drafts[`${line.name}|${s.tour}|${i}`];
   const key = `${line.name}|${s.tour}|${i}`;

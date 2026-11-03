@@ -146,6 +146,10 @@ pub fn parse_stnlinks(f: &CfgFile) -> Vec<StnLink> {
 }
 
 impl Trip {
+    pub fn is_named(&self, name: &str) -> bool {
+        self.name.trim().eq_ignore_ascii_case(name.trim())
+    }
+
     pub fn load(path: &Path) -> Result<Trip, omsi_cfg::CfgError> {
         let f = CfgFile::read(path)?;
         Ok(Self::parse(&f))
@@ -537,13 +541,21 @@ impl TimetableData {
     }
 
     pub fn trip(&self, name: &str) -> Option<&Trip> {
-        self.trips.iter().find(|t| t.name.eq_ignore_ascii_case(name))
+        self.trips.iter().find(|t| t.is_named(name))
     }
 }
 
 #[cfg(test)]
 mod line_tests {
     use super::*;
+
+    #[test]
+    fn a_trip_whose_file_name_ends_with_a_space_is_found_by_the_tours_name() {
+        let data = TimetableData { trips: vec![Trip { name: "10 - 2 ".into(), ..Default::default() }], ..Default::default() };
+        assert!(data.trip("10 - 2").is_some());
+        assert!(data.trip(" 10 - 2 ").is_some());
+        assert!(data.trip("10 - 3").is_none());
+    }
 
     #[test]
     fn line_text_reads_back() {

@@ -189,7 +189,7 @@ impl ScheduleSim {
             .data
             .trips
             .iter()
-            .find(|x| x.name.eq_ignore_ascii_case(trip_name))
+            .find(|x| x.is_named(trip_name))
         else {
             return (Vec::new(), true);
         };
@@ -213,7 +213,7 @@ impl ScheduleSim {
     /// has every tile's lanes whether loaded or not - chosen as `slots` chooses them (of a
     /// two-way path the direction that joins the lanes before and after).
     pub fn trip_route_in(&self, net: &crate::traffic::Network, trip_name: &str) -> Vec<usize> {
-        let Some(trip) = self.data.trips.iter().find(|x| x.name.eq_ignore_ascii_case(trip_name)) else {
+        let Some(trip) = self.data.trips.iter().find(|x| x.is_named(trip_name)) else {
             return Vec::new();
         };
         let (steps, _) = self.steps_of(trip_name, &trip_stations(trip));
