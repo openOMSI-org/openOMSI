@@ -1291,7 +1291,7 @@ impl TrafficSim {
                 let p = c.vehicle.position;
                 let r = (c.state.front + c.state.rear).abs().max(4.0) as f64 + 2.0;
                 let d = (p - v.pos).length();
-                c.vehicle.ai_visuals = d < UNSEEN_NEAR || v.frames(p, r);
+                c.vehicle.ai_visuals = d < UNSEEN_NEAR || (d < MIRROR_REACH && (p - v.pos).dot(v.forward) < 0.0) || v.frames(p, r);
                 // (a car nobody sees, well out of earshot of the mirrors: its script runs a
                 // few times a second, not every frame - each car at its own beat, so the
                 // runs do not all fall in one frame; a bus keeps its stop handshake)

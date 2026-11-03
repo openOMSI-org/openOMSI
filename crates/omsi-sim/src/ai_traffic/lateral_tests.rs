@@ -728,3 +728,15 @@ fn a_bus_serves_its_stop_before_moving_over_to_the_lane_its_route_goes_on() {
         }
     }
 }
+
+#[test]
+fn a_car_behind_the_camera_is_drawn_as_far_as_the_mirrors_see() {
+    let f = Fixture::new();
+    let mut t = traffic(&f, net_of(vec![street(0.0, -400.0, 0.0, 800.0)], &[]));
+    let near = add_car(&mut t, &f, 0, 250.0, 0xd01, Some(0.0));
+    let far = add_car(&mut t, &f, 0, 50.0, 0xd02, Some(0.0));
+    t.viewer = Some(viewer::Viewer::lan_player(DVec3::new(0.0, 0.0, 0.0), 0.0));
+    t.tick(DT, None);
+    assert!(car(&t, near).unwrap().vehicle.ai_visuals, "150 m behind the camera, in the mirrors' reach");
+    assert!(!car(&t, far).unwrap().vehicle.ai_visuals, "350 m behind the camera");
+}
