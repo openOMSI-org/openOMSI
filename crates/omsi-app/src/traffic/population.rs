@@ -504,7 +504,7 @@ impl Traffic {
             let mut types: HashMap<u64, Arc<VehicleType>> = HashMap::new();
             let admitted = admission.pass_for(Some(class), now, host, &mut budgets, |r| {
                 // nobody may see it appear (the first population is the world as it loads)
-                if kind == LaneKind::Street && !initial && !self.may_appear(world, r.pos) && !self.far_off(r.pos) {
+                if kind == LaneKind::Street && !initial && !self.far_off(r.pos) && !self.may_appear(world, r.pos) {
                     return Verdict::Retry(Retry::Visible);
                 }
                 // nor where something stands, or drives up so close it would have to brake hard
@@ -569,7 +569,7 @@ impl Traffic {
             // (as a new car: never close by, where the mirrors and a turn of the head see
             // it - woken out of the picture 30-60 m from the bus, a car came into being in
             // the mirror or just round the corner)
-            if !self.may_appear(world, p) && !self.far_off(p) {
+            if !self.far_off(p) && !self.may_appear(world, p) {
                 return Verdict::Retry(Retry::Visible);
             }
             let Some(d) = self.sim.dormant.iter().find(|d| Some(d.id) == r.dormant) else {

@@ -128,8 +128,8 @@ impl ScheduleSim {
     /// go on to from there, each with the termini of the trips that do. A passenger waiting
     /// at the stop wants one of these targets and boards a bus whose terminus is among its
     /// termini (0x61c33c); the names compare exactly.
-    /// Per bus stop, the destinations of the trips due there within the next
-    /// [`PAX_SPAWN_AHEAD`] (today's departures, the stations they stop at after it): what
+    /// Per bus stop, the destinations of the trips due there from [`PAX_LATE_WAIT`] ago to
+    /// [`PAX_SPAWN_AHEAD`] ahead (today's departures, the stations they stop at after it): what
     /// the people turning up there now draw their destination from. Omsi.exe spawns
     /// people for a trip up to a quarter of an hour before it is due at their stop (pionsix's
     /// tests, #1436); the destinations of every trip of the map, whatever its hour or day,
