@@ -20,10 +20,12 @@ pub(super) fn show_street(app: &mut App, name: &str) -> Option<ListKind> {
 }
 
 pub(crate) fn refresh_streets_when_read(app: &mut App) {
-    if matches!(app.menus.list_kind, Some(ListKind::Streets))
-        && app.menus.admin_list.as_ref().is_some_and(|l| l.iter().any(|(t, _)| *t == omsi_ui::tr(READING)))
-        && app.menus.navigator.as_ref().is_some_and(|n| n.street_names().is_some())
-    {
+    if !matches!(app.menus.list_kind, Some(ListKind::Streets)) {
+        return;
+    }
+    let id = app.menus.navigator.as_ref().map_or(0, |n| n.streets_id());
+    if id != app.menus.streets_seen {
+        app.menus.streets_seen = id;
         app.refresh_list();
     }
 }
@@ -46,11 +48,12 @@ mod tests {
         assert_eq!(run(app, &ListKind::Streets, "search"), Some(ListKind::Streets));
         app.open_list(ListKind::Streets);
         app.route_edit_text("haupt");
-        assert!(crate::platform::TEXT_INPUT_ON.with(|t| t.get()));
+        assert!(crate::platform::PHONE_KEYBOARD_ON.with(|t| t.get()));
+        assert_eq!(crate::platform::TEXT_INPUT_ON.with(|t| t.get()), crate::platform::MOBILE);
     }
 
     fn typing_over(app: &App) -> bool {
-        !crate::platform::TEXT_INPUT_ON.with(|t| t.get()) && app.menus.menu_edit.is_none() && !app.menus.menu_edit_search
+        !crate::platform::PHONE_KEYBOARD_ON.with(|t| t.get()) && !crate::platform::TEXT_INPUT_ON.with(|t| t.get()) && app.menus.menu_edit.is_none() && !app.menus.menu_edit_search
     }
 
     #[test]
@@ -85,10 +88,16 @@ mod tests {
         app.chooser_key(KeyCode::Escape);
         assert!(typing_over(&app));
         start_search(&mut app);
-        app.route_edit_text("\n");
+        app.route_edit_text("str\n");
         assert!(typing_over(&app));
+        assert!(app.menus.menu_search.ends_with("hauptstr"));
         start_search(&mut app);
         app.open_list(ListKind::Numbers);
+        assert!(typing_over(&app));
+        app.open_list(ListKind::Streets);
+        start_search(&mut app);
+        let back = app.menus.admin_list.as_ref().map_or(0, |l| l.len() - 1);
+        app.chooser_pick(back);
         assert!(typing_over(&app));
     }
 

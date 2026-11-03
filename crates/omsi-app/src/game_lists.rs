@@ -945,7 +945,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
     if action == "search" && searchable(kind) {
         app.menus.menu_edit = Some(app.menus.menu_search.clone());
         app.menus.menu_edit_search = true;
-        crate::platform::text_input(app.window.as_deref(), true);
+        crate::platform::phone_keyboard(app.window.as_deref(), true);
         return Some(kind.clone());
     }
     if action == "back" && crate::player_list::is_page(Some(kind)) {

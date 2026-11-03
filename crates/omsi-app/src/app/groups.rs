@@ -466,6 +466,7 @@ pub(crate) struct MenuState {
     pub(crate) menu_edit_ident: bool,
     /// `menu_edit` is the search of the open list being typed (see `game_lists::searchable`).
     pub(crate) menu_edit_search: bool,
+    pub(crate) streets_seen: usize,
     /// The search the open list is filtered by (empty: none).
     pub(crate) menu_search: String,
     /// The vehicle being chosen in "Place a vehicle" takes the place of the one driven

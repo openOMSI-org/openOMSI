@@ -157,6 +157,10 @@ impl Navigator {
         out
     }
 
+    pub fn streets_id(&self) -> usize {
+        self.streets.as_ref().map_or(0, |s| std::sync::Arc::as_ptr(s) as usize)
+    }
+
     pub fn street_names(&self) -> Option<Vec<String>> {
         let st = self.streets.as_deref()?;
         let mut labelled = vec![false; st.names.len()];

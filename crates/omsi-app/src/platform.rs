@@ -71,9 +71,18 @@ pub(crate) fn text_input(window: Option<&winit::window::Window>, on: bool) {
     TEXT_INPUT_ON.with(|t| t.set(on));
 }
 
+pub(crate) fn phone_keyboard(window: Option<&winit::window::Window>, on: bool) {
+    #[cfg(test)]
+    PHONE_KEYBOARD_ON.with(|t| t.set(on));
+    if MOBILE {
+        text_input(window, on);
+    }
+}
+
 #[cfg(test)]
 thread_local! {
     pub(crate) static TEXT_INPUT_ON: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    pub(crate) static PHONE_KEYBOARD_ON: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// Ask the system for the microphone now (Android's runtime permission; the other systems ask

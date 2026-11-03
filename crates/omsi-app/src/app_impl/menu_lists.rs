@@ -252,7 +252,8 @@ impl App {
     /// Text entered in OMSI's free route-number field. It is intentionally not restricted
     /// to letters and digits: add-on displays use values such as `-10` and other symbols.
     pub(crate) fn route_edit_text(&mut self, text: &str) {
-        if self.menus.menu_edit_search && text.contains('\n') {
+        if let Some((typed, _)) = text.split_once('\n').filter(|_| self.menus.menu_edit_search) {
+            self.route_edit_text(typed);
             self.search_edit_key(KeyCode::Enter);
             return;
         }
@@ -655,7 +656,10 @@ impl App {
                     }
                 }
                 None if action != "back" && matches!(kind, crate::game_lists::ListKind::Tours(..) | crate::game_lists::ListKind::Numbers | crate::game_lists::ListKind::Destinations | crate::game_lists::ListKind::RouteNumbers | crate::game_lists::ListKind::Hofs | crate::game_lists::ListKind::Spots) => self.close_game_menu(),
-                None => self.menus.menu_top = None,
+                None => {
+                    self.menus.menu_top = None;
+                    self.forget_search();
+                }
             }
             return;
         }
@@ -747,7 +751,7 @@ mod dropdown_tests {
 impl App {
     pub(crate) fn stop_search_typing(&mut self) {
         if self.menus.menu_edit_search {
-            crate::platform::text_input(self.window.as_deref(), false);
+            crate::platform::phone_keyboard(self.window.as_deref(), false);
             self.menus.menu_edit = None;
             self.menus.menu_edit_search = false;
         }
