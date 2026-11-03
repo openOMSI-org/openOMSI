@@ -161,16 +161,16 @@ fn vulkan_vram_mb(_adapter: &wgpu::Adapter) -> Option<u64> {
     None
 }
 
-/// The card's own memory in MB: wgpu's report on DirectX 12 (the adapter's DXGI
-/// `DedicatedVideoMemory`, the number [`dedicated_vram_mb`] reads), else what the system
-/// tells. (wgpu's Vulkan report sums every device-local heap where [`vulkan_vram_mb`] takes
-/// the largest, and Metal's is the working set the system recommends, not the card's own
-/// memory: those keep their own paths, so the texture budgets stay as they were.)
 pub fn card_vram_mb(adapter: &wgpu::Adapter) -> Option<u64> {
     let info = adapter.get_info();
     adapter_vram_mb(adapter, &info, adapter.memory_info().as_ref())
 }
 
+/// The card's own memory in MB: wgpu's report on DirectX 12 (the adapter's DXGI
+/// `DedicatedVideoMemory`, the number [`dedicated_vram_mb`] reads), else what the system
+/// tells. (wgpu's Vulkan report sums every device-local heap where [`vulkan_vram_mb`] takes
+/// the largest, and Metal's is the working set the system recommends, not the card's own
+/// memory: those keep their own paths, so the texture budgets stay as they were.)
 pub(super) fn adapter_vram_mb(adapter: &wgpu::Adapter, info: &wgpu::AdapterInfo, mem: Option<&wgpu::AdapterMemoryInfo>) -> Option<u64> {
     match mem {
         Some(m) if info.backend == wgpu::Backend::Dx12 => Some(m.dedicated_bytes >> 20),

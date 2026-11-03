@@ -665,7 +665,8 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   the launcher's passenger settings, `pax_short_rides_stand`, off by default), a passenger with
   no set stop who rides under about three kilometres takes the free standing place nearest an exit
   of their car instead of a seat; with no standing place free, they board as before (#2242).
-- **Graphics that fit the computer from the first start.** With no settings file yet, the game
+- **Graphics that fit the computer from the first start.** On a first start (no settings file,
+  no drive and no map loaded before), the game
   picks a quality preset from its best graphics chip before it opens the window's renderer: Low
   for software renderers, Intel HD / UHD chips and cards under 3 GB, Medium for other integrated
   chips and cards of 3 to 6 GB, High for 6 GB cards and Apple chips, Extra from 10 GB - and says
