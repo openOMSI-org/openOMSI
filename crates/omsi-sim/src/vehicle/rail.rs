@@ -86,7 +86,11 @@ impl VehicleInstance {
     /// (the stock trains are scripted for the AI only).
     fn rail_script_forces(&self, m_wheel: f32, brakes: &[f32]) -> Option<Forces> {
         let own: f32 = brakes.iter().sum();
-        let towed: f32 = self.trailers.iter().flat_map(|t| t.v_brakes.iter()).map(|&id| self.get(id).max(0.0)).sum();
+        let towed: f32 = self
+            .trailers
+            .iter()
+            .map(|t| t.v_brakes.iter().map(|&id| self.get(id).max(0.0)).sum::<f32>() + t.run.as_ref().and_then(|r| r.get("Brakeforce")).unwrap_or(0.0).max(0.0))
+            .sum();
         let brake = own + towed;
         if m_wheel.abs() < 1.0 && brake < 1.0 {
             return None;
