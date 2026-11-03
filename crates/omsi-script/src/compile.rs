@@ -417,7 +417,7 @@ pub fn compile(input: &CompileInput) -> Program {
         }
     }
     let mut pending: Vec<(usize, usize, String)> = Vec::new(); // (block, op index, macro name)
-    let mut c = Compiler { p: &mut p, consts: &consts, curves: &curve_index, pending: &mut pending, missing_curve: None };
+    let mut c = Compiler { p: &mut p, consts: &consts, curves: &curve_index, pending: &mut pending, missing_curve: None, file_frames: (0, 0) };
     for f in &files {
         c.compile_file(f);
     }
@@ -445,6 +445,7 @@ struct Compiler<'a> {
     pending: &'a mut Vec<(usize, usize, String)>,
     /// The empty curve an unknown `(F.L.name)` evaluates (see `compile_access`).
     missing_curve: Option<u32>,
+    file_frames: (usize, usize),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -544,6 +545,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn compile_file(&mut self, f: &CfgFile) {
+        self.file_frames = (self.p.frame.len(), self.p.frame_ai.len());
         let mut cur: Option<(Vec<BlockKind>, Block, Vec<(usize, bool)>)> = None; // kinds (aliases), block, if-stack: (jump op index, has_else)
         // the jumps of `{else}`s after an `{if}`'s first, with the depth of their `{if}` in
         // the if-stack: in OMSI every `{else}` reached goes on at the `{endif}`, so
@@ -744,8 +746,14 @@ impl<'a> Compiler<'a> {
     fn register(&mut self, kind: BlockKind, id: BlockId) {
         match kind {
             BlockKind::Init => self.p.init.push(id),
-            BlockKind::Frame => self.p.frame.push(id),
-            BlockKind::FrameAi => self.p.frame_ai.push(id),
+            BlockKind::Frame => {
+                self.p.frame.truncate(self.file_frames.0);
+                self.p.frame.push(id);
+            }
+            BlockKind::FrameAi => {
+                self.p.frame_ai.truncate(self.file_frames.1);
+                self.p.frame_ai.push(id);
+            }
             BlockKind::Macro(n) => {
                 self.p.macros.insert(n, id);
             }
@@ -1025,6 +1033,14 @@ mod tests {
                 Tok::Paren("L.L.c".into()),
             ]
         );
+    }
+
+    #[test]
+    fn a_file_keeps_one_frame_block_as_it_keeps_one_macro_of_a_name() {
+        let twice = program_of("{frame}\n1 (S.L.a)\n{end}\n{frame}\n2 (S.L.b)\n{end}\n");
+        assert_eq!(twice.frame.len(), 1);
+        let stacked = program_of("{frame}\n{frame}\n3 (S.L.c)\n{end}\n");
+        assert_eq!(stacked.frame.len(), 1);
     }
 
     #[test]
