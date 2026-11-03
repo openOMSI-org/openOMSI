@@ -178,7 +178,7 @@ fn a_light_passed_does_not_hold_again_further_in() {
 #[test]
 fn amber_decision_holds() {
     let f = Fixture::new();
-    let mut t = with_lights(&f, signalled(false, false),1);
+    let mut t = with_lights(&f, signalled(false, false), 1);
     show(&mut t, 0, 9);
     let first = car(&mut t, &f, 0, 100.0, 0x37, 15.0);
     let second = car(&mut t, &f, 0, 50.0, 0x38, 15.0);
@@ -197,7 +197,7 @@ fn amber_decision_holds() {
 #[test]
 fn amber_decision_holds_on_red() {
     let f = Fixture::new();
-    let mut t = with_lights(&f, signalled(false, false),1);
+    let mut t = with_lights(&f, signalled(false, false), 1);
     show(&mut t, 0, 0);
     let id = car(&mut t, &f, 0, 100.0, 0x39, 15.0);
     ticks(&mut t, 1.0);
@@ -211,7 +211,7 @@ fn amber_decision_holds_on_red() {
 #[test]
 fn amber_decision_holds_with_multiple_lights() {
     let f = Fixture::new();
-    let mut t = with_lights(&f, signalled(true, false),2);
+    let mut t = with_lights(&f, signalled(true, false), 2);
     show(&mut t, 1, 0);
     let id = car(&mut t, &f, 0, 100.0, 0x3a, 15.0);
     ticks(&mut t, 1.0);
@@ -226,7 +226,7 @@ fn amber_decision_holds_with_multiple_lights() {
 #[test]
 fn stopped_car_does_not_sets_off_on_red() {
     let f = Fixture::new();
-    let mut t = with_lights(&f, signalled(false, false),1);
+    let mut t = with_lights(&f, signalled(false, false), 1);
     show(&mut t, 0, 0);
     let id = car(&mut t, &f, 0, 0.0, 0x3b, 0.0);
     let front = get(&t, id).state.front;

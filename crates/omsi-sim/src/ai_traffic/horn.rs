@@ -80,7 +80,7 @@ pub fn patience(seed: u64, honk_factor: f32, bus: bool) -> f32 {
     (if bus {
         p * 1.5
     } else {
-        p 
+        p
     }) * honk_factor
 }
 
