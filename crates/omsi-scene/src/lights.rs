@@ -1178,6 +1178,13 @@ pub fn flashlight(lights: &mut Vec<PointLight>, eye: DVec3, forward: Vec3, right
 }
 
 /// The flashlight held at the camera's eye, shining along its view (`flashlight`).
+pub fn flashlight_toward(scene: &mut Scene, cam: &omsi_render::Camera, dir: Vec3) {
+    let right = dir.cross(Vec3::Z).normalize_or(cam.right());
+    let mut torch = Vec::with_capacity(2);
+    flashlight(&mut torch, cam.position, dir, right, right.cross(dir));
+    scene.lights.splice(0..0, torch);
+}
+
 pub fn flashlight_ahead(scene: &mut Scene, cam: &omsi_render::Camera) {
     let mut torch = Vec::with_capacity(2);
     flashlight(&mut torch, cam.position, cam.forward(), cam.right(), cam.up());
