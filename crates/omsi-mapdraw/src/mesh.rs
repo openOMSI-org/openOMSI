@@ -20,6 +20,8 @@ pub struct MapData {
     paved_cells: hashbrown::HashSet<(i32, i32)>,
     /// The middle of each house model, in its own frame (walls face away from it).
     model_centre: Vec<Vec2>,
+    /// Centroid-indexed triangles may reach into a view from neighbouring cells.
+    triangle_padding: [f32; 3],
 }
 
 /// The most triangles of house models one build of the city map draws (nearest first); the other
@@ -67,22 +69,32 @@ pub struct GroundLook {
 impl MapData {
     pub fn new(layers: std::sync::Arc<Layers>) -> MapData {
         let mut cells: HashMap<(i32, i32), Cell> = HashMap::new();
+        let mut triangle_padding = [0.0f32; 3];
+        let mut take_padding = |group: usize, t: &[Vec2]| {
+            let centre = (t[0] + t[1] + t[2]) / 3.0;
+            for p in t {
+                triangle_padding[group] = triangle_padding[group].max((*p - centre).abs().max_element());
+            }
+        };
         let new_cell = || Cell { land: vec![Vec::new(); layers::LAND_CLASSES], paved: vec![Vec::new(); layers::PAVE_CLASSES], paint: vec![Vec::new(); layers::PAINT_CLASSES], ..Default::default() };
         for (class, tris) in (0..layers::LAND_CLASSES).map(|c| (c, layers.land_of(c))) {
             for (i, t) in tris.chunks_exact(3).enumerate() {
                 let c = cell_of((t[0] + t[1] + t[2]) / 3.0);
+                take_padding(0, t);
                 cells.entry(c).or_insert_with(new_cell).land[class].push(i as u32);
             }
         }
         for (class, tris) in (0..layers::PAVE_CLASSES).map(|c| (c, layers.paved_of(c))) {
             for (i, t) in tris.chunks_exact(3).enumerate() {
                 let c = cell_of((t[0] + t[1] + t[2]) / 3.0);
+                take_padding(1, t);
                 cells.entry(c).or_insert_with(new_cell).paved[class].push(i as u32);
             }
         }
         for (class, tris) in (0..layers::PAINT_CLASSES).map(|c| (c, layers.paint_of(c))) {
             for (i, t) in tris.chunks_exact(3).enumerate() {
                 let c = cell_of((t[0] + t[1] + t[2]) / 3.0);
+                take_padding(2, t);
                 cells.entry(c).or_insert_with(new_cell).paint[class].push(i as u32);
             }
         }
@@ -140,7 +152,7 @@ impl MapData {
                 }
             }
         }
-        MapData { layers, cells, lines, paved_cells, model_centre }
+        MapData { layers, cells, lines, paved_cells, model_centre, triangle_padding }
     }
 
     /// The map's paving lies under most of a road along `points` (its middle sampled every
@@ -168,9 +180,18 @@ impl MapData {
     }
 
     /// The cells within `r` metres of `c` (layer coordinates).
-    fn cells_near(&self, c: Vec2, r: f32) -> impl Iterator<Item = &Cell> {
+    fn cells_near(&self, c: Vec2, r: f32) -> Box<dyn Iterator<Item = &Cell> + '_> {
         let (lo, hi) = (cell_of(c - Vec2::splat(r)), cell_of(c + Vec2::splat(r)));
-        (lo.1..=hi.1).flat_map(move |y| (lo.0..=hi.0).filter_map(move |x| self.cells.get(&(x, y))))
+        let count = ((hi.0 as i64 - lo.0 as i64 + 1).max(0) as u64)
+            .saturating_mul((hi.1 as i64 - lo.1 as i64 + 1).max(0) as u64);
+        // A huge crossing triangle or sparse map must not enumerate billions of empty cells.
+        if count > (self.cells.len() as u64).saturating_mul(4) {
+            Box::new(self.cells.iter().filter_map(move |(&(x, y), cell)| {
+                (x >= lo.0 && x <= hi.0 && y >= lo.1 && y <= hi.1).then_some(cell)
+            }))
+        } else {
+            Box::new((lo.1..=hi.1).flat_map(move |y| (lo.0..=hi.0).filter_map(move |x| self.cells.get(&(x, y)))))
+        }
     }
 
     /// From the layers' frame to one anchored at `anchor` (world).
@@ -192,7 +213,7 @@ impl MapData {
         let k = self.shift(anchor);
         let c = (centre - self.layers.origin).as_vec2();
         let v = |q: Vec2| (q + k).extend(0.0);
-        let cells: Vec<&Cell> = self.cells_near(c, radius as f32 + CELL * 1.25).collect();
+        let cells: Vec<&Cell> = self.cells_near(c, radius as f32 + self.triangle_padding[0]).collect();
         let land_order = [
             (layers::LAND_GRASS, pal.grass),
             (layers::LAND_FIELD, pal.field),
@@ -226,7 +247,7 @@ impl MapData {
         let k = self.shift(anchor);
         let c = (centre - self.layers.origin).as_vec2();
         let v = |q: Vec2| (q + k).extend(0.0);
-        let cells: Vec<&Cell> = self.cells_near(c, radius as f32).collect();
+        let cells: Vec<&Cell> = self.cells_near(c, radius as f32 + self.triangle_padding[1].max(self.triangle_padding[2])).collect();
         for (classes, fill) in [(&[layers::PAVE_GREEN][..], pal.grass), (&[layers::PAVE_AREA][..], pal.area), (&[layers::PAVE_FOOT, layers::PAVE_ROAD][..], pal.foot), (&[layers::PAVE_INNER][..], pal.road)] {
             for cell in &cells {
                 for &class in classes {

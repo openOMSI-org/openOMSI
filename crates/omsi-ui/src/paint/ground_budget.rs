@@ -1,7 +1,8 @@
 //! A dense map loses detail uniformly, not everything drawn after the first full layer.
 //! Exact vertices are kept until the budget is exceeded. Then all triangles, old and new,
 //! are composited into a fixed grid covering the build's area. Rows of equal cells become
-//! quads; even a checkerboard fits the original vertex budget. No GPU or readback needed.
+//! quads. A finer, screen-scaled grid is used when its actual runs fit; the coarse grid
+//! remains the worst-case fallback. No GPU or readback needed.
 
 use super::Vertex;
 use glam::Vec2;
@@ -11,6 +12,7 @@ pub(super) struct GroundBudget {
     reach: f32,
     mpp: f32,
     grid: Option<Grid>,
+    detail: Option<Grid>,
 }
 
 impl GroundBudget {
@@ -25,6 +27,7 @@ impl GroundBudget {
             },
             mpp: if mpp.is_finite() { mpp.max(0.0) } else { 0.0 },
             grid: None,
+            detail: None,
         }
     }
 
@@ -34,31 +37,71 @@ impl GroundBudget {
 
     pub fn clear(&mut self) {
         self.grid = None;
+        self.detail = None;
     }
 
     pub fn push(&mut self, exact: &mut Vec<Vertex>, vertices: &[Vertex]) {
         debug_assert_eq!(vertices.len() % 3, 0);
+        for t in vertices.chunks_exact(3) {
+            if self.visible(t) {
+                self.push_visible(exact, t);
+            }
+        }
+    }
+
+    fn visible(&self, t: &[Vertex]) -> bool {
+        let (mut lo, mut hi) = (Vec2::splat(f32::INFINITY), Vec2::splat(f32::NEG_INFINITY));
+        for v in t {
+            // Pixel-sized extrusion depends on perspective depth, which this painter does
+            // not know. Keep it conservatively for the existing GPU visibility culling.
+            if v.width[1] != 0.0 || v.mode[0] != 1.0 {
+                return true;
+            }
+            let p = Vec2::new(v.pos[0], v.pos[1]) + Vec2::from(v.ext) * v.width[0];
+            if !p.is_finite() {
+                return true;
+            }
+            lo = lo.min(p);
+            hi = hi.max(p);
+        }
+        // A triangle crossing the build area stays intact, even if all its corners are out.
+        lo.x <= self.reach && lo.y <= self.reach && hi.x >= -self.reach && hi.y >= -self.reach
+    }
+
+    fn push_visible(&mut self, exact: &mut Vec<Vertex>, vertices: &[Vertex]) {
         if self.grid.is_none() && exact.len().saturating_add(vertices.len()) <= self.limit {
             exact.extend_from_slice(vertices);
             return;
         }
-        let grid = self
-            .grid
-            .get_or_insert_with(|| Grid::new(self.limit, self.reach, self.mpp));
-        for t in exact.chunks_exact(3) {
-            grid.triangle(t);
+        if self.grid.is_none() {
+            let grid = Grid::new(self.limit, self.reach, self.mpp);
+            // At most four times finer per axis, with at most 64 MiB of extra cells.
+            let side = (2.0 * self.reach / self.mpp).ceil() as usize;
+            let side = side.min(grid.side * 4).min(2048);
+            if self.mpp > 0.0 && side > grid.side {
+                self.detail = Some(Grid::with_side(side, self.reach, self.mpp));
+            }
+            self.grid = Some(grid);
+        }
+        for grid in self.grid.iter_mut().chain(self.detail.iter_mut()) {
+            for t in exact.chunks_exact(3).chain(vertices.chunks_exact(3)) {
+                grid.triangle(t);
+            }
         }
         exact.clear();
-        for t in vertices.chunks_exact(3) {
-            grid.triangle(t);
-        }
     }
 
     pub fn finish(self, exact: Vec<Vertex>) -> Vec<Vertex> {
         match self.grid {
             Some(grid) => {
                 drop(exact);
-                grid.vertices()
+                match self
+                    .detail
+                    .filter(|detail| detail.vertex_count() <= self.limit)
+                {
+                    Some(detail) => detail.vertices(),
+                    None => grid.vertices(),
+                }
             }
             None => exact,
         }
@@ -78,6 +121,10 @@ struct Grid {
 impl Grid {
     fn new(limit: usize, reach: f32, mpp: f32) -> Self {
         let side = ((limit / 6) as f64).sqrt().floor().clamp(1.0, 512.0) as usize;
+        Self::with_side(side, reach, mpp)
+    }
+
+    fn with_side(side: usize, reach: f32, mpp: f32) -> Self {
         Self {
             side,
             reach,
@@ -154,6 +201,19 @@ impl Grid {
                 dst[3] = color[3] + dst[3] * (1.0 - color[3]);
             }
         }
+    }
+
+    fn vertex_count(&self) -> usize {
+        self.cells
+            .chunks_exact(self.side)
+            .map(|row| {
+                row.iter()
+                    .enumerate()
+                    .filter(|(x, color)| color[3] > 0.0 && (*x == 0 || **color != row[*x - 1]))
+                    .count()
+            })
+            .sum::<usize>()
+            * 6
     }
 
     fn vertices(self) -> Vec<Vertex> {

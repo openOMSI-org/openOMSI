@@ -264,6 +264,7 @@ struct Route {
 
 /// Roads around a centre, built into vertex buffer 0.
 struct Roads {
+    reach: f64,
     /// `Navigator::look_key` it was built for.
     look: u64,
     anchor: DVec2,
@@ -417,7 +418,7 @@ pub struct Navigator {
     resizing: Option<(f32, [f32; 2], f32)>,
     /// The ground being built on a worker for the small map (its look and lane count) and for
     /// the city map, and the network's carriageways with whether the paving covers each.
-    panel_job: Option<build::Job<(u64, usize)>>,
+    panel_job: Option<build::Job<(u64, usize, f64)>>,
     city_job: Option<build::Job<CityJob>>,
     road_cache: Option<(u64, std::sync::Arc<Vec<(MapRoad, bool)>>)>,
     road_job: Option<(u64, std::sync::mpsc::Receiver<std::sync::Arc<Vec<(MapRoad, bool)>>>)>,
