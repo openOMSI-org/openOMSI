@@ -28,6 +28,12 @@ impl HeadPose {
     pub fn seat_offset(&self) -> glam::Vec3 {
         glam::Vec3::new(-self.pos[0], -self.pos[2], self.pos[1]).clamp(glam::Vec3::splat(-60.0), glam::Vec3::splat(60.0)) / 100.0
     }
+
+    /// The pose seen from `centre`: the head's way from there, its turn the short way round.
+    pub fn from_centre(&self, centre: &HeadPose) -> HeadPose {
+        let turn = |a: f32, b: f32| (a - b + 180.0).rem_euclid(360.0) - 180.0;
+        HeadPose { pos: [0, 1, 2].map(|i| self.pos[i] - centre.pos[i]), rot: [0, 1, 2].map(|i| turn(self.rot[i], centre.rot[i])) }
+    }
 }
 
 /// opentrack's last pose: when it came, its number and the time since the one before (s).
@@ -52,6 +58,9 @@ fn put(slot: &Mutex<Option<Udp>>, pose: HeadPose) {
 
 pub struct HeadTracker {
     last: Arc<Mutex<Option<Udp>>>,
+    /// The opentrack, native TrackIR or freetrack pose taken as the middle
+    /// (`recenter_every_source`): their poses are given from there.
+    centre: Mutex<HeadPose>,
     /// A Tobii eye tracker read natively (`crate::tobii`), when the source asks for one.
     tobii: Option<crate::tobii::Tobii>,
 }
@@ -139,7 +148,7 @@ impl HeadTracker {
         if listening {
             log::info!("head tracking: listening for opentrack on UDP port {port}");
         }
-        Some(HeadTracker { last, tobii: None })
+        Some(HeadTracker { last, centre: Mutex::default(), tobii: None })
     }
 
     /// The source the setting `head_tracking_source` names: "opentrack" (its UDP output,
@@ -156,7 +165,7 @@ impl HeadTracker {
                 t.tobii = r;
                 Some(t)
             }
-            (None, Some(r)) => Some(HeadTracker { last: Arc::default(), tobii: Some(r) }),
+            (None, Some(r)) => Some(HeadTracker { last: Arc::default(), centre: Mutex::default(), tobii: Some(r) }),
             (None, None) => None,
         }
     }
@@ -167,6 +176,16 @@ impl HeadTracker {
         if let Some(t) = &self.tobii {
             t.recenter();
         }
+    }
+
+    /// Every source's middle taken anew where the head is now (a key or a button of its own,
+    /// which leaves the view as it is): opentrack's, native TrackIR's or freetrack's pose as it
+    /// comes now, and the Tobii tracker's.
+    pub fn recenter_every_source(&self) {
+        if let (Some(u), Ok(mut c)) = (self.udp(), self.centre.lock()) {
+            *c = u.pose;
+        }
+        self.recenter();
     }
 
     /// The Tobii tracker's settings as they are now (they may change in the game's options).
@@ -181,9 +200,14 @@ impl HeadTracker {
     /// The filter draws the head between the poses as they come, so the view turns at every
     /// frame and not in the tracker's steps (#2216, #1983).
     pub fn sample(&self) -> Option<crate::head_filter::Sample> {
-        let udp = self.last.lock().ok().and_then(|l| l.filter(|u| u.at.elapsed() < Duration::from_millis(500)));
-        let udp = udp.map(|u| crate::head_filter::Sample { pose: u.pose, gain: [1.0; 3], edge: 0.0, seq: u.seq, at: u.at, interval: u.interval, tobii: false });
+        let centre = self.centre.lock().map(|c| *c).unwrap_or_default();
+        let udp = self.udp().map(|u| crate::head_filter::Sample { pose: u.pose.from_centre(&centre), gain: [1.0; 3], edge: 0.0, seq: u.seq, at: u.at, interval: u.interval, tobii: false });
         udp.or_else(|| self.tobii.as_ref().and_then(|t| t.sample()))
+    }
+
+    /// opentrack's (native TrackIR's, freetrack's) pose as it came, while poses keep coming.
+    fn udp(&self) -> Option<Udp> {
+        self.last.lock().ok().and_then(|l| l.filter(|u| u.at.elapsed() < Duration::from_millis(500)))
     }
 }
 
@@ -606,5 +630,40 @@ mod tests {
         assert!((o.x - 0.1).abs() < 1e-6 && (o.y + 0.2).abs() < 1e-6 && (o.z - 0.05).abs() < 1e-6, "{o}");
         // (held within 60 cm)
         assert!((HeadPose { pos: [-200.0, 0.0, 0.0], rot: [0.0; 3] }.seat_offset().x - 0.6).abs() < 1e-6);
+    }
+
+    fn tracker(tobii: Option<crate::tobii::Tobii>) -> HeadTracker {
+        HeadTracker { last: Arc::default(), centre: Mutex::default(), tobii }
+    }
+
+    fn close(a: HeadPose, b: HeadPose) -> bool {
+        (0..3).all(|i| (a.pos[i] - b.pos[i]).abs() < 1e-4 && (a.rot[i] - b.rot[i]).abs() < 1e-4)
+    }
+
+    /// opentrack's pose is given from the middle taken where the head was, its turn the short
+    /// way round; F1's recentre leaves opentrack's poses as they come.
+    #[test]
+    fn opentracks_pose_is_given_from_the_middle_taken() {
+        let t = tracker(None);
+        let turned = HeadPose { pos: [-4.0, 2.0, 6.0], rot: [175.0, -8.0, 3.0] };
+        put(&t.last, turned);
+        t.recenter();
+        assert!(close(t.sample().unwrap().pose, turned));
+        t.recenter_every_source();
+        assert!(close(t.sample().unwrap().pose, HeadPose::default()));
+        put(&t.last, HeadPose { pos: [-1.0, 2.0, 6.0], rot: [-175.0, -8.0, 3.0] });
+        assert!(close(t.sample().unwrap().pose, HeadPose { pos: [3.0, 0.0, 0.0], rot: [10.0, 0.0, 0.0] }));
+    }
+
+    /// With opentrack's poses coming and a Tobii reader there as well ("auto"), the recentre
+    /// takes opentrack's pose as the middle and the Tobii tracker's middle anew.
+    #[test]
+    fn the_recentre_takes_opentracks_pose_while_a_tobii_reader_is_there_too() {
+        let t = tracker(Some(crate::tobii::Tobii::holding([0.0, 0.0, 600.0], [0.0; 3])));
+        put(&t.last, HeadPose { pos: [5.0, -3.0, 1.0], rot: [20.0, 4.0, -2.0] });
+        t.recenter_every_source();
+        let s = t.sample().unwrap();
+        assert!(!s.tobii && close(s.pose, HeadPose::default()));
+        assert!(!t.tobii.as_ref().unwrap().has_centre());
     }
 }
