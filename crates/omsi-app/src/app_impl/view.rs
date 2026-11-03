@@ -232,6 +232,15 @@ pub(crate) fn look_key_of(view: &str, cam: Option<(usize, usize)>) -> String {
     }
 }
 
+pub(crate) fn drawn_fov(fov: f32, view_fov: Option<f32>, setting: f32, zoom: Option<f32>) -> f32 {
+    let fov = match view_fov {
+        Some(f) => f.min(120.0),
+        None if setting >= 20.0 => setting.min(120.0),
+        None => fov,
+    };
+    zoom.map_or(fov, |z| (fov * z).clamp(8.0, 120.0))
+}
+
 /// How far the head turns inside the bus: all the way round, in the driver's seat as in a
 /// passenger's - Omsi.exe's mouse look (0x82c5f8) adds the cursor's way to the camera's
 /// yaw with no stop. Capped at 140 degrees each way, a quarter of the coach stayed out of

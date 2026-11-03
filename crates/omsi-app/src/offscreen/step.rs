@@ -60,7 +60,7 @@ impl Offscreen<'_> {
             ref settings,
             ..
         } = *self;
-        // (the world clock follows the wall, not the steps: see `world_clock`)
+        // (the world clock follows the wall, not the steps: see `omsi_sim::world_clock`)
         *srv_clock += srv_wall.step(Instant::now(), dt as f64, lan_off.as_ref().map(|l| l.clock_speed as f64).unwrap_or(1.0));
         // a server on the real time (server.cfg): its clock reads this machine's
         if i.is_multiple_of(super::steps_in(1.0)) && crate::real_time::server_real() {

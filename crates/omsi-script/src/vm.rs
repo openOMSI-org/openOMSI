@@ -667,6 +667,15 @@ mod tests {
     }
 
     #[test]
+    fn init_stores_follows_the_macros_init_calls() {
+        let p = prog("{init}\n(M.L.m)\n{end}\n{macro:m}\n1 (S.L.a)\n{end}\n{frame}\n1 (S.L.b)\n{end}\n");
+        assert!(p.errors.is_empty(), "{:?}", p.errors);
+        assert!(p.init_stores(p.var("a").unwrap()));
+        assert!(!p.init_stores(p.var("b").unwrap()));
+        assert!(!p.init_stores(p.var("result").unwrap()));
+    }
+
+    #[test]
     fn session_seed_gives_every_machine_its_own_numbers() {
         let p = prog("{init}\n500000 random 400000 + (S.L.result)\n{end}\n");
         let draw = || {
@@ -748,11 +757,18 @@ mod tests {
     /// all (with a budget for each, 50 blocks would stall the game 50 times as long).
     #[test]
     fn many_frame_blocks_share_one_budget() {
-        let mut src = String::from("{macro:m}\n(L.L.a) 1 + (S.L.a) (M.L.m) (M.L.m)\n{end}\n");
-        for _ in 0..50 {
-            src.push_str("{frame}\n(M.L.m)\n{end}\n");
+        let dir = std::env::temp_dir().join(format!("omsi_script_frames_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let vl = dir.join("v.txt");
+        std::fs::write(&vl, "a\n").unwrap();
+        let mut scripts = vec![dir.join("m.osc")];
+        std::fs::write(&scripts[0], "{macro:m}\n(L.L.a) 1 + (S.L.a) (M.L.m) (M.L.m)\n{end}\n").unwrap();
+        for k in 0..50 {
+            let f = dir.join(format!("f{k}.osc"));
+            std::fs::write(&f, "{frame}\n(M.L.m)\n{end}\n").unwrap();
+            scripts.push(f);
         }
-        let p = prog(&src);
+        let p = compile(&CompileInput { varlists: vec![vl], scripts, ..Default::default() });
         assert!(p.errors.is_empty(), "{:?}", p.errors);
         assert_eq!(p.frame.len(), 50);
         let mut vm = Vm::new();

@@ -152,8 +152,7 @@ pub use wire::{
 /// 15: the AI traffic as a table of rows under ids (`traffic_table`: `TRAF` datagrams the
 /// client acknowledges with `TACK`), no longer cars in `WORLD` or `DESC|c|…`.
 /// 16: `REALM`: the hardware identifier is made for each host owner, not the same everywhere.
-/// 17: the timetable buses' fleet number, plate and depot file in `TRAF` (`meta numbers`),
-/// a server's world clock kept to the wall, people not taken from in front of a player: a
+/// 17: the timetable buses' fleet number, plate and depot file in `TRAF` (`meta numbers`): a
 /// game of 16 drew the map's buses without numbers and with another depot's signs.
 pub const PROTOCOL: u32 = 17;
 /// (omsi-plugin's `MULTIPLAYER_PORTS` keeps `omsi.send` off this one and the `PORT_RANGE` after it.)
@@ -3048,6 +3047,11 @@ impl LanSession {
         }
         if let Some(p) = self.peers.remove(&id) {
             log::info!("LAN: player {id} '{}' left", p.pose.name);
+            let keep: Vec<u32> = self.peers.keys().copied().collect();
+            self.script_textures.retain_peers(&keep);
+            self.sounds.retain_peers(&keep);
+            self.var_receiver.retain_peers(&keep);
+            self.schema_receiver.retain_peers(&keep);
             gone.push(id);
             self.gone_lately.push((p.nonce, p.pose.name.clone(), id, Instant::now()));
             if self.role == Role::Host {
@@ -3228,6 +3232,7 @@ impl LanSession {
         if self.peers.get(&id).is_some_and(|p| p.nonce != nonce) {
             if let Some(old) = self.peers.get(&id).and_then(|p| p.nonce) { self.retired_nonces.insert(old); }
             self.reset_peer_sync(id);
+            self.broadcast(format!("BYE|{id}").as_bytes(), Some(id));
             let mut peer = Peer::new(Some(from), Pose::placeholder(id, &name, &bus));
             peer.nonce = nonce;
             peer.hwid = hwid.clone();

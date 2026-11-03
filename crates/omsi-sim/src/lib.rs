@@ -33,6 +33,7 @@ pub mod traffic;
 pub mod vehicle;
 pub mod vehicle_api;
 pub mod view_events;
+pub mod world_clock;
 pub mod world_data;
 pub mod ground_gap;
 

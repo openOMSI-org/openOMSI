@@ -21,7 +21,7 @@ const SLACK: f64 = 0.05;
 const TELL_EVERY: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Default)]
-pub(crate) struct WorldClock {
+pub struct WorldClock {
     /// The wall at the last step.
     last: Option<Instant>,
     /// The world seconds the wall has given since the start (each wall second at the speed
@@ -35,7 +35,7 @@ pub(crate) struct WorldClock {
 impl WorldClock {
     /// The world seconds to move the clock on for a step of `dt` at `speed`, the wall now at
     /// `now`.
-    pub(crate) fn step(&mut self, now: Instant, dt: f64, speed: f64) -> f64 {
+    pub fn step(&mut self, now: Instant, dt: f64, speed: f64) -> f64 {
         let speed = speed.max(0.0);
         let wall = self.last.map(|l| now.saturating_duration_since(l).as_secs_f64()).unwrap_or(dt);
         self.last = Some(now);

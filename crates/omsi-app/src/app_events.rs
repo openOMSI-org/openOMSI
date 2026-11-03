@@ -202,7 +202,7 @@ impl ApplicationHandler for App {
                     && (self.menus.menu_edit_search || matches!(self.menus.list_kind, Some(crate::game_lists::ListKind::RouteNumbers)))
                 {
                     if let Some(text) = event.text.as_deref() {
-                        if text.chars().any(|c| !c.is_control()) {
+                        if text.chars().any(|c| !c.is_control() || (self.menus.menu_edit_search && c == '\n')) {
                             self.route_edit_text(text);
                             return;
                         }

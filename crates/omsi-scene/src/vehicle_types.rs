@@ -42,6 +42,7 @@ pub struct VehicleRender {
     pub interior_lamps: std::cell::Cell<Option<(u32, u32)>>,
     /// The runs of lamp slots and which of the vehicle's lamps each holds.
     pub interior_blocks: std::cell::OnceCell<Vec<(u32, Vec<usize>)>>,
+    pub own_set: Option<VehicleSet>,
 }
 
 /// A material slot whose texture is generated per vehicle (text or script texture).
@@ -816,4 +817,45 @@ impl VehicleRender {
         let blocks = self.interior_blocks.get()?;
         blocks.iter().find(|b| b.1 == set).map(|b| (b.0, set.len() as u32))
     }
+}
+
+pub(super) fn free_set(
+    renderer: &Renderer,
+    scene: &mut Scene,
+    s: VehicleSet,
+    tex_ids: &mut HashMap<PathBuf, (TextureId, usize)>,
+    mesh_ids: &mut HashMap<(PathBuf, usize), (MeshId, usize)>,
+    gpu: &mut GpuCache,
+) -> (usize, usize) {
+    let (mut textures, mut meshes) = (0, 0);
+    for m in s.materials {
+        gpu.free_material(renderer, scene, m);
+    }
+    for p in s.textures {
+        let Some(e) = tex_ids.get_mut(&p) else {
+            continue;
+        };
+        e.1 = e.1.saturating_sub(1);
+        if e.1 == 0 {
+            let id = e.0;
+            tex_ids.remove(&p);
+            renderer.free_texture(scene, id);
+            gpu.free_textures.push(id);
+            textures += 1;
+        }
+    }
+    for mk in s.mesh_keys {
+        let Some(e) = mesh_ids.get_mut(&mk) else {
+            continue;
+        };
+        e.1 = e.1.saturating_sub(1);
+        if e.1 == 0 {
+            let id = e.0;
+            mesh_ids.remove(&mk);
+            renderer.free_mesh(scene, id);
+            gpu.free_meshes.push(id);
+            meshes += 1;
+        }
+    }
+    (textures, meshes)
 }

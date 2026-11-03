@@ -849,6 +849,7 @@ impl Navigator {
         let (from, to) = match (r.joined, stop_at) {
             (false, Some(k)) if r.approach => (r.progress.saturating_sub(3), (k + 2).min(r.lanes.len())),
             (false, Some(k)) => (k.saturating_sub(40).max(r.progress), (k + 2).min(r.lanes.len())),
+            (true, Some(k)) => (r.progress.saturating_sub(3), (r.progress + 60).min(k.max(r.progress) + 2).min(r.lanes.len())),
             _ => (r.progress.saturating_sub(3), (r.progress + 60).min(r.lanes.len())),
         };
         let mut best: Option<(usize, f32, f64)> = None;
@@ -1203,20 +1204,26 @@ impl Navigator {
         self.date = f.date;
         self.day_clock = (f.time, f.weekday);
         if let Some(rx) = self.building.as_ref() {
-            if let Ok((net, pos, streets, surface, hints)) = rx.try_recv() {
-                self.name_hints = hints;
-                log::info!("navigator: the map's road network is there ({} lanes, {} streets named)", net.lanes.len(), streets.names.len());
-                self.streets = Some(std::sync::Arc::new(streets));
-                self.set_surface(surface);
-                self.global = Some(std::sync::Arc::new(net));
-                self.stop_pos = std::sync::Arc::new(pos);
-                self.global_version += 1;
-                self.building = None;
-                // routes and roads again on the whole map
-                self.roads = None;
-                self.reset_navigation_network();
-                self.route_mesh.0 = u64::MAX;
-                self.route_jam.clear();
+            match rx.try_recv() {
+                Ok((net, pos, streets, surface, hints)) => {
+                    self.name_hints = hints;
+                    log::info!("navigator: the map's road network is there ({} lanes, {} streets named)", net.lanes.len(), streets.names.len());
+                    self.streets = Some(std::sync::Arc::new(streets));
+                    self.set_surface(surface);
+                    self.global = Some(std::sync::Arc::new(net));
+                    self.stop_pos = std::sync::Arc::new(pos);
+                    self.global_version += 1;
+                    self.building = None;
+                    // routes and roads again on the whole map
+                    self.roads = None;
+                    self.reset_navigation_network();
+                    self.route_mesh.0 = u64::MAX;
+                    self.route_jam.clear();
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) if self.streets.is_none() => {
+                    self.streets = Some(std::sync::Arc::new(Streets { names: Vec::new(), of_lane: Vec::new(), labels: Vec::new() }));
+                }
+                Err(_) => {}
             }
         }
         if let Some(rx) = self.layers_rx.as_ref() {

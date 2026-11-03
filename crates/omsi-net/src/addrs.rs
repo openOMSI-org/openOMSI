@@ -353,3 +353,50 @@ pub fn joinable_addresses() -> Vec<LocalAddr> {
         .filter(|a| a.kind.reachable())
         .collect()
 }
+
+/// A dedicated server's direct address (its web port reached without the tunnel), as it
+/// finds it by itself.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum DirectChoice {
+    /// An internet address of this machine's own: told as it is.
+    Own(Ipv4Addr),
+    /// The one the internet sees behind a router: told if the server reaches itself there.
+    Seen(Ipv4Addr),
+}
+
+impl DirectChoice {
+    pub fn ip(self) -> Ipv4Addr {
+        match self {
+            DirectChoice::Own(ip) | DirectChoice::Seen(ip) => ip,
+        }
+    }
+}
+
+/// Which address to tell: this machine's own internet address, else the one the internet
+/// sees (to be tried first), else none yet. An address in a carrier's NAT range
+/// (100.64.0.0/10) is never one.
+pub fn direct_choice(own: Option<Ipv4Addr>, seen: Option<Ipv4Addr>) -> Option<DirectChoice> {
+    let cgnat = |ip: &Ipv4Addr| ip.octets()[0] == 100 && (64..128).contains(&ip.octets()[1]);
+    let own = own.filter(|ip| !cgnat(ip));
+    own.map(DirectChoice::Own).or(seen.filter(|ip| !ip.is_private() && !ip.is_loopback() && !cgnat(ip)).map(DirectChoice::Seen))
+}
+
+#[cfg(test)]
+mod direct_tests {
+    use super::*;
+
+    /// An internet address of the machine's own is told at once; behind a router the one the
+    /// internet sees is only tried (the server must reach itself there); an address in a
+    /// carrier's NAT range is none; nothing known yet, nothing told.
+    #[test]
+    fn the_machines_own_address_first_the_seen_one_only_tried() {
+        let own = Ipv4Addr::new(203, 0, 113, 7);
+        let seen = Ipv4Addr::new(198, 51, 100, 9);
+        assert_eq!(direct_choice(Some(own), Some(seen)), Some(DirectChoice::Own(own)));
+        assert_eq!(direct_choice(None, Some(seen)), Some(DirectChoice::Seen(seen)));
+        assert_eq!(direct_choice(Some(Ipv4Addr::new(100, 72, 1, 2)), Some(seen)), Some(DirectChoice::Seen(seen)), "a CGNAT adapter is no internet address");
+        assert_eq!(direct_choice(None, Some(Ipv4Addr::new(100, 72, 1, 2))), None);
+        assert_eq!(direct_choice(None, Some(Ipv4Addr::new(192, 168, 1, 5))), None);
+        assert_eq!(direct_choice(None, None), None);
+    }
+}

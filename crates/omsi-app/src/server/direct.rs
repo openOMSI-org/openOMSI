@@ -7,7 +7,8 @@
 //! the carrier's. So it tells that one only if it reaches itself there; a router that cannot
 //! loop back loses the shortcut, but nobody is sent to an address that does not answer.
 
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use omsi_net::addrs::{direct_choice, DirectChoice};
+use std::net::{IpAddr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -33,10 +34,10 @@ pub(super) fn find(lan: &omsi_net::LanSession) {
         IpAddr::V4(ip) => Some(ip),
         IpAddr::V6(_) => None,
     });
-    let Some(choice) = choose(own, seen) else { return };
+    let Some(choice) = direct_choice(own, seen) else { return };
     STARTED.store(true, Ordering::Relaxed);
     let addr = SocketAddr::from((choice.ip(), port));
-    if let Choice::Own(_) = choice {
+    if let DirectChoice::Own(_) = choice {
         log::info!("server: players joining through the tunnel try this machine's address {addr} first (public_address = off: never)");
         crate::lan::update_server_direct(&addr.to_string());
         return;
@@ -49,49 +50,4 @@ pub(super) fn find(lan: &omsi_net::LanSession) {
             log::info!("server: not reached at {addr}, the address the internet sees (no forwarding of the web port, or a carrier's NAT): players join through the tunnel; public_address in server.cfg can name another");
         }
     });
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum Choice {
-    /// An internet address of this machine's own: told as it is.
-    Own(Ipv4Addr),
-    /// The one the internet sees behind a router: told if the server reaches itself there.
-    Seen(Ipv4Addr),
-}
-
-impl Choice {
-    fn ip(self) -> Ipv4Addr {
-        match self {
-            Choice::Own(ip) | Choice::Seen(ip) => ip,
-        }
-    }
-}
-
-/// Which address to tell: this machine's own internet address, else the one the internet
-/// sees (to be tried first), else none yet.
-fn choose(own: Option<Ipv4Addr>, seen: Option<Ipv4Addr>) -> Option<Choice> {
-    // (a carrier's NAT range on an adapter is no internet address: 100.64.0.0/10)
-    let cgnat = |ip: &Ipv4Addr| ip.octets()[0] == 100 && (64..128).contains(&ip.octets()[1]);
-    let own = own.filter(|ip| !cgnat(ip));
-    own.map(Choice::Own).or(seen.filter(|ip| !ip.is_private() && !ip.is_loopback() && !cgnat(ip)).map(Choice::Seen))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// An internet address of the machine's own is told at once; behind a router the one the
-    /// internet sees is only tried (the server must reach itself there); an address in a
-    /// carrier's NAT range is none; nothing known yet, nothing told.
-    #[test]
-    fn the_machines_own_address_first_the_seen_one_only_tried() {
-        let own = Ipv4Addr::new(203, 0, 113, 7);
-        let seen = Ipv4Addr::new(198, 51, 100, 9);
-        assert_eq!(choose(Some(own), Some(seen)), Some(Choice::Own(own)));
-        assert_eq!(choose(None, Some(seen)), Some(Choice::Seen(seen)));
-        assert_eq!(choose(Some(Ipv4Addr::new(100, 72, 1, 2)), Some(seen)), Some(Choice::Seen(seen)), "a CGNAT adapter is no internet address");
-        assert_eq!(choose(None, Some(Ipv4Addr::new(100, 72, 1, 2))), None);
-        assert_eq!(choose(None, Some(Ipv4Addr::new(192, 168, 1, 5))), None);
-        assert_eq!(choose(None, None), None);
-    }
 }
