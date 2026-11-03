@@ -590,7 +590,10 @@ impl VerifiedPack {
         }
         let unsigned_key = manifest.key_id.as_deref().unwrap_or_default();
         let scope = entitlement_scope(&manifest, unsigned_key)?;
-        let mut bytes = keys.load(&scope)?;
+        let mut bytes = keys.load(&scope).map_err(|error| match error {
+            PackError::KeyNotFound => PackError::MissingKey,
+            error => error,
+        })?;
         let verified = verify_entitlement(&manifest, &bytes, trusted);
         bytes.zeroize();
         let entitlement = verified?;

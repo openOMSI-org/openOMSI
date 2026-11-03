@@ -43,19 +43,29 @@ fn native_store(scope: &str, secret: &[u8]) -> Result<()> {
 }
 
 #[cfg(target_os = "macos")]
+fn keychain_error(error: security_framework::base::Error) -> PackError {
+    // errSecItemNotFound is the only status that means this grant is absent.
+    if error.code() == -25300 {
+        PackError::KeyNotFound
+    } else {
+        PackError::SecureStorage(error.to_string())
+    }
+}
+
+#[cfg(target_os = "macos")]
 fn native_load(scope: &str) -> Result<Vec<u8>> {
     validate_scope(scope)?;
     security_framework::passwords::generic_password(
         security_framework::passwords::PasswordOptions::new_generic_password(SERVICE, scope),
     )
-    .map_err(|e| PackError::SecureStorage(e.to_string()))
+    .map_err(keychain_error)
 }
 
 #[cfg(target_os = "macos")]
 fn native_delete(scope: &str) -> Result<()> {
     validate_scope(scope)?;
     security_framework::passwords::delete_generic_password(SERVICE, scope)
-        .map_err(|e| PackError::SecureStorage(e.to_string()))
+        .map_err(keychain_error)
 }
 
 #[cfg(windows)]
@@ -107,7 +117,12 @@ fn native_load(scope: &str) -> Result<Vec<u8>> {
     };
     validate_scope(scope)?;
     let path = windows_key_path(scope)?;
-    let encrypted = read_bounded_file(&path, ENTITLEMENT_LIMIT + 4096)?;
+    let encrypted = read_bounded_file(&path, ENTITLEMENT_LIMIT + 4096).map_err(|error| {
+        match error {
+            PackError::Io(error) if error.kind() == io::ErrorKind::NotFound => PackError::KeyNotFound,
+            error => error,
+        }
+    })?;
     let input = CRYPT_INTEGER_BLOB {
         cbData: encrypted.len() as u32,
         pbData: encrypted.as_ptr() as *mut u8,
@@ -237,4 +252,15 @@ fn native_load(_: &str) -> Result<Vec<u8>> {
 #[cfg(not(any(target_os = "macos", windows)))]
 fn native_delete(_: &str) -> Result<()> {
     Err(PackError::SecureStorageUnavailable)
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn keychain_access_errors_are_not_reported_as_absent_grants() {
+        assert!(matches!(keychain_error(security_framework::base::Error::from_code(-25300)), PackError::KeyNotFound));
+        assert!(matches!(keychain_error(security_framework::base::Error::from_code(-25293)), PackError::SecureStorage(_)));
+    }
 }

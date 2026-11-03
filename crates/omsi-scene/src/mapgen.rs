@@ -1231,7 +1231,7 @@ fn woods_of(part: &mut Part, lo: Vec2, ts: f32) {
 
 /// The key of a map's layers: the generator's version, and every tile's and painting's size
 /// and date (a map changed in the editor is read again).
-fn key_of(map_dir: &Path, tiles: &[(i32, i32, PathBuf)]) -> u64 {
+pub(crate) fn key_of(map_dir: &Path, tiles: &[(i32, i32, PathBuf)]) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     layers::VERSION.hash(&mut h);
@@ -1266,15 +1266,15 @@ pub fn cached_with_mounts(
 ) -> Layers {
     let key = key_of(map_dir, tiles);
     let name = map_dir.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "map".into());
-    // shortcut: publisher maps skip disk caching, revisit if cache keys bind every dependency revision.
+    // shortcut: after an encrypted publisher pack is mounted, skip disk caches until restart; revisit with per-input provenance.
     let has_publisher_metadata = omsi_cfg::vfs::is_file(&map_dir.join("dependencies.json"));
-    let path = layers::cache_path(&name).filter(|_| !has_publisher_metadata && !omsi_cfg::flags::OMSI_NO_MAP_CACHE.is_set());
+    let path = layers::cache_path(&name).filter(|_| !has_publisher_metadata && !omsi_cfg::vfs::protected_content_seen() && !omsi_cfg::flags::OMSI_NO_MAP_CACHE.is_set());
     if let Some(l) = path.as_ref().and_then(|p| Layers::open(p, key)) {
         log::info!("map layers: {} houses from the cache", l.buildings.len());
         return l;
     }
     let l = generate_with_mounts(root, map_dir, mounts, ground_textures, tiles, chrono_dirs);
-    if let Some(p) = path {
+    if let Some(p) = path.filter(|_| !omsi_cfg::vfs::protected_content_seen()) {
         let _ = std::fs::create_dir_all(p.parent().unwrap_or(Path::new(".")));
         let tmp = p.with_extension(format!("{}.tmp", std::process::id()));
         if std::fs::write(&tmp, l.to_bytes(key)).is_ok() && std::fs::rename(&tmp, &p).is_ok() {

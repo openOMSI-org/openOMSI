@@ -14,7 +14,10 @@ Each installed `.oopp` directory goes under the content folder's `Packs` directo
 manifest and detached signature describe the pack's exact version, licence and redistribution
 policy. `PackIndex` keeps verified signed manifest snapshots for provenance recognition. Each
 snapshot is checked against the current trust file when used; removing all trusted records
-also removes the ability to recognize those source bytes.
+also removes the ability to recognize those source bytes. Installed revisions are read first.
+Retained history past 1024 snapshots, 16 MiB of manifests or 32768 assets is skipped with a
+warning rather than disabling export; an installed revision that does not fit still fails
+closed. A snapshot left unfinished by an interrupted write is ignored.
 
 A map may carry `dependencies.json` beside `global.cfg`:
 
@@ -68,3 +71,5 @@ Offline operation cannot enforce immediate revocation or prevent deliberate syst
 rollback by a user controlling the machine. A running player also holds usable plaintext in
 memory and GPU resources; paging and a modified executable can expose it. Protected packs
 reduce accidental redistribution through official tools, not extraction by an administrator.
+
+Once an encrypted publisher pack has been mounted, the map layer generator bypasses disk cache reads and writes for the rest of that process, including after that mount is released. This conservatively covers global packs and mounts introduced during parallel generation. Multiplayer session stores are sealed at rest but hold no publisher-protected content, so they, like ordinary sessions, keep the existing cache behavior.

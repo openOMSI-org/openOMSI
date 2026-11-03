@@ -3,7 +3,7 @@ name: Content protection
 on:
   workflow_dispatch:
   push:
-    branches: [feat/content-protection]
+    branches: [feat/publisher-content-protection]
   pull_request:
     paths: ["crates/omsi-pack/**", "crates/omsi-cfg/**", "crates/omsi-scene/**", "crates/omsi-app/**", "Cargo.*", ".github/workflows/content-protection.yml"]
 

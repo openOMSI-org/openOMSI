@@ -483,6 +483,24 @@ fn cancellation_truncation_reordering_and_storage_failure_fail_closed() {
     let manifest = load_manifest(&healthy, &trust).unwrap();
     let grant = issue_entitlement(&manifest, key, expires, &signer).unwrap();
     assert!(unlock(&healthy, &grant, &trust, &BrokenStore).is_err());
-    assert!(VerifiedPack::open_unlocked(&healthy, &trust, &BrokenStore).is_err());
+    assert!(matches!(VerifiedPack::open_unlocked(&healthy, &trust, &BrokenStore), Err(PackError::MissingKey)));
+    forget_unlock(&healthy, &trust, &BrokenStore).unwrap();
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+#[cfg(any(target_os = "macos", windows))]
+fn native_absent_entitlement_has_an_exact_error_and_forget_is_idempotent() {
+    let scope = omsi_pack::sha256_hex(&omsi_pack::random_content_key().unwrap());
+    let store = omsi_pack::SystemKeyStore;
+    assert!(matches!(store.load(&scope), Err(PackError::KeyNotFound)));
+    assert!(matches!(store.delete(&scope), Err(PackError::KeyNotFound)));
+    let root = scratch();
+    std::fs::create_dir_all(&root).unwrap();
+    let key = random_content_key().unwrap();
+    let (out, _, trust) = make_pack(&root, "absent.oopp", &key, b"owned fixture");
+    assert!(matches!(VerifiedPack::open_unlocked(&out, &trust, &store), Err(PackError::MissingKey)));
+    forget_unlock(&out, &trust, &store).unwrap();
+    forget_unlock(&out, &trust, &store).unwrap();
     std::fs::remove_dir_all(root).unwrap();
 }

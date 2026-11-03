@@ -12,11 +12,16 @@ use unicode_normalization::UnicodeNormalization;
 
 static NEXT_DEPENDENCY_MOUNT: AtomicU64 = AtomicU64::new(1);
 static MAP_ALIASES: std::sync::RwLock<Vec<MapAliasScope>> = std::sync::RwLock::new(Vec::new());
+#[cfg(test)]
+std::thread_local! {
+    static SCOPE_PATH_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 
 struct MapAliasScope {
     id: u64,
     map: PathBuf,
     declarations: BTreeMap<String, String>,
+    pack_revisions: Vec<(PathBuf, String)>,
     aliases: BTreeMap<String, PathBuf>,
     mounts: Vec<PathBuf>,
     leases: usize,
@@ -38,6 +43,8 @@ pub fn digest(bytes: &[u8]) -> String {
 }
 
 fn map_scope_path(path: &Path) -> io::Result<PathBuf> {
+    #[cfg(test)]
+    SCOPE_PATH_CALLS.with(|calls| calls.set(calls.get() + 1));
     if let Ok(path) = std::fs::canonicalize(path) {
         return Ok(path);
     }
@@ -137,7 +144,8 @@ fn dependency(m: &Manifest) -> Dependency {
     }
 }
 
-fn cache_manifest(content: &Path, pack: &Path) -> io::Result<()> {
+/// Keep a snapshot of an installed manifest in `PackIndex`; returns its snapshot name.
+fn cache_manifest(content: &Path, pack: &Path) -> io::Result<String> {
     let bytes = bounded_read(&pack.join("manifest.json"), 1024 * 1024)?;
     let sig = bounded_read(&pack.join("manifest.sig"), 1024)?;
     let root = content.join("PackIndex");
@@ -145,9 +153,10 @@ fn cache_manifest(content: &Path, pack: &Path) -> io::Result<()> {
         return Err(invalid("publisher index must not be a symbolic link"));
     }
     std::fs::create_dir_all(&root)?;
-    let target = root.join(digest(&bytes));
+    let name = digest(&bytes);
+    let target = root.join(&name);
     if target.exists() {
-        return Ok(());
+        return Ok(name);
     }
     let temp = root.join(format!(".new-{}", digest(&crate::vfs::random_key()?)));
     std::fs::create_dir(&temp)?;
@@ -160,28 +169,82 @@ fn cache_manifest(content: &Path, pack: &Path) -> io::Result<()> {
         let _ = std::fs::remove_dir_all(temp);
     }
     if result.is_err() && target.is_dir() {
-        return Ok(());
+        return Ok(name);
     }
-    result
+    result.map(|()| name)
+}
+
+/// The snapshot folders of `PackIndex`, installed revisions first so that retained history
+/// never crowds them out. Only digest names count: an interrupted write leaves a `.new-*` folder.
+fn snapshots(root: &Path, installed: &BTreeSet<String>) -> io::Result<Vec<(bool, PathBuf)>> {
+    if !root.exists() {
+        return Ok(Vec::new());
+    }
+    if std::fs::symlink_metadata(root)?.file_type().is_symlink() {
+        return Err(invalid("publisher index must not be a symbolic link"));
+    }
+    let mut result = Vec::new();
+    for entry in std::fs::read_dir(root)? {
+        let entry = entry?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if entry.file_type()?.is_dir() && name.len() == 64 && name.bytes().all(|b| b.is_ascii_hexdigit()) {
+            result.push((installed.contains(&name), entry.path()));
+        }
+    }
+    result.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+    Ok(result)
+}
+
+/// Past the index budget, retained history is skipped; an installed revision still fails closed.
+fn over_index_budget(installed: bool, limit: &'static str) -> io::Result<()> {
+    if installed {
+        return Err(invalid(limit));
+    }
+    log::warn!("publisher index budget reached; older retained snapshots were not consulted");
+    Ok(())
+}
+
+fn catalog_manifest(path: &Path, trusted: &TrustedPublishers) -> io::Result<Option<Manifest>> {
+    match omsi_pack::load_manifest(path, trusted) {
+        Ok(manifest) => Ok(Some(manifest)),
+        Err(omsi_pack::PackError::Io(error)) if error.kind() != io::ErrorKind::NotFound => Err(error),
+        Err(error @ (omsi_pack::PackError::UntrustedPublisher
+            | omsi_pack::PackError::InvalidSignature | omsi_pack::PackError::Invalid(_)
+            | omsi_pack::PackError::Json(_) | omsi_pack::PackError::Io(_))) => {
+            log::warn!("publisher catalog skipped {}: {error}", path.display());
+            Ok(None)
+        }
+        Err(error) => Err(invalid(error)),
+    }
 }
 
 impl Catalog {
     pub fn load(content: &Path) -> io::Result<Self> {
         let trust = trust(content)?;
+        let mut installed = BTreeSet::new();
         for path in folders(&content.join("Packs"))? {
-            if path.join("manifest.json").exists() {
-                omsi_pack::load_manifest(&path, &trust).map_err(invalid)?;
-                cache_manifest(content, &path)?;
+            if path.join("manifest.json").exists() && catalog_manifest(&path, &trust)?.is_some() {
+                installed.insert(cache_manifest(content, &path)?);
             }
         }
         let mut catalog = Self::default();
-        let mut total = 0;
-        for path in folders(&content.join("PackIndex"))? {
-            total += bounded_read(&path.join("manifest.json"), 1024 * 1024)?.len();
-            if total > 16 * 1024 * 1024 {
-                return Err(invalid("publisher index exceeds its size limit"));
+        let (mut total, mut read) = (0, 0);
+        for (current, path) in snapshots(&content.join("PackIndex"), &installed)? {
+            let bytes = match bounded_read(&path.join("manifest.json"), 1024 * 1024) {
+                Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+                bytes => bytes?,
+            };
+            total += bytes.len();
+            read += 1;
+            if total > 16 * 1024 * 1024 || read > 1024 {
+                over_index_budget(current, "publisher index exceeds its size limit")?;
+                break;
             }
-            let manifest = omsi_pack::load_manifest(&path, &trust).map_err(invalid)?;
+            let Some(manifest) = catalog_manifest(&path, &trust)? else { continue };
+            if catalog.entries.len() + manifest.assets.len() > 32768 {
+                over_index_budget(current, "too many indexed publisher assets")?;
+                break;
+            }
             for asset in &manifest.assets {
                 catalog.entries.push(Provenance {
                     dependency: dependency(&manifest),
@@ -194,9 +257,6 @@ impl Catalog {
                     author: manifest.author.clone(),
                     protected: manifest.key_id.is_some(),
                 });
-                if catalog.entries.len() > 32768 {
-                    return Err(invalid("too many indexed publisher assets"));
-                }
             }
         }
         Ok(catalog)
@@ -467,6 +527,7 @@ fn check_aliases(aliases: &[(String, String)]) -> io::Result<()> {
 fn register_aliases(
     map_dir: &Path,
     declarations: BTreeMap<String, String>,
+    pack_revisions: Vec<(PathBuf, String)>,
     aliases: BTreeMap<String, PathBuf>,
     mounts: &mut Vec<PathBuf>,
 ) -> io::Result<(u64, bool)> {
@@ -477,7 +538,7 @@ fn register_aliases(
     let mut scopes = MAP_ALIASES.write().unwrap_or_else(|e| e.into_inner());
     if let Some(existing) = scopes
         .iter_mut()
-        .find(|s| s.map == map && s.declarations == declarations)
+        .find(|s| s.map == map && s.declarations == declarations && s.pack_revisions == pack_revisions)
     {
         existing.leases = existing
             .leases
@@ -500,6 +561,7 @@ fn register_aliases(
         id,
         map,
         declarations,
+        pack_revisions,
         aliases,
         mounts: std::mem::take(mounts),
         leases: 1,
@@ -511,8 +573,11 @@ fn register_aliases(
 
 /// Resolve a signed asset alias only for the map that declared it.
 pub(crate) fn resolve_alias(base: &Path, rel: &str) -> Option<PathBuf> {
-    let scopes = MAP_ALIASES.read().unwrap_or_else(|e| e.into_inner());
+    if MAP_ALIASES.read().unwrap_or_else(|e| e.into_inner()).is_empty() {
+        return None;
+    }
     let base = map_scope_path(base).ok()?;
+    let scopes = MAP_ALIASES.read().unwrap_or_else(|e| e.into_inner());
     for scope in scopes.iter().rev() {
         let suffix = base.strip_prefix(&scope.map).ok().or_else(|| {
             scope
@@ -523,7 +588,8 @@ pub(crate) fn resolve_alias(base: &Path, rel: &str) -> Option<PathBuf> {
         let Some(suffix) = suffix else { continue };
         // A path without a lease must not choose between conflicting map authorities.
         if scopes.iter().any(|other| {
-            other.map == scope.map && other.declarations != scope.declarations
+            other.map == scope.map && (other.declarations != scope.declarations
+                || other.pack_revisions != scope.pack_revisions)
         }) {
             return None;
         }
@@ -768,13 +834,16 @@ pub fn validate_map(map_dir: &Path) -> io::Result<DependencyMounts> {
         );
     }
     check_aliases(&aliases)?;
+    let pack_revisions = packs.iter().map(|(path, pack)| {
+        Ok((std::fs::canonicalize(path)?, digest(&serde_json::to_vec(pack.manifest()).map_err(invalid)?)))
+    }).collect::<io::Result<Vec<_>>>()?;
     let mut roots_added = BTreeMap::new();
     let mut virtual_mounts: Vec<PathBuf> = Vec::new();
     for (index, (_, pack)) in packs.into_iter().enumerate() {
+        // Canonical signed files include scripts; only untrusted renames use the data allowlist.
         let mut pack_aliases: BTreeMap<String, String> = pack
             .assets()
             .iter()
-            .filter(|asset| validate_asset_alias(&asset.path, &asset.path).is_ok())
             .map(|asset| (asset.path.clone(), asset.path.clone()))
             .collect();
         for reference in refs
@@ -818,7 +887,7 @@ pub fn validate_map(map_dir: &Path) -> io::Result<DependencyMounts> {
         virtual_mounts.push(mount);
     }
     let (alias_scope, shared_scope) =
-        match register_aliases(map_dir, declarations, roots_added, &mut virtual_mounts) {
+        match register_aliases(map_dir, declarations, pack_revisions, roots_added, &mut virtual_mounts) {
             Ok(id) => id,
             Err(error) => {
                 for root in virtual_mounts.drain(..).rev() {
@@ -836,4 +905,17 @@ pub fn validate_map(map_dir: &Path) -> io::Result<DependencyMounts> {
         mounts: virtual_mounts,
         alias_scope: (alias_scope != 0).then_some(alias_scope),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ordinary_lookup_without_alias_scopes_performs_no_scope_filesystem_resolution() {
+        assert!(MAP_ALIASES.read().unwrap().is_empty());
+        SCOPE_PATH_CALLS.with(|calls| calls.set(0));
+        assert!(resolve_alias(Path::new("ordinary-map"), "ordinary.sco").is_none());
+        assert_eq!(SCOPE_PATH_CALLS.with(|calls| calls.get()), 0);
+    }
 }

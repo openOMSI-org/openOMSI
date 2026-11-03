@@ -186,6 +186,13 @@ impl SealedMount {
 }
 
 static SEALED: RwLock<Vec<Arc<SealedMount>>> = RwLock::new(Vec::new());
+static PROTECTED_CONTENT_SEEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Has an encrypted publisher pack been mounted during this process, including mounts already
+/// dropped? Multiplayer session stores are sealed too, but they hold no publisher-protected content.
+pub fn protected_content_seen() -> bool {
+    PROTECTED_CONTENT_SEEN.load(std::sync::atomic::Ordering::Acquire)
+}
 
 /// Mount `files` (sealed with `key`) as the folder `mount`, which need not exist on disk;
 /// a store mounted there before is replaced. Returns the mount point.
@@ -289,6 +296,9 @@ fn mount_store(
         mount.display(),
         m.entries.len()
     );
+    if m.publisher.as_ref().is_some_and(|pack| pack.manifest().key_id.is_some()) {
+        PROTECTED_CONTENT_SEEN.store(true, std::sync::atomic::Ordering::Release);
+    }
     let mut all = SEALED.write().unwrap();
     all.retain(|x| x.path != mount);
     all.push(Arc::new(m));
@@ -466,5 +476,14 @@ mod tests {
             unseal(&key, b"", seal(&key, b"", b"").unwrap()).unwrap(),
             b""
         );
+    }
+
+    #[test]
+    fn session_stores_are_not_publisher_protected_content() {
+        // (no unit test here mounts an encrypted publisher pack, so the sticky marker starts unset)
+        let mount = std::env::temp_dir().join(format!("omsi-cfg-session-store-{}", std::process::id()));
+        mount_sealed(&mount, Arc::new(SealKey::new(&random_key().unwrap())), vec![]);
+        unmount_sealed(&mount);
+        assert!(!protected_content_seen(), "a multiplayer session store counted as publisher-protected content");
     }
 }
