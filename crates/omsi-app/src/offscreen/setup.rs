@@ -317,6 +317,7 @@ fn new_traffic(
     let mut t = traffic::Traffic::new(&args.root, world, args.traffic)?;
     t.lights_only = !(args.traffic > 0 || args.schedule || crate::rail_drive::args_rail(args) || args.lan_join.is_some());
     t.no_timetable_buses = args.no_timetable_buses;
+    t.drive_through_parked = args.ai_drive_through_parked;
     if let Some(seed) = lan_seed {
         t.set_lan_seed(seed);
     }
@@ -431,6 +432,7 @@ fn new_humans(
         h.bad_driving = settings.pax_bad_driving;
         h.boarding = settings.boarding.clone();
         h.stand_chance = settings.standing_chance;
+        h.short_rides_stand = settings.pax_short_rides_stand;
         h.voices = match settings.pax_voices.as_str() { "off" => 2, "tickets" => 1, _ => 0 };
         if let Some(p) = player.as_mut() {
             h.set_cabin(&mut p.vehicle);

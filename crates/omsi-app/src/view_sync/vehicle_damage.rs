@@ -396,6 +396,24 @@ pub(crate) fn add_crack(
     render.glass_cracks.push((mesh, instance, id));
 }
 
+pub(crate) fn carry_damage(renderer: &Renderer, scene: &mut Scene, from: &mut VehicleRender, to: &mut VehicleRender) {
+    for (mesh, id, data) in std::mem::take(&mut from.damaged) {
+        match to.instances.get(mesh) {
+            Some(&instance) => {
+                renderer.set_instance_mesh(scene, instance, id);
+                to.damaged.push((mesh, id, data));
+            }
+            None => from.damaged.push((mesh, id, data)),
+        }
+    }
+    for crack in std::mem::take(&mut from.glass_cracks) {
+        let materials = &scene.instances[crack.1].materials;
+        from.own_materials.retain(|m| !materials.contains(m));
+        to.own_materials.extend(materials.iter().copied());
+        to.glass_cracks.push(crack);
+    }
+}
+
 /// A dent taken: the mesh it is in pushed in round its point (a copy of the mesh of this
 /// vehicle's own, made at its first dent).
 pub(crate) fn add_dent(renderer: &Renderer, scene: &mut Scene, render: &mut VehicleRender, ty: &omsi_sim::VehicleType, dent: &omsi_sim::vehicle::VehicleDent) {

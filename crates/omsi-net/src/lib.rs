@@ -206,6 +206,9 @@ const VAR_RATE: (f32, f32) = (60.0, 60.0);
 const ANIMATION_RATE: (f32, f32) = (25.0, 320.0);
 const TEXTURE_RATE: (f32, f32) = (2048.0, 2048.0);
 const SOUND_RATE: (f32, f32) = (512.0, 2048.0);
+// Sound acknowledgements (36-byte headers) have their own bucket: one dropped made its event be
+// sent again past SOUND_RATE, but the host relays them, so they are not unlimited either.
+const SOUND_ACK_RATE: (f32, f32) = (2048.0, 8192.0);
 use voice_net::VOICE_RATE;
 const MESSAGE_RATE: (f32, f32) = (10.0, 20.0);
 const CHAT_RATE: (f32, f32) = (1.0, 3.0);
@@ -1119,6 +1122,7 @@ enum PeerTraffic {
     Tack,
     Message,
     Chat,
+    SoundAcks,
 }
 
 /// A token bucket: `rate` a second, at most `burst` at once.
@@ -1171,10 +1175,11 @@ pub struct Peer {
     tacks: Bucket,
     messages: Bucket,
     chat: Bucket,
+    sound_acks: Bucket,
     /// Datagrams of this player the host threw away (too many at once).
     pub dropped: u32,
     /// Rate-limit rejections by PeerTraffic category (no payloads stored).
-    drop_counts: [u32; 9],
+    drop_counts: [u32; 10],
     /// The nonce of the player's hellos (host side).
     nonce: Option<u64>,
     secret: [u8; 16],
@@ -1217,8 +1222,9 @@ impl Peer {
             tacks: Bucket::new(traffic_net::TACK_RATE.1),
             messages: Bucket::new(MESSAGE_RATE.1),
             chat: Bucket::new(CHAT_RATE.1),
+            sound_acks: Bucket::new(SOUND_ACK_RATE.1),
             dropped: 0,
-            drop_counts: [0; 9],
+            drop_counts: [0; 10],
             history: std::collections::VecDeque::new(),
             nonce: None,
             secret: admission::random_bytes(),
@@ -2321,7 +2327,7 @@ impl LanSession {
                 continue;
             };
             log::warn!(
-                "LAN: player {id} timed out after {:.1} s without an accepted datagram (loading={}, rate-limited total={}, state={}, variables={}, animations={}, textures={}, sounds={}, voice={}, tack={}, messages={}, chat={})",
+                "LAN: player {id} timed out after {:.1} s without an accepted datagram (loading={}, rate-limited total={}, state={}, variables={}, animations={}, textures={}, sounds={}, voice={}, tack={}, messages={}, chat={}, sound acks={})",
                 now.duration_since(p.last_seen).as_secs_f32(),
                 !p.has_pose,
                 p.dropped,
@@ -2333,7 +2339,8 @@ impl LanSession {
                 p.drop_counts[5],
                 p.drop_counts[6],
                 p.drop_counts[7],
-                p.drop_counts[8]
+                p.drop_counts[8],
+                p.drop_counts[9]
             );
             gone.push(id);
             self.gone_lately.push((p.nonce, p.pose.name.clone(), id, now));
@@ -2838,6 +2845,7 @@ impl LanSession {
             PeerTraffic::Tack => peer.tacks.take(rate),
             PeerTraffic::Message => peer.messages.take(rate),
             PeerTraffic::Chat => peer.chat.take(rate),
+            PeerTraffic::SoundAcks => peer.sound_acks.take(rate),
         };
         if !ok {
             peer.dropped = peer.dropped.saturating_add(1);
@@ -3033,6 +3041,11 @@ impl LanSession {
         }
         if let Some(p) = self.peers.remove(&id) {
             log::info!("LAN: player {id} '{}' left", p.pose.name);
+            let keep: Vec<u32> = self.peers.keys().copied().collect();
+            self.script_textures.retain_peers(&keep);
+            self.sounds.retain_peers(&keep);
+            self.var_receiver.retain_peers(&keep);
+            self.schema_receiver.retain_peers(&keep);
             gone.push(id);
             self.gone_lately.push((p.nonce, p.pose.name.clone(), id, Instant::now()));
             if self.role == Role::Host {
@@ -3213,6 +3226,7 @@ impl LanSession {
         if self.peers.get(&id).is_some_and(|p| p.nonce != nonce) {
             if let Some(old) = self.peers.get(&id).and_then(|p| p.nonce) { self.retired_nonces.insert(old); }
             self.reset_peer_sync(id);
+            self.broadcast(format!("BYE|{id}").as_bytes(), Some(id));
             let mut peer = Peer::new(Some(from), Pose::placeholder(id, &name, &bus));
             peer.nonce = nonce;
             peer.hwid = hwid.clone();

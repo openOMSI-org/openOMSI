@@ -21,6 +21,7 @@ impl World {
         let set = self.upload_vehicle(renderer, scene, vt, scheme, true);
         let mut render = self.instantiate_vehicle(renderer, scene, vt, &set, None, None, false);
         own_skinned_meshes(renderer, scene, vt, &mut render);
+        render.own_set = Some(set);
         render
     }
 
@@ -44,6 +45,7 @@ impl World {
         };
         let mut render = self.instantiate_vehicle(renderer, scene, vt, &set, None, shared, false);
         own_skinned_meshes(renderer, scene, vt, &mut render);
+        render.own_set = Some(set);
         render
     }
 
@@ -195,7 +197,11 @@ impl World {
 
     /// An AI vehicle has gone: its own instances, textures and materials go back to the free
     /// lists, and its set loses a user.
-    pub fn release_vehicle(&self, renderer: &Renderer, scene: &mut Scene, render: VehicleRender) {
+    pub fn release_vehicle(&self, renderer: &Renderer, scene: &mut Scene, mut render: VehicleRender) {
+        if let Some(set) = render.own_set.take() {
+            let (mut tex_ids, mut mesh_ids) = (self.vehicle_textures.lock(), self.vehicle_meshes.lock());
+            free_set(renderer, scene, set, &mut tex_ids, &mut mesh_ids, &mut self.gpu.lock());
+        }
         {
             let mut gpu = self.gpu.lock();
             // the mesh copies its `[smoothskin]` meshes were reshaped in belong to this
@@ -328,36 +334,9 @@ impl World {
         let mut gpu = self.gpu.lock();
         let (mut textures, mut meshes) = (0usize, 0usize);
         for k in &gone {
-            let s = sets.remove(k).unwrap();
-            for m in s.materials {
-                gpu.free_material(renderer, scene, m);
-            }
-            for p in s.textures {
-                let Some(e) = tex_ids.get_mut(&p) else {
-                    continue;
-                };
-                e.1 = e.1.saturating_sub(1);
-                if e.1 == 0 {
-                    let id = e.0;
-                    tex_ids.remove(&p);
-                    renderer.free_texture(scene, id);
-                    gpu.free_textures.push(id);
-                    textures += 1;
-                }
-            }
-            for mk in s.mesh_keys {
-                let Some(e) = mesh_ids.get_mut(&mk) else {
-                    continue;
-                };
-                e.1 = e.1.saturating_sub(1);
-                if e.1 == 0 {
-                    let id = e.0;
-                    mesh_ids.remove(&mk);
-                    renderer.free_mesh(scene, id);
-                    gpu.free_meshes.push(id);
-                    meshes += 1;
-                }
-            }
+            let (t, m) = free_set(renderer, scene, sets.remove(k).unwrap(), &mut tex_ids, &mut mesh_ids, &mut gpu);
+            textures += t;
+            meshes += m;
         }
         if omsi_cfg::flags::OMSI_PROFILE.is_set() {
             log::info!(
@@ -759,8 +738,7 @@ impl World {
             let shadow = vt
                 .meshes
                 .get(mi)
-                .map(|m| vt.model.meshes[m.def_index].is_shadow)
-                .unwrap_or(false);
+                .is_some_and(|m| shadow_blob(vt.model.meshes[m.def_index].is_shadow, &m.data.positions));
             let inst = if shadow {
                 renderer.add_shadow_blob_instance(scene, *id, DVec3::ZERO, Mat4::IDENTITY, mats)
             } else {
@@ -857,6 +835,7 @@ impl World {
             hidden: false,
             interior_lamps: std::cell::Cell::new(None),
             interior_blocks: std::cell::OnceCell::new(),
+            own_set: None,
         }
     }
 
@@ -1316,6 +1295,11 @@ fn slot_halves<'a>(plain: &[&'a MaterialDef], first_item: &[&'a MaterialDef], la
     halves
 }
 
+pub(crate) fn shadow_blob(is_shadow: bool, positions: &[glam::Vec3]) -> bool {
+    let (lo, hi) = positions.iter().fold((f32::MAX, f32::MIN), |(lo, hi), p| (lo.min(p.z), hi.max(p.z)));
+    is_shadow && (positions.is_empty() || hi - lo <= 0.3)
+}
+
 /// One material slot of a vehicle mesh being uploaded (see [`World::vehicle_slot_material`]).
 #[derive(Clone, Copy)]
 struct SlotCx<'s> {
@@ -1373,7 +1357,7 @@ fn slot_alpha(cx: &SlotCx, ov: &[&MaterialDef], tex: Option<TextureId>, transmap
     // override of its own (most shadow blobs have none) it defaulted to
     // opaque, so the decal's square base texture painted a solid (often
     // white or grey) tile under the bus instead of a soft shadow.
-    if def.is_shadow {
+    if shadow_blob(def.is_shadow, &vm.data.positions) {
         alpha = AlphaMode::Blend;
     }
     // A few bus packs mark a solid body mesh as `[matl_alpha] 2` and leave
@@ -1537,7 +1521,7 @@ fn slot_extra(
     // depth buffer, the stacked panes of a door blended over each other
     // whichever lay in front, #211.)
     if (transparent_layer_hint || see_through) && !cover && alpha == AlphaMode::Blend {
-        extra.writes_depth = declared_alpha == AlphaMode::Blend && !ov.iter().any(|o| o.no_z_write) && !def.is_shadow;
+        extra.writes_depth = declared_alpha == AlphaMode::Blend && !ov.iter().any(|o| o.no_z_write) && !shadow_blob(def.is_shadow, &vm.data.positions);
         extra.no_z_write = true;
     }
     // Name the pane explicitly for the shader. A plain blended window has

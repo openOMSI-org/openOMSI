@@ -272,7 +272,9 @@ impl Photo {
 
     /// The camera turned by (dx, dy) degrees (right, down).
     pub(crate) fn look(&mut self, dx: f32, dy: f32) {
+        let fine = if self.keys.contains(&KeyCode::AltLeft) || self.keys.contains(&KeyCode::AltRight) { 0.25 } else { 1.0 };
         self.dragged += dx.abs() + dy.abs();
+        let (dx, dy) = (dx * fine, dy * fine);
         if self.settings.orbit {
             self.orbit.1 += dx;
             self.orbit.2 = (self.orbit.2 + dy).clamp(-10.0, 85.0);
@@ -322,6 +324,7 @@ impl Photo {
         let mut m = Vec3::new(axis(k(KeyCode::KeyD), k(KeyCode::KeyA)), axis(k(KeyCode::KeyW), k(KeyCode::KeyS)), axis(up, down));
         m += self.pad.moves();
         m += Vec3::new(self.touch_move.x, self.touch_move.y, self.touch_z);
+        m.z *= 0.5;
         let fast = if k(KeyCode::ShiftLeft) || k(KeyCode::ShiftRight) || self.touch_fast { 4.0 } else if k(KeyCode::AltLeft) || k(KeyCode::AltRight) { 0.25 } else { 1.0 };
         // the arrows and the right stick turn the view; Z and X roll it
         let turn = 70.0 * dt * (self.cam.fov_deg / 60.0).clamp(0.15, 1.5);

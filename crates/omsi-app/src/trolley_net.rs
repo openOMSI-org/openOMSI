@@ -28,22 +28,30 @@ fn candidates(args: &crate::Args) -> Vec<PathBuf> {
 /// seconds on a big map. The buses of a map share one network, as they share one wire.
 static READ: std::sync::Mutex<Vec<(PathBuf, Option<Arc<WireNet>>)>> = std::sync::Mutex::new(Vec::new());
 
-pub(crate) fn load(args: &crate::Args, world: &omsi_scene::World) -> Option<Arc<WireNet>> {
+/// `splines`: with no `trolley.txt`, read the wire off the map's wire splines (for a trolleybus:
+/// seconds on a big map, and the map draws that wire itself).
+pub(crate) fn load(args: &crate::Args, world: &omsi_scene::World, splines: bool) -> Option<Arc<WireNet>> {
     let key = omsi_cfg::resolve_path(&args.root, &args.map);
     if let Some((_, net)) = READ.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|(k, _)| *k == key) {
         return net.clone();
     }
-    let net = read(args, world);
-    READ.lock().unwrap_or_else(|e| e.into_inner()).push((key, net.clone()));
+    let net = read(args, world, splines);
+    // (a "none" without the splines read is not the final word for a trolleybus later)
+    if splines || net.is_some() {
+        READ.lock().unwrap_or_else(|e| e.into_inner()).push((key, net.clone()));
+    }
     net
 }
 
-fn read(args: &crate::Args, world: &omsi_scene::World) -> Option<Arc<WireNet>> {
+fn read(args: &crate::Args, world: &omsi_scene::World, splines: bool) -> Option<Arc<WireNet>> {
     let (net, path) = match candidates(args).into_iter().find(|p| p.is_file()) {
         Some(path) => {
             let bytes = std::fs::read(&path).map_err(|e| log::warn!("{}: {e}", path.display())).ok()?;
-            (WireNet::parse(&omsi_cfg::decode_text(&bytes)), path)
+            let mut net = WireNet::parse(&omsi_cfg::decode_text(&bytes));
+            net.dir = path.parent().map(|d| d.to_path_buf());
+            (net, path)
         }
+        None if !splines => return None,
         // none written: the map's own wire splines
         None => {
             let tiles: Vec<(i32, i32, PathBuf)> = world.map_tiles().into_iter().map(|(_, x, y, p)| (x, y, p)).collect();

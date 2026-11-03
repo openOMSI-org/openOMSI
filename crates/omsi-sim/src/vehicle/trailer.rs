@@ -63,6 +63,7 @@ pub struct TrailerPart {
     pub(super) pivot: Option<DVec3>,
     /// Coupling → rear axle distance.
     pub(super) length: f32,
+    pub(super) ground_arm: f32,
     pub(super) coupling_front: Vec3,
     pub(super) coupling_back: Vec3,
     pub(super) axle_long: f32,
@@ -84,6 +85,7 @@ pub struct TrailerPart {
     pub(super) v_alpha: Option<omsi_script::VarId>,
     pub(super) v_beta: Option<omsi_script::VarId>,
     pub(super) odometer: f32,
+    pub(super) turned_put: f32,
     /// Placed by another game (a LAN player's rear section, `set_remote_pose`): it stays
     /// where that game has it, and is not walked on behind its coupling here.
     pub(super) remote: bool,
@@ -303,6 +305,10 @@ impl TrailerPart {
         } else {
             (coupling_front.y - axle_long).abs()
         };
+        let ground_arm = match turning_line {
+            Some(_) => ty.def.axles.iter().map(|a| (coupling_front.y - a.long).abs()).sum::<f32>() / ty.def.axles.len() as f32,
+            None => length,
+        };
         let wheel_radius = ty
             .def
             .axles
@@ -359,6 +365,7 @@ impl TrailerPart {
             heading: 0.0,
             pivot: None,
             length,
+            ground_arm,
             coupling_front,
             coupling_back,
             axle_long,
@@ -368,6 +375,7 @@ impl TrailerPart {
             first_axle,
             wheel_radius,
             odometer: 0.0,
+            turned_put: 0.0,
             remote: false,
             reversed,
             text_textures: Vec::new(),
@@ -706,6 +714,7 @@ impl TrailerPart {
             self.kappa = coupled_curvature(k_lead, self.coupling_back.y - line_lead, alpha, self.coupling_front.y - self.axle_long);
         }
         let new_pivot = c - DVec3::new(dir.x, dir.y, 0.0) * self.length as f64;
+        let axle_at = c - DVec3::new(dir.x, dir.y, 0.0) * self.ground_arm as f64;
         let ds = (new_pivot - pivot).truncate().length() as f32;
         self.odometer += ds * (main.physics.velocity_kmh().signum().max(0.0) * 2.0 - 1.0).max(-1.0);
         self.pivot = Some(new_pivot);
@@ -730,9 +739,9 @@ impl TrailerPart {
                 // ever found the ground beneath and hung there under the bridge while the
                 // front section drove on above (#135).
                 let top = self.position.z.max(level) + 1.5;
-                g.probe(new_pivot.x, new_pivot.y, top).below
+                g.probe(axle_at.x, axle_at.y, top).below
             }
-            (None, None, Some(g)) => g(new_pivot.x, new_pivot.y),
+            (None, None, Some(g)) => g(axle_at.x, axle_at.y),
             _ => None,
         };
         // A height far from where the coupling holds the part is another level's: the AI's
@@ -786,7 +795,7 @@ impl TrailerPart {
         let run = if let Some(track_p) = self.track {
             (c.truncate() - track_p.truncate()).length().max(0.5)
         } else {
-            self.length.max(0.5) as f64
+            self.ground_arm.max(0.5) as f64
         };
         let mut pitch = (dz.atan2(run).to_degrees() as f32).clamp(-30.0, 30.0);
         if let Some([_, bmax, _, kind]) = self.ty.def.coupling_front_character {
@@ -859,7 +868,9 @@ impl TrailerPart {
         let rpm =
             main.physics.velocity_kmh() / 3.6 / (2.0 * std::f32::consts::PI * self.wheel_radius)
                 * 60.0;
-        let rot = (self.odometer / self.wheel_radius).rem_euclid(std::f32::consts::TAU);
+        let turned = self.odometer / self.wheel_radius;
+        let step = turned - self.turned_put;
+        self.turned_put = turned;
         for a in 0..self.axle_count {
             let steer = self.axle_steer(a);
             for side in 0..2 {
@@ -867,7 +878,7 @@ impl TrailerPart {
                     main.state.vars[id as usize] = s;
                 }
                 if let Some(id) = self.axle_ids.rotation[a][side] {
-                    main.state.vars[id as usize] = rot;
+                    main.state.vars[id as usize] += step;
                 }
                 if let Some(id) = self.axle_ids.rotation_speed[a][side] {
                     main.state.vars[id as usize] = rpm;

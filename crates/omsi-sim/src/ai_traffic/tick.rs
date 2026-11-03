@@ -385,7 +385,7 @@ impl TrafficSim {
             }
             let h = heading.to_radians();
             let fwd = glam::DVec2::new(h.sin(), h.cos());
-            for l in 0..self.net.lanes.len() {
+            for l in crate::traffic::way::lanes_near(&self.net, pos.truncate(), 80.0) {
                 let lane = &self.net.lanes[l];
                 let Some((ci, li)) = lane.traffic_light else { continue };
                 if lane.kind != LaneKind::Street {
@@ -487,7 +487,7 @@ impl TrafficSim {
         // the player's vehicle and the LAN players' on the lanes, for the right of way (the
         // rear sections and the vehicles placed by hand stand, they do not come)
         let mut users: Vec<WayUser> = Vec::new();
-        if let Some(p) = player.as_ref() {
+        if let Some(p) = player.as_ref().filter(|_| !self.player_waving()) {
             users.extend(way_user_on(&self.net, p, self.player_blinker, player_standing, self.player_priority));
         }
         for (id, b) in others.iter().filter(|(id, _)| *id < 0xFFF0_0000) {
@@ -596,7 +596,7 @@ impl TrafficSim {
             let car = &self.cars[i];
             let st = &car.state;
             let near_way = self.way_lanes(st, 100.0);
-            let passing = car.passing.map(|p| !p.aborted).unwrap_or(false);
+            let (passing, drive_through) = (car.passing.map(|p| !p.aborted).unwrap_or(false), self.drive_through_parked);
             let mut swerve: Option<f32> = None;
             let mut stand: Option<(f32, usize, f32, f32)> = None;
             let mut check = |along: f32, lat: f32, lane: usize, at: f32| {
@@ -612,7 +612,7 @@ impl TrafficSim {
                     a < 0.9
                 };
                 if blocks {
-                    if along > 0.0 {
+                    if along > 0.0 && !drive_through {
                         let gap = along - 2.3 - st.front;
                         if stand.map(|o| gap < o.0).unwrap_or(true) {
                             stand = Some((gap, lane, at, lat));
@@ -1281,27 +1281,6 @@ impl TrafficSim {
             priority_warning,
             engine_off: car.bus.as_ref().is_some_and(|b| !b.engine_running(self.day_time)),
         })
-    }
-
-    /// Who can be seen: a car out of the view (and farther than the mirrors and the
-    /// shadows reach) leaves its animations as they are and is not drawn at all.
-    fn set_visibility(&mut self) {
-        if let Some(v) = self.viewer {
-            for c in &mut self.cars {
-                let p = c.vehicle.position;
-                let r = (c.state.front + c.state.rear).abs().max(4.0) as f64 + 2.0;
-                let d = (p - v.pos).length();
-                c.vehicle.ai_visuals = d < UNSEEN_NEAR || v.frames(p, r);
-                // (a car nobody sees, well out of earshot of the mirrors: its script runs a
-                // few times a second, not every frame - each car at its own beat, so the
-                // runs do not all fall in one frame; a bus keeps its stop handshake)
-                c.vehicle.ai_script_period = if !c.vehicle.ai_visuals && d > UNSEEN_SCRIPT_RANGE && c.bus.is_none() {
-                    0.2 + 0.05 * (c.id % 5) as f32
-                } else {
-                    0.0
-                };
-            }
-        }
     }
 
     /// The bodies and the scripts of the AI vehicles: on the frame's own thread while they

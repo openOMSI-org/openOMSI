@@ -97,7 +97,7 @@ pub(super) const CHANGES_WITHIN: std::time::Duration = std::time::Duration::from
 /// asked for again now?
 pub(super) fn may_retry(why: &Failure, since: std::time::Duration, fails: u32) -> bool {
     // (a bus on its way, or a host not reached - never given up: what can come, comes)
-    (why.coming() || fails < GIVE_UP) && since >= why.retry_after(RETRY)
+    !why.settled() && (why.coming() || fails < GIVE_UP) && since >= why.retry_after(RETRY)
 }
 
 // (what the rest of the game asks, of the game's own viewer)
@@ -156,7 +156,7 @@ impl Viewer {
     pub(crate) fn hopeless(&self, fp: &str) -> bool {
         let since = self.asked.lock().unwrap_or_else(|e| e.into_inner()).get(fp).map(|t| t.elapsed());
         match self.wanted().get(fp) {
-            Some((Wanted::Failed(why), _, fails)) => (!why.coming() && *fails >= GIVE_UP) || since.is_some_and(|s| s >= FALL_BACK_AFTER),
+            Some((Wanted::Failed(why), _, fails)) => why.settled() || (!why.coming() && *fails >= GIVE_UP) || since.is_some_and(|s| s >= FALL_BACK_AFTER),
             _ => false,
         }
     }
@@ -306,6 +306,11 @@ impl Viewer {
             // (a joining game whose way to the host is still being found asks once it is: the
             // store is open on every game, only the server waits here)
             if !crate::mods::upload::serving() {
+                // (a dedicated server that takes no uploads: nobody will ever send it this
+                // version - asking itself every few seconds rebuilt the box and filled the log)
+                if crate::server_cfg::SERVER_VEHICLES.get().is_some() {
+                    return Wanted::Failed(Failure::OwnBusesOnly);
+                }
                 return Wanted::Failed(Failure::NoHost);
             }
             return match wait_for(fp, crate::mods::upload::MANIFEST_WAIT).then(|| bus_file(fp)).flatten() {

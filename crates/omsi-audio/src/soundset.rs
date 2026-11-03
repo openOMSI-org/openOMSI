@@ -122,6 +122,7 @@ pub struct SoundSet {
     amount: f32,
     /// This set belongs to an AI vehicle or another player's (Omsi.exe's view 4).
     ai: bool,
+    scenery: bool,
     /// The player's own vehicle moves with its listener; its 3D sounds still pan and fade,
     /// but frame timing must not turn their fixed cabin positions into Doppler pitch shifts.
     listener_vehicle: bool,
@@ -265,6 +266,7 @@ impl SoundSet {
             inside: false,
             amount: 0.0,
             ai: false,
+            scenery: false,
             listener_vehicle: false,
             muffled: false,
             parts: Vec::new(),
@@ -340,6 +342,7 @@ impl SoundSet {
     /// Attach the sound set of coupled part `index` (built like this one: [`SoundSet::new`]
     /// for the player's bus, [`SoundSet::new_exterior`] for the others).
     pub fn add_part(&mut self, index: usize, mut part: SoundSet) {
+        part.master = self.master;
         part.inside = self.inside;
         part.amount = self.amount;
         part.muffled = self.muffled;
@@ -373,7 +376,7 @@ impl SoundSet {
     /// `[viewpoint] 1` sounds, which are the player's bus heard from the street.
     fn view_mask(&self) -> i32 {
         if self.ai {
-            4
+            if self.scenery { 5 } else { 4 }
         } else if self.inside {
             2
         } else {
@@ -387,6 +390,12 @@ impl SoundSet {
     pub fn new_exterior(engine: &AudioEngine, cfg: &SoundCfg, dir: &Path) -> SoundSet {
         let mut s = Self::new(engine, cfg, dir);
         s.ai = true;
+        s
+    }
+
+    pub fn new_scenery(engine: &AudioEngine, cfg: &SoundCfg, dir: &Path) -> SoundSet {
+        let mut s = Self::new_exterior(engine, cfg, dir);
+        s.scenery = true;
         s
     }
 
@@ -485,6 +494,17 @@ impl SoundSet {
     /// for a `[sound]`, which plays at its file's own rate.
     fn frequency(def: &SoundEntry, var: &dyn Fn(&str) -> Option<f32>) -> Option<f32> {
         def.is_loop.then(|| def.sample_rate.trunc() * var(&def.pitch_variable).unwrap_or(0.0).abs() / def.pitch_ref)
+    }
+
+    /// An entry plays on sound trigger `name`.
+    pub fn has_trigger(&self, name: &str) -> bool {
+        self.sounds.iter().any(|s| s.def.triggers.iter().any(|t| t.trim().eq_ignore_ascii_case(name)))
+    }
+
+    /// An entry's volume curve or condition reads variable `name`.
+    pub fn reads_var(&self, name: &str) -> bool {
+        let is = |v: &str| v.trim().eq_ignore_ascii_case(name);
+        self.sounds.iter().any(|s| s.def.vol_curves.iter().any(|c| is(&c.variable)) || s.def.conditions.iter().any(|c| is(&c.variable)))
     }
 
     /// The triggers (lower case) whose entries read script variables in a volume curve:
@@ -1015,6 +1035,31 @@ mod tests {
     }
 
     #[test]
+    fn scenery_is_heard_through_the_bodywork_from_a_cab() {
+        let _turn = globals();
+        let none = |_: &str| None;
+        set_outside_open(Some(0.5));
+        let bells = SoundEntry { volume: 0.8, ..Default::default() };
+        assert!((eval(&ctx(5, true), bells.clone(), &none).gain - 0.56).abs() < 1e-3);
+        assert!((eval(&ctx(5, false), bells, &none).gain - 0.8).abs() < 1e-3, "from the street: as it is");
+        assert!(!eval(&ctx(5, false), SoundEntry { volume: 1.0, viewpoint: 1, ..Default::default() }, &none).wrong_view);
+        assert!(eval(&ctx(5, true), SoundEntry { volume: 1.0, viewpoint: 2, ..Default::default() }, &none).wrong_view);
+        set_outside_open(None);
+    }
+
+    #[test]
+    fn a_scenery_set_is_heard_as_scenery_through_a_cab() {
+        let engine = AudioEngine::silent();
+        let mut set = SoundSet::new_scenery(&engine, &omsi_vehicle::sound::SoundCfg::default(), Path::new("/nonexistent"));
+        set.set_muffled(true);
+        let c = set.ctx(&engine);
+        assert_eq!((c.view, c.cab), (5, true));
+        let mut ai = SoundSet::new_exterior(&engine, &omsi_vehicle::sound::SoundCfg::default(), Path::new("/nonexistent"));
+        ai.set_muffled(true);
+        assert_eq!(ai.ctx(&engine).view, 4, "an AI vehicle stays view 4");
+    }
+
+    #[test]
     fn curves_are_linear_and_held_at_the_ends() {
         let p = [(0.0, 0.0), (1.0, 1.0), (1.0, 0.5), (3.0, 0.0)];
         assert_eq!(curve(&p, -1.0), 0.0);
@@ -1056,6 +1101,10 @@ mod tests {
         let ai = SoundEntry { volume: 0.5, viewpoint: 4, ..Default::default() };
         assert!((eval(&ctx(4, true), ai.clone(), &none).gain - 0.35).abs() < 1e-3);
         assert!((eval(&ctx(4, false), ai, &none).gain - 0.5).abs() < 1e-3, "from the street: as it is");
+        // a scenery object heard from a cab: as an AI vehicle, its street sounds too
+        let bells = SoundEntry { volume: 0.5, viewpoint: 1, ..Default::default() };
+        assert!((eval(&ctx(5, true), bells.clone(), &none).gain - 0.35).abs() < 1e-3);
+        assert!((eval(&ctx(5, false), bells, &none).gain - 0.5).abs() < 1e-3);
         // the player's bus heard from the street on an AI bus: never
         assert!(eval(&ctx(4, false), SoundEntry { volume: 1.0, viewpoint: 1, ..Default::default() }, &none).wrong_view);
         let cab = SoundEntry { volume: 0.8, viewpoint: 2, ..Default::default() };
@@ -1171,7 +1220,7 @@ mod tests {
             ..Default::default()
         };
         let sounds = (0..3).map(|_| RuntimeSound::new(entry.clone(), Some(clip.clone()))).collect();
-        let mut set = SoundSet { sounds, master: 1.0, dir: Default::default(), inside: false, amount: 0.0, ai: false, listener_vehicle: false, muffled: false, parts: Vec::new(), vars: None };
+        let mut set = SoundSet { sounds, master: 1.0, dir: Default::default(), inside: false, amount: 0.0, ai: false, scenery: false, listener_vehicle: false, muffled: false, parts: Vec::new(), vars: None };
         let reads = std::cell::Cell::new(0);
         let var = |n: &str| {
             reads.set(reads.get() + 1);
@@ -1197,7 +1246,7 @@ mod tests {
         assert_eq!(eval(&ctx(2, true), hit.clone(), &now).gain, 0.0, "read at the frame's end: silent");
         let fired = |n: &str| at_fire("ev_doorhitclose_0", n).or_else(|| now(n));
         assert_eq!(eval(&ctx(2, true), hit.clone(), &fired).gain, 1.0);
-        let set = SoundSet { sounds: vec![RuntimeSound::new(hit.clone(), None)], master: 1.0, dir: Default::default(), inside: true, amount: 1.0, ai: false, listener_vehicle: true, muffled: false, parts: Vec::new(), vars: None };
+        let set = SoundSet { sounds: vec![RuntimeSound::new(hit.clone(), None)], master: 1.0, dir: Default::default(), inside: true, amount: 1.0, ai: false, scenery: false, listener_vehicle: true, muffled: false, parts: Vec::new(), vars: None };
         assert_eq!(set.curve_triggers(), vec!["ev_doorhitclose_0".to_string()]);
     }
 
@@ -1214,7 +1263,7 @@ mod tests {
             ..Default::default()
         };
         let make = || SoundSet { sounds: vec![RuntimeSound::new(entry.clone(), Some(clip.clone()))], master: 1.0,
-            dir: Default::default(), inside: false, amount: 0.0, ai: false, listener_vehicle: false,
+            dir: Default::default(), inside: false, amount: 0.0, ai: false, scenery: false, listener_vehicle: false,
             muffled: false, parts: Vec::new(), vars: None };
         let mut set = make();
         set.add_part(0, make());

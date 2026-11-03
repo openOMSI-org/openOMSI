@@ -29,6 +29,7 @@ pub(super) fn option_now(app: &App, verb: &str, arg: &str) -> Option<f32> {
         "mouse_pedal_strength" => s.mouse_pedal_strength,
         "look_sens" => s.look_sens,
         "look_smoothing_ms" => s.look_smoothing_ms,
+        "zoom_hold_amount" => s.zoom_hold_amount,
         "head_tracking_smoothing" => s.head_tracking_smoothing,
         "head_tracking_dead_zone" => s.head_tracking_dead_zone,
         "pad_steer_smooth" => s.pad_steer_smooth,
@@ -173,6 +174,10 @@ pub(super) fn option_set(app: &mut App, verb: &str, arg: &str, v: f32) -> Option
         "look_smoothing_ms" => {
             app.settings.look_smoothing_ms = v.round();
             Some(("look_smoothing_ms", app.settings.look_smoothing_ms.to_string()))
+        }
+        "zoom_hold_amount" => {
+            app.settings.zoom_hold_amount = ((v * 100.0).round() / 100.0).clamp(0.15, 1.0);
+            Some(("zoom_hold_amount", app.settings.zoom_hold_amount.to_string()))
         }
         "mouse_sens" => {
             app.settings.mouse_sens = (v * 100.0).round() / 100.0;
@@ -419,8 +424,10 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "passenger_connections" => s.passenger_connections,
         "passenger_hailing" => s.passenger_hailing,
         "passenger_full_bus_reaction" => s.passenger_full_bus_reaction,
+        "pax_short_rides_stand" => s.pax_short_rides_stand,
         "navigator" => if app.vr_active() { app.vr_nav_profile().enabled } else { app.menus.navigator.as_ref().is_some_and(|n| n.enabled) },
         "nav_ai" => app.menus.navigator.as_ref().map_or(s.nav_ai, |n| n.show_ai),
+        "nav_ai_cars" => app.menus.navigator.as_ref().map_or(s.nav_ai_cars, |n| n.show_cars),
         "nav_surface" => app.menus.navigator.as_ref().map_or(s.nav_surface, |n| n.show_surface),
         "nav_3d" => app.menus.navigator.as_ref().map_or(s.nav_3d, |n| n.show_3d),
         "nav_classic_2d" => app.menus.navigator.as_ref().map_or(s.nav_classic_2d, |n| n.classic_2d),
@@ -486,6 +493,8 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "driver" => s.driver,
         "alt_view" => s.alt_view,
         "precision_zoom" => s.precision_zoom,
+        "zoom_hold_latch" => s.zoom_hold_latch,
+        "flashlight_cursor" => s.flashlight_cursor,
         "triple_screen" => s.triple.enabled,
         "triple_hud_center" => s.triple_hud_center,
         "triple_span" => s.triple_span,
@@ -507,6 +516,10 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "ui_scale_window" => s.ui_scale_window,
         "tooltips" => s.tooltips,
         "notes" => s.notes,
+        "notes_driving" => s.notes_driving,
+        "notes_script" => s.notes_script,
+        "notes_trip" => s.notes_trip,
+        "notes_tickets" => s.notes_tickets,
         "chat" => s.chat,
         "name_tags" => s.name_tags,
         "voice_enabled" => s.voice_enabled,
@@ -543,6 +556,13 @@ pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static 
             }
             Some(("passenger_full_bus_reaction", bit))
         },
+        "pax_short_rides_stand" => {
+            app.settings.pax_short_rides_stand = on;
+            if let Some(h) = app.session.humans.as_mut() {
+                h.short_rides_stand = on;
+            }
+            Some(("pax_short_rides_stand", bit))
+        },
         "navigator" => {
             if app.vr_active() {
                 if app.vr_nav_profile().enabled != on { app.vr_nav_adjust("enabled", 1.0); }
@@ -560,6 +580,13 @@ pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static 
             }
             app.settings.nav_ai = on;
             Some(("nav_ai", bit))
+        }
+        "nav_ai_cars" => {
+            if let Some(n) = app.menus.navigator.as_mut() {
+                n.show_cars = on;
+            }
+            app.settings.nav_ai_cars = on;
+            Some(("nav_ai_cars", bit))
         }
         "nav_surface" => {
             if let Some(n) = app.menus.navigator.as_mut() {
@@ -853,6 +880,14 @@ fn toggle_set_graphics_and_controls(app: &mut App, id: &str, on: bool, bit: Stri
             app.settings.alt_view = on;
             Some(("alt_view", bit))
         }
+        "zoom_hold_latch" => {
+            app.settings.zoom_hold_latch = on;
+            Some(("zoom_hold_latch", bit))
+        }
+        "flashlight_cursor" => {
+            app.settings.flashlight_cursor = on;
+            Some(("flashlight_cursor", bit))
+        }
         "precision_zoom" => {
             app.settings.precision_zoom = on;
             Some(("precision_zoom", bit))
@@ -948,6 +983,22 @@ fn toggle_set_graphics_and_controls(app: &mut App, id: &str, on: bool, bit: Stri
         "notes" => {
             app.settings.notes = on;
             Some(("notes", bit))
+        }
+        "notes_driving" => {
+            app.settings.notes_driving = on;
+            Some(("notes_driving", bit))
+        }
+        "notes_script" => {
+            app.settings.notes_script = on;
+            Some(("notes_script", bit))
+        }
+        "notes_trip" => {
+            app.settings.notes_trip = on;
+            Some(("notes_trip", bit))
+        }
+        "notes_tickets" => {
+            app.settings.notes_tickets = on;
+            Some(("notes_tickets", bit))
         }
         "chat" => {
             app.settings.chat = on;

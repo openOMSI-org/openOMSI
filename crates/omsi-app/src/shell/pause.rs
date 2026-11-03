@@ -89,6 +89,7 @@ pub(crate) fn rail_icon(id: &str) -> &'static str {
         "vehicle" => "airport_shuttle",
         "world" => "partly_cloudy_day",
         "map" => "map",
+        "streets" => "search",
         "duty" => "departure_board",
         "skipstop" => "near_me",
         "endduty" => "sports_score",
@@ -416,6 +417,11 @@ fn settings_row(ui: &mut Ui, k: usize, label: &str, r: Rect, kbd: bool, dd_open:
             let value = row.value.to_string();
             let changed = ui.slider_without_wheel(&format!("pause-sl-{k}-{}", row.name), ctl, &mut f, 0.0, 1.0, 0.0, "", &|_| value.clone());
             changed.then_some(Action::Control(k, f))
+        }
+        // A calendar field commits only after a day is selected.
+        "d" => {
+            let mut date = row.value.to_string();
+            ui.date_field(&format!("pause-date-{k}-{}", row.name), ctl, &mut date).then_some(Action::Date(date))
         }
         // a stepper: the value between the two arrows of a field
         "c" => {

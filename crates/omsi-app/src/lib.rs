@@ -51,6 +51,7 @@ use omsi_career::career;
 use omsi_input::describe;
 pub(crate) use omsi_scene::editor;
 mod duty_book;
+mod first_graphics;
 mod game_lists;
 mod game_panels;
 mod game_controller_menu;
@@ -136,7 +137,6 @@ mod on_foot;
 mod trolley_hands;
 mod trolley_mouse;
 pub(crate) mod trolley_net;
-mod trolley_sound;
 mod optimiser;
 use omsi_scene::route_arrows;
 mod server;
@@ -468,6 +468,8 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
         log::info!("sim thread: {}", if sim_thread { "the AI traffic, the people and the scenery scripts step beside the picture" } else { "off: every step on the main thread" });
     }
     let _lan_status = lan::StatusFileGuard;
+    // (a resumed bus loads its saved sheet by full path before any sheet is made this run)
+    omsi_scene::schedule_paper::trust_cache_dir();
     // OMSI's tutorials: the lesson's own situation
     if let Some(n) = args.tutorial.filter(|n| (1..=4).contains(n)) {
         args.situation = Some(tutorial::SITUATIONS[n - 1].to_string());
@@ -546,6 +548,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     }
     if let (Some(cfg), Some(l)) = (server_cfg.as_ref(), lan.as_ref()) {
         lan::open_public_gateway(l, server::info_of(cfg, &args.root), cfg.web_port, cfg.tunnel);
+        server::announce_fleet(cfg, &args.root);
         lan::publish_vehicles(args.root.clone(), cfg.vehicles.clone());
         server::start_public_list(cfg);
         if cfg.tunnel {
@@ -711,6 +714,8 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             autosave_t: 0.0,
             pumping: None,
             career: Default::default(),
+            depot_base: Default::default(),
+            depot_prev: None,
             journey: None,
             wetness: 0.0,
             cloud_drift: [0.0; 4],
@@ -745,6 +750,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             pane_scroll_drag: None,
             pane_scroll: None,
             teleport_pick: false,
+            map_place_from: None,
             game_panels: Default::default(),
             tutorial: None,
             wheel_acc: 0.0,
@@ -759,6 +765,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             menu_prev_pause: false,
             info_bar,
             timetable: false,
+            clean_screen: false,
             hud_resize: None,
             notices: Vec::new(),
             note_watch: Default::default(),
@@ -768,8 +775,10 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             menu_edit_number: false,
             menu_edit_ident: false,
             menu_edit_search: false,
+            streets_seen: 0,
             menu_search: String::new(),
             swap_pending: false,
+            swapped_in: None,
             pending_placement: None,
             menu_drag: None,
             menu_kbd: true,
@@ -784,6 +793,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             head_idle_hold: Default::default(),
             ego: false,
             flashlight: false,
+            flashlight_aim: None,
             in_cab: false,
             look: (0.0, 0.0),
             look_smooth: (0.0, 0.0),
@@ -791,6 +801,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             look_view: String::new(),
             cam_blend: Default::default(),
             view_zoom: Default::default(),
+            zoom_hold: Default::default(),
             cam_zooms: Default::default(),
             orbit: ORBIT_DEFAULT,
         },
@@ -799,6 +810,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
         sound: SoundState {
             radio,
             milezero: Default::default(),
+            switch_sound: Default::default(),
             audio: None,
             ambience: None,
             soundscape: None,
@@ -824,6 +836,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             pad_look: [false; 4],
             pad_repeat: Vec::new(),
             pad_voice_radio: false,
+            pad_zoom_hold: false,
             pad_voice_nearby: false,
             arrow_glance: false,
             headtrack: None,

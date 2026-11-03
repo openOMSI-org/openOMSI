@@ -597,6 +597,11 @@ fn full_bus_reaction_defaults_off_for_desktop_phone_and_old_settings() {
     assert!(!Settings::from_text("version=1\n").passenger_full_bus_reaction);
     assert!(Settings::from_text("passenger_full_bus_reaction=1\n").passenger_full_bus_reaction);
     assert!(!Settings::from_text("passenger_full_bus_reaction=0\n").passenger_full_bus_reaction);
+    assert!(!Settings::desktop().pax_short_rides_stand);
+    assert!(Settings::from_text("pax_short_rides_stand=1\n").pax_short_rides_stand);
+    let mut on = Settings::desktop();
+    on.pax_short_rides_stand = true;
+    assert!(Settings::from_text(&on.to_text()).pax_short_rides_stand);
 }
 #[test]
 fn full_bus_reaction_round_trips_through_both_settings_writers() {
@@ -634,3 +639,10 @@ fn graphics_brightness_defaults_clamp_and_roundtrip() {
     assert!((game.traffic_headlights - 1.6).abs() < 0.0001);
 }
 
+#[test]
+fn the_note_kinds_go_round_the_file() {
+    let mut s = Settings::desktop();
+    (s.notes_driving, s.notes_script, s.notes_trip, s.notes_tickets) = (false, true, false, true);
+    let back = Settings::from_text(&s.to_text());
+    assert_eq!((back.notes_driving, back.notes_script, back.notes_trip, back.notes_tickets), (false, true, false, true));
+}

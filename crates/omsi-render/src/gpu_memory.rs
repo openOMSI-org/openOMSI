@@ -161,6 +161,11 @@ fn vulkan_vram_mb(_adapter: &wgpu::Adapter) -> Option<u64> {
     None
 }
 
+pub fn card_vram_mb(adapter: &wgpu::Adapter) -> Option<u64> {
+    let info = adapter.get_info();
+    adapter_vram_mb(adapter, &info, adapter.memory_info().as_ref())
+}
+
 /// The card's own memory in MB: wgpu's report on DirectX 12 (the adapter's DXGI
 /// `DedicatedVideoMemory`, the number [`dedicated_vram_mb`] reads), else what the system
 /// tells. (wgpu's Vulkan report sums every device-local heap where [`vulkan_vram_mb`] takes
@@ -244,6 +249,7 @@ pub struct Ceiling {
     pub ssao: bool,
     pub shadow_size: u32,
     pub sample_counts: u32,
+    pub puddle_reflections: bool,
 }
 
 impl Ceiling {
@@ -261,13 +267,13 @@ fn ceiling_for(backend: wgpu::Backend, device_type: wgpu::DeviceType, name: &str
     let ssao = backend != wgpu::Backend::Gl;
     let sample_counts = 1 | 2 | 4 | 8;
     if omsi_cfg::flags::OMSI_FULL_GPU.is_set() {
-        return Ceiling { msaa: 8, ssao, shadow_size: 8192, sample_counts };
+        return Ceiling { msaa: 8, ssao, shadow_size: 8192, sample_counts, puddle_reflections: true };
     }
     let msaa = if amd_gl { 1 } else { 8 };
     match picture(backend, device_type, name, vram) {
-        Picture::Weak => Ceiling { msaa: 1, ssao: false, shadow_size: 1024, sample_counts },
-        Picture::Modest => Ceiling { msaa: msaa.min(2), ssao: false, shadow_size: 2048, sample_counts },
-        Picture::AsAsked => Ceiling { msaa, ssao, shadow_size: 8192, sample_counts },
+        Picture::Weak => Ceiling { msaa: 1, ssao: false, shadow_size: 1024, sample_counts, puddle_reflections: false },
+        Picture::Modest => Ceiling { msaa: msaa.min(2), ssao: false, shadow_size: 2048, sample_counts, puddle_reflections: true },
+        Picture::AsAsked => Ceiling { msaa, ssao, shadow_size: 8192, sample_counts, puddle_reflections: true },
     }
 }
 
@@ -287,8 +293,8 @@ pub(super) fn lighter_picture(info: &wgpu::AdapterInfo, vram: Option<u64>, optio
     };
     match picture(info.backend, info.device_type, &info.name, vram) {
         Picture::Weak => {
-            log::warn!("{}: a small or shared graphics chip - no SSAO, no MSAA, shadow maps of at most 1024 (OMSI_FULL_GPU=1 keeps the settings)", info.name);
-            RenderOptions { msaa: 1, ssao: false, shadow_size: options.shadow_size.min(1024), street_light: options.street_light.or(Some(false)), ..options }
+            log::warn!("{}: a small or shared graphics chip - no SSAO, no MSAA, no puddle reflections, shadow maps of at most 1024 (OMSI_FULL_GPU=1 keeps the settings)", info.name);
+            RenderOptions { msaa: 1, ssao: false, shadow_size: options.shadow_size.min(1024), street_light: options.street_light.or(Some(false)), puddle_reflections: false, ..options }
         }
         Picture::Modest => {
             log::info!("{}: {} MB of its own - no SSAO, at most 2x MSAA and 2048 shadow maps (OMSI_FULL_GPU=1 keeps the settings)", info.name, vram.unwrap_or(0));
@@ -549,6 +555,7 @@ mod tests {
         let weak = chip(DeviceType::IntegratedGpu, Backend::Dx12);
         assert_eq!(after(&weak, Some(8192), None), Some(false));
         assert_eq!(after(&weak, Some(8192), Some(true)), Some(true));
+        assert!(!super::lighter_picture(&weak, Some(8192), asked(None)).puddle_reflections);
         let modest = chip(DeviceType::DiscreteGpu, Backend::Vulkan);
         assert_eq!(after(&modest, Some(4076), None), Some(false));
         // a big card and an Apple chip keep the automatic setting, which turns it on
@@ -561,19 +568,19 @@ mod tests {
     fn the_ceiling_of_a_chip_is_what_its_lighter_picture_allows() {
         let c = |b, d, v, amd| ceiling_for(b, d, "", v, amd);
         let all = 1 | 2 | 4 | 8;
-        assert_eq!(c(Backend::Vulkan, DeviceType::DiscreteGpu, Some(20421), false), Ceiling { msaa: 8, ssao: true, shadow_size: 8192, sample_counts: all });
-        assert_eq!(c(Backend::Vulkan, DeviceType::DiscreteGpu, Some(4076), false), Ceiling { msaa: 2, ssao: false, shadow_size: 2048, sample_counts: all });
-        assert_eq!(c(Backend::Dx12, DeviceType::IntegratedGpu, Some(8192), false), Ceiling { msaa: 1, ssao: false, shadow_size: 1024, sample_counts: all });
-        assert_eq!(c(Backend::Gl, DeviceType::Other, Some(16304), true), Ceiling { msaa: 1, ssao: false, shadow_size: 8192, sample_counts: all });
+        assert_eq!(c(Backend::Vulkan, DeviceType::DiscreteGpu, Some(20421), false), Ceiling { msaa: 8, ssao: true, shadow_size: 8192, sample_counts: all, puddle_reflections: true });
+        assert_eq!(c(Backend::Vulkan, DeviceType::DiscreteGpu, Some(4076), false), Ceiling { msaa: 2, ssao: false, shadow_size: 2048, sample_counts: all, puddle_reflections: true });
+        assert_eq!(c(Backend::Dx12, DeviceType::IntegratedGpu, Some(8192), false), Ceiling { msaa: 1, ssao: false, shadow_size: 1024, sample_counts: all, puddle_reflections: false });
+        assert_eq!(c(Backend::Gl, DeviceType::Other, Some(16304), true), Ceiling { msaa: 1, ssao: false, shadow_size: 8192, sample_counts: all, puddle_reflections: true });
     }
 
     #[test]
     fn a_rebuild_takes_a_sample_count_the_device_has() {
-        let apple = Ceiling { msaa: 8, ssao: true, shadow_size: 8192, sample_counts: 1 | 4 };
+        let apple = Ceiling { msaa: 8, ssao: true, shadow_size: 8192, sample_counts: 1 | 4, puddle_reflections: true };
         assert_eq!(apple.msaa_for(2), 4, "2x was not asked for when the device was opened");
         assert_eq!(apple.msaa_for(1), 1);
         assert_eq!(apple.msaa_for(8), 4);
-        let modest = Ceiling { msaa: 2, ssao: false, shadow_size: 2048, sample_counts: 1 | 2 | 4 | 8 };
+        let modest = Ceiling { msaa: 2, ssao: false, shadow_size: 2048, sample_counts: 1 | 2 | 4 | 8, puddle_reflections: true };
         assert_eq!(modest.msaa_for(4), 2);
         assert_eq!(modest.msaa_for(2), 2);
     }

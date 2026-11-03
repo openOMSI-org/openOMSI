@@ -41,6 +41,9 @@ pub(crate) enum Failure {
     NotDriven,
     /// A server waited for a bus that did not come.
     NotHereYet,
+    /// A dedicated server that takes no uploads is the host itself: nobody to fetch a player's
+    /// version from, now or later - its own bus of that path stands in at once (`settled`).
+    OwnBusesOnly,
     /// Anything else: a bad answer, a check that failed here.
     Other(String),
 }
@@ -50,6 +53,7 @@ const NO_HOST: &str = "no host to ask yet";
 const NOT_DRIVEN: &str = "no longer driven here";
 const NOT_HERE_YET: &str = "no such bus here yet";
 const UNREACHABLE: &str = "cannot reach ";
+const OWN_BUSES_ONLY: &str = "this server takes no uploads: its own bus of that path stands in";
 
 impl Failure {
     /// Did the host answer with these words?
@@ -71,6 +75,11 @@ impl Failure {
     /// A bus that is still to come: asked for again, never given up.
     pub(crate) fn coming(&self) -> bool {
         matches!(self, Failure::NotDriven | Failure::NotHereYet) || self.host_says(says::NO_SUCH_BUS) || self.unreached()
+    }
+
+    /// Settled for the session: never asked for again, and another bus stands in at once.
+    pub(crate) fn settled(&self) -> bool {
+        matches!(self, Failure::OwnBusesOnly)
     }
 
     /// How long to wait before asking again: soon for a bus on its way, a little longer for a
@@ -104,6 +113,7 @@ impl fmt::Display for Failure {
             Failure::HostSays(words) => write!(f, "{HOST_SAYS}{words}"),
             Failure::NotDriven => f.write_str(NOT_DRIVEN),
             Failure::NotHereYet => f.write_str(NOT_HERE_YET),
+            Failure::OwnBusesOnly => f.write_str(OWN_BUSES_ONLY),
             Failure::Other(s) => f.write_str(s),
         }
     }
@@ -178,6 +188,7 @@ mod tests {
         assert!(Failure::NotDriven.coming() && Failure::NotHereYet.coming() && Failure::NoHost.coming());
         assert!(Failure::HostSays(says::BUSY.into()).unreached());
         assert!(!Failure::Other("the host's list is another bus".into()).coming());
+        assert!(Failure::OwnBusesOnly.settled() && !Failure::OwnBusesOnly.coming() && !Failure::NoHost.settled());
         assert!(Failure::HostSays(says::WHAT.into()).older_host());
         assert_eq!(Failure::HostSays(says::NO_SUCH_BUS.into()).retry_after(minute), Duration::from_secs(5));
         assert_eq!(Failure::ConnectionLost("reset".into()).retry_after(minute), Duration::from_secs(15));

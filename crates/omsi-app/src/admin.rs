@@ -188,7 +188,8 @@ fn host_action(app: &mut App, action: &str) {
         (Action::Traffic(arg), _) if arg == "clear" => clear_ai_traffic(app),
         (Action::Traffic(_), _) => {
             if let Some(t) = app.session.traffic.as_mut() {
-                t.target = crate::game_lists::next_step(&crate::game_lists::TRAFFIC, t.target);
+                let steps: Vec<usize> = crate::game_lists::TRAFFIC.iter().copied().filter(|&v| v <= crate::game_lists::TRAFFIC_MAX).collect();
+                t.target = crate::game_lists::next_step(&steps, t.target);
                 app.args.traffic = t.target;
                 app.service_msg = Some((omsi_ui::i18n::said(format!("{}: {}", omsi_ui::tr("Traffic"), t.target), format!("Traffic: {}", t.target)), 3.0));
             }
@@ -209,6 +210,23 @@ pub(crate) fn clear_ai_traffic(app: &mut App) {
         crate::view_sync::apply_traffic(t, &mut app.gfx.sim_view.traffic, w, r, scene);
         app.service_msg = Some((omsi_ui::i18n::tr_fill("{removed} AI vehicles taken off the road", &[("{removed}", &removed.to_string())]), 3.0));
     }
+}
+
+pub(crate) fn refresh_for_the_time(app: &mut App) {
+    if app.net.lan.as_ref().is_some_and(|l| l.role == Role::Client) {
+        app.service_msg = Some(("In a LAN session the host sets the clock".into(), 3.0));
+        return;
+    }
+    let buses = crate::app_impl::restart_timetable(app.session.schedule.as_mut(), app.session.traffic.as_mut(), app.world.as_deref(), app.renderer.as_ref(), app.scene.as_mut(), &mut app.gfx.sim_view.traffic);
+    let people = app.session.humans.as_mut().map(|h| h.sim.clear_waiting());
+    let n = people.unwrap_or(0).to_string();
+    let msg = match (buses, people.is_some()) {
+        (true, true) => omsi_ui::i18n::tr_fill("Timetable buses put out again; {n} waiting people taken off the stops", &[("{n}", &n)]),
+        (true, false) => omsi_ui::tr("Timetable buses put out again").into_owned(),
+        (false, true) => omsi_ui::i18n::tr_fill("{n} waiting people taken off the stops", &[("{n}", &n)]),
+        (false, false) => omsi_ui::tr("No timetable buses or passengers to set").into_owned(),
+    };
+    app.service_msg = Some((msg, 4.0));
 }
 
 /// The own bus (or the walker) put beside another vehicle.

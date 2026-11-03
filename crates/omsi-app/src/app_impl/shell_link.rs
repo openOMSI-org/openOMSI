@@ -160,6 +160,7 @@ impl App {
                         self.list_click(k, fx);
                     }
                 }
+                Action::Date(date) => self.choose_calendar_date(&date),
                 Action::Side(i) => self.settings_side_click(i),
                 Action::Pane(i) => self.tour_pane_click(i),
                 Action::Dropdown(i) => self.dropdown_pick(i),

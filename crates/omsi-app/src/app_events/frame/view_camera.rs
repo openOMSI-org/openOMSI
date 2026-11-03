@@ -61,7 +61,11 @@ impl App {
                 // `crate::head_filter`; with head tracking switched off or the tracker lost the
                 // view glides home - then the sensitivities and inversions)
                 let sample = self.input.headtrack.as_ref().and_then(|h| h.sample()).filter(|_| self.settings.head_tracking);
-                let calm = crate::head_filter::Params::tobii(self.settings.head_tracking_smoothing, self.settings.head_tracking_dead_zone);
+                let calm = if self.settings.head_tracking_source == "opentrack" {
+                    crate::head_filter::Params::OPENTRACK
+                } else {
+                    crate::head_filter::Params::tobii(self.settings.head_tracking_smoothing, self.settings.head_tracking_dead_zone)
+                };
                 let tracked = self.input.head_filter.step(sample.as_ref(), std::time::Instant::now(), calm).filter(|_| matches!(self.view.as_str(), "driver" | "pax"));
                 #[cfg(windows)]
                 let vr_on = self.xr.vr.is_some();
@@ -121,7 +125,7 @@ impl App {
                 // leaving the view drops it the same way.
                 self.f1_return(dt);
                 let Some(p) = self.player.as_mut() else { return };
-                let zoom = self.cam.view_zoom.get(&self.view).copied();
+                let zoom = crate::app_impl::with_zoom_hold(self.cam.view_zoom.get(&self.view).copied(), self.cam.zoom_hold.factor);
                 // The sway's own turn of the view: the driver's view only, for it is
                 // his head (and nothing at all while the sway is off or driven by a
                 // head tracker - `head_idle` is still then).
@@ -139,14 +143,7 @@ impl App {
                     }
                     // Settings → Field of view (0: the bus's own cameras); the view editor's for
                     // this bus before it
-                    if let Some(f) = view_fov {
-                        c.fov_deg = f.min(120.0);
-                    } else if fov_setting >= 20.0 {
-                        c.fov_deg = fov_setting.min(120.0);
-                    }
-                    if let Some(z) = zoom {
-                        c.fov_deg = (c.fov_deg * z).clamp(8.0, 120.0);
-                    }
+                    c.fov_deg = crate::app_impl::drawn_fov(c.fov_deg, view_fov, fov_setting, zoom);
                 };
                 let mut cam = p.camera_look(&self.view, &base, head_look, self.cam.orbit);
                 finish(&mut cam);
@@ -169,7 +166,7 @@ impl App {
             // the free camera and the view on foot follow the setting too (they
             // stayed at 60 degrees whatever it said)
             let base = if self.settings.fov >= 20.0 { self.settings.fov.min(120.0) } else { 60.0 };
-            cam.fov_deg = (base * self.cam.view_zoom.get(&self.view).copied().unwrap_or(1.0)).clamp(8.0, 120.0);
+            cam.fov_deg = (base * self.cam.view_zoom.get(&self.view).copied().unwrap_or(1.0) * self.cam.zoom_hold.factor).clamp(8.0, 120.0);
         }
     }
 

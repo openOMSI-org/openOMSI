@@ -190,7 +190,10 @@ impl Incoming {
         if !wanted.is_empty() && crate::server_cfg::SERVER_VEHICLES.get().is_some_and(|l| !l.is_empty()) {
             self.lease = None;
             self.held = None;
-            log::info!("uploads: {} is another version of a bus this server offers: refused", m.bus);
+            // (which files differ from the server's copy: what tells a modified bus from two
+            // machines that list the same bus differently)
+            let differ: Vec<String> = wanted.iter().take(8).map(|k| format!("{} ({} bytes)", m.entries[*k].path, m.entries[*k].size)).collect();
+            log::info!("uploads: {} is another version of a bus this server offers: refused ({} of its {} files are not the server's, e.g. {})", m.bus, wanted.len(), m.entries.len(), differ.join(", "));
             return Ok(Err("this server offers its own copies of its buses only".into()));
         }
         let bytes: u64 = wanted.iter().map(|k| m.entries[*k].size).sum();

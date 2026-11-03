@@ -1164,13 +1164,18 @@ impl AiState {
                 }
                 return false; // dead end: despawn
             };
-            // A timetable may name a path whose intervening map piece is missing.
-            // Never move the vehicle directly to the next path across that gap.
-            if !self.route.is_empty()
-                && !l.next.contains(&next)
-                && (net.lanes[next].start() - l.end()).truncate().length() >= 2.0
-            {
-                return false;
+            // (a missing map piece ends the drive; a step onto the parallel path of the next piece does not)
+            let mut side_step = None;
+            if !self.route.is_empty() && !l.next.contains(&next) && (net.lanes[next].start() - l.end()).truncate().length() >= 2.0 {
+                side_step = beside_successor(net, self.lane, next);
+                if side_step.is_none() {
+                    return false;
+                }
+            }
+            if let Some(offset) = side_step {
+                let len = (offset.abs() * 8.0).clamp(8.0, 30.0);
+                self.lateral_ramp = (self.lateral + offset, self.lateral_target, self.odometer, len);
+                self.lateral = self.lateral_at(self.odometer);
             }
             self.s -= l.length();
             self.prev_lane = Some(self.lane);
@@ -1191,6 +1196,20 @@ impl AiState {
         }
         true
     }
+}
+
+fn beside_successor(net: &Network, lane: usize, next: usize) -> Option<f32> {
+    let (from, to) = (&net.lanes[lane], &net.lanes[next]);
+    if to.kind != LaneKind::Street {
+        return None;
+    }
+    let h = to.start_heading().to_radians();
+    let right = DVec3::new(h.cos() as f64, -h.sin() as f64, 0.0);
+    from.next.iter().map(|&n| &net.lanes[n]).find(|n| {
+        let d = (to.start() - n.start()).truncate().length();
+        d < 5.0 && crate::traffic::wrap_deg(n.start_heading() - to.start_heading()).abs() < 20.0
+    })?;
+    Some((from.end() - to.start()).dot(right) as f32)
 }
 
 /// The pull of a vehicle at constant power: at most `p / v` (W/kg over m/s) once that is below the

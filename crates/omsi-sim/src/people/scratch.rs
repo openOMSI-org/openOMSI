@@ -34,6 +34,11 @@ pub struct Scratch {
     /// How many people were filed in `blocker_grid` (None: not filed, outside the
     /// passengers' frame).
     blockers_filed: Option<usize>,
+    door_at: Vec<DVec3>,
+    door_aboard: HashMap<BusId, Vec<u32>>,
+    door_buses: Vec<BusId>,
+    door_grid: HashMap<(i32, i32), Vec<u32>>,
+    door_cells: Vec<(i32, i32)>,
 }
 
 /// The cell size of the vehicle grid of the crowd (m).
@@ -43,6 +48,7 @@ const BLOCK_CELL: f64 = 32.0;
 const BLOCK_REACH: f64 = 25.0;
 /// The cell size of the blocker grid (m).
 const BLOCKER_CELL: f64 = 4.0;
+const DOOR_CELL: f64 = 50.0;
 
 fn cell(p: DVec2, size: f64) -> (i32, i32) {
     ((p.x / size).floor() as i32, (p.y / size).floor() as i32)
@@ -50,7 +56,7 @@ fn cell(p: DVec2, size: f64) -> (i32, i32) {
 
 /// Empty the cells used last time (their lists kept for the next filling); the whole map
 /// goes when it has grown big over a long drive.
-fn reset(grid: &mut HashMap<(i32, i32), Vec<u32>>, cells: &mut Vec<(i32, i32)>) {
+fn reset<K: Copy + Eq + std::hash::Hash>(grid: &mut HashMap<K, Vec<u32>>, cells: &mut Vec<K>) {
     if grid.len() > 4096 {
         grid.clear();
         cells.clear();
@@ -63,7 +69,7 @@ fn reset(grid: &mut HashMap<(i32, i32), Vec<u32>>, cells: &mut Vec<(i32, i32)>) 
     }
 }
 
-fn file(grid: &mut HashMap<(i32, i32), Vec<u32>>, cells: &mut Vec<(i32, i32)>, at: (i32, i32), k: usize) {
+fn file<K: Copy + Eq + std::hash::Hash>(grid: &mut HashMap<K, Vec<u32>>, cells: &mut Vec<K>, at: K, k: usize) {
     let v = grid.entry(at).or_default();
     if v.is_empty() {
         cells.push(at);
@@ -158,6 +164,28 @@ impl Scratch {
             }
         }
         true
+    }
+
+    pub fn file_doorways(&mut self, at: impl Iterator<Item = (Option<BusId>, DVec3)>) {
+        reset(&mut self.door_aboard, &mut self.door_buses);
+        reset(&mut self.door_grid, &mut self.door_cells);
+        self.door_at.clear();
+        for (inside, pos) in at {
+            let k = self.door_at.len();
+            self.door_at.push(pos);
+            match inside {
+                Some(b) => file(&mut self.door_aboard, &mut self.door_buses, b, k),
+                None => file(&mut self.door_grid, &mut self.door_cells, cell(pos.truncate(), DOOR_CELL), k),
+            }
+        }
+    }
+
+    pub fn doorways(&self, bn: &BusNow) -> (Vec<bool>, Vec<bool>) {
+        let r = DVec2::splat(door_reach(bn));
+        let (lo, hi) = (cell(bn.pos.truncate() - r, DOOR_CELL), cell(bn.pos.truncate() + r, DOOR_CELL));
+        let aboard = self.door_aboard.get(&bn.id).into_iter().flatten();
+        let outside = (lo.0..=hi.0).flat_map(|x| (lo.1..=hi.1).filter_map(move |y| self.door_grid.get(&(x, y)))).flatten();
+        doorways_taken_partitioned(bn, aboard.map(|&k| &self.door_at[k as usize]), outside.map(|&k| &self.door_at[k as usize]))
     }
 }
 

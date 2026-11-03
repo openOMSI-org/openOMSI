@@ -155,6 +155,7 @@ impl World {
             _publisher_mounts: publisher_mounts,
             publisher_texture_dirs,
             transit,
+            trolley_net: Mutex::new(None),
             global,
             map_dir,
             parklist: Mutex::new(HashMap::new()),

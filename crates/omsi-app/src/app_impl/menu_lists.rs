@@ -12,17 +12,17 @@ impl App {
         crate::game_lists::forget_page_titles(self);
         // (a search belongs to its list; `chooser_pick` has taken the kind when it goes on)
         if self.menus.list_kind.as_ref().is_some_and(|k| *k != kind) {
-            self.menus.forget_search();
+            self.forget_search();
             if self.menus.menu_edit_number {
-                if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);}
+                crate::platform::text_input(self.window.as_deref(),false);
                 self.menus.menu_edit_number=false; self.menus.menu_edit=None;
             }
             if self.menus.menu_edit_ident {
-                if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);}
+                crate::platform::text_input(self.window.as_deref(),false);
                 self.menus.menu_edit_ident=false; self.menus.menu_edit=None;
             }
             if self.menus.menu_edit_icao {
-                if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);}
+                crate::platform::text_input(self.window.as_deref(),false);
                 self.menus.menu_edit_icao=false; self.menus.menu_edit=None;
             }
         }
@@ -48,7 +48,7 @@ impl App {
 
     fn icao_edit_key(&mut self,code:KeyCode){
         match code{
-            KeyCode::Escape=>{self.menus.menu_edit=None;self.menus.menu_edit_icao=false;if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);}},
+            KeyCode::Escape=>{self.menus.menu_edit=None;self.menus.menu_edit_icao=false;crate::platform::text_input(self.window.as_deref(),false);},
             KeyCode::Backspace|KeyCode::Delete=>{if let Some(d)=self.menus.menu_edit.as_mut(){d.pop();}},
             KeyCode::Enter|KeyCode::NumpadEnter=>{self.apply_icao_edit();return;},
             _=>{}
@@ -66,12 +66,12 @@ impl App {
     }
     pub(crate) fn start_icao_edit(&mut self){
         self.menus.menu_edit=Some(String::new()); self.menus.menu_edit_icao=true;
-        if let Some(w)=self.window.as_ref(){w.set_ime_allowed(true);}
+        crate::platform::text_input(self.window.as_deref(),true);
     }
     pub(crate) fn apply_icao_edit(&mut self){
         let code=self.menus.menu_edit.take().unwrap_or_default().trim().to_ascii_uppercase();
         self.menus.menu_edit_icao=false;
-        if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);}
+        crate::platform::text_input(self.window.as_deref(),false);
         if code.len()==4&&code.chars().all(|c|c.is_ascii_alphabetic()){
             self.settings.metar_station=code.clone();
             crate::game_lists::remember_setting("metar_station",&code);
@@ -93,7 +93,7 @@ impl App {
 
     fn number_edit_key(&mut self,code:KeyCode){
         match code{
-            KeyCode::Escape=>{self.menus.menu_edit=None;self.menus.menu_edit_number=false;if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);}},
+            KeyCode::Escape=>{self.menus.menu_edit=None;self.menus.menu_edit_number=false;crate::platform::text_input(self.window.as_deref(),false);},
             KeyCode::Backspace|KeyCode::Delete=>{if let Some(d)=self.menus.menu_edit.as_mut(){d.pop();}},
             KeyCode::Enter|KeyCode::NumpadEnter=>{self.apply_number_edit();return;},
             _=>{}
@@ -103,13 +103,13 @@ impl App {
 
     pub(crate) fn start_number_edit(&mut self){
         self.menus.menu_edit=Some(String::new()); self.menus.menu_edit_number=true; self.menus.menu_edit_ident=false;
-        if let Some(w)=self.window.as_ref(){w.set_ime_allowed(true);}
+        crate::platform::text_input(self.window.as_deref(),true);
     }
 
     pub(crate) fn apply_number_edit(&mut self){
         let number=self.menus.menu_edit.take().unwrap_or_default().trim().to_string();
         self.menus.menu_edit_number=false;
-        if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);}
+        crate::platform::text_input(self.window.as_deref(),false);
         if let Some(p) = self.player.as_mut()  {
             if !number.is_empty() {
                 crate::game_lists::set_identity_to_player_vehicle(p, &number,None);
@@ -121,7 +121,7 @@ impl App {
 
     fn ident_edit_key(&mut self,code:KeyCode){
         match code{
-            KeyCode::Escape=>{self.menus.menu_edit=None;self.menus.menu_edit_ident=false;if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);}},
+            KeyCode::Escape=>{self.menus.menu_edit=None;self.menus.menu_edit_ident=false;crate::platform::text_input(self.window.as_deref(),false);},
             KeyCode::Backspace|KeyCode::Delete=>{if let Some(d)=self.menus.menu_edit.as_mut(){d.pop();}},
             KeyCode::Enter|KeyCode::NumpadEnter=>{self.apply_ident_edit();return;},
             _=>{}
@@ -141,13 +141,13 @@ impl App {
 
     pub(crate) fn start_ident_edit(&mut self){
         self.menus.menu_edit=Some(String::new()); self.menus.menu_edit_ident=true; self.menus.menu_edit_number=false;
-        if let Some(w)=self.window.as_ref(){w.set_ime_allowed(true);}
+        crate::platform::text_input(self.window.as_deref(),true);
     }
 
      pub(crate) fn apply_ident_edit(&mut self){
         let ident=self.menus.menu_edit.take().unwrap_or_default().trim().to_string();
         self.menus.menu_edit_ident=false;
-        if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);}
+        crate::platform::text_input(self.window.as_deref(),false);
         if let Some(p) = self.player.as_mut() {
             crate::game_lists::set_identity_to_player_vehicle(p, "", if ident.is_empty() { None } else { Some(&ident) });
             let ident = p.vehicle.ident();
@@ -196,13 +196,10 @@ impl App {
     /// typed (the search before stays); the text comes through `route_edit_text`.
     fn search_edit_key(&mut self, code: KeyCode) {
         match code {
-            KeyCode::Escape => {
-                self.menus.menu_edit = None;
-                self.menus.menu_edit_search = false;
-            }
+            KeyCode::Escape => self.stop_search_typing(),
             KeyCode::Enter | KeyCode::NumpadEnter => {
                 self.menus.menu_search = self.menus.menu_edit.take().unwrap_or_default();
-                self.menus.menu_edit_search = false;
+                self.stop_search_typing();
             }
             KeyCode::Backspace | KeyCode::Delete => {
                 if let Some(text) = self.menus.menu_edit.as_mut() {
@@ -225,7 +222,10 @@ impl App {
     /// physical key codes remain a fallback for platforms that do not provide text.
     fn route_edit_key(&mut self, code: KeyCode) {
         match code {
-            KeyCode::Escape => self.menus.menu_edit = None,
+            KeyCode::Escape => {
+                self.menus.menu_edit = None;
+                crate::platform::text_input(self.window.as_deref(), false);
+            }
             KeyCode::Backspace | KeyCode::Delete => {
                 if let Some(t) = self.menus.menu_edit.as_mut() {
                     t.pop();
@@ -252,6 +252,11 @@ impl App {
     /// Text entered in OMSI's free route-number field. It is intentionally not restricted
     /// to letters and digits: add-on displays use values such as `-10` and other symbols.
     pub(crate) fn route_edit_text(&mut self, text: &str) {
+        if let Some((typed, _)) = text.split_once('\n').filter(|_| self.menus.menu_edit_search) {
+            self.route_edit_text(typed);
+            self.search_edit_key(KeyCode::Enter);
+            return;
+        }
         if self.menus.menu_edit_search {
             if let Some(query) = self.menus.menu_edit.as_mut() {
                 for c in text.chars().filter(|c| !c.is_control()) {
@@ -323,17 +328,19 @@ impl App {
 
     /// The open list is closed: back to the game menu.
     pub(crate) fn close_list(&mut self) {
+        self.shell.ui.dismiss_popups();
         // A programmatic close cannot silently keep an unconfirmed graphics preview.
         if self.menus.graphics_before.is_some() {
             crate::game_lists::cancel_graphics_changes(self);
         }
         self.menus.key_capture = None;
         self.menus.dropdown = None;
-        if self.menus.menu_edit_icao { if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);} }
+        if self.menus.menu_edit.is_some() { crate::platform::text_input(self.window.as_deref(),false); }
+        if self.menus.menu_edit_icao { crate::platform::text_input(self.window.as_deref(),false); }
         self.menus.menu_edit_icao=false;
-        if self.menus.menu_edit_number { if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);} }
+        if self.menus.menu_edit_number { crate::platform::text_input(self.window.as_deref(),false); }
         self.menus.menu_edit_number=false;
-        if self.menus.menu_edit_ident { if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);} }
+        if self.menus.menu_edit_ident { crate::platform::text_input(self.window.as_deref(),false); }
         self.menus.menu_edit_ident=false;
         self.menus.menu_edit_search = false;
         self.menus.menu_search.clear();
@@ -360,13 +367,14 @@ impl App {
         self.menus.menu_edit = None;
         self.menus.key_capture = None;
         if self.menus.menu_edit_number {
-            if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);}
+            crate::platform::text_input(self.window.as_deref(),false);
             self.menus.menu_edit_number=false; self.menus.menu_edit=None;
         }
         if self.menus.menu_edit_ident {
-            if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);}
+            crate::platform::text_input(self.window.as_deref(),false);
             self.menus.menu_edit_ident=false; self.menus.menu_edit=None;
         }
+        self.shell.ui.dismiss_popups();
         self.open_list(next);
     }
 
@@ -437,7 +445,7 @@ impl App {
 
 
     /// A key while the vehicle chooser is open.
-    pub(super) fn chooser_key(&mut self, code: KeyCode) {
+    pub(crate) fn chooser_key(&mut self, code: KeyCode) {
         if self.menus.dropdown.is_some() {
             self.dropdown_key(code);
             return;
@@ -640,7 +648,7 @@ impl App {
                     let keep = next == kind;
                     if !keep {
                         self.menus.menu_top = None;
-                        self.menus.forget_search();
+                        self.forget_search();
                     }
                     self.open_list(next);
                     if keep {
@@ -648,7 +656,10 @@ impl App {
                     }
                 }
                 None if action != "back" && matches!(kind, crate::game_lists::ListKind::Tours(..) | crate::game_lists::ListKind::Numbers | crate::game_lists::ListKind::Destinations | crate::game_lists::ListKind::RouteNumbers | crate::game_lists::ListKind::Hofs | crate::game_lists::ListKind::Spots) => self.close_game_menu(),
-                None => self.menus.menu_top = None,
+                None => {
+                    self.menus.menu_top = None;
+                    self.forget_search();
+                }
             }
             return;
         }
@@ -737,19 +748,26 @@ mod dropdown_tests {
     }
 }
 
-impl MenuState {
-    /// A line's tours are open, with the stops of the tour chosen beside them.
-    fn tours_list(&self) -> bool {
-        self.chooser.is_some() && matches!(self.list_kind, Some(crate::game_lists::ListKind::Tours(..)))
+impl App {
+    pub(crate) fn stop_search_typing(&mut self) {
+        if self.menus.menu_edit_search {
+            crate::platform::phone_keyboard(self.window.as_deref(), false);
+            self.menus.menu_edit = None;
+            self.menus.menu_edit_search = false;
+        }
     }
 
     /// The search of the list shown is over (another list is shown).
     fn forget_search(&mut self) {
-        self.menu_search.clear();
-        if self.menu_edit_search {
-            self.menu_edit = None;
-            self.menu_edit_search = false;
-        }
+        self.menus.menu_search.clear();
+        self.stop_search_typing();
+    }
+}
+
+impl MenuState {
+    /// A line's tours are open, with the stops of the tour chosen beside them.
+    fn tours_list(&self) -> bool {
+        self.chooser.is_some() && matches!(self.list_kind, Some(crate::game_lists::ListKind::Tours(..)))
     }
 
     /// The line `step` lines on from `sel` (round the list; `n - 1` is one back), over the
