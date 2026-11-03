@@ -314,6 +314,7 @@ fn a_repaint_lets_go_of_what_the_last_livery_set() {
     assert_eq!(v.var("Colorscheme"), Some(-1.0));
 }
 
+#[test]
 fn a_livery_changed_puts_back_what_the_old_one_set() {
     let painted = |init: &str| {
         let mut ty = (*crate::timetable_run::tests::script_test_vehicle(init, "v_drzwi\nv_font\n", "").ty).clone();
