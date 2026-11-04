@@ -158,14 +158,14 @@ pub fn phase_word(p: Phase) -> &'static str {
     }
 }
 
-/// The map's latitude (degrees north) from its `timezone.txt`, else Berlin's as the sun's.
+/// The map's latitude (degrees north) from its `timezone.txt`, else the sun's (`SunPlace::locate`).
 pub fn map_latitude(root: &Path, map: &str) -> f64 {
     let cfg = omsi_cfg::resolve_path(root, map);
-    cfg.parent()
-        .and_then(|dir| omsi_map::TimeZone::load(&omsi_cfg::resolve_path(dir, "timezone.txt")).ok())
-        .and_then(|tz| tz.lat_lon())
-        .map(|(lat, _)| lat)
-        .unwrap_or(omsi_sim::daylight::SunPlace::default().latitude)
+    let mut place = omsi_sim::daylight::SunPlace::default();
+    if let Some(tz) = cfg.parent().and_then(|dir| omsi_map::TimeZone::load(&omsi_cfg::resolve_path(dir, "timezone.txt")).ok()) {
+        place.locate(tz.offset_hours as f64, tz.lat_lon());
+    }
+    place.latitude
 }
 
 /// The date of `choice` in `year` at `latitude`, or `date` itself (`(year, month, day)`)
