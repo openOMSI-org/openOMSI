@@ -18,7 +18,13 @@ pub struct Camera {
     pub far: f32,
 }
 
+pub const DEPTH_FAR: f32 = 25_000.0;
+
 impl Camera {
+    pub fn depth_far(&self) -> f32 {
+        if self.far >= 450.0 { self.far.max(DEPTH_FAR) } else { self.far }
+    }
+
     pub fn forward(&self) -> Vec3 {
         let (sy, cy) = self.yaw.to_radians().sin_cos();
         let (sp, cp) = self.pitch.to_radians().sin_cos();
@@ -53,7 +59,7 @@ impl Camera {
         // stops distant roads, kerbs and painted ground from flickering against each other
         // - with a plain 0..1 depth the resolution at a kilometre is a good quarter of a
         // metre, less than the gap between a road surface and the ground under it.
-        let proj = Mat4::perspective_rh(self.fov_deg.to_radians(), aspect, self.far, self.near);
+        let proj = Mat4::perspective_rh(self.fov_deg.to_radians(), aspect, self.depth_far(), self.near);
         proj * view
     }
 
@@ -317,5 +323,18 @@ impl Default for Lighting {
             storm: 0.0,
             animation_time: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod depth_far_tests {
+    use super::*;
+
+    #[test]
+    fn a_backdrop_20_km_away_is_inside_the_depth_range() {
+        let cam = Camera { position: DVec3::ZERO, yaw: 0.0, pitch: 0.0, roll: 0.0, fov_deg: 60.0, near: 0.1, far: 6000.0 };
+        let p = cam.view_proj(16.0 / 9.0, DVec3::ZERO).project_point3(cam.forward() * 20_000.0);
+        assert!(p.z > 0.0 && p.z < 1.0, "{p:?}");
+        assert_eq!(cam.far, 6000.0);
     }
 }

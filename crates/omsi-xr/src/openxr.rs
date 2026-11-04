@@ -669,7 +669,7 @@ impl Vr {
             let mut camera =
                 eye_camera(&vr_base, relative_position, relative_rotation, xr_view.fov);
             let ui_camera = eye_camera(&vr_base, tracked_relative, relative_rotation, xr_view.fov);
-            let ui_projection = eye_projection(xr_view.fov, camera.near, camera.far);
+            let ui_projection = eye_projection(xr_view.fov, camera.near, camera.depth_far());
             // Magnify focal lengths but preserve each eye's asymmetric projection
             // offset. Scaling that offset too displaced the two pictures apart.
             let projection = zoom_projection(ui_projection, zoom);
