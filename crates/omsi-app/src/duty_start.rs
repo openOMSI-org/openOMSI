@@ -129,7 +129,7 @@ pub(crate) fn place_on_duty(args: &mut Args) {
             } else if args.auto_entry {
                 entries.iter().filter_map(|e| cost(e.2, e.3).map(|c| (e, c))).min_by(|a, b| a.1.total_cmp(&b.1))
             } else {
-                entries.iter().find(|e| e.0 == args.entry.min(entries.len().saturating_sub(1))).and_then(|e| cost(e.2, e.3).map(|c| (e, c)))
+                entries.iter().find(|e| e.0 == args.entry.min(world.global.entry_points.len().saturating_sub(1))).and_then(|e| cost(e.2, e.3).map(|c| (e, c)))
             };
             let Some(((ei, name, _, _), way)) = pick else {
                 log::info!("duty start: no entry point leads to stop {} '{}' of trip {}", j, stop.name.trim(), trip.name);

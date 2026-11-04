@@ -356,6 +356,18 @@ impl App {
                     self.service_msg = Some((msg.into(), 3.0));
                 }
             }
+            "head_tracking_recenter" => {
+                let msg = match self.input.headtrack.as_ref() {
+                    _ if !self.settings.head_tracking => "Head tracking is off",
+                    Some(h) => {
+                        h.recenter_every_source();
+                        self.input.headtrack_scale_bias = [0.0; 6];
+                        "Head position reset"
+                    }
+                    None => "No head tracker found",
+                };
+                self.service_msg = Some((msg.into(), 2.5));
+            }
             _ => return false,
         }
         true

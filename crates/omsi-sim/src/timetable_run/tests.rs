@@ -807,3 +807,13 @@ fn a_tour_bus_takes_a_trip_on_only_at_its_start() {
     assert_eq!(tour_entry(&route, 16), None);
     assert_eq!(tour_entry(&route, 99), None);
 }
+
+#[test]
+fn people_still_turn_up_for_a_bus_some_minutes_late() {
+    use crate::timetable_run::sim::pax_turn_up_for;
+    let now = 10.0 * 3600.0;
+    assert!(pax_turn_up_for(now - 7.0 * 60.0, now));
+    assert!(pax_turn_up_for(now + 10.0 * 60.0, now));
+    assert!(!pax_turn_up_for(now - 20.0 * 60.0, now));
+    assert!(!pax_turn_up_for(now + 20.0 * 60.0, now));
+}

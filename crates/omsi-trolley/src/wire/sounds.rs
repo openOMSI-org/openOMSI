@@ -21,14 +21,12 @@ impl SoundChoice {
 /// The overhead line's contact, crossing and switch sounds. Vehicle equipment uses sound.cfg.
 #[derive(Debug, Clone, PartialEq)]
 pub struct WireSounds {
-    pub hiss: SoundChoice,
-    pub snap: SoundChoice,
     pub frog: SoundChoice,
     pub switch: SoundChoice,
 }
 
 impl Default for WireSounds {
     fn default() -> Self {
-        Self { hiss: SoundChoice::Builtin, snap: SoundChoice::Builtin, frog: SoundChoice::Builtin, switch: SoundChoice::Off }
+        Self { frog: SoundChoice::Builtin, switch: SoundChoice::Off }
     }
 }

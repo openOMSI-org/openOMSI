@@ -8,6 +8,34 @@ use std::ops::Range;
 use crate::atlas::Atlas;
 use crate::paint::Vertex;
 
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct Packed {
+    pos: [f32; 3],
+    ext: [u16; 2],
+    width: [u16; 2],
+    uv: [f32; 2],
+    color: [u8; 4],
+    mode: [u16; 2],
+}
+
+fn half(v: [f32; 2]) -> [u16; 2] {
+    v.map(|x| half::f16::from_f32(x.clamp(-65504.0, 65504.0)).to_bits())
+}
+
+const PACK_CHUNK: usize = 16384;
+
+fn pack(v: &Vertex) -> Packed {
+    Packed {
+        pos: v.pos,
+        ext: half(v.ext),
+        width: half(v.width),
+        uv: v.uv,
+        color: v.color.map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8),
+        mode: half(v.mode),
+    }
+}
+
 /// How one group of draws is seen.
 #[derive(Clone, Copy, Debug)]
 pub struct Layer {
@@ -104,6 +132,7 @@ pub struct Gpu {
     sampler: wgpu::Sampler,
     /// The vertex buffers and their capacity (None: making it failed; tried again next upload).
     buffers: Vec<(Option<wgpu::Buffer>, u64)>,
+    packed: Vec<Packed>,
     textures: Vec<Option<Tex>>,
     msaa: Option<(wgpu::TextureView, u32, u32)>,
     failed_target: Option<(u32, u32)>,
@@ -145,14 +174,14 @@ impl Gpu {
             ],
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("omsi-ui"), bind_group_layouts: &[Some(&u_layout), Some(&tex_layout)], immediate_size: 0 });
-        let attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2, 2 => Float32x2, 3 => Float32x2, 4 => Float32x4, 5 => Float32x2];
+        let attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float16x2, 2 => Float16x2, 3 => Float32x2, 4 => Unorm8x4, 5 => Float16x2];
         let make_pipeline = |depth: Option<wgpu::DepthStencilState>| device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("omsi-ui"),
             layout: Some(&layout),
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_main"),
-                buffers: &[wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Vertex>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &attrs }],
+                buffers: &[wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Packed>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &attrs }],
                 compilation_options: Default::default(),
             },
             primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleList, cull_mode: None, ..Default::default() },
@@ -202,7 +231,7 @@ impl Gpu {
             mipmap_filter: wgpu::MipmapFilterMode::Linear,
             ..Default::default()
         });
-        let mut g = Gpu { pipeline, pipeline_depth, pipeline_shadow, depth: None, tex_layout, uniform, uniform_group, sampler, buffers: Vec::new(), textures: Vec::new(), msaa: None, failed_target: None, samples, format, atlas_size: atlas_size.max(1), device: device.clone() };
+        let mut g = Gpu { pipeline, pipeline_depth, pipeline_shadow, depth: None, tex_layout, uniform, uniform_group, sampler, buffers: Vec::new(), packed: Vec::new(), textures: Vec::new(), msaa: None, failed_target: None, samples, format, atlas_size: atlas_size.max(1), device: device.clone() };
         let atlas = vec![0u8; (atlas_size * atlas_size * 4) as usize];
         g.add_texture_internal(device, None, atlas_size, atlas_size, &atlas);
         g
@@ -329,7 +358,9 @@ impl Gpu {
 
     /// Put `verts` into vertex buffer `id` (grown as needed).
     pub fn upload(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, id: usize, verts: &[Vertex]) {
-        let bytes = std::mem::size_of_val(verts) as u64;
+        self.packed.clear();
+        self.packed.extend(verts.iter().map(pack));
+        let bytes = std::mem::size_of_val(self.packed.as_slice()) as u64;
         while self.buffers.len() <= id {
             self.buffers.push((None, 0));
         }
@@ -338,18 +369,26 @@ impl Gpu {
             self.buffers[id] = (Self::vertex_buffer(device, cap, false), cap);
         }
         if let (Some(buf), true) = (&self.buffers[id].0, bytes > 0) {
-            queue.write_buffer(buf, 0, bytemuck::cast_slice(verts));
+            queue.write_buffer(buf, 0, bytemuck::cast_slice(&self.packed));
         }
     }
 
     pub fn vertices(device: &wgpu::Device, verts: &[Vertex]) -> Vertices {
-        let bytes = std::mem::size_of_val(verts) as u64;
+        let bytes = (verts.len() * std::mem::size_of::<Packed>()) as u64;
         if bytes == 0 {
             return Vertices(None, 0);
         }
         let buf = Self::vertex_buffer(device, bytes, true);
         if let Some(b) = &buf {
-            b.slice(..).get_mapped_range_mut().copy_from_slice(bytemuck::cast_slice(verts));
+            let mut range = b.slice(..).get_mapped_range_mut();
+            let mut chunk = Vec::with_capacity(PACK_CHUNK);
+            for (k, part) in verts.chunks(PACK_CHUNK).enumerate() {
+                chunk.clear();
+                chunk.extend(part.iter().map(pack));
+                let at = k * PACK_CHUNK * std::mem::size_of::<Packed>();
+                range.slice(at..at + std::mem::size_of_val(chunk.as_slice())).copy_from_slice(bytemuck::cast_slice(&chunk));
+            }
+            drop(range);
             b.unmap();
         }
         Vertices(buf, bytes)
@@ -512,6 +551,38 @@ impl Gpu {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn packed_vertices_keep_their_values_in_36_bytes() {
+        let v = crate::Vertex { pos: [1234.5, -987.25, 3.5], ext: [-0.7071, 1.0], width: [3.4, 2.5], uv: [0.123456, 0.987654], color: [0.2, 0.5, 1.0, 0.02], mode: [3.0, 1.0] };
+        let p = super::pack(&v);
+        assert_eq!(std::mem::size_of::<super::Packed>(), 36);
+        use std::mem::offset_of;
+        use super::Packed;
+        assert_eq!([offset_of!(Packed, ext), offset_of!(Packed, width), offset_of!(Packed, uv), offset_of!(Packed, color), offset_of!(Packed, mode)], [12, 16, 20, 28, 32]);
+        let f = |b: [u16; 2]| b.map(|x| half::f16::from_bits(x).to_f32());
+        assert_eq!(p.pos, v.pos);
+        assert_eq!(p.uv, v.uv);
+        assert_eq!(f(p.mode), v.mode);
+        for (a, b) in f(p.ext).iter().chain(&f(p.width)).zip(v.ext.iter().chain(&v.width)) {
+            assert!((a - b).abs() <= b.abs() * 1e-3, "{a} {b}");
+        }
+        assert_eq!(p.color, [51, 128, 255, 5]);
+    }
+
+    #[test]
+    fn vertices_longer_than_a_chunk_fill_their_buffer() {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let Ok(adapter) = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default())) else {
+            eprintln!("no graphics adapter: skipped");
+            return;
+        };
+        let (device, _queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).unwrap();
+        let verts = vec![crate::Vertex::default(); super::PACK_CHUNK * 2 + 7];
+        let v = super::Gpu::vertices(&device, &verts);
+        assert!(v.0.is_some());
+        assert_eq!(v.1, (verts.len() * std::mem::size_of::<super::Packed>()) as u64);
+    }
+
     #[test]
     fn shader_validates() {
         let m = naga::front::wgsl::parse_str(include_str!("ui.wgsl")).expect("parse");

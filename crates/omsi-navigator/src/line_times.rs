@@ -88,7 +88,7 @@ impl LineTimes {
                     continue;
                 }
                 for tt in &tour.trips {
-                    let Some(ti) = data.trips.iter().position(|x| x.name.eq_ignore_ascii_case(&tt.trip)) else { continue };
+                    let Some(ti) = data.trips.iter().position(|x| x.is_named(&tt.trip)) else { continue };
                     let trip = &data.trips[ti];
                     // (a train's trips carry no line: its file names it)
                     let number = if trip.line.trim().is_empty() { line.name.trim() } else { trip.line.trim() }.to_string();
