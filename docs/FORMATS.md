@@ -880,7 +880,10 @@ puts it on a material, `[matl_transmap] \S:n` uses its alpha as transparency map
 the line after the page's path makes it a **surface** - shaded by the world's light as every
 other material is, on every slot that shows the page, a scenery object's or a vehicle's -
 where a page is a display, drawn unlit at its own brightness, by default.
-An openOMSI extension; Omsi.exe draws such a slot unlit either way. The
+An openOMSI extension; Omsi.exe draws such a slot unlit either way.
+`[navigatortexture] w h [variable]` declares a screen the game's navigator draws its small map
+on, while the optional variable is not 0 (see `NAVIGATORTEXTURE.md`); `[useNavigatorTexture] n`
+puts the n-th on a material. Also an openOMSI extension. The
 scripts draw with `(M.V.ST…)` callbacks, arguments pushed in order (index first):
 `STNewTex(i)`, `STLock(i)`, `STUnlock(i)` (upload), `STFilter(i)`, `STSetColor(i, a, r, g, b)`,
 `STDrawPixel(i, x, y)`, `STDrawRect(i, x1, y1, x2, y2)`, `STTextOut(i, x, y, font, mode,

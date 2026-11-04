@@ -605,9 +605,7 @@ impl Navigator {
         let (x0, y0) = (((sw - w) * 0.5).round(), ((sh - h) * 0.5).round());
         self.city.rect = [x0, y0, x0 + w, y0 + h];
         let (tw, th) = (w as u32, h as u32);
-        if self.gpu.is_none() {
-            self.gpu = Some(Gpu::with_depth(&renderer.device, renderer.format(), map_samples(renderer.format()), self.atlas.size));
-        }
+        self.ensure_gpu(renderer);
         if self.city.target.map(|t| (t.1, t.2) != (tw, th)).unwrap_or(true) {
             if let Some((t, _, _)) = self.city.target.take() {
                 renderer.free_texture(scene, t);
