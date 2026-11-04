@@ -52,7 +52,8 @@ const fold = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g,
 
 function matches(row, words) {
   if (!row.label) return false;
-  const text = fold([row.label, t(row.label), row.help, row.help && t(row.help), typeof row.key === 'string' && row.key].join(' '));
+  const help = typeof row.help === 'function' ? '' : row.help;
+  const text = fold([row.label, t(row.label), help, help && t(help), typeof row.key === 'string' && row.key].join(' '));
   return words.every((w) => text.includes(w));
 }
 
@@ -159,7 +160,7 @@ function SelectRow({ row }) {
   const match = options.find(([v]) => same(cur, v) || String(cur) === String(v));
   const value = match ? match[0] : cur == null ? '' : typeof cur === 'boolean' ? (cur ? '1' : '0') : String(cur);
   return html`<div class="setting-row">
-    <${Name} label=${row.label} help=${row.help} warn=${row.heavy?.(value, s) && 'Heavy: can cost many frames per second on most graphics cards'} />
+    <${Name} label=${row.label} help=${typeof row.help === 'function' ? row.help(s) : row.help} warn=${row.heavy?.(value, s) && 'Heavy: can cost many frames per second on most graphics cards'} />
     <${Select} value=${value} options=${options} raw=${row.raw} onChange=${async (v) => (await saveSettings({ [row.key]: asStored(cur, v) })) && row.recheckUpdates && checkUpdates()} />
   </div>`;
 }
