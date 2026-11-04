@@ -365,6 +365,7 @@ impl MapIndex {
         // of it (see [`row_start`])
         let (mut checked, mut agree) = (0usize, 0usize);
         for (id, spline, first, d, interval) in &rows.1 {
+            index.repeater_first.insert((*id, *spline), *first);
             if *interval <= 0.0 {
                 continue;
             }
