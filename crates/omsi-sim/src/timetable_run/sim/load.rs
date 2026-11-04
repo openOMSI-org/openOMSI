@@ -254,6 +254,7 @@ impl ScheduleSim {
             player_tour: None,
             player_departure: None,
             purge_player_tour: false,
+            player_twins: HashSet::new(),
             lan_tours: HashSet::new(),
             last_tod: 0.0,
             deactivated,
