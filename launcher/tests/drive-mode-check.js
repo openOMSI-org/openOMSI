@@ -79,7 +79,7 @@ export async function run(root, Component = DriveMode) {
 }
 
 export async function hostLaunchStaysOnDrive() {
-  const { choose, start } = await import('../ui/js/data.js');
+  const { choose, start, pollNow } = await import('../ui/js/data.js');
   const saved = { choice: S.choice, page: S.page, poll: S.poll, gameStarted: S.gameStarted, toasts: S.toasts };
   const originalFetch = window.fetch;
   let launched;
@@ -93,9 +93,15 @@ export async function hostLaunchStaysOnDrive() {
     choose({ lan_mode: 'host', lan_server: null });
     set({ page: 'drive' });
     const result = await start();
-    await new Promise((r) => setTimeout(r, 150));
+    const hasCode = () => document.querySelector('.drive-mode')?.textContent.includes('OMSI-LAUNCHED');
+    const deadline = Date.now() + 3000;
+    // A poll already in flight makes start() skip its poll; wait for a fresh answer and redraw.
+    while (!hasCode() && Date.now() < deadline) {
+      await pollNow();
+      await new Promise((r) => setTimeout(r, 25));
+    }
     if (!launched || !result || S.page !== 'drive') throw new Error('Hosting must launch successfully and remain on Drive');
-    if (!document.querySelector('.drive-mode')?.textContent.includes('OMSI-LAUNCHED')) throw new Error('The launched host code must appear on the same Drive page');
+    if (!hasCode()) throw new Error('The launched host code must appear on the same Drive page');
     return 'PASS actual host launch stays on Drive and shows its polled session code';
   } finally {
     window.fetch = originalFetch;

@@ -14,6 +14,10 @@ export function DriveMode() {
   const mode = s.choice.lan_mode;
   const session = (s.poll.instances || []).filter((i) => i.running !== false)
     .map((i) => i.lan_status).find((x) => x?.role === 'host');
+  // (a running game that was to host and could not: its status says why - without it the page
+  // only went on waiting for a code that never came)
+  const failed = !session?.code && (s.poll.instances || []).filter((i) => i.running !== false)
+    .map((i) => i.lan_status).find((x) => x?.role === 'none' && x.error)?.error;
   const remoteMap = s.choice.lan_map;
   const mapMissing = mode === 'join' && remoteMap && Array.isArray(s.maps)
     && !s.maps.some((m) => m.file.replace(/\\/g, '/').toLowerCase() === remoteMap.replace(/\\/g, '/').toLowerCase());
@@ -50,7 +54,8 @@ export function DriveMode() {
         <span class="drive-session-code selectable" title=${session.code}>${session.code}</span>
         <span class="small muted">${t(session.tunnel ? 'Friends can join from anywhere' : 'Getting ready for friends on the internet...')}</span></div>
       <${Button} small icon="copy" label="Copy code" onClick=${copy} /></div>`}
-    ${mode === 'host' && !session?.code && html`<p class="drive-mode-hint small muted">${t('Start your hosted duty first. A session code appears only after the game starts.')}</p>`}
+    ${mode === 'host' && failed && html`<${Notice} kind="danger"><b>${t('The game could not open a session')}</b><div class="muted small">${t('Another program may use the port, or a firewall or antivirus blocks it. Close the game and start the duty again.')}</div><details><summary>${t('Technical details')}</summary><div class="small selectable">${failed}</div></details></${Notice}>`}
+    ${mode === 'host' && !session?.code && !failed && html`<p class="drive-mode-hint small muted">${t('Start your hosted duty first. A session code appears only after the game starts.')}</p>`}
     ${joining && html`<${JoinSessionDialog} onClose=${() => setJoining(false)} />`}
   </section>`;
 }

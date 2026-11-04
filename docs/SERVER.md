@@ -135,6 +135,10 @@ Default is the value a new `server.cfg` is written with. A key missing from the 
 | `passengers` | `1` / `0` | `1` | people at stops and on pavements ([Passengers](#passengers)) |
 | `passenger_density` | `0` to `3` | `1`; without the key: `pax_density` of `settings.cfg` | how many ([Passengers](#passengers)) |
 | `ai_drive_through_parked` | `0` / `1` | `0` | `1`: AI drives through a parked car in its lane, as OMSI 2 does, instead of stopping and going round when it can. For maps with no way round. |
+| `ai_unsched_factor` | `0` to `300` | empty: `settings.cfg` | random traffic, percent of the map's density, for the whole server |
+| `ai_max_scheduled` | `0` or more | empty: `settings.cfg` | timetable vehicles at once (`0` = no limit) |
+| `ai_max_parked` | `-1` or more | empty: `settings.cfg` | parked cars (`0` = every space, `-1` = none) |
+| `ai_max_humans` | `1` to `4096` | empty: `settings.cfg` | people at once, for the whole server (not per player) |
 | `speed_limit_kmh` | `0`, `60`, `75`, `80` | `0` (off) | RP speed limit ([governor](#optional-rp-speed-governor)) |
 | `allow_player_teleport` | `0` / `1` | `0` | `1`: every player may relocate their own bus ([Teleport](#teleport-and-moving-players)) |
 
@@ -147,6 +151,7 @@ Default is the value a new `server.cfg` is written with. A key missing from the 
 | `max_players` | 1 to 64 | `16` | player limit |
 | `gateway_proxy_header` | `x-forwarded-for`, `cf-connecting-ip` | `x-forwarded-for` | header a proxy on this machine names a WebSocket player's address in |
 | `tunnel` | `0` / `1` | `1` | start a free Cloudflare quick tunnel (needs `cloudflared`) |
+| `public_address` | empty, an address (`1.2.3.4:27025`, a name), `off` | empty | where players reach the web port without the tunnel; a game joining through the tunnel tries it first. Empty: found by itself (the machine's own internet address, else the one the internet sees if the server reaches itself there, never behind a carrier's NAT) |
 | `share_positions` | `0` / `1` | `0` | answer `GET /players` |
 | `share_maps` | `0` / `1` | `0`; without the key: `1`, so an older `server.cfg` shares its map | a joiner without the map gets it, with everything it uses, from the server (gigabytes for a big map). Off: players install it and are told which is missing. |
 | `accept_uploads` | `0` / `1` | `1` | [players' buses](#players-buses-accept_uploads) |
