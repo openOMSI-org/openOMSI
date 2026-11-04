@@ -117,6 +117,13 @@ fn native_load(scope: &str) -> Result<Vec<u8>> {
     };
     validate_scope(scope)?;
     let path = windows_key_path(scope)?;
+    // The bounded reader reports a missing file as an invalid path, not as NotFound.
+    match fs::symlink_metadata(&path) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return Err(PackError::KeyNotFound)
+        }
+        _ => {}
+    }
     let encrypted = read_bounded_file(&path, ENTITLEMENT_LIMIT + 4096).map_err(|error| {
         match error {
             PackError::Io(error) if error.kind() == io::ErrorKind::NotFound => PackError::KeyNotFound,
