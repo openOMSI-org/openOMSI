@@ -702,7 +702,6 @@ The Windows x64 packaging currently includes the four AMD FidelityFX 2.4.0
 DLLs identified under MIT and four signed NVIDIA Streamline/DLSS 2.14.1
 runtime DLLs. NVIDIA's proprietary NGX runtime retains its separate vendor
 license; these files are not AGPL-licensed or sublicensed by openOMSI.
-The combined distribution's AGPL compatibility is still under legal review.
 See [the licensing review](UPSCALER_THIRD_PARTY_LICENSING.md) and
 [NVIDIA DLL license scope](NVIDIA_DLL_LICENSE_SCOPE.md).
 For DLSS (a GeForce RTX card) `sl.interposer.dll`, `sl.common.dll`, `sl.dlss.dll` and `nvngx_dlss.dll`
