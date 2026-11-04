@@ -2,31 +2,56 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https:; connect-src 'self' https://api.github.com https://raw.githubusercontent.com https://openomsi.savvabestbrother.workers.dev; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>openOMSI - Privacy</title>
+<title>Privacy Policy · openOMSI</title>
 <meta name="description" content="How openOMSI handles information in the game, on openomsi.org and in its community services.">
-<link rel="icon" type="image/svg+xml" href="../assets/icon.svg">
+<link rel="icon" type="image/svg+xml" href="/assets/icon.svg">
+<link rel="canonical" href="https://openomsi.org/privacy/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="openOMSI">
+<meta property="og:url" content="https://openomsi.org/privacy/">
+<meta property="og:title" content="Privacy Policy · openOMSI">
+<meta property="og:description" content="How openOMSI handles information in the game, on openomsi.org and in its community services.">
+<meta property="og:image" content="https://openomsi.org/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <meta name="color-scheme" content="light dark">
-<style>
-  :root { --bg: #ffffff; --fg: #1f2227; --muted: #5d636c; --accent: #f78034; --line: #e3e5e8; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #16181c; --fg: #eceef1; --muted: #a2a8b1; --line: #2b2f35; } }
-  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
-  h1 { font-size: 32px; margin: 8px 0 4px; }
-  h2 { font-size: 20px; margin: 32px 0 8px; }
-  h3 { font-size: 17px; margin: 24px 0 6px; }
-  p, li { color: var(--fg); }
-  .muted { color: var(--muted); }
-  a { color: var(--accent); overflow-wrap: anywhere; }
-  code { font-size: 14px; overflow-wrap: anywhere; }
-  hr { border: 0; border-top: 1px solid var(--line); margin: 32px 0; }
-</style>
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e0f12" media="(prefers-color-scheme: dark)">
+<script src="/theme.js"></script>
+<link rel="stylesheet" href="/style.css">
 </head>
-<body>
-<main>
-<p><a href="../">openOMSI</a></p>
+<body data-page="legal" class="legal-page">
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <a href="/" class="brand"><img class="logo-on-dark" src="/assets/logos/openomsi-wordmark-light.svg" alt="openOMSI"><img class="logo-on-light" src="/assets/logos/openomsi-wordmark-dark.svg" alt="openOMSI"></a>
+  <nav class="topnav" aria-label="Main">
+    <a href="/download/">Download</a>
+    <a href="/docs/user-guide/">Docs</a>
+    <a href="/docs/openmapper/">openMapper</a>
+    <a href="/releases/">Releases</a>
+    <a href="/issues/">Issues</a>
+  </nav>
+  <span class="spacer"></span>
+  <a class="icon-btn" href="https://discord.gg/openomsi" aria-label="Discord" title="Discord">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M20.32 4.37A19.8 19.8 0 0 0 15.39 2.8a13.8 13.8 0 0 0-.63 1.3 18.4 18.4 0 0 0-5.52 0 13.2 13.2 0 0 0-.64-1.3 19.7 19.7 0 0 0-4.93 1.53C.53 9.05-.32 13.58.1 18.06a19.9 19.9 0 0 0 6.04 3.05 14.7 14.7 0 0 0 1.29-2.1 12.9 12.9 0 0 1-2.04-.97l.5-.39a14.2 14.2 0 0 0 12.22 0l.5.39c-.65.39-1.33.71-2.04.98.37.74.8 1.44 1.29 2.1a19.8 19.8 0 0 0 6.04-3.06c.5-5.18-.84-9.67-3.58-13.69zM8.02 15.33c-1.18 0-2.16-1.09-2.16-2.42s.95-2.42 2.16-2.42 2.18 1.09 2.16 2.42c0 1.33-.95 2.42-2.16 2.42zm7.97 0c-1.18 0-2.16-1.09-2.16-2.42s.95-2.42 2.16-2.42 2.18 1.09 2.16 2.42c0 1.33-.94 2.42-2.16 2.42z"/></svg>
+  </a>
+  <a class="icon-btn" href="https://github.com/openOMSI-org/openOMSI" aria-label="GitHub" title="GitHub">
+    <svg viewBox="0 0 16 16" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+  </a>
+  <a class="btn btn-contained btn-sm topbar-cta" href="/download/"><span class="material-icons">download</span>Download</a>
+</header>
+
+<main id="main">
+<div class="content content-doc">
+<article class="doc legal">
+<p class="kicker">Legal</p>
 <h1>Privacy Policy</h1>
-<p class="muted">Last updated: 1 November 2026. Applies to openOMSI on every platform (Windows, macOS, Linux, Android, iPhone and iPad), to openomsi.org, to project-operated online services, and to community services and forms.</p>
+<p class="legal-meta">Last updated: 4 November 2026. Applies to openOMSI on every platform (Windows, macOS, Linux, Android, iPhone and iPad), to openomsi.org, to project-operated online services, and to community services and forms.</p>
 
 <p>openOMSI is an independent, open-source project. It has no advertising, does not sell personal information,
 and does not use personal information for advertising or commercial profiling.</p>
@@ -99,8 +124,16 @@ multiplayer driver name and the session you joined, and the log lines can includ
 addresses. Read the report and remove anything you do not want to publish before you submit the issue.</p>
 <p>The launcher's support package (Settings, General, <em>Support package</em>) makes a ZIP on your device. It contains
 only system and hardware details (including device vendor and product identifiers), controller names, the names of
-the maps and buses you used, the number and size of installed archives, and log events reduced to names and numbers. It is never
-sent anywhere unless you attach it yourself.</p>
+the maps and buses you used, the number and size of installed archives, log events reduced to names and numbers, and the
+game records described below. It is never sent anywhere unless you attach it yourself.</p>
+<p>Game records. For each game, openOMSI keeps a small record on your device, in the <code>diagnostics</code>
+folder of the openOMSI data folder: the version, system, graphics card and graphics settings, the map, bus, line and
+tour, how smoothly the game ran (frame times grouped into a few ranges), and how the game ended. When the game meets an
+error, the record also holds how many errors it met and the last one: its message, cut before any quoted text and with your user folder, driver and player
+names removed, the source file and line where it happened, and the names of the program functions it went through
+(openOMSI's and those of the libraries it uses). Records older than 30 days are deleted the next time you play, and at
+most the last 100 are kept. They are never sent anywhere; the support package includes them so you can attach them to
+a report yourself. You can delete the folder at any time.</p>
 
 <h3>Permissions on phones, tablets and Macs</h3>
 <p>openOMSI asks for the microphone (voice chat), motion sensors (tilt steering), the local network (finding and
@@ -173,8 +206,10 @@ contributions may remain available as part of the project's development or commu
 
 <h2>6. openomsi.org</h2>
 <p>The website is hosted on GitHub Pages and served through Cloudflare. It sets no cookies, has no forms and runs no
-analytics. It stores only your light or dark theme choice in your browser.</p>
-<p>When you visit it, your browser also fetches fonts from Google Fonts, a script from jsDelivr, release and
+analytics. It stores in your browser your light or dark theme choice and the release, issue and contributor
+lists it read from GitHub, refreshed after ten minutes, so it asks GitHub less often. Clearing the site's data in
+your browser removes them.</p>
+<p>When you visit it, your browser also fetches fonts from Google Fonts, release and
 documentation information from GitHub, and the player count from the presence service. Cloudflare, GitHub and these
 providers may process technical information to deliver and protect the site, such as your IP address, browser and
 device information and request information.</p>
@@ -328,8 +363,18 @@ information in public GitHub issues or public Discord channels.</p>
 <p>If you believe your privacy rights have been violated, you may also contact the data protection, privacy or
 consumer-protection authority for your jurisdiction.</p>
 
-<hr>
-<p class="muted">openOMSI is an independent open-source project and is not affiliated with MR Software or Aerosoft.</p>
+<div class="legal-contact">
+  <span class="material-icons">support_agent</span>
+  <div><h3>Questions about your data?</h3><p>Open a private support ticket on the official Discord server. Please keep personal information out of public GitHub issues and channels.</p></div>
+  <a class="btn btn-contained" href="https://discord.gg/openomsi"><span class="material-icons">forum</span>Open a ticket</a>
+</div>
+</article>
+<aside class="toc" aria-label="On this page"></aside>
+</div>
+<footer class="footer">
+  <div class="footer-legal"><p>openOMSI is an independent open-source project and is not affiliated with MR Software or Aerosoft.</p> <a href="/">openOMSI</a> · <a href="https://github.com/openOMSI-org/openOMSI/blob/main/LICENSE">GNU AGPL v3</a> · <a href="/legal/">Legal notice</a></div>
+</footer>
 </main>
+<script src="page.js"></script>
 </body>
 </html>

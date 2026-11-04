@@ -50,7 +50,7 @@ It loads the existing OMSI 2 maps, buses, scenery and mods as they are.
 
 The newest stable version is always at
 [**Releases → Latest**](https://github.com/openOMSI-org/openOMSI/releases/latest) and on the
-[website](https://openomsi.org/#/download). Newer, untested builds are published as
+[website](https://openomsi.org/download/). Newer, untested builds are published as
 *Pre-release* (beta) on the [Releases](https://github.com/openOMSI-org/openOMSI/releases) page.
 
 | Platform | File |
@@ -118,8 +118,9 @@ window) or put into the `Mods` folder next to the game.
   `game.log` for the last game. **Settings → General → Support → Support package** saves a
   support package into `~/.openomsi` (`openomsi --export-diagnostics <file.zip>` does the same
   from the command line): system, graphics card, driver, settings, controllers, last map and
-  bus - no paths, names, chat or addresses. Nothing is sent; look inside before you attach it
-  to an issue.
+  bus, and a record of each game of the last 30 days (`~/.openomsi/diagnostics`: frame
+  times, how it ended, the error if it crashed) - no paths, names, chat or addresses. Nothing
+  is sent; look inside before you attach it to an issue.
 
 ## Goals
 

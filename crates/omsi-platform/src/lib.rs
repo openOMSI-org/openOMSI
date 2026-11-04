@@ -7,6 +7,7 @@
 //! version) and shows what comes back.
 
 pub mod avatars;
+pub mod diagnostics;
 pub mod discord;
 pub mod memory;
 pub mod presence;

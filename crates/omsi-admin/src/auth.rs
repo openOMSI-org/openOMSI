@@ -212,7 +212,7 @@ impl Auth {
         let Some(role) = self.role_of(password) else {
             self.all_fails.push(now);
             // (at most so many sources remembered: a flood of addresses forgets the oldest)
-            if self.fails.len() >= 1024 && !self.fails.contains_key(&source) {
+            if self.fails.len() >= 1024 && !self.fails.contains_key(&key) {
                 if let Some(k) = self.fails.keys().next().copied() {
                     self.fails.remove(&k);
                 }

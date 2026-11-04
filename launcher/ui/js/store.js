@@ -5,6 +5,7 @@ import { useEffect, useState } from '../vendor/preact-htm.js';
 export const S = {
   ready: false,
   page: 'drive',
+  driveBeforeJoin: null,
   boot: null,
   settings: null,
   config: null,

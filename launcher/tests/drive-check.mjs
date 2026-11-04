@@ -76,6 +76,11 @@ try {
     await page('Page.navigate', { url: `${origin}/ui/?check=${width}` });
     for (let i = 0; i < 300 && !(await evaluate("!!document.querySelector('.page-drive') && !!window.document.fonts && document.fonts.status === 'loaded'").catch(() => false)); i++) await new Promise((r) => setTimeout(r, 100));
     Object.assign(report, await evaluate(`import('${origin}/tests/drive-check.js').then((m) => m.run())`));
+    await page('Page.navigate', { url: `${origin}/tests/multiplayer-check.html` });
+    for (let i = 0; i < 300 && !(await evaluate("typeof document.querySelector('#run')?.onclick === 'function'").catch(() => false)); i++) await new Promise((r) => setTimeout(r, 100));
+    await evaluate("document.querySelector('#run').onclick()");
+    const multiplayer = await evaluate("document.querySelector('#report').textContent");
+    report[`${width}x${height} multiplayer interface`] = multiplayer.startsWith('PASS ') && !multiplayer.includes('FAIL ') ? [] : [multiplayer];
   }
   const errors = events.filter((e) => e.method === 'Runtime.exceptionThrown').map((e) => e.params.exceptionDetails.exception?.description || e.params.exceptionDetails.text);
   for (const [where, issues] of Object.entries(report)) {
