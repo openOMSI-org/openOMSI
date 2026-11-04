@@ -142,6 +142,7 @@ impl Cockpit {
     }
 
     pub fn stop(&mut self) -> Vec<Command> {
+        self.phone_steers = false;
         let Some(server) = self.server.take() else { return Vec::new() };
         let mut left: Vec<Command> = server.take_all_commands().into_iter().filter(|c| matches!(c, Command::Action { down: false, .. })).collect();
         left.extend(server.release_all().into_iter().map(|name| Command::Action { name, down: false }));
@@ -192,6 +193,7 @@ impl Cockpit {
         let key = v.map(vehicle_key).unwrap_or_default();
         if self.vehicle != key {
             server.release_held();
+            self.phone_steers = false;
             self.all_fired.clear();
             (self.door_ways, self.door_triggers) = Default::default();
             server.set_vehicle(v.map(|v| {
@@ -245,6 +247,10 @@ impl Cockpit {
             None => server.set_state(None, &env(), t.paused),
         }
     }
+}
+
+pub fn phone_steers(before: bool, held: bool, local: bool) -> bool {
+    held || (before && !local)
 }
 
 pub(crate) fn all_doors(triggers: &[Vec<String>], open: &[bool]) -> Vec<String> {

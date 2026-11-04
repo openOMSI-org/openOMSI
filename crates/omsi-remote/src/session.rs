@@ -18,6 +18,7 @@ const SILENT_FOR: Duration = Duration::from_secs(30);
 const PING_EVERY: Duration = Duration::from_secs(1);
 const MAX_BACKLOG: usize = 4 << 20;
 const READ_BUDGET: usize = 32;
+const UNPAIRED_MESSAGE: usize = 4096;
 
 type Ws = WebSocket<TcpStream>;
 
@@ -264,7 +265,7 @@ pub(crate) fn run(stream: TcpStream, shared: &Shared) -> Result<(), String> {
     let ip = stream.peer_addr().map_err(|e| e.to_string())?.ip();
     let peer = ip.to_string();
     let _ = stream.set_nodelay(true);
-    let config = WebSocketConfig::default().max_message_size(Some(MAX_LAYOUT * 2)).max_frame_size(Some(MAX_LAYOUT * 2)).max_write_buffer_size(MAX_BACKLOG);
+    let config = WebSocketConfig::default().max_message_size(Some(UNPAIRED_MESSAGE)).max_frame_size(Some(UNPAIRED_MESSAGE)).max_write_buffer_size(MAX_BACKLOG);
     let check = |req: &Request, res: Response| -> Result<Response, ErrorResponse> {
         if same_origin(req) {
             return Ok(res);
@@ -280,7 +281,8 @@ pub(crate) fn run(stream: TcpStream, shared: &Shared) -> Result<(), String> {
     if !texts.is_empty() {
         let _ = send(&mut ws, &texts);
     }
-    if !crate::server::admit_unpaired(&shared.unpaired, ip) {
+    let known = lock(&shared.trusted).contains(&ip);
+    if !crate::server::admit_unpaired(&shared.unpaired, ip, known) {
         let _ = ws.close(None);
         return Ok(());
     }
@@ -290,6 +292,11 @@ pub(crate) fn run(stream: TcpStream, shared: &Shared) -> Result<(), String> {
         let _ = ws.close(None);
         return Ok(());
     }
+    lock(&shared.trusted).insert(ip);
+    ws.set_config(|c| {
+        c.max_message_size = Some(MAX_LAYOUT * 2);
+        c.max_frame_size = Some(MAX_LAYOUT * 2);
+    });
     if shared.clients.fetch_add(1, Ordering::Relaxed) >= MAX_CLIENTS {
         shared.clients.fetch_sub(1, Ordering::Relaxed);
         let _ = send(&mut ws, &j!({ "t": "denied", "reason": "full" }).to_string());

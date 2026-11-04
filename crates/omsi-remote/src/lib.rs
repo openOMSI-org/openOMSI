@@ -81,6 +81,7 @@ pub(crate) struct Shared {
     pub sign_seq: AtomicU64,
     pub drive: Mutex<Option<Drive>>,
     pub unpaired: Mutex<HashMap<std::net::IpAddr, usize>>,
+    pub trusted: Mutex<std::collections::HashSet<std::net::IpAddr>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -147,6 +148,7 @@ impl Remote {
             sign_seq: AtomicU64::new(0),
             drive: Mutex::new(None),
             unpaired: Mutex::new(HashMap::new()),
+            trusted: Mutex::default(),
         });
         shared.rebuild_vehicle();
         let port = server::start(port, shared.clone())?;
@@ -268,7 +270,7 @@ impl Remote {
             *d = None;
         }
         d.map(|x| match x.at.elapsed() > DRIVE_FRESH {
-            true => Drive { throttle: 0.0, brake: 0.0, ..x },
+            true => Drive { throttle: 0.0, brake: 0.0, held: false, ..x },
             false => x,
         })
     }

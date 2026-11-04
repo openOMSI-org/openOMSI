@@ -342,13 +342,16 @@ fn unpaired_sockets_have_few_slots_per_address() {
     use crate::server::{admit_unpaired, leave_unpaired};
     let slots = std::sync::Mutex::new(std::collections::HashMap::new());
     let a: std::net::IpAddr = "192.168.1.20".parse().unwrap();
-    assert!((0..3).all(|_| admit_unpaired(&slots, a)));
-    assert!(!admit_unpaired(&slots, a));
+    assert!((0..3).all(|_| admit_unpaired(&slots, a, false)));
+    assert!(!admit_unpaired(&slots, a, false));
     leave_unpaired(&slots, a);
-    assert!(admit_unpaired(&slots, a));
-    let others: Vec<std::net::IpAddr> = (1..=40).map(|k| std::net::IpAddr::from([192, 168, 2, k])).collect();
-    assert!(others.iter().all(|ip| (0..3).all(|_| admit_unpaired(&slots, *ip))));
-    assert!(admit_unpaired(&slots, "192.168.3.1".parse().unwrap()), "a phone of its own address still gets in");
+    assert!(admit_unpaired(&slots, a, false));
+    let others: Vec<std::net::IpAddr> = (1..=4).map(|k| std::net::IpAddr::from([192, 168, 2, k])).collect();
+    assert!(others.iter().all(|ip| (0..3).all(|_| admit_unpaired(&slots, *ip, false))));
+    assert!(admit_unpaired(&slots, "192.168.2.9".parse().unwrap(), false));
+    let phone: std::net::IpAddr = "192.168.3.1".parse().unwrap();
+    assert!(!admit_unpaired(&slots, phone, false), "sixteen unpaired sockets in all");
+    assert!(admit_unpaired(&slots, phone, true), "a device paired before still gets in");
 }
 
 include!("../../../tools/test-support/original_root.rs");
@@ -455,4 +458,23 @@ fn forgetting_the_devices_and_stopping_act_at_once_under_a_stream_of_commands() 
         }
     }
     assert!(since.elapsed() < Duration::from_secs(2));
+}
+
+#[test]
+fn the_phone_wheel_steers_once_touched_and_gives_way_to_a_local_device() {
+    use crate::cockpit::phone_steers;
+    assert!(phone_steers(false, true, true), "a finger on the phone wheel wins, even over a USB wheel");
+    assert!(!phone_steers(false, false, false), "an untouched phone wheel does nothing");
+    assert!(phone_steers(true, false, false), "let go with no local device, it keeps its angle");
+    assert!(!phone_steers(true, false, true), "let go, a USB wheel, pad or steering key takes over");
+    assert!(!phone_steers(false, false, false), "and the phone waits to be touched again");
+}
+
+#[test]
+fn a_stale_drive_message_no_longer_holds_the_wheel() {
+    let dir = temp_dir("stale");
+    let remote = Remote::start(0, dir).unwrap();
+    *lock(&remote.shared.drive) = Some(Drive { session: 1, at: Instant::now() - Duration::from_millis(400), steering: 0.5, throttle: 1.0, brake: 0.0, held: true });
+    let d = remote.drive().unwrap();
+    assert_eq!((d.held, d.throttle, d.steering), (false, 0.0, 0.5));
 }

@@ -11,6 +11,8 @@ include!(concat!(env!("OUT_DIR"), "/icons.rs"));
 const MAX_CONNECTIONS: usize = 96;
 const MAX_PER_ADDRESS: usize = 10;
 const MAX_UNPAIRED_PER_ADDRESS: usize = 3;
+const MAX_UNPAIRED: usize = 16;
+const KEPT_FOR_PAIRED: usize = 24;
 const HEAD_WITHIN: Duration = Duration::from_secs(5);
 const MAX_HEAD: usize = 8192;
 fn csp(host: &str) -> String {
@@ -42,9 +44,10 @@ pub(crate) fn nearby(ip: IpAddr) -> bool {
     }
 }
 
-pub(crate) fn admit_unpaired(slots: &Mutex<HashMap<IpAddr, usize>>, ip: IpAddr) -> bool {
+pub(crate) fn admit_unpaired(slots: &Mutex<HashMap<IpAddr, usize>>, ip: IpAddr, known: bool) -> bool {
     let mut slots = lock(slots);
-    if slots.get(&ip).is_some_and(|n| *n >= MAX_UNPAIRED_PER_ADDRESS) {
+    let full = slots.values().sum::<usize>() >= MAX_UNPAIRED || slots.get(&ip).is_some_and(|n| *n >= MAX_UNPAIRED_PER_ADDRESS);
+    if full && !known {
         return false;
     }
     *slots.entry(ip).or_default() += 1;
@@ -78,7 +81,8 @@ pub(crate) fn start(port: u16, shared: Arc<Shared>) -> std::io::Result<u16> {
                     }
                     {
                         let mut counts = lock(&by_address);
-                        if open.load(Ordering::Relaxed) >= MAX_CONNECTIONS || counts.get(&ip).is_some_and(|n| *n >= MAX_PER_ADDRESS) {
+                        let kept = !lock(&shared.trusted).contains(&ip) && open.load(Ordering::Relaxed) >= MAX_CONNECTIONS - KEPT_FOR_PAIRED;
+                        if kept || open.load(Ordering::Relaxed) >= MAX_CONNECTIONS || counts.get(&ip).is_some_and(|n| *n >= MAX_PER_ADDRESS) {
                             continue;
                         }
                         *counts.entry(ip).or_default() += 1;
