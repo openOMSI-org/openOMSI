@@ -4026,6 +4026,7 @@ dependencies = [
  "anyhow",
  "omsi-cfg",
  "omsi-launcher-core",
+ "omsi-map",
  "omsi-net",
  "omsi-platform",
  "omsi-serverlist",

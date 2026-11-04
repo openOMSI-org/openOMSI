@@ -126,8 +126,20 @@ pub fn load(map: String) -> Answer {
     Ok(read(&map_dir))
 }
 
+fn chrono_today(map_dir: &Path) -> (Vec<PathBuf>, Vec<(String, PathBuf)>) {
+    let today = core::local_now().map(|(y, m, d, _, _)| y * 10000 + m * 100 + d);
+    let dirs = today.map(|t| omsi_map::active_chrono_dirs(map_dir, t)).unwrap_or_default();
+    let off = omsi_map::chrono_deactivated_lines(&dirs);
+    (dirs, off)
+}
+
+fn chrono_of<'a>(line: &Line, chrono: &'a [PathBuf]) -> Option<&'a Path> {
+    chrono.iter().map(PathBuf::as_path).find(|c| line.path.starts_with(c))
+}
+
 fn read(map_dir: &Path) -> Value {
-    let mut d = TimetableData::load(map_dir);
+    let (chrono, off) = chrono_today(map_dir);
+    let mut d = TimetableData::load_with_chrono(map_dir, &chrono, &off);
     d.lines.sort_by_key(|l| l.name.to_lowercase());
     let lines: Vec<Value> = d
         .lines
@@ -141,7 +153,8 @@ fn read(map_dir: &Path) -> Value {
                     json!({ "number": t.number, "ai_group": t.ai_group, "extra": t.extra, "trips": trips })
                 })
                 .collect();
-            json!({ "name": l.name, "user_allowed": l.user_allowed, "priority": l.priority, "tours": tours })
+            let folder = chrono_of(l, &chrono).and_then(|c| c.file_name()).map(|f| f.to_string_lossy().into_owned());
+            json!({ "name": l.name, "user_allowed": l.user_allowed, "priority": l.priority, "tours": tours, "chrono": folder })
         })
         .collect();
     let trips: Vec<Value> = d
@@ -171,12 +184,18 @@ pub fn save(map: String, lines: Vec<LineEdit>) -> Answer {
 
 fn save_lines(place: &Place, edits: Vec<LineEdit>) -> Value {
     let original = omsi_cfg::resolve_path(&place.map_dir, "TTData");
-    let known = TimetableData::load(&place.map_dir).lines;
+    let (chrono, off) = chrono_today(&place.map_dir);
+    let known = TimetableData::load_with_chrono(&place.map_dir, &chrono, &off).lines;
     let mut saved = Vec::new();
     let mut error = None;
     for e in edits {
         let name = e.name.trim().to_string();
-        match save_line(place, &original, &known, e) {
+        let from_chrono = known.iter().find(|l| l.name.eq_ignore_ascii_case(&name)).and_then(|l| chrono_of(l, &chrono));
+        let result = match from_chrono {
+            Some(c) => Err(core::i18n::tr("it belongs to the chrono folder {folder}").replace("{folder}", &c.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default())),
+            None => save_line(place, &original, &known, e),
+        };
+        match result {
             Ok(()) => saved.push(name),
             Err(why) => {
                 error.get_or_insert(core::i18n::tr("line {name}: {why}").replace("{why}", &why).replace("{name}", &name));
@@ -449,6 +468,22 @@ mod tests {
         }
         out.sort();
         out
+    }
+
+    #[test]
+    fn a_line_of_a_chrono_folder_is_listed_and_not_saved_into_the_map() {
+        let d = dirs("chrono");
+        let map = map_at(&d.omsi);
+        let chrono = map.join("Chrono").join("Rad");
+        std::fs::create_dir_all(chrono.join("TTData")).unwrap();
+        std::fs::write(chrono.join("Chrono.cfg"), "[startdate]\r\n20000101\r\n").unwrap();
+        std::fs::write(chrono.join("TTData").join("33.ttl"), "[priority]\r\n0\r\n[newtour]\r\n1\r\nBusses\r\n1023\r\n[addtrip]\r\nA\r\n0\r\n360.000\r\n").unwrap();
+        let lines = read(&map)["lines"].as_array().unwrap().clone();
+        assert!(lines.iter().any(|l| l["name"] == "33" && l["chrono"] == "Rad"));
+        assert!(lines.iter().any(|l| l["name"] == "1" && l["chrono"].is_null()));
+        let answer = save_lines(&place(&d, &map), vec![edit("33", &[420.0])]);
+        assert_eq!(answer["saved"], json!([]));
+        assert!(answer["error"].as_str().unwrap().contains("chrono folder Rad"));
     }
 
     #[test]

@@ -13,6 +13,7 @@ url.workspace = true
 omsi-launcher-core = { path = "../omsi-launcher-core" }
 omsi-cfg = { path = "../omsi-cfg" }
 omsi-timetable = { path = "../omsi-timetable" }
+omsi-map = { path = "../omsi-map" }
 # (the version the release was built as: OPENOMSI_VERSION, as the game's)
 omsi-platform = { path = "../omsi-platform" }
 omsi-net = { path = "../omsi-net" }

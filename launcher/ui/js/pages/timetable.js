@@ -200,6 +200,10 @@ async function reset() {
 }
 
 function touch(line) {
+  if (line.chrono) {
+    toast(t('it belongs to the chrono folder {folder}', { folder: line.chrono }), 'error');
+    return;
+  }
   const s = tt();
   up({ ver: { ...s.ver, [line.name]: (s.ver[line.name] || 0) + 1 }, dirty: s.dirty.includes(line.name) ? s.dirty : [...s.dirty, line.name] });
 }
