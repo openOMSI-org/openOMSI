@@ -7,7 +7,7 @@ import { t, hhmm, language } from '../i18n.js';
 import { call, contentUrl } from '../api.js';
 import { Button, Dialog } from '../ui.js';
 import { tourId, choose, realTime, realDate, launcherLayout } from '../data.js';
-import { MultiplayerDutyNotice } from './multiplayer.js';
+import { DriveMode } from './drive-mode.js';
 import { ClassicDrive } from './drive-classic.js';
 import { LayoutDrive } from './drive-layouts.js';
 
@@ -99,7 +99,7 @@ export function chooseTour(x, trip) {
 export function DrivePage() {
   useStore();
   const layout = launcherLayout();
-  return html`<${MultiplayerDutyNotice} />${layout === 'classic' ? html`<${ClassicDrive} />` : html`<${LayoutDrive} layout=${layout} />`}`;
+  return html`<${DriveMode} />${layout === 'classic' ? html`<${ClassicDrive} />` : html`<${LayoutDrive} layout=${layout} />`}`;
 }
 
 // the player's notes on maps and buses (#1791): read once, saved as they are typed
