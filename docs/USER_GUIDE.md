@@ -693,7 +693,7 @@ With it on (`street`, and also under `all`):
 
 ### NVIDIA DLSS and AMD FSR 3
 
-Settings → Graphics → Upscaling (Settings → Graphics → Upscaling, `upscaler=dlss` or `fsr3`, with
+Settings → Graphics → Upscaling (`upscaler=dlss` or `fsr3`, with
 `upscale_quality=native`, `quality`, `balanced`, `performance` or `ultra_performance`; Windows,
 DirectX 12 or Vulkan; DLSS only with an NVIDIA RTX card, FSR 3 with any): the picture is drawn smaller and brought up to the window with the help of the last
 frames, in place of the anti-aliasing and the render scale, from the next start (not with a headset
