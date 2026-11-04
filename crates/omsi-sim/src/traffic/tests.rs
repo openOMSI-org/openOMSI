@@ -1297,3 +1297,14 @@ fn win4_gives_each_bus_light_its_green_when_it_asks_alone() {
         assert_eq!(c.state(0), 6, "the main road left its green with nobody asking");
     }
 }
+
+#[test]
+fn a_door_program_without_green_holds_its_stop_in_state_four() {
+    let mut c = TrafficLightController::new(vec![vec![(0, 1.0), (4, 2.0), (0, 1.0)]], 4.0);
+    c.stops = vec![LightStop { light: 0, time: 1.5, if_request: false, jump_to: None }];
+    c.start(0.0);
+    c.request[0] = true;
+    c.advance(3.0);
+    assert_eq!(c.time, 1.5);
+    assert!(c.held);
+}
