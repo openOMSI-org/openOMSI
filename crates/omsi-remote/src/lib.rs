@@ -178,6 +178,7 @@ impl Remote {
 
     pub fn forget_devices(&self) {
         lock(&self.shared.devices).forget_all();
+        lock(&self.shared.trusted).clear();
         self.shared.generation.fetch_add(1, Ordering::Relaxed);
         self.shared.new_pin();
     }

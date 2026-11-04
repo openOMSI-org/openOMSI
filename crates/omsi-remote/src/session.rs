@@ -161,8 +161,7 @@ fn release(shared: &Shared, id: u64) {
     }
 }
 
-fn pump(ws: &mut Ws, shared: &Shared, id: u64) -> Result<(), String> {
-    let generation = shared.generation.load(Ordering::Relaxed);
+fn pump(ws: &mut Ws, shared: &Shared, id: u64, generation: u64) -> Result<(), String> {
     let (mut texts, mut vehicle, mut state, mut sign) = (0u64, 0u64, 0u64, u64::MAX);
     let mut sent: Option<std::sync::Arc<Value>> = None;
     let mut channels: Vec<(&'static str, u64)> = Vec::new();
@@ -281,6 +280,7 @@ pub(crate) fn run(stream: TcpStream, shared: &Shared) -> Result<(), String> {
     if !texts.is_empty() {
         let _ = send(&mut ws, &texts);
     }
+    let generation = shared.generation.load(Ordering::Relaxed);
     let known = lock(&shared.trusted).contains(&ip);
     if !crate::server::admit_unpaired(&shared.unpaired, ip, known) {
         let _ = ws.close(None);
@@ -305,7 +305,7 @@ pub(crate) fn run(stream: TcpStream, shared: &Shared) -> Result<(), String> {
     }
     let id = shared.sessions.fetch_add(1, Ordering::Relaxed);
     log::info!("remote cockpit: {peer} connected");
-    let r = pump(&mut ws, shared, id);
+    let r = pump(&mut ws, shared, id, generation);
     shared.clients.fetch_sub(1, Ordering::Relaxed);
     release(shared, id);
     log::info!("remote cockpit: {peer} left");

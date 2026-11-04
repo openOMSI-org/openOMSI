@@ -204,6 +204,7 @@ const App = {
     this.lastVehicle = same;
     this.pending = null;
     this.status("on", "Connected");
+    const sameBus = !!(this.vehicle && m.key && this.vehicle.key === m.key);
     this.vehicle = m.key ? m : null;
     this.scope = m.layout ? m.layout.scope : null;
     this.layout = m.layout ? normalize(m.layout.data) : null;
@@ -211,7 +212,7 @@ const App = {
     if (!this.layout && this.vehicle && this.state.vehicle) { this.layout = defaultLayout(this.state); this.scope = "default"; }
     $("vehicle-name").textContent = m.name || "";
     $("empty").hidden = !!m.key;
-    this.render();
+    this.render(sameBus);
   },
 
   showPair() {
@@ -284,9 +285,9 @@ const App = {
     tabs.hidden = pages.length < 2 && !Editor.active;
   },
 
-  render() {
+  render(sameBus) {
     this.releaseAll();
-    Drive.letGo();
+    if (!sameBus) Drive.letGo();
     this.applyTheme();
     this.renderTabs();
     const board = $("board");

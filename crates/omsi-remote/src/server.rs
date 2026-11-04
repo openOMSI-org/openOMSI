@@ -180,9 +180,11 @@ fn head(stream: &TcpStream) -> Result<(String, usize), String> {
             return Err("closed".into());
         }
         let end = buf[..n].windows(4).position(|w| w == b"\r\n\r\n").map(|i| i + 4);
-        if end.is_some() || n >= MAX_HEAD {
-            let size = end.unwrap_or(n);
+        if let Some(size) = end {
             return Ok((String::from_utf8_lossy(&buf[..size]).into_owned(), size));
+        }
+        if n >= MAX_HEAD {
+            return Err("request head too long".into());
         }
         if since.elapsed() > HEAD_WITHIN {
             return Err("request too slow".into());
