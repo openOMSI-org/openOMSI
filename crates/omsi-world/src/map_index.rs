@@ -53,6 +53,7 @@ pub struct MapIndex {
     /// objects). The index's own check of the chain model against the object counts the editor
     /// writes into the repeaters reads it.
     pub masters: HashMap<(usize, i64), (i64, f64, f64)>,
+    pub repeater_first: HashMap<(i64, i64), usize>,
     /// Object id → (tile, world position with the ground under it, rotation).
     pub objects: HashMap<i64, ((i32, i32), DVec3, [f64; 3])>,
     /// The objects whose id another tile uses as well, by (tile, id): a map joined from two
@@ -370,6 +371,7 @@ impl MapIndex {
             let Some(local) = index.splines.get(spline) else { continue };
             let d0 = d - chain_offset_from(&index, *spline, *local);
             let ours = first_after(d0, 0.0, *interval).map(|(_, j)| j).unwrap_or(0);
+            index.repeater_first.insert((*id, *spline), ours.min(*first));
             checked += 1;
             agree += (ours == *first) as usize;
             if ours != *first && omsi_cfg::flags::OMSI_DEBUG_REPEATERS.is_set() {
@@ -725,6 +727,10 @@ pub fn row_starts_before_its_spline(att: &SplineAttachment, splines: &[MapSpline
 
 /// The objects of row record `att` on `spline` from `start` on, while `j * interval <= range`.
 fn place_on(att: &SplineAttachment, spline: &MapSpline, origin: DVec2, index: Option<&MapIndex>, start: RowStart) -> Vec<RowObject> {
+    place_upto(att, spline, origin, index, start, 0)
+}
+
+fn place_upto(att: &SplineAttachment, spline: &MapSpline, origin: DVec2, index: Option<&MapIndex>, start: RowStart, upto: usize) -> Vec<RowObject> {
     let curve = SplineCurve { half_cant_width: omsi_geometry::half_cant_width_of(&spline.file), ..SplineCurve::from_map(spline, origin) };
     let len = spline.length.max(0.0);
     // the record's own copy of the row's spacing and reach (see [`row_start`])
@@ -747,7 +753,7 @@ fn place_on(att: &SplineAttachment, spline: &MapSpline, origin: DVec2, index: Op
         if interval > 0.0 && j as f64 * interval > range + JOINT_TOLERANCE {
             break;
         }
-        if s > end {
+        if s > end && j >= upto {
             break;
         }
         if s >= from {
@@ -803,6 +809,7 @@ pub fn tile_row_objects(att: &SplineAttachment, splines: &[MapSpline], origin: D
     let last = start.d0 + if interval > 0.0 { ((att.range.max(0.0) + JOINT_TOLERANCE) / interval).floor() * interval } else { 0.0 };
     let mut out: Vec<(usize, RowObject)> = place_on(att, own, origin, index, start).into_iter().map(|o| (si, o)).collect();
     let (mut cur, mut acc, mut backwards) = (si, start.acc, start.backwards);
+    let mut cur_start = start;
     let mut seen = vec![si];
     loop {
         acc += splines[cur].length.max(0.0);
@@ -811,7 +818,15 @@ pub fn tile_row_objects(att: &SplineAttachment, splines: &[MapSpline], origin: D
         }
         let c = &splines[cur];
         let next_id = if backwards { c.prev_id } else { c.next_id };
-        let Some(ni) = splines.iter().position(|s| s.id == next_id && !s.deleted) else { break };
+        let Some(ni) = splines.iter().position(|s| s.id == next_id && !s.deleted) else {
+            let next_first = index.and_then(|ix| ix.repeater_first.get(&(att.id, next_id)));
+            let drawn = out.iter().map(|(_, o)| o.index + 1).max().unwrap_or(0);
+            if let Some(upto) = next_first.filter(|&&k| k > drawn).map(|_| drawn + 1) {
+                let gap = place_upto(att, c, origin, index, cur_start, upto);
+                out.extend(gap.into_iter().filter(|o| o.index >= drawn && o.index < upto).map(|o| (cur, o)));
+            }
+            break;
+        };
         if seen.contains(&ni) || seen.len() > 500 {
             break;
         }
@@ -823,7 +838,8 @@ pub fn tile_row_objects(att: &SplineAttachment, splines: &[MapSpline], origin: D
             backwards = true;
         }
         let Some((s, j)) = first_after(start.d0, acc, interval) else { break };
-        out.extend(place_on(att, next, origin, index, RowStart { s, j, backwards, d0: start.d0, acc }).into_iter().map(|o| (ni, o)));
+        cur_start = RowStart { s, j, backwards, d0: start.d0, acc };
+        out.extend(place_on(att, next, origin, index, cur_start).into_iter().map(|o| (ni, o)));
         cur = ni;
     }
     out
@@ -1321,6 +1337,13 @@ mod tests {
         let objs = tile_row_objects(&repeater, &[s12], DVec2::ZERO, Some(&ix));
         assert_eq!(objs.len(), 1);
         assert!(objs[0].1.index == 3 && (objs[0].1.pose.pos.y - 620.0).abs() < 1e-6, "{:?}", objs[0].1.pose.pos);
+        let mut gap = buffer_stop_chain();
+        gap.repeater_first.insert((7, 12), 4);
+        let objs = tile_row_objects(&master, &tile[..2], DVec2::ZERO, Some(&gap));
+        assert_eq!(objs.iter().map(|(si, o)| (*si, o.index)).collect::<Vec<_>>(), vec![(0, 0), (0, 1), (1, 2), (1, 3)]);
+        assert!((objs[3].1.pose.pos.y - 600.0).abs() < 1e-6, "{:?}", objs[3].1.pose.pos);
+        gap.repeater_first.insert((7, 12), 3);
+        assert_eq!(tile_row_objects(&master, &tile[..2], DVec2::ZERO, Some(&gap)).len(), 3);
         // a single object past the end of its spline goes onto the next one in the tile
         let single = SplineAttachment { id: 8, ..row(0.0, 0.0, 450.0, None) };
         let objs = tile_row_objects(&single, &tile, DVec2::ZERO, Some(&ix));
