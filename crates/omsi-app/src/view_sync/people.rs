@@ -350,6 +350,10 @@ impl PeopleView {
             let inst = renderer.add_instance(scene, id, position, Mat4::IDENTITY, mats);
             meshes.push((id, inst));
         }
+        let radius = person_radius(ty);
+        for &(_, inst) in &meshes {
+            renderer.set_object_culling(scene, inst, radius, ty.model.detail_factor, ty.model.no_distance_check);
+        }
         meshes
     }
 }
@@ -878,4 +882,8 @@ mod seat_back_tests {
         assert_eq!(seat_back_shift(&body(-1.0), hip, 0.15), 0.12);
         assert_eq!(seat_back_shift(&[], hip, 0.15), 0.0);
     }
+}
+
+fn person_radius(ty: &HumanType) -> f32 {
+    ty.meshes.iter().flat_map(|m| &m.data.positions).map(|p| p.length()).fold(0.0f32, f32::max)
 }
