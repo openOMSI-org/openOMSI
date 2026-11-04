@@ -504,6 +504,7 @@ impl ApplicationHandler for App {
         crate::lan::close_public_gateway();
         // and the launcher's LAN status file goes (Cmd+Q never returns to main's guard)
         drop(lan::StatusFileGuard);
+        omsi_platform::diagnostics::ended("clean", Some(crate::support_bundle::diagnostics(self)));
         log::info!("game ends");
     }
 }

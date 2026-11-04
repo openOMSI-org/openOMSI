@@ -127,13 +127,11 @@ export function StartBar({ step, go }) {
       ${v?.missing_packs?.length > 0 && html`<span class="ellipsis" style="color:var(--warn)" title=${v.missing_packs.join(', ')}>${t('Parts of this bus come from packs that are not installed: {packs}', { packs: v.missing_packs.join(', ') })}</span>`}
     </div>
     <div class="bar-actions">
-      ${joined && html`<span class="tag accent"><${Icon} name="users" size=${14} />${t('Joining {server}', { server: c.lan_server?.name || c.lan_addr })}</span>
-        <${Button} kind="ghost" label="Leave" onClick=${() => choose({ lan_mode: 'off' })} />`}
       ${running > 0 && html`<a class="small" onClick=${() => set({ page: 'games' })}>${t('{n} game(s) running', { n: running })}</a>`}
       <${Continue} go=${launch} busy=${busy} />
       ${next < STEPS.length && html`<${Button} big onClick=${() => go(STEPS[next][0])}>${t('Next:')} ${t(STEPS[next][1])}<${Icon} name="right" /></${Button}>`}
       <${Button} kind="primary" big icon="play" disabled=${!ready || busy} onClick=${() => launch()}>
-        ${busy ? t('Starting…') : another ? t('Start another game') : joined ? t('Join and drive') : c.free ? t('Start driving') : t('Start the duty')}
+        ${busy ? t('Starting…') : another ? t('Start another game') : joined ? t('Join and drive') : c.lan_mode === 'host' ? t('Host and drive') : c.free ? t('Start driving') : t('Start the duty')}
       </${Button}>
     </div>
   </div>${dialog}`;

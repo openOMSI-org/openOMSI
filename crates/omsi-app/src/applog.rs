@@ -15,6 +15,7 @@ pub(crate) struct LogState {
     worst_dt: f32,
     /// The support snapshot of this game is kept (see `support_bundle::record`).
     support_recorded: bool,
+    pub(crate) frame_times: omsi_platform::diagnostics::Frames,
 }
 
 /// The machine, the program and its settings, once at the start.
@@ -103,7 +104,11 @@ impl App {
     pub(crate) fn log_frame(&mut self, dt: f32) {
         if !self.perf.log_state.support_recorded && self.renderer.is_some() {
             crate::support_bundle::record(self);
+            omsi_platform::diagnostics::save(crate::support_bundle::diagnostics(self));
             self.perf.log_state.support_recorded = true;
+        }
+        if self.player.is_some() && !self.paused {
+            self.perf.log_state.frame_times.add(dt);
         }
         // (compared in place: the message was copied every frame it stood on the screen)
         if self.service_msg.as_ref().map(|m| &m.0) != self.perf.log_state.last_msg.as_ref() {
@@ -132,6 +137,7 @@ impl App {
         s.t = 0.0;
         s.frames = 0;
         s.worst_dt = 0.0;
+        omsi_platform::diagnostics::save(crate::support_bundle::diagnostics(self));
         let bus = self.player.as_ref().map(|p| {
             let v = &p.vehicle;
             format!("bus at ({:.1}, {:.1}, {:.1}) heading {:.0}, {:.0} km/h", v.position.x, v.position.y, v.position.z, v.heading, v.physics.velocity_kmh())

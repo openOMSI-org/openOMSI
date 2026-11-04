@@ -121,6 +121,16 @@ fn sun_reaches(x: vec3<f32>) -> f32 {
     return textureSampleCompareLevel(t_shadow_far, s_shadow, vec2<f32>(fuv.x, fuv.y * (1.0 / (camera.shadow.y * camera.lamp_atlas.z))), fp2.z - 0.6 / SHAFT_DEPTH_RANGE);
 }
 
+fn sun_reaches_close(x: vec3<f32>) -> f32 {
+    let lp = camera.light_view_proj_close * vec4<f32>(x, 1.0);
+    let uv = vec2<f32>(lp.x * 0.5 + 0.5, 0.5 - lp.y * 0.5);
+    if (camera.flags.w <= 0.0 || max(abs(uv.x - 0.5), abs(uv.y - 0.5)) >= 0.48 || lp.z < 0.0 || lp.z > 1.0) {
+        return sun_reaches(x);
+    }
+    let s = select(1.0, camera.post.w, camera.post.w > 0.0);
+    return textureSampleCompareLevel(t_shadow, s_shadow, vec2<f32>(0.5 + uv.x * s * 0.5, uv.y * s), lp.z - 0.05 / SHAFT_DEPTH_RANGE);
+}
+
 // Shafts of sunlight - crepuscular rays: the air between the camera and what it sees
 // scatters the sun towards the eye wherever the sun reaches it, and not in the shadow of a
 // house or a tree. The picture's air (`air` in enhanced_common.wgsl) holds that light as
@@ -250,7 +260,7 @@ fn sun_seen(c: vec3<f32>, s: vec3<f32>) -> f32 {
             // as the camera turned put out the whole veil at once, and sky put it back, a
             // sheet of light over the picture switched off and on.
             if (camera.shadow.x > 0.5) {
-                seen = seen + sun_reaches(c + dir * 0.3);
+                seen = seen + sun_reaches_close(c + dir * 0.3);
             } else {
                 seen = seen + 1.0;
             }

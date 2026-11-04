@@ -56,8 +56,10 @@ pub extern "C" fn openomsi_ios_main() {
             log::warn!("caught by the renderer: {info}");
             return;
         }
-        let text = format!("the game stopped on an error (build {BUILD}): {info}\n{}", std::backtrace::Backtrace::force_capture());
+        let backtrace = std::backtrace::Backtrace::force_capture();
+        let text = format!("the game stopped on an error (build {BUILD}): {info}\n{backtrace}");
         log::error!("{text}");
+        omsi_platform::diagnostics::panicked(omsi_platform::diagnostics::panic_report(info, &backtrace));
         for f in &crash_files {
             let _ = std::fs::write(f, &text);
         }
