@@ -142,6 +142,23 @@ pub fn resolve_path(base: &Path, rel: &str) -> Option<PathBuf> {
     Some(cur)
 }
 
+fn plugin_opls(dirs: &[PathBuf]) -> Vec<(PathBuf, &PathBuf)> {
+    let mut earlier = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for dir in dirs {
+        let mut names = Vec::new();
+        for opl in find_opls(dir) {
+            let name = opl.file_name().map(|n| n.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+            if !earlier.contains(&name) {
+                names.push(name);
+                out.push((opl, dir));
+            }
+        }
+        earlier.extend(names);
+    }
+    out
+}
+
 fn library_path(opl_path: &Path, plugins_dir: &Path, dll: &str) -> Option<PathBuf> {
     resolve_path(plugins_dir, dll).or_else(|| opl_path.parent().and_then(|d| resolve_path(d, dll)))
 }
@@ -1100,20 +1117,13 @@ impl Plugins {
 
     fn load_process_host(dirs: &[PathBuf], hosts: &HostConfig, process_grants: api::process::ProcessGrants, process_permissions: Option<std::sync::Arc<api::process::ProcessPermissions>>) -> Plugins {
         let mut loaded: Vec<Plugin> = Vec::new();
-        let mut seen = std::collections::HashSet::new();
-        for dir in dirs {
-            for opl in find_opls(dir) {
-                let key = opl.strip_prefix(dir).unwrap_or(&opl).to_string_lossy().to_ascii_lowercase();
-                if !seen.insert(key) {
-                    continue;
+        for (opl, dir) in plugin_opls(dirs) {
+            match Plugin::load(&opl, dir, hosts) {
+                Ok(p) => {
+                    log::info!("plugin {} loaded ({} variables, {} strings, {} system variables, {} triggers, {} script textures{})", p.opl.dll, p.opl.vars.len(), p.opl.string_vars.len(), p.opl.system_vars.len(), p.opl.triggers.len(), if p.procs.texture { p.opl.script_textures.len() } else { 0 }, if p.procs.ticket { ", passengers' tickets" } else { "" });
+                    loaded.push(p);
                 }
-                match Plugin::load(&opl, dir, hosts) {
-                    Ok(p) => {
-                        log::info!("plugin {} loaded ({} variables, {} strings, {} system variables, {} triggers, {} script textures{})", p.opl.dll, p.opl.vars.len(), p.opl.string_vars.len(), p.opl.system_vars.len(), p.opl.triggers.len(), if p.procs.texture { p.opl.script_textures.len() } else { 0 }, if p.procs.ticket { ", passengers' tickets" } else { "" });
-                        loaded.push(p);
-                    }
-                    Err(e) => log::warn!("Could not load plugin {}: {e}", opl.display()),
-                }
+                Err(e) => log::warn!("Could not load plugin {}: {e}", opl.display()),
             }
         }
         let mut lua = Vec::new();
@@ -1383,6 +1393,14 @@ mod tests {
         assert_eq!(library_path(&opl, &dir, "MBASNE.dll"), Some(dir.join("Pablo/MBASNE.dll")));
         assert_eq!(library_path(&opl, &dir, "top.dll"), Some(dir.join("top.dll")));
         assert_eq!(library_path(&opl, &dir, "none.dll"), None);
+        let other = dir.join("other");
+        std::fs::create_dir_all(&other).unwrap();
+        std::fs::write(&opl, "[dll]\r\nMBASNE.dll\r\n").unwrap();
+        std::fs::write(other.join("mbas.opl"), "[dll]\r\nMBASNE.dll\r\n").unwrap();
+        std::fs::write(other.join("Extra.opl"), "[dll]\r\nx.dll\r\n").unwrap();
+        let first = dir.join("Pablo");
+        let found: Vec<PathBuf> = plugin_opls(&[first.clone(), other.clone()]).into_iter().map(|(p, _)| p).collect();
+        assert_eq!(found, vec![opl.clone(), other.join("Extra.opl")], "a later folder's copy of an .opl name is not loaded again");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
