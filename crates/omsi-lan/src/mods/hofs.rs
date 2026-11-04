@@ -137,6 +137,30 @@ pub fn settled(name: &str) -> bool {
     }
 }
 
+/// A player's depot file of a host's vehicle, kept in `cache` by `key` with whether it is final:
+/// the host's file of `name` once it is here (`host` loads it), else `own` (this game's lookup,
+/// made once per key: kept as provisional while the host's answer is on its way, and final once
+/// it has come). No name: `own`, final.
+pub fn cached<K: std::hash::Hash + Eq + Clone, T: Clone, S: std::hash::BuildHasher>(cache: &mut HashMap<K, (T, bool), S>, key: K, name: Option<&str>, host: impl Fn(&Path) -> Option<T>, own: impl FnOnce() -> T) -> T {
+    let mut host_file = |cache: &mut HashMap<K, (T, bool), S>| {
+        let t = host(&name.and_then(fetched)?)?;
+        cache.insert(key.clone(), (t.clone(), true));
+        Some(t)
+    };
+    let provisional = match cache.get(&key) {
+        Some((t, true)) => return t.clone(),
+        Some((t, false)) => Some(t.clone()),
+        None => None,
+    };
+    if let Some(t) = host_file(cache) {
+        return t;
+    }
+    let settled = name.is_none_or(settled);
+    let t = provisional.unwrap_or_else(own);
+    cache.insert(key, (t.clone(), settled));
+    t
+}
+
 /// Asks the host for depot file `name` and keeps it in this session's folder.
 fn fetch(host: std::net::SocketAddr, session: u64, name: &str) -> Result<PathBuf, String> {
     let (_raw, mut out, mut input) = super::failure::open(host, session).map_err(|e| e.to_string())?;
@@ -165,6 +189,21 @@ mod tests {
         for bad in ["", "..", "../x", "a/b", "a\\b", "c:x", "a\nb"] {
             assert!(valid(bad).is_none(), "{bad:?}");
         }
+    }
+
+    /// This game's own lookup is made once per key, not once per vehicle.
+    #[test]
+    fn the_own_lookup_is_made_once() {
+        let mut cache = HashMap::new();
+        let mut asked = 0;
+        for _ in 0..3 {
+            let t = cached(&mut cache, ("bus", "town"), Some("Town"), |_| Some(0), || {
+                asked += 1;
+                7
+            });
+            assert_eq!(t, 7);
+        }
+        assert_eq!(asked, 1);
     }
 
     /// Another session's fetches are not this one's: a file, a failure or the count.

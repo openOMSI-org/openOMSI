@@ -128,7 +128,7 @@ struct Mirror {
     /// The depot file of each vehicle type, by the name the host gave it (empty: a host
     /// older than that, which then has the map's own).
     /// Depot files by vehicle type and name, and whether that is final (`mirror_hof`).
-    hofs: HashMap<(PathBuf, String), (Option<Arc<omsi_vehicle::Hof>>, bool)>,
+    hofs: std::collections::HashMap<(PathBuf, String), (Option<Arc<omsi_vehicle::Hof>>, bool)>,
     /// The line, destination, number and plate each car shows.
     shown: HashMap<u32, omsi_net::traffic_table::Meta>,
     /// Cars and people drawn (created here).
@@ -1456,46 +1456,10 @@ mod display;
 /// when the host has none, the one of that name here, else the map's own - never the one this
 /// player chose for their own bus (its rows are other destinations: the host's `#<row>` read
 /// there showed another sign).
-fn mirror_hof(hofs: &mut HashMap<(PathBuf, String), (Option<Arc<omsi_vehicle::Hof>>, bool)>, world: &World, ty: &VehicleType, name: &str) -> Option<Arc<omsi_vehicle::Hof>> {
-    let key = (ty.def.path.clone(), name.to_lowercase());
+fn mirror_hof(hofs: &mut std::collections::HashMap<(PathBuf, String), (Option<Arc<omsi_vehicle::Hof>>, bool)>, world: &World, ty: &VehicleType, name: &str) -> Option<Arc<omsi_vehicle::Hof>> {
     let named = Some(name).filter(|n| !n.trim().is_empty());
-    let host_file = |hofs: &mut HashMap<_, _>, key: &(PathBuf, String)| {
-        let sent = named.and_then(omsi_lan::mods::hofs::fetched)?;
-        match omsi_vehicle::Hof::load(&sent) {
-            Ok(h) => {
-                let h = Some(Arc::new(h));
-                hofs.insert(key.clone(), (h.clone(), true));
-                Some(h)
-            }
-            Err(e) => {
-                log::warn!("depot file {name} from the host: {e}; this game's own is used");
-                None
-            }
-        }
-    };
-    match hofs.get(&key) {
-        Some((h, true)) => return h.clone(),
-        // our own lookup, kept while the host's answer is on its way (one lookup per type and
-        // name, not one per bus): the host's file replaces it once here
-        Some((h, false)) => {
-            let provisional = h.clone();
-            if let Some(h) = host_file(hofs, &key) {
-                return h;
-            }
-            if named.is_some_and(omsi_lan::mods::hofs::settled) {
-                hofs.insert(key, (provisional.clone(), true));
-            }
-            return provisional;
-        }
-        None => {}
-    }
-    if let Some(h) = host_file(hofs, &key) {
-        return h;
-    }
-    let own = crate::find_hof_named(named, world, ty);
-    let settled = named.is_none_or(omsi_lan::mods::hofs::settled);
-    hofs.insert(key, (own.clone(), settled));
-    own
+    let host = |p: &std::path::Path| omsi_vehicle::Hof::load(p).map(|h| Some(Arc::new(h))).map_err(|e| log::warn!("depot file {name} from the host: {e}; this game's own is used")).ok();
+    omsi_lan::mods::hofs::cached(hofs, (ty.def.path.clone(), name.to_lowercase()), named, host, || crate::find_hof_named(named, world, ty))
 }
 pub(crate) use display::car_meta;
 use display::show_car_destination;
