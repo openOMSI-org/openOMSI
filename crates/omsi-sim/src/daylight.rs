@@ -108,7 +108,6 @@ impl SunPlace {
         self.timezone = timezone;
         match lat_lon {
             Some((lat, lon)) => (self.latitude, self.longitude) = (lat, lon),
-            None if !(-1.0..=5.0).contains(&timezone) => (self.latitude, self.longitude) = (0.0, timezone * 15.0),
             None if timezone != SunPlace::default().timezone => self.longitude = timezone * 15.0,
             None => {}
         }
@@ -408,8 +407,7 @@ mod tests {
         let mut caxias = SunPlace::default();
         caxias.locate(-3.0, None);
         assert!(sun_position(&c, &caxias).0 > 10.0);
-        let november = SimClock { day_of_year: 308, time: 17.25 * 3600.0, ..Default::default() };
-        assert!(sun_position(&november, &caxias).0 > 5.0);
+        assert_eq!(caxias.latitude, SunPlace::default().latitude, "the climate keeps its latitude");
         let mut moscow = SunPlace::default();
         moscow.locate(3.0, None);
         assert_eq!((moscow.latitude, moscow.longitude), (SunPlace::default().latitude, 45.0));
