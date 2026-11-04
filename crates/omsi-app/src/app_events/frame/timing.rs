@@ -45,6 +45,7 @@ impl App {
         }
         if let Some(why) = self.renderer.as_ref().and_then(|r| r.device_lost()) {
             crate::support_bundle::record(self);
+            omsi_platform::diagnostics::ended("device_lost", Some(crate::support_bundle::diagnostics(self)));
             if self.restart_after_device_loss() {
                 log::warn!("device lost ({why}): the game goes on in a new start");
             } else {
