@@ -482,7 +482,7 @@ share the network's events, so the same movement is not played once per bus.
 | R (hold) | outside the bus near its back (on foot, outside or free camera) | take the rope of the nearest pole: it rises to just under the wire you look at (else the one above its working angle); let go to let its spring put it on |
 | T | the same | pull the nearest pole down (the shoe off the wire, the boom on its hook) |
 | Shift + R / T | the same | both poles |
-| Ctrl + R | anywhere, the cab too | both poles on the wire by themselves, or down if one is on, with or without a lifting gear (Ctrl+T is OMSI's change_give) |
+| Ctrl + R | anywhere, the cab too | both poles on the wire by themselves, or down if one is on, with or without a lifting gear; not where the keyboard file or the bus has Ctrl+R (Ctrl+T is OMSI's change_give) |
 
 In the cab R and T are the gearbox's: the poles answer the cab's own switch and Ctrl+R there.
 

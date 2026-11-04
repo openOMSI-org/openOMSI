@@ -75,6 +75,7 @@ impl App {
             g.grab = Some(k);
             g.grab_fresh = true;
             g.grab_manual = true;
+            g.grab_by_script = false;
         }
         true
     }
@@ -85,7 +86,6 @@ impl App {
             return;
         }
         let ray = self.cursor_ray_now().map(|(o, d, _)| (o, d.as_dvec3().normalize_or_zero()));
-        // the screen's right, to swing the pole the way the mouse goes from wherever it is seen
         let right = ray.map(|(_, d)| d.cross(DVec3::Z).normalize_or_zero()).unwrap_or(DVec3::X);
         let bus_x = self.player.as_ref().map(|p| p.vehicle.trolley_frame().1.x_axis.truncate().as_dvec3()).unwrap_or(DVec3::X);
         let side = if right.dot(bus_x) >= 0.0 { 1.0 } else { -1.0 };

@@ -273,7 +273,6 @@ impl TrolleyRig {
                 RopeCmd::Hold { theta, psi } => Rope::Hold { theta, psi },
                 RopeCmd::Raise { auto, .. } => Rope::Aim { goal: self.goal_for(k, cmd, net, inp.pos, &inp.rot), auto },
             };
-            // (the script's lifting gear, where no hand or cab has the pole)
             let rope = match (rope, self.poles[k].gear_order()) {
                 (Rope::Idle, Some(at)) => Rope::Gear { at, goal: self.goal_for(k, RopeCmd::Raise { ray: None, auto: true }, net, inp.pos, &inp.rot) },
                 (Rope::Idle, None) => Rope::Idle,

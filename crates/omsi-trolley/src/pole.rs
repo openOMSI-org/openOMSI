@@ -471,7 +471,6 @@ impl Pole {
                 _ => {}
             },
             Rope::Gear { at, .. } => match self.mode {
-                // (the gear takes the boom down off the wire, from where it is)
                 PoleMode::OnWire if at < 1.0 => {
                     self.gear_top = Some((self.theta, self.psi));
                     self.dewire(DewireCause::Rope, amps, out, pole);
@@ -489,7 +488,6 @@ impl Pole {
             },
             Rope::Idle => match self.mode {
                 PoleMode::Hand if let_go && self.theta - self.rest() < HOOK_CATCH.0 && self.psi.abs() < HOOK_CATCH.1 => {
-                    // (brought down to the roof by the rope: hooked on)
                     self.mode = PoleMode::Down;
                     self.w_theta = 0.0;
                     self.w_psi = 0.0;
@@ -596,7 +594,6 @@ impl Pole {
                     self.w_theta = dth / dt;
                     self.w_psi = dps / dt;
                 } else if let Rope::Gear { at, .. } = rope {
-                    // the script's gear: the carriage between the hook and just under the wire
                     let (top, top_psi) = match goal_pt {
                         Some(_) => (tg, pg),
                         None => self.gear_top.unwrap_or(((self.def.work_angle as f64).to_radians(), 0.0)),
@@ -604,7 +601,6 @@ impl Pole {
                     let (top, top_psi) = (top.clamp(self.rest(), self.top()), top_psi.clamp(-1.7, 1.7));
                     self.ride(dt, self.rest() + (top - self.rest()) * at, top_psi * at);
                     if at >= 1.0 {
-                        // (let go at the top, to spring up on to the wire)
                         self.gear_on = false;
                         self.carriage = None;
                         self.mode = PoleMode::Free;
@@ -1043,7 +1039,6 @@ mod tests {
         let (mut p, net, pos, mut ev) = held_under_the_wire(0.3, 1.0);
         run(&mut p, &net, pos, 2.0, Rope::Idle, 0.0, &mut ev);
         assert_eq!(p.mode, PoleMode::Free);
-        // loose, it rises only as far as its rope lets it
         run(&mut p, &net, pos, 3.0, Rope::Idle, 0.0, &mut ev);
         assert!(p.theta <= (p.def.max_angle as f64).to_radians() + 1e-9 && p.theta > 0.6, "{}", p.theta.to_degrees());
     }
@@ -1085,11 +1080,9 @@ mod tests {
         let seen: Vec<f64> = gear_leg(&mut p, &net, pos, 0.5, 0.5, 0.0, 3.0, &mut ev).iter().map(|t| t - mid).collect();
         assert!(seen.iter().any(|d| *d > 0.0) && seen.iter().any(|d| *d < 0.0), "no bounce about halfway: {seen:?}");
         assert!(seen.last().unwrap().abs() < 0.01);
-        // on to the top: let go, the spring puts it on the wire
         gear_leg(&mut p, &net, pos, 0.5, 1.0, 2.0, 2.0, &mut ev);
         assert_eq!(p.mode, PoleMode::OnWire, "{:?}", ev.iter().map(|e| e.kind).collect::<Vec<_>>());
         assert!(!p.lifting());
-        // down: off the wire as the carriage leaves the top, and on to the hook
         gear_leg(&mut p, &net, pos, 1.0, 0.0, 4.0, 2.0, &mut ev);
         assert_eq!(p.mode, PoleMode::Down);
         let steps: Vec<_> = ev.iter().map(|e| e.kind).filter(|k| matches!(k, PoleEventKind::Released | PoleEventKind::Engaged | PoleEventKind::Dewired(_) | PoleEventKind::Latched)).collect();
@@ -1115,7 +1108,6 @@ mod tests {
         run(&mut p, &net, pos, 1.0, up, 0.0, &mut ev);
         assert_eq!(p.mode, PoleMode::OnWire);
         assert!(p.hold_engaged);
-        // still held, it stays on the wire
         run(&mut p, &net, pos, 0.5, up, 0.0, &mut ev);
         assert_eq!(p.mode, PoleMode::OnWire);
     }

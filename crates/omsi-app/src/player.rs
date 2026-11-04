@@ -782,7 +782,6 @@ impl Player {
         let bound = self.bound_actions();
         let s = omsi_sim::startup::StartUp::new(&self.vehicle, &bound);
         let shutting_down = s.shutting_down();
-        // (a trolleybus standing under its wire goes into service with its poles on it)
         if !shutting_down {
             self.vehicle.trolley_put_on(true);
         }

@@ -1040,7 +1040,6 @@ fn a_trolleybus_moves_only_on_current() {
     assert!(up.trolley.as_ref().unwrap().rig.circuit);
     assert!(up.var("Trolley_Powered").is_some());
     assert!(up.var("Trolley_Pole2_Bounce").is_some());
-    // the shortcut takes them down again, motor or not
     let mut up = up;
     assert!(up.trolley_take_off());
     for _ in 0..(60 * 4) {
@@ -1048,7 +1047,6 @@ fn a_trolleybus_moves_only_on_current() {
     }
     assert!(up.trolley.as_ref().unwrap().rig.poles.iter().all(|p| p.mode == omsi_trolley::PoleMode::Down));
     assert!(!up.trolley_take_off());
-    // an auto-start puts them on only under a wire
     let at = |y: f64| {
         let mut v = VehicleInstance::new(ty.clone(), VehicleHost::new(Default::default()));
         v.heading = 90.0;

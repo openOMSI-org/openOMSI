@@ -260,7 +260,6 @@ impl TrolleySound {
         });
         let sounds = rig.take_sounds();
         let tip = rig.hiss_pos.as_vec3();
-        // (a pole's sounds at its own hinge or shoe; the bus's own between the hinges, on its roof)
         let hinge = |k: usize| rig.hinge_at(k).map(|h| h.as_vec3());
         let (sum, n) = (0..rig.poles.len()).filter_map(hinge).fold((Vec3::ZERO, 0), |(s, n), h| (s + h, n + 1));
         let roof = if n == 0 { bus + Vec3::new(0.0, 0.0, 3.0) } else { sum / n as f32 };

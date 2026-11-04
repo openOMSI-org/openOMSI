@@ -2,7 +2,7 @@
 //! free camera) near its back the rope of the pole nearest to the player is held with R: the
 //! pole rises and follows where the player looks, and when R is let go it springs up to the
 //! wire it was aimed at (a wire missed, and the pole flies loose). T pulls the pole down;
-//! Shift takes both poles. Ctrl+R, from anywhere, puts both on the wire or takes them down.
+//! Shift takes both poles.
 
 use glam::{DVec3, Vec3};
 use omsi_sim::VehicleInstance;
@@ -31,16 +31,7 @@ pub(crate) fn apply(v: &mut VehicleInstance, h: &Hands) -> Option<&'static str> 
     }
     g.ropes.iter_mut().for_each(|r| *r = RopeCmd::Idle);
     let ctrl = (h.keys)(KeyCode::ControlLeft) || (h.keys)(KeyCode::ControlRight);
-    let shortcut = ctrl && (h.keys)(KeyCode::KeyR);
-    let was = std::mem::replace(&mut g.shortcut_held, shortcut);
-    if shortcut {
-        if was {
-            return None;
-        }
-        // (Ctrl+T is OMSI's change_give)
-        return Some(v.trolley_toggle());
-    }
-    // (in the cab R and T are the gearbox's: the poles answer only Ctrl+R there)
+    // (in the cab R and T are the gearbox's; Ctrl+R is `input_script`'s)
     if ctrl || matches!(h.view, "driver" | "pax") {
         return None;
     }

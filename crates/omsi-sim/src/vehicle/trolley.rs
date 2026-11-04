@@ -18,8 +18,6 @@ pub struct TrolleyGear {
     pub auto_raise_for: f32,
     /// Take the poles down by themselves for this many seconds (the player's shortcut).
     pub auto_lower_for: f32,
-    /// The player's shortcut key was held at the last frame (one press, one action).
-    pub shortcut_held: bool,
     /// Wheel torque of this step when a modelled drive supplies it (Nm).
     torque: Option<f32>,
     /// What the script's own torque is scaled by (no drive modelled).
@@ -116,7 +114,6 @@ impl TrolleyGear {
             net: None,
             auto_raise_for: 0.0,
             auto_lower_for: 0.0,
-            shortcut_held: false,
             ropes: vec![RopeCmd::Idle; def.poles.len()],
             torque: None,
             gate: 1.0,
@@ -229,11 +226,12 @@ impl VehicleInstance {
 
     /// The player's Ctrl+R: the poles on the wire, or down if one is on; what the driver is told.
     pub fn trolley_toggle(&mut self) -> &'static str {
-        let on = self.trolley.as_ref().is_some_and(|g| g.rig.poles.iter().any(|p| p.mode == omsi_trolley::PoleMode::OnWire));
-        match on {
-            true if self.trolley_take_off() => "Taking the poles down",
-            false if self.trolley_put_on(false) => "Putting the poles on the wire",
-            _ => "The poles are already down",
+        if self.trolley.as_ref().is_some_and(|g| g.rig.poles.iter().any(|p| p.mode == omsi_trolley::PoleMode::OnWire)) {
+            self.trolley_take_off();
+            "Taking the poles down"
+        } else {
+            self.trolley_put_on(false);
+            "Putting the poles on the wire"
         }
     }
 
@@ -316,8 +314,6 @@ impl VehicleInstance {
             .as_ref()
             .map(|l| l.switches.iter().map(|n| (n.clone(), self.var(n).unwrap_or(0.0))).collect())
             .unwrap_or_default();
-        // a model's script with the ropes in its hand (its own `[mouseevent]`s on boom and rope):
-        // per pole 1 held (its `_drag` adds the mouse's pixels to _X/_Y), -1 pulled down, 0 let go
         if self.trolley.as_ref().is_some_and(|g| g.rope_ids.is_none()) {
             let ids = self.trolley.as_ref().unwrap().names.rope.iter().map(|n| {
                 let id = |s: &str| omsi_script::compile::with_lower(s, |k| self.var_index.get(k).copied());
@@ -328,7 +324,6 @@ impl VehicleInstance {
             g.rope_ids = Some(ids);
             g.gear_ids = gear;
         }
-        // a model's script driving the lifting gear itself: its carriage, 0 on the hook, 1 at the wire
         if let Some(g) = self.trolley.as_deref_mut() {
             for (p, id) in g.rig.poles.iter_mut().zip(&g.gear_ids) {
                 p.gear = id.map(|i| self.state.vars[i as usize] as f64);
@@ -396,7 +391,6 @@ impl VehicleInstance {
                 g.grab = None;
             }
             if rope > 0.5 && g.grab == Some(k) {
-                // (the mouse up raises the pole, sideways swings it the way the screen goes)
                 g.grab_move.0 -= y as f64 * ROPE_RATE;
                 g.grab_move.1 += x as f64 * ROPE_RATE * g.rope_side;
                 g.grab_fresh = true;
@@ -448,7 +442,6 @@ impl VehicleInstance {
                 // (a window that does not feed the ray - no mouse - lets the pole go)
                 let up = matches!(g.rig.poles.get(k).map(|p| p.mode), Some(omsi_trolley::PoleMode::Free | omsi_trolley::PoleMode::OnWire));
                 if g.grab_manual {
-                    // (pushed on to the wire, the hand lets go of the rope)
                     let p = &g.rig.poles[k];
                     if p.hold_engaged || g.grab_idle > 2.0 {
                         g.grab = None;
