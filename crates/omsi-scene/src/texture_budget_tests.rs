@@ -378,6 +378,7 @@ fn player_textures_keep_full_detail_while_ai_keeps_1024_floor() {
     let player = renderer.add_texture_data(&mut scene, &picture);
     let ai = renderer.add_texture_data(&mut scene, &picture);
     let path = world.root.join("player.png");
+    let ai_path = world.root.join("ai.png");
     world
         .vehicle_textures
         .lock()
@@ -385,7 +386,7 @@ fn player_textures_keep_full_detail_while_ai_keeps_1024_floor() {
     world
         .vehicle_textures
         .lock()
-        .insert(world.root.join("ai.png"), (ai, 1));
+        .insert(ai_path.clone(), (ai, 1));
     world.player_textures.lock().insert(path.clone());
     world.set_texture_budget(1);
     for _ in 0..3 {
@@ -394,10 +395,12 @@ fn player_textures_keep_full_detail_while_ai_keeps_1024_floor() {
     assert_eq!(scene.texture_size_of(player), Some((2048, 2048)));
     assert_eq!(scene.texture_size_of(ai), Some((1024, 1024)));
     assert!(renderer.drop_top_levels(&mut scene, player, 1));
-    world
-        .upgrades_done
-        .lock()
-        .push((path, Arc::new(picture), None));
+    let picture = Arc::new(picture);
+    world.upgrades_done.lock().extend([
+        (path, picture.clone(), None),
+        (ai_path, picture, None),
+    ]);
     world.apply_texture_upgrades(&renderer, &mut scene, None);
     assert_eq!(scene.texture_size_of(player), Some((2048, 2048)));
+    assert_eq!(scene.texture_size_of(ai), Some((1024, 1024)));
 }

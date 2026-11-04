@@ -837,7 +837,7 @@ impl World {
                 texture_restore_room(self.texture_budget_bytes(), usage, video_limit, card)
             };
             let before = scene.texture_bytes_of(id);
-            let upload = if vid.is_some() {
+            let upload = if self.player_textures.lock().contains(&path) {
                 data.clone()
             } else {
                 let Some(upload) = fit_upgrade(&data, before.saturating_add(room)) else { continue };
