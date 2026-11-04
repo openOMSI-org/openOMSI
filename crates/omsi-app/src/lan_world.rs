@@ -125,10 +125,8 @@ struct Mirror {
     loading: HashSet<PathBuf>,
     loaded_rx: Option<mpsc::Receiver<(PathBuf, Option<Arc<VehicleType>>)>>,
     loaded_tx: Option<mpsc::Sender<(PathBuf, Option<Arc<VehicleType>>)>>,
-    /// The depot file of each vehicle type, by the name the host gave it (empty: a host
-    /// older than that, which then has the map's own).
     /// Depot files by vehicle type and name, and whether that is final (`mirror_hof`).
-    hofs: std::collections::HashMap<(PathBuf, String), (Option<Arc<omsi_vehicle::Hof>>, bool)>,
+    hofs: HashMap<(PathBuf, String), (Option<Arc<omsi_vehicle::Hof>>, bool)>,
     /// The line, destination, number and plate each car shows.
     shown: HashMap<u32, omsi_net::traffic_table::Meta>,
     /// Cars and people drawn (created here).
@@ -1456,7 +1454,7 @@ mod display;
 /// when the host has none, the one of that name here, else the map's own - never the one this
 /// player chose for their own bus (its rows are other destinations: the host's `#<row>` read
 /// there showed another sign).
-fn mirror_hof(hofs: &mut std::collections::HashMap<(PathBuf, String), (Option<Arc<omsi_vehicle::Hof>>, bool)>, world: &World, ty: &VehicleType, name: &str) -> Option<Arc<omsi_vehicle::Hof>> {
+fn mirror_hof(hofs: &mut HashMap<(PathBuf, String), (Option<Arc<omsi_vehicle::Hof>>, bool)>, world: &World, ty: &VehicleType, name: &str) -> Option<Arc<omsi_vehicle::Hof>> {
     let named = Some(name).filter(|n| !n.trim().is_empty());
     let host = |p: &std::path::Path| omsi_vehicle::Hof::load(p).map(|h| Some(Arc::new(h))).map_err(|e| log::warn!("depot file {name} from the host: {e}; this game's own is used")).ok();
     omsi_lan::mods::hofs::cached(hofs, (ty.def.path.clone(), name.to_lowercase()), named, host, || crate::find_hof_named(named, world, ty))

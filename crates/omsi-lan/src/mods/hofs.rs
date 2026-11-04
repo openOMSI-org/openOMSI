@@ -141,21 +141,22 @@ pub fn settled(name: &str) -> bool {
 /// the host's file of `name` once it is here (`host` loads it), else `own` (this game's lookup,
 /// made once per key: kept as provisional while the host's answer is on its way, and final once
 /// it has come). No name: `own`, final.
-pub fn cached<K: std::hash::Hash + Eq + Clone, T: Clone, S: std::hash::BuildHasher>(cache: &mut HashMap<K, (T, bool), S>, key: K, name: Option<&str>, host: impl Fn(&Path) -> Option<T>, own: impl FnOnce() -> T) -> T {
-    let mut host_file = |cache: &mut HashMap<K, (T, bool), S>| {
-        let t = host(&name.and_then(fetched)?)?;
-        cache.insert(key.clone(), (t.clone(), true));
-        Some(t)
-    };
+pub fn cached<K: std::hash::Hash + Eq + Clone, T: Clone, S: std::hash::BuildHasher>(cache: &mut hashbrown::HashMap<K, (T, bool), S>, key: K, name: Option<&str>, host: impl Fn(&Path) -> Option<T>, own: impl FnOnce() -> T) -> T {
+    cached_with(cache, key, name, fetched, settled, host, own)
+}
+
+/// `cached`, with how the host's answer is asked for and known to have come.
+fn cached_with<K: std::hash::Hash + Eq + Clone, T: Clone, S: std::hash::BuildHasher>(cache: &mut hashbrown::HashMap<K, (T, bool), S>, key: K, name: Option<&str>, fetched: impl Fn(&str) -> Option<PathBuf>, settled: impl Fn(&str) -> bool, host: impl Fn(&Path) -> Option<T>, own: impl FnOnce() -> T) -> T {
     let provisional = match cache.get(&key) {
         Some((t, true)) => return t.clone(),
         Some((t, false)) => Some(t.clone()),
         None => None,
     };
-    if let Some(t) = host_file(cache) {
+    if let Some(t) = name.and_then(&fetched).and_then(|p| host(&p)) {
+        cache.insert(key, (t.clone(), true));
         return t;
     }
-    let settled = name.is_none_or(settled);
+    let settled = name.is_none_or(&settled);
     let t = provisional.unwrap_or_else(own);
     cache.insert(key, (t.clone(), settled));
     t
@@ -191,19 +192,30 @@ mod tests {
         }
     }
 
-    /// This game's own lookup is made once per key, not once per vehicle.
+    /// While the host's file is on its way this game's own lookup stands in, made once; the
+    /// host's file replaces it once here and is kept. Without a host the own one is final.
     #[test]
-    fn the_own_lookup_is_made_once() {
-        let mut cache = HashMap::new();
-        let mut asked = 0;
-        for _ in 0..3 {
-            let t = cached(&mut cache, ("bus", "town"), Some("Town"), |_| Some(0), || {
-                asked += 1;
+    fn the_own_lookup_stands_in_until_the_hosts_file_is_here() {
+        use std::cell::Cell;
+        let mut cache = hashbrown::HashMap::new();
+        let (asked, here) = (Cell::new(0), Cell::new(false));
+        let mut look = |cache: &mut hashbrown::HashMap<_, _>| {
+            cached_with(cache, ("bus", "town"), Some("Town"), |_| here.get().then(|| PathBuf::from("Town.hof")), |_| here.get(), |_| Some(99), || {
+                asked.set(asked.get() + 1);
                 7
-            });
-            assert_eq!(t, 7);
-        }
-        assert_eq!(asked, 1);
+            })
+        };
+        assert_eq!(look(&mut cache), 7, "on its way: our own");
+        assert_eq!(look(&mut cache), 7);
+        assert_eq!(asked.get(), 1, "our own looked up once");
+        here.set(true);
+        assert_eq!(look(&mut cache), 99, "the host's, once here");
+        here.set(false);
+        assert_eq!(look(&mut cache), 99, "and kept");
+        assert_eq!(asked.get(), 1);
+        let mut none = hashbrown::HashMap::new();
+        assert_eq!(cached_with(&mut none, 1, Some("Town"), |_| None, |_| true, |_| Some(99), || 7), 7);
+        assert_eq!(none.get(&1), Some(&(7, true)), "the host has none: ours is final");
     }
 
     /// Another session's fetches are not this one's: a file, a failure or the count.
