@@ -1,4 +1,3 @@
-// Selecting a session prepares the next duty; only the drive bar starts a game.
 import { S, set } from '../store.js';
 import { choose, allowedBus, serverJoined } from '../data.js';
 

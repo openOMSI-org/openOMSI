@@ -77,7 +77,7 @@ function Lobby({ lan }) {
       <div class="grow">
         <div class="section-title">${t('Session code')}</div>
         <div class="code selectable">${lan.code}</div>
-        <div class="muted small">${t('Your friends paste it into Multiplayer → Connect by Code.')}</div>
+        <div class="muted small">${t('Drive')} → ${t('Join friends')}</div>
       </div>
       <${Button} kind="primary" icon="copy" label="Copy code" onClick=${copy} />
     </div>`}

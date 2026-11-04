@@ -60,7 +60,8 @@ export function JoinSessionDialog({ onClose }) {
         ${current?.unavailable && html`<${Notice} kind="warn"><b>${t('Could not read the session details')}</b><div class="muted small">${t('Ask your friend to keep the game running and send the latest code. Retry, or continue without session details.')}</div><details class="multiplayer-error-details"><summary>${t('Technical details')}</summary><div class="small selectable">${current.unavailable}</div></details></${Notice}>`}
       </div>
       ${current?.validated && !current.full && html`<div><${Button} label="Choose a bus without session details" onClick=${() => select(current.code, null)} /></div>`}
-      <details class="multiplayer-help-panel"><summary>${t('First time here?')}</summary><p class="muted small">${t('Ask your friend to start a hosted duty and copy the session code.')}</p><p class="muted small">${t("Sessions and servers are run by players, not by openOMSI. The host receives your driver name, network address, chat and voice, and may keep logs.")}</p></details>
+      <${Notice} icon="users"><p class="muted small">${t("Sessions and servers are run by players, not by openOMSI. The host receives your driver name, network address, chat and voice, and may keep logs.")}</p></${Notice}>
+      <details class="multiplayer-help-panel"><summary>${t('First time here?')}</summary><p class="muted small">${t('Ask your friend to start a hosted duty and copy the session code.')}</p></details>
     </div>
   </${Dialog}>`;
 }

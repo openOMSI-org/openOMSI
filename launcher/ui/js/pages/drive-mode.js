@@ -1,9 +1,8 @@
-// All drive layouts share the same multiplayer entry points and duty state.
 import { html, useState } from '../../vendor/preact-htm.js';
 import { useStore, toast } from '../store.js';
 import { t } from '../i18n.js';
 import { call } from '../api.js';
-import { choose } from '../data.js';
+import { choose, mapName } from '../data.js';
 import { Button, Notice } from '../ui.js';
 import { Icon } from '../icons.js';
 import { JoinSessionDialog } from './join-session.js';
@@ -15,6 +14,9 @@ export function DriveMode() {
   const mode = s.choice.lan_mode;
   const session = (s.poll.instances || []).filter((i) => i.running !== false)
     .map((i) => i.lan_status).find((x) => x?.role === 'host');
+  const remoteMap = s.choice.lan_map;
+  const mapMissing = mode === 'join' && remoteMap && Array.isArray(s.maps)
+    && !s.maps.some((m) => m.file.replace(/\\/g, '/').toLowerCase() === remoteMap.replace(/\\/g, '/').toLowerCase());
   const select = (value) => {
     if (value === mode) return;
     choose({ lan_mode: value });
@@ -26,6 +28,7 @@ export function DriveMode() {
     ${mode === 'join' ? html`<${Notice} icon="users"><div class="row wrap"><div class="grow">
       <b>${s.choice.lan_server?.name || t('Choose a bus and start')}</b>
       <div class="muted small">${t('The session is selected, not connected yet. Choose your bus and press Join and drive.')}</div>
+      ${mapMissing && html`<div class="muted small">${t('The server plays {}, which is not installed here: it is fetched from the server on joining.', [mapName(remoteMap)])}</div>`}
     </div><${Button} small kind="ghost" label="Cancel" onClick=${cancelSession} /></div></${Notice}>` : html`
       <div class="drive-mode-title small muted">${t('Play mode')}</div>
       <div class="drive-mode-toolbar">
@@ -41,6 +44,7 @@ export function DriveMode() {
           <${Icon} name="users" size=${18} /><strong>${t('Join friends')}</strong><${Icon} name="external" size=${16} />
         </button>
       </div>`}
+    ${(mode === 'host' || session) && html`<${Notice} icon="users">${t("As the host, your game receives your players' driver names, network addresses, chat and voice. You are responsible for what you keep of it, such as logs and bans.")}</${Notice}>`}
     ${mode !== 'join' && session?.code && html`<div class="drive-session">
       <div class="drive-session-info"><span class="small">${t('Running hosted session')}</span>
         <span class="drive-session-code selectable" title=${session.code}>${session.code}</span>

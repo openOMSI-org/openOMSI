@@ -1,5 +1,3 @@
-// Server management is separate from the shared Drive page's invitation flow.
-
 import { html, useState, useEffect, useRef } from '../../vendor/preact-htm.js';
 import { S, set, toast } from '../store.js';
 import { t } from '../i18n.js';
@@ -69,7 +67,7 @@ function Servers() {
   };
   const join = (x, fresh) => {
     const i = fresh || info[x.address]?.ok;
-    if (i?.max_players > 0 && i.players >= i.max_players) return toast(t('The session is full. Ask your friend to make room, then confirm again.'), 'error');
+    if (i?.max_players > 0 && i.players >= i.max_players) return toast(t('the session is full ({} players)', [i.players]), 'error');
     let connection;
     try {
       connection = serverJoinSettings(x.address, x.protocol || 'auto', i);
