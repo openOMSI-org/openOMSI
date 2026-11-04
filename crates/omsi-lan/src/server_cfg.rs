@@ -482,8 +482,6 @@ fn checked_password(password: String, key: &str) -> String {
 /// The buses a dedicated server allows (`vehicles`; empty: every bus it has).
 pub static SERVER_VEHICLES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
 
-/// Whether a `vehicles` list allows the bus `file` (an empty list: every bus). A player's
-/// game may name it with a folder before it (`D:/OMSI 2/Vehicles/…/….bus`).
 /// The AI limits a server sets for itself (`server.cfg`), over its machine's `settings.cfg`.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct AiLimits {
@@ -536,6 +534,8 @@ impl AiLimits {
     }
 }
 
+/// Whether a `vehicles` list allows the bus `file` (an empty list: every bus). A player's
+/// game may name it with a folder before it (`D:/OMSI 2/Vehicles/…/….bus`).
 pub fn allows(list: &[String], file: &str) -> bool {
     let norm = |s: &str| s.trim().replace('\\', "/").to_ascii_lowercase();
     let f = norm(file);
@@ -624,7 +624,6 @@ mod passenger_density_tests {
         assert!(!load("passengers = 50\n").passengers);
     }
 
-    /// The file written for a new server says what it means, and is read back as 1.
     /// The AI limits of the game's options, set for the server: left empty, the machine's
     /// settings.cfg says; out of range, the same (with a warning); set, they go over it as
     /// settings.cfg lines.
@@ -650,6 +649,7 @@ mod passenger_density_tests {
         assert_eq!(load("public_address = OFF\n").public_address, "off");
     }
 
+    /// The file written for a new server says what it means, and is read back as 1.
     #[test]
     fn the_default_file_has_the_density() {
         let d = load(super::DEFAULT_CFG);

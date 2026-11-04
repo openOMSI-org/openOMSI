@@ -433,10 +433,9 @@ pub fn take_local_admin() -> Vec<String> {
 /// its WebSockets now and then, the direct way does not. None: the tunnel it is.
 fn direct_of(url: &str) -> Option<String> {
     let info = omsi_net::ws::query(url, false).ok()?;
-    // (only a public IPv4 address and port: a status naming this machine, its network or a
-    // carrier's NAT would send our requests there)
-    let addr: std::net::SocketAddrV4 = info.direct.trim().parse().ok().filter(|a: &std::net::SocketAddrV4| (public_ip(*a.ip()) || (cfg!(test) && a.ip().is_loopback())) && a.port() != 0)?;
-    // (the tests' servers are on this machine)
+    // (only a public IPv4 address and port, a name resolved to one: a status naming this
+    // machine, its network or a carrier's NAT would send our requests there)
+    let addr = followable(&info.direct)?;
     let base = omsi_net::ws::http_base(&format!("http://{addr}"))?;
     if omsi_net::ws::http_base(url).as_deref() == Some(base.as_str()) {
         return None;
@@ -548,6 +547,20 @@ pub(crate) fn host_web_gateway(host: std::net::SocketAddr) -> Option<String> {
     })
 }
 
+/// The address a status's `direct` (`1.2.3.4:27025`, or `name:27025`) is followed to: its first
+/// IPv4 address that is of the internet (`public_ip`; a test's servers on this machine too).
+fn followable(direct: &str) -> Option<std::net::SocketAddrV4> {
+    use std::net::ToSocketAddrs;
+    let direct = direct.trim();
+    if direct.is_empty() {
+        return None;
+    }
+    direct.to_socket_addrs().ok()?.find_map(|a| match a {
+        std::net::SocketAddr::V4(v4) if v4.port() != 0 && (public_ip(*v4.ip()) || (cfg!(test) && v4.ip().is_loopback())) => Some(v4),
+        _ => None,
+    })
+}
+
 /// An address of the internet: not this machine's, a private network's, a link's, a carrier's NAT
 /// (100.64.0.0/10), a test network's, multicast or unspecified.
 fn public_ip(ip: std::net::Ipv4Addr) -> bool {
@@ -561,6 +574,11 @@ mod public_ip_tests {
     fn only_internet_addresses_are_followed() {
         use std::net::Ipv4Addr;
         assert!(super::public_ip(Ipv4Addr::new(8, 8, 8, 8)));
+        // a name is followed to its address (here this machine's, as the tests allow)
+        assert_eq!(super::followable("localhost:27025").map(|a| a.port()), Some(27025));
+        assert_eq!(super::followable("10.0.0.1:27025"), None);
+        assert_eq!(super::followable("8.8.8.8:0"), None);
+        assert_eq!(super::followable(""), None);
         for no in [[127, 0, 0, 1], [192, 168, 1, 2], [10, 0, 0, 1], [172, 16, 0, 1], [169, 254, 1, 1], [100, 72, 0, 1], [0, 0, 0, 0], [224, 0, 0, 1], [255, 255, 255, 255], [203, 0, 113, 7]] {
             assert!(!super::public_ip(Ipv4Addr::from(no)), "{no:?}");
         }

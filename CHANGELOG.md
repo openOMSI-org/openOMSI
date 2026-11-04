@@ -1040,8 +1040,7 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   every player**, not only on the server or the hosting game: the host now tells each player
   the number and plate it drew for a bus and the depot file it reads its signs from. A player's
   copy showed no number and read the destination in the depot file that player chose for their
-  own bus, so it showed another sign. Older games joining a newer server, and newer games
-  joining an older one, still play together (without the numbers, as before).
+  own bus, so it showed another sign.
 - **People no longer vanish in front of the players of a server.** When the pool of people
   (`ai_max_humans`) is full, somebody walking or standing out of sight is taken to make room,
   as in OMSI 2. A dedicated server judged "out of sight" from its own camera, where nobody

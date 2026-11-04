@@ -19,8 +19,18 @@ const MAX_FETCHES: usize = 64;
 /// The host's depot files by name in lower case (the file name without `.hof`).
 static OFFERED: Mutex<Option<HashMap<String, PathBuf>>> = Mutex::new(None);
 
-/// A player's fetches: the file, once here, or None when the host had none to give.
-static FETCHED: Mutex<Option<HashMap<String, Fetch>>> = Mutex::new(None);
+/// A player's fetches in the session they are of: the file, once here, or None when the host had
+/// none to give. Another session (another host, in the same process: the phone's launcher and
+/// game are one) starts afresh.
+static FETCHED: Mutex<Option<(u64, HashMap<String, Fetch>)>> = Mutex::new(None);
+
+/// This session's fetches, the table emptied when it is another session's.
+fn of_session(guard: &mut Option<(u64, HashMap<String, Fetch>)>, session: u64) -> &mut HashMap<String, Fetch> {
+    if guard.as_ref().is_none_or(|(s, _)| *s != session) {
+        *guard = Some((session, HashMap::new()));
+    }
+    &mut guard.as_mut().expect("set above").1
+}
 
 #[derive(Clone)]
 enum Fetch {
@@ -75,8 +85,9 @@ pub(super) fn answer(root: &Path, name: &str, out: &mut impl Write) -> std::io::
 /// stands in.
 pub fn fetched(name: &str) -> Option<PathBuf> {
     let key = valid(name)?;
+    let (host, session) = super::upload::host()?;
     let mut guard = FETCHED.lock().unwrap_or_else(|e| e.into_inner());
-    let map = guard.get_or_insert_with(HashMap::new);
+    let map = of_session(&mut guard, session);
     match map.get(&key) {
         Some(Fetch::Have(p)) => return Some(p.clone()),
         Some(Fetch::Asking | Fetch::None) => return None,
@@ -86,13 +97,11 @@ pub fn fetched(name: &str) -> Option<PathBuf> {
     if map.len() >= MAX_FETCHES {
         return None;
     }
-    let (host, session) = super::upload::host()?;
     map.insert(key.clone(), Fetch::Asking);
     drop(guard);
     let name = name.trim().to_string();
     std::thread::spawn(move || {
-        let got = fetch(host, session, &name);
-        let state = match got {
+        let state = match fetch(host, session, &name) {
             Ok(p) => {
                 log::info!("depot file {name}: the host's taken ({})", p.display());
                 Fetch::Have(p)
@@ -102,7 +111,12 @@ pub fn fetched(name: &str) -> Option<PathBuf> {
                 Fetch::None
             }
         };
-        FETCHED.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).insert(key, state);
+        // (kept only while its session is still the one: an answer from the last host is not
+        // this one's)
+        let mut guard = FETCHED.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((_, map)) = guard.as_mut().filter(|(s, _)| *s == session) {
+            map.insert(key, state);
+        }
     });
     None
 }
@@ -111,12 +125,15 @@ pub fn fetched(name: &str) -> Option<PathBuf> {
 /// none)? Before, a lookup of our own stands in only for the moment.
 pub fn settled(name: &str) -> bool {
     let Some(key) = valid(name) else { return true };
-    let guard = FETCHED.lock().unwrap_or_else(|e| e.into_inner());
-    match guard.as_ref().and_then(|m| m.get(&key)) {
+    // (no host to ask: our own lookup is all there is)
+    let Some((_, session)) = super::upload::host() else { return true };
+    let mut guard = FETCHED.lock().unwrap_or_else(|e| e.into_inner());
+    let map = of_session(&mut guard, session);
+    match map.get(&key) {
         Some(Fetch::Have(_) | Fetch::None) => true,
         Some(Fetch::Asking) => false,
-        // (never asked: no host to ask, or past the fetches one host gets)
-        None => super::upload::host().is_none() || guard.as_ref().is_some_and(|m| m.len() >= MAX_FETCHES),
+        // (never asked: past the fetches one host gets)
+        None => map.len() >= MAX_FETCHES,
     }
 }
 
@@ -148,6 +165,15 @@ mod tests {
         for bad in ["", "..", "../x", "a/b", "a\\b", "c:x", "a\nb"] {
             assert!(valid(bad).is_none(), "{bad:?}");
         }
+    }
+
+    /// Another session's fetches are not this one's: a file, a failure or the count.
+    #[test]
+    fn a_new_session_fetches_afresh() {
+        let mut table = None;
+        of_session(&mut table, 1).insert("town".into(), Fetch::None);
+        assert!(of_session(&mut table, 1).contains_key("town"));
+        assert!(of_session(&mut table, 2).is_empty());
     }
 
     /// The bus's own depot file is served under its name; another name is not a path.
