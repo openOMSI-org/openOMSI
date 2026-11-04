@@ -268,6 +268,7 @@ impl App {
             return false;
         }
         self.input.cursor = (x, y);
+        self.input.cursor_stale &= (x, y) == last;
         if !self.input.buttons_held.0 {
             self.menus.hud_resize = None;
         }

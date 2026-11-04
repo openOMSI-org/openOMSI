@@ -851,6 +851,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             cruise: None,
             look_lock: None,
             cursor_hidden: None,
+            cursor_stale: false,
             last_ctl_steer: None,
             mouse_pedals: (0.0, 0.0),
             mouse_kmh: 0.0,
