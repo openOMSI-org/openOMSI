@@ -14,6 +14,7 @@ mod navigation_ui;
 mod quick_actions_ui;
 pub(crate) mod quick_actions;
 
+use omsi_settings_ui::parse_row;
 use std::borrow::Cow;
 use glam::Vec2;
 use omsi_ui::paint::Align;
@@ -254,25 +255,6 @@ fn list_hint(kind: MenuKind) -> String {
         _ => "",
     };
     omsi_ui::tr(t).into_owned()
-}
-
-/// A row of a settings window, taken apart.
-struct Row<'a> {
-    name: &'a str,
-    kind: &'a str,
-    value: &'a str,
-    desc: &'a str,
-    frac: Option<f32>,
-}
-
-fn parse_row(label: &str) -> Row<'_> {
-    let mut p = label.split('\u{1f}');
-    let name = p.next().unwrap_or("");
-    let kind = p.next().unwrap_or("a");
-    let value = p.next().unwrap_or("");
-    let desc = p.next().unwrap_or("");
-    let frac = p.next().and_then(|x| x.parse().ok());
-    Row { name, kind, value, desc, frac }
 }
 
 /// How high a row of a settings window is: two lines when it has a description.

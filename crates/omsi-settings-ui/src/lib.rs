@@ -1,5 +1,30 @@
 //! Reusable grouping and search logic for settings interfaces.
 
+/// A row of a settings window, taken apart.
+pub struct Row<'a> {
+    pub name: &'a str,
+    pub kind: &'a str,
+    pub value: &'a str,
+    pub desc: &'a str,
+    pub frac: Option<f32>,
+}
+
+pub fn parse_row(label: &str) -> Row<'_> {
+    let mut p = label.split('\u{1f}');
+    let name = p.next().unwrap_or("");
+    let kind = p.next().unwrap_or("a");
+    let value = p.next().unwrap_or("");
+    let desc = p.next().unwrap_or("");
+    let frac = p.next().and_then(|x| x.parse().ok());
+    Row {
+        name,
+        kind,
+        value,
+        desc,
+        frac,
+    }
+}
+
 #[derive(Default)]
 pub struct SearchState {
     pub page: String,
@@ -43,7 +68,9 @@ pub fn option_sections(
                 ("shadow_size", "Lighting and shadows"),
                 ("reflections", "Lighting and shadows"),
                 ("clouds", "Sky and atmosphere"),
+                ("light_shadows", "Light effects"),
                 ("rain_quality", "Rain and road effects"),
+                ("vehicle_smoke", "Environment effects"),
             ],
         ),
         "Display and memory" => (
@@ -174,10 +201,8 @@ pub fn filter_groups(
             if items[index].0 == heading {
                 return true;
             }
-            let mut fields = items[index].1.split('\u{1f}');
-            let name = fields.next().unwrap_or("");
-            let desc = fields.nth(2).unwrap_or("");
-            omsi_ui::kit::matches(name, &query) || omsi_ui::kit::matches(desc, &query)
+            let row = parse_row(items[index].1);
+            omsi_ui::kit::matches(row.name, &query) || omsi_ui::kit::matches(row.desc, &query)
         });
     }
     groups.retain(|group| group.iter().any(|&index| items[index].0 != heading));
@@ -187,6 +212,24 @@ pub fn filter_groups(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn settings_rows_parse_optional_fields_without_changing_defaults() {
+        let row = parse_row("Volume\u{1f}v\u{1f}50%\u{1f}Engine sound\u{1f}0.5");
+        assert_eq!(
+            (row.name, row.kind, row.value, row.desc, row.frac),
+            ("Volume", "v", "50%", "Engine sound", Some(0.5))
+        );
+        let row = parse_row("Heading");
+        assert_eq!(
+            (row.name, row.kind, row.value, row.desc, row.frac),
+            ("Heading", "a", "", "", None)
+        );
+        assert_eq!(
+            parse_row("A\u{1f}v\u{1f}1\u{1f}desc\u{1f}invalid").frac,
+            None
+        );
+    }
 
     #[test]
     fn search_toolbar_moves_below_the_title_on_narrow_surfaces() {
@@ -242,30 +285,50 @@ mod tests {
     #[test]
     fn graphics_lighting_has_one_card_with_mode_dependent_rows() {
         let (first, starts) = option_sections("Graphics").unwrap();
-        for visible in [
-            vec!["reflections"],
-            vec!["shadows", "shadow_size", "reflections"],
-            vec!["ray_tracing", "shadows", "shadow_size", "reflections"],
-            vec!["ray_tracing", "shadow_size"],
+        for (visible, enhanced) in [
+            (vec!["reflections"], false),
+            (vec!["shadows", "shadow_size", "reflections"], false),
+            (
+                vec!["ray_tracing", "shadows", "shadow_size", "reflections"],
+                true,
+            ),
+            (vec!["ray_tracing", "shadow_size"], true),
         ] {
             let actions: Vec<_> = ["graphics"]
                 .into_iter()
                 .chain(visible)
-                .chain(["clouds", "rain_quality"])
+                .chain(["clouds"])
+                .chain(
+                    enhanced
+                        .then_some(["light_shadows", "cloud_shadows", "light_glow"])
+                        .into_iter()
+                        .flatten(),
+                )
+                .chain([
+                    "rain_quality",
+                    "vehicle_smoke",
+                    "puddles",
+                    "windy_trees",
+                    "road_snow",
+                ])
                 .map(|key| (key.to_string(), key.to_string()))
                 .collect();
             let grouped = sectioned_rows(actions.clone(), first, starts, "##adjust");
+            let mut expected = vec![
+                "Quality and presets",
+                "Lighting and shadows",
+                "Sky and atmosphere",
+            ];
+            if enhanced {
+                expected.push("Light effects");
+            }
+            expected.extend(["Rain and road effects", "Environment effects"]);
             assert_eq!(
                 grouped
                     .iter()
                     .filter_map(|(title, _)| title.as_deref())
                     .collect::<Vec<_>>(),
-                [
-                    "Quality and presets",
-                    "Lighting and shadows",
-                    "Sky and atmosphere",
-                    "Rain and road effects"
-                ]
+                expected
             );
             assert_eq!(
                 grouped.into_iter().map(|(_, row)| row).collect::<Vec<_>>(),
