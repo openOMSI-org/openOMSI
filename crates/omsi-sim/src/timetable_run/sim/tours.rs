@@ -63,7 +63,7 @@ impl ScheduleSim {
                 .data
                 .trips
                 .iter()
-                .position(|x| x.name.eq_ignore_ascii_case(&tt.trip))
+                .position(|x| x.is_named(&tt.trip))
             else {
                 continue;
             };
@@ -124,7 +124,7 @@ impl ScheduleSim {
         let mut out = Vec::new();
         let mut k = 0;
         for tt in &t.trips {
-            let Some(ti) = self.data.trips.iter().position(|x| x.name.eq_ignore_ascii_case(&tt.trip)) else { continue };
+            let Some(ti) = self.data.trips.iter().position(|x| x.is_named(&tt.trip)) else { continue };
             let trip = &self.data.trips[ti];
             let departure = tt.departure as f64 * 60.0;
             let times = &self.times[ti][usize::try_from(tt.profile).unwrap_or(0).min(self.times[ti].len() - 1)];

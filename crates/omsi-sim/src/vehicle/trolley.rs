@@ -183,6 +183,7 @@ impl VehicleInstance {
         };
         // radio switches: the cab's request, or the indicator in a vehicle that has none
         let radio = match self.var(&def.vars.switch_request) {
+            Some(v) if (1.5..2.5).contains(&v) => 2,
             Some(v) if v > 0.5 => 1,
             Some(v) if v < -0.5 => -1,
             Some(_) => 0,

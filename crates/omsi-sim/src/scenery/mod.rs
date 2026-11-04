@@ -75,7 +75,7 @@ fn mesh_key(name: &str) -> String {
 
 /// Builtin variables of scenery objects (`program/varlist_scenobj.txt`).
 pub fn builtin_scenobj_vars(root: &Path) -> Vec<String> {
-    let mut v: Vec<String> = match omsi_cfg::CfgFile::read(root.join("program/varlist_scenobj.txt")) {
+    let mut v: Vec<String> = match omsi_cfg::CfgFile::read(omsi_cfg::resolve_path(root, "program/varlist_scenobj.txt")) {
         Ok(f) => f.lines.iter().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect(),
         Err(_) => vec!["NightlightA", "InUse", "TrafficLightPhase", "TrafficLightApproach", "Colorscheme", "Signal", "NextSignal", "Refresh_Strings", "Switch"].into_iter().map(String::from).collect(),
     };

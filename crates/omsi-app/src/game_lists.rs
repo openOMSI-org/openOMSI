@@ -816,7 +816,7 @@ pub(crate) fn menu_extras(
     // a trip's line and terminus
     let trip_of = |name: &str| -> (String, String) {
         schedule
-            .and_then(|s| s.data.trips.iter().find(|x| x.name.eq_ignore_ascii_case(name)))
+            .and_then(|s| s.data.trips.iter().find(|x| x.is_named(name)))
             .map(|x| (x.line.trim().to_string(), x.terminus.trim().to_string()))
             .unwrap_or_default()
     };

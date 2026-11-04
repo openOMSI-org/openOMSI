@@ -104,6 +104,12 @@ struct RunningTrip {
 /// How long before a trip is due at a stop the people for it turn up there (s).
 pub const PAX_SPAWN_AHEAD: f64 = 15.0 * 60.0;
 
+pub const PAX_LATE_WAIT: f64 = 15.0 * 60.0;
+
+pub(crate) fn pax_turn_up_for(due: f64, tod: f64) -> bool {
+    (tod - PAX_LATE_WAIT..=tod + PAX_SPAWN_AHEAD).contains(&due)
+}
+
 /// How far from a route a bus stop may stand when the route is only a part of the trip (a
 /// stop of the missing part would otherwise be put on the nearest point of this one).
 const STOP_REACH: f64 = 25.0;

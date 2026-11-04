@@ -266,6 +266,7 @@ pub(super) fn audio(cx: AudioCx, dt: f32) {
     }
     if let (Some(a), Some(cam)) = (cx.sound.audio.as_ref(), cx.view.camera.as_ref()) {
         let (reverb_time, reverb_mix) = cx.world.world.as_ref().map(|w| w.reverb_at(cam.position)).unwrap_or((0.0, 0.0));
+        omsi_audio::soundset::set_master_volume(cx.common.settings.volume);
         a.set_listener(omsi_audio::Listener {
             position: cam.position.as_vec3(),
             forward: cam.forward(),
@@ -294,7 +295,7 @@ pub(super) fn audio(cx: AudioCx, dt: f32) {
         cx.sound.milezero.update(a, cx.common.settings.milezero, cx.common.settings.volume);
         if let Some(world) = cx.world.world.as_ref() {
             if let Some(net) = world.trolley_net.lock().clone() {
-                cx.sound.switch_sound.update(a, &net, *cx.clock.paused);
+                cx.sound.switch_sound.update(a, &net, cx.view.cam.in_cab && cx.player.player.is_some(), *cx.clock.paused);
             }
         }
         match cx.player.player.as_mut() {

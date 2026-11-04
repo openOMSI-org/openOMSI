@@ -40,7 +40,7 @@ pub(crate) enum Ev {
 const COUNT: usize = Ev::PriorityWarning as usize + 1;
 
 /// The variables' names, in the order of [`Ev`].
-const NAMES: [&str; COUNT] = [
+pub(super) const NAMES: [&str; COUNT] = [
     "Dirt_Norm",
     "DirtRate",
     "PrecipRate",

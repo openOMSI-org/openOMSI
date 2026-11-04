@@ -381,6 +381,52 @@ pub fn direct_choice(own: Option<Ipv4Addr>, seen: Option<Ipv4Addr>) -> Option<Di
     own.map(DirectChoice::Own).or(seen.filter(|ip| !ip.is_private() && !ip.is_loopback() && !cgnat(ip)).map(DirectChoice::Seen))
 }
 
+/// The web port of a dedicated server whose direct address is found by itself (`auto_direct`).
+static WEB_PORT: std::sync::OnceLock<u16> = std::sync::OnceLock::new();
+/// Found, or being tried: not again.
+static DIRECT_STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// A dedicated server finds its direct address by itself, on `web_port` (`public_address` left
+/// empty): a game joining through the tunnel tries it first.
+pub fn auto_direct(web_port: u16) {
+    let _ = WEB_PORT.set(web_port);
+}
+
+/// Called as the status is told: once the address can be known, it is, once, and handed to
+/// `tell`. A machine with an internet address of its own (on one of its adapters) is reached
+/// there. One behind a router is reached at the address the internet sees (STUN) only if the
+/// router forwards the web port - and never behind a carrier's NAT (CGNAT), where that address
+/// is the carrier's. So that one is told only if the server reaches itself there; a router that
+/// cannot loop back loses the shortcut, but nobody is sent to an address that does not answer.
+pub fn find_direct(lan: &crate::LanSession, tell: fn(&str)) {
+    use std::sync::atomic::Ordering;
+    let Some(&port) = WEB_PORT.get() else { return };
+    if DIRECT_STARTED.load(Ordering::Relaxed) {
+        return;
+    }
+    let own = local_addresses().into_iter().find(|a| a.kind == AddrKind::Public).map(|a| a.ip);
+    let seen = lan.public_addr().and_then(|a| match a.ip() {
+        std::net::IpAddr::V4(ip) => Some(ip),
+        std::net::IpAddr::V6(_) => None,
+    });
+    let Some(choice) = direct_choice(own, seen) else { return };
+    DIRECT_STARTED.store(true, Ordering::Relaxed);
+    let addr = std::net::SocketAddr::from((choice.ip(), port));
+    if let DirectChoice::Own(_) = choice {
+        log::info!("server: players joining through the tunnel try this machine's address {addr} first (public_address = off: never)");
+        tell(&addr.to_string());
+        return;
+    }
+    std::thread::spawn(move || {
+        if crate::ws::reachable(&format!("http://{addr}"), Duration::from_secs(3)) {
+            log::info!("server: reached itself at {addr}: players joining through the tunnel try it first (public_address = off: never)");
+            tell(&addr.to_string());
+        } else {
+            log::info!("server: not reached at {addr}, the address the internet sees (no forwarding of the web port, or a carrier's NAT): players join through the tunnel; public_address in server.cfg can name another");
+        }
+    });
+}
+
 #[cfg(test)]
 mod direct_tests {
     use super::*;

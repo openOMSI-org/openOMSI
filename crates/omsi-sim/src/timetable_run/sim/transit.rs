@@ -202,7 +202,7 @@ impl ScheduleSim {
     pub fn install_transit(&mut self, done: Vec<(String, Result<Routed, String>)>) {
         for (name, result) in done {
             self.transit_unrouted.remove(&name.to_ascii_lowercase());
-            let Some(ti) = self.data.trips.iter().position(|t| t.name.eq_ignore_ascii_case(&name)) else { continue };
+            let Some(ti) = self.data.trips.iter().position(|t| t.is_named(&name)) else { continue };
             let Some(meta) = self.data.transit_trips.iter().find(|t| t.trip.eq_ignore_ascii_case(&name)).cloned() else { continue };
             match result {
                 Err(why) => log::warn!("transport route {name}: {why}"),

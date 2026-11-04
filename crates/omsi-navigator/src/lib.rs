@@ -264,6 +264,7 @@ struct Route {
 
 /// Roads around a centre, built into vertex buffer 0.
 struct Roads {
+    reach: f64,
     /// `Navigator::look_key` it was built for.
     look: u64,
     anchor: DVec2,
@@ -417,7 +418,7 @@ pub struct Navigator {
     resizing: Option<(f32, [f32; 2], f32)>,
     /// The ground being built on a worker for the small map (its look and lane count) and for
     /// the city map, and the network's carriageways with whether the paving covers each.
-    panel_job: Option<build::Job<(u64, usize)>>,
+    panel_job: Option<build::Job<(u64, usize, f64)>>,
     city_job: Option<build::Job<CityJob>>,
     road_cache: Option<(u64, std::sync::Arc<Vec<(MapRoad, bool)>>)>,
     road_job: Option<(u64, std::sync::mpsc::Receiver<std::sync::Arc<Vec<(MapRoad, bool)>>>)>,
@@ -509,11 +510,13 @@ fn draw_every(now: u32, frame_dt: f32) -> u32 {
     (ideal.ceil() as u32).clamp(1, 4)
 }
 
+const MAX_ZOOM: f64 = 320.0;
+
 fn zoom_target(speed_kmh: f32, turn_dist: Option<f64>, turning_deg: f64) -> f64 {
     let speed = 150.0 + speed_kmh.abs() as f64 * 2.4;
     let turn = turn_dist.map_or(f64::MAX, |d| 150.0 + d * 0.6);
     let bend = 1.0 - (turning_deg.abs() / 25.0).clamp(0.0, 1.0) * 0.25;
-    (speed.min(turn) * bend).clamp(150.0, 320.0)
+    (speed.min(turn) * bend).clamp(150.0, MAX_ZOOM)
 }
 
 fn ease(dt: f32, tau: f32) -> f64 {

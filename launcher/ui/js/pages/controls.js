@@ -116,7 +116,7 @@ const STOCK_SPLIT = STOCK.findIndex((b) => b.action === 'throttle');
 const stockBindings = () => ({ game: STOCK.slice(0, STOCK_SPLIT).map((b) => ({ ...b })), vehicles: STOCK.slice(STOCK_SPLIT).map((b) => ({ ...b })) });
 
 /** The game's own actions, which the bus's section has no use for. */
-const GAME_ONLY = /^(vr_|chat_|view_|door_[1-4]$|doors_all$|doors_release$|gear_(up|down)$|sim_pause$|open_menu$|screenshot$|photo_mode$|quicksave$|toggel_|exit$|voice_radio$|pax_door_request$)/;
+const GAME_ONLY = /^(vr_|chat_|view_|door_[1-4]$|doors_all$|doors_release$|gear_(up|down)$|sim_pause$|open_menu$|screenshot$|photo_mode$|quicksave$|toggel_|exit$|voice_radio$|pax_door_request$|head_tracking_recenter$)/;
 
 const SECTIONS = [
   ['vehicles', 'Driving & the bus', 'The bus\'s own keys'],

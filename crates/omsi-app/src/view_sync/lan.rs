@@ -195,9 +195,16 @@ fn sound_remote(
         for mut s in view.sounds.drain(..) {
             s.stop_all(audio);
         }
-        if view.inside_sounds.is_none() && audio.clips_ready(&omsi_audio::SoundSet::clip_paths(&cfg, &dir)) {
+        if view.inside_sounds.is_none()
+            && audio.clips_ready(&omsi_audio::SoundSet::clip_paths(&cfg, &dir))
+            && table.part_sounds.iter().all(|(_, c, d)| audio.clips_ready(&omsi_audio::SoundSet::clip_paths(c, d)))
+        {
             let number = rv.vehicle().number();
-            view.inside_sounds = Some(omsi_audio::SoundSet::new(audio, &cfg.chosen_for(&number), &dir));
+            let mut ss = omsi_audio::SoundSet::new(audio, &cfg.chosen_for(&number), &dir);
+            for (k, c, d) in &table.part_sounds {
+                ss.add_part(*k, omsi_audio::SoundSet::new(audio, &c.chosen_for(&number), d));
+            }
+            view.inside_sounds = Some(ss);
         }
         if let Some(ss) = view.inside_sounds.as_mut() {
             let v = rv.vehicle();
@@ -210,6 +217,7 @@ fn sound_remote(
             // the exterior engine drowned the cab (#1759)
             omsi_audio::soundset::set_outside_open(Some(v.var("Snd_OutsideVol").unwrap_or(0.0)));
             ss.update_fired(audio, &|n| v.var(n), &xf, &fired, &at_fire);
+            ss.update_parts(audio, &|n| v.var(n), &|i| v.trailers.get(i).map(|t| t.world_transform()), &fired, &at_fire);
             for (t, f) in &fired_files {
                 ss.play_file_trigger(audio, t, f, &|n| v.var(n), &xf);
             }

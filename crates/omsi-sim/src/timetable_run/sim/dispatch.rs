@@ -128,8 +128,8 @@ impl ScheduleSim {
     /// go on to from there, each with the termini of the trips that do. A passenger waiting
     /// at the stop wants one of these targets and boards a bus whose terminus is among its
     /// termini (0x61c33c); the names compare exactly.
-    /// Per bus stop, the destinations of the trips due there within the next
-    /// [`PAX_SPAWN_AHEAD`] (today's departures, the stations they stop at after it): what
+    /// Per bus stop, the destinations of the trips due there from [`PAX_LATE_WAIT`] ago to
+    /// [`PAX_SPAWN_AHEAD`] ahead (today's departures, the stations they stop at after it): what
     /// the people turning up there now draw their destination from. Omsi.exe spawns
     /// people for a trip up to a quarter of an hour before it is due at their stop (pionsix's
     /// tests, #1436); the destinations of every trip of the map, whatever its hour or day,
@@ -141,7 +141,7 @@ impl ScheduleSim {
         let name_of = |id: i64| names.get(&id).cloned().unwrap_or_else(|| id.to_string());
         let tod = day_time - self.day_base;
         let longest = self.times.iter().flatten().map(|t| t.duration).fold(0.0, f64::max);
-        let from = self.departures.partition_point(|d| d.time < tod - longest - 60.0);
+        let from = self.departures.partition_point(|d| d.time < tod - longest - PAX_LATE_WAIT);
         let mut out: HashMap<i64, HashSet<String>> = HashMap::new();
         for i in from..self.departures.len() {
             let d = &self.departures[i];
@@ -155,7 +155,7 @@ impl ScheduleSim {
             let stations = trip_stations(&self.data.trips[d.trip]);
             for (k, sid) in stations.iter().enumerate() {
                 let due = d.time + tt.stations.get(k).map(|s| s.0).unwrap_or(0.0);
-                if !(tod - 60.0..=tod + PAX_SPAWN_AHEAD).contains(&due) || !tt.stops.get(k).copied().unwrap_or(true) {
+                if !pax_turn_up_for(due, tod) || !tt.stops.get(k).copied().unwrap_or(true) {
                     continue;
                 }
                 let here = name_of(*sid);

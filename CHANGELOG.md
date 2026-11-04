@@ -583,6 +583,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **A key or a wheel's button can recentre head tracking**: *Head tracking: centre again* takes
+  where your head is now as the middle (opentrack, native TrackIR and a Tobii eye tracker), without
+  putting the view straight as F1 does. It is on the keys list without a key; a button that already
+  had it in `gamectrler.cfg` did nothing until now.
 - **The flashlight no longer follows a hidden cursor**: with *Flashlight follows the cursor* on,
   the cursor hidden while a controller drives still steered the beam; now the beam shines
   straight ahead until the mouse brings the cursor back.
