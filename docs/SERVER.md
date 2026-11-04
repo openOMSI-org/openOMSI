@@ -182,7 +182,7 @@ Default is the value a new `server.cfg` is written with. A key missing from the 
 | `log_keep` | count up to 1000; `0`: none | `5` | earlier logs kept |
 | `log_addresses` | `0` / `1` | `0` | write players' addresses whole (for an abuse report) |
 
-`log_max_mb` and `log_keep` are read by `run-server.cmd`, `run-server.sh` and `start.sh`, which write `server.log`. `openomsi --server` run another way, `start.cmd` and Docker ignore them.
+`log_max_mb` and `log_keep` are read by `run-server.cmd`, `run-server.sh` and `start.sh`, which write `server.log`. `openomsi --server` run another way, `start.cmd` and Docker ([docker/server/README.md](../docker/server/README.md)) ignore them.
 
 `server-icon.png` beside `server.cfg` (64x64 PNG, under 256 KB) is the icon in the players'
 list.
@@ -218,8 +218,8 @@ relays them without decoding, needs no audio device and stores nothing.
 * *Radio* channel: everybody.
 * Players must also turn voice on in their settings (off by default). Set `voice = 0` to avoid
   the traffic.
-* Limits per player: 60 frames a second (talking sends 50), 400 bytes a frame. Over it, the
-  player is dropped, as for any traffic.
+* Limits per player: 60 frames a second (talking sends 50), 400 bytes a frame. Frames over
+  the rate or the size are dropped (the rate with a log line); the player stays connected.
 * `vmute <id>` / `vunmute <id>` (admin or moderator, from the player's page in the
   Administration menu or the Player list). The mute ends when the player leaves.
 * Old keys `voice_server_uid`, `voice_channel`, `voice_channel_password` are ignored, with a log
@@ -408,7 +408,7 @@ Older menus' `kick 3` (number only) still works.
 | Command | Role | What it does |
 |---|---|---|
 | `kick 3#17 reason` | moderator (not on an admin) | send away; they read the reason (or "sent away by an admin") and may rejoin |
-| `ban` | moderator (not on an admin) | keep out for this run, by the game's random nonce and source address |
+| `ban 3#17 reason` | moderator (not on an admin) | keep out for this run, by the game's random nonce and source address |
 | `hwban 3#17 session\|all [12h\|3d] reason` | moderator for `session`, admin for `all` | [machine ban](#machine-bans) |
 | `unban <id>` | admin | lift a machine ban |
 | `say …` | moderator | message to all |
@@ -418,9 +418,9 @@ Older menus' `kick 3` (number only) still works.
 | `duty-off 3#17` | moderator | take a player's duty back |
 | `service repair\|refuel\|wash [all\|3#17]` | moderator | repair, refuel or wash one player's bus, or all (the default) |
 | `vmute <id>`, `vunmute <id>` | moderator (may not mute an admin) | mute or unmute voice |
-| `unstick` | moderator | right a player's bus |
-| `goto` | moderator | move own bus to a player |
-| `bring`, `bringall` | admin | bring players to own bus |
+| `unstick 3#17` | moderator | right a player's bus |
+| `goto 3#17` | moderator | move own bus to a player |
+| `bring 3#17`, `bringall` | admin | bring one player, or every player, to own bus |
 | `clock 30600` | admin | set the clock (seconds after midnight) |
 | `time 3600` | admin | move the clock on (or back with a minus), at most a day |
 | `speed 2` | admin | clock speed, 1 to 30 |
@@ -522,7 +522,7 @@ Served under `/api/admin/` (panel under `/admin/`) on the web port. All JSON. To
 
 | Request | Body / query | Answer |
 |---|---|---|
-| `POST /api/admin/login` | `{"password": "…"}` | `200 {"token", "session"}`; `401` wrong password; `429 {"retry_after"}` too many lately; `404` no password set |
+| `POST /api/admin/login` | `{"password": "…"}` | `200 {"token", "session"}`; `401` wrong password; `429 {"retry_after"}` too many lately; `503` a moderator login while every session is an admin's; `404` no password set |
 | `POST /api/admin/logout` | `{}` | `200`: the session ends |
 | `GET /api/admin/session` | | `200 {"session"}` |
 | `GET /api/admin/state` | | `200 {"session", "server", "age_ms"}` |
@@ -667,7 +667,7 @@ Tell your players what is kept (the motd is a good place). The end of `server.cf
 
 | What | Where | How long |
 |---|---|---|
-| Joins and leaves, names, **every chat message**, admin actions, errors | `server.log` beside `server.cfg` (`run-server` and `start.sh`; Docker: `docker compose logs`) | New file at every start and past `log_max_mb` (20 MB; 0: no limit). `log_keep` (5) older ones as `server.1.log` (newest) … `server.5.log`; `log_keep = 0` keeps none. Docker: five files of 20 MB (`docker-compose.yml`) |
+| Joins and leaves, names, **every chat message**, admin actions, errors | `server.log` beside `server.cfg` (`run-server` and `start.sh`; Docker: `docker compose logs`, see [docker/server/README.md](../docker/server/README.md)) | New file at every start and past `log_max_mb` (20 MB; 0: no limit). `log_keep` (5) older ones as `server.1.log` (newest) … `server.5.log`; `log_keep = 0` keeps none. Docker: five files of 20 MB (`docker-compose.yml`) |
 | Players' internet addresses | same log | Public addresses keep only the network (`203.0.113.x`, `2001:db8:85a3::x`); LAN and local addresses are written whole. `log_addresses = 1` writes all whole (for abuse reports) |
 | Logins, refused passwords, admin and moderator operations; **whole source addresses** for web logins and refused passwords, regardless of `log_addresses` | `admin-audit.log` | Rotated past 1 MB, keeping `admin-audit.log.1` and `.2`: about 3 MB total |
 | Banned machines (hardware identifier) | `bans.json`, `owner_bans` | Until lifted |

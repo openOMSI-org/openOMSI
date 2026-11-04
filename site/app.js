@@ -119,7 +119,7 @@ async function latestBeta() {
 }
 
 function slug(text) {
-  return text.toLowerCase().replace(/[^\w\- ]+/g, "").trim().replace(/ /g, "-");
+  return text.toLowerCase().replace(/[^\w\- ]+/g, "").replace(/ /g, "-");
 }
 
 function showTemplate(id) {
@@ -137,9 +137,9 @@ function scanVerdict(r) {
   if (!r || !r.n) return { kind: "wait" };
   const flagged = r.m + r.s;
   if (!flagged) return { kind: "clean", label: "Clean", note: `no engine out of ${r.n} flags this file` };
-  if (r.fp) return { kind: "reviewed", label: "Checked", note: `${flagged} of ${r.n} engines flag this file; the maintainers reviewed it as a false positive${r.why ? ` (${r.why})` : ""}` };
-  if (flagged < 3) return { kind: "review", label: `${flagged} of ${r.n} engines`, note: `${flagged} of ${r.n} engines flag this file; the maintainers are reviewing it, see the report` };
-  return { kind: "flagged", label: "Flagged", note: `${flagged} of ${r.n} engines flag this file` };
+  if (flagged >= 3) return { kind: "flagged", label: "Flagged", note: `${flagged} of ${r.n} engines flag this file` };
+  if (r.fp) return { kind: "checked", label: "Checked", note: `${flagged} of ${r.n} engines flag this file; the maintainers reviewed it as a false positive${r.why ? ` (${r.why})` : ""}` };
+  return { kind: "checked", label: "Checked", note: `${flagged} of ${r.n} engines guess from how this file looks, usually a false positive: see the report` };
 }
 
 async function home() {
@@ -292,7 +292,7 @@ async function download(beta = false) {
     const sha = (a?.digest || "").replace(/^sha256:/, "");
     const v = scanVerdict(scanResult(scans, sha));
     if (v.kind === "wait") return scanning && sha ? `<span class="vt vt-wait" title="VirusTotal is scanning this file"><span class="material-icons">shield</span>Scanning…</span>` : "";
-    const [cls, icon] = { clean: ["", "verified_user"], reviewed: ["", "verified_user"], review: [" vt-review", "shield"], flagged: [" vt-bad", "gpp_bad"] }[v.kind];
+    const [cls, icon] = { clean: ["", "verified_user"], checked: ["", "verified_user"], flagged: [" vt-bad", "gpp_bad"] }[v.kind];
     return `<a class="vt${cls}" href="https://www.virustotal.com/gui/file/${esc(sha)}" target="_blank" rel="noopener" title="VirusTotal: ${esc(v.note)}"><span class="material-icons">${icon}</span>${esc(v.label)}</a>`;
   };
   const portable = (f, cls) => f.portable ? `<a class="btn btn-outlined ${cls}" href="${esc(f.portable.browser_download_url)}" download>Portable .zip</a>` : "";
@@ -359,7 +359,7 @@ async function scanFigures() {
     const done = files.map(a => scanResult(data, a.digest.slice(7))).filter(r => r?.n);
     const kinds = done.map(r => scanVerdict(r).kind);
     return { rel, scanned, files: files.length, done: done.length, checks: done.reduce((t, r) => t + r.n, 0),
-      flags: kinds.filter(k => k === "review" || k === "flagged").length, reviewed: kinds.filter(k => k === "reviewed").length };
+      flags: kinds.filter(k => k === "flagged").length, reviewed: kinds.filter(k => k === "checked").length };
   }).filter(r => r.files);
   const sum = k => rows.reduce((t, r) => t + r[k], 0);
   return { failed, rows, done: sum("done"), files: sum("files"), checks: sum("checks"), flags: sum("flags"), reviewed: sum("reviewed"),
@@ -379,9 +379,9 @@ async function scanStats() {
     </div>
     <ul class="vt-releases">${f.rows.map(r => {
       const state = r.flags ? ["gpp_maybe", "vt-state-warn"] : r.done ? ["verified_user", "vt-state-ok"] : ["shield", "vt-state-wait"];
-      const text = !r.scanned ? "not checked yet" : !r.done ? "scan queued" : `${r.done < r.files ? `${r.done} of ${r.files} downloads checked so far` : `all ${r.files} downloads checked`}, ${r.flags ? `${r.flags} flagged, under review` : r.reviewed ? `${r.reviewed} reviewed as false positive${r.reviewed > 1 ? "s" : ""}` : "no detection"}`;
+      const text = !r.scanned ? "not checked yet" : !r.done ? "scan queued" : `${r.done < r.files ? `${r.done} of ${r.files} downloads checked so far` : `all ${r.files} downloads checked`}, ${r.flags ? `${r.flags} flagged` : r.reviewed ? "no confirmed detection" : "no detection"}`;
       return `<li class="${state[1]}"><span class="material-icons">${state[0]}</span><b>${r.rel.prerelease ? "Beta" : "Stable"} ${esc(r.rel.tag_name.replace(/^v/, ""))}</b><span>${text}</span><a href="${esc(r.rel.html_url)}" target="_blank" rel="noopener">Details</a></li>`;
-    }).join("")}</ul><p class="vt-note">When an engine flags a file, the maintainers look into it. A file shown as Checked was flagged by an engine and reviewed as a false positive, with the reason next to it in the release notes, and the engine's maker is told. Every engine's answer is in the release notes.</p>`;
+    }).join("")}</ul><p class="vt-note">Like most new free programs, a download can get a guess from one or two small engines that judge files by how they look, without any known threat. Such a file is shown as Checked: these guesses are false positives, and the engine's maker is told. Every engine's answer is in the release notes.</p>`;
 }
 
 async function scanStrip() {
@@ -389,7 +389,7 @@ async function scanStrip() {
   if (!box) return;
   const f = await scanFigures();
   if (!view.contains(box) || !f.done || f.rows.some(r => !r.scanned)) return;
-  const verdict = `<b>${f.checks.toLocaleString("en-GB")}</b> antivirus checks, <b>${f.flags ? `${f.flags} flagged, under review` : f.reviewed ? "no detection apart from reviewed false positives" : "no detection"}</b>`;
+  const verdict = `<b>${f.checks.toLocaleString("en-GB")}</b> antivirus checks, <b>${f.flags ? `${f.flags} flagged` : f.reviewed ? "no confirmed detection" : "no detection"}</b>`;
   box.querySelector("span:last-child").innerHTML = f.done < f.files
     ? `VirusTotal is checking every download of openOMSI ${esc(f.versions)}: <b>${f.done} of ${f.files}</b> done so far, ${verdict}`
     : `<b>All ${f.files} downloads</b> of openOMSI ${esc(f.versions)} checked by VirusTotal: ${verdict}`;

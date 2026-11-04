@@ -8,8 +8,8 @@ To build from source, see [BUILDING.md](BUILDING.md). For OpenXR headsets on Win
 ## Quick start: from download to driving
 
 1. **Install OMSI 2**<br>openOMSI plays on your own copy. The Steam version works.
-2. **Download openOMSI**<br>Get the build for your system on the [download page](https://openomsi.org/download/). Windows: run the setup, no administrator rights needed. macOS: drag `openOMSI.app` onto Applications. Linux: unpack and run `./openomsi`. Android: install the `.apk`, allow access to all files, copy the OMSI 2 folder to the phone and, if it is not found, choose it under **Setup → Browse** ([ANDROID.md](ANDROID.md)).
-3. **Open the launcher**<br>Start openOMSI. The launcher usually finds OMSI 2 by itself; if not, choose the folder with `maps` and `Vehicles` on the **Setup** page.
+2. **Download openOMSI**<br>Get the build for your system on the [download page](https://openomsi.org/download/). Windows: run the setup, no administrator rights needed. macOS: drag `openOMSI.app` onto Applications. Linux: unpack and run `./openomsi`. Android: install the `.apk`, allow access to all files, copy the OMSI 2 folder to the phone and, if it is not found, choose it under **More → Setup → Browse** ([ANDROID.md](ANDROID.md)).
+3. **Open the launcher**<br>Start openOMSI. The launcher usually finds OMSI 2 by itself; if not, choose the folder with `maps` and `Vehicles` on the **Setup** page (on Android under **More**).
 4. **Build your duty**<br>On the **Drive** page, pick a map and a start point, then **Timetable** with a line and a tour (or **Free drive**), a bus, and the time, date and weather. Click **Start the duty** (**Start driving** for a free drive).
 5. **Start the bus**<br><kbd>E</kbd> battery and ignition → hold <kbd>M</kbd> one second to start the engine → <kbd>Shift</kbd>+<kbd>D</kbd> drive → <kbd>.</kbd> release the parking brake. Or <kbd>Shift</kbd>+<kbd>U</kbd> for the whole start-up (a stock SD200; other buses may differ).
 6. **Drive**<br><kbd>W</kbd> or <kbd>↑</kbd> throttle, <kbd>S</kbd> or <kbd>↓</kbd> brake, <kbd>A</kbd> <kbd>D</kbd> steer, <kbd>Z</kbd> <kbd>X</kbd> <kbd>C</kbd> indicators.
@@ -117,7 +117,7 @@ sudo steamos-readonly enable
 
 ### Other platforms
 
-Android shows the same page in a web view over the game window. iPhone, iPad and the Mac app have their own launcher (SwiftUI).
+Android shows the same launcher in a web view over the game window, laid out for fingers (see [Pages](#pages)). iPhone, iPad and the Mac app have their own launcher (SwiftUI).
 
 ### Bus preview
 
@@ -126,6 +126,8 @@ The chosen bus is drawn by the game's renderer, running beside the launcher as i
 ### Pages
 
 The left menu groups the pages: **Play** (Drive, Depot, Multiplayer, Running games), **Content** (Mods, Timetable, Add-ons), **Options** (Settings, Controls, Setup), **Help** (Tutorials, Troubleshooting). The driver's **Profile** is at the bottom.
+
+On Android the menu is a bar of six: **Drive**, **Multiplayer**, **Profile**, **Mods**, **Settings** and **More**. **More** holds Running games, Troubleshooting, Tutorials, Setup and Add-ons; Controls opens from Settings. Depot and Timetable are not there.
 
 - **Drive**: build the duty. Bus (search, liveries, depot file, number plate), map and start point, line and tour (lines running on the chosen date) or free drive, start time, date, season, weather, traffic, passengers, and the roadbook with IBIS codes. Then **Start the duty** (or **Start driving** for a free drive). Settings → General → *Launcher layout*: *Big Map*, *Control Room*, *Classic+* or *Classic* (in steps).
 - **Depot**: your own buses (`depot.json`), each keeping its number plate, livery, fleet number, kilometres, fuel, dirt and faults from one drive to the next. Refuel, wash, repair, see its past duties, or **Drive this bus**.
@@ -143,7 +145,7 @@ The left menu groups the pages: **Play** (Drive, Depot, Multiplayer, Running gam
   - *General*: launcher look and layout, language, in-game interface size, chat, photo mode, navigator, updates, reset all settings.
   - *Troubleshooting*: opens Help → Troubleshooting at its *Model test*; not on phones and tablets.
   - **Discord Rich Presence** (General, off by default): shows the launcher, or your map, bus, line and multiplayer status, in Discord. Discord must run on the same computer.
-  - **Voice chat** (Sound, off by default): in multiplayer hold *Voice: nearby* (V) to reach nearby players, or *Voice: radio* (B) for the whole session. Keys are on Controls. Enabling it triggers the system's microphone prompt. See [VOICE.md](VOICE.md).
+  - **Voice chat** (Sound, off by default): in multiplayer hold *Voice: nearby* (V) to reach nearby players, or *Voice: radio* (B) for the whole session. By default V also shows and hides the chat; give one of them another key on Controls. Enabling it triggers the system's microphone prompt. See [VOICE.md](VOICE.md).
 - **Controls**: `Inputs/keyboard.cfg`. Click a key, press the new one; clashes show red.
   - Keys and controllers live in `~/.openomsi/Inputs` (Windows: `C:\Users\<you>\.openomsi\Inputs`), so updates and new program folders keep them. Keys saved beside the program are brought over there.
   - The list applies with *Driving keys: Custom controls* (Settings → Driving). A ready-made layout (W A S D, arrows) wins over the list; the page says so, and changing a key switches to Custom controls.
@@ -184,7 +186,7 @@ All vehicle keys of `Inputs/keyboard.cfg` work as in OMSI. openOMSI adds simpler
 | **Ctrl+S** (or Alt+S) | Quick save (OMSI's `quicksave`) |
 | F9 | Write the run into the personnel file |
 | **Ctrl+Shift+H** | Skip the next stop |
-| **Ctrl+Shift+G** | Get out (`get_up`) |
+| **Ctrl+Shift+G** | Get out (`get_up`); only with Settings → Gameplay → *Ability to get up* on (off by default) |
 | **Esc** | Game menu |
 | Home | Ticket desk camera (as OMSI's keyboard.cfg binds it) |
 | Insert | Timetable view (as OMSI's keyboard.cfg binds it) |
@@ -369,7 +371,7 @@ On a duty the game writes a **journey log** to the content folder's `Journeys`: 
 
 A map with an overhead wire (`trolley.txt`) and a bus with poles (`[trolley_pole]`) make a trolleybus that moves only on current. Raise the poles from outside:
 
-1. Get out (Ctrl+Shift+G, the `get_up` setting) or use the outside camera (F3).
+1. Get out (Ctrl+Shift+G; first turn on Settings → Gameplay → *Ability to get up*, off by default) or use the outside camera (F3).
 2. Go to the back of the bus.
 3. Hold **R** and look at the wire; the nearest pole rises and follows your look.
 4. Release R when the boom is under the wire.
@@ -513,7 +515,7 @@ Settings → General → *Navigator*:
 | *AI vehicles on the map* | `nav_ai` | on | AI vehicles as dots on navigator and city map. |
 | *Map surface under the roads* | `nav_surface` | on | The map's water, green land, rivers and rail under the roads, when the map has a package ([MAP_PACKAGE.md](MAP_PACKAGE.md)). |
 
-`nav_light` (`settings.cfg`, off by default): the navigator's maps in a light look.
+The navigator's maps follow the interface theme, `ui_theme` (`dark` by default, or `light`): Settings → General → *Launcher theme*, or *Interface theme* in the game's options. The old `nav_light` key is gone: `nav_light=1` in a file without `ui_theme` opens as the light theme, and the key is not written back.
 
 ## Settings reference
 
@@ -830,7 +832,7 @@ The content folder sits beside the game (beside `openOMSI.app` on macOS), or in 
 
 - Laid out like OMSI 2: `Vehicles`, `maps`, `Sceneryobjects`, `Splines`, `Texture`, `Fonts`, `Plugins`, `TicketPacks`, `Drivers`, `Weather`, ...
 - Searched *before* the original folder: mod files work as if copied into OMSI 2, and same-named files replace stock ones.
-- The original installation is never written to.
+- openOMSI never changes OMSI 2's own files.
 - `OMSI_CONTENT=/some/dir` moves it. The Mods page's **Content folder** button opens it.
 
 ### Install a mod
@@ -907,7 +909,7 @@ Over the internet no VPN or port forwarding is needed:
 ### Chat
 
 - **/** opens the chat line; Enter sends, Esc cancels. If your keyboard file uses **/** for something else (e.g. a manual gearbox), the key left of 1 or `\` opens it.
-- **V** hides/shows the chat. Both keys are on the Controls page.
+- **V** hides/shows the chat. By default V is also *Voice: nearby* (one key for both); give one of them another key on the Controls page, where both chat keys are.
 - Joins and leaves are announced.
 - Chat scales with the window, plus its own size: **Ctrl + mouse wheel** over it, or Settings → General → *Chat size* (50-300 %).
 
@@ -994,7 +996,7 @@ A small part of OMSI's map editor, in game. **Ctrl+Shift+E** (or *Object editor*
 Copies of the bus mirrors laid over the picture, so you see behind without looking at the glass.
 
 - **Ctrl+M** (in the cab) shows or hides them. The first time, a panel appears for each bus.
-- **Ctrl+Shift+M** starts and ends the editor.
+- **Ctrl+Shift+M** starts and ends the editor, outside VR. In VR the same keys place the navigator (`vr_position_navigator`).
 - Outside the editor, panels are only pictures; mouse and keys work as usual.
 - A panel shows its mirror as the model's glass does, however it maps the picture (flipped, or sideways).
 

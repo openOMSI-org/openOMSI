@@ -6,7 +6,9 @@ renderer, simulation, scripts, maps, buses and mods. Only the controls differ.
 ## Requirements
 
 - arm64, Android 8.0 or newer.
-- A GPU with Vulkan 1.1. Without Vulkan, openOMSI tries OpenGL ES 3.
+- A GPU with Vulkan 1.1. The app declares Vulkan 1.1 as required, so app stores do not offer it
+  on phones without it. On such a phone only a sideloaded APK installs; openOMSI then tries
+  OpenGL ES 3.
 - An OMSI 2 installation from a PC.
 
 ## Installing the game on the phone
@@ -19,8 +21,11 @@ renderer, simulation, scripts, maps, buses and mods. Only the controls differ.
 3. Copy the **whole OMSI 2 folder** (the one with `Omsi.exe`, `maps`, `Vehicles`) onto the
    phone, for example to `openOMSI/OMSI 2` in the internal storage. Use a USB cable from a
    PC, or a USB stick.
-4. openOMSI finds the folder by itself in `openOMSI/`, `Download/` or the top of the storage.
-   Anywhere else, choose it in the launcher: **Setup → Browse → Use this folder → Save**.
+4. openOMSI finds the folder by itself in `openOMSI/`, `Download/`, `Games/` or the top of the
+   internal storage (`/storage/emulated/0` or `/sdcard`), either as that folder itself or in a
+   folder inside it named `OMSI 2`, `OMSI 2 Original`, `Omsi 2`, `OMSI2`, `omsi2`,
+   `OMSI 2 Steam Edition` or `OMSI`. Anywhere else, choose it in the launcher:
+   **More → Setup → Browse → Use this folder → Save**.
 5. Optional, **mods**: copy mod folders or .zip, .7z and .rar files into `openOMSI/Mods`.
    They are installed when the launcher opens. You can also use the launcher's **Mods** page
    (Choose a folder / Choose an archive). .zip archives in `openOMSI/Archives` are used in
@@ -42,7 +47,7 @@ All on-screen buttons use Material Symbols.
 
 | Control | Action |
 |---|---|
-| Steering wheel (bottom left) | Take the rim and turn it; it follows the finger. 120° of rim is full lock. Let go and it returns as the bus's wheel does with the keys: slowly when standing, faster when rolling, not at all with Old Steering. |
+| Steering wheel (bottom left) | Take the rim and turn it; it follows the finger. Full lock is half of *Full lock at* (Settings → Driving) when that is set, else half of *Wheel rotation*: 450° each way by default. Let go and it returns as the bus's wheel does with the keys: slowly when standing, faster when rolling, not at all with Old Steering. |
 | Tilt steering | Tilt the phone to steer (cab panel → Tilt steering). |
 | Pedals (bottom right) | Brake and accelerator. The higher up the pedal you press, the harder. |
 | Above the pedals | Gearbox (R N D for an automatic, − N + for a manual), one button per door, front to back. |

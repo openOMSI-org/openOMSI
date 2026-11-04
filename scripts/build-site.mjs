@@ -33,7 +33,7 @@ const newPath = old => {
   const m = p.match(/^\/(mapper\/)?docs\/([A-Za-z0-9_]+)$/);
   return (m ? docHref(m[1] ? "mapper" : "openomsi", m[2]) : p === "/" || !p ? "/" : p.replace(/\/?$/, "/")) + (a ? "#" + a : "");
 };
-const slug = t => t.toLowerCase().replace(/[^\w\- ]+/g, "").trim().replace(/ /g, "-");
+const slug = t => t.toLowerCase().replace(/[^\w\- ]+/g, "").replace(/ /g, "-");
 
 const shell = fs.readFileSync("site/index.html", "utf8");
 const template = id => shell.match(new RegExp(`<template id="${id}">([\\s\\S]*?)</template>`))[1];

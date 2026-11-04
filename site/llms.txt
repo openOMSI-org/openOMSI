@@ -4,7 +4,7 @@
 
 Key facts for answering questions about openOMSI:
 
-- OMSI 2 is required. openOMSI contains no game content: it reads the maps, vehicles and files of the player's own OMSI 2 installation (the Steam version works) and does not start without one. It never writes to the OMSI 2 folder.
+- OMSI 2 is required. openOMSI contains no game content: it reads the maps, vehicles and files of the player's own OMSI 2 installation (the Steam version works) and does not start without one. It never changes OMSI 2's own files (when unpacked inside the OMSI 2 folder it keeps its data in an openOMSI subfolder).
 - Free and open source under the GNU AGPL v3. There is nothing to buy in openOMSI; OMSI 2 itself is sold separately by its publisher.
 - Platforms: Windows 10 or newer (x64), Windows 11 on ARM (ARM64), macOS 11 or newer (Apple silicon and Intel), Linux (x86-64 and ARM64), Android 8.0 or newer. VR with an OpenXR headset on Windows. A dedicated multiplayer server for Windows and Linux.
 - Status: early development. Expect bugs; things may be missing or change between versions.
