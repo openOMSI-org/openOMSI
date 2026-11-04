@@ -1,4 +1,5 @@
 import { html, render } from '../ui/vendor/preact-htm.js';
+import { DriveMode } from '../ui/js/pages/drive-mode.js';
 import { MultiplayerPage } from '../ui/js/pages/multiplayer.js';
 import { CHOICE_DEFAULTS } from '../ui/js/data.js';
 import { S, set } from '../ui/js/store.js';
@@ -54,19 +55,20 @@ export async function run(root) {
   const mount = async () => {
     render(null, root);
     await sleep(30);
-    set({ page: 'multiplayer', choice: { ...CHOICE_DEFAULTS }, maps: [{ file: server.map }], vehicles: [], poll: { instances: [] }, cache: {} });
-    render(html`<${MultiplayerPage} />`, root);
-    await sleep(150);
+    set({ page: 'drive', driveBeforeJoin: null, choice: { ...CHOICE_DEFAULTS }, maps: [{ file: server.map }], vehicles: [], poll: { instances: [] }, cache: {} });
+    render(html`<${DriveMode} />`, root);
+    await sleep(100);
+    await click('Join friends');
   };
   try {
     await mount();
-    assert(button('Join friends') && button('Invite friends'), 'Separate join and invite actions are required: ' + root.textContent);
+    assert(root.querySelector('[role="dialog"]'), 'Join friends must use a modal dialog');
     assert(button('Confirm session')?.disabled, 'An empty code must not be submitted');
     assert(root.querySelector('details.multiplayer-help-panel:not([open])'), 'Keep first-time help collapsed');
     report.push('PASS separate actions, compact input and collapsed help');
 
     scenario = 'invalid';
-    await type('bad-code');
+    await type('OMSI-BAD-CODE');
     await click('Confirm session');
     await until(() => root.textContent.includes('Invalid test code'));
     assert(!button('Choose a bus'), 'An invalid code must not advance');
@@ -76,11 +78,8 @@ export async function run(root) {
     scenario = 'ok';
     await type(' OMSI-TEST-CODE ');
     await click('Confirm session');
-    await until(() => !!button('Choose a bus'));
-    assert(root.querySelector('.multiplayer-session-summary')?.textContent.includes('Test host'), 'Show the queried host in the summary');
-    assert(button('Choose a bus').classList.contains('primary'), 'Make selecting a bus the primary next action');
-    assert(!button('Confirm session'), 'Demote confirmation after the session is found');
-    await click('Choose a bus');
+    await until(() => S.choice.lan_mode === 'join');
+    assert(!root.querySelector('[role="dialog"]'), 'Confirmation must close the dialog');
     assert(S.page === 'drive' && S.choice.lan_mode === 'join', 'Continue to real Drive settings');
     assert(S.choice.lan_addr === 'OMSI-TEST-CODE', 'Trim the code');
     assert(S.choice.map === server.map, 'Use the host map when installed');
@@ -135,27 +134,29 @@ export async function run(root) {
     pending = null;
     await click('Confirm session');
     await until(() => !!pending);
-    await click('Invite friends');
+    root.querySelector('.dialog-head button').click();
     pending();
     await sleep(100);
     assert(!root.textContent.includes('Test host'), 'Ignore the query after leaving the join flow');
     report.push('PASS leaving the join flow invalidates pending results');
 
     scenario = 'ok';
-    await click('Servers');
-    await until(() => !!button('Join') && root.textContent.includes('Test host'));
-    assert(button('Add server') && button('Join'), 'Keep the existing server list and join action');
-    report.push('PASS server list and join entry retained');
+    render(null, root);
+    render(html`<${MultiplayerPage} />`, root);
+    await until(() => !!button('Select server') && root.textContent.includes('Saved test server'));
+    assert(button('Use a server address') && button('Select server'), 'Keep server management and selection');
+    assert(!root.querySelector('#multiplayer-code'), 'Servers must not duplicate friend joining');
+    report.push('PASS separate server list and address dialog entry retained');
 
     await mount();
+    root.querySelector('.dialog-head button').click();
+    await sleep(80);
     scenario = 'tunnel-error';
-    await click('Invite friends');
-    assert(S.choice.lan_mode === 'off', 'Viewing the invite flow must not enable hosting');
-    await click('Set up a hosted duty');
-    assert(S.choice.lan_mode === 'host' && S.page === 'drive', 'One click must enable hosting and continue to Drive');
+    root.querySelector('input[value="host"]').click();
+    assert(S.choice.lan_mode === 'host' && S.page === 'drive', 'Host mode must use the existing Drive page');
     await until(() => S.toasts.some((x) => x.text.includes('Internet preparation could not be started')));
     assert(!S.toasts.some((x) => x.text.includes('Tunnel unavailable')), 'Do not expose raw technical errors in the background warning');
-    report.push('PASS one-click host setup continues even if background preparation fails');
+    report.push('PASS host setup continues even if background preparation fails');
 
     set({ poll: { instances: [{ running: false, lan_status: { role: 'host', code: 'STOPPED' } }, { running: true, lan_status: { role: 'host', code: 'OMSI-LIVE', tunnel: true } }] } });
     await sleep(150);

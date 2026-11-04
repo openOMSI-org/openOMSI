@@ -14,6 +14,7 @@ import { RouteMap } from '../routemap.js';
 import { tourId, choose, curMap, curBus, curLine, curTour, pickedTrip, realTime, realDate, start, weatherName, weatherOfItsOwn, askJoined, noServerBus, mapName, serverBuses, busFile, transportRefusal, serverFleetSelection } from '../data.js';
 import { hms, mapPicture, tripAt, depotRun, pickTrip, lineMatches, findTours, chooseLine, chooseTour, setSeason, localNow, SEASONS, PHASES, TripEnds, tripTime, weatherFacts, entryName } from '../pages/drive.js';
 import { MultiplayerPage } from '../pages/multiplayer.js';
+import { DriveMode } from '../pages/drive-mode.js';
 import { ProfilePage } from '../pages/profile.js';
 import { ModsPage } from '../pages/mods.js';
 import { TroubleshootPage, problems } from '../pages/troubleshoot.js';
@@ -26,7 +27,7 @@ import { AddonsPage } from '../pages/addons.js';
 
 const TABS = [
   ['drive', 'Drive', 'bus'],
-  ['multiplayer', 'Multiplayer', 'users'],
+  ['multiplayer', 'Servers', 'globe'],
   ['profile', 'Profile', 'user'],
   ['mods', 'Mods', 'puzzle'],
   ['settings', 'Settings', 'sliders'],
@@ -123,25 +124,13 @@ function MobileDrive() {
       <div class="m-go">
         ${trip && !depotRun(trip) ? html`<div class="sign"><span class="no">${trip.line}</span><span class="to">${trip.terminus}</span></div>` : c.free && html`<div class="sign"><span class="no"><${Icon} name="route" /></span><span class="to">${t('Free drive')}</span></div>`}
         <button class="m-start" disabled=${!ready || busy} onClick=${() => go()}>
-          <${Icon} name="play" size=${24} />${busy ? t('Starting…') : joined ? t('Join and drive') : c.free ? t('Start driving') : t('Start the duty')}
+          <${Icon} name="play" size=${24} />${busy ? t('Starting…') : joined ? t('Join and drive') : c.lan_mode === 'host' ? t('Host and drive') : c.free ? t('Start driving') : t('Start the duty')}
         </button>
       </div>
     </section>
     <section class="m-list">
-      ${joined && html`<div class="m-group">
-        <button class="m-row" onClick=${() => choose({ lan_mode: 'off' })}>
-          <span class="m-row-icon"><${Icon} name="users" /></span>
-          <span class="m-row-label">${t('Joining {server}', { server: srv.name || c.lan_addr })}${noServerBus() && html`<small>${t('The server offers none of the vehicles installed here')}</small>`}</span>
-          <span class="m-row-value">${t('Leave the server')}</span>
-        </button>
-      </div>`}
-      ${c.lan_mode === 'host' && html`<div class="m-group">
-        <button class="m-row" onClick=${() => choose({ lan_mode: 'off' })}>
-          <span class="m-row-icon"><${Icon} name="users" /></span>
-          <span class="m-row-label">${t('Host my next duty')}<small>${t('Start the duty to create your session, then return to Multiplayer to copy the code.')}</small></span>
-          <span class="m-row-value">${t('Cancel')}</span>
-        </button>
-      </div>`}
+      <${DriveMode} />
+      ${joined && noServerBus() && html`<p class="muted small">${t('The server offers none of the vehicles installed here')}</p>`}
       <div class="m-group">
         ${row('map', 'map', 'Map', mapLabel, joined ? t('Set by {server}', { server: srv.name || c.lan_addr }) : null, joined)}
         ${row('bus', 'bus', 'Bus', v ? v.name : s.vehicles || !s.boot?.root ? '-' : html`<${Spinner} />`)}
