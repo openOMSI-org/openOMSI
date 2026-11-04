@@ -220,15 +220,7 @@ impl Schedule {
         let route: Vec<usize> = section[start_index..].to_vec();
         // the trip's own line (" 5"), which is what the displays show; the timetable line's
         // name ("5 & 5N") only groups the tours
-        let trip_line = self.sim.trip_of(i)
-            .line
-            .trim()
-            .to_string();
-        let line = if trip_line.is_empty() {
-            self.sim.departure_line(i).to_string()
-        } else {
-            trip_line
-        };
+        let line = self.sim.display_line(i);
         let tour = self.sim.departure_tour(i).to_string();
         let terminus = self.sim.trip_of(i).terminus.clone();
         let Some(ci) = traffic.spawn_bus(
