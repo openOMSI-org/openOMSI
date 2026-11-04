@@ -144,6 +144,24 @@ impl TrolleyGear {
             var_values: Vec::new(),
         }))
     }
+
+    /// The mouse on a held pole's rope from outside, the cursor in window pixels (`scale`: per
+    /// point): up lets the pole rise, down pulls it down, sideways swings it the way `side` says
+    /// the screen's right goes (1 the bus's right). False when the rope cannot be held from here.
+    pub fn rope_by_mouse(&mut self, cursor: (f32, f32), scale: f32, side: f64, from_cab: bool) -> bool {
+        if from_cab && !self.grab_by_script {
+            self.grab = None;
+            return false;
+        }
+        // (a model's own script feeds its rope from its `_drag` instead)
+        if let Some(last) = self.grab_cursor.filter(|_| !self.grab_by_script) {
+            self.grab_move.0 -= ((cursor.1 - last.1) / scale) as f64 * ROPE_RATE;
+            self.grab_move.1 += ((cursor.0 - last.0) / scale) as f64 * ROPE_RATE * side;
+        }
+        self.grab_cursor = Some(cursor);
+        self.grab_fresh = true;
+        true
+    }
 }
 
 impl VehicleInstance {
@@ -207,6 +225,16 @@ impl VehicleInstance {
         g.auto_raise_for = 0.0;
         g.auto_lower_for = 5.0;
         true
+    }
+
+    /// The player's Ctrl+R: the poles on the wire, or down if one is on; what the driver is told.
+    pub fn trolley_toggle(&mut self) -> &'static str {
+        let on = self.trolley.as_ref().is_some_and(|g| g.rig.poles.iter().any(|p| p.mode == omsi_trolley::PoleMode::OnWire));
+        match on {
+            true if self.trolley_take_off() => "Taking the poles down",
+            false if self.trolley_put_on(false) => "Putting the poles on the wire",
+            _ => "The poles are already down",
+        }
     }
 
     pub fn trolley_frame(&self) -> (glam::DVec3, glam::Mat4, Option<[f32; 6]>) {

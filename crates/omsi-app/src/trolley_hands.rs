@@ -2,8 +2,7 @@
 //! free camera) near its back the rope of the pole nearest to the player is held with R: the
 //! pole rises and follows where the player looks, and when R is let go it springs up to the
 //! wire it was aimed at (a wire missed, and the pole flies loose). T pulls the pole down;
-//! Shift takes both poles. Ctrl+R / Ctrl+T, from anywhere (the cab too), put both poles on the
-//! wire or take them down by themselves, whether they have a lifting gear or not.
+//! Shift takes both poles. Ctrl+R, from anywhere, puts both on the wire or takes them down.
 
 use glam::{DVec3, Vec3};
 use omsi_sim::VehicleInstance;
@@ -38,14 +37,8 @@ pub(crate) fn apply(v: &mut VehicleInstance, h: &Hands) -> Option<&'static str> 
         if was {
             return None;
         }
-        // Ctrl+R: the poles on the wire, or off it if one is on, by themselves, from anywhere,
-        // with a motor or without (Ctrl+T is OMSI's change_give)
-        let on = g.rig.poles.iter().any(|p| p.mode == omsi_trolley::PoleMode::OnWire);
-        return Some(match on {
-            true if v.trolley_take_off() => "Taking the poles down",
-            false if v.trolley_put_on(false) => "Putting the poles on the wire",
-            _ => "The poles are already down",
-        });
+        // (Ctrl+T is OMSI's change_give)
+        return Some(v.trolley_toggle());
     }
     // (in the cab R and T are the gearbox's: the poles answer only Ctrl+R there)
     if ctrl || matches!(h.view, "driver" | "pax") {

@@ -1,11 +1,7 @@
 //! The mouse's hand on a trolleybus's poles. A click on the cab's pole switch takes the pole in
-//! hand: it follows the mouse - its tip goes towards the wire the cursor points at - and the next
-//! click lets it go, to spring on to the wire it was aimed at. From outside the cab a click on a
-//! pole is the hand on its rope, as in a real bus: the tip goes exactly where the mouse moves it,
-//! with no help to the wire, and the next click lets the spring lift the shoe from there (into the
-//! wire above it, or loose past it). Pushed up through a wire the shoe takes it, and the hand lets
-//! go. A model whose own script holds the ropes (`Trolley_Pole<n>_Rope`) does it through its mouse
-//! events instead: held while the button is. The keys R and T keep their ropes (see `trolley_hands`).
+//! hand, aimed at the wire the cursor points at, and the next click lets it go. From outside a
+//! click on a pole takes its rope (`TrolleyGear::rope_by_mouse`), with no help to the wire; a
+//! model's script may hold the ropes itself (`Trolley_Pole<n>_Rope`). R and T: `trolley_hands`.
 
 use super::*;
 use glam::{DMat3, DVec3};
@@ -104,20 +100,7 @@ impl App {
             return;
         }
         if g.grab_manual {
-            if from_cab && !g.grab_by_script {
-                // (the rope cannot be held from inside the bus)
-                g.grab = None;
-                return;
-            }
-            // the rope: the mouse up lets the pole rise, down pulls it down, sideways swings it
-            // (a model's own script feeds its rope from its `_drag` instead)
-            if let Some(last) = g.grab_cursor.filter(|_| !g.grab_by_script) {
-                let (dx, dy) = ((cursor.0 - last.0) / scale, (cursor.1 - last.1) / scale);
-                g.grab_move.0 -= dy as f64 * ROPE_RATE;
-                g.grab_move.1 += dx as f64 * ROPE_RATE * side;
-            }
-            g.grab_cursor = Some(cursor);
-            g.grab_fresh = true;
+            g.rope_by_mouse(cursor, scale, side, from_cab);
             return;
         }
         g.grab_auto = from_cab;
@@ -130,5 +113,3 @@ impl App {
         }
     }
 }
-
-use omsi_sim::vehicle::ROPE_RATE;
