@@ -1,7 +1,9 @@
 # Testing DLSS and FSR 3
 
-What a tester runs before DLSS and FSR 3 (`docs/NVIDIA_DLSS.md`) are called working. Nothing of
-it has run on a graphics card yet: every result counts, a failure as much as a success.
+What a tester runs before DLSS and FSR 3 (`docs/NVIDIA_DLSS.md`) are called working. Runs 1 to 5
+have been done on an RTX 5080. Testers also report DLSS on an RTX 5070 Ti, RTX 3060 Laptop and
+RTX 2070, and FSR 3 on an RX 580 and a GTX 1050. Intel cards have not been tried yet. Every
+further result counts, a failure as much as a success.
 
 ## Before
 
