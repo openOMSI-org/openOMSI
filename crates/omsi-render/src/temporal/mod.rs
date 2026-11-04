@@ -1,6 +1,6 @@
 //! Temporal upscaling: NVIDIA DLSS or AMD FSR 3 draw the picture smaller, take the last frames'
-//! pixels along by each pixel's motion and bring it up to the window. Windows and DirectX 12
-//! only. (The `upscaler` setting's other choices, Catmull-Rom and FSR 1, work on one frame and
+//! pixels along by each pixel's motion and bring it up to the window. Windows, on DirectX 12
+//! or Vulkan. (The `upscaler` setting's other choices, Catmull-Rom and FSR 1, work on one frame and
 //! need none of this: `encode_upscale`.)
 //!
 //! Neither vendor's code is linked or in the repository. Their DLLs are opened from the game's

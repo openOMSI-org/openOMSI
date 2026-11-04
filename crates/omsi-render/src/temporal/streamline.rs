@@ -25,7 +25,7 @@
 //! NVIDIA DLSS (Super Resolution, and DLAA at full size) by way of NVIDIA Streamline: Windows,
 //! DirectX 12 or Vulkan, a GeForce RTX card.
 //!
-//! Nothing of NVIDIA's is linked in or shipped. `sl.interposer.dll` is opened when the first
+//! Nothing of NVIDIA's is linked in. `sl.interposer.dll` is opened when the first
 //! DLSS frame asks for it, from the game's folder, and it brings in `sl.common.dll`,
 //! `sl.dlss.dll` and `nvngx_dlss.dll` from there. The `#[repr(C)]` structs mirror Streamline
 //! 2.14's public headers (`sl_core_types.h`, `sl_consts.h`, `sl_dlss.h`); their sizes are
@@ -977,8 +977,9 @@ impl Runtime {
         let textures = [inputs.color, inputs.depth, inputs.motion, inputs.output, inputs.mask];
         let sizes = [(rw, rh), (rw, rh), (rw, rh), (ow, oh), (rw, rh)];
         // (the picture's resource is plain UNORM and drawn through an sRGB view: see
-        // `temporal_targets`. DLSS reads it as that view)
-        let formats = [inputs.color.format().add_srgb_suffix(), inputs.depth.format(), inputs.motion.format(), inputs.output.format(), inputs.mask.format()];
+        // `temporal_targets`. DLSS takes its sRGB-encoded numbers as they are, as FSR 3 does:
+        // read through an sRGB view it made them linear and gave them back so, too dark)
+        let formats = [inputs.color.format(), inputs.depth.format(), inputs.motion.format(), inputs.output.format(), inputs.mask.format()];
         // (the states the scene's submit leaves them in: `temporal_end_of_scene` makes sure the
         // last pass on each is a render pass)
         let depth_at = 1;
@@ -1006,11 +1007,7 @@ impl Runtime {
                     let view = super::vulkan::view(inputs.views[order[k]])?;
                     let depth = k == depth_at;
                     let layout = if depth { vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL } else { vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL };
-                    // (the picture as its plain UNORM numbers, the sRGB-encoded ones, as FSR 3 takes
-                    // it: read through an sRGB view DLSS made them linear and gave them back so,
-                    // and the window, taking them for encoded ones, showed the picture too dark)
-                    let format = if k == 0 { t.format() } else { formats[k] };
-                    let mut r = blank(vk::Handle::as_raw(image) as *mut c_void, layout.as_raw() as u32, super::vulkan::format(format).as_raw() as u32, sizes[k]);
+                    let mut r = blank(vk::Handle::as_raw(image) as *mut c_void, layout.as_raw() as u32, super::vulkan::format(formats[k]).as_raw() as u32, sizes[k]);
                     r.memory = vk::Handle::as_raw(memory) as *mut c_void;
                     r.view = vk::Handle::as_raw(view) as *mut c_void;
                     // (wgpu makes an image with other view formats mutable: the picture's)
