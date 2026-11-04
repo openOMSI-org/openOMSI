@@ -153,12 +153,20 @@ function showcase() {
   const compare = document.getElementById("compare");
   const range = compare.querySelector("input");
   const open = t => {
-    tabs.forEach(o => o.setAttribute("aria-selected", String(o === t)));
+    tabs.forEach(o => { o.setAttribute("aria-selected", String(o === t)); o.tabIndex = o === t ? 0 : -1; });
     box.querySelectorAll(".show-pane").forEach(p => { p.hidden = p.dataset.show !== t.dataset.show; });
     compare.classList.toggle("sweep", t.dataset.show === "graphics" && !compare.style.getPropertyValue("--pos"));
   };
   tabs.forEach((t, i) => {
     t.onclick = () => open(t);
+    t.onkeydown = e => {
+      const step = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
+      if (!step) return;
+      e.preventDefault();
+      const next = tabs[(i + step + tabs.length) % tabs.length];
+      open(next);
+      next.focus();
+    };
     t.addEventListener("animationend", () => open(tabs[(i + 1) % tabs.length]));
   });
   range.oninput = () => {
@@ -271,7 +279,7 @@ async function download(beta = false) {
     if (!r || !r.n) return scanning && sha ? `<span class="vt vt-wait" title="VirusTotal is scanning this file"><span class="material-icons">shield</span>Scanning…</span>` : "";
     const flagged = r.m + r.s;
     const [cls, icon, label, note] = !flagged ? ["", "verified_user", "Clean", `no engine out of ${r.n} flags this file`]
-      : flagged < 3 ? ["", "verified_user", "Checked", `${flagged} of ${r.n} engines flag this file from a heuristic guess, a known false positive`]
+      : flagged < 3 ? ["", "verified_user", "Checked", `${flagged} of ${r.n} engines guess from how this file looks, usually a false positive: see the report`]
       : [" vt-bad", "gpp_bad", "Flagged", `${flagged} of ${r.n} engines flag this file`];
     return `<a class="vt${cls}" href="https://www.virustotal.com/gui/file/${esc(sha)}" target="_blank" rel="noopener" title="VirusTotal: ${note}"><span class="material-icons">${icon}</span>${label}</a>`;
   };
@@ -331,12 +339,13 @@ async function scanFigures() {
   let rels;
   try { rels = await Promise.all([latestRelease(), latestBeta().catch(() => null)]); } catch { rels = [{ failed: true }]; }
   const failed = !!rels[0]?.failed;
-  const rows = rels.filter(r => r?.tag_name && (r.body || "").includes("<!-- virustotal:start -->")).map(rel => {
+  const rows = rels.filter(r => r?.tag_name).map(rel => {
+    const scanned = (rel.body || "").includes("<!-- virustotal:start -->");
     let data = {};
     try { data = JSON.parse((rel.body || "").match(/<!-- virustotal-data:(\{.*?\}) -->/)?.[1] || "{}"); } catch {}
-    const files = (rel.assets || []).filter(a => (a.digest || "").startsWith("sha256:") && a.name !== "SHA256SUMS");
+    const files = [...new Map((rel.assets || []).filter(a => (a.digest || "").startsWith("sha256:") && a.name !== "SHA256SUMS").map(a => [a.digest, a])).values()];
     const done = files.filter(a => data[a.digest.slice(7)]?.n).map(a => ({ m: Number(data[a.digest.slice(7)].m) || 0, s: Number(data[a.digest.slice(7)].s) || 0, n: Number(data[a.digest.slice(7)].n) || 0 }));
-    return { rel, files: files.length, done: done.length, checks: done.reduce((t, r) => t + r.n, 0),
+    return { rel, scanned, files: files.length, done: done.length, checks: done.reduce((t, r) => t + r.n, 0),
       flags: done.filter(r => r.m + r.s >= 3).length, guesses: done.filter(r => r.m + r.s > 0 && r.m + r.s < 3).length };
   }).filter(r => r.files);
   const sum = k => rows.reduce((t, r) => t + r[k], 0);
@@ -349,7 +358,7 @@ async function scanStats() {
   const f = await scanFigures();
   if (!view.contains(box)) return;
   if (f.failed) { box.innerHTML = `<p class="muted">GitHub is not answering right now, so the figures could not be loaded. The results are in the notes of each <a href="/releases/">release</a>.</p>`; return; }
-  if (!f.done) { box.innerHTML = `<p class="muted">The first scan is under way: the figures appear here as soon as it has results.</p>`; return; }
+  if (!f.done) { box.innerHTML = `<p class="muted">The current versions have not been checked yet. Each <a href="/releases/">release</a> gets its VirusTotal results in its notes once they are in.</p>`; return; }
   box.innerHTML = `<div class="vt-figures">
       <div><b>${f.done}${f.done < f.files ? ` <small>/ ${f.files}</small>` : ""}</b><span>downloads checked</span></div>
       <div><b>${f.checks.toLocaleString("en-GB")}</b><span>antivirus checks</span></div>
@@ -357,7 +366,7 @@ async function scanStats() {
     </div>
     <ul class="vt-releases">${f.rows.map(r => {
       const state = r.flags ? ["gpp_maybe", "vt-state-warn"] : r.done ? ["verified_user", "vt-state-ok"] : ["shield", "vt-state-wait"];
-      const text = !r.done ? "scan queued" : `${r.done < r.files ? `${r.done} of ${r.files} downloads checked so far` : `all ${r.files} downloads checked`}, ${r.flags ? `${r.flags} flagged` : r.guesses ? "no confirmed detection" : "no detection"}`;
+      const text = !r.scanned ? "not checked yet" : !r.done ? "scan queued" : `${r.done < r.files ? `${r.done} of ${r.files} downloads checked so far` : `all ${r.files} downloads checked`}, ${r.flags ? `${r.flags} flagged` : r.guesses ? "no confirmed detection" : "no detection"}`;
       return `<li class="${state[1]}"><span class="material-icons">${state[0]}</span><b>${r.rel.prerelease ? "Beta" : "Stable"} ${esc(r.rel.tag_name.replace(/^v/, ""))}</b><span>${text}</span><a href="${esc(r.rel.html_url)}" target="_blank" rel="noopener">Details</a></li>`;
     }).join("")}</ul><p class="vt-note">Like most new free programs, a download can get a guess from one small engine that judges files by how they look, without any known threat. Such a file is shown as Checked: these guesses are false positives, and we report them to the engine's maker. Every engine's answer is in the release notes.</p>`;
 }
@@ -366,7 +375,7 @@ async function scanStrip() {
   const box = document.getElementById("vt-strip");
   if (!box) return;
   const f = await scanFigures();
-  if (!view.contains(box) || !f.done) return;
+  if (!view.contains(box) || !f.done || f.rows.some(r => !r.scanned)) return;
   const verdict = `<b>${f.checks.toLocaleString("en-GB")}</b> antivirus checks, <b>${f.flags ? `${f.flags} flagged` : f.guesses ? "no confirmed detection" : "no detection"}</b>`;
   box.querySelector("span:last-child").innerHTML = f.done < f.files
     ? `VirusTotal is checking every download of openOMSI ${esc(f.versions)}: <b>${f.done} of ${f.files}</b> done so far, ${verdict}`

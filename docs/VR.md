@@ -50,13 +50,12 @@ Edit the VR key bindings under **Controls → Keyboard** (search for `VR`).
 | F7 | Toggle the monitor preview |
 | F8 | Switch between VR and desktop |
 | Ctrl+Shift+N | Show or hide the VR navigator |
-| Shift+N | Cycle the navigator: map, map with stop list, off |
 | Ctrl+Shift+M | Position the VR navigator |
-| Esc | Open the menu in front of the headset |
-| Mouse | Point at cockpit controls |
-| Left-click | Use the cockpit control under the pointer |
-| Right-click | Toggle a smooth zoom (VR only). The mouse stays usable while zoomed. |
-| Right-drag (outside VR) | Normal camera control |
+| Right-click | Toggle a smooth zoom. The mouse stays usable while zoomed. |
+
+Also useful, as outside VR: Shift+N cycles the navigator (map, map with stop list, off), Esc
+opens the menu (in VR in front of the headset), the mouse points at cockpit controls and
+left-click uses the one under the pointer. Outside VR, right-drag is the normal camera control.
 
 - The pointer fades after ten seconds without mouse movement. It comes back in the centre
   when you move the mouse.

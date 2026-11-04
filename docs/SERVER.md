@@ -108,13 +108,13 @@ first. Only do this with Cloudflare in front: it overwrites a client's own heade
 
 ## server.cfg reference
 
-Default is the value a new `server.cfg` is written with.
+Default is the value a new `server.cfg` is written with. A key missing from the file (an older `server.cfg`) takes the same value, except where the table says *without the key*.
 
 **World**
 
 | Key | Values | Default | What it does |
 |---|---|---|---|
-| `name`, `motd` | text | `openOMSI server`, `Welcome! Drive safely.` | shown in the players' server list and on join |
+| `name`, `motd` | text | `openOMSI server`, `Welcome! Drive safely.` (`motd` without the key: empty) | shown in the players' server list and on join |
 | `map` | `maps/<folder>/global.cfg` | `maps/Berlin-Spandau/global.cfg` | the map |
 | `date` | `YYYY-MM-DD` | empty: today | start date |
 | `time` | time of day | `08:00` | start time |
@@ -130,7 +130,7 @@ Default is the value a new `server.cfg` is written with.
 
 | Key | Values | Default | What it does |
 |---|---|---|---|
-| `traffic` | number of cars | `30` | AI cars |
+| `traffic` | number of cars, up to the game's highest Traffic step | `30` | AI cars |
 | `timetable` | `0` / `1` | `1` | timetable buses |
 | `passengers` | `1` / `0` | `1` | people at stops and on pavements ([Passengers](#passengers)) |
 | `passenger_density` | `0` to `3` | `1`; without the key: `pax_density` of `settings.cfg` | how many ([Passengers](#passengers)) |
@@ -142,24 +142,24 @@ Default is the value a new `server.cfg` is written with.
 
 | Key | Values | Default | What it does |
 |---|---|---|---|
-| `port` | UDP port | `27015` | session port |
-| `web_port` | TCP port | `27025` | web gateway port |
-| `max_players` | number | `16` | player limit |
+| `port` | UDP port, 1 to 65535 | `27015` | session port |
+| `web_port` | TCP port, 1 to 65535 | `27025` | web gateway port |
+| `max_players` | 1 to 64 | `16` | player limit |
 | `gateway_proxy_header` | `x-forwarded-for`, `cf-connecting-ip` | `x-forwarded-for` | header a proxy on this machine names a WebSocket player's address in |
 | `tunnel` | `0` / `1` | `1` | start a free Cloudflare quick tunnel (needs `cloudflared`) |
 | `share_positions` | `0` / `1` | `0` | answer `GET /players` |
-| `share_maps` | `0` / `1` | `0` | a joiner without the map gets it, with everything it uses, from the server (gigabytes for a big map). Off: players install it and are told which is missing. |
+| `share_maps` | `0` / `1` | `0`; without the key: `1`, so an older `server.cfg` shares its map | a joiner without the map gets it, with everything it uses, from the server (gigabytes for a big map). Off: players install it and are told which is missing. |
 | `accept_uploads` | `0` / `1` | `1` | [players' buses](#players-buses-accept_uploads) |
-| `uploads_keep_days` | days | `30` | keep an unused player bus this long |
+| `uploads_keep_days` | 1 to 3650 days | `30` | keep an unused player bus this long |
 | `public_server` | `0` / `1` | `0` | list in the [public server list](#public-server-list) |
-| `public_list_url` | URL | empty: openOMSI's own | list service address |
+| `public_list_url` | URL | not in a new file; empty or missing: openOMSI's own | optional: list service address |
 
 **Voice** ([Voice chat](#voice-chat))
 
 | Key | Values | Default | What it does |
 |---|---|---|---|
-| `voice` | `0` / `1` | `1` | voice chat at all |
-| `voice_radio` | `0` / `1` | `1` | session-wide radio channel; `0`: nearby channel only |
+| `voice` | `0` / `1` | `1`; without the key: `0` | voice chat at all |
+| `voice_radio` | `0` / `1` | `1`; without the key: `0` | session-wide radio channel; `0`: nearby channel only |
 | `voice_range` | 5 to 1000 m | `75` | nearby channel reach |
 
 **Administration and bans**
@@ -170,7 +170,7 @@ Default is the value a new `server.cfg` is written with.
 | `admin_web` | `local`, `remote`, `off` | `local` in a new file; `off` without the key | who reaches the web panel (`/admin/` on the web port), see [below](#who-can-reach-the-web-panel-and-the-api). `remote` needs 16+ character passwords, else acts as `local`. |
 | `admin_web_origins` | `https://` sites | empty | other sites whose pages may send requests |
 | `admin_trusted_proxies` | addresses separated by `;` | this machine | proxies trusted with `remote` |
-| `admin_proxy_header` | `x-real-ip`, `cf-connecting-ip` | last address of `X-Forwarded-For` | header a trusted proxy names the client in |
+| `admin_proxy_header` | `x-forwarded-for`, `x-real-ip`, `cf-connecting-ip` | `x-forwarded-for` (its last address); also for a wrong word | header a trusted proxy names the client in |
 | `owner_bans` | file | empty: `~/.openomsi/bans-owner.json` | owner's ban list shared by all your sessions ([Machine bans](#machine-bans)) |
 | `require_hardware_id` | `0` / `1` | `0` | turn away games that send no machine identifier |
 
@@ -179,8 +179,10 @@ Default is the value a new `server.cfg` is written with.
 | Key | Values | Default | What it does |
 |---|---|---|---|
 | `log_max_mb` | MB; `0`: no limit | `20` | new `server.log` past this size |
-| `log_keep` | count; `0`: none | `5` | earlier logs kept |
+| `log_keep` | count up to 1000; `0`: none | `5` | earlier logs kept |
 | `log_addresses` | `0` / `1` | `0` | write players' addresses whole (for an abuse report) |
+
+`log_max_mb` and `log_keep` are read by `run-server.cmd`, `run-server.sh` and `start.sh`, which write `server.log`. `openomsi --server` run another way, `start.cmd` and Docker ignore them.
 
 `server-icon.png` beside `server.cfg` (64x64 PNG, under 256 KB) is the icon in the players'
 list.
@@ -410,13 +412,21 @@ Older menus' `kick 3` (number only) still works.
 | `hwban 3#17 session\|all [12h\|3d] reason` | moderator for `session`, admin for `all` | [machine ban](#machine-bans) |
 | `unban <id>` | admin | lift a machine ban |
 | `say …` | moderator | message to all |
-| `tell`, `notify` | moderator | word or notice to one or all |
+| `tell 3#17 text` | moderator | private word to one player |
+| `notify all\|3#17 <notice-id> <seconds> info\|warn\|alert text` | moderator | notice on the screen of one player or all |
+| `duty 3#17 <line> <tour> <trip> <stop>` | moderator | give a player a duty (`%20` for a space in a name; trip and stop by number) |
+| `duty-off 3#17` | moderator | take a player's duty back |
+| `service repair\|refuel\|wash [all\|3#17]` | moderator | repair, refuel or wash one player's bus, or all (the default) |
 | `vmute <id>`, `vunmute <id>` | moderator (may not mute an admin) | mute or unmute voice |
 | `unstick` | moderator | right a player's bus |
 | `goto` | moderator | move own bus to a player |
 | `bring`, `bringall` | admin | bring players to own bus |
-| `clock 30600` | admin | set the clock |
+| `clock 30600` | admin | set the clock (seconds after midnight) |
+| `time 3600` | admin | move the clock on (or back with a minus), at most a day |
+| `speed 2` | admin | clock speed, 1 to 30 |
 | `weather set Weather/#CAVOK.owt` | admin | set the weather |
+| `weather next`, `weather cycle` | admin | next installed weather (a server has no cycle of its own: `cycle` does the same) |
+| `traffic 40`, `traffic clear` | admin | AI traffic density (up to the game's highest Traffic step), or every AI car off the road (timetable buses stay) |
 | `passengers <factor>` | admin | set passenger density |
 | `admin-list [search]` | moderator | list players |
 | `admin-state` | moderator | server state |

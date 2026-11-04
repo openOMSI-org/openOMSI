@@ -206,23 +206,23 @@
     <p class="lead">Real screenshots of openOMSI on Berlin-Spandau and Grundorf, the maps that come with OMSI&nbsp;2.</p>
     <div class="showcase" id="showcase">
       <div class="show-tabs" role="tablist" aria-label="Screenshots">
-        <button type="button" role="tab" aria-selected="true" data-show="launcher"><span class="material-icons">tune</span><span><b>The launcher</b><small>Map, line, tour and bus on one screen</small></span></button>
-        <button type="button" role="tab" aria-selected="false" data-show="drive"><span class="material-icons">navigation</span><span><b>Navigator and info bar</b><small>Next turn, next stop and your delay</small></span></button>
-        <button type="button" role="tab" aria-selected="false" data-show="map"><span class="material-icons">map</span><span><b>City map</b><small>Streets, stops and lines of the whole map</small></span></button>
-        <button type="button" role="tab" aria-selected="false" data-show="graphics"><span class="material-icons">wb_sunny</span><span><b>Graphics</b><small>Drag the slider: Vanilla or Enhanced+</small></span></button>
+        <button type="button" role="tab" id="show-tab-launcher" aria-controls="show-pane-launcher" aria-selected="true" data-show="launcher"><span class="material-icons">tune</span><span><b>The launcher</b><small>Map, line, tour and bus on one screen</small></span></button>
+        <button type="button" role="tab" id="show-tab-drive" aria-controls="show-pane-drive" aria-selected="false" tabindex="-1" data-show="drive"><span class="material-icons">navigation</span><span><b>Navigator and info bar</b><small>Next turn, next stop and your delay</small></span></button>
+        <button type="button" role="tab" id="show-tab-map" aria-controls="show-pane-map" aria-selected="false" tabindex="-1" data-show="map"><span class="material-icons">map</span><span><b>City map</b><small>Streets, stops and lines of the whole map</small></span></button>
+        <button type="button" role="tab" id="show-tab-graphics" aria-controls="show-pane-graphics" aria-selected="false" tabindex="-1" data-show="graphics"><span class="material-icons">wb_sunny</span><span><b>Graphics</b><small>Drag the slider: Vanilla or Enhanced+</small></span></button>
       </div>
       <div class="show-stage">
         <button class="show-pause" id="show-pause" type="button" aria-pressed="false" aria-label="Pause the slideshow" title="Pause the slideshow"><span class="material-icons">pause</span></button>
-        <figure class="show-pane" data-show="launcher">
+        <figure class="show-pane" id="show-pane-launcher" role="tabpanel" aria-labelledby="show-tab-launcher" data-show="launcher">
           <div class="show-frame"><img src="/shots/launcher.webp" srcset="/shots/launcher-900.webp 900w, /shots/launcher.webp 1600w" sizes="(max-width: 900px) 100vw, 900px" width="1600" height="1000" alt="The openOMSI launcher: line, tour, route map, roadbook and bus on one screen"></div>
         </figure>
-        <figure class="show-pane" data-show="drive" hidden>
+        <figure class="show-pane" id="show-pane-drive" role="tabpanel" aria-labelledby="show-tab-drive" data-show="drive" hidden>
           <div class="show-frame"><img src="/shots/drive.webp" srcset="/shots/drive-900.webp 900w, /shots/drive.webp 1600w" sizes="(max-width: 900px) 100vw, 900px" width="1600" height="1000" loading="lazy" alt="Driving in the cab with the information bar at the top and the navigator in the corner"></div>
         </figure>
-        <figure class="show-pane" data-show="map" hidden>
+        <figure class="show-pane" id="show-pane-map" role="tabpanel" aria-labelledby="show-tab-map" data-show="map" hidden>
           <div class="show-frame"><img src="/shots/city-map.webp" srcset="/shots/city-map-900.webp 900w, /shots/city-map.webp 1600w" sizes="(max-width: 900px) 100vw, 900px" width="1600" height="1000" loading="lazy" alt="The city map of Berlin-Spandau with streets, stops and line numbers"></div>
         </figure>
-        <figure class="show-pane" data-show="graphics" hidden>
+        <figure class="show-pane" id="show-pane-graphics" role="tabpanel" aria-labelledby="show-tab-graphics" data-show="graphics" hidden>
           <div class="show-frame compare" id="compare">
             <img src="/shots/graphics-enhanced.webp" srcset="/shots/graphics-enhanced-900.webp 900w, /shots/graphics-enhanced.webp 1600w" sizes="(max-width: 900px) 100vw, 900px" width="1600" height="1000" loading="lazy" alt="The bus in the Enhanced+ graphics mode">
             <img class="compare-top" src="/shots/graphics-vanilla.webp" srcset="/shots/graphics-vanilla-900.webp 900w, /shots/graphics-vanilla.webp 1600w" sizes="(max-width: 900px) 100vw, 900px" width="1600" height="1000" loading="lazy" alt="The same view in the Vanilla graphics mode">

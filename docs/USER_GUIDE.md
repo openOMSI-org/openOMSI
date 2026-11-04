@@ -8,13 +8,13 @@ To build from source, see [BUILDING.md](BUILDING.md). For OpenXR headsets on Win
 ## Quick start: from download to driving
 
 1. **Install OMSI 2**<br>openOMSI plays on your own copy. The Steam version works.
-2. **Download openOMSI**<br>Get the build for your system on the [download page](https://openomsi.org/download/). Windows: run the setup, no administrator rights needed. macOS: drag `openOMSI.app` onto Applications. Linux: unpack and run `./openomsi`. Android: install the `.apk` and copy the OMSI 2 folder to the phone ([ANDROID.md](ANDROID.md)).
+2. **Download openOMSI**<br>Get the build for your system on the [download page](https://openomsi.org/download/). Windows: run the setup, no administrator rights needed. macOS: drag `openOMSI.app` onto Applications. Linux: unpack and run `./openomsi`. Android: install the `.apk`, allow access to all files, copy the OMSI 2 folder to the phone and, if it is not found, choose it under **Setup → Browse** ([ANDROID.md](ANDROID.md)).
 3. **Open the launcher**<br>Start openOMSI. The launcher usually finds OMSI 2 by itself; if not, choose the folder with `maps` and `Vehicles` on the **Setup** page.
 4. **Build your duty**<br>On the **Drive** page, pick a map and a start point, then **Timetable** with a line and a tour (or **Free drive**), a bus, and the time, date and weather. Click **Start the duty** (**Start driving** for a free drive).
 5. **Start the bus**<br><kbd>E</kbd> battery and ignition → hold <kbd>M</kbd> one second to start the engine → <kbd>Shift</kbd>+<kbd>D</kbd> drive → <kbd>.</kbd> release the parking brake. Or <kbd>Shift</kbd>+<kbd>U</kbd> for the whole start-up (a stock SD200; other buses may differ).
 6. **Drive**<br><kbd>W</kbd> or <kbd>↑</kbd> throttle, <kbd>S</kbd> or <kbd>↓</kbd> brake, <kbd>A</kbd> <kbd>D</kbd> steer, <kbd>Z</kbd> <kbd>X</kbd> <kbd>C</kbd> indicators.
 7. **Serve the stops**<br>The [navigator](#navigator) shows the next turn, the next stop and whether you are early or late; click it or press <kbd>Shift</kbd>+<kbd>M</kbd> for the city map. At a stop, open the doors with <kbd>Shift</kbd>+<kbd>1</kbd>, <kbd>Shift</kbd>+<kbd>2</kbd>, ..., let the passengers board and pay, close the doors and drive on.
-8. **Finish**<br><kbd>Esc</kbd> opens the game menu, with *End the tour* and *End the session*.
+8. **Finish**<br><kbd>Esc</kbd> opens the game menu, with *End the tour* and *End the session* (*Leave the server* on a server).
 
 All the keys: [Basic keys](#basic-keys). Other key layouts: [Driving key presets](#driving-key-presets).
 
@@ -125,13 +125,15 @@ The chosen bus is drawn by the game's renderer, running beside the launcher as i
 
 ### Pages
 
-The left menu groups the pages: **Play** (Drive, Multiplayer, Running games), **Content** (Mods, Timetable), **Options** (Settings, Controls, Setup), **Help** (Tutorials). The driver's **Profile** is at the bottom.
+The left menu groups the pages: **Play** (Drive, Depot, Multiplayer, Running games), **Content** (Mods, Timetable, Add-ons), **Options** (Settings, Controls, Setup), **Help** (Tutorials, Troubleshooting). The driver's **Profile** is at the bottom.
 
 - **Drive**: build the duty. Bus (search, liveries, depot file, number plate), map and start point, line and tour (lines running on the chosen date) or free drive, start time, date, season, weather, traffic, passengers, and the roadbook with IBIS codes. Then **Start the duty** (or **Start driving** for a free drive). Settings → General → *Launcher layout*: *Big Map*, *Control Room*, *Classic+* or *Classic* (in steps).
+- **Depot**: your own buses (`depot.json`), each keeping its number plate, livery, fleet number, kilometres, fuel, dirt and faults from one drive to the next. Refuel, wash, repair, see its past duties, or **Drive this bus**.
 - **Multiplayer**: host a duty, join by code, or pick an always-on server. See [Multiplayer (LAN play)](#multiplayer-lan-play) and [SERVER.md](SERVER.md).
 - **Running games**: every game the launcher started, with its log and **Stop**. Stop asks the game to end so it saves its run, waits up to 8 s, and kills only a stuck game. Multiplayer sessions also show the code to copy, the players and the chat.
 - **Mods**: install a bus, map or folder; drop a folder, .zip, .7z or .rar on the window. See [Mods and the content folder](#mods-and-the-content-folder).
 - **Timetable**: a map's TTData lines, tours and trips with departures. Edit and save, add lines and tours, repeat a tour at an interval. **Reset timetable** restores the map's own.
+- **Add-ons**: links to projects others make for openOMSI; nothing is downloaded or installed. See [ADDONS.md](ADDONS.md).
 - **Settings**: everything in `settings.cfg` ([Settings reference](#settings-reference)), saved on change. Keys the page does not manage are kept. Tabs:
   - *Graphics*: graphics mode and its quality presets first (a preset tunes the chosen mode and keeps it), then display, distances, mirrors, memory, saved graphics profiles.
   - *Driving*: keys, mouse, wheel, pedals, gamepad, force feedback, link to Controls.
@@ -139,8 +141,8 @@ The left menu groups the pages: **Play** (Drive, Multiplayer, Running games), **
   - *Sound*: volumes, radio stations.
   - *Gameplay*: passengers, traffic, collisions, maintenance, clock and weather sync.
   - *General*: launcher look and layout, language, in-game interface size, chat, photo mode, navigator, updates, reset all settings.
-  - *Content test*: not on phones and tablets.
-  - **Discord Rich Presence** (General, on by default): shows the launcher, or your map, bus, line and multiplayer status, in Discord. Discord must run on the same computer.
+  - *Troubleshooting*: opens Help → Troubleshooting at its *Model test*; not on phones and tablets.
+  - **Discord Rich Presence** (General, off by default): shows the launcher, or your map, bus, line and multiplayer status, in Discord. Discord must run on the same computer.
   - **Voice chat** (Sound, off by default): in multiplayer hold *Voice: nearby* (V) to reach nearby players, or *Voice: radio* (B) for the whole session. Keys are on Controls. Enabling it triggers the system's microphone prompt. See [VOICE.md](VOICE.md).
 - **Controls**: `Inputs/keyboard.cfg`. Click a key, press the new one; clashes show red.
   - Keys and controllers live in `~/.openomsi/Inputs` (Windows: `C:\Users\<you>\.openomsi\Inputs`), so updates and new program folders keep them. Keys saved beside the program are brought over there.
@@ -148,6 +150,7 @@ The left menu groups the pages: **Play** (Drive, Multiplayer, Running games), **
   - *Game controllers*: see [Wheels, pedals and force feedback](#wheels-pedals-and-force-feedback).
 - **Setup**: locations of the original installation, the game program, the content folder (mods), settings and logs. The OMSI 2 folder can be a quoted path, `Omsi.exe` itself, or a folder inside it. Unpacked into the OMSI 2 folder, openOMSI keeps its content in an `openOMSI` folder there and never writes to the game's files.
 - **Tutorials**: OMSI 2's four lessons, each in its own situation (`--tutorial 1..4`).
+- **Troubleshooting**: what is wrong with the installed content (packs waiting for their bus, buses missing parts, map HOF files, failed installs), with **Scan again**; its *Model test* tab loads one bus, map, mod or file the way the game does and lists every warning and error (not on phones and tablets).
 - **Profile**: the driver whose personnel file the game writes: hours, experience, level and recent runs, from OMSI's `.odr` files plus session summaries in `~/.openomsi/sessions`.
 
 ## Driving
@@ -424,11 +427,11 @@ Settings → Camera:
   - drive another placed vehicle, place any installed vehicle, couple/uncouple, get out, swap or reload;
   - service: refuel and wash (only at a petrol station or the depot's wash yard, as in OMSI), repair, put the bus back on its wheels, move it on the map.
 - *World options*: clock and date, weather (and custom weather), temperature, wind, traffic, passengers, [object editor](#object-editor)
-- *City map*, *Line and tour*
+- *City map*, *Find a street...* (look a street up by name on the city map), *Line and tour*
 - *Skip the next stop* (**Ctrl+Shift+H**): for a stop the bus cannot reach or never registers at
 - *End the tour*, *Save the situation*, *Save to a slot*, *Load the quicksave*, *Screenshot*, [*Photo mode*](#photo-mode), *End the session*
 
-On a server the menu is shorter: clock and weather belong to the server. Use the mouse, or **Up**/**Down** and **Enter**, with **Left**/**Right** to step a value. Settings are kept for the next game.
+On a server the menu is shorter: clock and weather belong to the server, there is no saving or loading, and *Leave the server* replaces *End the session*. Use the mouse, or **Up**/**Down** and **Enter**, with **Left**/**Right** to step a value. Settings are kept for the next game.
 
 The **HUD** shows time, speed, line, next stop, delay, the last workshop action, and why the bus is held (parking brake, low air pressure, a line the date's chrono removes). The controls show for the first seconds.
 
@@ -682,7 +685,7 @@ With it on (`street`, and also under `all`):
 - Some vehicles spray through their own wheel `[smoke]` driven by `tire_wet_freq`/`tire_wet_live`: stock AI cars (`main_AI` scripts) and stock SD200, SD202, NL/NG, including the AI SD84 (`spray.osc`). That spray appears only on a fully wet road (`StreetCond` 1), as in OMSI, with puddle spray on top.
 - Within 100 m of the camera (less farther away), max 1400 puffs. None inside the bus the camera is in.
 
-**Road snow** (`road_snow=0|1`, Graphics), **off by default**: gradual snow build-up on roads and roofs with tyre tracks. Off keeps the weather's conventional OMSI 2 road snow. Saved preferences are kept.
+**Built-up snow on roads and roofs** (`road_snow=0|1`, Graphics), **off by default**: gradual snow build-up on roads and roofs with tyre tracks. Off keeps the weather's conventional OMSI 2 road snow. Saved preferences are kept.
 
 **Vehicle smoke** (Graphics → *Vehicle smoke*, `vehicle_smoke`): **All vehicles** (`all`, default), **Player only** (`player`: your bus and its articulated sections), **Off** (`off`). Hides non-glowing smoke from other vehicles (AI cars and LAN players included), or from all with Off. Scenery smoke, glowing effects and rain spray are unaffected. Applies at once; only visibility changes, the particle simulation continues.
 

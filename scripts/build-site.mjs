@@ -4,7 +4,8 @@ import vm from "node:vm";
 
 const out = path.resolve(process.argv[2] || "_site");
 const SITE = "https://openomsi.org";
-if (out === process.cwd() || !path.relative(out, process.cwd()).startsWith("..") && path.relative(out, process.cwd()) !== "" || ["site", "docs", "assets"].some(d => out === path.resolve(d))) {
+const notOurs = fs.existsSync(out) && fs.readdirSync(out).length && !fs.existsSync(path.join(out, "sitemap.xml"));
+if (notOurs || out === process.cwd() || !path.relative(out, process.cwd()).startsWith("..") && path.relative(out, process.cwd()) !== "") {
   console.error(`refusing to write the site into ${out}`);
   process.exit(1);
 }
@@ -122,7 +123,7 @@ for (const d of DOCS) {
   add({ route: docHref("openomsi", d.file), section, title: `${d.title} · openOMSI docs`, description: summary(raw) || `${d.title}: openOMSI documentation.`, view });
 }
 for (const d of MAPPER_DOCS) {
-  const r = await fetch(`https://raw.githubusercontent.com/openOMSI-org/openMapper/main/docs/${d.file}.md`).catch(() => null);
+  const r = await fetch(`https://raw.githubusercontent.com/openOMSI-org/openMapper/main/docs/${d.file}.md`, { signal: AbortSignal.timeout(15000) }).catch(() => null);
   if (!r?.ok) { console.warn(`openMapper's ${d.file}.md could not be read: its page is left to the browser`); continue; }
   const { raw, view } = docView("mapper", d.file, await r.text());
   add({ route: docHref("mapper", d.file), section: "mapper", title: `${d.title} · openMapper`, description: summary(raw) || `${d.title}: openMapper documentation.`, view });
