@@ -44,7 +44,7 @@ pub(crate) fn apply(v: &mut VehicleInstance, h: &Hands) -> Option<&'static str> 
         return Some(match on {
             true if v.trolley_take_off() => "Taking the poles down",
             false if v.trolley_put_on(false) => "Putting the poles on the wire",
-            _ => "The poles are down",
+            _ => "The poles are already down",
         });
     }
     // (in the cab R and T are the gearbox's: the poles answer only Ctrl+R there)

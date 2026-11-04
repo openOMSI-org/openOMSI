@@ -103,7 +103,7 @@ impl App {
         if g.grab.is_none() {
             return;
         }
-        let hint = if g.grab_manual {
+        if g.grab_manual {
             if from_cab && !g.grab_by_script {
                 // (the rope cannot be held from inside the bus)
                 g.grab = None;
@@ -118,43 +118,17 @@ impl App {
             }
             g.grab_cursor = Some(cursor);
             g.grab_fresh = true;
-            shoe_hint(g, right)
-        } else {
-            g.grab_auto = from_cab;
-            if let Some(r) = ray {
-                g.grab_ray = Some(r);
-                g.grab_fresh = true;
-            }
-            if from_cab {
-                return;
-            }
-            "Move the mouse to put the pole on the wire, click to let it go".into()
-        };
-        if self.service_msg.as_ref().is_none_or(|s| s.1 <= 0.6) {
-            self.service_msg = Some((hint, 0.6));
+            return;
+        }
+        g.grab_auto = from_cab;
+        if let Some(r) = ray {
+            g.grab_ray = Some(r);
+            g.grab_fresh = true;
+        }
+        if self.service_msg.is_none() && !from_cab {
+            self.service_msg = Some(("Move the mouse to put the pole on the wire, click to let it go".into(), 0.6));
         }
     }
 }
 
 use omsi_sim::vehicle::ROPE_RATE;
-
-/// Where the held pole's shoe is against the nearest wire, as the player sees it.
-fn shoe_hint(g: &omsi_sim::vehicle::TrolleyGear, right: DVec3) -> String {
-    const FAR: &str = "No wire near the shoe: the mouse up raises the pole, sideways swings it";
-    let (Some(k), Some(net)) = (g.grab, g.net.as_deref()) else { return FAR.into() };
-    let tip = g.rig.poles[k].tip;
-    let Some((c, _)) = net.candidates(tip, 1.5).into_iter().min_by(|a, b| a.1.total_cmp(&b.1)) else { return FAR.into() };
-    let (w, t) = net.wire_point(&c);
-    let rel = tip - w;
-    let perp = rel - t * rel.dot(t);
-    let side = perp.dot(right);
-    // (one catalogue template each, see locales/app.yml)
-    let template = match (perp.z < 0.0, side < 0.0) {
-        (true, true) => "Shoe {} cm under the wire and {} cm to its left",
-        (true, false) => "Shoe {} cm under the wire and {} cm to its right",
-        (false, true) => "Shoe {} cm over the wire and {} cm to its left",
-        (false, false) => "Shoe {} cm over the wire and {} cm to its right",
-    };
-    let cm = |m: f64| format!("{:.0}", m.abs() * 100.0);
-    template.replacen("{}", &cm(perp.z), 1).replacen("{}", &cm(side), 1)
-}

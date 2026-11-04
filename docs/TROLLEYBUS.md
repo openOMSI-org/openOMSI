@@ -527,7 +527,7 @@ down. One hand: one pole at a time. T still pulls a pole down by its rope.
 
 From outside the cab (the outside, free or foot view) a click on a pole is the hand on its rope:
 the pole is taken where it is, the mouse up lets it rise, down pulls it down, sideways swings it,
-with no help to the wire (a line on the screen tells where the shoe is against the nearest wire).
+with no help to the wire.
 The next click lets go, and the spring lifts the shoe from where it was held: into the wire just
 above it, or loose past it. Pushed up through a wire the shoe takes it and the hand lets go; let
 go a little over its hook, the pole catches on it. A pole on the wire is taken off it the same way
