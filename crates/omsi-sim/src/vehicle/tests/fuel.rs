@@ -54,3 +54,13 @@ fn a_bus_without_a_pump_keeps_its_tank() {
     assert_eq!(v.refuel(), None);
     assert_eq!(v.var("engine_tank_content"), Some(37.5));
 }
+
+#[test]
+fn a_paint_scheme_name_with_a_leading_space_is_found() {
+    let dir = std::env::temp_dir().join(format!("omsi_cti_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("a.cti"), "[item]\n White | Tector 7 | Manual\nbody\nx.png\n").unwrap();
+    let schemes = crate::vehicle::types::load_paint_schemes(&dir);
+    assert_eq!(schemes.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), ["White | Tector 7 | Manual"]);
+    let _ = std::fs::remove_dir_all(&dir);
+}

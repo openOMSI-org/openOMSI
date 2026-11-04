@@ -250,7 +250,7 @@ pub fn load_paint_schemes(dir: &Path) -> Vec<PaintScheme> {
         while let Some(k) = r.next_keyword() {
             match k.as_str() {
                 "item" => {
-                    let name = r.str().to_string();
+                    let name = r.str().trim().to_string();
                     let ctc = r.str().to_string();
                     let tex = r.str().to_string();
                     match schemes
