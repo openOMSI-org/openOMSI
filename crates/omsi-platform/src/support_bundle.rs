@@ -170,6 +170,7 @@ pub fn export(out: &Path, value: &Value) -> anyhow::Result<()> {
         .map(|i| format!("game-{}.log", i.slot)).unwrap_or_else(|| "game.log".into());
     let logs: Vec<_> = [game_log.as_str(), "launcher.log", "crash.log"].iter()
         .filter_map(|name| tail(&dir.join(name)).ok().map(|text| (name.to_string(), text))).collect();
+    to_the_day(&mut value);
     archive(out, &value, &logs, &history())
 }
 
@@ -261,9 +262,11 @@ mod tests {
                 "stack": ["omsi_sim::bus::Bus::step"], "player": "Isaac"}});
         filter_keys(&mut v, &[SNAPSHOT_KEYS, HISTORY_KEYS].concat());
         clean_json(&mut v);
-        let mut times = json!({"started_unix_seconds": 1_793_785_869u64, "error": {"recorded_unix_seconds": 1_793_786_000u64}, "frames": 7});
+        let mut times = json!({"started_unix_seconds": 1_793_785_869u64, "error": {"recorded_unix_seconds": 1_793_786_000u64}, "frames": 7,
+            "last_recorded_game": {"recorded_unix_seconds": 1_793_785_870u64}});
         to_the_day(&mut times);
-        assert_eq!(times, json!({"started_unix_seconds": 1_793_750_400u64, "error": {"recorded_unix_seconds": 1_793_750_400u64}, "frames": 7}));
+        assert_eq!(times, json!({"started_unix_seconds": 1_793_750_400u64, "error": {"recorded_unix_seconds": 1_793_750_400u64}, "frames": 7,
+            "last_recorded_game": {"recorded_unix_seconds": 1_793_750_400u64}}));
         assert_eq!(v, json!({"end": "panic", "frame_times": {"frames": 10, "counts": [10]},
             "error": {"message": "[redacted]", "file": "crates/omsi-sim/src/bus.rs", "line": 3,
                 "stack": ["omsi_sim::bus::Bus::step"]}}));

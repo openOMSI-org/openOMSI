@@ -106,11 +106,11 @@ pub fn save(value: Value) {
 }
 
 pub fn ended(end: &str, fresh: Option<Value>) {
-    ended_in(&CURRENT, end, fresh);
+    ended_in(&CURRENT, &GAME, end, fresh);
 }
 
 pub fn panicked(error: Value) {
-    panicked_in(&CURRENT, &dir(), error, GAME.load(Ordering::Relaxed));
+    panicked_in(&CURRENT, &GAME, &dir(), error);
 }
 
 fn save_in(cell: &'static Mutex<Record>, dir: PathBuf, value: Value, new_game: bool) -> Option<std::thread::JoinHandle<()>> {
@@ -143,7 +143,8 @@ fn save_in(cell: &'static Mutex<Record>, dir: PathBuf, value: Value, new_game: b
     }).ok()
 }
 
-fn ended_in(cell: &'static Mutex<Record>, end: &str, fresh: Option<Value>) {
+fn ended_in(cell: &'static Mutex<Record>, game: &AtomicBool, end: &str, fresh: Option<Value>) {
+    game.store(false, Ordering::Relaxed);
     let Some(mut current) = lock_briefly(cell) else { return };
     let Some((path, old)) = current.take() else { return };
     if !is_open(&old) {
@@ -160,11 +161,11 @@ fn ended_in(cell: &'static Mutex<Record>, end: &str, fresh: Option<Value>) {
     *current = Some((path, value));
 }
 
-fn panicked_in(cell: &'static Mutex<Record>, dir: &Path, mut error: Value, game: bool) {
+fn panicked_in(cell: &'static Mutex<Record>, game: &AtomicBool, dir: &Path, mut error: Value) {
     let Some(mut current) = lock_briefly(cell) else { return };
     let (path, mut value) = match current.take() {
         Some((p, v)) if is_open(&v) => (p, v),
-        _ if game => opened(dir),
+        _ if game.load(Ordering::Relaxed) => opened(dir),
         other => {
             *current = other;
             return;
@@ -343,14 +344,18 @@ mod tests {
     #[test]
     fn a_game_keeps_one_record_to_its_end_and_the_next_game_gets_its_own() {
         static CELL: Mutex<Record> = Mutex::new(None);
+        static IN_GAME: AtomicBool = AtomicBool::new(true);
         let dir = temp_dir("games");
         let game = |frames: u32| json!({"session": {"map": "maps/A/global.cfg"}, "frame_times": {"frames": frames}});
         written(save_in(&CELL, dir.clone(), game(1), true));
-        panicked_in(&CELL, &dir, json!({"message": "caught"}), true);
+        panicked_in(&CELL, &IN_GAME, &dir, json!({"message": "caught"}));
         written(save_in(&CELL, dir.clone(), game(2), false));
-        ended_in(&CELL, "clean", Some(game(3)));
+        ended_in(&CELL, &IN_GAME, "clean", Some(game(3)));
         assert!(save_in(&CELL, dir.clone(), game(4), false).is_none());
-        ended_in(&CELL, "device_lost", None);
+        ended_in(&CELL, &IN_GAME, "device_lost", None);
+        panicked_in(&CELL, &IN_GAME, &dir, json!({"message": "in the launcher after the game"}));
+        assert_eq!(saved(&dir).len(), 1);
+        IN_GAME.store(true, Ordering::Relaxed);
         let first = &saved(&dir)[0];
         assert_eq!(first["end"], "clean");
         assert_eq!(first["frame_times"]["frames"], 3);
@@ -371,15 +376,17 @@ mod tests {
     fn a_panic_while_loading_stays_with_its_game_and_other_programs_keep_none() {
         static GAME_CELL: Mutex<Record> = Mutex::new(None);
         static TOOL_CELL: Mutex<Record> = Mutex::new(None);
+        static IN_GAME: AtomicBool = AtomicBool::new(true);
+        static IN_TOOL: AtomicBool = AtomicBool::new(false);
         let dir = temp_dir("loading");
-        panicked_in(&GAME_CELL, &dir, json!({"message": "loading"}), true);
+        panicked_in(&GAME_CELL, &IN_GAME, &dir, json!({"message": "loading"}));
         written(save_in(&GAME_CELL, dir.clone(), json!({"session": {"map": "maps/A/global.cfg"}}), true));
         let all = saved(&dir);
         assert_eq!(all.len(), 1);
         assert_eq!(all[0]["error"]["message"], "loading");
         assert_eq!(all[0]["session"]["map"], "maps/A/global.cfg");
         let tool = temp_dir("tool");
-        panicked_in(&TOOL_CELL, &tool, json!({"message": "helper"}), false);
+        panicked_in(&TOOL_CELL, &IN_TOOL, &tool, json!({"message": "helper"}));
         assert!(saved(&tool).is_empty());
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::remove_dir_all(&tool);
