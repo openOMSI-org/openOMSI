@@ -292,10 +292,11 @@ impl CarRun {
 
     /// Put what the cars ahead send into this car's `read` variables: the plugs facing the
     /// train's front (`facing`) take the bus's signals of their kind and number.
-    fn read_cables<'a>(&mut self, facing: impl IntoIterator<Item = &'a omsi_vehicle::vehicle::ControlCable>, bus: &CableBus, silent: Option<f32>) {
+    fn read_cables<'a>(&mut self, facing: impl IntoIterator<Item = &'a omsi_vehicle::vehicle::ControlCable>, bus: &CableBus, open_loops_back: bool) {
         for c in facing {
             let Some((kind, number)) = plug(c) else { continue };
-            let Some(value) = bus.iter().find(|(k, n, _)| *k == kind && *n == number).map(|e| e.2).or(silent) else { continue };
+            let own = || c.lines.get(3).filter(|_| open_loops_back).and_then(|w| self.get(w));
+            let Some(value) = bus.iter().find(|(k, n, _)| *k == kind && *n == number).map(|e| e.2).or_else(own) else { continue };
             if let Some(slot) = c.lines.get(2).and_then(|n| omsi_script::compile::with_lower(n, |k| self.names.get(k).copied())) {
                 self.state.vars[slot as usize] = value;
             }
@@ -371,8 +372,8 @@ impl CarRun {
         self.write_place(place);
         let bus = std::mem::take(&mut lead.cable_bus);
         let back_in = std::mem::take(&mut self.back_in);
-        self.read_cables(back_only(plugs[1], plugs[0]), &back_in, Some(0.0));
-        self.read_cables(plugs[0], &bus, None);
+        self.read_cables(back_only(plugs[1], plugs[0]), &back_in, true);
+        self.read_cables(plugs[0], &bus, false);
         let as_ai = !self.prog.frame_ai.is_empty() && lead.ev(Ev::Ai).unwrap_or(0.0) > 0.5;
         let (prog, state, machine) = (self.prog.clone(), &mut self.state, &mut self.machine);
         let own_probe = probe.map(|p| std::mem::replace(&mut lead.host.ground_probe, Some(p)));
@@ -530,7 +531,7 @@ mod tests {
         assert!(v.trailers[0].run.is_some());
         assert_eq!(v.trailers[0].run_var("seen_f"), Some(0.5), "the car behind reads the head's cable");
         assert_eq!(v.var("seen_b"), Some(1.5), "the head reads the car behind's cable");
-        assert_eq!(v.trailers[0].run_var("seen_b"), Some(0.0), "the tail hears nothing behind it");
+        assert_eq!(v.trailers[0].run_var("seen_b"), Some(1.5), "the tail's open plug loops back, as the head's do");
         let mut passive = (*ty).clone();
         passive.program = quiet;
         passive.def.control_cable_back[0] = cable("C", "cc_r", "cc_w");
@@ -541,7 +542,7 @@ mod tests {
         assert!(v.trailers[1].run.is_some());
         assert_eq!(v.var("seen_b"), Some(1.5), "the middle car passes the tail's signal forward");
         assert_eq!(v.trailers[1].run_var("seen_f"), Some(0.5), "the middle car passes the head's signal back");
-        assert_eq!(v.trailers[1].run_var("seen_b"), Some(0.0), "the tail does not hear its own signal");
+        assert_eq!(v.trailers[1].run_var("seen_b"), Some(1.5), "the tail's open plug loops back");
         assert_eq!(v.trailers[1].run_var("b_r"), Some(2.0), "a signal keeps to its own wire past the middle car");
         assert_eq!(v.trailers[1].run_var("a_r"), Some(0.0));
         let mut ty = super::super::tests::coupling_test_type(Some(-4.0));
