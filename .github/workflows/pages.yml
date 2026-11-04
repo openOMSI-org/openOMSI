@@ -1,10 +1,10 @@
-# Publishes the website (site/) with the documentation (docs/*.md) to GitHub Pages.
+# Publishes the website (site/) with the documentation (docs/*.md) to GitHub Pages, one page per address (scripts/build-site.mjs).
 name: Website
 
 on:
   push:
     branches: [main]
-    paths: ["site/**", "docs/**", "assets/logos/**", "assets/icons/app/**", "README.md", ".github/workflows/pages.yml"]
+    paths: ["site/**", "docs/**", "assets/logos/**", "assets/icons/app/**", "README.md", "scripts/build-site.mjs", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 permissions:
@@ -24,14 +24,8 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
-      - name: Assemble the site
-        run: |
-          mkdir -p _site/docs _site/assets
-          cp -R site/. _site/
-          cp docs/*.md _site/docs/
-          cp -R assets/logos _site/assets/logos
-          cp assets/icons/app/openomsi-256.png _site/assets/icon.png
-          cp assets/icons/app/openomsi.svg _site/assets/icon.svg
+      - name: Build the site
+        run: node scripts/build-site.mjs _site
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:

@@ -50,7 +50,7 @@ It loads the existing OMSI 2 maps, buses, scenery and mods as they are.
 
 The newest stable version is always at
 [**Releases → Latest**](https://github.com/openOMSI-org/openOMSI/releases/latest) and on the
-[website](https://openomsi.org/#/download). Newer, untested builds are published as
+[website](https://openomsi.org/download/). Newer, untested builds are published as
 *Pre-release* (beta) on the [Releases](https://github.com/openOMSI-org/openOMSI/releases) page.
 
 | Platform | File |

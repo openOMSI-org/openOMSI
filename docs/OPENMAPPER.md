@@ -49,8 +49,8 @@ built for each system and processor:
 
 ## Learn more
 
-* [Your first map](#/mapper/docs/TUTORIAL): from an empty window to a map you can drive in service.
-* [Features and controls](#/mapper/docs/FEATURES): everything it can do, and the keys.
-* [Roadmap](#/mapper/docs/ROADMAP): what comes next.
+* [Your first map](https://openomsi.org/mapper/docs/tutorial/): from an empty window to a map you can drive in service.
+* [Features and controls](https://openomsi.org/mapper/docs/features/): everything it can do, and the keys.
+* [Roadmap](https://openomsi.org/mapper/docs/roadmap/): what comes next.
 * [Source code](https://github.com/openOMSI-org/openMapper) and the
   [changelog](https://github.com/openOMSI-org/openMapper/blob/main/CHANGELOG.md).
