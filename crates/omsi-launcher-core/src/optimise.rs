@@ -125,6 +125,7 @@ pub fn lighter_steps(s: &Value, limit: Limit, m: &Machine) -> Vec<Step> {
     match limit {
         Limit::Gpu => {
             add(mirrors_redrawn, step("mirror_refresh", json!("eco"), Apply::Now));
+            add(!on(s, "texture_compression", true), step("texture_compression", json!(true), Apply::NextStart));
             add(msaa > 2 && m.msaa(2), step("msaa", json!(2), Apply::Rebuild));
             add(mirror > 512, step("mirror_size", json!(512), Apply::NextStart));
             // (what Enhanced's light adds, dearest first: the ray tracing, every light's shadows, the
