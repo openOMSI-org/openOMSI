@@ -416,7 +416,7 @@ impl Radio {
         if self.stations.is_empty() {
             return None;
         }
-        let button = if Self::has_radio(v) { Self::bus_button(v) } else { self.power.then_some(0) };
+        let button = Self::bus_button(v).filter(|_| Self::has_radio(v)).or(self.power.then_some(0));
         button.map(|b| (b + self.offset) % self.stations.len())
     }
 
@@ -428,8 +428,8 @@ impl Radio {
         if self.stations.is_empty() {
             return "No radio stations (see ~/.openomsi/radio.cfg)".into();
         }
-        if let Some(v) = v.filter(|v| Self::has_radio(v)) {
-            return if Self::bus_button(v).is_some() { "The bus radio is on (switch it off in the cockpit)" } else { "The bus radio is off (switch it on in the cockpit)" }.into();
+        if v.is_some_and(|v| Self::has_radio(v) && Self::bus_button(v).is_some()) {
+            return "The bus radio is on (switch it off in the cockpit)".into();
         }
         self.power = !self.power;
         if !self.power {
