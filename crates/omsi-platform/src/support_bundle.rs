@@ -31,9 +31,16 @@ pub fn redact_label(text: &str) -> String {
     }
 }
 
+const SHAREABLE_FOLDERS: [&str; 2] = ["maps/", "Vehicles/"];
+
+fn is_source_file(text: &str) -> bool {
+    text.starts_with("crates/") && text.ends_with(".rs") && !text.contains("..")
+        && text.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '/' | '-'))
+}
+
 pub fn content_name(text: &str) -> String {
     let text = text.replace('\\', "/");
-    if !(text.starts_with("maps/") || text.starts_with("Vehicles/"))
+    if !SHAREABLE_FOLDERS.iter().any(|f| text.starts_with(f))
         || text.split('/').any(|c| c == ".." || c.is_empty())
         || text.contains(':')
     {
@@ -45,7 +52,9 @@ pub fn content_name(text: &str) -> String {
 pub fn clean_json(value: &mut Value) {
     match value {
         Value::String(s) => {
-            *s = if s.starts_with("maps/") || s.starts_with("Vehicles/") {
+            *s = if is_source_file(s) {
+                s.clone()
+            } else if SHAREABLE_FOLDERS.iter().any(|f| s.starts_with(f)) {
                 content_name(s)
             } else { redact_label(s) };
         }
@@ -109,10 +118,10 @@ pub fn session_dir() -> PathBuf {
 }
 
 fn summary(value: &Value) -> String {
-    format!("openOMSI support package (schema 1)\n\n{}\n\nLogs are privacy projections, not raw log copies. Null means unavailable.\nRoots and archives are aliases; no absolute paths or archive filenames are exported.\nSettings are allowlisted; no environment, command line, chat, player identity, LAN codes, addresses, configuration files or serial numbers are attached.\n", serde_json::to_string_pretty(value).unwrap_or_default())
+    format!("openOMSI support package (schema 1)\n\n{}\n\nLogs are privacy projections, not raw log copies. Null means unavailable.\nRoots and archives are aliases; no absolute paths or archive filenames are exported.\nhistory/ holds a record of each game of the last 30 days: frame times, how it ended and its error, filtered the same way.\nSettings are allowlisted; no environment, command line, chat, player identity, LAN codes, addresses, configuration files or serial numbers are attached.\n", serde_json::to_string_pretty(value).unwrap_or_default())
 }
 
-fn archive(out: &Path, value: &Value, logs: &[(String, String)]) -> anyhow::Result<()> {
+fn archive(out: &Path, value: &Value, logs: &[(String, String)], history: &[(String, Value)]) -> anyhow::Result<()> {
     // create_new: a mistaken filename must never overwrite an unrelated file.
     let file = std::fs::OpenOptions::new().write(true).create_new(true).open(out)?;
     let mut zip = zip::ZipWriter::new(file);
@@ -125,6 +134,10 @@ fn archive(out: &Path, value: &Value, logs: &[(String, String)]) -> anyhow::Resu
         for (name, text) in logs {
             zip.start_file(format!("logs/{name}"), opts)?;
             zip.write_all(log_projection(text).as_bytes())?;
+        }
+        for (name, record) in history {
+            zip.start_file(format!("history/{name}"), opts)?;
+            zip.write_all(&serde_json::to_vec_pretty(record)?)?;
         }
         Ok(())
     })();
@@ -147,7 +160,7 @@ pub fn export(out: &Path, value: &Value) -> anyhow::Result<()> {
             if let Ok(mut game) = serde_json::from_slice::<Value>(&bytes) {
                 // Cache files are not raw attachments. Unknown keys are discarded,
                 // and all remaining strings pass the same privacy filter again.
-                filter_cached(&mut game);
+                filter_keys(&mut game, SNAPSHOT_KEYS);
                 clean_json(&mut game);
                 value["last_recorded_game"] = game;
             }
@@ -157,11 +170,21 @@ pub fn export(out: &Path, value: &Value) -> anyhow::Result<()> {
         .map(|i| format!("game-{}.log", i.slot)).unwrap_or_else(|| "game.log".into());
     let logs: Vec<_> = [game_log.as_str(), "launcher.log", "crash.log"].iter()
         .filter_map(|name| tail(&dir.join(name)).ok().map(|text| (name.to_string(), text))).collect();
-    archive(out, &value, &logs)
+    archive(out, &value, &logs, &history())
 }
 
-fn filter_cached(value: &mut Value) {
-    const KEYS: &[&str] = &["schema_version", "recorded_unix_seconds", "source", "version", "build",
+fn history() -> Vec<(String, Value)> {
+    crate::diagnostics::recent().into_iter()
+        .filter(|(name, _)| name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.'))
+        .map(|(name, mut record)| {
+            filter_keys(&mut record, &[SNAPSHOT_KEYS, HISTORY_KEYS].concat());
+            clean_json(&mut record);
+            (name, record)
+        })
+        .collect()
+}
+
+const SNAPSHOT_KEYS: &[&str] = &["schema_version", "recorded_unix_seconds", "source", "version", "build",
         "os", "architecture", "os_version", "graphics", "backend", "device_type",
         "adapter", "vendor_id", "device_id", "driver", "driver_info", "device_features", "device_limits",
         "max_texture_dimension_2d", "max_buffer_size", "max_storage_buffer_binding_size", "max_bind_groups",
@@ -172,9 +195,14 @@ fn filter_cached(value: &mut Value) {
         "files", "bytes", "controllers", "name", "vid_pid", "axes", "buttons",
         "gamepad", "ffb_capable", "ffb_effect_available", "physical_memory_bytes", "adapter_vram_mb",
         "adapter_texture_mb", "gpu_memory_bytes", "textures", "meshes"];
+
+const HISTORY_KEYS: &[&str] = &["started_unix_seconds", "end", "error", "message", "file", "stack",
+    "thread", "panics", "frame_times", "frames", "seconds", "average_fps", "worst_ms", "up_to_ms", "counts"];
+
+fn filter_keys(value: &mut Value, keys: &[&str]) {
     match value {
-        Value::Object(o) => { o.retain(|k, _| KEYS.contains(&k.as_str())); o.values_mut().for_each(filter_cached); }
-        Value::Array(a) => a.iter_mut().for_each(filter_cached),
+        Value::Object(o) => { o.retain(|k, _| keys.contains(&k.as_str())); o.values_mut().for_each(|v| filter_keys(v, keys)); }
+        Value::Array(a) => a.iter_mut().for_each(|v| filter_keys(v, keys)),
         _ => {}
     }
 }
@@ -197,15 +225,30 @@ mod tests {
         assert_eq!(content_name("Vehicles/Bus/vehicle.bus"), "Vehicles/Bus/vehicle.bus");
         assert_eq!(content_name("maps/../../private.txt"), "[redacted]");
         assert_eq!(content_name("/Users/isaac/OMSI 2/maps/Grundorf/global.cfg"), "[redacted]");
+        let mut v = json!(["crates/omsi-sim/src/bus.rs", "crates/../../Users/isaac/x.rs", "crates/a b/x.rs", "crates/notes.txt"]);
+        clean_json(&mut v);
+        assert_eq!(v, json!(["crates/omsi-sim/src/bus.rs", "[redacted]", "[redacted]", "[redacted]"]));
     }
 
     #[test]
     fn cached_snapshot_is_filtered_again_before_export() {
         let mut v = json!({"password": "123456", "unknown_filename.txt": "private",
             "graphics": {"adapter": "C:\\Users\\Isaac\\gpu", "vendor_id": 4098, "cookie": "SECRET"}});
-        filter_cached(&mut v);
+        filter_keys(&mut v, SNAPSHOT_KEYS);
         clean_json(&mut v);
         assert_eq!(v, json!({"graphics": {"adapter": "[redacted]", "vendor_id": 4098}}));
+    }
+
+    #[test]
+    fn a_game_record_keeps_its_frame_times_and_error_but_no_private_text() {
+        let mut v = json!({"end": "panic", "chat": "hello", "frame_times": {"frames": 10, "counts": [10]},
+            "error": {"message": "cannot open C:\\Users\\Isaac\\x", "file": "crates/omsi-sim/src/bus.rs", "line": 3,
+                "stack": ["omsi_sim::bus::Bus::step"], "player": "Isaac"}});
+        filter_keys(&mut v, &[SNAPSHOT_KEYS, HISTORY_KEYS].concat());
+        clean_json(&mut v);
+        assert_eq!(v, json!({"end": "panic", "frame_times": {"frames": 10, "counts": [10]},
+            "error": {"message": "[redacted]", "file": "crates/omsi-sim/src/bus.rs", "line": 3,
+                "stack": ["omsi_sim::bus::Bus::step"]}}));
     }
 
     #[test]
@@ -227,15 +270,17 @@ mod tests {
     fn archive_has_only_fixed_entries_and_refuses_overwrite() {
         let path = std::env::temp_dir().join(format!("omsi-support-test-{}.zip", std::process::id()));
         let _ = std::fs::remove_file(&path);
-        archive(&path, &json!({"schema_version": 1}), &[("game.log".into(), "chat: SECRET".into())]).unwrap();
+        let history = [("1-2.json".to_string(), json!({"end": "clean"}))];
+        archive(&path, &json!({"schema_version": 1}), &[("game.log".into(), "chat: SECRET".into())], &history).unwrap();
         let mut z = zip::ZipArchive::new(std::fs::File::open(&path).unwrap()).unwrap();
-        assert_eq!(z.len(), 3);
+        assert_eq!(z.len(), 4);
+        assert!(z.by_name("history/1-2.json").is_ok());
         assert_eq!(z.by_index(0).unwrap().name().unwrap(), "diagnostics.txt");
         assert_eq!(z.by_index(1).unwrap().name().unwrap(), "diagnostics.json");
         let mut log = String::new();
         z.by_name("logs/game.log").unwrap().read_to_string(&mut log).unwrap();
         assert!(!log.contains("SECRET"));
-        assert!(archive(&path, &Value::Null, &[]).is_err());
+        assert!(archive(&path, &Value::Null, &[], &[]).is_err());
         drop(z);
         std::fs::remove_file(path).unwrap();
     }
