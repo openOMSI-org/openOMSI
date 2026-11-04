@@ -36,11 +36,6 @@
 //! (`frame.rs`): the queue's order is all the synchronisation needed. Each texture is handed
 //! over in the state wgpu left it in after its last pass, and Streamline puts it back in that
 //! state.
-//!
-//! On Vulkan the same goes with a command buffer of ours (`vulkan.rs`), each image handed over
-//! with its memory, a view and the layout wgpu left it in. Streamline has to be started before
-//! the device is made there: DLSS needs device extensions of its own, which `vulkan_extensions`
-//! asks it for and `Renderer::open_on` adds to wgpu's (`prepare_vulkan`).
 
 use super::d3d12::{game_dir, wide, ListRing};
 use super::vulkan::{VkGpu, VkRing};
@@ -55,7 +50,6 @@ use windows::Win32::Graphics::Dxgi::Common::*;
 use windows::Win32::Graphics::Dxgi::{IDXGIDeviceSubObject_Impl, IDXGIObject_Impl, IDXGIOutput, IDXGISwapChain, IDXGISwapChain_Impl, DXGI_FRAME_STATISTICS, DXGI_PRESENT, DXGI_SWAP_CHAIN_DESC, DXGI_SWAP_CHAIN_FLAG};
 use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryExW, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR};
 
-// --- Streamline's structs and constants, as its 2.14 headers lay them out
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -188,7 +182,6 @@ struct AdapterInfo {
     vk_physical_device: *mut c_void,
 }
 
-/// `sl::VulkanInfo` (`sl_helpers_vk.h`): wgpu's Vulkan device, for manual hooking.
 #[repr(C)]
 struct VulkanInfo {
     base: Base,
@@ -215,7 +208,6 @@ struct Version {
     build: u32,
 }
 
-/// `sl::FeatureRequirements`: what a feature needs, here its Vulkan extensions and features.
 #[repr(C)]
 struct FeatureRequirements {
     base: Base,
@@ -364,7 +356,6 @@ type FnDlssSetOptions = unsafe extern "C" fn(*const ViewportHandle, *const DlssO
 /// memory budget; treated as a failure it would switch DLSS off on a card that is merely full.
 const WARN_OUT_OF_VRAM: i32 = 39;
 
-/// The name of an `sl::Result` code, for the log.
 fn result_name(r: i32) -> &'static str {
     const NAMES: [&str; 41] = [
         "eOk", "eErrorIO", "eErrorDriverOutOfDate", "eErrorOSOutOfDate", "eErrorOSDisabledHWS", "eErrorDeviceNotCreated",
@@ -382,7 +373,6 @@ fn result_name(r: i32) -> &'static str {
 
 
 
-/// A Streamline call's result as an error naming the call.
 fn check(what: &str, r: i32) -> Result<()> {
     static VRAM_WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
     match r {
@@ -397,7 +387,6 @@ fn check(what: &str, r: i32) -> Result<()> {
     }
 }
 
-/// Streamline's log lines into the game's log (errors, warnings; the rest at debug).
 unsafe extern "C" fn sl_log(kind: u32, msg: *const c_char) {
     if msg.is_null() {
         return;
@@ -423,7 +412,6 @@ fn mode_code(quality: TemporalQuality) -> u32 {
     }
 }
 
-/// The DXGI format Streamline is told for a texture (the formats DLSS gets here only).
 fn dxgi_format(f: wgpu::TextureFormat) -> u32 {
     use wgpu::TextureFormat as Tf;
     (match f {
@@ -511,7 +499,6 @@ impl IDXGISwapChain_Impl for NullSwapChain_Impl {
     }
 }
 
-/// An export of `sl.interposer.dll` as the function type `T`.
 fn load_fn<T: Copy>(module: HMODULE, name: &CStr) -> Result<T> {
     debug_assert_eq!(std::mem::size_of::<T>(), std::mem::size_of::<usize>());
     let f = unsafe { GetProcAddress(module, PCSTR(name.as_ptr().cast())) }
@@ -554,7 +541,6 @@ fn init(module: HMODULE, dir: &std::path::Path, features: &'static [u32], render
     Ok((plugin_dir, plugin_paths))
 }
 
-/// A function a Streamline plugin offers (`slGetFeatureFunction`).
 fn feature_fn(module: HMODULE, feature: u32, name: &CStr) -> Result<*mut c_void> {
     let get_feature_function: FnGetFeatureFunction = load_fn(module, c"slGetFeatureFunction")?;
     let mut f: *mut c_void = std::ptr::null_mut();
@@ -565,17 +551,14 @@ fn feature_fn(module: HMODULE, feature: u32, name: &CStr) -> Result<*mut c_void>
     Ok(f)
 }
 
-/// wgpu's device, as `Runtime::start` is given it.
 enum Device {
     Dx12(ID3D12Device),
     Vulkan(VkGpu),
 }
 
-/// wgpu's device as DLSS runs on it, with our command lists (or buffers) on its queue.
 enum Backend {
     Dx12 {
         ring: ListRing,
-        /// Streamline's proxy of a `NullSwapChain`, if it made one.
         pacer: Option<IDXGISwapChain>,
     },
     Vulkan {
@@ -605,20 +588,16 @@ pub struct Runtime {
     /// (kept alive: `slInit` was given pointers into them)
     _paths: (Vec<u16>, Vec<*const u16>),
     viewport: ViewportHandle,
-    /// Quality and window size `slDLSSSetOptions` was last called with.
     options_set: Option<(TemporalQuality, (u32, u32))>,
-    /// Streamline's answers to "how big to draw": (quality, window size) to picture size.
     optimal: Vec<((TemporalQuality, (u32, u32)), (u32, u32))>,
     frame: u32,
     backend: Backend,
-    /// DLSS has made its resources for the viewport, to be freed when this is dropped.
     allocated: bool,
 }
 
 // (only the render thread ever calls into Streamline; what is held are raw handles)
 unsafe impl Send for Runtime {}
 
-/// Streamline started for Vulkan before the device (`vulkan_extensions`), waiting for it.
 struct Prepared {
     module: HMODULE,
     paths: (Vec<u16>, Vec<*const u16>),
@@ -629,7 +608,6 @@ unsafe impl Send for Prepared {}
 
 static PREPARED: std::sync::Mutex<Option<Prepared>> = std::sync::Mutex::new(None);
 
-/// Opens `sl.interposer.dll` from the game's folder.
 fn open_interposer(dir: &std::path::Path) -> Result<HMODULE> {
     let missing = omsi_cfg::upscaler_files::missing(dir, "dlss", omsi_cfg::upscaler_files::Api::Dx12);
     if !missing.is_empty() {
@@ -732,8 +710,6 @@ pub fn vulkan_extensions() -> Result<Vec<&'static CStr>> {
 /// are chained to its device by us.
 pub const VULKAN_FEATURES: [&str; 3] = ["timelineSemaphore", "descriptorIndexing", "bufferDeviceAddress"];
 
-/// Lets go of Streamline started by `vulkan_extensions` when the device could not be made with
-/// what it asked for.
 pub fn vulkan_abandon() {
     if let Some(p) = PREPARED.lock().unwrap_or_else(|e| e.into_inner()).take() {
         if let Ok(shutdown) = load_fn::<Fn0>(p.module, c"slShutdown") {
@@ -745,17 +721,12 @@ pub fn vulkan_abandon() {
     }
 }
 
-/// The functions DLSS is run with, once Streamline has a device.
 struct Calls {
     is_supported: FnIsFeatureSupported,
     is_loaded: FnIsFeatureLoaded,
 }
 
 impl Runtime {
-    /// Starts Streamline and its DLSS plugin on wgpu's device (Direct3D 12, or Vulkan when
-    /// `vulkan_extensions` started it before the device). The error, when there is one, is meant
-    /// for the player's log: which DLL is missing, that the card or its driver cannot do DLSS, or
-    /// that the game is on neither interface.
     pub fn load(device: &wgpu::Device) -> Result<Runtime> {
         if let Some(hal) = unsafe { device.as_hal::<wgpu_hal::api::Dx12>() } {
             let raw_device = hal.raw_device().clone();
@@ -786,8 +757,6 @@ impl Runtime {
         })
     }
 
-    /// Streamline initialised (`slInit`): hands it the device, checks DLSS can run on this card
-    /// and gets its functions. Shut down by the caller on an error.
     fn start(module: HMODULE, dir: &std::path::Path, paths: (Vec<u16>, Vec<*const u16>), device: Device) -> Result<Runtime> {
         let shutdown: Fn0 = load_fn(module, c"slShutdown")?;
         let calls = Calls { is_supported: load_fn(module, c"slIsFeatureSupported")?, is_loaded: load_fn(module, c"slIsFeatureLoaded")? };
@@ -880,7 +849,6 @@ impl Runtime {
         })
     }
 
-    /// Whether DLSS runs on this adapter (an RTX card, a recent driver) and its plugin is loaded.
     fn supported(_module: HMODULE, calls: &Calls, adapter: &AdapterInfo) -> Result<()> {
         check("the DLSS check of this card (it takes a GeForce RTX and an up-to-date driver)", unsafe { (calls.is_supported)(FEATURE_DLSS, adapter) })?;
         let mut loaded = false;
@@ -919,8 +887,6 @@ impl Runtime {
         }
     }
 
-    /// How big to draw the picture for this quality and window: Streamline's optimal size
-    /// (asked once per quality and size), NVIDIA's ratio if it gives none.
     pub fn render_size(&mut self, quality: TemporalQuality, out: (u32, u32)) -> (u32, u32) {
         if quality == TemporalQuality::Native {
             return out;
@@ -964,7 +930,6 @@ impl Runtime {
         let (ow, oh) = inputs.output_size;
         let blank = |native: *mut c_void, state: u32, format: u32, (w, h): (u32, u32)| Resource {
             base: Base::new(RESOURCE, 1),
-            // ResourceType::eTex2d
             kind: 0,
             native,
             memory: std::ptr::null_mut(),
@@ -1005,8 +970,6 @@ impl Runtime {
                 out.try_into().map_err(|_| anyhow!("five resources"))?
             }
             Backend::Vulkan { .. } => {
-                // (Streamline on Vulkan: the image, its memory and a view, the layout wgpu left
-                // it in, its format, create flags and usage)
                 let order = [0usize, 1, 2, 4, 3];
                 let mut out = Vec::with_capacity(5);
                 for (k, t) in textures.iter().enumerate() {
@@ -1053,7 +1016,6 @@ impl Runtime {
             clip_to_prev_clip: c.clip_to_prev_clip,
             prev_clip_to_clip: c.prev_clip_to_clip,
             jitter_offset: f2(c.jitter),
-            // (scales our pixel offsets to the 0..1 of the picture DLSS expects)
             mvec_scale: f2([1.0 / rw as f32, 1.0 / rh as f32]),
             camera_pinhole_offset: f2([0.0, 0.0]),
             camera_pos: f3(c.camera_pos),
@@ -1112,7 +1074,6 @@ impl Runtime {
 
 impl Drop for Runtime {
     fn drop(&mut self) {
-        // (let the GPU finish the last DLSS frame before its resources go)
         self.backend.wait();
         unsafe {
             if self.allocated {

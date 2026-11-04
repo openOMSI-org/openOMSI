@@ -9,24 +9,20 @@
 
 use std::path::{Path, PathBuf};
 
-/// Streamline and its DLSS plugin: the same four for DirectX 12 and Vulkan.
 const DLSS: [&str; 4] = ["sl.interposer.dll", "sl.common.dll", "sl.dlss.dll", "nvngx_dlss.dll"];
 const FSR3_DX12: [&str; 2] = ["amd_fidelityfx_loader_dx12.dll", "amd_fidelityfx_upscaler_dx12.dll"];
 const FSR3_VULKAN: [&str; 2] = ["amd_fidelityfx_loader_vk.dll", "amd_fidelityfx_upscaler_vk.dll"];
 
-/// The graphics interface an upscaler is to run on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Api {
     Dx12,
     Vulkan,
 }
 
-/// The folder of the running program.
 pub fn program_dir() -> PathBuf {
     std::env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf)).unwrap_or_else(|| ".".into())
 }
 
-/// The DLLs an upscaler (`dlss`, `fsr3`) needs on `api`.
 pub fn files(upscaler: &str, api: Api) -> &'static [&'static str] {
     match (upscaler, api) {
         ("dlss", _) => &DLSS,
@@ -36,12 +32,10 @@ pub fn files(upscaler: &str, api: Api) -> &'static [&'static str] {
     }
 }
 
-/// Which of the DLLs an upscaler needs on `api` are not in `dir`.
 pub fn missing(dir: &Path, upscaler: &str, api: Api) -> Vec<&'static str> {
     files(upscaler, api).iter().copied().filter(|f| !dir.join(f).is_file()).collect()
 }
 
-/// Whether the upscaler's DLLs for one interface or the other are all in `dir`.
 fn present(dir: &Path, upscaler: &str) -> bool {
     [Api::Dx12, Api::Vulkan].into_iter().any(|api| !files(upscaler, api).is_empty() && missing(dir, upscaler, api).is_empty())
 }
@@ -52,13 +46,11 @@ pub fn rtx_candidate(vendor: u32, name: &str) -> bool {
     vendor == 0x10de && name.to_ascii_uppercase().contains("RTX")
 }
 
-/// Whether Windows lists an adapter DLSS may run on (`rtx_candidate`). Asked once a run.
 pub fn rtx_present() -> bool {
     static RTX: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *RTX.get_or_init(|| adapters().iter().any(|(vendor, name)| rtx_candidate(*vendor, name)))
 }
 
-/// The adapters Windows lists (vendor id, name).
 #[cfg(windows)]
 fn adapters() -> Vec<(u32, String)> {
     use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1};
@@ -75,25 +67,19 @@ fn adapters() -> Vec<(u32, String)> {
     out
 }
 
-/// (no NVIDIA runtime outside Windows)
 #[cfg(not(windows))]
 fn adapters() -> Vec<(u32, String)> {
     Vec::new()
 }
 
-/// The upscalers that can run from `dir` on this machine, as the `upscaler=` setting names them:
-/// Windows only. FSR 3 with AMD's DLLs for DirectX 12 or Vulkan; DLSS with NVIDIA's and an RTX
-/// card.
 pub fn available(dir: &Path) -> Vec<&'static str> {
     offered(dir, cfg!(windows), rtx_present())
 }
 
-/// `available` for a machine that is Windows or not and has an RTX card or not.
 fn offered(dir: &Path, windows: bool, rtx: bool) -> Vec<&'static str> {
     ["dlss", "fsr3"].into_iter().filter(|u| windows && present(dir, u) && (*u != "dlss" || rtx)).collect()
 }
 
-/// `upscale_quality=` as its one word; anything unknown is the default.
 pub fn quality_word(s: &str) -> &'static str {
     match s.trim().to_ascii_lowercase().as_str() {
         "native" => "native",
@@ -132,7 +118,6 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// FSR 3 is offered with AMD's Vulkan DLLs alone too.
     #[test]
     fn fsr3_on_vulkan_alone() {
         let dir = scratch("vk");
@@ -143,7 +128,6 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// DLSS only with an RTX card, FSR 3 on any.
     #[test]
     fn dlss_only_with_an_rtx_card() {
         let dir = scratch("rtx");

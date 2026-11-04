@@ -4,14 +4,12 @@
 // `scene_clip`), so the main pass's depth test meets it.
 
 struct Motion {
-    // this frame's view-projection without the sub-pixel jitter
     vp: mat4x4<f32>,
     // last frame's, for last frame's model matrices (relative to last frame's render origin)
     vp_prev: mat4x4<f32>,
     // last frame's, relative to this frame's render origin: the sky, and the entries without
     // a matrix of last frame
     vp_prev_here: mat4x4<f32>,
-    // the inverse of `vp` (the sky's directions)
     vp_inv: mat4x4<f32>,
     // xy: the render size in pixels, z: 1 when `prev_models` holds last frame's matrices,
     // w: how many entries it holds
@@ -22,14 +20,12 @@ struct Motion {
 };
 // (group 2 is the vehicle reflection's in the scene module: the motion is group 3)
 @group(3) @binding(0) var<uniform> motion: Motion;
-// last frame's model matrices, laid out as `models`
 @group(3) @binding(1) var<storage, read> prev_models: array<vec4<f32>>;
 
 struct MotionOut {
     @builtin(position) @invariant clip: vec4<f32>,
     @location(2) uv: vec2<f32>,
     @location(3) @interpolate(flat) params: vec4<f32>,
-    // (without the jitter) this frame's and last frame's clip position
     @location(5) cur: vec4<f32>,
     @location(6) prev: vec4<f32>,
 };
@@ -70,7 +66,6 @@ fn vs_motion(in: VsIn) -> MotionOut {
         out.prev = motion.vp_prev_here * wp;
     }
     if (pr.y < 0.5) {
-        // invisible: collapse the triangle
         out.clip = vec4<f32>(0.0, 0.0, 2.0, 1.0);
     }
     return out;

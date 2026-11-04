@@ -26,12 +26,6 @@
 //! AMD FSR 3 upscaling by way of AMD's FidelityFX API: Windows, DirectX 12 or Vulkan, any card
 //! that runs it well. It takes the same inputs as DLSS (`super::Inputs`) and leaves the same kind
 //! of picture: the sRGB-encoded values it was given, at the window's size.
-//!
-//! `amd_fidelityfx_loader_dx12.dll` and `amd_fidelityfx_upscaler_dx12.dll`, or on Vulkan
-//! `amd_fidelityfx_loader_vk.dll` and `amd_fidelityfx_upscaler_vk.dll` (AMD's signed DLLs from
-//! the SDK, MIT), are opened from the game's folder when the first frame asks for them; nothing
-//! is linked. The two loaders take the same calls; only the device and the resources they are
-//! handed differ (`ffx_api_dx12.h`, `vk/ffx_api_vk.h`).
 
 use super::d3d12::{game_dir, wide, ListRing};
 use super::vulkan::{VkGpu, VkRing};
@@ -47,7 +41,6 @@ use windows::Win32::Graphics::Direct3D12::*;
 use windows::Win32::Graphics::Dxgi::Common::*;
 use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryExW, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR};
 
-// --- the FidelityFX API's types, as its v2.3.0 headers lay them out
 
 type FfxContext = *mut c_void;
 
@@ -108,7 +101,6 @@ struct CreateBackendDx12 {
     device: *mut c_void,
 }
 
-/// `ffxCreateBackendVKDesc`: the device as `VkDeviceContext` gives it.
 #[repr(C)]
 struct CreateBackendVk {
     header: Header,
@@ -203,7 +195,6 @@ type FnCreateContext = unsafe extern "C" fn(*mut FfxContext, *const Header, *con
 type FnDestroyContext = unsafe extern "C" fn(*mut FfxContext, *const c_void) -> u32;
 type FnDispatch = unsafe extern "C" fn(*mut FfxContext, *const Header) -> u32;
 
-/// The loader DLL's entry points.
 struct Api {
     _module: HMODULE,
     create_context: FnCreateContext,
@@ -218,7 +209,6 @@ unsafe impl Sync for Api {}
 static API_DX12: OnceLock<Option<Api>> = OnceLock::new();
 static API_VK: OnceLock<Option<Api>> = OnceLock::new();
 
-/// The loader DLL for an interface.
 fn loader_name(gpu: Gpu) -> &'static str {
     match gpu {
         Gpu::Dx12 => "amd_fidelityfx_loader_dx12.dll",
@@ -281,7 +271,6 @@ fn ffx_format(f: DXGI_FORMAT) -> u32 {
     }
 }
 
-/// The FidelityFX format of a texture the upscaler is given on Vulkan.
 fn ffx_format_of(f: wgpu::TextureFormat) -> u32 {
     use wgpu::TextureFormat as Tf;
     match f {
@@ -298,8 +287,6 @@ fn ffx_format_of(f: wgpu::TextureFormat) -> u32 {
     }
 }
 
-/// A texture as the FidelityFX API describes it on Vulkan (`ffxApiGetResourceVK` and
-/// `ffxApiGetImageResourceDescriptionVK` in its headers: the image, its size, format and usage).
 fn resource_vk(t: &wgpu::Texture, state: u32) -> Result<Resource> {
     let image = super::vulkan::image(t)?;
     let depth = t.format().is_depth_stencil_format();
@@ -315,7 +302,6 @@ fn resource_vk(t: &wgpu::Texture, state: u32) -> Result<Resource> {
     })
 }
 
-/// A texture as the FidelityFX API describes it on this interface.
 fn resource_on(gpu: Gpu, t: &wgpu::Texture, state: u32) -> Result<Resource> {
     match gpu {
         Gpu::Dx12 => resource(t, state),
@@ -323,7 +309,6 @@ fn resource_on(gpu: Gpu, t: &wgpu::Texture, state: u32) -> Result<Resource> {
     }
 }
 
-/// A texture as the FidelityFX API describes it (`ffxApiGetResourceDX12` in its headers).
 fn resource(t: &wgpu::Texture, state: u32) -> Result<Resource> {
     let hal = unsafe { t.as_hal::<wgpu_hal::api::Dx12>() }.ok_or_else(|| anyhow!("no Direct3D 12 resource under an FSR 3 texture"))?;
     let raw = unsafe { hal.raw_resource() }.clone();
@@ -358,7 +343,6 @@ enum BackendDesc {
     Vulkan(Box<CreateBackendVk>),
 }
 
-/// wgpu's device and our command lists or buffers on its queue.
 enum Backend {
     Dx12 { device: ID3D12Device, ring: ListRing },
     Vulkan { gpu: VkGpu, ring: VkRing },
@@ -389,7 +373,6 @@ pub struct Upscaler {
 unsafe impl Send for Upscaler {}
 
 impl Upscaler {
-    /// FSR 3 upscaling on wgpu's device (Direct3D 12 or Vulkan); the error says what is missing.
     pub fn load(device: &wgpu::Device) -> Result<Upscaler> {
         let dir = game_dir();
         let backend = if let Some(hal) = unsafe { device.as_hal::<wgpu_hal::api::Dx12>() } {
@@ -411,7 +394,6 @@ impl Upscaler {
         Ok(Upscaler { backend, context: None })
     }
 
-    /// AMD's context for a window of `display` pixels (made anew for a new size).
     fn context_for(&mut self, display: (u32, u32)) -> Result<*mut FfxContext> {
         let api = api(self.backend.gpu())?;
         if self.context.as_ref().is_some_and(|c| c.display != display) {
@@ -450,8 +432,6 @@ impl Upscaler {
         Ok(&mut *self.context.as_mut().expect("made above").context)
     }
 
-    /// Upscales this frame into `inputs.output`: recorded into a command list (or buffer) of
-    /// ours and put on wgpu's queue, after the submit that drew the inputs.
     pub fn upscale(&mut self, queue: &wgpu::Queue, inputs: &Inputs, c: &FrameConstants) -> Result<()> {
         let gpu = self.backend.gpu();
         let api = api(gpu)?;
@@ -483,7 +463,6 @@ impl Upscaler {
                 transparency_and_composition: Resource::NONE,
                 output,
                 jitter_offset: Coords { x: c.jitter[0], y: c.jitter[1] },
-                // (the motion is in pixels already)
                 motion_vector_scale: Coords { x: 1.0, y: 1.0 },
                 render_size: Dimensions { width: inputs.render_size.0, height: inputs.render_size.1 },
                 upscale_size: Dimensions { width: inputs.output_size.0, height: inputs.output_size.1 },
@@ -503,7 +482,6 @@ impl Upscaler {
             };
             check("FSR 3 upscaling", unsafe { (api.dispatch)(context, &desc.header) })
         };
-        // (submitted either way: an empty list is harmless and keeps the fence right)
         match &mut self.backend {
             Backend::Dx12 { ring, .. } => {
                 let queue_hal = unsafe { queue.as_hal::<wgpu_hal::api::Dx12>() }.ok_or_else(|| anyhow!("no Direct3D 12 queue under wgpu's"))?;

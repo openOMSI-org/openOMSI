@@ -5,7 +5,6 @@ use windows::core::Interface;
 use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Graphics::Direct3D12::*;
 
-/// The folder the upscalers' DLLs are taken from: the game's.
 pub(super) fn game_dir() -> std::path::PathBuf {
     omsi_cfg::upscaler_files::program_dir()
 }
@@ -15,16 +14,12 @@ pub(super) fn wide(s: &std::path::Path) -> Vec<u16> {
     s.as_os_str().encode_wide().chain(std::iter::once(0)).collect()
 }
 
-/// One of the command lists an upscaler records into in turn, with the fence value that says
-/// the GPU has finished its last use.
 struct Slot {
     allocator: ID3D12CommandAllocator,
     list: ID3D12GraphicsCommandList,
     done_at: u64,
 }
 
-/// Command lists of ours on wgpu's queue, used in turn: each is reused once the GPU has
-/// finished with it.
 pub(super) struct ListRing {
     slots: Vec<Slot>,
     next: usize,
@@ -47,7 +42,6 @@ impl ListRing {
         Ok(ListRing { slots, next: 0, fence, value: 0 })
     }
 
-    /// The next list, open for recording.
     pub(super) fn begin(&mut self) -> Result<ID3D12GraphicsCommandList> {
         let slot = &mut self.slots[self.next];
         if unsafe { self.fence.GetCompletedValue() } < slot.done_at {
@@ -61,7 +55,6 @@ impl ListRing {
         Ok(slot.list.clone())
     }
 
-    /// The list `begin` opened, closed and put on `queue`.
     pub(super) fn submit(&mut self, queue: &ID3D12CommandQueue) -> Result<()> {
         let count = self.slots.len();
         let slot = &mut self.slots[self.next];
@@ -75,7 +68,6 @@ impl ListRing {
         Ok(())
     }
 
-    /// Waits until the GPU is through with every list.
     pub(super) fn wait(&self) {
         if unsafe { self.fence.GetCompletedValue() } < self.value {
             let _ = unsafe { self.fence.SetEventOnCompletion(self.value, HANDLE::default()) };

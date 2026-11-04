@@ -4,9 +4,6 @@
 use crate::temporal::{Temporal, TemporalUpscaler};
 use std::ffi::CStr;
 
-/// The upscaler asked for, if this adapter can run it: DirectX 12 or Vulkan on Windows; DLSS an
-/// NVIDIA RTX card too (whether its driver is recent enough, Streamline tells at the first
-/// frame). FSR 3 runs on any card.
 pub(super) fn usable(asked: Option<Temporal>, info: &wgpu::AdapterInfo) -> Option<Temporal> {
     let t = asked?;
     let api = cfg!(windows) && matches!(info.backend, wgpu::Backend::Dx12 | wgpu::Backend::Vulkan);
@@ -23,8 +20,6 @@ pub(super) fn usable(asked: Option<Temporal>, info: &wgpu::AdapterInfo) -> Optio
     None
 }
 
-/// For DLSS on Vulkan: Streamline started and the device extensions it wants, when this adapter
-/// has them all. None otherwise, with DLSS left off (the reason in the log).
 pub(super) fn dlss_vulkan(temporal: Option<Temporal>, adapter: &wgpu::Adapter, info: &wgpu::AdapterInfo) -> (Option<Temporal>, Option<Vec<&'static CStr>>) {
     let Some(t) = temporal.filter(|t| t.upscaler == TemporalUpscaler::Dlss && info.backend == wgpu::Backend::Vulkan) else {
         return (temporal, None);
@@ -49,7 +44,6 @@ pub(super) fn dlss_vulkan(temporal: Option<Temporal>, adapter: &wgpu::Adapter, i
     (Some(t), Some(wanted))
 }
 
-/// The device extensions the adapter offers.
 #[cfg(windows)]
 fn adapter_extensions(adapter: &wgpu::Adapter) -> Option<Vec<std::ffi::CString>> {
     let hal = unsafe { adapter.as_hal::<wgpu_hal::api::Vulkan>() }?;
@@ -63,7 +57,6 @@ fn adapter_extensions(_adapter: &wgpu::Adapter) -> Option<Vec<std::ffi::CString>
     None
 }
 
-/// The device and queue, made by wgpu with `extensions` added to its own on Vulkan.
 #[cfg(windows)]
 pub(super) fn open_with(adapter: &wgpu::Adapter, desc: &wgpu::DeviceDescriptor<'_>, extensions: Vec<&'static CStr>) -> anyhow::Result<(wgpu::Device, wgpu::Queue)> {
     use anyhow::{anyhow, Context};

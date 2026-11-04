@@ -2,8 +2,6 @@ use super::frame::{halton, jitter_phases, opaque, sl_matrix, temporal_mip_bias};
 use super::*;
 use glam::{Mat4, Vec3};
 
-/// Every choice survives settings.cfg, and what is not a temporal upscaler is left to the
-/// single-frame path.
 #[test]
 fn the_settings_words_read_back() {
     for u in [TemporalUpscaler::Dlss, TemporalUpscaler::Fsr3] {
@@ -44,7 +42,6 @@ fn a_screenshot_keeps_the_colours_and_is_opaque() {
     assert_eq!(opaque(vec![1, 2, 3, 0, 4, 5, 6, 128]), [1, 2, 3, 255, 4, 5, 6, 255]);
 }
 
-/// The mip bias sharpens the textures by what is scaled up and never blurs them at native size.
 #[test]
 fn the_mip_bias_is_the_log_of_the_scale() {
     assert_eq!(temporal_mip_bias(2560, 2560), 0.0);

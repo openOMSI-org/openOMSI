@@ -37,46 +37,32 @@ const MAX_FRAME_JUMP: f32 = 8.0;
 /// its own.
 const DLSS_SHARPEN: f32 = 0.25;
 
-/// The prepass pipelines that write motion: the six kinds of the ordinary prepass (plain, cut-out,
-/// transmap; each two-sided or culled), and one for the sky behind everything.
 pub(crate) struct TemporalPipelines {
     pub(crate) prepass: [wgpu::RenderPipeline; 6],
-    /// The same without writing depth, for the parts the prefill left out (`cut_batches`).
     pub(crate) late_motion: [wgpu::RenderPipeline; 6],
     pub(crate) sky: wgpu::RenderPipeline,
     pub(crate) motion_layout: wgpu::BindGroupLayout,
-    /// The transparency mask's: the panes (by their opacity) and the rain films, two-sided and
-    /// culled.
     pub(crate) glass_mask: [wgpu::RenderPipeline; 2],
     pub(crate) rain_mask: [wgpu::RenderPipeline; 2],
-    /// The bus's screens (`MaterialExtra::screen`), any kind of draw.
     pub(crate) screen_mask: [wgpu::RenderPipeline; 2],
 }
 
-/// The upscaler's textures for one picture size and window size.
 pub(crate) struct TemporalTargets {
     render: (u32, u32),
     output: (u32, u32),
-    /// The small picture the upscaler reads; `color_bg` stretches it into the window instead
-    /// should the upscaler fail.
     color: wgpu::Texture,
     pub(crate) color_view: wgpu::TextureView,
-    /// The same as its plain UNORM self: the sRGB-encoded numbers as they are (Streamline on
-    /// Vulkan reads the picture through it).
     color_raw_view: wgpu::TextureView,
     pub(crate) color_bg: wgpu::BindGroup,
     motion: wgpu::Texture,
     pub(crate) motion_view: wgpu::TextureView,
     mask: wgpu::Texture,
     pub(crate) mask_view: wgpu::TextureView,
-    /// What the upscaler writes, and the bind group that copies it to the window.
     output_tex: wgpu::Texture,
     output_view: wgpu::TextureView,
     output_bg: wgpu::BindGroup,
 }
 
-/// The previous frame: its camera (for the motion and the upscaler's previous-clip matrices) and
-/// what it was drawn with, which must match for its history to count.
 #[derive(Clone, Copy)]
 struct TemporalPrev {
     camera: Camera,
@@ -86,13 +72,11 @@ struct TemporalPrev {
     output: (u32, u32),
 }
 
-/// The upscaler the settings chose, once it is running.
 enum Runtime {
     Dlss(streamline::Runtime),
     Fsr3(fidelityfx::Upscaler),
 }
 
-/// Everything temporal upscaling keeps while it is on.
 pub(crate) struct TemporalState {
     runtime: Runtime,
     pub(crate) targets: Option<TemporalTargets>,
@@ -100,10 +84,7 @@ pub(crate) struct TemporalState {
     /// wgpu's submit, and wgpu would otherwise free a texture it thinks nobody needs.
     keep: std::collections::VecDeque<Vec<wgpu::Texture>>,
     motion_buf: wgpu::Buffer,
-    /// The copy's parameters (`upscale.wgsl`, its third mode).
     blit_buf: wgpu::Buffer,
-    /// A copy of the model matrices as the last frame had them, and the bind group that gives it
-    /// to the motion shader together with `motion_buf`.
     pub(crate) prev_models: Option<(wgpu::Buffer, wgpu::BindGroup)>,
     /// `Scene::model_epoch` and the number of entries when that copy was made: the old matrices
     /// are only used while the entries still sit where they sat.
@@ -113,21 +94,15 @@ pub(crate) struct TemporalState {
     frame: u64,
 }
 
-/// What the camera work of a frame leaves for `temporal_present`.
 pub(crate) struct TemporalFrame {
-    /// The view-projection without the jitter, and the last frame's taken from this frame's
-    /// render origin.
     vp: Mat4,
     vp_prev_here: Mat4,
-    /// This frame's jitter in pixels.
     jitter: [f32; 2],
     reset: bool,
     aspect: f32,
-    /// Since the last frame, in seconds.
     dt: f32,
 }
 
-/// Element `i` (1-based) of the van der Corput / Halton sequence in `base`, in 0..1.
 pub(super) fn halton(mut i: u32, base: u32) -> f32 {
     let (mut f, mut r) = (1.0f32, 0.0f32);
     while i > 0 {
@@ -144,14 +119,11 @@ pub(super) fn sl_matrix(m: Mat4) -> [[f32; 4]; 4] {
     m.to_cols_array_2d()
 }
 
-/// How many jitter steps before the sequence starts over: more the more the picture is scaled up
-/// (8 at native, up to 64), as NVIDIA's guide suggests.
 pub(super) fn jitter_phases(render_w: u32, full_w: u32) -> u32 {
     let ratio = (full_w as f32 / render_w.max(1) as f32).max(1.0);
     ((8.0 * ratio * ratio).round() as u32).clamp(8, 64)
 }
 
-/// The upscalers' alpha is not the picture's: a screenshot's pixels made opaque.
 pub(super) fn opaque(mut rgba: Vec<u8>) -> Vec<u8> {
     for px in rgba.chunks_exact_mut(4) {
         px[3] = 255;
@@ -167,8 +139,6 @@ pub(crate) fn temporal_mip_bias(render_w: u32, full_w: u32) -> f32 {
 }
 
 impl Renderer {
-    /// True when this window frame is upscaled. The first frame that wants it starts the
-    /// upscaler; if that fails the reason is logged once and it stays off.
     pub(crate) fn temporal_start(&mut self) -> bool {
         if self.temporal_failed {
             // (let go of its resources and textures: a runtime left here failed every frame)
@@ -225,7 +195,6 @@ impl Renderer {
         self.options.temporal.map_or_else(Default::default, |t| t.quality)
     }
 
-    /// The picture size for a window of `full` pixels at the chosen quality.
     pub(crate) fn temporal_render_size(&mut self, full: (u32, u32)) -> (u32, u32) {
         let quality = self.temporal_quality();
         match self.temporal.as_mut().map(|t| &mut t.runtime) {
@@ -234,7 +203,6 @@ impl Renderer {
         }
     }
 
-    /// Makes the upscaler's textures for these sizes if they are not the current ones.
     pub(crate) fn temporal_targets(&mut self, render: (u32, u32), output: (u32, u32)) {
         let Some(blit_buf) = self.temporal.as_ref().filter(|d| !d.targets.as_ref().is_some_and(|t| t.render == render && t.output == output)).map(|d| d.blit_buf.clone()) else {
             return;
@@ -270,7 +238,6 @@ impl Renderer {
         });
         let motion = tex("temporal motion vectors", render, TEMPORAL_MOTION_FORMAT, targets);
         let mask = tex("temporal transparency mask", render, TEMPORAL_MASK_FORMAT, targets);
-        // (COPY_SRC: a player's screenshot is read from it, `temporal_picture`)
         let output_tex = tex("temporal output", output, TEMPORAL_OUTPUT_FORMAT, targets | wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_SRC);
         let color_view = color.create_view(&wgpu::TextureViewDescriptor { format: Some(self.format), ..Default::default() });
         let motion_view = motion.create_view(&Default::default());
@@ -297,9 +264,6 @@ impl Renderer {
         d.targets = Some(TemporalTargets { render, output, color, color_view, color_raw_view, color_bg, motion, motion_view, mask, mask_view, output_tex, output_view, output_bg });
     }
 
-    /// The camera side of an upscaled frame. Returns the view-projection shifted by this frame's
-    /// jitter, writes the motion shader's uniform, and leaves what `temporal_present` needs in
-    /// `temporal_pending`. The motion is worked out from the unjittered matrices.
     pub(crate) fn temporal_jitter(&mut self, scene: &Scene, f: &FrameCtx, vp_plain: Mat4) -> Mat4 {
         let (width, height, full_w, full_h, camera, ro) = (f.width, f.height, f.full_w, f.target.texture().height(), f.camera, f.ro);
         let Some(pipes) = self.temporal_pipes.as_ref() else { return vp_plain };
@@ -307,19 +271,14 @@ impl Renderer {
         d.frame += 1;
         let i = (d.frame % jitter_phases(width, full_w) as u64) as u32 + 1;
         let jitter = [halton(i, 2) - 0.5, halton(i, 3) - 0.5];
-        // (a shift of the clip space by that many pixels; y grows downwards on the screen)
         let shift = Mat4::from_translation(Vec3::new(2.0 * jitter[0] / width as f32, -2.0 * jitter[1] / height as f32, 0.0));
-        // the last frame counts as history only if it was drawn the same way
         let prev = d.prev.filter(|p| p.render == (width, height) && p.output == (full_w, full_h));
-        // (a camera cut, or a turn too quick for any history to help)
         let jumped = prev.is_some_and(|p| (p.camera.position - camera.position).length() > 30.0 || p.camera.forward().dot(camera.forward()) < 0.8);
         let (vp_prev, vp_prev_here) = match prev {
             Some(p) => (p.camera.view_proj(p.aspect, p.origin), p.camera.view_proj(p.aspect, ro)),
             None => (vp_plain, vp_plain),
         };
         let origin_delta = prev.map_or(Vec3::ZERO, |p| (p.origin - ro).as_vec3());
-        // the copy of last frame's model matrices: grown with the scene's buffer, filled at the
-        // end of every frame (`temporal_end_of_scene`)
         if let Some(GpuArray::Buffer(models)) = scene.model_buf.as_ref() {
             if d.prev_models.as_ref().is_none_or(|(b, _)| b.size() < models.size()) {
                 let buf = self.device.create_buffer(&wgpu::BufferDescriptor {
@@ -402,9 +361,6 @@ impl Renderer {
         }));
     }
 
-    /// Runs the upscaler once the scene is submitted, then puts its result and the HUD in the
-    /// window. If it fails this frame shows the small picture stretched, as the render scale
-    /// would, and it is not tried again for the rest of the session.
     pub(crate) fn temporal_present(&mut self, scene: &Scene, f: &FrameCtx, frame: TemporalFrame) {
         let (target, camera, ro) = (f.target, f.camera, f.ro);
         let render = (f.width, f.height);

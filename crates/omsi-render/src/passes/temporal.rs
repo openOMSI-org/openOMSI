@@ -65,14 +65,12 @@ impl Renderer {
             multiview_mask: None,
         });
         pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
-        // (pipe codes: kind * 4 + cull * 2 + surface, see `pipe_code`)
         let blended = |b: &Batch| matches!(b.pipe / 4, PIPE_BLEND | PIPE_BLEND_NO_WRITE);
         let cull = |pipe: u8| ((pipe >> 1) & 1) as usize;
         for batches in [&plan.main_batches, &plan.cab_batches] {
             encode_batches_filtered(&mut pass, scene, batches, blended, |pipe| &p.glass_mask[cull(pipe)]);
         }
         encode_batches(&mut pass, scene, &plan.rain_batches, |pipe| &p.rain_mask[cull(pipe)]);
-        // (the screens: opaque mostly, so picked by their material out of every draw)
         // (not for FSR 3: without the history the jittered frames doubled the edges of their digits)
         let dlss = self.options.temporal.is_some_and(|t| matches!(t.upscaler, TemporalUpscaler::Dlss));
         let screen = |b: &Batch| dlss && scene.materials[b.material as usize].uniform.flags[0] > 0.5;
