@@ -368,17 +368,6 @@ pub fn upscaler_word(s: &str) -> &'static str {
     }
 }
 
-/// `upscale_quality=` as the game reads it (`TemporalQuality`): unknown words are `quality`.
-fn upscale_quality_word(s: &str) -> &'static str {
-    match s.trim().to_ascii_lowercase().as_str() {
-        "native" => "native",
-        "balanced" => "balanced",
-        "performance" => "performance",
-        "ultra_performance" => "ultra_performance",
-        _ => "quality",
-    }
-}
-
 /// The game's own content folder: the folder of the game binary, laid out like OMSI 2
 /// (Vehicles, maps, Sceneryobjects ...). Installed mods live here; the game searches it
 /// before the original installation.
@@ -2428,7 +2417,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "vehicle_smoke" => v[&k] = json!(vehicle_smoke(val)),
             "puddles" => v[&k] = json!(puddles(val)),
             "upscaler" => v[&k] = json!(upscaler_word(val)),
-            "upscale_quality" => v[&k] = json!(upscale_quality_word(val)),
+            "upscale_quality" => v[&k] = json!(omsi_cfg::upscaler_files::quality_word(val)),
             "fsr_quality" => v[&k] = json!(match val.to_ascii_lowercase().as_str() {
                 "ultra" => "ultra", "balanced" => "balanced", "performance" => "performance",
                 "custom" => "custom", "auto" => "auto", _ => "quality",
@@ -2914,7 +2903,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     ));
     text.push_str(&format!("upscaler={}\nupscale_quality={}\nfsr_quality={}\nfsr_sharpness={}\n",
         upscaler_word(v.get("upscaler").and_then(|x| x.as_str()).unwrap_or("")),
-        upscale_quality_word(v.get("upscale_quality").and_then(|x| x.as_str()).unwrap_or("")),
+        omsi_cfg::upscaler_files::quality_word(v.get("upscale_quality").and_then(|x| x.as_str()).unwrap_or("")),
         match v.get("fsr_quality").and_then(|x| x.as_str()).unwrap_or("quality") {
             "ultra" => "ultra", "balanced" => "balanced", "performance" => "performance",
             "custom" => "custom", "auto" => "auto", _ => "quality",

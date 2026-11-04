@@ -67,7 +67,7 @@ pub enum TemporalQuality {
 impl TemporalQuality {
     /// `upscale_quality=` in settings.cfg; anything unknown is the default.
     pub fn parse(s: &str) -> TemporalQuality {
-        match s.trim().to_ascii_lowercase().as_str() {
+        match omsi_cfg::upscaler_files::quality_word(s) {
             "native" => TemporalQuality::Native,
             "balanced" => TemporalQuality::Balanced,
             "performance" => TemporalQuality::Performance,

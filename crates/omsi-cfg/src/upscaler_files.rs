@@ -93,6 +93,17 @@ fn offered(dir: &Path, windows: bool, rtx: bool) -> Vec<&'static str> {
     ["dlss", "fsr3"].into_iter().filter(|u| windows && present(dir, u) && (*u != "dlss" || rtx)).collect()
 }
 
+/// `upscale_quality=` as its one word; anything unknown is the default.
+pub fn quality_word(s: &str) -> &'static str {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "native" => "native",
+        "balanced" => "balanced",
+        "performance" => "performance",
+        "ultra_performance" => "ultra_performance",
+        _ => "quality",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
