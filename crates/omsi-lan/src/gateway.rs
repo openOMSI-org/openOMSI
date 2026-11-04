@@ -433,7 +433,11 @@ pub fn take_local_admin() -> Vec<String> {
 /// its WebSockets now and then, the direct way does not. None: the tunnel it is.
 fn direct_of(url: &str) -> Option<String> {
     let info = omsi_net::ws::query(url, false).ok()?;
-    let base = omsi_net::ws::http_base(&format!("http://{}", info.direct)).filter(|_| !info.direct.is_empty())?;
+    // (only a public IPv4 address and port: a status naming this machine, its network or a
+    // carrier's NAT would send our requests there)
+    let addr: std::net::SocketAddrV4 = info.direct.trim().parse().ok().filter(|a: &std::net::SocketAddrV4| (public_ip(*a.ip()) || (cfg!(test) && a.ip().is_loopback())) && a.port() != 0)?;
+    // (the tests' servers are on this machine)
+    let base = omsi_net::ws::http_base(&format!("http://{addr}"))?;
     if omsi_net::ws::http_base(url).as_deref() == Some(base.as_str()) {
         return None;
     }
@@ -542,4 +546,23 @@ pub(crate) fn host_web_gateway(host: std::net::SocketAddr) -> Option<String> {
         log::info!("LAN mods: the host's web port answers at {a}");
         format!("ws://{a}/ws")
     })
+}
+
+/// An address of the internet: not this machine's, a private network's, a link's, a carrier's NAT
+/// (100.64.0.0/10), a test network's, multicast or unspecified.
+fn public_ip(ip: std::net::Ipv4Addr) -> bool {
+    let o = ip.octets();
+    !(ip.is_private() || ip.is_loopback() || ip.is_link_local() || ip.is_multicast() || ip.is_broadcast() || ip.is_unspecified() || ip.is_documentation() || o[0] == 0 || (o[0] == 100 && (64..128).contains(&o[1])) || o[0] >= 240)
+}
+
+#[cfg(test)]
+mod public_ip_tests {
+    #[test]
+    fn only_internet_addresses_are_followed() {
+        use std::net::Ipv4Addr;
+        assert!(super::public_ip(Ipv4Addr::new(8, 8, 8, 8)));
+        for no in [[127, 0, 0, 1], [192, 168, 1, 2], [10, 0, 0, 1], [172, 16, 0, 1], [169, 254, 1, 1], [100, 72, 0, 1], [0, 0, 0, 0], [224, 0, 0, 1], [255, 255, 255, 255], [203, 0, 113, 7]] {
+            assert!(!super::public_ip(Ipv4Addr::from(no)), "{no:?}");
+        }
+    }
 }

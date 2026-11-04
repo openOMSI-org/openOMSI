@@ -13,6 +13,9 @@ use std::sync::Mutex;
 /// A depot file larger than this is not one (the largest are a few hundred KB).
 pub(super) const MAX_HOF: u64 = 4 << 20;
 
+/// At most this many depot files are fetched from one host.
+const MAX_FETCHES: usize = 64;
+
 /// The host's depot files by name in lower case (the file name without `.hof`).
 static OFFERED: Mutex<Option<HashMap<String, PathBuf>>> = Mutex::new(None);
 
@@ -52,8 +55,9 @@ pub(super) fn served(name: &str) -> Option<PathBuf> {
 }
 
 /// The host's answer to `HOF <name>`: `OK <len>` and the file, or `ERR`.
-pub(super) fn answer(name: &str, out: &mut impl Write) -> std::io::Result<()> {
-    let Some(path) = served(name) else {
+pub(super) fn answer(root: &Path, name: &str, out: &mut impl Write) -> std::io::Result<()> {
+    // (as every file sent: never one that resolves outside the content's folders)
+    let Some(path) = served(name).filter(|p| super::server_fleet::trusted_source(root, p)) else {
         return writeln!(out, "ERR no depot file {name}");
     };
     match std::fs::read(&path) {
@@ -77,6 +81,10 @@ pub fn fetched(name: &str) -> Option<PathBuf> {
         Some(Fetch::Have(p)) => return Some(p.clone()),
         Some(Fetch::Asking | Fetch::None) => return None,
         None => {}
+    }
+    // (a map has a few depot files: a host naming more gets no more fetches)
+    if map.len() >= MAX_FETCHES {
+        return None;
     }
     let (host, session) = super::upload::host()?;
     map.insert(key.clone(), Fetch::Asking);
@@ -107,8 +115,8 @@ pub fn settled(name: &str) -> bool {
     match guard.as_ref().and_then(|m| m.get(&key)) {
         Some(Fetch::Have(_) | Fetch::None) => true,
         Some(Fetch::Asking) => false,
-        // (never asked: no host to ask, `fetched` gave up at once)
-        None => super::upload::host().is_none(),
+        // (never asked: no host to ask, or past the fetches one host gets)
+        None => super::upload::host().is_none() || guard.as_ref().is_some_and(|m| m.len() >= MAX_FETCHES),
     }
 }
 
@@ -152,10 +160,10 @@ mod tests {
         offer("Town", &file);
         assert_eq!(served("town"), Some(file.clone()));
         let mut out = Vec::new();
-        answer("TOWN", &mut out).unwrap();
+        answer(&dir, "TOWN", &mut out).unwrap();
         assert_eq!(out, b"OK 12\n[name]\nTown\n");
         let mut out = Vec::new();
-        answer("../Town", &mut out).unwrap();
+        answer(&dir, "../Town", &mut out).unwrap();
         assert!(out.starts_with(b"ERR"));
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -619,7 +619,7 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
             }
             // the depot file of the host's AI buses (`hofs`)
             ["HOF", name_hex] => match server_fleet::unhex_text(name_hex) {
-                Some(name) => hofs::answer(&name, &mut out)?,
+                Some(name) => hofs::answer(root, &name, &mut out)?,
                 None => writeln!(out, "ERR invalid depot name")?,
             },
             ["BYE"] | [] => return out.flush(),
