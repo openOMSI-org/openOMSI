@@ -404,7 +404,7 @@ pub struct ScriptedObject {
     /// Per instance, its slots faded by `[alphascale]` variables (`LampSlots::alpha`; empty
     /// when none is), and the alphas last given.
     pub alpha_slots: Vec<LampSlots>,
-    pub alpha_last: Vec<Vec<f32>>,
+    pub alpha_last: Vec<(Vec<f32>, Vec<[f32; 2]>)>,
     pub script_lamps: Vec<ScriptLamp>,
 }
 
@@ -475,6 +475,7 @@ pub struct LampSlots {
     pub count: usize,
     pub alpha: Vec<(usize, String)>,
     pub light: Vec<(usize, String)>,
+    pub uv: Vec<(usize, Option<String>, Option<String>)>,
 }
 
 impl LampSlots {
@@ -489,8 +490,23 @@ impl LampSlots {
             if let Some((_, v)) = &o.lightmap {
                 l.light.push((slot, v.trim().to_string()));
             }
+            let trans = |v: &Option<String>| v.as_ref().map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
+            if o.texcoord_trans_x.is_some() || o.texcoord_trans_y.is_some() {
+                l.uv.push((slot, trans(&o.texcoord_trans_x), trans(&o.texcoord_trans_y)));
+            }
         }
         l
+    }
+
+    pub fn uv_values(&self, value: &dyn Fn(&str) -> Option<f32>) -> Vec<[f32; 2]> {
+        let mut uv = vec![[0.0; 2]; if self.uv.is_empty() { 0 } else { self.count.max(1) }];
+        for (slot, x, y) in &self.uv {
+            if let Some(u) = uv.get_mut(*slot) {
+                u[0] = x.as_deref().and_then(value).unwrap_or(0.0);
+                u[1] = y.as_deref().and_then(value).unwrap_or(0.0);
+            }
+        }
+        uv
     }
 
     pub fn is_empty(&self) -> bool {
