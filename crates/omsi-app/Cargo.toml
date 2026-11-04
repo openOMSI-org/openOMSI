@@ -59,6 +59,7 @@ omsi-platform = { path = "../omsi-platform" }
 omsi-guard = { path = "../omsi-guard" }
 omsi-admin = { path = "../omsi-admin" }
 omsi-lan = { path = "../omsi-lan" }
+omsi-remote = { path = "../omsi-remote" }
 omsi-input = { path = "../omsi-input" }
 omsi-xr = { path = "../omsi-xr" }
 omsi-plugin-ui = { path = "../omsi-plugin-ui" }

@@ -102,6 +102,7 @@ mod depot_bus;
 mod devtools;
 mod telemetry;
 mod themes;
+mod remote;
 use omsi_scene::threads;
 use omsi_scene::tiles;
 mod traffic;
@@ -890,6 +891,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             plugins: None,
             vehicle_scripts_of: None,
             object_scripts: Default::default(),
+            remote: Default::default(),
         },
         net: NetState::default(),
         service_msg: clock_note.map(|m| (m, 10.0)),

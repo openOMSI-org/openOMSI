@@ -111,6 +111,7 @@ pub(crate) struct Integrations {
     pub(crate) vehicle_scripts_of: Option<std::path::PathBuf>,
     /// The scenery objects whose Lua scripts run (see `plugin_io::object`).
     pub(crate) object_scripts: crate::plugin_io::object::ObjectScripts,
+    pub(crate) remote: crate::remote::RemoteCockpit,
 }
 
 /// How the frames go and what is measured or scripted about them: the frame rate, the
