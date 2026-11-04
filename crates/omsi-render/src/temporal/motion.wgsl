@@ -18,7 +18,6 @@ struct Motion {
     // frame and still be the same object (`MAX_FRAME_JUMP`)
     origin_delta: vec4<f32>,
 };
-// (group 2 is the vehicle reflection's in the scene module: the motion is group 3)
 @group(3) @binding(0) var<uniform> motion: Motion;
 @group(3) @binding(1) var<storage, read> prev_models: array<vec4<f32>>;
 
@@ -45,7 +44,6 @@ fn vs_motion(in: VsIn) -> MotionOut {
     let local = vec4<f32>(in.pos, 1.0);
     let wp = m * local;
     var out: MotionOut;
-    // (as `vs_depth`: the windy trees' sway too)
     out.clip = scene_clip(e, wp + vec4<f32>(tree_sway(in.pos, m), 0.0), (m * vec4<f32>(in.normal, 0.0)).xyz);
     let pr = inst_params[e * 2u];
     out.uv = in.uv + pr.zw;
@@ -97,7 +95,6 @@ fn fs_motion_transmap(in: MotionIn) -> @location(0) vec4<f32> {
     return motion_pixels(in.cur, in.prev);
 }
 
-// The sky (whatever the prepass leaves uncovered): a point on the far plane, drawn first.
 struct SkyMotionOut {
     @builtin(position) clip: vec4<f32>,
     @location(0) ndc: vec2<f32>,
@@ -108,7 +105,6 @@ fn vs_motion_sky(@builtin(vertex_index) i: u32) -> SkyMotionOut {
     let x = f32(i32(i & 1u) * 4 - 1);
     let y = f32(i32(i >> 1u) * 4 - 1);
     var out: SkyMotionOut;
-    // (reversed Z: depth 0 is the far plane)
     out.clip = vec4<f32>(x, y, 0.0, 1.0);
     out.ndc = vec2<f32>(x, y);
     return out;

@@ -12,7 +12,6 @@ use crate::*;
 
 pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, upscaler: Option<TemporalUpscaler>) -> Option<TemporalPipelines> {
     let upscaler = upscaler?;
-    // (last frame's matrices are read as a storage buffer, as `models` is on such a device)
     if array_path() != ArrayPath::Storage {
         log::warn!("temporal upscaling: this device reads the scene's arrays from textures; drawing without it");
         return None;
@@ -119,8 +118,6 @@ pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, upscaler: Option<T
         multiview_mask: None,
         cache: crate::pipeline_cache::get(device).as_ref(),
     });
-    // the transparency mask (see `vs_mask` in motion.wgsl): the transparent draws again, into an
-    // mask, the most of each pixel kept, behind the prepass's depth and not writing it
     let mask_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("temporal transparency mask"),
         bind_group_layouts: &[Some(&scene.camera_layout), Some(&scene.material_layout)],

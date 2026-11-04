@@ -25,12 +25,6 @@
 //! NVIDIA DLSS (Super Resolution, and DLAA at full size) by way of NVIDIA Streamline: Windows,
 //! DirectX 12 or Vulkan, a GeForce RTX card.
 //!
-//! Nothing of NVIDIA's is linked in. `sl.interposer.dll` is opened when the first
-//! DLSS frame asks for it, from the game's folder, and it brings in `sl.common.dll`,
-//! `sl.dlss.dll` and `nvngx_dlss.dll` from there. The `#[repr(C)]` structs mirror Streamline
-//! 2.14's public headers (`sl_core_types.h`, `sl_consts.h`, `sl_dlss.h`); their sizes are
-//! asserted below as the SDK's own ABI test does.
-//!
 //! wgpu records and submits its own D3D12 command lists, so DLSS gets a list of ours, run on
 //! wgpu's queue after the submit that drew the scene and before the one that draws the HUD
 //! (`frame.rs`): the queue's order is all the synchronisation needed. Each texture is handed
@@ -85,7 +79,6 @@ const VULKAN_INFO: StructType = StructType { data1: 0x0eed6fd5, data2: 0x82cd, d
 const FEATURE_REQUIREMENTS: StructType = StructType { data1: 0x66714097, data2: 0xac6d, data3: 0x4bc6, data4: [0x89, 0x15, 0x1e, 0x0f, 0x55, 0xa6, 0xb6, 0x1f] };
 const DLSS_OPTIMAL_SETTINGS: StructType = StructType { data1: 0xef1d0957, data2: 0xfd58, data3: 0x4df7, data4: [0xb5, 0x04, 0x8b, 0x69, 0xd8, 0xaa, 0x6b, 0x76] };
 
-/// `sl::kSDKVersion` the structs above match: 2.14.1.
 const SDK_VERSION: u64 = (2 << 48) | (14 << 32) | (1 << 16) | 0xfedc;
 const FEATURE_DLSS: u32 = 0;
 const BUFFER_DEPTH: u32 = 0;
@@ -98,7 +91,6 @@ const PRESET_M: u32 = 13;
 const BUFFER_BIAS_CURRENT_COLOR: u32 = 29;
 const BUFFER_SCALING_INPUT_COLOR: u32 = 3;
 const BUFFER_SCALING_OUTPUT_COLOR: u32 = 4;
-/// `ResourceLifecycle::eValidUntilEvaluate`
 const VALID_UNTIL_EVALUATE: u32 = 2;
 const FLAG_DISABLE_CL_STATE_TRACKING: u64 = 1 << 0;
 const FLAG_DISABLE_DEBUG_TEXT: u64 = 1 << 1;
@@ -424,7 +416,6 @@ fn dxgi_format(f: wgpu::TextureFormat) -> u32 {
         Tf::Rg16Float => DXGI_FORMAT_R16G16_FLOAT,
         Tf::Rg32Float => DXGI_FORMAT_R32G32_FLOAT,
         Tf::R16Float => DXGI_FORMAT_R16_FLOAT,
-        // (wgpu creates a sampled depth texture typeless; read as a float it is this)
         Tf::Depth32Float => DXGI_FORMAT_R32_FLOAT,
         _ => DXGI_FORMAT_UNKNOWN,
     })
@@ -506,8 +497,6 @@ fn load_fn<T: Copy>(module: HMODULE, name: &CStr) -> Result<T> {
     Ok(unsafe { std::mem::transmute_copy::<_, T>(&f) })
 }
 
-/// `slInit` with these features, the plugins taken from `dir`. Gives back the strings
-/// Streamline was handed pointers to (keep them alive).
 fn init(module: HMODULE, dir: &std::path::Path, features: &'static [u32], render_api: u32) -> Result<(Vec<u16>, Vec<*const u16>)> {
     let init: FnInit = load_fn(module, c"slInit")?;
     let plugin_dir = wide(dir);
@@ -516,7 +505,6 @@ fn init(module: HMODULE, dir: &std::path::Path, features: &'static [u32], render
     let prefs = Preferences {
         base: Base::new(PREFERENCES, 1),
         show_console: false,
-        // (LogLevel::eDefault)
         log_level: 1,
         paths_to_plugins: plugin_paths.as_ptr(),
         num_paths_to_plugins: 1,
@@ -530,7 +518,6 @@ fn init(module: HMODULE, dir: &std::path::Path, features: &'static [u32], render
         features_to_load: features.as_ptr(),
         num_features_to_load: features.len() as u32,
         application_id: 0,
-        // (a custom engine)
         engine: 0,
         engine_version: engine_version.as_ptr().cast(),
         project_id: PROJECT_ID.as_ptr(),
@@ -617,8 +604,6 @@ fn open_interposer(dir: &std::path::Path) -> Result<HMODULE> {
     Ok(unsafe { LoadLibraryExW(PCWSTR(interposer.as_ptr()), None, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS) }.context("opening sl.interposer.dll")?)
 }
 
-/// A list of C strings Streamline gave, as names that live for the run (Vulkan extension
-/// names are handed to wgpu as `&'static CStr`; there are a handful, made once).
 fn static_names(count: u32, names: *const *const c_char) -> Vec<&'static CStr> {
     (0..count as usize)
         .filter_map(|i| {
@@ -628,10 +613,6 @@ fn static_names(count: u32, names: *const *const c_char) -> Vec<&'static CStr> {
         .collect()
 }
 
-/// Starts Streamline for DLSS on Vulkan, before wgpu makes its device, and gives the device
-/// extensions DLSS needs. Errs where it cannot run there: the files missing, or DLSS asking for
-/// Vulkan features or queues of its own that wgpu's device cannot be made with (then it is
-/// shut down again, and DirectX 12 is the way).
 pub fn vulkan_extensions() -> Result<Vec<&'static CStr>> {
     vulkan_abandon();
     let dir = game_dir();
@@ -783,7 +764,6 @@ impl Runtime {
                 let mut raw = pacer.as_raw();
                 let r = unsafe { upgrade_interface(&mut raw) };
                 let pacer = if r == 0 && !raw.is_null() && raw != pacer.as_raw() {
-                    // (Streamline's proxy; the reference it handed back is ours to release)
                     Some(unsafe { IDXGISwapChain::from_raw(raw) })
                 } else {
                     log::warn!("DLSS: no swap-chain proxy from Streamline ({}), so its per-frame housekeeping is skipped", result_name(r));
@@ -798,8 +778,6 @@ impl Runtime {
                     device: gpu.device.handle(),
                     instance: gpu.instance,
                     physical_device: gpu.physical,
-                    // (no queues of DLSS's own: `vulkan_extensions` refused any; these say where
-                    // wgpu's one is)
                     compute_queue_index: gpu.queue_index,
                     compute_queue_family: gpu.family,
                     graphics_queue_index: gpu.queue_index,
@@ -872,7 +850,6 @@ impl Runtime {
             sharpness: 0.0,
             pre_exposure: 1.0,
             exposure_scale: 1.0,
-            // (DLSS works on the finished, tone-mapped picture: low range, no HUD yet)
             color_buffers_hdr: FALSE,
             indicator_invert_axis_x: FALSE,
             indicator_invert_axis_y: FALSE,
@@ -912,9 +889,6 @@ impl Runtime {
         size
     }
 
-    /// Runs DLSS on this frame: records it into the next of our command lists and puts that
-    /// on wgpu's queue. It belongs after the submit that drew `inputs` and before any submit
-    /// that reads `inputs.output`.
     pub fn evaluate(&mut self, queue: &wgpu::Queue, quality: TemporalQuality, inputs: &Inputs, c: &FrameConstants) -> Result<()> {
         if self.options_set != Some((quality, inputs.output_size)) {
             // (a new quality or window size: resizing the proxy makes Streamline drop what it
@@ -964,7 +938,6 @@ impl Runtime {
                 let mut out = Vec::with_capacity(5);
                 for (k, t) in textures.iter().enumerate() {
                     let state = if k == depth_at { D3D12_RESOURCE_STATE_DEPTH_WRITE } else { D3D12_RESOURCE_STATE_RENDER_TARGET };
-                    // (the resource lives as long as its wgpu texture, which outlives the frame)
                     out.push(blank(raw(t)?.as_raw(), state.0 as u32, dxgi_format(formats[k]), sizes[k]));
                 }
                 out.try_into().map_err(|_| anyhow!("five resources"))?
@@ -980,7 +953,6 @@ impl Runtime {
                     let mut r = blank(vk::Handle::as_raw(image) as *mut c_void, layout.as_raw() as u32, super::vulkan::format(formats[k]).as_raw() as u32, sizes[k]);
                     r.memory = vk::Handle::as_raw(memory) as *mut c_void;
                     r.view = vk::Handle::as_raw(view) as *mut c_void;
-                    // (wgpu makes an image with other view formats mutable: the picture's)
                     r.flags = if t.format() != formats[k] { vk::ImageCreateFlags::MUTABLE_FORMAT.as_raw() } else { 0 };
                     r.usage = super::vulkan::usage(t.usage(), depth).as_raw();
                     out.push(r);
@@ -1064,7 +1036,6 @@ impl Runtime {
         }
         recorded?;
         self.allocated = true;
-        // (tells Streamline the frame is over: see `NullSwapChain`)
         if let Backend::Dx12 { pacer: Some(p), .. } = &self.backend {
             let _ = unsafe { p.Present(0, DXGI_PRESENT(0)) };
         }

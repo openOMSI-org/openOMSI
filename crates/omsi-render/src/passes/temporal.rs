@@ -38,9 +38,6 @@ impl Renderer {
         encode_batches_filtered(&mut pass, scene, &plan.cut_batches, |b: &Batch| b.pipe < 2, |pipe| &p.late_motion[pipe as usize]);
     }
 
-    /// The transparency mask of this frame (see `vs_mask` in `temporal/motion.wgsl`): the blended
-    /// draws of the main pass and the cab, the rain films and the bus's screens, over the
-    /// prepass's depth.
     pub(crate) fn encode_temporal_mask(&self, encoder: &mut wgpu::CommandEncoder, scene: &Scene, f: &FrameCtx, plan: &DrawPlan) {
         if !f.temporal_frame {
             return;

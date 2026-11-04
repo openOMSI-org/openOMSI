@@ -2,10 +2,6 @@
 //! whether this machine can use them. They are not part of the game's source: without them the
 //! choice is not offered, as a setting that can only ever say "unavailable" helps nobody. In this
 //! crate because the game and the launcher, which know nothing of each other, both ask.
-//!
-//! DLSS is offered only where Windows lists an NVIDIA GeForce RTX (or RTX workstation) card: on
-//! anything else NVIDIA's runtime refuses it anyway. FSR 3 runs on any card, on DirectX 12 or
-//! Vulkan, each with AMD's DLLs for it.
 
 use std::path::{Path, PathBuf};
 

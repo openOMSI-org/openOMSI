@@ -44,8 +44,6 @@ impl TemporalUpscaler {
     }
 }
 
-/// How much the upscaler scales up: the lower the quality, the smaller the picture drawn.
-/// `Native` draws at the window's size and only smooths the edges (DLSS calls it DLAA).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TemporalQuality {
     Native,
@@ -104,8 +102,6 @@ pub struct Inputs<'a> {
     /// Its depth from the prepass, reversed Z (1 near, 0 far).
     pub depth: &'a wgpu::Texture,
     pub motion: &'a wgpu::Texture,
-    /// Where glass, its reflections and the rain on it lie (R16Float, see `vs_mask`): DLSS's
-    /// bias-current-colour hint, FSR 3's reactive mask.
     pub mask: &'a wgpu::Texture,
     pub output: &'a wgpu::Texture,
     pub render_size: (u32, u32),

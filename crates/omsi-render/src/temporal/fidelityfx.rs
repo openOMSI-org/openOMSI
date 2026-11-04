@@ -163,17 +163,13 @@ const _: () = {
 };
 
 const CREATE_BACKEND_DX12: u64 = 0x0000_0002;
-/// `FFX_API_CREATE_CONTEXT_DESC_TYPE_BACKEND_VK`: `FFX_API_BACKEND_ID_VK` (0x0100_0000), 3.
 const CREATE_BACKEND_VK: u64 = 0x0100_0003;
 const CREATE_UPSCALE: u64 = 0x0001_0000;
 const DISPATCH_UPSCALE: u64 = 0x0001_0001;
 const CREATE_UPSCALE_VERSION: u64 = 0x0001_000b;
-/// `FFX_UPSCALER_VERSION` (4.1.2) of the header these structs follow.
 const UPSCALER_VERSION: u32 = (4 << 22) | (1 << 12) | 2;
-// FfxApiCreateContextUpscaleFlags
 const UPSCALE_DEPTH_INVERTED: u32 = 1 << 3;
 const UPSCALE_NON_LINEAR_COLORSPACE: u32 = 1 << 8;
-// FfxApiSurfaceFormat
 const FORMAT_UNKNOWN: u32 = 0;
 const FORMAT_R16G16_FLOAT: u32 = 18;
 const FORMAT_R8G8B8A8_UNORM: u32 = 10;
@@ -184,7 +180,6 @@ const FORMAT_R32_FLOAT: u32 = 28;
 const FORMAT_R16G16B16A16_FLOAT: u32 = 4;
 const FORMAT_R10G10B10A2_UNORM: u32 = 17;
 const FORMAT_R16_FLOAT: u32 = 21;
-// FfxApiResourceState and FfxApiResourceUsage
 const STATE_RENDER_TARGET: u32 = 1 << 8;
 const STATE_DEPTH_ATTACHMENT: u32 = 1 << 9;
 const USAGE_UAV: u32 = 1 << 1;
@@ -319,7 +314,6 @@ fn resource(t: &wgpu::Texture, state: u32) -> Result<Resource> {
         usage |= USAGE_UAV;
     }
     let resource = raw.as_raw();
-    // (the resource lives as long as its wgpu texture, which outlives the frame)
     drop(raw);
     Ok(Resource {
         resource,
@@ -337,7 +331,6 @@ struct UpscaleContext {
     _backend: BackendDesc,
 }
 
-/// The device as the context was created on (kept: AMD may keep a pointer to it).
 enum BackendDesc {
     Dx12(Box<CreateBackendDx12>),
     Vulkan(Box<CreateBackendVk>),
@@ -397,7 +390,6 @@ impl Upscaler {
     fn context_for(&mut self, display: (u32, u32)) -> Result<*mut FfxContext> {
         let api = api(self.backend.gpu())?;
         if self.context.as_ref().is_some_and(|c| c.display != display) {
-            // (the old one may still be in a list on the GPU)
             self.backend.wait();
             if let Some(mut c) = self.context.take() {
                 unsafe { (api.destroy_context)(&mut *c.context, std::ptr::null()) };
@@ -406,7 +398,6 @@ impl Upscaler {
         if self.context.is_none() {
             let size = Dimensions { width: display.0, height: display.1 };
             let mut create = Box::new((
-                // (the picture is the finished, tone-mapped one, sRGB-encoded: see `upscale`)
                 CreateUpscale { header: Header::new(CREATE_UPSCALE), flags: UPSCALE_DEPTH_INVERTED | UPSCALE_NON_LINEAR_COLORSPACE, max_render_size: size, max_upscale_size: size, message: std::ptr::null() },
                 CreateVersion { header: Header::new(CREATE_UPSCALE_VERSION), version: UPSCALER_VERSION },
             ));
@@ -436,9 +427,6 @@ impl Upscaler {
         let gpu = self.backend.gpu();
         let api = api(gpu)?;
         let context = self.context_for(inputs.output_size)?;
-        // (the picture read as plain UNORM and FSR left to work on those numbers as they are -
-        // the context's non-linear flag - so it hands back the same sRGB-encoded numbers, as
-        // DLSS does)
         let mut color = resource_on(gpu, inputs.color, STATE_RENDER_TARGET)?;
         color.description.format = match inputs.color.format().remove_srgb_suffix() {
             wgpu::TextureFormat::Bgra8Unorm => FORMAT_B8G8R8A8_UNORM,
@@ -457,8 +445,6 @@ impl Upscaler {
                 depth,
                 motion_vectors,
                 exposure: Resource::NONE,
-                // (glass, its reflections, the rain on it: FSR leans on this frame there instead
-                // of the history, see `vs_mask` and `fs_glass_mask_fsr`)
                 reactive,
                 transparency_and_composition: Resource::NONE,
                 output,
@@ -466,7 +452,6 @@ impl Upscaler {
                 motion_vector_scale: Coords { x: 1.0, y: 1.0 },
                 render_size: Dimensions { width: inputs.render_size.0, height: inputs.render_size.1 },
                 upscale_size: Dimensions { width: inputs.output_size.0, height: inputs.output_size.1 },
-                // (a little of FSR's own sharpening: its upscaled picture is soft otherwise)
                 enable_sharpening: inputs.render_size != inputs.output_size,
                 sharpness: 0.3,
                 frame_time_delta: c.frame_ms,

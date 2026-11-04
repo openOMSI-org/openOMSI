@@ -15,9 +15,6 @@ use crate::passes::FrameCtx;
 use crate::pipelines::common::uniform_buffer;
 use crate::*;
 
-/// Motion texture: per pixel, how many pixels back its point was one frame ago. Half floats, as
-/// NVIDIA's and AMD's own samples use: still finer than a tenth of a pixel up to 100 pixels of
-/// motion, and the prepass writes it for every surface it draws.
 pub(crate) const TEMPORAL_MOTION_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Float;
 /// The window-sized result: a storage texture, and those can't be sRGB. It only ever holds the
 /// sRGB-encoded numbers of the 8 bit picture the upscaler was given.
@@ -86,8 +83,6 @@ pub(crate) struct TemporalState {
     motion_buf: wgpu::Buffer,
     blit_buf: wgpu::Buffer,
     pub(crate) prev_models: Option<(wgpu::Buffer, wgpu::BindGroup)>,
-    /// `Scene::model_epoch` and the number of entries when that copy was made: the old matrices
-    /// are only used while the entries still sit where they sat.
     prev_epoch: u64,
     prev_entries: u32,
     prev: Option<TemporalPrev>,
@@ -113,8 +108,6 @@ pub(super) fn halton(mut i: u32, base: u32) -> f32 {
     r
 }
 
-/// A matrix laid out for the upscalers: glam stores columns, Streamline reads rows of row-vector
-/// matrices, and the two are the same numbers.
 pub(super) fn sl_matrix(m: Mat4) -> [[f32; 4]; 4] {
     m.to_cols_array_2d()
 }
@@ -141,7 +134,6 @@ pub(crate) fn temporal_mip_bias(render_w: u32, full_w: u32) -> f32 {
 impl Renderer {
     pub(crate) fn temporal_start(&mut self) -> bool {
         if self.temporal_failed {
-            // (let go of its resources and textures: a runtime left here failed every frame)
             self.temporal = None;
             return false;
         }
@@ -225,7 +217,6 @@ impl Renderer {
         // sRGB resource sRGB-typed, FSR would read linear numbers from it and the picture would
         // come out much too dark. This way anyone reading the resource as it is gets the
         // sRGB-encoded bytes, which is what both upscalers are told they get.
-        // (COPY_SRC as on the render scale's target: the rain on the glass copies the picture)
         let color = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("temporal scene"),
             size: wgpu::Extent3d { width: render.0, height: render.1, depth_or_array_layers: 1 },
@@ -255,8 +246,6 @@ impl Renderer {
             ],
         });
         let d = self.temporal.as_mut().expect("temporal state");
-        // (the old set may still be in the upscaler's last list, so it is held a few frames; its
-        // history does not fit the new size)
         if let Some(old) = d.targets.take() {
             d.keep.push_back(vec![old.color, old.motion, old.mask, old.output_tex]);
         }
@@ -321,7 +310,6 @@ impl Renderer {
     /// write" (depth), so these passes make sure that is what the last use was.
     pub(crate) fn temporal_end_of_scene(&mut self, encoder: &mut wgpu::CommandEncoder, scene: &Scene) {
         let Some(d) = self.temporal.as_mut() else { return };
-        // (this frame's prepass has already read the old copy: it was recorded earlier)
         if let (Some(GpuArray::Buffer(models)), Some((prev, _))) = (scene.model_buf.as_ref(), d.prev_models.as_ref()) {
             let bytes = (scene.uploaded_entries as u64 * 64).min(models.size()).min(prev.size());
             if bytes > 0 {

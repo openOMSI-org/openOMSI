@@ -16,7 +16,6 @@ pub(super) struct VkGpu {
     pub(super) instance: vk::Instance,
     pub(super) physical: vk::PhysicalDevice,
     pub(super) get_device_proc_addr: vk::PFN_vkGetDeviceProcAddr,
-    /// The queue family and index wgpu's one queue is (`queue` gives the handle).
     pub(super) family: u32,
     pub(super) queue_index: u32,
 }
@@ -78,7 +77,6 @@ pub(super) fn format(f: wgpu::TextureFormat) -> vk::Format {
     }
 }
 
-/// The image usage wgpu gives a texture of these usages (`wgpu_hal::vulkan::conv`).
 pub(super) fn usage(u: wgpu::TextureUsages, depth: bool) -> vk::ImageUsageFlags {
     let mut out = vk::ImageUsageFlags::empty();
     if u.contains(wgpu::TextureUsages::COPY_SRC) {
@@ -105,8 +103,6 @@ struct Slot {
     pending: bool,
 }
 
-/// Command buffers of ours on wgpu's queue, used in turn: each is reused once the GPU has
-/// finished with it (its fence says so).
 pub(super) struct VkRing {
     device: ash::Device,
     pool: vk::CommandPool,
