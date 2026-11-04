@@ -143,18 +143,12 @@ pub fn resolve_path(base: &Path, rel: &str) -> Option<PathBuf> {
 }
 
 fn plugin_opls(dirs: &[PathBuf]) -> Vec<(PathBuf, &PathBuf)> {
-    let mut earlier = std::collections::HashSet::new();
-    let mut out = Vec::new();
+    let name = |o: &Path| o.file_name().map(|n| n.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+    let (mut earlier, mut out) = (std::collections::HashSet::new(), Vec::new());
     for dir in dirs {
-        let mut names = Vec::new();
-        for opl in find_opls(dir) {
-            let name = opl.file_name().map(|n| n.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
-            if !earlier.contains(&name) {
-                names.push(name);
-                out.push((opl, dir));
-            }
-        }
-        earlier.extend(names);
+        let found: Vec<PathBuf> = find_opls(dir).into_iter().filter(|o| !earlier.contains(&name(o))).collect();
+        earlier.extend(found.iter().map(|o| name(o)));
+        out.extend(found.into_iter().map(|o| (o, dir)));
     }
     out
 }
@@ -1395,11 +1389,10 @@ mod tests {
         assert_eq!(library_path(&opl, &dir, "none.dll"), None);
         let other = dir.join("other");
         std::fs::create_dir_all(&other).unwrap();
-        std::fs::write(&opl, "[dll]\r\nMBASNE.dll\r\n").unwrap();
-        std::fs::write(other.join("mbas.opl"), "[dll]\r\nMBASNE.dll\r\n").unwrap();
-        std::fs::write(other.join("Extra.opl"), "[dll]\r\nx.dll\r\n").unwrap();
-        let first = dir.join("Pablo");
-        let found: Vec<PathBuf> = plugin_opls(&[first.clone(), other.clone()]).into_iter().map(|(p, _)| p).collect();
+        for f in [opl.clone(), other.join("mbas.opl"), other.join("Extra.opl")] {
+            std::fs::write(f, "[dll]\r\nMBASNE.dll\r\n").unwrap();
+        }
+        let found: Vec<PathBuf> = plugin_opls(&[dir.join("Pablo"), other.clone()]).into_iter().map(|(p, _)| p).collect();
         assert_eq!(found, vec![opl.clone(), other.join("Extra.opl")], "a later folder's copy of an .opl name is not loaded again");
         let _ = std::fs::remove_dir_all(&dir);
     }
