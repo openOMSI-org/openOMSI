@@ -201,7 +201,7 @@ impl Renderer {
                 true
             }
             Err(e) => {
-                log::warn!("{} upscaling is off: {e:#}", asked.upscaler.as_str());
+                log::warn!("{} upscaling is off: {e:#}; MSAA stays off too until another upscaling choice", asked.upscaler.as_str());
                 self.temporal_failed = true;
                 false
             }
@@ -440,7 +440,7 @@ impl Renderer {
         let ok = match result {
             Ok(()) => true,
             Err(e) => {
-                log::error!("upscaling stopped working ({e:#}); the picture is drawn without it from now on");
+                log::error!("upscaling stopped working ({e:#}); the picture is drawn without it from now on, and MSAA stays off until another upscaling choice");
                 false
             }
         };
@@ -454,6 +454,10 @@ impl Renderer {
         let sharpen = if matches!(d.runtime, Runtime::Dlss(_)) { DLSS_SHARPEN } else { 0.0 };
         self.queue.write_buffer(&d.blit_buf, 0, bytemuck::cast_slice(&[full.0 as f32, full.1 as f32, sharpen, 2.0]));
         let bg = if ok { &t.output_bg } else { &t.color_bg };
+        if !ok {
+            // (the plain picture's bind group reads this buffer, which no upscaled frame writes)
+            self.queue.write_buffer(&self.scale.upscale_buf, 0, bytemuck::cast_slice(&[render.0 as f32, render.1 as f32, 0.0, 0.0]));
+        }
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("temporal hud") });
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

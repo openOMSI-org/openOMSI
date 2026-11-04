@@ -268,7 +268,7 @@ impl Renderer {
             Err(e) => {
                 // (the device as wgpu makes it, DLSS off: better than no picture)
                 crate::temporal::dlss_vulkan_abandon();
-                log::warn!("dlss upscaling is off: {e:#}");
+                log::warn!("dlss upscaling is off: {e:#}; MSAA stays off too until another upscaling choice");
                 options.temporal = None;
                 None
             }
