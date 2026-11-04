@@ -539,6 +539,7 @@ body[data-page="legal"] .content-doc { max-width: 1280px; }
 .vt:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
 .vt-flag { color: #bf8700; }
 .vt-bad { color: #e5534b; }
+.vt-review { color: var(--muted); }
 .vt-wait { color: var(--muted); }
 .vt-wait:hover { background: none; }
 .vt-wait .material-icons { animation: vt-pulse 1.4s ease-in-out infinite; }
