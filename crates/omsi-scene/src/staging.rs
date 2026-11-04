@@ -402,7 +402,7 @@ pub struct ScriptedObject {
     /// pages themselves are `inst.html_textures`.
     pub htmls: Vec<(usize, TextureId)>,
     /// Per instance, its slots faded by `[alphascale]` variables (`LampSlots::alpha`; empty
-    /// when none is), and the alphas last given.
+    /// when none is), and the alphas and texture offsets last given.
     pub alpha_slots: Vec<LampSlots>,
     pub alpha_last: Vec<(Vec<f32>, Vec<[f32; 2]>)>,
     pub script_lamps: Vec<ScriptLamp>,
@@ -502,8 +502,12 @@ impl LampSlots {
         let mut uv = vec![[0.0; 2]; if self.uv.is_empty() { 0 } else { self.count.max(1) }];
         for (slot, x, y) in &self.uv {
             if let Some(u) = uv.get_mut(*slot) {
-                u[0] = x.as_deref().and_then(value).unwrap_or(0.0);
-                u[1] = y.as_deref().and_then(value).unwrap_or(0.0);
+                if let Some(x) = x {
+                    u[0] = value(x).unwrap_or(0.0);
+                }
+                if let Some(y) = y {
+                    u[1] = value(y).unwrap_or(0.0);
+                }
             }
         }
         uv
