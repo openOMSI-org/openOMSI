@@ -165,8 +165,26 @@ pub fn settings_columns(
     two: bool,
     mut row_height: impl FnMut(usize) -> f32,
 ) -> Vec<Vec<Vec<usize>>> {
-    if !two || groups.len() < 2 {
+    if !two || groups.is_empty() {
         return vec![groups];
+    }
+    if groups.len() == 1 {
+        let rows = &groups[0];
+        if rows.len() < 2 {
+            return vec![groups];
+        }
+        let heights: Vec<_> = rows.iter().map(|&index| row_height(index)).collect();
+        let half = heights.iter().sum::<f32>() * 0.5;
+        let mut height = 0.0;
+        let mut split = rows.len() - 1;
+        for (index, row) in heights.iter().enumerate() {
+            if index > 0 && height >= half {
+                split = index;
+                break;
+            }
+            height += row;
+        }
+        return vec![vec![rows[..split].to_vec()], vec![rows[split..].to_vec()]];
     }
     let heights: Vec<f32> = groups
         .iter()
@@ -409,6 +427,28 @@ mod tests {
         assert_eq!(
             filter_groups(&rows, "#", None, "  "),
             vec![vec![0, 1], vec![2, 3]]
+        );
+    }
+
+    #[test]
+    fn long_unheaded_page_splits_rows_by_height_without_reindexing() {
+        let groups = vec![vec![0, 2, 3, 4, 6, 7, 8, 9]];
+        let columns = settings_columns(groups.clone(), true, |i| if i < 4 { 80.0 } else { 20.0 });
+        assert_eq!(
+            columns,
+            vec![vec![vec![0, 2, 3]], vec![vec![4, 6, 7, 8, 9]]]
+        );
+        assert_eq!(
+            settings_columns(groups.clone(), false, |_| 40.0),
+            vec![groups]
+        );
+        assert_eq!(
+            settings_columns(Vec::new(), true, |_| 40.0),
+            vec![Vec::<Vec<usize>>::new()]
+        );
+        assert_eq!(
+            settings_columns(vec![vec![3]], true, |_| 40.0),
+            vec![vec![vec![3]]]
         );
     }
 

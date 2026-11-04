@@ -280,7 +280,7 @@ fn settings_rows(sh: &mut Shell, v: &PauseView, list: &ListView, body: Rect, anc
     if groups.is_empty() {
         sh.ui.text_in(&omsi_ui::tr("No matching settings"), body, 14.0, Weight::Regular, th().ink_muted, Align::Center);
     }
-    let two = body.w >= 900.0 && groups.len() > 1 && groups.iter().flatten().count() > 6;
+    let two = body.w >= 900.0 && groups.iter().flatten().count() > 6;
     let cols = settings_columns(groups, two, items);
     let any_hover = sh.ui.hover(body);
     let key = format!("pause-list-{}", list.key);

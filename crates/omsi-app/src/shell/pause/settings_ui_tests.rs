@@ -659,3 +659,18 @@ fn settings_search_closes_phone_keyboard_and_keeps_desktop_text() {
     assert!(!crate::platform::PHONE_KEYBOARD_ON.with(|flag| flag.get()));
     assert!(!crate::platform::TEXT_INPUT_ON.with(|flag| flag.get()));
 }
+
+#[test]
+fn pause_unheaded_long_page_uses_right_column_with_original_action_index() {
+    let rows: Vec<_> = (0..8).map(|_| ("keybind", "Binding\u{1f}a\u{1f}Key\u{1f}Change binding".to_string())).collect();
+    let rail = Vec::new();
+    let mut v = nested_view(&rail, &rows, false);
+    v.list.as_mut().unwrap().sel = 0;
+    let mut sh = Shell::new();
+    sh.begin(1600.0, 900.0, 1.0, 1.0 / 60.0);
+    sh.ui.input.mouse = Vec2::new(1200.0, 215.0);
+    sh.ui.input.pressed = true;
+    sh.ui.input.released = true;
+    settings_rows(&mut sh, &v, v.list.as_ref().unwrap(), Rect::new(300.0, 180.0, 1100.0, 600.0), &mut None);
+    assert_eq!(sh.actions, [Action::Choose(4)]);
+}
