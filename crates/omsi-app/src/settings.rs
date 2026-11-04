@@ -558,6 +558,10 @@ impl Default for Settings {
     }
 }
 
+/// A dedicated server's AI limits (`server.cfg`'s `ai_unsched_factor`, `ai_max_scheduled`,
+/// `ai_max_parked`, `ai_max_humans`), as `settings.cfg` lines read after the machine's own.
+pub(crate) static SERVER_AI_LIMITS: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
 impl Settings {
     /// HUD coordinates occupy the centre panel by default; world picking always
     /// keeps the full window's physical coordinates.
@@ -611,6 +615,11 @@ impl Settings {
         // OMSI_GRAPHICS=vanilla|vanilla_plus|enhanced: another renderer for one run
         if let Some(g) = omsi_cfg::flags::OMSI_GRAPHICS.var() {
             text.push_str(&format!("\ngraphics={g}\n"));
+        }
+        // a dedicated server's AI limits (`server.cfg`) over the machine's own
+        if let Some(lines) = SERVER_AI_LIMITS.get() {
+            text.push('\n');
+            text.push_str(lines);
         }
         // The settings made of the text read last, while the file says just the same: a
         // start asked for them some twenty times, and each time parsed the file anew.

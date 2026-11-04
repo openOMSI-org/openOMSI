@@ -52,15 +52,23 @@ pub struct Look {
 }
 
 /// What a timetable bus shows: its line and its destination (`#<index>` of the depot file's
-/// destinations, `#-1` for none). Empty for the random traffic.
+/// destinations, `#-1` for none), its fleet number and registration (the `number` and
+/// `ident` string variables) and the depot file it reads them from (its file name without
+/// the extension; empty when it has none). Empty for the random traffic.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct Meta {
     pub line: String,
     pub destination: String,
+    pub number: String,
+    pub ident: String,
+    pub hof: String,
 }
 
 pub const MAX_LINE: usize = 16;
 pub const MAX_DESTINATION: usize = 64;
+pub const MAX_NUMBER: usize = 32;
+pub const MAX_IDENT: usize = 32;
+pub const MAX_HOF: usize = 64;
 
 pub const SPEED_STEP: f64 = 0.05;
 pub const STEER_STEP: f64 = 0.5;

@@ -63,6 +63,38 @@ pub(crate) const ZSTD_FAST: i32 = 3;
 /// than `pack` over a whole bus, at a megabyte or two a second.
 pub(crate) const ZSTD_BEST: i32 = 19;
 
+/// Pieces packed on request at once, at most (`packing_slot`): a few cores' worth. With a
+/// thread for every connection (up to 160), players fetching buses together packed on every
+/// core and the server's own step - its traffic and people - got none.
+pub(crate) fn packers() -> usize {
+    std::thread::available_parallelism().map(|n| (n.get() / 4).max(1)).unwrap_or(1)
+}
+
+static PACKING: (std::sync::Mutex<usize>, std::sync::Condvar) = (std::sync::Mutex::new(0), std::sync::Condvar::new());
+
+/// One of the `packers()` places to pack a piece in, held until it is dropped: a connection
+/// past them waits its turn (it only waits on its own player's download).
+pub(crate) struct PackingSlot(());
+
+pub(crate) fn packing_slot() -> PackingSlot {
+    let (busy, freed) = &PACKING;
+    let mut n = busy.lock().unwrap_or_else(|e| e.into_inner());
+    while *n >= packers() {
+        n = freed.wait(n).unwrap_or_else(|e| e.into_inner());
+    }
+    *n += 1;
+    PackingSlot(())
+}
+
+impl Drop for PackingSlot {
+    fn drop(&mut self) {
+        let (busy, freed) = &PACKING;
+        let mut n = busy.lock().unwrap_or_else(|e| e.into_inner());
+        *n = n.saturating_sub(1);
+        freed.notify_one();
+    }
+}
+
 /// A piece as it goes with zstd at `level`: (codec, bytes) - as it is when that is smaller.
 pub(crate) fn pack_zstd(data: &[u8], level: i32) -> (char, Vec<u8>) {
     match zstd::bulk::compress(data, level) {
@@ -92,7 +124,10 @@ pub(crate) fn unpack(codec: &str, wire: Vec<u8>, raw: u64) -> Result<Vec<u8>, St
 
 /// Answer a `PIECE` request with `data`.
 pub(crate) fn send(out: &mut impl Write, data: &[u8]) -> std::io::Result<()> {
-    let (codec, wire) = pack(data);
+    let (codec, wire) = {
+        let _slot = packing_slot();
+        pack(data)
+    };
     send_packed(out, data.len() as u64, codec, &wire)
 }
 
@@ -284,5 +319,30 @@ mod tests {
         assert_eq!(d, (0..100).collect::<Vec<_>>());
         // a worker that fails: the answer is its failure
         assert!(share_out(vec![1, 2, 3], 2, |_| Err(String::from("broke"))).unwrap_err().contains("broke"));
+    }
+
+    /// No more than `packers()` pieces are packed on request at once, however many players
+    /// ask together; the others wait their turn, and every one gets its piece.
+    #[test]
+    fn pieces_are_packed_a_few_at_a_time() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static NOW: AtomicUsize = AtomicUsize::new(0);
+        static MOST: AtomicUsize = AtomicUsize::new(0);
+        let done: Vec<_> = (0..24)
+            .map(|_| {
+                std::thread::spawn(|| {
+                    let _slot = packing_slot();
+                    let n = NOW.fetch_add(1, Ordering::SeqCst) + 1;
+                    MOST.fetch_max(n, Ordering::SeqCst);
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                    NOW.fetch_sub(1, Ordering::SeqCst);
+                })
+            })
+            .collect();
+        for t in done {
+            t.join().unwrap();
+        }
+        assert!(MOST.load(Ordering::SeqCst) <= packers(), "{} at once", MOST.load(Ordering::SeqCst));
+        assert_eq!(NOW.load(Ordering::SeqCst), 0);
     }
 }

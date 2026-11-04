@@ -85,3 +85,22 @@ use omsi_lan::mirror::relative_to_roots;
         super::show_car_destination(&mut v, None, "5", "#1");
         assert_eq!(v.var("AI_target_index"), Some(2.0));
     }
+
+    /// What the host tells of a timetable bus holds the fleet number and plate it drew and its
+    /// depot file by name: a player's copy showed no number and read the destination's row in
+    /// a depot file of its own choosing.
+    #[test]
+    fn a_hosts_bus_tells_its_number_plate_and_depot_file() {
+        let mut v = crate::schedule::tests::script_test_vehicle("{frame}\n{end}\n", "AI_target_index\n", "SetLineTo\nnumber\nident\n");
+        for (name, text) in [("SetLineTo", "8022-10"), ("number", "80.849"), ("ident", "EMT-1234")] {
+            let i = v.ty.program.str_var(name).unwrap();
+            v.state.str_vars[i as usize] = text.into();
+        }
+        assert!(v.set_var("AI_target_index", 4.0));
+        v.host.hof = Some(std::sync::Arc::new(omsi_vehicle::Hof { path: PathBuf::from("Vehicles/Torino/Brigadeiro Sampaio.hof"), ..Default::default() }));
+        let m = super::car_meta(&v);
+        assert_eq!((m.line.as_str(), m.destination.as_str()), ("8022-10", "#4"));
+        assert_eq!((m.number.as_str(), m.ident.as_str(), m.hof.as_str()), ("80.849", "EMT-1234", "Brigadeiro Sampaio"));
+        v.host.hof = None;
+        assert_eq!(super::car_meta(&v).hof, "", "no depot file: none named");
+    }

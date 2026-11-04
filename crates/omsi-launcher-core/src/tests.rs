@@ -32,7 +32,7 @@ include!("plugin_launch_tests.rs");
 fn the_games_options_survive_a_save() {
     // what the pause menu's Options change, read back as they were set
     let mut v = settings_from_text(None);
-    for (k, x) in [("steer_look", json!(true)), ("discord_status", json!(false)), ("voice_enabled", json!(true)), ("voice_mode", json!("open")), ("voice_range", json!(120)), ("voice_mic_gain", json!(2.0)), ("launcher_rest", json!(false)), ("camera_collision", json!(false)), ("brake_hold", json!(false)), ("auto_clutch", json!(false)), ("momentary_gears", json!(true)), ("ff_enabled", json!(false)), ("head_tracking", json!(true)), ("collision_objects", json!(false)), ("led_mips", json!(2.5)), ("led_glow", json!(11)), ("look_sens", json!(0.5)), ("look_smoothing_ms", json!(120.0)), ("blinker_cancel", json!(false)), ("pedal_brake", json!(1.5)), ("mouse_pedal_strength", json!(1.75)), ("head_idle", json!(0.35)), ("head_idle_pace", json!(1.5)), ("seat_y", json!(-0.1)), ("seat_pitch_deg", json!(8.0))] {
+    for (k, x) in [("steer_look", json!(true)), ("discord_status", json!(false)), ("voice_enabled", json!(true)), ("voice_mode", json!("open")), ("voice_range", json!(120)), ("voice_mic_gain", json!(2.0)), ("launcher_rest", json!(false)), ("camera_collision", json!(false)), ("brake_hold", json!(false)), ("auto_clutch", json!(false)), ("momentary_gears", json!(true)), ("ff_enabled", json!(false)), ("head_tracking", json!(true)), ("collision_objects", json!(false)), ("realistic_road_physics", json!(true)), ("led_mips", json!(2.5)), ("led_glow", json!(11)), ("look_sens", json!(0.5)), ("look_smoothing_ms", json!(120.0)), ("blinker_cancel", json!(false)), ("pedal_brake", json!(1.5)), ("mouse_pedal_strength", json!(1.75)), ("head_idle", json!(0.35)), ("head_idle_pace", json!(1.5)), ("seat_y", json!(-0.1)), ("seat_pitch_deg", json!(8.0))] {
         v[k] = x;
     }
     let back = settings_from_text(Some(&settings_to_text(&v, None)));
@@ -44,7 +44,7 @@ fn the_games_options_survive_a_save() {
     assert_eq!(settings_from_text(Some(&settings_to_text(&r, None)))["resolution"], json!("1280x800"));
     assert_eq!(resolution_text("1920 x 1080"), "1920x1080");
     assert_eq!(resolution_text("huge"), "auto");
-    for k in ["steer_look", "discord_status", "voice_enabled", "voice_mode", "voice_range", "voice_mic_gain", "launcher_rest", "camera_collision", "brake_hold", "auto_clutch", "momentary_gears", "ff_enabled", "head_tracking", "collision_objects", "led_mips", "led_glow", "look_sens", "look_smoothing_ms", "blinker_cancel", "pedal_brake", "mouse_pedal_strength", "head_idle", "head_idle_pace", "seat_y", "seat_pitch_deg"] {
+    for k in ["steer_look", "discord_status", "voice_enabled", "voice_mode", "voice_range", "voice_mic_gain", "launcher_rest", "camera_collision", "brake_hold", "auto_clutch", "momentary_gears", "ff_enabled", "head_tracking", "collision_objects", "realistic_road_physics", "led_mips", "led_glow", "look_sens", "look_smoothing_ms", "blinker_cancel", "pedal_brake", "mouse_pedal_strength", "head_idle", "head_idle_pace", "seat_y", "seat_pitch_deg"] {
         assert_eq!(back[k], v[k], "{k}");
     }
     assert!(!settings_from_text(None)["discord_status"].as_bool().unwrap());
