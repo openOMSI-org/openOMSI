@@ -815,8 +815,8 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
             // as the self-illuminated materials do
             // (a window lit from inside shows some 80 cd/mÂ² - a room's 300 lux off its
             // walls and through a curtain - an illuminated sign more: over the dark street
-            // round it, well over the screen's white, and the eye's glare blooms round it)
-            emit = emit + nm * select(enh.exposure.z * 3.6, mix(max(enh.exposure.z * 2.0, 0.8), 0.8, near_player_vehicle(in.world) * inside_vehicle(camera.cam_pos.xyz) * (1.0 - outside)), switched);
+            // round it, a little over the screen's white, so that it keeps its colour)
+            emit = emit + nm * select(min(enh.exposure.z * 3.6, 1.2), mix(max(enh.exposure.z * 2.0, 0.8), 0.8, near_player_vehicle(in.world) * inside_vehicle(camera.cam_pos.xyz) * (1.0 - outside)), switched);
         }
     }
     if (material.params2.x > 0.5 && !terrain && !glass) {

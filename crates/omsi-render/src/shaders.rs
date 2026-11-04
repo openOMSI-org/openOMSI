@@ -130,7 +130,7 @@ mod tests {
     /// Omsi.exe's encoded mix, and the vertex-lit Direct3D headlight excluding its own vehicle,
     /// and the traced sample read once for FXC, the road glare in its own uniform lane,
     /// and the detail grain's octaves left out where faded, and the instance's parameters
-    /// handed to the fragments flat (#1488), and no sun glint on a face seen from behind (#3359).
+    /// handed to the fragments flat (#1488), and no sun glint on a face seen from behind (#3359), and an unswitched night map's gain capped (#3362).
     /// (with Unix line ends: a Windows checkout may turn the parts' into CRLF, as it did the
     /// single files', and the 0.2.31 release's Windows test failed on that alone)
     #[test]
