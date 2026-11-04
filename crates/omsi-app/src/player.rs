@@ -1041,6 +1041,9 @@ impl Player {
             throttle,
             brake,
         );
+        if a.steering.is_some_and(|s| s.abs() > 0.02) {
+            self.axes.steering = 0.0;
+        }
         self.vehicle.set_controls(omsi_sim::Controls {
             throttle,
             brake,
