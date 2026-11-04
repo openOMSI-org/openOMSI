@@ -303,6 +303,7 @@ impl VehicleInstance {
             pax_vars: std::sync::OnceLock::new(),
             engine_ids: std::sync::OnceLock::new(),
             cable_bus: Vec::new(),
+            cable_back: Vec::new(),
             program_ids: std::sync::OnceLock::new(),
             trolley,
             rail_env: None,
