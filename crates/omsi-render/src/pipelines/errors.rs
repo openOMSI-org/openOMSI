@@ -106,7 +106,7 @@ pub(crate) fn install(device: &wgpu::Device, format: wgpu::TextureFormat, option
 }
 
 fn blames_msaa(e: &wgpu::Error, text: &str, msaa: u32) -> bool {
-    msaa > 1 && !matches!(e, wgpu::Error::OutOfMemory { .. }) && !text.contains("is invalid")
+    msaa > 1 && !matches!(e, wgpu::Error::OutOfMemory { .. }) && !text.contains("label is invalid")
 }
 
 #[cfg(test)]
@@ -119,7 +119,8 @@ mod msaa_blame_tests {
         assert!(!blames_msaa(&oom, "Out of Memory", 4));
         let invalid = wgpu::Error::Validation { source: Box::new(std::io::Error::other("v")), description: String::new() };
         assert!(!blames_msaa(&invalid, "BindGroup with 'camera' label is invalid", 4));
-        assert!(blames_msaa(&invalid, "Sample count 3 is not supported", 4));
-        assert!(!blames_msaa(&invalid, "Sample count 3 is not supported", 1));
+        assert!(blames_msaa(&invalid, "Sample count 3 is invalid", 4));
+        assert!(blames_msaa(&invalid, "Color state [0] is invalid", 4));
+        assert!(!blames_msaa(&invalid, "Sample count 3 is invalid", 1));
     }
 }
