@@ -143,7 +143,7 @@ pub fn resolve_path(base: &Path, rel: &str) -> Option<PathBuf> {
 }
 
 fn plugin_opls(dirs: &[PathBuf]) -> Vec<(PathBuf, &PathBuf)> {
-    let name = |o: &Path| o.file_name().map(|n| n.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+    let name = |o: &Path| (o.file_name().map(|n| n.to_string_lossy().to_ascii_lowercase()), std::fs::read(o).ok().map(|t| parse_opl(&String::from_utf8_lossy(&t)).dll.rsplit(['\\', '/']).next().unwrap_or("").trim().to_ascii_lowercase()));
     let (mut earlier, mut out) = (std::collections::HashSet::new(), Vec::new());
     for dir in dirs {
         let found: Vec<PathBuf> = find_opls(dir).into_iter().filter(|o| !earlier.contains(&name(o))).collect();
@@ -1381,20 +1381,20 @@ mod tests {
     fn a_library_beside_its_opl_in_a_subfolder_is_found() {
         let dir = std::env::temp_dir().join(format!("omsi-opl-lib-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("Pablo")).unwrap();
-        std::fs::write(dir.join("Pablo/MBASNE.dll"), b"x").unwrap();
-        std::fs::write(dir.join("top.dll"), b"x").unwrap();
+        ["Pablo/MBASNE.dll", "top.dll"].map(|f| std::fs::write(dir.join(f), b"x").unwrap());
         let opl = dir.join("Pablo/MBAS.opl");
         assert_eq!(library_path(&opl, &dir, "MBASNE.dll"), Some(dir.join("Pablo/MBASNE.dll")));
         assert_eq!(library_path(&opl, &dir, "top.dll"), Some(dir.join("top.dll")));
         assert_eq!(library_path(&opl, &dir, "none.dll"), None);
-        let other = dir.join("other");
+        let other = std::env::temp_dir().join(format!("omsi-opl-lib-b-{}", std::process::id()));
         std::fs::create_dir_all(&other).unwrap();
-        for f in [opl.clone(), other.join("mbas.opl"), other.join("Extra.opl")] {
-            std::fs::write(f, "[dll]\r\nMBASNE.dll\r\n").unwrap();
+        for (f, dll) in [(&opl, "MBASNE.dll"), (&other.join("mbas.opl"), "x\\MBASNE.dll"), (&dir.join("Pablo/Config.opl"), "a.dll"), (&other.join("Config.opl"), "b.dll")] {
+            std::fs::write(f, format!("[dll]\r\n{dll}\r\n")).unwrap();
         }
-        let found: Vec<PathBuf> = plugin_opls(&[dir.join("Pablo"), other.clone()]).into_iter().map(|(p, _)| p).collect();
-        assert_eq!(found, vec![opl.clone(), other.join("Extra.opl")], "a later folder's copy of an .opl name is not loaded again");
-        let _ = std::fs::remove_dir_all(&dir);
+        let mut found: Vec<PathBuf> = plugin_opls(&[other.clone(), dir.clone()]).into_iter().map(|(p, _)| p).collect();
+        found.sort();
+        assert_eq!(found, vec![dir.join("Pablo/Config.opl"), other.join("Config.opl"), other.join("mbas.opl")], "a later folder's copy of the same plugin is not loaded again");
+        let _ = (std::fs::remove_dir_all(&dir), std::fs::remove_dir_all(&other));
     }
 
     #[test]
