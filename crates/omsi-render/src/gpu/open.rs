@@ -117,6 +117,7 @@ impl Renderer {
         };
         // a small or shared graphics chip gets a lighter picture (see `lighter_picture`)
         GL_BACKEND.store(info.backend == wgpu::Backend::Gl, std::sync::atomic::Ordering::Relaxed);
+        MULTISAMPLED_SHADING.store(!cfg!(target_os = "android") && info.backend != wgpu::Backend::Gl && adapter.get_downlevel_capabilities().flags.contains(wgpu::DownlevelFlags::MULTISAMPLED_SHADING), std::sync::atomic::Ordering::Relaxed);
         let options = gpu_memory::lighter_picture(&info, vram, options);
         let most = gpu_memory::ceiling(&info, vram);
         *CEILING.lock().unwrap_or_else(|e| e.into_inner()) = Some(if intel_vulkan_safe { gpu_memory::Ceiling { msaa: 1, ssao: false, shadow_size: most.shadow_size.min(2048), ..most } } else { most });
@@ -134,6 +135,8 @@ impl Renderer {
             limits.max_storage_buffer_binding_size =
                 adapter.limits().max_storage_buffer_binding_size;
             limits.max_buffer_size = adapter.limits().max_buffer_size;
+            limits.max_sampled_textures_per_shader_stage =
+                limits.max_sampled_textures_per_shader_stage.max(adapter.limits().max_sampled_textures_per_shader_stage.min(crate::pipelines::scene::PANE_MASK_TEXTURES));
         }
         // an older or smaller graphics chip (an OpenGL one, a GT 530) does not reach the
         // WebGPU defaults: asked for them anyway, the device was never opened
@@ -725,6 +728,8 @@ impl Renderer {
             prepass_pipelines: prepass.pipelines,
             prepass_msaa_pipelines: prepass.msaa_pipelines,
             prepass_eye_pipelines: prepass.eye_pipelines,
+            pane_mask: prepass.pane_mask,
+            pane_depth: None,
             ground_pipelines,
             ground_bound: std::cell::Cell::new(false),
             ssao_pipeline: ssao.ssao_pipeline,

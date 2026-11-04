@@ -151,6 +151,15 @@ fn fs_depth_transmap(in: DepthIn) {
     transmap_coverage(in.uv, in.params, camera.lod.x);
 }
 
+//MS @group(3) @binding(0) var t_pane_depth: texture_depth_multisampled_2d;
+
+//MS @fragment
+//MS fn fs_depth_masked(in: DepthIn, @builtin(sample_index) sample: u32) {
+//MS     if (in.clip.z <= textureLoad(t_pane_depth, vec2<i32>(in.clip.xy), i32(sample))) {
+//MS         discard;
+//MS     }
+//MS }
+
 // The multisampled prefill's cut-outs (foliage): their depth only where the colour pass
 // is sure to cover every sample - the alpha-to-coverage of an alpha of 1 (`shade_enhanced`:
 // the texture's alpha past the cutoff's smoothed edge, a plain material at full opacity,

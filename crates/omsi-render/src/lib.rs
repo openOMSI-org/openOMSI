@@ -154,6 +154,8 @@ pub struct Renderer {
     /// once per visible surface.
     prepass_msaa_pipelines: Option<[wgpu::RenderPipeline; 6]>,
     prepass_eye_pipelines: Option<[wgpu::RenderPipeline; 6]>,
+    pane_mask: Option<pipelines::scene::PaneMaskPipelines>,
+    pane_depth: Option<((u32, u32), wgpu::TextureView, wgpu::BindGroup)>,
     /// The ground albedo pass's pipelines (see `SceneBase::ground_pipeline_at`); none where
     /// the enhanced path is left out or on OpenGL.
     ground_pipelines: Option<[wgpu::RenderPipeline; 8]>,
