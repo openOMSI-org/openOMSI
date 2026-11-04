@@ -210,20 +210,7 @@ impl ScheduleSim {
     /// Returns how many of today's departures that takes from the AI.
     pub fn reserve_tour(&mut self, line: &str, tour: &str) -> usize {
         self.player_tour = Some((line.to_string(), tour.to_string()));
-        self.player_twins.clear();
-        let mut twins = HashSet::new();
-        let own = |s: &Self, i: usize| s.is_player_tour(i) && !s.lan_tours.iter().any(|t| s.departures[i].line.eq_ignore_ascii_case(&t.0) && s.departures[i].tour.eq_ignore_ascii_case(&t.1));
-        let off_day = !(0..self.departures.len()).any(|i| own(self, i) && self.runs(i));
-        for p in (0..self.departures.len()).filter(|&i| off_day && own(self, i) && !self.departures[i].yesterday) {
-            let d = &self.departures[p];
-            for (j, e) in self.departures.iter().enumerate() {
-                let dt = (e.time - d.time).rem_euclid(DAY);
-                if j != p && !e.yesterday && e.trip == d.trip && e.line.eq_ignore_ascii_case(&d.line) && (dt <= 120.0 || dt >= DAY - 120.0) && self.runs(j) {
-                    twins.insert(j);
-                }
-            }
-        }
-        self.player_twins = twins;
+        self.find_twins();
         let mine: Vec<bool> = (0..self.departures.len())
             .map(|i| self.is_player_tour(i))
             .collect();
@@ -240,6 +227,23 @@ impl ScheduleSim {
         self.purge_player_tour = true;
         log::info!("timetable: {n} departures of line {line} tour {tour} left to the player");
         n
+    }
+
+    pub(super) fn find_twins(&mut self) {
+        self.player_twins.clear();
+        let mut twins = HashSet::new();
+        let own = |s: &Self, i: usize| s.is_player_tour(i) && !s.lan_tours.iter().any(|t| s.departures[i].line.eq_ignore_ascii_case(&t.0) && s.departures[i].tour.eq_ignore_ascii_case(&t.1));
+        let off_day = !(0..self.departures.len()).any(|i| own(self, i) && self.runs(i));
+        for p in (0..self.departures.len()).filter(|&i| off_day && own(self, i) && !self.departures[i].yesterday) {
+            let d = &self.departures[p];
+            for (j, e) in self.departures.iter().enumerate() {
+                let dt = (e.time - d.time).rem_euclid(DAY);
+                if j != p && !e.yesterday && e.trip == d.trip && e.line.eq_ignore_ascii_case(&d.line) && (dt <= 120.0 || dt >= DAY - 120.0) && self.runs(j) {
+                    twins.insert(j);
+                }
+            }
+        }
+        self.player_twins = twins;
     }
 
     /// LAN play (host): the tours the other players drive now. A tour taken leaves the

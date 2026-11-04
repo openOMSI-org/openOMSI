@@ -479,6 +479,7 @@ impl ScheduleSim {
         if forward {
             self.night_trips_to_yesterday();
         }
+        self.find_twins();
         let busy: HashSet<usize> = self
             .pending
             .iter()
