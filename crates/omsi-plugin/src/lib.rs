@@ -1,7 +1,7 @@
 //! OMSI plugins, driven the way OMSI drives them:
 //!
 //! * the original finds every `*.opl` under `<OMSI>\plugins` (recursively) and reads
-//!   `[dll]` (the library, relative to `plugins\`), `[varlist]`, `[stringvarlist]`,
+//!   `[dll]` (the library, relative to `plugins\`, else beside the .opl), `[varlist]`, `[stringvarlist]`,
 //!   `[systemvarlist]` and `[triggers]` - each a count, then that many names.
 //! * the original loads the library and looks up `PluginStart`, `PluginFinalize` (both
 //!   required: without them the plugin is not loaded) and `AccessVariable`,
@@ -140,6 +140,10 @@ pub fn resolve_path(base: &Path, rel: &str) -> Option<PathBuf> {
         cur = found;
     }
     Some(cur)
+}
+
+fn library_path(opl_path: &Path, plugins_dir: &Path, dll: &str) -> Option<PathBuf> {
+    resolve_path(plugins_dir, dll).or_else(|| opl_path.parent().and_then(|d| resolve_path(d, dll)))
 }
 
 /// What one frame hands a plugin and what it gives back.
@@ -839,7 +843,7 @@ impl Plugin {
         if opl.dll.is_empty() {
             return Err("no [dll]".into());
         }
-        let dll = resolve_path(plugins_dir, &opl.dll).ok_or_else(|| format!("{} not found", opl.dll))?;
+        let dll = library_path(opl_path, plugins_dir, &opl.dll).ok_or_else(|| format!("{} not found", opl.dll))?;
         if patches_omsi_exe(&dll) {
             return Err("it patches the code of OMSI.exe, which openOMSI does not run".into());
         }
@@ -1368,6 +1372,19 @@ impl Drop for Plugins {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_library_beside_its_opl_in_a_subfolder_is_found() {
+        let dir = std::env::temp_dir().join(format!("omsi-opl-lib-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Pablo")).unwrap();
+        std::fs::write(dir.join("Pablo/MBASNE.dll"), b"x").unwrap();
+        std::fs::write(dir.join("top.dll"), b"x").unwrap();
+        let opl = dir.join("Pablo/MBAS.opl");
+        assert_eq!(library_path(&opl, &dir, "MBASNE.dll"), Some(dir.join("Pablo/MBASNE.dll")));
+        assert_eq!(library_path(&opl, &dir, "top.dll"), Some(dir.join("top.dll")));
+        assert_eq!(library_path(&opl, &dir, "none.dll"), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn opl_lists() {
