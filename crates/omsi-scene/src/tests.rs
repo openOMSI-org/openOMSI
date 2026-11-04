@@ -310,6 +310,8 @@ fn a_scenery_objects_texcoordtrans_variables_scroll_its_slots() {
     let value = |v: &str| v.parse::<f32>().ok().or((v == "water_y").then_some(0.4));
     assert_eq!(slots.uv_values(&value), vec![[0.0, 0.0], [0.0, 0.4], [0.25, 0.0]]);
     assert!(LampSlots { count: 2, ..Default::default() }.uv_values(&value).is_empty());
+    let both = LampSlots { count: 1, uv: vec![(0, Some("0.25".into()), None), (0, None, Some("water_y".into()))], ..Default::default() };
+    assert_eq!(both.uv_values(&value), vec![[0.25, 0.4]]);
 }
 
 /// A season's snow textures are told by their folder, whatever its case (#879).
