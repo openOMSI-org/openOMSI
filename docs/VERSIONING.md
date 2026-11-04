@@ -139,9 +139,8 @@ and never offered again.
 
 [`.github/workflows/pages.yml`](../.github/workflows/pages.yml) publishes `site/` together with
 the Markdown files of `docs/` to GitHub Pages
-(https://openomsi.org/) whenever they change on `main`, through
-[`scripts/build-site.mjs`](../scripts/build-site.mjs), which writes one page per document,
-so a documentation change is one edit in `docs/`.
+(https://openomsi.org/) whenever they change on `main`. The site renders
+the Markdown in the browser, so a documentation change is one edit in `docs/`.
 The Download page offers the latest stable release. Beta downloads have a separate page
 with the same platform cards and installation instructions; when no beta is newer than
 stable, it links back to stable instead of offering an older build. The release history
