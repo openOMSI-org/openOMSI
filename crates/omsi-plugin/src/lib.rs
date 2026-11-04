@@ -1,7 +1,7 @@
 //! OMSI plugins, driven the way OMSI drives them:
 //!
 //! * the original finds every `*.opl` under `<OMSI>\plugins` (recursively) and reads
-//!   `[dll]` (the library, relative to `plugins\`, else beside the .opl), `[varlist]`, `[stringvarlist]`,
+//!   `[dll]` (the library, relative to `plugins\`; openOMSI also looks beside the .opl), `[varlist]`, `[stringvarlist]`,
 //!   `[systemvarlist]` and `[triggers]` - each a count, then that many names.
 //! * the original loads the library and looks up `PluginStart`, `PluginFinalize` (both
 //!   required: without them the plugin is not loaded) and `AccessVariable`,
