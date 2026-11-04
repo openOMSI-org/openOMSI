@@ -16,9 +16,8 @@
 //!   off) the view glides back straight ahead instead of jumping there; not followed for a
 //!   while (another view) it starts afresh where the head is.
 //!
-//! The player sets the smoothing and the dead zone (`Params::tobii`) for a Tobii tracker's
-//! poses; opentrack's (and native TrackIR's, freetrack's), which opentrack filters itself,
-//! are only glided (`Params::OPENTRACK`), whatever the source setting. All in the head's own terms
+//! The player sets the smoothing and the dead zone (`Params::tobii`) for every tracker; the
+//! `opentrack` source, which opentrack filters itself, is only glided (`Params::OPENTRACK`). All in the head's own terms
 //! (degrees, cm), before the tracker's turn is made larger (`Sample::gain`).
 
 use std::time::{Duration, Instant};
@@ -67,10 +66,6 @@ impl Params {
 
     /// opentrack's poses, which opentrack filters itself (its Accela): only glided.
     pub const OPENTRACK: Params = Params { knee: [0.0; 2], dead: [0.0; 2], tau: [0.02; 2] };
-
-    pub fn for_poses(from_tobii: bool, smoothing: f32, dead_zone: f32) -> Params {
-        if from_tobii { Params::tobii(smoothing, dead_zone) } else { Params::OPENTRACK }
-    }
 }
 
 /// The channels: yaw, pitch, roll (degrees), x, y, z (cm), and the edge's yaw (degrees).
@@ -259,12 +254,6 @@ fn wrap(a: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn opentrack_poses_are_only_glided_whatever_the_source_setting() {
-        assert_eq!(Params::for_poses(false, 0.5, 0.1), Params::OPENTRACK);
-        assert_eq!(Params::for_poses(true, 0.5, 0.1), Params::tobii(0.5, 0.1));
-    }
 
     /// Noise as a tracker's: normal, from a fixed seed (xorshift, Box-Muller).
     struct Noise(u64);
