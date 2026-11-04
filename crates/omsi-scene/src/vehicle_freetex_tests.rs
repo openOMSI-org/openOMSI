@@ -156,6 +156,42 @@ fn display_frames_are_released_and_slots_reused_over_repeated_sequences() {
 }
 
 #[test]
+fn alternating_large_display_pictures_stay_cached_until_the_current_picture_shrinks() {
+    let (fixture, world) = Fixture::world();
+    let renderer = renderer();
+    let mut scene = renderer.new_scene();
+    let mut slot = slot(&world, &renderer, &mut scene);
+    let first_path = fixture.picture("first.png", 2048);
+    let second_path = fixture.picture("second.png", 2048);
+    let first = show(&mut slot, &renderer, &mut scene, first_path.clone());
+    assert!(scene.texture_bytes_of(first) >= KEEP_BYTES);
+    let second = show(&mut slot, &renderer, &mut scene, second_path.clone());
+    assert_eq!(slot.free[0].pictures.len(), 2);
+    assert_ne!(first, second);
+    for _ in 0..4 {
+        assert_eq!(
+            show(&mut slot, &renderer, &mut scene, first_path.clone()),
+            first
+        );
+        assert_eq!(
+            show(&mut slot, &renderer, &mut scene, second_path.clone()),
+            second
+        );
+        assert_eq!(world.vehicle_textures.lock().len(), 2);
+    }
+    let current = show(
+        &mut slot,
+        &renderer,
+        &mut scene,
+        fixture.picture("small.png", 32),
+    );
+    assert_eq!(slot.free[0].pictures.len(), 1);
+    assert_eq!(scene.texture_bytes_of(first), 0);
+    assert_eq!(scene.texture_bytes_of(second), 0);
+    assert_eq!(scene.texture_size_of(current), Some((32, 32)));
+}
+
+#[test]
 fn byte_limit_preserves_the_current_large_picture_and_other_owners() {
     let (fixture, world) = Fixture::world();
     let renderer = renderer();
@@ -175,10 +211,17 @@ fn byte_limit_preserves_the_current_large_picture_and_other_owners() {
         &mut scene,
         fixture.picture("current.png", 2048),
     );
+    let current = show(
+        &mut slot,
+        &renderer,
+        &mut scene,
+        fixture.picture("next.png", 2048),
+    );
     assert_eq!(slot.free[0].pictures.len(), 1);
     assert_eq!(world.vehicle_textures.lock()[&old_path].1, 1);
     assert_eq!(scene.texture_size_of(old), Some((2048, 2048)));
-    assert_eq!(scene.texture_size_of(new), Some((2048, 2048)));
+    assert_eq!(scene.texture_bytes_of(new), 0);
+    assert_eq!(scene.texture_size_of(current), Some((2048, 2048)));
     other.trim(&renderer, &mut scene, &[]);
     assert!(!world.vehicle_textures.lock().contains_key(&old_path));
     assert!(!world.player_textures.lock().contains(&old_path));

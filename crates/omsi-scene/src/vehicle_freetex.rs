@@ -49,13 +49,15 @@ impl FreeTex {
 
     fn over_limit(&self, scene: &Scene) -> bool {
         self.pictures.len() > KEEP_PICTURES || {
+            let current_bytes = self.image.map(|id| scene.texture_bytes_of(id)).unwrap_or(0);
+            let keep_bytes = KEEP_BYTES.max(current_bytes.saturating_mul(2));
             let shared = self.shared.lock();
             self.held
                 .iter()
                 .filter_map(|p| shared.get(p))
                 .map(|(id, _)| scene.texture_bytes_of(*id))
                 .sum::<u64>()
-                > KEEP_BYTES
+                > keep_bytes
         }
     }
 
