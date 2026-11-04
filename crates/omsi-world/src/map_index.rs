@@ -635,6 +635,7 @@ fn chain_offset_from(index: &MapIndex, id: i64, mut spline: IndexedSpline) -> f6
 /// spline lengths drift by a little (Spandau has buffer stops 0.1 and 0.5 m past theirs).
 const CHAIN_END_TOLERANCE: f64 = 1.0;
 const JOINT_TOLERANCE: f64 = 0.01;
+const ROW_END_DRIFT: f64 = 0.25;
 
 /// Where a row record's objects begin on its own spline.
 #[derive(Debug, Clone, Copy)]
@@ -747,7 +748,7 @@ fn place_upto(att: &SplineAttachment, spline: &MapSpline, origin: DVec2, index: 
     // of Thüringer Wald's road to Haselbach, #1693)
     let single = interval <= 0.0 || range < interval;
     let last_j = if interval > 0.0 { ((range + JOINT_TOLERANCE) / interval).floor() as usize } else { 0 };
-    let end_of = |j: usize| len + if chain_ends && (single || j == last_j) { CHAIN_END_TOLERANCE } else { JOINT_TOLERANCE };
+    let end_of = |j: usize| len + if chain_ends && single { CHAIN_END_TOLERANCE } else if chain_ends && j == last_j { ROW_END_DRIFT } else { JOINT_TOLERANCE };
     let from = if att.repeater.is_some() { JOINT_TOLERANCE } else { -1e-6 };
     let mut out = Vec::new();
     loop {
@@ -820,11 +821,17 @@ pub fn tile_row_objects(att: &SplineAttachment, splines: &[MapSpline], origin: D
         let c = &splines[cur];
         let next_id = if backwards { c.prev_id } else { c.next_id };
         let Some(ni) = splines.iter().position(|s| s.id == next_id && !s.deleted) else {
-            let next_first = index.and_then(|ix| ix.repeater_first.get(&(att.id, next_id)));
             let drawn = out.iter().map(|(_, o)| o.index + 1).max().unwrap_or(0);
-            if let Some(upto) = next_first.filter(|&&k| k > drawn).map(|_| drawn + 1) {
-                let gap = place_upto(att, c, origin, index, cur_start, upto);
-                out.extend(gap.into_iter().filter(|o| o.index >= drawn && o.index < upto).map(|o| (cur, o)));
+            let last_j = ((att.range.max(0.0) + JOINT_TOLERANCE) / interval.max(1e-9)).floor() as usize;
+            let past_end = cur_start.s + (drawn as f64 - cur_start.j as f64) * interval - c.length.max(0.0);
+            let room = match index.map(|ix| ix.repeater_first.get(&(att.id, next_id))) {
+                Some(Some(&k)) if k > drawn => CHAIN_END_TOLERANCE,
+                Some(None) if drawn == last_j => ROW_END_DRIFT,
+                _ => f64::NEG_INFINITY,
+            };
+            if interval > 0.0 && past_end <= room {
+                let gap = place_upto(att, c, origin, index, cur_start, drawn + 1);
+                out.extend(gap.into_iter().filter(|o| o.index == drawn).map(|o| (cur, o)));
             }
             break;
         };
@@ -1305,6 +1312,7 @@ mod tests {
         // 103.76 is 0.75 m past the chain's end at 103.01
         let posts = row_objects(&row(3.0, 7.0, 100.7586, None), &end, DVec2::ZERO, Some(&ix));
         assert_eq!(posts.len(), 1, "{:?}", posts.iter().map(|o| o.pose.pos.y).collect::<Vec<_>>());
+        assert_eq!(row_objects(&row(3.0, 3.0, 100.7586, None), &end, DVec2::ZERO, Some(&ix)).len(), 1);
         let to_the_spline = row_objects(&row(3.0, 12.0, 91.21, None), &end, DVec2::ZERO, Some(&ix));
         assert_eq!(to_the_spline.len(), 5, "{:?}", to_the_spline.iter().map(|o| o.pose.pos.y).collect::<Vec<_>>());
         assert!((to_the_spline[4].pose.pos.y - 12.0).abs() < 1e-6);
@@ -1343,11 +1351,20 @@ mod tests {
         assert!(objs[0].1.index == 3 && (objs[0].1.pose.pos.y - 620.0).abs() < 1e-6, "{:?}", objs[0].1.pose.pos);
         let mut gap = buffer_stop_chain();
         gap.repeater_first.insert((7, 12), 4);
-        let objs = tile_row_objects(&master, &tile[..2], DVec2::ZERO, Some(&gap));
+        assert_eq!(tile_row_objects(&master, &tile[..2], DVec2::ZERO, Some(&gap)).len(), 3);
+        let drifted = SplineAttachment { id: 9, ..row(200.0, 600.0, 0.5, None) };
+        gap.repeater_first.insert((9, 12), 4);
+        let objs = tile_row_objects(&drifted, &tile[..2], DVec2::ZERO, Some(&gap));
         assert_eq!(objs.iter().map(|(si, o)| (*si, o.index)).collect::<Vec<_>>(), vec![(0, 0), (0, 1), (1, 2), (1, 3)]);
         assert!((objs[3].1.pose.pos.y - 600.0).abs() < 1e-6, "{:?}", objs[3].1.pose.pos);
-        gap.repeater_first.insert((7, 12), 3);
-        assert_eq!(tile_row_objects(&master, &tile[..2], DVec2::ZERO, Some(&gap)).len(), 3);
+        gap.repeater_first.insert((9, 12), 3);
+        assert_eq!(tile_row_objects(&drifted, &tile[..2], DVec2::ZERO, Some(&gap)).len(), 3);
+        gap.repeater_first.clear();
+        assert_eq!(tile_row_objects(&drifted, &tile[..2], DVec2::ZERO, Some(&gap)).len(), 3);
+        let to_the_border = SplineAttachment { id: 9, ..row(200.0, 600.0, 0.2, None) };
+        let objs = tile_row_objects(&to_the_border, &tile[..2], DVec2::ZERO, Some(&gap));
+        assert_eq!(objs.iter().map(|(_, o)| o.index).collect::<Vec<_>>(), vec![0, 1, 2, 3]);
+        assert!((objs[3].1.pose.pos.y - 600.0).abs() < 1e-6, "{:?}", objs[3].1.pose.pos);
         // a single object past the end of its spline goes onto the next one in the tile
         let single = SplineAttachment { id: 8, ..row(0.0, 0.0, 450.0, None) };
         let objs = tile_row_objects(&single, &tile, DVec2::ZERO, Some(&ix));
