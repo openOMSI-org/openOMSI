@@ -294,16 +294,20 @@ impl CarRun {
         }
     }
 
-    /// What this car sends on down its far plug: what its script wrote to a cable's `write`
-    /// variable, or - where the script leaves it alone, as a coupler does - what the cable
-    /// brought in.
-    fn write_cables(&self, far: &[omsi_vehicle::vehicle::ControlCable], bus: &CableBus) -> CableBus {
-        far.iter()
+    fn relay(&self, out: &[omsi_vehicle::vehicle::ControlCable], inn: &[omsi_vehicle::vehicle::ControlCable], bus: &CableBus) -> CableBus {
+        out.iter()
             .filter_map(|c| {
                 let (kind, number) = plug(c)?;
                 let (read, write) = (c.lines.get(2)?, c.lines.get(3)?);
                 let coupled = c.lines.get(4).and_then(|n| self.get(n)).is_none_or(|v| v > 0.5);
-                let value = if self.stores(write) { self.get(write)? } else { bus.iter().find(|e| e.1 == number).map(|e| e.2).or_else(|| self.get(read))? };
+                let value = if self.stores(write) {
+                    self.get(write)?
+                } else {
+                    inn.iter()
+                        .filter(|o| o.lines.get(2).is_some_and(|r| r.trim().eq_ignore_ascii_case(read.trim())))
+                        .filter_map(plug)
+                        .find_map(|(k, n)| bus.iter().find(|e| e.0 == k && e.1 == n).map(|e| e.2))?
+                };
                 coupled.then_some((mate(&kind.to_string()), number, value))
             })
             .collect()
@@ -373,26 +377,13 @@ impl CarRun {
         if let Some(before) = own_probe {
             lead.host.ground_probe = before;
         }
-        lead.cable_bus = self.write_cables(plugs[1], &bus);
-        self.forward = self.write_forward(plugs[0], &back_in);
+        lead.cable_bus = self.relay(plugs[1], plugs[0], &bus);
+        self.forward = self.relay(plugs[0], plugs[1], &back_in);
         if !self.has_cables(plugs) {
             // (a car with no plugs lets the signals by)
             lead.cable_bus = bus;
             self.forward = back_in;
         }
-    }
-
-    fn write_forward(&self, front: &[omsi_vehicle::vehicle::ControlCable], back_in: &CableBus) -> CableBus {
-        front
-            .iter()
-            .filter_map(|c| {
-                let (kind, number) = plug(c)?;
-                let write = c.lines.get(3)?;
-                let coupled = c.lines.get(4).and_then(|n| self.get(n)).is_none_or(|v| v > 0.5);
-                let value = if self.stores(write) { self.get(write)? } else { back_in.iter().find(|e| e.1 == number)?.2 };
-                coupled.then_some((mate(&kind.to_string()), number, value))
-            })
-            .collect()
     }
 
     fn has_cables(&self, plugs: [&[omsi_vehicle::vehicle::ControlCable]; 2]) -> bool {
@@ -506,38 +497,44 @@ mod tests {
     fn the_leading_car_reads_what_the_car_behind_sends_forward() {
         let dir = std::env::temp_dir().join(format!("omsi-car-run-back-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let (script, list) = (dir.join("cc.osc"), dir.join("cc_varlist.txt"));
-        std::fs::write(&script, "{frame}\n(L.L.train_frontcoupling) (S.L.cc_w)\n(L.L.cc_r) (S.L.seen)\n{end}\n").unwrap();
-        std::fs::write(&list, format!("{}\ncc_w\ncc_r\nseen", PLACE_IN_TRAIN.join("\n"))).unwrap();
-        let program = omsi_script::compile(&CompileInput { varlists: vec![list.clone()], scripts: vec![script], ..Default::default() });
-        
-        assert!(program.errors.is_empty(), "{:?}", program.errors);
+        let names = format!("{}\ncc_w\ncc_r\ncc_rb\na_r\na_w\nb_r\nb_w\nseen_f\nseen_b\nplace", PLACE_IN_TRAIN.join("\n"));
+        let compile = |name: &str, body: &str| {
+            let (script, list) = (dir.join(format!("{name}.osc")), dir.join(format!("{name}_varlist.txt")));
+            std::fs::write(&script, format!("{{frame}}\n{body}{{end}}\n")).unwrap();
+            std::fs::write(&list, &names).unwrap();
+            let program = omsi_script::compile(&CompileInput { varlists: vec![list], scripts: vec![script], ..Default::default() });
+            assert!(program.errors.is_empty(), "{:?}", program.errors);
+            Arc::new(program)
+        };
+        let active = compile("cc", "(L.L.train_frontcoupling) 0.5 + (S.L.cc_w)\n2 (S.L.b_w)\n(L.L.cc_r) (S.L.seen_f)\n(L.L.cc_rb) (S.L.seen_b)\n");
+        let quiet = compile("p", "(L.L.train_frontcoupling) (S.L.place)\n");
+        std::fs::remove_dir_all(&dir).ok();
+        let cable = |kind: &str, read: &str, write: &str| omsi_vehicle::vehicle::ControlCable { lines: [kind, "1", read, write].map(String::from).to_vec() };
         let mut ty = super::super::tests::coupling_test_type(Some(-4.0));
         let t = Arc::get_mut(&mut ty).unwrap();
-        t.program = Arc::new(program);
-        let cable = omsi_vehicle::vehicle::ControlCable { lines: ["C", "1", "cc_r", "cc_w"].map(String::from).to_vec() };
-        t.def.control_cable_front.push(cable.clone());
-        t.def.control_cable_back.push(cable);
+        t.program = active;
+        t.def.control_cable_front = vec![cable("C", "cc_r", "cc_w"), cable("L", "a_r", "a_w"), cable("R", "b_r", "b_w")];
+        t.def.control_cable_back = vec![cable("C", "cc_rb", "cc_w"), cable("L", "a_r", "a_w"), cable("R", "b_r", "b_w")];
         let mut v = VehicleInstance::new(ty.clone(), crate::host::VehicleHost::new(Default::default()));
         v.attach_trailer_ex(ty.clone(), false);
         run_frames(&mut v, 6);
         assert!(v.trailers[0].run.is_some());
-        assert_eq!(v.trailers[0].run_var("seen"), Some(0.0), "the car behind reads the head's cable");
-        assert_eq!(v.var("seen"), Some(1.0), "the head reads the car behind's cable");
+        assert_eq!(v.trailers[0].run_var("seen_f"), Some(0.5), "the car behind reads the head's cable");
+        assert_eq!(v.var("seen_b"), Some(1.5), "the head reads the car behind's cable");
+        assert_eq!(v.trailers[0].run_var("seen_b"), Some(0.0), "the tail hears nothing behind it");
         let mut passive = (*ty).clone();
-        let script = dir.join("p.osc");
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(&script, "{frame}\n(L.L.train_frontcoupling) (S.L.place)\n{end}\n").unwrap();
-        std::fs::write(&list, format!("{}\ncc_w\ncc_r\nplace", PLACE_IN_TRAIN.join("\n"))).unwrap();
-        passive.program = Arc::new(omsi_script::compile(&CompileInput { varlists: vec![list.clone()], scripts: vec![script], ..Default::default() }));
-        std::fs::remove_dir_all(&dir).ok();
+        passive.program = quiet;
+        passive.def.control_cable_back[0] = cable("C", "cc_r", "cc_w");
         let mut v = VehicleInstance::new(ty.clone(), crate::host::VehicleHost::new(Default::default()));
         v.attach_trailer_ex(Arc::new(passive), false);
         v.attach_trailer_ex(ty, false);
         run_frames(&mut v, 8);
         assert!(v.trailers[1].run.is_some());
-        assert_eq!(v.var("seen"), Some(1.0), "the middle car passes the tail's signal on");
-        assert_eq!(v.trailers[1].run_var("cc_r"), Some(0.0), "the tail hears nothing behind it, not its own signal");
+        assert_eq!(v.var("seen_b"), Some(1.5), "the middle car passes the tail's signal forward");
+        assert_eq!(v.trailers[1].run_var("seen_f"), Some(0.5), "the middle car passes the head's signal back");
+        assert_eq!(v.trailers[1].run_var("seen_b"), Some(0.0), "the tail does not hear its own signal");
+        assert_eq!(v.trailers[1].run_var("b_r"), Some(2.0), "a signal keeps to its own wire past the middle car");
+        assert_eq!(v.trailers[1].run_var("a_r"), Some(0.0));
     }
 
     #[test]
