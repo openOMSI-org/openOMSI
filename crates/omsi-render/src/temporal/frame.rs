@@ -60,6 +60,9 @@ pub(crate) struct TemporalTargets {
     /// should the upscaler fail.
     color: wgpu::Texture,
     pub(crate) color_view: wgpu::TextureView,
+    /// The same as its plain UNORM self: the sRGB-encoded numbers as they are (Streamline on
+    /// Vulkan reads the picture through it).
+    color_raw_view: wgpu::TextureView,
     pub(crate) color_bg: wgpu::BindGroup,
     motion: wgpu::Texture,
     pub(crate) motion_view: wgpu::TextureView,
@@ -272,6 +275,7 @@ impl Renderer {
         let motion_view = motion.create_view(&Default::default());
         let mask_view = mask.create_view(&Default::default());
         let output_view = output_tex.create_view(&Default::default());
+        let color_raw_view = color.create_view(&Default::default());
         let color_bg = self.picture_group(&color_view);
         let output_bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("temporal output"),
@@ -289,7 +293,7 @@ impl Renderer {
             d.keep.push_back(vec![old.color, old.motion, old.mask, old.output_tex]);
         }
         d.prev = None;
-        d.targets = Some(TemporalTargets { render, output, color, color_view, color_bg, motion, motion_view, mask, mask_view, output_tex, output_view, output_bg });
+        d.targets = Some(TemporalTargets { render, output, color, color_view, color_raw_view, color_bg, motion, motion_view, mask, mask_view, output_tex, output_view, output_bg });
     }
 
     /// The camera side of an upscaled frame. Returns the view-projection shifted by this frame's
@@ -427,7 +431,7 @@ impl Renderer {
             reset: frame.reset,
             frame_ms: frame.dt * 1000.0,
         };
-        let inputs = Inputs { color: &t.color, depth: &ao.depth_tex, motion: &t.motion, mask: &t.mask, output: &t.output_tex, render_size: render, output_size: full, views: [&t.color_view, &ao.depth_view, &t.motion_view, &t.mask_view, &t.output_view] };
+        let inputs = Inputs { color: &t.color, depth: &ao.depth_tex, motion: &t.motion, mask: &t.mask, output: &t.output_tex, render_size: render, output_size: full, views: [&t.color_raw_view, &ao.depth_view, &t.motion_view, &t.mask_view, &t.output_view] };
         let result = match &mut d.runtime {
             Runtime::Dlss(r) => r.evaluate(&self.queue, quality, &inputs, &constants),
             Runtime::Fsr3(r) => r.upscale(&self.queue, &inputs, &constants),

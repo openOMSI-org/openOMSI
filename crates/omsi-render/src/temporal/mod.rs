@@ -128,7 +128,7 @@ pub struct Inputs<'a> {
     pub output: &'a wgpu::Texture,
     pub render_size: (u32, u32),
     pub output_size: (u32, u32),
-    /// Views of `color` (its sRGB one, as the scene draws it), `depth`, `motion`, `mask` and
+    /// Views of `color` (its plain UNORM one: the sRGB-encoded numbers), `depth`, `motion`, `mask` and
     /// `output`, in that order: Streamline on Vulkan is handed an image view with each image.
     pub views: [&'a wgpu::TextureView; 5],
 }

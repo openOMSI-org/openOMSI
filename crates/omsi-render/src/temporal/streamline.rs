@@ -1006,7 +1006,11 @@ impl Runtime {
                     let view = super::vulkan::view(inputs.views[order[k]])?;
                     let depth = k == depth_at;
                     let layout = if depth { vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL } else { vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL };
-                    let mut r = blank(vk::Handle::as_raw(image) as *mut c_void, layout.as_raw() as u32, super::vulkan::format(formats[k]).as_raw() as u32, sizes[k]);
+                    // (the picture as its plain UNORM numbers, the sRGB-encoded ones, as FSR 3 takes
+                    // it: read through an sRGB view DLSS made them linear and gave them back so,
+                    // and the window, taking them for encoded ones, showed the picture too dark)
+                    let format = if k == 0 { t.format() } else { formats[k] };
+                    let mut r = blank(vk::Handle::as_raw(image) as *mut c_void, layout.as_raw() as u32, super::vulkan::format(format).as_raw() as u32, sizes[k]);
                     r.memory = vk::Handle::as_raw(memory) as *mut c_void;
                     r.view = vk::Handle::as_raw(view) as *mut c_void;
                     // (wgpu makes an image with other view formats mutable: the picture's)
