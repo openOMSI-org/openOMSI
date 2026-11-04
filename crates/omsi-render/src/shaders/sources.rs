@@ -132,6 +132,7 @@ pub(crate) fn scene_shader_text(gl: bool) -> String {
     // Enhanced+: the enhanced pass writes the reflections' surfaces as well (`GBUF_FORMAT`)
     let src = if rt_gbuf() { src.replace("//RT ", "") } else { src };
     let src = if basic_pipelines() { lean_scene(src) } else { src };
+    let src = if !gl && VULKAN_BACKEND.load(std::sync::atomic::Ordering::Relaxed) { src.replace("//VK ", "") } else { src.replace("//DX ", "") };
     let src = if !gl && MULTISAMPLED_SHADING.load(std::sync::atomic::Ordering::Relaxed) { src.replace("//MS ", "") } else { src };
     if !gl {
         return src;

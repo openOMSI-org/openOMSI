@@ -585,11 +585,13 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     }
     // --- sky and ground
     var ao = 1.0;
-    var bounce = vec3<f32>(0.0);
-    if (camera.clouds.w > 0.5 && !capture) {
-        let ag = ao_gi_at(in.clip.xy, in.world, surface_rt);
-        ao = ag.x;
-        bounce = ag.yzw;
+    let screen_ao = camera.clouds.w > 0.5 && !capture;
+//DX     var bounce = vec3<f32>(0.0);
+    if (screen_ao) {
+//VK         ao = ao_traced_at(in.clip.xy, in.world, surface_rt);
+//DX         let ag = ao_gi_at(in.clip.xy, in.world, surface_rt);
+//DX         ao = ag.x;
+//DX         bounce = ag.yzw;
     }
     // AO is generated from the opaque depth buffer.  A transparent bus pane therefore
     // samples the seats/dashboard behind it and makes their dark outlines crawl across the
@@ -612,11 +614,12 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     ao = mix(ao, 1.0 - (1.0 - ao) * 0.35, in_cab);
     let avg_e = enh.fog_color.rgb * (PI / 0.9);
     let cab_e = vec3<f32>(dot(avg_e, vec3<f32>(0.2126, 0.7152, 0.0722))) * vec3<f32>(1.0, 0.98, 0.95);
-    let e_amb = mix(sh_irradiance(n), cab_e * CAB_AMBIENT, 0.6 * in_cab) * ao_bounce(ao, ambient_albedo)
-        + flash_irradiance(n) * ao * (1.0 - 0.7 * in_cab)
-        // the light the street's surfaces send to each other (their last frame's picture;
-        // the cab has its own even light)
-        + bounce * mix(1.0, ao, 0.5) * (1.0 - in_cab);
+    var e_amb = mix(sh_irradiance(n), cab_e * CAB_AMBIENT, 0.6 * in_cab) * ao_bounce(ao, ambient_albedo)
+        + flash_irradiance(n) * ao * (1.0 - 0.7 * in_cab);
+//VK     if (screen_ao && in_cab < 1.0) {
+//VK         e_amb = e_amb + bounce_at(in.clip.xy, in.world) * mix(1.0, ao, 0.5) * (1.0 - in_cab);
+//VK     }
+//DX     e_amb = e_amb + bounce * mix(1.0, ao, 0.5) * (1.0 - in_cab);
     var ambient = e_amb * ambient_albedo / PI * (vec3<f32>(1.0) - fr * (1.0 - rough) * env_share);
     // --- reflections: the sky probe, as sharp as the surface is smooth
     var r = reflect(-v, normalize(mix(face_n, n, face_w)));
