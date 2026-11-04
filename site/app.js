@@ -369,7 +369,7 @@ function step(d) {
 shotBox.addEventListener("keydown", e => {
   if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); step(e.key === "ArrowRight" ? 1 : -1); }
 });
-shotBox.addEventListener("close", () => shotAt?.querySelector("button").focus());
+shotBox.addEventListener("close", () => { if (shotAt?.isConnected) shotAt.querySelector("button").focus(); });
 
 function security(anchor) {
   showTemplate("security");
@@ -739,6 +739,7 @@ function route() {
   let anchor = "";
   try { anchor = decodeURIComponent(location.hash.slice(1)); } catch {}
   if (routed === path) return toAnchor(anchor, true);
+  if (shotBox.open) shotBox.close();
   const first = routed === null;
   routed = path;
   scrollKeep = first && !anchor;
