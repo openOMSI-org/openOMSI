@@ -79,10 +79,11 @@
       <a href="/docs/openmapper/" data-route="/docs/openmapper"><span class="material-icons">info</span>Map editor</a>
     </div>
   </details>
-  <details class="drawer-group" data-sections="issues security">
+  <details class="drawer-group" data-sections="issues security gallery">
     <summary><span class="material-icons">forum</span>Community<span class="material-icons drawer-chevron">expand_more</span></summary>
     <div class="drawer-section">
       <a href="/issues/" data-route="/issues"><span class="material-icons">bug_report</span>Issues</a>
+      <a href="/gallery/" data-route="/gallery"><span class="material-icons">photo_library</span>Screenshots</a>
       <a href="/security/" data-route="/security"><span class="material-icons">security</span>Security</a>
       <a href="https://discord.gg/openomsi"><span class="material-icons">chat</span>Discord</a>
       <a href="https://github.com/openOMSI-org/openOMSI"><span class="material-icons">code</span>Source code</a>
@@ -123,6 +124,13 @@
     <div class="footer-legal"><a href="https://github.com/openOMSI-org/openOMSI/blob/main/LICENSE">GNU AGPL v3</a> · <a href="/privacy/">Privacy</a> · <a href="/legal/">Legal notice</a></div>
   </footer>
 </main>
+<dialog class="shot-box" id="shot-box" aria-label="Screenshot">
+  <img alt="">
+  <p class="shot-box-cap"></p>
+  <button type="button" class="icon-btn shot-box-close" data-shot="close" aria-label="Close"><span class="material-icons">close</span></button>
+  <button type="button" class="icon-btn shot-box-prev" data-shot="-1" aria-label="Previous screenshot"><span class="material-icons">chevron_left</span></button>
+  <button type="button" class="icon-btn shot-box-next" data-shot="1" aria-label="Next screenshot"><span class="material-icons">chevron_right</span></button>
+</dialog>
 
 <template id="home">
   <section class="hero">
@@ -236,6 +244,14 @@
   </section>
 
   <section class="section">
+    <p class="kicker">From the community</p>
+    <h2 class="section-heading">Shot by players, in the game.</h2>
+    <p class="lead">Screenshots players post in #screenshots on the openOMSI Discord, with the buses and maps they drive.</p>
+    <div class="wall wall-bento" id="home-wall"></div>
+    <p class="wall-more"><a class="btn btn-outlined" href="/gallery/"><span class="material-icons">photo_library</span>See all the screenshots</a></p>
+  </section>
+
+  <section class="section">
     <p class="kicker">Get going</p>
     <h2 class="section-heading">On the road in three steps.</h2>
     <ol class="journey">
@@ -339,6 +355,40 @@
       <p><span class="material-icons">system_update</span>No update in your launcher? Download the new version directly from <a id="dl-github" href="https://github.com/openOMSI-org/openOMSI/releases/latest">GitHub</a>.</p>
       <p><span class="material-icons">verified_user</span>Is it safe? See <a href="/security/">how openOMSI keeps you safe</a>, and how to check your download.</p>
       <p><span class="material-icons">history</span>All versions: <a href="/releases/">Releases</a>. Versions are numbered <code>MAJOR.MINOR.PATCH</code>. See <a href="/docs/versioning/">Versioning</a>.</p>
+    </div>
+  </div>
+</template>
+
+<template id="gallery">
+  <div class="content">
+    <p class="kicker">From the community</p>
+    <h1>Screenshots</h1>
+    <p class="lead">Taken in openOMSI by players and posted in #screenshots on the <a href="https://discord.gg/openomsi">openOMSI Discord</a>. Post yours there: the best ones end up here, with your name.</p>
+    <div class="wall" id="wall">
+<figure style="--ar:16/10;--pos:60% 50%"><button type="button" data-full="/shots/community/01.webp"><img src="/shots/community/01-800.webp" width="800" height="450" loading="lazy" alt="Two double-deckers in the rain on a British high street"></button><figcaption><span class="material-icons">photo_camera</span>THE FLYING SCOTSMAN 60103</figcaption></figure>
+<figure style="--ar:4/5;--pos:38% 50%"><button type="button" data-full="/shots/community/02.webp"><img src="/shots/community/02-800.webp" width="800" height="450" loading="lazy" alt="An interurban bus with its lights on at a village stop at night"></button><figcaption><span class="material-icons">photo_camera</span>Dor_Leon</figcaption></figure>
+<figure style="--ar:1/1;--pos:72% 50%"><button type="button" data-full="/shots/community/03.webp"><img src="/shots/community/03-800.webp" width="800" height="450" loading="lazy" alt="A blue city bus at a stop under autumn trees"></button><figcaption><span class="material-icons">photo_camera</span>Muhammad</figcaption></figure>
+<figure style="--ar:4/3;--pos:50% 50%"><button type="button" data-full="/shots/community/04.webp"><img src="/shots/community/04-800.webp" width="800" height="450" loading="lazy" alt="A white single-decker in low autumn sun"></button><figcaption><span class="material-icons">photo_camera</span>KS</figcaption></figure>
+<figure style="--ar:4/5;--pos:58% 50%"><button type="button" data-full="/shots/community/05.webp"><img src="/shots/community/05-800.webp" width="800" height="450" loading="lazy" alt="An electric city bus in a pink livery on a wide street"></button><figcaption><span class="material-icons">photo_camera</span>Seigneur Tachyon</figcaption></figure>
+<figure style="--ar:16/9;--pos:40% 50%"><button type="button" data-full="/shots/community/06.webp"><img src="/shots/community/06-800.webp" width="800" height="450" loading="lazy" alt="An orange interurban coach on a country road in the rain"></button><figcaption><span class="material-icons">photo_camera</span>RobertoHD</figcaption></figure>
+<figure style="--ar:4/3;--pos:45% 50%"><button type="button" data-full="/shots/community/07.webp"><img src="/shots/community/07-800.webp" width="800" height="450" loading="lazy" alt="A red city bus on a straight road between autumn fields"></button><figcaption><span class="material-icons">photo_camera</span>LT586</figcaption></figure>
+<figure style="--ar:4/5;--pos:78% 50%"><button type="button" data-full="/shots/community/08.webp"><img src="/shots/community/08-800.webp" width="800" height="450" loading="lazy" alt="A bus on a hillside road at sunset"></button><figcaption><span class="material-icons">photo_camera</span>Nikel</figcaption></figure>
+<figure style="--ar:16/10;--pos:50% 50%"><button type="button" data-full="/shots/community/09.webp"><img src="/shots/community/09-800.webp" width="800" height="450" loading="lazy" alt="Two buses side by side under green trees"></button><figcaption><span class="material-icons">photo_camera</span>Austin9981Plays</figcaption></figure>
+<figure style="--ar:4/5;--pos:45% 50%"><button type="button" data-full="/shots/community/10.webp"><img src="/shots/community/10-800.webp" width="800" height="450" loading="lazy" alt="An articulated bus at a tram stop at night"></button><figcaption><span class="material-icons">photo_camera</span>LT586</figcaption></figure>
+<figure style="--ar:1/1;--pos:35% 50%"><button type="button" data-full="/shots/community/11.webp"><img src="/shots/community/11-800.webp" width="800" height="450" loading="lazy" alt="A blue single-decker in a bus station"></button><figcaption><span class="material-icons">photo_camera</span>ScotsGamer14</figcaption></figure>
+<figure style="--ar:4/3;--pos:50% 50%"><button type="button" data-full="/shots/community/12.webp"><img src="/shots/community/12-800.webp" width="800" height="450" loading="lazy" alt="An interurban bus at a stop under a pink sky"></button><figcaption><span class="material-icons">photo_camera</span>Dor_Leon</figcaption></figure>
+<figure style="--ar:4/5;--pos:50% 50%"><button type="button" data-full="/shots/community/13.webp"><img src="/shots/community/13-800.webp" width="800" height="450" loading="lazy" alt="An electric bus on a Hamburg street at dusk"></button><figcaption><span class="material-icons">photo_camera</span>matty0993</figcaption></figure>
+<figure style="--ar:16/9;--pos:50% 50%"><button type="button" data-full="/shots/community/14.webp"><img src="/shots/community/14-800.webp" width="800" height="450" loading="lazy" alt="A black double-decker full of passengers at night"></button><figcaption><span class="material-icons">photo_camera</span>BubbaTea</figcaption></figure>
+<figure style="--ar:4/3;--pos:45% 50%"><button type="button" data-full="/shots/community/15.webp"><img src="/shots/community/15-800.webp" width="800" height="450" loading="lazy" alt="A yellow city bus on a sunny autumn road"></button><figcaption><span class="material-icons">photo_camera</span>LT586</figcaption></figure>
+<figure style="--ar:4/5;--pos:55% 50%"><button type="button" data-full="/shots/community/16.webp"><img src="/shots/community/16-800.webp" width="800" height="450" loading="lazy" alt="A double-decker on a tree-lined avenue in the rain"></button><figcaption><span class="material-icons">photo_camera</span>toto by africa</figcaption></figure>
+<figure style="--ar:1/1;--pos:50% 50%"><button type="button" data-full="/shots/community/17.webp"><img src="/shots/community/17-800.webp" width="800" height="450" loading="lazy" alt="A city bus at a stop at dusk"></button><figcaption><span class="material-icons">photo_camera</span>saaam</figcaption></figure>
+<figure style="--ar:4/5;--pos:55% 50%"><button type="button" data-full="/shots/community/18.webp"><img src="/shots/community/18-800.webp" width="800" height="450" loading="lazy" alt="A blue bus on a circular route in warm evening light"></button><figcaption><span class="material-icons">photo_camera</span>ScotsGamer14</figcaption></figure>
+<figure style="--ar:4/3;--pos:55% 50%"><button type="button" data-full="/shots/community/19.webp"><img src="/shots/community/19-800.webp" width="800" height="450" loading="lazy" alt="A red city bus leaving a stop in the sun"></button><figcaption><span class="material-icons">photo_camera</span>LT586</figcaption></figure>
+<figure style="--ar:16/10;--pos:60% 50%"><button type="button" data-full="/shots/community/20.webp"><img src="/shots/community/20-800.webp" width="800" height="450" loading="lazy" alt="An interurban bus between slate houses at dusk"></button><figcaption><span class="material-icons">photo_camera</span>Dor_Leon</figcaption></figure>
+<figure style="--ar:4/5;--pos:48% 50%"><button type="button" data-full="/shots/community/21.webp"><img src="/shots/community/21-800.webp" width="800" height="450" loading="lazy" alt="A city bus at a junction on a summer day"></button><figcaption><span class="material-icons">photo_camera</span>MarX</figcaption></figure>
+<figure style="--ar:1/1;--pos:70% 50%"><button type="button" data-full="/shots/community/22.webp"><img src="/shots/community/22-800.webp" width="800" height="450" loading="lazy" alt="An electric bus in a pink livery on a square at sunset"></button><figcaption><span class="material-icons">photo_camera</span>Seigneur Tachyon</figcaption></figure>
+<figure style="--ar:16/9;--pos:40% 50%"><button type="button" data-full="/shots/community/23.webp"><img src="/shots/community/23-800.webp" width="800" height="450" loading="lazy" alt="A bus crossing open country on a misty morning"></button><figcaption><span class="material-icons">photo_camera</span>Horrys86</figcaption></figure>
+<figure style="--ar:4/5;--pos:42% 50%"><button type="button" data-full="/shots/community/24.webp"><img src="/shots/community/24-800.webp" width="800" height="450" loading="lazy" alt="An interurban bus in the fog at night"></button><figcaption><span class="material-icons">photo_camera</span>Dor_Leon</figcaption></figure>
     </div>
   </div>
 </template>

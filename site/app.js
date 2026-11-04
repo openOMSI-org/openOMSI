@@ -148,6 +148,8 @@ async function home() {
   scanStrip();
   crew();
   showcase();
+  const wall = document.getElementById("home-wall");
+  [...document.getElementById("gallery").content.querySelectorAll("figure")].slice(0, 8).forEach(f => wall.appendChild(f.cloneNode(true)));
   if (mapperIsNew()) document.getElementById("mapper-news")?.removeAttribute("hidden");
   playingNow();
   const os = { windows: "Windows", "windows-arm": "Windows", mac: "macOS", linux: "Linux", "linux-arm": "Linux", android: "Android" }[visitorOs()];
@@ -337,6 +339,37 @@ function pageToc() {
     `<a href="#${h.id}">${esc(h.textContent.replace(/#$/, ""))}</a>`).join("");
   tocSpy();
 }
+
+function gallery() {
+  showTemplate("gallery");
+  document.title = "Screenshots from the community · openOMSI";
+}
+
+const shotBox = document.getElementById("shot-box");
+let shotAt = null;
+function showShot(fig) {
+  shotAt = fig;
+  const img = fig.querySelector("img");
+  shotBox.querySelector("img").src = fig.querySelector("button").dataset.full;
+  shotBox.querySelector("img").alt = img.alt;
+  shotBox.querySelector(".shot-box-cap").textContent = `${img.alt}. Screenshot by ${fig.querySelector("figcaption").lastChild.textContent}.`;
+  if (!shotBox.open) shotBox.showModal();
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest(".wall figure button");
+  if (b) return showShot(b.closest("figure"));
+  const nav = e.target.closest("[data-shot]");
+  if (e.target === shotBox || nav?.dataset.shot === "close") return shotBox.close();
+  if (nav) step(Number(nav.dataset.shot));
+});
+function step(d) {
+  const all = [...shotAt.parentElement.children];
+  showShot(all[(all.indexOf(shotAt) + d + all.length) % all.length]);
+}
+shotBox.addEventListener("keydown", e => {
+  if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); step(e.key === "ArrowRight" ? 1 : -1); }
+});
+shotBox.addEventListener("close", () => shotAt?.querySelector("button").focus());
 
 function security(anchor) {
   showTemplate("security");
@@ -723,6 +756,7 @@ function route() {
   if (path === "/mapper") return go("/docs/openmapper/", true);
   if (path === "/download") return download();
   if (path === "/security") return security(anchor);
+  if (path === "/gallery") return gallery();
   if (path === "/beta") return download(true);
   if (path === "/releases") return releases();
   if (path === "/releases/beta") return releases(true);

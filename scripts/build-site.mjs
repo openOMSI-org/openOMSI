@@ -113,6 +113,9 @@ add({ route: "/beta/", section: "download", title: "Beta downloads · openOMSI",
 add({ route: "/security/", section: "security", title: "Is openOMSI safe? Security and VirusTotal checks · openOMSI",
   description: "How openOMSI keeps you safe: built in public, checked on every change, every download scanned on VirusTotal, why Windows may warn and how to check a download yourself.",
   view: template("security") });
+add({ route: "/gallery/", section: "gallery", title: "Screenshots from the community · openOMSI",
+  description: "openOMSI in pictures: buses and maps in the game, shot by players and posted on the openOMSI Discord.",
+  view: template("gallery") });
 add({ route: "/releases/", section: "releases", title: "Stable releases · openOMSI", description: "Every stable version of openOMSI with its release notes and downloads.", view: loading("Stable releases") });
 add({ route: "/releases/beta/", section: "releases", title: "Beta releases · openOMSI", description: "Every beta of openOMSI with its release notes and downloads.", view: loading("Beta releases") });
 add({ route: "/issues/", section: "issues", title: "Issues · openOMSI", description: "Bugs and wishes reported for openOMSI.", view: loading("Issues") });
