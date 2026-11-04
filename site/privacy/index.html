@@ -26,7 +26,7 @@
 <main>
 <p><a href="../">openOMSI</a></p>
 <h1>Privacy Policy</h1>
-<p class="muted">Last updated: 1 November 2026. Applies to openOMSI on every platform (Windows, macOS, Linux, Android, iPhone and iPad), to openomsi.org, to project-operated online services, and to community services and forms.</p>
+<p class="muted">Last updated: 4 November 2026. Applies to openOMSI on every platform (Windows, macOS, Linux, Android, iPhone and iPad), to openomsi.org, to project-operated online services, and to community services and forms.</p>
 
 <p>openOMSI is an independent, open-source project. It has no advertising, does not sell personal information,
 and does not use personal information for advertising or commercial profiling.</p>
@@ -99,8 +99,16 @@ multiplayer driver name and the session you joined, and the log lines can includ
 addresses. Read the report and remove anything you do not want to publish before you submit the issue.</p>
 <p>The launcher's support package (Settings, General, <em>Support package</em>) makes a ZIP on your device. It contains
 only system and hardware details (including device vendor and product identifiers), controller names, the names of
-the maps and buses you used, the number and size of installed archives, and log events reduced to names and numbers. It is never
-sent anywhere unless you attach it yourself.</p>
+the maps and buses you used, the number and size of installed archives, log events reduced to names and numbers, and the
+game records described below. It is never sent anywhere unless you attach it yourself.</p>
+<p>Game records. For each game, openOMSI keeps a small record on your device, in the <code>diagnostics</code>
+folder of the openOMSI data folder: the version, system, graphics card and graphics settings, the map, bus, line and
+tour, how smoothly the game ran (frame times grouped into a few ranges), and how the game ended. When the game meets an
+error, the record also holds how many errors it met and the last one: its message, cut before any quoted text and with your user folder, driver and player
+names removed, the source file and line where it happened, and the names of the program functions it went through
+(openOMSI's and those of the libraries it uses). Records older than 30 days are deleted the next time you play, and at
+most the last 100 are kept. They are never sent anywhere; the support package includes them so you can attach them to
+a report yourself. You can delete the folder at any time.</p>
 
 <h3>Permissions on phones, tablets and Macs</h3>
 <p>openOMSI asks for the microphone (voice chat), motion sensors (tilt steering), the local network (finding and

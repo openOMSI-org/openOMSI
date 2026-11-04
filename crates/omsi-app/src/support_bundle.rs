@@ -22,6 +22,25 @@ pub(crate) fn snapshot(
     session: Option<Session>,
     source: &str,
 ) -> Value {
+    let controllers: Option<Vec<Value>> = devices.map(|d| d.into_iter().map(|d| {
+        json!({"name": redact_label(&d.name), "vid_pid": d.hardware_id,
+            "axes": d.axes.len(), "buttons": d.buttons, "gamepad": d.gamepad,
+            "ffb_capable": d.ff_capable, "ffb_effect_available": d.ff})
+    }).collect());
+    let roots: Vec<Value> = omsi_cfg::content_roots().iter().enumerate()
+        .map(|(i, _)| json!({"alias": format!("root-{}", i + 1), "priority": i})).collect();
+    let archives: Vec<Value> = omsi_cfg::vfs::mounts().iter().enumerate().map(|(i, a)| {
+        json!({"alias": format!("archive-{}", i + 1), "files": a.file_count(), "bytes": a.total_size()})
+    }).collect();
+    let mut value = machine(renderer, settings, session, source);
+    value["content_roots"] = json!(roots);
+    value["mounted_archives"] = json!(archives);
+    value["controllers"] = json!(controllers);
+    clean_json(&mut value);
+    value
+}
+
+fn machine(renderer: Option<&omsi_render::Renderer>, settings: &crate::settings::Settings, session: Option<Session>, source: &str) -> Value {
     let info = omsi_render::ADAPTER_INFO.lock().unwrap_or_else(|e| e.into_inner()).clone();
     let graphics = renderer.map(|r| {
         let limits = r.device.limits();
@@ -49,17 +68,7 @@ pub(crate) fn snapshot(
         "render_scale": r.options.render_scale, "shadow_size": r.options.shadow_size,
         "basic_pipelines": omsi_render::basic_pipelines(),
     }));
-    let controllers: Option<Vec<Value>> = devices.map(|d| d.into_iter().map(|d| {
-        json!({"name": redact_label(&d.name), "vid_pid": d.hardware_id,
-            "axes": d.axes.len(), "buttons": d.buttons, "gamepad": d.gamepad,
-            "ffb_capable": d.ff_capable, "ffb_effect_available": d.ff})
-    }).collect());
-    let roots: Vec<Value> = omsi_cfg::content_roots().iter().enumerate()
-        .map(|(i, _)| json!({"alias": format!("root-{}", i + 1), "priority": i})).collect();
-    let archives: Vec<Value> = omsi_cfg::vfs::mounts().iter().enumerate().map(|(i, a)| {
-        json!({"alias": format!("archive-{}", i + 1), "files": a.file_count(), "bytes": a.total_size()})
-    }).collect();
-    let mut value = json!({
+    json!({
         "schema_version": 1,
         "recorded_unix_seconds": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|t| t.as_secs()).unwrap_or(0),
         "source": source, "version": crate::startup::VERSION, "build": crate::startup::BUILD,
@@ -74,12 +83,16 @@ pub(crate) fn snapshot(
             "reflections": settings.reflections, "vsync": settings.vsync, "max_fps": settings.max_fps},
         "session": session.map(|(map, bus, line, tour)| json!({"map": content_name(map),
             "bus": bus.map(content_name), "line": line.map(redact_label), "tour": tour.map(redact_label)})),
-        "content_roots": roots, "mounted_archives": archives,
-        "controllers": controllers, "physical_memory_bytes": crate::memory::physical_memory(),
+        "physical_memory_bytes": crate::memory::physical_memory(),
         "adapter_vram_mb": omsi_render::ADAPTER_VRAM_MB.load(std::sync::atomic::Ordering::Relaxed),
         "adapter_texture_mb": omsi_render::ADAPTER_TEXTURE_MB.load(std::sync::atomic::Ordering::Relaxed),
-    });
-    clean_json(&mut value);
+    })
+}
+
+pub(crate) fn diagnostics(app: &crate::App) -> Value {
+    let mut value = machine(app.renderer.as_ref(), &app.settings,
+        Some((&app.args.map, app.args.bus.as_deref(), app.args.line.as_deref(), app.args.tour.as_deref())), "game");
+    value["frame_times"] = app.perf.log_state.frame_times.to_json();
     value
 }
 
