@@ -655,6 +655,7 @@ fn static_names(count: u32, names: *const *const c_char) -> Vec<&'static CStr> {
 /// Vulkan features or queues of its own that wgpu's device cannot be made with (then it is
 /// shut down again, and DirectX 12 is the way).
 pub fn vulkan_extensions() -> Result<Vec<&'static CStr>> {
+    vulkan_abandon();
     let dir = game_dir();
     let module = open_interposer(&dir)?;
     let started = (|| -> Result<(Vec<&'static CStr>, (Vec<u16>, Vec<*const u16>))> {
@@ -759,6 +760,8 @@ impl Runtime {
         if let Some(hal) = unsafe { device.as_hal::<wgpu_hal::api::Dx12>() } {
             let raw_device = hal.raw_device().clone();
             drop(hal);
+            // (the game fell back from Vulkan: `slInit` must not run on a session still open)
+            vulkan_abandon();
             let dir = game_dir();
             let module = open_interposer(&dir)?;
             static FEATURES: [u32; 1] = [FEATURE_DLSS];
@@ -934,7 +937,11 @@ impl Runtime {
             log::warn!("DLSS: Streamline gave no picture size for {quality:?} in a {}x{} window ({}); taking NVIDIA's ratio", out.0, out.1, result_name(r));
             fallback_render_size(quality, out)
         };
-        log::info!("DLSS {quality:?}: the {}x{} window is drawn at {}x{}", out.0, out.1, size.0, size.1);
+        // (only this window's sizes are kept and told: a live resize asks for one at every step)
+        if self.optimal.is_empty() {
+            log::info!("DLSS {quality:?}: the {}x{} window is drawn at {}x{}", out.0, out.1, size.0, size.1);
+        }
+        self.optimal.retain(|((_, window), _)| *window == out);
         self.optimal.push(((quality, out), size));
         size
     }
