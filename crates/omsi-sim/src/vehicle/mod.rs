@@ -52,7 +52,7 @@ pub use rail::RailEnv;
 pub use props::*;
 pub use trailer::*;
 pub use panto::{Catenary, PantoGear};
-pub use trolley::TrolleyGear;
+pub use trolley::{TrolleyGear, ROPE_RATE};
 pub use types::*;
 use update::*;
 pub use weather::*;

@@ -1,8 +1,11 @@
-//! The mouse's hand on a trolleybus's poles. A click on the cab's pole switch (or on a pole
-//! itself from outside the cab) takes the pole in hand: it follows the mouse - its tip goes
-//! towards the wire the cursor points at, or where the cursor points when there is none -
-//! and the next click lets it go, to spring on to the wire it was aimed at (a wire missed,
-//! and the pole flies loose). The keys R and T keep their ropes (see `trolley_hands`).
+//! The mouse's hand on a trolleybus's poles. A click on the cab's pole switch takes the pole in
+//! hand: it follows the mouse - its tip goes towards the wire the cursor points at - and the next
+//! click lets it go, to spring on to the wire it was aimed at. From outside the cab a click on a
+//! pole is the hand on its rope, as in a real bus: the tip goes exactly where the mouse moves it,
+//! with no help to the wire, and the next click lets the spring lift the shoe from there (into the
+//! wire above it, or loose past it). Pushed up through a wire the shoe takes it, and the hand lets
+//! go. A model whose own script holds the ropes (`Trolley_Pole<n>_Rope`) does it through its mouse
+//! events instead: held while the button is. The keys R and T keep their ropes (see `trolley_hands`).
 
 use super::*;
 use glam::{DMat3, DVec3};
@@ -31,7 +34,8 @@ fn ray_segment(o: DVec3, d: DVec3, a: DVec3, b: DVec3) -> (f64, f64) {
 }
 
 impl App {
-    /// The pole the cursor's ray points at, among the player's trolleybus's.
+    /// The pole the cursor's ray points at, among the player's trolleybus's (not one whose rope the
+    /// model's own script handles, through its mouse events).
     fn trolley_pole_under_cursor(&self) -> Option<usize> {
         let p = self.player.as_ref()?;
         let g = p.vehicle.trolley.as_deref()?;
@@ -41,6 +45,9 @@ impl App {
         let rot = DMat3::from_cols(m.x_axis.truncate().as_dvec3(), m.y_axis.truncate().as_dvec3(), m.z_axis.truncate().as_dvec3());
         let mut best: Option<(usize, f64)> = None;
         for (k, pole) in g.rig.poles.iter().enumerate() {
+            if p.vehicle.trolley_rope_scripted(k) {
+                continue;
+            }
             let (a, b) = (pole.base_at(pos, &rot), pole.tip_at(pos, &rot));
             let (dist, along) = ray_segment(o, d, a, b);
             if along > PICK_REACH || dist > PICK_RADIUS + 0.012 * along {
@@ -57,7 +64,7 @@ impl App {
     /// from the driver's seat, where the cab's own switches are under the cursor). True when
     /// the press was the pole's.
     pub(crate) fn trolley_mouse_click(&mut self) -> bool {
-        let holding = self.player.as_ref().and_then(|p| p.vehicle.trolley.as_deref()).is_some_and(|g| g.grab.is_some());
+        let holding = self.player.as_ref().and_then(|p| p.vehicle.trolley.as_deref()).is_some_and(|g| g.grab.is_some() && !g.grab_by_script);
         if holding {
             if let Some(g) = self.player.as_mut().and_then(|p| p.vehicle.trolley.as_deref_mut()) {
                 g.grab = None;
@@ -71,29 +78,83 @@ impl App {
         if let Some(g) = self.player.as_mut().and_then(|p| p.vehicle.trolley.as_deref_mut()) {
             g.grab = Some(k);
             g.grab_fresh = true;
+            g.grab_manual = true;
         }
         true
     }
 
     /// While a pole is in the hand: the cursor's ray, every frame.
     pub(crate) fn trolley_mouse_feed(&mut self) {
-        let holding = self.player.as_ref().and_then(|p| p.vehicle.trolley.as_deref()).is_some_and(|g| g.grab.is_some());
-        if !holding {
+        if self.player.as_ref().is_none_or(|p| p.vehicle.trolley.is_none()) {
             return;
         }
         let ray = self.cursor_ray_now().map(|(o, d, _)| (o, d.as_dvec3().normalize_or_zero()));
+        // the screen's right, to swing the pole the way the mouse goes from wherever it is seen
+        let right = ray.map(|(_, d)| d.cross(DVec3::Z).normalize_or_zero()).unwrap_or(DVec3::X);
+        let bus_x = self.player.as_ref().map(|p| p.vehicle.trolley_frame().1.x_axis.truncate().as_dvec3()).unwrap_or(DVec3::X);
+        let side = if right.dot(bus_x) >= 0.0 { 1.0 } else { -1.0 };
         // (from the driver's seat the poles are behind the head and the wire is out of the cursor's
         // reach: the motor raises the pole to the wire by itself)
         let from_cab = matches!(self.view.as_str(), "driver" | "pax");
-        if let Some(g) = self.player.as_mut().and_then(|p| p.vehicle.trolley.as_deref_mut()) {
+        let cursor = self.input.cursor;
+        let scale = self.window.as_ref().map_or(1.0, |w| w.scale_factor() as f32).max(0.1);
+        let Some(g) = self.player.as_mut().and_then(|p| p.vehicle.trolley.as_deref_mut()) else { return };
+        g.rope_side = side;
+        if g.grab.is_none() {
+            return;
+        }
+        let hint = if g.grab_manual {
+            if from_cab && !g.grab_by_script {
+                // (the rope cannot be held from inside the bus)
+                g.grab = None;
+                return;
+            }
+            // the rope: the mouse up lets the pole rise, down pulls it down, sideways swings it
+            // (a model's own script feeds its rope from its `_drag` instead)
+            if let Some(last) = g.grab_cursor.filter(|_| !g.grab_by_script) {
+                let (dx, dy) = ((cursor.0 - last.0) / scale, (cursor.1 - last.1) / scale);
+                g.grab_move.0 -= dy as f64 * ROPE_RATE;
+                g.grab_move.1 += dx as f64 * ROPE_RATE * side;
+            }
+            g.grab_cursor = Some(cursor);
+            g.grab_fresh = true;
+            shoe_hint(g, right)
+        } else {
             g.grab_auto = from_cab;
             if let Some(r) = ray {
                 g.grab_ray = Some(r);
                 g.grab_fresh = true;
             }
-        }
-        if self.service_msg.is_none() && !from_cab {
-            self.service_msg = Some(("Move the mouse to put the pole on the wire, click to let it go".into(), 0.6));
+            if from_cab {
+                return;
+            }
+            "Move the mouse to put the pole on the wire, click to let it go".into()
+        };
+        if self.service_msg.as_ref().is_none_or(|s| s.1 <= 0.6) {
+            self.service_msg = Some((hint, 0.6));
         }
     }
+}
+
+use omsi_sim::vehicle::ROPE_RATE;
+
+/// Where the held pole's shoe is against the nearest wire, as the player sees it.
+fn shoe_hint(g: &omsi_sim::vehicle::TrolleyGear, right: DVec3) -> String {
+    const FAR: &str = "No wire near the shoe: the mouse up raises the pole, sideways swings it";
+    let (Some(k), Some(net)) = (g.grab, g.net.as_deref()) else { return FAR.into() };
+    let tip = g.rig.poles[k].tip;
+    let Some((c, _)) = net.candidates(tip, 1.5).into_iter().min_by(|a, b| a.1.total_cmp(&b.1)) else { return FAR.into() };
+    let (w, t) = net.wire_point(&c);
+    let rel = tip - w;
+    let perp = rel - t * rel.dot(t);
+    let side = perp.dot(right);
+    // (one catalogue template each, see locales/app.yml)
+    let template = match (perp.z < 0.0, side < 0.0) {
+        (true, true) => "Shoe {} cm under the wire and {} cm to its left",
+        (true, false) => "Shoe {} cm under the wire and {} cm to its right",
+        (false, true) => "Shoe {} cm over the wire and {} cm to its left",
+        (false, false) => "Shoe {} cm over the wire and {} cm to its right",
+    };
+    let cm = |m: f64| format!("{:.0}", m.abs() * 100.0);
+    template.replacen("{}", &cm(perp.z), 1).replacen("{}", &cm(side), 1)
 }

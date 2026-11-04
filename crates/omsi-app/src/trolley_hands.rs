@@ -2,7 +2,8 @@
 //! free camera) near its back the rope of the pole nearest to the player is held with R: the
 //! pole rises and follows where the player looks, and when R is let go it springs up to the
 //! wire it was aimed at (a wire missed, and the pole flies loose). T pulls the pole down;
-//! Shift takes both poles. In the cab only a pole with a motor answers, to the same keys.
+//! Shift takes both poles. Ctrl+R / Ctrl+T, from anywhere (the cab too), put both poles on the
+//! wire or take them down by themselves, whether they have a lifting gear or not.
 
 use glam::{DVec3, Vec3};
 use omsi_sim::VehicleInstance;
@@ -30,6 +31,26 @@ pub(crate) fn apply(v: &mut VehicleInstance, h: &Hands) -> Option<&'static str> 
         return None;
     }
     g.ropes.iter_mut().for_each(|r| *r = RopeCmd::Idle);
+    let ctrl = (h.keys)(KeyCode::ControlLeft) || (h.keys)(KeyCode::ControlRight);
+    let shortcut = ctrl && (h.keys)(KeyCode::KeyR);
+    let was = std::mem::replace(&mut g.shortcut_held, shortcut);
+    if shortcut {
+        if was {
+            return None;
+        }
+        // Ctrl+R: the poles on the wire, or off it if one is on, by themselves, from anywhere,
+        // with a motor or without (Ctrl+T is OMSI's change_give)
+        let on = g.rig.poles.iter().any(|p| p.mode == omsi_trolley::PoleMode::OnWire);
+        return Some(match on {
+            true if v.trolley_take_off() => "Taking the poles down",
+            false if v.trolley_put_on(false) => "Putting the poles on the wire",
+            _ => "The poles are down",
+        });
+    }
+    // (in the cab R and T are the gearbox's: the poles answer only Ctrl+R there)
+    if ctrl || matches!(h.view, "driver" | "pax") {
+        return None;
+    }
     let raise = (h.keys)(KeyCode::KeyR);
     let pull = (h.keys)(KeyCode::KeyT);
     if !(raise || pull) {
@@ -37,16 +58,6 @@ pub(crate) fn apply(v: &mut VehicleInstance, h: &Hands) -> Option<&'static str> 
     }
     let both = (h.keys)(KeyCode::ShiftLeft) || (h.keys)(KeyCode::ShiftRight);
     let cmd = |ray: Option<(DVec3, DVec3)>| if pull { RopeCmd::Pull } else { RopeCmd::Raise { ray, auto: false } };
-    if matches!(h.view, "driver" | "pax") {
-        let mut any = false;
-        for (k, p) in g.rig.poles.iter().enumerate() {
-            if p.def.motor {
-                g.ropes[k] = if pull { RopeCmd::Pull } else { RopeCmd::Raise { ray: None, auto: true } };
-                any = true;
-            }
-        }
-        return (!any).then_some("These poles are raised by hand from outside the bus");
-    }
     let (eye, fwd) = h.eye?;
     let reach = if h.view == "foot" { FOOT_REACH } else { CAMERA_REACH };
     let handle = |side: f32| pos + rot.transform_point3(Vec3::new(side.signum() * 0.45, rear + 0.1, 0.9)).as_dvec3();
