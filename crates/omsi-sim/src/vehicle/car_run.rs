@@ -99,12 +99,21 @@ pub(super) fn start_back_bus(lead: &mut VehicleInstance, trailers: &mut [super::
     lead.cable_back = incoming;
 }
 
-fn reads_into(c: &omsi_vehicle::vehicle::ControlCable, name: &str) -> bool {
-    c.lines.get(2).is_some_and(|r| r.trim().eq_ignore_ascii_case(name.trim()))
+type Cables = [omsi_vehicle::vehicle::ControlCable];
+
+fn same_read(a: &omsi_vehicle::vehicle::ControlCable, b: &omsi_vehicle::vehicle::ControlCable) -> bool {
+    matches!((a.lines.get(2), b.lines.get(2)), (Some(x), Some(y)) if x.trim().eq_ignore_ascii_case(y.trim()))
 }
 
-fn back_only<'a>(back: &'a [omsi_vehicle::vehicle::ControlCable], front: &'a [omsi_vehicle::vehicle::ControlCable]) -> impl Iterator<Item = &'a omsi_vehicle::vehicle::ControlCable> {
-    back.iter().filter(|c| c.lines.get(2).is_none_or(|r| !front.iter().any(|f| reads_into(f, r))))
+fn links(out: &Cables, inn: &Cables) -> Vec<Option<usize>> {
+    out.iter().map(|c| inn.iter().position(|o| same_read(c, o))).collect()
+}
+
+#[derive(Default)]
+struct Wiring {
+    key: [usize; 4],
+    back_from: Vec<Option<usize>>,
+    front_from: Vec<Option<usize>>,
 }
 
 pub(super) fn read_back_bus(lead: &mut VehicleInstance) {
@@ -112,13 +121,21 @@ pub(super) fn read_back_bus(lead: &mut VehicleInstance) {
         return;
     }
     let ty = lead.ty.clone();
-    for c in back_only(&ty.def.control_cable_back, &ty.def.control_cable_front) {
+    if lead.cable_back_only.0 != Arc::as_ptr(&ty) as usize {
+        let (back, front) = (&ty.def.control_cable_back, &ty.def.control_cable_front);
+        let only = links(back, front).iter().enumerate().filter(|(_, l)| l.is_none()).map(|(i, _)| i).collect();
+        lead.cable_back_only = (Arc::as_ptr(&ty) as usize, only);
+    }
+    let only = std::mem::take(&mut lead.cable_back_only.1);
+    for &i in &only {
+        let Some(c) = ty.def.control_cable_back.get(i) else { continue };
         let Some((kind, number)) = plug(c) else { continue };
         let Some(&(_, _, value)) = lead.cable_back.iter().find(|(k, n, _)| *k == kind && *n == number) else { continue };
         if let Some(slot) = c.lines.get(2).and_then(|n| lead.ty.program.var(n)) {
             lead.state.vars[slot as usize] = value;
         }
     }
+    lead.cable_back_only.1 = only;
 }
 
 /// Per variable of `p`: whether {init}, {frame} or {frame_ai} (or a macro they call)
@@ -195,6 +212,7 @@ pub struct CarRun {
     paint_base: Vec<(String, VarId, f32)>,
     back_in: CableBus,
     forward: CableBus,
+    wiring: Wiring,
 }
 
 impl CarRun {
@@ -224,6 +242,7 @@ impl CarRun {
             paint_base: Vec::new(),
             back_in: Vec::new(),
             forward: Vec::new(),
+            wiring: Wiring::default(),
         };
         run.sync_names(lead);
         let starting: Vec<(VarId, VarId)> =
@@ -303,20 +322,22 @@ impl CarRun {
         }
     }
 
-    fn relay(&self, out: &[omsi_vehicle::vehicle::ControlCable], inn: &[omsi_vehicle::vehicle::ControlCable], bus: &CableBus, fallback: impl Fn(&str) -> Option<f32>) -> CableBus {
+    fn relay(&self, out: &Cables, inn: &Cables, from: &[Option<usize>], bus: &CableBus, fallback: impl Fn(usize, &str) -> Option<f32>) -> CableBus {
         out.iter()
-            .filter_map(|c| {
+            .enumerate()
+            .filter_map(|(i, c)| {
                 let (kind, number) = plug(c)?;
                 let (read, write) = (c.lines.get(2)?, c.lines.get(3)?);
                 let coupled = c.lines.get(4).and_then(|n| self.get(n)).is_none_or(|v| v > 0.5);
                 let value = if self.stores(write) {
                     self.get(write)?
                 } else {
-                    inn.iter()
-                        .filter(|o| reads_into(o, read))
-                        .filter_map(plug)
-                        .find_map(|(k, n)| bus.iter().find(|e| e.0 == k && e.1 == n).map(|e| e.2))
-                        .or_else(|| fallback(read))?
+                    from.get(i)
+                        .copied()
+                        .flatten()
+                        .and_then(|j| plug(&inn[j]))
+                        .and_then(|(k, n)| bus.iter().find(|e| e.0 == k && e.1 == n).map(|e| e.2))
+                        .or_else(|| fallback(i, read))?
                 };
                 coupled.then_some((mate(&kind.to_string()), number, value))
             })
@@ -372,7 +393,12 @@ impl CarRun {
         self.write_place(place);
         let bus = std::mem::take(&mut lead.cable_bus);
         let back_in = std::mem::take(&mut self.back_in);
-        self.read_cables(back_only(plugs[1], plugs[0]), &back_in, true);
+        let key = [plugs[0].as_ptr() as usize, plugs[1].as_ptr() as usize, plugs[0].len(), plugs[1].len()];
+        if self.wiring.key != key {
+            self.wiring = Wiring { key, back_from: links(plugs[1], plugs[0]), front_from: links(plugs[0], plugs[1]) };
+        }
+        let back_only: Vec<&omsi_vehicle::vehicle::ControlCable> = plugs[1].iter().zip(&self.wiring.back_from).filter(|(_, l)| l.is_none()).map(|(c, _)| c).collect();
+        self.read_cables(back_only, &back_in, true);
         self.read_cables(plugs[0], &bus, false);
         let as_ai = !self.prog.frame_ai.is_empty() && lead.ev(Ev::Ai).unwrap_or(0.0) > 0.5;
         let (prog, state, machine) = (self.prog.clone(), &mut self.state, &mut self.machine);
@@ -387,9 +413,9 @@ impl CarRun {
         if let Some(before) = own_probe {
             lead.host.ground_probe = before;
         }
-        self.forward = self.relay(plugs[0], plugs[1], &back_in, |_| None);
-        let shared = |n: &str| plugs[0].iter().any(|f| reads_into(f, n));
-        lead.cable_bus = self.relay(plugs[1], plugs[0], &bus, |n| if shared(n) { self.get(n) } else { lead.var(n) });
+        self.forward = self.relay(plugs[0], plugs[1], &self.wiring.front_from, &back_in, |_, _| None);
+        let shared = &self.wiring.back_from;
+        lead.cable_bus = self.relay(plugs[1], plugs[0], shared, &bus, |i, n| if shared.get(i).copied().flatten().is_some() { self.get(n) } else { lead.var(n) });
         if !self.has_cables(plugs) {
             // (a car with no plugs lets the signals by)
             lead.cable_bus = bus;
