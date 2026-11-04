@@ -1450,13 +1450,29 @@ mod tests;
 
 mod display;
 
-/// The depot file of a host's vehicle on our copy of it: the one the host named, else the
-/// map's own - never the one this player chose for their own bus (its rows are other
-/// destinations: the host's `#<row>` read there showed another sign).
+/// The depot file of a host's vehicle on our copy of it: the host's own file of that name,
+/// sent over and used whatever this game has (`omsi_lan::mods::hofs`); until it is here, or
+/// when the host has none, the one of that name here, else the map's own - never the one this
+/// player chose for their own bus (its rows are other destinations: the host's `#<row>` read
+/// there showed another sign).
 fn mirror_hof(hofs: &mut HashMap<(PathBuf, String), Option<Arc<omsi_vehicle::Hof>>>, world: &World, ty: &VehicleType, name: &str) -> Option<Arc<omsi_vehicle::Hof>> {
-    hofs.entry((ty.def.path.clone(), name.to_lowercase()))
-        .or_insert_with(|| crate::find_hof_named(Some(name).filter(|n| !n.trim().is_empty()), world, ty))
-        .clone()
+    let key = (ty.def.path.clone(), name.to_lowercase());
+    if let Some(h) = hofs.get(&key) {
+        return h.clone();
+    }
+    let named = Some(name).filter(|n| !n.trim().is_empty());
+    if let Some(sent) = named.and_then(omsi_lan::mods::hofs::fetched) {
+        match omsi_vehicle::Hof::load(&sent) {
+            Ok(h) => return hofs.entry(key).or_insert(Some(Arc::new(h))).clone(),
+            Err(e) => log::warn!("depot file {name} from the host: {e}; this game's own is used"),
+        }
+    }
+    let own = crate::find_hof_named(named, world, ty);
+    // (kept only once the host's answer is in: until then each new bus asks again)
+    if named.is_none() || omsi_lan::mods::hofs::settled(name) {
+        hofs.insert(key, own.clone());
+    }
+    own
 }
 pub(crate) use display::car_meta;
 use display::show_car_destination;

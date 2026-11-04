@@ -1082,6 +1082,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   antivirus: since 0.3.47 it reserves a TCP port for its mods beside the UDP one, and checks
   it reaches itself there), Invite friends waited for a code that never came, without a word.
   It now shows the game's reason.
+- **The map's buses show the server's signs on every player.** The server sends each player
+  the depot file (`.hof`) its AI buses use (else the one of that name in `HOFs`), and the
+  player's game draws those buses with it, whatever depot files it has itself.
 - **Multiplayer protocol 17.** A game of this version and a server of this version play
   together; older ones are turned away at the door, as at every protocol change.
 - **A dedicated server opens its web port at once, before checking its fleet.** With a
