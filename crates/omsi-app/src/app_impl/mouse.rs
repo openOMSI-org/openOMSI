@@ -601,6 +601,7 @@ impl App {
         ) {
             let (dx, dy) = std::mem::take(&mut self.input.drag_delta);
             p.occlude_controls = self.view == "outside";
+            p.drawn_outside = !self.cam.in_cab;
             if pressed {
                 if let Some((page, u, v)) = p.html_hit(o, d, &self.integrations.plugin_pointer) {
                     p.release();
