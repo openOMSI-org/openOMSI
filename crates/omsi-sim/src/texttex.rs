@@ -99,8 +99,9 @@ impl FontLibrary {
                 }
                 let folder = folders.iter().position(|d| Some(d.as_path()) == p.parent()).unwrap_or(usize::MAX);
                 // `Font::path` is the .oft (read through the VFS): its bitmaps lie next to it
-                if let Ok(list) = Font::load_all(&p) {
-                    for f in list {
+                match Font::load_all(&p) {
+                    Err(e) => log::warn!("font file {} not read: {e:#}", p.display()),
+                    Ok(list) => for f in list {
                         let key = f.name.trim().to_ascii_lowercase();
                         match all.iter().position(|o| o.name.trim().to_ascii_lowercase() == key) {
                             Some(k) if folder_of[k] == folder && same_bitmap_fuller(&all[k], &f) => all[k] = f,
@@ -110,7 +111,7 @@ impl FontLibrary {
                                 folder_of.push(folder);
                             }
                         }
-                    }
+                    },
                 }
             }
             self.index = Some(all);
