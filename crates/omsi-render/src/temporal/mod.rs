@@ -121,7 +121,7 @@ pub struct Inputs<'a> {
     pub depth: &'a wgpu::Texture,
     /// Per pixel, how far its point lies from where it was a frame ago (Rg16Float, pixels).
     pub motion: &'a wgpu::Texture,
-    /// Where glass, its reflections and the rain on it lie (R8Unorm, see `vs_mask`): DLSS's
+    /// Where glass, its reflections and the rain on it lie (R16Float, see `vs_mask`): DLSS's
     /// bias-current-colour hint, FSR 3's reactive mask.
     pub mask: &'a wgpu::Texture,
     /// Where the window-sized picture goes (Rgba8Unorm, a storage texture).

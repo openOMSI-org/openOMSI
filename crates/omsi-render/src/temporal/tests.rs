@@ -62,3 +62,10 @@ fn fsr3_masks_the_glass_less_and_leaves_the_screens_out() {
     assert!(include_str!("../pipelines/temporal.rs").contains(r#"TemporalUpscaler::Fsr3) { "fs_glass_mask_fsr" }"#));
     assert!(include_str!("../passes/temporal.rs").contains("dlss && scene.materials"));
 }
+
+/// Streamline's Vulkan `getFormat` has no VK_FORMAT_R8_UNORM: a mask of that format logged four
+/// errors a frame, with `game.log` growing by megabytes a minute.
+#[test]
+fn the_mask_has_a_format_streamline_can_read_back_on_vulkan() {
+    assert_ne!(super::frame::TEMPORAL_MASK_FORMAT, wgpu::TextureFormat::R8Unorm);
+}

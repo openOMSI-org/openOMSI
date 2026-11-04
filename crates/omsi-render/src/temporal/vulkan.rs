@@ -79,7 +79,7 @@ pub(super) fn format(f: wgpu::TextureFormat) -> vk::Format {
         Tf::Rgba16Float => vk::Format::R16G16B16A16_SFLOAT,
         Tf::Rg16Float => vk::Format::R16G16_SFLOAT,
         Tf::Rg32Float => vk::Format::R32G32_SFLOAT,
-        Tf::R8Unorm => vk::Format::R8_UNORM,
+        Tf::R16Float => vk::Format::R16_SFLOAT,
         Tf::Depth32Float => vk::Format::D32_SFLOAT,
         _ => vk::Format::UNDEFINED,
     }

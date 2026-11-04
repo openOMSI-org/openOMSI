@@ -22,8 +22,9 @@ pub(crate) const TEMPORAL_MOTION_FORMAT: wgpu::TextureFormat = wgpu::TextureForm
 /// The window-sized result: a storage texture, and those can't be sRGB. It only ever holds the
 /// sRGB-encoded numbers of the 8 bit picture the upscaler was given.
 const TEMPORAL_OUTPUT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
-/// Where glass, its reflections and the rain on it lie (see `vs_mask`).
-pub(crate) const TEMPORAL_MASK_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::R8Unorm;
+/// Where glass, its reflections and the rain on it lie (see `vs_mask`). Not R8: Streamline's
+/// Vulkan layer cannot read VK_FORMAT_R8_UNORM back (`getFormat`), and logged four errors a frame.
+pub(crate) const TEMPORAL_MASK_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::R16Float;
 
 /// An object moved further than this in one frame (m) gets no motion of its own. The engine hands
 /// a freed entry to the next object loaded (`recycle_instance`), so for one frame the "last

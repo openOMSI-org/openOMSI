@@ -435,7 +435,7 @@ fn dxgi_format(f: wgpu::TextureFormat) -> u32 {
         Tf::Rgba16Float => DXGI_FORMAT_R16G16B16A16_FLOAT,
         Tf::Rg16Float => DXGI_FORMAT_R16G16_FLOAT,
         Tf::Rg32Float => DXGI_FORMAT_R32G32_FLOAT,
-        Tf::R8Unorm => DXGI_FORMAT_R8_UNORM,
+        Tf::R16Float => DXGI_FORMAT_R16_FLOAT,
         // (wgpu creates a sampled depth texture typeless; read as a float it is this)
         Tf::Depth32Float => DXGI_FORMAT_R32_FLOAT,
         _ => DXGI_FORMAT_UNKNOWN,
