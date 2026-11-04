@@ -74,7 +74,7 @@ impl Renderer {
         // With temporal upscaling the window's picture (only it: no mirror, headset eye or
         // texture) is drawn at the size the upscaler asks for, and the upscaler does what FXAA
         // and the render scale would
-        let temporal_frame = with_overlays && projection.is_none() && self.temporal_window && self.texture_aspect.is_none() && self.temporal_start();
+        let temporal_frame = with_overlays && projection.is_none() && self.temporal_window && self.texture_aspect.is_none() && self.temporal_fits((full_w, full_h)) && self.temporal_start();
         let (width, height) = if temporal_frame {
             let size = self.temporal_render_size((full_w, full_h));
             self.temporal_targets(size, (full_w, full_h));

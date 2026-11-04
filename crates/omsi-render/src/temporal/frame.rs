@@ -127,11 +127,28 @@ pub(super) fn opaque(mut rgba: Vec<u8>) -> Vec<u8> {
 /// The textures' mip bias of an upscaled frame: log2(render width / window width), as NVIDIA's
 /// guide and AMD's docs give it (-0.79 at Balanced). Without it the textures are sampled for the
 /// small picture and the cab goes soft.
+pub(crate) fn window_fits(full: (u32, u32)) -> bool {
+    full.0 >= 64 && full.1 >= 64
+}
+
 pub(crate) fn temporal_mip_bias(render_w: u32, full_w: u32) -> f32 {
     (render_w.max(1) as f32 / full_w.max(1) as f32).log2().clamp(-3.0, 0.0)
 }
 
 impl Renderer {
+    /// Whether a window of this size can be upscaled at all. A minimised one is 1x1: asked for
+    /// that, NGX refuses (0xbad00005) and DLSS would be gone for the session. Its history does
+    /// not outlive the gap.
+    pub(crate) fn temporal_fits(&mut self, full: (u32, u32)) -> bool {
+        let fits = window_fits(full);
+        if !fits {
+            if let Some(d) = self.temporal.as_mut() {
+                d.prev = None;
+            }
+        }
+        fits
+    }
+
     pub(crate) fn temporal_start(&mut self) -> bool {
         if self.temporal_failed {
             self.temporal = None;

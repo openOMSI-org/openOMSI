@@ -71,3 +71,11 @@ fn fsr3_masks_the_glass_less_and_leaves_the_screens_out() {
 fn the_mask_has_a_format_streamline_can_read_back_on_vulkan() {
     assert_ne!(super::frame::TEMPORAL_MASK_FORMAT, wgpu::TextureFormat::R8Unorm);
 }
+
+/// A minimised window is 1x1, and NGX refuses that for good: it must never reach the upscaler.
+#[test]
+fn a_minimised_window_is_not_upscaled() {
+    assert!(!super::frame::window_fits((1, 1)));
+    assert!(!super::frame::window_fits((3264, 1)));
+    assert!(super::frame::window_fits((640, 360)));
+}
