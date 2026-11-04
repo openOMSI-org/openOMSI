@@ -585,3 +585,15 @@ fn comfortable_cabin_is_an_independent_opt_in_launch_flag() {
     assert!(enabled.iter().any(|a| a == "--comfortable-cabin-on-start"));
     assert!(!enabled.iter().any(|a| a == "--autostart"));
 }
+
+#[test]
+fn the_upscaler_and_its_quality_survive_the_settings_file() {
+    let page = super::settings_from_text(Some("upscaler=dlss
+upscale_quality=native
+"));
+    assert_eq!((page["upscaler"].as_str(), page["upscale_quality"].as_str()), (Some("dlss"), Some("native")));
+    let saved = super::settings_to_text(&page, None);
+    assert!(saved.contains("upscaler=dlss
+") && saved.contains("upscale_quality=native
+"), "{saved}");
+}

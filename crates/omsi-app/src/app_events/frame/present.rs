@@ -123,7 +123,6 @@ impl App {
         // a player's screenshot is the world without the interface over it, as OMSI's
         // (#1265); the input script's pictures keep it for the visual tests
         let hud = (!include_touch).then(|| std::mem::take(&mut scene.overlays));
-        // (with DLSS or FSR 3 what the upscaler made, as the window shows it)
         let upscaled = (!include_touch).then(|| r.temporal_picture(s.config.width, s.config.height)).flatten();
         let picture = developed.map(Ok).or(upscaled).unwrap_or_else(|| r.render_to_image(
             scene,

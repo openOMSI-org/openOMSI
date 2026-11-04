@@ -156,8 +156,7 @@ pub struct Settings {
     pub render_scale: f32,
     /// Upscaling method for the main game picture: default or experimental fsr1.
     pub upscaler: String,
-    /// How much DLSS or AMD FSR 3 scale up (`upscaler=dlss` or `fsr3`): `native`, `quality`,
-    /// `balanced`, `performance` or `ultra_performance`.
+    /// How much DLSS or AMD FSR 3 scale up (`temporal::TemporalQuality`).
     pub upscale_quality: String,
     /// FSR1 internal resolution preset, or custom to use render_scale.
     pub fsr_quality: String,
@@ -1151,7 +1150,6 @@ impl Settings {
     pub fn apply_safe_gpu(&mut self, n: u32) {
         self.msaa = 1;
         self.ssao = false;
-        // (DLSS and FSR 3 record command lists of their own on the device: back to the plain one)
         if omsi_render::TemporalUpscaler::parse(&self.upscaler).is_some() {
             self.upscaler = "default".into();
         }
@@ -1199,13 +1197,8 @@ impl Settings {
         if self.render_scale > 0.0 { preset.min(self.render_scale) } else { preset }
     }
 
-    /// DLSS or AMD FSR 3 as the settings ask for them, when their DLLs are beside the game.
     pub fn temporal_upscaling(&self) -> Option<omsi_render::Temporal> {
-        // (only the window's own picture is upscaled: not a headset's eyes or a triple screen's panels)
-        if self.vr_requested() || self.triple.enabled {
-            return None;
-        }
-        let upscaler = omsi_render::TemporalUpscaler::parse(&self.upscaler)?;
+        let upscaler = omsi_render::TemporalUpscaler::parse(&self.upscaler).filter(|_| !self.vr_requested() && !self.triple.enabled)?;
         let files = omsi_cfg::upscaler_files::available(&omsi_cfg::upscaler_files::program_dir());
         files.contains(&upscaler.as_str()).then(|| omsi_render::Temporal { upscaler, quality: omsi_render::TemporalQuality::parse(&self.upscale_quality) })
     }

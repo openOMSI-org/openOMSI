@@ -86,8 +86,38 @@ pub fn quality_word(s: &str) -> &'static str {
     }
 }
 
+/// The graphics interface to ask for first with DLSS or FSR 3: Vulkan where that is the choice
+/// and the upscaler's DLLs for it are in `dir`, else DirectX 12.
+pub fn first_api(chosen: &str, upscaler: &str, dir: &Path) -> &'static str {
+    if chosen.trim().eq_ignore_ascii_case("vulkan") && missing(dir, upscaler, Api::Vulkan).is_empty() {
+        "vulkan"
+    } else {
+        "dx12"
+    }
+}
+
+/// The upscalers that can run from the game's folder, as a menu lists them.
+pub fn menu_choices() -> impl Iterator<Item = (&'static str, &'static str)> {
+    available(&program_dir()).into_iter().map(|u| if u == "dlss" { ("dlss", "NVIDIA DLSS (experimental)") } else { ("fsr3", "AMD FSR 3 (experimental)") })
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn an_upscaler_keeps_vulkan_with_its_dlls() {
+        let dir = std::env::temp_dir().join(format!("omsi-upscaling-api-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        assert_eq!(first_api("vulkan", "fsr3", &dir), "dx12");
+        for f in files("fsr3", Api::Vulkan) {
+            std::fs::write(dir.join(f), b"").unwrap();
+        }
+        assert_eq!(first_api("Vulkan", "fsr3", &dir), "vulkan");
+        assert_eq!(first_api("auto", "fsr3", &dir), "dx12");
+        assert_eq!(first_api("vulkan", "dlss", &dir), "dx12");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     use super::*;
 
     fn scratch(name: &str) -> PathBuf {
