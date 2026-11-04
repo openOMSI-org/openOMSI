@@ -1,4 +1,5 @@
 import { html, render } from '../ui/vendor/preact-htm.js';
+import { hostLaunchStaysOnDrive } from './drive-mode-check.js';
 import { Tours } from '../ui/js/pages/drive-duty.js';
 import { BusPicker } from '../ui/js/pages/bus-picker.js';
 import { S, set, remember } from '../ui/js/store.js';
@@ -37,7 +38,7 @@ const OPTIONS = {
   'Timetable buses': () => text(/^Timetable buses$/),
   'Bus ready to go': () => text(/^Bus ready to go$/),
   'Start on foot': () => text(/^Start on foot$/),
-  Start: () => labelled(/^(Start the duty|Start driving)$/),
+  Start: () => labelled(/^(Start the duty|Start driving|Host and drive|Join and drive)$/),
   'Continue a save': () => labelled(/^Continue$/),
   'Command line': () => text(/^Show the command line$/),
 };
@@ -494,5 +495,7 @@ export async function run({ themes = ['dark', 'light'], layouts = LAUNCHER_LAYOU
   report['duty date'] = await dateOutsideTheMapsYears();
   report['transport modes'] = transportModes();
   report['server-only bus picker'] = await serverOnlyBusPicker();
+  try { await hostLaunchStaysOnDrive(); report['host launch stays on Drive'] = []; }
+  catch (e) { report['host launch stays on Drive'] = [e.message]; }
   return report;
 }
