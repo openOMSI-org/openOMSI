@@ -253,6 +253,9 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         rows.push(button("Reset navigator position", "Reset", desc, "vr_nav_reset"));
         pages.push(("VR", rows));
     }
+    for (title, rows) in &mut pages {
+        *rows = section_option_rows(title, std::mem::take(rows));
+    }
     pages
 }
 
@@ -580,11 +583,63 @@ fn weather_rows(mut weather: Vec<(String, String)>, climate: Vec<(String, String
     sectioned_rows(weather, "Live weather", &[("weather", "Weather preset and clouds"), ("temp", "Temperature and humidity"), ("wind_speed", "Wind")])
 }
 
+/// Group the options tabs without changing the settings commands or their order.
+fn section_option_rows(title: &str, rows: Vec<(String, String)>) -> Vec<(String, String)> {
+    let Some((first, starts)) = option_sections(title) else { return rows };
+    sectioned_rows(rows, first, starts)
+}
+
+fn option_sections(title: &str) -> Option<(&'static str, &'static [(&'static str, &'static str)])> {
+    Some(match title {
+        "Gameplay" => ("Navigation and map", &[
+            ("get_up", "Driving and collisions"),
+            ("timetable_win", "Journey and information"),
+            ("exact_fare", "Passengers and fares"),
+            ("maintenance", "Traffic and people"),
+        ]),
+        "Graphics" => ("Quality and presets", &[
+            ("ray_tracing", "Lighting and shadows"),
+            ("clouds", "Sky and atmosphere"),
+            ("rain_quality", "Rain and road effects"),
+        ]),
+        "Display and memory" => ("Screen and output", &[
+            ("vsync", "Frame rate and performance"),
+            ("view_distance", "Scene detail"),
+            ("mirror_size", "Mirrors"),
+            ("video_memory", "Memory"),
+        ]),
+        "Sound" => ("Game and surroundings", &[
+            ("voice_enabled", "Voice chat"),
+            ("milezero", "Radio"),
+        ]),
+        "Camera" => ("View movement", &[
+            ("headtrack", "Head tracking"),
+            ("look_sens", "Looking and zoom"),
+            ("fov", "Field of view and seating"),
+            ("mirror_hud", "Mirror displays"),
+        ]),
+        "Controls" => ("Mouse driving", &[
+            ("steering_linear", "Keyboard steering"),
+            ("ff", "Force feedback and wheel"),
+            ("pedal_t", "Pedals and vehicle controls"),
+            ("auto_clutch", "Gearbox"),
+        ]),
+        "Interface" => ("Language and appearance", &[
+            ("ui_scale", "Interface size"),
+            ("tooltips", "Hints and notifications"),
+            ("chat", "Multiplayer interface"),
+        ]),
+        "VR" => ("Navigator placement", &[("vr_nav_opacity", "Appearance")]),
+        _ => return None,
+    })
+}
+
 /// Insert display-only headings while preserving every command and its relative order.
 fn sectioned_rows(rows: Vec<(String, String)>, first: &str, starts: &[(&str, &str)]) -> Vec<(String, String)> {
     let mut out = Vec::new();
     for (label, action) in rows {
-        let key = action.strip_suffix(ADJUST).unwrap_or(&action);
+        let key = action.strip_prefix("sel ").unwrap_or(&action);
+        let key = key.strip_suffix(ADJUST).unwrap_or(key);
         let title = starts.iter().find(|(id, _)| *id == key).map(|(_, title)| *title).or_else(|| out.is_empty().then_some(first));
         if let Some(title) = title {
             out.push((row(title, 'i', "", "", None), HEADING.to_string()));
@@ -592,6 +647,37 @@ fn sectioned_rows(rows: Vec<(String, String)>, first: &str, starts: &[(&str, &st
         out.push((label, action));
     }
     out
+}
+
+#[cfg(test)]
+mod option_section_tests {
+    use super::*;
+
+    #[test]
+    fn gameplay_sections_skip_absent_options_and_keep_actions_in_order() {
+        let rows = vec![
+            button("Navigator", "", "", "navigator"),
+            button("Get up", "", "", "get_up"),
+            button("Exact fares", "", "", "exact_fare"),
+            button("Passenger connections", "", "", "passenger_connections"),
+            (row("Maintenance", 'o', "Normal", "", None), "sel maintenance".to_string()),
+            button("Random traffic", "", "", "ai_unsched_factor"),
+        ];
+        let grouped = section_option_rows("Gameplay", rows.clone());
+        let headings: Vec<_> = grouped.iter().filter(|row| row.1 == HEADING).map(|row| row.0.split('\u{1f}').next().unwrap()).collect();
+        let actions: Vec<_> = grouped.iter().filter(|row| row.1 != HEADING).cloned().collect();
+
+        assert_eq!(headings, ["Navigation and map", "Driving and collisions", "Passengers and fares", "Traffic and people"]);
+        assert_eq!(actions, rows);
+    }
+
+    #[test]
+    fn option_section_titles_have_traditional_chinese_translations() {
+        assert_eq!(
+            crate::_rust_i18n_try_translate("zh-tw", "Navigation and map").map(|value| value.into_owned()),
+            Some("導航與地圖".to_string())
+        );
+    }
 }
 
 #[cfg(test)]
