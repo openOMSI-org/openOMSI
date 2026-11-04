@@ -158,7 +158,7 @@ pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, upscaler: Option<T
             cache: crate::pipeline_cache::get(device).as_ref(),
         })
     };
-    let glass = if matches!(upscaler, TemporalUpscaler::Fsr3) { "fs_glass_mask_fsr" } else { "fs_glass_mask" };
+    let glass = upscaler.glass_mask_entry();
     Some(TemporalPipelines {
         prepass: [make(0, false, true), make(0, true, true), make(1, false, true), make(1, true, true), make(2, false, true), make(2, true, true)],
         late_motion: [make(0, false, false), make(0, true, false), make(1, false, false), make(1, true, false), make(2, false, false), make(2, true, false)],

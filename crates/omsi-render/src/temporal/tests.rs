@@ -56,8 +56,13 @@ fn fsr3_masks_the_glass_less_and_leaves_the_screens_out() {
     let motion = include_str!("motion.wgsl");
     assert!(motion.contains("fn fs_glass_mask_fsr("));
     assert!(motion.contains("const FSR_GLASS_SHARE: f32 = 0.4;"));
-    assert!(include_str!("../pipelines/temporal.rs").contains(r#"TemporalUpscaler::Fsr3) { "fs_glass_mask_fsr" }"#));
-    assert!(include_str!("../passes/temporal.rs").contains("dlss && scene.materials"));
+    for upscaler in [TemporalUpscaler::Dlss, TemporalUpscaler::Fsr3] {
+        assert!(motion.contains(&format!("fn {}(", upscaler.glass_mask_entry())));
+    }
+    assert_eq!(TemporalUpscaler::Fsr3.glass_mask_entry(), "fs_glass_mask_fsr");
+    assert_ne!(TemporalUpscaler::Dlss.glass_mask_entry(), TemporalUpscaler::Fsr3.glass_mask_entry());
+    assert!(TemporalUpscaler::Dlss.masks_screens());
+    assert!(!TemporalUpscaler::Fsr3.masks_screens());
 }
 
 /// Streamline's Vulkan `getFormat` has no VK_FORMAT_R8_UNORM: a mask of that format logged four

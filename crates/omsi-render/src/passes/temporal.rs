@@ -68,9 +68,8 @@ impl Renderer {
             encode_batches_filtered(&mut pass, scene, batches, blended, |pipe| &p.glass_mask[cull(pipe)]);
         }
         encode_batches(&mut pass, scene, &plan.rain_batches, |pipe| &p.rain_mask[cull(pipe)]);
-        // (not for FSR 3: without the history the jittered frames doubled the edges of their digits)
-        let dlss = self.options.temporal.is_some_and(|t| matches!(t.upscaler, TemporalUpscaler::Dlss));
-        let screen = |b: &Batch| dlss && scene.materials[b.material as usize].uniform.flags[0] > 0.5;
+        let screens = self.options.temporal.is_some_and(|t| t.upscaler.masks_screens());
+        let screen = |b: &Batch| screens && scene.materials[b.material as usize].uniform.flags[0] > 0.5;
         for batches in [&plan.main_batches, &plan.cab_batches] {
             encode_batches_filtered(&mut pass, scene, batches, screen, |pipe| &p.screen_mask[cull(pipe)]);
         }

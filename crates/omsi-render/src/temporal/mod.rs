@@ -3,9 +3,10 @@
 //! or Vulkan. (The `upscaler` setting's other choices, Catmull-Rom and FSR 1, work on one frame and
 //! need none of this: `encode_upscale`.)
 //!
-//! Neither vendor's code is linked or in the repository. Their DLLs are opened from the game's
-//! folder when the first frame asks for them (`omsi_cfg::upscaler_files`), and without them the
-//! game neither offers the choice nor changes anything.
+//! Neither vendor's code is linked or in the repository: the Windows x64 package carries their
+//! DLLs (`.github/workflows/release.yml`). They are opened from the game's folder when the first
+//! frame asks for them (`omsi_cfg::upscaler_files`), and without them the game neither offers the
+//! choice nor changes anything.
 
 #[cfg(windows)]
 mod d3d12;
@@ -41,6 +42,19 @@ impl TemporalUpscaler {
             TemporalUpscaler::Dlss => "dlss",
             TemporalUpscaler::Fsr3 => "fsr3",
         }
+    }
+
+    /// FSR 3 gives up the history faster than DLSS for the same mask: its panes take a weaker one.
+    pub(crate) fn glass_mask_entry(self) -> &'static str {
+        match self {
+            TemporalUpscaler::Dlss => "fs_glass_mask",
+            TemporalUpscaler::Fsr3 => "fs_glass_mask_fsr",
+        }
+    }
+
+    /// Without the history FSR 3's jittered frames doubled the edges of a display's digits.
+    pub(crate) fn masks_screens(self) -> bool {
+        matches!(self, TemporalUpscaler::Dlss)
     }
 }
 
