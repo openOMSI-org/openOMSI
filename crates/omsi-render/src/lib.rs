@@ -626,6 +626,11 @@ impl Renderer {
         if let Some(t) = self.options.temporal.filter(|_| self.temporal_pipes.is_some() && !self.temporal_failed) {
             return temporal::fallback_render_size(t.quality, (width, height));
         }
+        self.scaled_size(width, height)
+    }
+
+    /// `scene_size` by the render scale alone: what a picture no upscaler takes is drawn at.
+    pub(crate) fn scaled_size(&self, width: u32, height: u32) -> (u32, u32) {
         let s = self.scene_scale(width, height);
         if s >= 0.999 {
             return (width, height);

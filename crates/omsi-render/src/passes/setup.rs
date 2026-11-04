@@ -79,6 +79,9 @@ impl Renderer {
             let size = self.temporal_render_size((full_w, full_h));
             self.temporal_targets(size, (full_w, full_h));
             size
+        } else if with_overlays && projection.is_some() {
+            // (a triple screen turned on in the menu: its panels are no upscaler's picture)
+            self.scaled_size(full_w, full_h)
         } else if with_overlays {
             self.scene_size(full_w, full_h)
         } else if let Some(s) = self.xr_fsr_scale().filter(|_| projection.is_some()) {

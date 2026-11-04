@@ -112,6 +112,27 @@ fn fsr1_upscales_each_triple_screen_panel() {
     assert!(d > 0.05 && d < 12.0, "the panels went through FSR 1: {d}");
 }
 
+/// A triple screen turned on in the menu while an upscaler runs: the panels are not the
+/// upscaler's picture, and are drawn at their own size until the game starts anew without it.
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn a_triple_screen_turned_on_with_an_upscaler_is_not_drawn_at_its_size() {
+    let (w, h) = (288, 96);
+    let rig = TripleScreen { enabled: true, ..Default::default() };
+    let lighting = Lighting { shadows: false, fog_density: 0.0, ..Default::default() };
+    let mut plain = renderer(1.0, false);
+    let mut scene = rails_scene(&mut plain);
+    let a = plain.render_triple_to_image(&mut scene, w, h, &camera(), &lighting, &rig).unwrap();
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let temporal = Some(Temporal { upscaler: TemporalUpscaler::Fsr3, quality: TemporalQuality::Performance });
+    let options = RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, temporal, ..Default::default() };
+    let mut upscaled = pollster::block_on(Renderer::new_with(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb), options)).expect("test renderer");
+    let mut scene = rails_scene(&mut upscaled);
+    let b = upscaled.render_triple_to_image(&mut scene, w, h, &camera(), &lighting, &rig).unwrap();
+    let d = difference(&a, &b);
+    assert!(d < 0.05, "the panels were drawn smaller and stretched: {d}");
+}
+
 /// VR with FSR 1: the headset image is full-sized, each eye is drawn at the eye resolution
 /// and FSR 1 scales it up to the image; without FSR 1 the image itself is that small, as
 /// before.
