@@ -13,6 +13,7 @@ omsi-map = { path = "../omsi-map" }
 omsi-platform = { path = "../omsi-platform" }
 omsi-scenery = { path = "../omsi-scenery" }
 omsi-sim = { path = "../omsi-sim" }
+omsi-script = { path = "../omsi-script" }
 omsi-vehicle = { path = "../omsi-vehicle" }
 anyhow.workspace = true
 glam.workspace = true
