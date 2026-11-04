@@ -530,3 +530,16 @@ mod tests {
         assert!(!offers(&offered_keys(&[]), "Vehicles/MAN_SD200/MAN_SD77.bus"));
     }
 }
+
+/// The WebSocket gateway of a host joined straight over UDP (by code or address), when its TCP
+/// port is out of reach: a dedicated server's web port on the same address (`web_port`, 27025 by
+/// default, or the UDP port + 10 as the defaults have them), if an openOMSI status answers there
+/// within 3 s. `ws://<address>/ws`, as a tunnel's.
+pub(crate) fn host_web_gateway(host: std::net::SocketAddr) -> Option<String> {
+    let mut ports = vec![host.port().saturating_add(10), 27025];
+    ports.dedup();
+    ports.into_iter().map(|p| std::net::SocketAddr::new(host.ip(), p)).find(|a| omsi_net::ws::reachable(&format!("http://{a}"), Duration::from_secs(3))).map(|a| {
+        log::info!("LAN mods: the host's web port answers at {a}");
+        format!("ws://{a}/ws")
+    })
+}

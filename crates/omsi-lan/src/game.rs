@@ -605,7 +605,11 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) -> Option<crate::m
             let joined_url = crate::gateway::joined_url();
             let direct = joined_url.is_none() && std::net::TcpStream::connect_timeout(&host, Duration::from_secs(3)).is_ok();
             if !direct {
-                let base = joined_url.or_else(|| omsi_net::bridge::lookup_tunnel(session).and_then(|u| omsi_net::ws::ws_url(&u)));
+                let base = joined_url
+                    .or_else(|| omsi_net::bridge::lookup_tunnel(session).and_then(|u| omsi_net::ws::ws_url(&u)))
+                    // (joined by code or address, straight over UDP: the host's own web port,
+                    // whose WebSockets carry the mods' TCP too, `crate::gateway::host_web_gateway`)
+                    .or_else(|| crate::gateway::host_web_gateway(host));
                 match base.map(|b| format!("{}/tcp", b.strip_suffix("/ws").unwrap_or(&b))) {
                     Some(tcp_url) => match omsi_net::ws::tcp_forward(&tcp_url) {
                         Ok(local) => {
