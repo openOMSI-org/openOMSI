@@ -1041,6 +1041,9 @@ html.phone, html.phone body { font-size: 15px; -webkit-tap-highlight-color: tran
 .m-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; height: 100%; }
 .m-split-list { overflow: auto; min-height: 0; }
 .m-split-map .routemap { height: 100%; min-height: 220px; border-radius: 12px; }
+@media (max-aspect-ratio: 3/4) {
+  .m-drive { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(240px, 36vh) minmax(0, 1fr); }
+}
 @media (max-width: 560px) {
   .m-split { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 240px; }
 }
