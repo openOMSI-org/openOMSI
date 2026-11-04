@@ -149,7 +149,7 @@ async function home() {
   crew();
   showcase();
   const wall = document.getElementById("home-wall");
-  [...document.getElementById("gallery").content.querySelectorAll("figure")].slice(0, 8).forEach(f => wall.appendChild(f.cloneNode(true)));
+  if (!wall.children.length) [...document.getElementById("gallery").content.querySelectorAll("figure")].slice(0, 8).forEach(f => wall.appendChild(f.cloneNode(true)));
   if (mapperIsNew()) document.getElementById("mapper-news")?.removeAttribute("hidden");
   playingNow();
   const os = { windows: "Windows", "windows-arm": "Windows", mac: "macOS", linux: "Linux", "linux-arm": "Linux", android: "Android" }[visitorOs()];

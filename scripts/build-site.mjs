@@ -101,9 +101,10 @@ const pages = [];
 const add = p => { page(p); if (!p.noindex) pages.push(p.route); };
 
 const loading = title => `<div class="content"><h1>${title}</h1><div class="loading">Loading…</div></div>`;
+const homeShots = (template("gallery").match(/<figure[\s\S]*?<\/figure>/g) || []).slice(0, 8).join("");
 add({ route: "/", home: true, title: "openOMSI: OMSI 2 rebuilt from scratch, free and open source",
   description: "openOMSI recreates the bus simulator OMSI 2 in Rust: your OMSI 2 maps, buses and mods on a new 64-bit engine. Free and open source, for Windows, macOS, Linux and Android.",
-  view: template("home") });
+  view: template("home").replace('<div class="wall wall-bento" id="home-wall"></div>', () => `<div class="wall wall-bento" id="home-wall">${homeShots}</div>`) });
 add({ route: "/download/", section: "download", title: "Download openOMSI for Windows, macOS, Linux and Android",
   description: "Download openOMSI, the free OMSI 2 remake: setup for Windows, dmg for macOS, Linux and Android builds and the dedicated server. Every download is checked on VirusTotal.",
   view: template("download") });
