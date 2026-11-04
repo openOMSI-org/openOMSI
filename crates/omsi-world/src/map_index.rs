@@ -746,14 +746,15 @@ fn place_upto(att: &SplineAttachment, spline: &MapSpline, origin: DVec2, index: 
     // a row's next post due 0.75 m past a dead end was put at the end, in the carriageway
     // of Thüringer Wald's road to Haselbach, #1693)
     let single = interval <= 0.0 || range < interval;
-    let end = len + if chain_ends && single { CHAIN_END_TOLERANCE } else { JOINT_TOLERANCE };
+    let last_j = if interval > 0.0 { ((range + JOINT_TOLERANCE) / interval).floor() as usize } else { 0 };
+    let end_of = |j: usize| len + if chain_ends && (single || j == last_j) { CHAIN_END_TOLERANCE } else { JOINT_TOLERANCE };
     let from = if att.repeater.is_some() { JOINT_TOLERANCE } else { -1e-6 };
     let mut out = Vec::new();
     loop {
         if interval > 0.0 && j as f64 * interval > range + JOINT_TOLERANCE {
             break;
         }
-        if s > end && j >= upto {
+        if s > end_of(j) && j >= upto {
             break;
         }
         if s >= from {
@@ -1304,6 +1305,9 @@ mod tests {
         // 103.76 is 0.75 m past the chain's end at 103.01
         let posts = row_objects(&row(3.0, 7.0, 100.7586, None), &end, DVec2::ZERO, Some(&ix));
         assert_eq!(posts.len(), 1, "{:?}", posts.iter().map(|o| o.pose.pos.y).collect::<Vec<_>>());
+        let to_the_spline = row_objects(&row(3.0, 12.0, 91.21, None), &end, DVec2::ZERO, Some(&ix));
+        assert_eq!(to_the_spline.len(), 5, "{:?}", to_the_spline.iter().map(|o| o.pose.pos.y).collect::<Vec<_>>());
+        assert!((to_the_spline[4].pose.pos.y - 12.0).abs() < 1e-6);
         let stop = row_objects(&row(10.0, 0.0, 103.5, None), &end, DVec2::ZERO, Some(&ix));
         assert_eq!(stop.len(), 1);
         assert!((stop[0].pose.pos.y - 12.0).abs() < 1e-6, "{:?}", stop[0].pose.pos);
