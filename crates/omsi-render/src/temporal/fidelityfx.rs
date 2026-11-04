@@ -1,9 +1,9 @@
 // The FidelityFX API structures, constants and identifiers below follow AMD's FidelityFX SDK
-// headers (https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK, v2.3.0:
-// `ffx_api.h`, `ffx_api_types.h`, `dx12/ffx_api_dx12.h`, `ffx_upscale.h`), which come under this
+// headers (https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK, v2.4.0:
+// `ffx_api.h`, `ffx_api_types.h`, `dx12/ffx_api_dx12.h`, `vk/ffx_api_vk.h`, `ffx_upscale.h`), which come under this
 // licence:
 //
-// Copyright (C) 2024 Advanced Micro Devices, Inc.
+// Copyright (C) 2026 Advanced Micro Devices, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
@@ -176,8 +176,8 @@ const CREATE_BACKEND_VK: u64 = 0x0100_0003;
 const CREATE_UPSCALE: u64 = 0x0001_0000;
 const DISPATCH_UPSCALE: u64 = 0x0001_0001;
 const CREATE_UPSCALE_VERSION: u64 = 0x0001_000b;
-/// `FFX_UPSCALER_VERSION` (4.1.1) of the header these structs follow.
-const UPSCALER_VERSION: u32 = (4 << 22) | (1 << 12) | 1;
+/// `FFX_UPSCALER_VERSION` (4.1.2) of the header these structs follow.
+const UPSCALER_VERSION: u32 = (4 << 22) | (1 << 12) | 2;
 // FfxApiCreateContextUpscaleFlags
 const UPSCALE_DEPTH_INVERTED: u32 = 1 << 3;
 const UPSCALE_NON_LINEAR_COLORSPACE: u32 = 1 << 8;
