@@ -1,6 +1,7 @@
 //! Opening the graphics device and building the renderer on it, with the fallbacks.
 
 use crate::*;
+use super::upscaler_device;
 
 /// The chosen MSAA is being tried again after a remembered fallback (see `build_with_fallbacks`).
 static MSAA_RETRY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -118,16 +119,13 @@ impl Renderer {
         // a small or shared graphics chip gets a lighter picture (see `lighter_picture`)
         GL_BACKEND.store(info.backend == wgpu::Backend::Gl, std::sync::atomic::Ordering::Relaxed);
         let options = gpu_memory::lighter_picture(&info, vram, options);
-        // Temporal upscaling needs DirectX 12; DLSS an NVIDIA card too (whether it is an RTX one
-        // with a recent enough driver, Streamline tells at the first frame). It replaces the MSAA
-        let can_upscale = |t: Temporal| cfg!(windows) && info.backend == wgpu::Backend::Dx12 && (t.upscaler == TemporalUpscaler::Fsr3 || info.vendor == 0x10de);
-        let options = match options.temporal {
-            Some(t) if can_upscale(t) => RenderOptions { msaa: 1, ..options },
-            Some(t) => {
-                log::warn!("{} upscaling asked for, but {} on {:?} cannot do it (DirectX 12 is needed, and for DLSS an NVIDIA RTX card); drawing without it", t.upscaler.as_str(), info.name, info.backend);
-                RenderOptions { temporal: None, ..options }
-            }
-            None => options,
+        // Temporal upscaling (DirectX 12 or Vulkan; DLSS an NVIDIA RTX card too) replaces the
+        // MSAA. DLSS on Vulkan starts Streamline now: the device is made with its extensions.
+        let temporal = upscaler_device::usable(options.temporal, &info);
+        let (temporal, dlss_extensions) = upscaler_device::dlss_vulkan(temporal, &adapter, &info);
+        let options = match temporal {
+            Some(t) => RenderOptions { msaa: 1, temporal: Some(t), ..options },
+            None => RenderOptions { temporal: None, ..options },
         };
         let most = gpu_memory::ceiling(&info, vram);
         *CEILING.lock().unwrap_or_else(|e| e.into_inner()) = Some(if intel_vulkan_safe { gpu_memory::Ceiling { msaa: 1, ssao: false, shadow_size: most.shadow_size.min(2048), ..most } } else { most });
@@ -247,8 +245,7 @@ impl Renderer {
         }
         device_selection::select_array_path(&adapter, &limits, &info);
         log::info!("opening graphics device: {} ({:?}, vendor {:#06x}, device {:#06x}), features {:?}, max buffer {} MB, max storage binding {} MB", info.name, info.backend, info.vendor, info.device, required_features, limits.max_buffer_size / 1_000_000, limits.max_storage_buffer_binding_size as u64 / 1_000_000);
-        let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor {
+        let desc = wgpu::DeviceDescriptor {
                 label: Some("omsi"),
                 required_features,
                 required_limits: limits,
@@ -264,9 +261,22 @@ impl Renderer {
                 // (the ray queries are still an experimental feature of wgpu)
                 experimental_features: if ray_query { unsafe { wgpu::ExperimentalFeatures::enabled() } } else { wgpu::ExperimentalFeatures::disabled() },
                 ..Default::default()
-            })
-            .await
-            .context("request_device")?;
+            };
+        let mut options = options;
+        let made = dlss_extensions.and_then(|extensions| match upscaler_device::open_with(&adapter, &desc, extensions) {
+            Ok(made) => Some(made),
+            Err(e) => {
+                // (the device as wgpu makes it, DLSS off: better than no picture)
+                crate::temporal::dlss_vulkan_abandon();
+                log::warn!("dlss upscaling is off: {e:#}");
+                options.temporal = None;
+                None
+            }
+        });
+        let (device, queue) = match made {
+            Some(made) => made,
+            None => adapter.request_device(&desc).await.context("request_device")?,
+        };
         log::info!("graphics device opened; compiling renderer pipelines");
         pipeline_cache::open(&device, &info);
         // the same choice wgpu-core makes when it validates a texture or a pipeline

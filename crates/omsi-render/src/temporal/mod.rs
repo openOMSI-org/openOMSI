@@ -17,6 +17,8 @@ mod fidelityfx;
 mod frame;
 #[cfg(windows)]
 mod streamline;
+#[cfg(windows)]
+mod vulkan;
 #[cfg(test)]
 mod tests;
 
@@ -126,6 +128,9 @@ pub struct Inputs<'a> {
     pub output: &'a wgpu::Texture,
     pub render_size: (u32, u32),
     pub output_size: (u32, u32),
+    /// Views of `color` (its sRGB one, as the scene draws it), `depth`, `motion`, `mask` and
+    /// `output`, in that order: Streamline on Vulkan is handed an image view with each image.
+    pub views: [&'a wgpu::TextureView; 5],
 }
 
 /// This frame's camera as the upscalers want it. The matrices are unjittered and stored column
@@ -151,6 +156,27 @@ pub struct FrameConstants {
     /// Since the last frame, in milliseconds.
     pub frame_ms: f32,
 }
+
+/// For DLSS on Vulkan, before wgpu makes the device: Streamline started and the device
+/// extensions it needs (`streamline::vulkan_extensions`).
+#[cfg(windows)]
+pub(crate) fn dlss_vulkan_extensions() -> anyhow::Result<Vec<&'static std::ffi::CStr>> {
+    streamline::vulkan_extensions()
+}
+
+/// Streamline started by `dlss_vulkan_extensions` let go again (the device was made without).
+#[cfg(windows)]
+pub(crate) fn dlss_vulkan_abandon() {
+    streamline::vulkan_abandon()
+}
+
+#[cfg(not(windows))]
+pub(crate) fn dlss_vulkan_extensions() -> anyhow::Result<Vec<&'static std::ffi::CStr>> {
+    anyhow::bail!("DLSS is Windows-only")
+}
+
+#[cfg(not(windows))]
+pub(crate) fn dlss_vulkan_abandon() {}
 
 /// The vendors' runtimes outside Windows, which never run: `Renderer::new` keeps
 /// `RenderOptions::temporal` to DirectX 12.

@@ -31,7 +31,9 @@ windows = { workspace = true, features = ["Win32_Graphics_Dxgi", "Win32_Graphics
 # (the `windows::core::implement` macro in `temporal::streamline` expands to code naming this
 # crate, so it has to be a dependency here even though nothing imports it by that name)
 windows-core = "0.62"
-wgpu-hal = { workspace = true, features = ["dx12"] }
+wgpu-hal = { workspace = true, features = ["dx12", "vulkan"] }
+# (the same ash as wgpu-hal's: DLSS and FSR 3 on wgpu's Vulkan device, see `temporal::vulkan`)
+ash = "0.38"
 # (the same glow as wgpu's GL backend, to turn ANGLE's parallel shader compiles off)
 glow = "0.17"
 

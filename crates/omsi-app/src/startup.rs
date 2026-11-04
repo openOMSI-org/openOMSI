@@ -295,11 +295,15 @@ pub(crate) fn backend_order() -> Vec<GraphicsApi> {
         return vec![GraphicsApi::Native(wgpu::Backends::METAL)];
     }
     let settings = crate::settings::Settings::load();
-    // (the headset, DLSS and FSR 3 all work on wgpu's Direct3D 12 device)
-    let wanted = if settings.vr_requested() || settings.temporal_upscaling().is_some() {
+    let chosen = omsi_cfg::flags::OMSI_BACKEND.var().map(str::to_string).unwrap_or(settings.graphics_api.clone());
+    // (the headset works on wgpu's Direct3D 12 device; DLSS and FSR 3 on it or on Vulkan, when
+    // Vulkan is the choice and the upscaler's DLLs for it are beside the game)
+    let wanted = if settings.vr_requested() {
         "dx12".to_owned()
+    } else if let Some(t) = settings.temporal_upscaling() {
+        upscaling_api(&chosen, t.upscaler.as_str(), &omsi_cfg::upscaler_files::program_dir()).to_owned()
     } else {
-        omsi_cfg::flags::OMSI_BACKEND.var().map(str::to_string).unwrap_or(settings.graphics_api)
+        chosen
     };
     let native = if cfg!(windows) {
         vec![wgpu::Backends::DX12, wgpu::Backends::VULKAN, wgpu::Backends::GL]
@@ -319,6 +323,17 @@ pub(crate) fn backend_order() -> Vec<GraphicsApi> {
     };
     // (the one asked for first, the others after it: a machine without it still starts)
     first.into_iter().chain(all.into_iter().filter(|b| Some(*b) != first)).collect()
+}
+
+/// The graphics interface to ask for first with DLSS or FSR 3 (`upscaler`): Vulkan where that
+/// is the choice and its DLLs for Vulkan are in `dir`, else DirectX 12.
+fn upscaling_api(chosen: &str, upscaler: &str, dir: &std::path::Path) -> &'static str {
+    use omsi_cfg::upscaler_files::{missing, Api};
+    if chosen.trim().eq_ignore_ascii_case("vulkan") && missing(dir, upscaler, Api::Vulkan).is_empty() {
+        "vulkan"
+    } else {
+        "dx12"
+    }
 }
 
 /// A renderer in software on the processor (wgpu calls it a CPU adapter: WARP, llvmpipe,
@@ -856,6 +871,23 @@ mod own_key_tests {
 #[cfg(test)]
 mod window_tests {
     use super::software_adapter;
+
+    /// DLSS and FSR 3 keep Vulkan when it is the choice and their Vulkan DLLs are there;
+    /// DirectX 12 otherwise.
+    #[test]
+    fn an_upscaler_keeps_vulkan_with_its_dlls() {
+        let dir = std::env::temp_dir().join(format!("omsi-upscaling-api-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        assert_eq!(super::upscaling_api("vulkan", "fsr3", &dir), "dx12");
+        for f in omsi_cfg::upscaler_files::files("fsr3", omsi_cfg::upscaler_files::Api::Vulkan) {
+            std::fs::write(dir.join(f), b"").unwrap();
+        }
+        assert_eq!(super::upscaling_api("Vulkan", "fsr3", &dir), "vulkan");
+        assert_eq!(super::upscaling_api("auto", "fsr3", &dir), "dx12");
+        assert_eq!(super::upscaling_api("vulkan", "dlss", &dir), "dx12");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     /// The software renderers come after every graphics chip (#770).
     #[test]

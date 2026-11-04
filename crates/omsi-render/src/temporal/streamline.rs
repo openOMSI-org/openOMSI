@@ -23,7 +23,7 @@
 // SOFTWARE.
 
 //! NVIDIA DLSS (Super Resolution, and DLAA at full size) by way of NVIDIA Streamline: Windows,
-//! DirectX 12, a GeForce RTX card.
+//! DirectX 12 or Vulkan, a GeForce RTX card.
 //!
 //! Nothing of NVIDIA's is linked in or shipped. `sl.interposer.dll` is opened when the first
 //! DLSS frame asks for it, from the game's folder, and it brings in `sl.common.dll`,
@@ -36,8 +36,15 @@
 //! (`frame.rs`): the queue's order is all the synchronisation needed. Each texture is handed
 //! over in the state wgpu left it in after its last pass, and Streamline puts it back in that
 //! state.
+//!
+//! On Vulkan the same goes with a command buffer of ours (`vulkan.rs`), each image handed over
+//! with its memory, a view and the layout wgpu left it in. Streamline has to be started before
+//! the device is made there: DLSS needs device extensions of its own, which `vulkan_extensions`
+//! asks it for and `Renderer::open_on` adds to wgpu's (`prepare_vulkan`).
 
 use super::d3d12::{game_dir, wide, ListRing};
+use super::vulkan::{VkGpu, VkRing};
+use ash::vk;
 use super::{fallback_render_size, FrameConstants, Inputs, TemporalQuality};
 use anyhow::{anyhow, bail, Context, Result};
 use std::ffi::{c_char, c_void, CStr};
@@ -80,6 +87,8 @@ const VIEWPORT_HANDLE: StructType = StructType { data1: 0x171b6435, data2: 0x9b3
 const ADAPTER_INFO: StructType = StructType { data1: 0x0677315f, data2: 0xa746, data3: 0x4492, data4: [0x9f, 0x42, 0xcb, 0x61, 0x42, 0xc9, 0xc3, 0xd4] };
 const CONSTANTS: StructType = StructType { data1: 0xdcd35ad7, data2: 0x4e4a, data3: 0x4bad, data4: [0xa9, 0x0c, 0xe0, 0xc4, 0x9e, 0xb2, 0x3a, 0xfe] };
 const DLSS_OPTIONS: StructType = StructType { data1: 0x6ac826e4, data2: 0x4c61, data3: 0x4101, data4: [0xa9, 0x2d, 0x63, 0x8d, 0x42, 0x10, 0x57, 0xb8] };
+const VULKAN_INFO: StructType = StructType { data1: 0x0eed6fd5, data2: 0x82cd, data3: 0x43a9, data4: [0xbd, 0xb5, 0x47, 0xa5, 0xba, 0x2f, 0x45, 0xd6] };
+const FEATURE_REQUIREMENTS: StructType = StructType { data1: 0x66714097, data2: 0xac6d, data3: 0x4bc6, data4: [0x89, 0x15, 0x1e, 0x0f, 0x55, 0xa6, 0xb6, 0x1f] };
 const DLSS_OPTIMAL_SETTINGS: StructType = StructType { data1: 0xef1d0957, data2: 0xfd58, data3: 0x4df7, data4: [0xb5, 0x04, 0x8b, 0x69, 0xd8, 0xaa, 0x6b, 0x76] };
 
 /// `sl::kSDKVersion` the structs above match: 2.14.1.
@@ -179,6 +188,59 @@ struct AdapterInfo {
     vk_physical_device: *mut c_void,
 }
 
+/// `sl::VulkanInfo` (`sl_helpers_vk.h`): wgpu's Vulkan device, for manual hooking.
+#[repr(C)]
+struct VulkanInfo {
+    base: Base,
+    device: vk::Device,
+    instance: vk::Instance,
+    physical_device: vk::PhysicalDevice,
+    compute_queue_index: u32,
+    compute_queue_family: u32,
+    graphics_queue_index: u32,
+    graphics_queue_family: u32,
+    optical_flow_queue_index: u32,
+    optical_flow_queue_family: u32,
+    use_native_optical_flow_mode: bool,
+    compute_queue_create_flags: u32,
+    graphics_queue_create_flags: u32,
+    optical_flow_queue_create_flags: u32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct Version {
+    major: u32,
+    minor: u32,
+    build: u32,
+}
+
+/// `sl::FeatureRequirements`: what a feature needs, here its Vulkan extensions and features.
+#[repr(C)]
+struct FeatureRequirements {
+    base: Base,
+    flags: u32,
+    max_num_cpu_threads: u32,
+    max_num_viewports: u32,
+    num_required_tags: u32,
+    required_tags: *const u32,
+    os_version_detected: Version,
+    os_version_required: Version,
+    driver_version_detected: Version,
+    driver_version_required: Version,
+    vk_num_compute_queues_required: u32,
+    vk_num_graphics_queues_required: u32,
+    vk_num_device_extensions: u32,
+    vk_device_extensions: *const *const c_char,
+    vk_num_instance_extensions: u32,
+    vk_instance_extensions: *const *const c_char,
+    vk_num_features12: u32,
+    vk_features12: *const *const c_char,
+    vk_num_features13: u32,
+    vk_features13: *const *const c_char,
+    vk_num_optical_flow_queues_required: u32,
+}
+
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct Float2 {
@@ -275,6 +337,10 @@ const _: () = {
     assert!(std::mem::size_of::<ViewportHandle>() == 40);
     assert!(std::mem::size_of::<Constants>() == 456);
     assert!(std::mem::size_of::<DlssOptions>() == 88);
+    assert!(std::mem::size_of::<VulkanInfo>() == 96);
+    assert!(std::mem::offset_of!(FeatureRequirements, vk_num_compute_queues_required) == 104);
+    assert!(std::mem::offset_of!(FeatureRequirements, vk_device_extensions) == 120);
+    assert!(std::mem::size_of::<FeatureRequirements>() == 184);
 };
 
 type Fn0 = unsafe extern "C" fn() -> i32;
@@ -282,6 +348,8 @@ type FnInit = unsafe extern "C" fn(*const Preferences, u64) -> i32;
 type FnIsFeatureSupported = unsafe extern "C" fn(u32, *const AdapterInfo) -> i32;
 type FnIsFeatureLoaded = unsafe extern "C" fn(u32, *mut bool) -> i32;
 type FnSetD3DDevice = unsafe extern "C" fn(*mut c_void) -> i32;
+type FnSetVulkanInfo = unsafe extern "C" fn(*const VulkanInfo) -> i32;
+type FnGetFeatureRequirements = unsafe extern "C" fn(u32, *mut FeatureRequirements) -> i32;
 type FnGetFeatureFunction = unsafe extern "C" fn(u32, *const c_char, *mut *mut c_void) -> i32;
 type FnGetNewFrameToken = unsafe extern "C" fn(*mut *const c_void, *const u32) -> i32;
 type FnSetTagForFrame = unsafe extern "C" fn(*const c_void, *const ViewportHandle, *const ResourceTag, u32, *mut c_void) -> i32;
@@ -453,7 +521,7 @@ fn load_fn<T: Copy>(module: HMODULE, name: &CStr) -> Result<T> {
 
 /// `slInit` with these features, the plugins taken from `dir`. Gives back the strings
 /// Streamline was handed pointers to (keep them alive).
-fn init(module: HMODULE, dir: &std::path::Path, features: &'static [u32]) -> Result<(Vec<u16>, Vec<*const u16>)> {
+fn init(module: HMODULE, dir: &std::path::Path, features: &'static [u32], render_api: u32) -> Result<(Vec<u16>, Vec<*const u16>)> {
     let init: FnInit = load_fn(module, c"slInit")?;
     let plugin_dir = wide(dir);
     let plugin_paths = vec![plugin_dir.as_ptr()];
@@ -475,11 +543,12 @@ fn init(module: HMODULE, dir: &std::path::Path, features: &'static [u32]) -> Res
         features_to_load: features.as_ptr(),
         num_features_to_load: features.len() as u32,
         application_id: 0,
-        // (a custom engine on Direct3D 12)
+        // (a custom engine)
         engine: 0,
         engine_version: engine_version.as_ptr().cast(),
         project_id: PROJECT_ID.as_ptr(),
-        render_api: 1,
+        // (sl::RenderAPI: 1 Direct3D 12, 2 Vulkan)
+        render_api,
     };
     check("slInit", unsafe { init(&prefs, SDK_VERSION) })?;
     Ok((plugin_dir, plugin_paths))
@@ -494,6 +563,33 @@ fn feature_fn(module: HMODULE, feature: u32, name: &CStr) -> Result<*mut c_void>
         bail!("Streamline does not offer {}", name.to_string_lossy());
     }
     Ok(f)
+}
+
+/// wgpu's device, as `Runtime::start` is given it.
+enum Device {
+    Dx12(ID3D12Device),
+    Vulkan(VkGpu),
+}
+
+/// wgpu's device as DLSS runs on it, with our command lists (or buffers) on its queue.
+enum Backend {
+    Dx12 {
+        ring: ListRing,
+        /// Streamline's proxy of a `NullSwapChain`, if it made one.
+        pacer: Option<IDXGISwapChain>,
+    },
+    Vulkan {
+        ring: VkRing,
+    },
+}
+
+impl Backend {
+    fn wait(&mut self) {
+        match self {
+            Backend::Dx12 { ring, .. } => ring.wait(),
+            Backend::Vulkan { ring, .. } => ring.wait(),
+        }
+    }
 }
 
 pub struct Runtime {
@@ -514,103 +610,282 @@ pub struct Runtime {
     /// Streamline's answers to "how big to draw": (quality, window size) to picture size.
     optimal: Vec<((TemporalQuality, (u32, u32)), (u32, u32))>,
     frame: u32,
-    ring: ListRing,
+    backend: Backend,
     /// DLSS has made its resources for the viewport, to be freed when this is dropped.
     allocated: bool,
-    /// Streamline's proxy of a `NullSwapChain`, if it made one.
-    pacer: Option<IDXGISwapChain>,
 }
 
 // (only the render thread ever calls into Streamline; what is held are raw handles)
 unsafe impl Send for Runtime {}
 
-impl Runtime {
-    /// Starts Streamline and its DLSS plugin on wgpu's D3D12 device. The error, when there is
-    /// one, is meant for the player's log: which DLL is missing, that the card or its driver
-    /// cannot do DLSS, or that the game is not on DirectX 12.
-    pub fn load(device: &wgpu::Device) -> Result<Runtime> {
-        let hal = unsafe { device.as_hal::<wgpu_hal::api::Dx12>() }.ok_or_else(|| anyhow!("the game is not running on DirectX 12 (Settings: Graphics API)"))?;
-        let raw_device = hal.raw_device().clone();
-        drop(hal);
-        let dir = game_dir();
-        let missing = omsi_cfg::upscaler_files::missing(&dir, "dlss");
-        if !missing.is_empty() {
-            bail!("{} not found in {} (they come with NVIDIA's Streamline SDK, bin/x64)", missing.join(", "), dir.display());
+/// Streamline started for Vulkan before the device (`vulkan_extensions`), waiting for it.
+struct Prepared {
+    module: HMODULE,
+    paths: (Vec<u16>, Vec<*const u16>),
+}
+
+// (handles and strings handed over to the render thread once)
+unsafe impl Send for Prepared {}
+
+static PREPARED: std::sync::Mutex<Option<Prepared>> = std::sync::Mutex::new(None);
+
+/// Opens `sl.interposer.dll` from the game's folder.
+fn open_interposer(dir: &std::path::Path) -> Result<HMODULE> {
+    let missing = omsi_cfg::upscaler_files::missing(dir, "dlss", omsi_cfg::upscaler_files::Api::Dx12);
+    if !missing.is_empty() {
+        bail!("{} not found in {} (they come with NVIDIA's Streamline SDK, bin/x64)", missing.join(", "), dir.display());
+    }
+    let interposer = wide(&dir.join("sl.interposer.dll"));
+    Ok(unsafe { LoadLibraryExW(PCWSTR(interposer.as_ptr()), None, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS) }.context("opening sl.interposer.dll")?)
+}
+
+/// A list of C strings Streamline gave, as names that live for the run (Vulkan extension
+/// names are handed to wgpu as `&'static CStr`; there are a handful, made once).
+fn static_names(count: u32, names: *const *const c_char) -> Vec<&'static CStr> {
+    (0..count as usize)
+        .filter_map(|i| {
+            let p = unsafe { *names.add(i) };
+            (!p.is_null()).then(|| &*Box::leak(unsafe { CStr::from_ptr(p) }.to_owned().into_boxed_c_str()))
+        })
+        .collect()
+}
+
+/// Starts Streamline for DLSS on Vulkan, before wgpu makes its device, and gives the device
+/// extensions DLSS needs. Errs where it cannot run there: the files missing, or DLSS asking for
+/// Vulkan features or queues of its own that wgpu's device cannot be made with (then it is
+/// shut down again, and DirectX 12 is the way).
+pub fn vulkan_extensions() -> Result<Vec<&'static CStr>> {
+    let dir = game_dir();
+    let module = open_interposer(&dir)?;
+    let started = (|| -> Result<(Vec<&'static CStr>, (Vec<u16>, Vec<*const u16>))> {
+        let shutdown: Fn0 = load_fn(module, c"slShutdown")?;
+        let requirements: FnGetFeatureRequirements = load_fn(module, c"slGetFeatureRequirements")?;
+        static FEATURES: [u32; 1] = [FEATURE_DLSS];
+        let paths = init(module, &dir, &FEATURES, 2)?;
+        (|| {
+            let mut r = FeatureRequirements {
+                base: Base::new(FEATURE_REQUIREMENTS, 2),
+                flags: 0,
+                max_num_cpu_threads: 0,
+                max_num_viewports: 0,
+                num_required_tags: 0,
+                required_tags: std::ptr::null(),
+                os_version_detected: Version::default(),
+                os_version_required: Version::default(),
+                driver_version_detected: Version::default(),
+                driver_version_required: Version::default(),
+                vk_num_compute_queues_required: 0,
+                vk_num_graphics_queues_required: 0,
+                vk_num_device_extensions: 0,
+                vk_device_extensions: std::ptr::null(),
+                vk_num_instance_extensions: 0,
+                vk_instance_extensions: std::ptr::null(),
+                vk_num_features12: 0,
+                vk_features12: std::ptr::null(),
+                vk_num_features13: 0,
+                vk_features13: std::ptr::null(),
+                vk_num_optical_flow_queues_required: 0,
+            };
+            check("slGetFeatureRequirements(DLSS)", unsafe { requirements(FEATURE_DLSS, &mut r) })?;
+            // (sl::FeatureRequirementFlags::eVulkanSupported)
+            if r.flags & (1 << 2) == 0 {
+                bail!("this Streamline's DLSS plugin does not run on Vulkan");
+            }
+            let names = |n, p| static_names(n, p).iter().map(|c| c.to_string_lossy().into_owned()).collect::<Vec<_>>().join(", ");
+            // (the Vulkan 1.2 features the device is made with for it, `VULKAN_FEATURES`; any
+            // other, or a 1.3 one, it cannot have)
+            let wanted: Vec<String> = static_names(r.vk_num_features12, r.vk_features12).iter().chain(&static_names(r.vk_num_features13, r.vk_features13)).map(|c| c.to_string_lossy().into_owned()).collect();
+            let other: Vec<&String> = wanted.iter().filter(|f| !VULKAN_FEATURES.contains(&f.as_str())).collect();
+            if !other.is_empty() {
+                bail!("DLSS asks for Vulkan features wgpu's device is not made with ({}); choose DirectX 12 for DLSS", other.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
+            }
+            let _ = names;
+            if r.vk_num_compute_queues_required + r.vk_num_graphics_queues_required + r.vk_num_optical_flow_queues_required > 0 {
+                bail!("DLSS asks for Vulkan queues of its own, which wgpu's device does not make; choose DirectX 12 for DLSS");
+            }
+            if r.vk_num_instance_extensions > 0 {
+                log::info!("DLSS on Vulkan wants the instance extensions {} (wgpu's instance must have them)", names(r.vk_num_instance_extensions, r.vk_instance_extensions));
+            }
+            Ok((static_names(r.vk_num_device_extensions, r.vk_device_extensions), paths))
+        })()
+        .inspect_err(|_| unsafe {
+            shutdown();
+        })
+    })();
+    match started {
+        Ok((extensions, paths)) => {
+            *PREPARED.lock().unwrap_or_else(|e| e.into_inner()) = Some(Prepared { module, paths });
+            Ok(extensions)
         }
-        let interposer = wide(&dir.join("sl.interposer.dll"));
-        let module = unsafe { LoadLibraryExW(PCWSTR(interposer.as_ptr()), None, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS) }.context("opening sl.interposer.dll")?;
-        Self::start(module, &dir, raw_device).inspect_err(|_| unsafe {
+        Err(e) => {
+            unsafe {
+                let _ = FreeLibrary(module);
+            }
+            Err(e)
+        }
+    }
+}
+
+/// The Vulkan 1.2 features DLSS may ask for that the device is made with
+/// (`gpu::upscaler_device`): wgpu turns timeline semaphores on itself on Vulkan 1.2, the other two
+/// are chained to its device by us.
+pub const VULKAN_FEATURES: [&str; 3] = ["timelineSemaphore", "descriptorIndexing", "bufferDeviceAddress"];
+
+/// Lets go of Streamline started by `vulkan_extensions` when the device could not be made with
+/// what it asked for.
+pub fn vulkan_abandon() {
+    if let Some(p) = PREPARED.lock().unwrap_or_else(|e| e.into_inner()).take() {
+        if let Ok(shutdown) = load_fn::<Fn0>(p.module, c"slShutdown") {
+            unsafe { shutdown() };
+        }
+        unsafe {
+            let _ = FreeLibrary(p.module);
+        }
+    }
+}
+
+/// The functions DLSS is run with, once Streamline has a device.
+struct Calls {
+    is_supported: FnIsFeatureSupported,
+    is_loaded: FnIsFeatureLoaded,
+}
+
+impl Runtime {
+    /// Starts Streamline and its DLSS plugin on wgpu's device (Direct3D 12, or Vulkan when
+    /// `vulkan_extensions` started it before the device). The error, when there is one, is meant
+    /// for the player's log: which DLL is missing, that the card or its driver cannot do DLSS, or
+    /// that the game is on neither interface.
+    pub fn load(device: &wgpu::Device) -> Result<Runtime> {
+        if let Some(hal) = unsafe { device.as_hal::<wgpu_hal::api::Dx12>() } {
+            let raw_device = hal.raw_device().clone();
+            drop(hal);
+            let dir = game_dir();
+            let module = open_interposer(&dir)?;
+            static FEATURES: [u32; 1] = [FEATURE_DLSS];
+            return (|| {
+                let shutdown: Fn0 = load_fn(module, c"slShutdown")?;
+                let paths = init(module, &dir, &FEATURES, 1)?;
+                Self::start(module, &dir, paths, Device::Dx12(raw_device)).inspect_err(|_| unsafe {
+                    shutdown();
+                })
+            })()
+            .inspect_err(|_| unsafe {
+                let _ = FreeLibrary(module);
+            });
+        }
+        let gpu = VkGpu::of(device).ok_or_else(|| anyhow!("the game is not running on DirectX 12 or Vulkan (Settings: Graphics API)"))?;
+        let prepared = PREPARED.lock().unwrap_or_else(|e| e.into_inner()).take().ok_or_else(|| anyhow!("on Vulkan DLSS takes its place from the next start of the game, chosen before it (its device extensions are given when the device is made); this run goes on without it"))?;
+        let module = prepared.module;
+        let shutdown: Fn0 = load_fn(module, c"slShutdown")?;
+        Self::start(module, &game_dir(), prepared.paths, Device::Vulkan(gpu)).inspect_err(|_| unsafe {
+            shutdown();
             let _ = FreeLibrary(module);
         })
     }
 
-    fn start(module: HMODULE, dir: &std::path::Path, device: ID3D12Device) -> Result<Runtime> {
+    /// Streamline initialised (`slInit`): hands it the device, checks DLSS can run on this card
+    /// and gets its functions. Shut down by the caller on an error.
+    fn start(module: HMODULE, dir: &std::path::Path, paths: (Vec<u16>, Vec<*const u16>), device: Device) -> Result<Runtime> {
         let shutdown: Fn0 = load_fn(module, c"slShutdown")?;
-        let is_supported: FnIsFeatureSupported = load_fn(module, c"slIsFeatureSupported")?;
-        let is_loaded: FnIsFeatureLoaded = load_fn(module, c"slIsFeatureLoaded")?;
-        let set_device: FnSetD3DDevice = load_fn(module, c"slSetD3DDevice")?;
+        let calls = Calls { is_supported: load_fn(module, c"slIsFeatureSupported")?, is_loaded: load_fn(module, c"slIsFeatureLoaded")? };
         let get_new_frame_token: FnGetNewFrameToken = load_fn(module, c"slGetNewFrameToken")?;
         let set_tag_for_frame: FnSetTagForFrame = load_fn(module, c"slSetTagForFrame")?;
         let set_constants: FnSetConstants = load_fn(module, c"slSetConstants")?;
         let evaluate_feature: FnEvaluateFeature = load_fn(module, c"slEvaluateFeature")?;
         let free_resources: FnFreeResources = load_fn(module, c"slFreeResources")?;
-        let upgrade_interface: FnUpgradeInterface = load_fn(module, c"slUpgradeInterface")?;
-
-        static FEATURES: [u32; 1] = [FEATURE_DLSS];
-        let paths = init(module, dir, &FEATURES)?;
-        // Streamline is running now: any failure below shuts it down before returning
-        (|| {
-            check("slSetD3DDevice", unsafe { set_device(device.as_raw()) })?;
-            let mut luid = unsafe { device.GetAdapterLuid() };
-            let adapter = AdapterInfo {
-                base: Base::new(ADAPTER_INFO, 1),
-                device_luid: (&mut luid as *mut windows::Win32::Foundation::LUID).cast(),
-                device_luid_size_in_bytes: std::mem::size_of::<windows::Win32::Foundation::LUID>() as u32,
-                vk_physical_device: std::ptr::null_mut(),
-            };
-            check("the DLSS check of this card (it takes a GeForce RTX and an up-to-date driver)", unsafe { is_supported(FEATURE_DLSS, &adapter) })?;
-            let mut loaded = false;
-            check("slIsFeatureLoaded", unsafe { is_loaded(FEATURE_DLSS, &mut loaded) })?;
-            if !loaded {
-                bail!("sl.dlss.dll was not loaded by Streamline");
+        let backend = match device {
+            Device::Dx12(device) => {
+                let set_device: FnSetD3DDevice = load_fn(module, c"slSetD3DDevice")?;
+                let upgrade_interface: FnUpgradeInterface = load_fn(module, c"slUpgradeInterface")?;
+                check("slSetD3DDevice", unsafe { set_device(device.as_raw()) })?;
+                let mut luid = unsafe { device.GetAdapterLuid() };
+                let adapter = AdapterInfo {
+                    base: Base::new(ADAPTER_INFO, 1),
+                    device_luid: (&mut luid as *mut windows::Win32::Foundation::LUID).cast(),
+                    device_luid_size_in_bytes: std::mem::size_of::<windows::Win32::Foundation::LUID>() as u32,
+                    vk_physical_device: std::ptr::null_mut(),
+                };
+                Self::supported(module, &calls, &adapter)?;
+                let ring = ListRing::new(&device).context("DLSS's command lists")?;
+                let pacer: IDXGISwapChain = NullSwapChain { device: device.clone() }.into();
+                let mut raw = pacer.as_raw();
+                let r = unsafe { upgrade_interface(&mut raw) };
+                let pacer = if r == 0 && !raw.is_null() && raw != pacer.as_raw() {
+                    // (Streamline's proxy; the reference it handed back is ours to release)
+                    Some(unsafe { IDXGISwapChain::from_raw(raw) })
+                } else {
+                    log::warn!("DLSS: no swap-chain proxy from Streamline ({}), so its per-frame housekeeping is skipped", result_name(r));
+                    None
+                };
+                Backend::Dx12 { ring, pacer }
             }
-            let get_optimal_settings: FnDlssGetOptimalSettings = unsafe { std::mem::transmute(feature_fn(module, FEATURE_DLSS, c"slDLSSGetOptimalSettings")?) };
-            let set_options: FnDlssSetOptions = unsafe { std::mem::transmute(feature_fn(module, FEATURE_DLSS, c"slDLSSSetOptions")?) };
-            let ring = ListRing::new(&device).context("DLSS's command lists")?;
-            let pacer: IDXGISwapChain = NullSwapChain { device: device.clone() }.into();
-            let mut raw = pacer.as_raw();
-            let r = unsafe { upgrade_interface(&mut raw) };
-            let pacer = if r == 0 && !raw.is_null() && raw != pacer.as_raw() {
-                // (Streamline's proxy; the reference it handed back is ours to release)
-                Some(unsafe { IDXGISwapChain::from_raw(raw) })
-            } else {
-                log::warn!("DLSS: no swap-chain proxy from Streamline ({}), so its per-frame housekeeping is skipped", result_name(r));
-                None
-            };
-            log::info!("DLSS: Streamline {}.{}.{} and its DLSS plugin loaded from {}", SDK_VERSION >> 48, (SDK_VERSION >> 32) & 0xffff, (SDK_VERSION >> 16) & 0xffff, dir.display());
-            Ok(Runtime {
-                module,
-                shutdown,
-                get_new_frame_token,
-                set_tag_for_frame,
-                set_constants,
-                evaluate_feature,
-                free_resources,
-                get_optimal_settings,
-                set_options,
-                _paths: paths,
-                viewport: ViewportHandle { base: Base::new(VIEWPORT_HANDLE, 1), value: 0 },
-                options_set: None,
-                optimal: Vec::new(),
-                frame: 0,
-                ring,
-                allocated: false,
-                pacer,
-            })
-        })()
-        .inspect_err(|_| {
-            unsafe { shutdown() };
+            Device::Vulkan(gpu) => {
+                let set_vulkan_info: FnSetVulkanInfo = load_fn(module, c"slSetVulkanInfo")?;
+                let info = VulkanInfo {
+                    base: Base::new(VULKAN_INFO, 3),
+                    device: gpu.device.handle(),
+                    instance: gpu.instance,
+                    physical_device: gpu.physical,
+                    // (no queues of DLSS's own: `vulkan_extensions` refused any; these say where
+                    // wgpu's one is)
+                    compute_queue_index: gpu.queue_index,
+                    compute_queue_family: gpu.family,
+                    graphics_queue_index: gpu.queue_index,
+                    graphics_queue_family: gpu.family,
+                    optical_flow_queue_index: 0,
+                    optical_flow_queue_family: 0,
+                    use_native_optical_flow_mode: false,
+                    compute_queue_create_flags: 0,
+                    graphics_queue_create_flags: 0,
+                    optical_flow_queue_create_flags: 0,
+                };
+                check("slSetVulkanInfo", unsafe { set_vulkan_info(&info) })?;
+                let adapter = AdapterInfo {
+                    base: Base::new(ADAPTER_INFO, 1),
+                    device_luid: std::ptr::null_mut(),
+                    device_luid_size_in_bytes: 0,
+                    vk_physical_device: vk::Handle::as_raw(gpu.physical) as *mut c_void,
+                };
+                Self::supported(module, &calls, &adapter)?;
+                // (Streamline's own per-frame housekeeping hangs on the swap chain's present,
+                // which on Vulkan is wgpu's and goes past it: DLSS's inputs are tagged for the
+                // frame and valid until its evaluation only, so nothing of theirs is kept)
+                Backend::Vulkan { ring: VkRing::new(&gpu).context("DLSS's command buffers")? }
+            }
+        };
+        let get_optimal_settings: FnDlssGetOptimalSettings = unsafe { std::mem::transmute(feature_fn(module, FEATURE_DLSS, c"slDLSSGetOptimalSettings")?) };
+        let set_options: FnDlssSetOptions = unsafe { std::mem::transmute(feature_fn(module, FEATURE_DLSS, c"slDLSSSetOptions")?) };
+        let api = if matches!(backend, Backend::Dx12 { .. }) { "DirectX 12" } else { "Vulkan" };
+        log::info!("DLSS: Streamline {}.{}.{} and its DLSS plugin loaded from {} ({api})", SDK_VERSION >> 48, (SDK_VERSION >> 32) & 0xffff, (SDK_VERSION >> 16) & 0xffff, dir.display());
+        Ok(Runtime {
+            module,
+            shutdown,
+            get_new_frame_token,
+            set_tag_for_frame,
+            set_constants,
+            evaluate_feature,
+            free_resources,
+            get_optimal_settings,
+            set_options,
+            _paths: paths,
+            viewport: ViewportHandle { base: Base::new(VIEWPORT_HANDLE, 1), value: 0 },
+            options_set: None,
+            optimal: Vec::new(),
+            frame: 0,
+            backend,
+            allocated: false,
         })
+    }
+
+    /// Whether DLSS runs on this adapter (an RTX card, a recent driver) and its plugin is loaded.
+    fn supported(_module: HMODULE, calls: &Calls, adapter: &AdapterInfo) -> Result<()> {
+        check("the DLSS check of this card (it takes a GeForce RTX and an up-to-date driver)", unsafe { (calls.is_supported)(FEATURE_DLSS, adapter) })?;
+        let mut loaded = false;
+        check("slIsFeatureLoaded", unsafe { (calls.is_loaded)(FEATURE_DLSS, &mut loaded) })?;
+        if !loaded {
+            bail!("sl.dlss.dll was not loaded by Streamline");
+        }
+        Ok(())
     }
 
     /// `sl::DLSSOptions` for a quality and window size. The presets are set by hand to what
@@ -668,39 +943,29 @@ impl Runtime {
     /// on wgpu's queue. It belongs after the submit that drew `inputs` and before any submit
     /// that reads `inputs.output`.
     pub fn evaluate(&mut self, queue: &wgpu::Queue, quality: TemporalQuality, inputs: &Inputs, c: &FrameConstants) -> Result<()> {
-        let queue_hal = unsafe { queue.as_hal::<wgpu_hal::api::Dx12>() }.ok_or_else(|| anyhow!("no Direct3D 12 queue under wgpu's"))?;
-        let raw_queue = queue_hal.as_raw().clone();
-        drop(queue_hal);
         if self.options_set != Some((quality, inputs.output_size)) {
             // (a new quality or window size: resizing the proxy makes Streamline drop what it
             // made for the old one)
-            if let (Some(p), Some(_)) = (&self.pacer, self.options_set) {
+            if let (Backend::Dx12 { pacer: Some(p), .. }, Some(_)) = (&self.backend, self.options_set) {
                 let _ = unsafe { p.ResizeBuffers(0, inputs.output_size.0, inputs.output_size.1, DXGI_FORMAT_UNKNOWN, DXGI_SWAP_CHAIN_FLAG(0)) };
             }
             let options = Self::options(quality, inputs.output_size);
             check("slDLSSSetOptions", unsafe { (self.set_options)(&self.viewport, &options) })?;
             self.options_set = Some((quality, inputs.output_size));
         }
-        let raw = |t: &wgpu::Texture| -> Result<ID3D12Resource> {
-            let h = unsafe { t.as_hal::<wgpu_hal::api::Dx12>() }.ok_or_else(|| anyhow!("no Direct3D 12 resource under a DLSS texture"))?;
-            Ok(unsafe { h.raw_resource() }.clone())
-        };
-        let (color, depth, motion, output, mask) = (raw(inputs.color)?, raw(inputs.depth)?, raw(inputs.motion)?, raw(inputs.output)?, raw(inputs.mask)?);
         let (rw, rh) = inputs.render_size;
         let (ow, oh) = inputs.output_size;
-        // (the states the scene's submit leaves them in: `temporal_end_of_scene` makes sure the
-        // last pass on each is a render pass)
-        let resource = |r: &ID3D12Resource, state: D3D12_RESOURCE_STATES, format: wgpu::TextureFormat, (w, h): (u32, u32)| Resource {
+        let blank = |native: *mut c_void, state: u32, format: u32, (w, h): (u32, u32)| Resource {
             base: Base::new(RESOURCE, 1),
             // ResourceType::eTex2d
             kind: 0,
-            native: r.as_raw(),
+            native,
             memory: std::ptr::null_mut(),
             view: std::ptr::null_mut(),
-            state: state.0 as u32,
+            state,
             width: w,
             height: h,
-            native_format: dxgi_format(format),
+            native_format: format,
             mip_levels: 1,
             array_layers: 1,
             gpu_virtual_address: 0,
@@ -709,15 +974,49 @@ impl Runtime {
             internal_flags: 0,
             reserved: 0,
         };
-        let mut res = [
-            // (the picture's resource is plain UNORM and drawn through an sRGB view: see
-            // `temporal_targets`. DLSS reads it as that view)
-            resource(&color, D3D12_RESOURCE_STATE_RENDER_TARGET, inputs.color.format().add_srgb_suffix(), (rw, rh)),
-            resource(&depth, D3D12_RESOURCE_STATE_DEPTH_WRITE, inputs.depth.format(), (rw, rh)),
-            resource(&motion, D3D12_RESOURCE_STATE_RENDER_TARGET, inputs.motion.format(), (rw, rh)),
-            resource(&output, D3D12_RESOURCE_STATE_RENDER_TARGET, inputs.output.format(), (ow, oh)),
-            resource(&mask, D3D12_RESOURCE_STATE_RENDER_TARGET, inputs.mask.format(), (rw, rh)),
-        ];
+        let textures = [inputs.color, inputs.depth, inputs.motion, inputs.output, inputs.mask];
+        let sizes = [(rw, rh), (rw, rh), (rw, rh), (ow, oh), (rw, rh)];
+        // (the picture's resource is plain UNORM and drawn through an sRGB view: see
+        // `temporal_targets`. DLSS reads it as that view)
+        let formats = [inputs.color.format().add_srgb_suffix(), inputs.depth.format(), inputs.motion.format(), inputs.output.format(), inputs.mask.format()];
+        // (the states the scene's submit leaves them in: `temporal_end_of_scene` makes sure the
+        // last pass on each is a render pass)
+        let depth_at = 1;
+        let mut res: [Resource; 5] = match &self.backend {
+            Backend::Dx12 { .. } => {
+                let raw = |t: &wgpu::Texture| -> Result<ID3D12Resource> {
+                    let h = unsafe { t.as_hal::<wgpu_hal::api::Dx12>() }.ok_or_else(|| anyhow!("no Direct3D 12 resource under a DLSS texture"))?;
+                    Ok(unsafe { h.raw_resource() }.clone())
+                };
+                let mut out = Vec::with_capacity(5);
+                for (k, t) in textures.iter().enumerate() {
+                    let state = if k == depth_at { D3D12_RESOURCE_STATE_DEPTH_WRITE } else { D3D12_RESOURCE_STATE_RENDER_TARGET };
+                    // (the resource lives as long as its wgpu texture, which outlives the frame)
+                    out.push(blank(raw(t)?.as_raw(), state.0 as u32, dxgi_format(formats[k]), sizes[k]));
+                }
+                out.try_into().map_err(|_| anyhow!("five resources"))?
+            }
+            Backend::Vulkan { .. } => {
+                // (Streamline on Vulkan: the image, its memory and a view, the layout wgpu left
+                // it in, its format, create flags and usage)
+                let order = [0usize, 1, 2, 4, 3];
+                let mut out = Vec::with_capacity(5);
+                for (k, t) in textures.iter().enumerate() {
+                    let (image, memory) = super::vulkan::image_and_memory(t)?;
+                    let view = super::vulkan::view(inputs.views[order[k]])?;
+                    let depth = k == depth_at;
+                    let layout = if depth { vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL } else { vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL };
+                    let mut r = blank(vk::Handle::as_raw(image) as *mut c_void, layout.as_raw() as u32, super::vulkan::format(formats[k]).as_raw() as u32, sizes[k]);
+                    r.memory = vk::Handle::as_raw(memory) as *mut c_void;
+                    r.view = vk::Handle::as_raw(view) as *mut c_void;
+                    // (wgpu makes an image with other view formats mutable: the picture's)
+                    r.flags = if t.format() != formats[k] { vk::ImageCreateFlags::MUTABLE_FORMAT.as_raw() } else { 0 };
+                    r.usage = super::vulkan::usage(t.usage(), depth).as_raw();
+                    out.push(r);
+                }
+                out.try_into().map_err(|_| anyhow!("five resources"))?
+            }
+        };
         let render_extent = Extent { top: 0, left: 0, width: rw, height: rh };
         let output_extent = Extent { top: 0, left: 0, width: ow, height: oh };
         let [c0, c1, c2, c3, c4] = &mut res;
@@ -767,8 +1066,13 @@ impl Runtime {
             motion_vectors_jittered: FALSE,
             min_relative_linear_depth_object_separation: 40.0,
         };
-        let list = self.ring.begin()?;
-        let list_ptr = list.as_raw();
+        let (list_ptr, dx12_list) = match &mut self.backend {
+            Backend::Dx12 { ring, .. } => {
+                let list = ring.begin()?;
+                (list.as_raw(), Some(list))
+            }
+            Backend::Vulkan { ring, .. } => (vk::Handle::as_raw(ring.begin()?) as *mut c_void, None),
+        };
         let recorded = (|| -> Result<()> {
             check("slSetConstants", unsafe { (self.set_constants)(&constants, token, &self.viewport) })?;
             check("slSetTagForFrame", unsafe { (self.set_tag_for_frame)(token, &self.viewport, tags.as_ptr(), tags.len() as u32, list_ptr) })?;
@@ -778,11 +1082,20 @@ impl Runtime {
         })();
         // (closed and submitted even when a call above failed: an empty list does no harm, and
         // the fence then still says when this slot is free)
-        self.ring.submit(&raw_queue)?;
+        drop(dx12_list);
+        match &mut self.backend {
+            Backend::Dx12 { ring, .. } => {
+                let queue_hal = unsafe { queue.as_hal::<wgpu_hal::api::Dx12>() }.ok_or_else(|| anyhow!("no Direct3D 12 queue under wgpu's"))?;
+                let raw_queue = queue_hal.as_raw().clone();
+                drop(queue_hal);
+                ring.submit(&raw_queue)?;
+            }
+            Backend::Vulkan { ring, .. } => ring.submit(super::vulkan::queue(queue)?)?,
+        }
         recorded?;
         self.allocated = true;
         // (tells Streamline the frame is over: see `NullSwapChain`)
-        if let Some(p) = &self.pacer {
+        if let Backend::Dx12 { pacer: Some(p), .. } = &self.backend {
             let _ = unsafe { p.Present(0, DXGI_PRESENT(0)) };
         }
         Ok(())
@@ -792,12 +1105,14 @@ impl Runtime {
 impl Drop for Runtime {
     fn drop(&mut self) {
         // (let the GPU finish the last DLSS frame before its resources go)
-        self.ring.wait();
+        self.backend.wait();
         unsafe {
             if self.allocated {
                 let _ = (self.free_resources)(FEATURE_DLSS, &self.viewport);
             }
-            self.pacer = None;
+            if let Backend::Dx12 { pacer, .. } = &mut self.backend {
+                *pacer = None;
+            }
             let r = (self.shutdown)();
             if r != 0 {
                 log::warn!("DLSS: Streamline did not shut down cleanly: {}", result_name(r));

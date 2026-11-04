@@ -495,14 +495,20 @@ vehicle's collision scripts and deform a localized part of its body mesh where t
 has editable body geometry.
 
 **NVIDIA DLSS and AMD FSR 3** (Settings → Graphics → Upscaling, `upscaler=dlss` or `fsr3`, with
-`upscale_quality=native`, `quality`, `balanced`, `performance` or `ultra_performance`; Windows and
-DirectX 12): the picture is drawn smaller and brought up to the window with the help of the last
+`upscale_quality=native`, `quality`, `balanced`, `performance` or `ultra_performance`; Windows,
+DirectX 12 or Vulkan; DLSS only with an NVIDIA RTX card, FSR 3 with any): the picture is drawn smaller and brought up to the window with the help of the last
 frames, in place of the anti-aliasing and the render scale, from the next start (not with a headset
-or a triple screen). The game does not
-come with them: they are offered once the vendor's DLLs are beside `openomsi.exe`.
+or a triple screen). They are offered only when the vendor's DLLs are beside `openomsi.exe`.
+The Windows x64 packaging currently includes the four AMD FidelityFX 2.4.0
+DLLs identified under MIT and four signed NVIDIA Streamline/DLSS 2.14.1
+runtime DLLs. NVIDIA's proprietary NGX runtime retains its separate vendor
+license; these files are not AGPL-licensed or sublicensed by openOMSI.
+The combined distribution's AGPL compatibility is still under legal review.
+See [the licensing review](UPSCALER_THIRD_PARTY_LICENSING.md) and
+[NVIDIA DLL license scope](NVIDIA_DLL_LICENSE_SCOPE.md).
 For DLSS (a GeForce RTX card) `sl.interposer.dll`, `sl.common.dll`, `sl.dlss.dll` and `nvngx_dlss.dll`
 from [NVIDIA's Streamline SDK](https://github.com/NVIDIA-RTX/Streamline), for FSR 3 (any card)
-`amd_fidelityfx_loader_dx12.dll` and `amd_fidelityfx_upscaler_dx12.dll` from
+`amd_fidelityfx_loader_dx12.dll` and `amd_fidelityfx_upscaler_dx12.dll` (on Vulkan the `_vk` ones) from
 [AMD's FidelityFX SDK](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK). Where one cannot
 start, `game.log` says why and the picture is drawn as without it.
 

@@ -3872,6 +3872,7 @@ dependencies = [
  "ring",
  "thiserror 2.0.21",
  "unicode-normalization",
+ "windows 0.62.2",
 ]
 
 [[package]]

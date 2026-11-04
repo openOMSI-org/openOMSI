@@ -280,8 +280,8 @@ pub(super) fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
         "render_scale" => vec![("auto", "Auto"), ("1", "100%"), ("0.85", "85%"), ("0.75", "75%"), ("0.67", "67%"), ("0.5", "50%")],
         "upscaler" => {
             let files = omsi_cfg::upscaler_files::available(&omsi_cfg::upscaler_files::program_dir());
-            let temporal = files.into_iter().map(|u| if u == "dlss" { ("dlss", "NVIDIA DLSS") } else { ("fsr3", "AMD FSR 3") });
-            [("default", "Standard (Catmull-Rom)"), ("fsr1", "AMD FSR 1.0")].into_iter().chain(temporal).collect()
+            let temporal = files.into_iter().map(|u| if u == "dlss" { ("dlss", "NVIDIA DLSS (experimental)") } else { ("fsr3", "AMD FSR 3 (experimental)") });
+            [("default", "Standard (Catmull-Rom)"), ("fsr1", "AMD FSR 1")].into_iter().chain(temporal).collect()
         }
         "upscale_quality" => vec![("native", "Native"), ("quality", "Quality"), ("balanced", "Balanced"), ("performance", "Performance"), ("ultra_performance", "Ultra performance")],
         "fsr_quality" => vec![("ultra", "Ultra Quality (77%)"), ("quality", "Quality (67%)"), ("balanced", "Balanced (59%)"), ("performance", "Performance (50%)"), ("auto", "Automatic (keeps the frame rate)"), ("custom", "Use render scale")],

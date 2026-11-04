@@ -23,15 +23,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//! AMD FSR 3 upscaling by way of AMD's FidelityFX API: Windows, DirectX 12, any card that runs it
-//! well. It takes the same inputs as DLSS (`super::Inputs`) and leaves the same kind of picture:
-//! the sRGB-encoded values it was given, at the window's size.
+//! AMD FSR 3 upscaling by way of AMD's FidelityFX API: Windows, DirectX 12 or Vulkan, any card
+//! that runs it well. It takes the same inputs as DLSS (`super::Inputs`) and leaves the same kind
+//! of picture: the sRGB-encoded values it was given, at the window's size.
 //!
-//! `amd_fidelityfx_loader_dx12.dll` and `amd_fidelityfx_upscaler_dx12.dll` (AMD's signed DLLs
-//! from the SDK, MIT) are opened from the game's folder when the first frame asks for them;
-//! nothing is linked.
+//! `amd_fidelityfx_loader_dx12.dll` and `amd_fidelityfx_upscaler_dx12.dll`, or on Vulkan
+//! `amd_fidelityfx_loader_vk.dll` and `amd_fidelityfx_upscaler_vk.dll` (AMD's signed DLLs from
+//! the SDK, MIT), are opened from the game's folder when the first frame asks for them; nothing
+//! is linked. The two loaders take the same calls; only the device and the resources they are
+//! handed differ (`ffx_api_dx12.h`, `vk/ffx_api_vk.h`).
 
 use super::d3d12::{game_dir, wide, ListRing};
+use super::vulkan::{VkGpu, VkRing};
+use ash::vk;
+use omsi_cfg::upscaler_files::Api as Gpu;
 use super::{FrameConstants, Inputs};
 use anyhow::{anyhow, bail, Context, Result};
 use std::ffi::{c_void, CStr};
@@ -103,6 +108,15 @@ struct CreateBackendDx12 {
     device: *mut c_void,
 }
 
+/// `ffxCreateBackendVKDesc`: the device as `VkDeviceContext` gives it.
+#[repr(C)]
+struct CreateBackendVk {
+    header: Header,
+    device: vk::Device,
+    physical_device: vk::PhysicalDevice,
+    get_device_proc_addr: vk::PFN_vkGetDeviceProcAddr,
+}
+
 #[repr(C)]
 struct CreateVersion {
     header: Header,
@@ -149,6 +163,7 @@ struct DispatchUpscale {
 const _: () = {
     assert!(std::mem::size_of::<Resource>() == 48);
     assert!(std::mem::size_of::<CreateVersion>() == 24);
+    assert!(std::mem::size_of::<CreateBackendVk>() == 40);
     assert!(std::mem::size_of::<CreateUpscale>() == 48);
     assert!(std::mem::size_of::<DispatchUpscale>() == 432);
     assert!(std::mem::offset_of!(DispatchUpscale, output) == 312);
@@ -156,6 +171,8 @@ const _: () = {
 };
 
 const CREATE_BACKEND_DX12: u64 = 0x0000_0002;
+/// `FFX_API_CREATE_CONTEXT_DESC_TYPE_BACKEND_VK`: `FFX_API_BACKEND_ID_VK` (0x0100_0000), 3.
+const CREATE_BACKEND_VK: u64 = 0x0100_0003;
 const CREATE_UPSCALE: u64 = 0x0001_0000;
 const DISPATCH_UPSCALE: u64 = 0x0001_0001;
 const CREATE_UPSCALE_VERSION: u64 = 0x0001_000b;
@@ -172,6 +189,8 @@ const FORMAT_R8G8B8A8_SRGB: u32 = 12;
 const FORMAT_B8G8R8A8_UNORM: u32 = 14;
 const FORMAT_B8G8R8A8_SRGB: u32 = 15;
 const FORMAT_R32_FLOAT: u32 = 28;
+const FORMAT_R16G16B16A16_FLOAT: u32 = 4;
+const FORMAT_R10G10B10A2_UNORM: u32 = 17;
 const FORMAT_R8_UNORM: u32 = 25;
 // FfxApiResourceState and FfxApiResourceUsage
 const STATE_RENDER_TARGET: u32 = 1 << 8;
@@ -196,10 +215,19 @@ struct Api {
 unsafe impl Send for Api {}
 unsafe impl Sync for Api {}
 
-static API: OnceLock<Option<Api>> = OnceLock::new();
+static API_DX12: OnceLock<Option<Api>> = OnceLock::new();
+static API_VK: OnceLock<Option<Api>> = OnceLock::new();
 
-fn load_api() -> Result<Api> {
-    let loader = game_dir().join("amd_fidelityfx_loader_dx12.dll");
+/// The loader DLL for an interface.
+fn loader_name(gpu: Gpu) -> &'static str {
+    match gpu {
+        Gpu::Dx12 => "amd_fidelityfx_loader_dx12.dll",
+        Gpu::Vulkan => "amd_fidelityfx_loader_vk.dll",
+    }
+}
+
+fn load_api(gpu: Gpu) -> Result<Api> {
+    let loader = game_dir().join(loader_name(gpu));
     let path = wide(&loader);
     let module = unsafe { LoadLibraryExW(PCWSTR(path.as_ptr()), None, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS) }.with_context(|| format!("opening {}", loader.display()))?;
     fn get<T: Copy>(module: HMODULE, name: &CStr) -> Result<T> {
@@ -214,8 +242,12 @@ fn load_api() -> Result<Api> {
     })
 }
 
-fn api() -> Result<&'static Api> {
-    API.get_or_init(|| match load_api() {
+fn api(gpu: Gpu) -> Result<&'static Api> {
+    let cell = match gpu {
+        Gpu::Dx12 => &API_DX12,
+        Gpu::Vulkan => &API_VK,
+    };
+    cell.get_or_init(|| match load_api(gpu) {
         Ok(a) => Some(a),
         Err(e) => {
             log::warn!("AMD FidelityFX is not available: {e:#}");
@@ -223,7 +255,7 @@ fn api() -> Result<&'static Api> {
         }
     })
     .as_ref()
-    .ok_or_else(|| anyhow!("AMD's FidelityFX loader DLL could not be opened"))
+    .ok_or_else(|| anyhow!("AMD's FidelityFX loader DLL ({}) could not be opened", loader_name(gpu)))
 }
 
 fn check(what: &str, r: u32) -> Result<()> {
@@ -246,6 +278,48 @@ fn ffx_format(f: DXGI_FORMAT) -> u32 {
         DXGI_FORMAT_R8_UNORM => FORMAT_R8_UNORM,
         DXGI_FORMAT_D32_FLOAT | DXGI_FORMAT_R32_FLOAT | DXGI_FORMAT_R32_TYPELESS => FORMAT_R32_FLOAT,
         _ => FORMAT_UNKNOWN,
+    }
+}
+
+/// The FidelityFX format of a texture the upscaler is given on Vulkan.
+fn ffx_format_of(f: wgpu::TextureFormat) -> u32 {
+    use wgpu::TextureFormat as Tf;
+    match f {
+        Tf::Bgra8Unorm => FORMAT_B8G8R8A8_UNORM,
+        Tf::Bgra8UnormSrgb => FORMAT_B8G8R8A8_SRGB,
+        Tf::Rgba8Unorm => FORMAT_R8G8B8A8_UNORM,
+        Tf::Rgba8UnormSrgb => FORMAT_R8G8B8A8_SRGB,
+        Tf::Rgba16Float => FORMAT_R16G16B16A16_FLOAT,
+        Tf::Rgb10a2Unorm => FORMAT_R10G10B10A2_UNORM,
+        Tf::Rg16Float => FORMAT_R16G16_FLOAT,
+        Tf::R8Unorm => FORMAT_R8_UNORM,
+        Tf::Depth32Float => FORMAT_R32_FLOAT,
+        _ => FORMAT_UNKNOWN,
+    }
+}
+
+/// A texture as the FidelityFX API describes it on Vulkan (`ffxApiGetResourceVK` and
+/// `ffxApiGetImageResourceDescriptionVK` in its headers: the image, its size, format and usage).
+fn resource_vk(t: &wgpu::Texture, state: u32) -> Result<Resource> {
+    let image = super::vulkan::image(t)?;
+    let depth = t.format().is_depth_stencil_format();
+    let mut usage = if depth { USAGE_DEPTHTARGET } else { 0 };
+    if t.usage().contains(wgpu::TextureUsages::STORAGE_BINDING) {
+        usage |= USAGE_UAV;
+    }
+    let size = t.size();
+    Ok(Resource {
+        resource: vk::Handle::as_raw(image) as *mut c_void,
+        description: ResourceDescription { kind: TYPE_TEXTURE2D, format: ffx_format_of(t.format()), width: size.width, height: size.height, depth: size.depth_or_array_layers, mip_count: t.mip_level_count(), flags: 0, usage },
+        state,
+    })
+}
+
+/// A texture as the FidelityFX API describes it on this interface.
+fn resource_on(gpu: Gpu, t: &wgpu::Texture, state: u32) -> Result<Resource> {
+    match gpu {
+        Gpu::Dx12 => resource(t, state),
+        Gpu::Vulkan => resource_vk(t, state),
     }
 }
 
@@ -274,12 +348,40 @@ fn resource(t: &wgpu::Texture, state: u32) -> Result<Resource> {
 struct UpscaleContext {
     context: Box<FfxContext>,
     display: (u32, u32),
-    _create: Box<(CreateUpscale, CreateVersion, CreateBackendDx12)>,
+    _create: Box<(CreateUpscale, CreateVersion)>,
+    _backend: BackendDesc,
+}
+
+/// The device as the context was created on (kept: AMD may keep a pointer to it).
+enum BackendDesc {
+    Dx12(Box<CreateBackendDx12>),
+    Vulkan(Box<CreateBackendVk>),
+}
+
+/// wgpu's device and our command lists or buffers on its queue.
+enum Backend {
+    Dx12 { device: ID3D12Device, ring: ListRing },
+    Vulkan { gpu: VkGpu, ring: VkRing },
+}
+
+impl Backend {
+    fn gpu(&self) -> Gpu {
+        match self {
+            Backend::Dx12 { .. } => Gpu::Dx12,
+            Backend::Vulkan { .. } => Gpu::Vulkan,
+        }
+    }
+
+    fn wait(&mut self) {
+        match self {
+            Backend::Dx12 { ring, .. } => ring.wait(),
+            Backend::Vulkan { ring, .. } => ring.wait(),
+        }
+    }
 }
 
 pub struct Upscaler {
-    device: ID3D12Device,
-    ring: ListRing,
+    backend: Backend,
     context: Option<UpscaleContext>,
 }
 
@@ -287,28 +389,34 @@ pub struct Upscaler {
 unsafe impl Send for Upscaler {}
 
 impl Upscaler {
-    /// FSR 3 upscaling on wgpu's device; the error says what is missing.
+    /// FSR 3 upscaling on wgpu's device (Direct3D 12 or Vulkan); the error says what is missing.
     pub fn load(device: &wgpu::Device) -> Result<Upscaler> {
         let dir = game_dir();
-        let missing = omsi_cfg::upscaler_files::missing(&dir, "fsr3");
+        let backend = if let Some(hal) = unsafe { device.as_hal::<wgpu_hal::api::Dx12>() } {
+            let raw = hal.raw_device().clone();
+            drop(hal);
+            Backend::Dx12 { ring: ListRing::new(&raw).context("FSR 3's command lists")?, device: raw }
+        } else if let Some(gpu) = VkGpu::of(device) {
+            Backend::Vulkan { ring: VkRing::new(&gpu).context("FSR 3's command buffers")?, gpu }
+        } else {
+            bail!("the game is not running on DirectX 12 or Vulkan (Settings: Graphics API)");
+        };
+        let gpu = backend.gpu();
+        let missing = omsi_cfg::upscaler_files::missing(&dir, "fsr3", gpu);
         if !missing.is_empty() {
             bail!("{} not found in {} (they come with AMD's FidelityFX SDK, Kits/FidelityFX/signedbin)", missing.join(", "), dir.display());
         }
-        api()?;
-        let hal = unsafe { device.as_hal::<wgpu_hal::api::Dx12>() }.ok_or_else(|| anyhow!("the game is not running on DirectX 12 (Settings: Graphics API)"))?;
-        let raw = hal.raw_device().clone();
-        drop(hal);
-        let ring = ListRing::new(&raw).context("FSR 3's command lists")?;
-        log::info!("FSR 3 upscaling: AMD FidelityFX loaded from {}", dir.display());
-        Ok(Upscaler { device: raw, ring, context: None })
+        api(gpu)?;
+        log::info!("FSR 3 upscaling: AMD FidelityFX for {gpu:?} loaded from {}", dir.display());
+        Ok(Upscaler { backend, context: None })
     }
 
     /// AMD's context for a window of `display` pixels (made anew for a new size).
     fn context_for(&mut self, display: (u32, u32)) -> Result<*mut FfxContext> {
-        let api = api()?;
+        let api = api(self.backend.gpu())?;
         if self.context.as_ref().is_some_and(|c| c.display != display) {
             // (the old one may still be in a list on the GPU)
-            self.ring.wait();
+            self.backend.wait();
             if let Some(mut c) = self.context.take() {
                 unsafe { (api.destroy_context)(&mut *c.context, std::ptr::null()) };
             }
@@ -319,82 +427,112 @@ impl Upscaler {
                 // (the picture is the finished, tone-mapped one, sRGB-encoded: see `upscale`)
                 CreateUpscale { header: Header::new(CREATE_UPSCALE), flags: UPSCALE_DEPTH_INVERTED | UPSCALE_NON_LINEAR_COLORSPACE, max_render_size: size, max_upscale_size: size, message: std::ptr::null() },
                 CreateVersion { header: Header::new(CREATE_UPSCALE_VERSION), version: UPSCALER_VERSION },
-                CreateBackendDx12 { header: Header::new(CREATE_BACKEND_DX12), device: self.device.as_raw() },
             ));
-            create.1.header.next = &create.2.header;
+            let backend = match &self.backend {
+                Backend::Dx12 { device, .. } => BackendDesc::Dx12(Box::new(CreateBackendDx12 { header: Header::new(CREATE_BACKEND_DX12), device: device.as_raw() })),
+                Backend::Vulkan { gpu, .. } => BackendDesc::Vulkan(Box::new(CreateBackendVk {
+                    header: Header::new(CREATE_BACKEND_VK),
+                    device: gpu.device.handle(),
+                    physical_device: gpu.physical,
+                    get_device_proc_addr: gpu.get_device_proc_addr,
+                })),
+            };
+            create.1.header.next = match &backend {
+                BackendDesc::Dx12(b) => &b.header,
+                BackendDesc::Vulkan(b) => &b.header,
+            };
             create.0.header.next = &create.1.header;
             let mut context: Box<FfxContext> = Box::new(std::ptr::null_mut());
             check("creating the FSR 3 upscaling context", unsafe { (api.create_context)(&mut *context, &create.0.header, std::ptr::null()) })?;
             log::info!("FSR 3 upscaling: {}x{}", display.0, display.1);
-            self.context = Some(UpscaleContext { context, display, _create: create });
+            self.context = Some(UpscaleContext { context, display, _create: create, _backend: backend });
         }
         Ok(&mut *self.context.as_mut().expect("made above").context)
     }
 
-    /// Upscales this frame into `inputs.output`: recorded into a command list of ours and put
-    /// on wgpu's queue, after the submit that drew the inputs.
+    /// Upscales this frame into `inputs.output`: recorded into a command list (or buffer) of
+    /// ours and put on wgpu's queue, after the submit that drew the inputs.
     pub fn upscale(&mut self, queue: &wgpu::Queue, inputs: &Inputs, c: &FrameConstants) -> Result<()> {
-        let api = api()?;
+        let gpu = self.backend.gpu();
+        let api = api(gpu)?;
         let context = self.context_for(inputs.output_size)?;
-        let queue_hal = unsafe { queue.as_hal::<wgpu_hal::api::Dx12>() }.ok_or_else(|| anyhow!("no Direct3D 12 queue under wgpu's"))?;
-        let raw_queue = queue_hal.as_raw().clone();
-        drop(queue_hal);
         // (the picture read as plain UNORM and FSR left to work on those numbers as they are -
         // the context's non-linear flag - so it hands back the same sRGB-encoded numbers, as
         // DLSS does)
-        let mut color = resource(inputs.color, STATE_RENDER_TARGET)?;
+        let mut color = resource_on(gpu, inputs.color, STATE_RENDER_TARGET)?;
         color.description.format = match inputs.color.format().remove_srgb_suffix() {
             wgpu::TextureFormat::Bgra8Unorm => FORMAT_B8G8R8A8_UNORM,
             wgpu::TextureFormat::Rgba8Unorm => FORMAT_R8G8B8A8_UNORM,
             f => bail!("FSR 3 upscaling does not take a picture in {f:?}"),
         };
-        let depth = resource(inputs.depth, STATE_DEPTH_ATTACHMENT)?;
-        let motion_vectors = resource(inputs.motion, STATE_RENDER_TARGET)?;
-        let reactive = resource(inputs.mask, STATE_RENDER_TARGET)?;
-        let output = resource(inputs.output, STATE_RENDER_TARGET)?;
-        let list = self.ring.begin()?;
-        let desc = DispatchUpscale {
-            header: Header::new(DISPATCH_UPSCALE),
-            command_list: list.as_raw(),
-            color,
-            depth,
-            motion_vectors,
-            exposure: Resource::NONE,
-            // (glass, its reflections, the rain on it: FSR leans on this frame there instead of
-            // the history, see `vs_mask` and `fs_glass_mask_fsr`)
-            reactive,
-            transparency_and_composition: Resource::NONE,
-            output,
-            jitter_offset: Coords { x: c.jitter[0], y: c.jitter[1] },
-            // (the motion is in pixels already)
-            motion_vector_scale: Coords { x: 1.0, y: 1.0 },
-            render_size: Dimensions { width: inputs.render_size.0, height: inputs.render_size.1 },
-            upscale_size: Dimensions { width: inputs.output_size.0, height: inputs.output_size.1 },
-            // (a little of FSR's own sharpening: its upscaled picture is soft otherwise)
-            enable_sharpening: inputs.render_size != inputs.output_size,
-            sharpness: 0.3,
-            frame_time_delta: c.frame_ms,
-            pre_exposure: 1.0,
-            reset: c.reset,
-            camera_near: c.near,
-            camera_far: c.far,
-            camera_fov_vertical: c.fov,
-            view_space_to_meters: 1.0,
-            // (not NON_LINEAR_COLOR_SRGB: with it FSR takes the input to linear and hands it
-            // back linear, which is then shown as if it were sRGB, the whole picture too dark)
-            flags: 0,
+        let depth = resource_on(gpu, inputs.depth, STATE_DEPTH_ATTACHMENT)?;
+        let motion_vectors = resource_on(gpu, inputs.motion, STATE_RENDER_TARGET)?;
+        let reactive = resource_on(gpu, inputs.mask, STATE_RENDER_TARGET)?;
+        let output = resource_on(gpu, inputs.output, STATE_RENDER_TARGET)?;
+        let dispatch = |command_list: *mut c_void| {
+            let desc = DispatchUpscale {
+                header: Header::new(DISPATCH_UPSCALE),
+                command_list,
+                color,
+                depth,
+                motion_vectors,
+                exposure: Resource::NONE,
+                // (glass, its reflections, the rain on it: FSR leans on this frame there instead
+                // of the history, see `vs_mask` and `fs_glass_mask_fsr`)
+                reactive,
+                transparency_and_composition: Resource::NONE,
+                output,
+                jitter_offset: Coords { x: c.jitter[0], y: c.jitter[1] },
+                // (the motion is in pixels already)
+                motion_vector_scale: Coords { x: 1.0, y: 1.0 },
+                render_size: Dimensions { width: inputs.render_size.0, height: inputs.render_size.1 },
+                upscale_size: Dimensions { width: inputs.output_size.0, height: inputs.output_size.1 },
+                // (a little of FSR's own sharpening: its upscaled picture is soft otherwise)
+                enable_sharpening: inputs.render_size != inputs.output_size,
+                sharpness: 0.3,
+                frame_time_delta: c.frame_ms,
+                pre_exposure: 1.0,
+                reset: c.reset,
+                camera_near: c.near,
+                camera_far: c.far,
+                camera_fov_vertical: c.fov,
+                view_space_to_meters: 1.0,
+                // (not NON_LINEAR_COLOR_SRGB: with it FSR takes the input to linear and hands it
+                // back linear, which is then shown as if it were sRGB, the whole picture too dark)
+                flags: 0,
+            };
+            check("FSR 3 upscaling", unsafe { (api.dispatch)(context, &desc.header) })
         };
-        let recorded = check("FSR 3 upscaling", unsafe { (api.dispatch)(context, &desc.header) });
         // (submitted either way: an empty list is harmless and keeps the fence right)
-        self.ring.submit(&raw_queue)?;
-        recorded
+        match &mut self.backend {
+            Backend::Dx12 { ring, .. } => {
+                let queue_hal = unsafe { queue.as_hal::<wgpu_hal::api::Dx12>() }.ok_or_else(|| anyhow!("no Direct3D 12 queue under wgpu's"))?;
+                let raw_queue = queue_hal.as_raw().clone();
+                drop(queue_hal);
+                let list = ring.begin()?;
+                let recorded = dispatch(list.as_raw());
+                ring.submit(&raw_queue)?;
+                recorded
+            }
+            Backend::Vulkan { ring, .. } => {
+                let raw_queue = super::vulkan::queue(queue)?;
+                let buffer = ring.begin()?;
+                let recorded = dispatch(vk::Handle::as_raw(buffer) as *mut c_void);
+                ring.submit(raw_queue)?;
+                recorded
+            }
+        }
     }
 }
 
 impl Drop for Upscaler {
     fn drop(&mut self) {
-        self.ring.wait();
-        if let (Some(api), Some(mut c)) = (API.get().and_then(|a| a.as_ref()), self.context.take()) {
+        self.backend.wait();
+        let api = match self.backend.gpu() {
+            Gpu::Dx12 => &API_DX12,
+            Gpu::Vulkan => &API_VK,
+        };
+        if let (Some(api), Some(mut c)) = (api.get().and_then(|a| a.as_ref()), self.context.take()) {
             unsafe { (api.destroy_context)(&mut *c.context, std::ptr::null()) };
         }
     }

@@ -5,6 +5,7 @@ use crate::*;
 
 mod fallbacks;
 mod open;
+mod upscaler_device;
 mod timers;
 
 pub use fallbacks::*;
