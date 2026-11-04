@@ -1307,4 +1307,10 @@ fn a_door_program_without_green_holds_its_stop_in_state_four() {
     c.advance(3.0);
     assert_eq!(c.time, 1.5);
     assert!(c.held);
+    let mut gdr = TrafficLightController::new(vec![vec![(0, 1.0), (4, 2.0), (8, 1.0)]], 4.0);
+    gdr.stops = c.stops.clone();
+    gdr.start(0.0);
+    gdr.request[0] = true;
+    gdr.advance(3.0);
+    assert!(!gdr.held, "green with yellow (state 8) is a go phase: the changeover to it is not held");
 }
