@@ -491,7 +491,7 @@ impl SceneryState {
             if !o.text_vars.is_empty() {
                 let _ = o.inst.take_refresh_strings();
             }
-            if !o.text_vars.is_empty() && *dist < TEXT_NEAR {
+            if !o.text_vars.is_empty() && (*dist < TEXT_NEAR || o.text_last.iter().any(Option::is_none)) {
                 for (k, (name, last)) in o.text_vars.iter().zip(o.text_last.iter_mut()).enumerate() {
                     let text = o.inst.str_var(name);
                     if last.as_deref() != Some(text) {
