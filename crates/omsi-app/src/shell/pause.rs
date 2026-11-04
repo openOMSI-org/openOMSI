@@ -291,7 +291,9 @@ fn row_h(id: &str, label: &str) -> f32 {
 /// the page is wide enough, the headings of the list as the panels' section titles.
 fn settings_rows(sh: &mut Shell, v: &PauseView, list: &ListView, body: Rect, anchor: &mut Option<Rect>) {
     let items = &list.items;
-    let groups = search::filter_groups(items, list.tabs.is_none(), &sh.settings_search.query);
+    let hide_back = list.tabs.is_none();
+    let back = hide_back.then(|| items.iter().position(|&(id, label)| id == "back" && plain(parse_row(label).name).0 == omsi_ui::tr("Back").as_ref())).flatten();
+    let groups = omsi_settings_ui::filter_groups(items, crate::game_lists::HEADING, back, &sh.settings_search.query);
     sh.settings_search.visible = groups.iter().flatten().copied().filter(|&k| items[k].0 != crate::game_lists::HEADING).collect();
     if groups.is_empty() {
         sh.ui.text_in(&omsi_ui::tr("No matching settings"), body, 14.0, Weight::Regular, th().ink_muted, Align::Center);
@@ -356,33 +358,13 @@ fn settings_rows(sh: &mut Shell, v: &PauseView, list: &ListView, body: Rect, anc
 }
 
 fn settings_columns(groups: Vec<Vec<usize>>, two: bool, items: &[(&str, &str)]) -> Vec<Vec<Vec<usize>>> {
-    if !two || groups.len() < 2 {
-        return vec![groups];
-    }
-    let heights: Vec<f32> = groups
-        .iter()
-        .map(|group| group.iter().map(|&k| row_h(items[k].0, items[k].1)).sum::<f32>() + 40.0)
-        .collect();
-    let total: f32 = heights.iter().sum();
-    let split = (1..groups.len())
-        .min_by(|&a, &b| {
-            let left_a: f32 = heights[..a].iter().sum();
-            let left_b: f32 = heights[..b].iter().sum();
-            (left_a - total * 0.5).abs().total_cmp(&(left_b - total * 0.5).abs())
-        })
-        .unwrap();
-    vec![groups[..split].to_vec(), groups[split..].to_vec()]
+    omsi_settings_ui::settings_columns(groups, two, |k| row_h(items[k].0, items[k].1))
 }
 
-/// Keep section boundaries and original action indices independent of screen width.
+#[cfg(test)]
 fn settings_groups(items: &[(&str, &str)], hide_back: bool) -> Vec<Vec<usize>> {
-    let mut groups: Vec<Vec<usize>> = Vec::new();
-    for (k, &(id, label)) in items.iter().enumerate() {
-        if hide_back && id == "back" && plain(parse_row(label).name).0 == omsi_ui::tr("Back").as_ref() { continue; }
-        if groups.is_empty() || id == crate::game_lists::HEADING { groups.push(Vec::new()); }
-        groups.last_mut().unwrap().push(k);
-    }
-    groups
+    let back = hide_back.then(|| items.iter().position(|&(id, label)| id == "back" && plain(parse_row(label).name).0 == omsi_ui::tr("Back").as_ref())).flatten();
+    omsi_settings_ui::settings_groups(items, crate::game_lists::HEADING, back)
 }
 
 /// One row of a settings window: its name (and description) on the left, its control on

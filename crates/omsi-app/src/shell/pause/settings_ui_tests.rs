@@ -72,14 +72,6 @@ fn pause_nested_groups_preserve_original_indices_and_hide_back() {
 }
 
 #[test]
-fn pause_settings_columns_keep_each_card_group_intact() {
-    let items = [("#", "First"), ("a", "A"), ("#", "Second"), ("b", "B"), ("#", "Third"), ("c", "C")];
-    let groups = settings_groups(&items, false);
-    let columns = settings_columns(groups, true, &items);
-    assert_eq!(columns, vec![vec![vec![0, 1]], vec![vec![2, 3], vec![4, 5]]]);
-}
-
-#[test]
 fn pause_nested_rows_keep_original_mouse_action_indices() {
     let rows = fixture(false);
     let rail = Vec::new();
@@ -600,15 +592,6 @@ fn render_pause_date_calendar_preview() {
 }
 
 #[test]
-fn settings_search_preserves_action_indices_and_drops_empty_cards() {
-    let items = [("#", "Map"), ("a", "Navigator\u{1f}s\u{1f}on\u{1f}Route map"), ("#", "Audio"), ("b", "Volume\u{1f}v\u{1f}50%\u{1f}Engine sound")];
-    assert_eq!(search::filter_groups(&items, false, "NAVIGATOR"), vec![vec![0, 1]]);
-    assert_eq!(search::filter_groups(&items, false, "engine"), vec![vec![2, 3]]);
-    assert!(search::filter_groups(&items, false, "missing").is_empty());
-    assert_eq!(search::filter_groups(&items, false, "  "), settings_groups(&items, false));
-}
-
-#[test]
 fn settings_search_keyboard_input_does_not_dispatch_game_actions() {
     use winit::keyboard::KeyCode as K;
     let mut sh = Shell::new();
@@ -660,13 +643,19 @@ fn settings_search_toolbar_types_and_resets_when_page_changes() {
 }
 
 #[test]
-fn settings_search_stays_in_the_title_row_when_wide_and_stacks_when_narrow() {
-    let wide = search::toolbar_layout(Rect::new(300.0, 28.0, 1100.0, 800.0), Rect::new(300.0, 98.0, 1100.0, 700.0));
-    assert_eq!(wide.0.y, 32.0);
-    assert_eq!(wide.0.right(), 1356.0);
-    assert_eq!(wide.1, 0.0);
-
-    let narrow = search::toolbar_layout(Rect::new(0.0, 28.0, 420.0, 700.0), Rect::new(0.0, 98.0, 420.0, 600.0));
-    assert_eq!(narrow.0.y, 98.0);
-    assert_eq!(narrow.1, 48.0);
+fn settings_search_closes_phone_keyboard_and_keeps_desktop_text() {
+    use clap::Parser;
+    use winit::keyboard::KeyCode as K;
+    let mut app = crate::assemble_app(crate::cli::Args::parse_from(["openomsi"]), crate::settings::Settings::default());
+    app.menus.game_menu = Some(0);
+    app.open_list(crate::game_lists::ListKind::Options(0));
+    app.shell.ui.focus = Some(id_of("pause-settings-search"));
+    crate::platform::TEXT_INPUT_ON.with(|flag| flag.set(false));
+    crate::platform::phone_keyboard(None, true);
+    assert_eq!(crate::platform::TEXT_INPUT_ON.with(|flag| flag.get()), crate::platform::MOBILE);
+    assert!(app.settings_search_key(K::KeyE, Some("é")));
+    assert_eq!(app.shell.ui.input.text, "é");
+    assert!(app.settings_search_key(K::Escape, None));
+    assert!(!crate::platform::PHONE_KEYBOARD_ON.with(|flag| flag.get()));
+    assert!(!crate::platform::TEXT_INPUT_ON.with(|flag| flag.get()));
 }

@@ -1,43 +1,13 @@
-//! Presentation-only filtering; actions always retain their original list indices.
+//! Search input integration for the pause settings pages.
 use super::*;
-
-#[derive(Default)]
-pub(crate) struct State {
-    pub page: String,
-    pub query: String,
-    pub visible: Vec<usize>,
-}
-
-pub(super) fn filter_groups(items: &[(&str, &str)], hide_back: bool, query: &str) -> Vec<Vec<usize>> {
-    let query = query.trim().to_lowercase();
-    let mut groups = settings_groups(items, hide_back);
-    if query.is_empty() { return groups; }
-    for group in &mut groups {
-        group.retain(|&k| {
-            if items[k].0 == crate::game_lists::HEADING { return true; }
-            let row = parse_row(items[k].1);
-            omsi_ui::kit::matches(row.name, &query) || omsi_ui::kit::matches(row.desc, &query)
-        });
-    }
-    groups.retain(|g| g.iter().any(|&k| items[k].0 != crate::game_lists::HEADING));
-    groups
-}
-
-pub(super) fn toolbar_layout(area: Rect, body: Rect) -> (Rect, f32) {
-    if area.w >= 760.0 {
-        let width = (area.w * 0.34).clamp(220.0, 360.0);
-        (Rect::new(area.right() - width - 44.0, area.y + 4.0, width, 36.0), 0.0)
-    } else {
-        (Rect::new(body.x, body.y, (body.w - 44.0).max(40.0), 36.0), 48.0)
-    }
-}
+pub(crate) type State = omsi_settings_ui::SearchState;
 
 pub(super) fn toolbar(sh: &mut Shell, list: &ListView, area: Rect, body: &mut Rect) {
     if sh.settings_search.page != list.key {
         sh.settings_search = State { page: list.key.clone(), ..Default::default() };
         sh.ui.focus = None;
     }
-    let (field, body_offset) = toolbar_layout(area, *body);
+    let (field, body_offset) = omsi_settings_ui::toolbar_layout(area, *body);
     let changed = sh.ui.text_input("pause-settings-search", field, &mut sh.settings_search.query, &omsi_ui::tr("Search settings"), Some("search"));
     let clear = sh.ui.icon_button("pause-settings-search-clear", Vec2::new(field.right() + 22.0, field.center().y), 18.0, "close", "Clear search");
     if clear { sh.settings_search.query.clear(); sh.ui.focus = None; }
@@ -81,7 +51,7 @@ impl crate::app::App {
         self.shell.ui.input.ctrl = self.input.keys.contains(&K::ControlLeft) || self.input.keys.contains(&K::ControlRight);
         self.shell.ui.input.alt = self.input.keys.contains(&K::AltLeft) || self.input.keys.contains(&K::AltRight);
         key(&mut self.shell, code, text);
-        if !focused(&self.shell) { crate::platform::text_input(self.window.as_deref(), false); }
+        if !focused(&self.shell) { crate::platform::phone_keyboard(self.window.as_deref(), false); }
         true
     }
 }

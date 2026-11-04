@@ -170,7 +170,6 @@ impl ApplicationHandler for App {
             WindowEvent::KeyboardInput { ref event, .. }
                 if event.state == ElementState::Released
                     && matches!(event.physical_key, PhysicalKey::Code(c) if input_script::is_modifier(c) && !self.input.keys.contains(&c)) => {}
-            WindowEvent::Ime(winit::event::Ime::Commit(text)) if crate::shell::pause::search::focused(&self.shell) => self.shell.ui.input.text.push_str(&text),
             WindowEvent::KeyboardInput { event, .. } => {
                 // a plugin's text field being typed into takes the keys pressed (their
                 // releases go on, so that nothing held stays held)

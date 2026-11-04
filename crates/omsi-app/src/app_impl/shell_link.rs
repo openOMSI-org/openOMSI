@@ -103,7 +103,7 @@ impl App {
         self.shell.finish();
         let focused_now = crate::shell::pause::search::focused(&self.shell);
         if search_focused != focused_now {
-            crate::platform::text_input(self.window.as_deref(), focused_now);
+            crate::platform::phone_keyboard(self.window.as_deref(), focused_now);
         }
     }
 
