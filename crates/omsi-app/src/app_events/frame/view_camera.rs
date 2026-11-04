@@ -61,11 +61,8 @@ impl App {
                 // `crate::head_filter`; with head tracking switched off or the tracker lost the
                 // view glides home - then the sensitivities and inversions)
                 let sample = self.input.headtrack.as_ref().and_then(|h| h.sample()).filter(|_| self.settings.head_tracking);
-                let calm = if self.settings.head_tracking_source == "opentrack" {
-                    crate::head_filter::Params::OPENTRACK
-                } else {
-                    crate::head_filter::Params::tobii(self.settings.head_tracking_smoothing, self.settings.head_tracking_dead_zone)
-                };
+                let from_tobii = sample.as_ref().map_or(self.settings.head_tracking_source != "opentrack", |s| s.tobii);
+                let calm = crate::head_filter::Params::for_poses(from_tobii, self.settings.head_tracking_smoothing, self.settings.head_tracking_dead_zone);
                 let tracked = self.input.head_filter.step(sample.as_ref(), std::time::Instant::now(), calm).filter(|_| matches!(self.view.as_str(), "driver" | "pax"));
                 #[cfg(windows)]
                 let vr_on = self.xr.vr.is_some();
