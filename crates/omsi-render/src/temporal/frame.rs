@@ -433,10 +433,12 @@ impl Renderer {
             frame_ms: frame.dt * 1000.0,
         };
         let inputs = Inputs { color: &t.color, depth: &ao.depth_tex, motion: &t.motion, mask: &t.mask, output: &t.output_tex, render_size: render, output_size: full, views: [&t.color_raw_view, &ao.depth_view, &t.motion_view, &t.mask_view, &t.output_view] };
+        let clock = std::time::Instant::now();
         let result = match &mut d.runtime {
             Runtime::Dlss(r) => r.evaluate(&self.queue, quality, &inputs, &constants),
             Runtime::Fsr3(r) => r.upscale(&self.queue, &inputs, &constants),
         };
+        let upscaled = clock.elapsed();
         let ok = match result {
             Ok(()) => true,
             Err(e) => {
@@ -487,6 +489,11 @@ impl Renderer {
             }
         }
         self.queue.submit(Some(encoder.finish()));
+        if self.profiling {
+            let mut stats = self.stats.borrow_mut();
+            *stats.entry("upscale").or_default() += upscaled.as_secs_f64();
+            *stats.entry("upscale hud").or_default() += (clock.elapsed() - upscaled).as_secs_f64();
+        }
         if !ok {
             self.temporal_failed = true;
         }
