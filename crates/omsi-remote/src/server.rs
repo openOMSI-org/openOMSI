@@ -10,6 +10,8 @@ include!(concat!(env!("OUT_DIR"), "/icons.rs"));
 
 const MAX_CONNECTIONS: usize = 96;
 const MAX_PER_ADDRESS: usize = 24;
+const MAX_UNPAIRED: usize = 16;
+const MAX_UNPAIRED_PER_ADDRESS: usize = 3;
 const HEAD_WITHIN: Duration = Duration::from_secs(5);
 const MAX_HEAD: usize = 8192;
 fn csp(host: &str) -> String {
@@ -31,6 +33,35 @@ static FILES: &[(&str, &str, &str)] = &[
 
 static APP_ICON: &[u8] = include_bytes!("../../../assets/icons/app/openomsi-256.png");
 
+pub(crate) fn nearby(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => v4.is_loopback() || v4.is_private() || v4.is_link_local() || (v4.octets()[0] == 100 && v4.octets()[1] & 0xc0 == 64),
+        IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
+            Some(v4) => nearby(IpAddr::V4(v4)),
+            None => v6.is_loopback() || v6.is_unique_local() || v6.is_unicast_link_local(),
+        },
+    }
+}
+
+pub(crate) fn admit_unpaired(slots: &Mutex<HashMap<IpAddr, usize>>, ip: IpAddr) -> bool {
+    let mut slots = lock(slots);
+    if slots.values().sum::<usize>() >= MAX_UNPAIRED || slots.get(&ip).is_some_and(|n| *n >= MAX_UNPAIRED_PER_ADDRESS) {
+        return false;
+    }
+    *slots.entry(ip).or_default() += 1;
+    true
+}
+
+pub(crate) fn leave_unpaired(slots: &Mutex<HashMap<IpAddr, usize>>, ip: IpAddr) {
+    let mut slots = lock(slots);
+    if let Some(n) = slots.get_mut(&ip) {
+        *n = n.saturating_sub(1);
+        if *n == 0 {
+            slots.remove(&ip);
+        }
+    }
+}
+
 pub(crate) fn start(port: u16, shared: Arc<Shared>) -> std::io::Result<u16> {
     let listener = TcpListener::bind(("0.0.0.0", port))?;
     listener.set_nonblocking(true)?;
@@ -42,6 +73,10 @@ pub(crate) fn start(port: u16, shared: Arc<Shared>) -> std::io::Result<u16> {
             match listener.accept() {
                 Ok((stream, peer)) => {
                     let ip = peer.ip();
+                    if !nearby(ip) {
+                        log::info!("remote cockpit: {ip} is not on this network, refused");
+                        continue;
+                    }
                     {
                         let mut counts = lock(&by_address);
                         if open.load(Ordering::Relaxed) >= MAX_CONNECTIONS || counts.get(&ip).is_some_and(|n| *n >= MAX_PER_ADDRESS) {

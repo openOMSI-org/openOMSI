@@ -3,6 +3,7 @@ mod json;
 mod layouts;
 pub mod nav;
 mod pairing;
+mod queue;
 mod server;
 mod session;
 pub mod sign;
@@ -14,7 +15,6 @@ mod texts;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 pub use skins::extract as extract_skins;
@@ -71,7 +71,7 @@ pub(crate) struct Shared {
     pub feed: Mutex<Feed>,
     pub vehicle: Mutex<Option<Arc<Vehicle>>>,
     pub clients: AtomicUsize,
-    pub commands: Mutex<Sender<Command>>,
+    pub commands: Mutex<queue::Queue>,
     pub held: Mutex<HashMap<u64, Vec<String>>>,
     pub sessions: AtomicU64,
     pub paired: AtomicU64,
@@ -80,6 +80,7 @@ pub(crate) struct Shared {
     pub sign: Mutex<Option<Arc<Vec<u8>>>>,
     pub sign_seq: AtomicU64,
     pub drive: Mutex<Option<Drive>>,
+    pub unpaired: Mutex<HashMap<std::net::IpAddr, usize>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -89,6 +90,7 @@ pub struct Drive {
     pub steering: f32,
     pub throttle: f32,
     pub brake: f32,
+    pub held: bool,
 }
 
 pub(crate) const DRIVE_FRESH: std::time::Duration = std::time::Duration::from_millis(250);
@@ -113,21 +115,19 @@ impl Shared {
         *lock(&self.pin) = pairing::new_pin();
     }
 
-    pub(crate) fn send(&self, c: Command) {
-        let _ = lock(&self.commands).send(c);
+    pub(crate) fn send(&self, c: Command) -> bool {
+        lock(&self.commands).push(c)
     }
 }
 
 pub struct Remote {
     shared: Arc<Shared>,
-    commands: Receiver<Command>,
     port: u16,
     last_state: serde_json::Value,
 }
 
 impl Remote {
     pub fn start(port: u16, dir: PathBuf) -> std::io::Result<Remote> {
-        let (tx, rx) = std::sync::mpsc::channel();
         let shared = Arc::new(Shared {
             pin: Mutex::new(pairing::new_pin()),
             pairing_open: AtomicBool::new(false),
@@ -137,7 +137,7 @@ impl Remote {
             feed: Mutex::new(Feed::default()),
             vehicle: Mutex::new(None),
             clients: AtomicUsize::new(0),
-            commands: Mutex::new(tx),
+            commands: Mutex::new(queue::Queue::default()),
             held: Mutex::new(HashMap::new()),
             sessions: AtomicU64::new(0),
             paired: AtomicU64::new(0),
@@ -146,11 +146,12 @@ impl Remote {
             sign: Mutex::new(None),
             sign_seq: AtomicU64::new(0),
             drive: Mutex::new(None),
+            unpaired: Mutex::new(HashMap::new()),
         });
         shared.rebuild_vehicle();
         let port = server::start(port, shared.clone())?;
         log::info!("remote cockpit: listening on port {port}");
-        Ok(Remote { shared, commands: rx, port, last_state: serde_json::Value::Null })
+        Ok(Remote { shared, port, last_state: serde_json::Value::Null })
     }
 
     pub fn port(&self) -> u16 {
@@ -248,7 +249,11 @@ impl Remote {
     }
 
     pub fn take_commands(&self) -> Vec<Command> {
-        self.commands.try_iter().collect()
+        lock(&self.shared.commands).take(queue::PER_FRAME)
+    }
+
+    pub fn take_all_commands(&self) -> Vec<Command> {
+        lock(&self.shared.commands).take(usize::MAX)
     }
 
     pub fn drive(&self) -> Option<Drive> {

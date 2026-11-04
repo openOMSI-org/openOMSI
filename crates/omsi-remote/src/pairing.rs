@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 const LOCK_AFTER: usize = 5;
-const LOCK_ALL_AFTER: usize = 30;
+const RENEW_AFTER: usize = 30;
 const LOCK_WINDOW: Duration = Duration::from_secs(120);
 const MAX_DEVICES: usize = 32;
 
@@ -88,7 +88,7 @@ impl Devices {
     fn locked(&mut self, from: IpAddr) -> bool {
         let from = network(from);
         self.failures.retain(|(_, t)| t.elapsed() < LOCK_WINDOW);
-        self.failures.len() >= LOCK_ALL_AFTER || self.failures.iter().filter(|(ip, _)| *ip == from).count() >= LOCK_AFTER
+        self.failures.iter().filter(|(ip, _)| *ip == from).count() >= LOCK_AFTER
     }
 
     pub(crate) fn pair(&mut self, pin: &str, wanted: &str, name: &str, from: IpAddr) -> Pairing {
@@ -97,7 +97,7 @@ impl Devices {
         }
         if !same(pin, wanted.trim()) {
             self.failures.push((network(from), Instant::now()));
-            return Pairing::Wrong { renew: self.failures.len() == LOCK_ALL_AFTER };
+            return Pairing::Wrong { renew: self.failures.len() % RENEW_AFTER == 0 };
         }
         let token = hex(&random_bytes::<32>());
         let name: String = name.chars().filter(|c| !c.is_control()).take(48).collect();

@@ -44,12 +44,14 @@ impl RemotePanel {
                     ],
                     RowAlign::Start,
                 ));
+                c.push(note(&tr("Use it only on a network you trust, such as your home Wi-Fi: what it sends is not encrypted."), pal));
                 c.push(note(&tr("A device that does not connect: allow openOMSI in this computer's firewall, and check that both are on the same network."), pal));
-                c.push(grow_row(vec![button("forget", &tr("Forget paired devices"), Some("delete")), button("off", &tr("Switch off"), Some("power_settings_new")), button("close", &tr("Close"), Some("close"))]));
+                c.push(grow_row(vec![button("forget", &tr("Forget paired devices"), Some("delete"))]));
+                c.push(grow_row(vec![button("off", &tr("Switch off"), Some("power_settings_new")), button("close", &tr("Close"), Some("close"))]));
             }
             None => {
                 if remote.failed() {
-                    c.push(Element { color: Some(theme_color(pal.danger)), ..text(&app.remote_description(), 13.0, Weight::Medium) });
+                    c.push(Element { color: Some(theme_color(pal.danger)), ..text(&tr(&app.remote_description()), 13.0, Weight::Medium) });
                 }
                 c.push(note(&tr("Nothing is reachable from the network while it is off."), pal));
                 c.push(grow_row(vec![button("on", &tr("Switch on"), Some("power_settings_new")), button("close", &tr("Close"), Some("close"))]));

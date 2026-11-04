@@ -31,7 +31,8 @@ fn commands_are_read_and_odd_names_refused() {
     assert_eq!(c(json!({ "t": "line", "line": "" })), None);
     assert_eq!(c(json!({ "t": "game", "name": "view_set_outside" })), Some(Command::Game("view_set_outside".into())));
     assert_eq!(c(json!({ "t": "nope" })), None);
-    assert_eq!(json::drive(&json!({ "s": 0.25, "g": 2.0, "b": -1.0 })), Some((0.25, 1.0, 0.0)));
+    assert_eq!(json::drive(&json!({ "s": 0.25, "g": 2.0, "b": -1.0 })), Some((0.25, 1.0, 0.0, false)));
+    assert_eq!(json::drive(&json!({ "s": -0.5, "g": 0.0, "b": 0.0, "h": 1 })), Some((-0.5, 0.0, 0.0, true)));
     assert_eq!(json::drive(&json!({ "s": "left", "g": 0.0, "b": 0.0 })), None);
     assert_eq!(json::drive(&json!({ "s": 0.0, "g": 0.0 })), None);
 }
@@ -132,11 +133,11 @@ fn pairing_needs_the_code_and_closes_after_five_wrong_ones() {
     }
     assert!(matches!(d.pair("123456", "123456", "", a), Pairing::Locked));
     assert!(matches!(d.pair("123456", "123456", "", b), Pairing::Paired(_)));
-    for k in 0..25 {
+    for k in 0..55 {
         let ip = std::net::IpAddr::from([10, 0, 0, k]);
-        assert!(matches!(d.pair("123456", "000000", "", ip), Pairing::Wrong { renew } if renew == (k == 24)));
+        assert!(matches!(d.pair("123456", "000000", "", ip), Pairing::Wrong { renew } if renew == (k == 24 || k == 54)));
     }
-    assert!(matches!(d.pair("123456", "123456", "", b), Pairing::Locked));
+    assert!(matches!(d.pair("123456", "123456", "", b), Pairing::Paired(_)));
     d.forget_all();
     assert!(!Devices::load(path).knows(&token));
 }
@@ -312,4 +313,144 @@ fn the_socket_is_only_opened_by_a_page_reached_by_its_address() {
     for host in ["evil.example:8642", "evil.example", "192.168.1.20.evil.example:8642", ""] {
         assert!(!crate::session::local_host(host), "{host}");
     }
+}
+
+#[test]
+fn all_doors_opens_every_door_or_closes_only_the_open_ones() {
+    let t = |v: &[&[&str]]| -> Vec<Vec<String>> { v.iter().map(|g| g.iter().map(|s| s.to_string()).collect()).collect() };
+    let two = t(&[&["bus_doorfront0"], &["bus_doorfront1"]]);
+    assert_eq!(crate::cockpit::all_doors(&two, &[false, false]), ["bus_doorfront0", "bus_doorfront1"]);
+    assert_eq!(crate::cockpit::all_doors(&two, &[false, true]), ["bus_doorfront1"]);
+    let articulated = t(&[&["bus_doorfront0"], &["bus_doorfront1"], &["bus_doorfront2"], &["bus_dooraft"]]);
+    assert_eq!(crate::cockpit::all_doors(&articulated, &[false; 4]), ["bus_doorfront0", "bus_doorfront1", "bus_doorfront2"]);
+    assert_eq!(crate::cockpit::all_doors(&articulated, &[true, false, false, true]), ["bus_doorfront0"]);
+}
+
+#[test]
+fn only_devices_of_the_home_network_are_let_in() {
+    use crate::server::nearby;
+    for ip in ["127.0.0.1", "192.168.1.20", "10.0.0.5", "172.20.1.1", "169.254.3.4", "100.101.102.103", "::1", "fe80::1", "fd12::5", "::ffff:192.168.0.9"] {
+        assert!(nearby(ip.parse().unwrap()), "{ip}");
+    }
+    for ip in ["8.8.8.8", "172.32.0.1", "100.128.0.1", "2001:db8::1", "::ffff:1.1.1.1"] {
+        assert!(!nearby(ip.parse().unwrap()), "{ip}");
+    }
+}
+
+#[test]
+fn unpaired_sockets_have_few_slots_per_address() {
+    use crate::server::{admit_unpaired, leave_unpaired};
+    let slots = std::sync::Mutex::new(std::collections::HashMap::new());
+    let a: std::net::IpAddr = "192.168.1.20".parse().unwrap();
+    assert!((0..3).all(|_| admit_unpaired(&slots, a)));
+    assert!(!admit_unpaired(&slots, a));
+    leave_unpaired(&slots, a);
+    assert!(admit_unpaired(&slots, a));
+    let others: Vec<std::net::IpAddr> = (1..=13).map(|k| std::net::IpAddr::from([192, 168, 2, k])).collect();
+    assert!(others.iter().all(|ip| admit_unpaired(&slots, *ip)));
+    assert!(!admit_unpaired(&slots, "192.168.3.1".parse().unwrap()));
+}
+
+include!("../../../tools/test-support/original_root.rs");
+
+fn door_buttons_hold(bus: &str) -> (Vec<Vec<usize>>, Vec<(Vec<String>, Vec<usize>)>) {
+    let root = original_root();
+    let ty = std::sync::Arc::new(omsi_sim::VehicleType::load(&root, &root.join(bus)).unwrap());
+    let ways = crate::doorways(&ty);
+    let tried = crate::tried_doors(ty, &ways);
+    assert!(!tried.is_empty(), "{bus}: no door button found");
+    for (k, (names, leaves)) in tried.iter().enumerate() {
+        assert!(!leaves.is_empty(), "{bus}: {names:?} opens nothing");
+        assert!(tried[..k].iter().all(|(_, l)| !l.iter().any(|x| leaves.contains(x))), "{bus}: {names:?} opens another button's door");
+    }
+    (ways, tried)
+}
+
+#[test]
+#[ignore]
+fn each_door_button_opens_its_own_door_on_a_solo_and_an_articulated_bus() {
+    let (ways, tried) = door_buttons_hold("Vehicles/MAN_NL_NG/MAN_EN92_main.bus");
+    assert!(ways.len() >= 2 && tried.len() >= 2, "{ways:?} {tried:?}");
+    let (_, tried) = door_buttons_hold("Vehicles/MAN_NL_NG/MAN_GN92_main.bus");
+    let root = original_root();
+    let trail = omsi_sim::VehicleType::load(&root, &root.join("Vehicles/MAN_NL_NG/MAN_GN92_trail.bus")).unwrap();
+    assert!(!crate::doorways(&trail).is_empty(), "the rear section has doorways of its own");
+    assert!(tried.len() >= 2, "{tried:?}");
+}
+
+#[test]
+fn the_command_queue_is_bounded_merges_states_and_always_takes_releases() {
+    let mut q = crate::queue::Queue::default();
+    assert!(q.push(Command::Route(1)) && q.push(Command::Route(2)) && q.push(Command::Indicator(1)) && q.push(Command::Indicator(0)));
+    assert_eq!(q.take(usize::MAX), vec![Command::Route(2), Command::Indicator(0)]);
+    assert!((0..crate::queue::MAX_QUEUED).all(|_| q.push(Command::StartUp)));
+    assert!(!q.push(Command::StartUp));
+    assert!(!q.push(Command::Action { name: "horn".into(), down: true }));
+    assert!(q.push(Command::Action { name: "horn".into(), down: false }));
+    assert_eq!(q.take(crate::queue::PER_FRAME).len(), crate::queue::PER_FRAME);
+    assert_eq!(q.len(), crate::queue::MAX_QUEUED + 1 - crate::queue::PER_FRAME);
+}
+
+fn paired(remote: &Remote, name: &str) -> Client {
+    remote.set_pairing(true);
+    let mut c = Client::open(remote.port());
+    c.send(json!({ "t": "pair", "pin": remote.pin(), "name": name }));
+    c.next("paired");
+    c.next("vehicle");
+    c
+}
+
+#[test]
+fn a_flood_of_commands_stays_bounded_and_still_lets_go_of_what_it_held() {
+    let dir = temp_dir("flood");
+    let remote = Remote::start(0, dir.clone()).unwrap();
+    remote.set_vehicle(Some(Vehicle { key: "Bus/a.bus".into(), name: "Bus A".into(), folder: dir.join("none"), actions: vec!["horn".into()], aliases: Vec::new(), depot: None, doors: Vec::new() }));
+    let mut c = paired(&remote, "flood");
+    c.send(json!({ "t": "act", "name": "horn", "down": true }));
+    assert_eq!(wait_for(&remote, 1), vec![Command::Action { name: "horn".into(), down: true }]);
+    for _ in 0..5000 {
+        if c.0.send(tungstenite::Message::Text(json!({ "t": "startup" }).to_string().into())).is_err() {
+            break;
+        }
+    }
+    let since = Instant::now();
+    while !lock(&remote.shared.held).is_empty() && since.elapsed() < Duration::from_secs(5) {
+        assert!(lock(&remote.shared.commands).len() <= crate::queue::MAX_QUEUED + 1);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(lock(&remote.shared.held).is_empty(), "the flooding device was let go");
+    assert!(remote.take_commands().len() <= crate::queue::PER_FRAME);
+    let rest = remote.take_all_commands();
+    assert!(rest.len() <= crate::queue::MAX_QUEUED + 1);
+    assert_eq!(rest.last(), Some(&Command::Action { name: "horn".into(), down: false }));
+}
+
+#[test]
+fn forgetting_the_devices_and_stopping_act_at_once_under_a_stream_of_commands() {
+    let dir = temp_dir("stream");
+    let remote = Remote::start(0, dir.clone()).unwrap();
+    remote.set_vehicle(Some(Vehicle { key: "Bus/a.bus".into(), name: "Bus A".into(), folder: dir.join("none"), actions: Vec::new(), aliases: Vec::new(), depot: None, doors: Vec::new() }));
+    let mut c = paired(&remote, "stream");
+    for k in 0..5000 {
+        c.send(json!({ "t": "route", "index": k % 7 }));
+    }
+    assert!(lock(&remote.shared.commands).len() <= 1, "routes are merged");
+    let since = Instant::now();
+    remote.forget_devices();
+    assert_eq!(c.next("denied")["reason"], "token");
+    assert!(since.elapsed() < Duration::from_secs(2));
+
+    let mut d = paired(&remote, "stream again");
+    for k in 0..5000 {
+        d.send(json!({ "t": "route", "index": k % 7 }));
+    }
+    let since = Instant::now();
+    drop(remote);
+    loop {
+        match d.0.read() {
+            Ok(tungstenite::Message::Close(_)) | Err(_) => break,
+            Ok(_) => assert!(since.elapsed() < Duration::from_secs(2), "the session ends when the game stops"),
+        }
+    }
+    assert!(since.elapsed() < Duration::from_secs(2));
 }

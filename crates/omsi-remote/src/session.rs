@@ -17,6 +17,7 @@ const RELEASE_AFTER: Duration = Duration::from_secs(4);
 const SILENT_FOR: Duration = Duration::from_secs(30);
 const PING_EVERY: Duration = Duration::from_secs(1);
 const MAX_BACKLOG: usize = 4 << 20;
+const READ_BUDGET: usize = 32;
 
 type Ws = WebSocket<TcpStream>;
 
@@ -119,10 +120,10 @@ fn handle(ws: &mut Ws, text: &str, shared: &Shared, id: u64) -> Result<(), Strin
         return Ok(());
     }
     if t == "drive" {
-        if let Some((steering, throttle, brake)) = json::drive(&v) {
+        if let Some((steering, throttle, brake, held)) = json::drive(&v) {
             let mut drive = lock(&shared.drive);
             if drive.is_none_or(|d| d.session == id || d.at.elapsed() > crate::STEER_FRESH) {
-                *drive = Some(crate::Drive { session: id, at: Instant::now(), steering, throttle, brake });
+                *drive = Some(crate::Drive { session: id, at: Instant::now(), steering, throttle, brake, held });
             }
         }
         return Ok(());
@@ -141,8 +142,10 @@ fn handle(ws: &mut Ws, text: &str, shared: &Shared, id: u64) -> Result<(), Strin
             }
         }
     }
-    shared.send(cmd);
-    Ok(())
+    match shared.send(cmd) {
+        true => Ok(()),
+        false => Err("more commands than the game takes".into()),
+    }
 }
 
 fn release(shared: &Shared, id: u64) {
@@ -169,13 +172,9 @@ fn pump(ws: &mut Ws, shared: &Shared, id: u64) -> Result<(), String> {
             let _ = send(ws, &j!({ "t": "denied", "reason": "token" }).to_string());
             break;
         }
-        let mut idle = true;
-        loop {
+        for _ in 0..READ_BUDGET {
             match receive(ws, &mut last_in)? {
-                Got::Text(t) => {
-                    idle = false;
-                    handle(ws, &t, shared, id)?;
-                }
+                Got::Text(t) => handle(ws, &t, shared, id)?,
                 Got::Nothing => break,
                 Got::Closed => return Ok(()),
             }
@@ -224,7 +223,6 @@ fn pump(ws: &mut Ws, shared: &Shared, id: u64) -> Result<(), String> {
             sent = Some(now);
         }
         for m in &out {
-            idle = false;
             send(ws, m)?;
         }
         if !out.is_empty() {
@@ -239,9 +237,6 @@ fn pump(ws: &mut Ws, shared: &Shared, id: u64) -> Result<(), String> {
         }
         if last_in.elapsed() > SILENT_FOR {
             return Err("nothing heard for half a minute".into());
-        }
-        if idle {
-            std::thread::sleep(Duration::from_millis(1));
         }
     }
     let _ = ws.close(None);
@@ -279,13 +274,19 @@ pub(crate) fn run(stream: TcpStream, shared: &Shared) -> Result<(), String> {
         Err(refuse)
     };
     let mut ws = tungstenite::accept_hdr_with_config(stream, check, Some(config)).map_err(|e| e.to_string())?;
-    ws.get_mut().set_read_timeout(Some(Duration::from_millis(2))).map_err(|e| e.to_string())?;
+    ws.get_mut().set_read_timeout(Some(Duration::from_millis(20))).map_err(|e| e.to_string())?;
     ws.get_mut().set_write_timeout(Some(Duration::from_secs(2))).map_err(|e| e.to_string())?;
     let texts = shared.feed().texts.clone();
     if !texts.is_empty() {
         let _ = send(&mut ws, &texts);
     }
-    if !authenticate(&mut ws, shared, ip)? {
+    if !crate::server::admit_unpaired(&shared.unpaired, ip) {
+        let _ = ws.close(None);
+        return Ok(());
+    }
+    let paired = authenticate(&mut ws, shared, ip);
+    crate::server::leave_unpaired(&shared.unpaired, ip);
+    if !paired? {
         let _ = ws.close(None);
         return Ok(());
     }

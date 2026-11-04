@@ -51,7 +51,9 @@ impl App {
         let Some(server) = self.integrations.remote.server.as_ref() else { return };
         if let (Some(d), Some(p), false) = (server.drive(), self.player.as_mut(), self.paused) {
             let a = &mut p.analog;
-            a.steering = Some(d.steering);
+            if d.held || a.steering.is_none() {
+                a.steering = Some(d.steering);
+            }
             a.stick = false;
             a.throttle = Some(a.throttle.unwrap_or(0.0).max(d.throttle));
             a.brake = Some(a.brake.unwrap_or(0.0).max(d.brake));

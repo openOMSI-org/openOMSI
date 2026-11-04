@@ -75,9 +75,9 @@ fn index(v: &Value) -> Option<usize> {
     v.get("index").and_then(Value::as_u64).and_then(|i| usize::try_from(i).ok()).filter(|i| *i < 100_000)
 }
 
-pub(crate) fn drive(v: &Value) -> Option<(f32, f32, f32)> {
+pub(crate) fn drive(v: &Value) -> Option<(f32, f32, f32, bool)> {
     let f = |k: &str| v.get(k).and_then(Value::as_f64).filter(|x| x.is_finite()).map(|x| x as f32);
-    Some((f("s")?.clamp(-1.0, 1.0), f("g")?.clamp(0.0, 1.0), f("b")?.clamp(0.0, 1.0)))
+    Some((f("s")?.clamp(-1.0, 1.0), f("g")?.clamp(0.0, 1.0), f("b")?.clamp(0.0, 1.0), f("h").is_some_and(|h| h > 0.0)))
 }
 
 pub(crate) fn command(v: &Value) -> Option<Command> {

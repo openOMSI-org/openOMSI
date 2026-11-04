@@ -1,13 +1,21 @@
 use crate::{doorways, tried_doors, Command, Remote, Vehicle};
 use omsi_sim::vehicle_api::ApiValue;
-use omsi_sim::VehicleInstance;
+use omsi_sim::{VehicleInstance, VehicleType};
+use std::sync::Arc;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver};
 
 const PUBLISH_EVERY: f32 = 1.0 / 30.0;
 
 type Skins = Receiver<(String, Vec<(String, Vec<u8>)>)>;
-type Doors = Receiver<(String, Vec<(Vec<String>, Vec<usize>)>)>;
+type Ways = (Vec<Vec<usize>>, Vec<Vec<String>>);
+
+enum Found {
+    Doors(Ways, Option<crate::sign::Sign>),
+    Tried(Vec<(Vec<String>, Vec<usize>)>),
+}
+
+type Doors = Receiver<(String, Found)>;
 pub type ActionAliases<'a> = &'a [(&'a str, &'a [&'a str])];
 
 #[derive(Default)]
@@ -53,11 +61,10 @@ fn aliases(v: &VehicleInstance, buttons: &[Vec<String>], action_aliases: ActionA
     out
 }
 
-fn doors(v: &VehicleInstance) -> (Vec<Vec<usize>>, Vec<Vec<String>>) {
-    let ty = &v.ty;
+fn doors(ty: &VehicleType, trailers: &[Arc<VehicleType>]) -> Ways {
     let mut ways = doorways(ty);
-    for t in &v.trailers {
-        ways.extend(doorways(&t.ty));
+    for t in trailers {
+        ways.extend(doorways(t));
     }
     let keys = omsi_sim::door_keys::door_keys(ty).len();
     let fronts: Vec<String> = (0..ways.len()).map(|k| format!("bus_doorfront{k}")).collect();
@@ -69,13 +76,15 @@ fn doors(v: &VehicleInstance) -> (Vec<Vec<usize>>, Vec<Vec<String>>) {
     }
 }
 
-fn try_doors(v: &VehicleInstance, key: &str) -> Doors {
+fn find_doors(v: &VehicleInstance, root: &Path, key: &str) -> Doors {
     let (tx, rx) = channel();
-    let (ty, ways, key) = (v.ty.clone(), doorways(&v.ty), key.to_string());
+    let (ty, root, key) = (v.ty.clone(), root.to_path_buf(), key.to_string());
+    let trailers: Vec<Arc<VehicleType>> = v.trailers.iter().map(|t| t.ty.clone()).collect();
     let _ = std::thread::Builder::new().name("remote cockpit doors".into()).spawn(move || {
-        let tried = tried_doors(ty, &ways);
+        let _ = tx.send((key.clone(), Found::Doors(doors(&ty, &trailers), crate::sign::Sign::find(&ty, &root))));
+        let tried = tried_doors(ty.clone(), &doorways(&ty));
         log::info!("remote cockpit: door buttons {:?}", tried.iter().map(|(t, l)| format!("{} = {l:?}", t.join(" + "))).collect::<Vec<_>>());
-        let _ = tx.send((key, tried));
+        let _ = tx.send((key, Found::Tried(tried)));
     });
     rx
 }
@@ -133,7 +142,7 @@ impl Cockpit {
 
     pub fn stop(&mut self) -> Vec<Command> {
         let Some(server) = self.server.take() else { return Vec::new() };
-        let mut left = server.take_commands();
+        let mut left = server.take_all_commands();
         left.extend(server.release_all().into_iter().map(|name| Command::Action { name, down: false }));
         left
     }
@@ -170,8 +179,7 @@ impl Cockpit {
                 return Some(Vec::new());
             }
             let open: Vec<bool> = self.door_ways.iter().map(|w| w.iter().any(|l| v.var(&format!("door_{l}")).is_some_and(|x| x > 0.05))).collect();
-            let any = open.contains(&true);
-            self.all_fired = self.door_triggers.iter().zip(&open).filter(|(_, o)| !any || **o).flat_map(|(t, _)| t.clone()).filter(|t| t != "bus_dooraft").collect();
+            self.all_fired = all_doors(&self.door_triggers, &open);
             return Some(self.all_fired.clone());
         }
         let n: usize = name.strip_prefix("door_")?.parse().ok()?;
@@ -184,23 +192,34 @@ impl Cockpit {
         if self.vehicle != key {
             let _ = server.release_all();
             self.all_fired.clear();
-            (self.door_ways, self.door_triggers) = v.map(doors).unwrap_or_default();
+            (self.door_ways, self.door_triggers) = Default::default();
             server.set_vehicle(v.map(|v| {
                 let (name, bound) = describe(v);
-                vehicle(v, name, bound, self.door_ways.clone(), aliases(v, &self.door_triggers, t.action_aliases))
+                vehicle(v, name, bound, Vec::new(), aliases(v, &[], t.action_aliases))
             }));
             self.skins = v.map(|v| start_skins(v, t.root, &key));
-            self.tried = v.map(|v| try_doors(v, &key));
-            self.sign = v.and_then(|v| crate::sign::Sign::find(&v.ty, t.root));
+            self.tried = v.map(|v| find_doors(v, t.root, &key));
+            self.sign = None;
             self.vehicle = key;
         }
         let ready = !server.holds_a_door() && t.doors_idle;
-        if let (true, Some(Ok((for_key, tried))), Some(v)) = (ready, self.tried.as_ref().map(|rx| rx.try_recv()), v) {
-            self.tried = None;
-            if for_key == self.vehicle && !tried.is_empty() {
-                (self.door_triggers, self.door_ways) = tried.into_iter().unzip();
-                server.set_doors(self.door_ways.clone(), aliases(v, &self.door_triggers, t.action_aliases));
+        while let (true, Some(Ok((for_key, found))), Some(v)) = (ready, self.tried.as_ref().map(|rx| rx.try_recv()), v) {
+            if for_key != self.vehicle {
+                continue;
             }
+            match found {
+                Found::Doors(ways, sign) => {
+                    (self.door_ways, self.door_triggers) = ways;
+                    self.sign = sign;
+                }
+                Found::Tried(tried) => {
+                    self.tried = None;
+                    if !tried.is_empty() {
+                        (self.door_triggers, self.door_ways) = tried.into_iter().unzip();
+                    }
+                }
+            }
+            server.set_doors(self.door_ways.clone(), aliases(v, &self.door_triggers, t.action_aliases));
         }
         if let Some(Ok((for_key, skins))) = self.skins.as_ref().map(|rx| rx.try_recv()) {
             if for_key == self.vehicle {
@@ -225,6 +244,11 @@ impl Cockpit {
             None => server.set_state(None, &env(), t.paused),
         }
     }
+}
+
+pub(crate) fn all_doors(triggers: &[Vec<String>], open: &[bool]) -> Vec<String> {
+    let any = open.contains(&true);
+    triggers.iter().zip(open).filter(|(_, o)| !any || **o).flat_map(|(t, _)| t.clone()).filter(|t| t != "bus_dooraft").collect()
 }
 
 pub fn qr_png(url: &str, dir: &Path) -> Option<PathBuf> {

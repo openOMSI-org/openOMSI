@@ -45,7 +45,7 @@ const Drive = {
     const eased = this.out + (target - this.out) * (1 - Math.exp(-dt / 0.09));
     this.out += Math.max(-dt / 0.8, Math.min(dt / 0.8, eased - this.out));
     if (Math.abs(this.out - target) < 0.0005) this.out = target;
-    const msg = { t: "drive", s: Math.round(this.out * 1000) / 1000, g: Math.round(this.throttle * 1000) / 1000, b: Math.round(this.brake * 1000) / 1000 };
+    const msg = { t: "drive", s: Math.round(this.out * 1000) / 1000, g: Math.round(this.throttle * 1000) / 1000, b: Math.round(this.brake * 1000) / 1000, h: this.holding() ? 1 : 0 };
     const moved = !this.sent || msg.s !== this.sent.s;
     const stale = this.out !== 0 && now - this.sentAt > 100;
     const busy = this.holding() || this.throttle > 0 || this.brake > 0 || moved;
