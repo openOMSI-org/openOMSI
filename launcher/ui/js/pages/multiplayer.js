@@ -77,7 +77,6 @@ function Servers() {
     selectSession(connection, i, x.name);
     close();
   };
-  // Public entries are queried before selection; saving remains an explicit action.
   const joinPublic = async (e) => {
     const id = ++request.current;
     try {

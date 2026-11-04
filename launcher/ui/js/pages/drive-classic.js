@@ -131,7 +131,7 @@ export function StartBar({ step, go }) {
       <${Continue} go=${launch} busy=${busy} />
       ${next < STEPS.length && html`<${Button} big onClick=${() => go(STEPS[next][0])}>${t('Next:')} ${t(STEPS[next][1])}<${Icon} name="right" /></${Button}>`}
       <${Button} kind="primary" big icon="play" disabled=${!ready || busy} onClick=${() => launch()}>
-        ${busy ? t('Starting…') : another ? t('Start another game') : joined ? t('Join and drive') : c.lan_mode === 'host' ? t('Host and drive') : c.lan_mode === 'off' ? t('Start solo driving') : c.free ? t('Start driving') : t('Start the duty')}
+        ${busy ? t('Starting…') : another ? t('Start another game') : joined ? t('Join and drive') : c.lan_mode === 'host' ? t('Host and drive') : c.free ? t('Start driving') : t('Start the duty')}
       </${Button}>
     </div>
   </div>${dialog}`;

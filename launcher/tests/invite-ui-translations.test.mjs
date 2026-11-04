@@ -7,7 +7,7 @@ const source = readFileSync(new URL('../../crates/omsi-app/locales/app.yml', imp
 const required = [
   'Play mode', 'Solo driving', 'Drive on your own without creating a room.',
   'Host your selected map, bus and duty. Share the code after starting.',
-  'Running hosted session', 'Host and drive', 'Start solo driving',
+  'Running hosted session', 'Host and drive',
   'As the host, your game receives your players\' driver names, network addresses, chat and voice. You are responsible for what you keep of it, such as logs and bans.',
   'Sessions and servers are run by players, not by openOMSI. The host receives your driver name, network address, chat and voice, and may keep logs.',
   'The server plays {}, which is not installed here: it is fetched from the server on joining.',

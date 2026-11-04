@@ -4,7 +4,7 @@ import { MultiplayerPage } from '../ui/js/pages/multiplayer.js';
 import { S, set } from '../ui/js/store.js';
 import { CHOICE_DEFAULTS } from '../ui/js/data.js';
 
-export async function run(root) {
+export async function run(root, Component = DriveMode) {
   const saved = { choice: S.choice, poll: S.poll, page: S.page, driveBeforeJoin: S.driveBeforeJoin, maps: S.maps };
   const sleep = () => new Promise((r) => setTimeout(r, 60));
   const assert = (ok, message) => { if (!ok) throw new Error(message); };
@@ -12,7 +12,7 @@ export async function run(root) {
   try {
     set({ choice: { ...CHOICE_DEFAULTS, lan_mode: 'off', map: 'maps/Test/global.cfg', bus: 'vehicles/Test.bus', paint: 'custom', time: 615 }, poll: { instances: [] } });
     const before = { ...S.choice };
-    render(html`<${DriveMode} />`, root);
+    render(html`<${Component} />`, root);
     await sleep();
     assert(root.querySelectorAll('.drive-mode-option > .icon').length === 2, 'Both play modes must have a recognizable icon');
     assert(root.querySelector('.drive-mode-divider[aria-hidden="true"]'), 'Join must be visually separated from mode selection');
@@ -100,5 +100,18 @@ export async function hostLaunchStaysOnDrive() {
   } finally {
     window.fetch = originalFetch;
     set(saved);
+  }
+}
+
+export async function mobileInvitations(root) {
+  const { MobileApp } = await import('../ui/js/mobile/mobile.js');
+  const phone = document.documentElement.classList.contains('phone');
+  const height = root.style.height;
+  document.documentElement.classList.add('phone');
+  root.style.height = '600px';
+  try { return (await run(root, MobileApp)).replaceAll('PASS ', 'PASS phone '); }
+  finally {
+    document.documentElement.classList.toggle('phone', phone);
+    root.style.height = height;
   }
 }

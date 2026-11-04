@@ -81,7 +81,6 @@ try {
     await evaluate("document.querySelector('#run').onclick()");
     const multiplayer = await evaluate("document.querySelector('#report').textContent");
     report[`${width}x${height} multiplayer interface`] = multiplayer.startsWith('PASS ') && !multiplayer.includes('FAIL ') ? [] : [multiplayer];
-
   }
   const errors = events.filter((e) => e.method === 'Runtime.exceptionThrown').map((e) => e.params.exceptionDetails.exception?.description || e.params.exceptionDetails.text);
   for (const [where, issues] of Object.entries(report)) {

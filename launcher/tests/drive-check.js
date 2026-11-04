@@ -38,7 +38,7 @@ const OPTIONS = {
   'Timetable buses': () => text(/^Timetable buses$/),
   'Bus ready to go': () => text(/^Bus ready to go$/),
   'Start on foot': () => text(/^Start on foot$/),
-  Start: () => labelled(/^(Start the duty|Start driving|Start solo driving|Host and drive|Join and drive)$/),
+  Start: () => labelled(/^(Start the duty|Start driving|Host and drive|Join and drive)$/),
   'Continue a save': () => labelled(/^Continue$/),
   'Command line': () => text(/^Show the command line$/),
 };
