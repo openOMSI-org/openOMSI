@@ -7,3 +7,4 @@ description = "Reusable grouping and filtering for settings interfaces"
 
 [dependencies]
 omsi-ui = { path = "../omsi-ui" }
+winit.workspace = true

@@ -32,6 +32,43 @@ pub struct SearchState {
     pub visible: Vec<usize>,
 }
 
+pub fn search_key(
+    ui: &mut omsi_ui::kit::Ui,
+    field: &str,
+    code: winit::keyboard::KeyCode,
+    text: Option<&str>,
+) -> bool {
+    use omsi_ui::kit::Key;
+    use winit::keyboard::KeyCode as K;
+    if ui.focus != Some(omsi_ui::kit::id_of(field)) {
+        return false;
+    }
+    let key = match code {
+        K::ArrowLeft => Some(Key::Left),
+        K::ArrowRight => Some(Key::Right),
+        K::Home => Some(Key::Home),
+        K::End => Some(Key::End),
+        K::Backspace => Some(Key::Backspace),
+        K::Delete => Some(Key::Delete),
+        K::Enter | K::NumpadEnter | K::Tab | K::Escape => {
+            ui.focus = None;
+            return true;
+        }
+        K::KeyA if ui.input.ctrl => Some(Key::SelectAll),
+        _ => None,
+    };
+    if let Some(key) = key {
+        ui.input.keys.push(key);
+    } else if !ui.input.ctrl && !ui.input.alt {
+        if let Some(text) = text {
+            ui.input
+                .text
+                .extend(text.chars().filter(|c| !c.is_control()));
+        }
+    }
+    true
+}
+
 pub fn toolbar_layout(area: omsi_ui::Rect, body: omsi_ui::Rect) -> (omsi_ui::Rect, f32) {
     if area.w >= 760.0 {
         let width = (area.w * 0.34).clamp(220.0, 360.0);
@@ -230,6 +267,32 @@ pub fn filter_groups(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn search_keys_preserve_text_modifiers_editing_and_focus() {
+        use omsi_ui::kit::{Key, Ui, id_of};
+        use winit::keyboard::KeyCode as K;
+        let mut ui = Ui::new();
+        assert!(!search_key(&mut ui, "search", K::KeyE, Some("é")));
+        ui.focus = Some(id_of("search"));
+        assert!(search_key(&mut ui, "search", K::KeyE, Some("é\n")));
+        assert_eq!(ui.input.text, "é");
+        ui.input.ctrl = true;
+        assert!(search_key(&mut ui, "search", K::KeyA, Some("a")));
+        assert_eq!(ui.input.keys, [Key::SelectAll]);
+        assert_eq!(ui.input.text, "é");
+        ui.input.ctrl = false;
+        ui.input.alt = true;
+        assert!(search_key(&mut ui, "search", K::KeyQ, Some("q")));
+        assert_eq!(ui.input.text, "é");
+        assert!(search_key(&mut ui, "search", K::Backspace, None));
+        assert_eq!(ui.input.keys, [Key::SelectAll, Key::Backspace]);
+        for code in [K::Escape, K::Enter, K::NumpadEnter, K::Tab] {
+            ui.focus = Some(id_of("search"));
+            assert!(search_key(&mut ui, "search", code, None));
+            assert_eq!(ui.focus, None);
+        }
+    }
 
     #[test]
     fn settings_rows_parse_optional_fields_without_changing_defaults() {

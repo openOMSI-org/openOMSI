@@ -25,22 +25,7 @@ pub(crate) fn focused(sh: &Shell) -> bool {
 }
 
 pub(crate) fn key(sh: &mut Shell, code: winit::keyboard::KeyCode, text: Option<&str>) -> bool {
-    use omsi_ui::kit::Key;
-    use winit::keyboard::KeyCode as K;
-    if !focused(sh) { return false; }
-    let key = match code {
-        K::ArrowLeft => Some(Key::Left), K::ArrowRight => Some(Key::Right),
-        K::Home => Some(Key::Home), K::End => Some(Key::End),
-        K::Backspace => Some(Key::Backspace), K::Delete => Some(Key::Delete),
-        K::Enter | K::NumpadEnter | K::Tab | K::Escape => { sh.ui.focus = None; return true; }
-        K::KeyA if sh.ui.input.ctrl => Some(Key::SelectAll),
-        _ => None,
-    };
-    if let Some(key) = key { sh.ui.input.keys.push(key); }
-    else if !sh.ui.input.ctrl && !sh.ui.input.alt {
-        if let Some(text) = text { sh.ui.input.text.extend(text.chars().filter(|c| !c.is_control())); }
-    }
-    true
+    omsi_settings_ui::search_key(&mut sh.ui, "pause-settings-search", code, text)
 }
 
 impl crate::app::App {
