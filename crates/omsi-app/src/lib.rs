@@ -792,6 +792,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             flashlight: false,
             flashlight_aim: None,
             in_cab: false,
+            heard_inside: false,
             look: (0.0, 0.0),
             look_smooth: (0.0, 0.0),
             view_looks: Default::default(),
