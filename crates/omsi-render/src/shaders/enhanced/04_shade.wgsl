@@ -561,6 +561,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
             if ((terrain || material.params2.z > 0.0) && !is_water) {
                 spec = spec * camera.lod.z;
             }
+            spec = spec * smoothstep(0.0, 0.05, dot(n, v));
             direct = e_sun * nl * (sf.albedo / PI * (vec3<f32>(1.0) - f_schlick(f0, nl)) + spec);
         }
     }

@@ -130,13 +130,13 @@ mod tests {
     /// Omsi.exe's encoded mix, and the vertex-lit Direct3D headlight excluding its own vehicle,
     /// and the traced sample read once for FXC, the road glare in its own uniform lane,
     /// and the detail grain's octaves left out where faded, and the instance's parameters
-    /// handed to the fragments flat (#1488).
+    /// handed to the fragments flat (#1488), and no sun glint on a face seen from behind (#3359).
     /// (with Unix line ends: a Windows checkout may turn the parts' into CRLF, as it did the
     /// single files', and the 0.2.31 release's Windows test failed on that alone)
     #[test]
     fn assembled_shaders_are_the_old_files() {
         let (scene, enhanced) = (super::SCENE.replace("\r\n", "\n"), super::ENHANCED.replace("\r\n", "\n"));
         assert_eq!((scene.len(), fnv1a(&scene)), (137867, 7536818374718643983));
-        assert_eq!((enhanced.len(), fnv1a(&enhanced)), (98_982, 10_519_434_041_611_795_178));
+        assert_eq!((enhanced.len(), fnv1a(&enhanced)), (99_042, 16_382_870_398_617_306_312));
     }
 }
