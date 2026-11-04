@@ -198,6 +198,7 @@ fn lamp_light(p: vec3<f32>, n: vec3<f32>, v: vec3<f32>, sf: Surface, thin: bool,
     let a = max(sf.rough * sf.rough, 0.02);
     let a_film = max(film.y * film.y, 0.02);
     let nv = max(dot(n, v), 1e-4);
+    let facing = smoothstep(0.0, 0.005, dot(n, v));
     let base = (u32(y) * side + u32(x)) * CELL_CAP;
     for (var j = 0u; j < CELL_CAP; j = j + 1u) {
         let li = grid[base + j];
@@ -272,6 +273,7 @@ fn lamp_light(p: vec3<f32>, n: vec3<f32>, v: vec3<f32>, sf: Surface, thin: bool,
         if (film.x > 0.0) {
             spec = mix(spec, d_beckmann(nh, a_film) * v_smith(nv, nl, a_film) * fr * film.z, film.x);
         }
+        spec = spec * facing;
         sum = sum + irr * nl * (sf.albedo / PI + spec);
     }
     // What the lit ground throws back up: a diffuse reflector of the street's albedo (asphalt
