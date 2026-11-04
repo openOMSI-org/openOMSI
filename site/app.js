@@ -350,6 +350,7 @@ let shotAt = null;
 function showShot(fig) {
   shotAt = fig;
   const img = fig.querySelector("img");
+  shotBox.querySelector("img").removeAttribute("src");
   shotBox.querySelector("img").src = fig.querySelector("button").dataset.full;
   shotBox.querySelector("img").alt = img.alt;
   shotBox.querySelector(".shot-box-cap").textContent = `${img.alt}. Screenshot by ${fig.querySelector("figcaption").lastChild.textContent}.`;
