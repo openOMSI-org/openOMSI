@@ -150,7 +150,7 @@ const App = {
         } else {
           this.qrPin = null;
           this.pairing = false;
-          const msg = { pin: "Wrong code", locked: "Too many tries, wait two minutes", closed: "Open Settings → Remote cockpit in the game to pair this device" }[m.reason];
+          const msg = { pin: "Wrong code", locked: "Too many tries, wait two minutes", closed: "Open Options → Interface → Remote cockpit in the game to pair this device" }[m.reason];
           if ($("pair").hidden) this.showPair();
           $("pin-error").textContent = R.T(msg || "Wrong code");
           $("pin-go").disabled = false;

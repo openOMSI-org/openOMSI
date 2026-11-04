@@ -346,9 +346,9 @@ fn unpaired_sockets_have_few_slots_per_address() {
     assert!(!admit_unpaired(&slots, a));
     leave_unpaired(&slots, a);
     assert!(admit_unpaired(&slots, a));
-    let others: Vec<std::net::IpAddr> = (1..=13).map(|k| std::net::IpAddr::from([192, 168, 2, k])).collect();
-    assert!(others.iter().all(|ip| admit_unpaired(&slots, *ip)));
-    assert!(!admit_unpaired(&slots, "192.168.3.1".parse().unwrap()));
+    let others: Vec<std::net::IpAddr> = (1..=40).map(|k| std::net::IpAddr::from([192, 168, 2, k])).collect();
+    assert!(others.iter().all(|ip| (0..3).all(|_| admit_unpaired(&slots, *ip))));
+    assert!(admit_unpaired(&slots, "192.168.3.1".parse().unwrap()), "a phone of its own address still gets in");
 }
 
 include!("../../../tools/test-support/original_root.rs");
@@ -383,6 +383,8 @@ fn the_command_queue_is_bounded_merges_states_and_always_takes_releases() {
     let mut q = crate::queue::Queue::default();
     assert!(q.push(Command::Route(1)) && q.push(Command::Route(2)) && q.push(Command::Indicator(1)) && q.push(Command::Indicator(0)));
     assert_eq!(q.take(usize::MAX), vec![Command::Route(2), Command::Indicator(0)]);
+    assert!(q.push(Command::Line("A".into())) && q.push(Command::ClearLine) && q.push(Command::Line("B".into())));
+    assert_eq!(q.take(usize::MAX), vec![Command::Line("A".into()), Command::ClearLine, Command::Line("B".into())]);
     assert!((0..crate::queue::MAX_QUEUED).all(|_| q.push(Command::StartUp)));
     assert!(!q.push(Command::StartUp));
     assert!(!q.push(Command::Action { name: "horn".into(), down: true }));

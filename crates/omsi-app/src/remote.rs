@@ -48,10 +48,12 @@ impl App {
         for c in server.take_commands() {
             self.remote_command(c);
         }
-        let Some(server) = self.integrations.remote.server.as_ref() else { return };
+        let r = &mut self.integrations.remote;
+        let Some(server) = r.server.as_ref() else { return };
         if let (Some(d), Some(p), false) = (server.drive(), self.player.as_mut(), self.paused) {
             let a = &mut p.analog;
-            if d.held || a.steering.is_none() {
+            r.phone_steers = d.held || (r.phone_steers && a.steering.is_none() && !p.axes.left_key && !p.axes.right_key);
+            if r.phone_steers {
                 a.steering = Some(d.steering);
             }
             a.stick = false;

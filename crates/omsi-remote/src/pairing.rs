@@ -49,6 +49,7 @@ pub(crate) struct Devices {
     path: PathBuf,
     known: Vec<(String, String)>,
     failures: Vec<(IpAddr, Instant)>,
+    wrong: usize,
 }
 
 pub(crate) enum Pairing {
@@ -67,7 +68,7 @@ impl Devices {
                 (h.len() == 64 && h.bytes().all(|c| c.is_ascii_hexdigit())).then(|| (h.to_string(), name.to_string()))
             })
             .collect();
-        Devices { path, known, failures: Vec::new() }
+        Devices { path, known, failures: Vec::new(), wrong: 0 }
     }
 
     fn save(&self) {
@@ -97,7 +98,8 @@ impl Devices {
         }
         if !same(pin, wanted.trim()) {
             self.failures.push((network(from), Instant::now()));
-            return Pairing::Wrong { renew: self.failures.len() % RENEW_AFTER == 0 };
+            self.wrong += 1;
+            return Pairing::Wrong { renew: self.wrong % RENEW_AFTER == 0 };
         }
         let token = hex(&random_bytes::<32>());
         let name: String = name.chars().filter(|c| !c.is_control()).take(48).collect();

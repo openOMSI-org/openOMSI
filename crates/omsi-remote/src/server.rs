@@ -9,8 +9,7 @@ use std::time::{Duration, Instant};
 include!(concat!(env!("OUT_DIR"), "/icons.rs"));
 
 const MAX_CONNECTIONS: usize = 96;
-const MAX_PER_ADDRESS: usize = 24;
-const MAX_UNPAIRED: usize = 16;
+const MAX_PER_ADDRESS: usize = 10;
 const MAX_UNPAIRED_PER_ADDRESS: usize = 3;
 const HEAD_WITHIN: Duration = Duration::from_secs(5);
 const MAX_HEAD: usize = 8192;
@@ -45,7 +44,7 @@ pub(crate) fn nearby(ip: IpAddr) -> bool {
 
 pub(crate) fn admit_unpaired(slots: &Mutex<HashMap<IpAddr, usize>>, ip: IpAddr) -> bool {
     let mut slots = lock(slots);
-    if slots.values().sum::<usize>() >= MAX_UNPAIRED || slots.get(&ip).is_some_and(|n| *n >= MAX_UNPAIRED_PER_ADDRESS) {
+    if slots.get(&ip).is_some_and(|n| *n >= MAX_UNPAIRED_PER_ADDRESS) {
         return false;
     }
     *slots.entry(ip).or_default() += 1;

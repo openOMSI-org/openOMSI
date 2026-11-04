@@ -21,7 +21,7 @@ fn state_like(c: &Command) -> bool {
 impl Queue {
     pub(crate) fn push(&mut self, c: Command) -> bool {
         if state_like(&c) {
-            if let Some(old) = self.commands.iter_mut().rev().find(|o| discriminant(*o) == discriminant(&c)) {
+            if let Some(old) = self.commands.back_mut().filter(|o| discriminant(*o) == discriminant(&c)) {
                 *old = c;
                 return true;
             }

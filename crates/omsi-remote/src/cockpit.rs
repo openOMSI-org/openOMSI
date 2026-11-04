@@ -30,6 +30,7 @@ pub struct Cockpit {
     sign: Option<crate::sign::Sign>,
     sign_t: f32,
     pub nav_t: f32,
+    pub phone_steers: bool,
     door_triggers: Vec<Vec<String>>,
     door_ways: Vec<Vec<usize>>,
     all_fired: Vec<String>,
@@ -142,7 +143,7 @@ impl Cockpit {
 
     pub fn stop(&mut self) -> Vec<Command> {
         let Some(server) = self.server.take() else { return Vec::new() };
-        let mut left = server.take_all_commands();
+        let mut left: Vec<Command> = server.take_all_commands().into_iter().filter(|c| matches!(c, Command::Action { down: false, .. })).collect();
         left.extend(server.release_all().into_iter().map(|name| Command::Action { name, down: false }));
         left
     }
@@ -190,7 +191,7 @@ impl Cockpit {
         let Some(server) = self.server.as_mut() else { return };
         let key = v.map(vehicle_key).unwrap_or_default();
         if self.vehicle != key {
-            let _ = server.release_all();
+            server.release_held();
             self.all_fired.clear();
             (self.door_ways, self.door_triggers) = Default::default();
             server.set_vehicle(v.map(|v| {

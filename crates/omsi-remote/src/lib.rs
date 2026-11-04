@@ -184,6 +184,12 @@ impl Remote {
         lock(&self.shared.held).values().flatten().any(|n| n.to_ascii_lowercase().starts_with("door"))
     }
 
+    pub fn release_held(&self) {
+        for name in self.release_all() {
+            self.shared.send(Command::Action { name, down: false });
+        }
+    }
+
     pub fn release_all(&self) -> Vec<String> {
         let mut names: Vec<String> = lock(&self.shared.held).drain().flat_map(|(_, v)| v).collect();
         names.sort();
