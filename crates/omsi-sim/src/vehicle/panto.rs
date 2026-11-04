@@ -77,7 +77,7 @@ impl PantoGear {
 
 impl VehicleInstance {
     pub(super) fn init_pantograph(&mut self) {
-        if self.ty.def.pantograph_var.is_some() && self.ty.def.is_rail() {
+        if super::rail::pantograph_binds(&self.ty.def) && self.ty.def.is_rail() {
             let seed = (self.ty.def.path.to_string_lossy().len() as u64) ^ 0x51ed_270b_1f3a_9c47;
             self.panto = Some(Box::new(PantoGear::new(seed)));
         }

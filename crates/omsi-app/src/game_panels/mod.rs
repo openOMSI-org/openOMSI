@@ -10,10 +10,12 @@
 //! on a panel goes to it, a click beside the quick menu closes it.
 
 use omsi_plugin::ui::{Align, Element, Kind, Panel, Rgba, RowAlign, UiState, Weight};
+use omsi_ui::theme::Palette;
 
 mod dest_form;
 mod multiplayer;
 mod move_here;
+pub(crate) mod radio_panel;
 pub(crate) use dest_form::open as open_dest_form;
 pub(crate) use move_here::ask as ask_move;
 pub(crate) mod quick_menu;
@@ -28,6 +30,7 @@ const GAME: u64 = 1;
 /// The panels and what they show.
 #[derive(Default)]
 pub(crate) struct GamePanels {
+    pub(crate) laid_out: Option<([f32; 4], f32)>,
     ui: UiState,
     draw: crate::plugin_ui::PluginPanels,
     /// A slider the left button holds: its panel, id and track on the window (physical
@@ -40,6 +43,7 @@ pub(crate) struct GamePanels {
     pub(crate) dest: Option<dest_form::DestForm>,
     pub(crate) multiplayer: Option<multiplayer::Multiplayer>,
     pub(crate) view: Option<view_editor::ViewEditor>,
+    pub(crate) radio: Option<radio_panel::RadioPanel>,
     /// Where the map camera's click asks to move the bus to.
     pub(crate) move_to: Option<glam::DVec3>,
 }
@@ -47,7 +51,7 @@ pub(crate) struct GamePanels {
 impl GamePanels {
     /// Whether any panel is open.
     pub(crate) fn any(&self) -> bool {
-        self.multiplayer.is_some() || self.quick.is_some() || self.trip.is_some() || self.dest.is_some() || self.view.is_some() || self.move_to.is_some()
+        self.multiplayer.is_some() || self.quick.is_some() || self.trip.is_some() || self.dest.is_some() || self.view.is_some() || self.radio.is_some() || self.move_to.is_some()
     }
 
     /// Whether the panels have the mouse.
@@ -70,8 +74,8 @@ pub(super) fn title(t: &str) -> Element {
     text(t, 17.0, Weight::Bold)
 }
 
-pub(super) fn note(t: &str, light: bool) -> Element {
-    Element { color: Some(theme_color(theme(light).TEXT_DIM)), ..text(t, 12.0, Weight::Regular) }
+pub(super) fn note(t: &str, pal: Palette) -> Element {
+    Element { color: Some(theme_color(pal.text_dim)), ..text(t, 12.0, Weight::Regular) }
 }
 
 pub(super) fn button(id: &str, t: &str, icon: Option<&str>) -> Element {
@@ -107,22 +111,15 @@ pub(super) fn divider() -> Element {
     el(None, Kind::Divider)
 }
 
-pub(super) fn theme(light: bool) -> omsi_ui::theme::Theme {
-    omsi_ui::theme::palette(light)
-}
-
 pub(super) fn theme_color(c: omsi_ui::Color) -> Rgba {
     Rgba(c.0.map(|v| (v * 255.0 + 0.5) as u8))
 }
 
-/// 遊戲面板背景；`alpha` 控制透出後方畫面的程度。
-pub(super) fn card(anchor: omsi_plugin::ui::Anchor, x: f32, y: f32, width: f32, alpha: u8, light: bool, children: Vec<Element>) -> Panel {
-    let background = if light {
-        let c = theme_color(theme(true).PANEL);
-        Rgba([c.0[0], c.0[1], c.0[2], alpha])
-    } else {
-        Rgba([14, 16, 20, alpha])
-    };
+/// The game's card: the colour of the panels (openOMSI's own near black in its dark look), a
+/// little see-through over the picture (`alpha`).
+pub(super) fn card(anchor: omsi_plugin::ui::Anchor, x: f32, y: f32, width: f32, alpha: u8, pal: Palette, children: Vec<Element>) -> Panel {
+    let [r, g, b, _] = if pal == Palette::OPENOMSI { [14, 16, 20, 255] } else { theme_color(pal.panel).0 };
+    let background = Rgba([r, g, b, alpha]);
     Panel { anchor, x, y, width, padding: 14.0, gap: 8.0, background: Some(background), radius: 12.0, accent: None, visible: true, clickable: false, draggable: false, grab: false, frame: false, children }
 }
 
@@ -146,6 +143,7 @@ impl crate::App {
                 "multiplayer" => multiplayer::click(self, el),
                 "view" => view_editor::click(self, el),
                 "move" => move_here::click(self, el),
+                "radio" => radio_panel::click(self, el),
                 _ => {}
             }
         }
@@ -171,7 +169,7 @@ impl crate::App {
                 j.take_summary();
             }
         }
-        let light = self.settings.is_light_theme();
+        let pal = crate::themes::palette(self.settings.is_light_theme());
         // (the quick menu's tile under the mouse is the one chosen, its name shown)
         let gp = &mut self.menus.game_panels;
         if gp.quick.is_some() && gp.ui.focused() {
@@ -183,12 +181,13 @@ impl crate::App {
             }
         }
         let panels: Vec<(&str, Option<Panel>)> = vec![
-            ("view", self.menus.game_panels.view.as_ref().map(|v| v.panel(self, light))),
-            ("trip", self.menus.game_panels.trip.as_ref().map(|t| t.panel(light))),
-            ("dest", self.menus.game_panels.dest.as_ref().map(|d| d.panel(light))),
-            ("multiplayer", self.menus.game_panels.multiplayer.as_ref().map(|f| f.panel(self, light))),
+            ("view", self.menus.game_panels.view.as_ref().map(|v| v.panel(self, pal))),
+            ("trip", self.menus.game_panels.trip.as_ref().map(|t| t.panel(pal))),
+            ("dest", self.menus.game_panels.dest.as_ref().map(|d| d.panel(pal))),
+            ("multiplayer", self.menus.game_panels.multiplayer.as_ref().map(|f| f.panel(self, pal))),
             ("quick", self.menus.game_panels.quick.as_ref().map(|q| q.panel(self))),
-            ("move", self.menus.game_panels.move_to.map(|at| move_here::panel(at, light))),
+            ("move", self.menus.game_panels.move_to.map(|at| move_here::panel(at, pal))),
+            ("radio", self.menus.game_panels.radio.as_ref().map(|r| r.panel(self, pal))),
         ];
         let gp = &mut self.menus.game_panels;
         for (id, p) in panels {
@@ -201,6 +200,7 @@ impl crate::App {
                 }
             }
         }
+        let clean = self.clean_screen_shown();
         let (Some(r), Some(scene)) = (self.renderer.as_ref(), self.scene.as_mut()) else { return };
         let dpi = self.window.as_ref().map_or(1.0, |w| w.scale_factor() as f32);
         let mut size = crate::ui::size_factor(hud[3], dpi, self.settings.ui_scale, self.settings.ui_scale_window);
@@ -208,8 +208,9 @@ impl crate::App {
         if let Some((w, h)) = self.menus.game_panels.trip.as_ref().map(|t| t.extent()) {
             size = size.min(hud[2] * 0.96 / (w * dpi)).min(hud[3] * 0.96 / (h * dpi));
         }
+        self.menus.game_panels.laid_out = Some((hud, dpi * size));
         let map_open = self.menus.navigator.as_ref().is_some_and(|n| n.map_open());
-        let hidden = vr_active || self.menus.game_menu.is_some() || self.menus.chooser.is_some() || map_open || self.photo.is_some();
+        let hidden = vr_active || self.menus.game_menu.is_some() || self.menus.chooser.is_some() || map_open || self.photo.is_some() || clean;
         let frame = crate::plugin_ui::PanelsFrame {
             hud,
             scale: dpi * size,
@@ -217,7 +218,7 @@ impl crate::App {
             cursor: self.input.cursor,
             dt,
             backdrop: crate::ui::backdrop(self.settings.ui_opacity),
-            light,
+            palette: pal,
             navigator: None,
             dock: None,
         };
@@ -323,7 +324,7 @@ impl crate::App {
             return true;
         }
         let gp = &mut self.menus.game_panels;
-        if gp.quick.take().is_some() || gp.move_to.take().is_some() || gp.dest.take().is_some() || gp.trip.take().is_some() {
+        if gp.quick.take().is_some() || gp.move_to.take().is_some() || gp.dest.take().is_some() || gp.trip.take().is_some() || gp.radio.take().is_some() {
             return true;
         }
         if gp.view.is_some() {

@@ -360,7 +360,9 @@ pub(crate) fn spawn_player_prepared(
     let objects = loaded.collision_objects;
     vehicle.collision = objects.then(|| world.data.peek().lists.collision.clone());
     vehicle.wheel_walls = objects;
-    let wires = if vehicle.trolley.is_some() { crate::trolley_net::load(args, world) } else { None };
+    // (the map's wire is drawn whatever is driven; only a trolleybus reads it off the splines)
+    let wires = crate::trolley_net::load(args, world, vehicle.trolley.is_some());
+    *world.trolley_net.lock() = wires.clone();
     vehicle.attach_wires(wires.clone());
     // a rail vehicle rides the track (its position comes from the rails, not the tyres)
     let rail_bound = crate::rail_drive::is_rail(&vt.def);

@@ -205,8 +205,8 @@ pub(crate) fn apply_situation_parsed(sit: &omsi_content::situation::Situation, a
         args.situation_odometer_km = saved_odometer_km(v, legacy_odometer_ids);
         // the livery it was driven in: the scheme's index is the `Colorscheme` variable (the
         // bus came back in its default paint - the variable alone repaints nothing)
-        if let Some((_, c)) = v.vars.iter().find(|(n, _)| n.eq_ignore_ascii_case("Colorscheme")).filter(|(_, c)| *c >= 0.0) {
-            args.paint = Some(format!("{}", *c as i64));
+        if let Some((_, c)) = v.vars.iter().find(|(n, _)| n.eq_ignore_ascii_case("Colorscheme")) {
+            args.paint = (*c >= 0.0).then(|| format!("{}", *c as i64));
         }
         args.situation_strvars = v.string_vars.clone();
         log::info!(
@@ -408,12 +408,11 @@ pub(crate) fn situation_heading(q: &[f64; 9]) -> f64 {
 
 /// The key `Inputs/keyboard.cfg` gives `ticket_give`, as the key names file spells it.
 pub(crate) fn ticket_key_name(root: &Path, bindings: &[omsi_content::KeyBinding]) -> String {
-    let Some(b) = bindings
-        .iter()
-        .find(|b| b.action.eq_ignore_ascii_case("ticket_give"))
-    else {
-        return "T".into();
-    };
+    key_name(root, bindings, "ticket_give").unwrap_or_else(|| "T".into())
+}
+
+pub(crate) fn key_name(root: &Path, bindings: &[omsi_content::KeyBinding], action: &str) -> Option<String> {
+    let b = bindings.iter().find(|b| b.action.eq_ignore_ascii_case(action) && b.scan_code != 0)?;
     let names =
         omsi_content::input::load_key_names(&root.join("Inputs/ENG.kyb")).unwrap_or_default();
     let key = names
@@ -422,12 +421,12 @@ pub(crate) fn ticket_key_name(root: &Path, bindings: &[omsi_content::KeyBinding]
         .map(|(_, n)| n.clone())
         .unwrap_or_else(|| format!("key {}", b.scan_code));
     let mut out = String::new();
-    for (bit, name) in [(omsi_content::input::KEY_SHIFT, "Shift+"), (omsi_content::input::KEY_CTRL, "Ctrl+"), (omsi_content::input::KEY_ALT, "Alt+")] {
+    for (bit, name) in [(omsi_content::input::KEY_CTRL, "Ctrl+"), (omsi_content::input::KEY_SHIFT, "Shift+"), (omsi_content::input::KEY_ALT, "Alt+")] {
         if b.modifier & bit != 0 {
             out.push_str(name);
         }
     }
-    out + &key
+    Some(out + &key)
 }
 
 /// A content path saved whole (a map or bus from an archive or the content folder:
@@ -496,6 +495,22 @@ mod tests {
         sit.vehicles[0].vars.clear();
         apply_situation_parsed(&sit, &mut args);
         assert_eq!(args.situation_odometer_km, None);
+    }
+
+    #[test]
+    fn a_bus_saved_in_its_default_paint_comes_back_in_it() {
+        let sit = omsi_content::situation::Situation {
+            vehicles: vec![omsi_content::situation::SituationVehicle {
+                file: "Vehicles/MAN_NL_NG/MAN_EN92.bus".into(),
+                is_my_vehicle: true,
+                vars: vec![("Colorscheme".into(), -1.0)],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let mut args = crate::cli::Args::parse_from(["openomsi", "--paint", "InterEssonne"]);
+        apply_situation_parsed(&sit, &mut args);
+        assert_eq!(args.paint, None);
     }
 
     #[test]

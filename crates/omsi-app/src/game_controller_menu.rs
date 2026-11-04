@@ -26,7 +26,7 @@ fn event_names(app: &App, device: &DeviceCfg) -> Vec<(String, String)> {
         .chain(crate::game_lists::keyboard_actions(app))
         .chain(app.player.as_ref().into_iter().flat_map(|p| p.vehicle.ty.program.trigger_names()))
         .chain(["kw_s_R_fest", "kw_s_1_fest", "kw_s_2_fest", "kw_s_3_fest", "kw_s_4_fest", "kw_s_5_fest", "kw_s_6_fest", "kw_s_7_fest", "kw_s_8_fest", "kw_s_9_fest", "kw_s_10_fest",
-                "gear_up", "gear_down", "view_look_left", "view_look_right", "view_look_up", "view_look_down", "view_toggle_viewpoint", "view_driver", "view_outside", "view_passenger", "voice_nearby", "voice_radio", "open_menu", "radio_power"].into_iter().map(str::to_string)) {
+                "gear_up", "gear_down", "view_look_left", "view_look_right", "view_look_up", "view_look_down", "view_toggle_viewpoint", "view_driver", "view_outside", "view_passenger", "voice_nearby", "voice_radio", "open_menu", "radio_power", "get_up"].into_iter().map(str::to_string)) {
         if !action.is_empty() && !events.iter().any(|(a, _)| a.eq_ignore_ascii_case(&action)) {
             let label = if action.eq_ignore_ascii_case("voice_radio") {
                 "Multiplayer voice: radio, whole session (hold)".into()

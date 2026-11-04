@@ -45,10 +45,6 @@ pub(super) fn terrain_height(world: &World, x: f64, y: f64) -> Option<f64> {
 /// or an underpass a few metres down.
 const BURIED: f64 = 6.0;
 
-/// How long fewer than half the cars asked for may drive about the player before one is let
-/// appear in view far off (s, see `wake_dormant`).
-const STARVED_AFTER: f32 = 20.0;
-
 impl Traffic {
     /// Is a vehicle of radius `r` at `p` hidden from the viewer by buildings (or a hill)?
     /// Every line of sight to it must be: to its middle, to both ends whichever way it
@@ -508,7 +504,7 @@ impl Traffic {
             let mut types: HashMap<u64, Arc<VehicleType>> = HashMap::new();
             let admitted = admission.pass_for(Some(class), now, host, &mut budgets, |r| {
                 // nobody may see it appear (the first population is the world as it loads)
-                if kind == LaneKind::Street && !initial && !self.may_appear(world, r.pos) {
+                if kind == LaneKind::Street && !initial && !self.far_off(r.pos) && !self.may_appear(world, r.pos) {
                     return Verdict::Retry(Retry::Visible);
                 }
                 // nor where something stands, or drives up so close it would have to brake hard
@@ -543,6 +539,10 @@ impl Traffic {
         }
     }
 
+    fn far_off(&self, p: DVec3) -> bool {
+        self.sim.nearest_eye(p).is_none_or(|d| d > omsi_sim::ai_traffic::viewer::NEAR_HIDE)
+    }
+
     /// The cars out of range that have come near again take their bodies back - where
     /// nobody sees it happen, in the order they went to sleep, up to a little over the number
     /// asked for around the player; one whose ground is not loaded stays asleep, and none
@@ -555,18 +555,6 @@ impl Traffic {
         let active = self.sim.cars.iter().filter(|c| !c.is_bus()).count();
         let budget = ((target as f32 * 1.25).ceil() as usize).saturating_sub(active);
         let centers: Vec<DVec3> = std::iter::once(center).chain(self.sim.lan_centers.iter().copied()).collect();
-        // Open country: nothing within NEAR_HIDE is behind anything, and a car coming along
-        // the road is in plain view from the edge of the range on - it was never woken, and
-        // Grundorf's traffic fell from 19 cars to 1 in three minutes. Starved for a while, a
-        // car is let appear in view, though only farther off than NEAR_HIDE (a few pixels
-        // there), as OMSI puts its cars on the road.
-        let now = self.sim.time;
-        if active * 2 < target {
-            self.sim.starved_since.get_or_insert(now);
-        } else {
-            self.sim.starved_since = None;
-        }
-        let starved = self.sim.starved_since.is_some_and(|t| now - t > STARVED_AFTER);
         if budget == 0 {
             return;
         }
@@ -581,8 +569,7 @@ impl Traffic {
             // (as a new car: never close by, where the mirrors and a turn of the head see
             // it - woken out of the picture 30-60 m from the bus, a car came into being in
             // the mirror or just round the corner)
-            let far_enough = starved && self.sim.nearest_eye(p).is_none_or(|d| d > omsi_sim::ai_traffic::viewer::NEAR_HIDE);
-            if !self.may_appear(world, p) && !far_enough {
+            if !self.far_off(p) && !self.may_appear(world, p) {
                 return Verdict::Retry(Retry::Visible);
             }
             let Some(d) = self.sim.dormant.iter().find(|d| Some(d.id) == r.dormant) else {
@@ -635,7 +622,7 @@ impl Traffic {
         let scheme = match scheme {
             Some(s) => s,
             None if ty.paint_schemes.is_empty() => None,
-            None => Some((seed >> 8) as usize % ty.paint_schemes.len().min(AI_SCHEMES)),
+            None => self.sim.ai_scheme(&ty, seed >> 8),
         };
         host.paint_scheme = Some(scheme);
         let mut vehicle = VehicleInstance::new(ty.clone(), host);
@@ -723,8 +710,8 @@ impl Traffic {
     pub fn random_sets(&self) -> Vec<(Arc<VehicleType>, Option<usize>)> {
         let mut sets: Vec<(Arc<VehicleType>, Option<usize>)> = Vec::new();
         for (ty, ..) in &self.sim.types {
-            let n = ty.paint_schemes.len().min(AI_SCHEMES);
-            let schemes: Vec<Option<usize>> = if n == 0 { vec![None] } else { (0..n).map(Some).collect() };
+            let set = self.sim.ai_schemes(ty);
+            let schemes: Vec<Option<usize>> = if set.is_empty() { vec![None] } else { set.into_iter().map(Some).collect() };
             for scheme in schemes {
                 if !sets.iter().any(|(t, s)| t.def.path == ty.def.path && *s == scheme) {
                     sets.push((ty.clone(), scheme));

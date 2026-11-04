@@ -81,6 +81,9 @@ pub(crate) struct Args {
     /// Discovered gateway to try if a direct UDP join gets no answer.
     #[arg(long)]
     pub(crate) lan_ws_fallback: Option<String>,
+    /// Explicitly allow selected server-owned bus/repaint downloads for this run.
+    #[arg(long)]
+    pub(crate) allow_server_fleet: bool,
     /// Dedicated server: host a session from this server.cfg (written with the defaults when
     /// missing), with no window, no sound and no graphics card.
     #[arg(long)]
@@ -140,6 +143,11 @@ pub(crate) struct Args {
     /// buses (the launcher's "Disable timetable buses" with a line chosen).
     #[arg(long)]
     pub(crate) no_timetable_buses: bool,
+    /// The AI drives on through a parked car standing in its lane, as Omsi.exe's traffic
+    /// does, instead of stopping behind it and going round it when it can (on some maps one
+    /// stands in the lane where there is no way round, and the traffic behind it froze).
+    #[arg(long)]
+    pub(crate) ai_drive_through_parked: bool,
     /// Date at start, YYYY-MM-DD (default 1989-05-30).
     #[arg(long)]
     pub(crate) date: Option<String>,

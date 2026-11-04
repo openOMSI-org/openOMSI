@@ -175,6 +175,90 @@ fn a_light_passed_does_not_hold_again_further_in() {
     assert_eq!(get(&t, id).state.lane, 2);
 }
 
+#[test]
+fn amber_decision_holds() {
+    let f = Fixture::new();
+    let mut t = with_lights(&f, signalled(false, false), 1);
+    show(&mut t, 0, 9);
+    let first = car(&mut t, &f, 0, 100.0, 0x37, 15.0);
+    let second = car(&mut t, &f, 0, 50.0, 0x38, 15.0);
+    ticks(&mut t, 1.0);
+    t.cars.iter_mut().find(|c| c.id == first).unwrap().amber_decision = 0.0;
+    t.cars.iter_mut().find(|c| c.id == second).unwrap().amber_decision = 1.0;
+    ticks(&mut t, 15.0);
+    let c1 = get(&t, first);
+    let c2 = get(&t, second);
+    assert_eq!(c1.amber_decision, 0.0, "amber decision of car 1 was not overridden, {} != 0", c1.amber_decision);
+    assert_eq!(c2.amber_decision, 1.0, "amber decision of car 2 was not overridden, {} != 1", c2.amber_decision);
+    assert!(over_line(&t, first) > 10.0, "car 1 did not pass the yellow light");
+    assert!(over_line(&t, second) < 0.0, "car 2 did pass the yellow light");
+}
+
+#[test]
+fn amber_decision_holds_on_red() {
+    let f = Fixture::new();
+    let mut t = with_lights(&f, signalled(false, false), 1);
+    show(&mut t, 0, 0);
+    let id = car(&mut t, &f, 0, 100.0, 0x39, 15.0);
+    ticks(&mut t, 1.0);
+    t.cars.iter_mut().find(|c| c.id == id).unwrap().amber_decision = 0.0;
+    ticks(&mut t, 15.0);
+    let c = get(&t, id);
+    assert_eq!(c.amber_decision, 0.0, "amber decision of car was not overridden, {} != 0", c.amber_decision);
+    assert!(over_line(&t, id) > 10.0, "car did not pass the red light");
+}
+
+#[test]
+fn amber_decision_holds_with_multiple_lights() {
+    let f = Fixture::new();
+    let mut t = with_lights(&f, signalled(true, false), 2);
+    show(&mut t, 1, 0);
+    let id = car(&mut t, &f, 0, 100.0, 0x3a, 15.0);
+    ticks(&mut t, 1.0);
+    t.cars.iter_mut().find(|c| c.id == id).unwrap().amber_decision = 0.0;
+    ticks(&mut t, 15.0);
+    let c = get(&t, id);
+    assert_eq!(c.current_light, Some((1, 0)), "car's current light was not updated to (1, 0): {:?}", c.current_light);
+    assert_eq!(c.state.lane, 1, "car did pass the crossing to lane {} (must have stopped on line 1)", c.state.lane);
+    assert!(over_line(&t, id) > 10.0);
+}
+
+#[test]
+fn stopped_car_does_not_sets_off_on_red() {
+    let f = Fixture::new();
+    let mut t = with_lights(&f, signalled(false, false), 1);
+    show(&mut t, 0, 0);
+    let id = car(&mut t, &f, 0, 0.0, 0x3b, 0.0);
+    let front = get(&t, id).state.front;
+    // stopped at 2 m before the line
+    t.cars.iter_mut().find(|c| c.id == id).unwrap().state.s = 150.0 - 2.0 - front;
+    ticks(&mut t, 0.1);
+    t.cars.iter_mut().find(|c| c.id == id).unwrap().amber_decision = 0.0;
+    ticks(&mut t, 15.0);
+    let c = get(&t, id);
+    assert!(over_line(&t, id) < 0.3, "car set off on red: {}", over_line(&t, id));
+    assert_eq!(c.state.lane, 0, "car moved onto lane {}", c.state.lane);
+    assert!(c.state.speed < 0.1, "car is moving at {} m/s", c.state.speed);
+}
+
+#[test]
+fn slow_moving_car_does_not_run_the_red() {
+    let f = Fixture::new();
+    let mut t = with_lights(&f, signalled(false, false), 1);
+    show(&mut t, 0, 0);
+    let id = car(&mut t, &f, 0, 0.0, 0x3c, 2.0);
+    let front = get(&t, id).state.front;
+    // at 5 m before the line
+    t.cars.iter_mut().find(|c| c.id == id).unwrap().state.s = 150.0 - 5.0 - front;
+    ticks(&mut t, 0.1);
+    t.cars.iter_mut().find(|c| c.id == id).unwrap().amber_decision = 0.0;
+    ticks(&mut t, 15.0);
+    let c = get(&t, id);
+    assert!(over_line(&t, id) < 0.3, "car passed on red: {}", over_line(&t, id));
+    assert_eq!(c.state.lane, 0, "car moved onto lane {}", c.state.lane);
+    assert!(c.state.speed < 0.1, "car is moving at {} m/s", c.state.speed);
+}
+
 /// `lane` as path `path` of junction object `id`.
 fn object(mut lane: crate::traffic::Lane, id: i64, path: u16) -> crate::traffic::Lane {
     lane.source = 2;

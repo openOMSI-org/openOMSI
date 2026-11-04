@@ -249,7 +249,7 @@ impl Renderer {
 
     pub fn rebuild_with(&mut self, scene: &mut Scene, options: RenderOptions) -> bool {
         let options = match ceiling() {
-            Some(c) => RenderOptions { msaa: c.msaa_for(options.msaa), ssao: options.ssao && c.ssao, shadow_size: options.shadow_size.clamp(512, c.shadow_size), ..options },
+            Some(c) => RenderOptions { msaa: c.msaa_for(options.msaa), ssao: options.ssao && c.ssao, shadow_size: options.shadow_size.clamp(512, c.shadow_size), puddle_reflections: options.puddle_reflections && c.puddle_reflections, ..options },
             None => options,
         };
         let options = if options.ray_tracing && options.msaa > 4 && !omsi_cfg::flags::OMSI_FULL_GPU.is_set() { RenderOptions { msaa: 4, ..options } } else { options };
@@ -703,8 +703,8 @@ impl Renderer {
         let mut plan = self.batch_draws(scene, &f, &visible, Vec::new());
         if plan.ground.active() {
             // (the frame's uniform was written with the flag off: the base is lit from the ground picture)
-            let lod = [self.fsr_mip_bias(&f), 1.0, 0.0, 0.0];
-            self.queue.write_buffer(&self.camera_buf, std::mem::offset_of!(CameraUniform, lod) as u64, bytemuck::bytes_of(&lod));
+            let flag = 1.0f32;
+            self.queue.write_buffer(&self.camera_buf, (std::mem::offset_of!(CameraUniform, lod) + 4) as u64, bytemuck::bytes_of(&flag));
         }
         // (the shadow casters' entries after the passes' own: the main pass's batches keep
         // their places in the list while only the shadows change, and its bundles are kept)

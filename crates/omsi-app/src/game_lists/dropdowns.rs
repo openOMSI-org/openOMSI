@@ -141,6 +141,7 @@ pub(crate) fn dropdown_apply(app: &mut App, action: &str) {
         "pick" => {
             if let Some((key, value)) = arg.split_once(' ') {
                 let before = app.settings.mirror_hud;
+                if is_graphics_setting(key) { begin_graphics_change(app); }
                 remember_setting(key, value);
                 reload_settings(app);
                 if key == "light_shadows" && value == "all" && app.renderer.as_ref().is_some_and(|r| !r.lamp_cube_maps()) {
@@ -161,6 +162,7 @@ pub(crate) fn dropdown_apply(app: &mut App, action: &str) {
         }
         "preset" => {
             if let Some(i) = arg.trim().parse::<usize>().ok().filter(|i| *i < 6) {
+                begin_graphics_change(app);
                 store_with(app, |v| {
                     // (a preset sets the mode as well)
                     let Some(p) = presets(v).into_iter().nth(i) else { return };
@@ -170,13 +172,14 @@ pub(crate) fn dropdown_apply(app: &mut App, action: &str) {
                         }
                     }
                 });
-                app.service_msg = Some((omsi_ui::tr("Takes effect when the game starts the next time").into_owned(), 5.0));
+                app.service_msg = Some((omsi_ui::tr("Graphics preset selected. Confirm to apply.").into_owned(), 5.0));
             }
         }
         "gfxprofile" => {
             let name = arg.trim();
             match omsi_launcher_lib::graphics_profiles().get(name) {
                 Some(p) => {
+                    begin_graphics_change(app);
                     store_with(app, |v| omsi_launcher_lib::apply_graphics_profile(p, v));
                     sync_live(app);
                     app.menus.list_dirty = true;
@@ -245,6 +248,9 @@ pub(super) fn settings_file() -> serde_json::Value {
         .clone();
     let pending = PENDING_SETTINGS.lock().unwrap_or_else(|e| e.into_inner());
     apply_pending(&mut v, &pending.0);
+    if let Some(draft) = GRAPHICS_DRAFT.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+        graphics::overlay(&mut v, draft);
+    }
     v
 }
 
@@ -272,7 +278,7 @@ pub(super) fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
         "light_shadows" => vec![("off", "Off"), ("street", "Street lamps and vehicles"), ("all", "Every light")],
         "msaa" => vec![("1", "Off"), ("2", "2x MSAA"), ("4", "4x MSAA"), ("8", "8x MSAA")],
         "render_scale" => vec![("auto", "Auto"), ("1", "100%"), ("0.85", "85%"), ("0.75", "75%"), ("0.67", "67%"), ("0.5", "50%")],
-        "upscaler" => vec![("default", "Standard (Catmull-Rom)"), ("fsr1", "AMD FSR 1 (experimental)")],
+        "upscaler" => vec![("default", "Standard (Catmull-Rom)"), ("fsr1", "AMD FSR 1.0")],
         "fsr_quality" => vec![("ultra", "Ultra Quality (77%)"), ("quality", "Quality (67%)"), ("balanced", "Balanced (59%)"), ("performance", "Performance (50%)"), ("auto", "Automatic (keeps the frame rate)"), ("custom", "Use render scale")],
         "anisotropy" => vec![("1", "Off"), ("2", "2x"), ("4", "4x"), ("8", "8x"), ("16", "16x")],
         "shadow_size" => vec![("1024", "1024"), ("2048", "2048"), ("4096", "4096")],
@@ -302,6 +308,8 @@ pub(super) fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
         // (OMSI's AIMaxHumans, #2087)
         "ai_max_humans" => vec![("50", "50"), ("100", "100"), ("200", "200"), ("400", "400"), ("720", "720"), ("1000", "1000")],
         "language" => omsi_launcher_lib::LANGUAGES.iter().map(|l| (l.0, l.1)).collect(),
+        // (openOMSI's own look as "openomsi": the setting reads it as "")
+        "ui_theme_pack" => crate::themes::choices().iter().map(|(id, name)| (if id.is_empty() { crate::themes::OWN } else { id.as_str() }, name.as_str())).collect(),
         "ui_theme" => vec![("dark", "Dark"), ("light", "Light theme")],
         "vr_scale" => vec![("0.5", "50%"), ("0.65", "65%"), ("0.8", "80%"), ("1", "100%")],
         "vr_head_smoothing_ms" => vec![("0", "Off"), ("5", "5 ms"), ("10", "10 ms"), ("20", "20 ms"), ("30", "30 ms")],
@@ -318,6 +326,45 @@ mod tests {
     #[test]
     fn interface_theme_dropdown_uses_the_shared_dark_and_light_values() {
         assert_eq!(select_options("ui_theme"), [("dark", "Dark"), ("light", "Light theme")]);
+    }
+
+    #[test]
+    fn selecting_custom_controls_releases_the_arrow_driving_preset() {
+        use winit::keyboard::KeyCode;
+        let args = crate::cli::Args::parse_from(["openomsi", "--drive-keys", "arrows"]);
+        let settings = crate::settings::Settings { drive_keys: "arrows".into(), ..Default::default() };
+        let mut app = crate::assemble_app(args, settings);
+        app.input.keys.insert(KeyCode::ArrowLeft);
+        assert!(crate::player::fallback_action(KeyCode::ArrowLeft, &app.args.drive_keys).is_some());
+
+        app.settings.drive_keys = "omsi".into();
+        sync_driving_keys(&mut app, "arrows");
+        assert_eq!(app.args.drive_keys, "omsi");
+        assert!(app.input.keys.is_empty());
+        for (key, scan, action) in [
+            (KeyCode::ArrowLeft, 203, "view_interiorcam_minus"),
+            (KeyCode::ArrowRight, 205, "view_interiorcam_plus"),
+        ] {
+            assert_eq!(crate::player::fallback_action(key, &app.args.drive_keys), None);
+            let binding = omsi_content::KeyBinding { action: action.into(), scan_code: scan, modifier: 0 };
+            assert!(crate::input_script::binding_is_key(&binding, key, scan, 0), "no Alt needed");
+        }
+
+        app.settings.drive_keys = "arrows".into();
+        sync_driving_keys(&mut app, "omsi");
+        assert!(crate::player::fallback_action(KeyCode::ArrowRight, &app.args.drive_keys).is_some());
+    }
+
+    #[test]
+    fn reloading_other_settings_keeps_the_command_line_driving_layout() {
+        use winit::keyboard::KeyCode;
+        let args = crate::cli::Args::parse_from(["openomsi", "--drive-keys", "arrows"]);
+        let mut app = crate::assemble_app(args, crate::settings::Settings::default());
+        app.input.keys.insert(KeyCode::ArrowRight);
+
+        sync_driving_keys(&mut app, "simple");
+        assert_eq!(app.args.drive_keys, "arrows");
+        assert!(app.input.keys.contains(&KeyCode::ArrowRight));
     }
 
     #[test]
@@ -377,7 +424,19 @@ pub(crate) fn saved_settings() -> Option<serde_json::Value> {
 pub(crate) fn store_with(app: &mut App, change: impl FnOnce(&mut serde_json::Value)) {
     flush_settings(true);
     let Ok(mut v) = omsi_launcher_lib::get_settings() else { return };
+    let before = v.clone();
+    if let Some(draft) = GRAPHICS_DRAFT.lock().unwrap_or_else(|e| e.into_inner()).as_ref() { graphics::overlay(&mut v, draft); }
     change(&mut v);
+    {
+        let mut draft = GRAPHICS_DRAFT.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(draft) = draft.as_mut() {
+            // Only graphics enter the transaction; unrelated settings still save normally.
+            for (key, value) in v.as_object().into_iter().flatten() {
+                if is_graphics_setting(key) && before.get(key) != Some(value) { draft[key] = value.clone(); }
+            }
+            graphics::overlay(&mut v, &before);
+        }
+    }
     *SETTINGS_CACHE.lock().unwrap_or_else(|e| e.into_inner()) = None;
     match omsi_launcher_lib::save_settings(&v) {
         Ok(()) => reload_settings(app),
@@ -388,11 +447,27 @@ pub(crate) fn store_with(app: &mut App, change: impl FnOnce(&mut serde_json::Val
 pub(super) fn reload_settings(app: &mut App) {
     flush_settings(true);
     // (the seat is the bus's, see `bus_seats`: it is read again for the bus)
+    let previous_drive_keys = app.settings.drive_keys.clone();
     app.settings = settings_in_mode(session_mode(app));
+    sync_driving_keys(app, &previous_drive_keys);
     app.session.seat_bus.clear();
     crate::ui_language(&app.settings.language);
     crate::units::Units::from_setting(&app.settings.units).set();
     sync_live(app);
+}
+
+/// A layout picked during the drive must reach the key handlers too. Keeping the old
+/// `args.drive_keys` left plain arrows steering after selecting Custom controls; Alt
+/// happened to bypass that preset and let the interior-camera bindings through.
+fn sync_driving_keys(app: &mut App, previous: &str) {
+    if app.settings.drive_keys == previous {
+        return;
+    }
+    // The key-up must not be interpreted through a different layout: release the old
+    // vehicle actions first, then wait for a fresh press with the new layout.
+    app.release_vehicle_keys();
+    app.input.keys.clear();
+    app.args.drive_keys.clone_from(&app.settings.drive_keys);
 }
 
 pub(crate) fn session_mode(app: &App) -> &'static str {
@@ -413,11 +488,8 @@ pub(super) fn mode_of_session(session: &crate::startup::SessionSettings, graphic
 }
 
 fn settings_in_mode(mode: &str) -> crate::settings::Settings {
-    let s = crate::settings::Settings::load();
-    if s.mode() == mode {
-        return s;
-    }
-    let text = crate::settings::Settings::path().and_then(|p| std::fs::read_to_string(p).ok()).unwrap_or_default();
+    let file = settings_file();
+    let text = omsi_launcher_lib::settings_to_text(&file, None);
     let mut s = text_in_mode(&text, mode);
     if let Some(n) = omsi_cfg::flags::OMSI_SAFE_GPU.parse::<u32>().filter(|n| *n > 0) {
         s.apply_safe_gpu(n);
@@ -459,6 +531,9 @@ pub(super) fn sync_live(app: &mut App) {
     let s = &app.settings;
     if let Some(w) = app.world.as_ref() {
         w.settings.set_sound_scenery(s.vol_scenery);
+        // The world reads these atomically during drawing, no map or bus reload required.
+        w.settings.set_mirror_size(s.mirror_size);
+        w.settings.set_rain_quality(crate::rain::quality_of(&s.rain_quality));
     }
     if let Some(a) = app.sound.audio.as_ref() {
         a.set_doppler(s.doppler);
@@ -477,6 +552,7 @@ pub(super) fn sync_live(app: &mut App) {
         h.bad_driving = s.pax_bad_driving;
         h.boarding = s.boarding.clone();
         h.stand_chance = s.standing_chance;
+        h.short_rides_stand = s.pax_short_rides_stand;
         h.voices = match s.pax_voices.as_str() {
             "off" => 2,
             "tickets" => 1,

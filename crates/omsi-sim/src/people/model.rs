@@ -54,8 +54,10 @@ pub struct DoorWants {
 }
 
 /// Sale events to play money sounds
+#[derive(Debug, PartialEq)]
 pub enum SaleEvent {
     PassengerGaveMoney,
+    PassengerTookTicket(usize),
 }
 
 /// A bus as the passengers know it.
@@ -432,6 +434,7 @@ pub struct PeopleSim {
     /// The chance a boarding passenger takes a standing place although a seat is free
     /// (`standing_chance` in the settings).
     pub stand_chance: f32,
+    pub short_rides_stand: bool,
     /// The driver pressed the ticket key (`ticket_give`): sell the requested ticket.
     pub give_ticket: bool,
     /// The key that sells a ticket, as the HUD names it.

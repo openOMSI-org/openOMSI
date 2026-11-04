@@ -27,6 +27,8 @@ pub(crate) enum ListKind {
     BanList,
     /// The options of the game, on this page of the settings window.
     Options(usize),
+    /// Confirmation of graphical settings in the active session.
+    GraphicsConfirm(usize),
     /// What can be done with the vehicle, on this page.
     Vehicle(usize),
     /// The clock, the weather and the traffic, on this page.
@@ -50,6 +52,8 @@ pub(crate) enum ListKind {
     Tours(String, Option<(String, usize, usize)>),
     Drivers,
     Numbers,
+    Liveries,
+    Streets,
     /// The vehicles placed in the world, to take the wheel of one of them (#2026).
     SwitchTo,
     /// The termini of the bus's depot file, for its destination display.
@@ -74,7 +78,7 @@ pub(crate) enum ListKind {
 /// The lists with a search line on top: the vehicles to place, the depot files and the
 /// destinations.
 pub(crate) fn searchable(kind: &ListKind) -> bool {
-    matches!(kind, ListKind::Hofs | ListKind::Destinations | ListKind::PlaceMaker | ListKind::PlaceType(_) | ListKind::PlaceHof(..) | ListKind::AdminPlayers)
+    matches!(kind, ListKind::Hofs | ListKind::Liveries | ListKind::Streets | ListKind::Destinations | ListKind::PlaceMaker | ListKind::PlaceType(_) | ListKind::PlaceHof(..) | ListKind::AdminPlayers)
 }
 
 /// The search typed (while it is) or set for the open list.
@@ -130,7 +134,7 @@ fn route_numbers(app: &App) -> Vec<String> {
 /// Whether a line can be represented by the numeric IBIS line/suffix variables openOMSI
 /// already knows how to encode. Everything else must stay as display text: turning "-10"
 /// or "EXP" into a number loses information.
-fn numeric_ibis_line(line: &str) -> bool {
+pub(crate) fn numeric_ibis_line(line: &str) -> bool {
     let line = line.trim();
     if line.is_empty() {
         return false;
@@ -159,6 +163,7 @@ fn numeric_ibis_line(line: &str) -> bool {
 /// list (the destination stays: the one on the display now, else the first -
 /// `schedule::shown_destination`).
 pub(crate) fn set_route_by_hand(app: &mut App, line: &str) {
+    crate::platform::text_input(app.window.as_deref(), false);
     let line = line.trim();
     if line.is_empty() {
         return;
@@ -168,7 +173,7 @@ pub(crate) fn set_route_by_hand(app: &mut App, line: &str) {
             let hof = p.vehicle.host.hof.clone();
             if let Some(hof) = hof.as_deref() {
                 if let Some(ti) = crate::schedule::shown_destination(&p.vehicle, hof, p.blind_pick.as_ref()) {
-                    p.set_destination_by_hand(hof, line, ti);
+                    p.set_destination_by_hand(hof, line, ti, false);
                 }
             }
         } else {
@@ -180,6 +185,10 @@ pub(crate) fn set_route_by_hand(app: &mut App, line: &str) {
                     p.vehicle.state.str_vars[i as usize] = line.to_string();
                 }
             }
+            if crate::schedule::has_roller_blind(&p.vehicle) {
+                let shown = p.vehicle.host.hof.clone().and_then(|hof| crate::schedule::shown_destination(&p.vehicle, &hof, p.blind_pick.as_ref()));
+                p.blind_pick = blind_with_line(p.blind_pick.take(), shown, line);
+            }
         }
         log::info!(
             "route number set by hand: {line} (IBIS_LinieKurs {:?}, Matrix_Nr {:?})",
@@ -188,6 +197,25 @@ pub(crate) fn set_route_by_hand(app: &mut App, line: &str) {
         );
         app.service_msg = Some((omsi_ui::i18n::said(format!("{} {line}", omsi_ui::tr("Route")), format!("Route {line}")), 3.0));
     }
+}
+
+pub(crate) fn route_keeps_blind(route: &str) -> bool {
+    route.trim().is_empty() || !numeric_ibis_line(route.trim())
+}
+
+pub(crate) fn form_route(v: &omsi_sim::VehicleInstance, pick: Option<&crate::schedule::BlindPick>) -> String {
+    let blind = crate::schedule::has_roller_blind(v).then(|| pick.map(|p| p.line.trim().to_string()).unwrap_or_else(|| v.str_var("SetLineTo").trim().to_string()));
+    [blind, Some(v.str_var("Matrix_Nr").trim().to_string())].into_iter().flatten().find(|l| !l.is_empty() && !numeric_ibis_line(l)).unwrap_or_else(|| destination_line(v))
+}
+
+pub(crate) fn kept_blind_line(shown: &str, keep: bool) -> Option<String> {
+    let shown = shown.trim();
+    (keep && !shown.is_empty() && !numeric_ibis_line(shown)).then(|| shown.to_string())
+}
+
+fn blind_with_line(pick: Option<crate::schedule::BlindPick>, shown: Option<usize>, line: &str) -> Option<crate::schedule::BlindPick> {
+    let row = pick.map(|p| p.row).or(shown)?;
+    Some(crate::schedule::BlindPick { row, line: line.to_string() })
 }
 
 /// The route number the bus shows: its matrix's (`Matrix_Nr`), else the one it was set to
@@ -355,10 +383,10 @@ fn hof_label(p: &std::path::Path) -> String {
 
 /// The time speeds, traffic amounts and passenger shares the options step through.
 const SPEEDS: [f64; 5] = [1.0, 2.0, 4.0, 8.0, 15.0];
-pub(crate) const TRAFFIC: [usize; 7] = [0, 10, 20, 30, 50, 80, 120];
-/// The most traffic anything may ask for: the menu's top step, the server's `traffic <n>`
-/// and server.cfg's `traffic` alike (#1327).
-pub(crate) const TRAFFIC_MAX: usize = TRAFFIC[TRAFFIC.len() - 1];
+pub(crate) const TRAFFIC: [usize; 10] = [0, 10, 20, 30, 50, 80, 120, 160, 220, 300];
+/// The most traffic anything may ask for: the server's `traffic <n>` and server.cfg's
+/// `traffic` alike (#1327).
+pub(crate) const TRAFFIC_MAX: usize = 120;
 const PAX: [f32; 6] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0];
 const VOLUME: [f32; 6] = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0];
 /// The pedal strengths the options step through (see `settings::pedal_curve`).
@@ -500,6 +528,11 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
         ListKind::Admin | ListKind::AdminClassic => return crate::admin::items(app),
         ListKind::AdminPlayers | ListKind::AdminPlayer(_) | ListKind::AdminConfirm(..) => out = crate::admin_panel::items(app, kind),
         ListKind::PlayerList | ListKind::PlayerPage(_) | ListKind::PlayerDo(..) | ListKind::BanList => return crate::player_list::items(app, kind),
+        ListKind::GraphicsConfirm(_) => return vec![
+            (row("Apply graphics changes?", 'i', "", "Confirm within 20 seconds; otherwise the previous values are restored.", None), "noop".into()),
+            button("Apply now", "Confirm", "Apply compatible graphics options in-game. Renderer mode and device formats require restart.", "graphics_confirm"),
+            button("Cancel changes", "Revert", "Restore the graphics settings from before editing.", "graphics_cancel"),
+        ],
         ListKind::Options(_) | ListKind::Vehicle(_) | ListKind::World(_) => {
             let Some((mut pages, tab)) = pages_of(app, kind) else { return out };
             if pages.is_empty() {
@@ -629,6 +662,14 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
             }
         }
         ListKind::PlaceMaker => {
+            if search_query(app).trim().is_empty() {
+                let offered = crate::lan::server_offers();
+                let driven = app.args.depot.clone().filter(|_| app.player.is_some());
+                for b in crate::depot_bus::listed().into_iter().filter(|b| offered.as_ref().is_none_or(|o| crate::lan::offers(o, &b.bus)) && driven.as_deref() != Some(b.id.as_str())) {
+                    let plate = if b.plate.trim().is_empty() { String::new() } else { format!("  |  {}", b.plate.trim()) };
+                    out.push((format!("{} {}{plate}", tr("My depot:"), b.name.trim()), format!("depot {}", b.id)));
+                }
+            }
             let all = place_vehicles(app, &tr("Unknown manufacturer"));
             let mut groups: Vec<(String, String, Vec<&(String, String, String, String)>)> = Vec::new();
             for v in &all {
@@ -724,6 +765,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
                 out.push((tr("There is no other vehicle to drive"), "back".into()));
             }
         }
+        ListKind::Streets => out = street_rows(app.menus.navigator.as_ref().map_or(Some(Vec::new()), |n| n.street_names())),
         ListKind::Numbers => {
             if let Some(p) = app.player.as_ref() {
                 let mut numbers = fleet_numbers(&p.vehicle);
@@ -737,10 +779,11 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
                 out.push((tr("This bus has no list of fleet numbers"), "back".into()));
             }
         }
+        ListKind::Liveries => out.extend(app.player.iter().flat_map(|p| liveries::items(p.vehicle.host.paint_scheme.flatten(), &p.vehicle.ty.paint_schemes))),
     }
     if searchable(kind) {
         let query = search_query(app);
-        out.retain(|(label, action)| search_matches(label, action, query));
+        out.retain(|(label, action)| search_matches(label, if matches!(kind, ListKind::Streets) { "" } else { action }, query));
         let label = if app.menus.menu_edit_search {
             format!("{}: {query}_  ({})", tr("Search..."), tr("Enter sets it, Esc cancels"))
         } else if query.is_empty() {
@@ -773,7 +816,7 @@ pub(crate) fn menu_extras(
     // a trip's line and terminus
     let trip_of = |name: &str| -> (String, String) {
         schedule
-            .and_then(|s| s.data.trips.iter().find(|x| x.name.eq_ignore_ascii_case(name)))
+            .and_then(|s| s.data.trips.iter().find(|x| x.is_named(name)))
             .map(|x| (x.line.trim().to_string(), x.terminus.trim().to_string()))
             .unwrap_or_default()
     };
@@ -782,6 +825,7 @@ pub(crate) fn menu_extras(
     let Some(kind) = kind else { return (MenuKind::List, head("Place a vehicle..."), None) };
     match kind {
         ListKind::Options(_) => (MenuKind::Options, head("Options..."), None),
+        ListKind::GraphicsConfirm(_) => (MenuKind::List, head("Confirm graphics changes"), None),
         ListKind::Vehicle(_) => (MenuKind::Options, head("Vehicle options..."), None),
         ListKind::World(_) => (MenuKind::Options, head("World options..."), None),
         ListKind::Controls => (MenuKind::Options, head("Controls..."), None),
@@ -857,6 +901,8 @@ pub(crate) fn menu_extras(
         }
         ListKind::Drivers => (MenuKind::List, head("Driver..."), None),
         ListKind::Numbers => (MenuKind::List, head("Fleet number..."), None),
+        ListKind::Liveries => (MenuKind::List, head("Livery..."), None),
+        ListKind::Streets => (MenuKind::List, head("Find a street..."), None),
         ListKind::SwitchTo => (MenuKind::List, head("Drive another vehicle..."), None),
         ListKind::Destinations => (MenuKind::List, head("Destination display..."), None),
         ListKind::RouteNumbers => (MenuKind::List, Some((tr("Route number"), String::new())), None),
@@ -875,6 +921,24 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str) -> Option<ListKi
     run_move(app, kind, action, Move::Next)
 }
 
+fn graphics_back(app: &App, kind: &ListKind) -> Option<ListKind> {
+    match kind {
+        ListKind::Options(tab) if app.menus.graphics_before.is_some() => Some(ListKind::GraphicsConfirm(*tab)),
+        _ => None,
+    }
+}
+
+/// Handle the two buttons of the graphics confirmation.
+fn graphics_confirmation_action(app: &mut App, tab: usize, action: &str, mv: Move) -> Option<ListKind> {
+    if !matches!(mv, Move::Next) { return Some(ListKind::GraphicsConfirm(tab)); }
+    match action {
+        "graphics_confirm" => apply_graphics_changes(app),
+        "graphics_cancel" => cancel_graphics_changes(app),
+        _ => return Some(ListKind::GraphicsConfirm(tab)),
+    }
+    Some(ListKind::Options(tab))
+}
+
 /// Do a line of the list, a setting changed as `mv` says (Enter and a click on a line are
 /// `Move::Next`; the arrows and a click on a slider or a stepper the others).
 pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -> Option<ListKind> {
@@ -884,12 +948,14 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
     if action == "search" && searchable(kind) {
         app.menus.menu_edit = Some(app.menus.menu_search.clone());
         app.menus.menu_edit_search = true;
+        crate::platform::phone_keyboard(app.window.as_deref(), true);
         return Some(kind.clone());
     }
     if action == "back" && crate::player_list::is_page(Some(kind)) {
         return crate::player_list::back(kind);
     }
     if action == "back" {
+        if let Some(next) = graphics_back(app, kind) { return Some(next); }
         return match kind {
             ListKind::Tours(..) => Some(ListKind::Lines),
             ListKind::Events => Some(ListKind::Keyboard(0)),
@@ -898,11 +964,13 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             ListKind::AdminPlayers | ListKind::AdminClassic => Some(ListKind::Admin),
             ListKind::AdminPlayer(_) => Some(ListKind::AdminPlayers),
             ListKind::AdminConfirm(_, t) => Some(ListKind::AdminPlayer(*t)),
+            ListKind::GraphicsConfirm(tab) => { cancel_graphics_changes(app); Some(ListKind::Options(*tab)) },
             _ => None,
         };
     }
     let (verb, arg) = action.split_once(' ').unwrap_or((action, ""));
     match kind {
+        ListKind::GraphicsConfirm(tab) => graphics_confirmation_action(app, *tab, action, mv),
         ListKind::ControllerDevices(_) | ListKind::Controller(..) | ListKind::ControllerAxis(..) | ListKind::ControllerButtons(_) | ListKind::ControllerButtonSettings(..) | ListKind::ControllerButton(..) | ListKind::ControllerCapture(_) => unreachable!("controller lists handled above"),
         ListKind::PlayerList | ListKind::PlayerPage(_) | ListKind::PlayerDo(..) | ListKind::BanList => crate::player_list::run(app, kind, action),
         ListKind::Admin | ListKind::AdminPlayers | ListKind::AdminPlayer(_) | ListKind::AdminConfirm(..) if crate::admin_panel::remote(app) => crate::admin_panel::run(app, kind, action),
@@ -919,6 +987,8 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             // (the arrows and a click on a stepper only change values: no buttons)
             let step = matches!(mv, Move::Next);
             match verb {
+                "graphics_apply" if step => return Some(ListKind::GraphicsConfirm(match kind { ListKind::Options(tab) => *tab, _ => 0 })),
+                "graphics_discard" if step => { cancel_graphics_changes(app); }
                 "vr_nav_edit" if step && app.vr_active() && app.player.is_some() => {
                     app.start_vr_nav_edit();
                     return None;
@@ -932,18 +1002,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                 "metar_icao_edit" if step => {
                     if app.menus.menu_edit_icao { app.apply_icao_edit(); } else { app.start_icao_edit(); }
                 }
-                // the exact time: Enter starts typing it, and sets it when typed
-                "time_edit" if step => {
-                    if app.menus.menu_edit.is_some() {
-                        app.apply_time_edit();
-                    } else if app.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
-                        app.service_msg = Some(("In a LAN session the host sets the clock".into(), 3.0));
-                    } else if app.real_time_locked() {
-                        app.service_msg = Some(("The time cannot be changed while the real-time sync is on".into(), 3.0));
-                    } else {
-                        app.menus.menu_edit = Some(String::new());
-                    }
-                }
+                "time_edit" | "clock_ontime" | "clock_set" | "clock_shift" if step => clock_lines::clock_action(app, verb, arg),
                 "view_editor" if step => { crate::game_panels::view_editor::open(app); return None; }
                 "mirror_hud_edit" if step => { app.page_action(verb); return None; }
                 "seat_reset" if step => {
@@ -952,28 +1011,11 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                     app.settings.seat_pitch_deg = 0.0;
                     remember_bus_seat(app);
                 }
-                "clock_ontime" if step => {
-                    if app.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
-                        app.service_msg = Some(("In a LAN session the host sets the clock".into(), 3.0));
-                    } else if let Some(d) = app.player.as_ref().map(|p| p.vehicle.host.tt_delay as f64).filter(|d| d.abs() >= 1.0) {
-                        // (the delay as it is now, not as the button was drawn: a second click
-                        // would otherwise move the clock by the old amount again)
-                        app.shift_clock(-d);
-                        if let Some(p) = app.player.as_mut() {
-                            p.vehicle.host.tt_delay = 0.0;
-                        }
-                    }
-                }
-                "clock_set" | "clock_shift" if step => {
-                    if app.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
-                        app.service_msg = Some(("In a LAN session the host sets the clock".into(), 3.0));
-                    } else if let Ok(secs) = arg.trim().parse::<f64>() {
-                        let by = if verb == "clock_set" { secs - app.clock.time } else { secs };
-                        app.shift_clock(by);
-                    }
-                }
                 "traffic_clear" if step => {
                     crate::admin::clear_ai_traffic(app);
+                }
+                "refresh_now" if step => {
+                    crate::admin::refresh_for_the_time(app);
                 }
                 "optimise" if step => {
                     app.start_optimiser(omsi_launcher_lib::optimise::chosen_target());
@@ -1106,6 +1148,11 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             None
         }
         ListKind::PlaceMaker | ListKind::PlaceType(_) if verb == "maker" => Some(ListKind::PlaceType(arg.to_string())),
+        ListKind::PlaceMaker if verb == "depot" => {
+            app.close_game_menu();
+            app.take_depot_bus(arg.trim());
+            None
+        }
         ListKind::PlaceMaker | ListKind::PlaceType(_) => Some(ListKind::PlaceLivery(arg.to_string())),
         ListKind::PlaceLivery(bus) => Some(ListKind::PlaceHof(bus.clone(), arg.to_string())),
         ListKind::PlaceHof(bus, paint) => {
@@ -1132,6 +1179,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                 }
                 None => {
                     app.menus.menu_edit = Some(String::new());
+                    crate::platform::text_input(app.window.as_deref(), true);
                     Some(ListKind::RouteNumbers)
                 }
             }
@@ -1148,7 +1196,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                     // (the line on the IBIS stays; only the destination changes)
                     let line = destination_line(&p.vehicle);
                     let name = t.menu_name();
-                    p.set_destination_by_hand(hof, &line, ti);
+                    p.set_destination_by_hand(hof, &line, ti, true);
                     log::info!("destination display set by hand: {} {} (terminus code now {:?})", t.code, name.trim(), p.vehicle.var("IBIS_TerminusCode"));
                     app.service_msg = Some((omsi_ui::i18n::said(format!("{} {}", omsi_ui::tr("Destination:"), name.trim()), format!("Destination: {}", name.trim())), 3.0));
                 }
@@ -1162,6 +1210,13 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             }
             None
         }
+        ListKind::Liveries => {
+            if let Some(scheme) = liveries::chosen(arg) {
+                app.repaint_driven(scheme);
+            }
+            Some(kind.clone())
+        }
+        ListKind::Streets => show_street(app, arg),
         ListKind::Numbers => {
             if let (Some((n, reg)), Some(p)) = (arg.split_once('\u{1}'), app.player.as_mut()) {
                 set_identity_to_player_vehicle(p, n, Some(reg));
@@ -1199,15 +1254,35 @@ mod rows;
 mod options;
 mod dropdowns;
 mod menu_pages;
+mod clock_lines;
 mod duty;
+mod graphics;
+mod liveries;
+mod streets;
 pub(crate) use rows::*;
 pub(crate) use options::*;
 pub(crate) use dropdowns::*;
 pub(crate) use menu_pages::*;
 pub(crate) use duty::*;
+pub(crate) use graphics::*;
+pub(crate) use streets::*;
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_typed_route_with_a_letter_goes_onto_the_roller_blind() {
+        use crate::schedule::BlindPick;
+        let pending = Some(BlindPick { row: 3, line: "41".into() });
+        assert_eq!(super::blind_with_line(pending, Some(7), "92A"), Some(BlindPick { row: 3, line: "92A".into() }));
+        assert_eq!(super::blind_with_line(None, Some(7), "4X"), Some(BlindPick { row: 7, line: "4X".into() }));
+        assert_eq!(super::blind_with_line(None, None, "1A"), None);
+        assert_eq!(super::kept_blind_line("92A", true), Some("92A".into()), "a destination picked: the letter stays");
+        assert_eq!(super::kept_blind_line("92A", false), None, "92A then 41 typed: the new number goes up");
+        assert_eq!(super::kept_blind_line("41", true), None);
+        assert!(super::route_keeps_blind("") && super::route_keeps_blind("92A"), "a route the IBIS cannot take leaves the blind's text");
+        assert!(!super::route_keeps_blind("41") && !super::route_keeps_blind("92E"), "a number the IBIS takes goes up");
+    }
+
     /// "Random livery" draws among all liveries (#2410: it always gave the same one).
     #[test]
     fn random_livery_reaches_every_livery() {
@@ -1294,6 +1369,20 @@ mod tests {
         set_str(&mut blind, "SetLineTo", "  5");
         blind.set_var("IBIS_LinieKurs", 145.0);
         assert_eq!(super::destination_line(&blind), "5");
+        // a blind on 92A over an IBIS on 41: the form offers 92A, Select keeps it (#2799)
+        set_str(&mut blind, "SetLineTo", "92A");
+        blind.set_var("IBIS_LinieKurs", 41.0);
+        let route = super::form_route(&blind, None);
+        assert_eq!(route, "92A");
+        assert!(super::route_keeps_blind(&route));
+        assert_eq!(super::kept_blind_line(&blind.str_var("SetLineTo"), super::route_keeps_blind(&route)), Some("92A".into()));
+        set_str(&mut v, "Matrix_Nr", "92A");
+        assert_eq!(super::form_route(&v, None), "92A", "a matrix showing 92A: the form offers it, not the IBIS's 145");
+        set_str(&mut v, "Matrix_Nr", "");
+        assert_eq!(super::form_route(&v, None), super::destination_line(&v), "nothing lettered shown: the form offers the IBIS's line");
+        set_str(&mut blind, "SetLineTo", " 41");
+        let pending = crate::schedule::BlindPick { row: 2, line: "92A".into() };
+        assert_eq!(super::form_route(&blind, Some(&pending)), "92A", "a bus still off: the pick waiting for it, not what the IBIS wrote");
     }
 
     #[test]
@@ -1351,3 +1440,4 @@ mod tests {
         assert!(!super::numeric_ibis_line("EXP"));
     }
 }
+

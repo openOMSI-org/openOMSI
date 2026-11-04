@@ -24,6 +24,7 @@ pub struct CityMap {
     pub(super) mpp: f64,
     /// The view stays on the bus until the map is dragged.
     pub(super) follow: bool,
+    pub(super) found: Option<u32>,
     pub(super) drag: Option<(f32, f32)>,
     /// How far the mouse has moved (pixels) since it was pressed on the map: a press let go
     /// without moving is a click.
@@ -77,7 +78,7 @@ struct CityGround {
 
 /// The city map's camera: its view-projection (relative to `centre`) and its inverse.
 pub(super) struct CityCam {
-    vp: Mat4,
+    pub(super) vp: Mat4,
     inv: Mat4,
 }
 
@@ -118,8 +119,16 @@ impl Navigator {
                 d += omsi_sim::traffic::wrap_deg(h0 - pe);
             }
             let junction = net.crossings.get(l).map(|c| !c.is_empty()).unwrap_or(false) || lane.turn != 0;
-            let turn = d.abs() > 35.0 && (len < 60.0 || d.abs() > 70.0);
-            if (turn || junction) && acc + len as f64 > 5.0 {
+            let choice = j > 0 && net.lanes.get(r.lanes[j - 1]).is_some_and(|p| p.next.len() > 1);
+            let (mut d, mut span, mut end, mut last) = (d, len, h1, l);
+            for &k in r.lanes.iter().skip(j + 1).take_while(|_| choice) {
+                let same = |a: Option<omsi_sim::traffic::LaneKey>, b: Option<omsi_sim::traffic::LaneKey>| a.zip(b).is_some_and(|(a, b)| (a.tile, a.id) == (b.tile, b.id));
+                let Some(next) = net.lanes.get(k).filter(|n| net.lanes[last].next.len() == 1 && same(net.lanes[last].key, n.key) && span + n.length() <= 60.0) else { break };
+                d += omsi_sim::traffic::wrap_deg(next.end_heading() - next.start_heading()) + omsi_sim::traffic::wrap_deg(next.start_heading() - end);
+                (span, end, last) = (span + next.length(), next.end_heading(), k);
+            }
+            let turn = d.abs() > 35.0 && (span < 60.0 || d.abs() > 70.0);
+            if (turn || junction) && choice && acc + len as f64 > 5.0 {
                 let kind = if !turn { "dn" } else if d > 0.0 { "R" } else { "L" };
                 // ten metres on from where the path begins, as OMSI puts it (the original:
                 // the path's start moved by (0, 0, 10) in its own frame); the mesh hangs
@@ -148,8 +157,43 @@ impl Navigator {
         out
     }
 
+    pub fn streets_id(&self) -> usize {
+        self.streets.as_ref().map_or(0, |s| std::sync::Arc::as_ptr(s) as usize)
+    }
+
+    pub fn street_names(&self) -> Option<Vec<String>> {
+        let st = self.streets.as_deref()?;
+        let mut labelled = vec![false; st.names.len()];
+        for l in &st.labels {
+            if let Some(b) = labelled.get_mut(l.2 as usize) {
+                *b = true;
+            }
+        }
+        Some(st.names.iter().zip(labelled).filter(|(_, l)| *l).map(|(n, _)| n.clone()).collect())
+    }
+
+    pub fn show_street(&mut self, name: &str) -> bool {
+        let Some(st) = self.streets.clone() else { return false };
+        let Some(id) = st.names.iter().position(|n| n == name) else { return false };
+        let points: Vec<DVec2> = st.labels.iter().filter(|l| l.2 as usize == id).map(|l| l.0).collect();
+        if points.is_empty() {
+            return false;
+        }
+        let mid = points.iter().copied().sum::<DVec2>() / points.len() as f64;
+        let at = points.iter().copied().min_by(|a, b| a.distance(mid).total_cmp(&b.distance(mid))).unwrap_or(mid);
+        if !self.city.open {
+            self.toggle_map();
+        }
+        self.city.follow = false;
+        self.city.center = at;
+        self.city.mpp = self.city.mpp.min(1.2);
+        self.city.found = Some(id as u32);
+        true
+    }
+
     /// Open or close the city map.
     pub fn toggle_map(&mut self) {
+        self.city.found = None;
         self.city.open = !self.city.open;
         if self.city.open {
             self.city.follow = true;
@@ -471,7 +515,9 @@ impl Navigator {
         let tilt = self.city.tilt;
         let centre = self.city.center;
         // (tilted, the far part of the view reaches well beyond the middle's scale)
-        let radius = (w.max(h) as f64 * mpp * (0.8 + 1.4 * tilt as f64)).max(500.0);
+        let cam = Self::city_cam(mpp, tilt, self.city.phi, w, h);
+        let visible_reach = super::build::view::ground_reach(cam.vp).unwrap_or_else(|| (w.max(h) as f64 * mpp * (0.8 + 1.4 * tilt as f64)).max(500.0));
+        let radius = super::build::view::padded(visible_reach);
         let detail = (mpp < 0.7) as u64 | ((mpp < 2.2) as u64) << 1 | ((mpp < 3.5) as u64) << 2 | ((mpp < 6.0) as u64) << 3;
         let band = self.contour_band();
         let key = self.look_key() ^ detail << 40 ^ self.global_version << 48 ^ band.map_or(0, |b| 1 + b.1) << 60;
@@ -491,7 +537,7 @@ impl Navigator {
         }
         let stale = match self.city.ground {
             None => true,
-            Some(g) => g.key != key || (g.centre - centre).length() > g.radius * 0.35 || g.mpp / mpp > 1.7 || mpp / g.mpp > 1.7,
+            Some(g) => g.key != key || (g.centre - centre).length() + visible_reach > g.radius || g.mpp / mpp > 1.7 || mpp / g.mpp > 1.7,
         };
         if stale && arrived.is_none() {
             let look = if self.classic_2d {
@@ -500,6 +546,7 @@ impl Navigator {
                 GroundLook { surfaces: mpp < 0.7, trees: mpp < 0.7, dashes: mpp < 3.5, tol: 0.0 }
             };
             let mut parts = self.ground_parts(net, band.map(|b| b.0));
+            parts.house_reach = Some((w.max(h) as f64 * mpp * (0.8 + 1.4 * tilt as f64)).max(500.0));
             if self.classic_2d {
                 parts.md = None;
                 parts.surface = None;
@@ -619,7 +666,7 @@ impl Navigator {
                 let (color, line) = traffic_kind(car);
                 let at = self.smoothed_position(car);
                 if color == DOT {
-                    if !far {
+                    if !far && self.show_cars {
                         car_dot(&mut dots, rel(at), self.light);
                     }
                 } else {
@@ -687,17 +734,19 @@ impl Navigator {
                     ang += std::f32::consts::PI;
                 }
                 let name = &st.names[*id as usize];
+                let found = self.city.found == Some(*id);
+                let px = if found { px * 1.3 } else { px };
                 let tw = self.fonts.width(name, px, Weight::Medium);
                 let (hx, hy) = ((ang.cos() * tw * 0.5).abs() + (ang.sin() * px * 0.6).abs(), (ang.sin() * tw * 0.5).abs() + (ang.cos() * px * 0.6).abs());
                 let bb = Rect::new(p.x - hx, p.y - hy, hx * 2.0, hy * 2.0);
-                if taken.iter().any(|t| rects_overlap(t, &bb)) {
+                if !found && taken.iter().any(|t| rects_overlap(t, &bb)) {
                     continue;
                 }
                 taken.push(bb);
                 for o in [Vec2::new(1.2, 0.0), Vec2::new(-1.2, 0.0), Vec2::new(0.0, 1.2), Vec2::new(0.0, -1.2)] {
                     ui.text_rotated(&mut self.atlas, &self.fonts, name, px, Weight::Medium, p + o * s, ang, pal.label_halo);
                 }
-                ui.text_rotated(&mut self.atlas, &self.fonts, name, px, Weight::Medium, p, ang, pal.label);
+                ui.text_rotated(&mut self.atlas, &self.fonts, name, px, Weight::Medium, p, ang, if found { Color::hex(0xf5a623) } else { pal.label });
             }
         }
         self.terrain_labels(&mut ui, &on_screen, win, s, &mut taken);

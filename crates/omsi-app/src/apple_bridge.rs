@@ -314,7 +314,7 @@ fn act(s: &mut State, a: &Value) -> anyhow::Result<Value> {
         "select_map" => {
             let file = st("file");
             if s.choice.map != file {
-                let span = s.maps.iter().find(|m| m.file == file).and_then(|m| m.year_span);
+                let span = s.maps.iter().find(|m| m.file == file).and_then(|m| m.year_span).filter(|_| !["use_real_date", "use_real_year"].iter().all(|k| s.settings.get(*k).and_then(|v| v.as_bool()).unwrap_or(false)));
                 s.choice.date = core::fit_date_to_years(&s.choice.date, span);
             }
             s.select_map(&file);
@@ -413,7 +413,7 @@ fn act(s: &mut State, a: &Value) -> anyhow::Result<Value> {
             s.touched();
         }
         "traffic" => {
-            s.choice.traffic = a.get("value").and_then(|v| v.as_f64()).unwrap_or(30.0).clamp(0.0, 120.0) as f32;
+            s.choice.traffic = a.get("value").and_then(|v| v.as_f64()).unwrap_or(30.0).clamp(0.0, if cfg!(target_os = "ios") { 120.0 } else { 300.0 }) as f32;
             s.touched();
         }
         "flag" => {

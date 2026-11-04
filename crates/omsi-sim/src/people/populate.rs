@@ -4,6 +4,22 @@
 use super::*;
 
 impl PeopleSim {
+    pub fn clear_waiting(&mut self) -> usize {
+        let waiting = |p: &Person| {
+            p.puppet.is_none() && !p.remote && matches!(p.place, Place::Ground) && matches!(&p.state, State::Pax(x) if x.inside.is_none() && x.bus.is_none() && matches!(x.task, Task::WaitingForBus | Task::WalkingToBusstop))
+        };
+        let mut gone = 0;
+        for i in (0..self.people.len()).rev() {
+            if waiting(&self.people[i]) {
+                self.release(i);
+                let p = self.people.swap_remove(i);
+                self.retire(&p);
+                gone += 1;
+            }
+        }
+        gone
+    }
+
     /// Put people at the bus stops near `center`: at the start everywhere, later only at
     /// stops out of sight (the others fill with people walking up).
     pub fn populate(
@@ -16,8 +32,9 @@ impl PeopleSim {
         }
         // whoever stands under the surface there (its tile's pavements and roads came
         // after them), or anyone standing still off it: onto it
-        for p in self.people.iter_mut() {
-            if matches!(p.place, Place::Ground) {
+        let waiting: Vec<bool> = (0..self.people.len()).map(|i| self.waiting_height(i).is_some()).collect();
+        for (p, waiting) in self.people.iter_mut().zip(waiting) {
+            if matches!(p.place, Place::Ground) && !waiting {
                 if let Some(z) = world.walk_height_near(p.position.x, p.position.y, p.position.z) {
                     let d = z - p.position.z;
                     let still = p.vel.length() < 0.05;

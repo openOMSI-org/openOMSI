@@ -21,7 +21,7 @@ pub mod clouds;
 mod cookies;
 pub use cookies::{Cookie, COOKIE_LAYERS};
 mod gpu_memory;
-pub use gpu_memory::{Ceiling, GpuMemory};
+pub use gpu_memory::{card_vram_mb, Ceiling, GpuMemory};
 mod passes;
 mod device_selection;
 use passes::{Encoders, FrameArgs, FrameEnv, PassTimers, StageClock};
@@ -354,6 +354,7 @@ pub struct RenderOptions {
     /// The glare round bright lights and the lamps' halo in the night air (the settings'
     /// `light_glow`).
     pub light_glow: bool,
+    pub puddle_reflections: bool,
     pub max_scene: Option<(u32, u32)>,
 }
 
@@ -386,6 +387,7 @@ impl Default for RenderOptions {
             light_shadows: 1,
             cloud_shadows: false,
             light_glow: false,
+            puddle_reflections: true,
             max_scene: None,
         }
     }

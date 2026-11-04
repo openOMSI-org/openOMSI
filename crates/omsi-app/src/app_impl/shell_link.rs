@@ -96,7 +96,7 @@ impl App {
             keys: !crate::platform::touch_controls(),
             summary: self.pause_summary(),
         };
-        self.shell.set_theme(self.settings.is_light_theme());
+        crate::themes::sync(&self.settings.ui_theme_pack, self.settings.is_light_theme());
         self.shell.begin(w, h, scale, dt);
         crate::shell::pause::draw(&mut self.shell, &view);
         self.shell.finish();
@@ -160,6 +160,7 @@ impl App {
                         self.list_click(k, fx);
                     }
                 }
+                Action::Date(date) => self.choose_calendar_date(&date),
                 Action::Side(i) => self.settings_side_click(i),
                 Action::Pane(i) => self.tour_pane_click(i),
                 Action::Dropdown(i) => self.dropdown_pick(i),

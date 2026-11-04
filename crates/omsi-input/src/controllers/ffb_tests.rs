@@ -820,3 +820,13 @@ mod file {
         assert_eq!(cut[0].ff_invert, Some(false));
     }
 }
+
+#[test]
+fn smooth_asphalt_rumbles_less_than_cobblestone() {
+    let mean = |surface| {
+        let mut m = super::Micro::default();
+        (0..240).map(|_| m.sample(1.0 / 60.0, 50.0, 0.0, 0.0, 0.0, super::surface_rumble(surface), 0.0).abs()).sum::<f32>() / 240.0
+    };
+    assert!(mean(Some(0)) * 3.0 < mean(Some(2)));
+    assert_eq!(super::surface_rumble(None), 1.0);
+}

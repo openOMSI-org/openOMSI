@@ -59,7 +59,7 @@ impl ScheduleSim {
                     if let Some(ti) = data
                         .trips
                         .iter()
-                        .position(|x| x.name.eq_ignore_ascii_case(&t.trip))
+                        .position(|x| x.is_named(&t.trip))
                     {
                         let profile = usize::try_from(t.profile)
                             .unwrap_or(0)
@@ -382,12 +382,20 @@ impl ScheduleSim {
     /// 24:00 - the next day's weekday, as the night belongs to both, or the day before's
     /// (its trips after midnight run today, #1576).
     pub fn tour_available(&self, tour: &omsi_timetable::Tour) -> bool {
+        self.tour_today(tour) || self.tour_from_yesterday(tour)
+    }
+
+    pub fn tour_today(&self, tour: &omsi_timetable::Tour) -> bool {
         let m = tour.extra.trim().parse::<i32>().unwrap_or(1023);
         if m & self.day_bits.0 != 0 && m & self.day_bits.1 != 0 {
             return true;
         }
         let night = tour.trips.iter().any(|t| t.departure >= 24.0 * 60.0);
-        night && ((m & self.next_day_bit != 0 && m & self.day_bits.1 != 0) || self.tour_runs_on(tour, self.yesterday_bits()))
+        night && m & self.next_day_bit != 0 && m & self.day_bits.1 != 0
+    }
+
+    pub fn tour_from_yesterday(&self, tour: &omsi_timetable::Tour) -> bool {
+        tour.trips.iter().any(|t| t.departure >= 24.0 * 60.0) && self.tour_runs_on(tour, self.yesterday_bits())
     }
 
     /// Whether a tour's day mask has these day bits (`day_bits`).

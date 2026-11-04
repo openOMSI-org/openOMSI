@@ -461,7 +461,8 @@ impl App {
                 return;
             }
         }
-        if pressed && self.menus.game_menu.is_none() {
+        let clean = self.clean_screen_shown();
+        if pressed && self.menus.game_menu.is_none() && !clean {
             if let Some((k, w0, shown)) = self.ui.as_ref().and_then(|u| u.grip_at(x, y)) {
                 self.settings.hud_sizes[k] = shown;
                 self.menus.hud_resize = Some((k, shown, [x, y], w0));
@@ -470,17 +471,29 @@ impl App {
         }
         let vr_active = self.vr_active();
         if let Some(n) = self.menus.navigator.as_mut() {
+            if !n.map_open() {
+                self.menus.map_place_from = None;
+            }
             if n.map_open() {
                 let ctrl = self.input.keys.contains(&KeyCode::ControlLeft) || self.input.keys.contains(&KeyCode::ControlRight);
-                if pressed && ctrl {
-                    // Ctrl+click: the bus to the street nearest that point, as OMSI's map
-                    // window places vehicles
+                let alt = self.input.keys.contains(&KeyCode::AltLeft) || self.input.keys.contains(&KeyCode::AltRight);
+                if pressed && alt && !ctrl {
                     if let Some(at) = n.map_point(x, y) {
-                        if std::mem::take(&mut self.menus.teleport_pick) {
+                        if !self.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
                             n.toggle_map();
                         }
-                        self.place_bus_at(at);
+                        self.walk_to(at);
                     }
+                } else if pressed && ctrl {
+                    // Ctrl+click: the bus to the street nearest that point, as OMSI's map
+                    // window places vehicles
+                    self.menus.map_place_from = n.map_point(x, y).map(|at| (at, [x, y]));
+                } else if let Some((from, press)) = self.menus.map_place_from.take().filter(|_| !pressed) {
+                    let facing = drag_heading(press, [x, y], from, n.map_point(x, y));
+                    if std::mem::take(&mut self.menus.teleport_pick) {
+                        n.toggle_map();
+                    }
+                    self.place_bus_facing(from, facing);
                 } else if pressed {
                     n.map_press(x, y);
                 } else if n.map_release() {
@@ -501,7 +514,7 @@ impl App {
                 return;
             }
             // (a click opens the city map, a drag moves the navigator: #940)
-            if pressed && !vr_active && n.over_panel(x, y) {
+            if pressed && !vr_active && !clean && n.over_panel(x, y) {
                 n.panel_press(x, y);
                 return;
             }
@@ -540,7 +553,7 @@ impl App {
                 .zip(self.world.clone())
                 .and_then(|((o, d, _), w)| crate::placing::ground_hit(&w, o, d.as_dvec3(), 2000.0));
             match hit {
-                Some(at) => self.place_bus_at(at.truncate()),
+                Some(at) => self.place_bus_facing(at.truncate(), self.camera.as_ref().map(|c| c.yaw as f64)),
                 None => self.service_msg = Some(("Ctrl+click on the ground to move the bus there".into(), 3.0)),
             }
             return;
@@ -596,10 +609,32 @@ impl App {
                     self.input.dragging = false;
                     return;
                 }
-                // a tear-off ticket block: a ticket of its type torn off for the passenger
-                if let Some(n) = self.session.humans.as_ref().and(self.gfx.sim_view.people.ticket_blocks.as_ref()).and_then(|b| b.hit(o, d, &p.vehicle)) {
+                // A tear-off ticket block: a ticket of its type torn off for the passenger.
+                let ticket = self.session.humans.as_ref().and(self.gfx.sim_view.people.ticket_blocks.as_ref()).and_then(|b| b.hit(o, d, &p.vehicle));
+
+                if let Some(n) = ticket {
                     log::info!("ticket block {n}: a ticket torn off");
+
+                    // Queue a physical ticket for the desk.
+                    if let Some(blocks) = self.gfx.sim_view.people.ticket_blocks.as_mut() {
+                        blocks.request_ticket(n);
+                    }
+
                     p.vehicle.set_engine_var("GivenTicket", n as f32);
+                    p.vehicle.host.fired_triggers.push("ev_ticketsale_giveticket".into());
+
+                    self.input.dragging = false;
+                    return;
+                }
+                // An individual ticket on the desk: picked up by the driver.
+                let desk_ticket = self.session.humans.as_ref().and(self.gfx.sim_view.people.ticket_blocks.as_ref()).and_then(|b| b.hit_desk_ticket(o, d, &p.vehicle));
+                if let Some(instance) = desk_ticket {
+                    log::info!("individual ticket picked up by the driver");
+
+                    if let Some(blocks) = self.gfx.sim_view.people.ticket_blocks.as_mut() {
+                        blocks.request_remove_ticket(instance);
+                    }
+
                     self.input.dragging = false;
                     return;
                 }
@@ -794,6 +829,26 @@ impl App {
 
 fn look_deg_per_px(fov_deg: f32) -> f32 {
     fov_deg / 78.75
+}
+
+fn drag_heading(press: [f32; 2], release: [f32; 2], from: glam::DVec2, to: Option<glam::DVec2>) -> Option<f64> {
+    let d = to.filter(|_| (release[0] - press[0]).hypot(release[1] - press[1]) > 12.0)? - from;
+    Some(d.x.atan2(d.y).to_degrees())
+}
+
+#[cfg(test)]
+mod drag_tests {
+    use super::drag_heading;
+    use glam::DVec2;
+
+    #[test]
+    fn a_ctrl_drag_gives_the_heading_and_a_click_none() {
+        let from = DVec2::new(10.0, 10.0);
+        assert_eq!(drag_heading([100.0, 100.0], [105.0, 104.0], from, Some(DVec2::new(30.0, 10.0))), None, "under 12 px: a click");
+        assert_eq!(drag_heading([100.0, 100.0], [140.0, 100.0], from, Some(DVec2::new(30.0, 10.0))), Some(90.0), "east");
+        assert_eq!(drag_heading([100.0, 100.0], [100.0, 60.0], from, Some(DVec2::new(10.0, 40.0))), Some(0.0), "north");
+        assert_eq!(drag_heading([100.0, 100.0], [140.0, 100.0], from, None), None, "let go off the map");
+    }
 }
 
 #[cfg(test)]

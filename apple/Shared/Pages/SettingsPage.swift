@@ -203,7 +203,7 @@ struct SettingsPage: View {
                 SettingSlider(label: "Mouse pedal strength", key: "mouse_pedal_strength", range: 0.5 ... 2, step: 0.05, fallback: 1, round: 0.01) { omsiPct($0) }
                 SettingToggle(label: "Smooth mouse steering (off: the wheel follows the cursor at once, as in OMSI)", key: "mouse_smooth", fallback: true)
                 SettingToggle(label: "The mouse works the pedals", key: "mouse_pedals", fallback: true, help: "Up the throttle, down the brake, as in OMSI; off: the mouse only steers, the pedals stay on the keys")
-                SettingToggle(label: "Hold the cursor while the mouse steers (off: the crosshair stays free, the window's edges are the lock)", key: "mouse_hold", fallback: true)
+                SettingToggle(label: "Hold the cursor while the mouse steers (off: the system's crosshair, kept inside the window whose edges are the lock; Windows, Linux)", key: "mouse_hold", fallback: true)
                 SettingToggle(label: "A right click ends the mouse steering (as in OMSI)", key: "mouse_right_off")
             }
             SettingToggle(label: "Indicators cancel themselves (as the bus's script does)", key: "blinker_cancel", fallback: true)
@@ -282,6 +282,8 @@ struct SettingsPage: View {
             SettingSelect(label: "Mirror panels on the screen", key: "mirror_hud", options: [("0", "Off"), ("2", "Left mirror"), ("1", "Right mirror"), ("3", "Left and right"), ("7", "Left, right and front")])
             if !phone {
                 SettingToggle(label: "Precision mouse zoom (FOV curve instead of the linear way)", key: "precision_zoom")
+                SettingSlider(label: "Zoom on a key", key: "zoom_hold_amount", range: 0.2 ... 0.8, step: 0.05, fallback: 0.5) { String(format: "%.2f", 1 / max($0, 0.15)).replacingOccurrences(of: #"\.?0+$"#, with: "", options: .regularExpression) + "x" }
+                SettingToggle(label: "Zoom key stays", key: "zoom_hold_latch", help: "One press zooms in, the next zooms out; off: only while the key is held")
             }
         }
     }
@@ -397,6 +399,9 @@ struct SettingsPage: View {
             SettingToggle(label: "Collisions with people", key: "collision_pedestrians", fallback: true)
             SettingToggle(label: "Start at the real time", key: "use_real_time")
             SettingToggle(label: "Start on today's date", key: "use_real_date")
+            if store.flag("use_real_date") {
+                SettingToggle(label: "Keep today's year, even outside the map's years", key: "use_real_year")
+            }
             SettingToggle(label: "Sync the clock with the real time (locks the time)", key: "time_sync")
             SettingToggle(label: "Sync the weather with METAR (locks the weather)", key: "metar_sync")
             SettingSelect(label: "Time speed (not in multiplayer or with the real-time sync)", key: "time_speed", options: [("1", "Real time"), ("2", "x2"), ("4", "x4"), ("8", "x8"), ("15", "x15"), ("30", "x30")])
@@ -413,7 +418,7 @@ struct SettingsPage: View {
             if !phone {
                 SettingToggle(label: "Translate the remaining texts automatically (offline, downloads 620 MB once)", key: "machine_translation")
                 SettingToggle(label: "The launcher rests while a game runs (gives the graphics card to the game)", key: "launcher_rest", fallback: true)
-                SettingToggle(label: "Discord Rich Presence", key: "discord_status", fallback: true, help: "Shows the launcher or your map, bus, line and multiplayer status in Discord.")
+                SettingToggle(label: "Discord Rich Presence", key: "discord_status", fallback: false, help: "Shows the launcher or your map, bus, line and multiplayer status in Discord.")
                 SettingToggle(label: "Voice chat in multiplayer", key: "voice_enabled", fallback: false, help: "Hold the nearby (V) or radio (B) key to talk. The microphone is used only while a key is held; nothing is recorded")
             }
             SettingToggle(label: "Disable plugins", key: "disable_plugins", fallback: true, help: "Starts the next game without Lua or legacy OMSI plugins, including vehicle plugins. Plugin features will be unavailable. Normal bus scripts still run.")
@@ -424,6 +429,10 @@ struct SettingsPage: View {
             SettingToggle(label: "Frame rate in the corner", key: "show_fps")
             SettingSelect(label: "Performance details", key: "perf_overlay", options: [("off", "Off"), ("compact", "Compact"), ("detailed", "Detailed")])
             SettingToggle(label: "Notes in the top-left corner", key: "notes", fallback: true)
+            SettingToggle(label: "Notes: why the bus does not move", key: "notes_driving", fallback: true)
+            SettingToggle(label: "Notes: the bus's own messages", key: "notes_script", fallback: true)
+            SettingToggle(label: "Notes: the end of a trip", key: "notes_trip", fallback: true)
+            SettingToggle(label: "Notes: tickets and change", key: "notes_tickets", fallback: true)
             SettingToggle(label: "Chat in online games", key: "chat", fallback: true)
             SettingSlider(label: "Chat size", key: "chat_size", range: 0.5 ... 3, step: 0.1, fallback: 1, round: 0.1) { pct($0) }
             SettingToggle(label: "Other players' names above their buses", key: "name_tags", fallback: true)
@@ -432,6 +441,9 @@ struct SettingsPage: View {
             SettingToggle(label: "Navigator (Shift+N: map, schedule, off)", key: "navigator", fallback: true)
             SettingToggle(label: "Route arrows (as in OMSI 2)", key: "nav_arrows")
             SettingToggle(label: "AI vehicles on the map", key: "nav_ai", fallback: true)
+            if store.flag("nav_ai", true) {
+                SettingToggle(label: "Cars on the map too", key: "nav_ai_cars", fallback: true)
+            }
             SettingToggle(label: "Map surface under the roads", key: "nav_surface", fallback: true)
             SettingToggle(label: "Light map", key: "nav_light")
             SettingToggle(label: "Classic 2D navigator (lightweight)", key: "nav_classic_2d")
@@ -452,6 +464,7 @@ struct SettingsPage: View {
                 SettingToggle(label: "Tell me about a new version during a session", key: "update_notify", fallback: true)
             }
             SettingToggle(label: "Count me in the website's \"playing now\" (anonymous)", key: "presence", fallback: true)
+            SettingToggle(label: "Send servers an identifier for bans", key: "hardware_id", fallback: true, help: "Made from this computer's ID, different for each server owner, so servers cannot match you with each other. Some servers turn away players without it.")
             HStack {
                 Text("openOMSI \(store.version) (\(store.build))").font(.inter(12)).foregroundStyle(Theme.muted)
                 Spacer()

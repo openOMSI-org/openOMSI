@@ -264,6 +264,7 @@ struct Route {
 
 /// Roads around a centre, built into vertex buffer 0.
 struct Roads {
+    reach: f64,
     /// `Navigator::look_key` it was built for.
     look: u64,
     anchor: DVec2,
@@ -383,6 +384,7 @@ pub struct Navigator {
     pub arrows: bool,
     /// The other (AI) vehicles are drawn on the maps (the `nav_ai` setting).
     pub show_ai: bool,
+    pub show_cars: bool,
     /// The map's own surface (`Maps/<Map>/openomsi-realmap`), once read, and a number that changes
     /// when it arrives (the meshes are built again).
     surface: Option<std::sync::Arc<omsi_map::package::Package>>,
@@ -416,7 +418,7 @@ pub struct Navigator {
     resizing: Option<(f32, [f32; 2], f32)>,
     /// The ground being built on a worker for the small map (its look and lane count) and for
     /// the city map, and the network's carriageways with whether the paving covers each.
-    panel_job: Option<build::Job<(u64, usize)>>,
+    panel_job: Option<build::Job<(u64, usize, f64)>>,
     city_job: Option<build::Job<CityJob>>,
     road_cache: Option<(u64, std::sync::Arc<Vec<(MapRoad, bool)>>)>,
     road_job: Option<(u64, std::sync::mpsc::Receiver<std::sync::Arc<Vec<(MapRoad, bool)>>>)>,
@@ -508,11 +510,13 @@ fn draw_every(now: u32, frame_dt: f32) -> u32 {
     (ideal.ceil() as u32).clamp(1, 4)
 }
 
+const MAX_ZOOM: f64 = 320.0;
+
 fn zoom_target(speed_kmh: f32, turn_dist: Option<f64>, turning_deg: f64) -> f64 {
     let speed = 150.0 + speed_kmh.abs() as f64 * 2.4;
     let turn = turn_dist.map_or(f64::MAX, |d| 150.0 + d * 0.6);
     let bend = 1.0 - (turning_deg.abs() / 25.0).clamp(0.0, 1.0) * 0.25;
-    (speed.min(turn) * bend).clamp(150.0, 320.0)
+    (speed.min(turn) * bend).clamp(150.0, MAX_ZOOM)
 }
 
 fn ease(dt: f32, tau: f32) -> f64 {
@@ -591,6 +595,7 @@ impl Navigator {
             next_dist: None,
             arrows: false,
             show_ai: true,
+            show_cars: true,
             surface: None,
             surface_version: 0,
             show_surface: true,
@@ -841,16 +846,13 @@ impl Navigator {
         }
         r.note = (r.note - f.dt).max(0.0);
         // where the next stop is on the route: the way to the route must not skip it
-        let stop_at = f.stops.first().and_then(|st| {
-            (r.progress..r.lanes.len().min(r.progress + 1500)).find(|&k| {
-                net.lanes.get(r.lanes[k]).and_then(|l| l.nearest_point(st.position)).map(|p| p.1 < 25.0).unwrap_or(false)
-            })
-        });
+        let stop_at = f.stops.first().and_then(|st| stop_on_route(net, &r.lanes[..r.lanes.len().min(r.progress + 1500)], r.progress, st.position, |_, _| true)).map(|(k, _)| k);
         // the nearest route lane near the bus that runs its way, a little back to a lot ahead
         // (before the bus first reached the route: only the stretch up to the next stop)
         let (from, to) = match (r.joined, stop_at) {
             (false, Some(k)) if r.approach => (r.progress.saturating_sub(3), (k + 2).min(r.lanes.len())),
             (false, Some(k)) => (k.saturating_sub(40).max(r.progress), (k + 2).min(r.lanes.len())),
+            (true, Some(k)) => (r.progress.saturating_sub(3), (r.progress + 60).min(k.max(r.progress) + 2).min(r.lanes.len())),
             _ => (r.progress.saturating_sub(3), (r.progress + 60).min(r.lanes.len())),
         };
         let mut best: Option<(usize, f32, f64)> = None;
@@ -1142,20 +1144,20 @@ impl Navigator {
     fn route_distance(&self, net: &Network, stop: DVec3) -> Option<f64> {
         if self.destination.is_some() { return None; }
         let r = &self.route;
-        let mut acc = -(r.s as f64);
+        if r.progress >= r.lanes.len() {
+            return None;
+        }
+        let mut acc = vec![-(r.s as f64)];
         for &l in r.lanes.iter().skip(r.progress) {
-            let lane = net.lanes.get(l)?;
-            if let Some((s, d)) = lane.nearest_point(stop) {
-                if d < 25.0 && (acc + s as f64) >= -5.0 {
-                    return Some((acc + s as f64).max(0.0));
-                }
-            }
-            acc += lane.length() as f64;
-            if acc > 30_000.0 {
+            let next = acc[acc.len() - 1] + net.lanes.get(l)?.length() as f64;
+            if next > 30_000.0 {
                 break;
             }
+            acc.push(next);
         }
-        None
+        let ahead = |k: usize| acc[k - r.progress];
+        let (k, s) = stop_on_route(net, &r.lanes[..r.progress + acc.len().min(r.lanes.len() - r.progress)], r.progress, stop, |k, s| ahead(k) + s as f64 >= -5.0)?;
+        Some((ahead(k) + s as f64).max(0.0))
     }
 
     /// Advance, draw into the texture and put it on the screen.
@@ -1205,20 +1207,26 @@ impl Navigator {
         self.date = f.date;
         self.day_clock = (f.time, f.weekday);
         if let Some(rx) = self.building.as_ref() {
-            if let Ok((net, pos, streets, surface, hints)) = rx.try_recv() {
-                self.name_hints = hints;
-                log::info!("navigator: the map's road network is there ({} lanes, {} streets named)", net.lanes.len(), streets.names.len());
-                self.streets = Some(std::sync::Arc::new(streets));
-                self.set_surface(surface);
-                self.global = Some(std::sync::Arc::new(net));
-                self.stop_pos = std::sync::Arc::new(pos);
-                self.global_version += 1;
-                self.building = None;
-                // routes and roads again on the whole map
-                self.roads = None;
-                self.reset_navigation_network();
-                self.route_mesh.0 = u64::MAX;
-                self.route_jam.clear();
+            match rx.try_recv() {
+                Ok((net, pos, streets, surface, hints)) => {
+                    self.name_hints = hints;
+                    log::info!("navigator: the map's road network is there ({} lanes, {} streets named)", net.lanes.len(), streets.names.len());
+                    self.streets = Some(std::sync::Arc::new(streets));
+                    self.set_surface(surface);
+                    self.global = Some(std::sync::Arc::new(net));
+                    self.stop_pos = std::sync::Arc::new(pos);
+                    self.global_version += 1;
+                    self.building = None;
+                    // routes and roads again on the whole map
+                    self.roads = None;
+                    self.reset_navigation_network();
+                    self.route_mesh.0 = u64::MAX;
+                    self.route_jam.clear();
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) if self.streets.is_none() => {
+                    self.streets = Some(std::sync::Arc::new(Streets { names: Vec::new(), of_lane: Vec::new(), labels: Vec::new() }));
+                }
+                Err(_) => {}
             }
         }
         if let Some(rx) = self.layers_rx.as_ref() {
@@ -1458,3 +1466,17 @@ mod tests;
 #[cfg(test)]
 #[path = "destination/tests.rs"]
 mod destination_tests;
+
+fn stop_on_route(net: &Network, lanes: &[usize], from: usize, stop: DVec3, ok: impl Fn(usize, f32) -> bool) -> Option<(usize, f32)> {
+    let near = |k: usize| net.lanes.get(lanes[k]).and_then(|l| l.nearest_point(stop)).filter(|&(s, d)| d < 25.0 && ok(k, s));
+    let kerb = |k: usize| near(k).filter(|_| passes_on_its_side(net, lanes[k], stop, 25.0));
+    let first = (from..lanes.len()).find(|&k| near(k).is_some())?;
+    if let Some((s, _)) = kerb(first).filter(|&(_, d)| d < 6.0) {
+        return Some((first, s));
+    }
+    (first..lanes.len().min(first + 60))
+        .filter_map(|k| kerb(k).map(|(s, d)| (k, s, d)))
+        .min_by(|a, b| a.2.total_cmp(&b.2))
+        .map(|(k, s, _)| (k, s))
+        .or_else(|| near(first).map(|(s, _)| (first, s)))
+}

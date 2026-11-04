@@ -159,6 +159,7 @@ pub struct CarRun {
     lead_len: Option<usize>,
     /// Slots of [`PLACE_IN_TRAIN`] here.
     place_slots: [Option<VarId>; 3],
+    paint_base: Vec<(String, VarId, f32)>,
 }
 
 impl CarRun {
@@ -185,6 +186,7 @@ impl CarRun {
             shared: Vec::new(),
             lead_len: None,
             place_slots: [None; 3],
+            paint_base: Vec::new(),
         };
         run.sync_names(lead);
         let starting: Vec<(VarId, VarId)> =
@@ -195,6 +197,15 @@ impl CarRun {
         run.write_place(place);
         let (prog, state, machine) = (run.prog.clone(), &mut run.state, &mut run.machine);
         quietly(lead, |host| machine.run_init(&prog, state, host));
+        run.paint_base = super::instance::scheme_var_names(ty)
+            .into_iter()
+            .filter_map(|k| {
+                let slot = *run.names.get(&k)?;
+                let now = run.state.vars[slot as usize];
+                let lead_base = lead.paint_base.iter().find(|(n, _)| *n == k).map(|(_, v)| *v);
+                Some((k, slot, if run.prog.init_stores(slot) { now } else { lead_base.unwrap_or(now) }))
+            })
+            .collect();
         // ({init} puts the defaults the paint's variables are meant to replace)
         if let Some(scheme) = lead.host.paint_scheme {
             run.apply_paint(ty, scheme);
@@ -215,6 +226,22 @@ impl CarRun {
         if let Some(i) = scheme {
             for (name, v) in &ty.paint_schemes[i].set_vars {
                 put(name, *v);
+            }
+        }
+    }
+
+    pub(super) fn take_own_brakeforce(&mut self) -> f32 {
+        if !self.stores("Brakeforce") {
+            return 0.0;
+        }
+        let Some(slot) = omsi_script::compile::with_lower("Brakeforce", |k| self.names.get(k).copied()) else { return 0.0 };
+        std::mem::take(&mut self.state.vars[slot as usize]).max(0.0)
+    }
+
+    pub(super) fn release_paint(&mut self, ty: &VehicleType, old: Option<usize>, new: Option<usize>) {
+        for (name, slot, v) in &self.paint_base {
+            if super::instance::scheme_sets(ty, old, name) && !super::instance::scheme_sets(ty, new, name) {
+                self.state.vars[*slot as usize] = *v;
             }
         }
     }
@@ -434,5 +461,21 @@ mod tests {
         let plain = super::super::tests::coupling_test_type(None);
         assert!(!uses_place_in_train(&plain));
         assert!(uses_place_in_train(&unit_car()));
+    }
+
+    #[test]
+    fn a_car_brakes_with_its_own_brakeforce_once_and_never_with_the_leads() {
+        let mut lead = VehicleInstance::new(super::super::tests::coupling_test_type(None), VehicleHost::new(Default::default()));
+        let car = |osc: &str| crate::timetable_run::tests::script_test_vehicle(osc, "Brakeforce\n", "").ty.clone();
+        let braking = car("{frame}\n1000 (S.L.Brakeforce)\n{end}\n");
+        let silent = car("{frame}\n{end}\n");
+        let mut a = CarRun::start(&braking, &mut lead, [1.0, 0.0, 0.0]);
+        let mut b = CarRun::start(&silent, &mut lead, [2.0, 0.0, 0.0]);
+        lead.set_var("Brakeforce", 5000.0);
+        a.frame(&mut lead, [1.0, 0.0, 0.0], [&[], &[]], None);
+        b.frame(&mut lead, [2.0, 0.0, 0.0], [&[], &[]], None);
+        assert_eq!(a.take_own_brakeforce(), 1000.0);
+        assert_eq!(a.take_own_brakeforce(), 0.0);
+        assert_eq!(b.take_own_brakeforce(), 0.0);
     }
 }

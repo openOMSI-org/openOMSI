@@ -276,6 +276,18 @@ fn junction_helpers_between_roads_remain_connected() {
 }
 
 #[test]
+fn a_map_whose_streets_are_all_editor_only_paths_on_object_roads_still_shows_them() {
+    let mut a = straight((0.0, 0.0), (0.0, 100.0));
+    let mut b = straight((30.0, 0.0), (30.0, 100.0));
+    a.invisible = true;
+    b.invisible = true;
+    let mut net = Network { lanes: vec![a, b], ..Default::default() };
+    confirm_road_surfaces(&mut net, &[]);
+    assert!(net.lanes.iter().all(|l| !l.invisible));
+    assert_eq!(road_geometry(&net).len(), 2);
+}
+
+#[test]
 fn placement_gaps_are_bridged_only_where_the_graph_connects() {
     let mut lanes = vec![straight((0.0, 0.0), (0.0, 40.0)), straight((0.0, 41.0), (0.0, 80.0)), straight((2.0, 41.0), (2.0, 80.0))];
     lanes[0].next = vec![1];
@@ -587,4 +599,88 @@ fn a_frame_panel_s_map_stays_inside_the_navigator() {
     // (no frame panel: the navigator lays itself out as ever)
     let n = Navigator::new(true, 0.85, "bottom-left");
     assert_eq!((n.frame_panel, n.framed, n.frame_card), (None, None, None));
+}
+
+#[test]
+fn route_arrows_stand_only_where_the_route_has_a_choice() {
+    let lanes = vec![
+        straight((0.0, 0.0), (0.0, 100.0)),
+        straight((0.0, 100.0), (0.0, 130.0)),
+        straight((0.0, 130.0), (60.0, 130.0)),
+        straight((60.0, 130.0), (160.0, 130.0)),
+        straight((0.0, 130.0), (0.0, 230.0)),
+        straight((160.0, 130.0), (160.0, 30.0)),
+    ];
+    let mut net = Network { lanes, ..Default::default() };
+    for (a, n) in [(0, vec![1]), (1, vec![2, 4]), (2, vec![3]), (3, vec![5])] {
+        net.lanes[a].next = n;
+    }
+    let mut nav = Navigator::new(true, 0.85, "bottom-left");
+    nav.arrows = true;
+    nav.global = Some(std::sync::Arc::new(net));
+    nav.route.lanes = vec![0, 1, 2, 3, 5];
+    nav.route.on_route = true;
+    let spots = nav.arrow_spots(None, 1000.0, &|_| None);
+    let at: Vec<u64> = spots.iter().map(|s| s.0).collect();
+    assert_eq!(at, vec![2], "{spots:?}");
+}
+
+#[test]
+fn a_route_arrow_shows_the_turn_of_a_junction_path_drawn_in_two_parts() {
+    let lanes = vec![
+        straight((0.0, 0.0), (0.0, 100.0)),
+        straight((0.0, 100.0), (0.0, 110.0)),
+        straight((0.0, 110.0), (30.0, 110.0)),
+        straight((0.0, 100.0), (0.0, 200.0)),
+    ];
+    let kinds = |second_object: i64| {
+        let mut net = Network { lanes: lanes.clone(), ..Default::default() };
+        for (a, n) in [(0, vec![1, 3]), (1, vec![2])] {
+            net.lanes[a].next = n;
+        }
+        let key = |id, path| Some(omsi_sim::traffic::LaneKey { tile: (0, 0), id, path });
+        (net.lanes[1].key, net.lanes[2].key) = (key(7, 0), key(second_object, 1));
+        let mut nav = Navigator::new(true, 0.85, "bottom-left");
+        nav.arrows = true;
+        nav.global = Some(std::sync::Arc::new(net));
+        nav.route.lanes = vec![0, 1, 2];
+        nav.route.on_route = true;
+        nav.arrow_spots(None, 1000.0, &|_| None).iter().map(|s| (s.0, s.3)).collect::<Vec<(u64, &str)>>()
+    };
+    assert_eq!(kinds(7), vec![(1, "R")], "one crossing object");
+    assert!(kinds(8).is_empty(), "straight on, then a bend of the road beyond");
+}
+
+#[test]
+fn the_next_stop_is_on_the_loop_that_serves_it_not_on_the_main_road_beside_it() {
+    let lanes = vec![
+        straight((0.0, 0.0), (0.0, 100.0)),
+        straight((0.0, 100.0), (20.0, 100.0)),
+        straight((20.0, 100.0), (20.0, 40.0)),
+        straight((20.0, 40.0), (0.0, 40.0)),
+    ];
+    let net = Network { lanes, ..Default::default() };
+    let stop = DVec3::new(15.0, 50.0, 0.0);
+    assert_eq!(stop_on_route(&net, &[0, 1, 2, 3], 0, stop, |_, _| true).map(|x| x.0), Some(2));
+    assert_eq!(stop_on_route(&net, &[0, 1], 0, stop, |_, _| true).map(|x| x.0), Some(0), "only the main road: the stop is on it");
+    assert_eq!(stop_on_route(&net, &[1], 0, DVec3::new(500.0, 0.0, 0.0), |_, _| true), None);
+    assert_eq!(stop_on_route(&net, &[0, 1, 2, 3], 0, stop, |k, _| k != 2).map(|x| x.0), Some(3), "a lane ruled out is passed over");
+    let side = Network { lanes: vec![straight((0.0, 0.0), (0.0, 100.0)), straight((0.0, 100.0), (6.0, 100.0)), straight((6.0, 100.0), (6.0, 0.0))], ..Default::default() };
+    assert_eq!(stop_on_route(&side, &[0, 1, 2], 0, DVec3::new(4.0, 70.0, 0.0), |_, _| true).map(|x| x.0), Some(0), "a stop at the main road's kerb stays there, a closer lane beyond notwithstanding");
+    assert_eq!(stop_on_route(&net, &[9, 0], 0, DVec3::new(2.0, 50.0, 0.0), |_, _| true).map(|x| x.0), Some(1), "a lane missing from the network is passed over");
+}
+
+#[test]
+fn only_streets_written_on_the_city_map_are_offered_and_found() {
+    let mut n = Navigator::new(true, 0.85, "bottom-left");
+    assert_eq!(n.street_names(), None);
+    let labels = vec![(DVec2::new(100.0, 0.0), 0.0, 0), (DVec2::new(300.0, 0.0), 0.0, 0), (DVec2::new(900.0, 0.0), 0.0, 0)];
+    n.streets = Some(std::sync::Arc::new(Streets { names: vec!["Hauptstr.".into(), "Am Hafen".into()], of_lane: vec![1], labels }));
+    assert_eq!(n.street_names(), Some(vec!["Hauptstr.".to_string()]));
+    assert!(!n.show_street("Am Hafen"));
+    assert!(!n.map_open());
+    assert!(n.show_street("Hauptstr."));
+    assert!(n.map_open() && !n.city.follow);
+    assert_eq!(n.city.center, DVec2::new(300.0, 0.0));
+    assert_eq!(n.city.found, Some(0));
 }

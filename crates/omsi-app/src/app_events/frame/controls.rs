@@ -95,6 +95,7 @@ impl App {
             // what the bus is standing on and running on: the road's own grain
             // (`StreetCond`: 0 dry, 1 wet, 2 snow) and the engine
             street_cond: driving.map(|p| p.vehicle.host.street_cond).unwrap_or(0.0),
+            surface: driving.and_then(|p| p.vehicle.rigid.as_ref()).and_then(|r| r.wheels.first()).map(|w| w.surface),
             engine_rpm: driving.and_then(|p| omsi_sim::startup::engine_rpm(&p.vehicle)).unwrap_or(0.0),
             engine_load: driving.map(|p| p.vehicle.physics.controls.throttle.clamp(0.0, 1.0)).unwrap_or(0.0),
             micro: 0.0,
@@ -288,6 +289,10 @@ impl App {
                 }
                 if n == "voice_nearby" {
                     self.input.pad_voice_nearby = *down;
+                    return false;
+                }
+                if n == "view_zoom_hold" {
+                    self.input.pad_zoom_hold = *down;
                     return false;
                 }
                 if gear_step(&n).is_some() {

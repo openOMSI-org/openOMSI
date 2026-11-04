@@ -381,9 +381,10 @@ fn interface_size_is_read_within_its_range() {
 }
 
 #[test]
-fn discord_settings_round_trip_and_default_enabled() {
-    assert!(Settings::default().discord_status);
-    let settings = Settings { discord_status: false, discord_app_id: "123456".into(), ..Default::default() };
+fn discord_settings_round_trip_and_default_off() {
+    // (Discord's status tells friends the map, bus, line and multiplayer: only when asked)
+    assert!(!Settings::default().discord_status);
+    let settings = Settings { discord_status: true, discord_app_id: "123456".into(), ..Default::default() };
     assert_eq!(Settings::from_text(&settings.to_text()), settings);
 }
 
@@ -596,6 +597,11 @@ fn full_bus_reaction_defaults_off_for_desktop_phone_and_old_settings() {
     assert!(!Settings::from_text("version=1\n").passenger_full_bus_reaction);
     assert!(Settings::from_text("passenger_full_bus_reaction=1\n").passenger_full_bus_reaction);
     assert!(!Settings::from_text("passenger_full_bus_reaction=0\n").passenger_full_bus_reaction);
+    assert!(!Settings::desktop().pax_short_rides_stand);
+    assert!(Settings::from_text("pax_short_rides_stand=1\n").pax_short_rides_stand);
+    let mut on = Settings::desktop();
+    on.pax_short_rides_stand = true;
+    assert!(Settings::from_text(&on.to_text()).pax_short_rides_stand);
 }
 #[test]
 fn full_bus_reaction_round_trips_through_both_settings_writers() {
@@ -613,4 +619,30 @@ fn full_bus_reaction_round_trips_through_both_settings_writers() {
             assert_eq!(serialized.lines().filter(|line| line.starts_with("passenger_full_bus_reaction=")).count(), 1);
         }
     }
+}
+
+#[test]
+fn graphics_brightness_defaults_clamp_and_roundtrip() {
+    let defaults = Settings::from_text("");
+    assert_eq!((defaults.road_glare, defaults.traffic_headlights), (1.0, 1.0));
+    let value = Settings::from_text("graphics=enhanced\nroad_glare=0.25\ntraffic_headlights=1.75\n");
+    assert_eq!((value.road_glare, value.traffic_headlights), (0.25, 1.75));
+    let clamped = Settings::from_text("road_glare=-5\ntraffic_headlights=999\n");
+    assert_eq!((clamped.road_glare, clamped.traffic_headlights), (0.0, 2.0));
+    let invalid = Settings::from_text("road_glare=NaN\ntraffic_headlights=inf\n");
+    assert_eq!((invalid.road_glare, invalid.traffic_headlights), (1.0, 1.0));
+    let mut ui = omsi_launcher_lib::settings_from_text(None);
+    ui["road_glare"] = serde_json::json!(0.3);
+    ui["traffic_headlights"] = serde_json::json!(1.6);
+    let game = Settings::from_text(&omsi_launcher_lib::settings_to_text(&ui, None));
+    assert!((game.road_glare - 0.3).abs() < 0.0001);
+    assert!((game.traffic_headlights - 1.6).abs() < 0.0001);
+}
+
+#[test]
+fn the_note_kinds_go_round_the_file() {
+    let mut s = Settings::desktop();
+    (s.notes_driving, s.notes_script, s.notes_trip, s.notes_tickets) = (false, true, false, true);
+    let back = Settings::from_text(&s.to_text());
+    assert_eq!((back.notes_driving, back.notes_script, back.notes_trip, back.notes_tickets), (false, true, false, true));
 }

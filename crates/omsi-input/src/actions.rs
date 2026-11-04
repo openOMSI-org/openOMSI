@@ -12,12 +12,15 @@ pub fn is_game_action(name: &str) -> bool {
                 | "screenshot"
                 | "photo_mode"
                 | "flashlight"
+                | "clean_screen"
+                | "get_up"
                 | "quicksave"
                 | "toggel_mouse_ctrl"
                 | "toggel_ctrler"
                 | "voice_radio"
                 | "voice_nearby"
                 | "pax_door_request"
+                | "head_tracking_recenter"
         )
 }
 
@@ -82,6 +85,13 @@ mod tests {
         let chord = omsi_content::input::chord(true, true, false);
         assert!(!game_chord_bound(&keys, scan, chord, false));
         assert!(game_chord_bound(&keys, scan, chord, true));
+    }
+
+    /// A controller button on head tracking's recentre goes to the game, not to the bus.
+    #[test]
+    fn the_head_tracking_recentre_is_a_game_action() {
+        assert!(is_game_action("head_tracking_recenter"));
+        assert!(is_game_action("Head_Tracking_Recenter"));
     }
 
     /// The game's own vehicle keys count for any bus; a script's trigger, an alias and a

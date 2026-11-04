@@ -136,7 +136,13 @@ impl App {
                 self.request_passenger_door();
                 return;
             }
-            // getting up (Ctrl+Shift+G) and, on foot, the walker's keys
+            // A remapped get-up key also steps out on foot, before the walker takes
+            // G, Space, F1 or a movement key (and before driving-layout fallbacks).
+            if pressed && !repeat && get_up_key(&self.input.game_keys, code, shift_now, ctrl, alt) {
+                self.game_action("get_up");
+                return;
+            }
+            // on foot, the walker's keys
             if self.foot_key(code, pressed, repeat, ctrl, shift_now) {
                 return;
             }
@@ -1296,6 +1302,36 @@ pub(crate) fn flies_free_camera(code: KeyCode) -> bool {
 pub(crate) fn binding_is_key(b: &omsi_content::KeyBinding, code: KeyCode, scan: i32, m: i32) -> bool {
     let ob = keys::own_modifier_bit(code);
     (b.scan_code == scan || keys::both_code(code) == Some(b.scan_code)) && (b.matches(m) || ob != 0 && b.matches(m | ob))
+}
+
+fn get_up_key(game: &[omsi_content::KeyBinding], code: KeyCode, shift: bool, ctrl: bool, alt: bool) -> bool {
+    let modifier = omsi_content::input::chord(shift, ctrl, alt) & !keys::own_modifier_bit(code);
+    keys::dik_code(code).is_some_and(|scan| game.iter().any(|b|
+        b.action.eq_ignore_ascii_case("get_up") && binding_is_key(b, code, scan, modifier)))
+}
+
+#[cfg(test)]
+mod get_up_key_tests {
+    use super::*;
+    use omsi_content::{input::{KEY_ALT, KEY_CTRL, KEY_SHIFT}, KeyBinding};
+
+    #[test]
+    fn remapped_get_up_keys_reach_the_action_before_walking_or_driving() {
+        let bound = |code, modifier| vec![KeyBinding {
+            action: "get_up".into(), scan_code: keys::dik_code(code).unwrap(), modifier,
+        }];
+        for code in [KeyCode::KeyG, KeyCode::KeyW, KeyCode::Space, KeyCode::F1] {
+            assert!(get_up_key(&bound(code, 0), code, false, false, false));
+        }
+        assert!(get_up_key(&bound(KeyCode::KeyG, KEY_ALT), KeyCode::KeyG, false, false, true));
+        assert!(!get_up_key(&bound(KeyCode::KeyG, KEY_ALT), KeyCode::KeyG, false, false, false));
+        let default = bound(KeyCode::KeyG, KEY_CTRL | KEY_SHIFT);
+        assert!(get_up_key(&default, KeyCode::KeyG, true, true, false));
+        assert!(!get_up_key(&default, KeyCode::KeyG, true, false, false), "Shift+G stays the seat key");
+        assert!(!get_up_key(&[], KeyCode::KeyG, false, false, false), "unbound G stays the seat key");
+        assert!(!get_up_key(&bound(KeyCode::KeyW, 0), KeyCode::KeyG, false, false, false));
+        assert!(!get_up_key(&[KeyBinding { action: "get_up".into(), ..Default::default() }], KeyCode::KeyG, false, false, false));
+    }
 }
 
 /// `App::key_left_free` for a key's scan code.

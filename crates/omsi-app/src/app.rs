@@ -230,6 +230,9 @@ impl App {
                 }
             },
         };
+        if let Some(preset) = crate::first_graphics::choose(self) {
+            self.service_msg = Some((omsi_ui::i18n::tr_fill("Graphics set to {preset} for this computer (Options › Graphics changes it)", &[("{preset}", &omsi_ui::tr(preset))]), 8.0));
+        }
         let start = match crate::startup::RendererStart::begin(&mut self.gfx.instance, &window, omsi_render::RenderOptions { max_scene: crate::settings::fullscreen_scene_cap(self.settings.fullscreen, self.gfx.spanned, resolution), ..self.args.session_settings.render_options(&self.settings) }) {
             Ok(s) => s,
             Err(e) => {
@@ -579,6 +582,7 @@ impl App {
                 if let Some(n) = self.menus.navigator.as_mut() {
                     n.arrows = self.settings.nav_arrows;
                     n.show_ai = self.settings.nav_ai;
+                    n.show_cars = self.settings.nav_ai_cars;
                     n.show_surface = self.settings.nav_surface;
                     n.light = self.settings.is_light_theme();
                     n.show_3d = self.settings.nav_3d;
@@ -607,6 +611,7 @@ impl App {
                     h.bad_driving = self.settings.pax_bad_driving;
                     h.boarding = self.settings.boarding.clone();
                     h.stand_chance = self.settings.standing_chance;
+                    h.short_rides_stand = self.settings.pax_short_rides_stand;
                     h.voices = match self.settings.pax_voices.as_str() { "off" => 2, "tickets" => 1, _ => 0 };
                     if let Some(p) = self.player.as_mut() {
                         h.set_cabin(&mut p.vehicle);
@@ -638,6 +643,7 @@ impl App {
                         Ok(mut t) => {
                             t.lights_only = !populated;
                             t.no_timetable_buses = self.args.no_timetable_buses;
+                            t.drive_through_parked = self.args.ai_drive_through_parked;
                             if let Some(lan) = self.net.lan.as_ref() {
                                 t.set_lan_seed(lan::population_seed(lan));
                             }
@@ -842,6 +848,7 @@ impl App {
     /// One loading screen picture (the map, or our bus going to the server): `title`, bar at `shown`.
     fn loading_frame(&mut self, renderer: omsi_render::Renderer, mut scene: Scene, title: &str, shown: f32) {
         let mut reconfigure = false;
+        crate::themes::sync(&self.settings.ui_theme_pack, self.settings.is_light_theme());
         if let (Some(ui), Some(s), Some(win)) = (
             self.ui.as_mut(),
             self.gfx.surface.as_ref(),

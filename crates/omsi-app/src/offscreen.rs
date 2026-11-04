@@ -243,7 +243,7 @@ fn world_lights(
     lights::collect(
         world, scene, daylight, eye, vehicles,
         lights::ConeWeather { enhanced: !renderer.options.no_enhanced, ..lights::ConeWeather::of(weather, daylight.night) },
-        lights::VehicleSmoke::from_setting(vehicle_smoke), player_first,
+        lights::VehicleSmoke::from_setting(vehicle_smoke), player_first, 1.0,
     );
     // (and the pictures the lights asked for first now: a picture has the one frame)
     lights::upload_corona_textures(renderer);

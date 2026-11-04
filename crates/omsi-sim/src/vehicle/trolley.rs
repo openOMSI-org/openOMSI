@@ -181,6 +181,16 @@ impl VehicleInstance {
                 _ => 0,
             }
         };
+        // radio switches: the cab's request, or the indicator in a vehicle that has none
+        let radio = match self.var(&def.vars.switch_request) {
+            Some(v) if (1.5..2.5).contains(&v) => 2,
+            Some(v) if v > 0.5 => 1,
+            Some(v) if v < -0.5 => -1,
+            Some(_) => 0,
+            None => blinker,
+        };
+        let route_code = self.var(&def.vars.switch_code).map_or(0, |v| v.max(0.0).round() as u32);
+        let channel = self.var(&def.vars.switch_channel).map_or(0, |v| v.max(0.0).round() as u32);
         let mut raise_all = self.var(&def.vars.raise_request).map(|v| v);
         // a plain OMSI 2 trolleybus: the cab's two switches (0 folded, 1 raised) ask for the
         // poles, and their meshes follow what our poles do (2: both hidden, ours are drawn)
@@ -301,6 +311,9 @@ impl VehicleInstance {
             brake: c.brake,
             dir,
             blinker,
+            radio,
+            route_code,
+            channel,
             ropes: &ropes,
             drive: has_drive,
             script_force,

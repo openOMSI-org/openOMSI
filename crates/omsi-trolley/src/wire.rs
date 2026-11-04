@@ -12,6 +12,12 @@ use glam::DVec3;
 use hashbrown::HashMap;
 use std::sync::Mutex;
 
+mod arcs;
+mod radio;
+mod sounds;
+pub use arcs::ArcRule;
+pub use sounds::{SoundChoice, WireSounds};
+
 /// Where a shoe's contact point lies: on this span, this far (m) from its first point, on the
 /// wire of this side (0 right/positive, 1 left/negative, seen along the span).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -118,8 +124,34 @@ pub enum SwitchMode {
     /// The vehicle's indicator on the side of the branch takes the branch, otherwise
     /// straight.
     Indicator,
+    /// Radio control: the cab's left or right request, or else the vehicle's route code looked
+    /// up in the switch's `route` lines, sets the frog; with neither it stays as it was set.
+    Radio,
     /// Stays as it is (the network's script or a test sets it).
     Fixed,
+}
+
+/// What a vehicle sends a contact plate or a radio receiver.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct SwitchRequest {
+    /// The current drawn (A), for `power` switches.
+    pub current: f32,
+    /// The indicator, for `indicator` switches: -1 left, +1 right, 0 none.
+    pub blinker: i8,
+    /// The cab's switch request: -1 left, +1 right, 2 toggle, 0 none.
+    pub radio: i8,
+    /// The route code the vehicle sends (0 none) and the radio channel it sends on.
+    pub code: u32,
+    pub channel: u32,
+}
+
+/// A frog's way as a `route` line names it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SwitchWay {
+    Straight,
+    Branch,
+    Left,
+    Right,
 }
 
 #[derive(Debug, Clone)]
@@ -144,6 +176,42 @@ pub struct SwitchDef {
     /// The branch leaves to the right, seen from the toe.
     pub branch_right: bool,
     pub initial_branch: bool,
+    /// Radio switches: the way each route code takes, and the only channel heard (none: all).
+    pub routes: Vec<(u32, SwitchWay)>,
+    pub channel: Option<u32>,
+    /// Radio reception radius in the horizontal plane (m).
+    pub radio_range: f32,
+}
+
+impl SwitchDef {
+    /// Whether a way of the frog is its branch.
+    pub fn is_branch(&self, way: SwitchWay) -> bool {
+        match way {
+            SwitchWay::Straight => false,
+            SwitchWay::Branch => true,
+            SwitchWay::Left => !self.branch_right,
+            SwitchWay::Right => self.branch_right,
+        }
+    }
+
+    /// The position a request asks of this switch (true: the branch), if it asks for one.
+    pub fn wanted(&self, r: &SwitchRequest) -> Option<bool> {
+        let side = |s: i8| (s > 0 && self.branch_right) || (s < 0 && !self.branch_right);
+        match self.mode {
+            SwitchMode::Fixed => None,
+            SwitchMode::Power => Some((r.current.abs() > self.sense_amps) != self.invert),
+            SwitchMode::Indicator => Some(side(r.blinker)),
+            SwitchMode::Radio => {
+                if r.radio == 2 || self.channel.is_some_and(|c| c != r.channel) {
+                    return None;
+                }
+                if r.radio != 0 {
+                    return Some(side(r.radio));
+                }
+                self.routes.iter().find(|(c, _)| r.code != 0 && *c == r.code).map(|(_, w)| self.is_branch(*w))
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -155,6 +223,23 @@ struct Dyn {
     branch: Vec<bool>,
     /// A switch holds its position this long after it was set (s).
     lock: Vec<f32>,
+    since: Vec<f32>,
+    switch_sounds: Vec<DVec3>,
+}
+
+impl Dyn {
+    fn move_switch(&mut self, index: usize, branch: bool, pos: DVec3) -> bool {
+        if self.branch.get(index).is_none_or(|was| *was == branch) {
+            return false;
+        }
+        self.branch[index] = branch;
+        self.since[index] = 0.0;
+        if self.switch_sounds.len() >= 256 {
+            self.switch_sounds.remove(0);
+        }
+        self.switch_sounds.push(pos);
+        true
+    }
 }
 
 /// The network. Everything but the sections' power and the switches' positions is fixed once
@@ -164,8 +249,14 @@ pub struct WireNet {
     /// How uneven the contact wire is (m): wear, ice, dirt. The shoe leaves it where it rises
     /// faster than the pole can follow.
     pub roughness: f32,
+    /// When a shoe crossing a frog, or entering or leaving a section insulator, under current arcs.
+    pub frog_arc: ArcRule,
+    pub insulator_arc: ArcRule,
     /// The wire was read off splines the map draws itself: the game draws no wire of its own.
     pub drawn_by_map: bool,
+    /// `[trolley_sounds]`: the overhead line's sounds, and the folder their files are in.
+    pub sounds: WireSounds,
+    pub dir: Option<std::path::PathBuf>,
     pub sections: Vec<Section>,
     pub spans: Vec<Span>,
     pub nodes: Vec<Node>,
@@ -217,6 +308,9 @@ struct RawSwitch {
     sense: f32,
     invert: bool,
     initial_branch: bool,
+    routes: Vec<(u32, SwitchWay)>,
+    channel: Option<u32>,
+    radio_range: f32,
 }
 
 impl WireNet {
@@ -227,6 +321,10 @@ impl WireNet {
     /// voltage 600            nominal line voltage (V)
     /// spacing 0.6            default distance between the two wires (m)
     /// roughness 0.0012      unevenness of the contact wire (m)
+    /// frog_arc_chance 1      chance a frog crossed under current arcs (0..1)
+    /// frog_arc_scale 1       scale of a frog arc's energy
+    /// frog_arc_min_amps 3    least current a frog arcs with (A)
+    /// insulator_arc_chance 1 the same for each entry into and exit from an insulator
     ///
     /// [trolley_section]
     /// id 1
@@ -243,11 +341,13 @@ impl WireNet {
     ///
     /// [trolley_switch]       at a joint of three spans
     /// pos 140 200 5.7
-    /// mode power             power | indicator | fixed
+    /// mode power             power | indicator | radio | fixed
     /// trigger 9              plate this far before the frog (m)
     /// sense 12               current counted as power on (A)
     /// invert 0
     /// initial straight
+    /// route 158 branch       radio: route code 158 takes the branch (straight|branch|left|right)
+    /// channel 2              radio: only vehicles sending on channel 2 set it
     ///
     /// [trolley_insulator]    at a joint of two spans
     /// pos 160 200 5.7
@@ -257,6 +357,7 @@ impl WireNet {
         let mut nominal = 600.0f32;
         let mut spacing = 0.6f32;
         let mut roughness = 0.0012f32;
+        let (mut frog_arc, mut insulator_arc) = (ArcRule::default(), ArcRule::default());
         let mut sections: Vec<Section> = Vec::new();
         struct RawSpan {
             section: i32,
@@ -266,6 +367,7 @@ impl WireNet {
         let mut spans: Vec<RawSpan> = Vec::new();
         let mut switches: Vec<RawSwitch> = Vec::new();
         let mut insulators: Vec<(DVec3, f32)> = Vec::new();
+        let mut sounds = WireSounds::default();
         let mut block = String::new();
         let mut sec: Option<Section> = None;
         let mut insulator: Option<(DVec3, f32)> = None;
@@ -292,7 +394,7 @@ impl WireNet {
                 match block.as_str() {
                     "trolley_section" => sec = Some(Section { id: sections.len() as i32 + 1, name: String::new(), live: true, regen_kw: 0.0, feeder_ohm: 0.05 }),
                     "trolley_span" => spans.push(RawSpan { section: 0, spacing: None, pts: Vec::new() }),
-                    "trolley_switch" => switches.push(RawSwitch { name: String::new(), pos: DVec3::ZERO, mode: SwitchMode::Power, trigger: 9.0, sense: 12.0, invert: false, initial_branch: false }),
+                    "trolley_switch" => switches.push(RawSwitch { name: String::new(), pos: DVec3::ZERO, mode: SwitchMode::Power, trigger: 9.0, sense: 12.0, invert: false, initial_branch: false, routes: Vec::new(), channel: None, radio_range: 150.0 }),
                     "trolley_insulator" => insulator = Some((DVec3::ZERO, DEFAULT_INSULATOR)),
                     _ => {}
                 }
@@ -303,11 +405,23 @@ impl WireNet {
             let n = numbers(l);
             let first = w.get(1).copied().unwrap_or("");
             match block.as_str() {
+                "trolley_sounds" => match key.as_str() {
+                    "frog" => sounds.frog = SoundChoice::parse(&w[1..]),
+                    "switch" => sounds.switch = SoundChoice::parse(&w[1..]),
+                    "hiss" | "snap" | "click" | "thud" | "clack" => log::warn!("trolley.txt [trolley_sounds]: '{key}' is the vehicle's sound, set in its sound.cfg; ignored here"),
+                    _ => {}
+                },
                 "trolley_net" => match key.as_str() {
                     "voltage" => nominal = n.first().copied().unwrap_or(600.0).clamp(100.0, 3000.0) as f32,
                     "spacing" => spacing = n.first().copied().unwrap_or(0.6).clamp(0.2, 2.0) as f32,
                     "roughness" => roughness = n.first().copied().unwrap_or(0.0012).clamp(0.0, 0.05) as f32,
-                    _ => {}
+                    other => {
+                        if let Some(rest) = other.strip_prefix("frog_arc_") {
+                            frog_arc.set(rest, n.first().copied());
+                        } else if let Some(rest) = other.strip_prefix("insulator_arc_") {
+                            insulator_arc.set(rest, n.first().copied());
+                        }
+                    }
                 },
                 "trolley_section" => {
                     if let Some(s) = sec.as_mut() {
@@ -338,7 +452,8 @@ impl WireNet {
                             "pos" if n.len() >= 3 => s.pos = DVec3::new(n[0], n[1], n[2]),
                             "mode" => {
                                 s.mode = match first.to_ascii_lowercase().as_str() {
-                                    "indicator" | "blinker" | "radio" => SwitchMode::Indicator,
+                                    "indicator" | "blinker" => SwitchMode::Indicator,
+                                    "radio" => SwitchMode::Radio,
                                     "fixed" | "manual" => SwitchMode::Fixed,
                                     _ => SwitchMode::Power,
                                 }
@@ -347,6 +462,21 @@ impl WireNet {
                             "sense" => s.sense = n.first().copied().unwrap_or(12.0).max(0.0) as f32,
                             "invert" => s.invert = !matches!(first, "0" | "false" | "no" | "off"),
                             "initial" => s.initial_branch = first.eq_ignore_ascii_case("branch"),
+                            "route" => {
+                                let way = match w.get(2).map(|x| x.to_ascii_lowercase()).as_deref() {
+                                    Some("straight") => Some(SwitchWay::Straight),
+                                    Some("branch") => Some(SwitchWay::Branch),
+                                    Some("left") => Some(SwitchWay::Left),
+                                    Some("right") => Some(SwitchWay::Right),
+                                    _ => None,
+                                };
+                                match (first.parse::<u32>().ok(), way) {
+                                    (Some(code), Some(way)) => s.routes.push((code, way)),
+                                    _ => log::warn!("trolley.txt: switch '{}': 'route' wants a code and straight, branch, left or right", s.name),
+                                }
+                            }
+                            "channel" => s.channel = first.parse::<u32>().ok(),
+                            "range" => s.radio_range = n.first().copied().filter(|range| range.is_finite()).unwrap_or(150.0).clamp(1.0, 1000.0) as f32,
                             _ => {}
                         }
                     }
@@ -370,13 +500,17 @@ impl WireNet {
         let mut net = WireNet {
             nominal_volts: nominal,
             roughness,
+            frog_arc,
+            insulator_arc,
             drawn_by_map: false,
+            sounds,
+            dir: None,
             sections,
             spans: Vec::new(),
             nodes: Vec::new(),
             switches: Vec::new(),
             grid: HashMap::new(),
-            dynamic: Mutex::new(Dyn { live: Vec::new(), current: Vec::new(), accum: Vec::new(), branch: Vec::new(), lock: Vec::new() }),
+            dynamic: Mutex::new(Dyn { live: Vec::new(), current: Vec::new(), accum: Vec::new(), branch: Vec::new(), lock: Vec::new(), since: Vec::new(), switch_sounds: Vec::new() }),
         };
         for r in spans {
             if r.pts.len() < 2 {
@@ -413,6 +547,8 @@ impl WireNet {
             accum: vec![0.0; net.sections.len()],
             branch: net.switches.iter().map(|s| s.initial_branch).collect(),
             lock: vec![0.0; net.switches.len()],
+            since: vec![1.0e6; net.switches.len()],
+            switch_sounds: Vec::new(),
         };
         *net.dynamic.lock().unwrap() = d;
         net
@@ -518,6 +654,9 @@ impl WireNet {
                 invert: r.invert,
                 branch_right,
                 initial_branch: r.initial_branch,
+                routes: r.routes.clone(),
+                channel: r.channel,
+                radio_range: r.radio_range,
             };
             self.nodes[ni].switch = Some(self.switches.len() as u32);
             self.switches.push(sw);
@@ -726,33 +865,66 @@ impl WireNet {
 
     // ---- switches ----
 
+    /// Advance display timers once per scenery step, independently of the vehicles.
+    pub fn step_switch_displays(&self, dt: f32) {
+        for since in &mut self.dynamic.lock().unwrap().since {
+            *since += dt.max(0.0);
+        }
+    }
+
     pub fn switch_branch(&self, sw: usize) -> bool {
         self.dynamic.lock().unwrap().branch.get(sw).copied().unwrap_or(false)
     }
 
     pub fn set_switch(&self, sw: usize, branch: bool) {
-        if let Some(b) = self.dynamic.lock().unwrap().branch.get_mut(sw) {
-            *b = branch;
+        if let Some(switch) = self.switches.get(sw) {
+            self.dynamic.lock().unwrap().move_switch(sw, branch, self.nodes[switch.node as usize].pos);
         }
+    }
+
+    /// Actual switch movements since the audio frame, each located at its frog.
+    pub fn take_switch_sounds(&self) -> Vec<DVec3> {
+        std::mem::take(&mut self.dynamic.lock().unwrap().switch_sounds)
+    }
+
+    /// The switch named by a placed object's strings, else the nearest within 40 m.
+    pub fn switch_for_display(&self, pos: DVec3, names: &[String]) -> Option<usize> {
+        self.switches
+            .iter()
+            .position(|switch| !switch.name.trim().is_empty() && names.iter().any(|name| name.trim().eq_ignore_ascii_case(switch.name.trim())))
+            .or_else(|| {
+                self.switches
+                    .iter()
+                    .enumerate()
+                    .map(|(index, switch)| (index, horizontal(self.nodes[switch.node as usize].pos - pos).length()))
+                    .filter(|(_, distance)| *distance < 40.0)
+                    .min_by(|left, right| left.1.total_cmp(&right.1))
+                    .map(|(index, _)| index)
+            })
+    }
+
+    /// Display state (1 left, 2 right), whether it is straight, and seconds since moving.
+    pub fn switch_display(&self, sw: usize) -> Option<(f32, f32, f32)> {
+        let switch = self.switches.get(sw)?;
+        let dynamic = self.dynamic.lock().unwrap();
+        let branch = *dynamic.branch.get(sw)?;
+        let right = branch == switch.branch_right;
+        Some((if right { 2.0 } else { 1.0 }, if branch { 0.0 } else { 1.0 }, dynamic.since[sw]))
     }
 
     /// A shoe passes the contact plate of a switch: the position the vehicle asks for, if the
     /// switch is free. Returns whether it changed.
-    pub fn trigger_switch(&self, sw: usize, current: f32, blinker: i8) -> bool {
-        let def = &self.switches[sw];
-        let want = match def.mode {
-            SwitchMode::Fixed => return false,
-            SwitchMode::Power => (current.abs() > def.sense_amps) != def.invert,
-            SwitchMode::Indicator => (blinker > 0 && def.branch_right) || (blinker < 0 && !def.branch_right),
-        };
+    pub fn trigger_switch(&self, sw: usize, request: &SwitchRequest) -> bool {
+        if self.switches[sw].mode == SwitchMode::Radio {
+            return false;
+        }
+        let Some(want) = self.switches[sw].wanted(request) else { return false };
         let mut d = self.dynamic.lock().unwrap();
         if d.lock[sw] > 0.0 {
             return false;
         }
         d.lock[sw] = 2.5;
-        let was = d.branch[sw];
-        d.branch[sw] = want;
-        was != want
+        d.move_switch(sw, want, self.nodes[self.switches[sw].node as usize].pos)
     }
 
     /// Where a shoe arriving at `from` of a node leaves it.
@@ -1125,14 +1297,178 @@ mod tests {
     #[test]
     fn power_sensed_switch_follows_the_current() {
         let n = y_net();
-        assert!(n.trigger_switch(0, 80.0, 0));
+        let amps = |current: f32| SwitchRequest { current, ..Default::default() };
+        assert!(n.trigger_switch(0, &amps(80.0)));
         assert!(n.switch_branch(0));
         // held while the vehicle passes
-        assert!(!n.trigger_switch(0, 0.0, 0));
+        assert!(!n.trigger_switch(0, &amps(0.0)));
         assert!(n.switch_branch(0));
         n.end_step(3.0);
-        assert!(n.trigger_switch(0, 0.0, 0));
+        assert!(n.trigger_switch(0, &amps(0.0)));
         assert!(!n.switch_branch(0));
+    }
+
+    pub(super) fn radio_net(extra: &str) -> WireNet {
+        let text = format!(
+            "[trolley_section]\nid 1\nlive 1\n\
+             [trolley_span]\nsection 1\np 0 0 5.5\np 25 0 5.5\np 50 0 5.5\n\
+             [trolley_span]\nsection 1\np 50 0 5.5\np 75 0 5.5\np 100 0 5.5\n\
+             [trolley_span]\nsection 1\np 50 0 5.5\np 70 6 5.5\np 90 20 5.5\n\
+             [trolley_switch]\npos 50 0 5.5\nmode radio\ntrigger 8\n{extra}"
+        );
+        WireNet::parse(&text)
+    }
+
+    #[test]
+    fn radio_always_uses_range_and_never_accepts_a_contact_plate() {
+        let request = SwitchRequest { radio: -1, ..Default::default() };
+        let net = radio_net("");
+        assert_eq!(net.switches[0].radio_range, 150.0);
+        assert!(!net.trigger_switch(0, &request));
+        assert!(!net.switch_branch(0));
+        assert_eq!(net.receive_radio(DVec3::new(50.0, 0.0, 5.5), &request), 1);
+        let mut ranged = radio_net("range 150\n");
+        assert_eq!(ranged.switches[0].radio_range, 150.0);
+        for mode in [SwitchMode::Power, SwitchMode::Indicator, SwitchMode::Fixed] {
+            ranged.switches[0].mode = mode;
+            assert_eq!(ranged.receive_radio(DVec3::new(50.0, 0.0, 5.5), &request), 0);
+        }
+        assert_eq!(radio_net("range -10\n").switches[0].radio_range, 1.0);
+        assert_eq!(radio_net("range 0\n").switches[0].radio_range, 1.0);
+        assert_eq!(radio_net("range 5000\n").switches[0].radio_range, 1000.0);
+    }
+
+    #[test]
+    fn radio_receivers_use_horizontal_range_and_filter_channels() {
+        let net = radio_net("range 20\nchannel 3\n");
+        let request = SwitchRequest { radio: -1, channel: 3, ..Default::default() };
+        assert_eq!(net.receive_radio(DVec3::new(50.0, 20.01, 5.5), &request), 0);
+        assert_eq!(net.receive_radio(DVec3::new(50.0, 0.0, 5.5), &SwitchRequest { channel: 2, ..request }), 0);
+        assert!(!net.switch_branch(0));
+        assert_eq!(net.receive_radio(DVec3::new(50.0, 20.0, 100.0), &request), 1);
+        assert!(net.switch_branch(0));
+    }
+
+    #[test]
+    fn radio_receivers_change_immediately_and_keep_unknown_route_positions() {
+        let net = radio_net("range 20\nroute 1 left\nroute 2 right\n");
+        let pos = DVec3::new(50.0, 0.0, 5.5);
+        let left = SwitchRequest { code: 1, ..Default::default() };
+        let right = SwitchRequest { code: 2, ..Default::default() };
+        assert_eq!(net.receive_radio(pos, &left), 1);
+        assert_eq!(net.receive_radio(pos, &right), 1);
+        assert_eq!(net.switch_display(0), Some((2.0, 1.0, 0.0)));
+        assert_eq!(net.receive_radio(pos, &left), 1);
+        for _ in 0..30 {
+            assert_eq!(net.receive_radio(pos, &left), 0);
+            net.end_step(0.1);
+        }
+        assert_eq!(net.receive_radio(pos, &SwitchRequest { code: 999, ..Default::default() }), 0);
+        assert_eq!(net.receive_radio(pos, &right), 1);
+        assert!(!net.switch_branch(0));
+        assert_eq!(net.receive_radio(pos, &left), 1);
+    }
+
+    #[test]
+    fn a_radio_switch_takes_the_cabs_request_and_keeps_it() {
+        let n = radio_net("");
+        assert_eq!(n.switches[0].mode, SwitchMode::Radio);
+        assert!(!n.switches[0].branch_right, "the branch leaves to the left");
+        let radio = |radio: i8| SwitchRequest { radio, ..Default::default() };
+        // power and indicator do not set it
+        assert_eq!(n.receive_radio(DVec3::ZERO, &SwitchRequest { current: 300.0, blinker: -1, ..Default::default() }), 0);
+        assert_eq!(n.receive_radio(DVec3::ZERO, &radio(-1)), 1);
+        assert!(n.switch_branch(0));
+        n.end_step(3.0);
+        // no request: the next vehicle finds it as it was left
+        assert_eq!(n.receive_radio(DVec3::ZERO, &radio(0)), 0);
+        assert!(n.switch_branch(0));
+        assert_eq!(n.receive_radio(DVec3::ZERO, &radio(1)), 1);
+        assert!(!n.switch_branch(0));
+    }
+
+    #[test]
+    fn displays_bind_by_name_before_distance_and_have_a_limited_fallback() {
+        let net = radio_net("name Junction A\n");
+        assert_eq!(net.switch_for_display(DVec3::ZERO, &[" junction a ".into()]), Some(0));
+        assert_eq!(net.switch_for_display(DVec3::new(50.0, 10.0, 20.0), &[]), Some(0));
+        assert_eq!(net.switch_for_display(DVec3::new(50.0, 40.0, 5.5), &[]), None);
+        assert_eq!(net.switch_display(99), None);
+    }
+
+    #[test]
+    fn displays_show_actual_direction_and_time_since_a_change() {
+        let mut net = radio_net("");
+        assert_eq!(net.switch_display(0), Some((2.0, 1.0, 1.0e6)));
+        assert_eq!(net.receive_radio(DVec3::ZERO, &SwitchRequest { radio: -1, ..Default::default() }), 1);
+        assert_eq!(net.switch_display(0), Some((1.0, 0.0, 0.0)));
+        net.end_step(1.0);
+        assert_eq!(net.switch_display(0), Some((1.0, 0.0, 0.0)));
+        net.step_switch_displays(1.0);
+        assert_eq!(net.receive_radio(DVec3::ZERO, &SwitchRequest { radio: -1, ..Default::default() }), 0);
+        assert_eq!(net.switch_display(0), Some((1.0, 0.0, 1.0)));
+        net.set_switch(0, true);
+        assert_eq!(net.switch_display(0), Some((1.0, 0.0, 1.0)));
+        net.set_switch(0, false);
+        assert_eq!(net.switch_display(0), Some((2.0, 1.0, 0.0)));
+        net.switches[0].branch_right = true;
+        assert_eq!(net.switch_display(0), Some((1.0, 1.0, 0.0)));
+        net.set_switch(0, true);
+        assert_eq!(net.switch_display(0), Some((2.0, 0.0, 0.0)));
+    }
+
+    #[test]
+    fn route_codes_set_a_radio_switch_and_the_cabs_request_overrides_them() {
+        let n = radio_net("route 158 branch\nroute 160 straight\nroute 7 right\n");
+        assert_eq!(n.switches[0].routes, vec![(158, SwitchWay::Branch), (160, SwitchWay::Straight), (7, SwitchWay::Right)]);
+        let code = |code: u32| SwitchRequest { code, ..Default::default() };
+        assert_eq!(n.receive_radio(DVec3::ZERO, &code(158)), 1);
+        assert!(n.switch_branch(0));
+        n.end_step(3.0);
+        assert_eq!(n.receive_radio(DVec3::ZERO, &code(160)), 1);
+        assert!(!n.switch_branch(0));
+        n.end_step(3.0);
+        // a code it does not know leaves it alone; right is the straight way here
+        assert_eq!(n.receive_radio(DVec3::ZERO, &code(999)), 0);
+        assert_eq!(n.receive_radio(DVec3::ZERO, &code(7)), 0);
+        n.end_step(3.0);
+        assert_eq!(n.receive_radio(DVec3::ZERO, &SwitchRequest { radio: -1, code: 160, ..Default::default() }), 1);
+        assert!(n.switch_branch(0));
+    }
+
+    #[test]
+    fn the_map_chooses_only_the_overhead_lines_sounds() {
+        let n = WireNet::parse("[trolley_sounds]\nhiss off\nsnap off\nfrog sounds/frog clatter.wav\nclick off\n[trolley_span]\np 0 0 5\np 50 0 5\n");
+        assert_eq!(n.sounds, WireSounds { frog: SoundChoice::File("sounds/frog clatter.wav".into()), switch: SoundChoice::Off });
+        assert_eq!(n.spans.len(), 1);
+    }
+
+    #[test]
+    fn switch_sound_is_map_defined_and_only_queued_when_the_frog_moves() {
+        let net = radio_net("channel 1\n[trolley_sounds]\nswitch sounds/switch.wav\n");
+        assert_eq!(net.sounds.switch, SoundChoice::File("sounds/switch.wav".into()));
+        assert!(net.take_switch_sounds().is_empty());
+        let request = SwitchRequest { radio: -1, channel: 1, ..Default::default() };
+        assert_eq!(net.receive_radio(DVec3::ZERO, &request), 1);
+        assert_eq!(net.take_switch_sounds(), vec![net.nodes[net.switches[0].node as usize].pos]);
+        assert_eq!(net.receive_radio(DVec3::ZERO, &request), 0);
+        assert_eq!(net.receive_radio(DVec3::ZERO, &SwitchRequest { radio: 1, channel: 2, ..Default::default() }), 0);
+        assert!(net.take_switch_sounds().is_empty());
+        net.set_switch(0, false);
+        net.set_switch(0, false);
+        assert_eq!(net.take_switch_sounds().len(), 1);
+        for index in 0..300 {
+            net.set_switch(0, index % 2 == 0);
+        }
+        assert_eq!(net.take_switch_sounds().len(), 256);
+    }
+
+    #[test]
+    fn a_radio_switch_on_a_channel_hears_only_that_channel() {
+        let n = radio_net("channel 3\n");
+        assert_eq!(n.switches[0].channel, Some(3));
+        assert_eq!(n.receive_radio(DVec3::ZERO, &SwitchRequest { radio: -1, channel: 1, ..Default::default() }), 0);
+        assert_eq!(n.receive_radio(DVec3::ZERO, &SwitchRequest { radio: -1, channel: 3, ..Default::default() }), 1);
     }
 
     #[test]

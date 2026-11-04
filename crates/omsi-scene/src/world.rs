@@ -7,6 +7,7 @@ pub struct World {
     /// The map's `transport` folder: stations, routes, wires, switches, depots, signals (empty
     /// for a map without one).
     pub transit: Arc<omsi_transit::TransitData>,
+    pub trolley_net: Mutex<Option<Arc<omsi_trolley::WireNet>>>,
     pub map_dir: PathBuf,
     /// Indexed parked car lists of the map, loaded when a parking space uses one.
     pub(super) parklist: Mutex<HashMap<usize, Vec<String>>>,

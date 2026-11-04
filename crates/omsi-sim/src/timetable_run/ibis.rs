@@ -237,9 +237,14 @@ pub fn ibis_target(
 
 /// A hand-cranked roller blind (SD79 or SD83 type), known by its own keys.
 pub fn has_roller_blind(v: &crate::VehicleInstance) -> bool {
-    ["rollband_sync", "rlbnd_ziel_start"]
-        .iter()
-        .any(|t| v.ty.program.trigger(t).is_some())
+    [
+        "rollband_sync",
+        "rlbnd_ziel_start",
+        //Likino 677 & ikarus i200 rollbands:
+        "bus_rollband_setL1",
+        "bus_rollband_setL2",
+        "bus_rollband_setL3",
+    ].iter().any(|t| v.ty.program.trigger(t).is_some())
 }
 
 /// `SetLineTo` for the AI trigger. A roller blind turns one roller per character -
@@ -555,7 +560,7 @@ pub(crate) fn set_destination_at(
     // the original's way: SetLineTo + AI_target_index, then the ai_scheduled_settarget trigger
     set_line_to(v, line);
     v.set_var("AI_target_index", ti as f32);
-    let pending_blind = player.then(|| v.var("rlbnd_ziel_target")).flatten();
+    let pending_blind = (player && has_roller_blind(v)).then(|| v.var("rlbnd_ziel_target")).flatten();
     let target_triggered = v.trigger("ai_scheduled_settarget");
     // The trigger also feeds destination displays, but a hand-cranked blind must remain
     // pending until `turn_roller_blind` applies the driver's selection.

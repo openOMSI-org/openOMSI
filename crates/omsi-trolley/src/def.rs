@@ -196,6 +196,11 @@ pub struct VarNames {
     pub indicator_left: String,
     pub indicator_right: String,
     pub raise_request: String,
+    /// For radio switches: the cab's request (< -0.5 left, > 0.5 right), the route code and
+    /// the channel. A vehicle that has no request variable sends its indicator instead.
+    pub switch_request: String,
+    pub switch_code: String,
+    pub switch_channel: String,
 }
 
 impl Default for VarNames {
@@ -205,6 +210,9 @@ impl Default for VarNames {
             indicator_left: "Blinker_Left".into(),
             indicator_right: "Blinker_Right".into(),
             raise_request: "Trolley_Poles_Raise".into(),
+            switch_request: "Trolley_Switch_Request".into(),
+            switch_code: "Trolley_Switch_Code".into(),
+            switch_channel: "Trolley_Switch_Channel".into(),
         }
     }
 }
@@ -408,6 +416,9 @@ impl VarNames {
                 "indicator_left" => into.indicator_left = n.to_string(),
                 "indicator_right" => into.indicator_right = n.to_string(),
                 "raise_request" => into.raise_request = n.to_string(),
+                "switch_request" => into.switch_request = n.to_string(),
+                "switch_code" => into.switch_code = n.to_string(),
+                "switch_channel" => into.switch_channel = n.to_string(),
                 _ => {}
             }
         }

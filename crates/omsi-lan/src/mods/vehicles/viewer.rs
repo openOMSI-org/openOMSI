@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::mods::failure::{self, Failure};
+mod fleet;
 
 /// A font library shared by the vehicles that write with it (the world's, or one fetched
 /// bus's own).
@@ -96,7 +97,7 @@ pub(super) const CHANGES_WITHIN: std::time::Duration = std::time::Duration::from
 /// asked for again now?
 pub(super) fn may_retry(why: &Failure, since: std::time::Duration, fails: u32) -> bool {
     // (a bus on its way, or a host not reached - never given up: what can come, comes)
-    (why.coming() || fails < GIVE_UP) && since >= why.retry_after(RETRY)
+    !why.settled() && (why.coming() || fails < GIVE_UP) && since >= why.retry_after(RETRY)
 }
 
 // (what the rest of the game asks, of the game's own viewer)
@@ -121,8 +122,8 @@ pub(crate) fn audit(fp: &str, root: &Path, reads: &[PathBuf]) -> Vec<PathBuf> {
     viewer().audit(fp, root, reads)
 }
 
-pub(crate) fn want(root: &Path, player: u32, fp: &str, bus: &str, paint: &str) -> Wanted {
-    viewer().want(root, player, fp, bus, paint)
+pub(crate) fn want(root: &Path, player: u32, fp: &str, bus: &str, paint: &str, allow_server_fleet: bool) -> Wanted {
+    viewer().want(root, player, fp, bus, paint, allow_server_fleet)
 }
 
 impl Viewer {
@@ -155,7 +156,7 @@ impl Viewer {
     pub(crate) fn hopeless(&self, fp: &str) -> bool {
         let since = self.asked.lock().unwrap_or_else(|e| e.into_inner()).get(fp).map(|t| t.elapsed());
         match self.wanted().get(fp) {
-            Some((Wanted::Failed(why), _, fails)) => (!why.coming() && *fails >= GIVE_UP) || since.is_some_and(|s| s >= FALL_BACK_AFTER),
+            Some((Wanted::Failed(why), _, fails)) => why.settled() || (!why.coming() && *fails >= GIVE_UP) || since.is_some_and(|s| s >= FALL_BACK_AFTER),
             _ => false,
         }
     }
@@ -246,7 +247,7 @@ impl Viewer {
     ///
     /// `player` is who drives it: a player whose bus changes more often than a player changes
     /// bus (`driven_by`) is drawn as a box - each made-up fingerprint started a download here.
-    pub(crate) fn want(&'static self, root: &Path, player: u32, fp: &str, bus: &str, paint: &str) -> Wanted {
+    pub(crate) fn want(&'static self, root: &Path, player: u32, fp: &str, bus: &str, paint: &str, allow_server_fleet: bool) -> Wanted {
         if !omsi_net::is_fingerprint(fp) {
             return Wanted::Failed("no fingerprint".into());
         }
@@ -271,7 +272,7 @@ impl Viewer {
         let (root, key, bus, paint) = (root.to_path_buf(), fp.to_string(), bus.to_string(), paint.to_string());
         let fp = key.clone();
         let spawned = std::thread::Builder::new().name("bus-by-content".into()).spawn(move || {
-            let w = self.make_sure(&root, &fp, &bus, &paint);
+            let w = self.make_sure(&root, &fp, &bus, &paint, allow_server_fleet);
             match &w {
                 Wanted::Local(_) => log::info!("vehicles: {bus} ({paint}) is the same here ({fp})"),
                 Wanted::Mounted(_) => log::info!("vehicles: {bus} ({paint}) fetched by its content ({fp})"),
@@ -286,7 +287,7 @@ impl Viewer {
         Wanted::Pending(0, 0)
     }
 
-    pub(super) fn make_sure(&self, root: &Path, fp: &str, bus: &str, paint: &str) -> Wanted {
+    pub(super) fn make_sure(&self, root: &Path, fp: &str, bus: &str, paint: &str, allow_server_fleet: bool) -> Wanted {
         // kept here already (fetched before, or sent by this machine's own player)
         if !is_open() && !open() {
             return Wanted::Failed("no store".into());
@@ -305,12 +306,25 @@ impl Viewer {
             // (a joining game whose way to the host is still being found asks once it is: the
             // store is open on every game, only the server waits here)
             if !crate::mods::upload::serving() {
+                // (a dedicated server that takes no uploads: nobody will ever send it this
+                // version - asking itself every few seconds rebuilt the box and filled the log)
+                if crate::server_cfg::SERVER_VEHICLES.get().is_some() {
+                    return Wanted::Failed(Failure::OwnBusesOnly);
+                }
                 return Wanted::Failed(Failure::NoHost);
             }
             return match wait_for(fp, crate::mods::upload::MANIFEST_WAIT).then(|| bus_file(fp)).flatten() {
                 Some(p) => Wanted::Mounted(p),
                 None => Wanted::Failed(Failure::NotHereYet),
             };
+        }
+        if allow_server_fleet {
+            // A closed dedicated server has its own bus package even when it
+            // refuses arbitrary player uploads. Try that exact content first.
+            match self.fetch_official(fp, bus, paint) {
+                Ok(()) => return bus_file(fp).map(Wanted::Mounted).unwrap_or_else(|| Wanted::Failed("server fleet downloaded, but not mounted".into())),
+                Err(e) => log::info!("vehicles: official server copy of {bus} ({paint}) did not match {fp}: {e}; trying normal content lookup"),
+            }
         }
         match self.fetch(fp) {
             Ok(()) => bus_file(fp).map(Wanted::Mounted).unwrap_or_else(|| Wanted::Failed("fetched, but not to be mounted".into())),

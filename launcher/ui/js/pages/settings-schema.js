@@ -86,7 +86,7 @@ const graphics = {
         { type: 'custom', id: 'preset' },
         { type: 'custom', id: 'optimise' },
         { type: 'select', key: 'msaa', label: 'Anti-aliasing', options: [['1', 'Off'], ['2', '2x MSAA'], ['4', '4x MSAA'], ['8', '8x MSAA']], heavy: (v, s) => v === '8' && !traced(s) },
-        { type: 'select', key: 'upscaler', label: 'Upscaling', options: [['default', 'Standard (Catmull-Rom)'], ['fsr1', 'AMD FSR 1 (experimental)']], help: 'Standard Catmull-Rom or experimental FSR 1; changes show at once' },
+        { type: 'select', key: 'upscaler', label: 'Upscaling', options: [['default', 'Standard (Catmull-Rom)'], ['fsr1', 'AMD FSR 1.0']], help: 'Standard Catmull-Rom or AMD FSR 1.0; changes show at once' },
         { type: 'select', key: 'fsr_quality', label: 'FSR quality', options: [['ultra', 'Ultra Quality (77%)'], ['quality', 'Quality (67%)'], ['balanced', 'Balanced (59%)'], ['performance', 'Performance (50%)'], ['auto', 'Automatic (keeps the frame rate)'], ['custom', 'Use render scale']], when: (s) => s.upscaler === 'fsr1' },
         { type: 'slider', key: 'fsr_sharpness', label: 'FSR sharpness', help: 'RCAS sharpening strength', min: 0, max: 1, step: 0.05, def: 0.8, store: snap(0.05), format: pct, when: (s) => s.upscaler === 'fsr1' },
         { type: 'select', key: 'render_scale', label: 'Render scale', options: [['auto', 'Auto'], ['1', '100%'], ['0.85', '85%'], ['0.75', '75%'], ['0.67', '67%'], ['0.5', '50%']] },
@@ -104,6 +104,8 @@ const graphics = {
         // (the `[isshadow]` blob under a vehicle is drawn in every mode, the vanilla one included)
         { type: 'toggle', key: 'shadow_blobs', label: "OMSI's shadow meshes (under vehicles)" },
         { type: 'slider', key: 'reflections', label: 'Reflective objects reflect', min: 0, max: 1, step: 0.05, def: 1, format: (v) => (v < 0.005 ? t('Off') : pct(v)), store: snap(0.05), when: (s) => !traced(s) },
+        { type: 'slider', key: 'road_glare', label: 'Road glare', help: 'Enhanced: highlights of the sun, the headlights and the street lamps on roads and ground; 100% keeps the original appearance.', min: 0, max: 2, step: 0.05, def: 1, format: pct, store: snap(0.05), when: enhanced },
+        { type: 'slider', key: 'traffic_headlights', label: 'Traffic headlight brightness', help: 'All graphics modes: other vehicles\' white headlamp glow and beam illumination on the road; does not change the player bus or street lamps.', min: 0, max: 2, step: 0.05, def: 1, format: pct, store: snap(0.05) },
         { type: 'toggle', key: 'clouds', label: 'Clouds' },
         // (only the enhanced modes march volumetric clouds; the vanilla ones are a texture)
         { type: 'select', key: 'cloud_quality', label: 'Cloud quality', options: [['high', 'High'], ['low', 'Low']], when: (s) => enhanced(s) && s.clouds !== false },
@@ -118,7 +120,7 @@ const graphics = {
         // (the wet roads' reflections need the reflection maps on)
         // (the same setting, named for what Enhanced makes of it)
         { type: 'select', key: 'puddles', label: 'Puddles', options: [['high', 'High'], ['low', 'Low'], ['off', 'Off']], when: (s) => !enhanced(s) && Number(s.reflections ?? 1) > 0.005 },
-        { type: 'select', key: 'puddles', label: 'Real-Time Reflections', options: [['high', 'High'], ['low', 'Low'], ['off', 'Off']], when: (s) => enhanced(s) && Number(s.reflections ?? 1) > 0.005 },
+        { type: 'select', key: 'puddles', label: 'Real-Time Reflections', options: [['high', 'High'], ['low', 'Low'], ['off', 'Off']], when: (s) => enhanced(s) && (traced(s) || Number(s.reflections ?? 1) > 0.005) },
         { type: 'toggle', key: 'windy_trees', label: 'Windy trees' },
         // (the snow built up on the roads and the vehicles' roofs; the classic picture shows the season's snow only)
         { type: 'toggle', key: 'road_snow', label: 'Built-up snow on roads and roofs', help: 'While it snows, snow builds up on the roads and on the vehicles\' roofs, with ruts and tyre tracks, and thaws again; off: the weather\'s own snow on road, as in OMSI 2', when: (s) => !classic(s) },
@@ -176,7 +178,7 @@ const driving = {
         { type: 'slider', key: 'mouse_pedal_strength', label: 'Mouse pedal strength', min: 0.5, max: 2, step: 0.05, def: 1, format: omsiPct, store: r2 },
         { type: 'toggle', key: 'mouse_smooth', label: 'Smooth mouse steering (off: the wheel follows the cursor at once, as in OMSI)' },
         { type: 'toggle', key: 'mouse_pedals', label: 'The mouse works the pedals', help: 'Up the throttle, down the brake, as in OMSI; off: the mouse only steers, the pedals stay on the keys' },
-        { type: 'toggle', key: 'mouse_hold', label: "Hold the cursor while the mouse steers (off: the crosshair stays free, the window's edges are the lock)" },
+        { type: 'toggle', key: 'mouse_hold', label: "Hold the cursor while the mouse steers (off: the system's crosshair, kept inside the window whose edges are the lock; Windows, Linux)" },
         { type: 'toggle', key: 'mouse_right_off', label: 'A right click ends the mouse steering (as in OMSI)' },
         { type: 'toggle', key: 'blinker_cancel', label: "Indicators cancel themselves (as the bus's script does)" },
         { type: 'toggle', key: 'brake_hold', label: 'The keyboard brake stays on until the throttle (as in OMSI)' },
@@ -255,6 +257,9 @@ const camera = {
         { type: 'toggle', key: 'alt_view', label: 'Right mouse button turns the view, Shift+right zooms (off: right zooms as in OMSI, the wheel button turns)' },
         { type: 'select', key: 'mirror_hud', label: 'Mirror panels on the screen', options: [['0', 'Off'], ['2', 'Left mirror'], ['1', 'Right mirror'], ['3', 'Left and right'], ['7', 'Left, right and front']] },
         { type: 'toggle', key: 'precision_zoom', label: 'Precision mouse zoom (FOV curve instead of the linear way)' },
+        { type: 'slider', key: 'zoom_hold_amount', label: 'Zoom on a key', help: 'How far the view zooms while the zoom key is held (Controls: Zoom while held)', min: 0.2, max: 0.8, step: 0.05, def: 0.5, format: (v) => `${+(1 / v).toFixed(2)}x` },
+        { type: 'toggle', key: 'zoom_hold_latch', label: 'Zoom key stays', help: 'One press zooms in, the next zooms out; off: only while the key is held' },
+        { type: 'toggle', key: 'flashlight_cursor', label: 'Flashlight follows the cursor', help: 'With the cursor free (on foot, or in the cab while the mouse does not steer) the flashlight lights where it points; otherwise straight ahead' },
       ],
     },
     {
@@ -373,6 +378,7 @@ const gameplay = {
         { type: 'slider', key: 'passenger_transfer_percent', label: 'Connection chance', min: 0, max: 100, step: 5, def: 20, format: (v) => `${v}%`, when: (s) => !!s.passenger_connections },
         { type: 'toggle', key: 'passenger_hailing', label: 'Passengers signal approaching buses', help: 'Optional visual hailing; only effective with supported natural animations' },
         { type: 'toggle', key: 'passenger_full_bus_reaction', label: 'Passengers react to full buses', help: 'Optional visual acknowledgement when an approaching compatible bus is at passenger capacity' },
+        { type: 'toggle', key: 'pax_short_rides_stand', label: 'Short rides stand by a door', help: 'Passengers with no set stop who ride only a few kilometres take a free standing place near an exit rather than a seat' },
         { type: 'toggle', key: 'auto_announce', label: 'Arrival announcements at the stop', help: 'On depot files that keep two recordings per stop (the Chinese maps), the arrival one is played as the bus reaches the stop: the IBIS\'s next stop key, pressed as the driver would' },
         { type: 'slider', key: 'pax_density', label: 'How many passengers', min: 0, max: 2, step: 0.1, def: 1, format: pct, store: r2 },
         { type: 'toggle', key: 'get_up', label: 'Ability to get up (Ctrl+Shift+G)' },
@@ -396,8 +402,10 @@ const gameplay = {
         { type: 'toggle', key: 'collision_vehicles', label: 'Collisions with vehicles' },
         { type: 'toggle', key: 'collision_objects', label: 'Collisions with objects (walls, poles)' },
         { type: 'toggle', key: 'collision_pedestrians', label: 'Collisions with people' },
+        { type: 'toggle', key: 'realistic_road_physics', label: 'Realistic road physics' },
         { type: 'toggle', key: 'use_real_time', label: 'Start at the real time' },
         { type: 'toggle', key: 'use_real_date', label: "Start on today's date" },
+        { type: 'toggle', key: 'use_real_year', label: "Keep today's year, even outside the map's years", when: (s) => s.use_real_date },
         // the game's clock follows this device's (the host's in multiplayer)
         { type: 'toggle', key: 'time_sync', label: 'Sync the clock with the real time (locks the time)' },
         // the weather follows the METAR report of the airport nearest the map
@@ -434,6 +442,10 @@ const general = {
         { type: 'toggle', key: 'show_fps', label: 'Frame rate in the corner' },
         { type: 'select', key: 'perf_overlay', label: 'Performance details', options: [['off', 'Off'], ['compact', 'Compact'], ['detailed', 'Detailed']] },
         { type: 'toggle', key: 'notes', label: 'Notes in the top-left corner' },
+        { type: 'toggle', key: 'notes_driving', label: 'Notes: why the bus does not move', when: (s) => s.notes !== false },
+        { type: 'toggle', key: 'notes_script', label: "Notes: the bus's own messages", when: (s) => s.notes !== false },
+        { type: 'toggle', key: 'notes_trip', label: 'Notes: the end of a trip', when: (s) => s.notes !== false },
+        { type: 'toggle', key: 'notes_tickets', label: 'Notes: tickets and change', when: (s) => s.notes !== false },
         { type: 'toggle', key: 'chat', label: 'Chat in online games' },
         // (on top of the interface's size; Ctrl + the wheel over it in the game)
         { type: 'slider', key: 'chat_size', label: 'Chat size', min: 0.5, max: 3, step: 0.1, def: 1, format: pct, store: r1 },
@@ -443,6 +455,7 @@ const general = {
         { type: 'toggle', key: 'navigator', label: 'Navigator (Shift+N: map, schedule, off)' },
         { type: 'toggle', key: 'nav_arrows', label: 'Route arrows (as in OMSI 2)' },
         { type: 'toggle', key: 'nav_ai', label: 'AI vehicles on the map' },
+        { type: 'toggle', key: 'nav_ai_cars', label: 'Cars on the map too', when: (s) => s.nav_ai !== false },
         { type: 'toggle', key: 'nav_surface', label: 'Map surface under the roads' },
         { type: 'toggle', key: 'nav_classic_2d', label: 'Classic 2D navigator (lightweight)' },
         { type: 'toggle', key: 'nav_3d', label: '3D buildings on the map' },
@@ -460,6 +473,7 @@ const general = {
         { type: 'toggle', key: 'update_auto', label: 'Install updates without asking' },
         { type: 'toggle', key: 'update_notify', label: 'Tell me about a new version during a session' },
         { type: 'toggle', key: 'presence', label: 'Count me in the website\'s "playing now" (anonymous)' },
+        { type: 'toggle', key: 'hardware_id', label: 'Send servers an identifier for bans', help: "Made from this computer's ID, different for each server owner, so servers cannot match you with each other. Some servers turn away players without it." },
         { type: 'custom', id: 'version' },
         // every setting at once: at the end, not the first control one sees
         { type: 'section', title: 'Reset' },
@@ -480,6 +494,6 @@ export const SETTINGS_TABS = [graphics, driving, camera, sound, gameplay, genera
 
 /** The settings a saved graphics profile holds (`GRAPHICS_PROFILE_KEYS`). */
 export const GRAPHICS_PROFILE_KEYS = [
-  'graphics', 'msaa', 'render_scale', 'upscaler', 'fsr_quality', 'fsr_sharpness', 'anisotropy', 'shadow_size', 'ssao', 'shadows', 'shadow_casters', 'detail_textures', 'night_brightness', 'led_glow', 'led_mips', 'shadow_blobs', 'lamp_shadows', 'reflections', 'clouds', 'cloud_quality', 'street_light', 'rain_quality', 'vehicle_smoke', 'puddles', 'windy_trees', 'road_snow', 'ray_tracing', 'light_shadows', 'cloud_shadows', 'light_glow',
+  'graphics', 'msaa', 'render_scale', 'upscaler', 'fsr_quality', 'fsr_sharpness', 'anisotropy', 'shadow_size', 'ssao', 'shadows', 'shadow_casters', 'detail_textures', 'night_brightness', 'led_glow', 'led_mips', 'shadow_blobs', 'lamp_shadows', 'reflections', 'road_glare', 'traffic_headlights', 'clouds', 'cloud_quality', 'street_light', 'rain_quality', 'vehicle_smoke', 'puddles', 'windy_trees', 'road_snow', 'ray_tracing', 'light_shadows', 'cloud_shadows', 'light_glow',
   'vsync', 'max_fps', 'view_distance', 'max_obj_dist', 'min_obj_size', 'mirror_size', 'mirror_refresh', 'mirror_quality', 'mirror_hud_every_frame', 'video_memory', 'texture_compression', 'gpu_texture_compression',
 ];

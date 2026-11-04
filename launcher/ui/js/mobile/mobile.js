@@ -8,10 +8,10 @@ import { html, useState, useEffect } from '../../vendor/preact-htm.js';
 import { S, useStore, set } from '../store.js';
 import { t, hhmm, longDate } from '../i18n.js';
 import { Icon } from '../icons.js';
-import { Spinner, Toggle, Slider } from '../ui.js';
+import { Spinner, Toggle, Slider, useConfirm } from '../ui.js';
 import { BusPreview } from '../preview.js';
 import { RouteMap } from '../routemap.js';
-import { tourId, choose, curMap, curBus, curLine, curTour, pickedTrip, realTime, realDate, start, weatherName, weatherOfItsOwn, askJoined, noServerBus, mapName, serverBuses, busFile, transportRefusal } from '../data.js';
+import { tourId, choose, curMap, curBus, curLine, curTour, pickedTrip, realTime, realDate, start, weatherName, weatherOfItsOwn, askJoined, noServerBus, mapName, serverBuses, busFile, transportRefusal, serverFleetSelection } from '../data.js';
 import { hms, mapPicture, tripAt, depotRun, pickTrip, lineMatches, findTours, chooseLine, chooseTour, setSeason, localNow, SEASONS, PHASES, TripEnds, tripTime, weatherFacts, entryName } from '../pages/drive.js';
 import { MultiplayerPage } from '../pages/multiplayer.js';
 import { ProfilePage } from '../pages/profile.js';
@@ -72,6 +72,7 @@ function More() {
 
 function MobileDrive() {
   const s = useStore();
+  const [ask, consent] = useConfirm();
   const [sheet, setSheet] = useState(null);
   const [busy, setBusy] = useState(false);
   const c = s.choice;
@@ -92,8 +93,19 @@ function MobileDrive() {
   const mapLabel = joined && c.lan_map ? mapName(c.lan_map.replace(/\\/g, '/')) : m ? m.friendly || m.name : '-';
   const go = async (extra) => {
     setBusy(true);
-    await start(extra);
-    setBusy(false);
+    try {
+      if (c.lan_mode === 'join') await askJoined({ refresh: true });
+      if (serverFleetSelection()) {
+        const approved = await ask({
+          title: t('Download server vehicle'),
+          text: t('The selected bus or repaint may need files from this server. Matching local files are reused; other files are checked and cached for this session without replacing your installed mods. Continue?'),
+          yes: t('Download and join'),
+        });
+        if (!approved) return;
+        extra = { ...extra, __fleetApproved: true };
+      }
+      await start(extra);
+    } finally { setBusy(false); }
   };
   const row = (id, icon, label, value, sub, locked) => html`<button class="m-row" disabled=${locked} onClick=${() => !locked && setSheet(id)}>
     <span class="m-row-icon"><${Icon} name=${icon} /></span>
@@ -101,6 +113,7 @@ function MobileDrive() {
     <span class="m-row-value">${value}</span>${!locked && html`<${Icon} name="right" />`}
   </button>`;
   return html`<div class="m-drive">
+    ${consent}
     <section class="m-stage">
       ${v ? html`<${BusPreview} class="m-preview" look=${{ bus: v.file, paint: c.paint, map: c.map, weather: c.weather, time: c.time, date: c.date }} />` : html`<div class="viewer m-preview"><div class="state"><${Spinner} /></div></div>`}
       <div class="m-chips">
@@ -133,6 +146,7 @@ function MobileDrive() {
         ${row('map', 'map', 'Map', mapLabel, joined ? t('Set by {server}', { server: srv.name || c.lan_addr }) : null, joined)}
         ${row('bus', 'bus', 'Bus', v ? v.name : s.vehicles || !s.boot?.root ? '-' : html`<${Spinner} />`)}
         ${v && row('paint', 'sun', 'Paint', c.paint || v.default_paint || t('Standard'))}
+        ${v && row('plate', 'badge', 'Number plate', c.plate || t('Automatic'))}
       </div>
       <div class="m-seg">
         <button class=${!c.free ? 'on' : ''} onClick=${() => choose({ free: false })}>${t('Timetable')}</button>
@@ -172,8 +186,8 @@ const rt = (c) => (realTime() || realDate() ? t('Follows the computer\'s clock (
 
 /** A full-screen sheet: a title bar with Back, and what to choose from. */
 function Sheet({ which, close }) {
-  const titles = { map: 'Choose a map', bus: 'Choose a bus', paint: 'Paint', line: 'Line', tour: 'Tour', trip: 'Trips of the tour', entry: 'Start at', time: 'Time and date', weather: 'Weather' };
-  const Body = { map: MapSheet, bus: BusSheet, paint: PaintSheet, line: LineSheet, tour: TourSheet, trip: TripSheet, entry: EntrySheet, time: TimeSheet, weather: WeatherSheet }[which];
+  const titles = { map: 'Choose a map', bus: 'Choose a bus', paint: 'Paint', line: 'Line', tour: 'Tour', trip: 'Trips of the tour', entry: 'Start at', time: 'Time and date', weather: 'Weather', plate: 'Number plate' };
+  const Body = { map: MapSheet, bus: BusSheet, paint: PaintSheet, line: LineSheet, tour: TourSheet, trip: TripSheet, entry: EntrySheet, time: TimeSheet, weather: WeatherSheet, plate: PlateSheet }[which];
   useEffect(() => {
     // the phone's Back closes the sheet
     const k = (e) => (e.key === 'Escape' || e.key === 'GoBack' || e.key === 'BrowserBack') && close();
@@ -307,6 +321,11 @@ function TimeSheet() {
     <div class="m-seg">${SEASONS.map(([v, l]) => html`<button class=${c.season === v ? 'on' : ''} onClick=${() => setSeason(v, c.phase)}>${t(l)}</button>`)}</div>
     ${c.season !== 'auto' && html`<div class="m-seg">${PHASES.map(([v, l]) => html`<button class=${c.phase === v ? 'on' : ''} onClick=${() => setSeason(c.season, v)}>${t(l)}</button>`)}</div>`}
   </div>`;
+}
+
+function PlateSheet() {
+  const c = useStore().choice;
+  return html`<input class="m-search" value=${c.plate || ''} placeholder=${t('Automatic')} onInput=${(e) => choose({ plate: e.currentTarget.value })} />`;
 }
 
 function WeatherSheet({ close }) {

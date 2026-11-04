@@ -165,6 +165,7 @@ impl Buses {
         *self.lock() = Some(Vehicles { store, dir: vdir, manifests: found.into_iter().map(|(_, fp, m)| (fp, m)).collect(), sizes, mounted: HashSet::new(), withheld, withheld_of });
         // (what nobody has used for longer than buses are kept goes at once)
         self.collect(0, IN_USE);
+        if let Some(v) = self.lock().as_ref() { write_cache_pins(v); }
         Ok(())
     }
 
@@ -404,6 +405,7 @@ impl Buses {
         let tmp = file.with_extension("part");
         std::fs::write(&tmp, serde_json::to_vec(&m).unwrap_or_default()).and_then(|_| std::fs::rename(&tmp, &file)).map_err(|e| format!("{}: {e}", file.display()))?;
         v.manifests.push((fp.clone(), m));
+        write_cache_pins(v);
         drop(g);
         // (whoever waits for a bus hears of it at once: `wait_for`)
         let (count, arrived) = &self.arrived;
@@ -487,5 +489,25 @@ impl Buses {
         let at = self.mount(fp)?;
         let rel = m.entries.iter().find(|e| identity::key(&e.path) == identity::key(&m.bus))?.path.clone();
         Some(rel.split('/').fold(at, |p, c| p.join(c)))
+    }
+}
+
+/// Keep server blobs without suspending eviction of unrelated client downloads.
+/// Call with the vehicle store held; launcher maintenance holds an exclusive game lease.
+pub(super) fn write_cache_pins(v: &Vehicles) {
+    let mut pins = std::collections::BTreeSet::new();
+    for (_, m) in &v.manifests {
+        for e in &m.entries {
+            if let Some(f) = v.store.has(e) {
+                if let Some(name) = f.blob.file_name() { pins.insert(name.to_string_lossy().into_owned()); }
+            }
+        }
+    }
+    let text = pins.into_iter().map(|p| format!("{p}\n")).collect::<String>();
+    let file = v.dir.join("cache-pins");
+    let tmp = v.dir.join("cache-pins.tmp");
+    if std::fs::write(&tmp, text).and_then(|_| std::fs::rename(&tmp, &file)).is_err() {
+        // A stale index must not make a newly retained bus evictable.
+        let _ = std::fs::remove_file(file);
     }
 }

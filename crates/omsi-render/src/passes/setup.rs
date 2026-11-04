@@ -124,6 +124,7 @@ impl Renderer {
         let puddles_wanted = with_overlays
             && self.puddles.is_some()
             && self.options.reflections
+            && self.options.puddle_reflections
             && lighting.puddles > 0
             && lighting.wetness * (1.0 - lighting.snow.clamp(0.0, 1.0)) > 0.05
             && scene.materials.iter().any(|m| m.uniform.params2[2] > 0.0)
@@ -443,7 +444,8 @@ impl Renderer {
                 }
                 std::array::from_fn(|r| std::array::from_fn(|c| at[r * 4 + c]))
             },
-            lod: [self.fsr_mip_bias(f), 0.0, 0.0, 0.0],
+            // y belongs to the ground prepass and is set only by render_inner.
+            lod: [self.fsr_mip_bias(f), 0.0, lighting.road_glare.clamp(0.0, 2.0), 0.0],
             spot: classic_spot(&scene.lights, ro),
         };
         self.queue

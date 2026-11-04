@@ -35,6 +35,25 @@ impl TrafficSim {
     /// initial cars instead of each process inventing a different world.
     pub fn set_lan_seed(&mut self, seed: u64) {
         self.rng = seed | 1;
+        self.scheme_salt = seed;
+        self.scheme_sets.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    }
+
+    pub fn ai_schemes(&self, ty: &VehicleType) -> Vec<usize> {
+        let mut sets = self.scheme_sets.lock().unwrap_or_else(|e| e.into_inner());
+        sets.entry(ty.def.path.clone())
+            .or_insert_with(|| {
+                let parts: Vec<String> = ty.def.path.components().map(|c| c.as_os_str().to_string_lossy().to_lowercase()).collect();
+                let from = parts.iter().rposition(|p| p == "vehicles").unwrap_or(parts.len().saturating_sub(1));
+                let fnv = parts[from..].join("/").bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3));
+                spread_schemes(ty.paint_schemes.len(), omsi_script::mix_seed(self.scheme_salt ^ fnv))
+            })
+            .clone()
+    }
+
+    pub fn ai_scheme(&self, ty: &VehicleType, pick: u64) -> Option<usize> {
+        let set = self.ai_schemes(ty);
+        (!set.is_empty()).then(|| set[(pick % set.len() as u64) as usize])
     }
 
     /// The traffic made of its parts: the linked network, the random traffic's types,
@@ -64,6 +83,7 @@ impl TrafficSim {
             street_weight: 0.0,
             parked,
             parked_waiting: Vec::new(),
+            drive_through_parked: false,
             lane_tiles: lane_tiles.into_iter().collect(),
             lanes_generation: 0,
             types,
@@ -83,10 +103,11 @@ impl TrafficSim {
             rng: omsi_script::session_seed()
                 .map(|s| omsi_script::mix_seed(s ^ 0x7472_6166_6669_6321) | 1)
                 .unwrap_or(0x9E37_79B9_7F4A_7C15),
+            scheme_salt: omsi_script::session_seed().unwrap_or(0),
+            scheme_sets: Default::default(),
             target,
             lights_only: false,
             spawn_radius: 400.0,
-            starved_since: None,
             time: 0.0,
             camera: None,
             lights,
@@ -138,6 +159,8 @@ impl TrafficSim {
             switch_board: Default::default(),
             player_signal_age: f32::MAX,
             player_signalling: 0.0,
+            player_beam_on: 0.0,
+            player_waved: 0.0,
             way_users: Vec::new(),
             others: Vec::new(),
             other_blinkers: HashMap::new(),

@@ -316,6 +316,19 @@ fn port_of_gateway() -> Option<u16> {
     WS_PATH.lock().ok()?.as_ref()?.gateway.as_ref().map(|g| g.addr.port())
 }
 
+/// The server's fleet once it has been checked (`omsi-app`'s `server::announce_fleet`): the
+/// web port opens before, telling no fleet (version 0, as servers before it did).
+pub fn update_server_fleet(fleet: Vec<omsi_net::ws::FleetPaints>, version: u32) {
+    if let Ok(w) = WS_PATH.lock() {
+        if let Some(g) = w.as_ref().and_then(|w| w.gateway.as_ref()) {
+            if let Ok(mut i) = g.info.lock() {
+                i.fleet = fleet;
+                i.fleet_version = version;
+            }
+        }
+    }
+}
+
 /// A server run: what its status page says now.
 pub fn update_server_info(players: usize, time: &str, weather: &str) {
     if let Ok(w) = WS_PATH.lock() {

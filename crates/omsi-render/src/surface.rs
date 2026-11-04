@@ -11,6 +11,8 @@ pub struct SurfaceState<'w> {
     pub(crate) lost: Arc<std::sync::Mutex<Option<String>>>,
     /// On ANGLE: the frames' sRGB stand-in, encoded into the plain window (see there).
     pub(crate) encode: Option<srgb_encode::SrgbEncode>,
+    /// A glass theme is in force: the window's picture is copied from (`set_glass`).
+    glass: bool,
 }
 
 impl Drop for SurfaceState<'_> {
@@ -27,6 +29,12 @@ impl Drop for SurfaceState<'_> {
             unsafe { std::mem::ManuallyDrop::drop(&mut self.surface) };
         }
     }
+}
+
+pub fn create_surface(instance: &wgpu::Instance, window: &Arc<winit_window::Window>) -> Result<wgpu::Surface<'static>> {
+    crate::catch(|| instance.create_surface(window.clone()))
+        .ok_or_else(|| anyhow!("the graphics driver refused the window (still held after a lost graphics device? restarting the game frees it)"))?
+        .context("create_surface")
 }
 
 /// The present mode for the window's vsync setting: `AutoVsync` / `AutoNoVsync`, as ever
@@ -82,9 +90,10 @@ impl<'w> SurfaceState<'w> {
         height: u32,
         vsync: bool,
     ) -> Result<Self> {
-        let surface = instance.create_surface(window).context("create_surface")?;
+        let surface = create_surface(instance, &window)?;
         let encode = srgb_encode::SrgbEncode::wanted(renderer, renderer.format());
         let modes = listed_modes(&surface, renderer);
+        // (copied from only for a glass theme: `set_glass`)
         let mut config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: encode.as_ref().map_or(renderer.format(), |e| e.window_format()),
@@ -103,14 +112,14 @@ impl<'w> SurfaceState<'w> {
         config.width = width.max(1);
         config.height = height.max(1);
         surface.configure(&renderer.device, &config);
-        Ok(SurfaceState { surface: std::mem::ManuallyDrop::new(surface), config, lost: renderer.errors.device_lost.clone(), encode })
+        Ok(SurfaceState { surface: std::mem::ManuallyDrop::new(surface), config, lost: renderer.errors.device_lost.clone(), encode, glass: false })
     }
 
     /// The window's surface on a device whose renderer is still being built ([`Opened`]'s
     /// device and format): pictures without the renderer (a clear, an interface) can be
     /// shown until [`Self::adopt`] hands it over.
     pub fn early(instance: &wgpu::Instance, window: Arc<winit_window::Window>, device: &wgpu::Device, format: wgpu::TextureFormat, width: u32, height: u32, vsync: bool) -> Result<Self> {
-        let surface = instance.create_surface(window).context("create_surface")?;
+        let surface = create_surface(instance, &window)?;
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
@@ -123,7 +132,7 @@ impl<'w> SurfaceState<'w> {
             view_formats: vec![],
         };
         surface.configure(device, &config);
-        Ok(SurfaceState { surface: std::mem::ManuallyDrop::new(surface), config, lost: Default::default(), encode: None })
+        Ok(SurfaceState { surface: std::mem::ManuallyDrop::new(surface), config, lost: Default::default(), encode: None, glass: false })
     }
 
     /// The renderer built for the device this surface was made on ([`Self::early`]) takes
@@ -138,6 +147,23 @@ impl<'w> SurfaceState<'w> {
         true
     }
 
+    /// Whether a glass theme is in force: only then is the window's picture copied from (the
+    /// glass behind the game's screens, see `picture`), where the window allows it - a window
+    /// that may be copied from can cost a mobile GPU its framebuffer compression. Reconfigures
+    /// the window when that changes; cheap to call every frame.
+    pub fn set_glass(&mut self, renderer: &Renderer, on: bool) {
+        if self.glass == on {
+            return;
+        }
+        self.glass = on;
+        let copy = on && renderer.adapter.as_ref().is_some_and(|a| self.surface.get_capabilities(a).usages.contains(wgpu::TextureUsages::COPY_SRC));
+        let usage = if copy { wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC } else { wgpu::TextureUsages::RENDER_ATTACHMENT };
+        if self.config.usage != usage {
+            self.config.usage = usage;
+            self.surface.configure(&renderer.device, &self.config);
+        }
+    }
+
     /// The window's next picture.
     pub fn acquire(&self) -> wgpu::CurrentSurfaceTexture {
         self.surface.get_current_texture()
@@ -149,6 +175,16 @@ impl<'w> SurfaceState<'w> {
             Some(e) => e.view(device, frame.texture.size()),
             None => frame.texture.create_view(&Default::default()),
         }
+    }
+
+    /// The texture `frame` is drawn into ([`Self::view`]: the window's own, or the stand-in it is
+    /// encoded from), to be copied from - none where it cannot be (a window that allows no copy).
+    pub fn picture(&self, frame: &wgpu::SurfaceTexture) -> Option<wgpu::Texture> {
+        let t = match &self.encode {
+            Some(e) => e.texture()?,
+            None => frame.texture.clone(),
+        };
+        t.usage().contains(wgpu::TextureUsages::COPY_SRC).then_some(t)
     }
 
     /// Shows `frame`, drawn into [`Self::view`].

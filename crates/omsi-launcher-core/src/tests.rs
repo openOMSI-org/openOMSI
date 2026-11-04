@@ -47,7 +47,9 @@ fn the_games_options_survive_a_save() {
     for k in ["steer_look", "discord_status", "voice_enabled", "voice_mode", "voice_range", "voice_mic_gain", "launcher_rest", "camera_collision", "brake_hold", "auto_clutch", "momentary_gears", "ff_enabled", "head_tracking", "collision_objects", "led_mips", "led_glow", "look_sens", "look_smoothing_ms", "blinker_cancel", "pedal_brake", "mouse_pedal_strength", "head_idle", "head_idle_pace", "seat_y", "seat_pitch_deg"] {
         assert_eq!(back[k], v[k], "{k}");
     }
-    assert!(settings_from_text(None)["discord_status"].as_bool().unwrap());
+    assert!(!settings_from_text(None)["discord_status"].as_bool().unwrap());
+    // (a player who switched it on keeps it)
+    assert!(settings_from_text(Some("discord_status=1\n"))["discord_status"].as_bool().unwrap());
     assert!(settings_from_text(None)["launcher_rest"].as_bool().unwrap());
     // voice chat is off until switched on
     assert!(!settings_from_text(None)["voice_enabled"].as_bool().unwrap());
@@ -493,6 +495,22 @@ fn a_chosen_duty_date_keeps_its_year() {
     let span = Some((1986, 2000));
     assert_eq!(date_for_game("2025-06-01", false, span), "2025-06-01");
     assert_eq!(date_for_game("2025-06-01", true, span), "2000-06-01");
+}
+
+#[test]
+fn todays_year_is_kept_when_the_player_asks_for_it() {
+    let dir = std::env::temp_dir().join(format!("openomsi-real-year-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("maps/x")).unwrap();
+    std::fs::write(dir.join("maps/x/global.cfg"), "[years]\n1988\n2000\n").unwrap();
+    let d = Duty { map: "maps/x/global.cfg".into(), bus: "Vehicles/x.bus".into(), time: "09:00".into(), date: Some("1995-01-01".into()), ..Default::default() };
+    let year = |st: serde_json::Value| {
+        let a = duty_args_with_settings(&d, &dir, &st).unwrap();
+        a[a.iter().position(|x| x == "--date").unwrap() + 1][..4].to_string()
+    };
+    let (y, ..) = local_now().unwrap();
+    assert_eq!(year(serde_json::json!({"use_real_date": true})), "1995");
+    assert_eq!(year(serde_json::json!({"use_real_date": true, "use_real_year": true})), format!("{y:04}"));
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]

@@ -597,7 +597,11 @@ impl Pole {
             let x = (c.s - k * 24.0) / 0.35;
             0.003 * (-x * x).exp()
         };
-        w.z += self.roughness * ((std::f64::consts::TAU * sg / 2.6).sin() + 0.5 * (std::f64::consts::TAU * sg / 0.95 + 1.3).sin()) + hanger;
+        // (faded out over the last metre to each joint: the next span's pattern starts afresh,
+        // and the step there lifted every shoe off at every joint and frog)
+        let edge = (c.s.min(net.spans[c.span as usize].len() - c.s)).clamp(0.0, 1.0);
+        let edge = edge * edge * (3.0 - 2.0 * edge);
+        w.z += edge * (self.roughness * ((std::f64::consts::TAU * sg / 2.6).sin() + 0.5 * (std::f64::consts::TAU * sg / 0.95 + 1.3).sin()) + hanger);
         let (th_w, ps_w, _) = self.angles_to(base, rot, w);
         // how fast the shoe slides along the wire
         let u = if self.have_prev { (w - self.prev_wire_pt).length() / dt } else { 0.0 };

@@ -10,20 +10,21 @@ pub(crate) fn tour_start(tour: &omsi_timetable::Tour) -> Option<f64> {
 /// Whether a tour is listed now: it runs on this day and is current at `now` (seconds of the
 /// day) - under way, or leaving within half an hour; one that has finished is not.
 pub(super) fn tour_listed(sch: &crate::schedule::Schedule, line: &str, tour: &omsi_timetable::Tour, now: f64) -> bool {
-    if !sch.tour_available(tour) {
-        return false;
-    }
     let start = tour_start(tour).unwrap_or(0.0);
     let end = sch.tour_stops(line, &tour.number).iter().map(|s| s.3).fold(start, f64::max);
-    // (a night tour's times go on past 24:00: the early hours of the next day count too)
-    [now, now + 86400.0].iter().any(|n| *n >= start - 1800.0 && *n <= end + 60.0)
+    listed_at(start, end, now, sch.tour_today(tour), sch.tour_from_yesterday(tour))
+}
+
+fn listed_at(start: f64, end: f64, now: f64, today: bool, from_yesterday: bool) -> bool {
+    let current = |n: f64| n >= start - 1800.0 && n <= end + 60.0;
+    (today && current(now)) || (from_yesterday && current(now + 86400.0))
 }
 
 /// The line number a line's trips carry (`.ttp` line), else the name of the line's file.
 pub(super) fn line_sign(schedule: Option<&crate::schedule::Schedule>, line: &omsi_timetable::Line) -> String {
     let sign = schedule.and_then(|sch| {
         line.tours.iter().flat_map(|t| t.trips.iter()).find_map(|tt| {
-            let t = sch.data.trips.iter().find(|x| x.name.eq_ignore_ascii_case(&tt.trip))?;
+            let t = sch.data.trips.iter().find(|x| x.is_named(&tt.trip))?;
             Some(t.line.trim().to_string()).filter(|n| !n.is_empty())
         })
     });
@@ -48,7 +49,7 @@ pub(super) fn sorted_tours(line: &omsi_timetable::Line) -> Vec<&omsi_timetable::
 pub(super) fn tour_trip_name(sch: &crate::schedule::Schedule, tour: &omsi_timetable::Tour, k: usize) -> Option<String> {
     tour.trips
         .iter()
-        .filter(|tt| sch.data.trips.iter().any(|x| x.name.eq_ignore_ascii_case(&tt.trip)))
+        .filter(|tt| sch.data.trips.iter().any(|x| x.is_named(&tt.trip)))
         .nth(k)
         .map(|tt| tt.trip.clone())
 }
@@ -66,6 +67,7 @@ pub(super) fn natural(a: &str, b: &str) -> std::cmp::Ordering {
 // like the file itself (written on exit by `flush_settings(true)`).
 pub(super) static PENDING_SETTINGS: std::sync::Mutex<(Vec<(String, String)>, Option<std::time::Instant>)> =
     std::sync::Mutex::new((Vec::new(), None));
+pub(super) static GRAPHICS_DRAFT: std::sync::Mutex<Option<serde_json::Value>> = std::sync::Mutex::new(None);
 pub(super) const SETTINGS_FLUSH_MS: u128 = 250;
 pub(super) static SETTINGS_CACHE: std::sync::Mutex<Option<serde_json::Value>> = std::sync::Mutex::new(None);
 
@@ -90,6 +92,13 @@ pub(super) fn remember_bus_seat(app: &App) {
 }
 
 pub(crate) fn remember_setting(key: &str, value: &str) {
+    if is_graphics_setting(key) {
+        let mut draft = GRAPHICS_DRAFT.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(v) = draft.as_mut() {
+            apply_pending(v, &[(key.to_string(), value.to_string())]);
+            return;
+        }
+    }
     {
         let mut p = PENDING_SETTINGS.lock().unwrap_or_else(|e| e.into_inner());
         match p.0.iter_mut().find(|(k, _)| k == key) {
@@ -164,6 +173,10 @@ pub(super) fn switch_driver(app: &mut App, name: &str) {
     // the bus's motion and the trip driven go on)
     next.seconds = app.session.career.seconds;
     next.go_on_from(&mut app.session.career);
+    crate::depot_bus::shift_base(&mut app.session.depot_base, &app.session.career, &next);
+    if let Some(sw) = app.session.depot_prev.as_mut() {
+        crate::depot_bus::shift_base(&mut sw.base, &app.session.career, &next);
+    }
     app.session.career = next;
     app.args.driver = Some(rel);
     app.service_msg = Some((omsi_ui::i18n::tr_fill("Driver: {name}", &[("{name}", &name)]), 3.0));
@@ -263,5 +276,19 @@ pub(super) fn start_duty(app: &mut App, line: &str, tour: &str) {
             app.service_msg = Some((format!("Line {line}, tour {}", tour.trim()), 4.0));
         }
         Err(e) => app.service_msg = Some((omsi_ui::i18n::tr_fill_words("No duty ({e})", &[("{e}", &e)]), 8.0)),
+    }
+}
+
+#[cfg(test)]
+mod listed_tests {
+    use super::listed_at;
+
+    #[test]
+    fn yesterdays_night_tour_is_listed_only_for_its_trips_past_midnight() {
+        let (start, end) = (5.0 * 3600.0, 25.5 * 3600.0);
+        assert!(listed_at(start, end, 12.0 * 3600.0, true, false), "on its own day");
+        assert!(!listed_at(start, end, 12.0 * 3600.0, false, true), "a Friday tour at Saturday noon");
+        assert!(listed_at(start, end, 0.5 * 3600.0, false, true), "its trip after midnight, on Saturday at 00:30");
+        assert!(!listed_at(start, end, 2.0 * 3600.0, false, true), "after its last trip");
     }
 }

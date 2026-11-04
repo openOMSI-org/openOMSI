@@ -54,14 +54,14 @@ impl WindingVotes {
 /// Built-in variables every road vehicle has (`program/varlist_roadvehicle.txt` + generated).
 pub fn builtin_vars(root: &Path) -> Vec<String> {
     let mut v: Vec<String> =
-        match omsi_cfg::CfgFile::read(root.join("program/varlist_roadvehicle.txt")) {
+        match omsi_cfg::CfgFile::read(omsi_cfg::resolve_path(root, "program/varlist_roadvehicle.txt")) {
             Ok(f) => f
                 .lines
                 .iter()
                 .map(|l| l.trim().to_string())
                 .filter(|l| !l.is_empty())
                 .collect(),
-            Err(_) => Vec::new(),
+            Err(_) => ["Velocity", "Velocity_Ground", "Throttle", "Brake", "Clutch", "M_Wheel", "n_Wheel", "Brakeforce", "A_Trans_X", "A_Trans_Y", "A_Trans_Z", "Spot_Select", "Snd_OutsideVol"].into_iter().chain(super::engine_vars::NAMES).map(String::from).collect(),
         };
     for a in 0..8 {
         for side in ["L", "R"] {
@@ -106,8 +106,12 @@ pub fn builtin_vars(root: &Path) -> Vec<String> {
     v
 }
 
+pub fn has_program_varlist(root: &Path) -> bool {
+    omsi_cfg::vfs::is_file(&omsi_cfg::resolve_path(root, "program/varlist_roadvehicle.txt"))
+}
+
 pub fn builtin_str_vars(root: &Path) -> Vec<String> {
-    match omsi_cfg::CfgFile::read(root.join("program/stringvarlist_roadvehicle.txt")) {
+    match omsi_cfg::CfgFile::read(omsi_cfg::resolve_path(root, "program/stringvarlist_roadvehicle.txt")) {
         Ok(f) => f
             .lines
             .iter()
@@ -373,6 +377,7 @@ impl VehicleType {
         let mut input = CompileInput {
             builtin_vars: builtin_vars(root),
             builtin_str_vars: builtin_str_vars(root),
+            declare_unknown: !has_program_varlist(root),
             ..Default::default()
         };
         input.varlists = def.scripts.varlists.clone();

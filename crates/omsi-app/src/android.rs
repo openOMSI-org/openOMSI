@@ -106,6 +106,7 @@ fn android_main(app: AndroidApp) {
     let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(1) % 1_000_000_000;
     omsi_script::set_session_seed(seed);
 
+    let _ = APP.set(app.clone());
     let event_loop = match EventLoop::builder().with_android_app(app).build() {
         Ok(e) => e,
         Err(e) => {
@@ -206,13 +207,15 @@ impl log::Log for TeeLogger {
         if !self.enabled(r.metadata()) {
             return;
         }
-        self.system.log(r);
-        use std::io::Write;
-        let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
-        if let Some(f) = self.file.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
-            // (the desktop's env_logger layout: the launcher's `crash_of` reads it)
-            let _ = writeln!(f, "[{secs:.3} {:<5} {}] {}", r.level(), r.target(), r.args());
-        }
+        crate::logmask::with_record(r, |r| {
+            self.system.log(r);
+            use std::io::Write;
+            let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
+            if let Some(f) = self.file.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
+                // (the desktop's env_logger layout: the launcher's `crash_of` reads it)
+                let _ = writeln!(f, "[{secs:.3} {:<5} {}] {}", r.level(), r.target(), r.args());
+            }
+        });
     }
 
     fn flush(&self) {
@@ -495,6 +498,18 @@ static TILT_THREAD: std::sync::Once = std::sync::Once::new();
 
 pub(crate) fn tilt() -> Option<f32> {
     (TILT_ON.load(Ordering::Relaxed) && TILT_SEEN.load(Ordering::Relaxed)).then(|| f32::from_bits(TILT.load(Ordering::Relaxed)))
+}
+
+static APP: std::sync::OnceLock<AndroidApp> = std::sync::OnceLock::new();
+
+pub(crate) fn soft_keyboard(show: bool) {
+    if let Some(app) = APP.get() {
+        if show {
+            app.show_soft_input(false);
+        } else {
+            app.hide_soft_input(false);
+        }
+    }
 }
 
 pub(crate) fn set_tilt(on: bool) {

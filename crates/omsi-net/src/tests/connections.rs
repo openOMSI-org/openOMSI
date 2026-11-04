@@ -1,4 +1,5 @@
 use super::*;
+use crate::receive_budget::{receive_budget_reached, RECEIVE_PACKET_LIMIT, RECEIVE_TIME_BUDGET};
 
 #[test]
 fn players_without_a_bus_stay_in_the_session() {
@@ -446,4 +447,105 @@ fn restarting_client_on_the_same_socket_invalidates_host_receive_state() {
     host.tick(0.1, &poses[0]);
     assert!(host.take_vars().iter().any(|v| v.strings == vec![(0, "new".into())]));
     assert!(host.take_var_schemas().iter().any(|v| v.strings == vec![(0, "new schema".into())]));
+}
+
+#[test]
+fn each_host_owner_gets_its_own_identifier_of_the_machine() {
+    let machine = "0123456789abcdef0123456789abcdef";
+    let mut ids = Vec::new();
+    for (first_port, realm) in [(28310, "aa".repeat(16)), (28320, "bb".repeat(16))] {
+        let mut host = LanSession::host(first_port, "host", world("m"), true).unwrap();
+        host.set_ban_realm(&realm);
+        let port = host.local_addr().unwrap().port();
+        let mut c = LanSession::join(&port.to_string(), "c", world("m"), Duration::from_secs(1)).unwrap();
+        c.hardware_base = Some(machine.to_string());
+        let none = Pose::default();
+        let t0 = Instant::now();
+        while !c.connected && t0.elapsed() < Duration::from_secs(4) {
+            host.tick(0.05, &none);
+            c.tick(0.05, &none);
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(c.connected);
+        let id = host.peer_hardware_id(c.my_id).unwrap().to_string();
+        assert_eq!(id, host_hardware_id(machine, &realm));
+        ids.push(id);
+    }
+    assert_ne!(ids[0], ids[1]);
+    assert!(!ids.iter().any(|i| i == machine));
+}
+
+#[test]
+fn receive_budget_bounds_each_tick() {
+    assert!(!receive_budget_reached(0, Duration::ZERO));
+    assert!(!receive_budget_reached(RECEIVE_PACKET_LIMIT - 1, Duration::ZERO));
+    assert!(receive_budget_reached(RECEIVE_PACKET_LIMIT, Duration::ZERO));
+    assert!(receive_budget_reached(0, RECEIVE_TIME_BUDGET));
+}
+
+#[test]
+fn rate_limit_diagnostics_preserve_packet_categories() {
+    let mut host = LanSession::host(0, "host", WorldInfo::default(), false).unwrap();
+    let from = SocketAddr::from(([127, 0, 0, 1], 30000));
+    host.peers.insert(2, Peer::new(Some(from), Pose::default()));
+    let seen = host.peers[&2].last_seen;
+
+    // Rejected flood packets must not renew liveness.
+    assert!(host.checked_peer(2, from, (0.0, 0.0), PeerTraffic::Sounds).is_none());
+    assert!(host.checked_peer(2, from, (0.0, 0.0), PeerTraffic::Variables).is_none());
+    let peer = &host.peers[&2];
+    assert_eq!(peer.dropped, 2);
+    assert_eq!(peer.drop_counts[PeerTraffic::Sounds as usize], 1);
+    assert_eq!(peer.drop_counts[PeerTraffic::Variables as usize], 1);
+    assert_eq!(peer.drop_counts[PeerTraffic::State as usize], 0);
+    assert_eq!(peer.last_seen, seen);
+}
+
+#[test]
+fn relayed_sound_acknowledgements_have_a_rate_of_their_own() {
+    let mut host = LanSession::host(0, "host", WorldInfo::default(), false).unwrap();
+    let (from, to) = (SocketAddr::from(([127, 0, 0, 1], 30000)), SocketAddr::from(([127, 0, 0, 1], 30001)));
+    host.peers.insert(2, Peer::new(Some(from), Pose::default()));
+    host.peers.insert(3, Peer::new(Some(to), Pose::default()));
+    // an acknowledgement from player 2 to player 3: a bare 36-byte header
+    let mut ack = vec![sounds::MAGIC, PROTOCOL as u8, 1, 0];
+    ack.extend(2u32.to_le_bytes());
+    ack.extend(3u32.to_le_bytes());
+    ack.extend(1u64.to_le_bytes());
+    ack.extend(1u64.to_le_bytes());
+    ack.resize(36, 0);
+    let n = SOUND_ACK_RATE.1 as usize + 1000;
+    for _ in 0..n {
+        host.on_sound(&ack, from);
+    }
+    let peer = &host.peers[&2];
+    let dropped = peer.drop_counts[PeerTraffic::SoundAcks as usize] as usize;
+    assert!(dropped >= 500 && dropped < n, "a flood of acknowledgements is cut at the burst, not relayed on: {dropped} of {n} dropped");
+    assert_eq!(peer.drop_counts[PeerTraffic::Sounds as usize], 0, "acknowledgements are not charged to the sound rate");
+    // from another address they are not taken at all
+    host.on_sound(&ack, SocketAddr::from(([127, 0, 0, 1], 30002)));
+    assert_eq!(host.peers[&2].drop_counts[PeerTraffic::SoundAcks as usize] as usize, dropped);
+}
+
+#[test]
+fn a_player_who_left_and_came_back_is_heard_again() {
+    let mut c = LanSession::join("127.0.0.1:28990", "c", world("m"), Duration::from_millis(10)).unwrap();
+    c.my_id = 2;
+    let from: SocketAddr = "127.0.0.1:28990".parse().unwrap();
+    let ev = |n: &str| sounds::Event { ai: 0, bus: "Vehicles/t.bus".into(), trigger: n.into(), file: None, values: Vec::new() };
+    let heard = |c: &mut LanSession, s: &mut sounds::Sync| {
+        for d in s.tick(PROTOCOL as u8, 5, 0.0) {
+            c.sounds.receive(PROTOCOL as u8, 2, &d);
+        }
+        c.sounds.take_incoming().len()
+    };
+    c.peers.insert(5, Peer::new(None, Pose::placeholder(5, "p", "b")));
+    let mut before = sounds::Sync::default();
+    before.publish(&[2], ev("door"));
+    assert_eq!(heard(&mut c, &mut before), 1);
+    c.on_bye(&["BYE", "5"], from, "BYE|5", &mut Vec::new());
+    c.peers.insert(5, Peer::new(None, Pose::placeholder(5, "p", "b")));
+    let mut after = sounds::Sync::default();
+    after.publish(&[2], ev("horn"));
+    assert_eq!(heard(&mut c, &mut after), 1, "the returning player's new sound stream was refused");
 }

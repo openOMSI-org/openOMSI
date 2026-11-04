@@ -26,6 +26,7 @@ nothing is drawn. `server.cfg` is written with a comment for every key on the fi
 | `time_speed`, `real_time` | how fast the clock runs (1 to 30), or the machine's real date and time |
 | `metar_sync`, `metar_station` | the weather follows an airport's METAR report (ICAO code; empty: the one nearest the map), downloaded every ten minutes and passed on to the players |
 | `traffic`, `timetable`, `passengers`, `passenger_density` | AI cars, timetable buses, waiting passengers and how many of them (below) |
+| `ai_drive_through_parked` | `1`: the AI drives on through a parked car standing in its lane, as OMSI 2's does, instead of stopping behind it and going round it when it can (for maps where a parked car stands in the lane with no way round); `0` (default) keeps the stop |
 | `port`, `web_port`, `max_players` | UDP port of the session (27015), TCP port of the web gateway (27025), player limit (16) |
 | `gateway_proxy_header` | the header a proxy of this machine names a WebSocket player's address in (below) |
 | `tunnel` | start a free Cloudflare quick tunnel (needs `cloudflared`) |
@@ -50,7 +51,8 @@ settings of `server.cfg` - name, players at most, the UDP and web ports, the tun
 password (typed hidden; 12 characters at least) - with what the file has in brackets, kept
 with Enter. Every time, it lists the installed maps by number (the last one marked, taken
 with Enter) and starts the server on the one picked, without changing `map` in `server.cfg`;
-the output goes to the window and to `server.log`, and when the server stops on an error it
+the output goes to the window and to `server.log` (begun anew at every start, see [What the
+server keeps about its players](#what-the-server-keeps-about-its-players)), and when the server stops on an error it
 says what the exit code means. Asked once per map, it makes `start-<map>.cmd` (or `.sh`)
 beside it: that starts the same map again with no question. `run-server.cmd -Setup`
 (`run-server.sh --setup`) asks for the folder and the settings again; `-Map maps/<folder>/global.cfg`
@@ -453,16 +455,22 @@ commands go the same way as the others and are in the audit log, with what becam
 **The audit log.** Every login, refused password, operation and what became of it is written to
 `admin-audit.log` beside `server.cfg` (a JSON object a line: when, who - `player 3 'Name'`,
 `local tool (POST /admin)`, `web#2 (address)` -, the role, the action, the player, the result),
-put aside as `admin-audit.log.1` past 1 MB, so it never takes more than about 2 MB. No password
+put aside as `admin-audit.log.1` past 1 MB, keeping the previous backup as `admin-audit.log.2`
+(about 3 MB total). Web logins and refused passwords keep their **whole source addresses**
+in this audit file, regardless of `log_addresses`; that setting controls only the general
+game/server log. No password
 or token is ever written to it; names, reasons and chat lines are kept as cleaned text.
 
 ## Machine bans
 
 A ban by name or address does not say who somebody is, so the lasting ban is by **machine**.
-The game sends a *hardware identifier* when it joins: 128 bits of SHA-256 over a fixed text and
-the machine's own id (Windows `MachineGuid`, Linux `/etc/machine-id`, macOS `IOPlatformUUID`;
-on a system with none, a random number kept in `~/.openomsi/hardware-id`). The id itself never
-leaves the machine and cannot be got back from the hash; no disk or board serial number is read.
+The game sends a *hardware identifier* when it joins, made for this host's owner: the host
+answers the first hello with its *realm* (a random key kept in the owner's list, see below), and
+the game sends SHA-256 over a fixed text, the machine's own id (Windows `MachineGuid`, Linux
+`/etc/machine-id`, macOS `IOPlatformUUID`; on a system with none, a random number kept in
+`~/.openomsi/hardware-id`) and that realm, cut to 128 bits. The id itself never leaves the
+machine and cannot be got back from the hash; no disk or board serial number is read. Every
+session of one owner list gets the same identifier from a machine; another owner gets another.
 The host pins the identifier to the connection at its first hello (a later hello of the same
 connection cannot change it), shows it to nobody (the panels list bans by name, reason and
 time only), and turns a joining machine away if a ban holds it:
@@ -490,10 +498,14 @@ time only), and turns a joining machine away if a ban holds it:
   machine or another computer is another machine. A game before this feature, and a player who
   switched it off (`OMSI_NO_HARDWARE_ID=1`), send none: such a player cannot be banned by
   machine - `require_hardware_id = 1` turns them away, and a ban by `ban` still holds the run.
-  The same identifier goes to every server a player joins, so two hosts could compare who
-  joined them; the player can switch it off at the price of servers that require it.
-* **Wire.** The `HELLO` has one more, last field (`|<hardware id>`); the protocol number stays,
-  a host before the field ignores it and a game before it sends none.
+  Players switch it off in the launcher (*Send servers an identifier for bans*) or with
+  `OMSI_NO_HARDWARE_ID=1`. Two hosts with different owner lists get different identifiers
+  and cannot compare who joined them, unless they share the list (`owner_bans`) on purpose.
+  Bans made before LAN protocol 16 name identifiers no game sends any more (the server's log
+  says so at the start): ban those players again.
+* **Wire.** The `HELLO` ends with `|<hardware id>`: empty until the host's `REALM|<realm>`
+  came, `-` when the player sends none. A host with a ban list answers an empty one with
+  `REALM` and lets the player in only after the next hello.
 
 ## Public server list
 
@@ -525,6 +537,26 @@ and **icons are not cleared at all yet**: no image classifier is bundled, so eve
 is "unchecked" and the public list shows the default one. An open-licence classifier (a small
 Apache-2.0 or MIT model run by `tract`, downloaded to the content folder with a checksum, not
 committed) plugs in with `set_image_classifier` and nothing else changes.
+
+## What the server keeps about its players
+
+Tell your players what is kept (the motd is a good place). `server.cfg` lists the same at its
+end.
+
+| What | Where | How long |
+|---|---|---|
+| Who joined and left, their names, **the chat (every message)**, the admins' actions, errors | `server.log` beside `server.cfg` (`run-server` and `start.sh`; Docker: `docker compose logs`) | A new file at every start and past `log_max_mb` (20 MB; 0: no limit); `log_keep` (5) earlier ones as `server.1.log` (the newest) … `server.5.log`; `log_keep = 0` keeps none. Docker: five files of 20 MB (`docker-compose.yml`) |
+| The players' internet addresses | the same log | A public address keeps only its network (`203.0.113.x`, `2001:db8:85a3::x`); the local network's and this machine's are written whole. `log_addresses = 1` writes them whole (for an abuse report) |
+| Logins, refused passwords, the admins' and moderators' operations; **whole source addresses** for web logins and refused passwords, regardless of `log_addresses` | `admin-audit.log` | Rotated past 1 MB, keeping `admin-audit.log.1` and `.2`: about 3 MB total |
+| Banned machines (their hardware identifier) | `bans.json`, `owner_bans` | Until the ban is lifted |
+| The players' buses (with `accept_uploads = 1`) | `~/.openomsi/lan-store` | `uploads_keep_days` (30) after the last use |
+| Name, icon, map, players, motd (not the players' names) | the public list, with `public_server = 1` | Forgotten three minutes after the server stops |
+| Names, buses, lines and positions | anyone who asks `GET /players`, with `share_positions = 1` | Live only |
+
+Voice is passed on and never recorded or decoded. The address cut is the game's own logger, so
+a game hosting a session from the launcher (`game.log`, written again at every start) cuts them
+the same way. Before a crash report is turned into a GitHub issue, the launcher also takes the
+account's folder and name out of it (`~`, `<user>`) and the driver's name (`Drivers/<driver>.odr`).
 
 ## License
 

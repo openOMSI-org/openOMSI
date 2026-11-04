@@ -522,3 +522,23 @@ fn a_control_cable_hands_what_the_scripts_write_to_what_they_read() {
         assert_eq!(v.var("seen"), Some(expected), "cabled {cabled}");
     }
 }
+
+#[test]
+fn road_vehicle_variables_are_known_without_the_program_folder_and_in_any_case() {
+    let has = |v: &[String], n: &str| v.iter().any(|x| x == n);
+    let dir = std::env::temp_dir().join(format!("omsi_builtin_vars_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("bare")).unwrap();
+    std::fs::create_dir_all(dir.join("upper/Program")).unwrap();
+    std::fs::write(dir.join("upper/Program/VarList_RoadVehicle.txt"), "Throttle\r\nOwnVar\r\n").unwrap();
+    std::fs::write(dir.join("t.osc"), "{frame}\n(L.L.Throttle) (S.L.Velocity)\n(L.L.cockpit_light_sw) (S.L.Spot_Select)\n{end}\n").unwrap();
+    let read = builtin_vars(&dir.join("upper"));
+    assert!(has(&read, "OwnVar") && has_program_varlist(&dir.join("upper")));
+    assert!(!has_program_varlist(&dir.join("bare")));
+    let compile = |declare_unknown| omsi_script::compile(&omsi_script::CompileInput { builtin_vars: builtin_vars(&dir.join("bare")), scripts: vec![dir.join("t.osc")], declare_unknown, ..Default::default() });
+    let p = compile(true);
+    assert!(p.errors.is_empty(), "{:?}", p.errors);
+    assert!(["throttle", "velocity", "spot_select", "cockpit_light_sw"].iter().all(|n| p.var(n).is_some()));
+    assert!(compile(false).errors.iter().any(|e| e.message.contains("cockpit_light_sw")));
+    let _ = std::fs::remove_dir_all(&dir);
+}

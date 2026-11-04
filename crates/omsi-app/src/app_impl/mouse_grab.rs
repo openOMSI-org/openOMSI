@@ -81,7 +81,7 @@ impl MouseGrab {
         let warping = self.mode == Some(GrabMode::Warp);
         if warping && self.warp_pending && outer {
             self.stray = self.stray.saturating_add(1);
-            if self.stray > 4 {
+            if self.stray > 60 {
                 self.warp_pending = false;
                 self.stray = 0;
                 self.at = Some((x, y));
@@ -197,6 +197,9 @@ impl App {
                 if let Some(win) = self.window.as_ref() {
                     let _ = win.set_cursor_grab(winit::window::CursorGrabMode::None);
                 }
+                if self.input.mouse_grab.mode == Some(GrabMode::Plain) && !self.settings.mouse_hold {
+                    self.confine_cursor();
+                }
             }
             Some(false) | None => {}
         }
@@ -259,9 +262,9 @@ impl App {
                 Some(GrabMode::Plain) => {}
                 Some(mode) => {
                     self.free_cursor(mode);
-                    self.input.mouse_grab.mode = Some(GrabMode::Plain);
+                    self.confine_cursor();
                 }
-                None => self.input.mouse_grab.mode = Some(GrabMode::Plain),
+                None => self.confine_cursor(),
             }
             return;
         }
@@ -269,6 +272,13 @@ impl App {
             (None, true) => self.catch_cursor(),
             (Some(mode), false) => self.free_cursor(mode),
             _ => {}
+        }
+    }
+
+    fn confine_cursor(&mut self) {
+        self.input.mouse_grab.mode = Some(GrabMode::Plain);
+        if let Some(win) = self.window.as_ref() {
+            let _ = win.set_cursor_grab(winit::window::CursorGrabMode::Confined);
         }
     }
 
@@ -434,9 +444,9 @@ mod tests {
         let mut g = MouseGrab::default();
         g.caught(GrabMode::Warp, Some((800.0, 450.0)));
         // the pen far right: the cursor put back in the middle, and the pen is there again
-        let reports: Vec<CursorStep> = (0..6).map(|_| g.cursor_at(1500.0, 450.0, (800.0, 450.0), SIZE)).collect();
-        assert_eq!(reports.iter().filter(|r| **r == CursorStep::Ignore).count(), 4);
-        assert_eq!(reports[4], CursorStep::Absolute);
+        let reports: Vec<CursorStep> = (0..62).map(|_| g.cursor_at(1500.0, 450.0, (800.0, 450.0), SIZE)).collect();
+        assert_eq!(reports.iter().filter(|r| **r == CursorStep::Ignore).count(), 60);
+        assert_eq!(reports[60], CursorStep::Absolute);
         assert_eq!(g.at, Some((1500.0, 450.0)));
     }
 

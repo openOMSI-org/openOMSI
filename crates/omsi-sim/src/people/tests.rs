@@ -377,6 +377,35 @@ fn articulated_cabins_are_joined_through_the_bellows() {
     assert!(
         (train_heading(0.0, &frames, Vec3::new(0.0, back.y, 0.5)) - bent * 0.5).abs() < 1e-9
     );
+    // a walker in the rear section turns and steps with it, not with the front (#2785)
+    let mut people = PeopleSim::new(Path::new("/nonexistent"), 0);
+    Arc::make_mut(&mut people.last_buses).push(BusNow {
+        id: BusId::Player,
+        cabin: Arc::new(cabin),
+        pos: DVec3::ZERO,
+        rot: lead_rot,
+        heading: 0.0,
+        speed: 0.0,
+        entry_open: Vec::new(),
+        exit_open: Vec::new(),
+        walk_open: None,
+        interior: 0.0,
+        air: CabinAir::default(),
+        half: DVec2::new(1.25, 4.5),
+        centre: DVec2::ZERO,
+        accel: DVec2::ZERO,
+        trailers: frames.to_vec(),
+        terminus: None,
+        takes: Takes::Terminus,
+        next_stop: None,
+        places_off: Vec::new(),
+        served: None,
+        route: None,
+    });
+    assert!((people.cabin_world(BusId::Player, behind_joint).unwrap().1 - bent).abs() < 1e-9);
+    assert!(people.cabin_world(BusId::Player, Vec3::new(1.0, -1.0, 0.5)).unwrap().1.abs() < 1e-9);
+    let rear_seat = people.seat_floor(BusId::Player, 1).unwrap();
+    assert!((people.cabin_world(BusId::Player, rear_seat).unwrap().1 - bent).abs() < 1e-9);
 }
 
 /// The SD200's footsteps as its paths.cfg gives them to the links (#311): the stairs
@@ -774,6 +803,25 @@ fn places_follow_their_own_variables() {
     let k = h.reserve_place(BusId::Player, &cabin.seats, &[false; 4]).unwrap();
     assert!(k >= 2, "one who wants to stand stands");
     h.free_seat(BusId::Player, k);
+    let mut door = cabin.entries[0].clone();
+    door.inside = Vec3::new(0.0, -1.2, 0.5);
+    assert_eq!(h.reserve_by_a_door(BusId::Player, &cabin.seats, &[false; 4], std::slice::from_ref(&door)), Some(3), "a short ride stands by the door");
+    door.inside = Vec3::new(0.0, 0.2, 0.5);
+    assert_eq!(h.reserve_by_a_door(BusId::Player, &cabin.seats, &[false; 4], std::slice::from_ref(&door)), Some(2), "the nearest free one");
+    assert_eq!(h.reserve_by_a_door(BusId::Player, &cabin.seats, &[false; 4], std::slice::from_ref(&door)), None, "no standing place left: a seat as usual");
+    h.free_seat(BusId::Player, 2);
+    h.free_seat(BusId::Player, 3);
+    assert_eq!(h.reserve_by_a_door(BusId::Player, &cabin.seats, &[false; 4], &[]), None, "no exit known");
+    let mut elsewhere = door.clone();
+    elsewhere.group += 1;
+    assert_eq!(h.reserve_by_a_door(BusId::Player, &cabin.seats, &[false; 4], &[elsewhere]), None, "an exit of another car does not count");
+    let mut pathless = door.clone();
+    pathless.point = None;
+    assert_eq!(h.reserve_by_a_door(BusId::Player, &cabin.seats, &[false; 4], &[pathless]), None, "nor one with no path to it");
+    assert!(super::pax_task::short_ride(None, 2.0));
+    assert!(!super::pax_task::short_ride(None, 5.0));
+    assert!(!super::pax_task::short_ride(Some("Rathaus"), 2.0), "a rider with a stop to go to rides to it");
+    assert!(!super::pax_task::short_ride(None, 0.0), "no ride drawn (a runner)");
     v.set_var("layout_long", 1.0);
     assert_eq!(places_off(&v, &cabin), [false; 4]);
     // somebody sits on the tip-up seat (place 1) of this bus, somebody on place 1 of another
@@ -917,6 +965,15 @@ fn a_doorway_is_busy_while_somebody_stands_in_it() {
     // a rider of another bus, somebody waiting further out on the pavement: nobody here
     let waiting = bn.world(Vec3::new(2.6, 4.0, 0.0));
     assert_eq!(doorways_taken(&bn, &[(Some(BusId::Player), rear), (None, waiting)]), (vec![false], vec![false]));
+    let mut scratch = super::scratch::Scratch::default();
+    for i in -40..=40 {
+        for j in -40..=40 {
+            let p = bn.pos + DVec3::new(i as f64 * 0.25, j as f64 * 0.25, 0.0);
+            let at = [(None, p), (Some(BusId::Ai(3)), rear), (Some(BusId::Player), p - bn.pos)];
+            scratch.file_doorways(at.iter().map(|(b, q)| (*b, *q)));
+            assert_eq!(scratch.doorways(&bn), doorways_taken(&bn, &at), "{p:?}");
+        }
+    }
     // into the script's variables, a door past the eighth with the eighth's
     std::fs::write(dir.join("vars.bus"), "[model]\nmodel.cfg\n[varnamelist]\n1\nvars.txt\n[script]\n1\nmain.osc\n").unwrap();
     std::fs::write(dir.join("model.cfg"), "").unwrap();

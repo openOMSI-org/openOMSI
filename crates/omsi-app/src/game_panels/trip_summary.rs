@@ -3,7 +3,8 @@
 //! in the Journeys folder beside the journey's log. Settings → Gameplay → "Trip summary"
 //! turns it off; the quick menu's statistics tile shows the last one again.
 
-use super::{button, card, divider, el, grow_row, note, row, text, theme, theme_color, title};
+use super::{button, card, divider, el, grow_row, note, row, text, theme_color, title};
+use omsi_ui::theme::Palette;
 use crate::journey::{hms, TripSummary};
 use omsi_plugin::ui::{Anchor, Element, Kind, Panel, Rgba, RowAlign, Weight};
 use omsi_ui::tr;
@@ -12,19 +13,28 @@ fn icon(name: &str, size: f32, color: Rgba) -> Element {
     Element { color: Some(color), ..el(None, Kind::Icon { name: name.to_string(), size }) }
 }
 
-fn label(t: &str, light: bool) -> Element {
-    Element { color: Some(theme_color(theme(light).TEXT_DIM)), ..text(&tr(t), 12.0, Weight::Medium) }
+fn label(t: &str, pal: Palette) -> Element {
+    Element { color: Some(theme_color(pal.text_dim)), ..text(&tr(t), 12.0, Weight::Medium) }
 }
 
-fn grade(percent: Option<f64>, light: bool) -> Rgba {
-    let colors = theme(light);
-    let Some(percent) = percent else { return theme_color(colors.TEXT_DIM) };
+fn grade(percent: Option<f64>, pal: Palette) -> Rgba {
+    let colors = pal;
+    let Some(percent) = percent else { return theme_color(colors.text_dim) };
     if percent >= 80.0 {
-        theme_color(colors.OK)
+        theme_color(colors.ok)
     } else if percent >= 50.0 {
-        theme_color(colors.WARN)
+        theme_color(colors.warn)
     } else {
-        theme_color(colors.DANGER)
+        theme_color(colors.danger)
+    }
+}
+
+fn status_color(status: &str, pal: Palette) -> Option<Rgba> {
+    match status {
+        "On time" => Some(theme_color(pal.ok)),
+        "Delayed" | "Left early" => Some(theme_color(pal.warn)),
+        "Not served" => Some(theme_color(pal.danger)),
+        _ => None,
     }
 }
 
@@ -42,10 +52,10 @@ fn head(lines: &str) -> String {
     lines.lines().map(line).collect::<Vec<_>>().join("\n")
 }
 
-fn stars(lit: u8, light: bool) -> Element {
-    let colors = theme(light);
-    let accent = theme_color(colors.ACCENT);
-    let unlit = theme_color(colors.TEXT_FAINT);
+fn stars(lit: u8, pal: Palette) -> Element {
+    let colors = pal;
+    let accent = theme_color(colors.accent);
+    let unlit = theme_color(colors.text_faint);
     let children = (0..5).map(|k| icon("star", 18.0, if k < lit { accent } else { unlit })).collect();
     el(None, Kind::Row { children, gap: 2.0, align: RowAlign::End })
 }
@@ -61,13 +71,13 @@ impl TripPanel {
         TripPanel { summary, said: None }
     }
 
-    pub(crate) fn panel(&self, light: bool) -> Panel {
+    pub(crate) fn panel(&self, pal: Palette) -> Panel {
         let s = &self.summary;
-        let accent = theme_color(theme(light).ACCENT);
+        let accent = theme_color(pal.accent);
         let mut children = vec![
-            row(vec![icon("directions_bus", 22.0, accent), Element { grow: true, ..title(&tr("Trip summary")) }, stars(s.stars(), light)], RowAlign::Start),
+            row(vec![icon("directions_bus", 22.0, accent), Element { grow: true, ..title(&tr("Trip summary")) }, stars(s.stars(), pal)], RowAlign::Start),
             text(&tr(&s.title), 14.0, Weight::Medium),
-            note(&head(&s.head), light),
+            note(&head(&s.head), pal),
         ];
         if let Some(mood) = s.mood() {
             children.push(row(vec![icon("forum", 18.0, accent), text(&tr(mood), 14.0, Weight::Medium)], RowAlign::Start));
@@ -84,44 +94,45 @@ impl TripPanel {
             tiles.push(("groups", r.passengers.to_string(), "passengers"));
         }
         children.push(grow_row(tiles.iter().map(|(i, v, _)| row(vec![icon(i, 18.0, accent), text(v, 17.0, Weight::Bold)], RowAlign::Start)).collect()));
-        children.push(grow_row(tiles.iter().map(|(_, _, l)| label(l, light)).collect()));
+        children.push(grow_row(tiles.iter().map(|(_, _, l)| label(l, pal)).collect()));
         if let Some(r) = s.rating {
             children.push(divider());
             let gauges = [("speed", Some(r.driving), "driving"), ("airport_shuttle", r.comfort_rated(), "comfort"), ("receipt_long", r.tickets_rated(), "ticket selling")];
             children.push(columns(
                 gauges
                     .iter()
-                    .map(|(i, p, l)| row(vec![icon(i, 16.0, accent), Element { grow: true, ..label(l, light) }, Element { color: Some(grade(*p, light)), ..text(&p.map(|p| format!("{p:.0} %")).unwrap_or_else(|| "-".into()), 13.0, Weight::Bold) }], RowAlign::Start))
+                    .map(|(i, p, l)| row(vec![icon(i, 16.0, accent), Element { grow: true, ..label(l, pal) }, Element { color: Some(grade(*p, pal)), ..text(&p.map(|p| format!("{p:.0} %")).unwrap_or_else(|| "-".into()), 13.0, Weight::Bold) }], RowAlign::Start))
                     .collect(),
             ));
-            children.push(columns(gauges.iter().map(|(_, p, _)| Element { color: Some(grade(*p, light)), ..el(None, Kind::Bar { value: p.map_or(0.0, |p| (p / 100.0).clamp(0.0, 1.0) as f32), height: 6.0, background: None, segments: Vec::new() }) }).collect()));
+            children.push(columns(gauges.iter().map(|(_, p, _)| Element { color: Some(grade(*p, pal)), ..el(None, Kind::Bar { value: p.map_or(0.0, |p| (p / 100.0).clamp(0.0, 1.0) as f32), height: 6.0, background: None, segments: Vec::new() }) }).collect()));
         }
         children.push(divider());
-        let rows: Vec<Vec<String>> = s.rows.iter().map(|r| r.to_vec()).collect();
+        let rows: Vec<Vec<String>> = s.rows.iter().map(|r| r.iter().enumerate().map(|(k, c)| if k == 4 { tr(c).into_owned() } else { c.clone() }).collect()).collect();
+        let inks = s.rows.iter().map(|r| (0..6).map(|k| (k == 4).then(|| status_color(&r[4], pal)).flatten()).collect()).collect();
         children.push(el(
             None,
             Kind::Table {
-                columns: ["Bus stop", "Plan", "Actual", "Diff", "Odometer"].map(|c| tr(c).into_owned()).to_vec(),
+                columns: ["Bus stop", "Plan", "Actual", "Diff", "Status", "Odometer"].map(|c| tr(c).into_owned()).to_vec(),
                 rows,
-                widths: vec![0.36, 0.15, 0.15, 0.16, 0.18],
+                widths: vec![0.29, 0.13, 0.13, 0.14, 0.15, 0.16],
                 size: 13.0,
                 aligns: Vec::new(),
-                inks: Vec::new(),
+                inks,
             },
         ));
         children.push(grow_row(vec![button("copy", &tr("Copy"), Some("content_copy")), button("save", &tr("Save"), Some("save")), button("close", &tr("Close"), Some("close"))]));
         if let Some(said) = &self.said {
-            children.push(note(said, light));
+            children.push(note(said, pal));
         }
-        children.push(row(vec![note(&tr("Settings → Gameplay → Trip summary turns it off."), light)], RowAlign::Start));
-        card(Anchor::Center, 0.0, 0.0, 620.0, 236, light, children)
+        children.push(row(vec![note(&tr("Settings → Gameplay → Trip summary turns it off."), pal)], RowAlign::Start));
+        card(Anchor::Center, 0.0, 0.0, 660.0, 236, pal, children)
     }
 
     /// About how much room the card takes at scale 1 (width, height), so that a small screen
     /// (a phone) can draw it smaller instead of past its edges.
     pub(crate) fn extent(&self) -> (f32, f32) {
         let table = (self.summary.rows.len() + 1) as f32 * 13.0 * crate::plugin_ui::LINE + 3.0;
-        (650.0, table + 380.0)
+        (680.0, table + 380.0)
     }
 }
 

@@ -11,7 +11,6 @@ use super::*;
 use omsi_ui::Vertex;
 
 const PANEL_REACH: f64 = 640.0;
-const PANEL_REBUILD: f64 = 150.0;
 /// The triangles of house models the panel's ground may hold: it is drawn every frame, and rebuilt
 /// as the bus drives.
 const PANEL_MODELS: usize = 30_000;
@@ -58,18 +57,20 @@ impl Navigator {
         let net = global.as_deref().or(f.traffic.map(|t| &t.net)).or(own.as_deref());
         let lanes_now = net.map(|n| n.lanes.len()).unwrap_or(0);
         let look_key = self.look_key();
+        let visible_reach = super::build::view::panel_reach(self.zoom, map.w, map.h).unwrap_or(PANEL_REACH);
+        let reach = super::build::view::panel_build_reach(map.w, map.h).unwrap_or(PANEL_REACH + 150.0);
         let rebuild = match &self.roads {
             None => lanes_now > 0 || self.map_data.is_some(),
-            Some(r) => r.look != look_key || (r.anchor - f.bus.truncate()).length() > PANEL_REBUILD || (r.lanes_seen != lanes_now && self.time - r.built_at > 1.5),
+            Some(r) => r.look != look_key || super::build::view::panel_moved(r.reach, visible_reach, (r.anchor - f.bus.truncate()).length()) || (r.lanes_seen != lanes_now && self.time - r.built_at > 1.5),
         };
         // (on a worker when the map's network is there; the picture keeps the old part meanwhile)
         let mut built = None;
         if let Some(job) = self.panel_job.as_ref() {
             match job.poll() {
                 Ok(Some(mut b)) => {
-                    let (look, lanes) = job.meta;
+                    let (look, lanes, reach) = job.meta;
                     let [_, houses @ ..] = b.counts;
-                    self.roads = Some(Roads { look, anchor: b.anchor, lanes_seen: lanes, houses, runs: std::mem::take(&mut b.runs), built_at: self.time });
+                    self.roads = Some(Roads { look, reach, anchor: b.anchor, lanes_seen: lanes, houses, runs: std::mem::take(&mut b.runs), built_at: self.time });
                     built = Some(b);
                     self.panel_job = None;
                 }
@@ -80,6 +81,7 @@ impl Navigator {
         if rebuild && self.panel_job.is_none() && built.is_none() {
             let anchor = f.bus.truncate();
             let mut parts = self.ground_parts(net, None);
+            parts.house_reach = Some(PANEL_REACH);
             // The older-style navigator needs only roads and route data.
             // Skip terrain meshes, map packages, buildings and their shadows entirely.
             if self.classic_2d {
@@ -91,18 +93,17 @@ impl Navigator {
             } else {
                 GroundLook { surfaces: true, trees: true, dashes: true, tol: 0.0 }
             };
-            let reach = PANEL_REACH;
             let mpp = (2.0 * self.zoom * (FOV.to_radians() as f64 * 0.5).tan() / map.h.max(1.0) as f64) as f32;
             let paved = !self.classic_2d;
             let models = (!self.classic_2d).then_some(PANEL_MODELS);
             if self.global.is_some() {
                 let pal2 = pal;
                 let device = renderer.device.clone();
-                self.panel_job = Some(super::build::Job::start((look_key, lanes_now), move || super::build::build(&parts, anchor, reach, &pal2, look, paved, models, true, mpp).made_on(&device)));
+                self.panel_job = Some(super::build::Job::start((look_key, lanes_now, reach), move || super::build::build(&parts, anchor, reach, &pal2, look, paved, models, true, mpp).made_on(&device)));
             } else {
                 let mut b = super::build::build(&parts, anchor, reach, &pal, look, paved, models, true, mpp);
                 let [_, houses @ ..] = b.counts;
-                self.roads = Some(Roads { look: look_key, anchor, lanes_seen: lanes_now, houses, runs: std::mem::take(&mut b.runs), built_at: self.time });
+                self.roads = Some(Roads { look: look_key, reach, anchor, lanes_seen: lanes_now, houses, runs: std::mem::take(&mut b.runs), built_at: self.time });
                 built = Some(b);
             }
         }
@@ -179,7 +180,9 @@ impl Navigator {
                 let (color, line) = traffic_kind(c);
                 let at = self.smoothed_position(c);
                 if color == DOT {
-                    car_dot(&mut dy, rel(at), self.light);
+                    if self.show_cars {
+                        car_dot(&mut dy, rel(at), self.light);
+                    }
                 } else {
                     transit.push((at, c.vehicle.heading, line));
                 }

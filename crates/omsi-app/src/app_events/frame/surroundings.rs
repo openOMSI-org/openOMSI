@@ -94,10 +94,14 @@ pub(super) fn lights(cx: LightsCx, dt: f32, daylight: omsi_sim::Daylight, behind
             w, scene, &daylight, cam.position, &vehicles, cone,
             lights::VehicleSmoke::from_setting(&cx.common.settings.vehicle_smoke),
             cx.player.player.is_some(),
+            cx.common.settings.traffic_headlights,
         );
         drop(vehicles);
         if cx.view.cam.flashlight {
-            lights::flashlight_ahead(scene, cam);
+            match cx.view.cam.flashlight_aim {
+                Some(d) => lights::flashlight_toward(scene, cam, d),
+                None => lights::flashlight_ahead(scene, cam),
+            }
         }
         if let Some(p) = cx.player.player.as_ref() {
             if let Some(tv) = p.trolley_view.as_ref() {
@@ -279,6 +283,7 @@ crate::app::stage_ctx!(
 
 /// The departure boards, the map's route arrows and the scenery's scripts.
 pub(super) fn scripted(cx: ScriptedCx, dt: f32, daylight: omsi_sim::Daylight) {
+    let dt = if *cx.clock.paused { 0.0 } else { dt };
     if let (Some(w), Some(r), Some(scene), Some(cam)) = (
         cx.world.world.as_ref(),
         cx.gfx.renderer.as_ref(),

@@ -1,5 +1,6 @@
 import { html, render } from '../ui/vendor/preact-htm.js';
 import { Tours } from '../ui/js/pages/drive-duty.js';
+import { BusPicker } from '../ui/js/pages/bus-picker.js';
 import { S, set, remember } from '../ui/js/store.js';
 import { applyTheme, choose, curTour, duty, resolveTour, transportRefusal, LAUNCHER_LAYOUTS } from '../ui/js/data.js';
 
@@ -390,6 +391,81 @@ async function duplicateTourNumbers() {
   return out;
 }
 
+/** Reproduces the missing 3D preview of an uninstalled bus in a server picker.
+ * Its old absolute-positioned placeholder covered all buttons and stole clicks. */
+async function serverOnlyBusPicker() {
+  const issues = [];
+  const saved = { choice: S.choice, vehicles: S.vehicles, page: S.page };
+  const host = document.createElement('div');
+  document.body.append(host);
+  const a = {
+    file: 'Vehicles/CI Test/A.bus', name: 'Test A', type_name: 'Test A',
+    manufacturer: 'Test', folder: 'Vehicles/CI Test', paints: [],
+    transport: ['bus'], server_only: true, server_catalog: true,
+    installed: false, missing_packs: [],
+  };
+  // Keep the test models in separate folders: the picker groups same-folder
+  // buses into one family and otherwise displays their shortened variant names.
+  const b = { ...a, file: 'Vehicles/CI Other/B.bus', folder: 'Vehicles/CI Other', name: 'Test B', type_name: 'Test B' };
+  let closed = 0;
+  const mount = async () => {
+    render(html`<${BusPicker} onClose=${() => closed++} />`, host);
+    await settle();
+  };
+  const rowFor = (name) => [...host.querySelectorAll('.picker .left .list .list-item')]
+    .find((el) => el.querySelector('.title')?.textContent.trim() === name);
+  const reachable = (el) => {
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return hit === el || el.contains(hit);
+  };
+  try {
+    set({ choice: { ...S.choice, lan_mode: 'off', bus: a.file, paint: '' }, vehicles: [a, b], page: 'profile' });
+    await mount();
+    const emptyPreview = host.querySelector('.picker .detail > .stage-empty');
+    if (!emptyPreview) issues.push('missing-server-bus picker: placeholder is absent');
+    if (emptyPreview && getComputedStyle(emptyPreview).position === 'absolute')
+      issues.push('missing-server-bus picker: placeholder covers the dialog');
+    const confirm = host.querySelector('.dialog-foot .btn.primary');
+    const search = host.querySelector('.picker .search input');
+    const paints = host.querySelector('.picker .field .select');
+    for (const [name, element] of [['confirm', confirm], ['search', search], ['paint', paints]]) {
+      if (!reachable(element)) issues.push(`missing-server-bus picker: ${name} cannot receive clicks`);
+    }
+    const selected = rowFor('Test B');
+    if (!selected || !reachable(selected)) {
+      issues.push('missing-server-bus picker: second bus cannot be selected');
+    } else {
+      selected.click();
+      await settle();
+      host.querySelector('.dialog-foot .btn.primary')?.click();
+      await settle();
+      if (S.choice.bus !== b.file || closed !== 1)
+        issues.push('missing-server-bus picker: Choose this bus did not commit selection and close');
+    }
+    render(null, host);
+    await settle(50);
+    set({ choice: { ...S.choice, bus: a.file, paint: '' } });
+    await mount();
+    const second = rowFor('Test B');
+    if (!second) issues.push('missing-server-bus picker: double-click row absent');
+    else {
+      second.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      await settle();
+      if (S.choice.bus !== b.file)
+        issues.push('missing-server-bus picker: double-click used the previous selection');
+    }
+  } catch (e) {
+    issues.push(`missing-server-bus picker: ${e.message}`);
+  } finally {
+    render(null, host);
+    host.remove();
+    set(saved);
+  }
+  return issues;
+}
+
 export async function run({ themes = ['dark', 'light'], layouts = LAUNCHER_LAYOUTS.map(([id]) => id), check = ['options', 'use'] } = {}) {
   const report = {};
   for (const theme of themes) for (const layout of layouts) {
@@ -417,5 +493,6 @@ export async function run({ themes = ['dark', 'light'], layouts = LAUNCHER_LAYOU
   report['duplicate tour numbers'] = await duplicateTourNumbers();
   report['duty date'] = await dateOutsideTheMapsYears();
   report['transport modes'] = transportModes();
+  report['server-only bus picker'] = await serverOnlyBusPicker();
   return report;
 }
