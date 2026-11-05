@@ -12,11 +12,6 @@ use unicode_normalization::UnicodeNormalization;
 
 static NEXT_DEPENDENCY_MOUNT: AtomicU64 = AtomicU64::new(1);
 static MAP_ALIASES: std::sync::RwLock<Vec<MapAliasScope>> = std::sync::RwLock::new(Vec::new());
-#[cfg(test)]
-std::thread_local! {
-    static SCOPE_PATH_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
-}
-
 struct MapAliasScope {
     id: u64,
     map: PathBuf,
@@ -43,8 +38,6 @@ pub fn digest(bytes: &[u8]) -> String {
 }
 
 fn map_scope_path(path: &Path) -> io::Result<PathBuf> {
-    #[cfg(test)]
-    SCOPE_PATH_CALLS.with(|calls| calls.set(calls.get() + 1));
     if let Ok(path) = std::fs::canonicalize(path) {
         return Ok(path);
     }
@@ -571,36 +564,6 @@ fn register_aliases(
     Ok((id, false))
 }
 
-/// Resolve a signed asset alias only for the map that declared it.
-pub(crate) fn resolve_alias(base: &Path, rel: &str) -> Option<PathBuf> {
-    if MAP_ALIASES.read().unwrap_or_else(|e| e.into_inner()).is_empty() {
-        return None;
-    }
-    let base = map_scope_path(base).ok()?;
-    let scopes = MAP_ALIASES.read().unwrap_or_else(|e| e.into_inner());
-    for scope in scopes.iter().rev() {
-        let suffix = base.strip_prefix(&scope.map).ok().or_else(|| {
-            scope
-                .mounts
-                .iter()
-                .find_map(|mount| base.strip_prefix(mount).ok())
-        });
-        let Some(suffix) = suffix else { continue };
-        // A path without a lease must not choose between conflicting map authorities.
-        if scopes.iter().any(|other| {
-            other.map == scope.map && (other.declarations != scope.declarations
-                || other.pack_revisions != scope.pack_revisions)
-        }) {
-            return None;
-        }
-        let key = alias_key(suffix, rel)?;
-        if let Some(path) = scope.aliases.get(&key) {
-            return Some(path.clone());
-        }
-    }
-    None
-}
-
 fn resolve_alias_in_scope(scope: &MapAliasScope, base: &Path, rel: &str) -> Option<PathBuf> {
     let suffix = base.strip_prefix(&scope.map).ok().or_else(|| {
         scope
@@ -905,17 +868,4 @@ pub fn validate_map(map_dir: &Path) -> io::Result<DependencyMounts> {
         mounts: virtual_mounts,
         alias_scope: (alias_scope != 0).then_some(alias_scope),
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn ordinary_lookup_without_alias_scopes_performs_no_scope_filesystem_resolution() {
-        assert!(MAP_ALIASES.read().unwrap().is_empty());
-        SCOPE_PATH_CALLS.with(|calls| calls.set(0));
-        assert!(resolve_alias(Path::new("ordinary-map"), "ordinary.sco").is_none());
-        assert_eq!(SCOPE_PATH_CALLS.with(|calls| calls.get()), 0);
-    }
 }

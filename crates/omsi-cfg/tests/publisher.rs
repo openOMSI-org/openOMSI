@@ -108,7 +108,7 @@ fn signed_dependency_reads_through_the_real_vfs_and_cached_provenance_survives_m
         let mounts = omsi_cfg::publisher::validate_map(&map).unwrap();
         let second = omsi_cfg::publisher::validate_map(&map).unwrap();
         assert_eq!(omsi_cfg::content_roots(), before);
-        let renamed = omsi_cfg::resolve_path(&map, "Sceneryobjects/Fixture/renamed.sco");
+        let renamed = mounts.resolve_map_alias(&map, "Sceneryobjects/Fixture/renamed.sco").unwrap();
         assert_eq!(
             omsi_cfg::CfgFile::read(&renamed).unwrap().lines[1],
             "model/sign.x"
@@ -353,7 +353,7 @@ fn reopened_map_keeps_the_complete_signed_pack_revision_for_each_live_lease() {
     assert_eq!(omsi_cfg::vfs::read(&first.resolve_map_alias(&map, alias).unwrap()).unwrap(), b"first");
     assert!(omsi_cfg::vfs::read(&omsi_cfg::resolve_path(&map, alias)).is_err(), "unleased lookup chose a conflicting pack revision");
     drop(first);
-    assert_eq!(omsi_cfg::vfs::read(&omsi_cfg::resolve_path(&map, alias)).unwrap(), b"second");
+    assert_eq!(omsi_cfg::vfs::read(&second.resolve_map_alias(&map, alias).unwrap()).unwrap(), b"second");
     drop(second);
     omsi_cfg::remove_content_root(&root);
     std::fs::remove_dir_all(root).unwrap();
