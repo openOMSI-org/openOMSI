@@ -575,8 +575,8 @@ impl PluginIo for Io<'_> {
         self.veh().map(|v| [v.position.x, v.position.y, v.position.z, v.heading])
     }
 
-    fn mesh_point(&self, mesh: &str, point: [f32; 3]) -> Option<[f64; 3]> {
-        mesh_point_of(self.veh()?, mesh, point)
+    fn mesh_point(&self, mesh: &str, point: [f32; 3], section: usize) -> Option<[f64; 3]> {
+        mesh_point_of(self.veh()?, mesh, point, section)
     }
 
     fn body_frame(&self, section: usize) -> Option<[f64; 12]> {
@@ -587,8 +587,8 @@ impl PluginIo for Io<'_> {
         body_frame_of(self.other(id)?, section)
     }
 
-    fn other_mesh_point(&mut self, id: u64, mesh: &str, point: [f32; 3]) -> Option<[f64; 3]> {
-        mesh_point_of(self.other(id)?, mesh, point)
+    fn other_mesh_point(&mut self, id: u64, mesh: &str, point: [f32; 3], section: usize) -> Option<[f64; 3]> {
+        mesh_point_of(self.other(id)?, mesh, point, section)
     }
 
     fn message(&mut self, text: &str, seconds: f32) {
@@ -1177,20 +1177,29 @@ mod tests {
 }
 
 /// Where a point of one of a vehicle's meshes is now (see `PluginIo::mesh_point`).
-fn mesh_point_of(v: &omsi_sim::VehicleInstance, mesh: &str, point: [f32; 3]) -> Option<[f64; 3]> {
-    let want = mesh.replace('/', "\\").to_ascii_lowercase();
-    let name_of = |i: usize| -> String {
-        let vm = &v.ty.meshes[i];
-        v.ty.model.meshes.get(vm.def_index).map(|m| m.file.replace('/', "\\").to_ascii_lowercase()).unwrap_or_default()
+fn mesh_point_of(v: &omsi_sim::VehicleInstance, mesh: &str, point: [f32; 3], section: usize) -> Option<[f64; 3]> {
+    let (position, xf) = if section == 0 {
+        (v.position, v.mesh_local_transform(mesh_index(&v.ty, mesh)?))
+    } else {
+        let t = v.trailers.get(section - 1)?;
+        (t.position, t.mesh_local_transform(mesh_index(&t.ty, mesh)?))
     };
-    // (the file's own name first: `sht_bashmak.o3d` is not `sht_bashmak_1.o3d`)
-    let n = v.ty.meshes.len();
-    let i = (0..n)
-        .find(|&i| name_of(i).rsplit('\\').next() == Some(want.as_str()))
-        .or_else(|| (0..n).find(|&i| name_of(i).ends_with(&want)))?;
-    let local = v.mesh_local_transform(i).transform_point3(glam::Vec3::from(point));
-    let w = v.position + local.as_dvec3();
+    let w = position + xf.transform_point3(glam::Vec3::from(point)).as_dvec3();
     Some([w.x, w.y, w.z])
+}
+
+/// The mesh of a vehicle model whose file is `mesh` (any case, `/` or `\`): the one of that
+/// file name first (`sht_bashmak.o3d` is not `sht_bashmak_1.o3d`), else the first whose path
+/// ends with it.
+fn mesh_index(ty: &omsi_sim::VehicleType, mesh: &str) -> Option<usize> {
+    fn name(f: &str) -> &str {
+        f.rsplit(['/', '\\']).next().unwrap_or(f)
+    }
+    let norm = |b: u8| if b == b'/' { b'\\' } else { b.to_ascii_lowercase() };
+    let ends_with = |file: &str| file.len() >= mesh.len() && file.bytes().rev().zip(mesh.bytes().rev()).all(|(a, b)| norm(a) == norm(b));
+    let file_of = |i: usize| ty.model.meshes.get(ty.meshes[i].def_index).map_or("", |m| m.file.as_str());
+    let n = ty.meshes.len();
+    (0..n).find(|&i| name(file_of(i)).eq_ignore_ascii_case(mesh)).or_else(|| (0..n).find(|&i| ends_with(file_of(i))))
 }
 
 /// A vehicle's body (or a coupled section's) now: origin and axes (see `PluginIo::body_frame`).
