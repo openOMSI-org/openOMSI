@@ -358,7 +358,7 @@ fn vulkan_adapter(wanted: &str, lost_mark: Option<&str>, adapters: &[(wgpu::Devi
 }
 
 fn vulkan_lost_mark(vendor: u32, device: u32) -> String {
-    format!("{}|{vendor:04x}-{device:04x}", option_env!("OPENOMSI_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")))
+    format!("{}|{vendor:04x}-{device:04x}", omsi_platform::VERSION)
 }
 
 pub(crate) fn mark_vulkan_lost() {
