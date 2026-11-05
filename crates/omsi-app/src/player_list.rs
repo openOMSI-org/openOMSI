@@ -12,6 +12,7 @@
 use crate::game_lists::ListKind;
 use crate::App;
 use omsi_admin::{BanView, Player, PlayerState, Role, Target};
+use omsi_multiplayer_ui::vehicle_name;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// The reasons a player sent away or banned can be given (the first: none).
@@ -53,12 +54,6 @@ pub(crate) fn players(app: &App) -> Vec<Player> {
 
 pub(crate) fn count(app: &App) -> usize {
     players(app).len()
-}
-
-pub(crate) fn vehicle_name(file: &str) -> String {
-    let f = file.replace('\\', "/");
-    let n = f.rsplit('/').next().unwrap_or(&f);
-    n.rsplit_once('.').map(|(a, _)| a).unwrap_or(n).to_string()
 }
 
 fn describe(p: &Player, tr: &dyn Fn(&str) -> String) -> String {

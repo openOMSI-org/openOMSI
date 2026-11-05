@@ -50,7 +50,6 @@ fn nested_view<'a>(rail: &'a [MenuLine], rows: &'a [(&'static str, String)], wor
         kbd: true,
         keys: true,
         summary: Summary { bus: "Test vehicle".into(), driver: "Driver".into() },
-
         online: Default::default(),
         list: Some(ListView {
             kind: MenuKind::Options,

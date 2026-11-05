@@ -117,7 +117,6 @@ impl App {
             kbd: self.menus.menu_kbd,
             keys: !crate::platform::touch_controls(),
             summary: self.pause_summary(),
-
             online: crate::shell::pause::online_ui::from_app(self),
         };
         crate::themes::sync(&self.settings.ui_theme_pack, self.settings.is_light_theme());

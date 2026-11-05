@@ -8,10 +8,12 @@ pub(crate) fn from_app(app: &crate::App) -> View {
     if app.net.lan.is_none() || app.shell.pause_category != navigation::Category::Online {
         return View::default();
     }
-    let weather: Vec<_> = crate::weather_cycle::installed()
-        .into_iter()
-        .map(|(file, w)| (file, w.name))
-        .collect();
+    let weather = app.menus.online_weather.get_or_init(|| {
+        crate::weather_cycle::installed()
+            .into_iter()
+            .map(|(file, w)| (file, w.name))
+            .collect()
+    });
     let weather_at = weather
         .iter()
         .position(|(file, _)| {
@@ -177,3 +179,44 @@ fn bans(sh: &mut Shell, v: &View, area: Rect) {
 #[cfg(test)]
 #[path = "online_ui_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod weather_cache_tests {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn snapshots_reuse_the_weather_catalog_including_empty_catalogs() {
+        for weather in [
+            Vec::new(),
+            vec![("Weather/test.owt".into(), "Cached weather".into())],
+        ] {
+            let mut app = crate::assemble_app(
+                crate::Args::parse_from(["openomsi"]),
+                Default::default(),
+            );
+            app.net.lan = Some(omsi_net::LanSession::host(
+                0,
+                "host",
+                Default::default(),
+                false,
+            )
+            .unwrap());
+            app.shell.pause_category = navigation::Category::Online;
+            app.menus.online_weather.set(weather.clone()).unwrap();
+            for _ in 0..2 {
+                assert_eq!(from_app(&app).weather, weather);
+            }
+        }
+    }
+
+    #[test]
+    fn hidden_online_page_does_not_load_weather() {
+        let app = crate::assemble_app(
+            crate::Args::parse_from(["openomsi"]),
+            Default::default(),
+        );
+        from_app(&app);
+        assert!(app.menus.online_weather.get().is_none());
+    }
+}

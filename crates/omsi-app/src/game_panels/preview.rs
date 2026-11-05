@@ -7,6 +7,37 @@ use super::*;
 use crate::plugin_ui::{draw_card, layout_typing, place};
 use omsi_ui::{Atlas, Fonts, Gpu};
 
+struct RestoreLanguage(String);
+
+impl RestoreLanguage {
+    fn capture() -> Self {
+        Self(omsi_ui::i18n::language())
+    }
+}
+
+impl Drop for RestoreLanguage {
+    fn drop(&mut self) {
+        omsi_ui::i18n::set_language(&self.0);
+    }
+}
+
+#[cfg(test)]
+mod language_tests {
+    use super::RestoreLanguage;
+
+    #[test]
+    fn restore_language_returns_to_the_captured_language() {
+        let original = omsi_ui::i18n::language();
+        omsi_ui::i18n::set_language("zh-tw");
+        {
+            let _restore = RestoreLanguage::capture();
+            omsi_ui::i18n::set_language("en");
+        }
+        assert_eq!(omsi_ui::i18n::language(), "zh-tw");
+        omsi_ui::i18n::set_language(&original);
+    }
+}
+
 /// Draw `panels` (with the hit to show under the mouse) into a picture over a stand-in for
 /// the road, and write it to `name`.
 fn picture(name: &str, panels: &[(Panel, Option<&str>)]) {
@@ -112,10 +143,11 @@ fn preview() {
 #[test]
 #[ignore]
 fn multiplayer_preview() {
+    let _language = RestoreLanguage::capture();
     omsi_ui::i18n::set_lookup(|lang, text| {
         crate::_rust_i18n_try_translate(lang, text).map(|value| value.into_owned())
     });
-    omsi_ui::i18n::set_language("zh-tw");
+    omsi_ui::i18n::set_language("en");
     let form = multiplayer::Multiplayer { target: "OMSI-EXAMPLE-ROOM-CODE".into(), said: None };
     for (name, pal) in [("dark", omsi_ui::theme::palette(false)), ("light", Palette::LIGHT)] {
         omsi_ui::theme::with_palette(pal, || {

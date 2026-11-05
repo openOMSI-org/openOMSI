@@ -396,7 +396,7 @@ fn online_write_preview() {
     omsi_ui::i18n::set_lookup(|lang, text| {
         crate::_rust_i18n_try_translate(lang, text).map(|value| value.into_owned())
     });
-    omsi_ui::i18n::set_language("zh-tw");
+    omsi_ui::i18n::set_language("en");
     let out = std::path::PathBuf::from(
         std::env::var_os("OPENOMSI_PAUSE_PREVIEW").expect("preview directory"),
     );

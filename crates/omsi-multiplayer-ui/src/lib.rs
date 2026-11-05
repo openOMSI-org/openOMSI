@@ -56,7 +56,8 @@ pub struct View {
     pub management: Option<(Player, Vec<(String, String)>)>,
 }
 
-fn vehicle_name(file: &str) -> String {
+/// The display name of a vehicle path, independent of path separators.
+pub fn vehicle_name(file: &str) -> String {
     let file = file.replace('\\', "/");
     let name = file.rsplit('/').next().unwrap_or(&file);
     name.rsplit_once('.')
