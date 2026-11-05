@@ -275,8 +275,9 @@ impl Renderer {
     }
 
     fn rebuild_in_place(&mut self, scene: &mut Scene, options: RenderOptions) {
-        // (the same device: the upscaler goes on, and Streamline on Vulkan could not start again)
-        let upscaler = self.temporal_runtime();
+        // (the same device: the upscaler goes on, and Streamline on Vulkan could not start again;
+        // without one in the new options it is dropped here, with its context and textures)
+        let upscaler = self.temporal_runtime().or_else(|| self.temporal_kept.take()).filter(|_| options.temporal.is_some());
         // Release render targets before building their replacements. Keeping the old
         // targets alive while the new renderer is built can turn a recoverable OOM into
         // another allocation failure.

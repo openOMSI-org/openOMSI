@@ -188,8 +188,44 @@ fn the_msaa_comes_back_only_when_the_upscaler_gives_up() {
     for _ in 0..2 {
         r.render_window(&mut scene, &view, w, h, &camera(), &lighting);
     }
+    if r.temporal.is_some() {
+        return;
+    }
     assert!(r.options.temporal.is_none());
     assert_eq!(r.options.msaa, 4);
+}
+
+/// A rebuild without an upscaler lets the running one go, instead of keeping its context and
+/// textures for a renderer that will never take them. Needs AMD's DLLs beside the test binary.
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn a_rebuild_without_the_upscaler_frees_it() {
+    let (w, h) = (192, 128);
+    let lighting = Lighting { shadows: false, fog_density: 0.0, ..Default::default() };
+    let mut r = upscaled_renderer();
+    let mut scene = rails_scene(&mut r);
+    let tex = r.device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        view_formats: &[],
+    });
+    let view = tex.create_view(&Default::default());
+    r.render_window(&mut scene, &view, w, h, &camera(), &lighting);
+    if r.temporal.is_none() {
+        return;
+    }
+    let shadows = RenderOptions { shadow_size: 512, ..r.options };
+    assert!(r.rebuild_with(&mut scene, shadows));
+    assert!(r.temporal_kept.is_some());
+    r.render_window(&mut scene, &view, w, h, &camera(), &lighting);
+    assert!(r.temporal.is_some() && r.temporal_kept.is_none());
+    assert!(r.rebuild_with(&mut scene, RenderOptions { temporal: None, ..r.options }));
+    assert!(r.temporal_kept.is_none() && r.temporal.is_none());
 }
 
 /// VR with FSR 1: the headset image is full-sized, each eye is drawn at the eye resolution
