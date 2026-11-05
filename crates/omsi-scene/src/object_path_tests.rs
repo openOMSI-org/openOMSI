@@ -231,7 +231,7 @@ fn world_loaders_resolve_publisher_aliases_from_the_map_scope() {
     let dirs = world.object_texture_dirs(&object);
     let dirs: Vec<&Path> = dirs.iter().map(PathBuf::as_path).collect();
     let texture = omsi_texture::find_texture("global.png", &dirs).unwrap();
-    assert_eq!(texture, omsi_cfg::resolve_path(&map_dir, "Texture/global.png"));
+    assert_eq!(texture, world._publisher_mounts.resolve_map_alias(&map_dir, "Texture/global.png").unwrap());
     let decoded = omsi_texture::decode_file(&texture).unwrap();
     assert_eq!((decoded.width, decoded.height), (2, 2));
     assert_eq!(&decoded.rgba[..4], &[180, 32, 76, 255]);
@@ -271,7 +271,7 @@ fn publisher_worlds_keep_their_lease_when_the_same_map_is_reopened() {
     let unscoped = omsi_cfg::resolve_path(&fixture.map_dir(), alias);
     assert!(!omsi_cfg::vfs::is_file(&unscoped), "an unleased lookup must not select a conflicting authority");
     drop(second);
-    assert_eq!(omsi_cfg::resolve_path(&fixture.map_dir(), alias), first_path);
+    assert_eq!(first._publisher_mounts.resolve_map_alias(&fixture.map_dir(), alias).unwrap(), first_path);
 }
 
 #[cfg(any(target_os = "macos", windows))]
@@ -312,9 +312,9 @@ fn encrypted_and_plain_publisher_aliases_are_isolated_by_world_map_scope() {
     let dirs: Vec<&Path> = dirs.iter().map(PathBuf::as_path).collect();
     assert_eq!(
         omsi_texture::find_texture("global.png", &dirs),
-        Some(omsi_cfg::resolve_path(&encrypted_dir, "Texture/global.png"))
+        encrypted._publisher_mounts.resolve_map_alias(&encrypted_dir, "Texture/global.png")
     );
-    let texture = omsi_cfg::resolve_path(&encrypted_dir, "Texture/global.png");
+    let texture = encrypted._publisher_mounts.resolve_map_alias(&encrypted_dir, "Texture/global.png").unwrap();
     let decoded = omsi_texture::decode_file(&texture).unwrap();
     assert_eq!(&decoded.rgba[..4], &[180, 32, 76, 255]);
     assert!(!texture.exists(), "encrypted global texture must remain virtual");
