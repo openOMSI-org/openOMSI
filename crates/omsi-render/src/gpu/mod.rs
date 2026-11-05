@@ -28,6 +28,8 @@ pub fn ceiling() -> Option<crate::gpu_memory::Ceiling> {
 
 /// The device runs on OpenGL (set in `Renderer::new`).
 pub(crate) static GL_BACKEND: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(crate) static AMD_VULKAN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(crate) static MULTISAMPLED_SHADING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Whether the device draws on OpenGL (known once a renderer is made).
 pub fn gl_backend() -> bool {

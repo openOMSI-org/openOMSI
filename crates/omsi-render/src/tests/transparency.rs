@@ -5,6 +5,10 @@ use super::*;
 /// far quad's material, `ordered` whether the model is drawn in model order. Returns the
 /// middle pixel for the classic, the Vanilla+ and the Enhanced picture at MSAA 1 and 4.
 fn behind_an_invisible_pane(second: impl Fn(&mut Renderer, &mut Scene) -> MaterialId, ordered: bool, split: bool) -> Vec<([u8; 3], String)> {
+    invisible_pane_scene(second, ordered, split, false)
+}
+
+fn invisible_pane_scene(second: impl Fn(&mut Renderer, &mut Scene) -> MaterialId, ordered: bool, split: bool, second_in_front: bool) -> Vec<([u8; 3], String)> {
     let adapter = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     let mut out = Vec::new();
     for (msaa, ssao) in [(1, false), (4, false), (1, true), (4, true)] {
@@ -40,8 +44,9 @@ fn behind_an_invisible_pane(second: impl Fn(&mut Renderer, &mut Scene) -> Materi
             },
         );
         renderer.add_instance(&mut scene, wall, DVec3::ZERO, Mat4::IDENTITY, vec![green]);
+        let (pane_at, second_at) = if second_in_front { ((4.0, 8.0), (2.0, 4.0)) } else { ((2.0, 4.0), (4.0, 8.0)) };
         if split {
-            for (y, half, material) in [(2.0, 4.0, near), (4.0, 8.0, far)] {
+            for (y, half, material) in [(pane_at.0, pane_at.1, near), (second_at.0, second_at.1, far)] {
                 let layer = renderer.add_mesh(
                     &mut scene,
                     &MeshData {
@@ -60,7 +65,7 @@ fn behind_an_invisible_pane(second: impl Fn(&mut Renderer, &mut Scene) -> Materi
             let layers = renderer.add_mesh(
                 &mut scene,
                 &MeshData {
-                    positions: [quad(2.0, 4.0), quad(4.0, 8.0)].concat(),
+                    positions: [quad(pane_at.0, pane_at.1), quad(second_at.0, second_at.1)].concat(),
                     normals: vec![-Vec3::Y; 8],
                     uvs: vec![glam::Vec2::ZERO; 8],
                     ranges: vec![(0, 6, 0), (6, 6, 1)],
@@ -101,6 +106,17 @@ fn an_invisible_pane_hides_what_its_model_draws_behind_it_later() {
     let red = |r: &mut Renderer, s: &mut Scene| r.add_material(s, None, AlphaMode::Opaque, [1.0, 0.0, 0.0, 1.0], true);
     for (c, case) in behind_an_invisible_pane(red, true, false) {
         assert!(c[1] > 100 && c[0] < 40, "the disc showed through the invisible cover: {c:?}; {case}");
+    }
+}
+
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn a_part_in_front_of_an_earlier_invisible_pane_stays_seen() {
+    let red = |r: &mut Renderer, s: &mut Scene| r.add_material(s, None, AlphaMode::Opaque, [1.0, 0.0, 0.0, 1.0], true);
+    for split in [false, true] {
+        for (c, case) in invisible_pane_scene(red, true, split, true) {
+            assert!(c[0] > 100 && c[1] < 40, "the part in front of the pane was lost: {c:?}; {case}, split {split}");
+        }
     }
 }
 

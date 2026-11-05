@@ -419,6 +419,7 @@ impl Renderer {
         let t = &self.targets;
         let mut bytes = view(&self.shadows.shadow_view) + view(&self.shadows.shadow_view_far);
         bytes += t.depth.as_ref().map_or(0, |d| view(&d.1));
+        bytes += self.pane_depth.as_ref().map_or(0, |d| view(&d.1));
         bytes += t.msaa_targets.values().map(|(c, d)| some(c) + view(d)).sum::<u64>();
         if let Some(ao) = &t.ao {
             bytes += view(&ao.depth_view) + view(&ao.ao_view) + view(&ao.blur_view) + view(&ao.fog_view);
