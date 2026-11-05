@@ -1,4 +1,4 @@
-Third-party notice for public DLSS adapter source in this branch
+Third-party notice for the public DLSS adapter source
 ==================================================================
 
 Source: https://github.com/Criisko/openOMSI/pull/1
@@ -33,4 +33,4 @@ The Streamline SDK's source/header MIT notice is preserved in
 crates/omsi-render/src/temporal/streamline.rs. This notice is for
 public source attribution only; it is NOT a redistribution license for
 nvngx_dlss.dll or other separately licensed NVIDIA binaries.
-See docs/UPSCALER_THIRD_PARTY_LICENSING.md before packaging these DLLs.
+openOMSI does not package these DLLs: see docs/UPSCALER_THIRD_PARTY_LICENSING.md.

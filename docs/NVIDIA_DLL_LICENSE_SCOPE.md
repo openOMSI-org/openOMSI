@@ -30,7 +30,7 @@ MIT notice. Streamline's MIT-covered portions and
 the separate proprietary NVIDIA DLSS/NGX runtime must retain their original
 copyright notices, license terms and limitations. NVIDIA retains the
 rights in its SDK and binaries; openOMSI does not grant downstream rights
-beyond NVIDIA's license. Distribution does **not** imply NVIDIA sponsorship,
+beyond NVIDIA's license. Using these DLLs does **not** imply NVIDIA sponsorship,
 endorsement or an assignment of distributor liability to NVIDIA.
 
 No part of the **openOMSI-authored integration code** is removed from

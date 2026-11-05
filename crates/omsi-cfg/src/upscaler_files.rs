@@ -89,7 +89,8 @@ pub fn quality_word(s: &str) -> &'static str {
 /// The graphics interface to ask for first with DLSS or FSR 3: Vulkan where that is the choice
 /// and the upscaler's DLLs for it are in `dir`, else DirectX 12.
 pub fn first_api(chosen: &str, upscaler: &str, dir: &Path) -> &'static str {
-    if chosen.trim().eq_ignore_ascii_case("vulkan") && missing(dir, upscaler, Api::Vulkan).is_empty() {
+    let vulkan = missing(dir, upscaler, Api::Vulkan).is_empty();
+    if vulkan && (chosen.trim().eq_ignore_ascii_case("vulkan") || !missing(dir, upscaler, Api::Dx12).is_empty()) {
         "vulkan"
     } else {
         "dx12"
@@ -113,6 +114,11 @@ mod tests {
             std::fs::write(dir.join(f), b"").unwrap();
         }
         assert_eq!(first_api("Vulkan", "fsr3", &dir), "vulkan");
+        // (only the Vulkan DLLs here: DirectX 12 could not run it)
+        assert_eq!(first_api("auto", "fsr3", &dir), "vulkan");
+        for f in files("fsr3", Api::Dx12) {
+            std::fs::write(dir.join(f), b"").unwrap();
+        }
         assert_eq!(first_api("auto", "fsr3", &dir), "dx12");
         assert_eq!(first_api("vulkan", "dlss", &dir), "dx12");
         let _ = std::fs::remove_dir_all(&dir);

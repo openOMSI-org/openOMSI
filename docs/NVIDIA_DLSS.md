@@ -1,7 +1,6 @@
 # NVIDIA DLSS and AMD FSR 3
 
-Temporal upscaling (`crates/omsi-render/src/temporal`, based on openOMSI-org/openOMSI#3681)
-is opt-in: Settings → Graphics → Upscaling, `upscaler=dlss` or `fsr3` plus
+Temporal upscaling (`crates/omsi-render/src/temporal`) is opt-in: Settings → Graphics → Upscaling, `upscaler=dlss` or `fsr3` plus
 `upscale_quality`. A change takes effect on the next start.
 
 - **DLSS** is offered only with an NVIDIA RTX adapter on Windows, subject to the
