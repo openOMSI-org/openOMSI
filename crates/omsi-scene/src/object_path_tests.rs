@@ -477,11 +477,11 @@ fn descending_object_path_joins_do_not_lift_the_rear_axle() {
     }
 }
 
-/// The protected-content marker is process-wide and never cleared, so a test that depends on
-/// it runs again alone in a new test process; true in the parent once that run has passed.
+/// The count of protected reads is process-wide, so a test that depends on it runs again
+/// alone in a new test process; true in the parent once that run has passed.
 fn ran_in_fresh_process(test: &str) -> bool {
     if std::env::var_os("PUBLISHER_CACHE_TEST_CHILD").is_some() {
-        assert!(!omsi_cfg::vfs::protected_content_seen(), "the new test process already saw protected content");
+        assert_eq!(omsi_cfg::vfs::protected_reads(), 0, "the new test process already read protected content");
         return false;
     }
     let output = std::process::Command::new(std::env::current_exe().unwrap())
@@ -524,8 +524,8 @@ fn ordinary_sealed_session_stores_keep_the_mapgen_cache() {
     let key = std::sync::Arc::new(omsi_cfg::vfs::SealKey::new(&omsi_cfg::vfs::random_key().unwrap()));
     let mount = root.join("session-store");
     omsi_cfg::vfs::mount_sealed(&mount, key, vec![]);
-    let seen = omsi_cfg::vfs::protected_content_seen();
     let layers = crate::mapgen::cached(&root, &map, &[], &[], &[]);
+    let seen = omsi_cfg::vfs::protected_reads() != 0;
     omsi_cfg::vfs::unmount_sealed(&mount);
     std::fs::remove_file(&path).unwrap();
     std::fs::remove_dir_all(root).unwrap();
@@ -535,8 +535,8 @@ fn ordinary_sealed_session_stores_keep_the_mapgen_cache() {
 
 #[cfg(any(target_os = "macos", windows))]
 #[test]
-fn a_released_publisher_protected_mount_disables_mapgen_cache_reuse() {
-    if ran_in_fresh_process("object_path_tests::a_released_publisher_protected_mount_disables_mapgen_cache_reuse") {
+fn an_ordinary_map_keeps_its_mapgen_cache_after_a_protected_pack_is_mounted() {
+    if ran_in_fresh_process("object_path_tests::an_ordinary_map_keeps_its_mapgen_cache_after_a_protected_pack_is_mounted") {
         return;
     }
     let _guard = PUBLISHER_WORLD_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -551,7 +551,7 @@ fn a_released_publisher_protected_mount_disables_mapgen_cache_reuse() {
     let layers = crate::mapgen::cached(&root, &map, &[], &[], &[]);
     std::fs::remove_file(&path).unwrap();
     std::fs::remove_dir_all(root).unwrap();
-    assert_ne!(layers.origin, origin, "a process that mounted protected content reused an ordinary disk cache");
+    assert_eq!(layers.origin, origin, "an ordinary map lost its disk cache because a protected pack was installed");
 }
 
 #[cfg(any(target_os = "macos", windows))]

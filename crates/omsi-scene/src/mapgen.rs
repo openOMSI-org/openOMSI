@@ -1266,15 +1266,16 @@ pub fn cached_with_mounts(
 ) -> Layers {
     let key = key_of(map_dir, tiles);
     let name = map_dir.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "map".into());
-    // shortcut: after an encrypted publisher pack is mounted, skip disk caches until restart; revisit with per-input provenance.
     let has_publisher_metadata = omsi_cfg::vfs::is_file(&map_dir.join("dependencies.json"));
-    let path = layers::cache_path(&name).filter(|_| !has_publisher_metadata && !omsi_cfg::vfs::protected_content_seen() && !omsi_cfg::flags::OMSI_NO_MAP_CACHE.is_set());
+    let path = layers::cache_path(&name).filter(|_| !has_publisher_metadata && !omsi_cfg::flags::OMSI_NO_MAP_CACHE.is_set());
     if let Some(l) = path.as_ref().and_then(|p| Layers::open(p, key)) {
         log::info!("map layers: {} houses from the cache", l.buildings.len());
         return l;
     }
+    let reads = omsi_cfg::vfs::protected_reads();
     let l = generate_with_mounts(root, map_dir, mounts, ground_textures, tiles, chrono_dirs);
-    if let Some(p) = path.filter(|_| !omsi_cfg::vfs::protected_content_seen()) {
+    // layers made while encrypted publisher content was read may hold some of it
+    if let Some(p) = path.filter(|_| omsi_cfg::vfs::protected_reads() == reads) {
         let _ = std::fs::create_dir_all(p.parent().unwrap_or(Path::new(".")));
         let tmp = p.with_extension(format!("{}.tmp", std::process::id()));
         if std::fs::write(&tmp, l.to_bytes(key)).is_ok() && std::fs::rename(&tmp, &p).is_ok() {
