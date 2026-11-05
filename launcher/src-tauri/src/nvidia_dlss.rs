@@ -23,8 +23,7 @@ fn game_dir() -> Result<PathBuf, String> {
      Ok(dir.to_path_buf())
  }
  
- /// Read-only status: this is just a presence check, not a signature check.
- /// All four signatures are validated during the actual install.
+ /// A presence check only: the signatures are checked when installing.
  pub fn status() -> Value {
      #[cfg(windows)]
      {
@@ -98,9 +97,7 @@ fn game_dir() -> Result<PathBuf, String> {
              return Err("NVIDIA DLSS requires an NVIDIA RTX GPU".into());
          }
  
-         // Embedded, source-controlled scripts; no remotely supplied PowerShell.
-         // The packager pins SHA-256 of the full NVIDIA SDK ZIP, validates each
-         // vendor Authenticode signature and copies only the fixed allowlist.
+        // (embedded scripts: the zip's SHA-256, each DLL's signature, a fixed list of files)
          let unique = std::time::SystemTime::now()
              .duration_since(std::time::UNIX_EPOCH)
              .map_err(|e| e.to_string())?

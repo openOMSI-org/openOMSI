@@ -1,14 +1,7 @@
-//! How a frame goes with temporal upscaling on.
-//!
-//! 1. `begin_frame` makes the picture as small as the upscaler wants and draws it into its input
-//!    texture instead of the window. FXAA and the render scale stay out of the way.
-//! 2. `temporal_jitter` shifts the projection by a different sub-pixel amount every frame, so
-//!    after a few frames the upscaler has seen every pixel from lots of points.
-//! 3. The depth prepass also writes how far each pixel moved since the last frame
-//!    (`pipelines/temporal.rs`, `motion.wgsl`): the camera's motion plus every object's own, from
-//!    its model matrix of the frame before.
-//! 4. After the scene is submitted `temporal_present` runs the upscaler on wgpu's queue, draws
-//!    the result to the window and then the HUD on top at full size.
+//! A frame with temporal upscaling: `begin_frame` draws the picture small into the upscaler's
+//! input, `temporal_jitter` shifts it by a sub-pixel amount every frame, the depth prepass
+//! writes each pixel's motion (`motion.wgsl`), and `temporal_present` runs the upscaler on
+//! wgpu's queue, then the HUD at full size.
 
 use super::{fallback_render_size, fidelityfx, streamline, FrameConstants, Inputs, TemporalQuality, TemporalUpscaler};
 use crate::passes::FrameCtx;
@@ -29,9 +22,7 @@ pub(crate) const TEMPORAL_MASK_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat
 /// bits of picture over the scene. 8 m is about 290 km/h at 10 fps.
 const MAX_FRAME_JUMP: f32 = 8.0;
 
-/// How much `upscale.wgsl` sharpens DLSS's result (contrast adaptive, 0..1). DLSS stopped
-/// sharpening years ago and its picture of the cab comes out soft next to MSAA; FSR 3 sharpens on
-/// its own.
+/// How much `upscale.wgsl` sharpens DLSS's result: DLSS no longer sharpens, FSR 3 does.
 const DLSS_SHARPEN: f32 = 0.25;
 
 pub(crate) struct TemporalPipelines {
@@ -205,10 +196,8 @@ impl Renderer {
         }
     }
 
-    /// The last upscaled picture of a window of this size, as RGBA8, before the HUD went over it:
-    /// what a player's screenshot should show (`render_to_image` draws the scene again, without
-    /// the upscaler). None when no frame has been upscaled, so that it is drawn after all. It
-    /// holds the sRGB-encoded numbers, as a picture file does, without DLSS's light sharpening.
+    /// The last upscaled picture, before the HUD: what a player's screenshot shows. None when none
+    /// was upscaled. sRGB-encoded, without DLSS's light sharpening.
     pub fn temporal_picture(&self, width: u32, height: u32) -> Option<anyhow::Result<Vec<u8>>> {
         if self.temporal_failed {
             return None;
@@ -247,11 +236,8 @@ impl Renderer {
             })
         };
         let targets = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING;
-        // The resource itself is plain UNORM, and the scene draws (and the fallback samples)
-        // through an sRGB view of it: on cards that cast fully typed formats wgpu would make an
-        // sRGB resource sRGB-typed, FSR would read linear numbers from it and the picture would
-        // come out much too dark. This way anyone reading the resource as it is gets the
-        // sRGB-encoded bytes, which is what both upscalers are told they get.
+        // The resource is plain UNORM, drawn through an sRGB view: cards that cast fully typed formats
+        // would make an sRGB resource sRGB-typed, and FSR would read linear numbers, too dark.
         let color = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("temporal scene"),
             size: wgpu::Extent3d { width: render.0, height: render.1, depth_or_array_layers: 1 },
@@ -337,12 +323,9 @@ impl Renderer {
         shift * vp_plain
     }
 
-    /// Last commands of the scene encoder in an upscaled frame.
-    ///
-    /// First the model matrices get copied for next frame's motion. Then two empty render passes
-    /// touch the upscaler's textures: wgpu leaves a texture in whatever state it was last used
-    /// in, and the upscalers are told "render target" (color, motion, mask, output) and "depth
-    /// write" (depth), so these passes make sure that is what the last use was.
+    /// Last commands of the scene encoder in an upscaled frame: the model matrices copied for the
+    /// next frame's motion, and two empty passes so that the upscalers find their textures in the
+    /// states they are told (render target, depth write).
     pub(crate) fn temporal_end_of_scene(&mut self, encoder: &mut wgpu::CommandEncoder, scene: &Scene) {
         let Some(d) = self.temporal.as_mut() else { return };
         if let (Some(GpuArray::Buffer(models)), Some((prev, _))) = (scene.model_buf.as_ref(), d.prev_models.as_ref()) {

@@ -1,7 +1,5 @@
-// Temporal upscaling: the depth prepass that also writes each pixel's motion (see `frame.rs`).
-// Appended to the scene module only for this prepass (`pipelines/temporal.rs`): the scene module
-// everyone else compiles stays as it is. Its depth is `vs_depth`'s to the last bit (the same
-// `scene_clip`), so the main pass's depth test meets it.
+// Temporal upscaling: the depth prepass that also writes each pixel's motion, appended to the
+// scene module for this prepass only, so the scene module others compile stays as it is.
 
 struct Motion {
     vp: mat4x4<f32>,
@@ -117,11 +115,9 @@ fn fs_motion_sky(in: SkyMotionOut) -> @location(0) vec4<f32> {
     return motion_pixels(vec4<f32>(in.ndc, 0.0, 1.0), motion.vp_prev_here * wp);
 }
 
-// The transparency mask DLSS (its "bias current color" hint) and FSR 3 (its reactive mask) take:
-// where glass, its dirt and reflections, or the rain films on it lie over the picture, they lean
-// on this frame's colour rather than the history the motion behind the pane drags along (that
-// history smeared the pane's reflections). Only the transparent draws, tested against the
-// prepass's depth, writing the most of what lands on each pixel.
+// The transparency mask (DLSS's bias-current-colour hint, FSR 3's reactive mask): where glass
+// and the rain on it lie, the upscaler leans on this frame, since the history behind the pane
+// smeared its reflections.
 const MASK_RAIN: f32 = 0.5;
 const MASK_SCREEN: f32 = 0.8;
 // FSR 3 gives up the history faster than DLSS for the same mask: at full strength the view

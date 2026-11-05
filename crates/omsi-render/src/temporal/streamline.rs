@@ -25,11 +25,8 @@
 //! NVIDIA DLSS (Super Resolution, and DLAA at full size) by way of NVIDIA Streamline: Windows,
 //! DirectX 12 or Vulkan, a GeForce RTX card.
 //!
-//! wgpu records and submits its own D3D12 command lists, so DLSS gets a list of ours, run on
-//! wgpu's queue after the submit that drew the scene and before the one that draws the HUD
-//! (`frame.rs`): the queue's order is all the synchronisation needed. Each texture is handed
-//! over in the state wgpu left it in after its last pass, and Streamline puts it back in that
-//! state.
+//! DLSS records into a command list of ours on wgpu's queue, between the scene's submit and the
+//! HUD's: the queue's order is the only synchronisation. Textures go over in wgpu's last state.
 
 use super::d3d12::{game_dir, wide, ListRing};
 use super::vulkan::{VkGpu, VkRing};
@@ -422,11 +419,8 @@ fn dxgi_format(f: wgpu::TextureFormat) -> u32 {
     .0 as u32
 }
 
-/// A stand-in swap chain whose `Present` does nothing. Streamline does its per-frame
-/// housekeeping (frame counting, freeing old resources, the VRAM budget) when its proxy of
-/// a swap chain is presented, but the window's real swap chain is wgpu's and Streamline
-/// never sees it (manual hooking). So it wraps this one, and its proxy is "presented"
-/// once after every DLSS frame.
+/// A swap chain whose `Present` does nothing: Streamline's per-frame housekeeping runs on its
+/// proxy's present, and the window's real swap chain is wgpu's (manual hooking).
 #[windows::core::implement(IDXGISwapChain)]
 struct NullSwapChain {
     device: ID3D12Device,
@@ -512,8 +506,6 @@ fn init(module: HMODULE, dir: &std::path::Path, features: &'static [u32], render
         allocate_callback: std::ptr::null(),
         release_callback: std::ptr::null(),
         log_message_callback: Some(sl_log),
-        // (Streamline keeps out of wgpu's way: it neither hooks the device nor tracks
-        // the command lists' states, and the inputs are tagged frame by frame)
         flags: FLAG_DISABLE_CL_STATE_TRACKING | FLAG_DISABLE_DEBUG_TEXT | FLAG_USE_MANUAL_HOOKING | FLAG_FRAME_BASED_TAGGING,
         features_to_load: features.as_ptr(),
         num_features_to_load: features.len() as u32,
@@ -652,8 +644,6 @@ pub fn vulkan_extensions() -> Result<Vec<&'static CStr>> {
                 bail!("this Streamline's DLSS plugin does not run on Vulkan");
             }
             let names = |n, p| static_names(n, p).iter().map(|c| c.to_string_lossy().into_owned()).collect::<Vec<_>>().join(", ");
-            // (the Vulkan 1.2 features the device is made with for it, `VULKAN_FEATURES`; any
-            // other, or a 1.3 one, it cannot have)
             let wanted: Vec<String> = static_names(r.vk_num_features12, r.vk_features12).iter().chain(&static_names(r.vk_num_features13, r.vk_features13)).map(|c| c.to_string_lossy().into_owned()).collect();
             let other: Vec<&String> = wanted.iter().filter(|f| !VULKAN_FEATURES.contains(&f.as_str())).collect();
             if !other.is_empty() {
@@ -687,8 +677,6 @@ pub fn vulkan_extensions() -> Result<Vec<&'static CStr>> {
 }
 
 /// The Vulkan 1.2 features DLSS may ask for that the device is made with
-/// (`gpu::upscaler_device`): wgpu turns timeline semaphores on itself on Vulkan 1.2, the other two
-/// are chained to its device by us.
 pub const VULKAN_FEATURES: [&str; 3] = ["timelineSemaphore", "descriptorIndexing", "bufferDeviceAddress"];
 
 pub fn vulkan_abandon() {
@@ -801,8 +789,6 @@ impl Runtime {
                     vk_physical_device: vk::Handle::as_raw(gpu.physical) as *mut c_void,
                 };
                 Self::supported(module, &calls, &adapter)?;
-                // (Streamline's own per-frame housekeeping hangs on the swap chain's present, which on
-                // Vulkan is wgpu's and goes past it: `evaluate` frees the old context itself)
                 Backend::Vulkan { ring: VkRing::new(&gpu).context("DLSS's command buffers")? }
             }
         };
@@ -840,10 +826,8 @@ impl Runtime {
         Ok(())
     }
 
-    /// `sl::DLSSOptions` for a quality and window size. The presets are set by hand to what
-    /// NVIDIA's newer SDK makes the default anyway (the transformer models): an older
-    /// nvngx_dlss.dll whose default is still the CNN one gets them too, and one that does not
-    /// know a preset takes its default.
+    /// `sl::DLSSOptions`, with the newer SDK's default presets set by hand: an older nvngx_dlss.dll
+    /// would pick the CNN model.
     fn options(quality: TemporalQuality, (w, h): (u32, u32)) -> DlssOptions {
         DlssOptions {
             base: Base::new(DLSS_OPTIONS, 3),

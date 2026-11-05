@@ -3,10 +3,9 @@
 //! or Vulkan. (The `upscaler` setting's other choices, Catmull-Rom and FSR 1, work on one frame and
 //! need none of this: `encode_upscale`.)
 //!
-//! Neither vendor's code is linked or in the repository: the Windows x64 package carries their
-//! DLLs (`.github/workflows/release.yml`). They are opened from the game's folder when the first
-//! frame asks for them (`omsi_cfg::upscaler_files`), and without them the game neither offers the
-//! choice nor changes anything.
+//! Neither vendor's code is linked or in the repository. The Windows x64 package carries AMD's
+//! DLLs; NVIDIA's come from the launcher's optional installer. Without them the game neither
+//! offers the choice nor changes anything (`omsi_cfg::upscaler_files`).
 
 #[cfg(windows)]
 mod d3d12;

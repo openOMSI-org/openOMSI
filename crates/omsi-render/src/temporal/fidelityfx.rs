@@ -23,9 +23,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//! AMD FSR 3 upscaling by way of AMD's FidelityFX API: Windows, DirectX 12 or Vulkan, any card
-//! that runs it well. It takes the same inputs as DLSS (`super::Inputs`) and leaves the same kind
-//! of picture: the sRGB-encoded values it was given, at the window's size.
+//! AMD FSR 3 by way of AMD's FidelityFX API, DirectX 12 or Vulkan: the same inputs as DLSS
+//! (`super::Inputs`), and the same sRGB-encoded picture back.
 
 use super::d3d12::{game_dir, wide, ListRing};
 use super::vulkan::{VkGpu, VkRing};
