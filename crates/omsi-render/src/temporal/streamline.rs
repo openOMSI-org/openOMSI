@@ -801,9 +801,8 @@ impl Runtime {
                     vk_physical_device: vk::Handle::as_raw(gpu.physical) as *mut c_void,
                 };
                 Self::supported(module, &calls, &adapter)?;
-                // (Streamline's own per-frame housekeeping hangs on the swap chain's present,
-                // which on Vulkan is wgpu's and goes past it: DLSS's inputs are tagged for the
-                // frame and valid until its evaluation only, so nothing of theirs is kept)
+                // (Streamline's own per-frame housekeeping hangs on the swap chain's present, which on
+                // Vulkan is wgpu's and goes past it: `evaluate` frees the old context itself)
                 Backend::Vulkan { ring: VkRing::new(&gpu).context("DLSS's command buffers")? }
             }
         };
@@ -899,6 +898,13 @@ impl Runtime {
             // made for the old one)
             if let (Backend::Dx12 { pacer: Some(p), .. }, Some(_)) = (&self.backend, self.options_set) {
                 let _ = unsafe { p.ResizeBuffers(0, inputs.output_size.0, inputs.output_size.1, DXGI_FORMAT_UNKNOWN, DXGI_SWAP_CHAIN_FLAG(0)) };
+            }
+            // (on Vulkan no present of ours ever empties Streamline's queue of old contexts: without
+            // this every window size kept its own, up to a full card)
+            if matches!(self.backend, Backend::Vulkan { .. }) && self.allocated {
+                self.backend.wait();
+                check("slFreeResources(DLSS)", unsafe { (self.free_resources)(FEATURE_DLSS, &self.viewport) })?;
+                self.allocated = false;
             }
             let options = Self::options(quality, inputs.output_size);
             check("slDLSSSetOptions", unsafe { (self.set_options)(&self.viewport, &options) })?;
