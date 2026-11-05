@@ -134,14 +134,19 @@ fn a_triple_screen_turned_on_with_an_upscaler_is_not_drawn_at_its_size() {
 }
 
 fn upscaled_renderer() -> Renderer {
+    upscaled_renderer_at(1.0)
+}
+
+fn upscaled_renderer_at(render_scale: f32) -> Renderer {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     let temporal = Some(Temporal { upscaler: TemporalUpscaler::Fsr3, quality: TemporalQuality::Performance });
-    let options = RenderOptions { msaa: 4, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, temporal, ..Default::default() };
+    let options = RenderOptions { msaa: 4, ssao: false, shadow_size: 1024, fxaa: false, render_scale, temporal, ..Default::default() };
     pollster::block_on(Renderer::new_with(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb), options)).expect("test renderer")
 }
 
 /// A photo is no upscaler's picture: it is drawn at its own size, and the upscaler neither starts
-/// for it nor fails for the session because of it.
+/// for it nor fails for the session because of it. The saved render scale, whose row is hidden
+/// while an upscaler is chosen, does not make it smaller either.
 #[test]
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn a_photo_does_not_go_through_the_upscaler() {
@@ -150,7 +155,7 @@ fn a_photo_does_not_go_through_the_upscaler() {
     let mut plain = renderer(1.0, false);
     let mut scene = rails_scene(&mut plain);
     let a = plain.render_to_image(&mut scene, w, h, &camera(), &lighting).unwrap();
-    let mut upscaled = upscaled_renderer();
+    let mut upscaled = upscaled_renderer_at(0.5);
     let mut scene = rails_scene(&mut upscaled);
     let b = upscaled.render_to_image(&mut scene, w, h, &camera(), &lighting).unwrap();
     assert!(!upscaled.temporal_failed && upscaled.temporal.is_none());

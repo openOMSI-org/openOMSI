@@ -83,8 +83,11 @@ impl Renderer {
             size
         } else if with_overlays && self.temporal_window {
             self.scene_size(full_w, full_h)
+        } else if with_overlays && self.options.temporal.is_some() {
+            // (a photo, or a triple screen turned on in the menu: no upscaler's picture, and not
+            // the render scale either, whose row is hidden while an upscaler is chosen)
+            (full_w, full_h)
         } else if with_overlays {
-            // (a photo, or a triple screen turned on in the menu: no upscaler's picture)
             self.scaled_size(full_w, full_h)
         } else if let Some(s) = self.xr_fsr_scale().filter(|_| projection.is_some()) {
             // (a VR eye with FSR 1: drawn smaller, scaled up to the headset's image)
