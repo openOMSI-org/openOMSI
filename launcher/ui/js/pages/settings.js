@@ -158,7 +158,7 @@ function SelectRow({ row }) {
   const cur = s[row.key];
   // the choice the value means ("4" for 4); a value written by hand shows as itself
   const match = options.find(([v]) => same(cur, v) || String(cur) === String(v));
-  const value = match ? match[0] : cur == null ? '' : typeof cur === 'boolean' ? (cur ? '1' : '0') : String(cur);
+  const value = match ? match[0] : row.unknown ?? (cur == null ? '' : typeof cur === 'boolean' ? (cur ? '1' : '0') : String(cur));
   return html`<div class="setting-row">
     <${Name} label=${row.label} help=${typeof row.help === 'function' ? row.help(s) : row.help} warn=${row.heavy?.(value, s) && 'Heavy: can cost many frames per second on most graphics cards'} />
     <${Select} value=${value} options=${options} raw=${row.raw} onChange=${async (v) => (await saveSettings({ [row.key]: asStored(cur, v) })) && row.recheckUpdates && checkUpdates()} />
