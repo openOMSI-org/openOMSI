@@ -30,6 +30,10 @@ pub struct Cable {
 /// At most this many points a cable, and cables a plugin.
 pub const MAX_POINTS: usize = 4096;
 pub const MAX_CABLES: usize = 4096;
+/// At most this many points in all of a plugin's cables together: each point is a ring of the
+/// tube's vertices and its faces, so this bounds a plugin's geometry (about 22 MB) where the
+/// two limits above alone would let it reach gigabytes.
+pub const MAX_PLUGIN_POINTS: usize = 65_536;
 
 /// Every plugin's cables, by owner and the plugin's own id for each.
 #[derive(Debug, Default)]
@@ -40,29 +44,35 @@ pub struct Cables {
     /// The cables laid, moved or taken away since the game last looked (`changes`): a game
     /// drawing a few thousand of them redraws only those.
     changed: BTreeSet<(u64, String)>,
-    /// How many cables each plugin has.
-    per_owner: HashMap<u64, usize>,
+    /// How many cables each plugin has, and their points in all.
+    per_owner: HashMap<u64, (usize, usize)>,
 }
 
 pub type SharedCables = Rc<RefCell<Cables>>;
 
 impl Cables {
-    /// Lays cable `id` of `owner`, or changes it; false when the plugin has too many.
+    /// Lays cable `id` of `owner`, or changes it; false (and nothing changes) when the plugin
+    /// would have more than `MAX_CABLES` cables or `MAX_PLUGIN_POINTS` points in all.
     pub fn set(&mut self, owner: u64, id: &str, cable: Cable) -> bool {
         let key = (owner, id.to_string());
+        let (count, points) = self.per_owner.get(&owner).copied().unwrap_or_default();
         if let Some(old) = self.by.get_mut(&key) {
             if *old != cable {
+                let points = points - old.points.len() + cable.points.len();
+                if points > MAX_PLUGIN_POINTS {
+                    return false;
+                }
+                self.per_owner.insert(owner, (count, points));
                 *old = cable;
                 self.generation += 1;
                 self.changed.insert(key);
             }
             return true;
         }
-        let n = self.per_owner.entry(owner).or_default();
-        if *n >= MAX_CABLES {
+        if count >= MAX_CABLES || points + cable.points.len() > MAX_PLUGIN_POINTS {
             return false;
         }
-        *n += 1;
+        self.per_owner.insert(owner, (count + 1, points + cable.points.len()));
         self.changed.insert(key.clone());
         self.by.insert(key, cable);
         self.generation += 1;
@@ -71,15 +81,14 @@ impl Cables {
 
     pub fn remove(&mut self, owner: u64, id: &str) -> bool {
         let key = (owner, id.to_string());
-        let gone = self.by.remove(&key).is_some();
-        if gone {
-            self.generation += 1;
-            if let Some(n) = self.per_owner.get_mut(&owner) {
-                *n = n.saturating_sub(1);
-            }
-            self.changed.insert(key);
+        let Some(old) = self.by.remove(&key) else { return false };
+        self.generation += 1;
+        if let Some((count, points)) = self.per_owner.get_mut(&owner) {
+            *count = count.saturating_sub(1);
+            *points = points.saturating_sub(old.points.len());
         }
-        gone
+        self.changed.insert(key);
+        true
     }
 
     /// Every cable of `owner` goes (it stopped, or cleared them).
@@ -130,6 +139,35 @@ mod tests {
 
     fn cable(x: f64) -> Cable {
         Cable { points: vec![[0.0, 0.0, 6.0], [x, 0.0, 6.0]], radius: 0.006, color: [0.1, 0.1, 0.1, 1.0], frame: CableFrame::World }
+    }
+
+    fn cable_of(points: usize) -> Cable {
+        Cable { points: vec![[0.0, 0.0, 6.0]; points], ..cable(1.0) }
+    }
+
+    #[test]
+    fn a_plugin_cannot_lay_more_points_than_its_budget_however_it_splits_them() {
+        let mut c = Cables::default();
+        // sixteen cables of the most points each: every one valid, together the whole budget
+        let each = MAX_POINTS;
+        for i in 0..MAX_PLUGIN_POINTS / each {
+            assert!(c.set(1, &format!("w{i}"), cable_of(each)));
+        }
+        assert!(!c.set(1, "one more", cable_of(2)), "over the budget");
+        assert!(!c.set(1, "w0", cable_of(each + 1)), "grown over the budget");
+        assert_eq!(c.by[&(1, "w0".into())].points.len(), each, "a refused change keeps the cable as it was");
+        // another plugin has a budget of its own
+        assert!(c.set(2, "w", cable_of(each)));
+        // what is taken away frees its points, and a cable made shorter makes room
+        assert!(c.remove(1, "w0"));
+        assert!(c.set(1, "one more", cable_of(2)));
+        assert!(c.set(1, "w1", cable_of(10)));
+        let free = (each - 2) + (each - 10);
+        assert!(c.set(1, "two more", cable_of(free)));
+        assert!(!c.set(1, "three more", cable_of(2)));
+        // cleared, the budget is whole again
+        c.remove_owner(1);
+        assert!(c.set(1, "w", cable_of(each)));
     }
 
     #[test]

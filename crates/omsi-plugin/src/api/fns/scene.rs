@@ -80,7 +80,7 @@ fn options(v: &Value) -> Result<(f32, [f32; 4], CableFrame), ApiError> {
 }
 
 pub(crate) static FNS: &[ApiFn] = &[
-    def!("cable.set", "scene", [p("id", "string"), p("points", "table"), o("options", "table")], "boolean", "Lays the cable `id` or moves it: a thin round tube through `points` (a flat list `{x1, y1, z1, x2, ...}` or a list of `{x, y, z}`, metres), lit and shaded as the scene. `options`: `radius` (m, default 0.006), `color` (`{r, g, b}` or `{r, g, b, a}`, 0 to 1, default dark grey) and `frame`: `\"world\"` (the map's coordinates, z up; the default) or `\"bus\"` (the player's bus's model frame: x right, y forward, z up, so a rope tied to the bus moves with it as drawn). Set it again whenever it moves; `false` when the plugin already has 4096 cables.", NEW, Ui, false, |c, a| {
+    def!("cable.set", "scene", [p("id", "string"), p("points", "table"), o("options", "table")], "boolean", "Lays the cable `id` or moves it: a thin round tube through `points` (a flat list `{x1, y1, z1, x2, ...}` or a list of `{x, y, z}`, metres), lit and shaded as the scene. `options`: `radius` (m, default 0.006), `color` (`{r, g, b}` or `{r, g, b, a}`, 0 to 1, default dark grey) and `frame`: `\"world\"` (the map's coordinates, z up; the default) or `\"bus\"` (the player's bus's model frame: x right, y forward, z up, so a rope tied to the bus moves with it as drawn). Set it again whenever it moves; `false` (and the cable stays as it was) when the plugin would have more than 4096 cables, or more than 65536 points in all its cables together.", NEW, Ui, false, |c, a| {
         let id = a.str(0)?;
         let pts = points(a.get(1))?;
         let (radius, color, frame) = options(a.get(2))?;

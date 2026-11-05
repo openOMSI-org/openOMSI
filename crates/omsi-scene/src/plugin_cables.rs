@@ -13,6 +13,11 @@ use omsi_sim::VehicleInstance;
 /// Sides of a cable's tube: six read as round at the thickness of a wire.
 const SIDES: usize = 6;
 
+/// The most vertices the meshes kept for reuse may hold together (a plugin's budget of
+/// points, `omsi_plugin`'s `MAX_PLUGIN_POINTS`): past it the oldest kept mesh is freed, its
+/// instance kept hidden for a mesh made anew.
+const SPARE_VERTS: usize = 65_536 * SIDES;
+
 /// A cable to draw: a row of points, in the map's frame or (`on_bus`) in the player's bus's
 /// model frame (x right, y forward, z up).
 #[derive(Debug, Clone, PartialEq)]
@@ -42,8 +47,12 @@ pub struct PluginCables {
     /// The scene the ids belong to (`Scene::serial`).
     scene: u64,
     drawn: HashMap<CableKey, Drawn>,
-    /// Meshes of cables taken away, hidden, for the next cables laid.
+    /// Meshes of cables taken away, hidden, for the next cables laid, oldest first, and the
+    /// vertices they hold.
     spare: Vec<Drawn>,
+    spare_verts: usize,
+    /// Hidden instances whose spare mesh was freed, for the next cables laid.
+    idle: Vec<usize>,
     materials: Palette,
 }
 
@@ -88,6 +97,8 @@ impl PluginCables {
             // (another scene: what was made lived in the old one; everything is laid anew)
             self.drawn.clear();
             self.spare.clear();
+            self.spare_verts = 0;
+            self.idle.clear();
             self.materials = Palette::default();
             self.scene = scene.serial;
         }
@@ -99,7 +110,14 @@ impl PluginCables {
                         // (kept for the next cable rather than left in the scene for good)
                         r.set_params(scene, d.instance, &[], false, &[]);
                         self.release(d.cable.color, r, scene);
+                        self.spare_verts += d.verts;
                         self.spare.push(d);
+                        while self.spare_verts > SPARE_VERTS && !self.spare.is_empty() {
+                            let old = self.spare.remove(0);
+                            self.spare_verts -= old.verts;
+                            r.free_mesh(scene, old.mesh);
+                            self.idle.push(old.instance);
+                        }
                     }
                 }
             }
@@ -134,7 +152,9 @@ impl PluginCables {
         // (a spare of the same size best: only its vertices change)
         let reused = own.or_else(|| {
             let same = self.spare.iter().position(|s| s.verts == data.positions.len());
-            same.or(self.spare.len().checked_sub(1)).map(|i| self.spare.swap_remove(i))
+            let d = same.or(self.spare.len().checked_sub(1)).map(|i| self.spare.remove(i))?;
+            self.spare_verts -= d.verts;
+            Some(d)
         });
         let d = match reused {
             Some(mut d) => {
@@ -155,7 +175,16 @@ impl PluginCables {
             }
             None => {
                 let mesh = r.add_mesh(scene, &data);
-                let instance = r.add_instance(scene, mesh, origin, Mat4::IDENTITY, vec![material]);
+                let instance = match self.idle.pop() {
+                    Some(i) => {
+                        r.set_instance_mesh(scene, i, mesh);
+                        r.set_material(scene, i, 0, material);
+                        r.set_transform(scene, i, origin, Mat4::IDENTITY);
+                        r.set_params(scene, i, &[], true, &[]);
+                        i
+                    }
+                    None => r.add_instance(scene, mesh, origin, Mat4::IDENTITY, vec![material]),
+                };
                 Drawn { mesh, instance, verts: data.positions.len(), cable }
             }
         };
