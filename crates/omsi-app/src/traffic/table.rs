@@ -59,18 +59,10 @@ impl Traffic {
                 scheme: c.scheme.map(|s| s.min(254) as u8),
                 paint: c.scheme.and_then(|s| v.ty.paint_schemes.get(s)).map(|p| p.name.clone()).unwrap_or_default(),
             };
-            let meta = || {
-                if c.is_bus() {
-                    let (line, destination) = crate::lan_world::car_display(v);
-                    Meta { line, destination }
-                } else {
-                    Meta::default()
-                }
-            };
+            let meta = || if c.is_bus() { crate::lan_world::car_meta(v) } else { Meta::default() };
             let Some(id) = self.table.upsert(c.id, kind, look, meta, row) else { continue };
             if c.is_bus() && refresh {
-                let (line, destination) = crate::lan_world::car_display(v);
-                self.table.set_meta(id, &Meta { line, destination });
+                self.table.set_meta(id, &crate::lan_world::car_meta(v));
             }
         }
         for id in self.table.finish() {

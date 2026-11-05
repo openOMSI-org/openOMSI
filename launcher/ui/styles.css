@@ -1041,6 +1041,9 @@ html.phone, html.phone body { font-size: 15px; -webkit-tap-highlight-color: tran
 .m-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; height: 100%; }
 .m-split-list { overflow: auto; min-height: 0; }
 .m-split-map .routemap { height: 100%; min-height: 220px; border-radius: 12px; }
+@media (max-aspect-ratio: 3/4) {
+  .m-drive { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(240px, 36vh) minmax(0, 1fr); }
+}
 @media (max-width: 560px) {
   .m-split { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 240px; }
 }
@@ -1232,3 +1235,44 @@ html.phone .ail-tick { width: 28px; height: 28px; }
 .ail-picker-list { max-height: 46vh; }
 @media (max-width: 1100px) { .ail-cols { grid-template-columns: clamp(200px, 30%, 260px) minmax(0, 1fr); } .ail-stage { grid-column: 1 / -1; position: static; } .ail-picker { grid-template-columns: minmax(0, 1fr); } }
 .ail.busy { opacity: 0.6; }
+
+.drive-mode { display: flex; flex-direction: column; gap: 8px; flex: none; }
+.drive-mode-title { letter-spacing: 0.04em; }
+.drive-mode-toolbar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.drive-mode-options { display: flex; padding: 4px; gap: 4px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); }
+.drive-mode-option { position: relative; display: flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid transparent; border-radius: var(--radius-sm); padding: 10px 14px; cursor: pointer; white-space: nowrap; color: var(--text-2); }
+.drive-mode-option:hover { background: var(--surface-3); color: var(--text); }
+.drive-mode-option.selected { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.drive-mode-option:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.drive-mode-option input { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.drive-mode-divider { width: 1px; height: 28px; background: var(--line); flex: none; }
+.drive-mode-join { gap: 8px; padding: 10px 14px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--text); }
+.drive-mode-join:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.drive-session { display: flex; align-items: center; gap: 12px; padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); }
+.drive-session-info { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; flex: 1; min-width: 0; }
+.drive-session-code { font: 600 12px ui-monospace, monospace; overflow-wrap: anywhere; min-width: 0; }
+.drive-session > .btn { flex: none; }
+.drive-mode-hint { margin: 0; }
+.page-drive:has(.drive-mode) { overflow: auto; }
+@media (max-width: 600px) {
+  .drive-mode-toolbar { gap: 8px; }
+  .drive-mode-options { flex: 1 1 100%; min-width: 0; }
+  .drive-mode-option { flex: 1 1 0; min-width: 0; padding: 10px 8px; white-space: normal; }
+  .drive-mode-option strong { min-width: 0; overflow-wrap: anywhere; }
+  .drive-mode-divider { display: none; }
+  .drive-mode-join { width: 100%; justify-content: center; }
+}
+
+.connection-dialog .multiplayer-code-row { flex-wrap: wrap; }
+.connection-dialog .multiplayer-code-row input { flex: 1 1 220px; min-width: 0; }
+.connection-dialog .dialog-foot { flex-wrap: wrap; }
+.connection-error { color: var(--danger); }
+.servers-page [hidden] { display: none; }
+.servers-page .card .row { flex-wrap: wrap; }
+.servers-page .page-head { flex-wrap: wrap; }
+@media (max-width: 600px) {
+  .connection-dialog .dialog-head, .connection-dialog .dialog-body { padding-left: 16px; padding-right: 16px; }
+  .connection-dialog .dialog-foot { padding-left: 16px; padding-right: 16px; }
+  .connection-dialog .multiplayer-code-row .btn { width: 100%; }
+  .servers-page .card-body.row > .grow { flex-basis: calc(100% - 64px); }
+}

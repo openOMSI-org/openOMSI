@@ -147,6 +147,7 @@ pub(crate) fn info_of(cfg: &ServerCfg, _root: &Path) -> omsi_net::ws::ServerInfo
         players_public: cfg.share_positions,
         player_list: Vec::new(),
         local_admin_password: cfg.admin_password.clone(),
+        direct: Some(cfg.public_address.clone()).filter(|a| a != "off").unwrap_or_default(),
         ..Default::default()
     }
 }
@@ -203,6 +204,14 @@ pub(crate) fn prepare(args: &mut Args, path: &Path) -> Result<ServerCfg> {
     }
     args.passengers = cfg.passengers;
     let _ = SERVER_PASSENGERS.set((cfg.passengers, cfg.passenger_density));
+    if cfg.public_address.is_empty() {
+        omsi_net::addrs::auto_direct(cfg.web_port);
+    }
+    let limits = cfg.ai_limits.settings_lines();
+    if !limits.is_empty() {
+        log::info!("server: AI limits of server.cfg over settings.cfg: {}", limits.trim_end().replace('\n', ", "));
+        let _ = crate::settings::SERVER_AI_LIMITS.set(limits);
+    }
     args.lan_host = Some(cfg.port);
     args.lan_join = None;
     args.lan_name = cfg.name.clone();
@@ -308,7 +317,8 @@ pub(crate) fn tick_status(lan: &omsi_net::LanSession, time: f64, weather: &str) 
     let players = lan.peers().filter(|p| p.has_info).count();
     // (the admin's clock shift may take the time below 0 or past midnight: 23:08 had come
     // out as "00:-52")
-    crate::lan::update_server_info(players, &crate::schedule::hhmm(time.rem_euclid(86400.0)), weather);
+    omsi_net::addrs::find_direct(lan, |a| crate::lan::update_server_direct(a));
+    crate::lan::update_server_info(players, &lan.world.date, &crate::schedule::hhmm(time.rem_euclid(86400.0)), weather);
     let poses: Vec<&omsi_net::Pose> = lan.peers().filter(|p| p.has_info && p.has_pose).map(|p| &p.pose).collect();
     let list = poses.iter().filter_map(|q| player_info(q, |id| poses.iter().copied().find(|o| o.id == id))).collect();
     crate::lan::update_server_players(list);

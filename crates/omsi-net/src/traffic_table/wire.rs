@@ -24,6 +24,12 @@
 //!       delta:     baseline 5 (snapshots back), pose 1, [dx 13, dy 13, dz 9 (cm), dh 8],
 //!                  changed 4 (attitude, speed, steer, flags), then those fields as in a
 //!                  full row
+//!   meta numbers 5 (as many as the metas, in their order; 0: none), each:
+//!                     number (8 + bytes), registration (8 + bytes), depot file (8 + bytes)
+//!
+//! The meta numbers come last so that a client older than them reads the datagram as before
+//! and leaves them be (a decoder stops after the rows); a datagram of an older host ends
+//! there, its padding reading as no numbers.
 //!
 //! TACK
 //! byte 0 0xBB, byte 1 protocol, byte 2 epoch, bytes 3-4 the newest datagram number heard,
@@ -36,7 +42,7 @@
 //! the host knows the client holds (one it acknowledged), `baseline` snapshots back.
 
 use super::ids::{TrafficId, ID_BITS};
-use super::row::{Kind, Look, Meta, Row, FLAGS_BITS, MAX_DESTINATION, MAX_LINE};
+use super::row::{Kind, Look, Meta, Row, FLAGS_BITS, MAX_DESTINATION, MAX_HOF, MAX_IDENT, MAX_LINE, MAX_NUMBER};
 use crate::wire::{BitReader, BitWriter};
 
 pub const MAGIC: u8 = 0xBA;
@@ -48,7 +54,7 @@ pub const MAX_DATAGRAM: usize = 1180;
 pub const MAX_BASELINE: u32 = 31;
 pub const MAX_STRING: usize = 255;
 
-pub const COUNT_BITS: usize = 5 + 6 + 5 + 6 + 8;
+pub const COUNT_BITS: usize = 5 + 6 + 5 + 6 + 8 + 5;
 const MAX_LOOKS: usize = 31;
 const MAX_SPAWNS: usize = 63;
 const MAX_METAS: usize = 31;
@@ -217,7 +223,7 @@ pub fn look_bits(l: &Look) -> usize {
 }
 
 pub fn meta_bits(m: &Meta) -> usize {
-    ID_BITS as usize + str_bits(&m.line) + str_bits(&m.destination)
+    ID_BITS as usize + str_bits(&m.line) + str_bits(&m.destination) + str_bits(&m.number) + str_bits(&m.ident) + str_bits(&m.hof)
 }
 
 /// A look that fits the wire, and a file a client may open.
@@ -297,6 +303,11 @@ fn get_full(r: &mut BitReader, a: &Anchor) -> Option<Row> {
 /// The datagram of `p`. None when something does not fit: a count, a string, a place too
 /// far from the anchor, a datagram of more than `MAX_DATAGRAM` bytes.
 pub fn encode(p: &Packet, protocol: u8) -> Option<Vec<u8>> {
+    encode_with(p, protocol, true)
+}
+
+/// `encode`, or (`numbers` false) as a host older than the metas' numbers wrote it.
+fn encode_with(p: &Packet, protocol: u8, numbers: bool) -> Option<Vec<u8>> {
     if p.looks.len() > MAX_LOOKS
         || p.spawns.len() > MAX_SPAWNS
         || p.metas.len() > MAX_METAS
@@ -382,6 +393,15 @@ pub fn encode(p: &Packet, protocol: u8) -> Option<Vec<u8>> {
             }
         }
     }
+    if !numbers {
+        return Some(w.finish());
+    }
+    w.put(p.metas.len() as u64, 5);
+    for (_, m) in &p.metas {
+        put_str(&mut w, &m.number);
+        put_str(&mut w, &m.ident);
+        put_str(&mut w, &m.hof);
+    }
     let out = w.finish();
     debug_assert_eq!(out.len(), p.size());
     Some(out)
@@ -429,7 +449,7 @@ pub fn decode(data: &[u8], protocol: u8) -> Option<Packet> {
         let id = TrafficId::from_raw(r.get(ID_BITS)? as u32)?;
         let line = get_str(&mut r, Some(MAX_LINE))?;
         let destination = get_str(&mut r, Some(MAX_DESTINATION))?;
-        p.metas.push((id, Meta { line, destination }));
+        p.metas.push((id, Meta { line, destination, ..Default::default() }));
     }
     for _ in 0..r.get(6)? {
         p.removes.push(TrafficId::from_raw(r.get(ID_BITS)? as u32)?);
@@ -455,6 +475,21 @@ pub fn decode(data: &[u8], protocol: u8) -> Option<Packet> {
         let steer = if mask & 4 != 0 { Some(r.get_signed(8)? as i8) } else { None };
         let flags = if mask & 8 != 0 { Some(r.get(FLAGS_BITS)? as u8) } else { None };
         p.rows.push(RowUpdate::Delta { id, base_back, delta: Delta { pose, attitude, speed, steer, flags } });
+    }
+    // the metas' numbers (a host older than them sends none: the padding reads as 0, or
+    // there are not even 5 bits left)
+    if !p.metas.is_empty() && r.get(5) == Some(p.metas.len() as u64) {
+        let mut numbers = Vec::with_capacity(p.metas.len());
+        for _ in 0..p.metas.len() {
+            let Some(n) = (|| Some((get_str(&mut r, Some(MAX_NUMBER))?, get_str(&mut r, Some(MAX_IDENT))?, get_str(&mut r, Some(MAX_HOF))?)))() else {
+                numbers.clear();
+                break;
+            };
+            numbers.push(n);
+        }
+        for ((_, m), (number, ident, hof)) in p.metas.iter_mut().zip(numbers) {
+            (m.number, m.ident, m.hof) = (number, ident, hof);
+        }
     }
     Some(p)
 }
@@ -560,7 +595,7 @@ mod tests {
             anchor: a,
             looks: vec![(7, look())],
             spawns: vec![Spawn { id: id(1, 1), look: 7, kind: Kind::Bus, row: row(1) }],
-            metas: vec![(id(1, 1), Meta { line: "37".into(), destination: "#4".into() })],
+            metas: vec![(id(1, 1), Meta { line: "37".into(), destination: "#4".into(), number: "80.849".into(), ident: "EMT-1234".into(), hof: "Brigadeiro".into() })],
             removes: vec![id(2, 5), id(4095, 255)],
             rows: vec![
                 RowUpdate::Full { id: id(3, 1), row: row(2) },
@@ -582,7 +617,33 @@ mod tests {
         for n in 0..d.len() {
             let _ = decode(&d[..n], 15);
         }
-        assert!(decode(&d[..d.len() - 4], 15).is_none());
+        // cut short in the rows it is none; cut in the metas' numbers it reads as an older
+        // host's datagram, without them
+        let old = encode_with(&p, 15, false).unwrap();
+        assert!(decode(&old[..old.len() - 4], 15).is_none());
+        for n in old.len()..d.len() {
+            if let Some(q) = decode(&d[..n], 15) {
+                assert_eq!(q.rows, p.rows);
+                assert!(q.metas.iter().all(|(_, m)| m.number.is_empty() && m.hof.is_empty()), "{n}");
+            }
+        }
+    }
+
+    /// A datagram of a host older than the metas' numbers (it ends after the rows) reads as
+    /// before, the numbers empty; an older client stops after the rows, and what it reads of a
+    /// new host's datagram is that same older datagram.
+    #[test]
+    fn the_metas_numbers_are_left_out_by_an_older_host_and_left_be_by_an_older_client() {
+        let p = packet();
+        let old = encode_with(&p, 15, false).unwrap();
+        let q = decode(&old, 15).unwrap();
+        assert_eq!(q.metas[0].1, Meta { line: "37".into(), destination: "#4".into(), ..Default::default() });
+        assert_eq!((&q.looks, &q.spawns, &q.removes, &q.rows), (&p.looks, &p.spawns, &p.removes, &p.rows));
+        // the new datagram is the old one with the numbers after it (an older client's
+        // decoder is this one's without them)
+        let new = encode(&p, 15).unwrap();
+        assert_eq!(new[..old.len() - 1], old[..old.len() - 1]);
+        assert_eq!(decode(&new, 15).unwrap().metas, p.metas);
     }
 
     #[test]

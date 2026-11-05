@@ -90,6 +90,7 @@ export function DayStep() {
       ? html`<div class="stack" style="gap:10px">
           <div class="muted small">${t('Set by {server}', { server: srv.name || c.lan_addr })}</div>
           <dl class="facts">
+            ${srv.date && html`<dt>${t('Date')}</dt><dd>${srv.date}</dd>`}
             <dt>${t('Time')}</dt><dd>${srv.time || '-'}</dd>
             <dt>${t('Weather')}</dt><dd>${srv.weather || t("the map's (the server's)")}</dd>
           </dl>
