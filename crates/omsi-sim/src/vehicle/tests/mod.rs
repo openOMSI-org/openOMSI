@@ -969,6 +969,33 @@ fn a_script_holds_a_poles_rope_and_moves_it_by_the_mouse() {
     assert_eq!(poles(&v)[0].0, PoleMode::Free);
 }
 
+/// A pole whose `max_angle` is below its `rest_angle` (both accepted by the parser) is held and
+/// moved by its rope without a panic, between the bounds the pole itself keeps.
+#[test]
+fn a_rope_on_a_pole_with_its_top_below_its_rest_does_not_panic() {
+    use omsi_trolley::{PoleDef, PoleMode, TrolleyDef};
+    let mut ty = coupling_test_type(None);
+    {
+        let t = Arc::get_mut(&mut ty).unwrap();
+        let pole = |side: &str| PoleDef::parse(&[side, "pos 0.3 -0.5 3.0", "length 6.5", "rest_angle 30", "max_angle 10"]);
+        t.def.trolley = TrolleyDef { poles: vec![pole("side left"), pole("side right")], ..Default::default() };
+    }
+    let mut v = VehicleInstance::new(ty, VehicleHost::new(Default::default()));
+    for s in ["", "_X", "_Y"] {
+        v.set_engine_var(&format!("Trolley_Pole1_Rope{s}"), 0.0);
+    }
+    v.set_engine_var("Trolley_Pole1_Rope", 1.0);
+    for dy in [-10.0, 10.0] {
+        for _ in 0..30 {
+            v.set_engine_var("Trolley_Pole1_Rope_Y", dy);
+            v.update(1.0 / 60.0);
+        }
+    }
+    let p = &v.trolley.as_ref().unwrap().rig.poles[0];
+    assert_eq!(p.mode, PoleMode::Hand);
+    assert!(p.theta >= p.rest() - 1e-9 && p.theta <= p.top() + 1e-9, "{}", p.theta.to_degrees());
+}
+
 /// A model's script driving the lifting gear (`Trolley_Pole<k>_Gear`, 0 on the hook, 1 at the wire):
 /// the pole follows from the variable's first change, and a variable left as it is moves nothing.
 #[test]

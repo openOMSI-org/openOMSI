@@ -449,7 +449,7 @@ impl VehicleInstance {
                         // (taken where it is: it does not jump to the hand)
                         let (mut theta, mut psi) = *g.grab_angles.get_or_insert((p.theta, p.psi));
                         let (dt_, dp) = std::mem::take(&mut g.grab_move);
-                        theta = (theta + dt_).clamp((p.def.rest_angle as f64).to_radians(), (p.def.max_angle as f64).to_radians());
+                        theta = (theta + dt_).clamp(p.rest(), p.top());
                         psi = (psi + dp).clamp(-1.7, 1.7);
                         g.grab_angles = Some((theta, psi));
                         ropes[k] = RopeCmd::Hold { theta, psi };

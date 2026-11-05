@@ -321,12 +321,12 @@ impl Pole {
         (self.def.mass as f64 / 3.0 + self.def.head_mass as f64) * self.len() * self.len()
     }
 
-    fn rest(&self) -> f64 {
+    pub fn rest(&self) -> f64 {
         (self.def.rest_angle as f64).to_radians()
     }
 
     /// The highest the boom goes: there its rope is taut.
-    fn top(&self) -> f64 {
+    pub fn top(&self) -> f64 {
         (self.def.max_angle as f64).to_radians().max(self.rest() + 0.05)
     }
 
