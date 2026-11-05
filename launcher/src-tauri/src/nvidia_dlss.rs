@@ -117,7 +117,10 @@
              include_str!("../../../scripts/windows/install-streamline.ps1"),
          ).map_err(|e| format!("Prepare NVIDIA installer: {e}"))?;
  
+         // (CREATE_NO_WINDOW: the launcher's button shows the progress, no console over it)
+         use std::os::windows::process::CommandExt;
          let output = std::process::Command::new("powershell.exe")
+             .creation_flags(0x0800_0000)
              .arg("-NoProfile")
              .arg("-NonInteractive")
              .arg("-ExecutionPolicy")
