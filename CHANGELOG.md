@@ -8,6 +8,12 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **Remote cockpit on a phone or tablet**: the game serves a page on your home network
+  (Options > Interface > Remote cockpit, off until switched on); scan the QR code or type the
+  address and the 6-digit code, and the phone or tablet shows a dashboard with the map and the
+  route, the bus's own buttons (every door, lights, indicators, kneeling...), its real
+  destination sign, a touch steering wheel and pedals, and a layout editor per bus. Nothing to
+  install, nothing leaves the network.
 - **Mouse steering keeps the system cursor in the window**: with *Hold the cursor while steering*
   off, the cursor is the system's own (no frame of delay) and now stays inside the game window
   while the mouse steers, so a hard turn no longer lets it slip onto another screen (Windows and
@@ -1036,6 +1042,60 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   lookups the Adreno 710 refused ([#2009](https://github.com/openOMSI-org/openOMSI/issues/2009)).
 ### Multiplayer
 
+- **The map's timetable buses show their fleet number, plate and the right destination for
+  every player**, not only on the server or the hosting game: the host now tells each player
+  the number and plate it drew for a bus and the depot file it reads its signs from. A player's
+  copy showed no number and read the destination in the depot file that player chose for their
+  own bus, so it showed another sign.
+- **People no longer vanish in front of the players of a server.** When the pool of people
+  (`ai_max_humans`) is full, somebody walking or standing out of sight is taken to make room,
+  as in OMSI 2. A dedicated server judged "out of sight" from its own camera, where nobody
+  plays, so it took people standing beside the players - passengers who had just got off a
+  bus among them. Now nobody near any player is taken.
+- **A server sets its own AI limits** in `server.cfg`: `ai_unsched_factor` (the random
+  traffic, percent of the map's density), `ai_max_scheduled`, `ai_max_parked` and
+  `ai_max_humans`, as the game's options have them. Left empty, the machine's `settings.cfg`
+  says, as before. They count for the whole server, so a busy one can raise them.
+- **A server that cannot keep up keeps the day.** Its world clock (the day, the timetable,
+  what the players are told) moved with its physics steps, so a server short of CPU fell
+  behind the day for good, silently: at half its steps, half a day's timetable in a day. It
+  follows the wall now, at most twice as fast while it takes back what it lost; the physics
+  still take their fixed steps, and the log says when the machine cannot keep up.
+- **The launcher shows a server's date** beside its time and weather (in the list and before
+  joining), from the server's status page (`date`); an older server shows none.
+- **Joining a busy server is quicker.** A player loading holds one of the eight loading
+  slots only while their game is heard from: one closed or stuck no longer keeps the others
+  waiting for two minutes.
+- **A server still loading its world lets players in once it is ready**, telling them it is
+  loading (an older game is told to try again); before, one let in met an empty world.
+- **A game joining through a server's tunnel tries its direct address first**, which a quick
+  tunnel's breaking connections do not touch, and keeps the tunnel if it does not answer within
+  three seconds. The server finds the address by itself: its own internet address, else the
+  one the internet sees if it reaches itself there - never behind a carrier's NAT (CGNAT), so
+  nobody waits on an address that cannot answer. `public_address` in `server.cfg` names
+  another, or `off` tells none.
+- **Many players fetching buses at once no longer take a server's CPU.** Every piece of a bus
+  was packed the moment it was asked for, on the thread of its connection (up to 160 of them),
+  and once more for every player who asked: players downloading together packed on every core,
+  and the server's traffic and people fell behind. A quarter of the cores pack at most, the
+  others' downloads wait their turn, and a piece packed is kept for the next player. A bus a
+  player sends a dedicated server is packed at its smallest at once, in the background, so the
+  others fetch it ready.
+- **A server's fleet bus is listed once, not once per player.** A player asking for a bus of
+  the server's fleet had the server load it and read every file of every paint again (the
+  seconds a bus takes in the fleet check), once for each paint asked for: many players at once
+  took every core. The list the fleet check made at the start is given instead, while the bus's
+  files are as they were; a list to make again is made by one request at a time.
+- **The launcher says why a game could not host.** When a game started to host by code could
+  not open its session (its port taken by another program, or refused by a firewall or an
+  antivirus: since 0.3.47 it reserves a TCP port for its mods beside the UDP one, and checks
+  it reaches itself there), Invite friends waited for a code that never came, without a word.
+  It now shows the game's reason.
+- **The map's buses show the server's signs on every player.** The server sends each player
+  the depot file (`.hof`) its AI buses use (else the one of that name in `HOFs`), and the
+  player's game draws those buses with it, whatever depot files it has itself.
+- **Multiplayer protocol 17.** A game of this version and a server of this version play
+  together; older ones are turned away at the door, as at every protocol change.
 - **A dedicated server opens its web port at once, before checking its fleet.** With a
   `vehicles` list, the server read and hashed every file of every bus and paint before the
   WebSocket gateway opened, so for minutes `/status`, the players and the admin page were

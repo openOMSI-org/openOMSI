@@ -152,7 +152,9 @@ pub use wire::{
 /// 15: the AI traffic as a table of rows under ids (`traffic_table`: `TRAF` datagrams the
 /// client acknowledges with `TACK`), no longer cars in `WORLD` or `DESC|c|…`.
 /// 16: `REALM`: the hardware identifier is made for each host owner, not the same everywhere.
-pub const PROTOCOL: u32 = 16;
+/// 17: the timetable buses' fleet number, plate and depot file in `TRAF` (`meta numbers`): a
+/// game of 16 drew the map's buses without numbers and with another depot's signs.
+pub const PROTOCOL: u32 = 17;
 /// (omsi-plugin's `MULTIPLAYER_PORTS` keeps `omsi.send` off this one and the `PORT_RANGE` after it.)
 pub const DEFAULT_PORT: u16 = 27015;
 /// Ports a host tries after the default one when that is taken (a second session on the
@@ -215,6 +217,7 @@ const CHAT_RATE: (f32, f32) = (1.0, 3.0);
 mod receive_budget;
 mod receive_world;
 mod join_queue;
+pub use join_queue::LOADING_ALIVE;
 // ---------------------------------------------------------------------------------------
 // session codes
 
@@ -655,7 +658,7 @@ impl WorldInfo {
 }
 
 /// `YYYY-MM-DD`, or empty for anything else.
-fn clean_date(s: &str) -> String {
+pub(crate) fn clean_date(s: &str) -> String {
     let v: Vec<&str> = s.trim().split('-').collect();
     let ok = v.len() == 3
         && v[0].len() == 4
@@ -1267,6 +1270,8 @@ pub struct LanSession {
     trying: f32,
     /// The host is currently admitting its bounded batch of loading peers.
     waiting_for_slot: bool,
+    /// A server still loading its world: new players wait (`set_starting`).
+    starting: bool,
     lost_at: Option<Instant>,
     /// The client gave up (no answer / host lost) but keeps saying hello now and then: a
     /// welcome brings it back without restarting the game (see `reconnect`).
@@ -1445,6 +1450,7 @@ impl LanSession {
             candidates: Vec::new(),
             trying: 0.0,
             waiting_for_slot: false,
+            starting: false,
             lost_at: None,
             timed_out: false,
             join_timeout: omsi_cfg::flags::OMSI_LAN_JOIN_TIMEOUT.live_var()
@@ -2659,7 +2665,7 @@ impl LanSession {
                         && field(&parts, 1).parse::<u32>().ok() == Some(PROTOCOL)
                         && self.accepts_host_source(from) =>
                 {
-                    self.on_waiting_slot(from);
+                    self.on_waiting_slot(from, field(&parts, 3) == "starting");
                 }
                 ("REJECT", Role::Client) if self.accepts_host_source(from) => {
                     let reason = clean_text(field(&parts, 2), 300);
@@ -3130,7 +3136,7 @@ impl LanSession {
                 );
                 return;
             }
-            None if self.peers.values().filter(|p| !p.has_pose).count() >= MAX_JOINING => {
+            None if self.loading_now() >= MAX_JOINING => {
                 // Defensive fallback; normally the bounded FIFO above handles this.
                 self.send(format!("WAIT|{PROTOCOL}|2").as_bytes(), from);
                 return;

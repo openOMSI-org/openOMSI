@@ -50,6 +50,7 @@ pub(crate) enum Action {
 
 /// The screens' toolkit, their graphics and what was drawn last.
 pub(crate) struct Shell {
+    pub(crate) settings_search: pause::search::State,
     pub(crate) process_prompt: Option<u64>,
     pub(crate) process_dialog: crate::process_permissions::DialogState,
     pub(crate) ui: Ui,
@@ -121,7 +122,7 @@ impl Shell {
         // (the desktop launcher's calm look: graphite surfaces, no edges)
         let mut ui = Ui::new();
         ui.flat = true;
-        Shell { process_prompt: None, process_dialog: Default::default(), ui, pause_category: Default::default(), quick_edit: false, pause_hidden: true, quick_focus: 0, gpu: None, shot_gpu: None, drawn: None, actions: Vec::new(), picture: None, picture_tex: None, logo_tex: None, shot_logo: None, logo_of: None, logo_title: None, logo_wide: None, glass: None, glass_taken: None, scale: 1.0, over_ui: false, last_sel: None, dd_anchor: None, opaque: false }
+        Shell { settings_search: Default::default(), process_prompt: None, process_dialog: Default::default(), ui, pause_category: Default::default(), quick_edit: false, pause_hidden: true, quick_focus: 0, gpu: None, shot_gpu: None, drawn: None, actions: Vec::new(), picture: None, picture_tex: None, logo_tex: None, shot_logo: None, logo_of: None, logo_title: None, logo_wide: None, glass: None, glass_taken: None, scale: 1.0, over_ui: false, last_sel: None, dd_anchor: None, opaque: false }
     }
 
     /// A frame of the screens begins: the window's size in physical pixels and how many of
@@ -151,6 +152,8 @@ impl Shell {
 
     /// Nothing of the screens shows this frame.
     pub(crate) fn clear(&mut self) {
+        self.settings_search = Default::default();
+        if pause::search::focused(self) { self.ui.focus = None; }
         self.drawn = None;
         self.over_ui = false;
         self.ui.discard_input();

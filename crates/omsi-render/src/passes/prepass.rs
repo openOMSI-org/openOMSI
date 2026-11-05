@@ -9,7 +9,7 @@ impl Renderer {
         let (camera, aspect, width, height, ao_on) = (f.camera, f.aspect, f.width, f.height, f.ao_on);
         if f.prepass_on {
             let proj = f.projection.unwrap_or_else(|| {
-                Mat4::perspective_rh(camera.fov_deg.to_radians(), aspect, camera.far, camera.near)
+                Mat4::perspective_rh(camera.fov_deg.to_radians(), aspect, camera.depth_far(), camera.near)
             });
             let u = SsaoUniform {
                 inv_proj: proj.inverse().to_cols_array_2d(),

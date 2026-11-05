@@ -440,7 +440,8 @@ impl RailDrive {
     }
 
     /// The next (or previous) rail lane among `candidates`: the indicator's branch, else
-    /// the one the switch is set to, else the straightest. The points it takes are thrown.
+    /// the one the switch is set to, else the straightest. The points it takes are thrown,
+    /// but not a switch that already sends it there (its script may be moving it).
     fn pick(&self, net: &Network, mut world: Option<(&World, &mut omsi_sim::scenery::SceneryState)>, candidates: &[usize], forward: bool, blinker: u8, _facing: bool) -> Option<usize> {
         let here = &net.lanes[self.lane];
         let h0 = if forward { here.at(here.length()).1 } else { here.at(0.0).1 } as f64;
@@ -460,16 +461,16 @@ impl RailDrive {
             return rails.first().map(|r| r.0);
         }
         rails.sort_by(|a, b| a.1.total_cmp(&b.1));
-        let chosen = match blinker {
-            1 => rails.first().map(|r| r.0),
-            2 => rails.last().map(|r| r.0),
-            _ => rails
-                .iter()
-                .find(|(i, _)| net.lanes[*i].key.and_then(|k| world.as_mut().and_then(|(w, s)| w.switch_set_to(s, k.id, k.path))) == Some(true))
-                .or_else(|| rails.iter().min_by(|a, b| a.1.abs().total_cmp(&b.1.abs())))
-                .map(|r| r.0),
-        }?;
-        if let (Some(k), Some((w, s))) = (net.lanes[chosen].key, world) {
+        let (chosen, throw) = match blinker {
+            1 => (rails.first().map(|r| r.0), true),
+            2 => (rails.last().map(|r| r.0), true),
+            _ => match rails.iter().find(|(i, _)| net.lanes[*i].key.and_then(|k| world.as_mut().and_then(|(w, s)| w.switch_set_to(s, k.id, k.path))) == Some(true)) {
+                Some(r) => (Some(r.0), false),
+                None => (rails.iter().min_by(|a, b| a.1.abs().total_cmp(&b.1.abs())).map(|r| r.0), true),
+            },
+        };
+        let chosen = chosen?;
+        if let (true, Some(k), Some((w, s))) = (throw, net.lanes[chosen].key, world) {
             w.set_switches(s, &[(k.id, k.path)]);
         }
         Some(chosen)

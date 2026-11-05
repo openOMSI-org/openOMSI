@@ -154,6 +154,8 @@ fn fallback_fonts() -> &'static [(&'static str, FontVec)] {
             ("", "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
             ("", "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc"),
             ("", "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc"),
+            ("", "/usr/share/fonts/google-noto-sans-cjk-fonts/NotoSansCJK-Regular.ttc"),
+            ("", "/usr/share/fonts/google-noto-sans-cjk-vf-fonts/NotoSansCJK-VF.ttc"),
             ("th", "/usr/share/fonts/truetype/noto/NotoSansThai-Regular.ttf"),
             ("th", "/usr/share/fonts/truetype/tlwg/Garuda.ttf"),
             ("hi", "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf"),

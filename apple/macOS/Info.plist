@@ -50,6 +50,6 @@
 	<key>ITSAppUsesNonExemptEncryption</key><false/>
 	<key>GCSupportsGameMode</key><true/>
 	<key>NSMicrophoneUsageDescription</key><string>openOMSI uses the microphone for voice chat in multiplayer, only while you hold a talk key (or with the open microphone) and only if you switch voice chat on. Nothing is recorded.</string>
-	<key>NSLocalNetworkUsageDescription</key><string>openOMSI finds and joins the multiplayer sessions of other players on your network.</string>
+	<key>NSLocalNetworkUsageDescription</key><string>openOMSI finds and joins the multiplayer sessions of other players on your network, and lets your phone or tablet reach the remote cockpit once you switch it on.</string>
 </dict>
 </plist>

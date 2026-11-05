@@ -250,6 +250,7 @@ pub(crate) fn start_duty_at(app: &mut App, line: &str, tour: &str, trip: usize, 
     app.args.line = Some(line.to_string());
     app.args.tour = Some(tour.to_string());
     app.session.duty = Some(d);
+    app.session.duty_places = false;
     app.service_msg = Some((format!("Line {line}, tour {}", tour.trim()), 4.0));
 }
 
@@ -273,6 +274,7 @@ pub(super) fn start_duty(app: &mut App, line: &str, tour: &str) {
             app.args.line = Some(line.to_string());
             app.args.tour = Some(tour.to_string());
             app.session.duty = Some(d);
+            app.session.duty_places = false;
             app.service_msg = Some((format!("Line {line}, tour {}", tour.trim()), 4.0));
         }
         Err(e) => app.service_msg = Some((omsi_ui::i18n::tr_fill_words("No duty ({e})", &[("{e}", &e)]), 8.0)),

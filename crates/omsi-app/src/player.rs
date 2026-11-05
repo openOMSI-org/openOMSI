@@ -159,6 +159,7 @@ pub(crate) struct Player {
     /// Set while the camera looks at the bus from outside (F3): a switch behind a wall or a
     /// window of the bus is out of reach there, and is neither named, clicked nor turned.
     pub(crate) occlude_controls: bool,
+    pub(crate) drawn_outside: bool,
     /// The press on `pressed_mesh`: whether the script has a trigger for the click itself,
     /// and how far the mouse has been dragged since (px).
     pub(crate) press_info: (bool, f32),
@@ -1044,6 +1045,9 @@ impl Player {
             throttle,
             brake,
         );
+        if a.steering.is_some_and(|s| s.abs() > 0.02) {
+            self.axes.steering = 0.0;
+        }
         self.vehicle.set_controls(omsi_sim::Controls {
             throttle,
             brake,

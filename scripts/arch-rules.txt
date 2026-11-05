@@ -140,6 +140,13 @@ forbid omsi-lan omsi-audio
 forbid omsi-lan omsi-ui
 forbid omsi-lan omsi-launcher-*
 
+forbid omsi-remote omsi-render
+forbid omsi-remote omsi-audio
+forbid omsi-remote omsi-ui
+forbid omsi-remote omsi-net
+forbid omsi-remote omsi-lan
+forbid omsi-remote omsi-launcher-*
+
 # The platform services (updates, presence) know nothing of the game: no simulation, drawing,
 # sound or network sessions.
 forbid omsi-platform omsi-sim
@@ -186,4 +193,4 @@ forbid omsi-guard omsi-audio
 forbid omsi-guard omsi-launcher-model
 
 # Lines of Rust in crates/omsi-app (may grow 2 % past this; lower with --update).
-app-lines 81678
+app-lines 83329

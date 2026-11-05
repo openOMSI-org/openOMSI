@@ -1,0 +1,10 @@
+[package]
+name = "omsi-settings-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Reusable grouping and filtering for settings interfaces"
+
+[dependencies]
+omsi-ui = { path = "../omsi-ui" }
+winit.workspace = true

@@ -3,6 +3,9 @@
 
 use super::*;
 
+/// How far the player can see somebody standing (`seen`).
+const SEEN_REACH: f64 = 230.0;
+
 impl PeopleSim {
     /// LAN uses the room id as the shared source of randomness.  This keeps the
     /// initial pedestrian selection and their generated identities identical on
@@ -311,12 +314,20 @@ impl PeopleSim {
             Some(e) => {
                 let d = p + DVec3::Z * 0.9 - e.pos;
                 let dist = d.length();
-                if dist > 230.0 {
+                if dist > SEEN_REACH {
                     return false;
                 }
                 dist < 3.0 || d.dot(e.fwd) / dist > e.cos_half
             }
         }
+    }
+
+    /// Could another LAN player see somebody standing at `p` (host)? Their view is not known
+    /// here, only where they are: within the distance `seen` reaches. A dedicated server's own
+    /// `seen` is its camera, where nobody plays: the people it took for the pool vanished in
+    /// front of the players, passengers who had just stepped off a bus among them.
+    pub fn near_a_lan_player(&self, p: DVec3) -> bool {
+        self.lan_centers.iter().any(|c| (p - *c).length() < SEEN_REACH)
     }
 
     /// The people of OMSI's pool there are now (everybody but avatars and other players'
@@ -334,7 +345,7 @@ impl PeopleSim {
         let free = (0..self.people.len()).find(|&i| {
             let p = &self.people[i];
             // (not somebody put out to run for a bus, see `runners`)
-            p.puppet.is_none() && !p.remote && matches!(p.state, State::Strolling(_) | State::Standing | State::Leaving { .. }) && !self.seen(p.position) && !self.put_out(p.id)
+            p.puppet.is_none() && !p.remote && matches!(p.state, State::Strolling(_) | State::Standing | State::Leaving { .. }) && !self.seen(p.position) && !self.near_a_lan_player(p.position) && !self.put_out(p.id)
         });
         match free {
             Some(i) => {
