@@ -967,7 +967,7 @@ mod window_tests {
         use super::{vulkan_passed_over, vulkan_pin_after, GraphicsApi};
         use wgpu::Backend::{Dx12, Vulkan};
         let (radeon, apu) = ((0x1002, 0x744c), (0x1002, 0x164e));
-        let (vulkan, dx12, gl) = [wgpu::Backends::VULKAN, wgpu::Backends::DX12, wgpu::Backends::GL].map(|b| Some(GraphicsApi::Native(b)));
+        let [vulkan, dx12, gl] = [wgpu::Backends::VULKAN, wgpu::Backends::DX12, wgpu::Backends::GL].map(|b| Some(GraphicsApi::Native(b)));
         let skipped = |pin, backend, (vendor, device)| vulkan_passed_over(pin, backend, vendor, device);
         let pin = vulkan_pin_after(Some(radeon), [None, vulkan].into_iter());
         assert_eq!(pin, Some(radeon));
