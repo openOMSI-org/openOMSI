@@ -176,9 +176,8 @@ impl ApplicationHandler for App {
                 // releases go on, so that nothing held stays held)
                 if event.state == ElementState::Pressed {
                     if let PhysicalKey::Code(code) = event.physical_key {
-                        if self.integrations.plugin_typing_key(code, event.text.as_deref()) || self.devtools_typing(code, event.text.as_deref()) {
-                            return;
-                        }
+                        if self.integrations.plugin_typing_key(code, event.text.as_deref()) || self.devtools_typing(code, event.text.as_deref())
+                            || self.settings_search_key(code, event.text.as_deref()) { return; }
                         // the game's panels: the field typed into, Esc closing the one on top
                         if self.game_panel_key(code, event.text.as_deref()) {
                             return;

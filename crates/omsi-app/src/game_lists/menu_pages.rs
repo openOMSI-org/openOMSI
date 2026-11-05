@@ -254,6 +254,9 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         rows.push(button("Reset navigator position", "Reset", desc, "vr_nav_reset"));
         pages.push(("VR", rows));
     }
+    for (title, rows) in &mut pages {
+        *rows = section_option_rows(title, std::mem::take(rows));
+    }
     pages
 }
 
@@ -581,40 +584,17 @@ fn weather_rows(mut weather: Vec<(String, String)>, climate: Vec<(String, String
     sectioned_rows(weather, "Live weather", &[("weather", "Weather preset and clouds"), ("temp", "Temperature and humidity"), ("wind_speed", "Wind")])
 }
 
-/// Insert display-only headings while preserving every command and its relative order.
-fn sectioned_rows(rows: Vec<(String, String)>, first: &str, starts: &[(&str, &str)]) -> Vec<(String, String)> {
-    let mut out = Vec::new();
-    for (label, action) in rows {
-        let key = action.strip_suffix(ADJUST).unwrap_or(&action);
-        let title = starts.iter().find(|(id, _)| *id == key).map(|(_, title)| *title).or_else(|| out.is_empty().then_some(first));
-        if let Some(title) = title {
-            out.push((row(title, 'i', "", "", None), HEADING.to_string()));
-        }
-        out.push((label, action));
-    }
-    out
+/// Group the options tabs without changing the settings commands or their order.
+fn section_option_rows(title: &str, rows: Vec<(String, String)>) -> Vec<(String, String)> {
+    let Some((first, starts)) = omsi_settings_ui::option_sections(title) else { return rows };
+    sectioned_rows(rows, first, starts)
 }
 
-#[cfg(test)]
-mod pause_sections_tests {
-    use super::*;
-
-    #[test]
-    fn pause_nested_sections_keep_actions_in_original_order() {
-        let rows = vec![button("A", "A", "", "a"), button("B", "B", "", "b"), button("C", "C", "", "c")];
-        let sections = sectioned_rows(rows.clone(), "First", &[("b", "Second")]);
-        assert_eq!(sections.iter().filter(|r| r.1 != HEADING).cloned().collect::<Vec<_>>(), rows);
-        assert_eq!(sections.iter().filter(|r| r.1 == HEADING).count(), 2);
-    }
-
-    #[test]
-    fn pause_nested_sections_omit_missing_groups_and_match_adjustable_controls() {
-        assert!(sectioned_rows(Vec::new(), "First", &[]).is_empty());
-        let sections = sectioned_rows(vec![button("Wind", "", "", &format!("wind_speed{ADJUST}"))], "First", &[("wind_speed", "Wind")]);
-        assert_eq!(sections.len(), 2);
-        assert!(sections[0].0.starts_with("Wind"));
-        assert_eq!(sections[1].1, format!("wind_speed{ADJUST}"));
-    }
+/// Insert display-only headings while preserving every command and its relative order.
+fn sectioned_rows(rows: Vec<(String, String)>, first: &str, starts: &[(&str, &str)]) -> Vec<(String, String)> {
+    omsi_settings_ui::sectioned_rows(rows, first, starts, ADJUST).into_iter().flat_map(|(heading, (label, action))| {
+        heading.into_iter().map(|title| (row(&title, 'i', "", "", None), HEADING.to_string())).chain(std::iter::once((label, action)))
+    }).collect()
 }
 
 #[cfg(test)]

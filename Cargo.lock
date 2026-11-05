@@ -3798,6 +3798,7 @@ dependencies = [
  "omsi-scene",
  "omsi-scenery",
  "omsi-script",
+ "omsi-settings-ui",
  "omsi-sim",
  "omsi-soundscape",
  "omsi-srcscan",
@@ -4353,6 +4354,14 @@ dependencies = [
  "serde_json",
  "sha2",
  "ureq",
+]
+
+[[package]]
+name = "omsi-settings-ui"
+version = "0.1.0"
+dependencies = [
+ "omsi-ui",
+ "winit",
 ]
 
 [[package]]
