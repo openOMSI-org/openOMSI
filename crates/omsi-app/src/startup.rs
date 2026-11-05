@@ -285,7 +285,8 @@ fn angle_available() -> bool {
 /// The graphics interfaces in the order they are tried: Metal on a Mac, an iPhone and an
 /// iPad; on Windows DirectX
 /// 12 first (the Windows drivers' best-kept path: on Vulkan they reset the device -
-/// "the graphics device was lost" - far more often), then Vulkan, then OpenGL for a card
+/// "the graphics device was lost" - far more often; with `auto` and a discrete AMD Radeon
+/// Vulkan first, see `vulkan_adapter`), then Vulkan, then OpenGL for a card
 /// without either (a GeForce GT 530), then OpenGL ES on ANGLE over DirectX 11 when its DLLs
 /// are there; elsewhere Vulkan, then OpenGL. Settings → Graphics API (`graphics_api`) or
 /// OMSI_BACKEND=vulkan|dx12|gl|angle puts one first: a driver whose Vulkan misbehaves is
@@ -322,24 +323,53 @@ pub(crate) fn backend_order() -> Vec<GraphicsApi> {
     first.into_iter().chain(all.into_iter().filter(|b| Some(*b) != first)).collect()
 }
 
-static VULKAN_FIRST: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+static VULKAN_FIRST: std::sync::OnceLock<Option<(u32, u32)>> = std::sync::OnceLock::new();
 
 fn vulkan_first(wanted: &str) -> bool {
-    matches!(wanted.trim().to_ascii_lowercase().as_str(), "" | "auto")
-        && *VULKAN_FIRST.get_or_init(|| {
-            let lost = vulkan_lost_path().is_some_and(|p| p.exists());
+    VULKAN_FIRST
+        .get_or_init(|| {
+            if !auto_api(wanted) {
+                return None;
+            }
             let dx12 = GraphicsApi::Native(wgpu::Backends::DX12);
-            let adapters = pollster::block_on(backend_instance(dx12).enumerate_adapters(dx12.backends()));
-            let chosen = adapters.iter().map(|a| a.get_info()).find(|i| i.device_type == wgpu::DeviceType::DiscreteGpu);
-            !lost && chosen.is_some_and(|i| prefers_vulkan(i.vendor))
+            let adapters: Vec<_> = pollster::block_on(backend_instance(dx12).enumerate_adapters(dx12.backends()))
+                .iter()
+                .map(|a| a.get_info())
+                .map(|i| (i.device_type, i.vendor, i.device))
+                .collect();
+            let mark = vulkan_lost_path().and_then(|p| std::fs::read_to_string(p).ok());
+            let chosen = vulkan_adapter(wanted, mark.as_deref(), &adapters);
+            if chosen.is_none() && mark.is_some() && vulkan_adapter(wanted, None, &adapters).is_some() {
+                log::info!("graphics: Auto keeps to DirectX 12, a device was lost on Vulkan here ({})", mark.as_deref().unwrap_or_default().trim());
+            }
+            chosen
         })
+        .is_some()
 }
 
-fn prefers_vulkan(vendor: u32) -> bool {
-    vendor == 0x1002
+fn auto_api(wanted: &str) -> bool {
+    matches!(wanted.trim().to_ascii_lowercase().as_str(), "" | "auto")
 }
 
-pub(crate) fn vulkan_lost_path() -> Option<PathBuf> {
+fn vulkan_adapter(wanted: &str, lost_mark: Option<&str>, adapters: &[(wgpu::DeviceType, u32, u32)]) -> Option<(u32, u32)> {
+    let (_, vendor, device) = *adapters.iter().find(|a| a.0 == wgpu::DeviceType::DiscreteGpu)?;
+    let lost = lost_mark.is_some_and(|m| m.trim() == vulkan_lost_mark(vendor, device));
+    (auto_api(wanted) && vendor == 0x1002 && !lost).then_some((vendor, device))
+}
+
+fn vulkan_lost_mark(vendor: u32, device: u32) -> String {
+    format!("{}|{vendor:04x}-{device:04x}", option_env!("OPENOMSI_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")))
+}
+
+pub(crate) fn mark_vulkan_lost() {
+    let (Some(Some((vendor, device))), Some(p)) = (VULKAN_FIRST.get(), vulkan_lost_path()) else { return };
+    if let Some(dir) = p.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let _ = std::fs::write(p, vulkan_lost_mark(*vendor, *device));
+}
+
+fn vulkan_lost_path() -> Option<PathBuf> {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
     Some(PathBuf::from(home).join(".openomsi").join("vulkan-lost"))
 }
@@ -448,7 +478,7 @@ impl Opener {
                 if is_software(&info) != self.software_round {
                     continue;
                 }
-                if info.backend == wgpu::Backend::Vulkan && VULKAN_FIRST.get() == Some(&true) && info.device_type != wgpu::DeviceType::DiscreteGpu {
+                if info.backend == wgpu::Backend::Vulkan && VULKAN_FIRST.get().is_some_and(|c| c.is_some_and(|c| c != (info.vendor, info.device))) {
                     continue;
                 }
                 let what = format!("{} ({:?})", info.name, info.backend);
@@ -895,9 +925,23 @@ mod window_tests {
     }
 
     #[test]
-    fn only_an_amd_radeon_opens_vulkan_first() {
-        assert!(super::prefers_vulkan(0x1002));
-        assert!(!super::prefers_vulkan(0x10de) && !super::prefers_vulkan(0x8086));
+    fn auto_opens_vulkan_only_on_a_discrete_amd_radeon() {
+        use wgpu::DeviceType::{DiscreteGpu, IntegratedGpu};
+        let amd = (DiscreteGpu, 0x1002, 0x744c);
+        let apu = (IntegratedGpu, 0x1002, 0x164e);
+        let nvidia = (DiscreteGpu, 0x10de, 0x2684);
+        let pick = |wanted, mark: Option<&str>, a: &[_]| super::vulkan_adapter(wanted, mark, a);
+        assert_eq!(pick("auto", None, &[apu, amd]), Some((0x1002, 0x744c)));
+        assert_eq!(pick("", None, &[amd]), Some((0x1002, 0x744c)));
+        assert_eq!(pick("auto", None, &[apu]), None);
+        assert_eq!(pick("auto", None, &[apu, nvidia]), None);
+        assert_eq!(pick("auto", None, &[nvidia, amd]), None);
+        assert_eq!(pick("vulkan", None, &[amd]), None);
+        assert_eq!(pick("dx12", None, &[amd]), None);
+        let mark = super::vulkan_lost_mark(0x1002, 0x744c);
+        assert_eq!(pick("auto", Some(&mark), &[amd]), None);
+        assert_eq!(pick("auto", Some("0.0.1|1002-744c"), &[amd]), Some((0x1002, 0x744c)));
+        assert_eq!(pick("auto", Some(&super::vulkan_lost_mark(0x1002, 0x73bf)), &[amd]), Some((0x1002, 0x744c)));
     }
 
     #[test]

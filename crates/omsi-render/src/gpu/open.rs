@@ -117,8 +117,8 @@ impl Renderer {
         };
         // a small or shared graphics chip gets a lighter picture (see `lighter_picture`)
         GL_BACKEND.store(info.backend == wgpu::Backend::Gl, std::sync::atomic::Ordering::Relaxed);
-        VULKAN_BACKEND.store(info.backend == wgpu::Backend::Vulkan, std::sync::atomic::Ordering::Relaxed);
-        MULTISAMPLED_SHADING.store(!cfg!(target_os = "android") && info.backend != wgpu::Backend::Gl && adapter.get_downlevel_capabilities().flags.contains(wgpu::DownlevelFlags::MULTISAMPLED_SHADING), std::sync::atomic::Ordering::Relaxed);
+        AMD_VULKAN.store(info.backend == wgpu::Backend::Vulkan && info.vendor == 0x1002, std::sync::atomic::Ordering::Relaxed);
+        MULTISAMPLED_SHADING.store(!cfg!(any(target_os = "android", target_vendor = "apple")) && info.backend != wgpu::Backend::Gl && adapter.get_downlevel_capabilities().flags.contains(wgpu::DownlevelFlags::MULTISAMPLED_SHADING), std::sync::atomic::Ordering::Relaxed);
         let options = gpu_memory::lighter_picture(&info, vram, options);
         let most = gpu_memory::ceiling(&info, vram);
         *CEILING.lock().unwrap_or_else(|e| e.into_inner()) = Some(if intel_vulkan_safe { gpu_memory::Ceiling { msaa: 1, ssao: false, shadow_size: most.shadow_size.min(2048), ..most } } else { most });
