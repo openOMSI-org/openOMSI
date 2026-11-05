@@ -61,6 +61,8 @@ impl App {
             || self.photo.is_some()
             || self.input.look_lock.is_some()
             || !matches!(self.view.as_str(), "driver" | "outside" | "pax");
+        let used = moved || actions.iter().any(|a| a.1) || analog.look != [0.0, 0.0];
+        self.input.cursor_stale |= used;
         let hide = (moved || actions.iter().any(|a| a.1)) && !needs_mouse && !vr_on && self.input.window_focused;
         if self.xr.vr_nav_edit.is_none() && hide != self.input.cursor_hidden.is_some() && (hide || needs_mouse) {
             if let Some(win) = self.window.as_ref() {

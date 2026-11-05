@@ -291,6 +291,7 @@ fn a_lamps_lenses_follow_its_alphascale_and_light_map_variables() {
         count: 4,
         alpha: vec![(0, "Red".into()), (1, "Yellow".into()), (2, "Green".into())],
         light: vec![(0, "Red".into()), (1, "Yellow".into()), (2, "Green".into()), (3, "NoSuchVar".into())],
+        uv: vec![],
     };
     let state = |v: &str| standard_traffic_lamp(v, true, false, false, false);
     let (alpha, light) = slots.values(&state);
@@ -299,8 +300,18 @@ fn a_lamps_lenses_follow_its_alphascale_and_light_map_variables() {
     let state = |v: &str| standard_traffic_lamp(v, false, false, true, false);
     assert_eq!(slots.values(&state), (vec![0.0, 0.0, 1.0, 1.0], vec![0.0, 0.0, 1.0, 1.0]));
     // a light map without a variable is always on
-    let plain = LampSlots { count: 1, alpha: vec![], light: vec![(0, String::new())] };
+    let plain = LampSlots { count: 1, alpha: vec![], light: vec![(0, String::new())], uv: vec![] };
     assert_eq!(plain.values(&|_| Some(0.0)).1, vec![1.0]);
+}
+
+#[test]
+fn a_scenery_objects_texcoordtrans_variables_scroll_its_slots() {
+    let slots = LampSlots { count: 3, uv: vec![(1, None, Some("water_y".into())), (2, Some("0.25".into()), Some("nope".into()))], ..Default::default() };
+    let value = |v: &str| v.parse::<f32>().ok().or((v == "water_y").then_some(0.4));
+    assert_eq!(slots.uv_values(&value), vec![[0.0, 0.0], [0.0, 0.4], [0.25, 0.0]]);
+    assert!(LampSlots { count: 2, ..Default::default() }.uv_values(&value).is_empty());
+    let both = LampSlots { count: 1, uv: vec![(0, Some("0.25".into()), None), (0, None, Some("water_y".into()))], ..Default::default() };
+    assert_eq!(both.uv_values(&value), vec![[0.25, 0.4]]);
 }
 
 /// A season's snow textures are told by their folder, whatever its case (#879).

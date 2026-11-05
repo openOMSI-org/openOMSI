@@ -368,6 +368,7 @@ pub(crate) struct InputState {
     pub(crate) look_lock: Option<bool>,
     /// The cursor hidden while a controller drives: where it stood.
     pub(crate) cursor_hidden: Option<(f32, f32)>,
+    pub(crate) cursor_stale: bool,
     /// The wheel's place when it last counted as moved.
     pub(crate) last_ctl_steer: Option<f32>,
     /// The mouse's throttle and brake (eased in with the steering).

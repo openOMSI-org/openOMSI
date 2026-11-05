@@ -58,7 +58,7 @@ pub struct ScriptedView {
     pub texts: Vec<(TextureId, omsi_sim::texttex::TextTextureState)>,
     pub htmls: Vec<(usize, TextureId)>,
     pub alpha_slots: Vec<LampSlots>,
-    pub alpha_last: Vec<Vec<f32>>,
+    pub alpha_last: Vec<(Vec<f32>, Vec<[f32; 2]>)>,
     /// Its meshes' transforms and visibility as the last step left them (for the rays of
     /// the mouse).
     pub mesh_xf: Vec<Mat4>,
@@ -785,12 +785,13 @@ impl World {
                 let visible = visible && (arrows || !v.ty.sco.is_help_arrow);
                 renderer.set_transform(scene, *inst, v.pos, v.xf * *xf);
                 // (the slots its `[alphascale]` variables fade, see `ScriptedObject::alpha_slots`)
-                let alpha = v.alpha_slots.get(k).filter(|l| !l.alpha.is_empty()).map(|l| l.values(&|n| n.trim().parse::<f32>().ok().or_else(|| var(n))).0);
+                let value = |n: &str| n.trim().parse::<f32>().ok().or_else(|| var(n));
+                let alpha = v.alpha_slots.get(k).filter(|l| !l.alpha.is_empty() || !l.uv.is_empty()).map(|l| (l.values(&value).0, l.uv_values(&value)));
                 let p = &mut scene.instances[*inst];
                 match alpha {
                     Some(a) => {
                         if p.visible != visible || v.alpha_last.get(k) != Some(&a) {
-                            renderer.set_params(scene, *inst, &a, visible, &[]);
+                            renderer.set_params(scene, *inst, &a.0, visible, &a.1);
                             if let Some(last) = v.alpha_last.get_mut(k) {
                                 *last = a;
                             }
