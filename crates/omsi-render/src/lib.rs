@@ -159,6 +159,7 @@ pub struct Renderer {
     temporal: Option<TemporalState>,
     temporal_failed: bool,
     temporal_window: bool,
+    temporal_kept: Option<temporal::Runtime>,
     /// The frame's numbers, waiting for `temporal_present` at the end of it.
     temporal_pending: Option<TemporalFrame>,
     /// The same, at the main pass's sample count (colour writes off):
@@ -301,6 +302,8 @@ pub struct RenderOptions {
     /// with the vendor's DLLs beside the game (see `temporal`). Elsewhere, or when it cannot
     /// start, the picture is drawn as without it.
     pub temporal: Option<Temporal>,
+    /// The player's MSAA while an upscaler has taken its place.
+    pub msaa_fallback: u32,
     /// RCAS sharpening strength, from 0 (none) to 1.
     pub fsr_sharpness: f32,
     /// VR: each eye is drawn at this fraction of its headset image and scaled up to it (by
@@ -386,6 +389,7 @@ impl Default for RenderOptions {
             render_scale: 0.0,
             fsr1: false,
             temporal: None,
+            msaa_fallback: 0,
             xr_scale: 1.0,
             fsr_sharpness: 0.8,
             compress_textures: true,

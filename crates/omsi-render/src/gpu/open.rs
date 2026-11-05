@@ -126,7 +126,7 @@ impl Renderer {
         let temporal = upscaler_device::usable(options.temporal, &info);
         let (temporal, dlss_extensions) = upscaler_device::dlss_vulkan(temporal, &adapter, &info);
         let options = match temporal {
-            Some(t) => RenderOptions { msaa: 1, temporal: Some(t), ..options },
+            Some(t) => RenderOptions { msaa: 1, msaa_fallback: options.msaa, temporal: Some(t), ..options },
             None => RenderOptions { temporal: None, ..options },
         };
         let most = gpu_memory::ceiling(&info, vram);
@@ -213,6 +213,10 @@ impl Renderer {
         if omsi_cfg::flags::OMSI_GPU_TIMERS.is_set() {
             required_features |= adapter.features() & wgpu::Features::TIMESTAMP_QUERY;
         }
+        // (FSR 3 on Vulkan picks its 16 bit shaders by what the card has, not what the device enabled)
+        if info.backend == wgpu::Backend::Vulkan && options.temporal.is_some_and(|t| t.upscaler == crate::temporal::TemporalUpscaler::Fsr3) {
+            required_features |= adapter.features() & wgpu::Features::SHADER_F16;
+        }
         // DXT textures stay compressed on the GPU where it takes them (Apple silicon does);
         // OMSI_NO_BC=1 uploads everything as RGBA (the old way, for comparisons), and so does
         // the settings' `gpu_texture_compression` off
@@ -272,8 +276,9 @@ impl Renderer {
             Err(e) => {
                 // (the device as wgpu makes it, DLSS off: better than no picture)
                 crate::temporal::dlss_vulkan_abandon();
-                log::warn!("dlss upscaling is off: {e:#}; MSAA stays off too until another upscaling choice");
+                log::warn!("dlss upscaling is off: {e:#}");
                 options.temporal = None;
+                options.msaa = options.msaa_fallback.max(1);
                 None
             }
         });
@@ -754,6 +759,7 @@ impl Renderer {
             temporal: None,
             temporal_failed: false,
             temporal_window: false,
+            temporal_kept: None,
             temporal_pending: None,
             prepass_msaa_pipelines: prepass.msaa_pipelines,
             prepass_eye_pipelines: prepass.eye_pipelines,

@@ -69,7 +69,7 @@ struct TemporalPrev {
     output: (u32, u32),
 }
 
-enum Runtime {
+pub(crate) enum Runtime {
     Dlss(streamline::Runtime),
     Fsr3(fidelityfx::Upscaler),
 }
@@ -124,13 +124,12 @@ pub(super) fn opaque(mut rgba: Vec<u8>) -> Vec<u8> {
     rgba
 }
 
-/// The textures' mip bias of an upscaled frame: log2(render width / window width), as NVIDIA's
-/// guide and AMD's docs give it (-0.79 at Balanced). Without it the textures are sampled for the
-/// small picture and the cab goes soft.
 pub(crate) fn window_fits(full: (u32, u32)) -> bool {
     full.0 >= 64 && full.1 >= 64
 }
 
+/// The textures' mip bias of an upscaled frame: log2(render width / window width), -0.79 at
+/// Balanced. Without it the textures are sampled for the small picture and the cab goes soft.
 pub(crate) fn temporal_mip_bias(render_w: u32, full_w: u32) -> f32 {
     (render_w.max(1) as f32 / full_w.max(1) as f32).log2().clamp(-3.0, 0.0)
 }
@@ -142,25 +141,44 @@ impl Renderer {
     pub(crate) fn temporal_fits(&mut self, full: (u32, u32)) -> bool {
         let fits = window_fits(full);
         if !fits {
-            if let Some(d) = self.temporal.as_mut() {
-                d.prev = None;
-            }
+            self.temporal_forget();
         }
         fits
     }
 
+    /// The window was drawn without the upscaler: its history and last picture are out of date.
+    pub(crate) fn temporal_forget(&mut self) {
+        if let Some(d) = self.temporal.as_mut() {
+            d.prev = None;
+        }
+    }
+
+    /// The running upscaler, its GPU work done, to go on in a renderer rebuilt on this device.
+    pub(crate) fn temporal_runtime(&mut self) -> Option<Runtime> {
+        let mut d = self.temporal.take()?;
+        match &mut d.runtime {
+            Runtime::Dlss(r) => r.wait(),
+            Runtime::Fsr3(r) => r.wait(),
+        }
+        Some(d.runtime)
+    }
+
     pub(crate) fn temporal_start(&mut self) -> bool {
         if self.temporal_failed {
-            self.temporal = None;
+            if self.temporal.take().is_some() {
+                // (its last commands may still use the textures that go with it)
+                let _ = crate::wait_gpu(&self.device, None);
+            }
             return false;
         }
         if self.temporal.is_some() {
             return true;
         }
         let Some(asked) = self.options.temporal.filter(|_| self.temporal_pipes.is_some()) else { return false };
-        let loaded = match asked.upscaler {
-            TemporalUpscaler::Dlss => streamline::Runtime::load(&self.device).map(Runtime::Dlss),
-            TemporalUpscaler::Fsr3 => fidelityfx::Upscaler::load(&self.device).map(Runtime::Fsr3),
+        let loaded = match (asked.upscaler, self.temporal_kept.take()) {
+            (TemporalUpscaler::Dlss, Some(r @ Runtime::Dlss(_))) | (TemporalUpscaler::Fsr3, Some(r @ Runtime::Fsr3(_))) => Ok(r),
+            (TemporalUpscaler::Dlss, _) => streamline::Runtime::load(&self.device).map(Runtime::Dlss),
+            (TemporalUpscaler::Fsr3, _) => fidelityfx::Upscaler::load(&self.device).map(Runtime::Fsr3),
         };
         match loaded {
             Ok(runtime) => {
@@ -180,7 +198,7 @@ impl Renderer {
                 true
             }
             Err(e) => {
-                log::warn!("{} upscaling is off: {e:#}; MSAA stays off too until another upscaling choice", asked.upscaler.as_str());
+                log::warn!("{} upscaling is off: {e:#}", asked.upscaler.as_str());
                 self.temporal_failed = true;
                 false
             }
@@ -375,7 +393,7 @@ impl Renderer {
         let (Some(d), Some(ao)) = (self.temporal.as_mut(), self.targets.ao.as_ref()) else { return };
         let Some(t) = d.targets.as_ref() else { return };
         let fov = camera.fov_deg.to_radians();
-        let proj = Mat4::perspective_rh(fov, frame.aspect, camera.far, camera.near);
+        let proj = Mat4::perspective_rh(fov, frame.aspect, camera.depth_far(), camera.near);
         let constants = FrameConstants {
             view_to_clip: sl_matrix(proj),
             clip_to_view: sl_matrix(proj.inverse()),
@@ -387,7 +405,7 @@ impl Renderer {
             camera_right: camera.right().to_array(),
             camera_fwd: camera.forward().to_array(),
             near: camera.near,
-            far: camera.far,
+            far: camera.depth_far(),
             fov,
             aspect: frame.aspect,
             reset: frame.reset,
@@ -403,7 +421,7 @@ impl Renderer {
         let ok = match result {
             Ok(()) => true,
             Err(e) => {
-                log::error!("upscaling stopped working ({e:#}); the picture is drawn without it from now on, and MSAA stays off until another upscaling choice");
+                log::error!("upscaling stopped working ({e:#}); the picture is drawn without it from now on");
                 false
             }
         };

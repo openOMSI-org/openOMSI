@@ -366,6 +366,10 @@ pub struct Upscaler {
 unsafe impl Send for Upscaler {}
 
 impl Upscaler {
+    pub(crate) fn wait(&mut self) {
+        self.backend.wait();
+    }
+
     pub fn load(device: &wgpu::Device) -> Result<Upscaler> {
         let dir = game_dir();
         let backend = if let Some(hal) = unsafe { device.as_hal::<wgpu_hal::api::Dx12>() } {

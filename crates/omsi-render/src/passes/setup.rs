@@ -54,6 +54,8 @@ impl Renderer {
             self.fall_back_without_ray_tracing(scene);
         } else if self.errors.gpu_error.load(std::sync::atomic::Ordering::Relaxed) {
             self.fall_back_to_single_sample(scene);
+        } else if self.options.temporal.is_some() && (self.temporal_failed || self.temporal_pipes.is_none()) {
+            self.fall_back_without_upscaler(scene);
         }
         true
     }
@@ -79,11 +81,11 @@ impl Renderer {
             let size = self.temporal_render_size((full_w, full_h));
             self.temporal_targets(size, (full_w, full_h));
             size
-        } else if with_overlays && projection.is_some() {
-            // (a triple screen turned on in the menu: its panels are no upscaler's picture)
-            self.scaled_size(full_w, full_h)
-        } else if with_overlays {
+        } else if with_overlays && self.temporal_window {
             self.scene_size(full_w, full_h)
+        } else if with_overlays {
+            // (a photo, or a triple screen turned on in the menu: no upscaler's picture)
+            self.scaled_size(full_w, full_h)
         } else if let Some(s) = self.xr_fsr_scale().filter(|_| projection.is_some()) {
             // (a VR eye with FSR 1: drawn smaller, scaled up to the headset's image)
             (((full_w as f32 * s).round() as u32).max(1), ((full_h as f32 * s).round() as u32).max(1))

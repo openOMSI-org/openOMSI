@@ -637,7 +637,6 @@ fn shaders_validate_and_match_the_uniforms() {
         ("ray-traced reflections", rt::reflect_source()),
         ("texture means", include_str!("../rt_avg.wgsl").to_string()),
         ("rt texture coordinates", include_str!("../rt_uv.wgsl").to_string()),
-        // temporal upscaling: the scene module with the motion prepass appended
         ("temporal motion", format!("{}\n{}", scene_shader_source(false), include_str!("../temporal/motion.wgsl"))),
     ];
     let sizes: &[(&str, usize)] = &[

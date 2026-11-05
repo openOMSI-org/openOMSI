@@ -133,6 +133,65 @@ fn a_triple_screen_turned_on_with_an_upscaler_is_not_drawn_at_its_size() {
     assert!(d < 0.05, "the panels were drawn smaller and stretched: {d}");
 }
 
+fn upscaled_renderer() -> Renderer {
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let temporal = Some(Temporal { upscaler: TemporalUpscaler::Fsr3, quality: TemporalQuality::Performance });
+    let options = RenderOptions { msaa: 4, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, temporal, ..Default::default() };
+    pollster::block_on(Renderer::new_with(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb), options)).expect("test renderer")
+}
+
+/// A photo is no upscaler's picture: it is drawn at its own size, and the upscaler neither starts
+/// for it nor fails for the session because of it.
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn a_photo_does_not_go_through_the_upscaler() {
+    let (w, h) = (192, 128);
+    let lighting = Lighting { shadows: false, fog_density: 0.0, ..Default::default() };
+    let mut plain = renderer(1.0, false);
+    let mut scene = rails_scene(&mut plain);
+    let a = plain.render_to_image(&mut scene, w, h, &camera(), &lighting).unwrap();
+    let mut upscaled = upscaled_renderer();
+    let mut scene = rails_scene(&mut upscaled);
+    let b = upscaled.render_to_image(&mut scene, w, h, &camera(), &lighting).unwrap();
+    assert!(!upscaled.temporal_failed && upscaled.temporal.is_none());
+    let d = difference(&a, &b);
+    assert!(d < 0.05, "the photo was drawn smaller and stretched: {d}");
+}
+
+/// An upscaler whose DLLs cannot be loaded gives the picture back to the player's MSAA, and a
+/// rebuild while one is asked for keeps it off (the test's folder has no vendor DLLs).
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn the_msaa_comes_back_only_when_the_upscaler_gives_up() {
+    let (w, h) = (192, 128);
+    let lighting = Lighting { shadows: false, fog_density: 0.0, ..Default::default() };
+    let mut r = upscaled_renderer();
+    if r.options.temporal.is_none() {
+        return;
+    }
+    assert_eq!((r.options.msaa, r.options.msaa_fallback), (1, 4));
+    let mut scene = rails_scene(&mut r);
+    let options = RenderOptions { msaa: 4, shadow_size: 512, ..r.options };
+    assert!(r.rebuild_with(&mut scene, options));
+    assert_eq!((r.options.msaa, r.options.msaa_fallback, r.options.shadow_size), (1, 4, 512));
+    let tex = r.device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let view = tex.create_view(&Default::default());
+    for _ in 0..2 {
+        r.render_window(&mut scene, &view, w, h, &camera(), &lighting);
+    }
+    assert!(r.options.temporal.is_none());
+    assert_eq!(r.options.msaa, 4);
+}
+
 /// VR with FSR 1: the headset image is full-sized, each eye is drawn at the eye resolution
 /// and FSR 1 scales it up to the image; without FSR 1 the image itself is that small, as
 /// before.

@@ -171,6 +171,7 @@ mod streamline {
     pub struct Runtime;
 
     impl Runtime {
+        pub(crate) fn wait(&mut self) {}
         pub fn load(_device: &wgpu::Device) -> Result<Runtime> {
             anyhow::bail!("DLSS is Windows-only (DirectX 12)")
         }
@@ -191,6 +192,7 @@ mod fidelityfx {
     pub struct Upscaler;
 
     impl Upscaler {
+        pub(crate) fn wait(&mut self) {}
         pub fn load(_device: &wgpu::Device) -> Result<Upscaler> {
             anyhow::bail!("FSR 3 upscaling is Windows-only (DirectX 12)")
         }

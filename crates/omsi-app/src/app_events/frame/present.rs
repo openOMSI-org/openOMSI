@@ -345,7 +345,7 @@ impl App {
                 &rig,
             );
         } else if !mirrored {
-            r.render(
+            r.render_window(
                 scene,
                 &view,
                 s.config.width,

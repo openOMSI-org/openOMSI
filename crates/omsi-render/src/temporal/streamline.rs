@@ -708,6 +708,10 @@ struct Calls {
 }
 
 impl Runtime {
+    pub(crate) fn wait(&mut self) {
+        self.backend.wait();
+    }
+
     pub fn load(device: &wgpu::Device) -> Result<Runtime> {
         if let Some(hal) = unsafe { device.as_hal::<wgpu_hal::api::Dx12>() } {
             let raw_device = hal.raw_device().clone();
