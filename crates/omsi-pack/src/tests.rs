@@ -449,3 +449,24 @@ fn malformed_licence_ids_and_unprotected_licensed_manifests_are_rejected() {
     assert!(load_manifest(&plain, &trusted).is_err());
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn a_pack_revision_is_scanned_once_and_every_read_is_still_authenticated() {
+    let root = licence_scratch("verify-once");
+    let signer = SigningKey::generate(&SystemRandom::new()).unwrap();
+    let mut metadata = licence_metadata(&[0; 32]);
+    metadata.key_id = None;
+    let pack = root.join("plain.oopp");
+    let manifest = create_pack(&pack, metadata, &licence_input(), &signer, None, &AtomicBool::new(false)).unwrap();
+    let trusted = licence_trust(&signer);
+    let keys = MemoryKeys::default();
+    let first = VerifiedPack::open_unlocked(&pack, &trusted, &keys).unwrap();
+    assert_eq!(first.read("maps/Fixture/global.cfg").unwrap(), b"owned synthetic fixture");
+
+    let asset = pack.join(format!("assets/{}/plain.bin", sha256_hex(manifest.assets[0].id.as_bytes())));
+    fs::write(&asset, b"changed after the first scan").unwrap();
+    // (the revision was scanned once, so a second open does not read every asset again)
+    let second = VerifiedPack::open_unlocked(&pack, &trusted, &keys).unwrap();
+    assert!(second.read("maps/Fixture/global.cfg").is_err(), "a changed asset was returned");
+    fs::remove_dir_all(root).unwrap();
+}

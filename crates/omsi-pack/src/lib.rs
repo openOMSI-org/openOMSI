@@ -640,7 +640,7 @@ impl VerifiedPack {
                 manifest,
                 content_key: None,
             };
-            pack.verify_all()?;
+            pack.verify_once()?;
             return Ok(pack);
         }
         let unsigned_key = manifest.key_id.as_deref().unwrap_or_default();
@@ -659,8 +659,26 @@ impl VerifiedPack {
             manifest,
             content_key: Some(*content_key),
         };
-        pack.verify_all()?;
+        pack.verify_once()?;
         Ok(pack)
+    }
+
+    /// `verify_all` once per pack revision and key in this process: the game opens every
+    /// installed pack at launch and each dependency again per map, and `read` still
+    /// authenticates every asset it returns.
+    fn verify_once(&self) -> Result<()> {
+        static VERIFIED: std::sync::Mutex<BTreeSet<(PathBuf, String, String)>> = std::sync::Mutex::new(BTreeSet::new());
+        let revision = (
+            self.root.clone(),
+            sha256_hex(&serde_json::to_vec(&self.manifest)?),
+            self.content_key.as_ref().map(|key| sha256_hex(key)).unwrap_or_default(),
+        );
+        if VERIFIED.lock().unwrap_or_else(|e| e.into_inner()).contains(&revision) {
+            return Ok(());
+        }
+        self.verify_all()?;
+        VERIFIED.lock().unwrap_or_else(|e| e.into_inner()).insert(revision);
+        Ok(())
     }
 
     pub fn manifest(&self) -> &Manifest {
