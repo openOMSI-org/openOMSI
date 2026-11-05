@@ -199,3 +199,45 @@ fn a_busy_host_keeps_the_client_waiting_without_permanent_rejection() {
     assert!(!fresh.waiting_for_slot);
 }
 
+
+/// A loading player not heard from for `LOADING_ALIVE` (its game closed or stuck) holds no
+/// loading slot: the next one comes in instead of waiting up to `LOAD_TIMEOUT` for it.
+#[test]
+fn a_silent_loader_holds_no_loading_slot() {
+    let mut host = LanSession::host(0, "host", world("m"), false).unwrap();
+    host.set_peer_limit(20);
+    for id in 100..100 + MAX_JOINING as u32 {
+        let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, id as u16 + 30000));
+        host.peers.insert(id, Peer::new(Some(addr), Pose::default()));
+    }
+    let a = SocketAddr::from((Ipv4Addr::LOCALHOST, 42011));
+    let hello = format!("HELLO|{PROTOCOL}|-|next|Vehicles/x.bus|m|1989-05-30|32400|||||||wait-v1");
+    let fields: Vec<&str> = hello.split('|').collect();
+    host.on_hello(&fields, a);
+    assert_eq!(host.peer_count(), MAX_JOINING, "every slot is held by a live loader: it waits");
+    // one loader has been silent past LOADING_ALIVE (but not yet timed out)
+    host.peers.get_mut(&100).unwrap().last_seen = Instant::now() - LOADING_ALIVE - Duration::from_secs(1);
+    host.on_hello(&fields, a);
+    assert_eq!(host.peer_count(), MAX_JOINING + 1, "the silent loader's slot is free");
+    assert!(host.peers.contains_key(&100), "it is still timed out only after LOAD_TIMEOUT");
+}
+
+/// A server loading its world tells new players to wait (an old game: to try again) and lets
+/// them in once it is ready; players already there are not touched.
+#[test]
+fn a_server_loading_its_world_lets_nobody_new_in() {
+    let mut host = LanSession::host(0, "dedicated", world("m"), false).unwrap();
+    host.set_starting(true);
+    let client = raw();
+    let from = SocketAddr::from((Ipv4Addr::LOCALHOST, client.local_addr().unwrap().port()));
+    assert!(host.defer_new_join(from, true));
+    let mut buf = [0u8; 256];
+    let (n, _) = client.recv_from(&mut buf).unwrap();
+    assert_eq!(String::from_utf8_lossy(&buf[..n]), format!("WAIT|{PROTOCOL}|2|starting"));
+    assert!(host.defer_new_join(from, false));
+    let (n, _) = client.recv_from(&mut buf).unwrap();
+    assert!(String::from_utf8_lossy(&buf[..n]).contains("still loading its world"));
+    assert!(host.waiting_joins.is_empty());
+    host.set_starting(false);
+    assert!(!host.defer_new_join(from, true), "ready: in it comes");
+}

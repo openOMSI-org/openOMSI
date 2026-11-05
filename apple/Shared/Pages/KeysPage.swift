@@ -103,7 +103,7 @@ enum Keys {
         "door_1": "Door 1 (front), any bus", "door_2": "Door 2, any bus", "door_3": "Door 3, any bus", "door_4": "Door 4, any bus", "doors_all": "All doors, any bus",
         "doors_release": "Door release (passengers open), any bus", "ticket_give": "Sell the requested ticket", "view_set_driver": "Driver's view", "view_set_passenger": "Passenger view",
         "view_set_outside": "Outside view", "view_toggle_viewpoint": "Next view", "view_toggle_interior": "Cabin and outside, one key", "view_interiorcam_plus": "Next interior camera",
-        "view_interiorcam_minus": "Previous interior camera", "view_reset_direction": "Reset the view direction", "view_reset_all_directions": "Reset all view directions",
+        "view_interiorcam_minus": "Previous interior camera", "view_reset_direction": "Reset the view direction", "view_reset_all_directions": "Reset all view directions", "head_tracking_recenter": "Head tracking: centre again",
         "view_look_left": "Look left (hold)", "view_look_right": "Look right (hold)", "view_look_up": "Look up (hold)", "view_look_down": "Look down (hold)",
         "vr_recenter": "VR: Reset view", "vr_toggle_desktop_mirror": "VR: Monitor preview", "vr_toggle_mode": "VR: Switch VR / desktop", "vr_toggle_navigator": "VR: Toggle navigator",
         "vr_position_navigator": "VR: Position navigator", "exit": "Quit", "pax_door_request": "Passenger: request entry / exit", "chat_open": "Multiplayer: write in the chat",
@@ -135,7 +135,7 @@ enum Keys {
     }
 
     static func gameOnly(_ a: String) -> Bool {
-        a.range(of: "^(vr_|chat_|view_|door_[1-4]$|doors_all$|doors_release$|gear_(up|down)$|sim_pause$|open_menu$|screenshot$|photo_mode$|clean_screen$|get_up$|quicksave$|toggel_|exit$|voice_radio$|voice_nearby$|pax_door_request$)", options: .regularExpression) != nil
+        a.range(of: "^(vr_|chat_|view_|door_[1-4]$|doors_all$|doors_release$|gear_(up|down)$|sim_pause$|open_menu$|screenshot$|photo_mode$|clean_screen$|get_up$|quicksave$|toggel_|exit$|voice_radio$|voice_nearby$|pax_door_request$|head_tracking_recenter$)", options: .regularExpression) != nil
     }
 }
 

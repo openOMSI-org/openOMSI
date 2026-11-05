@@ -389,6 +389,13 @@ fn discord_settings_round_trip_and_default_off() {
 }
 
 #[test]
+fn remote_cockpit_round_trips_and_is_off_by_default() {
+    assert!(!Settings::default().remote_cockpit);
+    let s = Settings { remote_cockpit: true, remote_cockpit_port: 9000, ..Default::default() };
+    assert_eq!(Settings::from_text(&s.to_text()), s);
+}
+
+#[test]
 fn voice_chat_is_off_by_default_and_round_trips() {
     let d = Settings::default();
     assert!(!d.voice_enabled && !d.voice_all_off && d.voice_mode == "ptt" && d.voice_range == 75.0);

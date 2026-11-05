@@ -41,6 +41,7 @@ mod bus_files;
 mod channel;
 pub(crate) mod failure;
 mod host_bus;
+pub mod hofs;
 pub mod identity;
 mod paced;
 mod pieces;
@@ -616,6 +617,11 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
                     }
                 }
             }
+            // the depot file of the host's AI buses (`hofs`)
+            ["HOF", name_hex] => match server_fleet::unhex_text(name_hex) {
+                Some(name) => hofs::answer(root, &name, &mut out)?,
+                None => writeln!(out, "ERR invalid depot name")?,
+            },
             ["BYE"] | [] => return out.flush(),
             // a player's bus for the session, and the others' by their content (`upload`,
             // `vehicles`): read and checked once (`upload::requests`), then answered

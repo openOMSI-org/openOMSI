@@ -54,14 +54,14 @@ impl WindingVotes {
 /// Built-in variables every road vehicle has (`program/varlist_roadvehicle.txt` + generated).
 pub fn builtin_vars(root: &Path) -> Vec<String> {
     let mut v: Vec<String> =
-        match omsi_cfg::CfgFile::read(root.join("program/varlist_roadvehicle.txt")) {
+        match omsi_cfg::CfgFile::read(omsi_cfg::resolve_path(root, "program/varlist_roadvehicle.txt")) {
             Ok(f) => f
                 .lines
                 .iter()
                 .map(|l| l.trim().to_string())
                 .filter(|l| !l.is_empty())
                 .collect(),
-            Err(_) => Vec::new(),
+            Err(_) => ["Velocity", "Velocity_Ground", "Throttle", "Brake", "Clutch", "M_Wheel", "n_Wheel", "Brakeforce", "A_Trans_X", "A_Trans_Y", "A_Trans_Z", "Spot_Select", "Snd_OutsideVol"].into_iter().chain(super::engine_vars::NAMES).map(String::from).collect(),
         };
     for a in 0..8 {
         for side in ["L", "R"] {
@@ -106,8 +106,12 @@ pub fn builtin_vars(root: &Path) -> Vec<String> {
     v
 }
 
+pub fn has_program_varlist(root: &Path) -> bool {
+    omsi_cfg::vfs::is_file(&omsi_cfg::resolve_path(root, "program/varlist_roadvehicle.txt"))
+}
+
 pub fn builtin_str_vars(root: &Path) -> Vec<String> {
-    match omsi_cfg::CfgFile::read(root.join("program/stringvarlist_roadvehicle.txt")) {
+    match omsi_cfg::CfgFile::read(omsi_cfg::resolve_path(root, "program/stringvarlist_roadvehicle.txt")) {
         Ok(f) => f
             .lines
             .iter()
@@ -246,7 +250,7 @@ pub fn load_paint_schemes(dir: &Path) -> Vec<PaintScheme> {
         while let Some(k) = r.next_keyword() {
             match k.as_str() {
                 "item" => {
-                    let name = r.str().to_string();
+                    let name = r.str().trim().to_string();
                     let ctc = r.str().to_string();
                     let tex = r.str().to_string();
                     match schemes
@@ -373,6 +377,7 @@ impl VehicleType {
         let mut input = CompileInput {
             builtin_vars: builtin_vars(root),
             builtin_str_vars: builtin_str_vars(root),
+            declare_unknown: !has_program_varlist(root),
             ..Default::default()
         };
         input.varlists = def.scripts.varlists.clone();
@@ -490,16 +495,17 @@ impl VehicleType {
         // of the whole vehicle, a part borrowed from another pack - a ticket machine, a
         // display - was turned in one bus and kept in the next, whatever its own pack's
         // exporter does: the same Atron machine inside out in some buses only (#977, #1054).
-        let mut kept = 0;
+        let mut kept = Vec::new();
         for (i, pack) in &turned {
             if votes.get(pack).is_some_and(WindingVotes::keep_authored) {
                 omsi_geometry::reverse_winding(&mut meshes[*i].data);
                 meshes[*i].keep_winding = true;
-                kept += 1;
+                kept.push(*i);
             }
         }
-        if kept > 0 {
-            log::info!("{}: {kept} meshes keep their winding (their packs' meshes with a positive determinant face along their normals: {votes:?})", bus_file.display());
+        if !kept.is_empty() {
+            let names: Vec<String> = kept.iter().map(|&i| meshes[i].file.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default()).collect();
+            log::info!("{}: {} meshes keep their winding (their packs' meshes with a positive determinant face along their normals: {votes:?}): {names:?}", bus_file.display(), kept.len());
         }
         for (pack, n) in &missing_packs {
             log::warn!(

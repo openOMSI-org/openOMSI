@@ -67,7 +67,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         slider_row(app, "led_glow", "LED glow", "How strongly the dots of LED destination displays glow", &|v| format!("{}/15", v as i64)).filter(|_| shown("led_glow")),
         slider_row(app, "led_mips", "LED mip strength", "Lower: sharper LED dots that shimmer from a distance; higher: calmer, softer dots", &|v| format!("{v:.2}")).filter(|_| shown("led_mips")),
         slider_row(app, "reflections", "Reflective objects reflect", "Changes show at once; turned up from Off, they come back when the game starts the next time", &|v| if v < 0.005 { "Off".to_string() } else { format!("{:.0}%", v * 100.0) }).filter(|_| shown("reflections")),
-        slider_row(app, "road_glare", "Road sunlight glare", "Enhanced: direct sunlight highlights on roads and ground; 100% is the original look", &pct).filter(|_| shown("road_glare")),
+        slider_row(app, "road_glare", "Road glare", "Enhanced: highlights of the sun, the headlights and the street lamps on roads and ground; 100% keeps the original appearance.", &pct).filter(|_| shown("road_glare")),
         slider_row(app, "traffic_headlights", "Traffic headlight brightness", "All graphics modes: other vehicles' white headlamp glow and road illumination, not the player bus or street lights", &pct).filter(|_| shown("traffic_headlights")),
         switch_row(app, "clouds", "Clouds", later),
         pick("cloud_quality", "Cloud quality", "Enhanced: the volumetric clouds marched in fewer steps - faster, a little grainier").filter(|_| shown("cloud_quality") && app.settings.clouds),
@@ -231,6 +231,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         switch_row(app, "chat", "Chat in online games", "Shows the chat of a LAN session"),
         slider_row(app, "chat_size", "Chat size", "The chat's texts on top of the interface size (also Ctrl + the mouse wheel over the chat)", &pct),
         switch_row(app, "name_tags", "Other players' names above their buses", "Shows the names of the other players"),
+        Some(button("Remote cockpit", "Open", &app.remote_description(), "remote_panel")),
         Some(opens("Reset all settings...", "Everything but the language, the key bindings and the game folder goes back to how it came", "reset")),
     ]
         .into_iter()
@@ -252,6 +253,9 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         rows.extend(slider_row(app, "vr_nav_opacity", "Interface opacity", desc, &pct));
         rows.push(button("Reset navigator position", "Reset", desc, "vr_nav_reset"));
         pages.push(("VR", rows));
+    }
+    for (title, rows) in &mut pages {
+        *rows = section_option_rows(title, std::mem::take(rows));
     }
     pages
 }
@@ -580,40 +584,17 @@ fn weather_rows(mut weather: Vec<(String, String)>, climate: Vec<(String, String
     sectioned_rows(weather, "Live weather", &[("weather", "Weather preset and clouds"), ("temp", "Temperature and humidity"), ("wind_speed", "Wind")])
 }
 
-/// Insert display-only headings while preserving every command and its relative order.
-fn sectioned_rows(rows: Vec<(String, String)>, first: &str, starts: &[(&str, &str)]) -> Vec<(String, String)> {
-    let mut out = Vec::new();
-    for (label, action) in rows {
-        let key = action.strip_suffix(ADJUST).unwrap_or(&action);
-        let title = starts.iter().find(|(id, _)| *id == key).map(|(_, title)| *title).or_else(|| out.is_empty().then_some(first));
-        if let Some(title) = title {
-            out.push((row(title, 'i', "", "", None), HEADING.to_string()));
-        }
-        out.push((label, action));
-    }
-    out
+/// Group the options tabs without changing the settings commands or their order.
+fn section_option_rows(title: &str, rows: Vec<(String, String)>) -> Vec<(String, String)> {
+    let Some((first, starts)) = omsi_settings_ui::option_sections(title) else { return rows };
+    sectioned_rows(rows, first, starts)
 }
 
-#[cfg(test)]
-mod pause_sections_tests {
-    use super::*;
-
-    #[test]
-    fn pause_nested_sections_keep_actions_in_original_order() {
-        let rows = vec![button("A", "A", "", "a"), button("B", "B", "", "b"), button("C", "C", "", "c")];
-        let sections = sectioned_rows(rows.clone(), "First", &[("b", "Second")]);
-        assert_eq!(sections.iter().filter(|r| r.1 != HEADING).cloned().collect::<Vec<_>>(), rows);
-        assert_eq!(sections.iter().filter(|r| r.1 == HEADING).count(), 2);
-    }
-
-    #[test]
-    fn pause_nested_sections_omit_missing_groups_and_match_adjustable_controls() {
-        assert!(sectioned_rows(Vec::new(), "First", &[]).is_empty());
-        let sections = sectioned_rows(vec![button("Wind", "", "", &format!("wind_speed{ADJUST}"))], "First", &[("wind_speed", "Wind")]);
-        assert_eq!(sections.len(), 2);
-        assert!(sections[0].0.starts_with("Wind"));
-        assert_eq!(sections[1].1, format!("wind_speed{ADJUST}"));
-    }
+/// Insert display-only headings while preserving every command and its relative order.
+fn sectioned_rows(rows: Vec<(String, String)>, first: &str, starts: &[(&str, &str)]) -> Vec<(String, String)> {
+    omsi_settings_ui::sectioned_rows(rows, first, starts, ADJUST).into_iter().flat_map(|(heading, (label, action))| {
+        heading.into_iter().map(|title| (row(&title, 'i', "", "", None), HEADING.to_string())).chain(std::iter::once((label, action)))
+    }).collect()
 }
 
 #[cfg(test)]

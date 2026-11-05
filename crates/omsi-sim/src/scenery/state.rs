@@ -105,6 +105,8 @@ impl SceneryObject {
     }
 }
 
+const TEXT_NEAR: f64 = 250.0;
+
 /// What the scripts read of the world this frame besides their own variables, gathered
 /// before they run: the time and day, the daylight, the traffic lights and the timetable's
 /// boards.
@@ -488,6 +490,8 @@ impl SceneryState {
             let mut texts = Vec::new();
             if !o.text_vars.is_empty() {
                 let _ = o.inst.take_refresh_strings();
+            }
+            if !o.text_vars.is_empty() && (*dist < TEXT_NEAR || o.text_last.iter().any(Option::is_none)) {
                 for (k, (name, last)) in o.text_vars.iter().zip(o.text_last.iter_mut()).enumerate() {
                     let text = o.inst.str_var(name);
                     if last.as_deref() != Some(text) {

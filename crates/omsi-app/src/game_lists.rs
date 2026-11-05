@@ -816,7 +816,7 @@ pub(crate) fn menu_extras(
     // a trip's line and terminus
     let trip_of = |name: &str| -> (String, String) {
         schedule
-            .and_then(|s| s.data.trips.iter().find(|x| x.name.eq_ignore_ascii_case(name)))
+            .and_then(|s| s.data.trips.iter().find(|x| x.is_named(name)))
             .map(|x| (x.line.trim().to_string(), x.terminus.trim().to_string()))
             .unwrap_or_default()
     };
@@ -1005,6 +1005,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                 "time_edit" | "clock_ontime" | "clock_set" | "clock_shift" if step => clock_lines::clock_action(app, verb, arg),
                 "view_editor" if step => { crate::game_panels::view_editor::open(app); return None; }
                 "mirror_hud_edit" if step => { app.page_action(verb); return None; }
+                "remote_panel" if step => { crate::game_panels::remote_panel::open(app); return None; }
                 "seat_reset" if step => {
                     // (this bus's views as its .bus file has them again)
                     app.settings.seat = [0.0; 3];

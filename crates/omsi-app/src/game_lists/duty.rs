@@ -24,7 +24,7 @@ fn listed_at(start: f64, end: f64, now: f64, today: bool, from_yesterday: bool) 
 pub(super) fn line_sign(schedule: Option<&crate::schedule::Schedule>, line: &omsi_timetable::Line) -> String {
     let sign = schedule.and_then(|sch| {
         line.tours.iter().flat_map(|t| t.trips.iter()).find_map(|tt| {
-            let t = sch.data.trips.iter().find(|x| x.name.eq_ignore_ascii_case(&tt.trip))?;
+            let t = sch.data.trips.iter().find(|x| x.is_named(&tt.trip))?;
             Some(t.line.trim().to_string()).filter(|n| !n.is_empty())
         })
     });
@@ -49,7 +49,7 @@ pub(super) fn sorted_tours(line: &omsi_timetable::Line) -> Vec<&omsi_timetable::
 pub(super) fn tour_trip_name(sch: &crate::schedule::Schedule, tour: &omsi_timetable::Tour, k: usize) -> Option<String> {
     tour.trips
         .iter()
-        .filter(|tt| sch.data.trips.iter().any(|x| x.name.eq_ignore_ascii_case(&tt.trip)))
+        .filter(|tt| sch.data.trips.iter().any(|x| x.is_named(&tt.trip)))
         .nth(k)
         .map(|tt| tt.trip.clone())
 }
@@ -250,6 +250,7 @@ pub(crate) fn start_duty_at(app: &mut App, line: &str, tour: &str, trip: usize, 
     app.args.line = Some(line.to_string());
     app.args.tour = Some(tour.to_string());
     app.session.duty = Some(d);
+    app.session.duty_places = false;
     app.service_msg = Some((format!("Line {line}, tour {}", tour.trim()), 4.0));
 }
 
@@ -273,6 +274,7 @@ pub(super) fn start_duty(app: &mut App, line: &str, tour: &str) {
             app.args.line = Some(line.to_string());
             app.args.tour = Some(tour.to_string());
             app.session.duty = Some(d);
+            app.session.duty_places = false;
             app.service_msg = Some((format!("Line {line}, tour {}", tour.trim()), 4.0));
         }
         Err(e) => app.service_msg = Some((omsi_ui::i18n::tr_fill_words("No duty ({e})", &[("{e}", &e)]), 8.0)),

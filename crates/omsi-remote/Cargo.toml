@@ -1,0 +1,25 @@
+[package]
+name = "omsi-remote"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "openOMSI's remote cockpit: a page on a phone or tablet of the same network that shows the bus's switches and works them, with layouts of its own for every vehicle"
+
+[dependencies]
+omsi-sim = { path = "../omsi-sim" }
+omsi-texture = { path = "../omsi-texture" }
+omsi-model = { path = "../omsi-model" }
+omsi-geometry = { path = "../omsi-geometry" }
+glam.workspace = true
+image.workspace = true
+log.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+ring.workspace = true
+qrcodegen = "1.8"
+tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
+
+[dev-dependencies]
+omsi-vehicle = { path = "../omsi-vehicle" }
+omsi-cfg = { path = "../omsi-cfg" }
+parking_lot.workspace = true

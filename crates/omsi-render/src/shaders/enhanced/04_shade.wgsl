@@ -561,6 +561,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
             if ((terrain || material.params2.z > 0.0) && !is_water) {
                 spec = spec * camera.lod.z;
             }
+            spec = select(spec, vec3<f32>(0.0), dot(geo_n, v) < 0.0 && !is_water);
             direct = e_sun * nl * (sf.albedo / PI * (vec3<f32>(1.0) - f_schlick(f0, nl)) + spec);
         }
     }
@@ -756,7 +757,10 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     if (glass) {
         sf_lit.albedo = vec3<f32>(0.0);
     }
-    let lamps = lamp_light(in.world, n, v, sf_lit, thin, !capture, film) * select(1.0, 0.0, material.params.y > 0.2 && material.params.y < 0.3);
+    if ((terrain || material.params2.z > 0.0) && !is_water) {
+        sf_lit.f0 = sf_lit.f0 * camera.lod.z;
+    }
+    let lamps = lamp_light(in.world, n, v, sf_lit, thin, !capture, film, dot(geo_n, v) < 0.0 && !is_water) * select(1.0, 0.0, material.params.y > 0.2 && material.params.y < 0.3);
     // [interiorlight]: OMSI adds its lamps' light to the lit meshes whatever the daylight,
     // so a switched-on saloon is brighter by day as well and only stands out more at night.
     // Taken as a lamp against the daylight exposure it vanished by day altogether.
@@ -811,8 +815,8 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
             // as the self-illuminated materials do
             // (a window lit from inside shows some 80 cd/mÂ² - a room's 300 lux off its
             // walls and through a curtain - an illuminated sign more: over the dark street
-            // round it, well over the screen's white, and the eye's glare blooms round it)
-            emit = emit + nm * select(enh.exposure.z * 3.6, mix(max(enh.exposure.z * 2.0, 0.8), 0.8, near_player_vehicle(in.world) * inside_vehicle(camera.cam_pos.xyz) * (1.0 - outside)), switched);
+            // round it, a little over the screen's white, so that it keeps its colour)
+            emit = emit + nm * select(min(enh.exposure.z * 3.6, 1.2), mix(max(enh.exposure.z * 2.0, 0.8), 0.8, near_player_vehicle(in.world) * inside_vehicle(camera.cam_pos.xyz) * (1.0 - outside)), switched);
         }
     }
     if (material.params2.x > 0.5 && !terrain && !glass) {

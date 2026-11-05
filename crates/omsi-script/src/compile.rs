@@ -365,6 +365,7 @@ pub struct CompileInput {
     pub stringvarlists: Vec<PathBuf>,
     pub constfiles: Vec<PathBuf>,
     pub scripts: Vec<PathBuf>,
+    pub declare_unknown: bool,
 }
 
 fn read_list(path: &Path, errors: &mut Vec<ScriptError>) -> Vec<String> {
@@ -433,7 +434,7 @@ pub fn compile(input: &CompileInput) -> Program {
         }
     }
     let mut pending: Vec<(usize, usize, String)> = Vec::new(); // (block, op index, macro name)
-    let mut c = Compiler { p: &mut p, consts: &consts, curves: &curve_index, pending: &mut pending, missing_curve: None, file_frames: (0, 0) };
+    let mut c = Compiler { p: &mut p, consts: &consts, curves: &curve_index, pending: &mut pending, missing_curve: None, declare_unknown: input.declare_unknown, file_frames: (0, 0) };
     for f in &files {
         c.compile_file(f);
     }
@@ -461,6 +462,7 @@ struct Compiler<'a> {
     pending: &'a mut Vec<(usize, usize, String)>,
     /// The empty curve an unknown `(F.L.name)` evaluates (see `compile_access`).
     missing_curve: Option<u32>,
+    declare_unknown: bool,
     file_frames: (usize, usize),
 }
 
@@ -801,6 +803,10 @@ impl<'a> Compiler<'a> {
         match (kind, scope) {
             (b'L', b'L') => match self.p.var(&lname) {
                 Some(id) => Some(Op::Load(id)),
+                None if self.declare_unknown => {
+                    log::debug!("{}:{line}: variable \"{name}\" declared as the script uses it", file.display());
+                    Some(Op::Load(self.p.declare_var(name)))
+                }
                 None => {
                     self.err(file, line, format!("SC_ErrorInCommand_varinvalid: variable \"{name}\" not found"));
                     Some(Op::Push(0.0))
@@ -808,6 +814,10 @@ impl<'a> Compiler<'a> {
             },
             (b'S', b'L') => match self.p.var(&lname) {
                 Some(id) => Some(Op::Store(id)),
+                None if self.declare_unknown => {
+                    log::debug!("{}:{line}: variable \"{name}\" declared as the script uses it", file.display());
+                    Some(Op::Store(self.p.declare_var(name)))
+                }
                 None => {
                     self.err(file, line, format!("SC_ErrorInCommand_varinvalid: variable \"{name}\" not found"));
                     None

@@ -70,11 +70,15 @@ impl TrafficSim {
         let car = &self.cars[i];
         let st = &car.state;
         let v = st.speed;
+        let amber_factor = st.amber_factor;
+        let seed = car.seed;
         let mut stop = None;
         let mut amber = car.amber;
         // (it stood at this light's line when it went green: it was the first in the queue)
         let mut started = car.amber_start;
         let waited_here = car.light_hold;
+        let mut current_light = car.current_light;
+        let mut ad = car.amber_decision;
         for (k, &(_, d)) in way.iter().enumerate().skip(1) {
             if d > 150.0 {
                 break;
@@ -82,6 +86,14 @@ impl TrafficSim {
             let Some((c, li)) = self.light_at_entry(way, k) else {
                 continue;
             };
+            match current_light {
+                Some((cc, cli)) if cc == c && cli == li => {},
+                _ => {
+                    current_light = Some((c, li));
+                    let n = ((c as u64) << 32) | li as u64;
+                    ad = random::draw(seed, n);
+                }
+            }
             let Some(ctl) = self.lights.get(c) else {
                 continue;
             };
@@ -104,7 +116,7 @@ impl TrafficSim {
                     true
                 }
                 Aspect::Yellow | Aspect::GreenYellow => {
-                    if on_its_way && (amber == Some((c, li)) || gap < comfortable) {
+                    if on_its_way && ((amber == Some((c, li)) || gap < comfortable) || ad < amber_factor) {
                         amber = Some((c, li));
                         true
                     } else {
@@ -115,7 +127,9 @@ impl TrafficSim {
                 // (a car that stands cannot fail to stop: with its nose over the line it
                 // stays where it is)
                 Aspect::Red | Aspect::RedYellow => {
-                    let go = (amber == Some((c, li)) && on_its_way && gap < comfortable) || (v > 1.0 && gap < possible - 0.5);
+                    let go = (amber == Some((c, li)) && on_its_way && gap < comfortable)
+                        || (v > 1.0 && gap < possible - 0.5)
+                        || (amber_holds(v, gap) && ad < amber_factor * amber_factor);
                     if !go && amber == Some((c, li)) {
                         amber = None;
                         started = false;
@@ -140,6 +154,8 @@ impl TrafficSim {
         }
         self.cars[i].amber = amber;
         self.cars[i].amber_start = started && amber.is_some();
+        self.cars[i].current_light = current_light;
+        self.cars[i].amber_decision = ad;
         stop
     }
 

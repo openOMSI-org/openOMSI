@@ -82,15 +82,35 @@ the constants are in the vehicle's file, not in the game.
   Radio range is a circle around the frog measured from the vehicle's trolley reference
   position, not along the wire. There is no heading or approach filter: every radio switch
   in range on a matching channel can respond, even on a neighbouring road. Use channels to
-  separate nearby receivers. A vehicle transmits when entering a circle or changing its
-  direction request, route code or channel, not continuously while holding the same selection.
+  separate nearby receivers. After its initial step, a vehicle transmits only on a change
+  of direction request or route code, not continuously while holding the same selection.
+  Releasing a request to `0` transmits nothing, so a toggled or chosen switch is not handed
+  back to the route code.
+  A route code other than `0` is also sent to each receiver as the vehicle enters its range,
+  so the switches on a route set themselves as the bus arrives. Direction requests are never
+  sent on entry. Loading a vehicle and changing the channel alone never transmit, and a
+  direction selected outside reception range is not queued for later delivery.
   The last matching transmission sets the switch; another bus's stale selection does not
   immediately undo it. An unchanged position does not reset the display's change timer. Leaving the circle,
   sending an unknown route or selecting another channel leaves the frog as it was.
+  A momentary button can instead send `Trolley_Switch_Request = 2` while pressed and `0`
+  when released. Each press toggles the actual retained position of every matching receiver,
+  not a remembered cab selection. Holding it does not repeat; entering range, changing the
+  channel or changing the route while held does not toggle. Release and press again to send
+  another toggle. A request already held when the vehicle is first stepped is not a press.
+  Absolute left/right requests use the selection-change behavior above.
+  For manual-only radio control, keep the route code at `0` and use a momentary toggle
+  button. The driver reads the actual position from the roadside switch display. Range is
+  configurable reception coverage, not a model of antenna propagation or a safety interlock.
 * **Arcs and sound.** Where current is broken - the shoe leaving the wire, a pole coming off,
   an insulator or a frog crossed under power - an arc burns `L I^2 / 2` of the motor circuit's
   inductance (12 mH): the game draws a flash with sparks, lights the wire and the roof and
-  cracks. Coasting through an insulator strikes none; power on through it a loud one. The
+  cracks. Coasting through an insulator strikes none; power on through it a loud one. A frog
+  or an insulator crossed with more than 3 A (a coasting bus's auxiliaries often draw more)
+  arcs every time by default; a map's `[trolley_net]` can make those arcs rarer, weaker or need
+  more current (`frog_arc_*`, `insulator_arc_*` below). The chance is drawn per frog crossing
+  and per insulator entry and exit, from the vehicle's seed (repeatable). Arcs of a shoe
+  leaving the wire (see `roughness`) and of a pole coming off are not affected. The
   shoes hiss on the wire, louder with the current and the speed (a loop with the rectifier's
   300 Hz ripple); the contactors click, a shoe landing on the wire and a pole on its hook
   thud, a frog clatters. The sounds are made in the game unless the vehicle or the map gives
@@ -142,6 +162,12 @@ are the map's (x east, y north, z up, metres).
 voltage 600            nominal line voltage (V)
 spacing 0.6            distance between the two wires (m)
 roughness 0.0012       unevenness of the contact wire (m); worn or icy wire: 0.003 and more
+frog_arc_chance 1      chance (0..1) that a frog crossed under current arcs; 0: never
+frog_arc_scale 1       multiplier of a frog arc's energy (0..10): its flash and crack
+frog_arc_min_amps 3    least current (A) a frog crossing arcs with
+insulator_arc_chance 1    the same for each entry into and exit from a section insulator
+insulator_arc_scale 1
+insulator_arc_min_amps 3
 
 [trolley_section]
 id 1
@@ -174,8 +200,6 @@ pos 300 -185.4 6.1
 length 1.0             dead stretch (m)
 
 [trolley_sounds]       the overhead line's sounds (see Sounds): on | off | a file beside trolley.txt
-hiss off
-snap on
 frog sounds\frog.wav
 switch sounds\switch.wav
 ```
@@ -266,7 +290,7 @@ direction Trolley_Direction     > 0.5 forward, < -0.5 reverse, else neutral (def
 indicator_left Blinker_Left     for switches in `indicator` mode
 indicator_right Blinker_Right
 raise_request Trolley_Poles_Raise   +1 raise, -1 lower the poles that have a motor
-switch_request Trolley_Switch_Request   radio switches: < -0.5 left, > 0.5 right (without it: the indicator)
+switch_request Trolley_Switch_Request   radio: -1 left, +1 right, 2 momentary toggle, 0 none (without it: indicator)
 switch_code Trolley_Switch_Code         radio switches: the route code, 0 none
 switch_channel Trolley_Switch_Channel   radio switches: the channel sent on
 ```
@@ -305,19 +329,27 @@ The gear makes six sounds of its own, from noise and decaying tones (no files):
 
 | Sound | When | Sound trigger | Map key |
 |---|---|---|---|
-| hiss (a loop) | the shoes sliding on the wire, louder with the current and the speed | - (`Trolley_Hiss`, 0..1) | `hiss` |
-| arc crack | current broken: a shoe leaving the wire or a pole coming off under load, an insulator or a frog crossed under power | `trolley_snap` | `snap` |
+| hiss (a loop) | the shoes sliding on the wire, louder with the current and the speed | - (`Trolley_Hiss`, 0..1) | - |
+| arc crack | current broken: a shoe leaving the wire or a pole coming off under load, an insulator or a frog crossed under power | `trolley_snap` | - |
 | frog clatter | a shoe going through a frog | `trolley_frog` | `frog` |
 | contactor click | the rheostat controller stepping | `trolley_click` | - |
 | thud | a shoe landing on the wire, a pole on its hook or coming off | `trolley_thud` | - |
 | hook | a pole's hook letting go or catching it | `trolley_clack` | - |
 | switch mechanism | the selected leg actually changes, not when a shoe crosses it | - (map-owned) | `switch` |
 
-The built-in hiss and a map replacement hiss are located at each touching shoe, not the bus
-centre. Their maximum gain is 0.035: beyond 1 m a steep fade is added to the normal distance
-falloff, and they are completely silent at 5 m and beyond. They are also silent in the cab.
+The built-in hiss is located at each touching shoe, not the bus
+centre. Its maximum gain is 0.035: beyond 1 m a steep fade is added to the normal distance
+falloff, and it is completely silent at 5 m and beyond. It is also silent in the cab.
 A bus-authored `sound.cfg` hiss keeps its own volume, viewpoint and 3-D settings; old sliding
 loops should not be played over the native hiss as well.
+
+The other built-in sounds are at full volume within a set distance (`[3d]`-style: switch
+mechanism 15 m, arc crack 10 m, frog 8 m, thud and hook 6 m, contactors 4 m) and fall off as
+1/d beyond. In the player's cab the sounds on the roof come through the body at half volume
+and somewhat dull with doors and windows shut, a switch out on the line at a fifth and duller,
+both clear as doors and windows open (`Snd_OutsideVol`); the contactors are in the bus and are
+not muffled. How a sound is heard is
+fixed when it starts: one started in the cab stays muffled if the view changes while it plays.
 
 **A vehicle** plays its own the OMSI way, in its `sound.cfg`: an entry with `[trigger]` on one
 of the triggers above plays each time that happens (the game fires the trigger as a script's
@@ -345,10 +377,10 @@ Trolley_Hiss
 1
 ```
 
-**A map** chooses the overhead line's sounds (hiss, arcs, frog crossings and switch movements) in a `[trolley_sounds]` block of
+**A map** chooses the overhead line's own sounds (frog crossings and switch movements) in a `[trolley_sounds]` block of
 its `trolley.txt`: each key `on` (the game's own), `off`, or a sound file beside `trolley.txt`
-(a file that cannot be read leaves the game's own). The vehicle's own equipment (contactors,
-thud, hook) is the vehicle's: those keys are ignored there with a warning.
+(a file that cannot be read leaves the game's own). The vehicle's sounds (hiss, arc crack,
+contactors, thud, hook) are the vehicle's: those keys are ignored there with a warning.
 
 Which plays: the vehicle's `sound.cfg` entry, else the map's choice, else the game's own. A
 vehicle and a map that say nothing hear the game's own sounds, as before.

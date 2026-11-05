@@ -179,7 +179,7 @@ mod tests {
         let mut t = TrafficTable::default();
         t.begin(1.0);
         let a = t.upsert(10, Kind::Car, || look("golf"), Meta::default, row(1)).unwrap();
-        let b = t.upsert(11, Kind::Bus, || look("man"), || Meta { line: "37".into(), destination: "#2".into() }, row(2)).unwrap();
+        let b = t.upsert(11, Kind::Bus, || look("man"), || Meta { line: "37".into(), destination: "#2".into(), ..Default::default() }, row(2)).unwrap();
         assert!(t.finish().is_empty());
         assert_eq!((t.len(), t.id_of(10), t.id_of(11)), (2, Some(a), Some(b)));
         // the same look is one entry
@@ -217,7 +217,7 @@ mod tests {
         let mut t = TrafficTable::default();
         t.begin(0.0);
         let id = t.upsert(1, Kind::Bus, || look("m"), Meta::default, row(0)).unwrap();
-        let m = Meta { line: "A".into(), destination: "#1".into() };
+        let m = Meta { line: "A".into(), destination: "#1".into(), ..Default::default() };
         assert!(t.set_meta(id, &m));
         assert!(!t.set_meta(id, &m));
         assert_eq!(t.get(id).unwrap().meta_rev, 2);

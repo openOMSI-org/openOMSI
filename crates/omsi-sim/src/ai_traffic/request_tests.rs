@@ -191,3 +191,42 @@ fn the_players_train_asks_the_lights_on_every_branch_ahead() {
     // backing away from the fork it asks nothing
     assert_eq!(run(660.0, true, false, -2.0), (false, false));
 }
+
+fn junction_with_a_second_light(cross_traffic_joins: bool) -> Network {
+    let path = |start: DVec3, n: u16, light: (usize, usize)| {
+        let mut lane = street(start, 0.0, 10.0);
+        lane.source = 2;
+        lane.key = Some(crate::traffic::LaneKey { tile: (0, 0), id: 10, path: n });
+        lane.traffic_light = Some(light);
+        lane
+    };
+    let mut lanes = vec![
+        street(DVec3::new(0.0, -100.0, 0.0), 0.0, 100.0),
+        path(DVec3::ZERO, 0, (0, 0)),
+        path(DVec3::new(0.0, 10.0, 0.0), 1, (0, 1)),
+        street(DVec3::new(0.0, 20.0, 0.0), 0.0, 200.0),
+    ];
+    if cross_traffic_joins {
+        lanes.push(street(DVec3::new(0.0, -30.0, 0.0), 0.0, 40.0));
+    }
+    let mut net = Network { lanes, ..Default::default() };
+    net.link(1.5);
+    net
+}
+
+#[test]
+fn a_car_turning_onto_the_cross_traffics_path_does_not_ask_its_light() {
+    let f = Fixture::new();
+    let ty = f.ty.clone();
+    for (cross_traffic_joins, second_asked) in [(true, false), (false, true)] {
+        let mut t = traffic(&f, junction_with_a_second_light(cross_traffic_joins));
+        assert_eq!(t.net.prev[2].len(), if cross_traffic_joins { 2 } else { 1 });
+        let mut ctl = TrafficLightController::new(vec![vec![(0, 400.0), (6, 20.0)]; 2], 0.0);
+        ctl.approach = vec![Some(100.0), Some(100.0)];
+        t.lights = vec![ctl];
+        place_front(&mut t, &ty, LaneKind::Street, 0, 5.0, 8.0, 0x51);
+        t.tick(0.02, None);
+        assert!(t.lights[0].request[0], "the car's own light was not asked");
+        assert_eq!(t.lights[0].request[1], second_asked, "cross traffic joins: {cross_traffic_joins}");
+    }
+}

@@ -125,10 +125,10 @@ struct Mirror {
     loading: HashSet<PathBuf>,
     loaded_rx: Option<mpsc::Receiver<(PathBuf, Option<Arc<VehicleType>>)>>,
     loaded_tx: Option<mpsc::Sender<(PathBuf, Option<Arc<VehicleType>>)>>,
-    /// Depot files by vehicle file (the destination displays of the timetable buses).
-    hofs: HashMap<PathBuf, Option<Arc<omsi_vehicle::Hof>>>,
-    /// The line and destination each car shows.
-    shown: HashMap<u32, (String, String)>,
+    /// Depot files by vehicle type and name, and whether that is final (`mirror_hof`).
+    hofs: HashMap<(PathBuf, String), (Option<Arc<omsi_vehicle::Hof>>, bool)>,
+    /// The line, destination, number and plate each car shows.
+    shown: HashMap<u32, omsi_net::traffic_table::Meta>,
     /// Cars and people drawn (created here).
     drawn_cars: HashSet<u32>,
     drawn_people: HashSet<u32>,
@@ -748,7 +748,7 @@ impl LanWorld {
         if let Some(t) = traffic.as_deref_mut() {
             m.add_and_remove_cars(table, t, view, args, world, renderer, scene);
             let shown = m.place_cars(table, t, dt, render_ms);
-            m.show_destinations(table, t, shown, args, world);
+            m.show_destinations(table, t, shown, world);
         }
         // people
         let forget = std::time::Duration::from_secs_f32(nw::FORGET_AFTER);
@@ -1009,6 +1009,7 @@ impl Mirror {
                 continue;
             };
             let (file, scheme, paint) = (look.file.clone(), look.scheme, look.paint.clone());
+            let hof_name = row.meta.hof.clone();
             // Never run init with an incomplete host timetable.
             let Some(context) = m.contexts.get(&id).cloned() else {
                 m.waiting.0 += 1;
@@ -1063,7 +1064,7 @@ impl Mirror {
                 ty.clone(),
                 scheme,
                 &context,
-                m.hofs.entry(ty.def.path.clone()).or_insert_with(|| crate::find_hof_named(args.hof.as_deref(), world, &ty)).clone(),
+                mirror_hof(&mut m.hofs, world, &ty, &hof_name),
                 DVec3::new(first.pos[0], first.pos[1], first.pos[2]),
                 first.heading,
             );
@@ -1158,32 +1159,33 @@ impl Mirror {
     }
 
     /// The timetable buses' displays.
-    fn show_destinations(&mut self, table: &ClientTable, t: &mut Traffic, shown: Vec<(usize, u32)>, args: &LanConfig, world: &World) {
+    fn show_destinations(&mut self, table: &ClientTable, t: &mut Traffic, shown: Vec<(usize, u32)>, world: &World) {
         let m = self;
         for (i, id) in shown {
             let Some(row) = TrafficId::from_raw(id).and_then(|tid| table.get(tid)) else {
                 continue;
             };
-            let (line, destination) = (&row.meta.line, &row.meta.destination);
-            if line.is_empty() || !destination.starts_with('#') || destination == "#-1" {
-                continue;
-            }
-            let want = (line.clone(), destination.clone());
-            if m.shown.get(&id) == Some(&want) {
+            let meta = &row.meta;
+            if m.shown.get(&id) == Some(meta) {
                 continue;
             }
             let car = &mut t.cars[i];
-            let path = car.vehicle.ty.def.path.clone();
-            let hof = m
-                .hofs
-                .entry(path)
-                .or_insert_with(|| crate::find_hof_named(args.hof.as_deref(), world, &car.vehicle.ty))
-                .clone();
-            if let Some(k) = car.vehicle.ty.program.str_var("Linie") {
-                car.vehicle.state.str_vars[k as usize] = line.clone();
+            // the fleet number and plate the host drew for it (a host older than that sends
+            // none: they stay as they are)
+            for (name, text) in [("number", &meta.number), ("ident", &meta.ident)] {
+                if let (false, Some(k)) = (text.is_empty(), car.vehicle.ty.program.str_var(name)) {
+                    car.vehicle.state.str_vars[k as usize] = text.clone();
+                }
             }
-            show_car_destination(&mut car.vehicle, hof.as_deref(), line, destination);
-            m.shown.insert(id, want);
+            let (line, destination) = (&meta.line, &meta.destination);
+            if !line.is_empty() && destination.starts_with('#') && destination != "#-1" {
+                let hof = mirror_hof(&mut m.hofs, world, &car.vehicle.ty, &meta.hof);
+                if let Some(k) = car.vehicle.ty.program.str_var("Linie") {
+                    car.vehicle.state.str_vars[k as usize] = line.clone();
+                }
+                show_car_destination(&mut car.vehicle, hof.as_deref(), line, destination);
+            }
+            m.shown.insert(id, meta.clone());
         }
 
     }
@@ -1446,7 +1448,18 @@ fn describe(humans: Option<&Humans>, r: EntityRef) -> Option<Desc> {
 mod tests;
 
 mod display;
-pub(crate) use display::car_display;
+
+/// The depot file of a host's vehicle on our copy of it: the host's own file of that name,
+/// sent over and used whatever this game has (`omsi_lan::mods::hofs`); until it is here, or
+/// when the host has none, the one of that name here, else the map's own - never the one this
+/// player chose for their own bus (its rows are other destinations: the host's `#<row>` read
+/// there showed another sign).
+fn mirror_hof(hofs: &mut HashMap<(PathBuf, String), (Option<Arc<omsi_vehicle::Hof>>, bool)>, world: &World, ty: &VehicleType, name: &str) -> Option<Arc<omsi_vehicle::Hof>> {
+    let named = Some(name).filter(|n| !n.trim().is_empty());
+    let host = |p: &std::path::Path| omsi_vehicle::Hof::load(p).map(|h| Some(Arc::new(h))).map_err(|e| log::warn!("depot file {name} from the host: {e}; this game's own is used")).ok();
+    omsi_lan::mods::hofs::cached(hofs, (ty.def.path.clone(), name.to_lowercase()), named, host, || crate::find_hof_named(named, world, ty))
+}
+pub(crate) use display::car_meta;
 use display::show_car_destination;
 
 mod lifecycle;

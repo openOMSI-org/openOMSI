@@ -167,6 +167,20 @@ impl Tobii {
     }
 }
 
+#[cfg(test)]
+impl Tobii {
+    /// A reader with no runtime behind it, the head at `pos` (mm) and `rot` (radians) and
+    /// centred there.
+    pub(crate) fn holding(pos: [f32; 3], rot: [f32; 3]) -> Tobii {
+        let shared = Shared { latest: Some((pos, rot)), centre: Some((pos, rot)), at: Some(Instant::now()), ..Default::default() };
+        Tobii { shared: Arc::new(Mutex::new(shared)), stop: Arc::new(AtomicBool::new(false)), options: Arc::default() }
+    }
+
+    pub(crate) fn has_centre(&self) -> bool {
+        self.shared.lock().unwrap().centre.is_some()
+    }
+}
+
 impl Drop for Tobii {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);

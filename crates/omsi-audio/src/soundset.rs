@@ -212,6 +212,11 @@ fn direct_sound_volume(v: f32, last: f32) -> (f32, bool) {
     }
 }
 
+fn buffer_volume(v: f32, last: f32, master: f32) -> (f32, bool) {
+    let (gain, audible) = direct_sound_volume(v * master, last * master);
+    (gain / master, audible)
+}
+
 /// DirectSound's frequency range (`DSBFREQUENCY_MIN`/`MAX`).
 const FREQ_MIN: f32 = 100.0;
 const FREQ_MAX: f32 = 200_000.0;
@@ -893,7 +898,7 @@ impl Ctx {
                 vol *= share;
             }
         }
-        let (gain, audible) = direct_sound_volume(vol, s.last_gain);
+        let (gain, audible) = buffer_volume(vol, s.last_gain, master_volume());
         s.last_gain = gain;
         let mut audible = audible;
         let mut pitch = s.last_pitch;
@@ -993,6 +998,16 @@ fn cab_amount() -> f32 {
     walker_cab_amount().unwrap_or(1.0)
 }
 
+static MASTER_VOLUME: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0x3f80_0000);
+
+pub fn set_master_volume(v: f32) {
+    MASTER_VOLUME.store(v.clamp(0.0, 1.0).to_bits(), std::sync::atomic::Ordering::Relaxed);
+}
+
+fn master_volume() -> f32 {
+    f32::from_bits(MASTER_VOLUME.load(std::sync::atomic::Ordering::Relaxed)).max(1.0e-3)
+}
+
 /// `Snd_OutsideVol` of the player's bus (bits of an f32): Omsi.exe's 0x859a04, 1 while the
 /// player has no vehicle.
 static OUTSIDE_VOL: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0x3f80_0000);
@@ -1008,7 +1023,7 @@ pub fn set_outside_open(v: Option<f32>) {
     OUTSIDE_VOL.store(v.to_bits(), std::sync::atomic::Ordering::Relaxed);
 }
 
-fn outside_vol() -> f32 {
+pub(crate) fn outside_vol() -> f32 {
     f32::from_bits(OUTSIDE_VOL.load(std::sync::atomic::Ordering::Relaxed))
 }
 
@@ -1077,6 +1092,11 @@ mod tests {
         // 44100 "as a volume": the buffer keeps what it had
         assert_eq!(direct_sound_volume(44100.0, 0.3), (0.3, true));
         assert_eq!(direct_sound_volume(1.3, 1.0), (1.0, true));
+        let (g, _) = buffer_volume(2.0, 1.0, 0.3);
+        assert!((g - 2.0).abs() < 0.01, "{g}");
+        let (g, _) = buffer_volume(2.5, 2.0, 0.3);
+        assert!((g - 2.5).abs() < 0.01, "{g}");
+        assert_eq!(buffer_volume(2.0, 1.0, 1.0), (1.0, true));
         let (g, a) = direct_sound_volume(0.5, 1.0);
         assert!((g - 0.5).abs() < 1e-3 && a);
         assert_eq!(direct_sound_volume(0.0, 0.7), (0.0, false));

@@ -76,6 +76,7 @@ impl App {
         let outside = self.view == "outside";
         if let Some(p) = self.player.as_mut() {
             p.occlude_controls = outside;
+            p.drawn_outside = !self.cam.in_cab;
         }
         let found = match (
             self.player.as_ref(),

@@ -61,6 +61,8 @@ impl App {
             || self.photo.is_some()
             || self.input.look_lock.is_some()
             || !matches!(self.view.as_str(), "driver" | "outside" | "pax");
+        let used = moved || actions.iter().any(|a| a.1) || analog.look != [0.0, 0.0];
+        self.input.cursor_stale |= used;
         let hide = (moved || actions.iter().any(|a| a.1)) && !needs_mouse && !vr_on && self.input.window_focused;
         if self.xr.vr_nav_edit.is_none() && hide != self.input.cursor_hidden.is_some() && (hide || needs_mouse) {
             if let Some(win) = self.window.as_ref() {
@@ -95,6 +97,7 @@ impl App {
             // what the bus is standing on and running on: the road's own grain
             // (`StreetCond`: 0 dry, 1 wet, 2 snow) and the engine
             street_cond: driving.map(|p| p.vehicle.host.street_cond).unwrap_or(0.0),
+            surface: driving.and_then(|p| p.vehicle.rigid.as_ref()).and_then(|r| r.wheels.first()).map(|w| w.surface),
             engine_rpm: driving.and_then(|p| omsi_sim::startup::engine_rpm(&p.vehicle)).unwrap_or(0.0),
             engine_load: driving.map(|p| p.vehicle.physics.controls.throttle.clamp(0.0, 1.0)).unwrap_or(0.0),
             micro: 0.0,

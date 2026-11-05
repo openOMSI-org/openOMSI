@@ -18,6 +18,7 @@ impl VehicleInstance {
         // a model.cfg read again with other slots or lights kept the old ones)
         self.props_plan = PropsPlan::default();
         self.program_ids = std::sync::OnceLock::new();
+        self.cable_back_only = (0, Vec::new());
     }
 
     /// The `.bus` file read again (`def`, as `Vehicle::load` gives it): its cameras, mirrors,
@@ -131,6 +132,7 @@ impl VehicleInstance {
             stringvarlists: def.scripts.stringvarlists.clone(),
             constfiles: def.scripts.constfiles.clone(),
             scripts: def.scripts.scripts.clone(),
+            declare_unknown: !super::types::has_program_varlist(root),
             ..Default::default()
         };
         compile(&input)

@@ -84,9 +84,10 @@ impl VehicleInstance {
     /// the driven wheels, `brakes` the per-wheel brake forces of the vehicle's own axles and
     /// the coupled cars' come from theirs. `None` for a vehicle whose scripts give neither
     /// (the stock trains are scripted for the AI only).
-    fn rail_script_forces(&self, m_wheel: f32, brakes: &[f32]) -> Option<Forces> {
+    fn rail_script_forces(&mut self, m_wheel: f32, brakes: &[f32]) -> Option<Forces> {
         let own: f32 = brakes.iter().sum();
-        let towed: f32 = self.trailers.iter().flat_map(|t| t.v_brakes.iter()).map(|&id| self.get(id).max(0.0)).sum();
+        let towed: f32 = self.trailers.iter().flat_map(|t| t.v_brakes.iter()).map(|&id| self.get(id).max(0.0)).sum::<f32>()
+            + self.trailers.iter_mut().filter_map(|t| t.run.as_deref_mut()).map(|r| r.take_own_brakeforce()).sum::<f32>();
         let brake = own + towed;
         if m_wheel.abs() < 1.0 && brake < 1.0 {
             return None;
@@ -94,6 +95,10 @@ impl VehicleInstance {
         let driven = self.ty.def.axles.iter().filter(|a| a.driven).map(|a| a.wheel_diameter / 2.0).collect::<Vec<_>>();
         let radius = if driven.is_empty() { 0.45 } else { driven.iter().sum::<f32>() / driven.len() as f32 }.max(0.15);
         Some(Forces { drive: m_wheel / radius, brake, track_brake: 0.0 })
+    }
+
+    pub(super) fn on_rails(&self) -> bool {
+        self.rail_env.is_some() && RailClass::of(&self.ty.def).is_some()
     }
 
     /// The speed along the rails after `dt` as the rail dynamics make it (`v0` the speed

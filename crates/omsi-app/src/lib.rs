@@ -102,6 +102,7 @@ mod depot_bus;
 mod devtools;
 mod telemetry;
 mod themes;
+mod remote;
 use omsi_scene::threads;
 use omsi_scene::tiles;
 mod traffic;
@@ -259,10 +260,9 @@ pub fn run() -> Result<()> {
             log::warn!("caught by the renderer: {info}");
             return;
         }
-        log::error!(
-            "the game stopped on an error (build {BUILD}): {info}\n{}",
-            std::backtrace::Backtrace::force_capture()
-        );
+        let backtrace = std::backtrace::Backtrace::force_capture();
+        log::error!("the game stopped on an error (build {BUILD}): {info}\n{backtrace}");
+        omsi_platform::diagnostics::panicked(omsi_platform::diagnostics::panic_report(info, &backtrace));
         default_hook(info);
     }));
     log::info!(
@@ -498,6 +498,9 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     season_phase::apply_season_date(&mut args);
     if args.export_glb.is_none() && args.lan_join.is_none() {
         place_on_duty(&mut args);
+    }
+    if server_cfg.is_none() && args.export_glb.is_none() {
+        omsi_platform::diagnostics::game_started();
     }
     let settings = settings::Settings::load();
     applog::log_system(&settings);
@@ -795,6 +798,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             flashlight: false,
             flashlight_aim: None,
             in_cab: false,
+            heard_inside: false,
             look: (0.0, 0.0),
             look_smooth: (0.0, 0.0),
             view_looks: Default::default(),
@@ -854,6 +858,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             cruise: None,
             look_lock: None,
             cursor_hidden: None,
+            cursor_stale: false,
             last_ctl_steer: None,
             mouse_pedals: (0.0, 0.0),
             mouse_kmh: 0.0,
@@ -893,6 +898,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             plugins: None,
             vehicle_scripts_of: None,
             object_scripts: Default::default(),
+            remote: Default::default(),
         },
         net: NetState::default(),
         service_msg: clock_note.map(|m| (m, 10.0)),

@@ -10,12 +10,14 @@
 <div id="fixture"></div>
 <script type="module">
 import { run } from './multiplayer-check.js';
+import { run as unified } from './unified-driving-check.js';
+import { run as driveMode, mobileInvitations } from './drive-mode-check.js';
 document.querySelector('#run').onclick = async () => {
   const button = document.querySelector('#run');
   button.disabled = true;
   const report = document.querySelector('#report');
   report.textContent = 'Running…';
-  try { report.textContent = await run(document.querySelector('#fixture')); }
+  try { report.textContent = await run(document.querySelector('#fixture')) + '\n' + await driveMode(document.querySelector('#fixture')) + '\n' + await mobileInvitations(document.querySelector('#fixture')) + '\n' + await unified(document.querySelector('#fixture')); }
   catch (e) { report.textContent = `FAIL ${e.stack || e}`; }
   finally { button.disabled = false; }
 };

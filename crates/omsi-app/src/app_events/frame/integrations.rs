@@ -42,6 +42,7 @@ impl App {
         if let Some(steam) = self.integrations.steam.as_ref() {
             steam.client.run_callbacks();
         }
+        self.frame_remote(dt);
         // the plugins' frame, with the bus's scripts done
         // (their main chunk already knows the interface themes: `ui.themes`, `ui.theme`)
         let mut plugins = self.integrations.plugins.take().unwrap_or_else(|| {

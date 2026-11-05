@@ -4,11 +4,12 @@
 //! from noise and decaying tones when first wanted, not read from files, and played where they
 //! happen. A vehicle plays its own instead where its `sound.cfg` has an entry on the sound's
 //! trigger (`trolley_thud`...) or reads `Trolley_Hiss`; the map's `trolley.txt` can switch the
-//! overhead line's off or give a file for them (see `docs/TROLLEYBUS.md`, Sounds).
+//! overhead line's own (frog, switch) off or give a file for them (see `docs/TROLLEYBUS.md`, Sounds).
 
 use glam::Vec3;
+use crate::soundset::{cab_lowpass_hz, outside_vol};
 use crate::{AudioEngine, Clip, SoundSet, VoiceId, VoiceParams};
-use omsi_trolley::{PoleMode, RigSound, SoundChoice, TrolleyRig, WireNet, WireSounds};
+use omsi_trolley::{PoleMode, RigSound, SoundChoice, TrolleyRig, WireNet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 
@@ -17,6 +18,20 @@ const RATE: u32 = 44100;
 const HISS_GAIN: f32 = 0.035;
 const HISS_NEAR: f32 = 1.0;
 const HISS_FAR: f32 = 5.0;
+
+/// The share of a sound on the roof that comes through a shut cab.
+const ROOF_SHUT: f32 = 0.5;
+/// The share of a switch's clunk out on the line that comes through a shut cab.
+const SWITCH_SHUT: f32 = 0.2;
+
+/// How an outside sound is heard from the player's cab, with `open` its `Snd_OutsideVol` and
+/// `shut` the share that comes through with all shut: (gain factor, low-pass Hz), the less
+/// through the duller, clear as doors and windows open. Fixed when the sound starts.
+fn cab(inside: bool, open: f32, shut: f32) -> (f32, f32) {
+    let open = if open.is_finite() { open.clamp(0.0, 1.0) } else { 0.0 };
+    let base = 0.8 * shut;
+    if inside { (shut + (1.0 - shut) * open, cab_lowpass_hz(base + (1.0 - base) * open)) } else { (1.0, 0.0) }
+}
 
 struct Rng(u64);
 
@@ -141,8 +156,9 @@ pub struct SwitchSound {
 }
 
 impl SwitchSound {
-    /// Drain each actual switch movement once and play the map's sound at the frog.
-    pub fn update(&mut self, audio: &AudioEngine, net: &Arc<WireNet>, paused: bool) -> usize {
+    /// Drain each actual switch movement once and play the map's sound at the frog; `inside`:
+    /// the listener is in the player's cab.
+    pub fn update(&mut self, audio: &AudioEngine, net: &Arc<WireNet>, inside: bool, paused: bool) -> usize {
         let events = net.take_switch_sounds();
         if paused || events.is_empty() {
             return 0;
@@ -154,10 +170,12 @@ impl SwitchSound {
         }
         let Some(clip) = &self.clip else { return 0 };
         let count = events.len();
+        // (a switch drive's clunk carries across a junction, and the driver listens for it)
+        let (through, lowpass_hz) = cab(inside, outside_vol(), SWITCH_SHUT);
         for position in events {
             audio.play(clip.clone(), VoiceParams {
-                gain: 0.6, pitch: 1.0, looping: false, position: Some(position.as_vec3()),
-                doppler: false, range: 2.0, lowpass_hz: 0.0, important: true,
+                gain: 0.6 * through, pitch: 1.0, looping: false, position: Some(position.as_vec3()),
+                doppler: false, range: 15.0, lowpass_hz, important: true,
             });
         }
         count
@@ -217,17 +235,15 @@ fn pick(audio: &AudioEngine, choice: &SoundChoice, dir: Option<&Path>, own: fn()
 
 impl TrolleySound {
     /// One frame of the gear's sounds; `bus` is where the vehicle stands, `net` the wire it runs
-    /// on (its `[trolley_sounds]` choose the overhead line's clips). A sound the vehicle's own
+    /// on (its `[trolley_sounds]` choose the frog's clip). A sound the vehicle's own
     /// `sound_set` has an entry for is fired into `fired` (its sound triggers) instead.
     #[allow(clippy::too_many_arguments)]
     pub fn update(&mut self, audio: &AudioEngine, rig: &mut TrolleyRig, net: Option<&WireNet>, sound_set: Option<&SoundSet>, fired: &mut Vec<String>, bus: Vec3, sparks_at: &[Vec3], inside: bool, paused: bool) {
         let c = self.clips.get_or_insert_with(|| {
-            let w = net.map(|n| (&n.sounds, n.dir.as_deref()));
-            let wire = |f: fn(&WireSounds) -> &SoundChoice, own: fn() -> Arc<Clip>| w.map_or_else(|| Some(own()), |(s, d)| pick(audio, f(s), d, own));
             Clips {
-                hiss: wire(|s| &s.hiss, hiss),
-                snap: wire(|s| &s.snap, snap),
-                frog: wire(|s| &s.frog, frog),
+                hiss: Some(hiss()),
+                snap: Some(snap()),
+                frog: net.map_or_else(|| Some(frog()), |n| pick(audio, &n.sounds.frog, n.dir.as_deref(), frog)),
                 thud: Some(thud()),
                 click: Some(click()),
                 clack: Some(clack()),
@@ -262,9 +278,10 @@ impl TrolleySound {
                 _ => *voice = Some(audio.play_from_random_place(c.hiss.clone().unwrap(), params)),
             }
         }
-        let one = |clip: &Option<Arc<Clip>>, gain: f32, at: Vec3, range: f32| {
+        let open = outside_vol();
+        let one = |clip: &Option<Arc<Clip>>, gain: f32, at: Vec3, range: f32, heard: (f32, f32)| {
             let Some(clip) = clip else { return };
-            audio.play(clip.clone(), VoiceParams { gain, pitch: 1.0, looping: false, position: Some(at), doppler: false, range, lowpass_hz: 0.0, important: true });
+            audio.play(clip.clone(), VoiceParams { gain: gain * heard.0, pitch: 1.0, looping: false, position: Some(at), doppler: false, range, lowpass_hz: heard.1, important: true });
         };
         let mut sp = sparks_at.iter().copied();
         for s in sounds {
@@ -274,11 +291,11 @@ impl TrolleySound {
                 continue;
             }
             match s {
-                RigSound::Click => one(&c.click, 0.5, roof - Vec3::Y * 2.0, 6.0),
-                RigSound::Thud(l) => one(&c.thud, 0.3 + 0.5 * l, tip, 12.0),
-                RigSound::Snap(l) => one(&c.snap, 0.3 + 0.7 * l, sp.next().unwrap_or(tip), 40.0),
-                RigSound::Frog => one(&c.frog, 0.7, tip, 20.0),
-                RigSound::Release | RigSound::Latch => one(&c.clack, 0.5, roof - Vec3::Y * 4.0, 10.0),
+                RigSound::Click => one(&c.click, 0.5, roof - Vec3::Y * 2.0, 4.0, (1.0, 0.0)),
+                RigSound::Thud(l) => one(&c.thud, 0.3 + 0.5 * l, tip, 6.0, cab(inside, open, ROOF_SHUT)),
+                RigSound::Snap(l) => one(&c.snap, 0.3 + 0.7 * l, sp.next().unwrap_or(tip), 10.0, cab(inside, open, ROOF_SHUT)),
+                RigSound::Frog => one(&c.frog, 0.7, tip, 8.0, cab(inside, open, ROOF_SHUT)),
+                RigSound::Release | RigSound::Latch => one(&c.clack, 0.5, roof - Vec3::Y * 4.0, 6.0, cab(inside, open, ROOF_SHUT)),
             }
         }
     }
@@ -303,6 +320,20 @@ mod tests {
         assert_eq!(hiss_params(1.0, true, contact, contact).gain, 0.0);
         assert_eq!(hiss_params(0.0, false, contact, contact).gain, 0.0);
         assert_eq!(hiss_params(1.0, false, contact, Vec3::splat(f32::NAN)).gain, 0.0);
+    }
+
+    #[test]
+    fn the_cab_halves_and_dulls_roof_sounds_until_it_is_opened() {
+        assert_eq!(cab(false, 0.0, ROOF_SHUT), (1.0, 0.0));
+        let (gain, lowpass) = cab(true, 0.0, ROOF_SHUT);
+        assert!((gain - 0.5).abs() < 1e-6 && lowpass > 2000.0 && lowpass < 3000.0, "{gain} {lowpass}");
+        let (half_open, half_lowpass) = cab(true, 0.5, ROOF_SHUT);
+        assert!(half_open > gain && half_lowpass > lowpass);
+        assert_eq!(cab(true, 1.0, ROOF_SHUT), (1.0, 0.0));
+        assert_eq!(cab(true, f32::NAN, ROOF_SHUT), cab(true, 0.0, ROOF_SHUT));
+        let (switch, switch_lowpass) = cab(true, 0.0, SWITCH_SHUT);
+        assert!((switch - 0.2).abs() < 1e-6 && switch_lowpass > 700.0 && switch_lowpass < 1200.0, "{switch} {switch_lowpass}");
+        assert_eq!(cab(true, 1.0, SWITCH_SHUT), (1.0, 0.0));
     }
 
     #[test]
@@ -344,16 +375,16 @@ mod tests {
         let audio = AudioEngine::capture(44100);
         let mut sound = SwitchSound::default();
         let net = network("on");
-        assert_eq!(sound.update(&audio, &net, false), 0);
+        assert_eq!(sound.update(&audio, &net, false, false), 0);
         net.set_switch(0, true);
-        assert_eq!(sound.update(&audio, &net, false), 1);
-        assert_eq!(sound.update(&audio, &net, false), 0);
+        assert_eq!(sound.update(&audio, &net, false, false), 1);
+        assert_eq!(sound.update(&audio, &net, false, false), 0);
         net.set_switch(0, false);
-        assert_eq!(sound.update(&audio, &net, true), 0);
-        assert_eq!(sound.update(&audio, &net, false), 0);
+        assert_eq!(sound.update(&audio, &net, false, true), 0);
+        assert_eq!(sound.update(&audio, &net, false, false), 0);
         let off = network("off");
         off.set_switch(0, true);
-        assert_eq!(sound.update(&audio, &off, false), 0);
+        assert_eq!(sound.update(&audio, &off, false, false), 0);
         assert!(off.take_switch_sounds().is_empty());
     }
 }

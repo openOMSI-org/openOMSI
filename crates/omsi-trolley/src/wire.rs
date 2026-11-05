@@ -12,7 +12,10 @@ use glam::DVec3;
 use hashbrown::HashMap;
 use std::sync::Mutex;
 
+mod arcs;
+mod radio;
 mod sounds;
+pub use arcs::ArcRule;
 pub use sounds::{SoundChoice, WireSounds};
 
 /// Where a shoe's contact point lies: on this span, this far (m) from its first point, on the
@@ -135,7 +138,7 @@ pub struct SwitchRequest {
     pub current: f32,
     /// The indicator, for `indicator` switches: -1 left, +1 right, 0 none.
     pub blinker: i8,
-    /// The cab's switch request, for `radio` switches: -1 left, +1 right, 0 none.
+    /// The cab's switch request: -1 left, +1 right, 2 toggle, 0 none.
     pub radio: i8,
     /// The route code the vehicle sends (0 none) and the radio channel it sends on.
     pub code: u32,
@@ -199,7 +202,7 @@ impl SwitchDef {
             SwitchMode::Power => Some((r.current.abs() > self.sense_amps) != self.invert),
             SwitchMode::Indicator => Some(side(r.blinker)),
             SwitchMode::Radio => {
-                if self.channel.is_some_and(|c| c != r.channel) {
+                if r.radio == 2 || self.channel.is_some_and(|c| c != r.channel) {
                     return None;
                 }
                 if r.radio != 0 {
@@ -246,6 +249,9 @@ pub struct WireNet {
     /// How uneven the contact wire is (m): wear, ice, dirt. The shoe leaves it where it rises
     /// faster than the pole can follow.
     pub roughness: f32,
+    /// When a shoe crossing a frog, or entering or leaving a section insulator, under current arcs.
+    pub frog_arc: ArcRule,
+    pub insulator_arc: ArcRule,
     /// The wire was read off splines the map draws itself: the game draws no wire of its own.
     pub drawn_by_map: bool,
     /// `[trolley_sounds]`: the overhead line's sounds, and the folder their files are in.
@@ -315,6 +321,10 @@ impl WireNet {
     /// voltage 600            nominal line voltage (V)
     /// spacing 0.6            default distance between the two wires (m)
     /// roughness 0.0012      unevenness of the contact wire (m)
+    /// frog_arc_chance 1      chance a frog crossed under current arcs (0..1)
+    /// frog_arc_scale 1       scale of a frog arc's energy
+    /// frog_arc_min_amps 3    least current a frog arcs with (A)
+    /// insulator_arc_chance 1 the same for each entry into and exit from an insulator
     ///
     /// [trolley_section]
     /// id 1
@@ -347,6 +357,7 @@ impl WireNet {
         let mut nominal = 600.0f32;
         let mut spacing = 0.6f32;
         let mut roughness = 0.0012f32;
+        let (mut frog_arc, mut insulator_arc) = (ArcRule::default(), ArcRule::default());
         let mut sections: Vec<Section> = Vec::new();
         struct RawSpan {
             section: i32,
@@ -395,18 +406,22 @@ impl WireNet {
             let first = w.get(1).copied().unwrap_or("");
             match block.as_str() {
                 "trolley_sounds" => match key.as_str() {
-                    "hiss" => sounds.hiss = SoundChoice::parse(&w[1..]),
-                    "snap" => sounds.snap = SoundChoice::parse(&w[1..]),
                     "frog" => sounds.frog = SoundChoice::parse(&w[1..]),
                     "switch" => sounds.switch = SoundChoice::parse(&w[1..]),
-                    "click" | "thud" | "clack" => log::warn!("trolley.txt [trolley_sounds]: '{key}' is the vehicle's sound: its sound.cfg plays trolley_{key}"),
+                    "hiss" | "snap" | "click" | "thud" | "clack" => log::warn!("trolley.txt [trolley_sounds]: '{key}' is the vehicle's sound, set in its sound.cfg; ignored here"),
                     _ => {}
                 },
                 "trolley_net" => match key.as_str() {
                     "voltage" => nominal = n.first().copied().unwrap_or(600.0).clamp(100.0, 3000.0) as f32,
                     "spacing" => spacing = n.first().copied().unwrap_or(0.6).clamp(0.2, 2.0) as f32,
                     "roughness" => roughness = n.first().copied().unwrap_or(0.0012).clamp(0.0, 0.05) as f32,
-                    _ => {}
+                    other => {
+                        if let Some(rest) = other.strip_prefix("frog_arc_") {
+                            frog_arc.set(rest, n.first().copied());
+                        } else if let Some(rest) = other.strip_prefix("insulator_arc_") {
+                            insulator_arc.set(rest, n.first().copied());
+                        }
+                    }
                 },
                 "trolley_section" => {
                     if let Some(s) = sec.as_mut() {
@@ -485,6 +500,8 @@ impl WireNet {
         let mut net = WireNet {
             nominal_volts: nominal,
             roughness,
+            frog_arc,
+            insulator_arc,
             drawn_by_map: false,
             sounds,
             dir: None,
@@ -910,33 +927,6 @@ impl WireNet {
         d.move_switch(sw, want, self.nodes[self.switches[sw].node as usize].pos)
     }
 
-    /// Send a radio request immediately to every matching receiver in horizontal range.
-    pub fn receive_radio(&self, pos: DVec3, request: &SwitchRequest) -> usize {
-        self.receive_radio_since(pos, request, None)
-    }
-
-    pub(crate) fn receive_radio_since(&self, pos: DVec3, request: &SwitchRequest, previous: Option<DVec3>) -> usize {
-        let mut dynamic = self.dynamic.lock().unwrap();
-        let mut changed = 0;
-        for (index, switch) in self.switches.iter().enumerate() {
-            if switch.mode != SwitchMode::Radio || switch.radio_range <= 0.0 {
-                continue;
-            }
-            let distance = horizontal(self.nodes[switch.node as usize].pos - pos).length_squared();
-            if distance > (switch.radio_range as f64).powi(2) {
-                continue;
-            }
-            if previous.is_some_and(|previous| horizontal(self.nodes[switch.node as usize].pos - previous).length_squared() <= (switch.radio_range as f64).powi(2)) {
-                continue;
-            }
-            let Some(want) = switch.wanted(request) else { continue };
-            if dynamic.move_switch(index, want, self.nodes[switch.node as usize].pos) {
-                changed += 1;
-            }
-        }
-        changed
-    }
-
     /// Where a shoe arriving at `from` of a node leaves it.
     fn exit_at(&self, node: u32, from: (u32, u8)) -> Option<(u32, u8)> {
         let n = &self.nodes[node as usize];
@@ -1318,7 +1308,7 @@ mod tests {
         assert!(!n.switch_branch(0));
     }
 
-    fn radio_net(extra: &str) -> WireNet {
+    pub(super) fn radio_net(extra: &str) -> WireNet {
         let text = format!(
             "[trolley_section]\nid 1\nlive 1\n\
              [trolley_span]\nsection 1\np 0 0 5.5\np 25 0 5.5\np 50 0 5.5\n\
@@ -1448,11 +1438,8 @@ mod tests {
 
     #[test]
     fn the_map_chooses_only_the_overhead_lines_sounds() {
-        let n = WireNet::parse("[trolley_sounds]\nhiss off\nfrog sounds/frog clatter.wav\nclick off\n[trolley_span]\np 0 0 5\np 50 0 5\n");
-        assert_eq!(n.sounds.hiss, SoundChoice::Off);
-        assert_eq!(n.sounds.snap, SoundChoice::Builtin);
-        assert_eq!(n.sounds.frog, SoundChoice::File("sounds/frog clatter.wav".into()));
-        assert_eq!(n.sounds.switch, SoundChoice::Off);
+        let n = WireNet::parse("[trolley_sounds]\nhiss off\nsnap off\nfrog sounds/frog clatter.wav\nclick off\n[trolley_span]\np 0 0 5\np 50 0 5\n");
+        assert_eq!(n.sounds, WireSounds { frog: SoundChoice::File("sounds/frog clatter.wav".into()), switch: SoundChoice::Off });
         assert_eq!(n.spans.len(), 1);
     }
 
