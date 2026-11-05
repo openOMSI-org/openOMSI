@@ -20,7 +20,13 @@ if (-not (Test-Path -LiteralPath (Join-Path $ResolvedGame 'openomsi.exe') -PathT
 if (-not (Test-Path -LiteralPath $PackagingScript -PathType Leaf)) {
     throw 'The bundled NVIDIA verification script is missing'
 }
-if (Get-Process -Name 'openomsi' -ErrorAction SilentlyContinue) {
+# (the launcher's own bus preview runs as `openomsi --launcher-service` and loads no NVIDIA file;
+# a game in another folder does not use these files)
+$GameExe = Join-Path $ResolvedGame 'openomsi.exe'
+$RunningGame = @(Get-CimInstance Win32_Process -Filter "Name = 'openomsi.exe'" | Where-Object {
+    $_.CommandLine -notmatch '--launcher-service' -and (-not $_.ExecutablePath -or $_.ExecutablePath -ieq $GameExe)
+})
+if ($RunningGame.Count -gt 0) {
     throw 'Close openOMSI before installing NVIDIA DLSS files'
 }
 if (((Get-Item -LiteralPath $ResolvedGame -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {

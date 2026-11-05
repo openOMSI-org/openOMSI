@@ -50,5 +50,6 @@ test('installer is Windows only and checks RTX and the game folder', () => {
   assert.match(backend, /#\[cfg\(windows\)\]/);
   assert.match(backend, /omsi_cfg::upscaler_files::rtx_present\(\)/);
   assert.match(backend, /openomsi\.exe/);
-  assert.match(installer, /Get-Process -Name 'openomsi'/);
+  assert.match(installer, /-notmatch '--launcher-service'/);
+  assert.match(installer, /Close openOMSI before installing/);
 });
