@@ -232,6 +232,7 @@ pos -0.3 1.0 4.16           the hinge on the roof (x right, y forward, z up, m)
 length 6.7                  boom length (m)
 rest_angle -1.5             elevation lying on the hook (degrees)
 work_angle 16               elevation in work (degrees): where the spring's force is rated
+max_angle 45                the highest it rises loose, held by its rope (degrees)
 tip_force 120               what the shoe presses the wire with at work_angle (N)
 mass 16                     boom with rope (kg)
 head_mass 3                 head and shoe (kg)
@@ -241,6 +242,8 @@ max_wire_angle 40           how far the boom may stand off the wire (degrees)
 kink_speed 3.0              sideways speed of the shoe a bend of the wire may ask (m/s)
 retriever 35                a rope retriever pulls it down at this rate after dewiring (deg/s)
 motor 1                     raised and lowered from the cab
+boom_bounce 1.1             the boom's bounce on a script's lifting gear (Hz)
+boom_damping 0.12           how quickly that bounce dies away (damping ratio)
 visible 1                   the game draws the boom and its rope (0: the model draws its own)
 reach 9                     how far from the rope's handle it can be handled (m)
 ```
@@ -313,6 +316,8 @@ make sound by them):
 | `Trolley_Pole<k>_State` | 0 down on the hook, 1 being pulled down, 2 in the hand, 3 loose, 4 on the wire with the contact open, 5 on the wire |
 | `Trolley_Pole<k>_Contact` | 1 while the shoe touches the wire |
 | `Trolley_Pole<k>_Force` | what the shoe presses with (N) |
+| `Trolley_Pole<k>_Bounce` | 0..1 how hard the boom bounces on its script's lifting gear |
+| `Trolley_Pole<k>_Hit` | 0..1 how hard its last hit was (on the wire, back on it, against its rope) |
 | `Trolley_Volts`, `Trolley_Amps` | the voltage at the bus and the current from the line (negative: given back) |
 | `Trolley_Powered` | 1 while both poles are on live wire |
 | `Trolley_Notch` | the rheostat controller's position |
@@ -323,6 +328,29 @@ make sound by them):
 A vehicle whose model carries its own poles puts `visible 0` in its `[trolley_pole]` and rotates
 its pole meshes by `Trolley_Pole<k>_Elev` and `_Azim`.
 
+### A script's lifting gear
+
+A vehicle's script can run its poles' lifting gear itself, as an OMSI 2 door script runs its
+doors: it declares and writes `Trolley_Pole<k>_Gear`, where the gear's carriage is, 0 on the hook,
+1 just under the wire (the wire above it, else where the pole left the wire, else its
+`work_angle`). The boom rides on the carriage as a spring (`boom_bounce`, `boom_damping`), so
+wherever the carriage stops or starts the boom bounces; at 1 the gear lets it go, and its spring
+puts the shoe on the wire. Going below 1 from the wire takes the shoe off it; at 0 the hook
+catches the boom once it has come down.
+
+The script times the run as it likes (a delay, a stop halfway, the speeds, from its own constant
+file) and fires its run's sound itself, with a trigger of its own, as a door script does. The
+pole follows the variable from its first change until the run's end (on the wire or the hook);
+a variable left as it is moves nothing, so a hand or the cab still puts a pole up or down. Taken
+by hand, a pole leaves the script's run. Without the variable `motor 1` works as before.
+
+```
+'raise from the hook: 2 s to halfway, 3 s there, 2 s on
+(L.L.gear_t) (L.S.Timegap) + (S.L.gear_t)
+(L.L.gear_t) 2 < {if} (L.L.gear_t) 4 / {else} (L.L.gear_t) 5 < {if} 0.5 {else} (L.L.gear_t) 5 - 4 / 0.5 + 1 min {endif} {endif}
+(S.L.Trolley_Pole1_Gear) (S.L.Trolley_Pole2_Gear)
+```
+
 ## Sounds
 
 The gear makes six sounds of its own, from noise and decaying tones (no files):
@@ -330,12 +358,64 @@ The gear makes six sounds of its own, from noise and decaying tones (no files):
 | Sound | When | Sound trigger | Map key |
 |---|---|---|---|
 | hiss (a loop) | the shoes sliding on the wire, louder with the current and the speed | - (`Trolley_Hiss`, 0..1) | - |
-| arc crack | current broken: a shoe leaving the wire or a pole coming off under load, an insulator or a frog crossed under power | `trolley_snap` | - |
-| frog clatter | a shoe going through a frog | `trolley_frog` | `frog` |
-| contactor click | the rheostat controller stepping | `trolley_click` | - |
-| thud | a shoe landing on the wire, a pole on its hook or coming off | `trolley_thud` | - |
-| hook | a pole's hook letting go or catching it | `trolley_clack` | - |
+| arc crack | current broken: a shoe leaving the wire or a pole coming off under load, an insulator or a frog crossed under power | `ev_trolleyarc` | - |
+| frog clatter | a shoe going through a frog | `ev_trolleyfrog` (below) | `frog` |
+| contactor click | the rheostat controller stepping | `ev_trolleycontactor` | - |
+| thud | a shoe landing on the wire or coming off it | `ev_trolleyhitup`, `wirehit`, `wireoff`, `dewire`, `hitmax` (below) | - |
+| hook | a pole's hook letting go or catching it | `ev_trolleyhookopen`, `hitdown` (below) | - |
 | switch mechanism | the selected leg actually changes, not when a shoe crosses it | - (map-owned) | `switch` |
+
+A vehicle plays its own recordings of the poles as OMSI 2 buses do their doors'
+(`ev_doortriggeropen_0` as a door is ordered to move, `ev_doorhitclose_0` as it hits its stop).
+
+A pole's own triggers end in its number `_<k>`, from 1 as its `Trolley_Pole<k>` variables;
+the same trigger without the number plays for either pole (fired once when both do it in the
+same frame).
+
+The game fires these for what happens to a pole, whoever moves it (a hand, a script's lifting
+gear, a bounce):
+
+| Sound trigger | When | What to record |
+|---|---|---|
+| `ev_trolleyhookopen_<k>` | the pole is taken off its hook by hand | the hook opening |
+| `ev_trolleyhitup_<k>` | its shoe lands on the wire | the hit |
+| `ev_trolleywireoff_<k>` | its shoe is taken off the wire by the rope | the shoe leaving it |
+| `ev_trolleyhitdown_<k>` | it comes down on the roof and its hook catches it | the hit and the lock |
+| `ev_trolleydewire_<k>` | its shoe is thrown off the wire: a bounce, a bend, the bus too far aside | the shoe flying off |
+| `ev_trolleyhitmax_<k>` | the loose boom is brought up short by its rope at `max_angle` | the jolt |
+| `ev_trolleywirehit_<k>` | its shoe falls back on the wire after bouncing off it | a knock |
+| `ev_trolleyfrog_<k>` | its shoe goes through a frog | the clatter |
+| `ev_trolleyinsulator_<k>` | its shoe goes over a section insulator (silent without it) | the click |
+| `ev_trolleyarc` | an arc's crack (see above) | the crack |
+| `ev_trolleycontactor` | the rheostat controller steps | the contactor |
+
+One recording for several of these is one `[sound]` with several `[trigger]`s, as OMSI 2's. A
+vehicle's entry on a trigger replaces the game's own sound even while it is silent: a lifting
+gear's recording that has the shoe's hit in it (the script fires it with the run, as a door's
+opening) keeps the hit's own entry quiet while its script's run goes on, with a `[volcurve]` (a
+triggered sound's `[conditionSingle]` is not looked at, as in OMSI 2):
+
+```
+[sound]
+pole_on_wire.wav
+1
+[trigger]
+ev_trolleyhitup_1
+[volcurve]
+my_gear_running_1
+[pnt]
+0
+1
+[pnt]
+1
+0
+```
+
+`Trolley_Pole<k>_Hit` (0..1) is how hard pole k's last hit was (on the wire, back on it, against
+its rope), for a `[volcurve]` as OMSI 2's `doorSpeed_<n>`. A `[volcurve]` on `Trolley_Pole<k>_Elev`
+or `_State` cuts a run's sound short where a hand stops the pole, as `door_<n>` does a door's.
+The boom's bounce has no sound of its own; a vehicle can loop a rattle or a spring's creak on
+`Trolley_Pole<k>_Bounce` (0..1).
 
 The built-in hiss is located at each touching shoe, not the bus
 centre. Its maximum gain is 0.035: beyond 1 m a steep fade is added to the normal distance
@@ -353,7 +433,7 @@ fixed when it starts: one started in the cab stays muffled if the view changes w
 
 **A vehicle** plays its own the OMSI way, in its `sound.cfg`: an entry with `[trigger]` on one
 of the triggers above plays each time that happens (the game fires the trigger as a script's
-`(T.L.trolley_thud)` would), and the game's own sound is not played; an entry whose volume
+`(T.L.ev_trolleyhitup_1)` would), and the game's own sound is not played; an entry whose volume
 curve or condition reads `Trolley_Hiss` takes the place of the hiss (a `[sound]` without a
 trigger loops; its `[volcurve]` on `Trolley_Hiss` makes it follow the hiss). An entry with a silent file or no volume silences a sound.
 
@@ -362,7 +442,9 @@ trigger loops; its `[volcurve]` on `Trolley_Hiss` makes it follow the hiss). An 
 sound\pole_hook.wav
 1
 [trigger]
-trolley_clack
+ev_trolleyhookopen
+[trigger]
+ev_trolleyhitdown
 
 [sound]
 sound\shoe_hiss.wav
@@ -397,10 +479,15 @@ share the network's events, so the same movement is not played once per bus.
 
 | Key | Where | Does |
 |---|---|---|
-| R (hold) | outside the bus near its back (on foot, outside or free camera) | take the rope of the nearest pole: it rises and follows your look; let go to put it on the wire |
+| R (hold) | outside the bus near its back (on foot, outside or free camera) | take the rope of the nearest pole: it rises to just under the wire you look at (else the one above its working angle); let go to let its spring put it on |
 | T | the same | pull the nearest pole down (the shoe off the wire, the boom on its hook) |
 | Shift + R / T | the same | both poles |
-| R / T | in the cab | raise / lower the poles that have a motor |
+| Ctrl + R | anywhere, the cab too | both poles on the wire by themselves, or down if one is on, with or without a lifting gear; not where the keyboard file or the bus has Ctrl+R (Ctrl+T is OMSI's change_give) |
+
+In the cab R and T are the gearbox's: the poles answer the cab's own switch and Ctrl+R there.
+
+The game's auto-start (Shift+U) also puts the poles on the wire, when each one has a wire
+within its reach.
 
 On foot you get out with Ctrl+Shift+G (the `get_up` setting); the outside camera is F3.
 
@@ -432,13 +519,30 @@ the whole gear are in `crates/omsi-trolley`.
 ## The mouse's hand on a pole
 
 A click on the cab's pole switch (a plain OMSI 2 trolleybus: `cp_SHTANGALEV`, `cp_SHTANGAPRAV`
-or what its model calls it), or - from outside the cab, with the outside, free or foot view -
-a click on a pole itself, takes that pole in hand. The tip of the boom follows the mouse: it goes
-to the wire the cursor points at (as the R key's gaze does), or to where the cursor points when
-no wire is near. The next click lets go, and the spring lifts the shoe into the wire it was aimed
-at; a wire missed, the pole flies loose and the motor's retriever (if it has one) pulls it down.
-A pole on the wire is taken off it by the same click (an arc, as for any dewiring under
-current). One hand: one pole at a time. T still pulls a pole down by its rope.
+or what its model calls it) takes that pole in hand. The tip of the boom follows the mouse: it
+goes to the wire the cursor points at (as the R key's gaze does), or to where the cursor points
+when no wire is near. The next click lets go, and the spring lifts the shoe into the wire it was
+aimed at; a wire missed, the pole flies loose and the motor's retriever (if it has one) pulls it
+down. One hand: one pole at a time. T still pulls a pole down by its rope.
+
+From outside the cab (the outside, free or foot view) a click on a pole is the hand on its rope:
+the pole is taken where it is, the mouse up lets it rise, down pulls it down, sideways swings it,
+with no help to the wire.
+The next click lets go, and the spring lifts the shoe from where it was held: into the wire just
+above it, or loose past it. Pushed up through a wire the shoe takes it and the hand lets go; let
+go a little over its hook, the pole catches on it. A pole on the wire is taken off it the same way
+(an arc, as for any dewiring under current).
+
+A model can hold the ropes itself, through its own `[mouseevent]`s on the boom and the rope, as
+OMSI 2 trolleybuses do: its script declares and writes, per pole k,
+
+| Variable | Meaning |
+|---|---|
+| `Trolley_Pole<k>_Rope` | 1 the rope is held (the press of its mouse event), -1 pulled down (a retriever), 0 let go |
+| `Trolley_Pole<k>_Rope_X`, `_Rope_Y` | the mouse's movement while held, in pixels (`(L.S.mouse_x)` / `_y` of its `_drag`, added up): the game takes them each step and sets them to 0 |
+
+A pole with these takes no click of the game's own; the hand works as above, held while the
+mouse button is.
 
 From the driver's seat the poles are behind the head and the wire is out of the cursor's reach,
 so a click on the switch has the motor raise the pole to the wire nearest its tip (the hand lets

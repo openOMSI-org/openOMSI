@@ -118,6 +118,8 @@ impl Renderer {
         };
         // a small or shared graphics chip gets a lighter picture (see `lighter_picture`)
         GL_BACKEND.store(info.backend == wgpu::Backend::Gl, std::sync::atomic::Ordering::Relaxed);
+        AMD_VULKAN.store(info.backend == wgpu::Backend::Vulkan && info.vendor == 0x1002, std::sync::atomic::Ordering::Relaxed);
+        MULTISAMPLED_SHADING.store(!cfg!(any(target_os = "android", target_vendor = "apple")) && info.backend != wgpu::Backend::Gl && adapter.get_downlevel_capabilities().flags.contains(wgpu::DownlevelFlags::MULTISAMPLED_SHADING), std::sync::atomic::Ordering::Relaxed);
         let options = gpu_memory::lighter_picture(&info, vram, options);
         // Temporal upscaling (DirectX 12 or Vulkan; DLSS an NVIDIA RTX card too) replaces the
         // MSAA. DLSS on Vulkan starts Streamline now: the device is made with its extensions.
@@ -143,6 +145,8 @@ impl Renderer {
             limits.max_storage_buffer_binding_size =
                 adapter.limits().max_storage_buffer_binding_size;
             limits.max_buffer_size = adapter.limits().max_buffer_size;
+            limits.max_sampled_textures_per_shader_stage =
+                limits.max_sampled_textures_per_shader_stage.max(adapter.limits().max_sampled_textures_per_shader_stage.min(crate::pipelines::scene::PANE_MASK_TEXTURES));
         }
         // an older or smaller graphics chip (an OpenGL one, a GT 530) does not reach the
         // WebGPU defaults: asked for them anyway, the device was never opened
@@ -753,6 +757,8 @@ impl Renderer {
             temporal_pending: None,
             prepass_msaa_pipelines: prepass.msaa_pipelines,
             prepass_eye_pipelines: prepass.eye_pipelines,
+            pane_mask: prepass.pane_mask,
+            pane_depth: None,
             ground_pipelines,
             ground_bound: std::cell::Cell::new(false),
             ssao_pipeline: ssao.ssao_pipeline,

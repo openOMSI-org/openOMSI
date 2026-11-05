@@ -27,7 +27,7 @@ fn renderer(noop: bool) -> Renderer {
         None,
         Some(wgpu::TextureFormat::Rgba8UnormSrgb),
         RenderOptions {
-            msaa: 1,
+            msaa: if noop { 1 } else { 4 },
             ssao: false,
             shadow_size: 1024,
             fxaa: false,
@@ -202,6 +202,20 @@ fn memory_pressure_keeps_colour_and_cutout_alpha_on_the_gpu() {
                 "colour/alpha changed at {x}: {:?} vs {:?}",
                 pixel(&before, x),
                 pixel(&after, x)
+            );
+        }
+    }
+    renderer.fall_back_without_ray_tracing(&mut scene);
+    assert_eq!(renderer.options.msaa, 4);
+    assert!(!renderer.options.ray_tracing);
+    let recovered = renderer
+        .render_to_image(&mut scene, 64, 64, &camera, &lighting)
+        .unwrap();
+    for x in [16, 48] {
+        for (a, b) in pixel(&after, x).iter().zip(pixel(&recovered, x)) {
+            assert!(
+                a.abs_diff(b) <= 3,
+                "ray-tracing fallback changed the picture at {x}"
             );
         }
     }

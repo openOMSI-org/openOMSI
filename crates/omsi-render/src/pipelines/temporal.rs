@@ -48,7 +48,7 @@ pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, upscaler: Option<T
         write_mask: wgpu::ColorWrites::ALL,
     })];
     // (as the ordinary prepass: plain, cut out, a transmap's opaque part; two-sided, culled.
-    // write false: the late ones, see `cut_batches`, only where the main pass left their own
+    // write false: the late ones, see `DrawPlan::masked`, only where the main pass left their own
     // depth, so just the parts that are seen: with GreaterEqual, parts the picture does not show
     // there put their motion over what lies in front)
     let make = |kind: u8, cull: bool, write: bool| {

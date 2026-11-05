@@ -19,6 +19,8 @@ pub struct PoleDef {
     /// Elevation of the boom lying on its hook, and in its working position (degrees).
     pub rest_angle: f32,
     pub work_angle: f32,
+    /// The highest elevation the boom can rise to, held there by its rope (degrees).
+    pub max_angle: f32,
     /// What the spring presses the shoe up against the wire with at the working angle (N).
     pub tip_force: f32,
     /// Mass of the boom with its rope (kg) and of the head and shoe at the tip (kg).
@@ -39,6 +41,9 @@ pub struct PoleDef {
     pub retriever: f32,
     /// A motor raises and lowers the pole from the cab.
     pub motor: bool,
+    /// The boom's own bounce on a script's lifting gear: its frequency (Hz) and damping ratio.
+    pub boom_bounce: f32,
+    pub boom_damping: f32,
     /// The game draws the boom (a vehicle model that carries its own poles says 0 and takes
     /// the pole variables instead).
     pub visible: bool,
@@ -54,6 +59,7 @@ impl Default for PoleDef {
             length: 6.6,
             rest_angle: 2.5,
             work_angle: 26.0,
+            max_angle: 45.0,
             tip_force: 120.0,
             mass: 16.0,
             head_mass: 3.0,
@@ -63,6 +69,8 @@ impl Default for PoleDef {
             kink_speed: 3.0,
             retriever: 0.0,
             motor: false,
+            boom_bounce: 1.1,
+            boom_damping: 0.12,
             visible: true,
             reach: 9.0,
         }
@@ -324,7 +332,10 @@ impl PoleDef {
                 "max_wire_angle" => p.max_wire_angle = num(&v, 0).unwrap_or(p.max_wire_angle).clamp(5.0, 80.0),
                 "kink_speed" => p.kink_speed = num(&v, 0).unwrap_or(p.kink_speed).clamp(0.2, 10.0),
                 "retriever" => p.retriever = if v.len() > 0 && num(&v, 0).is_none() { if flag(&v) { 35.0 } else { 0.0 } } else { num(&v, 0).unwrap_or(0.0).max(0.0) },
+                "max_angle" => p.max_angle = num(&v, 0).unwrap_or(p.max_angle).clamp(10.0, 80.0),
                 "motor" => p.motor = flag(&v),
+                "boom_bounce" => p.boom_bounce = num(&v, 0).unwrap_or(p.boom_bounce).clamp(0.2, 5.0),
+                "boom_damping" => p.boom_damping = num(&v, 0).unwrap_or(p.boom_damping).clamp(0.02, 1.0),
                 "visible" => p.visible = flag(&v),
                 "reach" => p.reach = num(&v, 0).unwrap_or(p.reach).clamp(1.0, 30.0),
                 _ => {}
@@ -461,6 +472,9 @@ mod tests {
         assert_eq!(p.base, Vec3::new(-0.4, -1.2, 3.05));
         assert_eq!(p.length, 7.0);
         assert!(p.retriever > 0.0);
+        let m = PoleDef::parse(&["motor 1", "boom_bounce 1.5", "boom_damping 0.2"]);
+        assert_eq!((m.boom_bounce, m.boom_damping), (1.5, 0.2));
+        assert_eq!((p.max_angle, PoleDef::parse(&["max_angle 38"]).max_angle), (45.0, 38.0));
         assert_eq!(p.tip_force, 120.0);
     }
 

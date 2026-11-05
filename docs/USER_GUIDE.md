@@ -483,7 +483,7 @@ the bus waits at a stop) and `head_idle_pace` (0.5..2: how fast that sway moves,
 pace it is designed at), `collision_objects` (walls, poles and bridges stop the bus; off is OMSI's `no_collision`
 option and is taken from OMSI's options when openOMSI starts the first time), `graphics_api`
 (`auto`, `vulkan`, `dx12` on Windows, `gl`, `angle` on Windows: which graphics interface the
-game asks first - with `auto` on Windows DirectX 12, then Vulkan, then OpenGL, then ANGLE;
+game asks first - with `auto` on Windows DirectX 12, then Vulkan, then OpenGL, then ANGLE, except with a discrete AMD Radeon, where `auto` asks Vulkan first, as it is faster there; after a device lost on Vulkan, `auto` keeps to DirectX 12 on that machine until the next version of the game, or until `~/.openomsi/vulkan-lost` is deleted;
 on Linux and Android Vulkan, then OpenGL; a Mac, iPhone and iPad always use Metal; see
 *Graphics API* below), `ctrl_off` (game controllers switched off on the Controls page, by
 name, separated by `|`) and `language` (the language of the interface - `ENG`, `DEU`, `FRA`,

@@ -8,7 +8,8 @@ impl Renderer {
     /// the street's motion behind the windscreen, and the dashboard would smear while driving.
     /// Drawn after the main pass, over the depth it left, without writing depth (#2059).
     pub(crate) fn encode_temporal_late_motion(&self, encoder: &mut wgpu::CommandEncoder, scene: &Scene, f: &FrameCtx, plan: &DrawPlan) {
-        if !f.temporal_frame || plan.cut_batches.is_empty() || plan.prefill.is_none() || !self.shares_prepass_depth(f, plan) {
+        let Some((_, cut_batches)) = plan.masked.as_ref().filter(|(_, cut)| !cut.is_empty()) else { return };
+        if !f.temporal_frame || plan.prefill.is_none() || !self.shares_prepass_depth(f, plan) {
             return;
         }
         let (Some(d), Some(ao)) = (self.temporal.as_ref(), self.targets.ao.as_ref()) else { return };
@@ -35,7 +36,7 @@ impl Renderer {
         // (plain opaque parts only, prepass codes 0 and 1: a cut-out or transmap layer, the dirt
         // on a windscreen, left its depth in scattered texels, and the motion through the glass
         // would come out speckled)
-        encode_batches_filtered(&mut pass, scene, &plan.cut_batches, |b: &Batch| b.pipe < 2, |pipe| &p.late_motion[pipe as usize]);
+        encode_batches_filtered(&mut pass, scene, cut_batches, |b: &Batch| b.pipe < 2, |pipe| &p.late_motion[pipe as usize]);
     }
 
     pub(crate) fn encode_temporal_mask(&self, encoder: &mut wgpu::CommandEncoder, scene: &Scene, f: &FrameCtx, plan: &DrawPlan) {
