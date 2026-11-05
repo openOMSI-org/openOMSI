@@ -322,8 +322,9 @@ impl TrafficSim {
             }
             let rail = c.is_train();
             let way = if rail { self.train_way(&c.state, rail_reach) } else { self.way_lanes(&c.state, reach) };
-            for (l, d) in way {
-                if let Some((ci, li)) = self.net.lanes[l].traffic_light {
+            for (k, &(l, d)) in way.iter().enumerate() {
+                let light = if rail || k == 0 { self.net.lanes[l].traffic_light } else { super::lights::entry_light(&self.net, &way, k) };
+                if let Some((ci, li)) = light {
                     if let Some(ctl) = self.lights.get_mut(ci) {
                         let gap = d - c.state.front;
                         // (asked until its rear has left the lane, not its middle; a car

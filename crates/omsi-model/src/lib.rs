@@ -788,7 +788,7 @@ impl Model {
                 self.meshes.push(MeshDef { file, lod: self.lods.len() - 1, illumination_interior, ..Default::default() });
             }
             "item" => {
-                let name = r.str().to_string();
+                let name = r.str().trim().to_string();
                 let ctc = r.str().to_string();
                 let texture = r.str().to_string();
                 self.items.push(ModelItem { name, ctc, texture, set_vars: Vec::new() });

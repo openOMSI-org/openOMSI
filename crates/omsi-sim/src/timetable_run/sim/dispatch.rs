@@ -540,11 +540,6 @@ impl ScheduleSim {
         self.departures[i].trip
     }
 
-    /// The timetable line (`[newtour]`'s), tour and AI group of departure `i`.
-    pub fn departure_line(&self, i: usize) -> &str {
-        &self.departures[i].line
-    }
-
     pub fn departure_tour(&self, i: usize) -> &str {
         &self.departures[i].tour
     }

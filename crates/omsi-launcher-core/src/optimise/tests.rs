@@ -107,6 +107,17 @@ fn a_card_far_too_slow_gets_the_settings_of_the_next_start_too() {
 }
 
 #[test]
+fn texture_compression_comes_back_only_where_the_card_compresses() {
+    let m = Machine { cores: 8, msaa_counts: 1 | 2 | 4, ssao: true };
+    let mut s = pc_1440p();
+    s["texture_compression"] = json!(false);
+    let offered = |s: &Value| lighter_steps(s, Limit::Gpu, &m).iter().any(|st| st.key == "texture_compression" && st.to == json!(true));
+    assert!(offered(&s));
+    s["gpu_texture_compression"] = json!(false);
+    assert!(!offered(&s), "with the card's compression off the textures stay RGBA either way");
+}
+
+#[test]
 fn a_device_without_2x_is_not_tried_at_2x() {
     let apple = Machine { cores: 8, msaa_counts: 1 | 4, ssao: true };
     assert!(!lighter_steps(&pc_1440p(), Limit::Gpu, &apple).iter().any(|s| s.key == "msaa" && s.to == json!(2)));

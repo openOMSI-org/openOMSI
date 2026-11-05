@@ -103,12 +103,14 @@ the maps and buses you used, the number and size of installed archives, log even
 game records described below. It is never sent anywhere unless you attach it yourself.</p>
 <p>Game records. For each game, openOMSI keeps a small record on your device, in the <code>diagnostics</code>
 folder of the openOMSI data folder: the version, system, graphics card and graphics settings, the map, bus, line and
-tour, how smoothly the game ran (frame times grouped into a few ranges), and how the game ended. When the game meets an
-error, the record also holds how many errors it met and the last one: its message, cut before any quoted text and with your user folder, driver and player
+tour, when the game started and when its record was last saved, how long you drove, how smoothly the game ran (frame
+times grouped into a few ranges), and how the game ended. When the game meets an error, the record also holds how many
+errors it met and the last one: its message, cut before any quoted text and with your user folder, driver and player
 names removed, the source file and line where it happened, and the names of the program functions it went through
 (openOMSI's and those of the libraries it uses). Records older than 30 days are deleted the next time you play, and at
-most the last 100 are kept. They are never sent anywhere; the support package includes them so you can attach them to
-a report yourself. You can delete the folder at any time.</p>
+most the last 100 are kept. They are never sent anywhere; the support package includes them, with the times cut to the
+day, so you can attach them to a report yourself. You can delete the folder at any time (on Android, by clearing
+the app's data; on iPhone and iPad, by deleting the app).</p>
 
 <h3>Permissions on phones, tablets and Macs</h3>
 <p>openOMSI asks for the microphone (voice chat), motion sensors (tilt steering), the local network (finding and

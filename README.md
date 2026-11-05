@@ -118,9 +118,9 @@ window) or put into the `Mods` folder next to the game.
   `game.log` for the last game. **Settings → General → Support → Support package** saves a
   support package into `~/.openomsi` (`openomsi --export-diagnostics <file.zip>` does the same
   from the command line): system, graphics card, driver, settings, controllers, last map and
-  bus, and a record of each game of the last 30 days (`~/.openomsi/diagnostics`: frame
-  times, how it ended, the error if it crashed) - no paths, names, chat or addresses. Nothing
-  is sent; look inside before you attach it to an issue.
+  bus, and a record of each game of the last 30 days (`~/.openomsi/diagnostics`: the day it
+  was played, how long and how smoothly, how it ended, the error if it crashed) - no paths,
+  names, chat or addresses. Nothing is sent; look inside before you attach it to an issue.
 
 ## Goals
 

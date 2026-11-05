@@ -829,7 +829,7 @@ impl Renderer {
                         // reversed depth (1 at the near plane, 0 at the far one) of
                         // `perspective_rh(fov, aspect, far, near)` back to the distance along
                         // the view
-                        let (near, far) = (camera.near as f64, camera.far as f64);
+                        let (near, far) = (camera.near as f64, camera.depth_far() as f64);
                         let r = near / (far - near);
                         Some(raw.chunks_exact(4).take((width * height) as usize).map(|b| {
                             let d = f32::from_le_bytes([b[0], b[1], b[2], b[3]]) as f64;

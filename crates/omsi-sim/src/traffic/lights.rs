@@ -244,7 +244,7 @@ impl TrafficLightController {
 
     /// Some light shows red-and-yellow: the program is changing over to green.
     fn in_changeover(&self) -> bool {
-        (0..self.lights.len()).any(|i| Self::aspect(self.state(i)) == Aspect::RedYellow)
+        (0..self.lights.len()).any(|i| Self::aspect(self.state(i)) == Aspect::RedYellow && self.lights[i].iter().any(|&(s, _)| matches!(Self::aspect(s), Aspect::Green | Aspect::GreenYellow)))
     }
 
     /// State of light `i` at position `x` of the cycle (s).

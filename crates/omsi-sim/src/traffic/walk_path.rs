@@ -76,7 +76,12 @@ impl Network {
     #[allow(clippy::too_many_arguments)]
     pub fn path_through_box(&self, center: DVec2, half: DVec2, right: DVec2, fwd: DVec2, z: f64, reach: f64, near: DVec2, near_r: f64) -> bool {
         let radius = half.length() + 1.0;
-        let (c0, c1) = (Self::grid_cell((center - DVec2::splat(radius)).extend(0.0)), Self::grid_cell((center + DVec2::splat(radius)).extend(0.0)));
+        let lo = (center - DVec2::splat(radius)).max(near - DVec2::splat(near_r));
+        let hi = (center + DVec2::splat(radius)).min(near + DVec2::splat(near_r));
+        if lo.x > hi.x || lo.y > hi.y {
+            return false;
+        }
+        let (c0, c1) = (Self::grid_cell(lo.extend(0.0)), Self::grid_cell(hi.extend(0.0)));
         let inside = |p: DVec2| {
             let d = p - center;
             d.dot(right).abs() <= half.x && d.dot(fwd).abs() <= half.y
@@ -95,6 +100,11 @@ impl Network {
                         continue;
                     }
                     for w in l.points.windows(2) {
+                        let (a, b) = (w[0].truncate(), w[1].truncate());
+                        let t = ((near - a).dot(b - a) / (b - a).length_squared().max(1e-12)).clamp(0.0, 1.0);
+                        if (a + (b - a) * t - near).length() > near_r {
+                            continue;
+                        }
                         // (sampled along the segment: a path may cross a thin wall between two points)
                         let n = ((w[1] - w[0]).truncate().length() / 0.25).ceil().max(1.0) as usize;
                         for s in 0..=n {

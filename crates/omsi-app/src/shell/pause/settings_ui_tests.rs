@@ -201,7 +201,7 @@ fn pause_settings_headings_draw_accent_markers_without_actions() {
         );
         let verts = &sh.drawn.as_ref().unwrap().verts;
         for n in 0..3 {
-            let top = 201.0 + n as f32 * 34.0;
+            let top = 201.0 + n as f32 * 74.0;
             let marker: Vec<_> = verts
                 .iter()
                 .filter(|v| {
@@ -589,4 +589,88 @@ fn render_pause_date_calendar_preview() {
         image::save_buffer(out.join(format!("{name}.png")), &pixels, w, h, image::ColorType::Rgba8).unwrap();
         println!("preview: {}", out.join(format!("{name}.png")).display());
     }
+}
+
+#[test]
+fn settings_search_keyboard_input_does_not_dispatch_game_actions() {
+    use winit::keyboard::KeyCode as K;
+    let mut sh = Shell::new();
+    assert!(!search::key(&mut sh, K::KeyW, Some("w")));
+    sh.ui.focus = Some(id_of("pause-settings-search"));
+    assert!(search::key(&mut sh, K::KeyW, Some("w")));
+    assert_eq!(sh.ui.input.text, "w");
+    assert!(sh.actions.is_empty());
+    assert!(search::key(&mut sh, K::Escape, None));
+    assert!(!search::focused(&sh));
+}
+
+#[test]
+fn settings_search_filtered_click_keeps_original_action_index() {
+    let rows = fixture(false);
+    let rail = Vec::new();
+    let v = nested_view(&rail, &rows, false);
+    let mut sh = Shell::new();
+    sh.settings_search.query = "custom plate".into();
+    sh.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
+    sh.ui.input.mouse = Vec2::new(350.0, 245.0);
+    sh.ui.input.pressed = true;
+    sh.ui.input.released = true;
+    settings_rows(&mut sh, &v, v.list.as_ref().unwrap(), Rect::new(300.0, 180.0, 800.0, 600.0), &mut None);
+    assert_eq!(sh.actions, [Action::Choose(6)]);
+    assert_eq!(sh.settings_search.visible, [6]);
+}
+
+#[test]
+fn settings_search_toolbar_types_and_resets_when_page_changes() {
+    let rows = fixture(false);
+    let rail = Vec::new();
+    let v = nested_view(&rail, &rows, false);
+    let list = v.list.as_ref().unwrap();
+    let mut sh = Shell::new();
+    sh.settings_search.page = list.key.clone();
+    sh.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
+    sh.ui.focus = Some(id_of("pause-settings-search"));
+    sh.ui.input.text = "Fleet".into();
+    let mut body = Rect::new(300.0, 180.0, 800.0, 600.0);
+    search::toolbar(&mut sh, list, Rect::new(300.0, 100.0, 700.0, 650.0), &mut body);
+    assert_eq!(sh.settings_search.query, "Fleet");
+    assert_eq!(body.y, 228.0);
+    sh.ui.input.text.clear();
+    sh.settings_search.page = "Other".into();
+    search::toolbar(&mut sh, list, Rect::new(300.0, 100.0, 700.0, 650.0), &mut body);
+    assert!(sh.settings_search.query.is_empty());
+    assert!(!search::focused(&sh));
+}
+
+#[test]
+fn settings_search_closes_phone_keyboard_and_keeps_desktop_text() {
+    use clap::Parser;
+    use winit::keyboard::KeyCode as K;
+    let mut app = crate::assemble_app(crate::cli::Args::parse_from(["openomsi"]), crate::settings::Settings::default());
+    app.menus.game_menu = Some(0);
+    app.open_list(crate::game_lists::ListKind::Options(0));
+    app.shell.ui.focus = Some(id_of("pause-settings-search"));
+    crate::platform::TEXT_INPUT_ON.with(|flag| flag.set(false));
+    crate::platform::phone_keyboard(None, true);
+    assert_eq!(crate::platform::TEXT_INPUT_ON.with(|flag| flag.get()), crate::platform::MOBILE);
+    assert!(app.settings_search_key(K::KeyE, Some("é")));
+    assert_eq!(app.shell.ui.input.text, "é");
+    assert!(app.settings_search_key(K::Escape, None));
+    assert!(!crate::platform::PHONE_KEYBOARD_ON.with(|flag| flag.get()));
+    assert!(!crate::platform::TEXT_INPUT_ON.with(|flag| flag.get()));
+}
+
+#[test]
+fn pause_unheaded_long_page_uses_right_column_with_original_action_index() {
+    let rows: Vec<_> = (0..8).map(|_| ("keybind", "Binding\u{1f}a\u{1f}Key\u{1f}Change binding".to_string())).collect();
+    let rail = Vec::new();
+    let mut v = nested_view(&rail, &rows, false);
+    v.list.as_mut().unwrap().sel = 0;
+    let mut sh = Shell::new();
+    sh.begin(1600.0, 900.0, 1.0, 1.0 / 60.0);
+    sh.ui.input.mouse = Vec2::new(1200.0, 215.0);
+    sh.ui.input.pressed = true;
+    sh.ui.input.released = true;
+    settings_rows(&mut sh, &v, v.list.as_ref().unwrap(), Rect::new(300.0, 180.0, 1100.0, 600.0), &mut None);
+    assert_eq!(sh.actions, [Action::Choose(4)]);
 }

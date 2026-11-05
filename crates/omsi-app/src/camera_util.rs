@@ -280,11 +280,17 @@ pub(crate) fn render_mirrors(
     }
     // the mirrors in the picture (all of them without a view); none in it, none redrawn (a
     // static camera's screen is somewhere else than the camera: it always takes its turn)
+    let glass = world.mirror_glass.lock().clone();
+    let (v_pos, v_rot) = (v.position, v.body_rotation());
     let seen: Vec<usize> = match pick {
         MirrorPick::Only(set) => (0..cams.len()).filter(|i| set.contains(i)).collect(),
         MirrorPick::All(skip) | MirrorPick::Turn(_, skip) => (0..cams.len())
             .filter(|i| !skip.contains(i))
-            .filter(|&i| cams[i].0.fixed || on_screen.contains(&i) || view.as_ref().map(|v| mirror_in_view(cams[i].1 .0, cams[i].0.extra.unwrap_or(0.0).max(MIRROR_MIN_RADIUS), v)).unwrap_or(true))
+            .filter(|&i| {
+                cams[i].0.fixed
+                    || on_screen.contains(&i)
+                    || view.as_ref().map(|v| mirror_in_view(cams[i].1 .0, cams[i].0.extra.unwrap_or(0.0).max(MIRROR_MIN_RADIUS), v) || glass.get(i).copied().flatten().is_some_and(|g| mirror_in_view(v_pos + v_rot.transform_vector3(g.centre).as_dvec3(), MIRROR_MIN_RADIUS, v))).unwrap_or(true)
+            })
             .collect(),
     };
     if seen.is_empty() {
