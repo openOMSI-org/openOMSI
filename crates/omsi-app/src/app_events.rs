@@ -97,6 +97,7 @@ impl ApplicationHandler for App {
         self.input.touch.drop_gpu();
         self.input_lost();
         self.save_last_situation();
+        omsi_platform::diagnostics::save(crate::support_bundle::diagnostics(self));
         // (a phone's app in the background is often ended without `exiting`)
         omsi_render::pipeline_cache::save();
     }

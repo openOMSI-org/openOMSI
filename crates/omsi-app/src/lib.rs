@@ -495,6 +495,9 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     if args.export_glb.is_none() && args.lan_join.is_none() {
         place_on_duty(&mut args);
     }
+    if server_cfg.is_none() && args.export_glb.is_none() {
+        omsi_platform::diagnostics::game_started();
+    }
     let settings = settings::Settings::load();
     applog::log_system(&settings);
     if args.drive_keys.eq_ignore_ascii_case("simple")
