@@ -111,6 +111,9 @@ impl SealedMount {
     pub(super) fn read(&self, key: &str) -> io::Result<Vec<u8>> {
         let f = self.entries.get(key).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, format!("{}: no file {key}", self.path.display())))?;
         if let Some(pack) = &self.publisher {
+            if pack.manifest().key_id.is_some() {
+                PROTECTED_READS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
             return pack.read(&f.blob.to_string_lossy()).map_err(io::Error::other);
         }
         let key = self.key.as_ref().ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "sealed store has no key"))?;
@@ -139,12 +142,13 @@ impl SealedMount {
 }
 
 static SEALED: RwLock<Vec<Arc<SealedMount>>> = RwLock::new(Vec::new());
-static PROTECTED_CONTENT_SEEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static PROTECTED_READS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// Has an encrypted publisher pack been mounted during this process, including mounts already
-/// dropped? Multiplayer session stores are sealed too, but they hold no publisher-protected content.
-pub fn protected_content_seen() -> bool {
-    PROTECTED_CONTENT_SEEN.load(std::sync::atomic::Ordering::Acquire)
+/// How many files of encrypted publisher packs were read so far. Anything derived while it
+/// grows may hold protected content, so it must not be cached on disk. Multiplayer session
+/// stores are sealed too, but they hold no publisher-protected content and are not counted.
+pub fn protected_reads() -> u64 {
+    PROTECTED_READS.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// Mount `files` (sealed with `key`) as the folder `mount`, which need not exist on disk;
@@ -197,9 +201,6 @@ fn mount_store(mount: &Path, key: Option<Arc<SealKey>>, files: Vec<SealedFile>, 
         m.entries.insert(lower.join("/"), f);
     }
     log::info!("sealed store {}: {} files mounted", mount.display(), m.entries.len());
-    if m.publisher.as_ref().is_some_and(|pack| pack.manifest().key_id.is_some()) {
-        PROTECTED_CONTENT_SEEN.store(true, std::sync::atomic::Ordering::Release);
-    }
     let mut all = SEALED.write().unwrap();
     all.retain(|x| x.path != mount);
     all.push(Arc::new(m));
@@ -335,10 +336,15 @@ mod tests {
 
     #[test]
     fn session_stores_are_not_publisher_protected_content() {
-        // (no unit test here mounts an encrypted publisher pack, so the sticky marker starts unset)
-        let mount = std::env::temp_dir().join(format!("omsi-cfg-session-store-{}", std::process::id()));
-        mount_sealed(&mount, Arc::new(SealKey::new(&random_key().unwrap())), vec![]);
+        let dir = std::env::temp_dir().join(format!("omsi-cfg-session-store-{}", std::process::id()));
+        let key = SealKey::new(&random_key().unwrap());
+        let files = store(&dir, &key);
+        let mount = dir.join("mount");
+        mount_sealed(&mount, Arc::new(key), files);
+        let before = protected_reads();
+        super::super::read(&mount.join("maps/Test Map/global.cfg")).unwrap();
         unmount_sealed(&mount);
-        assert!(!protected_content_seen(), "a multiplayer session store counted as publisher-protected content");
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(protected_reads(), before, "a multiplayer session store counted as publisher-protected content");
     }
 }

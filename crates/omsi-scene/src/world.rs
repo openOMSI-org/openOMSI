@@ -691,6 +691,9 @@ pub(super) fn insert_publisher_texture_dirs(
     publisher_texture_dirs: &[PathBuf],
     root: &Path,
 ) {
+    if publisher_texture_dirs.is_empty() {
+        return;
+    }
     let global = omsi_cfg::resolve_path(root, "Texture");
     let at = dirs.iter().position(|dir| *dir == global).unwrap_or(dirs.len());
     dirs.splice(at..at, publisher_texture_dirs.iter().cloned());
