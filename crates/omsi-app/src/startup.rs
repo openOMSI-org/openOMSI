@@ -300,7 +300,9 @@ pub(crate) fn backend_order() -> Vec<GraphicsApi> {
     } else {
         omsi_cfg::flags::OMSI_BACKEND.var().map(str::to_string).unwrap_or(settings.graphics_api)
     };
-    let native = if cfg!(windows) {
+    let native = if cfg!(windows) && vulkan_first(&wanted) {
+        vec![wgpu::Backends::VULKAN, wgpu::Backends::DX12, wgpu::Backends::GL]
+    } else if cfg!(windows) {
         vec![wgpu::Backends::DX12, wgpu::Backends::VULKAN, wgpu::Backends::GL]
     } else {
         vec![wgpu::Backends::VULKAN, wgpu::Backends::GL]
@@ -318,6 +320,28 @@ pub(crate) fn backend_order() -> Vec<GraphicsApi> {
     };
     // (the one asked for first, the others after it: a machine without it still starts)
     first.into_iter().chain(all.into_iter().filter(|b| Some(*b) != first)).collect()
+}
+
+static VULKAN_FIRST: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+
+fn vulkan_first(wanted: &str) -> bool {
+    matches!(wanted.trim().to_ascii_lowercase().as_str(), "" | "auto")
+        && *VULKAN_FIRST.get_or_init(|| {
+            let lost = vulkan_lost_path().is_some_and(|p| p.exists());
+            let dx12 = GraphicsApi::Native(wgpu::Backends::DX12);
+            let adapters = pollster::block_on(backend_instance(dx12).enumerate_adapters(dx12.backends()));
+            let chosen = adapters.iter().map(|a| a.get_info()).find(|i| i.device_type == wgpu::DeviceType::DiscreteGpu);
+            !lost && chosen.is_some_and(|i| prefers_vulkan(i.vendor))
+        })
+}
+
+fn prefers_vulkan(vendor: u32) -> bool {
+    vendor == 0x1002
+}
+
+pub(crate) fn vulkan_lost_path() -> Option<PathBuf> {
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
+    Some(PathBuf::from(home).join(".openomsi").join("vulkan-lost"))
 }
 
 /// A renderer in software on the processor (wgpu calls it a CPU adapter: WARP, llvmpipe,
@@ -422,6 +446,9 @@ impl Opener {
             for adapter in Renderer::adapters_for(&inst, &surface) {
                 let info = adapter.get_info();
                 if is_software(&info) != self.software_round {
+                    continue;
+                }
+                if info.backend == wgpu::Backend::Vulkan && VULKAN_FIRST.get() == Some(&true) && info.device_type != wgpu::DeviceType::DiscreteGpu {
                     continue;
                 }
                 let what = format!("{} ({:?})", info.name, info.backend);
@@ -865,6 +892,12 @@ mod window_tests {
         assert!(software_adapter("llvmpipe (LLVM 15.0.7, 256 bits)", Cpu));
         assert!(!software_adapter("Intel(R) HD Graphics 2500", IntegratedGpu));
         assert!(!software_adapter("NVIDIA GeForce RTX 3050 Laptop GPU", DiscreteGpu));
+    }
+
+    #[test]
+    fn only_an_amd_radeon_opens_vulkan_first() {
+        assert!(super::prefers_vulkan(0x1002));
+        assert!(!super::prefers_vulkan(0x10de) && !super::prefers_vulkan(0x8086));
     }
 
     #[test]
