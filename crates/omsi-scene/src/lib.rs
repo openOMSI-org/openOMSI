@@ -64,6 +64,7 @@ mod scripted;
 pub use scripted::DayKind;
 mod vehicle_materials;
 mod vehicle_types;
+mod vehicle_freetex;
 mod freetex_reload;
 pub use freetex_reload::FreeTextureReloads;
 mod pane_uv;
