@@ -33,7 +33,16 @@ impl App {
             if let Some(t) = self.session.traffic.as_mut() {
                 t.sim.show_actual();
             }
+            if let Some(hub) = self.integrations.plugins.as_ref().map(|p| p.hub.clone()) {
+                let changes = |all| hub.cables.borrow_mut().changes(all).into_iter().map(|(k, c)| (k, c.map(scene_cable))).collect();
+                self.gfx.plugin_cables.sync(changes, self.player.as_ref().map(|p| &p.vehicle), r, scene);
+            }
         }
         self.player_back_to_sim_pose(sim);
     }
+}
+
+/// A plugin's cable as the scene draws it.
+fn scene_cable(c: omsi_plugin::api::cables::Cable) -> omsi_scene::plugin_cables::Cable {
+    omsi_scene::plugin_cables::Cable { on_bus: c.frame == omsi_plugin::api::cables::CableFrame::Bus, points: c.points, radius: c.radius, color: c.color }
 }

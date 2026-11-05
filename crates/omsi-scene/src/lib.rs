@@ -43,6 +43,7 @@ pub mod threads;
 pub mod trolley_derive;
 pub mod arc_fx;
 pub mod trolley_view;
+pub mod plugin_cables;
 pub mod wheel_surface;
 pub mod window_wipers;
 
