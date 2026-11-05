@@ -30,56 +30,74 @@ use omsi_lan::commands::Command;
 /// The clock speeds offered.
 pub(crate) const SPEEDS: [f64; 6] = [1.0, 2.0, 4.0, 8.0, 15.0, 30.0];
 
+fn append_section(out: &mut Vec<(String, String)>, title: String, rows: Vec<(String, String)>) {
+    if rows.is_empty() {
+        return;
+    }
+    out.push((title, crate::game_lists::HEADING.into()));
+    out.extend(rows);
+}
+
 /// The lines of the administration menu: (label, action).
 pub(crate) fn items(app: &App) -> Vec<(String, String)> {
     let mut out = Vec::new();
     let Some(lan) = app.net.lan.as_ref() else { return out };
     let mut peers: Vec<(u32, String)> = lan.peers().map(|p| (p.pose.id, if p.pose.name.is_empty() { omsi_ui::tr("Player {}").replace("{}", &p.pose.id.to_string()) } else { p.pose.name.clone() })).collect();
     peers.sort();
+    let mut player_rows = Vec::new();
     for (id, name) in &peers {
         if *id == lan.my_id {
             continue;
         }
         // (the labels in the interface's language around the player's name)
         let tr = |t: &str| omsi_ui::tr(t).into_owned();
-        out.push((format!("{name}: {}", tr("go to")), format!("goto {id}")));
-        out.push((format!("{name}: {}", tr("bring here")), format!("bring {id}")));
-        out.push((format!("{name}: {}", tr("repair and refuel their bus")), format!("service repair {id}")));
-        out.push((format!("{name}: {}", tr("put their bus back on its wheels")), format!("unstick {id}")));
-        out.push((format!("{name}: {}", tr("send away")), format!("kick {id}")));
-        out.push((format!("{name}: {}", tr("send away for the session")), format!("ban {id}")));
+        player_rows.push((format!("{name}: {}", tr("go to")), format!("goto {id}")));
+        player_rows.push((format!("{name}: {}", tr("bring here")), format!("bring {id}")));
+        player_rows.push((format!("{name}: {}", tr("repair and refuel their bus")), format!("service repair {id}")));
+        player_rows.push((format!("{name}: {}", tr("put their bus back on its wheels")), format!("unstick {id}")));
+        player_rows.push((format!("{name}: {}", tr("send away")), format!("kick {id}")));
+        player_rows.push((format!("{name}: {}", tr("send away for the session")), format!("ban {id}")));
     }
     if peers.len() > 1 {
-        out.push((omsi_ui::tr("Bring everybody here").into_owned(), "bringall".into()));
-        out.push((omsi_ui::tr("Everybody: repair").into_owned(), "service repair all".into()));
-        out.push((omsi_ui::tr("Everybody: refuel").into_owned(), "service refuel all".into()));
-        out.push((omsi_ui::tr("Everybody: wash").into_owned(), "service wash all".into()));
+        player_rows.push((omsi_ui::tr("Bring everybody here").into_owned(), "bringall".into()));
+        player_rows.push((omsi_ui::tr("Everybody: repair").into_owned(), "service repair all".into()));
+        player_rows.push((omsi_ui::tr("Everybody: refuel").into_owned(), "service refuel all".into()));
+        player_rows.push((omsi_ui::tr("Everybody: wash").into_owned(), "service wash all".into()));
     }
+    append_section(&mut out, omsi_ui::tr("Players").into_owned(), player_rows);
+
+    let mut clock_rows = Vec::new();
     for (label, secs) in [("Clock: 06:00 (morning)", 6 * 3600), ("Clock: 12:00 (noon)", 12 * 3600), ("Clock: 18:00 (evening)", 18 * 3600), ("Clock: 23:00 (night)", 23 * 3600)] {
-        out.push((omsi_ui::tr(label).into_owned(), format!("clock {secs}")));
+        clock_rows.push((omsi_ui::tr(label).into_owned(), format!("clock {secs}")));
     }
-    if let Some(t) = app.session.traffic.as_ref() {
-        out.push((format!("{}: {} ({})", omsi_ui::tr("Traffic"), t.target, omsi_ui::tr("more / less")), "traffic next".into()));
-    }
-    out.push(("Clock +1 hour".into(), "time 3600".into()));
-    out.push(("Clock -1 hour".into(), "time -3600".into()));
+    clock_rows.push(("Clock +1 hour".into(), "time 3600".into()));
+    clock_rows.push(("Clock -1 hour".into(), "time -3600".into()));
     let speed = lan.clock_speed;
     for s in SPEEDS {
         let mark = if (s - speed).abs() < 1e-6 { format!("  {}", omsi_ui::tr("(now)")) } else { String::new() };
-        out.push((format!("{} x{s}{mark}", omsi_ui::tr("Time speed")), format!("speed {s}")));
+        clock_rows.push((format!("{} x{s}{mark}", omsi_ui::tr("Time speed")), format!("speed {s}")));
     }
-    out.push(("Next weather".into(), "weather next".into()));
+    append_section(&mut out, omsi_ui::tr("Clock").into_owned(), clock_rows);
+
+    let mut weather_rows = vec![("Next weather".into(), "weather next".into())];
     // the weather cycle, and each installed weather by name
     let cycling = app.session.weather_cycle.is_some();
-    out.push((format!("{}: {}", omsi_ui::tr("Weather cycle"), if cycling { omsi_ui::tr("on") } else { omsi_ui::tr("off") }), "weather cycle".into()));
+    weather_rows.push((format!("{}: {}", omsi_ui::tr("Weather cycle"), if cycling { omsi_ui::tr("on") } else { omsi_ui::tr("off") }), "weather cycle".into()));
     for (file, w) in crate::weather_cycle::installed() {
         let now = app.args.weather.as_deref().is_some_and(|c| c.replace('\\', "/").eq_ignore_ascii_case(&file));
         let mark = if now { format!("  {}", omsi_ui::tr("(now)")) } else { String::new() };
-        out.push((format!("{}: {}{mark}", omsi_ui::tr("Weather"), w.name), format!("weather set {file}")));
+        weather_rows.push((format!("{}: {}{mark}", omsi_ui::tr("Weather"), w.name), format!("weather set {file}")));
+    }
+    append_section(&mut out, omsi_ui::tr("Weather").into_owned(), weather_rows);
+
+    let mut traffic_rows = Vec::new();
+    if let Some(t) = app.session.traffic.as_ref() {
+        traffic_rows.push((format!("{}: {} ({})", omsi_ui::tr("Traffic"), t.target, omsi_ui::tr("more / less")), "traffic next".into()));
     }
     if app.session.traffic.is_some() {
-        out.push((omsi_ui::tr("Clear the AI traffic (a jam)").into_owned(), "traffic clear".into()));
+        traffic_rows.push((omsi_ui::tr("Clear the AI traffic (a jam)").into_owned(), "traffic clear".into()));
     }
+    append_section(&mut out, omsi_ui::tr("Traffic").into_owned(), traffic_rows);
     out.push(("Back".into(), "back".into()));
     out
 }
@@ -483,6 +501,14 @@ pub(crate) fn guard_fall(app: &mut App, dt: f32) {
 #[cfg(test)]
 mod traffic_order_tests {
     use omsi_lan::admin::TrafficOrder;
+
+    #[test]
+    fn admin_sections_keep_actions_in_order_and_omit_empty_sections() {
+        let mut rows = Vec::new();
+        super::append_section(&mut rows, "Players".into(), vec![("Alex: go to".into(), "goto 2".into())]);
+        super::append_section(&mut rows, "Weather".into(), Vec::new());
+        assert_eq!(rows, [("Players".into(), "#".into()), ("Alex: go to".into(), "goto 2".into())]);
+    }
 
     #[test]
     fn a_traffic_order_is_read() {

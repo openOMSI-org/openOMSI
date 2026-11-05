@@ -1,0 +1,11 @@
+[package]
+name = "omsi-multiplayer-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Multiplayer player, world and device-ban panels rendered from session snapshots"
+
+[dependencies]
+omsi-admin = { path = "../omsi-admin" }
+omsi-ui = { path = "../omsi-ui" }
+glam.workspace = true

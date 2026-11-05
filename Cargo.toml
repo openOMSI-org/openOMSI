@@ -27,6 +27,7 @@ members = [
     "crates/omsi-plugin/demo",
     "crates/omsi-ui",
     "crates/omsi-settings-ui",
+    "crates/omsi-multiplayer-ui",
     "crates/omsi-launcher-core",
     "crates/omsi-launcher-api",
     "crates/omsi-launcher-model",
