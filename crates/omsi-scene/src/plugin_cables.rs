@@ -54,6 +54,11 @@ pub struct PluginCables {
     /// Hidden instances whose spare mesh was freed, for the next cables laid.
     idle: Vec<usize>,
     materials: Palette,
+    /// Slots of the scene's meshes and materials freed here: the next made take them over
+    /// (`recycle_*`), so a cable that changes its colour or its number of points each frame
+    /// does not grow the scene's lists.
+    free_meshes: Vec<MeshId>,
+    free_materials: Vec<MaterialId>,
 }
 
 /// One material per colour drawn now, freed when the last cable of that colour goes or takes
@@ -100,6 +105,8 @@ impl PluginCables {
             self.spare_verts = 0;
             self.idle.clear();
             self.materials = Palette::default();
+            self.free_meshes.clear();
+            self.free_materials.clear();
             self.scene = scene.serial;
         }
         for (key, cable) in changes(all) {
@@ -115,14 +122,13 @@ impl PluginCables {
                         while self.spare_verts > SPARE_VERTS && !self.spare.is_empty() {
                             let old = self.spare.remove(0);
                             self.spare_verts -= old.verts;
-                            r.free_mesh(scene, old.mesh);
+                            self.free_mesh(old.mesh, r, scene);
                             self.idle.push(old.instance);
                         }
                     }
                 }
             }
         }
-        // the ones tied to the bus go where the bus is drawn, or out of sight without it
         let pose = bus.map(|v| (v.position, v.body_rotation()));
         for d in self.drawn.values().filter(|d| d.cable.on_bus) {
             match pose {
@@ -149,7 +155,6 @@ impl PluginCables {
             // (after the new colour was taken: the same colour is not freed and made again)
             self.release(d.cable.color, r, scene);
         }
-        // (a spare of the same size best: only its vertices change)
         let reused = own.or_else(|| {
             let same = self.spare.iter().position(|s| s.verts == data.positions.len());
             let d = same.or(self.spare.len().checked_sub(1)).map(|i| self.spare.remove(i))?;
@@ -161,9 +166,9 @@ impl PluginCables {
                 if d.verts == data.positions.len() {
                     r.update_mesh(scene, d.mesh, &data.positions, &data.normals, &data.uvs);
                 } else {
-                    let mesh = r.add_mesh(scene, &data);
+                    self.free_mesh(d.mesh, r, scene);
+                    let mesh = self.add_mesh(&data, r, scene);
                     r.set_instance_mesh(scene, d.instance, mesh);
-                    r.free_mesh(scene, d.mesh);
                     d.mesh = mesh;
                     d.verts = data.positions.len();
                 }
@@ -174,7 +179,7 @@ impl PluginCables {
                 d
             }
             None => {
-                let mesh = r.add_mesh(scene, &data);
+                let mesh = self.add_mesh(&data, r, scene);
                 let instance = match self.idle.pop() {
                     Some(i) => {
                         r.set_instance_mesh(scene, i, mesh);
@@ -192,16 +197,47 @@ impl PluginCables {
     }
 
     fn material(&mut self, color: [f32; 4], r: &Renderer, scene: &mut Scene) -> MaterialId {
+        let free = &mut self.free_materials;
         self.materials.take(color, || {
             let alpha = if color[3] < 1.0 { AlphaMode::Blend } else { AlphaMode::Opaque };
-            r.add_material(scene, None, alpha, color, false)
+            let new = r.add_material(scene, None, alpha, color, false);
+            match free.pop() {
+                Some(into) => {
+                    let id = r.recycle_material(scene, new, into);
+                    if id == new {
+                        free.push(into);
+                    }
+                    id
+                }
+                None => new,
+            }
         })
     }
 
     fn release(&mut self, color: [f32; 4], r: &Renderer, scene: &mut Scene) {
         if let Some(m) = self.materials.give_back(color) {
             r.free_material(scene, m);
+            self.free_materials.push(m);
         }
+    }
+
+    fn add_mesh(&mut self, data: &omsi_geometry::MeshData, r: &Renderer, scene: &mut Scene) -> MeshId {
+        let new = r.add_mesh(scene, data);
+        match self.free_meshes.pop() {
+            Some(into) => {
+                let id = r.recycle_mesh(scene, new, into);
+                if id == new {
+                    self.free_meshes.push(into);
+                }
+                id
+            }
+            None => new,
+        }
+    }
+
+    fn free_mesh(&mut self, mesh: MeshId, r: &Renderer, scene: &mut Scene) {
+        r.free_mesh(scene, mesh);
+        self.free_meshes.push(mesh);
     }
 }
 
@@ -218,13 +254,11 @@ fn tube(points: &[[f64; 3]], origin: DVec3, radius: f32) -> omsi_geometry::MeshD
     };
     let mut positions = Vec::with_capacity(n * SIDES);
     let mut normals = Vec::with_capacity(n * SIDES);
-    // the first ring's sideways axis: anything square to the line, not along it
     let t0 = tangent(0);
     let mut side = if t0.z.abs() < 0.9 { t0.cross(Vec3::Z) } else { t0.cross(Vec3::X) }.normalize();
     let mut prev_t = t0;
     for (i, p) in pts.iter().enumerate() {
         let t = tangent(i);
-        // carry the axis round the turn from the last tangent to this one
         let axis = prev_t.cross(t);
         if axis.length_squared() > 1e-12 {
             let angle = prev_t.dot(t).clamp(-1.0, 1.0).acos();
@@ -290,6 +324,47 @@ mod tests {
         }
         assert!(p.by.is_empty());
         assert_eq!(p.give_back(red), None);
+    }
+
+    fn renderer() -> Renderer {
+        let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
+        descriptor.backends = wgpu::Backends::NOOP;
+        descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
+        let instance = wgpu::Instance::new(descriptor);
+        pollster::block_on(Renderer::new_with(
+            &instance,
+            None,
+            Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            omsi_render::RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, ..Default::default() },
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_cable_blinking_and_growing_every_frame_keeps_the_scene_its_size() {
+        let r = renderer();
+        let mut scene = r.new_scene();
+        let mut cables = PluginCables::default();
+        let key = |id: &str| (1u64, id.to_string());
+        let cable = |i: usize| Cable {
+            points: (0..2 + i % 7).map(|k| [k as f64, 0.0, 6.0]).collect(),
+            radius: 0.01,
+            color: [(i % 50) as f32 / 50.0, 0.0, 0.0, 1.0],
+            on_bus: false,
+        };
+        let sizes = |s: &Scene| (s.meshes.len(), s.materials.len(), s.instances.len());
+        let mut steady = None;
+        for i in 0..300 {
+            // a cable that takes a new colour and a new number of points each frame, and one
+            // laid and taken away again and again
+            let mut frame = vec![(key("wire"), Some(cable(i)))];
+            frame.push((key("rope"), if i % 2 == 0 { Some(cable(i + 3)) } else { None }));
+            cables.sync(|_| frame, None, &r, &mut scene);
+            if i == 4 {
+                steady = Some(sizes(&scene));
+            }
+        }
+        assert_eq!(Some(sizes(&scene)), steady, "the scene's meshes, materials and instances");
     }
 
     #[test]
