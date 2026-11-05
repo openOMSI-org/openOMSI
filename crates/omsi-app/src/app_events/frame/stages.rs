@@ -237,6 +237,7 @@ impl frame_stages::Host<WindowStage> for WindowFrame<'_> {
                 let (analog, actions) = self.controls.take().expect("the controllers stage comes first");
                 app.frame_pad_actions(analog, actions);
                 app.touch_frame(dt());
+                app.remote_input();
             }
             PlayerTick => super::driving::player_step(super::driving::PlayerStepCx::of(&mut app.parts()), dt()),
             PlayerView => app.frame_player_view(dt()),

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en" data-theme="night">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f1115">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.png">
+<link rel="apple-touch-icon" href="/icon.png">
+<link rel="stylesheet" href="/style.css">
+<title>openOMSI Remote</title>
+</head>
+<body>
+<header id="bar">
+  <div id="conn" class="conn" data-state="off"><span class="dot"></span><span id="conn-text"></span></div>
+  <div id="vehicle-name"></div>
+  <nav id="tabs"></nav>
+  <div class="bar-actions">
+    <button id="btn-edit" class="bar-btn" data-icon="tune"></button>
+    <button id="btn-full" class="bar-btn" data-icon="fullscreen"></button>
+  </div>
+</header>
+<main id="board"></main>
+<div id="paused" data-t="Paused" hidden></div>
+<section id="pair" class="screen" hidden>
+  <div class="pair-card">
+    <img src="/icon.png" alt="" class="pair-logo">
+    <h1 data-t="Remote cockpit"></h1>
+    <ol class="steps">
+      <li data-t="Connect this device to the same network (Wi-Fi) as the computer that runs the game."></li>
+      <li data-t="In the game, open Options → Interface → Remote cockpit: the code is shown there."></li>
+      <li data-t="Enter that six-digit code. This device then connects by itself next time."></li>
+    </ol>
+    <input id="pin" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]*" placeholder="000000">
+    <button id="pin-go" class="primary" data-t="Connect"></button>
+    <p id="pin-error" class="error"></p>
+    <details class="help">
+      <summary data-t="It does not connect?"></summary>
+      <p data-t="Check that both are on the same network, and allow openOMSI in the computer's firewall (Windows asks the first time)."></p>
+      <p data-t="Tip: add this page to the home screen to use it full screen, like an app."></p>
+    </details>
+  </div>
+</section>
+<section id="empty" class="screen" hidden>
+  <div class="pair-card">
+    <img src="/icon.png" alt="" class="pair-logo">
+    <h1 data-t="Waiting for a bus"></h1>
+    <p data-t="The cockpit appears as soon as you drive a vehicle in the game."></p>
+  </div>
+</section>
+<div id="sheet" class="sheet" hidden>
+  <div class="sheet-card">
+    <header class="sheet-head"><h2 id="sheet-title"></h2><button id="sheet-close" class="bar-btn" data-icon="close"></button></header>
+    <div id="sheet-body" class="sheet-body"></div>
+  </div>
+</div>
+<div id="toast" hidden></div>
+<script src="/picto.js"></script>
+<script src="/widgets.js"></script>
+<script src="/map.js"></script>
+<script src="/drive.js"></script>
+<script src="/editor.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

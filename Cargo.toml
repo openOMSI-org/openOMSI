@@ -32,6 +32,7 @@ members = [
     "crates/omsi-admin",
     "crates/omsi-lan",
     "crates/omsi-serverlist",
+    "crates/omsi-remote",
     "crates/omsi-platform",
     "crates/omsi-guard",
     "crates/omsi-input",
