@@ -61,7 +61,8 @@ editor and texture-cache restrictions.
 
 Publishers issue signed offline entitlements for an exact manifest and expiry. Entitlements
 contain a pack key and must be delivered confidentially. Runtime storage uses macOS Keychain
-or Windows user-scoped DPAPI, without a plaintext fallback. A new version or changed manifest
+or Windows user-scoped DPAPI, without a plaintext fallback, so encrypted packs only play on
+Windows and macOS. Linux, Android and iOS have no key store yet and load unencrypted packs only. A new version or changed manifest
 requires a corresponding entitlement. Copying application settings is not a supported key
 backup; obtain another entitlement from the publisher when native storage cannot be restored.
 
@@ -79,4 +80,4 @@ rollback by a user controlling the machine. A running player also holds usable p
 memory and GPU resources; paging and a modified executable can expose it. Protected packs
 reduce accidental redistribution through official tools, not extraction by an administrator.
 
-Once an encrypted publisher pack has been mounted, the map layer generator bypasses disk cache reads and writes for the rest of that process, including after that mount is released. This conservatively covers global packs and mounts introduced during parallel generation. Multiplayer session stores are sealed at rest but hold no publisher-protected content, so they, like ordinary sessions, keep the existing cache behavior.
+The map layer generator does not write its disk cache for a map with `dependencies.json`, nor for a map whose layers were made while files of an encrypted publisher pack were read (an ordinary map may still place objects from an installed pack). Every other map keeps its cache, also after an encrypted pack has been mounted. Multiplayer session stores are sealed at rest but hold no publisher-protected content and are not counted.

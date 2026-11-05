@@ -1096,12 +1096,6 @@ pub fn load_smoke_texture(renderer: &mut omsi_render::Renderer, root: &std::path
     }
 }
 
-/// The pictures of the coronas besides the standard glow: a light's own `bitmap` and the
-/// fog cone's `Texture/light_cone.bmp`, numbered as they are first asked for and uploaded
-/// before the next frame is drawn (`upload_corona_textures`).
-/// Process-wide on purpose: it only numbers picture files (the numbers live on in the
-/// world's lights); which of them a renderer holds is the renderer's
-/// (`Renderer::pictures_taken`), so a second session's renderer gets them all again.
 #[derive(Clone)]
 enum CoronaSource {
     File(std::path::PathBuf),
@@ -1116,6 +1110,12 @@ enum CoronaSource {
 const MAX_SCOPED_CORONA_BYTES: usize = 8 * 1024 * 1024;
 const MAX_SCOPED_CORONA_PATHS: usize = 4096;
 
+/// The pictures of the coronas besides the standard glow: a light's own `bitmap` and the
+/// fog cone's `Texture/light_cone.bmp`, numbered as they are first asked for and uploaded
+/// before the next frame is drawn (`upload_corona_textures`).
+/// Process-wide on purpose: it only numbers picture files (the numbers live on in the
+/// world's lights); which of them a renderer holds is the renderer's
+/// (`Renderer::pictures_taken`), so a second session's renderer gets them all again.
 #[derive(Default)]
 struct CoronaTextures {
     ids: std::collections::HashMap<std::path::PathBuf, u16>,
