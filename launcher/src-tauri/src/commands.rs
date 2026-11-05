@@ -21,7 +21,21 @@ async fn work<F: FnOnce() -> Answer + Send + 'static>(f: F) -> Answer {
 }
 
 pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
-    tauri::generate_handler![call, call_bytes, pick_folder, pick_file, pick_mod, pick_hofs, open_path, open_url, update_relaunch, selftest_done, fit_zoom]
+    tauri::generate_handler![call, call_bytes, pick_folder, pick_file, pick_mod, pick_hofs, open_path, open_url, update_relaunch, selftest_done, fit_zoom, nvidia_dlss_status, nvidia_dlss_install]
+}
+
+/// Read-only DLSS runtime presence and NVIDIA RTX adapter status.
+#[tauri::command]
+fn nvidia_dlss_status() -> Value {
+    crate::nvidia_dlss::status()
+}
+
+/// The user's explicit opt-in. The background task downloads from NVIDIA's
+/// original release, verifies the pinned SHA256 and Windows signatures and
+/// installs only the four DLSS files with their license notices.
+#[tauri::command]
+async fn nvidia_dlss_install(accepted_terms: bool) -> Answer {
+    work(move || crate::nvidia_dlss::install(accepted_terms)).await
 }
 
 /// This window, for the commands of `omsi-launcher-api`.

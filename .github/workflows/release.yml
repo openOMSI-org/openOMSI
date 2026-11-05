@@ -123,20 +123,9 @@ jobs:
           }
           Copy-Item (Join-Path $dir.FullName "libEGL.dll"), (Join-Path $dir.FullName "libGLESv2.dll"), (Join-Path $dir.FullName "LICENSE-ANGLE.txt") dist/windows/
           Get-ChildItem dist/windows
-      # NVIDIA Streamline 2.14.1 production runtimes (MIT Streamline components,
-      # separately licensed proprietary NGX). Package only the four allowlisted
-      # signed DLLs with the original vendor licenses and provenance checks.
-      # Legal notice: docs/NVIDIA_DLL_LICENSE_SCOPE.md; this step is not an
-      # AGPL section 7 exception on behalf of third-party contributors.
-      - name: NVIDIA Streamline 2.14.1 (DLSS, x64)
-        if: matrix.arch == 'x64'
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          New-Item -ItemType Directory -Force streamline | Out-Null
-          gh release download v2.14.1 -R NVIDIA-RTX/Streamline --pattern "streamline-sdk-v2.14.1.zip" -D streamline
-          & scripts/windows/package-streamline.ps1 -Archive "streamline/streamline-sdk-v2.14.1.zip" -Destination "dist/windows"
+      # NVIDIA DLSS is NOT bundled in any openOMSI release. A player may
+      # download the official SDK explicitly through the Windows launcher.
+      # The AMD FidelityFX binaries below retain their own MIT terms.
       # The four specific signed FidelityFX SDK 2.4.0 DLLs below are explicitly
       # MIT-licensed exceptions in the pinned SDK's Kits/FidelityFX/docs/license.md.
       # Keep the exact file allowlist, upstream license and third-party notices.

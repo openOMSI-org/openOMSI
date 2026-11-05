@@ -11,7 +11,7 @@ is opt-in: Settings → Graphics → Upscaling, `upscaler=dlss` or `fsr3` plus
   the relevant DLLs; failure disables the upscaler and is logged in `game.log`.
 - The source integration does not contain the vendor's production DLLs.
 
-## Windows x64 packaging: AMD and NVIDIA runtimes included
+## Windows x64 packaging: AMD bundled, NVIDIA user-installed
 
 `.github/workflows/release.yml` packages the **four specific FidelityFX
 SDK 2.4.0 signed DLLs** on every Windows x64 release. The SDK's pinned
@@ -20,19 +20,29 @@ as **MIT-licensed exceptions** (see its `These source files ... are subject
 to the following license` section). The workflow checks that the four are
 listed and includes the full license and third-party notices.
 
-The Windows x64 packaging step also includes the four unmodified, signed
-NVIDIA Streamline 2.14.1/DLSS files from a SHA-256-pinned vendor ZIP:
-`sl.interposer.dll`, `sl.common.dll`, `sl.dlss.dll`, and
-`nvngx_dlss.dll`. The original vendor license texts are packaged with them.
+**NVIDIA DLSS DLLs are NOT part of the openOMSI release archive.** On
+Windows with an RTX GPU, the launcher offers an **Install NVIDIA DLSS** button.
+It remains disabled until the player explicitly acknowledges the linked
+NVIDIA Streamline/RTX/NGX terms. After the player's click, the launcher
+downloads the official Streamline SDK 2.14.1 archive directly from NVIDIA's
+GitHub release, checks the pinned SHA-256 and each DLL's NVIDIA digital
+signature, and installs only `sl.interposer.dll`, `sl.common.dll`,
+`sl.dlss.dll`, `nvngx_dlss.dll` and the accompanying vendor licenses/notices.
+It does not redistribute the full SDK, and it does not run unattended.
 The NVIDIA runtime has **separate terms**: the MIT license for the open
 Streamline components must not be assumed to cover the proprietary NGX DLL.
-The game source stays AGPLv3; no NVIDIA DLL is relicensed under AGPL.
+The **entire original openOMSI source integration**, including DLSS and
+FSR code, remains AGPLv3. NVIDIA's SDK binaries retain their **own NVIDIA
+licenses**, and AMD's binaries retain their applicable **AMD licenses**.
+Neither NVIDIA nor AMD vendor binaries are relicensed by the openOMSI AGPLv3
+or its historical MIT notice.
 
 **Legal caveat:** mere separate notices do not settle whether the combined
 AGPL application and proprietary DLSS runtime can lawfully be distributed
-together. This is a maintainer-directed release choice, **not** an AGPLv3
-section 7 exception granted by every openOMSI contributor or NVIDIA's
-approval of the combination. See
+together. User-initiated installation removes NVIDIA's proprietary binaries from
+openOMSI's distributed release ZIP but does **not** transfer copyright,
+change NVIDIA's license, or guarantee that every form of combined use is
+compatible with AGPLv3. The user receives only rights granted by NVIDIA. See
 [`NVIDIA_DLL_LICENSE_SCOPE.md`](NVIDIA_DLL_LICENSE_SCOPE.md) and
 [`UPSCALER_THIRD_PARTY_LICENSING.md`](UPSCALER_THIRD_PARTY_LICENSING.md).
 

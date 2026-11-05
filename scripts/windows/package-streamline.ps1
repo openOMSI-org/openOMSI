@@ -1,5 +1,6 @@
-# Package the official NVIDIA Streamline 2.14.1 PRODUCTION DLLs for one
-# Windows x64 openOMSI release archive. DLSS remains runtime opt-in.
+# Verify and extract the official NVIDIA Streamline 2.14.1 PRODUCTION DLLs
+# into a staging folder for an optional user-initiated installation.
+# The openOMSI public release does not bundle these proprietary binaries.
 #
 # Binary source: https://github.com/NVIDIA-RTX/Streamline/releases/tag/v2.14.1
 # Do not take files from third-party modifications or development/debug builds.
@@ -17,6 +18,9 @@ if ($ActualSha256 -ne $ExpectedSha256) {
 New-Item -ItemType Directory -Path $Destination -Force | Out-Null
 $OutDir = (Resolve-Path -LiteralPath $Destination).Path
 Add-Type -AssemblyName System.IO.Compression
+# (ZipFile lives in System.IO.Compression.FileSystem on Windows PowerShell 5.1, which the
+# launcher runs as powershell.exe; PowerShell 7 has it in System.IO.Compression already)
+Add-Type -AssemblyName System.IO.Compression.FileSystem
 $Zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $Archive).Path)
 try {
     function Get-SdkEntry {
@@ -82,17 +86,21 @@ NVIDIA Streamline SDK v2.14.1 (PRODUCTION)
 Original download: https://github.com/NVIDIA-RTX/Streamline/releases/tag/v2.14.1
 Official archive SHA-256: $ExpectedSha256
 
-This release package contains NVIDIA's unmodified, signed runtime binaries:
+This optional user-installed component set contains NVIDIA's unmodified, signed binaries:
   sl.interposer.dll, sl.common.dll, sl.dlss.dll, nvngx_dlss.dll
 
-These components are included as unmodified NVIDIA-distributed runtime
+These components are installed as unmodified NVIDIA-distributed runtime
 libraries. The source code of openOMSI remains licensed under GNU AGPLv3.
-The NVIDIA binaries are NOT relicensed under AGPLv3:
-  - NVIDIA-Streamline-LICENSE.txt: Streamline components
+All original openOMSI integration source code remains GNU AGPLv3.
+These separate, unmodified NVIDIA vendor DLLs are NOT relicensed under
+the openOMSI AGPLv3 or its retained historical MIT license.
+Each NVIDIA file retains its original applicable vendor license:
+  - NVIDIA-Streamline-LICENSE.txt: MIT-covered Streamline components
   - nvngx_dlss.license.txt: proprietary NVIDIA DLSS/NGX runtime
-The NVIDIA license terms and intellectual property rights remain in force.
-No NVIDIA endorsement of openOMSI is implied. This notice does not grant
-an AGPL section 7 linking exception for code owned by other contributors.
+All NVIDIA license terms and intellectual property rights remain in force.
+This software contains source code provided by NVIDIA Corporation.
+No NVIDIA endorsement of openOMSI is implied. No openOMSI source
+code is removed from AGPLv3 and no linking exception is granted here.
 See docs/NVIDIA_DLL_LICENSE_SCOPE.md in the project source repository.
 Only DLSS Super Resolution / DLAA is included, not DLSS Frame Generation.
 The game works without DLSS on unsupported hardware; DLSS is opt-in.
