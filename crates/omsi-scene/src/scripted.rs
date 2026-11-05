@@ -118,7 +118,7 @@ impl ScriptedSet {
         s.controller = controller;
         s.light_index = light_index;
         s.light_parent = light_parent;
-        s.var_parent = var_parent;
+        s.var_parent = var_parent.or((arrivals && ty.sco.is_bus_stop).then_some(map_id));
         s.arrivals = arrivals;
         s.text_vars = texts.iter().map(|(_, st)| st.def.variable.trim().to_string()).collect();
         s.text_last = vec![None; texts.len()];

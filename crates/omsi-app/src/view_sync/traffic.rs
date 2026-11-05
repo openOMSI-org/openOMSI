@@ -411,7 +411,7 @@ impl Traffic {
             if !lamp.texts.is_empty() {
                 if let Some(s) = lamp.script.and_then(|k| lamps.get_mut(k)) {
                     let _ = s.take_refresh_strings();
-                    for (tex, st) in lamp.texts.iter_mut() {
+                    for (tex, st) in lamp.texts.iter_mut().filter(|(_, st)| dist < TEXT_NEAR || st.last_text.is_none()) {
                         let text = s.str_var(st.def.variable.trim()).to_string();
                         if st.update(&text) {
                             if let Some(rgba) = st.pending.take() {
@@ -683,6 +683,7 @@ fn mesh_shown(vp: i32, inside: bool) -> (bool, bool) {
 
 /// Lamps further than this from the viewer (m) are updated in turns (see `sync_lamps`).
 const LAMP_NEAR: f64 = 300.0;
+const TEXT_NEAR: f64 = 250.0;
 /// A far lamp is updated every this many frames.
 const LAMP_TURNS: u32 = 4;
 

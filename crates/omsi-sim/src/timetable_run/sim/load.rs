@@ -254,6 +254,7 @@ impl ScheduleSim {
             player_tour: None,
             player_departure: None,
             purge_player_tour: false,
+            player_twins: HashSet::new(),
             lan_tours: HashSet::new(),
             last_tod: 0.0,
             deactivated,
@@ -478,6 +479,7 @@ impl ScheduleSim {
         if forward {
             self.night_trips_to_yesterday();
         }
+        self.find_twins();
         let busy: HashSet<usize> = self
             .pending
             .iter()

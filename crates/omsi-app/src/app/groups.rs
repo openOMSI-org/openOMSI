@@ -258,6 +258,7 @@ pub(crate) struct ViewState {
     pub(crate) flashlight_aim: Option<glam::Vec3>,
     /// The camera is in the own bus's cab this frame (see RedrawRequested).
     pub(crate) in_cab: bool,
+    pub(crate) heard_inside: bool,
     /// How far the player has turned the head (driver, passenger) or swung the outside
     /// camera around the bus, and how far that camera sits from it.
     pub(crate) look: (f32, f32),

@@ -75,7 +75,7 @@ pub(crate) fn install(device: &wgpu::Device, format: wgpu::TextureFormat, option
                 if !rt_flag.swap(true, std::sync::atomic::Ordering::Relaxed) {
                     log::error!("GPU error with ray tracing (Enhanced+ draws as Enhanced from now on): {text}");
                 }
-            } else if msaa > 1 && !flag.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            } else if blames_msaa(&e, &text, msaa) && !flag.swap(true, std::sync::atomic::Ordering::Relaxed) {
                 log::error!("GPU error with {msaa}x MSAA (drawing without it from now on): {text}");
             } else if n < 20 || n % 1000 == 0 {
                 log::error!("GPU error #{} (the game goes on): {text}", n + 1);
@@ -103,4 +103,24 @@ pub(crate) fn install(device: &wgpu::Device, format: wgpu::TextureFormat, option
         });
     }
     ErrorFlags { gpu_error, rt_error, out_of_memory, device_lost }
+}
+
+fn blames_msaa(e: &wgpu::Error, text: &str, msaa: u32) -> bool {
+    msaa > 1 && !matches!(e, wgpu::Error::OutOfMemory { .. }) && !text.contains("label is invalid")
+}
+
+#[cfg(test)]
+mod msaa_blame_tests {
+    use super::blames_msaa;
+
+    #[test]
+    fn out_of_memory_and_its_invalid_resources_keep_msaa() {
+        let oom = wgpu::Error::OutOfMemory { source: Box::new(std::io::Error::other("oom")) };
+        assert!(!blames_msaa(&oom, "Out of Memory", 4));
+        let invalid = wgpu::Error::Validation { source: Box::new(std::io::Error::other("v")), description: String::new() };
+        assert!(!blames_msaa(&invalid, "BindGroup with 'camera' label is invalid", 4));
+        assert!(blames_msaa(&invalid, "Sample count 3 is invalid", 4));
+        assert!(blames_msaa(&invalid, "Color state [0] is invalid", 4));
+        assert!(!blames_msaa(&invalid, "Sample count 3 is invalid", 1));
+    }
 }
