@@ -117,7 +117,16 @@ pub(crate) fn indexing_as_calls(src: &str, name: &str, call: &str) -> String {
     out
 }
 
+pub(crate) fn backend_forms(src: String, gl: bool, amd_vulkan: bool, multisampled_shading: bool) -> String {
+    let src = if !gl && amd_vulkan { src.replace("//VK ", "") } else { src.replace("//DX ", "") };
+    if !gl && multisampled_shading { src.replace("//MS ", "") } else { src }
+}
+
 pub(crate) fn scene_shader_text(gl: bool) -> String {
+    scene_shader_forms(gl, AMD_VULKAN.load(std::sync::atomic::Ordering::Relaxed), MULTISAMPLED_SHADING.load(std::sync::atomic::Ordering::Relaxed))
+}
+
+pub(crate) fn scene_shader_forms(gl: bool, amd_vulkan: bool, multisampled_shading: bool) -> String {
     let src = [
         include_str!("../colour.wgsl"),
         shaders::SCENE,
@@ -132,6 +141,7 @@ pub(crate) fn scene_shader_text(gl: bool) -> String {
     // Enhanced+: the enhanced pass writes the reflections' surfaces as well (`GBUF_FORMAT`)
     let src = if rt_gbuf() { src.replace("//RT ", "") } else { src };
     let src = if basic_pipelines() { lean_scene(src) } else { src };
+    let src = backend_forms(src, gl, amd_vulkan, multisampled_shading);
     if !gl {
         return src;
     }
