@@ -14,8 +14,7 @@ const schema = file('../ui/js/pages/settings-schema.js');
 const api = file('../ui/js/api.js');
 
 test('no NVIDIA DLLs are bundled by Windows release workflow', () => {
-  assert.doesNotMatch(release, /gh release download v2\.14\.1 -R NVIDIA-RTX\/Streamline/);
-  assert.doesNotMatch(release, /package-streamline\.ps1.*-Archive/);
+  assert.doesNotMatch(release, /nvngx|sl\.interposer|Streamline/i);
   assert.match(release, /AMD FidelityFX SDK 2\.4\.0/);
 });
 
@@ -38,6 +37,8 @@ test('installer downloads only official Streamline and verifies SDK hash and sig
   assert.match(packager, /92c4d954631a1710da86ca3fa8d5034f2b9503838c95fc4ae977ae149319781b/);
   assert.match(packager, /Get-AuthenticodeSignature/);
   assert.match(packager, /\$Sig\.Status -ne "Valid"/);
+  assert.match(packager, /O=NVIDIA Corporation/);
+  assert.match(backend, /System32.*powershell\.exe/);
   assert.match(installer, /Move-Item -LiteralPath \$BackupFile/);
   for (const name of ['sl.interposer.dll', 'sl.common.dll', 'sl.dlss.dll', 'nvngx_dlss.dll']) {
     assert.ok(installer.includes(name), `installer needs ${name}`);

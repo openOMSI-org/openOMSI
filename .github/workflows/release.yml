@@ -147,6 +147,8 @@ jobs:
           foreach ($file in $files) {
             $entry = 'Kits\FidelityFX\signedbin\' + $file
             if ($licence.Substring($mitSection, $mitGrant - $mitSection) -notlike ('*' + $entry + '*')) { throw "Not explicitly MIT-licensed: $file" }
+            $signed = Get-AuthenticodeSignature (Join-Path ffx/Kits/FidelityFX/signedbin $file)
+            if ($signed.Status -ne 'Valid' -or $signed.SignerCertificate.Subject -notmatch '(^|, )O=Advanced Micro Devices(,|$)') { throw "AMD signature of ${file}: $($signed.Status)" }
             Copy-Item (Join-Path ffx/Kits/FidelityFX/signedbin $file) dist/windows/
           }
           Copy-Item ffx/Kits/FidelityFX/docs/license.md dist/windows/LICENSE-FidelityFX.md

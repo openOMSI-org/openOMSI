@@ -3,7 +3,8 @@
  //! download the unmodified SDK directly from NVIDIA and accepts its terms.
  
  use serde_json::{json, Value};
- use std::path::{Path, PathBuf};
+ #[cfg(windows)]
+use std::path::PathBuf;
  
  const NVIDIA_FILES: [&str; 4] = [
      "sl.interposer.dll",
@@ -12,7 +13,8 @@
      "nvngx_dlss.dll",
  ];
  
- fn game_dir() -> Result<PathBuf, String> {
+ #[cfg(windows)]
+fn game_dir() -> Result<PathBuf, String> {
      let exe = std::env::current_exe().map_err(|e| format!("Launcher executable: {e}"))?;
      let dir = exe.parent().ok_or("Launcher has no installation directory")?;
      if !dir.join("openomsi.exe").is_file() {
@@ -119,7 +121,10 @@
  
          // (CREATE_NO_WINDOW: the launcher's button shows the progress, no console over it)
          use std::os::windows::process::CommandExt;
-         let output = std::process::Command::new("powershell.exe")
+         let output = std::process::Command::new(
+                // (by its full path: Windows looks in the launcher's folder first for a bare name)
+                PathBuf::from(std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into())).join(r"System32\WindowsPowerShell\v1.0\powershell.exe"),
+            )
              .creation_flags(0x0800_0000)
              .arg("-NoProfile")
              .arg("-NonInteractive")

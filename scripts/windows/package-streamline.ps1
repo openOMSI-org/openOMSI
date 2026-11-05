@@ -53,7 +53,7 @@ try {
         # All shipping modules must be signed by NVIDIA. Reject unsigned and
         # altered DLLs even when the downloaded archive itself hashes correctly.
         $Sig = Get-AuthenticodeSignature -LiteralPath (Join-Path $OutDir $Dll)
-        if ($Sig.Status -ne "Valid" -or $Sig.SignerCertificate.Subject -notmatch "(?i)NVIDIA") {
+        if ($Sig.Status -ne "Valid" -or $Sig.SignerCertificate.Subject -notmatch "(^|, )O=NVIDIA Corporation(,|$)") {
             throw "Invalid NVIDIA production signature: $Dll ($($Sig.Status))"
         }
         Write-Host "Official NVIDIA signed runtime: $Dll"

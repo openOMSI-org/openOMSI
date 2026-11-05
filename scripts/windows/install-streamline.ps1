@@ -39,6 +39,7 @@ $DownloadDir = Join-Path ([IO.Path]::GetTempPath()) ('openomsi-nvidia-' + [guid]
 $TxnDir = Join-Path $ResolvedGame ('.openomsi-nvidia-install-' + [guid]::NewGuid().ToString('N'))
 $MovedBackups = [System.Collections.Generic.List[string]]::new()
 $Installed = [System.Collections.Generic.List[string]]::new()
+$Finished = $false
 try {
     New-Item -ItemType Directory -Path $DownloadDir -ErrorAction Stop | Out-Null
     $Stage = Join-Path $DownloadDir 'stage'
@@ -80,8 +81,7 @@ try {
         Move-Item -LiteralPath (Join-Path $Pending $Name) -Destination $Target -ErrorAction Stop
         $Installed.Add($Name)
     }
-    # (all in place: the replaced files are not kept beside the game)
-    Remove-Item -LiteralPath $Backup -Recurse -Force
+    $Finished = $true
     Write-Output 'NVIDIA Streamline DLSS 2.14.1 installed from the official verified SDK.'
 }
 catch {
@@ -105,6 +105,11 @@ finally {
         Remove-Item -LiteralPath $DownloadDir -Recurse -Force -ErrorAction SilentlyContinue
     }
     if (Test-Path -LiteralPath $TxnDir) {
+        # (all in place: the replaced files are not kept beside the game; a lock on one of them
+        # must not undo a finished install)
+        if ($Finished) {
+            Remove-Item -LiteralPath (Join-Path $TxnDir 'backup') -Recurse -Force -ErrorAction SilentlyContinue
+        }
         # Do not delete a backup directory if rollback could not restore a file.
         $Leftovers = @(Get-ChildItem -LiteralPath (Join-Path $TxnDir 'backup') -ErrorAction SilentlyContinue)
         if ($Leftovers.Count -eq 0) {
