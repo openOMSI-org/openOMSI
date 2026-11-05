@@ -21,7 +21,6 @@ use crate::wire::{Contact, WireNet};
 use glam::{DMat3, DVec3};
 
 pub const G: f64 = 9.81;
-const THETA_MAX: f64 = 80.0 * std::f64::consts::PI / 180.0;
 /// How stiffly the spring's force falls as the arm rises (per radian).
 const SPRING_FALL: f64 = 0.35;
 /// Damping of the arm's turning (1/s, times its inertia).
@@ -80,6 +79,12 @@ pub enum Rope {
     Pull,
     /// Held and guided at this wire point (or not aimed at any); `auto` is the motor's.
     Aim { goal: Option<Contact>, auto: bool },
+    /// Held by its rope at this elevation and swing (radians, the bus's frame), with no help to
+    /// the wire: the shoe takes a wire only when pushed up through it, or later rising on its spring.
+    Hold { theta: f64, psi: f64 },
+    /// The vehicle's script drives the lifting gear: its carriage at `at`, 0 on the hook, 1 just
+    /// under the wire (`goal`), where it lets the boom go to rise on to it.
+    Gear { at: f64, goal: Option<Contact> },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -96,6 +101,8 @@ pub enum PoleEventKind {
     GapLeft,
     FrogPassed { switch: u32, branch: bool },
     Plate { switch: u32 },
+    /// A loose boom rose as far as its rope lets it, at this speed (rad/s).
+    RopeTaut { speed: f32 },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -185,7 +192,22 @@ pub struct Pole {
     /// A pole just let go of: the wire the spring is lifting it to, which swings the boom
     /// the last bit sideways (the hand's last nudge) while it rises.
     pub steer_to: Option<DVec3>,
+    /// A held pole (`Rope::Hold`) was pushed on to a wire: it stays there while still held.
+    pub hold_engaged: bool,
+    held_last: bool,
+    /// The script's lifting gear variable this step (the rig sets it; None: the script has none).
+    pub gear: Option<f64>,
+    gear_seen: Option<f64>,
+    /// The script's gear drives the pole: from a change of its variable to the run's end.
+    gear_on: bool,
+    /// Where the gear's carriage holds the boom now (elevation, swing).
+    carriage: Option<(f64, f64)>,
+    /// The carriage's top when no wire is above it: where the gear took the pole off the wire.
+    gear_top: Option<(f64, f64)>,
 }
+
+/// How near its hook a pole let go of by the rope catches on it (rad above it, and to the side).
+const HOOK_CATCH: (f64, f64) = (0.07, 0.26);
 
 pub fn rotate_tip_pub(theta: f64, psi: f64, len: f64) -> DVec3 {
     rotate_tip(theta, psi, len)
@@ -232,7 +254,56 @@ impl Pole {
             roughness: 0.0012,
             free_aim: None,
             steer_to: None,
+            hold_engaged: false,
+            held_last: false,
+            gear: None,
+            gear_seen: None,
+            gear_on: false,
+            carriage: None,
+            gear_top: None,
         }
+    }
+
+    /// How hard the boom bounces on the lifting gear, 0..1 (for a sound's loop).
+    pub fn bounce_level(&self) -> f32 {
+        let Some((ct, _)) = self.carriage else { return 0.0 };
+        ((self.theta - ct).abs() / 0.05).min(1.0) as f32
+    }
+
+    /// The script's gear position to drive the pole with this step, if it drives it: from the
+    /// first change of its variable until the run's end (the hook, or the boom let go at the
+    /// wire), so a variable left as it is never moves a pole put up or down otherwise.
+    pub fn gear_order(&mut self) -> Option<f64> {
+        let Some(v) = self.gear else {
+            self.gear_on = false;
+            return None;
+        };
+        if self.gear_seen.replace(v).is_some_and(|s| (s - v).abs() > 1e-4) {
+            self.gear_on = true;
+        }
+        self.gear_on.then_some(v.clamp(0.0, 1.0))
+    }
+
+    /// A hand or the cab takes the pole: the script's run ends.
+    pub fn gear_cancel(&mut self) {
+        self.gear_on = false;
+    }
+
+    /// The boom one step on the gear's carriage at (`ct`, `cp`): it follows it as a lightly
+    /// damped spring.
+    fn ride(&mut self, dt: f64, ct: f64, cp: f64) {
+        self.carriage = Some((ct, cp));
+        let omega = std::f64::consts::TAU * self.def.boom_bounce as f64;
+        let (k, c) = (omega * omega, 2.0 * self.def.boom_damping as f64 * omega);
+        self.w_theta += (k * (ct - self.theta) - c * self.w_theta) * dt;
+        self.w_psi += (k * (cp - self.psi) - c * self.w_psi) * dt;
+        self.theta = (self.theta + self.w_theta * dt).clamp(self.rest(), self.top());
+        self.psi += self.w_psi * dt;
+    }
+
+    /// The script's lifting gear is in the middle of a run.
+    pub fn lifting(&self) -> bool {
+        self.gear_on
     }
 
     fn rand(&mut self) -> f64 {
@@ -250,8 +321,13 @@ impl Pole {
         (self.def.mass as f64 / 3.0 + self.def.head_mass as f64) * self.len() * self.len()
     }
 
-    fn rest(&self) -> f64 {
+    pub fn rest(&self) -> f64 {
         (self.def.rest_angle as f64).to_radians()
+    }
+
+    /// The highest the boom goes: there its rope is taut.
+    pub fn top(&self) -> f64 {
+        (self.def.max_angle as f64).to_radians().max(self.rest() + 0.05)
     }
 
     /// The torque (N m) the spring, the weight and the roof's vertical acceleration `az` make
@@ -337,6 +413,11 @@ impl Pole {
         if !matches!(rope, Rope::Aim { auto: true, .. }) {
             self.auto_released = false;
         }
+        let held = matches!(rope, Rope::Hold { .. });
+        let let_go = std::mem::replace(&mut self.held_last, held) && !held;
+        if !held {
+            self.hold_engaged = false;
+        }
         let rope = match rope {
             Rope::Aim { auto: true, .. } if self.auto_released && matches!(self.mode, PoleMode::Free | PoleMode::OnWire) => Rope::Idle,
             r => r,
@@ -372,7 +453,46 @@ impl Pole {
                 }
                 _ => {}
             },
+            Rope::Hold { .. } => match self.mode {
+                PoleMode::OnWire if !self.hold_engaged => {
+                    self.dewire(DewireCause::Rope, amps, out, pole);
+                    self.mode = PoleMode::Hand;
+                    self.hand = Hand { held: 0.0, phase: [0.0; 4] };
+                }
+                PoleMode::Down => {
+                    self.mode = PoleMode::Hand;
+                    self.hand = Hand { held: 0.0, phase: [0.0; 4] };
+                    out.push(PoleEvent { pole, kind: PoleEventKind::Released, pos: self.tip, amps: 0.0 });
+                }
+                PoleMode::Lowering | PoleMode::Free => {
+                    self.mode = PoleMode::Hand;
+                    self.hand = Hand { held: 0.0, phase: [0.0; 4] };
+                }
+                _ => {}
+            },
+            Rope::Gear { at, .. } => match self.mode {
+                PoleMode::OnWire if at < 1.0 => {
+                    self.gear_top = Some((self.theta, self.psi));
+                    self.dewire(DewireCause::Rope, amps, out, pole);
+                    self.mode = PoleMode::Hand;
+                }
+                PoleMode::Down if at > 0.0 => {
+                    self.gear_top = None;
+                    self.mode = PoleMode::Hand;
+                    out.push(PoleEvent { pole, kind: PoleEventKind::Released, pos: self.tip, amps: 0.0 });
+                }
+                PoleMode::Lowering | PoleMode::Free if at < 1.0 => {
+                    self.mode = PoleMode::Hand;
+                }
+                _ => {}
+            },
             Rope::Idle => match self.mode {
+                PoleMode::Hand if let_go && self.theta - self.rest() < HOOK_CATCH.0 && self.psi.abs() < HOOK_CATCH.1 => {
+                    self.mode = PoleMode::Down;
+                    self.w_theta = 0.0;
+                    self.w_psi = 0.0;
+                    out.push(PoleEvent { pole, kind: PoleEventKind::Latched, pos: self.tip, amps: 0.0 });
+                }
                 PoleMode::Hand => {
                     self.mode = PoleMode::Free;
                     self.retrieve_wait = 0.0;
@@ -382,6 +502,9 @@ impl Pole {
                 }
                 _ => {}
             },
+        }
+        if !matches!(rope, Rope::Gear { .. }) {
+            self.carriage = None;
         }
 
         match self.mode {
@@ -409,7 +532,7 @@ impl Pole {
             }
             PoleMode::Hand => {
                 let goal = match rope {
-                    Rope::Aim { goal, .. } => goal,
+                    Rope::Aim { goal, .. } | Rope::Gear { goal, .. } => goal,
                     _ => None,
                 };
                 self.hand.held += dt;
@@ -445,16 +568,23 @@ impl Pole {
                         None => ((self.def.work_angle as f64 * 0.6).to_radians(), 0.0),
                     },
                 };
-                let manual = matches!(rope, Rope::Aim { auto: false, .. }) && self.free_aim.is_some();
+                let held = matches!(rope, Rope::Hold { .. });
+                let manual = held || (matches!(rope, Rope::Aim { auto: false, .. }) && self.free_aim.is_some());
                 if manual {
                     // the mouse's hand: the tip goes where the cursor points, smoothly (a time
                     // constant of a twentieth of a second, at most three radians a second), with
                     // no tremor of its own
                     // (where the cursor points at a wire the tip is held a little under it, to be
                     // let go of and rise into it; elsewhere where the cursor points)
-                    let target = goal_pt.map(|g| g - DVec3::Z * 0.35).or(self.free_aim).unwrap();
-                    let (tm, pm, _) = self.angles_to(base, rot, target);
-                    let (tm, pm) = (tm.clamp(self.rest(), THETA_MAX), pm.clamp(-1.7, 1.7));
+                    let (tm, pm) = match rope {
+                        Rope::Hold { theta, psi } => (theta, psi),
+                        _ => {
+                            let target = goal_pt.map(|g| g - DVec3::Z * 0.35).or(self.free_aim).unwrap();
+                            let (tm, pm, _) = self.angles_to(base, rot, target);
+                            (tm, pm)
+                        }
+                    };
+                    let (tm, pm) = (tm.clamp(self.rest(), self.top()), pm.clamp(-1.7, 1.7));
                     let k = 1.0 - (-dt / 0.05).exp();
                     let step = 3.0 * dt;
                     let dth = ((tm - self.theta) * k).clamp(-step, step);
@@ -463,8 +593,32 @@ impl Pole {
                     self.psi += dps;
                     self.w_theta = dth / dt;
                     self.w_psi = dps / dt;
+                } else if let Rope::Gear { at, .. } = rope {
+                    let (top, top_psi) = match goal_pt {
+                        Some(_) => (tg, pg),
+                        None => self.gear_top.unwrap_or(((self.def.work_angle as f64).to_radians(), 0.0)),
+                    };
+                    let (top, top_psi) = (top.clamp(self.rest(), self.top()), top_psi.clamp(-1.7, 1.7));
+                    self.ride(dt, self.rest() + (top - self.rest()) * at, top_psi * at);
+                    if at >= 1.0 {
+                        self.gear_on = false;
+                        self.carriage = None;
+                        self.mode = PoleMode::Free;
+                        self.retrieve_wait = 0.0;
+                        return;
+                    }
+                    if at <= 0.0 && self.theta - self.rest() < 0.01 && self.psi.abs() < HOOK_CATCH.1 {
+                        self.gear_on = false;
+                        self.carriage = None;
+                        self.mode = PoleMode::Down;
+                        self.w_theta = 0.0;
+                        self.w_psi = 0.0;
+                        out.push(PoleEvent { pole, kind: PoleEventKind::Latched, pos: self.tip, amps: 0.0 });
+                        self.place(base, rot);
+                        return;
+                    }
                 } else {
-                    let tg = (tg + jit(p[0], p[1])).clamp(self.rest(), THETA_MAX);
+                    let tg = (tg + jit(p[0], p[1])).clamp(self.rest(), self.top());
                     let pg = (pg + jit(p[2], p[3])).clamp(-1.7, 1.7);
                     let up = 0.9 * dt;
                     let down = 1.3 * dt;
@@ -476,7 +630,10 @@ impl Pole {
                     self.psi += dp.clamp(-1.2 * dt, 1.2 * dt);
                 }
                 self.place(base, rot);
-                self.try_engage(net, base, rot, amps, pole, out);
+                self.try_engage(net, base, rot, amps, pole, out, held);
+                if held && self.mode == PoleMode::OnWire {
+                    self.hold_engaged = true;
+                }
             }
             PoleMode::Free => {
                 let az = accel.z as f64;
@@ -484,8 +641,11 @@ impl Pole {
                 let al = (self.torque(self.theta, az) - DAMPING * i * self.w_theta) / i;
                 self.w_theta += al * dt;
                 self.theta += self.w_theta * dt;
-                if self.theta > THETA_MAX {
-                    self.theta = THETA_MAX;
+                if self.theta > self.top() {
+                    self.theta = self.top();
+                    if self.w_theta > 0.05 {
+                        out.push(PoleEvent { pole, kind: PoleEventKind::RopeTaut { speed: self.w_theta as f32 }, pos: self.tip, amps: 0.0 });
+                    }
                     if self.w_theta > 0.0 {
                         self.w_theta *= -0.25;
                     }
@@ -516,14 +676,16 @@ impl Pole {
                         self.lower_auto = true;
                     }
                 }
-                self.try_engage(net, base, rot, amps, pole, out);
+                self.try_engage(net, base, rot, amps, pole, out, false);
             }
             PoleMode::OnWire => self.wire_sub(net, base, rot, accel, dt, amps, pole, out),
         }
     }
 
-    /// Does the shoe, moving from where it was, take a wire into its groove?
-    fn try_engage(&mut self, net: &WireNet, base: DVec3, rot: &DMat3, amps: f32, pole: usize, out: &mut Vec<PoleEvent>) {
+    /// Does the shoe, moving from where it was, take a wire into its groove? (`through_only`: only
+    /// a wire the shoe is pushed up through, as a hand on the rope does.)
+    #[allow(clippy::too_many_arguments)]
+    fn try_engage(&mut self, net: &WireNet, base: DVec3, rot: &DMat3, amps: f32, pole: usize, out: &mut Vec<PoleEvent>, through_only: bool) {
         if net.is_empty() || self.engage_block > 0.0 {
             return;
         }
@@ -545,8 +707,10 @@ impl Pole {
             let aligned = h.length() < 0.3 || th.length() < 0.05 || h.normalize().dot(th.normalize()).abs().clamp(0.0, 1.0).acos() < (self.def.max_wire_angle as f64).to_radians() * 0.8;
             // (a shoe lifted by its spring crosses the wire's height in a step or two: the wire passed
             // between the horns counts as well as one the shoe is sitting in)
-            let through = pperp.z <= 0.0 && perp.z > 0.02 && perp.z <= 0.3;
-            if aligned && lat.abs() <= funnel && ((perp.z >= -depth && perp.z <= 0.02 && perp.z >= pperp.z - 1e-9) || through) {
+            // (a hand pushes it up slowly: any crossing counts)
+            let through = pperp.z <= 0.0 && perp.z > if through_only { 0.0 } else { 0.02 } && perp.z <= 0.3;
+            let groove = !through_only && perp.z >= -depth && perp.z <= 0.02 && perp.z >= pperp.z - 1e-9;
+            if aligned && lat.abs() <= funnel && (groove || through) {
                 if best.is_none_or(|b| lat.abs() < b.1) {
                     best = Some((c, lat.abs()));
                 }
@@ -836,6 +1000,116 @@ mod tests {
             run(&mut p, &net, pos, 1.0 / 60.0, Rope::Idle, 0.0, &mut ev);
         }
         assert_eq!(p.mode, PoleMode::OnWire, "{:?} {:?}", p.mode, ev.iter().map(|e| e.kind).collect::<Vec<_>>());
+    }
+
+    /// The rope's hold that puts the shoe `under` the wire and `side` metres beside it.
+    fn hold_at(p: &Pole, pos: DVec3, under: f64, side: f64) -> (Rope, DVec3) {
+        let rot = DMat3::from_rotation_z(-std::f64::consts::FRAC_PI_2);
+        let base = p.base_at(pos, &rot);
+        let aim = DVec3::new(base.x - 6.0, -0.3 + side, 5.5 - under);
+        let tip = base + (aim - base).normalize() * p.def.length as f64;
+        let (theta, psi, _) = p.angles_to(base, &rot, tip);
+        (Rope::Hold { theta, psi }, tip)
+    }
+
+    /// A pole held by its rope with its shoe `under` the wire and `side` metres beside it.
+    fn held_under_the_wire(under: f64, side: f64) -> (Pole, WireNet, DVec3, Vec<PoleEvent>) {
+        let net = straight();
+        let mut p = pole();
+        let mut ev = Vec::new();
+        let pos = DVec3::new(20.0, 0.0, 0.0);
+        let (hold, _) = hold_at(&p, pos, under, side);
+        run(&mut p, &net, pos, 3.0, hold, 0.0, &mut ev);
+        (p, net, pos, ev)
+    }
+
+    #[test]
+    fn a_rope_holds_the_shoe_where_the_hand_puts_it_and_the_spring_lifts_it_on() {
+        let (mut p, net, pos, mut ev) = held_under_the_wire(0.3, 0.05);
+        assert_eq!(p.mode, PoleMode::Hand);
+        // (no help to the wire: the shoe stays where it is held, under the wire)
+        let (_, tip) = hold_at(&p, pos, 0.3, 0.05);
+        assert!((p.tip - tip).length() < 0.02, "{:?}", p.tip);
+        run(&mut p, &net, pos, 2.0, Rope::Idle, 0.0, &mut ev);
+        assert_eq!(p.mode, PoleMode::OnWire, "{:?}", ev.iter().map(|e| e.kind).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn a_rope_let_go_beside_the_wire_misses_it() {
+        let (mut p, net, pos, mut ev) = held_under_the_wire(0.3, 1.0);
+        run(&mut p, &net, pos, 2.0, Rope::Idle, 0.0, &mut ev);
+        assert_eq!(p.mode, PoleMode::Free);
+        run(&mut p, &net, pos, 3.0, Rope::Idle, 0.0, &mut ev);
+        assert!(p.theta <= (p.def.max_angle as f64).to_radians() + 1e-9 && p.theta > 0.6, "{}", p.theta.to_degrees());
+    }
+
+    /// Pole `p` driven by its script's gear from `from` to `to` over `secs`, then held there for
+    /// `hold` s (a run's leg and its stop).
+    #[allow(clippy::too_many_arguments)]
+    fn gear_leg(p: &mut Pole, net: &WireNet, pos: DVec3, from: f64, to: f64, secs: f64, hold: f64, ev: &mut Vec<PoleEvent>) -> Vec<f64> {
+        let goal = Some(Contact { span: 0, s: 65.0, side: 0 });
+        let dt = 1.0 / 60.0;
+        let mut seen = Vec::new();
+        let n = (secs / dt).round().max(1.0) as usize;
+        for i in 0..n + (hold / dt).round() as usize {
+            p.gear = Some(from + (to - from) * ((i + 1) as f64 / n as f64).min(1.0));
+            let rope = match p.gear_order() {
+                Some(at) => Rope::Gear { at, goal },
+                None => Rope::Idle,
+            };
+            run(p, net, pos, dt, rope, 0.0, ev);
+            seen.push(p.theta);
+        }
+        seen
+    }
+
+    #[test]
+    fn the_script_s_gear_carries_the_boom_which_bounces_where_it_stops() {
+        let net = straight();
+        let mut p = pole();
+        let mut ev = Vec::new();
+        let pos = DVec3::new(20.0, 0.0, 0.0);
+        // (a variable as it was found moves nothing)
+        p.gear = Some(0.0);
+        assert_eq!(p.gear_order(), None);
+        // up to halfway: off the hook, and the boom bounces about the stopped carriage
+        gear_leg(&mut p, &net, pos, 0.0, 0.5, 2.0, 0.0, &mut ev);
+        assert_eq!(p.mode, PoleMode::Hand);
+        assert!(p.lifting());
+        let mid = p.carriage.unwrap().0;
+        let seen: Vec<f64> = gear_leg(&mut p, &net, pos, 0.5, 0.5, 0.0, 3.0, &mut ev).iter().map(|t| t - mid).collect();
+        assert!(seen.iter().any(|d| *d > 0.0) && seen.iter().any(|d| *d < 0.0), "no bounce about halfway: {seen:?}");
+        assert!(seen.last().unwrap().abs() < 0.01);
+        gear_leg(&mut p, &net, pos, 0.5, 1.0, 2.0, 2.0, &mut ev);
+        assert_eq!(p.mode, PoleMode::OnWire, "{:?}", ev.iter().map(|e| e.kind).collect::<Vec<_>>());
+        assert!(!p.lifting());
+        gear_leg(&mut p, &net, pos, 1.0, 0.0, 4.0, 2.0, &mut ev);
+        assert_eq!(p.mode, PoleMode::Down);
+        let steps: Vec<_> = ev.iter().map(|e| e.kind).filter(|k| matches!(k, PoleEventKind::Released | PoleEventKind::Engaged | PoleEventKind::Dewired(_) | PoleEventKind::Latched)).collect();
+        assert_eq!(steps, [PoleEventKind::Released, PoleEventKind::Engaged, PoleEventKind::Dewired(DewireCause::Rope), PoleEventKind::Latched]);
+        // (and the variable left at 0 does not take the pole down again once put up by hand)
+        assert_eq!(p.gear_order(), None);
+    }
+
+    #[test]
+    fn a_rope_brought_down_to_the_roof_hooks_the_pole_on() {
+        let (mut p, net, pos, mut ev) = held_under_the_wire(0.3, 0.05);
+        let rest = p.rest();
+        run(&mut p, &net, pos, 3.0, Rope::Hold { theta: rest, psi: 0.05 }, 0.0, &mut ev);
+        run(&mut p, &net, pos, 1.0, Rope::Idle, 0.0, &mut ev);
+        assert_eq!(p.mode, PoleMode::Down);
+        assert!(ev.iter().any(|e| matches!(e.kind, PoleEventKind::Latched)));
+    }
+
+    #[test]
+    fn a_shoe_pushed_up_through_the_wire_by_the_rope_takes_it() {
+        let (mut p, net, pos, mut ev) = held_under_the_wire(0.3, 0.05);
+        let (up, _) = hold_at(&p, pos, -0.15, 0.05);
+        run(&mut p, &net, pos, 1.0, up, 0.0, &mut ev);
+        assert_eq!(p.mode, PoleMode::OnWire);
+        assert!(p.hold_engaged);
+        run(&mut p, &net, pos, 0.5, up, 0.0, &mut ev);
+        assert_eq!(p.mode, PoleMode::OnWire);
     }
 
     #[test]

@@ -932,6 +932,101 @@ fn a_scheme_folder_supplies_only_what_its_cti_names() {
     assert_eq!(map["sedista.bmp"], "sedista-diffuse.bmp", "a picture the folder has not got: the bare name, found with the model's textures");
 }
 
+/// A model's script holding a pole's rope (`Trolley_Pole<k>_Rope`): the mouse's pixels it hands
+/// over raise that pole only, are taken each step, and letting go leaves the pole loose.
+#[test]
+fn a_script_holds_a_poles_rope_and_moves_it_by_the_mouse() {
+    use omsi_trolley::{PoleDef, PoleMode, TrolleyDef};
+    let mut ty = coupling_test_type(None);
+    {
+        let t = Arc::get_mut(&mut ty).unwrap();
+        let pole = |side: i8| PoleDef { side, base: Vec3::new(0.3 * side as f32, -0.5, 3.0), length: 6.5, ..Default::default() };
+        t.def.trolley = TrolleyDef { poles: vec![pole(-1), pole(1)], ..Default::default() };
+    }
+    let mut v = VehicleInstance::new(ty, VehicleHost::new(Default::default()));
+    for k in 1..=2 {
+        for s in ["", "_X", "_Y"] {
+            v.set_engine_var(&format!("Trolley_Pole{k}_Rope{s}"), 0.0);
+        }
+    }
+    v.set_engine_var("Trolley_Pole1_Rope", 1.0);
+    for _ in 0..60 {
+        // (the script's `_drag`: the mouse up 10 pixels a frame)
+        let y = v.var("Trolley_Pole1_Rope_Y").unwrap();
+        v.set_engine_var("Trolley_Pole1_Rope_Y", y - 10.0);
+        v.update(1.0 / 60.0);
+    }
+    let poles = |v: &VehicleInstance| v.trolley.as_ref().unwrap().rig.poles.iter().map(|p| (p.mode, p.theta.to_degrees())).collect::<Vec<_>>();
+    let held = poles(&v);
+    assert_eq!(held[0].0, PoleMode::Hand, "{held:?}");
+    assert!(held[0].1 > 20.0, "{held:?}");
+    assert_eq!(held[1].0, PoleMode::Down);
+    assert_eq!(v.var("Trolley_Pole1_Rope_Y"), Some(0.0));
+    v.set_engine_var("Trolley_Pole1_Rope", 0.0);
+    for _ in 0..30 {
+        v.update(1.0 / 60.0);
+    }
+    assert_eq!(poles(&v)[0].0, PoleMode::Free);
+}
+
+/// A pole whose `max_angle` is below its `rest_angle` (both accepted by the parser) is held and
+/// moved by its rope without a panic, between the bounds the pole itself keeps.
+#[test]
+fn a_rope_on_a_pole_with_its_top_below_its_rest_does_not_panic() {
+    use omsi_trolley::{PoleDef, PoleMode, TrolleyDef};
+    let mut ty = coupling_test_type(None);
+    {
+        let t = Arc::get_mut(&mut ty).unwrap();
+        let pole = |side: &str| PoleDef::parse(&[side, "pos 0.3 -0.5 3.0", "length 6.5", "rest_angle 30", "max_angle 10"]);
+        t.def.trolley = TrolleyDef { poles: vec![pole("side left"), pole("side right")], ..Default::default() };
+    }
+    let mut v = VehicleInstance::new(ty, VehicleHost::new(Default::default()));
+    for s in ["", "_X", "_Y"] {
+        v.set_engine_var(&format!("Trolley_Pole1_Rope{s}"), 0.0);
+    }
+    v.set_engine_var("Trolley_Pole1_Rope", 1.0);
+    for dy in [-10.0, 10.0] {
+        for _ in 0..30 {
+            v.set_engine_var("Trolley_Pole1_Rope_Y", dy);
+            v.update(1.0 / 60.0);
+        }
+    }
+    let p = &v.trolley.as_ref().unwrap().rig.poles[0];
+    assert_eq!(p.mode, PoleMode::Hand);
+    assert!(p.theta >= p.rest() - 1e-9 && p.theta <= p.top() + 1e-9, "{}", p.theta.to_degrees());
+}
+
+/// A model's script driving the lifting gear (`Trolley_Pole<k>_Gear`, 0 on the hook, 1 at the wire):
+/// the pole follows from the variable's first change, and a variable left as it is moves nothing.
+#[test]
+fn a_script_drives_the_lifting_gear_by_its_variable() {
+    use omsi_trolley::{PoleDef, PoleMode, TrolleyDef};
+    let mut ty = coupling_test_type(None);
+    {
+        let t = Arc::get_mut(&mut ty).unwrap();
+        let pole = |side: i8| PoleDef { side, base: Vec3::new(0.3 * side as f32, -0.5, 3.0), length: 6.5, ..Default::default() };
+        t.def.trolley = TrolleyDef { poles: vec![pole(-1), pole(1)], ..Default::default() };
+    }
+    let mut v = VehicleInstance::new(ty, VehicleHost::new(Default::default()));
+    v.set_engine_var("Trolley_Pole1_Gear", 0.0);
+    for _ in 0..30 {
+        v.update(1.0 / 60.0);
+    }
+    let pole = |v: &VehicleInstance, k: usize| { let p = &v.trolley.as_ref().unwrap().rig.poles[k]; (p.mode, p.theta.to_degrees()) };
+    assert_eq!(pole(&v, 0).0, PoleMode::Down);
+    for i in 1..=120 {
+        v.set_engine_var("Trolley_Pole1_Gear", 0.5 * i as f32 / 120.0);
+        v.update(1.0 / 60.0);
+    }
+    for _ in 0..240 {
+        v.update(1.0 / 60.0);
+    }
+    let (mode, theta) = pole(&v, 0);
+    assert_eq!(mode, PoleMode::Hand);
+    assert!(theta > 8.0, "{theta}");
+    assert_eq!(pole(&v, 1).0, PoleMode::Down);
+}
+
 /// A trolleybus on a wire: no current, no movement; with its poles raised, the drive moves it.
 #[test]
 fn a_trolleybus_moves_only_on_current() {
@@ -955,9 +1050,9 @@ fn a_trolleybus_moves_only_on_current() {
         v.attach_wires(net);
         v.set_controls(Controls { throttle: 1.0, ..Default::default() });
         if raise {
-            v.trolley.as_deref_mut().unwrap().auto_raise_for = 5.0;
+            assert!(v.trolley_put_on(false));
         }
-        for _ in 0..(60 * 14) {
+        for _ in 0..(60 * 11) {
             v.update(1.0 / 60.0);
         }
         v
@@ -966,8 +1061,26 @@ fn a_trolleybus_moves_only_on_current() {
     assert!(bare.physics.speed.abs() < 0.01, "no wire: {}", bare.physics.speed);
     let down = drive(Some(net.clone()), false);
     assert!(down.physics.speed.abs() < 0.01, "poles down: {}", down.physics.speed);
+    let net_far = net.clone();
     let up = drive(Some(net), true);
     assert!(up.physics.speed > 3.0, "poles up: {} m/s", up.physics.speed);
     assert!(up.trolley.as_ref().unwrap().rig.circuit);
     assert!(up.var("Trolley_Powered").is_some());
+    assert!(up.var("Trolley_Pole2_Bounce").is_some());
+    let mut up = up;
+    assert!(up.trolley_take_off());
+    for _ in 0..(60 * 4) {
+        up.update(1.0 / 60.0);
+    }
+    assert!(up.trolley.as_ref().unwrap().rig.poles.iter().all(|p| p.mode == omsi_trolley::PoleMode::Down));
+    assert!(!up.trolley_take_off());
+    let at = |y: f64| {
+        let mut v = VehicleInstance::new(ty.clone(), VehicleHost::new(Default::default()));
+        v.heading = 90.0;
+        v.position = DVec3::new(0.0, y, 0.0);
+        v.attach_wires(Some(net_far.clone()));
+        v.trolley_put_on(true)
+    };
+    assert!(at(0.0));
+    assert!(!at(30.0));
 }

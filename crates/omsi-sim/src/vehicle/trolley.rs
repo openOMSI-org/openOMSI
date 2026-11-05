@@ -16,6 +16,8 @@ pub struct TrolleyGear {
     pub ropes: Vec<RopeCmd>,
     /// Put the poles on the wire by themselves for this many seconds (tests and demos).
     pub auto_raise_for: f32,
+    /// Take the poles down by themselves for this many seconds (the player's shortcut).
+    pub auto_lower_for: f32,
     /// Wheel torque of this step when a modelled drive supplies it (Nm).
     torque: Option<f32>,
     /// What the script's own torque is scaled by (no drive modelled).
@@ -36,6 +38,24 @@ pub struct TrolleyGear {
     /// The hand cannot see the wire (the cab: the poles are behind the driver): the motor takes
     /// the pole to the wire nearest its tip by itself, and the hand lets go when it is up.
     pub grab_auto: bool,
+    /// The pole is held by its rope (the mouse's button held down on it from outside): it goes
+    /// exactly where the mouse puts it, and let go it rises on its spring with no help to the wire.
+    pub grab_manual: bool,
+    /// The rope's hand moved this much since the last step (elevation, swing; radians).
+    pub grab_move: (f64, f64),
+    /// Where the window's cursor was last frame, while the rope is held.
+    pub grab_cursor: Option<(f32, f32)>,
+    grab_angles: Option<(f64, f64)>,
+    /// The rope is held by the model's own script (`Trolley_Pole<n>_Rope`), not the window's mouse.
+    pub grab_by_script: bool,
+    /// Seen from the player, the screen's right is the bus's right (1) or its left (-1).
+    pub rope_side: f64,
+    rope_was: Vec<f32>,
+    /// The slots of each pole's rope variables, found once (None per pole the script lacks them).
+    rope_ids: Option<Vec<Option<[omsi_script::VarId; 3]>>>,
+    /// The slots of each pole's `Trolley_Pole<n>_Gear`, written by a script that drives the lifting
+    /// gear itself.
+    gear_ids: Vec<Option<omsi_script::VarId>>,
     grab_idle: f32,
     grab_was: Option<usize>,
     /// A pole just let go of: the motor of a plain trolleybus (the retriever) carries it on to the
@@ -51,8 +71,17 @@ pub struct TrolleyGear {
 }
 
 struct Names {
-    pole: Vec<[String; 5]>,
+    pole: Vec<[String; 7]>,
+    /// Written by a model's script that handles the ropes itself (not declared by the game).
+    rope: Vec<[String; 3]>,
+    /// Written by a model's script that drives the lifting gear itself.
+    gear: Vec<String>,
 }
+
+/// How far a hand on the rope turns the pole per pixel of the mouse (rad).
+pub const ROPE_RATE: f64 = 0.0025;
+/// The most poles whose ropes a script can hold.
+const MAX_ROPES: usize = 8;
 
 impl TrolleyGear {
     pub fn for_type(def: &TrolleyDef, seed: u64) -> Option<Box<TrolleyGear>> {
@@ -69,9 +98,13 @@ impl TrolleyGear {
                     format!("Trolley_Pole{k}_State"),
                     format!("Trolley_Pole{k}_Contact"),
                     format!("Trolley_Pole{k}_Force"),
+                    format!("Trolley_Pole{k}_Bounce"),
+                    format!("Trolley_Pole{k}_Hit"),
                 ]
             })
             .collect();
+        let rope = (1..=def.poles.len()).map(|k| [format!("Trolley_Pole{k}_Rope"), format!("Trolley_Pole{k}_Rope_X"), format!("Trolley_Pole{k}_Rope_Y")]).collect();
+        let gear = (1..=def.poles.len()).map(|k| format!("Trolley_Pole{k}_Gear")).collect();
         let mut rig = TrolleyRig::new(def, seed);
         rig.verbose = omsi_cfg::flags::OMSI_DEBUG_TROLLEY.is_set();
         Some(Box::new(TrolleyGear {
@@ -80,6 +113,7 @@ impl TrolleyGear {
             carrier: None,
             net: None,
             auto_raise_for: 0.0,
+            auto_lower_for: 0.0,
             ropes: vec![RopeCmd::Idle; def.poles.len()],
             torque: None,
             gate: 1.0,
@@ -89,14 +123,41 @@ impl TrolleyGear {
             grab_ray: None,
             grab_fresh: false,
             grab_auto: false,
+            grab_manual: false,
+            grab_move: (0.0, 0.0),
+            grab_cursor: None,
+            grab_angles: None,
+            grab_by_script: false,
+            rope_side: 1.0,
+            rope_was: vec![0.0; def.poles.len()],
+            rope_ids: None,
+            gear_ids: Vec::new(),
             grab_idle: 0.0,
             grab_was: None,
             assist: vec![0.0; def.poles.len()],
-            names: Names { pole },
+            names: Names { pole, rope, gear },
             last_dir: 1.0,
             var_ids: Vec::new(),
             var_values: Vec::new(),
         }))
+    }
+
+    /// The mouse on a held pole's rope from outside, the cursor in window pixels (`scale`: per
+    /// point): up lets the pole rise, down pulls it down, sideways swings it the way `side` says
+    /// the screen's right goes (1 the bus's right). False when the rope cannot be held from here.
+    pub fn rope_by_mouse(&mut self, cursor: (f32, f32), scale: f32, side: f64, from_cab: bool) -> bool {
+        if from_cab && !self.grab_by_script {
+            self.grab = None;
+            return false;
+        }
+        // (a model's own script feeds its rope from its `_drag` instead)
+        if let Some(last) = self.grab_cursor.filter(|_| !self.grab_by_script) {
+            self.grab_move.0 -= ((cursor.1 - last.1) / scale) as f64 * ROPE_RATE;
+            self.grab_move.1 += ((cursor.0 - last.0) / scale) as f64 * ROPE_RATE * side;
+        }
+        self.grab_cursor = Some(cursor);
+        self.grab_fresh = true;
+        true
     }
 }
 
@@ -117,6 +178,60 @@ impl VehicleInstance {
     pub fn attach_wires(&mut self, net: Option<Arc<WireNet>>) {
         if let Some(g) = self.trolley.as_mut() {
             g.net = net;
+        }
+    }
+
+    /// The model's own script handles pole `k`'s rope (it has `Trolley_Pole<n>_Rope`).
+    pub fn trolley_rope_scripted(&self, k: usize) -> bool {
+        self.trolley.as_ref().and_then(|g| g.names.rope.get(k)).is_some_and(|n| self.var(&n[0]).is_some())
+    }
+
+    /// Put the poles on the wire by themselves, whether or not they have a motor (the player's
+    /// shortcut, or an auto-start); `only_under_wire`: only if each pole lying down has a wire
+    /// within its reach. True when they are being put on.
+    pub fn trolley_put_on(&mut self, only_under_wire: bool) -> bool {
+        let (pos, m, _) = self.trolley_frame();
+        let rot = glam::DMat3::from_cols(m.x_axis.truncate().as_dvec3(), m.y_axis.truncate().as_dvec3(), m.z_axis.truncate().as_dvec3());
+        let Some(g) = self.trolley.as_deref_mut() else { return false };
+        let down: Vec<&omsi_trolley::Pole> = g.rig.poles.iter().filter(|p| p.mode != omsi_trolley::PoleMode::OnWire).collect();
+        if down.is_empty() {
+            return false;
+        }
+        if only_under_wire {
+            let Some(net) = g.net.as_deref() else { return false };
+            let reaches = |p: &omsi_trolley::Pole| {
+                let tip = p.base_at(pos, &rot) + rot * omsi_trolley::rotate_tip_pub((p.def.work_angle as f64).to_radians(), 0.0, p.def.length as f64);
+                !net.candidates(tip, 3.5).is_empty()
+            };
+            if !down.iter().all(|p| reaches(p)) {
+                return false;
+            }
+        }
+        g.auto_lower_for = 0.0;
+        g.auto_raise_for = g.auto_raise_for.max(5.0);
+        true
+    }
+
+    /// Take the poles down on to their hooks by themselves (the player's shortcut). True when any
+    /// was up.
+    pub fn trolley_take_off(&mut self) -> bool {
+        let Some(g) = self.trolley.as_deref_mut() else { return false };
+        if g.rig.poles.iter().all(|p| p.mode == omsi_trolley::PoleMode::Down) {
+            return false;
+        }
+        g.auto_raise_for = 0.0;
+        g.auto_lower_for = 5.0;
+        true
+    }
+
+    /// The player's Ctrl+R: the poles on the wire, or down if one is on; what the driver is told.
+    pub fn trolley_toggle(&mut self) -> &'static str {
+        if self.trolley.as_ref().is_some_and(|g| g.rig.poles.iter().any(|p| p.mode == omsi_trolley::PoleMode::OnWire)) {
+            self.trolley_take_off();
+            "Taking the poles down"
+        } else {
+            self.trolley_put_on(false);
+            "Putting the poles on the wire"
         }
     }
 
@@ -199,6 +314,30 @@ impl VehicleInstance {
             .as_ref()
             .map(|l| l.switches.iter().map(|n| (n.clone(), self.var(n).unwrap_or(0.0))).collect())
             .unwrap_or_default();
+        if self.trolley.as_ref().is_some_and(|g| g.rope_ids.is_none()) {
+            let ids = self.trolley.as_ref().unwrap().names.rope.iter().map(|n| {
+                let id = |s: &str| omsi_script::compile::with_lower(s, |k| self.var_index.get(k).copied());
+                Some([id(&n[0])?, id(&n[1])?, id(&n[2])?])
+            }).collect();
+            let gear = self.trolley.as_ref().unwrap().names.gear.iter().map(|n| omsi_script::compile::with_lower(n, |k| self.var_index.get(k).copied())).collect();
+            let g = self.trolley.as_mut().unwrap();
+            g.rope_ids = Some(ids);
+            g.gear_ids = gear;
+        }
+        if let Some(g) = self.trolley.as_deref_mut() {
+            for (p, id) in g.rig.poles.iter_mut().zip(&g.gear_ids) {
+                p.gear = id.map(|i| self.state.vars[i as usize] as f64);
+            }
+        }
+        let mut rope_vars = [None; MAX_ROPES];
+        if let Some(ids) = self.trolley.as_ref().and_then(|g| g.rope_ids.as_ref()) {
+            for (slot, [r, x, y]) in rope_vars.iter_mut().zip(ids.iter()).filter_map(|(s, i)| Some((s, (*i)?))) {
+                let vars = &mut self.state.vars;
+                *slot = Some((vars[r as usize], vars[x as usize], vars[y as usize]));
+                vars[x as usize] = 0.0;
+                vars[y as usize] = 0.0;
+            }
+        }
         let script_force = (self.get(self.v_m_wheel) / self.driven_radius().max(0.1)).max(0.0);
         let radius = self.driven_radius();
         let c = self.physics.controls;
@@ -240,14 +379,43 @@ impl VehicleInstance {
                 legacy_write.push((name.clone(), 1.0));
             }
         }
+        for (k, v) in rope_vars.iter().enumerate().take(g.rig.poles.len()) {
+            let Some((rope, x, y)) = *v else { continue };
+            let was = std::mem::replace(&mut g.rope_was[k], rope);
+            if rope > 0.5 && was <= 0.5 {
+                g.grab = Some(k);
+                g.grab_manual = true;
+                g.grab_by_script = true;
+                g.grab_fresh = true;
+            } else if rope <= 0.5 && was > 0.5 && g.grab == Some(k) {
+                g.grab = None;
+            }
+            if rope > 0.5 && g.grab == Some(k) {
+                g.grab_move.0 -= y as f64 * ROPE_RATE;
+                g.grab_move.1 += x as f64 * ROPE_RATE * g.rope_side;
+                g.grab_fresh = true;
+            }
+            if rope < -0.5 && ropes.get(k) == Some(&RopeCmd::Idle) && g.grab != Some(k) {
+                ropes[k] = RopeCmd::Pull;
+            }
+        }
         // the mouse's hand on a pole: aimed along the mouse's ray
         let was_grab = g.grab_was;
         if was_grab != g.grab {
             // let go: the pole goes on being guided to the wire the hand aimed at
             if let (Some(k), None) = (was_grab, g.grab) {
-                if let Some(a) = g.assist.get_mut(k) {
+                if let Some(a) = g.assist.get_mut(k).filter(|_| !g.grab_manual) {
                     *a = 2.2;
                 }
+            }
+            if g.grab.is_none() {
+                g.grab_manual = false;
+                g.grab_by_script = false;
+            }
+            g.grab_angles = None;
+            g.grab_cursor = None;
+            if g.grab.is_none() {
+                g.grab_move = (0.0, 0.0);
             }
             g.grab_was = g.grab;
         }
@@ -273,7 +441,20 @@ impl VehicleInstance {
                 }
                 // (a window that does not feed the ray - no mouse - lets the pole go)
                 let up = matches!(g.rig.poles.get(k).map(|p| p.mode), Some(omsi_trolley::PoleMode::Free | omsi_trolley::PoleMode::OnWire));
-                if g.grab_idle > 2.0 || (g.grab_auto && up) {
+                if g.grab_manual {
+                    let p = &g.rig.poles[k];
+                    if p.hold_engaged || g.grab_idle > 2.0 {
+                        g.grab = None;
+                    } else {
+                        // (taken where it is: it does not jump to the hand)
+                        let (mut theta, mut psi) = *g.grab_angles.get_or_insert((p.theta, p.psi));
+                        let (dt_, dp) = std::mem::take(&mut g.grab_move);
+                        theta = (theta + dt_).clamp(p.rest(), p.top());
+                        psi = (psi + dp).clamp(-1.7, 1.7);
+                        g.grab_angles = Some((theta, psi));
+                        ropes[k] = RopeCmd::Hold { theta, psi };
+                    }
+                } else if g.grab_idle > 2.0 || (g.grab_auto && up) {
                     g.grab = None;
                 } else {
                     ropes[k] = RopeCmd::Raise { ray: g.grab_ray, auto: g.grab_auto };
@@ -296,6 +477,14 @@ impl VehicleInstance {
             g.auto_raise_for -= dt;
             for r in ropes.iter_mut() {
                 *r = RopeCmd::Raise { ray: None, auto: true };
+            }
+        }
+        if g.auto_lower_for > 0.0 {
+            g.auto_lower_for -= dt;
+            for (r, p) in ropes.iter_mut().zip(&g.rig.poles) {
+                if p.mode != omsi_trolley::PoleMode::Down {
+                    *r = RopeCmd::Pull;
+                }
             }
         }
         let net = g.net.clone();
@@ -325,8 +514,8 @@ impl VehicleInstance {
         const GLOBAL: [&str; 7] = ["Trolley_Volts", "Trolley_Amps", "Trolley_Powered", "Trolley_Notch", "Trolley_Arc", "Trolley_Hiss", "Trolley_Battery"];
         let mut vals = std::mem::take(&mut g.var_values);
         vals.clear();
-        for p in &g.rig.poles {
-            vals.extend_from_slice(&[p.theta.to_degrees() as f32, p.psi.to_degrees() as f32, p.state_code(), if p.closed { 1.0 } else { 0.0 }, p.force as f32]);
+        for (p, hit) in g.rig.poles.iter().zip(&g.rig.hit_level) {
+            vals.extend_from_slice(&[p.theta.to_degrees() as f32, p.psi.to_degrees() as f32, p.state_code(), if p.closed { 1.0 } else { 0.0 }, p.force as f32, p.bounce_level(), *hit]);
         }
         vals.extend_from_slice(&[g.rig.volts, g.rig.amps, if g.rig.circuit { 1.0 } else { 0.0 }, out.notch, g.rig.arc, g.rig.hiss, out.battery_soc]);
         let mut ids = std::mem::take(&mut g.var_ids);
