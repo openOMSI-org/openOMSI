@@ -369,6 +369,14 @@ pub(crate) fn mark_vulkan_lost() {
     let _ = std::fs::write(p, vulkan_lost_mark(*vendor, *device));
 }
 
+fn vulkan_pin_after(pin: Option<(u32, u32)>, mut made: impl Iterator<Item = Option<GraphicsApi>>) -> Option<(u32, u32)> {
+    pin.filter(|_| !made.any(|b| b == Some(GraphicsApi::Native(wgpu::Backends::DX12))))
+}
+
+fn vulkan_passed_over(pin: Option<(u32, u32)>, backend: wgpu::Backend, vendor: u32, device: u32) -> bool {
+    backend == wgpu::Backend::Vulkan && pin.is_some_and(|p| p != (vendor, device))
+}
+
 fn vulkan_lost_path() -> Option<PathBuf> {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
     Some(PathBuf::from(home).join(".openomsi").join("vulkan-lost"))
@@ -426,6 +434,9 @@ struct Opener {
     /// The round (graphics chips, then software renderers) and the instance in it.
     software_round: bool,
     k: usize,
+    /// The Radeon Auto opens Vulkan on: the other Vulkan adapters wait until DirectX 12 was
+    /// tried too.
+    vulkan_pin: Option<(u32, u32)>,
 }
 
 impl Opener {
@@ -439,6 +450,7 @@ impl Opener {
             no_surface: Vec::new(),
             software_round: false,
             k: 0,
+            vulkan_pin: VULKAN_FIRST.get().copied().flatten(),
         }
     }
 
@@ -446,6 +458,12 @@ impl Opener {
     fn next(&mut self) -> Option<(omsi_render::Opened, String, wgpu::Instance)> {
         loop {
             if self.k == self.made.len() {
+                let pin = vulkan_pin_after(self.vulkan_pin, self.made.iter().map(|m| m.0));
+                if pin != self.vulkan_pin {
+                    self.vulkan_pin = pin;
+                    self.k = 0;
+                    continue;
+                }
                 match self.order.next() {
                     Some(b) => {
                         log::info!("graphics: trying {b:?}");
@@ -478,7 +496,7 @@ impl Opener {
                 if is_software(&info) != self.software_round {
                     continue;
                 }
-                if info.backend == wgpu::Backend::Vulkan && VULKAN_FIRST.get().is_some_and(|c| c.is_some_and(|c| c != (info.vendor, info.device))) {
+                if vulkan_passed_over(self.vulkan_pin, info.backend, info.vendor, info.device) {
                     continue;
                 }
                 let what = format!("{} ({:?})", info.name, info.backend);
@@ -942,6 +960,25 @@ mod window_tests {
         assert_eq!(pick("auto", Some(&mark), &[amd]), None);
         assert_eq!(pick("auto", Some("0.0.1|1002-744c"), &[amd]), Some((0x1002, 0x744c)));
         assert_eq!(pick("auto", Some(&super::vulkan_lost_mark(0x1002, 0x73bf)), &[amd]), Some((0x1002, 0x744c)));
+    }
+
+    #[test]
+    fn the_other_vulkan_adapters_are_tried_once_directx_12_could_not_draw() {
+        use super::{vulkan_passed_over, vulkan_pin_after, GraphicsApi};
+        use wgpu::Backend::{Dx12, Vulkan};
+        let (radeon, apu) = ((0x1002, 0x744c), (0x1002, 0x164e));
+        let (vulkan, dx12, gl) = [wgpu::Backends::VULKAN, wgpu::Backends::DX12, wgpu::Backends::GL].map(|b| Some(GraphicsApi::Native(b)));
+        let skipped = |pin, backend, (vendor, device)| vulkan_passed_over(pin, backend, vendor, device);
+        let pin = vulkan_pin_after(Some(radeon), [None, vulkan].into_iter());
+        assert_eq!(pin, Some(radeon));
+        assert!(!skipped(pin, Vulkan, radeon));
+        assert!(skipped(pin, Vulkan, apu));
+        assert!(!skipped(pin, Dx12, apu));
+        let pin = vulkan_pin_after(pin, [None, vulkan, dx12].into_iter());
+        assert_eq!(pin, None);
+        assert!(!skipped(pin, Vulkan, apu));
+        assert_eq!(vulkan_pin_after(None, [None, vulkan, dx12, gl].into_iter()), None);
+        assert!(!skipped(None, Vulkan, apu));
     }
 
     #[test]
