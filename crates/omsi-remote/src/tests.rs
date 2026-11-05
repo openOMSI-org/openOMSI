@@ -431,6 +431,45 @@ fn a_flood_of_commands_stays_bounded_and_still_lets_go_of_what_it_held() {
 }
 
 #[test]
+fn refused_presses_over_many_reconnects_leave_no_releases_and_held_ones_still_let_go() {
+    let dir = temp_dir("reconnect");
+    let remote = Remote::start(0, dir.clone()).unwrap();
+    remote.set_vehicle(Some(Vehicle { key: "Bus/a.bus".into(), name: "Bus A".into(), folder: dir.join("none"), actions: vec!["horn".into()], aliases: Vec::new(), depot: None, doors: Vec::new() }));
+    remote.set_pairing(true);
+    let mut c = Client::open(remote.port());
+    c.send(json!({ "t": "pair", "pin": remote.pin(), "name": "holder" }));
+    let token = c.next("paired")["token"].as_str().unwrap().to_string();
+    c.send(json!({ "t": "act", "name": "horn", "down": true }));
+    c.send(json!({ "t": "act", "name": "wiper", "down": true }));
+    assert_eq!(wait_for(&remote, 2).len(), 2);
+    assert!((0..crate::queue::MAX_QUEUED).all(|_| remote.shared.send(Command::StartUp)));
+    for k in 0..40 {
+        let mut d = Client::open(remote.port());
+        d.send(json!({ "t": "hello", "token": token }));
+        d.send(json!({ "t": "act", "name": format!("key{k}"), "down": true }));
+        d.send(json!({ "t": "act", "name": "horn", "down": true }));
+        while d.0.read().is_ok() {}
+        assert_eq!(lock(&remote.shared.commands).len(), crate::queue::MAX_QUEUED, "a refused press queues no release");
+    }
+    c.send(json!({ "t": "act", "name": "wiper", "down": false }));
+    c.send(json!({ "t": "act", "name": "wiper", "down": true }));
+    c.send(json!({ "t": "ping", "id": 1 }));
+    c.next("pong");
+    assert_eq!(lock(&remote.shared.commands).len(), crate::queue::MAX_QUEUED + 1);
+    drop(c);
+    let since = Instant::now();
+    while !lock(&remote.shared.held).is_empty() && since.elapsed() < Duration::from_secs(5) {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    remote.release_held();
+    let rest = remote.take_all_commands();
+    let releases: Vec<_> = rest.iter().filter(|c| !matches!(c, Command::StartUp)).cloned().collect();
+    assert_eq!(rest.len(), crate::queue::MAX_QUEUED + releases.len());
+    assert_eq!(releases.len(), 2, "{releases:?}");
+    assert!(["horn", "wiper"].iter().all(|n| releases.contains(&Command::Action { name: (*n).into(), down: false })), "{releases:?}");
+}
+
+#[test]
 fn forgetting_the_devices_and_stopping_act_at_once_under_a_stream_of_commands() {
     let dir = temp_dir("stream");
     let remote = Remote::start(0, dir.clone()).unwrap();

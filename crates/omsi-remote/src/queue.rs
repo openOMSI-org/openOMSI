@@ -26,6 +26,12 @@ impl Queue {
                 return true;
             }
         }
+        if let Command::Action { name, down: false } = &c {
+            let last = self.commands.iter().rev().find(|o| matches!(o, Command::Action { name: n, .. } if n == name));
+            if last.is_some_and(release) {
+                return true;
+            }
+        }
         if !release(&c) && self.commands.iter().filter(|o| !release(o)).count() >= MAX_QUEUED {
             return false;
         }

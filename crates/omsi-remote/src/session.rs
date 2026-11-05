@@ -130,20 +130,30 @@ fn handle(ws: &mut Ws, text: &str, shared: &Shared, id: u64) -> Result<(), Strin
         return Ok(());
     }
     let Some(cmd) = json::command(&v) else { return Ok(()) };
-    if let Command::Action { name, down } = &cmd {
-        let mut held = lock(&shared.held);
-        let mine = held.entry(id).or_default();
-        let was = mine.iter().position(|h| h == name);
-        match (*down, was) {
-            (true, Some(_)) | (false, None) => return Ok(()),
-            (true, None) if mine.len() >= MAX_HELD => return Ok(()),
-            (true, None) => mine.push(name.clone()),
-            (false, Some(i)) => {
-                mine.swap_remove(i);
+    let admitted = match &cmd {
+        Command::Action { name, down } => {
+            let mut held = lock(&shared.held);
+            let mine = held.entry(id).or_default();
+            let was = mine.iter().position(|h| h == name);
+            match (*down, was) {
+                (true, Some(_)) | (false, None) => return Ok(()),
+                (true, None) if mine.len() >= MAX_HELD => return Ok(()),
+                (true, None) => {
+                    let sent = shared.send(cmd.clone());
+                    if sent {
+                        mine.push(name.clone());
+                    }
+                    sent
+                }
+                (false, Some(i)) => {
+                    mine.swap_remove(i);
+                    shared.send(cmd.clone())
+                }
             }
         }
-    }
-    match shared.send(cmd) {
+        _ => shared.send(cmd),
+    };
+    match admitted {
         true => Ok(()),
         false => Err("more commands than the game takes".into()),
     }
