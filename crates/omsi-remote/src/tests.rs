@@ -447,15 +447,14 @@ fn refused_presses_over_many_reconnects_leave_no_releases_and_held_ones_still_le
         let mut d = Client::open(remote.port());
         d.send(json!({ "t": "hello", "token": token }));
         d.send(json!({ "t": "act", "name": format!("key{k}"), "down": true }));
-        d.send(json!({ "t": "act", "name": "horn", "down": true }));
         while d.0.read().is_ok() {}
         assert_eq!(lock(&remote.shared.commands).len(), crate::queue::MAX_QUEUED, "a refused press queues no release");
     }
     c.send(json!({ "t": "act", "name": "wiper", "down": false }));
-    c.send(json!({ "t": "act", "name": "wiper", "down": true }));
     c.send(json!({ "t": "ping", "id": 1 }));
     c.next("pong");
-    assert_eq!(lock(&remote.shared.commands).len(), crate::queue::MAX_QUEUED + 1);
+    assert!(remote.shared.send(Command::Action { name: "wiper".into(), down: false }));
+    assert_eq!(lock(&remote.shared.commands).len(), crate::queue::MAX_QUEUED + 1, "a second release of the same key is merged");
     drop(c);
     let since = Instant::now();
     while !lock(&remote.shared.held).is_empty() && since.elapsed() < Duration::from_secs(5) {
