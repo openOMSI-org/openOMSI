@@ -761,6 +761,58 @@
       "permission": null
     },
     {
+      "name": "cable.clear",
+      "group": "scene",
+      "since": "0.2.22",
+      "doc": "Takes every cable of the plugin away; how many went. They go by themselves when the plugin stops.",
+      "params": [],
+      "returns": "integer",
+      "multi": false,
+      "permission": "ui"
+    },
+    {
+      "name": "cable.remove",
+      "group": "scene",
+      "since": "0.2.22",
+      "doc": "Takes the cable `id` away; `true` when there was one.",
+      "params": [
+        {
+          "name": "id",
+          "type": "string",
+          "optional": false
+        }
+      ],
+      "returns": "boolean",
+      "multi": false,
+      "permission": "ui"
+    },
+    {
+      "name": "cable.set",
+      "group": "scene",
+      "since": "0.2.22",
+      "doc": "Lays the cable `id` or moves it: a thin round tube through `points` (a flat list `{x1, y1, z1, x2, ...}` or a list of `{x, y, z}`, metres), lit and shaded as the scene. `options`: `radius` (m, default 0.006), `color` (`{r, g, b}` or `{r, g, b, a}`, 0 to 1, default dark grey) and `frame`: `\"world\"` (the map's coordinates, z up; the default) or `\"bus\"` (the player's bus's model frame: x right, y forward, z up, so a rope tied to the bus moves with it as drawn). Set it again whenever it moves; `false` (and the cable stays as it was) when the plugin would have more than 4096 cables, or more than 65536 points in all its cables together.",
+      "params": [
+        {
+          "name": "id",
+          "type": "string",
+          "optional": false
+        },
+        {
+          "name": "points",
+          "type": "table",
+          "optional": false
+        },
+        {
+          "name": "options",
+          "type": "table",
+          "optional": true
+        }
+      ],
+      "returns": "boolean",
+      "multi": false,
+      "permission": "ui"
+    },
+    {
       "name": "camera.fov",
       "group": "camera",
       "since": "0.2.22",

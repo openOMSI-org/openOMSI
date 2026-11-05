@@ -229,6 +229,8 @@ pub(crate) struct GfxState {
     pub(crate) window_hidden: bool,
     /// OMSI 2's route arrows over the road (the `nav_arrows` setting).
     pub(crate) route_arrows: crate::route_arrows::RouteArrows,
+    /// The plugins' cables in the scene (`omsi.cable`).
+    pub(crate) plugin_cables: omsi_scene::plugin_cables::PluginCables,
     /// Frames the window was hidden for (they are not drawn).
     pub(crate) hidden_frames: u32,
     /// Stand-in for the window's frame while the window is hidden (OMSI_RENDER_OCCLUDED).

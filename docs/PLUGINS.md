@@ -928,6 +928,14 @@ On macOS, helpers extracted from ZIP files may need their executable bit restore
 | `omsi.ui.update(panel, element, values)` | true, or false and the reason | Changes one element of a panel in place, by its id: `text`, `color`, `value` (a bar, a slider), `segments` (a bar), `checked`, `selected`, `name` (an icon), `values` (a chart), `rows` and `aligns` (a table), `stops` (a stop list), `src` (an image) - cheaper than setting the whole panel again. *Permission: `ui`.* | 0.2.22 |
 | `omsi.ui.value(panel, element)` | any | The value of a checkbox, slider, text field or tabs element now (as `ui_change` gives it). *Permission: `ui`.* | 0.2.22 |
 
+#### Cables in the world
+
+| Function | Returns | What it does | Since |
+| --- | --- | --- | --- |
+| `omsi.cable.clear()` | integer | Takes every cable of the plugin away; how many went. They go by themselves when the plugin stops. *Permission: `ui`.* | 0.2.22 |
+| `omsi.cable.remove(id)` | boolean | Takes the cable `id` away; `true` when there was one. *Permission: `ui`.* | 0.2.22 |
+| `omsi.cable.set(id, points, [options])` | boolean | Lays the cable `id` or moves it: a thin round tube through `points` (a flat list `{x1, y1, z1, x2, ...}` or a list of `{x, y, z}`, metres), lit and shaded as the scene. `options`: `radius` (m, default 0.006), `color` (`{r, g, b}` or `{r, g, b, a}`, 0 to 1, default dark grey) and `frame`: `"world"` (the map's coordinates, z up; the default) or `"bus"` (the player's bus's model frame: x right, y forward, z up, so a rope tied to the bus moves with it as drawn). Set it again whenever it moves; `false` (and the cable stays as it was) when the plugin would have more than 4096 cables, or more than 65536 points in all its cables together. *Permission: `ui`.* | 0.2.22 |
+
 #### Events, timers and watches
 
 | Function | Returns | What it does | Since |

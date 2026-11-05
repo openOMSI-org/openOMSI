@@ -195,6 +195,9 @@ pub struct Rainfall {
 }
 
 pub struct Scene {
+    /// Which scene this is, different for every one made (`Renderer::new_scene`): what keeps
+    /// ids of the scene's meshes and instances can tell they belong to one replaced since.
+    pub serial: u64,
     pub meshes: Vec<GpuMesh>,
     pub textures: Vec<GpuTexture>,
     /// Texture slot read by procedural rain films.
