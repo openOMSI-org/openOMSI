@@ -856,8 +856,14 @@ fn a_circle_of_cars_giving_way_lets_the_longest_waiter_go_after_eight_seconds() 
     // a red light in it: congestion as the law wants it
     let mut t = circle_of_four(&f, Hold::Rule, [20.0; 4]);
     t.cars[0].light_hold = true;
+    t.cars[0].why = ("light", 1.0);
     t.resolve_waits();
     assert!(t.cars.iter().all(|c| c.yield_pass == f32::MIN));
+    let mut t = circle_of_four(&f, Hold::Rule, [9.0, 12.5, 8.5, 10.0]);
+    t.cars[0].light_hold = true;
+    t.resolve_waits();
+    let going: Vec<usize> = (0..4).filter(|&k| t.cars[k].yield_pass > t.time).collect();
+    assert_eq!(going, vec![1]);
 }
 
 #[test]

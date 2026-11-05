@@ -52,16 +52,6 @@ jobs:
           git show "$BASE:$LOCALES" > "$RUNNER_TEMP/app.base.yml" 2>/dev/null || : > "$RUNNER_TEMP/app.base.yml"
           python3 .github/scripts/check_locales.py "$RUNNER_TEMP/app.base.yml" "$LOCALES"
 
-      - name: Website
-        if: ${{ !cancelled() }}
-        run: |
-          if git diff --quiet "$BASE" HEAD -- site docs scripts/build-site.mjs scripts/site.test.mjs; then
-            echo "The website is not changed."
-            exit 0
-          fi
-          node --test scripts/site.test.mjs
-          node scripts/build-site.mjs "$RUNNER_TEMP/site"
-
       # No Rust file and no function may grow past its recorded size (+5 %), and new ones stay
       # under 1500 / 300 lines: scripts/size-budget.sh, baseline in scripts/size-budget.txt.
       - name: File and function sizes

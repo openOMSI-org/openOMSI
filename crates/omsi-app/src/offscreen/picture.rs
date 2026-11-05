@@ -469,7 +469,7 @@ impl Offscreen<'_> {
                 glam::Mat4::perspective_rh(
                     c.fov_deg.to_radians(),
                     w as f32 / h as f32,
-                    c.far,
+                    c.depth_far(),
                     c.near,
                 )
             });

@@ -454,7 +454,7 @@ impl Renderer {
             self.write_precip_camera(&cu, m);
         }
         if rt_frame {
-            let proj = Mat4::perspective_rh(camera.fov_deg.to_radians(), aspect, camera.far, camera.near);
+            let proj = Mat4::perspective_rh(camera.fov_deg.to_radians(), aspect, camera.depth_far(), camera.near);
             self.prepare_ray_tracing(scene, camera, lighting, vp_mat, proj, f.width, f.height, f.dt);
             clock.stage(self, "ray tracing", "mirror.ray tracing");
         }

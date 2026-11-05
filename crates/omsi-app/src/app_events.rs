@@ -97,6 +97,7 @@ impl ApplicationHandler for App {
         self.input.touch.drop_gpu();
         self.input_lost();
         self.save_last_situation();
+        omsi_platform::diagnostics::save(crate::support_bundle::diagnostics(self));
         // (a phone's app in the background is often ended without `exiting`)
         omsi_render::pipeline_cache::save();
     }
@@ -603,6 +604,7 @@ impl App {
                 ray,
             ) {
                 p.occlude_controls = self.view == "outside";
+                p.drawn_outside = !self.cam.in_cab;
                 if p.pick(o, d, spread).is_some() {
                     // a notch is worth a good push of the mouse: the scripts divide
                     // the movement by 10 (the ignition key), 200 (the parking brake)

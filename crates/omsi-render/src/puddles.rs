@@ -567,7 +567,7 @@ impl Renderer {
         }
         let vp = Mat4::from_cols_array_2d(&cu.view_proj);
         let proj = projection.unwrap_or_else(|| {
-            Mat4::perspective_rh(camera.fov_deg.to_radians(), aspect, camera.far, camera.near)
+            Mat4::perspective_rh(camera.fov_deg.to_radians(), aspect, camera.depth_far(), camera.near)
         });
         let enhanced = cu.post[0] > 0.5;
         let surround = if enhanced {
@@ -1003,11 +1003,12 @@ mod tests {
                 // Read both textures below through an immutable renderer borrow.
                 let receiver = depth_at_centre(&r, &targets.source_depth, size);
                 let hit = depth_at_centre(&r, &targets.hit_depth, size);
+                let reversed = |z: f32| { let (n, f) = (camera.near, camera.depth_far()); n * (f - z) / (z * (f - n)) };
                 assert!(
-                    (receiver - 0.009009).abs() < 1e-5,
+                    (receiver - reversed(10.0)).abs() < 1e-5,
                     "opaque receiver: {receiver}"
                 );
-                let expected_hit = if inside { receiver } else { 0.019019 };
+                let expected_hit = if inside { receiver } else { reversed(5.0) };
                 assert!((hit - expected_hit).abs() < 1e-5, "glass hit: {hit}");
             }
         }

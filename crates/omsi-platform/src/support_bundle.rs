@@ -118,7 +118,7 @@ pub fn session_dir() -> PathBuf {
 }
 
 fn summary(value: &Value) -> String {
-    format!("openOMSI support package (schema 1)\n\n{}\n\nLogs are privacy projections, not raw log copies. Null means unavailable.\nRoots and archives are aliases; no absolute paths or archive filenames are exported.\nhistory/ holds a record of each game of the last 30 days: frame times, how it ended and its error, filtered the same way.\nSettings are allowlisted; no environment, command line, chat, player identity, LAN codes, addresses, configuration files or serial numbers are attached.\n", serde_json::to_string_pretty(value).unwrap_or_default())
+    format!("openOMSI support package (schema 1)\n\n{}\n\nLogs are privacy projections, not raw log copies. Null means unavailable.\nRoots and archives are aliases; no absolute paths or archive filenames are exported.\nhistory/ holds a record of each game of the last 30 days: the day it was played, frame times, how it ended and its error, filtered the same way.\nSettings are allowlisted; no environment, command line, chat, player identity, LAN codes, addresses, configuration files or serial numbers are attached.\n", serde_json::to_string_pretty(value).unwrap_or_default())
 }
 
 fn archive(out: &Path, value: &Value, logs: &[(String, String)], history: &[(String, Value)]) -> anyhow::Result<()> {
@@ -170,18 +170,34 @@ pub fn export(out: &Path, value: &Value) -> anyhow::Result<()> {
         .map(|i| format!("game-{}.log", i.slot)).unwrap_or_else(|| "game.log".into());
     let logs: Vec<_> = [game_log.as_str(), "launcher.log", "crash.log"].iter()
         .filter_map(|name| tail(&dir.join(name)).ok().map(|text| (name.to_string(), text))).collect();
+    to_the_day(&mut value);
     archive(out, &value, &logs, &history())
 }
 
 fn history() -> Vec<(String, Value)> {
-    crate::diagnostics::recent().into_iter()
-        .filter(|(name, _)| name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.'))
-        .map(|(name, mut record)| {
+    crate::diagnostics::recent().into_iter().enumerate()
+        .map(|(i, (_, mut record))| {
             filter_keys(&mut record, &[SNAPSHOT_KEYS, HISTORY_KEYS].concat());
             clean_json(&mut record);
-            (name, record)
+            to_the_day(&mut record);
+            (format!("game-{}.json", i + 1), record)
         })
         .collect()
+}
+
+fn to_the_day(value: &mut Value) {
+    match value {
+        Value::Object(o) => {
+            for (key, v) in o.iter_mut() {
+                match v.as_u64() {
+                    Some(t) if key.ends_with("unix_seconds") => *v = t.saturating_sub(t % 86_400).into(),
+                    _ => to_the_day(v),
+                }
+            }
+        }
+        Value::Array(a) => a.iter_mut().for_each(to_the_day),
+        _ => {}
+    }
 }
 
 const SNAPSHOT_KEYS: &[&str] = &["schema_version", "recorded_unix_seconds", "source", "version", "build",
@@ -196,7 +212,7 @@ const SNAPSHOT_KEYS: &[&str] = &["schema_version", "recorded_unix_seconds", "sou
         "gamepad", "ffb_capable", "ffb_effect_available", "physical_memory_bytes", "adapter_vram_mb",
         "adapter_texture_mb", "gpu_memory_bytes", "textures", "meshes"];
 
-const HISTORY_KEYS: &[&str] = &["started_unix_seconds", "end", "error", "message", "file", "stack",
+const HISTORY_KEYS: &[&str] = &["record_version", "started_unix_seconds", "end", "error", "message", "file", "stack",
     "thread", "panics", "frame_times", "frames", "seconds", "average_fps", "worst_ms", "up_to_ms", "counts"];
 
 fn filter_keys(value: &mut Value, keys: &[&str]) {
@@ -246,6 +262,11 @@ mod tests {
                 "stack": ["omsi_sim::bus::Bus::step"], "player": "Isaac"}});
         filter_keys(&mut v, &[SNAPSHOT_KEYS, HISTORY_KEYS].concat());
         clean_json(&mut v);
+        let mut times = json!({"started_unix_seconds": 1_793_785_869u64, "error": {"recorded_unix_seconds": 1_793_786_000u64}, "frames": 7,
+            "last_recorded_game": {"recorded_unix_seconds": 1_793_785_870u64}});
+        to_the_day(&mut times);
+        assert_eq!(times, json!({"started_unix_seconds": 1_793_750_400u64, "error": {"recorded_unix_seconds": 1_793_750_400u64}, "frames": 7,
+            "last_recorded_game": {"recorded_unix_seconds": 1_793_750_400u64}}));
         assert_eq!(v, json!({"end": "panic", "frame_times": {"frames": 10, "counts": [10]},
             "error": {"message": "[redacted]", "file": "crates/omsi-sim/src/bus.rs", "line": 3,
                 "stack": ["omsi_sim::bus::Bus::step"]}}));

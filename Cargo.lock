@@ -4397,6 +4397,7 @@ dependencies = [
  "omsi-map",
  "omsi-platform",
  "omsi-scenery",
+ "omsi-script",
  "omsi-sim",
  "omsi-vehicle",
  "serde_json",

@@ -101,7 +101,7 @@ impl TripleScreen {
             // Right-handed, 0..1 reversed depth. Unlike a symmetric FOV, the
             // shift accounts for the eye not being on the side panel's normal.
             let n = camera.near;
-            let f = camera.far;
+            let f = camera.depth_far();
             let projection = Mat4::from_cols(
                 Vec4::new(2.0 / (r - l), 0.0, 0.0, 0.0),
                 Vec4::new(0.0, 2.0 / (t - b), 0.0, 0.0),
@@ -276,7 +276,7 @@ mod tests {
             );
             assert!(
                 v.projection
-                    .project_point3(Vec3::new(0.0, 0.0, -cam.far))
+                    .project_point3(Vec3::new(0.0, 0.0, -cam.depth_far()))
                     .z
                     .abs()
                     < 1e-5

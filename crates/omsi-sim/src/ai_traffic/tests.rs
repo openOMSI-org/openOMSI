@@ -348,9 +348,12 @@ mod group_density_tests {
         // but not beyond its reach, nor behind it
         assert!(!in_player_sweep(on_arc(25.0, 70.0), c, f, r, 2.6, 6.5, 27.0, 6.5, 1.0 / 25.0));
         assert!(!in_player_sweep(DVec3::new(0.0, -10.0, 0.0), c, f, r, 2.6, 6.5, 27.0, 6.5, 1.0 / 25.0));
-        // the body itself always counts, and a straight path is the old box
+        // the band covers the body, and a straight path is the old box
         assert!(in_player_sweep(DVec3::new(-2.0, 5.0, 0.0), c, f, r, 2.6, 6.5, 27.0, 6.5, 1.0 / 25.0));
         assert!(in_player_sweep(oncoming, c, f, r, 2.6, 6.5, 27.0, 6.5, 0.0));
+        let beside_the_front = on_arc(25.0 + 2.97, 6.0f64.atan2(27.97).to_degrees());
+        assert!(!in_player_sweep(beside_the_front, c, f, r, 2.6, 6.5, 27.0, 6.5, 1.0 / 25.0));
+        assert!(in_player_sweep(on_arc(25.0, -10.0), c, f, r, 2.6, 6.5, 27.0, 6.5, 1.0 / 25.0));
         // the curvature from two boxes 0.1 s apart: 14 m/s turning 3.2 degrees to the right
         let a = (DVec3::ZERO, 0.0, 6.0, 1.25, 14.0);
         let b = (DVec3::new(0.0, 1.4, 0.0), 14.0 * 0.1 / 25.0 * 57.29578, 6.0, 1.25, 14.0);

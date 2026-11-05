@@ -1275,14 +1275,15 @@ impl World {
         } else {
             Vec::new()
         };
-        let faded = alpha_slots.iter().any(|l| !l.alpha.is_empty());
+        let faded = alpha_slots.iter().any(|l| !l.alpha.is_empty() || !l.uv.is_empty());
         let mut alpha_last = Vec::new();
         if faded {
             for (l, &id) in alpha_slots.iter().zip(&all_instances) {
-                let (a, _) = l.values(&|v| v.trim().parse::<f32>().ok().or_else(|| inst.var(v)));
+                let value = |v: &str| v.trim().parse::<f32>().ok().or_else(|| inst.var(v));
+                let (a, uv) = (l.values(&value).0, l.uv_values(&value));
                 let visible = scene.instances[id].visible;
-                renderer.set_params(scene, id, &a, visible, &[]);
-                alpha_last.push(a);
+                renderer.set_params(scene, id, &a, visible, &uv);
+                alpha_last.push((a, uv));
             }
         }
         let script_lamps = if lamp.is_none() { crate::place::lamps_switched_by_script(ot, pos, xf) } else { Vec::new() };

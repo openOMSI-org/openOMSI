@@ -1,125 +1,79 @@
 # openOMSI on Android
 
-openOMSI runs on Android phones and tablets. It is the same game as on the computer: same
-renderer, simulation, scripts, maps, buses and mods. Only the controls differ.
+openOMSI runs on Android phones and tablets (arm64, Android 8.0 or newer, a GPU with
+Vulkan 1.1; on a phone without Vulkan openOMSI tries OpenGL ES 3). It is the same game as on the computer: the same renderer, simulation, scripts,
+maps, buses and mods. What differs is how it is controlled:
 
-## Requirements
+- **one app, one window**: the launcher and the game share a window. Start is pressed in the
+  launcher, the game plays in its window, and ending the session (the menu's Quit, or the
+  back key and Quit) goes back to the launcher, which is kept as it was
+  (`crates/omsi-app/src/android.rs`);
+- **the launcher for fingers**: the desktop launcher's page (`launcher/ui`, its phone layout
+  `js/mobile`) in a web view over the game's window (`LauncherBridge.java`,
+  `crates/omsi-app/src/android_launcher.rs`), its commands answered by the same code as on a
+  computer (`omsi-launcher-api`); the bus preview and the city map are drawn by the game in
+  the same process;
+- **on-screen controls** in the game (`crates/omsi-app/src/touch.rs`), all Material Symbols:
 
-- arm64, Android 8.0 or newer.
-- A GPU with Vulkan 1.1. The app declares Vulkan 1.1 as required, so app stores do not offer it
-  on phones without it. On such a phone only a sideloaded APK installs; openOMSI then tries
-  OpenGL ES 3.
-- An OMSI 2 installation from a PC.
+| Where | What |
+|---|---|
+| bottom left | the steering wheel: take the rim and turn it round - it follows the finger, 120° of rim is the full lock (let go, it comes back as the bus's wheel does with the keys: slowly standing, brisker rolling, not at all with Old Steering) - or tilt the phone (panel → Tilt steering) |
+| bottom right | the brake and the accelerator: the higher up the pedal, the harder |
+| above the pedals | the gearbox (R N D of an automatic, − N + of a manual), a button for each door, front to back |
+| beside the pedals | the parking brake, the stop brake / door release |
+| above the wheel | indicator left, hazard lights, indicator right; the horn beside the wheel |
+| top left | the game menu, pause, the camera (driver → outside → passenger), look straight ahead |
+| top right | the controls hidden / shown, the cab panel, the city map, the timetable, a screenshot |
+| cab panel | battery, engine start (hold), start the bus by itself, headlights, high beam, wipers, saloon lights, sell a ticket, the next seat view, the free camera, the navigator, the information bar, tilt steering |
+
+Everything else is in the cab itself, as in OMSI: a tap works the switch under the finger (the
+IBIS, the ticket printer, the light switches), a finger dragged from a switch turns it (knobs,
+the ignition key, the sun blind), a drag elsewhere looks round, two fingers zoom. The
+navigator stands in the top middle (under the information bar when that is on): a tap opens the
+city map, a finger dragged on it puts it somewhere else, where it stays. On foot a stick at the bottom left walks (pushed to the edge: runs); in the free camera (cab
+panel → Free camera) the stick flies, as far as it is pushed, the buttons at the bottom right
+rise, sink and set the speed, a drag looks, two fingers zoom, and "Exit free camera" goes back; on foot the
+button at the bottom right kneels, for a picture from low down, and stands up again. The game
+menu and its lists scroll with the finger and a tap picks a line (a finger put down to scroll
+does not pick the line it lands on); on the city map the fingers are the mouse. The back key
+is Escape. The launcher is laid out for the phone: the text at least at the system's own
+size, the settings in one column, and a finger on a list that has reached its end scrolls
+the page on.
+A game controller connected by Bluetooth works as on the computer.
+
+The buttons fire the actions of `Inputs/keyboard.cfg` (or the keys that stand for them, e.g.
+Shift + n for the n-th door), and the wheel and pedals are the analog axes a game controller
+gives, so a mod bus is driven by them as by the keyboard.
 
 ## Installing the game on the phone
 
-1. Install the APK. Allow installing from this source when Android asks.
-2. Start openOMSI. Allow **access to all files** when Android asks (Settings → Apps →
+1. Install the APK (allow installing from this source when Android asks).
+2. Start openOMSI and allow **access to all files** when Android asks (Settings → Apps →
    openOMSI → Permissions → Files and media → Allow management of all files). The game reads
-   OMSI 2's thousands of files by path. Without this permission it can read only the app's
-   own folder.
-3. Copy the **whole OMSI 2 folder** (the one with `Omsi.exe`, `maps`, `Vehicles`) onto the
-   phone, for example to `openOMSI/OMSI 2` in the internal storage. Use a USB cable from a
-   PC, or a USB stick.
-4. openOMSI finds the folder by itself in `openOMSI/`, `Download/`, `Games/` or the top of the
-   internal storage (`/storage/emulated/0` or `/sdcard`), either as that folder itself or in a
-   folder inside it named `OMSI 2`, `OMSI 2 Original`, `Omsi 2`, `OMSI2`, `omsi2`,
-   `OMSI 2 Steam Edition` or `OMSI`. Anywhere else, choose it in the launcher:
-   **More → Setup → Browse → Use this folder → Save**.
-5. Optional, **mods**: copy mod folders or .zip, .7z and .rar files into `openOMSI/Mods`.
-   They are installed when the launcher opens. You can also use the launcher's **Mods** page
-   (Choose a folder / Choose an archive). .zip archives in `openOMSI/Archives` are used in
-   place. Maps and buses work exactly as on the computer.
+   OMSI 2's thousands of files by path; without it only the app's own folder can be read.
+3. Copy the **whole OMSI 2 folder** of a PC installation (the one with `Omsi.exe`, `maps`,
+   `Vehicles`) onto the phone, e.g. to `openOMSI/OMSI 2` in the internal storage (by USB
+   cable, from a PC or a USB stick). openOMSI finds it by itself in `openOMSI/`,
+   `Download/` or the top of the storage; anywhere else choose it in the launcher under
+   **Setup → Browse → Use this folder → Save**.
+4. **Mods**: copy mod folders or .zip, .7z and .rar files into `openOMSI/Mods` (installed when the launcher
+   opens), or install them from the launcher's **Mods** page (Choose a folder / Choose an
+   archive); .zip archives can also lie in `openOMSI/Archives` and are used in place. Maps and buses
+   work exactly as on the computer.
 
-## How the app works
+Settings, profiles and sessions are in the app's private folder; screenshots go to
+`openOMSI/Screenshots`. Every other folder in `openOMSI/` (and the OMSI 2 installation, wherever
+it lies) gets an empty `.nomedia` file, so that the gallery apps do not list the thousands of
+textures as photos - they are the game's content, deleting them leaves buses white. A gallery
+that listed them before may need a moment (or a restart of the phone) to forget them. The first start on a phone uses lighter graphics defaults (2x MSAA, no
+ambient occlusion, a 1024 shadow map, 60 fps, a 900 m object distance); everything can be
+changed on the launcher's Settings page. When the frame rate stays below 40 because the
+graphics chip is the limit, the 3D picture is drawn smaller in steps (85 %, 70 %, 55 % of the
+screen), as on the computer.
 
-- **One app, one window.** The launcher and the game share a window. Press Start in the
-  launcher to play. Quit (menu, or back key then Quit) returns to the launcher, kept as you
-  left it.
-- **Launcher for fingers.** Text at least the system's size, settings in one column. A
-  finger on a list at its end scrolls the page on.
-- **Files.** Settings, profiles and sessions are in the app's private folder. Screenshots go
-  to `openOMSI/Screenshots`.
+Logs: `adb logcat -s openOMSI`.
 
-## Controls
-
-All on-screen buttons use Material Symbols.
-
-| Control | Action |
-|---|---|
-| Steering wheel (bottom left) | Take the rim and turn it; it follows the finger. Full lock is half of *Full lock at* (Settings → Driving) when that is set, else half of *Wheel rotation*: 450° each way by default. Let go and it returns as the bus's wheel does with the keys: slowly when standing, faster when rolling, not at all with Old Steering. |
-| Tilt steering | Tilt the phone to steer (cab panel → Tilt steering). |
-| Pedals (bottom right) | Brake and accelerator. The higher up the pedal you press, the harder. |
-| Above the pedals | Gearbox (R N D for an automatic, − N + for a manual), one button per door, front to back. |
-| Beside the pedals | Parking brake, stop brake / door release. |
-| Above the wheel | Indicator left, hazard lights, indicator right. The horn is beside the wheel. |
-| Top left | Game menu, pause, camera (driver → outside → passenger), look straight ahead. |
-| Top right | Hide / show controls, cab panel, city map, timetable, screenshot. |
-| Cab panel (tune button) | Battery, engine start (hold), start the bus by itself, headlights, high beam, wipers, saloon lights, sell a ticket, next seat view, free camera, navigator, information bar, tilt steering. |
-| Tap in the cab | Works the switch under the finger (IBIS, ticket printer, light switches). |
-| Drag from a switch | Turns it (knobs, ignition key, sun blind). |
-| Drag elsewhere / two fingers | Look around / zoom. |
-| Navigator (top middle, under the information bar when that is on) | Tap: open the city map. Drag: move it; it stays where you put it. |
-| City map | Fingers act as the mouse. |
-| Game menu and lists | Scroll with the finger, tap to pick a line. A finger put down to scroll does not pick the line it lands on. |
-| Back key | Escape. |
-| On foot: stick (bottom left) | Walk. Push to the edge to run. |
-| On foot: button (bottom right) | Kneel for a picture from low down, and stand up again. |
-| Free camera: stick | Fly, as far as the stick is pushed (cab panel → Free camera). |
-| Free camera: buttons (bottom right) | Rise, sink, set the speed. |
-| Free camera: drag / two fingers | Look / zoom. "Exit free camera" goes back. |
-
-A game controller connected by Bluetooth works as on the computer.
-
-The buttons fire the actions of `Inputs/keyboard.cfg` (or their keys, for example Shift + n
-for the n-th door). The wheel and pedals act as game controller analog axes. So they drive a
-mod bus as the keyboard does.
-
-## Settings
-
-The first start on a phone uses lighter graphics defaults. Change them all on the launcher's
-Settings page.
-
-| Setting | Phone default |
-|---|---|
-| MSAA | 2x |
-| Ambient occlusion | Off |
-| Shadow map | 1024 |
-| Frame rate | 60 fps |
-| Object distance | 900 m |
-
-When the frame rate stays below 40 because the graphics chip is the limit, the 3D picture is
-drawn smaller in steps (85 %, 70 %, 55 % of the screen), as on the computer.
-
-`openOMSI/env.txt` on the shared storage takes the `OMSI_*` switches a computer takes from its
-environment, one `NAME=value` per line.
-
-## Updates
-
-1. The launcher looks for a newer GitHub release when it starts and offers it. Choose the
-   update channel (Stable or Beta) under Settings → General → Updates.
-2. Press **Update now**. The APK is downloaded and handed to Android's package installer.
-3. The first time, Android asks you to allow openOMSI to install apps.
-4. Android asks "Do you want to update this app?". **Update** replaces openOMSI and starts it
-   again. **Cancel** returns to the launcher as "not updated".
-
-The APK must be signed with the same key as the installed app (release builds are).
-
-To try an update from a local release description, put
-`OMSI_UPDATE_URL=file:///sdcard/…/release.json` in `openOMSI/env.txt`.
-
-## Troubleshooting
-
-- **Game finds no files:** allow access to all files, or pick the folder under **Setup → Browse** (install steps 2 and 4).
-- **Textures show up as photos in the gallery:** every folder in `openOMSI/` except
-  `Screenshots` (and the OMSI 2 installation, wherever it is) gets an empty `.nomedia` file to
-  hide them. A gallery that listed them before may need a moment, or a phone restart, to forget
-  them. Do not delete them there: they are game content, and deleting them leaves buses white.
-- **Logs:** `adb logcat -s openOMSI`.
-
-## For developers
-
-### Building
+## Building
 
 ```sh
 rustup target add aarch64-linux-android
@@ -130,47 +84,45 @@ scripts/build-android.sh            # → dist/android/openOMSI-<version>.apk
 scripts/build-android.sh install    # ... and adb install it on the attached phone
 ```
 
-- `android/env.sh` finds the SDK (`ANDROID_HOME`, else Homebrew's), the newest NDK and a JDK 17.
-- The script builds the game library as a shared object
-  (`cargo rustc --lib --crate-type cdylib --profile android`).
-- It compiles the two Java classes in `android/java` with javac and d8:
-  `OmsiActivity` (full screen, storage permission, vibration, installing updates) and
-  `LauncherBridge` (the launcher's web view).
-- It packs, aligns and signs the APK with a debug key made on the first build
-  (`android/debug.keystore`, not in git).
+`android/env.sh` finds the SDK (`ANDROID_HOME`, else Homebrew's), the newest NDK and a JDK
+17. The script builds the game library as a shared object (`cargo rustc --lib --crate-type
+cdylib --profile android`), compiles the two Java classes in `android/java` (`OmsiActivity`:
+full screen, storage permission, vibration, installing updates; `LauncherBridge`: the
+launcher's web view) with javac and d8, and packs, aligns and signs the APK
+with a debug key made on the first build (`android/debug.keystore`, not in git).
 
-### Where the code is
+The touch controls can be looked at on the computer: `OMSI_TOUCH=1` shows them in the game
+window, and `OMSI_INPUT` drives them with `touch down|move|up x,y[,finger]` (logical pixels),
+e.g. `OMSI_TOUCH=1 OMSI_INPUT="t=8 touch down 1500,700; t=10 touch up 1500,700; t=11 shot
+touch.png"` presses the accelerator for two seconds and writes the picture with the controls
+on it. `OMSI_MOBILE=1` gives the game the phone's screen cut-outs.
+A phone-sized picture with no window on the screen: `OMSI_HIDDEN_WINDOW=1 OMSI_BACKGROUND=1
+OMSI_TOUCH=1 openomsi --size 360x800 --exit-after 12` with `OMSI_INPUT="t=7 shot phone.png"` (the
+picture is the window's, the controls on it; 360x800, 412x915, 820x1180 and 800x360 are the
+sizes to look at). The free camera: cab panel (tune button) → Free camera, then the stick and
+the buttons at the bottom; photo mode: `OMSI_INPUT="t=7 photo"` and touch the buttons.
+The bus preview's cost per picture (drawing, read-back, JPEG) is in the answer's `ms` of the
+launcher service's `frame` command: `openomsi --launcher-service`, one JSON request a line.
 
-- One window, launcher and game: `crates/omsi-app/src/android.rs`.
-- Launcher: the desktop launcher's page (`launcher/ui`, phone layout `js/mobile`) in a web
-  view over the game's window (`LauncherBridge.java`, `crates/omsi-app/src/android_launcher.rs`).
-  Its commands are answered by the same code as on a computer (`omsi-launcher-api`). The game
-  draws the bus preview and the city map in the same process.
-- On-screen controls: `crates/omsi-app/src/touch.rs`.
-
-### Testing the touch controls on a computer
-
-- `OMSI_TOUCH=1` shows the touch controls in the game window.
-- `OMSI_INPUT` drives them with `touch down|move|up x,y[,finger]` (logical pixels). This
-  presses the accelerator for two seconds and writes the picture with the controls on it:
-  `OMSI_TOUCH=1 OMSI_INPUT="t=8 touch down 1500,700; t=10 touch up 1500,700; t=11 shot touch.png"`
-- `OMSI_MOBILE=1` gives the game the phone's screen cut-outs.
-- Phone-sized picture with no window on the screen:
-  `OMSI_HIDDEN_WINDOW=1 OMSI_BACKGROUND=1 OMSI_TOUCH=1 openomsi --size 360x800 --exit-after 12`
-  with `OMSI_INPUT="t=7 shot phone.png"`. The picture is the window's, with the controls on
-  it. Sizes to check: 360x800, 412x915, 820x1180 and 800x360.
-- Free camera: cab panel (tune button) → Free camera, then the stick and the buttons at the
-  bottom. Photo mode: `OMSI_INPUT="t=7 photo"`, then touch the buttons.
-- The bus preview's cost per picture (drawing, read-back, JPEG) is the `ms` in the answer to
-  the launcher service's `frame` command: `openomsi --launcher-service`, one JSON request per
-  line.
-
-### Releases
+## Releases
 
 Every release (started by hand from main) builds the APK in GitHub Actions (`android` job of
-`.github/workflows/release.yml`). It is attached to the beta as
-`openOMSI-<version>-android-arm64.apk` and as `openOMSI-android.apk`. So
-`releases/latest/download/openOMSI-android.apk` is always the newest stable APK.
+`.github/workflows/release.yml`) and attaches it to the beta as
+`openOMSI-<version>-android-arm64.apk` and as `openOMSI-android.apk`, so that
+`releases/latest/download/openOMSI-android.apk` is always the newest stable APK. Set the repository secret `ANDROID_KEYSTORE_B64`
+(`base64 < android/debug.keystore`) so that every release is signed with the same key and
+installs over the previous one.
 
-Set the repository secret `ANDROID_KEYSTORE_B64` (`base64 < android/debug.keystore`). Then
-every release is signed with the same key and installs over the previous one.
+## Updates
+
+The launcher looks for a newer GitHub release when it starts (Settings → General → Updates,
+where the update channel, Stable or Beta, is chosen too) and offers it; **Update now** downloads the APK and hands it to Android's package installer. The first
+time Android asks to allow openOMSI to install apps. Then Android asks "Do you want to update
+this app?": **Update** replaces openOMSI and starts it again, **Cancel** comes back to the
+launcher as "not updated". The APK must be signed with the same key as the installed app
+(release builds are).
+
+`openOMSI/env.txt` on the shared storage takes the `OMSI_*` switches a computer takes from its
+environment (one `NAME=value` a line), for example `OMSI_UPDATE_URL=file:///sdcard/…/release.json`
+to try an update from a local release description.
+

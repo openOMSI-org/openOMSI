@@ -259,6 +259,7 @@ pub(crate) struct ViewState {
     pub(crate) flashlight_aim: Option<glam::Vec3>,
     /// The camera is in the own bus's cab this frame (see RedrawRequested).
     pub(crate) in_cab: bool,
+    pub(crate) heard_inside: bool,
     /// How far the player has turned the head (driver, passenger) or swung the outside
     /// camera around the bus, and how far that camera sits from it.
     pub(crate) look: (f32, f32),
@@ -368,6 +369,7 @@ pub(crate) struct InputState {
     pub(crate) look_lock: Option<bool>,
     /// The cursor hidden while a controller drives: where it stood.
     pub(crate) cursor_hidden: Option<(f32, f32)>,
+    pub(crate) cursor_stale: bool,
     /// The wheel's place when it last counted as moved.
     pub(crate) last_ctl_steer: Option<f32>,
     /// The mouse's throttle and brake (eased in with the steering).

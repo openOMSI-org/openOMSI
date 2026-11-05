@@ -191,3 +191,32 @@ fn chance_zero_twenty_and_hundred_respect_draw_and_service() {
     assert!(h.try_connection(0, at, 0.0, Some(42), buses[1].id, &buses, &ix, &world));
     assert_eq!(h.pax(0).unwrap().transfer_count, 2);
 }
+
+#[test]
+fn a_stop_in_range_gets_one_more_waiting_person_each_time_its_clock_runs_out() {
+    let (mut h, _) = super::super::pax_stops::brt_tests::setup("stop-fill-pace", None);
+    h.types = vec![h.people[0].ty.clone()];
+    h.pool_types = 1;
+    h.map_humans_done = true;
+    let stop = h.stops.get_mut(&42).unwrap();
+    h.center = stop.pos;
+    stop.spots = (0..6).map(|k| WaitSpot { pos: stop.pos + DVec3::X * k as f64, face: 0.0, height: 0.0 }).collect();
+    stop.taken = vec![false; 6];
+    stop.enter_max = 5.0;
+    stop.enter_min = 5.0;
+    stop.near = true;
+    stop.clock_ms = 15_001.0;
+    let world = FlatWorld::default();
+    let waiting = |h: &PeopleSim| h.people.iter().filter(|p| matches!(&p.state, State::Pax(x) if x.stop == Some(42))).count();
+    assert_eq!(waiting(&h), 1);
+    for _ in 0..5 {
+        h.stops_tick(0.1, &world);
+    }
+    assert_eq!(h.stops[&42].want, 5);
+    assert_eq!(waiting(&h), 2);
+    h.stops.get_mut(&42).unwrap().clock_ms = 15_001.0;
+    for _ in 0..5 {
+        h.stops_tick(0.1, &world);
+    }
+    assert_eq!(waiting(&h), 3);
+}
