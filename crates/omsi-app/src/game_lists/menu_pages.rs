@@ -559,7 +559,7 @@ mod tests {
 /// FSR 1's quality and sharpening while it is chosen.
 fn upscaler_rows(app: &App, file: &serde_json::Value) -> Vec<(String, String)> {
     let fsr = app.settings.upscaler == "fsr1";
-    let temporal = omsi_render::TemporalUpscaler::parse(&app.settings.upscaler).is_some();
+    let temporal = app.settings.temporal_upscaling().is_some();
     let offered = !omsi_cfg::upscaler_files::available(&omsi_cfg::upscaler_files::program_dir()).is_empty();
     let pct = |v: f32| format!("{:.0} %", v * 100.0);
     [

@@ -52,7 +52,7 @@ const fold = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g,
 
 function matches(row, words) {
   if (!row.label) return false;
-  const help = typeof row.help === 'function' ? '' : row.help;
+  const help = typeof row.help === 'function' ? row.help(S.settings) : row.help;
   const text = fold([row.label, t(row.label), help, help && t(help), typeof row.key === 'string' && row.key].join(' '));
   return words.every((w) => text.includes(w));
 }
@@ -161,7 +161,7 @@ function SelectRow({ row }) {
   const value = match ? match[0] : row.unknown ?? (cur == null ? '' : typeof cur === 'boolean' ? (cur ? '1' : '0') : String(cur));
   return html`<div class="setting-row">
     <${Name} label=${row.label} help=${typeof row.help === 'function' ? row.help(s) : row.help} warn=${row.heavy?.(value, s) && 'Heavy: can cost many frames per second on most graphics cards'} />
-    <${Select} value=${value} options=${options} raw=${row.raw} onChange=${async (v) => (await saveSettings({ [row.key]: asStored(cur, v) })) && row.recheckUpdates && checkUpdates()} />
+    <${Select} value=${value} options=${options} raw=${row.raw} always=${!match && row.unknown != null} onChange=${async (v) => (await saveSettings({ [row.key]: asStored(cur, v) })) && row.recheckUpdates && checkUpdates()} />
   </div>`;
 }
 
@@ -239,7 +239,7 @@ const CUSTOM = {
 // openOMSI release: the player may separately obtain official vendor files.
 const NVIDIA_STREAMLINE_URL = 'https://github.com/NVIDIA-RTX/Streamline/releases/tag/v2.14.1';
 const NVIDIA_STREAMLINE_LICENSE = 'https://github.com/NVIDIA-RTX/Streamline/blob/v2.14.1/license.txt';
-const NVIDIA_NGX_LICENSE = 'https://github.com/NVIDIA/DLSS/blob/main/LICENSE.txt';
+const NVIDIA_NGX_LICENSE = 'https://github.com/NVIDIA-RTX/Streamline/blob/v2.14.1/external/ngx-sdk/license.txt';
 
 function NvidiaDlssInstall() {
   const [status, setStatus] = useState(null);
@@ -255,14 +255,16 @@ function NvidiaDlssInstall() {
   }, []);
   const open = (url) => call('open_url', { url }).catch((e) => toast(e.message, 'error'));
   const installed = !!status?.installed;
+  // (nothing to offer without an RTX card or beside no game)
+  if (status && !installed && (!status.rtx || !status.supported)) return null;
   const install = async () => {
     if (!accepted || busy || installed) return;
     setBusy(true);
     setProblem('');
     try {
       const result = await call('nvidia_dlss_install', { acceptedTerms: true });
-      if (!result?.installed) throw new Error('The NVIDIA runtime was not found after installation');
-      toast('NVIDIA DLSS installed. Restarting the launcher to refresh available upscalers.', 'success');
+      if (!result?.installed) throw new Error(t('The NVIDIA runtime was not found after installation'));
+      toast(t('NVIDIA DLSS installed. Restarting the launcher to refresh available upscalers.'), 'success');
       window.location.reload();
     } catch (error) {
       setProblem(error.message || String(error));
@@ -274,11 +276,9 @@ function NvidiaDlssInstall() {
       <div class="stack" style="gap:10px">
         <${Name} label="NVIDIA DLSS runtime (optional)"
           help="Not included with openOMSI. Installs NVIDIA's own DLLs only after your approval. Windows, NVIDIA RTX and a game restart required." />
-        <p class="muted small" style="margin:0">${status == null ? 'Checking NVIDIA DLSS files…'
+        <p class="muted small" style="margin:0">${t(status == null ? 'Checking NVIDIA DLSS files…'
           : installed ? 'NVIDIA DLSS runtime is installed.'
-          : !status.supported ? 'Requires the Windows desktop launcher next to openomsi.exe.'
-          : !status.rtx ? 'An NVIDIA RTX graphics card is required.'
-          : 'DLSS files are not installed. The game works without them.'}</p>
+          : 'DLSS files are not installed. The game works without them.')}</p>
         <div class="grid-2">
           <${Button} kind="ghost" icon="external" label="NVIDIA RTX/NGX license" onClick=${() => open(NVIDIA_NGX_LICENSE)} />
           <${Button} kind="ghost" icon="external" label="Streamline MIT license" onClick=${() => open(NVIDIA_STREAMLINE_LICENSE)} />
@@ -287,8 +287,7 @@ function NvidiaDlssInstall() {
         ${!installed && html`
           <label class="small" style="display:flex;align-items:flex-start;gap:10px">
             <input type="checkbox" checked=${accepted} onChange=${(e) => setAccepted(e.currentTarget.checked)} />
-            <span>I have read and agree to NVIDIA's applicable Streamline and RTX/NGX license terms.
-              The launcher will download the SDK directly from NVIDIA and install the four verified DLSS DLLs plus notices.</span>
+            <span>${t("I have read and agree to NVIDIA's applicable Streamline and RTX/NGX license terms. The launcher will download the SDK directly from NVIDIA and install the four verified DLSS DLLs plus notices.")}</span>
           </label>
           <${Button} kind="primary" icon="download"
             label=${busy ? 'Downloading and verifying NVIDIA DLSS…' : 'Install NVIDIA DLSS'}
