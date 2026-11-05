@@ -80,6 +80,8 @@ try {
         Move-Item -LiteralPath (Join-Path $Pending $Name) -Destination $Target -ErrorAction Stop
         $Installed.Add($Name)
     }
+    # (all in place: the replaced files are not kept beside the game)
+    Remove-Item -LiteralPath $Backup -Recurse -Force
     Write-Output 'NVIDIA Streamline DLSS 2.14.1 installed from the official verified SDK.'
 }
 catch {
