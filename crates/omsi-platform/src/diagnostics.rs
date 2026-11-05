@@ -1,6 +1,6 @@
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Mutex, MutexGuard, TryLockError};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -8,9 +8,14 @@ pub const KEEP: Duration = Duration::from_secs(30 * 24 * 3600);
 const MAX_FILES: usize = 100;
 const UP_TO_MS: [f64; 10] = [8.4, 11.2, 16.8, 20.0, 25.0, 33.4, 50.0, 100.0, 250.0, 1000.0];
 const STACK_FRAMES: usize = 24;
+const RECORD_VERSION: u32 = 1;
 
-static CURRENT: Mutex<Option<(PathBuf, Value)>> = Mutex::new(None);
+type Record = Option<(PathBuf, Value)>;
+
+static CURRENT: Mutex<Record> = Mutex::new(None);
+static GAME: AtomicBool = AtomicBool::new(false);
 static PURGED: AtomicBool = AtomicBool::new(false);
+static SEQUENCE: AtomicU32 = AtomicU32::new(0);
 
 #[derive(Default)]
 pub struct Frames {
@@ -53,15 +58,17 @@ fn now() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|t| t.as_secs()).unwrap_or(0)
 }
 
-fn base() -> Value {
-    json!({
-        "schema_version": 1, "version": crate::VERSION, "build": crate::BUILD,
+fn opened(dir: &Path) -> (PathBuf, Value) {
+    let path = dir.join(format!("{}-{}-{}.json", now(), std::process::id(), SEQUENCE.fetch_add(1, Ordering::Relaxed)));
+    (path, json!({
+        "record_version": RECORD_VERSION, "version": crate::VERSION, "build": crate::BUILD,
         "os": std::env::consts::OS, "architecture": std::env::consts::ARCH,
-    })
+        "started_unix_seconds": now(), "end": "open",
+    }))
 }
 
-fn new_path(dir: &Path) -> PathBuf {
-    dir.join(format!("{}-{}.json", now(), std::process::id()))
+fn is_open(record: &Value) -> bool {
+    record["end"] == "open"
 }
 
 fn carried(mut fresh: Value, old: &Value) -> Value {
@@ -70,12 +77,14 @@ fn carried(mut fresh: Value, old: &Value) -> Value {
             fresh[key] = old[key].clone();
         }
     }
+    fresh["record_version"] = json!(RECORD_VERSION);
+    fresh["recorded_unix_seconds"] = json!(now());
     fresh
 }
 
-fn lock_briefly() -> Option<MutexGuard<'static, Option<(PathBuf, Value)>>> {
+fn lock_briefly(cell: &'static Mutex<Record>) -> Option<MutexGuard<'static, Record>> {
     for _ in 0..100 {
-        match CURRENT.try_lock() {
+        match cell.try_lock() {
             Ok(guard) => return Some(guard),
             Err(TryLockError::Poisoned(e)) => return Some(e.into_inner()),
             Err(TryLockError::WouldBlock) => std::thread::sleep(Duration::from_millis(10)),
@@ -84,69 +93,90 @@ fn lock_briefly() -> Option<MutexGuard<'static, Option<(PathBuf, Value)>>> {
     None
 }
 
+pub fn game_started() {
+    GAME.store(true, Ordering::Relaxed);
+}
+
+pub fn start(value: Value) {
+    let _ = save_in(&CURRENT, dir(), value, true);
+}
+
 pub fn save(value: Value) {
-    let mut current = match CURRENT.try_lock() {
+    let _ = save_in(&CURRENT, dir(), value, false);
+}
+
+pub fn ended(end: &str, fresh: Option<Value>) {
+    ended_in(&CURRENT, &GAME, end, fresh);
+}
+
+pub fn panicked(error: Value) {
+    panicked_in(&CURRENT, &GAME, &dir(), error);
+}
+
+fn save_in(cell: &'static Mutex<Record>, dir: PathBuf, value: Value, new_game: bool) -> Option<std::thread::JoinHandle<()>> {
+    let mut current = match cell.try_lock() {
         Ok(guard) => guard,
         Err(TryLockError::Poisoned(e)) => e.into_inner(),
-        Err(TryLockError::WouldBlock) => return,
+        Err(TryLockError::WouldBlock) => return None,
     };
-    let (path, mut value) = match current.take() {
-        Some((p, old)) if old["end"] != "open" => {
-            *current = Some((p, old));
-            return;
+    let (path, old) = match current.take() {
+        Some((p, old)) if is_open(&old) && (!new_game || old["session"].is_null()) => (p, old),
+        Some(record) if !new_game => {
+            *current = Some(record);
+            return None;
         }
-        Some((p, old)) => (p, carried(value, &old)),
-        None => (new_path(&dir()), carried(value, &json!({"started_unix_seconds": now()}))),
+        _ => opened(&dir),
     };
-    value["recorded_unix_seconds"] = json!(now());
+    let mut value = carried(value, &old);
     value["end"] = json!("open");
     crate::support_bundle::clean_json(&mut value);
     *current = Some((path, value));
     drop(current);
-    let _ = std::thread::Builder::new().name("diagnostics".into()).spawn(|| {
+    std::thread::Builder::new().name("diagnostics".into()).spawn(move || {
         if !PURGED.swap(true, Ordering::Relaxed) {
-            purge(&dir(), SystemTime::now());
+            purge(&dir, SystemTime::now());
         }
-        let current = CURRENT.lock().unwrap_or_else(|e| e.into_inner());
+        let current = cell.lock().unwrap_or_else(|e| e.into_inner());
         if let Some((path, value)) = current.as_ref() {
             write(path, value);
         }
-    });
+    }).ok()
 }
 
-pub fn ended(end: &str, fresh: Option<Value>) {
-    let Some(mut current) = lock_briefly() else { return };
+fn ended_in(cell: &'static Mutex<Record>, game: &AtomicBool, end: &str, fresh: Option<Value>) {
+    game.store(false, Ordering::Relaxed);
+    let Some(mut current) = lock_briefly(cell) else { return };
     let Some((path, old)) = current.take() else { return };
-    if old["end"] != "open" {
+    if !is_open(&old) {
         *current = Some((path, old));
         return;
     }
     let mut value = match fresh {
         Some(fresh) => carried(fresh, &old),
-        None => old,
+        None => carried(old.clone(), &old),
     };
-    value["recorded_unix_seconds"] = json!(now());
     value["end"] = json!(end);
     crate::support_bundle::clean_json(&mut value);
     write(&path, &value);
     *current = Some((path, value));
 }
 
-pub fn panicked(error: Value) {
-    let Some(mut current) = lock_briefly() else { return };
-    let (path, mut value) = current.take().unwrap_or_else(|| {
-        let mut v = base();
-        v["started_unix_seconds"] = json!(now());
-        v["end"] = json!("open");
-        (new_path(&dir()), v)
-    });
-    if value["end"] == "open" {
-        value["recorded_unix_seconds"] = json!(now());
-        value["panics"] = json!(value["panics"].as_u64().unwrap_or(0) + 1);
-        value["error"] = error;
-        crate::support_bundle::clean_json(&mut value);
-        write(&path, &value);
-    }
+fn panicked_in(cell: &'static Mutex<Record>, game: &AtomicBool, dir: &Path, mut error: Value) {
+    let Some(mut current) = lock_briefly(cell) else { return };
+    let (path, mut value) = match current.take() {
+        Some((p, v)) if is_open(&v) => (p, v),
+        _ if game.load(Ordering::Relaxed) => opened(dir),
+        other => {
+            *current = other;
+            return;
+        }
+    };
+    error["recorded_unix_seconds"] = json!(now());
+    value["recorded_unix_seconds"] = json!(now());
+    value["panics"] = json!(value["panics"].as_u64().unwrap_or(0) + 1);
+    value["error"] = error;
+    crate::support_bundle::clean_json(&mut value);
+    write(&path, &value);
     *current = Some((path, value));
 }
 
@@ -289,6 +319,77 @@ mod tests {
         assert_eq!(source_file("crates/omsi-sim/src/bus.rs"), "crates/omsi-sim/src/bus.rs");
         assert_eq!(source_file("/Users/isaac/.cargo/registry/src/index/wgpu-25.0.0/src/lib.rs"), "lib.rs");
         assert_eq!(source_file("C:\\Users\\isaac\\.cargo\\registry\\src\\x\\y.rs"), "y.rs");
+    }
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("omsi-diagnostics-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn saved(dir: &Path) -> Vec<Value> {
+        let mut all: Vec<(String, Value)> = std::fs::read_dir(dir).unwrap().flatten()
+            .filter(|e| e.path().extension().is_some_and(|x| x == "json"))
+            .map(|e| (e.file_name().to_string_lossy().into_owned(), serde_json::from_slice(&std::fs::read(e.path()).unwrap()).unwrap()))
+            .collect();
+        all.sort_by_key(|(name, _)| name.rsplit('-').next().and_then(|n| n.trim_end_matches(".json").parse::<u32>().ok()));
+        all.into_iter().map(|(_, v)| v).collect()
+    }
+
+    fn written(handle: Option<std::thread::JoinHandle<()>>) {
+        handle.expect("a write").join().unwrap();
+    }
+
+    #[test]
+    fn a_game_keeps_one_record_to_its_end_and_the_next_game_gets_its_own() {
+        static CELL: Mutex<Record> = Mutex::new(None);
+        static IN_GAME: AtomicBool = AtomicBool::new(true);
+        let dir = temp_dir("games");
+        let game = |frames: u32| json!({"session": {"map": "maps/A/global.cfg"}, "frame_times": {"frames": frames}});
+        written(save_in(&CELL, dir.clone(), game(1), true));
+        panicked_in(&CELL, &IN_GAME, &dir, json!({"message": "caught"}));
+        written(save_in(&CELL, dir.clone(), game(2), false));
+        ended_in(&CELL, &IN_GAME, "clean", Some(game(3)));
+        assert!(save_in(&CELL, dir.clone(), game(4), false).is_none());
+        ended_in(&CELL, &IN_GAME, "device_lost", None);
+        panicked_in(&CELL, &IN_GAME, &dir, json!({"message": "in the launcher after the game"}));
+        assert_eq!(saved(&dir).len(), 1);
+        IN_GAME.store(true, Ordering::Relaxed);
+        let first = &saved(&dir)[0];
+        assert_eq!(first["end"], "clean");
+        assert_eq!(first["frame_times"]["frames"], 3);
+        assert_eq!(first["error"]["message"], "caught");
+        assert_eq!(first["panics"], 1);
+        assert_eq!(first["record_version"], RECORD_VERSION);
+        assert!(first["started_unix_seconds"].is_u64());
+        written(save_in(&CELL, dir.clone(), game(5), true));
+        written(save_in(&CELL, dir.clone(), game(6), true));
+        let all = saved(&dir);
+        assert_eq!(all.len(), 3);
+        assert_eq!((all[1]["end"].as_str(), all[1]["frame_times"]["frames"].as_u64()), (Some("open"), Some(5)));
+        assert!(all[2]["error"].is_null());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_panic_while_loading_stays_with_its_game_and_other_programs_keep_none() {
+        static GAME_CELL: Mutex<Record> = Mutex::new(None);
+        static TOOL_CELL: Mutex<Record> = Mutex::new(None);
+        static IN_GAME: AtomicBool = AtomicBool::new(true);
+        static IN_TOOL: AtomicBool = AtomicBool::new(false);
+        let dir = temp_dir("loading");
+        panicked_in(&GAME_CELL, &IN_GAME, &dir, json!({"message": "loading"}));
+        written(save_in(&GAME_CELL, dir.clone(), json!({"session": {"map": "maps/A/global.cfg"}}), true));
+        let all = saved(&dir);
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0]["error"]["message"], "loading");
+        assert_eq!(all[0]["session"]["map"], "maps/A/global.cfg");
+        let tool = temp_dir("tool");
+        panicked_in(&TOOL_CELL, &IN_TOOL, &tool, json!({"message": "helper"}));
+        assert!(saved(&tool).is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&tool);
     }
 
     #[test]

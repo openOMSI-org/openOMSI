@@ -104,10 +104,10 @@ impl App {
     pub(crate) fn log_frame(&mut self, dt: f32) {
         if !self.perf.log_state.support_recorded && self.renderer.is_some() {
             crate::support_bundle::record(self);
-            omsi_platform::diagnostics::save(crate::support_bundle::diagnostics(self));
+            omsi_platform::diagnostics::start(crate::support_bundle::diagnostics(self));
             self.perf.log_state.support_recorded = true;
         }
-        if self.player.is_some() && !self.paused {
+        if self.player.is_some() && !self.paused && !self.gfx.window_hidden {
             self.perf.log_state.frame_times.add(dt);
         }
         // (compared in place: the message was copied every frame it stood on the screen)

@@ -416,20 +416,20 @@ impl Radio {
         if self.stations.is_empty() {
             return None;
         }
-        let button = if Self::has_radio(v) { Self::bus_button(v) } else { self.power.then_some(0) };
+        let button = Self::bus_button(v).filter(|_| Self::has_radio(v)).or(self.power.then_some(0));
         button.map(|b| (b + self.offset) % self.stations.len())
     }
 
     fn has_radio(v: &omsi_sim::VehicleInstance) -> bool {
-        v.var("SndExt_Radio").is_some() || v.var("Snd_Radio").is_some()
+        switches_radio(&v.ty.program)
     }
 
     pub fn toggle_power(&mut self, v: Option<&omsi_sim::VehicleInstance>) -> String {
         if self.stations.is_empty() {
             return "No radio stations (see ~/.openomsi/radio.cfg)".into();
         }
-        if let Some(v) = v.filter(|v| Self::has_radio(v)) {
-            return if Self::bus_button(v).is_some() { "The bus radio is on (switch it off in the cockpit)" } else { "The bus radio is off (switch it on in the cockpit)" }.into();
+        if v.is_some_and(|v| Self::has_radio(v) && Self::bus_button(v).is_some()) {
+            return "The bus radio is on (switch it off in the cockpit)".into();
         }
         self.power = !self.power;
         if !self.power {
@@ -573,10 +573,32 @@ impl Radio {
     }
 }
 
+fn switches_radio(p: &omsi_script::Program) -> bool {
+    ["SndExt_Radio", "Snd_Radio"].iter().any(|n| p.var(n).is_some_and(|id| p.stores(id)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use omsi_cfg::radio::{station_lines, with_stations};
+
+    #[test]
+    fn only_a_bus_whose_scripts_switch_its_radio_has_one() {
+        let dir = std::env::temp_dir().join(format!("omsi-radio-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let program = |name: &str, text: &str| {
+            let f = dir.join(name);
+            std::fs::write(&f, text).unwrap();
+            omsi_script::compile(&omsi_script::CompileInput { builtin_vars: vec!["Snd_Radio".into(), "SndExt_Radio".into()], scripts: vec![f], ..Default::default() })
+        };
+        let stored = program("plain.osc", "{frame}\n(L.L.Snd_Radio) (S.L.Snd_Radio)\n{end}\n");
+        let silent = program("silent.osc", "{frame}\n(L.L.Snd_Radio) 1 + (S.L.Throttle)\n{end}\n");
+        let radio = program("radio.osc", "{trigger:radio_on}\n1 (S.L.SndExt_Radio)\n{end}\n");
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(switches_radio(&stored));
+        assert!(!switches_radio(&silent));
+        assert!(switches_radio(&radio));
+    }
 
     #[test]
     fn the_radio_switches_on_by_itself_in_a_bus_without_one() {

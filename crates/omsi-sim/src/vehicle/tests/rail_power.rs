@@ -58,3 +58,17 @@ fn a_vehicle_that_says_nothing_is_as_it_was() {
     v.set_rail_env(Some(env(Some(DEAD), Some(DEAD))));
     assert!(v.rail_powered());
 }
+
+#[test]
+fn a_rail_wheel_turns_once_with_the_rails() {
+    let mut v = vehicle(|d| d.kind = omsi_vehicle::VehicleKind::Other(2));
+    v.set_rail_env(Some(env(None, None)));
+    v.physics.speed = 10.0;
+    let before: Vec<(f32, f32)> = v.physics.wheels.iter().flatten().map(|w| (w.turned, w.radius)).collect();
+    assert!(!before.is_empty());
+    v.step_physics(0.1);
+    for (w, (t, _)) in v.physics.wheels.iter().flatten().zip(&before) {
+        let expected = v.physics.speed / w.radius.max(0.05) * 0.1;
+        assert!((w.turned - t - expected).abs() < 1e-3, "turned {} expected {expected}", w.turned - t);
+    }
+}

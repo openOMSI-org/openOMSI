@@ -210,6 +210,7 @@ impl ScheduleSim {
     /// Returns how many of today's departures that takes from the AI.
     pub fn reserve_tour(&mut self, line: &str, tour: &str) -> usize {
         self.player_tour = Some((line.to_string(), tour.to_string()));
+        self.find_twins();
         let mine: Vec<bool> = (0..self.departures.len())
             .map(|i| self.is_player_tour(i))
             .collect();
@@ -226,6 +227,23 @@ impl ScheduleSim {
         self.purge_player_tour = true;
         log::info!("timetable: {n} departures of line {line} tour {tour} left to the player");
         n
+    }
+
+    pub(super) fn find_twins(&mut self) {
+        self.player_twins.clear();
+        let mut twins = HashSet::new();
+        let own = |s: &Self, i: usize| s.is_player_tour(i) && !s.lan_tours.iter().any(|t| s.departures[i].line.eq_ignore_ascii_case(&t.0) && s.departures[i].tour.eq_ignore_ascii_case(&t.1));
+        let off_day = !(0..self.departures.len()).any(|i| own(self, i) && self.runs(i));
+        for p in (0..self.departures.len()).filter(|&i| off_day && own(self, i) && !self.departures[i].yesterday) {
+            let d = &self.departures[p];
+            for (j, e) in self.departures.iter().enumerate() {
+                let dt = (e.time - d.time).rem_euclid(DAY);
+                if j != p && !e.yesterday && e.trip == d.trip && e.line.eq_ignore_ascii_case(&d.line) && (dt <= 120.0 || dt >= DAY - 120.0) && self.runs(j) {
+                    twins.insert(j);
+                }
+            }
+        }
+        self.player_twins = twins;
     }
 
     /// LAN play (host): the tours the other players drive now. A tour taken leaves the
@@ -267,6 +285,9 @@ impl ScheduleSim {
 
     /// Does a player drive departure `i` (we, or another LAN player)?
     pub(super) fn is_player_tour(&self, i: usize) -> bool {
+        if self.player_twins.contains(&i) {
+            return true;
+        }
         if let Some(d) = self.departures.get(i) {
             if self.lan_tours.iter().any(|t| d.line.eq_ignore_ascii_case(&t.0) && d.tour.eq_ignore_ascii_case(&t.1)) {
                 return true;
@@ -564,5 +585,25 @@ mod tests {
         assert_eq!(duty.trips.len(), 1);
         assert_eq!(duty.first_trip, 1);
         assert_eq!(s.tour_plan(&w, "N1", "1").unwrap().trips.len(), 2);
+    }
+
+    #[test]
+    fn an_off_day_tour_takes_the_same_trip_of_todays_tour_from_the_ai() {
+        let w = World {
+            path: std::env::temp_dir().join(format!("omsi_tour_twins_{}", std::process::id())),
+            ai: Default::default(),
+            positions: Default::default(),
+        };
+        let mut s = ScheduleSim::new(&w.path, &w, &crate::SimClock::default());
+        s.day_bits = (1, 1);
+        let dep = |time: f64, tour: &str, mask: i32| Departure { time, trip: 0, profile: 0, line: "8".into(), ai_group: String::new(), tour: tour.into(), mask, spawned: false, yesterday: false };
+        s.departures = vec![dep(40000.0, "ND2", 64), dep(40000.0, "RD4", 1), dep(42400.0, "RD4", 1)];
+        s.reserve_tour("8", "ND2");
+        assert!(s.is_player_tour(1));
+        assert!(!s.is_player_tour(2));
+        assert!(s.departures[1].spawned && !s.departures[2].spawned);
+        s.departures = vec![dep(40000.0, "ND2", 65), dep(40000.0, "RD4", 1)];
+        s.reserve_tour("8", "ND2");
+        assert!(!s.is_player_tour(1));
     }
 }

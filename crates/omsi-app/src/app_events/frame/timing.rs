@@ -62,6 +62,7 @@ impl App {
         // seat of it after getting up (its inside is drawn and heard from inside)
         self.cam.in_cab = matches!(self.view.as_str(), "driver" | "pax")
             || (self.view == "foot" && self.foot_bus() == Some(crate::humans::BusId::Player));
+        self.cam.heard_inside = self.cam.in_cab || (self.view == "foot" && matches!(self.foot_bus(), Some(crate::humans::BusId::Ai(_))));
         // standing or sitting in another player's bus: that bus is drawn and heard
         // from inside (its interior meshes, not the outside ones over them)
         self.net.inside_remote = match self.foot_bus() {
@@ -148,6 +149,10 @@ impl App {
                     && (self.settings.max_fps == 0 || self.settings.max_fps >= 50)
                     && !omsi_cfg::flags::OMSI_FIXED_SCALE.is_set()
                     && !self.optimiser_holds_frame_rate();
+                if let Some(r) = self.renderer.as_mut().filter(|r| !free && r.dynamic_scale() < 1.0) {
+                    r.set_dynamic_scale(1.0);
+                    log::info!("the 3D picture is drawn at the full size of the window again (render scale no longer automatic)");
+                }
                 if let (Some(r), true) = (self.renderer.as_mut(), free) {
                     let s = r.dynamic_scale();
                     let mut step = render_scale_step(fps, wait_share);

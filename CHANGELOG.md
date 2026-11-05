@@ -8,6 +8,12 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **Remote cockpit on a phone or tablet**: the game serves a page on your home network
+  (Options > Interface > Remote cockpit, off until switched on); scan the QR code or type the
+  address and the 6-digit code, and the phone or tablet shows a dashboard with the map and the
+  route, the bus's own buttons (every door, lights, indicators, kneeling...), its real
+  destination sign, a touch steering wheel and pedals, and a layout editor per bus. Nothing to
+  install, nothing leaves the network.
 - **Mouse steering keeps the system cursor in the window**: with *Hold the cursor while steering*
   off, the cursor is the system's own (no frame of delay) and now stays inside the game window
   while the mouse steers, so a hard turn no longer lets it slip onto another screen (Windows and

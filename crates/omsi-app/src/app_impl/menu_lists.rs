@@ -466,6 +466,16 @@ impl App {
             }
             return;
         }
+        if self.settings_list() && !self.shell.settings_search.query.trim().is_empty() {
+            let shown = &self.shell.settings_search.visible;
+            let sel = self.menus.chooser.unwrap_or(0);
+            let down = matches!(code, KeyCode::ArrowDown | KeyCode::KeyS);
+            if down || matches!(code, KeyCode::ArrowUp | KeyCode::KeyW) {
+                self.menus.chooser = crate::shell::pause::navigation::step(shown, sel, down).or(self.menus.chooser);
+                return;
+            }
+            if matches!(code, KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::Space | KeyCode::ArrowLeft | KeyCode::KeyA | KeyCode::ArrowRight | KeyCode::KeyD) && !shown.contains(&sel) { return; }
+        }
         let n = self.menus.admin_list.as_ref().unwrap_or(&self.menus.vehicle_list).len().max(1);
         let sel = self.menus.chooser.unwrap_or(0);
         self.menus.menu_top = None;

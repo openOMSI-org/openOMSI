@@ -98,8 +98,13 @@ impl App {
         };
         crate::themes::sync(&self.settings.ui_theme_pack, self.settings.is_light_theme());
         self.shell.begin(w, h, scale, dt);
+        let search_focused = crate::shell::pause::search::focused(&self.shell);
         crate::shell::pause::draw(&mut self.shell, &view);
         self.shell.finish();
+        let focused_now = crate::shell::pause::search::focused(&self.shell);
+        if search_focused != focused_now {
+            crate::platform::phone_keyboard(self.window.as_deref(), focused_now);
+        }
     }
 
     /// What the pause menu's sidebar shows of the session: the bus and the driver.

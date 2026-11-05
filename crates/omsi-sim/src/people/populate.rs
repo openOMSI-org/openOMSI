@@ -285,7 +285,7 @@ impl PeopleSim {
                     break;
                 }
             }
-            if count >= want {
+            if count >= want || !changed {
                 self.stops.get_mut(&id).unwrap().clock_ms = 0.0;
             }
         }

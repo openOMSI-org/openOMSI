@@ -382,6 +382,8 @@ pub struct Navigator {
     /// (degrees), how far (m) and the street it turns into.
     /// OMSI 2's route arrows are wanted (see `turn_hint`).
     pub arrows: bool,
+    pub remote: bool,
+    remote_area: Option<(DVec2, u64)>,
     /// The other (AI) vehicles are drawn on the maps (the `nav_ai` setting).
     pub show_ai: bool,
     pub show_cars: bool,
@@ -594,6 +596,8 @@ impl Navigator {
             time: 0.0,
             next_dist: None,
             arrows: false,
+            remote: false,
+            remote_area: None,
             show_ai: true,
             show_cars: true,
             surface: None,
@@ -1194,7 +1198,7 @@ impl Navigator {
         self.dock_slot = None;
         self.board = None;
         // (with the navigator off the route is still followed for OMSI 2's arrows)
-        if !self.enabled && !self.city.open && !self.arrows && self.shown < 0.01 {
+        if !self.enabled && !self.city.open && !self.arrows && !self.remote && self.shown < 0.01 {
             self.invalidate_next_stop_distance();
             return;
         }
@@ -1457,6 +1461,8 @@ pub use build::{Built, MapGround};
 mod cull;
 mod city_map;
 mod destination;
+mod remote;
+pub use remote::RemoteNav;
 pub use city_map::*;
 use lines_panel::*;
 #[cfg(test)]
