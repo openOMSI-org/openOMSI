@@ -41,6 +41,7 @@ Frame generation (Settings → Graphics → Frame generation, DirectX 12, the fr
 | 10 | NVIDIA RTX 40 or 50 | DLSS | NVIDIA DLSS 2x | `frame generation: Streamline's swap chain for the window`, `NVIDIA DLSS 2x for ..., up to ...x on this card` |
 | 11 | NVIDIA RTX 50 | DLSS | NVIDIA DLSS 4x | as 10, `NVIDIA DLSS 4x` |
 | 12 | NVIDIA RTX 20 or 30 | DLSS | NVIDIA DLSS 2x | `frame generation is off: this card or system cannot run DLSS frame generation ...`; the game runs on without it |
+| 13 | NVIDIA RTX 40 or 50 | FSR 3, then DLSS | AMD FSR 3, Off, then NVIDIA DLSS 2x, applied in the game's menu without a restart | `frame generation: ... -> ..., the window's swap chain made again` each time; the game goes on |
 
 In runs 9 to 11 the frame rate's corner reads like `240 fps (120 + FG) · DLSS`: the frames on
 screen, then the drawn ones. Look for the HUD and the cab's displays staying steady (not

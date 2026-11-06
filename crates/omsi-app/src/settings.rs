@@ -1214,7 +1214,7 @@ impl Settings {
 
     /// Frame generation, where it can run: AMD FSR 3 with DLSS or FSR 3 on (it takes their
     /// motion), NVIDIA DLSS with DLSS on (DLSS hands it its inputs); DirectX 12 and the vendor's
-    /// DLLs either way. Read when the window is made.
+    /// DLLs either way. Read when the window is made and when the graphics menu applies.
     pub fn frame_generation_kind(&self) -> Option<omsi_render::FrameGenerationKind> {
         let kind = omsi_render::FrameGenerationKind::parse(&self.frame_generation)?;
         let temporal = self.temporal_upscaling()?;

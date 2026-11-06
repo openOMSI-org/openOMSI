@@ -275,8 +275,6 @@ impl Renderer {
     }
 
     fn rebuild_in_place(&mut self, scene: &mut Scene, options: RenderOptions) {
-        // (the same device: the upscaler goes on, and Streamline on Vulkan could not start again;
-        // without one in the new options it is dropped here, with its context and textures)
         // (frame generation reads the depth, the motion and the picture before the HUD when the
         // window presents, on the vendor's queues, after wgpu is done with them: it keeps them)
         if let Some(g) = &self.frame_generation {
@@ -284,6 +282,8 @@ impl Renderer {
             g.hold(self.temporal_generation_inputs());
             let _ = crate::wait_gpu(&self.device, None);
         }
+        // (the same device: the upscaler goes on, and Streamline on Vulkan could not start again;
+        // without one in the new options it is dropped here, with its context and textures)
         let upscaler = self.temporal_runtime().or_else(|| self.temporal_kept.take()).filter(|_| options.temporal.is_some());
         // Release render targets before building their replacements. Keeping the old
         // targets alive while the new renderer is built can turn a recoverable OOM into
@@ -324,14 +324,14 @@ impl Renderer {
         self.render_inner(scene, target, width, height, camera, lighting, true, None, None, false);
     }
 
-    /// `render` for the window's own picture, the only one temporal upscaling draws: a photo or
-    /// an off-screen picture would rebuild its targets and lose its history.
     /// The window's frame generation (`SurfaceState::frame_generation`): upscaled frames hand it
     /// what it makes the in-between frames from.
     pub fn set_frame_generation(&mut self, frame_generation: Option<temporal::FrameGeneration>) {
         self.frame_generation = frame_generation;
     }
 
+    /// `render` for the window's own picture, the only one temporal upscaling draws: a photo or
+    /// an off-screen picture would rebuild its targets and lose its history.
     pub fn render_window(&mut self, scene: &mut Scene, target: &wgpu::TextureView, width: u32, height: u32, camera: &Camera, lighting: &Lighting) {
         self.temporal_window = true;
         self.render(scene, target, width, height, camera, lighting);

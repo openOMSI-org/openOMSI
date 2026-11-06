@@ -12,9 +12,10 @@ Temporal upscaling (`crates/omsi-render/src/temporal`) is opt-in: Settings → G
 
 ## Frame generation
 
-`frame_generation=fsr3`, `dlss2x`, `dlss3x` or `dlss4x` (Settings → Graphics → Frame generation,
-from the next start; DirectX 12 only, with DLSS or FSR 3 upscaling on) makes the window's swap
-chain the vendor's own, which shows generated frames between the drawn ones:
+`frame_generation=fsr3`, `dlss2x`, `dlss3x` or `dlss4x` (Settings → Graphics → Frame generation;
+DirectX 12 only, with DLSS or FSR 3 upscaling on) makes the window's swap chain the vendor's own,
+which shows generated frames between the drawn ones. Applied in the game's graphics menu, the
+window's swap chain is made again for the new choice, without a restart:
 
 - **AMD FSR 3** (`temporal/framegen.rs`): AMD's frame-interpolation swap chain, with any card. It
   takes the depth, the motion and the camera of the upscaler's frame, and the picture before
@@ -22,6 +23,8 @@ chain the vendor's own, which shows generated frames between the drawn ones:
 - **NVIDIA DLSS** (`temporal/dlssg.rs`): Streamline's swap chain with DLSS-G, Reflex and PCL,
   with DLSS upscaling on a GeForce RTX 40 or 50 (3x and 4x on an RTX 50; asked for more than
   the card makes, it makes what it can). DLSS tags the same inputs, valid until the present.
+  Reflex runs in low-latency mode because DLSS-G requires it; its markers are set around the
+  upscaler, so it does not shorten the input lag.
 
 Without frame generation the window keeps wgpu's surface, as before. A frame drawn without the
 upscaler (a menu over no scene, the loading screen) goes out without generated frames. Where

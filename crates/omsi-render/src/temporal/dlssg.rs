@@ -26,10 +26,12 @@
 //! 50, with DLSS upscaling. The window's swap chain is Streamline's (made through its proxy of
 //! the DXGI factory), which puts the generated frames in when the window presents.
 //!
-//! Streamline is started here, with DLSS, DLSS-G, Reflex and PCL, when the window is made; DLSS
-//! then joins this session (`streamline::Runtime::load`) and tags, frame by frame, what frame
-//! generation reads at the present: the depth, the motion and the picture before the HUD. The
-//! session lives as long as the game: the swap chain and DLSS both belong to it.
+//! Streamline is started here, with DLSS, DLSS-G, Reflex and PCL, when the window's swap chain is
+//! made for it; DLSS then joins this session (`streamline::Runtime::load`) and tags, frame by
+//! frame, what frame generation reads at the present: the depth, the motion and the picture
+//! before the HUD. The session is shut down once the window lets go of the swap chain and DLSS
+//! has left it (`abandon`). Reflex runs because DLSS-G requires it; its markers are set around
+//! the upscaler, so it does not shorten the input lag.
 
 use super::d3d12::game_dir;
 use super::framegen::GENERATED;

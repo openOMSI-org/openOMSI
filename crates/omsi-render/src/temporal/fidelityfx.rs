@@ -268,7 +268,7 @@ fn ffx_format(f: DXGI_FORMAT) -> u32 {
     }
 }
 
-pub(super) fn ffx_format_of(f: wgpu::TextureFormat) -> u32 {
+fn ffx_format_of(f: wgpu::TextureFormat) -> u32 {
     use wgpu::TextureFormat as Tf;
     match f {
         Tf::Bgra8Unorm => FORMAT_B8G8R8A8_UNORM,

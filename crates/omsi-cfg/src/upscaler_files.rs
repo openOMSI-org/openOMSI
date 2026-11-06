@@ -108,7 +108,7 @@ pub fn frame_generation_word(s: &str) -> &'static str {
 
 /// The frame generation that can run from `dir`, as the menus offer it: `fsr3` and `dlss`.
 pub fn frame_generation_choices(dir: &Path) -> Vec<&'static str> {
-    choices(frame_generation_available(dir), dlss_frame_generation_files(dir) && rtx_present())
+    choices(frame_generation_available(dir), dlss_frame_generation_available(dir))
 }
 
 fn choices(amd: bool, nvidia: bool) -> Vec<&'static str> {
