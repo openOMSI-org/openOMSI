@@ -174,6 +174,37 @@ impl Renderer {
         Some(d.runtime)
     }
 
+    /// Before the window's swap chain is made again for `kind`: DLSS on a Streamline session that
+    /// does not suit it is let go of, and the next upscaled frame loads it again
+    /// (`streamline::Runtime::load`). NVIDIA's frame generation starts Streamline for the window,
+    /// where DLSS on a session of its own stands in the way; without it, DLSS that joined frame
+    /// generation's session would go on without the window's presents that keep it going.
+    pub fn before_frame_generation(&mut self, kind: Option<FrameGenerationKind>) {
+        let nvidia = matches!(kind, Some(FrameGenerationKind::Dlss(_)));
+        let unsuited = |r: &Runtime| matches!(r, Runtime::Dlss(d) if d.own_session() == nvidia);
+        let running = self.temporal.as_ref().is_some_and(|d| unsuited(&d.runtime));
+        let kept = self.temporal_kept.as_ref().is_some_and(unsuited);
+        if !running && !kept {
+            return;
+        }
+        if running {
+            drop(self.temporal_runtime());
+        }
+        if kept {
+            self.temporal_kept = None;
+        }
+        let _ = crate::wait_gpu(&self.device, None);
+        log::info!("DLSS: let go of, to start again {}", if nvidia { "in frame generation's Streamline session" } else { "on a Streamline session of its own" });
+    }
+
+    /// After the window let go of its swap chain ([`Self::before_frame_generation`] first): a
+    /// Streamline session of frame generation's that nothing holds any more is shut down, for
+    /// DLSS to start its own.
+    pub fn after_frame_generation(&mut self) {
+        #[cfg(windows)]
+        super::dlssg::abandon();
+    }
+
     pub(crate) fn temporal_start(&mut self) -> bool {
         if self.temporal_failed {
             if self.temporal.take().is_some() {

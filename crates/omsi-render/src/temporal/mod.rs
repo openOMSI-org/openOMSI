@@ -72,6 +72,9 @@ impl OwnSwapChain {
     pub fn set_vsync(&mut self, _: bool) {
         match *self {}
     }
+    pub fn ask_frames(&self, _: u32) -> bool {
+        match *self {}
+    }
 }
 
 /// What makes the in-between frames (the `frame_generation` setting): AMD FSR 3, or NVIDIA DLSS
@@ -255,6 +258,9 @@ mod streamline {
 
     impl Runtime {
         pub(crate) fn wait(&mut self) {}
+        pub(crate) fn own_session(&self) -> bool {
+            false
+        }
         pub fn load(_device: &wgpu::Device) -> Result<Runtime> {
             anyhow::bail!("DLSS is Windows-only (DirectX 12)")
         }

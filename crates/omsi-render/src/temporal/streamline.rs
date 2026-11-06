@@ -704,6 +704,11 @@ impl Runtime {
         self.backend.wait();
     }
 
+    /// DLSS runs on a Streamline session of its own, not frame generation's (`dlssg`).
+    pub(crate) fn own_session(&self) -> bool {
+        self._paths.is_some()
+    }
+
     pub fn load(device: &wgpu::Device) -> Result<Runtime> {
         if let Some(hal) = unsafe { device.as_hal::<wgpu_hal::api::Dx12>() } {
             let raw_device = hal.raw_device().clone();
@@ -1089,7 +1094,9 @@ impl Drop for Runtime {
                 *pacer = None;
             }
             // (frame generation's session belongs to the window: it stays)
-            if self._paths.is_some() {
+            if self._paths.is_none() {
+                super::dlssg::leave();
+            } else {
                 let r = (self.shutdown)();
                 if r != 0 {
                     log::warn!("DLSS: Streamline did not shut down cleanly: {}", result_name(r));

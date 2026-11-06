@@ -61,6 +61,47 @@ pub(crate) fn apply_graphics_changes(app: &mut App) {
     rebuild_session_graphics(app);
     app.menus.list_dirty = true;
     app.service_msg = Some((omsi_ui::tr("Graphics settings applied. Restart to change renderer mode or device formats.").into_owned(), 6.0));
+    if !switch_frame_generation(app) {
+        app.service_msg = Some((omsi_ui::tr("Frame generation could not start; the log says why").into_owned(), 8.0));
+    }
+}
+
+/// The window's frame generation follows the setting: another count of NVIDIA's frames on the
+/// same swap chain, otherwise the window's surface made again for it (its swap chain is made
+/// with it). False when frame generation was asked for and could not start (the log says why).
+fn switch_frame_generation(app: &mut App) -> bool {
+    let want = app.settings.frame_generation_kind();
+    let vsync = app.settings.vsync && !app.vr_active();
+    let capped = (1..1000).contains(&app.settings.max_fps) && !cfg!(target_os = "android");
+    let (Some(window), Some(renderer), Some(surface)) = (app.window.clone(), app.renderer.as_mut(), app.gfx.surface.as_mut()) else { return true };
+    if surface.retarget_frame_generation(want) {
+        return true;
+    }
+    log::info!("frame generation: {:?} -> {want:?}, the window's swap chain made again", surface.frame_generation_kind());
+    renderer.set_frame_generation(None);
+    renderer.before_frame_generation(want);
+    // (the old swap chain gone, with its buffers, before the window takes the new one)
+    app.gfx.surface = None;
+    let _ = omsi_render::wait_gpu(&renderer.device, None);
+    renderer.after_frame_generation();
+    let size = crate::platform::surface_size(&window);
+    let made = omsi_render::SurfaceState::new_with(&app.gfx.instance, window.clone(), renderer, size.width, size.height, vsync, want).or_else(|e| {
+        log::error!("frame generation: the window's surface for it: {e:#}; made again without it");
+        omsi_render::SurfaceState::new_with(&app.gfx.instance, window, renderer, size.width, size.height, vsync, None)
+    });
+    match made {
+        Ok(mut s) => {
+            s.set_vsync(renderer, vsync, capped);
+            renderer.set_frame_generation(s.frame_generation());
+            let started = want.is_none() || s.frame_generation().is_some();
+            app.gfx.surface = Some(s);
+            started
+        }
+        Err(e) => {
+            log::error!("the window's surface could not be made again: {e:#}");
+            false
+        }
+    }
 }
 
 /// Restore graphic keys but preserve unrelated settings saved while the preview was open.

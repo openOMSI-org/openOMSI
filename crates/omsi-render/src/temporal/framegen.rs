@@ -559,6 +559,18 @@ impl OwnSwapChain {
     pub fn set_vsync(&mut self, vsync: bool) {
         self.vsync = vsync;
     }
+
+    /// Another count of NVIDIA's frames on screen per drawn one, on this swap chain (false: the
+    /// swap chain is AMD's, made again for another kind of frame generation).
+    pub fn ask_frames(&self, frames: u32) -> bool {
+        match &self.generation.0 {
+            Generation::Dlss => {
+                super::dlssg::ask(frames);
+                true
+            }
+            Generation::Amd(_) => false,
+        }
+    }
 }
 
 impl Drop for OwnSwapChain {
@@ -571,7 +583,11 @@ impl Drop for OwnSwapChain {
             }
             Generation::Dlss => super::dlssg::set_window(false),
         }
-        self.buffers.clear();
+        // (destroyed, not only let go of: the window takes another swap chain only once nothing
+        // holds this one's buffers)
+        for b in self.buffers.drain(..) {
+            b.destroy();
+        }
         if let Some(amd) = self.amd.take() {
             OwnSwapChain::destroy_amd(amd);
         }

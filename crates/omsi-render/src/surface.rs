@@ -16,6 +16,8 @@ pub struct SurfaceState<'w> {
     /// AMD's frame-interpolation swap chain, in place of the surface's, while frame generation
     /// is on (the surface is then never configured).
     own: Option<temporal::OwnSwapChain>,
+    /// The frame generation the window was made for (`own` is None where it could not start).
+    kind: Option<temporal::FrameGenerationKind>,
 }
 
 /// The window's next picture, as `wgpu::CurrentSurfaceTexture` names the cases.
@@ -176,7 +178,7 @@ impl<'w> SurfaceState<'w> {
         if own.is_none() {
             surface.configure(&renderer.device, &config);
         }
-        Ok(SurfaceState { surface: std::mem::ManuallyDrop::new(surface), config, lost: renderer.errors.device_lost.clone(), encode, glass: false, own })
+        Ok(SurfaceState { surface: std::mem::ManuallyDrop::new(surface), config, lost: renderer.errors.device_lost.clone(), encode, glass: false, own, kind: frame_generation })
     }
 
     /// The window's surface on a device whose renderer is still being built ([`Opened`]'s
@@ -199,7 +201,7 @@ impl<'w> SurfaceState<'w> {
         if own.is_none() {
             surface.configure(device, &config);
         }
-        Ok(SurfaceState { surface: std::mem::ManuallyDrop::new(surface), config, lost: Default::default(), encode: None, glass: false, own })
+        Ok(SurfaceState { surface: std::mem::ManuallyDrop::new(surface), config, lost: Default::default(), encode: None, glass: false, own, kind: frame_generation })
     }
 
     /// The renderer built for the device this surface was made on ([`Self::early`]) takes
@@ -249,6 +251,30 @@ impl<'w> SurfaceState<'w> {
     /// Frame generation's handle for the renderer, while the window has its swap chain.
     pub fn frame_generation(&self) -> Option<temporal::FrameGeneration> {
         self.own.as_ref().map(|o| o.frame_generation())
+    }
+
+    /// The frame generation the window was made for: [`Self::frame_generation`] is None as well
+    /// where it could not start.
+    pub fn frame_generation_kind(&self) -> Option<temporal::FrameGenerationKind> {
+        self.kind
+    }
+
+    /// Frame generation set to `kind` where the window's swap chain can stay: it is that already,
+    /// or only the count of NVIDIA's frames changes. False: the surface is to be made anew for
+    /// `kind` (the swap chain is made with it), after [`Renderer::before_frame_generation`].
+    pub fn retarget_frame_generation(&mut self, kind: Option<temporal::FrameGenerationKind>) -> bool {
+        use temporal::FrameGenerationKind::Dlss;
+        if self.kind == kind {
+            return true;
+        }
+        let in_place = match (self.kind, kind, &self.own) {
+            (Some(Dlss(_)), Some(Dlss(frames)), Some(own)) => own.ask_frames(frames),
+            _ => false,
+        };
+        if in_place {
+            self.kind = kind;
+        }
+        in_place
     }
 
     /// The view `frame` is drawn into (of the renderer's format).

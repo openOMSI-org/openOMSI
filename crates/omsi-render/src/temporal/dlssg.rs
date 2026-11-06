@@ -183,8 +183,8 @@ pub(super) fn module() -> Option<HMODULE> {
     })
 }
 
-/// The window's swap chain could not be made after Streamline started for it: Streamline goes
-/// again, so DLSS starts its own, unless DLSS already joined this one.
+/// Streamline started for the window and nothing holds it (its swap chain could not be made, or the
+/// window let go of it and DLSS left it): shut down, so DLSS starts its own.
 pub(super) fn abandon() {
     let mut s = session();
     if s.as_ref().is_some_and(|s| !s.joined && !s.window) {
@@ -293,6 +293,13 @@ pub(super) fn proxy_factory(device: &ID3D12Device, factory: &IDXGIFactory5, fram
     unsafe { windows::core::IUnknown::from_raw(raw) }.cast().context("Streamline's proxy of the DXGI factory")
 }
 
+/// DLSS that joined the session (`module`) is let go of.
+pub(super) fn leave() {
+    if let Some(s) = session().as_mut() {
+        s.joined = false;
+    }
+}
+
 /// Before the renderer drops what frame generation reads at the present (a rebuild): off until
 /// DLSS tags a frame again.
 pub(super) fn pause() {
@@ -312,6 +319,14 @@ pub(super) fn set_window(on: bool) {
             s.switch(1, (0, 0));
             s.token = std::ptr::null();
         }
+    }
+}
+
+/// Another count of frames on screen per drawn one (the setting changed in the game's menu): from
+/// the next frame DLSS tags.
+pub(super) fn ask(frames: u32) {
+    if let Some(s) = session().as_mut() {
+        s.asked = frames;
     }
 }
 
