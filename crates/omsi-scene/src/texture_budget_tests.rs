@@ -277,32 +277,37 @@ fn an_idle_look_is_kept_until_something_changes() {
     let mut m = BudgetMemo::default();
     let c = [DVec3::new(10.0, 20.0, 5.0)];
     let limit = 1000;
-    assert!(!m.unchanged(1, 900, limit, &c), "nothing remembered yet");
-    m.remember(1, 900, limit, &c, true);
-    assert!(m.unchanged(1, 900, limit, &c));
+    assert!(!m.unchanged(1, 900, limit, 0, &c), "nothing remembered yet");
+    m.remember(1, 900, limit, 0, &c, true);
+    assert!(m.unchanged(1, 900, limit, 0, &c));
     // a little way on, or up a hill: the same distances for the budget's purposes
-    assert!(m.unchanged(1, 900, limit, &[DVec3::new(30.0, 20.0, 50.0)]));
+    assert!(m.unchanged(1, 900, limit, 0, &[DVec3::new(30.0, 20.0, 50.0)]));
     assert!(
-        !m.unchanged(1, 900, limit, &[DVec3::new(40.0, 20.0, 5.0)]),
+        !m.unchanged(1, 900, limit, 0, &[DVec3::new(40.0, 20.0, 5.0)]),
         "moved 30 m"
     );
-    assert!(!m.unchanged(2, 900, limit, &c), "the tiles changed");
-    assert!(!m.unchanged(1, 900, limit, &[c[0], c[0]]), "another center");
+    assert!(!m.unchanged(2, 900, limit, 0, &c), "the tiles changed");
+    assert!(!m.unchanged(1, 900, limit, 0, &[c[0], c[0]]), "another center");
     // a texture compressed meanwhile: a little less or more, still nothing to do
-    assert!(m.unchanged(1, 895, limit, &c));
-    assert!(m.unchanged(1, 990, limit, &c));
-    assert!(!m.unchanged(1, 1001, limit, &c), "over the budget");
+    assert!(m.unchanged(1, 895, limit, 0, &c));
+    assert!(m.unchanged(1, 990, limit, 0, &c));
+    assert!(!m.unchanged(1, 1001, limit, 0, &c), "over the budget");
     assert!(
-        !m.unchanged(1, 900, 600, &c),
+        !m.unchanged(1, 900, 600, 0, &c),
         "a lower budget must run even while standing still"
     );
     assert!(
-        !m.unchanged(1, 880, limit, &c),
+        !m.unchanged(1, 880, limit, 0, &c),
         "room for a texture to come back"
     );
-    m.remember(1, 900, limit, &c, false);
+    assert!(m.unchanged(1, 900, limit, 64 << 20, &c));
     assert!(
-        !m.unchanged(1, 900, limit, &c),
+        !m.unchanged(1, 900, limit, 100 << 20, &c),
+        "the card has room again"
+    );
+    m.remember(1, 900, limit, 0, &c, false);
+    assert!(
+        !m.unchanged(1, 900, limit, 0, &c),
         "a look that did something looks again"
     );
 }
