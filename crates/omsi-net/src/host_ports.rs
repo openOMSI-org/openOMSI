@@ -56,11 +56,10 @@ fn verify_loopback(listener: &TcpListener) -> io::Result<()> {
     let deadline = Instant::now() + Duration::from_millis(250);
     loop {
         match listener.accept() {
-            Ok((mut stream, peer)) if peer == source => {
+            Ok((stream, peer)) if peer == source => {
                 // Close the probe first so the host port does not enter TIME_WAIT.
                 probe.shutdown(Shutdown::Write)?;
-                stream.set_read_timeout(Some(Duration::from_millis(250)))?;
-                stream.read(&mut [0])?;
+                let _ = await_probe_close(stream);
                 listener.set_nonblocking(false)?;
                 return Ok(());
             }
@@ -76,6 +75,12 @@ fn verify_loopback(listener: &TcpListener) -> io::Result<()> {
         }
         std::thread::sleep(Duration::from_millis(1));
     }
+}
+
+fn await_probe_close(mut stream: TcpStream) -> io::Result<usize> {
+    stream.set_nonblocking(false)?;
+    stream.set_read_timeout(Some(Duration::from_millis(250)))?;
+    stream.read(&mut [0])
 }
 
 // A refused connection or failed handshake means this candidate did not reach
@@ -179,6 +184,25 @@ impl LanSession {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_probe_that_closes_late_is_awaited() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let probe = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let stream = loop {
+            if let Ok((stream, _)) = listener.accept() {
+                break stream;
+            }
+        };
+        let closer = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(50));
+            probe.shutdown(Shutdown::Write).unwrap();
+            probe
+        });
+        assert_eq!(await_probe_close(stream).unwrap(), 0);
+        closer.join().unwrap();
+    }
 
     #[test]
     fn loopback_connection_failures_allow_the_next_candidate() {
