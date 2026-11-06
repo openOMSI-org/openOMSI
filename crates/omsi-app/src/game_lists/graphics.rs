@@ -74,21 +74,28 @@ fn switch_frame_generation(app: &mut App) -> bool {
     let vsync = app.settings.vsync && !app.vr_active();
     let capped = (1..1000).contains(&app.settings.max_fps) && !cfg!(target_os = "android");
     let (Some(window), Some(renderer), Some(surface)) = (app.window.clone(), app.renderer.as_mut(), app.gfx.surface.as_mut()) else { return true };
-    if surface.retarget_frame_generation(want) {
+    // (a lost device: the next frame starts the game again, `restart_after_device_loss`)
+    if renderer.device_lost().is_some() || surface.retarget_frame_generation(want) {
         return true;
     }
     log::info!("frame generation: {:?} -> {want:?}, the window's swap chain made again", surface.frame_generation_kind());
     renderer.set_frame_generation(None);
-    renderer.before_frame_generation(want);
-    // (the old swap chain gone, with its buffers, before the window takes the new one)
+    // (the old swap chain gone, with its buffers, before the window takes the new one; DLSS is
+    // moved to another Streamline session only once nothing presents through the old one)
     app.gfx.surface = None;
     let _ = omsi_render::wait_gpu(&renderer.device, None);
+    renderer.before_frame_generation(want);
     renderer.after_frame_generation();
     let size = crate::platform::surface_size(&window);
     let made = omsi_render::SurfaceState::new_with(&app.gfx.instance, window.clone(), renderer, size.width, size.height, vsync, want).or_else(|e| {
         log::error!("frame generation: the window's surface for it: {e:#}; made again without it");
         omsi_render::SurfaceState::new_with(&app.gfx.instance, window, renderer, size.width, size.height, vsync, None)
     });
+    // (a surface made on a lost device is never configured: the window goes without one)
+    if renderer.device_lost().is_some() {
+        log::error!("frame generation: the graphics device was lost while the window's swap chain was made again");
+        return true;
+    }
     match made {
         Ok(mut s) => {
             s.set_vsync(renderer, vsync, capped);

@@ -177,7 +177,19 @@ unsafe impl Send for Shared {}
 
 /// The renderer's handle on the window's frame generation (`Renderer::set_frame_generation`).
 #[derive(Clone)]
-pub struct FrameGeneration(Generation);
+pub struct FrameGeneration(Generation, Arc<Mutex<Held>>);
+
+/// Textures the renderer let go of that frame generation may still read after a present, on the
+/// vendor's own queues, which `wait_gpu` does not wait for (`FrameGeneration::hold`).
+#[derive(Default)]
+struct Held {
+    textures: Vec<wgpu::Texture>,
+    /// Presents to go before they are let go of.
+    presents: u32,
+}
+
+/// Presents after which nothing of an earlier frame is read any more (the vendors queue a few).
+const HELD_PRESENTS: u32 = 8;
 
 #[derive(Clone)]
 enum Generation {
@@ -330,6 +342,24 @@ impl FrameGeneration {
         }
     }
 
+    /// The renderer lets go of `textures` (a rebuild) that frame generation may still read after
+    /// a present: kept for some more presents, or until the window's swap chain is gone.
+    pub(crate) fn hold(&self, textures: Vec<wgpu::Texture>) {
+        let mut h = self.1.lock().unwrap_or_else(|e| e.into_inner());
+        h.textures.extend(textures);
+        h.presents = HELD_PRESENTS;
+    }
+
+    fn presented(&self) {
+        let mut h = self.1.lock().unwrap_or_else(|e| e.into_inner());
+        if h.presents > 0 {
+            h.presents -= 1;
+            if h.presents == 0 {
+                h.textures.clear();
+            }
+        }
+    }
+
     /// Whether the window takes the picture before the HUD this frame.
     pub(crate) fn working(&self) -> bool {
         match &self.0 {
@@ -479,7 +509,7 @@ impl OwnSwapChain {
         };
         // (winit does the full screen; DXGI's Alt+Enter would fight it)
         let _ = unsafe { factory.MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_WINDOW_CHANGES) };
-        let mut own = OwnSwapChain { generation: FrameGeneration(generation), swapchain, amd, buffers: Vec::new(), format, size, vsync, tearing };
+        let mut own = OwnSwapChain { generation: FrameGeneration(generation, Default::default()), swapchain, amd, buffers: Vec::new(), format, size, vsync, tearing };
         // (dropped on failure, which takes down what was made above)
         own.buffers = wrap(device, &own.swapchain, format, size)?;
         if matches!(kind, FrameGenerationKind::Dlss(_)) {
@@ -530,6 +560,7 @@ impl OwnSwapChain {
             }
             Generation::Dlss => super::dlssg::present(present),
         }
+        self.generation.presented();
     }
 
     /// New buffers for a window of `size`: the old ones go first and the GPU is waited for, as
@@ -591,5 +622,7 @@ impl Drop for OwnSwapChain {
         if let Some(amd) = self.amd.take() {
             OwnSwapChain::destroy_amd(amd);
         }
+        // (AMD's swap chain waited for its queues as it went; Streamline's is let go of with it)
+        self.generation.1.lock().unwrap_or_else(|e| e.into_inner()).textures.clear();
     }
 }

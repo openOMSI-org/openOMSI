@@ -44,6 +44,9 @@ impl FrameGeneration {
     pub(crate) fn pause(&self) {
         match *self {}
     }
+    pub(crate) fn hold(&self, _: Vec<wgpu::Texture>) {
+        match *self {}
+    }
     pub(crate) fn working(&self) -> bool {
         match *self {}
     }

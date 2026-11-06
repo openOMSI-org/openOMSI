@@ -164,6 +164,12 @@ impl Renderer {
         }
     }
 
+    /// What frame generation reads of the upscaler's frames: the inputs of the last ones and the
+    /// pictures before the HUD.
+    pub(crate) fn temporal_generation_inputs(&self) -> Vec<wgpu::Texture> {
+        self.temporal.as_ref().map_or_else(Vec::new, |d| d.keep.iter().flatten().cloned().chain(d.hudless.iter().map(|(h, _)| h.clone())).collect())
+    }
+
     /// The running upscaler, its GPU work done, to go on in a renderer rebuilt on this device.
     pub(crate) fn temporal_runtime(&mut self) -> Option<Runtime> {
         let mut d = self.temporal.take()?;
@@ -174,7 +180,8 @@ impl Renderer {
         Some(d.runtime)
     }
 
-    /// Before the window's swap chain is made again for `kind`: DLSS on a Streamline session that
+    /// After the window let go of its swap chain, before it is made again for `kind`: DLSS on a
+    /// Streamline session that
     /// does not suit it is let go of, and the next upscaled frame loads it again
     /// (`streamline::Runtime::load`). NVIDIA's frame generation starts Streamline for the window,
     /// where DLSS on a session of its own stands in the way; without it, DLSS that joined frame
@@ -197,7 +204,7 @@ impl Renderer {
         log::info!("DLSS: let go of, to start again {}", if nvidia { "in frame generation's Streamline session" } else { "on a Streamline session of its own" });
     }
 
-    /// After the window let go of its swap chain ([`Self::before_frame_generation`] first): a
+    /// Then ([`Self::before_frame_generation`] first): a
     /// Streamline session of frame generation's that nothing holds any more is shut down, for
     /// DLSS to start its own.
     pub fn after_frame_generation(&mut self) {
