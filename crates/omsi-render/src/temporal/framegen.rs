@@ -23,14 +23,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//! AMD FSR 3 frame generation (DirectX 12): the window's swap chain is AMD's
-//! frame-interpolation swap chain, which shows a made-up frame between every two the game
-//! draws. Each upscaled frame hands it the depth, motion and camera the upscaler had, and the
-//! picture before the HUD went over it.
+//! Frame generation (DirectX 12): the window's swap chain shows made-up frames between the ones
+//! the game draws. With AMD FSR 3 it is AMD's frame-interpolation swap chain, which each upscaled
+//! frame hands the depth, motion and camera the upscaler had, and the picture before the HUD went
+//! over it; with NVIDIA DLSS it is Streamline's (`dlssg`), which DLSS hands the same.
 
 use super::d3d12::ListRing;
 use super::fidelityfx::{api, check, resource, Api, Coords, CreateBackendDx12, CreateVersion, Dimensions, FfxContext, Header, Resource, CREATE_BACKEND_DX12, STATE_DEPTH_ATTACHMENT, STATE_RENDER_TARGET};
-use super::FrameConstants;
+use super::{FrameConstants, FrameGenerationKind};
 use anyhow::{anyhow, bail, Context, Result};
 use omsi_cfg::upscaler_files::Api as Gpu;
 use std::ffi::c_void;
@@ -177,10 +177,18 @@ unsafe impl Send for Shared {}
 
 /// The renderer's handle on the window's frame generation (`Renderer::set_frame_generation`).
 #[derive(Clone)]
-pub struct FrameGeneration(Arc<Mutex<Shared>>);
+pub struct FrameGeneration(Generation);
 
-/// The in-between frames made since the start (`FrameGeneration::generated`).
-static GENERATED: AtomicU64 = AtomicU64::new(0);
+#[derive(Clone)]
+enum Generation {
+    /// AMD FSR 3's, handed each frame's inputs by `prepare`.
+    Amd(Arc<Mutex<Shared>>),
+    /// NVIDIA DLSS's, handed them by DLSS itself (`streamline::Runtime::evaluate`).
+    Dlss,
+}
+
+/// The in-between frames made since the start (`FrameGeneration::generated`), by either.
+pub(super) static GENERATED: AtomicU64 = AtomicU64::new(0);
 
 /// The frame-interpolation swap chain's dispatch, asked for by the swap chain for each frame
 /// it makes; the context comes back as the user pointer.
@@ -294,7 +302,8 @@ impl FrameGeneration {
     /// This frame's inputs, after the scene's and the HUD's submits and before the window's
     /// picture is presented. `hudless` is the window's picture before the HUD went over it.
     pub(crate) fn prepare(&self, depth: &wgpu::Texture, motion: &wgpu::Texture, hudless: &wgpu::Texture, render: (u32, u32), c: &FrameConstants) {
-        let mut s = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        let Generation::Amd(s) = &self.0 else { return };
+        let mut s = s.lock().unwrap_or_else(|e| e.into_inner());
         if s.failed {
             return;
         }
@@ -305,9 +314,28 @@ impl FrameGeneration {
         }
     }
 
+    /// Before the renderer drops the textures frame generation reads (`rebuild_in_place`): off,
+    /// and the work it had queued with them done, until the next upscaled frame.
+    pub(crate) fn pause(&self) {
+        match &self.0 {
+            Generation::Amd(s) => {
+                let mut s = s.lock().unwrap_or_else(|e| e.into_inner());
+                if s.enabled {
+                    let _ = s.configure(false, Resource::NONE);
+                }
+                s.ring.wait();
+                s.prepared = false;
+            }
+            Generation::Dlss => super::dlssg::pause(),
+        }
+    }
+
     /// Whether the window takes the picture before the HUD this frame.
     pub(crate) fn working(&self) -> bool {
-        !self.0.lock().unwrap_or_else(|e| e.into_inner()).failed
+        match &self.0 {
+            Generation::Amd(s) => !s.lock().unwrap_or_else(|e| e.into_inner()).failed,
+            Generation::Dlss => super::dlssg::working(),
+        }
     }
 
     /// The in-between frames made since the start.
@@ -318,7 +346,8 @@ impl FrameGeneration {
     /// Right before the window's picture is presented: a frame drawn without the upscaler
     /// (a menu, the loading screen) has nothing to make an in-between frame from.
     fn before_present(&self) {
-        let mut s = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        let Generation::Amd(s) = &self.0 else { return };
+        let mut s = s.lock().unwrap_or_else(|e| e.into_inner());
         if !s.prepared && s.enabled {
             let _ = s.configure(false, Resource::NONE);
         }
@@ -326,12 +355,20 @@ impl FrameGeneration {
     }
 }
 
-/// The window's swap chain while frame generation is on: AMD's, drawn into through wgpu
-/// textures wrapping its buffers.
-pub struct OwnSwapChain {
-    shared: FrameGeneration,
+/// AMD's swap chain context, which the swap chain goes with.
+struct AmdSwapChain {
+    api: &'static Api,
     context: Box<FfxContext>,
+    /// (AMD may keep pointers into what the context was created from)
     _create: Box<(CreateVersion, DXGI_SWAP_CHAIN_DESC1, *mut c_void)>,
+}
+
+/// The window's swap chain while frame generation is on: AMD's or Streamline's, drawn into
+/// through wgpu textures wrapping its buffers.
+pub struct OwnSwapChain {
+    generation: FrameGeneration,
+    swapchain: IDXGISwapChain4,
+    amd: Option<AmdSwapChain>,
     buffers: Vec<wgpu::Texture>,
     format: wgpu::TextureFormat,
     size: (u32, u32),
@@ -362,19 +399,16 @@ fn wrap(device: &wgpu::Device, swapchain: &IDXGISwapChain4, format: wgpu::Textur
 }
 
 impl OwnSwapChain {
-    /// AMD's frame-interpolation swap chain for `hwnd`, on wgpu's queue. Fails without AMD's
-    /// DLLs, off DirectX 12, or for a format AMD's frame generation does not take.
-    pub fn new(device: &wgpu::Device, hwnd: HWND, format: wgpu::TextureFormat, size: (u32, u32), vsync: bool) -> Result<OwnSwapChain> {
+    /// Frame generation's swap chain for `hwnd`, on wgpu's queue: AMD's for FSR 3, Streamline's
+    /// for DLSS. Fails without the vendor's DLLs, off DirectX 12, on a card that cannot, or for
+    /// a format frame generation does not take.
+    pub fn new(device: &wgpu::Device, hwnd: HWND, format: wgpu::TextureFormat, size: (u32, u32), vsync: bool, kind: FrameGenerationKind) -> Result<OwnSwapChain> {
         let size = (size.0.max(1), size.1.max(1));
         let (dxgi, ffx) = dxgi_format(format).ok_or_else(|| anyhow!("frame generation takes no {format:?} window"))?;
         let (raw_device, queue) = {
             let hal = unsafe { device.as_hal::<wgpu_hal::api::Dx12>() }.ok_or_else(|| anyhow!("the game is not on DirectX 12"))?;
             (hal.raw_device().clone(), hal.raw_queue().clone())
         };
-        let api = api(Gpu::Dx12)?;
-        if !omsi_cfg::upscaler_files::frame_generation_available(&super::d3d12::game_dir()) {
-            bail!("AMD's frame generation DLLs are not beside the game");
-        }
         let factory: IDXGIFactory5 = unsafe { CreateDXGIFactory2(DXGI_CREATE_FACTORY_FLAGS(0)) }.context("the DXGI factory")?;
         let tearing = {
             let mut allow = windows::core::BOOL::default();
@@ -393,36 +427,74 @@ impl OwnSwapChain {
             AlphaMode: DXGI_ALPHA_MODE_UNSPECIFIED,
             Flags: if tearing { DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING.0 as u32 } else { 0 },
         };
-        // (AMD may keep pointers into what the context was created from)
-        let mut create = Box::new((CreateVersion { header: Header::new(CREATE_SWAPCHAIN_VERSION_DX12), version: SWAPCHAIN_DX12_VERSION }, desc, std::ptr::null_mut::<c_void>()));
-        let make = CreateSwapChainForHwnd {
-            header: Header { kind: CREATE_SWAPCHAIN_FOR_HWND_DX12, next: &create.0.header },
-            swapchain: &mut create.2,
-            hwnd,
-            desc: &mut create.1,
-            fullscreen_desc: std::ptr::null_mut(),
-            factory: factory.as_raw(),
-            game_queue: queue.as_raw(),
+        let (swapchain, generation, amd) = match kind {
+            FrameGenerationKind::Fsr3 => {
+                let api = api(Gpu::Dx12)?;
+                if !omsi_cfg::upscaler_files::frame_generation_available(&super::d3d12::game_dir()) {
+                    bail!("AMD's frame generation DLLs are not beside the game");
+                }
+                let mut create = Box::new((CreateVersion { header: Header::new(CREATE_SWAPCHAIN_VERSION_DX12), version: SWAPCHAIN_DX12_VERSION }, desc, std::ptr::null_mut::<c_void>()));
+                let make = CreateSwapChainForHwnd {
+                    header: Header { kind: CREATE_SWAPCHAIN_FOR_HWND_DX12, next: &create.0.header },
+                    swapchain: &mut create.2,
+                    hwnd,
+                    desc: &mut create.1,
+                    fullscreen_desc: std::ptr::null_mut(),
+                    factory: factory.as_raw(),
+                    game_queue: queue.as_raw(),
+                };
+                let mut context: Box<FfxContext> = Box::new(std::ptr::null_mut());
+                check("creating AMD's frame-interpolation swap chain", unsafe { (api.create_context)(&mut *context, &make.header, std::ptr::null()) })?;
+                let amd = AmdSwapChain { api, context, _create: create };
+                if amd._create.2.is_null() {
+                    OwnSwapChain::destroy_amd(amd);
+                    bail!("AMD's FidelityFX API made no swap chain");
+                }
+                // (the swap chain's reference is ours now; the context lets go of its own on destroy)
+                let swapchain = unsafe { IDXGISwapChain4::from_raw(amd._create.2) };
+                let ring = match ListRing::new(&raw_device) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        OwnSwapChain::destroy_amd(amd);
+                        return Err(e.context("frame generation's command lists"));
+                    }
+                };
+                let shared = Shared { api, device: raw_device, queue, swapchain: swapchain.clone(), format: ffx, ring, generator: None, frame_id: 0, prepared: false, enabled: false, failed: false };
+                (swapchain, Generation::Amd(Arc::new(Mutex::new(shared))), Some(amd))
+            }
+            FrameGenerationKind::Dlss(frames) => {
+                let made = (|| -> Result<IDXGISwapChain4> {
+                    let proxy = super::dlssg::proxy_factory(&raw_device, &factory, frames)?;
+                    let made: IDXGISwapChain1 = unsafe { proxy.CreateSwapChainForHwnd(&queue, hwnd, &desc, None, None) }.context("creating Streamline's swap chain")?;
+                    made.cast().context("Streamline's swap chain")
+                })();
+                match made {
+                    Ok(s) => (s, Generation::Dlss, None),
+                    Err(e) => {
+                        super::dlssg::abandon();
+                        return Err(e);
+                    }
+                }
+            }
         };
-        let mut context: Box<FfxContext> = Box::new(std::ptr::null_mut());
-        check("creating AMD's frame-interpolation swap chain", unsafe { (api.create_context)(&mut *context, &make.header, std::ptr::null()) })?;
-        if create.2.is_null() {
-            let _ = unsafe { (api.destroy_context)(&mut *context, std::ptr::null()) };
-            bail!("AMD's FidelityFX API made no swap chain");
-        }
-        // (the swap chain's reference is ours now; the context lets go of its own on destroy)
-        let swapchain = unsafe { IDXGISwapChain4::from_raw(create.2) };
         // (winit does the full screen; DXGI's Alt+Enter would fight it)
         let _ = unsafe { factory.MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_WINDOW_CHANGES) };
-        let buffers = wrap(device, &swapchain, format, size)?;
-        let ring = ListRing::new(&raw_device).context("frame generation's command lists")?;
-        let shared = FrameGeneration(Arc::new(Mutex::new(Shared { api, device: raw_device, queue, swapchain, format: ffx, ring, generator: None, frame_id: 0, prepared: false, enabled: false, failed: false })));
-        log::info!("frame generation: AMD's swap chain for the window, {}x{}, tearing {tearing}", size.0, size.1);
-        Ok(OwnSwapChain { shared, context, _create: create, buffers, format, size, vsync, tearing })
+        let mut own = OwnSwapChain { generation: FrameGeneration(generation), swapchain, amd, buffers: Vec::new(), format, size, vsync, tearing };
+        // (dropped on failure, which takes down what was made above)
+        own.buffers = wrap(device, &own.swapchain, format, size)?;
+        if matches!(kind, FrameGenerationKind::Dlss(_)) {
+            super::dlssg::set_window(true);
+        }
+        log::info!("frame generation: {} swap chain for the window, {}x{}, tearing {tearing}", if own.amd.is_some() { "AMD's" } else { "Streamline's" }, size.0, size.1);
+        Ok(own)
+    }
+
+    fn destroy_amd(mut amd: AmdSwapChain) {
+        let _ = unsafe { (amd.api.destroy_context)(&mut *amd.context, std::ptr::null()) };
     }
 
     pub fn frame_generation(&self) -> FrameGeneration {
-        self.shared.clone()
+        self.generation.clone()
     }
 
     pub fn size(&self) -> (u32, u32) {
@@ -431,8 +503,8 @@ impl OwnSwapChain {
 
     /// The buffer this frame is drawn into.
     pub fn current(&self) -> Option<wgpu::Texture> {
-        let s = self.shared.0.lock().unwrap_or_else(|e| e.into_inner());
-        let i = unsafe { s.swapchain.GetCurrentBackBufferIndex() } as usize;
+        // (Streamline's frame generation checks this is asked every frame)
+        let i = unsafe { self.swapchain.GetCurrentBackBufferIndex() } as usize;
         self.buffers.get(i).cloned()
     }
 
@@ -441,15 +513,22 @@ impl OwnSwapChain {
         let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("frame generation present") });
         enc.transition_resources(std::iter::empty(), std::iter::once(wgpu::TextureTransition { texture: buffer, selector: None, state: wgpu::TextureUses::PRESENT }));
         queue.submit([enc.finish()]);
-        self.shared.before_present();
         let (interval, flags) = match (self.vsync, self.tearing) {
             (true, _) => (1, DXGI_PRESENT(0)),
             (false, true) => (0, DXGI_PRESENT_ALLOW_TEARING),
             (false, false) => (0, DXGI_PRESENT(0)),
         };
-        let s = self.shared.0.lock().unwrap_or_else(|e| e.into_inner());
-        if let Err(e) = unsafe { s.swapchain.Present(interval, flags) }.ok() {
-            log::warn!("frame generation: Present failed ({e})");
+        let present = || {
+            if let Err(e) = unsafe { self.swapchain.Present(interval, flags) }.ok() {
+                log::warn!("frame generation: Present failed ({e})");
+            }
+        };
+        match &self.generation.0 {
+            Generation::Amd(_) => {
+                self.generation.before_present();
+                present();
+            }
+            Generation::Dlss => super::dlssg::present(present),
         }
     }
 
@@ -464,15 +543,14 @@ impl OwnSwapChain {
             b.destroy();
         }
         let _ = crate::wait_gpu(device, None);
-        let s = self.shared.0.lock().unwrap_or_else(|e| e.into_inner());
         let flags = if self.tearing { DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING.0 } else { 0 };
-        let resized = unsafe { s.swapchain.ResizeBuffers(BUFFERS, size.0, size.1, DXGI_FORMAT_UNKNOWN, DXGI_SWAP_CHAIN_FLAG(flags)) };
+        let resized = unsafe { self.swapchain.ResizeBuffers(BUFFERS, size.0, size.1, DXGI_FORMAT_UNKNOWN, DXGI_SWAP_CHAIN_FLAG(flags)) };
         if let Err(e) = &resized {
             log::error!("frame generation: ResizeBuffers to {}x{} failed ({e}); the old size stays", size.0, size.1);
         } else {
             self.size = size;
         }
-        match wrap(device, &s.swapchain, self.format, self.size) {
+        match wrap(device, &self.swapchain, self.format, self.size) {
             Ok(b) => self.buffers = b,
             Err(e) => log::error!("frame generation: the swap chain's buffers: {e:#}"),
         }
@@ -485,12 +563,17 @@ impl OwnSwapChain {
 
 impl Drop for OwnSwapChain {
     fn drop(&mut self) {
-        let mut s = self.shared.0.lock().unwrap_or_else(|e| e.into_inner());
-        s.drop_generator();
-        s.failed = true;
-        let api = s.api;
-        drop(s);
+        match &self.generation.0 {
+            Generation::Amd(s) => {
+                let mut s = s.lock().unwrap_or_else(|e| e.into_inner());
+                s.drop_generator();
+                s.failed = true;
+            }
+            Generation::Dlss => super::dlssg::set_window(false),
+        }
         self.buffers.clear();
-        let _ = unsafe { (api.destroy_context)(&mut *self.context, std::ptr::null()) };
+        if let Some(amd) = self.amd.take() {
+            OwnSwapChain::destroy_amd(amd);
+        }
     }
 }

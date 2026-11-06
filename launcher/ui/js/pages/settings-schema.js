@@ -50,8 +50,15 @@ const tripleOn = (s) => !!s.triple_screen;
 const vrOn = (s, p) => windows(s, p) && !!s.vr;
 // (what `Settings::temporal_upscaling` tells: DLSS or FSR 3 take the place of the anti-aliasing and the render scale)
 const temporalOn = (s, p) => (s.temporal_upscalers || []).includes(s.upscaler) && !tripleOn(s) && !vrOn(s, p);
-// (what `Settings::frame_generation_on` tells: DLSS or FSR 3 on DirectX 12, with AMD's DLLs beside the game)
-const generationOffered = (s, p) => windows(s, p) && temporalOn(s, p) && !!s.frame_generation_available && s.graphics_api !== 'vulkan';
+// (what `Settings::frame_generation_kind` tells: DLSS or FSR 3 on DirectX 12, with the vendor's DLLs beside
+// the game; NVIDIA's frame generation only with DLSS upscaling)
+const generationChoices = (s) => s.frame_generation_choices || [];
+const generationOffered = (s, p) => windows(s, p) && temporalOn(s, p) && generationChoices(s).length > 0 && s.graphics_api !== 'vulkan';
+const generationOptions = (s) => [
+  ['off', 'Off'],
+  ...(generationChoices(s).includes('fsr3') ? [['fsr3', 'AMD FSR 3']] : []),
+  ...(generationChoices(s).includes('dlss') && s.upscaler === 'dlss' ? [['dlss2x', 'NVIDIA DLSS 2x'], ['dlss3x', 'NVIDIA DLSS 3x (RTX 50)'], ['dlss4x', 'NVIDIA DLSS 4x (RTX 50)']] : []),
+];
 
 /** The window sizes the settings offer (`resolution`). */
 export const RESOLUTIONS = [
@@ -93,7 +100,7 @@ const graphics = {
         { type: 'select', key: 'upscaler', label: 'Upscaling', unknown: 'default', options: (s) => [['default', 'Standard (Catmull-Rom)'], ['fsr1', 'AMD FSR 1'], ...(s.temporal_upscalers || []).map((u) => (u === 'dlss' ? ['dlss', 'NVIDIA DLSS (experimental)'] : ['fsr3', 'AMD FSR 3 (experimental)']))], help: (s) => ((s.temporal_upscalers || []).length ? 'Standard Catmull-Rom or AMD FSR 1 change at once; NVIDIA DLSS or AMD FSR 3 take the place of the anti-aliasing and the render scale, on DirectX 12 or Vulkan, from the next start' : 'Standard Catmull-Rom or AMD FSR 1; changes show at once') },
         { type: 'custom', id: 'nvidia_dlss_install', when: (s, p) => windows(s, p) },
         { type: 'select', key: 'upscale_quality', label: 'Upscaling quality', options: [['native', 'Native'], ['quality', 'Quality'], ['balanced', 'Balanced'], ['performance', 'Performance'], ['ultra_performance', 'Ultra performance']], help: "Native keeps the window's resolution and only smooths the edges; the lower the quality, the smaller the picture is drawn and the higher the frame rate", when: (s, p) => temporalOn(s, p) },
-        { type: 'select', key: 'frame_generation', label: 'Frame generation', options: [['off', 'Off'], ['fsr3', 'AMD FSR 3']], help: "AMD FSR 3 adds a generated frame between every two drawn ones: smoother motion, slightly more input lag; DirectX 12 only, from the next start", when: generationOffered },
+        { type: 'select', key: 'frame_generation', label: 'Frame generation', unknown: 'off', options: generationOptions, help: "AMD FSR 3 (any card) or NVIDIA DLSS (with DLSS upscaling; 3x and 4x on an RTX 50) adds generated frames between the drawn ones: smoother motion, slightly more input lag; DirectX 12 only, from the next start", when: generationOffered },
         { type: 'select', key: 'fsr_quality', label: 'FSR quality', options: [['ultra', 'Ultra Quality (77%)'], ['quality', 'Quality (67%)'], ['balanced', 'Balanced (59%)'], ['performance', 'Performance (50%)'], ['auto', 'Automatic (keeps the frame rate)'], ['custom', 'Use render scale']], when: (s) => s.upscaler === 'fsr1' },
         { type: 'slider', key: 'fsr_sharpness', label: 'FSR sharpness', help: 'RCAS sharpening strength', min: 0, max: 1, step: 0.05, def: 0.8, store: snap(0.05), format: pct, when: (s) => s.upscaler === 'fsr1' },
         { type: 'select', key: 'render_scale', label: 'Render scale', options: [['auto', 'Auto'], ['1', '100%'], ['0.85', '85%'], ['0.75', '75%'], ['0.67', '67%'], ['0.5', '50%']], when: (s, p) => !temporalOn(s, p) },

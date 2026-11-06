@@ -8,14 +8,18 @@ Streamline SDK 2.14.1 for the Windows x64 version of openOMSI:
 - `sl.common.dll`
 - `sl.dlss.dll`
 - `nvngx_dlss.dll`
+- `sl.dlss_g.dll` (DLSS frame generation)
+- `nvngx_dlssg.dll` (DLSS frame generation)
+- `sl.reflex.dll` (NVIDIA Reflex, which DLSS frame generation runs on)
+- `sl.pcl.dll` (NVIDIA Reflex's PC latency markers)
 
 The openOMSI release ZIP contains **no NVIDIA runtime DLLs**. After the
 player acknowledges NVIDIA's terms and requests installation in the launcher,
 these binaries are downloaded directly from NVIDIA's original Streamline
 release and checked by a pinned SDK ZIP SHA-256 and per-DLL Authenticode
 signature validation. The separate user-installed component set includes
-`NVIDIA-Streamline-LICENSE.txt`, `nvngx_dlss.license.txt` and
-`NVIDIA-Streamline-NOTICE.txt`.
+`NVIDIA-Streamline-LICENSE.txt`, `nvngx_dlss.license.txt`,
+`reflex.license.txt` and `NVIDIA-Streamline-NOTICE.txt`.
 
 ## Separate vendor licensing; no relicensing
 
@@ -24,7 +28,7 @@ DLSS/FSR integration, launcher/settings code and packaging scripts, stays
 under the project's GNU AGPLv3 license. No special project-code exception
 or relicensing is created by the presence of separately licensed binaries.
 
-The four listed **NVIDIA vendor binaries** are **not** openOMSI source code
+The eight listed **NVIDIA vendor binaries** are **not** openOMSI source code
 and are **not** licensed under openOMSI's AGPLv3 or its retained historical
 MIT notice. Streamline's MIT-covered portions and
 the separate proprietary NVIDIA DLSS/NGX runtime must retain their original

@@ -9,6 +9,8 @@ const DLSS: [&str; 4] = ["sl.interposer.dll", "sl.common.dll", "sl.dlss.dll", "n
 const FSR3_DX12: [&str; 2] = ["amd_fidelityfx_loader_dx12.dll", "amd_fidelityfx_upscaler_dx12.dll"];
 const FSR3_VULKAN: [&str; 2] = ["amd_fidelityfx_loader_vk.dll", "amd_fidelityfx_upscaler_vk.dll"];
 const FRAME_GENERATION: [&str; 2] = ["amd_fidelityfx_loader_dx12.dll", "amd_fidelityfx_framegeneration_dx12.dll"];
+/// What NVIDIA DLSS frame generation needs beside DLSS's own (from the same Streamline SDK).
+pub const DLSS_FRAME_GENERATION: [&str; 4] = ["sl.dlss_g.dll", "nvngx_dlssg.dll", "sl.reflex.dll", "sl.pcl.dll"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Api {
@@ -82,9 +84,47 @@ pub fn frame_generation_available(dir: &Path) -> bool {
     cfg!(windows) && FRAME_GENERATION.iter().all(|f| dir.join(f).is_file())
 }
 
-/// The `frame_generation` setting's word: `fsr3` (AMD FSR 3 frame generation), anything else `off`.
+/// Whether NVIDIA DLSS frame generation can run from `dir`: DLSS's DLLs, frame generation's,
+/// and an RTX card (Windows, DirectX 12; NVIDIA's runtime still checks for an RTX 40 or 50).
+pub fn dlss_frame_generation_available(dir: &Path) -> bool {
+    dlss_frame_generation_files(dir) && rtx_present()
+}
+
+fn dlss_frame_generation_files(dir: &Path) -> bool {
+    cfg!(windows) && DLSS.iter().chain(&DLSS_FRAME_GENERATION).all(|f| dir.join(f).is_file())
+}
+
+/// The `frame_generation` setting's word: `fsr3` (AMD FSR 3), `dlss2x`, `dlss3x` or `dlss4x`
+/// (NVIDIA DLSS, that many frames on screen per drawn one), anything else `off`.
 pub fn frame_generation_word(s: &str) -> &'static str {
-    if s.trim().eq_ignore_ascii_case("fsr3") { "fsr3" } else { "off" }
+    match s.trim().to_ascii_lowercase().as_str() {
+        "fsr3" => "fsr3",
+        "dlss" | "dlss2x" => "dlss2x",
+        "dlss3x" => "dlss3x",
+        "dlss4x" => "dlss4x",
+        _ => "off",
+    }
+}
+
+/// The frame generation that can run from `dir`, as the menus offer it: `fsr3` and `dlss`.
+pub fn frame_generation_choices(dir: &Path) -> Vec<&'static str> {
+    choices(frame_generation_available(dir), dlss_frame_generation_files(dir) && rtx_present())
+}
+
+fn choices(amd: bool, nvidia: bool) -> Vec<&'static str> {
+    [("fsr3", amd), ("dlss", nvidia)].into_iter().filter(|(_, ok)| *ok).map(|(k, _)| k).collect()
+}
+
+/// The frame generation choices of a menu, from `frame_generation_choices`.
+pub fn frame_generation_menu(choices: &[&str]) -> Vec<(&'static str, &'static str)> {
+    let mut menu = vec![("off", "Off")];
+    if choices.contains(&"fsr3") {
+        menu.push(("fsr3", "AMD FSR 3"));
+    }
+    if choices.contains(&"dlss") {
+        menu.extend([("dlss2x", "NVIDIA DLSS 2x"), ("dlss3x", "NVIDIA DLSS 3x (RTX 50)"), ("dlss4x", "NVIDIA DLSS 4x (RTX 50)")]);
+    }
+    menu
 }
 
 pub fn quality_word(s: &str) -> &'static str {
@@ -179,6 +219,29 @@ mod tests {
         }
         assert_eq!(offered(&dir, true, true), ["dlss", "fsr3"]);
         assert_eq!(offered(&dir, true, false), ["fsr3"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn frame_generation_words_and_choices() {
+        assert_eq!(frame_generation_word(" FSR3 "), "fsr3");
+        assert_eq!(frame_generation_word("dlss"), "dlss2x");
+        assert_eq!(frame_generation_word("DLSS4X"), "dlss4x");
+        assert_eq!(frame_generation_word("dlss5x"), "off");
+        assert_eq!(choices(true, true), ["fsr3", "dlss"]);
+        assert!(choices(false, false).is_empty());
+        assert_eq!(frame_generation_menu(&["fsr3"]).len(), 2);
+        assert_eq!(frame_generation_menu(&["dlss"]).iter().map(|c| c.0).collect::<Vec<_>>(), ["off", "dlss2x", "dlss3x", "dlss4x"]);
+        let dir = scratch("dlssg");
+        for f in DLSS {
+            std::fs::write(dir.join(f), b"").unwrap();
+        }
+        assert!(!dlss_frame_generation_files(&dir), "DLSS alone");
+        for f in DLSS_FRAME_GENERATION {
+            std::fs::write(dir.join(f), b"").unwrap();
+        }
+        assert_eq!(dlss_frame_generation_files(&dir), cfg!(windows));
+        assert!(!frame_generation_available(&dir), "no AMD DLL");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

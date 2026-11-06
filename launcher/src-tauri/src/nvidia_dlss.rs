@@ -6,12 +6,21 @@ use serde_json::{json, Value};
 #[cfg(windows)]
 use std::path::PathBuf;
 
-const NVIDIA_FILES: [&str; 4] = [
+/// DLSS (Super Resolution and DLAA) first, then DLSS frame generation's (with Reflex and PCL,
+/// which it runs on): all from the same official Streamline SDK.
+const NVIDIA_FILES: [&str; 8] = [
     "sl.interposer.dll",
     "sl.common.dll",
     "sl.dlss.dll",
     "nvngx_dlss.dll",
+    "sl.dlss_g.dll",
+    "nvngx_dlssg.dll",
+    "sl.reflex.dll",
+    "sl.pcl.dll",
 ];
+
+/// How many of `NVIDIA_FILES` DLSS upscaling alone needs.
+const UPSCALING_FILES: usize = 4;
 
 #[cfg(windows)]
 fn game_dir() -> Result<PathBuf, String> {
@@ -38,16 +47,22 @@ pub fn status() -> Value {
                 .collect(),
             Err(_) => NVIDIA_FILES.to_vec(),
         };
+        // (an install from before frame generation: DLSS runs, frame generation needs a new one)
+        let upscaling = game.is_ok()
+            && NVIDIA_FILES[..UPSCALING_FILES]
+                .iter()
+                .all(|name| !missing.contains(name));
         return json!({
             "supported": game.is_ok(),
             "installed": game.is_ok() && missing.is_empty(),
+            "upscaling": upscaling,
             "rtx": omsi_cfg::upscaler_files::rtx_present(),
             "missing": missing,
         });
     }
     #[cfg(not(windows))]
     {
-        json!({ "supported": false, "installed": false, "rtx": false, "missing": NVIDIA_FILES })
+        json!({ "supported": false, "installed": false, "upscaling": false, "rtx": false, "missing": NVIDIA_FILES })
     }
 }
 
@@ -159,7 +174,7 @@ pub fn install(accepted_terms: bool) -> Result<Value, String> {
             ));
         }
         if NVIDIA_FILES.iter().any(|name| !dir.join(name).is_file()) {
-            return Err("NVIDIA installer completed without all four required files".into());
+            return Err("NVIDIA installer completed without all eight required files".into());
         }
         Ok(status())
     }
@@ -170,15 +185,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn vendor_allowlist_is_exactly_dlss_super_resolution() {
+    fn vendor_allowlist_is_exactly_dlss_and_its_frame_generation() {
         assert_eq!(
             NVIDIA_FILES,
             [
                 "sl.interposer.dll",
                 "sl.common.dll",
                 "sl.dlss.dll",
-                "nvngx_dlss.dll"
+                "nvngx_dlss.dll",
+                "sl.dlss_g.dll",
+                "nvngx_dlssg.dll",
+                "sl.reflex.dll",
+                "sl.pcl.dll"
             ]
+        );
+        assert_eq!(
+            NVIDIA_FILES[UPSCALING_FILES..],
+            omsi_cfg::upscaler_files::DLSS_FRAME_GENERATION
         );
     }
 }

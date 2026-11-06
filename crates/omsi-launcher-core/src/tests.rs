@@ -596,4 +596,13 @@ upscale_quality=native
     assert!(saved.contains("upscaler=dlss
 ") && saved.contains("upscale_quality=native
 "), "{saved}");
+    assert_eq!(page["frame_generation"], "off");
+    let page = super::settings_from_text(Some("frame_generation=dlss4x
+"));
+    assert!(super::settings_to_text(&page, None).contains("frame_generation=dlss4x
+"));
+    let page = super::settings_from_text(Some("frame_generation=nonsense
+"));
+    assert!(super::settings_to_text(&page, None).contains("frame_generation=off
+"));
 }

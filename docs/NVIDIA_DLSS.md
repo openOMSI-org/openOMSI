@@ -10,23 +10,46 @@ Temporal upscaling (`crates/omsi-render/src/temporal`) is opt-in: Settings → G
   the relevant DLLs; failure disables the upscaler and is logged in `game.log`.
 - The source integration does not contain the vendor's production DLLs.
 
+## Frame generation
+
+`frame_generation=fsr3`, `dlss2x`, `dlss3x` or `dlss4x` (Settings → Graphics → Frame generation,
+from the next start; DirectX 12 only, with DLSS or FSR 3 upscaling on) makes the window's swap
+chain the vendor's own, which shows generated frames between the drawn ones:
+
+- **AMD FSR 3** (`temporal/framegen.rs`): AMD's frame-interpolation swap chain, with any card. It
+  takes the depth, the motion and the camera of the upscaler's frame, and the picture before
+  the HUD, drawn for it beside the window's.
+- **NVIDIA DLSS** (`temporal/dlssg.rs`): Streamline's swap chain with DLSS-G, Reflex and PCL,
+  with DLSS upscaling on a GeForce RTX 40 or 50 (3x and 4x on an RTX 50; asked for more than
+  the card makes, it makes what it can). DLSS tags the same inputs, valid until the present.
+
+Without frame generation the window keeps wgpu's surface, as before. A frame drawn without the
+upscaler (a menu over no scene, the loading screen) goes out without generated frames. Where
+frame generation cannot start, `game.log` says why and the window gets wgpu's surface. The
+frame rate's corner shows the frames on screen, the drawn ones and the upscaler, e.g.
+`240 fps (120 + FG) · DLSS`.
+
 ## Windows x64 packaging: AMD bundled, NVIDIA user-installed
 
-`.github/workflows/release.yml` packages the **four specific FidelityFX
-SDK 2.4.0 signed DLLs** on every Windows x64 release. The SDK's pinned
-`Kits/FidelityFX/docs/license.md` explicitly lists those four filenames
+`.github/workflows/release.yml` packages the **five specific FidelityFX
+SDK 2.4.0 signed DLLs** on every Windows x64 release (FSR 3 upscaling on
+DirectX 12 and Vulkan, and FSR 3 frame generation). The SDK's pinned
+`Kits/FidelityFX/docs/license.md` explicitly lists those five filenames
 as **MIT-licensed exceptions** (see its `These source files ... are subject
-to the following license` section). The workflow checks that the four are
+to the following license` section). The workflow checks that the five are
 listed and includes the full license and third-party notices.
 
 **NVIDIA DLSS DLLs are NOT part of the openOMSI release archive.** On
 Windows with an RTX GPU, the launcher offers an **Install NVIDIA DLSS** button.
 It remains disabled until the player explicitly acknowledges the linked
-NVIDIA Streamline/RTX/NGX terms. After the player's click, the launcher
+NVIDIA Streamline/RTX/NGX/Reflex terms. After the player's click, the launcher
 downloads the official Streamline SDK 2.14.1 archive directly from NVIDIA's
 GitHub release, checks the pinned SHA-256 and each DLL's NVIDIA digital
 signature, and installs only `sl.interposer.dll`, `sl.common.dll`,
-`sl.dlss.dll`, `nvngx_dlss.dll` and the accompanying vendor licenses/notices.
+`sl.dlss.dll`, `nvngx_dlss.dll` (DLSS), `sl.dlss_g.dll`, `nvngx_dlssg.dll`,
+`sl.reflex.dll`, `sl.pcl.dll` (DLSS frame generation) and the accompanying
+vendor licenses/notices (`reflex.license.txt` among them). An install from
+before frame generation shows as DLSS without it, and installing again adds it.
 It does not redistribute the full SDK, and it does not run unattended.
 The NVIDIA runtime has **separate terms**: the MIT license for the open
 Streamline components must not be assumed to cover the proprietary NGX DLL.
@@ -45,7 +68,7 @@ compatible with AGPLv3. The user receives only rights granted by NVIDIA. See
 [`NVIDIA_DLL_LICENSE_SCOPE.md`](NVIDIA_DLL_LICENSE_SCOPE.md) and
 [`UPSCALER_THIRD_PARTY_LICENSING.md`](UPSCALER_THIRD_PARTY_LICENSING.md).
 
-Shipping the four AMD MIT-listed binaries does not mean every SDK file is
+Shipping the five AMD MIT-listed binaries does not mean every SDK file is
 MIT-licensed. None of the production DLLs is committed to the source tree.
 
 ## Not verified yet

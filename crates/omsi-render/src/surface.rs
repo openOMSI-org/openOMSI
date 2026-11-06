@@ -51,12 +51,12 @@ impl From<wgpu::CurrentSurfaceTexture> for Acquired {
 }
 
 /// Frame generation's swap chain for `window`, or None (logged) where it cannot be made.
-fn own_swap_chain(window: &winit_window::Window, device: &wgpu::Device, format: wgpu::TextureFormat, size: (u32, u32), vsync: bool) -> Option<temporal::OwnSwapChain> {
+fn own_swap_chain(window: &winit_window::Window, device: &wgpu::Device, format: wgpu::TextureFormat, size: (u32, u32), vsync: bool, kind: temporal::FrameGenerationKind) -> Option<temporal::OwnSwapChain> {
     #[cfg(windows)]
     {
         use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
         let made = match window.window_handle().map(|h| h.as_raw()) {
-            Ok(RawWindowHandle::Win32(h)) => temporal::OwnSwapChain::new(device, windows::Win32::Foundation::HWND(h.hwnd.get() as *mut std::ffi::c_void), format, size, vsync),
+            Ok(RawWindowHandle::Win32(h)) => temporal::OwnSwapChain::new(device, windows::Win32::Foundation::HWND(h.hwnd.get() as *mut std::ffi::c_void), format, size, vsync, kind),
             _ => Err(anyhow!("no Win32 window")),
         };
         match made {
@@ -69,7 +69,7 @@ fn own_swap_chain(window: &winit_window::Window, device: &wgpu::Device, format: 
     }
     #[cfg(not(windows))]
     {
-        let _ = (window, device, format, size, vsync);
+        let _ = (window, device, format, size, vsync, kind);
         None
     }
 }
@@ -137,7 +137,7 @@ impl<'w> SurfaceState<'w> {
         width: u32,
         height: u32,
     ) -> Result<Self> {
-        Self::new_with(instance, window, renderer, width, height, true, false)
+        Self::new_with(instance, window, renderer, width, height, true, None)
     }
 
     /// `vsync` false lets the frames go out as fast as they are drawn. `frame_generation`: the
@@ -149,10 +149,10 @@ impl<'w> SurfaceState<'w> {
         width: u32,
         height: u32,
         vsync: bool,
-        frame_generation: bool,
+        frame_generation: Option<temporal::FrameGenerationKind>,
     ) -> Result<Self> {
         let surface = create_surface(instance, &window)?;
-        let own = frame_generation.then(|| own_swap_chain(&window, &renderer.device, renderer.format(), (width, height), vsync)).flatten();
+        let own = frame_generation.and_then(|kind| own_swap_chain(&window, &renderer.device, renderer.format(), (width, height), vsync, kind));
         let encode = srgb_encode::SrgbEncode::wanted(renderer, renderer.format());
         let modes = listed_modes(&surface, renderer);
         // (copied from only for a glass theme: `set_glass`)
@@ -182,9 +182,9 @@ impl<'w> SurfaceState<'w> {
     /// The window's surface on a device whose renderer is still being built ([`Opened`]'s
     /// device and format): pictures without the renderer (a clear, an interface) can be
     /// shown until [`Self::adopt`] hands it over.
-    pub fn early(instance: &wgpu::Instance, window: Arc<winit_window::Window>, device: &wgpu::Device, format: wgpu::TextureFormat, width: u32, height: u32, vsync: bool, frame_generation: bool) -> Result<Self> {
+    pub fn early(instance: &wgpu::Instance, window: Arc<winit_window::Window>, device: &wgpu::Device, format: wgpu::TextureFormat, width: u32, height: u32, vsync: bool, frame_generation: Option<temporal::FrameGenerationKind>) -> Result<Self> {
         let surface = create_surface(instance, &window)?;
-        let own = frame_generation.then(|| own_swap_chain(&window, device, format, (width, height), vsync)).flatten();
+        let own = frame_generation.and_then(|kind| own_swap_chain(&window, device, format, (width, height), vsync, kind));
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,

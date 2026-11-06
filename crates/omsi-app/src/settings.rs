@@ -158,7 +158,8 @@ pub struct Settings {
     pub upscaler: String,
     /// How much DLSS or AMD FSR 3 scale up (`temporal::TemporalQuality`).
     pub upscale_quality: String,
-    /// `fsr3`: AMD FSR 3 frame generation with DLSS or FSR 3 on, DirectX 12; else `off`.
+    /// Frame generation on DirectX 12 (`omsi_cfg::upscaler_files::frame_generation_word`):
+    /// `fsr3` with DLSS or FSR 3 on, `dlss2x` to `dlss4x` with DLSS on; else `off`.
     pub frame_generation: String,
     /// FSR1 internal resolution preset, or custom to use render_scale.
     pub fsr_quality: String,
@@ -1211,11 +1212,21 @@ impl Settings {
         files.contains(&upscaler.as_str()).then(|| omsi_render::Temporal { upscaler, quality: omsi_render::TemporalQuality::parse(&self.upscale_quality) })
     }
 
-    /// AMD FSR 3 frame generation, where it can run: DLSS or FSR 3 on (it takes their motion),
-    /// DirectX 12 and AMD's DLLs. Read when the window is made.
-    pub fn frame_generation_on(&self) -> bool {
+    /// Frame generation, where it can run: AMD FSR 3 with DLSS or FSR 3 on (it takes their
+    /// motion), NVIDIA DLSS with DLSS on (DLSS hands it its inputs); DirectX 12 and the vendor's
+    /// DLLs either way. Read when the window is made.
+    pub fn frame_generation_kind(&self) -> Option<omsi_render::FrameGenerationKind> {
+        let kind = omsi_render::FrameGenerationKind::parse(&self.frame_generation)?;
+        let temporal = self.temporal_upscaling()?;
         let dir = omsi_cfg::upscaler_files::program_dir();
-        self.frame_generation == "fsr3" && self.temporal_upscaling().is_some_and(|t| omsi_cfg::upscaler_files::first_api(&self.graphics_api, t.upscaler.as_str(), &dir) == "dx12") && omsi_cfg::upscaler_files::frame_generation_available(&dir)
+        if omsi_cfg::upscaler_files::first_api(&self.graphics_api, temporal.upscaler.as_str(), &dir) != "dx12" {
+            return None;
+        }
+        let runs = match kind {
+            omsi_render::FrameGenerationKind::Fsr3 => omsi_cfg::upscaler_files::frame_generation_available(&dir),
+            omsi_render::FrameGenerationKind::Dlss(_) => temporal.upscaler == omsi_render::TemporalUpscaler::Dlss && omsi_cfg::upscaler_files::dlss_frame_generation_available(&dir),
+        };
+        runs.then_some(kind)
     }
 
     pub fn render_options(&self) -> omsi_render::RenderOptions {

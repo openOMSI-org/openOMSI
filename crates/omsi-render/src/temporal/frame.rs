@@ -423,7 +423,7 @@ impl Renderer {
             }
             d.hudless[(d.frame % 2) as usize].clone()
         });
-        let inputs = Inputs { color: &t.color, depth: &ao.depth_tex, motion: &t.motion, mask: &t.mask, output: &t.output_tex, render_size: render, output_size: full, views: [&t.color_raw_view, &ao.depth_view, &t.motion_view, &t.mask_view, &t.output_view] };
+        let inputs = Inputs { color: &t.color, depth: &ao.depth_tex, motion: &t.motion, mask: &t.mask, output: &t.output_tex, hudless: hudless.as_ref().map(|(h, _)| h), render_size: render, output_size: full, views: [&t.color_raw_view, &ao.depth_view, &t.motion_view, &t.mask_view, &t.output_view] };
         let clock = std::time::Instant::now();
         let result = match &mut d.runtime {
             Runtime::Dlss(r) => r.evaluate(&self.queue, quality, &inputs, &constants),

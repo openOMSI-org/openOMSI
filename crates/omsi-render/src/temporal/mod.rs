@@ -10,6 +10,8 @@
 #[cfg(windows)]
 mod d3d12;
 #[cfg(windows)]
+mod dlssg;
+#[cfg(windows)]
 mod fidelityfx;
 #[cfg(windows)]
 mod framegen;
@@ -39,6 +41,9 @@ impl FrameGeneration {
     pub(crate) fn generated(&self) -> u64 {
         match *self {}
     }
+    pub(crate) fn pause(&self) {
+        match *self {}
+    }
     pub(crate) fn working(&self) -> bool {
         match *self {}
     }
@@ -66,6 +71,26 @@ impl OwnSwapChain {
     }
     pub fn set_vsync(&mut self, _: bool) {
         match *self {}
+    }
+}
+
+/// What makes the in-between frames (the `frame_generation` setting): AMD FSR 3, or NVIDIA DLSS
+/// with this many frames on screen per drawn one (2 to 4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FrameGenerationKind {
+    Fsr3,
+    Dlss(u32),
+}
+
+impl FrameGenerationKind {
+    pub fn parse(s: &str) -> Option<FrameGenerationKind> {
+        match omsi_cfg::upscaler_files::frame_generation_word(s) {
+            "fsr3" => Some(FrameGenerationKind::Fsr3),
+            "dlss2x" => Some(FrameGenerationKind::Dlss(2)),
+            "dlss3x" => Some(FrameGenerationKind::Dlss(3)),
+            "dlss4x" => Some(FrameGenerationKind::Dlss(4)),
+            _ => None,
+        }
     }
 }
 
@@ -173,6 +198,9 @@ pub struct Inputs<'a> {
     pub motion: &'a wgpu::Texture,
     pub mask: &'a wgpu::Texture,
     pub output: &'a wgpu::Texture,
+    /// With frame generation: the window's picture before the HUD (window-sized, the swap
+    /// chain's format), drawn after the upscaler and read at the window's present.
+    pub hudless: Option<&'a wgpu::Texture>,
     pub render_size: (u32, u32),
     pub output_size: (u32, u32),
     /// Views of `color` (its plain UNORM one: the sRGB-encoded numbers), `depth`, `motion`, `mask` and

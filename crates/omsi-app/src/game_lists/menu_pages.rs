@@ -564,12 +564,12 @@ fn upscaler_rows(app: &App, file: &serde_json::Value) -> Vec<(String, String)> {
     let dir = omsi_cfg::upscaler_files::program_dir();
     let offered = !omsi_cfg::upscaler_files::available(&dir).is_empty();
     // (frame generation runs on DirectX 12, which DLSS and FSR 3 take unless Vulkan is chosen)
-    let generation = temporal && omsi_cfg::upscaler_files::frame_generation_available(&dir) && !app.settings.graphics_api.eq_ignore_ascii_case("vulkan");
+    let generation = temporal && !omsi_cfg::upscaler_files::frame_generation_choices(&dir).is_empty() && !app.settings.graphics_api.eq_ignore_ascii_case("vulkan");
     let pct = |v: f32| format!("{:.0} %", v * 100.0);
     [
         select_row(file, "upscaler", "Upscaling", if offered { "Standard Catmull-Rom or AMD FSR 1 change at once; NVIDIA DLSS or AMD FSR 3 take the place of the anti-aliasing and the render scale, on DirectX 12 or Vulkan, from the next start" } else { "Standard Catmull-Rom or AMD FSR 1; changes show at once" }),
         select_row(file, "upscale_quality", "Upscaling quality", "Native keeps the window's resolution and only smooths the edges; the lower the quality, the smaller the picture is drawn and the higher the frame rate").filter(|_| temporal),
-        select_row(file, "frame_generation", "Frame generation", "AMD FSR 3 adds a generated frame between every two drawn ones: smoother motion, slightly more input lag; DirectX 12 only, from the next start").filter(|_| generation),
+        select_row(file, "frame_generation", "Frame generation", "AMD FSR 3 (any card) or NVIDIA DLSS (with DLSS upscaling; 3x and 4x on an RTX 50) adds generated frames between the drawn ones: smoother motion, slightly more input lag; DirectX 12 only, from the next start").filter(|_| generation),
         select_row(file, "fsr_quality", "FSR quality", &fsr_size(app)).filter(|_| fsr),
         slider_row(app, "fsr_sharpness", "FSR sharpness", "RCAS sharpening strength", &pct).filter(|_| fsr),
     ]

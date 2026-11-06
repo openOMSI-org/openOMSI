@@ -109,10 +109,10 @@ impl App {
                 let size = crate::platform::surface_size(&window);
                 if let Some(r) = self.renderer.as_ref() {
                     let vsync = self.settings.vsync && !self.vr_active();
-                    self.gfx.surface = SurfaceState::new_with(&self.gfx.instance, window.clone(), r, size.width.max(1), size.height.max(1), vsync, self.settings.frame_generation_on()).ok();
+                    self.gfx.surface = SurfaceState::new_with(&self.gfx.instance, window.clone(), r, size.width.max(1), size.height.max(1), vsync, self.settings.frame_generation_kind()).ok();
                     self.last = Instant::now();
                 } else if let Some(ws) = self.gfx.starting.as_ref().filter(|ws| ws.start.early()) {
-                    self.gfx.surface = SurfaceState::early(&self.gfx.instance, window.clone(), &ws.start.device, ws.start.format, size.width.max(1), size.height.max(1), self.settings.vsync, self.settings.frame_generation_on()).ok();
+                    self.gfx.surface = SurfaceState::early(&self.gfx.instance, window.clone(), &ws.start.device, ws.start.format, size.width.max(1), size.height.max(1), self.settings.vsync, self.settings.frame_generation_kind()).ok();
                 }
             }
             return;
@@ -245,7 +245,7 @@ impl App {
         // is there
         let early = start.early().then(|| {
             let size = crate::platform::surface_size(&window);
-            SurfaceState::early(&self.gfx.instance, window.clone(), &start.device, start.format, size.width, size.height, self.settings.vsync, self.settings.frame_generation_on()).ok()
+            SurfaceState::early(&self.gfx.instance, window.clone(), &start.device, start.format, size.width, size.height, self.settings.vsync, self.settings.frame_generation_kind()).ok()
         }).flatten();
         let had_surface = early.is_some();
         self.gfx.surface = early;
@@ -345,7 +345,7 @@ impl App {
         let adopted = self.gfx.surface.as_mut().is_some_and(|s| s.adopt(&renderer, device));
         if !adopted && (self.gfx.surface.is_some() || !had_surface) {
             self.gfx.surface = None;
-            match SurfaceState::new_with(&self.gfx.instance, window.clone(), &renderer, size.width, size.height, vsync, self.settings.frame_generation_on()) {
+            match SurfaceState::new_with(&self.gfx.instance, window.clone(), &renderer, size.width, size.height, vsync, self.settings.frame_generation_kind()) {
                 Ok(s) => self.gfx.surface = Some(s),
                 Err(e) => {
                     fatal_message(&omsi_ui::tr("The game's window cannot be drawn into: {e:#}").replace("{e:#}", &format!("{e:#}")));

@@ -1999,7 +1999,7 @@ pub fn get_settings() -> Result<Value> {
     let mut v = settings_from_text(text.as_deref());
     // (what the page may offer beside the upscalers that are always there; not a setting)
     let game_dir = find_game(&load_config_raw().game).and_then(|g| g.parent().map(Path::to_path_buf));
-    v["frame_generation_available"] = json!(game_dir.as_deref().is_some_and(omsi_cfg::upscaler_files::frame_generation_available));
+    v["frame_generation_choices"] = json!(game_dir.as_deref().map_or(Vec::new(), omsi_cfg::upscaler_files::frame_generation_choices));
     v["temporal_upscalers"] = json!(game_dir.map_or(Vec::new(), |d| omsi_cfg::upscaler_files::available(&d)));
     // no settings of our own yet: start from what the player set in OMSI 2
     if text.is_none() {

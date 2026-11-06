@@ -278,6 +278,12 @@ impl Renderer {
         // (the same device: the upscaler goes on, and Streamline on Vulkan could not start again;
         // without one in the new options it is dropped here, with its context and textures)
         let upscaler = self.temporal_runtime().or_else(|| self.temporal_kept.take()).filter(|_| options.temporal.is_some());
+        // (frame generation reads the depth, the motion and the picture before the HUD when the
+        // window presents, after wgpu is done with them)
+        if let Some(g) = &self.frame_generation {
+            g.pause();
+            let _ = crate::wait_gpu(&self.device, None);
+        }
         // Release render targets before building their replacements. Keeping the old
         // targets alive while the new renderer is built can turn a recoverable OOM into
         // another allocation failure.
