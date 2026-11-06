@@ -103,6 +103,7 @@ ab_glyph = "0.2"
 rfd = "0.15"
 libc = "0.2"
 windows = "0.62"
+windows-core = "0.62"
 winresource = "0.1"
 
 [profile.release]

@@ -494,6 +494,8 @@ With `collision_vehicles` enabled, impacts against AI traffic are delivered to t
 vehicle's collision scripts and deform a localized part of its body mesh where the model
 has editable body geometry.
 
+**NVIDIA DLSS and AMD FSR 3** (Settings → Graphics → Upscaling, `upscaler=dlss` or `fsr3`, with `upscale_quality=native`, `quality`, `balanced`, `performance` or `ultra_performance`; Windows, DirectX 12 or Vulkan; DLSS only with an NVIDIA RTX card, FSR 3 with any): the picture is drawn smaller and brought up to the window with the help of the last frames, in place of the anti-aliasing and the render scale, from the next start (not with a headset or a triple screen). They are offered only when the vendor's DLLs are beside `openomsi.exe`. The Windows x64 package includes AMD's FidelityFX DLLs. NVIDIA's are not included: on an RTX card the launcher offers to download them from NVIDIA once you accept NVIDIA's licences. See [the licensing review](UPSCALER_THIRD_PARTY_LICENSING.md) and [NVIDIA DLL license scope](NVIDIA_DLL_LICENSE_SCOPE.md). Where an upscaler cannot start, `game.log` says why and the picture is drawn as without it.
+
 **Graphics API** (Settings → Graphics → Display, `graphics_api`; not on a Mac): the interface named is asked first and
 the others follow, so a machine without it still starts. *ANGLE (DirectX 11)* (Windows) runs
 OpenGL ES through Google's ANGLE on the card's DirectX 11 driver: for graphics chips whose
