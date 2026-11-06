@@ -3,7 +3,7 @@
 //! shoe on the wire and of a pole on its hook, the contactors, a frog's clatter. They are made
 //! from noise and decaying tones when first wanted, not read from files, and played where they
 //! happen. A vehicle plays its own instead where its `sound.cfg` has an entry on the sound's
-//! trigger (`trolley_thud`...) or reads `Trolley_Hiss`; the map's `trolley.txt` can switch the
+//! trigger (`ev_trolleyhitup_1`...) or reads `Trolley_Hiss`; the map's `trolley.txt` can switch the
 //! overhead line's own (frog, switch) off or give a file for them (see `docs/TROLLEYBUS.md`, Sounds).
 
 use glam::Vec3;
@@ -206,14 +206,23 @@ struct Clips {
     clack: Option<Arc<Clip>>,
 }
 
-/// The sound trigger a vehicle's `sound.cfg` plays a sound of the gear on.
-pub fn trigger_of(s: RigSound) -> &'static str {
+/// The sound triggers a vehicle's `sound.cfg` can play a sound of the gear on, the first one it
+/// has. Named as OMSI 2's doors' (`ev_doortriggeropen_0`, `ev_doorhitclose_0`): pole k's own
+/// (`_<k>`, from 1 as `Trolley_Pole<k>`), else any pole's.
+pub fn triggers_of(s: RigSound) -> Vec<String> {
+    let pole = |name: &str, pole: usize| vec![format!("ev_trolley{name}_{}", pole + 1), format!("ev_trolley{name}")];
     match s {
-        RigSound::Click => "trolley_click",
-        RigSound::Thud(_) => "trolley_thud",
-        RigSound::Snap(_) => "trolley_snap",
-        RigSound::Frog => "trolley_frog",
-        RigSound::Release | RigSound::Latch => "trolley_clack",
+        RigSound::Click => vec!["ev_trolleycontactor".into()],
+        RigSound::Snap(_) => vec!["ev_trolleyarc".into()],
+        RigSound::Frog { pole: k } => pole("frog", k),
+        RigSound::Insulator { pole: k } => pole("insulator", k),
+        RigSound::Dewire { pole: k } => pole("dewire", k),
+        RigSound::RopeStop { pole: k, .. } => pole("hitmax", k),
+        RigSound::Release { pole: k, .. } => pole("hookopen", k),
+        RigSound::OnWire { pole: k, .. } => pole("hitup", k),
+        RigSound::ShoeHit { pole: k, .. } => pole("wirehit", k),
+        RigSound::OffWire { pole: k, .. } => pole("wireoff", k),
+        RigSound::Latch { pole: k, .. } => pole("hitdown", k),
     }
 }
 
@@ -251,7 +260,10 @@ impl TrolleySound {
         });
         let sounds = rig.take_sounds();
         let tip = rig.hiss_pos.as_vec3();
-        let roof = bus + Vec3::new(0.0, 0.0, 3.0);
+        let hinge = |k: usize| rig.hinge_at(k).map(|h| h.as_vec3());
+        let (sum, n) = (0..rig.poles.len()).filter_map(hinge).fold((Vec3::ZERO, 0), |(s, n), h| (s + h, n + 1));
+        let roof = if n == 0 { bus + Vec3::new(0.0, 0.0, 3.0) } else { sum / n as f32 };
+        let shoe = |k: usize| rig.poles.get(k).map_or(tip, |p| p.tip.as_vec3());
         if paused {
             return;
         }
@@ -285,17 +297,28 @@ impl TrolleySound {
         };
         let mut sp = sparks_at.iter().copied();
         for s in sounds {
-            let trigger = trigger_of(s);
-            if sound_set.is_some_and(|set| set.has_trigger(trigger)) {
-                fired.push(trigger.to_string());
+            // (an articulated bus's poles are on its rear section, whose own sound config plays them)
+            let has = |set: &SoundSet, t: &str| set.has_trigger(t) || set.parts.iter().any(|(_, p)| p.has_trigger(t));
+            if let Some(trigger) = triggers_of(s).into_iter().find(|t| sound_set.is_some_and(|set| has(set, t))) {
+                // (an un-numbered hit of both poles in the same frame: one sound)
+                if !fired.contains(&trigger) {
+                    fired.push(trigger);
+                }
                 continue;
             }
             match s {
-                RigSound::Click => one(&c.click, 0.5, roof - Vec3::Y * 2.0, 4.0, (1.0, 0.0)),
-                RigSound::Thud(l) => one(&c.thud, 0.3 + 0.5 * l, tip, 6.0, cab(inside, open, ROOF_SHUT)),
+                RigSound::Click => one(&c.click, 0.5, roof - Vec3::Z * 1.5, 4.0, (1.0, 0.0)),
+                RigSound::ShoeHit { pole, loud } => one(&c.thud, 0.3 + 0.5 * loud, shoe(pole), 6.0, cab(inside, open, ROOF_SHUT)),
+                RigSound::OffWire { pole, .. } => one(&c.thud, 0.55, shoe(pole), 6.0, cab(inside, open, ROOF_SHUT)),
                 RigSound::Snap(l) => one(&c.snap, 0.3 + 0.7 * l, sp.next().unwrap_or(tip), 10.0, cab(inside, open, ROOF_SHUT)),
-                RigSound::Frog => one(&c.frog, 0.7, tip, 8.0, cab(inside, open, ROOF_SHUT)),
-                RigSound::Release | RigSound::Latch => one(&c.clack, 0.5, roof - Vec3::Y * 4.0, 6.0, cab(inside, open, ROOF_SHUT)),
+                RigSound::Frog { pole } => one(&c.frog, 0.7, shoe(pole), 8.0, cab(inside, open, ROOF_SHUT)),
+                // (a shoe over an insulator: only the vehicle's own sound, the arc has its own)
+                RigSound::Insulator { .. } => {}
+                RigSound::Dewire { pole } => one(&c.thud, 0.6, shoe(pole), 6.0, cab(inside, open, ROOF_SHUT)),
+                RigSound::RopeStop { pole, loud } => one(&c.thud, 0.2 + 0.4 * loud, shoe(pole), 6.0, cab(inside, open, ROOF_SHUT)),
+                RigSound::Release { pole, .. } => one(&c.clack, 0.5, hinge(pole).unwrap_or(roof), 6.0, cab(inside, open, ROOF_SHUT)),
+                RigSound::Latch { pole, .. } => one(&c.clack, 0.5, hinge(pole).unwrap_or(roof), 6.0, cab(inside, open, ROOF_SHUT)),
+                RigSound::OnWire { pole, .. } => one(&c.thud, 0.65, shoe(pole), 6.0, cab(inside, open, ROOF_SHUT)),
             }
         }
     }
@@ -304,6 +327,15 @@ impl TrolleySound {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_pole_has_its_own_triggers_numbered_as_its_variables() {
+        assert_eq!(triggers_of(RigSound::Latch { pole: 1 }), ["ev_trolleyhitdown_2", "ev_trolleyhitdown"]);
+        assert_eq!(triggers_of(RigSound::OnWire { pole: 0 }), ["ev_trolleyhitup_1", "ev_trolleyhitup"]);
+        assert_eq!(triggers_of(RigSound::Release { pole: 0 }), ["ev_trolleyhookopen_1", "ev_trolleyhookopen"]);
+        assert_eq!(triggers_of(RigSound::Snap(1.0)), ["ev_trolleyarc"]);
+        assert_eq!(triggers_of(RigSound::Click), ["ev_trolleycontactor"]);
+    }
 
     #[test]
     fn hiss_is_local_to_contact_and_silent_in_the_cab() {

@@ -26,7 +26,14 @@ anyhow.workspace = true
 winit.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-windows = { workspace = true, features = ["Win32_Graphics_Dxgi", "Win32_Foundation"] }
+# (DLSS and FSR 3 run on wgpu's own D3D12 device and queue, see `temporal`)
+windows = { workspace = true, features = ["Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_Graphics_Direct3D12", "Win32_Foundation", "Win32_System_LibraryLoader"] }
+# (the `windows::core::implement` macro in `temporal::streamline` expands to code naming this
+# crate, so it has to be a dependency here even though nothing imports it by that name)
+windows-core = { workspace = true }
+wgpu-hal = { workspace = true, features = ["dx12", "vulkan"] }
+# (the same ash as wgpu-hal's: DLSS and FSR 3 on wgpu's Vulkan device, see `temporal::vulkan`)
+ash = "0.38"
 # (the same glow as wgpu's GL backend, to turn ANGLE's parallel shader compiles off)
 glow = "0.17"
 

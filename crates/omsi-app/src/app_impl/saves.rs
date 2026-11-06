@@ -182,6 +182,9 @@ impl App {
     /// other graphics interface when the lost one was Vulkan. Twice at most in a row. False
     /// when it cannot (a LAN session, the tutorial, nothing to save): the session ends.
     pub(crate) fn restart_after_device_loss(&mut self) -> bool {
+        if cfg!(windows) && self.renderer.as_ref().is_some_and(|r| r.adapter_name.contains("(Vulkan)")) {
+            crate::startup::mark_vulkan_lost();
+        }
         let n = omsi_cfg::flags::OMSI_SAFE_GPU.parse::<u32>().unwrap_or(0);
         if n >= 2 {
             return false;

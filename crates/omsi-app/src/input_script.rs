@@ -466,6 +466,12 @@ impl App {
                     self.skip_next_stop();
                     return true;
                 }
+                // (Ctrl+T, not Ctrl+R's pair, is OMSI's change_give)
+                KeyCode::KeyR if ctrl && !alt && !shift_now && self.player.as_ref().is_some_and(|p| p.vehicle.trolley.is_some()) && !self.chord_bound(code, shift_now, ctrl, alt) => {
+                    let msg = self.player.as_mut().map_or("", |p| p.vehicle.trolley_toggle());
+                    self.service_msg = Some((msg.into(), 2.5));
+                    return true;
+                }
                 // the object editor (`crate::editor`)
                 KeyCode::KeyE if ctrl && shift_now && !self.chord_bound(code, shift_now, ctrl, alt) => {
                     self.toggle_editor();

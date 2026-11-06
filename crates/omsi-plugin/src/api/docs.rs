@@ -20,6 +20,7 @@ pub const GROUPS: &[(&str, &str)] = &[
     ("input", "Input"),
     ("audio", "Sound"),
     ("ui", "On screen"),
+    ("scene", "Cables in the world"),
     ("events", "Events, timers and watches"),
     ("plugin", "The plugin itself"),
     ("storage", "Storage and files"),

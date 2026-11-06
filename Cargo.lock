@@ -3887,6 +3887,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.21",
  "unicode-normalization",
+ "windows 0.62.2",
 ]
 
 [[package]]
@@ -4307,7 +4308,9 @@ dependencies = [
  "pollster 1.0.1",
  "rayon",
  "wgpu",
+ "wgpu-hal",
  "windows 0.62.2",
+ "windows-core 0.62.2",
  "winit",
 ]
 

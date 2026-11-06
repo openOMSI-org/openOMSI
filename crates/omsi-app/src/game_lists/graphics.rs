@@ -92,6 +92,7 @@ fn restore_runtime_graphics(target: &mut crate::settings::Settings, source: &cra
     target.msaa = source.msaa.clone();
     target.render_scale = source.render_scale.clone();
     target.upscaler = source.upscaler.clone();
+    target.upscale_quality = source.upscale_quality.clone();
     target.fsr_quality = source.fsr_quality.clone();
     target.fsr_sharpness = source.fsr_sharpness.clone();
     target.anisotropy = source.anisotropy.clone();

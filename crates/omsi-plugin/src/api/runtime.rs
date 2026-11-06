@@ -79,6 +79,8 @@ pub struct Hub {
     pub ui: SharedUi,
     pub process_grants: std::sync::Arc<super::process::ProcessGrants>,
     pub process_permissions: Option<std::sync::Arc<super::process::ProcessPermissions>>,
+    /// The cables the plugins lay in the world (`omsi.cable`), for the game to draw.
+    pub cables: RefCell<super::cables::Cables>,
     pub mail: RefCell<Vec<Mail>>,
     /// The loaded plugins' names, in load order.
     pub names: RefCell<Vec<String>>,
@@ -310,6 +312,7 @@ impl PluginState {
             // (its buttons would answer nothing any more)
             self.hub.ui.borrow_mut().remove_owner(self.owner);
             self.give_back(io);
+            self.hub.cables.borrow_mut().remove_owner(self.owner);
         }
     }
 }
@@ -664,6 +667,7 @@ pub fn finish(ctx: &mut Ctx<'_>) {
     ctx.state().ui().remove_owner(owner);
     let (io, s) = ctx.both();
     s.give_back(io);
+    ctx.state().hub.cables.borrow_mut().remove_owner(owner);
     let name = ctx_name(ctx);
     ctx.state().hub.names.borrow_mut().retain(|n| *n != name);
 }

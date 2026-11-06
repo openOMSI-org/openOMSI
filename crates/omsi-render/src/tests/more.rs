@@ -597,6 +597,18 @@ fn origin_lookup_keeps_float_equality_and_large_coordinates() {
     assert_eq!(distances[&origin_key(c)], 5.0);
 }
 
+#[test]
+fn every_backend_form_of_the_scene_shader_validates() {
+    use wgpu::naga;
+    for (amd_vulkan, multisampled_shading) in [(false, false), (true, false), (false, true), (true, true)] {
+        let src = arrays_as_textures(&crate::shaders::scene_shader_forms(false, amd_vulkan, multisampled_shading), array_path());
+        let module = naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("AMD Vulkan {amd_vulkan}, multisampled shading {multisampled_shading}: {}", e.emit_to_string(&src)));
+        naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all())
+            .validate(&module)
+            .unwrap_or_else(|e| panic!("AMD Vulkan {amd_vulkan}, multisampled shading {multisampled_shading}: {e:?}"));
+    }
+}
+
 /// Every shader module parses and validates as the device will see it, translates to
 /// Metal and Vulkan SPIR-V, and its uniform structs are laid out as the Rust side writes them.
 #[test]
@@ -625,6 +637,7 @@ fn shaders_validate_and_match_the_uniforms() {
         ("ray-traced reflections", rt::reflect_source()),
         ("texture means", include_str!("../rt_avg.wgsl").to_string()),
         ("rt texture coordinates", include_str!("../rt_uv.wgsl").to_string()),
+        ("temporal motion", format!("{}\n{}", scene_shader_source(false), include_str!("../temporal/motion.wgsl"))),
     ];
     let sizes: &[(&str, usize)] = &[
         ("Enhanced", std::mem::size_of::<EnhancedUniform>()),
@@ -638,6 +651,7 @@ fn shaders_validate_and_match_the_uniforms() {
         ("PointLight", std::mem::size_of::<GpuPointLight>()),
         ("Camera", std::mem::size_of::<CameraUniform>()),
         ("MaterialParams", std::mem::size_of::<MaterialUniform>()),
+        ("Motion", std::mem::size_of::<MotionUniform>()),
         ("RtParams", rt::PARAMS_SIZE),
         ("Record", rt::RECORD_SIZE),
     ];

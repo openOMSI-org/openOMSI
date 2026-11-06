@@ -16,3 +16,7 @@ unicode-normalization = "0.1"
 omsi-pack = { path = "../omsi-pack" }
 serde.workspace = true
 serde_json.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+# (DXGI's adapter list: whether DLSS can be offered, `upscaler_files::rtx_present`)
+windows = { workspace = true, features = ["Win32_Graphics_Dxgi"] }

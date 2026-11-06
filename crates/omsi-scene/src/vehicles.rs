@@ -19,7 +19,9 @@ impl World {
         self.mirror_aspect.lock().clear();
         self.mirror_glass.lock().clear();
         let set = self.upload_vehicle(renderer, scene, vt, scheme, true);
+        self.player_textures.lock().clear();
         let mut render = self.instantiate_vehicle(renderer, scene, vt, &set, None, None, false);
+        self.protect_player_textures(&set, &mut render);
         own_skinned_meshes(renderer, scene, vt, &mut render);
         render.own_set = Some(set);
         render
@@ -44,6 +46,7 @@ impl World {
             None
         };
         let mut render = self.instantiate_vehicle(renderer, scene, vt, &set, None, shared, false);
+        self.protect_player_textures(&set, &mut render);
         own_skinned_meshes(renderer, scene, vt, &mut render);
         render.own_set = Some(set);
         render
@@ -263,6 +266,7 @@ impl World {
                     own_materials.extend(built.materials());
                 }
                 for f in v.free {
+                    own_textures.extend(f.spare);
                     // the pictures it showed: shared, gone with their last holder
                     let mut shared = f.shared.lock();
                     for p in f.held {
@@ -1248,36 +1252,6 @@ impl World {
             dyn_slots.push(DynSlot { mesh: instances.len(), slot, text: text_slot, script: script_slot, script_trans, lit: script_slot.is_some_and(|i| vt.model.html_page_lit(i)), tex, alpha, transmap, night, lightmap, envmap, address, extra, color, emissive });
         }
         base
-    }
-
-    /// Cache state and reload ownership shared by free textures in this world: one
-    /// `[matl_freetex]` of a vehicle slot, standing in for `key` (`diffuse`: the slot's own
-    /// texture), on the halves its bits name (see `free_texture_defs`).
-    fn free_texture_slot(
-        &self,
-        var: String,
-        key: Option<TextureId>,
-        diffuse: bool,
-        halves: u32,
-        dirs: &[PathBuf],
-    ) -> FreeTex {
-        FreeTex {
-            remote: None,
-            remote_key: String::new(),
-            image: None,
-            reloads: self.freetex_reloads.clone(),
-            var,
-            diffuse,
-            key,
-            halves,
-            dirs: dirs.to_vec(),
-            textures: self.textures.clone(),
-            pictures: HashMap::new(),
-            current: None,
-            shared: self.vehicle_textures.clone(),
-            held: Vec::new(),
-            wants_upgrade: self.freetex_upgrades.clone(),
-        }
     }
 }
 
