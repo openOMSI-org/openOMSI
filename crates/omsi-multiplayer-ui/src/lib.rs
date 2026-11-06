@@ -1003,26 +1003,4 @@ pub fn bans(sh: &mut Panel<'_>, v: &View, area: Rect) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn search_matches_unicode_names_vehicles_and_ids() {
-        let p = Player {
-            id: 2,
-            conn: 102,
-            name: "Alex 名稱".into(),
-            state: PlayerState::Driving,
-            vehicle: "Vehicles/MAN/MAN_D87.bus".into(),
-            line: String::new(),
-            tour: String::new(),
-            aboard: None,
-            online_secs: 60,
-            admin: None,
-        };
-        for query in ["alex", "名稱", "man_d87", "#2"] {
-            assert!(matches_query(&p, query), "{query}");
-        }
-        assert!(!matches_query(&p, "missing"));
-    }
-}
+mod tests;

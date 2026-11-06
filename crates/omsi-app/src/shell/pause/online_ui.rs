@@ -1,7 +1,7 @@
 //! Session snapshots and action routing for the independent multiplayer panels.
 use super::*;
 #[cfg(test)]
-use omsi_admin::{BanView, Player, PlayerState, Role};
+use omsi_admin::{Player, PlayerState, Role};
 pub(crate) use omsi_multiplayer_ui::View;
 
 pub(crate) fn from_app(app: &crate::App) -> View {

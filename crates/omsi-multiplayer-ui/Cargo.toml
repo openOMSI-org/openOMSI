@@ -9,3 +9,6 @@ description = "Multiplayer player, world and device-ban panels rendered from ses
 omsi-admin = { path = "../omsi-admin" }
 omsi-ui = { path = "../omsi-ui" }
 glam.workspace = true
+
+[dev-dependencies]
+omsi-ui = { path = "../omsi-ui", features = ["test-support"] }

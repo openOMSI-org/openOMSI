@@ -279,27 +279,6 @@ fn online_management_modal_blocks_the_page_and_closes_after_disconnect() {
 }
 
 #[test]
-fn online_voice_and_time_controls_dispatch_existing_actions() {
-    let v = session();
-    for (tab, id, action) in [
-        (0, "pause-online-voice-all", "vall"),
-        (1, "online-time-preset-12", "clock 43200"),
-        (1, "online-speed-4", "speed 4"),
-        (1, "online-next-weather", "weather next"),
-        (1, "online-weather-cycle", "weather cycle"),
-        (1, "online-traffic-next", "traffic next"),
-    ] {
-        let mut sh = Shell::new();
-        click(&mut sh, tab, &v, id);
-        assert_eq!(
-            sh.actions,
-            [Action::OnlineAction(tab as u8, action.into())],
-            "{id}"
-        );
-    }
-}
-
-#[test]
 fn online_search_accepts_unicode_keyboard_input() {
     let mut sh = Shell::new();
     sh.ui.focus = Some(id_of("pause-online-search"));
@@ -311,77 +290,7 @@ fn online_search_accepts_unicode_keyboard_input() {
     assert_eq!(sh.ui.input.text, "名稱");
 }
 
-#[test]
-fn online_world_controls_respect_roles_and_time_locks() {
-    let mut v = session();
-    let mut sh = Shell::new();
-    v.rights = Some(Role::Moderator);
-    render(&mut sh, 1, &v);
-    assert!(!sh.ui.drawn.contains_key(&id_of("online-speed-4")));
-    v.rights = Some(Role::Admin);
-    v.clock_locked = true;
-    render(&mut sh, 1, &v);
-    assert!(!sh.ui.drawn.contains_key(&id_of("online-time-preset-12")));
-}
 
-#[test]
-fn online_unban_uses_device_identity_and_admin_permission() {
-    let mut v = session();
-    v.bans.push(BanView {
-        id: "device-record".into(),
-        name: "Alex".into(),
-        reason: "".into(),
-        by: "host".into(),
-        at: 0,
-        until: None,
-        scope: "session".into(),
-    });
-    let mut sh = Shell::new();
-    click(&mut sh, 2, &v, "online-unban-device-record");
-    assert!(sh.actions.is_empty());
-    assert_eq!(
-        sh.pause_online.confirm,
-        Some((2, "unban device-record".into()))
-    );
-    v.rights = Some(Role::Moderator);
-    sh.pause_online.confirm = None;
-    render(&mut sh, 2, &v);
-    assert!(
-        !sh.ui
-            .drawn
-            .contains_key(&id_of("online-unban-device-record"))
-    );
-}
-
-#[test]
-fn online_confirmation_cancel_and_accept_keep_their_existing_actions() {
-    for (tab, action) in [(1, "traffic clear"), (2, "unban device-record")] {
-        for accept in [false, true] {
-            let mut sh = Shell::new();
-            sh.pause_online.confirm = Some((tab, action.into()));
-            sh.begin(1440.0, 900.0, 1.0, 0.016);
-            confirmation(&mut sh);
-            let id = if accept {
-                "online-confirm-accept"
-            } else {
-                "online-confirm-cancel"
-            };
-            let r = *sh.ui.drawn.get(&id_of(id)).unwrap();
-            sh.finish();
-            sh.begin(1440.0, 900.0, 1.0, 0.016);
-            sh.ui.input.mouse = r.center();
-            sh.ui.input.pressed = true;
-            sh.ui.input.released = true;
-            confirmation(&mut sh);
-            assert!(sh.pause_online.confirm.is_none());
-            if accept {
-                assert_eq!(sh.actions, [Action::OnlineAction(tab, action.into())]);
-            } else {
-                assert!(sh.actions.is_empty());
-            }
-        }
-    }
-}
 
 #[test]
 #[ignore = "Requires a graphics adapter and OPENOMSI_PAUSE_PREVIEW"]
