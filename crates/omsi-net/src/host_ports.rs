@@ -59,6 +59,7 @@ fn verify_loopback(listener: &TcpListener) -> io::Result<()> {
             Ok((mut stream, peer)) if peer == source => {
                 // Close the probe first so the host port does not enter TIME_WAIT.
                 probe.shutdown(Shutdown::Write)?;
+                stream.set_nonblocking(false)?;
                 stream.set_read_timeout(Some(Duration::from_millis(250)))?;
                 stream.read(&mut [0])?;
                 listener.set_nonblocking(false)?;
