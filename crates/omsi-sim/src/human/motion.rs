@@ -58,7 +58,7 @@ impl Pose {
         p.breath = p.rand() * TAU;
         p.glance_t = p.rand() * 3.0;
         p.shift_t = p.rand() * 5.0;
-        p.pace = 0.92 + 0.16 * p.rand();
+        p.pace = 0.88 + 0.24 * p.rand();
         p.idle_to = Idle::pick(p.rand());
         p.idle_from = p.idle_to;
         p.idle_t = 12.0 + p.rand() * 28.0;
@@ -175,7 +175,7 @@ impl Pose {
             (r.x * 0.62, r.y + 0.4 * beta * stride)
         } else {
             (
-                r.x + SIDE[side] * 0.012 * self.style[2] + self.fidget[side].x,
+                r.x + SIDE[side] * 0.035 * self.style[2] + self.fidget[side].x,
                 r.y + self.fidget[side].y,
             )
         };
@@ -343,10 +343,12 @@ impl Pose {
             }
         }
         self.gait = gait_now;
+        if self.gait {
+            self.catch_up(rig, beta);
+        }
         let prev_phase = self.phase;
         if self.gait {
             self.phase = (self.phase + dt * cadence) % 1.0;
-            self.catch_up(rig, beta);
         }
         for side in 0..2 {
             let offset = if side == 0 { 0.0 } else { 0.5 };
@@ -569,6 +571,7 @@ impl Pose {
             }
             // (on the phone: looking down at it, glancing up now and then)
             None if self.idle_to == Idle::Phone && self.walk < 0.2 && self.sit <= 0.0 && self.glance.x.abs() < 40.0 => Vec2::new(self.glance.x * 0.15, -32.0),
+            None if self.walk > 0.3 => Vec2::new(self.glance.x.clamp(-25.0, 25.0), self.glance.y),
             None => self.glance,
         };
         let step = 220.0 * dt;
@@ -578,7 +581,7 @@ impl Pose {
         self.head.y = approach(self.head.y, want.y, step);
     }
 
-    /// Walking: a quick step for a foot left too far behind (see the comment inside).
+    /// Walking: a foot left too far behind takes its own step now (a quick step when stranded on another floor; see the comment inside).
     fn catch_up(&mut self, rig: &Rig, beta: f32) {
         // a foot left too far behind (the body was pushed on or sped up faster than the
         // stride): a quick step catches up rather than the hips sinking to reach it. A
@@ -614,7 +617,12 @@ impl Pose {
                     worst = Some((side, need));
                 }
             }
-            if let Some((side, _)) = worst {
+            if let Some((side, need)) = worst {
+                if need <= 1.0 {
+                    self.phase = (beta + if side == 0 { 0.0 } else { 0.5 }) % 1.0;
+                    self.catch_ups += 1;
+                    return;
+                }
                 let f = &mut self.feet[side];
                 f.from_ankle = Self::stance_ankle(rig, f, 0.0);
                 f.from_yaw = f.yaw;

@@ -615,3 +615,77 @@ fn changing_the_way_of_standing_keeps_the_hands_out_of_the_body() {
         }
     }
 }
+
+#[test]
+fn setting_off_steps_left_and_right_in_turn() {
+    let r = rig();
+    for dt in [1.0 / 60.0, 0.0667] {
+        for seed in 0..36 {
+            let speed = [0.7, 1.05, 1.45][seed as usize % 3];
+            let mut p = Pose::new(seed);
+            let mut pos = DVec3::ZERO;
+            let mut steps = Vec::new();
+            let mut was = [true; 2];
+            let mut last_ankle: Option<[Vec3; 2]> = None;
+            for i in 0..(5.0 / dt) as usize {
+                let v = if (i as f32) * dt < 1.0 { 0.0 } else { speed };
+                pos.y += v * dt as f64;
+                let input = PoseInput { activity: Activity::Walk, origin: pos, velocity: DVec2::new(0.0, v), ..Default::default() };
+                p.advance(&r, &input, dt);
+                let ankle = p.bones(&r).ankle;
+                if let Some(last) = last_ankle {
+                    for side in 0..2 {
+                        let jump = (ankle[side] - last[side]).length() / dt;
+                        assert!(jump < 8.0, "seed {seed} dt {dt}: foot {side} jumped at {jump} m/s at {}", i as f32 * dt);
+                    }
+                }
+                last_ankle = Some(ankle);
+                for side in 0..2 {
+                    if p.planted(side) && !was[side] {
+                        steps.push(side);
+                    }
+                    was[side] = p.planted(side);
+                }
+            }
+            assert!(steps.len() >= 6, "seed {seed} dt {dt}: {steps:?}");
+            assert!(steps.windows(2).all(|w| w[0] != w[1]), "seed {seed} dt {dt}: one foot stepped twice running: {steps:?}");
+        }
+    }
+}
+
+#[test]
+fn walking_looks_where_it_goes() {
+    let r = rig();
+    for seed in 0..30 {
+        let mut p = Pose::new(seed);
+        let mut pos = DVec3::ZERO;
+        let mut worst = 0.0f32;
+        for i in 0..600 {
+            let v = if i < 200 { 0.0 } else { 1.2 };
+            pos.y += v / 60.0;
+            let input = PoseInput { activity: Activity::Walk, origin: pos, velocity: DVec2::new(0.0, v), ..Default::default() };
+            p.advance(&r, &input, 1.0 / 60.0);
+            if i > 320 {
+                worst = worst.max(p.head.x.abs());
+            }
+        }
+        assert!(worst < 30.0, "seed {seed}: the head turned {worst} degrees while walking");
+    }
+}
+
+#[test]
+fn people_stand_and_walk_in_ways_of_their_own() {
+    let r = rig();
+    let poses: Vec<Pose> = (0..40).map(Pose::new).collect();
+    let spread = |f: &dyn Fn(&Pose) -> f32| {
+        let v: Vec<f32> = poses.iter().map(f).collect();
+        v.iter().cloned().fold(f32::MIN, f32::max) - v.iter().cloned().fold(f32::MAX, f32::min)
+    };
+    let width = |p: &Pose| {
+        let (l, _) = p.rest_target(&r, 0, DVec3::ZERO, 0.0, false);
+        let (rt, _) = p.rest_target(&r, 1, DVec3::ZERO, 0.0, false);
+        (rt.x - l.x) as f32
+    };
+    assert!(spread(&width) > 0.1, "stance widths spread {}", spread(&width));
+    assert!(spread(&|p: &Pose| p.pace) > 0.18, "paces spread {}", spread(&|p: &Pose| p.pace));
+}
