@@ -112,6 +112,14 @@ Section "Uninstall"
   manifest_end:
   FileClose $0
   manifest_done:
+  ; (what the launcher's optional NVIDIA DLSS installer put beside the game)
+  Delete "$INSTDIR\sl.interposer.dll"
+  Delete "$INSTDIR\sl.common.dll"
+  Delete "$INSTDIR\sl.dlss.dll"
+  Delete "$INSTDIR\nvngx_dlss.dll"
+  Delete "$INSTDIR\nvngx_dlss.license.txt"
+  Delete "$INSTDIR\NVIDIA-Streamline-LICENSE.txt"
+  Delete "$INSTDIR\NVIDIA-Streamline-NOTICE.txt"
   Delete "$INSTDIR\*.old-update"
   Delete "$INSTDIR\*.bad-update"
   Delete "$INSTDIR\.openomsi-files"

@@ -190,10 +190,6 @@ pub(crate) fn interior_lamp_on(ty: &omsi_sim::VehicleType, li: usize, var: impl 
     il.variable.trim().parse::<f32>().ok().or_else(|| var(&il.variable)).unwrap_or(0.0) >= 0.5
 }
 
-/// How many combinations of free pictures a slot keeps the materials of (see
-/// `VariantSlot::free_built`).
-const FREE_BUILT_KEEP: usize = 32;
-
 pub(crate) fn sync_materials(
     renderer: &Renderer,
     scene: &mut Scene,
@@ -243,34 +239,7 @@ pub(crate) fn sync_materials(
                     if resolved.is_none() {
                         log::warn!("vehicle [matl_freetex] '{}' = {:?}: texture not found", f.var, current);
                     }
-                    resolved.and_then(|path| {
-                        let mut shared = f.shared.lock();
-                        // (a picture a display generator rewrites is reloaded in place,
-                        // under the same id, see `FreeTextureReloads`)
-                        let max_dimension = renderer.device.limits().max_texture_dimension_2d;
-                        if let Some(e) = shared.get_mut(&path) {
-                            e.1 += 1;
-                            if f.reloads.snapshot(e.0).is_none() {
-                                if let Some((data, _)) = f.textures.get_gpu_fast(&path) {
-                                    f.reloads.remember(e.0, data);
-                                }
-                            }
-                            f.reloads.watch(path.clone(), e.0, &f.shared, max_dimension);
-                            f.held.push(path);
-                            return Some(e.0);
-                        }
-                        let (img, worth) = f.textures.get_gpu_fast(&path)?;
-                        let id = renderer.add_texture_data(scene, &img);
-                        f.reloads.remember(id, img.clone());
-                        if worth {
-                            f.wants_upgrade.lock().push(path.clone());
-                        }
-                        attach_pbr(renderer, scene, &path, id);
-                        shared.insert(path.clone(), (id, 1));
-                        f.reloads.watch(path.clone(), id, &f.shared, max_dimension);
-                        f.held.push(path);
-                        Some(id)
-                    })
+                    resolved.and_then(|path| f.load_picture(renderer, scene, path))
                 };
                 f.pictures.insert(name.clone(), found);
             }
@@ -319,20 +288,7 @@ pub(crate) fn sync_materials(
                     *slot = *m;
                 }
             }
-            // (a display that runs through many pictures - a clock, a ticket printer - would
-            // keep the materials of every one while the vehicle lives: past a few dozen the
-            // ones not on show go)
-            if v.free_built.len() > FREE_BUILT_KEEP {
-                let shown = |b: &omsi_scene::FreeBuilt| b.materials().any(|m| m == v.base || m == v.item || v.more.contains(&m));
-                let gone: Vec<String> = v.free_built.iter().filter(|(k, b)| **k != key && !shown(b)).map(|(k, _)| k.clone()).collect();
-                for k in gone {
-                    if let Some(b) = v.free_built.remove(&k) {
-                        for m in b.materials() {
-                            renderer.free_material(scene, m);
-                        }
-                    }
-                }
-            }
+            v.trim_free_textures(renderer, scene);
         }
         if let (Some(l), Some(mask)) = (&mut v.lights, mask) {
             // (with a free texture, the free texture's materials above carry the maps)

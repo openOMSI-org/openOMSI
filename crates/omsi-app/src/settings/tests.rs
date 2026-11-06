@@ -21,6 +21,11 @@ fn fsr1_menu_settings_round_trip_into_renderer() {
 
     // A corrupt or future setting must not enable experimental shaders.
     assert_eq!(Settings::from_text("upscaler=anything_else\\n").upscaler, "default");
+    let temporal = Settings::from_text("upscaler=FSR3\nupscale_quality=ultra_performance\n");
+    assert_eq!((temporal.upscaler.as_str(), temporal.upscale_quality.as_str()), ("fsr3", "ultra_performance"));
+    let mut lost = Settings::from_text("upscaler=dlss\n");
+    lost.apply_safe_gpu(1);
+    assert_eq!(lost.upscaler, "default");
     assert_eq!(Settings::from_text("fsr_sharpness=nan\\n").fsr_sharpness, 0.8);
 }
 

@@ -26,6 +26,7 @@ use std::path::{Path, PathBuf};
 pub mod cache_budget;
 pub mod cache_activity;
 pub mod codepage;
+pub mod upscaler_files;
 pub mod collate;
 pub mod flags;
 pub mod lang;

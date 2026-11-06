@@ -15,13 +15,14 @@ pub(crate) mod media;
 pub(crate) mod object;
 pub(crate) mod plugin;
 pub(crate) mod process;
+pub(crate) mod scene;
 pub(crate) mod storage;
 pub(crate) mod traffic;
 pub(crate) mod util;
 pub(crate) mod world;
 
 /// Every group's functions.
-pub static GROUPS: &[&[ApiFn]] = &[hof::FNS, data::FNS, core::FNS, bus::FNS, duty::FNS, map::FNS, object::FNS, traffic::FNS, world::FNS, media::FNS, game::FNS, plugin::FNS, process::FNS, storage::FNS, util::FNS];
+pub static GROUPS: &[&[ApiFn]] = &[hof::FNS, data::FNS, core::FNS, bus::FNS, duty::FNS, map::FNS, object::FNS, traffic::FNS, world::FNS, media::FNS, game::FNS, scene::FNS, plugin::FNS, process::FNS, storage::FNS, util::FNS];
 
 /// What a function body may give back: a value, something that becomes one, or an error.
 pub trait Ret {

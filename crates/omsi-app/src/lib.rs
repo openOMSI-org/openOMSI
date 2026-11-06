@@ -669,6 +669,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             mirror_hud: Default::default(),
             window_hidden: false,
             route_arrows: Default::default(),
+            plugin_cables: Default::default(),
             hidden_frames: 0,
             stand_in: None,
             sim_view: Default::default(),

@@ -123,6 +123,46 @@ jobs:
           }
           Copy-Item (Join-Path $dir.FullName "libEGL.dll"), (Join-Path $dir.FullName "libGLESv2.dll"), (Join-Path $dir.FullName "LICENSE-ANGLE.txt") dist/windows/
           Get-ChildItem dist/windows
+      # NVIDIA DLSS is NOT bundled in any openOMSI release. A player may
+      # download the official SDK explicitly through the Windows launcher.
+      # The AMD FidelityFX binaries below retain their own MIT terms.
+      # The four specific signed FidelityFX SDK 2.4.0 DLLs below are explicitly
+      # MIT-licensed exceptions in the pinned SDK's Kits/FidelityFX/docs/license.md.
+      # Keep the exact file allowlist, upstream license and third-party notices.
+      - name: AMD FidelityFX SDK 2.4.0 (FSR 3, x64; MIT-listed DLLs)
+        if: matrix.arch == 'x64'
+        shell: pwsh
+        run: |
+          git init -q ffx
+          git -C ffx remote add origin https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK
+          git -C ffx sparse-checkout set --no-cone /Kits/FidelityFX/signedbin/amd_fidelityfx_loader_dx12.dll /Kits/FidelityFX/signedbin/amd_fidelityfx_upscaler_dx12.dll /Kits/FidelityFX/signedbin/amd_fidelityfx_loader_vk.dll /Kits/FidelityFX/signedbin/amd_fidelityfx_upscaler_vk.dll /Kits/FidelityFX/docs/license.md /3rdpartynotice.md
+          git -C ffx fetch -q --depth 1 origin 7539ae8b6568ad29ed78a753404351daf3b5cca7
+          git -C ffx checkout -q FETCH_HEAD
+          if ((git -C ffx rev-parse HEAD) -ne '7539ae8b6568ad29ed78a753404351daf3b5cca7') { throw 'FidelityFX SDK commit mismatch' }
+          $files = @('amd_fidelityfx_loader_dx12.dll', 'amd_fidelityfx_upscaler_dx12.dll', 'amd_fidelityfx_loader_vk.dll', 'amd_fidelityfx_upscaler_vk.dll')
+          $licence = Get-Content ffx/Kits/FidelityFX/docs/license.md -Raw
+          $mitSection = $licence.IndexOf('These source files')
+          $mitGrant = $licence.IndexOf('are subject to the following license:', $mitSection)
+          if ($mitSection -lt 0 -or $mitGrant -lt 0 -or $licence.Substring($mitGrant) -notmatch 'Permission is hereby granted') { throw 'FidelityFX MIT exception section missing' }
+          foreach ($file in $files) {
+            $entry = 'Kits\FidelityFX\signedbin\' + $file
+            if ($licence.Substring($mitSection, $mitGrant - $mitSection) -notlike ('*' + $entry + '*')) { throw "Not explicitly MIT-licensed: $file" }
+            $signed = Get-AuthenticodeSignature (Join-Path ffx/Kits/FidelityFX/signedbin $file)
+            if ($signed.Status -ne 'Valid' -or $signed.SignerCertificate.Subject -notmatch '(^|, )O=Advanced Micro Devices(,|$)') { throw "AMD signature of ${file}: $($signed.Status)" }
+            Copy-Item (Join-Path ffx/Kits/FidelityFX/signedbin $file) dist/windows/
+          }
+          Copy-Item ffx/Kits/FidelityFX/docs/license.md dist/windows/LICENSE-FidelityFX.md
+          Copy-Item ffx/3rdpartynotice.md dist/windows/THIRD-PARTY-FidelityFX.md
+          $note = @(
+            'These four DLLs are listed as MIT-licensed exceptions in the pinned AMD FidelityFX SDK 2.4.0 license:',
+            'amd_fidelityfx_loader_dx12.dll, amd_fidelityfx_upscaler_dx12.dll,',
+            'amd_fidelityfx_loader_vk.dll, amd_fidelityfx_upscaler_vk.dll',
+            'Original SDK commit: 7539ae8b6568ad29ed78a753404351daf3b5cca7',
+            'Full license: LICENSE-FidelityFX.md (MIT grant is near the end)',
+            'Additional upstream third-party notices: THIRD-PARTY-FidelityFX.md'
+          ) -join "`n"
+          Set-Content -Path dist/windows/FidelityFX-BINARIES-NOTICE.txt -Value $note -Encoding UTF8
+          Get-ChildItem dist/windows/amd_fidelityfx_*.dll | Select-Object Name,Length
       - name: ANGLE DirectX 11 startup regression (WARP)
         if: matrix.arch == 'x64' && github.event_name == 'pull_request'
         timeout-minutes: 10

@@ -11,6 +11,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod commands;
+mod nvidia_dlss;
 mod discord;
 mod protocol;
 mod service;

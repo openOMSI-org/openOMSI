@@ -19,6 +19,7 @@ struct MainTargets<'t> {
     /// the ordinary scenery's depth, laid into the multisampled buffer at the start of
     /// the pass (of its first part) before the colour draws (see `encode_prefill`)
     prefill: Option<(&'t [Batch], &'t [wgpu::RenderPipeline; 6])>,
+    masked: Option<(&'t [Batch], &'t [wgpu::RenderPipeline; 2], &'t wgpu::BindGroup)>,
     /// the bundles of the last part (all of them when the pass is not split)
     bundles: &'t [wgpu::RenderBundle],
 }
@@ -32,6 +33,11 @@ impl Renderer {
     /// encoders of their own, which are returned.
     pub(crate) fn encode_main_pass(&mut self, encoder: &mut wgpu::CommandEncoder, scene: &Scene, f: &FrameCtx, plan: &DrawPlan, main_bundles: &[wgpu::RenderBundle], timers: &mut PassTimers) -> Vec<wgpu::CommandEncoder> {
         let (width, height, enhanced, with_overlays, lighting) = (f.width, f.height, f.enhanced, f.with_overlays, f.lighting);
+        let want_mask = plan.masked.is_some() && with_overlays && !f.xr_view && !f.eye_color
+            && plan.msaa_prepass(self, f) && !plan.presurface_prefill(self, f) && !self.shares_prepass_depth(f, plan);
+        if want_mask {
+            self.ensure_pane_depth(width, height);
+        }
         // Without multisampling the main pass tests against the depth the prepass left
         // (when there was one): the costly shading - lighting, the shadow filter - is then
         // done once per pixel for the surface that is seen, not for every tree and wall
@@ -70,6 +76,27 @@ impl Renderer {
             .then_some(())
             .and(self.prefill_pipelines(f.eye_color))
             .map(|pipes| (plan.prefill_batches(), pipes));
+        let masked = prefill.filter(|_| want_mask).and_then(|_| {
+            let (panes, cut) = plan.masked.as_ref()?;
+            let mask = self.pane_mask.as_ref()?;
+            let (_, view, bg) = self.pane_depth.as_ref()?;
+            let pass_encoder = lead.as_mut().unwrap_or(&mut *encoder);
+            let mut pass = pass_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("pane depth"),
+                color_attachments: &[],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view,
+                    depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(0.0), store: wgpu::StoreOp::Store }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: pass_timer(timers.set.as_ref(), &mut timers.timed, "pane depth"),
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
+            encode_batches(&mut pass, scene, panes, |pipe| &mask.panes[pipe as usize]);
+            Some((&cut[..], &mask.prefill, bg))
+        });
         let mut main_parts: Vec<wgpu::CommandEncoder> = Vec::new();
         {
             // The enhanced sky dome was meant to cover everything, so this used to clear to
@@ -142,6 +169,7 @@ impl Renderer {
                 parts,
                 presurface_prefill,
                 prefill,
+                masked,
                 bundles: &main_bundles[tail..],
             };
             for g in 0..parts.saturating_sub(1) {
@@ -176,6 +204,30 @@ impl Renderer {
         encode_batches(pass, scene, batches, |pipe| &pipes[pipe as usize]);
     }
 
+    fn ensure_pane_depth(&mut self, width: u32, height: u32) {
+        let Some(mask) = self.pane_mask.as_ref() else { return };
+        if self.pane_depth.as_ref().is_some_and(|d| d.0 == (width, height)) {
+            return;
+        }
+        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("pane depth"),
+            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: self.options.msaa,
+            dimension: wgpu::TextureDimension::D2,
+            format: DEPTH_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&Default::default());
+        let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("pane depth"),
+            layout: &mask.layout,
+            entries: &[wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&view) }],
+        });
+        self.pane_depth = Some(((width, height), view, bg));
+    }
+
     /// The sky dome (see sky.wgsl `vs_main`: it lies on the far plane and is tested against
     /// the depth there is).
     fn encode_sky<'p>(&self, pass: &mut wgpu::RenderPass<'p>, scene: &'p Scene, sky_pipe: &'p wgpu::RenderPipeline) {
@@ -190,7 +242,7 @@ impl Renderer {
 
     /// One part of a split main pass (the first one with the sky), its bundles executed.
     fn encode_main_part(&self, part: &mut wgpu::CommandEncoder, scene: &Scene, f: &FrameCtx, plan: &DrawPlan, mt: &MainTargets, bundles: &[wgpu::RenderBundle], first: bool, stamp: Option<wgpu::RenderPassTimestampWrites<'_>>) {
-        let MainTargets { draw_view, depth_view, hdr, pp, sky_pipe, sky_clear, depth_first, prefill, presurface_prefill, .. } = *mt;
+        let MainTargets { draw_view, depth_view, hdr, pp, sky_pipe, sky_clear, depth_first, prefill, masked, presurface_prefill, .. } = *mt;
         let part_colors = [
             Some(wgpu::RenderPassColorAttachment {
                 view: draw_view,
@@ -244,6 +296,7 @@ impl Renderer {
             }
             if let Some((batches, pipes)) = prefill {
                 self.encode_prefill(&mut pass, scene, f, batches, pipes);
+                encode_masked(&mut pass, scene, masked);
             }
             if sky_late {
                 self.encode_sky(&mut pass, scene, sky_pipe);
@@ -254,7 +307,7 @@ impl Renderer {
 
     /// The main pass (the last part of a split one).
     fn encode_main(&self, encoder: &mut wgpu::CommandEncoder, scene: &Scene, f: &FrameCtx, plan: &DrawPlan, mt: &MainTargets, timers: &mut PassTimers) {
-        let MainTargets { draw_view, resolve_view, depth_view, hdr, pp, sky_pipe, sky_clear, depth_first, depth_store, parts, presurface_prefill, prefill, bundles } = *mt;
+        let MainTargets { draw_view, resolve_view, depth_view, hdr, pp, sky_pipe, sky_clear, depth_first, depth_store, parts, presurface_prefill, prefill, masked, bundles } = *mt;
         // the enhanced pass's screen mask beside the picture (see `MASK_FORMAT`)
         let mask_attachment = hdr.map(|h| wgpu::RenderPassColorAttachment {
             view: h.mask_msaa.as_ref().unwrap_or(&h.mask),
@@ -336,6 +389,7 @@ impl Renderer {
             self.encode_prefill(&mut pass, scene, f, &plan.msaa_safe_batches, pipes);
         } else if let Some((batches, pipes)) = prefill {
             self.encode_prefill(&mut pass, scene, f, batches, pipes);
+            encode_masked(&mut pass, scene, masked);
             if sky_late {
                 self.encode_sky(&mut pass, scene, sky_pipe);
             }
@@ -443,5 +497,12 @@ impl Renderer {
                 }
             }
         }
+    }
+}
+
+fn encode_masked<'p>(pass: &mut wgpu::RenderPass<'p>, scene: &'p Scene, masked: Option<(&[Batch], &'p [wgpu::RenderPipeline; 2], &'p wgpu::BindGroup)>) {
+    if let Some((batches, pipes, bg)) = masked {
+        pass.set_bind_group(3, bg, &[]);
+        encode_batches(pass, scene, batches, |pipe| &pipes[pipe as usize]);
     }
 }
