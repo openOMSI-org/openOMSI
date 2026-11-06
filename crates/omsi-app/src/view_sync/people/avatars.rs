@@ -8,6 +8,7 @@
 
 use glam::Vec3;
 use omsi_sim::human::avatar::AvatarInfo;
+use omsi_sim::human::clips::{Kind, Mix, Motion};
 use omsi_sim::human::HumanType;
 use parking_lot::Mutex;
 use std::sync::{Arc, OnceLock};
@@ -30,6 +31,7 @@ pub(super) fn enabled() -> bool {
 /// The avatars by kind: adult women, adult men, girls, boys.
 pub(super) struct Pool {
     kinds: [Vec<Arc<HumanType>>; 4],
+    motions: [[Vec<Motion>; 3]; 2],
 }
 
 enum State {
@@ -58,6 +60,7 @@ fn start_loading() {
         *STATE.lock() = State::Missing;
         return;
     };
+    omsi_platform::avatars::fetch_if_missing();
     std::thread::Builder::new()
         .name("avatars load".into())
         .spawn(move || {
@@ -82,6 +85,7 @@ fn start_loading() {
             for (info, t) in loaded {
                 kinds[kind_index(info.female, info.child)].push(t);
             }
+            let motions = load_motions(&dir);
             let n: usize = kinds.iter().map(|k| k.len()).sum();
             log::info!(
                 "avatars: {n} loaded from {} in {:.1} s ({} women, {} men, {} girls, {} boys)",
@@ -92,9 +96,56 @@ fn start_loading() {
                 kinds[2].len(),
                 kinds[3].len()
             );
-            *STATE.lock() = if n == 0 { State::Missing } else { State::Ready(Arc::new(Pool { kinds })) };
+            *STATE.lock() = if n == 0 { State::Missing } else { State::Ready(Arc::new(Pool { kinds, motions })) };
         })
         .ok();
+}
+
+fn load_motions(dir: &std::path::Path) -> [[Vec<Motion>; 3]; 2] {
+    use rayon::prelude::*;
+    let started = std::time::Instant::now();
+    let loaded: Vec<Motion> = omsi_platform::avatars::clips(dir)
+        .par_iter()
+        .filter_map(|c| {
+            let kind = match c.kind.as_str() {
+                "walk" => Kind::Walk,
+                "stand" => Kind::Stand,
+                "sit" => Kind::Sit,
+                _ => return None,
+            };
+            match omsi_o3d::fbx::load_clip(&c.file) {
+                Ok(clip) => Motion::from_clip(&clip, kind, c.female),
+                Err(e) => {
+                    log::warn!("avatar clip {}: {e:#}", c.file.display());
+                    None
+                }
+            }
+        })
+        .collect();
+    let mut out: [[Vec<Motion>; 3]; 2] = Default::default();
+    for m in loaded {
+        out[m.female as usize][m.kind as usize].push(m);
+    }
+    log::info!("avatars: {} motion clips in {:.1} s", out.iter().flatten().map(|v| v.len()).sum::<usize>(), started.elapsed().as_secs_f32());
+    out
+}
+
+static CLOCK: OnceLock<std::time::Instant> = OnceLock::new();
+
+pub(super) fn clip_pose(id: u32, ty: &HumanType, pose: &omsi_sim::human::Pose, posed: &mut omsi_sim::human::Posed) {
+    if ty.biped.is_none() {
+        return;
+    }
+    let Some(pool) = pool() else { return };
+    let set = &pool.motions[is_female(ty) as usize];
+    if set.iter().any(|v| v.is_empty()) {
+        return;
+    }
+    let h = |salt: u64| ((id as u64 ^ salt).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 32) as usize;
+    let pick = |k: Kind| &set[k as usize][h(k as u64 + 1) % set[k as usize].len()];
+    let mix = Mix { walk: pick(Kind::Walk), stand: pick(Kind::Stand), sit: pick(Kind::Sit) };
+    let seconds = CLOCK.get_or_init(std::time::Instant::now).elapsed().as_secs_f32() + (h(7) % 600) as f32;
+    omsi_sim::human::clips::apply(ty, posed, &mix, pose.clip_blend(), seconds);
 }
 
 fn kind_index(female: bool, child: bool) -> usize {
