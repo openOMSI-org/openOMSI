@@ -454,13 +454,14 @@ const App = {
     video.src = AWAKE_VIDEO;
     let lock = null;
     const hold = () => {
-      if (document.hidden) return;
+      if (document.hidden) return video.pause();
       if (navigator.wakeLock) {
         if (!lock) navigator.wakeLock.request("screen").then((l) => { lock = l; l.onrelease = () => (lock = null); }).catch(() => video.play().catch(() => {}));
       } else if (video.paused) video.play().catch(() => {});
     };
     document.addEventListener("pointerdown", hold, true);
     document.addEventListener("visibilitychange", hold);
+    addEventListener("pagehide", () => video.pause());
     hold();
   },
 
