@@ -290,8 +290,6 @@ fn online_search_accepts_unicode_keyboard_input() {
     assert_eq!(sh.ui.input.text, "名稱");
 }
 
-
-
 #[test]
 #[ignore = "Requires a graphics adapter and OPENOMSI_PAUSE_PREVIEW"]
 fn online_write_preview() {
