@@ -50,6 +50,21 @@ fn send(ws: &mut Ws, text: &str) -> Result<(), String> {
     }
 }
 
+fn send_binary(ws: &mut Ws, bytes: &[u8]) -> Result<(), String> {
+    match ws.send(Message::Binary(bytes.to_vec().into())).and_then(|_| ws.flush()) {
+        Ok(()) => Ok(()),
+        Err(tungstenite::Error::Io(e)) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+pub(crate) fn picture_pause(sending: Duration) -> Duration {
+    match sending > Duration::from_millis(30) {
+        true => (sending * 4).min(Duration::from_secs(2)),
+        false => Duration::ZERO,
+    }
+}
+
 fn authenticate(ws: &mut Ws, shared: &Shared, from: IpAddr) -> Result<bool, String> {
     let since = Instant::now();
     let mut last_in = Instant::now();
@@ -120,6 +135,11 @@ fn handle(ws: &mut Ws, text: &str, shared: &Shared, id: u64) -> Result<(), Strin
         }
         return Ok(());
     }
+    if t == "map.view" {
+        let side = |k: &str| v.get(k).and_then(Value::as_u64).map_or(0, |n| n.min(u64::from(u32::MAX)) as u32);
+        shared.pictures.want(id, side("w"), side("h"));
+        return Ok(());
+    }
     if t == "drive" {
         if let Some((steering, throttle, brake, held)) = json::drive(&v) {
             let mut drive = lock(&shared.drive);
@@ -165,6 +185,7 @@ fn release(shared: &Shared, id: u64) {
         *drive = None;
     }
     drop(drive);
+    shared.pictures.forget(id);
     let names = lock(&shared.held).remove(&id).unwrap_or_default();
     for name in names {
         shared.send(Command::Action { name, down: false });
@@ -172,7 +193,8 @@ fn release(shared: &Shared, id: u64) {
 }
 
 fn pump(ws: &mut Ws, shared: &Shared, id: u64, generation: u64) -> Result<(), String> {
-    let (mut texts, mut vehicle, mut state, mut sign) = (0u64, 0u64, 0u64, u64::MAX);
+    let (mut texts, mut vehicle, mut state, mut sign, mut map) = (0u64, 0u64, 0u64, u64::MAX, 0u64);
+    let mut map_after = Instant::now();
     let mut sent: Option<std::sync::Arc<Value>> = None;
     let mut channels: Vec<(&'static str, u64)> = Vec::new();
     let mut last_in = Instant::now();
@@ -234,6 +256,15 @@ fn pump(ws: &mut Ws, shared: &Shared, id: u64, generation: u64) -> Result<(), St
         }
         for m in &out {
             send(ws, m)?;
+        }
+        let map_now = shared.pictures.seq();
+        if map_now != map && Instant::now() >= map_after && shared.pictures.wants(id) {
+            map = map_now;
+            if let Some(jpeg) = shared.pictures.last() {
+                let since = Instant::now();
+                send_binary(ws, &jpeg)?;
+                map_after = Instant::now() + picture_pause(since.elapsed());
+            }
         }
         if !out.is_empty() {
             let _ = ws.flush();

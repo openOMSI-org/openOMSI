@@ -120,6 +120,12 @@ struct Tex {
 
 pub struct Vertices(Option<wgpu::Buffer>, u64);
 
+#[derive(Default)]
+pub struct Targets {
+    msaa: Option<(wgpu::TextureView, u32, u32)>,
+    depth: Option<(wgpu::TextureView, u32, u32)>,
+}
+
 pub struct Gpu {
     pipeline: wgpu::RenderPipeline,
     /// With a depth buffer: the pipeline of the depth-tested layers, and the buffer.
@@ -153,6 +159,11 @@ impl Gpu {
     /// The same with a depth buffer: layers marked `depth` are depth-tested (see [`Layer::depth`]).
     pub fn with_depth(device: &wgpu::Device, format: wgpu::TextureFormat, samples: u32, atlas_size: u32) -> Gpu {
         Self::make(device, format, samples, atlas_size, true)
+    }
+
+    pub fn swap_targets(&mut self, other: &mut Targets) {
+        std::mem::swap(&mut self.msaa, &mut other.msaa);
+        std::mem::swap(&mut self.depth, &mut other.depth);
     }
 
     fn make(device: &wgpu::Device, format: wgpu::TextureFormat, samples: u32, atlas_size: u32, with_depth: bool) -> Gpu {
