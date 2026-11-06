@@ -238,8 +238,8 @@ impl App {
                 self.window.as_ref(),
             ) {
                 hud.update(r, scene, &lines);
-                if let wgpu::CurrentSurfaceTexture::Success(frame)
-                | wgpu::CurrentSurfaceTexture::Suboptimal(frame) =
+                if let omsi_render::Acquired::Success(frame)
+                | omsi_render::Acquired::Suboptimal(frame) =
                     s.acquire()
                 {
                     let view = s.view(&r.device, &frame);

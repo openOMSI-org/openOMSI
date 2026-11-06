@@ -13,6 +13,65 @@ pub struct SurfaceState<'w> {
     pub(crate) encode: Option<srgb_encode::SrgbEncode>,
     /// A glass theme is in force: the window's picture is copied from (`set_glass`).
     glass: bool,
+    /// AMD's frame-interpolation swap chain, in place of the surface's, while frame generation
+    /// is on (the surface is then never configured).
+    own: Option<temporal::OwnSwapChain>,
+}
+
+/// The window's next picture, as `wgpu::CurrentSurfaceTexture` names the cases.
+pub enum Acquired {
+    Success(WindowFrame),
+    Suboptimal(WindowFrame),
+    Timeout,
+    Occluded,
+    Outdated,
+    Lost,
+    Validation,
+}
+
+/// A picture of the window's: the surface's, or a buffer of frame generation's swap chain.
+pub struct WindowFrame {
+    pub texture: wgpu::Texture,
+    surface: Option<wgpu::SurfaceTexture>,
+}
+
+impl From<wgpu::CurrentSurfaceTexture> for Acquired {
+    fn from(c: wgpu::CurrentSurfaceTexture) -> Acquired {
+        let frame = |f: wgpu::SurfaceTexture| WindowFrame { texture: f.texture.clone(), surface: Some(f) };
+        match c {
+            wgpu::CurrentSurfaceTexture::Success(f) => Acquired::Success(frame(f)),
+            wgpu::CurrentSurfaceTexture::Suboptimal(f) => Acquired::Suboptimal(frame(f)),
+            wgpu::CurrentSurfaceTexture::Timeout => Acquired::Timeout,
+            wgpu::CurrentSurfaceTexture::Occluded => Acquired::Occluded,
+            wgpu::CurrentSurfaceTexture::Outdated => Acquired::Outdated,
+            wgpu::CurrentSurfaceTexture::Lost => Acquired::Lost,
+            wgpu::CurrentSurfaceTexture::Validation => Acquired::Validation,
+        }
+    }
+}
+
+/// Frame generation's swap chain for `window`, or None (logged) where it cannot be made.
+fn own_swap_chain(window: &winit_window::Window, device: &wgpu::Device, format: wgpu::TextureFormat, size: (u32, u32), vsync: bool) -> Option<temporal::OwnSwapChain> {
+    #[cfg(windows)]
+    {
+        use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+        let made = match window.window_handle().map(|h| h.as_raw()) {
+            Ok(RawWindowHandle::Win32(h)) => temporal::OwnSwapChain::new(device, windows::Win32::Foundation::HWND(h.hwnd.get() as *mut std::ffi::c_void), format, size, vsync),
+            _ => Err(anyhow!("no Win32 window")),
+        };
+        match made {
+            Ok(s) => Some(s),
+            Err(e) => {
+                log::warn!("frame generation is off: {e:#}");
+                None
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (window, device, format, size, vsync);
+        None
+    }
 }
 
 impl Drop for SurfaceState<'_> {
@@ -78,10 +137,11 @@ impl<'w> SurfaceState<'w> {
         width: u32,
         height: u32,
     ) -> Result<Self> {
-        Self::new_with(instance, window, renderer, width, height, true)
+        Self::new_with(instance, window, renderer, width, height, true, false)
     }
 
-    /// `vsync` false lets the frames go out as fast as they are drawn.
+    /// `vsync` false lets the frames go out as fast as they are drawn. `frame_generation`: the
+    /// window gets frame generation's swap chain where it can (DirectX 12).
     pub fn new_with(
         instance: &wgpu::Instance,
         window: Arc<winit_window::Window>,
@@ -89,8 +149,10 @@ impl<'w> SurfaceState<'w> {
         width: u32,
         height: u32,
         vsync: bool,
+        frame_generation: bool,
     ) -> Result<Self> {
         let surface = create_surface(instance, &window)?;
+        let own = frame_generation.then(|| own_swap_chain(&window, &renderer.device, renderer.format(), (width, height), vsync)).flatten();
         let encode = srgb_encode::SrgbEncode::wanted(renderer, renderer.format());
         let modes = listed_modes(&surface, renderer);
         // (copied from only for a glass theme: `set_glass`)
@@ -111,15 +173,18 @@ impl<'w> SurfaceState<'w> {
         };
         config.width = width.max(1);
         config.height = height.max(1);
-        surface.configure(&renderer.device, &config);
-        Ok(SurfaceState { surface: std::mem::ManuallyDrop::new(surface), config, lost: renderer.errors.device_lost.clone(), encode, glass: false })
+        if own.is_none() {
+            surface.configure(&renderer.device, &config);
+        }
+        Ok(SurfaceState { surface: std::mem::ManuallyDrop::new(surface), config, lost: renderer.errors.device_lost.clone(), encode, glass: false, own })
     }
 
     /// The window's surface on a device whose renderer is still being built ([`Opened`]'s
     /// device and format): pictures without the renderer (a clear, an interface) can be
     /// shown until [`Self::adopt`] hands it over.
-    pub fn early(instance: &wgpu::Instance, window: Arc<winit_window::Window>, device: &wgpu::Device, format: wgpu::TextureFormat, width: u32, height: u32, vsync: bool) -> Result<Self> {
+    pub fn early(instance: &wgpu::Instance, window: Arc<winit_window::Window>, device: &wgpu::Device, format: wgpu::TextureFormat, width: u32, height: u32, vsync: bool, frame_generation: bool) -> Result<Self> {
         let surface = create_surface(instance, &window)?;
+        let own = frame_generation.then(|| own_swap_chain(&window, device, format, (width, height), vsync)).flatten();
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
@@ -131,8 +196,10 @@ impl<'w> SurfaceState<'w> {
             alpha_mode: wgpu::CompositeAlphaMode::Auto,
             view_formats: vec![],
         };
-        surface.configure(device, &config);
-        Ok(SurfaceState { surface: std::mem::ManuallyDrop::new(surface), config, lost: Default::default(), encode: None, glass: false })
+        if own.is_none() {
+            surface.configure(device, &config);
+        }
+        Ok(SurfaceState { surface: std::mem::ManuallyDrop::new(surface), config, lost: Default::default(), encode: None, glass: false, own })
     }
 
     /// The renderer built for the device this surface was made on ([`Self::early`]) takes
@@ -156,6 +223,10 @@ impl<'w> SurfaceState<'w> {
             return;
         }
         self.glass = on;
+        // (frame generation's buffers can always be copied from)
+        if self.own.is_some() {
+            return;
+        }
         let copy = on && renderer.adapter.as_ref().is_some_and(|a| self.surface.get_capabilities(a).usages.contains(wgpu::TextureUsages::COPY_SRC));
         let usage = if copy { wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC } else { wgpu::TextureUsages::RENDER_ATTACHMENT };
         if self.config.usage != usage {
@@ -165,12 +236,23 @@ impl<'w> SurfaceState<'w> {
     }
 
     /// The window's next picture.
-    pub fn acquire(&self) -> wgpu::CurrentSurfaceTexture {
-        self.surface.get_current_texture()
+    pub fn acquire(&self) -> Acquired {
+        match &self.own {
+            Some(own) => match own.current() {
+                Some(texture) => Acquired::Success(WindowFrame { texture, surface: None }),
+                None => Acquired::Outdated,
+            },
+            None => self.surface.get_current_texture().into(),
+        }
+    }
+
+    /// Frame generation's handle for the renderer, while the window has its swap chain.
+    pub fn frame_generation(&self) -> Option<temporal::FrameGeneration> {
+        self.own.as_ref().map(|o| o.frame_generation())
     }
 
     /// The view `frame` is drawn into (of the renderer's format).
-    pub fn view(&self, device: &wgpu::Device, frame: &wgpu::SurfaceTexture) -> wgpu::TextureView {
+    pub fn view(&self, device: &wgpu::Device, frame: &WindowFrame) -> wgpu::TextureView {
         match &self.encode {
             Some(e) => e.view(device, frame.texture.size()),
             None => frame.texture.create_view(&Default::default()),
@@ -179,7 +261,7 @@ impl<'w> SurfaceState<'w> {
 
     /// The texture `frame` is drawn into ([`Self::view`]: the window's own, or the stand-in it is
     /// encoded from), to be copied from - none where it cannot be (a window that allows no copy).
-    pub fn picture(&self, frame: &wgpu::SurfaceTexture) -> Option<wgpu::Texture> {
+    pub fn picture(&self, frame: &WindowFrame) -> Option<wgpu::Texture> {
         let t = match &self.encode {
             Some(e) => e.texture()?,
             None => frame.texture.clone(),
@@ -188,11 +270,17 @@ impl<'w> SurfaceState<'w> {
     }
 
     /// Shows `frame`, drawn into [`Self::view`].
-    pub fn present(&self, device: &wgpu::Device, queue: &wgpu::Queue, frame: wgpu::SurfaceTexture) {
-        if let Some(e) = &self.encode {
-            e.encode(device, queue, &frame);
+    pub fn present(&self, device: &wgpu::Device, queue: &wgpu::Queue, frame: WindowFrame) {
+        if let Some(own) = &self.own {
+            own.present(device, queue, &frame.texture);
+            return;
         }
-        frame.present();
+        if let Some(e) = &self.encode {
+            e.encode(device, queue, &frame.texture);
+        }
+        if let Some(f) = frame.surface {
+            f.present();
+        }
     }
 
     pub fn resize(&mut self, renderer: &Renderer, width: u32, height: u32) {
@@ -202,14 +290,20 @@ impl<'w> SurfaceState<'w> {
         if renderer.device_lost().is_some() {
             return;
         }
-        self.surface.configure(&renderer.device, &self.config);
+        match self.own.as_mut() {
+            Some(own) => own.resize(&renderer.device, (self.config.width, self.config.height)),
+            None => self.surface.configure(&renderer.device, &self.config),
+        }
     }
 
     /// [`Self::resize`] while the renderer is still being built (see [`Self::early`]).
     pub fn resize_on(&mut self, device: &wgpu::Device, width: u32, height: u32) {
         self.config.width = width.max(1);
         self.config.height = height.max(1);
-        self.surface.configure(device, &self.config);
+        match self.own.as_mut() {
+            Some(own) => own.resize(device, (self.config.width, self.config.height)),
+            None => self.surface.configure(device, &self.config),
+        }
     }
 
     pub fn set_vsync(&mut self, renderer: &Renderer, enabled: bool, capped: bool) {
@@ -219,6 +313,10 @@ impl<'w> SurfaceState<'w> {
             return;
         }
         self.config.present_mode = mode;
+        if let Some(own) = self.own.as_mut() {
+            own.set_vsync(enabled);
+            return;
+        }
         // (two frames in flight: see `new_with`)
         self.config.desired_maximum_frame_latency = 2;
         self.surface.configure(&renderer.device, &self.config);

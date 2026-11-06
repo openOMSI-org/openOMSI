@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 const DLSS: [&str; 4] = ["sl.interposer.dll", "sl.common.dll", "sl.dlss.dll", "nvngx_dlss.dll"];
 const FSR3_DX12: [&str; 2] = ["amd_fidelityfx_loader_dx12.dll", "amd_fidelityfx_upscaler_dx12.dll"];
 const FSR3_VULKAN: [&str; 2] = ["amd_fidelityfx_loader_vk.dll", "amd_fidelityfx_upscaler_vk.dll"];
+const FRAME_GENERATION: [&str; 2] = ["amd_fidelityfx_loader_dx12.dll", "amd_fidelityfx_framegeneration_dx12.dll"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Api {
@@ -74,6 +75,11 @@ pub fn available(dir: &Path) -> Vec<&'static str> {
 
 fn offered(dir: &Path, windows: bool, rtx: bool) -> Vec<&'static str> {
     ["dlss", "fsr3"].into_iter().filter(|u| windows && present(dir, u) && (*u != "dlss" || rtx)).collect()
+}
+
+/// Whether AMD FSR 3 frame generation can run from `dir` (Windows, DirectX 12).
+pub fn frame_generation_available(dir: &Path) -> bool {
+    cfg!(windows) && FRAME_GENERATION.iter().all(|f| dir.join(f).is_file())
 }
 
 pub fn quality_word(s: &str) -> &'static str {

@@ -11,6 +11,8 @@
 mod d3d12;
 #[cfg(windows)]
 mod fidelityfx;
+#[cfg(windows)]
+mod framegen;
 mod frame;
 #[cfg(windows)]
 mod streamline;
@@ -20,6 +22,49 @@ mod vulkan;
 mod tests;
 
 pub(crate) use frame::*;
+#[cfg(windows)]
+pub use framegen::{FrameGeneration, OwnSwapChain};
+
+/// Frame generation is Windows-only (DirectX 12): never made elsewhere.
+#[cfg(not(windows))]
+#[derive(Clone)]
+pub enum FrameGeneration {}
+
+#[cfg(not(windows))]
+impl FrameGeneration {
+    pub(crate) fn prepare(&self, _: &wgpu::Texture, _: &wgpu::Texture, _: &wgpu::Texture, _: (u32, u32), _: &FrameConstants) {
+        match *self {}
+    }
+
+    pub(crate) fn working(&self) -> bool {
+        match *self {}
+    }
+}
+
+#[cfg(not(windows))]
+pub enum OwnSwapChain {}
+
+#[cfg(not(windows))]
+impl OwnSwapChain {
+    pub fn frame_generation(&self) -> FrameGeneration {
+        match *self {}
+    }
+    pub fn size(&self) -> (u32, u32) {
+        match *self {}
+    }
+    pub fn current(&self) -> Option<wgpu::Texture> {
+        match *self {}
+    }
+    pub fn present(&self, _: &wgpu::Device, _: &wgpu::Queue, _: &wgpu::Texture) {
+        match *self {}
+    }
+    pub fn resize(&mut self, _: &wgpu::Device, _: (u32, u32)) {
+        match *self {}
+    }
+    pub fn set_vsync(&mut self, _: bool) {
+        match *self {}
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TemporalUpscaler {

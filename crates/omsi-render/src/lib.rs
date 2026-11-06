@@ -160,6 +160,8 @@ pub struct Renderer {
     temporal_failed: bool,
     temporal_window: bool,
     temporal_kept: Option<temporal::Runtime>,
+    /// The window's frame generation, while its swap chain is frame generation's.
+    frame_generation: Option<temporal::FrameGeneration>,
     /// The frame's numbers, waiting for `temporal_present` at the end of it.
     temporal_pending: Option<TemporalFrame>,
     /// The same, at the main pass's sample count (colour writes off):

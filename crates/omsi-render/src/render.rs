@@ -290,8 +290,8 @@ impl Renderer {
         self.targets.triple_targets = None;
         self.targets.glass_picture = None;
         self.targets.target_use.clear();
-        let mesh_pages = self.mesh_pages;
-        *self = Renderer { mesh_pages, temporal_kept: upscaler, ..self.rebuilt(options) };
+        let (mesh_pages, frame_generation) = (self.mesh_pages, self.frame_generation.take());
+        *self = Renderer { mesh_pages, temporal_kept: upscaler, frame_generation, ..self.rebuilt(options) };
         scene.dirty = true;
         scene.model_buf = None;
         scene.params_buf = None;
@@ -319,6 +319,12 @@ impl Renderer {
 
     /// `render` for the window's own picture, the only one temporal upscaling draws: a photo or
     /// an off-screen picture would rebuild its targets and lose its history.
+    /// The window's frame generation (`SurfaceState::frame_generation`): upscaled frames hand it
+    /// what it makes the in-between frames from.
+    pub fn set_frame_generation(&mut self, frame_generation: Option<temporal::FrameGeneration>) {
+        self.frame_generation = frame_generation;
+    }
+
     pub fn render_window(&mut self, scene: &mut Scene, target: &wgpu::TextureView, width: u32, height: u32, camera: &Camera, lighting: &Lighting) {
         self.temporal_window = true;
         self.render(scene, target, width, height, camera, lighting);
