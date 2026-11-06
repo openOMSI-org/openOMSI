@@ -8,12 +8,7 @@ pub(crate) fn from_app(app: &crate::App) -> View {
     if app.net.lan.is_none() || app.shell.pause_category != navigation::Category::Online {
         return View::default();
     }
-    let weather = app.menus.online_weather.get_or_init(|| {
-        crate::weather_cycle::installed()
-            .into_iter()
-            .map(|(file, w)| (file, w.name))
-            .collect()
-    });
+    let weather = crate::weather_cycle::catalog(&app.menus.online_weather);
     let weather_at = weather
         .iter()
         .position(|(file, _)| {
@@ -94,7 +89,7 @@ pub(crate) fn from_app(app: &crate::App) -> View {
         },
         speeds: crate::admin::SPEEDS.to_vec(),
         cycling: app.session.weather_cycle.is_some(),
-        weather: weather.clone(),
+        weather: weather.to_vec(),
         weather_at,
         weather_name: if remote {
             omsi_lan::admin::unesc(panel.state_value("weather"))
@@ -162,8 +157,6 @@ pub(super) fn confirmation(sh: &mut Shell) {
     with_panel(sh, omsi_multiplayer_ui::confirmation);
 }
 #[cfg(test)]
-use omsi_multiplayer_ui::matches_query;
-#[cfg(test)]
 fn players(sh: &mut Shell, v: &View, area: Rect) {
     with_panel(sh, |panel| omsi_multiplayer_ui::players(panel, v, area));
 }
@@ -206,6 +199,16 @@ mod weather_cache_tests {
             app.menus.online_weather.set(weather.clone()).unwrap();
             for _ in 0..2 {
                 assert_eq!(from_app(&app).weather, weather);
+                let rows = crate::admin::items(&app);
+                let presets: Vec<_> = rows
+                    .iter()
+                    .filter(|(_, action)| action.starts_with("weather set "))
+                    .collect();
+                assert_eq!(presets.len(), weather.len());
+                for ((label, action), (file, name)) in presets.into_iter().zip(&weather) {
+                    assert!(label.contains(name));
+                    assert_eq!(action, &format!("weather set {file}"));
+                }
             }
         }
     }

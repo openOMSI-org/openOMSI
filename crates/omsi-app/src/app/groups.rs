@@ -435,7 +435,7 @@ pub(crate) struct MenuState {
     /// The open settings window's page titles, kept for a moment (asked every frame, see
     /// `game_lists::page_titles`).
     pub(crate) page_titles: std::cell::RefCell<crate::game_lists::TitlesCache>,
-    /// Installed weather names, loaded once on the first online-page snapshot.
+    /// Installed weather names, loaded once for online snapshots or local administration.
     pub(crate) online_weather: std::cell::OnceCell<Vec<(String, String)>>,
     /// (manufacturer, type) of each vehicle of `vehicle_list`, by its path.
     pub(crate) vehicle_meta: std::collections::HashMap<String, (String, String)>,

@@ -83,10 +83,10 @@ pub(crate) fn items(app: &App) -> Vec<(String, String)> {
     // the weather cycle, and each installed weather by name
     let cycling = app.session.weather_cycle.is_some();
     weather_rows.push((format!("{}: {}", omsi_ui::tr("Weather cycle"), if cycling { omsi_ui::tr("on") } else { omsi_ui::tr("off") }), "weather cycle".into()));
-    for (file, w) in crate::weather_cycle::installed() {
-        let now = app.args.weather.as_deref().is_some_and(|c| c.replace('\\', "/").eq_ignore_ascii_case(&file));
+    for (file, name) in crate::weather_cycle::catalog(&app.menus.online_weather) {
+        let now = app.args.weather.as_deref().is_some_and(|c| c.replace('\\', "/").eq_ignore_ascii_case(file));
         let mark = if now { format!("  {}", omsi_ui::tr("(now)")) } else { String::new() };
-        weather_rows.push((format!("{}: {}{mark}", omsi_ui::tr("Weather"), w.name), format!("weather set {file}")));
+        weather_rows.push((format!("{}: {}{mark}", omsi_ui::tr("Weather"), name), format!("weather set {file}")));
     }
     append_section(&mut out, omsi_ui::tr("Weather").into_owned(), weather_rows);
 

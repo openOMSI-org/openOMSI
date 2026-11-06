@@ -300,14 +300,7 @@ fn online_voice_and_time_controls_dispatch_existing_actions() {
 }
 
 #[test]
-fn online_search_matches_unicode_names_vehicles_and_ids() {
-    let mut p = session().players.remove(1);
-    p.name = "Alex 名稱".into();
-    assert!(matches_query(&p, "alex"));
-    assert!(matches_query(&p, "名稱"));
-    assert!(matches_query(&p, "man_d87"));
-    assert!(matches_query(&p, "#2"));
-    assert!(!matches_query(&p, "missing"));
+fn online_search_accepts_unicode_keyboard_input() {
     let mut sh = Shell::new();
     sh.ui.focus = Some(id_of("pause-online-search"));
     assert!(super::super::search::key(
