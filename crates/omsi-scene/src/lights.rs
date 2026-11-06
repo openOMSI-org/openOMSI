@@ -1105,8 +1105,7 @@ enum CoronaSource {
     },
 }
 
-// Pack reads are bounded to 64 MiB per asset; this cap bounds retained bytes, not the read peak.
-// Retained source bytes only; authenticated pack reads may transiently reach the pack asset limit.
+// Bounds the retained bytes only: one authenticated pack read can still reach the 64 MiB asset limit.
 const MAX_SCOPED_CORONA_BYTES: usize = 8 * 1024 * 1024;
 const MAX_SCOPED_CORONA_PATHS: usize = 4096;
 
