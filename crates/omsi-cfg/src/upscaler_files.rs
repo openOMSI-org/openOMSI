@@ -82,6 +82,11 @@ pub fn frame_generation_available(dir: &Path) -> bool {
     cfg!(windows) && FRAME_GENERATION.iter().all(|f| dir.join(f).is_file())
 }
 
+/// The `frame_generation` setting's word: `fsr3` (AMD FSR 3 frame generation), anything else `off`.
+pub fn frame_generation_word(s: &str) -> &'static str {
+    if s.trim().eq_ignore_ascii_case("fsr3") { "fsr3" } else { "off" }
+}
+
 pub fn quality_word(s: &str) -> &'static str {
     match s.trim().to_ascii_lowercase().as_str() {
         "native" => "native",

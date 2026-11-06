@@ -36,6 +36,9 @@ impl FrameGeneration {
         match *self {}
     }
 
+    pub(crate) fn generated(&self) -> u64 {
+        match *self {}
+    }
     pub(crate) fn working(&self) -> bool {
         match *self {}
     }
@@ -85,6 +88,14 @@ impl TemporalUpscaler {
         match self {
             TemporalUpscaler::Dlss => "dlss",
             TemporalUpscaler::Fsr3 => "fsr3",
+        }
+    }
+
+    /// The name the frame rate's corner shows.
+    pub fn label(self) -> &'static str {
+        match self {
+            TemporalUpscaler::Dlss => "DLSS",
+            TemporalUpscaler::Fsr3 => "FSR 3",
         }
     }
 

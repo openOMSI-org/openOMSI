@@ -674,9 +674,12 @@ impl App {
         }
         self.perf.total_frames += 1;
         if self.perf.fps_t.elapsed().as_secs_f32() >= 1.0 {
+            let generated = r.frames_generated();
+            self.perf.generated = generated.map(|n| n.saturating_sub(std::mem::replace(&mut self.perf.generated_mark, n)) as f32);
             if omsi_cfg::flags::OMSI_PROFILE.is_set() {
                 let secs = self.perf.fps_t.elapsed().as_secs_f32();
-                log::info!("profile interval: {:.1} fps over {secs:.2} s", self.perf.frames as f32 / secs);
+                let made = self.perf.generated.map(|g| format!(", {:.1} more made by frame generation", g / secs)).unwrap_or_default();
+                log::info!("profile interval: {:.1} fps over {secs:.2} s{made}", self.perf.frames as f32 / secs);
             }
             let speed = self
                 .player

@@ -629,6 +629,20 @@ impl Renderer {
         self.options.fsr1 && self.scale.fsr.is_some() && self.scene_size(width, height) != (width, height)
     }
 
+    /// The upscaler the window's picture goes through now, as the frame rate names it: DLSS or
+    /// FSR 3 while it runs, FSR 1 while it scales the picture up, else None (the standard one).
+    pub fn upscaler_in_use(&self, width: u32, height: u32) -> Option<&'static str> {
+        match self.options.temporal.filter(|_| self.temporal_pipes.is_some() && !self.temporal_failed) {
+            Some(t) => Some(t.upscaler.label()),
+            None => self.fsr_active(width, height).then_some("FSR 1"),
+        }
+    }
+
+    /// The in-between frames frame generation has made since the start, while it runs.
+    pub fn frames_generated(&self) -> Option<u64> {
+        self.frame_generation.as_ref().filter(|g| g.working()).map(|g| g.generated())
+    }
+
     /// The size the 3D scene is drawn at for a window of this size.
     pub fn scene_size(&self, width: u32, height: u32) -> (u32, u32) {
         if let Some(t) = self.options.temporal.filter(|_| self.temporal_pipes.is_some() && !self.temporal_failed) {

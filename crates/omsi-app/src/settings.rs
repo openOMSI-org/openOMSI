@@ -790,7 +790,7 @@ impl Settings {
                 "vsync" => s.vsync = b(v),
                 "volume" => s.volume = v.parse().unwrap_or(s.volume),
                 "upscaler" | "upscale_quality" | "fsr_quality" | "fsr_sharpness" => s.read_upscaler(&k, v),
-                "frame_generation" => s.frame_generation = if v.trim().eq_ignore_ascii_case("fsr3") { "fsr3" } else { "off" }.into(),
+                "frame_generation" => s.frame_generation = omsi_cfg::upscaler_files::frame_generation_word(v).into(),
                 // "auto", a fraction (0.75) or a percentage (75)
                 "render_scale" => {
                     s.render_scale = if v.eq_ignore_ascii_case("auto") {

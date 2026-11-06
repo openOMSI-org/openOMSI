@@ -34,6 +34,7 @@ use super::FrameConstants;
 use anyhow::{anyhow, bail, Context, Result};
 use omsi_cfg::upscaler_files::Api as Gpu;
 use std::ffi::c_void;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use windows::core::Interface;
 use windows::Win32::Foundation::HWND;
@@ -178,11 +179,20 @@ unsafe impl Send for Shared {}
 #[derive(Clone)]
 pub struct FrameGeneration(Arc<Mutex<Shared>>);
 
-/// The frame-interpolation swap chain's dispatch, asked for by the swap chain when the game
-/// presents; the context comes back as the user pointer.
+/// The in-between frames made since the start (`FrameGeneration::generated`).
+static GENERATED: AtomicU64 = AtomicU64::new(0);
+
+/// The frame-interpolation swap chain's dispatch, asked for by the swap chain for each frame
+/// it makes; the context comes back as the user pointer.
 unsafe extern "C" fn dispatch(params: *mut Header, context: *mut c_void) -> u32 {
     match api(Gpu::Dx12) {
-        Ok(api) => unsafe { (api.dispatch)(context.cast(), params) },
+        Ok(api) => {
+            let result = unsafe { (api.dispatch)(context.cast(), params) };
+            if result == 0 {
+                GENERATED.fetch_add(1, Ordering::Relaxed);
+            }
+            result
+        }
         Err(_) => 1,
     }
 }
@@ -298,6 +308,11 @@ impl FrameGeneration {
     /// Whether the window takes the picture before the HUD this frame.
     pub(crate) fn working(&self) -> bool {
         !self.0.lock().unwrap_or_else(|e| e.into_inner()).failed
+    }
+
+    /// The in-between frames made since the start.
+    pub(crate) fn generated(&self) -> u64 {
+        GENERATED.load(Ordering::Relaxed)
     }
 
     /// Right before the window's picture is presented: a frame drawn without the upscaler
