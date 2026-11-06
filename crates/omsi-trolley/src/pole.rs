@@ -204,7 +204,15 @@ pub struct Pole {
     carriage: Option<(f64, f64)>,
     /// The carriage's top when no wire is above it: where the gear took the pole off the wire.
     gear_top: Option<(f64, f64)>,
+    /// The head's swivel against the boom (rad): about the boom's own up axis (+ to the right)
+    /// and then about its side axis (+ the far end up), so that the shoe lies along the wire.
+    pub shoe_yaw: f64,
+    pub shoe_pitch: f64,
+    shoe_w: (f64, f64),
 }
+
+/// Off the wire the head swings back to straight on its own small spring (Hz, damping ratio).
+const SHOE_SPRING: (f64, f64) = (1.2, 0.35);
 
 /// How near its hook a pole let go of by the rope catches on it (rad above it, and to the side).
 const HOOK_CATCH: (f64, f64) = (0.07, 0.26);
@@ -261,6 +269,9 @@ impl Pole {
             gear_on: false,
             carriage: None,
             gear_top: None,
+            shoe_yaw: 0.0,
+            shoe_pitch: 0.0,
+            shoe_w: (0.0, 0.0),
         }
     }
 
@@ -404,6 +415,36 @@ impl Pole {
             self.clock += h;
             self.sub(net, base, &rot, span.accel, h, rope, amps, pole, out);
         }
+        self.swivel_shoe(net, &span.rot1, dt);
+    }
+
+    /// The head on the wire lies along it; off it, it swings back to straight.
+    fn swivel_shoe(&mut self, net: &WireNet, rot: &DMat3, dt: f64) {
+        let target = match self.contact.filter(|_| self.mode == PoleMode::OnWire) {
+            Some(c) => {
+                let (st, ct, sp, cp) = (self.theta.sin(), self.theta.cos(), self.psi.sin(), self.psi.cos());
+                let (f, s, u) = (DVec3::new(sp * ct, -cp * ct, st), DVec3::new(cp, sp, 0.0), DVec3::new(-sp * st, cp * st, ct));
+                let mut t = rot.transpose() * net.wire_point(&c).1;
+                if t.dot(f) < 0.0 {
+                    t = -t;
+                }
+                let (tf, ts) = (t.dot(f), t.dot(s));
+                Some((ts.atan2(tf), t.dot(u).atan2(tf.hypot(ts))))
+            }
+            None => None,
+        };
+        let dt = dt.max(1e-4);
+        if let Some((yaw, pitch)) = target {
+            self.shoe_w = ((yaw - self.shoe_yaw) / dt, (pitch - self.shoe_pitch) / dt);
+            (self.shoe_yaw, self.shoe_pitch) = (yaw, pitch);
+            return;
+        }
+        let omega = std::f64::consts::TAU * SHOE_SPRING.0;
+        let (k, c) = (omega * omega, 2.0 * SHOE_SPRING.1 * omega);
+        self.shoe_w.0 += (-k * self.shoe_yaw - c * self.shoe_w.0) * dt;
+        self.shoe_w.1 += (-k * self.shoe_pitch - c * self.shoe_w.1) * dt;
+        self.shoe_yaw += self.shoe_w.0 * dt;
+        self.shoe_pitch += self.shoe_w.1 * dt;
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1133,6 +1174,31 @@ mod tests {
         // the shoe presses the wire with about the spring's rated force
         assert!((p.force - 120.0).abs() < 40.0, "force {}", p.force);
         assert!((p.slide - 8.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn the_head_lies_along_the_wire_and_swings_back_straight_off_it() {
+        let net = straight();
+        // (the bus beside the wire, so that the boom stands swung out and the head is turned)
+        for side in [0.0, 1.2] {
+            let mut p = pole();
+            let mut ev = Vec::new();
+            let pos = DVec3::new(20.0, side, 0.0);
+            run(&mut p, &net, pos, 4.0, Rope::Aim { goal: Some(Contact { span: 0, s: 65.0, side: 0 }), auto: false }, 0.0, &mut ev);
+            run(&mut p, &net, pos, 2.0, Rope::Idle, 0.0, &mut ev);
+            assert_eq!(p.mode, PoleMode::OnWire);
+            let (st, ct, sp, cp) = (p.theta.sin(), p.theta.cos(), p.psi.sin(), p.psi.cos());
+            let (f, s, u) = (DVec3::new(sp * ct, -cp * ct, st), DVec3::new(cp, sp, 0.0), DVec3::new(-sp * st, cp * st, ct));
+            let shoe = p.shoe_pitch.cos() * (p.shoe_yaw.cos() * f + p.shoe_yaw.sin() * s) + p.shoe_pitch.sin() * u;
+            // (the wire runs along the bus: the bus's -y)
+            assert!(shoe.dot(DVec3::NEG_Y) > 0.9999, "side {side}: shoe {shoe:?}");
+            assert!((p.shoe_pitch + p.theta).abs() < 0.02, "{} {}", p.shoe_pitch, p.theta);
+            assert_eq!(p.shoe_yaw.abs() > 0.05, side > 0.0, "{}", p.shoe_yaw);
+            let turned = (p.shoe_yaw, p.shoe_pitch);
+            run(&mut p, &net, pos, 4.0, Rope::Pull, 0.0, &mut ev);
+            assert_eq!(p.mode, PoleMode::Down);
+            assert!(p.shoe_yaw.abs() < 0.01 && p.shoe_pitch.abs() < 0.01, "{turned:?} -> {} {}", p.shoe_yaw, p.shoe_pitch);
+        }
     }
 
     #[test]

@@ -318,6 +318,7 @@ make sound by them):
 | `Trolley_Pole<k>_Force` | what the shoe presses with (N) |
 | `Trolley_Pole<k>_Bounce` | 0..1 how hard the boom bounces on its script's lifting gear |
 | `Trolley_Pole<k>_Hit` | 0..1 how hard its last hit was (on the wire, back on it, against its rope) |
+| `Trolley_Pole<k>_Shoe_Yaw`, `_Shoe_Pitch` | the head's swivel against the boom (degrees): about the boom's up axis (+ to the right), then about its side axis (+ the far end up), so that the shoe lies along the wire; off the wire it swings back to 0 |
 | `Trolley_Volts`, `Trolley_Amps` | the voltage at the bus and the current from the line (negative: given back) |
 | `Trolley_Powered` | 1 while both poles are on live wire |
 | `Trolley_Notch` | the rheostat controller's position |
@@ -326,7 +327,9 @@ make sound by them):
 | `Trolley_Battery` | the battery's charge, 0..1 |
 
 A vehicle whose model carries its own poles puts `visible 0` in its `[trolley_pole]` and rotates
-its pole meshes by `Trolley_Pole<k>_Elev` and `_Azim`.
+its pole meshes by `Trolley_Pole<k>_Elev` and `_Azim`. Its head (the shoe and what swivels with it)
+turns on top of that by `_Shoe_Yaw` and then `_Shoe_Pitch`, about the head's pivot: a boom
+standing at 15 degrees under a level wire has `_Shoe_Pitch` -15, the shoe level on the wire.
 
 ### A script's lifting gear
 
