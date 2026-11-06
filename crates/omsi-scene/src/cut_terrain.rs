@@ -716,6 +716,7 @@ fn restore_spline_holes(
     ts: &mut TileSurface,
     hole_rims: &mut Vec<Vec<DVec3>>,
     sources: &[&Arc<StagedTile>],
+    terrain: &Terrain,
     (tx, ty): (i32, i32),
     origin: DVec3,
 ) {
@@ -723,9 +724,45 @@ fn restore_spline_holes(
         if (q.tx - tx).abs() > 1 || (q.ty - ty).abs() > 1 {
             continue;
         }
-        cut_spline_rims(ts, hole_rims, &q.hole_rims, (tx, ty), origin);
+        let buried: Vec<Vec<DVec3>> = q.hole_rims.iter().filter(|rim| ground_over_spline(ts, terrain, rim, origin)).cloned().collect();
+        cut_spline_rims(ts, hole_rims, &buried, (tx, ty), origin);
     }
 }
+
+/// Does this tile's saved ground come up over the aligned spline inside outline `rim` (world
+/// space) - a ditch, a trough? Asked across it (a quarter, half and three quarters of the way
+/// from each point of the outline to the one opposite), against the tile's road surfaces. Only such a spline needs its hole when the fit fails: one that lies on
+/// the ground or over it shows by itself, and its hole only opened slivers of sky where its
+/// outline met the other roads of a crossing (Nova Friburgo, tile -7744,-4167). Where no
+/// point of it can be asked (no surface known there, or off this tile) the hole is cut as
+/// before.
+fn ground_over_spline(ts: &TileSurface, terrain: &Terrain, rim: &[DVec3], origin: DVec3) -> bool {
+    let side = tile_size();
+    let n = rim.len();
+    let across = (0..n / 2).flat_map(|i| {
+        let (a, b) = (rim[i], rim[n - 1 - i]);
+        [a.lerp(b, 0.25), a.lerp(b, 0.5), a.lerp(b, 0.75)]
+    });
+    let mut asked = false;
+    for p in across {
+        let l = p - origin;
+        if !(0.0..=side).contains(&l.x) || !(0.0..=side).contains(&l.y) {
+            continue;
+        }
+        let Some(surface) = ts.sample(l.x as f32, l.y as f32) else {
+            continue;
+        };
+        asked = true;
+        if terrain.sample(l.x as f32, l.y as f32) > surface + GROUND_OVER_SPLINE {
+            return true;
+        }
+    }
+    !asked
+}
+
+/// How far the saved ground may stand over an aligned spline's surface without needing its
+/// hole when the fit fails (m).
+const GROUND_OVER_SPLINE: f32 = 0.05;
 
 /// Cut Omsi.exe's outlines (world space) of aligned splines out of this tile's ground.
 fn cut_spline_rims(
@@ -755,8 +792,8 @@ pub(super) fn finish_spline_fit(
     match result {
         Ok(mesh) => mesh,
         Err(e) => {
-            log::warn!("tile {key:?}: cannot fit spline terrain: {e}; restoring saved ground and spline holes");
-            restore_spline_holes(ts, hole_rims, sources, key, origin);
+            log::warn!("tile {key:?}: cannot fit spline terrain: {e}; restoring saved ground and the holes of the splines it covers");
+            restore_spline_holes(ts, hole_rims, sources, terrain, key, origin);
             build_terrain_mesh(terrain)
         }
     }
