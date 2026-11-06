@@ -227,7 +227,7 @@ mod tests {
         assert_eq!(frame_generation_word(" FSR3 "), "fsr3");
         assert_eq!(frame_generation_word("dlss"), "dlss2x");
         assert_eq!(frame_generation_word("DLSS4X"), "dlss4x");
-        assert_eq!(frame_generation_word("dlss5x"), "off");
+        assert_eq!(frame_generation_word("dlss8x"), "off");
         assert_eq!(choices(true, true), ["fsr3", "dlss"]);
         assert!(choices(false, false).is_empty());
         assert_eq!(frame_generation_menu(&["fsr3"]).len(), 2);
