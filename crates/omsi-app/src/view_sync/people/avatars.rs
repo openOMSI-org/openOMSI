@@ -80,14 +80,15 @@ fn start_loading() {
                     })
                     .collect()
             };
+            let n = loaded.len();
             let mut kinds: [Vec<Arc<HumanType>>; 4] = Default::default();
             for (info, t) in loaded {
-                kinds[kind_index(info.female, info.child)].push(t);
+                let k = &mut kinds[kind_index(info.female, info.child)];
+                k.extend(std::iter::repeat_n(t, weight(&info.id)));
             }
             let motions = load_motions(&dir);
-            let n: usize = kinds.iter().map(|k| k.len()).sum();
             log::info!(
-                "avatars: {n} loaded from {} in {:.1} s ({} women, {} men, {} girls, {} boys)",
+                "avatars: {n} loaded from {} in {:.1} s (draw slots: {} women, {} men, {} girls, {} boys)",
                 dir.display(),
                 started.elapsed().as_secs_f32(),
                 kinds[0].len(),
@@ -144,6 +145,14 @@ pub(super) fn clip_pose(id: u32, ty: &HumanType, pose: &omsi_sim::human::Pose, s
     let mix = Mix { walk: pick(Kind::Walk), stand: pick(Kind::Stand), sit: pick(Kind::Sit) };
     let seconds = seconds + (h(7) % 600) as f32;
     omsi_sim::human::clips::apply(ty, posed, &mix, pose.clip_blend(), seconds);
+fn weight(id: &str) -> usize {
+    match id {
+        "Female_Adult_06" | "Female_Adult_10" | "Female_Adult_16" | "Female_Child_02" | "Male_Adult_15" | "Male_Adult_19" | "Male_Adult_21" => 1,
+        _ if id.contains("_Adult_") || id.contains("_Child_") => 10,
+        _ if id.starts_with("Business_") => 4,
+        _ if id.starts_with("Female_Party_") => 2,
+        _ => 1,
+    }
 }
 
 fn kind_index(female: bool, child: bool) -> usize {
@@ -428,5 +437,19 @@ fn read_figures_ahead(types: &[Arc<HumanType>], root: &std::path::Path, read: &F
     });
     if let Err(e) = spawned {
         log::warn!("people: no thread to read the figures' pictures ahead: {e}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn everyday_avatars_outweigh_uniforms() {
+        assert_eq!(super::weight("Female_Adult_01"), 10);
+        assert_eq!(super::weight("Male_Child_01"), 10);
+        assert_eq!(super::weight("Female_Child_02"), 1);
+        assert_eq!(super::weight("Male_Adult_19"), 1);
+        assert_eq!(super::weight("Pilot_Male_01"), 1);
+        assert_eq!(super::weight("Construction_Male_03"), 1);
+        assert_eq!(super::weight("Business_Female_02"), 4);
     }
 }
