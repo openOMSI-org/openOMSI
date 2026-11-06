@@ -8,6 +8,11 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **What's new in the launcher**: after an update the launcher shows the notes of every
+  version since the one last seen, opened, and the others folded below them; *What's new*
+  beside *Check now* (Settings) opens them at any time, and the offer of an update shows that
+  version's notes before it is installed. The notes come from the releases on GitHub; links in
+  them open in the browser, and only https ones.
 - **Remote cockpit on a phone or tablet**: the game serves a page on your home network
   (Options > Interface > Remote cockpit, off until switched on); scan the QR code or type the
   address and the 6-digit code, and the phone or tablet shows a dashboard with the map and the
@@ -589,6 +594,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **No more slivers of sky at crossings of raised roads** (Nova Friburgo, since 0.3.42): where
+  the ground cannot be fitted to roads it should follow, only the roads the ground covers (a
+  ditch) are cut out of it, not those lying on it.
 - **A key or a wheel's button can recentre head tracking**: *Head tracking: centre again* takes
   where your head is now as the middle (opentrack, native TrackIR and a Tobii eye tracker), without
   putting the view straight as F1 does. It is on the keys list without a key; a button that already
