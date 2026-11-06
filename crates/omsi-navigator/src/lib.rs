@@ -1199,6 +1199,7 @@ impl Navigator {
         self.panel_overlay = None;
         self.dock_slot = None;
         self.board = None;
+        self.release_closed_city(renderer, scene);
         // (with the navigator off the route is still followed for OMSI 2's arrows)
         if !self.enabled && !self.city.open && !self.arrows && !self.remote && self.shown < 0.01 {
             self.invalidate_next_stop_distance();

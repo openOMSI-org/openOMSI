@@ -992,7 +992,7 @@ impl World {
             memo.resume = false;
             return 0;
         }
-        if pass != BudgetPass::Now && !memo.resume && !retry_due && memo.unchanged(generation, usage, limit, centers) {
+        if pass != BudgetPass::Now && !memo.resume && !retry_due && memo.unchanged(generation, usage, limit, card_restore_room(video_limit, card), centers) {
             return 0;
         }
         let ts = tile_size();
@@ -1192,7 +1192,7 @@ impl World {
         // Nothing left to do for now: not looked at again before something changed. (A pass
         // that shrank or sent back textures changes the bytes in use, now or when they come
         // back, and looks again.)
-        memo.remember(generation, usage, limit, centers, shrunk.is_empty() && restoring == 0);
+        memo.remember(generation, usage, limit, card_restore_room(video_limit, card), centers, shrunk.is_empty() && restoring == 0);
         memo.resume = cut_short;
         // (the swapped-in textures waiting for theirs go along)
         let shrunk_n = shrunk.len();
@@ -1455,6 +1455,7 @@ pub(super) struct BudgetMemo {
     generation: u64,
     usage: u64,
     limit: u64,
+    room: u64,
     centers: Vec<DVec3>,
     in_use: u64,
 }
@@ -1463,10 +1464,11 @@ impl BudgetMemo {
     /// How far a center may move before the textures' distances are looked at again.
     const MOVED: f64 = 25.0;
 
-    fn unchanged(&self, generation: u64, usage: u64, limit: u64, centers: &[DVec3]) -> bool {
+    fn unchanged(&self, generation: u64, usage: u64, limit: u64, room: u64, centers: &[DVec3]) -> bool {
         self.idle
             && self.generation == generation
             && self.limit == limit
+            && room <= self.room.saturating_add(64 << 20)
             && usage <= self.usage.max(limit)
             && usage + limit / 100 >= self.usage
             && self.centers.len() == centers.len()
@@ -1477,8 +1479,9 @@ impl BudgetMemo {
                 .all(|(a, b)| a.truncate().distance_squared(b.truncate()) < Self::MOVED * Self::MOVED)
     }
 
-    fn remember(&mut self, generation: u64, usage: u64, limit: u64, centers: &[DVec3], idle: bool) {
+    fn remember(&mut self, generation: u64, usage: u64, limit: u64, room: u64, centers: &[DVec3], idle: bool) {
         self.idle = idle;
+        self.room = room;
         self.generation = generation;
         self.usage = usage;
         self.limit = limit;
