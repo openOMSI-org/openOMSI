@@ -145,6 +145,8 @@ pub(super) fn clip_pose(id: u32, ty: &HumanType, pose: &omsi_sim::human::Pose, s
     let mix = Mix { walk: pick(Kind::Walk), stand: pick(Kind::Stand), sit: pick(Kind::Sit) };
     let seconds = seconds + (h(7) % 600) as f32;
     omsi_sim::human::clips::apply(ty, posed, &mix, pose.clip_blend(), seconds);
+}
+
 fn weight(id: &str) -> usize {
     match id {
         "Female_Adult_06" | "Female_Adult_10" | "Female_Adult_16" | "Female_Child_02" | "Male_Adult_15" | "Male_Adult_19" | "Male_Adult_21" => 1,
