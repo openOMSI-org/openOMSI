@@ -237,6 +237,7 @@ impl Renderer {
         }
         scene.changed.clear();
         scene.changed_mark.clear();
+        scene.model_epoch += 1;
         // one entry per (instance, material slot) so every draw call has its own parameters
         let mut mats: Vec<[[f32; 4]; 4]> = Vec::new();
         let mut params: Vec<[f32; 4]> = Vec::new();

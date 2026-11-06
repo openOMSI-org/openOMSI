@@ -309,3 +309,19 @@ fn a_run_cut_short_leaves_the_settings_and_the_backup_as_they_were() {
     assert_eq!(backup_in(&dir).unwrap()["msaa"], json!(4));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn an_upscaler_at_work_leaves_the_msaa_and_the_render_scale_out_of_the_steps() {
+    let hw = Machine::default();
+    let mut s = pc_1440p();
+    s["msaa"] = json!(4);
+    s["render_scale"] = json!("0.75");
+    let keys = |s: &Value| -> Vec<&'static str> {
+        lighter_steps(s, Limit::Gpu, &hw).iter().map(|x| x.key).chain(heavier_steps(s, s, &hw).iter().map(|x| x.key)).collect()
+    };
+    assert!(keys(&s).iter().any(|k| *k == "msaa" || *k == "render_scale"));
+    s["upscaler"] = json!("dlss");
+    assert!(!keys(&s).iter().any(|k| *k == "msaa" || *k == "render_scale"));
+    s["temporal_upscalers"] = json!(["fsr3"]);
+    assert!(keys(&s).iter().any(|k| *k == "msaa" || *k == "render_scale"), "its DLLs are gone");
+}

@@ -27,7 +27,7 @@ export function Field({ label, help, children }) {
 }
 
 /** A select of `options`: [value, label] pairs (labels translated unless `raw`). */
-export function Select({ value, options, onChange, disabled, raw, placeholder }) {
+export function Select({ value, options, onChange, disabled, raw, placeholder, always }) {
   const [open, setOpen] = useState(false);
   const [hi, setHi] = useState(-1);
   const [place, setPlace] = useState(null);
@@ -84,7 +84,7 @@ export function Select({ value, options, onChange, disabled, raw, placeholder })
   }
   const pick = (v) => {
     setOpen(false);
-    if (v !== now) onChange(v);
+    if (v !== now || always) onChange(v);
   };
   const move = (n) => {
     const i = Math.max(0, Math.min(shown.length - 1, n));

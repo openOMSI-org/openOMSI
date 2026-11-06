@@ -227,6 +227,13 @@ impl Renderer {
         self.rebuild_in_place(scene, options);
     }
 
+    /// The upscaler could not start or stopped working: back to the player's anti-aliasing.
+    pub(crate) fn fall_back_without_upscaler(&mut self, scene: &mut Scene) {
+        let msaa = self.options.msaa_fallback.max(1);
+        log::warn!("drawing without the upscaler from now on, with {msaa}x MSAA");
+        self.rebuild_with(scene, RenderOptions { temporal: None, msaa, msaa_fallback: 0, ..self.options });
+    }
+
     /// Rebuild the pipelines and targets without multisampling after a GPU error with it.
     /// The scene's materials stay valid (the device hands out the same bind group layout
     /// for identical entries); its per-draw buffers and camera bind group are made anew,
@@ -252,6 +259,12 @@ impl Renderer {
             Some(c) => RenderOptions { msaa: c.msaa_for(options.msaa), ssao: options.ssao && c.ssao, shadow_size: options.shadow_size.clamp(512, c.shadow_size), puddle_reflections: options.puddle_reflections && c.puddle_reflections, ..options },
             None => options,
         };
+        // (an upscaler takes the place of the MSAA, whatever the settings say; the player's stays
+        // for when it gives up)
+        let options = match options.temporal {
+            Some(_) => RenderOptions { msaa: 1, msaa_fallback: if options.msaa > 1 { options.msaa } else { options.msaa_fallback }, ..options },
+            None => options,
+        };
         let options = if options.ray_tracing && options.msaa > 4 && !omsi_cfg::flags::OMSI_FULL_GPU.is_set() { RenderOptions { msaa: 4, ..options } } else { options };
         if options == self.options {
             return false;
@@ -262,6 +275,9 @@ impl Renderer {
     }
 
     fn rebuild_in_place(&mut self, scene: &mut Scene, options: RenderOptions) {
+        // (the same device: the upscaler goes on, and Streamline on Vulkan could not start again;
+        // without one in the new options it is dropped here, with its context and textures)
+        let upscaler = self.temporal_runtime().or_else(|| self.temporal_kept.take()).filter(|_| options.temporal.is_some());
         // Release render targets before building their replacements. Keeping the old
         // targets alive while the new renderer is built can turn a recoverable OOM into
         // another allocation failure.
@@ -275,7 +291,7 @@ impl Renderer {
         self.targets.glass_picture = None;
         self.targets.target_use.clear();
         let mesh_pages = self.mesh_pages;
-        *self = Renderer { mesh_pages, ..self.rebuilt(options) };
+        *self = Renderer { mesh_pages, temporal_kept: upscaler, ..self.rebuilt(options) };
         scene.dirty = true;
         scene.model_buf = None;
         scene.params_buf = None;
@@ -301,6 +317,14 @@ impl Renderer {
         self.render_inner(scene, target, width, height, camera, lighting, true, None, None, false);
     }
 
+    /// `render` for the window's own picture, the only one temporal upscaling draws: a photo or
+    /// an off-screen picture would rebuild its targets and lose its history.
+    pub fn render_window(&mut self, scene: &mut Scene, target: &wgpu::TextureView, width: u32, height: u32, camera: &Camera, lighting: &Lighting) {
+        self.temporal_window = true;
+        self.render(scene, target, width, height, camera, lighting);
+        self.temporal_window = false;
+    }
+
     /// Three independently culled and shaded physical panels, composited into a
     /// spanning window. HUD and menu remain in window pixels and are drawn once.
     pub fn render_triple(
@@ -316,6 +340,7 @@ impl Renderer {
         if width < 3 || height == 0 || self.device_lost().is_some() {
             return;
         }
+        self.temporal_forget();
         let views = rig.views(camera, width, height);
         // all three panels have the same size: they share the size-keyed targets
         let pw = panel_width(width);
@@ -775,6 +800,8 @@ impl Renderer {
         }
         let puddles_on = self.encode_scene_reflections(&mut enc.picture, scene, &f, &plan, &cu, &mut timers);
         self.encode_fog_lamps(&mut enc.picture, scene, &f, vp_mat, puddles_on, &mut timers);
+        self.encode_temporal_late_motion(&mut enc.picture, scene, &f, &plan);
+        self.encode_temporal_mask(&mut enc.picture, scene, &f, &plan);
         self.encode_rain_film(&mut enc.picture, scene, &f, &plan.rain_batches, puddles_on);
         self.encode_classic_present(&mut enc.picture, scene, &f, puddles_on);
         if f.enhanced {
@@ -783,6 +810,10 @@ impl Renderer {
         self.encode_upscale(&mut enc.picture, scene, &f, &mut timers);
         clock.stage(self, "encode", "mirror.encode");
         self.finish_and_submit(enc, main_parts, big, with_overlays, &mut clock, timers);
+        // the picture is on the queue now: the upscaler brings it up into the window, the HUD after
+        if let Some(frame) = self.temporal_pending.take().filter(|_| f.temporal_frame) {
+            self.temporal_present(scene, &f, frame);
+        }
     }
 
     /// Render off-screen and return RGBA8 pixels.

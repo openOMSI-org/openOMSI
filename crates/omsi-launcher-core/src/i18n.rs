@@ -129,7 +129,7 @@ mod tests {
             for key in ["Road glare", "Traffic headlight brightness", "Apply graphics changes?", "Disk cache and multiplayer downloads", "Unknown cache scope."] {
                 assert!(table.get(key).is_some_and(|value| !value.is_empty() && value != key), "{lang}: {key}");
             }
-            assert_eq!(table.get("AMD FSR 1.0").map(String::as_str), Some("AMD FSR 1.0"));
+            assert_eq!(table.get("AMD FSR 1").map(String::as_str), Some("AMD FSR 1"));
         }
     }
 

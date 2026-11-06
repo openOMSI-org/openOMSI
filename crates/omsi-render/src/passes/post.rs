@@ -59,7 +59,9 @@ impl Renderer {
         self.queue
             .write_buffer(&self.tone.post_buf, 0, bytemuck::bytes_of(&pu));
         // (a mirror's small picture goes without FXAA)
+        // (nor does the picture an upscaler takes: it smooths the edges from its jittered frames)
         let fxaa = with_overlays
+            && !f.temporal_frame
             && self.options.fxaa
             && self.options.msaa <= 1
             && !f.env.no_fxaa;
@@ -193,15 +195,24 @@ impl Renderer {
     /// else 0. (The standard upscaler keeps the textures as they were: its sharpening does
     /// its part, and the picture it gives is unchanged.)
     pub(crate) fn fsr_mip_bias(&self, f: &FrameCtx) -> f32 {
+        if f.temporal_frame {
+            return temporal_mip_bias(f.width, f.full_w);
+        }
         let off = omsi_cfg::flags::OMSI_NO_FSR_MIP_BIAS.is_set() || self.scale.fsr_mip_bias_off.get();
         if !off && self.fsr_draws(f) { (f.width as f32 / f.full_w.max(1) as f32).log2().clamp(-1.0, 0.0) } else { 0.0 }
     }
 
     // --- the smaller picture scaled up to the window, the HUD on top at full size;
     // the smaller the picture, the more it is sharpened
-    pub(crate) fn encode_upscale(&self, encoder: &mut wgpu::CommandEncoder, scene: &Scene, f: &FrameCtx, timers: &mut PassTimers) {
+    pub(crate) fn encode_upscale(&mut self, encoder: &mut wgpu::CommandEncoder, scene: &Scene, f: &FrameCtx, timers: &mut PassTimers) {
         let (width, height, full_w) = (f.width, f.height, f.full_w);
         let overlays = &f.overlays;
+        if f.temporal_frame {
+            // the upscaler takes the picture from here, after this frame's submit, and draws
+            // the HUD after it (`temporal_present`)
+            self.temporal_end_of_scene(encoder, scene);
+            return;
+        }
         if let Some((_, bg)) = &f.scene_target {
             // Opt-in FSR1 experiment. Use the existing scene scale setting for quality.
             // Leave mirrors, offscreen views, vanilla FXAA and the default path untouched.

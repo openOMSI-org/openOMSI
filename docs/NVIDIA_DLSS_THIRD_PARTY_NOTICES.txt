@@ -1,0 +1,36 @@
+Third-party notice for the public DLSS adapter source
+==================================================================
+
+Source: https://github.com/Criisko/openOMSI/pull/1
+Source repository: https://github.com/Criisko/openOMSI
+Originally integrated October 3, 2026, under the repository's MIT license.
+This notice applies to portions copied/adapted from the public PR, not to
+NVIDIA's proprietary DLSS runtime or the private OmniLine product.
+
+MIT License
+
+Copyright (c) 2026 usonskyyyy
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+The Streamline SDK's source/header MIT notice is preserved in
+crates/omsi-render/src/temporal/streamline.rs. This notice is for
+public source attribution only; it is NOT a redistribution license for
+nvngx_dlss.dll or other separately licensed NVIDIA binaries.
+openOMSI does not package these DLLs: see docs/UPSCALER_THIRD_PARTY_LICENSING.md.

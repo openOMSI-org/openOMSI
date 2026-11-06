@@ -71,7 +71,7 @@ pub struct TrolleyGear {
 }
 
 struct Names {
-    pole: Vec<[String; 7]>,
+    pole: Vec<[String; 9]>,
     /// Written by a model's script that handles the ropes itself (not declared by the game).
     rope: Vec<[String; 3]>,
     /// Written by a model's script that drives the lifting gear itself.
@@ -100,6 +100,8 @@ impl TrolleyGear {
                     format!("Trolley_Pole{k}_Force"),
                     format!("Trolley_Pole{k}_Bounce"),
                     format!("Trolley_Pole{k}_Hit"),
+                    format!("Trolley_Pole{k}_Shoe_Yaw"),
+                    format!("Trolley_Pole{k}_Shoe_Pitch"),
                 ]
             })
             .collect();
@@ -515,7 +517,7 @@ impl VehicleInstance {
         let mut vals = std::mem::take(&mut g.var_values);
         vals.clear();
         for (p, hit) in g.rig.poles.iter().zip(&g.rig.hit_level) {
-            vals.extend_from_slice(&[p.theta.to_degrees() as f32, p.psi.to_degrees() as f32, p.state_code(), if p.closed { 1.0 } else { 0.0 }, p.force as f32, p.bounce_level(), *hit]);
+            vals.extend_from_slice(&[p.theta.to_degrees() as f32, p.psi.to_degrees() as f32, p.state_code(), if p.closed { 1.0 } else { 0.0 }, p.force as f32, p.bounce_level(), *hit, p.shoe_yaw.to_degrees() as f32, p.shoe_pitch.to_degrees() as f32]);
         }
         vals.extend_from_slice(&[g.rig.volts, g.rig.amps, if g.rig.circuit { 1.0 } else { 0.0 }, out.notch, g.rig.arc, g.rig.hiss, out.battery_soc]);
         let mut ids = std::mem::take(&mut g.var_ids);
