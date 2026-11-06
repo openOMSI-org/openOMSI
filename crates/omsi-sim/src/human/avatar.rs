@@ -249,7 +249,7 @@ impl HumanType {
             variants: Vec::new(),
             extra_dirs: vec![model_dir],
             face,
-            biped: super::clips::Biped::from_joints(&m.joints, arm_t).map(Box::new),
+            biped: path.extension().is_some_and(|e| e.eq_ignore_ascii_case("fbx")).then(|| super::clips::Biped::from_joints(&m.joints, arm_t)).flatten().map(Box::new),
         })
     }
 

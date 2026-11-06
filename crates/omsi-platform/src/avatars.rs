@@ -68,7 +68,22 @@ pub fn user_dir() -> Option<PathBuf> {
 
 /// The folder of the pack, if there is one.
 pub fn find_dir() -> Option<PathBuf> {
-    dirs().into_iter().find(|d| d.join("pack.json").is_file())
+    if let Some(d) = omsi_cfg::flags::OMSI_AVATARS_DIR.var() {
+        let d = PathBuf::from(d);
+        return d.join("pack.json").is_file().then_some(d);
+    }
+    best(dirs())
+}
+
+fn best(dirs: Vec<PathBuf>) -> Option<PathBuf> {
+    dirs.into_iter().filter(|d| d.join("pack.json").is_file()).fold(None, |b: Option<PathBuf>, d| match b {
+        Some(b) if version(&b) >= version(&d) => Some(b),
+        _ => Some(d),
+    })
+}
+
+fn needs_fetch(found: Option<&Path>) -> bool {
+    omsi_cfg::flags::OMSI_AVATARS_DIR.var().is_none() && found.is_none_or(|d| version(d) < PACK_VERSION)
 }
 
 /// The avatars of the pack in `dir`.
@@ -106,7 +121,7 @@ static FETCHING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::
 /// drawn from the next drive on.
 pub fn fetch_if_missing() {
     static STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-    if cfg!(target_os = "android") || find_dir().is_some_and(|d| version(&d) >= PACK_VERSION) || STARTED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+    if cfg!(target_os = "android") || !needs_fetch(find_dir().as_deref()) || STARTED.swap(true, std::sync::atomic::Ordering::Relaxed) {
         return;
     }
     let Some(dir) = user_dir() else { return };
@@ -185,6 +200,8 @@ mod tests {
         super::fetch(&dir, &part).unwrap();
         let a = super::load(&dir);
         assert_eq!(a.len(), 91);
+        assert_eq!(super::clips(&dir).len(), 34);
+        assert_eq!(super::version(&dir), super::PACK_VERSION);
         assert!(!part.exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -199,7 +216,15 @@ mod tests {
         assert_eq!(c.len(), 1);
         assert!(c[0].female && c[0].kind == "walk");
         assert_eq!(super::version(&dir), super::PACK_VERSION);
+        let old = dir.with_extension("v1");
+        std::fs::create_dir_all(&old).unwrap();
+        std::fs::write(old.join("pack.json"), r#"{"version":1,"avatars":[]}"#).unwrap();
+        assert_eq!(super::best(vec![old.clone(), dir.clone()]), Some(dir.clone()), "the newer pack wins wherever it lies");
+        if omsi_cfg::flags::OMSI_AVATARS_DIR.var().is_none() {
+            assert!(super::needs_fetch(Some(&old)) && super::needs_fetch(None) && !super::needs_fetch(Some(&dir)));
+        }
         let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&old);
     }
 
     #[test]

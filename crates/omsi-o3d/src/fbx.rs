@@ -60,7 +60,7 @@ pub fn parse_fbx_clip(bytes: &[u8]) -> Result<Clip, O3dError> {
         return Err(err("no skeleton"));
     }
     let names = joints.iter().map(|&i| (scene.nodes[i].element.name.as_ref() as &str).to_string()).collect();
-    let n = (((stack.time_end - stack.time_begin) * fps).round() as usize).clamp(1, 20_000);
+    let n = (((stack.time_end - stack.time_begin) * fps).round() as usize).clamp(1, 3_000);
     let mut frames = Vec::with_capacity(n);
     for f in 0..n {
         let t = stack.time_begin + f as f64 / fps;

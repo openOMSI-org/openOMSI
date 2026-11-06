@@ -14,6 +14,13 @@ fn key(name: &str) -> String {
     n.strip_prefix("bip01").map(|r| r.trim().to_string()).unwrap_or(n)
 }
 
+fn twist(q: Quat, axis: Vec3) -> Quat {
+    let v = Vec3::new(q.x, q.y, q.z);
+    let p = axis * v.dot(axis);
+    let t = Quat::from_xyzw(p.x, p.y, p.z, q.w);
+    if t.length_squared() < 1e-12 { Quat::IDENTITY } else { t.normalize() }
+}
+
 fn index(names: &[String], want: &str) -> Option<usize> {
     names.iter().position(|n| key(n) == want)
 }
@@ -32,7 +39,7 @@ impl Biped {
         for (k, n) in NAMES.iter().enumerate() {
             bind[k] = joints[index(&names, n)?].rotation;
         }
-        Some(Biped { pelvis: bind[PELVIS], bind, arm_t })
+        Some(Biped { pelvis: twist(bind[PELVIS], Vec3::Y), bind, arm_t })
     }
 }
 
@@ -55,7 +62,7 @@ impl Motion {
     pub fn from_clip(clip: &Clip, kind: Kind, female: bool) -> Option<Motion> {
         let ix: Vec<usize> = NAMES.iter().map(|n| index(&clip.names, n)).collect::<Option<_>>()?;
         let rel = |f: &[(Vec3, Quat)]| -> [Quat; 8] {
-            let p = f[ix[PELVIS]].1.inverse();
+            let p = twist(f[ix[PELVIS]].1, Vec3::Y).inverse();
             std::array::from_fn(|k| p * f[ix[k]].1)
         };
         let (start, len) = match kind {
@@ -66,7 +73,10 @@ impl Motion {
             return None;
         }
         let n = clip.frames.len();
-        let frames = (start..start + len).map(|i| rel(&clip.frames[i % n])).collect();
+        let frames: Vec<[Quat; 8]> = (start..start + len).map(|i| rel(&clip.frames[i % n])).collect();
+        if frames.iter().flatten().any(|q| !q.is_finite()) {
+            return None;
+        }
         Some(Motion { kind, female, fps: clip.fps.max(1.0), frames })
     }
 
@@ -153,21 +163,29 @@ pub fn apply(ty: &HumanType, posed: &mut Posed, mix: &Mix, blend: (f32, f32, f32
     if keep >= 1.0 || !posed.ok {
         return;
     }
-    let stand = mix.stand.ping_pong(seconds);
-    let walking = mix.walk.cycle(phase);
-    let sitting = mix.sit.ping_pong(seconds);
-    let rel: [Quat; 8] = std::array::from_fn(|k| stand[k].slerp(walking[k], walk.clamp(0.0, 1.0)).slerp(sitting[k], sit.clamp(0.0, 1.0)));
+    let (walk, sit) = (walk.clamp(0.0, 1.0), sit.clamp(0.0, 1.0));
+    let mut rel = if walk >= 1.0 { mix.walk.cycle(phase) } else { mix.stand.ping_pong(seconds) };
+    if walk > 0.0 && walk < 1.0 {
+        let w = mix.walk.cycle(phase);
+        rel = std::array::from_fn(|k| rel[k].slerp(w[k], walk));
+    }
+    if sit > 0.0 {
+        let s = mix.sit.ping_pong(seconds);
+        rel = std::array::from_fn(|k| rel[k].slerp(s[k], sit));
+    }
+    let saved = (posed.bones, posed.elbow, posed.wrist, posed.neck);
     let delta = |k: usize| model(b.pelvis * rel[k] * b.bind[k].inverse());
     let rig = &ty.rig;
     let pelvis_m = posed.bones[HIP];
     let qp = rot_of(&pelvis_m);
+    let yaw = twist(qp, Vec3::Z);
     let old_main = posed.bones[MAIN];
-    let trunk = (qp * delta(SPINE)).slerp(rot_of(&old_main), keep);
+    let trunk = (yaw * delta(SPINE)).slerp(rot_of(&old_main), keep);
     let main = pelvis_m * about(rig.waist, qp.inverse() * trunk);
     posed.bones[HEAD] = main * old_main.inverse() * posed.bones[HEAD];
     posed.bones[MAIN] = main;
     for s in 0..2 {
-        let blend_rot = |bone: usize, slot: usize| (qp * delta(bone) * b.arm_t[s].inverse()).slerp(rot_of(&posed.bones[slot]), keep);
+        let blend_rot = |bone: usize, slot: usize| (yaw * delta(bone) * b.arm_t[s].inverse()).slerp(rot_of(&posed.bones[slot]), keep);
         let (ru, rf, rh) = (blend_rot(UPPER_B[s], UPPER[s]), blend_rot(FORE_B[s], FORE[s]), blend_rot(HAND_B[s], HAND[s]));
         let sh = main.transform_point3(rig.shoulder[s]);
         let el = sh + ru * (rig.elbow[s] - rig.shoulder[s]);
@@ -179,6 +197,9 @@ pub fn apply(ty: &HumanType, posed: &mut Posed, mix: &Mix, blend: (f32, f32, f32
         posed.wrist[s] = wr;
     }
     posed.neck = posed.bones[HEAD].transform_point3(rig.head_pivot);
+    if !posed.bones.iter().all(|b| b.is_finite()) {
+        (posed.bones, posed.elbow, posed.wrist, posed.neck) = saved;
+    }
 }
 
 #[cfg(test)]
@@ -206,6 +227,38 @@ mod tests {
         assert_eq!((start, len), (0, 32));
     }
 
+    fn motion(frames: Vec<[Quat; 8]>) -> Motion {
+        Motion { kind: Kind::Stand, female: false, fps: 10.0, frames }
+    }
+
+    #[test]
+    fn idles_play_back_and_forth_and_cycles_wrap() {
+        let m = motion((0..5).map(|i| [Quat::from_rotation_z(i as f32 * 0.1); 8]).collect());
+        let angle = |q: [Quat; 8]| q[0].to_axis_angle().1;
+        assert!((angle(m.ping_pong(0.4)) - 0.4).abs() < 1e-4);
+        assert!((angle(m.ping_pong(0.6)) - 0.2).abs() < 1e-4, "back after the last frame");
+        assert!((angle(m.ping_pong(0.8)) - 0.0).abs() < 1e-4);
+        assert!((angle(m.cycle(1.0)) - angle(m.cycle(0.0))).abs() < 1e-5);
+        assert!(angle(m.cycle(-0.1)).is_finite());
+    }
+
+    #[test]
+    fn a_clip_with_a_broken_key_is_left_out() {
+        let names: Vec<String> = NAMES.iter().map(|n| format!("Bip01 {n}")).collect();
+        let mut f = vec![(Vec3::ZERO, Quat::IDENTITY); 8];
+        f[3].1 = Quat::from_xyzw(f32::NAN, 0.0, 0.0, 1.0);
+        let clip = Clip { fps: 30.0, names, frames: vec![f.clone(), f] };
+        assert!(Motion::from_clip(&clip, Kind::Stand, true).is_none());
+    }
+
+    #[test]
+    fn only_the_turn_about_the_vertical_is_kept() {
+        let q = Quat::from_rotation_z(0.7) * Quat::from_rotation_x(0.4);
+        let t = twist(q, Vec3::Z);
+        assert!((t.to_axis_angle().1 - 0.7).abs() < 0.05);
+        assert!(t.to_axis_angle().0.z.abs() > 0.99);
+    }
+
     #[test]
     fn biped_names_match_with_or_without_prefix() {
         assert_eq!(key("Bip01 L UpperArm"), "l upperarm");
@@ -222,6 +275,15 @@ mod tests {
         let (walk, stand, sit) = (load("f_walk_neutral_01.fbx", Kind::Walk), load("f_idle_neutral_01.fbx", Kind::Stand), load("f_sit_chair_idle_neutral_01.fbx", Kind::Sit));
         eprintln!("walk cycle {:.2} s, stand {:.1} s, sit {:.1} s", walk.seconds(), stand.seconds(), sit.seconds());
         assert!(walk.seconds() > 0.8 && walk.seconds() < 1.6);
+        for e in std::fs::read_dir(&dir).unwrap() {
+            let p = e.unwrap().path();
+            let n = p.file_name().unwrap().to_string_lossy().to_string();
+            let kind = if n.contains("_walk_") { Kind::Walk } else if n.contains("_sit_") { Kind::Sit } else { Kind::Stand };
+            let m = Motion::from_clip(&omsi_o3d::fbx::load_clip(&p).unwrap(), kind, n.starts_with("f_"));
+            let m = m.unwrap_or_else(|| panic!("{n}"));
+            eprintln!("{n}: {:.2} s", m.seconds());
+            assert!(kind != Kind::Walk || (m.seconds() > 0.7 && m.seconds() < 2.5), "{n}");
+        }
         let mix = Mix { walk: &walk, stand: &stand, sit: &sit };
         let mut pose = Pose::new(3);
         let mut pos = DVec3::ZERO;

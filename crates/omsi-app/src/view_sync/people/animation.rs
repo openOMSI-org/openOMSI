@@ -110,10 +110,12 @@ pub(super) fn bones(p: &PersonFrame, ty: &omsi_sim::human::HumanType, st: &mut P
         ..PoseInput::default()
     };
     let seed = p.id;
+    st.clip_t += dt;
+    let clip_t = st.clip_t;
     let pose = st.procedural.get_or_insert_with(|| Pose::new(seed));
     pose.advance(&ty.rig, &input, dt);
     let mut posed = pose.bones(&ty.rig);
-    super::avatars::clip_pose(p.id, ty, pose, &mut posed);
+    super::avatars::clip_pose(p.id, ty, pose, clip_t, &mut posed);
     // Shift the local pose back to the renderer's original anchor; no game logic moves.
     if floor_lift != 0.0 {
         let lift = Affine3A::from_translation(Vec3::Z * floor_lift);

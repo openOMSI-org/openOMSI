@@ -60,7 +60,6 @@ fn start_loading() {
         *STATE.lock() = State::Missing;
         return;
     };
-    omsi_platform::avatars::fetch_if_missing();
     std::thread::Builder::new()
         .name("avatars load".into())
         .spawn(move || {
@@ -97,6 +96,7 @@ fn start_loading() {
                 kinds[3].len()
             );
             *STATE.lock() = if n == 0 { State::Missing } else { State::Ready(Arc::new(Pool { kinds, motions })) };
+            omsi_platform::avatars::fetch_if_missing();
         })
         .ok();
 }
@@ -130,13 +130,11 @@ fn load_motions(dir: &std::path::Path) -> [[Vec<Motion>; 3]; 2] {
     out
 }
 
-static CLOCK: OnceLock<std::time::Instant> = OnceLock::new();
-
-pub(super) fn clip_pose(id: u32, ty: &HumanType, pose: &omsi_sim::human::Pose, posed: &mut omsi_sim::human::Posed) {
+pub(super) fn clip_pose(id: u32, ty: &HumanType, pose: &omsi_sim::human::Pose, seconds: f32, posed: &mut omsi_sim::human::Posed) {
     if ty.biped.is_none() {
         return;
     }
-    let Some(pool) = pool() else { return };
+    let Some(pool) = ready() else { return };
     let set = &pool.motions[is_female(ty) as usize];
     if set.iter().any(|v| v.is_empty()) {
         return;
@@ -144,7 +142,7 @@ pub(super) fn clip_pose(id: u32, ty: &HumanType, pose: &omsi_sim::human::Pose, p
     let h = |salt: u64| ((id as u64 ^ salt).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 32) as usize;
     let pick = |k: Kind| &set[k as usize][h(k as u64 + 1) % set[k as usize].len()];
     let mix = Mix { walk: pick(Kind::Walk), stand: pick(Kind::Stand), sit: pick(Kind::Sit) };
-    let seconds = CLOCK.get_or_init(std::time::Instant::now).elapsed().as_secs_f32() + (h(7) % 600) as f32;
+    let seconds = seconds + (h(7) % 600) as f32;
     omsi_sim::human::clips::apply(ty, posed, &mix, pose.clip_blend(), seconds);
 }
 
@@ -155,6 +153,15 @@ fn kind_index(female: bool, child: bool) -> usize {
         (true, true) => 2,
         (true, false) => 3,
     }
+}
+
+fn ready() -> Option<&'static Pool> {
+    static READY: OnceLock<Arc<Pool>> = OnceLock::new();
+    if let Some(p) = READY.get() {
+        return Some(&**p);
+    }
+    let p = pool()?;
+    Some(&**READY.get_or_init(|| p))
 }
 
 /// The avatars, once they are loaded.
