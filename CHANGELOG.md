@@ -597,6 +597,12 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 - **No more slivers of sky at crossings of raised roads** (Nova Friburgo, since 0.3.42): where
   the ground cannot be fitted to roads it should follow, only the roads the ground covers (a
   ditch) are cut out of it, not those lying on it.
+- **Window films and tinted glass of Brazilian buses show again**: a number written in an
+  `[alphascale]` in place of a variable's name (`[alphascale] 0.9`, as the LFD Caio Apache
+  Vip V's window film, its outer and its frosted glass have it) is that opacity, as a number
+  already is for lamps and interior lights. Read as a variable that does not exist it was 0,
+  and those panes were not drawn at all. Panes named in Portuguese (`vidro`, `janela`,
+  `parabrisa`) are now known as glass, as those named in the other languages.
 - **A key or a wheel's button can recentre head tracking**: *Head tracking: centre again* takes
   where your head is now as the middle (opentrack, native TrackIR and a Tobii eye tracker), without
   putting the view straight as F1 does. It is on the keys list without a key; a button that already
