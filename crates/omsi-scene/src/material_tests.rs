@@ -382,9 +382,6 @@ fn only_a_flat_shadow_mesh_is_drawn_as_a_shadow_blob() {
     assert!(!shadow_blob(false, &[]));
 }
 
-/// Brazilian buses name their panes in Portuguese (the LFD Caio Apache Vip V:
-/// `1724\Vidros\Vidros.o3d` with `vidro.tga`, `vidro_fora.tga`, `Skin_Vidros.png`,
-/// `Janelas_Ac_1L.o3d`): they are glass, not bodywork to repair, as the other languages'.
 #[test]
 fn portuguese_panes_are_glass() {
     for (mesh, texture) in [
@@ -394,8 +391,17 @@ fn portuguese_panes_are_glass() {
         ("Exterior\\parabrisa.o3d", "pb.tga"),
         ("Exterior\\para-brisa.o3d", "pb.tga"),
     ] {
-        assert!(!is_vehicle_body_material(mesh, texture, true, false, false, true), "{mesh} {texture}");
+        assert!(
+            !is_vehicle_body_material(mesh, texture, true, false, false, true),
+            "{mesh} {texture}"
+        );
     }
-    // (the body itself stays body)
-    assert!(is_vehicle_body_material("1724\\Carroceria\\Lataria.o3d", "Base_Mascara.png", true, false, false, true));
+    assert!(is_vehicle_body_material(
+        "1724\\Carroceria\\Lataria.o3d",
+        "Base_Mascara.png",
+        true,
+        false,
+        false,
+        true
+    ));
 }
