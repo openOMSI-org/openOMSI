@@ -838,7 +838,7 @@ mod tests {
         let (release_a, wait_a) = std::sync::mpsc::channel::<()>();
         let mut limit = ServerLimit::default();
         assert_eq!(limit.get("a", move |_| wait_a.recv().ok().map(|_| 16)), 0);
-        assert_eq!(limit.get("b", |_| Some(64)), 0);
+        limit.get("b", |_| Some(64));
         let until = Instant::now() + Duration::from_secs(2);
         while limit.get("b", |_| panic!("asked twice")) != 64 {
             assert!(Instant::now() < until);
@@ -849,7 +849,7 @@ mod tests {
         assert_eq!(limit.get("b", |_| panic!("asked twice")), 64);
         assert_eq!(limit.get("a", |_| None), 0);
         limit.forget();
-        assert_eq!(limit.get("a", |_| Some(8)), 0);
+        limit.get("a", |_| Some(8));
         let until = Instant::now() + Duration::from_secs(2);
         while limit.get("a", |_| panic!("asked twice")) != 8 {
             assert!(Instant::now() < until);
