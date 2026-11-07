@@ -31,23 +31,93 @@ pub(super) fn solid_and_ghost(v: &[Vertex], ghost: f32) -> (Vec<Vertex>, Vec<Ver
     (solid, faint)
 }
 
+const PANEL_POINTS_WIDE: f32 = 360.0;
+
+/// What differs between the panel on the window and a screen in the cockpit, both drawn by
+/// [`Navigator::draw`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct PanelLook {
+    pub scale: f32,
+    pub radius: f32,
+    pub fade: f32,
+    pub backdrop: f32,
+    pub grip: bool,
+    /// A screen in the cockpit shows the map, not the plugins' panels.
+    pub plugins: bool,
+    pub clear: wgpu::Color,
+}
+
+impl PanelLook {
+    pub(super) fn hud(nav: &Navigator, width: f32) -> PanelLook {
+        let scale = width / PANEL_POINTS_WIDE;
+        PanelLook {
+            scale,
+            radius: (14.0 * scale).max(10.0),
+            fade: nav.shown * if nav.cockpit_display { nav.opacity } else { 1.0 },
+            backdrop: if nav.cockpit_display { 1.0 } else { omsi_ui::theme::backdrop(nav.opacity).min(1.0) },
+            grip: nav.widget,
+            plugins: true,
+            clear: wgpu::Color::TRANSPARENT,
+        }
+    }
+
+    /// Laid out for the screen's shorter way, so that a wide, low screen gets smaller texts
+    /// rather than cards that overlap.
+    pub(super) fn screen(size: (u32, u32), points_high: f32) -> PanelLook {
+        let scale = (size.0 as f32 / PANEL_POINTS_WIDE).min(size.1 as f32 / points_high);
+        PanelLook { scale, radius: 0.0, fade: 1.0, backdrop: 1.0, grip: false, plugins: false, clear: wgpu::Color::BLACK }
+    }
+
+    pub(super) fn remote(size: (u32, u32)) -> PanelLook {
+        let mut look = Self::screen(size, PANEL_POINTS_WIDE / 1.25);
+        look.clear = wgpu::Color::TRANSPARENT;
+        look
+    }
+}
+
 impl Navigator {
-    pub(super) fn draw(&mut self, renderer: &Renderer, target: &wgpu::TextureView, size: (u32, u32), map_h: f32, f: &NavFrame) {
+    pub(super) fn ensure_gpu(&mut self, renderer: &Renderer) {
+        if self.gpu.is_none() {
+            self.gpu = Some(Gpu::with_depth(&renderer.device, renderer.format(), map_samples(renderer.format()), self.atlas.size));
+        }
+    }
+
+    pub(super) fn pace(&mut self) {
+        let now = std::time::Instant::now();
+        if let Some(dt) = self.last_frame.replace(now).map(|t| (now - t).as_secs_f32()).filter(|dt| *dt < 0.1) {
+            self.frame_dt += (dt - self.frame_dt) * ease(dt, 0.5) as f32;
+        }
+        self.draw_every = draw_every(self.draw_every, self.frame_dt);
+    }
+
+    pub(super) fn stop_list_height(&self, scale: f32, stops: usize) -> f32 {
+        if self.schedule { (stops.clamp(1, 5) as f32 * 22.0 + 12.0) * scale } else { 0.0 }
+    }
+
+    pub(super) fn below_map(&self, scale: f32, stops: usize) -> f32 {
+        self.place_row_height(scale) + self.stop_list_height(scale, stops)
+    }
+
+    /// Offscreen views keep their own attachments and submit before the HUD rewrites buffers.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn draw(&mut self, renderer: &Renderer, target: &wgpu::TextureView, size: (u32, u32), map_h: f32, look: &PanelLook, beside: Option<&mut omsi_ui::Attachments>, f: &NavFrame) {
         let (pw, ph) = (size.0 as f32, size.1 as f32);
-        let s = pw / 360.0;
+        let remote = self.remote_pic.drawing;
+        let s = look.scale;
         let wd = &WORDS;
         let pal = *style::palette(self.light);
         self.atlas.begin_frame();
         let panel = Rect::new(0.0, 0.0, pw, ph);
-        let radius = (14.0 * s).max(10.0);
+        let radius = look.radius;
         // (under a plugin's panel in the whole frame: its map where it says, rounded as a card
         // of its own, or no map at all)
-        let (map, cards, map_radius) = match self.framed {
+        let plugin_frame = self.framed.filter(|_| look.plugins);
+        let (map, cards, map_radius) = match plugin_frame {
             Some(Some((r, cards))) => (r, cards, (10.0 * s).min(radius)),
-            Some(None) => return self.draw_card_alone(renderer, target, size, &pal, radius),
+            Some(None) => return self.draw_card_alone(renderer, target, size, &pal, look),
             None => (Rect::new(0.0, 0.0, pw, map_h), true, radius),
         };
-        let framed = self.framed.is_some();
+        let framed = plugin_frame.is_some();
         let vp = [map.x, map.y, map.w, map.h];
 
         // --- the ground (buffer 0): built again when the bus went far, tiles brought lanes,
@@ -59,6 +129,10 @@ impl Navigator {
         let look_key = self.look_key();
         let visible_reach = super::build::view::panel_reach(self.zoom, map.w, map.h).unwrap_or(PANEL_REACH);
         let reach = super::build::view::panel_build_reach(map.w, map.h).unwrap_or(PANEL_REACH + 150.0);
+        if remote {
+            self.remote_pic.reach = reach;
+        }
+        let reach = reach.max(self.remote_pic.reach);
         let rebuild = match &self.roads {
             None => lanes_now > 0 || self.map_data.is_some(),
             Some(r) => r.look != look_key || super::build::view::panel_moved(r.reach, visible_reach, (r.anchor - f.bus.truncate()).length()) || (r.lanes_seen != lanes_now && self.time - r.built_at > 1.5),
@@ -202,23 +276,23 @@ impl Navigator {
         let icon_verts = self.minimap_icons(vpm, vp, anchor, f.bus.truncate(), map, s);
         // (the place row, the cards and the stop list: the plugin's panel has the rest of the
         // frame, and says whether the cards go over its map)
-        if !framed {
+        if !framed && !remote {
             let loc_h = self.place_row_height(s);
             self.draw_place_row(&mut ui, Rect::new(0.0, map.bottom(), pw, loc_h), 10.0 * s, s);
         }
         if cards {
             self.draw_cards(&mut ui, f, wd, net, map, s, &pal);
         }
-        if self.schedule && !framed {
+        if self.schedule && !framed && !remote {
             let loc_h = self.place_row_height(s);
             let r = Rect::new(0.0, map.bottom() + loc_h, pw, ph - map.bottom() - loc_h);
-            match self.board {
+            match self.board.filter(|_| look.plugins) {
                 // (a plugin's board: its panel is drawn over the card here)
                 Some(_) => ui.rect(r, pal.card.alpha(1.0)),
                 None => self.draw_schedule(&mut ui, f, r, s, &pal),
             }
         }
-        self.draw_grip(&mut ui, pw, ph, s, &pal);
+        Self::draw_grip(&mut ui, look, pw, ph, &pal);
 
         // --- to the GPU
         let (Some(gpu), device, queue) = (self.gpu.as_mut(), &renderer.device, &renderer.queue) else { return };
@@ -239,13 +313,12 @@ impl Navigator {
         let (icon_n, icon_tex) = self.place.upload(gpu, device, queue, 16, &icon_verts);
         gpu.upload_atlas(queue, &mut self.atlas);
         let flat = Layer::flat(clip_panel, radius, 1.0);
-        let backdrop = Layer::flat(clip_panel, radius, if self.cockpit_display { 1.0 } else { omsi_ui::theme::backdrop(self.opacity).min(1.0) });
+        let backdrop = Layer::flat(clip_panel, radius, look.backdrop);
         let mut layers = [flat, map_layer, map_layer.with_shadow(), depth_layer, depth_layer, backdrop];
         // The cockpit setting fades the map and its labels too; opaque map geometry
         // would otherwise cover the background whose opacity was changed.
-        let opacity = self.shown * if self.cockpit_display { self.opacity } else { 1.0 };
         for l in layers.iter_mut() {
-            l.opacity *= opacity;
+            l.opacity *= look.fade;
         }
         let solid_n = self.roads.as_ref().map_or(0, |r| r.houses[1] as u32);
         let three = self.show_3d && !self.classic_2d;
@@ -267,15 +340,29 @@ impl Navigator {
             Draw { buffer: 2, range: n_ui_start..all.len() as u32, layer: 0, texture: 0 },
         ]);
         let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("navigator") });
-        gpu.render(device, queue, &mut enc, target, size, Some(wgpu::Color::TRANSPARENT), &layers, &draws);
-        renderer.submit_with_frame(enc.finish());
+        let offscreen = beside.is_some();
+        match beside {
+            Some(attachments) => gpu.render_with(
+                attachments, device, queue, &mut enc, target, size, Some(look.clear), &layers, &draws,
+            ),
+            None => gpu.render(device, queue, &mut enc, target, size, Some(look.clear), &layers, &draws),
+        }
+        let drawn = enc.finish();
+        if remote {
+            self.remote_pic.commands = Some(drawn);
+        } else if offscreen {
+            queue.submit([drawn]);
+        } else {
+            renderer.submit_with_frame(drawn);
+        }
     }
 
     /// The corner to pull for another size, on a navigator that is a widget.
-    fn draw_grip(&self, ui: &mut Painter, pw: f32, ph: f32, s: f32, pal: &Palette) {
-        if !self.widget {
+    fn draw_grip(ui: &mut Painter, look: &PanelLook, pw: f32, ph: f32, pal: &Palette) {
+        if !look.grip {
             return;
         }
+        let s = look.scale;
         let c = Vec2::new(pw - 7.0 * s, ph - 7.0 * s);
         for k in 0..3 {
             let o = (k as f32 * 4.0 + 3.0) * s;
@@ -285,27 +372,26 @@ impl Navigator {
 
     /// The card alone, under a plugin's panel that fills the frame and has no map: nothing of
     /// the map is built or drawn.
-    fn draw_card_alone(&mut self, renderer: &Renderer, target: &wgpu::TextureView, size: (u32, u32), pal: &Palette, radius: f32) {
+    fn draw_card_alone(&mut self, renderer: &Renderer, target: &wgpu::TextureView, size: (u32, u32), pal: &Palette, look: &PanelLook) {
         let (pw, ph) = (size.0 as f32, size.1 as f32);
-        let s = pw / 360.0;
+        let radius = look.radius;
         let mut bg = Painter::new();
         bg.rounded(Rect::new(0.0, 0.0, pw, ph), radius, self.frame_card.unwrap_or(pal.card));
         let n_bg = bg.len();
         let mut ui = Painter::new();
-        self.draw_grip(&mut ui, pw, ph, s, pal);
+        Self::draw_grip(&mut ui, look, pw, ph, pal);
         let (Some(gpu), device, queue) = (self.gpu.as_mut(), &renderer.device, &renderer.queue) else { return };
         let mut all = bg.verts;
         all.extend(ui.verts);
         gpu.upload(device, queue, 2, &all);
         let clip = [0.0, 0.0, pw, ph];
-        let opacity = self.shown * if self.cockpit_display { self.opacity } else { 1.0 };
-        let mut layers = [Layer::flat(clip, radius, 1.0), Layer::flat(clip, radius, omsi_ui::theme::backdrop(self.opacity).min(1.0))];
+        let mut layers = [Layer::flat(clip, radius, 1.0), Layer::flat(clip, radius, look.backdrop)];
         for l in layers.iter_mut() {
-            l.opacity *= opacity;
+            l.opacity *= look.fade;
         }
         let draws = [Draw { buffer: 2, range: 0..n_bg, layer: 1, texture: 0 }, Draw { buffer: 2, range: n_bg..all.len() as u32, layer: 0, texture: 0 }];
         let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("navigator") });
-        gpu.render(device, queue, &mut enc, target, size, Some(wgpu::Color::TRANSPARENT), &layers, &draws);
+        gpu.render(device, queue, &mut enc, target, size, Some(look.clear), &layers, &draws);
         renderer.submit_with_frame(enc.finish());
     }
 

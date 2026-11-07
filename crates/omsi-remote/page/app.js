@@ -86,6 +86,7 @@ const App = {
     this.status("wait", "Connecting…");
     const ws = new WebSocket(`ws://${location.host}/ws`);
     this.ws = ws;
+    ws.binaryType = "arraybuffer";
     ws.onopen = () => {
       const pin = (location.hash.match(/pin=(\d{6})/) || [])[1];
       if (pin) { this.qrPin = pin; history.replaceState(null, "", location.pathname); }
@@ -96,6 +97,7 @@ const App = {
     };
     ws.onmessage = (e) => {
       this.heard = performance.now();
+      if (e.data instanceof ArrayBuffer) { MapView.picture(e.data); return; }
       let m;
       try { m = JSON.parse(e.data); } catch (_) { return; }
       this.receive(m);
