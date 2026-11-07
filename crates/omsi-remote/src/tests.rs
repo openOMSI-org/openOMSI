@@ -568,8 +568,30 @@ fn the_map_picture_drops_row_padding_and_reorders_bgra() {
 }
 
 #[test]
-fn a_slow_device_gets_the_map_picture_less_often() {
-    assert_eq!(crate::session::picture_pause(Duration::from_millis(10)), Duration::ZERO);
-    assert_eq!(crate::session::picture_pause(Duration::from_millis(100)), Duration::from_millis(400));
-    assert_eq!(crate::session::picture_pause(Duration::from_secs(5)), Duration::from_secs(2));
+fn a_stalled_map_picture_does_not_hold_back_driving() {
+    let remote = Remote::start(0, temp_dir("stalled")).unwrap();
+    let mut c = paired(&remote, "slow");
+    c.send(json!({ "t": "map.view", "w": 1024, "h": 1024 }));
+    let mut seed = 1u32;
+    let mut noise = || {
+        (0..1024 * 1024 * 4)
+            .map(|_| {
+                seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                (seed >> 24) as u8
+            })
+            .collect::<Vec<u8>>()
+    };
+    let mut worst = Duration::ZERO;
+    for i in 1..=12 {
+        remote.set_map_picture(1024, 1024, 1024 * 4, false, noise());
+        std::thread::sleep(Duration::from_millis(100));
+        let steer = i as f32 / 20.0;
+        let since = Instant::now();
+        c.send(json!({ "t": "drive", "s": steer, "g": 0.0, "b": 0.0 }));
+        while remote.drive().is_none_or(|d| d.steering != steer) && since.elapsed() < Duration::from_secs(5) {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        worst = worst.max(since.elapsed());
+    }
+    assert!(worst < Duration::from_millis(250), "steering waited {worst:?} behind the map picture");
 }

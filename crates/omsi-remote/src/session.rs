@@ -19,6 +19,7 @@ const PING_EVERY: Duration = Duration::from_secs(1);
 const MAX_BACKLOG: usize = 4 << 20;
 const READ_BUDGET: usize = 32;
 const UNPAIRED_MESSAGE: usize = 4096;
+const IDLE: Duration = Duration::from_millis(5);
 
 type Ws = WebSocket<TcpStream>;
 
@@ -42,27 +43,16 @@ fn receive(ws: &mut Ws, last_in: &mut Instant) -> Result<Got, String> {
     }
 }
 
+fn written(r: tungstenite::Result<()>) -> Result<bool, String> {
+    match r {
+        Ok(()) => Ok(true),
+        Err(tungstenite::Error::Io(e)) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => Ok(false),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
 fn send(ws: &mut Ws, text: &str) -> Result<(), String> {
-    match ws.send(Message::Text(text.into())) {
-        Ok(()) => Ok(()),
-        Err(tungstenite::Error::Io(e)) if e.kind() == ErrorKind::WouldBlock => Ok(()),
-        Err(e) => Err(e.to_string()),
-    }
-}
-
-fn send_binary(ws: &mut Ws, bytes: &[u8]) -> Result<(), String> {
-    match ws.send(Message::Binary(bytes.to_vec().into())).and_then(|_| ws.flush()) {
-        Ok(()) => Ok(()),
-        Err(tungstenite::Error::Io(e)) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => Ok(()),
-        Err(e) => Err(e.to_string()),
-    }
-}
-
-pub(crate) fn picture_pause(sending: Duration) -> Duration {
-    match sending > Duration::from_millis(30) {
-        true => (sending * 4).min(Duration::from_secs(2)),
-        false => Duration::ZERO,
-    }
+    written(ws.send(Message::Text(text.into()))).map(|_| ())
 }
 
 fn authenticate(ws: &mut Ws, shared: &Shared, from: IpAddr) -> Result<bool, String> {
@@ -194,7 +184,7 @@ fn release(shared: &Shared, id: u64) {
 
 fn pump(ws: &mut Ws, shared: &Shared, id: u64, generation: u64) -> Result<(), String> {
     let (mut texts, mut vehicle, mut state, mut sign, mut map) = (0u64, 0u64, 0u64, u64::MAX, 0u64);
-    let mut map_after = Instant::now();
+    let mut backlog = false;
     let mut sent: Option<std::sync::Arc<Value>> = None;
     let mut channels: Vec<(&'static str, u64)> = Vec::new();
     let mut last_in = Instant::now();
@@ -204,9 +194,13 @@ fn pump(ws: &mut Ws, shared: &Shared, id: u64, generation: u64) -> Result<(), St
             let _ = send(ws, &j!({ "t": "denied", "reason": "token" }).to_string());
             break;
         }
+        let mut heard = false;
         for _ in 0..READ_BUDGET {
             match receive(ws, &mut last_in)? {
-                Got::Text(t) => handle(ws, &t, shared, id)?,
+                Got::Text(t) => {
+                    heard = true;
+                    handle(ws, &t, shared, id)?;
+                }
                 Got::Nothing => break,
                 Got::Closed => return Ok(()),
             }
@@ -255,19 +249,19 @@ fn pump(ws: &mut Ws, shared: &Shared, id: u64, generation: u64) -> Result<(), St
             sent = Some(now);
         }
         for m in &out {
-            send(ws, m)?;
+            written(ws.write(Message::Text(m.as_str().into())))?;
         }
         let map_now = shared.pictures.seq();
-        if map_now != map && Instant::now() >= map_after && shared.pictures.wants(id) {
+        let mut picture = false;
+        if map_now != map && !backlog && shared.pictures.wants(id) {
             map = map_now;
             if let Some(jpeg) = shared.pictures.last() {
-                let since = Instant::now();
-                send_binary(ws, &jpeg)?;
-                map_after = Instant::now() + picture_pause(since.elapsed());
+                written(ws.write(Message::Binary(jpeg.to_vec().into())))?;
+                picture = true;
             }
         }
-        if !out.is_empty() {
-            let _ = ws.flush();
+        if backlog || picture || !out.is_empty() {
+            backlog = !written(ws.flush())?;
         }
         if last_ping.elapsed() > PING_EVERY {
             last_ping = Instant::now();
@@ -278,6 +272,9 @@ fn pump(ws: &mut Ws, shared: &Shared, id: u64, generation: u64) -> Result<(), St
         }
         if last_in.elapsed() > SILENT_FOR {
             return Err("nothing heard for half a minute".into());
+        }
+        if !heard {
+            std::thread::sleep(IDLE);
         }
     }
     let _ = ws.close(None);
@@ -334,6 +331,7 @@ pub(crate) fn run(stream: TcpStream, shared: &Shared) -> Result<(), String> {
         return Ok(());
     }
     lock(&shared.trusted).insert(ip);
+    ws.get_mut().set_nonblocking(true).map_err(|e| e.to_string())?;
     ws.set_config(|c| {
         c.max_message_size = Some(MAX_LAYOUT * 2);
         c.max_frame_size = Some(MAX_LAYOUT * 2);
