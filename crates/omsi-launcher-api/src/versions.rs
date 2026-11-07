@@ -139,6 +139,7 @@ pub fn list() -> Answer {
                 "date": l.published,
                 "size": l.release.size,
                 "page": l.release.page,
+                "notes": l.release.notes,
                 "current": v == current,
                 "latest": latest.as_deref() == Some(v),
                 "beta": l.beta,
