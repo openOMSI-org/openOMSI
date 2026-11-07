@@ -410,6 +410,10 @@ fn discord_settings_round_trip_and_default_off() {
     assert!(!Settings::default().discord_status);
     let settings = Settings { discord_status: true, discord_app_id: "123456".into(), ..Default::default() };
     assert_eq!(Settings::from_text(&settings.to_text()), settings);
+    assert_eq!(Settings::default().discord_show, crate::discord::Show::default());
+    let hidden = crate::discord::Show { map: false, bus: true, line: false, stop: false, players: true, buttons: false };
+    let settings = Settings { discord_show: hidden, ..Default::default() };
+    assert_eq!(Settings::from_text(&settings.to_text()).discord_show, hidden);
 }
 
 #[test]
