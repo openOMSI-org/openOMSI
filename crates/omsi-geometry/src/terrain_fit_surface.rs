@@ -78,6 +78,21 @@ pub(super) fn profiles(def: &Spline) -> Vec<Vec<[f32; 3]>> {
     out
 }
 
+/// The steepest slope a rim hands to the ground it blends into (about 72 degrees). The side
+/// of a kerb is nearly vertical, and the gradient of such a triangle runs to tens of thousands:
+/// blended into the ground it raised spikes of terrain more than a kilometre high at the end of
+/// a road (Berlin-Spandau, Hansastrasse, tile 2381/11289).
+const MAX_RIM_GRADIENT: f64 = 3.0;
+
+fn limit_gradient(g: DVec2) -> DVec2 {
+    let len = g.length();
+    if len > MAX_RIM_GRADIENT {
+        g * (MAX_RIM_GRADIENT / len)
+    } else {
+        g
+    }
+}
+
 /// Each boundary edge carries the adjacent surface's horizontal gradient. This
 /// lets the exterior blend match both the rim elevation and the slope at that rim.
 pub(super) fn boundary(mesh: &MeshData, offset: DVec3) -> Vec<([DVec3; 2], DVec2)> {
@@ -89,7 +104,7 @@ pub(super) fn boundary(mesh: &MeshData, offset: DVec3) -> Vec<([DVec3; 2], DVec2
         if det.abs() < 1e-8 {
             continue;
         }
-        let gradient = DVec2::new(d.z * e.y - e.z * d.y, d.x * e.z - e.x * d.z) / det;
+        let gradient = limit_gradient(DVec2::new(d.z * e.y - e.z * d.y, d.x * e.z - e.x * d.z) / det);
         for j in 0..3 {
             let (u, v) = (t[j], t[(j + 1) % 3]);
             let entry = edges.entry((u.min(v), u.max(v))).or_insert((
