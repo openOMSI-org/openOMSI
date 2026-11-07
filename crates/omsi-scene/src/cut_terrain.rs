@@ -786,45 +786,119 @@ fn restore_spline_holes(
         if (q.tx - tx).abs() > 1 || (q.ty - ty).abs() > 1 {
             continue;
         }
-        let buried: Vec<Vec<DVec3>> = q.hole_rims.iter().filter(|rim| ground_over_spline(ts, terrain, rim, origin)).cloned().collect();
-        cut_spline_rims(ts, hole_rims, &buried, (tx, ty), origin);
+        for (rim, segments) in &q.hole_rims {
+            if ground_over_spline(ts, terrain, rim, *segments, origin) {
+                cut_spline_rims(ts, hole_rims, std::slice::from_ref(rim), (tx, ty), origin);
+            }
+        }
     }
 }
 
-/// Does this tile's saved ground come up over the aligned spline inside outline `rim` (world
-/// space) - a ditch, a trough? Asked across it (a quarter, half and three quarters of the way
-/// from each point of the outline to the one opposite), against the tile's road surfaces. Only such a spline needs its hole when the fit fails: one that lies on
-/// the ground or over it shows by itself, and its hole only opened slivers of sky where its
-/// outline met the other roads of a crossing (Nova Friburgo, tile -7744,-4167). Where no
-/// point of it can be asked (no surface known there, or off this tile) the hole is cut as
-/// before.
-fn ground_over_spline(ts: &TileSurface, terrain: &Terrain, rim: &[DVec3], origin: DVec3) -> bool {
+fn rim_cross_sections(rim: &[DVec3], segments: usize) -> impl Iterator<Item = (DVec3, DVec3)> + '_ {
+    let inner = segments - 1;
+    let cap = rim.len() / 2 - inner;
+    let near_left = rim.len() - cap;
+    // The closed ring runs right, far cap, left, near cap.
+    std::iter::once((rim[rim.len() - 1], rim[near_left]))
+        .chain((0..=inner).map(move |i| (rim[i], rim[near_left - 1 - i])))
+}
+
+fn ground_over_spline(
+    ts: &TileSurface,
+    terrain: &Terrain,
+    rim: &[DVec3],
+    segments: usize,
+    origin: DVec3,
+) -> bool {
     let side = tile_size();
-    let n = rim.len();
-    let across = (0..n / 2).flat_map(|i| {
-        let (a, b) = (rim[i], rim[n - 1 - i]);
-        [a.lerp(b, 0.25), a.lerp(b, 0.5), a.lerp(b, 0.75)]
-    });
+    let across = rim_cross_sections(rim, segments)
+        .flat_map(|(a, b)| [a.lerp(b, 0.25), a.lerp(b, 0.5), a.lerp(b, 0.75)]);
     let mut asked = false;
     for p in across {
         let l = p - origin;
         if !(0.0..=side).contains(&l.x) || !(0.0..=side).contains(&l.y) {
             continue;
         }
-        let Some(surface) = ts.sample(l.x as f32, l.y as f32) else {
+        let Some((x, y, surface)) = ts.sample_at_texel_center(l.x as f32, l.y as f32) else {
             continue;
         };
         asked = true;
-        if terrain.sample(l.x as f32, l.y as f32) > surface + GROUND_OVER_SPLINE {
+        if terrain.sample(x, y) > surface + GROUND_OVER_SPLINE {
             return true;
         }
     }
     !asked
 }
 
-/// How far the saved ground may stand over an aligned spline's surface without needing its
-/// hole when the fit fails (m).
 const GROUND_OVER_SPLINE: f32 = 0.05;
+
+#[cfg(test)]
+#[test]
+fn curved_rim_pairs_both_sides_at_the_same_station() {
+    let def = omsi_scenery::Spline {
+        terrain_hole_profiles: vec![vec![
+            [-2.0, 0.0, 0.0],
+            [-0.5, -0.5, 0.0],
+            [0.5, -0.5, 0.0],
+            [2.0, 0.0, 0.0],
+        ]],
+        ..Default::default()
+    };
+    for radius in [-7.0, 7.0] {
+        let curve = omsi_geometry::SplineCurve::from_map(
+            &omsi_map::MapSpline {
+                pos: [40.0, 40.0, 0.0],
+                length: 9.0,
+                radius,
+                ..Default::default()
+            },
+            DVec2::ZERO,
+        );
+        let (rims, segments) =
+            omsi_geometry::spline_hole_rims_with_stations(&def, &curve, false, 4);
+        let pairs: Vec<_> = rim_cross_sections(&rims[0], segments).collect();
+        assert_eq!(pairs.len(), segments + 1);
+        for (i, (right, left)) in pairs.into_iter().enumerate() {
+            let center = curve.point_at(i as f64 * curve.length / segments as f64);
+            assert!(right.lerp(left, 0.5).distance(center) < 1e-6);
+            assert!((right.distance(left) - 4.0).abs() < 1e-6);
+        }
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn fallback_compares_a_steep_spline_and_ground_at_the_same_point() {
+    let side = tile_size() as f32;
+    let rise = 0.2 * side;
+    let mesh = MeshData {
+        positions: vec![
+            glam::Vec3::ZERO,
+            glam::Vec3::new(side, 0.0, rise),
+            glam::Vec3::new(side, side, rise),
+            glam::Vec3::new(0.0, side, 0.0),
+        ],
+        indices: vec![0, 1, 2, 0, 2, 3],
+        ..Default::default()
+    };
+    let mut ts = TileSurface::new(512);
+    ts.rasterize(&mesh, &Mat4::IDENTITY, DVec3::ZERO, 0, 0);
+    let cell = side as f64 / 512.0;
+    let (start, end) = (cell * 21.98, cell * 31.98);
+    let rim = [
+        DVec3::new(end, 14.0, 0.0),
+        DVec3::new(end, 10.0, 0.0),
+        DVec3::new(start, 10.0, 0.0),
+        DVec3::new(start, 14.0, 0.0),
+    ];
+    let mut terrain = Terrain {
+        cells: 1,
+        heights: vec![0.0, rise, 0.0, rise],
+    };
+    assert!(!ground_over_spline(&ts, &terrain, &rim, 1, DVec3::ZERO));
+    terrain.heights.iter_mut().for_each(|height| *height += 0.1);
+    assert!(ground_over_spline(&ts, &terrain, &rim, 1, DVec3::ZERO));
+}
 
 /// Cut Omsi.exe's outlines (world space) of aligned splines out of this tile's ground.
 fn cut_spline_rims(
@@ -854,7 +928,7 @@ pub(super) fn finish_spline_fit(
     match result {
         Ok(mesh) => mesh,
         Err(e) => {
-            log::warn!("tile {key:?}: cannot fit spline terrain: {e}; restoring saved ground and the holes of the splines it covers");
+            log::warn!("tile {key:?}: cannot fit spline terrain: {e}; restoring saved ground");
             restore_spline_holes(ts, hole_rims, sources, terrain, key, origin);
             build_terrain_mesh(terrain)
         }
