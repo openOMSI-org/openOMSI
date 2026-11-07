@@ -419,6 +419,14 @@ struct SettingsPage: View {
                 SettingToggle(label: "Translate the remaining texts automatically (offline, downloads 620 MB once)", key: "machine_translation")
                 SettingToggle(label: "The launcher rests while a game runs (gives the graphics card to the game)", key: "launcher_rest", fallback: true)
                 SettingToggle(label: "Discord Rich Presence", key: "discord_status", fallback: false, help: "Shows the launcher or your map, bus, line and multiplayer status in Discord.")
+                if store.flag("discord_status") {
+                    SettingToggle(label: "Discord: the map", key: "discord_map", fallback: true)
+                    SettingToggle(label: "Discord: the bus", key: "discord_bus", fallback: true)
+                    SettingToggle(label: "Discord: the line and tour", key: "discord_line", fallback: true)
+                    SettingToggle(label: "Discord: the next stop and the delay", key: "discord_stop", fallback: true)
+                    SettingToggle(label: "Discord: multiplayer and the number of players", key: "discord_players", fallback: true)
+                    SettingToggle(label: "Discord: buttons to the website and the community", key: "discord_buttons", fallback: true)
+                }
                 SettingToggle(label: "Voice chat in multiplayer", key: "voice_enabled", fallback: false, help: "Hold the nearby (V) or radio (B) key to talk. The microphone is used only while a key is held; nothing is recorded")
             }
             SettingToggle(label: "Disable plugins", key: "disable_plugins", fallback: true, help: "Starts the next game without Lua or legacy OMSI plugins, including vehicle plugins. Plugin features will be unavailable. Normal bus scripts still run.")

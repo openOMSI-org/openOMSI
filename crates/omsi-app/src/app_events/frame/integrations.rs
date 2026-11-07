@@ -19,6 +19,8 @@ impl App {
                     self.integrations.discord =
                         crate::discord::Discord::start(&self.settings.discord_app_id);
                 }
+                let show = self.settings.discord_show;
+                let max = if show.players { self.discord_server_max() } else { 0 };
                 if let Some(d) = self.integrations.discord.as_ref() {
                     let bus = self.player.as_ref().map(|p| {
                         let definition = &p.vehicle.ty.def;
@@ -26,13 +28,19 @@ impl App {
                         let full = omsi_launcher_lib::display_bus_name(&format!("{} {short}", definition.manufacturer));
                         (short, full)
                     });
-                    let duty = self.session.duty.as_ref().map(|d| (d.line.as_str(), d.tour.as_str()));
-                    d.set(crate::discord::Presence::for_game(
-                        self.world.as_ref().map(|w| w.global.name.as_str()),
-                        bus.as_ref().map(|(short, full)| (short.as_str(), full.as_str())),
-                        duty,
-                        self.net.lan.is_some(),
-                    ));
+                    let duty = self.session.duty.as_ref();
+                    let next_stop = duty.zip(self.player.as_ref()).and_then(|(d, p)| {
+                        let stop = d.trips.get(d.trip_index)?.stops.get(d.next_stop)?;
+                        Some((stop.name.as_str(), p.vehicle.host.tt_delay as f32))
+                    });
+                    let game = crate::discord::Game {
+                        map: self.world.as_ref().map(|w| w.global.name.as_str()),
+                        bus: bus.as_ref().map(|(short, full)| (short.as_str(), full.as_str())),
+                        duty: duty.map(|d| (d.line.as_str(), d.tour.as_str())),
+                        next_stop,
+                        players: self.net.lan.is_some().then(|| (crate::player_list::count(self), max)),
+                    };
+                    d.set(crate::discord::Presence::for_game(&game, show));
                 }
             }
         }
@@ -164,6 +172,24 @@ impl App {
                 crate::plugins::queue_event(&mut self.integrations.plugin_events, "pedestrian", vec![omsi_plugin::InfoValue::Num(hurt as f64)]);
             }
         }
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn discord_server_max(&mut self) -> usize {
+        use std::sync::atomic::Ordering;
+        let Some(lan) = self.net.lan.as_ref() else { return 0 };
+        if lan.role == omsi_net::Role::Host {
+            return 64;
+        }
+        let target = self.args.lan_join.clone();
+        let max = self.integrations.discord_max.get_or_insert_with(|| {
+            let max = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let found = max.clone();
+            let ask = move || target.and_then(|t| omsi_net::ws::query(&t, false).ok()).map(|i| found.store(i.max_players, Ordering::Relaxed));
+            let _ = std::thread::Builder::new().name("discord-server-size".into()).spawn(ask);
+            max
+        });
+        max.load(Ordering::Relaxed)
     }
 }
 
