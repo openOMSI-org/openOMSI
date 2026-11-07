@@ -112,7 +112,7 @@ pub struct Settings {
     /// `[AIUnschedFactor]`: the share of the random traffic (percent of the map's density).
     pub ai_unsched_factor: f32,
     /// `ai_reaction`: the AI drivers' reaction time as a factor of the default (percent in the
-    /// file, 50 to 200; below 100 a queue pulls away closer together).
+    /// file, 25 to 200; below 100 a queue pulls away closer together).
     pub ai_reaction: f32,
     /// `[AIMaxCountScheduled]`: timetable vehicles on the road at once (0 = no limit).
     pub ai_max_scheduled: u32,
@@ -865,7 +865,7 @@ impl Settings {
                 "video_memory" => s.video_memory = v.parse::<f32>().map(|x| x.max(0.0) as u32).unwrap_or(s.video_memory),
                 "maintenance" | "wear_lifespan" => s.maintenance = v.parse::<u8>().map(|x| x.min(4)).unwrap_or(s.maintenance),
                 "ai_unsched_factor" | "aiunschedfactor" => s.ai_unsched_factor = v.trim_end_matches('%').parse::<f32>().map(|x| (x / 100.0).clamp(0.0, 3.0)).unwrap_or(s.ai_unsched_factor),
-                "ai_reaction" => s.ai_reaction = v.trim_end_matches('%').parse::<f32>().map(|x| (x / 100.0).clamp(0.5, 2.0)).unwrap_or(s.ai_reaction),
+                "ai_reaction" => s.ai_reaction = v.trim_end_matches('%').parse::<f32>().map(|x| (x / 100.0).clamp(0.25, 2.0)).unwrap_or(s.ai_reaction),
                 "ai_max_scheduled" | "aimaxcountscheduled" => s.ai_max_scheduled = v.parse().unwrap_or(s.ai_max_scheduled),
                 "ai_max_humans" | "aimaxhumans" => s.ai_max_humans = v.parse::<u32>().map(|x| x.max(1)).unwrap_or(s.ai_max_humans),
                 "ai_wait_timed_stops_only" => s.ai_wait_timed_stops_only = b(v),

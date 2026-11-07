@@ -2709,7 +2709,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         "{text}maintenance={}\nai_unsched_factor={}\nai_reaction={}\nai_max_scheduled={}\nai_max_parked={}\nai_max_humans={}\nuse_real_time={}\nuse_real_date={}\nuse_real_year={}\ncollision_vehicles={}\ncollision_objects={}\ncollision_pedestrians={}\nrealistic_road_physics={}\nhead_movement={}\ndriverview_smooth={}\nhands_in_cab={}\nalt_view={}\nprecision_zoom={}\n",
         n("maintenance", 0).clamp(0, 4),
         n("ai_unsched_factor", 100).clamp(0, 300),
-        n("ai_reaction", 100).clamp(50, 200),
+        n("ai_reaction", 100).clamp(25, 200),
         n("ai_max_scheduled", 0).max(0),
         n("ai_max_parked", 0).max(-1),
         n("ai_max_humans", 200).max(1),
