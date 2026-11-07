@@ -26,26 +26,19 @@ fn candidates(args: &crate::Args) -> Vec<PathBuf> {
 /// The wire of each map read so far in this run (including "none": a map without wire is not
 /// searched again at every trolleybus placed): reading the map's tiles for its wire splines is
 /// seconds on a big map. The buses of a map share one network, as they share one wire.
-/// An online game reads its own (`true`): it keeps `initial random` switches straight.
-static READ: std::sync::Mutex<Vec<(PathBuf, bool, Option<Arc<WireNet>>)>> =
-    std::sync::Mutex::new(Vec::new());
+static READ: std::sync::Mutex<Vec<(PathBuf, Option<Arc<WireNet>>)>> = std::sync::Mutex::new(Vec::new());
 
 /// `splines`: with no `trolley.txt`, read the wire off the map's wire splines (for a trolleybus:
 /// seconds on a big map, and the map draws that wire itself).
 pub(crate) fn load(args: &crate::Args, world: &omsi_scene::World, splines: bool) -> Option<Arc<WireNet>> {
     let key = omsi_cfg::resolve_path(&args.root, &args.map);
-    let online = args.online();
-    let cache = READ.lock().unwrap_or_else(|e| e.into_inner());
-    let before = cache.iter().find(|(k, o, _)| *k == key && *o == online);
-    let before = before.map(|(_, _, net)| net.clone());
-    drop(cache);
-    if let Some(net) = before {
-        return net;
+    if let Some((_, net)) = READ.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|(k, _)| *k == key) {
+        return net.clone();
     }
     let net = read(args, world, splines);
     // (a "none" without the splines read is not the final word for a trolleybus later)
     if splines || net.is_some() {
-        READ.lock().unwrap_or_else(|e| e.into_inner()).push((key, online, net.clone()));
+        READ.lock().unwrap_or_else(|e| e.into_inner()).push((key, net.clone()));
     }
     net
 }

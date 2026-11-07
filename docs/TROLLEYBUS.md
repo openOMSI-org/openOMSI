@@ -215,7 +215,8 @@ A switch with `initial random` takes a way at random when the game first reads t
 The game keeps that network until it quits, so placing a vehicle again or reloading the same map
 keeps the positions the switches have by then; a new draw needs a restart. In an online game
 (serving, hosting or joining) the players' switches are not synchronized, so `initial random`
-switches start straight there, the same for everyone.
+switches start straight there, the same for everyone. A room joined later on a map already
+driven in the same run keeps that run's network and its positions, drawn or not.
 
 The wire's masts and hangers are the map's own objects: the game draws the two wires (8.5 mm
 thick) and nothing else, whatever vehicle is driven (a bus or a car sees the wire too; a map
