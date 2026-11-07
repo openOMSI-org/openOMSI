@@ -128,7 +128,7 @@ impl frame_stages::Stage for WindowStage {
             Duty => stage("duty", P::Sim, Role::Duty, &[G::Duty, G::Player, G::People, G::Clock, G::World, G::Net, G::Input, G::Menus, G::Traffic, G::Sound, G::View, G::Gfx], &[G::Duty, G::Player, G::Integrations, G::Ui, G::Net], Profile::Key(K::Duty)),
             Integrations => stage("integrations", P::Sim, Role::Own, &[G::Integrations, G::Player, G::Duty, G::World, G::Net, G::Input, G::Clock, G::Weather, G::Traffic, G::People, G::Sound, G::View, G::Ui, G::Gfx, G::Perf], &[G::Integrations, G::Player, G::Menus, G::Duty], Profile::Key(K::Integrations)),
             ViewKeys => stage("view_keys", P::Input, Role::Own, super::view_keys::ViewKeysCx::READS, super::view_keys::ViewKeysCx::WRITES, Profile::Key(K::ViewKeys)),
-            Drawn => stage("drawn", P::Present, Role::Own, &[G::Clock, G::Net, G::World, G::People, G::Traffic, G::Player, G::View, G::Gfx], &[G::Player, G::Traffic, G::People, G::View, G::Gfx], Profile::Key(K::Player)),
+            Drawn => stage("drawn", P::Present, Role::Own, &[G::Clock, G::Net, G::World, G::People, G::Traffic, G::Player, G::View, G::Gfx, G::Integrations], &[G::Player, G::Traffic, G::People, G::View, G::Gfx, G::Integrations], Profile::Key(K::Player)),
             Weather => StageInfo { gives: &[Carry::Daylight], ..stage("weather", P::Sim, Role::Clock, &[G::Clock, G::Weather, G::World, G::Net, G::Ui, G::Perf], &[G::Clock, G::Weather, G::Traffic, G::Player, G::Gfx], Profile::Key(K::Weather)) },
             Lights => StageInfo { takes: &[Carry::Time, Carry::Daylight], ..stage("lights", P::Present, Role::Surroundings, super::surroundings::LightsCx::READS, super::surroundings::LightsCx::WRITES, Profile::Key(K::LightsAndRain)) },
             Scripted => StageInfo { takes: &[Carry::Time, Carry::Daylight], ..stage("scripted", P::Present, Role::Own, super::surroundings::ScriptedCx::READS, super::surroundings::ScriptedCx::WRITES, Profile::Key(K::Scripted)) },
@@ -237,6 +237,7 @@ impl frame_stages::Host<WindowStage> for WindowFrame<'_> {
                 let (analog, actions) = self.controls.take().expect("the controllers stage comes first");
                 app.frame_pad_actions(analog, actions);
                 app.touch_frame(dt());
+                app.remote_input();
             }
             PlayerTick => super::driving::player_step(super::driving::PlayerStepCx::of(&mut app.parts()), dt()),
             PlayerView => app.frame_player_view(dt()),

@@ -135,7 +135,7 @@
 	</array>
 	<!-- LAN sessions: the other players on the same network -->
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>openOMSI finds and joins the multiplayer sessions of other players on your network.</string>
+	<string>openOMSI finds and joins the multiplayer sessions of other players on your network, and lets your phone or tablet reach the remote cockpit once you switch it on.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_openomsi._udp</string>

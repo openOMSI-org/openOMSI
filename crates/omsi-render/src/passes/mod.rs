@@ -10,6 +10,7 @@ mod effects;
 mod ground;
 mod headlamp_shadow;
 mod main_pass;
+mod temporal;
 mod post;
 mod precip_map;
 pub(crate) use precip_map::*;
@@ -146,6 +147,8 @@ pub(crate) struct FrameCtx<'a> {
     pub ro: DVec3,
     /// the window's width (the HUD is drawn at the window's size)
     pub full_w: u32,
+    /// temporal upscaling draws this frame: the window's own picture, at the size it scales up
+    pub temporal_frame: bool,
     /// the 3D picture's size (smaller than the window's with a render scale)
     pub width: u32,
     pub height: u32,

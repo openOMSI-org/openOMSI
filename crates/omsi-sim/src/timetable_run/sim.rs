@@ -182,6 +182,7 @@ pub struct ScheduleSim {
     /// With a single trip picked: the departure (s of the day) of that trip; the rest of
     /// the tour stays the AI's.
     player_departure: Option<f64>,
+    player_twins: HashSet<usize>,
     /// A player tour was just taken over: its buses already on the road go at the next tick.
     purge_player_tour: bool,
     /// LAN play (host): the tours the other players drive (line, tour; lower case), left to

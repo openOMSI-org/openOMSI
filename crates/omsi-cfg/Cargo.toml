@@ -13,3 +13,7 @@ rayon.workspace = true
 flate2.workspace = true
 ring.workspace = true
 unicode-normalization = "0.1"
+
+[target.'cfg(windows)'.dependencies]
+# (DXGI's adapter list: whether DLSS can be offered, `upscaler_files::rtx_present`)
+windows = { workspace = true, features = ["Win32_Graphics_Dxgi"] }

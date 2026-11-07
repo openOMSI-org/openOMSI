@@ -54,6 +54,7 @@ pub struct CityMap {
     /// The turn of the view (radians): the map direction that points up on the screen lies this far clockwise from the
     /// map's up. Eased.
     pub(super) phi: f64,
+    closed_at: Option<std::time::Instant>,
 }
 
 /// A city map ground being built: what for.
@@ -595,6 +596,31 @@ impl Navigator {
         }
         self.city.route = (stamp, anchor, p.len());
         Some(p)
+    }
+
+    pub(super) fn release_closed_city(&mut self, renderer: &Renderer, scene: &mut Scene) {
+        if self.city.open {
+            self.city.closed_at = None;
+            return;
+        }
+        if self.city.closed_at.get_or_insert_with(std::time::Instant::now).elapsed() < std::time::Duration::from_secs(10) {
+            return;
+        }
+        if self.city.ground.is_none() && self.city.target.is_none() && self.city_job.is_none() {
+            return;
+        }
+        self.city_job = None;
+        self.city.ground = None;
+        if let Some((t, _, _)) = self.city.target.take() {
+            renderer.free_texture(scene, t);
+            scene.premultiplied.remove(&t);
+        }
+        if let Some(gpu) = self.gpu.as_mut() {
+            for id in [7, 14, 10, 15] {
+                gpu.drop_vertices(id);
+            }
+            gpu.drop_targets();
+        }
     }
 
     pub(super) fn city(&mut self, renderer: &Renderer, scene: &mut Scene, f: &NavFrame) {

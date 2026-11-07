@@ -5,7 +5,10 @@
 // what the smaller picture lost, most where the picture is flat and least on hard edges.
 struct Params {
     // xy: size of the source picture, z: sharpening 0..1, w: 1 = the picture at the window's
-    // own size smoothed by FXAA instead (the plain graphics without multisampling)
+    // own size smoothed by FXAA instead (the plain graphics without multisampling); 2 = a
+    // temporal upscaler's result at the window's size, copied as it is but brought back to
+    // linear light (it hands back the sRGB-encoded numbers it read, which the window's sRGB
+    // target would encode once more)
     src: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> p: Params;
@@ -171,6 +174,24 @@ fn fs_panel(in: VsOut) -> @location(0) vec4<f32> {
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let size = p.src.xy;
+    if (p.src.w > 1.5) {
+        var c = max(tap(in.uv), vec3<f32>(0.0));
+        // (a light contrast-adaptive sharpening, on the sRGB-encoded numbers as AMD's CAS wants)
+        if (p.src.z > 0.0) {
+            let px = 1.0 / size;
+            let n = tap(in.uv - vec2<f32>(0.0, px.y));
+            let s = tap(in.uv + vec2<f32>(0.0, px.y));
+            let w = tap(in.uv - vec2<f32>(px.x, 0.0));
+            let e = tap(in.uv + vec2<f32>(px.x, 0.0));
+            let mn = min(c, min(min(n, s), min(w, e)));
+            let mx = max(c, max(max(n, s), max(w, e)));
+            let amp = sqrt(clamp(min(mn, vec3<f32>(1.0) - mx) / max(mx, vec3<f32>(1e-4)), vec3<f32>(0.0), vec3<f32>(1.0)));
+            let wgt = amp * (-1.0 / mix(8.0, 5.0, p.src.z));
+            c = clamp((c + (n + s + w + e) * wgt) / (vec3<f32>(1.0) + 4.0 * wgt), vec3<f32>(0.0), vec3<f32>(1.0));
+        }
+        let lin = select(pow((c + 0.055) / 1.055, vec3<f32>(2.4)), c / 12.92, c <= vec3<f32>(0.04045));
+        return vec4<f32>(lin, 1.0);
+    }
     if (p.src.w > 0.5) {
         return vec4<f32>(fxaa(in.uv, 1.0 / size), 1.0);
     }

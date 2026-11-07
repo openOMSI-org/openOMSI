@@ -26,12 +26,14 @@ members = [
     "crates/omsi-plugin",
     "crates/omsi-plugin/demo",
     "crates/omsi-ui",
+    "crates/omsi-settings-ui",
     "crates/omsi-launcher-core",
     "crates/omsi-launcher-api",
     "crates/omsi-launcher-model",
     "crates/omsi-admin",
     "crates/omsi-lan",
     "crates/omsi-serverlist",
+    "crates/omsi-remote",
     "crates/omsi-platform",
     "crates/omsi-guard",
     "crates/omsi-input",
@@ -101,6 +103,7 @@ ab_glyph = "0.2"
 rfd = "0.15"
 libc = "0.2"
 windows = "0.62"
+windows-core = "0.62"
 winresource = "0.1"
 
 [profile.release]

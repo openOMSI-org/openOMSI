@@ -59,6 +59,7 @@ omsi-platform = { path = "../omsi-platform" }
 omsi-guard = { path = "../omsi-guard" }
 omsi-admin = { path = "../omsi-admin" }
 omsi-lan = { path = "../omsi-lan" }
+omsi-remote = { path = "../omsi-remote" }
 omsi-input = { path = "../omsi-input" }
 omsi-xr = { path = "../omsi-xr" }
 omsi-plugin-ui = { path = "../omsi-plugin-ui" }
@@ -68,6 +69,7 @@ omsi-soundscape = { path = "../omsi-soundscape" }
 omsi-world = { path = "../omsi-world" }
 omsi-scene = { path = "../omsi-scene" }
 omsi-ui = { path = "../omsi-ui" }
+omsi-settings-ui = { path = "../omsi-settings-ui" }
 omsi-launcher-core = { path = "../omsi-launcher-core" }
 omsi-launcher-api = { path = "../omsi-launcher-api" }
 omsi-launcher-model = { path = "../omsi-launcher-model" }

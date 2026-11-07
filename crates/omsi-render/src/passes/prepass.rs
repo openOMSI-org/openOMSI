@@ -9,7 +9,7 @@ impl Renderer {
         let (camera, aspect, width, height, ao_on) = (f.camera, f.aspect, f.width, f.height, f.ao_on);
         if f.prepass_on {
             let proj = f.projection.unwrap_or_else(|| {
-                Mat4::perspective_rh(camera.fov_deg.to_radians(), aspect, camera.far, camera.near)
+                Mat4::perspective_rh(camera.fov_deg.to_radians(), aspect, camera.depth_far(), camera.near)
             });
             let u = SsaoUniform {
                 inv_proj: proj.inverse().to_cols_array_2d(),
@@ -28,10 +28,22 @@ impl Renderer {
             self.queue
                 .write_buffer(&self.ao_buf, 0, bytemuck::bytes_of(&u));
             let ao = self.targets.ao.as_ref().unwrap();
+            // temporal upscaling: the same depth, and each pixel's motion written beside it
+            let motion = if f.temporal_frame {
+                self.temporal_pipes.as_ref().zip(self.temporal.as_ref()).and_then(|(p, d)| Some((p, d.targets.as_ref()?, &d.prev_models.as_ref()?.1)))
+            } else {
+                None
+            };
+            let motion_target = [motion.map(|(_, t, _)| wgpu::RenderPassColorAttachment {
+                view: &t.motion_view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store },
+            })];
             {
                 let mut pass = prepass_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("depth prepass"),
-                    color_attachments: &[],
+                    color_attachments: if motion.is_some() { &motion_target[..] } else { &[] },
                     depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                         view: &ao.depth_view,
                         depth_ops: Some(wgpu::Operations {
@@ -45,8 +57,15 @@ impl Renderer {
                     multiview_mask: None,
                 });
                 pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
-                encode_batches(&mut pass, scene, prepass_batches, |pipe| {
-                    &self.prepass_pipelines[pipe as usize]
+                if let Some((p, _, bg)) = motion {
+                    // (the sky's motion first, where nothing covers it)
+                    pass.set_bind_group(3, bg, &[]);
+                    pass.set_pipeline(&p.sky);
+                    pass.draw(0..3, 0..1);
+                }
+                encode_batches(&mut pass, scene, prepass_batches, |pipe| match motion {
+                    Some((p, _, _)) => &p.prepass[pipe as usize],
+                    None => &self.prepass_pipelines[pipe as usize],
                 });
             }
             for (pipe, bg, target, pass_label) in [

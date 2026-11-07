@@ -522,6 +522,7 @@ impl TrafficSim {
         let fwd = DVec2::new(h.sin(), h.cos());
         let right = DVec2::new(h.cos(), -h.sin());
         let out = if self.net.left_hand { 1.0 } else { -1.0 };
+        let (bus, touching) = (centre, (half_w + half_width) as f64);
         let centre = centre + (right * (out * widen * 0.5)).extend(0.0);
         let half_w = half_w + (widen * 0.5) as f32;
         let own = player.0 == self.player.map_or(DVec3::NAN, |p| p.0);
@@ -534,7 +535,7 @@ impl TrafficSim {
         // (the player's own bus bends its reach along its turn; a LAN player's goes straight)
         let turn = if own { self.player_turn } else { 0.0 };
         let body = half_len as f64 + margin;
-        let inside = |p: DVec3| in_player_sweep(p, centre, fwd, right, wide, body, ahead + margin, behind + margin, turn);
+        let inside = |p: DVec3| in_player_box(p, bus, fwd, right, touching, body, body) || in_player_sweep(p, centre, fwd, right, wide, body, ahead + margin, behind + margin, turn);
         let look = (st.speed * st.speed / (2.0 * st.decel) + st.speed * 2.0 + 15.0)
             .clamp(15.0, look_ahead(st.speed));
         let mut d = 0.0f32;
@@ -576,18 +577,15 @@ impl TrafficSim {
 }
 
 /// `in_player_box` with the stretch ahead of the bus bent along the arc it is turning on
-/// (`turn`: its curvature, 1/m, positive to the right): the body itself (`body` ahead of
-/// `centre`) and a band `wide` to either side of the arc its centre will run along for
-/// `ahead` metres. Straight ahead, as before, the reach of a bus driving through a bend at
+/// (`turn`: its curvature, 1/m, positive to the right): a band `wide` to either side of
+/// the arc its centre runs along, from `behind` back to `ahead` metres on (the body's own
+/// box, without the widening, is the caller's). Straight ahead, as before, the reach of a bus driving through a bend at
 /// speed lay across the oncoming lane, and the cars coming the other way braked hard for a
 /// bus that was never going to be where they were.
 #[allow(clippy::too_many_arguments)]
 pub fn in_player_sweep(p: DVec3, centre: DVec3, fwd: DVec2, right: DVec2, wide: f64, body: f64, ahead: f64, behind: f64, turn: f64) -> bool {
     if turn.abs() < 1e-4 || ahead <= body {
         return in_player_box(p, centre, fwd, right, wide, ahead, behind);
-    }
-    if in_player_box(p, centre, fwd, right, wide, body, behind) {
-        return true;
     }
     if (p.z - centre.z).abs() >= 4.0 {
         return false;
@@ -598,7 +596,7 @@ pub fn in_player_sweep(p: DVec3, centre: DVec3, fwd: DVec2, right: DVec2, wide: 
     let radius = 1.0 / turn.abs();
     let (vx, vy) = (x - 1.0 / turn, y);
     let along = vy.atan2(-turn.signum() * vx) * radius;
-    ((vx * vx + vy * vy).sqrt() - radius).abs() <= wide && along >= 0.0 && along <= ahead
+    ((vx * vx + vy * vy).sqrt() - radius).abs() <= wide && along >= -behind && along <= ahead
 }
 
 /// The curvature (1/m, positive to the right) of the player's path from its last two boxes

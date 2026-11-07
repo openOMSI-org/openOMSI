@@ -11,6 +11,7 @@
 //! language-neutral [`runtime`], which calls the plugin's functions back through its
 //! [`Binding`]. Values cross as [`Value`]s.
 
+pub mod cables;
 pub mod docs;
 pub mod events;
 mod fns;

@@ -837,7 +837,12 @@ impl World {
                 texture_restore_room(self.texture_budget_bytes(), usage, video_limit, card)
             };
             let before = scene.texture_bytes_of(id);
-            let Some(upload) = fit_upgrade(&data, before.saturating_add(room)) else { continue };
+            let upload = if self.player_textures.lock().contains(&path) {
+                data.clone()
+            } else {
+                let Some(upload) = fit_upgrade(&data, before.saturating_add(room)) else { continue };
+                upload
+            };
             let replaced = renderer.replace_texture(scene, id, &upload);
             usage = (usage + scene.texture_bytes_of(id)).saturating_sub(before);
             if self.freetex_reloads.snapshot(id).is_some() {
@@ -942,6 +947,7 @@ impl World {
             }
         }
         let t0 = std::time::Instant::now();
+        let player = self.player_textures.lock();
         let vehicle_bytes: u64 = self
             .vehicle_textures
             .lock()
@@ -986,7 +992,7 @@ impl World {
             memo.resume = false;
             return 0;
         }
-        if pass != BudgetPass::Now && !memo.resume && !retry_due && memo.unchanged(generation, usage, limit, centers) {
+        if pass != BudgetPass::Now && !memo.resume && !retry_due && memo.unchanged(generation, usage, limit, card_restore_room(video_limit, card), centers) {
             return 0;
         }
         let ts = tile_size();
@@ -1098,8 +1104,9 @@ impl World {
                 let mut own: Vec<(TextureId, u64)> = self
                     .vehicle_textures
                     .lock()
-                    .values()
-                    .map(|(t, _)| (*t, scene.texture_bytes_of(*t)))
+                    .iter()
+                    .filter(|(p, _)| !player.contains(*p))
+                    .map(|(_, (t, _))| (*t, scene.texture_bytes_of(*t)))
                     .collect();
                 own.sort_by(|a, b| b.1.cmp(&a.1));
                 for (id, before) in own {
@@ -1124,7 +1131,9 @@ impl World {
                 let mut emergency: Vec<(TextureId, Option<PathBuf>)> = entries.iter()
                     .filter_map(|(_, p)| gpu.textures.get(p).map(|e| (e.id, Some(p.clone()))))
                     .collect();
-                emergency.extend(self.vehicle_textures.lock().values().map(|(id, _)| (*id, None)));
+                emergency.extend(self.vehicle_textures.lock().iter()
+                    .filter(|(p, _)| !player.contains(*p))
+                    .map(|(_, (id, _))| (*id, None)));
                 for (id, path) in emergency {
                     if over == 0 || shrunk.len() >= 96 {
                         break;
@@ -1183,7 +1192,7 @@ impl World {
         // Nothing left to do for now: not looked at again before something changed. (A pass
         // that shrank or sent back textures changes the bytes in use, now or when they come
         // back, and looks again.)
-        memo.remember(generation, usage, limit, centers, shrunk.is_empty() && restoring == 0);
+        memo.remember(generation, usage, limit, card_restore_room(video_limit, card), centers, shrunk.is_empty() && restoring == 0);
         memo.resume = cut_short;
         // (the swapped-in textures waiting for theirs go along)
         let shrunk_n = shrunk.len();
@@ -1446,6 +1455,7 @@ pub(super) struct BudgetMemo {
     generation: u64,
     usage: u64,
     limit: u64,
+    room: u64,
     centers: Vec<DVec3>,
     in_use: u64,
 }
@@ -1454,10 +1464,11 @@ impl BudgetMemo {
     /// How far a center may move before the textures' distances are looked at again.
     const MOVED: f64 = 25.0;
 
-    fn unchanged(&self, generation: u64, usage: u64, limit: u64, centers: &[DVec3]) -> bool {
+    fn unchanged(&self, generation: u64, usage: u64, limit: u64, room: u64, centers: &[DVec3]) -> bool {
         self.idle
             && self.generation == generation
             && self.limit == limit
+            && room <= self.room.saturating_add(64 << 20)
             && usage <= self.usage.max(limit)
             && usage + limit / 100 >= self.usage
             && self.centers.len() == centers.len()
@@ -1468,8 +1479,9 @@ impl BudgetMemo {
                 .all(|(a, b)| a.truncate().distance_squared(b.truncate()) < Self::MOVED * Self::MOVED)
     }
 
-    fn remember(&mut self, generation: u64, usage: u64, limit: u64, centers: &[DVec3], idle: bool) {
+    fn remember(&mut self, generation: u64, usage: u64, limit: u64, room: u64, centers: &[DVec3], idle: bool) {
         self.idle = idle;
+        self.room = room;
         self.generation = generation;
         self.usage = usage;
         self.limit = limit;

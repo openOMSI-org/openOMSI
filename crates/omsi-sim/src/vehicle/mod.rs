@@ -52,7 +52,7 @@ pub use rail::RailEnv;
 pub use props::*;
 pub use trailer::*;
 pub use panto::{Catenary, PantoGear};
-pub use trolley::TrolleyGear;
+pub use trolley::{TrolleyGear, ROPE_RATE};
 pub use types::*;
 use update::*;
 pub use weather::*;
@@ -256,6 +256,8 @@ pub struct VehicleInstance {
     engine_ids: std::sync::OnceLock<engine_vars::EngineVarIds>,
     /// What the control cables carry to the next car this frame (see `car_run`).
     cable_bus: car_run::CableBus,
+    cable_back: car_run::CableBus,
+    cable_back_only: (usize, Vec<usize>),
     /// The program's own variables the engine uses every frame (see `program_ids`).
     program_ids: std::sync::OnceLock<program_ids::ProgramIds>,
     /// A trolleybus's poles and traction (see `trolley`); None for every other vehicle.

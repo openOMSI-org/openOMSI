@@ -232,6 +232,7 @@ impl VehicleInstance {
         for &(write, read) in &self.v_cables {
             self.state.vars[read as usize] = self.state.vars[write as usize];
         }
+        super::car_run::read_back_bus(self);
     }
 
     /// Run the scripts' frame once with no time passing (no physics, no clock): what a
@@ -505,6 +506,7 @@ impl VehicleInstance {
         let mut trailers = std::mem::take(&mut self.trailers);
         super::car_run::set_couplings(&mut trailers);
         super::car_run::start_bus(self);
+        super::car_run::start_back_bus(self, &mut trailers);
         let mut lead: Option<(DVec3, Mat4, f64)> = None;
         let mut turn = self.turning();
         for t in &mut trailers {
@@ -538,6 +540,7 @@ impl VehicleInstance {
         let mut trailers = std::mem::take(&mut self.trailers);
         super::car_run::set_couplings(&mut trailers);
         super::car_run::start_bus(self);
+        super::car_run::start_back_bus(self, &mut trailers);
         let mut lead: Option<(DVec3, Mat4, f64)> = None;
         let mut turn = self.turning();
         if self.ty.def.is_rail() {

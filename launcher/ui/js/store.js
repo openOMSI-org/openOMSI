@@ -27,6 +27,7 @@ export const S = {
   profile: null,
   poll: { stamp: '', jobs: [], instances: [] },
   toasts: [],
+  changelog: false,
   errors: {},
   cache: {},
 };

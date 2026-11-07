@@ -358,6 +358,16 @@ fn root() -> Result<PathBuf> {
     Ok(r)
 }
 
+/// The `upscaler=` setting as the game reads it: unknown words are the standard upscaler.
+pub fn upscaler_word(s: &str) -> &'static str {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "fsr1" => "fsr1",
+        "dlss" => "dlss",
+        "fsr3" => "fsr3",
+        _ => "default",
+    }
+}
+
 /// The game's own content folder: the folder of the game binary, laid out like OMSI 2
 /// (Vehicles, maps, Sceneryobjects ...). Installed mods live here; the game searches it
 /// before the original installation.
@@ -1987,6 +1997,9 @@ pub fn save_keybindings(v: &Value) -> Result<()> {
 pub fn get_settings() -> Result<Value> {
     let text = std::fs::read_to_string(data_dir().join("settings.cfg")).ok();
     let mut v = settings_from_text(text.as_deref());
+    // (what the page may offer beside the upscalers that are always there; not a setting)
+    let game_dir = find_game(&load_config_raw().game).and_then(|g| g.parent().map(Path::to_path_buf));
+    v["temporal_upscalers"] = json!(game_dir.map_or(Vec::new(), |d| omsi_cfg::upscaler_files::available(&d)));
     // no settings of our own yet: start from what the player set in OMSI 2
     if text.is_none() {
         if let Some(o) = root().ok().and_then(|r| omsi_options(&r)) {
@@ -2241,6 +2254,7 @@ fn passenger_defaults(v: &mut Value) {
 /// Initial values shared by desktop and phone, kept outside the long settings parser.
 fn graphics_and_interface_defaults(v: &mut Value) {
     v["upscaler"] = json!("default");
+    v["upscale_quality"] = json!("quality");
     v["fsr_quality"] = json!("quality");
     v["fsr_sharpness"] = json!(0.8);
     v["street_light"] = json!("off");
@@ -2301,6 +2315,8 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     v["cross_platform_launcher"] = json!(false);
     v["discord_app_id"] = json!("");
     voice_defaults(&mut v);
+    v["remote_cockpit"] = json!(false);
+    v["remote_cockpit_port"] = json!(8642);
     // the launcher gives the graphics card up while a game runs (off: it stays drawn)
     v["launcher_rest"] = json!(true);
     // the window's size in pixels, "auto" to fit the screen (#904)
@@ -2402,7 +2418,8 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "rain_quality" => v[&k] = json!(rain_quality(val)),
             "vehicle_smoke" => v[&k] = json!(vehicle_smoke(val)),
             "puddles" => v[&k] = json!(puddles(val)),
-            "upscaler" => v[&k] = json!(if val.eq_ignore_ascii_case("fsr1") { "fsr1" } else { "default" }),
+            "upscaler" => v[&k] = json!(upscaler_word(val)),
+            "upscale_quality" => v[&k] = json!(omsi_cfg::upscaler_files::quality_word(val)),
             "fsr_quality" => v[&k] = json!(match val.to_ascii_lowercase().as_str() {
                 "ultra" => "ultra", "balanced" => "balanced", "performance" => "performance",
                 "custom" => "custom", "auto" => "auto", _ => "quality",
@@ -2462,11 +2479,12 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "pad_steer_speed" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.8, 5.0)).unwrap_or(2.0)),
             "pad_deadzone" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 0.4)).unwrap_or(0.08)),
             "pad_type" => v[&k] = json!(match val.trim().to_ascii_lowercase().as_str() { "xbox" => "xbox", "ps4" => "ps4", "ps5" => "ps5", _ => "auto" }),
-            "camera_collision" | "right_stick_look" | "ctrl_background" | "pad_steer_linear" | "pad_buttons" | "arrows_switch_cams" | "steer_look" | "head_tracking" | "head_tracking_invert_yaw" | "head_tracking_invert_pitch" | "head_tracking_invert_roll" | "head_tracking_invert_x" | "head_tracking_invert_y" | "head_tracking_invert_z" | "discord_status" | "launcher_rest" | "cross_platform_launcher" => v[&k] = json!(b(val)),
+            "camera_collision" | "right_stick_look" | "ctrl_background" | "pad_steer_linear" | "pad_buttons" | "arrows_switch_cams" | "steer_look" | "head_tracking" | "head_tracking_invert_yaw" | "head_tracking_invert_pitch" | "head_tracking_invert_roll" | "head_tracking_invert_x" | "head_tracking_invert_y" | "head_tracking_invert_z" | "discord_status" | "remote_cockpit" | "launcher_rest" | "cross_platform_launcher" => v[&k] = json!(b(val)),
             // (how much of the mip chain an LED panel is held at, 0..4; a file from before
             // it was a number says 1 or 0)
             "led_mips" => v[&k] = json!(val.trim().parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 4.0)).unwrap_or(1.3)),
             "led_glow" => v[&k] = json!(val.parse::<i64>().map(|x| x.clamp(0, 15)).unwrap_or(6)),
+            "remote_cockpit_port" => v[&k] = json!(val.trim().parse::<u16>().ok().filter(|p| *p > 0).unwrap_or(8642)),
             "night_brightness" => v[&k] = json!(val.trim().parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 3.0)).unwrap_or(0.0)),
             "reflections" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map_or_else(|| if b(val) { 1.0 } else { 0.0 }, |x| x.clamp(0.0, 1.0))),
             "road_glare" | "traffic_headlights" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).unwrap_or(1.0).clamp(0.0, 2.0)),
@@ -2800,7 +2818,8 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     let vr_scale = v.get("vr_scale").and_then(|x| x.as_f64().or_else(|| x.as_str().and_then(|s| s.parse().ok()))).filter(|x| x.is_finite()).unwrap_or(0.65).clamp(0.5, 1.0);
     let vr_head_smoothing_ms = v.get("vr_head_smoothing_ms").and_then(|x| x.as_f64().or_else(|| x.as_str().and_then(|s| s.parse().ok()))).filter(|x| x.is_finite()).unwrap_or(0.0).clamp(0.0, 30.0);
     let vr_mirror_rate = v.get("vr_mirror_rate").and_then(|x| x.as_f64().or_else(|| x.as_str().and_then(|s| s.parse().ok()))).filter(|x| x.is_finite()).unwrap_or(16.0).clamp(-1.0, 360.0);
-    let text = format!("{text}vr={}\nvr_scale={vr_scale}\nvr_head_smoothing_ms={vr_head_smoothing_ms}\nvr_mirror_rate={vr_mirror_rate}\nvr_desktop_mirror={}\ndiscord_status={}\nlauncher_rest={}\ncross_platform_launcher={}\n", b("vr", false), b("vr_desktop_mirror", true), b("discord_status", false), b("launcher_rest", true), b("cross_platform_launcher", false));
+    let remote_port = v.get("remote_cockpit_port").and_then(|x| x.as_u64().or_else(|| x.as_str().and_then(|s| s.trim().parse().ok()))).filter(|p| (1..=65535).contains(p)).unwrap_or(8642);
+    let text = format!("{text}vr={}\nvr_scale={vr_scale}\nvr_head_smoothing_ms={vr_head_smoothing_ms}\nvr_mirror_rate={vr_mirror_rate}\nvr_desktop_mirror={}\ndiscord_status={}\nremote_cockpit={}\nremote_cockpit_port={remote_port}\nlauncher_rest={}\ncross_platform_launcher={}\n", b("vr", false), b("vr_desktop_mirror", true), b("discord_status", false), b("remote_cockpit", false), b("launcher_rest", true), b("cross_platform_launcher", false));
     // what the page does not manage (keys of newer games, hand-written ones) stays as it
     // was in the file; other spellings of the keys just written go
     let mut text = text;
@@ -2886,8 +2905,9 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         head_tracking_value("head_tracking_smoothing", v.get("head_tracking_smoothing").and_then(|x| x.as_f64())),
         head_tracking_value("head_tracking_dead_zone", v.get("head_tracking_dead_zone").and_then(|x| x.as_f64())),
     ));
-    text.push_str(&format!("upscaler={}\nfsr_quality={}\nfsr_sharpness={}\n",
-        if v.get("upscaler").and_then(|x| x.as_str()) == Some("fsr1") { "fsr1" } else { "default" },
+    text.push_str(&format!("upscaler={}\nupscale_quality={}\nfsr_quality={}\nfsr_sharpness={}\n",
+        upscaler_word(v.get("upscaler").and_then(|x| x.as_str()).unwrap_or("")),
+        omsi_cfg::upscaler_files::quality_word(v.get("upscale_quality").and_then(|x| x.as_str()).unwrap_or("")),
         match v.get("fsr_quality").and_then(|x| x.as_str()).unwrap_or("quality") {
             "ultra" => "ultra", "balanced" => "balanced", "performance" => "performance",
             "custom" => "custom", "auto" => "auto", _ => "quality",

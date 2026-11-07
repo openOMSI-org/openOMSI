@@ -107,6 +107,17 @@ fn a_card_far_too_slow_gets_the_settings_of_the_next_start_too() {
 }
 
 #[test]
+fn texture_compression_comes_back_only_where_the_card_compresses() {
+    let m = Machine { cores: 8, msaa_counts: 1 | 2 | 4, ssao: true };
+    let mut s = pc_1440p();
+    s["texture_compression"] = json!(false);
+    let offered = |s: &Value| lighter_steps(s, Limit::Gpu, &m).iter().any(|st| st.key == "texture_compression" && st.to == json!(true));
+    assert!(offered(&s));
+    s["gpu_texture_compression"] = json!(false);
+    assert!(!offered(&s), "with the card's compression off the textures stay RGBA either way");
+}
+
+#[test]
 fn a_device_without_2x_is_not_tried_at_2x() {
     let apple = Machine { cores: 8, msaa_counts: 1 | 4, ssao: true };
     assert!(!lighter_steps(&pc_1440p(), Limit::Gpu, &apple).iter().any(|s| s.key == "msaa" && s.to == json!(2)));
@@ -297,4 +308,20 @@ fn a_run_cut_short_leaves_the_settings_and_the_backup_as_they_were() {
     begin_in(&dir, &half).unwrap();
     assert_eq!(backup_in(&dir).unwrap()["msaa"], json!(4));
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn an_upscaler_at_work_leaves_the_msaa_and_the_render_scale_out_of_the_steps() {
+    let hw = Machine::default();
+    let mut s = pc_1440p();
+    s["msaa"] = json!(4);
+    s["render_scale"] = json!("0.75");
+    let keys = |s: &Value| -> Vec<&'static str> {
+        lighter_steps(s, Limit::Gpu, &hw).iter().map(|x| x.key).chain(heavier_steps(s, s, &hw).iter().map(|x| x.key)).collect()
+    };
+    assert!(keys(&s).iter().any(|k| *k == "msaa" || *k == "render_scale"));
+    s["upscaler"] = json!("dlss");
+    assert!(!keys(&s).iter().any(|k| *k == "msaa" || *k == "render_scale"));
+    s["temporal_upscalers"] = json!(["fsr3"]);
+    assert!(keys(&s).iter().any(|k| *k == "msaa" || *k == "render_scale"), "its DLLs are gone");
 }

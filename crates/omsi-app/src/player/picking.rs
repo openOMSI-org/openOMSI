@@ -5,7 +5,7 @@ use super::*;
 /// The `[mouseevent]` mesh a ray picks, and whether the ray through the cursor itself found
 /// it (not the rings around it). `reach`: how far along the ray through the cursor and along
 /// the rings a switch may be and still be reached ([`Reach`]).
-pub(crate) fn pick_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3, dir: Vec3, spread: f32, reach: Reach) -> Option<(usize, bool)> {
+pub(crate) fn pick_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3, dir: Vec3, spread: f32, reach: Reach, outside: bool) -> Option<(usize, bool)> {
     let o = (origin - vehicle.position).as_vec3();
     let right = Vec3::new(-dir.y, dir.x, 0.0).normalize_or_zero();
     let up = dir.cross(right).normalize_or_zero();
@@ -28,7 +28,8 @@ pub(crate) fn pick_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3, dir: V
     // hundreds of meshes; calculating their posed transforms three times made
     // hovering over its controls needlessly expensive.
     let candidates: Vec<(usize, glam::Mat4, Vec<u32>)> = vehicle.ty.meshes.iter().enumerate().filter_map(|(i, vm)| {
-        if vehicle.ty.model.meshes[vm.def_index].mouse_event.is_none() || !vehicle.mesh_props[i].visible {
+        let def = &vehicle.ty.model.meshes[vm.def_index];
+        if def.mouse_event.is_none() || !vehicle.mesh_props[i].visible || !drawn_in_view(def.viewpoint, outside) {
             return None;
         }
         let xf = vehicle.mesh_local_transform(i);
@@ -118,9 +119,7 @@ pub(crate) fn hiding_part(ty: &omsi_sim::VehicleType, props: &[omsi_sim::vehicle
     for (i, vm) in ty.meshes.iter().enumerate() {
         let def = &ty.model.meshes[vm.def_index];
         let Some(p) = props.get(i).filter(|p| p.visible) else { continue };
-        let vp = def.viewpoint;
-        let drawn = vp == 0 || vp & 1 != 0;
-        if def.mouse_event.is_some() || def.is_shadow || !drawn {
+        if def.mouse_event.is_some() || def.is_shadow || !drawn_in_view(def.viewpoint, true) {
             continue;
         }
         let xf = xf_of(i);
@@ -137,6 +136,10 @@ pub(crate) fn hiding_part(ty: &omsi_sim::VehicleType, props: &[omsi_sim::vehicle
         }
     }
     nearest
+}
+
+fn drawn_in_view(viewpoint: i32, outside: bool) -> bool {
+    viewpoint == 0 || viewpoint & if outside { 1 } else { 2 } != 0
 }
 
 /// Depth band (m) inside which overlapping cockpit `[mouseevent]` meshes are disambiguated
@@ -244,7 +247,7 @@ pub(crate) fn pick_html_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3, d
 /// The same forgiving pick as `pick`, but for the coupled sections of an articulated
 /// bus.  The old picker only searched the lead vehicle, so GN92's rear door opener and
 /// every other button in the second section could never receive a click.
-pub(crate) fn pick_trailer_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3, dir: Vec3, spread: f32, reach: Reach) -> Option<((usize, usize), bool)> {
+pub(crate) fn pick_trailer_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3, dir: Vec3, spread: f32, reach: Reach, outside: bool) -> Option<((usize, usize), bool)> {
     let right = Vec3::new(-dir.y, dir.x, 0.0).normalize_or_zero();
     let up = dir.cross(right).normalize_or_zero();
     let mut rings: Vec<Vec<Vec3>> = vec![vec![dir]];
@@ -265,7 +268,8 @@ pub(crate) fn pick_trailer_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3
     let candidates: Vec<(usize, usize, glam::Mat4, Vec<u32>)> = vehicle.trailers.iter().enumerate().flat_map(|(ti, trailer)| {
         let o = (origin - trailer.position).as_vec3();
         trailer.ty.meshes.iter().enumerate().filter_map(move |(i, vm)| {
-            if trailer.ty.model.meshes[vm.def_index].mouse_event.is_none() || !trailer.mesh_props[i].visible {
+            let def = &trailer.ty.model.meshes[vm.def_index];
+            if def.mouse_event.is_none() || !trailer.mesh_props[i].visible || !drawn_in_view(def.viewpoint, outside) {
                 return None;
             }
             let xf = trailer.mesh_local_transform(i);
@@ -371,7 +375,7 @@ mod reach_tests {
 
     fn picks(v: &omsi_sim::VehicleInstance, outside: bool) -> Option<usize> {
         let reach = reach_into(&v.ty, &v.mesh_props, |i| v.mesh_local_transform(i), Vec3::ZERO, Vec3::Y, outside);
-        pick_in(v, v.position, Vec3::Y, 0.0, reach).map(|(i, _)| i)
+        pick_in(v, v.position, Vec3::Y, 0.0, reach, outside).map(|(i, _)| i)
     }
 
     /// From outside a switch behind any part of the bus cannot be clicked through it, glass
@@ -385,7 +389,19 @@ mod reach_tests {
         assert_eq!(picks(&bus("glass.dds", 1.2), false), Some(1));
         assert_eq!(picks(&bus("dash.dds", 1.004), false), Some(1));
         assert_eq!(picks(&bus("dash.dds", 0.995), true), Some(1));
-        assert_eq!(pick_in(&bus("dash.dds", 1.2), DVec3::ZERO, Vec3::Y, 0.0, Reach::ANY).map(|h| h.0), Some(1));
+        assert_eq!(pick_in(&bus("dash.dds", 1.2), DVec3::ZERO, Vec3::Y, 0.0, Reach::ANY, false).map(|h| h.0), Some(1));
+    }
+
+    #[test]
+    fn a_switch_is_clicked_only_from_the_views_that_draw_it() {
+        let in_view = |viewpoint: i32, outside: bool| {
+            let mut v = bus("dash.dds", 0.5);
+            std::sync::Arc::get_mut(&mut v.ty).unwrap().model.meshes[1].viewpoint = viewpoint;
+            picks(&v, outside).is_some()
+        };
+        assert!(in_view(1, true) && !in_view(1, false));
+        assert!(in_view(2, false) && !in_view(2, true));
+        assert!(in_view(3, false) && in_view(3, true) && in_view(0, false) && in_view(0, true));
     }
 
     /// Real buses: every switch that a ray from one of the bus's cameras picks with nothing
@@ -440,7 +456,7 @@ mod reach_tests {
                         aims.iter().any(|&aim| {
                             let dir = (aim - eye).normalize_or_zero();
                             let reach = if with_parts { reach_into(&v.ty, &v.mesh_props, |m| v.mesh_local_transform(m), eye, dir, false) } else { Reach::ANY };
-                            pick_in(&v, v.position + eye.as_dvec3(), dir, 0.0, reach).is_some_and(|h| h.0 == i)
+                            pick_in(&v, v.position + eye.as_dvec3(), dir, 0.0, reach, false).is_some_and(|h| h.0 == i)
                         })
                     })
                 };

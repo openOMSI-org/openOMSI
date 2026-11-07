@@ -97,6 +97,12 @@ fn distance(s: &Value, key: &str, auto: f64) -> f64 {
     }
 }
 
+/// DLSS or FSR 3 at work: the MSAA and the render scale are not in use, nothing to gain there.
+fn upscaler_takes_over(s: &Value) -> bool {
+    let word = text(s, "upscaler", "default");
+    (word == "dlss" || word == "fsr3") && s.get("temporal_upscalers").and_then(Value::as_array).is_none_or(|list| list.iter().any(|u| u.as_str() == Some(&*word)))
+}
+
 fn scale(s: &Value) -> f64 {
     match num(s, "render_scale", 0.0) {
         x if x > 0.0 => x,
@@ -109,11 +115,11 @@ pub fn lighter_steps(s: &Value, limit: Limit, m: &Machine) -> Vec<Step> {
     let classic = mode == "vanilla";
     let traced = mode == "enhanced_plus";
     let enhanced = traced || mode == "enhanced";
-    let msaa = num(s, "msaa", 4.0) as i64;
+    let msaa = if upscaler_takes_over(s) { 1 } else { num(s, "msaa", 4.0) as i64 };
     let shadow = num(s, "shadow_size", 2048.0) as i64;
     let mirror = num(s, "mirror_size", 256.0) as i64;
     let refresh = text(s, "mirror_refresh", "full");
-    let render = scale(s);
+    let render = if upscaler_takes_over(s) { 0.0 } else { scale(s) };
     let lit = !classic && !traced;
     let mut out = Vec::new();
     let mut add = |ok: bool, st: Step| {
@@ -125,6 +131,7 @@ pub fn lighter_steps(s: &Value, limit: Limit, m: &Machine) -> Vec<Step> {
     match limit {
         Limit::Gpu => {
             add(mirrors_redrawn, step("mirror_refresh", json!("eco"), Apply::Now));
+            add(!on(s, "texture_compression", true) && on(s, "gpu_texture_compression", true), step("texture_compression", json!(true), Apply::NextStart));
             add(msaa > 2 && m.msaa(2), step("msaa", json!(2), Apply::Rebuild));
             add(mirror > 512, step("mirror_size", json!(512), Apply::NextStart));
             // (what Enhanced's light adds, dearest first: the ray tracing, every light's shadows, the
@@ -172,10 +179,10 @@ pub fn heavier_steps(s: &Value, start: &Value, m: &Machine) -> Vec<Step> {
             out.push(st);
         }
     };
-    let render = scale(s);
+    let render = if upscaler_takes_over(s) { 1.0 } else { scale(s) };
     add(render < 0.99, step("render_scale", json!("auto"), Apply::Now));
     add(lit && !on(s, "shadows", true), step("shadows", json!(true), Apply::Now));
-    let msaa = num(s, "msaa", 4.0) as i64;
+    let msaa = if upscaler_takes_over(s) { 8 } else { num(s, "msaa", 4.0) as i64 };
     let most = if traced { 2 } else { 4 };
     if let Some(n) = [2, 4].into_iter().find(|&n| n > msaa && n <= most && m.msaa(n)) {
         add(true, step("msaa", json!(n), Apply::Rebuild));

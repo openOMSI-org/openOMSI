@@ -382,6 +382,9 @@ pub struct Navigator {
     /// (degrees), how far (m) and the street it turns into.
     /// OMSI 2's route arrows are wanted (see `turn_hint`).
     pub arrows: bool,
+    pub remote: bool,
+    remote_area: Option<(DVec2, u64)>,
+    remote_pic: remote_picture::RemotePicture,
     /// The other (AI) vehicles are drawn on the maps (the `nav_ai` setting).
     pub show_ai: bool,
     pub show_cars: bool,
@@ -596,6 +599,9 @@ impl Navigator {
             time: 0.0,
             next_dist: None,
             arrows: false,
+            remote: false,
+            remote_area: None,
+            remote_pic: Default::default(),
             show_ai: true,
             show_cars: true,
             surface: None,
@@ -1197,8 +1203,14 @@ impl Navigator {
         self.panel_overlay = None;
         self.dock_slot = None;
         self.board = None;
-        // (with the navigator off the route is still followed for OMSI 2's arrows)
-        if !self.enabled && !self.city.open && !self.arrows && self.shown < 0.01 && !self.screen_wants_frame() {
+        self.release_closed_city(renderer, scene);
+        if !self.enabled
+            && !self.city.open
+            && !self.arrows
+            && !self.remote
+            && self.shown < 0.01
+            && !self.screen_wants_frame()
+        {
             self.invalidate_next_stop_distance();
             return;
         }
@@ -1293,9 +1305,9 @@ impl Navigator {
         self.first = false;
         self.pace();
         self.frame_screen(renderer, scene, f);
+        self.remote_picture_frame(renderer, f);
         if !self.enabled && self.shown < 0.01 {
             self.panel_rect = [0.0; 4];
-            // (followed for the route arrows alone, with the city map shut: nothing to draw)
             if self.city.open {
                 self.city(renderer, scene, f);
             }
@@ -1458,6 +1470,10 @@ pub use build::{Built, MapGround};
 mod cull;
 mod city_map;
 mod destination;
+mod remote;
+pub use remote::RemoteNav;
+mod remote_picture;
+pub use remote_picture::RemoteFrame;
 pub use city_map::*;
 use lines_panel::*;
 #[cfg(test)]

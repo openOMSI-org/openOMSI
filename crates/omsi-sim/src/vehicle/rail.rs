@@ -97,6 +97,10 @@ impl VehicleInstance {
         Some(Forces { drive: m_wheel / radius, brake, track_brake: 0.0 })
     }
 
+    pub(super) fn on_rails(&self) -> bool {
+        self.rail_env.is_some() && RailClass::of(&self.ty.def).is_some()
+    }
+
     /// The speed along the rails after `dt` as the rail dynamics make it (`v0` the speed
     /// before): `None` for a vehicle that is not on a track.
     fn rail_solve(&mut self, dt: f32, v0: f32, m_wheel: f32, brakes: &[f32]) -> Option<rail::Outcome> {

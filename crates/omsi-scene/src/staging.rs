@@ -402,9 +402,9 @@ pub struct ScriptedObject {
     /// pages themselves are `inst.html_textures`.
     pub htmls: Vec<(usize, TextureId)>,
     /// Per instance, its slots faded by `[alphascale]` variables (`LampSlots::alpha`; empty
-    /// when none is), and the alphas last given.
+    /// when none is), and the alphas and texture offsets last given.
     pub alpha_slots: Vec<LampSlots>,
-    pub alpha_last: Vec<Vec<f32>>,
+    pub alpha_last: Vec<(Vec<f32>, Vec<[f32; 2]>)>,
     pub script_lamps: Vec<ScriptLamp>,
 }
 
@@ -475,6 +475,7 @@ pub struct LampSlots {
     pub count: usize,
     pub alpha: Vec<(usize, String)>,
     pub light: Vec<(usize, String)>,
+    pub uv: Vec<(usize, Option<String>, Option<String>)>,
 }
 
 impl LampSlots {
@@ -489,8 +490,27 @@ impl LampSlots {
             if let Some((_, v)) = &o.lightmap {
                 l.light.push((slot, v.trim().to_string()));
             }
+            let trans = |v: &Option<String>| v.as_ref().map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
+            if o.texcoord_trans_x.is_some() || o.texcoord_trans_y.is_some() {
+                l.uv.push((slot, trans(&o.texcoord_trans_x), trans(&o.texcoord_trans_y)));
+            }
         }
         l
+    }
+
+    pub fn uv_values(&self, value: &dyn Fn(&str) -> Option<f32>) -> Vec<[f32; 2]> {
+        let mut uv = vec![[0.0; 2]; if self.uv.is_empty() { 0 } else { self.count.max(1) }];
+        for (slot, x, y) in &self.uv {
+            if let Some(u) = uv.get_mut(*slot) {
+                if let Some(x) = x {
+                    u[0] = value(x).unwrap_or(0.0);
+                }
+                if let Some(y) = y {
+                    u[1] = value(y).unwrap_or(0.0);
+                }
+            }
+        }
+        uv
     }
 
     pub fn is_empty(&self) -> bool {
@@ -897,8 +917,8 @@ pub struct StagedTile {
     pub(super) base_terrain: Terrain,
     /// `[spline_terrain_align]` splines: (index into `splines`, reach in metres).
     pub(super) align: Vec<(usize, f32)>,
-    /// Original OMSI outlines, used only when terrain fitting fails. World coordinates.
-    pub(super) hole_rims: Vec<Vec<DVec3>>,
+    /// World-space outlines and their segment counts for the fitting fallback.
+    pub(super) hole_rims: Vec<(Vec<DVec3>, usize)>,
     pub(super) water: Option<[f32; 4]>,
     /// `[variable_terrainlightmap]`: the tile's light map is baked from the lamps around it
     /// (see [`bake_light_map`]), not read from its `.map.LM.bmp`.

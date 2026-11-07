@@ -67,6 +67,12 @@ impl PanelLook {
         let scale = (size.0 as f32 / PANEL_POINTS_WIDE).min(size.1 as f32 / points_high);
         PanelLook { scale, radius: 0.0, fade: 1.0, backdrop: 1.0, grip: false, plugins: false, clear: wgpu::Color::BLACK }
     }
+
+    pub(super) fn remote(size: (u32, u32)) -> PanelLook {
+        let mut look = Self::screen(size, PANEL_POINTS_WIDE / 1.25);
+        look.clear = wgpu::Color::TRANSPARENT;
+        look
+    }
 }
 
 impl Navigator {
@@ -92,12 +98,11 @@ impl Navigator {
         self.place_row_height(scale) + self.stop_list_height(scale, stops)
     }
 
-    /// `beside`: a target drawn beside the panel in the same frame (the screen), through
-    /// attachments of its own, so that the panel keeps its own; it is submitted at once, as
-    /// the panel's buffer writes would otherwise overtake its own before either is drawn.
+    /// Offscreen views keep their own attachments and submit before the HUD rewrites buffers.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn draw(&mut self, renderer: &Renderer, target: &wgpu::TextureView, size: (u32, u32), map_h: f32, look: &PanelLook, beside: Option<&mut omsi_ui::Attachments>, f: &NavFrame) {
         let (pw, ph) = (size.0 as f32, size.1 as f32);
+        let remote = self.remote_pic.drawing;
         let s = look.scale;
         let wd = &WORDS;
         let pal = *style::palette(self.light);
@@ -124,6 +129,10 @@ impl Navigator {
         let look_key = self.look_key();
         let visible_reach = super::build::view::panel_reach(self.zoom, map.w, map.h).unwrap_or(PANEL_REACH);
         let reach = super::build::view::panel_build_reach(map.w, map.h).unwrap_or(PANEL_REACH + 150.0);
+        if remote {
+            self.remote_pic.reach = reach;
+        }
+        let reach = reach.max(self.remote_pic.reach);
         let rebuild = match &self.roads {
             None => lanes_now > 0 || self.map_data.is_some(),
             Some(r) => r.look != look_key || super::build::view::panel_moved(r.reach, visible_reach, (r.anchor - f.bus.truncate()).length()) || (r.lanes_seen != lanes_now && self.time - r.built_at > 1.5),
@@ -267,14 +276,14 @@ impl Navigator {
         let icon_verts = self.minimap_icons(vpm, vp, anchor, f.bus.truncate(), map, s);
         // (the place row, the cards and the stop list: the plugin's panel has the rest of the
         // frame, and says whether the cards go over its map)
-        if !framed {
+        if !framed && !remote {
             let loc_h = self.place_row_height(s);
             self.draw_place_row(&mut ui, Rect::new(0.0, map.bottom(), pw, loc_h), 10.0 * s, s);
         }
         if cards {
             self.draw_cards(&mut ui, f, wd, net, map, s, &pal);
         }
-        if self.schedule && !framed {
+        if self.schedule && !framed && !remote {
             let loc_h = self.place_row_height(s);
             let r = Rect::new(0.0, map.bottom() + loc_h, pw, ph - map.bottom() - loc_h);
             match self.board.filter(|_| look.plugins) {
@@ -331,15 +340,20 @@ impl Navigator {
             Draw { buffer: 2, range: n_ui_start..all.len() as u32, layer: 0, texture: 0 },
         ]);
         let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("navigator") });
+        let offscreen = beside.is_some();
         match beside {
-            Some(attachments) => {
-                gpu.render_with(attachments, device, queue, &mut enc, target, size, Some(look.clear), &layers, &draws);
-                queue.submit([enc.finish()]);
-            }
-            None => {
-                gpu.render(device, queue, &mut enc, target, size, Some(look.clear), &layers, &draws);
-                renderer.submit_with_frame(enc.finish());
-            }
+            Some(attachments) => gpu.render_with(
+                attachments, device, queue, &mut enc, target, size, Some(look.clear), &layers, &draws,
+            ),
+            None => gpu.render(device, queue, &mut enc, target, size, Some(look.clear), &layers, &draws),
+        }
+        let drawn = enc.finish();
+        if remote {
+            self.remote_pic.commands = Some(drawn);
+        } else if offscreen {
+            queue.submit([drawn]);
+        } else {
+            renderer.submit_with_frame(drawn);
         }
     }
 

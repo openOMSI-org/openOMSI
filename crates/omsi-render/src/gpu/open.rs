@@ -1,6 +1,7 @@
 //! Opening the graphics device and building the renderer on it, with the fallbacks.
 
 use crate::*;
+use super::upscaler_device;
 
 /// The chosen MSAA is being tried again after a remembered fallback (see `build_with_fallbacks`).
 static MSAA_RETRY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -117,7 +118,17 @@ impl Renderer {
         };
         // a small or shared graphics chip gets a lighter picture (see `lighter_picture`)
         GL_BACKEND.store(info.backend == wgpu::Backend::Gl, std::sync::atomic::Ordering::Relaxed);
+        AMD_VULKAN.store(info.backend == wgpu::Backend::Vulkan && info.vendor == 0x1002, std::sync::atomic::Ordering::Relaxed);
+        MULTISAMPLED_SHADING.store(!cfg!(any(target_os = "android", target_vendor = "apple")) && info.backend != wgpu::Backend::Gl && adapter.get_downlevel_capabilities().flags.contains(wgpu::DownlevelFlags::MULTISAMPLED_SHADING), std::sync::atomic::Ordering::Relaxed);
         let options = gpu_memory::lighter_picture(&info, vram, options);
+        // Temporal upscaling (DirectX 12 or Vulkan; DLSS an NVIDIA RTX card too) replaces the
+        // MSAA. DLSS on Vulkan starts Streamline now: the device is made with its extensions.
+        let temporal = upscaler_device::usable(options.temporal, &info);
+        let (temporal, dlss_extensions) = upscaler_device::dlss_vulkan(temporal, &adapter, &info);
+        let options = match temporal {
+            Some(t) => RenderOptions { msaa: 1, msaa_fallback: options.msaa, temporal: Some(t), ..options },
+            None => RenderOptions { temporal: None, ..options },
+        };
         let most = gpu_memory::ceiling(&info, vram);
         *CEILING.lock().unwrap_or_else(|e| e.into_inner()) = Some(if intel_vulkan_safe { gpu_memory::Ceiling { msaa: 1, ssao: false, shadow_size: most.shadow_size.min(2048), ..most } } else { most });
         let shadow_size = options
@@ -134,6 +145,8 @@ impl Renderer {
             limits.max_storage_buffer_binding_size =
                 adapter.limits().max_storage_buffer_binding_size;
             limits.max_buffer_size = adapter.limits().max_buffer_size;
+            limits.max_sampled_textures_per_shader_stage =
+                limits.max_sampled_textures_per_shader_stage.max(adapter.limits().max_sampled_textures_per_shader_stage.min(crate::pipelines::scene::PANE_MASK_TEXTURES));
         }
         // an older or smaller graphics chip (an OpenGL one, a GT 530) does not reach the
         // WebGPU defaults: asked for them anyway, the device was never opened
@@ -200,6 +213,10 @@ impl Renderer {
         if omsi_cfg::flags::OMSI_GPU_TIMERS.is_set() {
             required_features |= adapter.features() & wgpu::Features::TIMESTAMP_QUERY;
         }
+        // (FSR 3 on Vulkan picks its 16 bit shaders by what the card has, not what the device enabled)
+        if info.backend == wgpu::Backend::Vulkan && options.temporal.is_some_and(|t| t.upscaler == crate::temporal::TemporalUpscaler::Fsr3) {
+            required_features |= adapter.features() & wgpu::Features::SHADER_F16;
+        }
         // DXT textures stay compressed on the GPU where it takes them (Apple silicon does);
         // OMSI_NO_BC=1 uploads everything as RGBA (the old way, for comparisons), and so does
         // the settings' `gpu_texture_compression` off
@@ -236,8 +253,7 @@ impl Renderer {
         }
         device_selection::select_array_path(&adapter, &limits, &info);
         log::info!("opening graphics device: {} ({:?}, vendor {:#06x}, device {:#06x}), features {:?}, max buffer {} MB, max storage binding {} MB", info.name, info.backend, info.vendor, info.device, required_features, limits.max_buffer_size / 1_000_000, limits.max_storage_buffer_binding_size as u64 / 1_000_000);
-        let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor {
+        let desc = wgpu::DeviceDescriptor {
                 label: Some("omsi"),
                 required_features,
                 required_limits: limits,
@@ -253,9 +269,23 @@ impl Renderer {
                 // (the ray queries are still an experimental feature of wgpu)
                 experimental_features: if ray_query { unsafe { wgpu::ExperimentalFeatures::enabled() } } else { wgpu::ExperimentalFeatures::disabled() },
                 ..Default::default()
-            })
-            .await
-            .context("request_device")?;
+            };
+        let mut options = options;
+        let made = dlss_extensions.and_then(|extensions| match upscaler_device::open_with(&adapter, &desc, extensions) {
+            Ok(made) => Some(made),
+            Err(e) => {
+                // (the device as wgpu makes it, DLSS off: better than no picture)
+                crate::temporal::dlss_vulkan_abandon();
+                log::warn!("dlss upscaling is off: {e:#}");
+                options.temporal = None;
+                options.msaa = options.msaa_fallback.max(1);
+                None
+            }
+        });
+        let (device, queue) = match made {
+            Some(made) => made,
+            None => adapter.request_device(&desc).await.context("request_device")?,
+        };
         log::info!("graphics device opened; compiling renderer pipelines");
         pipeline_cache::open(&device, &info);
         // the same choice wgpu-core makes when it validates a texture or a pipeline
@@ -552,6 +582,8 @@ impl Renderer {
         let ssao = ssao::ssao(&device, gl);
         let fog_lamps = ssao::fog_lamps(&device, &scene.camera_layout, hdr_format, gl);
         let prepass = scene::prepass(&device, &scene, msaa, !leave_out_enhanced);
+        // (the prepass with motion vectors: only when temporal upscaling is asked for)
+        let temporal_pipes = pipelines::temporal::build(&device, &scene, options.temporal.map(|t| t.upscaler));
         let ground_pipelines = (!gl && !leave_out_enhanced && !sixteen_texture_units()).then(|| std::array::from_fn(|i| scene.ground_pipeline_at(&device, i)));
         let mip = mip::build(&device);
         let post = post::build(&device, format, hdr_format, &defaults.white_texture);
@@ -723,8 +755,16 @@ impl Renderer {
             ao_layout: ssao.layout,
             ao_buf: ssao.buf,
             prepass_pipelines: prepass.pipelines,
+            temporal_pipes,
+            temporal: None,
+            temporal_failed: false,
+            temporal_window: false,
+            temporal_kept: None,
+            temporal_pending: None,
             prepass_msaa_pipelines: prepass.msaa_pipelines,
             prepass_eye_pipelines: prepass.eye_pipelines,
+            pane_mask: prepass.pane_mask,
+            pane_depth: None,
             ground_pipelines,
             ground_bound: std::cell::Cell::new(false),
             ssao_pipeline: ssao.ssao_pipeline,

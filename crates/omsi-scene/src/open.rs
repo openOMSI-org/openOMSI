@@ -56,11 +56,7 @@ impl World {
         let tz_path = omsi_cfg::resolve_path(&map_dir, "timezone.txt");
         let mut place = omsi_sim::daylight::SunPlace::default();
         if let Ok(tz) = omsi_map::TimeZone::load(&tz_path) {
-            place.timezone = tz.offset_hours as f64;
-            if let Some((lat, lon)) = tz.lat_lon() {
-                place.latitude = lat;
-                place.longitude = lon;
-            }
+            place.locate(tz.offset_hours as f64, tz.lat_lon());
             place.dst = tz.dst.iter().map(|d| (d.start, d.end, d.params[0], d.params[1], d.params[2])).collect();
             log::info!("sun: {:.3} N {:.3} E, UTC{:+}, {} summer time periods", place.latitude, place.longitude, place.timezone, place.dst.len());
         }
@@ -167,6 +163,7 @@ impl World {
             data,
             vehicle_gpu: Mutex::new(HashMap::new()),
             vehicle_textures: Default::default(),
+            player_textures: Default::default(),
             freetex_reloads: Default::default(),
             vehicle_meshes: Default::default(),
             vehicle_ready: Default::default(),

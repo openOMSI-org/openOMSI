@@ -5,6 +5,7 @@ use crate::*;
 
 mod fallbacks;
 mod open;
+mod upscaler_device;
 mod timers;
 
 pub use fallbacks::*;
@@ -28,6 +29,8 @@ pub fn ceiling() -> Option<crate::gpu_memory::Ceiling> {
 
 /// The device runs on OpenGL (set in `Renderer::new`).
 pub(crate) static GL_BACKEND: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(crate) static AMD_VULKAN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(crate) static MULTISAMPLED_SHADING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Whether the device draws on OpenGL (known once a renderer is made).
 pub fn gl_backend() -> bool {
@@ -99,7 +102,8 @@ impl GpuArray {
             return GpuArray::Buffer(device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some(label),
                 size: size.max(16).next_multiple_of(wgpu::COPY_BUFFER_ALIGNMENT),
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                // (copied from too: temporal upscaling keeps last frame's matrices)
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC,
                 mapped_at_creation: false,
             }));
         }

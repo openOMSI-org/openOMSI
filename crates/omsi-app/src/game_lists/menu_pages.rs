@@ -54,8 +54,9 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         preset_row(&file, "Quality preset", "Sets the graphics mode and most of the options at once, from Low (Vanilla) to Ultra (Enhanced with everything on)"),
         app.can_optimise().then(|| button("Optimise for my PC", "Start", "Measures while you drive and adjusts the graphics for a smooth frame rate; your settings are saved first", "optimise")),
         omsi_launcher_lib::optimise::backup().is_some().then(|| button("Restore my previous settings", "Restore", "The graphics settings as they were before the last optimisation", "optimise_restore")),
-        pick("msaa", "Anti-aliasing", later),
-        pick("render_scale", "Render scale", if s.upscaler == "fsr1" { "With FSR 1 it changes at once" } else { later }),
+        // (DLSS and FSR 3 take the place of both)
+        pick("msaa", "Anti-aliasing", later).filter(|_| s.temporal_upscaling().is_none()),
+        pick("render_scale", "Render scale", if s.upscaler == "fsr1" { "With FSR 1 it changes at once" } else { later }).filter(|_| s.temporal_upscaling().is_none()),
         pick("anisotropy", "Anisotropic", later),
         switch_row(app, "ray_tracing", "Real-Time Ray Tracing", "Enhanced: the sun's shadows, the ambient occlusion and the reflections traced with hardware ray queries, where the card has them; the heaviest option (takes effect when the game starts the next time)").filter(|_| shown("ray_tracing")),
         switch_row(app, "shadows", "Sun shadows", "Enables/Disables shadows").filter(|_| shown("shadows")),
@@ -231,6 +232,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         switch_row(app, "chat", "Chat in online games", "Shows the chat of a LAN session"),
         slider_row(app, "chat_size", "Chat size", "The chat's texts on top of the interface size (also Ctrl + the mouse wheel over the chat)", &pct),
         switch_row(app, "name_tags", "Other players' names above their buses", "Shows the names of the other players"),
+        Some(button("Remote cockpit", "Open", &app.remote_description(), "remote_panel")),
         Some(opens("Reset all settings...", "Everything but the language, the key bindings and the game folder goes back to how it came", "reset")),
     ]
         .into_iter()
@@ -253,6 +255,9 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         rows.push(button("Reset navigator position", "Reset", desc, "vr_nav_reset"));
         pages.push(("VR", rows));
     }
+    for (title, rows) in &mut pages {
+        *rows = section_option_rows(title, std::mem::take(rows));
+    }
     pages
 }
 
@@ -262,7 +267,7 @@ fn add_graphics_action_rows(app: &App, file: &serde_json::Value, graphics: &mut 
         graphics.push(button("Apply graphics changes...", "Confirm", "Apply compatible graphics options in-game. Renderer mode and device formats require restart.", "graphics_apply"));
         graphics.push(button("Discard graphics changes", "Revert", "Restore the graphics settings from before editing.", "graphics_discard"));
     }
-    let at = graphics.iter().position(|r| r.1 == "sel render_scale").map_or(graphics.len(), |k| k + 1);
+    let at = graphics.iter().position(|r| r.1 == "sel render_scale").map(|k| k + 1).or_else(|| graphics.iter().position(|r| r.1 == "sel anisotropy")).unwrap_or(graphics.len());
     graphics.splice(at..at, upscaler_rows(app, file));
 }
 
@@ -554,9 +559,12 @@ mod tests {
 /// FSR 1's quality and sharpening while it is chosen.
 fn upscaler_rows(app: &App, file: &serde_json::Value) -> Vec<(String, String)> {
     let fsr = app.settings.upscaler == "fsr1";
+    let temporal = app.settings.temporal_upscaling().is_some();
+    let offered = !omsi_cfg::upscaler_files::available(&omsi_cfg::upscaler_files::program_dir()).is_empty();
     let pct = |v: f32| format!("{:.0} %", v * 100.0);
     [
-        select_row(file, "upscaler", "Upscaling", "Standard Catmull-Rom or AMD FSR 1.0; changes show at once"),
+        select_row(file, "upscaler", "Upscaling", if offered { "Standard Catmull-Rom or AMD FSR 1 change at once; NVIDIA DLSS or AMD FSR 3 take the place of the anti-aliasing and the render scale, on DirectX 12 or Vulkan, from the next start" } else { "Standard Catmull-Rom or AMD FSR 1; changes show at once" }),
+        select_row(file, "upscale_quality", "Upscaling quality", "Native keeps the window's resolution and only smooths the edges; the lower the quality, the smaller the picture is drawn and the higher the frame rate").filter(|_| temporal),
         select_row(file, "fsr_quality", "FSR quality", &fsr_size(app)).filter(|_| fsr),
         slider_row(app, "fsr_sharpness", "FSR sharpness", "RCAS sharpening strength", &pct).filter(|_| fsr),
     ]
@@ -580,40 +588,17 @@ fn weather_rows(mut weather: Vec<(String, String)>, climate: Vec<(String, String
     sectioned_rows(weather, "Live weather", &[("weather", "Weather preset and clouds"), ("temp", "Temperature and humidity"), ("wind_speed", "Wind")])
 }
 
-/// Insert display-only headings while preserving every command and its relative order.
-fn sectioned_rows(rows: Vec<(String, String)>, first: &str, starts: &[(&str, &str)]) -> Vec<(String, String)> {
-    let mut out = Vec::new();
-    for (label, action) in rows {
-        let key = action.strip_suffix(ADJUST).unwrap_or(&action);
-        let title = starts.iter().find(|(id, _)| *id == key).map(|(_, title)| *title).or_else(|| out.is_empty().then_some(first));
-        if let Some(title) = title {
-            out.push((row(title, 'i', "", "", None), HEADING.to_string()));
-        }
-        out.push((label, action));
-    }
-    out
+/// Group the options tabs without changing the settings commands or their order.
+fn section_option_rows(title: &str, rows: Vec<(String, String)>) -> Vec<(String, String)> {
+    let Some((first, starts)) = omsi_settings_ui::option_sections(title) else { return rows };
+    sectioned_rows(rows, first, starts)
 }
 
-#[cfg(test)]
-mod pause_sections_tests {
-    use super::*;
-
-    #[test]
-    fn pause_nested_sections_keep_actions_in_original_order() {
-        let rows = vec![button("A", "A", "", "a"), button("B", "B", "", "b"), button("C", "C", "", "c")];
-        let sections = sectioned_rows(rows.clone(), "First", &[("b", "Second")]);
-        assert_eq!(sections.iter().filter(|r| r.1 != HEADING).cloned().collect::<Vec<_>>(), rows);
-        assert_eq!(sections.iter().filter(|r| r.1 == HEADING).count(), 2);
-    }
-
-    #[test]
-    fn pause_nested_sections_omit_missing_groups_and_match_adjustable_controls() {
-        assert!(sectioned_rows(Vec::new(), "First", &[]).is_empty());
-        let sections = sectioned_rows(vec![button("Wind", "", "", &format!("wind_speed{ADJUST}"))], "First", &[("wind_speed", "Wind")]);
-        assert_eq!(sections.len(), 2);
-        assert!(sections[0].0.starts_with("Wind"));
-        assert_eq!(sections[1].1, format!("wind_speed{ADJUST}"));
-    }
+/// Insert display-only headings while preserving every command and its relative order.
+fn sectioned_rows(rows: Vec<(String, String)>, first: &str, starts: &[(&str, &str)]) -> Vec<(String, String)> {
+    omsi_settings_ui::sectioned_rows(rows, first, starts, ADJUST).into_iter().flat_map(|(heading, (label, action))| {
+        heading.into_iter().map(|title| (row(&title, 'i', "", "", None), HEADING.to_string())).chain(std::iter::once((label, action)))
+    }).collect()
 }
 
 #[cfg(test)]
