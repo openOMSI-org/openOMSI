@@ -129,9 +129,6 @@ pub(crate) fn face_for<R>(font: &FontRef<'static>, bold: bool, ch: char, f: impl
     })
 }
 
-pub(crate) const STEP_LIMIT: u32 = 400_000;
-pub(crate) const DEPTH_LIMIT: u32 = 48;
-
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

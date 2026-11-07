@@ -63,8 +63,6 @@ pub(crate) struct PauseView<'a> {
     /// The line the keyboard is on (the game menu's, while no list is open).
     pub rail_sel: Option<usize>,
     pub disabled: &'a [&'a str],
-    /// The line of the rail the open list belongs to.
-    pub rail_open: Option<&'static str>,
     pub list: Option<ListView<'a>>,
     /// The keyboard chose last: its line is shown lit.
     pub kbd: bool,

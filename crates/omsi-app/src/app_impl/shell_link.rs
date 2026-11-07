@@ -6,31 +6,6 @@ use crate::game_lists::ListKind;
 use crate::shell::pause::{ListView, PauseView};
 use crate::shell::Action;
 
-/// The line of the pause menu's rail that list `kind` was opened from (it stays lit while
-/// the list is open, as the launcher's page in its rail).
-pub(crate) fn rail_of(kind: &ListKind, camera_tab: bool) -> Option<&'static str> {
-    Some(match kind {
-        ListKind::Options(_) if camera_tab => "camera",
-        ListKind::Options(_) => "options",
-        ListKind::Controls
-        | ListKind::Keyboard(_)
-        | ListKind::ControllerDevices(_)
-        | ListKind::Controller(..)
-        | ListKind::ControllerAxis(..)
-        | ListKind::ControllerButtons(_)
-        | ListKind::ControllerButtonSettings(..)
-        | ListKind::ControllerButton(..)
-        | ListKind::ControllerCapture(_)
-        | ListKind::Events => "controls",
-        ListKind::World(_) => "world",
-        ListKind::SaveSlots => "saveslot",
-        ListKind::PlayerList | ListKind::PlayerPage(..) | ListKind::PlayerDo(..) | ListKind::BanList => "players",
-        ListKind::Lines | ListKind::Tours(..) => "duty",
-        ListKind::Admin | ListKind::AdminPlayers | ListKind::AdminPlayer(_) | ListKind::AdminConfirm(..) | ListKind::AdminClassic => "admin",
-        _ => "vehicle",
-    })
-}
-
 fn pause_kind(kind: Option<&ListKind>, original: crate::ui::MenuKind, remote_admin: bool) -> crate::ui::MenuKind {
     match kind {
         Some(ListKind::AdminClassic) => crate::ui::MenuKind::Sections,
@@ -93,7 +68,6 @@ impl App {
             Some(ListKind::AdminPlayers) if remote_admin => Some(self.net.admin_panel.total),
             _ => None,
         };
-        let camera_tab = matches!(self.menus.list_kind, Some(ListKind::Options(t)) if Some(t) == tabs.as_ref().and_then(|(titles, _)| titles.iter().position(|x| x == omsi_ui::tr("Camera").as_ref())));
         let list = self.menus.chooser.map(|sel| ListView {
             kind,
             head,
@@ -112,7 +86,6 @@ impl App {
             rail: &rail,
             rail_sel: self.menus.game_menu,
             disabled: self.menu_disabled_ids(),
-            rail_open: self.menus.list_kind.as_ref().and_then(|k| rail_of(k, camera_tab)).filter(|_| self.menus.chooser.is_some()),
             list,
             kbd: self.menus.menu_kbd,
             keys: !crate::platform::touch_controls(),
@@ -253,13 +226,6 @@ mod pause_navigation_tests {
     use super::*;
 
     #[test]
-    fn pause_navigation_player_lists_keep_the_online_category() {
-        assert_eq!(rail_of(&ListKind::PlayerList, false), Some("players"));
-        assert_eq!(rail_of(&ListKind::BanList, false), Some("players"));
-        assert_eq!(rail_of(&ListKind::SaveSlots, false), Some("saveslot"));
-    }
-
-    #[test]
     fn local_admin_pages_use_sections_without_changing_remote_admin_pages() {
         use crate::ui::MenuKind;
         assert_eq!(pause_kind(Some(&ListKind::Admin), MenuKind::List, false), MenuKind::Sections);
@@ -270,7 +236,6 @@ mod pause_navigation_tests {
 
 #[cfg(test)]
 mod online_action_tests {
-    use super::*;
     #[test]
     fn online_room_switch_opens_the_existing_form_without_leaving_the_session() {
         use clap::Parser;

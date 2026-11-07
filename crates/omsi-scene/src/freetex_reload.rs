@@ -129,6 +129,7 @@ struct Worker {
     watch: mpsc::Sender<Watch>,
     ready: Mutex<mpsc::Receiver<Reload>>,
     versions: Arc<Mutex<HashMap<PathBuf, FileStamp>>>,
+    #[cfg_attr(not(test), allow(dead_code))]
     sampled: Arc<std::sync::atomic::AtomicUsize>,
 }
 

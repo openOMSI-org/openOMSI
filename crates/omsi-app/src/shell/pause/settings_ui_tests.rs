@@ -46,7 +46,6 @@ fn nested_view<'a>(rail: &'a [MenuLine], rows: &'a [(&'static str, String)], wor
         rail,
         rail_sel: Some(1),
         disabled: &[],
-        rail_open: Some(if world { "world" } else { "vehicle" }),
         kbd: true,
         keys: true,
         summary: Summary { bus: "Test vehicle".into(), driver: "Driver".into() },

@@ -96,7 +96,9 @@ pub(crate) struct Integrations {
     /// The Lua plugins' panels and notifications on the screen (`omsi.ui`).
     pub(crate) plugin_panels: crate::plugin_ui::PluginPanels,
     /// Discord's "Playing openOMSI" status, and when it was last brought up to date.
+    #[cfg_attr(any(target_os = "android", target_os = "ios"), allow(dead_code))]
     pub(crate) discord: Option<crate::discord::Discord>,
+    #[cfg_attr(any(target_os = "android", target_os = "ios"), allow(dead_code))]
     pub(crate) discord_t: f32,
     pub(crate) discord_max: crate::discord::ServerLimit,
     // Steamworks API layer and it's last updated time

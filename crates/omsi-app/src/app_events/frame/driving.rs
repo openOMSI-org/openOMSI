@@ -292,7 +292,7 @@ pub(super) fn audio(cx: AudioCx, dt: f32) {
         }
     }
     if let Some(a) = cx.sound.audio.as_ref() {
-        cx.sound.milezero.update(a, cx.common.settings.milezero, cx.common.settings.volume);
+        cx.sound.milezero.update(a, cx.common.settings.milezero);
         if let Some(world) = cx.world.world.as_ref() {
             if let Some(net) = world.trolley_net.lock().clone() {
                 cx.sound.switch_sound.update(a, &net, cx.view.cam.in_cab && cx.player.player.is_some(), *cx.clock.paused);

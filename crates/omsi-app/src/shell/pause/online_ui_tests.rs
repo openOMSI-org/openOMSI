@@ -49,7 +49,6 @@ fn view(rail: &[crate::app_impl::MenuLine]) -> PauseView<'_> {
         rail,
         rail_sel: Some(0),
         disabled: &[],
-        rail_open: None,
         list: None,
         kbd: false,
         keys: true,
