@@ -35,19 +35,38 @@
 
 use super::d3d12::game_dir;
 use super::framegen::GENERATED;
-use super::streamline::{check, feature_fn, init, load_fn, open_interposer, result_name, AdapterInfo, Base, StructType, ViewportHandle, ADAPTER_INFO, FEATURE_DLSS, FnIsFeatureSupported, FnSetD3DDevice, FnUpgradeInterface, VIEWPORT_HANDLE};
-use anyhow::{bail, Context, Result};
+use super::streamline::{
+    ADAPTER_INFO, AdapterInfo, Base, FEATURE_DLSS, FnIsFeatureSupported, FnSetD3DDevice,
+    FnUpgradeInterface, StructType, VIEWPORT_HANDLE, ViewportHandle, check, feature_fn, init,
+    load_fn, open_interposer, result_name,
+};
+use anyhow::{Context, Result, bail};
 use std::ffi::c_void;
-use std::sync::atomic::Ordering;
 use std::sync::Mutex;
-use windows::core::Interface;
+use std::sync::atomic::Ordering;
 use windows::Win32::Foundation::{FreeLibrary, HMODULE};
 use windows::Win32::Graphics::Direct3D12::{ID3D12Device, ID3D12Fence};
 use windows::Win32::Graphics::Dxgi::{IDXGIFactory2, IDXGIFactory5};
+use windows::core::Interface;
 
-const DLSSG_OPTIONS: StructType = StructType { data1: 0xfac5f1cb, data2: 0x2dfd, data3: 0x4f36, data4: [0xa1, 0xe6, 0x3a, 0x9e, 0x86, 0x52, 0x56, 0xc5] };
-const DLSSG_STATE: StructType = StructType { data1: 0xcc8ac8e1, data2: 0xa179, data3: 0x44f5, data4: [0x97, 0xfa, 0xe7, 0x41, 0x12, 0xf9, 0xbc, 0x61] };
-const REFLEX_OPTIONS: StructType = StructType { data1: 0xf03af81a, data2: 0x6d0b, data3: 0x4902, data4: [0xa6, 0x51, 0xc4, 0x96, 0x5e, 0x21, 0x54, 0x34] };
+const DLSSG_OPTIONS: StructType = StructType {
+    data1: 0xfac5f1cb,
+    data2: 0x2dfd,
+    data3: 0x4f36,
+    data4: [0xa1, 0xe6, 0x3a, 0x9e, 0x86, 0x52, 0x56, 0xc5],
+};
+const DLSSG_STATE: StructType = StructType {
+    data1: 0xcc8ac8e1,
+    data2: 0xa179,
+    data3: 0x44f5,
+    data4: [0x97, 0xfa, 0xe7, 0x41, 0x12, 0xf9, 0xbc, 0x61],
+};
+const REFLEX_OPTIONS: StructType = StructType {
+    data1: 0xf03af81a,
+    data2: 0x6d0b,
+    data3: 0x4902,
+    data4: [0xa6, 0x51, 0xc4, 0x96, 0x5e, 0x21, 0x54, 0x34],
+};
 
 const FEATURE_REFLEX: u32 = 3;
 const FEATURE_PCL: u32 = 4;
@@ -214,7 +233,9 @@ fn start(device: &ID3D12Device, frames: u32) -> Result<HMODULE> {
     }
     let dir = game_dir();
     if !omsi_cfg::upscaler_files::dlss_frame_generation_available(&dir) {
-        bail!("NVIDIA's frame generation DLLs are not beside the game (Launcher: Settings, Graphics, NVIDIA DLSS)");
+        bail!(
+            "NVIDIA's frame generation DLLs are not beside the game (Launcher: Settings, Graphics, NVIDIA DLSS)"
+        );
     }
     let module = open_interposer(&dir)?;
     let started = (|| -> Result<Session> {
@@ -271,7 +292,10 @@ fn start(device: &ID3D12Device, frames: u32) -> Result<HMODULE> {
     })();
     match started {
         Ok(session) => {
-            log::info!("frame generation: Streamline with DLSS-G, Reflex and PCL loaded from {}", dir.display());
+            log::info!(
+                "frame generation: Streamline with DLSS-G, Reflex and PCL loaded from {}",
+                dir.display()
+            );
             *s = Some(session);
             Ok(module)
         }
@@ -286,7 +310,11 @@ fn start(device: &ID3D12Device, frames: u32) -> Result<HMODULE> {
 
 /// Streamline's proxy of `factory`, asking for `frames` on screen per drawn one: a swap chain it
 /// makes is one Streamline sees every present of.
-pub(super) fn proxy_factory(device: &ID3D12Device, factory: &IDXGIFactory5, frames: u32) -> Result<IDXGIFactory2> {
+pub(super) fn proxy_factory(
+    device: &ID3D12Device,
+    factory: &IDXGIFactory5,
+    frames: u32,
+) -> Result<IDXGIFactory2> {
     let module = start(device, frames)?;
     let upgrade: FnUpgradeInterface = load_fn(module, c"slUpgradeInterface")?;
     let mut raw = factory.clone().into_raw();
@@ -296,9 +324,14 @@ pub(super) fn proxy_factory(device: &ID3D12Device, factory: &IDXGIFactory5, fram
             // (our reference back, whatever became of it)
             drop(unsafe { windows::core::IUnknown::from_raw(raw) });
         }
-        bail!("Streamline gave no proxy of the DXGI factory ({})", result_name(r));
+        bail!(
+            "Streamline gave no proxy of the DXGI factory ({})",
+            result_name(r)
+        );
     }
-    unsafe { windows::core::IUnknown::from_raw(raw) }.cast().context("Streamline's proxy of the DXGI factory")
+    unsafe { windows::core::IUnknown::from_raw(raw) }
+        .cast()
+        .context("Streamline's proxy of the DXGI factory")
 }
 
 /// DLSS that joined the session (`module`) is let go of.
@@ -354,7 +387,11 @@ pub(super) fn working() -> bool {
 pub(super) fn frame_begun(token: *const c_void) {
     if let Some(s) = session().as_mut() {
         s.token = token;
-        for m in [MARKER_SIMULATION_START, MARKER_SIMULATION_END, MARKER_RENDER_SUBMIT_START] {
+        for m in [
+            MARKER_SIMULATION_START,
+            MARKER_SIMULATION_END,
+            MARKER_RENDER_SUBMIT_START,
+        ] {
             let _ = unsafe { (s.set_marker)(m, token) };
         }
     }
@@ -366,7 +403,11 @@ pub(super) fn frame_submitted(size: (u32, u32)) {
         if !s.token.is_null() {
             let _ = unsafe { (s.set_marker)(MARKER_RENDER_SUBMIT_END, s.token) };
         }
-        let frames = if s.most > 0 { s.asked.min(s.most) } else { s.asked };
+        let frames = if s.most > 0 {
+            s.asked.min(s.most)
+        } else {
+            s.asked
+        };
         s.switch(frames, size);
         s.tagged = true;
     }
@@ -390,7 +431,14 @@ pub(super) fn present(present: impl FnOnce()) {
     if on {
         let _ = unsafe { (s.set_marker)(MARKER_PRESENT_START, token) };
     }
-    let (set_marker, get_state, viewport) = (s.set_marker, s.get_state, ViewportHandle { base: Base::new(VIEWPORT_HANDLE, 1), value: s.viewport.value });
+    let (set_marker, get_state, viewport) = (
+        s.set_marker,
+        s.get_state,
+        ViewportHandle {
+            base: Base::new(VIEWPORT_HANDLE, 1),
+            value: s.viewport.value,
+        },
+    );
     // (not held over the present: Streamline's work there needs nothing of ours)
     drop(guard);
     present();
@@ -399,19 +447,25 @@ pub(super) fn present(present: impl FnOnce()) {
         let mut state = blank_state();
         if unsafe { get_state(&viewport, &mut state, std::ptr::null()) } == 0 {
             // (the frames presented since the last call: this one and the ones made after it)
-            GENERATED.fetch_add(u64::from(state.num_frames_actually_presented.saturating_sub(1)), Ordering::Relaxed);
-            let fence = unsafe { ID3D12Fence::from_raw_borrowed(&state.inputs_processing_completion_fence) };
+            GENERATED.fetch_add(
+                u64::from(state.num_frames_actually_presented.saturating_sub(1)),
+                Ordering::Relaxed,
+            );
+            let fence = unsafe {
+                ID3D12Fence::from_raw_borrowed(&state.inputs_processing_completion_fence)
+            };
             if let (Some(fence), Some(s)) = (fence, session().as_mut()) {
-                s.read = Some((fence.clone(), state.last_present_inputs_processing_completion_fence_value));
+                s.read = Some((
+                    fence.clone(),
+                    state.last_present_inputs_processing_completion_fence_value,
+                ));
             }
         }
     }
 }
 
-/// Until Streamline's frame generation has read the inputs of the last frame presented
-/// (`DLSSGState::inputsProcessingCompletionFence`, which NVIDIA's guide has the game wait on before
-/// it destroys them; read right after the present, as Streamline asks). True when no frame went
-/// to it yet, false when the wait failed.
+/// NVIDIA's guide waits on `inputsProcessingCompletionFence` before the inputs are destroyed.
+/// True when no frame went to frame generation yet.
 pub(super) fn drain() -> bool {
     let guard = session();
     match guard.as_ref().and_then(|s| s.read.as_ref()) {
@@ -440,7 +494,10 @@ impl Session {
     /// `slDLSSGSetOptions` when the frames on screen per drawn one (1: off) or the window's size
     /// changed. The first time it is on, what the card can do goes to the log.
     fn switch(&mut self, frames: u32, size: (u32, u32)) {
-        if self.failed || self.set == Some((frames, size)) || (frames <= 1 && self.set.is_none_or(|(f, _)| f <= 1)) {
+        if self.failed
+            || self.set == Some((frames, size))
+            || (frames <= 1 && self.set.is_none_or(|(f, _)| f <= 1))
+        {
             return;
         }
         let options = Options {
@@ -467,15 +524,21 @@ impl Session {
             enable_user_interface_recomposition: 0,
             dynamic_target_frame_rate: 0.0,
         };
-        if let Err(e) = check("slDLSSGSetOptions", unsafe { (self.set_options)(&self.viewport, &options) }) {
-            log::error!("frame generation stopped working ({e:#}); the frames are shown without it from now on");
+        if let Err(e) = check("slDLSSGSetOptions", unsafe {
+            (self.set_options)(&self.viewport, &options)
+        }) {
+            log::error!(
+                "frame generation stopped working ({e:#}); the frames are shown without it from now on"
+            );
             self.failed = true;
             return;
         }
         self.set = Some((frames, size));
         if self.most == 0 && frames > 1 {
             let mut state = blank_state();
-            match check("slDLSSGGetState", unsafe { (self.get_state)(&self.viewport, &mut state, &options) }) {
+            match check("slDLSSGGetState", unsafe {
+                (self.get_state)(&self.viewport, &mut state, &options)
+            }) {
                 Ok(()) => {
                     self.most = state.num_frames_to_generate_max.max(1) + 1;
                     log::info!(
@@ -483,11 +546,23 @@ impl Session {
                         size.0,
                         size.1,
                         self.most,
-                        if state.is_vsync_support_available == 1 { "supported" } else { "not supported" },
-                        if state.status & STATUS_NO_REFLEX != 0 { " (Reflex not seen yet)" } else { "" }
+                        if state.is_vsync_support_available == 1 {
+                            "supported"
+                        } else {
+                            "not supported"
+                        },
+                        if state.status & STATUS_NO_REFLEX != 0 {
+                            " (Reflex not seen yet)"
+                        } else {
+                            ""
+                        }
                     );
                     if frames > self.most {
-                        log::warn!("frame generation: {frames}x asked, this card makes at most {}x; {}x from the next frame", self.most, self.most);
+                        log::warn!(
+                            "frame generation: {frames}x asked, this card makes at most {}x; {}x from the next frame",
+                            self.most,
+                            self.most
+                        );
                     }
                 }
                 Err(e) => log::warn!("frame generation: {e:#}"),

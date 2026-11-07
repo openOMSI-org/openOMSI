@@ -431,7 +431,12 @@ pub fn graph_scale(frames: &VecDeque<Sample>) -> f32 {
 /// frame generation makes any, and the drawn frame's time.
 fn head(fps: f32, generated_per_drawn: Option<f32>, frame_ms: f32) -> String {
     match generated_per_drawn.filter(|g| *g > 0.0) {
-        Some(g) => format!("{} fps ({} + FG)   {:.1} ms", (fps * (1.0 + g)).round() as i32, fps.round() as i32, frame_ms),
+        Some(g) => format!(
+            "{} fps ({} + FG)   {:.1} ms",
+            (fps * (1.0 + g)).round() as i32,
+            fps.round() as i32,
+            frame_ms
+        ),
         None => format!("{} fps   {:.1} ms", fps.round() as i32, frame_ms),
     }
 }
@@ -440,8 +445,14 @@ fn head(fps: f32, generated_per_drawn: Option<f32>, frame_ms: f32) -> String {
 mod tests {
     #[test]
     fn the_head_counts_the_generated_frames_beside_the_drawn_ones() {
-        assert_eq!(super::head(45.0, Some(1.0), 22.2), "90 fps (45 + FG)   22.2 ms");
-        assert_eq!(super::head(60.0, Some(3.0), 16.7), "240 fps (60 + FG)   16.7 ms");
+        assert_eq!(
+            super::head(45.0, Some(1.0), 22.2),
+            "90 fps (45 + FG)   22.2 ms"
+        );
+        assert_eq!(
+            super::head(60.0, Some(3.0), 16.7),
+            "240 fps (60 + FG)   16.7 ms"
+        );
         assert_eq!(super::head(60.0, Some(0.0), 16.7), "60 fps   16.7 ms");
         assert_eq!(super::head(60.0, None, 16.7), "60 fps   16.7 ms");
     }

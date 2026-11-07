@@ -44,7 +44,11 @@ impl crate::App {
                 cars + buses
             }),
             people: self.session.humans.as_ref().map_or(0, |h| h.people.len()),
-            generated_per_drawn: self.perf.generated.filter(|_| self.perf.fps > 0.0).map(|g| g / self.perf.fps),
+            generated_per_drawn: self
+                .perf
+                .generated
+                .filter(|_| self.perf.fps > 0.0)
+                .map(|g| g / self.perf.fps),
             ..Default::default()
         };
         if let Some(r) = self.renderer.as_ref() {
