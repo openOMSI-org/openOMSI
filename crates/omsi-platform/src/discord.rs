@@ -3,7 +3,7 @@
 use omsi_launcher_lib::i18n::{tr, trf};
 use std::io::{self, Read, Write};
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicUsize, Ordering},
     Arc, Mutex,
 };
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -35,7 +35,7 @@ pub struct Presence {
     pub state: String,
     pub large_text: String,
     pub small: Option<(&'static str, String)>,
-    pub party: Option<(usize, usize)>,
+    pub party: Option<(String, usize, usize)>,
     pub buttons: Vec<(String, &'static str)>,
 }
 
@@ -79,7 +79,39 @@ pub struct Game<'a> {
     pub bus: Option<(&'a str, &'a str)>,
     pub duty: Option<(&'a str, &'a str)>,
     pub next_stop: Option<(&'a str, f32)>,
-    pub players: Option<(usize, usize)>,
+    pub players: Option<(u64, usize, usize)>,
+}
+
+#[derive(Default)]
+pub struct ServerLimit {
+    asked: Option<(String, Arc<AtomicUsize>)>,
+}
+
+impl ServerLimit {
+    pub fn get(&mut self, target: &str, ask: impl FnOnce(&str) -> Option<usize> + Send + 'static) -> usize {
+        if self.asked.as_ref().is_none_or(|(asked, _)| asked != target) {
+            let max = Arc::new(AtomicUsize::new(0));
+            let found = max.clone();
+            let server = target.to_string();
+            let _ = std::thread::Builder::new().name("discord-server-size".into()).spawn(move || {
+                if let Some(n) = ask(&server) {
+                    found.store(n, Ordering::Relaxed);
+                }
+            });
+            self.asked = Some((target.to_string(), max));
+        }
+        self.asked.as_ref().map_or(0, |(_, max)| max.load(Ordering::Relaxed))
+    }
+
+    pub fn forget(&mut self) {
+        self.asked = None;
+    }
+}
+
+fn party_id(session: u64) -> String {
+    use sha2::Digest;
+    let digest = sha2::Sha256::digest(format!("openomsi-discord-party:{session}"));
+    digest[..12].iter().map(|b| format!("{b:02x}")).collect()
 }
 
 impl Presence {
@@ -98,7 +130,7 @@ impl Presence {
         if let (true, Some((line, _))) = (show.line, game.duty) {
             details.push(trf("Line {line}", &[("line", &line.trim())]));
         }
-        let party = game.players.filter(|(n, max)| multiplayer && *n > 0 && max >= n);
+        let party = game.players.filter(|(session, n, max)| multiplayer && *session != 0 && *n > 0 && max >= n).map(|(session, n, max)| (party_id(session), n, max));
         let mut state = Vec::new();
         let next_stop = game.next_stop.filter(|(name, _)| show.stop && game.duty.is_some() && !name.trim().is_empty());
         match (bus, next_stop) {
@@ -455,8 +487,8 @@ fn activity(presence: &Presence, started: u64, full: bool) -> serde_json::Value 
             assets["small_text"] = serde_json::json!(text.chars().take(120).collect::<String>());
         }
         activity["assets"] = assets;
-        if let Some((players, max)) = presence.party {
-            activity["party"] = serde_json::json!({ "id": "openomsi", "size": [players, max] });
+        if let Some((id, players, max)) = &presence.party {
+            activity["party"] = serde_json::json!({ "id": id, "size": [players, max] });
         }
         if !presence.buttons.is_empty() {
             activity["buttons"] = presence.buttons.iter().map(|(label, url)| serde_json::json!({ "label": label.chars().take(32).collect::<String>(), "url": url })).collect();
@@ -745,13 +777,13 @@ mod tests {
         let bus = Some(("Bus", "Full bus name"));
         assert_eq!(Presence::for_game(&Game { bus, ..Default::default() }, show), None);
         assert_eq!(Presence::for_game(&Game { map: Some(" "), ..Default::default() }, show), None);
-        let online = Game { map: Some("Map"), bus, duty: Some((" 5 ", " 2 ")), players: Some((3, 16)), ..Default::default() };
+        let online = Game { map: Some("Map"), bus, duty: Some((" 5 ", " 2 ")), players: Some((7, 3, 16)), ..Default::default() };
         let p = Presence::for_game(&online, show).unwrap();
         assert_eq!(p.details, "Map | Line 5");
         assert_eq!(p.state, "Bus | Tour 2");
         assert_eq!(p.large_text, "openOMSI | Map | Full bus name");
         assert_eq!(p.small, Some(("online", "Multiplayer".into())));
-        assert_eq!(p.party, Some((3, 16)));
+        assert_eq!(p.party, Some((party_id(7), 3, 16)));
         assert_eq!(p.buttons.len(), 2);
         let walk = Presence::for_game(&Game { map: Some("Map"), ..Default::default() }, show).unwrap();
         assert_eq!(walk.state, "On foot");
@@ -762,7 +794,7 @@ mod tests {
     #[test]
     fn each_part_can_be_hidden() {
         omsi_launcher_lib::i18n::pin_language("ENG");
-        let game = Game { map: Some("Map"), bus: Some(("Bus", "Full bus name")), duty: Some(("5", "2")), next_stop: Some(("Hauptbahnhof", 83.0)), players: Some((3, 16)) };
+        let game = Game { map: Some("Map"), bus: Some(("Bus", "Full bus name")), duty: Some(("5", "2")), next_stop: Some(("Hauptbahnhof", 83.0)), players: Some((7, 3, 16)) };
         let all = Presence::for_game(&game, Show::default()).unwrap();
         assert_eq!(all.state, "Next stop: Hauptbahnhof (+1:23)");
         assert!(all.large_text.ends_with("Full bus name"));
@@ -786,9 +818,43 @@ mod tests {
         show.set("unknown", false);
         assert_eq!(show, Show { stop: false, ..Show::default() });
         assert!(show.to_text().contains("discord_stop=0\ndiscord_players=1\n"));
-        let unknown_max = Presence::for_game(&Game { players: Some((3, 0)), ..game }, Show::default()).unwrap();
+        let unknown_max = Presence::for_game(&Game { players: Some((7, 3, 0)), ..game }, Show::default()).unwrap();
         assert_eq!(unknown_max.party, None);
         assert!(unknown_max.state.ends_with("Multiplayer"));
+        let no_session = Presence::for_game(&Game { players: Some((0, 3, 16)), ..game }, Show::default()).unwrap();
+        assert_eq!(no_session.party, None);
+    }
+
+    #[test]
+    fn each_session_is_its_own_party_and_hides_the_session() {
+        assert_eq!(party_id(42), party_id(42));
+        assert_ne!(party_id(42), party_id(43));
+        assert_eq!(party_id(42).len(), 24);
+        assert!(!party_id(42).contains("42"));
+    }
+
+    #[test]
+    fn server_limit_follows_the_server_and_ignores_a_late_answer() {
+        let (release_a, wait_a) = std::sync::mpsc::channel::<()>();
+        let mut limit = ServerLimit::default();
+        assert_eq!(limit.get("a", move |_| wait_a.recv().ok().map(|_| 16)), 0);
+        assert_eq!(limit.get("b", |_| Some(64)), 0);
+        let until = Instant::now() + Duration::from_secs(2);
+        while limit.get("b", |_| panic!("asked twice")) != 64 {
+            assert!(Instant::now() < until);
+            std::thread::sleep(POLL);
+        }
+        release_a.send(()).unwrap();
+        std::thread::sleep(POLL * 5);
+        assert_eq!(limit.get("b", |_| panic!("asked twice")), 64);
+        assert_eq!(limit.get("a", |_| None), 0);
+        limit.forget();
+        assert_eq!(limit.get("a", |_| Some(8)), 0);
+        let until = Instant::now() + Duration::from_secs(2);
+        while limit.get("a", |_| panic!("asked twice")) != 8 {
+            assert!(Instant::now() < until);
+            std::thread::sleep(POLL);
+        }
     }
 
     #[test]
@@ -983,7 +1049,7 @@ mod tests {
             state: "line".into(),
             large_text: "openOMSI".into(),
             small: Some(("bus", "Driving".into())),
-            party: Some((2, 8)),
+            party: Some(("abc".into(), 2, 8)),
             buttons: vec![("x".repeat(40), WEBSITE)],
         };
         let a = activity(&p, 1234, true);
@@ -992,6 +1058,7 @@ mod tests {
         assert_eq!(a["assets"]["large_image"], "logo");
         assert_eq!(a["assets"]["small_image"], "bus");
         assert_eq!(a["party"]["size"], serde_json::json!([2, 8]));
+        assert_eq!(a["party"]["id"], "abc");
         assert_eq!(a["buttons"][0]["label"].as_str().unwrap().len(), 32);
         assert_eq!(a["buttons"][0]["url"], WEBSITE);
         let plain = activity(&p, 1234, false);

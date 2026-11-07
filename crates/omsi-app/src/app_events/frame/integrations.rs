@@ -38,7 +38,7 @@ impl App {
                         bus: bus.as_ref().map(|(short, full)| (short.as_str(), full.as_str())),
                         duty: duty.map(|d| (d.line.as_str(), d.tour.as_str())),
                         next_stop,
-                        players: self.net.lan.is_some().then(|| (crate::player_list::count(self), max)),
+                        players: self.net.lan.as_ref().map(|lan| (lan.session, crate::player_list::count(self), max)),
                     };
                     d.set(crate::discord::Presence::for_game(&game, show));
                 }
@@ -176,20 +176,12 @@ impl App {
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn discord_server_max(&mut self) -> usize {
-        use std::sync::atomic::Ordering;
         let Some(lan) = self.net.lan.as_ref() else { return 0 };
         if lan.role == omsi_net::Role::Host {
             return 64;
         }
-        let target = self.args.lan_join.clone();
-        if self.integrations.discord_max.as_ref().is_none_or(|(asked, _)| *asked != target) {
-            let max = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-            let found = max.clone();
-            let ask = target.clone();
-            let _ = std::thread::Builder::new().name("discord-server-size".into()).spawn(move || ask.and_then(|t| omsi_net::ws::query(&t, false).ok()).map(|i| found.store(i.max_players, Ordering::Relaxed)));
-            self.integrations.discord_max = Some((target, max));
-        }
-        self.integrations.discord_max.as_ref().map_or(0, |(_, max)| max.load(Ordering::Relaxed))
+        let Some(target) = self.args.lan_join.clone() else { return 0 };
+        self.integrations.discord_max.get(&target, |t| omsi_net::ws::query(t, false).ok().map(|i| i.max_players))
     }
 }
 
