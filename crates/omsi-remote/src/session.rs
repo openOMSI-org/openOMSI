@@ -230,7 +230,7 @@ fn pump(ws: &mut Ws, shared: &Shared, id: u64, generation: u64) -> Result<(), St
                     }
                 }
             }
-            let now = (f.state_seq != state && !f.state.is_null()).then(|| {
+            let now = (!backlog && f.state_seq != state && !f.state.is_null()).then(|| {
                 state = f.state_seq;
                 f.state.clone()
             });
