@@ -312,6 +312,12 @@ impl World {
                     continue;
                 }
                 for h in &ot.holes {
+                    // A cutter lying wholly far under the ground cuts nothing: a junction a
+                    // mapper left at height zero opened a pit thirty metres deep (Berlin-
+                    // Spandau, `Einm_Poststr_Poststr` at the corner of tile 2382/11287).
+                    if hole_is_buried(h, &pose.rot, pose.pos, &|x, y| staged_ground_at(&src, x, y)) {
+                        continue;
+                    }
                     if !outside(&mesh_bounds(h, &pose.rot, pose.pos)) {
                         ts.rasterize_hole(h, &pose.rot, pose.pos, tx, ty);
                         // and cut exactly along its rim, as along a spline's outline:
@@ -688,6 +694,76 @@ impl World {
                 }
             }
         }
+    }
+}
+
+/// How far (m) under the lowest ground of its footprint the top of a `[terrainhole]` cutter
+/// must lie for it to cut nothing: far more than a tunnel's or an underpass's roof.
+const BURIED_HOLE: f64 = 10.0;
+
+/// Whether a `[terrainhole]` cutter lies wholly under the ground by `BURIED_HOLE`: every point of
+/// it, with the ground of the staged tiles beneath it. Where the ground of a tile is not
+/// known the cutter is not taken for buried.
+fn hole_is_buried(
+    hole: &MeshData,
+    rot: &Mat4,
+    pos: DVec3,
+    ground_at: &dyn Fn(f64, f64) -> Option<f64>,
+) -> bool {
+    if hole.positions.is_empty() {
+        return false;
+    }
+    let (mut top, mut ground) = (f64::NEG_INFINITY, f64::INFINITY);
+    for v in &hole.positions {
+        let w = rot.transform_point3(*v).as_dvec3() + pos;
+        let Some(g) = ground_at(w.x, w.y) else { return false };
+        top = top.max(w.z);
+        ground = ground.min(g);
+    }
+    top + BURIED_HOLE < ground
+}
+
+/// The ground of the staged tiles at a world point (None where its tile is not known).
+fn staged_ground_at(tiles: &HashMap<(i32, i32), Arc<StagedTile>>, x: f64, y: f64) -> Option<f64> {
+    let (key, (lx, ly)) = omsi_map::world_to_tile_local(x, y);
+    tiles.get(&key).map(|t| t.base_terrain.sample(lx as f32, ly as f32) as f64)
+}
+
+#[cfg(test)]
+mod buried_hole_tests {
+    use super::*;
+
+    fn square(z: f32) -> MeshData {
+        MeshData {
+            positions: vec![
+                glam::Vec3::new(-5.0, -5.0, z),
+                glam::Vec3::new(5.0, -5.0, z),
+                glam::Vec3::new(5.0, 5.0, z),
+                glam::Vec3::new(-5.0, 5.0, z),
+            ],
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_cutter_thirty_metres_down_is_buried_and_a_shallow_one_is_not() {
+        let ground = |_: f64, _: f64| Some(30.0);
+        let at = |z: f64| DVec3::new(100.0, 100.0, z);
+        // a junction left at height zero under ground at thirty metres
+        assert!(hole_is_buried(&square(0.0), &Mat4::IDENTITY, at(0.0), &ground));
+        // an underpass or a tunnel a few metres below the ground still cuts
+        assert!(!hole_is_buried(&square(0.0), &Mat4::IDENTITY, at(25.0), &ground));
+        assert!(!hole_is_buried(&square(0.0), &Mat4::IDENTITY, at(30.0), &ground));
+        // a cutter that reaches the ground (a tunnel mouth) is never buried
+        let mut slope = square(0.0);
+        slope.positions[0].z = 30.0;
+        assert!(!hole_is_buried(&slope, &Mat4::IDENTITY, at(0.0), &ground));
+    }
+
+    #[test]
+    fn a_cutter_where_the_ground_is_not_known_is_not_taken_for_buried() {
+        let nowhere = |_: f64, _: f64| None;
+        assert!(!hole_is_buried(&square(0.0), &Mat4::IDENTITY, DVec3::new(0.0, 0.0, -50.0), &nowhere));
     }
 }
 
