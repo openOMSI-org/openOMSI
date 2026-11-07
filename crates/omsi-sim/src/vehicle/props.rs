@@ -113,9 +113,12 @@ pub fn compute_mesh_props(ty: &VehicleType, var: &dyn Fn(&str) -> Option<f32>) -
             props.interior = interior * 0.5;
             for m in &def.materials {
                 if let Some(v) = &m.alphascale {
-                    // (a number in place of the name is the scale itself, as for the
-                    // lamps' and the interior lights' variables: see `PropsPlan::refresh`)
-                    let x = v.trim().parse::<f32>().ok().or_else(|| var(v)).unwrap_or(0.0);
+                    let x = v
+                        .trim()
+                        .parse::<f32>()
+                        .ok()
+                        .or_else(|| var(v))
+                        .unwrap_or(0.0);
                     if let Some(slot) = override_slot(&vm.materials, m) {
                         let boost = if v.trim().to_ascii_lowercase().starts_with("rain_window") {
                             1.8
@@ -179,9 +182,7 @@ pub(super) struct MeshPlan {
     /// boosts a raindrop-film layer (`Rain_Window_*_Wetness`) so it stays visible instead of
     /// reading as the texture's own faint alpha (its drops are only a few percent opaque,
     /// so a middling wetness value was nearly invisible against the glass behind it).
-    /// (An undeclared `[alphascale]` variable reads 0. A number written in place of the
-    /// name is that scale: the LFD buses' window films have `[alphascale] 0.9`, and read as
-    /// a variable that does not exist they were not drawn at all.)
+    /// An undeclared `[alphascale]` variable reads 0.
     pub(super) alpha: Vec<(usize, PropSource, f32)>,
     pub(super) uv_x: Vec<(usize, usize)>,
     pub(super) uv_y: Vec<(usize, usize)>,
