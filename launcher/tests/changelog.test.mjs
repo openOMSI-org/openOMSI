@@ -21,6 +21,15 @@ test('release notes as the release script writes them', () => {
   assert.deepEqual(blocks(null), []);
 });
 
+test('discarding a comment keeps the surrounding text separated', () => {
+  assert.deepEqual(blocks('New<!-- internal note -->features'), [
+    { kind: 'paragraph', text: 'New features' },
+  ]);
+  assert.deepEqual(blocks('<!<!-- internal note -->-- left as text -->'), [
+    { kind: 'paragraph', text: '<! -- left as text -->' },
+  ]);
+});
+
 test('inline marks, and links only to https', () => {
   assert.deepEqual(inline('a **b** *c* `d` [e](https://x.org/y) f'), [
     { kind: 'text', text: 'a ' }, { kind: 'bold', text: 'b' }, { kind: 'text', text: ' ' },
