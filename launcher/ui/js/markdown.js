@@ -13,7 +13,7 @@ export function blocks(source) {
   const out = [];
   let open = null;
   const close = () => { open = null; };
-  const text = String(source || '').replace(/\r\n?/g, '\n').replace(/<!--[\s\S]*?-->/g, '');
+  const text = String(source || '').replace(/\r\n?/g, '\n').replace(/<!--[\s\S]*?-->/g, ' ');
   for (const line of text.split('\n')) {
     if (!line.trim()) { close(); continue; }
     if (RULE.test(line)) { close(); continue; }
