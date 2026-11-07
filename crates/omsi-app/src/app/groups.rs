@@ -98,7 +98,7 @@ pub(crate) struct Integrations {
     /// Discord's "Playing openOMSI" status, and when it was last brought up to date.
     pub(crate) discord: Option<crate::discord::Discord>,
     pub(crate) discord_t: f32,
-    pub(crate) discord_max: Option<std::sync::Arc<std::sync::atomic::AtomicUsize>>,
+    pub(crate) discord_max: Option<(Option<String>, std::sync::Arc<std::sync::atomic::AtomicUsize>)>,
     // Steamworks API layer and it's last updated time
     #[cfg(steam)]
     pub(crate) steam: Option<crate::steam::Steam>,

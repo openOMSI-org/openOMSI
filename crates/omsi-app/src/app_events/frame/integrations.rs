@@ -20,7 +20,7 @@ impl App {
                         crate::discord::Discord::start(&self.settings.discord_app_id);
                 }
                 let show = self.settings.discord_show;
-                let max = if show.players { self.discord_server_max() } else { 0 };
+                let max = if show.players && self.integrations.discord.is_some() { self.discord_server_max() } else { 0 };
                 if let Some(d) = self.integrations.discord.as_ref() {
                     let bus = self.player.as_ref().map(|p| {
                         let definition = &p.vehicle.ty.def;
@@ -182,14 +182,14 @@ impl App {
             return 64;
         }
         let target = self.args.lan_join.clone();
-        let max = self.integrations.discord_max.get_or_insert_with(|| {
+        if self.integrations.discord_max.as_ref().is_none_or(|(asked, _)| *asked != target) {
             let max = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
             let found = max.clone();
-            let ask = move || target.and_then(|t| omsi_net::ws::query(&t, false).ok()).map(|i| found.store(i.max_players, Ordering::Relaxed));
-            let _ = std::thread::Builder::new().name("discord-server-size".into()).spawn(ask);
-            max
-        });
-        max.load(Ordering::Relaxed)
+            let ask = target.clone();
+            let _ = std::thread::Builder::new().name("discord-server-size".into()).spawn(move || ask.and_then(|t| omsi_net::ws::query(&t, false).ok()).map(|i| found.store(i.max_players, Ordering::Relaxed)));
+            self.integrations.discord_max = Some((target, max));
+        }
+        self.integrations.discord_max.as_ref().map_or(0, |(_, max)| max.load(Ordering::Relaxed))
     }
 }
 
