@@ -439,7 +439,8 @@ struct SettingsPage: View {
             SettingSelect(label: "Photo mode", key: "photo_mode", options: [("simple", "Simple"), ("advanced", "Advanced (for photographers)")], help: "Simple: the lens, the look and the frame. Advanced: a camera body - sensor size, P/A/S/M exposure with ISO and metering, white balance in kelvin, tilt-shift, histogram, focus peaking, bracketing and 16-bit PNG.")
             SectionTitle("Navigator").padding(.top, 8)
             SettingToggle(label: "Navigator (Shift+N: map, schedule, off)", key: "navigator", fallback: true)
-            SettingToggle(label: "Route arrows (as in OMSI 2)", key: "nav_arrows")
+            SettingToggle(label: "Dynamic route arrows", key: "nav_dynamic_arrows")
+            SettingToggle(label: "Map-placed route arrows", key: "nav_map_arrows")
             SettingToggle(label: "AI vehicles on the map", key: "nav_ai", fallback: true)
             if store.flag("nav_ai", true) {
                 SettingToggle(label: "Cars on the map too", key: "nav_ai_cars", fallback: true)

@@ -227,7 +227,7 @@ pub(crate) struct GfxState {
     pub(crate) mirror_hud: crate::mirror_hud::MirrorHud,
     /// The window is minimised or out of sight, as its events last said.
     pub(crate) window_hidden: bool,
-    /// OMSI 2's route arrows over the road (the `nav_arrows` setting).
+    /// OMSI 2's route arrows over the road (the `nav_dynamic_arrows` setting).
     pub(crate) route_arrows: crate::route_arrows::RouteArrows,
     /// The plugins' cables in the scene (`omsi.cable`).
     pub(crate) plugin_cables: omsi_scene::plugin_cables::PluginCables,

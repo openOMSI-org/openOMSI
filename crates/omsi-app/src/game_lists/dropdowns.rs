@@ -542,7 +542,7 @@ pub(super) fn sync_live(app: &mut App) {
         a.set_doppler(s.doppler);
     }
     if let Some(n) = app.menus.navigator.as_mut() {
-        n.arrows = s.nav_arrows;
+        n.arrows = s.nav_dynamic_arrows;
         n.light = s.is_light_theme();
     }
     if let Some(h) = app.session.humans.as_mut() {
