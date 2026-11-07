@@ -458,10 +458,6 @@ fn synthetic_material_plan_preserves_lightmap_thresholds_and_alpha_slots() {
     assert_eq!(got[0].slot_light, vec![1.0, 1.0]);
 }
 
-/// `[alphascale]` with a number where the variable's name goes (the LFD Caio Apache Vip V's
-/// window films: `Skin_Vidros.png` 0.9, `vidro_fora.tga` 0.5, `vidro_fosco.tga` 0.2) scales by
-/// that number, as a lamp's or an interior light's number does; read as a variable that does
-/// not exist it was 0, and the films were not drawn. An undeclared name still reads 0.
 #[test]
 fn a_number_in_alphascale_is_the_scale_itself() {
     let cfg = "[mesh]\nwindows.o3d\n\
@@ -473,23 +469,40 @@ fn a_number_in_alphascale_is_the_scale_itself() {
     let ty = Arc::get_mut(&mut ty).unwrap();
     ty.model = Model::parse(&omsi_cfg::CfgFile::from_str("glass.cfg", cfg));
     ty.meshes.push(VehicleMesh {
-        def_index: 0, data: MeshData::default(), file: PathBuf::new(),
-        materials: ["film.png", "frost.tga", "pane.tga", "tint.tga"].into_iter().map(|t| omsi_o3d::Material {
-            texture: t.into(), ..Default::default()
-        }).collect(),
-        overrides: Vec::new(), pivot: Mat4::IDENTITY, viewpoint: 0,
-        skin: Vec::new(), keep_winding: false,
+        def_index: 0,
+        data: MeshData::default(),
+        file: PathBuf::new(),
+        materials: ["film.png", "frost.tga", "pane.tga", "tint.tga"]
+            .into_iter()
+            .map(|texture| omsi_o3d::Material {
+                texture: texture.into(),
+                ..Default::default()
+            })
+            .collect(),
+        overrides: Vec::new(),
+        pivot: Mat4::IDENTITY,
+        viewpoint: 0,
+        skin: Vec::new(),
+        keep_winding: false,
     });
-    let index: HashMap<String, omsi_script::VarId> = [("envir_brightness".to_string(), 0)].into_iter().collect();
+    let index: HashMap<String, omsi_script::VarId> =
+        [("envir_brightness".to_string(), 0)].into_iter().collect();
     let mut plan = PropsPlan::default();
     plan.refresh(ty, &index);
     let mut got = Vec::new();
     for light in [0.0, 0.4, 1.0] {
         let vars = [light];
         plan.apply(&vars, &mut got);
-        assert_eq!(got[0].slot_alpha, vec![0.9, 0.2, 0.0, light], "brightness {light}");
+        assert_eq!(
+            got[0].slot_alpha,
+            vec![0.9, 0.2, 0.0, light],
+            "brightness {light}"
+        );
         let want = compute_mesh_props(ty, &|name| index.get(name).map(|&i| vars[i as usize]));
-        assert_eq!(got[0].slot_alpha, want[0].slot_alpha, "the plan and the direct way agree");
+        assert_eq!(
+            got[0].slot_alpha, want[0].slot_alpha,
+            "the plan and the direct way agree"
+        );
     }
 }
 
