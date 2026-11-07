@@ -562,7 +562,7 @@ impl App {
                 // (the editors' keys; not over the city map, whose header they covered
                 // once they stood on the timetable's line)
                 notes: if !map_open && self.menus.game_menu.is_none() { notes } else { &[] },
-                fps: self.settings.show_fps.then_some(self.perf.fps),
+                fps: self.settings.show_fps.then(|| fps_label(self.perf.fps, self.perf.generated, r.upscaler_in_use(s.config.width, s.config.height))),
                 perf: self.settings.perf_overlay_on().then_some(&self.perf.overlay),
                 perf_detailed: self.settings.perf_overlay == "detailed",
                 perf_touch: self.input.touch.enabled.then(|| self.input.touch.top_gap.map(|g| g[2])),
@@ -640,5 +640,29 @@ mod tests {
         assert_eq!(super::message_kind("Press a key for this action (Delete clears it, Esc cancels)"), Action);
         assert_eq!(super::message_kind("Controller configuration saved and applied"), Success);
         assert_eq!(super::message_kind("Fleet number 2412"), Info);
+    }
+}
+
+/// The frame rate's corner: the frames a second drawn, with the ones frame generation made on
+/// top while it makes any, and the upscaler the picture goes through (none: the standard one).
+fn fps_label(drawn: f32, generated: Option<f32>, upscaler: Option<&str>) -> String {
+    let mut text = match generated.filter(|g| *g > 0.0) {
+        Some(g) => format!("{:.0} fps ({drawn:.0} + FG)", drawn + g),
+        None => format!("{drawn:.0} fps"),
+    };
+    if let Some(u) = upscaler {
+        text.push_str(" · ");
+        text.push_str(u);
+    }
+    text
+}
+
+#[cfg(test)]
+mod fps_label_tests {
+    #[test]
+    fn the_corner_names_the_upscaler_and_frame_generations_frames() {
+        assert_eq!(super::fps_label(60.0, None, None), "60 fps");
+        assert_eq!(super::fps_label(60.0, Some(0.0), Some("FSR 3")), "60 fps · FSR 3");
+        assert_eq!(super::fps_label(60.0, Some(59.0), Some("DLSS")), "119 fps (60 + FG) · DLSS");
     }
 }

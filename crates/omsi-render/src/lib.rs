@@ -56,7 +56,7 @@ pub(crate) use shaders::*;
 pub use sky::*;
 pub use surface::*;
 pub(crate) use targets::*;
-pub use temporal::{Temporal, TemporalQuality, TemporalUpscaler};
+pub use temporal::{FrameGenerationKind, Temporal, TemporalQuality, TemporalUpscaler};
 pub(crate) use temporal::{temporal_mip_bias, TemporalFrame, TemporalPipelines, TemporalState, TEMPORAL_MASK_FORMAT, TEMPORAL_MOTION_FORMAT};
 pub use uniforms::*;
 pub use view::*;
@@ -160,6 +160,8 @@ pub struct Renderer {
     temporal_failed: bool,
     temporal_window: bool,
     temporal_kept: Option<temporal::Runtime>,
+    /// The window's frame generation, while its swap chain is frame generation's.
+    frame_generation: Option<temporal::FrameGeneration>,
     /// The frame's numbers, waiting for `temporal_present` at the end of it.
     temporal_pending: Option<TemporalFrame>,
     /// The same, at the main pass's sample count (colour writes off):
@@ -625,6 +627,20 @@ impl Renderer {
     /// smaller than the window).
     pub fn fsr_active(&self, width: u32, height: u32) -> bool {
         self.options.fsr1 && self.scale.fsr.is_some() && self.scene_size(width, height) != (width, height)
+    }
+
+    /// The upscaler the window's picture goes through now, as the frame rate names it: DLSS or
+    /// FSR 3 while it runs, FSR 1 while it scales the picture up, else None (the standard one).
+    pub fn upscaler_in_use(&self, width: u32, height: u32) -> Option<&'static str> {
+        match self.options.temporal.filter(|_| self.temporal_pipes.is_some() && !self.temporal_failed) {
+            Some(t) => Some(t.upscaler.label()),
+            None => self.fsr_active(width, height).then_some("FSR 1"),
+        }
+    }
+
+    /// The in-between frames frame generation has made since the start, while it runs.
+    pub fn frames_generated(&self) -> Option<u64> {
+        self.frame_generation.as_ref().filter(|g| g.working()).map(|g| g.generated())
     }
 
     /// The size the 3D scene is drawn at for a window of this size.

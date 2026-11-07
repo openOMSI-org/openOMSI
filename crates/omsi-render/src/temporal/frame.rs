@@ -78,6 +78,9 @@ pub(crate) struct TemporalState {
     prev_entries: u32,
     prev: Option<TemporalPrev>,
     frame: u64,
+    /// For frame generation: the window's picture before the HUD, two in turn (the swap chain
+    /// may still read the last one while the next is drawn).
+    hudless: Vec<(wgpu::Texture, wgpu::TextureView)>,
 }
 
 pub(crate) struct TemporalFrame {
@@ -125,6 +128,23 @@ pub(crate) fn temporal_mip_bias(render_w: u32, full_w: u32) -> f32 {
     (render_w.max(1) as f32 / full_w.max(1) as f32).log2().clamp(-3.0, 0.0)
 }
 
+/// A picture the size of the window in the swap chain's own format, drawn through the
+/// renderer's (sRGB) view.
+fn hudless_target(device: &wgpu::Device, (width, height): (u32, u32), format: wgpu::TextureFormat) -> (wgpu::Texture, wgpu::TextureView) {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("frame generation hudless"),
+        size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: format.remove_srgb_suffix(),
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        view_formats: &[format],
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor { format: Some(format), ..Default::default() });
+    (texture, view)
+}
+
 impl Renderer {
     /// Whether a window of this size can be upscaled at all. A minimised one is 1x1: asked for
     /// that, NGX refuses (0xbad00005) and DLSS would be gone for the session. Its history does
@@ -144,6 +164,12 @@ impl Renderer {
         }
     }
 
+    /// What frame generation reads of the upscaler's frames: the inputs of the last ones and the
+    /// pictures before the HUD.
+    pub(crate) fn temporal_generation_inputs(&self) -> Vec<wgpu::Texture> {
+        self.temporal.as_ref().map_or_else(Vec::new, |d| d.keep.iter().flatten().cloned().chain(d.hudless.iter().map(|(h, _)| h.clone())).collect())
+    }
+
     /// The running upscaler, its GPU work done, to go on in a renderer rebuilt on this device.
     pub(crate) fn temporal_runtime(&mut self) -> Option<Runtime> {
         let mut d = self.temporal.take()?;
@@ -152,6 +178,35 @@ impl Renderer {
             Runtime::Fsr3(r) => r.wait(),
         }
         Some(d.runtime)
+    }
+
+    /// After the window let go of its swap chain, before it is made again for `kind`: DLSS on a
+    /// Streamline session that does not suit `kind` is let go of, and loaded again at the next
+    /// upscaled frame. NVIDIA's frame generation starts its own session, and DLSS that joined it
+    /// needs that swap chain's presents.
+    pub fn before_frame_generation(&mut self, kind: Option<FrameGenerationKind>) {
+        let nvidia = matches!(kind, Some(FrameGenerationKind::Dlss(_)));
+        let unsuited = |r: &Runtime| matches!(r, Runtime::Dlss(d) if d.own_session() == nvidia);
+        let running = self.temporal.as_ref().is_some_and(|d| unsuited(&d.runtime));
+        let kept = self.temporal_kept.as_ref().is_some_and(unsuited);
+        if !running && !kept {
+            return;
+        }
+        if running {
+            drop(self.temporal_runtime());
+        }
+        if kept {
+            self.temporal_kept = None;
+        }
+        let _ = crate::wait_gpu(&self.device, None);
+        log::info!("DLSS: let go of, to start again {}", if nvidia { "in frame generation's Streamline session" } else { "on a Streamline session of its own" });
+    }
+
+    /// After [`Self::before_frame_generation`]: frame generation's Streamline session, once
+    /// nothing holds it, is shut down.
+    pub fn after_frame_generation(&mut self) {
+        #[cfg(windows)]
+        super::dlssg::abandon();
     }
 
     pub(crate) fn temporal_start(&mut self) -> bool {
@@ -184,6 +239,7 @@ impl Renderer {
                     prev_entries: 0,
                     prev: None,
                     frame: 0,
+                    hudless: Vec::new(),
                 });
                 log::info!("{} upscaling ({}) running on {}", asked.upscaler.as_str(), asked.quality.as_str(), self.adapter_name);
                 true
@@ -394,7 +450,15 @@ impl Renderer {
             reset: frame.reset,
             frame_ms: frame.dt * 1000.0,
         };
-        let inputs = Inputs { color: &t.color, depth: &ao.depth_tex, motion: &t.motion, mask: &t.mask, output: &t.output_tex, render_size: render, output_size: full, views: [&t.color_raw_view, &ao.depth_view, &t.motion_view, &t.mask_view, &t.output_view] };
+        let generate = self.frame_generation.clone().filter(|g| g.working());
+        let format = target.texture().format();
+        let hudless = generate.as_ref().map(|_| {
+            if d.hudless.first().is_none_or(|(h, _)| (h.width(), h.height()) != full) {
+                d.hudless = (0..2).map(|_| hudless_target(&self.device, full, format)).collect();
+            }
+            d.hudless[(d.frame % 2) as usize].clone()
+        });
+        let inputs = Inputs { color: &t.color, depth: &ao.depth_tex, motion: &t.motion, mask: &t.mask, output: &t.output_tex, hudless: hudless.as_ref().map(|(h, _)| h), render_size: render, output_size: full, views: [&t.color_raw_view, &ao.depth_view, &t.motion_view, &t.mask_view, &t.output_view] };
         let clock = std::time::Instant::now();
         let result = match &mut d.runtime {
             Runtime::Dlss(r) => r.evaluate(&self.queue, quality, &inputs, &constants),
@@ -423,6 +487,26 @@ impl Renderer {
             self.queue.write_buffer(&self.scale.upscale_buf, 0, bytemuck::cast_slice(&[render.0 as f32, render.1 as f32, 0.0, 0.0]));
         }
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("temporal hud") });
+        if let Some((_, view)) = hudless.as_ref().filter(|_| ok) {
+            // (the same picture as the window's below the HUD, to the bit: frame generation
+            // tells the HUD apart by the difference)
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("frame generation hudless"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Store },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&self.scale.upscale_pipeline);
+            pass.set_bind_group(0, bg, &[]);
+            pass.draw(0..3, 0..1);
+        }
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("temporal hud"),
@@ -451,10 +535,17 @@ impl Renderer {
             }
         }
         self.queue.submit(Some(encoder.finish()));
+        let hud_done = clock.elapsed();
+        if let (Some(g), Some((h, _))) = (generate.filter(|_| ok), hudless.as_ref()) {
+            g.prepare(&ao.depth_tex, &t.motion, h, render, &constants);
+        }
         if self.profiling {
             let mut stats = self.stats.borrow_mut();
             *stats.entry("upscale").or_default() += upscaled.as_secs_f64();
-            *stats.entry("upscale hud").or_default() += (clock.elapsed() - upscaled).as_secs_f64();
+            *stats.entry("upscale hud").or_default() += (hud_done - upscaled).as_secs_f64();
+            if self.frame_generation.is_some() {
+                *stats.entry("frame generation").or_default() += (clock.elapsed() - hud_done).as_secs_f64();
+            }
         }
         if !ok {
             self.temporal_failed = true;
