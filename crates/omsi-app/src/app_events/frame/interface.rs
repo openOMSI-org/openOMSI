@@ -441,7 +441,8 @@ impl App {
             let scale = self.window.as_ref().map(|w| w.scale_factor() as f32).unwrap_or(1.0);
             let (w, h) = (hud[2], hud[3]);
             self.net.remotes.chat.disabled = !self.settings.chat;
-            let chat = (self.net.lan.is_some() && self.settings.chat).then(|| ui::ChatView {
+            // The pause menu owns this area; a hovered chat field must not show through it.
+            let chat = (self.net.lan.is_some() && self.settings.chat && !shell_menu).then(|| ui::ChatView {
                 lines: &self.net.remotes.chat.lines,
                 typing: self.net.remotes.chat.typing.as_deref(),
                 error: self.net.remotes.chat.error(),

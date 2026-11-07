@@ -3786,6 +3786,7 @@ dependencies = [
  "omsi-mapdraw",
  "omsi-model",
  "omsi-mt",
+ "omsi-multiplayer-ui",
  "omsi-navigator",
  "omsi-net",
  "omsi-o3d",
@@ -4128,6 +4129,15 @@ dependencies = [
  "serde_json",
  "sha2",
  "ureq",
+]
+
+[[package]]
+name = "omsi-multiplayer-ui"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "omsi-admin",
+ "omsi-ui",
 ]
 
 [[package]]

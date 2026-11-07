@@ -50,9 +50,11 @@ fn nested_view<'a>(rail: &'a [MenuLine], rows: &'a [(&'static str, String)], wor
         kbd: true,
         keys: true,
         summary: Summary { bus: "Test vehicle".into(), driver: "Driver".into() },
+        online: Default::default(),
         list: Some(ListView {
             kind: MenuKind::Options,
             head: Some((omsi_ui::tr(if world { "World options..." } else { "Vehicle options..." }).into_owned(), String::new())),
+            badge: None,
             tabs: Some((titles, usize::from(world))),
             items: rows.iter().map(|(id, label)| (*id, label.as_str())).collect(),
             sel: 1,
