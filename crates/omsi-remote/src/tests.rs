@@ -516,3 +516,82 @@ fn a_stale_drive_message_no_longer_holds_the_wheel() {
     let d = remote.drive().unwrap();
     assert_eq!((d.held, d.throttle, d.steering), (false, 0.0, 0.5));
 }
+
+#[test]
+fn the_game_map_picture_goes_only_to_devices_that_ask_for_it() {
+    let dir = temp_dir("picture");
+    let remote = Remote::start(0, dir).unwrap();
+    remote.set_pairing(true);
+    let mut asks = paired(&remote, "asks");
+    let mut quiet = paired(&remote, "quiet");
+    assert_eq!(remote.map_wanted(), None);
+    asks.send(json!({ "t": "map.view", "w": 300, "h": 200 }));
+    quiet.send(json!({ "t": "map.view", "w": 100000, "h": 50 }));
+    let since = Instant::now();
+    while remote.map_wanted().is_none() && since.elapsed() < Duration::from_secs(5) {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(remote.map_wanted(), Some((300, 200)));
+    remote.set_map_picture(4, 2, 16, true, vec![200; 16 * 2]);
+    let jpeg = loop {
+        if let tungstenite::Message::Binary(b) = asks.0.read().unwrap() {
+            break b;
+        }
+    };
+    assert_eq!(&jpeg[..2], &[0xff, 0xd8]);
+    let img = image::load_from_memory(&jpeg).unwrap();
+    assert_eq!((img.width(), img.height()), (4, 2));
+    quiet.send(json!({ "t": "ping", "id": 1 }));
+    loop {
+        match quiet.0.read().unwrap() {
+            tungstenite::Message::Binary(_) => panic!("a device that did not ask got the picture"),
+            tungstenite::Message::Text(m) if m.contains("pong") => break,
+            _ => {}
+        }
+    }
+    asks.send(json!({ "t": "map.view", "w": 0, "h": 0 }));
+    let since = Instant::now();
+    while remote.map_wanted().is_some() && since.elapsed() < Duration::from_secs(5) {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(remote.map_wanted(), None);
+    assert!(crate::picture::encode(4, 2, &[0; 5]).is_none());
+}
+
+#[test]
+fn the_map_picture_drops_row_padding_and_reorders_bgra() {
+    let data = [1, 2, 3, 9, 4, 5, 6, 9, 0, 0, 0, 0, 7, 8, 9, 9, 10, 11, 12, 9];
+    assert_eq!(crate::picture::rgb_rows(&data, 12, 2, 2, true), Some(vec![3, 2, 1, 6, 5, 4, 9, 8, 7, 12, 11, 10]));
+    assert_eq!(crate::picture::rgb_rows(&data, 12, 2, 2, false), Some(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]));
+    assert_eq!(crate::picture::rgb_rows(&data, 12, 2, 3, true), None);
+    assert_eq!(crate::picture::rgb_rows(&data, 4, 2, 2, true), None);
+}
+
+#[test]
+fn a_stalled_map_picture_does_not_hold_back_driving() {
+    let remote = Remote::start(0, temp_dir("stalled")).unwrap();
+    let mut c = paired(&remote, "slow");
+    c.send(json!({ "t": "map.view", "w": 1024, "h": 1024 }));
+    let mut seed = 1u32;
+    let mut noise = || {
+        (0..1024 * 1024 * 4)
+            .map(|_| {
+                seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                (seed >> 24) as u8
+            })
+            .collect::<Vec<u8>>()
+    };
+    let mut worst = Duration::ZERO;
+    for i in 1..=12 {
+        remote.set_map_picture(1024, 1024, 1024 * 4, false, noise());
+        std::thread::sleep(Duration::from_millis(100));
+        let steer = i as f32 / 20.0;
+        let since = Instant::now();
+        c.send(json!({ "t": "drive", "s": steer, "g": 0.0, "b": 0.0 }));
+        while remote.drive().is_none_or(|d| d.steering != steer) && since.elapsed() < Duration::from_secs(5) {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        worst = worst.max(since.elapsed());
+    }
+    assert!(worst < Duration::from_millis(250), "steering waited {worst:?} behind the map picture");
+}

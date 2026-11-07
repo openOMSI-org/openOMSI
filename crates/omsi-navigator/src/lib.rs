@@ -384,6 +384,7 @@ pub struct Navigator {
     pub arrows: bool,
     pub remote: bool,
     remote_area: Option<(DVec2, u64)>,
+    remote_pic: remote_picture::RemotePicture,
     /// The other (AI) vehicles are drawn on the maps (the `nav_ai` setting).
     pub show_ai: bool,
     pub show_cars: bool,
@@ -598,6 +599,7 @@ impl Navigator {
             arrows: false,
             remote: false,
             remote_area: None,
+            remote_pic: Default::default(),
             show_ai: true,
             show_cars: true,
             surface: None,
@@ -1292,6 +1294,7 @@ impl Navigator {
             self.update_place(f.bus.truncate());
         }
         self.first = false;
+        self.remote_picture_frame(renderer, f);
         if !self.enabled && self.shown < 0.01 {
             self.panel_rect = [0.0; 4];
             // (followed for the route arrows alone, with the city map shut: nothing to draw)
@@ -1464,6 +1467,8 @@ mod city_map;
 mod destination;
 mod remote;
 pub use remote::RemoteNav;
+mod remote_picture;
+pub use remote_picture::RemoteFrame;
 pub use city_map::*;
 use lines_panel::*;
 #[cfg(test)]

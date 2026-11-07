@@ -358,6 +358,7 @@ const Editor = {
       if (look === "two") body.append(this.field("Push the pedals", this.seg([["down", "Downwards"], ["up", "Upwards"]], w.push === "up" ? "up" : "down", set("push"))));
     }
     if (w.kind === "wheel") body.append(this.field("Steering lock", this.input(w.max || 360, (v) => set("max")(Math.max(45, Math.min(1440, Number(v) || 360))), "number")));
+    if (w.kind === "map") body.append(this.field("Look", this.seg([["simple", "Simple map"], ["game", "Like in the game"]], w.look === "game" ? "game" : "simple", (v) => set("look")(v === "game" ? v : ""))));
     if (w.kind === "doors" || w.kind === "vdo") body.append(this.field("Look", this.seg([["line", "Line drawing"], ["lcd", "Green display"]], w.look || "line", set("look"))));
     if (w.kind === "telltales") {
       const list = R.el("div", "list");
