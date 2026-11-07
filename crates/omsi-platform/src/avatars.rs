@@ -183,9 +183,24 @@ fn fetch(dir: &Path, part: &Path) -> anyhow::Result<()> {
     let _ = std::fs::remove_dir_all(&tmp);
     crate::updater::unpack(part, &tmp)?;
     anyhow::ensure!(tmp.join("pack.json").is_file(), "the archive holds no pack.json");
-    let _ = std::fs::remove_dir_all(dir);
-    std::fs::rename(&tmp, dir)?;
+    promote(&tmp, dir)?;
     let _ = std::fs::remove_file(part);
+    Ok(())
+}
+
+fn promote(new: &Path, dir: &Path) -> anyhow::Result<()> {
+    let old = dir.with_extension("old");
+    let _ = std::fs::remove_dir_all(&old);
+    if dir.exists() {
+        std::fs::rename(dir, &old)?;
+    }
+    if let Err(e) = std::fs::rename(new, dir) {
+        if old.exists() {
+            std::fs::rename(&old, dir)?;
+        }
+        return Err(e.into());
+    }
+    let _ = std::fs::remove_dir_all(&old);
     Ok(())
 }
 
@@ -225,6 +240,24 @@ mod tests {
         }
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::remove_dir_all(&old);
+    }
+
+    #[test]
+    fn a_failed_upgrade_keeps_the_installed_pack() {
+        let dir = std::env::temp_dir().join(format!("omsi-avatars-promote-{}", std::process::id()));
+        let new = dir.with_extension("unpacking");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("pack.json"), r#"{"version":1,"avatars":[]}"#).unwrap();
+        let _ = std::fs::remove_dir_all(&new);
+        assert!(super::promote(&new, &dir).is_err());
+        assert_eq!(std::fs::read_to_string(dir.join("pack.json")).unwrap(), r#"{"version":1,"avatars":[]}"#);
+        assert!(!dir.with_extension("old").exists());
+        std::fs::create_dir_all(&new).unwrap();
+        std::fs::write(new.join("pack.json"), r#"{"version":2,"avatars":[]}"#).unwrap();
+        super::promote(&new, &dir).unwrap();
+        assert_eq!(super::version(&dir), 2);
+        assert!(!new.exists() && !dir.with_extension("old").exists());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
