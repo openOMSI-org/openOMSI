@@ -165,6 +165,9 @@ struct Session {
     window: bool,
     /// DLSS joined the session (`module`): it cannot be shut down under it.
     joined: bool,
+    /// Streamline's inputs-processing fence and the value it reaches once the last present's
+    /// inputs are read, as its state said right after that present (held: it may let go of it).
+    read: Option<(ID3D12Fence, u64)>,
     shutdown: unsafe extern "C" fn() -> i32,
 }
 
@@ -190,7 +193,9 @@ pub(super) fn module() -> Option<HMODULE> {
 pub(super) fn abandon() {
     let mut s = session();
     if s.as_ref().is_some_and(|s| !s.joined && !s.window) {
-        if let Some(gone) = s.take() {
+        if let Some(mut gone) = s.take() {
+            // (its fence let go of before Streamline shuts down)
+            gone.read = None;
             unsafe {
                 (gone.shutdown)();
                 let _ = FreeLibrary(gone.module);
@@ -256,6 +261,7 @@ fn start(device: &ID3D12Device, frames: u32) -> Result<HMODULE> {
                 failed: false,
                 window: false,
                 joined: false,
+                read: None,
                 shutdown,
             })
         })()
@@ -394,27 +400,23 @@ pub(super) fn present(present: impl FnOnce()) {
         if unsafe { get_state(&viewport, &mut state, std::ptr::null()) } == 0 {
             // (the frames presented since the last call: this one and the ones made after it)
             GENERATED.fetch_add(u64::from(state.num_frames_actually_presented.saturating_sub(1)), Ordering::Relaxed);
+            let fence = unsafe { ID3D12Fence::from_raw_borrowed(&state.inputs_processing_completion_fence) };
+            if let (Some(fence), Some(s)) = (fence, session().as_mut()) {
+                s.read = Some((fence.clone(), state.last_present_inputs_processing_completion_fence_value));
+            }
         }
     }
 }
 
 /// Until Streamline's frame generation has read the inputs of the last frame presented
 /// (`DLSSGState::inputsProcessingCompletionFence`, which NVIDIA's guide has the game wait on before
-/// it destroys them). False when it cannot tell.
+/// it destroys them; read right after the present, as Streamline asks). True when no frame went
+/// to it yet, false when the wait failed.
 pub(super) fn drain() -> bool {
     let guard = session();
-    let Some(s) = guard.as_ref() else { return true };
-    let viewport = ViewportHandle { base: Base::new(VIEWPORT_HANDLE, 1), value: s.viewport.value };
-    let mut state = blank_state();
-    if unsafe { (s.get_state)(&viewport, &mut state, std::ptr::null()) } != 0 {
-        return false;
-    }
-    // (the frames presented since the last call, which the present counts otherwise)
-    GENERATED.fetch_add(u64::from(state.num_frames_actually_presented.saturating_sub(1)), Ordering::Relaxed);
-    let raw = state.inputs_processing_completion_fence;
-    match unsafe { ID3D12Fence::from_raw_borrowed(&raw) } {
-        Some(fence) => super::d3d12::wait_fence(fence, state.last_present_inputs_processing_completion_fence_value),
-        None => false,
+    match guard.as_ref().and_then(|s| s.read.as_ref()) {
+        Some((fence, value)) => super::d3d12::wait_fence(fence, *value),
+        None => true,
     }
 }
 
