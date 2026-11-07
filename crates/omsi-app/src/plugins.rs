@@ -575,6 +575,22 @@ impl PluginIo for Io<'_> {
         self.veh().map(|v| [v.position.x, v.position.y, v.position.z, v.heading])
     }
 
+    fn mesh_point(&self, mesh: &str, point: [f32; 3]) -> Option<[f64; 3]> {
+        mesh_point_of(self.veh()?, mesh, point)
+    }
+
+    fn body_frame(&self, section: usize) -> Option<[f64; 12]> {
+        body_frame_of(self.veh()?, section)
+    }
+
+    fn other_body_frame(&mut self, id: u64, section: usize) -> Option<[f64; 12]> {
+        body_frame_of(self.other(id)?, section)
+    }
+
+    fn other_mesh_point(&mut self, id: u64, mesh: &str, point: [f32; 3]) -> Option<[f64; 3]> {
+        mesh_point_of(self.other(id)?, mesh, point)
+    }
+
     fn message(&mut self, text: &str, seconds: f32) {
         match self.app.as_deref_mut() {
             Some(app) => app.service_msg = Some((text.to_string(), seconds)),
@@ -1158,4 +1174,33 @@ mod tests {
         stop_info(&mut v, &stops, 0, false, None);
         assert!(v.iter().all(|(k, _)| !k.starts_with("previous_stop") && *k != "next_stop_distance"));
     }
+}
+
+/// Where a point of one of a vehicle's meshes is now (see `PluginIo::mesh_point`).
+fn mesh_point_of(v: &omsi_sim::VehicleInstance, mesh: &str, point: [f32; 3]) -> Option<[f64; 3]> {
+    let want = mesh.replace('/', "\\").to_ascii_lowercase();
+    let name_of = |i: usize| -> String {
+        let vm = &v.ty.meshes[i];
+        v.ty.model.meshes.get(vm.def_index).map(|m| m.file.replace('/', "\\").to_ascii_lowercase()).unwrap_or_default()
+    };
+    // (the file's own name first: `sht_bashmak.o3d` is not `sht_bashmak_1.o3d`)
+    let n = v.ty.meshes.len();
+    let i = (0..n)
+        .find(|&i| name_of(i).rsplit('\\').next() == Some(want.as_str()))
+        .or_else(|| (0..n).find(|&i| name_of(i).ends_with(&want)))?;
+    let local = v.mesh_local_transform(i).transform_point3(glam::Vec3::from(point));
+    let w = v.position + local.as_dvec3();
+    Some([w.x, w.y, w.z])
+}
+
+/// A vehicle's body (or a coupled section's) now: origin and axes (see `PluginIo::body_frame`).
+fn body_frame_of(v: &omsi_sim::VehicleInstance, section: usize) -> Option<[f64; 12]> {
+    let (p, r) = if section == 0 {
+        (v.position, v.body_rotation())
+    } else {
+        let t = v.trailers.get(section - 1)?;
+        (t.position, t.body_rotation())
+    };
+    let (x, y, z) = (r.x_axis, r.y_axis, r.z_axis);
+    Some([p.x, p.y, p.z, x.x as f64, x.y as f64, x.z as f64, y.x as f64, y.y as f64, y.z as f64, z.x as f64, z.y as f64, z.z as f64])
 }

@@ -164,6 +164,15 @@ pub static FNS: &[ApiFn] = &[
         Ok::<_, ApiError>(())
     }),
     def!("position", "vehicle", [], "x, y, z, heading", "Where the bus is: map metres (x east, y north, z up) and its heading in degrees clockwise from north; nothing on foot.", V10, None, true, |c, a| multi(c.io().position().map(|p| p.map(Value::Num)))),
+    def!("body_frame", "vehicle", [o("section", "integer")], "x, y, z, rx, ry, rz, fx, fy, fz, ux, uy, uz", "The bus's body now, as the last simulation step left it: its origin (map metres) and its model's axes in the world - right, forward and up, each a unit vector - with the heading, the climb and the lean on the springs in them. A point of the model at (mx, my, mz) is at origin + mx·right + my·forward + mz·up. `section` 1, 2, ... is a section coupled behind (an articulated bus's rear one). Nothing on foot.", NEW, None, true, |c, a| {
+        let s = a.opt_int(0)?.unwrap_or(0).max(0) as usize;
+        Ok::<_, ApiError>(multi(c.io().body_frame(s).map(|f| f.map(Value::Num))))
+    }),
+    def!("mesh_point", "vehicle", [p("mesh", "string"), p("x", "number"), p("y", "number"), p("z", "number")], "x, y, z", "Where a point of one of the bus's meshes is now, in map metres: `mesh` names the mesh's file (`\"sht_bashmak.o3d\"`, or a part of its path), `x, y, z` is the point in the model's frame (x right, y forward, z up) as the mesh stands at rest; its animations and the body's lean move it. For a plugin that lines a part of the bus up with something outside it. Nothing when the bus has no such mesh.", NEW, None, true, |c, a| {
+        let mesh = a.str(0)?;
+        let p = [a.num(1)? as f32, a.num(2)? as f32, a.num(3)? as f32];
+        Ok::<_, ApiError>(multi(c.io().mesh_point(&mesh, p).map(|w| w.map(Value::Num))))
+    }),
     def!("vars", "vehicle", [o("kind", "string")], "list of strings", "The names of every variable of the bus's scripts, or of every string variable with `\"str\"`.", V10, None, false, |c, a| {
         let kind = a.opt_str(0)?;
         let (vars, strs) = c.io().var_names();
@@ -189,6 +198,17 @@ pub static FNS: &[ApiFn] = &[
     def!("other_var", "traffic", [p("id", "integer"), p("name", "string")], "number or nil", "A script variable of one of `others`, or `nil`.", V21, None, false, |c, a| {
         let (id, n) = (a.int(0)? as u64, a.str(1)?);
         Ok::<_, ApiError>(c.io().other_var(id, &n).map(|v| v as f64))
+    }),
+    def!("other_body_frame", "traffic", [p("id", "integer"), o("section", "integer")], "x, y, z, rx, ry, rz, fx, fy, fz, ux, uy, uz", "`body_frame` of one of `others`: its body now, origin and axes.", NEW, None, true, |c, a| {
+        let id = a.int(0)? as u64;
+        let s = a.opt_int(1)?.unwrap_or(0).max(0) as usize;
+        Ok::<_, ApiError>(multi(c.io().other_body_frame(id, s).map(|f| f.map(Value::Num))))
+    }),
+    def!("other_mesh_point", "traffic", [p("id", "integer"), p("mesh", "string"), p("x", "number"), p("y", "number"), p("z", "number")], "x, y, z", "`mesh_point` of one of `others`: where a point of one of its meshes is now.", NEW, None, true, |c, a| {
+        let id = a.int(0)? as u64;
+        let mesh = a.str(1)?;
+        let p = [a.num(2)? as f32, a.num(3)? as f32, a.num(4)? as f32];
+        Ok::<_, ApiError>(multi(c.io().other_mesh_point(id, &mesh, p).map(|w| w.map(Value::Num))))
     }),
     def!("set_other_var", "traffic", [p("id", "integer"), p("name", "string"), p("value", "number")], "boolean", "Sets a script variable of one of `others`; `true` when that vehicle has it. An AI vehicle keeps it until its scripts write it again; another player's bus takes its values from the network again.", V21, TrafficWrite, false, |c, a| {
         let (id, n, v) = (a.int(0)? as u64, a.str(1)?, a.num(2)? as f32);

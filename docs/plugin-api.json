@@ -118,6 +118,22 @@
       "permission": null
     },
     {
+      "name": "body_frame",
+      "group": "vehicle",
+      "since": "0.2.22",
+      "doc": "The bus's body now, as the last simulation step left it: its origin (map metres) and its model's axes in the world - right, forward and up, each a unit vector - with the heading, the climb and the lean on the springs in them. A point of the model at (mx, my, mz) is at origin + mx·right + my·forward + mz·up. `section` 1, 2, ... is a section coupled behind (an articulated bus's rear one). Nothing on foot.",
+      "params": [
+        {
+          "name": "section",
+          "type": "integer",
+          "optional": true
+        }
+      ],
+      "returns": "x, y, z, rx, ry, rz, fx, fy, fz, ux, uy, uz",
+      "multi": true,
+      "permission": null
+    },
+    {
       "name": "bus.acceleration",
       "group": "vehicle",
       "since": "0.2.22",
@@ -2417,6 +2433,37 @@
       "permission": null
     },
     {
+      "name": "mesh_point",
+      "group": "vehicle",
+      "since": "0.2.22",
+      "doc": "Where a point of one of the bus's meshes is now, in map metres: `mesh` names the mesh's file (`\"sht_bashmak.o3d\"`, or a part of its path), `x, y, z` is the point in the model's frame (x right, y forward, z up) as the mesh stands at rest; its animations and the body's lean move it. For a plugin that lines a part of the bus up with something outside it. Nothing when the bus has no such mesh.",
+      "params": [
+        {
+          "name": "mesh",
+          "type": "string",
+          "optional": false
+        },
+        {
+          "name": "x",
+          "type": "number",
+          "optional": false
+        },
+        {
+          "name": "y",
+          "type": "number",
+          "optional": false
+        },
+        {
+          "name": "z",
+          "type": "number",
+          "optional": false
+        }
+      ],
+      "returns": "x, y, z",
+      "multi": true,
+      "permission": null
+    },
+    {
       "name": "message",
       "group": "ui",
       "since": "0.1.5",
@@ -2707,6 +2754,63 @@
       ],
       "returns": "the function",
       "multi": false,
+      "permission": null
+    },
+    {
+      "name": "other_body_frame",
+      "group": "traffic",
+      "since": "0.2.22",
+      "doc": "`body_frame` of one of `others`: its body now, origin and axes.",
+      "params": [
+        {
+          "name": "id",
+          "type": "integer",
+          "optional": false
+        },
+        {
+          "name": "section",
+          "type": "integer",
+          "optional": true
+        }
+      ],
+      "returns": "x, y, z, rx, ry, rz, fx, fy, fz, ux, uy, uz",
+      "multi": true,
+      "permission": null
+    },
+    {
+      "name": "other_mesh_point",
+      "group": "traffic",
+      "since": "0.2.22",
+      "doc": "`mesh_point` of one of `others`: where a point of one of its meshes is now.",
+      "params": [
+        {
+          "name": "id",
+          "type": "integer",
+          "optional": false
+        },
+        {
+          "name": "mesh",
+          "type": "string",
+          "optional": false
+        },
+        {
+          "name": "x",
+          "type": "number",
+          "optional": false
+        },
+        {
+          "name": "y",
+          "type": "number",
+          "optional": false
+        },
+        {
+          "name": "z",
+          "type": "number",
+          "optional": false
+        }
+      ],
+      "returns": "x, y, z",
+      "multi": true,
       "permission": null
     },
     {
