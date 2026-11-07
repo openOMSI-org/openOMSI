@@ -72,7 +72,21 @@ pub fn find_dir() -> Option<PathBuf> {
         let d = PathBuf::from(d);
         return d.join("pack.json").is_file().then_some(d);
     }
+    if let Some(d) = user_dir() {
+        if let Err(e) = restore_backup(&d) {
+            log::warn!("avatars: the backup pack could not be put back into {}: {e}", d.display());
+        }
+    }
     best(dirs())
+}
+
+// (an upgrade stopped between moving the pack aside and promoting the new one)
+fn restore_backup(dir: &Path) -> std::io::Result<()> {
+    let old = dir.with_extension("old");
+    if !dir.exists() && old.join("pack.json").is_file() {
+        std::fs::rename(&old, dir)?;
+    }
+    Ok(())
 }
 
 fn best(dirs: Vec<PathBuf>) -> Option<PathBuf> {
@@ -189,10 +203,8 @@ fn fetch(dir: &Path, part: &Path) -> anyhow::Result<()> {
 }
 
 fn promote(new: &Path, dir: &Path) -> anyhow::Result<()> {
+    restore_backup(dir)?;
     let old = dir.with_extension("old");
-    if !dir.exists() && old.exists() {
-        std::fs::rename(&old, dir)?;
-    }
     let _ = std::fs::remove_dir_all(&old);
     if dir.exists() {
         std::fs::rename(dir, &old)?;
@@ -273,6 +285,21 @@ mod tests {
         std::fs::write(old.join("pack.json"), r#"{"version":1,"avatars":[]}"#).unwrap();
         assert!(super::promote(&new, &dir).is_err());
         assert_eq!(std::fs::read_to_string(dir.join("pack.json")).unwrap(), r#"{"version":1,"avatars":[]}"#);
+        assert!(!old.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_backup_left_alone_is_used_offline() {
+        let dir = std::env::temp_dir().join(format!("omsi-avatars-offline-{}", std::process::id()));
+        let old = dir.with_extension("old");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&old).unwrap();
+        std::fs::write(old.join("a.fbx"), b"x").unwrap();
+        std::fs::write(old.join("pack.json"), r#"{"version":1,"avatars":[{"id":"a","file":"a.fbx"}]}"#).unwrap();
+        super::restore_backup(&dir).unwrap();
+        assert_eq!(super::best(vec![dir.clone()]), Some(dir.clone()));
+        assert_eq!(super::load(&dir).len(), 1);
         assert!(!old.exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
