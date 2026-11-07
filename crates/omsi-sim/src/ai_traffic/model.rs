@@ -96,7 +96,7 @@ pub struct AiCar {
     /// That decision was taken standing first at the light's line as it went green.
     pub amber_start: bool,
     pub passing: Option<Passing>,
-    /// The current light this car has decision about (passing on amber/red) and a random factor variable
+    /// The current light and the car's random choice for approaching it on yellow.
     pub current_light: Option<(usize, usize)>,
     pub amber_decision: f32,
     /// Finished (a dead end, the end of a timetable trip, given up): taken off the road as
