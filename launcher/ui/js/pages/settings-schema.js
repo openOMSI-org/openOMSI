@@ -390,6 +390,7 @@ const gameplay = {
         { type: 'toggle', key: 'trip_summary', label: 'Trip summary' },
         { type: 'section', title: 'Traffic' },
         { type: 'select', key: 'ai_unsched_factor', label: 'Random traffic', options: [['25', '25%'], ['50', '50%'], ['75', '75%'], ['100', '100%'], ['150', '150%'], ['200', '200%']] },
+        { type: 'slider', key: 'ai_reaction', label: 'AI reaction time', min: 25, max: 200, step: 5, def: 100, format: offPct100, store: snap(5) },
         { type: 'select', key: 'ai_max_scheduled', label: 'Timetable vehicles', options: [['0', 'All'], ['10', 'At most 10'], ['25', 'At most 25'], ['50', 'At most 50']] },
         { type: 'select', key: 'ai_max_parked', label: 'Parked cars', options: [['-1', 'None'], ['0', 'Every space'], ['35', 'At most 35'], ['100', 'At most 100'], ['250', 'At most 250']] },
         // (OMSI's AIMaxHumans, #2087)
