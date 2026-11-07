@@ -34,12 +34,13 @@ pub(super) fn solid_and_ghost(v: &[Vertex], ghost: f32) -> (Vec<Vertex>, Vec<Ver
 impl Navigator {
     pub(super) fn draw(&mut self, renderer: &Renderer, target: &wgpu::TextureView, size: (u32, u32), map_h: f32, f: &NavFrame) {
         let (pw, ph) = (size.0 as f32, size.1 as f32);
-        let s = pw / 360.0;
+        let remote = self.remote_pic.drawing;
+        let s = if remote { pw.min(map_h * 1.25) } else { pw } / 360.0;
         let wd = &WORDS;
         let pal = *style::palette(self.light);
         self.atlas.begin_frame();
         let panel = Rect::new(0.0, 0.0, pw, ph);
-        let radius = (14.0 * s).max(10.0);
+        let radius = if remote { 0.0 } else { (14.0 * s).max(10.0) };
         // (under a plugin's panel in the whole frame: its map where it says, rounded as a card
         // of its own, or no map at all)
         let (map, cards, map_radius) = match self.framed {
@@ -59,6 +60,10 @@ impl Navigator {
         let look_key = self.look_key();
         let visible_reach = super::build::view::panel_reach(self.zoom, map.w, map.h).unwrap_or(PANEL_REACH);
         let reach = super::build::view::panel_build_reach(map.w, map.h).unwrap_or(PANEL_REACH + 150.0);
+        if remote {
+            self.remote_pic.reach = reach;
+        }
+        let reach = reach.max(self.remote_pic.reach);
         let rebuild = match &self.roads {
             None => lanes_now > 0 || self.map_data.is_some(),
             Some(r) => r.look != look_key || super::build::view::panel_moved(r.reach, visible_reach, (r.anchor - f.bus.truncate()).length()) || (r.lanes_seen != lanes_now && self.time - r.built_at > 1.5),
@@ -202,7 +207,7 @@ impl Navigator {
         let icon_verts = self.minimap_icons(vpm, vp, anchor, f.bus.truncate(), map, s);
         // (the place row, the cards and the stop list: the plugin's panel has the rest of the
         // frame, and says whether the cards go over its map)
-        if !framed {
+        if !framed && !remote {
             let loc_h = self.place_row_height(s);
             self.draw_place_row(&mut ui, Rect::new(0.0, map.bottom(), pw, loc_h), 10.0 * s, s);
         }
@@ -239,7 +244,7 @@ impl Navigator {
         let (icon_n, icon_tex) = self.place.upload(gpu, device, queue, 16, &icon_verts);
         gpu.upload_atlas(queue, &mut self.atlas);
         let flat = Layer::flat(clip_panel, radius, 1.0);
-        let backdrop = Layer::flat(clip_panel, radius, if self.cockpit_display { 1.0 } else { omsi_ui::theme::backdrop(self.opacity).min(1.0) });
+        let backdrop = Layer::flat(clip_panel, radius, if self.cockpit_display || remote { 1.0 } else { omsi_ui::theme::backdrop(self.opacity).min(1.0) });
         let mut layers = [flat, map_layer, map_layer.with_shadow(), depth_layer, depth_layer, backdrop];
         // The cockpit setting fades the map and its labels too; opaque map geometry
         // would otherwise cover the background whose opacity was changed.
@@ -268,7 +273,10 @@ impl Navigator {
         ]);
         let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("navigator") });
         gpu.render(device, queue, &mut enc, target, size, Some(wgpu::Color::TRANSPARENT), &layers, &draws);
-        renderer.submit_with_frame(enc.finish());
+        match remote {
+            true => self.remote_pic.commands = Some(enc.finish()),
+            false => renderer.submit_with_frame(enc.finish()),
+        }
     }
 
     /// The corner to pull for another size, on a navigator that is a widget.
