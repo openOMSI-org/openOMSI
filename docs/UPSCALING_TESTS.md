@@ -43,10 +43,12 @@ Frame generation (Settings → Graphics → Frame generation, DirectX 12, the fr
 | 12 | NVIDIA RTX 20 or 30 | DLSS | NVIDIA DLSS 2x | `frame generation is off: this card or system cannot run DLSS frame generation ...`; the game runs on without it |
 | 13 | NVIDIA RTX 40 or 50 | FSR 3, then DLSS | AMD FSR 3, Off, then NVIDIA DLSS 2x, applied in the game's menu without a restart | `frame generation: ... -> ..., the window's swap chain made again` each time; the game goes on |
 
-In runs 9 to 11 the frame rate's corner reads like `240 fps (120 + FG) · DLSS`: the frames on
-screen, then the drawn ones. Look for the HUD and the cab's displays staying steady (not
-wobbling with the generated frames), and for the menu and the loading screen showing no
-generated frames.
+In runs 9 to 11 the frame rate's corner reads like `240 fps (120 + FG) · DLSS`, and the
+performance overlay's first line `240 fps (120 + FG)`: the frames on screen, then the drawn ones.
+Run 9 also logs `frame generation: AMD's video memory ... MB for frame generation, ... MB for its
+swap chain`. Look for the HUD and the cab's displays and gauges staying steady (not doubled or
+wobbling with the generated frames, also behind the gauges' glass in sunlight), and for the menu
+and the loading screen showing no generated frames.
 
 Run 3 may end with `dlss upscaling is off: ...` instead: that line (Streamline asking for a Vulkan
 feature, queue or extension the game's device does not have) is the result to report, not a
