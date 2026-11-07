@@ -119,6 +119,7 @@ const _: () = {
     assert!(std::mem::size_of::<CreateSwapChainForHwnd>() == 64);
     assert!(std::mem::size_of::<ConfigureFrameGeneration>() == 144);
     assert!(std::mem::offset_of!(ConfigureFrameGeneration, hudless_color) == 64);
+    assert!(std::mem::size_of::<QueryMemory>() == 24 && std::mem::size_of::<MemoryUsage>() == 16);
     assert!(std::mem::offset_of!(ConfigureFrameGeneration, frame_id) == 136);
     assert!(std::mem::size_of::<DispatchPrepare>() == 232);
     assert!(std::mem::offset_of!(DispatchPrepare, depth) == 88);
@@ -131,6 +132,11 @@ const DISPATCH_PREPARE_V2: u64 = 0x0002_000c;
 const CREATE_FRAMEGENERATION_VERSION: u64 = 0x0002_000e;
 const CREATE_SWAPCHAIN_FOR_HWND_DX12: u64 = 0x0003_0006;
 const CREATE_SWAPCHAIN_VERSION_DX12: u64 = 0x0003_000b;
+const QUERY_FRAMEGENERATION_MEMORY: u64 = 0x0002_0007;
+const QUERY_SWAPCHAIN_MEMORY_DX12: u64 = 0x0003_0009;
+/// Frames frame generation has run before what AMD's context and swap chain hold is logged:
+/// some of it is made only once it works.
+const MEMORY_LOGGED_AFTER: u32 = 60;
 const FRAMEGENERATION_VERSION: u32 = (4 << 22) | 2;
 const SWAPCHAIN_DX12_VERSION: u32 = 4 << 22;
 const FLAG_DEPTH_INVERTED: u32 = 1 << 3;
@@ -149,6 +155,21 @@ fn dxgi_format(f: wgpu::TextureFormat) -> Option<(DXGI_FORMAT, u32)> {
     })
 }
 
+/// `FfxApiEffectMemoryUsage`.
+#[repr(C)]
+#[derive(Default)]
+struct MemoryUsage {
+    total: u64,
+    _aliasable: u64,
+}
+
+/// The frame generation context's and the swap chain's memory query: one pointer to fill.
+#[repr(C)]
+struct QueryMemory {
+    header: Header,
+    usage: *mut MemoryUsage,
+}
+
 /// AMD's frame generation for the size the window has now; made again when that changes.
 struct Generator {
     context: Box<FfxContext>,
@@ -163,9 +184,13 @@ struct Shared {
     device: ID3D12Device,
     queue: ID3D12CommandQueue,
     swapchain: IDXGISwapChain4,
+    /// The swap chain's own context, owned by `AmdSwapChain`: asked what it holds.
+    swapchain_context: FfxContext,
     format: u32,
     ring: ListRing,
     generator: Option<Generator>,
+    /// Frames since the context was made, until its video memory is logged.
+    since_made: u32,
     frame_id: u64,
     prepared: bool,
     enabled: bool,
@@ -255,6 +280,7 @@ impl Shared {
         let mut context: Box<FfxContext> = Box::new(std::ptr::null_mut());
         check("creating the frame generation context", unsafe { (self.api.create_context)(&mut *context, &create.0.header, std::ptr::null()) })?;
         self.generator = Some(Generator { context, display, _create: create });
+        self.since_made = 0;
         log::info!("frame generation: AMD FSR 3 for {}x{}", display.0, display.1);
         Ok(())
     }
@@ -306,7 +332,26 @@ impl Shared {
         recorded?;
         self.frame_id += 1;
         self.prepared = true;
+        self.since_made += 1;
+        if self.since_made == MEMORY_LOGGED_AFTER {
+            self.log_memory();
+        }
         Ok(())
+    }
+
+    /// The video memory AMD's frame generation and its swap chain hold, as they say.
+    fn log_memory(&mut self) {
+        let Some(g) = self.generator.as_mut() else { return };
+        let mut ask = |context: *mut FfxContext, kind: u64| -> Option<u64> {
+            let mut usage = MemoryUsage::default();
+            let mut q = QueryMemory { header: Header::new(kind), usage: &mut usage };
+            (unsafe { (self.api.query)(context, &mut q.header) } == 0).then_some(usage.total)
+        };
+        let generation = ask(&mut *g.context, QUERY_FRAMEGENERATION_MEMORY);
+        let mut swapchain_context = self.swapchain_context;
+        let swapchain = ask(&mut swapchain_context, QUERY_SWAPCHAIN_MEMORY_DX12);
+        let mb = |b: Option<u64>| b.map_or_else(|| "?".to_string(), |b| format!("{:.0}", b as f64 / 1_048_576.0));
+        log::info!("frame generation: AMD's video memory {} MB for frame generation, {} MB for its swap chain", mb(generation), mb(swapchain));
     }
 }
 
@@ -489,7 +534,7 @@ impl OwnSwapChain {
                         return Err(e.context("frame generation's command lists"));
                     }
                 };
-                let shared = Shared { api, device: raw_device, queue, swapchain: swapchain.clone(), format: ffx, ring, generator: None, frame_id: 0, prepared: false, enabled: false, failed: false };
+                let shared = Shared { api, device: raw_device, queue, swapchain: swapchain.clone(), swapchain_context: *amd.context, format: ffx, ring, generator: None, since_made: 0, frame_id: 0, prepared: false, enabled: false, failed: false };
                 (swapchain, Generation::Amd(Arc::new(Mutex::new(shared))), Some(amd))
             }
             FrameGenerationKind::Dlss(frames) => {

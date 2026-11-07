@@ -189,6 +189,7 @@ type FnCreateContext = unsafe extern "C" fn(*mut FfxContext, *const Header, *con
 type FnDestroyContext = unsafe extern "C" fn(*mut FfxContext, *const c_void) -> u32;
 type FnDispatch = unsafe extern "C" fn(*mut FfxContext, *const Header) -> u32;
 type FnConfigure = unsafe extern "C" fn(*mut FfxContext, *const Header) -> u32;
+type FnQuery = unsafe extern "C" fn(*mut FfxContext, *mut Header) -> u32;
 
 pub(super) struct Api {
     _module: HMODULE,
@@ -196,6 +197,7 @@ pub(super) struct Api {
     pub(super) destroy_context: FnDestroyContext,
     pub(super) dispatch: FnDispatch,
     pub(super) configure: FnConfigure,
+    pub(super) query: FnQuery,
 }
 
 // (function pointers into a DLL loaded for the process's lifetime)
@@ -225,6 +227,7 @@ fn load_api(gpu: Gpu) -> Result<Api> {
         destroy_context: get(module, c"ffxDestroyContext")?,
         dispatch: get(module, c"ffxDispatch")?,
         configure: get(module, c"ffxConfigure")?,
+        query: get(module, c"ffxQuery")?,
         _module: module,
     })
 }
