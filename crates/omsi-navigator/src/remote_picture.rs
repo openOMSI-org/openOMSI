@@ -1,3 +1,4 @@
+use super::panel::PanelLook;
 use super::*;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -13,7 +14,7 @@ pub(crate) struct RemotePicture {
     want: Option<(u32, u32)>,
     t: f32,
     target: Option<(wgpu::Texture, wgpu::TextureView, u32, u32)>,
-    targets: omsi_ui::gpu::Targets,
+    targets: omsi_ui::Attachments,
     pending: Option<Readback>,
     copying: bool,
     copier: Option<(Sender<Readback>, Receiver<(wgpu::Buffer, RemoteFrame)>)>,
@@ -148,19 +149,13 @@ impl Navigator {
             self.remote_pic.target = Some((texture, view, w, h));
         }
         renderer.queue.submit(renderer.take_deferred_commands());
-        let saved = (self.framed.take(), self.schedule, self.widget, self.shown, self.cockpit_display);
-        (self.schedule, self.widget, self.shown, self.cockpit_display) = (false, false, 1.0, false);
         self.remote_pic.drawing = true;
-        if let Some(g) = self.gpu.as_mut() {
-            g.swap_targets(&mut self.remote_pic.targets);
-        }
+        let mut targets = std::mem::take(&mut self.remote_pic.targets);
         let view = self.remote_pic.target.as_ref().map(|t| t.1.clone()).unwrap();
-        self.draw(renderer, &view, (w, h), h as f32, f);
-        if let Some(g) = self.gpu.as_mut() {
-            g.swap_targets(&mut self.remote_pic.targets);
-        }
+        let look = PanelLook::remote((w, h));
+        self.draw(renderer, &view, (w, h), h as f32, &look, Some(&mut targets), f);
+        self.remote_pic.targets = targets;
         self.remote_pic.drawing = false;
-        (self.framed, self.schedule, self.widget, self.shown, self.cockpit_display) = saved;
         let Some(drawn) = self.remote_pic.commands.take() else { return };
         let row = (w * 4).div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT) * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
         let size = (row * h) as u64;
