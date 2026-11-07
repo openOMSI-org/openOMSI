@@ -394,6 +394,17 @@ impl Gpu {
         Vertices(buf, bytes)
     }
 
+    pub fn drop_vertices(&mut self, id: usize) {
+        if let Some(b) = self.buffers.get_mut(id) {
+            *b = (None, 0);
+        }
+    }
+
+    pub fn drop_targets(&mut self) {
+        self.msaa = None;
+        self.depth = None;
+    }
+
     pub fn put(&mut self, id: usize, v: Vertices) {
         while self.buffers.len() <= id {
             self.buffers.push((None, 0));

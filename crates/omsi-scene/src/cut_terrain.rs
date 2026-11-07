@@ -313,6 +313,10 @@ impl World {
                 }
                 for h in &ot.holes {
                     if !outside(&mesh_bounds(h, &pose.rot, pose.pos)) {
+                        // (a stray junction left at height zero dug a 30 m pit: Spandau, tile 2382/11287)
+                        if hole_is_buried(h, &pose.rot, pose.pos, &|x, y| Self::base_ground(&src, x, y)) {
+                            continue;
+                        }
                         ts.rasterize_hole(h, &pose.rot, pose.pos, tx, ty);
                         // and cut exactly along its rim, as along a spline's outline:
                         // by texel alone the ground stood a metre into the road at
@@ -688,6 +692,64 @@ impl World {
                 }
             }
         }
+    }
+}
+
+/// How far (m) under the ground a whole `[terrainhole]` cutter must lie to cut nothing.
+const BURIED_HOLE: f64 = 10.0;
+
+/// Whether the cutter lies wholly `BURIED_HOLE` under the ground (never where the ground is unknown).
+fn hole_is_buried(
+    hole: &MeshData,
+    rot: &Mat4,
+    pos: DVec3,
+    ground_at: &dyn Fn(f64, f64) -> Option<f64>,
+) -> bool {
+    if hole.positions.is_empty() {
+        return false;
+    }
+    let (mut top, mut ground) = (f64::NEG_INFINITY, f64::INFINITY);
+    for v in &hole.positions {
+        let w = rot.transform_point3(*v).as_dvec3() + pos;
+        let Some(g) = ground_at(w.x, w.y) else { return false };
+        top = top.max(w.z);
+        ground = ground.min(g);
+    }
+    top + BURIED_HOLE < ground
+}
+
+#[cfg(test)]
+mod buried_hole_tests {
+    use super::*;
+
+    fn square(z: f32) -> MeshData {
+        MeshData {
+            positions: vec![
+                glam::Vec3::new(-5.0, -5.0, z),
+                glam::Vec3::new(5.0, -5.0, z),
+                glam::Vec3::new(5.0, 5.0, z),
+                glam::Vec3::new(-5.0, 5.0, z),
+            ],
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_cutter_thirty_metres_down_is_buried_and_a_shallow_one_is_not() {
+        let ground = |_: f64, _: f64| Some(30.0);
+        let at = |z: f64| DVec3::new(100.0, 100.0, z);
+        assert!(hole_is_buried(&square(0.0), &Mat4::IDENTITY, at(0.0), &ground));
+        assert!(!hole_is_buried(&square(0.0), &Mat4::IDENTITY, at(25.0), &ground));
+        assert!(!hole_is_buried(&square(0.0), &Mat4::IDENTITY, at(30.0), &ground));
+        let mut slope = square(0.0);
+        slope.positions[0].z = 30.0;
+        assert!(!hole_is_buried(&slope, &Mat4::IDENTITY, at(0.0), &ground));
+    }
+
+    #[test]
+    fn a_cutter_where_the_ground_is_not_known_is_not_taken_for_buried() {
+        let nowhere = |_: f64, _: f64| None;
+        assert!(!hole_is_buried(&square(0.0), &Mat4::IDENTITY, DVec3::new(0.0, 0.0, -50.0), &nowhere));
     }
 }
 
