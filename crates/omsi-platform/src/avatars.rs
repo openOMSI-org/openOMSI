@@ -190,6 +190,9 @@ fn fetch(dir: &Path, part: &Path) -> anyhow::Result<()> {
 
 fn promote(new: &Path, dir: &Path) -> anyhow::Result<()> {
     let old = dir.with_extension("old");
+    if !dir.exists() && old.exists() {
+        std::fs::rename(&old, dir)?;
+    }
     let _ = std::fs::remove_dir_all(&old);
     if dir.exists() {
         std::fs::rename(dir, &old)?;
@@ -257,6 +260,20 @@ mod tests {
         super::promote(&new, &dir).unwrap();
         assert_eq!(super::version(&dir), 2);
         assert!(!new.exists() && !dir.with_extension("old").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_interrupted_upgrade_restores_the_backup() {
+        let dir = std::env::temp_dir().join(format!("omsi-avatars-interrupted-{}", std::process::id()));
+        let (new, old) = (dir.with_extension("unpacking"), dir.with_extension("old"));
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&new);
+        std::fs::create_dir_all(&old).unwrap();
+        std::fs::write(old.join("pack.json"), r#"{"version":1,"avatars":[]}"#).unwrap();
+        assert!(super::promote(&new, &dir).is_err());
+        assert_eq!(std::fs::read_to_string(dir.join("pack.json")).unwrap(), r#"{"version":1,"avatars":[]}"#);
+        assert!(!old.exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
