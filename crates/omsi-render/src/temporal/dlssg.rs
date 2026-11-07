@@ -42,7 +42,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Mutex;
 use windows::core::Interface;
 use windows::Win32::Foundation::{FreeLibrary, HMODULE};
-use windows::Win32::Graphics::Direct3D12::ID3D12Device;
+use windows::Win32::Graphics::Direct3D12::{ID3D12Device, ID3D12Fence};
 use windows::Win32::Graphics::Dxgi::{IDXGIFactory2, IDXGIFactory5};
 
 const DLSSG_OPTIONS: StructType = StructType { data1: 0xfac5f1cb, data2: 0x2dfd, data3: 0x4f36, data4: [0xa1, 0xe6, 0x3a, 0x9e, 0x86, 0x52, 0x56, 0xc5] };
@@ -395,6 +395,26 @@ pub(super) fn present(present: impl FnOnce()) {
             // (the frames presented since the last call: this one and the ones made after it)
             GENERATED.fetch_add(u64::from(state.num_frames_actually_presented.saturating_sub(1)), Ordering::Relaxed);
         }
+    }
+}
+
+/// Until Streamline's frame generation has read the inputs of the last frame presented
+/// (`DLSSGState::inputsProcessingCompletionFence`, which NVIDIA's guide has the game wait on before
+/// it destroys them). False when it cannot tell.
+pub(super) fn drain() -> bool {
+    let guard = session();
+    let Some(s) = guard.as_ref() else { return true };
+    let viewport = ViewportHandle { base: Base::new(VIEWPORT_HANDLE, 1), value: s.viewport.value };
+    let mut state = blank_state();
+    if unsafe { (s.get_state)(&viewport, &mut state, std::ptr::null()) } != 0 {
+        return false;
+    }
+    // (the frames presented since the last call, which the present counts otherwise)
+    GENERATED.fetch_add(u64::from(state.num_frames_actually_presented.saturating_sub(1)), Ordering::Relaxed);
+    let raw = state.inputs_processing_completion_fence;
+    match unsafe { ID3D12Fence::from_raw_borrowed(&raw) } {
+        Some(fence) => super::d3d12::wait_fence(fence, state.last_present_inputs_processing_completion_fence_value),
+        None => false,
     }
 }
 

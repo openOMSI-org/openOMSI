@@ -276,7 +276,8 @@ impl Renderer {
 
     fn rebuild_in_place(&mut self, scene: &mut Scene, options: RenderOptions) {
         // (frame generation reads the depth, the motion and the picture before the HUD when the
-        // window presents, on the vendor's queues, after wgpu is done with them: it keeps them)
+        // window presents, on the vendor's queues, after wgpu is done with them: they are waited
+        // for before these go)
         if let Some(g) = &self.frame_generation {
             g.pause();
             g.hold(self.temporal_generation_inputs());

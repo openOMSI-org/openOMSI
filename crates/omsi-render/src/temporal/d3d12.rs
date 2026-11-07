@@ -5,6 +5,11 @@ use windows::core::Interface;
 use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Graphics::Direct3D12::*;
 
+/// Until `fence` reaches `value` (at once after a device is lost: its fences read the most).
+pub(super) fn wait_fence(fence: &ID3D12Fence, value: u64) -> bool {
+    unsafe { fence.GetCompletedValue() >= value || fence.SetEventOnCompletion(value, HANDLE::default()).is_ok() }
+}
+
 pub(super) fn game_dir() -> std::path::PathBuf {
     omsi_cfg::upscaler_files::program_dir()
 }

@@ -134,6 +134,7 @@ const CREATE_SWAPCHAIN_FOR_HWND_DX12: u64 = 0x0003_0006;
 const CREATE_SWAPCHAIN_VERSION_DX12: u64 = 0x0003_000b;
 const QUERY_FRAMEGENERATION_MEMORY: u64 = 0x0002_0007;
 const QUERY_SWAPCHAIN_MEMORY_DX12: u64 = 0x0003_0009;
+const DISPATCH_SWAPCHAIN_WAIT_FOR_PRESENTS_DX12: u64 = 0x0003_0007;
 /// Frames frame generation has run before what AMD's context and swap chain hold is logged:
 /// some of it is made only once it works.
 const MEMORY_LOGGED_AFTER: u32 = 60;
@@ -204,17 +205,13 @@ unsafe impl Send for Shared {}
 #[derive(Clone)]
 pub struct FrameGeneration(Generation, Arc<Mutex<Held>>);
 
-/// Textures the renderer let go of that frame generation may still read after a present, on the
-/// vendor's own queues, which `wait_gpu` does not wait for (`FrameGeneration::hold`).
+/// Textures the renderer let go of while the vendor's own queues, which `wait_gpu` does not wait
+/// for, could not be shown done with them (`FrameGeneration::hold`): kept until the window's swap
+/// chain is gone.
 #[derive(Default)]
 struct Held {
     textures: Vec<wgpu::Texture>,
-    /// Presents to go before they are let go of.
-    presents: u32,
 }
-
-/// Presents after which nothing of an earlier frame is read any more (the vendors queue a few).
-const HELD_PRESENTS: u32 = 8;
 
 #[derive(Clone)]
 enum Generation {
@@ -339,10 +336,18 @@ impl Shared {
         Ok(())
     }
 
+    /// Until the swap chain's presents and the frames it made for them are done
+    /// (`ffxDispatchDescFrameGenerationSwapChainWaitForPresentsDX12`).
+    fn wait_for_presents(&mut self) -> bool {
+        let header = Header::new(DISPATCH_SWAPCHAIN_WAIT_FOR_PRESENTS_DX12);
+        let mut context = self.swapchain_context;
+        unsafe { (self.api.dispatch)(&mut context, &header) == 0 }
+    }
+
     /// The video memory AMD's frame generation and its swap chain hold, as they say.
     fn log_memory(&mut self) {
         let Some(g) = self.generator.as_mut() else { return };
-        let mut ask = |context: *mut FfxContext, kind: u64| -> Option<u64> {
+        let ask = |context: *mut FfxContext, kind: u64| -> Option<u64> {
             let mut usage = MemoryUsage::default();
             let mut q = QueryMemory { header: Header::new(kind), usage: &mut usage };
             (unsafe { (self.api.query)(context, &mut q.header) } == 0).then_some(usage.total)
@@ -387,21 +392,18 @@ impl FrameGeneration {
         }
     }
 
-    /// The renderer lets go of `textures` (a rebuild) that frame generation may still read after
-    /// a present: kept for some more presents, or until the window's swap chain is gone.
+    /// The renderer lets go of `textures` (a rebuild, after `pause`) that frame generation may
+    /// still read on the vendor's own queues: they are waited for first, AMD's swap chain until
+    /// its presents are done, Streamline until it has read the last frame's inputs. When that
+    /// cannot be told the textures are kept until the window's swap chain is gone.
     pub(crate) fn hold(&self, textures: Vec<wgpu::Texture>) {
-        let mut h = self.1.lock().unwrap_or_else(|e| e.into_inner());
-        h.textures.extend(textures);
-        h.presents = HELD_PRESENTS;
-    }
-
-    fn presented(&self) {
-        let mut h = self.1.lock().unwrap_or_else(|e| e.into_inner());
-        if h.presents > 0 {
-            h.presents -= 1;
-            if h.presents == 0 {
-                h.textures.clear();
-            }
+        let drained = match &self.0 {
+            Generation::Amd(s) => s.lock().unwrap_or_else(|e| e.into_inner()).wait_for_presents(),
+            Generation::Dlss => super::dlssg::drain(),
+        };
+        if !drained {
+            log::warn!("frame generation: the vendor's queues could not be waited for; the textures it read are kept until its swap chain goes");
+            self.1.lock().unwrap_or_else(|e| e.into_inner()).textures.extend(textures);
         }
     }
 
@@ -605,7 +607,6 @@ impl OwnSwapChain {
             }
             Generation::Dlss => super::dlssg::present(present),
         }
-        self.generation.presented();
     }
 
     /// New buffers for a window of `size`: the old ones go first and the GPU is waited for, as
