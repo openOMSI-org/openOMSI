@@ -26532,6 +26532,7 @@ _version: 2
   pl: "Cienie latarni"
   nl: "Schaduwen van straatlantaarns"
   ca: "Ombres dels fanals"
+  sr: "Senke uličnih svetiljki"
 
 "OMSI's shadow meshes (under vehicles)":
   ca: "Malles d'ombra d'OMSI (sota els vehicles)"
@@ -31776,7 +31777,7 @@ _version: 2
   zh: "交换"
   nl: "Wisselen"
   sv: "Byt"
-  sr: "Svap"
+  sr: "Zameni"
   ru: "Заменить"
   ka: "გაცვლა"
 "Swap for another vehicle":
@@ -44296,6 +44297,7 @@ _version: 2
   pt: "O programa openomsi que executa as escalas. Se ficar vazio, é usado o que está ao lado do launcher."
   pt-pt: "O programa openomsi que executa as escalas. Se ficar vazio, é usado o que está ao lado do launcher."
   ka: "openomsi პროგრამა, რომლითაც რეისები იწყება. თუ ცარიელია, გამოიყენება გამშვების გვერდით მდებარე."
+  sr: "Program openOMSI-ja kojim se pokreću ture. Ako polje ostane prazno, koristi se program iz foldera pokretača."
 
 "Choose the game program":
   es: "Elige el programa del juego"
@@ -102110,6 +102112,7 @@ _version: 2
   ka: "ამ გაჩერებაზე ჩერდება მგზავრობები: {n}"
 "Washing...":
   zh-tw: "正在洗車……"
+  sr: "Pranje…"
 "With FSR 1 it changes at once":
   be: "З FSR 1 змяняецца адразу"
   ca: "Amb FSR 1 canvia a l'instant"
