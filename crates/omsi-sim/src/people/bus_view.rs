@@ -65,12 +65,20 @@ impl PeopleSim {
         // See `shown_terminus_row`.
         let terminus = match (v.host.hof.as_ref(), v.var("target_index_int")) {
             (Some(hof), script) => {
+                let reports_destination = script.is_some()
+                    || v.var("IBIS_TerminusCode").is_some()
+                    || v.var("IBIS_TerminusIndex").is_some();
                 let code = v.var("IBIS_TerminusCode").filter(|c| c.is_finite() && *c >= 0.0).map(|c| c.round() as i32);
                 let index = v.var("IBIS_TerminusIndex").filter(|i| i.is_finite() && *i >= 0.0).map(|i| i.round() as usize);
                 let script = script.filter(|i| i.is_finite() && *i >= 0.0).map(|i| i.round() as usize);
                 match shown_terminus_row(&hof.termini, code, index, script) {
-                    Some(i) => Some(hof.termini.get(i).filter(|t| !t.all_exit).map(|t| t.texture_id.trim().to_string())),
-                    None if script.is_none() => None,
+                    Some(i) => Some(
+                        hof.termini
+                            .get(i)
+                            .filter(|t| !t.all_exit && !t.texture_id.trim().is_empty())
+                            .map(|t| t.texture_id.trim().to_string()),
+                    ),
+                    None if !reports_destination => None,
                     None => Some(None),
                 }
             }

@@ -550,9 +550,9 @@ pub struct StopPlan {
 pub enum Takes {
     /// Those whose line record lists its terminus, as in Omsi.exe: a timetable bus.
     Terminus,
-    /// The player's bus on a duty: those as well whom its trip takes where they are going,
-    /// however the bus's depot file spells the terminus. `next` is the stop of the trip the
-    /// duty is due at, `done` that the trip has reached its last stop.
+    /// Compatibility fallback for a player's bus whose scripts expose no destination:
+    /// those as well whom its duty takes where they are going. `next` is the stop of the
+    /// trip the duty is due at, `done` that the trip has reached its last stop.
     Duty { trip: Arc<DutyTrip>, next: usize, done: bool },
     /// Nobody waiting: another player's bus (their game boards it), a bus the player left
     /// standing (its riders get off as ever).
@@ -692,8 +692,8 @@ pub fn best_bus(buses: impl Iterator<Item = (BusId, Fit, f64)>) -> Option<(BusId
 /// Omsi.exe compares the names alone: the destination the bus's depot file gives it with
 /// the timetable's termini. A depot file that spells them another way (another case, a
 /// shortened name, the terminus of another variant of the line, a file made for another
-/// map) left the people at every stop of a duty waiting for another bus. The duty knows
-/// the trip: whoever it takes where they are going gets on.
+/// map) left the people at every stop of a duty waiting for another bus. Only buses whose
+/// scripts expose no destination use the duty fallback; a reported sign always wins.
 pub fn fit(id: i64, stop: &PaxStop, dest: Option<&str>, termini: &HashSet<String>, terminus: &str, takes: &Takes) -> Option<Fit> {
     if termini.contains(terminus.trim()) || without_route(terminus).is_some_and(|t| termini.contains(t)) {
         return Some(Fit::Terminus);
