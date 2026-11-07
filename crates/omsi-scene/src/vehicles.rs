@@ -589,9 +589,6 @@ impl World {
         lod: bool,
     ) -> VehicleRender {
         let mut gpu = self.gpu.lock();
-        let blank = |gpu: &mut GpuCache, scene: &mut Scene, w: i32, h: i32| {
-            Some(gpu.add_blank(renderer, scene, w.max(1) as u32, h.max(1) as u32))
-        };
         let blank_text = |gpu: &mut GpuCache, scene: &mut Scene, w: i32, h: i32| {
             Some(gpu.add_blank_mips(renderer, scene, w.max(1) as u32, h.max(1) as u32))
         };
@@ -607,11 +604,8 @@ impl World {
             .collect();
         let script_textures: Vec<Option<TextureId>> = match shared_script {
             Some(s) => s.to_vec(),
-            None => vt
-                .model
-                .script_textures
-                .iter()
-                .map(|(w, h)| blank(&mut gpu, scene, *w, *h))
+            None => (0..vt.model.script_textures.len())
+                .map(|i| Some(gpu.add_script_slot(renderer, scene, &vt.model, i)))
                 .collect(),
         };
         let mut instances = Vec::new();

@@ -3,6 +3,7 @@ mod json;
 mod layouts;
 pub mod nav;
 mod pairing;
+mod picture;
 mod queue;
 mod server;
 mod session;
@@ -82,6 +83,7 @@ pub(crate) struct Shared {
     pub drive: Mutex<Option<Drive>>,
     pub unpaired: Mutex<HashMap<std::net::IpAddr, usize>>,
     pub trusted: Mutex<std::collections::HashSet<std::net::IpAddr>>,
+    pub pictures: Arc<picture::Pictures>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -125,6 +127,7 @@ pub struct Remote {
     shared: Arc<Shared>,
     port: u16,
     last_state: serde_json::Value,
+    map_tx: Option<std::sync::mpsc::SyncSender<picture::Raw>>,
 }
 
 impl Remote {
@@ -149,11 +152,13 @@ impl Remote {
             drive: Mutex::new(None),
             unpaired: Mutex::new(HashMap::new()),
             trusted: Mutex::default(),
+            pictures: Arc::default(),
         });
         shared.rebuild_vehicle();
         let port = server::start(port, shared.clone())?;
         log::info!("remote cockpit: listening on port {port}");
-        Ok(Remote { shared, port, last_state: serde_json::Value::Null })
+        let map_tx = picture::encoder(shared.pictures.clone());
+        Ok(Remote { shared, port, last_state: serde_json::Value::Null, map_tx })
     }
 
     pub fn port(&self) -> u16 {
@@ -254,6 +259,16 @@ impl Remote {
                 c.2 += 1;
             }
             None => f.channels.push((channel, Arc::new(message), 1)),
+        }
+    }
+
+    pub fn map_wanted(&self) -> Option<(u32, u32)> {
+        self.shared.pictures.largest()
+    }
+
+    pub fn set_map_picture(&self, w: u32, h: u32, row: u32, bgra: bool, data: Vec<u8>) {
+        if let Some(tx) = self.map_tx.as_ref() {
+            let _ = tx.try_send(picture::Raw { w, h, row, bgra, data });
         }
     }
 

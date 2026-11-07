@@ -1276,3 +1276,25 @@ html.phone .ail-tick { width: 28px; height: 28px; }
   .connection-dialog .multiplayer-code-row .btn { width: 100%; }
   .servers-page .card-body.row > .grow { flex-basis: calc(100% - 64px); }
 }
+
+/* Release notes: "What's new" and the update offer. */
+.changelog { display: flex; flex-direction: column; gap: 6px; max-height: min(62vh, 560px); overflow: auto; margin: 0 -8px; padding: 0 8px; }
+.changelog details { border-radius: var(--radius-sm); background: var(--surface-2); }
+.changelog summary { display: flex; align-items: center; gap: 10px; padding: 10px 12px; cursor: pointer; list-style: none; }
+.changelog summary::-webkit-details-marker { display: none; }
+.changelog summary::before { content: '›'; color: var(--muted); transition: transform 0.15s; }
+.changelog details[open] summary::before { transform: rotate(90deg); }
+.changelog details > .notes { padding: 0 14px 12px 30px; }
+.update-notes { max-height: min(34vh, 280px); overflow: auto; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.notes { font-size: 13px; line-height: 1.5; color: var(--text-2); overflow-wrap: anywhere; }
+.notes p, .notes ul, .notes blockquote { margin: 0 0 8px; }
+.notes ul { padding-left: 18px; }
+.notes li { margin: 2px 0; }
+.notes b { color: var(--text); }
+.notes code { font-size: 12px; padding: 1px 4px; border-radius: 3px; background: var(--surface-3); }
+.notes a { color: var(--accent); }
+.notes blockquote { padding: 6px 10px; border-left: 3px solid var(--line); color: var(--muted); }
+.notes .notes-h1, .notes .notes-h2, .notes .notes-h3 { margin: 10px 0 4px; font-weight: 600; color: var(--text); }
+.notes .notes-h1 { font-size: 15px; }
+.notes .notes-h2 { font-size: 14px; }
+.notes > :last-child { margin-bottom: 0; }
