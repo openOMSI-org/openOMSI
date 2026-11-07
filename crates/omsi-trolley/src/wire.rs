@@ -308,6 +308,7 @@ struct RawSwitch {
     sense: f32,
     invert: bool,
     initial_branch: bool,
+    initial_random: bool,
     routes: Vec<(u32, SwitchWay)>,
     channel: Option<u32>,
     radio_range: f32,
@@ -345,7 +346,7 @@ impl WireNet {
     /// trigger 9              plate this far before the frog (m)
     /// sense 12               current counted as power on (A)
     /// invert 0
-    /// initial straight
+    /// initial straight      straight | branch | random (drawn each time the wire loads)
     /// route 158 branch       radio: route code 158 takes the branch (straight|branch|left|right)
     /// channel 2              radio: only vehicles sending on channel 2 set it
     ///
@@ -394,7 +395,7 @@ impl WireNet {
                 match block.as_str() {
                     "trolley_section" => sec = Some(Section { id: sections.len() as i32 + 1, name: String::new(), live: true, regen_kw: 0.0, feeder_ohm: 0.05 }),
                     "trolley_span" => spans.push(RawSpan { section: 0, spacing: None, pts: Vec::new() }),
-                    "trolley_switch" => switches.push(RawSwitch { name: String::new(), pos: DVec3::ZERO, mode: SwitchMode::Power, trigger: 9.0, sense: 12.0, invert: false, initial_branch: false, routes: Vec::new(), channel: None, radio_range: 150.0 }),
+                    "trolley_switch" => switches.push(RawSwitch { name: String::new(), pos: DVec3::ZERO, mode: SwitchMode::Power, trigger: 9.0, sense: 12.0, invert: false, initial_branch: false, initial_random: false, routes: Vec::new(), channel: None, radio_range: 150.0 }),
                     "trolley_insulator" => insulator = Some((DVec3::ZERO, DEFAULT_INSULATOR)),
                     _ => {}
                 }
@@ -461,7 +462,7 @@ impl WireNet {
                             "trigger" => s.trigger = n.first().copied().unwrap_or(9.0).clamp(0.5, 60.0) as f32,
                             "sense" => s.sense = n.first().copied().unwrap_or(12.0).max(0.0) as f32,
                             "invert" => s.invert = !matches!(first, "0" | "false" | "no" | "off"),
-                            "initial" => s.initial_branch = first.eq_ignore_ascii_case("branch"),
+                            "initial" => (s.initial_branch, s.initial_random) = (first.eq_ignore_ascii_case("branch"), first.eq_ignore_ascii_case("random")),
                             "route" => {
                                 let way = match w.get(2).map(|x| x.to_ascii_lowercase()).as_deref() {
                                     Some("straight") => Some(SwitchWay::Straight),
@@ -653,7 +654,8 @@ impl WireNet {
                 sense_amps: r.sense,
                 invert: r.invert,
                 branch_right,
-                initial_branch: r.initial_branch,
+                // RandomState is seeded per process and per call: a fresh draw each load, once, off the frame path
+                initial_branch: r.initial_branch || (r.initial_random && std::hash::BuildHasher::hash_one(&std::collections::hash_map::RandomState::new(), ni) & 1 == 1),
                 routes: r.routes.clone(),
                 channel: r.channel,
                 radio_range: r.radio_range,
@@ -1203,6 +1205,14 @@ mod tests {
         let curl = &n.spans[1];
         assert_ne!(curl.ends[0], curl.ends[1], "both ends in one node");
         assert!(curl.len() > 4.0);
+    }
+
+    #[test]
+    fn a_random_initial_switch_starts_either_way() {
+        let net = |way: &str| WireNet::parse(&format!("[trolley_section]\nid 1\nlive 1\n[trolley_span]\nsection 1\np 0 0 5.5\np 50 0 5.5\n[trolley_span]\nsection 1\np 50 0 5.5\np 100 0 5.5\n[trolley_span]\nsection 1\np 50 0 5.5\np 90 20 5.5\n[trolley_switch]\npos 50 0 5.5\ninitial {way}\n"));
+        assert!(net("branch").switch_branch(0) && !net("straight").switch_branch(0));
+        let draws: Vec<bool> = (0..64).map(|_| net("random").switch_branch(0)).collect();
+        assert!(draws.contains(&true) && draws.contains(&false));
     }
 
     #[test]
