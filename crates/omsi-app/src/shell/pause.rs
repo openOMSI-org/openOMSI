@@ -11,6 +11,7 @@
 pub(crate) mod navigation;
 pub(crate) mod search;
 mod navigation_ui;
+pub(crate) mod online_ui;
 mod quick_actions_ui;
 pub(crate) mod quick_actions;
 
@@ -41,6 +42,7 @@ const LIST_ROW: f32 = 40.0;
 pub(crate) struct ListView<'a> {
     pub kind: MenuKind,
     pub head: Option<(String, String)>,
+    pub badge: Option<usize>,
     pub tabs: Option<(Vec<String>, usize)>,
     /// (what it does, what it shows)
     pub items: Vec<(&'a str, &'a str)>,
@@ -70,6 +72,7 @@ pub(crate) struct PauseView<'a> {
     pub keys: bool,
     /// What the home page sums up of the session.
     pub summary: Summary,
+    pub online: online_ui::View,
 }
 
 /// The session as the pause menu's sidebar shows it: the bus and the driver.
@@ -100,7 +103,7 @@ pub(crate) fn rail_icon(id: &str) -> &'static str {
         "load" => "history",
         "copycode" => "content_copy",
         "admin" => "key",
-        "players" => "group",
+        "players" | "multiplayer" => "group",
         "plugin" => "extension",
         "quit" => "logout",
         _ => "chevron_right",
@@ -116,9 +119,27 @@ fn plain(label: &str) -> (&str, bool) {
     }
 }
 
+fn count_badge_rect(title_width: f32, badge_width: f32, title_x: f32, right: f32, y: f32) -> Option<Rect> {
+    let x = title_x + title_width + 12.0;
+    (x + badge_width <= right).then(|| Rect::new(x, y + 9.0, badge_width, 22.0))
+}
+
 pub(crate) fn draw(sh: &mut Shell, v: &PauseView) {
+    if sh.pause_category != navigation::Category::Online {
+        sh.pause_online.confirm = None;
+        sh.pause_online.management = None;
+    }
+    let saved_click = (sh.ui.input.pressed, sh.ui.input.released);
+    let management_open = sh.pause_online.management.is_some();
+    let saved_wheel = sh.ui.input.wheel;
+    if management_open { sh.ui.input.wheel = Vec2::ZERO; }
+    if sh.pause_online.confirm.is_some() || management_open {
+        sh.ui.input.pressed = false;
+        sh.ui.input.released = false;
+    }
+
     if !v.list.as_ref().is_some_and(|list| list.kind == MenuKind::Options) {
-        if search::focused(sh) { sh.ui.focus = None; }
+        if sh.ui.focus == Some(id_of("pause-settings-search")) { sh.ui.focus = None; }
         sh.settings_search = Default::default();
     }
     let size = sh.ui.size;
@@ -147,6 +168,12 @@ pub(crate) fn draw(sh: &mut Shell, v: &PauseView) {
     if sidebar {
         navigation_ui::rail(sh, v);
     }
+    (sh.ui.input.pressed, sh.ui.input.released) = saved_click;
+    if management_open {
+        sh.ui.input.wheel = saved_wheel;
+        online_ui::management_modal(sh, &v.online);
+    }
+    online_ui::confirmation(sh);
 }
 
 /// The launcher's tabs: the titles in a row, the chosen one in the text colour over an amber
@@ -200,6 +227,15 @@ fn list_page(sh: &mut Shell, v: &PauseView, list: &ListView, page: Rect) {
         area.w - 46.0
     };
     sh.ui.text_in(&title, Rect::new(tx, area.y + 4.0, title_width, 34.0), 26.0, Weight::Bold, th().ink, Align::Left);
+    if let Some(count) = list.badge {
+        let text = count.to_string();
+        let badge_width = (sh.ui.width(&text, 12.0, Weight::Medium) + 16.0).max(24.0);
+        let title_width = sh.ui.width(&title, 26.0, Weight::Bold);
+        if let Some(badge) = count_badge_rect(title_width, badge_width, tx, area.right(), area.y) {
+            sh.ui.p().rounded(badge, 6.0, th().accent.alpha(0.16));
+            sh.ui.text_in(&text, badge, 12.0, Weight::Medium, th().accent, Align::Center);
+        }
+    }
     let sub = if sub.is_empty() { list_hint(list.kind) } else { sub };
     if !sub.is_empty() {
         sh.ui.text_in(&sub, Rect::new(tx, area.y + 36.0, title_width, 20.0), 13.0, Weight::Regular, th().ink_muted, Align::Left);
@@ -232,7 +268,7 @@ fn list_page(sh: &mut Shell, v: &PauseView, list: &ListView, page: Rect) {
     }
     let mut anchor: Option<Rect> = None;
     match list.kind {
-        MenuKind::Options => settings_rows(sh, v, list, body, &mut anchor),
+        MenuKind::Options | MenuKind::Sections => settings_rows(sh, v, list, body, &mut anchor),
         MenuKind::Lines | MenuKind::Tours => timetable_lists(sh, v, list, body),
         _ => plain_list(sh, v, list, body),
     }
@@ -737,6 +773,13 @@ fn preview(sh: &mut Shell, p: &Preview, list: &ListView, r: Rect) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn player_count_badge_follows_the_title_without_overflowing() {
+        let badge = count_badge_rect(120.0, 28.0, 100.0, 400.0, 10.0).unwrap();
+        assert_eq!(badge, Rect::new(232.0, 19.0, 28.0, 22.0));
+        assert!(count_badge_rect(250.0, 28.0, 100.0, 370.0, 10.0).is_none());
+    }
 
     #[test]
     fn a_label_that_opens_more_loses_its_dots() {

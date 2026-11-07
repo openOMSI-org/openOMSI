@@ -732,6 +732,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             list_dirty: false,
             graphics_before: None,
             page_titles: Default::default(),
+            online_weather: Default::default(),
             chooser: None,
             editor: None,
             vehicle_list: Vec::new(),
