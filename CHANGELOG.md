@@ -8,6 +8,7 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **AI reaction time**: the new `ai_reaction` setting (50 to 200 %, default 100 %, in the launcher's Traffic settings) scales how long the AI drivers wait before moving off, so a queue at a light pulls away closer together at a lower value. It never goes under 0.4 s, the shortest reaction the junction code is built for (#3793).
 - **What's new in the launcher**: after an update the launcher shows the notes of every
   version since the one last seen, opened, and the others folded below them; *What's new*
   beside *Check now* (Settings) opens them at any time, and the offer of an update shows that
