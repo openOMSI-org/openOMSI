@@ -176,6 +176,8 @@ pub struct SwitchDef {
     /// The branch leaves to the right, seen from the toe.
     pub branch_right: bool,
     pub initial_branch: bool,
+    /// `initial random`: straight until [`WireNet::draw_random_switches`] picks a way.
+    pub initial_random: bool,
     /// Radio switches: the way each route code takes, and the only channel heard (none: all).
     pub routes: Vec<(u32, SwitchWay)>,
     pub channel: Option<u32>,
@@ -307,8 +309,7 @@ struct RawSwitch {
     trigger: f32,
     sense: f32,
     invert: bool,
-    initial_branch: bool,
-    initial_random: bool,
+    initial: String,
     routes: Vec<(u32, SwitchWay)>,
     channel: Option<u32>,
     radio_range: f32,
@@ -346,7 +347,7 @@ impl WireNet {
     /// trigger 9              plate this far before the frog (m)
     /// sense 12               current counted as power on (A)
     /// invert 0
-    /// initial straight      straight | branch | random (drawn each time the wire loads)
+    /// initial straight       straight | branch | random (see draw_random_switches)
     /// route 158 branch       radio: route code 158 takes the branch (straight|branch|left|right)
     /// channel 2              radio: only vehicles sending on channel 2 set it
     ///
@@ -395,7 +396,11 @@ impl WireNet {
                 match block.as_str() {
                     "trolley_section" => sec = Some(Section { id: sections.len() as i32 + 1, name: String::new(), live: true, regen_kw: 0.0, feeder_ohm: 0.05 }),
                     "trolley_span" => spans.push(RawSpan { section: 0, spacing: None, pts: Vec::new() }),
-                    "trolley_switch" => switches.push(RawSwitch { name: String::new(), pos: DVec3::ZERO, mode: SwitchMode::Power, trigger: 9.0, sense: 12.0, invert: false, initial_branch: false, initial_random: false, routes: Vec::new(), channel: None, radio_range: 150.0 }),
+                    "trolley_switch" => switches.push(RawSwitch {
+                        name: String::new(), pos: DVec3::ZERO, mode: SwitchMode::Power,
+                        trigger: 9.0, sense: 12.0, invert: false, initial: String::new(),
+                        routes: Vec::new(), channel: None, radio_range: 150.0,
+                    }),
                     "trolley_insulator" => insulator = Some((DVec3::ZERO, DEFAULT_INSULATOR)),
                     _ => {}
                 }
@@ -462,7 +467,7 @@ impl WireNet {
                             "trigger" => s.trigger = n.first().copied().unwrap_or(9.0).clamp(0.5, 60.0) as f32,
                             "sense" => s.sense = n.first().copied().unwrap_or(12.0).max(0.0) as f32,
                             "invert" => s.invert = !matches!(first, "0" | "false" | "no" | "off"),
-                            "initial" => (s.initial_branch, s.initial_random) = (first.eq_ignore_ascii_case("branch"), first.eq_ignore_ascii_case("random")),
+                            "initial" => s.initial = first.to_ascii_lowercase(),
                             "route" => {
                                 let way = match w.get(2).map(|x| x.to_ascii_lowercase()).as_deref() {
                                     Some("straight") => Some(SwitchWay::Straight),
@@ -654,8 +659,8 @@ impl WireNet {
                 sense_amps: r.sense,
                 invert: r.invert,
                 branch_right,
-                // RandomState is seeded per process and per call: a fresh draw each load, once, off the frame path
-                initial_branch: r.initial_branch || (r.initial_random && std::hash::BuildHasher::hash_one(&std::collections::hash_map::RandomState::new(), ni) & 1 == 1),
+                initial_branch: r.initial == "branch",
+                initial_random: r.initial == "random",
                 routes: r.routes.clone(),
                 channel: r.channel,
                 radio_range: r.radio_range,
@@ -876,6 +881,17 @@ impl WireNet {
 
     pub fn switch_branch(&self, sw: usize) -> bool {
         self.dynamic.lock().unwrap().branch.get(sw).copied().unwrap_or(false)
+    }
+
+    /// Each `initial random` switch takes a way at random, without a movement or its sound.
+    /// The caller decides when: the players of an online game do not share this draw.
+    pub fn draw_random_switches(&mut self) {
+        let d = self.dynamic.get_mut().unwrap();
+        for (i, s) in self.switches.iter_mut().enumerate().filter(|(_, s)| s.initial_random) {
+            let draw = std::collections::hash_map::RandomState::new();
+            s.initial_branch = std::hash::BuildHasher::hash_one(&draw, i) & 1 == 1;
+            d.branch[i] = s.initial_branch;
+        }
     }
 
     pub fn set_switch(&self, sw: usize, branch: bool) {
@@ -1205,14 +1221,6 @@ mod tests {
         let curl = &n.spans[1];
         assert_ne!(curl.ends[0], curl.ends[1], "both ends in one node");
         assert!(curl.len() > 4.0);
-    }
-
-    #[test]
-    fn a_random_initial_switch_starts_either_way() {
-        let net = |way: &str| WireNet::parse(&format!("[trolley_section]\nid 1\nlive 1\n[trolley_span]\nsection 1\np 0 0 5.5\np 50 0 5.5\n[trolley_span]\nsection 1\np 50 0 5.5\np 100 0 5.5\n[trolley_span]\nsection 1\np 50 0 5.5\np 90 20 5.5\n[trolley_switch]\npos 50 0 5.5\ninitial {way}\n"));
-        assert!(net("branch").switch_branch(0) && !net("straight").switch_branch(0));
-        let draws: Vec<bool> = (0..64).map(|_| net("random").switch_branch(0)).collect();
-        assert!(draws.contains(&true) && draws.contains(&false));
     }
 
     #[test]

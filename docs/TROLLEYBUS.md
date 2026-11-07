@@ -190,7 +190,7 @@ mode radio             power | indicator | radio | fixed
 trigger 9              power/indicator: contact plate distance before the frog (m); ignored by radio
 sense 12               the current that counts as power on (A)
 invert 0
-initial straight       straight | branch | random (drawn anew each time the wire loads)
+initial straight       straight | branch | random (see below)
 route 158 branch       radio: route code 158 takes the branch (straight | branch | left | right)
 channel 2              radio: only vehicles sending on channel 2 set it
 range 150              radio: reception radius (m, 1..1000, default 150); never a contact plate
@@ -210,6 +210,12 @@ needs a joint of exactly three spans; which one is the toe (the single side) and
 straight or to the side is worked out from their directions. A pole can follow the wire through
 a joint, a switch and across spans, and a crossing of two wires that do not share a joint is not
 a connection.
+
+A switch with `initial random` takes a way at random when the game first reads the map's wire.
+The game keeps that network until it quits, so placing a vehicle again or reloading the same map
+keeps the positions the switches have by then; a new draw needs a restart. In an online game
+(serving, hosting or joining) the players' switches are not synchronized, so `initial random`
+switches start straight there, the same for everyone.
 
 The wire's masts and hangers are the map's own objects: the game draws the two wires (8.5 mm
 thick) and nothing else, whatever vehicle is driven (a bus or a car sees the wire too; a map
