@@ -455,15 +455,18 @@ const App = {
     video.setAttribute("playsinline", "");
     video.src = AWAKE_VIDEO;
     let lock = null;
+    let shown = true;
+    const play = () => { if (shown && !document.hidden) video.play().catch(() => {}); };
     const hold = () => {
       if (document.hidden) return video.pause();
+      shown = true;
       if (navigator.wakeLock) {
-        if (!lock) navigator.wakeLock.request("screen").then((l) => { lock = l; l.onrelease = () => (lock = null); }).catch(() => video.play().catch(() => {}));
-      } else if (video.paused) video.play().catch(() => {});
+        if (!lock) navigator.wakeLock.request("screen").then((l) => { lock = l; l.onrelease = () => (lock = null); }).catch(play);
+      } else if (video.paused) play();
     };
     document.addEventListener("pointerdown", hold, true);
     document.addEventListener("visibilitychange", hold);
-    addEventListener("pagehide", () => video.pause());
+    addEventListener("pagehide", () => { shown = false; video.pause(); });
     hold();
   },
 
