@@ -265,6 +265,7 @@ impl App {
             if nav_hidden {
                 nav.enabled = false;
             }
+            nav.set_screen(p.and_then(|p| navigator::Screen::of_vehicle(&p.vehicle, &p.render)));
             if let Some(w) = self.world.as_ref() {
                 nav.start_map(w.clone());
             }

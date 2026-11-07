@@ -4141,6 +4141,7 @@ dependencies = [
  "omsi-lan",
  "omsi-map",
  "omsi-mapdraw",
+ "omsi-model",
  "omsi-render",
  "omsi-scene",
  "omsi-sim",
