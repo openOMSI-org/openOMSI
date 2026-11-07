@@ -128,7 +128,7 @@ impl Pose {
         let trunk_yaw = -pelvis_yaw * 1.7
             - d((self.head.x.clamp(-90.0, 90.0) * 0.42).clamp(-30.0, 30.0)) * (1.0 - walk) * (1.0 - self.reach)
             + reach_twist;
-        let trunk_lean = d((3.0 + 2.0 * self.style[3]) * walk + lean_acc)
+        let trunk_lean = d((3.0 + 2.0 * self.style[3]) * walk + 1.5 * self.style[3] + lean_acc)
             + d(34.0) * bump
             + d(12.0 - 4.0) * s_ease
             + d(0.7) * breath
@@ -143,7 +143,7 @@ impl Pose {
         let trunk_rot = pelvis_q * trunk_q;
         // the head: level, turned towards what it looks at, within its limits
         // (it follows half of a deep forward lean)
-        let head_pitch = self.head.y.clamp(-38.0, 28.0) + 2.0 * self.style[1]
+        let head_pitch = self.head.y.clamp(-38.0, 28.0) + 4.0 * self.style[1]
             - 0.5 * trunk_lean.to_degrees().max(0.0);
         let head_world =
             yaw_quat(self.head.x.clamp(-72.0, 72.0)) * Quat::from_rotation_x(d(head_pitch));
@@ -239,7 +239,7 @@ impl Pose {
 
         // --- arms ---
         let run = run_factor(self.speed);
-        let arm_amp = d(17.0) * rig.arm_swing.powf(0.7) * intensity * (1.0 + 1.1 * run) * (1.0 + 0.35 * self.style[0]);
+        let arm_amp = d(17.0) * rig.arm_swing.powf(0.7) * intensity * (1.0 + 1.1 * run) * (1.0 + 0.5 * self.style[0]);
         for side in 0..2 {
             let s = SIDE[side];
             let sh_at = trunk_m.transform_point3(rig.shoulder[side]);
