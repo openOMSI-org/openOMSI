@@ -888,7 +888,7 @@ impl WireNet {
     pub fn draw_random_switches(&mut self) {
         let d = self.dynamic.get_mut().unwrap();
         for (i, s) in self.switches.iter_mut().enumerate().filter(|(_, s)| s.initial_random) {
-            let draw = std::collections::hash_map::RandomState::new();
+            let draw = std::collections::hash_map::RandomState::new(); // reseeded per call
             s.initial_branch = std::hash::BuildHasher::hash_one(&draw, i) & 1 == 1;
             d.branch[i] = s.initial_branch;
         }
