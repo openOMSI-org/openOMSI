@@ -641,8 +641,8 @@ rim the reflection running on away from the camera.
   180° were `.x` meshes read with transposed frames); text is centred and squeezed to fit.
   A `[texttexture]` whose variable is one of the object's script string variables (the stock
   stop departure displays) is drawn from the script whenever it calls `Refresh_Strings`.
-  `[helparrow]` objects (route arrows a map's author puts up) are drawn only while OMSI 2's
-  route arrows are on (`nav_arrows`, the game menu's "Route arrows"), as in Omsi.exe.
+  `[helparrow]` objects are shown by *Map-placed route arrows* (`nav_map_arrows`). The game
+  can show these independently of the dynamic arrows it generates from the driven route.
 * `[matl_envmap]`: the reflectivity mask is the diffuse alpha; textures without an alpha
   channel (DXT1 paint schemes such as the GN92 HVL livery) do not reflect at all.
 

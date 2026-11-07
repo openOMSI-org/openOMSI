@@ -89,7 +89,7 @@ fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {
 }
 
 impl Navigator {
-    /// Where OMSI 2's dynamic route arrows stand on the route ahead (the `nav_arrows`
+    /// Where OMSI 2's dynamic route arrows stand on the route ahead (the `nav_dynamic_arrows`
     /// setting): every junction lane of the next `reach` metres with the way through it
     /// (`L`, `R`, or `dn` for straight on), and the stops of the trip ahead with their
     /// names (`busstop`). Each: a key that stays the same while it is ahead, the place,
