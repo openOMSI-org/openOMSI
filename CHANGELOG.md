@@ -8,6 +8,11 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **The launcher opens on the page it is asked for.** `openomsi-launcher-app --page settings`
+  (or `--page=settings`) starts it on that page of the sidebar - `settings`, `controls`, `setup`,
+  `mods`, `timetable`, `profile` and the others - instead of Drive; a name that is no page
+  opens Drive. With `--no-sidebar` the sidebar is left out and the window holds that page alone.
+  For programs that have a menu of their own and start the launcher on one of its pages.
 - **Remote cockpit on a phone or tablet**: the game serves a page on your home network
   (Options > Interface > Remote cockpit, off until switched on); scan the QR code or type the
   address and the 6-digit code, and the phone or tablet shows a dashboard with the map and the

@@ -37,6 +37,14 @@ const GROUPS = [
 
 const PAGES = [...GROUPS.flatMap(([, pages]) => pages), ['profile', 'Profile', 'user', ProfilePage]];
 
+// (`--page` names a page of the list: another name opens on Drive, with Drive marked)
+if (!PAGES.some((x) => x && x[0] === S.page)) S.page = 'drive';
+
+// (`--no-sidebar`: the page alone, for a program that has its own menu and opens the launcher
+// on one of its pages; the program hands it over as `window.__openomsiNoSidebar`, or
+// `?nosidebar` in a browser)
+const NO_SIDEBAR = !!window.__openomsiNoSidebar || new URLSearchParams(location.search).has('nosidebar');
+
 function Sidebar() {
   const s = useStore();
   const running = s.poll.instances?.length || 0;
@@ -101,7 +109,7 @@ function App() {
   const Page = page[3];
   const resting = !s.boot?.selftest && s.settings?.launcher_rest !== false && s.poll.instances?.length > 0 && !focused;
   return html`<div class="shell">
-    <${Sidebar} />
+    ${!NO_SIDEBAR && html`<${Sidebar} />`}
     <main class="main">
       <div class=${'page page-' + page[0]} key=${s.page} hidden=${resting}><${Page} /></div>
       ${resting && html`<div class="splash resting"><${Icon} name="bus" size=${40} /><p>${t('The launcher rests while you drive, so that the game has the graphics card to itself. It is back as soon as the game ends.')}</p></div>`}
