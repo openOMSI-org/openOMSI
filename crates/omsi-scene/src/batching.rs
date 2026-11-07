@@ -325,6 +325,7 @@ impl GpuCache {
         type_key: usize,
         selection: &[usize],
         root: &Path,
+        publisher_texture_dirs: &[PathBuf],
         images: &HashMap<PathBuf, Arc<TextureData>>,
     ) -> Option<Arc<Vec<Vec<Option<(MaterialId, MaterialId)>>>>> {
         // (shared, not copied: every scripted object with such textures asks for its rows
@@ -385,6 +386,7 @@ impl GpuCache {
                     continue;
                 };
                 let mut dirs = ot.texture_dirs(root);
+                crate::world::insert_publisher_texture_dirs(&mut dirs, publisher_texture_dirs, root);
                 dirs.insert(0, scheme_dir.clone());
                 let Some((texture, path)) = self.texture(renderer, scene, file, &dirs, images)
                 else {

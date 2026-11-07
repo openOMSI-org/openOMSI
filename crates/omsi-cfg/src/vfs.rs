@@ -24,7 +24,7 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
 mod sealed;
-pub use sealed::{is_sealed, mount_sealed, random_key, seal, sealed_len, unmount_sealed, unseal, SealKey, SealedFile, SEALED_OVERHEAD};
+pub use sealed::{is_sealed, protected_reads, mount_publisher, mount_sealed, random_key, seal, sealed_len, unmount_sealed, unseal, SealKey, SealedFile, SEALED_OVERHEAD};
 
 /// One file inside an archive.
 #[derive(Debug, Clone)]
@@ -300,6 +300,10 @@ impl ZipArchive {
         self.entries.values().map(|e| e.size).sum()
     }
 
+    fn bounded_sizes(&self, rel: &str) -> Option<(u64, u64)> {
+        self.entries.get(&normalize(rel)).map(|e| (e.size, e.compressed))
+    }
+
     /// Contents of the entry at `rel` (relative to the mount root, any case).
     pub fn read(&self, rel: &str) -> io::Result<Vec<u8>> {
         let key = normalize(rel);
@@ -429,7 +433,7 @@ fn memory_file(path: &Path) -> Option<Arc<[u8]>> {
 
 /// Whether a VFS layer takes precedence over the plain file at this path.
 pub fn is_virtual(path: &Path) -> bool {
-    memory_file(path).is_some() || is_sealed(path) || archive_of(path).is_some()
+    memory_file(path).is_some() || sealed::locate(path).is_some() || archive_of(path).is_some()
 }
 
 /// Read a whole file, from a folder, a mounted archive or a sealed store.
@@ -457,6 +461,77 @@ pub fn read(path: &Path) -> io::Result<Vec<u8>> {
     }
     r
 }
+
+/// Read one input with a caller's stricter limit while checking the opened file handle,
+/// rather than trusting an earlier metadata lookup that could race with replacement.
+pub fn read_bounded(path: &Path, limit: u64) -> io::Result<Vec<u8>> {
+    let result = if let Some(bytes) = memory_file(path) {
+        if bytes.len() as u64 > limit {
+            return Err(bad("file exceeds its size limit"));
+        }
+        bytes.to_vec()
+    } else if let Some((mount, key)) = sealed::locate(path) {
+        if mount.size(&key).is_none_or(|size| size > limit) {
+            return Err(bad("file exceeds its size limit"));
+        }
+        let bytes = mount.read(&key)?;
+        if bytes.len() as u64 > limit {
+            return Err(bad("file exceeds its size limit"));
+        }
+        bytes
+    } else if let Some((archive, key)) = locate(path) {
+        let (size, compressed) = archive
+            .bounded_sizes(&key)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "file is not in the archive"))?;
+        if size > limit || compressed > limit.saturating_add(64 * 1024) {
+            return Err(bad("file exceeds its size limit"));
+        }
+        let bytes = archive.read(&key)?;
+        if bytes.len() as u64 > limit {
+            return Err(bad("file exceeds its size limit"));
+        }
+        bytes
+    } else {
+        let link = std::fs::symlink_metadata(path)?;
+        if link.file_type().is_symlink() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "symbolic links are not allowed for bounded metadata",
+            ));
+        }
+        let file = std::fs::File::open(path)?;
+        let metadata = file.metadata()?;
+        if !metadata.is_file() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "not a regular file",
+            ));
+        }
+        if metadata.len() > limit {
+            return Err(bad("file exceeds its size limit"));
+        }
+        let mut bytes = Vec::new();
+        file.take(limit.saturating_add(1)).read_to_end(&mut bytes)?;
+        if bytes.len() as u64 > limit {
+            return Err(bad("file exceeds its size limit"));
+        }
+        bytes
+    };
+    if RECORDING.load(std::sync::atomic::Ordering::Relaxed) {
+        READS
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_or_insert_with(Default::default)
+            .insert(path.to_path_buf());
+    }
+    AUDIT.with(|a| {
+        if let Some(v) = a.borrow_mut().as_mut() {
+            v.push(path.to_path_buf());
+        }
+    });
+    Ok(result)
+}
+
 
 thread_local! {
     static AUDIT: std::cell::RefCell<Option<Vec<PathBuf>>> = const { std::cell::RefCell::new(None) };
@@ -771,6 +846,30 @@ mod tests {
         let f = crate::CfgFile::read(&cfg).unwrap();
         assert_eq!(f.lines[1], "Test");
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn bounded_archive_read_checks_compressed_size_before_unpacking() {
+        let dir = std::env::temp_dir().join(format!("omsi-cfg-bounded-zip-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let zip = dir.join("deps.zip");
+        write_zip(
+            &zip,
+            &[("maps/Test/dependencies.json", b"{}".to_vec(), false)],
+        );
+        let mut bytes = std::fs::read(&zip).unwrap();
+        let central = bytes
+            .windows(4)
+            .position(|w| w == 0x0201_4b50u32.to_le_bytes())
+            .unwrap();
+        bytes[central + 20..central + 24]
+            .copy_from_slice(&(1024u32 * 1024 + 64 * 1024 + 1).to_le_bytes());
+        std::fs::write(&zip, bytes).unwrap();
+        add_content_zip(&zip).unwrap();
+        assert!(read_bounded(&zip.join("maps/Test/dependencies.json"), 1024 * 1024).is_err());
+        crate::remove_content_root(&zip);
+        MOUNTS.write().unwrap().retain(|m| m.path != zip);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

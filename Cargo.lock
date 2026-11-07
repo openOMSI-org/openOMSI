@@ -1087,6 +1087,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "core-foundation"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b2a6cd9ae233e7f62ba4e9353e81a88df7fc8a5987b8d445b4d90c879bd156f6"
+dependencies = [
+ "core-foundation-sys",
+ "libc",
+]
+
+[[package]]
 name = "core-foundation-sys"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1099,7 +1109,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c07782be35f9e1140080c6b96f0d44b739e2278479f64e02fdab4e32dfd8b081"
 dependencies = [
  "bitflags 1.3.2",
- "core-foundation",
+ "core-foundation 0.9.4",
  "core-graphics-types",
  "foreign-types",
  "libc",
@@ -1112,7 +1122,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "45390e6114f68f718cc7a830514a96f903cccd70d02a8f6d9f643ac4ba45afaf"
 dependencies = [
  "bitflags 1.3.2",
- "core-foundation",
+ "core-foundation 0.9.4",
  "libc",
 ]
 
@@ -3870,8 +3880,11 @@ dependencies = [
  "encoding_rs",
  "flate2",
  "log",
+ "omsi-pack",
  "rayon",
  "ring",
+ "serde",
+ "serde_json",
  "thiserror 2.0.21",
  "unicode-normalization",
  "windows 0.62.2",
@@ -4183,6 +4196,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "omsi-pack"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "ring",
+ "security-framework",
+ "serde",
+ "serde_json",
+ "sha2",
+ "unicode-normalization",
+ "windows 0.62.2",
+ "zeroize",
+]
+
+[[package]]
 name = "omsi-photo"
 version = "0.1.0"
 dependencies = [
@@ -4305,6 +4333,7 @@ dependencies = [
  "omsi-map",
  "omsi-model",
  "omsi-o3d",
+ "omsi-pack",
  "omsi-render",
  "omsi-scenery",
  "omsi-script",
@@ -4321,6 +4350,7 @@ dependencies = [
  "png",
  "pollster 1.0.1",
  "rayon",
+ "ring",
  "serde_json",
  "wgpu",
  "zip",
@@ -5545,6 +5575,29 @@ dependencies = [
  "memmap2",
  "smithay-client-toolkit",
  "tiny-skia 0.11.4",
+]
+
+[[package]]
+name = "security-framework"
+version = "3.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b7f4bc775c73d9a02cde8bf7b2ec4c9d12743edf609006c7facc23998404cd1d"
+dependencies = [
+ "bitflags 2.13.2",
+ "core-foundation 0.10.1",
+ "core-foundation-sys",
+ "libc",
+ "security-framework-sys",
+]
+
+[[package]]
+name = "security-framework-sys"
+version = "2.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ce2691df843ecc5d231c0b14ece2acc3efb62c0a398c7e1d875f3983ce020e3"
+dependencies = [
+ "core-foundation-sys",
+ "libc",
 ]
 
 [[package]]
@@ -7621,7 +7674,7 @@ dependencies = [
  "calloop",
  "cfg_aliases",
  "concurrent-queue",
- "core-foundation",
+ "core-foundation 0.9.4",
  "core-graphics",
  "cursor-icon",
  "dpi",
