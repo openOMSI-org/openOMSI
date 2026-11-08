@@ -361,7 +361,7 @@ function TourTools({ s, line, tour }) {
     touch(line);
   };
   return html`<div class="menu-box">
-    <${Button} small kind=${open ? 'primary' : ''} icon="copy" label="Copies" title="Copy the tour later in the day, or every few minutes" onClick=${() => setOpen(!open)} />
+    <${Button} small kind=${open ? 'primary' : ''} icon="copy" label="Duplicate tour" title="Copy the tour later in the day, or every few minutes" onClick=${() => setOpen(!open)} />
     ${open && html`<div class="menu tte-menu" style="bottom:auto;top:calc(100% + 6px)">
       <div class="tte-tool">
         <b>${t('Copy this tour later')}</b>
