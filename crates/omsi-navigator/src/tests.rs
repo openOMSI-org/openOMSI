@@ -694,3 +694,42 @@ fn the_remote_picture_keeps_its_shape_within_the_size_cap() {
     assert_eq!(remote_picture::fit(10, 0), (64, 64));
 }
 
+#[test]
+fn minimap_route_cache_waits_for_three_metres_of_progress() {
+    use super::panel::route_position_changed;
+
+    let cached = 12.0;
+    assert!(!route_position_changed(cached, 12.0));
+    assert!(!route_position_changed(cached, 12.5));
+    assert!(!route_position_changed(cached, 14.99));
+    assert!(route_position_changed(cached, 15.0));
+}
+
+#[test]
+fn minimap_route_cache_measures_from_the_last_draw_in_both_directions() {
+    use super::panel::route_position_changed;
+
+    let cached = 14.99;
+    assert!(!route_position_changed(cached, 15.01));
+    assert!(!route_position_changed(cached, 17.98));
+    assert!(route_position_changed(cached, 18.0));
+    assert!(!route_position_changed(cached, 12.01));
+    assert!(route_position_changed(cached, 11.98));
+}
+
+#[test]
+fn minimap_route_cache_accumulates_small_steps_without_rebuilding_each_frame() {
+    use super::panel::route_position_changed;
+
+    let mut cached = 0.0;
+    let mut rebuilds = 0;
+    for frame in 1..=600 {
+        let current = frame as f32 * 0.25;
+        if route_position_changed(cached, current) {
+            cached = current;
+            rebuilds += 1;
+        }
+        assert!((current - cached).abs() < 3.0);
+    }
+    assert_eq!(rebuilds, 50);
+}
