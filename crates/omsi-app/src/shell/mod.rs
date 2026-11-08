@@ -28,6 +28,8 @@ pub(crate) enum Action {
     PauseCategory(pause::navigation::Category),
     /// Edit presentation-only shortcuts without executing the underlying action.
     QuickActions(pause::quick_actions::Edit),
+    /// A row or setting acted on within a multiplayer pause tab.
+    OnlineAction(u8, String),
     /// A line of the pause menu's rail chosen while a list is open over it: the list closes
     /// and the line is done.
     Rail(usize),
@@ -55,6 +57,7 @@ pub(crate) struct Shell {
     pub(crate) process_dialog: crate::process_permissions::DialogState,
     pub(crate) ui: Ui,
     pub(crate) pause_category: pause::navigation::Category,
+    pub(crate) pause_online: omsi_multiplayer_ui::State,
     pub(crate) quick_edit: bool,
     /// No category chosen: the pause menu shows only the rail over the dimmed paused game.
     pub(crate) pause_hidden: bool,
@@ -122,7 +125,7 @@ impl Shell {
         // (the desktop launcher's calm look: graphite surfaces, no edges)
         let mut ui = Ui::new();
         ui.flat = true;
-        Shell { settings_search: Default::default(), process_prompt: None, process_dialog: Default::default(), ui, pause_category: Default::default(), quick_edit: false, pause_hidden: true, quick_focus: 0, gpu: None, shot_gpu: None, drawn: None, actions: Vec::new(), picture: None, picture_tex: None, logo_tex: None, shot_logo: None, logo_of: None, logo_title: None, logo_wide: None, glass: None, glass_taken: None, scale: 1.0, over_ui: false, last_sel: None, dd_anchor: None, opaque: false }
+        Shell { settings_search: Default::default(), process_prompt: None, process_dialog: Default::default(), ui, pause_category: Default::default(), pause_online: Default::default(), quick_edit: false, pause_hidden: true, quick_focus: 0, gpu: None, shot_gpu: None, drawn: None, actions: Vec::new(), picture: None, picture_tex: None, logo_tex: None, shot_logo: None, logo_of: None, logo_title: None, logo_wide: None, glass: None, glass_taken: None, scale: 1.0, over_ui: false, last_sel: None, dd_anchor: None, opaque: false }
     }
 
     /// A frame of the screens begins: the window's size in physical pixels and how many of
@@ -153,6 +156,8 @@ impl Shell {
     /// Nothing of the screens shows this frame.
     pub(crate) fn clear(&mut self) {
         self.settings_search = Default::default();
+        self.pause_online.confirm = None;
+        self.pause_online.management = None;
         if pause::search::focused(self) { self.ui.focus = None; }
         self.drawn = None;
         self.over_ui = false;

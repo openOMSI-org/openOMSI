@@ -27,9 +27,30 @@ pub struct ScriptTexture {
     /// The size the `[scripttexture]` entry declares, which `STNewTex` comes back to
     /// (`STLoadTex` makes the texture the size of its file).
     declared: (u32, u32),
+    /// The game draws this slot on the GPU: pixels from a script, a plugin, the network or a
+    /// saved situation would cover its picture.
+    drawn_by_game: bool,
 }
 
 impl ScriptTexture {
+    /// 1x1: the scripts may still ask about the slot.
+    pub fn drawn_by_game() -> ScriptTexture {
+        ScriptTexture { drawn_by_game: true, dirty: false, ..ScriptTexture::new(1, 1) }
+    }
+
+    pub fn slots_of(model: &omsi_model::Model) -> Vec<ScriptTexture> {
+        (0..model.script_textures.len())
+            .map(|i| match model.script_textures[i] {
+                _ if model.script_texture_drawn_by_game(i) => ScriptTexture::drawn_by_game(),
+                (w, h) => ScriptTexture::new(w, h),
+            })
+            .collect()
+    }
+
+    pub fn is_drawn_by_game(&self) -> bool {
+        self.drawn_by_game
+    }
+
     pub fn new(width: i32, height: i32) -> ScriptTexture {
         let (w, h) = (width.max(1) as u32, height.max(1) as u32);
         ScriptTexture {
@@ -44,6 +65,7 @@ impl ScriptTexture {
             mipmaps: false,
             color: [255, 255, 255, 255],
             declared: (w, h),
+            drawn_by_game: false,
         }
     }
 
@@ -70,7 +92,7 @@ impl ScriptTexture {
     /// draws nothing after a load, and the display stayed empty (#1559). A picture of
     /// another size than the texture's is not taken.
     pub fn restore(&mut self, width: u32, height: u32, rgba: Vec<u8>) -> bool {
-        if (width, height) != (self.width, self.height) || rgba.len() != (width * height * 4) as usize {
+        if self.drawn_by_game || (width, height) != (self.width, self.height) || rgba.len() != (width * height * 4) as usize {
             return false;
         }
         self.rgba = rgba;
@@ -86,7 +108,7 @@ impl ScriptTexture {
     /// a script holds the texture locked, as the image released, so the script's half-done
     /// drawing does not show and its next unlock draws over the plugin's again.
     pub fn replace(&mut self, width: u32, height: u32, rgba: &[u8]) -> bool {
-        if (width, height) != (self.width, self.height) || rgba.len() != self.rgba.len() {
+        if self.drawn_by_game || (width, height) != (self.width, self.height) || rgba.len() != self.rgba.len() {
             return false;
         }
         if self.locked {
@@ -128,6 +150,9 @@ impl ScriptTexture {
 
     /// Network readers opt into retaining released images, independent of GPU uploads.
     pub fn released_image(&mut self) -> Option<(u32, u32, bool, Arc<Vec<u8>>)> {
+        if self.drawn_by_game {
+            return None;
+        }
         self.network_snapshot = true;
         if self.released.is_none() {
             if let Some(pending) = &self.pending {
@@ -143,7 +168,7 @@ impl ScriptTexture {
     /// Apply an owner's committed RGBA image without running local ST callbacks.
     pub fn apply_network(&mut self, width: u32, height: u32, mipmaps: bool, rgba: &[u8]) -> bool {
         let Some(len) = (width as usize).checked_mul(height as usize).and_then(|n| n.checked_mul(4)) else { return false };
-        if width == 0 || height == 0 || len > 16 * 1024 * 1024 || rgba.len() != len { return false; }
+        if self.drawn_by_game || width == 0 || height == 0 || len > 16 * 1024 * 1024 || rgba.len() != len { return false; }
         self.width = width;
         self.height = height;
         self.mipmaps = mipmaps;
@@ -172,6 +197,9 @@ impl ScriptTexture {
     /// Take the latest released image. A locked buffer may already contain edits
     /// for the next unlock; those must not replace the image just released.
     pub fn take_upload(&mut self) -> Option<Vec<u8>> {
+        if self.drawn_by_game {
+            return None;
+        }
         if !self.locked && self.dirty {
             self.publish();
             self.dirty = false;
@@ -437,5 +465,28 @@ mod tests {
         t.put(0, 0, [2; 4]);
         assert_eq!(t.take_upload().unwrap(), vec![2; 4]);
         assert!(t.take_upload().is_none());
+    }
+
+    #[test]
+    fn a_slot_the_game_draws_never_yields_or_takes_pixels() {
+        let mut t = ScriptTexture::drawn_by_game();
+        assert!(t.is_drawn_by_game() && !ScriptTexture::new(1, 1).is_drawn_by_game());
+        assert!(t.take_upload().is_none(), "not even the first, blank picture");
+        t.put(0, 0, [9; 4]);
+        t.unlock();
+        assert!(t.take_upload().is_none());
+        assert!(t.released_image().is_none());
+        assert!(!t.replace(1, 1, &[1; 4]));
+        assert!(!t.restore(1, 1, vec![1; 4]));
+        assert!(!t.apply_network(1, 1, false, &[1; 4]));
+        assert!(t.take_upload().is_none());
+    }
+
+    #[test]
+    fn a_models_slots_keep_their_order_and_sizes() {
+        let cfg = omsi_cfg::CfgFile::from_str("model.cfg", "[scripttexture]\n64\n32\n[navigatortexture]\n800\n480\n[htmltexture]\n16\n8\na.html\n");
+        let slots = ScriptTexture::slots_of(&omsi_model::Model::parse(&cfg));
+        let shape: Vec<_> = slots.iter().map(|s| (s.width, s.height, s.is_drawn_by_game())).collect();
+        assert_eq!(shape, vec![(64, 32, false), (1, 1, true), (16, 8, false)]);
     }
 }

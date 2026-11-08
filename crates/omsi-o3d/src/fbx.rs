@@ -5,7 +5,7 @@
 
 use crate::import::{embedded_texture, from_rh, texture_name, Builder};
 use crate::{Bone, BoneWeight, Joint, Material, Mesh, Morph, O3dError};
-use glam::{Vec2, Vec3};
+use glam::{Mat3, Quat, Vec2, Vec3};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -23,16 +23,61 @@ fn v3(v: ufbx::Vec3) -> Vec3 {
     Vec3::new(v.x as f32, v.y as f32, v.z as f32)
 }
 
-/// Read an FBX file's bytes (`path` names it: textures are looked for beside it).
-pub fn parse_fbx(bytes: &[u8], path: &Path) -> Result<Mesh, O3dError> {
-    let opts = ufbx::LoadOpts {
+fn rot_rh(m: &ufbx::Matrix) -> Quat {
+    let c = |x: f64, y: f64, z: f64| Vec3::new(x as f32, y as f32, -(z as f32)).normalize_or_zero();
+    let (x, y) = (c(m.m00, m.m10, m.m20), c(m.m01, m.m11, m.m21));
+    let z = x.cross(y).normalize_or_zero();
+    Quat::from_mat3(&Mat3::from_cols(x, z.cross(x), z)).normalize()
+}
+
+fn pos_rh(m: &ufbx::Matrix) -> Vec3 {
+    from_rh(Vec3::new(m.m03 as f32, m.m13 as f32, m.m23 as f32))
+}
+
+fn load_opts() -> ufbx::LoadOpts<'static> {
+    ufbx::LoadOpts {
         target_axes: ufbx::CoordinateAxes::right_handed_y_up(),
         target_unit_meters: 1.0,
         space_conversion: ufbx::SpaceConversion::ModifyGeometry,
         generate_missing_normals: true,
         ..Default::default()
-    };
-    let scene = ufbx::load_memory(bytes, opts).map_err(|e| err(e.description.as_ref() as &str))?;
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Clip {
+    pub fps: f32,
+    pub names: Vec<String>,
+    pub frames: Vec<Vec<(Vec3, Quat)>>,
+}
+
+pub fn parse_fbx_clip(bytes: &[u8]) -> Result<Clip, O3dError> {
+    let scene = ufbx::load_memory(bytes, load_opts()).map_err(|e| err(e.description.as_ref() as &str))?;
+    let stack = scene.anim_stacks.iter().next().ok_or_else(|| err("no animation"))?;
+    let fps = if scene.settings.frames_per_second > 1.0 { scene.settings.frames_per_second } else { 30.0 };
+    let joints: Vec<usize> = (0..scene.nodes.len()).filter(|&i| scene.nodes[i].bone.is_some()).collect();
+    if joints.is_empty() {
+        return Err(err("no skeleton"));
+    }
+    let names = joints.iter().map(|&i| (scene.nodes[i].element.name.as_ref() as &str).to_string()).collect();
+    let n = (((stack.time_end - stack.time_begin) * fps).round() as usize).clamp(1, 3_000);
+    let mut frames = Vec::with_capacity(n);
+    for f in 0..n {
+        let t = stack.time_begin + f as f64 / fps;
+        let s = ufbx::evaluate_scene(&scene, &stack.anim, t, ufbx::EvaluateOpts::default()).map_err(|e| err(e.description.as_ref() as &str))?;
+        frames.push(joints.iter().map(|&i| (pos_rh(&s.nodes[i].node_to_world), rot_rh(&s.nodes[i].node_to_world))).collect());
+    }
+    Ok(Clip { fps: fps as f32, names, frames })
+}
+
+pub fn load_clip(path: &Path) -> Result<Clip, O3dError> {
+    let bytes = std::fs::read(path).map_err(|e| err(format!("{}: {e}", path.display())))?;
+    parse_fbx_clip(&bytes)
+}
+
+/// Read an FBX file's bytes (`path` names it: textures are looked for beside it).
+pub fn parse_fbx(bytes: &[u8], path: &Path) -> Result<Mesh, O3dError> {
+    let scene = ufbx::load_memory(bytes, load_opts()).map_err(|e| err(e.description.as_ref() as &str))?;
     let mut b = Builder::default();
     // materials by ufbx element id
     let mut mat_index: HashMap<u32, u16> = HashMap::new();
@@ -70,7 +115,7 @@ pub fn parse_fbx(bytes: &[u8], path: &Path) -> Result<Mesh, O3dError> {
     let mut bone_order: Vec<String> = Vec::new();
     let mut morphs: Vec<Morph> = Vec::new();
     // rest positions of the bones the skins name (the bind pose, where the skin was made)
-    let mut bind: HashMap<u32, Vec3> = HashMap::new();
+    let mut bind: HashMap<u32, (Vec3, Quat)> = HashMap::new();
     let mut tri = Vec::new();
     for node in scene.nodes.iter() {
         let Some(mesh) = node.mesh.as_ref() else { continue };
@@ -120,7 +165,7 @@ pub fn parse_fbx(bytes: &[u8], path: &Path) -> Result<Mesh, O3dError> {
                 let Some(bone) = cl.bone_node.as_ref() else { continue };
                 let name = (bone.element.name.as_ref() as &str).to_string();
                 let m = &cl.bind_to_world;
-                bind.insert(bone.element.element_id, Vec3::new(m.m03 as f32, m.m13 as f32, m.m23 as f32));
+                bind.insert(bone.element.element_id, (pos_rh(m), rot_rh(m)));
                 if !bones.contains_key(&name) {
                     bone_order.push(name.clone());
                 }
@@ -171,9 +216,9 @@ pub fn parse_fbx(bytes: &[u8], path: &Path) -> Result<Mesh, O3dError> {
     for n in scene.nodes.iter().filter(|n| is_joint(n)) {
         let id = n.element.element_id;
         let w = &n.node_to_world;
-        let position = bind.get(&id).copied().unwrap_or(Vec3::new(w.m03 as f32, w.m13 as f32, w.m23 as f32));
+        let (position, rotation) = bind.get(&id).copied().unwrap_or((pos_rh(w), rot_rh(w)));
         let parent = n.parent.as_ref().and_then(|p| ids.iter().position(|i| *i == p.element.element_id));
-        b.mesh.joints.push(Joint { name: (n.element.name.as_ref() as &str).to_string(), parent, position: from_rh(position) });
+        b.mesh.joints.push(Joint { name: (n.element.name.as_ref() as &str).to_string(), parent, position, rotation });
     }
     b.mesh.bones = bone_order.into_iter().map(|name| Bone { weights: bones.remove(&name).unwrap_or_default(), name }).collect();
     b.mesh.morphs = morphs;

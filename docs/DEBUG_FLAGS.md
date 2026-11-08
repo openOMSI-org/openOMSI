@@ -235,6 +235,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_SKIP_PIPE` | text | - | frame | render | Pipeline kinds to leave out of the main pass (comma-separated numbers). |
 | `OMSI_SPOT_SELECT` | num | - | use | scene | Turn on spotlight n (headlight pictures). |
 | `OMSI_TEST_AVATAR` | text | - | test | sim | Test only: an avatar FBX for the avatar loading test (`cargo test -p omsi-sim a_rocketbox_avatar_loads -- --ignored`). |
+| `OMSI_TEST_CLIPS` | text | - | test | sim | Test only: a folder of Rocketbox motion clips (`f_walk_neutral_01.fbx`, ...) for the clip test (`cargo test -p omsi-sim rocketbox_clips -- --ignored`, with OMSI_TEST_AVATAR). |
 | `OMSI_TEST_CONTENT` | text | - | test | o3d, scene | Content root for tests that need real OMSI content. |
 | `OMSI_TEST_LEGACY_TROLLEY_DRIVE` | bool | off | test | sim | Test only: set by the trolley test on the child process it starts to run itself with the realistic physics on. |
 | `OMSI_TEST_PACKAGE_MAP` | text | - | test | launcher-model | Test only: the global.cfg of a map that carries a package, for the launcher route map test (`cargo test -p omsi-launcher-model the_package_of_a_real_map_is_exported -- --ignored`). |

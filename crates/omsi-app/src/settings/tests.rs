@@ -214,6 +214,25 @@ fn triple_settings_round_trip_and_reject_nonfinite_geometry() {
 use super::*;
 
 #[test]
+fn route_arrow_settings_keep_legacy_defaults_and_round_trip_independently() {
+    for (text, expected) in [
+        ("", (false, false)),
+        ("nav_arrows=1\n", (true, true)),
+        ("nav_dynamic_arrows=0\nnav_arrows=1\n", (false, true)),
+        ("nav_arrows=1\nnav_map_arrows=0\n", (true, false)),
+    ] {
+        let game = Settings::from_text(text);
+        assert_eq!((game.nav_dynamic_arrows, game.nav_map_arrows), expected);
+        assert_eq!(Settings::from_text(&game.to_text()), game);
+
+        let launcher = omsi_launcher_lib::settings_from_text(Some(text));
+        let saved = omsi_launcher_lib::settings_to_text(&launcher, Some(text));
+        let game = Settings::from_text(&saved);
+        assert_eq!((game.nav_dynamic_arrows, game.nav_map_arrows), expected);
+    }
+}
+
+#[test]
 fn old_files_board_automatically() {
     // the launcher's old default, written without a version
     assert_eq!(Settings::from_text("msaa=1\nboarding=pay\n").boarding, "auto");
@@ -391,6 +410,10 @@ fn discord_settings_round_trip_and_default_off() {
     assert!(!Settings::default().discord_status);
     let settings = Settings { discord_status: true, discord_app_id: "123456".into(), ..Default::default() };
     assert_eq!(Settings::from_text(&settings.to_text()), settings);
+    assert_eq!(Settings::default().discord_show, crate::discord::Show::default());
+    let hidden = crate::discord::Show { map: false, bus: true, line: false, stop: false, players: true, buttons: false };
+    let settings = Settings { discord_show: hidden, ..Default::default() };
+    assert_eq!(Settings::from_text(&settings.to_text()).discord_show, hidden);
 }
 
 #[test]

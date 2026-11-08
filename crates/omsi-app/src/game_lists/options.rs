@@ -470,7 +470,8 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "head_tracking_invert_z" => s.head_tracking_invert_z,
         "timetable_win" => app.menus.timetable,
         "info_bar" => app.menus.info_bar,
-        "nav_arrows" => app.menus.navigator.as_ref().map_or(s.nav_arrows, |n| n.arrows),
+        "nav_dynamic_arrows" => s.nav_dynamic_arrows,
+        "nav_map_arrows" => s.nav_map_arrows,
         "exact_fare" => s.exact_fare,
         "pax_bad_driving" => s.pax_bad_driving,
         "auto_announce" => s.auto_announce,
@@ -788,9 +789,13 @@ pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static 
             app.set_info_bar(on);
             None
         }
-        "nav_arrows" => {
-            app.settings.nav_arrows = on;
-            Some(("nav_arrows", bit))
+        "nav_dynamic_arrows" => {
+            app.settings.nav_dynamic_arrows = on;
+            Some(("nav_dynamic_arrows", bit))
+        }
+        "nav_map_arrows" => {
+            app.settings.nav_map_arrows = on;
+            Some(("nav_map_arrows", bit))
         }
         "exact_fare" => {
             app.settings.exact_fare = on;

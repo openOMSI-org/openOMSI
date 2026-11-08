@@ -641,8 +641,8 @@ rim the reflection running on away from the camera.
   180° were `.x` meshes read with transposed frames); text is centred and squeezed to fit.
   A `[texttexture]` whose variable is one of the object's script string variables (the stock
   stop departure displays) is drawn from the script whenever it calls `Refresh_Strings`.
-  `[helparrow]` objects (route arrows a map's author puts up) are drawn only while OMSI 2's
-  route arrows are on (`nav_arrows`, the game menu's "Route arrows"), as in Omsi.exe.
+  `[helparrow]` objects are shown by *Map-placed route arrows* (`nav_map_arrows`). The game
+  can show these independently of the dynamic arrows it generates from the driven route.
 * `[matl_envmap]`: the reflectivity mask is the diffuse alpha; textures without an alpha
   channel (DXT1 paint schemes such as the GN92 HVL livery) do not reflect at all.
 
@@ -880,7 +880,10 @@ puts it on a material, `[matl_transmap] \S:n` uses its alpha as transparency map
 the line after the page's path makes it a **surface** - shaded by the world's light as every
 other material is, on every slot that shows the page, a scenery object's or a vehicle's -
 where a page is a display, drawn unlit at its own brightness, by default.
-An openOMSI extension; Omsi.exe draws such a slot unlit either way. The
+An openOMSI extension; Omsi.exe draws such a slot unlit either way.
+`[navigatortexture] w h [variable]` declares a screen the game's navigator draws its small map
+on, while the optional variable is not 0 (see `NAVIGATORTEXTURE.md`); `[useNavigatorTexture] n`
+puts the n-th on a material. Also an openOMSI extension. The
 scripts draw with `(M.V.ST…)` callbacks, arguments pushed in order (index first):
 `STNewTex(i)`, `STLock(i)`, `STUnlock(i)` (upload), `STFilter(i)`, `STSetColor(i, a, r, g, b)`,
 `STDrawPixel(i, x, y)`, `STDrawRect(i, x1, y1, x2, y2)`, `STTextOut(i, x, y, font, mode,

@@ -361,6 +361,11 @@ impl Args {
         !connected && self.server.is_none() && self.lan_host.is_none() && self.lan_join.is_none()
     }
 
+    /// Serving, hosting or joining an online game.
+    pub(crate) fn online(&self) -> bool {
+        self.server.is_some() || self.lan_host.is_some() || self.lan_join.is_some()
+    }
+
     pub(crate) fn is_resuming(&self) -> bool {
         self.situation.is_some()
             || self.situation_odometer_km.is_some()

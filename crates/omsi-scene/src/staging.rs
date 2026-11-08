@@ -917,8 +917,8 @@ pub struct StagedTile {
     pub(super) base_terrain: Terrain,
     /// `[spline_terrain_align]` splines: (index into `splines`, reach in metres).
     pub(super) align: Vec<(usize, f32)>,
-    /// Original OMSI outlines, used only when terrain fitting fails. World coordinates.
-    pub(super) hole_rims: Vec<Vec<DVec3>>,
+    /// World-space outlines and their segment counts for the fitting fallback.
+    pub(super) hole_rims: Vec<(Vec<DVec3>, usize)>,
     pub(super) water: Option<[f32; 4]>,
     /// `[variable_terrainlightmap]`: the tile's light map is baked from the lamps around it
     /// (see [`bake_light_map`]), not read from its `.map.LM.bmp`.

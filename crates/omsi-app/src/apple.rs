@@ -18,7 +18,6 @@ unsafe extern "C" {
     /// The latest turn of the device (-1 .. 1) into `out`; 0 while there is none yet.
     fn openomsi_swift_tilt_value(out: *mut f32) -> i32;
     fn openomsi_swift_haptic(ms: u32);
-    fn openomsi_swift_open_url(url: *const c_char);
     fn openomsi_swift_set_clipboard(text: *const c_char) -> i32;
     fn openomsi_swift_is_phone() -> i32;
     /// The game window's safe area in pixels: left, top, right, bottom.
@@ -67,13 +66,6 @@ pub(crate) fn tilt() -> Option<f32> {
 pub(crate) fn buzz(ms: u32) {
     // SAFETY: a plain call into the app
     unsafe { openomsi_swift_haptic(ms) }
-}
-
-pub(crate) fn open_url(url: &str) {
-    if let Ok(u) = CString::new(url) {
-        // SAFETY: a nul-terminated string the call only reads
-        unsafe { openomsi_swift_open_url(u.as_ptr()) }
-    }
 }
 
 /// The text onto the system's clipboard (UIPasteboard).

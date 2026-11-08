@@ -686,6 +686,15 @@ fn only_streets_written_on_the_city_map_are_offered_and_found() {
 }
 
 #[test]
+fn the_remote_picture_keeps_its_shape_within_the_size_cap() {
+    assert_eq!(remote_picture::fit(400, 300), (400, 300));
+    let (w, h) = remote_picture::fit(3000, 1500);
+    assert!(w <= 1280 && h <= 1280 && w * h <= 1280 * 800);
+    assert!(((w as f32 / h as f32) - 2.0).abs() < 0.01);
+    assert_eq!(remote_picture::fit(10, 0), (64, 64));
+}
+
+#[test]
 fn minimap_route_cache_waits_for_three_metres_of_progress() {
     use super::panel::route_position_changed;
 
@@ -695,6 +704,7 @@ fn minimap_route_cache_waits_for_three_metres_of_progress() {
     assert!(!route_position_changed(cached, 14.99));
     assert!(route_position_changed(cached, 15.0));
 }
+
 #[test]
 fn minimap_route_cache_measures_from_the_last_draw_in_both_directions() {
     use super::panel::route_position_changed;
