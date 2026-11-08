@@ -328,6 +328,7 @@ impl App {
 
     /// The open list is closed: back to the game menu.
     pub(crate) fn close_list(&mut self) {
+        self.shell.clear_bus_preview();
         self.shell.ui.dismiss_popups();
         // A programmatic close cannot silently keep an unconfirmed graphics preview.
         if self.menus.graphics_before.is_some() {

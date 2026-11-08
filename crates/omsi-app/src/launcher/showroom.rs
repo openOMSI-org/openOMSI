@@ -21,6 +21,8 @@ pub struct Look {
     pub map: String,
     pub bus: String,
     pub paint: String,
+    /// An exact scheme chosen from the driven vehicle, before any name lookup.
+    pub paint_index: Option<usize>,
     pub weather: String,
     /// Minutes of the day, and the date.
     pub time: i32,
@@ -340,7 +342,7 @@ impl Showroom {
             let loading = self.loading.as_ref().map(|l| &l.0);
             if shown != Some(&w) && loading != Some(&w) && self.loading.is_none() && self.failed.as_ref() != Some(&w) {
                 // only the time or weather changed: the preview does not show them
-                let same_bus = shown.map(|s| s.bus == w.bus && s.paint == w.paint && s.map == w.map && s.root == w.root).unwrap_or(false);
+                let same_bus = shown.map(|s| s.bus == w.bus && s.paint == w.paint && s.paint_index == w.paint_index && s.map == w.map && s.root == w.root).unwrap_or(false);
                 if same_bus {
                     if let Some(s) = self.shown.as_mut() {
                         s.look = w.clone();
@@ -400,14 +402,17 @@ impl Showroom {
                 }
                 let path = player_bus_path(&root, &l2.bus)?;
                 let vt = Arc::new(omsi_sim::VehicleType::load(&root, &path)?);
-                let scheme = paint_scheme(&vt, Some(l2.paint.as_str()).filter(|p| !p.is_empty()));
-                // (on a mild day, not at the 0 °C of no weather: see `preview_weather`)
-                crate::services::preview_weather();
+                let scheme = match l2.paint_index {
+                    Some(index) if index < vt.paint_schemes.len() => Some(index),
+                    Some(index) => return Err(anyhow!("preview paint scheme {index} no longer exists")),
+                    None => paint_scheme(&vt, Some(l2.paint.as_str()).filter(|p| !p.is_empty())),
+                };
                 // (the scheme on the host, as the game and `--export-glb` give it: its
                 // [setvar]s are set again after the scripts every frame, which a script that
                 // writes them itself would overwrite - the Kajosoft Jelcz's glazed doors
                 // showed white in the preview, as they did in the game before #3183)
-                let mut host = omsi_sim::VehicleHost::new(start_clock(&args));
+                // Studio weather is local to this bus, including in an in-game preview.
+                let mut host = crate::services::preview_host(start_clock(&args));
                 host.paint_scheme = Some(scheme);
                 let mut vehicle = omsi_sim::VehicleInstance::new(vt.clone(), host);
                 vehicle.apply_paint_vars(scheme);
