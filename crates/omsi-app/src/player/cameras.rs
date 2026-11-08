@@ -242,7 +242,7 @@ impl Player {
                 let center = orbit_pivot(self.vehicle.position, self.vehicle.heading, c);
                 let mut cam = Camera {
                     position: center,
-                    yaw: self.vehicle.heading as f32 - 35.0 + look.0,
+                    yaw: self.vehicle.heading as f32 + look.0,
                     pitch: (-15.0 + look.1).clamp(-85.0, 85.0),
                     roll: 0.0,
                     fov_deg: fallback.fov_deg,
