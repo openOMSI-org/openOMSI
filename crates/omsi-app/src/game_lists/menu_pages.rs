@@ -376,7 +376,7 @@ pub(super) fn world_pages(app: &App) -> Vec<Page> {
             time.extend(slider_row(app, "minute", "Minute", "Set the minute directly", &|v| format!("{:02}", v as i64)));
             // (forwards and back by a tap: the typed time wants Enter and the held keys Ctrl+Shift+Page Up,
             // neither of which a phone has)
-            for (name, text, secs) in [("Clock -1 hour", "-1 h", -3600), ("Clock -10 minutes", "-10 min", -600), ("Clock +10 minutes", "+10 min", 600), ("Clock +1 hour", "+1 h", 3600)] {
+            for (name, text, secs) in [("Clock -1 hour", "-1 h", -3600), ("Clock -10 minutes", "-10 min", -600), ("Clock -1 minute", "-1 min", -60), ("Clock +1 minute", "+1 min", 60), ("Clock +10 minutes", "+10 min", 600), ("Clock +1 hour", "+1 h", 3600)] {
                 time.push(button(name, text, "Move the clock.", &format!("clock_shift {secs}")));
             }
             for (name, hm, secs) in [("Morning", "06:00", 6 * 3600), ("Noon", "12:00", 12 * 3600), ("Evening", "18:00", 18 * 3600), ("Night", "23:00", 23 * 3600)] {
