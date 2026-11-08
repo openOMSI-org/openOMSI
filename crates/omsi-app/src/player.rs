@@ -396,7 +396,29 @@ impl Player {
         for name in &fire {
             self.vehicle.trigger(name);
         }
+        if !fire.is_empty() {
+            if let Some(driver) = self.driver.as_mut() {
+                driver.door_button_pressed(n);
+            }
+        }
         fire
+    }
+
+    /// Reach for the driver's physical door button when a bus trigger is activated directly
+    /// (by a cockpit mouse event or a key bound to `bus_doorfront0`, etc.).
+    pub(crate) fn door_button_for_trigger(&mut self, trigger: &str) {
+        let index = door_keys(&self.vehicle.ty)
+            .iter()
+            .position(|group| {
+                group.iter().any(|name| {
+                    name.split('|')
+                        .any(|part| part.eq_ignore_ascii_case(trigger))
+                })
+            })
+            .map(|i| i + 1);
+        if let (Some(index), Some(driver)) = (index, self.driver.as_mut()) {
+            driver.door_button_pressed(index);
+        }
     }
 
     /// `doors_release`: the bus's door release (`VehicleInstance::door_release_trigger`); the triggers fired.
@@ -405,6 +427,11 @@ impl Player {
         log::info!("door release: {}", fired.first().map_or("none on this bus", |s| s.as_str()));
         for name in &fired {
             self.vehicle.trigger(name);
+        }
+        if !fired.is_empty() {
+            if let Some(driver) = self.driver.as_mut() {
+                driver.door_button_pressed(0);
+            }
         }
         fired
     }
@@ -467,6 +494,9 @@ impl Player {
                 self.door_key_off(&fired);
             }
             return true;
+        }
+        if pressed {
+            self.door_button_for_trigger(name);
         }
         if name.eq_ignore_ascii_case("ticket_give") {
             if pressed {
