@@ -37,6 +37,7 @@ impl RemotePanel {
                         c.push(grow_row(vec![button("firewall", &tr("Allow in the Windows firewall"), Some("lock"))]));
                     }
                     omsi_remote::firewall::FirewallState::Asking => c.push(note(&tr("Answer Windows' question to let phones and tablets in."), pal)),
+                    omsi_remote::firewall::FirewallState::Setting => c.push(Element { color: Some(theme_color(pal.danger)), ..text(&tr("A rule or setting of the Windows firewall keeps phones and tablets out. Change it in the Windows firewall settings."), 13.0, Weight::Medium) }),
                     _ => {}
                 }
                 if let Some(path) = crate::remote::dir().and_then(|d| omsi_remote::cockpit::qr_png(&url, &d)) {
@@ -74,7 +75,7 @@ impl RemotePanel {
 
 pub(crate) fn open(app: &mut crate::App) {
     app.close_game_menu();
-    omsi_remote::firewall::check();
+    omsi_remote::firewall::check(&crate::remote::lan_ip(), app.settings.remote_cockpit_port);
     app.menus.game_panels.remote = Some(RemotePanel::default());
 }
 
@@ -96,7 +97,7 @@ pub(crate) fn click(app: &mut crate::App, id: &str) {
                 p.said = Some(tr("Every device has to enter the code again").into_owned());
             }
         }
-        "firewall" => omsi_remote::firewall::allow(),
+        "firewall" => omsi_remote::firewall::allow(&crate::remote::lan_ip(), app.settings.remote_cockpit_port),
         "close" => app.menus.game_panels.remote = None,
         _ => {}
     }

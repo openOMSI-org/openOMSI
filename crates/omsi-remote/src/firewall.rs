@@ -6,6 +6,7 @@ pub enum FirewallState {
     Open,
     Blocked,
     Asking,
+    Setting,
 }
 
 static STATE: AtomicU8 = AtomicU8::new(FirewallState::Unknown as u8);
@@ -15,38 +16,41 @@ pub fn state() -> FirewallState {
         1 => FirewallState::Open,
         2 => FirewallState::Blocked,
         3 => FirewallState::Asking,
+        4 => FirewallState::Setting,
         _ => FirewallState::Unknown,
     }
 }
 
-pub fn check() {
-    if STATE.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |s| (s != FirewallState::Asking as u8).then_some(FirewallState::Unknown as u8)).is_ok() {
-        spawn(false);
+pub fn check(ip: &str, port: u16) {
+    if STATE.try_update(Ordering::Relaxed, Ordering::Relaxed, |s| (s != FirewallState::Asking as u8).then_some(FirewallState::Unknown as u8)).is_ok() {
+        spawn(false, ip, port);
     }
 }
 
-pub fn allow() {
+pub fn allow(ip: &str, port: u16) {
     if STATE.swap(FirewallState::Asking as u8, Ordering::Relaxed) != FirewallState::Asking as u8 {
-        spawn(true);
+        spawn(true, ip, port);
     }
 }
 
-fn spawn(allow: bool) {
+fn spawn(allow: bool, ip: &str, port: u16) {
     let exe = match std::env::current_exe() {
         Ok(exe) if cfg!(windows) => exe,
         _ => return STATE.store(FirewallState::Unknown as u8, Ordering::Relaxed),
     };
+    let ip = ip.parse::<std::net::IpAddr>().ok().filter(|a| !a.is_loopback()).map(|a| a.to_string()).unwrap_or_default();
     let started = std::thread::Builder::new().name("firewall".into()).spawn(move || {
         let exe = exe.to_string_lossy();
-        if allow && run(&allow_script(&exe)) != Some(0) {
+        if allow && run(&allow_script(&exe, port)) != Some(0) {
             log::info!("remote cockpit: the firewall rule was not added");
         }
-        let now = match run(&check_script(&exe)) {
+        let now = match run(&check_script(&exe, &ip, port)) {
             Some(0) => FirewallState::Open,
             Some(3) => FirewallState::Blocked,
+            Some(4) => FirewallState::Setting,
             _ => FirewallState::Unknown,
         };
-        let _ = STATE.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |s| (allow || s != FirewallState::Asking as u8).then_some(now as u8));
+        let _ = STATE.try_update(Ordering::Relaxed, Ordering::Relaxed, |s| (allow || s != FirewallState::Asking as u8).then_some(now as u8));
     });
     if started.is_err() {
         STATE.store(FirewallState::Unknown as u8, Ordering::Relaxed);
@@ -60,20 +64,29 @@ fn path_literal(exe: &str) -> String {
 
 const RULE: &str = "openOMSI, allowed from the game";
 
-pub(crate) fn check_script(exe: &str) -> String {
+pub(crate) fn check_script(exe: &str, ip: &str, port: u16) -> String {
     format!(
-        "{}; $r = @(Get-NetFirewallApplicationFilter | Where-Object {{ $_.Program -eq $e }} | Get-NetFirewallRule | Where-Object {{ $_.Direction -eq 'Inbound' -and $_.Enabled -eq 'True' }}); \
-         if (@($r | Where-Object {{ $_.Action -eq 'Block' }}).Count -gt 0) {{ exit 3 }}; \
-         if (@(Get-NetFirewallProfile | Where-Object {{ $_.Enabled -eq 'True' -and $_.DefaultInboundAction -ne 'Allow' }}).Count -eq 0) {{ exit 0 }}; \
-         if (@($r | Where-Object {{ $_.Action -eq 'Allow' -and ([int]$_.Profile -eq 0 -or ([int]$_.Profile -band 6) -eq 6) }}).Count -gt 0) {{ exit 0 }}; exit 3",
+        "{}; $port = {port}; $keys = @{{ Domain = 1; DomainAuthenticated = 1; Private = 2; Public = 4 }}; \
+         $c = @(); if ('{ip}') {{ foreach ($a in @(Get-NetIPAddress -IPAddress '{ip}' -ErrorAction SilentlyContinue)) {{ $c += @(Get-NetConnectionProfile -InterfaceIndex $a.InterfaceIndex -ErrorAction SilentlyContinue) }} }}; \
+         if ($c.Count -eq 0) {{ $c = @(Get-NetConnectionProfile -ErrorAction SilentlyContinue) }}; \
+         $active = 0; foreach ($x in $c) {{ $active = $active -bor $keys[[string]$x.NetworkCategory] }}; if ($active -eq 0) {{ exit 5 }}; \
+         $need = 0; $on = 0; foreach ($f in @(Get-NetFirewallProfile -PolicyStore ActiveStore -ErrorAction Stop)) {{ $b = $keys[[string]$f.Name]; if (($active -band $b) -and [string]$f.Enabled -ne 'False') {{ if ([string]$f.AllowInboundRules -eq 'False' -or [string]$f.AllowLocalFirewallRules -eq 'False') {{ exit 4 }}; $on = $on -bor $b; if ([string]$f.DefaultInboundAction -ne 'Allow') {{ $need = $need -bor $b }} }} }}; if ($on -eq 0) {{ exit 0 }}; \
+         $app = @{{}}; Get-NetFirewallApplicationFilter -PolicyStore ActiveStore | ForEach-Object {{ if (-not $_.Package) {{ $app[$_.InstanceID] = $_.Program }} }}; \
+         $sf = @{{}}; Get-NetFirewallServiceFilter -PolicyStore ActiveStore | ForEach-Object {{ $sf[$_.InstanceID] = [string]$_.Service }}; \
+         $pf = @{{}}; Get-NetFirewallPortFilter -PolicyStore ActiveStore | ForEach-Object {{ $pf[$_.InstanceID] = $_ }}; \
+         $af = @{{}}; Get-NetFirewallAddressFilter -PolicyStore ActiveStore | ForEach-Object {{ $af[$_.InstanceID] = $_ }}; \
+         $r = @(Get-NetFirewallRule -PolicyStore ActiveStore -Direction Inbound -Enabled True | Where-Object {{ $p = $pf[$_.InstanceID]; -not $_.Owner -and $sf[$_.InstanceID] -eq 'Any' -and ($app[$_.InstanceID] -eq $e -or $app[$_.InstanceID] -eq 'Any') -and ([string]$p.Protocol -eq 'Any' -or [string]$p.Protocol -eq 'TCP') -and @($p.LocalPort | Where-Object {{ $_ -eq 'Any' -or $_ -eq [string]$port -or ($_ -match '^(\\d+)-(\\d+)$' -and [int]$Matches[1] -le $port -and $port -le [int]$Matches[2]) }}).Count -gt 0 -and ([string]$_.Action -eq 'Block' -or @($af[$_.InstanceID].RemoteAddress | Where-Object {{ $_ -in 'Any', 'LocalSubnet', 'LocalSubnet4' }}).Count -gt 0) }} | ForEach-Object {{ $m = [int]$_.Profile; if ($m -eq 0) {{ $m = 7 }}; [pscustomobject]@{{ Name = $_.Name; Action = [string]$_.Action; Profile = $m -band $on }} }} | Where-Object {{ $_.Profile -ne 0 }}); \
+         $blocks = @($r | Where-Object {{ $_.Action -eq 'Block' }}); \
+         if (@($blocks | Where-Object {{ $_.Name -notlike 'TCP Query User{{*' }}).Count -gt 0) {{ exit 4 }}; if ($blocks.Count -gt 0) {{ exit 3 }}; \
+         foreach ($x in $r) {{ if ($x.Action -eq 'Allow') {{ $need = $need -band -bnot $x.Profile }} }}; if ($need -eq 0) {{ exit 0 }}; exit 3",
         path_literal(exe)
     )
 }
 
-pub(crate) fn allow_script(exe: &str) -> String {
+pub(crate) fn allow_script(exe: &str, port: u16) -> String {
     let elevated = format!(
-        "{}; Get-NetFirewallApplicationFilter | Where-Object {{ $_.Program -eq $e }} | Get-NetFirewallRule | Where-Object {{ $_.Direction -eq 'Inbound' -and ($_.Action -eq 'Block' -or $_.DisplayName -eq '{RULE}') }} | Remove-NetFirewallRule -ErrorAction SilentlyContinue; \
-         New-NetFirewallRule -DisplayName '{RULE}' -Direction Inbound -Action Allow -Program $e -Profile Any -ErrorAction Stop | Out-Null",
+        "{}; Get-NetFirewallApplicationFilter | Where-Object {{ $_.Program -eq $e }} | Get-NetFirewallRule | Where-Object {{ [string]$_.Direction -eq 'Inbound' -and (([string]$_.Action -eq 'Block' -and $_.Name -like 'TCP Query User{{*') -or $_.DisplayName -eq '{RULE}') }} | Remove-NetFirewallRule -ErrorAction SilentlyContinue; \
+         New-NetFirewallRule -DisplayName '{RULE}' -Direction Inbound -Action Allow -Program $e -Protocol TCP -LocalPort {port} -RemoteAddress LocalSubnet -Profile Any -ErrorAction Stop | Out-Null",
         path_literal(exe)
     );
     format!(

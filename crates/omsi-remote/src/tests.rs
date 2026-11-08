@@ -600,8 +600,10 @@ fn a_stalled_map_picture_does_not_hold_back_driving() {
 fn firewall_scripts_carry_the_path_only_as_hex() {
     let exe = "C:\\Users\\Jean\u{2019}s O'Neil\\openomsi.exe";
     let hex: String = exe.encode_utf16().map(|u| format!("{u:04x}")).collect();
-    for script in [crate::firewall::check_script(exe), crate::firewall::allow_script(exe)] {
+    for script in [crate::firewall::check_script(exe, "192.168.1.20", 8642), crate::firewall::allow_script(exe, 8642)] {
         assert!(script.contains(&hex), "{script}");
         assert!(!script.contains('\u{2019}') && !script.contains("O'Neil") && !script.contains('"'), "{script}");
     }
+    let allow = crate::firewall::allow_script(exe, 8642);
+    assert!(allow.contains("-Protocol TCP -LocalPort 8642 -RemoteAddress LocalSubnet") && allow.contains("TCP Query User{*"), "{allow}");
 }
