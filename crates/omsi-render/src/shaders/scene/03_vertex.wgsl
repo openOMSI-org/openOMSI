@@ -254,6 +254,10 @@ fn is_tree_card() -> bool {
     return material.params.y > 0.1 && material.params.y < 0.2;
 }
 
+fn detailed_trees() -> bool {
+    return DETAILED_TREES;
+}
+
 fn tree_crown_normal(local: vec3<f32>, m: mat4x4<f32>, up: vec3<f32>) -> vec3<f32> {
     let pivot = select(0.28, material.sway.y, material.sway.x > 0.5);
     let centre = mix(pivot, select(1.0, material.sway.z, material.sway.x > 0.5), 0.45);
@@ -263,7 +267,7 @@ fn tree_crown_normal(local: vec3<f32>, m: mat4x4<f32>, up: vec3<f32>) -> vec3<f3
 }
 
 fn tree_card_fade(world: vec3<f32>) -> f32 {
-    if (!is_tree_card() && material.sway.x < 0.5) {
+    if (!detailed_trees() || (!is_tree_card() && material.sway.x < 0.5)) {
         return 1.0;
     }
     let c = cross(dpdx(world), dpdy(world));
@@ -287,7 +291,7 @@ fn vs_main(in: VsIn) -> VsOut {
     out.world = wp.xyz;
     out.local = in.pos;
     out.normal = safe_normal((m * vec4<f32>(in.normal, 0.0)).xyz);
-    if (is_tree_card() || (material.sway.x > 0.5 && material.sway.z - material.sway.y > 2.5)) {
+    if (detailed_trees() && (is_tree_card() || (material.sway.x > 0.5 && material.sway.z - material.sway.y > 2.5))) {
         out.normal = tree_crown_normal(in.pos, m, out.normal);
     }
     let sp = vertex_specular(wp.xyz, out.normal);

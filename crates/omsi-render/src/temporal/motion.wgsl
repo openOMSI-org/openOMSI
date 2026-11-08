@@ -25,6 +25,7 @@ struct MotionOut {
     @location(3) @interpolate(flat) params: vec4<f32>,
     @location(5) cur: vec4<f32>,
     @location(6) prev: vec4<f32>,
+    @location(7) world: vec3<f32>,
 };
 // (the fragment side of MotionOut, without the invariant: see DepthIn)
 struct MotionIn {
@@ -33,6 +34,7 @@ struct MotionIn {
     @location(3) @interpolate(flat) params: vec4<f32>,
     @location(5) cur: vec4<f32>,
     @location(6) prev: vec4<f32>,
+    @location(7) world: vec3<f32>,
 };
 
 @vertex
@@ -42,7 +44,9 @@ fn vs_motion(in: VsIn) -> MotionOut {
     let local = vec4<f32>(in.pos, 1.0);
     let wp = m * local;
     var out: MotionOut;
-    out.clip = scene_clip(e, wp + vec4<f32>(tree_sway(in.pos, m), 0.0), (m * vec4<f32>(in.normal, 0.0)).xyz);
+    let swayed = wp + vec4<f32>(tree_sway(in.pos, m), 0.0);
+    out.clip = scene_clip(e, swayed, (m * vec4<f32>(in.normal, 0.0)).xyz);
+    out.world = swayed.xyz;
     let pr = inst_params[e * 2u];
     out.uv = in.uv + pr.zw;
     out.params = pr;
@@ -83,7 +87,7 @@ fn fs_motion(in: MotionIn) -> @location(0) vec4<f32> {
 
 @fragment
 fn fs_motion_test(in: MotionIn) -> @location(0) vec4<f32> {
-    cutout_coverage(in.uv, in.params, camera.lod.x, 1.0);
+    cutout_coverage(in.uv, in.params, camera.lod.x, tree_card_fade(in.world));
     return motion_pixels(in.cur, in.prev);
 }
 
