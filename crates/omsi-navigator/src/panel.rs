@@ -15,11 +15,6 @@ const PANEL_REACH: f64 = 640.0;
 /// as the bus drives.
 const PANEL_MODELS: usize = 30_000;
 
-// Measure from the last mesh build, not a bin boundary, to avoid jitter-triggered uploads.
-pub(super) fn route_position_changed(cached: f32, current: f32) -> bool {
-    (current - cached).abs() >= 3.0
-}
-
 /// The card behind the next turn (dark in both looks, as a car's guidance banner is).
 const BANNER: Color = Color::rgba(28, 30, 33, 0.95);
 const BANNER_TEXT: Color = Color::rgba(255, 255, 255, 1.0);
@@ -78,6 +73,11 @@ impl PanelLook {
         look.clear = wgpu::Color::TRANSPARENT;
         look
     }
+}
+
+// Measure from the last mesh build, not a bin boundary, to avoid jitter-triggered uploads.
+pub(super) fn route_position_changed(cached: f32, current: f32) -> bool {
+    (current - cached).abs() >= 3.0
 }
 
 impl Navigator {
