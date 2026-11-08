@@ -24,9 +24,6 @@ use std::sync::Arc;
 use omsi_sim::timetable_run::*;
 
 pub use omsi_sim::timetable_run::{PlannedStop, PlannedTrip, PlayerDuty};
-// (the tests of `schedule_paper` name it by this path)
-#[cfg_attr(not(test), allow(unused_imports))]
-pub use omsi_sim::timetable_run::StopDir;
 pub(crate) use omsi_sim::timetable_run::{
     has_roller_blind, hhmm, ibis_stop_index, player_ibis, set_ai_destination,
     set_ai_destination_at, set_player_destination_at, set_player_destination_directly,

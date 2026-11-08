@@ -1381,7 +1381,7 @@ mod tests {
     fn a_library_beside_its_opl_in_a_subfolder_is_found() {
         let dir = std::env::temp_dir().join(format!("omsi-opl-lib-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("Pablo")).unwrap();
-        ["Pablo/MBASNE.dll", "top.dll"].map(|f| std::fs::write(dir.join(f), b"x").unwrap());
+        for f in ["Pablo/MBASNE.dll", "top.dll"] { std::fs::write(dir.join(f), b"x").unwrap(); }
         let opl = dir.join("Pablo/MBAS.opl");
         assert_eq!(library_path(&opl, &dir, "MBASNE.dll"), Some(dir.join("Pablo/MBASNE.dll")));
         assert_eq!(library_path(&opl, &dir, "top.dll"), Some(dir.join("top.dll")));

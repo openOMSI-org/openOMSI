@@ -436,22 +436,6 @@ mod hash_stream_tests {
 #[path = "hash_tests.rs"]
 mod hash_tests;
 
-/// Does the plain file `p` start as a program does (`looks_executable`)? One that cannot be
-/// read is taken for one.
-pub(super) fn starts_as_program(p: &Path) -> bool {
-    let mut head = [0u8; 8];
-    let Ok(mut f) = std::fs::File::open(p) else { return true };
-    let mut n = 0;
-    while n < head.len() {
-        match f.read(&mut head[n..]) {
-            Ok(0) => break,
-            Ok(k) => n += k,
-            Err(_) => return true,
-        }
-    }
-    crate::mods::looks_executable(&head[..n])
-}
-
 /// `a/b/../c` → `a/c`, `/`-separated.
 pub(super) fn norm(p: &str) -> String {
     let mut parts: Vec<&str> = Vec::new();

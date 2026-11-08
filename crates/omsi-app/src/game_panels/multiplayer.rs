@@ -82,6 +82,7 @@ impl Multiplayer {
         } else {
             if role.is_none() {
                 children.push(section_heading(&tr("Join room"), pal));
+                #[cfg_attr(any(target_os = "android", target_os = "ios"), allow(unused_mut))]
                 let mut entry = vec![input("code", &self.target, &tr("Connection code or server address"), 2048)];
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 entry.push(button("paste", &tr("Paste connection code"), Some("content_paste")));

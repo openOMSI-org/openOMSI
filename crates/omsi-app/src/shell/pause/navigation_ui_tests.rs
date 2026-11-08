@@ -26,7 +26,6 @@ fn view(rail: &[MenuLine]) -> PauseView<'_> {
         rail,
         rail_sel: Some(0),
         disabled: &[],
-        rail_open: None,
         list: None,
         kbd: false,
         keys: true,
@@ -223,7 +222,6 @@ fn pause_navigation_open_list_preserves_origin_category() {
             let mut sh = Shell::new(); sh.pause_hidden = false;
             sh.pause_category = origin;
             let mut v = view(&rail);
-            v.rail_open = Some(target);
             v.list = Some(ListView {
                 kind: MenuKind::Options, head: None, badge: None, tabs: None,
                 items: vec![("back", "Back")], sel: 0, preview: None,
@@ -233,7 +231,6 @@ fn pause_navigation_open_list_preserves_origin_category() {
             draw(&mut sh, &v);
             assert_eq!(sh.pause_category, origin, "opening {target}");
             v.list = None;
-            v.rail_open = None;
             draw(&mut sh, &v);
             assert_eq!(sh.pause_category, origin, "returning from {target}");
         }
