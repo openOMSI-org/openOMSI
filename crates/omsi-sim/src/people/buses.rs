@@ -219,14 +219,15 @@ impl PeopleSim {
                 // empties the bus whatever the duty)
                 None => self.duty.as_ref().map(|(trip, _, _)| trip.terminus.clone()),
             };
-            // Stop records decide whether the sign contradicts this duty.
+            // Free drive still boards by the displayed terminus (Omsi.exe's sub_61c33c);
+            // requiring a duty left everyone waiting with the doors open (#1627).
             let takes = match &self.duty {
                 Some((trip, next, done)) => Takes::Duty {
                     trip: trip.clone(),
                     next: *next,
                     done: *done,
                 },
-                _ => Takes::Terminus,
+                None => Takes::Terminus,
             };
             // Changing only the sign can leave IBIS_RouteIndex on the old service.
             // Its alternate termini and final stop must not override the new display.

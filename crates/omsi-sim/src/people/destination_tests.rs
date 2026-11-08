@@ -273,7 +273,52 @@ fn destination_boarding_unresolved_ibis_keeps_duty_but_blank_rows_empty_bus() {
 }
 
 #[test]
-fn destination_boarding_reads_display_before_ibis_and_rejects_invalid_signs() {
+fn destination_boarding_invalid_display_keeps_duty_unless_ibis_resolves() {
+    let (mut people, mut view) = setup("destination-invalid-display");
+    let mut vehicle = destination_vehicle("invalid-display", true);
+    for invalid in [-1.0, f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+        vehicle.set_var("target_index_int", invalid);
+        vehicle.set_var("IBIS_TerminusCode", 999.0);
+        vehicle.set_var("IBIS_TerminusIndex", 999.0);
+        view.terminus = people.player_bus_view(&vehicle).terminus;
+        assert_eq!(
+            view.terminus, None,
+            "invalid display {invalid} is not a blank sign"
+        );
+        let (chosen, registered) = choice(&mut people, &view, 0);
+        assert!(
+            chosen.is_some(),
+            "the active duty still admits its passengers"
+        );
+        assert!(
+            !registered.all_exit,
+            "an invalid index must not send riders off"
+        );
+
+        // A resolved IBIS row still wins, including explicit blank/all-exit rows.
+        for (index, code) in [(1.0, 29.0), (2.0, 99.0), (3.0, 0.0)] {
+            vehicle.set_var("IBIS_TerminusIndex", index);
+            vehicle.set_var("IBIS_TerminusCode", code);
+            view.terminus = people.player_bus_view(&vehicle).terminus;
+            let (chosen, registered) = choice(&mut people, &view, 0);
+            assert_eq!(chosen, None);
+            if code == 29.0 {
+                assert_eq!(view.terminus, Some(Some("M29 terminus".into())));
+                assert!(!registered.all_exit);
+                assert_eq!(
+                    choice(&mut people, &view, 1).0,
+                    Some((BusId::Player, Fit::Terminus))
+                );
+            } else {
+                assert_eq!(view.terminus, Some(None));
+                assert!(registered.all_exit);
+            }
+        }
+    }
+}
+
+#[test]
+fn destination_boarding_reads_display_before_ibis_and_rejects_blank_or_missing_rows() {
     let mut vehicle = destination_vehicle("display", true);
     let people = PeopleSim::new(Path::new("/nonexistent"), 200);
     vehicle.set_var("IBIS_TerminusCode", 10.0);
@@ -287,11 +332,9 @@ fn destination_boarding_reads_display_before_ibis_and_rejects_invalid_signs() {
         vehicle.set_var("target_index_int", row);
         assert_eq!(people.player_bus_view(&vehicle).terminus, Some(None));
     }
-    // Invalid values are a reported but unusable sign, not permission to use the duty.
+    // A nonnegative display row outside the HOF retains its existing empty-sign behavior.
     vehicle.set_var("IBIS_TerminusCode", 999.0);
     vehicle.set_var("IBIS_TerminusIndex", 999.0);
-    for row in [-1.0, f32::NAN, 999.0] {
-        vehicle.set_var("target_index_int", row);
-        assert_eq!(people.player_bus_view(&vehicle).terminus, Some(None));
-    }
+    vehicle.set_var("target_index_int", 999.0);
+    assert_eq!(people.player_bus_view(&vehicle).terminus, Some(None));
 }
