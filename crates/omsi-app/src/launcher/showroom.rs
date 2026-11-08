@@ -411,7 +411,6 @@ impl Showroom {
                 // [setvar]s are set again after the scripts every frame, which a script that
                 // writes them itself would overwrite - the Kajosoft Jelcz's glazed doors
                 // showed white in the preview, as they did in the game before #3183)
-                // Studio weather is local to this bus, including in an in-game preview.
                 let mut host = crate::services::preview_host(start_clock(&args));
                 host.paint_scheme = Some(scheme);
                 let mut vehicle = omsi_sim::VehicleInstance::new(vt.clone(), host);

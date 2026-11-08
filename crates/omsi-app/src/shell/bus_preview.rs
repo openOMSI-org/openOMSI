@@ -42,6 +42,7 @@ pub(crate) struct State {
     pub orbit: (f32, f32),
     pub zoom: f32,
     look: Option<Look>,
+    selection: Option<(crate::game_lists::ListKind, usize, Option<(String, String)>)>,
     serial: u64,
     sent: Option<Request>,
     worker: Option<Worker>,
@@ -49,6 +50,29 @@ pub(crate) struct State {
 }
 
 impl State {
+    pub fn invalidate_selection(&mut self) {
+        self.selection = None;
+    }
+
+    pub fn selection_changed(
+        &mut self,
+        kind: &crate::game_lists::ListKind,
+        index: usize,
+        row: Option<&(String, String)>,
+    ) -> bool {
+        if self
+            .selection
+            .as_ref()
+            .is_some_and(|(previous, selected, item)| {
+                previous == kind && *selected == index && item.as_ref() == row
+            })
+        {
+            return false;
+        }
+        self.selection = Some((kind.clone(), index, row.cloned()));
+        true
+    }
+
     pub fn invalidate_texture(&mut self) {
         self.texture = None;
         self.ready = false;
@@ -77,7 +101,6 @@ impl State {
         }
         self.look = look;
         if self.look.is_none() {
-            self.worker = None;
             self.sent = None;
         }
     }
@@ -280,6 +303,75 @@ fn run(requests: Receiver<Request>, answers: SyncSender<Reply>, options: RenderO
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn in_game_bus_preview_resolves_only_changed_selection() {
+        use crate::game_lists::ListKind;
+        let mut state = State::default();
+        let row = ("My depot: Bus".into(), "depot test".into());
+        assert!(state.selection_changed(&ListKind::PlaceMaker, 1, Some(&row)));
+        for _ in 0..120 {
+            assert!(!state.selection_changed(&ListKind::PlaceMaker, 1, Some(&row)));
+        }
+        assert!(state.selection_changed(&ListKind::PlaceMaker, 2, Some(&row)));
+        let changed = ("Renamed bus".into(), row.1.clone());
+        assert!(state.selection_changed(&ListKind::PlaceMaker, 2, Some(&changed)));
+        assert!(state.selection_changed(&ListKind::PlaceType("maker".into()), 2, Some(&changed)));
+        state.invalidate_selection();
+        assert!(state.selection_changed(&ListKind::PlaceType("maker".into()), 2, Some(&changed)));
+        assert!(state.selection_changed(&ListKind::PlaceMaker, 0, None));
+        assert!(!state.selection_changed(&ListKind::PlaceMaker, 0, None));
+    }
+
+    #[test]
+    fn in_game_bus_preview_keeps_worker_on_non_vehicle_rows() {
+        let mut state = State::default();
+        let look = Look {
+            bus: "bus".into(),
+            ..Default::default()
+        };
+        state.select(Some(look.clone()), String::new(), String::new());
+        let previous = state.request().unwrap();
+        state.sent = Some(previous.clone());
+        let (tx, requests) = mpsc::sync_channel(1);
+        let (answers, rx) = mpsc::sync_channel(1);
+        state.worker = Some(Worker { tx, rx });
+        for _ in 0..10 {
+            state.select(None, "Search".into(), String::new());
+            assert!(
+                state.worker.is_some(),
+                "navigation must keep the renderer alive"
+            );
+            assert!(state.request().is_none());
+            assert!(!state.ready);
+            assert!(!state.busy);
+            state.select(Some(look.clone()), String::new(), String::new());
+            assert!(state.worker.is_some());
+            assert!(state.request().unwrap().serial > previous.serial);
+            state.accept(Reply {
+                serial: previous.serial,
+                pixels: Some((1, 1, vec![255; 4])),
+                busy: false,
+                error: None,
+                views: Vec::new(),
+            });
+            assert!(state.pixels.is_none());
+        }
+        let mut shell = super::super::Shell::new();
+        shell.bus_preview = state;
+        shell.clear_bus_preview();
+        assert!(shell.bus_preview.worker.is_none());
+        assert!(requests.recv().is_err());
+        assert!(answers
+            .send(Reply {
+                serial: 0,
+                pixels: None,
+                busy: false,
+                error: None,
+                views: Vec::new()
+            })
+            .is_err());
+    }
 
     #[test]
     fn in_game_bus_preview_delivers_frames_while_dragging() {

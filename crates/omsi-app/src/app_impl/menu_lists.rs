@@ -27,6 +27,7 @@ impl App {
             }
         }
         self.menus.dropdown = None;
+        self.shell.bus_preview.invalidate_selection();
         self.menus.admin_list = Some(crate::game_lists::items(self, &kind));
         self.menus.list_kind = Some(kind);
         // (on its first line, not on a heading, nor on the search line above it: Enter

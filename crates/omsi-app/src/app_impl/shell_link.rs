@@ -56,8 +56,13 @@ impl App {
         let scale = dpi * ui::size_factor(h, dpi, self.settings.ui_scale, self.settings.ui_scale_window);
         self.fix_pause_focus();
         if self.menus.chooser.is_some() && crate::game_lists::bus_preview::is_vehicle_list(self.menus.list_kind.as_ref()) {
-            let (look, title, meta) = crate::game_lists::bus_preview::selection(self);
-            self.shell.bus_preview.select(look, title, meta);
+            let kind = self.menus.list_kind.as_ref().unwrap();
+            let index = self.menus.chooser.unwrap();
+            let row = self.menus.admin_list.as_ref().and_then(|rows| rows.get(index));
+            if self.shell.bus_preview.selection_changed(kind, index, row) {
+                let (look, title, meta) = crate::game_lists::bus_preview::selection(self);
+                self.shell.bus_preview.select(look, title, meta);
+            }
             self.shell.bus_preview.update(crate::launcher::showroom_options(&self.settings));
             if let Some(renderer) = self.renderer.as_ref() { self.shell.upload_bus_preview(renderer); }
         } else if self.shell.bus_preview.active { self.shell.clear_bus_preview(); }
@@ -361,7 +366,4 @@ mod online_action_tests {
         assert!(app.menus.game_panels.multiplayer.is_some());
         assert!(app.net.lan.is_none());
     }
-
-
-
 }
