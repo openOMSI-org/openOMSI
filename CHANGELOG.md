@@ -595,6 +595,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **The outside view (F3) starts straight behind the bus**, a little above it, as in OMSI 2,
+  instead of three quarters from the side. It still keeps the angle you leave it at, and Space
+  puts it back behind the bus.
 - **No more slivers of sky at crossings of raised roads** (Nova Friburgo, since 0.3.42): where
   the ground cannot be fitted to roads it should follow, only the roads the ground covers (a
   ditch) are cut out of it, not those lying on it.
