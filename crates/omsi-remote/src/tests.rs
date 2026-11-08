@@ -595,3 +595,13 @@ fn a_stalled_map_picture_does_not_hold_back_driving() {
     }
     assert!(worst < Duration::from_millis(250), "steering waited {worst:?} behind the map picture");
 }
+
+#[test]
+fn firewall_scripts_carry_the_path_only_as_hex() {
+    let exe = "C:\\Users\\Jean\u{2019}s O'Neil\\openomsi.exe";
+    let hex: String = exe.encode_utf16().map(|u| format!("{u:04x}")).collect();
+    for script in [crate::firewall::check_script(exe), crate::firewall::allow_script(exe)] {
+        assert!(script.contains(&hex), "{script}");
+        assert!(!script.contains('\u{2019}') && !script.contains("O'Neil") && !script.contains('"'), "{script}");
+    }
+}
