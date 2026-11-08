@@ -612,6 +612,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   copy of `Einm_Poststr_Poststr` at height zero in the corner of a tile near Falkensee Bahnhof;
   its cutter opened a pit thirty metres deep in the field, walled with tall strips of ground.
   Tunnels and underpasses, whose cutters reach the ground or lie a few metres under it, cut as before.
+- **No more towers of ground at the end of a road**: where the ground is fitted to a road, the side of a
+  kerb - a nearly vertical face - gave the blend a slope of tens of thousands, and the ground rose
+  more than a kilometre in thin strips at the end of the road (Berlin-Spandau, Hansastrasse near
+  Falkensee Bahnhof). The slope a rim hands to the ground is now limited to about 72 degrees.
 - **A key or a wheel's button can recentre head tracking**: *Head tracking: centre again* takes
   where your head is now as the middle (opentrack, native TrackIR and a Tobii eye tracker), without
   putting the view straight as F1 does. It is on the keys list without a key; a button that already
