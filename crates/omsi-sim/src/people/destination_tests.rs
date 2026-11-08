@@ -1,4 +1,4 @@
-//! Boarding must follow the display even when the duty or IBIS route stays unchanged.
+//! Known conflicting signs override the duty; unknown HOF spellings keep its fallback.
 use super::*;
 
 fn setup(tag: &str) -> (PeopleSim, PlayerBusView) {
@@ -111,14 +111,73 @@ fn destination_boarding_overrides_duty_and_stale_ibis_route() {
     assert_eq!(choice(&mut people, &view, 1).0, None);
     assert_eq!(
         choice(&mut people, &view, 2).0,
+        Some((BusId::Player, Fit::Duty)),
+        "the matching duty still takes its passengers"
+    );
+    people.duty = None;
+    assert_eq!(
+        choice(&mut people, &view, 2).0,
         boards,
         "matching route aliases still work"
     );
-    people.duty = None;
     assert_eq!(
         choice(&mut people, &view, 0).0,
         boards,
         "free drive uses the same display"
+    );
+}
+
+#[test]
+fn destination_boarding_keeps_duty_for_unknown_hof_spelling() {
+    let (mut people, mut view) = setup("destination-spelling");
+    let mut vehicle = destination_vehicle("spelling", true);
+    Arc::make_mut(vehicle.host.hof.as_mut().unwrap()).termini[0].texture_id =
+        "X10 terminus (via station)".into();
+    view.terminus = people.player_bus_view(&vehicle).terminus;
+    assert_eq!(
+        view.terminus,
+        Some(Some("X10 terminus (via station)".into()))
+    );
+    for line in [0, 2] {
+        let (chosen, registered) = choice(&mut people, &view, line);
+        assert_eq!(chosen, Some((BusId::Player, Fit::Duty)));
+        assert!(!registered.all_exit);
+    }
+    assert_eq!(choice(&mut people, &view, 1).0, None);
+
+    // The duty still unloads at its endpoint despite the different HOF spelling.
+    people.stops.get_mut(&42).unwrap().name = "X10 stop".into();
+    people.duty.as_mut().unwrap().2 = true;
+    let (chosen, registered) = choice(&mut people, &view, 0);
+    assert_eq!(chosen, None);
+    assert!(registered.all_exit);
+}
+
+#[test]
+fn destination_boarding_keeps_duty_when_stop_evidence_is_ambiguous() {
+    let (mut people, view) = setup("destination-ambiguous");
+    // A shared terminus in the same record is not proof of a different service.
+    people.stops.get_mut(&42).unwrap().lines[1]
+        .1
+        .insert("X10 terminus".into());
+    assert_eq!(
+        choice(&mut people, &view, 0).0,
+        Some((BusId::Player, Fit::Duty))
+    );
+    // Nor is a sign taking people to one of the duty's stops.
+    people.stops.get_mut(&42).unwrap().lines[1]
+        .1
+        .remove("X10 terminus");
+    people.stops.get_mut(&42).unwrap().lines[1].0 = "X10 stop".into();
+    assert_eq!(
+        choice(&mut people, &view, 0).0,
+        Some((BusId::Player, Fit::Duty))
+    );
+    // With no record for the sign, retain compatibility rather than guessing.
+    people.stops.get_mut(&42).unwrap().lines.remove(1);
+    assert_eq!(
+        choice(&mut people, &view, 0).0,
+        Some((BusId::Player, Fit::Duty))
     );
 }
 
@@ -138,9 +197,8 @@ fn destination_boarding_distinguishes_no_display_support_from_out_of_service() {
     assert_eq!(choice(&mut people, &view, 0).0, None);
 }
 
-#[test]
-fn destination_boarding_reads_display_before_ibis_and_rejects_invalid_signs() {
-    let dir = std::env::temp_dir().join(format!("omsi-destination-view-{}", std::process::id()));
+fn destination_vehicle(tag: &str, reports_display: bool) -> VehicleInstance {
+    let dir = std::env::temp_dir().join(format!("omsi-destination-{tag}-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("test.bus"),
@@ -150,7 +208,11 @@ fn destination_boarding_reads_display_before_ibis_and_rejects_invalid_signs() {
     std::fs::write(dir.join("model.cfg"), "").unwrap();
     std::fs::write(
         dir.join("vars.txt"),
-        "target_index_int\nIBIS_TerminusIndex\nIBIS_TerminusCode\n",
+        if reports_display {
+            "target_index_int\nIBIS_TerminusIndex\nIBIS_TerminusCode\n"
+        } else {
+            "IBIS_TerminusIndex\nIBIS_TerminusCode\n"
+        },
     )
     .unwrap();
     let ty = Arc::new(crate::VehicleType::load(&dir, &dir.join("test.bus")).unwrap());
@@ -182,6 +244,37 @@ fn destination_boarding_reads_display_before_ibis_and_rejects_invalid_signs() {
         ],
         ..Default::default()
     }));
+    vehicle
+}
+
+#[test]
+fn destination_boarding_unresolved_ibis_keeps_duty_but_blank_rows_empty_bus() {
+    let (mut people, mut view) = setup("destination-ibis");
+    let mut vehicle = destination_vehicle("ibis-only", false);
+    assert_eq!(vehicle.var("target_index_int"), None);
+    for invalid in [999.0, -1.0, f32::NAN] {
+        vehicle.set_var("IBIS_TerminusCode", invalid);
+        vehicle.set_var("IBIS_TerminusIndex", invalid);
+        view.terminus = people.player_bus_view(&vehicle).terminus;
+        assert_eq!(view.terminus, None);
+        let (chosen, registered) = choice(&mut people, &view, 0);
+        assert!(chosen.is_some());
+        assert!(!registered.all_exit);
+    }
+    for (index, code) in [(2.0, 99.0), (3.0, 0.0)] {
+        vehicle.set_var("IBIS_TerminusIndex", index);
+        vehicle.set_var("IBIS_TerminusCode", code);
+        view.terminus = people.player_bus_view(&vehicle).terminus;
+        assert_eq!(view.terminus, Some(None));
+        let (chosen, registered) = choice(&mut people, &view, 0);
+        assert_eq!(chosen, None);
+        assert!(registered.all_exit);
+    }
+}
+
+#[test]
+fn destination_boarding_reads_display_before_ibis_and_rejects_invalid_signs() {
+    let mut vehicle = destination_vehicle("display", true);
     let people = PeopleSim::new(Path::new("/nonexistent"), 200);
     vehicle.set_var("IBIS_TerminusCode", 10.0);
     vehicle.set_var("IBIS_TerminusIndex", 0.0);

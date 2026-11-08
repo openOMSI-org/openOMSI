@@ -264,8 +264,7 @@ fn test_stop(name: &str, alias: &str) -> PaxStop {
     }
 }
 
-/// The compatibility fallback for buses without destination variables can use a duty;
-/// buses with a reported display use Takes::Terminus instead (destination_tests).
+/// The duty fallback tolerates different HOF and timetable terminus spellings.
 #[test]
 fn who_boards_the_players_bus() {
     // line 76 from Bauernhof (stop 10) by Kirche to Endstation; the depot file calls the

@@ -219,10 +219,9 @@ impl PeopleSim {
                 // empties the bus whatever the duty)
                 None => self.duty.as_ref().map(|(trip, _, _)| trip.terminus.clone()),
             };
-            // A reported display is authoritative, even on a duty. Only buses whose
-            // scripts expose no destination retain the timetable compatibility fallback.
-            let takes = match (&b.terminus, &self.duty) {
-                (None, Some((trip, next, done))) => Takes::Duty {
+            // Stop records decide whether the sign contradicts this duty.
+            let takes = match &self.duty {
+                Some((trip, next, done)) => Takes::Duty {
                     trip: trip.clone(),
                     next: *next,
                     done: *done,

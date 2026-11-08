@@ -399,8 +399,7 @@ pub struct PeopleSim {
     /// the HUD shows OMSI's hint for it (`Languages/*_basic*.olf`, `RL_PassDlg_<name>`).
     pub dialog: Option<String>,
     /// The player's duty (`set_duty`): its trip, the stop of it the duty is due at, and
-    /// whether the trip has reached its last stop. Boarding follows the displayed
-    /// destination; this is a fallback only for scripts that expose no destination.
+    /// whether the trip has reached its last stop. A fallback for unrecognized signs.
     pub duty: Option<(Arc<DutyTrip>, usize, bool)>,
     /// Buses whose validator somebody used since the app last looked (`take_stamped`), with
     /// the index of that `[stamper]` in the bus's cabin.
