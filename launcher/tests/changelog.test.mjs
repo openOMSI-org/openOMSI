@@ -44,6 +44,16 @@ test('release note tables parse headers, alignments, and inline cell marks', () 
   ]);
 });
 
+test('a line under text without a pipe is not a table, and short rows are padded', () => {
+  assert.deepEqual(blocks('Fixes\n---\n- a'), [
+    { kind: 'paragraph', text: 'Fixes' },
+    { kind: 'list', items: [{ depth: 0, text: 'a' }] },
+  ]);
+  assert.deepEqual(blocks('| A | B |\n|---|---|\n| 1 |\n| 2 | 3 | 4 |'), [
+    { kind: 'table', headers: ['A', 'B'], align: ['left', 'left'], rows: [['1', ''], ['2', '3']] },
+  ]);
+});
+
 test('inline marks, and links only to https', () => {
   assert.deepEqual(inline('a **b** *c* `d` [e](https://x.org/y) f'), [
     { kind: 'text', text: 'a ' }, { kind: 'bold', text: 'b' }, { kind: 'text', text: ' ' },

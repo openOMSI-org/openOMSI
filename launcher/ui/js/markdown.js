@@ -88,14 +88,13 @@ export function blocks(source) {
     if (!line.trim()) { close(); continue; }
     if (RULE.test(line)) { close(); continue; }
     const headers = tableCells(line);
-    const align = i + 1 < lines.length ? tableAlignment(lines[i + 1]) : null;
+    const align = i + 1 < lines.length && lines[i + 1].includes('|') ? tableAlignment(lines[i + 1]) : null;
     if (align && align.length === headers.length) {
       close();
       const rows = [];
       while (i + 2 < lines.length && lines[i + 2].includes('|')) {
         const row = tableCells(lines[i + 2]);
-        if (row.length !== headers.length) break;
-        rows.push(row);
+        rows.push(headers.map((_, k) => row[k] ?? ''));
         i++;
       }
       out.push({ kind: 'table', headers, align, rows });

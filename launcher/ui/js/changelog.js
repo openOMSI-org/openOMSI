@@ -14,7 +14,7 @@ function Inline({ text }) {
     p.kind === 'bold' ? html`<b>${p.text}</b>`
     : p.kind === 'italic' ? html`<i>${p.text}</i>`
     : p.kind === 'code' ? html`<code>${p.text}</code>`
-    : p.kind === 'link' ? html`<a href=${p.url} onClick=${(e) => { e.preventDefault(); openUrl(p.url); }}>${p.text}</a>`
+    : p.kind === 'link' ? html`<a href=${p.url} onClick=${(e) => { e.preventDefault(); openUrl(p.url); }}><${Inline} text=${p.text} /></a>`
     : p.kind === 'image' ? html`<img src=${p.url} alt=${p.alt} width=${p.width} height=${p.height} loading="lazy" decoding="async" />`
     : p.text);
 }
