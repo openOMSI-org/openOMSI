@@ -242,6 +242,9 @@ pub struct TrolleyDef {
     /// A trolleybus made for OMSI 2 as it is: a bus script drives it and its poles are two
     /// meshes the cockpit switches `cp_SHTANGALEV`/`cp_SHTANGAPRAV` show (folded or raised).
     pub legacy: Option<LegacyDef>,
+    /// `[trolley_none]`: the vehicle's own script or a plugin handles its poles, so the game
+    /// gives it no gear of its own, not even the one it would read off a plain trolleybus's model.
+    pub none: bool,
 }
 
 /// How a plain OMSI 2 trolleybus is told from its files (see `docs/TROLLEY_MODS.md`).
@@ -279,6 +282,12 @@ impl DriveKind {
 impl TrolleyDef {
     pub fn is_empty(&self) -> bool {
         self.poles.is_empty()
+    }
+
+    /// The vehicle's file gives no poles and does not say `[trolley_none]`: a plain OMSI 2
+    /// trolleybus's poles may be read off its model.
+    pub fn takes_model_poles(&self) -> bool {
+        self.is_empty() && !self.none
     }
 }
 
@@ -446,6 +455,7 @@ impl TrolleyDef {
             "trolley_async" => self.drive = Some(DriveKind::Async(AsyncDef::parse(lines))),
             "trolley_battery" => self.battery = Some(BatteryDef::parse(lines)),
             "trolley_vars" => VarNames::parse(lines, &mut self.vars),
+            "trolley_none" => self.none = true,
             "trolley_aux" => {
                 if let Some(x) = pairs(lines).first().and_then(|(k, v)| num(v, 0).or_else(|| k.parse().ok())) {
                     self.aux_kw = x.max(0.0);
@@ -457,7 +467,7 @@ impl TrolleyDef {
     }
 
     pub fn keywords() -> &'static [&'static str] {
-        &["trolley_pole", "trolley_rheostat", "trolley_async", "trolley_battery", "trolley_vars", "trolley_aux"]
+        &["trolley_pole", "trolley_rheostat", "trolley_async", "trolley_battery", "trolley_vars", "trolley_aux", "trolley_none"]
     }
 }
 
@@ -492,6 +502,17 @@ mod tests {
             }
             _ => panic!("rheostat drive"),
         }
+    }
+
+    #[test]
+    fn trolley_none_keeps_the_model_s_poles_from_being_taken() {
+        let mut d = TrolleyDef::default();
+        assert!(d.takes_model_poles());
+        assert!(d.take_block("trolley_none", &[]));
+        assert!(d.none && d.is_empty() && !d.takes_model_poles());
+        let mut own = TrolleyDef::default();
+        own.take_block("trolley_pole", &["side 1"]);
+        assert!(!own.takes_model_poles());
     }
 
     #[test]

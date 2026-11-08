@@ -15,7 +15,7 @@ the constants are in the vehicle's file, not in the game.
 > Real trolleybus add-ons for OMSI 2 carry no wire logic of their own; how they are read and run
 > here is in [TROLLEY_MODS.md](TROLLEY_MODS.md). A map's wire splines are read as the wire when no
 > `trolley.txt` is given, and a bus with `cp_SHTANGALEV`/`cp_SHTANGAPRAV` pole meshes gets poles
-> without a `[trolley_pole]` block.
+> without a `[trolley_pole]` block, unless its `.bus` says `[trolley_none]`.
 
 ## What it does
 
@@ -303,6 +303,15 @@ raise_request Trolley_Poles_Raise   +1 raise, -1 lower the poles that have a mot
 switch_request Trolley_Switch_Request   radio: -1 left, +1 right, 2 momentary toggle, 0 none (without it: indicator)
 switch_code Trolley_Switch_Code         radio switches: the route code, 0 none
 switch_channel Trolley_Switch_Channel   radio switches: the channel sent on
+```
+
+A vehicle whose own script or a plugin moves its poles puts an empty `[trolley_none]` block in
+its `.bus`: the game then gives it no gear, and does not read poles off its model either (the
+meshes keep their own `[visible]` and animations). Without any of these blocks the vehicle is
+taken as a plain trolleybus when its model looks like one (see [TROLLEY_MODS.md](TROLLEY_MODS.md)).
+
+```
+[trolley_none]
 ```
 
 With a modelled drive the vehicle's own `M_Wheel` is replaced by the drive's force (times the
