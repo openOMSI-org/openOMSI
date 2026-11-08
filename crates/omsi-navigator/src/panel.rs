@@ -75,6 +75,11 @@ impl PanelLook {
     }
 }
 
+// Measure from the last mesh build, not a bin boundary, to avoid jitter-triggered uploads.
+pub(super) fn route_position_changed(cached: f32, current: f32) -> bool {
+    (current - cached).abs() >= 3.0
+}
+
 impl Navigator {
     pub(super) fn ensure_gpu(&mut self, renderer: &Renderer) {
         if self.gpu.is_none() {
@@ -198,23 +203,37 @@ impl Navigator {
         let depth_layer = map_layer.with_depth();
         let vpm = map_layer.view_proj;
 
-        // --- the route (buffers 1 and 9): built again when it, its traffic or the bus's lane changed
+        // --- the route (buffers 1 and 9): rebuilt for route changes or three metres of progress
         let mut route_verts = None;
         let route_net = global.as_deref().or(f.traffic.map(|t| &t.net));
         if let (Some(rn), true) = (route_net, !self.route.lanes.is_empty()) {
             let first = self.route.lanes.get(self.route.progress.min(self.route.lanes.len().saturating_sub(1))).copied();
             let bus_lane = first.map(|l| lane_from_right(rn, l, f.bus)).unwrap_or(0);
-            if self.route_mesh.0 != self.route.version || self.route_mesh.1 != self.jam_version || self.route_mesh.2 != anchor || self.route_mesh.4 != bus_lane || self.route_mesh.5 != look_key {
+            if self.route_mesh.0 != self.route.version
+                || self.route_mesh.1 != self.jam_version
+                || self.route_mesh.2 != anchor
+                || self.route_mesh.4 != bus_lane
+                || self.route_mesh.5 != look_key
+                || route_position_changed(self.route_mesh.6, self.route.s)
+            {
                 let mut p = Painter::new();
                 let style = RouteStyle { extra_m: -0.6, min_px: 5.0, arrows: Some((32.0, 900.0)), max_len: 12_000.0, near: Some((anchor, PANEL_REACH)) };
                 mapmesh::roads::build_route_to(&mut p, rn, &self.route.lanes[self.route.progress.min(self.route.lanes.len())..], anchor, self.route.s, &self.route_jam, &style, bus_lane, &pal, self.destination.as_ref().and_then(|d| d.path.as_ref().map(|p| p.end_s)));
                 self.draw_waypoint_routes(&mut p, rn, anchor, &style, &pal);
-                self.route_mesh = (self.route.version, self.jam_version, anchor, p.len(), bus_lane, look_key);
+                self.route_mesh = (
+                    self.route.version,
+                    self.jam_version,
+                    anchor,
+                    p.len(),
+                    bus_lane,
+                    look_key,
+                    self.route.s,
+                );
                 route_verts = Some(p.verts);
             }
         } else if self.route_mesh.3 != 0 {
             route_verts = Some(Vec::new());
-            self.route_mesh = (self.route.version, self.jam_version, anchor, 0, 0, look_key);
+            self.route_mesh = (self.route.version, self.jam_version, anchor, 0, 0, look_key, 0.0);
         }
 
         // --- the land colour under everything, the traffic, the vehicles

@@ -1292,8 +1292,13 @@ html.phone .ail-tick { width: 28px; height: 28px; }
 .notes li { margin: 2px 0; }
 .notes b { color: var(--text); }
 .notes code { font-size: 12px; padding: 1px 4px; border-radius: 3px; background: var(--surface-3); }
-.notes a { color: var(--accent); }
+.notes a, .notes a b { color: var(--accent); }
 .notes blockquote { padding: 6px 10px; border-left: 3px solid var(--line); color: var(--muted); }
+.notes img { display: block; max-width: 100%; height: auto; margin: 0 0 8px; border-radius: var(--radius-sm); }
+.notes-table-wrap { max-width: 100%; margin: 0 0 8px; overflow-x: auto; }
+.notes table { border-collapse: collapse; min-width: 100%; }
+.notes th, .notes td { padding: 5px 8px; border: 1px solid var(--line-strong); }
+.notes th { color: var(--text); background: var(--surface-3); font-weight: 600; }
 .notes .notes-h1, .notes .notes-h2, .notes .notes-h3 { margin: 10px 0 4px; font-weight: 600; color: var(--text); }
 .notes .notes-h1 { font-size: 15px; }
 .notes .notes-h2 { font-size: 14px; }
