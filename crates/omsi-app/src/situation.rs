@@ -187,6 +187,9 @@ pub(crate) fn apply_situation_parsed(sit: &omsi_content::situation::Situation, a
         if !v.paint.trim().is_empty() {
             args.hof = Some(v.paint.clone());
         }
+        if args.riders == 0 {
+            args.riders = v.riders;
+        }
         args.situation_next_stop = None;
         if v.timetable.len() >= 2 {
             args.line = Some(v.timetable[0].clone());
@@ -338,6 +341,7 @@ pub(crate) fn build_situation(
             vars,
             string_vars,
             timetable: Vec::new(),
+            riders: if mine { v.host.humans_count.max(0.0) as usize } else { 0 },
         }
     };
     let mut vehicles = Vec::new();
