@@ -1192,6 +1192,9 @@ fn mesh_point_of(v: &omsi_sim::VehicleInstance, mesh: &str, point: [f32; 3], sec
 /// file name first (`sht_bashmak.o3d` is not `sht_bashmak_1.o3d`), else the first whose path
 /// ends with it.
 fn mesh_index(ty: &omsi_sim::VehicleType, mesh: &str) -> Option<usize> {
+    if mesh.is_empty() {
+        return None;
+    }
     fn name(f: &str) -> &str {
         f.rsplit(['/', '\\']).next().unwrap_or(f)
     }

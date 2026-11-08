@@ -168,11 +168,13 @@ pub static FNS: &[ApiFn] = &[
         let s = a.opt_int(0)?.unwrap_or(0).max(0) as usize;
         Ok::<_, ApiError>(multi(c.io().body_frame(s).map(|f| f.map(Value::Num))))
     }),
-    def!("mesh_point", "vehicle", [p("mesh", "string"), p("x", "number"), p("y", "number"), p("z", "number"), o("section", "integer")], "x, y, z", "Where a point of one of the bus's meshes is now, in map metres: `mesh` names the mesh's file (`\"sht_bashmak.o3d\"`, or a part of its path), `x, y, z` is the point in the model's frame (x right, y forward, z up) as the mesh stands at rest; its animations and the body's lean move it. `section` (0, the default) looks in a section coupled behind instead (1, 2, ...: an articulated bus's rear part), its point in that section's model frame. For a plugin that lines a part of the bus up with something outside it. Nothing when the bus has no such mesh.", NEW, None, true, |c, a| {
+    def!("mesh_point", "vehicle", [p("mesh", "string"), p("x", "number"), p("y", "number"), p("z", "number"), o("section", "integer")], "x, y, z", "Where a point of one of the bus's meshes is now, in map metres: `mesh` names the mesh's file (`\"sht_bashmak.o3d\"`, or a part of its path), `x, y, z` is the point in the model's frame (x right, y forward, z up) as the mesh stands at rest; its animations and the body's lean move it. `section` (0, the default) looks in a section coupled behind instead (1, 2, ...: an articulated bus's rear part), its point in that section's model frame. For a plugin that lines a part of the bus up with something outside it. Nothing when the bus or the section has no such mesh, or `mesh` is empty.", NEW, None, true, |c, a| {
         let mesh = a.str(0)?;
         let p = [a.num(1)? as f32, a.num(2)? as f32, a.num(3)? as f32];
         let s = a.opt_int(4)?.unwrap_or(0).max(0) as usize;
-        Ok::<_, ApiError>(multi(c.io().mesh_point(&mesh, p, s).map(|w| w.map(Value::Num))))
+        // (an empty name would match every mesh's path)
+        let w = if mesh.is_empty() { None } else { c.io().mesh_point(&mesh, p, s) };
+        Ok::<_, ApiError>(multi(w.map(|w| w.map(Value::Num))))
     }),
     def!("vars", "vehicle", [o("kind", "string")], "list of strings", "The names of every variable of the bus's scripts, or of every string variable with `\"str\"`.", V10, None, false, |c, a| {
         let kind = a.opt_str(0)?;
@@ -205,12 +207,13 @@ pub static FNS: &[ApiFn] = &[
         let s = a.opt_int(1)?.unwrap_or(0).max(0) as usize;
         Ok::<_, ApiError>(multi(c.io().other_body_frame(id, s).map(|f| f.map(Value::Num))))
     }),
-    def!("other_mesh_point", "traffic", [p("id", "integer"), p("mesh", "string"), p("x", "number"), p("y", "number"), p("z", "number"), o("section", "integer")], "x, y, z", "`mesh_point` of one of `others`: where a point of one of its meshes (or of one of its coupled sections's, with `section`) is now.", NEW, None, true, |c, a| {
+    def!("other_mesh_point", "traffic", [p("id", "integer"), p("mesh", "string"), p("x", "number"), p("y", "number"), p("z", "number"), o("section", "integer")], "x, y, z", "`mesh_point` of one of `others`: where a point of one of its meshes (or, with `section`, of one of its coupled sections') is now.", NEW, None, true, |c, a| {
         let id = a.int(0)? as u64;
         let mesh = a.str(1)?;
         let p = [a.num(2)? as f32, a.num(3)? as f32, a.num(4)? as f32];
         let s = a.opt_int(5)?.unwrap_or(0).max(0) as usize;
-        Ok::<_, ApiError>(multi(c.io().other_mesh_point(id, &mesh, p, s).map(|w| w.map(Value::Num))))
+        let w = if mesh.is_empty() { None } else { c.io().other_mesh_point(id, &mesh, p, s) };
+        Ok::<_, ApiError>(multi(w.map(|w| w.map(Value::Num))))
     }),
     def!("set_other_var", "traffic", [p("id", "integer"), p("name", "string"), p("value", "number")], "boolean", "Sets a script variable of one of `others`; `true` when that vehicle has it. An AI vehicle keeps it until its scripts write it again; another player's bus takes its values from the network again.", V21, TrafficWrite, false, |c, a| {
         let (id, n, v) = (a.int(0)? as u64, a.str(1)?, a.num(2)? as f32);

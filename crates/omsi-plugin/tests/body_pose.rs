@@ -19,7 +19,8 @@ struct Game {
 
 /// A point of a mesh in a body's frame, where the game would put it (only `shoe.o3d` exists).
 fn point(frame: &[f64; 12], mesh: &str, p: [f32; 3]) -> Option<[f64; 3]> {
-    if mesh != "shoe.o3d" {
+    // (an empty name, like a suffix of every path, matches here: the API must not ask)
+    if mesh != "shoe.o3d" && !mesh.is_empty() {
         return None;
     }
     let (x, y, z) = (p[0] as f64, p[1] as f64, p[2] as f64);
@@ -91,6 +92,8 @@ fn a_plugin_sees_where_bodies_and_mesh_points_are() {
           local sx, sy, sz = omsi.mesh_point("shoe.o3d", 1, -6, 5)
           omsi.set_var("shoe_x", sx) omsi.set_var("shoe_y", sy) omsi.set_var("shoe_z", sz)
           assert(omsi.mesh_point("no_such.o3d", 0, 0, 0) == nil)
+          assert(omsi.mesh_point("", 0, 0, 0) == nil, "an empty name is no mesh")
+          assert(omsi.other_mesh_point(7, "", 0, 0, 0) == nil, "an empty name is no mesh")
           local ox, oy = omsi.other_body_frame(7)
           omsi.set_var("other_x", ox) omsi.set_var("other_y", oy)
           local px, py, pz = omsi.other_mesh_point(7, "shoe.o3d", 1, -6, 5)

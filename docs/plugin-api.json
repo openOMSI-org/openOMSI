@@ -2436,7 +2436,7 @@
       "name": "mesh_point",
       "group": "vehicle",
       "since": "0.2.22",
-      "doc": "Where a point of one of the bus's meshes is now, in map metres: `mesh` names the mesh's file (`\"sht_bashmak.o3d\"`, or a part of its path), `x, y, z` is the point in the model's frame (x right, y forward, z up) as the mesh stands at rest; its animations and the body's lean move it. `section` (0, the default) looks in a section coupled behind instead (1, 2, ...: an articulated bus's rear part), its point in that section's model frame. For a plugin that lines a part of the bus up with something outside it. Nothing when the bus has no such mesh.",
+      "doc": "Where a point of one of the bus's meshes is now, in map metres: `mesh` names the mesh's file (`\"sht_bashmak.o3d\"`, or a part of its path), `x, y, z` is the point in the model's frame (x right, y forward, z up) as the mesh stands at rest; its animations and the body's lean move it. `section` (0, the default) looks in a section coupled behind instead (1, 2, ...: an articulated bus's rear part), its point in that section's model frame. For a plugin that lines a part of the bus up with something outside it. Nothing when the bus or the section has no such mesh, or `mesh` is empty.",
       "params": [
         {
           "name": "mesh",
@@ -2786,7 +2786,7 @@
       "name": "other_mesh_point",
       "group": "traffic",
       "since": "0.2.22",
-      "doc": "`mesh_point` of one of `others`: where a point of one of its meshes (or of one of its coupled sections's, with `section`) is now.",
+      "doc": "`mesh_point` of one of `others`: where a point of one of its meshes (or, with `section`, of one of its coupled sections') is now.",
       "params": [
         {
           "name": "id",
