@@ -359,8 +359,8 @@ pub struct Navigator {
     duty_route: Option<Route>,
     entries: Vec<destination::EntryMarker>,
     /// The route mesh (buffers 1 and 9): the route and traffic versions, the anchor, its
-    /// size, the bus's lane and the look it was built for.
-    route_mesh: (u64, u64, DVec2, u32, usize, u64, i32),
+    /// size, the bus's lane, look and along-lane position it was built for.
+    route_mesh: (u64, u64, DVec2, u32, usize, u64, f32),
     /// Per lane of the traffic: how congested it is (0 free … 1 standing), smoothed.
     congestion: HashMap<usize, f32>,
     /// The same for the route's lanes ahead (in the route's network), and a version that
@@ -584,7 +584,7 @@ impl Navigator {
             waypoints: Vec::new(),
             duty_route: None,
             entries: Vec::new(),
-            route_mesh: (u64::MAX, 0, DVec2::ZERO, 0, 0, 0, 0),
+            route_mesh: (u64::MAX, 0, DVec2::ZERO, 0, 0, 0, 0.0),
             congestion: HashMap::new(),
             route_jam: HashMap::new(),
             jam_version: 0,
