@@ -83,7 +83,7 @@ fn fs_motion(in: MotionIn) -> @location(0) vec4<f32> {
 
 @fragment
 fn fs_motion_test(in: MotionIn) -> @location(0) vec4<f32> {
-    cutout_coverage(in.uv, in.params, camera.lod.x);
+    cutout_coverage(in.uv, in.params, camera.lod.x, 1.0);
     return motion_pixels(in.cur, in.prev);
 }
 
