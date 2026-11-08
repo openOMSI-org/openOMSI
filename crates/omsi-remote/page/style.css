@@ -104,6 +104,8 @@ body {
 
 button { font: inherit; color: inherit; }
 
+.awake { position: fixed; right: 0; bottom: 0; width: 1px; height: 1px; opacity: 0.01; pointer-events: none; }
+
 .ico {
   display: inline-block;
   width: 1em;
@@ -554,7 +556,7 @@ body.editing .w.sel { outline: 2px solid var(--accent); z-index: 3; }
 #edit-bar button.primary { background: var(--accent); color: #111; width: auto; font-size: inherit; padding: 10px 14px; }
 #edit-bar button:disabled { opacity: .4; }
 
-#toast { position: fixed; bottom: calc(80px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--edge); padding: 10px 18px; border-radius: 999px; z-index: 40; box-shadow: 0 6px 24px rgba(0, 0, 0, .4); }
+#toast { position: fixed; bottom: calc(80px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100vw - 32px); text-align: center; background: var(--panel-2); border: 1px solid var(--edge); padding: 10px 18px; border-radius: 22px; z-index: 40; box-shadow: 0 6px 24px rgba(0, 0, 0, .4); }
 
 @media (max-width: 600px) {
   #vehicle-name { display: none; }
