@@ -195,12 +195,16 @@ pub(super) struct HandbrakeLever {
     pub variable: String,
 }
 
-/// A named door button in the cockpit model and the hand nearest to it.
-#[derive(Clone, Copy)]
+/// A physical door control in the cockpit model and the hand nearest to it.
+#[derive(Clone)]
 pub(super) struct DoorButtonControl {
     pub mesh: usize,
     pub point: Vec3,
     pub hand: usize,
+    /// The model event on this mesh, when it exposes one.
+    pub event: Option<String>,
+    /// The player's door key group this control belongs to, when it can be inferred.
+    pub group: Option<usize>,
 }
 
 fn handbrake_hand(grab: Vec3, hip: Vec3, heading: f32) -> usize {
@@ -277,17 +281,18 @@ pub(super) fn find_handbrake(
     })
 }
 
-/// Find a cockpit mesh that is explicitly named as a door button/control. If a bus does not
-/// name its control, the driver animation uses its conventional left-side fallback.
+/// Find physical cockpit door controls. Mouse events are the strongest signal: their trigger
+/// either belongs to a door key group, writes a door leaf, or names a door action. Mesh names
+/// remain a fallback for models with no useful event metadata. If neither signal exists, the
+/// driver animation uses its conventional wheel-relative fallback.
 pub(super) fn find_door_buttons(
     v: &impl DriverCar,
     hip: Vec3,
     heading: f32,
-) -> [Option<DoorButtonControl>; 3] {
+) -> Vec<DoorButtonControl> {
     const DOOR_HINTS: &[&str] = &["door", "tuer", "tür", "porte", "porta"];
     const CONTROL_HINTS: &[&str] = &[
-        "button", "btn", "taster", "knopf", "schalter", "switch", "tuerpin", "botao",
-        "pino",
+        "button", "btn", "taster", "knopf", "schalter", "switch", "tuerpin", "botao", "pino",
     ];
     let positions_of = |i: usize| -> Vec<Vec3> {
         let vm = &v.ty().meshes[i];
@@ -300,18 +305,56 @@ pub(super) fn find_door_buttons(
                 .unwrap_or_default()
         }
     };
-    let mut indexed: [Option<(f32, DoorButtonControl)>; 3] = [None; 3];
-    let mut generic: Option<(f32, DoorButtonControl)> = None;
+    let groups = omsi_sim::door_keys::door_keys(v.ty());
+    let program = &v.ty().program;
+    let mut candidates: Vec<(f32, DoorButtonControl)> = Vec::new();
     for (i, vm) in v.ty().meshes.iter().enumerate() {
-        let def = &v.ty().model.meshes[vm.def_index];
+        let Some(def) = v.ty().model.meshes.get(vm.def_index) else {
+            continue;
+        };
         let mut names = format!("{:?}", vm.file).to_ascii_lowercase();
+        if let Some(ident) = &def.mesh_ident {
+            names.push(' ');
+            names.push_str(&ident.to_ascii_lowercase());
+        }
         for animation in &def.animations {
             names.push(' ');
             names.push_str(&animation.variable.to_ascii_lowercase());
         }
-        let door_hint = DOOR_HINTS.iter().any(|hint| names.contains(hint));
-        let control_hint = CONTROL_HINTS.iter().any(|hint| names.contains(hint));
-        if !door_hint || !control_hint {
+        let event = def
+            .mouse_event
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
+        let event_leaves = event
+            .map(|event| omsi_sim::door_keys::trigger_leaves(program, event))
+            .unwrap_or_default();
+        let event_group = event.and_then(|event| {
+            groups
+                .iter()
+                .position(|group| {
+                    group.iter().any(|name| {
+                        name.split('|')
+                            .any(|trigger| trigger.eq_ignore_ascii_case(event))
+                            || name.split('|').any(|trigger| {
+                                let leaves = omsi_sim::door_keys::trigger_leaves(program, trigger);
+                                leaves
+                                    .iter()
+                                    .any(|leaf| event_leaves.iter().any(|e| e == leaf))
+                            })
+                    })
+                })
+                .map(|index| index + 1)
+        });
+        let event_named_as_door = event.is_some_and(|event| {
+            let event = event.to_ascii_lowercase();
+            DOOR_HINTS.iter().any(|hint| event.contains(hint))
+        });
+        let event_is_door_control =
+            event_group.is_some() || !event_leaves.is_empty() || event_named_as_door;
+        let named_door_control = DOOR_HINTS.iter().any(|hint| names.contains(hint))
+            && CONTROL_HINTS.iter().any(|hint| names.contains(hint));
+        if !event_is_door_control && !named_door_control {
             continue;
         }
         let positions = positions_of(i);
@@ -325,16 +368,27 @@ pub(super) fn find_door_buttons(
         if !distance.is_finite() || distance > 1.6 {
             continue;
         }
-        let rank = DOOR_HINTS.iter().filter(|hint| names.contains(**hint)).count() as f32
-            + CONTROL_HINTS.iter().filter(|hint| names.contains(**hint)).count() as f32;
-        let score = rank * 2.0 - distance;
+        let rank = DOOR_HINTS
+            .iter()
+            .filter(|hint| names.contains(**hint))
+            .count() as f32
+            + CONTROL_HINTS
+                .iter()
+                .filter(|hint| names.contains(**hint))
+                .count() as f32;
+        let score = rank * 2.0 + if event_is_door_control { 6.0 } else { 0.0 } - distance;
         let control = DoorButtonControl {
             mesh: i,
             point: local,
             hand: handbrake_hand(point, hip, heading),
+            event: event.map(str::to_ascii_lowercase),
+            group: event_group,
         };
-        let compact: String = names.chars().filter(|c| c.is_ascii_alphanumeric()).collect();
-        let index = (1..=3).find(|n| {
+        let compact: String = names
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric())
+            .collect();
+        let numbered = (1..=9).find(|n| {
             let number = n.to_string();
             [
                 "tuertaster",
@@ -350,27 +404,24 @@ pub(super) fn find_door_buttons(
                 "portapino",
                 "pinporta",
             ]
+            .iter()
+            .any(|stem| compact.contains(&format!("{stem}{number}")))
+                || [
+                    "taster", "button", "schalter", "switch", "knopf", "pin", "botao", "pino",
+                ]
                 .iter()
                 .any(|stem| compact.contains(&format!("{stem}{number}")))
-                || ["taster", "button", "schalter", "switch", "knopf", "pin", "botao", "pino"]
-                    .iter()
-                    .any(|stem| compact.contains(&format!("{stem}{number}")))
         });
-        if let Some(n) = index {
-            let slot = &mut indexed[n - 1];
-            if slot.as_ref().is_none_or(|(current, _)| score > *current) {
-                *slot = Some((score, control));
-            }
-        } else if generic.as_ref().is_none_or(|(current, _)| score > *current) {
-            generic = Some((score, control));
-        }
+        candidates.push((
+            score,
+            DoorButtonControl {
+                group: control.group.or(numbered),
+                ..control
+            },
+        ));
     }
-    let any_numbered = indexed.iter().any(Option::is_some);
-    if !any_numbered {
-        return [generic.map(|(_, control)| control); 3];
-    }
-    let fallback = generic.map(|(_, control)| control);
-    std::array::from_fn(|i| indexed[i].map(|(_, control)| control).or(fallback))
+    candidates.sort_by(|a, b| b.0.total_cmp(&a.0));
+    candidates.into_iter().map(|(_, control)| control).collect()
 }
 
 /// The gear lever of a manual bus: the mesh near the seat that a gear/shift variable animates

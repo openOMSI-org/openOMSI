@@ -5,6 +5,7 @@ use omsi_input::auto_shift::GateMemory;
 
 mod cameras;
 mod doors;
+mod driver_controls;
 mod gears;
 mod ibis;
 mod mouse;
@@ -398,27 +399,10 @@ impl Player {
         }
         if !fire.is_empty() {
             if let Some(driver) = self.driver.as_mut() {
-                driver.door_button_pressed(n);
+                driver.door_button_pressed(n, fire.first().map(String::as_str), None);
             }
         }
         fire
-    }
-
-    /// Reach for the driver's physical door button when a bus trigger is activated directly
-    /// (by a cockpit mouse event or a key bound to `bus_doorfront0`, etc.).
-    pub(crate) fn door_button_for_trigger(&mut self, trigger: &str) {
-        let index = door_keys(&self.vehicle.ty)
-            .iter()
-            .position(|group| {
-                group.iter().any(|name| {
-                    name.split('|')
-                        .any(|part| part.eq_ignore_ascii_case(trigger))
-                })
-            })
-            .map(|i| i + 1);
-        if let (Some(index), Some(driver)) = (index, self.driver.as_mut()) {
-            driver.door_button_pressed(index);
-        }
     }
 
     /// `doors_release`: the bus's door release (`VehicleInstance::door_release_trigger`); the triggers fired.
@@ -430,7 +414,7 @@ impl Player {
         }
         if !fired.is_empty() {
             if let Some(driver) = self.driver.as_mut() {
-                driver.door_button_pressed(0);
+                driver.door_button_pressed(0, fired.first().map(String::as_str), None);
             }
         }
         fired
@@ -496,7 +480,7 @@ impl Player {
             return true;
         }
         if pressed {
-            self.door_button_for_trigger(name);
+            self.door_button_for_trigger(name, None);
         }
         if name.eq_ignore_ascii_case("ticket_give") {
             if pressed {
