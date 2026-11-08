@@ -449,39 +449,42 @@ const App = {
   },
 
   keepAwake() {
-    if (navigator.wakeLock) {
-      let lock = null;
-      const hold = () => {
-        if (!document.hidden && !lock) navigator.wakeLock.request("screen").then((l) => { lock = l; l.onrelease = () => (lock = null); }).catch(() => {});
+    let video = null;
+    const fallback = () => {
+      if (video) return;
+      video = document.createElement("video");
+      video.playsInline = true;
+      video.setAttribute("playsinline", "");
+      video.src = AWAKE_VIDEO;
+      video.className = "awake";
+      video.addEventListener("timeupdate", () => { if (video.currentTime > 1) video.currentTime = 0; });
+      document.body.append(video);
+      const btn = $("btn-awake");
+      btn.hidden = false;
+      const on = () => btn.getAttribute("aria-pressed") === "true";
+      const play = (e) => { if (on() && !document.hidden && video.paused && !(e && btn.contains(e.target))) video.play().catch(() => {}); };
+      btn.onclick = () => {
+        if (on()) {
+          btn.setAttribute("aria-pressed", "false");
+          video.pause();
+          this.toast(R.T("The screen can turn off again."));
+        } else {
+          btn.setAttribute("aria-pressed", "true");
+          video.play().then(() => this.toast(R.T("The screen stays on. Music from other apps may stop."), 5000)).catch(() => btn.setAttribute("aria-pressed", "false"));
+        }
       };
-      document.addEventListener("pointerdown", hold, true);
-      document.addEventListener("visibilitychange", hold);
-      return hold();
-    }
-    const video = document.createElement("video");
-    video.playsInline = true;
-    video.setAttribute("playsinline", "");
-    video.src = AWAKE_VIDEO;
-    video.className = "awake";
-    video.addEventListener("timeupdate", () => { if (video.currentTime > 1) video.currentTime = 0; });
-    document.body.append(video);
-    const btn = $("btn-awake");
-    btn.hidden = false;
-    const on = () => btn.getAttribute("aria-pressed") === "true";
-    const play = (e) => { if (on() && !document.hidden && video.paused && !(e && btn.contains(e.target))) video.play().catch(() => {}); };
-    btn.onclick = () => {
-      if (on()) {
-        btn.setAttribute("aria-pressed", "false");
-        video.pause();
-        this.toast(R.T("The screen can turn off again."));
-      } else {
-        btn.setAttribute("aria-pressed", "true");
-        video.play().then(() => this.toast(R.T("The screen stays on. Music from other apps may stop."), 5000)).catch(() => btn.setAttribute("aria-pressed", "false"));
-      }
+      document.addEventListener("click", play, true);
+      document.addEventListener("touchend", play, true);
+      document.addEventListener("visibilitychange", () => (document.hidden ? video.pause() : play()));
     };
-    document.addEventListener("click", play, true);
-    document.addEventListener("touchend", play, true);
-    document.addEventListener("visibilitychange", () => (document.hidden ? video.pause() : play()));
+    if (!navigator.wakeLock) return fallback();
+    let lock = null;
+    const hold = () => {
+      if (!document.hidden && !lock && !video) navigator.wakeLock.request("screen").then((l) => { lock = l; l.onrelease = () => (lock = null); }).catch(fallback);
+    };
+    document.addEventListener("pointerdown", hold, true);
+    document.addEventListener("visibilitychange", hold);
+    hold();
   },
 
   init() {
