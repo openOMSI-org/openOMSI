@@ -1,5 +1,3 @@
-use super::*;
-
 /// The fog composite's gather (`gathered_air_light`) skips its weighted sum only when none of
 /// the sixteen half-size rays of the tent holds light: an outer ray lit with the four
 /// nearest dark still lights the pixel (the reviewer's case: f = 0.25, the ray one to the

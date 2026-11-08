@@ -59,12 +59,11 @@ fn link_points_down(target: &Path) -> bool {
     !target.as_os_str().is_empty() && target.components().all(|c| matches!(c, Component::Normal(_) | Component::CurDir))
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::io::Write;
 
-    #[cfg(unix)]
     #[test]
     fn links_and_setuid_bits_do_not_leave_the_unpacked_folder() {
         use std::os::unix::fs::PermissionsExt;

@@ -28,12 +28,7 @@ impl VehicleInstance {
         let mut state = State::new(&program);
         let mut vm = Vm::new();
         let mut host = host;
-        host.script_textures = ty
-            .model
-            .script_textures
-            .iter()
-            .map(|(w, h)| crate::scripttex::ScriptTexture::new(*w, *h))
-            .collect();
+        host.script_textures = crate::scripttex::ScriptTexture::slots_of(&ty.model);
         host.content_dir = ty.def.dir().to_path_buf();
         let html_textures: Vec<crate::htmltex::HtmlTexture> = ty
             .model

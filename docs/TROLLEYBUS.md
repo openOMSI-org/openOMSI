@@ -15,7 +15,7 @@ the constants are in the vehicle's file, not in the game.
 > Real trolleybus add-ons for OMSI 2 carry no wire logic of their own; how they are read and run
 > here is in [TROLLEY_MODS.md](TROLLEY_MODS.md). A map's wire splines are read as the wire when no
 > `trolley.txt` is given, and a bus with `cp_SHTANGALEV`/`cp_SHTANGAPRAV` pole meshes gets poles
-> without a `[trolley_pole]` block.
+> without a `[trolley_pole]` block, unless its `.bus` says `[trolley_none]`.
 
 ## What it does
 
@@ -190,7 +190,7 @@ mode radio             power | indicator | radio | fixed
 trigger 9              power/indicator: contact plate distance before the frog (m); ignored by radio
 sense 12               the current that counts as power on (A)
 invert 0
-initial straight
+initial straight       straight | branch | random (see below)
 route 158 branch       radio: route code 158 takes the branch (straight | branch | left | right)
 channel 2              radio: only vehicles sending on channel 2 set it
 range 150              radio: reception radius (m, 1..1000, default 150); never a contact plate
@@ -210,6 +210,13 @@ needs a joint of exactly three spans; which one is the toe (the single side) and
 straight or to the side is worked out from their directions. A pole can follow the wire through
 a joint, a switch and across spans, and a crossing of two wires that do not share a joint is not
 a connection.
+
+A switch with `initial random` takes a way at random when the game first reads the map's wire.
+The game keeps that network until it quits, so placing a vehicle again or reloading the same map
+keeps the positions the switches have by then; a new draw needs a restart. In an online game
+(serving, hosting or joining) the players' switches are not synchronized, so `initial random`
+switches start straight there, the same for everyone. A room joined later on a map already
+driven in the same run keeps that run's network and its positions, drawn or not.
 
 The wire's masts and hangers are the map's own objects: the game draws the two wires (8.5 mm
 thick) and nothing else, whatever vehicle is driven (a bus or a car sees the wire too; a map
@@ -297,6 +304,18 @@ switch_request Trolley_Switch_Request   radio: -1 left, +1 right, 2 momentary to
 switch_code Trolley_Switch_Code         radio switches: the route code, 0 none
 switch_channel Trolley_Switch_Channel   radio switches: the channel sent on
 ```
+
+A vehicle whose own script or a plugin moves its poles puts an empty `[trolley_none]` block in
+its `.bus`: the game then gives it no gear, and does not read poles off its model either (the
+meshes keep their own `[visible]` and animations). Without any of these blocks the vehicle is
+taken as a plain trolleybus when its model looks like one (see [TROLLEY_MODS.md](TROLLEY_MODS.md)).
+
+```
+[trolley_none]
+```
+
+Each section of an articulated vehicle has its own `.bus`, read on its own: the block goes in the
+`.bus` of the section whose model carries the poles (usually the rear one, as on the Ikarus 280T).
 
 With a modelled drive the vehicle's own `M_Wheel` is replaced by the drive's force (times the
 wheel radius of the driven axle) and the drive's mechanical brake force is added to

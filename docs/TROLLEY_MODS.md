@@ -76,7 +76,7 @@ This is the interface the real content leaves to its host (openOMSI provides all
 1. **Read the wire off the map**: any spline whose profile is two thin, high strips is a pair
    of wires (centre = the middle of the strips, spacing = their distance, height = their height);
    three of them ending at one point are a frog.
-2. **Make the poles from the model**: a bus that has no `[trolley_pole]` blocks but two
+2. **Make the poles from the model**: a bus that has no `[trolley_pole]` or `[trolley_none]` blocks but two
    meshes visible on a variable called `*SHTANG*` / `*pole*` with value 1 has two poles, whose
    hinges and lengths are those meshes' (hinge: the low end of the box furthest forward; shoe:
    the high end furthest back). The variable is the cab's switch.

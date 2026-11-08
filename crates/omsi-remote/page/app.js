@@ -2,6 +2,8 @@
 
 const $ = (id) => document.getElementById(id);
 
+const AWAKE_VIDEO = "data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAMGbW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAA+gAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAlV0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAA+gAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAABAAAAAQAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAPoAAAAAAABAAAAAAHNbWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAABAAAAAQABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABeG1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAThzdGJsAAAAuHN0c2QAAAAAAAAAAQAAAKhhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAABAAEABIAAAASAAAAAAAAAABDExhdmMgbGlieDI2NAAAAAAAAAAAAAAAAAAAAAAAAAAAGP//AAAALmF2Y0MBQsAK/+EAFmdCwArZHsBEAAADAAQAAAMAEDxImSABAAVoy4PLIAAAABBwYXNwAAAAAQAAAAEAAAAUYnRydAAAAAAAABRQAAAAAAAAABhzdHRzAAAAAAAAAAEAAAACAAAgAAAAABRzdHNzAAAAAAAAAAEAAAABAAAAHHN0c2MAAAAAAAAAAQAAAAEAAAACAAAAAQAAABxzdHN6AAAAAAAAAAAAAAACAAACgAAAAAoAAAAUc3RjbwAAAAAAAAABAAADNgAAAD11ZHRhAAAANW1ldGEAAAAAAAAAIWhkbHIAAAAAAAAAAG1kaXJhcHBsAAAAAAAAAAAAAAAACGlsc3QAAAAIZnJlZQAAApJtZGF0AAACbQYF//9p3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE2NSByMzIyMiBiMzU2MDVhIC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAyNSAtIGh0dHA6Ly93d3cudmlkZW9sYW4ub3JnL3gyNjQuaHRtbCAtIG9wdGlvbnM6IGNhYmFjPTAgcmVmPTMgZGVibG9jaz0xOjA6MCBhbmFseXNlPTB4MToweDExMSBtZT1oZXggc3VibWU9NyBwc3k9MSBwc3lfcmQ9MS4wMDowLjAwIG1peGVkX3JlZj0xIG1lX3JhbmdlPTE2IGNocm9tYV9tZT0xIHRyZWxsaXM9MSA4eDhkY3Q9MCBjcW09MCBkZWFkem9uZT0yMSwxMSBmYXN0X3Bza2lwPTEgY2hyb21hX3FwX29mZnNldD0tMiB0aHJlYWRzPTEgbG9va2FoZWFkX3RocmVhZHM9MSBzbGljZWRfdGhyZWFkcz0wIG5yPTAgZGVjaW1hdGU9MSBpbnRlcmxhY2VkPTAgYmx1cmF5X2NvbXBhdD0wIGNvbnN0cmFpbmVkX2ludHJhPTAgYmZyYW1lcz0wIHdlaWdodHA9MCBrZXlpbnQ9MiBrZXlpbnRfbWluPTEgc2NlbmVjdXQ9NDAgaW50cmFfcmVmcmVzaD0wIHJjX2xvb2thaGVhZD0yIHJjPWNyZiBtYnRyZWU9MSBjcmY9MjMuMCBxY29tcD0wLjYwIHFwbWluPTAgcXBtYXg9NjkgcXBzdGVwPTQgaXBfcmF0aW89MS40MCBhcT0xOjEuMDAAgAAAAAtliIQFPJigAD+/gAAAAAZBmjgJeoA=";
+
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } },
   set(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (_) {} },
@@ -84,6 +86,7 @@ const App = {
     this.status("wait", "Connecting…");
     const ws = new WebSocket(`ws://${location.host}/ws`);
     this.ws = ws;
+    ws.binaryType = "arraybuffer";
     ws.onopen = () => {
       const pin = (location.hash.match(/pin=(\d{6})/) || [])[1];
       if (pin) { this.qrPin = pin; history.replaceState(null, "", location.pathname); }
@@ -94,6 +97,7 @@ const App = {
     };
     ws.onmessage = (e) => {
       this.heard = performance.now();
+      if (e.data instanceof ArrayBuffer) { MapView.picture(e.data); return; }
       let m;
       try { m = JSON.parse(e.data); } catch (_) { return; }
       this.receive(m);
@@ -443,6 +447,29 @@ const App = {
     this.toastTimer = setTimeout(() => (t.hidden = true), 2200);
   },
 
+  keepAwake() {
+    const video = document.createElement("video");
+    video.muted = true;
+    video.loop = true;
+    video.playsInline = true;
+    video.setAttribute("playsinline", "");
+    video.src = AWAKE_VIDEO;
+    let lock = null;
+    let shown = true;
+    const play = () => { if (shown && !document.hidden) video.play().catch(() => {}); };
+    const hold = () => {
+      if (document.hidden) return video.pause();
+      shown = true;
+      if (navigator.wakeLock) {
+        if (!lock) navigator.wakeLock.request("screen").then((l) => { lock = l; l.onrelease = () => (lock = null); }).catch(play);
+      } else if (video.paused) play();
+    };
+    document.addEventListener("pointerdown", hold, true);
+    document.addEventListener("visibilitychange", hold);
+    addEventListener("pagehide", () => { shown = false; video.pause(); });
+    hold();
+  },
+
   init() {
     for (const b of document.querySelectorAll("[data-icon]")) b.append(R.icon(b.dataset.icon));
     this.translateStatic();
@@ -472,6 +499,7 @@ const App = {
     document.addEventListener("gesturestart", (e) => e.preventDefault());
     for (const type of ["lostpointercapture", "pointercancel"]) document.addEventListener(type, () => this.dropDetached(), true);
     setInterval(() => this.ping(), 2000);
+    this.keepAwake();
     this.connect();
   },
 };

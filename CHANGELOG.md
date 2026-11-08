@@ -8,6 +8,12 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **AI reaction time**: the new `ai_reaction` setting (25 to 200 %, default 100 %, a slider in the launcher's Traffic settings) scales how long the AI drivers wait before moving off, so a queue at a light pulls away closer together at a lower value. It never goes under 0.4 s, the shortest reaction the junction code is built for (#3793).
+- **What's new in the launcher**: after an update the launcher shows the notes of every
+  version since the one last seen, opened, and the others folded below them; *What's new*
+  beside *Check now* (Settings) opens them at any time, and the offer of an update shows that
+  version's notes before it is installed. The notes come from the releases on GitHub; links in
+  them open in the browser, and only https ones.
 - **Remote cockpit on a phone or tablet**: the game serves a page on your home network
   (Options > Interface > Remote cockpit, off until switched on); scan the QR code or type the
   address and the 6-digit code, and the phone or tablet shows a dashboard with the map and the
@@ -589,6 +595,20 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **No more slivers of sky at crossings of raised roads** (Nova Friburgo, since 0.3.42): where
+  the ground cannot be fitted to roads it should follow, only the roads the ground covers (a
+  ditch) are cut out of it, not those lying on it.
+- **Window films and tinted glass of Brazilian buses show again**: a number written in an
+  `[alphascale]` in place of a variable's name (`[alphascale] 0.9`, as the LFD Caio Apache
+  Vip V's window film, its outer and its frosted glass have it) is that opacity, as a number
+  already is for lamps and interior lights. Read as a variable that does not exist it was 0,
+  and those panes were not drawn at all. Panes named in Portuguese (`vidro`, `janela`,
+  `parabrisa`) are now known as glass, as those named in the other languages.
+- **A junction left deep under the ground no longer digs a pit**: a `[terrainhole]` cutter that lies
+  wholly more than ten metres under the ground cuts nothing now. Berlin-Spandau has a stray
+  copy of `Einm_Poststr_Poststr` at height zero in the corner of a tile near Falkensee Bahnhof;
+  its cutter opened a pit thirty metres deep in the field, walled with tall strips of ground.
+  Tunnels and underpasses, whose cutters reach the ground or lie a few metres under it, cut as before.
 - **No more towers of ground at the end of a road**: where the ground is fitted to a road, the side of a
   kerb - a nearly vertical face - gave the blend a slope of tens of thousands, and the ground rose
   more than a kilometre in thin strips at the end of the road (Berlin-Spandau, Hansastrasse near

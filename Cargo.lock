@@ -3786,6 +3786,7 @@ dependencies = [
  "omsi-mapdraw",
  "omsi-model",
  "omsi-mt",
+ "omsi-multiplayer-ui",
  "omsi-navigator",
  "omsi-net",
  "omsi-o3d",
@@ -4131,6 +4132,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "omsi-multiplayer-ui"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "omsi-admin",
+ "omsi-ui",
+]
+
+[[package]]
 name = "omsi-navigator"
 version = "0.1.0"
 dependencies = [
@@ -4141,6 +4151,7 @@ dependencies = [
  "omsi-lan",
  "omsi-map",
  "omsi-mapdraw",
+ "omsi-model",
  "omsi-render",
  "omsi-scene",
  "omsi-sim",

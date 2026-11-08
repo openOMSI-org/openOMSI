@@ -44,6 +44,20 @@ pub fn language() -> String {
     STATE.read().map(|s| s.1.clone()).unwrap_or_default()
 }
 
+pub struct LanguageGuard(String);
+
+impl LanguageGuard {
+    pub fn capture() -> Self {
+        Self(language())
+    }
+}
+
+impl Drop for LanguageGuard {
+    fn drop(&mut self) {
+        set_language(&self.0);
+    }
+}
+
 static TEMPLATES: RwLock<Option<Index>> = RwLock::new(None);
 
 /// The keys of the tables that are format strings: a text drawn with its numbers or names
@@ -194,5 +208,17 @@ mod tests {
         let shown = said("Gang 3".into(), "Gear 3".into());
         assert_eq!(english(&shown), "Gear 3");
         assert_eq!(english("Gear 4"), "Gear 4");
+    }
+
+    #[test]
+    fn a_language_guard_restores_the_captured_language() {
+        let original = language();
+        set_language("zh-tw");
+        {
+            let _restore = LanguageGuard::capture();
+            set_language("en");
+        }
+        assert_eq!(language(), "zh-tw");
+        set_language(&original);
     }
 }

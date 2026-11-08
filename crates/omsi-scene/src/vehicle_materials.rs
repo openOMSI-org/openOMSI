@@ -512,7 +512,7 @@ pub(super) fn helper_text_image(tt: &omsi_model::TextTexture, atlas: Option<&oms
 /// add-ons are made in. The body-depth repair must not turn one of these opaque when the
 /// model.cfg declares it blended: a Czech bus's `okna.o3d` (windows) on the shared
 /// `body.png` was drawn as a black wall, where OMSI shows the tinted glass.
-pub(super) const GLASS_WORDS: [&str; 20] = [
+pub(super) const GLASS_WORDS: [&str; 24] = [
     "window", "fenster", "glas", "scheibe", "windshield", "windscreen", // en, de ("glas" is also German: `Leuchtmelderglas.tga`)
     "okn", "sklo", // cs, sk (okna, okno, sklo)
     "szyb", "okien", // pl
@@ -522,6 +522,7 @@ pub(super) const GLASS_WORDS: [&str; 20] = [
     "vetro", "finestr", // it
     "raam", "ruit", // nl
     "ventan", "cristal", // es
+    "vidro", "janel", "parabrisa", "para-brisa", // pt (vidro, vidros, janela, janelas)
 ];
 
 pub(super) fn is_vehicle_body_material(

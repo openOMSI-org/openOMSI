@@ -135,7 +135,7 @@ fn nearest_rail(net: &Network, p: DVec3, heading: f64, reach: f64, within: Optio
 /// got the stale sample while one asked for a place just ahead got the exact one - the cars
 /// jumped back and forth by a few centimetres as they crossed from one answer to the other.
 pub(crate) fn point_at(trail: &std::collections::VecDeque<(f64, DVec3)>, head: Option<(f64, DVec3)>, u: f64) -> Option<DVec3> {
-    let mut at = |u: f64| -> Option<DVec3> {
+    let at = |u: f64| -> Option<DVec3> {
         if trail.is_empty() {
             return head.map(|h| h.1);
         }

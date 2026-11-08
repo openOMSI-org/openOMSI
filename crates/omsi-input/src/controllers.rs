@@ -23,7 +23,9 @@ mod held;
 use held::HeldButtons;
 mod ffb;
 pub use ffb::{FfInput, FfTune};
-use ffb::{tuned_wheel_force, Micro, ScriptVib, FF_FADE, VIB_SHARE};
+use ffb::{tuned_wheel_force, Micro, ScriptVib, FF_FADE};
+#[cfg(windows)]
+use ffb::VIB_SHARE;
 #[cfg(test)]
 use ffb::wheel_force;
 

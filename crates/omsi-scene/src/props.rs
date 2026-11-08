@@ -28,9 +28,7 @@ impl World {
         Some(pos)
     }
 
-    /// Draw the route arrows the map's author put up (`[helparrow]` objects) or hide them:
-    /// `on` is whether OMSI 2's route arrows are on (the `nav_arrows` setting). Nothing to
-    /// do when that has not changed; the tiles placed later follow it.
+    /// Show or hide route arrows placed by the map author. Tiles placed later follow it.
     pub fn show_help_arrows(&self, renderer: &Renderer, scene: &mut Scene, on: bool) {
         if self.help_arrows_shown.swap(on, std::sync::atomic::Ordering::Relaxed) == on {
             return;
