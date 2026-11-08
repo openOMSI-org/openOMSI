@@ -15,6 +15,7 @@ function Inline({ text }) {
     : p.kind === 'italic' ? html`<i>${p.text}</i>`
     : p.kind === 'code' ? html`<code>${p.text}</code>`
     : p.kind === 'link' ? html`<a href=${p.url} onClick=${(e) => { e.preventDefault(); openUrl(p.url); }}>${p.text}</a>`
+    : p.kind === 'image' ? html`<img src=${p.url} alt=${p.alt} width=${p.width} height=${p.height} loading="lazy" decoding="async" />`
     : p.text);
 }
 
@@ -28,6 +29,10 @@ export function Notes({ text, version }) {
     b.kind === 'heading' ? html`<div class=${'notes-h' + Math.min(b.level, 3)}><${Inline} text=${b.text} /></div>`
     : b.kind === 'list' ? html`<ul>${b.items.map((i) => html`<li style=${i.depth ? `margin-left:${i.depth * 16}px` : ''}><${Inline} text=${i.text} /></li>`)}</ul>`
     : b.kind === 'quote' ? html`<blockquote><${Inline} text=${b.text} /></blockquote>`
+    : b.kind === 'table' ? html`<div class="notes-table-wrap"><table>
+      <thead><tr>${b.headers.map((cell, i) => html`<th style=${`text-align:${b.align[i]}`}><${Inline} text=${cell} /></th>`)}</tr></thead>
+      <tbody>${b.rows.map((row) => html`<tr>${row.map((cell, i) => html`<td style=${`text-align:${b.align[i]}`}><${Inline} text=${cell} /></td>`)}</tr>`)}</tbody>
+    </table></div>`
     : html`<p><${Inline} text=${b.text} /></p>`)}</div>`;
 }
 

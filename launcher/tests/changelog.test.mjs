@@ -30,6 +30,20 @@ test('discarding a comment keeps the surrounding text separated', () => {
   ]);
 });
 
+test('release note tables parse headers, alignments, and inline cell marks', () => {
+  assert.deepEqual(blocks('| Feature | Status |\n| :--- | ---: |\n| **Night mode** | Ready |\n| Maps | `updated` |'), [
+    { kind: 'table', headers: ['Feature', 'Status'], align: ['left', 'right'], rows: [
+      ['**Night mode**', 'Ready'],
+      ['Maps', '`updated`'],
+    ] },
+  ]);
+  assert.deepEqual(blocks('Before\n\nFeature | Note\n--- | ---\nA \\| B | works\n\nAfter'), [
+    { kind: 'paragraph', text: 'Before' },
+    { kind: 'table', headers: ['Feature', 'Note'], align: ['left', 'left'], rows: [['A | B', 'works']] },
+    { kind: 'paragraph', text: 'After' },
+  ]);
+});
+
 test('inline marks, and links only to https', () => {
   assert.deepEqual(inline('a **b** *c* `d` [e](https://x.org/y) f'), [
     { kind: 'text', text: 'a ' }, { kind: 'bold', text: 'b' }, { kind: 'text', text: ' ' },
@@ -42,7 +56,29 @@ test('inline marks, and links only to https', () => {
     assert.equal(parts[0].text, 'go', bad);
   }
   assert.deepEqual(inline('<img src=x onerror=alert(1)>'), [{ kind: 'text', text: '<img src=x onerror=alert(1)>' }]);
+  assert.deepEqual(inline('<img width="1600" alt="What\'s new in openOMSI 0.3.52" src="https://github.com/user-attachments/assets/560783ae-7534-49b4-bf5e-980b0271618e" />'), [
+    { kind: 'image', url: 'https://github.com/user-attachments/assets/560783ae-7534-49b4-bf5e-980b0271618e', alt: "What's new in openOMSI 0.3.52", width: 1600, height: undefined },
+  ]);
+  assert.deepEqual(inline('![Preview](https://github.com/user-attachments/assets/preview.png)'), [
+    { kind: 'image', alt: 'Preview', url: 'https://github.com/user-attachments/assets/preview.png', width: undefined, height: undefined },
+  ]);
+  for (const unsafe of [
+    '<img src="javascript:alert(1)" alt="x">',
+    '<img src="https://example.com/x" onerror="alert(1)">',
+    '![x](data:text/html,x)',
+    '![x](https://example.com/image.png)',
+  ]) {
+    assert(!inline(unsafe).some((part) => part.kind === 'image'), unsafe);
+  }
   assert.deepEqual(inline('2 * 3 * 4 and snake_case_name'), [{ kind: 'text', text: '2 * 3 * 4 and snake_case_name' }]);
+});
+
+test('launcher CSP permits the GitHub release image hosts', () => {
+  const config = JSON.parse(readFileSync(new URL('../src-tauri/tauri.conf.json', import.meta.url), 'utf8'));
+  const imageSources = config.app.security.csp['img-src'].split(/\s+/);
+  assert(imageSources.includes('https://github.com/user-attachments/assets/'));
+  assert(imageSources.includes('https://private-user-images.githubusercontent.com'));
+  assert(imageSources.includes('https://github-production-user-asset-6210df.s3.amazonaws.com'));
 });
 
 test('versions compare as numbers', () => {
