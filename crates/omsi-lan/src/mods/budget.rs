@@ -44,7 +44,7 @@ impl Budget {
     /// `n` bytes of it, if they are free - or if nothing is held: a request larger than all
     /// of it comes alone.
     pub(crate) fn hold(&self, n: u64) -> Option<Held<'_>> {
-        self.held.fetch_update(Ordering::AcqRel, Ordering::Acquire, |h| (h + n <= self.max || h == 0).then_some(h + n)).ok().map(|_| Held(&self.held, n))
+        self.held.try_update(Ordering::AcqRel, Ordering::Acquire, |h| (h + n <= self.max || h == 0).then_some(h + n)).ok().map(|_| Held(&self.held, n))
     }
 
     /// `hold`, waiting up to `wait` for the room (for work that has no `busy` to answer).

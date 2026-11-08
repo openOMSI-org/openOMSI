@@ -8,6 +8,7 @@
 
 use glam::Vec3;
 use omsi_sim::human::avatar::AvatarInfo;
+use omsi_sim::human::clips::{Kind, Mix, Motion};
 use omsi_sim::human::HumanType;
 use parking_lot::Mutex;
 use std::sync::{Arc, OnceLock};
@@ -30,6 +31,7 @@ pub(super) fn enabled() -> bool {
 /// The avatars by kind: adult women, adult men, girls, boys.
 pub(super) struct Pool {
     kinds: [Vec<Arc<HumanType>>; 4],
+    motions: [[Vec<Motion>; 3]; 2],
 }
 
 enum State {
@@ -78,13 +80,15 @@ fn start_loading() {
                     })
                     .collect()
             };
+            let n = loaded.len();
             let mut kinds: [Vec<Arc<HumanType>>; 4] = Default::default();
             for (info, t) in loaded {
-                kinds[kind_index(info.female, info.child)].push(t);
+                let k = &mut kinds[kind_index(info.female, info.child)];
+                k.extend(std::iter::repeat_n(t, weight(&info.id)));
             }
-            let n: usize = kinds.iter().map(|k| k.len()).sum();
+            let motions = load_motions(&dir);
             log::info!(
-                "avatars: {n} loaded from {} in {:.1} s ({} women, {} men, {} girls, {} boys)",
+                "avatars: {n} loaded from {} in {:.1} s (draw slots: {} women, {} men, {} girls, {} boys)",
                 dir.display(),
                 started.elapsed().as_secs_f32(),
                 kinds[0].len(),
@@ -92,9 +96,65 @@ fn start_loading() {
                 kinds[2].len(),
                 kinds[3].len()
             );
-            *STATE.lock() = if n == 0 { State::Missing } else { State::Ready(Arc::new(Pool { kinds })) };
+            *STATE.lock() = if n == 0 { State::Missing } else { State::Ready(Arc::new(Pool { kinds, motions })) };
+            omsi_platform::avatars::fetch_if_missing();
         })
         .ok();
+}
+
+fn load_motions(dir: &std::path::Path) -> [[Vec<Motion>; 3]; 2] {
+    use rayon::prelude::*;
+    let started = std::time::Instant::now();
+    let loaded: Vec<Motion> = omsi_platform::avatars::clips(dir)
+        .par_iter()
+        .filter_map(|c| {
+            let kind = match c.kind.as_str() {
+                "walk" => Kind::Walk,
+                "stand" => Kind::Stand,
+                "sit" => Kind::Sit,
+                _ => return None,
+            };
+            match omsi_o3d::fbx::load_clip(&c.file) {
+                Ok(clip) => Motion::from_clip(&clip, kind, c.female),
+                Err(e) => {
+                    log::warn!("avatar clip {}: {e:#}", c.file.display());
+                    None
+                }
+            }
+        })
+        .collect();
+    let mut out: [[Vec<Motion>; 3]; 2] = Default::default();
+    for m in loaded {
+        out[m.female as usize][m.kind as usize].push(m);
+    }
+    log::info!("avatars: {} motion clips in {:.1} s", out.iter().flatten().map(|v| v.len()).sum::<usize>(), started.elapsed().as_secs_f32());
+    out
+}
+
+pub(super) fn clip_pose(id: u32, ty: &HumanType, pose: &omsi_sim::human::Pose, seconds: f32, posed: &mut omsi_sim::human::Posed) {
+    if ty.biped.is_none() {
+        return;
+    }
+    let Some(pool) = ready() else { return };
+    let set = &pool.motions[is_female(ty) as usize];
+    if set.iter().any(|v| v.is_empty()) {
+        return;
+    }
+    let h = |salt: u64| ((id as u64 ^ salt).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 32) as usize;
+    let pick = |k: Kind| &set[k as usize][h(k as u64 + 1) % set[k as usize].len()];
+    let mix = Mix { walk: pick(Kind::Walk), stand: pick(Kind::Stand), sit: pick(Kind::Sit) };
+    let seconds = seconds + (h(7) % 600) as f32;
+    omsi_sim::human::clips::apply(ty, posed, &mix, pose.clip_blend(), seconds);
+}
+
+fn weight(id: &str) -> usize {
+    match id {
+        "Female_Adult_06" | "Female_Adult_10" | "Female_Adult_16" | "Female_Child_02" | "Male_Adult_15" | "Male_Adult_19" | "Male_Adult_21" => 1,
+        _ if id.contains("_Adult_") || id.contains("_Child_") => 10,
+        _ if id.starts_with("Business_") => 4,
+        _ if id.starts_with("Female_Party_") => 2,
+        _ => 1,
+    }
 }
 
 fn kind_index(female: bool, child: bool) -> usize {
@@ -104,6 +164,15 @@ fn kind_index(female: bool, child: bool) -> usize {
         (true, true) => 2,
         (true, false) => 3,
     }
+}
+
+fn ready() -> Option<&'static Pool> {
+    static READY: OnceLock<Arc<Pool>> = OnceLock::new();
+    if let Some(p) = READY.get() {
+        return Some(&**p);
+    }
+    let p = pool()?;
+    Some(&**READY.get_or_init(|| p))
 }
 
 /// The avatars, once they are loaded.
@@ -370,5 +439,19 @@ fn read_figures_ahead(types: &[Arc<HumanType>], root: &std::path::Path, read: &F
     });
     if let Err(e) = spawned {
         log::warn!("people: no thread to read the figures' pictures ahead: {e}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn everyday_avatars_outweigh_uniforms() {
+        assert_eq!(super::weight("Female_Adult_01"), 10);
+        assert_eq!(super::weight("Male_Child_01"), 10);
+        assert_eq!(super::weight("Female_Child_02"), 1);
+        assert_eq!(super::weight("Male_Adult_19"), 1);
+        assert_eq!(super::weight("Pilot_Male_01"), 1);
+        assert_eq!(super::weight("Construction_Male_03"), 1);
+        assert_eq!(super::weight("Business_Female_02"), 4);
     }
 }

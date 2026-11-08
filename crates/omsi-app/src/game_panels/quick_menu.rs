@@ -37,7 +37,7 @@ pub(crate) const TILES: [(&str, &str, &str); 30] = [
     ("repair", "Repair", "construction"),
     ("refuel", "Refuel", "local_gas_station"),
     ("wash", "Wash", "local_car_wash"),
-    ("arrows", "Route arrows", "navigation"),
+    ("arrows", "Dynamic route arrows", "navigation"),
     ("time", "Time", "schedule"),
     ("weather", "Weather", "partly_cloudy_day"),
     ("controls", "Controls", "sports_esports"),
@@ -102,7 +102,7 @@ impl TileState {
         let offered: Vec<&'static str> = app.game_menu_items().iter().map(|l| l.0).collect();
         let mut off: Vec<&'static str> = MENU_LINES.iter().copied().filter(|id| !offered.contains(id)).collect();
         let mut lit = Vec::new();
-        if app.settings.nav_arrows {
+        if app.settings.nav_dynamic_arrows {
             lit.push("arrows");
         }
         if app.session.duty.is_some() {
@@ -263,7 +263,12 @@ fn start(app: &mut crate::App, id: &str, mouse: bool) {
         "dest" => super::dest_form::open(app),
         "radio" => super::radio_panel::open(app),
         "arrows" => {
-            crate::game_lists::option_do(app, "nav_arrows", "", crate::game_lists::Move::Next);
+            crate::game_lists::option_do(
+                app,
+                "nav_dynamic_arrows",
+                "",
+                crate::game_lists::Move::Next,
+            );
         }
         "time" | "weather" => {
             let tab = crate::game_lists::tab_of(app, crate::game_lists::ListKind::World(0), if id == "time" { "Time" } else { "Weather" });
@@ -442,7 +447,8 @@ mod tests {
         click(&mut app, "next");
         click(&mut app, "arrows");
         assert!(app.menus.game_panels.quick.as_ref().is_some_and(|q| q.page == 1), "the menu stays, as in OMSI 2");
-        assert!(app.settings.nav_arrows);
+        assert!(app.settings.nav_dynamic_arrows);
+        assert!(!app.settings.nav_map_arrows);
         click(&mut app, "time");
         assert!(app.menus.game_panels.quick.is_none(), "a list takes over");
     }

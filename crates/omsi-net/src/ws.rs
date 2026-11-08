@@ -441,7 +441,7 @@ struct Place<'a>(&'a AtomicUsize);
 impl Places {
     /// A place, when fewer than `max` are taken.
     fn take(&self, max: usize) -> Option<Place<'_>> {
-        self.0.fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| (n < max).then_some(n + 1)).ok().map(|_| Place(&self.0))
+        self.0.try_update(Ordering::AcqRel, Ordering::Acquire, |n| (n < max).then_some(n + 1)).ok().map(|_| Place(&self.0))
     }
 }
 

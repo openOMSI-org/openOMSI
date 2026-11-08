@@ -680,8 +680,9 @@ planned time and whether the bus is early or late, in the interface's language
 default: drag it anywhere and size it at its corner; `nav_widget`), *Navigator size*
 (`nav_size`), *Classic 2D navigator* (`nav_classic_2d`, off by default) for a lighter
 top-down street map without detailed terrain and buildings, *3D buildings on the map*
-(`nav_3d`, on by default) and *Route arrows (as in
-OMSI 2)* over the road (`nav_arrows`, off by default). A click on the navigator (or
+(`nav_3d`, on by default), *Dynamic route arrows* over the road (`nav_dynamic_arrows`)
+and *Map-placed route arrows* (`nav_map_arrows`). Both are off by default.
+Older settings files use the previous route-arrows value for both. A click on the navigator (or
 **Shift+M**) opens the city map: a large window over the game
 with the whole map from above - every road with its street name (read from the map's
 street name signs), the trip's route by traffic with arrows, its stops with their times,

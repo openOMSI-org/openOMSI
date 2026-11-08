@@ -154,13 +154,6 @@ pub(crate) fn trigger(app: &mut App, id: i64, name: &str) -> bool {
     find(app, id).is_some_and(|o| o.inst.trigger(name))
 }
 
-pub(crate) fn meshes(app: &mut App, id: i64) -> Vec<String> {
-    match find(app, id) {
-        Some(o) => (0..o.inst.mesh_count()).filter_map(|i| o.inst.mesh_file(i).map(str::to_string)).collect(),
-        None => Vec::new(),
-    }
-}
-
 /// A script's transform as the matrix the animations compose with.
 pub(crate) fn matrix(t: &MeshTransform) -> Mat4 {
     let pivot = Vec3::from(t.pivot);

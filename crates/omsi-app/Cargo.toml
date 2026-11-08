@@ -70,6 +70,7 @@ omsi-world = { path = "../omsi-world" }
 omsi-scene = { path = "../omsi-scene" }
 omsi-ui = { path = "../omsi-ui" }
 omsi-settings-ui = { path = "../omsi-settings-ui" }
+omsi-multiplayer-ui = { path = "../omsi-multiplayer-ui" }
 omsi-launcher-core = { path = "../omsi-launcher-core" }
 omsi-launcher-api = { path = "../omsi-launcher-api" }
 omsi-launcher-model = { path = "../omsi-launcher-model" }

@@ -96,8 +96,11 @@ pub(crate) struct Integrations {
     /// The Lua plugins' panels and notifications on the screen (`omsi.ui`).
     pub(crate) plugin_panels: crate::plugin_ui::PluginPanels,
     /// Discord's "Playing openOMSI" status, and when it was last brought up to date.
+    #[cfg_attr(any(target_os = "android", target_os = "ios"), allow(dead_code))]
     pub(crate) discord: Option<crate::discord::Discord>,
+    #[cfg_attr(any(target_os = "android", target_os = "ios"), allow(dead_code))]
     pub(crate) discord_t: f32,
+    pub(crate) discord_max: crate::discord::ServerLimit,
     // Steamworks API layer and it's last updated time
     #[cfg(steam)]
     pub(crate) steam: Option<crate::steam::Steam>,
@@ -233,7 +236,7 @@ pub(crate) struct GfxState {
     pub(crate) mirror_hud: crate::mirror_hud::MirrorHud,
     /// The window is minimised or out of sight, as its events last said.
     pub(crate) window_hidden: bool,
-    /// OMSI 2's route arrows over the road (the `nav_arrows` setting).
+    /// OMSI 2's route arrows over the road (the `nav_dynamic_arrows` setting).
     pub(crate) route_arrows: crate::route_arrows::RouteArrows,
     /// The plugins' cables in the scene (`omsi.cable`).
     pub(crate) plugin_cables: omsi_scene::plugin_cables::PluginCables,
@@ -441,6 +444,8 @@ pub(crate) struct MenuState {
     /// The open settings window's page titles, kept for a moment (asked every frame, see
     /// `game_lists::page_titles`).
     pub(crate) page_titles: std::cell::RefCell<crate::game_lists::TitlesCache>,
+    /// Installed weather names, loaded once for online snapshots or local administration.
+    pub(crate) online_weather: std::cell::OnceCell<Vec<(String, String)>>,
     /// (manufacturer, type) of each vehicle of `vehicle_list`, by its path.
     pub(crate) vehicle_meta: std::collections::HashMap<String, (String, String)>,
     pub(crate) hud: Option<hud::Hud>,

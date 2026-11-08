@@ -128,8 +128,7 @@ impl TrafficSim {
                 // stays where it is)
                 Aspect::Red | Aspect::RedYellow => {
                     let go = (amber == Some((c, li)) && on_its_way && gap < comfortable)
-                        || (v > 1.0 && gap < possible - 0.5)
-                        || (amber_holds(v, gap) && ad < amber_factor * amber_factor);
+                        || (v > 1.0 && gap < possible - 0.5);
                     if !go && amber == Some((c, li)) {
                         amber = None;
                         started = false;

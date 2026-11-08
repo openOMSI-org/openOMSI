@@ -732,6 +732,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             list_dirty: false,
             graphics_before: None,
             page_titles: Default::default(),
+            online_weather: Default::default(),
             chooser: None,
             editor: None,
             vehicle_list: Vec::new(),
@@ -888,7 +889,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             plugin_command: false,
             plugin_panels: Default::default(),
             discord: None,
-            discord_t: 0.0,
+            discord_t: 0.0, discord_max: Default::default(),
             #[cfg(steam)]
             steam,
             update_watch,

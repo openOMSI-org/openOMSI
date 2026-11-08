@@ -21,17 +21,18 @@ pub(super) fn toolbar(sh: &mut Shell, list: &ListView, area: Rect, body: &mut Re
 }
 
 pub(crate) fn focused(sh: &Shell) -> bool {
-    sh.ui.focus == Some(id_of("pause-settings-search"))
+    sh.ui.focus.is_some_and(|id| id == id_of("pause-settings-search") || id == id_of("pause-online-search"))
 }
 
 pub(crate) fn key(sh: &mut Shell, code: winit::keyboard::KeyCode, text: Option<&str>) -> bool {
-    omsi_settings_ui::search_key(&mut sh.ui, "pause-settings-search", code, text)
+    let field = if sh.ui.focus == Some(id_of("pause-online-search")) { "pause-online-search" } else { "pause-settings-search" };
+    omsi_settings_ui::search_key(&mut sh.ui, field, code, text)
 }
 
 impl crate::app::App {
     pub(crate) fn settings_search_key(&mut self, code: winit::keyboard::KeyCode, text: Option<&str>) -> bool {
         use winit::keyboard::KeyCode as K;
-        if self.menus.game_menu.is_none() || self.menus.chooser.is_none() || !focused(&self.shell) { return false; }
+        if self.menus.game_menu.is_none() || !focused(&self.shell) { return false; }
         self.shell.ui.input.shift = self.input.keys.contains(&K::ShiftLeft) || self.input.keys.contains(&K::ShiftRight);
         self.shell.ui.input.ctrl = self.input.keys.contains(&K::ControlLeft) || self.input.keys.contains(&K::ControlRight);
         self.shell.ui.input.alt = self.input.keys.contains(&K::AltLeft) || self.input.keys.contains(&K::AltRight);

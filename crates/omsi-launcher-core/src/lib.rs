@@ -2222,6 +2222,25 @@ fn ui_theme_from_text(text: &str) -> &'static str {
     theme.unwrap_or(if legacy_nav_light == Some(true) { "light" } else { "dark" })
 }
 
+/// Dynamic and map-placed arrows, each falling back to the former shared setting.
+pub fn route_arrows_from_text(text: &str) -> (bool, bool) {
+    let mut legacy = false;
+    let mut dynamic = None;
+    let mut map = None;
+    for (key, value) in text.lines().filter_map(|line| line.split_once('=')) {
+        let on = || {
+            matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes")
+        };
+        match key.trim().to_ascii_lowercase().as_str() {
+            "nav_arrows" => legacy = on(),
+            "nav_dynamic_arrows" => dynamic = Some(on()),
+            "nav_map_arrows" => map = Some(on()),
+            _ => {}
+        }
+    }
+    (dynamic.unwrap_or(legacy), map.unwrap_or(legacy))
+}
+
 /// The page's view of a `settings.cfg` text (None: no file yet, the game's defaults).
 pub fn settings_from_text(text: Option<&str>) -> Value {
     settings_from_text_on(text, cfg!(any(target_os = "android", target_os = "ios")))
@@ -2305,6 +2324,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     v["mirror_quality"] = json!("standard");
     v["vr_desktop_mirror"] = json!(true);
     v["discord_status"] = json!(false); // (it tells friends the map, bus and line: only when asked)
+    for k in ["discord_map", "discord_bus", "discord_line", "discord_stop", "discord_players", "discord_buttons"] { v[k] = json!(true); }
     // Only fresh installs opt in; existing settings files retain enabled plugins.
     v["disable_plugins"] = json!(text.is_none());
     // a Tobii eye tracker read natively, beside opentrack (the game's menu switches these)
@@ -2351,11 +2371,11 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     // the arrival half of the stops of a depot file that keeps two recordings per stop
     v["auto_announce"] = json!(false);
     // OMSI's own options
-    for (k, d) in [("maintenance", json!(0)), ("ai_unsched_factor", json!(100)), ("standing_chance", json!(5)), ("ai_max_scheduled", json!(0)), ("ai_max_parked", json!(0)), ("ai_max_humans", json!(200)), ("use_real_time", json!(false)), ("use_real_date", json!(false)), ("use_real_year", json!(false)), ("collision_vehicles", json!(true)), ("collision_objects", json!(true)), ("collision_pedestrians", json!(true)), ("realistic_road_physics", json!(false)), ("head_movement", json!(true)), ("driverview_smooth", json!(true)), ("hands_in_cab", json!(false)), ("alt_view", json!(true)), ("precision_zoom", json!(false))] {
+    for (k, d) in [("maintenance", json!(0)), ("ai_unsched_factor", json!(100)), ("ai_reaction", json!(100)), ("standing_chance", json!(5)), ("ai_max_scheduled", json!(0)), ("ai_max_parked", json!(0)), ("ai_max_humans", json!(200)), ("use_real_time", json!(false)), ("use_real_date", json!(false)), ("use_real_year", json!(false)), ("collision_vehicles", json!(true)), ("collision_objects", json!(true)), ("collision_pedestrians", json!(true)), ("realistic_road_physics", json!(false)), ("head_movement", json!(true)), ("driverview_smooth", json!(true)), ("hands_in_cab", json!(false)), ("alt_view", json!(true)), ("precision_zoom", json!(false))] {
         v[k] = d;
     }
     // openOMSI's own: what passengers say, OMSI's route arrows, getting up from the seat
-    for (k, d) in [("pax_voices", json!("all")), ("nav_arrows", json!(false)), ("nav_ai", json!(true)), ("nav_ai_cars", json!(true)), ("nav_surface", json!(true)), ("nav_light", json!(false)), ("nav_3d", json!(true)), ("nav_classic_2d", json!(false)), ("nav_widget", json!(true)), ("nav_size", json!(1.0)), ("get_up", json!(false)), ("time_speed", json!("1")), ("time_sync", json!(false)), ("metar_sync", json!(false)), ("metar_station", json!("")), ("machine_translation", json!(false)), ("shadow_casters", json!("all")), ("shadow_blobs", json!(true)), ("reflections", json!(1.0)), ("mouse_sens", json!(1.0)), ("graphics_api", json!("auto")), ("ctrl_off", json!("")), ("steering_linear", json!(false)), ("old_steering", json!(false)), ("red_steer_spd", json!(false)), ("ff_invert", json!(false)), ("ff_enabled", json!(true)), ("brake_hold", json!(true)), ("auto_clutch", json!(true)), ("momentary_gears", json!(false)), ("auto_shift", json!(false)), ("wheel_range", json!(900.0)), ("wheel_lock", json!(0.0)), ("cab_wheel_rotation", json!(0)), ("fov", json!(0.0)), ("camera_collision", json!(true)), ("right_stick_look", json!(true)), ("steer_look", json!(false)), ("pedal_throttle", json!(1.0)), ("pedal_brake", json!(1.0)), ("seat_x", json!(0.0)), ("seat_y", json!(0.0)), ("seat_z", json!(0.0)), ("seat_pitch_deg", json!(0.0)), ("head_tracking", json!(false)), ("head_tracking_yaw_sens", json!(100.0)), ("head_tracking_pitch_sens", json!(100.0)), ("head_tracking_roll_sens", json!(100.0)), ("head_tracking_x_sens", json!(100.0)), ("head_tracking_y_sens", json!(100.0)), ("head_tracking_z_sens", json!(100.0)), ("head_tracking_invert_yaw", json!(false)), ("head_tracking_invert_pitch", json!(false)), ("head_tracking_invert_roll", json!(false)), ("head_tracking_invert_x", json!(false)), ("head_tracking_invert_y", json!(false)), ("head_tracking_invert_z", json!(false)), ("led_glow", json!(6)), ("led_mips", json!(1.3)), ("night_brightness", json!(0.0)), ("ui_scale", json!(1.0)), ("ui_scale_window", json!(true)), ("chat_size", json!(1.0)), ("notes", json!(true)), ("notes_driving", json!(true)), ("notes_script", json!(true)), ("notes_trip", json!(true)), ("notes_tickets", json!(true)), ("mouse_steering", json!(false)), ("mouse_right_off", json!(false)), ("mouse_smooth", json!(true)), ("mouse_hold", json!(true)), ("mouse_pedals", json!(true)), ("key_pedal_speed", json!(1.0)), ("blinker_cancel", json!(true)), ("ff_road_vib", json!(1.0)), ("ff_engine_vib", json!(1.0)), ("ff_fade", json!(0.28))] {
+    for (k, d) in [("pax_voices", json!("all")), ("nav_ai", json!(true)), ("nav_ai_cars", json!(true)), ("nav_surface", json!(true)), ("nav_light", json!(false)), ("nav_3d", json!(true)), ("nav_classic_2d", json!(false)), ("nav_widget", json!(true)), ("nav_size", json!(1.0)), ("get_up", json!(false)), ("time_speed", json!("1")), ("time_sync", json!(false)), ("metar_sync", json!(false)), ("metar_station", json!("")), ("machine_translation", json!(false)), ("shadow_casters", json!("all")), ("shadow_blobs", json!(true)), ("reflections", json!(1.0)), ("mouse_sens", json!(1.0)), ("graphics_api", json!("auto")), ("ctrl_off", json!("")), ("steering_linear", json!(false)), ("old_steering", json!(false)), ("red_steer_spd", json!(false)), ("ff_invert", json!(false)), ("ff_enabled", json!(true)), ("brake_hold", json!(true)), ("auto_clutch", json!(true)), ("momentary_gears", json!(false)), ("auto_shift", json!(false)), ("wheel_range", json!(900.0)), ("wheel_lock", json!(0.0)), ("cab_wheel_rotation", json!(0)), ("fov", json!(0.0)), ("camera_collision", json!(true)), ("right_stick_look", json!(true)), ("steer_look", json!(false)), ("pedal_throttle", json!(1.0)), ("pedal_brake", json!(1.0)), ("seat_x", json!(0.0)), ("seat_y", json!(0.0)), ("seat_z", json!(0.0)), ("seat_pitch_deg", json!(0.0)), ("head_tracking", json!(false)), ("head_tracking_yaw_sens", json!(100.0)), ("head_tracking_pitch_sens", json!(100.0)), ("head_tracking_roll_sens", json!(100.0)), ("head_tracking_x_sens", json!(100.0)), ("head_tracking_y_sens", json!(100.0)), ("head_tracking_z_sens", json!(100.0)), ("head_tracking_invert_yaw", json!(false)), ("head_tracking_invert_pitch", json!(false)), ("head_tracking_invert_roll", json!(false)), ("head_tracking_invert_x", json!(false)), ("head_tracking_invert_y", json!(false)), ("head_tracking_invert_z", json!(false)), ("led_glow", json!(6)), ("led_mips", json!(1.3)), ("night_brightness", json!(0.0)), ("ui_scale", json!(1.0)), ("ui_scale_window", json!(true)), ("chat_size", json!(1.0)), ("notes", json!(true)), ("notes_driving", json!(true)), ("notes_script", json!(true)), ("notes_trip", json!(true)), ("notes_tickets", json!(true)), ("mouse_steering", json!(false)), ("mouse_right_off", json!(false)), ("mouse_smooth", json!(true)), ("mouse_hold", json!(true)), ("mouse_pedals", json!(true)), ("key_pedal_speed", json!(1.0)), ("blinker_cancel", json!(true)), ("ff_road_vib", json!(1.0)), ("ff_engine_vib", json!(1.0)), ("ff_fade", json!(0.28))] {
         v[k] = d;
     }
     v["steer_look_angle"] = json!(30.0);
@@ -2381,6 +2401,9 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     for (k, d) in [("update_check", json!(true)), ("update_auto", json!(false)), ("update_notify", json!(true)), ("update_channel", json!("stable")), ("presence", json!(true)), ("hardware_id", json!(true))] {
         v[k] = d;
     }
+    let (dynamic_arrows, map_arrows) = route_arrows_from_text(text.unwrap_or_default());
+    v["nav_dynamic_arrows"] = json!(dynamic_arrows);
+    v["nav_map_arrows"] = json!(map_arrows);
     let Some(t) = text else { return v };
     v["ui_theme"] = json!(ui_theme_from_text(t));
     let mut version = 0;
@@ -2433,7 +2456,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "max_fps" => v[&k] = json!(val.parse::<f64>().map(|x| x as i64).unwrap_or(0)),
             "max_obj_dist" => v[&k] = if val.eq_ignore_ascii_case("auto") { json!("auto") } else { json!(val.parse::<f64>().map(|m| (m.round() as i64).to_string()).unwrap_or_else(|_| "auto".into())) },
             "ssao" | "shadows" | "shadow_blobs" | "lamp_shadows" | "navigator" | "enhanced" | "triple_screen" | "triple_span" | "triple_hud_center" | "vr" | "vr_desktop_mirror" | "fullscreen" | "vsync" | "exact_fare" | "detail_textures" | "texture_compression" | "chat" | "tooltips" | "name_tags" | "show_fps" | "clouds" | "doppler" | "driver" | "use_real_time" | "use_real_date" | "use_real_year" | "collision_vehicles" | "collision_objects" | "collision_pedestrians" | "realistic_road_physics" | "head_movement" | "driverview_smooth" | "hands_in_cab" | "alt_view" | "precision_zoom" => v[&k] = json!(b(val)),
-            "maintenance" | "ai_unsched_factor" | "ai_max_scheduled" | "standing_chance" => v[&k] = json!(val.trim_end_matches('%').parse::<f64>().map(|x| x.max(0.0) as i64).unwrap_or(0)),
+            "maintenance" | "ai_unsched_factor" | "ai_reaction" | "ai_max_scheduled" | "standing_chance" => v[&k] = json!(val.trim_end_matches('%').parse::<f64>().map(|x| x.max(0.0) as i64).unwrap_or(0)),
             // (-1: no parked cars at all, #864)
             "ai_max_parked" => v[&k] = json!(val.parse::<f64>().map(|x| x.max(-1.0) as i64).unwrap_or(0)),
             "ai_max_humans" => v[&k] = json!(val.parse::<f64>().map(|x| x.max(1.0) as i64).unwrap_or(200)),
@@ -2482,7 +2505,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "pad_steer_speed" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.8, 5.0)).unwrap_or(2.0)),
             "pad_deadzone" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 0.4)).unwrap_or(0.08)),
             "pad_type" => v[&k] = json!(match val.trim().to_ascii_lowercase().as_str() { "xbox" => "xbox", "ps4" => "ps4", "ps5" => "ps5", _ => "auto" }),
-            "camera_collision" | "right_stick_look" | "ctrl_background" | "pad_steer_linear" | "pad_buttons" | "arrows_switch_cams" | "steer_look" | "head_tracking" | "head_tracking_invert_yaw" | "head_tracking_invert_pitch" | "head_tracking_invert_roll" | "head_tracking_invert_x" | "head_tracking_invert_y" | "head_tracking_invert_z" | "discord_status" | "remote_cockpit" | "launcher_rest" | "cross_platform_launcher" => v[&k] = json!(b(val)),
+            "camera_collision" | "right_stick_look" | "ctrl_background" | "pad_steer_linear" | "pad_buttons" | "arrows_switch_cams" | "steer_look" | "head_tracking" | "head_tracking_invert_yaw" | "head_tracking_invert_pitch" | "head_tracking_invert_roll" | "head_tracking_invert_x" | "head_tracking_invert_y" | "head_tracking_invert_z" | "discord_status" | "discord_map" | "discord_bus" | "discord_line" | "discord_stop" | "discord_players" | "discord_buttons" | "remote_cockpit" | "launcher_rest" | "cross_platform_launcher" => v[&k] = json!(b(val)),
             // (how much of the mip chain an LED panel is held at, 0..4; a file from before
             // it was a number says 1 or 0)
             "led_mips" => v[&k] = json!(val.trim().parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 4.0)).unwrap_or(1.3)),
@@ -2508,7 +2531,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "seat_pitch_deg" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).unwrap_or(0.0).clamp(-45.0, 45.0)),
             "head_tracking_yaw_sens" | "head_tracking_pitch_sens" | "head_tracking_roll_sens" | "head_tracking_x_sens" | "head_tracking_y_sens" | "head_tracking_z_sens" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 100.0)).unwrap_or(100.0)),
             "full_tank" | "trip_summary" => v[&k] = json!(b(val)),
-            "nav_arrows" | "nav_ai" | "nav_ai_cars" | "nav_surface" | "nav_3d" | "nav_widget" | "get_up" | "time_sync" | "metar_sync" | "ui_scale_window" | "notes" | "notes_driving" | "notes_script" | "notes_trip" | "notes_tickets" | "machine_translation" | "update_check" | "update_auto" | "update_notify" | "presence" | "hardware_id" | "steering_linear" | "old_steering" | "red_steer_spd" | "ff_invert" | "ff_enabled" | "brake_hold" | "auto_clutch" | "momentary_gears" | "auto_shift" | "mouse_steering" | "mouse_right_off" | "mouse_smooth" | "mouse_hold" | "mouse_pedals" | "blinker_cancel" => v[&k] = json!(b(val)),
+            "nav_ai" | "nav_ai_cars" | "nav_surface" | "nav_3d" | "nav_widget" | "get_up" | "time_sync" | "metar_sync" | "ui_scale_window" | "notes" | "notes_driving" | "notes_script" | "notes_trip" | "notes_tickets" | "machine_translation" | "update_check" | "update_auto" | "update_notify" | "presence" | "hardware_id" | "steering_linear" | "old_steering" | "red_steer_spd" | "ff_invert" | "ff_enabled" | "brake_hold" | "auto_clutch" | "momentary_gears" | "auto_shift" | "mouse_steering" | "mouse_right_off" | "mouse_smooth" | "mouse_hold" | "mouse_pedals" | "blinker_cancel" => v[&k] = json!(b(val)),
             "nav_light" => v[&k] = json!(b(val)),
             "nav_classic_2d" => v[&k] = json!(b(val)),
             "info_bar" | "disable_plugins" => v[&k] = json!(b(val)),
@@ -2651,6 +2674,9 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     // a number, also as the string a select gives
     let n = |k: &str, d: i64| v.get(k).and_then(|x| x.as_i64().or_else(|| x.as_f64().or_else(|| x.as_str().and_then(|s| s.trim().parse::<f64>().ok())).map(|f| f as i64))).unwrap_or(d);
     let f = |k: &str, d: f64| v.get(k).and_then(|x| x.as_f64()).unwrap_or(d);
+    let legacy_arrows = b("nav_arrows", false) != 0;
+    let dynamic_arrows = b("nav_dynamic_arrows", legacy_arrows);
+    let map_arrows = b("nav_map_arrows", legacy_arrows);
     let text = format!(
         "# openOMSI settings (written by the launcher)\nversion=4\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\nenhanced={}\ngraphics={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\nrender_scale={}\nview_distance={}\nlanguage={}\nvideo_memory={}\ntexture_compression={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nmirror_size={}\ndoppler={}\ndriver={}\nmax_fps={}\nmin_obj_size={}\nmax_obj_dist={}\n",
         n("msaa", 4),
@@ -2709,9 +2735,10 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     // OMSI's own options (options.cfg): maintenance ([wear_lifespan]), the AI counts and
     // the share of random traffic, the real clock and calendar, collisions, head movement
     let text = format!(
-        "{text}maintenance={}\nai_unsched_factor={}\nai_max_scheduled={}\nai_max_parked={}\nai_max_humans={}\nuse_real_time={}\nuse_real_date={}\nuse_real_year={}\ncollision_vehicles={}\ncollision_objects={}\ncollision_pedestrians={}\nrealistic_road_physics={}\nhead_movement={}\ndriverview_smooth={}\nhands_in_cab={}\nalt_view={}\nprecision_zoom={}\n",
+        "{text}maintenance={}\nai_unsched_factor={}\nai_reaction={}\nai_max_scheduled={}\nai_max_parked={}\nai_max_humans={}\nuse_real_time={}\nuse_real_date={}\nuse_real_year={}\ncollision_vehicles={}\ncollision_objects={}\ncollision_pedestrians={}\nrealistic_road_physics={}\nhead_movement={}\ndriverview_smooth={}\nhands_in_cab={}\nalt_view={}\nprecision_zoom={}\n",
         n("maintenance", 0).clamp(0, 4),
         n("ai_unsched_factor", 100).clamp(0, 300),
+        n("ai_reaction", 100).clamp(25, 200),
         n("ai_max_scheduled", 0).max(0),
         n("ai_max_parked", 0).max(-1),
         n("ai_max_humans", 200).max(1),
@@ -2729,13 +2756,12 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("precision_zoom", false),
     );
     let text = format!(
-        "{text}pax_voices={}\nnav_arrows={}\nnav_ai={}\nnav_ai_cars={}\nnav_surface={}\nnav_3d={}\nnav_classic_2d={}\nnav_widget={}\nnav_size={}\nget_up={}\ntime_speed={}\nmachine_translation={}\nshadow_casters={}\nshadow_blobs={}\nlamp_shadows={}\nctrl_deadzone={}\nupdate_check={}\nupdate_auto={}\nupdate_notify={}\npresence={}\nhardware_id={}\nreflections={}\nmouse_sens={}\nmouse_pedal_strength={}\ngraphics_api={}\nctrl_off={}\nsteering_linear={}\nold_steering={}\nred_steer_spd={}\nff_invert={}\nwheel_range={}\nwheel_lock={}\ncab_wheel_rotation={}\nfov={}\ncamera_collision={}\npedal_throttle={}\npedal_brake={}\nseat_x={}\nseat_y={}\nseat_z={}\nseat_pitch_deg={}\nsteer_look={}\nhead_tracking={}\nhead_tracking_yaw_sens={}\nhead_tracking_pitch_sens={}\nhead_tracking_roll_sens={}\nhead_tracking_x_sens={}\nhead_tracking_y_sens={}\nhead_tracking_z_sens={}\nhead_tracking_invert_yaw={}\nhead_tracking_invert_pitch={}\nhead_tracking_invert_roll={}\nhead_tracking_invert_x={}\nhead_tracking_invert_y={}\nhead_tracking_invert_z={}\nff_enabled={}\nbrake_hold={}\nauto_clutch={}\nmomentary_gears={}\nauto_shift={}\nled_glow={}\nled_mips={}\nnight_brightness={}\nui_scale={}\nui_scale_window={}\nchat_size={}\nnotes={}\nnotes_driving={}\nnotes_script={}\nnotes_trip={}\nnotes_tickets={}\nmouse_steering={}\nmouse_right_off={}\nmouse_smooth={}\nmouse_hold={}\nblinker_cancel={}\nff_road_vib={}\nff_engine_vib={}\nff_fade={}\n",
+        "{text}nav_dynamic_arrows={dynamic_arrows}\nnav_map_arrows={map_arrows}\npax_voices={}\nnav_ai={}\nnav_ai_cars={}\nnav_surface={}\nnav_3d={}\nnav_classic_2d={}\nnav_widget={}\nnav_size={}\nget_up={}\ntime_speed={}\nmachine_translation={}\nshadow_casters={}\nshadow_blobs={}\nlamp_shadows={}\nctrl_deadzone={}\nupdate_check={}\nupdate_auto={}\nupdate_notify={}\npresence={}\nhardware_id={}\nreflections={}\nmouse_sens={}\nmouse_pedal_strength={}\ngraphics_api={}\nctrl_off={}\nsteering_linear={}\nold_steering={}\nred_steer_spd={}\nff_invert={}\nwheel_range={}\nwheel_lock={}\ncab_wheel_rotation={}\nfov={}\ncamera_collision={}\npedal_throttle={}\npedal_brake={}\nseat_x={}\nseat_y={}\nseat_z={}\nseat_pitch_deg={}\nsteer_look={}\nhead_tracking={}\nhead_tracking_yaw_sens={}\nhead_tracking_pitch_sens={}\nhead_tracking_roll_sens={}\nhead_tracking_x_sens={}\nhead_tracking_y_sens={}\nhead_tracking_z_sens={}\nhead_tracking_invert_yaw={}\nhead_tracking_invert_pitch={}\nhead_tracking_invert_roll={}\nhead_tracking_invert_x={}\nhead_tracking_invert_y={}\nhead_tracking_invert_z={}\nff_enabled={}\nbrake_hold={}\nauto_clutch={}\nmomentary_gears={}\nauto_shift={}\nled_glow={}\nled_mips={}\nnight_brightness={}\nui_scale={}\nui_scale_window={}\nchat_size={}\nnotes={}\nnotes_driving={}\nnotes_script={}\nnotes_trip={}\nnotes_tickets={}\nmouse_steering={}\nmouse_right_off={}\nmouse_smooth={}\nmouse_hold={}\nblinker_cancel={}\nff_road_vib={}\nff_engine_vib={}\nff_fade={}\n",
         match v.get("pax_voices").and_then(|x| x.as_str()).unwrap_or("all") {
             "tickets" => "tickets",
             "off" => "off",
             _ => "all",
         },
-        b("nav_arrows", false),
         b("nav_ai", true), b("nav_ai_cars", true), b("nav_surface", true), b("nav_3d", true), b("nav_classic_2d", false), b("nav_widget", true), f("nav_size", 1.0).clamp(0.6, 2.0),
         b("get_up", false),
         match v.get("time_speed") {
@@ -2822,7 +2848,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     let vr_head_smoothing_ms = v.get("vr_head_smoothing_ms").and_then(|x| x.as_f64().or_else(|| x.as_str().and_then(|s| s.parse().ok()))).filter(|x| x.is_finite()).unwrap_or(0.0).clamp(0.0, 30.0);
     let vr_mirror_rate = v.get("vr_mirror_rate").and_then(|x| x.as_f64().or_else(|| x.as_str().and_then(|s| s.parse().ok()))).filter(|x| x.is_finite()).unwrap_or(16.0).clamp(-1.0, 360.0);
     let remote_port = v.get("remote_cockpit_port").and_then(|x| x.as_u64().or_else(|| x.as_str().and_then(|s| s.trim().parse().ok()))).filter(|p| (1..=65535).contains(p)).unwrap_or(8642);
-    let text = format!("{text}vr={}\nvr_scale={vr_scale}\nvr_head_smoothing_ms={vr_head_smoothing_ms}\nvr_mirror_rate={vr_mirror_rate}\nvr_desktop_mirror={}\ndiscord_status={}\nremote_cockpit={}\nremote_cockpit_port={remote_port}\nlauncher_rest={}\ncross_platform_launcher={}\n", b("vr", false), b("vr_desktop_mirror", true), b("discord_status", false), b("remote_cockpit", false), b("launcher_rest", true), b("cross_platform_launcher", false));
+    let text = format!("{text}vr={}\nvr_scale={vr_scale}\nvr_head_smoothing_ms={vr_head_smoothing_ms}\nvr_mirror_rate={vr_mirror_rate}\nvr_desktop_mirror={}\ndiscord_status={}\ndiscord_map={}\ndiscord_bus={}\ndiscord_line={}\ndiscord_stop={}\ndiscord_players={}\ndiscord_buttons={}\nremote_cockpit={}\nremote_cockpit_port={remote_port}\nlauncher_rest={}\ncross_platform_launcher={}\n", b("vr", false), b("vr_desktop_mirror", true), b("discord_status", false), b("discord_map", true), b("discord_bus", true), b("discord_line", true), b("discord_stop", true), b("discord_players", true), b("discord_buttons", true), b("remote_cockpit", false), b("launcher_rest", true), b("cross_platform_launcher", false));
     // what the page does not manage (keys of newer games, hand-written ones) stays as it
     // was in the file; other spellings of the keys just written go
     let mut text = text;

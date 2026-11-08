@@ -240,6 +240,7 @@ impl App {
         omsi_cfg::vfs::record_reads(false);
         self.args.lan_host = None;
         self.args.lan_join = None;
+        self.integrations.discord_max.forget();
         self.args.lan_ws_fallback = None;
         if let Some(traffic) = self.session.traffic.as_mut() {
             traffic.lights_only = !(self.args.traffic > 0

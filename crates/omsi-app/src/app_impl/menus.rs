@@ -39,6 +39,7 @@ impl App {
 
     pub(crate) fn close_game_menu(&mut self) {
         self.shell.ui.dismiss_popups();
+        self.shell.pause_online.management = None;
         // Never keep unconfirmed graphics changes after dismissing the entire menu.
         if self.menus.graphics_before.is_some() {
             crate::game_lists::cancel_graphics_changes(self);
@@ -71,6 +72,16 @@ impl App {
 
     pub(crate) fn menu_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode) {
         self.menus.menu_kbd = true;
+        if self.shell.pause_online.management.is_some() {
+            if code == KeyCode::Escape {
+                if let Some((_, stage)) = self.shell.pause_online.management.as_mut().filter(|(_, stage)| stage.is_some()) {
+                    *stage = None;
+                } else {
+                    self.shell.pause_online.management = None;
+                }
+            }
+            return;
+        }
         if code == KeyCode::Escape && self.shell.ui.dismiss_date_popup() {
             return;
         }
@@ -272,6 +283,12 @@ impl App {
     /// What a line of the game menu does, by its id (all but loading, leaving and the
     /// plugins' lines): also the Alt quick menu's tiles. False when `id` is none of them.
     pub(crate) fn game_menu_action(&mut self, id: &str) -> bool {
+        if self.shell.pause_category == crate::shell::pause::navigation::Category::Online {
+            if let Some(tab) = match id { "players" => Some(0), "world" => Some(1), "admin" => Some(2), _ => None } {
+                self.close_list(); self.shell.pause_online.tab = tab; self.shell.pause_hidden = false;
+                return true;
+            }
+        }
         match id {
             "resume" => self.close_game_menu(),
             "options" => self.open_list(crate::game_lists::ListKind::Options(0)),
@@ -282,12 +299,25 @@ impl App {
             }
             "vehicle" => self.open_list(crate::game_lists::ListKind::Vehicle(0)),
             "world" => self.open_list(crate::game_lists::ListKind::World(0)),
+            "multiplayer" if self.net.lan.is_some() && self.shell.pause_category != crate::shell::pause::navigation::Category::Online => {
+                self.switch_pause_category(crate::shell::pause::navigation::Category::Online);
+                self.shell.pause_online.tab = 0;
+                self.shell.pause_online.management = None;
+                self.shell.pause_online.confirm = None;
+            }
             "multiplayer" => self.open_multiplayer(),
             "copycode" => {
                 self.close_game_menu();
                 self.copy_server_code();
             }
             "admin" => self.open_list(crate::game_lists::ListKind::Admin),
+            "players" if self.net.lan.is_some() => {
+                self.close_list();
+                self.shell.pause_category = crate::shell::pause::navigation::Category::Online;
+                self.shell.pause_online.tab = 0;
+                self.shell.pause_online.management = None;
+                self.shell.pause_hidden = false;
+            }
             "players" => self.open_list(crate::game_lists::ListKind::PlayerList),
             "duty" => self.open_list(crate::game_lists::ListKind::Lines),
             "streets" => self.open_list(crate::game_lists::ListKind::Streets),
