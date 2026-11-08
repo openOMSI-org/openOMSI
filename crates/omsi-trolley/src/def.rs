@@ -1,9 +1,9 @@
 //! What a vehicle file says about its trolley gear: the poles on the roof and the traction
 //! drive. The blocks are openOMSI's own (OMSI 2 has no overhead wire of its own; its trolleybus
 //! add-ons run a plugin beside the game): a `[trolley_pole]` per pole, one `[trolley_rheostat]`
-//! or `[trolley_async]` drive, an optional `[trolley_battery]` and `[trolley_vars]`. Inside a
-//! block every line is `key value ...`; keys left out keep the defaults below, and anything
-//! unknown is skipped.
+//! or `[trolley_async]` drive, an optional `[trolley_battery]` and `[trolley_vars]`, or an empty
+//! `[trolley_none]` for a vehicle that moves its poles itself. Inside a block every line is
+//! `key value ...`; keys left out keep the defaults below, and anything unknown is skipped.
 
 use glam::Vec3;
 
@@ -284,8 +284,6 @@ impl TrolleyDef {
         self.poles.is_empty()
     }
 
-    /// The vehicle's file gives no poles and does not say `[trolley_none]`: a plain OMSI 2
-    /// trolleybus's poles may be read off its model.
     pub fn takes_model_poles(&self) -> bool {
         self.is_empty() && !self.none
     }
