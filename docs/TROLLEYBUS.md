@@ -314,6 +314,9 @@ taken as a plain trolleybus when its model looks like one (see [TROLLEY_MODS.md]
 [trolley_none]
 ```
 
+Each section of an articulated vehicle has its own `.bus`, read on its own: the block goes in the
+`.bus` of the section whose model carries the poles (usually the rear one, as on the Ikarus 280T).
+
 With a modelled drive the vehicle's own `M_Wheel` is replaced by the drive's force (times the
 wheel radius of the driven axle) and the drive's mechanical brake force is added to
 `Brakeforce` (the vehicle's variable list must declare `Brakeforce`, `M_Wheel`, `Throttle`
