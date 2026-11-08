@@ -279,6 +279,7 @@ pub(super) fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
         "msaa" => vec![("1", "Off"), ("2", "2x MSAA"), ("4", "4x MSAA"), ("8", "8x MSAA")],
         "render_scale" => vec![("auto", "Auto"), ("1", "100%"), ("0.85", "85%"), ("0.75", "75%"), ("0.67", "67%"), ("0.5", "50%")],
         "upscaler" => [("default", "Standard (Catmull-Rom)"), ("fsr1", "AMD FSR 1")].into_iter().chain(omsi_cfg::upscaler_files::menu_choices()).collect(),
+        "frame_generation" => omsi_cfg::upscaler_files::frame_generation_menu(&omsi_cfg::upscaler_files::frame_generation_choices(&omsi_cfg::upscaler_files::program_dir())),
         "upscale_quality" => vec![("native", "Native"), ("quality", "Quality"), ("balanced", "Balanced"), ("performance", "Performance"), ("ultra_performance", "Ultra performance")],
         "fsr_quality" => vec![("ultra", "Ultra Quality (77%)"), ("quality", "Quality (67%)"), ("balanced", "Balanced (59%)"), ("performance", "Performance (50%)"), ("auto", "Automatic (keeps the frame rate)"), ("custom", "Use render scale")],
         "anisotropy" => vec![("1", "Off"), ("2", "2x"), ("4", "4x"), ("8", "8x"), ("16", "16x")],
@@ -385,7 +386,11 @@ mod tests {
 }
 
 pub(super) fn select_state(file: &serde_json::Value, key: &str) -> (Vec<(&'static str, &'static str)>, Option<usize>, String) {
-    let options = select_options(key);
+    let mut options = select_options(key);
+    // (NVIDIA's frame generation takes DLSS's inputs: offered with DLSS, as in the launcher)
+    if key == "frame_generation" && file.get("upscaler").and_then(|u| u.as_str()) != Some("dlss") {
+        options.retain(|o| !o.0.starts_with("dlss"));
+    }
     let cur = value_text(file.get(key).unwrap_or(&serde_json::Value::Null));
     let at = options.iter().position(|o| same_value(o.0, &cur));
     (options, at, cur)

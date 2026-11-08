@@ -10,7 +10,11 @@
 #[cfg(windows)]
 mod d3d12;
 #[cfg(windows)]
+mod dlssg;
+#[cfg(windows)]
 mod fidelityfx;
+#[cfg(windows)]
+mod framegen;
 mod frame;
 #[cfg(windows)]
 mod streamline;
@@ -20,6 +24,81 @@ mod vulkan;
 mod tests;
 
 pub(crate) use frame::*;
+#[cfg(windows)]
+pub use framegen::{FrameGeneration, OwnSwapChain};
+
+/// Frame generation is Windows-only (DirectX 12): never made elsewhere.
+#[cfg(not(windows))]
+#[derive(Clone)]
+pub enum FrameGeneration {}
+
+#[cfg(not(windows))]
+impl FrameGeneration {
+    pub(crate) fn prepare(&self, _: &wgpu::Texture, _: &wgpu::Texture, _: &wgpu::Texture, _: (u32, u32), _: &FrameConstants) {
+        match *self {}
+    }
+
+    pub(crate) fn generated(&self) -> u64 {
+        match *self {}
+    }
+    pub(crate) fn pause(&self) {
+        match *self {}
+    }
+    pub(crate) fn hold(&self, _: Vec<wgpu::Texture>) {
+        match *self {}
+    }
+    pub(crate) fn working(&self) -> bool {
+        match *self {}
+    }
+}
+
+#[cfg(not(windows))]
+pub enum OwnSwapChain {}
+
+#[cfg(not(windows))]
+impl OwnSwapChain {
+    pub fn frame_generation(&self) -> FrameGeneration {
+        match *self {}
+    }
+    pub fn size(&self) -> (u32, u32) {
+        match *self {}
+    }
+    pub fn current(&self) -> Option<wgpu::Texture> {
+        match *self {}
+    }
+    pub fn present(&self, _: &wgpu::Device, _: &wgpu::Queue, _: &wgpu::Texture) {
+        match *self {}
+    }
+    pub fn resize(&mut self, _: &wgpu::Device, _: (u32, u32)) {
+        match *self {}
+    }
+    pub fn set_vsync(&mut self, _: bool) {
+        match *self {}
+    }
+    pub fn ask_frames(&self, _: u32) -> bool {
+        match *self {}
+    }
+}
+
+/// What makes the in-between frames (the `frame_generation` setting): AMD FSR 3, or NVIDIA DLSS
+/// with this many frames on screen per drawn one (2 to 4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FrameGenerationKind {
+    Fsr3,
+    Dlss(u32),
+}
+
+impl FrameGenerationKind {
+    pub fn parse(s: &str) -> Option<FrameGenerationKind> {
+        match omsi_cfg::upscaler_files::frame_generation_word(s) {
+            "fsr3" => Some(FrameGenerationKind::Fsr3),
+            "dlss2x" => Some(FrameGenerationKind::Dlss(2)),
+            "dlss3x" => Some(FrameGenerationKind::Dlss(3)),
+            "dlss4x" => Some(FrameGenerationKind::Dlss(4)),
+            _ => None,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TemporalUpscaler {
@@ -40,6 +119,14 @@ impl TemporalUpscaler {
         match self {
             TemporalUpscaler::Dlss => "dlss",
             TemporalUpscaler::Fsr3 => "fsr3",
+        }
+    }
+
+    /// The name the frame rate's corner shows.
+    pub fn label(self) -> &'static str {
+        match self {
+            TemporalUpscaler::Dlss => "DLSS",
+            TemporalUpscaler::Fsr3 => "FSR 3",
         }
     }
 
@@ -117,6 +204,9 @@ pub struct Inputs<'a> {
     pub motion: &'a wgpu::Texture,
     pub mask: &'a wgpu::Texture,
     pub output: &'a wgpu::Texture,
+    /// With frame generation: the window's picture before the HUD (window-sized, the swap
+    /// chain's format), drawn after the upscaler and read at the window's present.
+    pub hudless: Option<&'a wgpu::Texture>,
     pub render_size: (u32, u32),
     pub output_size: (u32, u32),
     /// Views of `color` (its plain UNORM one: the sRGB-encoded numbers), `depth`, `motion`, `mask` and
@@ -171,6 +261,9 @@ mod streamline {
 
     impl Runtime {
         pub(crate) fn wait(&mut self) {}
+        pub(crate) fn own_session(&self) -> bool {
+            false
+        }
         pub fn load(_device: &wgpu::Device) -> Result<Runtime> {
             anyhow::bail!("DLSS is Windows-only (DirectX 12)")
         }

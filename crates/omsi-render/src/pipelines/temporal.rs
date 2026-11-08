@@ -49,13 +49,17 @@ pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, upscaler: Option<T
     })];
     // (as the ordinary prepass: plain, cut out, a transmap's opaque part; two-sided, culled.
     // write false: the late ones, see `DrawPlan::masked`, only where the main pass left their own
-    // depth, so just the parts that are seen: with GreaterEqual, parts the picture does not show
-    // there put their motion over what lies in front)
+    // depth or a pane's just in front of it (`BEHIND_GLASS` in `motion.wgsl`), so just the parts
+    // that are seen: a plain GreaterEqual would put the motion of parts the picture does not show
+    // there over what lies in front)
     let make = |kind: u8, cull: bool, write: bool| {
-        let fragment = match kind {
-            0 => "fs_motion",
-            1 => "fs_motion_test",
-            2 => "fs_motion_transmap",
+        let fragment = match (kind, write) {
+            (0, true) => "fs_motion",
+            (1, true) => "fs_motion_test",
+            (2, true) => "fs_motion_transmap",
+            (0, false) => "fs_late_motion",
+            (1, false) => "fs_late_motion_test",
+            (2, false) => "fs_late_motion_transmap",
             _ => unreachable!(),
         };
         compile_pipeline(device, &wgpu::RenderPipelineDescriptor {
@@ -71,7 +75,7 @@ pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, upscaler: Option<T
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: DEPTH_FORMAT,
                 depth_write_enabled: Some(write),
-                depth_compare: Some(if write { wgpu::CompareFunction::GreaterEqual } else { wgpu::CompareFunction::Equal }),
+                depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
                 stencil: Default::default(),
                 bias: Default::default(),
             }),

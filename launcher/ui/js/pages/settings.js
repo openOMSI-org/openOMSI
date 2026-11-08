@@ -240,6 +240,7 @@ const CUSTOM = {
 const NVIDIA_STREAMLINE_URL = 'https://github.com/NVIDIA-RTX/Streamline/releases/tag/v2.14.1';
 const NVIDIA_STREAMLINE_LICENSE = 'https://github.com/NVIDIA-RTX/Streamline/blob/v2.14.1/license.txt';
 const NVIDIA_NGX_LICENSE = 'https://github.com/NVIDIA-RTX/Streamline/blob/v2.14.1/external/ngx-sdk/license.txt';
+const NVIDIA_REFLEX_LICENSE = 'https://github.com/NVIDIA-RTX/Streamline/blob/v2.14.1/external/reflex-sdk-vk/reflex.license.txt';
 
 function NvidiaDlssInstall() {
   const [status, setStatus] = useState(null);
@@ -278,16 +279,18 @@ function NvidiaDlssInstall() {
           help="Not included with openOMSI. Installs NVIDIA's own DLLs only after your approval. Windows, NVIDIA RTX and a game restart required." />
         <p class="muted small" style="margin:0">${t(status == null ? 'Checking NVIDIA DLSS files…'
           : installed ? 'NVIDIA DLSS runtime is installed.'
+          : status.upscaling ? 'DLSS is installed without frame generation. Install again to add it.'
           : 'DLSS files are not installed. The game works without them.')}</p>
         <div class="grid-2">
           <${Button} kind="ghost" icon="external" label="NVIDIA RTX/NGX license" onClick=${() => open(NVIDIA_NGX_LICENSE)} />
           <${Button} kind="ghost" icon="external" label="Streamline MIT license" onClick=${() => open(NVIDIA_STREAMLINE_LICENSE)} />
+          <${Button} kind="ghost" icon="external" label="NVIDIA Reflex license" onClick=${() => open(NVIDIA_REFLEX_LICENSE)} />
         </div>
         <${Button} kind="ghost" icon="external" label="View official NVIDIA SDK 2.14.1" onClick=${() => open(NVIDIA_STREAMLINE_URL)} />
         ${!installed && html`
           <label class="small" style="display:flex;align-items:flex-start;gap:10px">
             <input type="checkbox" checked=${accepted} onChange=${(e) => setAccepted(e.currentTarget.checked)} />
-            <span>${t("I have read and agree to NVIDIA's applicable Streamline and RTX/NGX license terms. The launcher will download the SDK directly from NVIDIA and install the four verified DLSS DLLs plus notices.")}</span>
+            <span>${t("I have read and agree to NVIDIA's applicable Streamline, RTX/NGX and Reflex license terms. The launcher will download the SDK directly from NVIDIA and install the eight verified DLSS and DLSS frame generation DLLs plus notices.")}</span>
           </label>
           <${Button} kind="primary" icon="download"
             label=${busy ? 'Downloading and verifying NVIDIA DLSS…' : 'Install NVIDIA DLSS'}

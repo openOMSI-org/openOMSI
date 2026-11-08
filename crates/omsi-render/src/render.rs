@@ -275,6 +275,14 @@ impl Renderer {
     }
 
     fn rebuild_in_place(&mut self, scene: &mut Scene, options: RenderOptions) {
+        // (frame generation reads the depth, the motion and the picture before the HUD when the
+        // window presents, on the vendor's queues, after wgpu is done with them: they are waited
+        // for before these go)
+        if let Some(g) = &self.frame_generation {
+            g.pause();
+            g.hold(self.temporal_generation_inputs());
+            let _ = crate::wait_gpu(&self.device, None);
+        }
         // (the same device: the upscaler goes on, and Streamline on Vulkan could not start again;
         // without one in the new options it is dropped here, with its context and textures)
         let upscaler = self.temporal_runtime().or_else(|| self.temporal_kept.take()).filter(|_| options.temporal.is_some());
@@ -290,8 +298,8 @@ impl Renderer {
         self.targets.triple_targets = None;
         self.targets.glass_picture = None;
         self.targets.target_use.clear();
-        let mesh_pages = self.mesh_pages;
-        *self = Renderer { mesh_pages, temporal_kept: upscaler, ..self.rebuilt(options) };
+        let (mesh_pages, frame_generation) = (self.mesh_pages, self.frame_generation.take());
+        *self = Renderer { mesh_pages, temporal_kept: upscaler, frame_generation, ..self.rebuilt(options) };
         scene.dirty = true;
         scene.model_buf = None;
         scene.params_buf = None;
@@ -315,6 +323,12 @@ impl Renderer {
             self.history.triple_culling = Default::default();
         }
         self.render_inner(scene, target, width, height, camera, lighting, true, None, None, false);
+    }
+
+    /// The window's frame generation (`SurfaceState::frame_generation`): upscaled frames hand it
+    /// what it makes the in-between frames from.
+    pub fn set_frame_generation(&mut self, frame_generation: Option<temporal::FrameGeneration>) {
+        self.frame_generation = frame_generation;
     }
 
     /// `render` for the window's own picture, the only one temporal upscaling draws: a photo or

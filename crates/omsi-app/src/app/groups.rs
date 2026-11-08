@@ -122,6 +122,10 @@ pub(crate) struct Integrations {
 /// the log.
 pub(crate) struct PerfState {
     pub(crate) fps: f32,
+    /// The in-between frames frame generation made in the last second, while it runs, and its
+    /// count when that second began (`Renderer::frames_generated`).
+    pub(crate) generated: Option<f32>,
+    pub(crate) generated_mark: u64,
     /// Per-stage frame time accumulators (OMSI_PROFILE), seconds.
     pub(crate) profile: crate::profile_keys::ProfileTimes,
     /// `profile` as it was at the start of the last frame: what a slow frame spent where.
@@ -176,6 +180,8 @@ impl PerfState {
     pub(crate) fn new(input_script: Vec<(f32, String)>, fps_t: Instant) -> PerfState {
         PerfState {
             fps: 0.0,
+            generated: None,
+            generated_mark: 0,
             profile: Default::default(),
             profile_prev: Default::default(),
             total_frames: 0,

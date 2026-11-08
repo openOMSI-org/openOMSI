@@ -10,7 +10,8 @@ $ProgressPreference = 'SilentlyContinue'
 $ReleaseUrl = 'https://github.com/NVIDIA-RTX/Streamline/releases/download/v2.14.1/streamline-sdk-v2.14.1.zip'
 $Files = @(
     'sl.interposer.dll', 'sl.common.dll', 'sl.dlss.dll', 'nvngx_dlss.dll',
-    'NVIDIA-Streamline-LICENSE.txt', 'nvngx_dlss.license.txt',
+    'sl.dlss_g.dll', 'nvngx_dlssg.dll', 'sl.reflex.dll', 'sl.pcl.dll',
+    'NVIDIA-Streamline-LICENSE.txt', 'nvngx_dlss.license.txt', 'reflex.license.txt',
     'NVIDIA-Streamline-NOTICE.txt'
 )
 $ResolvedGame = (Resolve-Path -LiteralPath $GameDirectory).Path
@@ -48,7 +49,7 @@ try {
     Invoke-WebRequest -Uri $ReleaseUrl -OutFile $Archive -UseBasicParsing -MaximumRedirection 5 -TimeoutSec 300 -Headers @{ 'User-Agent' = 'openOMSI-Launcher' }
 
     # This pinned source-controlled script verifies the full SDK archive SHA256,
-    # extracts ONLY the four allowlisted production DLLs, checks every NVIDIA
+    # extracts ONLY the eight allowlisted production DLLs, checks every NVIDIA
     # Authenticode signature, and copies the vendor's own licenses and notice.
     & $PackagingScript -Archive $Archive -Destination $Stage
 
@@ -82,7 +83,7 @@ try {
         $Installed.Add($Name)
     }
     $Finished = $true
-    Write-Output 'NVIDIA Streamline DLSS 2.14.1 installed from the official verified SDK.'
+    Write-Output 'NVIDIA Streamline DLSS and DLSS Frame Generation 2.14.1 installed from the official verified SDK.'
 }
 catch {
     $OriginalError = $_

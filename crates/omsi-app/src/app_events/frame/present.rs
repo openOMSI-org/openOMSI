@@ -174,7 +174,7 @@ impl App {
 
     /// The window's picture to draw into (none: the window is hidden; `reconfigure`: the
     /// drawable went away), and whether nothing is shown this frame.
-    fn frame_acquire(&mut self, reconfigure: &mut bool) -> (Option<wgpu::SurfaceTexture>, Option<wgpu::TextureView>, bool) {
+    fn frame_acquire(&mut self, reconfigure: &mut bool) -> (Option<omsi_render::WindowFrame>, Option<wgpu::TextureView>, bool) {
         let (Some(s), Some(r)) = (self.gfx.surface.as_ref(), self.renderer.as_ref()) else {
             return (None, None, true);
         };
@@ -194,18 +194,18 @@ impl App {
             .map(|(a, b)| (a..b).contains(&self.started.elapsed().as_secs_f32()))
             .unwrap_or(false);
         let acquired = match s.acquire() {
-            wgpu::CurrentSurfaceTexture::Success(_)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(_)
+            omsi_render::Acquired::Success(_)
+            | omsi_render::Acquired::Suboptimal(_)
             if hidden_now =>
                 {
-                    wgpu::CurrentSurfaceTexture::Occluded
+                    omsi_render::Acquired::Occluded
                 }
             other => other,
         };
         let (frame, stand_in) = match acquired {
-            wgpu::CurrentSurfaceTexture::Success(frame)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => (Some(frame), None),
-            wgpu::CurrentSurfaceTexture::Occluded
+            omsi_render::Acquired::Success(frame)
+            | omsi_render::Acquired::Suboptimal(frame) => (Some(frame), None),
+            omsi_render::Acquired::Occluded
             if omsi_cfg::flags::OMSI_RENDER_OCCLUDED.is_set() || omsi_cfg::flags::OMSI_HIDDEN_WINDOW.is_set() =>
                 {
                     let (w, h) = (s.config.width, s.config.height);
@@ -238,8 +238,8 @@ impl App {
                             .map(|t| t.create_view(&Default::default())),
                     )
                 }
-            wgpu::CurrentSurfaceTexture::Outdated
-            | wgpu::CurrentSurfaceTexture::Lost => {
+            omsi_render::Acquired::Outdated
+            | omsi_render::Acquired::Lost => {
                 *reconfigure = true;
                 (None, None)
             }
@@ -264,7 +264,7 @@ impl App {
         raw_dt: f32,
         lighting: &omsi_render::Lighting,
         vr_nav_display: Option<crate::vr_navigator::Display>,
-        frame: Option<wgpu::SurfaceTexture>,
+        frame: Option<omsi_render::WindowFrame>,
         view: wgpu::TextureView,
     ) {
         #[cfg(not(windows))]
@@ -674,9 +674,12 @@ impl App {
         }
         self.perf.total_frames += 1;
         if self.perf.fps_t.elapsed().as_secs_f32() >= 1.0 {
+            let generated = r.frames_generated();
+            self.perf.generated = generated.map(|n| n.saturating_sub(std::mem::replace(&mut self.perf.generated_mark, n)) as f32);
             if omsi_cfg::flags::OMSI_PROFILE.is_set() {
                 let secs = self.perf.fps_t.elapsed().as_secs_f32();
-                log::info!("profile interval: {:.1} fps over {secs:.2} s", self.perf.frames as f32 / secs);
+                let made = self.perf.generated.map(|g| format!(", {:.1} more made by frame generation", g / secs)).unwrap_or_default();
+                log::info!("profile interval: {:.1} fps over {secs:.2} s{made}", self.perf.frames as f32 / secs);
             }
             let speed = self
                 .player

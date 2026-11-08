@@ -643,8 +643,8 @@ impl RendererStart {
 /// the window gave no picture to draw into (hidden, covered, being resized).
 pub(crate) fn present_clear(surface: &mut SurfaceState<'_>, device: &wgpu::Device, queue: &wgpu::Queue, window: &winit::window::Window, color: wgpu::Color) -> bool {
     let frame = match surface.acquire() {
-        wgpu::CurrentSurfaceTexture::Success(f) | wgpu::CurrentSurfaceTexture::Suboptimal(f) => f,
-        wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
+        omsi_render::Acquired::Success(f) | omsi_render::Acquired::Suboptimal(f) => f,
+        omsi_render::Acquired::Outdated | omsi_render::Acquired::Lost => {
             let size = crate::platform::surface_size(window);
             surface.resize_on(device, size.width, size.height);
             return false;
@@ -660,7 +660,7 @@ pub(crate) fn present_clear(surface: &mut SurfaceState<'_>, device: &wgpu::Devic
     }));
     queue.submit([enc.finish()]);
     window.pre_present_notify();
-    frame.present();
+    surface.present(device, queue, frame);
     true
 }
 
