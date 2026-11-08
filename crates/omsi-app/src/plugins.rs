@@ -1075,6 +1075,47 @@ impl PluginIo for Io<'_> {
     }
 }
 
+/// Where a point of one of a vehicle's meshes is now (see `PluginIo::mesh_point`).
+fn mesh_point_of(v: &omsi_sim::VehicleInstance, mesh: &str, point: [f32; 3], section: usize) -> Option<[f64; 3]> {
+    let (position, xf) = if section == 0 {
+        (v.position, v.mesh_local_transform(mesh_index(&v.ty, mesh)?))
+    } else {
+        let t = v.trailers.get(section - 1)?;
+        (t.position, t.mesh_local_transform(mesh_index(&t.ty, mesh)?))
+    };
+    let w = position + xf.transform_point3(glam::Vec3::from(point)).as_dvec3();
+    Some([w.x, w.y, w.z])
+}
+
+/// The mesh of a vehicle model whose file is `mesh` (any case, `/` or `\`): the one of that
+/// file name first (`sht_bashmak.o3d` is not `sht_bashmak_1.o3d`), else the first whose path
+/// ends with it.
+fn mesh_index(ty: &omsi_sim::VehicleType, mesh: &str) -> Option<usize> {
+    if mesh.is_empty() {
+        return None;
+    }
+    fn name(f: &str) -> &str {
+        f.rsplit(['/', '\\']).next().unwrap_or(f)
+    }
+    let norm = |b: u8| if b == b'/' { b'\\' } else { b.to_ascii_lowercase() };
+    let ends_with = |file: &str| file.len() >= mesh.len() && file.bytes().rev().zip(mesh.bytes().rev()).all(|(a, b)| norm(a) == norm(b));
+    let file_of = |i: usize| ty.model.meshes.get(ty.meshes[i].def_index).map_or("", |m| m.file.as_str());
+    let n = ty.meshes.len();
+    (0..n).find(|&i| name(file_of(i)).eq_ignore_ascii_case(mesh)).or_else(|| (0..n).find(|&i| ends_with(file_of(i))))
+}
+
+/// A vehicle's body (or a coupled section's) now: origin and axes (see `PluginIo::body_frame`).
+fn body_frame_of(v: &omsi_sim::VehicleInstance, section: usize) -> Option<[f64; 12]> {
+    let (p, r) = if section == 0 {
+        (v.position, v.body_rotation())
+    } else {
+        let t = v.trailers.get(section - 1)?;
+        (t.position, t.body_rotation())
+    };
+    let (x, y, z) = (r.x_axis, r.y_axis, r.z_axis);
+    Some([p.x, p.y, p.z, x.x as f64, x.y as f64, x.z as f64, y.x as f64, y.y as f64, y.z as f64, z.x as f64, z.y as f64, z.z as f64])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1174,45 +1215,4 @@ mod tests {
         stop_info(&mut v, &stops, 0, false, None);
         assert!(v.iter().all(|(k, _)| !k.starts_with("previous_stop") && *k != "next_stop_distance"));
     }
-}
-
-/// Where a point of one of a vehicle's meshes is now (see `PluginIo::mesh_point`).
-fn mesh_point_of(v: &omsi_sim::VehicleInstance, mesh: &str, point: [f32; 3], section: usize) -> Option<[f64; 3]> {
-    let (position, xf) = if section == 0 {
-        (v.position, v.mesh_local_transform(mesh_index(&v.ty, mesh)?))
-    } else {
-        let t = v.trailers.get(section - 1)?;
-        (t.position, t.mesh_local_transform(mesh_index(&t.ty, mesh)?))
-    };
-    let w = position + xf.transform_point3(glam::Vec3::from(point)).as_dvec3();
-    Some([w.x, w.y, w.z])
-}
-
-/// The mesh of a vehicle model whose file is `mesh` (any case, `/` or `\`): the one of that
-/// file name first (`sht_bashmak.o3d` is not `sht_bashmak_1.o3d`), else the first whose path
-/// ends with it.
-fn mesh_index(ty: &omsi_sim::VehicleType, mesh: &str) -> Option<usize> {
-    if mesh.is_empty() {
-        return None;
-    }
-    fn name(f: &str) -> &str {
-        f.rsplit(['/', '\\']).next().unwrap_or(f)
-    }
-    let norm = |b: u8| if b == b'/' { b'\\' } else { b.to_ascii_lowercase() };
-    let ends_with = |file: &str| file.len() >= mesh.len() && file.bytes().rev().zip(mesh.bytes().rev()).all(|(a, b)| norm(a) == norm(b));
-    let file_of = |i: usize| ty.model.meshes.get(ty.meshes[i].def_index).map_or("", |m| m.file.as_str());
-    let n = ty.meshes.len();
-    (0..n).find(|&i| name(file_of(i)).eq_ignore_ascii_case(mesh)).or_else(|| (0..n).find(|&i| ends_with(file_of(i))))
-}
-
-/// A vehicle's body (or a coupled section's) now: origin and axes (see `PluginIo::body_frame`).
-fn body_frame_of(v: &omsi_sim::VehicleInstance, section: usize) -> Option<[f64; 12]> {
-    let (p, r) = if section == 0 {
-        (v.position, v.body_rotation())
-    } else {
-        let t = v.trailers.get(section - 1)?;
-        (t.position, t.body_rotation())
-    };
-    let (x, y, z) = (r.x_axis, r.y_axis, r.z_axis);
-    Some([p.x, p.y, p.z, x.x as f64, x.y as f64, x.z as f64, y.x as f64, y.y as f64, y.z as f64, z.x as f64, z.y as f64, z.z as f64])
 }
