@@ -193,6 +193,12 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // grey at night while its light map lit them in Vanilla+ (#2927).
     let glass = !terrain && mode > 1.5 && (material.bump.z > 0.5 || material.emissive.w > 0.5) &&
         (has_env || material.params.z > 0.5 || material.emissive.w > 0.5) && material.flags.x < 0.5;
+    // Some window textures use a low, nonzero alpha for tinted glass. Keep those
+    // panes visible, but leave transparent texels untouched (stickers and cut-outs
+    // share blended glass materials in several buses).
+    if (glass && alpha > 0.001) {
+        alpha = max(alpha, 0.25);
+    }
     // An envmap on opaque vehicle paint is legacy material data, not a request to make
     // the whole body behave like glass. Keep the diffuse/sun response, but use the
     // ordinary rough dielectric path for the body.

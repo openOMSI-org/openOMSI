@@ -244,6 +244,7 @@ impl Player {
                 .clone()
                 .unwrap();
             log::info!("mouse event {ev}");
+            self.door_button_for_trigger(&ev);
             let plain = self.vehicle.trigger(&ev);
             // Momentary `[mouseevent]` buttons (Aachen ibox / ticket printer, #744) set a
             // flag in the press trigger and clear it in `_drag` / `_off`. The frame script
