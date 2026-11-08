@@ -1104,7 +1104,6 @@ fn the_rim_of_a_nearly_vertical_face_hands_the_ground_a_bounded_slope() {
     };
     let rims = terrain_fit_surface::boundary(&mesh, DVec3::ZERO);
     assert_eq!(rims.len(), 3);
-    // the face rises along +y: the limited slope keeps that way, at the limit
     for (_, gradient) in rims {
         assert!(
             gradient.x.abs() < 1e-9 && (gradient.y - 3.0).abs() < 1e-9,
