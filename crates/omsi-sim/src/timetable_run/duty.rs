@@ -160,6 +160,8 @@ impl PlayerDuty {
             position: None,
             unnumbered_public: Vec::new(),
             passed: PassedStop::default(),
+            ibis_stops: vec![None; trips.len()],
+            ibis_host_trip: None,
         }
     }
 
@@ -258,10 +260,23 @@ impl PlayerDuty {
     /// missed. Returns how many stops it closed.
     pub fn set_closed_stops(&mut self, names: &[String], via: &str) -> usize {
         let mut n = 0;
-        for s in self.trips.iter_mut().flat_map(|t| t.stops.iter_mut()) {
-            let closed = names.iter().any(|c| c.trim().eq_ignore_ascii_case(s.name.trim()));
-            s.closed = closed.then(|| via.trim().to_string());
-            n += closed as usize;
+        for (trip_index, trip) in self.trips.iter_mut().enumerate() {
+            let mut changed = false;
+            for s in &mut trip.stops {
+                let closed = names.iter().any(|c| c.trim().eq_ignore_ascii_case(s.name.trim()));
+                let via = closed.then(|| via.trim().to_string());
+                if s.closed != via {
+                    s.closed = via;
+                    changed = true;
+                }
+                n += closed as usize;
+            }
+            if changed {
+                self.ibis_stops[trip_index] = None;
+                if self.ibis_host_trip == Some(trip_index) {
+                    self.ibis_host_trip = None;
+                }
+            }
         }
         n
     }
@@ -685,30 +700,42 @@ impl PlayerDuty {
     }
 
     /// Supply restored timetable data before the first resumed script frame.
-    pub fn restore_host(&self, bus: &mut crate::VehicleInstance, day_time: f64) {
+    pub fn restore_host(&mut self, bus: &mut crate::VehicleInstance, day_time: f64) {
         self.feed_host(bus, day_time);
         bus.host.schedule_active = 1.0;
         bus.set_var("schedule_active", 1.0);
     }
 
-    pub(crate) fn feed_host(&self, bus: &mut crate::VehicleInstance, day_time: f64) {
+    pub(crate) fn feed_host(&mut self, bus: &mut crate::VehicleInstance, day_time: f64) {
         let delay = self.delay(day_time);
-        let trip = &self.trips[self.trip_index];
+        let trip_index = self.trip_index;
+        let trip = &self.trips[trip_index];
         let prev_ibis = bus.host.tt_ibis_busstop_index;
-        let has_timetable_calls = trip.stops.iter().any(|stop| stop.stops);
-        let calling: Vec<(usize, &PlannedStop)> = trip.stops.iter().enumerate()
-            .filter(|(_, stop)| if has_timetable_calls { stop.calls() } else { true })
-            .collect();
-        let next_calling = calling.iter().position(|(index, _)| *index >= self.next_stop)
+        if self.ibis_stops[trip_index].is_none() {
+            let has_timetable_calls = trip.stops.iter().any(|stop| stop.stops);
+            self.ibis_stops[trip_index] = Some(
+                trip.stops.iter().enumerate()
+                    .filter_map(|(index, stop)| (if has_timetable_calls { stop.calls() } else { true }).then_some(index))
+                    .collect(),
+            );
+        }
+        let calling = self.ibis_stops[trip_index].as_ref().expect("IBIS stops were just cached");
+        let next_calling = calling.iter().position(|index| *index >= self.next_stop)
             .or_else(|| calling.len().checked_sub(1));
-        let ibis_stop = next_calling.and_then(|index| calling.get(index).copied());
+        let ibis_stop = next_calling.and_then(|index| calling.get(index).copied())
+            .and_then(|stop_index| trip.stops.get(stop_index).map(|stop| (stop_index, stop)));
         let ibis_index = next_calling.map_or(-1, |index| index as i32);
+        let rebuild_ibis_rows = self.ibis_host_trip != Some(trip_index)
+            || (bus.host.tt_ibis_stops.is_empty() && !calling.is_empty());
         {
             let host = &mut bus.host;
             host.tt_line = trip.line.clone();
             host.tt_stops = trip.stops.iter().map(|s| (s.name.clone(), s.arr as f32, s.dep as f32)).collect();
             host.tt_stop_ids = trip.stops.iter().map(|s| s.object_id).collect();
-            host.tt_ibis_stops = calling.iter().map(|(_, s)| (s.name.clone(), s.arr as f32, s.dep as f32)).collect();
+            if rebuild_ibis_rows {
+                host.tt_ibis_stops = calling.iter().filter_map(|&index| trip.stops.get(index))
+                    .map(|s| (s.name.clone(), s.arr as f32, s.dep as f32)).collect();
+            }
             host.tt_ibis_busstop_index = ibis_index;
             host.tt_busstop_index = self.next_stop as i32;
             host.tt_terminus_index = tt_terminus_index(host.hof.as_deref(), &trip.terminus);
@@ -716,6 +743,9 @@ impl PlayerDuty {
             // clock's second less the timetable's interpolated one, each rounded - 0x7d5124 -
             // so a bus 0.3 s behind is not yet late to the scripts' `GetTTDelay > 0`)
             host.tt_delay = delay.round() as f32;
+        }
+        if rebuild_ibis_rows {
+            self.ibis_host_trip = Some(trip_index);
         }
         // Aachen's ibox keeps its own stop counter and does `+ 1` when
         // `GetTTBusstopIndex` changes. A jump of more than one stop, or a unit that only
