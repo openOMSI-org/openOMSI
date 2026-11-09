@@ -380,6 +380,7 @@ impl BusService {
         } else if self.stops.is_empty() && !self.route_open {
             vehicle.host.tt_busstop_index = vehicle.host.tt_stops.len().saturating_sub(1) as i32;
         }
+        vehicle.host.tt_ibis_busstop_index = vehicle.host.tt_busstop_index;
         vehicle.host.tt_delay = if self.at_stop() {
             self.stops
                 .front()
