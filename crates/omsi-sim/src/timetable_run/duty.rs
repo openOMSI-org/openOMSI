@@ -722,18 +722,6 @@ impl PlayerDuty {
         }
     }
 
-    /// Move the timetable index over intermediate stations the profile says to pass.
-    /// Keep those stations in the trip itself: their positions still describe the route.
-    /// The last station remains as the trip's end marker if no later calling stop exists.
-    fn skip_non_calling_stops(&mut self) {
-        let last = self.trip().stops.len().saturating_sub(1);
-        while self.next_stop < last
-            && self.trip().stops.get(self.next_stop).is_some_and(|s| !s.calls())
-        {
-            self.next_stop += 1;
-        }
-    }
-
     /// The bus came to a later stop of the trip than the one it is due at (it drove past
     /// some). Which stop that is cannot be told by the distance alone: a circular route, or
     /// one that turns back, calls at the same place twice, and its two stops there stand a
@@ -854,7 +842,6 @@ impl PlayerDuty {
                 self.trip().terminus
             );
         }
-        self.skip_non_calling_stops();
         let mut served = None;
         let trip = &self.trips[self.trip_index];
         let last = trip.stops.len().saturating_sub(1);
@@ -866,7 +853,6 @@ impl PlayerDuty {
         if doors_open_here && !self.at_stop {
             self.catch_up(pos, forward_of(self.heading));
         }
-        self.skip_non_calling_stops();
         let trip = &self.trips[self.trip_index];
         // stop progress by proximity
         if let Some(stop) = trip.stops.get(self.next_stop) {
@@ -899,7 +885,6 @@ impl PlayerDuty {
                 }
             }
         }
-        self.skip_non_calling_stops();
         served
     }
 }
