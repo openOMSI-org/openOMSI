@@ -203,6 +203,22 @@ fn feed_host_hides_plugin_closed_stops_from_ibis() {
     assert_eq!(bus.host.tt_ibis_busstop_index, 1);
 }
 
+#[test]
+fn feed_host_rebuilds_ibis_rows_when_a_stop_is_closed() {
+    let mut duty = early_departure_duty();
+    duty.trips[0] = planned(100.0, &[(0.0, 100.0, 100.0), (100.0, 200.0, 200.0), (200.0, 300.0, 300.0)]);
+    let mut bus = timetable_test_vehicle();
+
+    duty.feed_host(&mut bus, 150.0);
+    assert_eq!(bus.host.tt_ibis_stops.len(), 3);
+
+    duty.set_closed_stops(&["s1".into()], "diversion");
+    duty.feed_host(&mut bus, 151.0);
+
+    assert_eq!(bus.host.tt_ibis_stops.iter().map(|s| s.0.as_str()).collect::<Vec<_>>(), vec!["s0", "s2"]);
+    assert_eq!(bus.host.tt_ibis_busstop_index, 1);
+}
+
 fn depot_run_keeps_all_stops_in_ibis_when_none_are_calling() {
     let mut duty = early_departure_duty();
     duty.trips[0] = planned(
