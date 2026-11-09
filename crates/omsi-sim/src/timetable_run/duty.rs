@@ -135,7 +135,6 @@ impl PlayerDuty {
     /// `trip_index`, before the bus has been placed on it; `picked` when the player picked
     /// the trip.
     pub fn new(line: String, tour: String, trips: Vec<PlannedTrip>, trip_index: usize, first_trip: usize, picked: bool) -> PlayerDuty {
-        let ibis_stops = HashMap::new();
         PlayerDuty {
             line,
             tour,
@@ -161,7 +160,7 @@ impl PlayerDuty {
             position: None,
             unnumbered_public: Vec::new(),
             passed: PassedStop::default(),
-            ibis_stops,
+            ibis_stops: HashMap::new(),
             ibis_host_trip: None,
         }
     }
@@ -714,8 +713,10 @@ impl PlayerDuty {
         let prev_ibis = bus.host.tt_ibis_busstop_index;
         if !self.ibis_stops.contains_key(&trip_index) {
             let has_timetable_calls = trip.stops.iter().any(|stop| stop.stops);
-            self.ibis_stops.insert(trip_index,
-                trip.stops.iter().enumerate()
+            self.ibis_stops.insert(
+                trip_index,
+                trip.stops.iter()
+                    .enumerate()
                     .filter_map(|(index, stop)| (if has_timetable_calls { stop.calls() } else { true }).then_some(index))
                     .collect(),
             );
@@ -734,8 +735,10 @@ impl PlayerDuty {
             host.tt_stops = trip.stops.iter().map(|s| (s.name.clone(), s.arr as f32, s.dep as f32)).collect();
             host.tt_stop_ids = trip.stops.iter().map(|s| s.object_id).collect();
             if rebuild_ibis_rows {
-                host.tt_ibis_stops = calling.iter().filter_map(|&index| trip.stops.get(index))
-                    .map(|s| (s.name.clone(), s.arr as f32, s.dep as f32)).collect();
+                host.tt_ibis_stops = calling.iter()
+                    .filter_map(|&index| trip.stops.get(index))
+                    .map(|s| (s.name.clone(), s.arr as f32, s.dep as f32))
+                    .collect();
             }
             host.tt_ibis_busstop_index = ibis_index;
             host.tt_busstop_index = self.next_stop as i32;
