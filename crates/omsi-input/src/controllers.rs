@@ -1265,7 +1265,8 @@ impl Controllers {
             }
             self.held.event(&self.cfg, name, *n, *down, &mut self.actions);
         }
-        if !self.editing && self.enabled {
+        // Nothing waiting: one check. The timer runs only for a button that has a second action.
+        if !self.editing && self.enabled && self.held.waiting() {
             self.held.advance(&mut self.actions);
         }
         self.repeating = if self.editing || !self.enabled || !self.focused { Vec::new() } else { self.held.repeating() };

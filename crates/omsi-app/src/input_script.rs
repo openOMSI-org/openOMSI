@@ -366,6 +366,10 @@ impl App {
         if self.input.long_replay {
             return false;
         }
+        // Off, and nothing already waiting: a key is the key it was. No scan, no chord, no list.
+        if !self.settings.long_press && self.input.key_waits.is_empty() {
+            return false;
+        }
         let Some(scan) = keys::dik_code(code) else { return false };
         let m = omsi_content::input::chord(
             shift_now && !matches!(code, KeyCode::ShiftLeft | KeyCode::ShiftRight),
@@ -428,17 +432,25 @@ impl App {
         }
     }
 
+    #[inline]
     pub(crate) fn tick_long_keys(&mut self) {
+        // No key is waiting: the frame does nothing here. That is the usual frame.
+        if self.input.key_waits.is_empty() {
+            return;
+        }
         let menu = self.menus.game_menu.is_some() || self.menus.chooser.is_some() || self.photo.is_some();
         if !self.settings.long_press || menu {
             self.release_long_keys(false);
             return;
         }
-        let due: Vec<usize> = self.input.key_waits.iter().enumerate().filter(|(_, w)| !w.fired && w.at.elapsed().as_millis() as u32 >= w.ms).map(|(i, _)| i).collect();
-        for i in due {
-            let name = self.input.key_waits[i].long_action.clone();
-            self.input.key_waits[i].fired = true;
-            self.fire_named(&name, true);
+        let mut i = 0;
+        while i < self.input.key_waits.len() {
+            if !self.input.key_waits[i].fired && self.input.key_waits[i].at.elapsed().as_millis() as u32 >= self.input.key_waits[i].ms {
+                let name = self.input.key_waits[i].long_action.clone();
+                self.input.key_waits[i].fired = true;
+                self.fire_named(&name, true);
+            }
+            i += 1;
         }
     }
 

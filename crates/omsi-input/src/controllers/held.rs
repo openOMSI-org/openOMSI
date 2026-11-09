@@ -1,7 +1,11 @@
 use super::{find_device_cfg, latch_release, names_match, DeviceCfg};
 use crate::actions::is_game_action;
 
-struct Wait {
+/// A press that has not chosen short or long yet. Kept off `Held`, so a button that fires
+/// on the way down does not carry a timer.
+struct Pending {
+    device: String,
+    button: usize,
     at: std::time::Instant,
     ms: u32,
     long: String,
@@ -17,8 +21,6 @@ struct Held {
     continuous: bool,
     fresh: bool,
     out: bool,
-    /// Set while the press is waiting to see if it is short or long. `actions` stays empty until the long action fires.
-    wait: Option<Wait>,
 }
 
 /// Button-down actions remember their original mapping until release. Editing a binding
@@ -26,53 +28,56 @@ struct Held {
 pub(super) struct HeldButtons {
     long_press: bool,
     buttons: Vec<Held>,
+    /// Empty unless a button with a second action is down and has not fired. The frame
+    /// path looks at nothing else.
+    pending: Vec<Pending>,
 }
 
 impl Default for HeldButtons {
     fn default() -> Self {
-        Self { long_press: false, buttons: Vec::new() }
+        Self { long_press: false, buttons: Vec::new(), pending: Vec::new() }
     }
 }
 
 impl HeldButtons {
     pub(super) fn set_long_press(&mut self, on: bool) {
-        self.long_press = on;
+        if self.long_press != on {
+            self.long_press = on;
+        }
+    }
+
+    /// True only while a second action is waiting. The frame skips the timer otherwise.
+    #[inline]
+    pub(super) fn waiting(&self) -> bool {
+        !self.pending.is_empty()
     }
 
     pub(super) fn event(&mut self, cfg: &[DeviceCfg], name: &str, button: usize, down: bool, actions: &mut Vec<(String, bool)>) {
         if down {
-            if self.buttons.iter().any(|h| names_match(&h.device, name) && h.button == button) {
+            if self.buttons.iter().any(|h| names_match(&h.device, name) && h.button == button) || self.pending.iter().any(|p| names_match(&p.device, name) && p.button == button) {
                 return;
             }
             let Some(d) = find_device_cfg(cfg, name) else { return };
             let bound = d.actions_of(button);
-            if let Some((long, ms)) = d.second_of(button).filter(|_| self.long_press) {
-                // The press waits. Nothing fires until the button comes up early, or the time is reached.
-                self.buttons.push(Held {
-                    device: name.to_string(),
-                    button,
-                    actions: Vec::new(),
-                    latching: false,
-                    continuous: false,
-                    fresh: true,
-                    out: false,
-                    wait: Some(Wait { at: std::time::Instant::now(), ms, long, short: bound, latch: d.latching.contains(&button) }),
-                });
-                return;
+            // A second action is read only while the setting is on. Off, this is the press path as it was.
+            if self.long_press {
+                if let Some((long, ms)) = d.second_of(button) {
+                    self.pending.push(Pending { device: name.to_string(), button, at: std::time::Instant::now(), ms, long, short: bound, latch: d.latching.contains(&button) });
+                    return;
+                }
             }
             if bound.is_empty() {
                 return;
             }
             actions.extend(bound.iter().map(|a| (a.clone(), true)));
-            self.buttons.push(Held { device: name.to_string(), button, actions: bound, latching: d.latching.contains(&button), continuous: d.continuous(button), fresh: true, out: false, wait: None });
+            self.buttons.push(Held { device: name.to_string(), button, actions: bound, latching: d.latching.contains(&button), continuous: d.continuous(button), fresh: true, out: false });
+        } else if let Some(i) = self.pending.iter().position(|p| names_match(&p.device, name) && p.button == button) {
+            let w = self.pending.remove(i);
+            if self.long_press {
+                self.finish_wait(w, actions);
+            }
         } else if let Some(i) = self.buttons.iter().position(|h| names_match(&h.device, name) && h.button == button) {
             let h = self.buttons.remove(i);
-            if let Some(w) = h.wait.filter(|_| h.actions.is_empty()) {
-                if self.long_press {
-                    self.finish_wait(w, actions);
-                }
-                return;
-            }
             actions.extend(h.actions.iter().map(|a| (a.clone(), false)));
             if h.latching {
                 for a in &h.actions {
@@ -84,9 +89,10 @@ impl HeldButtons {
         }
     }
 
-    fn finish_wait(&self, w: Wait, actions: &mut Vec<(String, bool)>) {
-        let held_long = w.at.elapsed().as_millis() as u32 >= w.ms;
-        if held_long {
+    fn finish_wait(&self, w: Pending, actions: &mut Vec<(String, bool)>) {
+        // The button is already up. Past the time, the second action is one down and one up.
+        // Before it, the original action is.
+        if w.at.elapsed().as_millis() as u32 >= w.ms {
             actions.push((w.long.clone(), true));
             actions.push((w.long, false));
             return;
@@ -104,30 +110,32 @@ impl HeldButtons {
         }
     }
 
-    /// Fire a second action whose time has been reached. With long press off, a wait that has not fired is dropped.
+    /// Fire a second action whose time has been reached. Returns at once when nothing is waiting.
+    /// With long press off, a wait that has not fired is dropped.
     pub(super) fn advance(&mut self, actions: &mut Vec<(String, bool)>) {
-        if !self.long_press {
-            self.buttons.retain(|h| h.wait.is_none() || !h.actions.is_empty());
-            for h in &mut self.buttons {
-                if h.actions.is_empty() {
-                    h.wait = None;
-                }
-            }
-            self.buttons.retain(|h| !h.actions.is_empty());
+        if self.pending.is_empty() {
             return;
         }
-        for h in &mut self.buttons {
-            let Some(w) = h.wait.as_ref() else { continue };
-            if h.actions.is_empty() && w.at.elapsed().as_millis() as u32 >= w.ms {
+        if !self.long_press {
+            self.pending.clear();
+            return;
+        }
+        let mut i = 0;
+        while i < self.pending.len() {
+            if self.pending[i].at.elapsed().as_millis() as u32 >= self.pending[i].ms {
+                let w = self.pending.remove(i);
                 let name = w.long.clone();
-                h.wait = None;
-                h.actions = vec![name.clone()];
-                actions.push((name, true));
+                actions.push((name.clone(), true));
+                self.buttons.push(Held { device: w.device, button: w.button, actions: vec![name], latching: false, continuous: false, fresh: true, out: false });
+            } else {
+                i += 1;
             }
         }
     }
 
     pub(super) fn release(&mut self, actions: &mut Vec<(String, bool)>) {
+        // A wait that never fired is not a press.
+        self.pending.clear();
         for h in self.buttons.drain(..) {
             // Do not toggle a latching switch just because its configuration changed.
             actions.extend(h.actions.into_iter().map(|a| (a, false)));
@@ -140,6 +148,7 @@ impl HeldButtons {
     /// the switch went out in the game at ESC or alt-tab and only came back once it was
     /// switched off and on again by hand (#1876).
     pub(super) fn release_momentary(&mut self, actions: &mut Vec<(String, bool)>) {
+        self.pending.clear();
         self.buttons.retain(|h| {
             if !h.latching {
                 actions.extend(h.actions.iter().map(|a| (a.clone(), false)));
@@ -243,10 +252,8 @@ mod tests {
 
     fn age(held: &mut HeldButtons, ms: u32) {
         let back = std::time::Duration::from_millis(ms as u64);
-        for h in &mut held.buttons {
-            if let Some(w) = h.wait.as_mut() {
-                w.at = w.at.checked_sub(back).unwrap_or(w.at);
-            }
+        for w in &mut held.pending {
+            w.at = w.at.checked_sub(back).unwrap_or(w.at);
         }
     }
 
