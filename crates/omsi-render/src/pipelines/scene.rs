@@ -19,6 +19,7 @@ pub(crate) struct SceneBase {
     layout: wgpu::PipelineLayout,
     pub vertex_layout: wgpu::VertexBufferLayout<'static>,
     bias: i32,
+    pub(crate) trees: &'static [(&'static str, f64)],
 }
 
 /// The ground albedo picture's format (see `fs_ground`): sRGB, so that the layers blend as light.
@@ -29,7 +30,7 @@ const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![0
 impl SceneBase {
     /// `omit_enhanced`: the camera group without the enhanced path's textures (see
     /// `camera_layout_entries`).
-    pub(crate) fn new(device: &wgpu::Device, omit_enhanced: bool) -> SceneBase {
+    pub(crate) fn new(device: &wgpu::Device, omit_enhanced: bool, detailed_trees: bool) -> SceneBase {
         // One module for both paths: the enhanced fragment shader shares the vertex shader,
         // which the depth prepass relies on to the last bit (see `VsOut::clip`).
         log::info!("renderer: compiling the scene shaders");
@@ -95,7 +96,7 @@ impl SceneBase {
         };
         let bias: i32 = omsi_cfg::flags::OMSI_SURFACE_BIAS.parse()
             .unwrap_or(-24);
-        SceneBase { shader, shadow_layout, camera_layout, lm_atlas, lm_uniform, snow_track, snow_track_uniform, material_layout, corona_layout, layout, vertex_layout, bias }
+        SceneBase { shader, shadow_layout, camera_layout, lm_atlas, lm_uniform, snow_track, snow_track_uniform, material_layout, corona_layout, layout, vertex_layout, bias, trees: if detailed_trees && !GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed) { &[("DETAILED_TREES", 1.0)] } else { &[] } }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -114,6 +115,11 @@ impl SceneBase {
         surfaces: bool,
     ) -> wgpu::RenderPipeline {
         let use_alpha_to_coverage = alpha_to_coverage && samples > 1;
+        let constants: Vec<(&str, f64)> = [
+            ("ALPHA_TEST", if alpha_to_coverage { 1.0 } else { 0.0 }),
+            ("ALPHA_TO_COVERAGE", if use_alpha_to_coverage { 1.0 } else { 0.0 }),
+            ("TERRAIN_PAINT", if terrain_paint { 1.0 } else { 0.0 }),
+        ].into_iter().chain(self.trees.iter().copied()).collect();
         compile_pipeline(device, &wgpu::RenderPipelineDescriptor {
             label: Some("omsi"),
             layout: Some(&self.layout),
@@ -121,7 +127,7 @@ impl SceneBase {
                 module: &self.shader,
                 entry_point: Some("vs_main"),
                 buffers: &[self.vertex_layout.clone()],
-                compilation_options: Default::default(),
+                compilation_options: wgpu::PipelineCompilationOptions { constants: self.trees, ..Default::default() },
             },
             primitive: one_sided_primitive(cull),
             // Reversed Z: the near plane is 1 and the far plane 0, so nearer means
@@ -163,14 +169,7 @@ impl SceneBase {
                 // where it is invisible too: Omsi.exe draws `[matl_alpha] 2` with the alpha
                 // test off, and content hides things under invisible covers, #2059.)
                 compilation_options: wgpu::PipelineCompilationOptions {
-                    constants: &[
-                        ("ALPHA_TEST", if alpha_to_coverage { 1.0 } else { 0.0 }),
-                        (
-                            "ALPHA_TO_COVERAGE",
-                            if use_alpha_to_coverage { 1.0 } else { 0.0 },
-                        ),
-                        ("TERRAIN_PAINT", if terrain_paint { 1.0 } else { 0.0 }),
-                    ],
+                    constants: &constants,
                     ..Default::default()
                 },
             }),
@@ -396,7 +395,7 @@ fn depth_pipeline(device: &wgpu::Device, scene: &SceneBase, layout: &wgpu::Pipel
                         color_targets_for(HDR_FORMAT, None, wgpu::ColorWrites::empty(), false, false,
                             surfaces,
                         ) } else { Vec::new() },
-            compilation_options: Default::default(),
+            compilation_options: wgpu::PipelineCompilationOptions { constants: scene.trees, ..Default::default() },
         }),
         multiview_mask: None,
         cache: crate::pipeline_cache::get(device).as_ref(),
