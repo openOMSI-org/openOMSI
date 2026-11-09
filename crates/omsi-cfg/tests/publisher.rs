@@ -401,10 +401,11 @@ fn retained_index_history_and_unfinished_snapshots_keep_installed_provenance() {
     std::fs::create_dir_all(index.join(format!(".new-{}", "a".repeat(64)))).unwrap();
     installed_only("unfinished snapshot");
     // Retained history that sorts first and outgrows the index budget is skipped, not fatal.
+    // (17 x 4 MiB is past the 64 MiB index budget)
     for n in 0..17 {
         let folder = index.join(format!("{n:064x}"));
         std::fs::create_dir_all(&folder).unwrap();
-        std::fs::write(folder.join("manifest.json"), vec![b' '; 1024 * 1024]).unwrap();
+        std::fs::write(folder.join("manifest.json"), vec![b' '; 4 * 1024 * 1024]).unwrap();
     }
     installed_only("index byte budget");
     for n in 17..130 {

@@ -451,7 +451,7 @@ fn malformed_licence_ids_and_unprotected_licensed_manifests_are_rejected() {
 }
 
 #[test]
-fn a_pack_revision_is_scanned_once_and_every_read_is_still_authenticated() {
+fn a_pack_changed_on_disk_after_the_first_scan_is_rejected_when_opened_again() {
     let root = licence_scratch("verify-once");
     let signer = SigningKey::generate(&SystemRandom::new()).unwrap();
     let mut metadata = licence_metadata(&[0; 32]);
@@ -462,11 +462,50 @@ fn a_pack_revision_is_scanned_once_and_every_read_is_still_authenticated() {
     let keys = MemoryKeys::default();
     let first = VerifiedPack::open_unlocked(&pack, &trusted, &keys).unwrap();
     assert_eq!(first.read("maps/Fixture/global.cfg").unwrap(), b"owned synthetic fixture");
+    // (an unchanged pack opens again from the cached scan)
+    assert!(VerifiedPack::open_unlocked(&pack, &trusted, &keys).is_ok());
 
     let asset = pack.join(format!("assets/{}/plain.bin", sha256_hex(manifest.assets[0].id.as_bytes())));
     fs::write(&asset, b"changed after the first scan").unwrap();
-    // (the revision was scanned once, so a second open does not read every asset again)
-    let second = VerifiedPack::open_unlocked(&pack, &trusted, &keys).unwrap();
-    assert!(second.read("maps/Fixture/global.cfg").is_err(), "a changed asset was returned");
+    assert!(VerifiedPack::open_unlocked(&pack, &trusted, &keys).is_err(), "a changed pack file was accepted at open");
+    assert!(first.read("maps/Fixture/global.cfg").is_err(), "a changed asset was returned");
+    fs::remove_file(&asset).unwrap();
+    assert!(VerifiedPack::open_unlocked(&pack, &trusted, &keys).is_err(), "a removed pack file was accepted at open");
     fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn a_largest_pack_manifest_fits() {
+    // 4096 assets with the longest id and path; together 1 GiB in 64 KiB chunks, plus one
+    // partial chunk per asset.
+    let chunks_per_asset = (MAX_PACK_SIZE as usize / CHUNK_SIZE).div_ceil(MAX_ASSETS) + 1;
+    let hash = "0".repeat(64);
+    let chunk = |i: usize| Chunk { file: format!("assets/{hash}/{i:08}.bin"), plaintext_size: CHUNK_SIZE as u32, ciphertext_sha256: hash.clone() };
+    let assets = (0..MAX_ASSETS)
+        .map(|n| Asset {
+            id: format!("{n:0>256}"),
+            path: format!("Sceneryobjects/{}/{n:08}.sco", "a".repeat(1000)),
+            source_sha256: hash.clone(),
+            output_sha256: hash.clone(),
+            size: MAX_ASSET_SIZE,
+            chunks: (0..chunks_per_asset).map(chunk).collect(),
+        })
+        .collect();
+    let id = "i".repeat(256);
+    let manifest = Manifest {
+        format_version: FORMAT_VERSION,
+        publisher_id: id.clone(),
+        author: id.clone(),
+        pack_id: id.clone(),
+        version: id.clone(),
+        license: id.clone(),
+        redistribution: false,
+        signing_key_id: hash.clone(),
+        key_id: Some(hash.clone()),
+        licence_id: Some(id.clone()),
+        dependencies: (0..MAX_DEPENDENCIES).map(|_| Dependency { publisher_id: id.clone(), pack_id: id.clone(), version: id.clone() }).collect(),
+        assets,
+    };
+    let size = serde_json::to_vec(&manifest).unwrap().len();
+    assert!(size <= MANIFEST_LIMIT, "{size} bytes");
 }

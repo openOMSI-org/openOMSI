@@ -532,7 +532,6 @@ pub fn read_bounded(path: &Path, limit: u64) -> io::Result<Vec<u8>> {
     Ok(result)
 }
 
-
 thread_local! {
     static AUDIT: std::cell::RefCell<Option<Vec<PathBuf>>> = const { std::cell::RefCell::new(None) };
 }

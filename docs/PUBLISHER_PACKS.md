@@ -15,7 +15,7 @@ manifest and detached signature describe the pack's exact version, licence and r
 policy. `PackIndex` keeps verified signed manifest snapshots for provenance recognition. Each
 snapshot is checked against the current trust file when used; removing all trusted records
 also removes the ability to recognize those source bytes. Installed revisions are read first.
-Retained history past 1024 snapshots, 16 MiB of manifests or 32768 assets is skipped with a
+Retained history past 1024 snapshots, 64 MiB of manifests or 32768 assets is skipped with a
 warning rather than disabling export; an installed revision that does not fit still fails
 closed. A snapshot left unfinished by an interrupted write is ignored.
 

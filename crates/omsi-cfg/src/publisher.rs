@@ -24,6 +24,8 @@ struct MapAliasScope {
 
 const MAX_ALIAS_SCOPES: usize = 64;
 const MAX_ACTIVE_ALIASES: usize = 32768;
+/// Signed manifests `PackIndex` reads per catalog: room for four of the largest packs.
+const INDEX_BYTES: usize = 4 * omsi_pack::MANIFEST_LIMIT;
 
 fn invalid(message: impl ToString) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.to_string())
@@ -139,7 +141,7 @@ fn dependency(m: &Manifest) -> Dependency {
 
 /// Keep a snapshot of an installed manifest in `PackIndex`; returns its snapshot name.
 fn cache_manifest(content: &Path, pack: &Path) -> io::Result<String> {
-    let bytes = bounded_read(&pack.join("manifest.json"), 1024 * 1024)?;
+    let bytes = bounded_read(&pack.join("manifest.json"), omsi_pack::MANIFEST_LIMIT as u64)?;
     let sig = bounded_read(&pack.join("manifest.sig"), 1024)?;
     let root = content.join("PackIndex");
     if root.exists() && std::fs::symlink_metadata(&root)?.file_type().is_symlink() {
@@ -223,13 +225,13 @@ impl Catalog {
         let mut catalog = Self::default();
         let (mut total, mut read) = (0, 0);
         for (current, path) in snapshots(&content.join("PackIndex"), &installed)? {
-            let bytes = match bounded_read(&path.join("manifest.json"), 1024 * 1024) {
+            let bytes = match bounded_read(&path.join("manifest.json"), omsi_pack::MANIFEST_LIMIT as u64) {
                 Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
                 bytes => bytes?,
             };
             total += bytes.len();
             read += 1;
-            if total > 16 * 1024 * 1024 || read > 1024 {
+            if total > INDEX_BYTES || read > 1024 {
                 over_index_budget(current, "publisher index exceeds its size limit")?;
                 break;
             }
@@ -745,6 +747,11 @@ pub fn validate_map(map_dir: &Path) -> io::Result<DependencyMounts> {
             .map_err(invalid)?;
         packs.push((path.clone(), Arc::new(pack)));
     }
+    // (each signed manifest is serialized and hashed once, for its aliases and its revision)
+    let digests = packs
+        .iter()
+        .map(|(_, p)| Ok(digest(&serde_json::to_vec(p.manifest()).map_err(invalid)?)))
+        .collect::<io::Result<Vec<_>>>()?;
     for required in &refs.dependencies {
         if !packs
             .iter()
@@ -770,20 +777,18 @@ pub fn validate_map(map_dir: &Path) -> io::Result<DependencyMounts> {
         {
             return Err(invalid("asset names an undeclared dependency"));
         }
-        let pack = packs
+        let (index, pack) = packs
             .iter()
-            .find(|(_, p)| same(&reference.dependency, &dependency(p.manifest())))
-            .map(|(_, p)| p)
+            .enumerate()
+            .find(|(_, (_, p))| same(&reference.dependency, &dependency(p.manifest())))
+            .map(|(i, (_, p))| (i, p))
             .ok_or_else(|| invalid("asset dependency is not in the verified closure"))?;
         let asset = pack
-            .assets()
-            .iter()
-            .find(|a| a.id == reference.asset_id)
+            .asset_by_id(&reference.asset_id)
             .ok_or_else(|| invalid("dependency asset identity was not found"))?;
         validate_asset_alias(&reference.path, &asset.path)?;
         aliases.push((reference.path.clone(), asset.path.clone()));
         let dep = pack_key(&reference.dependency);
-        let signed_manifest = serde_json::to_vec(pack.manifest()).map_err(invalid)?;
         declarations.insert(
             reference.path.clone(),
             format!(
@@ -791,14 +796,14 @@ pub fn validate_map(map_dir: &Path) -> io::Result<DependencyMounts> {
                 dep.0,
                 dep.1,
                 dep.2,
-                digest(&signed_manifest),
+                digests[index],
                 asset.path
             ),
         );
     }
     check_aliases(&aliases)?;
-    let pack_revisions = packs.iter().map(|(path, pack)| {
-        Ok((std::fs::canonicalize(path)?, digest(&serde_json::to_vec(pack.manifest()).map_err(invalid)?)))
+    let pack_revisions = packs.iter().zip(&digests).map(|((path, _), digest)| {
+        Ok((std::fs::canonicalize(path)?, digest.clone()))
     }).collect::<io::Result<Vec<_>>>()?;
     let mut roots_added = BTreeMap::new();
     let mut virtual_mounts: Vec<PathBuf> = Vec::new();
@@ -814,13 +819,7 @@ pub fn validate_map(map_dir: &Path) -> io::Result<DependencyMounts> {
             .iter()
             .filter(|r| same(&r.dependency, &dependency(pack.manifest())))
         {
-            let canonical = pack
-                .assets()
-                .iter()
-                .find(|a| a.id == reference.asset_id)
-                .unwrap()
-                .path
-                .clone();
+            let canonical = pack.asset_by_id(&reference.asset_id).unwrap().path.clone();
             pack_aliases.insert(reference.path.clone(), canonical);
         }
         if pack_aliases.is_empty() {

@@ -36,7 +36,8 @@ whole asset size. Signed ciphertext hashes are checked before authentication. A 
 random content key; chunk nonces are checked for duplicates within that pack before use.
 
 An encrypted asset may be at most 64 MiB; a pack may contain at most 4096 assets, 256 exact
-dependencies and 1 GiB of asset bytes. Each file is fully authenticated and checked against its
+dependencies and 1 GiB of asset bytes; its signed manifest may be up to 16 MiB, enough for the
+chunk list of the largest encrypted pack. Each file is fully authenticated and checked against its
 signed output hash before a decoder receives it. The runtime obtains the files through its sealed
 virtual filesystem so the ordinary editor and texture-cache write guards still apply. Plaintext
 exists in process memory and may reach GPU or operating-system paging; a modified player can

@@ -12,7 +12,7 @@ use ring::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     fs::{self, File, OpenOptions},
     io::{self, Read, Write},
     path::{Path, PathBuf},
@@ -29,7 +29,10 @@ use entitlement::{entitlement_scope, verify_entitlement};
 use entitlement::SignedEntitlement;
 
 const FORMAT_VERSION: u32 = 1;
-const MANIFEST_LIMIT: usize = 1024 * 1024;
+/// Room for the largest manifest the other limits allow (`a_largest_pack_manifest_fits`):
+/// every 64 KiB chunk of a 1 GiB encrypted pack, a partial chunk per asset, and long ids and
+/// paths, which is about 10 MiB. A fixed 1 MiB stopped encrypted packs near 200 MB.
+pub const MANIFEST_LIMIT: usize = 16 * 1024 * 1024;
 const TRUST_LIMIT: usize = 256 * 1024;
 pub(crate) const ENTITLEMENT_LIMIT: usize = 64 * 1024;
 const MAX_ASSETS: usize = 4096;
@@ -569,7 +572,7 @@ fn build_pack(
         validate_manifest(&manifest)?;
         let bytes = serde_json::to_vec(&manifest)?;
         if bytes.len() > MANIFEST_LIMIT {
-            return Err(PackError::Invalid("signed manifest exceeds 1 MiB"));
+            return Err(PackError::Invalid("signed manifest exceeds 16 MiB"));
         }
         let signature = signer.pair.sign(&bytes);
         write_pack_file(&staging, "manifest.sig", signature.as_ref())?;
@@ -591,6 +594,9 @@ pub struct VerifiedPack {
     root: PathBuf,
     manifest: Manifest,
     content_key: Option<[u8; 32]>,
+    /// Asset index by lowercase path and by id, so mounting and reads do not scan the manifest.
+    by_path: HashMap<String, usize>,
+    by_id: HashMap<String, usize>,
 }
 
 impl Drop for VerifiedPack {
@@ -617,11 +623,7 @@ impl VerifiedPack {
                 return Err(PackError::WrongKey);
             }
         }
-        let pack = Self {
-            root: root.canonicalize()?,
-            manifest,
-            content_key: content_key.as_ref().map(|key| **key),
-        };
+        let pack = Self::new(root, manifest, content_key.as_ref().map(|key| **key))?;
         pack.verify_all()?;
         Ok(pack)
     }
@@ -635,11 +637,7 @@ impl VerifiedPack {
     ) -> Result<Self> {
         let manifest = load_manifest(root, trusted)?;
         if manifest.key_id.is_none() {
-            let pack = Self {
-                root: root.canonicalize()?,
-                manifest,
-                content_key: None,
-            };
+            let pack = Self::new(root, manifest, None)?;
             pack.verify_once()?;
             return Ok(pack);
         }
@@ -654,24 +652,29 @@ impl VerifiedPack {
         let entitlement = verified?;
         let content_key = Zeroizing::new(entitlement.content_key);
         drop(entitlement);
-        let pack = Self {
-            root: root.canonicalize()?,
-            manifest,
-            content_key: Some(*content_key),
-        };
+        let pack = Self::new(root, manifest, Some(*content_key))?;
         pack.verify_once()?;
         Ok(pack)
     }
 
+    fn new(root: &Path, manifest: Manifest, content_key: Option<[u8; 32]>) -> Result<Self> {
+        let by_path = manifest.assets.iter().enumerate().map(|(i, a)| (a.path.to_ascii_lowercase(), i)).collect();
+        let by_id = manifest.assets.iter().enumerate().map(|(i, a)| (a.id.clone(), i)).collect();
+        Ok(Self { root: root.canonicalize()?, manifest, content_key, by_path, by_id })
+    }
+
     /// `verify_all` once per pack revision and key in this process: the game opens every
     /// installed pack at launch and each dependency again per map, and `read` still
-    /// authenticates every asset it returns.
+    /// authenticates every asset it returns. The revision includes the size and change
+    /// times of every pack file, so a file changed or removed after the first scan is
+    /// scanned again (and rejected) on the next open.
     fn verify_once(&self) -> Result<()> {
-        static VERIFIED: std::sync::Mutex<BTreeSet<(PathBuf, String, String)>> = std::sync::Mutex::new(BTreeSet::new());
+        static VERIFIED: std::sync::Mutex<BTreeSet<(PathBuf, String, String, String)>> = std::sync::Mutex::new(BTreeSet::new());
         let revision = (
             self.root.clone(),
             sha256_hex(&serde_json::to_vec(&self.manifest)?),
             self.content_key.as_ref().map(|key| sha256_hex(key)).unwrap_or_default(),
+            self.files_fingerprint()?,
         );
         if VERIFIED.lock().unwrap_or_else(|e| e.into_inner()).contains(&revision) {
             return Ok(());
@@ -681,20 +684,55 @@ impl VerifiedPack {
         Ok(())
     }
 
+    /// Size, modification time (and on Unix the inode and change time, which a writer cannot
+    /// set back) of every file the manifest names; a missing file fails the open.
+    fn files_fingerprint(&self) -> Result<String> {
+        let mut digest = Sha256::new();
+        for asset in &self.manifest.assets {
+            let plain = [format!("assets/{}/plain.bin", sha256_hex(asset.id.as_bytes()))];
+            let files: Vec<&str> = if self.content_key.is_some() {
+                asset.chunks.iter().map(|c| c.file.as_str()).collect()
+            } else {
+                plain.iter().map(String::as_str).collect()
+            };
+            for file in files {
+                let meta = fs::metadata(self.root.join(file))
+                    .map_err(|_| PackError::Invalid("chunk is missing, truncated, or changed"))?;
+                let modified = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).unwrap_or_default();
+                digest.update(file.as_bytes());
+                digest.update(meta.len().to_le_bytes());
+                digest.update(modified.as_nanos().to_le_bytes());
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::MetadataExt as _;
+                    digest.update(meta.ino().to_le_bytes());
+                    digest.update(meta.ctime().to_le_bytes());
+                    digest.update(meta.ctime_nsec().to_le_bytes());
+                }
+            }
+        }
+        Ok(hex_digest(digest.finalize().as_slice()))
+    }
+
     pub fn manifest(&self) -> &Manifest {
         &self.manifest
     }
     pub fn assets(&self) -> &[Asset] {
         &self.manifest.assets
     }
+    /// The asset stored at `path` (ASCII case-insensitive), without scanning the manifest.
+    pub fn asset_by_path(&self, path: &str) -> Option<&Asset> {
+        self.by_path.get(&path.to_ascii_lowercase()).map(|&i| &self.manifest.assets[i])
+    }
+    /// The asset with the publisher identity `id`.
+    pub fn asset_by_id(&self, id: &str) -> Option<&Asset> {
+        self.by_id.get(id).map(|&i| &self.manifest.assets[i])
+    }
 
     /// Authenticate a requested asset fully before returning plaintext to a decoder.
     pub fn read(&self, path: &str) -> Result<Vec<u8>> {
         let asset = self
-            .manifest
-            .assets
-            .iter()
-            .find(|a| a.path.eq_ignore_ascii_case(path))
+            .asset_by_path(path)
             .ok_or(PackError::Invalid("asset is not in the signed manifest"))?;
         if asset.size > MAX_ASSET_SIZE {
             return Err(PackError::Invalid("asset exceeds 64 MiB"));

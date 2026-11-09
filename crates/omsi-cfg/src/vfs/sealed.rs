@@ -171,7 +171,7 @@ pub fn mount_publisher(mount: &Path, pack: Arc<omsi_pack::VerifiedPack>, aliases
         {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "unsafe or duplicate publisher asset alias"));
         }
-        let asset = pack.assets().iter().find(|a| a.path == original).ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "publisher asset alias was not found"))?;
+        let asset = pack.asset_by_path(&original).filter(|a| a.path == original).ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "publisher asset alias was not found"))?;
         files.push(SealedFile { rel: alias, blob: PathBuf::from(original), aad: Vec::new(), size: asset.size });
     }
     Ok(mount_store(mount, None, files, Some(pack)))
