@@ -11,6 +11,7 @@
 
 use crate::i18n::{tr, trf};
 use crate::install::{self, ARCHIVES};
+use crate::map_uses::{self, Plan};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -335,6 +336,10 @@ fn unmount(content: &Path, paths: &[String]) {
 
 /// Switch the mod `id` off (its folders into `Mods/disabled/<id>`) or on (back again).
 pub fn set_enabled(content: &Path, id: &str, on: bool) -> anyhow::Result<String> {
+    set_enabled_in(content, id, on, &omsi_cfg::content_roots())
+}
+
+fn set_enabled_in(content: &Path, id: &str, on: bool, roots: &[PathBuf]) -> anyhow::Result<String> {
     if installing() {
         anyhow::bail!(tr("an install is under way: wait for it to end"));
     }
@@ -344,13 +349,14 @@ pub fn set_enabled(content: &Path, id: &str, on: bool) -> anyhow::Result<String>
     if m.enabled == on {
         return Ok(m.name);
     }
+    let kept = if on { Vec::new() } else { plan_in(content, &r, k, roots, false).kept };
     let off = disabled_dir(content, &m.id);
     let mut moved: Vec<(PathBuf, PathBuf)> = Vec::new();
     if !on {
         unmount(content, &m.paths);
     }
     let mut shared_elsewhere = Vec::new();
-    for p in &m.paths {
+    for p in m.paths.iter().filter(|p| !kept.contains(p)) {
         let (from, to) = if on { (off.join(p), content.join(p)) } else { (content.join(p), off.join(p)) };
         if on && p.to_ascii_lowercase().starts_with("hofs/") && to.exists() {
             shared_elsewhere.push(p.clone());
@@ -381,14 +387,59 @@ pub fn set_enabled(content: &Path, id: &str, on: bool) -> anyhow::Result<String>
 /// Delete the mod `id`: its folders (wherever they are, on or off), its note, and what its
 /// inbox install left in `Mods/installed`.
 pub fn remove(content: &Path, id: &str) -> anyhow::Result<String> {
+    remove_in(content, id, &omsi_cfg::content_roots())
+}
+
+pub fn remove_preview(content: &Path, id: &str) -> anyhow::Result<Plan> {
+    let mut r = load(content);
+    let k = take(content, &mut r, id)?;
+    Ok(plan_in(content, &r, k, &omsi_cfg::content_roots(), true))
+}
+
+fn plan_in(content: &Path, r: &Registry, k: usize, roots: &[PathBuf], full: bool) -> Plan {
+    let m = &r.mods[k];
+    let at = |p: &String| [content.join(p), disabled_dir(content, &m.id).join(p)];
+    let mut mine: Vec<PathBuf> = Vec::new();
+    for p in &m.paths {
+        let lower = p.to_ascii_lowercase();
+        if lower.starts_with("maps/") {
+            mine.extend(at(p).into_iter().filter(|d| d.is_dir()));
+        } else if lower.starts_with(&format!("{}/", ARCHIVES.to_ascii_lowercase())) {
+            let zip = content.join(p);
+            for root in roots.iter().filter(|x| x.starts_with(&zip)) {
+                mine.extend(map_uses::child(root, "maps").map(|d| map_uses::subdirs(&d)).unwrap_or_default());
+            }
+        }
+    }
+    let mut parents: Vec<PathBuf> = roots.iter().chain([&content.to_path_buf()]).filter_map(|x| map_uses::child(x, "maps")).collect();
+    parents.extend(map_uses::subdirs(&content.join("Mods").join(DISABLED)).iter().filter_map(|d| map_uses::child(d, "maps")));
+    let mut others: Vec<PathBuf> = Vec::new();
+    for d in parents.iter().flat_map(|p| map_uses::subdirs(p)) {
+        if !mine.iter().chain(&others).any(|x| map_uses::same(x, &d)) {
+            others.push(d);
+        }
+    }
+    let foreign: Vec<String> = r.mods.iter().enumerate().filter(|(i, _)| *i != k).flat_map(|(_, x)| x.paths.clone()).collect();
+    let archive = |p: &String| p.to_ascii_lowercase().starts_with(&format!("{}/", ARCHIVES.to_ascii_lowercase()));
+    let unread = std::fs::read_dir(content.join(ARCHIVES)).map(|rd| rd.flatten().any(|e| e.path().is_file() && e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("zip")) && !roots.iter().any(|x| x.starts_with(e.path())))).unwrap_or(false);
+    let blind = unread || r.mods.iter().enumerate().any(|(i, x)| i != k && !x.enabled && x.paths.iter().any(archive));
+    let maps = !mine.is_empty() || matches!(kind_of(&m.paths), Kind::Map | Kind::Archive);
+    let scope = map_uses::Scope { mine, others, owned: &m.paths, foreign, blind, maps };
+    let mut plan = map_uses::plan(content, roots, &scope, full);
+    plan.bytes = plan.freed.iter().map(|p| size_of(&content.join(p))).sum();
+    plan
+}
+
+fn remove_in(content: &Path, id: &str, roots: &[PathBuf]) -> anyhow::Result<String> {
     if installing() {
         anyhow::bail!(tr("an install is under way: wait for it to end"));
     }
     let mut r = load(content);
     let k = take(content, &mut r, id)?;
+    let plan = plan_in(content, &r, k, roots, true);
     let m = r.mods.remove(k);
     unmount(content, &m.paths);
-    for p in &m.paths {
+    for p in m.paths.iter().filter(|p| !plan.kept.contains(p)) {
         install::check_installed_rel(p)?;
         for at in [content.join(p), disabled_dir(content, &m.id).join(p)] {
             if at.is_dir() {
@@ -405,6 +456,11 @@ pub fn remove(content: &Path, id: &str) -> anyhow::Result<String> {
     let _ = std::fs::remove_file(&installed);
     let _ = std::fs::remove_file(content.join("Mods").join(install::RECORDS).join(format!("{}.txt", m.name)));
     save(content, &r)?;
+    for p in plan.freed.iter().filter(|p| install::check_installed_rel(p).is_ok()) {
+        if let Err(e) = std::fs::remove_dir_all(content.join(p)) {
+            crate::log_to_file(&format!("mods: {p}, used by {} alone, was not deleted: {e}", m.name));
+        }
+    }
     omsi_cfg::content_changed();
     Ok(m.name)
 }
@@ -565,5 +621,130 @@ mod tests {
         remove(&c, &town.id).unwrap();
         assert!(!c.join("Archives/Town.zip").exists() && !c.join("HOFs/Town.hof").exists());
         std::fs::remove_dir_all(c).unwrap();
+    }
+
+    fn put(at: &Path, text: &str) {
+        std::fs::create_dir_all(at.parent().unwrap()).unwrap();
+        std::fs::write(at, text).unwrap();
+    }
+
+    fn two_maps() -> (PathBuf, PathBuf, String) {
+        let c = content();
+        let omsi = c.with_extension("omsi");
+        put(&omsi.join("maps/Stock/tile_0_0.map"), "[object]\n0\nSceneryobjects\\Generic\\x.sco\n");
+        put(&omsi.join("Sceneryobjects/Generic/x.sco"), "");
+        put(&c.join("maps/Hill Town/tile_0_0.map"), "[object]\n0\nSceneryobjects\\PackA\\a.sco\n1\n\n[object]\n0\nsceneryobjects\\SHARED\\s.sco\n\n[spline]\n0\nSplines\\RoadA\\r.sli\n\n[object]\n0\nSceneryobjects\\Generic\\x.sco\n\n[object]\n0\nSceneryobjects\\Linked\\l.sco\n");
+        put(&c.join("maps/Valley/Chrono/Summer/tile_0_0.map"), "[spline]\n0\nSplines\\ChronoB\\c.sli\n");
+        put(&c.join("maps/Valley/parklist_p.txt"), "Sceneryobjects\\Shared\\t.sco\n");
+        for d in ["Sceneryobjects/PackA/model", "Sceneryobjects/Shared", "Sceneryobjects/Generic", "Sceneryobjects/Linked", "Splines/RoadA", "Splines/ChronoB"] {
+            put(&c.join(d).join("f.txt"), "1234");
+        }
+        put(&c.join("Sceneryobjects/Other/o.sco"), "[mesh]\n..\\..\\Linked\\model\\m.o3d\n");
+        record(&c, "Hill Town", &["maps/Hill Town".into(), "Sceneryobjects/Shared".into()]);
+        let id = list(&c).into_iter().find(|m| m.name == "Hill Town").unwrap().id;
+        (c, omsi, id)
+    }
+
+    #[test]
+    fn a_deleted_map_takes_the_objects_and_splines_no_other_map_uses() {
+        let (c, omsi, id) = two_maps();
+        let roots = [c.clone(), omsi.clone()];
+        let mut r = load(&c);
+        let k = take(&c, &mut r, &id).unwrap();
+        let plan = plan_in(&c, &r, k, &roots, true);
+        assert_eq!(plan.kept, ["Sceneryobjects/Shared"]);
+        assert_eq!(plan.freed, ["Sceneryobjects/PackA", "Splines/RoadA"]);
+        assert_eq!(plan.bytes, 8);
+        remove_in(&c, &id, &roots).unwrap();
+        for gone in ["maps/Hill Town", "Sceneryobjects/PackA", "Splines/RoadA"] {
+            assert!(!c.join(gone).exists(), "{gone}");
+        }
+        for kept in ["Sceneryobjects/Shared", "Sceneryobjects/Generic", "Sceneryobjects/Linked", "Sceneryobjects/Other", "Splines/ChronoB", "maps/Valley"] {
+            assert!(c.join(kept).exists(), "{kept}");
+        }
+        assert!(list(&c).iter().any(|m| m.paths == ["Sceneryobjects/Shared"] && !m.noted));
+        std::fs::remove_dir_all(c).unwrap();
+        std::fs::remove_dir_all(omsi).unwrap();
+    }
+
+    #[test]
+    fn without_the_omsi_folder_only_the_shared_objects_are_kept() {
+        let (c, omsi, id) = two_maps();
+        remove_in(&c, &id, &[c.clone()]).unwrap();
+        assert!(!c.join("maps/Hill Town").exists() && c.join("Sceneryobjects/Shared").exists() && c.join("Sceneryobjects/PackA").exists());
+        std::fs::remove_dir_all(c).unwrap();
+        std::fs::remove_dir_all(omsi).unwrap();
+    }
+
+    #[test]
+    fn a_map_switched_off_leaves_the_objects_another_map_uses() {
+        let (c, omsi, id) = two_maps();
+        let roots = [c.clone(), omsi.clone()];
+        set_enabled_in(&c, &id, false, &roots).unwrap();
+        assert!(!c.join("maps/Hill Town").exists() && c.join("Sceneryobjects/Shared/f.txt").exists());
+        std::fs::remove_dir_all(c.join("maps/Valley")).unwrap();
+        set_enabled_in(&c, &id, true, &roots).unwrap();
+        assert!(c.join("maps/Hill Town/tile_0_0.map").exists() && c.join("Sceneryobjects/Shared/f.txt").exists());
+        remove_in(&c, &id, &roots).unwrap();
+        assert!(!c.join("Sceneryobjects/Shared").exists() && !c.join("Splines/RoadA").exists() && c.join("Splines/ChronoB").exists());
+        std::fs::remove_dir_all(c).unwrap();
+        std::fs::remove_dir_all(omsi).unwrap();
+    }
+
+    #[test]
+    fn an_object_pack_a_map_uses_is_still_removed_when_asked() {
+        let (c, omsi, _) = two_maps();
+        let roots = [c.clone(), omsi.clone()];
+        set_enabled_in(&c, "found:Sceneryobjects/Linked", false, &roots).unwrap();
+        assert!(!c.join("Sceneryobjects/Linked").exists());
+        let pack = list(&c).into_iter().find(|m| m.paths == ["Sceneryobjects/Linked"] && !m.enabled).unwrap();
+        remove_in(&c, &pack.id, &roots).unwrap();
+        assert!(!c.join("Mods/disabled").join(&pack.id).exists() && !c.join("Sceneryobjects/Linked").exists());
+        std::fs::remove_dir_all(c).unwrap();
+        std::fs::remove_dir_all(omsi).unwrap();
+    }
+
+    #[test]
+    fn objects_reached_through_another_pack_or_an_unread_archive_stay() {
+        let (c, omsi, id) = two_maps();
+        let roots = [c.clone(), omsi.clone()];
+        put(&c.join("maps/Valley/tile_1_0.map"), "[object]\r0\r.\\Sceneryobjects\\ValPack\\v.sco\r");
+        put(&c.join("Sceneryobjects/ValPack/v.sco"), "[mesh]\r\n..\\..\\PackA\\model\\a.o3d\r\n");
+        record(&c, "Hill Town", &["Splines/RoadA".into()]);
+        let mut r = load(&c);
+        let k = take(&c, &mut r, &id).unwrap();
+        let plan = plan_in(&c, &r, k, &roots, true);
+        assert_eq!(plan.kept, ["Sceneryobjects/Shared"]);
+        assert!(plan.freed.is_empty(), "{:?}", plan.freed);
+        record(&c, "Town.zip", &["Archives/Town.zip".into()]);
+        put(&c.join("Archives/Town.zip"), "x");
+        let town = list(&c).into_iter().find(|m| m.name == "Town.zip").unwrap();
+        set_enabled_in(&c, &town.id, false, &roots).unwrap();
+        std::fs::remove_dir_all(c.join("Sceneryobjects/ValPack")).unwrap();
+        let mut r = load(&c);
+        let k = take(&c, &mut r, &id).unwrap();
+        let plan = plan_in(&c, &r, k, &roots, true);
+        assert!(plan.freed.is_empty() && plan.kept == ["Sceneryobjects/Shared", "Splines/RoadA"], "{plan:?}");
+        std::fs::remove_dir_all(c).unwrap();
+        std::fs::remove_dir_all(omsi).unwrap();
+    }
+
+    #[test]
+    fn what_a_kept_pack_reaches_stays_and_nothing_owned_goes_when_a_map_cannot_be_read() {
+        let (c, omsi, id) = two_maps();
+        let roots = [c.clone(), omsi.clone()];
+        record(&c, "Hill Town", &["Sceneryobjects/Base".into()]);
+        put(&c.join("Sceneryobjects/Base/b.sco"), "[mesh]\n..\\..\\PackA\\x.o3d\n");
+        put(&c.join("Sceneryobjects/Other/o2.sco"), "[mesh]\n..\\..\\Base\\y.o3d\n");
+        let mut r = load(&c);
+        let k = take(&c, &mut r, &id).unwrap();
+        let plan = plan_in(&c, &r, k, &roots, true);
+        assert_eq!(plan.kept, ["Sceneryobjects/Shared", "Sceneryobjects/Base"]);
+        assert_eq!(plan.freed, ["Splines/RoadA"]);
+        put(&c.join("Archives/Off.zip"), "x");
+        let plan = plan_in(&c, &r, k, &roots, true);
+        assert!(plan.freed.is_empty() && plan.kept == ["Sceneryobjects/Shared", "Sceneryobjects/Base"], "{plan:?}");
+        std::fs::remove_dir_all(c).unwrap();
+        std::fs::remove_dir_all(omsi).unwrap();
     }
 }
