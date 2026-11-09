@@ -318,7 +318,7 @@ fn run(requests: Receiver<Request>, answers: SyncSender<Reply>, options: RenderO
             match answers.try_send(reply) {
                 Ok(()) => {}
                 Err(TrySendError::Full(reply)) => pending = Some(reply),
-                Err(TrySendError::Disconnected(_)) => return,
+                Err(TrySendError::Disconnected(_)) => break,
             }
         }
         let waiting = showroom.busy || showroom.moving() || pending.is_some();
@@ -337,13 +337,15 @@ fn run(requests: Receiver<Request>, answers: SyncSender<Reply>, options: RenderO
                 }
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {}
-            Err(mpsc::RecvTimeoutError::Disconnected) => return,
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
         }
     }
+    showroom.close();
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
 
     #[test]
     fn in_game_bus_preview_close_disconnects_and_releases_worker_payload() {
@@ -363,7 +365,6 @@ mod tests {
         finished.recv_timeout(Duration::from_secs(5)).unwrap();
         assert!(weak.upgrade().is_none());
     }
-    use super::*;
 
     #[test]
     fn in_game_bus_preview_defers_reopen_until_delayed_teardown_finishes() {

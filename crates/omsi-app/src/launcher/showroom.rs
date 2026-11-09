@@ -197,6 +197,14 @@ fn args_for(look: &Look) -> Args {
 // (a launcher closed while a preview loads did not hang: the mark goes with it)
 impl Drop for Showroom {
     fn drop(&mut self) {
+        let _ = std::fs::remove_file(placing_mark());
+    }
+}
+
+impl Showroom {
+    /// Join loaders before the in-game worker releases its renderer.
+    /// Launcher shutdown uses nonblocking `Drop` instead.
+    pub fn close(mut self) {
         // Disconnect before joining: a loader may be waiting for GPU prefetch.
         self.opening = None;
         self.loading = None;
@@ -210,14 +218,11 @@ impl Drop for Showroom {
         self.shown = None;
         self.target = None;
         if let Some((world, textures)) = owners {
-            log::info!("showroom: dropped; remaining world owners={}, texture-cache owners={}",
+            log::debug!("showroom: closed; remaining world owners={}, texture-cache owners={}",
                 world.strong_count(), textures.strong_count());
         }
-        let _ = std::fs::remove_file(placing_mark());
     }
-}
 
-impl Showroom {
     pub fn new() -> Showroom {
         Showroom {
             shown: None,
@@ -680,6 +685,27 @@ mod tests {
     use std::mem::ManuallyDrop;
 
     #[test]
+    fn showroom_drop_does_not_wait_for_a_stalled_loader() {
+        let mut showroom = Showroom::new();
+        let (release, stalled) = channel();
+        let (exited, finished) = channel();
+        showroom.loaders.push(std::thread::spawn(move || {
+            let _ = stalled.recv();
+            exited.send(()).unwrap();
+        }));
+        let (dropped, done) = channel();
+        let dropper = std::thread::spawn(move || {
+            drop(showroom);
+            dropped.send(()).unwrap();
+        });
+        let returned = done.recv_timeout(std::time::Duration::from_secs(2));
+        release.send(()).unwrap();
+        dropper.join().unwrap();
+        finished.recv_timeout(std::time::Duration::from_secs(2)).unwrap();
+        assert!(returned.is_ok(), "launcher drop must not wait for asset loading");
+    }
+
+    #[test]
     fn showroom_close_joins_a_loader_waiting_for_prefetch() {
         let mut showroom = Showroom::new();
         let (world_tx, world_rx) = channel();
@@ -692,10 +718,9 @@ mod tests {
             let _owner = owner;
             assert!(prefetch_rx.recv().is_err());
         }));
-        drop(showroom);
-        assert!(weak.upgrade().is_none(), "the loader must exit before showroom drop returns");
+        showroom.close();
+        assert!(weak.upgrade().is_none(), "the loader must exit before explicit close returns");
     }
-
 
     #[test]
     fn the_cove_rises_from_the_floor_to_its_wall() {

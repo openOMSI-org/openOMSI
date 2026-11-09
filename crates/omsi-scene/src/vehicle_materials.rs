@@ -567,7 +567,7 @@ impl Drop for AlphaMasks {
     fn drop(&mut self) {
         let masks = self.0.get_mut();
         let bytes: usize = masks.values().filter_map(Option::as_ref).map(|m| m.len()).sum();
-        log::info!("alpha masks: releasing {} entries, {} bytes", masks.len(), bytes);
+        log::debug!("alpha masks: releasing {} entries, {} bytes", masks.len(), bytes);
     }
 }
 
