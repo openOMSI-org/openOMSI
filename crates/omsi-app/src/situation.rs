@@ -372,6 +372,7 @@ pub(crate) fn build_situation(
     Situation {
         path: Default::default(),
         name: name.to_string(),
+        name_chosen: false,
         description: format!(
             "Saved by the openOMSI at {:02}:{:02}",
             (clock.time / 3600.0) as i32,

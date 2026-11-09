@@ -213,6 +213,10 @@ fn delete_situation(map: String, file: String) -> Answer {
     Ok(json!(core::delete_situation(&map, Path::new(&file)).map_err(err)?))
 }
 
+fn rename_situation(map: String, file: String, name: String) -> Answer {
+    Ok(json!(core::rename_situation(&map, Path::new(&file), &name).map_err(err)?))
+}
+
 /// A season and its phase chosen: the date the game will have (none: by date), and the word
 /// the game's `--season` takes.
 fn season_date(season: String, phase: String, date: String, map: String, keep: bool) -> Answer {
@@ -835,6 +839,7 @@ fn answer(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "default_hof" => default_hof(arg::<Value>(args, "map")?, arg::<Value>(args, "bus")?, arg::<String>(args, "date")?, arg::<Option<String>>(args, "line")?),
         "saved_situations" => saved_situations(arg::<String>(args, "map")?),
         "delete_situation" => delete_situation(arg::<String>(args, "map")?, arg::<String>(args, "file")?),
+        "rename_situation" => rename_situation(arg::<String>(args, "map")?, arg::<String>(args, "file")?, arg::<String>(args, "name")?),
         "season_date" => season_date(arg::<String>(args, "season")?, arg::<String>(args, "phase")?, arg::<String>(args, "date")?, arg::<String>(args, "map")?, arg::<bool>(args, "keep")?),
         "tutorials" => tutorials(),
         "ai_vehicles" => to_json(core::ai_lists::vehicles(arg::<Option<bool>>(args, "refresh")?.unwrap_or(false)).map_err(err)?),
