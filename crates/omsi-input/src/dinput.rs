@@ -47,13 +47,11 @@ const VJOY_HARDWARE_ID: (u16, u16) = (0x1234, 0xBEAD);
 const LOGITECH_VENDOR: u16 = 0x046D;
 /// The G923's product ids (PlayStation/PC and Xbox models, each in both of its modes).
 const G923_PRODUCTS: [u16; 4] = [0xC266, 0xC267, 0xC26D, 0xC26E];
-/// Thrustmaster T300 servo base, PC mode. The bare T300, the T300 RS and the T300 RS GT share it.
+/// Thrustmaster T300 servo base, PC mode (`044f:b66e`).
 const T300_PC: (u16, u16) = (0x044F, 0xB66E);
 
-/// A G923 turns the other way from DirectInput's positive force (pulse test: +0.15 left,
-/// -0.15 right). A T300 in PC mode does too. The setup guide's two-pulse test, run twice
-/// on `044f:b66e`: +0.250 moved the axis -0.081 and -0.250 moved it +0.078; +0.260 moved
-/// it -0.077 and -0.260 moved it +0.083. Other models stay as they were until one of them is.
+/// A G923 (pulse +0.15 left, -0.15 right) and a T300 in PC mode (pulses +0.25 and +0.26
+/// moved the axis about -0.08) turn the other way from a positive force. Other wheels do not.
 fn force_flipped_for(hardware_id: Option<(u16, u16)>) -> bool {
     hardware_id.is_some_and(|id| (id.0 == LOGITECH_VENDOR && G923_PRODUCTS.contains(&id.1)) || id == T300_PC)
 }
