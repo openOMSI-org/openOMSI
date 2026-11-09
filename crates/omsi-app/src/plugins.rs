@@ -357,7 +357,7 @@ pub(crate) fn game_info(app: &crate::App) -> Vec<(&'static str, InfoValue)> {
 }
 
 fn next_calling_stop(stops: &[crate::schedule::PlannedStop], next: usize) -> usize {
-    (next..stops.len()).find(|&i| stops[i].stops).unwrap_or(next)
+    (next..stops.len()).find(|&i| stops[i].calls()).unwrap_or(stops.len())
 }
 
 /// `omsi.info()`'s keys of the next stop and the one before it: `stops` the trip's, `next`
@@ -1202,14 +1202,17 @@ mod tests {
             stops,
             closed: None,
         };
+        let mut closed = stop(12, "Closed stop", true);
+        closed.closed = Some("plugin diversion".into());
         let stops = vec![
             stop(11, "Due stop", true),
             stop(12, "Pass-through", false),
+            closed,
             stop(13, "Next calling stop", true),
         ];
 
         let next = next_calling_stop(&stops, 1);
-        assert_eq!(next, 2);
+        assert_eq!(next, 3);
 
         let mut info = Vec::new();
         stop_info(&mut info, &stops, next, false, None);
