@@ -340,7 +340,7 @@ export function Controllers() {
         pick(wizardDevice.name);
         change(wizardDevice.name, (c) => {
           c.axes = axes.map((a, k) => (a ? [a[0], a[1], c.axes[k][2] & ~1] : [-1, false, c.axes[k][2] & ~1]));
-          if (ffInvert != null) c.ff_invert = ffInvert;
+          if (ffInvert != null) { c.ff_invert = ffInvert; c.ff_set = true; }
         });
         setWizard(null);
       }}
@@ -690,7 +690,7 @@ function WheelCard({ d, live, ff, change, paused }) {
       invert=${d.ff_invert ?? !!S.settings?.ff_invert}
       onClose=${() => setTest(false)}
       onDone=${(v) => {
-        change((c) => (c.ff_invert = v));
+        change((c) => { c.ff_invert = v; c.ff_set = true; });
         setTest(false);
       }}
     />`}`;
@@ -745,7 +745,7 @@ function FeedbackCard({ d, live, axis, change, onTest }) {
         <div class="name">${t('Invert force feedback')}</div>
         <div class="row" style="gap:10px;justify-content:flex-end">
           <${Button} small icon="play" label="Test the direction" disabled=${!live || axis < 0} onClick=${onTest} />
-          <${Toggle} checked=${d.ff_invert ?? !!S.settings?.ff_invert} onChange=${(v) => change((c) => (c.ff_invert = v))} />
+          <${Toggle} checked=${d.ff_invert ?? !!S.settings?.ff_invert} onChange=${(v) => change((c) => { c.ff_invert = v; c.ff_set = true; })} />
         </div>
       </div>
     </div>

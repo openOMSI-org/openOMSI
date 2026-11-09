@@ -93,6 +93,8 @@ pub struct DeviceCfg {
     pub ff_tune: Option<FfTune>,
     /// Motor polarity for this device; None uses the existing global setting.
     pub ff_invert: Option<bool>,
+    /// The saved direction was chosen after the built-in flip.
+    pub ff_set: bool,
     /// `[openOMSI.Latching]`: the buttons (from 0) that are latching switches - a turn signal
     /// lever, a lit hazard button - and switch back when they come out.
     pub latching: Vec<usize>,
@@ -226,6 +228,12 @@ pub fn parse_cfg(text: &str) -> Vec<DeviceCfg> {
                 }
                 i += 2;
             }
+            "[openOMSI.FFSet]" => {
+                if let Some(d) = out.last_mut() {
+                    d.ff_set = lines.get(i + 1).is_some_and(|v| *v == "1");
+                }
+                i += 2;
+            }
             _ => i += 1,
         }
     }
@@ -257,6 +265,9 @@ pub fn cfg_text(devices: &[DeviceCfg]) -> String {
         }
         if let Some(invert) = d.ff_invert {
             t.push_str(&format!("[openOMSI.FFInvert]\r\n{}\r\n\r\n", invert as u8));
+        }
+        if d.ff_set {
+            t.push_str("[openOMSI.FFSet]\r\n1\r\n\r\n");
         }
         if !d.latching.is_empty() {
             let numbers: Vec<String> = d.latching.iter().map(|b| (b + 1).to_string()).collect();
@@ -1484,7 +1495,7 @@ impl Controllers {
             // The wheel force is calculated from the steering axis after its configured
             // reversal, while DirectInput sends forces in the physical axis direction.
             let axis_reversed = force_axis_reversed(cfg, di.force_axis(&name));
-            let inverted = feedback_inverted(cfg, self.ff_invert, axis_reversed) ^ di.force_flipped(&name);
+            let inverted = steering_force_negated(cfg, self.ff_invert, axis_reversed, di.t300_pc(&name), di.force_flipped(&name));
             let force = if inverted { -force } else { force };
             crate::dinput::trace_ffb(&f, x, x0, inverted, force);
             if di.set_force(&name, force) {
@@ -1688,6 +1699,14 @@ fn force_axis_reversed(cfg: Option<&DeviceCfg>, axis: Option<usize>) -> bool {
 
 fn feedback_inverted(cfg: Option<&DeviceCfg>, global: bool, axis_reversed: bool) -> bool {
     cfg.and_then(|d| d.ff_invert).unwrap_or(global) ^ axis_reversed
+}
+
+/// A T300's saved invert from before the built-in flip is that flip, so it is not applied again.
+fn steering_force_negated(cfg: Option<&DeviceCfg>, global: bool, axis_reversed: bool, t300: bool, builtin_flip: bool) -> bool {
+    let saved = cfg.and_then(|d| d.ff_invert);
+    let legacy = t300 && saved == Some(true) && !cfg.is_some_and(|d| d.ff_set);
+    let saved = if legacy { Some(false) } else { saved };
+    saved.unwrap_or(global) ^ axis_reversed ^ builtin_flip
 }
 
 #[cfg_attr(windows, allow(dead_code))]
@@ -2150,6 +2169,29 @@ mod cfg_tests {
         assert!(!super::calibrated_steering_reversed(Some(&reversed)));
         reversed.ff_invert = Some(false);
         assert!(super::calibrated_steering_reversed(Some(&reversed)));
+    }
+
+    #[test]
+    fn a_t300_profile_from_the_current_release_keeps_the_calibrated_direction() {
+        let old = super::DeviceCfg { ff_invert: Some(true), ..Default::default() };
+        let fresh = super::DeviceCfg::default();
+        let chosen = super::DeviceCfg { ff_invert: Some(true), ff_set: true, ..Default::default() };
+        // The current release has no built-in flip, so the guide's saved invert is the whole correction.
+        assert!(super::steering_force_negated(Some(&old), false, false, false, false));
+        // The same saved invert is that correction, so the new flip is not applied a second time.
+        assert!(super::steering_force_negated(Some(&old), false, false, true, true));
+        assert!(super::steering_force_negated(Some(&fresh), false, false, true, true));
+        // Chosen after the flip, a saved invert still overrides it. Another flipped wheel is unchanged.
+        assert!(!super::steering_force_negated(Some(&chosen), false, false, true, true));
+        assert!(!super::steering_force_negated(Some(&old), false, false, false, true));
+        let text = "\r\n[ctrl]\r\nThrustmaster T300RS Racing Wheel\r\n1\r\n\r\n[openOMSI.FFInvert]\r\n1\r\n";
+        let read = super::parse_cfg(text);
+        assert_eq!(read[0].ff_invert, Some(true));
+        assert!(!read[0].ff_set);
+        assert!(super::steering_force_negated(Some(&read[0]), false, false, true, true));
+        let saved = super::parse_cfg(&super::cfg_text(&[chosen]));
+        assert!(saved[0].ff_set);
+        assert_eq!(saved[0].ff_invert, Some(true));
     }
 
     #[test]

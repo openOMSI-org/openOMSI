@@ -468,7 +468,10 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str, mv: Move) -> Opt
             d.ff_tune = tuned(t);
         }
         "reset_tuning" if matches!(mv, Move::Next) => d.ff_tune = None,
-        "force_invert" => d.ff_invert = Some(switched(d.ff_invert.unwrap_or(app.settings.ff_invert), mv)),
+        "force_invert" => {
+            d.ff_invert = Some(switched(d.ff_invert.unwrap_or(app.settings.ff_invert), mv));
+            d.ff_set = true;
+        }
         "continuous" => if let Some(b) = arg.parse::<usize>().ok().filter(|b| *b < crate::controllers::HAT_BUTTONS + 16) {
             let on = switched(d.continuous(b), mv);
             d.buttons.resize(d.buttons.len().max(b + 1), (String::new(), "0".into()));

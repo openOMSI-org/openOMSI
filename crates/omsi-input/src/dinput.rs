@@ -655,6 +655,13 @@ impl DirectInput {
             .any(|d| d.name == name && d.ff.is_some() && force_flipped_for(d.hardware_id))
     }
 
+    /// This device is a T300 in PC mode.
+    pub fn t300_pc(&self, name: &str) -> bool {
+        self.devices
+            .iter()
+            .any(|d| d.name == name && d.ff.is_some() && d.hardware_id == Some(T300_PC))
+    }
+
     /// `hwnd`: the window the devices belong to; `ff`: take the devices for force feedback
     /// (the game's window: they then answer only while it is in front, as in OMSI).
     pub fn new(hwnd: isize, ff: bool) -> Option<DirectInput> {

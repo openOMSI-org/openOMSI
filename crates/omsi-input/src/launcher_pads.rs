@@ -179,6 +179,7 @@ fn device_json(d: &DeviceCfg) -> Value {
         "ff_scale": d.ff_scale.map(|(a, b)| [round3(a), round3(b)]),
         "ff_tune": d.ff_tune.map(|t| TUNE_KEYS.iter().zip(t.values()).map(|(k, v)| (k.to_string(), json!(round3(v)))).collect::<serde_json::Map<_, _>>()),
         "ff_invert": d.ff_invert,
+        "ff_set": d.ff_set,
         "latching": d.latching,
         "more": d.more,
     })
@@ -211,6 +212,7 @@ fn device_from(v: &Value) -> Result<DeviceCfg, String> {
     // (a value missing or no number is its default, and each is brought into its range)
     d.ff_tune = v.get("ff_tune").filter(|t| t.is_object()).map(|t| FfTune::from_values(&TUNE_KEYS.map(|k| t.get(k).and_then(Value::as_f64).map_or(f32::NAN, |v| v as f32))));
     d.ff_invert = v.get("ff_invert").and_then(Value::as_bool);
+    d.ff_set = v.get("ff_set").and_then(Value::as_bool).unwrap_or(false);
     d.latching = v.get("latching").and_then(Value::as_array).into_iter().flatten().filter_map(|b| b.as_u64().map(|b| b as usize)).filter(|b| *b < d.buttons.len()).collect();
     d.latching.sort_unstable();
     d.latching.dedup();
