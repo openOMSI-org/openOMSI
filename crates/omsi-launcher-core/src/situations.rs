@@ -1,5 +1,6 @@
 use crate::{content_dir, data_dir, root};
 use anyhow::Result;
+use omsi_content::situation::NAME_CHOSEN;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
@@ -22,13 +23,15 @@ pub struct SavedSituation {
     pub name: String,
     pub saved: u64,
     pub slot: bool,
+    #[serde(skip)]
+    pub chosen: bool,
 }
 
 /// What can be continued on `map` (#341): the last situation, then the save slots the game
 /// writes into `Saves` of the map's folder in the content folder and the quicksave made on
 /// that map, the newest first.
 pub fn saved_situations(map: &str) -> Vec<SavedSituation> {
-    let mut out: Vec<SavedSituation> = last_situation(map).map(|f| SavedSituation { saved: modified_secs(&f), file: f, name: "Last situation".into(), slot: false }).into_iter().collect();
+    let mut out: Vec<SavedSituation> = last_situation(map).map(|f| SavedSituation { saved: modified_secs(&f), file: f, name: "Last situation".into(), slot: false, chosen: false }).into_iter().collect();
     if let Some(dir) = Path::new(&map.replace('\\', "/")).parent() {
         let c = content_dir();
         // (and where the game saves when the content folder takes no file, #1673)
@@ -43,7 +46,7 @@ pub fn saved_situations(map: &str) -> Vec<SavedSituation> {
         for base in &bases {
             let f = base.join("Situations").join("quicksave.osn");
             if f.is_file() && situation_map(&f).is_some_and(|m| same_map(&m, map)) {
-                out.push(SavedSituation { saved: modified_secs(&f), file: f, name: "Quicksave".into(), slot: false });
+                out.push(SavedSituation { saved: modified_secs(&f), file: f, name: "Quicksave".into(), slot: false, chosen: false });
             }
         }
         let last = usize::from(out.first().is_some_and(|f| f.name == "Last situation"));
@@ -87,24 +90,34 @@ fn write_name(file: &Path, name: &str) -> Result<()> {
     let saved = std::fs::metadata(file)?.modified()?;
     let text = omsi_cfg::decode_text(&bytes);
     let mut lines = omsi_cfg::split_lines(&text);
-    match lines.iter().position(|l| l.trim().eq_ignore_ascii_case("[name]")) {
-        Some(i) if i + 1 < lines.len() => lines[i + 1] = name.to_string(),
-        Some(_) => lines.push(name.to_string()),
-        None => lines.splice(0..0, ["[name]".to_string(), name.to_string(), String::new()]).for_each(drop),
+    let at = match lines.iter().position(|l| l.trim().eq_ignore_ascii_case("[name]")) {
+        Some(i) if i + 1 < lines.len() => {
+            lines[i + 1] = name.to_string();
+            i + 2
+        }
+        Some(_) => {
+            lines.push(name.to_string());
+            lines.len()
+        }
+        None => {
+            lines.splice(0..0, ["[name]".to_string(), name.to_string(), String::new()]).for_each(drop);
+            2
+        }
+    };
+    if !lines.iter().any(|l| l.trim().eq_ignore_ascii_case(NAME_CHOSEN)) {
+        lines.insert(at, NAME_CHOSEN.to_string());
     }
     let ended = text.ends_with(['\r', '\n']);
     let mut text = lines.join("\r\n");
     if ended {
         text.push_str("\r\n");
     }
-    // (Windows-1252 cannot hold every name: such a file comes back in UTF-16, as the game writes it)
     let out: Vec<u8> = if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
         [0xEF, 0xBB, 0xBF].into_iter().chain(text.bytes()).collect()
     } else {
         [0xFF, 0xFE].into_iter().chain(text.encode_utf16().flat_map(u16::to_le_bytes)).collect()
     };
     let tmp = file.with_extension("osn.renaming");
-    // (the lists sort and date the saves by this time: a rename is not a newer save)
     let written = std::fs::write(&tmp, out).and_then(|_| std::fs::File::options().write(true).open(&tmp)?.set_modified(saved)).and_then(|_| std::fs::rename(&tmp, file));
     if written.is_err() {
         let _ = std::fs::remove_file(&tmp);
@@ -150,9 +163,10 @@ fn save_slots(dir: &Path) -> Vec<SavedSituation> {
             // situation holds every variable of every vehicle; the game writes them in
             // UTF-16, as OMSI does)
             let text = std::fs::read(&f).map(|b| omsi_cfg::decode_text(&b[..b.len().min(8192) & !1])).unwrap_or_default();
+            let chosen = text.lines().any(|l| l.trim().eq_ignore_ascii_case(NAME_CHOSEN));
             let mut lines = text.lines().map(str::trim);
             let name = lines.by_ref().find(|l| l.eq_ignore_ascii_case("[name]")).and_then(|_| lines.next()).map(str::to_string).filter(|n| !n.is_empty()).unwrap_or_else(|| f.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default());
-            SavedSituation { saved: modified_secs(&f), file: f, name, slot: true }
+            SavedSituation { saved: modified_secs(&f), file: f, name, slot: true, chosen }
         })
         .collect();
     slots.sort_by(|a, b| b.saved.cmp(&a.saved).then_with(|| b.name.cmp(&a.name)));
@@ -205,17 +219,18 @@ mod save_slot_tests {
         std::fs::write(dir.join("Slot 2.osn"), b"[time]\r\n8\r\n").unwrap();
         std::fs::write(dir.join("Slot 3.osn"), b"[name]\rold\r[time]\r8\r").unwrap();
         write_name(&dir.join("Slot 3.osn"), "Morning").unwrap();
-        assert_eq!(omsi_cfg::decode_text(&std::fs::read(dir.join("Slot 3.osn")).unwrap()), "[name]\r\nMorning\r\n[time]\r\n8\r\n");
+        assert_eq!(omsi_cfg::decode_text(&std::fs::read(dir.join("Slot 3.osn")).unwrap()), "[name]\r\nMorning\r\n[openomsi_name_chosen]\r\n[time]\r\n8\r\n");
         std::fs::remove_file(dir.join("Slot 3.osn")).unwrap();
         let before = std::fs::metadata(dir.join("Slot 1.osn")).unwrap().modified().unwrap();
-        write_name(&dir.join("Slot 1.osn"), "Before the depot").unwrap();
+        write_name(&dir.join("Slot 1.osn"), "Slot 1: Depot run, 09:00").unwrap();
         assert_eq!(std::fs::metadata(dir.join("Slot 1.osn")).unwrap().modified().unwrap(), before);
         write_name(&dir.join("Slot 2.osn"), "Перед депо").unwrap();
-        assert_eq!(std::fs::read(dir.join("Slot 1.osn")).unwrap(), utf16(&format!("[name]\r\nBefore the depot{body}")));
-        assert_eq!(omsi_cfg::decode_text(&std::fs::read(dir.join("Slot 2.osn")).unwrap()), "[name]\r\nПеред депо\r\n\r\n[time]\r\n8\r\n");
-        let mut names: Vec<String> = save_slots(&dir).into_iter().map(|s| s.name).collect();
-        names.sort();
-        assert_eq!(names, ["Before the depot", "Перед депо"]);
+        assert_eq!(std::fs::read(dir.join("Slot 1.osn")).unwrap(), utf16(&format!("[name]\r\nSlot 1: Depot run, 09:00\r\n[openomsi_name_chosen]{body}")));
+        assert_eq!(omsi_cfg::decode_text(&std::fs::read(dir.join("Slot 2.osn")).unwrap()), "[name]\r\nПеред депо\r\n[openomsi_name_chosen]\r\n\r\n[time]\r\n8\r\n");
+        std::fs::write(dir.join("Slot 4.osn"), utf16("[name]\r\nSlot 4: SD202, 10:00\r\n")).unwrap();
+        let mut slots: Vec<(String, bool)> = save_slots(&dir).into_iter().map(|s| (s.name, s.chosen)).collect();
+        slots.sort();
+        assert_eq!(slots, [("Slot 1: Depot run, 09:00".to_string(), true), ("Slot 4: SD202, 10:00".to_string(), false), ("Перед депо".to_string(), true)]);
         assert!(!rename_situation("maps/Grundorf/global.cfg", &dir.join("Slot 1.osn"), "elsewhere").unwrap());
         let _ = std::fs::remove_dir_all(&dir);
     }
