@@ -311,10 +311,10 @@ A map can have live weather from Tomorrow.io: add an `openomsi_weather.cfg` besi
 `global.cfg`. See [weather areas](WEATHER_REGIONS.md) for the format, the player's setup
 and the [community config editor](https://openomsi.mxnticek.eu/weather/).
 
-Also, a climate statistics can be provided in `openomsi_climate.cfg` file. The `[temperature]`
-section of the file should contain 12 monthly mean temperatures (January to December) in °C 
-(one per line), and the `[precipitation]` section should have the same 12 values, but 
-for the precipitation in millimetres. These values will be used as baseline for 
+Also, a map can also give its climate statistics in an `openomsi_climate.cfg` file. The `[temperature]`
+section of the file should contain 12 monthly mean temperatures (January to December) in °C
+(one per line), and the `[precipitation]` section should have the same 12 values, but
+for the precipitation in millimetres. These values will be used as baseline for
 natural weather preset.
 
 ## Trolleybuses: poles, drive and a wire
