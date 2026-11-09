@@ -424,7 +424,7 @@ fn plan_in(content: &Path, r: &Registry, k: usize, roots: &[PathBuf], full: bool
     }
     let foreign: Vec<String> = r.mods.iter().enumerate().filter(|(i, _)| *i != k).flat_map(|(_, x)| x.paths.clone()).collect();
     let archive = |p: &String| p.to_ascii_lowercase().starts_with(&format!("{}/", ARCHIVES.to_ascii_lowercase()));
-    let unread = std::fs::read_dir(content.join(ARCHIVES)).map(|rd| rd.flatten().any(|e| e.path().is_file() && e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("zip")) && !roots.iter().any(|x| x.starts_with(e.path())))).unwrap_or(false);
+    let unread = std::fs::read_dir(content.join(ARCHIVES)).map(|rd| rd.flatten().any(|e| e.path().is_file() && e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("zip")) && !roots.iter().any(|x| x.starts_with(e.path())))).unwrap_or_else(|_| content.join(ARCHIVES).symlink_metadata().is_ok());
     let blind = lost || unread || r.mods.iter().enumerate().any(|(i, x)| i != k && !x.enabled && x.paths.iter().any(archive));
     let maps = !mine.is_empty() || matches!(kind_of(&m.paths), Kind::Map | Kind::Archive);
     let scope = map_uses::Scope { mine, others, owned: &m.paths, foreign, blind, maps };
@@ -788,6 +788,22 @@ mod tests {
         assert!(plan_in(&c, &r, k, &roots, true).freed.is_empty());
         std::fs::remove_dir_all(gone.parent().unwrap()).unwrap();
         assert_eq!(plan_in(&c, &r, k, &roots, true).freed, ["Sceneryobjects/PackA", "Splines/RoadA"]);
+        let packs = c.join("Mods/disabled/Old/Sceneryobjects");
+        std::fs::create_dir_all(packs.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(&packs, &packs).unwrap();
+        assert!(plan_in(&c, &r, k, &roots, true).freed.is_empty());
+        std::fs::remove_dir_all(packs.parent().unwrap()).unwrap();
+        let tile = c.join("maps/Hill Town/tile_0_0.map");
+        put(&tile, &(std::fs::read_to_string(&tile).unwrap() + "\n[object]\n0\nSceneryobjects\\Twin\\t.sco\n"));
+        put(&c.join("Sceneryobjects/Twin/f.txt"), "1234");
+        assert_eq!(plan_in(&c, &r, k, &roots, true).freed, ["Sceneryobjects/PackA", "Sceneryobjects/Twin", "Splines/RoadA"]);
+        std::fs::rename(omsi.join("Sceneryobjects"), omsi.join("Objects")).unwrap();
+        std::os::unix::fs::symlink(omsi.join("Sceneryobjects"), omsi.join("Sceneryobjects")).unwrap();
+        assert_eq!(plan_in(&c, &r, k, &roots, true).freed, ["Splines/RoadA"]);
+        std::fs::remove_file(omsi.join("Sceneryobjects")).unwrap();
+        std::os::unix::fs::symlink(c.join("Archives"), c.join("Archives")).unwrap();
+        assert!(plan_in(&c, &r, k, &roots, true).freed.is_empty());
+        std::fs::remove_file(c.join("Archives")).unwrap();
         for d in [c, omsi, more] {
             std::fs::remove_dir_all(d).unwrap();
         }
