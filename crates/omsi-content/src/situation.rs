@@ -28,6 +28,7 @@ pub struct Situation {
     pub path: PathBuf,
     pub name: String,
     pub description: String,
+    pub name_chosen: bool,
     pub map: String,
     pub weather: Option<String>,
     /// year, day of year, hour, minute, second
@@ -41,11 +42,16 @@ pub struct Situation {
     pub vehicles: Vec<SituationVehicle>,
 }
 
+pub const NAME_CHOSEN: &str = "[openomsi_name_chosen]";
+
 impl Situation {
     /// Write the situation the way OMSI does (UTF-16 LE with a BOM, CR LF).
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         let mut t = String::new();
         t.push_str(&format!("[name]\r\n{}\r\n", self.name));
+        if self.name_chosen {
+            t.push_str(&format!("{NAME_CHOSEN}\r\n"));
+        }
         t.push_str(&format!("[description]\r\n{}\r\n[end]\r\n\r\n", self.description));
         t.push_str(&format!("[map]\r\n{}\r\n\r\n", self.map));
         if let Some(w) = &self.weather {
@@ -118,6 +124,7 @@ impl Situation {
         while let Some(k) = r.next_keyword() {
             match k.as_str() {
                 "name" => s.name = r.str().to_string(),
+                "openomsi_name_chosen" => s.name_chosen = true,
                 "description" => s.description = r.until("[end]").join("\n"),
                 "map" => s.map = r.str().to_string(),
                 "actuweather" => s.weather = Some(r.str().to_string()),
@@ -220,11 +227,14 @@ mod tests {
                 riders: 23,
                 ..Default::default()
             }],
+            name: "Slot 3: Depot run, 09:00".into(),
+            name_chosen: true,
             ..Default::default()
         };
         sit.save(&path).unwrap();
         let loaded = Situation::load(&path).unwrap();
         std::fs::remove_file(path).unwrap();
         assert_eq!(loaded.vehicles, sit.vehicles);
+        assert_eq!((loaded.name.as_str(), loaded.name_chosen), ("Slot 3: Depot run, 09:00", true));
     }
 }
