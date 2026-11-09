@@ -40,13 +40,20 @@ pub fn same(a: &Path, b: &Path) -> bool {
     key(a) == key(b)
 }
 
-pub fn child(dir: &Path, name: &str) -> Option<PathBuf> {
-    let name = name.to_lowercase();
-    vfs::list_dir(dir)?.into_iter().find(|(n, _)| n.to_string_lossy().to_lowercase() == name).map(|(n, _)| dir.join(n))
+fn listing(dir: &Path, lost: &mut bool) -> Vec<(std::ffi::OsString, bool)> {
+    vfs::list_dir(dir).unwrap_or_else(|| {
+        *lost |= vfs::exists(dir) || std::fs::symlink_metadata(dir).is_ok();
+        Vec::new()
+    })
 }
 
-pub fn subdirs(dir: &Path) -> Vec<PathBuf> {
-    vfs::list_dir(dir).unwrap_or_default().into_iter().filter(|(_, d)| *d).map(|(n, _)| dir.join(n)).collect()
+pub fn child(dir: &Path, name: &str, lost: &mut bool) -> Option<PathBuf> {
+    let name = name.to_lowercase();
+    listing(dir, lost).into_iter().find(|(n, _)| n.to_string_lossy().to_lowercase() == name).map(|(n, _)| dir.join(n))
+}
+
+pub fn subdirs(dir: &Path, lost: &mut bool) -> Vec<PathBuf> {
+    listing(dir, lost).into_iter().filter(|(_, d)| *d).map(|(n, _)| dir.join(n)).collect()
 }
 
 fn text_files(dir: &Path, exts: &[&str], depth: u32, out: &mut Vec<PathBuf>) -> bool {
@@ -113,19 +120,20 @@ fn up_links(line: &str) -> Vec<String> {
 }
 
 fn pack_links(content: &Path) -> Option<Vec<(String, Vec<String>)>> {
+    let mut lost = false;
     let mut bases = vec![content.to_path_buf()];
-    bases.extend(subdirs(&content.join("Mods").join("disabled")));
+    bases.extend(subdirs(&content.join("Mods").join("disabled"), &mut lost));
     let mut out = Vec::new();
     for base in bases {
         for top in SHARED {
-            let Some(top_dir) = child(&base, top) else { continue };
-            for pack in subdirs(&top_dir) {
+            let Some(top_dir) = child(&base, top, &mut lost) else { continue };
+            for pack in subdirs(&top_dir, &mut lost) {
                 let unit = format!("{top}/{}", pack.file_name().unwrap_or_default().to_string_lossy().to_lowercase());
                 out.push((unit, scan(&pack, &["sco", "sli", "cfg", "txt"], up_links)?));
             }
         }
     }
-    Some(out)
+    (!lost).then_some(out)
 }
 
 pub struct Scope<'a> {
@@ -156,14 +164,17 @@ pub fn plan(content: &Path, roots: &[PathBuf], s: &Scope, full: bool) -> Plan {
     let owned_units: HashSet<String> = s.owned.iter().filter_map(|p| unit_of(p)).collect();
     let foreign_units: HashSet<String> = s.foreign.iter().filter_map(|p| unit_of(p)).collect();
     let elsewhere: Vec<&PathBuf> = roots.iter().filter(|r| !same(r, content)).collect();
-    let in_root = |root: &Path, unit: &str| unit.split_once('/').and_then(|(t, n)| child(root, t).and_then(|d| child(&d, n))).filter(|p| vfs::is_dir(p));
+    let in_root = |root: &Path, unit: &str, lost: &mut bool| unit.split_once('/').and_then(|(t, n)| child(root, t, lost).and_then(|d| child(&d, n, lost))).filter(|p| vfs::is_dir(p));
     let mut cands: Vec<(String, PathBuf)> = Vec::new();
     if full && !blind && elsewhere.iter().any(|r| !r.starts_with(content)) {
         for u in s.mine.iter().flat_map(|d| uses(d).unwrap_or_default()).collect::<BTreeSet<_>>() {
-            if used.contains(&u) || owned_units.contains(&u) || foreign_units.contains(&u) || elsewhere.iter().any(|r| in_root(r, &u).is_some()) {
+            if used.contains(&u) || owned_units.contains(&u) || foreign_units.contains(&u) || elsewhere.iter().any(|r| {
+                let mut lost = false;
+                in_root(r, &u, &mut lost).is_some() || lost
+            }) {
                 continue;
             }
-            if let Some(dir) = in_root(content, &u).filter(|p| p.is_dir()) {
+            if let Some(dir) = in_root(content, &u, &mut false).filter(|p| p.is_dir()) {
                 cands.push((u, dir));
             }
         }

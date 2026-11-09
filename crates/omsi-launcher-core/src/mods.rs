@@ -399,6 +399,7 @@ pub fn remove_preview(content: &Path, id: &str) -> anyhow::Result<Plan> {
 fn plan_in(content: &Path, r: &Registry, k: usize, roots: &[PathBuf], full: bool) -> Plan {
     let m = &r.mods[k];
     let at = |p: &String| [content.join(p), disabled_dir(content, &m.id).join(p)];
+    let mut lost = false;
     let mut mine: Vec<PathBuf> = Vec::new();
     for p in &m.paths {
         let lower = p.to_ascii_lowercase();
@@ -407,14 +408,16 @@ fn plan_in(content: &Path, r: &Registry, k: usize, roots: &[PathBuf], full: bool
         } else if lower.starts_with(&format!("{}/", ARCHIVES.to_ascii_lowercase())) {
             let zip = content.join(p);
             for root in roots.iter().filter(|x| x.starts_with(&zip)) {
-                mine.extend(map_uses::child(root, "maps").map(|d| map_uses::subdirs(&d)).unwrap_or_default());
+                mine.extend(map_uses::child(root, "maps", &mut false).map(|d| map_uses::subdirs(&d, &mut false)).unwrap_or_default());
             }
         }
     }
-    let mut parents: Vec<PathBuf> = roots.iter().chain([&content.to_path_buf()]).filter_map(|x| map_uses::child(x, "maps")).collect();
-    parents.extend(map_uses::subdirs(&content.join("Mods").join(DISABLED)).iter().filter_map(|d| map_uses::child(d, "maps")));
+    let mut parents: Vec<PathBuf> = roots.iter().chain([&content.to_path_buf()]).filter_map(|x| map_uses::child(x, "maps", &mut lost)).collect();
+    for d in map_uses::subdirs(&content.join("Mods").join(DISABLED), &mut lost) {
+        parents.extend(map_uses::child(&d, "maps", &mut lost));
+    }
     let mut others: Vec<PathBuf> = Vec::new();
-    for d in parents.iter().flat_map(|p| map_uses::subdirs(p)) {
+    for d in parents.iter().flat_map(|p| map_uses::subdirs(p, &mut lost)).collect::<Vec<_>>() {
         if !mine.iter().chain(&others).any(|x| map_uses::same(x, &d)) {
             others.push(d);
         }
@@ -422,7 +425,7 @@ fn plan_in(content: &Path, r: &Registry, k: usize, roots: &[PathBuf], full: bool
     let foreign: Vec<String> = r.mods.iter().enumerate().filter(|(i, _)| *i != k).flat_map(|(_, x)| x.paths.clone()).collect();
     let archive = |p: &String| p.to_ascii_lowercase().starts_with(&format!("{}/", ARCHIVES.to_ascii_lowercase()));
     let unread = std::fs::read_dir(content.join(ARCHIVES)).map(|rd| rd.flatten().any(|e| e.path().is_file() && e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("zip")) && !roots.iter().any(|x| x.starts_with(e.path())))).unwrap_or(false);
-    let blind = unread || r.mods.iter().enumerate().any(|(i, x)| i != k && !x.enabled && x.paths.iter().any(archive));
+    let blind = lost || unread || r.mods.iter().enumerate().any(|(i, x)| i != k && !x.enabled && x.paths.iter().any(archive));
     let maps = !mine.is_empty() || matches!(kind_of(&m.paths), Kind::Map | Kind::Archive);
     let scope = map_uses::Scope { mine, others, owned: &m.paths, foreign, blind, maps };
     let mut plan = map_uses::plan(content, roots, &scope, full);
@@ -764,5 +767,29 @@ mod tests {
         assert!(plan.freed.is_empty() && plan.kept == ["Sceneryobjects/Shared"], "{plan:?}");
         std::fs::remove_dir_all(c).unwrap();
         std::fs::remove_dir_all(omsi).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_map_collection_that_cannot_be_listed_keeps_every_object_folder() {
+        let (c, omsi, id) = two_maps();
+        let more = c.with_extension("more");
+        std::fs::create_dir_all(&more).unwrap();
+        std::os::unix::fs::symlink(more.join("maps"), more.join("maps")).unwrap();
+        let mut r = load(&c);
+        let k = take(&c, &mut r, &id).unwrap();
+        let roots = [c.clone(), omsi.clone(), more.clone()];
+        let plan = plan_in(&c, &r, k, &roots, true);
+        assert!(plan.freed.is_empty() && plan.kept == ["Sceneryobjects/Shared"], "{plan:?}");
+        std::fs::remove_file(more.join("maps")).unwrap();
+        let gone = c.join("Mods/disabled/Gone/maps");
+        std::fs::create_dir_all(gone.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(&gone, &gone).unwrap();
+        assert!(plan_in(&c, &r, k, &roots, true).freed.is_empty());
+        std::fs::remove_dir_all(gone.parent().unwrap()).unwrap();
+        assert_eq!(plan_in(&c, &r, k, &roots, true).freed, ["Sceneryobjects/PackA", "Splines/RoadA"]);
+        for d in [c, omsi, more] {
+            std::fs::remove_dir_all(d).unwrap();
+        }
     }
 }
