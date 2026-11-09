@@ -20,6 +20,7 @@ pub struct SituationVehicle {
     pub vars: Vec<(String, f64)>,
     pub string_vars: Vec<(String, String)>,
     pub timetable: Vec<String>,
+    pub riders: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -83,6 +84,9 @@ impl Situation {
             }
             if v.is_my_vehicle {
                 t.push_str("\r\n[ismyVehicle]\r\n");
+            }
+            if v.riders > 0 {
+                t.push_str(&format!("\r\n[openOMSI_riders]\r\n{}\r\n", v.riders));
             }
             t.push_str(&format!("\r\n[vars]\r\n{}\r\n", v.vars.len()));
             for (n, x) in &v.vars {
@@ -149,6 +153,12 @@ impl Situation {
                         veh.is_my_vehicle = true;
                     }
                 }
+                "openomsi_riders" => {
+                    let n = r.usize();
+                    if let Some(veh) = s.vehicles.last_mut() {
+                        veh.riders = n;
+                    }
+                }
                 "vars" => {
                     let n = r.count();
                     let mut vars = Vec::with_capacity(n);
@@ -191,7 +201,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn situation_round_trips_padded_device_strings_and_duty_identity() {
+    fn situation_round_trips_padded_device_strings_duty_identity_and_riders() {
         let path =
             std::env::temp_dir().join(format!("omsi_situation_strings_{}.osn", std::process::id()));
         let sit = Situation {
@@ -207,6 +217,7 @@ mod tests {
                 timetable: ["109", "65104", "16", "7", "0", "0"]
                     .map(String::from)
                     .to_vec(),
+                riders: 23,
                 ..Default::default()
             }],
             ..Default::default()

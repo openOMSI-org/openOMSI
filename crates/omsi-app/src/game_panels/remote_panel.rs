@@ -31,6 +31,15 @@ impl RemotePanel {
                     Element { color: Some(theme_color(pal.accent)), ..text(&address, 18.0, Weight::Bold) },
                     text(&server.pin().chars().map(|ch| ch.to_string()).collect::<Vec<_>>().join(" "), 30.0, Weight::Bold),
                 ];
+                match omsi_remote::firewall::state() {
+                    omsi_remote::firewall::FirewallState::Blocked => {
+                        c.push(Element { color: Some(theme_color(pal.danger)), ..text(&tr("The Windows firewall keeps phones and tablets out."), 13.0, Weight::Medium) });
+                        c.push(grow_row(vec![button("firewall", &tr("Allow in the Windows firewall"), Some("lock"))]));
+                    }
+                    omsi_remote::firewall::FirewallState::Asking => c.push(note(&tr("Answer Windows' question to let phones and tablets in."), pal)),
+                    omsi_remote::firewall::FirewallState::Setting => c.push(Element { color: Some(theme_color(pal.danger)), ..text(&tr("A rule or setting of the Windows firewall keeps phones and tablets out. Change it in the Windows firewall settings."), 13.0, Weight::Medium) }),
+                    _ => {}
+                }
                 if let Some(path) = crate::remote::dir().and_then(|d| omsi_remote::cockpit::qr_png(&url, &d)) {
                     c.push(row(vec![el(None, Kind::Image { path: Some(path), width: 200.0, height: 200.0 })], RowAlign::Center));
                 }
@@ -66,6 +75,7 @@ impl RemotePanel {
 
 pub(crate) fn open(app: &mut crate::App) {
     app.close_game_menu();
+    omsi_remote::firewall::check(&crate::remote::lan_ip(), app.settings.remote_cockpit_port);
     app.menus.game_panels.remote = Some(RemotePanel::default());
 }
 
@@ -87,6 +97,7 @@ pub(crate) fn click(app: &mut crate::App, id: &str) {
                 p.said = Some(tr("Every device has to enter the code again").into_owned());
             }
         }
+        "firewall" => omsi_remote::firewall::allow(&crate::remote::lan_ip(), app.settings.remote_cockpit_port),
         "close" => app.menus.game_panels.remote = None,
         _ => {}
     }

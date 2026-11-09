@@ -264,9 +264,7 @@ fn test_stop(name: &str, alias: &str) -> PaxStop {
     }
 }
 
-/// The player's bus on a duty takes the people its trip takes where they are going,
-/// whatever its depot file calls the terminus; in free drive, or with no destination
-/// shown, nobody; a bus whose terminus is on their line record comes first.
+/// The duty fallback tolerates different HOF and timetable terminus spellings.
 #[test]
 fn who_boards_the_players_bus() {
     // line 76 from Bauernhof (stop 10) by Kirche to Endstation; the depot file calls the

@@ -1090,3 +1090,43 @@ fn a_spline_in_a_cutting_is_left_to_the_hole_but_a_trough_is_not() {
     }
     assert!(profile_in_cutting(&profile, DVec3::ZERO, &hill, &[]), "a 5 m cutting");
 }
+
+#[test]
+fn the_rim_of_a_nearly_vertical_face_hands_the_ground_a_bounded_slope() {
+    let mesh = MeshData {
+        positions: vec![
+            glam::Vec3::new(0.0, 0.0, 0.0),
+            glam::Vec3::new(1.0, 0.0, 0.0),
+            glam::Vec3::new(0.5, 0.00001, 1.0),
+        ],
+        indices: vec![0, 1, 2],
+        ..Default::default()
+    };
+    let rims = terrain_fit_surface::boundary(&mesh, DVec3::ZERO);
+    assert_eq!(rims.len(), 3);
+    for (_, gradient) in rims {
+        assert!(
+            gradient.x.abs() < 1e-9 && (gradient.y - 3.0).abs() < 1e-9,
+            "gradient {gradient:?}"
+        );
+    }
+}
+
+#[test]
+fn the_rim_of_a_gentle_face_keeps_its_slope() {
+    let mesh = MeshData {
+        positions: vec![
+            glam::Vec3::new(0.0, 0.0, 0.0),
+            glam::Vec3::new(1.0, 0.0, 0.0),
+            glam::Vec3::new(0.0, 1.0, 0.5),
+        ],
+        indices: vec![0, 1, 2],
+        ..Default::default()
+    };
+    for (_, gradient) in terrain_fit_surface::boundary(&mesh, DVec3::ZERO) {
+        assert!(
+            gradient.x.abs() < 1e-9 && (gradient.y - 0.5).abs() < 1e-9,
+            "gradient {gradient:?}"
+        );
+    }
+}

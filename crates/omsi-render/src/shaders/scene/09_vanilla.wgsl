@@ -88,7 +88,7 @@ fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) ->
         let nuv = select(buv, vec2<f32>(in.uv.x, 1.0 - in.uv.y), material.extra.x > 0.5);
         night_sample = sample_nightmap(nuv);
     }
-    tex.a = night_coverage(tex.a, night_sample.a);
+    tex.a = night_coverage(tex.a, night_sample.a) * tree_card_fade(in.world);
     let mode = material.params.x;
     // Mip-filtered alpha is the fraction of the pixel covered by leaves or fence wires.
     // Tighten the transition around the cutout edge before MSAA turns it into sample

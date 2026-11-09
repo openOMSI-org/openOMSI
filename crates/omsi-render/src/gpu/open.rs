@@ -562,7 +562,7 @@ impl Renderer {
         if sixteen_texture_units() && !options.no_enhanced && !options.preview_only {
             log::warn!("renderer: the enhanced graphics take more textures than OpenGL has units for on {adapter_name}; drawing vanilla+");
         }
-        let scene = scene::SceneBase::new(&device, leave_out_enhanced);
+        let scene = scene::SceneBase::new(&device, leave_out_enhanced, options.detailed_trees);
         let hdr_format = wgpu::TextureFormat::Rgba16Float;
         let shadows = shadows::build(&device, &scene, shadow_size, !leave_out_enhanced && !options.no_enhanced, options.light_shadows >= 2);
         let defaults = defaults::build(&device, &queue, options.anisotropy);

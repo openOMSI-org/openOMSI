@@ -377,6 +377,7 @@ pub struct RenderOptions {
     pub light_glow: bool,
     pub puddle_reflections: bool,
     pub max_scene: Option<(u32, u32)>,
+    pub detailed_trees: bool,
 }
 
 impl Default for RenderOptions {
@@ -412,6 +413,7 @@ impl Default for RenderOptions {
             light_glow: false,
             puddle_reflections: true,
             max_scene: None,
+            detailed_trees: false,
         }
     }
 }
