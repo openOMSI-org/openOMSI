@@ -88,14 +88,14 @@ impl VehicleHost {
             // --- timetable callbacks
             Some(Cb::GetTTLineString) => stacks.push_str(self.tt_line.clone()),
             Some(Cb::GetTTDelay) => stacks.push(self.tt_delay),
-            Some(Cb::GetTTBusstopCount) => stacks.push(self.tt_stops.len() as f32),
+            Some(Cb::GetTTBusstopCount) => stacks.push(self.tt_ibis_stops.len() as f32),
             // Without a timetable there is no current stop. Returning the first
             // stop (0) makes the Atron repeatedly detect an arrival and clear its
             // sales text after the holding brake has been on for three seconds.
-            Some(Cb::GetTTBusstopIndex) => stacks.push(if self.tt_stops.is_empty() {
+            Some(Cb::GetTTBusstopIndex) => stacks.push(if self.tt_ibis_stops.is_empty() {
                 -1.0
             } else {
-                self.tt_busstop_index as f32
+                self.tt_ibis_busstop_index as f32
             }),
             Some(Cb::GetTTerminusIndex) | Some(Cb::GetTTTerminusIndex) => stacks.push(if self.tt_stops.is_empty() {
                 -1.0
@@ -118,15 +118,15 @@ impl VehicleHost {
             }
             Some(Cb::GetTTBusstopName) => {
                 let i = arg_i32(stacks.pop());
-                stacks.push_str(self.tt_stops.get(usize::try_from(i).unwrap_or(usize::MAX)).map(|s| s.0.clone()).unwrap_or_default());
+                stacks.push_str(self.tt_ibis_stops.get(usize::try_from(i).unwrap_or(usize::MAX)).map(|s| s.0.clone()).unwrap_or_default());
             }
             Some(Cb::GetTTBusstopDep) => {
                 let i = arg_i32(stacks.pop());
-                stacks.push(self.tt_stops.get(usize::try_from(i).unwrap_or(usize::MAX)).map(|s| s.2).unwrap_or(0.0));
+                stacks.push(self.tt_ibis_stops.get(usize::try_from(i).unwrap_or(usize::MAX)).map(|s| s.2).unwrap_or(0.0));
             }
             Some(Cb::GetTTBusstopArr) => {
                 let i = arg_i32(stacks.pop());
-                stacks.push(self.tt_stops.get(usize::try_from(i).unwrap_or(usize::MAX)).map(|s| s.1).unwrap_or(0.0));
+                stacks.push(self.tt_ibis_stops.get(usize::try_from(i).unwrap_or(usize::MAX)).map(|s| s.1).unwrap_or(0.0));
             }
             Some(Cb::GiveChangeCoin) => {
                 let i = arg_i32(stacks.pop());
