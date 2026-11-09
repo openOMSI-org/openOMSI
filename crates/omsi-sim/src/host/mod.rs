@@ -922,10 +922,12 @@ mod tests {
         assert_eq!(host.script_textures[0].rgba, vec![255; 4]);
         // The first stop of an actual timetable still reports an arrival.
         host.tt_stops.push(("First stop".into(), 0.0, 0.0));
+        host.tt_ibis_stops.push(("First stop".into(), 0.0, 0.0));
         assert!(vm.run_trigger(&p, "check", &mut state, &mut host));
         assert_eq!(host.script_textures[0].rgba, vec![0; 4]);
         host.script_textures[0].put(0, 0, [255; 4]);
         host.tt_stops.clear();
+        host.tt_ibis_stops.clear();
         assert!(vm.run_trigger(&p, "check", &mut state, &mut host));
         assert_eq!(host.script_textures[0].rgba, vec![255; 4]);
     }

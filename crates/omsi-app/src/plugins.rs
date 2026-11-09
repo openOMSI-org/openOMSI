@@ -357,7 +357,7 @@ pub(crate) fn game_info(app: &crate::App) -> Vec<(&'static str, InfoValue)> {
 }
 
 fn next_calling_stop(stops: &[crate::schedule::PlannedStop], next: usize) -> usize {
-    (next..stops.len()).find(|&i| stops[i].calls()).unwrap_or(stops.len())
+    (next..stops.len()).find(|&i| stops[i].calls()).unwrap_or_else(|| if stops.iter().any(|stop| stop.calls()) { stops.len() } else { next.min(stops.len().saturating_sub(1)) })
 }
 
 /// `omsi.info()`'s keys of the next stop and the one before it: `stops` the trip's, `next`
@@ -1221,6 +1221,23 @@ mod tests {
         assert_eq!(get("next_stop_number"), Some(InfoValue::Num(4.0)));
         assert_eq!(get("next_stop_id"), Some(InfoValue::Num(13.0)));
         assert_eq!(get("at_stop"), Some(InfoValue::Bool(false)));
+
+        let depot_stops = vec![
+            stop(21, "Depot start", false),
+            stop(22, "Depot next", false),
+        ];
+        let depot_next = next_calling_stop(&depot_stops, 0);
+        assert_eq!(depot_next, 0);
+
+        let mut depot_info = Vec::new();
+        stop_info(&mut depot_info, &depot_stops, depot_next, false, None);
+        let depot_get = |key: &str| depot_info.iter()
+            .find(|(name, _)| *name == key)
+            .map(|(_, value)| value.clone());
+
+        assert_eq!(depot_get("next_stop"), Some(InfoValue::Text("Depot start".into())));
+        assert_eq!(depot_get("next_stop_number"), Some(InfoValue::Num(1.0)));
+        assert_eq!(depot_get("at_stop"), Some(InfoValue::Bool(false)));
     }
 
     /// The next stop and the one before it, by object ID, with their distances: the stop
