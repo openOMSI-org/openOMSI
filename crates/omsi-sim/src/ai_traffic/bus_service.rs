@@ -25,6 +25,7 @@ impl AiTimetable {
         host.tt_line = self.line.clone();
         host.tt_stops = self.stops.iter().map(|s| (s.1.clone(), s.2, s.3)).collect();
         host.tt_stop_ids = self.stops.iter().map(|s| s.0).collect();
+        host.tt_ibis_stops.clone_from(&host.tt_stops);
         host.tt_terminus_index = host
             .hof
             .as_ref()
@@ -35,6 +36,7 @@ impl AiTimetable {
             })
             .map_or(-1, |i| i as i32);
         host.tt_busstop_index = timetable_stop_index(host, next).unwrap_or(0) as i32;
+        host.tt_ibis_busstop_index = host.tt_busstop_index;
         host.tt_delay = 0.0;
     }
 }
