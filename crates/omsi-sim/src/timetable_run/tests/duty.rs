@@ -158,6 +158,35 @@ fn duty_place_keeps_first_stop_while_its_place_is_unknown() {
     assert_eq!(bus.host.tt_stops[0].0, "s0");
 }
 
+/// Pass-through timetable entries stay in the internal duty, but are omitted from
+/// the stop list exposed to the bus's IBIS scripts.
+#[test]
+fn feed_host_hides_pass_through_stops_from_ibis() {
+    let mut duty = early_departure_duty();
+    duty.trips[0] = planned(
+        100.0,
+        &[
+            (0.0, 100.0, 100.0),
+            (100.0, 200.0, 200.0),
+            (200.0, 300.0, 300.0),
+            (300.0, 400.0, 400.0),
+        ],
+    );
+    duty.trips[0].stops[1].stops = false;
+    duty.next_stop = 1;
+
+    let mut bus = timetable_test_vehicle();
+    duty.feed_host(&mut bus, 150.0);
+
+    assert_eq!(bus.host.tt_stops.len(), 4, "the internal timetable remains complete");
+    assert_eq!(
+        bus.host.tt_ibis_stops.iter().map(|s| s.0.as_str()).collect::<Vec<_>>(),
+        vec!["s0", "s2", "s3"]
+    );
+    assert_eq!(bus.host.tt_busstop_index, 1, "internal timetable index is unchanged");
+    assert_eq!(bus.host.tt_ibis_busstop_index, 1, "IBIS points to the next calling stop");
+}
+
 /// The terminus served (the bus stopped there, a door open): the duty goes on to the next
 /// trip at once, as OMSI 2 does - not a minute before it leaves (#2148, #2060).
 #[test]
