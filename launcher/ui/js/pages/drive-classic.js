@@ -180,7 +180,7 @@ function Continue({ go, busy }) {
       ${s.situations.map((x) => html`<div class="menu-item" role="button" tabindex="0" aria-disabled=${busy} onClick=${() => !busy && (setOpen(false), go({ situation: x.file }))} onKeyDown=${(e) => e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ') && !busy && (e.preventDefault(), setOpen(false), go({ situation: x.file }))}>
         <${Icon} name="play" size=${16} />
         <span class="grow"><b class="ellipsis">${t(x.name)}</b><span class="muted small">${new Date(x.saved * 1000).toLocaleString(language())}</span></span>
-        ${x.slot && html`<${Button} kind="ghost" small icon="edit" title="Rename the save" onClick=${(e) => (e.stopPropagation(), setNaming(x))} />`}
+        ${x.slot && html`<${Button} kind="ghost" small icon="edit" title="Rename the save" disabled=${busy} onClick=${(e) => (e.stopPropagation(), setNaming(x))} />`}
         <${Button} kind="ghost" small icon="trash" title="Delete" onClick=${(e) => remove(e, x)} />
       </div>`)}
     </div>`}

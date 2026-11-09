@@ -135,10 +135,10 @@ function Detail({ b, groups = [] }) {
 // (the depot list's choice for the buses kept in no depot)
 const NONE = '\u0001';
 
-/** A depot's name, asked in a dialog. */
+/** A name, asked in a dialog. */
 export function NameDialog({ title, value = '', label = 'Depot name', placeholder = 'Grand Paris-Moulon', onSave, onClose }) {
   const [name, setName] = useState(value);
-  const save = () => name.trim() && onSave(name.trim());
+  const save = () => name.trim() && name.trim() !== value && onSave(name.trim());
   return html`<${Dialog} title=${title} onClose=${onClose} footer=${html`
       <${Button} label="Cancel" onClick=${onClose} />
       <${Button} kind="primary" icon="check" label="Save" disabled=${!name.trim() || name.trim() === value} onClick=${save} />`}>

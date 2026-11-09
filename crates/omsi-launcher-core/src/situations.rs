@@ -1,5 +1,3 @@
-//! The situations a map can be continued from: its last one, the save slots and the quicksave.
-
 use crate::{content_dir, data_dir, root};
 use anyhow::Result;
 use serde::Serialize;
@@ -23,7 +21,6 @@ pub struct SavedSituation {
     pub file: PathBuf,
     pub name: String,
     pub saved: u64,
-    /// One of the map's own save slots: those alone can be renamed.
     pub slot: bool,
 }
 
@@ -69,8 +66,6 @@ pub fn delete_situation(map: &str, file: &Path) -> Result<bool> {
     Ok(true)
 }
 
-/// Give one of `map`'s save slots a new `[name]` (what the lists show). Whether it was a slot
-/// and the name one line of text.
 pub fn rename_situation(map: &str, file: &Path, name: &str) -> Result<bool> {
     let name = name.trim();
     if name.is_empty() || name.chars().any(char::is_control) || !listed(map, file).is_some_and(|s| s.slot) {
@@ -89,6 +84,7 @@ fn listed(map: &str, file: &Path) -> Option<SavedSituation> {
 
 fn write_name(file: &Path, name: &str) -> Result<()> {
     let bytes = std::fs::read(file)?;
+    let saved = std::fs::metadata(file)?.modified()?;
     let text = omsi_cfg::decode_text(&bytes);
     let mut lines: Vec<&str> = text.lines().collect();
     match lines.iter().position(|l| l.trim().eq_ignore_ascii_case("[name]")) {
@@ -107,9 +103,12 @@ fn write_name(file: &Path, name: &str) -> Result<()> {
         [0xFF, 0xFE].into_iter().chain(text.encode_utf16().flat_map(u16::to_le_bytes)).collect()
     };
     let tmp = file.with_extension("osn.renaming");
-    std::fs::write(&tmp, out)?;
-    std::fs::rename(&tmp, file)?;
-    Ok(())
+    // (the lists sort and date the saves by this time: a rename is not a newer save)
+    let written = std::fs::write(&tmp, out).and_then(|_| std::fs::File::options().write(true).open(&tmp)?.set_modified(saved)).and_then(|_| std::fs::rename(&tmp, file));
+    if written.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    Ok(written?)
 }
 
 /// The `[map]` a situation file was saved on (its head alone is read).
@@ -203,7 +202,9 @@ mod save_slot_tests {
         let body = "\r\n[map]\r\nmaps\\Grundorf\\global.cfg\r\n[name]\r\nx\r\n";
         std::fs::write(dir.join("Slot 1.osn"), utf16(&format!("[name]\r\nSlot 1: SD202, 09:00{body}"))).unwrap();
         std::fs::write(dir.join("Slot 2.osn"), b"[time]\r\n8\r\n").unwrap();
+        let before = std::fs::metadata(dir.join("Slot 1.osn")).unwrap().modified().unwrap();
         write_name(&dir.join("Slot 1.osn"), "Before the depot").unwrap();
+        assert_eq!(std::fs::metadata(dir.join("Slot 1.osn")).unwrap().modified().unwrap(), before);
         write_name(&dir.join("Slot 2.osn"), "Перед депо").unwrap();
         assert_eq!(std::fs::read(dir.join("Slot 1.osn")).unwrap(), utf16(&format!("[name]\r\nBefore the depot{body}")));
         assert_eq!(omsi_cfg::decode_text(&std::fs::read(dir.join("Slot 2.osn")).unwrap()), "[name]\r\nПеред депо\r\n\r\n[time]\r\n8\r\n");

@@ -301,7 +301,7 @@ impl App {
         };
         let head = if out.file_stem().is_some_and(|s| s.to_string_lossy() == n) { n.clone() } else { format!("Slot {n}") };
         // (a slot renamed in the launcher keeps its name when saved over)
-        let name = named.filter(|n| !n.starts_with(&format!("{head}:"))).unwrap_or_else(|| format!("{head}: {what}, {:02}:{:02}", (t / 3600.0) as i32 % 24, ((t % 3600.0) / 60.0) as i32));
+        let name = named.filter(|n| *n != head && !n.starts_with(&format!("{head}:"))).unwrap_or_else(|| format!("{head}: {what}, {:02}:{:02}", (t / 3600.0) as i32 % 24, ((t % 3600.0) / 60.0) as i32));
         let sit = build_situation(&self.args, w, &self.clock, self.args.weather.as_deref(), self.player.as_ref(), &self.session.placed, cam, self.session.duty.as_ref(), &name);
         let rel = rel_dir.join(out.file_name().map(|f| f.to_os_string()).unwrap_or_else(|| format!("Slot {n}.osn").into()));
         match save_or_fallback(&sit, &out, rel.as_path()) {
