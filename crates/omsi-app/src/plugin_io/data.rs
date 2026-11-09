@@ -117,11 +117,11 @@ pub(crate) fn read(
         ),
         Q::GetTTLineString => string(h.tt_line.clone()),
         Q::GetTTDelay => number(h.tt_delay),
-        Q::GetTTBusstopCount => number(h.tt_stops.len() as f32),
-        Q::GetTTBusstopIndex => number(if h.tt_stops.is_empty() {
+        Q::GetTTBusstopCount => number(h.tt_ibis_stops.len() as f32),
+        Q::GetTTBusstopIndex => number(if h.tt_ibis_stops.is_empty() {
             -1.0
         } else {
-            h.tt_busstop_index as f32
+            h.tt_ibis_busstop_index as f32
         }),
         Q::GetTTerminusIndex | Q::GetTTTerminusIndex => number(if h.tt_stops.is_empty() {
             -1.0
@@ -129,13 +129,13 @@ pub(crate) fn read(
             h.tt_terminus_index as f32
         }),
         Q::GetTTBusstopName => string(
-            h.tt_stops
+            h.tt_ibis_stops
                 .get(idx(0))
                 .map(|s| s.0.clone())
                 .unwrap_or_default(),
         ),
-        Q::GetTTBusstopArr => number(h.tt_stops.get(idx(0)).map_or(0.0, |s| s.1)),
-        Q::GetTTBusstopDep => number(h.tt_stops.get(idx(0)).map_or(0.0, |s| s.2)),
+        Q::GetTTBusstopArr => number(h.tt_ibis_stops.get(idx(0)).map_or(0.0, |s| s.1)),
+        Q::GetTTBusstopDep => number(h.tt_ibis_stops.get(idx(0)).map_or(0.0, |s| s.2)),
         Q::GetHeightAbovePoint => number(
             h.ground_probe
                 .as_ref()
