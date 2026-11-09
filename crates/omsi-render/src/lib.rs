@@ -446,7 +446,7 @@ const MASK_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const GBUF_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 const AUX_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Float;
 /// The renderer is built for Enhanced+: its HDR pipelines and targets have the two above.
-static RT_GBUF: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static RT_GBUF: crate::AdapterBool = crate::AdapterBool::new(6);
 fn rt_gbuf() -> bool {
     RT_GBUF.load(std::sync::atomic::Ordering::Relaxed)
 }

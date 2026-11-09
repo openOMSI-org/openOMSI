@@ -55,7 +55,8 @@ impl App {
         let dpi = self.window.as_ref().map(|w| w.scale_factor() as f32).unwrap_or(1.0);
         let scale = dpi * ui::size_factor(h, dpi, self.settings.ui_scale, self.settings.ui_scale_window);
         self.fix_pause_focus();
-        if self.menus.chooser.is_some() && crate::game_lists::bus_preview::is_vehicle_list(self.menus.list_kind.as_ref()) {
+        if self.menus.chooser.is_some() && crate::game_lists::bus_preview::is_vehicle_list(self.menus.list_kind.as_ref())
+            && self.renderer.as_ref().is_some_and(|r| r.device.adapter_info().backend != wgpu::Backend::Gl) {
             let kind = self.menus.list_kind.as_ref().unwrap();
             let index = self.menus.chooser.unwrap();
             let row = self.menus.admin_list.as_ref().and_then(|rows| rows.get(index));
@@ -63,7 +64,7 @@ impl App {
                 let (look, title, meta) = crate::game_lists::bus_preview::selection(self);
                 self.shell.bus_preview.select(look, title, meta);
             }
-            self.shell.bus_preview.update(crate::launcher::showroom_options(&self.settings));
+            self.shell.bus_preview.update(crate::launcher::showroom_options(&self.settings), self.renderer.as_ref().and_then(|r| r.adapter()));
             if let Some(renderer) = self.renderer.as_ref() { self.shell.upload_bus_preview(renderer); }
         } else if self.shell.bus_preview.active { self.shell.clear_bus_preview(); }
         let rail = self.game_menu_items();

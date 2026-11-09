@@ -146,7 +146,7 @@ fn in_game_bus_preview_render_real_vehicle() {
     );
     let started = Instant::now();
     while !sh.bus_preview.ready {
-        sh.bus_preview.update(options);
+        sh.bus_preview.update(options, renderer.adapter());
         assert!(sh.bus_preview.error.is_none(), "{:?}", sh.bus_preview.error);
         assert!(
             started.elapsed() < Duration::from_secs(180),
@@ -195,7 +195,7 @@ fn in_game_bus_preview_render_real_vehicle() {
             );
             let started = Instant::now();
             while !sh.bus_preview.ready {
-                sh.bus_preview.update(options);
+                sh.bus_preview.update(options, renderer.adapter());
                 assert!(sh.bus_preview.error.is_none(), "{:?}", sh.bus_preview.error);
                 assert!(started.elapsed() < Duration::from_secs(180));
                 std::thread::sleep(Duration::from_millis(16));

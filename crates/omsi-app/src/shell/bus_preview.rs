@@ -141,16 +141,20 @@ impl State {
         }
     }
 
-    pub fn update(&mut self, options: RenderOptions) {
+    pub fn update(&mut self, options: RenderOptions, adapter: Option<wgpu::Adapter>) {
         let Some(request) = self.request() else {
             return;
         };
         if self.worker.is_none() {
+            let Some(adapter) = adapter.filter(|a| a.get_info().backend != wgpu::Backend::Gl) else {
+                self.busy = false;
+                return;
+            };
             let (tx, requests) = mpsc::sync_channel(1);
             let (answers, rx) = mpsc::sync_channel(1);
             match std::thread::Builder::new()
                 .name("bus chooser preview".into())
-                .spawn(move || run(requests, answers, options))
+                .spawn(move || omsi_render::with_auxiliary_renderer(|| run(requests, answers, options, adapter)))
             {
                 Ok(_) => self.worker = Some(Worker { tx, rx }),
                 Err(error) => {
@@ -213,13 +217,12 @@ impl super::Shell {
     }
 }
 
-fn run(requests: Receiver<Request>, answers: SyncSender<Reply>, options: RenderOptions) {
+fn run(requests: Receiver<Request>, answers: SyncSender<Reply>, options: RenderOptions, adapter: wgpu::Adapter) {
     let Ok(mut request) = requests.recv() else {
         return;
     };
-    let instance = crate::graphics_instance();
-    let mut renderer = match pollster::block_on(Renderer::new_with(
-        &instance,
+    let mut renderer = match pollster::block_on(Renderer::new_on(
+        adapter,
         None,
         Some(wgpu::TextureFormat::Rgba8UnormSrgb),
         options,
@@ -507,12 +510,14 @@ mod tests {
             ..Default::default()
         };
         let options = crate::launcher::showroom_options(&crate::settings::Settings::load());
+        let instance = crate::graphics_instance();
+        let renderer = pollster::block_on(Renderer::new_with(&instance, None, None, options)).unwrap();
         let mut state = State::default();
         state.select(Some(look.clone()), "Bus".into(), String::new());
         let wait = |state: &mut State| {
             let start = Instant::now();
             loop {
-                state.update(options);
+                state.update(options, renderer.adapter());
                 assert!(state.error.is_none(), "{:?}", state.error);
                 if let Some(pixels) = state.pixels.take() {
                     break pixels;
@@ -532,7 +537,7 @@ mod tests {
         let mut picture = original.clone();
         while start.elapsed() < Duration::from_secs(3) {
             state.orbit.0 = start.elapsed().as_secs_f32() * 100.0;
-            state.update(options);
+            state.update(options, renderer.adapter());
             assert!(state.error.is_none(), "{:?}", state.error);
             if let Some(pixels) = state.pixels.take() {
                 max_gap = max_gap.max(last.elapsed());
@@ -666,7 +671,7 @@ mod tests {
         drop(answers);
         state.worker = Some(Worker { tx, rx });
         state.sent = state.request();
-        state.update(RenderOptions::default());
+        state.update(RenderOptions::default(), None);
         assert!(!state.busy);
         assert!(state.error.is_some());
     }

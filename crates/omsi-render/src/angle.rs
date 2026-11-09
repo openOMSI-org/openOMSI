@@ -60,11 +60,12 @@ where
     #[cfg(windows)]
     {
         no_parallel_compiles(device);
+        let context = crate::auxiliary_context();
         std::thread::scope(|scope| {
             std::thread::Builder::new()
                 .name("ANGLE shader compiler".into())
                 .stack_size(COMPILER_STACK_MB << 20)
-                .spawn_scoped(scope, operation)
+                .spawn_scoped(scope, move || crate::with_auxiliary_context(context, operation))
                 .expect("ANGLE shader compiler thread")
                 .join()
                 .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
