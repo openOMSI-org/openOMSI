@@ -74,21 +74,22 @@ pub(crate) fn script_route_index(bus: &crate::VehicleInstance) -> Option<usize> 
 /// so on a forward step the value is left at the previous route index and that `+ 1` lands
 /// on the new one. A backward step (or a resume) writes the index itself and freezes the
 /// ibox's "last TT index" so the frame does not announce again.
-pub(crate) fn sync_script_busstop(bus: &mut crate::VehicleInstance, tt: usize, name: &str, prev_tt: i32) {
+pub(crate) fn sync_script_busstop(
+    bus: &mut crate::VehicleInstance,
+    timetable_stop: usize,
+    name: &str,
+    forward: bool,
+    ibis_index: i32,
+) {
     let Some(hof) = bus.host.hof.clone() else { return };
     let Some(route) = script_route_index(bus) else { return };
-    let Some(idx) = ibis_stop_index(&hof, route, name, tt) else { return };
-    let forward = (tt as i32) > prev_tt;
+    let Some(idx) = ibis_stop_index(&hof, route, name, timetable_stop) else { return };
     let value = if forward { idx.saturating_sub(1) } else { idx };
-    for var in ["ibox_busstop"] {
-        if bus.var(var).is_some() {
-            bus.set_var(var, value as f32);
-        }
+    if bus.var("ibox_busstop").is_some() {
+        bus.set_var("ibox_busstop", value as f32);
     }
-    if !forward {
-        if bus.var("ibox_TTBusstopIndexLAST").is_some() {
-            bus.set_var("ibox_TTBusstopIndexLAST", tt as f32);
-        }
+    if !forward && bus.var("ibox_TTBusstopIndexLAST").is_some() {
+        bus.set_var("ibox_TTBusstopIndexLAST", ibis_index as f32);
     }
 }
 
@@ -693,17 +694,19 @@ impl PlayerDuty {
     pub(crate) fn feed_host(&self, bus: &mut crate::VehicleInstance, day_time: f64) {
         let delay = self.delay(day_time);
         let trip = &self.trips[self.trip_index];
-        let prev_tt = bus.host.tt_busstop_index;
-        let stop_name = trip.stops.get(self.next_stop).map(|s| s.name.clone());
+        let prev_ibis = bus.host.tt_ibis_busstop_index;
+        let calling: Vec<(usize, &PlannedStop)> = trip.stops.iter().enumerate().filter(|(_, stop)| stop.stops).collect();
+        let next_calling = calling.iter().position(|(index, _)| *index >= self.next_stop)
+            .or_else(|| calling.len().checked_sub(1));
+        let ibis_stop = next_calling.and_then(|index| calling.get(index).copied());
+        let ibis_index = next_calling.map_or(-1, |index| index as i32);
         {
             let host = &mut bus.host;
             host.tt_line = trip.line.clone();
-            host.tt_stops = trip
-                .stops
-                .iter()
-                .map(|s| (s.name.clone(), s.arr as f32, s.dep as f32))
-                .collect();
+            host.tt_stops = trip.stops.iter().map(|s| (s.name.clone(), s.arr as f32, s.dep as f32)).collect();
             host.tt_stop_ids = trip.stops.iter().map(|s| s.object_id).collect();
+            host.tt_ibis_stops = calling.iter().map(|(_, s)| (s.name.clone(), s.arr as f32, s.dep as f32)).collect();
+            host.tt_ibis_busstop_index = ibis_index;
             host.tt_busstop_index = self.next_stop as i32;
             host.tt_terminus_index = tt_terminus_index(host.hof.as_deref(), &trip.terminus);
             // (whole seconds, as Omsi.exe keeps it: an integer field of the vehicle, the
@@ -715,9 +718,9 @@ impl PlayerDuty {
         // `GetTTBusstopIndex` changes. A jump of more than one stop, or a unit that only
         // has `ibox_busstop`, left that counter behind the timetable - the announcement
         // used the new TT name while the list still showed the old `ibox_busstop` row.
-        if self.next_stop as i32 != prev_tt {
-            if let Some(name) = stop_name.as_deref() {
-                sync_script_busstop(bus, self.next_stop, name, prev_tt);
+        if ibis_index != prev_ibis {
+            if let Some((timetable_stop, stop)) = ibis_stop {
+                sync_script_busstop(bus, timetable_stop, &stop.name, ibis_index > prev_ibis, ibis_index);
             }
         }
     }
