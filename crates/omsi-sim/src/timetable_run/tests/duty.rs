@@ -725,11 +725,9 @@ fn catch_up_skips_pass_through_stations() {
     d.advance(glam::DVec3::new(0.0, 0.0, 0.0), 0.0);
     d.advance(glam::DVec3::new(60.0, 0.0, 0.0), 30.0);
 
-    // Passing the pass-through station must not make it the next stop.
     d.advance(glam::DVec3::new(500.0, 0.0, 0.0), 60.0);
     assert_eq!(d.next_stop, 1);
 
-    // The pass-through station is not counted as missed when catching up.
     d.advance(glam::DVec3::new(1000.0, 0.0, 0.0), 90.0);
     assert_eq!(d.next_stop, 3);
     assert_eq!(d.take_skipped(), Some((1, 2, 4)));
