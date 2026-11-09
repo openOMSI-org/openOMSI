@@ -5,7 +5,8 @@
 //! lists them, as nearly every wheel has them; and a device with no pedal lying at an end
 //! (a joystick, a wheel with its pedals on one combined axis) drives with its Y axis, pushed
 //! forward to go and pulled back to brake. Before, such a device only steered and the
-//! player had to set up its pedals by hand in the launcher. Gamepads keep their own layout
+//! player had to set up its pedals by hand in the launcher. A wheel listed in `defaults/`
+//! for this platform uses that pedal order instead. Gamepads keep their own layout
 //! (`gamepad_profile`); whatever is guessed here is saved like a set-up made by hand and
 //! can be changed in the launcher's Game controllers page.
 
@@ -16,19 +17,6 @@ use crate::controllers::{Connected, DeviceCfg, Func};
 pub(crate) const PEDAL_REST: f32 = 0.9;
 /// How near its centre the Y axis must rest to drive as a combined throttle and brake.
 const CENTRE_REST: f32 = 0.2;
-
-/// Logitech's wheels on macOS and Linux, read as their HID report has them (Windows's
-/// Logitech driver reorders the pedals): the clutch on Y, the throttle on Z, the brake on Rz.
-const LOGITECH: u16 = 0x046d;
-const LOGITECH_HID_PEDALS: &[u16] = &[
-    0xc24f, // G29 (PlayStation)
-    0xc260, // G29 (PlayStation 4 mode)
-    0xc262, // G920
-    0xc266, // G923 (PlayStation)
-    0xc267, // G923 (PlayStation, Xbox's mode)
-    0xc26d, // G923 (Xbox)
-    0xc26e, // G923 (Xbox)
-];
 
 /// The set-up of a device nobody has set up, from its axes at rest (DirectInput slots:
 /// X, Y, Z, Rx, Ry, Rz and the two sliders, -1..1). None: nothing it could drive with.
@@ -54,8 +42,15 @@ pub fn guess(name: &str, hardware_id: Option<(u16, u16)>, ff_capable: bool, rest
         return None;
     }
     let slots: Vec<usize> = pedals.iter().map(|p| p.0).collect();
-    let logitech_hid = !cfg!(windows) && hardware_id.is_some_and(|(v, p)| v == LOGITECH && LOGITECH_HID_PEDALS.contains(&p)) && slots == [1, 2, 5];
-    let order: &[Func] = if logitech_hid { &[Func::Clutch, Func::Throttle, Func::Brake] } else { &[Func::Throttle, Func::Brake, Func::Clutch] };
+    if let Some(assigned) = crate::wheel_defaults::pedals_for(hardware_id, &slots) {
+        for &(k, v) in &pedals {
+            if let Some((_, f)) = assigned.iter().find(|(axis, _)| *axis == k) {
+                d.axes[k] = Some((*f, v > 0.0));
+            }
+        }
+        return Some(d);
+    }
+    let order: &[Func] = &[Func::Throttle, Func::Brake, Func::Clutch];
     for (&(k, v), &f) in pedals.iter().zip(order) {
         // (a pedal reads -1 up and 1 down: one resting at 1 runs the other way)
         d.axes[k] = Some((f, v > 0.0));
