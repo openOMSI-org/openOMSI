@@ -185,6 +185,30 @@ fn feed_host_hides_pass_through_stops_from_ibis() {
     assert_eq!(bus.host.tt_ibis_busstop_index, 1, "IBIS points to the next calling stop");
 }
 
+#[test]
+fn depot_run_keeps_all_stops_in_ibis_when_none_are_calling() {
+    let mut duty = early_departure_duty();
+    duty.trips[0] = planned(
+        100.0,
+        &[
+            (0.0, 100.0, 100.0),
+            (100.0, 200.0, 200.0),
+            (200.0, 300.0, 300.0),
+        ],
+    );
+    for stop in &mut duty.trips[0].stops {
+        stop.stops = false;
+    }
+    duty.next_stop = 0;
+
+    let mut bus = timetable_test_vehicle();
+    duty.feed_host(&mut bus, 100.0);
+
+    assert_eq!(bus.host.tt_ibis_stops.len(), 3);
+    assert_eq!(bus.host.tt_ibis_stops[0].0, "s0");
+    assert_eq!(bus.host.tt_ibis_busstop_index, 0);
+}
+
 /// The terminus served (the bus stopped there, a door open): the duty goes on to the next
 /// trip at once, as OMSI 2 does - not a minute before it leaves (#2148, #2060).
 #[test]
