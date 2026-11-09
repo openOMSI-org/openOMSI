@@ -255,6 +255,8 @@ pub enum MenuKind {
     Lines,
     /// One line's tours.
     Tours,
+    /// Vehicle placement and swapping with the launcher showroom.
+    Vehicles,
     /// Any other list (drivers, fleet numbers, destinations, liveries ...).
     List,
 }

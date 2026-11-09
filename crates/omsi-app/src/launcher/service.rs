@@ -146,7 +146,7 @@ fn serve(rx: std::sync::mpsc::Receiver<Value>, reply: Reply) {
                 }
                 let _ = omsi_launcher_lib::content_dir();
                 let root = omsi_launcher_lib::root_dir().unwrap_or_default();
-                showroom.want(Look { root, map: s("map"), bus: s("bus"), paint: s("paint"), weather: s("weather"), time: f("time", 540.0) as i32, date: s("date") });
+                showroom.want(Look { root, map: s("map"), bus: s("bus"), paint: s("paint"), paint_index: None, weather: s("weather"), time: f("time", 540.0) as i32, date: s("date") });
                 send(&id, json!({ "ok": true }), &[]);
             }
             "orbit" => {
