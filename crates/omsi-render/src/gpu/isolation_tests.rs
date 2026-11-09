@@ -126,3 +126,18 @@ fn mesh_pages_use_their_device_not_another_renderers_rt_state() {
         });
     });
 }
+
+#[test]
+fn mesh_blas_usage_respects_fallback_and_device_features() {
+    with_auxiliary_renderer(|| {
+        for enabled in [false, true] {
+            crate::RT_BUFFERS.store(enabled, Relaxed);
+            for capable in [false, true] {
+                let features = if capable { wgpu::Features::EXPERIMENTAL_RAY_QUERY } else { wgpu::Features::empty() };
+                let usage = crate::mesh_blas_usage(features);
+                assert_eq!(usage.contains(wgpu::BufferUsages::BLAS_INPUT), enabled && capable);
+                assert_eq!(usage.contains(wgpu::BufferUsages::STORAGE), enabled && capable);
+            }
+        }
+    });
+}
