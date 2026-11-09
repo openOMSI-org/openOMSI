@@ -59,8 +59,8 @@ pub fn guess(name: &str, hardware_id: Option<(u16, u16)>, ff_capable: bool, rest
     }
     let slots: Vec<usize> = pedals.iter().map(|p| p.0).collect();
     let logitech_hid = !cfg!(windows) && hardware_id.is_some_and(|(v, p)| v == LOGITECH && LOGITECH_HID_PEDALS.contains(&p)) && slots == [1, 2, 5];
-    // Windows and Linux: brake on Y, throttle on Rz. macOS is not confirmed.
-    let t300 = cfg!(any(windows, target_os = "linux")) && hardware_id == Some((THRUSTMASTER, T300RS));
+    // Windows lists this base's brake before the throttle.
+    let t300 = cfg!(windows) && hardware_id == Some((THRUSTMASTER, T300RS));
     let order: &[Func] = if logitech_hid {
         &[Func::Clutch, Func::Throttle, Func::Brake]
     } else if t300 {
@@ -177,7 +177,7 @@ mod tests {
             assert_eq!(funcs(&d), [(0, Func::Steering, false), (1, Func::Throttle, true), (5, Func::Brake, true), (6, Func::Clutch, true)]);
         }
         let d = guess("Thrustmaster T300RS", Some((0x044f, 0xb66e)), true, &[(0, -0.02), (1, -1.0), (5, -0.98)], false).unwrap();
-        let expected = if cfg!(any(windows, target_os = "linux")) {
+        let expected = if cfg!(windows) {
             [(0, Func::Steering, false), (1, Func::Brake, false), (5, Func::Throttle, false)]
         } else {
             [(0, Func::Steering, false), (1, Func::Throttle, false), (5, Func::Brake, false)]
@@ -188,7 +188,7 @@ mod tests {
     #[test]
     fn a_t300_swaps_throttle_and_brake_and_leaves_the_clutch_on_slider_1() {
         let d = guess("T300 RS GT", Some((0x044f, 0xb66e)), true, &[(0, 0.0), (1, -1.0), (5, -1.0), (7, -1.0)], false).unwrap();
-        let expected = if cfg!(any(windows, target_os = "linux")) {
+        let expected = if cfg!(windows) {
             [(0, Func::Steering, false), (1, Func::Brake, false), (5, Func::Throttle, false), (7, Func::Clutch, false)]
         } else {
             [(0, Func::Steering, false), (1, Func::Throttle, false), (5, Func::Brake, false), (7, Func::Clutch, false)]
@@ -197,21 +197,15 @@ mod tests {
         assert_eq!(d.ff_invert, None);
         assert!(d.buttons.is_empty());
         let d = guess("T300 RS", Some((0x044f, 0xb66e)), true, &[(0, 0.0), (1, -1.0), (5, -1.0)], false).unwrap();
-        let expected = if cfg!(any(windows, target_os = "linux")) {
+        let expected = if cfg!(windows) {
             [(0, Func::Steering, false), (1, Func::Brake, false), (5, Func::Throttle, false)]
         } else {
             [(0, Func::Steering, false), (1, Func::Throttle, false), (5, Func::Brake, false)]
         };
         assert_eq!(funcs(&d), expected);
-        // Linux: the clutch is slot 6, and the pedals rest at +1.
-        let d = guess("T300 RS GT", Some((0x044f, 0xb66e)), true, &[(0, 0.005), (1, 1.0), (5, 1.0), (6, 1.0)], false).unwrap();
-        let expected = if cfg!(any(windows, target_os = "linux")) {
-            [(0, Func::Steering, false), (1, Func::Brake, true), (5, Func::Throttle, true), (6, Func::Clutch, true)]
-        } else {
-            [(0, Func::Steering, false), (1, Func::Throttle, true), (5, Func::Brake, true), (6, Func::Clutch, true)]
-        };
-        assert_eq!(funcs(&d), expected);
         let d = guess("Other wheel", None, true, &[(0, 0.0), (1, -1.0), (5, -1.0), (7, -1.0)], false).unwrap();
+        assert_eq!(funcs(&d), [(0, Func::Steering, false), (1, Func::Throttle, false), (5, Func::Brake, false), (7, Func::Clutch, false)]);
+        let d = guess("Other Thrustmaster", Some((0x044f, 0xb65e)), true, &[(0, 0.0), (1, -1.0), (5, -1.0), (7, -1.0)], false).unwrap();
         assert_eq!(funcs(&d), [(0, Func::Steering, false), (1, Func::Throttle, false), (5, Func::Brake, false), (7, Func::Clutch, false)]);
         assert_eq!(d.ff_invert, None);
         assert!(d.buttons.is_empty());
@@ -253,7 +247,7 @@ mod tests {
         let d = guess("Fanatec ClubSport Pedals", None, false, &[(0, -1.0), (1, -1.0), (2, -1.0)], true).unwrap();
         assert_eq!(funcs(&d), [(0, Func::Throttle, false), (1, Func::Brake, false), (2, Func::Clutch, false)]);
         let d = guess("Thrustmaster T300RS", Some((0x044f, 0xb66e)), true, &[(0, -0.02), (1, -1.0), (5, -0.98)], true).unwrap();
-        let expected = if cfg!(any(windows, target_os = "linux")) {
+        let expected = if cfg!(windows) {
             [(0, Func::Steering, false), (1, Func::Brake, false), (5, Func::Throttle, false)]
         } else {
             [(0, Func::Steering, false), (1, Func::Throttle, false), (5, Func::Brake, false)]

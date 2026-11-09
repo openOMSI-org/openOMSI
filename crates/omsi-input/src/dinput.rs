@@ -51,7 +51,7 @@ const G923_PRODUCTS: [u16; 4] = [0xC266, 0xC267, 0xC26D, 0xC26E];
 const T300_PC: (u16, u16) = (0x044F, 0xB66E);
 
 /// A G923 (pulse +0.15 left, -0.15 right) and a T300 in PC mode (pulses +0.25 and +0.26
-/// moved the axis about -0.08) turn the other way from a positive force. Other wheels do not.
+/// moved the axis about -0.08) turn the other way from a positive force. Other wheels stay as they were.
 fn force_flipped_for(hardware_id: Option<(u16, u16)>) -> bool {
     hardware_id.is_some_and(|id| (id.0 == LOGITECH_VENDOR && G923_PRODUCTS.contains(&id.1)) || id == T300_PC)
 }

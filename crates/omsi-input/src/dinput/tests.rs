@@ -5,6 +5,7 @@ fn a_g923_and_a_t300_have_their_force_flipped() {
     assert!(force_flipped_for(Some((0x046D, 0xC266)))); // G923 PlayStation/PC
     assert!(force_flipped_for(Some((0x046D, 0xC26E)))); // G923 Xbox
     assert!(force_flipped_for(Some((0x044F, 0xB66E)))); // Thrustmaster T300, PC mode
+    assert!(!force_flipped_for(Some((0x044F, 0xB65E)))); // another Thrustmaster product
     assert!(!force_flipped_for(Some((0x046D, 0xC24F)))); // G29
     assert!(!force_flipped_for(Some(VJOY_HARDWARE_ID)));
     assert!(!force_flipped_for(None));
