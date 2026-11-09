@@ -695,7 +695,10 @@ impl PlayerDuty {
         let delay = self.delay(day_time);
         let trip = &self.trips[self.trip_index];
         let prev_ibis = bus.host.tt_ibis_busstop_index;
-        let calling: Vec<(usize, &PlannedStop)> = trip.stops.iter().enumerate().filter(|(_, stop)| stop.stops).collect();
+        let mut calling: Vec<(usize, &PlannedStop)> = trip.stops.iter().enumerate().filter(|(_, stop)| stop.stops).collect();
+        if calling.is_empty() {
+            calling = trip.stops.iter().enumerate().collect();
+        }
         let next_calling = calling.iter().position(|(index, _)| *index >= self.next_stop)
             .or_else(|| calling.len().checked_sub(1));
         let ibis_stop = next_calling.and_then(|index| calling.get(index).copied());
