@@ -135,6 +135,7 @@ impl PlayerDuty {
     /// `trip_index`, before the bus has been placed on it; `picked` when the player picked
     /// the trip.
     pub fn new(line: String, tour: String, trips: Vec<PlannedTrip>, trip_index: usize, first_trip: usize, picked: bool) -> PlayerDuty {
+        let ibis_stops = vec![None; trips.len()];
         PlayerDuty {
             line,
             tour,
@@ -160,7 +161,7 @@ impl PlayerDuty {
             position: None,
             unnumbered_public: Vec::new(),
             passed: PassedStop::default(),
-            ibis_stops: vec![None; trips.len()],
+            ibis_stops,
             ibis_host_trip: None,
         }
     }
