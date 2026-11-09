@@ -1218,7 +1218,7 @@ mod tests {
         stop_info(&mut info, &stops, next, false, None);
         let get = |key: &str| info.iter().find(|(name, _)| *name == key).map(|(_, value)| value.clone());
         assert_eq!(get("next_stop"), Some(InfoValue::Text("Next calling stop".into())));
-        assert_eq!(get("next_stop_number"), Some(InfoValue::Num(3.0)));
+        assert_eq!(get("next_stop_number"), Some(InfoValue::Num(4.0)));
         assert_eq!(get("next_stop_id"), Some(InfoValue::Num(13.0)));
         assert_eq!(get("at_stop"), Some(InfoValue::Bool(false)));
     }

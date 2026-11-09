@@ -227,6 +227,8 @@ mod tests {
         );
         v.state.str_vars[v.host.number_var.unwrap() as usize] = "1234".into();
         v.host.tt_stops = vec![("Night stop".into(), 86460.0, 86490.0)];
+        v.host.tt_ibis_stops = v.host.tt_stops.clone();
+        v.host.tt_ibis_busstop_index = 0;
         v.host.tt_line = "200E".into();
         v.host.hof = Some(std::sync::Arc::new(omsi_vehicle::Hof {
             termini: vec![omsi_vehicle::hof::Terminus {
