@@ -43,6 +43,15 @@ fn cloud_kind(total: f32, deck: f32) -> &'static str {
     else { "-1" }
 }
 
+#[derive(Debug, Clone)]
+/// Monthly climate statistics per location, specified in the map's `climate.txt`
+pub struct ClimateStats {
+    /// Mean temperatures (°C)
+    pub temp: [f32; 12],
+    /// Mean precipitations (mm)
+    pub precip: [f32; 12]
+}
+
 /// The model's state at one moment.
 #[derive(Debug, Clone)]
 pub struct WeatherModel {
@@ -50,6 +59,8 @@ pub struct WeatherModel {
     hours: f64,
     /// Seed of the year's large-scale waves.
     year_seed: u32,
+    /// Leapness of the year
+    is_leap: bool,
     latitude: f32,
     /// Air temperature at 2 m (°C).
     pub temp: f32,
@@ -91,6 +102,8 @@ pub struct WeatherModel {
     /// Altocumulus (cover of the layer at 2-6 km): moist air at the middle levels
     /// ahead of a front, before the troposphere is saturated.
     pub alto: f32,
+    /// Optional: climate stats for computing the temperature for the given day
+    pub climate_stats: Option<ClimateStats>,
 }
 
 /// What the renderer takes from the model besides the `.owt` values.
@@ -120,6 +133,7 @@ pub struct ModelRun {
     year: i32,
     latitude: f64,
     longitude: f64,
+    climate_stats: Option<ClimateStats>,
     /// The clock time (s of the day, day of the year) the model stands at.
     at: (i32, f64),
 }
@@ -131,12 +145,12 @@ impl ModelRun {
     /// Start the model for a session beginning at `clock` (at the map's place as far as it
     /// is known yet: `refresh` starts it again once the map has told its own) and give its
     /// weather.
-    pub fn start(clock: &omsi_sim::SimClock) -> (ModelRun, Weather) {
+    pub fn start(clock: &omsi_sim::SimClock, climate_stats: &Option<ClimateStats>) -> (ModelRun, Weather) {
         let place = omsi_sim::daylight::place();
-        let model = WeatherModel::new(clock, &place);
+        let model = WeatherModel::new(clock, &place, climate_stats);
         let w = model.weather();
         log::info!("weather: the physical model, {:.1} °C, {:.0} % humidity, cumulus {:.2}, deck {:.2}, veil {:.2}, fog {:.2}, rain {:.2}, visibility {:.0} m", model.temp, model.humidity() * 100.0, model.cumulus, model.deck, model.veil, model.fog, model.precip, w.fog.0);
-        (ModelRun { model, year: clock.year, latitude: place.latitude, longitude: place.longitude, at: (clock.day_of_year, clock.time) }, w)
+        (ModelRun { model, year: clock.year, latitude: place.latitude, longitude: place.longitude, at: (clock.day_of_year, clock.time), climate_stats: climate_stats.clone() }, w)
     }
 
     /// Carry the model on to `clock` (started again where the map's place differs from the
@@ -148,7 +162,7 @@ impl ModelRun {
         let elapsed = (clock.day_of_year - s.at.0) as f64 * 86_400.0 + (clock.time - s.at.1);
         let moved = (place.latitude - s.latitude).abs() > 0.01 || (place.longitude - s.longitude).abs() > 0.01;
         if moved || clock.year != s.year || !(0.0..=86_400.0).contains(&elapsed) {
-            s.model = WeatherModel::new(clock, &place);
+            s.model = WeatherModel::new(clock, &place, &s.climate_stats);
             s.year = clock.year;
             s.latitude = place.latitude;
             s.longitude = place.longitude;
@@ -249,6 +263,35 @@ impl WeatherModel {
 
     /// The climate's mean temperature (°C) for the day of the year at the latitude.
     fn climate_temp(&self, doy: f32) -> f32 {
+        if let Some(stats) = &self.climate_stats {
+            let midpoints = if self.is_leap {
+                [16.5f32, 46.5, 76.5, 107.0, 137.5, 168.0, 198.5, 229.5, 260.0, 290.5, 321.0, 351.5, 382.5]                
+            } else {
+                [16.5f32, 46.0, 75.5, 106.0, 136.5, 167.0, 197.5, 228.5, 259.0, 289.5, 320.0, 350.5, 381.5]
+            };
+            let days_in_year = if self.is_leap { 366.0 } else { 365.0 };
+            let doy = (doy - 1.0).rem_euclid(days_in_year) + 1.0;
+            let doy = if doy < midpoints[0] { doy + days_in_year } else { doy }; 
+            let interval = midpoints.iter().position(|x| x >= &doy).map(|x| if x == 0 { 12 } else { x });
+            match interval {
+                Some(idx) if (1..=12).contains(&idx) => {
+                    
+                    let t = (doy - midpoints[idx - 1]) / (midpoints[idx] - midpoints[idx - 1]);
+                    let temp_diff = if idx == 12 {
+                        stats.temp[0] - stats.temp[11]
+                    } else {
+                        stats.temp[idx] - stats.temp[idx - 1]
+                    };
+                    stats.temp[idx - 1] + t * temp_diff
+                }
+                _ => unreachable!()
+            }
+        } else {
+            self.default_climate_temp(doy)
+        }
+    }
+
+    fn default_climate_temp(&self, doy: f32) -> f32 {
         // (27 °C at the equator, 10 at Berlin's 52.5°, -3 at 70°; the seasons' swing grows
         // towards the poles)
         let lat = self.latitude.abs();
@@ -260,14 +303,16 @@ impl WeatherModel {
     /// A model for the clock at `place`, spun up over the three weeks before it so that what
     /// it shows at the start already follows from the days before - the snow of last
     /// week's cold spell included.
-    pub fn new(clock: &omsi_sim::SimClock, place: &omsi_sim::daylight::SunPlace) -> WeatherModel {
+    pub fn new(clock: &omsi_sim::SimClock, place: &omsi_sim::daylight::SunPlace, climate_stats: &Option<ClimateStats>) -> WeatherModel {
         let solar = place.solar_hours(clock);
         let hours = (clock.day_of_year - 1) as f64 * 24.0 + solar;
         let year_seed = (clock.year.rem_euclid(100_000) as u32).wrapping_mul(2_654_435_761);
+        let is_leap = omsi_sim::clock::days_in_year(clock.year) == 366;
         let mut m = WeatherModel {
             hours: hours - SPIN_UP_HOURS,
             year_seed,
             latitude: place.latitude as f32,
+            is_leap,
             temp: 10.0,
             q: 6.0,
             mixed: 300.0,
@@ -286,6 +331,7 @@ impl WeatherModel {
             deck_tau: 8.0,
             cu_depth: 800.0,
             alto: 0.0,
+            climate_stats: climate_stats.clone(),
         };
         let (doy, _) = sun_at(clock.year, m.hours, place);
         m.temp = m.climate_temp(doy);
@@ -521,9 +567,9 @@ mod tests {
         omsi_sim::daylight::SunPlace::default()
     }
 
-    fn run(year: i32, doy: i32, days: i32, mut f: impl FnMut(&WeatherModel, f64)) {
+    fn run(year: i32, doy: i32, days: i32, climate_stats: Option<ClimateStats>, mut f: impl FnMut(&WeatherModel, f64)) {
         let clock = omsi_sim::SimClock { year, day_of_year: doy, time: 0.0, ..Default::default() };
-        let mut m = WeatherModel::new(&clock, &place());
+        let mut m = WeatherModel::new(&clock, &place(), &climate_stats);
         for k in 0..(days * 24 * 2) {
             m.step(year, &place(), 0.5);
             f(&m, k as f64 * 0.5);
@@ -535,7 +581,7 @@ mod tests {
         // over a summer month: afternoons warmer than the mornings by several degrees on
         // average, and the temperature within what a Berlin summer has
         let (mut morning, mut afternoon, mut n) = (0.0, 0.0, 0);
-        run(2026, 180, 30, |m, h| {
+        run(2026, 180, 30, None, |m, h| {
             let hod = (h + 72.0).rem_euclid(24.0);
             assert!((-2.0..40.0).contains(&m.temp), "{} at {h}", m.temp);
             if (5.5..6.0).contains(&hod) {
@@ -558,7 +604,7 @@ mod tests {
         let mut fog_mornings = 0;
         let mut cumulus_afternoons = 0;
         let mut clear_evenings = 0;
-        run(2026, 1, 45, |m, h| {
+        run(2026, 1, 45, None, |m, h| {
             let hod = (h + 72.0).rem_euclid(24.0);
             if (13.0..13.5).contains(&hod) && m.deck > 0.85 {
                 grey_winter += 1;
@@ -567,7 +613,7 @@ mod tests {
                 rain_hours += 1;
             }
         });
-        run(2026, 170, 45, |m, h| {
+        run(2026, 170, 45, None, |m, h| {
             let hod = (h + 72.0).rem_euclid(24.0);
             if (13.0..13.5).contains(&hod) && m.deck > 0.85 {
                 grey_summer += 1;
@@ -579,7 +625,7 @@ mod tests {
                 clear_evenings += 1;
             }
         });
-        run(2026, 280, 45, |m, h| {
+        run(2026, 280, 45, None, |m, h| {
             let hod = (h + 72.0).rem_euclid(24.0);
             if (6.5..7.0).contains(&hod) && m.fog > 0.4 {
                 fog_mornings += 1;
@@ -598,7 +644,7 @@ mod tests {
         let mut after_rain = Vec::new();
         let mut dry_long = Vec::new();
         let mut since = 1000.0;
-        run(2026, 120, 90, |m, _| {
+        run(2026, 120, 90, None, |m, _| {
             if m.precip > 0.2 {
                 since = 0.0;
             } else {
@@ -619,13 +665,42 @@ mod tests {
     #[test]
     fn the_state_changes_smoothly() {
         let mut last: Option<WeatherModel> = None;
-        run(2026, 200, 10, |m, _| {
+        run(2026, 200, 10, None, |m, _| {
             if let Some(l) = &last {
                 assert!((m.temp - l.temp).abs() < 2.5, "{} -> {}", l.temp, m.temp);
                 assert!((m.deck - l.deck).abs() < 0.4 && (m.cumulus - l.cumulus).abs() < 0.5);
             }
             last = Some(m.clone());
         });
+    }
+
+    #[test]
+    fn polar_winters_are_frosty_and_summers_are_hot() {
+        let stats = ClimateStats {
+            temp: [-15.0, -12.0, -5.0, 4.0, 14.0, 17.0, 20.0, 18.0, 11.0, 5.0, -1.0, -11.0],
+            precip: [32.0, 28.0, 35.0, 42.0, 57.0, 71.0, 64.0, 60.0, 48.0, 40.0, 35.0, 31.0]
+        };
+        let mut frosty_mornings = 0;
+        let mut hot_afternoons = 0;
+        run(2026, 1, 60, Some(stats.clone()), |m, h| {
+            let hod = (h + 72.0).rem_euclid(24.0);
+            let doy = h.div_euclid(24.0) + 1.0;
+            if (5.0..5.5).contains(&hod) && m.temp < -10.0 { frosty_mornings += 1; }
+            let mean_temp = m.climate_temp(doy as f32);
+            assert!(mean_temp < 0.0, "the required temperature is too high: {}°C in winter at day {}", mean_temp, doy);
+            assert!(m.temp <= 3.0, "the weather is too warm for winter: {}°C at day {}", m.temp, doy);
+        });
+        assert!(frosty_mornings > 30, "the winter is too warm: {frosty_mornings} out of 60 days have less than -10°C");
+        run(2026, 152, 90, Some(stats.clone()), |m, h| {
+            let hod = (h + 72.0).rem_euclid(24.0);
+            let doy = h.div_euclid(24.0) + 152.0;
+            if (14.0..14.5).contains(&hod) && m.temp > 25.0 { hot_afternoons += 1; }
+            let mean_temp = m.climate_temp(doy as f32);
+            assert!(mean_temp > 15.0, "the required temperature is too low: {}°C in summer at day {}", mean_temp, doy);
+            assert!(m.temp >= 8.0, "the weather is too cold for summer: {}°C at day {}", m.temp, doy);
+        });
+        assert!(hot_afternoons > 30, "the summer is too cold: {hot_afternoons} out of 90 days have more than 25°C");
+
     }
 }
 
@@ -646,7 +721,7 @@ mod run_tests {
     impl Before {
         fn start(&mut self, clock: &SimClock) -> Weather {
             let place = place();
-            let model = WeatherModel::new(clock, &place);
+            let model = WeatherModel::new(clock, &place, &None);
             let w = model.weather();
             self.current = Some(model.sky());
             self.session = Some((model, clock.year, place.latitude, place.longitude, (clock.day_of_year, clock.time)));
@@ -664,7 +739,7 @@ mod run_tests {
             let elapsed = (clock.day_of_year - s.4 .0) as f64 * 86_400.0 + (clock.time - s.4 .1);
             let moved = (place.latitude - s.2).abs() > 0.01 || (place.longitude - s.3).abs() > 0.01;
             if moved || clock.year != s.1 || !(0.0..=86_400.0).contains(&elapsed) {
-                s.0 = WeatherModel::new(clock, &place);
+                s.0 = WeatherModel::new(clock, &place, &None);
                 s.1 = clock.year;
                 s.2 = place.latitude;
                 s.3 = place.longitude;
@@ -697,7 +772,7 @@ mod run_tests {
         };
         for session in 0..2 {
             let w_old = before.start(&clock);
-            let (r, w_new) = ModelRun::start(&clock);
+            let (r, w_new) = ModelRun::start(&clock, &None);
             assert_eq!(format!("{w_old:?}"), format!("{w_new:?}"));
             run = Some(r);
             assert_eq!(before.current, run.as_ref().map(|r| r.sky()));
@@ -749,7 +824,7 @@ mod report {
         for (doy0, label) in [(1, "winter"), (100, "spring"), (180, "summer"), (280, "autumn")] {
             println!("== {label}");
             let clock = omsi_sim::SimClock { year: 2026, day_of_year: doy0, time: 0.0, ..Default::default() };
-            let mut m = WeatherModel::new(&clock, &place);
+            let mut m = WeatherModel::new(&clock, &place, &None);
             let mut stats = [0.0f32; 6];
             let mut snow_days = 0;
             for day in 0..30 {
