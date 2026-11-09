@@ -2,7 +2,6 @@
   "platform": ["windows"],
   "id": ["044f:b66e"],
   "wheel": 0,
-  "ffb": "flipped",
   "pedals": [
     { "axis": 1, "function": "brake" },
     { "axis": 5, "function": "throttle" },

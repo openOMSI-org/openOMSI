@@ -1,6 +1,6 @@
-//! Pedal order and force direction from `defaults/*.json`. A device that already has a
-//! setup is left alone. `ffb: flipped` is the motor's direction when the force is sent,
-//! and is not written into the player's invert.
+//! Pedal order and force direction from `defaults/*.json`. A saved setup's axes are
+//! left alone. `ffb: flipped` is the motor's direction when the force is sent, including
+//! for a wheel that already has a setup, and is not written into the player's invert.
 
 use std::sync::OnceLock;
 
@@ -180,7 +180,7 @@ mod tests {
         assert!(!ffb_flipped_on("linux", g923));
         assert!(!ffb_flipped(None));
         let t300 = Some((0x044f, 0xb66e));
-        assert!(ffb_flipped_on("windows", t300));
+        assert!(!ffb_flipped_on("windows", t300));
         assert!(!ffb_flipped_on("linux", t300));
         assert_eq!(
             axes_for_on("windows", t300, &[1, 5]).unwrap(),
