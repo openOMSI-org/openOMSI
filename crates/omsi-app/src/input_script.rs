@@ -359,8 +359,6 @@ impl App {
         false
     }
 
-    /// `on_key` for the [game] keys of keyboard.cfg; true when the key was used up.
-    #[allow(clippy::too_many_arguments)]
     /// A key with a second action waits. A tap still runs the key's own actions; a hold runs only the second one.
     fn consume_long_press(&mut self, event_loop: &ActiveEventLoop, code: KeyCode, pressed: bool, repeat: bool, ctrl: bool, alt: bool, shift_now: bool) -> bool {
         if self.input.long_replay {
@@ -468,6 +466,8 @@ impl App {
         self.input.key_waits = left;
     }
 
+    /// `on_key` for the [game] keys of keyboard.cfg; true when the key was used up.
+    #[allow(clippy::too_many_arguments)]
     fn game_binding_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode, pressed: bool, repeat: bool, ctrl: bool, alt: bool, shift_now: bool) -> bool {
         if pressed && !repeat {
             // (a modifier key pressed is a key of its own, not its own modifier: Shift
