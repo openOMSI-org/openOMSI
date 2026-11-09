@@ -126,6 +126,7 @@ const graphics = {
         { type: 'select', key: 'puddles', label: 'Puddles', options: [['high', 'High'], ['low', 'Low'], ['off', 'Off']], when: (s) => !enhanced(s) && Number(s.reflections ?? 1) > 0.005 },
         { type: 'select', key: 'puddles', label: 'Real-Time Reflections', options: [['high', 'High'], ['low', 'Low'], ['off', 'Off']], when: (s) => enhanced(s) && (traced(s) || Number(s.reflections ?? 1) > 0.005) },
         { type: 'toggle', key: 'windy_trees', label: 'Windy trees' },
+        { type: 'toggle', key: 'detailed_trees', label: 'Detailed trees', help: 'Close up, the trees\' leaf pictures no longer show as streaks seen from the side, and their crowns get shade; costs a little graphics time' },
         // (the snow built up on the roads and the vehicles' roofs; the classic picture shows the season's snow only)
         { type: 'toggle', key: 'road_snow', label: 'Built-up snow on roads and roofs', help: 'While it snows, snow builds up on the roads and on the vehicles\' roofs, with ruts and tyre tracks, and thaws again; off: the weather\'s own snow on road, as in OMSI 2', when: (s) => !classic(s) },
       ],
@@ -506,6 +507,6 @@ export const SETTINGS_TABS = [graphics, driving, camera, sound, gameplay, genera
 
 /** The settings a saved graphics profile holds (`GRAPHICS_PROFILE_KEYS`). */
 export const GRAPHICS_PROFILE_KEYS = [
-  'graphics', 'msaa', 'render_scale', 'upscaler', 'upscale_quality', 'fsr_quality', 'fsr_sharpness', 'anisotropy', 'shadow_size', 'ssao', 'shadows', 'shadow_casters', 'detail_textures', 'night_brightness', 'led_glow', 'led_mips', 'shadow_blobs', 'lamp_shadows', 'reflections', 'road_glare', 'traffic_headlights', 'clouds', 'cloud_quality', 'street_light', 'rain_quality', 'vehicle_smoke', 'puddles', 'windy_trees', 'road_snow', 'ray_tracing', 'light_shadows', 'cloud_shadows', 'light_glow',
+  'graphics', 'msaa', 'render_scale', 'upscaler', 'upscale_quality', 'fsr_quality', 'fsr_sharpness', 'anisotropy', 'shadow_size', 'ssao', 'shadows', 'shadow_casters', 'detail_textures', 'night_brightness', 'led_glow', 'led_mips', 'shadow_blobs', 'lamp_shadows', 'reflections', 'road_glare', 'traffic_headlights', 'clouds', 'cloud_quality', 'street_light', 'rain_quality', 'vehicle_smoke', 'puddles', 'windy_trees', 'detailed_trees', 'road_snow', 'ray_tracing', 'light_shadows', 'cloud_shadows', 'light_glow',
   'vsync', 'max_fps', 'view_distance', 'max_obj_dist', 'min_obj_size', 'mirror_size', 'mirror_refresh', 'mirror_quality', 'mirror_hud_every_frame', 'video_memory', 'texture_compression', 'gpu_texture_compression',
 ];

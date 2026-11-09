@@ -667,12 +667,9 @@ fn shaders_validate_and_match_the_uniforms() {
         .unwrap_or_else(|e| panic!("{name}: {e:?}"));
         // Exercise the painted-ground specialization as well as the default shader.
         let mut constants = naga::back::PipelineConstants::default();
-        if name.starts_with("scene ") {
-            constants.insert("ALPHA_TEST".into(), 0.0);
-        }
-        if *name == "scene terrain paint" {
-            constants.insert("TERRAIN_PAINT".into(), 1.0);
-        }
+        if name.starts_with("scene ") { constants.insert("ALPHA_TEST".into(), 0.0); }
+        if *name == "scene terrain paint" { constants.insert("TERRAIN_PAINT".into(), 1.0); }
+        if name.starts_with("scene ") || *name == "temporal motion" { constants.insert("DETAILED_TREES".into(), 1.0); }
         let (module, info) = naga::back::pipeline_constants::process_overrides(
             &module,
             &info,

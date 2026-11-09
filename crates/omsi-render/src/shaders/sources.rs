@@ -18,6 +18,17 @@ pub(crate) fn scene_shader_for(gl: bool, path: ArrayPath) -> String {
     if gl && path.no_storage() { compares_without_gather(&src) } else { src }
 }
 
+fn without_tree_fade(src: &str) -> String {
+    let src = stub_fn(src, "fn tree_card_fade(world: vec3<f32>) -> f32 {", "1.0");
+    stub_fn(&src, "fn tree_crown_normal(local: vec3<f32>, m: mat4x4<f32>, up: vec3<f32>) -> vec3<f32> {", "up")
+}
+
+fn stub_fn(src: &str, head: &str, value: &str) -> String {
+    let start = src.find(head).unwrap_or_else(|| panic!("scene shader: {head} not found"));
+    let close = start + src[start..].find("\n}").unwrap_or_else(|| panic!("scene shader: {head} has no end")) + 2;
+    format!("{}{head}\n    return {value};\n}}{}", &src[..start], &src[close..])
+}
+
 /// The sun's shadow tent with each gather of four depth comparisons taken as four single
 /// ones. OpenGL without storage buffers is GLES 3.0 or GL 3.3 (ANGLE on Direct3D 11 among
 /// them), which have no textureGather: the scene pipelines failed to compile there ("no
@@ -155,7 +166,7 @@ pub(crate) fn scene_shader_forms(gl: bool, amd_vulkan: bool, multisampled_shadin
     // their lookups are left out of the module. With them in the scene fragment shader, the
     // D3D compiler under ANGLE (fxc) recursed without end in CProgram::CheckAssertion_Group
     // and the game closed before its first frame (#197).
-    let out = src
+    let out = without_tree_fade(&src)
         .replace("textureSampleBias(t_trans, s_tile, uv, bias)", &clamped("t_trans", "bias"))
         .replace("textureSampleBias(t_night, s_tile, uv, camera.lod.x)", &clamped("t_night", "camera.lod.x"))
         .replace("ao = ao_at(in.clip.xy, in.world);", "ao = 1.0;")
@@ -331,4 +342,18 @@ pub(crate) fn corona_shader_source() -> String {
         return indexing_as_calls(&indexing_as_calls(&src, "lights", "lights_at"), "grid", "grid_at");
     }
     src
+}
+
+#[cfg(test)]
+mod tree_detail_tests {
+    #[test]
+    fn opengl_leaves_the_tree_detail_out_with_either_line_end() {
+        for src in [super::shaders::SCENE.to_string(), super::shaders::SCENE.replace('\n', "\r\n")] {
+            let out = super::without_tree_fade(&src);
+            assert!(!out.contains("cross(dpdx(world), dpdy(world))") && !out.contains("0.65 * crown"));
+            assert!(out.contains("fn tree_card_fade(world: vec3<f32>) -> f32 {\n    return 1.0;\n}"));
+            assert!(out.contains("-> vec3<f32> {\n    return up;\n}"));
+            assert_eq!(out.matches("fn ").count(), src.matches("fn ").count());
+        }
+    }
 }
