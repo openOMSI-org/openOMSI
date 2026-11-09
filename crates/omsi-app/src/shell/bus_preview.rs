@@ -25,6 +25,19 @@ pub(crate) struct Reply {
 struct Worker {
     tx: SyncSender<Request>,
     rx: Receiver<Reply>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl Drop for Worker {
+    fn drop(&mut self) {
+        if let Some(thread) = self.thread.take() {
+            // Joining off the UI thread keeps closing responsive even during asset I/O.
+            std::thread::spawn(move || match thread.join() {
+                Ok(()) => log::info!("bus preview: worker joined; thread exited"),
+                Err(_) => log::warn!("bus preview: worker panicked during shutdown"),
+            });
+        }
+    }
 }
 
 #[derive(Default)]
@@ -154,9 +167,13 @@ impl State {
             let (answers, rx) = mpsc::sync_channel(1);
             match std::thread::Builder::new()
                 .name("bus chooser preview".into())
-                .spawn(move || omsi_render::with_auxiliary_renderer(|| run(requests, answers, options, adapter)))
+                .spawn(move || {
+                    omsi_render::with_auxiliary_renderer(|| run(requests, answers, options, adapter));
+                    // run's showroom (including loaders) and renderer are dropped here.
+                    log::info!("bus preview: worker finished; showroom, loaders and renderer released");
+                })
             {
-                Ok(_) => self.worker = Some(Worker { tx, rx }),
+                Ok(thread) => self.worker = Some(Worker { tx, rx, thread: Some(thread) }),
                 Err(error) => {
                     self.busy = false;
                     self.error = Some(error.to_string());
@@ -305,6 +322,25 @@ fn run(requests: Receiver<Request>, answers: SyncSender<Reply>, options: RenderO
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn in_game_bus_preview_close_disconnects_and_releases_worker_payload() {
+        let (tx, requests) = mpsc::sync_channel(1);
+        let (answers, rx) = mpsc::sync_channel(1);
+        let (done, finished) = mpsc::channel();
+        let owner = std::sync::Arc::new(());
+        let weak = std::sync::Arc::downgrade(&owner);
+        let thread = std::thread::spawn(move || {
+            let _answers = answers;
+            let _owner = owner;
+            assert!(requests.recv().is_err());
+            drop(_owner);
+            done.send(()).unwrap();
+        });
+        drop(Worker { tx, rx, thread: Some(thread) });
+        finished.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(weak.upgrade().is_none());
+    }
     use super::*;
 
     #[test]
@@ -338,7 +374,7 @@ mod tests {
         state.sent = Some(previous.clone());
         let (tx, requests) = mpsc::sync_channel(1);
         let (answers, rx) = mpsc::sync_channel(1);
-        state.worker = Some(Worker { tx, rx });
+        state.worker = Some(Worker { tx, rx, thread: None });
         for _ in 0..10 {
             state.select(None, "Search".into(), String::new());
             assert!(
@@ -669,7 +705,7 @@ mod tests {
         let (tx, _requests) = mpsc::sync_channel(1);
         let (answers, rx) = mpsc::sync_channel(1);
         drop(answers);
-        state.worker = Some(Worker { tx, rx });
+        state.worker = Some(Worker { tx, rx, thread: None });
         state.sent = state.request();
         state.update(RenderOptions::default(), None);
         assert!(!state.busy);

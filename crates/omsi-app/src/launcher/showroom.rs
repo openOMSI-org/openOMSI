@@ -109,6 +109,7 @@ impl Shown {
 
 pub struct Showroom {
     shown: Option<Shown>,
+    loaders: Vec<std::thread::JoinHandle<()>>,
     wanted: Option<Look>,
     /// The last look that could not be shown (not read again until something changes).
     failed: Option<Look>,
@@ -196,6 +197,22 @@ fn args_for(look: &Look) -> Args {
 // (a launcher closed while a preview loads did not hang: the mark goes with it)
 impl Drop for Showroom {
     fn drop(&mut self) {
+        // Disconnect before joining: a loader may be waiting for GPU prefetch.
+        self.opening = None;
+        self.loading = None;
+        for loader in self.loaders.drain(..) {
+            if loader.join().is_err() {
+                log::warn!("showroom: loader panicked during shutdown");
+            }
+        }
+        let owners = self.shown.as_ref().and_then(|shown| shown.world.as_ref())
+            .map(|world| (Arc::downgrade(world), Arc::downgrade(&world.textures)));
+        self.shown = None;
+        self.target = None;
+        if let Some((world, textures)) = owners {
+            log::info!("showroom: dropped; remaining world owners={}, texture-cache owners={}",
+                world.strong_count(), textures.strong_count());
+        }
         let _ = std::fs::remove_file(placing_mark());
     }
 }
@@ -204,6 +221,7 @@ impl Showroom {
     pub fn new() -> Showroom {
         Showroom {
             shown: None,
+            loaders: Vec::new(),
             wanted: None,
             failed: None,
             loading: None,
@@ -388,7 +406,7 @@ impl Showroom {
         let (world_tx, world_rx) = channel();
         let (prefetch_tx, prefetch_rx) = channel::<scene::VehiclePrefetch>();
         let l2 = look.clone();
-        std::thread::spawn(move || {
+        let loader = std::thread::spawn(move || {
             let r = (|| -> Result<Ready> {
                 let t0 = std::time::Instant::now();
                 let world = Arc::new(scene::World::open(&root, &map_cfg, date)?);
@@ -427,6 +445,8 @@ impl Showroom {
             })();
             let _ = tx.send(r.map_err(|e| format!("{e:#}")));
         });
+        self.loaders.retain(|loader| !loader.is_finished());
+        self.loaders.push(loader);
         self.opening = Some((world_rx, prefetch_tx));
         self.loading = Some((look, rx));
     }
@@ -658,6 +678,24 @@ impl Quality {
 mod tests {
     use super::*;
     use std::mem::ManuallyDrop;
+
+    #[test]
+    fn showroom_close_joins_a_loader_waiting_for_prefetch() {
+        let mut showroom = Showroom::new();
+        let (world_tx, world_rx) = channel();
+        let (prefetch_tx, prefetch_rx) = channel::<scene::VehiclePrefetch>();
+        showroom.opening = Some((world_rx, prefetch_tx));
+        let owner = Arc::new(());
+        let weak = Arc::downgrade(&owner);
+        showroom.loaders.push(std::thread::spawn(move || {
+            let _worlds = world_tx;
+            let _owner = owner;
+            assert!(prefetch_rx.recv().is_err());
+        }));
+        drop(showroom);
+        assert!(weak.upgrade().is_none(), "the loader must exit before showroom drop returns");
+    }
+
 
     #[test]
     fn the_cove_rises_from_the_floor_to_its_wall() {
