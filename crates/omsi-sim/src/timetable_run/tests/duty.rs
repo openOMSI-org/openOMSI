@@ -158,8 +158,6 @@ fn duty_place_keeps_first_stop_while_its_place_is_unknown() {
     assert_eq!(bus.host.tt_stops[0].0, "s0");
 }
 
-/// Pass-through timetable entries stay in the internal duty, but are omitted from
-/// the stop list exposed to the bus's IBIS scripts.
 #[test]
 fn feed_host_hides_pass_through_stops_from_ibis() {
     let mut duty = early_departure_duty();
