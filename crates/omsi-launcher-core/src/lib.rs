@@ -2091,7 +2091,7 @@ pub fn graphics_presets() -> [(&'static str, Value); 6] {
         let low = i == 0;
         let preset = json!({
             "graphics": graphics[i], "ray_tracing": i == 5, "msaa": msaa[i], "anisotropy": anisotropy[i],
-            "shadow_size": shadow[i], "clouds": true, "rain_quality": rain[i], "windy_trees": !low,
+            "shadow_size": shadow[i], "clouds": true, "rain_quality": rain[i], "windy_trees": !low, "detailed_trees": !low,
             "view_distance": view[i], "min_obj_size": obj_size[i], "max_obj_dist": obj_dist[i],
             "mirror_size": mirror[i], "mirror_refresh": refresh[i], "mirror_quality": mirror_quality[i], "render_scale": scale[i],
             "detail_textures": !low, "ssao": !low, "shadows": !low, "reflections": 1.0, "road_glare": 1.0, "traffic_headlights": 1.0,
@@ -2355,6 +2355,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     v["units"] = json!("metric");
     // the trees' foliage bends and sways in the weather's wind
     v["windy_trees"] = json!(true);
+    v["detailed_trees"] = json!(true);
     v["road_snow"] = json!(false); // opt-in; off preserves the weather's classic snow on roads
     v["sim_thread"] = json!(false); // (switched in the game's Display menu, saved through this writer)
     v["mirror_hud_every_frame"] = json!(false);
@@ -2536,7 +2537,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "perf_overlay" => v[&k] = json!(perf_overlay_mode(val)),
             "sim_thread" => v[&k] = json!(b(val)),
             "mirror_hud" => v[&k] = json!(val.trim().parse::<u8>().map(|x| x.min(7)).unwrap_or(0)),
-            "windy_trees" | "road_snow" | "mirror_hud_every_frame" | "mirror_shadows" | "mirror_particles" | "ai_wait_timed_stops_only" | "pax_bad_driving" | "passenger_connections" | "passenger_hailing" | "passenger_full_bus_reaction" | "pax_short_rides_stand" | "auto_announce" | "ambient" => v[&k] = json!(b(val)),
+            "windy_trees" | "detailed_trees" | "road_snow" | "mirror_hud_every_frame" | "mirror_shadows" | "mirror_particles" | "ai_wait_timed_stops_only" | "pax_bad_driving" | "passenger_connections" | "passenger_hailing" | "passenger_full_bus_reaction" | "pax_short_rides_stand" | "auto_announce" | "ambient" => v[&k] = json!(b(val)),
             "head_tracking_source" => v[&k] = json!(head_tracking_source(val)),
             "tobii_edges" => v[&k] = json!(b(val)),
             "head_tracking_smoothing" | "head_tracking_dead_zone" => v[&k] = json!(head_tracking_value(&k, val.parse::<f64>().ok())),
@@ -2903,6 +2904,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("info_bar={}\nperf_overlay={}\n", b("info_bar", false), perf_overlay_mode(&v.get("perf_overlay").map(|x| x.as_str().map_or_else(|| x.to_string(), str::to_string)).unwrap_or_default())));
     text.push_str(&format!("info_size={}\ntimetable_size={}\nperf_size={}\n", f("info_size", 1.0).clamp(0.6, 2.0), f("timetable_size", 1.0).clamp(0.6, 2.0), f("perf_size", 1.0).clamp(0.6, 2.0)));
     text.push_str(&format!("windy_trees={}\n", b("windy_trees", true)));
+    text.push_str(&format!("detailed_trees={}\n", b("detailed_trees", true)));
     text.push_str(&format!("road_snow={}\n", b("road_snow", false)));
     text.push_str(&format!("sim_thread={}\n", b("sim_thread", false)));
     text.push_str(&format!("mirror_hud_every_frame={}\n", b("mirror_hud_every_frame", false)));
