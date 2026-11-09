@@ -10,6 +10,7 @@ import { BusList, BusOptions, withoutMaker } from './bus-list.js';
 import { DayStep } from './drive-day.js';
 import { DutyStep, DutyStage } from './drive-duty.js';
 import { depotRun, tripAt, hms, entryName } from './drive.js';
+import { NameDialog } from './depot.js';
 
 const STEPS = [['bus', 'Bus'], ['day', 'Day & weather'], ['duty', 'Map & duty']];
 
@@ -141,6 +142,7 @@ function Continue({ go, busy }) {
   const s = useStore();
   const [open, setOpen] = useState(false);
   const [ask, dialog] = useConfirm();
+  const [naming, setNaming] = useState(null);
   const box = useRef();
   useEffect(() => {
     loadSituations();
@@ -162,15 +164,27 @@ function Continue({ go, busy }) {
     }
     loadSituations();
   };
+  const rename = async (to) => {
+    const x = naming;
+    setNaming(null);
+    try {
+      if (!(await call('rename_situation', { map: s.choice.map, file: x.file, name: to }))) toast(t('Nothing found'), 'error');
+    } catch (err) {
+      toast(t(err.message), 'error');
+    }
+    loadSituations();
+  };
   return html`<div class="menu-box" ref=${box}>
     <${Button} big icon="history" label="Continue" onClick=${() => setOpen(!open)} />
     ${open && html`<div class="menu up">
       ${s.situations.map((x) => html`<div class="menu-item" role="button" tabindex="0" aria-disabled=${busy} onClick=${() => !busy && (setOpen(false), go({ situation: x.file }))} onKeyDown=${(e) => e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ') && !busy && (e.preventDefault(), setOpen(false), go({ situation: x.file }))}>
         <${Icon} name="play" size=${16} />
         <span class="grow"><b class="ellipsis">${t(x.name)}</b><span class="muted small">${new Date(x.saved * 1000).toLocaleString(language())}</span></span>
+        ${x.slot && html`<${Button} kind="ghost" small icon="edit" title="Rename the save" onClick=${(e) => (e.stopPropagation(), setNaming(x))} />`}
         <${Button} kind="ghost" small icon="trash" title="Delete" onClick=${(e) => remove(e, x)} />
       </div>`)}
     </div>`}
     ${dialog}
+    ${naming && html`<${NameDialog} title="Rename the save" label="Name" placeholder="" value=${naming.name} onSave=${rename} onClose=${() => setNaming(null)} />`}
   </div>`;
 }
