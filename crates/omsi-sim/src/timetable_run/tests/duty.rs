@@ -1029,6 +1029,29 @@ fn a_stop_passed_and_served_further_on_is_stepped_back_to() {
     assert_eq!(d.next_stop, 2, "nearer to the next stop: no step back");
 }
 
+/// A station marked as pass-through stays in the route, but must not become the
+/// player's next announced stop when the bus drives through it.
+#[test]
+fn pass_through_stations_are_skipped_by_the_players_duty() {
+    let mut trip = planned(
+        0.0,
+        &[(0.0, 0.0, 0.0), (100.0, 60.0, 60.0), (200.0, 120.0, 120.0), (300.0, 180.0, 180.0)],
+    );
+    trip.stops[1].stops = false;
+    trip.set_dirs();
+    let mut duty = PlayerDuty::new("5".into(), "1".into(), vec![trip], 0, 0, true);
+    duty.placed = true;
+    duty.heading = 90.0;
+    let east = |x: f64| glam::DVec3::new(x, 0.0, 0.0);
+
+    duty.progress_at(east(0.0), 0.0, true);
+    duty.progress_at(east(40.0), 15.0, false);
+
+    assert_eq!(duty.next_stop, 2, "the pass-through station is not announced as next");
+    assert_eq!(duty.trip().stops.len(), 4, "the station remains in the route");
+    assert_eq!(duty.trip().stops[1].name, "s1");
+}
+
 /// Passing through the circle of a stop further on is not reaching it: only standing there
 /// with a door open counts the stops in between as skipped.
 #[test]
