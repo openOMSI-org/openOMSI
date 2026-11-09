@@ -59,6 +59,7 @@ pub(crate) struct State {
     serial: u64,
     sent: Option<Request>,
     worker: Option<Worker>,
+    shutdown: Option<std::thread::JoinHandle<()>>,
     pixels: Option<(u32, u32, Vec<u8>)>,
 }
 
@@ -154,7 +155,25 @@ impl State {
         }
     }
 
+    fn shutdown_pending(&mut self) -> bool {
+        let Some(thread) = self.shutdown.as_ref() else {
+            return false;
+        };
+        if !thread.is_finished() {
+            return true;
+        }
+        match self.shutdown.take().unwrap().join() {
+            Ok(()) => log::info!("bus preview: worker joined; thread exited"),
+            Err(_) => log::warn!("bus preview: worker panicked during shutdown"),
+        }
+        false
+    }
+
     pub fn update(&mut self, options: RenderOptions, adapter: Option<wgpu::Adapter>) {
+        // Keep the text chooser usable while the previous renderer finishes teardown.
+        if self.shutdown_pending() {
+            return;
+        }
         let Some(request) = self.request() else {
             return;
         };
@@ -214,7 +233,10 @@ impl super::Shell {
         if let (Some(texture), Some((gpu, _))) = (self.bus_preview.texture, self.gpu.as_mut()) {
             gpu.free(texture);
         }
-        self.bus_preview = State::default();
+        // Preserve the only closing worker across resets; reopening must await its exit.
+        let shutdown = self.bus_preview.worker.as_mut().and_then(|worker| worker.thread.take())
+            .or_else(|| self.bus_preview.shutdown.take());
+        self.bus_preview = State { shutdown, ..State::default() };
     }
 
     pub(crate) fn upload_bus_preview(&mut self, renderer: &Renderer) {
@@ -342,6 +364,50 @@ mod tests {
         assert!(weak.upgrade().is_none());
     }
     use super::*;
+
+    #[test]
+    fn in_game_bus_preview_defers_reopen_until_delayed_teardown_finishes() {
+        let mut shell = super::super::Shell::new();
+        let (tx, requests) = mpsc::sync_channel(1);
+        let (answers, rx) = mpsc::sync_channel(1);
+        let (closing, started) = mpsc::channel();
+        let (release, delayed) = mpsc::channel();
+        let (done, finished) = mpsc::channel();
+        let thread = std::thread::spawn(move || {
+            let _answers = answers;
+            assert!(requests.recv().is_err());
+            closing.send(()).unwrap();
+            delayed.recv().unwrap();
+            done.send(()).unwrap();
+        });
+        shell.bus_preview.worker = Some(Worker { tx, rx, thread: Some(thread) });
+        shell.clear_bus_preview();
+        started.recv_timeout(Duration::from_secs(5)).unwrap();
+        let mut deferred = Vec::new();
+        for _ in 0..10 {
+            shell.bus_preview.select(Some(Look { bus: "bus".into(), ..Default::default() }),
+                "Selected bus".into(), "Text chooser stays responsive".into());
+            shell.bus_preview.update(RenderOptions::default(), None);
+            deferred.push(shell.bus_preview.busy);
+            assert_eq!(shell.bus_preview.title, "Selected bus");
+            assert!(shell.bus_preview.worker.is_none());
+            shell.clear_bus_preview();
+        }
+        release.send(()).unwrap();
+        finished.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(deferred.into_iter().all(|waiting| waiting),
+            "every reopen must wait for the previous worker, even across repeated clears");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while shell.bus_preview.shutdown_pending() {
+            assert!(Instant::now() < deadline, "completed teardown must free the worker slot");
+            std::thread::yield_now();
+        }
+        assert!(shell.bus_preview.shutdown.is_none());
+        shell.bus_preview.select(Some(Look { bus: "next".into(), ..Default::default() }),
+            "Next bus".into(), String::new());
+        shell.bus_preview.update(RenderOptions::default(), None);
+        assert!(!shell.bus_preview.busy, "normal adapter handling must resume after teardown");
+    }
 
     #[test]
     fn in_game_bus_preview_resolves_only_changed_selection() {
