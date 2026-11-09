@@ -301,7 +301,7 @@ impl App {
         };
         let head = if out.file_stem().is_some_and(|s| s.to_string_lossy() == n) { n.clone() } else { format!("Slot {n}") };
         // (a slot renamed in the launcher keeps its name when saved over)
-        let name = named.filter(|n| *n != head && !n.starts_with(&format!("{head}:"))).unwrap_or_else(|| format!("{head}: {what}, {:02}:{:02}", (t / 3600.0) as i32 % 24, ((t % 3600.0) / 60.0) as i32));
+        let name = named.filter(|n| !automatic_name(n, &head)).unwrap_or_else(|| format!("{head}: {what}, {:02}:{:02}", (t / 3600.0) as i32 % 24, ((t % 3600.0) / 60.0) as i32));
         let sit = build_situation(&self.args, w, &self.clock, self.args.weather.as_deref(), self.player.as_ref(), &self.session.placed, cam, self.session.duty.as_ref(), &name);
         let rel = rel_dir.join(out.file_name().map(|f| f.to_os_string()).unwrap_or_else(|| format!("Slot {n}.osn").into()));
         match save_or_fallback(&sit, &out, rel.as_path()) {
@@ -319,6 +319,20 @@ impl App {
             }
         }
     }
+}
+
+/// The game's own name for slot `head` (or the bare file name of a slot without `[name]`).
+fn automatic_name(name: &str, head: &str) -> bool {
+    let time = name.get(name.len().saturating_sub(7)..).is_some_and(|t| t.starts_with(", ") && t.as_bytes()[4] == b':' && t[2..].bytes().filter(u8::is_ascii_digit).count() == 4);
+    name == head || (name.starts_with(&format!("{head}:")) && time)
+}
+
+#[test]
+fn a_chosen_slot_name_is_not_taken_for_the_game_s_own() {
+    assert!(automatic_name("Slot 3: SD202, line 76 / 1, 09:00", "Slot 3"));
+    assert!(automatic_name("Slot 3", "Slot 3"));
+    assert!(!automatic_name("Slot 3: seaside run", "Slot 3"));
+    assert!(!automatic_name("Перед депо", "Slot 3"));
 }
 
 /// The folder of a map's save slots, inside the map's folder in the content folder (the

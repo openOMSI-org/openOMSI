@@ -86,14 +86,15 @@ fn write_name(file: &Path, name: &str) -> Result<()> {
     let bytes = std::fs::read(file)?;
     let saved = std::fs::metadata(file)?.modified()?;
     let text = omsi_cfg::decode_text(&bytes);
-    let mut lines: Vec<&str> = text.lines().collect();
+    let mut lines = omsi_cfg::split_lines(&text);
     match lines.iter().position(|l| l.trim().eq_ignore_ascii_case("[name]")) {
-        Some(i) if i + 1 < lines.len() => lines[i + 1] = name,
-        Some(_) => lines.push(name),
-        None => lines.splice(0..0, ["[name]", name, ""]).for_each(drop),
+        Some(i) if i + 1 < lines.len() => lines[i + 1] = name.to_string(),
+        Some(_) => lines.push(name.to_string()),
+        None => lines.splice(0..0, ["[name]".to_string(), name.to_string(), String::new()]).for_each(drop),
     }
+    let ended = text.ends_with(['\r', '\n']);
     let mut text = lines.join("\r\n");
-    if bytes.ends_with(b"\n") || bytes.ends_with(b"\n\0") {
+    if ended {
         text.push_str("\r\n");
     }
     // (Windows-1252 cannot hold every name: such a file comes back in UTF-16, as the game writes it)
@@ -202,6 +203,10 @@ mod save_slot_tests {
         let body = "\r\n[map]\r\nmaps\\Grundorf\\global.cfg\r\n[name]\r\nx\r\n";
         std::fs::write(dir.join("Slot 1.osn"), utf16(&format!("[name]\r\nSlot 1: SD202, 09:00{body}"))).unwrap();
         std::fs::write(dir.join("Slot 2.osn"), b"[time]\r\n8\r\n").unwrap();
+        std::fs::write(dir.join("Slot 3.osn"), b"[name]\rold\r[time]\r8\r").unwrap();
+        write_name(&dir.join("Slot 3.osn"), "Morning").unwrap();
+        assert_eq!(omsi_cfg::decode_text(&std::fs::read(dir.join("Slot 3.osn")).unwrap()), "[name]\r\nMorning\r\n[time]\r\n8\r\n");
+        std::fs::remove_file(dir.join("Slot 3.osn")).unwrap();
         let before = std::fs::metadata(dir.join("Slot 1.osn")).unwrap().modified().unwrap();
         write_name(&dir.join("Slot 1.osn"), "Before the depot").unwrap();
         assert_eq!(std::fs::metadata(dir.join("Slot 1.osn")).unwrap().modified().unwrap(), before);
