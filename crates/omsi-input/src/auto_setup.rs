@@ -42,7 +42,12 @@ pub fn guess(name: &str, hardware_id: Option<(u16, u16)>, ff_capable: bool, rest
         return None;
     }
     let slots: Vec<usize> = pedals.iter().map(|p| p.0).collect();
-    if let Some(assigned) = crate::wheel_defaults::pedals_for(hardware_id, &slots) {
+    if let Some((wheel, assigned)) = crate::wheel_defaults::axes_for(hardware_id, &slots) {
+        if let Some(w) = wheel {
+            if (ff_capable || !steering_taken) && at(w).is_some_and(|v| v.abs() < PEDAL_REST) {
+                d.axes[w] = Some((Func::Steering, false));
+            }
+        }
         for &(k, v) in &pedals {
             if let Some((_, f)) = assigned.iter().find(|(axis, _)| *axis == k) {
                 d.axes[k] = Some((*f, v > 0.0));
@@ -159,9 +164,15 @@ mod tests {
         if cfg!(windows) {
             assert_eq!(funcs(&d), [(0, Func::Steering, false), (1, Func::Throttle, true), (5, Func::Brake, true), (6, Func::Clutch, true)]);
         }
-        // a wheel of another maker, its pedals resting at -1
+        // a T300 in PC mode: the defaults file, brake then throttle. Other platforms keep the usual order.
         let d = guess("Thrustmaster T300RS", Some((0x044f, 0xb66e)), true, &[(0, -0.02), (1, -1.0), (5, -0.98)], false).unwrap();
-        assert_eq!(funcs(&d), [(0, Func::Steering, false), (1, Func::Throttle, false), (5, Func::Brake, false)]);
+        let expected = if cfg!(windows) {
+            [(0, Func::Steering, false), (1, Func::Brake, false), (5, Func::Throttle, false)]
+        } else {
+            [(0, Func::Steering, false), (1, Func::Throttle, false), (5, Func::Brake, false)]
+        };
+        assert_eq!(funcs(&d), expected);
+        assert!(d.ff_invert.is_none());
     }
 
     #[test]
@@ -200,6 +211,28 @@ mod tests {
         let d = guess("Fanatec ClubSport Pedals", None, false, &[(0, -1.0), (1, -1.0), (2, -1.0)], true).unwrap();
         assert_eq!(funcs(&d), [(0, Func::Throttle, false), (1, Func::Brake, false), (2, Func::Clutch, false)]);
         let d = guess("Thrustmaster T300RS", Some((0x044f, 0xb66e)), true, &[(0, -0.02), (1, -1.0), (5, -0.98)], true).unwrap();
+        let expected = if cfg!(windows) {
+            [(0, Func::Steering, false), (1, Func::Brake, false), (5, Func::Throttle, false)]
+        } else {
+            [(0, Func::Steering, false), (1, Func::Throttle, false), (5, Func::Brake, false)]
+        };
+        assert_eq!(funcs(&d), expected);
+    }
+
+    #[test]
+    fn a_listed_wheel_uses_its_file_and_an_unknown_id_does_not() {
+        let t300 = Some((0x044f, 0xb66e));
+        let three = &[(0, 0.0), (1, -1.0), (5, -1.0), (7, 1.0)];
+        let d = guess("Thrustmaster T300RS", t300, true, three, false).unwrap();
+        if cfg!(windows) {
+            assert_eq!(funcs(&d), [(0, Func::Steering, false), (1, Func::Brake, false), (5, Func::Throttle, false), (7, Func::Clutch, true)]);
+        } else {
+            assert_eq!(funcs(&d), [(0, Func::Steering, false), (1, Func::Throttle, false), (5, Func::Brake, false), (7, Func::Clutch, true)]);
+        }
+        let extra = &[(0, 0.0), (1, -1.0), (5, -1.0), (6, -1.0)];
+        let d = guess("Thrustmaster T300RS", t300, true, extra, false).unwrap();
+        assert_eq!(funcs(&d), [(0, Func::Steering, false), (1, Func::Throttle, false), (5, Func::Brake, false), (6, Func::Clutch, false)]);
+        let d = guess("Thrustmaster", Some((0x044f, 0xb65e)), true, &[(0, -0.02), (1, -1.0), (5, -0.98)], false).unwrap();
         assert_eq!(funcs(&d), [(0, Func::Steering, false), (1, Func::Throttle, false), (5, Func::Brake, false)]);
     }
 

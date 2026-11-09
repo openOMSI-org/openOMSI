@@ -13,13 +13,26 @@ include!(concat!(env!("OUT_DIR"), "/wheel_defaults_files.rs"));
 struct Pedal {
     axis: usize,
     func: Func,
+    optional: bool,
 }
 
 struct Entry {
     ids: Vec<(u16, u16)>,
     platforms: Vec<String>,
+    wheel: Option<usize>,
     pedals: Vec<Pedal>,
     ffb_flipped: bool,
+}
+
+pub(crate) struct PresetPedal {
+    pub axis: usize,
+    pub function: &'static str,
+    pub optional: bool,
+}
+
+pub(crate) struct Preset {
+    pub wheel: Option<usize>,
+    pub pedals: Vec<PresetPedal>,
 }
 
 fn platform() -> &'static str {
@@ -53,6 +66,20 @@ fn func_of(name: &str) -> Option<Func> {
     }
 }
 
+fn func_name(func: Func) -> &'static str {
+    match func {
+        Func::Throttle => "throttle",
+        Func::Brake => "brake",
+        Func::Clutch => "clutch",
+        _ => "",
+    }
+}
+
+fn axis_of(v: &Value) -> Option<usize> {
+    let n = v.as_u64()? as usize;
+    (n < 8).then_some(n)
+}
+
 fn parse_file(text: &str) -> Option<Entry> {
     let v: Value = match serde_json::from_str(text) {
         Ok(v) => v,
@@ -73,14 +100,19 @@ fn parse_file(text: &str) -> Option<Entry> {
     }
     let mut pedals = Vec::new();
     for p in v.get("pedals").and_then(Value::as_array).into_iter().flatten() {
-        let axis = p.get("axis")?.as_u64()? as usize;
-        if axis >= 8 {
-            log::error!("wheel defaults: an axis is out of range");
-            return None;
-        }
-        pedals.push(Pedal { axis, func: func_of(p.get("function")?.as_str()?)? });
+        pedals.push(Pedal {
+            axis: axis_of(p.get("axis")?)?,
+            func: func_of(p.get("function")?.as_str()?)?,
+            optional: p.get("optional").and_then(Value::as_bool).unwrap_or(false),
+        });
     }
-    Some(Entry { ids, platforms, pedals, ffb_flipped: v.get("ffb").and_then(Value::as_str) == Some("flipped") })
+    Some(Entry {
+        ids,
+        platforms,
+        wheel: v.get("wheel").and_then(axis_of),
+        pedals,
+        ffb_flipped: v.get("ffb").and_then(Value::as_str) == Some("flipped"),
+    })
 }
 
 fn matches(entry: &Entry, platform: &str, id: (u16, u16)) -> bool {
@@ -96,27 +128,38 @@ pub(crate) fn ffb_flipped_on(platform: &str, id: Option<(u16, u16)>) -> bool {
     entries().iter().any(|e| e.ffb_flipped && matches(e, platform, id))
 }
 
-/// Pedal functions when a file lists exactly these resting axes for this id and platform.
-pub(crate) fn pedals_for(id: Option<(u16, u16)>, resting: &[usize]) -> Option<Vec<(usize, Func)>> {
-    pedals_for_on(platform(), id, resting)
+/// The file's wheel axis and the pedals that are resting, when every resting pedal is listed
+/// and every pedal that is not optional is resting.
+pub(crate) fn axes_for(id: Option<(u16, u16)>, resting: &[usize]) -> Option<(Option<usize>, Vec<(usize, Func)>)> {
+    axes_for_on(platform(), id, resting)
 }
 
-pub(crate) fn pedals_for_on(platform: &str, id: Option<(u16, u16)>, resting: &[usize]) -> Option<Vec<(usize, Func)>> {
+pub(crate) fn axes_for_on(platform: &str, id: Option<(u16, u16)>, resting: &[usize]) -> Option<(Option<usize>, Vec<(usize, Func)>)> {
     let id = id?;
     let mut slots = resting.to_vec();
     slots.sort_unstable();
     slots.dedup();
-    entries().iter().find(|e| matches(e, platform, id) && same_axes(e, &slots)).map(|e| e.pedals.iter().map(|p| (p.axis, p.func)).collect())
+    let entry = entries().iter().find(|e| matches(e, platform, id) && covers(e, &slots))?;
+    let pedals = entry.pedals.iter().filter(|p| slots.contains(&p.axis)).map(|p| (p.axis, p.func)).collect();
+    Some((entry.wheel, pedals))
 }
 
-fn same_axes(entry: &Entry, slots: &[usize]) -> bool {
+/// Every resting slot is listed, and every pedal that is not optional is resting.
+fn covers(entry: &Entry, slots: &[usize]) -> bool {
     if entry.pedals.is_empty() {
         return false;
     }
-    let mut axes: Vec<usize> = entry.pedals.iter().map(|p| p.axis).collect();
-    axes.sort_unstable();
-    axes.dedup();
-    axes == slots
+    slots.iter().all(|s| entry.pedals.iter().any(|p| p.axis == *s)) && entry.pedals.iter().filter(|p| !p.optional).all(|p| slots.contains(&p.axis))
+}
+
+/// Axes the setup guide can offer. None when this id has no wheel or pedals on this platform.
+pub(crate) fn preset(id: Option<(u16, u16)>) -> Option<Preset> {
+    let id = id?;
+    let entry = entries().iter().find(|e| matches(e, platform(), id) && (e.wheel.is_some() || !e.pedals.is_empty()))?;
+    Some(Preset {
+        wheel: entry.wheel,
+        pedals: entry.pedals.iter().map(|p| PresetPedal { axis: p.axis, function: func_name(p.func), optional: p.optional }).collect(),
+    })
 }
 
 #[cfg(test)]
@@ -128,16 +171,33 @@ mod tests {
         let g29 = Some((0x046d, 0xc24f));
         let g923 = Some((0x046d, 0xc266));
         let slots = [1, 2, 5];
-        assert_eq!(
-            pedals_for_on("linux", g29, &slots).unwrap(),
-            vec![(1, Func::Clutch), (2, Func::Throttle), (5, Func::Brake)]
-        );
-        assert!(pedals_for_on("macos", g923, &slots).is_some());
-        assert!(pedals_for_on("windows", g29, &slots).is_none());
-        assert!(pedals_for_on("linux", g29, &[1, 5]).is_none());
+        assert_eq!(axes_for_on("linux", g29, &slots).unwrap().1, vec![(1, Func::Clutch), (2, Func::Throttle), (5, Func::Brake)]);
+        assert!(axes_for_on("macos", g923, &slots).is_some());
+        assert!(axes_for_on("windows", g29, &slots).is_none());
+        assert!(axes_for_on("linux", g29, &[1, 5]).is_none());
         assert!(ffb_flipped_on("windows", g923));
         assert!(!ffb_flipped_on("windows", g29));
         assert!(!ffb_flipped_on("linux", g923));
         assert!(!ffb_flipped(None));
+        let t300 = Some((0x044f, 0xb66e));
+        assert!(ffb_flipped_on("windows", t300));
+        assert!(!ffb_flipped_on("linux", t300));
+        assert_eq!(
+            axes_for_on("windows", t300, &[1, 5]).unwrap(),
+            (Some(0), vec![(1, Func::Brake), (5, Func::Throttle)])
+        );
+        assert_eq!(
+            axes_for_on("windows", t300, &[1, 5, 7]).unwrap().1,
+            vec![(1, Func::Brake), (5, Func::Throttle), (7, Func::Clutch)]
+        );
+        assert!(axes_for_on("linux", t300, &[1, 5]).is_none());
+        assert!(axes_for_on("windows", t300, &[1, 6]).is_none());
+        if cfg!(windows) {
+            assert!(preset(t300).is_some());
+            assert!(preset(g923).is_none());
+        } else {
+            assert!(preset(t300).is_none());
+            assert!(preset(g923).is_some());
+        }
     }
 }
