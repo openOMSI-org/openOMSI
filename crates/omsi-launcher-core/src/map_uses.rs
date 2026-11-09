@@ -32,7 +32,8 @@ fn ref_unit(line: &str) -> Option<String> {
 }
 
 fn key(p: &Path) -> String {
-    p.to_string_lossy().replace('\\', "/").trim_end_matches('/').to_lowercase()
+    let p = std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    p.to_string_lossy().replace('\\', "/").trim_end_matches('/').to_string()
 }
 
 pub fn same(a: &Path, b: &Path) -> bool {
@@ -48,17 +49,18 @@ pub fn subdirs(dir: &Path) -> Vec<PathBuf> {
     vfs::list_dir(dir).unwrap_or_default().into_iter().filter(|(_, d)| *d).map(|(n, _)| dir.join(n)).collect()
 }
 
-fn text_files(dir: &Path, exts: &[&str], depth: u32, out: &mut Vec<PathBuf>) {
-    for (name, is_dir) in vfs::list_dir(dir).unwrap_or_default() {
+fn text_files(dir: &Path, exts: &[&str], depth: u32, out: &mut Vec<PathBuf>) -> bool {
+    let Some(list) = vfs::list_dir(dir) else { return false };
+    let mut whole = true;
+    for (name, is_dir) in list {
         let p = dir.join(&name);
         if is_dir {
-            if depth < 8 {
-                text_files(&p, exts, depth + 1, out);
-            }
+            whole &= depth < 16 && text_files(&p, exts, depth + 1, out);
         } else if Path::new(&name).extension().is_some_and(|e| exts.iter().any(|x| e.eq_ignore_ascii_case(x))) {
             out.push(p);
         }
     }
+    whole
 }
 
 fn stamp(files: &[PathBuf]) -> u64 {
@@ -73,27 +75,33 @@ fn stamp(files: &[PathBuf]) -> u64 {
 
 static SEEN: Mutex<Vec<(String, u64, Vec<String>)>> = Mutex::new(Vec::new());
 
-fn scan(dir: &Path, exts: &[&str], pick: fn(&str) -> Vec<String>) -> Vec<String> {
+pub fn forget() {
+    SEEN.lock().unwrap().clear();
+}
+
+fn scan(dir: &Path, exts: &[&str], pick: fn(&str) -> Vec<String>) -> Option<Vec<String>> {
     let mut files = Vec::new();
-    text_files(dir, exts, 0, &mut files);
+    if !text_files(dir, exts, 0, &mut files) {
+        return None;
+    }
     files.sort();
     let (k, s) = (format!("{}|{}", exts.join(","), key(dir)), stamp(&files));
     if let Some((_, _, u)) = SEEN.lock().unwrap().iter().find(|(d, st, _)| *d == k && *st == s) {
-        return u.clone();
+        return Some(u.clone());
     }
     let mut set = BTreeSet::new();
     for f in &files {
-        let Ok(text) = vfs::read_text(f) else { continue };
+        let text = vfs::read_text(f).ok()?;
         set.extend(omsi_cfg::split_lines(&text).iter().flat_map(|l| pick(l)));
     }
     let u: Vec<String> = set.into_iter().collect();
     let mut seen = SEEN.lock().unwrap();
     seen.retain(|(d, _, _)| *d != k);
     seen.push((k, s, u.clone()));
-    u
+    Some(u)
 }
 
-pub fn uses(map_dir: &Path) -> Vec<String> {
+pub fn uses(map_dir: &Path) -> Option<Vec<String>> {
     scan(map_dir, &["map", "cfg", "txt"], |l| ref_unit(l).into_iter().collect())
 }
 
@@ -104,18 +112,20 @@ fn up_links(line: &str) -> Vec<String> {
     line.to_lowercase().split(['/', '\\']).map(str::trim).filter(|c| !c.is_empty() && *c != "..").map(str::to_string).collect()
 }
 
-fn linked_from(content: &Path, skip: &HashSet<String>, names: &HashSet<String>) -> HashSet<String> {
-    let mut found = HashSet::new();
-    for top in SHARED {
-        let Some(top_dir) = child(content, top) else { continue };
-        for pack in subdirs(&top_dir) {
-            let unit = format!("{top}/{}", pack.file_name().unwrap_or_default().to_string_lossy().to_lowercase());
-            if !skip.contains(&unit) {
-                found.extend(scan(&pack, &["sco", "sli", "cfg", "txt"], up_links).into_iter().filter(|c| names.contains(c)));
+fn pack_links(content: &Path) -> Option<Vec<(String, Vec<String>)>> {
+    let mut bases = vec![content.to_path_buf()];
+    bases.extend(subdirs(&content.join("Mods").join("disabled")));
+    let mut out = Vec::new();
+    for base in bases {
+        for top in SHARED {
+            let Some(top_dir) = child(&base, top) else { continue };
+            for pack in subdirs(&top_dir) {
+                let unit = format!("{top}/{}", pack.file_name().unwrap_or_default().to_string_lossy().to_lowercase());
+                out.push((unit, scan(&pack, &["sco", "sli", "cfg", "txt"], up_links)?));
             }
         }
     }
-    found
+    Some(out)
 }
 
 pub struct Scope<'a> {
@@ -135,14 +145,21 @@ pub fn plan(content: &Path, roots: &[PathBuf], s: &Scope, full: bool) -> Plan {
     if !s.maps {
         return Plan::default();
     }
-    let used: HashSet<String> = s.others.iter().flat_map(|d| uses(d)).collect();
+    let mut blind = s.blind;
+    let mut used: HashSet<String> = HashSet::new();
+    for d in &s.others {
+        match uses(d) {
+            Some(u) => used.extend(u),
+            None => blind = true,
+        }
+    }
     let owned_units: HashSet<String> = s.owned.iter().filter_map(|p| unit_of(p)).collect();
     let foreign_units: HashSet<String> = s.foreign.iter().filter_map(|p| unit_of(p)).collect();
     let elsewhere: Vec<&PathBuf> = roots.iter().filter(|r| !same(r, content)).collect();
     let in_root = |root: &Path, unit: &str| unit.split_once('/').and_then(|(t, n)| child(root, t).and_then(|d| child(&d, n))).filter(|p| vfs::is_dir(p));
     let mut cands: Vec<(String, PathBuf)> = Vec::new();
-    if full && !s.blind && elsewhere.iter().any(|r| !r.starts_with(content)) {
-        for u in s.mine.iter().flat_map(|d| uses(d)).collect::<BTreeSet<_>>() {
+    if full && !blind && elsewhere.iter().any(|r| !r.starts_with(content)) {
+        for u in s.mine.iter().flat_map(|d| uses(d).unwrap_or_default()).collect::<BTreeSet<_>>() {
             if used.contains(&u) || owned_units.contains(&u) || foreign_units.contains(&u) || elsewhere.iter().any(|r| in_root(r, &u).is_some()) {
                 continue;
             }
@@ -151,15 +168,17 @@ pub fn plan(content: &Path, roots: &[PathBuf], s: &Scope, full: bool) -> Plan {
             }
         }
     }
-    let mut stay: HashSet<String> = owned_units.iter().filter(|u| s.blind || used.contains(*u)).cloned().collect();
+    let links = if cands.is_empty() && owned_units.iter().all(|u| blind || used.contains(u)) { Some(Vec::new()) } else { pack_links(content) };
+    let mut stay: HashSet<String> = owned_units.iter().filter(|u| blind || links.is_none() || used.contains(*u)).cloned().collect();
+    if links.is_none() {
+        cands.clear();
+    }
+    let links = links.unwrap_or_default();
     loop {
         let going: HashSet<String> = cands.iter().map(|(u, _)| u).chain(&owned_units).filter(|u| !stay.contains(*u)).cloned().collect();
-        let names: HashSet<String> = going.iter().map(|u| name_of(u).to_string()).collect();
-        if names.is_empty() {
-            break;
-        }
-        let linked = linked_from(content, &going, &names);
-        let newly: Vec<String> = going.into_iter().filter(|u| linked.contains(name_of(u))).collect();
+        let names: HashSet<&str> = going.iter().map(|u| name_of(u)).collect();
+        let linked: HashSet<&str> = links.iter().filter(|(u, _)| !going.contains(u)).flat_map(|(_, l)| l.iter().map(String::as_str)).filter(|c| names.contains(c)).collect();
+        let newly: Vec<String> = going.iter().filter(|u| linked.contains(name_of(u))).cloned().collect();
         if newly.is_empty() {
             break;
         }

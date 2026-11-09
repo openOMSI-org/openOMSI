@@ -436,6 +436,7 @@ fn remove_in(content: &Path, id: &str, roots: &[PathBuf]) -> anyhow::Result<Stri
     }
     let mut r = load(content);
     let k = take(content, &mut r, id)?;
+    map_uses::forget();
     let plan = plan_in(content, &r, k, roots, true);
     let m = r.mods.remove(k);
     unmount(content, &m.paths);
@@ -744,6 +745,23 @@ mod tests {
         put(&c.join("Archives/Off.zip"), "x");
         let plan = plan_in(&c, &r, k, &roots, true);
         assert!(plan.freed.is_empty() && plan.kept == ["Sceneryobjects/Shared", "Sceneryobjects/Base"], "{plan:?}");
+        std::fs::remove_dir_all(c).unwrap();
+        std::fs::remove_dir_all(omsi).unwrap();
+    }
+
+    #[test]
+    fn a_map_or_pack_not_read_to_the_end_keeps_everything() {
+        let (c, omsi, id) = two_maps();
+        let roots = [c.clone(), omsi.clone()];
+        put(&c.join("Mods/disabled/Old/Sceneryobjects/Old/o.sco"), "[mesh]\n..\\..\\PackA\\a.o3d\n");
+        let mut r = load(&c);
+        let k = take(&c, &mut r, &id).unwrap();
+        assert_eq!(plan_in(&c, &r, k, &roots, true).freed, ["Splines/RoadA"]);
+        std::fs::remove_dir_all(c.join("Mods/disabled/Old")).unwrap();
+        let deep: PathBuf = (0..20).fold(c.join("maps/Valley"), |p, i| p.join(i.to_string()));
+        put(&deep.join("x.map"), "");
+        let plan = plan_in(&c, &r, k, &roots, true);
+        assert!(plan.freed.is_empty() && plan.kept == ["Sceneryobjects/Shared"], "{plan:?}");
         std::fs::remove_dir_all(c).unwrap();
         std::fs::remove_dir_all(omsi).unwrap();
     }
