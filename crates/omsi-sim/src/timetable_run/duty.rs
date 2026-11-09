@@ -135,7 +135,7 @@ impl PlayerDuty {
     /// `trip_index`, before the bus has been placed on it; `picked` when the player picked
     /// the trip.
     pub fn new(line: String, tour: String, trips: Vec<PlannedTrip>, trip_index: usize, first_trip: usize, picked: bool) -> PlayerDuty {
-        let ibis_stops = vec![None; trips.len()];
+        let ibis_stops = HashMap::new();
         PlayerDuty {
             line,
             tour,
@@ -273,7 +273,7 @@ impl PlayerDuty {
                 n += closed as usize;
             }
             if changed {
-                self.ibis_stops[trip_index] = None;
+                self.ibis_stops.remove(&trip_index);
                 if self.ibis_host_trip == Some(trip_index) {
                     self.ibis_host_trip = None;
                 }
@@ -712,15 +712,15 @@ impl PlayerDuty {
         let trip_index = self.trip_index;
         let trip = &self.trips[trip_index];
         let prev_ibis = bus.host.tt_ibis_busstop_index;
-        if self.ibis_stops[trip_index].is_none() {
+        if !self.ibis_stops.contains_key(&trip_index) {
             let has_timetable_calls = trip.stops.iter().any(|stop| stop.stops);
-            self.ibis_stops[trip_index] = Some(
+            self.ibis_stops.insert(trip_index,
                 trip.stops.iter().enumerate()
                     .filter_map(|(index, stop)| (if has_timetable_calls { stop.calls() } else { true }).then_some(index))
                     .collect(),
             );
         }
-        let calling = self.ibis_stops[trip_index].as_ref().expect("IBIS stops were just cached");
+        let calling = self.ibis_stops.get(&trip_index).expect("IBIS stops were just cached");
         let next_calling = calling.iter().position(|index| *index >= self.next_stop)
             .or_else(|| calling.len().checked_sub(1));
         let ibis_stop = next_calling.and_then(|index| calling.get(index).copied())
