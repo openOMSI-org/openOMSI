@@ -763,7 +763,7 @@ impl PlayerDuty {
             }
         }
         let Some((k, _)) = best else { return };
-        // Closed stops and stations marked as pass-through are not missed.
+        // (a closed stop or a station passed through was not missed)
         let missed = trip.stops[self.next_stop..k].iter().filter(|s| s.calls()).count();
         if missed == 0 {
             self.next_stop = k;

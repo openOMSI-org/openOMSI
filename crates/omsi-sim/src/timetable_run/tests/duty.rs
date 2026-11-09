@@ -654,6 +654,37 @@ fn closed_stops_passed_are_not_missed() {
 }
 
 #[test]
+fn catch_up_skips_pass_through_stations() {
+    let mut trip = planned(
+        0.0,
+        &[
+            (0.0, 0.0, 0.0),
+            (100.0, 60.0, 60.0),
+            (500.0, 120.0, 120.0),
+            (1000.0, 200.0, 200.0),
+            (1500.0, 280.0, 280.0),
+        ],
+    );
+    trip.stops[2].stops = false;
+    trip.set_dirs();
+
+    let mut d = PlayerDuty::new("5".into(), "1".into(), vec![trip], 0, 0, true);
+    (d.placed, d.heading) = (true, 90.0);
+
+    d.advance(glam::DVec3::new(0.0, 0.0, 0.0), 0.0);
+    d.advance(glam::DVec3::new(60.0, 0.0, 0.0), 30.0);
+
+    // Passing the pass-through station must not make it the next stop.
+    d.advance(glam::DVec3::new(500.0, 0.0, 0.0), 60.0);
+    assert_eq!(d.next_stop, 1);
+
+    // The pass-through station is not counted as missed when catching up.
+    d.advance(glam::DVec3::new(1000.0, 0.0, 0.0), 90.0);
+    assert_eq!(d.next_stop, 3);
+    assert_eq!(d.take_skipped(), Some((1, 2, 4)));
+}
+
+#[test]
 fn a_duty_starts_with_the_trip_that_fits_the_time() {
     // Spandau line 5, tour "Mo-Fr 3": a depot run 14:44-15:01, then 15:07 and 16:01
     let trips = vec![
