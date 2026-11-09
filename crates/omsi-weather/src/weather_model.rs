@@ -43,13 +43,13 @@ fn cloud_kind(total: f32, deck: f32) -> &'static str {
     else { "-1" }
 }
 
+/// Monthly climate statistics per location, specified in the map's `openomsi_climate.cfg`
 #[derive(Debug, Clone)]
-/// Monthly climate statistics per location, specified in the map's `climate.txt`
 pub struct ClimateStats {
     /// Mean temperatures (°C)
     pub temp: [f32; 12],
     /// Mean precipitations (mm)
-    pub precip: [f32; 12]
+    pub precip: [f32; 12],
 }
 
 /// The model's state at one moment.
@@ -265,17 +265,16 @@ impl WeatherModel {
     fn climate_temp(&self, doy: f32) -> f32 {
         if let Some(stats) = &self.climate_stats {
             let midpoints = if self.is_leap {
-                [16.5f32, 46.5, 76.5, 107.0, 137.5, 168.0, 198.5, 229.5, 260.0, 290.5, 321.0, 351.5, 382.5]                
+                [16.5f32, 46.5, 76.5, 107.0, 137.5, 168.0, 198.5, 229.5, 260.0, 290.5, 321.0, 351.5, 382.5]
             } else {
                 [16.5f32, 46.0, 75.5, 106.0, 136.5, 167.0, 197.5, 228.5, 259.0, 289.5, 320.0, 350.5, 381.5]
             };
             let days_in_year = if self.is_leap { 366.0 } else { 365.0 };
             let doy = (doy - 1.0).rem_euclid(days_in_year) + 1.0;
-            let doy = if doy < midpoints[0] { doy + days_in_year } else { doy }; 
+            let doy = if doy < midpoints[0] { doy + days_in_year } else { doy };
             let interval = midpoints.iter().position(|x| x >= &doy).map(|x| if x == 0 { 12 } else { x });
             match interval {
                 Some(idx) if (1..=12).contains(&idx) => {
-                    
                     let t = (doy - midpoints[idx - 1]) / (midpoints[idx] - midpoints[idx - 1]);
                     let temp_diff = if idx == 12 {
                         stats.temp[0] - stats.temp[11]
@@ -675,7 +674,7 @@ mod tests {
     }
 
     #[test]
-    fn polar_winters_are_frosty_and_summers_are_hot() {
+    fn continental_winters_are_frosty_and_summers_are_hot() {
         let stats = ClimateStats {
             temp: [-15.0, -12.0, -5.0, 4.0, 14.0, 17.0, 20.0, 18.0, 11.0, 5.0, -1.0, -11.0],
             precip: [32.0, 28.0, 35.0, 42.0, 57.0, 71.0, 64.0, 60.0, 48.0, 40.0, 35.0, 31.0]
