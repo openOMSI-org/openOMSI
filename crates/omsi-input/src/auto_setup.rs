@@ -5,9 +5,10 @@
 //! lists them, as nearly every wheel has them; and a device with no pedal lying at an end
 //! (a joystick, a wheel with its pedals on one combined axis) drives with its Y axis, pushed
 //! forward to go and pulled back to brake. Before, such a device only steered and the
-//! player had to set up its pedals by hand in the launcher. Gamepads keep their own layout
-//! (`gamepad_profile`); whatever is guessed here is saved like a set-up made by hand and
-//! can be changed in the launcher's Game controllers page.
+//! player had to set up its pedals by hand in the launcher. A wheel listed in
+//! `wheel_defaults.json` for this platform uses that list instead. Gamepads keep their own
+//! layout (`gamepad_profile`); whatever is guessed here is saved like a set-up made by hand
+//! and can be changed in the launcher's Game controllers page.
 
 use crate::controllers::{Connected, DeviceCfg, Func};
 
@@ -17,24 +18,20 @@ pub(crate) const PEDAL_REST: f32 = 0.9;
 /// How near its centre the Y axis must rest to drive as a combined throttle and brake.
 const CENTRE_REST: f32 = 0.2;
 
-/// Logitech's wheels on macOS and Linux, read as their HID report has them (Windows's
-/// Logitech driver reorders the pedals): the clutch on Y, the throttle on Z, the brake on Rz.
-const LOGITECH: u16 = 0x046d;
-const LOGITECH_HID_PEDALS: &[u16] = &[
-    0xc24f, // G29 (PlayStation)
-    0xc260, // G29 (PlayStation 4 mode)
-    0xc262, // G920
-    0xc266, // G923 (PlayStation)
-    0xc267, // G923 (PlayStation, Xbox's mode)
-    0xc26d, // G923 (Xbox)
-    0xc26e, // G923 (Xbox)
-];
-
 /// The set-up of a device nobody has set up, from its axes at rest (DirectInput slots:
 /// X, Y, Z, Rx, Ry, Rz and the two sliders, -1..1). None: nothing it could drive with.
 pub fn guess(name: &str, hardware_id: Option<(u16, u16)>, ff_capable: bool, rest: &[(usize, f32)], steering_taken: bool) -> Option<DeviceCfg> {
     let at = |k: usize| rest.iter().find(|(s, _)| *s == k).map(|(_, v)| *v);
     let mut d = DeviceCfg { name: name.to_string(), second: if ff_capable { "1" } else { "0" }.into(), ..Default::default() };
+    if let Some(set) = crate::wheel_defaults::assign(hardware_id, rest) {
+        for (k, f, rev) in set {
+            d.axes[k] = Some((f, rev));
+        }
+        if d.axes[0].is_none() && (ff_capable || !steering_taken) && at(0).is_some_and(|x| x.abs() < PEDAL_REST) {
+            d.axes[0] = Some((Func::Steering, false));
+        }
+        return Some(d);
+    }
     // (an X axis resting at an end is a pedal: a set of pedals of its own has its throttle there)
     let steers = (ff_capable || !steering_taken) && at(0).is_some_and(|x| x.abs() < PEDAL_REST);
     if steers {
@@ -53,9 +50,7 @@ pub fn guess(name: &str, hardware_id: Option<(u16, u16)>, ff_capable: bool, rest
     if !steers && pedals.is_empty() {
         return None;
     }
-    let slots: Vec<usize> = pedals.iter().map(|p| p.0).collect();
-    let logitech_hid = !cfg!(windows) && hardware_id.is_some_and(|(v, p)| v == LOGITECH && LOGITECH_HID_PEDALS.contains(&p)) && slots == [1, 2, 5];
-    let order: &[Func] = if logitech_hid { &[Func::Clutch, Func::Throttle, Func::Brake] } else { &[Func::Throttle, Func::Brake, Func::Clutch] };
+    let order: &[Func] = &[Func::Throttle, Func::Brake, Func::Clutch];
     for (&(k, v), &f) in pedals.iter().zip(order) {
         // (a pedal reads -1 up and 1 down: one resting at 1 runs the other way)
         d.axes[k] = Some((f, v > 0.0));
@@ -164,9 +159,15 @@ mod tests {
         if cfg!(windows) {
             assert_eq!(funcs(&d), [(0, Func::Steering, false), (1, Func::Throttle, true), (5, Func::Brake, true), (6, Func::Clutch, true)]);
         }
-        // a wheel of another maker, its pedals resting at -1
+        // a T300 in PC mode: the defaults file, brake then throttle. Other platforms keep the usual order.
         let d = guess("Thrustmaster T300RS", Some((0x044f, 0xb66e)), true, &[(0, -0.02), (1, -1.0), (5, -0.98)], false).unwrap();
-        assert_eq!(funcs(&d), [(0, Func::Steering, false), (1, Func::Throttle, false), (5, Func::Brake, false)]);
+        let expected = if cfg!(windows) {
+            [(0, Func::Steering, false), (1, Func::Brake, false), (5, Func::Throttle, false)]
+        } else {
+            [(0, Func::Steering, false), (1, Func::Throttle, false), (5, Func::Brake, false)]
+        };
+        assert_eq!(funcs(&d), expected);
+        assert!(d.ff_invert.is_none());
     }
 
     #[test]
@@ -205,6 +206,29 @@ mod tests {
         let d = guess("Fanatec ClubSport Pedals", None, false, &[(0, -1.0), (1, -1.0), (2, -1.0)], true).unwrap();
         assert_eq!(funcs(&d), [(0, Func::Throttle, false), (1, Func::Brake, false), (2, Func::Clutch, false)]);
         let d = guess("Thrustmaster T300RS", Some((0x044f, 0xb66e)), true, &[(0, -0.02), (1, -1.0), (5, -0.98)], true).unwrap();
+        let expected = if cfg!(windows) {
+            [(0, Func::Steering, false), (1, Func::Brake, false), (5, Func::Throttle, false)]
+        } else {
+            [(0, Func::Steering, false), (1, Func::Throttle, false), (5, Func::Brake, false)]
+        };
+        assert_eq!(funcs(&d), expected);
+    }
+
+    #[test]
+    fn a_listed_wheel_uses_its_defaults_and_an_unknown_id_does_not() {
+        let t300 = Some((0x044f, 0xb66e));
+        let three = &[(0, 0.0), (1, -1.0), (5, -1.0), (7, 1.0)];
+        let d = guess("Thrustmaster T300RS", t300, true, three, false).unwrap();
+        if cfg!(windows) {
+            assert_eq!(funcs(&d), [(0, Func::Steering, false), (1, Func::Brake, false), (5, Func::Throttle, false), (7, Func::Clutch, true)]);
+        } else {
+            assert_eq!(funcs(&d), [(0, Func::Steering, false), (1, Func::Throttle, false), (5, Func::Brake, false), (7, Func::Clutch, true)]);
+        }
+        // an extra resting axis is not in the file, so the usual order is used
+        let extra = &[(0, 0.0), (1, -1.0), (5, -1.0), (6, -1.0)];
+        let d = guess("Thrustmaster T300RS", t300, true, extra, false).unwrap();
+        assert_eq!(funcs(&d), [(0, Func::Steering, false), (1, Func::Throttle, false), (5, Func::Brake, false), (6, Func::Clutch, false)]);
+        let d = guess("Thrustmaster", Some((0x044f, 0xb65e)), true, &[(0, -0.02), (1, -1.0), (5, -0.98)], false).unwrap();
         assert_eq!(funcs(&d), [(0, Func::Steering, false), (1, Func::Throttle, false), (5, Func::Brake, false)]);
     }
 

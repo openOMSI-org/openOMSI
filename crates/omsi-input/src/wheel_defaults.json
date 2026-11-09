@@ -1,0 +1,32 @@
+[
+  { "id": "046d:c266", "platform": ["windows"], "ffb": "flipped" },
+  { "id": "046d:c267", "platform": ["windows"], "ffb": "flipped" },
+  { "id": "046d:c26d", "platform": ["windows"], "ffb": "flipped" },
+  { "id": "046d:c26e", "platform": ["windows"], "ffb": "flipped" },
+  { "id": "044f:b66e", "platform": ["windows"], "wheel": 0, "ffb": "flipped", "pedals": [
+    { "axis": 1, "function": "brake" },
+    { "axis": 5, "function": "throttle" },
+    { "axis": 7, "function": "clutch", "optional": true }
+  ]},
+  { "id": "046d:c24f", "platform": ["linux", "macos"], "wheel": 0, "pedals": [
+    { "axis": 1, "function": "clutch" }, { "axis": 2, "function": "throttle" }, { "axis": 5, "function": "brake" }
+  ]},
+  { "id": "046d:c260", "platform": ["linux", "macos"], "wheel": 0, "pedals": [
+    { "axis": 1, "function": "clutch" }, { "axis": 2, "function": "throttle" }, { "axis": 5, "function": "brake" }
+  ]},
+  { "id": "046d:c262", "platform": ["linux", "macos"], "wheel": 0, "pedals": [
+    { "axis": 1, "function": "clutch" }, { "axis": 2, "function": "throttle" }, { "axis": 5, "function": "brake" }
+  ]},
+  { "id": "046d:c266", "platform": ["linux", "macos"], "wheel": 0, "pedals": [
+    { "axis": 1, "function": "clutch" }, { "axis": 2, "function": "throttle" }, { "axis": 5, "function": "brake" }
+  ]},
+  { "id": "046d:c267", "platform": ["linux", "macos"], "wheel": 0, "pedals": [
+    { "axis": 1, "function": "clutch" }, { "axis": 2, "function": "throttle" }, { "axis": 5, "function": "brake" }
+  ]},
+  { "id": "046d:c26d", "platform": ["linux", "macos"], "wheel": 0, "pedals": [
+    { "axis": 1, "function": "clutch" }, { "axis": 2, "function": "throttle" }, { "axis": 5, "function": "brake" }
+  ]},
+  { "id": "046d:c26e", "platform": ["linux", "macos"], "wheel": 0, "pedals": [
+    { "axis": 1, "function": "clutch" }, { "axis": 2, "function": "throttle" }, { "axis": 5, "function": "brake" }
+  ]}
+]
