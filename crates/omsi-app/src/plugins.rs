@@ -356,10 +356,10 @@ pub(crate) fn game_info(app: &crate::App) -> Vec<(&'static str, InfoValue)> {
     v
 }
 
-/// The index of the next timetable stop where the bus is meant to stop.
 fn next_calling_stop(stops: &[crate::schedule::PlannedStop], next: usize) -> usize {
     (next..stops.len()).find(|&i| stops[i].stops).unwrap_or(next)
 }
+
 /// `omsi.info()`'s keys of the next stop and the one before it: `stops` the trip's, `next`
 /// the index of the next one, `bus` where the player's bus is.
 fn stop_info(v: &mut Vec<(&'static str, InfoValue)>, stops: &[crate::schedule::PlannedStop], next: usize, at_stop: bool, bus: Option<glam::DVec3>) {
@@ -1219,6 +1219,7 @@ mod tests {
         assert_eq!(get("next_stop_id"), Some(InfoValue::Num(13.0)));
         assert_eq!(get("at_stop"), Some(InfoValue::Bool(false)));
     }
+
     /// The next stop and the one before it, by object ID, with their distances: the stop
     /// before skips a passing station, and a stop with no known place has no distance.
     #[test]
