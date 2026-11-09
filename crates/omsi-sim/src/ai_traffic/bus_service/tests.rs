@@ -18,6 +18,25 @@ fn the_engine_rests_through_a_long_wait() {
 
 use super::*;
 
+#[test]
+fn installed_ai_timetable_is_exposed_to_ibis_scripts() {
+    let mut vehicle = service_vehicle();
+    let timetable = AiTimetable {
+        line: "042".into(),
+        terminus: String::new(),
+        stops: vec![
+            (11, "First".into(), 100.0, 120.0),
+            (12, "Second".into(), 200.0, 220.0),
+        ],
+    };
+
+    timetable.install(&mut vehicle.host, None);
+
+    assert_eq!(vehicle.host.tt_ibis_stops, vehicle.host.tt_stops);
+    assert_eq!(vehicle.host.tt_ibis_busstop_index, vehicle.host.tt_busstop_index);
+    assert_eq!(vehicle.host.tt_ibis_stops.len(), 2);
+}
+
 /// Somebody coming from another stop than the one the bus serves does not keep it there
 /// (#767); somebody on the way out does, wherever.
 #[test]
