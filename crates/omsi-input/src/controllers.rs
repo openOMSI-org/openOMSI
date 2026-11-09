@@ -97,6 +97,24 @@ pub struct DeviceCfg {
     /// lever, a lit hazard button - and switch back when they come out.
     pub latching: Vec<usize>,
     pub more: Vec<(usize, String)>,
+    /// `[openOMSI.HoldActions]`: one second action per button (from 0). Used only while
+    /// the long-press setting is on.
+    pub hold: Vec<(usize, String)>,
+    /// `[openOMSI.HoldMs]`: how long that button must be held, when it is not 200 ms.
+    pub hold_ms: Vec<(usize, u32)>,
+}
+
+/// How long a second action waits, when the button does not say.
+pub const HOLD_MS: u32 = 200;
+
+/// A hold time is kept inside 50 ms .. 2000 ms.
+pub fn clamp_hold_ms(ms: u32) -> u32 {
+    ms.clamp(50, 2000)
+}
+
+/// The press waits only while long press is on and this control has a second action.
+pub fn second_action_waits(enabled: bool, has_second: bool) -> bool {
+    enabled && has_second
 }
 
 impl DeviceCfg {
@@ -118,6 +136,30 @@ impl DeviceCfg {
 
     pub fn continuous(&self, button: usize) -> bool {
         self.buttons.get(button).is_some_and(|b| b.1.trim() == "1")
+    }
+
+    /// The second action and its hold time, when one is set.
+    pub fn second_of(&self, button: usize) -> Option<(String, u32)> {
+        let action = self.hold.iter().find(|(b, a)| *b == button && !a.is_empty()).map(|(_, a)| a.clone())?;
+        let ms = self.hold_ms.iter().find(|(b, _)| *b == button).map(|(_, ms)| clamp_hold_ms(*ms)).unwrap_or(HOLD_MS);
+        Some((action, ms))
+    }
+
+    pub fn set_second(&mut self, button: usize, action: &str) {
+        self.hold.retain(|(b, _)| *b != button);
+        if !action.is_empty() {
+            self.hold.push((button, action.to_string()));
+        } else {
+            self.hold_ms.retain(|(b, _)| *b != button);
+        }
+    }
+
+    pub fn set_hold_ms(&mut self, button: usize, ms: u32) {
+        self.hold_ms.retain(|(b, _)| *b != button);
+        let ms = clamp_hold_ms(ms);
+        if ms != HOLD_MS && self.hold.iter().any(|(b, _)| *b == button) {
+            self.hold_ms.push((button, ms));
+        }
     }
 }
 
@@ -210,6 +252,31 @@ pub fn parse_cfg(text: &str) -> Vec<DeviceCfg> {
                 }
                 i += 2 + n * 2;
             }
+            "[openOMSI.HoldActions]" => {
+                let n: usize = lines.get(i + 1).and_then(|v| v.parse().ok()).unwrap_or(0).min(512);
+                if let Some(d) = out.last_mut() {
+                    for k in 0..n {
+                        let button = lines.get(i + 2 + k * 2).and_then(|v| v.parse::<usize>().ok()?.checked_sub(1));
+                        let action = lines.get(i + 3 + k * 2).unwrap_or(&"");
+                        if let Some(b) = button.filter(|_| !action.is_empty()) {
+                            d.set_second(b, action);
+                        }
+                    }
+                }
+                i += 2 + n * 2;
+            }
+            "[openOMSI.HoldMs]" => {
+                if let Some(d) = out.last_mut() {
+                    for pair in lines.get(i + 1).unwrap_or(&"").split_whitespace() {
+                        let mut parts = pair.split(':');
+                        let (Some(button), Some(ms)) = (parts.next().and_then(|v| v.parse::<usize>().ok()?.checked_sub(1)), parts.next().and_then(|v| v.parse().ok())) else { continue };
+                        if d.hold.iter().any(|(b, _)| *b == button) {
+                            d.set_hold_ms(button, ms);
+                        }
+                    }
+                }
+                i += 2;
+            }
             "[openOMSI.FFTuning]" => {
                 // centring, damping, parking, min_force, smoothing: as many as are there
                 // before the next blank line or section, the rest (and a NaN) at their defaults
@@ -268,6 +335,17 @@ pub fn cfg_text(devices: &[DeviceCfg]) -> String {
                 t.push_str(&format!("{}\r\n{action}\r\n", b + 1));
             }
             t.push_str("\r\n");
+        }
+        if !d.hold.is_empty() {
+            t.push_str(&format!("[openOMSI.HoldActions]\r\n{}\r\n", d.hold.len()));
+            for (b, action) in &d.hold {
+                t.push_str(&format!("{}\r\n{action}\r\n", b + 1));
+            }
+            t.push_str("\r\n");
+            if !d.hold_ms.is_empty() {
+                let numbers: Vec<String> = d.hold_ms.iter().map(|(b, ms)| format!("{}:{}", b + 1, ms)).collect();
+                t.push_str(&format!("[openOMSI.HoldMs]\r\n{}\r\n\r\n", numbers.join(" ")));
+            }
         }
     }
     t
@@ -988,6 +1066,8 @@ pub struct Controllers {
     pub ff_invert: bool,
     /// Force feedback and rumble switched on (Settings: `ff_enabled`).
     pub ff_enabled: bool,
+    /// A button with a second action waits before it fires (Settings: `long_press`). Off ignores every saved second action.
+    pub long_press: bool,
     /// How strongly the tarmac's grain is felt under the wheels (Settings: `ff_road_vib`,
     /// 0 = none).
     pub ff_road: f32,
@@ -1108,7 +1188,7 @@ impl Controllers {
     }
 
     fn with_devices(devices: Devices, cfg: Vec<DeviceCfg>) -> Controllers {
-        Controllers { settled: Vec::new(), devices, focused: true, background: false, cfg, held: HeldButtons::default(), editing: false, raw_buttons: Vec::new(), repeating: Vec::new(), deadzone: 0.0, right_stick_look: true, pad_deadzone: 0.08, pad_presets: true, pedal_throttle: 1.0, pedal_brake: 1.0, disabled: Vec::new(), ff_invert: false, ff_enabled: true, ff_road: 1.0, ff_engine: 1.0, ff_fade: FF_FADE, steer_gain: 1.0, enabled: true, actions: Vec::new(), announced: Vec::new(), moved: Vec::new(), notice: None, rests: Default::default(), auto_saved: None, cfg_unread: false, steer: None, ff_t: 0.0, ff_smooth: 0.0, ff_lateral: 0.0, ff_bump: 0.0, ff_bump_age: 0.0, ff_micro: Micro::default(), ff_vib: ScriptVib::default(), ff_rumble: 0.0, ff_source_logged: None, rumble: Vec::new(), #[cfg(all(target_os = "linux", target_pointer_width = "64"))] wheel: None, #[cfg(all(target_os = "linux", target_pointer_width = "64"))] wheel_tried: None }
+        Controllers { settled: Vec::new(), devices, focused: true, background: false, cfg, held: HeldButtons::default(), editing: false, raw_buttons: Vec::new(), repeating: Vec::new(), deadzone: 0.0, right_stick_look: true, pad_deadzone: 0.08, pad_presets: true, pedal_throttle: 1.0, pedal_brake: 1.0, disabled: Vec::new(), ff_invert: false, ff_enabled: true, long_press: false, ff_road: 1.0, ff_engine: 1.0, ff_fade: FF_FADE, steer_gain: 1.0, enabled: true, actions: Vec::new(), announced: Vec::new(), moved: Vec::new(), notice: None, rests: Default::default(), auto_saved: None, cfg_unread: false, steer: None, ff_t: 0.0, ff_smooth: 0.0, ff_lateral: 0.0, ff_bump: 0.0, ff_bump_age: 0.0, ff_micro: Micro::default(), ff_vib: ScriptVib::default(), ff_rumble: 0.0, ff_source_logged: None, rumble: Vec::new(), #[cfg(all(target_os = "linux", target_pointer_width = "64"))] wheel: None, #[cfg(all(target_os = "linux", target_pointer_width = "64"))] wheel_tried: None }
     }
 
     /// Whether this device steers the bus (set up so, or steering now): the photo mode's camera takes none for its gamepad (a wheel turned it).
@@ -1168,6 +1248,7 @@ impl Controllers {
     /// Read the devices: the analog controls, and the button actions into `actions`.
     pub fn poll(&mut self) -> Analog {
         let mut out = Analog::default();
+        self.held.set_long_press(self.long_press);
         self.raw_buttons = self.devices.poll();
         if omsi_cfg::flags::OMSI_DEBUG_PAD.is_set() {
             for (name, n, down) in &self.raw_buttons {
@@ -1183,6 +1264,9 @@ impl Controllers {
                 continue;
             }
             self.held.event(&self.cfg, name, *n, *down, &mut self.actions);
+        }
+        if !self.editing && self.enabled {
+            self.held.advance(&mut self.actions);
         }
         self.repeating = if self.editing || !self.enabled || !self.focused { Vec::new() } else { self.held.repeating() };
         self.preset_buttons();
@@ -2180,6 +2264,37 @@ mod cfg_tests {
         assert!(devs.iter().any(|d| d.name.contains("G25")), "{:?}", devs.iter().map(|d| &d.name).collect::<Vec<_>>());
         let again = super::parse_cfg(&super::cfg_text(&devs));
         assert_eq!(again, devs);
+    }
+
+    #[test]
+    fn a_file_without_a_hold_section_is_written_back_without_one() {
+        let mut d = super::DeviceCfg { name: "Wheel".into(), second: "0".into(), ..Default::default() };
+        d.buttons = vec![("bus_horn".into(), "0".into())];
+        let text = super::cfg_text(&[d]);
+        assert!(text.contains("[buttons]\r\n1\r\nbus_horn\r\n0\r\n"));
+        assert!(!text.contains("Hold"));
+        let parsed = super::parse_cfg(&text);
+        assert!(parsed[0].hold.is_empty());
+        assert_eq!(super::parse_cfg(&super::cfg_text(&parsed)), parsed);
+    }
+
+    #[test]
+    fn a_second_action_is_stored_apart_from_the_button_line() {
+        let mut d = super::DeviceCfg { name: "Wheel".into(), second: "0".into(), ..Default::default() };
+        d.buttons = vec![("bus_horn".into(), "1".into())];
+        d.set_second(0, "bus_wiper");
+        d.set_hold_ms(0, 400);
+        let text = super::cfg_text(&[d.clone()]);
+        assert!(text.contains("[buttons]\r\n1\r\nbus_horn\r\n1\r\n"));
+        assert!(text.contains("[openOMSI.HoldActions]"));
+        assert!(text.contains("1:400"));
+        let parsed = super::parse_cfg(&text);
+        assert_eq!(parsed[0].buttons[0], ("bus_horn".into(), "1".into()));
+        assert_eq!(parsed[0].second_of(0), Some(("bus_wiper".into(), 400)));
+        assert_eq!(super::parse_cfg(&super::cfg_text(&parsed)), parsed);
+        let mut plain = d;
+        plain.set_hold_ms(0, 200);
+        assert!(!super::cfg_text(&[plain]).contains("HoldMs"));
     }
 }
 

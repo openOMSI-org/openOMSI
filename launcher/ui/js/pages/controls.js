@@ -214,8 +214,14 @@ function Keyboard() {
 
   const preset = s.settings?.drive_keys ?? 'simple';
   const presetName = { wasd: 'W A S D only', arrows: 'Arrow keys only' }[preset] || 'W A S D + arrows';
+  const longOn = !!s.settings?.long_press;
 
-  const clear = (i) => persist(edit(sec, (a) => Object.assign(a[i], { scan_code: 0, modifier: 0 })), isVr(list[i]?.action));
+  const clear = (i) => {
+    const b = list[i];
+    let next = edit(sec, (a) => Object.assign(a[i], { scan_code: 0, modifier: 0 }));
+    if (b?.scan_code) next = { ...next, holds: (next.holds || []).filter((h) => !(h.scan_code === b.scan_code && h.chord === chordOf(b.modifier))) };
+    persist(next, isVr(b?.action));
+  };
   const remove = (i) => persist(edit(sec, (a) => a.splice(i, 1)), isVr(list[i]?.action));
 
   /** The key pressed for the entry waiting (0 clears it). */
@@ -224,11 +230,23 @@ function Keyboard() {
     setCapture(null);
     if (c.index != null) {
       const b = kb[c.sec][c.index];
-      // (the entry's held bit is the action's, not the key's: it stays)
-      persist(edit(c.sec, (a) => Object.assign(a[c.index], { scan_code: scan, modifier: scan ? chord | ((b.modifier || 0) & KEY_HOLD) : 0 })), isVr(b.action));
+      const from = chordOf(b.modifier);
+      let next = edit(c.sec, (a) => Object.assign(a[c.index], { scan_code: scan, modifier: scan ? chord | ((b.modifier || 0) & KEY_HOLD) : 0 }));
+      next = {
+        ...next,
+        holds: (next.holds || []).map((h) => (h.scan_code === b.scan_code && h.chord === from ? { ...h, scan_code: scan, chord: scan ? chord : 0 } : h)).filter((h) => h.scan_code),
+      };
+      persist(next, isVr(b.action));
     } else if (scan) {
       persist(edit(c.sec, (a) => a.splice(c.insert, 0, { action: c.action, scan_code: scan, modifier: chord | (c.modifier & KEY_HOLD) })), isVr(c.action));
     }
+  }
+
+  function setHold(scan, chord, action, ms) {
+    const holds = (kb.holds || []).filter((h) => !(h.scan_code === scan && h.chord === chord));
+    const time = Math.max(50, Math.min(2000, Number(ms) || 200));
+    if (action) holds.push({ scan_code: scan, chord, action, ms: time });
+    persist({ ...kb, holds });
   }
 
   async function reset() {
@@ -279,6 +297,12 @@ function Keyboard() {
                     <td>
                       <div>${label}</div>
                       ${label !== b.action && html`<div class="muted small">${b.action}</div>`}
+                      ${longOn && !!b.scan_code && html`<div class="row" style="gap:8px;margin-top:6px">
+                        <input placeholder=${t('Hold action')} value=${(kb.holds || []).find((h) => h.scan_code === b.scan_code && h.chord === chordOf(b.modifier))?.action || ''}
+                          onChange=${(e) => setHold(b.scan_code, chordOf(b.modifier), e.target.value.trim(), (kb.holds || []).find((h) => h.scan_code === b.scan_code && h.chord === chordOf(b.modifier))?.ms)} />
+                        <input type="number" min="50" max="2000" aria-label=${t('Hold time')} value=${(kb.holds || []).find((h) => h.scan_code === b.scan_code && h.chord === chordOf(b.modifier))?.ms || 200}
+                          onChange=${(e) => setHold(b.scan_code, chordOf(b.modifier), (kb.holds || []).find((h) => h.scan_code === b.scan_code && h.chord === chordOf(b.modifier))?.action || '', e.target.value)} />
+                      </div>`}
                     </td>
                     <td>
                       <div class="row" style="gap:8px">

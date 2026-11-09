@@ -181,6 +181,8 @@ fn device_json(d: &DeviceCfg) -> Value {
         "ff_invert": d.ff_invert,
         "latching": d.latching,
         "more": d.more,
+        "hold": d.hold,
+        "hold_ms": d.hold_ms,
     })
 }
 
@@ -223,6 +225,20 @@ fn device_from(v: &Value) -> Result<DeviceCfg, String> {
         if !action.is_empty() && b < d.buttons.len() && !d.actions_of(b).iter().any(|a| a.eq_ignore_ascii_case(action)) {
             d.more.push((b, action.to_string()));
         }
+    }
+    for h in v.get("hold").and_then(Value::as_array).into_iter().flatten().take(512) {
+        let (Some(b), Some(action)) = (h.get(0).and_then(Value::as_u64), h.get(1).and_then(Value::as_str).map(str::trim)) else { continue };
+        if action.contains(['\r', '\n']) {
+            return Err(format!("{action:?} is not an action"));
+        }
+        let b = b as usize;
+        if !action.is_empty() && b < d.buttons.len() {
+            d.set_second(b, action);
+        }
+    }
+    for h in v.get("hold_ms").and_then(Value::as_array).into_iter().flatten().take(512) {
+        let (Some(b), Some(ms)) = (h.get(0).and_then(Value::as_u64), h.get(1).and_then(Value::as_u64)) else { continue };
+        d.set_hold_ms(b as usize, ms as u32);
     }
     Ok(d)
 }

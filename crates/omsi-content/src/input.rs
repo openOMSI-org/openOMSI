@@ -48,6 +48,25 @@ pub fn chord(shift: bool, ctrl: bool, alt: bool) -> i32 {
 pub struct KeyboardCfg {
     pub game: Vec<KeyBinding>,
     pub vehicles: Vec<KeyBinding>,
+    /// A second action for a scan code and chord. Not part of the key's third number.
+    pub holds: Vec<KeyHold>,
+}
+
+/// How long a second key action waits, when the key does not say.
+pub const HOLD_MS: u32 = 200;
+
+/// A hold time is kept inside 50 ms .. 2000 ms.
+pub fn clamp_hold_ms(ms: u32) -> u32 {
+    ms.clamp(50, 2000)
+}
+
+/// One second action for a key, matched by scan code and chord (Shift, Ctrl, Alt only).
+#[derive(Debug, Clone, PartialEq)]
+pub struct KeyHold {
+    pub action: String,
+    pub scan_code: i32,
+    pub chord: i32,
+    pub ms: u32,
 }
 
 impl KeyboardCfg {
@@ -75,6 +94,7 @@ impl KeyboardCfg {
                 _ => {}
             }
         }
+        k.holds = holds_of(&f.lines);
         Ok(k)
     }
 
@@ -191,11 +211,67 @@ impl KeyboardCfg {
             }
             t.push_str("\r\n");
         }
+        for h in &self.holds {
+            if h.scan_code == 0 || h.action.is_empty() {
+                continue;
+            }
+            let chord = h.chord & (KEY_SHIFT | KEY_CTRL | KEY_ALT);
+            let ms = clamp_hold_ms(h.ms);
+            t.push_str(&format!("[openomsi.hold]\r\n{}\r\n{}\r\n{chord}\r\n", h.action, h.scan_code));
+            if ms != HOLD_MS {
+                t.push_str(&format!("{ms}\r\n"));
+            }
+            t.push_str("\r\n");
+        }
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
         }
         std::fs::write(path, t)
     }
+
+    pub fn hold_of(&self, scan: i32, chord: i32) -> Option<&KeyHold> {
+        let chord = chord & (KEY_SHIFT | KEY_CTRL | KEY_ALT);
+        self.holds.iter().find(|h| h.scan_code == scan && h.chord == chord && !h.action.is_empty())
+    }
+
+    pub fn set_hold(&mut self, scan: i32, chord: i32, action: &str, ms: u32) {
+        let chord = chord & (KEY_SHIFT | KEY_CTRL | KEY_ALT);
+        self.holds.retain(|h| !(h.scan_code == scan && h.chord == chord));
+        if scan != 0 && !action.is_empty() {
+            self.holds.push(KeyHold { action: action.to_string(), scan_code: scan, chord, ms: clamp_hold_ms(ms) });
+        }
+    }
+}
+
+/// `[openomsi.hold]` lines the keyword walker does not read as key entries.
+fn holds_of(lines: &[String]) -> Vec<KeyHold> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < lines.len() {
+        if !lines[i].trim().eq_ignore_ascii_case("[openomsi.hold]") {
+            i += 1;
+            continue;
+        }
+        let mut fields = Vec::new();
+        i += 1;
+        while i < lines.len() && !lines[i].trim().starts_with('[') {
+            let t = lines[i].trim();
+            if !t.is_empty() {
+                fields.push(t.to_string());
+            }
+            i += 1;
+        }
+        if fields.len() >= 3 {
+            let scan = fields[1].parse().unwrap_or(0);
+            let chord = fields[2].parse().unwrap_or(0) & (KEY_SHIFT | KEY_CTRL | KEY_ALT);
+            let ms = fields.get(3).and_then(|s| s.parse().ok()).map(clamp_hold_ms).unwrap_or(HOLD_MS);
+            if scan != 0 && !fields[0].is_empty() {
+                out.retain(|h: &KeyHold| !(h.scan_code == scan && h.chord == chord));
+                out.push(KeyHold { action: fields[0].clone(), scan_code: scan, chord, ms });
+            }
+        }
+    }
+    out
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -390,10 +466,10 @@ mod tests {
         assert_eq!(key(&cfg, "chat_open"), vec![(41, 0)]);
         assert!(cfg.vehicles.contains(&gear));
         // a file saved while the chat was on '/' as well: moved off it, once
-        let old = KeyboardCfg { game: vec![KeyBinding { action: "chat_open".into(), scan_code: 53, modifier: 0 }], vehicles: vec![gear.clone()] }.with_game_defaults().with_game_defaults();
+        let old = KeyboardCfg { game: vec![KeyBinding { action: "chat_open".into(), scan_code: 53, modifier: 0 }], vehicles: vec![gear.clone()], holds: vec![] }.with_game_defaults().with_game_defaults();
         assert_eq!(key(&old, "chat_open"), vec![(41, 0)]);
         // '/' moved to Shift+'/' by the player stays there
-        let shifted = KeyboardCfg { game: vec![KeyBinding { action: "chat_open".into(), scan_code: 53, modifier: KEY_SHIFT }], vehicles: vec![gear] }.with_game_defaults();
+        let shifted = KeyboardCfg { game: vec![KeyBinding { action: "chat_open".into(), scan_code: 53, modifier: KEY_SHIFT }], vehicles: vec![gear], holds: vec![] }.with_game_defaults();
         assert_eq!(key(&shifted, "chat_open"), vec![(53, KEY_SHIFT)]);
     }
 
@@ -443,6 +519,7 @@ mod tests {
                     modifier: 1,
                 },
             ],
+            holds: vec![],
         };
         let path =
             std::env::temp_dir().join(format!("omsi-keyboard-cfg-test-{}.cfg", std::process::id()));
@@ -450,5 +527,30 @@ mod tests {
         let back = KeyboardCfg::load(&path).unwrap();
         let _ = std::fs::remove_file(&path);
         assert_eq!(back, k);
+    }
+
+    #[test]
+    fn a_second_key_action_does_not_change_the_key_line() {
+        let k = KeyboardCfg {
+            game: vec![KeyBinding { action: "exit".into(), scan_code: 16, modifier: KEY_HOLD | KEY_SHIFT }],
+            vehicles: vec![],
+            holds: vec![KeyHold { action: "lights".into(), scan_code: 16, chord: KEY_SHIFT, ms: HOLD_MS }],
+        };
+        let path = std::env::temp_dir().join(format!("omsi-keyboard-hold-{}.cfg", std::process::id()));
+        k.save(&path).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        let back = KeyboardCfg::load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(back.game[0].modifier, KEY_HOLD | KEY_SHIFT);
+        assert_eq!(back.holds[0].action, "lights");
+        assert_eq!(back.holds[0].ms, HOLD_MS);
+        assert!(text.contains("[openomsi.hold]"));
+        assert!(!text.lines().any(|l| l.trim() == "200"));
+        let plain = KeyboardCfg { holds: vec![], ..k.clone() };
+        let path = std::env::temp_dir().join(format!("omsi-keyboard-plain-{}.cfg", std::process::id()));
+        plain.save(&path).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert!(!text.contains("openomsi.hold"));
     }
 }

@@ -186,6 +186,7 @@ const driving = {
         { type: 'toggle', key: 'mouse_right_off', label: 'A right click ends the mouse steering (as in OMSI)' },
         { type: 'toggle', key: 'blinker_cancel', label: "Indicators cancel themselves (as the bus's script does)" },
         { type: 'toggle', key: 'brake_hold', label: 'The keyboard brake stays on until the throttle (as in OMSI)' },
+        { type: 'toggle', key: 'long_press', label: 'Long press', help: 'A second action fires after the key or button is held. Off: every control fires on press, as before.' },
         { type: 'slider', key: 'key_pedal_speed', label: 'Pedal keys speed (100 % = OMSI)', min: 0.25, max: 2, step: 0.05, def: 1, format: omsiPct, store: r2 },
         { type: 'toggle', key: 'auto_clutch', label: 'Automatic clutch (manual gearboxes)' },
         { type: 'toggle', key: 'auto_shift', label: 'Automated manual gearbox (shifts a manual gearbox for you by the engine speed)' },

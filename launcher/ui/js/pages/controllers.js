@@ -46,7 +46,7 @@ export function buttonName(n) {
   return t('Button {n}', { n: n + 1 });
 }
 
-export const newDevice = (name) => ({ name, second: '0', axes: Array.from({ length: 8 }, () => [-1, false, 0]), buttons: [], ff_scale: null, ff_invert: null, ff_tune: null, latching: [], more: [] });
+export const newDevice = (name) => ({ name, second: '0', axes: Array.from({ length: 8 }, () => [-1, false, 0]), buttons: [], ff_scale: null, ff_invert: null, ff_tune: null, latching: [], more: [], hold: [], hold_ms: [] });
 // a wheel's force feedback tuning: multipliers of the self-centring, the damping and the parking
 // resistance, the minimum force (a share of full force) and the smoothing (seconds); none saved
 // (null) is these
@@ -603,6 +603,8 @@ function SearchHits({ q, all, row }) {
 
 function ByButton({ d, live, actions, fresh, hats: seen, change, bind, assign, unbind }) {
   const [adding, setAdding] = useState(null);
+  const s = useStore();
+  const longOn = !!s.settings?.long_press;
   const physical = live?.buttons || 0;
   const last = d.buttons.reduce((m, [a], i) => (a && i < HATS ? i + 1 : m), 0);
   const count = Math.min(HATS, Math.max(physical, last, fresh != null && fresh < HATS ? fresh + 1 : 0, live ? 0 : last));
@@ -653,6 +655,22 @@ function ByButton({ d, live, actions, fresh, hats: seen, change, bind, assign, u
           <${Toggle} checked=${d.latching.includes(n)} disabled=${!a} label="Latching" onChange=${(v) => change((c) => (c.latching = v ? [...c.latching.filter((x) => x !== n), n].sort((x, y) => x - y) : c.latching.filter((x) => x !== n)))} />
           <${Toggle} checked=${d.buttons[n]?.[1] === '1'} disabled=${!a} label="Continuous" onChange=${(v) => change((c) => flag(c, v))} />
         </div>
+        ${longOn && html`<div class="button-action">
+          <span class="muted small">${t('Hold action')}</span>
+          <${Select} value=${(d.hold || []).find(([b]) => b === n)?.[1] || ''} options=${opts((d.hold || []).find(([b]) => b === n)?.[1] || '')} raw onChange=${(v) => change((c) => {
+            c.hold = (c.hold || []).filter(([b]) => b !== n);
+            c.hold_ms = (c.hold_ms || []).filter(([b]) => b !== n);
+            if (v) c.hold.push([n, v]);
+          })} />
+          <input type="number" min="50" max="2000" aria-label=${t('Hold time')} value=${(d.hold_ms || []).find(([b]) => b === n)?.[1] || 200}
+            onChange=${(e) => {
+              const ms = Math.max(50, Math.min(2000, Number(e.target.value) || 200));
+              change((c) => {
+                c.hold_ms = (c.hold_ms || []).filter(([b]) => b !== n);
+                if (ms !== 200 && (c.hold || []).some(([b]) => b === n)) c.hold_ms.push([n, ms]);
+              });
+            }} />
+        </div>`}
       </div>
     </div>`;
   };

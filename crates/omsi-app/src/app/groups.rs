@@ -394,6 +394,12 @@ pub(crate) struct InputState {
     pub(crate) pad_steer_target: f32,
     /// OMSI's global key actions from `Inputs/keyboard.cfg` ([game]).
     pub(crate) game_keys: Vec<omsi_content::KeyBinding>,
+    /// Second actions for a key, used only while long press is on.
+    pub(crate) key_holds: Vec<omsi_content::input::KeyHold>,
+    /// A key press waiting to see if it is short or long.
+    pub(crate) key_waits: Vec<KeyWait>,
+    /// Replaying a short press through the normal key path, so it is not waited on again.
+    pub(crate) long_replay: bool,
     /// Keys (DirectInput scan codes, no modifier) the player bound on the Controls page to
     /// something the original's keyboard.cfg does not have there: a driving preset (W A S D,
     /// the arrows) leaves them alone - D bound to the gearbox is the gearbox, not "steer right".
@@ -416,6 +422,15 @@ pub(crate) struct InputState {
     pub(crate) cursor_kind: u8,
     /// The on-screen controls of a phone (see `touch.rs`).
     pub(crate) touch: crate::touch::Touch,
+}
+
+/// A key that has a second action, held down and not yet released.
+pub(crate) struct KeyWait {
+    pub(crate) scan: i32,
+    pub(crate) at: std::time::Instant,
+    pub(crate) ms: u32,
+    pub(crate) long_action: String,
+    pub(crate) fired: bool,
 }
 
 /// What is open over the picture and how it is being worked: the start and game menus with
@@ -515,7 +530,11 @@ pub(crate) struct MenuState {
     /// A binding chosen in the pause menu that is waiting for the next physical key:
     /// (true: [game], false: [vehicles], index in that section).
     pub(crate) key_capture: Option<(bool, usize)>,
+    /// The key list row whose second action the event list will set.
+    pub(crate) key_hold_for: Option<(bool, usize)>,
     pub(crate) ctrl_add_action: bool,
+    /// The controller button list is choosing a second action, not the press action.
+    pub(crate) ctrl_hold_action: bool,
     /// Whether the game stood paused before the menu opened (closing it goes back to that).
     pub(crate) menu_prev_pause: bool,
     /// OMSI's information bar (`view_toggle_informationdisplay`, Ctrl+Y): time, speed, the

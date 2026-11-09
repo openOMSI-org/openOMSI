@@ -432,6 +432,7 @@ impl App {
     fn install_keyboard_cfg(&mut self, cfg: omsi_content::KeyboardCfg) {
         let runtime = cfg.with_game_defaults().with_vr_defaults();
         self.input.game_keys = runtime.game.clone();
+        self.input.key_holds = runtime.holds.clone();
         if let Some(p) = self.player.as_mut() {
             p.bindings = runtime.vehicles;
         }
@@ -500,6 +501,39 @@ impl App {
             Err(e) => self.service_msg = Some((format!("Event was not added ({e})"), 5.0)),
         }
     }
+
+    fn set_key_hold(&mut self, game: bool, index: usize, action: &str) {
+        let mut cfg = keyboard_cfg(self);
+        let found = {
+            let b = if game { cfg.game.get(index) } else { cfg.vehicles.get(index) };
+            b.map(|b| {
+                let (scan, chord) = (b.scan_code, b.chord());
+                let ms = cfg.hold_of(scan, chord).map(|h| h.ms).unwrap_or(omsi_content::input::HOLD_MS);
+                (scan, chord, ms)
+            })
+        };
+        let Some((scan, chord, ms)) = found else { return };
+        cfg.set_hold(scan, chord, action, ms);
+        match write_keyboard_cfg(self, &cfg) {
+            Ok(()) => self.install_keyboard_cfg(cfg),
+            Err(e) => self.service_msg = Some((format!("Hold action was not saved ({e})"), 5.0)),
+        }
+    }
+
+    fn cycle_key_hold_ms(&mut self, game: bool, index: usize) {
+        let mut cfg = keyboard_cfg(self);
+        let found = {
+            let b = if game { cfg.game.get(index) } else { cfg.vehicles.get(index) };
+            b.and_then(|b| cfg.hold_of(b.scan_code, b.chord()).cloned())
+        };
+        let Some(hold) = found else { return };
+        let steps = [200u32, 300, 500, 1000];
+        let next = steps.iter().copied().find(|ms| *ms > hold.ms).unwrap_or(steps[0]);
+        cfg.set_hold(hold.scan_code, hold.chord, &hold.action, next);
+        if write_keyboard_cfg(self, &cfg).is_ok() {
+            self.install_keyboard_cfg(cfg);
+        }
+    }
 }
 
 fn keyboard_pages(app: &App) -> Vec<Page> {
@@ -515,6 +549,16 @@ fn keyboard_pages(app: &App) -> Vec<Page> {
                 else { crate::keys::key_name(b.scan_code as i64, b.modifier as i64) };
             rows.push((row(&names.control(&b.action), 'a', &key, "Enter to change; Delete clears; Esc cancels", None),
                 format!("keybind {} {i}", if is_game { "g" } else { "v" })));
+            if app.settings.long_press && b.scan_code != 0 {
+                let side = if is_game { "g" } else { "v" };
+                let hold = cfg.hold_of(b.scan_code, b.chord());
+                let shown = hold.map(|h| names.control(&h.action)).unwrap_or_else(|| "none".into());
+                rows.push((row("Hold action", 'a', &shown, "Fires only after the key is held", None), format!("keyhold {side} {i}")));
+                if let Some(h) = hold {
+                    rows.push((row("Hold time", 'a', &format!("{} ms", h.ms), "How long the key must be held", None), format!("keyhold_ms {side} {i}")));
+                    rows.push((row("Clear hold action", 'a', "", "The key fires on press again", None), format!("keyhold_clear {side} {i}")));
+                }
+            }
         }
     }
     vec![("Driving and bus", vehicle), ("Game and camera", game)]
@@ -1071,11 +1115,40 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                     }
                     Some(kind.clone())
                 }
+                "keyhold" => {
+                    let mut p = arg.split_whitespace();
+                    let game = p.next() == Some("g");
+                    if let Some(index) = p.next().and_then(|n| n.parse::<usize>().ok()) {
+                        app.menus.key_hold_for = Some((game, index));
+                        return Some(ListKind::Events);
+                    }
+                    Some(kind.clone())
+                }
+                "keyhold_ms" => {
+                    let mut p = arg.split_whitespace();
+                    let game = p.next() == Some("g");
+                    if let Some(index) = p.next().and_then(|n| n.parse::<usize>().ok()) {
+                        app.cycle_key_hold_ms(game, index);
+                    }
+                    Some(kind.clone())
+                }
+                "keyhold_clear" => {
+                    let mut p = arg.split_whitespace();
+                    let game = p.next() == Some("g");
+                    if let Some(index) = p.next().and_then(|n| n.parse::<usize>().ok()) {
+                        app.set_key_hold(game, index, "");
+                    }
+                    Some(kind.clone())
+                }
                 _ => Some(kind.clone()),
             }
         }
         ListKind::Events => {
             if matches!(mv, Move::Next) && verb == "key_event" {
+                if let Some((game, index)) = app.menus.key_hold_for.take() {
+                    app.set_key_hold(game, index, arg);
+                    return Some(ListKind::Keyboard(0));
+                }
                 app.add_key_event(arg);
                 Some(ListKind::Keyboard(0))
             } else {

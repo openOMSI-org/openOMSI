@@ -213,6 +213,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         slider_row(app, "pedal_b", "Brake pedal strength", "Adjust how strongly pedal input affects the brake", &|v| format!("x{v}")),
         switch_row(app, "blinker_cancel", "Indicators cancel themselves", "The bus's script turns the indicator off after a turn; off: it stays on until you turn it off"),
         switch_row(app, "brake_hold", "Keyboard brake stays on", "Keep the brake applied until the throttle is pressed"),
+        switch_row(app, "long_press", "Long press", "A second action fires after the key or button is held. Off: every control fires on press, as before."),
         switch_row(app, "auto_clutch", "Automatic clutch", "Automatically operate the clutch for you"),
         switch_row(app, "momentary_gears", "H-pattern shifter: return to neutral when the gear is released", "For a manual shifter without a neutral button; releasing a gear selects neutral immediately"),
         switch_row(app, "auto_shift", "Automated manual gearbox", "Shift a manual gearbox's gears for you by the engine speed"),

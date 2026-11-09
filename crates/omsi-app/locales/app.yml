@@ -110300,3 +110300,26 @@ _version: 2
   ca: "Uneix-te al Discord"
   sr: "Pridruži se Discord serveru"
   ka: "Discord-ს შეუერთდი"
+
+"Long press": {}
+
+"A second action fires after the key or button is held. Off: every control fires on press, as before.": {}
+
+"Hold action": {}
+
+"Hold time": {}
+
+"Fires only after the key is held": {}
+
+"Fires only after the button is held": {}
+
+"How long the key must be held": {}
+
+"How long the button must be held": {}
+
+"Clear hold action": {}
+
+"The key fires on press again": {}
+
+"The button fires on press again": {}
+

@@ -317,6 +317,16 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
             }
             out.push((crate::game_lists::row("Latching switch", 's', if d.latching.contains(b) { "on" } else { "off" }, "Switch back when a physical switch is released", None), format!("latching {b}")));
             out.push((crate::game_lists::row("Continuous", 's', if d.continuous(*b) { "on" } else { "off" }, "Held down, the action repeats until the button is released, as OMSI's continuous fire", None), format!("continuous {b}")));
+            if app.settings.long_press {
+                let names = crate::describe::names(&app.args.root, &app.settings.language);
+                let hold = d.second_of(*b);
+                let shown = hold.as_ref().map(|(a, _)| names.control(a)).unwrap_or_else(|| "none".into());
+                out.push(crate::game_lists::opens(&format!("Hold action: {shown}"), "Fires only after the button is held", "choose_hold"));
+                if let Some((_, ms)) = hold {
+                    out.push((crate::game_lists::row("Hold time", 'a', &format!("{ms} ms"), "How long the button must be held", None), format!("hold_ms {b}")));
+                    out.push(crate::game_lists::button("Clear hold action", "Clear", "The button fires on press again", &format!("hold_clear {b}")));
+                }
+            }
             out.push(crate::game_lists::button("Clear assignment", "Clear", "Leave this button without an action", "bind "));
         }
         ListKind::ControllerCapture(name) => {
@@ -410,8 +420,9 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str, mv: Move) -> Opt
                 if a < AXES.len() { return Some(ListKind::ControllerAxis(name.clone(), a)); }
             },
             "button_numbers" => return Some(ListKind::ControllerButtons(name.clone())),
-            "choose_action" | "add_action" => if let Some(b) = button {
+            "choose_action" | "add_action" | "choose_hold" => if let Some(b) = button {
                 app.menus.ctrl_add_action = verb == "add_action";
+                app.menus.ctrl_hold_action = verb == "choose_hold";
                 return Some(ListKind::ControllerButton(name.clone(), b));
             },
             "capture_button" => return Some(ListKind::ControllerCapture(name.clone())),
@@ -486,9 +497,14 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str, mv: Move) -> Opt
             if let Some(b) = button {
                 if b >= crate::controllers::HAT_BUTTONS + 16 { return Some(kind.clone()); }
                 d.buttons.resize(d.buttons.len().max(b + 1), (String::new(), "0".into()));
-                if !(std::mem::take(&mut app.menus.ctrl_add_action) && matches!(kind, ListKind::ControllerButton(..))) {
+                if std::mem::take(&mut app.menus.ctrl_hold_action) && matches!(kind, ListKind::ControllerButton(..)) {
+                    d.set_second(b, arg);
+                } else if !(std::mem::take(&mut app.menus.ctrl_add_action) && matches!(kind, ListKind::ControllerButton(..))) {
                     d.buttons[b].0 = arg.to_string();
                     d.more.retain(|(x, a)| *x != b || (!arg.is_empty() && !a.eq_ignore_ascii_case(arg)));
+                    if arg.is_empty() {
+                        d.set_second(b, "");
+                    }
                 } else if !arg.is_empty() && !d.actions_of(b).iter().any(|a| a.eq_ignore_ascii_case(arg)) {
                     d.more.push((b, arg.to_string()));
                 }
@@ -497,6 +513,15 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str, mv: Move) -> Opt
             }
             return Some(kind.clone());
         }
+        "hold_ms" => if let Some(b) = arg.parse::<usize>().ok() {
+            let now = d.second_of(b).map(|(_, ms)| ms).unwrap_or(crate::controllers::HOLD_MS);
+            let steps = [200u32, 300, 500, 1000];
+            let next = steps.iter().copied().find(|ms| *ms > now).unwrap_or(steps[0]);
+            d.set_hold_ms(b, next);
+        } else { return Some(kind.clone()); },
+        "hold_clear" if matches!(mv, Move::Next) => if let Some(b) = arg.parse::<usize>().ok() {
+            d.set_second(b, "");
+        } else { return Some(kind.clone()); },
         _ => return Some(kind.clone()),
     }
     save(app, devices);

@@ -459,6 +459,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "hands_in_cab" => s.hands_in_cab,
         "ff" => s.ff_enabled,
         "brake_hold" => s.brake_hold,
+        "long_press" => s.long_press,
         "auto_clutch" => s.auto_clutch,
         "headtrack" => s.head_tracking,
         "tobii_edges" => s.tobii_edges,
@@ -769,6 +770,10 @@ pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static 
         "brake_hold" => {
             app.settings.brake_hold = on;
             Some(("brake_hold", bit))
+        }
+        "long_press" => {
+            app.settings.long_press = on;
+            Some(("long_press", bit))
         }
         "auto_clutch" => {
             app.settings.auto_clutch = on;

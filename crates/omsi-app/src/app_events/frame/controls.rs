@@ -27,6 +27,7 @@ impl App {
         ctl.pedal_brake = self.settings.pedal_brake;
         ctl.ff_invert = self.settings.ff_invert;
         ctl.ff_enabled = self.settings.ff_enabled;
+        ctl.long_press = self.settings.long_press;
         ctl.ff_road = self.settings.ff_road_vib;
         ctl.ff_engine = self.settings.ff_engine_vib;
         ctl.ff_fade = self.settings.ff_fade;
@@ -103,6 +104,7 @@ impl App {
             micro: 0.0,
             dt,
         });
+        self.tick_long_keys();
         crate::game_controller_menu::frame(self);
         // In the photo mode the wheel, the pedals and the joystick do nothing: its camera
         // listens to a gamepad of its own (`photo::pad`), and a wheel's axes and buttons went

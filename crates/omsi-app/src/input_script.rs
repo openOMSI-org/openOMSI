@@ -146,6 +146,9 @@ impl App {
             if self.foot_key(code, pressed, repeat, ctrl, shift_now) {
                 return;
             }
+            if self.consume_long_press(event_loop, code, pressed, repeat, ctrl, alt, shift_now) {
+                return;
+            }
             // OMSI's global actions as `Inputs/keyboard.cfg` binds them ([game]); a key our
             // driving layout uses keeps that meaning (with the OMSI layout, every binding
             // counts)
@@ -358,6 +361,101 @@ impl App {
 
     /// `on_key` for the [game] keys of keyboard.cfg; true when the key was used up.
     #[allow(clippy::too_many_arguments)]
+    /// A key with a second action waits. A tap still runs the key's own actions; a hold runs only the second one.
+    fn consume_long_press(&mut self, event_loop: &ActiveEventLoop, code: KeyCode, pressed: bool, repeat: bool, ctrl: bool, alt: bool, shift_now: bool) -> bool {
+        if self.input.long_replay {
+            return false;
+        }
+        let Some(scan) = keys::dik_code(code) else { return false };
+        let m = omsi_content::input::chord(
+            shift_now && !matches!(code, KeyCode::ShiftLeft | KeyCode::ShiftRight),
+            ctrl && !matches!(code, KeyCode::ControlLeft | KeyCode::ControlRight),
+            alt && !matches!(code, KeyCode::AltLeft | KeyCode::AltRight),
+        );
+        if !pressed {
+            let Some(i) = self.input.key_waits.iter().position(|w| w.scan == scan) else { return false };
+            let w = self.input.key_waits.remove(i);
+            if w.fired {
+                self.fire_named(&w.long_action, false);
+            } else if self.settings.long_press {
+                self.replay_short_key(event_loop, code, ctrl, alt, shift_now);
+            }
+            return true;
+        }
+        if self.input.key_waits.iter().any(|w| w.scan == scan) {
+            return true;
+        }
+        if repeat || !self.settings.long_press {
+            return false;
+        }
+        let Some(hold) = self.input.key_holds.iter().find(|h| h.scan_code == scan && h.chord == m && !h.action.is_empty()).cloned() else { return false };
+        self.input.key_waits.push(crate::app::KeyWait {
+            scan,
+            at: std::time::Instant::now(),
+            ms: omsi_content::input::clamp_hold_ms(hold.ms),
+            long_action: hold.action,
+            fired: false,
+        });
+        true
+    }
+
+    fn replay_short_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode, ctrl: bool, alt: bool, shift_now: bool) {
+        self.input.long_replay = true;
+        if !self.game_binding_key(event_loop, code, true, false, ctrl, alt, shift_now) && !self.shortcut_key(code, true, false, ctrl, alt, shift_now) && !self.layout_extra_key(code, true, false) {
+            self.drive_key(code, true, false);
+        }
+        if !self.game_binding_key(event_loop, code, false, false, ctrl, alt, shift_now) && !self.shortcut_key(code, false, false, ctrl, alt, shift_now) && !self.layout_extra_key(code, false, false) {
+            self.drive_key(code, false, false);
+        }
+        self.input.long_replay = false;
+    }
+
+    fn fire_named(&mut self, name: &str, down: bool) {
+        if is_game_action(name) {
+            if down {
+                self.game_action(name);
+            }
+            return;
+        }
+        if let Some(p) = self.player.as_mut() {
+            p.from_keyboard = true;
+            if let Some(a) = omsi_sim::engine_action(name) {
+                p.axes.set(a, down);
+            } else {
+                p.action(name, down);
+            }
+            p.from_keyboard = false;
+        }
+    }
+
+    pub(crate) fn tick_long_keys(&mut self) {
+        let menu = self.menus.game_menu.is_some() || self.menus.chooser.is_some() || self.photo.is_some();
+        if !self.settings.long_press || menu {
+            self.release_long_keys(false);
+            return;
+        }
+        let due: Vec<usize> = self.input.key_waits.iter().enumerate().filter(|(_, w)| !w.fired && w.at.elapsed().as_millis() as u32 >= w.ms).map(|(i, _)| i).collect();
+        for i in due {
+            let name = self.input.key_waits[i].long_action.clone();
+            self.input.key_waits[i].fired = true;
+            self.fire_named(&name, true);
+        }
+    }
+
+    /// `keep_fired` is false when the wait should vanish: a hold that already fired is released, one that has not fired is dropped.
+    fn release_long_keys(&mut self, keep_fired: bool) {
+        let waits = std::mem::take(&mut self.input.key_waits);
+        let mut left = Vec::new();
+        for w in waits {
+            if w.fired && keep_fired {
+                left.push(w);
+            } else if w.fired {
+                self.fire_named(&w.long_action, false);
+            }
+        }
+        self.input.key_waits = left;
+    }
+
     fn game_binding_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode, pressed: bool, repeat: bool, ctrl: bool, alt: bool, shift_now: bool) -> bool {
         if pressed && !repeat {
             // (a modifier key pressed is a key of its own, not its own modifier: Shift
@@ -1193,6 +1291,7 @@ impl App {
     /// controller's axes stay theirs.
     pub(crate) fn input_lost(&mut self) {
         self.input.input_away = true;
+        self.release_long_keys(false);
         self.release_vehicle_keys();
         self.input.keys.clear();
         let precise_release = self.vr_active();

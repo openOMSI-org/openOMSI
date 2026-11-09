@@ -1,6 +1,14 @@
 use super::{find_device_cfg, latch_release, names_match, DeviceCfg};
 use crate::actions::is_game_action;
 
+struct Wait {
+    at: std::time::Instant,
+    ms: u32,
+    long: String,
+    short: Vec<String>,
+    latch: bool,
+}
+
 struct Held {
     device: String,
     button: usize,
@@ -9,28 +17,62 @@ struct Held {
     continuous: bool,
     fresh: bool,
     out: bool,
+    /// Set while the press is waiting to see if it is short or long. `actions` stays empty until the long action fires.
+    wait: Option<Wait>,
 }
 
 /// Button-down actions remember their original mapping until release. Editing a binding
 /// must release that action, rather than sending an unrelated new action's key-up.
-#[derive(Default)]
-pub(super) struct HeldButtons(Vec<Held>);
+pub(super) struct HeldButtons {
+    long_press: bool,
+    buttons: Vec<Held>,
+}
+
+impl Default for HeldButtons {
+    fn default() -> Self {
+        Self { long_press: false, buttons: Vec::new() }
+    }
+}
 
 impl HeldButtons {
+    pub(super) fn set_long_press(&mut self, on: bool) {
+        self.long_press = on;
+    }
+
     pub(super) fn event(&mut self, cfg: &[DeviceCfg], name: &str, button: usize, down: bool, actions: &mut Vec<(String, bool)>) {
         if down {
-            if self.0.iter().any(|h| names_match(&h.device, name) && h.button == button) {
+            if self.buttons.iter().any(|h| names_match(&h.device, name) && h.button == button) {
                 return;
             }
             let Some(d) = find_device_cfg(cfg, name) else { return };
             let bound = d.actions_of(button);
+            if let Some((long, ms)) = d.second_of(button).filter(|_| self.long_press) {
+                // The press waits. Nothing fires until the button comes up early, or the time is reached.
+                self.buttons.push(Held {
+                    device: name.to_string(),
+                    button,
+                    actions: Vec::new(),
+                    latching: false,
+                    continuous: false,
+                    fresh: true,
+                    out: false,
+                    wait: Some(Wait { at: std::time::Instant::now(), ms, long, short: bound, latch: d.latching.contains(&button) }),
+                });
+                return;
+            }
             if bound.is_empty() {
                 return;
             }
             actions.extend(bound.iter().map(|a| (a.clone(), true)));
-            self.0.push(Held { device: name.to_string(), button, actions: bound, latching: d.latching.contains(&button), continuous: d.continuous(button), fresh: true, out: false });
-        } else if let Some(i) = self.0.iter().position(|h| names_match(&h.device, name) && h.button == button) {
-            let h = self.0.remove(i);
+            self.buttons.push(Held { device: name.to_string(), button, actions: bound, latching: d.latching.contains(&button), continuous: d.continuous(button), fresh: true, out: false, wait: None });
+        } else if let Some(i) = self.buttons.iter().position(|h| names_match(&h.device, name) && h.button == button) {
+            let h = self.buttons.remove(i);
+            if let Some(w) = h.wait.filter(|_| h.actions.is_empty()) {
+                if self.long_press {
+                    self.finish_wait(w, actions);
+                }
+                return;
+            }
             actions.extend(h.actions.iter().map(|a| (a.clone(), false)));
             if h.latching {
                 for a in &h.actions {
@@ -42,8 +84,51 @@ impl HeldButtons {
         }
     }
 
+    fn finish_wait(&self, w: Wait, actions: &mut Vec<(String, bool)>) {
+        let held_long = w.at.elapsed().as_millis() as u32 >= w.ms;
+        if held_long {
+            actions.push((w.long.clone(), true));
+            actions.push((w.long, false));
+            return;
+        }
+        for a in &w.short {
+            actions.push((a.clone(), true));
+            actions.push((a.clone(), false));
+        }
+        if w.latch {
+            for a in &w.short {
+                let back = latch_release(a);
+                actions.push((back.clone(), true));
+                actions.push((back, false));
+            }
+        }
+    }
+
+    /// Fire a second action whose time has been reached. With long press off, a wait that has not fired is dropped.
+    pub(super) fn advance(&mut self, actions: &mut Vec<(String, bool)>) {
+        if !self.long_press {
+            self.buttons.retain(|h| h.wait.is_none() || !h.actions.is_empty());
+            for h in &mut self.buttons {
+                if h.actions.is_empty() {
+                    h.wait = None;
+                }
+            }
+            self.buttons.retain(|h| !h.actions.is_empty());
+            return;
+        }
+        for h in &mut self.buttons {
+            let Some(w) = h.wait.as_ref() else { continue };
+            if h.actions.is_empty() && w.at.elapsed().as_millis() as u32 >= w.ms {
+                let name = w.long.clone();
+                h.wait = None;
+                h.actions = vec![name.clone()];
+                actions.push((name, true));
+            }
+        }
+    }
+
     pub(super) fn release(&mut self, actions: &mut Vec<(String, bool)>) {
-        for h in self.0.drain(..) {
+        for h in self.buttons.drain(..) {
             // Do not toggle a latching switch just because its configuration changed.
             actions.extend(h.actions.into_iter().map(|a| (a, false)));
         }
@@ -55,7 +140,7 @@ impl HeldButtons {
     /// the switch went out in the game at ESC or alt-tab and only came back once it was
     /// switched off and on again by hand (#1876).
     pub(super) fn release_momentary(&mut self, actions: &mut Vec<(String, bool)>) {
-        self.0.retain(|h| {
+        self.buttons.retain(|h| {
             if !h.latching {
                 actions.extend(h.actions.iter().map(|a| (a.clone(), false)));
             }
@@ -64,13 +149,13 @@ impl HeldButtons {
     }
 
     pub(super) fn while_editing(&mut self, name: &str, button: usize, down: bool) {
-        if let Some(h) = self.0.iter_mut().find(|h| names_match(&h.device, name) && h.button == button) {
+        if let Some(h) = self.buttons.iter_mut().find(|h| names_match(&h.device, name) && h.button == button) {
             h.out = !down;
         }
     }
 
     pub(super) fn resume(&mut self, cfg: &[DeviceCfg], actions: &mut Vec<(String, bool)>) {
-        let out: Vec<(String, usize)> = self.0.iter().filter(|h| h.out).map(|h| (h.device.clone(), h.button)).collect();
+        let out: Vec<(String, usize)> = self.buttons.iter().filter(|h| h.out).map(|h| (h.device.clone(), h.button)).collect();
         for (name, button) in out {
             self.event(cfg, &name, button, false, actions);
         }
@@ -78,7 +163,7 @@ impl HeldButtons {
 
     pub(super) fn repeating(&mut self) -> Vec<String> {
         let mut due = Vec::new();
-        for h in self.0.iter_mut().filter(|h| h.continuous && !h.out) {
+        for h in self.buttons.iter_mut().filter(|h| h.continuous && !h.out) {
             if !std::mem::take(&mut h.fresh) {
                 due.extend(h.actions.iter().filter(|a| !is_game_action(a)).cloned());
             }
@@ -145,5 +230,80 @@ mod tests {
         held.event(&cfg, "Wheel", 1, true, &mut actions);
         held.repeating();
         assert_eq!(held.repeating(), ["retarder_up"]);
+    }
+
+    fn with_second(button: usize, action: &str, ms: Option<u32>) -> Vec<DeviceCfg> {
+        let mut cfg = wheel();
+        cfg[0].set_second(button, action);
+        if let Some(ms) = ms {
+            cfg[0].set_hold_ms(button, ms);
+        }
+        cfg
+    }
+
+    fn age(held: &mut HeldButtons, ms: u32) {
+        let back = std::time::Duration::from_millis(ms as u64);
+        for h in &mut held.buttons {
+            if let Some(w) = h.wait.as_mut() {
+                w.at = w.at.checked_sub(back).unwrap_or(w.at);
+            }
+        }
+    }
+
+    #[test]
+    fn long_press_off_still_fires_the_press_action() {
+        let (cfg, mut held, mut actions) = (with_second(0, "bus_wiper", None), HeldButtons::default(), Vec::new());
+        held.event(&cfg, "Wheel", 0, true, &mut actions);
+        assert_eq!(actions, [("bus_doorfront0".into(), true), ("bus_doorfront1".into(), true), ("bus_doorrear0".into(), true)]);
+        age(&mut held, 500);
+        held.advance(&mut actions);
+        assert!(actions.iter().all(|(a, _)| a != "bus_wiper"));
+    }
+
+    #[test]
+    fn long_press_on_without_a_second_action_fires_on_the_way_down() {
+        let (cfg, mut held, mut actions) = (wheel(), HeldButtons::default(), Vec::new());
+        held.set_long_press(true);
+        held.event(&cfg, "Wheel", 0, true, &mut actions);
+        assert_eq!(actions.first(), Some(&("bus_doorfront0".into(), true)));
+    }
+
+    #[test]
+    fn a_tap_fires_the_press_action_down_then_up() {
+        let (cfg, mut held, mut actions) = (with_second(0, "bus_wiper", None), HeldButtons::default(), Vec::new());
+        held.set_long_press(true);
+        held.event(&cfg, "Wheel", 0, true, &mut actions);
+        assert!(actions.is_empty());
+        age(&mut held, 100);
+        held.event(&cfg, "Wheel", 0, false, &mut actions);
+        let names: Vec<&str> = actions.iter().map(|(a, _)| a.as_str()).collect();
+        assert!(names.contains(&"bus_doorfront0") && names.contains(&"bus_doorfront1"));
+        assert!(!names.contains(&"bus_wiper"));
+        assert_eq!(actions.iter().filter(|(a, _)| a == "bus_doorfront0").map(|(_, d)| *d).collect::<Vec<_>>(), vec![true, false]);
+    }
+
+    #[test]
+    fn a_hold_fires_only_the_second_action() {
+        let (cfg, mut held, mut actions) = (with_second(0, "bus_wiper", None), HeldButtons::default(), Vec::new());
+        held.set_long_press(true);
+        held.event(&cfg, "Wheel", 0, true, &mut actions);
+        age(&mut held, 200);
+        held.advance(&mut actions);
+        assert_eq!(actions, [("bus_wiper".into(), true)]);
+        actions.clear();
+        held.event(&cfg, "Wheel", 0, false, &mut actions);
+        assert_eq!(actions, [("bus_wiper".into(), false)]);
+    }
+
+    #[test]
+    fn letting_go_of_focus_during_the_wait_fires_nothing() {
+        let (cfg, mut held, mut actions) = (with_second(0, "bus_wiper", None), HeldButtons::default(), Vec::new());
+        held.set_long_press(true);
+        held.event(&cfg, "Wheel", 0, true, &mut actions);
+        held.release_momentary(&mut actions);
+        assert!(actions.is_empty());
+        held.advance(&mut actions);
+        assert!(actions.is_empty());
+        let _ = cfg;
     }
 }

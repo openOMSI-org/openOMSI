@@ -642,7 +642,9 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
     let started = Instant::now();
     let last = Instant::now();
     let input_script = parse_input_script();
-    let game_keys = omsi_content::KeyboardCfg::load(&crate::startup::keyboard_cfg(&args_root_for_keys)).unwrap_or_default().with_game_defaults().with_vr_defaults().game;
+    let loaded_keys = omsi_content::KeyboardCfg::load(&crate::startup::keyboard_cfg(&args_root_for_keys)).unwrap_or_default().with_game_defaults().with_vr_defaults();
+    let game_keys = loaded_keys.game;
+    let key_holds = loaded_keys.holds;
     let own_keys = crate::startup::own_keys(&args_root_for_keys);
     let own_shift = crate::startup::own_bindings(&args_root_for_keys, omsi_content::input::KEY_SHIFT);
     let fps_t = Instant::now();
@@ -763,7 +765,9 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             admin_list: None,
             list_kind: None,
             key_capture: None,
+            key_hold_for: None,
             ctrl_add_action: false,
+            ctrl_hold_action: false,
             menu_prev_pause: false,
             info_bar,
             timetable: false,
@@ -866,6 +870,9 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             pad_kmh: 0.0,
             pad_steer_target: 0.0,
             game_keys,
+            key_holds,
+            key_waits: Vec::new(),
+            long_replay: false,
             own_keys,
             own_shift,
             dragging: false,
