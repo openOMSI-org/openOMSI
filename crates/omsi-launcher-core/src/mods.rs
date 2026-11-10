@@ -442,6 +442,12 @@ fn remove_in(content: &Path, id: &str, roots: &[PathBuf]) -> anyhow::Result<Stri
     map_uses::forget();
     let plan = plan_in(content, &r, k, roots, true);
     let m = r.mods.remove(k);
+    for p in &plan.kept {
+        let (from, to) = (disabled_dir(content, &m.id).join(p), content.join(p));
+        if from.exists() && !to.exists() {
+            move_path(&from, &to)?;
+        }
+    }
     unmount(content, &m.paths);
     for p in m.paths.iter().filter(|p| !plan.kept.contains(p)) {
         install::check_installed_rel(p)?;
@@ -765,6 +771,23 @@ mod tests {
         put(&deep.join("x.map"), "");
         let plan = plan_in(&c, &r, k, &roots, true);
         assert!(plan.freed.is_empty() && plan.kept == ["Sceneryobjects/Shared"], "{plan:?}");
+        std::fs::remove_dir_all(c).unwrap();
+        std::fs::remove_dir_all(omsi).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_switched_off_map_deleted_while_a_map_cannot_be_listed_puts_its_kept_objects_back() {
+        let (c, omsi, id) = two_maps();
+        std::fs::remove_file(c.join("maps/Valley/parklist_p.txt")).unwrap();
+        let roots = [c.clone(), omsi.clone()];
+        set_enabled_in(&c, &id, false, &roots).unwrap();
+        let id = list(&c).into_iter().find(|m| m.name == "Hill Town").unwrap().id;
+        assert!(!c.join("Sceneryobjects/Shared").exists() && disabled_dir(&c, &id).join("Sceneryobjects/Shared").exists());
+        std::os::unix::fs::symlink(c.join("Archives"), c.join("Archives")).unwrap();
+        remove_in(&c, &id, &roots).unwrap();
+        assert!(c.join("Sceneryobjects/Shared/f.txt").exists() && !disabled_dir(&c, &id).exists() && !c.join("maps/Hill Town").exists());
+        assert!(c.join("Sceneryobjects/PackA").exists());
         std::fs::remove_dir_all(c).unwrap();
         std::fs::remove_dir_all(omsi).unwrap();
     }
