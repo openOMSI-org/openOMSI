@@ -122,6 +122,18 @@ pub fn first_api(chosen: &str, upscaler: &str, dir: &Path) -> &'static str {
     }
 }
 
+/// The Upscaling row's help text, as the in-game menu shows it: what the temporal upscalers this
+/// machine has do. A Mac's only one is Apple's own, and Metal its only graphics interface.
+pub fn menu_help(offered: bool) -> &'static str {
+    if !offered {
+        "Standard Catmull-Rom or AMD FSR 1; changes show at once"
+    } else if cfg!(target_os = "macos") {
+        "Standard Catmull-Rom or AMD FSR 1 change at once; Apple MetalFX takes the place of the anti-aliasing and the render scale, from the next start"
+    } else {
+        "Standard Catmull-Rom or AMD FSR 1 change at once; NVIDIA DLSS or AMD FSR 3 take the place of the anti-aliasing and the render scale, on DirectX 12 or Vulkan, from the next start"
+    }
+}
+
 /// The upscalers that can run from the game's folder, as a menu lists them.
 pub fn menu_choices() -> impl Iterator<Item = (&'static str, &'static str)> {
     available(&program_dir()).into_iter().map(|u| (u, label(u)))
