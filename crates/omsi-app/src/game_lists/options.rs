@@ -483,6 +483,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "cloud_shadows" => s.cloud_shadows,
         "light_glow" => s.light_glow,
         "windy_trees" => s.windy_trees,
+        "detailed_trees" => s.detailed_trees,
         "road_snow" => s.road_snow,
         "mirror_hud_every_frame" => s.mirror_hud_every_frame,
         "mirror_shadows" => s.mirror_shadows,
@@ -850,6 +851,7 @@ fn toggle_set_graphics_and_controls(app: &mut App, id: &str, on: bool, bit: Stri
             app.settings.windy_trees = on;
             Some(("windy_trees", bit))
         }
+        "detailed_trees" => { app.settings.detailed_trees = on; Some(("detailed_trees", bit)) }
         // (the next picture tells the road snow, see `picture_lighting`)
         "road_snow" => { app.settings.road_snow = on; Some(("road_snow", bit)) }
         "mirror_hud_every_frame" => { app.settings.mirror_hud_every_frame = on; Some(("mirror_hud_every_frame", bit)) }

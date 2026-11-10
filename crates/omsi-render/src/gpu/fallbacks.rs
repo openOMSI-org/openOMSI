@@ -9,11 +9,11 @@ use crate::*;
 /// drivers do) takes the whole device with it, and every frame after that came out black
 /// (see `Renderer::new_on`). Once set, it stays for the rest of the run. OMSI_BASIC_PIPELINES=1
 /// asks for it.
-pub(crate) static BASIC_PIPELINES: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(crate) static BASIC_PIPELINES: super::auxiliary::AdapterBool = super::auxiliary::AdapterBool::new(3);
 pub fn basic_pipelines() -> bool {
     BASIC_PIPELINES.load(std::sync::atomic::Ordering::Relaxed) || omsi_cfg::flags::OMSI_BASIC_PIPELINES.is_set()
 }
-pub(crate) static RAINFALL_LEFT_OUT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(crate) static RAINFALL_LEFT_OUT: super::auxiliary::AdapterBool = super::auxiliary::AdapterBool::new(4);
 pub(crate) fn rainfall_pipeline() -> bool {
     !basic_pipelines() || !(cfg!(any(target_os = "android", target_os = "ios")) || RAINFALL_LEFT_OUT.load(std::sync::atomic::Ordering::Relaxed) || omsi_cfg::flags::OMSI_SAFE_MODE.is_set())
 }
@@ -67,6 +67,7 @@ pub(crate) fn game_version() -> &'static str {
 /// The reduced renderer (MSAA, basic pipelines) that worked on adapter `name` before, and
 /// whether it was found by this version of the game.
 pub(crate) fn fallback_load(name: &str) -> Option<(u32, bool, bool)> {
+    if auxiliary_context().is_some() { return None; }
     let text = std::fs::read_to_string(fallback_path()?).ok()?;
     let e = parse_fallbacks(&text).into_iter().find(|e| e.0 == name)?;
     if e.4 && e.3 == game_version() {
@@ -77,6 +78,7 @@ pub(crate) fn fallback_load(name: &str) -> Option<(u32, bool, bool)> {
 
 /// Remember (`Some`) or forget (`None`) the reduced renderer for adapter `name`.
 pub(crate) fn fallback_store(name: &str, what: Option<(u32, bool)>) {
+    if auxiliary_context().is_some() { return; }
     let Some(path) = fallback_path() else { return };
     let mut all = std::fs::read_to_string(&path).map(|t| parse_fallbacks(&t)).unwrap_or_default();
     all.retain(|e| e.0 != name);

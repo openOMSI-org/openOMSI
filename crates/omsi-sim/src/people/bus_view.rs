@@ -69,7 +69,13 @@ impl PeopleSim {
                 let index = v.var("IBIS_TerminusIndex").filter(|i| i.is_finite() && *i >= 0.0).map(|i| i.round() as usize);
                 let script = script.filter(|i| i.is_finite() && *i >= 0.0).map(|i| i.round() as usize);
                 match shown_terminus_row(&hof.termini, code, index, script) {
-                    Some(i) => Some(hof.termini.get(i).filter(|t| !t.all_exit).map(|t| t.texture_id.trim().to_string())),
+                    Some(i) => Some(
+                        hof.termini
+                            .get(i)
+                            .filter(|t| !t.all_exit && !t.texture_id.trim().is_empty())
+                            .map(|t| t.texture_id.trim().to_string()),
+                    ),
+                    // Invalid display indices and unresolved IBIS values do not prove a blank sign.
                     None if script.is_none() => None,
                     None => Some(None),
                 }

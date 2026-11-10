@@ -38,6 +38,7 @@ impl App {
     }
 
     pub(crate) fn close_game_menu(&mut self) {
+        self.shell.clear_bus_preview();
         self.shell.ui.dismiss_popups();
         self.shell.pause_online.management = None;
         // Never keep unconfirmed graphics changes after dismissing the entire menu.

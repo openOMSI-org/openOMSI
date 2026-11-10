@@ -148,6 +148,7 @@ struct SettingsPage: View {
                 SettingSelect(label: enhanced ? "Real-Time Reflections" : "Puddles", key: "puddles", options: [("high", "High"), ("low", "Low"), ("off", "Off")])
             }
             SettingToggle(label: "Windy trees", key: "windy_trees", fallback: true)
+            SettingToggle(label: "Detailed trees", key: "detailed_trees", fallback: true, help: "Close up, the trees' leaf pictures no longer show as streaks seen from the side, and their crowns get shade; costs a little graphics time")
             if !classic {
                 SettingToggle(label: "Built-up snow on roads and roofs", key: "road_snow", fallback: false, help: "While it snows, snow builds up on the roads and on the vehicles' roofs, with ruts and tyre tracks, and thaws again; off: the weather's own snow on road, as in OMSI 2")
             }

@@ -1210,7 +1210,6 @@ impl TexEntry {
         self.full_bytes = source.gpu_bytes();
         self.format = source.format;
         self.texels = source.width as u64 * source.height as u64;
-        self.squeezed = false;
         self.near_restore = false;
         let (w, h) = scene.texture_size_of(self.id).unwrap_or((1, 1));
         self.dropped = omsi_texture::gpu::mip_count(source.width, source.height)
@@ -1218,6 +1217,7 @@ impl TexEntry {
         if self.bytes == 0 {
             self.dropped = self.dropped.max(1);
         }
+        self.squeezed &= self.dropped > 0;
     }
 }
 

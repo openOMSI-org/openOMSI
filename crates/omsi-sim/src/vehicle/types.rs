@@ -558,7 +558,10 @@ impl VehicleType {
                 def.pantograph_detected = true;
             }
         }
-        if def.trolley.is_empty() {
+        if def.trolley.none {
+            log::info!("{}: [trolley_none], its poles are its own", bus_file.display());
+        }
+        if def.trolley.takes_model_poles() {
             def.trolley = legacy_trolley(&model, &meshes, &mesh_boxes, &program, bus_file, keep_meshes);
             take_model_poles(&mut model, &meshes, &mesh_boxes, &def.trolley);
             // the drive a trolleybus's traction motors would have, kept for when the bus script's

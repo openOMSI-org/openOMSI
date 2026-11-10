@@ -9,6 +9,7 @@ mod server;
 mod session;
 pub mod sign;
 mod doors;
+pub mod firewall;
 pub use doors::{doorways, tried_doors};
 mod skins;
 mod texts;

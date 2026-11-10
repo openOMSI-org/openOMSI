@@ -583,6 +583,7 @@ pub struct VehicleSet {
 pub struct VehiclePrefetch {
     pub(super) root: PathBuf,
     pub(super) textures: Arc<TextureCache>,
+    pub(super) alpha_masks: Arc<crate::vehicle_materials::AlphaMasks>,
     pub(super) on_gpu: Arc<Mutex<HashMap<PathBuf, (TextureId, usize)>>>,
     pub(super) meshes_on_gpu: Arc<Mutex<HashMap<(PathBuf, usize), (MeshId, usize)>>>,
     pub(super) ready: Arc<Mutex<PreparedVehicles>>,
@@ -638,7 +639,7 @@ impl VehiclePrefetch {
             // what its alpha covers, which the upload reads to tell glass from bodywork
             // (`slot_alpha`): the whole picture decoded for it on the thread that draws was
             // most of the 0.1 to 1 s a coach's set took there
-            let _ = crate::vehicle_materials::alpha_mask(&path);
+            let _ = self.alpha_masks.get(&path);
             if self.on_gpu.lock().contains_key(&path)
                 || self.ready.lock().textures.contains_key(&path)
             {

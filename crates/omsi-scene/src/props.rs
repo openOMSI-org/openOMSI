@@ -820,25 +820,26 @@ impl World {
             // the texture is still up under that name (it may have gone meanwhile)
             let vid = self.vehicle_textures.lock().get(&path).map(|e| e.0);
             let found = match vid {
-                Some(id) => Some((id, false)),
-                None => self.gpu.lock().textures.get(&path).map(|e| (e.id, e.near_restore)),
+                Some(id) => Some((id, false, false)),
+                None => self.gpu.lock().textures.get(&path).map(|e| (e.id, e.near_restore, e.squeezed)),
             };
-            let Some((id, near)) = found else { continue };
+            let Some((id, near, squeezed)) = found else { continue };
             if data.levels.is_empty() {
                 // nothing better to be had (an upgrade that stays RGBA)
                 continue;
             }
             let card = renderer.gpu_memory(scene);
-            let room = if near {
-                card_restore_room(video_limit, card)
-            } else {
-                texture_restore_room(self.texture_budget_bytes(), usage, video_limit, card)
-            };
             let before = scene.texture_bytes_of(id);
+            let allowed = if near {
+                let room = card_near_room(video_limit, card);
+                if squeezed { room.min(before.saturating_add(texture_room(self.texture_budget_bytes(), usage))) } else { room }
+            } else {
+                card_near_room(video_limit, card).min(before.saturating_add(texture_restore_room(self.texture_budget_bytes(), usage, video_limit, card)))
+            };
             let upload = if self.player_textures.lock().contains(&path) {
                 data.clone()
             } else {
-                let Some(upload) = fit_upgrade(&data, before.saturating_add(room)) else { continue };
+                let Some(upload) = fit_upgrade(&data, allowed) else { continue };
                 upload
             };
             let replaced = renderer.replace_texture(scene, id, &upload);
@@ -966,7 +967,7 @@ impl World {
         // budget counted the scenery and the vehicles alone, and on an 8 GB card with a
         // 4000 MB budget the textures grew to 5.4 GB over a drive; with the picture's targets
         // the card paged to the system's memory and the frame rate fell from 140 to 25 (#2295).
-        let usage = scenery_bytes + vehicle_bytes + texture_overdraft(renderer.texture_bytes(scene));
+        let texture_usage = scenery_bytes + vehicle_bytes + texture_overdraft(renderer.texture_bytes(scene));
         // And everything the game holds on the card - the meshes, the render targets and
         // shadow maps, the driver's own - stays within the video memory setting and the
         // driver's budget: the textures counted against their budget alone, the game took
@@ -979,7 +980,7 @@ impl World {
         // second while over)
         const STEP: u64 = 32 << 20;
         let card_over = if card_cap > 0 { card.total().saturating_sub(card_cap) / STEP * STEP } else { 0 };
-        let usage = if card_over > 0 { usage.max(limit.saturating_add(card_over)) } else { usage };
+        let usage = if card_over > 0 { texture_usage.max(limit.saturating_add(card_over)) } else { texture_usage };
         memo.in_use = usage;
         if pass == BudgetPass::AfterStreaming && usage <= limit && !memo.resume {
             // (the bytes are all a forced look is for: the restores wait for the second's)
@@ -1042,6 +1043,7 @@ impl World {
                 see(p, *d);
             }
         }
+        ground_is_near(&gpu, &mut near);
         drop((trees, shared));
         drop(states);
         let mut entries: Vec<(f64, PathBuf)> = gpu
@@ -1058,10 +1060,12 @@ impl World {
             + if pass == BudgetPass::Now { std::time::Duration::from_secs(3600) } else { std::time::Duration::from_millis(2) };
         let pending = self.upgrades_pending.lock();
         let reserved = if card_cap == 0 && usage > limit { 0 } else { reserved_restore_bytes(&gpu, &pending) };
-        restoring += queue_near_restores(&mut gpu, &pending, &entries, NEAR, card_restore_room(video_limit, card).saturating_sub(reserved), t0);
+        let rooms = (card_near_room(video_limit, card).saturating_sub(reserved), texture_room(limit, texture_usage).saturating_sub(reserved));
+        restoring += queue_near_restores(&mut gpu, &pending, &entries, NEAR, rooms, t0);
         if usage > limit {
             entries.sort_by(|a, b| b.0.total_cmp(&a.0));
             let mut over = usage - limit;
+            let card_part = (usage - texture_usage.max(limit)).saturating_sub(card_hard_over(card, video_limit, card_over, STEP));
             let mut drops = renderer.begin_level_drops();
             for (d, p) in &entries {
                 // (96 a second: at 16 a map's first tiles stayed over a small card's budget
@@ -1125,7 +1129,7 @@ impl World {
                     }
                 }
             }
-            if over > 0 && shrunk.len() < 96 && !cut_short {
+            if over > card_part && shrunk.len() < 96 && !cut_short {
                 let mut emergency: Vec<(TextureId, Option<PathBuf>)> = entries.iter()
                     .filter_map(|(_, p)| gpu.textures.get(p).map(|e| (e.id, Some(p.clone()))))
                     .collect();
@@ -1133,7 +1137,7 @@ impl World {
                     .filter(|(p, _)| !player.contains(*p))
                     .map(|(_, (id, _))| (*id, None)));
                 for (id, path) in emergency {
-                    if over == 0 || shrunk.len() >= 96 {
+                    if over <= card_part || shrunk.len() >= 96 {
                         break;
                     }
                     if std::time::Instant::now() >= budget_end {
@@ -1143,7 +1147,7 @@ impl World {
                     let Some((w, h, levels)) = renderer.texture_levels(scene, id) else { continue };
                     let before = scene.texture_bytes_of(id);
                     let floor = if path.is_some() { 256 } else { 1024 };
-                    let n = budget_level_drop(w.max(h), levels, floor, before, over);
+                    let n = budget_level_drop(w.max(h), levels, floor, before, over - card_part);
                     if n > 0 && renderer.drop_top_levels_in(&mut drops, scene, id, n) {
                         let after = scene.texture_bytes_of(id);
                         over = over.saturating_sub(before.saturating_sub(after));

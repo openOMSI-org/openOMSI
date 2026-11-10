@@ -85,6 +85,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         pick("vehicle_smoke", "Vehicle smoke", "Controls the vehicles' smoke particles, not scenery effects or glowing particles."),
         pick("puddles", if shown("ray_tracing") { "Real-Time Reflections" } else { "Puddles" }, "The wet roads' reflections in the rain: Low only near the bus and in fewer rays, much cheaper; Off none (the reflections on paint and glass stay)").filter(|_| app.settings.reflections > 0.0),
         switch_row(app, "windy_trees", "Windy trees", "The trees' leaves bend and sway in the wind and its gusts; with no wind they stand still"),
+        switch_row(app, "detailed_trees", "Detailed trees", "Close up, the trees' leaf pictures no longer show as streaks seen from the side, and their crowns get shade; costs a little graphics time"),
         switch_row(app, "road_snow", "Built-up snow on roads and roofs", "While it snows, snow builds up on the roads and on the vehicles' roofs, with ruts and tyre tracks, and thaws again; off: the weather's own snow on road, as in OMSI 2").filter(|_| shown("road_snow")),
     ]
         .into_iter()
@@ -376,7 +377,7 @@ pub(super) fn world_pages(app: &App) -> Vec<Page> {
             time.extend(slider_row(app, "minute", "Minute", "Set the minute directly", &|v| format!("{:02}", v as i64)));
             // (forwards and back by a tap: the typed time wants Enter and the held keys Ctrl+Shift+Page Up,
             // neither of which a phone has)
-            for (name, text, secs) in [("Clock -1 hour", "-1 h", -3600), ("Clock -10 minutes", "-10 min", -600), ("Clock +10 minutes", "+10 min", 600), ("Clock +1 hour", "+1 h", 3600)] {
+            for (name, text, secs) in [("Clock -1 hour", "-1 h", -3600), ("Clock -10 minutes", "-10 min", -600), ("Clock -1 minute", "-1 min", -60), ("Clock +1 minute", "+1 min", 60), ("Clock +10 minutes", "+10 min", 600), ("Clock +1 hour", "+1 h", 3600)] {
                 time.push(button(name, text, "Move the clock.", &format!("clock_shift {secs}")));
             }
             for (name, hm, secs) in [("Morning", "06:00", 6 * 3600), ("Noon", "12:00", 12 * 3600), ("Evening", "18:00", 18 * 3600), ("Night", "23:00", 23 * 3600)] {

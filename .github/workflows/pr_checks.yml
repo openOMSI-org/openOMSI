@@ -81,6 +81,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: node launcher/tests/ai-lists-check.mjs
 
+      - name: Graphics profile sharing
+        if: ${{ !cancelled() }}
+        run: node --experimental-websocket launcher/tests/graphics-profile-transfer-check.mjs
+
       - name: Launcher settings startup
         if: ${{ !cancelled() }}
         run: node --experimental-vm-modules --test launcher/tests/*.test.mjs

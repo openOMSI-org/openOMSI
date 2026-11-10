@@ -5,6 +5,7 @@
 //! the list again (or the next one: a line's tours).
 
 use crate::App;
+pub(crate) mod bus_preview;
 /// The cloud types of OMSI's weather (`Weather/clouds.cfg`): the name in a weather file and
 /// the name shown.
 use crate::weather_setup::CLOUD_KINDS;

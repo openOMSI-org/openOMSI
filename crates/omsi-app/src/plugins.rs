@@ -344,8 +344,9 @@ pub(crate) fn game_info(app: &crate::App) -> Vec<(&'static str, InfoValue)> {
             // the next one only a minute before it leaves
             v.push(("trip_done", Bool(d.trip_done())));
             let bus = app.player.as_ref().map(|p| p.vehicle.position);
-            stop_info(&mut v, &trip.stops, d.next_stop, d.at_stop(), bus);
-            if let Some(stop) = trip.stops.get(d.next_stop) {
+            let next_calling = omsi_sim::timetable_run::next_calling_stop(&trip.stops, d.next_stop);
+            stop_info(&mut v, &trip.stops, next_calling, d.at_stop() && next_calling == d.next_stop, bus);
+            if let Some(stop) = trip.stops.get(next_calling) {
                 if let Some(distance) = app.menus.navigator.as_ref().and_then(|n| n.next_stop_distance_for(stop.object_id)) {
                     v.push(("next_stop_distance_nav", Num(distance)));
                 }
@@ -573,6 +574,22 @@ impl PluginIo for Io<'_> {
 
     fn position(&self) -> Option<[f64; 4]> {
         self.veh().map(|v| [v.position.x, v.position.y, v.position.z, v.heading])
+    }
+
+    fn mesh_point(&self, mesh: &str, point: [f32; 3], section: usize) -> Option<[f64; 3]> {
+        mesh_point_of(self.veh()?, mesh, point, section)
+    }
+
+    fn body_frame(&self, section: usize) -> Option<[f64; 12]> {
+        body_frame_of(self.veh()?, section)
+    }
+
+    fn other_body_frame(&mut self, id: u64, section: usize) -> Option<[f64; 12]> {
+        body_frame_of(self.other(id)?, section)
+    }
+
+    fn other_mesh_point(&mut self, id: u64, mesh: &str, point: [f32; 3], section: usize) -> Option<[f64; 3]> {
+        mesh_point_of(self.other(id)?, mesh, point, section)
     }
 
     fn message(&mut self, text: &str, seconds: f32) {
@@ -1059,6 +1076,47 @@ impl PluginIo for Io<'_> {
     }
 }
 
+/// Where a point of one of a vehicle's meshes is now (see `PluginIo::mesh_point`).
+fn mesh_point_of(v: &omsi_sim::VehicleInstance, mesh: &str, point: [f32; 3], section: usize) -> Option<[f64; 3]> {
+    let (position, xf) = if section == 0 {
+        (v.position, v.mesh_local_transform(mesh_index(&v.ty, mesh)?))
+    } else {
+        let t = v.trailers.get(section - 1)?;
+        (t.position, t.mesh_local_transform(mesh_index(&t.ty, mesh)?))
+    };
+    let w = position + xf.transform_point3(glam::Vec3::from(point)).as_dvec3();
+    Some([w.x, w.y, w.z])
+}
+
+/// The mesh of a vehicle model whose file is `mesh` (any case, `/` or `\`): the one of that
+/// file name first (`sht_bashmak.o3d` is not `sht_bashmak_1.o3d`), else the first whose path
+/// ends with it.
+fn mesh_index(ty: &omsi_sim::VehicleType, mesh: &str) -> Option<usize> {
+    if mesh.is_empty() {
+        return None;
+    }
+    fn name(f: &str) -> &str {
+        f.rsplit(['/', '\\']).next().unwrap_or(f)
+    }
+    let norm = |b: u8| if b == b'/' { b'\\' } else { b.to_ascii_lowercase() };
+    let ends_with = |file: &str| file.len() >= mesh.len() && file.bytes().rev().zip(mesh.bytes().rev()).all(|(a, b)| norm(a) == norm(b));
+    let file_of = |i: usize| ty.model.meshes.get(ty.meshes[i].def_index).map_or("", |m| m.file.as_str());
+    let n = ty.meshes.len();
+    (0..n).find(|&i| name(file_of(i)).eq_ignore_ascii_case(mesh)).or_else(|| (0..n).find(|&i| ends_with(file_of(i))))
+}
+
+/// A vehicle's body (or a coupled section's) now: origin and axes (see `PluginIo::body_frame`).
+fn body_frame_of(v: &omsi_sim::VehicleInstance, section: usize) -> Option<[f64; 12]> {
+    let (p, r) = if section == 0 {
+        (v.position, v.body_rotation())
+    } else {
+        let t = v.trailers.get(section - 1)?;
+        (t.position, t.body_rotation())
+    };
+    let (x, y, z) = (r.x_axis, r.y_axis, r.z_axis);
+    Some([p.x, p.y, p.z, x.x as f64, x.y as f64, x.z as f64, y.x as f64, y.y as f64, y.z as f64, z.x as f64, z.y as f64, z.z as f64])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1126,6 +1184,56 @@ mod tests {
         let mut io = snapshot(vec![("clock", InfoValue::Num(32400.0)), ("map_path", InfoValue::Text("maps/example/global.cfg".into()))]);
         assert_eq!(io.var("openomsi_clock"), None);
         assert_eq!(io.string("openomsi_map_path"), None);
+    }
+
+    #[test]
+    fn plugins_next_stop_skips_pass_through_station() {
+        let stop = |id: i64, name: &str, stops: bool| crate::schedule::PlannedStop {
+            object_id: id,
+            name: name.into(),
+            arr: 0.0,
+            dep: 0.0,
+            position: None,
+            dir: Default::default(),
+            stops,
+            closed: None,
+        };
+        let mut closed = stop(12, "Closed stop", true);
+        closed.closed = Some("plugin diversion".into());
+        let stops = vec![
+            stop(11, "Due stop", true),
+            stop(12, "Pass-through", false),
+            closed,
+            stop(13, "Next calling stop", true),
+        ];
+
+        let next = omsi_sim::timetable_run::next_calling_stop(&stops, 1);
+        assert_eq!(next, 3);
+
+        let mut info = Vec::new();
+        stop_info(&mut info, &stops, next, false, None);
+        let get = |key: &str| info.iter().find(|(name, _)| *name == key).map(|(_, value)| value.clone());
+        assert_eq!(get("next_stop"), Some(InfoValue::Text("Next calling stop".into())));
+        assert_eq!(get("next_stop_number"), Some(InfoValue::Num(4.0)));
+        assert_eq!(get("next_stop_id"), Some(InfoValue::Num(13.0)));
+        assert_eq!(get("at_stop"), Some(InfoValue::Bool(false)));
+
+        let depot_stops = vec![
+            stop(21, "Depot start", false),
+            stop(22, "Depot next", false),
+        ];
+        let depot_next = omsi_sim::timetable_run::next_calling_stop(&depot_stops, 0);
+        assert_eq!(depot_next, 0);
+
+        let mut depot_info = Vec::new();
+        stop_info(&mut depot_info, &depot_stops, depot_next, false, None);
+        let depot_get = |key: &str| depot_info.iter()
+            .find(|(name, _)| *name == key)
+            .map(|(_, value)| value.clone());
+
+        assert_eq!(depot_get("next_stop"), Some(InfoValue::Text("Depot start".into())));
+        assert_eq!(depot_get("next_stop_number"), Some(InfoValue::Num(1.0)));
+        assert_eq!(depot_get("at_stop"), Some(InfoValue::Bool(false)));
     }
 
     /// The next stop and the one before it, by object ID, with their distances: the stop

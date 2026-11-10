@@ -62,6 +62,27 @@ pub trait PluginIo {
     fn position(&self) -> Option<[f64; 4]> {
         None
     }
+    /// The body of the bus (`section` 0) or of a section coupled behind it (1, 2, ...) as
+    /// the last simulation step left it: its origin and its model's axes in the world (right,
+    /// forward, up), with the heading, the climb and the lean on the springs in them.
+    fn body_frame(&self, _section: usize) -> Option<[f64; 12]> {
+        None
+    }
+    /// Where a point of one of the meshes of the bus (`section` 0) or of a section coupled
+    /// behind it (1, 2, ...) is now (map metres): `mesh` is the mesh's file (`sht_bashmak.o3d`,
+    /// or a part of its path), the point in that section's model frame as the mesh stands at
+    /// rest; the mesh's animations and the section's pose move it.
+    fn mesh_point(&self, _mesh: &str, _point: [f32; 3], _section: usize) -> Option<[f64; 3]> {
+        None
+    }
+    /// `body_frame` of one of `others`.
+    fn other_body_frame(&mut self, _id: u64, _section: usize) -> Option<[f64; 12]> {
+        None
+    }
+    /// `mesh_point` of one of `others`.
+    fn other_mesh_point(&mut self, _id: u64, _mesh: &str, _point: [f32; 3], _section: usize) -> Option<[f64; 3]> {
+        None
+    }
     /// A line of text on the screen for `seconds`.
     fn message(&mut self, _text: &str, _seconds: f32) {}
     /// What the game is doing, as (key, value) pairs for `omsi.info()`: the map, the clock,

@@ -8,6 +8,7 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **Rename a save**: the pencil beside a save slot in the launcher's *Continue* list gives it a name of your own, without editing its `.osn` file in the map's `Saves` folder. Saving over that slot in the game keeps the name (#3849).
 - **AI reaction time**: the new `ai_reaction` setting (25 to 200 %, default 100 %, a slider in the launcher's Traffic settings) scales how long the AI drivers wait before moving off, so a queue at a light pulls away closer together at a lower value. It never goes under 0.4 s, the shortest reaction the junction code is built for (#3793).
 - **What's new in the launcher**: after an update the launcher shows the notes of every
   version since the one last seen, opened, and the others folded below them; *What's new*
@@ -595,6 +596,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **The outside view (F3) starts straight behind the bus**, a little above it, as in OMSI 2,
+  instead of three quarters from the side. It still keeps the angle you leave it at, and Space
+  puts it back behind the bus.
 - **No more slivers of sky at crossings of raised roads** (Nova Friburgo, since 0.3.42): where
   the ground cannot be fitted to roads it should follow, only the roads the ground covers (a
   ditch) are cut out of it, not those lying on it.
@@ -609,6 +613,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   copy of `Einm_Poststr_Poststr` at height zero in the corner of a tile near Falkensee Bahnhof;
   its cutter opened a pit thirty metres deep in the field, walled with tall strips of ground.
   Tunnels and underpasses, whose cutters reach the ground or lie a few metres under it, cut as before.
+- **No more towers of ground at the end of a road**: where the ground is fitted to a road, the side of a
+  kerb - a nearly vertical face - gave the blend a slope of tens of thousands, and the ground rose
+  more than a kilometre in thin strips at the end of the road (Berlin-Spandau, Hansastrasse near
+  Falkensee Bahnhof). The slope a rim hands to the ground is now limited to about 72 degrees.
 - **A key or a wheel's button can recentre head tracking**: *Head tracking: centre again* takes
   where your head is now as the middle (opentrack, native TrackIR and a Tobii eye tracker), without
   putting the view straight as F1 does. It is on the keys list without a key; a button that already

@@ -15,7 +15,7 @@
         "script-src": "'self'",
         "style-src": "'self' 'unsafe-inline'",
         "font-src": "'self'",
-        "img-src": "'self' data: blob: omsi: http://omsi.localhost https://omsi.localhost",
+        "img-src": "'self' data: blob: omsi: http://omsi.localhost https://omsi.localhost https://github.com/user-attachments/assets/ https://private-user-images.githubusercontent.com https://github-production-user-asset-6210df.s3.amazonaws.com",
         "connect-src": "'self' ipc: http://ipc.localhost omsi: http://omsi.localhost https://omsi.localhost",
         "worker-src": "'self' blob:"
       }

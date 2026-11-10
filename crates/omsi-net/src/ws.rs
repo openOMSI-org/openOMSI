@@ -1298,20 +1298,19 @@ mod tests {
         assert_eq!(client.reconnects(), 1);
     }
 
-    /// UDP and TCP reserve ports independently: a random UDP port may already be
-    /// occupied on TCP when tests run concurrently. Windows can report an
-    /// excluded TCP port as PermissionDenied (10013), rather than AddrInUse.
     fn session_and_mod_listener() -> (UdpSocket, TcpListener) {
-        for _ in 0..32 {
-            let session = UdpSocket::bind("127.0.0.1:0").unwrap();
-            let target = session.local_addr().unwrap();
-            match TcpListener::bind(("127.0.0.1", target.port())) {
-                Ok(mods) => return (session, mods),
-                Err(e) if matches!(e.kind(), ErrorKind::AddrInUse | ErrorKind::PermissionDenied) => continue,
-                Err(e) => panic!("cannot bind mods listener at {target}: {e}"),
+        use std::hash::BuildHasher;
+        let seed = std::collections::hash_map::RandomState::new().hash_one(0u8) as u16;
+        for i in 0..256u16 {
+            let port = 49152 + seed.wrapping_add(i.wrapping_mul(997)) % 16384;
+            if let (Ok(session), Ok(mods)) = (
+                UdpSocket::bind(("127.0.0.1", port)),
+                TcpListener::bind(("127.0.0.1", port)),
+            ) {
+                return (session, mods);
             }
         }
-        panic!("could not reserve an available UDP/TCP test port after 32 attempts");
+        panic!("could not reserve an available UDP/TCP test port");
     }
 
     /// Mod streams up to `MAX_TUNNELS`; one more is told `ERR busy` (and its game asks again),

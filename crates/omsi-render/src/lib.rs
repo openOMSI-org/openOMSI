@@ -379,6 +379,7 @@ pub struct RenderOptions {
     pub light_glow: bool,
     pub puddle_reflections: bool,
     pub max_scene: Option<(u32, u32)>,
+    pub detailed_trees: bool,
 }
 
 impl Default for RenderOptions {
@@ -414,6 +415,7 @@ impl Default for RenderOptions {
             light_glow: false,
             puddle_reflections: true,
             max_scene: None,
+            detailed_trees: false,
         }
     }
 }
@@ -448,7 +450,7 @@ const MASK_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const GBUF_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 const AUX_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Float;
 /// The renderer is built for Enhanced+: its HDR pipelines and targets have the two above.
-static RT_GBUF: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static RT_GBUF: crate::AdapterBool = crate::AdapterBool::new(6);
 fn rt_gbuf() -> bool {
     RT_GBUF.load(std::sync::atomic::Ordering::Relaxed)
 }

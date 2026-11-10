@@ -244,9 +244,9 @@ impl Renderer {
             self.options.msaa,
             self.adapter_name
         );
-        if let Some(c) = CEILING.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
-            c.msaa = 1;
-        }
+        update_ceiling(|ceiling| {
+            if let Some(c) = ceiling.as_mut() { c.msaa = 1; }
+        });
         let options = RenderOptions {
             msaa: 1,
             ..self.options

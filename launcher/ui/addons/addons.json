@@ -9,6 +9,15 @@
       "homepage": "https://omsihub.com",
       "icon": "omsi-hub.svg",
       "tags": ["company", "planning", "online"]
+    },
+    {
+      "id": "omsi-mapworks",
+      "name": "OMSI MapWorks",
+      "author": "sirtiegertosch",
+      "description": "A 2D and 3D map editor for OMSI 2 maps: roads and crossings, terrain, aerial pictures and OpenStreetMap as reference, map checks and export as a separate map.",
+      "homepage": "https://omsi-modhub.de/de/mods/mapworks",
+      "icon": "omsi-mapworks.png",
+      "tags": ["tools", "maps", "editor"]
     }
   ]
 }

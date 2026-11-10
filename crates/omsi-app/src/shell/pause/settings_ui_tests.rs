@@ -270,6 +270,8 @@ fn pause_section_markers_write_preview() {
     for (name, value) in [
         ("Clock -1 hour", "-1 h"),
         ("Clock -10 minutes", "-10 min"),
+        ("Clock -1 minute", "-1 min"),
+        ("Clock +1 minute", "+1 min"),
         ("Clock +10 minutes", "+10 min"),
         ("Clock +1 hour", "+1 h"),
     ] {

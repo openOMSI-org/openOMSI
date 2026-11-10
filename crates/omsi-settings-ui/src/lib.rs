@@ -390,6 +390,7 @@ mod tests {
                     "vehicle_smoke",
                     "puddles",
                     "windy_trees",
+                    "detailed_trees",
                     "road_snow",
                 ])
                 .map(|key| (key.to_string(), key.to_string()))
