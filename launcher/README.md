@@ -86,7 +86,7 @@ They do not start a game, query a remote server, or change a real saved duty.
 ## Settings navigation
 
 Settings uses persistent categories and smaller topic pages. Graphics profiles remain under
-**Settings → Graphics → Profiles**, with the existing save, load and delete controls. Search
+**Settings → Graphics → Profiles**, with save, load, delete, import and export controls. Search
 includes all available settings and custom blocks such as graphics profiles. Each topic shows
 all applicable options. Use a setting's star to keep it in
 **Favourite settings**, stored locally by the launcher. The original settings values, platform
@@ -96,3 +96,30 @@ Serve `launcher/` and open `/tests/settings-navigation-check.html` to check the 
 against local command fixtures. The checks cover every original schema row, profile management,
 profile allowlists, search, favourites, conditional visibility and setting writes. They also run
 through `node launcher/tests/drive-check.mjs` in the existing interface check matrix.
+
+## Sharing graphics profiles
+
+In **Settings → Graphics → Profiles**, **Export graphics profile** saves the selected
+profile as a JSON file. **Import graphics profile** adds a shared file to the saved list and
+selects it; press **Load** to apply it. Cancelling either file dialog leaves profiles and
+settings unchanged. Importing an existing name adds a numbered suffix instead of replacing it.
+These buttons use native file dialogs in the desktop launcher.
+
+The UTF-8 file uses the existing saved-profile format, for example:
+
+```json
+{"name": "Shared graphics", "graphics": {"graphics": "enhanced", "msaa": 4}}
+```
+
+Existing individual files from `~/.openomsi/graphics_profiles/` can also be imported.
+Files must not exceed 64 KiB and must contain a name and at least one supported graphics
+setting. Only the existing graphics-profile allowlist is shared; unknown keys, fullscreen,
+graphics API, paths and unrelated settings are ignored. Invalid known value types are rejected
+before the imported profile is saved.
+
+The interface regression check runs the real settings page against mocked desktop commands,
+without touching saved settings or opening native dialogs:
+
+```bash
+CHROME=/path/to/chrome node launcher/tests/graphics-profile-transfer-check.mjs
+```

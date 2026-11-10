@@ -252,12 +252,13 @@ function PresetRow() {
   </div>`;
 }
 
-/** Save, load and delete the graphics settings as named profiles. */
+/** Save, load, share and delete the graphics settings as named profiles. */
 function ProfilesBlock() {
   const [names, setNames] = useState(null);
   const [sel, setSel] = useState('');
   const [name, setName] = useState('');
   const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
   const reload = async (pick) => {
     const all = await call('graphics_profiles').catch(() => ({}));
     const list = Object.keys(all || {});
@@ -302,23 +303,47 @@ function ProfilesBlock() {
       setMsg(e.message);
     }
   };
+  const transfer = async (importing) => {
+    if (busy) return;
+    setBusy(true);
+    setMsg('');
+    try {
+      const result = await call(importing ? 'graphics_profile_import' : 'graphics_profile_export', importing ? {} : { name: sel });
+      if (result == null) return;
+      if (importing) {
+        setName(result);
+        await reload(result);
+        setMsg(t('Imported "{name}". Load it to apply these settings.', { name: result }));
+      } else {
+        setMsg(t('Exported "{name}".', { name: sel }));
+      }
+    } catch (e) {
+      setMsg(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
   return html`
     <div class="settings-profiles">
       <section class="settings-profile-saved" aria-labelledby="saved-graphics-profiles">
         <h4 id="saved-graphics-profiles">${t('Saved profile')}</h4>
-        <${Select} raw value=${sel} disabled=${!list.length} options=${list.length ? list.map((n) => [n, n]) : [['', t('No saved profiles')]]} onChange=${(n) => {
+        <${Select} raw value=${sel} disabled=${busy || !list.length} options=${list.length ? list.map((n) => [n, n]) : [['', t('No saved profiles')]]} onChange=${(n) => {
           setSel(n);
           setName(n);
         }} />
         <div class="settings-profile-actions">
-          <${Button} icon="download" label="Load" disabled=${!list.length} onClick=${load} />
-          <${Button} kind="danger" icon="trash" label="Delete" disabled=${!list.length} onClick=${remove} />
+          <${Button} icon="download" label="Load" disabled=${busy || !list.length} onClick=${load} />
+          <${Button} kind="danger" icon="trash" label="Delete" disabled=${busy || !list.length} onClick=${remove} />
         </div>
+        ${!onPhone && html`<div class="settings-profile-actions">
+          <${Button} icon="file" label="Import graphics profile" disabled=${busy} onClick=${() => transfer(true)} />
+          <${Button} icon="download" label="Export graphics profile" disabled=${busy || !list.length} onClick=${() => transfer(false)} />
+        </div>`}
       </section>
       <section class="settings-profile-save" aria-labelledby="save-graphics-profile">
         <h4 id="save-graphics-profile">${t('Save current graphics settings')}</h4>
-        <${Input} id="graphics-profile-name" aria-label=${t('Profile name')} value=${name} placeholder="Profile name" onInput=${setName} maxlength="40" />
-        <div class="settings-profile-actions"><${Button} kind="primary" icon="save" label="Save current graphics as profile" onClick=${save} /></div>
+        <${Input} id="graphics-profile-name" aria-label=${t('Profile name')} value=${name} placeholder="Profile name" onInput=${setName} maxlength="40" disabled=${busy} />
+        <div class="settings-profile-actions"><${Button} kind="primary" icon="save" label="Save current graphics as profile" disabled=${busy} onClick=${save} /></div>
       </section>
       <p class="muted small">${t('Profiles only store graphics settings; window size and fullscreen are kept.')}</p>
       ${msg && html`<p class="muted small" role="status">${msg}</p>`}
