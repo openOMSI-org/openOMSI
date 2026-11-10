@@ -613,6 +613,10 @@ impl Renderer {
         let puddles = (!gl && !passes.leave_out_enhanced).then(|| {
             puddles::Pipelines::new(&device, &scene.shader, &scene.camera_layout, &scene.material_layout)
         });
+        let cabin_reflections = puddles.as_ref().map(|p| cabin_reflections::Pipelines::new(
+            &device, &scene.shader, &scene.camera_layout, &scene.material_layout,
+            &p.vehicle[0].get_bind_group_layout(2),
+        ));
         let rt = options.ray_tracing.then(|| rt::RayTracer::new(&device));
         let cookie_atlas = cookies::CookieAtlas::new();
         Renderer {
@@ -749,6 +753,7 @@ impl Renderer {
             address_next: std::cell::Cell::new(TexAddressing::Wrap),
             light_map_next: std::cell::Cell::new(false),
             puddles,
+            cabin_reflections,
             texture_aspect: None,
             last_frame: None,
             adapter: None,

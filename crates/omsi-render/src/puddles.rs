@@ -25,7 +25,7 @@ struct VehicleBox {
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub(super) struct VehicleUniform {
-    plane: [f32; 4],
+    pub(crate) plane: [f32; 4],
     parts: [VehicleBox; 4],
 }
 
@@ -62,7 +62,7 @@ pub(super) struct Pipelines {
     blur_y: wgpu::RenderPipeline,
     resolve: wgpu::RenderPipeline,
     glass: [wgpu::RenderPipeline; 2],
-    vehicle: Vec<wgpu::RenderPipeline>,
+    pub(crate) vehicle: Vec<wgpu::RenderPipeline>,
     chassis: wgpu::RenderPipeline,
     vehicle_params: wgpu::Buffer,
     vehicle_bg: wgpu::BindGroup,

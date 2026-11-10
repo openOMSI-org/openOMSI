@@ -176,6 +176,7 @@ pub(super) fn material_extra(
         specular,
         bump: bump.filter(|b| b.1.is_finite() && b.1 != 0.0),
         glass: false,
+        daylight_glass: false,
         night_switched: false,
         night_alpha: false,
         rain_film: false,

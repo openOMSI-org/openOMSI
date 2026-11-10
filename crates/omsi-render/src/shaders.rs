@@ -35,6 +35,7 @@ pub(crate) const ENHANCED: &str = concat!(
     include_str!("shaders/enhanced/04_shade.wgsl"),
     include_str!("shaders/enhanced/05_puddles.wgsl"),
     include_str!("shaders/enhanced/06_ground.wgsl"),
+    include_str!("shaders/enhanced/07_cabin_reflections.wgsl"),
 );
 
 /// FSR 1's passes for a picture of `format`: on an sRGB one they take its texels to gamma
@@ -136,7 +137,7 @@ mod tests {
     #[test]
     fn assembled_shaders_are_the_old_files() {
         let (scene, enhanced) = (super::SCENE.replace("\r\n", "\n"), super::ENHANCED.replace("\r\n", "\n"));
-        assert_eq!((scene.len(), fnv1a(&scene)), (141067, 16582456829263248557));
-        assert_eq!((enhanced.len(), fnv1a(&enhanced)), (99366, 11134015870607419208));
+        assert_eq!((scene.len(), fnv1a(&scene)), (141106, 1308372599967549558));
+        assert_eq!((enhanced.len(), fnv1a(&enhanced)), (102464, 1529402076321468432));
     }
 }

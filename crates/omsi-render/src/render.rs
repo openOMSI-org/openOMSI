@@ -745,6 +745,8 @@ impl Renderer {
         );
         clock.stage(self, "items", "mirror.items");
         plan.split_rain(scene, f.glass_on);
+        let cabin = self.cabin_reflections.as_ref().and_then(|_| cabin_reflections::plan(scene, &f, &visible, &mut plan.list));
+        self.upload_cabin_planes(cabin.as_ref());
         self.upload_draw_list(scene, &plan.list);
         clock.stage(self, "upload", "mirror.upload");
         let main_bundles = self.record_main_bundles(scene, &f, &plan);
@@ -798,6 +800,7 @@ impl Renderer {
             let rest = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("after the main pass") });
             main_parts.push(std::mem::replace(&mut enc.picture, rest));
         }
+        self.encode_cabin_reflections(&mut enc.picture, scene, &f, cabin.as_ref(), &mut timers);
         let puddles_on = self.encode_scene_reflections(&mut enc.picture, scene, &f, &plan, &cu, &mut timers);
         self.encode_fog_lamps(&mut enc.picture, scene, &f, vp_mat, puddles_on, &mut timers);
         self.encode_temporal_late_motion(&mut enc.picture, scene, &f, &plan);

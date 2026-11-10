@@ -31,7 +31,7 @@ pub(crate) struct MaterialUniform {
     /// Window mask: mesh X/Z origin and inverse size; zero disables it.
     pub(crate) wipe_bounds: [f32; 4],
     /// x: `[matl_glow]` strength (`MaterialExtra::glow`); 0 = the keyword is not there.
-    /// y/z/w free.
+    /// y: LED glow scale; z: a pane faded by Envir_Brightness; w free.
     pub(crate) glow: [f32; 4],
 }
 
@@ -169,6 +169,9 @@ pub struct MaterialExtra {
     /// A named transparent window layer. This is separate from envmap/transmap because
     /// stock and add-on buses often use a plain alpha-blended window texture.
     pub glass: bool,
+    /// A real pane whose authored environment layer fades with `Envir_Brightness`.
+    /// Cabin reflections stay visible at night; other script alpha still hides glass.
+    pub daylight_glass: bool,
     /// The night map is switched by something other than the time of day - a `[matl_item]`'s
     /// variable, a vehicle mesh's `[visible]`: it glows by day as well (warning lamps,
     /// dashboard displays), not only at night.
@@ -830,7 +833,7 @@ impl Renderer {
             sway: extra.sway.map_or([0.0; 4], |s| [1.0, s[0], s[1], s[2]]),
             // (no mask bound - its file missing - no glow: the slot would shine all over)
             // (y: an LED panel's share of its glow, see `MaterialExtra::led_glow`)
-            glow: [if lightmap.is_some() { extra.glow.max(0.0) } else { 0.0 }, extra.led_glow.map_or(1.0, |g| g.clamp(0.0, 1.0)), 0.0, 0.0],
+            glow: [if lightmap.is_some() { extra.glow.max(0.0) } else { 0.0 }, extra.led_glow.map_or(1.0, |g| g.clamp(0.0, 1.0)), if extra.glass && extra.daylight_glass { 1.0 } else { 0.0 }, 0.0],
         };
         let slot = |t: Option<TextureId>| {
             t.and_then(|t| scene.textures.get(t).map(|g| (t, g.generation)))

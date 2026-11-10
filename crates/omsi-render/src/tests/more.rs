@@ -648,6 +648,7 @@ fn shaders_validate_and_match_the_uniforms() {
         ("PuddleParams", std::mem::size_of::<puddles::Uniform>()),
         ("Sight", std::mem::size_of::<SightUniform>()),
         ("VehicleReflection", std::mem::size_of::<puddles::VehicleUniform>()),
+        ("CabinReflection", std::mem::size_of::<crate::cabin_reflections::Uniform>()),
         ("PointLight", std::mem::size_of::<GpuPointLight>()),
         ("Camera", std::mem::size_of::<CameraUniform>()),
         ("MaterialParams", std::mem::size_of::<MaterialUniform>()),
