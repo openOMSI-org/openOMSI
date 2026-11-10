@@ -717,7 +717,7 @@ impl Renderer {
         let args = FrameArgs { target, width, height, camera, lighting, with_overlays, exclude_texture, projection, second_eye };
         let f = self.begin_frame(scene, env, args, &mut clock);
         let sh = self.plan_shadow_cache(scene, &f);
-        let (vp_mat, cu, probe_redraw) = self.frame_uniforms(scene, &f, &sh, &mut clock);
+        let (vp_mat, mut cu, probe_redraw) = self.frame_uniforms(scene, &f, &sh, &mut clock);
         // --- what every pass draws, as batches over one draw list (see `Batch`): the shadow
         // casters of each cascade, the depth prepass and the main pass. The list is built
         // and uploaded before any pass is encoded.
@@ -728,9 +728,7 @@ impl Renderer {
         let visible = self.cull_view(scene, &f, &mut clock);
         let mut plan = self.batch_draws(scene, &f, &visible, Vec::new());
         if plan.ground.active() {
-            // (the frame's uniform was written with the flag off: the base is lit from the ground picture)
-            let flag = 1.0f32;
-            self.queue.write_buffer(&self.camera_buf, (std::mem::offset_of!(CameraUniform, lod) + 4) as u64, bytemuck::bytes_of(&flag));
+            cu.lod[1] = 1.0;
         }
         // (the shadow casters' entries after the passes' own: the main pass's batches keep
         // their places in the list while only the shadows change, and its bundles are kept)
@@ -746,7 +744,8 @@ impl Renderer {
         clock.stage(self, "items", "mirror.items");
         plan.split_rain(scene, f.glass_on);
         let cabin = self.cabin_reflections.as_ref().and_then(|_| cabin_reflections::plan(scene, &f, &visible, &mut plan.list));
-        self.upload_cabin_planes(cabin.as_ref());
+        cu.cabin_planes = cabin_reflections::camera_planes(cabin.as_ref());
+        self.queue.write_buffer(&self.camera_buf, 0, bytemuck::bytes_of(&cu));
         self.upload_draw_list(scene, &plan.list);
         clock.stage(self, "upload", "mirror.upload");
         let main_bundles = self.record_main_bundles(scene, &f, &plan);

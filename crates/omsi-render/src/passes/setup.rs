@@ -473,8 +473,6 @@ impl Renderer {
             spot: classic_spot(&scene.lights, ro),
             cabin_planes: [[0.0; 4]; 2],
         };
-        self.queue
-            .write_buffer(&self.camera_buf, 0, bytemuck::bytes_of(&cu));
         if let Some(m) = sh.precip {
             self.write_precip_camera(&cu, m);
         }

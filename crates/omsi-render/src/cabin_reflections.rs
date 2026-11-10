@@ -196,7 +196,7 @@ impl Pipelines {
         Self { layout, compose, resolve, overlay: None, captures: Vec::new(), size: (0, 0), refreshed: None }
     }
 
-    fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, plane_layout: &wgpu::BindGroupLayout, f: &FrameCtx, plan: &Plan) {
+    fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, plane_layout: &wgpu::BindGroupLayout, f: &FrameCtx, plan: &Plan, update: bool) {
         let scale = (320.0 / f.width as f32).min(180.0 / f.height as f32).min(0.5);
         let size = ((f.width as f32 * scale).ceil().max(1.0) as u32, (f.height as f32 * scale).ceil().max(1.0) as u32);
         if self.size != size || self.captures.len() != plan.planes.len() { self.captures.clear(); self.refreshed = None; self.size = size; }
@@ -213,9 +213,8 @@ impl Pipelines {
             let picture_bg = device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("cabin picture"), layout: &self.layout, entries: &[wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&color) }, wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&sampler) }, wgpu::BindGroupEntry { binding: 3, resource: params.as_entire_binding() }] });
             self.captures.push(Capture { color, depth, plane, plane_bg, params, picture_bg });
         }
-        let mut planes = [[0.0; 4]; PLANES];
-        for (i, p) in plan.planes.iter().enumerate() { planes[i] = p.to_array(); }
-        for (i, c) in self.captures.iter().enumerate() {
+        let planes = camera_planes(Some(plan));
+        for (i, c) in self.captures.iter().enumerate().filter(|_| update) {
             let mut u: puddles::VehicleUniform = bytemuck::Zeroable::zeroed();
             u.plane = planes[i];
             u.cabin_fade = DISTANCE_FADE;
@@ -231,15 +230,15 @@ impl Pipelines {
     }
 }
 
-impl Renderer {
-    pub(crate) fn upload_cabin_planes(&self, plan: Option<&Plan>) {
-        if let Some(plan) = plan {
-            let mut planes = [[0.0; 4]; PLANES];
-            for (i, p) in plan.planes.iter().enumerate() { planes[i] = p.to_array(); }
-            self.queue.write_buffer(&self.camera_buf, std::mem::offset_of!(CameraUniform, cabin_planes) as u64, bytemuck::cast_slice(&planes));
-        }
+pub(crate) fn camera_planes(plan: Option<&Plan>) -> [[f32; 4]; PLANES] {
+    let mut planes = [[0.0; 4]; PLANES];
+    if let Some(plan) = plan {
+        for (i, p) in plan.planes.iter().enumerate() { planes[i] = p.to_array(); }
     }
+    planes
+}
 
+impl Renderer {
     pub(crate) fn encode_cabin_reflections(&mut self, encoder: &mut wgpu::CommandEncoder, scene: &Scene, f: &FrameCtx, plan: Option<&Plan>, timers: &mut passes::PassTimers) {
         let Some(pipes) = self.cabin_reflections.as_mut() else { return };
         let Some(plan) = plan else {
@@ -249,8 +248,8 @@ impl Renderer {
         };
         let Some(vehicle) = self.puddles.as_ref() else { return };
         let Some(ao) = self.targets.ao.as_ref() else { return };
-        pipes.prepare(&self.device, &self.queue, &vehicle.vehicle[0].get_bind_group_layout(2), f, plan);
         let update = f.xr_view || pipes.refreshed.as_ref().is_none_or(|(at, state)| at.elapsed().as_secs_f32() >= 1.0 / 30.0 || !state.matches(&plan.refresh));
+        pipes.prepare(&self.device, &self.queue, &vehicle.vehicle[0].get_bind_group_layout(2), f, plan, update);
         if update {
             let c = &pipes.captures[0];
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

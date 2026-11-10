@@ -109,7 +109,7 @@ mod tests {
         );
         let render = include_str!("render.rs");
         assert!(
-            render.contains("(std::mem::offset_of!(CameraUniform, lod) + 4) as u64, bytemuck::bytes_of(&flag)"),
+            render.contains("cu.lod[1] = 1.0;"),
             "the ground pass must set lod.y alone and keep the glare in lod.z"
         );
     }
