@@ -1053,7 +1053,6 @@ fn a_later_stop_counts_only_with_the_doors_open() {
     assert_eq!(duty.take_skipped(), Some((3, 2, 5)), "stops 2 to 4 passed, at stop 5");
 }
 
-// A pass-through station between two calling stops must not count as missed.
 #[test]
 fn catch_up_skips_pass_through_stations() {
     let mut trip = planned(0.0, &[(0.0, 0.0, 0.0), (100.0, 60.0, 60.0), (500.0, 120.0, 120.0), (1000.0, 200.0, 200.0)]);
