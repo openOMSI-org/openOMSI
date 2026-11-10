@@ -31,6 +31,14 @@ impl Drop for Fixture {
     }
 }
 
+#[test]
+fn automatic_texture_settings_keep_the_driver_memory_limit_active() {
+    assert!(!memory_budget_active(0, 0, 0), "no known limit needs no budget pass");
+    assert!(memory_budget_active(0, 0, 3_000_000_000), "driver VRAM budget remains active");
+    assert!(memory_budget_active(0, 250_000_000, 0), "explicit GPU limit");
+    assert!(memory_budget_active(125_000_000, 0, 0), "explicit texture limit");
+}
+
 fn renderer() -> Renderer {
     let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
     descriptor.backends = wgpu::Backends::NOOP;
