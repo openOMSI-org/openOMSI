@@ -4,6 +4,37 @@
 use super::*;
 
 impl Network {
+    pub(super) fn can_link(&self, from: usize, to: usize, tol: f64) -> bool {
+        let (Some(a), Some(b)) = (self.lanes.get(from), self.lanes.get(to)) else {
+            return false;
+        };
+        if from == to || a.kind != b.kind {
+            return false;
+        }
+        let (e, s) = (a.end(), b.start());
+        (s - e).truncate().length() <= tol
+            && wrap_deg(b.start_heading() - a.end_heading()).abs() < 40.0
+            && (s.z - e.z).abs() < 3.0
+    }
+
+    /// Keep a direct link only when it does not skip a signalized lane that joins both ends.
+    pub(super) fn link_targets(&self, from: usize, candidates: Vec<usize>, tol: f64) -> Vec<usize> {
+        candidates
+            .iter()
+            .copied()
+            .filter(|&to| {
+                self.can_link(from, to, tol)
+                    && (self.lanes[to].traffic_light.is_some()
+                        || !candidates.iter().any(|&via| {
+                            via != to
+                                && self.lanes[via].traffic_light.is_some()
+                                && self.can_link(from, via, tol)
+                                && self.can_link(via, to, tol)
+                        }))
+            })
+            .collect()
+    }
+
     /// The sign of a lateral offset (positive to the right) towards the oncoming lane:
     /// -1 on the right-hand side of the road, +1 on a left-hand-traffic map.
     pub fn oncoming_sign(&self) -> f32 {
@@ -500,23 +531,16 @@ impl Network {
                 for dy in -1..=1 {
                     if let Some(list) = grid.get(&(cx + dx, cy + dy)) {
                         for &j in list {
-                            if j == i {
-                                continue;
-                            }
-                            let l = &self.lanes[j];
-                            if l.kind != kind {
-                                continue;
-                            }
-                            let d = (l.start() - e).truncate().length();
-                            let dh = wrap_deg(l.start_heading() - eh).abs();
-                            if d <= tol && dh < 40.0 && (l.start().z - e.z).abs() < 3.0 {
+                            if self.can_link(i, j, tol) {
                                 found.push(j);
                             }
                         }
                     }
                 }
             }
-            if found.is_empty() && omsi_cfg::flags::OMSI_DEBUG_UNLINKED.is_set() {
+            let has_candidates = !found.is_empty();
+            found = self.link_targets(i, found, tol);
+            if !has_candidates && omsi_cfg::flags::OMSI_DEBUG_UNLINKED.is_set() {
                 // a lane end with a start of its kind near it that was not taken
                 for dx in -1..=1 {
                     for dy in -1..=1 {

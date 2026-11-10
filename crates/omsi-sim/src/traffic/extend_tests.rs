@@ -27,6 +27,56 @@ fn extend_links_like_link() {
 }
 
 #[test]
+fn links_do_not_skip_signalized_segments() {
+    let mut signal = straight(0.0, 10.0, 11.0, 2, (0, 0));
+    signal.traffic_light = Some((0, 0));
+    let mut net = Network {
+        lanes: vec![
+            straight(0.0, 0.0, 10.0, 1, (0, 0)),
+            signal,
+            straight(0.0, 11.0, 21.0, 3, (0, 0)),
+        ],
+        ..Default::default()
+    };
+    net.link(1.5);
+
+    assert_eq!(net.lanes[0].next, vec![1]);
+    assert_eq!(net.lanes[1].next, vec![2]);
+    assert_eq!(net.prev[2], vec![1]);
+}
+
+#[test]
+fn extending_with_a_signalized_segment_removes_the_existing_bypass_link() {
+    let before = vec![
+        straight(0.0, 0.0, 10.0, 1, (0, 0)),
+        straight(0.0, 11.0, 21.0, 3, (0, 0)),
+    ];
+    let mut grown = Network {
+        lanes: before.clone(),
+        ..Default::default()
+    };
+    grown.link(1.5);
+    assert_eq!(grown.lanes[0].next, vec![1]);
+
+    let mut signal = straight(0.0, 10.0, 11.0, 2, (0, 1));
+    signal.traffic_light = Some((0, 0));
+    grown.extend(vec![signal.clone()], 1.5);
+
+    let mut whole = Network {
+        lanes: vec![before[0].clone(), signal, before[1].clone()],
+        ..Default::default()
+    };
+    whole.link(1.5);
+    for i in 0..whole.lanes.len() {
+        assert_eq!(grown.lanes[i].next, whole.lanes[i].next, "lane {i}");
+        assert_eq!(grown.prev[i], whole.prev[i], "lane {i}");
+    }
+    assert_eq!(grown.reach, whole.reach);
+    assert_eq!(grown.lanes[0].next, vec![2]);
+    assert_eq!(grown.lanes[2].next, vec![1]);
+}
+
+#[test]
 fn short_road_choices_progress_without_changing_linking_or_reach() {
     for heading in [0.0, 129.0, 309.0] {
         let mut p = DVec3::new(-1200.0, -600.0, 20.0);
