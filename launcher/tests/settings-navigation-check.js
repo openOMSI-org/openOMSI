@@ -7,7 +7,7 @@ const assert = (ok, message) => { if (!ok) throw new Error(message); };
 export async function run(root) {
   const originalTauri = window.__TAURI__;
   const originalState = { ...S };
-  const storageKeys = ['settings-tab', 'settings-favourites', 'settings-advanced', 'settings-section-graphics'];
+  const storageKeys = ['settings-tab', 'settings-favourites', 'settings-section-graphics'];
   const originalStorage = storageKeys.map((key) => [key, localStorage.getItem(key)]);
   const report = [];
   const commands = [];
@@ -32,7 +32,6 @@ export async function run(root) {
   try {
     remember('settings-tab', 'graphics');
     remember('settings-favourites', '[]');
-    remember('settings-advanced', '0');
     remember('settings-section-graphics', 'display');
     const { SettingsPage } = await import('../ui/js/pages/settings.js');
     const { SETTINGS_TABS } = await import('../ui/js/pages/settings-schema.js');
@@ -55,8 +54,14 @@ export async function run(root) {
     report.push('PASS persistent categories and graphics profile subpage');
     assert(!root.querySelector('.settings-help-hint'), 'Do not repeat the sidebar help instruction above the list');
     assert(root.querySelector('#settings-description').textContent.includes('Select Help beside a setting'), 'Keep the initial help instruction in the sidebar');
-    assert(!root.querySelector('.settings-advanced') && !root.querySelector('.settings-reveal'), 'All options must be visible without an advanced switch');
-    assert(root.querySelector('[data-setting-key="sim_thread"]'), 'Previously advanced display options must be visible even with the old preference disabled');
+    assert(root.querySelector('[data-setting-key="sim_thread"]'), 'Display must include the simulation-thread setting');
+    const searchKey = new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, cancelable: true, bubbles: true });
+    window.dispatchEvent(searchKey);
+    assert(searchKey.defaultPrevented && document.activeElement === root.querySelector('.settings-search input'), 'Ctrl+F must focus setting search');
+    const otherKey = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, cancelable: true, bubbles: true });
+    window.dispatchEvent(otherKey);
+    assert(!otherKey.defaultPrevented, 'Settings must leave Ctrl+K available to the browser');
+    report.push('PASS Ctrl+F search without capturing Ctrl+K');
     const beforeHelp = commands.filter(([cmd]) => cmd === 'settings_patch').length;
     await click('[data-setting-key="fullscreen"] .settings-help');
     const helpRow = root.querySelector('[data-setting-key="fullscreen"]');

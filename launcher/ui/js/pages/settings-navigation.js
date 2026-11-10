@@ -22,7 +22,6 @@ function matches(entry, words, settings) {
 
 function settingHelp(entry, settings) {
   const help = typeof entry.row.help === 'function' ? entry.row.help(settings) : entry.row.help;
-  if (entry.row.id === 'launcher_size') return 'Grows with the window; this sets how big it is';
   return help || 'No additional description is available for this setting.';
 }
 
@@ -37,7 +36,7 @@ export function SettingsNavigation({ Row }) {
   const scroll = useRef();
   useEffect(() => {
     const key = (event) => {
-      if ((event.ctrlKey || event.metaKey) && ['f', 'k'].includes(event.key.toLowerCase())) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
         event.preventDefault();
         document.querySelector('.settings-search input')?.focus();
       } else if (event.key === 'Escape' && document.activeElement?.closest('.settings-search')) setQuery('');

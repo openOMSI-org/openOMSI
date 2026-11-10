@@ -88,7 +88,7 @@ They do not start a game, query a remote server, or change a real saved duty.
 Settings uses persistent categories and smaller topic pages. Graphics profiles remain under
 **Settings → Graphics → Profiles**, with the existing save, load and delete controls. Search
 includes all available settings and custom blocks such as graphics profiles. Each topic shows
-all applicable options without an advanced-options switch. Use a setting's star to keep it in
+all applicable options. Use a setting's star to keep it in
 **Favourite settings**, stored locally by the launcher. The original settings values, platform
 conditions and automatic saving are unchanged.
 

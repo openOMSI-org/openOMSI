@@ -1,4 +1,3 @@
-// Presentation metadata only: the original schema remains the settings contract.
 const groups = {
   graphics: [
     ['display', 'Display', 'fullscreen resolution vsync max_fps graphics_api sim_thread'],
@@ -47,7 +46,7 @@ const groups = {
 };
 
 const defaults = { graphics: 'quality', driving: 'keyboard', camera: 'view', sound: 'volume', gameplay: 'passengers', general: 'appearance' };
-const customLabels = { profiles: 'Profiles', preset: 'Quality preset', optimise: 'Optimise', nvidia_dlss_install: 'NVIDIA DLSS', theme: 'Launcher theme', launcher_layout: 'Launcher layout', launcher_size: 'Launcher size', corner: 'Navigator corner', version: 'Updates', reset: 'Reset', support: 'Support', radio: 'Radio stations' };
+const customLabels = { profiles: 'Profiles', preset: 'Quality preset', optimise: 'Optimise for my PC', nvidia_dlss_install: 'NVIDIA DLSS runtime (optional)', theme: 'Launcher theme', launcher_layout: 'Launcher layout', launcher_size: 'Launcher size', corner: 'Corner', version: 'Updates', reset: 'Reset', support: 'Support', radio: 'Radio stations' };
 
 export const settingToken = (row) => typeof row.key === 'string' ? row.key : row.id ? '@' + row.id : row.type === 'section' ? '#' + row.title.replaceAll(' ', '_') : row.label || row.text;
 export const settingLabel = (row) => row.label || customLabels[row.id] || row.title || '';
@@ -55,7 +54,6 @@ export const settingId = (tab, row) => tab.id + ':' + settingToken(row);
 export const isSettingVisible = (row, settings, platform) => !row.when || row.when(settings, platform);
 export const isSettingControl = (row) => !['section', 'note'].includes(row.type);
 
-/** Reuse row objects, including their predicates and custom blocks, without copying values. */
 export function settingsGroups(tab) {
   const definitions = groups[tab.id];
   if (!definitions) return tab.cols.map((col, i) => ({ id: String(i), label: col.title, rows: col.rows }));

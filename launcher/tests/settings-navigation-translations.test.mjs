@@ -4,7 +4,12 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const source = readFileSync(new URL('../../crates/omsi-app/locales/app.yml', import.meta.url), 'utf8');
+const layout = readFileSync(new URL('../ui/js/pages/settings-layout.js', import.meta.url), 'utf8');
+const customLabels = [...layout.match(/const customLabels = \{([^}]+)\};/)[1].matchAll(/:\s*'([^']+)'/g)].map((match) => match[1]);
 const required = [
+  'Optimise for my PC',
+  'NVIDIA DLSS runtime (optional)',
+  'Corner',
   "Lighting",
   "Weather & effects",
   "Mouse",
@@ -71,4 +76,8 @@ test('settings navigation entries cover exactly the supported locales', () => {
   for (const key of required) {
     assert.deepEqual([...catalogue.get(key).keys()].sort(), [...languages].sort(), key);
   }
+});
+
+test('every custom setting label has a catalogue key', () => {
+  for (const label of customLabels) assert(source.includes(JSON.stringify(label) + ':'), 'Missing custom label: ' + label);
 });
