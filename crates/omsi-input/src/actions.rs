@@ -72,10 +72,7 @@ pub fn game_chord_bound(keys: &[omsi_content::KeyBinding], scan: i32, chord: i32
     keys.iter().any(|b| b.scan_code == scan && b.matches(chord) && (vr || !is_vr_action(&b.action)))
 }
 
-/// Whether pressing `code` with modifiers (`shift`, `ctrl`, `alt`) triggers simulation pause:
-/// any `sim_pause` entry in `game_keys` replaces the built-in plain `KeyP` fallback (including
-/// disabling pause when unbound with `scan_code == 0`), and `own_keys` reclaims plain `KeyP`
-/// when bound to a vehicle action.
+/// True when `code` + modifiers triggers pause (configured `sim_pause`, or plain `P` if unconfigured and free).
 pub fn is_pause_key(
     game_keys: &[omsi_content::KeyBinding],
     code: winit::keyboard::KeyCode,
@@ -97,7 +94,18 @@ pub fn is_pause_key(
                 && (b.matches(chord) || (own_mod != 0 && b.matches(chord | own_mod)))
         });
     }
-    code == winit::keyboard::KeyCode::KeyP && chord == 0 && !own_keys.contains(&scan)
+    chord == 0 && is_pause_fallback(game_keys, code, own_keys)
+}
+
+/// True when `code` can fall back to built-in `P` pause (no `sim_pause` entry in `game_keys`).
+pub fn is_pause_fallback(
+    game_keys: &[omsi_content::KeyBinding],
+    code: winit::keyboard::KeyCode,
+    own_keys: &std::collections::HashSet<i32>,
+) -> bool {
+    code == winit::keyboard::KeyCode::KeyP
+        && !game_keys.iter().any(|b| b.action.eq_ignore_ascii_case("sim_pause"))
+        && crate::keys::dik_code(code).is_some_and(|scan| !own_keys.contains(&scan))
 }
 
 #[cfg(test)]
@@ -170,5 +178,10 @@ mod tests {
         let p_scan = crate::keys::dik_code(KeyCode::KeyP).unwrap();
         let own = [p_scan].into_iter().collect();
         assert!(!is_pause_key(&[], KeyCode::KeyP, false, false, false, &own));
+        assert!(is_pause_fallback(&[], KeyCode::KeyP, &none));
+        assert!(!is_pause_fallback(&[kb(KeyCode::KeyP, 0)], KeyCode::KeyP, &none));
+        assert!(!is_pause_fallback(&rebound, KeyCode::KeyP, &none));
+        assert!(!is_pause_fallback(&unbound, KeyCode::KeyP, &none));
+        assert!(!is_pause_fallback(&[], KeyCode::KeyP, &own));
     }
 }

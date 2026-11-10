@@ -809,6 +809,7 @@ impl App {
         match code {
             // the game's own keys stay (menu, pause, screenshots, chat)
             KeyCode::Escape | KeyCode::F12 | KeyCode::KeyV | KeyCode::Slash => false,
+            KeyCode::KeyP if ctrl && shift => false,
             _ if omsi_input::actions::is_pause_key(&self.input.game_keys, code, shift, ctrl, alt, &self.input.own_keys) => false,
             KeyCode::F1 => {
                 if pressed && !repeat {
