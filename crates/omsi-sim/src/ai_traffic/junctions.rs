@@ -834,7 +834,13 @@ impl TrafficSim {
             .flat_map(|&(lane, dl)| {
                 self.net.crossings[lane]
                     .iter()
-                    .filter(|c| !way.iter().any(|w| w.0 == c.other))
+                    // Only a path another vehicle has actually claimed can hold the
+                    // queue out. An unclaimed crossing path is not a reason to leave
+                    // the whole junction empty (as in OMSI.exe).
+                    .filter(|c| {
+                        !way.iter().any(|w| w.0 == c.other)
+                            && book.lanes.get(&c.other).is_some_and(|cars| cars.iter().any(|&j| j != i))
+                    })
                     .map(move |c| (dl + c.at - c.before, dl + c.at + c.after))
             })
             .filter(|&(from, to)| from < front_at_stop && to > rear_at_stop)
