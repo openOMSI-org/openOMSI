@@ -325,7 +325,8 @@ pub struct LanGame {
     /// Vehicles another player drives that could not be made here, and when that was
     /// tried: tried again only after a while (every frame, a server read a big add-on bus
     /// it could not load over and over and stood still for everybody).
-    failed: hashbrown::HashMap<(u32, String), std::time::Instant>,
+    /// Retry separately for each repaint: a missing old livery must not delay a new one.
+    failed: hashbrown::HashMap<(u32, String, String), std::time::Instant>,
     /// Our vehicle's variable table (by its program), for `omsi_net::vars`.
     my_vars: Option<(usize, Arc<VarTable>)>,
     my_var_schema: Option<String>,
@@ -2427,7 +2428,7 @@ pub fn tick_receive(
             }
         }
         if !game.remotes.contains_key(&pose.id) {
-            let key = (pose.id, pose.bus.clone());
+            let key = (pose.id, pose.bus.clone(), pose.paint.clone());
             if game.failed.get(&key).is_some_and(|t| t.elapsed().as_secs_f32() < 30.0) {
                 continue;
             }
