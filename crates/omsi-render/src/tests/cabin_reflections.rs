@@ -57,8 +57,7 @@ fn falloff_case(msaa: u32, ray_tracing: bool) {
         let outside = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [0.0, 0.0, 0.0, 1.0], true);
         panel(&renderer, &mut scene, 20.0, [-50.0, 50.0], [-50.0, 50.0], outside, false);
         let red = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [1.0, 0.01, 0.01, 1.0], false);
-        // Keep the projected area and lamp-to-surface distance the same. Only the
-        // optical path to the pane changes, not lighting or the number of pixels.
+        // Change optical distance while keeping illumination and projected area constant.
         let y = 2.0 - distance;
         let half = (distance + 2.0) * 0.06;
         let seat = panel(&renderer, &mut scene, y, [-half, half], [1.5 - half, 1.5 + half], red, true);
@@ -74,8 +73,7 @@ fn falloff_case(msaa: u32, ray_tracing: bool) {
         }
         gains.push(samples[3] - samples[0]);
         if distance == 2.5 {
-            // Moving just the lamp away must weaken illumination of the same
-            // nearby object too, independently of the reflection's own falloff.
+            // Lamp attenuation is independent of the reflected image's distance fade.
             let mut lamp_gains = Vec::new();
             for lamp_distance in [3.0, 6.0] {
                 renderer.set_interior_light(&mut scene, light, PointLight { position: DVec3::new(0.0, y as f64 + lamp_distance, 1.5), radius: 4.0, core: 1.0, intensity: 1.0, color: [1.0; 3], ..Default::default() });
@@ -83,8 +81,7 @@ fn falloff_case(msaa: u32, ray_tracing: bool) {
             }
             assert!(lamp_gains[0] > 1.0 && lamp_gains[0] < gains[0] * 0.6 && lamp_gains[1] <= 1.0, "lamp distance: {lamp_gains:?}, nearby: {}", gains[0]);
         }
-        // An illuminated object remains opaque in the capture even when its
-        // reflected light fades, and an emissive source must also fade with range.
+        // Emissive sources also fade with distance.
         scene.instances[seat].visible = false;
         scene.dirty = true;
         let emitter = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [1.0, 0.01, 0.01, 1.0], true);
@@ -107,8 +104,7 @@ fn reflection_case(msaa: u32, ray_tracing: bool) {
     let glass = renderer.add_material_extra(&mut scene, None, AlphaMode::Blend, [0.0, 0.0, 0.0, 0.08], false, None, None, None, None, [0.0; 3],
         MaterialExtra { glass: true, daylight_glass: true, no_z_write: true, ..Default::default() });
     let pane = panel(&renderer, &mut scene, 2.0, [-2.0, 2.0], [0.0, 3.0], glass, true);
-    // Stock glass fades its daylight environment at night. Its physical reflection
-    // still exists, even though the ordinary blended draw is skipped altogether.
+    // Stock glass hides its environment map at night without removing the glass.
     scene.instances[pane].slot_alpha[0] = 0.0;
     let red = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [1.0, 0.01, 0.01, 1.0], false);
     let blue = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [0.01, 0.01, 1.0, 1.0], false);
@@ -130,8 +126,7 @@ fn reflection_case(msaa: u32, ray_tracing: bool) {
     let off = renderer.render_to_image(&mut scene, 128, 128, &camera, &lighting).unwrap();
     let pixel = |rgba: &[u8], x: usize, y: usize| -> [i32; 3] { std::array::from_fn(|c| rgba[(y * 128 + x) * 4 + c] as i32) };
     let diff = |x, y| -> [i32; 3] { let a = pixel(&on, x, y); let b = pixel(&off, x, y); std::array::from_fn(|c| a[c] - b[c]) };
-    // A reflected point is at y=6, not at the pane's y=2. The shapes therefore
-    // occupy these different footprints: a low square seat and a long thin rail.
+    // Reflection places the seat and rail at y=6, beyond the pane at y=2.
     let seat_diff = diff(54, 70);
     let rail_diff = diff(71, 56);
     assert!(seat_diff[0] >= 8 && seat_diff[0] > seat_diff[2] * 2, "red seat: {seat_diff:?}");
@@ -155,8 +150,7 @@ fn reflection_case(msaa: u32, ray_tracing: bool) {
     scene.materials[glass].uniform.glow[2] = 0.0;
     let hidden = renderer.render_to_image(&mut scene, 128, 128, &camera, &lighting).unwrap();
     assert!(pixel(&hidden, 54, 70)[0] <= pixel(&off, 54, 70)[0] + 2);
-    // A transparent texture hole on the right transmits the street without a
-    // reflection, while the left half still shows the seat's actual silhouette.
+    // Texture holes transmit the street without reflecting the cabin.
     scene.instances[pane].visible = false;
     scene.instances[duplicate].visible = false;
     scene.dirty = true;
@@ -185,12 +179,19 @@ fn adjacent_panes_keep_separate_cabin_images() {
         MaterialExtra { glass: true, daylight_glass: true, no_z_write: true, ..Default::default() });
     let left = panel(&renderer, &mut scene, 2.0, [-2.0, 0.0], [0.0, 3.0], glass, true);
     let right = panel(&renderer, &mut scene, 3.0, [0.0, 3.0], [0.0, 3.0], glass, true);
-    let red = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [1.0, 0.0, 0.0, 1.0], true);
-    let blue = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [0.0, 0.0, 1.0, 1.0], true);
-    panel(&renderer, &mut scene, -2.0, [-1.6, -0.8], [1.1, 1.9], red, true);
-    panel(&renderer, &mut scene, -2.0, [0.8, 1.6], [1.1, 1.9], blue, true);
+    let source = |rgba| omsi_texture::Image { width: 1, height: 1, rgba: Vec::from(rgba), has_alpha: false };
+    let screen = renderer.add_texture(&mut scene, &source([255, 0, 0, 255]), false);
+    let red = renderer.add_material(&mut scene, Some(screen), AlphaMode::Opaque, [1.0; 4], false);
+    let blue = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [0.0, 0.0, 1.0, 1.0], false);
+    let red_panel = panel(&renderer, &mut scene, -2.0, [-1.6, -0.8], [1.1, 1.9], red, true);
+    let blue_panel = panel(&renderer, &mut scene, -2.0, [0.8, 1.6], [1.1, 1.9], blue, true);
+    let lamp = renderer.alloc_interior_lights(&mut scene, 1);
+    renderer.set_interior_light(&mut scene, lamp, PointLight { position: DVec3::new(0.0, 0.0, 2.0), radius: 8.0, core: 2.0, intensity: 1.0, color: [1.0; 3], ..Default::default() });
+    for i in [red_panel, blue_panel] { renderer.set_interior_lamps(&mut scene, i, lamp, 1); }
+    let outside = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [0.0, 0.0, 0.0, 1.0], true);
+    panel(&renderer, &mut scene, 20.0, [-50.0, 50.0], [-50.0, 50.0], outside, false);
     let camera = Camera { position: DVec3::new(0.0, 0.0, 1.5), yaw: 0.0, pitch: 0.0, roll: 0.0, fov_deg: 90.0, near: 0.1, far: 100.0 };
-    let lighting = Lighting { enhanced: true, sun_intensity: 0.0, ambient: Vec3::ZERO, secondary: Vec3::ZERO, night: 1.0, shadows: false, lamp_shadows: false, fog_density: 0.0,
+    let lighting = Lighting { enhanced: true, sun_dir: Vec3::new(0.0, 0.8, -0.6), sun_intensity: 0.0, ambient: Vec3::ZERO, secondary: Vec3::ZERO, night: 1.0, shadows: false, lamp_shadows: false, fog_density: 0.0,
         inside: Some((DVec3::ZERO, 0.0, [6.0, 10.0, 3.2, 0.0, 0.0, 1.5])), ..Default::default() };
     let mut images = Vec::new();
     for (a, b) in [(true, false), (false, true), (true, true)] {
@@ -200,7 +201,12 @@ fn adjacent_panes_keep_separate_cabin_images() {
     }
     for (x, channel, isolated) in [(51, 0, 0), (74, 2, 1)] {
         let at = (64 * 128 + x) * 4 + channel;
-        assert!(images[isolated][at] > 10, "the isolated pane reflects its colored source");
-        assert!((images[2][at] as i32 - images[isolated][at] as i32).abs() <= 2, "atlas planes must match separate captures");
+        assert!(images[isolated][at] > 10, "the isolated pane reflects its colored source: {}", images[isolated][at]);
+        assert!((images[2][at] as i32 - images[isolated][at] as i32).abs() <= 2, "atlas planes must match separate captures: {} vs {}", images[2][at], images[isolated][at]);
     }
+    renderer.update_texture(&scene, screen, &source([0, 255, 0, 255]));
+    std::thread::sleep(std::time::Duration::from_millis(35));
+    let changed = renderer.render_to_image(&mut scene, 128, 128, &camera, &lighting).unwrap();
+    let at = (64 * 128 + 51) * 4;
+    assert!(changed[at] < images[2][at] / 2 && changed[at + 1] > changed[at] * 2, "a changed cabin display invalidates the cached picture: {:?} -> {:?}", &images[2][at..at+3], &changed[at..at+3]);
 }

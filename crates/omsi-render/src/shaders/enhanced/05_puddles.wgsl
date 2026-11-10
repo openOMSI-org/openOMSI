@@ -35,8 +35,8 @@ fn fs_puddle_vehicle(input: FsIn) -> @location(0) vec4<f32> {
         let travel = length(input.world - eye) * height / max(height + eye_height, 1e-4);
         let weight = fade.x * fade.x / (fade.x * fade.x + travel * travel)
             * (1.0 - smoothstep(fade.y, fade.z, travel));
-        // Dim objects must still occlude geometry behind them.
-        return vec4<f32>(color.rgb * weight, color.a);
+        // Cache radiance independently of eye adaptation, retaining occlusion alpha.
+        return vec4<f32>(color.rgb * weight / max(enh.exposure.x, 1e-6), color.a);
     }
     return color;
 }

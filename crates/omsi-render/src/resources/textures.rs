@@ -944,6 +944,7 @@ impl Renderer {
             return;
         }
         let t = &gt.texture;
+        scene.texture_epoch.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: t,
@@ -970,6 +971,7 @@ impl Renderer {
         if (img.width, img.height) != gt.size || x + w > img.width || y + h > img.height || img.rgba.len() < (img.width * img.height * 4) as usize {
             return;
         }
+        scene.texture_epoch.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &gt.texture,
@@ -1008,6 +1010,7 @@ impl Renderer {
         let img = fitted.as_ref().unwrap_or(img);
         let levels = (32 - img.width.max(img.height).leading_zeros()).max(1);
         if old.size != (img.width, img.height) || old.texture.mip_level_count() != levels {
+            scene.texture_epoch.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             scene.textures[id] = self.upload_rgba_mips_with(img.width, img.height, &img.rgba, MipAverage::Independent);
             return true;
         }
@@ -1036,6 +1039,7 @@ impl Renderer {
         if texture.bytes == 0 || (old.bytes > 0 && lost_detail) {
             return false;
         }
+        scene.texture_epoch.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         scene.textures[id] = texture;
         true
     }
@@ -1078,6 +1082,7 @@ impl Renderer {
         {
             return self.replace_texture(scene, id, data);
         }
+        scene.texture_epoch.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let (bw, bh) = format.block_dimensions();
         let block = format.block_copy_size(None).unwrap_or(4);
         for (level, bytes) in data.levels.iter().enumerate() {

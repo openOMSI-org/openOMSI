@@ -24,6 +24,7 @@ fn cabin_plane_index(world: vec3<f32>, normal: vec3<f32>) -> i32 {
 
 @fragment
 fn fs_cabin_reflection(in: FsIn) -> @location(0) vec4<f32> {
+    if (in.params.y < 0.5) { discard; }
     // Select one plane to avoid overlapping reflected images.
     let n = safe_normal(in.normal);
     let best = cabin_plane_index(in.world, n);
@@ -44,8 +45,7 @@ fn fs_cabin_reflection(in: FsIn) -> @location(0) vec4<f32> {
     let local = clamp(in.clip.xy / cabin_reflection.screen.xy, vec2<f32>(0.5) / vec2<f32>(size.x, height), vec2<f32>(1.0) - vec2<f32>(0.5) / vec2<f32>(size.x, height));
     let atlas_uv = vec2<f32>(local.x, (local.y + f32(best)) / cabin_reflection.screen.w);
     let reflected = textureSampleLevel(t_cabin_reflection, s_cabin_reflection, atlas_uv, 0.0);
-    // The capture already includes exposure.
-    return vec4<f32>(reflected.rgb * 1.15 * fresnel * coverage * camera.cam_pos.w, 0.0);
+    return vec4<f32>(reflected.rgb * enh.exposure.x * 1.15 * fresnel * coverage * camera.cam_pos.w, 0.0);
 }
 
 @vertex

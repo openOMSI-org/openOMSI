@@ -732,7 +732,7 @@ impl Renderer {
         }
         // (the shadow casters' entries after the passes' own: the main pass's batches keep
         // their places in the list while only the shadows change, and its bundles are kept)
-        let cabin = self.cabin_reflections.as_ref().and_then(|_| cabin_reflections::plan(scene, &f, &visible, &mut plan.list));
+        let cabin = self.cabin_reflections.as_mut().and_then(|p| p.plan(scene, &f, &visible, &mut plan.list));
         let at = plan.list.len() as u32;
         for b in shadow_batches.iter_mut().flatten() {
             b.instances = b.instances.start + at..b.instances.end + at;

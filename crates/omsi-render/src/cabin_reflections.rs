@@ -1,5 +1,6 @@
 mod refresh;
 mod recorded;
+mod planning;
 
 use crate::*;
 use crate::passes::{FrameCtx, kind_of};
@@ -15,8 +16,10 @@ pub(crate) struct Uniform {
     screen: [f32; 4],
 }
 
+#[derive(Clone)]
 pub(crate) struct Plan {
     planes: Vec<glam::Vec4>,
+    members: Vec<usize>,
     panes: Vec<Batch>,
     cabin: Vec<Vec<Batch>>,
     refresh: refresh::State,
@@ -83,7 +86,7 @@ fn nearby_instances(scene: &Scene, parts: &[&(DVec3, f64, [f32; 6])]) -> Vec<usi
     }).flat_map(|b| b * scene::CULL_BLOCK..((b + 1) * scene::CULL_BLOCK).min(scene.instances.len())).collect()
 }
 
-pub(crate) fn plan(scene: &Scene, f: &FrameCtx, visible: &[(usize, f32, bool)], list: &mut Vec<u32>) -> Option<Plan> {
+fn build_plan(scene: &Scene, f: &FrameCtx, visible: &[(usize, f32, bool)], list: &mut Vec<u32>) -> Option<Plan> {
     if !f.enhanced || f.lighting.reflection_strength <= 0.0 || !f.prepass_on || !(f.with_overlays || f.xr_view) { return None; }
     let own = f.lighting.inside.as_ref()?;
     if !point_in_vehicle_box(f.camera.position, own) { return None; }
@@ -92,6 +95,7 @@ pub(crate) fn plan(scene: &Scene, f: &FrameCtx, visible: &[(usize, f32, bool)], 
     if planes.is_empty() { return None; }
     let parts: Vec<_> = std::iter::once(own).chain(f.lighting.puddle_parts.iter()).take(4).collect();
     let bounds: Vec<_> = parts.iter().map(|p| passes::VehicleBox::new(p, f.ro)).collect();
+    let mut members = Vec::new();
     let mut pane_items = Vec::new();
     let view = Mat4::look_to_rh(f.cam_rel, f.camera.forward(), f.camera.up());
     let vp = f.projection.map_or_else(|| f.camera.view_proj(f.aspect, f.ro), |p| p * view);
@@ -102,11 +106,13 @@ pub(crate) fn plan(scene: &Scene, f: &FrameCtx, visible: &[(usize, f32, bool)], 
     let nearby = nearby_instances(scene, &parts);
     for i in nearby {
         let inst = &scene.instances[i];
-        if !inst.visible || inst.blob || inst.surface { continue; }
+        if inst.blob || inst.surface { continue; }
         let own_part = inst.roof.is_some() && parts.iter().any(|p| inst.origin.distance_squared(p.0) < 0.01);
         let centre = (inst.origin - f.ro).as_vec3() + inst.bounds.centre;
         let human = inst.roof.is_none() && inst.bounds.radius < 2.0 && bounds.iter().any(|b| b.contains(centre, -0.05));
         if !own_part && !human { continue; }
+        members.push(i);
+        if !inst.visible { continue; }
         let captured: [bool; PLANES] = std::array::from_fn(|i| {
             let Some(p) = planes.get(i) else { return false; };
             let height = p.truncate().dot(centre) - p.w;
@@ -144,8 +150,8 @@ pub(crate) fn plan(scene: &Scene, f: &FrameCtx, visible: &[(usize, f32, bool)], 
         batch_items(scene, blend, false, list, &mut batches);
         cabin.push(batches);
     }
-    let refresh = refresh::State::new(scene, f, &planes, &cabin, list);
-    Some(Plan { planes, panes, cabin, refresh })
+    let refresh = refresh::State::new(scene, f, &planes, &cabin, list, &members);
+    Some(Plan { planes, members, panes, cabin, refresh })
 }
 
 struct Capture {
@@ -166,6 +172,7 @@ pub(crate) struct Pipelines {
     captures: Vec<Capture>,
     size: (u32, u32),
     refreshed: Option<(std::time::Instant, refresh::State)>,
+    planned: Option<planning::Cached>,
     recorded: Option<recorded::Recorded>,
 }
 
@@ -197,7 +204,7 @@ impl Pipelines {
             fragment: Some(wgpu::FragmentState { module: shader, entry_point: Some("fs_cabin_resolve"), targets: &[Some(wgpu::ColorTargetState { format: HDR_FORMAT, blend: Some(wgpu::BlendState { color: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One, dst_factor: wgpu::BlendFactor::One, operation: wgpu::BlendOperation::Add }, alpha: wgpu::BlendComponent::OVER }), write_mask: wgpu::ColorWrites::COLOR })], compilation_options: Default::default() }),
             multiview_mask: None, cache: crate::pipeline_cache::get(device).as_ref(),
         });
-        Self { layout, compose, resolve, overlay: None, captures: Vec::new(), size: (0, 0), refreshed: None, recorded: None }
+        Self { layout, compose, resolve, overlay: None, captures: Vec::new(), size: (0, 0), refreshed: None, planned: None, recorded: None }
     }
 
     fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, plane_layout: &wgpu::BindGroupLayout, f: &FrameCtx, plan: &Plan, update: bool) {
@@ -252,7 +259,7 @@ impl Renderer {
         };
         let Some(vehicle) = self.puddles.as_ref() else { return };
         let Some(ao) = self.targets.ao.as_ref() else { return };
-        let update = f.xr_view || pipes.refreshed.as_ref().is_none_or(|(at, state)| at.elapsed().as_secs_f32() >= 1.0 / 30.0 || !state.matches(&plan.refresh));
+        let update = refresh::needs_capture(pipes.refreshed.as_ref(), &plan.refresh, f.xr_view);
         pipes.prepare(&self.device, &self.queue, &vehicle.vehicle[0].get_bind_group_layout(2), f, plan, update);
         if update {
             let color = pipes.captures[0].color.clone();
