@@ -1,17 +1,21 @@
-//! Temporal upscaling: NVIDIA DLSS or AMD FSR 3 draw the picture smaller, take the last frames'
-//! pixels along by each pixel's motion and bring it up to the window. Windows, on DirectX 12
-//! or Vulkan. (The `upscaler` setting's other choices, Catmull-Rom and FSR 1, work on one frame and
-//! need none of this: `encode_upscale`.)
+//! Temporal upscaling: NVIDIA DLSS, AMD FSR 3 or Apple MetalFX draw the picture smaller, take
+//! the last frames' pixels along by each pixel's motion and bring it up to the window. DLSS and
+//! FSR 3 on Windows, on DirectX 12 or Vulkan; MetalFX on a Mac with Apple silicon, on Metal.
+//! (The `upscaler` setting's other choices, Catmull-Rom and FSR 1, work on one frame and need
+//! none of this: `encode_upscale`.)
 //!
-//! Neither vendor's code is linked or in the repository. The Windows x64 package carries AMD's
-//! DLLs; NVIDIA's come from the launcher's optional installer. Without them the game neither
-//! offers the choice nor changes anything (`omsi_cfg::upscaler_files`).
+//! No vendor's code is linked or in the repository. The Windows x64 package carries AMD's
+//! DLLs; NVIDIA's come from the launcher's optional installer; MetalFX is part of macOS 13 and
+//! newer. Without them the game neither offers the choice nor changes anything
+//! (`omsi_cfg::upscaler_files`).
 
 #[cfg(windows)]
 mod d3d12;
 #[cfg(windows)]
 mod fidelityfx;
 mod frame;
+#[cfg(target_os = "macos")]
+mod metalfx;
 #[cfg(windows)]
 mod streamline;
 #[cfg(windows)]
@@ -25,6 +29,7 @@ pub(crate) use frame::*;
 pub enum TemporalUpscaler {
     Dlss,
     Fsr3,
+    MetalFx,
 }
 
 impl TemporalUpscaler {
@@ -32,6 +37,7 @@ impl TemporalUpscaler {
         match s.trim().to_ascii_lowercase().as_str() {
             "dlss" => Some(TemporalUpscaler::Dlss),
             "fsr3" => Some(TemporalUpscaler::Fsr3),
+            "metalfx" => Some(TemporalUpscaler::MetalFx),
             _ => None,
         }
     }
@@ -40,14 +46,16 @@ impl TemporalUpscaler {
         match self {
             TemporalUpscaler::Dlss => "dlss",
             TemporalUpscaler::Fsr3 => "fsr3",
+            TemporalUpscaler::MetalFx => "metalfx",
         }
     }
 
     /// FSR 3 gives up the history faster than DLSS for the same mask: its panes take a weaker one.
+    /// MetalFX reads its mask as FSR 3 does (1 is "no history at all"), and takes FSR 3's.
     pub(crate) fn glass_mask_entry(self) -> &'static str {
         match self {
             TemporalUpscaler::Dlss => "fs_glass_mask",
-            TemporalUpscaler::Fsr3 => "fs_glass_mask_fsr",
+            TemporalUpscaler::Fsr3 | TemporalUpscaler::MetalFx => "fs_glass_mask_fsr",
         }
     }
 
@@ -102,6 +110,16 @@ impl TemporalQuality {
 pub fn fallback_render_size(quality: TemporalQuality, (w, h): (u32, u32)) -> (u32, u32) {
     let s = quality.scale();
     (((w as f32 * s).round() as u32).max(1), ((h as f32 * s).round() as u32).max(1))
+}
+
+/// The size MetalFX draws at, and whether it is larger than the quality asked for: Apple's
+/// scaler goes up to `max_scale` times a side (`supportedInputContentMaxScaleForDevice`), which
+/// is less than Ultra performance's three on most Macs.
+pub fn metalfx_render_size(quality: TemporalQuality, out: (u32, u32), max_scale: f32) -> ((u32, u32), bool) {
+    let asked = fallback_render_size(quality, out);
+    let least = |side: u32| ((side as f32 / max_scale.max(1.0)).ceil() as u32).clamp(1, side.max(1));
+    let size = (asked.0.max(least(out.0)), asked.1.max(least(out.1)));
+    (size, size != asked)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -197,6 +215,27 @@ mod fidelityfx {
         }
         pub fn upscale(&mut self, _queue: &wgpu::Queue, _inputs: &Inputs, _c: &FrameConstants) -> Result<()> {
             anyhow::bail!("FSR 3 upscaling is Windows-only (DirectX 12)")
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+mod metalfx {
+    use super::{fallback_render_size, FrameConstants, Inputs, TemporalQuality};
+    use anyhow::Result;
+
+    pub struct Upscaler;
+
+    impl Upscaler {
+        pub(crate) fn wait(&mut self) {}
+        pub fn load(_device: &wgpu::Device) -> Result<Upscaler> {
+            anyhow::bail!("MetalFX upscaling is macOS-only (Metal)")
+        }
+        pub fn render_size(&mut self, quality: TemporalQuality, out: (u32, u32)) -> (u32, u32) {
+            fallback_render_size(quality, out)
+        }
+        pub fn upscale(&mut self, _queue: &wgpu::Queue, _inputs: &Inputs, _c: &FrameConstants) -> Result<()> {
+            anyhow::bail!("MetalFX upscaling is macOS-only (Metal)")
         }
     }
 }

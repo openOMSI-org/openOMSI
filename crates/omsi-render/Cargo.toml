@@ -37,6 +37,15 @@ ash = "0.38"
 # (the same glow as wgpu's GL backend, to turn ANGLE's parallel shader compiles off)
 glow = "0.17"
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# (MetalFX runs on wgpu's own Metal device and queue, see `temporal::metalfx`; the same objc2
+# crates as wgpu-hal's, so that their types match. MetalFX itself is not linked: it is opened
+# when asked for, as macOS 11 and 12 have none)
+wgpu-hal = { workspace = true, features = ["metal"] }
+objc2 = "0.6"
+objc2-metal = { version = "0.3.2", default-features = false, features = ["std", "MTLCommandBuffer", "MTLCommandQueue", "MTLDevice", "MTLPixelFormat", "MTLResource", "MTLTexture"] }
+libc.workspace = true
+
 [dev-dependencies]
 naga = { workspace = true, features = ["spv-out", "glsl-out", "hlsl-out"] }
 env_logger.workspace = true

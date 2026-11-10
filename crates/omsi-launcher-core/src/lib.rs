@@ -370,6 +370,7 @@ pub fn upscaler_word(s: &str) -> &'static str {
         "fsr1" => "fsr1",
         "dlss" => "dlss",
         "fsr3" => "fsr3",
+        "metalfx" => "metalfx",
         _ => "default",
     }
 }
@@ -2005,7 +2006,7 @@ pub fn get_settings() -> Result<Value> {
     let mut v = settings_from_text(text.as_deref());
     // (what the page may offer beside the upscalers that are always there; not a setting)
     let game_dir = find_game(&load_config_raw().game).and_then(|g| g.parent().map(Path::to_path_buf));
-    v["temporal_upscalers"] = json!(game_dir.map_or(Vec::new(), |d| omsi_cfg::upscaler_files::available(&d)));
+    v["temporal_upscalers"] = json!(game_dir.map_or_else(omsi_cfg::upscaler_files::of_the_system, |d| omsi_cfg::upscaler_files::available(&d)));
     // no settings of our own yet: start from what the player set in OMSI 2
     if text.is_none() {
         if let Some(o) = root().ok().and_then(|r| omsi_options(&r)) {

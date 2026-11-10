@@ -48,7 +48,9 @@ const mobile = (s, p) => p === 'android' || p === 'ios';
 const windows = (s, p) => p === 'windows';
 const tripleOn = (s) => !!s.triple_screen;
 const vrOn = (s, p) => windows(s, p) && !!s.vr;
-// (what `Settings::temporal_upscaling` tells: DLSS or FSR 3 take the place of the anti-aliasing and the render scale)
+// (what `Settings::temporal_upscaling` tells: DLSS, FSR 3 or MetalFX take the place of the anti-aliasing and the render scale)
+// (the upscalers `temporal_upscalers` may name, as `omsi_cfg::upscaler_files::label` calls them)
+const TEMPORAL_LABELS = { dlss: 'NVIDIA DLSS (experimental)', fsr3: 'AMD FSR 3 (experimental)', metalfx: 'Apple MetalFX (experimental)' };
 const temporalOn = (s, p) => (s.temporal_upscalers || []).includes(s.upscaler) && !tripleOn(s) && !vrOn(s, p);
 
 /** The window sizes the settings offer (`resolution`). */
@@ -88,7 +90,7 @@ const graphics = {
         { type: 'custom', id: 'preset' },
         { type: 'custom', id: 'optimise' },
         { type: 'select', key: 'msaa', label: 'Anti-aliasing', options: [['1', 'Off'], ['2', '2x MSAA'], ['4', '4x MSAA'], ['8', '8x MSAA']], heavy: (v, s) => v === '8' && !traced(s), when: (s, p) => !temporalOn(s, p) },
-        { type: 'select', key: 'upscaler', label: 'Upscaling', unknown: 'default', options: (s) => [['default', 'Standard (Catmull-Rom)'], ['fsr1', 'AMD FSR 1'], ...(s.temporal_upscalers || []).map((u) => (u === 'dlss' ? ['dlss', 'NVIDIA DLSS (experimental)'] : ['fsr3', 'AMD FSR 3 (experimental)']))], help: (s) => ((s.temporal_upscalers || []).length ? 'Standard Catmull-Rom or AMD FSR 1 change at once; NVIDIA DLSS or AMD FSR 3 take the place of the anti-aliasing and the render scale, on DirectX 12 or Vulkan, from the next start' : 'Standard Catmull-Rom or AMD FSR 1; changes show at once') },
+        { type: 'select', key: 'upscaler', label: 'Upscaling', unknown: 'default', options: (s) => [['default', 'Standard (Catmull-Rom)'], ['fsr1', 'AMD FSR 1'], ...(s.temporal_upscalers || []).filter((u) => TEMPORAL_LABELS[u]).map((u) => [u, TEMPORAL_LABELS[u]])], help: (s) => (!(s.temporal_upscalers || []).length ? 'Standard Catmull-Rom or AMD FSR 1; changes show at once' : (s.temporal_upscalers || []).includes('metalfx') ? 'Standard Catmull-Rom or AMD FSR 1 change at once; Apple MetalFX takes the place of the anti-aliasing and the render scale, from the next start' : 'Standard Catmull-Rom or AMD FSR 1 change at once; NVIDIA DLSS or AMD FSR 3 take the place of the anti-aliasing and the render scale, on DirectX 12 or Vulkan, from the next start') },
         { type: 'custom', id: 'nvidia_dlss_install', when: (s, p) => windows(s, p) },
         { type: 'select', key: 'upscale_quality', label: 'Upscaling quality', options: [['native', 'Native'], ['quality', 'Quality'], ['balanced', 'Balanced'], ['performance', 'Performance'], ['ultra_performance', 'Ultra performance']], help: "Native keeps the window's resolution and only smooths the edges; the lower the quality, the smaller the picture is drawn and the higher the frame rate", when: (s, p) => temporalOn(s, p) },
         { type: 'select', key: 'fsr_quality', label: 'FSR quality', options: [['ultra', 'Ultra Quality (77%)'], ['quality', 'Quality (67%)'], ['balanced', 'Balanced (59%)'], ['performance', 'Performance (50%)'], ['auto', 'Automatic (keeps the frame rate)'], ['custom', 'Use render scale']], when: (s) => s.upscaler === 'fsr1' },

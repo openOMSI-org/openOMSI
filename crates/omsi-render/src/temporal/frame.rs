@@ -3,7 +3,7 @@
 //! writes each pixel's motion (`motion.wgsl`), and `temporal_present` runs the upscaler on
 //! wgpu's queue, then the HUD at full size.
 
-use super::{fallback_render_size, fidelityfx, streamline, FrameConstants, Inputs, TemporalQuality, TemporalUpscaler};
+use super::{fallback_render_size, fidelityfx, metalfx, streamline, FrameConstants, Inputs, TemporalQuality, TemporalUpscaler};
 use crate::passes::FrameCtx;
 use crate::pipelines::common::uniform_buffer;
 use crate::*;
@@ -22,7 +22,8 @@ pub(crate) const TEMPORAL_MASK_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat
 /// bits of picture over the scene. 8 m is about 290 km/h at 10 fps.
 const MAX_FRAME_JUMP: f32 = 8.0;
 
-/// How much `upscale.wgsl` sharpens DLSS's result: DLSS no longer sharpens, FSR 3 does.
+/// How much `upscale.wgsl` sharpens DLSS's and MetalFX's result: DLSS no longer sharpens and
+/// MetalFX never did, FSR 3 does.
 const DLSS_SHARPEN: f32 = 0.25;
 
 pub(crate) struct TemporalPipelines {
@@ -63,6 +64,7 @@ struct TemporalPrev {
 pub(crate) enum Runtime {
     Dlss(streamline::Runtime),
     Fsr3(fidelityfx::Upscaler),
+    MetalFx(metalfx::Upscaler),
 }
 
 pub(crate) struct TemporalState {
@@ -150,6 +152,7 @@ impl Renderer {
         match &mut d.runtime {
             Runtime::Dlss(r) => r.wait(),
             Runtime::Fsr3(r) => r.wait(),
+            Runtime::MetalFx(r) => r.wait(),
         }
         Some(d.runtime)
     }
@@ -167,9 +170,10 @@ impl Renderer {
         }
         let Some(asked) = self.options.temporal.filter(|_| self.temporal_pipes.is_some()) else { return false };
         let loaded = match (asked.upscaler, self.temporal_kept.take()) {
-            (TemporalUpscaler::Dlss, Some(r @ Runtime::Dlss(_))) | (TemporalUpscaler::Fsr3, Some(r @ Runtime::Fsr3(_))) => Ok(r),
+            (TemporalUpscaler::Dlss, Some(r @ Runtime::Dlss(_))) | (TemporalUpscaler::Fsr3, Some(r @ Runtime::Fsr3(_))) | (TemporalUpscaler::MetalFx, Some(r @ Runtime::MetalFx(_))) => Ok(r),
             (TemporalUpscaler::Dlss, _) => streamline::Runtime::load(&self.device).map(Runtime::Dlss),
             (TemporalUpscaler::Fsr3, _) => fidelityfx::Upscaler::load(&self.device).map(Runtime::Fsr3),
+            (TemporalUpscaler::MetalFx, _) => metalfx::Upscaler::load(&self.device).map(Runtime::MetalFx),
         };
         match loaded {
             Ok(runtime) => {
@@ -215,6 +219,7 @@ impl Renderer {
         let quality = self.temporal_quality();
         match self.temporal.as_mut().map(|t| &mut t.runtime) {
             Some(Runtime::Dlss(r)) => r.render_size(quality, full),
+            Some(Runtime::MetalFx(r)) => r.render_size(quality, full),
             _ => fallback_render_size(quality, full),
         }
     }
@@ -399,6 +404,7 @@ impl Renderer {
         let result = match &mut d.runtime {
             Runtime::Dlss(r) => r.evaluate(&self.queue, quality, &inputs, &constants),
             Runtime::Fsr3(r) => r.upscale(&self.queue, &inputs, &constants),
+            Runtime::MetalFx(r) => r.upscale(&self.queue, &inputs, &constants),
         };
         let upscaled = clock.elapsed();
         let ok = match result {
@@ -415,7 +421,7 @@ impl Renderer {
         d.prev = Some(TemporalPrev { camera: *camera, aspect: frame.aspect, origin: ro, render, output: full });
         // (`upscale.wgsl`'s third mode: the upscalers return the sRGB-encoded numbers they were
         // given, and writing them to the sRGB window unconverted would encode them twice)
-        let sharpen = if matches!(d.runtime, Runtime::Dlss(_)) { DLSS_SHARPEN } else { 0.0 };
+        let sharpen = if matches!(d.runtime, Runtime::Dlss(_) | Runtime::MetalFx(_)) { DLSS_SHARPEN } else { 0.0 };
         self.queue.write_buffer(&d.blit_buf, 0, bytemuck::cast_slice(&[full.0 as f32, full.1 as f32, sharpen, 2.0]));
         let bg = if ok { &t.output_bg } else { &t.color_bg };
         if !ok {

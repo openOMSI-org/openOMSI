@@ -596,4 +596,8 @@ upscale_quality=native
     assert!(saved.contains("upscaler=dlss
 ") && saved.contains("upscale_quality=native
 "), "{saved}");
+    // (a Mac's upscaler is a word the page keeps too, not the standard one in its place)
+    let mac = super::settings_from_text(Some("upscaler=MetalFX\n"));
+    assert_eq!(mac["upscaler"].as_str(), Some("metalfx"));
+    assert!(super::settings_to_text(&mac, None).contains("upscaler=metalfx\n"));
 }
