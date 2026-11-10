@@ -999,7 +999,7 @@ fn info_line(clock: &omsi_sim::SimClock, player: Option<&Player>, duty: Option<&
             if let Some(trip) = d.trips.get(d.trip_index) {
                 let line = if trip.line.trim().is_empty() { d.line.trim() } else { trip.line.trim() };
                 data.route = Some((line.to_string(), trip.terminus.trim().to_string()));
-                let next = crate::plugins::next_calling_stop(&trip.stops, d.next_stop);
+                let next = omsi_sim::timetable_run::next_calling_stop(&trip.stops, d.next_stop);
                 data.next_stop = trip.stops.get(next).map(|s| s.name.trim().to_string());
                 let delay = p.vehicle.host.tt_delay;
                 data.delay = Some(format!("{}{}:{:02}", if delay < 0.0 { "-" } else { "+" }, (delay.abs() / 60.0) as i64, (delay.abs() % 60.0) as i64));
