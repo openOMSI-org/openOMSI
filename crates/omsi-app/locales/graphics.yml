@@ -556,3 +556,39 @@ _version: 2
   vi: "NVIDIA DLSS (thử nghiệm)"
   zh: "NVIDIA DLSS (实验性)"
   zh-tw: "NVIDIA DLSS (實驗性)"
+
+"Import graphics profile":
+  zh-tw: "匯入圖像設定檔"
+  zh: "导入图像配置文件"
+
+"Export graphics profile":
+  zh-tw: "匯出圖像設定檔"
+  zh: "导出图像配置文件"
+
+"Imported \"{name}\". Load it to apply these settings.":
+  zh-tw: "已匯入「{name}」。按「載入」以套用這些設定。"
+  zh: "已导入“{name}”。点击“载入”以应用这些设置。"
+
+"Exported \"{name}\".":
+  zh-tw: "已匯出「{name}」。"
+  zh: "已导出“{name}”。"
+
+"Invalid graphics profile file.":
+  zh-tw: "圖像設定檔格式無效。"
+  zh: "图像配置文件格式无效。"
+
+"Invalid graphics profile value: {key}.":
+  zh-tw: "圖像設定檔中的設定值無效：{key}。"
+  zh: "图像配置文件中的设置值无效：{key}。"
+
+"The file contains no supported graphics settings.":
+  zh-tw: "檔案中沒有支援的圖像設定。"
+  zh: "文件中没有支持的图像设置。"
+
+"Graphics profile files must not exceed 64 KiB.":
+  zh-tw: "圖像設定檔大小不得超過 64 KiB。"
+  zh: "图像配置文件大小不得超过 64 KiB。"
+
+"The graphics profile no longer exists.":
+  zh-tw: "此圖像設定檔已不存在。"
+  zh: "此图像配置文件已不存在。"
