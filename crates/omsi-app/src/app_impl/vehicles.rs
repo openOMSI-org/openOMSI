@@ -407,7 +407,6 @@ fn placement_args(args: &Args, bus: String, spawn: String, paint: Option<String>
     Args {
         bus: Some(bus),
         spawn: Some(spawn),
-        // Startup identity belongs to the initial vehicle; reloads and depot picks opt in.
         number: None,
         plate: None,
         // a bus placed now is a new one, also in a session started from a situation
