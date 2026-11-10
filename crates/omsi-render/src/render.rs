@@ -732,6 +732,7 @@ impl Renderer {
         }
         // (the shadow casters' entries after the passes' own: the main pass's batches keep
         // their places in the list while only the shadows change, and its bundles are kept)
+        let cabin = self.cabin_reflections.as_ref().and_then(|_| cabin_reflections::plan(scene, &f, &visible, &mut plan.list));
         let at = plan.list.len() as u32;
         for b in shadow_batches.iter_mut().flatten() {
             b.instances = b.instances.start + at..b.instances.end + at;
@@ -743,7 +744,6 @@ impl Renderer {
         );
         clock.stage(self, "items", "mirror.items");
         plan.split_rain(scene, f.glass_on);
-        let cabin = self.cabin_reflections.as_ref().and_then(|_| cabin_reflections::plan(scene, &f, &visible, &mut plan.list));
         cu.cabin_planes = cabin_reflections::camera_planes(cabin.as_ref());
         self.queue.write_buffer(&self.camera_buf, 0, bytemuck::bytes_of(&cu));
         self.upload_draw_list(scene, &plan.list);

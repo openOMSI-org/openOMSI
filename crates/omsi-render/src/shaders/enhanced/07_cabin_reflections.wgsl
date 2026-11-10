@@ -6,23 +6,27 @@ struct CabinReflection {
 @group(3) @binding(2) var s_cabin_reflection: sampler;
 @group(3) @binding(3) var<uniform> cabin_reflection: CabinReflection;
 
+fn cabin_plane_error(world: vec3<f32>, normal: vec3<f32>, plane: vec4<f32>) -> f32 {
+    return abs(dot(plane.xyz, world) - plane.w) + 4.0 * (1.0 - abs(dot(normal, plane.xyz)));
+}
+
+fn cabin_plane_matches(world: vec3<f32>, normal: vec3<f32>) -> bool {
+    return cabin_plane_error(world, normal, camera.cabin_planes[0]) < 0.22
+        || cabin_plane_error(world, normal, camera.cabin_planes[1]) < 0.22;
+}
+
 fn cabin_plane_index(world: vec3<f32>, normal: vec3<f32>) -> i32 {
-    var best = -1;
-    var error = 0.22;
-    let n = safe_normal(normal);
-    for (var i = 0; i < 2; i = i + 1) {
-        let p = camera.cabin_planes[i];
-        let e = abs(dot(p.xyz, world) - p.w) + 4.0 * (1.0 - abs(dot(n, p.xyz)));
-        if (e < error) { error = e; best = i; }
-    }
-    return best;
+    let a = cabin_plane_error(world, normal, camera.cabin_planes[0]);
+    let b = cabin_plane_error(world, normal, camera.cabin_planes[1]);
+    if (min(a, b) >= 0.22) { return -1; }
+    return select(0, 1, b < a);
 }
 
 @fragment
 fn fs_cabin_reflection(in: FsIn) -> @location(0) vec4<f32> {
     // Select one plane to avoid overlapping reflected images.
-    let best = cabin_plane_index(in.world, in.normal);
     let n = safe_normal(in.normal);
+    let best = cabin_plane_index(in.world, n);
     if (best < 0) { discard; }
     let uv = tex_address(in.uv);
     var coverage = diffuse_border(textureSample(t_diffuse, s_diffuse, uv), uv).a;

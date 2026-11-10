@@ -1,4 +1,5 @@
 mod refresh;
+mod recorded;
 
 use crate::*;
 use crate::passes::{FrameCtx, kind_of};
@@ -106,11 +107,12 @@ pub(crate) fn plan(scene: &Scene, f: &FrameCtx, visible: &[(usize, f32, bool)], 
         let centre = (inst.origin - f.ro).as_vec3() + inst.bounds.centre;
         let human = inst.roof.is_none() && inst.bounds.radius < 2.0 && bounds.iter().any(|b| b.contains(centre, -0.05));
         if !own_part && !human { continue; }
-        let captured: Vec<_> = planes.iter().map(|p| {
+        let captured: [bool; PLANES] = std::array::from_fn(|i| {
+            let Some(p) = planes.get(i) else { return false; };
             let height = p.truncate().dot(centre) - p.w;
             let reflected = centre - 2.0 * p.truncate() * height;
             height + inst.bounds.radius >= 0.0 && frustum.iter().all(|f| f.dot(reflected.extend(1.0)) >= -inst.bounds.radius * f.truncate().length())
-        }).collect();
+        });
         let radius = if inst.object_radius > 0.0 { inst.object_radius } else { inst.bounds.radius };
         let distance = if inst.object_radius > 0.0 { inst.origin.distance(f.camera.position) as f32 } else { centre.distance(f.cam_rel) };
         let size = scene::object_screen_size(radius, distance, f.camera.fov_deg.to_radians().max(1e-3));
@@ -153,6 +155,7 @@ struct Capture {
     plane_bg: wgpu::BindGroup,
     params: wgpu::Buffer,
     picture_bg: wgpu::BindGroup,
+    recorded: Option<recorded::Recorded>,
 }
 
 pub(crate) struct Pipelines {
@@ -163,6 +166,7 @@ pub(crate) struct Pipelines {
     captures: Vec<Capture>,
     size: (u32, u32),
     refreshed: Option<(std::time::Instant, refresh::State)>,
+    recorded: Option<recorded::Recorded>,
 }
 
 impl Pipelines {
@@ -193,7 +197,7 @@ impl Pipelines {
             fragment: Some(wgpu::FragmentState { module: shader, entry_point: Some("fs_cabin_resolve"), targets: &[Some(wgpu::ColorTargetState { format: HDR_FORMAT, blend: Some(wgpu::BlendState { color: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One, dst_factor: wgpu::BlendFactor::One, operation: wgpu::BlendOperation::Add }, alpha: wgpu::BlendComponent::OVER }), write_mask: wgpu::ColorWrites::COLOR })], compilation_options: Default::default() }),
             multiview_mask: None, cache: crate::pipeline_cache::get(device).as_ref(),
         });
-        Self { layout, compose, resolve, overlay: None, captures: Vec::new(), size: (0, 0), refreshed: None }
+        Self { layout, compose, resolve, overlay: None, captures: Vec::new(), size: (0, 0), refreshed: None, recorded: None }
     }
 
     fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, plane_layout: &wgpu::BindGroupLayout, f: &FrameCtx, plan: &Plan, update: bool) {
@@ -211,7 +215,7 @@ impl Pipelines {
             let params = buffer(std::mem::size_of::<Uniform>() as u64);
             let sampler = device.create_sampler(&wgpu::SamplerDescriptor { mag_filter: wgpu::FilterMode::Linear, min_filter: wgpu::FilterMode::Linear, ..Default::default() });
             let picture_bg = device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("cabin picture"), layout: &self.layout, entries: &[wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&color) }, wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&sampler) }, wgpu::BindGroupEntry { binding: 3, resource: params.as_entire_binding() }] });
-            self.captures.push(Capture { color, depth, plane, plane_bg, params, picture_bg });
+            self.captures.push(Capture { color, depth, plane, plane_bg, params, picture_bg, recorded: None });
         }
         let planes = camera_planes(Some(plan));
         for (i, c) in self.captures.iter().enumerate().filter(|_| update) {
@@ -243,7 +247,7 @@ impl Renderer {
         let Some(pipes) = self.cabin_reflections.as_mut() else { return };
         let Some(plan) = plan else {
             // Mirror rendering must retain the main view's targets.
-            if f.with_overlays || f.xr_view { pipes.captures.clear(); pipes.overlay = None; pipes.refreshed = None; }
+            if f.with_overlays || f.xr_view { pipes.captures.clear(); pipes.overlay = None; pipes.refreshed = None; pipes.recorded = None; }
             return;
         };
         let Some(vehicle) = self.puddles.as_ref() else { return };
@@ -251,18 +255,25 @@ impl Renderer {
         let update = f.xr_view || pipes.refreshed.as_ref().is_none_or(|(at, state)| at.elapsed().as_secs_f32() >= 1.0 / 30.0 || !state.matches(&plan.refresh));
         pipes.prepare(&self.device, &self.queue, &vehicle.vehicle[0].get_bind_group_layout(2), f, plan, update);
         if update {
-            let c = &pipes.captures[0];
+            let color = pipes.captures[0].color.clone();
+            let depth = pipes.captures[0].depth.clone();
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("cabin reflected geometry"), color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: &c.color, resolve_target: None, depth_slice: None, ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store } })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment { view: &c.depth, depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(0.0), store: wgpu::StoreOp::Discard }), stencil_ops: None }),
+                label: Some("cabin reflected geometry"), color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: &color, resolve_target: None, depth_slice: None, ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store } })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment { view: &depth, depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(0.0), store: wgpu::StoreOp::Discard }), stencil_ops: None }),
                 timestamp_writes: pass_timer(timers.set.as_ref(), &mut timers.timed, "cabin capture"), occlusion_query_set: None, multiview_mask: None,
             });
             pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
-            for (i, (c, batches)) in pipes.captures.iter().zip(&plan.cabin).enumerate() {
+            for (i, (c, batches)) in pipes.captures.iter_mut().zip(&plan.cabin).enumerate() {
                 pass.set_viewport(0.0, (i as u32 * pipes.size.1) as f32, pipes.size.0 as f32, pipes.size.1 as f32, 0.0, 1.0);
                 pass.set_scissor_rect(0, i as u32 * pipes.size.1, pipes.size.0, pipes.size.1);
-                pass.set_bind_group(2, &c.plane_bg, &[]);
-                encode_batches(&mut pass, scene, batches, |pipe| &vehicle.vehicle[pipe as usize]);
+                if f.env.no_bundles {
+                    pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
+                    pass.set_bind_group(2, &c.plane_bg, &[]);
+                    encode_batches(&mut pass, scene, batches, |pipe| &vehicle.vehicle[pipe as usize]);
+                } else {
+                    let bundle = recorded::get(&mut c.recorded, &self.device, scene, batches, &c.plane_bg, None, |pipe| &vehicle.vehicle[pipe as usize]);
+                    pass.execute_bundles(std::iter::once(bundle));
+                }
             }
             pipes.refreshed = Some((std::time::Instant::now(), plan.refresh.clone()));
         }
@@ -275,9 +286,14 @@ impl Renderer {
         });
         pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
         let c = &pipes.captures[0];
-        pass.set_bind_group(2, &c.plane_bg, &[]);
-        pass.set_bind_group(3, &c.picture_bg, &[]);
-        encode_batches(&mut pass, scene, &plan.panes, |pipe| &pipes.compose[(pipe % 4 / 2) as usize]);
+        if f.env.no_bundles {
+            pass.set_bind_group(2, &c.plane_bg, &[]);
+            pass.set_bind_group(3, &c.picture_bg, &[]);
+            encode_batches(&mut pass, scene, &plan.panes, |pipe| &pipes.compose[(pipe % 4 / 2) as usize]);
+        } else {
+            let bundle = recorded::get(&mut pipes.recorded, &self.device, scene, &plan.panes, &c.plane_bg, Some(&c.picture_bg), |pipe| &pipes.compose[(pipe % 4 / 2) as usize]);
+            pass.execute_bundles(std::iter::once(bundle));
+        }
         drop(pass);
         let hdr = &self.targets.hdr_targets[&(f.width, f.height)];
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
