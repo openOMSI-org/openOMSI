@@ -16,6 +16,7 @@ pub(crate) fn load_weather(args: &Args) -> omsi_content::weather::Weather {
 
 fn load_map_climate(args: &Args) -> Option<ClimateStats> {
     Path::new(&args.map).parent().map(|dir| {
+        let dir = dir.strip_prefix(&args.root).unwrap_or(&dir);
         let climate_path = omsi_cfg::find_in_roots(&dir.join("openomsi_climate.cfg").to_string_lossy()).map(|x| x.1)?;
         let f = CfgFile::read(climate_path).ok()?;
         load_map_climate_config(&f)
@@ -24,48 +25,48 @@ fn load_map_climate(args: &Args) -> Option<ClimateStats> {
 
 fn load_map_climate_config(f: &CfgFile) -> Option<ClimateStats> {
     let mut r = f.reader();
-        let mut temp: Option<Vec<f32>> = None;
-        let mut precip: Option<Vec<f32>> = None;
-        while let Some(k) = r.next_keyword() {
-            match k.as_str() {
-                "temperature" => {
-                    temp = r.rest_of_block().iter()
-                        .map(|x| x.trim())
-                        .filter(|x| !x.is_empty())
-                        .map(|x| x.parse::<f32>())
-                        .collect::<Result<Vec<f32>, _>>()
-                        .map_err(|e| log::warn!("openomsi_climate.cfg: float parsing error: {e}"))
-                        .ok();
-                }
-                "precipitation" => {
-                    precip = r.rest_of_block().iter()
-                        .map(|x| x.trim())
-                        .filter(|x| !x.is_empty())
-                        .map(|x| x.parse::<f32>())
-                        .collect::<Result<Vec<f32>, _>>()
-                        .map_err(|e| log::warn!("openomsi_climate.cfg: float parsing error: {e}"))
-                        .ok();
-                }
-                _ => {
-                    log::warn!("openomsi_climate.cfg: unknown section [{k}] occurred");
-                }
+    let mut temp: Option<Vec<f32>> = None;
+    let mut precip: Option<Vec<f32>> = None;
+    while let Some(k) = r.next_keyword() {
+        match k.as_str() {
+            "temperature" => {
+                temp = r.rest_of_block().iter()
+                    .map(|x| x.trim())
+                    .filter(|x| !x.is_empty())
+                    .map(|x| x.parse::<f32>())
+                    .collect::<Result<Vec<f32>, _>>()
+                    .map_err(|e| log::warn!("openomsi_climate.cfg: float parsing error: {e}"))
+                    .ok();
+            }
+            "precipitation" => {
+                precip = r.rest_of_block().iter()
+                    .map(|x| x.trim())
+                    .filter(|x| !x.is_empty())
+                    .map(|x| x.parse::<f32>())
+                    .collect::<Result<Vec<f32>, _>>()
+                    .map_err(|e| log::warn!("openomsi_climate.cfg: float parsing error: {e}"))
+                    .ok();
+            }
+            _ => {
+                log::warn!("openomsi_climate.cfg: unknown section [{k}] occurred");
             }
         }
-        if let Some(t) = temp {
-            let p = precip.unwrap_or_else(|| vec![0.0f32; 12]);
-            if (t.iter().all(|x| (-100.0..=100.0).contains(x)) && p.iter().all(|x| (0.0..=5000.0).contains(x))) {
-                Some(ClimateStats {
-                    temp: *t.as_array().or_else(|| { log::warn!("temperature: {} elements provided, 12 expected; falling back to default", t.len()); None })?,
-                    precip: *p.as_array().or_else(||  { log::warn!("precipitation: {} elements provided, 12 expected; falling back to default", p.len()); None })?
-                })
-            } else {
-                log::warn!("some values non-finite or outside the range (-100 to 100 °C, 0 to 5000 mm)");
-                None
-            }
+    }
+    if let Some(t) = temp {
+        let p = precip.unwrap_or_else(|| vec![0.0f32; 12]);
+        if t.iter().all(|x| (-100.0..=100.0).contains(x)) && p.iter().all(|x| (0.0..=5000.0).contains(x)) {
+            Some(ClimateStats {
+                temp: *t.as_array().or_else(|| { log::warn!("openomsi_climate.cfg: temperature: {} elements provided, 12 expected; falling back to default", t.len()); None })?,
+                precip: *p.as_array().or_else(||  { log::warn!("openomsi_climate.cfg: precipitation: {} elements provided, 12 expected; falling back to default", p.len()); None })?
+            })
         } else {
-            log::warn!("openomsi_climate.cfg: incomplete configuration, falling back to default");
+            log::warn!("openomsi_climate.cfg: some values non-finite or outside the range (-100 to 100 °C, 0 to 5000 mm)");
             None
         }
+    } else {
+        log::warn!("openomsi_climate.cfg: incomplete configuration, falling back to default");
+        None
+    }
 }
 
 /// [`load_weather`], and the physical model's run when the weather is the model's, for the
@@ -787,10 +788,18 @@ mod tests {
 
         let f5 = CfgFile {
             path: PathBuf::from("maps/test/openomsi_climate.cfg"),
-            lines: ["[temperatures]", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "Nan"]
+            lines: ["[temperature]", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "NaN"]
                 .iter().map(|x| x.to_string()).collect()
         };
         let s5 = load_map_climate_config(&f5);
         assert!(s5.is_none());
+
+        let f6 = CfgFile {
+            path: PathBuf::from("maps/test/openomsi_climate.cfg"),
+            lines: ["[temperature]", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "-Inf"]
+                .iter().map(|x| x.to_string()).collect()
+        };
+        let s6 = load_map_climate_config(&f6);
+        assert!(s6.is_none());
     }
 }
