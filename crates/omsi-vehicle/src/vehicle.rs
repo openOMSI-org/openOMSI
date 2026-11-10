@@ -465,7 +465,8 @@ impl Vehicle {
                     v.default_paint = r.str().to_string();
                 }
                 "openomsi_multiplayer" => {
-                    // Unknown values fail closed: a typo must not disclose a private mod.
+                    // Even an empty or misspelled policy block fails closed.
+                    v.lan_file_transfer = Some(false);
                     for line in r.rest_of_block() {
                         let line = line.split("//").next().unwrap_or("").trim();
                         let Some((key, value)) = line.split_once(char::is_whitespace) else { continue };
