@@ -77,9 +77,7 @@ impl VehicleInstance {
         self.set_engine_ev(Ev::StreetCond, self.host.street_cond);
         // what is coupled to this vehicle (the train scripts light their ends by it: a head
         // lamp only where nothing is coupled, the tail lamps at the last car)
-        self.set_engine_ev(Ev::TrainFrontCoupling, 0.0);
-        self.set_engine_ev(Ev::TrainBackCoupling, if self.trailers.is_empty() { 0.0 } else { 1.0 });
-        self.set_engine_ev(Ev::TrainMeReverse, 0.0);
+        self.set_coupling_evs();
         // and for the tyres' grip
         let mu = road_grip(self.host.street_cond, self.host.temperature);
         if let Some(rb) = self.rigid.as_mut() {
@@ -291,6 +289,14 @@ impl VehicleInstance {
     /// (`ai_motion::AiBody`, which also leaves the accelerations and each wheel's travel in
     /// `physics`), the scripts see the motion through `Velocity` and the `AI_*` variables and
     /// run their `{frame_ai}` blocks (falling back to `{frame}` when a script has none).
+    /// Report coupling end state (`train_frontcoupling`, `train_backcoupling`, `train_me_reverse`)
+    /// to this leading vehicle for both player and AI consists (#3801).
+    fn set_coupling_evs(&mut self) {
+        self.set_engine_ev(Ev::TrainFrontCoupling, 0.0);
+        self.set_engine_ev(Ev::TrainBackCoupling, if self.trailers.is_empty() { 0.0 } else { 1.0 });
+        self.set_engine_ev(Ev::TrainMeReverse, 0.0);
+    }
+
     pub fn update_ai(&mut self, dt: f32, ai: &AiFrame) {
         self.update_ai_with(dt, ai, &[], &[]);
     }
@@ -410,6 +416,7 @@ impl VehicleInstance {
                 _ => 0.0,
             },
         };
+        self.set_coupling_evs();
         for (ev, v) in [
             (Ev::Ai, 1.0),
             (Ev::AiBlinkerL, matches!(ai.blinker, 1 | 3) as i32 as f32),
