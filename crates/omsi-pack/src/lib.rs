@@ -665,11 +665,7 @@ impl VerifiedPack {
         Ok(Self { root: root.canonicalize()?, manifest, content_key, by_path, by_id })
     }
 
-    /// `verify_all` once per pack revision and key in this process: the game opens every
-    /// installed pack at launch and each dependency again per map, and `read` still
-    /// authenticates every asset it returns. The revision includes the size, modification and
-    /// change markers of every pack file, so a file changed or removed after the first scan is
-    /// scanned again (and rejected) on the next open.
+    /// `verify_all` once per pack revision (manifest, key and the markers of every pack file) in this process.
     fn verify_once(&self) -> Result<()> {
         static VERIFIED: std::sync::Mutex<BTreeSet<(PathBuf, String, String, String)>> = std::sync::Mutex::new(BTreeSet::new());
         let Some(files) = self.files_fingerprint()? else {
@@ -689,10 +685,7 @@ impl VerifiedPack {
         Ok(())
     }
 
-    /// Size and modification time of every file the manifest names, plus a change marker a writer
-    /// cannot set back with the modification time: the inode and change time on Unix, the file
-    /// ID and change time on Windows. `None` when Windows has no change time for a file (FAT or
-    /// exFAT): the caller then scans the whole pack. A missing file fails the open.
+    /// Size, modification time and change marker of every pack file; `None` when one has no change time.
     fn files_fingerprint(&self) -> Result<Option<String>> {
         let mut digest = Sha256::new();
         #[cfg(windows)]

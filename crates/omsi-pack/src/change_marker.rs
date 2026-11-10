@@ -7,9 +7,7 @@ use std::{
 
 use crate::{PackError, Result};
 
-/// Size, modification time, NTFS change time and file ID of a pack file, read for a whole folder
-/// at once (one directory query instead of opening every chunk). Putting the modification time
-/// back sets the change time. `None` without a change time (FAT, exFAT).
+/// Size, modification time, NTFS change time and file ID of a pack file; `None` without a change time (FAT, exFAT).
 pub(crate) fn file_marker(
     root: &Path,
     file: &str,
