@@ -96,6 +96,10 @@ impl Sender {
 
     pub(in crate::mods) fn begin(&'static self, root: &Path, bus: &str, paint: &str, own: impl FnOnce() -> Vec<PathBuf> + Send + 'static) {
         let Some((host, session)) = self.host() else { return };
+        if !crate::mods::transfer_policy::allows_bus(root, bus) {
+            log::info!("LAN upload: {bus} is private; its files are not sent");
+            return;
+        }
         if bus.is_empty() || self.refused.load(Ordering::Relaxed) || self.sending.lock().unwrap_or_else(|e| e.into_inner()).as_ref().is_some_and(|s| s.busy) {
             return;
         }
@@ -179,6 +183,10 @@ impl Sender {
             Some(t) => t.elapsed() > AGAIN,
         };
         if !due {
+            return;
+        }
+        if !crate::mods::transfer_policy::allows_bus(root, bus) {
+            s.last = Some(Instant::now());
             return;
         }
         s.busy = true;
