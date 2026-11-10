@@ -3,6 +3,19 @@
 
 use super::*;
 
+// Validate the actual stored .bus/.ovh bytes, never a permission asserted by a peer.
+// Used for new uploads and while reopening persisted manifests from an older release.
+fn shareable_manifest(store: &Store, m: &VehicleManifest) -> bool {
+    let mut checked = false;
+    for e in m.entries.iter().filter(|e| super::super::transfer_policy::is_descriptor(&e.path)) {
+        let Ok(bytes) = store.read(e) else { return false };
+        let cfg = omsi_cfg::CfgFile::from_bytes(&e.path, &bytes);
+        if !omsi_vehicle::Vehicle::parse(&cfg).allows_file_transfer() { return false }
+        checked = true;
+    }
+    checked
+}
+
 // (what the rest of the game asks, of the game's own store)
 
 pub(in crate::mods) fn open() -> bool {
@@ -141,6 +154,10 @@ impl Buses {
             let held: Vec<Withheld> = std::fs::read(vdir.join(format!("{fp}.withheld.json"))).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
             if let Some(lost) = m.entries.iter().find(|e| store.has(e).is_none() && !held.iter().any(|w| w.path == e.path)) {
                 log::warn!("vehicles: {name} lacks {} in the store; left aside", lost.path);
+                continue;
+            }
+            if !shareable_manifest(&store, &m) {
+                log::warn!("vehicles: {name} is private or unreadable; cannot redistribute its files");
                 continue;
             }
             if !held.is_empty() {
@@ -373,6 +390,10 @@ impl Buses {
     /// worked out here from what was checked here (never the one its sender says).
     pub(super) fn commit(&self, m: VehicleManifest) -> Result<(String, bool), String> {
         let m = m.validated()?;
+        let store = self.lock().as_ref().ok_or("no store")?.store.clone();
+        if !shareable_manifest(&store, &m) {
+            return Err("this vehicle forbids multiplayer file transfers".into());
+        }
         let fp = m.fingerprint();
         let mut g = self.lock();
         let v = g.as_mut().ok_or("no store")?;
