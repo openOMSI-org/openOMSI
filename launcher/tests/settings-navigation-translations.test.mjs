@@ -17,7 +17,6 @@ const required = [
   "Favourite settings",
   "Game preferences",
   "Search all settings",
-  "Choose a topic to find the settings you need.",
   "{n} options",
   "Search results",
   "Remove from favourites: {name}",
