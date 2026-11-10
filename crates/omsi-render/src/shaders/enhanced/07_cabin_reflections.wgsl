@@ -43,7 +43,7 @@ fn fs_cabin_reflection(in: FsIn) -> @location(0) vec4<f32> {
     let reflected = textureSampleLevel(t_cabin_reflection, s_cabin_reflection, in.clip.xy / cabin_reflection.screen.xy, 0.0);
     // The HDR capture is already exposed. Add its reflected light before tone
     // mapping, without an opaque tint or a second copy of the street/sky.
-    return vec4<f32>(reflected.rgb * fresnel * coverage, 0.0);
+    return vec4<f32>(reflected.rgb * fresnel * coverage * camera.cam_pos.w, 0.0);
 }
 
 @vertex

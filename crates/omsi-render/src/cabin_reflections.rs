@@ -72,7 +72,7 @@ fn planes(scene: &Scene, f: &FrameCtx, visible: &[(usize, f32, bool)], origin: D
 }
 
 pub(crate) fn plan(scene: &Scene, f: &FrameCtx, visible: &[(usize, f32, bool)], list: &mut Vec<u32>) -> Option<Plan> {
-    if !f.enhanced || !f.prepass_on || !(f.with_overlays || f.xr_view) { return None; }
+    if !f.enhanced || f.lighting.reflection_strength <= 0.0 || !f.prepass_on || !(f.with_overlays || f.xr_view) { return None; }
     let own = f.lighting.inside.as_ref()?;
     if !point_in_vehicle_box(f.camera.position, own) { return None; }
     let planes = planes(scene, f, visible, own.0);

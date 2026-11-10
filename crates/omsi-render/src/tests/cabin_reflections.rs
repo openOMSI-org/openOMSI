@@ -73,6 +73,10 @@ fn reflection_case(msaa: u32, ray_tracing: bool) {
         let (a, b) = (pixel(&on, x, y), pixel(&twice, x, y));
         assert!((0..3).all(|c| (a[c] - b[c]).abs() <= 2), "a single reflection through layered glass: {a:?} vs {b:?}");
     }
+    let mut disabled_lighting = lighting.clone();
+    disabled_lighting.reflection_strength = 0.0;
+    let disabled = renderer.render_to_image(&mut scene, 128, 128, &camera, &disabled_lighting).unwrap();
+    assert!(pixel(&disabled, 54, 70)[0] < pixel(&on, 54, 70)[0] - 10, "the existing reflection control disables the cabin capture too");
     // Turning a pane off with an ordinary script must still hide its reflection.
     scene.materials[glass].uniform.glow[2] = 0.0;
     let hidden = renderer.render_to_image(&mut scene, 128, 128, &camera, &lighting).unwrap();
