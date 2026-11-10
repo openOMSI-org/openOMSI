@@ -313,9 +313,9 @@ and the [community config editor](https://openomsi.mxnticek.eu/weather/).
 
 A map can also give its climate statistics in an `openomsi_climate.cfg` file. The `[temperature]`
 section of the file should contain 12 monthly mean temperatures (January to December) in °C
-(one per line), and the `[precipitation]` section should have the same 12 values, but
-for the precipitation in millimetres. These values will be used as baseline for
-natural weather preset.
+(one per line), and the optional (currently unused) `[precipitation]` section should have
+the same 12 values, but for the precipitation in millimetres. These values will be used
+as baseline for natural weather preset.
 
 ## Trolleybuses: poles, drive and a wire
 

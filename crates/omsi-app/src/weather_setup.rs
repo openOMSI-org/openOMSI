@@ -2,11 +2,10 @@
 
 use super::*;
 
-use omsi_cfg::CfgFile;
 // (the cloud kinds, a hand-set weather's text and the METAR airports: omsi_content::weather_choice)
 pub(crate) use omsi_content::weather_choice::{cloud_kind_index, cloud_kind_nearest, cover_of, custom_weather, dew_point_c, metar_airports, relative_humidity, CustomWeather, CLOUD_KINDS};
 pub(crate) use omsi_weather::conditions::{cloud_drift_at, cloud_drift_step, initial_wetness, precip_of, road_wetness, street_condition};
-use omsi_weather::weather_model::ClimateStats;
+use omsi_weather::climate::ClimateStats;
 
 
 /// Weather from `--weather`, else the clear-sky default.
@@ -15,58 +14,7 @@ pub(crate) fn load_weather(args: &Args) -> omsi_content::weather::Weather {
 }
 
 fn load_map_climate(args: &Args) -> Option<ClimateStats> {
-    Path::new(&args.map).parent().map(|dir| {
-        let dir = dir.strip_prefix(&args.root).unwrap_or(&dir);
-        let climate_path = omsi_cfg::find_in_roots(&dir.join("openomsi_climate.cfg").to_string_lossy()).map(|x| x.1)?;
-        let f = CfgFile::read(climate_path).ok()?;
-        load_map_climate_config(&f)
-    })?
-}
-
-fn load_map_climate_config(f: &CfgFile) -> Option<ClimateStats> {
-    let mut r = f.reader();
-    let mut temp: Option<Vec<f32>> = None;
-    let mut precip: Option<Vec<f32>> = None;
-    while let Some(k) = r.next_keyword() {
-        match k.as_str() {
-            "temperature" => {
-                temp = r.rest_of_block().iter()
-                    .map(|x| x.trim())
-                    .filter(|x| !x.is_empty())
-                    .map(|x| x.parse::<f32>())
-                    .collect::<Result<Vec<f32>, _>>()
-                    .map_err(|e| log::warn!("openomsi_climate.cfg: float parsing error: {e}"))
-                    .ok();
-            }
-            "precipitation" => {
-                precip = r.rest_of_block().iter()
-                    .map(|x| x.trim())
-                    .filter(|x| !x.is_empty())
-                    .map(|x| x.parse::<f32>())
-                    .collect::<Result<Vec<f32>, _>>()
-                    .map_err(|e| log::warn!("openomsi_climate.cfg: float parsing error: {e}"))
-                    .ok();
-            }
-            _ => {
-                log::warn!("openomsi_climate.cfg: unknown section [{k}] occurred");
-            }
-        }
-    }
-    if let Some(t) = temp {
-        let p = precip.unwrap_or_else(|| vec![0.0f32; 12]);
-        if t.iter().all(|x| (-100.0..=100.0).contains(x)) && p.iter().all(|x| (0.0..=5000.0).contains(x)) {
-            Some(ClimateStats {
-                temp: *t.as_array().or_else(|| { log::warn!("openomsi_climate.cfg: temperature: {} elements provided, 12 expected; falling back to default", t.len()); None })?,
-                precip: *p.as_array().or_else(||  { log::warn!("openomsi_climate.cfg: precipitation: {} elements provided, 12 expected; falling back to default", p.len()); None })?
-            })
-        } else {
-            log::warn!("openomsi_climate.cfg: some values non-finite or outside the range (-100 to 100 °C, 0 to 5000 mm)");
-            None
-        }
-    } else {
-        log::warn!("openomsi_climate.cfg: incomplete configuration, falling back to default");
-        None
-    }
+    ClimateStats::for_map(&args.map, &args.root)
 }
 
 /// [`load_weather`], and the physical model's run when the weather is the model's, for the
@@ -748,58 +696,5 @@ mod tests {
         assert_eq!(cloud_kind_nearest(0.01), 1);
         assert_eq!(cloud_kind_nearest(0.0), 0);
         assert_eq!(cloud_kind_nearest(0.9), 4);
-    }
-
-    #[test]
-    fn custom_climate_is_read_properly() {
-        let f1 = CfgFile {
-            path: PathBuf::from("maps/test/openomsi_climate.cfg"),
-            lines: ["[temperature]", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"]
-                .iter().map(|x| x.to_string()).collect()
-        };
-        let s1 = load_map_climate_config(&f1);
-        assert!(s1.is_some());
-        assert_eq!(s1.unwrap().temp, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]);
-
-        let f2 = CfgFile {
-            path: PathBuf::from("maps/test/openomsi_climate.cfg"),
-            lines: ["[temperature]", "1", "2", "3", "4", "5", "6", "", "7", "8", "9", "", "10", "11", "12", "", ""]
-                .iter().map(|x| x.to_string()).collect()
-        };
-        let s2 = load_map_climate_config(&f2);
-        assert!(s2.is_some());
-        assert_eq!(s2.unwrap().temp, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]);
-
-        let f3 = CfgFile {
-            path: PathBuf::from("maps/test/openomsi_climate.cfg"),
-            lines: ["[temperature]", "1", "2", "3", "4", "5", "6", "7", "8", "", "[precipitation]", "25", "30"]
-                .iter().map(|x| x.to_string()).collect()
-        };
-        let s3 = load_map_climate_config(&f3);
-        assert!(s3.is_none());
-
-        let f4 = CfgFile {
-            path: PathBuf::from("maps/test/openomsi_climate.cfg"),
-            lines: ["[temperatures]", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"]
-                .iter().map(|x| x.to_string()).collect()
-        };
-        let s4 = load_map_climate_config(&f4);
-        assert!(s4.is_none());
-
-        let f5 = CfgFile {
-            path: PathBuf::from("maps/test/openomsi_climate.cfg"),
-            lines: ["[temperature]", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "NaN"]
-                .iter().map(|x| x.to_string()).collect()
-        };
-        let s5 = load_map_climate_config(&f5);
-        assert!(s5.is_none());
-
-        let f6 = CfgFile {
-            path: PathBuf::from("maps/test/openomsi_climate.cfg"),
-            lines: ["[temperature]", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "-Inf"]
-                .iter().map(|x| x.to_string()).collect()
-        };
-        let s6 = load_map_climate_config(&f6);
-        assert!(s6.is_none());
     }
 }

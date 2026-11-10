@@ -43,15 +43,6 @@ fn cloud_kind(total: f32, deck: f32) -> &'static str {
     else { "-1" }
 }
 
-/// Monthly climate statistics per location, specified in the map's `openomsi_climate.cfg`
-#[derive(Debug, Clone)]
-pub struct ClimateStats {
-    /// Mean temperatures (°C)
-    pub temp: [f32; 12],
-    /// Mean precipitations (mm)
-    pub precip: [f32; 12],
-}
-
 /// The model's state at one moment.
 #[derive(Debug, Clone)]
 pub struct WeatherModel {
@@ -140,6 +131,8 @@ pub struct ModelRun {
 
 /// Whether a weather choice means this model: `natural`, or none at all.
 pub use omsi_content::weather_choice::is_natural;
+
+use crate::climate::ClimateStats;
 
 impl ModelRun {
     /// Start the model for a session beginning at `clock` (at the map's place as far as it
