@@ -446,9 +446,9 @@ pub fn session_files(map: &str, bus: Option<&str>, weather: Option<&str>, origin
     (list, missing)
 }
 
-/// Whether the map goes to players who join without it (`share_maps` of a server; a game
-/// that hosts a session shares it).
-static SHARE_MAPS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+/// Whether the host may send map files to clients. Off by default for both
+/// dedicated and player-hosted LAN. Dedicated hosts opt in via `share_maps = 1`.
+static SHARE_MAPS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 pub fn share_maps(on: bool) {
     SHARE_MAPS.store(on, std::sync::atomic::Ordering::Relaxed);
