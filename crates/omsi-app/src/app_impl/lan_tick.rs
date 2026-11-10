@@ -97,7 +97,9 @@ impl App {
         let world_ms = phase.elapsed().as_secs_f64() * 1000.0;
         let phase = std::time::Instant::now();
         if let Some(t) = self.session.traffic.as_mut().filter(|t| t.sim.mirror) {
-            let ready: Vec<_> = t.sim.cars.iter().filter(|c| t.has_sound_set(c.id)).map(|c| c.id).collect();
+            // Matching every car against a Vec was quadratic in AI traffic:
+            // on crowded LAN servers this ran every frame while mirroring sounds.
+            let ready: std::collections::HashSet<_> = t.sim.cars.iter().filter(|c| t.has_sound_set(c.id)).map(|c| c.id).collect();
             for c in &mut t.sim.cars {
                 if ready.contains(&c.id) { self.net.remotes.apply_ai_sounds(&mut c.vehicle, c.id, &config.root); }
             }
