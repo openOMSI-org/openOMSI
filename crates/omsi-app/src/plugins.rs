@@ -344,7 +344,7 @@ pub(crate) fn game_info(app: &crate::App) -> Vec<(&'static str, InfoValue)> {
             // the next one only a minute before it leaves
             v.push(("trip_done", Bool(d.trip_done())));
             let bus = app.player.as_ref().map(|p| p.vehicle.position);
-            let next_calling = next_calling_stop(&trip.stops, d.next_stop);
+            let next_calling = omsi_sim::timetable_run::next_calling_stop(&trip.stops, d.next_stop);
             stop_info(&mut v, &trip.stops, next_calling, d.at_stop() && next_calling == d.next_stop, bus);
             if let Some(stop) = trip.stops.get(next_calling) {
                 if let Some(distance) = app.menus.navigator.as_ref().and_then(|n| n.next_stop_distance_for(stop.object_id)) {
@@ -354,10 +354,6 @@ pub(crate) fn game_info(app: &crate::App) -> Vec<(&'static str, InfoValue)> {
         }
     }
     v
-}
-
-pub(crate) fn next_calling_stop(stops: &[crate::schedule::PlannedStop], next: usize) -> usize {
-    (next..stops.len()).find(|&i| stops[i].calls()).unwrap_or_else(|| if stops.iter().any(|stop| stop.calls()) { stops.len() } else { next.min(stops.len().saturating_sub(1)) })
 }
 
 /// `omsi.info()`'s keys of the next stop and the one before it: `stops` the trip's, `next`
@@ -1211,7 +1207,7 @@ mod tests {
             stop(13, "Next calling stop", true),
         ];
 
-        let next = next_calling_stop(&stops, 1);
+        let next = omsi_sim::timetable_run::next_calling_stop(&stops, 1);
         assert_eq!(next, 3);
 
         let mut info = Vec::new();
@@ -1226,7 +1222,7 @@ mod tests {
             stop(21, "Depot start", false),
             stop(22, "Depot next", false),
         ];
-        let depot_next = next_calling_stop(&depot_stops, 0);
+        let depot_next = omsi_sim::timetable_run::next_calling_stop(&depot_stops, 0);
         assert_eq!(depot_next, 0);
 
         let mut depot_info = Vec::new();
