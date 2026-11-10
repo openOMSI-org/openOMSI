@@ -73,6 +73,14 @@ pub struct Hof {
 pub const FREE_TEXT: &str = "(free text)";
 
 impl Hof {
+    pub fn depot_name(&self) -> String {
+        self.path
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| self.name.clone())
+    }
+
     /// This depot file with one destination more, or the one it had of the kind changed:
     /// `lines` typed by the driver as the displays' text (the destination form's two free
     /// lines). Its strings are those a destination of the file has, as many: the first holds
@@ -289,17 +297,6 @@ pub fn depot_files(dir: &Path) -> Vec<PathBuf> {
 }
 
 /// The depot file of `dir` called `name`: by its file name (without `.hof`) or its `[name]`.
-impl Hof {
-    /// Depot lookup key matching `depot_in`: file stem when present, else internal `[name]`.
-    pub fn depot_name(&self) -> String {
-        self.path
-            .file_stem()
-            .map(|s| s.to_string_lossy().into_owned())
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| self.name.clone())
-    }
-}
-
 pub fn depot_in(dir: &Path, name: &str) -> Option<Hof> {
     let name = name.trim();
     if name.is_empty() {
