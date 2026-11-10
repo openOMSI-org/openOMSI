@@ -751,7 +751,7 @@ impl PlayerDuty {
         let mut best: Option<(usize, f64)> = None;
         for k in self.next_stop + 1..upto {
             let Some(d) = of(k) else { continue };
-            if d >= AT_STOP || here.is_some_and(|h| d >= h) || !trip.stops[k].calls() || !trip.stops[k].dir.takes(fwd) {
+            if d >= AT_STOP || here.is_some_and(|h| d >= h) || (!trip.stops[k].calls() && trip.stops.iter().any(|s| s.calls())) || !trip.stops[k].dir.takes(fwd) {
                 continue;
             }
             if best.is_none_or(|(_, b)| d < b) {
@@ -759,7 +759,7 @@ impl PlayerDuty {
             }
         }
         let Some((k, _)) = best else { return };
-        // (a closed stop was not missed)
+        // (a closed stop or a station passed through was not missed)
         let missed = trip.stops[self.next_stop..k].iter().filter(|s| s.calls()).count();
         if missed == 0 {
             self.next_stop = k;
