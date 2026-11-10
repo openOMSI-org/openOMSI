@@ -20,11 +20,15 @@ mod hof_sync;
 mod file_dialog;
 pub mod i18n;
 mod graphics_profiles;
+mod graphics_profile_transfer;
+#[cfg(test)]
+mod graphics_profile_transfer_tests;
+pub use graphics_profile_transfer::{export_graphics_profile, import_graphics_profile};
 pub use graphics_profiles::*;
 mod situations;
 pub use situations::{delete_situation, last_situation, rename_situation, saved_situations, SavedSituation};
 
-pub use file_dialog::{pick_file, pick_folder, pick_hofs, pick_mod};
+pub use file_dialog::{pick_file, pick_folder, pick_graphics_profile, pick_hofs, pick_mod};
 pub use hof_sync::{add_shared_hofs, share_map_hofs, MapHofOffer};
 
 use anyhow::{anyhow, Context, Result};
