@@ -475,6 +475,39 @@ fn a_pack_changed_on_disk_after_the_first_scan_is_rejected_when_opened_again() {
 }
 
 #[test]
+fn a_same_size_change_with_the_old_modified_time_is_rejected_when_opened_again() {
+    use std::io::Write as _;
+    let root = licence_scratch("verify-once-same-size");
+    let signer = SigningKey::generate(&SystemRandom::new()).unwrap();
+    let mut metadata = licence_metadata(&[0; 32]);
+    metadata.key_id = None;
+    let pack = root.join("plain.oopp");
+    let manifest = create_pack(&pack, metadata, &licence_input(), &signer, None, &AtomicBool::new(false)).unwrap();
+    let trusted = licence_trust(&signer);
+    let keys = MemoryKeys::default();
+    let first = VerifiedPack::open_unlocked(&pack, &trusted, &keys).unwrap();
+    assert_eq!(first.read("maps/Fixture/global.cfg").unwrap(), b"owned synthetic fixture");
+
+    let asset = pack.join(format!("assets/{}/plain.bin", sha256_hex(manifest.assets[0].id.as_bytes())));
+    let original = fs::read(&asset).unwrap();
+    let modified = fs::metadata(&asset).unwrap().modified().unwrap();
+    // past the file system's clock tick, so the change time can move
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    let mut file = fs::OpenOptions::new().write(true).open(&asset).unwrap();
+    file.write_all(&original.iter().map(|byte| byte ^ 1).collect::<Vec<u8>>()).unwrap();
+    file.set_modified(modified).unwrap();
+    drop(file);
+    let meta = fs::metadata(&asset).unwrap();
+    assert_eq!((meta.len(), meta.modified().unwrap()), (original.len() as u64, modified));
+    assert!(
+        VerifiedPack::open_unlocked(&pack, &trusted, &keys).is_err(),
+        "a same-size change with the old modified time was accepted at open"
+    );
+    assert!(first.read("maps/Fixture/global.cfg").is_err());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn a_largest_pack_manifest_fits() {
     // 4096 assets with the longest id and path; together 1 GiB in 64 KiB chunks, plus one
     // partial chunk per asset.

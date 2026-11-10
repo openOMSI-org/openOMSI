@@ -665,16 +665,19 @@ impl VerifiedPack {
 
     /// `verify_all` once per pack revision and key in this process: the game opens every
     /// installed pack at launch and each dependency again per map, and `read` still
-    /// authenticates every asset it returns. The revision includes the size and change
-    /// times of every pack file, so a file changed or removed after the first scan is
+    /// authenticates every asset it returns. The revision includes the size, modification and
+    /// change markers of every pack file, so a file changed or removed after the first scan is
     /// scanned again (and rejected) on the next open.
     fn verify_once(&self) -> Result<()> {
         static VERIFIED: std::sync::Mutex<BTreeSet<(PathBuf, String, String, String)>> = std::sync::Mutex::new(BTreeSet::new());
+        let Some(files) = self.files_fingerprint()? else {
+            return self.verify_all();
+        };
         let revision = (
             self.root.clone(),
             sha256_hex(&serde_json::to_vec(&self.manifest)?),
             self.content_key.as_ref().map(|key| sha256_hex(key)).unwrap_or_default(),
-            self.files_fingerprint()?,
+            files,
         );
         if VERIFIED.lock().unwrap_or_else(|e| e.into_inner()).contains(&revision) {
             return Ok(());
@@ -684,10 +687,14 @@ impl VerifiedPack {
         Ok(())
     }
 
-    /// Size, modification time (and on Unix the inode and change time, which a writer cannot
-    /// set back) of every file the manifest names; a missing file fails the open.
-    fn files_fingerprint(&self) -> Result<String> {
+    /// Size and modification time of every file the manifest names, plus a change marker a writer
+    /// cannot set back with the modification time: the inode and change time on Unix, the file
+    /// ID and change time on Windows. `None` when Windows has no change time for a file (FAT or
+    /// exFAT): the caller then scans the whole pack. A missing file fails the open.
+    fn files_fingerprint(&self) -> Result<Option<String>> {
         let mut digest = Sha256::new();
+        #[cfg(windows)]
+        let mut folders = HashMap::new();
         for asset in &self.manifest.assets {
             let plain = [format!("assets/{}/plain.bin", sha256_hex(asset.id.as_bytes()))];
             let files: Vec<&str> = if self.content_key.is_some() {
@@ -696,22 +703,30 @@ impl VerifiedPack {
                 plain.iter().map(String::as_str).collect()
             };
             for file in files {
-                let meta = fs::metadata(self.root.join(file))
-                    .map_err(|_| PackError::Invalid("chunk is missing, truncated, or changed"))?;
-                let modified = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).unwrap_or_default();
                 digest.update(file.as_bytes());
-                digest.update(meta.len().to_le_bytes());
-                digest.update(modified.as_nanos().to_le_bytes());
-                #[cfg(unix)]
+                #[cfg(windows)]
                 {
-                    use std::os::unix::fs::MetadataExt as _;
-                    digest.update(meta.ino().to_le_bytes());
-                    digest.update(meta.ctime().to_le_bytes());
-                    digest.update(meta.ctime_nsec().to_le_bytes());
+                    let Some(marker) = windows_file_marker(&self.root, file, &mut folders)? else { return Ok(None) };
+                    digest.update(marker);
+                }
+                #[cfg(not(windows))]
+                {
+                    let meta = fs::metadata(self.root.join(file))
+                        .map_err(|_| PackError::Invalid("chunk is missing, truncated, or changed"))?;
+                    let modified = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).unwrap_or_default();
+                    digest.update(meta.len().to_le_bytes());
+                    digest.update(modified.as_nanos().to_le_bytes());
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::MetadataExt as _;
+                        digest.update(meta.ino().to_le_bytes());
+                        digest.update(meta.ctime().to_le_bytes());
+                        digest.update(meta.ctime_nsec().to_le_bytes());
+                    }
                 }
             }
         }
-        Ok(hex_digest(digest.finalize().as_slice()))
+        Ok(Some(hex_digest(digest.finalize().as_slice())))
     }
 
     pub fn manifest(&self) -> &Manifest {
@@ -1141,6 +1156,76 @@ fn hex_digest(digest: &[u8]) -> String {
         let _ = write!(out, "{b:02x}");
     }
     out
+}
+
+/// Size, modification time, NTFS change time and file ID of a pack file, read for a whole folder
+/// at once (one directory query instead of opening every chunk). Putting the modification time
+/// back sets the change time. `None` without a change time (FAT, exFAT).
+#[cfg(windows)]
+fn windows_file_marker(
+    root: &Path,
+    file: &str,
+    folders: &mut HashMap<PathBuf, HashMap<String, [i64; 4]>>,
+) -> Result<Option<[u8; 32]>> {
+    let (dir, name) = file.rsplit_once('/').unwrap_or(("", file));
+    let dir = root.join(dir);
+    if !folders.contains_key(&dir) {
+        let entries = windows_folder_markers(&dir).unwrap_or_default();
+        folders.insert(dir.clone(), entries);
+    }
+    let [size, modified, changed, id] = *folders[&dir]
+        .get(&name.to_ascii_lowercase())
+        .ok_or(PackError::Invalid("chunk is missing, truncated, or changed"))?;
+    if changed == 0 {
+        return Ok(None);
+    }
+    let mut marker = [0u8; 32];
+    for (slot, value) in marker.chunks_exact_mut(8).zip([size, modified, changed, id]) {
+        slot.copy_from_slice(&value.to_le_bytes());
+    }
+    Ok(Some(marker))
+}
+
+#[cfg(windows)]
+fn windows_folder_markers(dir: &Path) -> std::io::Result<HashMap<String, [i64; 4]>> {
+    use std::os::windows::{fs::OpenOptionsExt as _, io::AsRawHandle as _};
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::Storage::FileSystem::{
+        FileIdBothDirectoryInfo, FileIdBothDirectoryRestartInfo, GetFileInformationByHandleEx, FILE_FLAG_BACKUP_SEMANTICS,
+        FILE_ID_BOTH_DIR_INFO, FILE_LIST_DIRECTORY,
+    };
+
+    let folder = fs::OpenOptions::new()
+        .access_mode(FILE_LIST_DIRECTORY.0)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS.0)
+        .open(dir)?;
+    let handle = HANDLE(folder.as_raw_handle());
+    let mut entries = HashMap::new();
+    let mut buffer = vec![0u64; 8192];
+    let mut class = FileIdBothDirectoryRestartInfo;
+    // the call fails with ERROR_NO_MORE_FILES after the last entry
+    while unsafe { GetFileInformationByHandleEx(handle, class, buffer.as_mut_ptr().cast(), (buffer.len() * 8) as u32) }.is_ok() {
+        class = FileIdBothDirectoryInfo;
+        let mut offset = 0;
+        loop {
+            // SAFETY: the call wrote a chain of 8-byte aligned entries inside the buffer, each
+            // followed by its name
+            let (entry, name) = unsafe {
+                let ptr = buffer.as_ptr().cast::<u8>().add(offset).cast::<FILE_ID_BOTH_DIR_INFO>();
+                let name = std::ptr::addr_of!((*ptr).FileName).cast::<u16>();
+                (&*ptr, std::slice::from_raw_parts(name, (*ptr).FileNameLength as usize / 2))
+            };
+            entries.insert(
+                String::from_utf16_lossy(name).to_ascii_lowercase(),
+                [entry.EndOfFile, entry.LastWriteTime, entry.ChangeTime, entry.FileId],
+            );
+            if entry.NextEntryOffset == 0 {
+                break;
+            }
+            offset += entry.NextEntryOffset as usize;
+        }
+    }
+    Ok(entries)
 }
 
 fn chunk_aad(m: &Manifest, a: &Asset, index: u32, count: u32) -> Vec<u8> {
