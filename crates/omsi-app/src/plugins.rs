@@ -344,8 +344,9 @@ pub(crate) fn game_info(app: &crate::App) -> Vec<(&'static str, InfoValue)> {
             // the next one only a minute before it leaves
             v.push(("trip_done", Bool(d.trip_done())));
             let bus = app.player.as_ref().map(|p| p.vehicle.position);
-            stop_info(&mut v, &trip.stops, d.next_stop, d.at_stop(), bus);
-            if let Some(stop) = trip.stops.get(d.next_stop) {
+            let next_calling = omsi_sim::timetable_run::next_calling_stop(&trip.stops, d.next_stop);
+            stop_info(&mut v, &trip.stops, next_calling, d.at_stop() && next_calling == d.next_stop, bus);
+            if let Some(stop) = trip.stops.get(next_calling) {
                 if let Some(distance) = app.menus.navigator.as_ref().and_then(|n| n.next_stop_distance_for(stop.object_id)) {
                     v.push(("next_stop_distance_nav", Num(distance)));
                 }
@@ -1183,6 +1184,56 @@ mod tests {
         let mut io = snapshot(vec![("clock", InfoValue::Num(32400.0)), ("map_path", InfoValue::Text("maps/example/global.cfg".into()))]);
         assert_eq!(io.var("openomsi_clock"), None);
         assert_eq!(io.string("openomsi_map_path"), None);
+    }
+
+    #[test]
+    fn plugins_next_stop_skips_pass_through_station() {
+        let stop = |id: i64, name: &str, stops: bool| crate::schedule::PlannedStop {
+            object_id: id,
+            name: name.into(),
+            arr: 0.0,
+            dep: 0.0,
+            position: None,
+            dir: Default::default(),
+            stops,
+            closed: None,
+        };
+        let mut closed = stop(12, "Closed stop", true);
+        closed.closed = Some("plugin diversion".into());
+        let stops = vec![
+            stop(11, "Due stop", true),
+            stop(12, "Pass-through", false),
+            closed,
+            stop(13, "Next calling stop", true),
+        ];
+
+        let next = omsi_sim::timetable_run::next_calling_stop(&stops, 1);
+        assert_eq!(next, 3);
+
+        let mut info = Vec::new();
+        stop_info(&mut info, &stops, next, false, None);
+        let get = |key: &str| info.iter().find(|(name, _)| *name == key).map(|(_, value)| value.clone());
+        assert_eq!(get("next_stop"), Some(InfoValue::Text("Next calling stop".into())));
+        assert_eq!(get("next_stop_number"), Some(InfoValue::Num(4.0)));
+        assert_eq!(get("next_stop_id"), Some(InfoValue::Num(13.0)));
+        assert_eq!(get("at_stop"), Some(InfoValue::Bool(false)));
+
+        let depot_stops = vec![
+            stop(21, "Depot start", false),
+            stop(22, "Depot next", false),
+        ];
+        let depot_next = omsi_sim::timetable_run::next_calling_stop(&depot_stops, 0);
+        assert_eq!(depot_next, 0);
+
+        let mut depot_info = Vec::new();
+        stop_info(&mut depot_info, &depot_stops, depot_next, false, None);
+        let depot_get = |key: &str| depot_info.iter()
+            .find(|(name, _)| *name == key)
+            .map(|(_, value)| value.clone());
+
+        assert_eq!(depot_get("next_stop"), Some(InfoValue::Text("Depot start".into())));
+        assert_eq!(depot_get("next_stop_number"), Some(InfoValue::Num(1.0)));
+        assert_eq!(depot_get("at_stop"), Some(InfoValue::Bool(false)));
     }
 
     /// The next stop and the one before it, by object ID, with their distances: the stop
