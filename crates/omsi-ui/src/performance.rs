@@ -460,8 +460,14 @@ mod tests {
     #[test]
     fn the_corner_names_the_upscaler_and_frame_generations_frames() {
         assert_eq!(super::corner(60.0, None, None), "60 fps");
-        assert_eq!(super::corner(60.0, Some(0.0), Some("FSR 3")), "60 fps · FSR 3");
-        assert_eq!(super::corner(60.0, Some(59.0), Some("DLSS")), "119 fps (60 + FG) · DLSS");
+        assert_eq!(
+            super::corner(60.0, Some(0.0), Some("FSR 3")),
+            "60 fps · FSR 3"
+        );
+        assert_eq!(
+            super::corner(60.0, Some(59.0), Some("DLSS")),
+            "119 fps (60 + FG) · DLSS"
+        );
     }
 
     #[test]

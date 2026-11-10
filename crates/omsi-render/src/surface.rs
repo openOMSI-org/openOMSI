@@ -368,12 +368,17 @@ pub fn switch_frame_generation(
     vsync: bool,
     capped: bool,
 ) -> bool {
-    let Some(s) = surface.as_mut() else { return true };
+    let Some(s) = surface.as_mut() else {
+        return true;
+    };
     // (a lost device: the next frame starts the game again)
     if renderer.device_lost().is_some() || s.retarget_frame_generation(want) {
         return true;
     }
-    log::info!("frame generation: {:?} -> {want:?}, the window's swap chain made again", s.frame_generation_kind());
+    log::info!(
+        "frame generation: {:?} -> {want:?}, the window's swap chain made again",
+        s.frame_generation_kind()
+    );
     renderer.set_frame_generation(None);
     // (the old swap chain gone, with its buffers, before the window takes the new one; DLSS is
     // moved to another Streamline session only once nothing presents through the old one)
@@ -381,13 +386,24 @@ pub fn switch_frame_generation(
     let _ = wait_gpu(&renderer.device, None);
     renderer.before_frame_generation(want);
     renderer.after_frame_generation();
-    let made = SurfaceState::new_with(instance, window.clone(), renderer, width, height, vsync, want).or_else(|e| {
+    let made = SurfaceState::new_with(
+        instance,
+        window.clone(),
+        renderer,
+        width,
+        height,
+        vsync,
+        want,
+    )
+    .or_else(|e| {
         log::error!("frame generation: the window's surface for it: {e:#}; made again without it");
         SurfaceState::new_with(instance, window, renderer, width, height, vsync, None)
     });
     // (a surface made on a lost device is never configured: the window goes without one)
     if renderer.device_lost().is_some() {
-        log::error!("frame generation: the graphics device was lost while the window's swap chain was made again");
+        log::error!(
+            "frame generation: the graphics device was lost while the window's swap chain was made again"
+        );
         return true;
     }
     match made {
