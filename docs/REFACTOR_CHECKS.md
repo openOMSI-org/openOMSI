@@ -160,6 +160,7 @@ must not depend on what (`forbid omsi-sim omsi-render`: the simulation never kno
 drawn) and the edges that still break a rule and are to be removed (`allow ...`); once such an
 edge is gone, the check asks for its `allow` line to be deleted, so it cannot come back.
 The same file limits how many lines of Rust a pull request may add to `crates/omsi-app`, net
-(added minus removed) and its tests aside (`app-growth`, against the pull request's base; locally against the merge base
-with main): a new subsystem gets a crate of its own instead of growing the app. `--graph`
-prints the dependency graph.
+(added minus removed) and its tests aside (`app-growth`, against the pull request's base;
+locally against the merge base with main, and without any it says the growth was not
+checked): a new subsystem gets a crate of its own instead of growing the app. `--graph` prints
+the dependency graph.
