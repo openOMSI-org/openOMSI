@@ -553,8 +553,22 @@ mod tests {
 
     #[test]
     fn more_than_eight_mirrors_scroll_and_select() {
-        let (mut ui, cams, mut m) = (omsi_ui::kit::Ui::new(), vec![omsi_vehicle::Camera::default(); 10], 0);
-        for f in 0..40 { ui.input = omsi_ui::kit::Input { mouse: Vec2::new(40.0, 192.0), wheel: Vec2::new(0.0, if f < 6 { -4.0 } else { 0.0 }), pressed: f == 38, down: f == 38, released: f == 39, ..Default::default() }; ui.begin(Vec2::new(400.0, 400.0), 1.0, 0.05); panel::mirror_list(&mut ui, &cams, &mut m, omsi_ui::Rect::new(0.0, 0.0, 400.0, 208.0)); }
+        let mut ui = omsi_ui::kit::Ui::new();
+        let cams = vec![omsi_vehicle::Camera::default(); 10];
+        let mut m = 0;
+        let area = omsi_ui::Rect::new(0.0, 0.0, 400.0, 208.0);
+        for f in 0..40 {
+            ui.input = omsi_ui::kit::Input {
+                mouse: Vec2::new(40.0, 192.0),
+                wheel: Vec2::new(0.0, if f < 6 { -4.0 } else { 0.0 }),
+                pressed: f == 38,
+                down: f == 38,
+                released: f == 39,
+                ..Default::default()
+            };
+            ui.begin(Vec2::new(400.0, 400.0), 1.0, 0.05);
+            panel::mirror_list(&mut ui, &cams, &mut m, area);
+        }
         assert_eq!(m, 9);
     }
 }
