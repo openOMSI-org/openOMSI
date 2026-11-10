@@ -49,6 +49,7 @@ mod quarantine;
 mod server_fleet;
 pub use server_fleet::{fingerprint as fleet_fingerprint, fingerprint_loaded as fleet_fingerprint_loaded};
 mod store;
+mod transfer_policy;
 pub mod upload;
 pub mod vehicles;
 
@@ -438,6 +439,7 @@ pub fn session_files(map: &str, bus: Option<&str>, weather: Option<&str>, origin
         }
     }
     let mut list: Vec<(String, PathBuf)> = files.into_values().filter(|(rel, _)| refuse_path(rel).is_none()).collect();
+    transfer_policy::filter_session_files(&mut list);
     list.sort_by(|a, b| a.0.cmp(&b.0));
     missing.sort();
     missing.dedup();
