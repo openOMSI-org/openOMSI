@@ -74,22 +74,21 @@ pub(crate) fn script_route_index(bus: &crate::VehicleInstance) -> Option<usize> 
 /// so on a forward step the value is left at the previous route index and that `+ 1` lands
 /// on the new one. A backward step (or a resume) writes the index itself and freezes the
 /// ibox's "last TT index" so the frame does not announce again.
-pub(crate) fn sync_script_busstop(
-    bus: &mut crate::VehicleInstance,
-    timetable_stop: usize,
-    name: &str,
-    forward: bool,
-    ibis_index: i32,
-) {
+pub(crate) fn sync_script_busstop(bus: &mut crate::VehicleInstance, tt: usize, name: &str, prev_tt: i32) {
     let Some(hof) = bus.host.hof.clone() else { return };
     let Some(route) = script_route_index(bus) else { return };
-    let Some(idx) = ibis_stop_index(&hof, route, name, timetable_stop) else { return };
+    let Some(idx) = ibis_stop_index(&hof, route, name, tt) else { return };
+    let forward = (tt as i32) > prev_tt;
     let value = if forward { idx.saturating_sub(1) } else { idx };
-    if bus.var("ibox_busstop").is_some() {
-        bus.set_var("ibox_busstop", value as f32);
+    for var in ["ibox_busstop"] {
+        if bus.var(var).is_some() {
+            bus.set_var(var, value as f32);
+        }
     }
-    if !forward && bus.var("ibox_TTBusstopIndexLAST").is_some() {
-        bus.set_var("ibox_TTBusstopIndexLAST", ibis_index as f32);
+    if !forward {
+        if bus.var("ibox_TTBusstopIndexLAST").is_some() {
+            bus.set_var("ibox_TTBusstopIndexLAST", tt as f32);
+        }
     }
 }
 
@@ -160,8 +159,6 @@ impl PlayerDuty {
             position: None,
             unnumbered_public: Vec::new(),
             passed: PassedStop::default(),
-            ibis_stops: HashMap::new(),
-            ibis_host_trip: None,
         }
     }
 
@@ -260,23 +257,10 @@ impl PlayerDuty {
     /// missed. Returns how many stops it closed.
     pub fn set_closed_stops(&mut self, names: &[String], via: &str) -> usize {
         let mut n = 0;
-        for (trip_index, trip) in self.trips.iter_mut().enumerate() {
-            let mut changed = false;
-            for s in &mut trip.stops {
-                let closed = names.iter().any(|c| c.trim().eq_ignore_ascii_case(s.name.trim()));
-                let via = closed.then(|| via.trim().to_string());
-                if s.closed != via {
-                    s.closed = via;
-                    changed = true;
-                }
-                n += closed as usize;
-            }
-            if changed {
-                self.ibis_stops.remove(&trip_index);
-                if self.ibis_host_trip == Some(trip_index) {
-                    self.ibis_host_trip = None;
-                }
-            }
+        for s in self.trips.iter_mut().flat_map(|t| t.stops.iter_mut()) {
+            let closed = names.iter().any(|c| c.trim().eq_ignore_ascii_case(s.name.trim()));
+            s.closed = closed.then(|| via.trim().to_string());
+            n += closed as usize;
         }
         n
     }
@@ -700,47 +684,26 @@ impl PlayerDuty {
     }
 
     /// Supply restored timetable data before the first resumed script frame.
-    pub fn restore_host(&mut self, bus: &mut crate::VehicleInstance, day_time: f64) {
+    pub fn restore_host(&self, bus: &mut crate::VehicleInstance, day_time: f64) {
         self.feed_host(bus, day_time);
         bus.host.schedule_active = 1.0;
         bus.set_var("schedule_active", 1.0);
     }
 
-    pub(crate) fn feed_host(&mut self, bus: &mut crate::VehicleInstance, day_time: f64) {
+    pub(crate) fn feed_host(&self, bus: &mut crate::VehicleInstance, day_time: f64) {
         let delay = self.delay(day_time);
-        let trip_index = self.trip_index;
-        let trip = &self.trips[trip_index];
-        let prev_ibis = bus.host.tt_ibis_busstop_index;
-        if !self.ibis_stops.contains_key(&trip_index) {
-            let has_timetable_calls = trip.stops.iter().any(|stop| stop.stops);
-            self.ibis_stops.insert(
-                trip_index,
-                trip.stops.iter()
-                    .enumerate()
-                    .filter_map(|(index, stop)| (if has_timetable_calls { stop.calls() } else { true }).then_some(index))
-                    .collect(),
-            );
-        }
-        let calling = self.ibis_stops.get(&trip_index).expect("IBIS stops were just cached");
-        let next_calling = calling.iter().position(|index| *index >= self.next_stop)
-            .or_else(|| calling.len().checked_sub(1));
-        let ibis_stop = next_calling.and_then(|index| calling.get(index).copied())
-            .and_then(|stop_index| trip.stops.get(stop_index).map(|stop| (stop_index, stop)));
-        let ibis_index = next_calling.map_or(-1, |index| index as i32);
-        let rebuild_ibis_rows = self.ibis_host_trip != Some(trip_index)
-            || (bus.host.tt_ibis_stops.is_empty() && !calling.is_empty());
+        let trip = &self.trips[self.trip_index];
+        let prev_tt = bus.host.tt_busstop_index;
+        let stop_name = trip.stops.get(self.next_stop).map(|s| s.name.clone());
         {
             let host = &mut bus.host;
             host.tt_line = trip.line.clone();
-            host.tt_stops = trip.stops.iter().map(|s| (s.name.clone(), s.arr as f32, s.dep as f32)).collect();
+            host.tt_stops = trip
+                .stops
+                .iter()
+                .map(|s| (s.name.clone(), s.arr as f32, s.dep as f32))
+                .collect();
             host.tt_stop_ids = trip.stops.iter().map(|s| s.object_id).collect();
-            if rebuild_ibis_rows {
-                host.tt_ibis_stops = calling.iter()
-                    .filter_map(|&index| trip.stops.get(index))
-                    .map(|s| (s.name.clone(), s.arr as f32, s.dep as f32))
-                    .collect();
-            }
-            host.tt_ibis_busstop_index = ibis_index;
             host.tt_busstop_index = self.next_stop as i32;
             host.tt_terminus_index = tt_terminus_index(host.hof.as_deref(), &trip.terminus);
             // (whole seconds, as Omsi.exe keeps it: an integer field of the vehicle, the
@@ -748,16 +711,13 @@ impl PlayerDuty {
             // so a bus 0.3 s behind is not yet late to the scripts' `GetTTDelay > 0`)
             host.tt_delay = delay.round() as f32;
         }
-        if rebuild_ibis_rows {
-            self.ibis_host_trip = Some(trip_index);
-        }
         // Aachen's ibox keeps its own stop counter and does `+ 1` when
         // `GetTTBusstopIndex` changes. A jump of more than one stop, or a unit that only
         // has `ibox_busstop`, left that counter behind the timetable - the announcement
         // used the new TT name while the list still showed the old `ibox_busstop` row.
-        if ibis_index != prev_ibis {
-            if let Some((timetable_stop, stop)) = ibis_stop {
-                sync_script_busstop(bus, timetable_stop, &stop.name, ibis_index > prev_ibis, ibis_index);
+        if self.next_stop as i32 != prev_tt {
+            if let Some(name) = stop_name.as_deref() {
+                sync_script_busstop(bus, self.next_stop, name, prev_tt);
             }
         }
     }
@@ -791,11 +751,7 @@ impl PlayerDuty {
         let mut best: Option<(usize, f64)> = None;
         for k in self.next_stop + 1..upto {
             let Some(d) = of(k) else { continue };
-            if d >= AT_STOP
-                || here.is_some_and(|h| d >= h)
-                || !trip.stops[k].calls()
-                || !trip.stops[k].dir.takes(fwd)
-            {
+            if d >= AT_STOP || here.is_some_and(|h| d >= h) || !trip.stops[k].calls() || !trip.stops[k].dir.takes(fwd) {
                 continue;
             }
             if best.is_none_or(|(_, b)| d < b) {
@@ -803,7 +759,7 @@ impl PlayerDuty {
             }
         }
         let Some((k, _)) = best else { return };
-        // (a closed stop or a station passed through was not missed)
+        // (a closed stop was not missed)
         let missed = trip.stops[self.next_stop..k].iter().filter(|s| s.calls()).count();
         if missed == 0 {
             self.next_stop = k;

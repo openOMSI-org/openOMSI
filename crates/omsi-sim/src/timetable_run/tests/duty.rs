@@ -32,7 +32,6 @@ fn early_departure_duty() -> PlayerDuty {
         position: None,
         unnumbered_public: Vec::new(),
         passed: Default::default(),
-        ibis_stops: HashMap::new(), ibis_host_trip: None,
     }
 }
 
@@ -105,7 +104,6 @@ fn ibox_busstop_is_prepositioned_when_the_timetable_jumps() {
         position: None,
         unnumbered_public: Vec::new(),
         passed: Default::default(),
-        ibis_stops: HashMap::new(), ibis_host_trip: None,
     };
     // jump from the first stop to the last: the script will +1 once, so leave 1 behind
     duty.next_stop = 2;
@@ -149,7 +147,6 @@ fn duty_place_keeps_first_stop_while_its_place_is_unknown() {
         position: None,
         unnumbered_public: Vec::new(),
         passed: Default::default(),
-        ibis_stops: HashMap::new(), ibis_host_trip: None,
     };
     // late for the trip, standing at stop 2 whose place is known
     d.place(glam::DVec3::new(20.0, 0.0, 0.0), 250.0);
@@ -159,87 +156,6 @@ fn duty_place_keeps_first_stop_while_its_place_is_unknown() {
     d.feed_host(&mut bus, 250.0);
     assert_eq!(bus.host.tt_busstop_index, 0);
     assert_eq!(bus.host.tt_stops[0].0, "s0");
-}
-
-#[test]
-fn feed_host_hides_pass_through_stops_from_ibis() {
-    let mut duty = early_departure_duty();
-    duty.trips[0] = planned(
-        100.0,
-        &[
-            (0.0, 100.0, 100.0),
-            (100.0, 200.0, 200.0),
-            (200.0, 300.0, 300.0),
-            (300.0, 400.0, 400.0),
-        ],
-    );
-    duty.trips[0].stops[1].stops = false;
-    duty.next_stop = 1;
-
-    let mut bus = timetable_test_vehicle();
-    duty.feed_host(&mut bus, 150.0);
-
-    assert_eq!(bus.host.tt_stops.len(), 4, "the internal timetable remains complete");
-    assert_eq!(
-        bus.host.tt_ibis_stops.iter().map(|s| s.0.as_str()).collect::<Vec<_>>(),
-        vec!["s0", "s2", "s3"]
-    );
-    assert_eq!(bus.host.tt_busstop_index, 1, "internal timetable index is unchanged");
-    assert_eq!(bus.host.tt_ibis_busstop_index, 1, "IBIS points to the next calling stop");
-}
-
-#[test]
-fn feed_host_hides_plugin_closed_stops_from_ibis() {
-    let mut duty = early_departure_duty();
-    duty.trips[0] = planned(100.0, &[(0.0, 100.0, 100.0), (100.0, 200.0, 200.0), (200.0, 300.0, 300.0)]);
-    duty.trips[0].stops[1].closed = Some("plugin diversion".into());
-    duty.next_stop = 1;
-
-    let mut bus = timetable_test_vehicle();
-    duty.feed_host(&mut bus, 150.0);
-
-    assert_eq!(bus.host.tt_ibis_stops.iter().map(|s| s.0.as_str()).collect::<Vec<_>>(), vec!["s0", "s2"]);
-    assert_eq!(bus.host.tt_ibis_busstop_index, 1);
-}
-
-#[test]
-fn feed_host_rebuilds_ibis_rows_when_a_stop_is_closed() {
-    let mut duty = early_departure_duty();
-    duty.trips[0] = planned(100.0, &[(0.0, 100.0, 100.0), (100.0, 200.0, 200.0), (200.0, 300.0, 300.0)]);
-    let mut bus = timetable_test_vehicle();
-
-    duty.feed_host(&mut bus, 150.0);
-    assert_eq!(bus.host.tt_ibis_stops.len(), 3);
-
-    duty.set_closed_stops(&["s1".into()], "diversion");
-    duty.feed_host(&mut bus, 151.0);
-
-    assert_eq!(bus.host.tt_ibis_stops.iter().map(|s| s.0.as_str()).collect::<Vec<_>>(), vec!["s0", "s2"]);
-    assert_eq!(bus.host.tt_ibis_busstop_index, 1);
-}
-
-#[test]
-fn depot_run_keeps_all_stops_in_ibis_when_none_are_calling() {
-    let mut duty = early_departure_duty();
-    duty.trips[0] = planned(
-        100.0,
-        &[
-            (0.0, 100.0, 100.0),
-            (100.0, 200.0, 200.0),
-            (200.0, 300.0, 300.0),
-        ],
-    );
-    for stop in &mut duty.trips[0].stops {
-        stop.stops = false;
-    }
-    duty.next_stop = 0;
-
-    let mut bus = timetable_test_vehicle();
-    duty.feed_host(&mut bus, 100.0);
-
-    assert_eq!(bus.host.tt_ibis_stops.len(), 3);
-    assert_eq!(bus.host.tt_ibis_stops[0].0, "s0");
-    assert_eq!(bus.host.tt_ibis_busstop_index, 0);
 }
 
 /// The terminus served (the bus stopped there, a door open): the duty goes on to the next
@@ -359,7 +275,6 @@ fn resumed_duty_keeps_its_trip_and_stop_before_the_first_script_frame() {
         position: None,
         unnumbered_public: Vec::new(),
         passed: Default::default(),
-        ibis_stops: HashMap::new(), ibis_host_trip: None,
     };
     // The same name appears twice. Its saved ordinal, rather than its name or the
     // bus's position far from any stop, selects the second occurrence.
@@ -449,7 +364,6 @@ fn a_stop_placed_only_once_its_tile_loads_is_reached() {
         position: None,
         unnumbered_public: Vec::new(),
         passed: Default::default(),
-        ibis_stops: HashMap::new(), ibis_host_trip: None,
     };
     d.advance(glam::DVec3::new(0.0, 0.0, 0.0), 0.0);
     d.advance(glam::DVec3::new(100.0, 0.0, 0.0), 10.0);
@@ -495,7 +409,6 @@ fn the_next_trip_starts_at_its_first_stop_though_the_last_one_was_missed() {
         position: None,
         unnumbered_public: Vec::new(),
         passed: Default::default(),
-        ibis_stops: HashMap::new(), ibis_host_trip: None,
     };
     d.advance(glam::DVec3::new(0.0, 0.0, 0.0), 0.0);
     d.advance(glam::DVec3::new(100.0, 0.0, 0.0), 10.0);
@@ -537,7 +450,6 @@ fn the_next_trip_starts_at_its_first_stop_though_the_last_one_was_missed() {
         position: None,
         unnumbered_public: Vec::new(),
         passed: Default::default(),
-        ibis_stops: HashMap::new(), ibis_host_trip: None,
     };
     d.advance(glam::DVec3::new(800.0, 0.0, 0.0), 345.0);
     assert_eq!(d.trip_index, 0);
@@ -548,8 +460,7 @@ fn the_next_trip_starts_at_its_first_stop_though_the_last_one_was_missed() {
 fn the_next_stop_can_be_skipped() {
     let trip = planned(0.0, &[(0.0, 0.0, 0.0), (100.0, 60.0, 60.0), (500.0, 120.0, 120.0), (1000.0, 200.0, 200.0)]);
     let next = planned(400.0, &[(1040.0, 400.0, 400.0), (1500.0, 500.0, 500.0)]);
-    let mut d = PlayerDuty { line: "5".into(), tour: "1".into(), trips: vec![trip, next], trip_index: 0, first_trip: 0, next_stop: 0, at_stop: false, arrived_late: None, done: false, served_terminus: None, left_late: None, held_back: false, placed: true, trip_changed: false, skipped: None, run: 0, finished: None, reopened: None, picked: true, first_update: None, heading: 90.0, position: None, unnumbered_public: Vec::new(), passed: Default::default(),
-        ibis_stops: HashMap::new(), ibis_host_trip: None };
+    let mut d = PlayerDuty { line: "5".into(), tour: "1".into(), trips: vec![trip, next], trip_index: 0, first_trip: 0, next_stop: 0, at_stop: false, arrived_late: None, done: false, served_terminus: None, left_late: None, held_back: false, placed: true, trip_changed: false, skipped: None, run: 0, finished: None, reopened: None, picked: true, first_update: None, heading: 90.0, position: None, unnumbered_public: Vec::new(), passed: Default::default() };
     // at the first stop and away from it: the next is s1
     d.advance(glam::DVec3::new(0.0, 0.0, 0.0), 0.0);
     d.advance(glam::DVec3::new(50.0, 0.0, 0.0), 10.0);
@@ -606,7 +517,6 @@ fn a_page_can_go_back_to_an_earlier_stop() {
         position: None,
         unnumbered_public: Vec::new(),
         passed: Default::default(),
-        ibis_stops: HashMap::new(), ibis_host_trip: None,
     };
     assert!(d.skip_to(2));
     assert_eq!(d.next_stop, 2);
@@ -664,7 +574,6 @@ fn a_loop_does_not_jump_to_the_stop_over_the_road() {
         position: None,
         unnumbered_public: Vec::new(),
         passed: Default::default(),
-        ibis_stops: HashMap::new(), ibis_host_trip: None,
     };
     // at stop 0, then leaving east
     d.advance(glam::DVec3::new(0.0, 0.0, 0.0), 0.0);
@@ -705,7 +614,6 @@ fn stops_passed_without_stopping_are_told_once() {
         position: None,
         unnumbered_public: Vec::new(),
         passed: Default::default(),
-        ibis_stops: HashMap::new(), ibis_host_trip: None,
     };
     d.advance(glam::DVec3::new(0.0, 0.0, 0.0), 0.0);
     d.advance(glam::DVec3::new(60.0, 0.0, 0.0), 30.0);
@@ -743,35 +651,6 @@ fn closed_stops_passed_are_not_missed() {
     // and an empty list opens them again
     assert_eq!(d.set_closed_stops(&[], ""), 0);
     assert!(d.trip().stops.iter().all(|s| s.closed.is_none()));
-}
-
-#[test]
-fn catch_up_skips_pass_through_stations() {
-    let mut trip = planned(
-        0.0,
-        &[
-            (0.0, 0.0, 0.0),
-            (100.0, 60.0, 60.0),
-            (500.0, 120.0, 120.0),
-            (1000.0, 200.0, 200.0),
-            (1500.0, 280.0, 280.0),
-        ],
-    );
-    trip.stops[2].stops = false;
-    trip.set_dirs();
-
-    let mut d = PlayerDuty::new("5".into(), "1".into(), vec![trip], 0, 0, true);
-    (d.placed, d.heading) = (true, 90.0);
-
-    d.advance(glam::DVec3::new(0.0, 0.0, 0.0), 0.0);
-    d.advance(glam::DVec3::new(60.0, 0.0, 0.0), 30.0);
-
-    d.advance(glam::DVec3::new(500.0, 0.0, 0.0), 60.0);
-    assert_eq!(d.next_stop, 1);
-
-    d.advance(glam::DVec3::new(1000.0, 0.0, 0.0), 90.0);
-    assert_eq!(d.next_stop, 3);
-    assert_eq!(d.take_skipped(), Some((1, 2, 4)));
 }
 
 #[test]
@@ -837,7 +716,6 @@ fn a_duty_starts_with_the_trip_that_fits_the_time() {
         position: None,
         unnumbered_public: Vec::new(),
         passed: Default::default(),
-        ibis_stops: HashMap::new(), ibis_host_trip: None,
     };
     // 200 m from the first stop two minutes before the departure: early, next stop the first
     assert_eq!(d.advance(glam::DVec3::new(300.0, 0.0, 0.0), now), None);
@@ -896,7 +774,6 @@ fn a_duty_starts_with_a_trip_the_bus_can_reach() {
         position: None,
         unnumbered_public: Vec::new(),
         passed: Default::default(),
-        ibis_stops: HashMap::new(), ibis_host_trip: None,
     };
     // 4 km away two minutes before the 15:07 leaves: the duty begins with the 16:01
     let mut d = duty(trips.clone());
@@ -946,7 +823,6 @@ fn ibis_skips_a_service_leg_for_the_player_display() {
         position: None,
         unnumbered_public: Vec::new(),
         passed: Default::default(),
-        ibis_stops: HashMap::new(), ibis_host_trip: None,
     };
     let (trip, stop) = d.trip_for_ibis();
     assert_eq!(trip.line, "5E");

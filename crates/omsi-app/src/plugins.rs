@@ -356,7 +356,7 @@ pub(crate) fn game_info(app: &crate::App) -> Vec<(&'static str, InfoValue)> {
     v
 }
 
-fn next_calling_stop(stops: &[crate::schedule::PlannedStop], next: usize) -> usize {
+pub(crate) fn next_calling_stop(stops: &[crate::schedule::PlannedStop], next: usize) -> usize {
     (next..stops.len()).find(|&i| stops[i].calls()).unwrap_or_else(|| if stops.iter().any(|stop| stop.calls()) { stops.len() } else { next.min(stops.len().saturating_sub(1)) })
 }
 

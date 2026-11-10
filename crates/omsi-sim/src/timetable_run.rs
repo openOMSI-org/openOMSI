@@ -225,10 +225,6 @@ pub struct PlayerDuty {
     /// A stop driven past without opening the doors, for the bus that stops further on and
     /// serves it there (see [`PlayerDuty::step_back`]).
     pub(crate) passed: PassedStop,
-    /// Calling-stop rows for each trip, built lazily and invalidated when closures change.
-    ibis_stops: HashMap<usize, Vec<usize>>,
-    /// Trip whose cached IBIS rows are currently installed on the vehicle host.
-    ibis_host_trip: Option<usize>,
 }
 
 /// What [`PlayerDuty::step_back`] needs to know of the stops the bus left.

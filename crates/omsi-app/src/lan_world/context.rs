@@ -41,6 +41,4 @@ pub(crate) fn apply_ai_context(
         .map(|s| (s.1.clone(), s.2, s.3))
         .collect();
     host.tt_stop_ids = context.stops.iter().map(|s| s.0).collect();
-    host.tt_ibis_stops.clone_from(&host.tt_stops);
-    host.tt_ibis_busstop_index = host.tt_busstop_index;
 }

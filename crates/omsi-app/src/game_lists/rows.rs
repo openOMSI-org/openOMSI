@@ -55,8 +55,6 @@ pub(crate) fn clear_timetable(v: &mut omsi_sim::VehicleInstance) {
     h.tt_line.clear();
     h.tt_stops.clear();
     h.tt_stop_ids.clear();
-    h.tt_ibis_stops.clear();
-    h.tt_ibis_busstop_index = -1;
     h.tt_busstop_index = -1;
     h.tt_terminus_index = -1;
     h.tt_delay = 0.0;

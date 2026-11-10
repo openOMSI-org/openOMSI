@@ -191,7 +191,10 @@ pub(super) fn humans(cx: HumansCx, dt: f32) {
         h.set_player_next_stop(
             cx.duty.duty
                 .as_ref()
-                .and_then(|d| d.trip().stops.iter().skip(d.next_stop).find(|s| s.calls())),
+                .and_then(|d| {
+                    let stops = &d.trip().stops;
+                    stops.get(crate::plugins::next_calling_stop(stops, d.next_stop))
+                }),
         );
         let step_dt = if *cx.clock.paused { 0.0 } else { dt };
         // (OMSI_SIM_THREAD: what the people's step made during the last picture is taken

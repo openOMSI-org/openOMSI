@@ -188,8 +188,6 @@ impl TrafficSim {
         car.vehicle.host.tt_line.clear();
         car.vehicle.host.tt_stops.clear();
         car.vehicle.host.tt_stop_ids.clear();
-        car.vehicle.host.tt_ibis_stops.clear();
-        car.vehicle.host.tt_ibis_busstop_index = -1;
         car.vehicle.host.tt_busstop_index = -1;
         car.vehicle.host.tt_terminus_index = -1;
         car.vehicle.host.tt_delay = 0.0;
