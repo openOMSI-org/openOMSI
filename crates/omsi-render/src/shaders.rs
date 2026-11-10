@@ -138,6 +138,6 @@ mod tests {
     fn assembled_shaders_are_the_old_files() {
         let (scene, enhanced) = (super::SCENE.replace("\r\n", "\n"), super::ENHANCED.replace("\r\n", "\n"));
         assert_eq!((scene.len(), fnv1a(&scene)), (141129, 10659386180183282841));
-        assert_eq!((enhanced.len(), fnv1a(&enhanced)), (103323, 18273867677402491044));
+        assert_eq!((enhanced.len(), fnv1a(&enhanced)), (102787, 11307986208591506565));
     }
 }

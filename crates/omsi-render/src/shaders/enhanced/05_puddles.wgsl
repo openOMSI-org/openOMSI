@@ -30,15 +30,12 @@ fn fs_puddle_vehicle(input: FsIn) -> @location(0) vec4<f32> {
     let color = shade_enhanced(input, &unused, true, eye);
     let fade = vehicle_reflection.cabin_fade;
     if (fade.x > 0.0) {
-        // For cabin glass only: source-to-pane travel along the reflected ray,
-        // not just perpendicular distance (which misses distant side-window
-        // sources). The mirrored eye lies on the other side of the pane.
+        // Ray travel also fades distant sources along side windows.
         let eye_height = max(plane.w - dot(plane.xyz, eye), 0.0);
         let travel = length(input.world - eye) * height / max(height + eye_height, 1e-4);
         let weight = fade.x * fade.x / (fade.x * fade.x + travel * travel)
             * (1.0 - smoothstep(fade.y, fade.z, travel));
-        // Preserve depth and alpha: a dim reflected object still occludes what
-        // is behind it. Brightness, light maps and emissive sources all fade.
+        // Dim objects must still occlude geometry behind them.
         return vec4<f32>(color.rgb * weight, color.a);
     }
     return color;

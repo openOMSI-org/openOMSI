@@ -1,14 +1,10 @@
-//! Planar reflections of the lit cabin in its windows. Unlike screen-space rays,
-//! a mirrored geometry capture sees the seats, handrails and people behind the eye.
-//! Two visible pane planes, at at most 640 x 360 each, bound the extra rendering.
+mod refresh;
 
 use crate::*;
 use crate::passes::{FrameCtx, kind_of};
 
 const PLANES: usize = 2;
-// Half strength at 3 m, fading smoothly away between 8 and 14 m of travel to the
-// pane. This visibility envelope keeps distant saloon imagery from washing out
-// the road; it supplements the actual lamp-to-surface lighting, not replaces it.
+// Fade distant cabin imagery before it washes out the road.
 const DISTANCE_FADE: [f32; 4] = [3.0, 8.0, 14.0, 0.0];
 
 #[repr(C)]
@@ -21,7 +17,8 @@ pub(crate) struct Uniform {
 pub(crate) struct Plan {
     planes: Vec<glam::Vec4>,
     panes: Vec<Batch>,
-    cabin: Vec<Batch>,
+    cabin: Vec<Vec<Batch>>,
+    refresh: refresh::State,
 }
 
 fn pane(mat: &Material) -> bool {
@@ -33,9 +30,7 @@ fn plane_error(a: glam::Vec4, b: glam::Vec4) -> f32 {
     (a.w - b.w).abs() + 4.0 * (1.0 - a.truncate().dot(b.truncate()).clamp(-1.0, 1.0))
 }
 
-/// Keep the largest visible surfaces, merging the two faces/layers of a pane.
-/// Planes come from the authored triangles, so tilted glass and a rotated bus
-/// reflect the cabin in the right direction rather than assuming a vertical wall.
+// Authored planes preserve the reflection direction of tilted glass.
 fn planes(scene: &Scene, f: &FrameCtx, visible: &[(usize, f32, bool)], origin: DVec3) -> Vec<glam::Vec4> {
     let mut candidates = Vec::new();
     for &(i, _, _) in visible {
@@ -56,8 +51,7 @@ fn planes(scene: &Scene, f: &FrameCtx, visible: &[(usize, f32, bool)], origin: D
             if n.length_squared() < 0.5 || n.dot(to_eye) < 0.08 || distance > 8.0 { continue; }
             let radius = (flat.hi - flat.lo).length() * scene::transform_scale(inst.transform) * 0.5;
             if (-to_eye).dot(f.camera.forward()) + radius < 0.1 { continue; }
-            // Projected area favours the windscreen when looking forwards, and the
-            // side pane when turning to it. Very small instrument covers stay out.
+            // Prefer the pane occupying most of the view.
             let extent = (flat.hi - flat.lo) * scene::transform_scale(inst.transform);
             let area = extent.x * extent.y + extent.x * extent.z + extent.y * extent.z;
             if area < 0.12 { continue; }
@@ -75,6 +69,19 @@ fn planes(scene: &Scene, f: &FrameCtx, visible: &[(usize, f32, bool)], origin: D
     selected
 }
 
+fn nearby_instances(scene: &Scene, parts: &[&(DVec3, f64, [f32; 6])]) -> Vec<usize> {
+    let spheres: Vec<_> = parts.iter().map(|(o, _, bb)| {
+        (*o, glam::DVec3::new(bb[0] as f64, bb[1] as f64, bb[2] as f64).length() * 0.5
+            + glam::DVec3::new(bb[3] as f64, bb[4] as f64, bb[5] as f64).length() + 0.1)
+    }).collect();
+    let cached = scene.cache_bounds && scene.block_bounds.len() == scene.instances.len().div_ceil(scene::CULL_BLOCK);
+    (0..scene.instances.len().div_ceil(scene::CULL_BLOCK)).filter(|&b| {
+        if !cached { return true; }
+        let (lo, hi) = scene.block_bounds[b];
+        lo.cmple(hi).all() && spheres.iter().any(|&(o, r)| o.clamp(lo, hi).distance_squared(o) <= r * r)
+    }).flat_map(|b| b * scene::CULL_BLOCK..((b + 1) * scene::CULL_BLOCK).min(scene.instances.len())).collect()
+}
+
 pub(crate) fn plan(scene: &Scene, f: &FrameCtx, visible: &[(usize, f32, bool)], list: &mut Vec<u32>) -> Option<Plan> {
     if !f.enhanced || f.lighting.reflection_strength <= 0.0 || !f.prepass_on || !(f.with_overlays || f.xr_view) { return None; }
     let own = f.lighting.inside.as_ref()?;
@@ -85,16 +92,25 @@ pub(crate) fn plan(scene: &Scene, f: &FrameCtx, visible: &[(usize, f32, bool)], 
     let parts: Vec<_> = std::iter::once(own).chain(f.lighting.puddle_parts.iter()).take(4).collect();
     let bounds: Vec<_> = parts.iter().map(|p| passes::VehicleBox::new(p, f.ro)).collect();
     let mut pane_items = Vec::new();
-    let mut solid_items = Vec::new();
-    let mut blend_items = Vec::new();
-    // Deliberately independent of main-view culling: the reflected cabin is behind
-    // the camera, and the mirror-only driver must be visible in the reflection.
-    for inst in &scene.instances {
+    let view = Mat4::look_to_rh(f.cam_rel, f.camera.forward(), f.camera.up());
+    let vp = f.projection.map_or_else(|| f.camera.view_proj(f.aspect, f.ro), |p| p * view);
+    let frustum = [vp.row(3) + vp.row(0), vp.row(3) - vp.row(0), vp.row(3) + vp.row(1), vp.row(3) - vp.row(1), vp.row(2), vp.row(3) - vp.row(2)];
+    let mut solid_items = vec![Vec::new(); planes.len()];
+    let mut blend_items = vec![Vec::new(); planes.len()];
+    // Include cabin geometry behind the eye, but skip distant map blocks.
+    let nearby = nearby_instances(scene, &parts);
+    for i in nearby {
+        let inst = &scene.instances[i];
         if !inst.visible || inst.blob || inst.surface { continue; }
         let own_part = inst.roof.is_some() && parts.iter().any(|p| inst.origin.distance_squared(p.0) < 0.01);
         let centre = (inst.origin - f.ro).as_vec3() + inst.bounds.centre;
         let human = inst.roof.is_none() && inst.bounds.radius < 2.0 && bounds.iter().any(|b| b.contains(centre, -0.05));
         if !own_part && !human { continue; }
+        let captured: Vec<_> = planes.iter().map(|p| {
+            let height = p.truncate().dot(centre) - p.w;
+            let reflected = centre - 2.0 * p.truncate() * height;
+            height + inst.bounds.radius >= 0.0 && frustum.iter().all(|f| f.dot(reflected.extend(1.0)) >= -inst.bounds.radius * f.truncate().length())
+        }).collect();
         let radius = if inst.object_radius > 0.0 { inst.object_radius } else { inst.bounds.radius };
         let distance = if inst.object_radius > 0.0 { inst.origin.distance(f.camera.position) as f32 } else { centre.distance(f.cam_rel) };
         let size = scene::object_screen_size(radius, distance, f.camera.fov_deg.to_radians().max(1e-3));
@@ -108,22 +124,26 @@ pub(crate) fn plan(scene: &Scene, f: &FrameCtx, visible: &[(usize, f32, bool)], 
                 if own_part && (alpha >= 1.0 / 512.0 || mat.uniform.glow[2] > 0.5) { pane_items.push(item); }
                 continue;
             }
-            // Never capture rain, dirt, or glass again: that would reflect the
-            // environment photograph and opaque window films into the cabin.
+            // Exclude glass films to avoid reflecting the environment twice.
             if mat.uniform.emissive[3] > 0.5 || (mat.alpha == AlphaMode::Blend && (mat.no_z_write || alpha < 1.0 / 512.0)) { continue; }
             if mat.alpha == AlphaMode::Blend {
                 item.pipe = pipe_code(PIPE_BLEND, culls_back_faces(scene, inst), false);
-                blend_items.push(item);
+                for (items, &keep) in blend_items.iter_mut().zip(&captured) { if keep { items.push(item); } }
             } else {
-                solid_items.push(item);
+                for (items, &keep) in solid_items.iter_mut().zip(&captured) { if keep { items.push(item); } }
             }
         }
     }
     let (mut panes, mut cabin) = (Vec::new(), Vec::new());
     batch_items(scene, &mut pane_items, true, list, &mut panes);
-    batch_items(scene, &mut solid_items, true, list, &mut cabin);
-    batch_items(scene, &mut blend_items, false, list, &mut cabin);
-    Some(Plan { planes, panes, cabin })
+    for (solid, blend) in solid_items.iter_mut().zip(&mut blend_items) {
+        let mut batches = Vec::new();
+        batch_items(scene, solid, true, list, &mut batches);
+        batch_items(scene, blend, false, list, &mut batches);
+        cabin.push(batches);
+    }
+    let refresh = refresh::State::new(scene, f, &planes, &cabin, list);
+    Some(Plan { planes, panes, cabin, refresh })
 }
 
 struct Capture {
@@ -142,6 +162,7 @@ pub(crate) struct Pipelines {
     overlay: Option<(wgpu::TextureView, wgpu::BindGroup)>,
     captures: Vec<Capture>,
     size: (u32, u32),
+    refreshed: Option<(std::time::Instant, refresh::State)>,
 }
 
 impl Pipelines {
@@ -172,18 +193,18 @@ impl Pipelines {
             fragment: Some(wgpu::FragmentState { module: shader, entry_point: Some("fs_cabin_resolve"), targets: &[Some(wgpu::ColorTargetState { format: HDR_FORMAT, blend: Some(wgpu::BlendState { color: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One, dst_factor: wgpu::BlendFactor::One, operation: wgpu::BlendOperation::Add }, alpha: wgpu::BlendComponent::OVER }), write_mask: wgpu::ColorWrites::COLOR })], compilation_options: Default::default() }),
             multiview_mask: None, cache: crate::pipeline_cache::get(device).as_ref(),
         });
-        Self { layout, compose, resolve, overlay: None, captures: Vec::new(), size: (0, 0) }
+        Self { layout, compose, resolve, overlay: None, captures: Vec::new(), size: (0, 0), refreshed: None }
     }
 
     fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, plane_layout: &wgpu::BindGroupLayout, f: &FrameCtx, plan: &Plan) {
-        let scale = (640.0 / f.width as f32).min(360.0 / f.height as f32).min(0.5);
+        let scale = (320.0 / f.width as f32).min(180.0 / f.height as f32).min(0.5);
         let size = ((f.width as f32 * scale).ceil().max(1.0) as u32, (f.height as f32 * scale).ceil().max(1.0) as u32);
-        if self.size != size { self.captures.clear(); self.size = size; }
+        if self.size != size || self.captures.len() != plan.planes.len() { self.captures.clear(); self.refreshed = None; self.size = size; }
         self.captures.truncate(plan.planes.len());
         while self.captures.len() < plan.planes.len() {
-            let texture = |format| device.create_texture(&wgpu::TextureDescriptor { label: Some("cabin reflection"), size: wgpu::Extent3d { width: size.0, height: size.1, depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format, usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING, view_formats: &[] }).create_view(&Default::default());
-            let color = texture(HDR_FORMAT);
-            let depth = texture(DEPTH_FORMAT);
+            let texture = |format| device.create_texture(&wgpu::TextureDescriptor { label: Some("cabin reflection"), size: wgpu::Extent3d { width: size.0, height: size.1 * plan.planes.len() as u32, depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format, usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING, view_formats: &[] }).create_view(&Default::default());
+            let color = self.captures.first().map_or_else(|| texture(HDR_FORMAT), |c| c.color.clone());
+            let depth = self.captures.first().map_or_else(|| texture(DEPTH_FORMAT), |c| c.depth.clone());
             let buffer = |size| device.create_buffer(&wgpu::BufferDescriptor { label: Some("cabin reflection parameters"), size, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
             let plane = buffer(std::mem::size_of::<puddles::VehicleUniform>() as u64);
             let plane_bg = device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("cabin mirror plane"), layout: plane_layout, entries: &[wgpu::BindGroupEntry { binding: 0, resource: plane.as_entire_binding() }] });
@@ -222,38 +243,42 @@ impl Renderer {
     pub(crate) fn encode_cabin_reflections(&mut self, encoder: &mut wgpu::CommandEncoder, scene: &Scene, f: &FrameCtx, plan: Option<&Plan>, timers: &mut passes::PassTimers) {
         let Some(pipes) = self.cabin_reflections.as_mut() else { return };
         let Some(plan) = plan else {
-            // A mirror is rendered before the main view; do not throw away the main
-            // view's targets at every mirror. Release them when leaving the bus.
-            if f.with_overlays || f.xr_view { pipes.captures.clear(); pipes.overlay = None; }
+            // Mirror rendering must retain the main view's targets.
+            if f.with_overlays || f.xr_view { pipes.captures.clear(); pipes.overlay = None; pipes.refreshed = None; }
             return;
         };
         let Some(vehicle) = self.puddles.as_ref() else { return };
         let Some(ao) = self.targets.ao.as_ref() else { return };
         pipes.prepare(&self.device, &self.queue, &vehicle.vehicle[0].get_bind_group_layout(2), f, plan);
-        for c in &pipes.captures {
+        let update = f.xr_view || pipes.refreshed.as_ref().is_none_or(|(at, state)| at.elapsed().as_secs_f32() >= 1.0 / 30.0 || !state.matches(&plan.refresh));
+        if update {
+            let c = &pipes.captures[0];
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("cabin reflected geometry"), color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: &c.color, resolve_target: None, depth_slice: None, ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store } })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment { view: &c.depth, depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(0.0), store: wgpu::StoreOp::Discard }), stencil_ops: None }),
                 timestamp_writes: pass_timer(timers.set.as_ref(), &mut timers.timed, "cabin capture"), occlusion_query_set: None, multiview_mask: None,
             });
             pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
-            pass.set_bind_group(2, &c.plane_bg, &[]);
-            encode_batches(&mut pass, scene, &plan.cabin, |pipe| &vehicle.vehicle[pipe as usize]);
+            for (i, (c, batches)) in pipes.captures.iter().zip(&plan.cabin).enumerate() {
+                pass.set_viewport(0.0, (i as u32 * pipes.size.1) as f32, pipes.size.0 as f32, pipes.size.1 as f32, 0.0, 1.0);
+                pass.set_scissor_rect(0, i as u32 * pipes.size.1, pipes.size.0, pipes.size.1);
+                pass.set_bind_group(2, &c.plane_bg, &[]);
+                encode_batches(&mut pass, scene, batches, |pipe| &vehicle.vehicle[pipe as usize]);
+            }
+            pipes.refreshed = Some((std::time::Instant::now(), plan.refresh.clone()));
         }
         let (overlay, resolve_bg) = pipes.overlay.as_ref().unwrap();
-        // Replace into one picture first: a pane with coincident front/back faces
-        // or two authored layers must reflect the cabin only once.
+        // Replacement blending prevents coincident pane layers doubling the reflection.
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("cabin reflected in glass"), color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: overlay, resolve_target: None, depth_slice: None, ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store } })],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment { view: &ao.depth_view, depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store }), stencil_ops: None }),
             timestamp_writes: pass_timer(timers.set.as_ref(), &mut timers.timed, "cabin glass"), occlusion_query_set: None, multiview_mask: None,
         });
         pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
-        for c in &pipes.captures {
-            pass.set_bind_group(2, &c.plane_bg, &[]);
-            pass.set_bind_group(3, &c.picture_bg, &[]);
-            encode_batches(&mut pass, scene, &plan.panes, |pipe| &pipes.compose[(pipe % 4 / 2) as usize]);
-        }
+        let c = &pipes.captures[0];
+        pass.set_bind_group(2, &c.plane_bg, &[]);
+        pass.set_bind_group(3, &c.picture_bg, &[]);
+        encode_batches(&mut pass, scene, &plan.panes, |pipe| &pipes.compose[(pipe % 4 / 2) as usize]);
         drop(pass);
         let hdr = &self.targets.hdr_targets[&(f.width, f.height)];
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

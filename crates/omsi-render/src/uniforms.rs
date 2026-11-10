@@ -86,8 +86,7 @@ pub(crate) struct CameraUniform {
     /// (Every shader's copy of this struct carries it, read or not - see the test
     /// `shaders_validate_and_match_the_uniforms`.)
     pub(crate) spot: [[f32; 4]; 4],
-    /// Planes whose cabin reflections are captured this view; zero normals disable
-    /// them. The ordinary reflection shader leaves these panes to that capture.
+    /// Zero normals leave panes on the ordinary reflection path.
     pub(crate) cabin_planes: [[f32; 4]; 2],
 }
 

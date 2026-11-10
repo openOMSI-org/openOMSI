@@ -169,8 +169,7 @@ pub struct MaterialExtra {
     /// A named transparent window layer. This is separate from envmap/transmap because
     /// stock and add-on buses often use a plain alpha-blended window texture.
     pub glass: bool,
-    /// A real pane whose authored environment layer fades with `Envir_Brightness`.
-    /// Cabin reflections stay visible at night; other script alpha still hides glass.
+    /// `Envir_Brightness` fades the environment layer, not the physical pane.
     pub daylight_glass: bool,
     /// The night map is switched by something other than the time of day - a `[matl_item]`'s
     /// variable, a vehicle mesh's `[visible]`: it glows by day as well (warning lamps,

@@ -173,3 +173,34 @@ fn reflection_case(msaa: u32, ray_tracing: bool) {
     let blocked = renderer.render_to_image(&mut scene, 128, 128, &camera, &lighting).unwrap();
     assert!(pixel(&blocked, 54, 70)[0] <= pixel(&hole, 54, 70)[0] - seat_diff[0] + 2, "a foreground dashboard part occludes the reflection");
 }
+
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn adjacent_panes_keep_separate_cabin_images() {
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let mut renderer = pollster::block_on(Renderer::new_with(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        RenderOptions { msaa: 1, ray_tracing: false, ssao: false, shadow_size: 256, fxaa: false, light_shadows: 0, ..Default::default() })).unwrap();
+    let mut scene = renderer.new_scene();
+    let glass = renderer.add_material_extra(&mut scene, None, AlphaMode::Blend, [0.0, 0.0, 0.0, 0.08], false, None, None, None, None, [0.0; 3],
+        MaterialExtra { glass: true, daylight_glass: true, no_z_write: true, ..Default::default() });
+    let left = panel(&renderer, &mut scene, 2.0, [-2.0, 0.0], [0.0, 3.0], glass, true);
+    let right = panel(&renderer, &mut scene, 3.0, [0.0, 3.0], [0.0, 3.0], glass, true);
+    let red = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [1.0, 0.0, 0.0, 1.0], true);
+    let blue = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [0.0, 0.0, 1.0, 1.0], true);
+    panel(&renderer, &mut scene, -2.0, [-1.6, -0.8], [1.1, 1.9], red, true);
+    panel(&renderer, &mut scene, -2.0, [0.8, 1.6], [1.1, 1.9], blue, true);
+    let camera = Camera { position: DVec3::new(0.0, 0.0, 1.5), yaw: 0.0, pitch: 0.0, roll: 0.0, fov_deg: 90.0, near: 0.1, far: 100.0 };
+    let lighting = Lighting { enhanced: true, sun_intensity: 0.0, ambient: Vec3::ZERO, secondary: Vec3::ZERO, night: 1.0, shadows: false, lamp_shadows: false, fog_density: 0.0,
+        inside: Some((DVec3::ZERO, 0.0, [6.0, 10.0, 3.2, 0.0, 0.0, 1.5])), ..Default::default() };
+    let mut images = Vec::new();
+    for (a, b) in [(true, false), (false, true), (true, true)] {
+        renderer.set_params(&mut scene, left, &[0.0], a, &[]);
+        renderer.set_params(&mut scene, right, &[0.0], b, &[]);
+        images.push(renderer.render_to_image(&mut scene, 128, 128, &camera, &lighting).unwrap());
+    }
+    for (x, channel, isolated) in [(51, 0, 0), (74, 2, 1)] {
+        let at = (64 * 128 + x) * 4 + channel;
+        assert!(images[isolated][at] > 10, "the isolated pane reflects its colored source");
+        assert!((images[2][at] as i32 - images[isolated][at] as i32).abs() <= 2, "atlas planes must match separate captures");
+    }
+}
