@@ -73,6 +73,9 @@ pub(super) fn package(root: &Path, base: &(Manifest, Vec<PathBuf>), bus: &str, p
     if !trusted_source(root, &path) {
         return Err("the selected bus resolves outside the trusted content roots".into());
     }
+    if !transfer_policy::allows_file(&path) {
+        return Err("this vehicle forbids multiplayer file transfers".into());
+    }
     let ty = omsi_sim::VehicleType::load(root, &path).map_err(|e| format!("{bus}: {e}"))?;
     if !paint.is_empty() && !ty.paint_schemes.iter().take(128).any(|p| p.name.eq_ignore_ascii_case(paint)) {
         return Err("the selected repaint is not offered by the server".into());
@@ -130,7 +133,11 @@ fn gathered(root: &Path, ty: &omsi_sim::VehicleType) -> Result<Vec<(String, Path
     if all.iter().any(|path| !trusted_source(root, path)) {
         return Err("selected vehicle dependencies resolve outside the trusted content roots".into());
     }
-    Ok(upload::listed(root, all.into_iter().collect()))
+    let files = upload::listed(root, all.into_iter().collect());
+    if !transfer_policy::allows_dependencies(&files) {
+        return Err("the vehicle package includes a private coupled vehicle".into());
+    }
+    Ok(files)
 }
 
 fn model_manifest(root: &Path, bus: &str, ty: &omsi_sim::VehicleType) -> Result<(identity::VehicleManifest, Vec<PathBuf>), String> {
@@ -186,6 +193,9 @@ pub(super) fn exact(root: &Path, bus: &str, paint: &str) -> Result<(Manifest, Ve
     if !trusted_source(root, &path) {
         return Err("the selected bus resolves outside the trusted content roots".into());
     }
+    if !transfer_policy::allows_file(&path) {
+        return Err("this vehicle forbids multiplayer file transfers".into());
+    }
     let ty = omsi_sim::VehicleType::load(root, &path).map_err(|e| format!("{bus}: {e}"))?;
     let scheme = if paint.is_empty() { None } else {
         Some(ty.paint_schemes.iter().take(128).position(|p| p.name.eq_ignore_ascii_case(paint))
@@ -196,6 +206,9 @@ pub(super) fn exact(root: &Path, bus: &str, paint: &str) -> Result<(Manifest, Ve
         return Err("selected vehicle dependencies resolve outside the trusted content roots".into());
     }
     let files = upload::listed(root, dependencies);
+    if !transfer_policy::allows_dependencies(&files) {
+        return Err("the vehicle package includes a private coupled vehicle".into());
+    }
     let entries = upload::hashed(&files);
     if entries.len() != files.len() {
         return Err(format!("{} of {} selected vehicle files could not be verified", files.len() - entries.len(), files.len()));
