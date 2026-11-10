@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use omsi_cfg::CfgFile;
+use omsi_cfg::{CfgFile, CfgReader};
 
 /// Monthly climate statistics per location, specified in the map's `openomsi_climate.cfg`
 #[derive(Debug, Clone)]
@@ -12,15 +12,27 @@ pub struct ClimateStats {
 }
 
 impl ClimateStats {
-    pub fn for_map(map: &str, root: &PathBuf) -> Option<ClimateStats> {
+    pub fn for_map(map: &str, root: &Path) -> Option<ClimateStats> {
         Path::new(map).parent().map(|dir| {
-            let dir = dir.strip_prefix(root).unwrap_or(&dir);
-            let climate_path =
-                omsi_cfg::find_in_roots(&dir.join("openomsi_climate.cfg").to_string_lossy())
-                    .map(|x| x.1)?;
+            let rel = dir.strip_prefix(root).unwrap_or(&dir);
+            const CLIMATE_CFG: &'static str = "openomsi_climate.cfg";
+            let climate_path = omsi_cfg::find_in_roots(&rel.join(CLIMATE_CFG).to_string_lossy())
+                .map(|x| x.1)
+                .unwrap_or_else(|| dir.join(CLIMATE_CFG));
             let f = CfgFile::read(climate_path).ok()?;
             Self::from_cfg(&f)
         })?
+    }
+
+    fn read_monthly_values(r: &mut CfgReader) -> Option<Vec<f32>> {
+        r.rest_of_block()
+            .iter()
+            .map(|x| x.trim())
+            .filter(|x| !x.is_empty())
+            .map(|x| x.parse::<f32>())
+            .collect::<Result<Vec<f32>, _>>()
+            .map_err(|e| log::warn!("openomsi_climate.cfg: float parsing error: {e}"))
+            .ok()
     }
 
     pub fn from_cfg(f: &CfgFile) -> Option<ClimateStats> {
@@ -30,26 +42,10 @@ impl ClimateStats {
         while let Some(k) = r.next_keyword() {
             match k.as_str() {
                 "temperature" => {
-                    temp = r
-                        .rest_of_block()
-                        .iter()
-                        .map(|x| x.trim())
-                        .filter(|x| !x.is_empty())
-                        .map(|x| x.parse::<f32>())
-                        .collect::<Result<Vec<f32>, _>>()
-                        .map_err(|e| log::warn!("openomsi_climate.cfg: float parsing error: {e}"))
-                        .ok();
+                    temp = Self::read_monthly_values(&mut r);
                 }
                 "precipitation" => {
-                    precip = r
-                        .rest_of_block()
-                        .iter()
-                        .map(|x| x.trim())
-                        .filter(|x| !x.is_empty())
-                        .map(|x| x.parse::<f32>())
-                        .collect::<Result<Vec<f32>, _>>()
-                        .map_err(|e| log::warn!("openomsi_climate.cfg: float parsing error: {e}"))
-                        .ok();
+                    precip = Self::read_monthly_values(&mut r);
                 }
                 _ => {
                     log::warn!("openomsi_climate.cfg: unknown section [{k}] occurred");
@@ -61,10 +57,12 @@ impl ClimateStats {
             if t.iter().all(|x| (-100.0..=100.0).contains(x))
                 && p.iter().all(|x| (0.0..=5000.0).contains(x))
             {
+                let t = t.as_array().or_else(|| { log::warn!("openomsi_climate.cfg: temperature: {} elements provided, 12 expected; falling back to default", t.len()); None })?;
+                let p = p.as_array().or_else(||  { log::warn!("openomsi_climate.cfg: precipitation: {} elements provided, 12 expected; falling back to default", p.len()); None })?;
                 Some(ClimateStats {
-                temp: *t.as_array().or_else(|| { log::warn!("openomsi_climate.cfg: temperature: {} elements provided, 12 expected; falling back to default", t.len()); None })?,
-                precip: *p.as_array().or_else(||  { log::warn!("openomsi_climate.cfg: precipitation: {} elements provided, 12 expected; falling back to default", p.len()); None })?
-            })
+                    temp: *t,
+                    precip: *p,
+                })
             } else {
                 log::warn!(
                     "openomsi_climate.cfg: some values non-finite or outside the range (-100 to 100 °C, 0 to 5000 mm)"
@@ -78,6 +76,7 @@ impl ClimateStats {
     }
 }
 
+#[cfg(test)]
 mod tests {
 
     #[test]
@@ -113,7 +112,9 @@ mod tests {
         assert!(s1.is_some());
         assert_eq!(
             s1.unwrap().temp,
-            [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]
+            [
+                1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0
+            ]
         );
 
         let f2 = CfgFile {
@@ -145,7 +146,9 @@ mod tests {
         assert!(s2.is_some());
         assert_eq!(
             s2.unwrap().temp,
-            [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]
+            [
+                1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0
+            ]
         );
 
         let f3 = CfgFile {
