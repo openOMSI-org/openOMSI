@@ -1,6 +1,3 @@
-// Settings controls keep their existing contracts; settings-navigation.js arranges them
-// into short topics. Every change goes to settings.cfg at once.
-
 import { html, useState, useEffect, useRef } from '../../vendor/preact-htm.js';
 import { S, useStore, set, toast, remembered, remember } from '../store.js';
 import { t } from '../i18n.js';
