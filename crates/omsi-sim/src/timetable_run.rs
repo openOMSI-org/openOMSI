@@ -110,7 +110,6 @@ impl PlannedStop {
     }
 }
 
-/// The next stop the bus is to call at, or the current timetable stop on a depot run.
 pub fn next_calling_stop(stops: &[PlannedStop], next: usize) -> usize {
     (next..stops.len())
         .find(|&i| stops[i].calls())

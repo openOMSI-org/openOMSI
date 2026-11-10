@@ -748,10 +748,11 @@ impl PlayerDuty {
             }
         }
         let here = of(self.next_stop);
+        let has_calling_stops = trip.stops.iter().any(|s| s.calls());
         let mut best: Option<(usize, f64)> = None;
         for k in self.next_stop + 1..upto {
             let Some(d) = of(k) else { continue };
-            if d >= AT_STOP || here.is_some_and(|h| d >= h) || (!trip.stops[k].calls() && trip.stops.iter().any(|s| s.calls())) || !trip.stops[k].dir.takes(fwd) {
+            if d >= AT_STOP || here.is_some_and(|h| d >= h) || (!trip.stops[k].calls() && has_calling_stops) || !trip.stops[k].dir.takes(fwd) {
                 continue;
             }
             if best.is_none_or(|(_, b)| d < b) {
