@@ -1,4 +1,3 @@
-//! Portable graphics profiles share the existing on-disk format and allowlist.
 use super::graphics_profiles::*;
 use super::*;
 use std::io::{Read, Write};
@@ -28,16 +27,14 @@ fn checked_graphics(value: &Value) -> Result<Value> {
         let Some(value) = object.get(key) else {
             continue;
         };
-        // Numeric selections have been stored both as JSON numbers and strings. Reflections
-        // used to be a toggle; retain compatibility with profiles saved by older releases.
+        // Older profiles used a boolean reflection toggle and numeric strings.
         let normalized = match &defaults[key] {
             Value::Bool(_) if value.is_boolean() => Some(value.clone()),
             Value::Number(_) => {
                 if value.is_number() || (key == "reflections" && value.is_boolean()) {
                     Some(value.clone())
                 } else {
-                    // The settings writer accepts numeric strings for integer choices but
-                    // requires JSON numbers for floats. Normalize both before saving.
+                    // Float settings require JSON numbers in the settings writer.
                     value
                         .as_str()
                         .and_then(|s| s.parse::<serde_json::Number>().ok())
@@ -126,8 +123,7 @@ pub(crate) fn export_graphics_profile_in(base: &Path, name: &str, path: &Path) -
         .ok_or_else(|| anyhow!(i18n::tr("The graphics profile no longer exists.")))?;
     let graphics = checked_graphics(profile)?;
     let text = serde_json::to_string_pretty(&json!({"name": name, "graphics": graphics}))?;
-    // Keep an existing export intact if writing or replacing it fails. The temporary
-    // file is beside the destination, so renaming stays on the same filesystem.
+    // Replace on the same filesystem to preserve existing exports if writing fails.
     let nonce = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
         .as_nanos();
