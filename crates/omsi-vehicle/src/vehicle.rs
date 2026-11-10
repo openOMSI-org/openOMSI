@@ -167,6 +167,8 @@ pub struct Vehicle {
     pub manufacturer: String,
     pub type_name: String,
     pub default_paint: String,
+    /// openOMSI multiplayer extension; absent keeps the legacy sharing default.
+    pub lan_file_transfer: Option<bool>,
     /// The file has a `[friendlyname]`: OMSI offers exactly these in its vehicle list.
     /// Rear sections of articulated buses, trailers and most AI-only variants have none.
     pub has_friendly_name: bool,
@@ -363,6 +365,10 @@ impl Vehicle {
         Ok(Self::parse(&f))
     }
 
+    pub fn allows_file_transfer(&self) -> bool {
+        self.lan_file_transfer.unwrap_or(true)
+    }
+
     pub fn dir(&self) -> &Path {
         self.path.parent().unwrap_or(Path::new(""))
     }
@@ -457,6 +463,19 @@ impl Vehicle {
                     v.manufacturer = r.str().to_string();
                     v.type_name = r.str().to_string();
                     v.default_paint = r.str().to_string();
+                }
+                "openomsi_multiplayer" => {
+                    // Unknown values fail closed: a typo must not disclose a private mod.
+                    for line in r.rest_of_block() {
+                        let line = line.split("//").next().unwrap_or("").trim();
+                        let Some((key, value)) = line.split_once(char::is_whitespace) else { continue };
+                        if key.eq_ignore_ascii_case("allow_file_transfer") {
+                            v.lan_file_transfer = Some(matches!(
+                                value.split_whitespace().next().unwrap_or("").to_ascii_lowercase().as_str(),
+                                "1" | "yes" | "on" | "true"
+                            ));
+                        }
+                    }
                 }
                 "friendlyname_inv" => v.friendly_name_inv = (0..3).map(|_| r.str().to_string()).collect(),
                 "description" => v.description = r.until("[end]").join("\n"),
@@ -805,6 +824,18 @@ impl Vehicle {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn multiplayer_transfer_policy_is_optional_and_keeps_next_block() {
+        let plain = Vehicle::parse(&CfgFile::from_str("plain.bus", "[friendlyname]\nA\nB\nC\n"));
+        assert!(plain.allows_file_transfer());
+        assert_eq!(plain.lan_file_transfer, None);
+        let private = Vehicle::parse(&CfgFile::from_str("private.bus", "[openomsi_multiplayer]\nallow_file_transfer 0\n[mass]\n10\n"));
+        assert!(!private.allows_file_transfer());
+        assert_eq!(private.mass, 10.0);
+        assert!(Vehicle::parse(&CfgFile::from_str("public.bus", "[openomsi_multiplayer]\nallow_file_transfer 1\n")).allows_file_transfer());
+        assert!(!Vehicle::parse(&CfgFile::from_str("bad.bus", "[openomsi_multiplayer]\nallow_file_transfer typo\n")).allows_file_transfer());
+    }
 
     #[test]
     fn suspension_blocks_pick_the_strut_of_each_axle() {
