@@ -656,8 +656,13 @@ fn a_bus_that_makes_no_list_is_not_worked_out_every_frame() {
             Vec::new()
         }
     };
-    // (a bus path that leaves the root: no valid list)
-    let bus = "../outside.bus";
+    // A readable vehicle with an empty list still fails its manifest. Keep the
+    // existing "list only once per bus/paint" regression independent of the new
+    // fast rejection of invalid or protected vehicle paths.
+    let bus = "Vehicles/NoList/no-list.bus";
+    let bus_path = root.join(bus);
+    std::fs::create_dir_all(bus_path.parent().unwrap()).unwrap();
+    std::fs::write(&bus_path, "[friendlyname]\nTest\nNoList\nDefault\n").unwrap();
     own.identify(&root, bus, "paint", lister());
     let t = std::time::Instant::now();
     while !own.has_failed(bus, "paint") && t.elapsed() < std::time::Duration::from_secs(10) {
