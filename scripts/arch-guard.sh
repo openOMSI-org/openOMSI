@@ -10,10 +10,11 @@
 # the check when a crate matching <from> depends on one matching <to>; `allow <from> <to>`
 # records an existing edge that breaks a rule and is still to be removed. An allowance that is
 # no longer needed fails the check as well, so that the line is deleted and the edge cannot
-# come back. `app-growth <n>`: a change may add at most n lines of Rust to crates/omsi-app, its
-# tests aside, against $BASE (the pull request's base; locally the merge base with main): the
-# app crate is the glue between the others, new subsystems get crates of their own. A cap on the
-# crate's total stopped every small pull request once main came near it.
+# come back. `app-growth <n>`: a change may grow crates/omsi-app by at most n lines of Rust
+# (added minus removed), its tests aside, against $BASE (the pull request's base; locally the
+# merge base with main): the app crate is the glue between the others, new subsystems get
+# crates of their own. A cap on the crate's total stopped every small pull request once main
+# came near it.
 #
 # Needs nothing but python3 (3.8+), git and the checkout.
 set -euo pipefail
@@ -26,7 +27,7 @@ repo = sys.argv[1]
 mode = sys.argv[2] if len(sys.argv) > 2 else "--check"
 rules_path = os.path.join(repo, "scripts", "arch-rules.txt")
 APP = "omsi-app"
-TEST_FILE = re.compile(r"(^|/)tests(/|\.rs$)|_tests?\.rs$")
+TEST_FILE = re.compile(r"(^|/)tests?(/|\.rs$)|_tests?\.rs$")
 
 
 def deps_of(manifest):
@@ -68,7 +69,7 @@ def graph():
 
 def git(*args):
     r = subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True)
-    return r.stdout.strip() if r.returncode == 0 else None
+    return r.stdout.strip("\n") if r.returncode == 0 else None
 
 
 def base_rev():
@@ -83,12 +84,13 @@ def base_rev():
 
 def app_growth(base):
     """Lines of Rust a change adds to omsi-app (added minus removed), test files aside."""
-    out = git("diff", "--numstat", base, "HEAD", "--", f"crates/{APP}")
+    # (-z: a quoted or renamed path would not end in .rs; no renames: a test moved out counts)
+    out = git("diff", "--numstat", "-z", "--no-renames", base, "HEAD", "--", f"crates/{APP}")
     if out is None:
-        return None
+        sys.exit(f"arch guard: cannot compare with {base} (BASE): is that commit fetched?")
     n = 0
-    for line in out.splitlines():
-        added, removed, path = line.split("\t", 2)
+    for record in filter(None, out.split("\0")):
+        added, removed, path = record.split("\t", 2)
         if path.endswith(".rs") and added != "-" and not TEST_FILE.search(path):
             n += int(added) - int(removed)
     return n

@@ -192,5 +192,5 @@ forbid omsi-guard omsi-scene
 forbid omsi-guard omsi-audio
 forbid omsi-guard omsi-launcher-model
 
-# Lines of Rust a change may add to crates/omsi-app, its tests aside.
+# Net lines of Rust (added minus removed) a change may add to crates/omsi-app, its tests aside.
 app-growth 300
