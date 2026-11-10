@@ -3,6 +3,15 @@
 
 use super::*;
 
+/// A long pavement lane may begin far outside the 200 m pedestrian area but
+/// still cross right beside the player. Its bounding box, rather than only its
+/// first vertex, decides whether it is worth trying a spawn on this path.
+fn pavement_reaches(lo: DVec2, hi: DVec2, center: DVec2, radius: f64) -> bool {
+    let dx = (lo.x - center.x).max(center.x - hi.x).max(0.0);
+    let dy = (lo.y - center.y).max(center.y - hi.y).max(0.0);
+    dx * dx + dy * dy < radius * radius
+}
+
 impl PeopleSim {
     pub fn clear_waiting(&mut self) -> usize {
         let waiting = |p: &Person| {
@@ -388,7 +397,9 @@ impl PeopleSim {
                 // on pedestrian paths (e.g. map 400's traffic islands). Keep the path
                 // in PedNet so passengers and people already walking can still use it.
                 net.lanes[l].density > 0.0
-                    && (net.lanes[l].start() - center).truncate().length() < STROLL_RADIUS * 0.9
+                    && ped.bounds.get(&l).is_some_and(|&(lo, hi)| {
+                        pavement_reaches(lo, hi, center.truncate(), STROLL_RADIUS * 0.9)
+                    })
                     && net.lanes[l].length() > 4.0
             })
             .collect();
@@ -408,7 +419,13 @@ impl PeopleSim {
             })
             .count();
         if have < target && !lanes.is_empty() {
-            for _ in 0..(target - have).min(4) {
+            // A path can cross the neighbourhood while most of its length lies
+            // outside it. Give those long paths a few bounded retries instead
+            // of producing an empty pavement from unlucky random positions.
+            let wanted = (target - have).min(4);
+            let mut made = 0;
+            for _ in 0..wanted * 4 {
+                if made >= wanted { break; }
                 let lane = lanes[(self.rand() as usize) % lanes.len()];
                 let len = net.lanes[lane].length();
                 let s = (self.rand_f() as f32 * (len - 1.0)).max(0.5);
@@ -435,6 +452,7 @@ impl PeopleSim {
                     State::Strolling(PedWalk::new(vec![leg], true, side)),
                 ) {
                     self.people[i].activity = Activity::Walk;
+                    made += 1;
                 }
             }
         }
@@ -508,5 +526,19 @@ impl PeopleSim {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod pavement_region_tests {
+    use super::pavement_reaches;
+    use glam::DVec2;
+
+    #[test]
+    fn long_pavement_crossing_player_is_eligible_even_if_its_start_is_far_away() {
+        let near = DVec2::new(0.0, 0.0);
+        assert!(pavement_reaches(DVec2::new(-500.0, -2.0), DVec2::new(500.0, 2.0), near, 180.0));
+        assert!(!pavement_reaches(DVec2::new(220.0, 220.0), DVec2::new(500.0, 500.0), near, 180.0));
+        assert!(pavement_reaches(DVec2::new(120.0, 120.0), DVec2::new(300.0, 300.0), near, 180.0));
     }
 }
