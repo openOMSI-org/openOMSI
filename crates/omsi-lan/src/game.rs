@@ -2428,6 +2428,12 @@ pub fn tick_receive(
             }
         }
         if !game.remotes.contains_key(&pose.id) {
+            // Keep at most one failed repaint per player. A failed previous
+            // scheme must not defer a newly selected paint, or accumulate
+            // unreachable entries as the user browses the livery list.
+            game.failed.retain(|(id, bus, paint), _| {
+                *id != pose.id || (bus == &pose.bus && paint == &pose.paint)
+            });
             let key = (pose.id, pose.bus.clone(), pose.paint.clone());
             if game.failed.get(&key).is_some_and(|t| t.elapsed().as_secs_f32() < 30.0) {
                 continue;
