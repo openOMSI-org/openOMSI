@@ -110,6 +110,19 @@ impl PlannedStop {
     }
 }
 
+/// The next stop the bus is to call at, or the current timetable stop on a depot run.
+pub fn next_calling_stop(stops: &[PlannedStop], next: usize) -> usize {
+    (next..stops.len())
+        .find(|&i| stops[i].calls())
+        .unwrap_or_else(|| {
+            if stops.iter().any(|stop| stop.calls()) {
+                stops.len()
+            } else {
+                next.min(stops.len().saturating_sub(1))
+            }
+        })
+}
+
 /// Which way a trip runs through one of its stops: the direction it arrives on and the one
 /// it leaves on, as unit vectors of the ground plane (x east, y north). None where a
 /// neighbour's place is unknown or too near to tell a direction - any heading will do then.
