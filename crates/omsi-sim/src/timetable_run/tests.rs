@@ -204,6 +204,29 @@ fn the_ibis_stands_at_the_trips_first_stop_on_a_route_that_begins_before_it() {
     assert_eq!(target.stop, 1);
 }
 
+#[test]
+fn ibis_target_finds_encoded_hof_routes_for_night_and_express_lines() {
+    let hof = omsi_vehicle::Hof {
+        termini: vec![
+            omsi_vehicle::hof::Terminus { code: 712, texture_id: "Birkenweg".into(), strings: vec!["Birkenweg".into()], ..Default::default() },
+            omsi_vehicle::hof::Terminus { code: 154, texture_id: "Gatow".into(), strings: vec!["S+U Rathaus Spandau".into()], ..Default::default() },
+        ],
+        info_trips: vec![
+            omsi_vehicle::hof::InfoTrip { code: "91502".into(), name: "N15 -> Birkenweg".into(), route: "712".into(), line: "915".into(), ..Default::default() },
+            omsi_vehicle::hof::InfoTrip { code: "93402".into(), name: "Gatow".into(), route: "154".into(), line: "934".into(), ..Default::default() },
+            omsi_vehicle::hof::InfoTrip { code: "53402".into(), name: "X34".into(), route: "154".into(), line: "534".into(), ..Default::default() },
+        ],
+        info_busstop_lists: vec![vec![], vec![], vec![]],
+        ..Default::default()
+    };
+    let n15 = ibis_target(&hof, "N15", "Birkenweg", &[], None).expect("N15 target");
+    assert_eq!((n15.line, n15.suffix, n15.route), (915, 35, Some(2)));
+    let n34 = ibis_target(&hof, "N34", "S+U Rathaus Spandau", &[], None).expect("N34 target");
+    assert_eq!((n34.line, n34.suffix, n34.route), (934, 35, Some(2)));
+    let x34 = ibis_target(&hof, "X34", "S+U Rathaus Spandau", &[], None).expect("X34 target");
+    assert_eq!((x34.line, x34.suffix, x34.route), (534, 36, Some(2)));
+}
+
 fn link(a: i64, b: i64) -> Option<f64> {
     // 100 m between neighbours, 300 m from 3 to 4
     Some(if (a, b) == (3, 4) { 300.0 } else { 100.0 })
