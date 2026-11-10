@@ -193,7 +193,7 @@ pub(super) fn humans(cx: HumansCx, dt: f32) {
                 .as_ref()
                 .and_then(|d| {
                     let stops = &d.trip().stops;
-                    stops.get(crate::plugins::next_calling_stop(stops, d.next_stop))
+                    stops.get(omsi_sim::timetable_run::next_calling_stop(stops, d.next_stop))
                 }),
         );
         let step_dt = if *cx.clock.paused { 0.0 } else { dt };
