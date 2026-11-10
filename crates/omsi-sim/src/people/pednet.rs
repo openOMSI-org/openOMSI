@@ -203,18 +203,45 @@ impl PedNet {
             let hi = l.points.iter().fold(DVec2::splat(f64::MIN), |m, p| m.max(p.truncate()));
             self.bounds.insert(i, (lo, hi));
             added.push(i);
-            let mut seen: Vec<(i32, i32)> = Vec::new();
-            for p in &l.points {
-                let c = ((p.x / 50.0).floor() as i32, (p.y / 50.0).floor() as i32);
-                if !seen.contains(&c) {
-                    seen.push(c);
-                    self.grid.entry(c).or_default().push(i);
+            // Index the *segments*, not just the vertices: a long straight
+            // sidewalk can cross an entire neighbourhood between its endpoints.
+            // Sampling half a grid cell apart covers every crossed cell without
+            // storing a per-frame scan of the whole map. Cap malformed giant paths.
+            let mut seen = std::collections::HashSet::new();
+            for segment in l.points.windows(2) {
+                let distance = (segment[1] - segment[0]).truncate().length();
+                let samples = (distance / 20.0).ceil().clamp(1.0, 512.0) as usize;
+                for sample in 0..=samples {
+                    let p = segment[0].lerp(segment[1], sample as f64 / samples as f64);
+                    let c = ((p.x / 50.0).floor() as i32, (p.y / 50.0).floor() as i32);
+                    if seen.insert(c) {
+                        self.grid.entry(c).or_default().push(i);
+                    }
                 }
             }
         }
         self.built = net.lanes.len();
         self.join_midway(net, &added, from);
         self.ends.len() - before
+    }
+
+    /// Sidewalk candidates within `radius` of a camera/vehicle, looked up in
+    /// the spatial index. This avoids walking every lane in large streamed maps
+    /// on every population tick.
+    pub fn sidewalks_near(&self, p: DVec2, radius: f64) -> Vec<usize> {
+        let (cx, cy) = ((p.x / 50.0).floor() as i32, (p.y / 50.0).floor() as i32);
+        let cells = ((radius / 50.0).ceil() as i32 + 1).clamp(0, 16);
+        let mut candidates = std::collections::HashSet::new();
+        for dx in -cells..=cells {
+            for dy in -cells..=cells {
+                for &lane in self.grid.get(&(cx + dx, cy + dy)).into_iter().flatten() {
+                    candidates.insert(lane);
+                }
+            }
+        }
+        let mut lanes: Vec<_> = candidates.into_iter().collect();
+        lanes.sort_unstable();
+        lanes
     }
 
     fn lanes_near(&self, p: DVec2) -> Vec<usize> {
