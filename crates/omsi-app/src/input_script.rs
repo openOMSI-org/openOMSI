@@ -477,8 +477,8 @@ impl App {
                     self.toggle_editor();
                     return true;
                 }
-                // OMSI's `sim_pause`
-                KeyCode::KeyP if !ctrl && !alt && !shift_now => {
+                // OMSI's `sim_pause`: fallback P only when keyboard.cfg has no `sim_pause` entry (#3708)
+                KeyCode::KeyP if !ctrl && !alt && !shift_now && omsi_input::actions::is_pause_key(&self.input.game_keys, code, false, false, false, &self.input.own_keys) => {
                     self.toggle_pause();
                     return true;
                 }

@@ -805,9 +805,11 @@ impl App {
         if self.session.on_foot.is_none() {
             return false;
         }
+        let alt = self.input.keys.contains(&KeyCode::AltLeft) || self.input.keys.contains(&KeyCode::AltRight);
         match code {
             // the game's own keys stay (menu, pause, screenshots, chat)
-            KeyCode::Escape | KeyCode::F12 | KeyCode::KeyP | KeyCode::KeyV | KeyCode::Slash => false,
+            KeyCode::Escape | KeyCode::F12 | KeyCode::KeyV | KeyCode::Slash => false,
+            _ if omsi_input::actions::is_pause_key(&self.input.game_keys, code, shift, ctrl, alt, &self.input.own_keys) => false,
             KeyCode::F1 => {
                 if pressed && !repeat {
                     if let Some(f) = self.session.on_foot.as_mut() {

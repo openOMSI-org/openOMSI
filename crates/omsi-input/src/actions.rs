@@ -72,6 +72,34 @@ pub fn game_chord_bound(keys: &[omsi_content::KeyBinding], scan: i32, chord: i32
     keys.iter().any(|b| b.scan_code == scan && b.matches(chord) && (vr || !is_vr_action(&b.action)))
 }
 
+/// Whether pressing `code` with modifiers (`shift`, `ctrl`, `alt`) triggers simulation pause:
+/// any `sim_pause` entry in `game_keys` replaces the built-in plain `KeyP` fallback (including
+/// disabling pause when unbound with `scan_code == 0`), and `own_keys` reclaims plain `KeyP`
+/// when bound to a vehicle action.
+pub fn is_pause_key(
+    game_keys: &[omsi_content::KeyBinding],
+    code: winit::keyboard::KeyCode,
+    shift: bool,
+    ctrl: bool,
+    alt: bool,
+    own_keys: &std::collections::HashSet<i32>,
+) -> bool {
+    let Some(scan) = crate::keys::dik_code(code) else {
+        return false;
+    };
+    let own_mod = crate::keys::own_modifier_bit(code);
+    let chord = omsi_content::input::chord(shift, ctrl, alt) & !own_mod;
+    if game_keys.iter().any(|b| b.action.eq_ignore_ascii_case("sim_pause")) {
+        return game_keys.iter().any(|b| {
+            b.action.eq_ignore_ascii_case("sim_pause")
+                && b.scan_code != 0
+                && (b.scan_code == scan || crate::keys::both_code(code) == Some(b.scan_code))
+                && (b.matches(chord) || (own_mod != 0 && b.matches(chord | own_mod)))
+        });
+    }
+    code == winit::keyboard::KeyCode::KeyP && chord == 0 && !own_keys.contains(&scan)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -121,5 +149,26 @@ mod tests {
         assert_eq!(door_action("door_0"), None);
         assert_eq!(door_action("bus_doorfront0"), None);
         assert_eq!(door_action("door_x"), None);
+    }
+
+    #[test]
+    fn pause_key_respects_rebound_cleared_and_vehicle_keys() {
+        use winit::keyboard::KeyCode;
+        let kb = |c, m| omsi_content::KeyBinding {
+            action: "sim_pause".into(),
+            scan_code: crate::keys::dik_code(c).unwrap(),
+            modifier: m,
+        };
+        let none = std::collections::HashSet::new();
+        assert!(is_pause_key(&[], KeyCode::KeyP, false, false, false, &none));
+        assert!(!is_pause_key(&[], KeyCode::KeyP, true, false, false, &none));
+        let rebound = vec![kb(KeyCode::F6, 0)];
+        assert!(!is_pause_key(&rebound, KeyCode::KeyP, false, false, false, &none));
+        assert!(is_pause_key(&rebound, KeyCode::F6, false, false, false, &none));
+        let unbound = vec![omsi_content::KeyBinding { action: "sim_pause".into(), scan_code: 0, modifier: 0 }];
+        assert!(!is_pause_key(&unbound, KeyCode::KeyP, false, false, false, &none));
+        let p_scan = crate::keys::dik_code(KeyCode::KeyP).unwrap();
+        let own = [p_scan].into_iter().collect();
+        assert!(!is_pause_key(&[], KeyCode::KeyP, false, false, false, &own));
     }
 }
