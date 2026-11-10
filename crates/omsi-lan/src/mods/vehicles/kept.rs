@@ -390,10 +390,6 @@ impl Buses {
     /// worked out here from what was checked here (never the one its sender says).
     pub(super) fn commit(&self, m: VehicleManifest) -> Result<(String, bool), String> {
         let m = m.validated()?;
-        let store = self.lock().as_ref().ok_or("no store")?.store.clone();
-        if !shareable_manifest(&store, &m) {
-            return Err("this vehicle forbids multiplayer file transfers".into());
-        }
         let fp = m.fingerprint();
         let mut g = self.lock();
         let v = g.as_mut().ok_or("no store")?;
@@ -409,6 +405,12 @@ impl Buses {
                 Some(why) if identity::key(&e.path) != bus_key => held.push(Withheld { path: e.path.clone(), why: why.clone() }),
                 _ => return Err(format!("{} has not come", e.path)),
             }
+        }
+        // Preserve the existing missing-file error (including quarantined bus
+        // descriptors) before checking the author's transfer policy. No manifest
+        // or cache is committed unless its actual stored .bus files opt in.
+        if !shareable_manifest(&v.store, &m) {
+            return Err("this vehicle forbids multiplayer file transfers".into());
         }
         if !held.is_empty() {
             let file = v.dir.join(format!("{fp}.withheld.json"));
