@@ -120,7 +120,7 @@ fn set(app: &mut crate::App, form: &DestForm, clear: bool) -> String {
     let Some(hof) = p.vehicle.host.hof.clone() else {
         return omsi_ui::tr("This bus has no depot file (.hof) with destinations").into_owned();
     };
-    let line = crate::game_lists::destination_line(&p.vehicle);
+    let line = crate::game_lists::resolved_route_line(&form.route, &p.vehicle);
     let lines = if clear { [String::new(), String::new()] } else { form.lines.clone() };
     if !clear && lines.iter().all(|l| l.trim().is_empty()) {
         return omsi_ui::tr("Route number set").into_owned();
