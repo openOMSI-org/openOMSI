@@ -194,7 +194,7 @@ fn a_held_program_runs_on_when_the_side_road_asks() {
         c.request.fill(false);
         c.advance(0.02);
     }
-    assert!((c.time - 34.0).abs() < 0.01, "held at {}", c.time);
+    assert!((c.time - 33.98).abs() < 0.01, "held at {}", c.time);
     for _ in 0..1000 {
         c.request.fill(false);
         c.request[1] = true;

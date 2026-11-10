@@ -596,6 +596,11 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **Vehicle-actuated traffic lights wait before the stop, not in the yellow**: a stop whose
+  request is present now holds the clock at the phase before it, so a queue can no longer
+  leave a light stuck on yellow; an exact stop time still holds, and a jump at the same time
+  is taken first. This fixes the traffic light at Ahlheim V5's Eichenhöhe Bahnhof
+  ([#2947](https://github.com/openOMSI-org/openOMSI/issues/2947)).
 - **The outside view (F3) starts straight behind the bus**, a little above it, as in OMSI 2,
   instead of three quarters from the side. It still keeps the angle you leave it at, and Space
   puts it back behind the bus.
