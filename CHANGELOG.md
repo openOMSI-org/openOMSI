@@ -598,6 +598,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **A sharper picture with Apple MetalFX upscaling**: the textures are read one level sharper
+  and the picture is sharpened a little more, so bark, grass and the numbers of the gauges come
+  closer to the picture drawn at the window's size, without halos around the lamp posts at night.
 - **Vehicle-actuated traffic lights wait before the stop, not in the yellow**: a stop whose
   request is present now holds the clock at the phase before it, so a queue can no longer
   leave a light stuck on yellow; an exact stop time still holds, and a jump at the same time

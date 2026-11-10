@@ -57,7 +57,7 @@ pub use sky::*;
 pub use surface::*;
 pub(crate) use targets::*;
 pub use temporal::{Temporal, TemporalQuality, TemporalUpscaler};
-pub(crate) use temporal::{temporal_mip_bias, TemporalFrame, TemporalPipelines, TemporalState, TEMPORAL_MASK_FORMAT, TEMPORAL_MOTION_FORMAT};
+pub(crate) use temporal::{TemporalFrame, TemporalPipelines, TemporalState, TEMPORAL_MASK_FORMAT, TEMPORAL_MOTION_FORMAT};
 pub use uniforms::*;
 pub use view::*;
 pub use triple::{panel_width, ScreenView, TripleScreen};

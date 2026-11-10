@@ -22,9 +22,21 @@ pub(crate) const TEMPORAL_MASK_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat
 /// bits of picture over the scene. 8 m is about 290 km/h at 10 fps.
 const MAX_FRAME_JUMP: f32 = 8.0;
 
-/// How much `upscale.wgsl` sharpens DLSS's and MetalFX's result: DLSS no longer sharpens and
-/// MetalFX never did, FSR 3 does.
+/// How much `upscale.wgsl` sharpens DLSS's result: DLSS no longer sharpens itself, FSR 3 does.
 const DLSS_SHARPEN: f32 = 0.25;
+
+/// How much `upscale.wgsl` sharpens MetalFX's result, which MetalFX never sharpens itself. Chosen
+/// on St-Servan's pictures with `METALFX_MIP_BIAS`: 0.6 brought the gauges' numbers and the bark
+/// closest to the picture drawn at the window's size, but the foliage shimmered more while the
+/// view turned; no value up to 0.6 drew halos around the lamp posts against the sky.
+const METALFX_SHARPEN: f32 = 0.4;
+
+/// MetalFX's textures one mip level sharper than the render scale alone gives, as Apple advises
+/// for its temporal scaler (log2(render / output) - 1, WWDC22 "Boost performance with MetalFX
+/// Upscaling"): -1.58 at Quality. Without it the result was softer than the picture drawn at
+/// the window's size (bark, the gauges' numbers, grass). (NVIDIA and AMD advise the same for
+/// DLSS and FSR 3; those keep the scale alone until someone compares them on Windows.)
+const METALFX_MIP_BIAS: f32 = -1.0;
 
 pub(crate) struct TemporalPipelines {
     pub(crate) prepass: [wgpu::RenderPipeline; 6],
@@ -122,12 +134,22 @@ pub(crate) fn window_fits(full: (u32, u32)) -> bool {
 }
 
 /// The textures' mip bias of an upscaled frame: log2(render width / window width), -0.79 at
-/// Balanced. Without it the textures are sampled for the small picture and the cab goes soft.
-pub(crate) fn temporal_mip_bias(render_w: u32, full_w: u32) -> f32 {
-    (render_w.max(1) as f32 / full_w.max(1) as f32).log2().clamp(-3.0, 0.0)
+/// Balanced, plus the upscaler's own `extra`. Without it the textures are sampled for the small
+/// picture and the cab goes soft.
+pub(crate) fn temporal_mip_bias(render_w: u32, full_w: u32, extra: f32) -> f32 {
+    ((render_w.max(1) as f32 / full_w.max(1) as f32).log2() + extra).clamp(-3.0, 0.0)
 }
 
 impl Renderer {
+    /// This upscaled frame's mip bias (`temporal_mip_bias`): MetalFX's one level sharper.
+    pub(crate) fn temporal_textures_bias(&self, render_w: u32, full_w: u32) -> f32 {
+        let extra = match self.temporal.as_ref().map(|d| &d.runtime) {
+            Some(Runtime::MetalFx(_)) => METALFX_MIP_BIAS,
+            _ => 0.0,
+        };
+        temporal_mip_bias(render_w, full_w, extra)
+    }
+
     /// Whether a window of this size can be upscaled at all. A minimised one is 1x1: asked for
     /// that, NGX refuses (0xbad00005) and DLSS would be gone for the session. Its history does
     /// not outlive the gap.
@@ -421,7 +443,11 @@ impl Renderer {
         d.prev = Some(TemporalPrev { camera: *camera, aspect: frame.aspect, origin: ro, render, output: full });
         // (`upscale.wgsl`'s third mode: the upscalers return the sRGB-encoded numbers they were
         // given, and writing them to the sRGB window unconverted would encode them twice)
-        let sharpen = if matches!(d.runtime, Runtime::Dlss(_) | Runtime::MetalFx(_)) { DLSS_SHARPEN } else { 0.0 };
+        let sharpen = match d.runtime {
+            Runtime::Dlss(_) => DLSS_SHARPEN,
+            Runtime::MetalFx(_) => METALFX_SHARPEN,
+            Runtime::Fsr3(_) => 0.0,
+        };
         self.queue.write_buffer(&d.blit_buf, 0, bytemuck::cast_slice(&[full.0 as f32, full.1 as f32, sharpen, 2.0]));
         let bg = if ok { &t.output_bg } else { &t.color_bg };
         if !ok {
