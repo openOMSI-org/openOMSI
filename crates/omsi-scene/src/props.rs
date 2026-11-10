@@ -926,9 +926,15 @@ impl World {
         // DX12 and Metal can still report a finite driver budget. Without this
         // check the budget pass returned early and never relieved VRAM pressure in
         // automatic mode, even as the driver approached out-of-memory.
-        if centers.is_empty()
-            || (limit == 0 && video_limit == 0 && renderer.gpu_memory(scene).cap(0) == 0)
-        {
+        if centers.is_empty() {
+            return 0;
+        }
+        let driver_cap = if limit == 0 && video_limit == 0 {
+            renderer.gpu_memory(scene).cap(0)
+        } else {
+            0
+        };
+        if !memory_budget_active(limit, video_limit, driver_cap) {
             return 0;
         }
         // (no texture budget of their own: the card's alone bounds them)
