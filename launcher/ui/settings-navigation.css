@@ -30,10 +30,12 @@
 .settings-options { min-width: 0; }
 .settings-options-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
 .settings-options-heading h3 { margin: 0; font-size: 14px; font-weight: 600; }
-.settings-options-heading small { font-size: 11px; font-weight: 400; color: var(--muted); margin-left: 10px; }.settings-options-card { border: 1px solid var(--line-strong); background: var(--surface); border-radius: var(--radius); overflow: hidden; }
+.settings-options-heading small { font-size: 11px; font-weight: 400; color: var(--muted); margin-left: 10px; }
+.settings-options-card { border: 1px solid var(--line-strong); background: var(--surface); border-radius: var(--radius); overflow: hidden; }
 .settings-entry { display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line-strong); }
 .settings-entry:last-child { border-bottom: 0; }
-.settings-entry:focus-within { background: var(--accent-soft); }.settings-entry-tools { display: flex; align-items: center; gap: 8px; flex: none; }
+.settings-entry:focus-within { background: var(--accent-soft); }
+.settings-entry-tools { display: flex; align-items: center; gap: 8px; flex: none; }
 .settings-help { display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 5px 7px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface-2); color: var(--text-2); font: inherit; font-size: 11px; white-space: nowrap; cursor: pointer; }
 .settings-help:hover, .settings-help.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .settings-help:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -52,7 +54,8 @@
 .settings-pin { flex: none; align-self: center; }
 .settings-pin:not(.on) { opacity: .5; }
 .settings-entry:hover .settings-pin, .settings-pin:focus-visible { opacity: 1; }
-.settings-result-path { color: var(--accent); font-size: 10px; margin-bottom: 8px; }.settings-info { font-size: 12px; color: var(--text-2); }
+.settings-result-path { color: var(--accent); font-size: 10px; margin-bottom: 8px; }
+.settings-info { font-size: 12px; color: var(--text-2); }
 .settings-info-icon { display: grid; place-items: center; background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: var(--radius); height: 120px; color: var(--accent); margin-bottom: 22px; }
 .settings-info-label { color: var(--accent); display: flex; align-items: center; gap: 6px; font-size: 11px; margin-bottom: 10px; }
 .settings-info h3 { margin: 0 0 10px; color: var(--text); font-size: 13px; }
@@ -106,8 +109,10 @@
   .settings-help span { display: none; }
   .settings-frame .setting-row .name span { font-size: 10px; }
   .settings-options-heading { gap: 6px; flex-wrap: wrap; }
-  .settings-options-heading h3 { font-size: 13px; }  .settings-footer { padding: 11px 16px; font-size: 10px; }
-  .settings-footer-key { display: none; }}
+  .settings-options-heading h3 { font-size: 13px; }
+  .settings-footer { padding: 11px 16px; font-size: 10px; }
+  .settings-footer-key { display: none; }
+}
 
 .settings-profiles { padding: 3px 0; }
 .settings-profiles h4 { margin: 0 0 12px; font-size: 13px; font-weight: 600; }
