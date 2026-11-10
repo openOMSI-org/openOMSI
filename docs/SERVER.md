@@ -148,11 +148,19 @@ Default is the value a new `server.cfg` is written with. A key missing from the 
 | `gateway_proxy_header` | `x-forwarded-for`, `cf-connecting-ip` | `x-forwarded-for` | header a proxy on this machine names a WebSocket player's address in |
 | `tunnel` | `0` / `1` | `1` | start a free Cloudflare quick tunnel (needs `cloudflared`) |
 | `share_positions` | `0` / `1` | `0` | answer `GET /players` |
-| `share_maps` | `0` / `1` | `0`; without the key: `1`, so an older `server.cfg` shares its map | a joiner without the map gets it, with everything it uses, from the server (gigabytes for a big map). Off: players install it and are told which is missing. |
+| `share_maps` | `0` / `1` | `0` in all configs, including older files missing this key | A dedicated server only sends its map and dependencies after explicitly setting `share_maps = 1`. Otherwise players install their own map. Player-hosted LAN never automatically shares the map. |
 | `accept_uploads` | `0` / `1` | `1` | [players' buses](#players-buses-accept_uploads) |
 | `uploads_keep_days` | 1 to 3650 days | `30` | keep an unused player bus this long |
 | `public_server` | `0` / `1` | `0` | list in the [public server list](#public-server-list) |
 | `public_list_url` | URL | not in a new file; empty or missing: openOMSI's own | optional: list service address |
+
+**Map transfer safety:** Both new and existing dedicated servers default to
+`share_maps = 0`, even if the key is absent from a legacy `server.cfg`.
+Admins must explicitly set `share_maps = 1` to distribute the map and its
+dependencies. Player-hosted LAN sessions do not automatically send maps;
+the connecting player must install the matching map locally. These defaults
+do not block separately authorized vehicle transfers or remove files previously
+downloaded by other players.
 
 **Voice** ([Voice chat](#voice-chat))
 
