@@ -23,6 +23,12 @@ pub(super) fn fit_upgrade(data: &Arc<TextureData>, allowed: u64) -> Option<Arc<T
     Some(upload)
 }
 
+/// Even when the user picked Automatic for both controls, a driver-provided
+/// GPU budget is an active safety limit, not permission to allocate indefinitely.
+pub(super) fn memory_budget_active(texture_limit: u64, video_limit: u64, driver_cap: u64) -> bool {
+    texture_limit > 0 || video_limit > 0 || driver_cap > 0
+}
+
 pub(super) fn card_restore_room(video_limit: u64, card: omsi_render::GpuMemory) -> u64 {
     match card.cap(video_limit) {
         0 => u64::MAX,
