@@ -1,4 +1,3 @@
-// Run: node --test launcher/tests/settings-navigation-translations.test.mjs
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';

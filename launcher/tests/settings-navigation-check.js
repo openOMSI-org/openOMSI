@@ -145,6 +145,34 @@ export async function run(root) {
     await sleep(100);
     assert(!root.querySelector('[data-setting-key="msaa"]'), 'Temporal upscaling must still hide MSAA');
     report.push('PASS original conditional visibility');
+
+    render(null, root); mounted = false;
+    const savedFavourites = ['graphics:fullscreen', 'graphics:@nvidia_dlss_install', 'graphics:ray_tracing', 'graphics:missing_setting'];
+    remember('settings-favourites', JSON.stringify(savedFavourites));
+    await mount();
+    set({ boot: { ...S.boot, platform: 'android' }, settings: { ...S.settings, graphics: 'vanilla' } });
+    await sleep(100);
+    await click('[data-settings-category=favourites]');
+    const favouriteCount = () => Number(root.querySelector('[data-settings-category=favourites] small').textContent);
+    const assertFavouriteCount = (expected) => {
+      assert(favouriteCount() === expected, 'Favourite count must exclude hidden and stale saved IDs');
+      assert(root.querySelectorAll('.settings-entry.control').length === expected, 'Favourite count must match the displayed controls');
+    };
+    assertFavouriteCount(1);
+    const favouriteSearch = root.querySelector('.settings-search input');
+    favouriteSearch.value = 'shadow_casters';
+    favouriteSearch.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(80);
+    assert(favouriteCount() === 1, 'Searching must not change the visible favourite count');
+    await click('[data-settings-category=favourites]');
+    set({ boot: { ...S.boot, platform: 'windows' } });
+    await sleep(100);
+    assertFavouriteCount(2);
+    set({ settings: { ...S.settings, graphics: 'enhanced' } });
+    await sleep(100);
+    assertFavouriteCount(3);
+    assert(JSON.stringify(JSON.parse(localStorage.getItem('settings-favourites'))) === JSON.stringify(savedFavourites), 'Visibility changes must preserve saved favourite IDs');
+    report.push('PASS visible favourite count follows platform and setting changes without removing saved IDs');
     for (const theme of ['dark', 'light']) {
       document.documentElement.dataset.theme = theme;
       assert(root.querySelector('.settings-body').getBoundingClientRect().width > 0, 'Settings content is hidden in ' + theme);

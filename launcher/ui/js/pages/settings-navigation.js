@@ -56,7 +56,9 @@ export function SettingsNavigation({ Row }) {
   const group = groups.find((group) => group.id === requested) || groups[0];
   const words = fold(query).split(/\s+/).filter(Boolean);
   const searching = words.length > 0;
-  const shown = entries.filter((entry) => tabs.includes(entry.tab) && visible(entry.row) && (searching ? isSettingControl(entry.row) && matches(entry, words, s.settings) : favouritesPage ? isSettingControl(entry.row) && favourites.has(entry.id) : entry.tab === current && entry.group === group));
+  const visibleEntries = entries.filter((entry) => tabs.includes(entry.tab) && visible(entry.row));
+  const favouriteCount = visibleEntries.filter((entry) => isSettingControl(entry.row) && favourites.has(entry.id)).length;
+  const shown = visibleEntries.filter((entry) => searching ? isSettingControl(entry.row) && matches(entry, words, s.settings) : favouritesPage ? isSettingControl(entry.row) && favourites.has(entry.id) : entry.tab === current && entry.group === group);
   const label = searching ? 'Search all settings' : favouritesPage ? 'Favourite settings' : current.label;
   const pick = (id) => { setCategory(id); setQuery(''); setFocused(null); remember('settings-tab', id); };
   const pickGroup = (id) => {
@@ -74,7 +76,7 @@ export function SettingsNavigation({ Row }) {
     <aside class="settings-categories" aria-label=${t('Settings')}>
       <h1>${t('Settings')}</h1>
       <nav>
-        <button class=${favouritesPage && !searching ? 'on' : ''} data-settings-category="favourites" aria-current=${favouritesPage && !searching ? 'page' : undefined} onClick=${() => pick('favourites')}><${Icon} name="star" /><span>${t('Favourite settings')}</span><small>${favourites.size}</small></button>
+        <button class=${favouritesPage && !searching ? 'on' : ''} data-settings-category="favourites" aria-current=${favouritesPage && !searching ? 'page' : undefined} onClick=${() => pick('favourites')}><${Icon} name="star" /><span>${t('Favourite settings')}</span><small>${favouriteCount}</small></button>
         <div class="settings-nav-label">${t('Game preferences')}</div>
         ${tabs.map((tab) => html`<button key=${tab.id} class=${!favouritesPage && !searching && tab === current ? 'on' : ''} data-settings-category=${tab.id} aria-current=${!favouritesPage && !searching && tab === current ? 'page' : undefined} onClick=${() => pick(tab.id)}><${Icon} name=${icons[tab.id]} /><span>${t(tab.label)}</span></button>`)}
       </nav>
