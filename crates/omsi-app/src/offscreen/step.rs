@@ -727,7 +727,7 @@ impl Offscreen<'_> {
             h.set_duty(duty.as_ref());
             h.set_player_next_stop(duty.as_ref().and_then(|d| {
                 let stops = &d.trip().stops;
-                stops.get(crate::plugins::next_calling_stop(stops, d.next_stop))
+                stops.get(omsi_sim::timetable_run::next_calling_stop(stops, d.next_stop))
             }));
             let took = steps::tick_humans(h, &mut sim_view.people, dt, world, player.as_mut(), traffic.as_mut(), renderer, scene);
             if let Some(p) = player.as_mut() {
