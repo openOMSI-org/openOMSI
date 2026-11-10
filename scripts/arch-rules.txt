@@ -192,5 +192,5 @@ forbid omsi-guard omsi-scene
 forbid omsi-guard omsi-audio
 forbid omsi-guard omsi-launcher-model
 
-# Lines of Rust in crates/omsi-app (may grow 2 % past this; lower with --update).
-app-lines 85076
+# Lines of Rust a change may add to crates/omsi-app, its tests aside.
+app-growth 300
