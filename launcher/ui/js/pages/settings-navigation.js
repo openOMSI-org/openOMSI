@@ -1,5 +1,5 @@
 import { html, useState, useEffect, useRef } from '../../vendor/preact-htm.js';
-import { useStore, remembered, remember, set } from '../store.js';
+import { useStore, remembered, remember } from '../store.js';
 import { t } from '../i18n.js';
 import { Icon } from '../icons.js';
 import { Search, useConfirm } from '../ui.js';
@@ -80,11 +80,10 @@ export function SettingsNavigation({ Row }) {
         <div class="settings-nav-label">${t('Game preferences')}</div>
         ${tabs.map((tab) => html`<button key=${tab.id} class=${!favouritesPage && !searching && tab === current ? 'on' : ''} data-settings-category=${tab.id} aria-current=${!favouritesPage && !searching && tab === current ? 'page' : undefined} onClick=${() => pick(tab.id)}><${Icon} name=${icons[tab.id]} /><span>${t(tab.label)}</span></button>`)}
       </nav>
-      ${!['android', 'ios'].includes(platform) && html`<button class="settings-troubleshoot" onClick=${() => { remember('troubleshoot-tab', 'content'); set({ page: 'troubleshoot' }); }}><${Icon} name="info" />${t('Troubleshooting')}</button>`}
     </aside>
     <section class="settings-main">
       <header class="settings-heading">
-        <div class="settings-heading-line"><div><div class="settings-breadcrumb">${t('Settings')} / ${t(label)}</div><h2>${t(label)}</h2><p>${t('Choose a topic to find the settings you need.')}</p></div><div class="settings-search"><${Search} value=${query} onInput=${setQuery} placeholder="Search all settings (Ctrl+F)" /></div></div>
+        <div class="settings-heading-line"><div><div class="settings-breadcrumb">${t('Settings')} / ${t(label)}</div><h2>${t(label)}</h2></div><div class="settings-search"><${Search} value=${query} onInput=${setQuery} placeholder="Search all settings (Ctrl+F)" /></div></div>
         ${!searching && !favouritesPage && !current.page && html`<nav class="settings-subtabs" aria-label=${t(current.label)}>${groups.map((item) => html`<button key=${item.id} class=${item === group ? 'on' : ''} data-settings-group=${item.id} aria-current=${item === group ? 'page' : undefined} onClick=${() => pickGroup(item.id)}>${t(item.label)}</button>`)}</nav>`}
       </header>
       <div class="settings-body" ref=${scroll}>
@@ -108,7 +107,6 @@ export function SettingsNavigation({ Row }) {
           <aside class="settings-info" id="settings-description" aria-live="polite"><div class="settings-info-icon"><${Icon} name=${icons[current.id]} size=${44} /></div><div class="settings-info-label"><${Icon} name="info" size=${16} />${t('About this setting')}</div><h3>${t(focused ? settingLabel(focused.row) : 'Setting help')}</h3><p>${t(focused ? settingHelp(focused, s.settings) : 'Select Help beside a setting to see what it does.')}</p></aside>
         </div>`}
       </div>
-      <footer class="settings-footer"><${Icon} name="info" size=${16} /><span>${t('Every change is saved at once; the game reads them when it starts.')}</span><span class="settings-footer-key">Ctrl+F · ${t('Search')}</span></footer>
     </section>
     ${dialog}
   </div>`;

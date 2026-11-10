@@ -9,13 +9,11 @@
 .settings-categories button .icon { width: 18px; height: 18px; flex: none; }
 .settings-categories button small { margin-left: auto; font-size: 11px; color: var(--muted); }
 .settings-nav-label { color: var(--muted); font-size: 11px; padding: 18px 12px 8px; }
-.settings-categories .settings-troubleshoot { margin-top: auto; border-top: 1px solid var(--line-strong); border-radius: 0; padding-top: 18px; }
 .settings-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .settings-heading { padding: 24px 28px 0; flex: none; }
 .settings-heading-line { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
 .settings-breadcrumb { color: var(--muted); font-size: 11px; margin-bottom: 8px; }
 .settings-heading h2 { font-size: 25px; font-weight: 650; letter-spacing: -.025em; margin: 0; }
-.settings-heading p { font-size: 12px; color: var(--text-2); margin-top: 5px; }
 .settings-search { width: 270px; max-width: 44%; flex: none; }
 .settings-search .input { width: 100%; font-size: 12px; border: 1px solid var(--muted); background: var(--surface); }
 .settings-search .input:hover { border-color: var(--text-2); }
@@ -59,9 +57,6 @@
 .settings-info-label { color: var(--accent); display: flex; align-items: center; gap: 6px; font-size: 11px; margin-bottom: 10px; }
 .settings-info h3 { margin: 0 0 10px; color: var(--text); font-size: 13px; }
 .settings-info p { line-height: 1.8; }
-.settings-footer { display: flex; align-items: center; gap: 8px; padding: 14px 28px; border-top: 1px solid var(--line-strong); color: var(--muted); font-size: 11px; flex: none; }
-.settings-footer .icon { flex: none; color: var(--accent); }
-.settings-footer-key { margin-left: auto; white-space: nowrap; }
 .m-main.m-main:has(.settings-frame) { padding: 0; overflow: hidden; display: flex; scrollbar-gutter: auto; }
 @media (max-width: 1250px) {
   .settings-workspace { grid-template-columns: minmax(0, 1fr); }
@@ -88,7 +83,7 @@
 @media (max-width: 760px) {
   .settings-frame { display: flex; flex-direction: column; }
   .settings-categories { flex: none; padding: 8px 12px; overflow: visible; border-right: 0; border-bottom: 1px solid var(--line-strong); }
-  .settings-categories h1, .settings-nav-label, .settings-categories .settings-troubleshoot { display: none; }
+  .settings-categories h1, .settings-nav-label { display: none; }
   .settings-categories nav { flex-direction: row; overflow-x: auto; }
   .settings-categories button { padding: 9px 10px; flex: none; font-size: 12px; white-space: nowrap; }
   .settings-categories button small { display: none; }
@@ -97,7 +92,6 @@
   .settings-breadcrumb { display: none; }
   .settings-heading h2 { font-size: 22px; }
   .settings-heading-line { gap: 12px; }
-  .settings-heading p { font-size: 11px; }
   .settings-body { padding: 16px; }
   .settings-subtabs { margin-top: 16px; }
   .settings-frame .setting-row { grid-template-columns: minmax(0, 1fr) minmax(100px, 38%); gap: 10px; }
@@ -109,8 +103,6 @@
   .settings-frame .setting-row .name span { font-size: 10px; }
   .settings-options-heading { gap: 6px; flex-wrap: wrap; }
   .settings-options-heading h3 { font-size: 13px; }
-  .settings-footer { padding: 11px 16px; font-size: 10px; }
-  .settings-footer-key { display: none; }
 }
 
 .settings-profiles { padding: 3px 0; }
