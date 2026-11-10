@@ -291,6 +291,37 @@ the bus files to the server, which keeps them and passes them on, so nobody sees
 * `accept_uploads = 0` turns it off. A game hosting a session (`--lan-host`) takes joiners'
   buses the same way and keeps its own bus in its store for them.
 
+### Private vehicle file transfer opt-out (openOMSI extension)
+
+A vehicle author may mark a `.bus` or `.ovh` as non-redistributable:
+
+```ini
+[openomsi_multiplayer]
+allow_file_transfer 0
+```
+
+This is an opt-out from **automatic file transfer**, not from multiplayer driving.
+The official openOMSI client will not upload this vehicle to a player-hosted LAN
+or a dedicated server; the LAN host will not publish its own protected vehicle,
+and dedicated servers refuse to serve a protected vehicle from their fleet.
+Other players will see a stand-in unless they already have a matching local copy.
+
+`allow_file_transfer 1` explicitly permits transfers. Without the block, the
+legacy behavior remains unchanged. Unrecognized values are treated as `0`.
+Referenced `.bus` / `.ovh` descriptions (including articulated rear sections)
+are also checked. The session manifest omits a whole `Vehicles/<folder>` or
+`Trains/<folder>` if any vehicle description listed there forbids transfers.
+Previously persisted private vehicle manifests are not served after updating.
+
+**Limitations:** This does not retract content already delivered, prevent
+redistribution by modified clients or older releases, or infer ownership of
+shared assets outside vehicle folders (shared sounds, fonts, displays, etc.).
+Do not place private assets in content folders shared by the map itself.
+To limit automatic sharing on dedicated servers, use `share_maps = 0`
+and/or `accept_uploads = 0`; for player-hosted LAN, `OMSI_NO_LAN_MODS=1`
+turns off all mod exchange and `OMSI_NO_LAN_UPLOADS=1` prevents receiving
+other players' vehicles. This policy is not DRM.
+
 ## Optional RP speed governor
 
 `speed_limit_kmh` advertises `60`, `75` or `80` km/h to players. `0` (default) keeps normal
