@@ -448,6 +448,10 @@ impl Uploads {
         if bus.is_empty() || !self.serving() {
             return;
         }
+        if !crate::mods::transfer_policy::allows_bus(root, bus) {
+            log::info!("LAN host: {bus} is private; its files will not be offered");
+            return;
+        }
         let key = format!("{bus}|{paint}");
         {
             let mut k = self.kept_own.lock().unwrap_or_else(|e| e.into_inner());
