@@ -98,6 +98,20 @@ impl FrameGenerationKind {
             _ => None,
         }
     }
+
+    /// The setting's frame generation where it can run: AMD FSR 3 with DLSS or FSR 3 on (it takes
+    /// their motion), NVIDIA DLSS with DLSS on (DLSS hands it its inputs); DirectX 12 and the
+    /// vendor's DLLs either way.
+    pub fn runnable(word: &str, temporal: Option<Temporal>, graphics_api: &str) -> Option<FrameGenerationKind> {
+        use omsi_cfg::upscaler_files as files;
+        let (kind, temporal) = (Self::parse(word)?, temporal?);
+        let dir = files::program_dir();
+        let runs = match kind {
+            FrameGenerationKind::Fsr3 => files::frame_generation_available(&dir),
+            FrameGenerationKind::Dlss(_) => temporal.upscaler == TemporalUpscaler::Dlss && files::dlss_frame_generation_available(&dir),
+        };
+        (runs && files::first_api(graphics_api, temporal.upscaler.as_str(), &dir) == "dx12").then_some(kind)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

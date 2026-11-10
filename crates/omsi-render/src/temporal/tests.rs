@@ -26,6 +26,8 @@ fn the_frame_generation_words_read_back() {
     for word in ["off", "", "dlss8x", "fsr4"] {
         assert_eq!(FrameGenerationKind::parse(word), None, "{word}");
     }
+    // (no frame generation without DLSS or FSR 3 drawing the picture)
+    assert_eq!(FrameGenerationKind::runnable("fsr3", None, "dx12"), None);
 }
 
 #[test]

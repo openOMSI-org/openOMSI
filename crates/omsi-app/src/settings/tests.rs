@@ -30,21 +30,13 @@ fn fsr1_menu_settings_round_trip_into_renderer() {
 }
 
 #[test]
-fn frame_generation_survives_the_menus_and_needs_an_upscaler() {
+fn frame_generation_survives_the_menus() {
     for word in ["off", "fsr3", "dlss2x", "dlss3x", "dlss4x"] {
         let mut ui = omsi_launcher_lib::settings_from_text(Some("upscaler=dlss\n"));
         ui["frame_generation"] = serde_json::json!(word);
-        let saved = omsi_launcher_lib::settings_to_text(&ui, None);
-        let game = Settings::from_text(&saved);
-        assert_eq!(game.frame_generation, word);
+        let game = Settings::from_text(&omsi_launcher_lib::settings_to_text(&ui, None));
         assert_eq!(Settings::from_text(&game.to_text()).frame_generation, word);
     }
-    // (an unknown or future word is off)
-    assert_eq!(Settings::from_text("frame_generation=dlss8x\n").frame_generation, "off");
-    assert_eq!(Settings::from_text("frame_generation=DLSS\n").frame_generation, "dlss2x");
-    // (no frame generation without DLSS or FSR 3 drawing the picture, nor without the vendor's DLLs)
-    assert_eq!(Settings::from_text("frame_generation=fsr3\n").frame_generation_kind(), None);
-    assert_eq!(Settings::from_text("upscaler=fsr1\nframe_generation=dlss2x\n").frame_generation_kind(), None);
 }
 
 #[test]

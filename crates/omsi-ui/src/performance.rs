@@ -427,6 +427,20 @@ pub fn graph_scale(frames: &VecDeque<Sample>) -> f32 {
         .unwrap_or(0.2)
 }
 
+/// The frame rate's corner: the frames a second drawn, with the ones frame generation made on
+/// top while it makes any, and the upscaler the picture goes through (none: the standard one).
+pub fn corner(drawn: f32, generated: Option<f32>, upscaler: Option<&str>) -> String {
+    let mut text = match generated.filter(|g| *g > 0.0) {
+        Some(g) => format!("{:.0} fps ({drawn:.0} + FG)", drawn + g),
+        None => format!("{drawn:.0} fps"),
+    };
+    if let Some(u) = upscaler {
+        text.push_str(" · ");
+        text.push_str(u);
+    }
+    text
+}
+
 /// The panel's first line: the frames a second on screen, with the drawn ones beside them while
 /// frame generation makes any, and the drawn frame's time.
 fn head(fps: f32, generated_per_drawn: Option<f32>, frame_ms: f32) -> String {
@@ -443,6 +457,13 @@ fn head(fps: f32, generated_per_drawn: Option<f32>, frame_ms: f32) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_corner_names_the_upscaler_and_frame_generations_frames() {
+        assert_eq!(super::corner(60.0, None, None), "60 fps");
+        assert_eq!(super::corner(60.0, Some(0.0), Some("FSR 3")), "60 fps · FSR 3");
+        assert_eq!(super::corner(60.0, Some(59.0), Some("DLSS")), "119 fps (60 + FG) · DLSS");
+    }
+
     #[test]
     fn the_head_counts_the_generated_frames_beside_the_drawn_ones() {
         assert_eq!(
