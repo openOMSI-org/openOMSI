@@ -570,13 +570,7 @@ fn upscaler_rows(app: &App, file: &serde_json::Value) -> Vec<(String, String)> {
     let offered = !omsi_cfg::upscaler_files::available(&omsi_cfg::upscaler_files::program_dir()).is_empty();
     let pct = |v: f32| format!("{:.0} %", v * 100.0);
     // (a Mac's only temporal upscaler is Apple's own, and Metal its only graphics interface)
-    let help = if !offered {
-        "Standard Catmull-Rom or AMD FSR 1; changes show at once"
-    } else if cfg!(target_os = "macos") {
-        "Standard Catmull-Rom or AMD FSR 1 change at once; Apple MetalFX takes the place of the anti-aliasing and the render scale, from the next start"
-    } else {
-        "Standard Catmull-Rom or AMD FSR 1 change at once; NVIDIA DLSS or AMD FSR 3 take the place of the anti-aliasing and the render scale, on DirectX 12 or Vulkan, from the next start"
-    };
+    let help = if !offered { "Standard Catmull-Rom or AMD FSR 1; changes show at once" } else if cfg!(target_os = "macos") { "Standard Catmull-Rom or AMD FSR 1 change at once; Apple MetalFX takes the place of the anti-aliasing and the render scale, from the next start" } else { "Standard Catmull-Rom or AMD FSR 1 change at once; NVIDIA DLSS or AMD FSR 3 take the place of the anti-aliasing and the render scale, on DirectX 12 or Vulkan, from the next start" };
     [
         select_row(file, "upscaler", "Upscaling", help),
         select_row(file, "upscale_quality", "Upscaling quality", "Native keeps the window's resolution and only smooths the edges; the lower the quality, the smaller the picture is drawn and the higher the frame rate").filter(|_| temporal),

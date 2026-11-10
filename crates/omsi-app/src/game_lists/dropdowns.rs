@@ -396,8 +396,7 @@ pub(super) fn select_row(file: &serde_json::Value, key: &str, name: &str, desc: 
     if options.is_empty() {
         return None;
     }
-    // (DLSS or FSR 3 whose DLLs are gone, MetalFX on another machine: the game draws with the
-    // standard upscaler)
+    // (DLSS or FSR 3 whose DLLs are gone, MetalFX on another machine: the standard upscaler)
     let at = at.or((key == "upscaler").then_some(0));
     let label = at.map(|i| omsi_ui::tr(options[i].1).into_owned()).unwrap_or(cur);
     Some((row(name, 'o', &label, desc, None), format!("sel {key}")))

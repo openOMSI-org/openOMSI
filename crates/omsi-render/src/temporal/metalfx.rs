@@ -160,9 +160,19 @@ impl Upscaler {
             if mask {
                 // (the mask's own usage: `reactiveMaskTextureUsage` from macOS 27, before it the
                 // same under its older name, `reactiveTextureUsage`, from 14.4)
-                let newer: bool = unsafe { msg_send![&*raw, respondsToSelector: sel!(reactiveMaskTextureUsage)] };
-                let need: MTLTextureUsage = if newer { unsafe { msg_send![&*raw, reactiveMaskTextureUsage] } } else { unsafe { msg_send![&*raw, reactiveTextureUsage] } };
-                needs.push(("mask", need, &frame.mask));
+                // (a version that answers to neither keeps its mask unchecked: asked anyway,
+                // Objective-C would stop the game instead of falling back)
+                let answers = |s| -> bool { unsafe { msg_send![&*raw, respondsToSelector: s] } };
+                let need: Option<MTLTextureUsage> = if answers(sel!(reactiveMaskTextureUsage)) {
+                    Some(unsafe { msg_send![&*raw, reactiveMaskTextureUsage] })
+                } else if answers(sel!(reactiveTextureUsage)) {
+                    Some(unsafe { msg_send![&*raw, reactiveTextureUsage] })
+                } else {
+                    None
+                };
+                if let Some(need) = need {
+                    needs.push(("mask", need, &frame.mask));
+                }
             }
             for (what, need, have) in needs {
                 if have.usage().0 & need.0 != need.0 {
