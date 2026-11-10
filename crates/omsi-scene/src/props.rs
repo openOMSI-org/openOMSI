@@ -922,7 +922,13 @@ impl World {
             .texture_limit
             .load(std::sync::atomic::Ordering::Relaxed);
         let video_limit = self.video_memory_limit.load(std::sync::atomic::Ordering::Relaxed);
-        if (limit == 0 && video_limit == 0) || centers.is_empty() {
+        // Zero in both user settings does not mean unlimited video memory: Vulkan,
+        // DX12 and Metal can still report a finite driver budget. Without this
+        // check the budget pass returned early and never relieved VRAM pressure in
+        // automatic mode, even as the driver approached out-of-memory.
+        if centers.is_empty()
+            || (limit == 0 && video_limit == 0 && renderer.gpu_memory(scene).cap(0) == 0)
+        {
             return 0;
         }
         // (no texture budget of their own: the card's alone bounds them)
