@@ -325,7 +325,6 @@ pub struct LanGame {
     /// Vehicles another player drives that could not be made here, and when that was
     /// tried: tried again only after a while (every frame, a server read a big add-on bus
     /// it could not load over and over and stood still for everybody).
-    /// Retry separately for each repaint: a missing old livery must not delay a new one.
     failed: hashbrown::HashMap<(u32, String, String), std::time::Instant>,
     /// Our vehicle's variable table (by its program), for `omsi_net::vars`.
     my_vars: Option<(usize, Arc<VarTable>)>,
@@ -2428,12 +2427,8 @@ pub fn tick_receive(
             }
         }
         if !game.remotes.contains_key(&pose.id) {
-            // Keep at most one failed repaint per player. A failed previous
-            // scheme must not defer a newly selected paint, or accumulate
-            // unreachable entries as the user browses the livery list.
-            game.failed.retain(|(id, bus, paint), _| {
-                *id != pose.id || (bus == &pose.bus && paint == &pose.paint)
-            });
+            // Discard stale repaint retries when the player changes livery.
+            game.failed.retain(|(id, bus, paint), _| *id != pose.id || (bus == &pose.bus && paint == &pose.paint));
             let key = (pose.id, pose.bus.clone(), pose.paint.clone());
             if game.failed.get(&key).is_some_and(|t| t.elapsed().as_secs_f32() < 30.0) {
                 continue;
