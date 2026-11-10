@@ -389,9 +389,8 @@ impl PeopleSim {
         let center = self.center;
         // strollers: as many as the pavement around carries
         let lanes: Vec<usize> = ped
-            .ends
-            .keys()
-            .copied()
+            .sidewalks_near(center.truncate(), STROLL_RADIUS * 0.9)
+            .into_iter()
             .filter(|&l| {
                 // A zero trafficdensity means no random traffic originates here, also
                 // on pedestrian paths (e.g. map 400's traffic islands). Keep the path
