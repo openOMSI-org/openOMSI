@@ -1,18 +1,17 @@
-// Settings: one tab at a time (the whole page at once was taller than two screens), each in
-// two columns. What the tabs hold is in settings-schema.js; here they are drawn, and every
-// change goes to settings.cfg at once.
+// Settings controls keep their existing contracts; settings-navigation.js arranges them
+// into short topics. Every change goes to settings.cfg at once.
 
 import { html, useState, useEffect, useRef } from '../../vendor/preact-htm.js';
 import { S, useStore, set, toast, remembered, remember } from '../store.js';
 import { t } from '../i18n.js';
 import { call, onPhone, inTauri } from '../api.js';
-import { Button, Card, Select, Input, Toggle, Tabs, Slider, PageHead, Search, useConfirm } from '../ui.js';
+import { Button, Select, Input, Toggle, Slider } from '../ui.js';
 import { saveSettings, applyTheme, fitWindow, launcherSize, LAUNCHER_SIZES, launcherLayout, LAUNCHER_LAYOUTS } from '../data.js';
 import { UpdateRow, checkUpdates } from '../updates.js';
 import { SETTINGS_TABS, GRAPHICS_PROFILE_KEYS } from './settings-schema.js';
 import { VersionsDialog } from './versions.js';
 import { RadioStations } from './radio-stations.js';
-import { AiListsPage } from './ai-lists.js';
+import { SettingsNavigation } from './settings-navigation.js';
 import { OptimiseBlock } from './optimise.js';
 
 const REPO_URL = 'https://github.com/openOmsi-project/openOMSI';
@@ -46,77 +45,8 @@ function asStored(cur, v) {
   return v;
 }
 
-const visible = (row, s, platform) => !row.when || row.when(s, platform);
-
-const fold = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-
-function matches(row, words) {
-  if (!row.label) return false;
-  const help = typeof row.help === 'function' ? row.help(S.settings) : row.help;
-  const text = fold([row.label, t(row.label), help, help && t(help), typeof row.key === 'string' && row.key].join(' '));
-  return words.every((w) => text.includes(w));
-}
-
-function SearchResults({ tabs, words, platform, ask }) {
-  const s = S.settings;
-  const groups = tabs.filter((tab) => tab.cols).map((tab) => [tab, tab.cols.flatMap((col) => col.rows.filter((row) => visible(row, s, platform) && matches(row, words)))]).filter(([, rows]) => rows.length);
-  if (!groups.length) return html`<p class="muted" style="margin:16px 0">${t('No setting matches this search')}</p>`;
-  return html`<div class="settings-grid">
-    ${groups.map(([tab, rows]) => html`<${Card} key=${tab.id} title=${tab.label}>
-      ${rows.map((row, i) => html`<${Row} key=${i + (row.key || row.label)} row=${row} ask=${ask} />`)}
-    </${Card}>`)}
-  </div>`;
-}
-
 export function SettingsPage() {
-  const s = useStore();
-  const [tab, setTab] = useState(() => {
-    const id = remembered('settings-tab', 'graphics');
-    return SETTINGS_TABS.some((x) => x.id === id) ? id : 'graphics';
-  });
-  const [ask, dialog] = useConfirm();
-  const [q, setQ] = useState('');
-  useEffect(() => {
-    const key = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
-        e.preventDefault();
-        document.querySelector('.settings-search input')?.focus();
-      } else if (e.key === 'Escape' && document.activeElement?.closest?.('.settings-search')) setQ('');
-    };
-    window.addEventListener('keydown', key);
-    return () => window.removeEventListener('keydown', key);
-  }, []);
-  if (!s.settings) return null;
-  const platform = s.boot?.platform || '';
-  // (the model test runs the game program: not on a phone)
-  const phone = ['android', 'ios'].includes(platform);
-  const tabs = SETTINGS_TABS.filter((x) => visible(x, s.settings, platform));
-  const current = tabs.find((x) => x.id === tab) || tabs[0];
-  const words = fold(q).split(/\s+/).filter(Boolean);
-  const pick = (id) => {
-    // (Troubleshooting is no tab of its own: it opens that page at its model test)
-    if (id === 'troubleshoot') {
-      remember('troubleshoot-tab', 'content');
-      return set({ page: 'troubleshoot' });
-    }
-    setTab(id);
-    remember('settings-tab', id);
-  };
-  return html`
-    <${PageHead} title="Settings" text="Every change is saved at once; the game reads them when it starts." />
-    <div class="settings-search" style="margin-bottom:12px"><${Search} value=${q} onInput=${setQ} placeholder="Search all settings (Ctrl+F)" /></div>
-    ${words.length
-      ? html`<${SearchResults} tabs=${tabs} words=${words} platform=${platform} ask=${ask} />`
-      : html`<${Tabs} value=${current.id} options=${[...tabs.map((x) => [x.id, x.label]), ...(phone ? [] : [['troubleshoot', 'Troubleshooting']])]} onChange=${pick} />
-    ${current.page === 'ailists'
-      ? html`<div key=${tab}><${AiListsPage} /></div>`
-      : html`<div class="settings-grid" key=${tab}>
-      ${current.cols.map((col) => html`<${Card} title=${col.title}>
-        ${col.rows.filter((row) => visible(row, s.settings, platform)).map((row, i) => html`<${Row} key=${i + (row.key || row.id || row.label || row.title || '')} row=${row} ask=${ask} />`)}
-      </${Card}>`)}
-    </div>`}`}
-    ${dialog}
-  `;
+  return html`<${SettingsNavigation} Row=${Row} />`;
 }
 
 export function settingRow(key) {
@@ -128,22 +58,22 @@ export function SettingRow({ row, ask }) {
   return row ? html`<${Row} row=${row} ask=${ask} />` : null;
 }
 
-function Row({ row, ask }) {
+function Row({ row, ask, compact = false }) {
   switch (row.type) {
     case 'section':
       return html`<div class="section-title">${t(row.title)}</div>`;
     case 'note':
       return html`<p class="muted small" style="margin:8px 0">${t(row.text)}</p>`;
     case 'select':
-      return html`<${SelectRow} row=${row} />`;
+      return html`<${SelectRow} row=${row} compact=${compact} />`;
     case 'toggle':
-      return html`<${ToggleRow} row=${row} />`;
+      return html`<${ToggleRow} row=${row} compact=${compact} />`;
     case 'slider':
-      return html`<${SliderRow} row=${row} />`;
+      return html`<${SliderRow} row=${row} compact=${compact} />`;
     case 'button':
       return html`<${ButtonRow} row=${row} />`;
     case 'custom':
-      return CUSTOM[row.id]?.({ ask }) || null;
+      return CUSTOM[row.id]?.({ ask, compact }) || null;
   }
   return null;
 }
@@ -152,7 +82,7 @@ function Name({ label, help, warn }) {
   return html`<div class="name">${t(label)}${help && html`<span>${t(help)}</span>`}${warn && html`<span class="warn-fg">${t(warn)}</span>`}</div>`;
 }
 
-function SelectRow({ row }) {
+function SelectRow({ row, compact }) {
   const s = S.settings;
   const options = typeof row.options === 'function' ? row.options(s, S.boot) : row.options;
   const cur = s[row.key];
@@ -160,21 +90,21 @@ function SelectRow({ row }) {
   const match = options.find(([v]) => same(cur, v) || String(cur) === String(v));
   const value = match ? match[0] : row.unknown ?? (cur == null ? '' : typeof cur === 'boolean' ? (cur ? '1' : '0') : String(cur));
   return html`<div class="setting-row">
-    <${Name} label=${row.label} help=${typeof row.help === 'function' ? row.help(s) : row.help} warn=${row.heavy?.(value, s) && 'Heavy: can cost many frames per second on most graphics cards'} />
+    <${Name} label=${row.label} help=${!compact && (typeof row.help === 'function' ? row.help(s) : row.help)} warn=${row.heavy?.(value, s) && 'Heavy: can cost many frames per second on most graphics cards'} />
     <${Select} value=${value} options=${options} raw=${row.raw} always=${!match && row.unknown != null} onChange=${async (v) => (await saveSettings({ [row.key]: asStored(cur, v) })) && row.recheckUpdates && checkUpdates()} />
   </div>`;
 }
 
-function ToggleRow({ row }) {
+function ToggleRow({ row, compact }) {
   return html`<div class="setting-row">
-    <${Name} label=${row.label} help=${row.help} />
+    <${Name} label=${row.label} help=${!compact && (typeof row.help === 'function' ? row.help(S.settings) : row.help)} />
     <${Toggle} checked=${!!S.settings[row.key]} onChange=${(v) => saveSettings({ [row.key]: v })} />
   </div>`;
 }
 
 /** A slider shows its value at once and saves it a moment after the hand stops (a save per
  * step would write settings.cfg dozens of times a drag). */
-function SliderRow({ row }) {
+function SliderRow({ row, compact }) {
   const key = typeof row.key === 'function' ? row.key(S.settings) : row.key;
   const stored = num(S.settings[key]);
   const [shown, setShown] = useState(null);
@@ -202,7 +132,7 @@ function SliderRow({ row }) {
   };
   const value = shown ?? (isNaN(stored) ? row.def : stored);
   return html`<div class="setting-row full">
-    <${Slider} label=${row.label} help=${row.help} value=${value} min=${row.min} max=${row.max} step=${row.step} format=${row.format} onChange=${onChange} />
+    <${Slider} label=${row.label} help=${!compact && (typeof row.help === 'function' ? row.help(S.settings) : row.help)} value=${value} min=${row.min} max=${row.max} step=${row.step} format=${row.format} onChange=${onChange} />
   </div>`;
 }
 
@@ -226,7 +156,7 @@ const CUSTOM = {
   profiles: () => html`<${ProfilesBlock} />`,
   theme: () => html`<${ThemeRow} />`,
   launcher_layout: () => !onPhone && html`<${LauncherLayoutRow} />`,
-  launcher_size: () => inTauri && html`<${LauncherSizeRow} />`,
+  launcher_size: ({ compact }) => inTauri && html`<${LauncherSizeRow} compact=${compact} />`,
   corner: () => html`<${CornerRow} />`,
   version: () => html`<${VersionRow} />`,
   reset: ({ ask }) => html`<${ResetRow} ask=${ask} />`,
@@ -373,26 +303,26 @@ function ProfilesBlock() {
     }
   };
   return html`
-    <div class="setting-row">
-      <${Name} label="Saved profile" />
-      <${Select} raw value=${sel} disabled=${!list.length} options=${list.length ? list.map((n) => [n, n]) : [['', t('No saved profiles')]]} onChange=${(n) => {
-        setSel(n);
-        setName(n);
-      }} />
+    <div class="settings-profiles">
+      <section class="settings-profile-saved" aria-labelledby="saved-graphics-profiles">
+        <h4 id="saved-graphics-profiles">${t('Saved profile')}</h4>
+        <${Select} raw value=${sel} disabled=${!list.length} options=${list.length ? list.map((n) => [n, n]) : [['', t('No saved profiles')]]} onChange=${(n) => {
+          setSel(n);
+          setName(n);
+        }} />
+        <div class="settings-profile-actions">
+          <${Button} icon="download" label="Load" disabled=${!list.length} onClick=${load} />
+          <${Button} kind="danger" icon="trash" label="Delete" disabled=${!list.length} onClick=${remove} />
+        </div>
+      </section>
+      <section class="settings-profile-save" aria-labelledby="save-graphics-profile">
+        <h4 id="save-graphics-profile">${t('Save current graphics settings')}</h4>
+        <${Input} id="graphics-profile-name" aria-label=${t('Profile name')} value=${name} placeholder="Profile name" onInput=${setName} maxlength="40" />
+        <div class="settings-profile-actions"><${Button} kind="primary" icon="save" label="Save current graphics as profile" onClick=${save} /></div>
+      </section>
+      <p class="muted small">${t('Profiles only store graphics settings; window size and fullscreen are kept.')}</p>
+      ${msg && html`<p class="muted small" role="status">${msg}</p>`}
     </div>
-    <div class="setting-row full">
-      <div class="grid-2">
-        <${Button} icon="download" label="Load" disabled=${!list.length} onClick=${load} />
-        <${Button} kind="danger" icon="trash" label="Delete" disabled=${!list.length} onClick=${remove} />
-      </div>
-    </div>
-    <div class="setting-row full">
-      <div class="stack" style="gap:10px">
-        <${Input} value=${name} placeholder="Profile name" onInput=${setName} maxlength="40" />
-        <${Button} kind="primary" icon="save" label="Save current graphics as profile" onClick=${save} />
-      </div>
-    </div>
-    ${msg && html`<p class="muted small" style="margin:8px 0">${msg}</p>`}
   `;
 }
 
@@ -430,10 +360,10 @@ function LauncherLayoutRow() {
   </div>`;
 }
 
-function LauncherSizeRow() {
+function LauncherSizeRow({ compact }) {
   const [size, setSize] = useState(launcherSize);
   return html`<div class="setting-row">
-    <${Name} label="Launcher size" help="Grows with the window; this sets how big it is" />
+    <${Name} label="Launcher size" help=${!compact && 'Grows with the window; this sets how big it is'} />
     <${Select} value=${size} options=${LAUNCHER_SIZES} onChange=${(v) => {
       setSize(v);
       remember('launcher_size', v);
