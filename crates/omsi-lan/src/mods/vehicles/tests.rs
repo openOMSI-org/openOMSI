@@ -14,6 +14,28 @@ fn entry(path: &str, data: &[u8]) -> Entry {
     Entry { path: path.into(), size: data.len() as u64, sha256: super::super::sha256_of(data) }
 }
 
+#[test]
+fn private_vehicle_manifest_is_never_committed_or_reopened() {
+    let dir = temp("private-policy");
+    let kept = Buses::default();
+    kept.open_in(&dir).unwrap();
+    let bus = b"[openomsi_multiplayer]\nallow_file_transfer 0\n";
+    let e = entry("Vehicles/Private/private.bus", bus);
+    kept.put(&e, bus).unwrap();
+    let m = VehicleManifest {
+        bus: e.path.clone(),
+        entries: vec![e],
+    }.validated().unwrap();
+    assert!(kept.commit(m.clone()).is_err(), "a private bus cannot be offered to other players");
+
+    // Reproduce a manifest written by an older version before the opt-out existed.
+    let fp = m.fingerprint();
+    std::fs::write(dir.join("vehicles").join(format!("{fp}.json")), serde_json::to_vec(&m).unwrap()).unwrap();
+    kept.open_in(&dir).unwrap();
+    assert!(kept.manifest(&fp).is_none(), "a persisted private bus cannot be re-served");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// A host that answers MANIFEST with `list`, and BLOB and PIECE from `files` (by
 /// SHA-256), on the encrypted mods connection - a host with a store of its own, apart from
 /// this test's.
