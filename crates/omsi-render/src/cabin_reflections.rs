@@ -6,6 +6,10 @@ use crate::*;
 use crate::passes::{FrameCtx, kind_of};
 
 const PLANES: usize = 2;
+// Half strength at 3 m, fading smoothly away between 8 and 14 m of travel to the
+// pane. This visibility envelope keeps distant saloon imagery from washing out
+// the road; it supplements the actual lamp-to-surface lighting, not replaces it.
+const DISTANCE_FADE: [f32; 4] = [3.0, 8.0, 14.0, 0.0];
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -193,6 +197,7 @@ impl Pipelines {
         for (i, c) in self.captures.iter().enumerate() {
             let mut u: puddles::VehicleUniform = bytemuck::Zeroable::zeroed();
             u.plane = planes[i];
+            u.cabin_fade = DISTANCE_FADE;
             queue.write_buffer(&c.plane, 0, bytemuck::bytes_of(&u));
             queue.write_buffer(&c.params, 0, bytemuck::bytes_of(&Uniform { planes, screen: [f.width as f32, f.height as f32, i as f32, plan.planes.len() as f32] }));
         }

@@ -360,7 +360,7 @@ fn vs_depth(in: VsIn) -> DepthOut {
 }
 
 struct VehicleBox { a: vec4<f32>, b: vec4<f32>, c: vec4<f32> };
-struct VehicleReflection { plane: vec4<f32>, parts: array<VehicleBox, 4> };
+struct VehicleReflection { plane: vec4<f32>, parts: array<VehicleBox, 4>, cabin_fade: vec4<f32> };
 @group(2) @binding(0) var<uniform> vehicle_reflection: VehicleReflection;
 
 @vertex

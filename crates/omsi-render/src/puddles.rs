@@ -27,6 +27,8 @@ struct VehicleBox {
 pub(super) struct VehicleUniform {
     pub(crate) plane: [f32; 4],
     parts: [VehicleBox; 4],
+    // Cabin-only visibility envelope; zero leaves road captures unchanged.
+    pub(crate) cabin_fade: [f32; 4],
 }
 
 #[repr(C)]
@@ -651,7 +653,7 @@ impl Renderer {
         self.queue.write_buffer(
             &self.puddles.as_ref().unwrap().vehicle_params,
             0,
-            bytemuck::bytes_of(&VehicleUniform { plane, parts }),
+            bytemuck::bytes_of(&VehicleUniform { plane, parts, cabin_fade: [0.0; 4] }),
         );
         self.queue.write_buffer(
             &self.puddles.as_ref().unwrap().params,

@@ -24,6 +24,80 @@ fn windscreen_reflects_the_cabin_with_ray_tracing_and_msaa() {
     reflection_case(4, true);
 }
 
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn cabin_reflection_follows_brightness_and_distance() {
+    falloff_case(1, false);
+}
+
+#[test]
+#[ignore = "requires a ray-query graphics adapter; run with --ignored on a GPU host"]
+fn cabin_reflection_follows_brightness_and_distance_with_ray_tracing() {
+    falloff_case(4, true);
+}
+
+fn falloff_case(msaa: u32, ray_tracing: bool) {
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let mut renderer = pollster::block_on(Renderer::new_with(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        RenderOptions { msaa, ray_tracing, ssao: false, shadow_size: 256, fxaa: false, light_shadows: 0, ..Default::default() })).unwrap();
+    if ray_tracing { assert!(renderer.rt.is_some(), "this test requires ray queries"); }
+    let camera = Camera { position: DVec3::new(0.0, 0.0, 1.5), yaw: 0.0, pitch: 0.0, roll: 0.0, fov_deg: 90.0, near: 0.1, far: 100.0 };
+    let lighting = Lighting { enhanced: true, sun_dir: Vec3::new(0.0, 0.8, -0.6), sun_intensity: 0.0, ambient: Vec3::ZERO, secondary: Vec3::ZERO, night: 1.0, shadows: false, lamp_shadows: false, fog_density: 0.0,
+        inside: Some((DVec3::ZERO, 0.0, [4.5, 30.0, 3.2, 0.0, 0.0, 1.5])), ..Default::default() };
+    let centre = |rgba: &[u8]| -> f32 {
+        (63..=65).flat_map(|y| (63..=65).map(move |x| rgba[(y * 128 + x) * 4] as f32)).sum::<f32>() / 9.0
+    };
+    let mut gains = Vec::new();
+    for distance in [2.5, 6.0, 10.0, 14.0] {
+        let mut scene = renderer.new_scene();
+        let glass = renderer.add_material_extra(&mut scene, None, AlphaMode::Blend, [0.0, 0.0, 0.0, 0.08], false, None, None, None, None, [0.0; 3],
+            MaterialExtra { glass: true, daylight_glass: true, no_z_write: true, ..Default::default() });
+        let pane = panel(&renderer, &mut scene, 2.0, [-2.0, 2.0], [0.0, 3.0], glass, true);
+        scene.instances[pane].slot_alpha[0] = 0.0;
+        let outside = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [0.0, 0.0, 0.0, 1.0], true);
+        panel(&renderer, &mut scene, 20.0, [-50.0, 50.0], [-50.0, 50.0], outside, false);
+        let red = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [1.0, 0.01, 0.01, 1.0], false);
+        // Keep the projected area and lamp-to-surface distance the same. Only the
+        // optical path to the pane changes, not lighting or the number of pixels.
+        let y = 2.0 - distance;
+        let half = (distance + 2.0) * 0.06;
+        let seat = panel(&renderer, &mut scene, y, [-half, half], [1.5 - half, 1.5 + half], red, true);
+        let light = renderer.alloc_interior_lights(&mut scene, 1);
+        renderer.set_interior_lamps(&mut scene, seat, light, 1);
+        let mut samples = Vec::new();
+        for intensity in [0.0, 0.25, 0.5, 1.0] {
+            renderer.set_interior_light(&mut scene, light, PointLight { position: DVec3::new(0.0, y as f64 + 1.0, 1.5), radius: 4.0, core: 1.0, intensity, color: [1.0; 3], ..Default::default() });
+            samples.push(centre(&renderer.render_to_image(&mut scene, 128, 128, &camera, &lighting).unwrap()));
+        }
+        if distance <= 6.0 {
+            assert!(samples.windows(2).all(|p| p[1] > p[0] + 2.0), "brightness at {distance} m: {samples:?}");
+        }
+        gains.push(samples[3] - samples[0]);
+        if distance == 2.5 {
+            // Moving just the lamp away must weaken illumination of the same
+            // nearby object too, independently of the reflection's own falloff.
+            let mut lamp_gains = Vec::new();
+            for lamp_distance in [3.0, 6.0] {
+                renderer.set_interior_light(&mut scene, light, PointLight { position: DVec3::new(0.0, y as f64 + lamp_distance, 1.5), radius: 4.0, core: 1.0, intensity: 1.0, color: [1.0; 3], ..Default::default() });
+                lamp_gains.push(centre(&renderer.render_to_image(&mut scene, 128, 128, &camera, &lighting).unwrap()) - samples[0]);
+            }
+            assert!(lamp_gains[0] > 1.0 && lamp_gains[0] < gains[0] * 0.6 && lamp_gains[1] <= 1.0, "lamp distance: {lamp_gains:?}, nearby: {}", gains[0]);
+        }
+        // An illuminated object remains opaque in the capture even when its
+        // reflected light fades, and an emissive source must also fade with range.
+        scene.instances[seat].visible = false;
+        scene.dirty = true;
+        let emitter = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [1.0, 0.01, 0.01, 1.0], true);
+        panel(&renderer, &mut scene, y, [-half, half], [1.5 - half, 1.5 + half], emitter, true);
+        let emitted = centre(&renderer.render_to_image(&mut scene, 128, 128, &camera, &lighting).unwrap()) - samples[0];
+        if distance == 2.5 { assert!(emitted > 5.0, "near emissive source: {emitted}"); }
+        if distance == 14.0 { assert!(emitted <= 1.0, "distant emissive source: {emitted}"); }
+    }
+    eprintln!("cabin reflection gains at 2.5/6/10/14 m (RT={ray_tracing}): {gains:?}");
+    assert!(gains[0] > gains[1] * 1.3 && gains[1] > gains[2] * 1.5, "front/middle/rear falloff: {gains:?}");
+    assert!(gains[2] > 1.0 && gains[3] <= 1.0, "a faint rear reflection fades to none: {gains:?}");
+}
+
 fn reflection_case(msaa: u32, ray_tracing: bool) {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     let mut renderer = pollster::block_on(Renderer::new_with(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
@@ -60,8 +134,8 @@ fn reflection_case(msaa: u32, ray_tracing: bool) {
     // occupy these different footprints: a low square seat and a long thin rail.
     let seat_diff = diff(54, 70);
     let rail_diff = diff(71, 56);
-    assert!(seat_diff[0] > 10 && seat_diff[0] > seat_diff[2] * 2, "red seat: {seat_diff:?}");
-    assert!(rail_diff[2] > 10 && rail_diff[2] > rail_diff[0] * 2, "blue rail: {rail_diff:?}");
+    assert!(seat_diff[0] >= 8 && seat_diff[0] > seat_diff[2] * 2, "red seat: {seat_diff:?}");
+    assert!(rail_diff[2] >= 8 && rail_diff[2] > rail_diff[0] * 2, "blue rail: {rail_diff:?}");
     assert!(diff(54, 53).iter().all(|c| c.abs() <= 3), "no seat above its actual silhouette");
     assert!(diff(90, 64).iter().all(|c| c.abs() <= 3), "clear street between cabin objects");
     // Two coincident authored pane layers must not double the reflected light.
@@ -76,7 +150,7 @@ fn reflection_case(msaa: u32, ray_tracing: bool) {
     let mut disabled_lighting = lighting.clone();
     disabled_lighting.reflection_strength = 0.0;
     let disabled = renderer.render_to_image(&mut scene, 128, 128, &camera, &disabled_lighting).unwrap();
-    assert!(pixel(&disabled, 54, 70)[0] < pixel(&on, 54, 70)[0] - 10, "the existing reflection control disables the cabin capture too");
+    assert!(pixel(&disabled, 54, 70)[0] <= pixel(&off, 54, 70)[0] + 2, "the existing reflection control disables the cabin capture too");
     // Turning a pane off with an ordinary script must still hide its reflection.
     scene.materials[glass].uniform.glow[2] = 0.0;
     let hidden = renderer.render_to_image(&mut scene, 128, 128, &camera, &lighting).unwrap();
@@ -92,10 +166,10 @@ fn reflection_case(msaa: u32, ray_tracing: bool) {
     let cut = panel(&renderer, &mut scene, 2.0, [-2.0, 2.0], [0.0, 3.0], cut_glass, true);
     scene.instances[cut].slot_alpha[0] = 0.0;
     let hole = renderer.render_to_image(&mut scene, 128, 128, &camera, &lighting).unwrap();
-    assert!(pixel(&hole, 54, 70)[0] > pixel(&hidden, 54, 70)[0] + 10);
+    assert!(pixel(&hole, 54, 70)[0] >= pixel(&hidden, 54, 70)[0] + seat_diff[0] - 2);
     assert!(pixel(&hole, 71, 56)[2] <= pixel(&hidden, 71, 56)[2] + 2, "no reflection in the texture hole");
     let black = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [0.0, 0.0, 0.0, 1.0], true);
     panel(&renderer, &mut scene, 1.0, [-0.2, -0.1], [1.33, 1.46], black, true);
     let blocked = renderer.render_to_image(&mut scene, 128, 128, &camera, &lighting).unwrap();
-    assert!(pixel(&blocked, 54, 70)[0] < pixel(&hole, 54, 70)[0] - 10, "a foreground dashboard part occludes the reflection");
+    assert!(pixel(&blocked, 54, 70)[0] <= pixel(&hole, 54, 70)[0] - seat_diff[0] + 2, "a foreground dashboard part occludes the reflection");
 }
