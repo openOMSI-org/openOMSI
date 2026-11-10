@@ -225,29 +225,28 @@ pub(crate) fn adjust_mirror(p: &mut Player, i: usize, shift: [f32; 3], turn: [f3
     p.mirrors_dirty = true;
 }
 
+/// Scrollable mirror selector rows so buses with more than eight remain reachable.
+pub(super) fn mirror_list(ui: &mut Ui, cams: &[omsi_vehicle::Camera], mirror: &mut usize, r: Rect) {
+    ui.scroll_area("dt-mirrors", r, &mut |ui, area| {
+        for (k, c) in cams.iter().enumerate() {
+            let row = Rect::new(area.x, area.y + k as f32 * LINE, area.w, LINE - 2.0);
+            if !ui.rect_visible(row) { continue; }
+            if ui.row(&format!("dt-m{k}"), row, *mirror == k) { *mirror = k; }
+            ui.text_in(&format!("{k}   {:.2}, {:.2}, {:.2}   {} {:.0}  {} {:.0}  {} {:.0}", c.pos[0], c.pos[1], c.pos[2], omsi_ui::tr("yaw"), c.yaw, omsi_ui::tr("pitch"), c.pitch, omsi_ui::tr("fov"), c.fov), row.pad(8.0, 0.0), 12.0, Weight::Regular, th().text_soft, Align::Left);
+        }
+        cams.len() as f32 * LINE
+    });
+}
+
 fn mirrors(ui: &mut Ui, d: &mut DevTools, p: Option<&mut Player>, r: Rect, out: &mut Vec<Request>) {
     let Some(p) = p else { return };
     let n = p.vehicle.ty.def.cameras_reflexion.len();
     let mut y = r.y;
-    if n == 0 {
-        ui.text_in(&omsi_ui::tr("This bus has no mirrors"), Rect::new(r.x, y, r.w, LINE), 13.0, Weight::Regular, th().text_dim, Align::Left);
-        return;
-    }
+    if n == 0 { ui.text_in(&omsi_ui::tr("This bus has no mirrors"), Rect::new(r.x, y, r.w, LINE), 13.0, Weight::Regular, th().text_dim, Align::Left); return; }
     d.mirror = d.mirror.min(n - 1);
     ui.heading(Rect::new(r.x, y, r.w, 26.0), "Mirrors", None);
-    y += 26.0;
-    for (k, c) in p.vehicle.ty.def.cameras_reflexion.iter().enumerate().take(8) {
-        let row = Rect::new(r.x, y, r.w, LINE - 2.0);
-        if ui.row(&format!("dt-m{k}"), row, d.mirror == k) {
-            d.mirror = k;
-        }
-        let yaw = omsi_ui::tr("yaw");
-        let pitch = omsi_ui::tr("pitch");
-        let fov = omsi_ui::tr("fov");
-        ui.text_in(&format!("{k}   {:.2}, {:.2}, {:.2}   {yaw} {:.0}  {pitch} {:.0}  {fov} {:.0}", c.pos[0], c.pos[1], c.pos[2], c.yaw, c.pitch, c.fov), row.pad(8.0, 0.0), 12.0, Weight::Regular, th().text_soft, Align::Left);
-        y += LINE;
-    }
-    y += 8.0;
+    mirror_list(ui, &p.vehicle.ty.def.cameras_reflexion, &mut d.mirror, Rect::new(r.x, y + 26.0, r.w, n.min(8) as f32 * LINE));
+    y += 26.0 + n.min(8) as f32 * LINE + 8.0;
     let i = d.mirror;
     let mut shift = p.mirror_shifts.get(i).copied().unwrap_or([0.0; 3]);
     let mut turn = p.mirror_offsets.get(i).copied().unwrap_or([0.0; 2]);
