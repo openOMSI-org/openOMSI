@@ -613,7 +613,10 @@ impl Renderer {
         let puddles = (!gl && !passes.leave_out_enhanced).then(|| {
             puddles::Pipelines::new(&device, &scene.shader, &scene.camera_layout, &scene.material_layout)
         });
-        let cabin_reflections = puddles.as_ref().map(|p| cabin_reflections::Pipelines::new(
+        // The cabin picture adds one sampled texture to the scene/material layouts.
+        // Devices restricted to the WebGPU/downlevel default of 16 still need to
+        // open successfully and retain their ordinary glass reflection path.
+        let cabin_reflections = puddles.as_ref().filter(|_| device.limits().max_sampled_textures_per_shader_stage >= 17).map(|p| cabin_reflections::Pipelines::new(
             &device, &scene.shader, &scene.camera_layout, &scene.material_layout,
             &p.vehicle[0].get_bind_group_layout(2),
         ));
