@@ -206,15 +206,28 @@ fn the_ibis_stands_at_the_trips_first_stop_on_a_route_that_begins_before_it() {
 
 #[test]
 fn ibis_target_finds_encoded_hof_routes_for_night_and_express_lines() {
+    let terminus = |code: i32, tex: &str, s: &str| omsi_vehicle::hof::Terminus {
+        code,
+        texture_id: tex.into(),
+        strings: vec![s.into()],
+        ..Default::default()
+    };
+    let trip = |code: &str, name: &str, route: &str, line: &str| omsi_vehicle::hof::InfoTrip {
+        code: code.into(),
+        name: name.into(),
+        route: route.into(),
+        line: line.into(),
+        ..Default::default()
+    };
     let hof = omsi_vehicle::Hof {
         termini: vec![
-            omsi_vehicle::hof::Terminus { code: 712, texture_id: "Birkenweg".into(), strings: vec!["Birkenweg".into()], ..Default::default() },
-            omsi_vehicle::hof::Terminus { code: 154, texture_id: "Gatow".into(), strings: vec!["S+U Rathaus Spandau".into()], ..Default::default() },
+            terminus(712, "Birkenweg", "Birkenweg"),
+            terminus(154, "Gatow", "S+U Rathaus Spandau"),
         ],
         info_trips: vec![
-            omsi_vehicle::hof::InfoTrip { code: "91502".into(), name: "N15 -> Birkenweg".into(), route: "712".into(), line: "915".into(), ..Default::default() },
-            omsi_vehicle::hof::InfoTrip { code: "93402".into(), name: "Gatow".into(), route: "154".into(), line: "934".into(), ..Default::default() },
-            omsi_vehicle::hof::InfoTrip { code: "53402".into(), name: "X34".into(), route: "154".into(), line: "534".into(), ..Default::default() },
+            trip("91502", "N15 -> Birkenweg", "712", "915"),
+            trip("93402", "Gatow", "154", "934"),
+            trip("53402", "X34", "154", "534"),
         ],
         info_busstop_lists: vec![vec![], vec![], vec![]],
         ..Default::default()
