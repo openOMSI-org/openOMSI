@@ -3,6 +3,13 @@
 
 use super::*;
 
+/// A waiting place's floor, lifted to the pavement when that is up to a step above it: a
+/// place placed at z 0 on a raised footpath had its people standing knee-deep in it. Never
+/// lowered, the road beside a kerb sank them (see `PeopleSim::waiting_height`).
+fn raised_by_ground(world: &dyn World, floor: f64, x: f64, y: f64) -> f64 {
+    world.walk_height_near(x, y, floor).filter(|g| *g > floor).unwrap_or(floor)
+}
+
 impl PeopleSim {
     /// The world position and heading of a passenger.
     pub fn pax_world(&self, p: &Pax, buses: &[BusNow], bus_ix: &HashMap<BusId, usize>) -> Option<(DVec3, f64)> {
@@ -418,7 +425,7 @@ impl PeopleSim {
             // (the people waiting keep the floor of their place: see `waiting_height`)
             if p.inside.is_none() && p.pax_state != 2.0 {
                 if let Some(f) = waiting_height {
-                    p.pos.z = f;
+                    p.pos.z = raised_by_ground(world, f, p.pos.x, p.pos.y);
                 } else if let Some(g) = world.walk_height_near(p.pos.x, p.pos.y, p.pos.z) {
                     p.pos.z = g;
                 }
@@ -454,7 +461,7 @@ impl PeopleSim {
             step.z = if slope.is_finite() { moved as f64 * slope } else { d.z };
         } else {
             let at = p.pos + step;
-            step.z = match waiting_height.or_else(|| world.walk_height_near(at.x, at.y, p.pos.z)) {
+            step.z = match waiting_height.map(|f| raised_by_ground(world, f, at.x, at.y)).or_else(|| world.walk_height_near(at.x, at.y, p.pos.z)) {
                 Some(g) => g - p.pos.z,
                 None => 0.0,
             };
