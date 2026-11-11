@@ -156,6 +156,8 @@ impl TrafficLightController {
         let cycle = self.cycle_len();
         let mut left = dt.max(0.0) as f64;
         self.held = false;
+        // will build cache once only when there is a potential barrier
+        let mut barrier_cache: Option<(Vec<bool>, Vec<bool>)> = None;
         let clear_rewind = |this: &mut Self, move_by: f64| {
             let Some(k) = this.rewound else { return };
             let source = this.stops[k].time as f64;
@@ -188,20 +190,48 @@ impl TrafficLightController {
                     best = Some((k, d, wrapped));
                 }
             }
-            // jump at the same time goes first.
-            let barrier = self
-                .stops
-                .iter()
-                .enumerate()
-                .filter(|(k, p)| p.jump_to.is_none() && !self.passed.contains(k) && self.stop_active(p) && self.stop_holdable(p))
-                .map(|(_, p)| (p.time as f64 - self.time).rem_euclid(cycle))
-                .filter(|d| *d > 1e-6 && *d <= left + 1e-6)
-                .reduce(f64::min);
+
+            let best_d = best.map_or(f64::INFINITY, |(_, d, _)| d);
+            let is_candidate = |k: usize, p: &LightStop| {
+                p.jump_to.is_none()
+                    && !self.passed.contains(&k)
+                    && {
+                        let d = (p.time as f64 - self.time).rem_euclid(cycle);
+                        d > 1e-6 && d <= left + 1e-6 && d <= best_d + 1e-6
+                    }
+            };
+
+            let has_candidate = best.is_some() && self.stops.iter().enumerate().any(|(k, p)| is_candidate(k, p)); 
+            if has_candidate && barrier_cache.is_none() {
+                let active: Vec<bool> = self.stops.iter().map(|p| self.stop_active(p)).collect();
+                let holdable: Vec<bool> = self
+                    .stops
+                    .iter()
+                    .zip(&active)
+                    .map(|(p, &active)| !active || p.jump_to.is_some() || !self.in_changeover_at(p.time as f64))
+                    .collect();
+                barrier_cache = Some((active, holdable));
+            }
+            let barrier = if has_candidate {
+                barrier_cache.as_ref().and_then(|(active, holdable)| {
+                    self.stops
+                        .iter()
+                        .enumerate()
+                        .filter(|(k, p)| is_candidate(*k, p))
+                        .filter(|(k, _)| active[*k] && holdable[*k])
+                        .map(|(_, p)| (p.time as f64 - self.time).rem_euclid(cycle))
+                        .reduce(f64::min)
+                })
+            } else {
+                None
+            };
 
             if let Some(bd) = barrier {
                 let jump_first = best.is_some_and(|(k, d, _)| {
                     let p = self.stops[k];
-                    p.jump_to.is_some() && (d - bd).abs() <= 1e-6 && self.stop_active(&p)
+                    p.jump_to.is_some()
+                        && (d - bd).abs() <= 1e-6
+                        && barrier_cache.as_ref().map_or_else(|| self.stop_active(&p), |(active, _)| active[k])
                 });
                 let barrier_first = best.map_or(true, |(_, d, _)| bd <= d + 1e-6);
                 if barrier_first && !jump_first {
@@ -226,11 +256,14 @@ impl TrafficLightController {
                 return;
             };
             let p = self.stops[k];
+            let is_active = barrier_cache.as_ref().map_or_else(|| self.stop_active(&p), |(active, _)| active[k]);
+            let is_holdable = p.jump_to.is_none()
+                && barrier_cache.as_ref().map_or_else(|| self.stop_holdable(&p), |(_, holdable)| holdable[k]);
 
             // A stop the clock already stands on (within 1e-6 either side) stops
             // here, as it would after a direct placement. An inactive one is behind it.
             if p.jump_to.is_none() && (d < 1e-6 || wrapped) {
-                if self.stop_active(&p) && self.stop_holdable(&p) {
+                if is_active && is_holdable {
                     self.held = true;
                     self.passed.clear();
                     return;
@@ -251,7 +284,7 @@ impl TrafficLightController {
                 continue;
             }
 
-            if !self.stop_active(&p) {
+            if !is_active {
                 self.passed.push(k);
                 continue;
             }
