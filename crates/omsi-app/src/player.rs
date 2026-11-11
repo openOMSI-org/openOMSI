@@ -5,6 +5,7 @@ use omsi_input::auto_shift::GateMemory;
 
 mod cameras;
 mod doors;
+mod driver_controls;
 mod gears;
 mod ibis;
 mod mouse;
@@ -396,6 +397,11 @@ impl Player {
         for name in &fire {
             self.vehicle.trigger(name);
         }
+        if !fire.is_empty() {
+            if let Some(driver) = self.driver.as_mut() {
+                driver.door_button_pressed(n, fire.first().map(String::as_str), None);
+            }
+        }
         fire
     }
 
@@ -405,6 +411,11 @@ impl Player {
         log::info!("door release: {}", fired.first().map_or("none on this bus", |s| s.as_str()));
         for name in &fired {
             self.vehicle.trigger(name);
+        }
+        if !fired.is_empty() {
+            if let Some(driver) = self.driver.as_mut() {
+                driver.door_button_pressed(0, fired.first().map(String::as_str), None);
+            }
         }
         fired
     }
@@ -467,6 +478,9 @@ impl Player {
                 self.door_key_off(&fired);
             }
             return true;
+        }
+        if pressed {
+            self.door_button_for_trigger(name, None);
         }
         if name.eq_ignore_ascii_case("ticket_give") {
             if pressed {

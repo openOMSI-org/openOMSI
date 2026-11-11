@@ -239,11 +239,10 @@ impl Player {
     pub(crate) fn click(&mut self, origin: DVec3, dir: Vec3, spread: f32) -> Option<usize> {
         self.release();
         if let Some(i) = self.pick(origin, dir, spread) {
-            let ev = self.vehicle.ty.model.meshes[self.vehicle.ty.meshes[i].def_index]
-                .mouse_event
-                .clone()
-                .unwrap();
-            log::info!("mouse event {ev}");
+            let def = &self.vehicle.ty.model.meshes[self.vehicle.ty.meshes[i].def_index];
+            let ev = def.mouse_event.clone().unwrap();
+            log::info!("mouse event {ev} on mesh {}", def.file);
+            self.door_button_for_trigger(&ev, Some(i));
             let plain = self.vehicle.trigger(&ev);
             // Momentary `[mouseevent]` buttons (Aachen ibox / ticket printer, #744) set a
             // flag in the press trigger and clear it in `_drag` / `_off`. The frame script
