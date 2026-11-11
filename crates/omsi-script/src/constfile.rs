@@ -59,7 +59,11 @@ impl ConstFile {
                 "const" => {
                     let name = r.word().to_string();
                     let value = r.f32();
-                    out.consts.push((name, value));
+                    // OMSI keeps the first value when a constfile repeats a name; later
+                    // blocks often contain legacy values for other script variants.
+                    if !out.consts.iter().any(|(existing, _)| existing.eq_ignore_ascii_case(&name)) {
+                        out.consts.push((name, value));
+                    }
                 }
                 "newcurve" => {
                     let name = r.word().to_string();
@@ -77,5 +81,20 @@ impl ConstFile {
             }
         }
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ConstFile;
+
+    #[test]
+    fn a_duplicate_const_keeps_the_first_definition() {
+        let file = omsi_cfg::CfgFile::from_str(
+            "duplicate.txt",
+            "[const]\nDoorAftOpenTime\n0.8\n[const]\ndooraftopentime\n0\n",
+        );
+        let parsed = ConstFile::parse(&file);
+        assert_eq!(parsed.consts, vec![("DoorAftOpenTime".to_string(), 0.8)]);
     }
 }
