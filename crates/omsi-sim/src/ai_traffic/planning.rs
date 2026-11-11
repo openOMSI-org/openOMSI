@@ -458,7 +458,13 @@ impl TrafficSim {
                 // it (not the head of a queue that waits for a light, a junction or a car),
                 // or the end of a queue standing behind a bus at its stop
                 o.standing_for(self.day_time) > 4.0
-                    || (o.stopped > 25.0 && !o.held && self.cars[i].stopped > 6.0)
+                    || (long_stopped_car_can_be_passed(
+                        o.stopped,
+                        o.held,
+                        o.light_hold,
+                        o.yielding,
+                        o.why.0,
+                    ) && self.cars[i].stopped > 6.0)
                     || (o.stopped > 3.0 && self.standing_queue(j).1)
             }
             Some(_) => player_standing.min(self.cars[i].since_player_at_light) > 10.0,
@@ -1321,4 +1327,47 @@ pub struct PullOut {
     pub side: f32,
     pub until: f32,
     pub back: f32,
+}
+
+
+/// A long-stopped vehicle is only an obstacle to pass when it is not part of a traffic
+/// queue. Otherwise every car behind a queue member reserves passing room, spreading the
+/// queue out even when the road ahead is simply waiting at a junction.
+fn long_stopped_car_can_be_passed(
+    stopped: f32,
+    held: bool,
+    light_hold: bool,
+    yielding: bool,
+    why: &str,
+) -> bool {
+    stopped > 25.0
+        && !held
+        && !light_hold
+        && !yielding
+        && why != "lead"
+        && why != "keep_back"
+}
+
+#[cfg(test)]
+mod standing_obstacle_tests {
+    use super::long_stopped_car_can_be_passed;
+
+    #[test]
+    fn a_long_stopped_queue_member_is_not_a_passing_obstacle() {
+        assert!(!long_stopped_car_can_be_passed(30.0, false, false, false, "lead"));
+        assert!(!long_stopped_car_can_be_passed(30.0, false, false, false, "keep_back"));
+    }
+
+    #[test]
+    fn a_long_stopped_junction_waiter_is_not_a_passing_obstacle() {
+        assert!(!long_stopped_car_can_be_passed(30.0, false, false, true, ""));
+        assert!(!long_stopped_car_can_be_passed(30.0, false, true, false, ""));
+        assert!(!long_stopped_car_can_be_passed(30.0, true, false, false, ""));
+    }
+
+    #[test]
+    fn an_unheld_stopped_vehicle_can_still_be_passed() {
+        assert!(long_stopped_car_can_be_passed(30.0, false, false, false, "parked"));
+        assert!(!long_stopped_car_can_be_passed(20.0, false, false, false, "parked"));
+    }
 }
