@@ -1094,8 +1094,16 @@ pub fn turns_round(m: &omsi_o3d::Mesh) -> bool {
         let z = linear.z_axis.normalize_or_zero();
         x.dot(Vec3::X) > 0.9 && y.dot(Vec3::Y) > 0.9 && z.dot(Vec3::Z) > 0.9
     };
-    let mirrored =
-        m.has_transform && !identity && !axis_aligned && m.transform.determinant() > 0.0;
+    // The Blender exporter writes the turn of its Z-up frame into Direct3D's Y-up (a quarter turn
+    // about x) in the matrix of every ordinary mesh: thousands of meshes carry it, so it is no
+    // sign of a mirror, and Omsi.exe draws those as wound (the IVECO static buses of Praha 200,
+    // whose normals were recomputed the other way, lost their outer skin).
+    let export_turn = linear.abs_diff_eq(glam::Mat3::from_cols(Vec3::X, -Vec3::Z, Vec3::Y), 1e-4);
+    let mirrored = m.has_transform
+        && !identity
+        && !axis_aligned
+        && !export_turn
+        && m.transform.determinant() > 0.0;
     let explained = against_turned * 10 <= counted;
     mirrored && !explained && counted >= 2 && against * 10 >= counted * 9
 }
