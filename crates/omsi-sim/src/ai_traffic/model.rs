@@ -520,10 +520,8 @@ pub fn personality(state: &mut AiState, seed: u64, heavy: bool) {
     } else {
         (1.01 + 0.11 * rg(3)).clamp(0.7, 1.3)
     };
-    // Keep moving traffic compact, and close the gaps in a queue without letting cars overlap.
-    // A shorter headway reduces the speed-dependent gap; min_gap is the bumper gap at a standstill.
-    state.headway = (1.0 + 0.15 * rg(11)).clamp(0.85, 1.25);
-    state.min_gap = 0.8 + 0.7 * ru(19);
+    state.headway = 1.4 + 0.2 * rg(11);
+    state.min_gap = 1.6 + 1.4 * ru(19);
     state.accel = if heavy {
         0.8 + 0.4 * ru(27)
     } else {
