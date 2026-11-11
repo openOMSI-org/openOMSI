@@ -390,11 +390,12 @@ index, and `[varparent] id` = the crossing; their `[visible] red|yellow|green 1`
 
 `[traffic_light_stop] light time ifAnf` and `[traffic_light_jump] light time ifAnf target`
 are points on that cycle clock. `ifAnf` 1 makes the condition "nobody is asking at `light`",
-0 "somebody is asking". A stop holds the clock **before** its time, so the phase that ends
-there stays shown; if the clock is already at the stop (within 1e-6 s either side) it holds
-there. A stop whose own time is red-and-yellow (the changeover to green) never holds, so a
-request cannot freeze a junction in the changeover. A jump whose condition holds at the same
-cycle time as a stop is taken first, and the stop is left behind.
+0 "somebody is asking". A stop normally holds the clock **just before** its time, so the
+phase that ends there stays shown; if the clock is already at the stop (within 1e-6 s
+either side) it holds there. A stop never holds in a red-and-yellow changeover: if the
+instant just before the stop is red-and-yellow, the clock holds at the stop's own time;
+a stop whose own time is red-and-yellow is passed. A jump whose condition holds at the
+same cycle time as a stop is taken first, and the stop is left behind.
 
 ## Timetables (`TTData`)
 

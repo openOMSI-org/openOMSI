@@ -135,13 +135,17 @@ impl TrafficLightController {
         if p.if_request { !asked } else { asked }
     }
 
-    /// Whether a stop at `p` may wait: not while a light is changing over to green at
-    /// the stop's own time. London's Brixton Road programs put a stop a second into
-    /// red-and-yellow, and a queue waiting there held the junction in the changeover for
-    /// good. Any other phase may hold: green, and also flashing yellow, dark or all red
-    /// (mod level crossings rest with dark road lights, night programs without a jump).
-    fn stop_holdable(&self, p: &LightStop) -> bool {
-        !self.in_changeover_at(p.time as f64)
+    /// The instant a stop may hold at: `at`, or `p.time` when `at` is in a red-yellow changeover; `None` when the stop itself is in one.
+    fn hold_instant(&self, p: &LightStop, at: f64, cycle: f64) -> Option<f64> {
+        let stop = p.time as f64;
+        if self.in_changeover_at(stop) {
+            None
+        } else if self.in_changeover_at(at) {
+            // The stop's own time must be ahead: never rewind to it after the clock passed.
+            ((stop - at).rem_euclid(cycle) < 1e-4).then_some(stop)
+        } else {
+            Some(at)
+        }
     }
 
     /// Some light shows red-and-yellow at `x` and has a green later: the program is
@@ -156,8 +160,6 @@ impl TrafficLightController {
         let cycle = self.cycle_len();
         let mut left = dt.max(0.0) as f64;
         self.held = false;
-        // will build cache once only when there is a potential barrier
-        let mut barrier_cache: Option<(Vec<bool>, Vec<bool>)> = None;
         let clear_rewind = |this: &mut Self, move_by: f64| {
             let Some(k) = this.rewound else { return };
             let source = this.stops[k].time as f64;
@@ -192,53 +194,36 @@ impl TrafficLightController {
             }
 
             let best_d = best.map_or(f64::INFINITY, |(_, d, _)| d);
-            let is_candidate = |k: usize, p: &LightStop| {
-                p.jump_to.is_none()
-                    && !self.passed.contains(&k)
-                    && {
-                        let d = (p.time as f64 - self.time).rem_euclid(cycle);
-                        d > 1e-6 && d <= left + 1e-6 && d <= best_d + 1e-6
+            let mut barrier: Option<(f64, f64)> = None;
+            if best.is_some() {
+                for (k, p) in self.stops.iter().enumerate() {
+                    if p.jump_to.is_some() || self.passed.contains(&k) {
+                        continue;
                     }
-            };
-
-            let has_candidate = best.is_some() && self.stops.iter().enumerate().any(|(k, p)| is_candidate(k, p)); 
-            if has_candidate && barrier_cache.is_none() {
-                let active: Vec<bool> = self.stops.iter().map(|p| self.stop_active(p)).collect();
-                let holdable: Vec<bool> = self
-                    .stops
-                    .iter()
-                    .zip(&active)
-                    .map(|(p, &active)| !active || p.jump_to.is_some() || !self.in_changeover_at(p.time as f64))
-                    .collect();
-                barrier_cache = Some((active, holdable));
+                    let d = (p.time as f64 - self.time).rem_euclid(cycle);
+                    if d <= 1e-6 || d > left + 1e-6 || d > best_d + 1e-6 || !self.stop_active(p) {
+                        continue;
+                    }
+                    let at = if d > 1e-5 {
+                        (self.time + d - 1e-5).rem_euclid(cycle)
+                    } else {
+                        self.time
+                    };
+                    if let Some(hold_at) = self.hold_instant(p, at, cycle) {
+                        if barrier.map_or(true, |(bd, _)| d < bd) {
+                            barrier = Some((d, hold_at));
+                        }
+                    }
+                }
             }
-            let barrier = if has_candidate {
-                barrier_cache.as_ref().and_then(|(active, holdable)| {
-                    self.stops
-                        .iter()
-                        .enumerate()
-                        .filter(|(k, p)| is_candidate(*k, p))
-                        .filter(|(k, _)| active[*k] && holdable[*k])
-                        .map(|(_, p)| (p.time as f64 - self.time).rem_euclid(cycle))
-                        .reduce(f64::min)
-                })
-            } else {
-                None
-            };
 
-            if let Some(bd) = barrier {
+            if let Some((bd, hold_at)) = barrier {
                 let jump_first = best.is_some_and(|(k, d, _)| {
                     let p = self.stops[k];
-                    p.jump_to.is_some()
-                        && (d - bd).abs() <= 1e-6
-                        && barrier_cache.as_ref().map_or_else(|| self.stop_active(&p), |(active, _)| active[k])
+                    p.jump_to.is_some() && (d - bd).abs() <= 1e-6 && self.stop_active(&p)
                 });
-                let barrier_first = best.map_or(true, |(_, d, _)| bd <= d + 1e-6);
-                if barrier_first && !jump_first {
-                    // waits just before the stop while preventing moving back the clock
-                    if bd > 1e-5 {
-                        self.time = (self.time + bd - 1e-5).rem_euclid(cycle);
-                    }
+                if !jump_first {
+                    self.time = hold_at.rem_euclid(cycle);
                     self.held = true;
                     return;
                 }
@@ -256,17 +241,18 @@ impl TrafficLightController {
                 return;
             };
             let p = self.stops[k];
-            let is_active = barrier_cache.as_ref().map_or_else(|| self.stop_active(&p), |(active, _)| active[k]);
-            let is_holdable = p.jump_to.is_none()
-                && barrier_cache.as_ref().map_or_else(|| self.stop_holdable(&p), |(_, holdable)| holdable[k]);
+            let is_active = self.stop_active(&p);
 
             // A stop the clock already stands on (within 1e-6 either side) stops
             // here, as it would after a direct placement. An inactive one is behind it.
             if p.jump_to.is_none() && (d < 1e-6 || wrapped) {
-                if is_active && is_holdable {
-                    self.held = true;
-                    self.passed.clear();
-                    return;
+                if is_active {
+                    if let Some(hold_at) = self.hold_instant(&p, self.time, cycle) {
+                        self.time = hold_at.rem_euclid(cycle);
+                        self.held = true;
+                        self.passed.clear();
+                        return;
+                    }
                 }
                 self.passed.push(k);
                 continue;
@@ -341,12 +327,12 @@ impl TrafficLightController {
             Some(p) if !p.is_empty() => p,
             _ => return 6,
         };
-        let mut x = x.rem_euclid(self.cycle_len()) as f32;
+        let mut x = x.rem_euclid(self.cycle_len());
         for (state, dur) in phases {
-            if x < *dur {
+            if x < f64::from(*dur) {
                 return *state;
             }
-            x -= dur;
+            x -= f64::from(*dur);
         }
         // after the last phase its state holds until the cycle starts again
         phases.last().map(|p| p.0).unwrap_or(0)
