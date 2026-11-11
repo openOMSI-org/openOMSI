@@ -664,10 +664,11 @@ impl DriverFigure {
         if !show {
             return;
         }
-        if self.settled {
+        // (hands resting in the lap do not regrip or work the gear lever)
+        if self.settled && !self.original_pose {
             self.update_shift(v, dt);
         }
-        if let Some(theta) = self.wheel_angle(v) {
+        if let Some(theta) = self.wheel_angle(v).filter(|_| !self.original_pose) {
             self.steer_hands(theta, if self.settled { dt } else { 0.0 });
         }
         // the person's own frame: feet at `floor` (slid forward by `slide`), facing `heading`
