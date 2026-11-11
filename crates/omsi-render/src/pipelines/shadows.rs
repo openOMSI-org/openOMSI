@@ -5,6 +5,7 @@ use super::scene::SceneBase;
 use crate::*;
 
 pub(crate) struct Shadows {
+    pub size: u32,
     pub view: wgpu::TextureView,
     pub view_far: wgpu::TextureView,
     /// Where the lamps' tiles lie under the far cascade.
@@ -17,43 +18,37 @@ pub(crate) struct Shadows {
 /// `lamps`: the picture is an Enhanced one, which looks the lamps' shadows up (the plain ones
 /// have no tiles under the far map, nor pipelines to draw them).
 pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, shadow_size: u32, lamps: bool, cube: bool) -> Shadows {
-    // (the lamps' tiles are left out where their pipelines are: see `basic_pipelines`)
-    let lamp_atlas = LampAtlas::new(shadow_size, lamps && !basic_pipelines(), device.limits().max_texture_dimension_2d, cube);
-    if lamp_atlas.rows == 0 && lamps && !basic_pipelines() {
-        log::warn!("renderer: no room for the lamps' shadow tiles under a far shadow map of {shadow_size} texels: the lamps cast no shadows");
-    }
-    // sun shadow map: depth only, from the light's orthographic camera
-    let shadow_tex = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("shadow map"),
-        size: wgpu::Extent3d {
-            // near cascade on the left, close cascade on the right
-            width: shadow_size * 2,
-            height: shadow_size,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: DEPTH_FORMAT,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-        view_formats: &[],
-    });
-    let shadow_view = shadow_tex.create_view(&Default::default());
-    let shadow_tex_far = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("shadow map far"),
+    let depth_map = |label: &str, width: u32, height: u32| {
+        device.create_texture(&wgpu::TextureDescriptor {
+            label: Some(label),
+            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: DEPTH_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        })
+    };
+    let mut size = shadow_size;
+    let (lamp_atlas, shadow_tex, shadow_tex_far) = loop {
+        // (the lamps' tiles are left out where their pipelines are: see `basic_pipelines`)
+        let lamp_atlas = LampAtlas::new(size, lamps && !basic_pipelines(), device.limits().max_texture_dimension_2d, cube);
+        let scope = device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+        // near cascade on the left, close cascade on the right
+        let near = depth_map("shadow map", size * 2, size);
         // (and the lamps' tiles under it, see `LampAtlas`)
-        size: wgpu::Extent3d {
-            width: shadow_size,
-            height: lamp_atlas.height(),
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: DEPTH_FORMAT,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-        view_formats: &[],
-    });
+        let far = depth_map("shadow map far", size, lamp_atlas.height());
+        if pollster::block_on(scope.pop()).is_none() || size <= 512 {
+            break (lamp_atlas, near, far);
+        }
+        log::warn!("renderer: no graphics memory left for a shadow map of {size} texels: trying {}", size / 2);
+        size /= 2;
+    };
+    if lamp_atlas.rows == 0 && lamps && !basic_pipelines() {
+        log::warn!("renderer: no room for the lamps' shadow tiles under a far shadow map of {size} texels: the lamps cast no shadows");
+    }
+    let shadow_view = shadow_tex.create_view(&Default::default());
     let shadow_view_far = shadow_tex_far.create_view(&Default::default());
     let shadow_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
         address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -133,6 +128,7 @@ pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, shadow_size: u32, 
         shadow_pipelines.extend(tile_pipelines.into_iter().flatten());
     }
     Shadows {
+        size,
         view: shadow_view,
         view_far: shadow_view_far,
         lamp_atlas,
