@@ -176,6 +176,8 @@ pub struct Instance {
     /// The draw order's depth step of each material slot (see `draw_order_level`): above 0
     /// only for a slot lying on an earlier surface of the same object (`overlay`).
     pub(crate) slot_levels: Vec<u8>,
+    /// The plane each slot's step is worked out over (`overlay::slot_planes`).
+    pub(crate) slot_planes: Vec<[f32; 2]>,
 }
 
 /// The rain the renderer draws round the camera (rain.wgsl): every drop is worked out on

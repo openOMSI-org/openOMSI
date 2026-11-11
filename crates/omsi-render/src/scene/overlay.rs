@@ -36,9 +36,7 @@ pub(crate) struct Flat {
     pub(crate) offset: f32,
     pub(crate) lo: Vec3,
     pub(crate) hi: Vec3,
-    /// A unit direction in the plane and the half extents of the surface along it and along
-    /// the in-plane direction across it: the oriented box its tilt is measured over (the
-    /// axis-aligned `lo`..`hi` of a slanted strip is many times wider than the strip).
+    /// An in-plane direction and the half extents along it and across it (the tilt is measured over these).
     pub(crate) axis: Vec3,
     pub(crate) half: [f32; 2],
 }
@@ -129,9 +127,7 @@ pub(crate) struct ObjectRun {
     models: HashMap<u64, Vec<(usize, Vec<u8>)>>,
 }
 
-/// The bucket of a normal in `ObjectRun::by_normal`: cells of 1/30, so that the cell next to
-/// one holds every normal `facing` takes for the same way (their dot above 0.9995: a component
-/// apart by up to 0.032). Cells of 1/100 lost a skewed strip a degree off its tile's plane.
+/// Cells of 1/30, so that the next cell holds every normal `facing` takes for the same way.
 fn normal_key(n: Vec3) -> (i32, i32, i32) {
     ((n.x * 30.0).round() as i32, (n.y * 30.0).round() as i32, (n.z * 30.0).round() as i32)
 }
@@ -145,10 +141,7 @@ fn facing(f: &Flat, g: &Flat, margin: f32) -> Option<(f32, f32)> {
     }
     let c = (f.lo + f.hi) * 0.5;
     let c = c - f.normal * (f.normal.dot(c) - f.offset);
-    // How far the tilt lifts `f`'s edge off `g`'s plane: over `f`'s half extent in the in-plane
-    // direction across the tilt's axis - the surface's own extent, not its box's diagonal:
-    // a text strip laid across a skewed display tile (the Pixel XC's, 0.14 mm up over its
-    // 7 mm) has a box many times as wide as it is and would be said to lift 2 mm.
+    // (the tilt over the surface's own extent, not its box's diagonal)
     let axis = f.normal.cross(g.normal);
     let sin = axis.length();
     let tilt = match axis.try_normalize() {
@@ -165,9 +158,7 @@ fn facing(f: &Flat, g: &Flat, margin: f32) -> Option<(f32, f32)> {
 /// Whether `f` lies on `g`: its middle within `CENTRE_GAP` of `g`'s plane, its tilt against
 /// it lifting no edge further than `PLANE_GAP`, and their boxes overlapping.
 fn lies_on(f: &Flat, g: &Flat) -> bool {
-    // (a tilted surface may stand off by what its tilt lifts its edge: one whose plane meets
-    // `g`'s inside it lies on it, a strip rooted on it at one edge and raised a tenth of a
-    // millimetre at the other is printed on it, while a parallel one that far off is apart)
+    // (a tilted surface may stand off by what its tilt lifts its edge)
     facing(f, g, BOX_GAP).is_some_and(|(gap, tilt)| gap < CENTRE_GAP + tilt && tilt < PLANE_GAP)
 }
 
@@ -177,6 +168,23 @@ fn lies_on(f: &Flat, g: &Flat) -> bool {
 /// angle by more than the gap, and it is the middle distance that the step's lift reaches.)
 fn near_on(f: &Flat, g: &Flat) -> bool {
     facing(f, g, NEAR_GAP).is_some_and(|(gap, _)| (CENTRE_GAP..NEAR_GAP).contains(&gap))
+}
+
+/// The plane normal of a slot that is one flat surface, octahedral plus 2, for `scene_clip` (0: none).
+pub(crate) fn slot_planes(flats: &[Flat], slots: usize) -> Vec<[f32; 2]> {
+    (0..slots)
+        .map(|slot| {
+            let mut mine = flats.iter().filter(|f| f.slot as usize == slot);
+            match (mine.next(), mine.next()) {
+                (Some(f), None) => {
+                    let n = f.normal / (f.normal.x.abs() + f.normal.y.abs() + f.normal.z.abs()).max(1e-6);
+                    let o = if n.z >= 0.0 { glam::Vec2::new(n.x, n.y) } else { (glam::Vec2::ONE - glam::Vec2::new(n.y, n.x).abs()) * glam::Vec2::new(n.x.signum(), n.y.signum()) };
+                    [o.x + 2.0, o.y + 2.0]
+                }
+                _ => [0.0; 2],
+            }
+        })
+        .collect()
 }
 
 impl ObjectRun {
@@ -582,6 +590,51 @@ mod tests {
             *p += n * 1.0e-4;
         }
         assert_eq!(levels(&off), vec![0, 0]);
+    }
+
+    /// A print tilted a little and standing 0.1 mm off its base at its nearest edge is apart
+    /// from it: `near_on` caps its step, `lies_on` would give it a full one, which far off
+    /// carries it past what lies in front of it.
+    #[test]
+    fn a_slightly_tilted_surface_a_tenth_of_a_millimetre_off_at_its_nearest_edge_is_not_on_the_base() {
+        for lift in [1.0e-4_f32, -1.0e-4] {
+            let mut mesh = quad(1.0, 0.2, 0, false);
+            let mut over = quad(1.0, 0.1, 1, true);
+            // (tilted by a degree across its width, its nearest edge `lift` off the base's plane)
+            let slope = 0.2 * 1.0_f32.to_radians();
+            over.positions[0].z += lift;
+            over.positions[3].z += lift;
+            over.positions[1].z += lift + slope;
+            over.positions[2].z += lift + slope;
+            mesh.positions.extend(&over.positions);
+            mesh.normals.extend(&over.normals);
+            mesh.uvs.extend(&over.uvs);
+            mesh.indices.extend(over.indices.iter().map(|i| i + 4));
+            mesh.ranges = vec![(0, 6, 0), (6, 6, 1)];
+            let mut run = ObjectRun::default();
+            run.begin(None);
+            let levels = run.levels([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&mesh), 2);
+            assert_eq!(levels, vec![0, 0], "lift {lift}");
+        }
+    }
+
+    #[test]
+    fn a_flat_slot_carries_its_plane_for_the_vertex_shader() {
+        let flats = mesh_flats(&quad(1.0, 0.5, 0, false));
+        let decode = |p: [f32; 2]| {
+            let (x, y) = (p[0] - 2.0, p[1] - 2.0);
+            let mut v = Vec3::new(x, y, 1.0 - x.abs() - y.abs());
+            if v.z < 0.0 {
+                let w = (glam::Vec2::ONE - glam::Vec2::new(v.y, v.x).abs()) * glam::Vec2::new(if v.x >= 0.0 { 1.0 } else { -1.0 }, if v.y >= 0.0 { 1.0 } else { -1.0 });
+                v = Vec3::new(w.x, w.y, v.z);
+            }
+            v.normalize()
+        };
+        assert!(decode(slot_planes(&flats, 1)[0]).dot(Vec3::Z) > 0.9999);
+        // (a slot of several surfaces, or none, carries none)
+        let two = [flats[0], Flat { normal: Vec3::X, ..flats[0] }];
+        assert_eq!(slot_planes(&two, 1), vec![[0.0; 2]]);
+        assert_eq!(slot_planes(&flats, 2)[1], [0.0; 2]);
     }
 
     #[test]

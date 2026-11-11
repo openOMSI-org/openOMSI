@@ -25,6 +25,11 @@ impl Renderer {
         for (k, a) in i.slot_alpha.iter().enumerate() {
             let mut m = m;
             m[0][3] = draw_order_level(i, k);
+            if m[0][3] > 0.0 {
+                if let Some(p) = i.slot_planes.get(k) {
+                    (m[1][3], m[2][3]) = (p[0], p[1]);
+                }
+            }
             mats.push(m);
             let uv = i.slot_uv.get(k).copied().unwrap_or([0.0; 2]);
             params.push([*a, vis, uv[0], uv[1]]);

@@ -125,6 +125,7 @@ impl Renderer {
         scene.instances.push(Instance {
             draw_order,
             slot_levels,
+            slot_planes: crate::scene::overlay::slot_planes(&scene.meshes[mesh].flats, slots),
             mesh,
             transform,
             origin,
@@ -187,6 +188,7 @@ impl Renderer {
         scene.instances.push(Instance {
             draw_order,
             slot_levels,
+            slot_planes: crate::scene::overlay::slot_planes(&scene.meshes[mesh].flats, slots),
             mesh,
             transform,
             origin,
