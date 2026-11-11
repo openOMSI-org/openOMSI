@@ -379,7 +379,6 @@ fn stock_state_codes_mean_what_the_lamp_scripts_show() {
     assert_eq!(TrafficLightController::lamps(9), (false, true, false));
     assert_eq!(TrafficLightController::lamps(12), (false, false, false));
     assert!(TrafficLightController::allows_go(6) && !TrafficLightController::allows_go(9) && !TrafficLightController::allows_go(3));
-    // green with yellow lets the traffic go (Tver's left-turn arrows show it as their green)
     assert!(TrafficLightController::allows_go(8));
     // the clock starts from the time of day: two crossings with one cycle run in step
     let (mut a, mut b) = (erzgebirgs(), erzgebirgs());
