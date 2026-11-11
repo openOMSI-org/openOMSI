@@ -152,8 +152,6 @@ pub(crate) fn info_of(cfg: &ServerCfg, _root: &Path) -> omsi_net::ws::ServerInfo
     }
 }
 
-/// Set up the arguments for a server run from `server.cfg` (the rest is the offscreen
-/// host loop, see `offscreen::run_offscreen`).
 /// The floor a parked bus stands on at (x, y), `near` being the height it stands at now:
 /// the face a vehicle's wheels would stand on about that height (`World::stand_height`: a
 /// bus on the lower of two floors stays on it, one put a little into the ground comes up).
@@ -172,6 +170,8 @@ pub(crate) fn park_buses(server: bool, args: &Args, world: &World) {
     }
 }
 
+/// Set up the arguments for a server run from `server.cfg` (the rest is the offscreen
+/// host loop, see `offscreen::run_offscreen`).
 pub(crate) fn prepare(args: &mut Args, path: &Path) -> Result<ServerCfg> {
     let mut cfg = ServerCfg::load(path, crate::game_lists::TRAFFIC_MAX)?;
     // (the map a start script picked, over server.cfg's)

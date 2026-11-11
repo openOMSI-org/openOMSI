@@ -241,7 +241,8 @@ uploads_keep_days = 30
 # left them (also after a restart), and any player who walks up to one takes it with the key
 # that takes a seat: up to this many of them, one of each bus (0 = none, 536 at most; a
 # game is told the ones near its player, so they cost nothing where nobody is). Needs
-# accept_uploads = 1
+# accept_uploads = 1. Players on a release before this one see them as other players' parked
+# buses (a driver at the wheel, counted among the players) and cannot take them
 parked_buses = 0
 # a player who joins without the server's map gets it from the server (the map and the
 # objects, splines and vehicles it uses - gigabytes for a big map). Off: players install the
