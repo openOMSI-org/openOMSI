@@ -119,6 +119,7 @@ impl Hof {
         }
         let digits: String = l.chars().take_while(|c| c.is_ascii_digit()).collect();
         let number = digits.parse::<i32>().ok().filter(|n| *n > 0);
+        let encoded = encoded_hof_line(&l);
         let boundary = |rest: &str| rest.chars().next().is_none_or(|c| !c.is_ascii_alphanumeric());
         self.info_trips.iter().any(|t| {
             let code = omsi_cfg::parse_i32(&t.code);
@@ -127,7 +128,9 @@ impl Hof {
                 && (l.strip_prefix(head.as_str()).is_some_and(boundary)
                     || (l.ends_with(|c: char| c.is_ascii_digit())
                         && head.strip_prefix(l.as_str()).is_some_and(|r| r.chars().next().is_some_and(|c| c.is_ascii_alphabetic()))));
-            named || number.is_some_and(|n| code >= 100 && code / 100 == n)
+            named
+                || number.is_some_and(|n| code >= 100 && code / 100 == n)
+                || encoded.is_some_and(|enc| code >= 100 && code / 100 == enc as i32)
         })
     }
 
@@ -435,6 +438,49 @@ mod tests {
         assert!(inter.has_line("91.06C") && inter.has_line("91.06") && !inter.has_line("11-11s"));
     }
 
+    #[test]
+    fn encoded_prefixed_lines_find_their_routes() {
+        let trip = |code: &str, name: &str, route: &str, line: &str| InfoTrip {
+            code: code.into(),
+            name: name.into(),
+            route: route.into(),
+            line: line.into(),
+            ..Default::default()
+        };
+        let hof = Hof {
+            termini: vec![
+                Terminus {
+                    code: 712,
+                    texture_id: "Birkenweg".into(),
+                    strings: vec!["Birkenweg".into()],
+                    ..Default::default()
+                },
+                Terminus {
+                    code: 154,
+                    texture_id: "S+U Rathaus Spandau".into(),
+                    strings: vec!["S+U Rathaus Spandau".into()],
+                    ..Default::default()
+                },
+            ],
+            info_trips: vec![
+                trip("1501", "Day 15 -> Birkenweg", "712", "15"),
+                trip("91502", "Birkenweg", "712", "915"),
+                trip("93402", "Spandau", "154", "934"),
+                trip("53402", "Kladow", "154", ""),
+                trip("4101", "Hbf", "154", "41"),
+                trip("101", "91.06A -> MASSY GARE", "154", "1"),
+            ],
+            ..Default::default()
+        };
+        assert_eq!(routes_to(&hof, "N15", &[712]), vec![1]);
+        assert_eq!(routes_to(&hof, "N34", &[154]), vec![2]);
+        assert_eq!(routes_to(&hof, "X34", &[154]), vec![3]);
+        assert_eq!(routes_to(&hof, "M41", &[154]), Vec::<usize>::new());
+        assert_eq!(routes_to(&hof, "91", &[154]), Vec::<usize>::new());
+        assert!(hof.has_line("N15") && hof.has_line("N34") && hof.has_line("X34"));
+        assert!(!hof.has_line("M41"));
+    }
+
     use super::*;
 
     /// #896: the bus's own depot of the map's place, not the first of its folder.
@@ -683,25 +729,48 @@ pub fn trip_terminus(
     Some((ti, route))
 }
 
+fn encoded_hof_line(line: &str) -> Option<u32> {
+    let s = line.trim();
+    let mut chars = s.chars();
+    let prefix = chars.next().filter(|c| c.is_ascii_alphabetic())?.to_ascii_uppercase();
+    let rest = chars.as_str();
+    if rest.is_empty() || !rest.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    let num = rest.parse::<u32>().ok().filter(|&n| n < 100)?;
+    match prefix {
+        'N' => Some(900 + num),
+        'X' => Some(500 + num),
+        _ => None,
+    }
+}
+
 /// The depot file's routes of `line` to a terminus with one of `codes`, in file order. The
 /// route code is the line's number and two digits: a driver types those, whatever the
 /// route's line string says (Grundorf's 7601 to Krankenhaus has "TML").
 pub fn routes_to(hof: &Hof, line: &str, codes: &[i32]) -> Vec<usize> {
-    let line_digits: String = line
-        .trim()
-        .chars()
-        .take_while(|c| c.is_ascii_digit())
-        .collect();
+    let trimmed = line.trim();
+    let line_digits: String = trimmed.chars().take_while(|c| c.is_ascii_digit()).collect();
     let line_number = line_digits.parse::<u32>().ok();
+    let encoded = encoded_hof_line(trimmed);
     hof.info_trips
         .iter()
         .enumerate()
         .filter(|(_, t)| {
-            codes.contains(&omsi_cfg::parse_i32(&t.route))
-                && (t.line.trim().eq_ignore_ascii_case(line.trim())
+            if !codes.contains(&omsi_cfg::parse_i32(&t.route)) {
+                return false;
+            }
+            let hof_line = t
+                .line
+                .trim()
+                .parse::<u32>()
+                .ok()
+                .or_else(|| t.code.trim().parse::<u32>().ok().map(|c| c / 100));
+            t.line.trim().eq_ignore_ascii_case(trimmed)
                 || (!line_digits.is_empty() && t.line.trim() == line_digits)
                 || (line_number.is_some()
-                && t.code.trim().parse::<u32>().ok().map(|c| c / 100) == line_number))
+                    && t.code.trim().parse::<u32>().ok().map(|c| c / 100) == line_number)
+                || encoded.is_some_and(|enc| hof_line == Some(enc))
         })
         .map(|(i, _)| i)
         .collect()
