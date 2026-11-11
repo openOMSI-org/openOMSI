@@ -580,7 +580,7 @@ fn a_backwards_quad_with_an_unmirrored_matrix_can_keep_its_winding() {
 
 #[test]
 fn the_exporters_quarter_turn_matrix_does_not_turn_a_mesh_round() {
-    let v = |x: f32, y: f32| omsi_o3d::Vertex { position: Vec3::new(x, y, 1.0), normal: Vec3::new(0.0, 0.0, 1.0), uv: Vec2::ZERO };
+    let v = |x: f32, y: f32| omsi_o3d::Vertex { position: Vec3::new(x, y, 1.0), normal: Vec3::new(0.0, 1.0, 1.0), uv: Vec2::ZERO };
     let quarter_turn = glam::Mat4::from_cols(glam::Vec4::X, glam::Vec4::new(0.0, 0.0, -1.0, 0.0), glam::Vec4::new(0.0, 1.0, 0.0, 0.0), glam::Vec4::new(0.0, 0.0251, 0.0, 1.0));
     let o3d = omsi_o3d::Mesh {
         vertices: vec![v(0.0, 0.0), v(0.0, 1.0), v(1.0, 0.0), v(1.0, 1.0)],
@@ -590,9 +590,6 @@ fn the_exporters_quarter_turn_matrix_does_not_turn_a_mesh_round() {
         has_transform: true,
         ..Default::default()
     };
-    // faces that turn their backs on their normals, as in a mesh whose normals were recomputed
-    // the other way: Omsi.exe draws it as wound, and so does the quarter turn every ordinary
-    // mesh of this exporter carries
     assert_eq!(positive_det_faces_forward(&o3d), Some(false));
     assert!(!turns_round(&o3d));
     assert_eq!(mesh_from_o3d(&o3d).indices[..3], [0, 1, 2]);
