@@ -677,6 +677,35 @@ fn new_player(vehicle: omsi_sim::VehicleInstance, render: scene::VehicleRender, 
 }
 
 #[cfg(test)]
+pub(crate) fn test_player(
+    vehicle: omsi_sim::VehicleInstance,
+    bindings: Vec<omsi_content::KeyBinding>,
+) -> Player {
+    let ty = vehicle.ty.clone();
+    let render = scene::VehicleRender {
+        window_wipers: None,
+        instances: vec![],
+        far: vec![],
+        own_materials: vec![],
+        set: None,
+        variants: vec![],
+        text_textures: vec![],
+        script_textures: vec![],
+        shared_script: false,
+        displays_far: false,
+        display_tick: 0,
+        skinned: vec![],
+        damaged: vec![],
+        glass_cracks: vec![],
+        hidden: false,
+        interior_lamps: Default::default(),
+        interior_blocks: Default::default(),
+        own_set: None,
+    };
+    new_player(vehicle, render, vec![], bindings, false, &ty)
+}
+
+#[cfg(test)]
 mod cabin_input_tests;
 
 /// `OMSI_DEBUG_MESHES`: every mesh of the vehicle with its bounds, and per material slot (of the

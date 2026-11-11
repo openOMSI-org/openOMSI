@@ -196,3 +196,22 @@ fn g_on_foot_sits_down_unless_it_is_the_get_up_chord() {
     assert!(super::get_up_chord(&bind(KEY_CTRL), true, false), "moved to Ctrl+G");
     assert!(!super::get_up_chord(&[], true, true), "unbound: the walker keeps G");
 }
+
+#[test]
+fn foot_key_keeps_screenshot_chord_and_rebound_pause() {
+    let mut app = crate::assemble_app(
+        <crate::cli::Args as clap::Parser>::parse_from(["openomsi"]),
+        Default::default(),
+    );
+    app.session.on_foot = Some(walker());
+    let f6_scan = omsi_input::keys::dik_code(KeyCode::F6).unwrap();
+    app.input.game_keys.retain(|b| !b.action.eq_ignore_ascii_case("sim_pause"));
+    app.input.game_keys.push(omsi_content::KeyBinding {
+        action: "sim_pause".into(),
+        scan_code: f6_scan,
+        modifier: 0,
+    });
+    assert!(!app.foot_key(KeyCode::KeyP, true, false, true, true));
+    assert!(app.foot_key(KeyCode::KeyP, true, false, false, false));
+    assert!(!app.foot_key(KeyCode::F6, true, false, false, false));
+}
