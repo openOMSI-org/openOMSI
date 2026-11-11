@@ -369,7 +369,8 @@ impl TrafficLightController {
     /// May a vehicle drive over the stop line now (not counting yellow, which is the
     /// driver's decision)?
     pub fn allows_go(state: i32) -> bool {
-        matches!(Self::aspect(state), Aspect::Green | Aspect::Dark)
+        // state 8 is the go phase of some programs (Tver's left-turn arrows)
+        matches!(Self::aspect(state), Aspect::Green | Aspect::GreenYellow | Aspect::Dark)
     }
 
     /// Lamp variables (red, yellow, green) of a state, for lamp objects without a script
