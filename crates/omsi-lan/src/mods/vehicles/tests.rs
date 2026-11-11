@@ -36,6 +36,29 @@ fn private_vehicle_manifest_is_never_committed_or_reopened() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+#[test]
+fn unmarked_and_explicitly_public_vehicles_remain_shareable() {
+    for (name, bus) in [
+        ("legacy-public", "[friendlyname]\\nMaker\\nModel\\nDefault\\n"),
+        ("explicit-public", "[openomsi_multiplayer]\\nallow_file_transfer 1\\n"),
+        ("empty-policy", "[openomsi_multiplayer]\\n[mass]\\n10\\n"),
+    ] {
+        let dir = temp(name);
+        let kept = Buses::default();
+        kept.open_in(&dir).unwrap();
+        let bus = bus.replace("\\n", "\n");
+        let e = entry(&format!("Vehicles/Public/{name}.bus"), bus.as_bytes());
+        kept.put(&e, bus.as_bytes()).unwrap();
+        let manifest = VehicleManifest { bus: e.path.clone(), entries: vec![e] }.validated().unwrap();
+        let (fp, inserted) = kept.commit(manifest.clone()).unwrap();
+        assert!(inserted, "{name} must be accepted for automatic transfers");
+        assert!(kept.manifest(&fp).is_some());
+        kept.open_in(&dir).unwrap();
+        assert!(kept.manifest(&fp).is_some(), "{name} must still be served after restart");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
 /// A host that answers MANIFEST with `list`, and BLOB and PIECE from `files` (by
 /// SHA-256), on the encrypted mods connection - a host with a store of its own, apart from
 /// this test's.
