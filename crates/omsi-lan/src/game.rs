@@ -570,8 +570,6 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) -> Option<crate::m
             // does, and keeps its own for them: `mods::upload::keep_own`; a server takes them
             // as its server.cfg says)
             if !args.server {
-                // Player-hosted LAN never inherits dedicated-server map sharing state.
-                // There is no LAN UI opt-in for map redistribution.
                 crate::mods::share_maps(false);
                 crate::mods::upload::accept(crate::mods::upload::a_hosting_game_takes_uploads());
             }
@@ -2427,7 +2425,6 @@ pub fn tick_receive(
             }
         }
         if !game.remotes.contains_key(&pose.id) {
-            // Discard stale repaint retries when the player changes livery.
             game.failed.retain(|(id, bus, paint), _| *id != pose.id || (bus == &pose.bus && paint == &pose.paint));
             let key = (pose.id, pose.bus.clone(), pose.paint.clone());
             if game.failed.get(&key).is_some_and(|t| t.elapsed().as_secs_f32() < 30.0) {
