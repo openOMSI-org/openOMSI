@@ -314,8 +314,10 @@ or a dedicated server; the LAN host will not publish its own protected vehicle,
 and dedicated servers refuse to serve a protected vehicle from their fleet.
 Other players will see a stand-in unless they already have a matching local copy.
 
-`allow_file_transfer 1` explicitly permits transfers. Without the block, the
-legacy behavior remains unchanged. Unrecognized values are treated as `0`.
+`allow_file_transfer 1` explicitly permits transfers. With no policy block,
+or with a policy block that omits `allow_file_transfer`, the legacy behavior
+remains unchanged: transfers stay enabled. A present but unrecognized
+`allow_file_transfer` value is treated as `0`.
 Referenced `.bus` / `.ovh` descriptions (including articulated rear sections)
 are also checked. The session manifest omits a whole `Vehicles/<folder>` or
 `Trains/<folder>` if any vehicle description listed there forbids transfers.
