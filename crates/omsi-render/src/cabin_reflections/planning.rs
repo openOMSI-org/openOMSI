@@ -27,7 +27,9 @@ fn parameters(scene: &Scene, members: &[usize]) -> u64 {
 
 impl Pipelines {
     pub(crate) fn plan(&mut self, scene: &Scene, f: &FrameCtx, visible: &[(usize, f32, bool)], list: &mut Vec<u32>) -> Option<Plan> {
-        if !f.enhanced || f.lighting.reflection_strength <= 0.0 || !f.prepass_on || !(f.with_overlays || f.xr_view)
+        // XR renders each eye independently; keep cabin reflections off until their
+        // captures can be cached per eye instead of rebuilding every eye and pane.
+        if !f.enhanced || f.lighting.reflection_strength <= 0.0 || !f.prepass_on || !f.with_overlays || f.xr_view
             || !f.lighting.inside.as_ref().is_some_and(|own| point_in_vehicle_box(f.camera.position, own)) {
             if f.with_overlays || f.xr_view { self.planned = None; }
             return None;

@@ -9,7 +9,6 @@ struct CabinReflection {
 fn cabin_plane_error(world: vec3<f32>, normal: vec3<f32>, plane: vec4<f32>) -> f32 {
     return abs(dot(plane.xyz, world) - plane.w) + 4.0 * (1.0 - abs(dot(normal, plane.xyz)));
 }
-
 fn cabin_plane_matches(world: vec3<f32>, normal: vec3<f32>) -> bool {
     return cabin_plane_error(world, normal, camera.cabin_planes[0]) < 0.22
         || cabin_plane_error(world, normal, camera.cabin_planes[1]) < 0.22;
@@ -44,15 +43,4 @@ fn fs_cabin_reflection(in: FsIn) -> @location(0) vec4<f32> {
     let local = clamp(in.clip.xy / cabin_reflection.screen.xy, vec2<f32>(0.5) / size, vec2<f32>(1.0) - vec2<f32>(0.5) / size);
     let reflected = textureSampleLevel(t_cabin_reflection, s_cabin_reflection, local, best, 0.0);
     return vec4<f32>(reflected.rgb * enh.exposure.x * 1.15 * fresnel * coverage * camera.cam_pos.w, 0.0);
-}
-
-@vertex
-fn vs_cabin_resolve(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
-    let p = array<vec2<f32>, 3>(vec2<f32>(-1.0, -1.0), vec2<f32>(3.0, -1.0), vec2<f32>(-1.0, 3.0));
-    return vec4<f32>(p[i], 0.0, 1.0);
-}
-
-@fragment
-fn fs_cabin_resolve(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
-    return textureLoad(t_cabin_reflection, vec2<i32>(p.xy), 0, 0);
 }

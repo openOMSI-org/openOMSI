@@ -87,7 +87,9 @@ fn nearby_instances(scene: &Scene, parts: &[&(DVec3, f64, [f32; 6])]) -> Vec<usi
 }
 
 fn build_plan(scene: &Scene, f: &FrameCtx, visible: &[(usize, f32, bool)], list: &mut Vec<u32>) -> Option<Plan> {
-    if !f.enhanced || f.lighting.reflection_strength <= 0.0 || !f.prepass_on || !(f.with_overlays || f.xr_view) { return None; }
+    // The desktop view owns the cached capture.  XR would need one cache per eye;
+    // leave the feature off there until that lifetime is implemented.
+    if !f.enhanced || f.lighting.reflection_strength <= 0.0 || !f.prepass_on || !f.with_overlays || f.xr_view { return None; }
     let own = f.lighting.inside.as_ref()?;
     if !point_in_vehicle_box(f.camera.position, own) { return None; }
     let planes = planes(scene, f, visible, own.0);
@@ -169,8 +171,6 @@ struct Capture {
 pub(crate) struct Pipelines {
     layout: wgpu::BindGroupLayout,
     compose: [wgpu::RenderPipeline; 2],
-    resolve: wgpu::RenderPipeline,
-    overlay: Option<(wgpu::TextureView, wgpu::BindGroup)>,
     captures: Vec<Capture>,
     size: (u32, u32),
     planned: Option<planning::Cached>,
@@ -192,20 +192,16 @@ impl Pipelines {
             label: Some("cabin reflection on glass"), layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState { module: shader, entry_point: Some("vs_main"), buffers: &[wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Vertex>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2] }], compilation_options: Default::default() },
             primitive: one_sided_primitive(cull),
-            depth_stencil: Some(wgpu::DepthStencilState { format: DEPTH_FORMAT, depth_write_enabled: Some(false), depth_compare: Some(wgpu::CompareFunction::GreaterEqual), stencil: Default::default(), bias: Default::default() }),
+            // Draw straight into the HDR picture.  The small depth offset makes the first
+            // coincident pane win while the second layer fails `Greater`; this is the
+            // replacement behaviour the old full-resolution overlay provided without
+            // allocating another screen-sized target.
+            depth_stencil: Some(wgpu::DepthStencilState { format: DEPTH_FORMAT, depth_write_enabled: Some(true), depth_compare: Some(wgpu::CompareFunction::Greater), stencil: Default::default(), bias: wgpu::DepthBiasState { constant: 1, slope_scale: 0.0, clamp: 0.0 } }),
             multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState { module: shader, entry_point: Some("fs_cabin_reflection"), targets: &[Some(wgpu::ColorTargetState { format: HDR_FORMAT, blend: None, write_mask: wgpu::ColorWrites::ALL })], compilation_options: Default::default() }),
+            fragment: Some(wgpu::FragmentState { module: shader, entry_point: Some("fs_cabin_reflection"), targets: &[Some(wgpu::ColorTargetState { format: HDR_FORMAT, blend: Some(wgpu::BlendState { color: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One, dst_factor: wgpu::BlendFactor::One, operation: wgpu::BlendOperation::Add }, alpha: wgpu::BlendComponent::OVER }), write_mask: wgpu::ColorWrites::COLOR })], compilation_options: Default::default() }),
             multiview_mask: None, cache: crate::pipeline_cache::get(device).as_ref(),
         }));
-        let resolve_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("cabin reflection resolve"), bind_group_layouts: &[None, None, None, Some(&layout)], immediate_size: 0 });
-        let resolve = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("cabin reflection resolve"), layout: Some(&resolve_layout),
-            vertex: wgpu::VertexState { module: shader, entry_point: Some("vs_cabin_resolve"), buffers: &[], compilation_options: Default::default() },
-            primitive: Default::default(), depth_stencil: None, multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState { module: shader, entry_point: Some("fs_cabin_resolve"), targets: &[Some(wgpu::ColorTargetState { format: HDR_FORMAT, blend: Some(wgpu::BlendState { color: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One, dst_factor: wgpu::BlendFactor::One, operation: wgpu::BlendOperation::Add }, alpha: wgpu::BlendComponent::OVER }), write_mask: wgpu::ColorWrites::COLOR })], compilation_options: Default::default() }),
-            multiview_mask: None, cache: crate::pipeline_cache::get(device).as_ref(),
-        });
-        Self { layout, compose, resolve, overlay: None, captures: Vec::new(), size: (0, 0), planned: None, recorded: None }
+        Self { layout, compose, captures: Vec::new(), size: (0, 0), planned: None, recorded: None }
     }
 
     fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, plane_layout: &wgpu::BindGroupLayout, f: &FrameCtx, plan: &Plan, updates: &[bool]) {
@@ -234,13 +230,6 @@ impl Pipelines {
             queue.write_buffer(&c.plane, 0, bytemuck::bytes_of(&u));
             queue.write_buffer(&c.params, 0, bytemuck::bytes_of(&Uniform { planes, screen: [f.width as f32, f.height as f32, i as f32, plan.planes.len() as f32] }));
         }
-        if self.overlay.as_ref().is_none_or(|(v, _)| v.texture().width() != f.width || v.texture().height() != f.height) {
-            let view = device.create_texture(&wgpu::TextureDescriptor { label: Some("cabin reflection on panes"), size: wgpu::Extent3d { width: f.width, height: f.height, depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format: HDR_FORMAT, usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING, view_formats: &[] }).create_view(&Default::default());
-            let sampler = device.create_sampler(&Default::default());
-            let array = view.texture().create_view(&wgpu::TextureViewDescriptor { dimension: Some(wgpu::TextureViewDimension::D2Array), ..Default::default() });
-            let bg = device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("cabin reflection resolve"), layout: &self.layout, entries: &[wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&array) }, wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&sampler) }, wgpu::BindGroupEntry { binding: 3, resource: self.captures[0].params.as_entire_binding() }] });
-            self.overlay = Some((view, bg));
-        }
     }
 }
 
@@ -257,7 +246,7 @@ impl Renderer {
         let Some(pipes) = self.cabin_reflections.as_mut() else { return };
         let Some(plan) = plan else {
             // Mirror rendering must retain the main view's targets.
-            if f.with_overlays || f.xr_view { pipes.captures.clear(); pipes.overlay = None; pipes.recorded = None; }
+            if f.with_overlays || f.xr_view { pipes.captures.clear(); pipes.recorded = None; }
             return;
         };
         let Some(vehicle) = self.puddles.as_ref() else { return };
@@ -284,10 +273,11 @@ impl Renderer {
             drop(pass);
             c.refreshed = Some((std::time::Instant::now(), plan.refresh.clone()));
         }
-        let (overlay, resolve_bg) = pipes.overlay.as_ref().unwrap();
-        // Replacement blending prevents coincident pane layers doubling the reflection.
+        // Add directly to the HDR picture. Depth writes and the strict comparison make
+        // overlapping pane layers replacement-like without a second full-resolution target.
+        let hdr = &self.targets.hdr_targets[&(f.width, f.height)];
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("cabin reflected in glass"), color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: overlay, resolve_target: None, depth_slice: None, ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store } })],
+            label: Some("cabin reflected in glass"), color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: &hdr.view, resolve_target: None, depth_slice: None, ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store } })],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment { view: &ao.depth_view, depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store }), stencil_ops: None }),
             timestamp_writes: pass_timer(timers.set.as_ref(), &mut timers.timed, "cabin glass"), occlusion_query_set: None, multiview_mask: None,
         });
@@ -301,14 +291,5 @@ impl Renderer {
             let bundle = recorded::get(&mut pipes.recorded, &self.device, scene, &plan.panes, &c.plane_bg, Some(&c.picture_bg), |pipe| &pipes.compose[(pipe % 4 / 2) as usize]);
             pass.execute_bundles(std::iter::once(bundle));
         }
-        drop(pass);
-        let hdr = &self.targets.hdr_targets[&(f.width, f.height)];
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("cabin reflection resolve"), color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: &hdr.view, resolve_target: None, depth_slice: None, ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store } })],
-            depth_stencil_attachment: None, timestamp_writes: pass_timer(timers.set.as_ref(), &mut timers.timed, "cabin resolve"), occlusion_query_set: None, multiview_mask: None,
-        });
-        pass.set_pipeline(&pipes.resolve);
-        pass.set_bind_group(3, resolve_bg, &[]);
-        pass.draw(0..3, 0..1);
     }
 }
