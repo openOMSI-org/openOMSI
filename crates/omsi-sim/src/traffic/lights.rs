@@ -188,12 +188,7 @@ impl TrafficLightController {
                     best = Some((k, d, wrapped));
                 }
             }
-            let changing = self.in_changeover_at(self.time);
-            // An active stop this step would reach (or stand on) is a barrier: the clock
-            // stays at its current value, before the stop, so the phase it shows stays the
-            // one that ends there. A step that would only come within 1e-6 of it is
-            // held as well; the clock never enters the point. A jump at the same time goes
-            // first instead.
+            // jump at the same time goes first.
             let barrier = self
                 .stops
                 .iter()
@@ -202,6 +197,7 @@ impl TrafficLightController {
                 .map(|(_, p)| (p.time as f64 - self.time).rem_euclid(cycle))
                 .filter(|d| *d > 1e-6 && *d <= left + 1e-6)
                 .reduce(f64::min);
+
             if let Some(bd) = barrier {
                 let jump_first = best.is_some_and(|(k, d, _)| {
                     let p = self.stops[k];
@@ -209,13 +205,12 @@ impl TrafficLightController {
                 });
                 let barrier_first = best.map_or(true, |(_, d, _)| bd <= d + 1e-6);
                 if barrier_first && !jump_first {
-                    // While a light is changing over, freezing the clock at its current
-                    // value would hold the changeover for good. Let the step reach the
-                    // stop; the stop itself holds there if its own phase may hold.
-                    if !changing {
-                        self.held = true;
-                        return;
+                    // waits just before the stop while preventing moving back the clock
+                    if bd > 1e-5 {
+                        self.time = (self.time + bd - 1e-5).rem_euclid(cycle);
                     }
+                    self.held = true;
+                    return;
                 }
             }
             let Some((k, d, wrapped)) = best else {
@@ -251,17 +246,7 @@ impl TrafficLightController {
             self.time = (self.time + d).rem_euclid(cycle);
             left -= d;
 
-            // A stop reached by the step was held above while its condition held; if it
-            // is reached here its condition no longer holds, so it is behind the clock.
-            // The exception is a step let through a changeover: the stop then holds at
-            // its own time rather than freezing the changeover.
             if p.jump_to.is_none() {
-                if changing && !self.passed.contains(&k) && self.stop_active(&p) && self.stop_holdable(&p) {
-                    self.time = p.time as f64;
-                    self.held = true;
-                    self.passed.clear();
-                    return;
-                }
                 self.passed.push(k);
                 continue;
             }
