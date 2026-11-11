@@ -113,7 +113,8 @@ pub(crate) fn apply_lan(
     // draw them like AI traffic
     for (id, rv) in game.remotes.iter_mut() {
         let Some(v) = view.remotes.get_mut(id) else { continue };
-        if v.driver_for.as_deref() != Some(rv.last.figure.as_str()) && !rv.stand_in {
+        // (a bus parked for the players stands empty: nobody at its wheel)
+        if v.driver_for.as_deref() != Some(rv.last.figure.as_str()) && !rv.stand_in && !omsi_net::is_parked(*id) {
             v.driver_for = Some(rv.last.figure.clone());
             if let Some(mut d) = v.driver.take() {
                 d.hide(r, scene);

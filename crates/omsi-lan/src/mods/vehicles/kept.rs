@@ -33,6 +33,11 @@ pub(crate) fn withheld_of(fp: &str) -> Vec<Withheld> {
     buses().withheld_of(fp)
 }
 
+/// The fingerprints of every bus kept.
+pub(crate) fn kept_fingerprints() -> Vec<String> {
+    buses().lock().as_ref().map(|v| v.manifests.iter().map(|m| m.0.clone()).collect()).unwrap_or_default()
+}
+
 pub(in crate::mods) fn put(e: &Entry, data: &[u8]) -> Result<(), String> {
     buses().put(e, data)
 }
@@ -110,6 +115,14 @@ impl Buses {
     /// The buses kept in the store's folder opened, each with all its files there.
     /// False when there is no store.
     pub(super) fn open(&self) -> bool {
+        // (one at a time, and once: every bus wanted while the store is not open yet asked
+        // for it to be opened - two dozen parked buses round a joining player read a store of
+        // thousands of files two dozen times at once, minutes of boxes)
+        static ONE: Mutex<()> = Mutex::new(());
+        let _one = ONE.lock().unwrap_or_else(|e| e.into_inner());
+        if self.is_open() {
+            return true;
+        }
         match crate::mods::store_dir().map(|d| self.open_in(&d)) {
             Some(Ok(())) => true,
             Some(Err(e)) => {

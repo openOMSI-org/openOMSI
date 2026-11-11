@@ -154,6 +154,24 @@ pub(crate) fn info_of(cfg: &ServerCfg, _root: &Path) -> omsi_net::ws::ServerInfo
 
 /// Set up the arguments for a server run from `server.cfg` (the rest is the offscreen
 /// host loop, see `offscreen::run_offscreen`).
+/// The floor a parked bus stands on at (x, y), `near` being the height it stands at now:
+/// the face a vehicle's wheels would stand on about that height (`World::stand_height`: a
+/// bus on the lower of two floors stays on it, one put a little into the ground comes up).
+/// Only where there is none - a bus deep in the ground, or over a place with no floor so
+/// high - the one further up, then the terrain.
+pub(crate) fn parked_floor(world: &World, x: f64, y: f64, near: f64) -> Option<f64> {
+    world.stand_height(x, y, near).or_else(|| world.stand_height(x, y, near + 4.0)).or_else(|| world.ground_height(x, y))
+}
+
+/// A dedicated server's parked buses (`omsi_lan::parked`) stand in its world from now on: at
+/// the map's entry points when they were left on another map or nowhere yet.
+pub(crate) fn park_buses(server: bool, args: &Args, world: &World) {
+    if server {
+        let spots: Vec<omsi_lan::parked::Spot> = world.global.entry_points.iter().filter_map(|e| world.entry_point_place(e)).map(|(at, h)| (at.to_array(), h[0] as f32)).collect();
+        omsi_lan::parked::start(&args.root, &args.map, &spots, &|x, y, near| parked_floor(world, x, y, near));
+    }
+}
+
 pub(crate) fn prepare(args: &mut Args, path: &Path) -> Result<ServerCfg> {
     let mut cfg = ServerCfg::load(path, crate::game_lists::TRAFFIC_MAX)?;
     // (the map a start script picked, over server.cfg's)
@@ -319,7 +337,9 @@ pub(crate) fn tick_status(lan: &omsi_net::LanSession, time: f64, weather: &str) 
     // out as "00:-52")
     omsi_net::addrs::find_direct(lan, |a| crate::lan::update_server_direct(a));
     crate::lan::update_server_info(players, &lan.world.date, &crate::schedule::hhmm(time.rem_euclid(86400.0)), weather);
-    let poses: Vec<&omsi_net::Pose> = lan.peers().filter(|p| p.has_info && p.has_pose).map(|p| &p.pose).collect();
+    // (and the buses parked for the players: where each stands)
+    let parked = omsi_lan::parked::server_free();
+    let poses: Vec<&omsi_net::Pose> = lan.peers().filter(|p| p.has_info && p.has_pose).map(|p| &p.pose).chain(&parked).collect();
     let list = poses.iter().filter_map(|q| player_info(q, |id| poses.iter().copied().find(|o| o.id == id))).collect();
     crate::lan::update_server_players(list);
 }

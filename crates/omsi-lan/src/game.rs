@@ -959,7 +959,7 @@ pub fn host_addresses(port: u16) -> Vec<(&'static str, String, &'static str)> {
 fn write_status(lan: &LanSession, game: &LanGame, player: Option<&omsi_sim::VehicleInstance>) {
     let Some(p) = status_path() else { return };
     let players: Vec<serde_json::Value> = lan
-        .peers()
+        .peers().filter(|peer| !omsi_net::is_parked(peer.pose.id))
         .map(|peer| {
             let d = player.filter(|_| peer.pose.has_vehicle()).map(|pl| relative_position(pl, &peer.pose));
             serde_json::json!({ "id": peer.pose.id, "name": peer.pose.name, "bus": peer.pose.bus, "line": peer.pose.line, "destination": peer.pose.destination, "passengers": peer.pose.passengers, "where": d, "drawn": game.remotes.contains_key(&peer.pose.id) })
@@ -1041,7 +1041,7 @@ fn relative_position(me: &omsi_sim::VehicleInstance, pose: &Pose) -> serde_json:
 /// The other players for the navigator and the city map (#1011, #1080); `my_id` is ours.
 pub fn nav_players(game: &LanGame, my_id: u32) -> Vec<NavPlayer> {
     let bus_of = |id: u32| game.remotes.get(&id).map(|r| (r.vehicle.position, r.vehicle.heading));
-    let mut out: Vec<_> = game.remotes.values().filter_map(|r| nav_player(&r.last, &r.name, (r.vehicle.position, r.vehicle.heading), my_id, bus_of)).collect();
+    let mut out: Vec<_> = game.remotes.iter().filter(|(id, _)| !omsi_net::is_parked(**id)).filter_map(|(_, r)| nav_player(&r.last, &r.name, (r.vehicle.position, r.vehicle.heading), my_id, bus_of)).collect();
     // (always in the same order: the tags of two players close together do not swap)
     out.sort_by(|a, b| a.name.cmp(&b.name));
     out
@@ -1068,7 +1068,7 @@ fn nav_player(pose: &Pose, name: &str, bus: (DVec3, f64), my_id: u32, bus_of: im
 pub fn content_relative(path: &Path, root: &Path) -> String {
     let mut roots = omsi_cfg::content_roots();
     roots.push(root.to_path_buf());
-    crate::mirror::relative_to_roots(path, &roots).unwrap_or_default()
+    crate::mirror::relative_to_roots(path, &roots).or_else(|| crate::mods::vehicles::mounted(path).map(|m| m.1)).unwrap_or_default()
 }
 
 /// The drive starts, the map there and our player's bus `v` (None: no bus to drive) ready:

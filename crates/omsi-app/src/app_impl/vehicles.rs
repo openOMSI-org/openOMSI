@@ -173,6 +173,7 @@ impl App {
                     replace: self.player.as_ref().filter(|_| swap).map(|p| p.uid),
                     reload: false,
                     heading,
+                    taken: None,
                 });
                 self.service_msg = Some(("Loading vehicle...".into(), 4.0));
             }
@@ -333,7 +334,9 @@ pub(crate) fn placement(mut cx: PlacementCx) {
     if let Some(uid) = pending.replace {
         let Some(p) = cx.player.player.as_ref().filter(|p| p.uid == uid) else { return };
         // (where the bus driven stands now: it may have moved while the other was read)
-        pending.args.spawn = Some(format!("{},{},{}", p.vehicle.position.x, p.vehicle.position.y, p.vehicle.heading));
+        if pending.taken.is_none() {
+            pending.args.spawn = Some(format!("{},{},{}", p.vehicle.position.x, p.vehicle.position.y, p.vehicle.heading));
+        }
     }
     let (Some(r), Some(scene)) = (cx.gfx.renderer.as_ref(), cx.gfx.scene.as_mut()) else { return };
     let start = Instant::now();
@@ -344,6 +347,10 @@ pub(crate) fn placement(mut cx: PlacementCx) {
             let name = format!("{} {}", q.vehicle.ty.def.manufacturer, q.vehicle.ty.def.type_name);
             cx.menus.menus.swapped_in = Some(q.uid);
             replace_driven_vehicle(q, &mut cx);
+            if let Some(id) = pending.taken {
+                cx.menus.menus.parked_transfer.iter_mut().for_each(|t| t.took(id));
+                crate::on_foot::sit_at_the_wheel(cx.people, cx.view, cx.ui, cx.player);
+            }
             *cx.ui.service_msg = Some(if pending.reload {
                 (format!("Reloaded {} from its files", name.trim()), 4.0)
             } else {
@@ -353,6 +360,11 @@ pub(crate) fn placement(mut cx: PlacementCx) {
         Ok(Some(q)) => {
             let uid = q.uid;
             cx.player.placed.push(q);
+            if let Some(id) = pending.taken {
+                cx.menus.menus.parked_transfer.iter_mut().for_each(|t| t.took(id));
+                // (a player with no bus of its own: at the wheel of the one it took)
+                return crate::on_foot::take_placed(cx.player.placed.len() - 1, cx.player, cx.people, cx.view, cx.ui, cx.sound, cx.common.settings);
+            }
             // (then put down with the mouse, where the player wants it)
             crate::placing::begin_placing(cx.menus.menus, cx.ui.service_msg, uid, pending.heading);
             *cx.ui.service_msg = Some(("Vehicle loaded".into(), 4.0));
@@ -403,7 +415,7 @@ fn switch_vehicle(
     *ui.service_msg = Some((omsi_ui::i18n::tr_fill("Now driving: {name}", &[("{name}", &name.trim())]), 4.0));
 }
 
-fn placement_args(args: &Args, bus: String, spawn: String, paint: Option<String>, hof: Option<String>) -> Args {
+pub(crate) fn placement_args(args: &Args, bus: String, spawn: String, paint: Option<String>, hof: Option<String>) -> Args {
     Args {
         bus: Some(bus),
         spawn: Some(spawn),

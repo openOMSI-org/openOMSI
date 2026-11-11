@@ -80,6 +80,9 @@ pub struct ServerCfg {
     pub accept_uploads: bool,
     /// Days a bus players sent is kept when nobody uses it (`mods::vehicles::collect`).
     pub uploads_keep_days: u64,
+    /// How many of the buses players sent stand parked in the world, for any player to take
+    /// (`parked`; 0: none).
+    pub parked_buses: usize,
     /// The map (and what it uses) goes to players who join without it (`mods`); off,
     /// they install it themselves - the server's line is kept for the players' buses. A
     /// `server.cfg` without the key shares it, as servers did before the key came; the new
@@ -234,6 +237,12 @@ accept_uploads = 1
 # days a bus players sent is kept when nobody drives it; when the disk runs short, the buses
 # nobody drives now go first, the least lately used first (no bus is refused for its size)
 uploads_keep_days = 30
+# the buses players sent stand in the world when nobody drives them, where their last driver
+# left them (also after a restart), and any player who walks up to one takes it with the key
+# that takes a seat: up to this many of them, one of each bus (0 = none, 536 at most; a
+# game is told the ones near its player, so they cost nothing where nobody is). Needs
+# accept_uploads = 1
+parked_buses = 0
 # a player who joins without the server's map gets it from the server (the map and the
 # objects, splines and vehicles it uses - gigabytes for a big map). Off: players install the
 # map themselves and are told which one is missing; the server's bandwidth goes to the
@@ -292,6 +301,7 @@ impl ServerCfg {
     pub fn apply_to_mods(&self) {
         crate::mods::upload::accept(self.accept_uploads);
         crate::mods::vehicles::keep_for_days(self.uploads_keep_days);
+        crate::parked::allow(if self.accept_uploads { self.parked_buses } else { 0 });
         crate::mods::share_maps(self.share_maps);
     }
 
@@ -361,6 +371,7 @@ impl ServerCfg {
             share_positions: flag("share_positions", false),
             accept_uploads: flag("accept_uploads", true),
             uploads_keep_days: num("uploads_keep_days", 30).clamp(1, 3650) as u64,
+            parked_buses: num("parked_buses", 0).clamp(0, 536) as usize,
             share_maps: flag("share_maps", true),
             voice: voice_policy(&kv),
             public_server: flag("public_server", false),
@@ -578,6 +589,8 @@ pub fn player_info<'a>(q: &omsi_net::Pose, pose_of: impl Fn(u32) -> Option<&'a o
         line: if driving { q.line.clone() } else { String::new() },
         destination: if driving { q.destination.clone() } else { String::new() },
         tour: q.tour.clone(),
+        paint: if driving { q.paint.clone() } else { String::new() },
+        parked: omsi_net::is_parked(q.id),
         x,
         y,
         heading,
