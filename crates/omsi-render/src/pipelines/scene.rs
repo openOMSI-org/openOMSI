@@ -119,6 +119,7 @@ impl SceneBase {
             ("ALPHA_TEST", if alpha_to_coverage { 1.0 } else { 0.0 }),
             ("ALPHA_TO_COVERAGE", if use_alpha_to_coverage { 1.0 } else { 0.0 }),
             ("TERRAIN_PAINT", if terrain_paint { 1.0 } else { 0.0 }),
+            ("CABIN_REFLECTIONS", if blend.is_some() && !terrain_paint { 1.0 } else { 0.0 }),
         ].into_iter().chain(self.trees.iter().copied()).collect();
         compile_pipeline(device, &wgpu::RenderPipelineDescriptor {
             label: Some("omsi"),
