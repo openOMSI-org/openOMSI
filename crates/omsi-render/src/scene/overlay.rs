@@ -36,6 +36,11 @@ pub(crate) struct Flat {
     pub(crate) offset: f32,
     pub(crate) lo: Vec3,
     pub(crate) hi: Vec3,
+    /// A unit direction in the plane and the half extents of the surface along it and along
+    /// the in-plane direction across it: the oriented box its tilt is measured over (the
+    /// axis-aligned `lo`..`hi` of a slanted strip is many times wider than the strip).
+    pub(crate) axis: Vec3,
+    pub(crate) half: [f32; 2],
 }
 
 /// The normal with the sign that makes its largest component positive, and the offset to
@@ -54,7 +59,8 @@ pub(crate) fn mesh_flats(data: &MeshData) -> Vec<Flat> {
         // (plane key -> flat, area)
         // (a hashbrown map sized ahead, no list per triangle: a GPM street lamp of 150 000 triangles took 23 ms)
         let end = (first + count).min(data.indices.len() as u32);
-        let mut planes: hashbrown::HashMap<(i32, i32, i32, i32), (Flat, f32)> = hashbrown::HashMap::with_capacity((end.saturating_sub(first) / 3) as usize);
+        // (the last: the surface's extent along its axis and across it, low and high)
+        let mut planes: hashbrown::HashMap<(i32, i32, i32, i32), (Flat, f32, [f32; 4])> = hashbrown::HashMap::with_capacity((end.saturating_sub(first) / 3) as usize);
         let mut k = first as usize;
         let at = |i: u32| data.positions.get(i as usize).copied();
         while k + 2 < end as usize {
@@ -70,12 +76,31 @@ pub(crate) fn mesh_flats(data: &MeshData) -> Vec<Flat> {
             let (n, offset) = canonical(cross / (2.0 * area), (cross / (2.0 * area)).dot(p[0]));
             let key = ((n.x * 1000.0).round() as i32, (n.y * 1000.0).round() as i32, (n.z * 1000.0).round() as i32, (offset / PLANE_GAP).round() as i32);
             let (lo, hi) = (p[0].min(p[1]).min(p[2]), p[0].max(p[1]).max(p[2]));
-            let e = planes.entry(key).or_insert((Flat { slot, normal: n, offset, lo, hi }, 0.0));
+            let e = planes.entry(key).or_insert_with(|| {
+                // (the axis: the middle edge of the plane's first triangle - a leg of the right
+                // triangle a rectangle is cut into, not its diagonal)
+                let mut edges = [p[1] - p[0], p[2] - p[1], p[0] - p[2]];
+                edges.sort_by(|a, b| a.length_squared().total_cmp(&b.length_squared()));
+                let edge = edges[1];
+                let axis = (edge - n * n.dot(edge)).try_normalize().unwrap_or_else(|| n.any_orthonormal_vector());
+                (Flat { slot, normal: n, offset, lo, hi, axis, half: [0.0; 2] }, 0.0, [f32::MAX, f32::MIN, f32::MAX, f32::MIN])
+            });
             e.0.lo = e.0.lo.min(lo);
             e.0.hi = e.0.hi.max(hi);
             e.1 += area;
+            let across = n.cross(e.0.axis);
+            for q in p {
+                let (u, v) = (q.dot(e.0.axis), q.dot(across));
+                e.2 = [e.2[0].min(u), e.2[1].max(u), e.2[2].min(v), e.2[3].max(v)];
+            }
         }
-        let mut flats: Vec<(Flat, f32)> = planes.into_values().collect();
+        let mut flats: Vec<(Flat, f32)> = planes
+            .into_values()
+            .map(|(mut f, area, r)| {
+                f.half = [(r[1] - r[0]) * 0.5, (r[3] - r[2]) * 0.5];
+                (f, area)
+            })
+            .collect();
         // (the largest picked out before they are sorted: a curved mesh has a plane per triangle)
         if flats.len() > FLATS_PER_SLOT {
             flats.select_nth_unstable_by(FLATS_PER_SLOT, |a, b| b.1.total_cmp(&a.1));
@@ -104,8 +129,11 @@ pub(crate) struct ObjectRun {
     models: HashMap<u64, Vec<(usize, Vec<u8>)>>,
 }
 
+/// The bucket of a normal in `ObjectRun::by_normal`: cells of 1/30, so that the cell next to
+/// one holds every normal `facing` takes for the same way (their dot above 0.9995: a component
+/// apart by up to 0.032). Cells of 1/100 lost a skewed strip a degree off its tile's plane.
 fn normal_key(n: Vec3) -> (i32, i32, i32) {
-    ((n.x * 100.0).round() as i32, (n.y * 100.0).round() as i32, (n.z * 100.0).round() as i32)
+    ((n.x * 30.0).round() as i32, (n.y * 30.0).round() as i32, (n.z * 30.0).round() as i32)
 }
 
 /// `f` against `g` when the two face the same way and their boxes overlap within `margin`: how
@@ -117,14 +145,30 @@ fn facing(f: &Flat, g: &Flat, margin: f32) -> Option<(f32, f32)> {
     }
     let c = (f.lo + f.hi) * 0.5;
     let c = c - f.normal * (f.normal.dot(c) - f.offset);
-    let tilt = f.normal.cross(g.normal).length() * (f.hi - f.lo).length() * 0.5;
+    // How far the tilt lifts `f`'s edge off `g`'s plane: over `f`'s half extent in the in-plane
+    // direction across the tilt's axis - the surface's own extent, not its box's diagonal:
+    // a text strip laid across a skewed display tile (the Pixel XC's, 0.14 mm up over its
+    // 7 mm) has a box many times as wide as it is and would be said to lift 2 mm.
+    let axis = f.normal.cross(g.normal);
+    let sin = axis.length();
+    let tilt = match axis.try_normalize() {
+        Some(a) => {
+            let up = f.normal.cross(a);
+            let across = f.normal.cross(f.axis);
+            sin * (up.dot(f.axis).abs() * f.half[0] + up.dot(across).abs() * f.half[1])
+        }
+        None => 0.0,
+    };
     Some(((g.normal.dot(c) - g.offset).abs(), tilt))
 }
 
 /// Whether `f` lies on `g`: its middle within `CENTRE_GAP` of `g`'s plane, its tilt against
 /// it lifting no edge further than `PLANE_GAP`, and their boxes overlapping.
 fn lies_on(f: &Flat, g: &Flat) -> bool {
-    facing(f, g, BOX_GAP).is_some_and(|(gap, tilt)| gap < CENTRE_GAP && tilt < PLANE_GAP)
+    // (a tilted surface may stand off by what its tilt lifts its edge: one whose plane meets
+    // `g`'s inside it lies on it, a strip rooted on it at one edge and raised a tenth of a
+    // millimetre at the other is printed on it, while a parallel one that far off is apart)
+    facing(f, g, BOX_GAP).is_some_and(|(gap, tilt)| gap < CENTRE_GAP + tilt && tilt < PLANE_GAP)
 }
 
 /// Whether `f` lies just off `g`'s plane, further than `CENTRE_GAP` but nearer than
@@ -189,7 +233,9 @@ impl ObjectRun {
                     transform.transform_point3(Vec3::new(pick(1, f.lo.x, f.hi.x), pick(2, f.lo.y, f.hi.y), pick(4, f.lo.z, f.hi.z)))
                 });
                 let (lo, hi) = corners.fold((Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)), |(lo, hi), c| (lo.min(c), hi.max(c)));
-                Some(Flat { slot: f.slot, normal, offset, lo, hi })
+                let (axis, across) = (transform.transform_vector3(f.axis), transform.transform_vector3(f.normal.cross(f.axis)));
+                let half = [f.half[0] * axis.length(), f.half[1] * across.length()];
+                Some(Flat { slot: f.slot, normal, offset, lo, hi, axis: axis.try_normalize().unwrap_or(f.axis), half })
             })
             .collect();
         let mut levels = vec![0u8; slots];
@@ -494,6 +540,48 @@ mod tests {
             let levels = run.levels([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&mesh), 2);
             assert_eq!(levels, vec![0, 1], "display layer gap {gap}");
         }
+    }
+
+    /// The Pixel XC's list rows (MZKP SOR NBG 12): a display tile and, in the second slot of
+    /// its mesh, the strip its text is drawn on - rooted on the tile's plane at its lower edge
+    /// and 0.14 mm up at the upper one, laid across a tile that is slanted in the mesh's frame.
+    /// With no step the strip's upper half lost the depth test to the tile and each row read
+    /// as cut off along its middle.
+    #[test]
+    fn a_text_strip_rooted_on_its_tile_and_raised_a_tenth_of_a_millimetre_at_one_edge_takes_a_step() {
+        let slant = Mat4::from_translation(Vec3::new(0.06, 1.49, 5.3)) * Mat4::from_rotation_z(-0.9) * Mat4::from_rotation_x(0.3);
+        let plane = |lift_top: f32| -> MeshData {
+            // tile 0.2 x 0.014, strip 0.2 x 0.0074 inside it
+            let mut mesh = quad(0.0, 0.1, 0, false);
+            for p in &mut mesh.positions {
+                p.y *= 0.07;
+            }
+            let strip = [Vec3::new(-0.1, -0.0037, 0.0), Vec3::new(0.1, -0.0037, 0.0), Vec3::new(0.1, 0.0037, lift_top), Vec3::new(-0.1, 0.0037, lift_top)];
+            let base = mesh.positions.len() as u32;
+            mesh.positions.extend(strip);
+            mesh.normals.extend([Vec3::Z; 4]);
+            mesh.uvs.extend([glam::Vec2::ZERO; 4]);
+            mesh.indices.extend([0, 1, 2, 0, 2, 3].map(|i| i + base));
+            mesh.ranges = vec![(0, 6, 0), (6, 6, 1)];
+            for p in &mut mesh.positions {
+                *p = slant.transform_point3(*p);
+            }
+            mesh
+        };
+        let levels = |mesh: &MeshData| {
+            let mut run = ObjectRun::default();
+            run.begin(None);
+            run.levels([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(mesh), 2)
+        };
+        assert_eq!(levels(&plane(1.4e-4)), vec![0, 1]);
+        // (the same strip standing a tenth of a millimetre off all along is apart from the tile)
+        let apart = plane(0.0);
+        let mut off = apart.clone();
+        let n = slant.transform_vector3(Vec3::Z);
+        for p in &mut off.positions[4..] {
+            *p += n * 1.0e-4;
+        }
+        assert_eq!(levels(&off), vec![0, 0]);
     }
 
     #[test]
