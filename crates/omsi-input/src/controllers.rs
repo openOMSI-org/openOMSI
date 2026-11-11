@@ -2371,20 +2371,17 @@ mod tests {
             ("G920 Driving Force Racing Wheel for Xbox One", g920_id, false),
         ];
 
-        // Matched WGI twin (both rumble-capable and non-FF) is suppressed in DirectInput.
         let flydigi_match = super::match_system_pad("Flydigi Direwolf 4", flydigi_id, gilrs_pads);
         assert_eq!(flydigi_match, super::SystemPadMatch::Wgi);
         assert!(!super::include_di_device("Flydigi Direwolf 4", true, true, flydigi_match));
         assert!(!super::include_di_device("Flydigi Direwolf 4", false, true, flydigi_match));
         assert!(super::is_system_gamepad_kind("Flydigi Direwolf 4", true, false));
 
-        // Second &IG_ pad with no gilrs counterpart stays visible even while a WGI pad is active.
         let second_match = super::match_system_pad("Generic DirectInput Only Pad", second_id, gilrs_pads);
         assert_eq!(second_match, super::SystemPadMatch::None);
         assert!(super::include_di_device("Generic DirectInput Only Pad", false, true, second_match));
         assert!(super::include_di_device("Generic DirectInput Only Pad", true, true, second_match));
 
-        // FF Xbox-licensed wheels (RawGameController, not WGI Gamepad) stay in DirectInput even with &IG_.
         let g920_match = super::match_system_pad("G920 Driving Force Racing Wheel for Xbox One", g920_id, gilrs_pads);
         assert_eq!(g920_match, super::SystemPadMatch::Named);
         assert!(super::include_di_device("G920 Driving Force Racing Wheel for Xbox One", true, false, g920_match));
@@ -2395,7 +2392,6 @@ mod tests {
         assert!(super::include_di_device("Thrustmaster TMX Racing Wheel", true, true, tmx_match));
         assert!(!super::is_system_gamepad_kind("Logitech G29 Driving Force Racing Wheel", false, true));
 
-        // Xbox One / Series WGI suppresses Windows xinputhid twins while keeping wheels and unmatched pads.
         let xbox_wgi_pads = [
             ("Xbox One Game Controller", Some((0x045e, 0x02ea)), true),
             ("Xbox Wireless Controller", Some((0x045e, 0x0b13)), true),
@@ -2409,7 +2405,6 @@ mod tests {
         assert_eq!(super::match_system_pad("Generic DirectInput Only Pad", second_id, xbox_wgi_pads), super::SystemPadMatch::None);
         assert_ne!(super::match_system_pad("G920 Driving Force Racing Wheel for Xbox One", g920_id, xbox_wgi_pads), super::SystemPadMatch::Wgi);
 
-        // Duplicate WGI edge is suppressed while distinct XInput edge on the same pad in the same poll stays.
         let gilrs_edges = [("Xbox One Game Controller".to_string(), 0usize, true)];
         let xinput_edges = [
             (gilrs::Button::South, 0usize, true),

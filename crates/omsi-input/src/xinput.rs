@@ -1,5 +1,3 @@
-//! Windows XInput reader for background launcher polling (`openomsi --launcher-service`).
-
 use std::ffi::c_void;
 use windows::core::{s, w};
 use windows::Win32::Foundation::HMODULE;
@@ -7,12 +5,10 @@ use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 
 use crate::controllers::HAT_BUTTONS;
 
-/// Maximum controller slots supported by the XInput API (`XUSER_MAX_COUNT`).
 pub const MAX_SLOTS: usize = 4;
 
 type GetStateFn = unsafe extern "system" fn(u32, *mut XInputState) -> u32;
 
-/// Win32 `XINPUT_GAMEPAD` ABI layout.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct GamepadState {
@@ -32,7 +28,6 @@ struct XInputState {
     gamepad: GamepadState,
 }
 
-/// Standard 14 XInput buttons paired with their `gilrs::Button` and fallback button index.
 pub const BUTTON_MAP: [(u16, gilrs::Button, usize); 14] = [
     (0x1000, gilrs::Button::South, 0),
     (0x2000, gilrs::Button::East, 1),
@@ -74,7 +69,6 @@ impl Default for Slot {
     }
 }
 
-/// Stateful per-slot XInput poller with lazy DLL binding.
 #[derive(Default)]
 pub struct Reader {
     api: Option<Option<GetStateFn>>,
@@ -248,10 +242,10 @@ mod tests {
     fn poll_with_emits_button_edges_pairs_wgi_name_and_releases_on_disconnect() {
         let mut r = Reader::default();
         let mut custom = DEFAULT_INDICES;
-        custom[1] = 7; // Verify custom gilrs mapping index persists through unplug.
+        custom[1] = 7;
         let pads = [("Xbox One Game Controller", custom)];
         let mut s0 = Some(GamepadState {
-            buttons: 0x1001, // South + DPadUp
+            buttons: 0x1001,
             left_trigger: 255,
             thumb_lx: -32768,
             ..Default::default()
@@ -288,7 +282,6 @@ mod tests {
         assert_eq!(r.state_for_name("Xbox One Game Controller"), None);
         assert_eq!(r.state_for_name("Flydigi Direwolf 4"), None);
 
-        // One WGI pad beside two XInput slots (e.g. a second virtual/DI XInput pad) must stay unnamed too.
         let updates_single = r.poll_with(&pads[..1], |i| if i < 2 { active } else { None });
         assert!(updates_single.is_empty());
         assert_eq!(r.state_for_name("Xbox One Game Controller"), None);
