@@ -1,16 +1,10 @@
-//! A dedicated server's parked buses: the buses its players sent it (`mods::vehicles`) stand
-//! in its world when nobody drives them, where their last driver left them, and any player
-//! walks up to one and takes it. The server keeps the list and the places (`parked.json`
-//! beside the store, so they stand there after a restart too) and says who may take which;
-//! the game of the player who took one drives it as its own bus, and the others see it as
-//! that player's. A free one is told to the players as a player's parked bus is
-//! (`omsi_net::LanSession::set_parked`).
+//! A dedicated server's parked buses: the buses its players sent it stand in its world when
+//! nobody drives them (`parked.json` beside the store), and any player takes one.
 //!
-//! A game asks with the command `park-take <bus> <op>` and hears `park-grant <bus> <op>` or
-//! `park-deny <bus> <op>`; once it drives the bus it says `park-took <bus> <op>` until it
-//! hears `park-yours <bus> <op>` - only then is the bus it came in left for the others.
-//! `<op>` is the game's own number of that taking: an answer to an earlier asking, or a
-//! word of an asking the player gave up for another, is told apart by it on both sides.
+//! `park-take <bus> <op>` -> `park-grant` / `park-deny`; the game then says `park-took <bus> <op>`
+//! until it hears `park-yours`. Only then is the bus the player came in left for the others,
+//! so a lost answer or a bus that fails to load costs nobody a bus. `<op>` is the game's own
+//! number of that taking: it tells late answers and given-up askings apart on both sides.
 
 use omsi_net::{is_fingerprint, is_parked, LanSession, Pose, FIRST_PARKED_ID};
 use serde::{Deserialize, Serialize};
@@ -18,18 +12,13 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-/// A player granted a bus has this long to appear in it; then it is free again.
 const GRANT_WAIT: Duration = Duration::from_secs(120);
-/// The list is written this long after it changed at the earliest (and the places of the
-/// buses being driven are noted as often: a server that stops dead loses no more).
 const SAVE_EVERY: Duration = Duration::from_secs(10);
 /// While a bus is kept for a player, a bus of the same files its game shows this near to it
 /// may be either of the two: the one it came in is not followed there.
 const TAKEN_WITHIN: f64 = 25.0;
-/// A player takes a bus it stands at, not one across the map.
 const REACH: f64 = 40.0;
 
-/// One bus: which (its fingerprint among the kept ones), drawn how, standing where.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ParkedBus {
     pub id: u32,
@@ -56,15 +45,12 @@ pub struct ParkedBus {
     driver: Option<Driver>,
 }
 
-/// Who has a bus. A bus is free (no `Driver`), kept for a player who asked for it
-/// (`drives` false: it stands there for everybody to see until that player's game shows it,
-/// or `until` passes, or the player goes), or driven (`drives`).
+/// Free (no `Driver`), kept for a player who asked (`drives` false), or driven.
 #[derive(Debug, Clone, PartialEq)]
 struct Driver {
     player: u32,
     drives: bool,
     until: Instant,
-    /// The player's number of this taking (`park-take <bus> <op>`).
     op: u32,
     /// The bus the player had when it asked, as its game showed it: left for the others only
     /// once the player sits in this one - until then it is still that player's, whatever
@@ -95,7 +81,6 @@ impl ParkedBus {
         b
     }
 
-    /// Left where `p` shows it.
     fn stand(&mut self, p: &Pose) {
         (self.x, self.y, self.z) = (p.x, p.y, p.z);
         (self.heading, self.pitch, self.bank) = (p.heading, p.pitch, p.bank);
@@ -122,9 +107,8 @@ impl ParkedBus {
         }
     }
 
-    /// Is this the bus `bus` in the paint `paint`, or the very bus `fp`? Two players'
-    /// copies of a bus differ in a file or two and so in their fingerprints: for the players
-    /// they are the same bus in the same paint, and one of them stands in the world.
+    /// Two players' copies of a bus differ in a file or two, so in their fingerprints: for the
+    /// players they are one bus in one paint.
     fn is(&self, fp: &str, bus: &str, paint: &str) -> bool {
         self.fp == fp || (self.bus.to_lowercase() == bus.to_lowercase() && self.paint.to_lowercase() == paint.to_lowercase())
     }
@@ -146,15 +130,12 @@ pub type Spot = ([f64; 3], f32);
 pub struct Parked {
     file: PathBuf,
     map: String,
-    /// How many buses stand in the world at most (the numbers there are for them).
     max: usize,
     buses: Vec<ParkedBus>,
-    /// The bus each player's game showed last (players in a bus this server keeps).
     seen: HashMap<u32, Pose>,
     /// Each player's latest asking (its `<op>`, counted up by its game): one numbered
     /// before it that comes late changes nothing.
     asked: HashMap<u32, u32>,
-    /// Is the bus with this fingerprint kept whole, so that every player can have it?
     kept: fn(&str) -> bool,
     changed: bool,
     unsaved: Option<Instant>,
@@ -166,8 +147,7 @@ fn kept_whole(fp: &str) -> bool {
 }
 
 impl Parked {
-    /// The buses as `file` has them. Its places are for the map they were left on: on
-    /// another map the buses are put to `spots` (the map's entry points), side by side.
+    /// The places are those of the map the buses were left on: on another map, the entry points.
     pub fn open(file: &Path, map: &str, max: usize, spots: &[Spot]) -> Self {
         Self::open_with(file, map, max, spots, kept_whole)
     }
@@ -192,9 +172,6 @@ impl Parked {
         p
     }
 
-    /// The buses the server keeps that stand nowhere yet (kept before it parked any, or sent
-    /// by a player who left before this was on) are put to the entry points: `described` says
-    /// how such a bus is told (`describe`), None for one that cannot be.
     fn park_kept(&mut self, fps: &[String], spots: &[Spot], described: impl Fn(&str) -> Option<Pose>) {
         let first = self.buses.len();
         for fp in fps {
@@ -202,7 +179,6 @@ impl Parked {
                 continue;
             }
             let (Some(id), Some(pose)) = ((FIRST_PARKED_ID..=u16::MAX as u32).find(|id| !self.buses.iter().any(|b| b.id == *id)), described(fp)) else { continue };
-            // (the same bus in the same paint, sent by another player: one is enough)
             if !self.buses.iter().any(|b| b.is(fp, &pose.bus, &pose.paint)) {
                 self.buses.push(ParkedBus::of(id, &pose));
             }
@@ -213,10 +189,7 @@ impl Parked {
         }
     }
 
-    /// The free buses from the `from`-th on to the entry points: one at each, the next ones
-    /// beside them.
     pub fn to_spots(&mut self, spots: &[Spot], from: usize) {
-        // (a map without one: they stay where they are)
         if spots.is_empty() {
             return;
         }
@@ -231,10 +204,7 @@ impl Parked {
         self.touched();
     }
 
-    /// Every free bus down on the ground where it stands (`ground`: the floor at x, y nearest
-    /// the height given, where the world knows one). The buses put to an entry point stand in
-    /// a row at that point's height, and a yard is not level: without this the ones further
-    /// along the row stood in the ground, or over it.
+    /// A row put to an entry point takes that point's height, and a yard is not level.
     fn seat(&mut self, ground: &dyn Fn(f64, f64, f64) -> Option<f64>) {
         let mut moved = 0;
         for b in self.buses.iter_mut().filter(|b| b.driver.is_none()) {
@@ -258,8 +228,6 @@ impl Parked {
         self.unsaved.get_or_insert_with(Instant::now);
     }
 
-    /// The bus `player` left (`pose`: as its game showed it last) stands there from now on:
-    /// the parked bus it had taken, or its own when the server keeps that one.
     fn left(&mut self, player: u32, pose: &Pose) {
         if let Some(b) = self.buses.iter_mut().find(|b| b.driver.as_ref().is_some_and(|d| d.player == player && d.drives)) {
             b.stand(pose);
@@ -267,7 +235,6 @@ impl Parked {
             log::info!("parked buses: player {player} left {} ({}) at {:.0}, {:.0}", b.bus, b.id, b.x, b.y);
             return self.touched();
         }
-        // (one of each bus and paint: a second player's copy of it is not another bus here)
         if self.buses.len() >= self.max || self.buses.iter().any(|b| b.is(&pose.content, &pose.bus, &pose.paint)) || !(self.kept)(&pose.content) {
             return;
         }
@@ -277,8 +244,6 @@ impl Parked {
         self.touched();
     }
 
-    /// A frame of the server: who drives what now, the free buses told to the players, the
-    /// list written when it changed.
     pub fn tick(&mut self, lan: &mut LanSession, dt: f32) {
         let now: HashMap<u32, Pose> = lan
             .peers()
@@ -303,7 +268,6 @@ impl Parked {
                 log::info!("parked buses: player {} did not take bus {id}: free again", d.player);
                 self.buses[k].driver = None;
                 self.changed = true;
-                // (a player who went meanwhile left the bus it came in, as every player who goes)
                 if let (false, Some(pose)) = (online.contains(&d.player), &d.came_in) {
                     self.left(d.player, pose);
                 }
@@ -312,7 +276,6 @@ impl Parked {
         // (a player a bus is kept for is between two buses: the one its game shows is the one
         // it came in, held in `Driver::came_in` until it is known which of the two it drives)
         let between = |me: &Self, player: u32| me.buses.iter().any(|b| b.driver.as_ref().is_some_and(|d| d.player == player && !d.drives));
-        // players who went, or changed buses: the bus they had stands where it was
         let before = std::mem::take(&mut self.seen);
         for (player, pose) in &before {
             if now.get(player).is_none_or(|p| p.content != pose.content) && !between(self, *player) {
@@ -343,9 +306,6 @@ impl Parked {
         }
     }
 
-    /// `player`'s game says it drives bus `id` now: the bus kept for it is its own (and the
-    /// one it came in stands where it was left, for the others), when its game shows that bus.
-    /// Said again by a player who has it already: yes again.
     fn took(&mut self, lan: &LanSession, player: u32, id: u32, op: u32) -> bool {
         let Some(k) = self.buses.iter().position(|b| b.id == id && b.driver.as_ref().is_some_and(|d| d.player == player && d.op == op)) else { return false };
         let d = self.buses[k].driver.clone().expect("found by its driver");
@@ -363,10 +323,7 @@ impl Parked {
         true
     }
 
-    /// A player's command, when it is about a parked bus (`park-take <number>`,
-    /// `park-took <number>`): answered.
     pub fn command(&mut self, lan: &mut LanSession, from: u32, text: &str) -> bool {
-        // (`<bus> <op>`; a word that names no bus is nobody's)
         let named = |rest: &str| {
             let mut w = rest.split_whitespace();
             Some((w.next()?.parse::<u32>().ok()?, w.next().and_then(|o| o.parse::<u32>().ok()).unwrap_or(0)))
@@ -390,8 +347,6 @@ impl Parked {
         true
     }
 
-    /// `player` asks for bus `id`: it is kept for that player when it is free and the player is
-    /// at it. The bus the player came in stays its own until its game shows it in this one.
     fn take(&mut self, lan: &LanSession, player: u32, id: u32, op: u32) -> bool {
         let Some(peer) = lan.peers().find(|p| p.pose.id == player && p.has_pose) else { return false };
         let at = peer.pose.walker.map(|w| (w.x, w.y)).unwrap_or((peer.pose.x, peer.pose.y));
@@ -405,7 +360,6 @@ impl Parked {
         if self.buses[k].driver.is_some() || self.buses[k].away(at.0, at.1) >= REACH {
             return false;
         }
-        // (one bus is kept for a player at a time: another it asked for before is free again)
         let mut came_in = self.seen.remove(&player);
         for b in &mut self.buses {
             if b.driver.as_ref().is_some_and(|d| d.player == player && !d.drives) {
@@ -419,10 +373,6 @@ impl Parked {
         true
     }
 
-    /// The administration puts the free bus `id` down at `x`, `y` facing `heading` (degrees),
-    /// on the ground there (`ground`: the floor at a place nearest a height - the one the bus
-    /// stood at - when the world knows one): a bus left where no bus gets out again, or in
-    /// the way, is parked where it belongs.
     fn put(&mut self, id: u32, x: f64, y: f64, heading: f32, ground: &dyn Fn(f64, f64, f64) -> Option<f64>) -> Result<(), &'static str> {
         if ![x, y, heading as f64].iter().all(|v| v.is_finite()) {
             return Err("not a place");
@@ -437,7 +387,6 @@ impl Parked {
         Ok(())
     }
 
-    /// The list to its file now (as the server stops; `tick` writes it as it changes).
     pub fn save(&mut self) {
         let saved = Saved { map: self.map.clone(), buses: self.buses.clone() };
         let tmp = self.file.with_extension("json.tmp");
@@ -453,22 +402,18 @@ impl Parked {
     }
 }
 
-/// How many buses a dedicated server parks (`parked_buses` of its server.cfg; 0: none).
 static ALLOWED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-/// The dedicated server's parked buses, once its world is there.
 static SERVER: std::sync::Mutex<Option<Parked>> = std::sync::Mutex::new(None);
 
 fn server() -> std::sync::MutexGuard<'static, Option<Parked>> {
     SERVER.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-/// server.cfg: up to `max` of the buses the players sent stand in the world (0: none).
 pub fn allow(max: usize) {
     ALLOWED.store(max, std::sync::atomic::Ordering::Relaxed);
 }
 
-/// A kept bus as it is told while it stands parked: read from its kept files for its size
-/// and for the paint it was sent in (the one whose pictures are among its files).
+/// The paint a kept bus was sent in is the one whose pictures are among its files.
 fn describe(root: &Path, fp: &str) -> Option<Pose> {
     let m = crate::mods::vehicles::manifest(fp)?;
     let ty = omsi_sim::VehicleType::load(root, &crate::mods::vehicles::bus_file(fp)?).ok()?;
@@ -481,9 +426,6 @@ fn describe(root: &Path, fp: &str) -> Option<Pose> {
     Some(Pose { content: fp.to_string(), bus: m.bus, paint, length: bb[1], width: bb[0], height: bb[2], box_offset: bb[4], ..Default::default() })
 }
 
-/// The server's world is loaded (`map`, `spots`: its entry points): its parked buses stand
-/// in it from now on - where they were left, the ones never left anywhere at the entry
-/// points - each on the ground there (`ground`: the floor at x, y nearest a height).
 pub fn start(root: &Path, map: &str, spots: &[Spot], ground: &dyn Fn(f64, f64, f64) -> Option<f64>) {
     let max = ALLOWED.load(std::sync::atomic::Ordering::Relaxed);
     let Some(file) = crate::data_dir().filter(|_| max > 0).map(|d| d.join("lan-store").join("parked.json")) else { return };
@@ -493,20 +435,15 @@ pub fn start(root: &Path, map: &str, spots: &[Spot], ground: &dyn Fn(f64, f64, f
     *server() = Some(parked);
 }
 
-/// A player's command to the server, when it is about a parked bus.
 pub fn server_command(lan: &mut LanSession, from: u32, text: &str) -> bool {
     server().as_mut().is_some_and(|p| p.command(lan, from, text))
 }
 
-/// The buses standing free in the server's world now (for its map of who is where).
 pub fn server_free() -> Vec<Pose> {
     server().as_ref().map(|p| p.buses.iter().filter(|b| b.driver.is_none()).map(ParkedBus::pose).collect()).unwrap_or_default()
 }
 
-/// A command of the server's administration (its web panel, a tool on its machine), when it
-/// is about the parked buses: `parked move <number> <x> <y> <heading>` puts a free one down
-/// there, on the ground (`ground`: the floor at a place nearest a height, where the world is
-/// loaded).
+/// The local administration's `parked move <bus> <x> <y> <heading>`.
 pub fn server_admin(text: &str, ground: &dyn Fn(f64, f64, f64) -> Option<f64>) -> bool {
     let Some(rest) = text.trim().strip_prefix("parked ") else { return false };
     let words: Vec<&str> = rest.split_whitespace().collect();
@@ -525,7 +462,6 @@ pub fn server_admin(text: &str, ground: &dyn Fn(f64, f64, f64) -> Option<f64>) -
     true
 }
 
-/// A frame of the server (see `Parked::tick`).
 pub fn server_tick(lan: &mut LanSession, dt: f32) {
     if let Some(p) = server().as_mut() {
         p.tick(lan, dt);

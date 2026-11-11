@@ -33,7 +33,6 @@ pub(crate) fn withheld_of(fp: &str) -> Vec<Withheld> {
     buses().withheld_of(fp)
 }
 
-/// The fingerprints of every bus kept.
 pub(crate) fn kept_fingerprints() -> Vec<String> {
     buses().lock().as_ref().map(|v| v.manifests.iter().map(|m| m.0.clone()).collect()).unwrap_or_default()
 }

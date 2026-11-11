@@ -40,7 +40,6 @@ pub(in crate::mods) fn own_bus() -> &'static OwnBus {
 /// files): its fingerprint, which is what it is for everybody - nothing of it is listed or sent.
 static DRIVES_KEPT: Mutex<Option<String>> = Mutex::new(None);
 
-/// Every frame: whether our bus is a kept one (`vehicles::mounted`), and which.
 pub(crate) fn drives_kept(fp: Option<String>) -> bool {
     let mut kept = DRIVES_KEPT.lock().unwrap_or_else(|e| e.into_inner());
     if *kept != fp {

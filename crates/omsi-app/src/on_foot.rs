@@ -738,7 +738,6 @@ impl App {
             }
             return;
         }
-        // at the cab of a bus the server keeps parked: asked for
         if let Some(id) = self.parked_cab_near(pos) {
             return self.ask_for_parked(id);
         }

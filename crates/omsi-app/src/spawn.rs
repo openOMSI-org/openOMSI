@@ -120,8 +120,7 @@ pub(crate) struct PreparedPlayer {
     pub(crate) ty: Arc<omsi_sim::VehicleType>,
     parts: Vec<(Arc<omsi_sim::VehicleType>, bool)>,
     staged: Option<scene::VehiclePrefetch>,
-    /// The fonts its displays write with, when they are not the world's (a bus read from the
-    /// files a server keeps has its own).
+    /// A bus read from the files a server keeps writes its displays with its own fonts.
     fonts: Option<omsi_lan::mods::vehicles::SharedFonts>,
 }
 
@@ -135,8 +134,6 @@ impl PreparedPlayer {
         Ok(Self { ty, parts, staged: None, fonts: None })
     }
 
-    /// A vehicle read already (another's bus drawn here, taken over) with the fonts it is
-    /// drawn with, and its coupled parts.
     pub(crate) fn of_type(root: &Path, ty: Arc<omsi_sim::VehicleType>, fonts: Option<omsi_lan::mods::vehicles::SharedFonts>) -> Self {
         let parts = load_coupled_types(root, ty.clone());
         Self { ty, parts, staged: None, fonts }
@@ -167,8 +164,7 @@ pub(crate) struct PendingPlacement {
     /// The driven vehicle read again from its files (the menu's reload).
     pub(crate) reload: bool,
     pub(crate) heading: f64,
-    /// A server's parked bus taken over (`on_foot::parked`), its number: put where it
-    /// stands, the player at its wheel, and the server told.
+    /// A server's parked bus taken over (`on_foot::parked`): its number.
     pub(crate) taken: Option<u32>,
 }
 

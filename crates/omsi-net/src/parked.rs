@@ -1,7 +1,5 @@
-//! Buses that stand in the host's world with nobody in them, for the players to take: the
-//! host tells them as it tells a player's parked bus (`INFO` and a state now and then, under
-//! a number no player gets), so every game draws them with what it draws the players' buses
-//! with, and a game that knows nothing of them sees buses somebody left there.
+//! Buses that stand in the host's world with nobody in them: told as a player's parked bus
+//! is, so a game that knows nothing of them draws buses somebody left there.
 
 use super::*;
 
@@ -12,21 +10,16 @@ pub const FIRST_PARKED_ID: u32 = 65000;
 /// hears nothing of in `TIMEOUT`).
 const STATE_EVERY: f32 = 1.0;
 
-/// A player is told the parked buses within this distance (m) of where it is, the nearest
-/// `TOLD_AT_MOST` of them: however many stand in the world, a game draws those round it (it
-/// keeps `MAX_PEERS` others at most, the players among them). One it gets away from is told
-/// no more, and its game forgets it as it forgets a player it hears nothing of.
+/// A game keeps `MAX_PEERS` others, the players among them: it is told the parked buses
+/// near its player only.
 const TOLD_WITHIN: f64 = 700.0;
 const TOLD_AT_MOST: usize = 24;
-/// Places among a game's `MAX_PEERS` that parked buses never take: the players'.
 const PLAYERS_ROOM: usize = 34;
 
-/// Is `id` a parked bus's number, not a player's?
 pub fn is_parked(id: u32) -> bool {
     (FIRST_PARKED_ID..=u16::MAX as u32).contains(&id)
 }
 
-/// The host's parked buses and when they were last told.
 #[derive(Default)]
 pub(crate) struct Parked {
     buses: Vec<Pose>,
@@ -42,9 +35,6 @@ impl Parked {
 }
 
 impl LanSession {
-    /// The buses standing free in the host's world (host), each under its own number
-    /// (`is_parked`; others are left out). One that is no longer among them - taken by a
-    /// player, or gone - leaves the players' games at once.
     pub fn set_parked(&mut self, buses: Vec<Pose>) {
         let mut buses: Vec<Pose> = buses.into_iter().filter(|p| is_parked(p.id) && !p.bus.is_empty()).collect();
         for p in &mut buses {
@@ -64,7 +54,6 @@ impl LanSession {
         self.parked.buses = buses;
     }
 
-    /// Tell the players the parked buses when it is time (host, every frame).
     pub fn tell_parked(&mut self, dt: f32) {
         if self.parked.buses.is_empty() {
             return;
@@ -85,7 +74,6 @@ impl LanSession {
         }
         let sent_ms = self.stamp_ms().max(1);
         for peer in self.peers.values() {
-            // where the player is: its bus, or the player itself when it walks
             let (Some(addr), true) = (peer.addr, peer.has_pose) else { continue };
             let (x, y) = peer.pose.walker.map(|w| (w.x, w.y)).unwrap_or((peer.pose.x, peer.pose.y));
             let mut near: Vec<(f64, &Pose)> = self.parked.buses.iter().map(|p| ((p.x - x).hypot(p.y - y), p)).filter(|n| n.0 < TOLD_WITHIN).collect();
@@ -104,9 +92,7 @@ impl LanSession {
         }
     }
 
-    /// Is there room among the peers for `id`, new here (a client)? A player always finds
-    /// room while parked buses hold places: one of them goes (the game hears of it again
-    /// when there is room). A parked bus finds none in the players' places.
+    /// Among a full game's peers a new player takes a parked bus's place, never the other way.
     pub(crate) fn room_for(&mut self, id: u32) -> bool {
         let parked = self.peers.keys().filter(|k| is_parked(**k)).count();
         if is_parked(id) {

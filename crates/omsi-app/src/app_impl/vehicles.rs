@@ -362,7 +362,6 @@ pub(crate) fn placement(mut cx: PlacementCx) {
             cx.player.placed.push(q);
             if let Some(id) = pending.taken {
                 cx.menus.menus.parked_transfer.iter_mut().for_each(|t| t.took(id));
-                // (a player with no bus of its own: at the wheel of the one it took)
                 return crate::on_foot::take_placed(cx.player.placed.len() - 1, cx.player, cx.people, cx.view, cx.ui, cx.sound, cx.common.settings);
             }
             // (then put down with the mouse, where the player wants it)

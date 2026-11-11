@@ -69,7 +69,6 @@ pub(crate) fn name_tags(
         )]
     };
     let mut tags = Vec::new();
-    // (a bus parked for the players is nobody's: no name over it)
     for r in game.remotes.iter().filter(|(id, _)| !omsi_net::is_parked(**id)).map(|(_, r)| r) {
         let v = r.vehicle();
         // the roof: the bounding box's top when the bus says, else a bus's height
