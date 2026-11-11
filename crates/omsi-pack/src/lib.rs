@@ -685,7 +685,7 @@ impl VerifiedPack {
         Ok(())
     }
 
-    /// Size, modification time and change marker of every pack file; `None` when one has no change time.
+    /// Size, modification time and change marker of every pack file; `None` when one has no change time or cannot be listed.
     fn files_fingerprint(&self) -> Result<Option<String>> {
         let mut digest = Sha256::new();
         #[cfg(windows)]
