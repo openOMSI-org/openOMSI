@@ -1581,13 +1581,23 @@ fn link_route(data: &omsi_timetable::TimetableData, stops: &[i64], at: &dyn Fn(f
     route
 }
 
+/// Active Chrono directories for `map_dir` when `date` parses.
+pub fn chrono_dirs_for_date(map_dir: &Path, date: &str) -> Vec<PathBuf> {
+    omsi_map::date_code(date.trim()).map(|c| omsi_map::active_chrono_dirs(map_dir, c)).unwrap_or_default()
+}
+
+/// Timetable data for `map_dir`, layering active Chrono events when `date` parses.
+pub fn timetable_for_date(map_dir: &Path, date: &str) -> omsi_timetable::TimetableData {
+    let chrono = chrono_dirs_for_date(map_dir, date);
+    let off = omsi_map::chrono_deactivated_lines(&chrono);
+    omsi_timetable::TimetableData::load_with_chrono(map_dir, &chrono, &off)
+}
+
 /// A run of stops - a trip being made in the timetable editor - as a map picture needs it:
 /// the road pieces the map's station links drive between them.
 pub fn chain_path(map: &str, date: &str, stops: &[i64]) -> Result<TripPath> {
     let map_dir = resolve_content(map)?.parent().map(|p| p.to_path_buf()).context("map folder")?;
-    let chrono = omsi_map::date_code(date.trim()).map(|c| omsi_map::active_chrono_dirs(&map_dir, c)).unwrap_or_default();
-    let off = omsi_map::chrono_deactivated_lines(&chrono);
-    let data = omsi_timetable::TimetableData::load_with_chrono(&map_dir, &chrono, &off);
+    let data = timetable_for_date(&map_dir, date);
     let tiles = omsi_map::GlobalCfg::load(&map_dir.join("global.cfg")).map(|g| g.raw_tiles).unwrap_or_default();
     let at = |tile_index: f64| tiles.get(tile_index as usize).copied();
     Ok(TripPath { route: link_route(&data, stops, &at), stops: stops.to_vec() })
