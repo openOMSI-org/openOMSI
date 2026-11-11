@@ -3,6 +3,7 @@ use std::hash::{Hash, Hasher};
 
 #[derive(Clone)]
 pub(super) struct State {
+    resources: [u64; 4],
     stamp: u64,
     motion: u64,
     eye: Vec3,
@@ -47,6 +48,7 @@ impl State {
         }
         [f.lighting.sun_intensity, f.lighting.night, f.lighting.night_brightness].map(f32::to_bits).hash(&mut motion);
         Self {
+            resources: [scene.serial, scene.model_epoch, f.width as u64, f.height as u64],
             stamp: hash.finish(),
             motion: motion.finish(),
             eye: local.transform_vector3((f.camera.position - origin).as_vec3()),
@@ -67,7 +69,7 @@ impl State {
     }
 
     pub(super) fn urgent(&self, other: &Self) -> bool {
-        self.stamp != other.stamp || self.planes.len() != other.planes.len()
+        self.resources != other.resources || self.planes.len() != other.planes.len()
             || self.planes.iter().zip(&other.planes).any(|(a, b)| !a.abs_diff_eq(*b, 0.0001))
     }
 
@@ -90,10 +92,10 @@ pub(super) fn needs_capture(previous: Option<&(std::time::Instant, State)>, next
 #[cfg(test)]
 mod tests {
     #[test]
-    fn capture_waits_for_motion_but_reacts_to_lamps() {
+    fn capture_caps_motion_and_lighting_but_refreshes_new_targets() {
         assert!(!super::due(10.0, false, false), "a static cabin is reused indefinitely");
-        assert!(!super::due(0.01, true, false), "motion cannot bypass the capture interval");
+        assert!(!super::due(0.01, true, false), "motion and lighting cannot bypass the capture interval");
         assert!(super::due(1.0 / 30.0, true, false));
-        assert!(super::due(0.01, true, true), "changed lamps or resources take effect immediately");
+        assert!(super::due(0.01, true, true), "new resources cannot reuse the previous picture");
     }
 }

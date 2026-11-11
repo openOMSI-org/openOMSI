@@ -14,15 +14,13 @@ fn parameters(scene: &Scene, members: &[usize]) -> u64 {
     scene.instances.len().hash(&mut hash);
     for &i in members {
         let Some(inst) = scene.instances.get(i) else { continue; };
-        (inst.visible, inst.mesh, inst.interior_lamps, inst.interior.to_bits()).hash(&mut hash);
+        (inst.visible, inst.mesh).hash(&mut hash);
         inst.materials.hash(&mut hash);
         for &id in &inst.materials {
             let mat = &scene.materials[id];
             (mat.look, mat.uniform.glow[2].to_bits(), mat.uniform.emissive[3].to_bits()).hash(&mut hash);
         }
-        for values in [&inst.slot_alpha, &inst.slot_light, &inst.slot_night] {
-            for &v in values { v.to_bits().hash(&mut hash); }
-        }
+        for &alpha in &inst.slot_alpha { (alpha >= 1.0 / 512.0).hash(&mut hash); }
     }
     hash.finish()
 }

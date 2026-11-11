@@ -1,5 +1,11 @@
 use super::*;
 
+fn picture(renderer: &mut Renderer, scene: &mut Scene, camera: &Camera, lighting: &Lighting) -> Vec<u8> {
+    // Let the capture cadence elapse between scripted scene changes.
+    std::thread::sleep(std::time::Duration::from_millis(35));
+    renderer.render_to_image(scene, 128, 128, camera, lighting).unwrap()
+}
+
 fn panel(renderer: &Renderer, scene: &mut Scene, y: f32, x: [f32; 2], z: [f32; 2], material: usize, vehicle: bool) -> usize {
     let mesh = renderer.add_mesh(scene, &MeshData {
         positions: vec![Vec3::new(x[0], y, z[0]), Vec3::new(x[1], y, z[0]), Vec3::new(x[1], y, z[1]), Vec3::new(x[0], y, z[1])],
@@ -66,7 +72,7 @@ fn falloff_case(msaa: u32, ray_tracing: bool) {
         let mut samples = Vec::new();
         for intensity in [0.0, 0.25, 0.5, 1.0] {
             renderer.set_interior_light(&mut scene, light, PointLight { position: DVec3::new(0.0, y as f64 + 1.0, 1.5), radius: 4.0, core: 1.0, intensity, color: [1.0; 3], ..Default::default() });
-            samples.push(centre(&renderer.render_to_image(&mut scene, 128, 128, &camera, &lighting).unwrap()));
+            samples.push(centre(&picture(&mut renderer, &mut scene, &camera, &lighting)));
         }
         if distance <= 6.0 {
             assert!(samples.windows(2).all(|p| p[1] > p[0] + 2.0), "brightness at {distance} m: {samples:?}");
@@ -77,7 +83,7 @@ fn falloff_case(msaa: u32, ray_tracing: bool) {
             let mut lamp_gains = Vec::new();
             for lamp_distance in [3.0, 6.0] {
                 renderer.set_interior_light(&mut scene, light, PointLight { position: DVec3::new(0.0, y as f64 + lamp_distance, 1.5), radius: 4.0, core: 1.0, intensity: 1.0, color: [1.0; 3], ..Default::default() });
-                lamp_gains.push(centre(&renderer.render_to_image(&mut scene, 128, 128, &camera, &lighting).unwrap()) - samples[0]);
+                lamp_gains.push(centre(&picture(&mut renderer, &mut scene, &camera, &lighting)) - samples[0]);
             }
             assert!(lamp_gains[0] > 1.0 && lamp_gains[0] < gains[0] * 0.6 && lamp_gains[1] <= 1.0, "lamp distance: {lamp_gains:?}, nearby: {}", gains[0]);
         }
@@ -86,7 +92,7 @@ fn falloff_case(msaa: u32, ray_tracing: bool) {
         scene.dirty = true;
         let emitter = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [1.0, 0.01, 0.01, 1.0], true);
         panel(&renderer, &mut scene, y, [-half, half], [1.5 - half, 1.5 + half], emitter, true);
-        let emitted = centre(&renderer.render_to_image(&mut scene, 128, 128, &camera, &lighting).unwrap()) - samples[0];
+        let emitted = centre(&picture(&mut renderer, &mut scene, &camera, &lighting)) - samples[0];
         if distance == 2.5 { assert!(emitted > 5.0, "near emissive source: {emitted}"); }
         if distance == 14.0 { assert!(emitted <= 1.0, "distant emissive source: {emitted}"); }
     }
@@ -121,9 +127,9 @@ fn reflection_case(msaa: u32, ray_tracing: bool) {
     let camera = Camera { position: DVec3::new(0.0, 0.0, 1.5), yaw: 0.0, pitch: 0.0, roll: 0.0, fov_deg: 90.0, near: 0.1, far: 100.0 };
     let lighting = Lighting { enhanced: true, sun_dir: Vec3::new(0.0, 0.8, -0.6), sun_intensity: 0.0, ambient: Vec3::ZERO, secondary: Vec3::ZERO, night: 1.0, shadows: false, lamp_shadows: false, fog_density: 0.0,
         inside: Some((DVec3::ZERO, 0.0, [4.5, 10.0, 3.2, 0.0, 0.0, 1.5])), ..Default::default() };
-    let on = renderer.render_to_image(&mut scene, 128, 128, &camera, &lighting).unwrap();
+    let on = picture(&mut renderer, &mut scene, &camera, &lighting);
     renderer.set_interior_light(&mut scene, light, PointLight { intensity: 0.0, ..lamp });
-    let off = renderer.render_to_image(&mut scene, 128, 128, &camera, &lighting).unwrap();
+    let off = picture(&mut renderer, &mut scene, &camera, &lighting);
     let pixel = |rgba: &[u8], x: usize, y: usize| -> [i32; 3] { std::array::from_fn(|c| rgba[(y * 128 + x) * 4 + c] as i32) };
     let diff = |x, y| -> [i32; 3] { let a = pixel(&on, x, y); let b = pixel(&off, x, y); std::array::from_fn(|c| a[c] - b[c]) };
     // Reflection places the seat and rail at y=6, beyond the pane at y=2.
@@ -137,18 +143,18 @@ fn reflection_case(msaa: u32, ray_tracing: bool) {
     renderer.set_interior_light(&mut scene, light, PointLight { position: DVec3::new(0.0, 0.0, 2.0), radius: 8.0, core: 2.0, intensity: 1.0, color: [1.0; 3], ..Default::default() });
     let duplicate = panel(&renderer, &mut scene, 2.0, [-2.0, 2.0], [0.0, 3.0], glass, true);
     scene.instances[duplicate].slot_alpha[0] = 0.0;
-    let twice = renderer.render_to_image(&mut scene, 128, 128, &camera, &lighting).unwrap();
+    let twice = picture(&mut renderer, &mut scene, &camera, &lighting);
     for (x, y) in [(54, 70), (71, 56)] {
         let (a, b) = (pixel(&on, x, y), pixel(&twice, x, y));
         assert!((0..3).all(|c| (a[c] - b[c]).abs() <= 2), "a single reflection through layered glass: {a:?} vs {b:?}");
     }
     let mut disabled_lighting = lighting.clone();
     disabled_lighting.reflection_strength = 0.0;
-    let disabled = renderer.render_to_image(&mut scene, 128, 128, &camera, &disabled_lighting).unwrap();
+    let disabled = picture(&mut renderer, &mut scene, &camera, &disabled_lighting);
     assert!(pixel(&disabled, 54, 70)[0] <= pixel(&off, 54, 70)[0] + 2, "the existing reflection control disables the cabin capture too");
     // Turning a pane off with an ordinary script must still hide its reflection.
     scene.materials[glass].uniform.glow[2] = 0.0;
-    let hidden = renderer.render_to_image(&mut scene, 128, 128, &camera, &lighting).unwrap();
+    let hidden = picture(&mut renderer, &mut scene, &camera, &lighting);
     assert!(pixel(&hidden, 54, 70)[0] <= pixel(&off, 54, 70)[0] + 2);
     // Texture holes transmit the street without reflecting the cabin.
     scene.instances[pane].visible = false;
@@ -159,12 +165,12 @@ fn reflection_case(msaa: u32, ray_tracing: bool) {
         MaterialExtra { glass: true, daylight_glass: true, no_z_write: true, ..Default::default() });
     let cut = panel(&renderer, &mut scene, 2.0, [-2.0, 2.0], [0.0, 3.0], cut_glass, true);
     scene.instances[cut].slot_alpha[0] = 0.0;
-    let hole = renderer.render_to_image(&mut scene, 128, 128, &camera, &lighting).unwrap();
+    let hole = picture(&mut renderer, &mut scene, &camera, &lighting);
     assert!(pixel(&hole, 54, 70)[0] >= pixel(&hidden, 54, 70)[0] + seat_diff[0] - 2);
     assert!(pixel(&hole, 71, 56)[2] <= pixel(&hidden, 71, 56)[2] + 2, "no reflection in the texture hole");
     let black = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [0.0, 0.0, 0.0, 1.0], true);
     panel(&renderer, &mut scene, 1.0, [-0.2, -0.1], [1.33, 1.46], black, true);
-    let blocked = renderer.render_to_image(&mut scene, 128, 128, &camera, &lighting).unwrap();
+    let blocked = picture(&mut renderer, &mut scene, &camera, &lighting);
     assert!(pixel(&blocked, 54, 70)[0] <= pixel(&hole, 54, 70)[0] - seat_diff[0] + 2, "a foreground dashboard part occludes the reflection");
 }
 
