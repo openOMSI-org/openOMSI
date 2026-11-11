@@ -67,11 +67,39 @@ fn extending_with_a_signalized_segment_removes_the_existing_bypass_link() {
         ..Default::default()
     };
     whole.link(1.5);
-    for i in 0..whole.lanes.len() {
-        assert_eq!(grown.lanes[i].next, whole.lanes[i].next, "lane {i}");
-        assert_eq!(grown.prev[i], whole.prev[i], "lane {i}");
+    let keys = |net: &Network, lanes: &[usize]| {
+        let mut keys: Vec<_> = lanes
+            .iter()
+            .map(|&i| {
+                let key = net.lanes[i].key.unwrap();
+                (key.tile, key.id, key.path)
+            })
+            .collect();
+        keys.sort_unstable();
+        keys
+    };
+    for (grown_i, lane) in grown.lanes.iter().enumerate() {
+        let whole_i = whole
+            .find(lane.key.unwrap(), None)
+            .expect("same lane in whole network");
+        assert_eq!(
+            keys(&grown, &grown.lanes[grown_i].next),
+            keys(&whole, &whole.lanes[whole_i].next),
+            "next links for {:?}",
+            lane.key
+        );
+        assert_eq!(
+            keys(&grown, &grown.prev[grown_i]),
+            keys(&whole, &whole.prev[whole_i]),
+            "previous links for {:?}",
+            lane.key
+        );
+        assert_eq!(
+            grown.reach[grown_i], whole.reach[whole_i],
+            "reach for {:?}",
+            lane.key
+        );
     }
-    assert_eq!(grown.reach, whole.reach);
     assert_eq!(grown.lanes[0].next, vec![2]);
     assert_eq!(grown.lanes[2].next, vec![1]);
 }
