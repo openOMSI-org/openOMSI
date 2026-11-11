@@ -29,6 +29,10 @@ pub const RAIL_ASK_DISTANCE: f32 = 600.0;
 /// `[approachdist]` notwithstanding (with 0 a car half a metre short never asked).
 pub const WAITING_AT_LINE: f32 = 3.0;
 
+/// How far before its stop the clock rests (s): close enough to keep the phase that ends
+/// there, and inside the wire's 0.05 s step so a client can be sent the same phase.
+const HOLD_MARGIN: f64 = 1e-5;
+
 /// The `TrafficLightPhase` of an object no crossing light drives: a signal without a
 /// `[varparent]`, one whose crossing has no program, any other scripted object. Omsi.exe
 /// binds every placed object's `TrafficLightPhase` and `TrafficLightApproach` to a light
@@ -139,6 +143,7 @@ impl TrafficLightController {
     fn hold_instant(&self, p: &LightStop, at: f64, cycle: f64) -> Option<f64> {
         let stop = p.time as f64;
         if self.in_changeover_at(stop) {
+            // (Brixton Road's stop inside red-and-yellow would freeze the junction)
             None
         } else if self.in_changeover_at(at) {
             // The stop's own time must be ahead: never rewind to it after the clock passed.
@@ -194,18 +199,21 @@ impl TrafficLightController {
             }
 
             let best_d = best.map_or(f64::INFINITY, |(_, d, _)| d);
+            // (a step shorter than the hold margin reaches no point, but a held clock
+            // must stay held for the network snapshot: treat that stop as in reach)
+            let reach = if best.is_some() { left } else { HOLD_MARGIN };
             let mut barrier: Option<(f64, f64)> = None;
-            if best.is_some() {
+            if best.is_some() || left <= HOLD_MARGIN {
                 for (k, p) in self.stops.iter().enumerate() {
                     if p.jump_to.is_some() || self.passed.contains(&k) {
                         continue;
                     }
                     let d = (p.time as f64 - self.time).rem_euclid(cycle);
-                    if d <= 1e-6 || d > left + 1e-6 || d > best_d + 1e-6 || !self.stop_active(p) {
+                    if d <= 1e-6 || d > reach + 1e-6 || d > best_d + 1e-6 || !self.stop_active(p) {
                         continue;
                     }
-                    let at = if d > 1e-5 {
-                        (self.time + d - 1e-5).rem_euclid(cycle)
+                    let at = if d > HOLD_MARGIN {
+                        (self.time + d - HOLD_MARGIN).rem_euclid(cycle)
                     } else {
                         self.time
                     };

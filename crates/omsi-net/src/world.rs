@@ -286,7 +286,14 @@ pub fn encode(frame: &WorldFrame, protocol: u8) -> Vec<Vec<u8>> {
         w.put(lights.len() as u64, 6);
         for l in lights {
             w.put(l.object as u32 as u64, 32);
-            w.put_unsigned((l.time / 0.05).round() as i64, 17);
+            // (a held clock rests just before its stop: rounding up would put every
+            // client on the far side of the phase change, yellow while the host is green)
+            let units = if l.held {
+                ((l.time + 1e-9) / 0.05).floor()
+            } else {
+                (l.time / 0.05).round()
+            };
+            w.put_unsigned(units as i64, 17);
             w.put(l.held as u64, 1);
         }
         w.put(gone.len() as u64, 6);
@@ -597,6 +604,19 @@ mod tests {
         for n in 0..d[0].len() {
             let _ = decode(&d[0][..n], 4);
         }
+    }
+
+    #[test]
+    fn a_held_clock_just_before_a_phase_change_is_encoded_before_it() {
+        // Green until 22 s, yellow after: the host holds at 22.0 - 1e-5 while a bus asks.
+        let frame = WorldFrame {
+            lights: vec![LightState { object: 1, time: 22.0 - 1e-5, held: true }],
+            ..WorldFrame::default()
+        };
+        let g = decode(&encode(&frame, 4)[0], 4).unwrap();
+        assert!(g.lights[0].held);
+        assert!(g.lights[0].time < 22.0, "held at {}", g.lights[0].time);
+        assert!(22.0 - g.lights[0].time <= 0.05 + 1e-9, "held at {}", g.lights[0].time);
     }
 
     #[test]

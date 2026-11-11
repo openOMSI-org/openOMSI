@@ -696,6 +696,27 @@ fn a_stop_does_not_move_the_clock_back_inside_its_hold_margin() {
 }
 
 #[test]
+fn a_held_stop_stays_held_through_a_zero_or_tiny_step() {
+    let mut c = TrafficLightController::from_program(
+        vec![(vec![(0, 4.0), (6, 16.0)], None)],
+        Some(20.0),
+        &[[0.0, 4.0, 0.0]],
+        &[],
+    );
+    c.time = 3.9;
+    c.request[0] = true;
+    c.advance(0.2);
+    assert!(c.held);
+    c.advance(0.0);
+    assert!(c.held, "the network snapshot still says held");
+    c.advance(5e-6);
+    assert!(c.held, "a step shorter than the margin keeps the hold");
+    c.request[0] = false;
+    c.advance(0.0);
+    assert!(!c.held, "the request is gone: release even on a zero step");
+}
+
+#[test]
 fn a_jump_at_a_stop_time_goes_first() {
     let mut c = TrafficLightController::from_program(
         vec![(vec![(0, 4.0), (6, 16.0)], None); 2],
