@@ -263,9 +263,8 @@ impl Traffic {
             } else if !random {
                 // a timetable bus standing for minutes away from its stops and lights is in a
                 // jam that does not clear: it goes once nobody sees it, as one at the edge
-                // (kept for good, the jam behind it never cleared); one whose trip is done is
-                // waiting out its layover for its next trip, not stuck
-                c.is_bus() && c.stopped > 240.0 && !c.at_station() && !c.light_hold && !c.trip_done() && (from_eye > 40.0 || self.out_of_sight(world, c, r))
+                // (kept for good, the jam behind it never cleared)
+                c.is_bus() && stuck_in_jam(c.stopped, c.at_station(), c.light_hold, c.trip_done(), || from_eye > 40.0 || self.out_of_sight(world, c, r))
             } else if at_end && (!c.is_bus() || self.out_of_sight(world, c, r) || (c.stopped > 8.0 && from_eye > 180.0) || c.stopped > 150.0 || (c.stopped > 25.0 && queued.contains(&c.id) && from_eye > 25.0)) {
                 // (and in view too once others wait behind it: a fire engine at the end of a
                 // dead-end street held a queue of fourteen cars for two and a half minutes)
@@ -794,6 +793,31 @@ impl Traffic {
             self.sim.count_near = None;
             done.push(c);
         }
+    }
+}
+
+/// A timetable bus standing for minutes (`stopped` seconds) away from its stops and lights is
+/// in a jam that does not clear, and goes once `unseen`. One whose trip is done is waiting out
+/// its layover for its next trip, not stuck.
+fn stuck_in_jam(stopped: f32, at_station: bool, light_hold: bool, trip_done: bool, unseen: impl FnOnce() -> bool) -> bool {
+    stopped > 240.0 && !at_station && !light_hold && !trip_done && unseen()
+}
+
+#[cfg(test)]
+mod stuck_bus_tests {
+    use super::stuck_in_jam;
+
+    /// A bus held in `TripDone` for its next trip past 240 s, with the camera far off, stays.
+    #[test]
+    fn a_bus_on_layover_is_not_taken_as_stuck() {
+        assert!(!stuck_in_jam(300.0, false, false, true, || true));
+        // the same bus mid-trip in a jam goes
+        assert!(stuck_in_jam(300.0, false, false, false, || true));
+        // not yet four minutes, boarding, at a light, or still seen: stays
+        assert!(!stuck_in_jam(200.0, false, false, false, || true));
+        assert!(!stuck_in_jam(300.0, true, false, false, || true));
+        assert!(!stuck_in_jam(300.0, false, true, false, || true));
+        assert!(!stuck_in_jam(300.0, false, false, false, || false));
     }
 }
 
