@@ -465,8 +465,8 @@ impl Vehicle {
                     v.default_paint = r.str().to_string();
                 }
                 "openomsi_multiplayer" => {
-                    // Even an empty or misspelled policy block fails closed.
-                    v.lan_file_transfer = Some(false);
+                    // Absence of the option preserves normal automatic transfers.
+                    // A present but malformed option fails closed.
                     for line in r.rest_of_block() {
                         let line = line.split("//").next().unwrap_or("").trim();
                         let Some((key, value)) = line.split_once(char::is_whitespace) else { continue };
@@ -831,6 +831,9 @@ mod tests {
         let plain = Vehicle::parse(&CfgFile::from_str("plain.bus", "[friendlyname]\nA\nB\nC\n"));
         assert!(plain.allows_file_transfer());
         assert_eq!(plain.lan_file_transfer, None);
+        let empty = Vehicle::parse(&CfgFile::from_str("empty.bus", "[openomsi_multiplayer]\n[mass]\n10\n"));
+        assert!(empty.allows_file_transfer(), "an unrelated or empty policy block must not disable transfers");
+        assert_eq!(empty.lan_file_transfer, None);
         let private = Vehicle::parse(&CfgFile::from_str("private.bus", "[openomsi_multiplayer]\nallow_file_transfer 0\n[mass]\n10\n"));
         assert!(!private.allows_file_transfer());
         assert_eq!(private.mass, 10.0);
