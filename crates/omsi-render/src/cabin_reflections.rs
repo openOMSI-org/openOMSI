@@ -155,6 +155,7 @@ fn build_plan(scene: &Scene, f: &FrameCtx, visible: &[(usize, f32, bool)], list:
 }
 
 struct Capture {
+    array: wgpu::TextureView,
     color: wgpu::TextureView,
     depth: wgpu::TextureView,
     plane: wgpu::Buffer,
@@ -162,6 +163,7 @@ struct Capture {
     params: wgpu::Buffer,
     picture_bg: wgpu::BindGroup,
     recorded: Option<recorded::Recorded>,
+    refreshed: Option<(std::time::Instant, refresh::State)>,
 }
 
 pub(crate) struct Pipelines {
@@ -171,7 +173,6 @@ pub(crate) struct Pipelines {
     overlay: Option<(wgpu::TextureView, wgpu::BindGroup)>,
     captures: Vec<Capture>,
     size: (u32, u32),
-    refreshed: Option<(std::time::Instant, refresh::State)>,
     planned: Option<planning::Cached>,
     recorded: Option<recorded::Recorded>,
 }
@@ -181,7 +182,7 @@ impl Pipelines {
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("cabin reflection picture"),
             entries: &[
-                wgpu::BindGroupLayoutEntry { binding: 1, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }, count: None },
+                wgpu::BindGroupLayoutEntry { binding: 1, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2Array, multisampled: false }, count: None },
                 wgpu::BindGroupLayoutEntry { binding: 2, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), count: None },
                 wgpu::BindGroupLayoutEntry { binding: 3, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: wgpu::BufferSize::new(std::mem::size_of::<Uniform>() as u64) }, count: None },
             ],
@@ -204,28 +205,29 @@ impl Pipelines {
             fragment: Some(wgpu::FragmentState { module: shader, entry_point: Some("fs_cabin_resolve"), targets: &[Some(wgpu::ColorTargetState { format: HDR_FORMAT, blend: Some(wgpu::BlendState { color: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One, dst_factor: wgpu::BlendFactor::One, operation: wgpu::BlendOperation::Add }, alpha: wgpu::BlendComponent::OVER }), write_mask: wgpu::ColorWrites::COLOR })], compilation_options: Default::default() }),
             multiview_mask: None, cache: crate::pipeline_cache::get(device).as_ref(),
         });
-        Self { layout, compose, resolve, overlay: None, captures: Vec::new(), size: (0, 0), refreshed: None, planned: None, recorded: None }
+        Self { layout, compose, resolve, overlay: None, captures: Vec::new(), size: (0, 0), planned: None, recorded: None }
     }
 
-    fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, plane_layout: &wgpu::BindGroupLayout, f: &FrameCtx, plan: &Plan, update: bool) {
+    fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, plane_layout: &wgpu::BindGroupLayout, f: &FrameCtx, plan: &Plan, updates: &[bool]) {
         let scale = (320.0 / f.width as f32).min(180.0 / f.height as f32).min(0.5);
         let size = ((f.width as f32 * scale).ceil().max(1.0) as u32, (f.height as f32 * scale).ceil().max(1.0) as u32);
-        if self.size != size || self.captures.len() != plan.planes.len() { self.captures.clear(); self.refreshed = None; self.size = size; }
+        if self.size != size || self.captures.len() != plan.planes.len() { self.captures.clear(); self.size = size; }
         self.captures.truncate(plan.planes.len());
         while self.captures.len() < plan.planes.len() {
-            let texture = |format| device.create_texture(&wgpu::TextureDescriptor { label: Some("cabin reflection"), size: wgpu::Extent3d { width: size.0, height: size.1 * plan.planes.len() as u32, depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format, usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING, view_formats: &[] }).create_view(&Default::default());
-            let color = self.captures.first().map_or_else(|| texture(HDR_FORMAT), |c| c.color.clone());
-            let depth = self.captures.first().map_or_else(|| texture(DEPTH_FORMAT), |c| c.depth.clone());
+            let texture = |format, layers| device.create_texture(&wgpu::TextureDescriptor { label: Some("cabin reflection"), size: wgpu::Extent3d { width: size.0, height: size.1, depth_or_array_layers: layers }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format, usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING, view_formats: &[] });
+            let array = self.captures.first().map_or_else(|| texture(HDR_FORMAT, plan.planes.len() as u32).create_view(&wgpu::TextureViewDescriptor { dimension: Some(wgpu::TextureViewDimension::D2Array), ..Default::default() }), |c| c.array.clone());
+            let color = array.texture().create_view(&wgpu::TextureViewDescriptor { dimension: Some(wgpu::TextureViewDimension::D2), base_array_layer: self.captures.len() as u32, array_layer_count: Some(1), ..Default::default() });
+            let depth = self.captures.first().map_or_else(|| texture(DEPTH_FORMAT, 1).create_view(&Default::default()), |c| c.depth.clone());
             let buffer = |size| device.create_buffer(&wgpu::BufferDescriptor { label: Some("cabin reflection parameters"), size, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
             let plane = buffer(std::mem::size_of::<puddles::VehicleUniform>() as u64);
             let plane_bg = device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("cabin mirror plane"), layout: plane_layout, entries: &[wgpu::BindGroupEntry { binding: 0, resource: plane.as_entire_binding() }] });
             let params = buffer(std::mem::size_of::<Uniform>() as u64);
             let sampler = device.create_sampler(&wgpu::SamplerDescriptor { mag_filter: wgpu::FilterMode::Linear, min_filter: wgpu::FilterMode::Linear, ..Default::default() });
-            let picture_bg = device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("cabin picture"), layout: &self.layout, entries: &[wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&color) }, wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&sampler) }, wgpu::BindGroupEntry { binding: 3, resource: params.as_entire_binding() }] });
-            self.captures.push(Capture { color, depth, plane, plane_bg, params, picture_bg, recorded: None });
+            let picture_bg = device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("cabin picture"), layout: &self.layout, entries: &[wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&array) }, wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&sampler) }, wgpu::BindGroupEntry { binding: 3, resource: params.as_entire_binding() }] });
+            self.captures.push(Capture { array, color, depth, plane, plane_bg, params, picture_bg, recorded: None, refreshed: None });
         }
         let planes = camera_planes(Some(plan));
-        for (i, c) in self.captures.iter().enumerate().filter(|_| update) {
+        for (i, c) in self.captures.iter().enumerate().filter(|(i, _)| updates[*i]) {
             let mut u: puddles::VehicleUniform = bytemuck::Zeroable::zeroed();
             u.plane = planes[i];
             u.cabin_fade = DISTANCE_FADE;
@@ -235,7 +237,8 @@ impl Pipelines {
         if self.overlay.as_ref().is_none_or(|(v, _)| v.texture().width() != f.width || v.texture().height() != f.height) {
             let view = device.create_texture(&wgpu::TextureDescriptor { label: Some("cabin reflection on panes"), size: wgpu::Extent3d { width: f.width, height: f.height, depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format: HDR_FORMAT, usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING, view_formats: &[] }).create_view(&Default::default());
             let sampler = device.create_sampler(&Default::default());
-            let bg = device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("cabin reflection resolve"), layout: &self.layout, entries: &[wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&view) }, wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&sampler) }, wgpu::BindGroupEntry { binding: 3, resource: self.captures[0].params.as_entire_binding() }] });
+            let array = view.texture().create_view(&wgpu::TextureViewDescriptor { dimension: Some(wgpu::TextureViewDimension::D2Array), ..Default::default() });
+            let bg = device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("cabin reflection resolve"), layout: &self.layout, entries: &[wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&array) }, wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&sampler) }, wgpu::BindGroupEntry { binding: 3, resource: self.captures[0].params.as_entire_binding() }] });
             self.overlay = Some((view, bg));
         }
     }
@@ -254,35 +257,32 @@ impl Renderer {
         let Some(pipes) = self.cabin_reflections.as_mut() else { return };
         let Some(plan) = plan else {
             // Mirror rendering must retain the main view's targets.
-            if f.with_overlays || f.xr_view { pipes.captures.clear(); pipes.overlay = None; pipes.refreshed = None; pipes.recorded = None; }
+            if f.with_overlays || f.xr_view { pipes.captures.clear(); pipes.overlay = None; pipes.recorded = None; }
             return;
         };
         let Some(vehicle) = self.puddles.as_ref() else { return };
         let Some(ao) = self.targets.ao.as_ref() else { return };
-        let update = refresh::needs_capture(pipes.refreshed.as_ref(), &plan.refresh, f.xr_view);
-        pipes.prepare(&self.device, &self.queue, &vehicle.vehicle[0].get_bind_group_layout(2), f, plan, update);
-        if update {
-            let color = pipes.captures[0].color.clone();
-            let depth = pipes.captures[0].depth.clone();
+        let previous: Vec<_> = pipes.captures.iter().map(|c| c.refreshed.as_ref()).collect();
+        let updates = refresh::schedule(&previous, &plan.refresh, plan.planes.len(), f.xr_view);
+        pipes.prepare(&self.device, &self.queue, &vehicle.vehicle[0].get_bind_group_layout(2), f, plan, &updates);
+        for (_, (c, batches)) in pipes.captures.iter_mut().zip(&plan.cabin).enumerate().filter(|(i, _)| updates[*i]) {
+            let color = c.color.clone();
+            let depth = c.depth.clone();
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("cabin reflected geometry"), color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: &color, resolve_target: None, depth_slice: None, ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store } })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment { view: &depth, depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(0.0), store: wgpu::StoreOp::Discard }), stencil_ops: None }),
                 timestamp_writes: pass_timer(timers.set.as_ref(), &mut timers.timed, "cabin capture"), occlusion_query_set: None, multiview_mask: None,
             });
             pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
-            for (i, (c, batches)) in pipes.captures.iter_mut().zip(&plan.cabin).enumerate() {
-                pass.set_viewport(0.0, (i as u32 * pipes.size.1) as f32, pipes.size.0 as f32, pipes.size.1 as f32, 0.0, 1.0);
-                pass.set_scissor_rect(0, i as u32 * pipes.size.1, pipes.size.0, pipes.size.1);
-                if f.env.no_bundles {
-                    pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
-                    pass.set_bind_group(2, &c.plane_bg, &[]);
-                    encode_batches(&mut pass, scene, batches, |pipe| &vehicle.vehicle[pipe as usize]);
-                } else {
-                    let bundle = recorded::get(&mut c.recorded, &self.device, scene, batches, &c.plane_bg, None, |pipe| &vehicle.vehicle[pipe as usize]);
-                    pass.execute_bundles(std::iter::once(bundle));
-                }
+            if f.env.no_bundles {
+                pass.set_bind_group(2, &c.plane_bg, &[]);
+                encode_batches(&mut pass, scene, batches, |pipe| &vehicle.vehicle[pipe as usize]);
+            } else {
+                let bundle = recorded::get(&mut c.recorded, &self.device, scene, batches, &c.plane_bg, None, |pipe| &vehicle.vehicle[pipe as usize]);
+                pass.execute_bundles(std::iter::once(bundle));
             }
-            pipes.refreshed = Some((std::time::Instant::now(), plan.refresh.clone()));
+            drop(pass);
+            c.refreshed = Some((std::time::Instant::now(), plan.refresh.clone()));
         }
         let (overlay, resolve_bg) = pipes.overlay.as_ref().unwrap();
         // Replacement blending prevents coincident pane layers doubling the reflection.

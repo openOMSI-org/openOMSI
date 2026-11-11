@@ -85,8 +85,17 @@ fn due(elapsed: f32, changed: bool, urgent: bool) -> bool {
     urgent || (changed && elapsed >= 1.0 / 30.0)
 }
 
-pub(super) fn needs_capture(previous: Option<&(std::time::Instant, State)>, next: &State, xr: bool) -> bool {
-    xr || previous.is_none_or(|(at, old)| due(at.elapsed().as_secs_f32(), !old.matches(next), old.urgent(next)))
+fn select(ages: &[(f32, bool, bool)], all: bool) -> Vec<bool> {
+    if all || ages.iter().any(|a| a.2) { return vec![true; ages.len()]; }
+    // Stagger changed panes so both captures do not land on the same frame.
+    let oldest = ages.iter().enumerate().filter(|(_, a)| due(a.0, a.1, a.2)).max_by(|(_, a), (_, b)| a.0.total_cmp(&b.0)).map(|(i, _)| i);
+    (0..ages.len()).map(|i| oldest == Some(i)).collect()
+}
+
+pub(super) fn schedule(previous: &[Option<&(std::time::Instant, State)>], next: &State, count: usize, xr: bool) -> Vec<bool> {
+    let ages: Vec<_> = (0..count).map(|i| previous.get(i).copied().flatten().map_or((0.0, true, true), |(at, old)|
+        (at.elapsed().as_secs_f32(), !old.matches(next), old.urgent(next)))).collect();
+    select(&ages, xr || previous.len() != count)
 }
 
 #[cfg(test)]
@@ -97,5 +106,15 @@ mod tests {
         assert!(!super::due(0.01, true, false), "motion and lighting cannot bypass the capture interval");
         assert!(super::due(1.0 / 30.0, true, false));
         assert!(super::due(0.01, true, true), "new resources cannot reuse the previous picture");
+    }
+
+    #[test]
+    fn changed_panes_take_turns_without_starving_the_older_image() {
+        assert_eq!(super::select(&[(0.04, true, false), (0.05, true, false)], false), [false, true]);
+        assert_eq!(super::select(&[(0.05, true, false), (0.01, true, false)], false), [true, false]);
+        assert_eq!(super::select(&[(10.0, false, false); 2], false), [false, false]);
+        assert_eq!(super::select(&[(0.01, true, false); 2], false), [false, false]);
+        assert_eq!(super::select(&[(0.01, true, true), (0.01, false, false)], false), [true, true]);
+        assert_eq!(super::select(&[(0.01, false, false); 2], true), [true, true]);
     }
 }

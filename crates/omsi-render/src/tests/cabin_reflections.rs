@@ -208,10 +208,13 @@ fn adjacent_panes_keep_separate_cabin_images() {
     for (x, channel, isolated) in [(51, 0, 0), (74, 2, 1)] {
         let at = (64 * 128 + x) * 4 + channel;
         assert!(images[isolated][at] > 10, "the isolated pane reflects its colored source: {}", images[isolated][at]);
-        assert!((images[2][at] as i32 - images[isolated][at] as i32).abs() <= 2, "atlas planes must match separate captures: {} vs {}", images[2][at], images[isolated][at]);
+        assert!((images[2][at] as i32 - images[isolated][at] as i32).abs() <= 2, "array layers must match separate captures: {} vs {}", images[2][at], images[isolated][at]);
     }
     renderer.update_texture(&scene, screen, &source([0, 255, 0, 255]));
     std::thread::sleep(std::time::Duration::from_millis(35));
+    let staggered = renderer.render_to_image(&mut scene, 128, 128, &camera, &lighting).unwrap();
+    let blue_at = (64 * 128 + 74) * 4 + 2;
+    assert!((staggered[blue_at] as i32 - images[2][blue_at] as i32).abs() <= 2, "updating a layer must preserve the other pane");
     let changed = renderer.render_to_image(&mut scene, 128, 128, &camera, &lighting).unwrap();
     let at = (64 * 128 + 51) * 4;
     assert!(changed[at] < images[2][at] / 2 && changed[at + 1] > changed[at] * 2, "a changed cabin display invalidates the cached picture: {:?} -> {:?}", &images[2][at..at+3], &changed[at..at+3]);

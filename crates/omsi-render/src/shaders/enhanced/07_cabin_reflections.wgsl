@@ -2,7 +2,7 @@ struct CabinReflection {
     planes: array<vec4<f32>, 2>,
     screen: vec4<f32>, // picture width/height, this plane, number of planes
 };
-@group(3) @binding(1) var t_cabin_reflection: texture_2d<f32>;
+@group(3) @binding(1) var t_cabin_reflection: texture_2d_array<f32>;
 @group(3) @binding(2) var s_cabin_reflection: sampler;
 @group(3) @binding(3) var<uniform> cabin_reflection: CabinReflection;
 
@@ -41,10 +41,8 @@ fn fs_cabin_reflection(in: FsIn) -> @location(0) vec4<f32> {
     let v = normalize(camera.cam_pos.xyz - in.world);
     let fresnel = 0.04 + 0.96 * pow(1.0 - abs(dot(n, v)), 5.0);
     let size = vec2<f32>(textureDimensions(t_cabin_reflection));
-    let height = size.y / cabin_reflection.screen.w;
-    let local = clamp(in.clip.xy / cabin_reflection.screen.xy, vec2<f32>(0.5) / vec2<f32>(size.x, height), vec2<f32>(1.0) - vec2<f32>(0.5) / vec2<f32>(size.x, height));
-    let atlas_uv = vec2<f32>(local.x, (local.y + f32(best)) / cabin_reflection.screen.w);
-    let reflected = textureSampleLevel(t_cabin_reflection, s_cabin_reflection, atlas_uv, 0.0);
+    let local = clamp(in.clip.xy / cabin_reflection.screen.xy, vec2<f32>(0.5) / size, vec2<f32>(1.0) - vec2<f32>(0.5) / size);
+    let reflected = textureSampleLevel(t_cabin_reflection, s_cabin_reflection, local, best, 0.0);
     return vec4<f32>(reflected.rgb * enh.exposure.x * 1.15 * fresnel * coverage * camera.cam_pos.w, 0.0);
 }
 
@@ -56,5 +54,5 @@ fn vs_cabin_resolve(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f3
 
 @fragment
 fn fs_cabin_resolve(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
-    return textureLoad(t_cabin_reflection, vec2<i32>(p.xy), 0);
+    return textureLoad(t_cabin_reflection, vec2<i32>(p.xy), 0, 0);
 }

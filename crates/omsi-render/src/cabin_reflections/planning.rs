@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 pub(super) struct Cached {
     plan: Plan,
     entries: Vec<u32>,
-    view: refresh::State,
+    resources: [u64; 4],
     params: u64,
     built: std::time::Instant,
 }
@@ -32,14 +32,14 @@ impl Pipelines {
             if f.with_overlays || f.xr_view { self.planned = None; }
             return None;
         }
-        let view = refresh::State::new(scene, f, &[], &[], &[], &[]);
+        let resources = [scene.serial, scene.model_epoch, f.width as u64, f.height as u64];
         let keep = !f.xr_view && self.planned.as_ref().is_some_and(|c| c.built.elapsed().as_secs_f32() < 1.0 / 30.0
-            && !c.view.urgent(&view) && c.params == parameters(scene, &c.plan.members));
+            && c.resources == resources && c.params == parameters(scene, &c.plan.members));
         if !keep {
             let mut entries = Vec::new();
             let Some(plan) = build_plan(scene, f, visible, &mut entries) else { self.planned = None; return None; };
             let params = parameters(scene, &plan.members);
-            self.planned = Some(Cached { plan, entries, view, params, built: std::time::Instant::now() });
+            self.planned = Some(Cached { plan, entries, resources, params, built: std::time::Instant::now() });
         }
         let cached = self.planned.as_ref().unwrap();
         let mut plan = cached.plan.clone();
