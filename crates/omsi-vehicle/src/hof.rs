@@ -73,6 +73,14 @@ pub struct Hof {
 pub const FREE_TEXT: &str = "(free text)";
 
 impl Hof {
+    pub fn depot_name(&self) -> String {
+        self.path
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| self.name.clone())
+    }
+
     /// This depot file with one destination more, or the one it had of the kind changed:
     /// `lines` typed by the driver as the displays' text (the destination form's two free
     /// lines). Its strings are those a destination of the file has, as many: the first holds
@@ -488,6 +496,22 @@ mod tests {
         omsi_cfg::remove_content_root(&root);
         let _ = std::fs::remove_dir_all(&root);
         assert_eq!(found, Some(map.join(format!("company-{stamp}.hof"))));
+    }
+
+    #[test]
+    fn depot_name_prefers_file_stem_over_shared_internal_name() {
+        let dir = std::env::temp_dir().join(format!("openomsi-hof-stem-{}", std::process::id()));
+        std::fs::remove_dir_all(&dir).ok();
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("HOF1.hof"), "[name]\nShared\n").unwrap();
+        std::fs::write(dir.join("HOF2.hof"), "[name]\nShared\n").unwrap();
+        let h2 = Hof::load(&dir.join("HOF2.hof")).unwrap();
+        assert_eq!(h2.depot_name(), "HOF2");
+        let picked = depot_in(&dir, &h2.depot_name()).unwrap();
+        assert_eq!(picked.path, dir.join("HOF2.hof"));
+        let memory_only = Hof { name: "Fallback".into(), ..Default::default() };
+        assert_eq!(memory_only.depot_name(), "Fallback");
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
