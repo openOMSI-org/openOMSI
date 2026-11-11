@@ -263,8 +263,9 @@ impl Traffic {
             } else if !random {
                 // a timetable bus standing for minutes away from its stops and lights is in a
                 // jam that does not clear: it goes once nobody sees it, as one at the edge
-                // (kept for good, the jam behind it never cleared)
-                c.is_bus() && c.stopped > 240.0 && !c.at_station() && !c.light_hold && (from_eye > 40.0 || self.out_of_sight(world, c, r))
+                // (kept for good, the jam behind it never cleared); one whose trip is done is
+                // waiting out its layover for its next trip, not stuck
+                c.is_bus() && c.stopped > 240.0 && !c.at_station() && !c.light_hold && !c.trip_done() && (from_eye > 40.0 || self.out_of_sight(world, c, r))
             } else if at_end && (!c.is_bus() || self.out_of_sight(world, c, r) || (c.stopped > 8.0 && from_eye > 180.0) || c.stopped > 150.0 || (c.stopped > 25.0 && queued.contains(&c.id) && from_eye > 25.0)) {
                 // (and in view too once others wait behind it: a fire engine at the end of a
                 // dead-end street held a queue of fourteen cars for two and a half minutes)
