@@ -289,7 +289,7 @@ pub fn encode(frame: &WorldFrame, protocol: u8) -> Vec<Vec<u8>> {
             // (a held clock rests just before its stop: rounding up would put every
             // client on the far side of the phase change, yellow while the host is green)
             let units = if l.held {
-                ((l.time + 1e-9) / 0.05).floor()
+                ((l.time + 5e-6) / 0.05).floor()
             } else {
                 (l.time / 0.05).round()
             };
