@@ -324,4 +324,8 @@ fn an_upscaler_at_work_leaves_the_msaa_and_the_render_scale_out_of_the_steps() {
     assert!(!keys(&s).iter().any(|k| *k == "msaa" || *k == "render_scale"));
     s["temporal_upscalers"] = json!(["fsr3"]);
     assert!(keys(&s).iter().any(|k| *k == "msaa" || *k == "render_scale"), "its DLLs are gone");
+    // (a Mac's MetalFX takes their place as DLSS does)
+    s["upscaler"] = json!("metalfx");
+    s["temporal_upscalers"] = json!(["metalfx"]);
+    assert!(!keys(&s).iter().any(|k| *k == "msaa" || *k == "render_scale"));
 }

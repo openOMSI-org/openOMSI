@@ -1,13 +1,16 @@
 //! The vendors' DLLs temporal upscaling needs beside the game (`omsi_render::temporal`), and
 //! whether this machine can use them. They are not part of the game's source: without them the
-//! choice is not offered, as a setting that can only ever say "unavailable" helps nobody. In this
-//! crate because the game and the launcher, which know nothing of each other, both ask.
+//! choice is not offered, as a setting that can only ever say "unavailable" helps nobody. On a
+//! Mac the upscaler is Apple's MetalFX, which is part of the system and needs no file here. In
+//! this crate because the game and the launcher, which know nothing of each other, both ask.
 
 use std::path::{Path, PathBuf};
 
 const DLSS: [&str; 4] = ["sl.interposer.dll", "sl.common.dll", "sl.dlss.dll", "nvngx_dlss.dll"];
 const FSR3_DX12: [&str; 2] = ["amd_fidelityfx_loader_dx12.dll", "amd_fidelityfx_upscaler_dx12.dll"];
 const FSR3_VULKAN: [&str; 2] = ["amd_fidelityfx_loader_vk.dll", "amd_fidelityfx_upscaler_vk.dll"];
+/// Where macOS 13 and newer have MetalFX (the folder is there, its code is in the system's cache).
+const METALFX: &str = "/System/Library/Frameworks/MetalFX.framework";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Api {
@@ -68,12 +71,34 @@ fn adapters() -> Vec<(u32, String)> {
     Vec::new()
 }
 
-pub fn available(dir: &Path) -> Vec<&'static str> {
-    offered(dir, cfg!(windows), rtx_present())
+/// Apple's MetalFX temporal scaler: a Mac with Apple silicon on macOS 13 or newer. A candidate,
+/// as an RTX card is for DLSS: the scaler itself is asked when the game starts it.
+pub fn metalfx_present() -> bool {
+    cfg!(all(target_os = "macos", target_arch = "aarch64")) && Path::new(METALFX).is_dir()
 }
 
-fn offered(dir: &Path, windows: bool, rtx: bool) -> Vec<&'static str> {
-    ["dlss", "fsr3"].into_iter().filter(|u| windows && present(dir, u) && (*u != "dlss" || rtx)).collect()
+pub fn available(dir: &Path) -> Vec<&'static str> {
+    offered(dir, cfg!(windows), rtx_present(), metalfx_present())
+}
+
+fn offered(dir: &Path, windows: bool, rtx: bool, metalfx: bool) -> Vec<&'static str> {
+    let files = ["dlss", "fsr3"].into_iter().filter(|u| windows && present(dir, u) && (*u != "dlss" || rtx));
+    files.chain(metalfx.then_some("metalfx")).collect()
+}
+
+/// The upscalers that need no file beside the game: what a launcher that has not found the
+/// game yet can still offer.
+pub fn of_the_system() -> Vec<&'static str> {
+    metalfx_present().then_some("metalfx").into_iter().collect()
+}
+
+/// An upscaler's name as a menu shows it.
+pub fn label(upscaler: &str) -> &'static str {
+    match upscaler {
+        "dlss" => "NVIDIA DLSS (experimental)",
+        "metalfx" => "Apple MetalFX (experimental)",
+        _ => "AMD FSR 3 (experimental)",
+    }
 }
 
 pub fn quality_word(s: &str) -> &'static str {
@@ -97,9 +122,21 @@ pub fn first_api(chosen: &str, upscaler: &str, dir: &Path) -> &'static str {
     }
 }
 
+/// The Upscaling row's help text, as the in-game menu shows it: what the temporal upscalers this
+/// machine has do. A Mac's only one is Apple's own, and Metal its only graphics interface.
+pub fn menu_help(offered: bool) -> &'static str {
+    if !offered {
+        "Standard Catmull-Rom or AMD FSR 1; changes show at once"
+    } else if cfg!(target_os = "macos") {
+        "Standard Catmull-Rom or AMD FSR 1 change at once; Apple MetalFX takes the place of the anti-aliasing and the render scale, from the next start"
+    } else {
+        "Standard Catmull-Rom or AMD FSR 1 change at once; NVIDIA DLSS or AMD FSR 3 take the place of the anti-aliasing and the render scale, on DirectX 12 or Vulkan, from the next start"
+    }
+}
+
 /// The upscalers that can run from the game's folder, as a menu lists them.
 pub fn menu_choices() -> impl Iterator<Item = (&'static str, &'static str)> {
-    available(&program_dir()).into_iter().map(|u| if u == "dlss" { ("dlss", "NVIDIA DLSS (experimental)") } else { ("fsr3", "AMD FSR 3 (experimental)") })
+    available(&program_dir()).into_iter().map(|u| (u, label(u)))
 }
 
 #[cfg(test)]
@@ -137,15 +174,15 @@ mod tests {
     fn an_upscaler_needs_all_of_its_files() {
         let dir = scratch("all");
         assert_eq!(missing(&dir, "fsr3", Api::Dx12), FSR3_DX12);
-        assert!(offered(&dir, true, true).is_empty());
+        assert!(offered(&dir, true, true, false).is_empty());
         std::fs::write(dir.join(FSR3_DX12[0]), b"").unwrap();
         assert_eq!(missing(&dir, "fsr3", Api::Dx12), [FSR3_DX12[1]]);
-        assert!(offered(&dir, true, true).is_empty());
+        assert!(offered(&dir, true, true, false).is_empty());
         std::fs::write(dir.join(FSR3_DX12[1]), b"").unwrap();
         assert!(missing(&dir, "fsr3", Api::Dx12).is_empty());
         assert_eq!(missing(&dir, "fsr3", Api::Vulkan), FSR3_VULKAN);
-        assert_eq!(offered(&dir, true, false), ["fsr3"]);
-        assert!(offered(&dir, false, true).is_empty(), "Windows only");
+        assert_eq!(offered(&dir, true, false, false), ["fsr3"]);
+        assert!(offered(&dir, false, true, false).is_empty(), "Windows only");
         assert_eq!(missing(&dir, "dlss", Api::Vulkan), DLSS);
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -156,7 +193,7 @@ mod tests {
         for f in FSR3_VULKAN {
             std::fs::write(dir.join(f), b"").unwrap();
         }
-        assert_eq!(offered(&dir, true, false), ["fsr3"]);
+        assert_eq!(offered(&dir, true, false, false), ["fsr3"]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -166,8 +203,26 @@ mod tests {
         for f in DLSS.iter().chain(&FSR3_DX12) {
             std::fs::write(dir.join(f), b"").unwrap();
         }
-        assert_eq!(offered(&dir, true, true), ["dlss", "fsr3"]);
-        assert_eq!(offered(&dir, true, false), ["fsr3"]);
+        assert_eq!(offered(&dir, true, true, false), ["dlss", "fsr3"]);
+        assert_eq!(offered(&dir, true, false, false), ["fsr3"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// MetalFX is part of macOS: it is offered without a file beside the game, and never on
+    /// another system, whatever lies in the folder.
+    #[test]
+    fn metalfx_needs_no_files_and_only_a_mac_has_it() {
+        let dir = scratch("metalfx");
+        assert_eq!(offered(&dir, false, false, true), ["metalfx"]);
+        assert!(offered(&dir, false, false, false).is_empty());
+        for f in DLSS.iter().chain(&FSR3_DX12) {
+            std::fs::write(dir.join(f), b"").unwrap();
+        }
+        assert_eq!(offered(&dir, true, true, false), ["dlss", "fsr3"]);
+        assert_eq!(offered(&dir, false, true, true), ["metalfx"], "the DLLs are of no use on a Mac");
+        assert!(files("metalfx", Api::Dx12).is_empty() && files("metalfx", Api::Vulkan).is_empty());
+        assert_eq!(metalfx_present(), cfg!(all(target_os = "macos", target_arch = "aarch64")) && Path::new(METALFX).is_dir());
+        assert_eq!((label("dlss"), label("fsr3"), label("metalfx")), ("NVIDIA DLSS (experimental)", "AMD FSR 3 (experimental)", "Apple MetalFX (experimental)"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

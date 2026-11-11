@@ -60,7 +60,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         preset_row(&file, "Quality preset", "Sets the graphics mode and most of the options at once, from Low (Vanilla) to Ultra (Enhanced with everything on)"),
         app.can_optimise().then(|| button("Optimise for my PC", "Start", "Measures while you drive and adjusts the graphics for a smooth frame rate; your settings are saved first", "optimise")),
         omsi_launcher_lib::optimise::backup().is_some().then(|| button("Restore my previous settings", "Restore", "The graphics settings as they were before the last optimisation", "optimise_restore")),
-        // (DLSS and FSR 3 take the place of both)
+        // (DLSS, FSR 3 and MetalFX take the place of both)
         pick("msaa", "Anti-aliasing", later).filter(|_| s.temporal_upscaling().is_none()),
         pick("render_scale", "Render scale", if s.upscaler == "fsr1" { "With FSR 1 it changes at once" } else { later }).filter(|_| s.temporal_upscaling().is_none()),
         pick("anisotropy", "Anisotropic", later),
@@ -570,7 +570,7 @@ fn upscaler_rows(app: &App, file: &serde_json::Value) -> Vec<(String, String)> {
     let offered = !omsi_cfg::upscaler_files::available(&omsi_cfg::upscaler_files::program_dir()).is_empty();
     let pct = |v: f32| format!("{:.0} %", v * 100.0);
     [
-        select_row(file, "upscaler", "Upscaling", if offered { "Standard Catmull-Rom or AMD FSR 1 change at once; NVIDIA DLSS or AMD FSR 3 take the place of the anti-aliasing and the render scale, on DirectX 12 or Vulkan, from the next start" } else { "Standard Catmull-Rom or AMD FSR 1; changes show at once" }),
+        select_row(file, "upscaler", "Upscaling", omsi_cfg::upscaler_files::menu_help(offered)),
         select_row(file, "upscale_quality", "Upscaling quality", "Native keeps the window's resolution and only smooths the edges; the lower the quality, the smaller the picture is drawn and the higher the frame rate").filter(|_| temporal),
         select_row(file, "fsr_quality", "FSR quality", &fsr_size(app)).filter(|_| fsr),
         slider_row(app, "fsr_sharpness", "FSR sharpness", "RCAS sharpening strength", &pct).filter(|_| fsr),

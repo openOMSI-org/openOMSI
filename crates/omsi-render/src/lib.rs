@@ -298,9 +298,9 @@ pub struct RenderOptions {
     pub render_scale: f32,
     /// Experimental FSR1 spatial upscaler (at the start, or later with `set_upscaler`).
     pub fsr1: bool,
-    /// NVIDIA DLSS or AMD FSR 3 instead of multisampling, FXAA and the render scale: DirectX 12
-    /// with the vendor's DLLs beside the game (see `temporal`). Elsewhere, or when it cannot
-    /// start, the picture is drawn as without it.
+    /// NVIDIA DLSS, AMD FSR 3 or Apple MetalFX instead of multisampling, FXAA and the render
+    /// scale: DirectX 12 or Vulkan with the vendor's DLLs beside the game, or Metal on a Mac
+    /// (see `temporal`). Elsewhere, or when it cannot start, the picture is drawn as without it.
     pub temporal: Option<Temporal>,
     /// The player's MSAA while an upscaler has taken its place.
     pub msaa_fallback: u32,

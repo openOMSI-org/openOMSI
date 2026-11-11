@@ -123,8 +123,8 @@ impl Renderer {
         AMD_VULKAN.store(info.backend == wgpu::Backend::Vulkan && info.vendor == 0x1002, std::sync::atomic::Ordering::Relaxed);
         MULTISAMPLED_SHADING.store(!cfg!(any(target_os = "android", target_vendor = "apple")) && info.backend != wgpu::Backend::Gl && adapter.get_downlevel_capabilities().flags.contains(wgpu::DownlevelFlags::MULTISAMPLED_SHADING), std::sync::atomic::Ordering::Relaxed);
         let options = gpu_memory::lighter_picture(&info, vram, options);
-        // Temporal upscaling (DirectX 12 or Vulkan; DLSS an NVIDIA RTX card too) replaces the
-        // MSAA. DLSS on Vulkan starts Streamline now: the device is made with its extensions.
+        // Temporal upscaling (DirectX 12 or Vulkan, DLSS an NVIDIA RTX card too; MetalFX on
+        // Metal) replaces the MSAA. DLSS on Vulkan starts Streamline now: the device is made with its extensions.
         let temporal = upscaler_device::usable(options.temporal, &info);
         let (temporal, dlss_extensions) = upscaler_device::dlss_vulkan(temporal, &adapter, &info);
         let options = match temporal {

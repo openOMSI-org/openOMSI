@@ -53,3 +53,26 @@ failure of the test.
 Per run: the card, the driver, the run's number, works / fails, the frame rates with and
 without, the screenshot, and `game.log` (the lines with `DLSS`, `Streamline`, `FSR 3`,
 `FidelityFX`, `upscaling`, `opening graphics device`).
+
+## Apple MetalFX (macOS)
+
+MetalFX is the Mac's temporal upscaler (`upscaler=metalfx`): Apple silicon, macOS 13 or newer,
+Metal. Nothing lies beside the game for it. Run 1 has been done on an Apple M2 (macOS 27.2).
+Note the Mac's chip and macOS' version.
+
+| # | Mac | Upscaler | Quality | The log must say |
+|---|---|---|---|---|
+| 1 | Apple silicon, macOS 14.4 or newer | MetalFX | Quality | `MetalFX upscaling: Apple's temporal scaler, up to ...x on this Mac`, `metalfx upscaling (quality) running` |
+| 2 | Apple silicon | MetalFX | Native | as 1, the window's size drawn (`MetalFX upscaling: WxH to WxH`) |
+| 3 | Apple silicon | MetalFX | Ultra performance | as 1, and `this Mac's MetalFX does ...x at most; drawing at ...` where the chip scales up less than three times |
+| 4 | Apple silicon, macOS 13.0 to 14.3 | MetalFX | Quality | as 1, with `without the mask` |
+| 5 | Intel Mac, or macOS 11 or 12 | - | - | MetalFX is not in the list |
+
+What to look at and what to report are as above; the log's lines are those with `MetalFX`,
+`metalfx`, `upscaling` and `opening graphics device`. The frame rate and the frame times can be
+read off Metal's own overlay as well: start the game with `MTL_HUD_ENABLED=1`.
+
+On a Mac with a graphics card, `cargo test -p omsi-render --lib -- --ignored fsr::` runs the
+upscaler's tests with MetalFX, among them a still picture that has to settle on the full-sized
+one (`metalfx_settles_on_the_full_sized_picture`).
+
