@@ -6,13 +6,22 @@ use super::*;
 pub const NAVIGATOR_TEXTURE_MAX: i32 = 4096;
 
 /// An openOMSI extension: Omsi.exe leaves such a slot an empty script texture.
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NavigatorTextureDef {
     pub script_index: usize,
     pub width: i32,
     pub height: i32,
     /// A variable the scripts do not have leaves the screen on, as no variable does.
     pub power_var: Option<String>,
+    pub map_scale: f64,
+    pub fixed_north: bool,
+    pub no_nav_ui: bool,
+}
+
+impl Default for NavigatorTextureDef {
+    fn default() -> Self {
+        Self { script_index: 0, width: 0, height: 0, power_var: None, map_scale: 1.0, fixed_north: false, no_nav_ui: false }
+    }
 }
 
 impl NavigatorTextureDef {
@@ -37,23 +46,18 @@ impl Model {
     pub(super) fn parse_navigator_texture(&mut self, r: &mut CfgReader<'_>) {
         let width = r.i32().clamp(1, NAVIGATOR_TEXTURE_MAX);
         let height = r.i32().clamp(1, NAVIGATOR_TEXTURE_MAX);
-        let power_var = Self::take_optional_word(r);
+        let power = r.param_line().trim();
+        let power_var = (!power.is_empty()).then(|| power.to_string());
+        let map_scale = r.param_line().trim().parse::<f64>().ok().filter(|v| v.is_finite() && *v > 0.0).unwrap_or(1.0);
+        let fixed_north = r.param_line().trim() == "1";
+        let no_nav_ui = r.param_line().trim() == "1";
         let script_index = self.reserve_script_texture(width, height);
-        self.navigator_textures.push(NavigatorTextureDef { script_index, width, height, power_var });
+        self.navigator_textures.push(NavigatorTextureDef { script_index, width, height, power_var, map_scale, fixed_north, no_nav_ui });
     }
 
     pub(super) fn parse_use_navigator_texture(&mut self, r: &mut CfgReader<'_>) {
         let index = usize::try_from(r.i32()).ok().and_then(|n| self.navigator_textures.get(n)).map(|d| d.script_index);
         self.bind_script_texture(index);
-    }
-
-    fn take_optional_word(r: &mut CfgReader<'_>) -> Option<String> {
-        let mut ahead = r.clone();
-        let word = ahead.param_line().trim();
-        (!word.is_empty()).then(|| {
-            *r = ahead;
-            word.to_string()
-        })
     }
 
     pub fn navigator_screen(&self, script_index: usize) -> Option<&NavigatorTextureDef> {
@@ -78,7 +82,7 @@ mod tests {
     fn a_navigator_screen_takes_a_script_texture_index() {
         let m = parse("[scripttexture]\n64\n32\n\n[navigatortexture]\n800\n480\n\n[mesh]\nx.o3d\n\n[matl]\ngps.dds\n0\n[useNavigatorTexture]\n0\n");
         assert_eq!(m.script_textures, vec![(64, 32), (800, 480)]);
-        assert_eq!(m.navigator_textures, vec![NavigatorTextureDef { script_index: 1, width: 800, height: 480, power_var: None }]);
+        assert_eq!(m.navigator_textures, vec![NavigatorTextureDef { script_index: 1, width: 800, height: 480, ..Default::default() }]);
         assert_eq!(m.meshes[0].materials[0].use_script_texture, Some(1));
         assert!(m.script_texture_drawn_by_game(1) && !m.script_texture_drawn_by_game(0));
         assert!(m.navigator_screen(0).is_none());
@@ -100,6 +104,28 @@ mod tests {
         let m = parse("[navigatortexture]\n99999\n0\n");
         assert_eq!((m.navigator_textures[0].width, m.navigator_textures[0].height), (NAVIGATOR_TEXTURE_MAX, 1));
         assert_eq!(m.script_textures, vec![(NAVIGATOR_TEXTURE_MAX, 1)], "the slot is made at that size too");
+    }
+
+    #[test]
+    fn screen_options_follow_the_optional_power_variable() {
+        for power in ["power", ""] {
+            let m = parse(&format!("[navigatortexture]\n800\n480\n{power}\n2.5\n1\n1\n[mesh]\nx.o3d\n"));
+            let def = &m.navigator_textures[0];
+            assert_eq!(def.power_var.as_deref(), (!power.is_empty()).then_some(power));
+            assert_eq!((def.map_scale, def.fixed_north, def.no_nav_ui), (2.5, true, true));
+            assert_eq!(m.meshes.len(), 1);
+        }
+        let m = parse("[navigatortexture]\n800\n480\n\n0.5\n[mesh]\nx.o3d\n");
+        assert_eq!((m.navigator_textures[0].map_scale, m.navigator_textures[0].fixed_north, m.navigator_textures[0].no_nav_ui), (0.5, false, false));
+        assert_eq!(m.meshes.len(), 1);
+    }
+
+    #[test]
+    fn invalid_map_scales_use_the_default() {
+        for scale in ["", "0", "-1", "NaN", "inf", "invalid"] {
+            let m = parse(&format!("[navigatortexture]\n800\n480\n\n{scale}\n0\n0\n"));
+            assert_eq!(m.navigator_textures[0].map_scale, 1.0);
+        }
     }
 
     #[test]

@@ -44,6 +44,9 @@ pub(super) struct PanelLook {
     pub grip: bool,
     /// A screen in the cockpit shows the map, not the plugins' panels.
     pub plugins: bool,
+    pub map_scale: f64,
+    pub fixed_north: bool,
+    pub no_nav_ui: bool,
     pub clear: wgpu::Color,
 }
 
@@ -57,6 +60,9 @@ impl PanelLook {
             backdrop: if nav.cockpit_display { 1.0 } else { omsi_ui::theme::backdrop(nav.opacity).min(1.0) },
             grip: nav.widget,
             plugins: true,
+            map_scale: 1.0,
+            fixed_north: false,
+            no_nav_ui: false,
             clear: wgpu::Color::TRANSPARENT,
         }
     }
@@ -65,7 +71,7 @@ impl PanelLook {
     /// rather than cards that overlap.
     pub(super) fn screen(size: (u32, u32), points_high: f32) -> PanelLook {
         let scale = (size.0 as f32 / PANEL_POINTS_WIDE).min(size.1 as f32 / points_high);
-        PanelLook { scale, radius: 0.0, fade: 1.0, backdrop: 1.0, grip: false, plugins: false, clear: wgpu::Color::BLACK }
+        PanelLook { scale, radius: 0.0, fade: 1.0, backdrop: 1.0, grip: false, plugins: false, map_scale: 1.0, fixed_north: false, no_nav_ui: false, clear: wgpu::Color::BLACK }
     }
 
     pub(super) fn remote(size: (u32, u32)) -> PanelLook {
@@ -109,6 +115,8 @@ impl Navigator {
         let (pw, ph) = (size.0 as f32, size.1 as f32);
         let remote = self.remote_pic.drawing;
         let s = look.scale;
+        let zoom = self.zoom / look.map_scale;
+        let camera_heading = if look.fixed_north { 0.0 } else { self.cam_heading };
         let wd = &WORDS;
         let pal = *style::palette(self.light);
         self.atlas.begin_frame();
@@ -132,8 +140,10 @@ impl Navigator {
         let net = global.as_deref().or(f.traffic.map(|t| &t.net)).or(own.as_deref());
         let lanes_now = net.map(|n| n.lanes.len()).unwrap_or(0);
         let look_key = self.look_key();
-        let visible_reach = super::build::view::panel_reach(self.zoom, map.w, map.h).unwrap_or(PANEL_REACH);
+        let visible_reach = super::build::view::panel_reach(zoom, map.w, map.h).unwrap_or(PANEL_REACH);
         let reach = super::build::view::panel_build_reach(map.w, map.h).unwrap_or(PANEL_REACH + 150.0);
+        let scaled_reach = super::build::view::panel_reach(MAX_ZOOM / look.map_scale, map.w, map.h).unwrap_or(visible_reach);
+        let reach = reach.max(scaled_reach + 150.0);
         if remote {
             self.remote_pic.reach = reach;
         }
@@ -160,7 +170,7 @@ impl Navigator {
         if rebuild && self.panel_job.is_none() && built.is_none() {
             let anchor = f.bus.truncate();
             let mut parts = self.ground_parts(net, None);
-            parts.house_reach = Some(PANEL_REACH);
+            parts.house_reach = Some(if look.map_scale < 1.0 { reach.max(PANEL_REACH) } else { PANEL_REACH });
             // The older-style navigator needs only roads and route data.
             // Skip terrain meshes, map packages, buildings and their shadows entirely.
             if self.classic_2d {
@@ -172,7 +182,7 @@ impl Navigator {
             } else {
                 GroundLook { surfaces: true, trees: true, dashes: true, tol: 0.0 }
             };
-            let mpp = (2.0 * self.zoom * (FOV.to_radians() as f64 * 0.5).tan() / map.h.max(1.0) as f64) as f32;
+            let mpp = (2.0 * zoom * (FOV.to_radians() as f64 * 0.5).tan() / map.h.max(1.0) as f64) as f32;
             let paved = !self.classic_2d;
             let models = (!self.classic_2d).then_some(PANEL_MODELS);
             if self.global.is_some() {
@@ -190,12 +200,12 @@ impl Navigator {
         // --- the camera (world relative to the anchor), behind and above the bus
         let anchor = self.roads.as_ref().map(|r| r.anchor).unwrap_or(f.bus.truncate());
         let rel = |p: DVec3| Vec3::new((p.x - anchor.x) as f32, (p.y - anchor.y) as f32, 0.0);
-        let hd = self.cam_heading.to_radians();
+        let hd = camera_heading.to_radians();
         let fwd = DVec2::new(hd.sin(), hd.cos());
-        let look_at = f.bus.truncate() - anchor + fwd * self.zoom * 0.17;
+        let look_at = f.bus.truncate() - anchor + fwd * zoom * 0.17;
         let pitch = (if self.classic_2d { 90.0 } else if self.show_3d { PITCH } else { PITCH + 8.0 }).to_radians();
-        let back = fwd * self.zoom * pitch.cos();
-        let eye = DVec3::new(look_at.x - back.x, look_at.y - back.y, self.zoom * pitch.sin());
+        let back = fwd * zoom * pitch.cos();
+        let eye = DVec3::new(look_at.x - back.x, look_at.y - back.y, zoom * pitch.sin());
         let up = if self.classic_2d { Vec3::new(fwd.x as f32, fwd.y as f32, 0.0) } else { Vec3::Z };
         let view = Mat4::look_at_rh(eye.as_vec3(), Vec3::new(look_at.x as f32, look_at.y as f32, 0.0), up);
         let clip_panel = [0.0, 0.0, pw, ph];
@@ -209,7 +219,8 @@ impl Navigator {
         if let (Some(rn), true) = (route_net, !self.route.lanes.is_empty()) {
             let first = self.route.lanes.get(self.route.progress.min(self.route.lanes.len().saturating_sub(1))).copied();
             let bus_lane = first.map(|l| lane_from_right(rn, l, f.bus)).unwrap_or(0);
-            if self.route_mesh.0 != self.route.version
+            if built.is_some()
+                || self.route_mesh.0 != self.route.version
                 || self.route_mesh.1 != self.jam_version
                 || self.route_mesh.2 != anchor
                 || self.route_mesh.4 != bus_lane
@@ -217,7 +228,8 @@ impl Navigator {
                 || route_position_changed(self.route_mesh.6, self.route.s)
             {
                 let mut p = Painter::new();
-                let style = RouteStyle { extra_m: -0.6, min_px: 5.0, arrows: Some((32.0, 900.0)), max_len: 12_000.0, near: Some((anchor, PANEL_REACH)) };
+                let route_reach = self.roads.as_ref().map_or(PANEL_REACH, |r| r.reach.max(PANEL_REACH));
+                let style = RouteStyle { extra_m: -0.6, min_px: 5.0, arrows: Some((32.0, 900.0)), max_len: 12_000.0, near: Some((anchor, route_reach)) };
                 mapmesh::roads::build_route_to(&mut p, rn, &self.route.lanes[self.route.progress.min(self.route.lanes.len())..], anchor, self.route.s, &self.route_jam, &style, bus_lane, &pal, self.destination.as_ref().and_then(|d| d.path.as_ref().map(|p| p.end_s)));
                 self.draw_waypoint_routes(&mut p, rn, anchor, &style, &pal);
                 self.route_mesh = (
@@ -265,9 +277,9 @@ impl Navigator {
         // the public transport as drops with their lines (over the map's marks, on the screen);
         // the map's own timetabled trains are left out
         let mut transit: Vec<(DVec3, f64, Option<String>)> = Vec::new();
-        if let Some(t) = f.traffic.filter(|_| self.show_ai) {
+        if let Some(t) = f.traffic.filter(|_| self.show_ai && !look.no_nav_ui) {
             for c in &t.cars {
-                if c.gone || c.is_rail() || in_the_air(c, &t.net) || (c.vehicle.position - f.bus).truncate().length() > self.zoom * 3.5 + 150.0 {
+                if c.gone || c.is_rail() || in_the_air(c, &t.net) || (c.vehicle.position - f.bus).truncate().length() > zoom * 3.5 + 150.0 {
                     continue;
                 }
                 let (color, line) = traffic_kind(c);
@@ -289,20 +301,22 @@ impl Navigator {
         let mut ui = Painter::new();
         // the far end of the map: a haze into the land's colour
         ui.gradient(Rect::new(map.x, map.y, map.w, map.h * 0.16), pal.land.alpha(0.7), pal.land.alpha(0.0));
-        self.draw_map_marks(&mut ui, f, map, vpm, vp, anchor, s, transit, &pal);
-        self.draw_destination_markers(&mut ui, &|q| project(vpm, vp, Vec3::new((q.x - anchor.x) as f32, (q.y - anchor.y) as f32, 0.0)), map, s, false, &pal);
+        self.draw_map_marks(&mut ui, f, map, vpm, vp, anchor, s, camera_heading, transit, &pal);
+        if !look.no_nav_ui {
+            self.draw_destination_markers(&mut ui, &|q| project(vpm, vp, Vec3::new((q.x - anchor.x) as f32, (q.y - anchor.y) as f32, 0.0)), map, s, false, &pal);
+        }
         // the package's places: its icons on the map, the municipality and the street under it
         let icon_verts = self.minimap_icons(vpm, vp, anchor, f.bus.truncate(), map, s);
         // (the place row, the cards and the stop list: the plugin's panel has the rest of the
         // frame, and says whether the cards go over its map)
-        if !framed && !remote {
+        if !framed && !remote && !look.no_nav_ui {
             let loc_h = self.place_row_height(s);
             self.draw_place_row(&mut ui, Rect::new(0.0, map.bottom(), pw, loc_h), 10.0 * s, s);
         }
-        if cards {
+        if cards && !look.no_nav_ui {
             self.draw_cards(&mut ui, f, wd, net, map, s, &pal);
         }
-        if self.schedule && !framed && !remote {
+        if self.schedule && !framed && !remote && !look.no_nav_ui {
             let loc_h = self.place_row_height(s);
             let r = Rect::new(0.0, map.bottom() + loc_h, pw, ph - map.bottom() - loc_h);
             match self.board.filter(|_| look.plugins) {
@@ -342,7 +356,7 @@ impl Navigator {
         let solid_n = self.roads.as_ref().map_or(0, |r| r.houses[1] as u32);
         let three = self.show_3d && !self.classic_2d;
         let route_n = self.route_mesh.3;
-        let mpp = map_layer.px_scale * self.zoom as f32 * 4.0;
+        let mpp = map_layer.px_scale * zoom as f32 * 4.0;
         let seen = |part: usize, on: bool| match (&self.roads, on) {
             (Some(r), true) => super::cull::visible(&r.runs[part], vpm, mpp),
             _ => Vec::new(),
@@ -417,7 +431,7 @@ impl Navigator {
     /// The marks over the map: the stops ahead, the other players, the public transport's line
     /// tags and the bus itself.
     #[allow(clippy::too_many_arguments)]
-    fn draw_map_marks(&mut self, ui: &mut Painter, f: &NavFrame, map: Rect, vpm: Mat4, vp: [f32; 4], anchor: DVec2, s: f32, mut transit: Vec<(DVec3, f64, Option<String>)>, pal: &Palette) {
+    fn draw_map_marks(&mut self, ui: &mut Painter, f: &NavFrame, map: Rect, vpm: Mat4, vp: [f32; 4], anchor: DVec2, s: f32, camera_heading: f64, mut transit: Vec<(DVec3, f64, Option<String>)>, pal: &Palette) {
         let rel = |p: DVec3| Vec3::new((p.x - anchor.x) as f32, (p.y - anchor.y) as f32, 0.0);
         let n_stops = f.stops.len();
         let markers = spaced_markers(f.stops.iter().enumerate().filter_map(|(k, st)| project(vpm, vp, rel(st.position)).filter(|p| map.contains(*p)).map(|p| (k, p))), 20.0 * s);
@@ -428,7 +442,7 @@ impl Navigator {
         let mut taken: Vec<Rect> = Vec::new();
         for pl in &f.players {
             let Some(p) = project(vpm, vp, rel(pl.position)).filter(|p| map.contains(*p)) else { continue };
-            let a = (angle_diff(self.cam_heading, pl.heading) as f32).to_radians();
+            let a = (angle_diff(camera_heading, pl.heading) as f32).to_radians();
             puck(ui, p, a, 7.5 * s, PLAYER);
             let px = 9.5 * s;
             let name = self.fonts.fit(&pl.name, px, Weight::Bold, 90.0 * s);
@@ -448,7 +462,7 @@ impl Navigator {
             transit_drop(ui, &mut self.atlas, &self.fonts, p, ahead - p, line.as_deref(), s, &mut taken, pal);
         }
         if let Some(bp) = project(vpm, vp, rel(f.bus)) {
-            let a = (angle_diff(self.cam_heading, f.heading) as f32).to_radians();
+            let a = (angle_diff(camera_heading, f.heading) as f32).to_radians();
             puck(ui, bp, a, 10.0 * s, style::LIGHT.route);
         }
     }

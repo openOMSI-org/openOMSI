@@ -9,11 +9,14 @@ use super::*;
 const SCREEN_POINTS_HIGH: f32 = 300.0;
 
 /// A texture made by `Renderer::add_render_texture`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Screen {
     pub texture: TextureId,
     pub size: (u32, u32),
     pub on: bool,
+    pub map_scale: f64,
+    pub fixed_north: bool,
+    pub no_nav_ui: bool,
 }
 
 impl Screen {
@@ -21,7 +24,10 @@ impl Screen {
     pub fn find(model: &omsi_model::Model, textures: &[Option<TextureId>], var: impl Fn(&str) -> Option<f32>) -> Option<Screen> {
         let def = model.navigator_textures.first()?;
         let texture = textures.get(def.script_index).copied().flatten()?;
-        Some(Screen { texture, size: (def.width.max(1) as u32, def.height.max(1) as u32), on: def.is_on(var) })
+        Some(Screen {
+            texture, size: (def.width.max(1) as u32, def.height.max(1) as u32), on: def.is_on(var),
+            map_scale: def.map_scale, fixed_north: def.fixed_north, no_nav_ui: def.no_nav_ui,
+        })
     }
 
     pub fn of_vehicle(vehicle: &omsi_sim::VehicleInstance, render: &omsi_scene::VehicleRender) -> Option<Screen> {
@@ -30,6 +36,9 @@ impl Screen {
 
     fn map_height(&self, below: f32) -> f32 {
         let h = self.size.1 as f32;
+        if self.no_nav_ui {
+            return h;
+        }
         (h - below).max(h * 0.5).round()
     }
 }
@@ -72,7 +81,10 @@ impl Navigator {
         state.frames_since_drawn = 0;
         let mut attachments = state.attachments.take().unwrap_or_default();
         let drawn = Screen { size: (w, h), ..screen };
-        let look = PanelLook::screen(drawn.size, SCREEN_POINTS_HIGH);
+        let look = PanelLook {
+            map_scale: drawn.map_scale, fixed_north: drawn.fixed_north, no_nav_ui: drawn.no_nav_ui,
+            ..PanelLook::screen(drawn.size, SCREEN_POINTS_HIGH)
+        };
         let map_h = drawn.map_height(self.below_map(look.scale, f.stops.len()));
         self.ensure_gpu(renderer);
         self.draw(renderer, &view, drawn.size, map_h, &look, Some(&mut attachments), f);
@@ -94,7 +106,7 @@ mod tests {
         let m = model("[scripttexture]\n64\n32\n[navigatortexture]\n800\n480\npower\n[navigatortexture]\n10\n10\n");
         let textures = [Some(7), Some(9), Some(11)];
         let on = Screen::find(&m, &textures, |_| Some(1.0)).unwrap();
-        assert_eq!(on, Screen { texture: 9, size: (800, 480), on: true });
+        assert_eq!(on, Screen { texture: 9, size: (800, 480), on: true, map_scale: 1.0, fixed_north: false, no_nav_ui: false });
         assert!(!Screen::find(&m, &textures, |_| Some(0.0)).unwrap().on);
         assert!(Screen::find(&m, &[Some(7), None], |_| None).is_none(), "its texture is not there");
         assert!(Screen::find(&model("[scripttexture]\n64\n32\n"), &textures, |_| None).is_none());
@@ -102,9 +114,17 @@ mod tests {
 
     #[test]
     fn the_map_leaves_room_under_it_but_keeps_half_the_screen() {
-        let s = Screen { texture: 0, size: (800, 480), on: true };
+        let s = Screen { texture: 0, size: (800, 480), on: true, map_scale: 1.0, fixed_north: false, no_nav_ui: false };
         assert_eq!(s.map_height(40.0), 440.0);
         assert_eq!(s.map_height(400.0), 240.0);
+        assert_eq!(Screen { no_nav_ui: true, ..s }.map_height(400.0), 480.0);
+    }
+
+    #[test]
+    fn screen_options_are_taken_from_the_model() {
+        let m = model("[navigatortexture]\n800\n480\n\n0.5\n1\n1\n");
+        let s = Screen::find(&m, &[Some(9)], |_| None).unwrap();
+        assert_eq!((s.map_scale, s.fixed_north, s.no_nav_ui), (0.5, true, true));
     }
 
     #[test]
