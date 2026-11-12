@@ -839,6 +839,11 @@ mod tests {
         assert_eq!(private.mass, 10.0);
         assert!(Vehicle::parse(&CfgFile::from_str("public.bus", "[openomsi_multiplayer]\nallow_file_transfer 1\n")).allows_file_transfer());
         assert!(!Vehicle::parse(&CfgFile::from_str("bad.bus", "[openomsi_multiplayer]\nallow_file_transfer typo\n")).allows_file_transfer());
+        // Cars and other traffic vehicles use .ovh, not just buses (.bus).
+        let private_car = Vehicle::parse(&CfgFile::from_str("car.ovh", "[openomsi_multiplayer]\nallow_file_transfer 0\n"));
+        assert!(!private_car.allows_file_transfer());
+        let old_car = Vehicle::parse(&CfgFile::from_str("oldcar.ovh", "[type]\n0\n"));
+        assert!(old_car.allows_file_transfer(), "unmarked legacy cars remain shareable");
     }
 
     #[test]
