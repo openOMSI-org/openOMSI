@@ -14,10 +14,10 @@ jobs:
     name: Build Windows x64
     runs-on: windows-latest
     steps:
-      - name: Check out traffic test branch
+      - name: Check out functional traffic fixes
         uses: actions/checkout@v4
         with:
-          ref: fix/ai-crossing-queue-2592
+          ref: 29eb88d50bd6f66cbca182bb2dbb62cb3451b59b
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
