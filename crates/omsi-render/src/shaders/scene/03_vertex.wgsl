@@ -245,7 +245,18 @@ fn scene_clip(e: u32, wp: vec4<f32>, nw: vec3<f32>) -> vec4<f32> {
     }
     // (the depth of the eye's own point: n f / (f - n), about the near plane)
     let at_eye = (camera.view_proj * vec4<f32>(camera.cam_pos.xyz, 1.0)).z;
-    let plane = max(abs(dot(safe_normal(nw), cp - camera.cam_pos.xyz)), 0.05 * length(cp - camera.cam_pos.xyz));
+    // Lighting normals may be smoothed or authored independently of the plane.
+    // Using them here bends a flat layer's depth and can lift it through its print.
+    let encoded = vec2<f32>(models[e * 4u + 1u].w, models[e * 4u + 2u].w);
+    var depth_n = nw;
+    if (all(abs(encoded) <= vec2<f32>(1.0))) {
+        var n = vec3<f32>(encoded, 1.0 - abs(encoded.x) - abs(encoded.y));
+        let t = clamp(-n.z, 0.0, 1.0);
+        n.x += select(t, -t, n.x >= 0.0);
+        n.y += select(t, -t, n.y >= 0.0);
+        depth_n = n;
+    }
+    let plane = max(abs(dot(safe_normal(depth_n), cp - camera.cam_pos.xyz)), 0.05 * length(cp - camera.cam_pos.xyz));
     let slant = level * 2e-5 * at_eye * clip.w / plane;
     return vec4<f32>(clip.x, clip.y, clip.z * (1.0 + level * 1e-5) + slant, clip.w);
 }

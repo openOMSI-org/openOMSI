@@ -15,6 +15,7 @@ impl Renderer {
     /// per material slot.
     pub(crate) fn instance_entries(
         i: &Instance,
+        mesh: &GpuMesh,
         ro: DVec3,
         mats: &mut Vec<[[f32; 4]; 4]>,
         params: &mut Vec<[f32; 4]>,
@@ -22,9 +23,17 @@ impl Renderer {
         let m =
             (Mat4::from_translation((i.origin - ro).as_vec3()) * i.transform).to_cols_array_2d();
         let vis = if i.visible { 1.0 } else { 0.0 };
+        let normal_matrix = if mesh.depth_normals.is_empty() || !i.slot_levels.iter().any(|&l| l > 0) {
+            Mat4::IDENTITY
+        } else {
+            i.transform.inverse().transpose()
+        };
         for (k, a) in i.slot_alpha.iter().enumerate() {
             let mut m = m;
             m[0][3] = draw_order_level(i, k);
+            let n = super::depth_plane::encode(normal_matrix, mesh.depth_normals.get(k).copied().unwrap_or(Vec3::ZERO));
+            m[1][3] = n[0];
+            m[2][3] = n[1];
             mats.push(m);
             let uv = i.slot_uv.get(k).copied().unwrap_or([0.0; 2]);
             params.push([*a, vis, uv[0], uv[1]]);
@@ -117,7 +126,7 @@ impl Renderer {
             let mut base = scene.uploaded_entries;
             for i in scene.instances[first..].iter_mut() {
                 i.base = base;
-                Self::instance_entries(i, ro, &mut mats, &mut params);
+                Self::instance_entries(i, &scene.meshes[i.mesh], ro, &mut mats, &mut params);
                 base = scene.uploaded_entries + mats.len() as u32;
             }
             let (buf, pbuf) = (
@@ -199,7 +208,7 @@ impl Renderer {
                         };
                         mats.clear();
                         params.clear();
-                        Self::instance_entries(i, ro, &mut mats, &mut params);
+                        Self::instance_entries(i, &scene.meshes[i.mesh], ro, &mut mats, &mut params);
                         let (b, n) = (i.base as usize, mats.len());
                         if b + n > scene.cpu_models.len() || (b + n) * 2 > scene.cpu_params.len() {
                             continue;
@@ -244,7 +253,7 @@ impl Renderer {
         let ro = scene.render_origin;
         for i in scene.instances.iter_mut() {
             i.base = mats.len() as u32;
-            Self::instance_entries(i, ro, &mut mats, &mut params);
+            Self::instance_entries(i, &scene.meshes[i.mesh], ro, &mut mats, &mut params);
         }
         if mats.is_empty() {
             mats.push(Mat4::IDENTITY.to_cols_array_2d());

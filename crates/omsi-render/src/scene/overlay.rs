@@ -155,8 +155,8 @@ impl ObjectRun {
     /// with `transform` at `origin` (its key) as instance number `draw_order`: a slot lying
     /// on an earlier surface of the same object (`lies_on`) takes one step more than the
     /// highest of those, at most `MAX_LEVEL`; a slot with another surface of the object lying
-    /// just off, but not in, its plane (`near_on`) takes no step beyond that surface's, so
-    /// that the step's lift never carries it past a surface that is really apart from it.
+    /// just off, but not in, its plane (`near_on`) may cap the extra step, but never
+    /// lowers the slot below an earlier surface it covers.
     /// Any other slot 0. Outside an object begun with `begin` every slot is 0, and a mesh
     /// that is not the next one of the object (another place, a gap in the order) ends it.
     pub(crate) fn levels(&mut self, origin: [u64; 3], draw_order: u64, mesh: usize, transform: Mat4, flats: &[Flat], slots: usize) -> Vec<u8> {
@@ -224,7 +224,8 @@ impl ObjectRun {
             // lying on each other, a lens on a display on a panel - and its lift outgrows what
             // the step is for: it takes no more than the lowest step of the surfaces lying just
             // off its plane, so that it cannot carry itself past one of them, but never less than
-            // two. A slot one or two steps above its base keeps its step, which is what orders
+            // two or the highest step already under it. A slot one or two steps above its
+            // base keeps its step, which is what orders
             // a print over its base and a second print over the first, even with a pane just in
             // front; a slot on nothing takes the highest step beside it, so the step does not
             // decide that pair either.)
@@ -235,6 +236,10 @@ impl ObjectRun {
             } else {
                 level
             };
+            // A nearby patch may cap the extra step, never the depth of a surface
+            // already underneath this slot: lowering it would expose that surface.
+            let floor = under.iter().map(|&i| self.flats[i].1).max().unwrap_or(0);
+            let level = level.max(floor);
             levels[slot] = level;
             for f in mine {
                 self.by_normal.entry(normal_key(f.normal)).or_default().push(self.flats.len());
@@ -477,6 +482,23 @@ mod tests {
         let at = Vec3::new(0.0, 5.5, 1.2);
         assert_eq!(levels_of(&[tilted(at, 0.3, 45.0), tilted(at, 0.05, 45.0)]), vec![0, 1]);
         assert_eq!(levels_of(&[tilted(at, 0.3, 44.999), tilted(at, 0.05, 45.001)]), vec![0, 1]);
+    }
+
+    /// A neighbouring patch may cap a new step, but must not put a later print
+    /// below the stack it covers. The patch need not overlap that earlier stack.
+    #[test]
+    fn a_later_print_never_drops_below_its_existing_stack() {
+        let patch = moved(quad(0.0002, 0.1, 0, false), Vec3::new(0.8, 0.0, 0.0));
+        let levels = levels_of(&[
+            patch,
+            quad(0.0, 0.3, 0, false),
+            quad(0.0, 0.25, 0, true),
+            quad(0.0, 0.2, 0, false),
+            quad(0.0, 0.15, 0, true),
+            quad(0.0, 1.0, 0, false),
+        ]);
+        assert_eq!(&levels[..5], &[0, 0, 1, 2, 3]);
+        assert_eq!(levels[5], 3, "a nearby patch cannot lower the print below its base");
     }
 
     #[test]
