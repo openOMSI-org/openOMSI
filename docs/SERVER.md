@@ -323,6 +323,15 @@ are also checked. The session manifest omits a whole `Vehicles/<folder>` or
 `Trains/<folder>` if any vehicle description listed there forbids transfers.
 Previously persisted private vehicle manifests are not served after updating.
 
+For an additional **machine-wide emergency opt-out**, set
+`OMSI_NO_LAN_VEHICLE_TRANSFER=1` before starting openOMSI. This prevents
+automatic vehicle uploads, player-hosted sharing, dedicated fleet transfers
+and accepting vehicle uploads on that machine, even for older mods with no
+policy block. It is **off by default** so unmarked `.bus`/`.ovh` files continue
+to transfer normally unless the player explicitly enables this safeguard.
+It does not stop map file transfer when a dedicated admin explicitly enables
+`share_maps = 1`; leave maps disabled if protecting private content.
+
 **Limitations:** This does not retract content already delivered, prevent
 redistribution by modified clients or older releases, or infer ownership of
 shared assets outside vehicle folders (shared sounds, fonts, displays, etc.).
