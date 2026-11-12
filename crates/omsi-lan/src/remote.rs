@@ -23,15 +23,16 @@ pub struct PoseTrack {
     pub min_delay: f64,
     /// Changes when the owner clock restarts, invalidating dependent animation samples.
     pub generation: u64,
-    /// A parked bus's scripts: the seconds they have run, and the frames since they last did.
-    still: (f32, u32),
+    /// A parked bus's scripts: the seconds they have run, and the seconds since they last did.
+    still: (f32, f32),
 }
 
 /// A server's parked bus stands with everything off and nobody in it: once its scripts have
-/// run this long (s) they run every so many frames only - nothing of it moves, and two dozen
-/// of them run every frame took the frame as long as drawing the world.
+/// run this long (s) they run twice a second only (by the clock, not by frames: the same on
+/// a game that draws 30 frames a second and on one that draws 144) - nothing of it moves, and
+/// two dozen of them run every frame took the frame as long as drawing the world.
 const SETTLED: f32 = 5.0;
-const STILL_EVERY: u32 = 30;
+const STILL_EVERY: f32 = 0.5;
 
 /// Seconds on our clock (for comparing with the others' `sent_ms`).
 pub fn lan_now() -> f64 {
@@ -53,8 +54,12 @@ impl PoseTrack {
             self.still.0 += dt;
             return false;
         }
-        self.still.1 = (self.still.1 + 1) % STILL_EVERY;
-        self.still.1 != 0
+        self.still.1 += dt;
+        if self.still.1 < STILL_EVERY {
+            return true;
+        }
+        self.still.1 = 0.0;
+        false
     }
 
     /// Take in the states that came (with when they arrived).
@@ -250,7 +255,9 @@ mod tests {
         assert!((0..100).all(|_| !t.stands_still(7, 0.25)), "a player's bus runs them every frame");
         let bus = omsi_net::FIRST_PARKED_ID;
         assert_eq!((0..20).filter(|_| !t.stands_still(bus, 0.25)).count(), 20, "five seconds, every frame");
-        assert_eq!((0..300).filter(|_| !t.stands_still(bus, 0.25)).count(), 10, "then one frame in thirty");
+        // then twice a second, whatever the frame rate: ten seconds at 32 and at 128 frames a second
+        assert_eq!((0..320).filter(|_| !t.stands_still(bus, 1.0 / 32.0)).count(), 20);
+        assert_eq!((0..1280).filter(|_| !t.stands_still(bus, 1.0 / 128.0)).count(), 20);
     }
 
     #[test]
