@@ -288,6 +288,7 @@ struct SettingsPage: View {
             SettingToggle(label: "Head moves with the bus", key: "head_movement", fallback: true)
             SettingToggle(label: "Camera glides between viewpoints", key: "driverview_smooth", fallback: true)
             SettingToggle(label: "Driver's hands in the cab view", key: "hands_in_cab")
+            SettingToggle(label: "Driver sits as in OMSI 2", key: "driver_like_omsi")
             if !phone {
                 SettingToggle(label: "Right mouse button turns the view, Shift+right zooms (off: right zooms as in OMSI, the wheel button turns)", key: "alt_view", fallback: true)
             }
