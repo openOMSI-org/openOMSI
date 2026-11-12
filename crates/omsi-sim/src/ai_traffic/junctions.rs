@@ -30,9 +30,17 @@ fn long_waiter_may_be_let_in(long_waiter: bool, ring_entry: bool, inside: bool) 
     long_waiter && (!ring_entry || inside)
 }
 
+/// A stopped queue on the ring keeps priority over traffic entering it, but must not
+/// indefinitely hold a vehicle already inside the junction: that vehicle is judged by
+/// the ordinary arrival/gap rules (and still yields to traffic physically in its path).
+fn ring_queue_blocks(ring_lane: bool, approach_ring: bool, speed: f32, distance: f32, inside: bool, long_waiter: bool) -> bool {
+    ring_lane && !approach_ring && speed < 0.3 && distance < 10.0
+        && !long_waiter_may_be_let_in(long_waiter, true, inside)
+}
+
 #[cfg(test)]
 mod long_waiter_tests {
-    use super::{is_long_waiter, COURTESY_WAIT};
+    use super::{is_long_waiter, ring_queue_blocks, COURTESY_WAIT};
 
     #[test]
     fn a_car_waiting_inside_a_junction_can_be_recognized_as_a_long_waiter() {
@@ -69,6 +77,21 @@ mod long_waiter_tests {
     fn long_waiter_rule_still_applies_on_non_ring_junctions() {
         assert!(long_waiter_may_be_let_in(true, false, false));
         assert!(!long_waiter_may_be_let_in(false, false, true));
+    }
+
+    #[test]
+    fn stopped_ring_queue_keeps_priority_at_the_entry() {
+        assert!(ring_queue_blocks(true, false, 0.0, 5.0, false, true));
+    }
+
+    #[test]
+    fn stopped_ring_queue_does_not_trap_a_long_waiter_already_inside() {
+        assert!(!ring_queue_blocks(true, false, 0.0, 5.0, true, true));
+    }
+
+    #[test]
+    fn moving_ring_traffic_is_still_judged_by_the_gap_rules() {
+        assert!(!ring_queue_blocks(true, false, 2.0, 5.0, true, true));
     }
 }
 
@@ -1224,7 +1247,7 @@ impl TrafficSim {
                     // the meeting place as well: it does not squeeze in ahead of a ring that
                     // queues (one standing farther back is a stalled queue it may go past),
                     // and its long wait does not outrank a ring car briefly stopped.
-                    let ring_queue = self.net.lanes[m].ring && !self.net.lanes[l].ring && o.state.speed < 0.3 && theirs < 10.0;
+                    let ring_queue = ring_queue_blocks(self.net.lanes[m].ring, self.net.lanes[l].ring, o.state.speed, theirs, jn.inside, long_waiter);
                     // the gap a driver takes in the main road's traffic: the critical gap of
                     // 5 to 7.5 s (by driver), and time enough to be through
                     // (where the two run into one lane the other only has to be able to
