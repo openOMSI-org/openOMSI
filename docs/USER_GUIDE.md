@@ -959,10 +959,17 @@ Vehicle sharing is separate. The running player can choose **Esc → Vehicle
 options → Livery...** at any time, even in LAN. The bus stays in place and
 keeps its script state, passengers and damage; peers receive the updated paint
 name and content fingerprint, then obtain any permitted missing textures.
-They may briefly see a stand-in while those files arrive. A repaint marked
-with `[openomsi_multiplayer]` and `allow_file_transfer 0` is **never
-automatically uploaded** by the official client; peers must already own it
-to see it correctly. Older and modified clients do not enforce this opt-out.
+They may briefly see a stand-in while those files arrive. A vehicle whose
+`.bus` or `.ovh` contains `[openomsi_multiplayer]` and `allow_file_transfer 0`
+is **not automatically uploaded** by the updated official client; peers must
+already own it to see it correctly. Without the directive, transfers remain
+enabled by default. Older and modified clients may ignore this opt-out.
+
+Players with private vehicles can additionally set
+`OMSI_NO_LAN_VEHICLE_TRANSFER=1` before starting the game, preventing this
+machine from automatically uploading or serving **any** vehicle content.
+This switch is off by default and does not prevent use of installed vehicles.
+The server-wide `accept_uploads = 0` separately stops receiving players' buses.
 
 Bus files authorized for sharing are offered as needed, and can include their
 model, selected livery, scripts and referenced assets. Map redistribution is
