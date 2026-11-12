@@ -6,6 +6,7 @@ use super::*;
 // Validate the actual stored .bus/.ovh bytes, never a permission asserted by a peer.
 // Used for new uploads and while reopening persisted manifests from an older release.
 fn shareable_manifest(store: &Store, m: &VehicleManifest) -> bool {
+    if !super::super::transfer_policy::transfers_enabled() { return false; }
     let mut checked = false;
     for e in m.entries.iter().filter(|e| super::super::transfer_policy::is_descriptor(&e.path)) {
         let Ok(bytes) = store.read(e) else { return false };
