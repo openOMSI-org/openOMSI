@@ -156,6 +156,7 @@ impl TemporalUpscaler {
         match self {
             TemporalUpscaler::Dlss => "DLSS",
             TemporalUpscaler::Fsr3 => "FSR 3",
+            TemporalUpscaler::MetalFx => "MetalFX",
         }
     }
 
