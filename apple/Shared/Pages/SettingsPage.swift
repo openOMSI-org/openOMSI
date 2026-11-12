@@ -99,6 +99,10 @@ struct SettingsPage: View {
         let enhanced = mode.hasPrefix("enhanced")
         // (Real-Time Ray Tracing is a switch of Enhanced; a file of the days of Enhanced+ names it as a mode)
         let traced = enhanced && (mode == "enhanced_plus" || store.flag("ray_tracing", false))
+        // (the upscalers this machine has beside the two that are always there: Apple MetalFX
+        // on a Mac; one at work takes the place of the anti-aliasing and the render scale)
+        let temporal = Choices.temporal(store.setting("temporal_upscalers"))
+        let temporalOn = temporal.contains { $0.0 == store.setting("upscaler")?.string } && !store.flag("triple_screen")
         return Card("Graphics") {
             SettingSelect(label: "Graphics", key: "graphics", options: [("vanilla", "Vanilla (as OMSI 2)"), ("vanilla_plus", "Vanilla+"), ("enhanced", "Enhanced")])
             if enhanced {
@@ -106,13 +110,20 @@ struct SettingsPage: View {
             }
             PresetRow(mode: mode)
             OptimiseBlock()
-            SettingSelect(label: "Anti-aliasing", key: "msaa", options: Choices.msaa, heavy: { $0 == "8" && !traced })
-            SettingSelect(label: "Upscaling", key: "upscaler", options: [("default", "Standard (Catmull-Rom)"), ("fsr1", "AMD FSR 1 (experimental)")])
+            if !temporalOn {
+                SettingSelect(label: "Anti-aliasing", key: "msaa", options: Choices.msaa, heavy: { $0 == "8" && !traced })
+            }
+            SettingSelect(label: "Upscaling", key: "upscaler", options: [("default", "Standard (Catmull-Rom)"), ("fsr1", "AMD FSR 1 (experimental)")] + temporal, help: temporal.isEmpty ? nil : "Standard Catmull-Rom or AMD FSR 1 change at once; Apple MetalFX takes the place of the anti-aliasing and the render scale, from the next start")
+            if temporalOn {
+                SettingSelect(label: "Upscaling quality", key: "upscale_quality", options: Choices.upscaleQuality, help: "Native keeps the window's resolution and only smooths the edges; the lower the quality, the smaller the picture is drawn and the higher the frame rate", fallback: "quality")
+            }
             if store.setting("upscaler")?.string == "fsr1" {
                 SettingSelect(label: "FSR quality", key: "fsr_quality", options: [("ultra", "Ultra Quality (77%)"), ("quality", "Quality (67%)"), ("balanced", "Balanced (59%)"), ("performance", "Performance (50%)"), ("auto", "Automatic (keeps the frame rate)"), ("custom", "Use render scale")])
                 SettingSlider(label: "FSR sharpness", key: "fsr_sharpness", range: 0 ... 1, step: 0.05, fallback: 0.8) { "\(Int($0 * 100))%" }
             }
-            SettingSelect(label: "Render scale", key: "render_scale", options: Choices.renderScale)
+            if !temporalOn {
+                SettingSelect(label: "Render scale", key: "render_scale", options: Choices.renderScale)
+            }
             SettingSelect(label: "Anisotropic", key: "anisotropy", options: [("1", "Off"), ("2", "2x"), ("4", "4x"), ("8", "8x"), ("16", "16x")])
             if !classic {
                 SettingSelect(label: "Shadow map", key: "shadow_size", options: Choices.shadowSize)
@@ -538,6 +549,20 @@ enum Choices {
     static let maxFps = [("0", "Screen refresh rate"), ("30", "30 fps"), ("45", "45 fps"), ("60", "60 fps"), ("120", "120 fps"), ("144", "144 fps"), ("1000", "Unlimited")]
     static let msaa = [("1", "Off"), ("2", "2x MSAA"), ("4", "4x MSAA"), ("8", "8x MSAA")]
     static let renderScale = [("auto", "Auto"), ("1", "100%"), ("0.85", "85%"), ("0.75", "75%"), ("0.67", "67%"), ("0.5", "50%")]
+    static let upscaleQuality = [("native", "Native"), ("quality", "Quality"), ("balanced", "Balanced"), ("performance", "Performance"), ("ultra_performance", "Ultra performance")]
+
+    /// The temporal upscalers the launcher's core found (`temporal_upscalers`), as the menu names them.
+    static func temporal(_ found: JSON?) -> [(String, String)] {
+        guard case .array(let names)? = found else { return [] }
+        return names.compactMap(\.string).compactMap { name in
+            switch name {
+            case "metalfx": return (name, "Apple MetalFX (experimental)")
+            case "fsr3": return (name, "AMD FSR 3 (experimental)")
+            case "dlss": return (name, "NVIDIA DLSS (experimental)")
+            default: return nil
+            }
+        }
+    }
     static let shadowSize = [("1024", "1024"), ("2048", "2048"), ("4096", "4096")]
     static let cloudQuality = [("high", "High"), ("low", "Low")]
     static let rainQuality = [("high", "High"), ("medium", "Medium"), ("low", "Low")]

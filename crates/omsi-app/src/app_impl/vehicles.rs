@@ -17,7 +17,7 @@ impl App {
         let bus = omsi_cfg::content_roots().iter().chain(std::iter::once(&self.args.root)).find_map(|r| file.strip_prefix(r).ok()).unwrap_or(file).to_string_lossy().replace('\\', "/");
         let paint = p.vehicle.host.paint_scheme.flatten().and_then(|i| p.vehicle.ty.paint_schemes.get(i)).map(|s| s.name.clone());
         // (the depot file by its file name, as `find_hof` looks for it)
-        let hof = p.vehicle.host.hof.as_ref().and_then(|h| h.path.file_stem().map(|s| s.to_string_lossy().to_string()).or_else(|| Some(h.name.clone())));
+        let hof = p.vehicle.host.hof.as_deref().map(omsi_vehicle::hof::Hof::depot_name);
         let identity = (p.vehicle.number(), p.vehicle.ident());
         let idle = self.menus.pending_placement.is_none();
         self.menus.swap_pending = true;

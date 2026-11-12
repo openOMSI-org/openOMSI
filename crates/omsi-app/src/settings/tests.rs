@@ -26,6 +26,10 @@ fn fsr1_menu_settings_round_trip_into_renderer() {
     let mut lost = Settings::from_text("upscaler=dlss\n");
     lost.apply_safe_gpu(1);
     assert_eq!(lost.upscaler, "default");
+    let mut mac = Settings::from_text("upscaler=MetalFX\n");
+    assert_eq!(mac.upscaler, "metalfx");
+    mac.apply_safe_gpu(1);
+    assert_eq!(mac.upscaler, "default");
     assert_eq!(Settings::from_text("fsr_sharpness=nan\\n").fsr_sharpness, 0.8);
 }
 

@@ -597,12 +597,12 @@ upscale_quality=native
 ") && saved.contains("upscale_quality=native
 "), "{saved}");
     assert_eq!(page["frame_generation"], "off");
-    let page = super::settings_from_text(Some("frame_generation=dlss4x
-"));
-    assert!(super::settings_to_text(&page, None).contains("frame_generation=dlss4x
-"));
-    let page = super::settings_from_text(Some("frame_generation=nonsense
-"));
-    assert!(super::settings_to_text(&page, None).contains("frame_generation=off
-"));
+    let page = super::settings_from_text(Some("frame_generation=dlss4x\n"));
+    assert!(super::settings_to_text(&page, None).contains("frame_generation=dlss4x\n"));
+    let page = super::settings_from_text(Some("frame_generation=nonsense\n"));
+    assert!(super::settings_to_text(&page, None).contains("frame_generation=off\n"));
+    // (a Mac's upscaler is a word the page keeps too, not the standard one in its place)
+    let mac = super::settings_from_text(Some("upscaler=MetalFX\n"));
+    assert_eq!(mac["upscaler"].as_str(), Some("metalfx"));
+    assert!(super::settings_to_text(&mac, None).contains("upscaler=metalfx\n"));
 }

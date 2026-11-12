@@ -388,6 +388,15 @@ index n; `[traffic_light] name` + `[phase] state seconds` (0 red, 3 red+yellow, 
 restarts). `[trafficlight]` lamp objects are placed with map flag 1, the extra line = light
 index, and `[varparent] id` = the crossing; their `[visible] red|yellow|green 1` meshes follow.
 
+`[traffic_light_stop] light time ifAnf` and `[traffic_light_jump] light time ifAnf target`
+are points on that cycle clock. `ifAnf` 1 makes the condition "nobody is asking at `light`",
+0 "somebody is asking". A stop normally holds the clock **just before** its time, so the
+phase that ends there stays shown; if the clock is already at the stop (within 1e-6 s
+either side) it holds there. A stop never holds in a red-and-yellow changeover: if the
+instant just before the stop is red-and-yellow, the clock holds at the stop's own time;
+a stop whose own time is red-and-yellow is passed. A jump whose condition holds at the
+same cycle time as a stop is taken first, and the stop is left behind.
+
 ## Timetables (`TTData`)
 
 * `Busstops.cfg`: `[busstop] name tile-index object-id offset 0 0` (tile index = position of

@@ -124,7 +124,7 @@ fn a_triple_screen_turned_on_with_an_upscaler_is_not_drawn_at_its_size() {
     let mut scene = rails_scene(&mut plain);
     let a = plain.render_triple_to_image(&mut scene, w, h, &camera(), &lighting, &rig).unwrap();
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-    let temporal = Some(Temporal { upscaler: TemporalUpscaler::Fsr3, quality: TemporalQuality::Performance });
+    let temporal = Some(Temporal { upscaler: UPSCALER, quality: TemporalQuality::Performance });
     let options = RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, temporal, ..Default::default() };
     let mut upscaled = pollster::block_on(Renderer::new_with(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb), options)).expect("test renderer");
     let mut scene = rails_scene(&mut upscaled);
@@ -133,13 +133,16 @@ fn a_triple_screen_turned_on_with_an_upscaler_is_not_drawn_at_its_size() {
     assert!(d < 0.05, "the panels were drawn smaller and stretched: {d}");
 }
 
+/// The temporal upscaler these tests ask for: Apple's on a Mac, which has no other, AMD's elsewhere.
+const UPSCALER: TemporalUpscaler = if cfg!(target_os = "macos") { TemporalUpscaler::MetalFx } else { TemporalUpscaler::Fsr3 };
+
 fn upscaled_renderer() -> Renderer {
     upscaled_renderer_at(1.0)
 }
 
 fn upscaled_renderer_at(render_scale: f32) -> Renderer {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-    let temporal = Some(Temporal { upscaler: TemporalUpscaler::Fsr3, quality: TemporalQuality::Performance });
+    let temporal = Some(Temporal { upscaler: UPSCALER, quality: TemporalQuality::Performance });
     let options = RenderOptions { msaa: 4, ssao: false, shadow_size: 1024, fxaa: false, render_scale, temporal, ..Default::default() };
     pollster::block_on(Renderer::new_with(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb), options)).expect("test renderer")
 }
@@ -423,4 +426,48 @@ fn fsr1_textures_keep_their_detail_with_the_mip_bias() {
     eprintln!("detail: native {native}, FSR 50 % with the bias {with}, without {without}");
     assert!(with > without * 4.0, "the checks kept with the bias, grey without: native {native}, with {with}, without {without}");
     assert!(with < native * 1.3, "not sharper than the full-size picture: native {native}, with {with}");
+}
+
+/// Apple's MetalFX on a Mac: a still scene drawn at half the window's size settles, over the
+/// frames of a jitter cycle, nearer the picture drawn at full size than the same half-sized
+/// picture merely stretched. A jitter of the wrong sign leaves it blurred.
+#[cfg(target_os = "macos")]
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn metalfx_settles_on_the_full_sized_picture() {
+    let (w, h) = (384, 256);
+    let lighting = Lighting { shadows: false, fog_density: 0.0, ..Default::default() };
+    let mut full = renderer(1.0, false);
+    let mut scene = rails_scene(&mut full);
+    let reference = full.render_to_image(&mut scene, w, h, &camera(), &lighting).unwrap();
+    let mut half = renderer(0.5, false);
+    let mut scene = rails_scene(&mut half);
+    let stretched = half.render_to_image(&mut scene, w, h, &camera(), &lighting).unwrap();
+
+    let mut r = upscaled_renderer();
+    assert_eq!(r.options.temporal.map(|t| t.upscaler), Some(TemporalUpscaler::MetalFx), "MetalFX is not offered on this Mac's Metal");
+    let mut scene = rails_scene(&mut r);
+    let tex = r.device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let view = tex.create_view(&Default::default());
+    // (two jitter cycles of a picture scaled up twice: 32 frames each)
+    for _ in 0..64 {
+        r.render_window(&mut scene, &view, w, h, &camera(), &lighting);
+    }
+    assert!(r.temporal.is_some() && !r.temporal_failed, "MetalFX did not start, or gave up");
+    assert_eq!(r.temporal_render_size((w, h)), (w / 2, h / 2));
+    let upscaled = r.temporal_picture(w, h).expect("an upscaled picture").unwrap();
+    assert!(upscaled.chunks(4).filter(|p| p[0] > 120 && p[1] < 60).count() > 50, "the rails upscaled");
+    let (settled, plain) = (difference(&reference, &upscaled), difference(&reference, &stretched));
+    // (measured on an Apple M2: 0.29 against the stretched picture's 0.66; with the jitter
+    // of the wrong sign on one axis 0.39 or 0.57, on both 0.62)
+    assert!(settled < 0.55 * plain, "MetalFX's picture ({settled}) is not much nearer the full-sized one than the stretched picture ({plain})");
 }

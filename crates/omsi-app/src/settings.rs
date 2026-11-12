@@ -159,7 +159,7 @@ pub struct Settings {
     pub render_scale: f32,
     /// Upscaling method for the main game picture: default or experimental fsr1.
     pub upscaler: String,
-    /// How much DLSS or AMD FSR 3 scale up (`temporal::TemporalQuality`).
+    /// How much DLSS, AMD FSR 3 or Apple MetalFX scale up (`temporal::TemporalQuality`).
     pub upscale_quality: String,
     /// Frame generation on DirectX 12 (`omsi_cfg::upscaler_files::frame_generation_word`):
     /// `fsr3` with DLSS or FSR 3 on, `dlss2x` to `dlss4x` with DLSS on; else `off`.

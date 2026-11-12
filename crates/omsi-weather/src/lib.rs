@@ -8,6 +8,7 @@
 pub mod condensation;
 pub mod conditions;
 pub mod season_phase;
+pub mod climate;
 pub mod weather_cycle;
 pub mod weather_model;
 pub mod window_drops;
