@@ -8,6 +8,13 @@ pub(super) fn is_descriptor(name: &str) -> bool {
     name.rsplit_once('.').is_some_and(|(_, ext)| ext.eq_ignore_ascii_case("bus") || ext.eq_ignore_ascii_case("ovh"))
 }
 
+/// Inspect incoming `.bus`/`.ovh` bytes before storing them. A modified or
+/// outdated sender can ignore its own policy, so the receiver must also check.
+/// Other assets are not independently labelled with redistribution permissions.
+pub(super) fn allows_description_bytes(name: &str, bytes: &[u8]) -> bool {
+    !is_descriptor(name) || omsi_vehicle::Vehicle::parse(&omsi_cfg::CfgFile::from_bytes(name, bytes)).allows_file_transfer()
+}
+
 /// Fail closed if a referenced vehicle description cannot be read.
 pub(super) fn transfers_enabled() -> bool {
     !omsi_cfg::flags::OMSI_NO_LAN_VEHICLE_TRANSFER.is_set()
