@@ -511,9 +511,37 @@ impl TrafficSim {
         let gap = lead.map(|l| l.0.gap);
         let st = &self.cars[i].state;
         let stuck = self.cars[i].stopped;
-        if stuck > 20.0 && standing && omsi_cfg::flags::OMSI_DEBUG_STUCK.is_set() && (self.time * 0.2).fract() < 0.01 {
+        if stuck > 20.0 && omsi_cfg::flags::OMSI_DEBUG_STUCK.is_set() && (self.time * 0.2).fract() < 0.01 {
             let lane = &self.net.lanes[st.lane];
-            log::info!("t={:.1}: car {} behind an obstacle {:.1} m for {stuck:.0} s: change {:?} route {} cooldown {:.1} light {} yielding {} left {:?} right {:?} left clear {:?}", self.time, self.cars[i].id, gap.unwrap_or(-1.0), st.change.map(|c| (c.to, c.t, c.wait, c.bypass, c.length)), st.route.len(), st.change_cooldown, self.cars[i].light_hold, self.cars[i].yielding, lane.left, lane.right, lane.left.map(|l| { let s_side = st.s / lane.length().max(1.0) * self.net.lanes[l].length(); (self.open_to(i, l), self.lane_clear(i, l, s_side, 12.0, 30.0, by_lane), self.can_merge(i, l, s_side, by_lane)) }));
+            log::info!(
+                "t={:.1}: car {} stuck {:.0} s: lane {} s={:.1} v={:.1} standing {} gap {:.1} change {:?} route {}:{} next {:?} cooldown {:.1} light {} yielding {} junction {:?} left {:?} right {:?} left clear {:?}",
+                self.time,
+                self.cars[i].id,
+                stuck,
+                st.lane,
+                st.s,
+                st.speed,
+                standing,
+                gap.unwrap_or(-1.0),
+                st.change.map(|c| (c.to, c.t, c.wait, c.bypass, c.length)),
+                st.route_index,
+                st.route.len(),
+                st.planned_next,
+                st.change_cooldown,
+                self.cars[i].light_hold,
+                self.cars[i].yielding,
+                self.cars[i].junction_why,
+                lane.left,
+                lane.right,
+                lane.left.map(|l| {
+                    let s_side = st.s / lane.length().max(1.0) * self.net.lanes[l].length();
+                    (
+                        self.open_to(i, l),
+                        self.lane_clear(i, l, s_side, 12.0, 30.0, by_lane),
+                        self.can_merge(i, l, s_side, by_lane),
+                    )
+                })
+            );
         }
         let st = &self.cars[i].state;
         if st.change.is_some()
