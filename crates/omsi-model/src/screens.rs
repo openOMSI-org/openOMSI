@@ -16,11 +16,13 @@ pub struct NavigatorTextureDef {
     pub map_scale: f64,
     pub fixed_north: bool,
     pub no_nav_ui: bool,
+    pub nav_center: bool,
+    pub show_previous_path_bus_stop: bool,
 }
 
 impl Default for NavigatorTextureDef {
     fn default() -> Self {
-        Self { script_index: 0, width: 0, height: 0, power_var: None, map_scale: 1.0, fixed_north: false, no_nav_ui: false }
+        Self { script_index: 0, width: 0, height: 0, power_var: None, map_scale: 1.0, fixed_north: false, no_nav_ui: false, nav_center: false, show_previous_path_bus_stop: false }
     }
 }
 
@@ -48,11 +50,13 @@ impl Model {
         let height = r.i32().clamp(1, NAVIGATOR_TEXTURE_MAX);
         let power = r.param_line().trim();
         let power_var = (!power.is_empty()).then(|| power.to_string());
-        let map_scale = r.param_line().trim().parse::<f64>().ok().filter(|v| v.is_finite() && *v > 0.0).unwrap_or(1.0);
+        let map_scale = r.param_line().trim().parse::<f64>().ok().filter(|v| (0.25..=4.0).contains(v)).unwrap_or(1.0);
         let fixed_north = r.param_line().trim() == "1";
         let no_nav_ui = r.param_line().trim() == "1";
+        let nav_center = r.param_line().trim() == "1";
+        let show_previous_path_bus_stop = r.param_line().trim() == "1";
         let script_index = self.reserve_script_texture(width, height);
-        self.navigator_textures.push(NavigatorTextureDef { script_index, width, height, power_var, map_scale, fixed_north, no_nav_ui });
+        self.navigator_textures.push(NavigatorTextureDef { script_index, width, height, power_var, map_scale, fixed_north, no_nav_ui, nav_center, show_previous_path_bus_stop });
     }
 
     pub(super) fn parse_use_navigator_texture(&mut self, r: &mut CfgReader<'_>) {
@@ -109,10 +113,11 @@ mod tests {
     #[test]
     fn screen_options_follow_the_optional_power_variable() {
         for power in ["power", ""] {
-            let m = parse(&format!("[navigatortexture]\n800\n480\n{power}\n2.5\n1\n1\n[mesh]\nx.o3d\n"));
+            let m = parse(&format!("[navigatortexture]\n800\n480\n{power}\n2.5\n1\n1\n1\n[mesh]\nx.o3d\n"));
             let def = &m.navigator_textures[0];
             assert_eq!(def.power_var.as_deref(), (!power.is_empty()).then_some(power));
             assert_eq!((def.map_scale, def.fixed_north, def.no_nav_ui), (2.5, true, true));
+            assert!(def.nav_center);
             assert_eq!(m.meshes.len(), 1);
         }
         let m = parse("[navigatortexture]\n800\n480\n\n0.5\n[mesh]\nx.o3d\n");
@@ -121,10 +126,32 @@ mod tests {
     }
 
     #[test]
+    fn nav_center_is_optional_and_only_one_enables_it() {
+        for (value, enabled) in [("", false), ("0", false), ("1", true), ("2", false)] {
+            let m = parse(&format!("[navigatortexture]\n800\n480\n\n1\n0\n0\n{value}\n[mesh]\nx.o3d\n"));
+            assert_eq!(m.navigator_textures[0].nav_center, enabled);
+            assert_eq!(m.meshes.len(), 1);
+        }
+    }
+
+    #[test]
+    fn previous_path_option_is_optional_and_preserves_the_next_keyword() {
+        for (value, enabled) in [("", false), ("0", false), ("1", true), ("2", false)] {
+            let m = parse(&format!("[navigatortexture]\n800\n480\n\n1\n0\n0\n0\n{value}\n[mesh]\nx.o3d\n"));
+            assert_eq!(m.navigator_textures[0].show_previous_path_bus_stop, enabled);
+            assert_eq!(m.meshes.len(), 1);
+        }
+    }
+
+    #[test]
     fn invalid_map_scales_use_the_default() {
-        for scale in ["", "0", "-1", "NaN", "inf", "invalid"] {
+        for scale in ["", "0", "-1", "0.01", "0.249999", "4.000001", "1000000", "NaN", "inf", "-inf", "invalid"] {
             let m = parse(&format!("[navigatortexture]\n800\n480\n\n{scale}\n0\n0\n"));
-            assert_eq!(m.navigator_textures[0].map_scale, 1.0);
+            assert_eq!(m.navigator_textures[0].map_scale, 1.0, "scale {scale:?}");
+        }
+        for scale in [0.25, 1.0, 4.0] {
+            let m = parse(&format!("[navigatortexture]\n800\n480\n\n{scale}\n0\n0\n"));
+            assert_eq!(m.navigator_textures[0].map_scale, scale);
         }
     }
 

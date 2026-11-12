@@ -240,6 +240,8 @@ const WORDS: Words = Words { days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "S
 struct Route {
     key: String,
     lanes: Vec<usize>,
+    /// Original timetable route, retained when navigation replaces `lanes` with a way back.
+    original_lanes: Vec<usize>,
     complete: bool,
     generation: u64,
     /// Index into `lanes` of the lane the bus is on, and how far along it.
@@ -361,6 +363,9 @@ pub struct Navigator {
     /// The route mesh (buffers 1 and 9): the route and traffic versions, the anchor, its
     /// size, the bus's lane, look and along-lane position it was built for.
     route_mesh: (u64, u64, DVec2, u32, usize, u64, f32),
+    route_mesh_history: bool,
+    completed_stops: Vec<NavStop>,
+    trip_completed: bool,
     /// Per lane of the traffic: how congested it is (0 free … 1 standing), smoothed.
     congestion: HashMap<usize, f32>,
     /// The same for the route's lanes ahead (in the route's network), and a version that
@@ -588,6 +593,9 @@ impl Navigator {
             duty_route: None,
             entries: Vec::new(),
             route_mesh: (u64::MAX, 0, DVec2::ZERO, 0, 0, 0, 0.0),
+            route_mesh_history: false,
+            completed_stops: Vec::new(),
+            trip_completed: false,
             congestion: HashMap::new(),
             route_jam: HashMap::new(),
             jam_version: 0,
@@ -795,6 +803,10 @@ impl Navigator {
     pub fn set_route(&mut self, key: &str, lanes: Vec<usize>, complete: bool, generation: u64) {
         let r = self.duty_route_mut();
         let same_trip = r.key == key;
+        if !same_trip || !lanes.is_empty() {
+            r.original_lanes = lanes.clone();
+            r.version += 1;
+        }
         r.key = key.to_string();
         r.complete = complete;
         r.generation = generation;
@@ -817,10 +829,24 @@ impl Navigator {
 
     /// No duty: nothing to follow.
     pub fn clear_route(&mut self) {
+        self.completed_stops.clear();
+        self.trip_completed = false;
         let r = self.duty_route_mut();
         if !r.key.is_empty() || !r.lanes.is_empty() {
             *r = Route { version: r.version + 1, ..Route::default() };
         }
+    }
+
+    /// Stops already passed on the current duty trip, kept separately from guidance stops.
+    pub fn set_completed_stops(&mut self, duty: Option<&omsi_sim::timetable_run::PlayerDuty>) {
+        self.completed_stops.clear();
+        self.trip_completed = duty.is_some_and(|d| d.trip_done());
+        let Some(d) = duty else { return };
+        let Some(trip) = d.trips.get(d.trip_index) else { return };
+        self.completed_stops = trip.stops.iter().enumerate()
+            .filter(|(i, s)| s.stops && (*i < d.next_stop || self.trip_completed))
+            .map(|(_, s)| NavStop { object_id: s.object_id, position: s.position.unwrap_or(DVec3::ZERO), name: s.name.clone(), arrival: s.arr, closed: s.closed.clone() })
+            .collect();
     }
 
 

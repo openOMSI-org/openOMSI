@@ -16,6 +16,8 @@ elec_busbar_av
 1
 0
 0
+0
+0
 
 ##########################################
 
@@ -35,13 +37,14 @@ gps_screen.dds
   0 the screen is black; while it is anything else it shows the map. Without the line - or with
   a variable the bus's scripts do not have - the screen is always on. A blank line or the next
   keyword after the size means "no variable".
-- Three optional lines after the power variable control this screen: **`mapScale`**,
-  **`fixedNorth`**, then **`noNavUI`**, in that order. These are values on separate lines,
+- Five optional lines after the power variable control this screen: **`mapScale`**,
+  **`fixedNorth`**, **`noNavUI`**, **`NavCenter`**, then **`showPreviousPath_BusStop`**,
+  in that order. These are values on separate lines,
   not additional keywords. To use them without a power variable, leave its line blank.
   Omitted options keep their defaults; use a blank line to skip an option before a later one.
-- **`mapScale`** (default `1`): a positive zoom multiplier. `2` zooms in to show half the
+- **`mapScale`** (default `1`): a zoom multiplier from `0.25` to `4`, inclusive. `2` zooms in to show half the
   usual distance; `0.5` zooms out to show twice the distance. The navigator's automatic zoom
-  still applies. Zero, negative, non-finite and invalid values use `1`.
+  still applies. Values outside this range, non-finite and invalid values use `1`.
 - **`fixedNorth`** (default `0`): `1` keeps north at the top of the map while the bus's
   arrow rotates with its heading. `0` follows the bus's heading as usual.
 - **`noNavUI`** (default `0`): `1` fills the screen with the map and hides all information
@@ -49,6 +52,17 @@ gps_screen.dds
   row and the timetable. It also hides entry/spawn markers and AI scheduled-bus markers. The
   route, stop markers and the player's bus arrow remain visible. `0` shows the usual navigator
   interface. These options affect the cockpit screen only.
+- **`NavCenter`** (default `0`): `1` centers the map on the player's bus (the blue circle
+  and heading arrow), removing the usual look-ahead offset. It works with either
+  `fixedNorth` setting and with any `mapScale`. With `noNavUI=1`, the bus is at the center
+  of the entire texture; otherwise it is at the center of the map area above the place row
+  and timetable. `0` keeps the usual look-ahead view.
+- **`showPreviousPath_BusStop`** (default `0`): `1` keeps the current trip's original route
+  visible behind the bus in the usual route color and shows completed bus stops in grey.
+  Upcoming stops keep their usual colors. Completion follows the duty's stop progression;
+  the final stop turns grey when the trip is complete. History resets for a new trip or
+  when leaving the duty. This also works with `noNavUI=1`. `0` keeps the usual view of
+  the remaining route and stops. Free-drive destinations keep their usual behavior.
 - **`[useNavigatorTexture] n`**: the material shows the `n`-th `[navigatortexture]` of the
   model (counted from 0). The material's own texture (`gps_screen.dds` above) only names the
   slot: the screen replaces it.

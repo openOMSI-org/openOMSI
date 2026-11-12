@@ -350,6 +350,7 @@ impl Offscreen<'_> {
                     nav.debug_lines(spec);
                 }
                 let (line, terminus, stops, trip) = navigator::duty_parts(duty.as_ref());
+                nav.set_completed_stops(duty.as_ref());
                 if let (Some((key, name)), Some(sch)) = (trip, schedule.as_ref()) {
                     let lanes = sch.trip_route_in(nav.map_net().unwrap(), &name);
                     let g = nav.global_version + (1 << 40);
