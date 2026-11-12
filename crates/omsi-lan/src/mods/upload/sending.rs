@@ -360,6 +360,11 @@ pub(super) fn send_pieces(bus: &str, manifest: &VehicleManifest, source: &HashMa
 
 /// `send` with the files chosen: (relative path, where it is read from).
 pub(super) fn send_files(bus: &str, files: Vec<(String, PathBuf)>, host: SocketAddr, session: u64, quiet: bool) -> Result<usize, Failure> {
+    // Last line of defence: no network connection (not even a manifest) for
+    // protected .bus/.ovh files, regardless of which caller prepared this upload.
+    if !crate::mods::transfer_policy::allows_dependencies(&files) {
+        return Err(Failure::from("this vehicle forbids multiplayer file transfers"));
+    }
     if files.is_empty() {
         return Ok(0);
     }
