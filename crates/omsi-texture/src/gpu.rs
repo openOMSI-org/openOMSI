@@ -6,7 +6,7 @@ use crate::bc::{self, Bc};
 use crate::disk_cache::{DiskCache, Key};
 use crate::{Image, TextureError};
 use std::path::Path;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 /// Pixel layout of a [`TextureData`] level.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -128,6 +128,19 @@ pub fn set_gpu_options(o: GpuOptions) {
 pub fn gpu_options() -> GpuOptions {
     let v = OPTIONS.load(Ordering::Relaxed);
     GpuOptions { bc: v & 1 != 0, compress: v & 2 != 0 }
+}
+
+/// A device that takes no BC textures gets every picture as RGBA, four to eight times the
+/// memory of the compressed one a map and its buses are made for. Set, a picture goes up at
+/// half its size instead: a quarter of the RGBA, what BC3 takes at the full size.
+static HALVE_PLAIN: AtomicBool = AtomicBool::new(false);
+
+pub fn set_halve_plain(on: bool) {
+    HALVE_PLAIN.store(on, Ordering::Relaxed);
+}
+
+fn plain(t: TextureData) -> TextureData {
+    if HALVE_PLAIN.load(Ordering::Relaxed) { halved_for_now(t) } else { t }
 }
 
 /// Smallest picture (texels) worth compressing: below this the saving is a few kilobytes.
@@ -390,7 +403,7 @@ fn dds_blocks(bytes: &[u8]) -> Option<(PixelFormat, u32, u32, u32, usize)> {
 /// Load a texture file for the GPU under the current options.
 pub fn load_gpu(path: &Path) -> Result<(TextureData, Prepared), TextureError> {
     let bytes = omsi_cfg::vfs::read(path).map_err(|e| TextureError::Decode(path.to_path_buf(), e.to_string()))?;
-    load_gpu_cached(&bytes, path, gpu_options(), DiskCache::global())
+    load_gpu_cached(&bytes, path, gpu_options(), DiskCache::global()).map(|(t, info)| (plain(t), info))
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -446,7 +459,7 @@ pub fn load_gpu_fast(path: &Path) -> Result<(TextureData, bool), TextureError> {
     let texels = img.width as u64 * img.height as u64;
     let dxt = bytes.starts_with(b"DDS ") && dds_blocks(&bytes).is_some();
     let worth = o.bc && (dxt || o.compress) && block_size(img.width, img.height).is_some() && texels >= MIN_COMPRESS_TEXELS;
-    Ok((TextureData::from_image(img), worth))
+    Ok((plain(TextureData::from_image(img)), worth))
 }
 
 /// An RGBA texture at half its size (a quarter of the memory), for the while before its
