@@ -1,0 +1,42 @@
+name: AI traffic test build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/ai-crossing-queue-2592
+
+permissions:
+  contents: read
+
+jobs:
+  windows-x64:
+    name: Build Windows x64
+    runs-on: windows-latest
+    steps:
+      - name: Check out traffic test branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/ai-crossing-queue-2592
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: i686-pc-windows-msvc
+
+      - name: Build openOMSI
+        shell: cmd
+        run: scripts\build-windows.cmd
+
+      - name: Package test build
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist\windows\* -DestinationPath openOMSI-traffic-test-windows-x64.zip -Force
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: openOMSI-traffic-test-windows-x64
+          path: openOMSI-traffic-test-windows-x64.zip
+          if-no-files-found: error
+          retention-days: 14
