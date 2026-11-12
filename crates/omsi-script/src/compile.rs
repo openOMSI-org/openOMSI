@@ -407,12 +407,14 @@ pub fn compile(input: &CompileInput) -> Program {
                     errors.push(ScriptError { file: path.clone(), line: 0, message: e });
                 }
                 for (n, v) in cf.consts {
-                    consts.insert(n.to_ascii_lowercase(), v);
+                    // Resolve all definitions in file order, including duplicates within a file.
+                    consts.entry(n.to_ascii_lowercase()).or_insert(v);
                 }
                 for c in cf.curves {
-                    let id = p.curves.len() as u32;
-                    curve_index.insert(c.name.to_ascii_lowercase(), id);
-                    p.curves.push(c);
+                    if let hashbrown::hash_map::Entry::Vacant(entry) = curve_index.entry(c.name.to_ascii_lowercase()) {
+                        entry.insert(p.curves.len() as u32);
+                        p.curves.push(c);
+                    }
                 }
             }
             Err(e) => errors.push(ScriptError { file: path.clone(), line: 0, message: format!("cannot read constfile: {e}") }),
