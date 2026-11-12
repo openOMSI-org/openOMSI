@@ -144,6 +144,8 @@ pub struct Showroom {
     fresh_light: bool,
 }
 
+const REST_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
+
 /// Names the bus whose preview is being read and placed, until it is in the picture.
 fn placing_mark() -> PathBuf {
     preview_guard_path(&omsi_launcher_lib::data_dir(), "placing", omsi_platform::VERSION)
@@ -223,16 +225,31 @@ impl Showroom {
         }
     }
 
-    /// Let go of the bus, its map and the picture, and keep what is wanted: the next
-    /// `update` reads it again. The loaders are joined, so nothing of the bus is held
-    /// when this returns.
+    /// Keeps what is wanted for the next `update`. A loader stuck on slow storage must not hold the service's thread.
     pub fn rest(&mut self) {
-        self.renderer_changed();
-        for loader in self.loaders.drain(..) {
+        self.forget();
+        let until = std::time::Instant::now() + REST_WAIT;
+        while self.loaders.iter().any(|l| !l.is_finished()) && std::time::Instant::now() < until {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let (done, running): (Vec<_>, Vec<_>) = self.loaders.drain(..).partition(|l| l.is_finished());
+        for loader in done {
             if loader.join().is_err() {
                 log::warn!("showroom: loader panicked while the preview went to rest");
             }
         }
+        self.loaders = running;
+        if self.loaders.is_empty() {
+            clear_placing_mark();
+        } else {
+            log::warn!("showroom: {} loader(s) still reading a bus as the game starts", self.loaders.len());
+        }
+    }
+
+    /// The game started and ended beside any loader left reading: its bus took nothing down.
+    pub fn wake(&mut self) {
+        self.loaders.retain(|loader| !loader.is_finished());
+        clear_placing_mark();
     }
 
     pub fn new() -> Showroom {
@@ -640,6 +657,10 @@ impl Showroom {
 
     pub fn renderer_changed(&mut self) {
         let _ = std::fs::remove_file(placing_mark());
+        self.forget();
+    }
+
+    fn forget(&mut self) {
         self.shown = None;
         self.target = None;
         self.loading = None;
@@ -753,6 +774,26 @@ mod tests {
         assert!(weak.upgrade().is_none(), "the loader must exit before the rest returns");
         assert!(showroom.loaders.is_empty() && !showroom.has_picture());
         assert_eq!(showroom.wanted, Some(look));
+    }
+
+    #[test]
+    fn a_loader_stuck_reading_does_not_hold_the_rest_and_goes_at_the_wake() {
+        let mut showroom = Showroom::new();
+        let (release, stuck) = channel::<()>();
+        showroom.loaders.push(std::thread::spawn(move || {
+            let _ = stuck.recv();
+        }));
+        let t0 = std::time::Instant::now();
+        showroom.rest();
+        assert!(t0.elapsed() < REST_WAIT + std::time::Duration::from_secs(1));
+        assert_eq!(showroom.loaders.len(), 1);
+        drop(release);
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while !showroom.loaders[0].is_finished() && std::time::Instant::now() < until {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        showroom.wake();
+        assert!(showroom.loaders.is_empty());
     }
 
     #[test]

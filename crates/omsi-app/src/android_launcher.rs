@@ -26,9 +26,7 @@ fn service() -> &'static super::launcher::InProcess {
     })
 }
 
-/// The bus preview rests while a game runs (`rest`: its renderer and its bus are let go
-/// before this returns, or the game starts beside them after ten seconds) and wakes when
-/// the session ended, before the page is told and asks for its picture again.
+/// Wakes before the page is told the session ended, so its next `frame` finds the preview awake.
 pub(crate) fn preview_rests(rests: bool) {
     let Some(service) = SERVICE.get() else { return };
     let cmd = if rests { "rest" } else { "wake" };

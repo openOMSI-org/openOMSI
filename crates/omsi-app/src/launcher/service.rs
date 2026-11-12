@@ -172,6 +172,7 @@ fn serve(rx: std::sync::mpsc::Receiver<Value>, reply: Reply) {
             }
             "wake" => {
                 resting = false;
+                showroom.wake();
                 send(&id, json!({ "ok": true }), &[]);
             }
             // (the launcher starts: the renderer's pipelines are built now, not on the first picture)
@@ -182,7 +183,7 @@ fn serve(rx: std::sync::mpsc::Receiver<Value>, reply: Reply) {
                 send(&id, json!({ "ok": renderer.is_some() }), &[]);
             }
             "frame" => {
-                // (no picture and nothing more to come: the page asks again when the game ends)
+                // (`picture: true` with nothing moving is what stops the page polling until the game ends)
                 if resting {
                     send(&id, json!({ "ok": true, "busy": false, "failed": false, "moving": false, "picture": true, "view": showroom.view.name(), "views": showroom.views() }), &[]);
                     continue;
