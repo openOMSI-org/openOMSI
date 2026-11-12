@@ -1108,6 +1108,13 @@ impl TrafficSim {
     #[allow(clippy::too_many_arguments)]
     fn drive_car(&mut self, i: usize, ts: &TickScene, lead: LeadOf, stop_at: Option<f32>, why: (&'static str, f32), light: Option<f32>, yield_at: Option<f32>, merge_wait: Option<f32>) -> Option<AiFrame> {
         let (debug, dt) = (ts.debug, ts.dt);
+        let tight_queue = lead.is_some_and(|(l, source)| {
+            l.speed < 0.3
+                && source.is_some_and(|j| {
+                    j < self.cars.len()
+                        && self.cars[j].state.lane == self.cars[i].state.lane
+                })
+        });
         let lead_id = lead
             .and_then(|l| l.1)
             .filter(|&j| j < self.cars.len())
@@ -1210,10 +1217,15 @@ impl TrafficSim {
         }
         if omsi_cfg::flags::OMSI_DEBUG_CAR.parse::<u64>() == Some(car.id) {
             let up: Vec<usize> = car.state.upcoming().take(4).collect();
-            let lead_detail = lead.and_then(|(_, j)| j.filter(|&j| j < self.cars.len()).map(|j| { let o = &self.cars[j]; (o.id, o.state.speed, o.state.lane, o.state.s, o.why, o.yielding, o.light_hold) }));
-            log::info!("t={:.2} car {}: v {:.2} accel {:.2} desired {:.2} lane {} s {:.1}/{:.1} upcoming {:?} bend {:.2} lead {:?} lead_detail {:?} stop {:?} why {:?} held {} light_hold {} light_at {:?} yielding {} yield_to {:?} junction_why {:?} merge_after {:?} exit_wait {} reserved {:?} held_by {:?}", self.time, car.id, car.state.speed, car.state.accel, car.state.desired_accel(&self.net, lead_now, stop_at), car.state.lane, car.state.s, self.net.lanes[car.state.lane].length(), up, car.state.curve_speed(&self.net), lead_now.map(|l| l.gap), lead_detail, stop_at.map(|x| x - car.state.front), car.why, car.held, car.light_hold, car.light_at, car.yielding, car.yield_to, car.junction_why, car.merge_after, car.exit_wait, car.reserved, car.holds.iter().map(|(j, h)| (self.cars[*j].id, *h)).collect::<Vec<_>>());
+            log::info!("t={:.2} car {}: v {:.2} lane {} s {:.1}/{:.1} upcoming {:?} bend {:.2} desired {:.2} lead {:?} stop {:?} why {:?}", self.time, car.id, car.state.speed, car.state.lane, car.state.s, self.net.lanes[car.state.lane].length(), up, car.state.curve_speed(&self.net), car.state.desired_accel(&self.net, lead_now, stop_at), lead_now.map(|l| l.gap), stop_at.map(|x| x - car.state.front), car.why);
         }
-        if !car.state.drive(&self.net, dt, lead_now, stop_at) {
+        let original_min_gap = car.state.min_gap;
+        if tight_queue {
+            car.state.min_gap = car.state.standstill_gap;
+        }
+        let drove = car.state.drive(&self.net, dt, lead_now, stop_at);
+        car.state.min_gap = original_min_gap;
+        if !drove {
             if debug {
                 // (where, and the nearest lane start beyond the end: a network gap the map's
                 // paths do not close shows here)

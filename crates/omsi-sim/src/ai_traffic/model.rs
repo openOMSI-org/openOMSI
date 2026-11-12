@@ -522,6 +522,7 @@ pub fn personality(state: &mut AiState, seed: u64, heavy: bool) {
     };
     state.headway = 1.4 + 0.2 * rg(11);
     state.min_gap = 1.6 + 1.4 * ru(19);
+    state.standstill_gap = 0.8 + 0.7 * ru(20);
     state.accel = if heavy {
         0.8 + 0.4 * ru(27)
     } else {
