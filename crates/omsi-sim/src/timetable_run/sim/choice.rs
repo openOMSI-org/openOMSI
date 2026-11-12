@@ -22,9 +22,6 @@ impl ScheduleSim {
         ) = match (&train, self.depots.get(&group).filter(|v| !v.is_empty())) {
             (Some(cars), _) => {
                 let ty = cars[0].0.clone();
-                // A .zug names a consist, not a depot. Resolve the leading car's
-                // depot just like a plain [aigroup_2] vehicle, so its scripts can
-                // look up destination pictures and AI_target_index for the trip.
                 let hof = self.pool_hof(ty.def.dir(), world);
                 (ty, Vec::new(), hof)
             }
