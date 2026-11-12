@@ -349,7 +349,6 @@ mod tests {
             ],
             ..Default::default()
         };
-        // A visible space belongs to the atlas, not a synthetic selection rectangle.
         let alpha = vec![255; 3 * 2 * 4];
         let color = [20, 40, 60, 255].repeat(3 * 2);
         let atlas = FontAtlas::new(font, 3, 2, color, alpha);
