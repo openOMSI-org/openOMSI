@@ -143,8 +143,8 @@ pub struct ScheduleSim {
     /// Plain `[aigroup_2]` vehicle pools, loaded the first time a trip asks for one
     /// (the Tegel approaches are flown by the group's own aircraft, not by depot buses).
     pools: HashMap<String, Vec<Arc<VehicleType>>>,
-    /// Per vehicle folder: the depot file a bus of a plain `[aigroup_2]` runs with
-    /// (see [`pool_depot`]), looked up the first time such a bus is chosen.
+    /// Per vehicle folder: the depot file a plain `[aigroup_2]` vehicle or `.zug` runs with
+    /// (see [`pool_depot`]), looked up the first time such a vehicle is chosen.
     pool_hofs: HashMap<PathBuf, Option<Arc<omsi_vehicle::Hof>>>,
     /// Departures that are due but not on the road yet. Putting twenty minutes of a Berlin
     /// timetable on the map at once costs several seconds in one frame, so they are spawned
