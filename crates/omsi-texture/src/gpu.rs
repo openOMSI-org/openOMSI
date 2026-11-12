@@ -130,17 +130,24 @@ pub fn gpu_options() -> GpuOptions {
     GpuOptions { bc: v & 1 != 0, compress: v & 2 != 0 }
 }
 
-/// A device that takes no BC textures gets every picture as RGBA, four to eight times the
-/// memory of the compressed one a map and its buses are made for. Set, a picture goes up at
-/// half its size instead: a quarter of the RGBA, what BC3 takes at the full size.
+/// Without BC every picture is RGBA, 4-8x the compressed one; at half size it takes what BC3 does.
 static HALVE_PLAIN: AtomicBool = AtomicBool::new(false);
 
 pub fn set_halve_plain(on: bool) {
     HALVE_PLAIN.store(on, Ordering::Relaxed);
 }
 
-fn plain(t: TextureData) -> TextureData {
-    if HALVE_PLAIN.load(Ordering::Relaxed) { halved_for_now(t) } else { t }
+/// What the scene uploads in `t`'s place; loaders give it whole, as online play hashes and shares it.
+pub fn halved_plain(t: &TextureData) -> Option<TextureData> {
+    if !HALVE_PLAIN.load(Ordering::Relaxed) || !halves(t) {
+        return None;
+    }
+    let (rgba, width, height) = bc::downsample_alpha_weighted(&t.levels[0], t.width, t.height);
+    Some(TextureData { width, height, format: t.format, levels: vec![rgba], has_alpha: t.has_alpha, gpu_mips: t.gpu_mips })
+}
+
+fn halves(t: &TextureData) -> bool {
+    t.format == PixelFormat::Rgba8 && t.levels.len() == 1 && t.width >= 256 && t.height >= 256
 }
 
 /// Smallest picture (texels) worth compressing: below this the saving is a few kilobytes.
@@ -403,7 +410,7 @@ fn dds_blocks(bytes: &[u8]) -> Option<(PixelFormat, u32, u32, u32, usize)> {
 /// Load a texture file for the GPU under the current options.
 pub fn load_gpu(path: &Path) -> Result<(TextureData, Prepared), TextureError> {
     let bytes = omsi_cfg::vfs::read(path).map_err(|e| TextureError::Decode(path.to_path_buf(), e.to_string()))?;
-    load_gpu_cached(&bytes, path, gpu_options(), DiskCache::global()).map(|(t, info)| (plain(t), info))
+    load_gpu_cached(&bytes, path, gpu_options(), DiskCache::global())
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -459,13 +466,13 @@ pub fn load_gpu_fast(path: &Path) -> Result<(TextureData, bool), TextureError> {
     let texels = img.width as u64 * img.height as u64;
     let dxt = bytes.starts_with(b"DDS ") && dds_blocks(&bytes).is_some();
     let worth = o.bc && (dxt || o.compress) && block_size(img.width, img.height).is_some() && texels >= MIN_COMPRESS_TEXELS;
-    Ok((plain(TextureData::from_image(img)), worth))
+    Ok((TextureData::from_image(img), worth))
 }
 
 /// An RGBA texture at half its size (a quarter of the memory), for the while before its
 /// compressed whole is swapped in; anything else as it is.
 pub fn halved_for_now(t: TextureData) -> TextureData {
-    if t.format != PixelFormat::Rgba8 || t.levels.len() != 1 || t.width < 256 || t.height < 256 {
+    if !halves(&t) {
         return t;
     }
     let (rgba, w, h) = bc::downsample_alpha_weighted(&t.levels[0], t.width, t.height);
@@ -521,6 +528,24 @@ mod tests {
         b[84..88].copy_from_slice(fourcc);
         b.extend_from_slice(blocks);
         b
+    }
+
+    #[test]
+    fn without_bc_a_picture_goes_up_halved_and_is_loaded_whole() {
+        let pic = |s: u32| TextureData::from_image(Image { width: s, height: s, rgba: vec![200; (s * s * 4) as usize], has_alpha: false });
+        let opaque: Vec<u8> = (0..64 * 64).flat_map(|_| [0xFF, 0xF0, 0x10, 0x00, 0x1B, 0x6C, 0xC6, 0x00]).collect();
+        let file = dds(b"DXT1", 256, 256, 1, &opaque);
+        assert!(halved_plain(&pic(256)).is_none());
+        set_halve_plain(true);
+        let half = halved_plain(&pic(256));
+        let small = halved_plain(&pic(128));
+        let loaded = load_gpu_bytes(&file, Path::new("x.dds"), GpuOptions { bc: false, compress: true });
+        set_halve_plain(false);
+        let half = half.unwrap();
+        assert_eq!((half.width, half.height, half.levels[0].len()), (128, 128, 128 * 128 * 4));
+        assert!(small.is_none());
+        let (loaded, _) = loaded.unwrap();
+        assert_eq!((loaded.format, loaded.width, loaded.height), (PixelFormat::Rgba8, 256, 256));
     }
 
     #[test]

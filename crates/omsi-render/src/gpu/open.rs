@@ -367,9 +367,7 @@ impl Renderer {
     }
 }
 
-/// Whether the pictures go up at half their size (`omsi_texture::gpu::set_halve_plain`): on a
-/// chip that has no BC at all - a phone's - not on one whose BC the settings turned off, and
-/// only while the settings ask for compressed textures.
+/// Only a chip with no BC at all (a phone's), not one whose BC a setting turned off.
 fn halves_plain(adapter: wgpu::Features, options: &RenderOptions) -> bool {
     !adapter.contains(wgpu::Features::TEXTURE_COMPRESSION_BC) && options.compress_textures && !omsi_cfg::flags::OMSI_NO_TEXCOMPRESS.is_set()
 }
