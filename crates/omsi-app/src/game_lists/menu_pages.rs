@@ -51,6 +51,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         pick("ai_max_scheduled", "Timetable vehicles", later),
         pick("ai_max_parked", "Parked cars", later),
         pick("ai_max_humans", "People at once", later),
+        pick("parked_buses_drawn", "Parked buses on a server", "How many of the buses parked near you are drawn; fewer take less memory"),
     ]
         .into_iter()
         .flatten()

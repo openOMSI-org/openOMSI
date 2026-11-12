@@ -1700,7 +1700,7 @@ impl LanSession {
 
     /// Everybody else as we know them.
     pub fn peers(&self) -> impl Iterator<Item = &Peer> {
-        self.peers.values()
+        self.peers.values().filter(|p| !self.parked.hidden.contains(&p.pose.id))
     }
 
     pub fn peer_count(&self) -> usize {
@@ -2375,6 +2375,7 @@ impl LanSession {
             self.lost_at = Some(now);
         }
         self.check_join_timeout();
+        self.hide_far_parked(mine);
         gone
     }
 

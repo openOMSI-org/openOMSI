@@ -15,6 +15,9 @@ const STATE_EVERY: f32 = 1.0;
 const TOLD_WITHIN: f64 = 700.0;
 const TOLD_AT_MOST: usize = 24;
 const PLAYERS_ROOM: usize = 34;
+/// One drawn stays drawn until another is this much nearer: a player walking between two
+/// would have the game read them in turn.
+const DRAWN_STAYS: f64 = 15.0;
 
 pub fn is_parked(id: u32) -> bool {
     (FIRST_PARKED_ID..=u16::MAX as u32).contains(&id)
@@ -26,6 +29,10 @@ pub(crate) struct Parked {
     seq: u16,
     state_acc: f32,
     info_acc: f32,
+    /// A game's own say (`set_parked_drawn`): the nearest so many are its peers, the others
+    /// are heard and left aside (`hidden`).
+    drawn_most: Option<usize>,
+    pub(crate) hidden: Vec<u32>,
 }
 
 impl Parked {
@@ -90,6 +97,26 @@ impl LanSession {
                 }
             }
         }
+    }
+
+    /// A game draws the nearest `most` of the parked buses its host tells it (each costs it
+    /// what another player's bus does).
+    pub fn set_parked_drawn(&mut self, most: usize) {
+        self.parked.drawn_most = Some(most);
+    }
+
+    pub(crate) fn hide_far_parked(&mut self, mine: &Pose) {
+        let Some(most) = self.parked.drawn_most else { return };
+        let (x, y) = mine.walker.map(|w| (w.x, w.y)).unwrap_or((mine.x, mine.y));
+        let hidden = std::mem::take(&mut self.parked.hidden);
+        let mut near: Vec<(f64, u32)> = self
+            .peers
+            .values()
+            .filter(|p| is_parked(p.pose.id) && p.has_pose)
+            .map(|p| ((p.pose.x - x).hypot(p.pose.y - y) + if hidden.contains(&p.pose.id) { DRAWN_STAYS } else { 0.0 }, p.pose.id))
+            .collect();
+        near.sort_by(|a, b| a.0.total_cmp(&b.0));
+        self.parked.hidden = near.into_iter().skip(most).map(|n| n.1).collect();
     }
 
     /// Among a full game's peers a new player takes a parked bus's place, never the other way.

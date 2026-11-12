@@ -14,8 +14,11 @@ use std::time::{Duration, Instant};
 
 const GRANT_WAIT: Duration = Duration::from_secs(120);
 const SAVE_EVERY: Duration = Duration::from_secs(10);
-/// While a bus is kept for a player, a bus of the same files its game shows this near to it
-/// may be either of the two: the one it came in is not followed there.
+/// While a bus is kept for a player, a bus its game shows this near to it may be either of
+/// the two, whatever files it names: where a bus is and which bus it is come in separate
+/// messages, and a game that has just sat down in the kept bus shows it for a moment under
+/// the files of the bus it came in. The one it came in is not followed there - followed, it
+/// was left standing in the place of the bus taken.
 const TAKEN_WITHIN: f64 = 25.0;
 const REACH: f64 = 40.0;
 
@@ -260,7 +263,7 @@ impl Parked {
             let Some(mut d) = self.buses[k].driver.clone().filter(|d| !d.drives) else { continue };
             let (b, id) = (&self.buses[k], self.buses[k].id);
             let shown = now.get(&d.player).filter(|p| d.came_in.as_ref().is_some_and(|c| c.content == p.content));
-            if let Some(p) = shown.filter(|p| !(p.content == b.fp && b.away(p.x, p.y) < TAKEN_WITHIN)) {
+            if let Some(p) = shown.filter(|p| b.away(p.x, p.y) >= TAKEN_WITHIN) {
                 d.came_in = Some(p.clone());
                 self.buses[k].driver = Some(d.clone());
             }

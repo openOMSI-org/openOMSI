@@ -255,6 +255,34 @@ fn the_administration_parks_a_free_bus_elsewhere_but_not_one_a_player_has() {
 }
 
 #[test]
+fn the_bus_a_player_came_in_stays_where_it_was_left_not_where_the_bus_taken_stood() {
+    let first = FIRST_PARKED_ID;
+    let mut room = Room::new(28628, "leftfar");
+    let (mut a, mut b) = (room.join("a"), room.join("b"));
+    let (a_bus, b_bus) = (bus(&fp("a1"), 100.0), bus(&fp("b2"), 300.0));
+    room.run(&mut [(&mut a, &a_bus), (&mut b, &b_bus)], |r, _, _| r.parked.seen.len() == 2);
+    a.leave();
+    drop(a);
+    room.run(&mut [(&mut b, &b_bus)], |_, p, _| sees(p[0].0, first, 100.0));
+    // B left its bus two hundred metres away and walked up to A's
+    room.run(&mut [(&mut b, &on_foot(&b_bus, 102.0))], |r, _, _| r.host.peers().any(|q| q.pose.walker.is_some()));
+    b.command(1, &format!("park-take {first} 7"));
+    room.run(&mut [(&mut b, &on_foot(&b_bus, 102.0))], |_, _, heard| heard.contains(&format!("park-grant {first} 7")));
+    // B's game sits down in it: for a moment the server knows the new place (a state) under
+    // the files of the bus B came in (the last info) - that is not B's own bus driven there
+    let between = Pose { x: 100.0, ..b_bus.clone() };
+    let t0 = Instant::now();
+    room.run(&mut [(&mut b, &between)], |_, _, _| t0.elapsed() > Duration::from_millis(600));
+    assert_eq!(room.parked.buses()[0].driver.as_ref().and_then(|d| d.came_in.as_ref()).map(|c| c.x), Some(300.0));
+    let taken = bus(&fp("a1"), 100.0);
+    room.run(&mut [(&mut b, &taken)], |r, _, _| r.host.peers().any(|q| q.pose.content == fp("a1")));
+    b.command(1, &format!("park-took {first} 7"));
+    room.run(&mut [(&mut b, &taken)], |_, p, heard| heard.contains(&format!("park-yours {first} 7")) && sees(p[0].0, first + 1, 300.0));
+    assert_eq!(room.parked.buses().iter().map(|b| (b.id, b.x)).collect::<Vec<_>>(), vec![(first, 100.0), (first + 1, 300.0)]);
+    let _ = std::fs::remove_file(&room.file);
+}
+
+#[test]
 fn a_bus_of_the_same_files_standing_near_is_not_the_bus_taken() {
     let first = FIRST_PARKED_ID;
     let mut room = Room::new(28622, "samefiles");

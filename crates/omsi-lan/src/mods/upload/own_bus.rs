@@ -42,9 +42,7 @@ static DRIVES_KEPT: Mutex<Option<String>> = Mutex::new(None);
 
 pub(crate) fn drives_kept(fp: Option<String>) -> bool {
     let mut kept = DRIVES_KEPT.lock().unwrap_or_else(|e| e.into_inner());
-    if *kept != fp {
-        *kept = fp;
-    }
+    *kept = fp;
     kept.is_some()
 }
 

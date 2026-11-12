@@ -31,6 +31,7 @@ impl App {
             return;
         };
         if lan.role == omsi_net::Role::Client {
+            lan.set_parked_drawn(self.settings.parked_buses_drawn as usize);
             if !lan.connected {
                 self.net.speed_limit_welcome = None;
                 self.net.dedicated_teleport = None;

@@ -2387,7 +2387,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     // the arrival half of the stops of a depot file that keeps two recordings per stop
     v["auto_announce"] = json!(false);
     // OMSI's own options
-    for (k, d) in [("maintenance", json!(0)), ("ai_unsched_factor", json!(100)), ("ai_reaction", json!(100)), ("standing_chance", json!(5)), ("ai_max_scheduled", json!(0)), ("ai_max_parked", json!(0)), ("ai_max_humans", json!(200)), ("use_real_time", json!(false)), ("use_real_date", json!(false)), ("use_real_year", json!(false)), ("collision_vehicles", json!(true)), ("collision_objects", json!(true)), ("collision_pedestrians", json!(true)), ("realistic_road_physics", json!(false)), ("head_movement", json!(true)), ("driverview_smooth", json!(true)), ("hands_in_cab", json!(false)), ("alt_view", json!(true)), ("precision_zoom", json!(false))] {
+    for (k, d) in [("maintenance", json!(0)), ("ai_unsched_factor", json!(100)), ("ai_reaction", json!(100)), ("standing_chance", json!(5)), ("ai_max_scheduled", json!(0)), ("ai_max_parked", json!(0)), ("ai_max_humans", json!(200)), ("parked_buses_drawn", json!(if phone { 5 } else { 10 })), ("use_real_time", json!(false)), ("use_real_date", json!(false)), ("use_real_year", json!(false)), ("collision_vehicles", json!(true)), ("collision_objects", json!(true)), ("collision_pedestrians", json!(true)), ("realistic_road_physics", json!(false)), ("head_movement", json!(true)), ("driverview_smooth", json!(true)), ("hands_in_cab", json!(false)), ("alt_view", json!(true)), ("precision_zoom", json!(false))] {
         v[k] = d;
     }
     // openOMSI's own: what passengers say, OMSI's route arrows, getting up from the seat
@@ -2475,6 +2475,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             // (-1: no parked cars at all, #864)
             "ai_max_parked" => v[&k] = json!(val.parse::<f64>().map(|x| x.max(-1.0) as i64).unwrap_or(0)),
             "ai_max_humans" => v[&k] = json!(val.parse::<f64>().map(|x| x.max(1.0) as i64).unwrap_or(200)),
+            "parked_buses_drawn" => v[&k] = json!(val.parse::<f64>().map(|x| x.max(0.0) as i64).unwrap_or(10)),
             "drive_keys" | "navigator_corner" | "boarding" | "render_scale" | "pax_voices" => v[&k] = json!(val),
             "touch_door_mode" => v[&k] = json!(if val.eq_ignore_ascii_case("direct") { "direct" } else { "standard" }),
             "update_channel" => v[&k] = json!(if val.eq_ignore_ascii_case("beta") { "beta" } else { "stable" }),
@@ -2750,13 +2751,14 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     // OMSI's own options (options.cfg): maintenance ([wear_lifespan]), the AI counts and
     // the share of random traffic, the real clock and calendar, collisions, head movement
     let text = format!(
-        "{text}maintenance={}\nai_unsched_factor={}\nai_reaction={}\nai_max_scheduled={}\nai_max_parked={}\nai_max_humans={}\nuse_real_time={}\nuse_real_date={}\nuse_real_year={}\ncollision_vehicles={}\ncollision_objects={}\ncollision_pedestrians={}\nrealistic_road_physics={}\nhead_movement={}\ndriverview_smooth={}\nhands_in_cab={}\nalt_view={}\nprecision_zoom={}\n",
+        "{text}maintenance={}\nai_unsched_factor={}\nai_reaction={}\nai_max_scheduled={}\nai_max_parked={}\nai_max_humans={}\nparked_buses_drawn={}\nuse_real_time={}\nuse_real_date={}\nuse_real_year={}\ncollision_vehicles={}\ncollision_objects={}\ncollision_pedestrians={}\nrealistic_road_physics={}\nhead_movement={}\ndriverview_smooth={}\nhands_in_cab={}\nalt_view={}\nprecision_zoom={}\n",
         n("maintenance", 0).clamp(0, 4),
         n("ai_unsched_factor", 100).clamp(0, 300),
         n("ai_reaction", 100).clamp(25, 200),
         n("ai_max_scheduled", 0).max(0),
         n("ai_max_parked", 0).max(-1),
         n("ai_max_humans", 200).max(1),
+        n("parked_buses_drawn", 10).max(0),
         b("use_real_time", false),
         b("use_real_date", false),
         b("use_real_year", false),

@@ -150,7 +150,7 @@ pub struct RemoteVehicle {
     made_ready: bool,
     /// A box made while its bus was being read off the frame (`remote_load`): the count of
     /// buses read then, and that bus (file, paint). It is made again when a bus is done and
-    /// its own is no longer being read (done itself, or its turn has come).
+    /// its own is among them, or its turn to be read has come (`remote_load::due`).
     made_reading: Option<(u64, std::path::PathBuf, String)>,
     pub last: Pose,
     /// The bus file, paint scheme and fingerprint it was made in (`last` is the state drawn,
@@ -1929,6 +1929,7 @@ fn drive_remote(rv: &mut RemoteVehicle, pose: &Pose, dt: f32, exact: bool) {
             w.suspension = it.next().copied().unwrap_or(0.0);
         }
     }
+    if rv.track.stands_still(pose.id, dt) { return rv.last = pose.clone(); }
     // the horn: pressed and let go as theirs (the scripts fire its sound events)
     let horn = pose.flags & omsi_net::FLAG_HORN != 0;
     if horn != rv.horn {
@@ -2385,11 +2386,12 @@ pub fn tick_receive(
             game.drawn.events.push(RemoteEvent::Gone(id));
         }
     }
-    let poses: Vec<Pose> = lan
+    let mut poses: Vec<Pose> = lan
         .peers()
         .filter(|p| p.has_pose && p.has_info && p.pose.has_vehicle())
         .map(|p| p.pose.clone())
         .collect();
+    poses.sort_by_key(|p| omsi_net::is_parked(p.id));
     for pose in poses {
         // (a bus another stands in for is still asked for, in the background, when it is time
         // - the one standing in is not made again each time: only once theirs is here)
@@ -2400,7 +2402,7 @@ pub fn tick_receive(
         // it: made again
         if game
             .remotes
-            .get(&pose.id)
+            .get(&pose.id).filter(|_| remote_type::its_turn(game, pose.id))
             .map(|rv| {
                 rv.made_as.0 != pose.bus
                     || rv.made_as.1 != pose.paint
@@ -2413,7 +2415,7 @@ pub fn tick_receive(
                     // between the bus's mount and the fetch saying it is done)
                     || rv.stand_in && !rv.made_ready && crate::mods::vehicles::ready(&pose.content)
                     // (a box while its bus was read off the frame, when a bus is done)
-                    || rv.made_reading.as_ref().is_some_and(|(g, path, paint)| *g != crate::remote_load::generation() && !crate::remote_load::being_read(path, paint))
+                    || rv.made_reading.as_ref().is_some_and(|(g, path, paint)| *g != crate::remote_load::generation() && crate::remote_load::due(path, paint))
                     // (another bus standing in for theirs, once theirs is here)
                     || rv.fallback && rv.read_failed.is_none() && omsi_net::is_fingerprint(&pose.content) && crate::mods::vehicles::ready(&pose.content)
                     // (their own bus that could not be read, once it reads: tried again after a
@@ -2427,7 +2429,7 @@ pub fn tick_receive(
                 game.drawn.events.push(RemoteEvent::Gone(pose.id));
             }
         }
-        if !game.remotes.contains_key(&pose.id) {
+        if !game.remotes.contains_key(&pose.id) && remote_type::its_turn(game, pose.id) {
             let key = (pose.id, pose.bus.clone());
             if game.failed.get(&key).is_some_and(|t| t.elapsed().as_secs_f32() < 30.0) {
                 continue;

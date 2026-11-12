@@ -131,3 +131,35 @@ fn parked_buses_are_not_counted_among_the_other_players() {
     assert_eq!(c.peers().count() - c.peer_count(), 2);
     assert_eq!(c.peer_count(), c.peers().filter(|p| !is_parked(p.pose.id)).count());
 }
+
+#[test]
+fn a_game_draws_the_nearest_parked_buses_it_asked_for_and_keeps_the_ones_it_draws() {
+    let mut host = LanSession::host(28616, "server", world("m"), true).unwrap();
+    let port = host.local_addr().unwrap().port();
+    host.set_parked((0..6).map(|k| parked(k, 20.0 + 20.0 * k as f64)).collect());
+    let mut c = LanSession::join(&port.to_string(), "c", world("m"), Duration::from_secs(1)).unwrap();
+    let all = |c: &LanSession| c.peers.values().filter(|p| is_parked(p.pose.id) && p.has_pose).count();
+    let drawn = |c: &LanSession| {
+        let mut ids: Vec<u32> = c.peers().map(|p| p.pose.id).filter(|id| is_parked(*id)).map(|id| id - FIRST_PARKED_ID).collect();
+        ids.sort();
+        ids
+    };
+    // (nothing said: every one the host tells, as before)
+    run(&mut host, &mut c, 300, |c| all(c) == 6);
+    assert_eq!(drawn(&c), [0, 1, 2, 3, 4, 5]);
+    // the player (at x = 7) draws two: the two nearest
+    c.set_parked_drawn(2);
+    c.tick(0.06, &pose(7.0));
+    assert_eq!(drawn(&c), [0, 1]);
+    assert_eq!(all(&c), 6, "the others are heard still: one of them is drawn at once when its turn comes");
+    // on foot between two of them it keeps the one it draws, until the other is clearly nearer
+    let walking = |x: f64| Pose { walker: Some(Walker { x, y: 2.0, ..Default::default() }), ..pose(7.0) };
+    c.tick(0.06, &walking(42.0));
+    assert_eq!(drawn(&c), [0, 1], "bus 2 is 4 m nearer than bus 0: not worth reading another bus");
+    c.tick(0.06, &walking(55.0));
+    assert_eq!(drawn(&c), [1, 2]);
+    // none at all
+    c.set_parked_drawn(0);
+    c.tick(0.06, &pose(7.0));
+    assert!(drawn(&c).is_empty());
+}

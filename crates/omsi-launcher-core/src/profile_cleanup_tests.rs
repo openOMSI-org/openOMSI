@@ -98,7 +98,7 @@ fn enhanced_plus_is_enhanced_with_ray_tracing() {
 fn a_phone_starts_from_the_games_phone_defaults() {
     let phone = settings_from_text_on(None, true);
     let saved = settings_from_text_on(Some(&settings_to_text(&phone, None)), false);
-    for (k, x) in [("msaa", json!(2)), ("anisotropy", json!(4)), ("ssao", json!(false)), ("shadow_size", json!(1024)), ("mirror_size", json!(128)), ("max_fps", json!(60)), ("max_obj_dist", json!("900")), ("pax_density", json!(0.7)), ("navigator_corner", json!("top-center"))] {
+    for (k, x) in [("msaa", json!(2)), ("anisotropy", json!(4)), ("ssao", json!(false)), ("shadow_size", json!(1024)), ("mirror_size", json!(128)), ("max_fps", json!(60)), ("max_obj_dist", json!("900")), ("pax_density", json!(0.7)), ("navigator_corner", json!("top-center")), ("parked_buses_drawn", json!(5))] {
         assert_eq!(phone[k], x, "{k}");
         assert_eq!(saved[k], x, "{k}");
     }
@@ -107,7 +107,7 @@ fn a_phone_starts_from_the_games_phone_defaults() {
     let file = settings_from_text_on(Some("msaa=8\nmax_obj_dist=1500\n"), true);
     assert_eq!((&file["msaa"], &file["max_obj_dist"], &file["anisotropy"]), (&json!(8), &json!("1500"), &json!(4)));
     for (k, d) in desktop.as_object().unwrap() {
-        if !["msaa", "anisotropy", "ssao", "shadow_size", "mirror_size", "max_fps", "max_obj_dist", "pax_density", "navigator_corner"].contains(&k.as_str()) {
+        if !["msaa", "anisotropy", "ssao", "shadow_size", "mirror_size", "max_fps", "max_obj_dist", "pax_density", "navigator_corner", "parked_buses_drawn"].contains(&k.as_str()) {
             assert_eq!(&phone[k.as_str()], d, "{k}");
         }
     }
