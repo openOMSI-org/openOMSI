@@ -420,6 +420,7 @@ impl Uploads {
 
     pub(in crate::mods) fn accepting(&self) -> bool {
         self.accept.load(Ordering::Relaxed)
+            && crate::mods::transfer_policy::transfers_enabled()
     }
 
     pub(in crate::mods) fn open(&self) {
