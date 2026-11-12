@@ -33,8 +33,18 @@ fn long_waiter_may_be_let_in(long_waiter: bool, ring_entry: bool, inside: bool) 
 /// A stopped queue on the ring keeps priority over traffic entering it, but must not
 /// indefinitely hold a vehicle already inside the junction: that vehicle is judged by
 /// the ordinary arrival/gap rules (and still yields to traffic physically in its path).
-fn ring_queue_blocks(ring_lane: bool, approach_ring: bool, speed: f32, distance: f32, inside: bool, long_waiter: bool) -> bool {
-    ring_lane && !approach_ring && speed < 0.3 && distance < 10.0
+fn ring_queue_blocks(
+    ring_lane: bool,
+    approach_ring: bool,
+    speed: f32,
+    distance: f32,
+    inside: bool,
+    long_waiter: bool,
+) -> bool {
+    ring_lane
+        && !approach_ring
+        && speed < 0.3
+        && distance < 10.0
         && !long_waiter_may_be_let_in(long_waiter, true, inside)
 }
 
