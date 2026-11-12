@@ -483,6 +483,10 @@ impl Uploads {
 /// file refused for what it is is withheld, the bus kept without it), the bus kept by the
 /// fingerprint worked out from them. The fingerprint.
 pub(in crate::mods) fn keep_files(bus: &str, files: Vec<(String, PathBuf)>) -> Result<String, String> {
+    // Refuse protected content before hashing, caching or writing any bytes.
+    if !crate::mods::transfer_policy::allows_dependencies(&files) {
+        return Err("this vehicle forbids multiplayer file transfers".into());
+    }
     if !crate::mods::vehicles::is_open() && !crate::mods::vehicles::open() {
         return Err("no store".into());
     }
