@@ -245,6 +245,9 @@ impl Buses {
     }
 
     pub(super) fn put_making_room(&self, e: &Entry, data: &[u8], unused_for: std::time::Duration) -> Result<(), String> {
+        if !super::super::transfer_policy::allows_description_bytes(&e.path, data) {
+            return Err(format!("{}: vehicle forbids multiplayer file transfers", e.path));
+        }
         self.make_room(e.size, unused_for)?;
         // (sealed and written with the store let go, as a piece is: a file of a GB held the
         // store - and the host's frame asking which buses are in use, or mounting one - for
@@ -374,6 +377,10 @@ impl Buses {
         if crate::mods::sha256_of(&data) != e.sha256 {
             drop_pieces();
             return Err(format!("{}: not the file the list names", e.path));
+        }
+        if !super::super::transfer_policy::allows_description_bytes(&e.path, &data) {
+            drop_pieces();
+            return Err(format!("{}: vehicle forbids multiplayer file transfers", e.path));
         }
         // (refused for what it is: the bus goes on without it - `withhold`)
         let refused = crate::mods::quarantine::screen(&e.path, &data).err();
