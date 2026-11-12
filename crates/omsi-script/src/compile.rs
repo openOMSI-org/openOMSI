@@ -407,7 +407,7 @@ pub fn compile(input: &CompileInput) -> Program {
                     errors.push(ScriptError { file: path.clone(), line: 0, message: e });
                 }
                 for (n, v) in cf.consts {
-                    // Resolve all definitions in file order, including duplicates within a file.
+                    // OMSI 2 keeps the first definition, within and across constfiles.
                     consts.entry(n.to_ascii_lowercase()).or_insert(v);
                 }
                 for c in cf.curves {
