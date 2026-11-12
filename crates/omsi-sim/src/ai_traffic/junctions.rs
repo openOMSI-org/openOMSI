@@ -17,6 +17,39 @@ pub const COURTESY_WAIT: f32 = 20.0;
 /// this (m/s): in a queue, not in flowing traffic.
 pub const COURTESY_SPEED: f32 = 6.0;
 
+/// A driver who has waited beyond the courtesy threshold may be let into a slow queue,
+/// including when already inside a junction. A queued follower is not a waiter in its own
+/// right; a car already admitted on courtesy keeps that status while it holds its claim.
+fn is_long_waiter(queued: bool, wait: f32, courtesy: bool, committed: bool) -> bool {
+    (!queued && wait > COURTESY_WAIT) || (courtesy && committed)
+}
+
+#[cfg(test)]
+mod long_waiter_tests {
+    use super::{is_long_waiter, COURTESY_WAIT};
+
+    #[test]
+    fn a_car_waiting_inside_a_junction_can_be_recognized_as_a_long_waiter() {
+        assert!(is_long_waiter(false, COURTESY_WAIT + 1.0, false, false));
+    }
+
+    #[test]
+    fn a_queued_follower_is_not_treated_as_a_long_waiter() {
+        assert!(!is_long_waiter(true, COURTESY_WAIT + 30.0, false, false));
+    }
+
+    #[test]
+    fn a_car_that_has_not_waited_long_is_not_a_long_waiter() {
+        assert!(!is_long_waiter(false, COURTESY_WAIT, false, false));
+    }
+
+    #[test]
+    fn courtesy_is_kept_while_the_car_holds_its_committed_claim() {
+        assert!(is_long_waiter(true, 0.0, true, true));
+        assert!(!is_long_waiter(true, 0.0, true, false));
+    }
+}
+
 /// A driver at `v` m/s, `room` m before a meeting place, who would let a car that has
 /// waited long at its line go first there: slow, and able to stop before it braking
 /// comfortably (`decel`). Both sides judge it from the same speed and distance, so the
@@ -606,7 +639,7 @@ impl TrafficSim {
         let wait = self.cars[i].state.yield_time;
         let patience = 1.0 - (wait / 40.0).min(1.0) / 3.0;
         // (a driver let in keeps counting on it while he holds his claim)
-        let long_waiter = (!jn.inside && !queued && wait > COURTESY_WAIT) || (self.cars[i].courtesy && committed);
+        let long_waiter = is_long_waiter(queued, wait, self.cars[i].courtesy, committed);
         let w = self.weigh_crossings(i, jn, way, on_lane, coming, &book.lanes, walkers, committed, patience, long_waiter, explain, stop_at);
         let Weighing { hard, mut ruled, mut soft, mut why, stop_at, by, mut courtesy, mut holds, people, only_oncoming, oncoming_meet, let_in, nearest, sign_yield } = w;
         // A left turn across the oncoming traffic at a signal pulls into the junction up to
