@@ -34,8 +34,7 @@ const METALFX_SHARPEN: f32 = 0.4;
 /// MetalFX's textures one mip level sharper than the render scale alone gives, as Apple advises
 /// for its temporal scaler (log2(render / output) - 1, WWDC22 "Boost performance with MetalFX
 /// Upscaling"): -1.58 at Quality. Without it the result was softer than the picture drawn at
-/// the window's size (bark, the gauges' numbers, grass). (NVIDIA and AMD advise the same for
-/// DLSS and FSR 3; those keep the scale alone until someone compares them on Windows.)
+/// the window's size (bark, the gauges' numbers, grass).
 const METALFX_MIP_BIAS: f32 = -1.0;
 
 pub(crate) struct TemporalPipelines {
