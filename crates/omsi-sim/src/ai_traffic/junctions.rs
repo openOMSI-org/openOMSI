@@ -24,6 +24,12 @@ fn is_long_waiter(queued: bool, wait: f32, courtesy: bool, committed: bool) -> b
     (!queued && wait > COURTESY_WAIT) || (courtesy && committed)
 }
 
+/// A long-waiting car already inside a junction may take a safe gap in a slow queue,
+/// even when the crossing is part of a ring. At the entry, ring traffic keeps priority.
+fn long_waiter_may_be_let_in(long_waiter: bool, ring_entry: bool, inside: bool) -> bool {
+    long_waiter && (!ring_entry || inside)
+}
+
 #[cfg(test)]
 mod long_waiter_tests {
     use super::{is_long_waiter, COURTESY_WAIT};
@@ -47,6 +53,22 @@ mod long_waiter_tests {
     fn courtesy_is_kept_while_the_car_holds_its_committed_claim() {
         assert!(is_long_waiter(true, 0.0, true, true));
         assert!(!is_long_waiter(true, 0.0, true, false));
+    }
+
+    #[test]
+    fn a_waiting_car_at_a_ring_entry_does_not_take_priority_from_ring_traffic() {
+        assert!(!long_waiter_may_be_let_in(true, true, false));
+    }
+
+    #[test]
+    fn a_car_already_inside_may_take_a_safe_gap_in_a_ring_queue() {
+        assert!(long_waiter_may_be_let_in(true, true, true));
+    }
+
+    #[test]
+    fn long_waiter_rule_still_applies_on_non_ring_junctions() {
+        assert!(long_waiter_may_be_let_in(true, false, false));
+        assert!(!long_waiter_may_be_let_in(false, false, true));
     }
 }
 
@@ -1146,7 +1168,10 @@ impl TrafficSim {
                     // that queue letting him: both judge it by `lets_in` of the queue's car.
                     // (between equals as well: the one who waits gave way by coming later)
                     let ring_entry = self.net.lanes[l].ring != self.net.lanes[m].ring;
-                    let other_lets_in = long_waiter && !ring_entry && (must_yield || equals) && !o_prio && lets_in(o.state.speed, o.state.decel, theirs);
+                    let other_lets_in = long_waiter_may_be_let_in(long_waiter, ring_entry, jn.inside)
+                        && (must_yield || equals)
+                        && !o_prio
+                        && lets_in(o.state.speed, o.state.decel, theirs);
                     if other_lets_in {
                         let_in = true;
                         continue;
