@@ -21,7 +21,10 @@ fn private_vehicle_manifest_is_never_committed_or_reopened() {
     kept.open_in(&dir).unwrap();
     let bus = b"[openomsi_multiplayer]\nallow_file_transfer 0\n";
     let e = entry("Vehicles/Private/private.bus", bus);
-    kept.put(&e, bus).unwrap();
+    assert!(kept.put(&e, bus).is_err(), "private descriptor must not enter the current upload store");
+    // A legacy version may already have persisted this content. Simulate it
+    // directly in the encrypted store to verify it cannot be re-advertised.
+    super::super::store::Store::open(&dir).unwrap().put(&e, bus).unwrap();
     let m = VehicleManifest {
         bus: e.path.clone(),
         entries: vec![e],
