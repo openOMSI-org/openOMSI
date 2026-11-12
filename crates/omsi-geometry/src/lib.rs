@@ -1094,8 +1094,13 @@ pub fn turns_round(m: &omsi_o3d::Mesh) -> bool {
         let z = linear.z_axis.normalize_or_zero();
         x.dot(Vec3::X) > 0.9 && y.dot(Vec3::Y) > 0.9 && z.dot(Vec3::Z) > 0.9
     };
-    let mirrored =
-        m.has_transform && !identity && !axis_aligned && m.transform.determinant() > 0.0;
+    // (every ordinary mesh of the Blender exporter carries this quarter turn about x: no mirror)
+    let export_turn = linear.abs_diff_eq(glam::Mat3::from_cols(Vec3::X, -Vec3::Z, Vec3::Y), 1e-4);
+    let mirrored = m.has_transform
+        && !identity
+        && !axis_aligned
+        && !export_turn
+        && m.transform.determinant() > 0.0;
     let explained = against_turned * 10 <= counted;
     mirrored && !explained && counted >= 2 && against * 10 >= counted * 9
 }
