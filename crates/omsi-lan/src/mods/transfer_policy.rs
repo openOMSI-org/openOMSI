@@ -9,7 +9,12 @@ pub(super) fn is_descriptor(name: &str) -> bool {
 }
 
 /// Fail closed if a referenced vehicle description cannot be read.
+pub(super) fn transfers_enabled() -> bool {
+    !omsi_cfg::flags::OMSI_NO_LAN_VEHICLE_TRANSFER.is_set()
+}
+
 pub(super) fn allows_file(path: &Path) -> bool {
+    if !transfers_enabled() { return false; }
     match omsi_vehicle::Vehicle::load(path) {
         Ok(v) => v.allows_file_transfer(),
         Err(e) => {
@@ -27,6 +32,7 @@ pub(super) fn allows_bus(root: &Path, bus: &str) -> bool {
 
 /// Also reject a protected articulated rear section or other referenced .bus/.ovh.
 pub(super) fn allows_dependencies(files: &[(String, PathBuf)]) -> bool {
+    if !transfers_enabled() { return false; }
     files.iter().filter(|(name, _)| is_descriptor(name)).all(|(_, path)| allows_file(path))
 }
 
@@ -43,6 +49,10 @@ fn vehicle_folder(name: &str) -> Option<String> {
 /// The host map collector normally includes entire Vehicles/<folder> subtrees.
 /// Exclude the entire folder when any included vehicle descriptor forbids transfers.
 pub(super) fn filter_session_files(files: &mut Vec<(String, PathBuf)>) {
+    if !transfers_enabled() {
+        files.retain(|(name, _)| vehicle_folder(name).is_none());
+        return;
+    }
     let private: HashSet<String> = files.iter()
         .filter(|(name, path)| is_descriptor(name) && !allows_file(path))
         .filter_map(|(name, _)| vehicle_folder(name))
