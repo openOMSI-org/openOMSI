@@ -14,7 +14,7 @@
 mod door_requests;
 mod ground;
 mod parked;
-pub(crate) use parked::ParkedTransfer;
+pub(crate) use parked::{parked_drawn, ParkedTransfer};
 
 use crate::humans::{AvatarCmd, BusId, Humans};
 use crate::App;

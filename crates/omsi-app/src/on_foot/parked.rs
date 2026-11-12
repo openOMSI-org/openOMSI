@@ -78,6 +78,22 @@ impl ParkedTransfer {
     }
 }
 
+/// The parked buses this game draws at most (`LanSession::set_parked_drawn`; never a
+/// player's bus): the player's choice, or left to the game what its textures' budget holds
+/// without making any texture smaller. Measured on the test server (players' coaches in
+/// their paints, the textures in use with the scenery's 240 MB): 2 buses 555 MB, 5 buses
+/// 1380 MB, 10 buses 2250 MB. Past the budget textures lose a level: 10 buses cost 16
+/// textures one at 2000 MB and 431 at 1000 MB, 5 buses 68 at 1000 MB and 335 at 500 MB, 2
+/// buses 13 at 500 MB, 25 buses 160 at 3750 MB.
+pub(crate) fn parked_drawn(chosen: i32, texture_budget: u64) -> usize {
+    match (chosen, texture_budget / 1_000_000) {
+        (0.., _) => chosen as usize,
+        (_, 0) | (_, 2300..) => 10,
+        (_, 1400..) => 5,
+        _ => 2,
+    }
+}
+
 impl App {
     pub(super) fn parked_cab_near(&mut self, pos: DVec3) -> Option<u32> {
         let h = self.session.humans.as_mut()?;

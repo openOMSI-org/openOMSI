@@ -163,3 +163,28 @@ fn a_game_draws_the_nearest_parked_buses_it_asked_for_and_keeps_the_ones_it_draw
     c.tick(0.06, &pose(7.0));
     assert!(drawn(&c).is_empty());
 }
+
+#[test]
+fn a_game_that_draws_no_parked_bus_sees_every_other_player() {
+    let mut host = LanSession::host(28617, "server", world("m"), true).unwrap();
+    let port = host.local_addr().unwrap().port();
+    host.set_parked((0..4).map(|k| parked(k, 20.0 + 20.0 * k as f64)).collect());
+    let mut c = LanSession::join(&port.to_string(), "c", world("m"), Duration::from_secs(1)).unwrap();
+    let mut d = LanSession::join(&port.to_string(), "d", world("m"), Duration::from_secs(1)).unwrap();
+    c.set_parked_drawn(0);
+    // (D's bus stands farther from C than every parked bus)
+    for _ in 0..300 {
+        host.tick(0.06, &Pose::default());
+        host.tell_parked(0.06);
+        c.tick(0.06, &pose(7.0));
+        d.tick(0.06, &pose(900.0));
+        if find(&c, 900.0).is_some() && c.peers.keys().filter(|k| is_parked(**k)).count() == 4 {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(c.peers().all(|p| !is_parked(p.pose.id)), "no parked bus among its peers");
+    let other = find(&c, 900.0).expect("the other player's bus");
+    assert!(!is_parked(other.pose.id) && other.pose.has_vehicle());
+    assert_eq!(c.peer_count(), c.peers().count());
+}

@@ -31,3 +31,13 @@ fn no_other_transfer_starts_while_one_is_past_the_asking() {
     t.took(65001);
     assert!(t.holds(), "ours, and the server has not said so yet");
 }
+
+#[test]
+fn left_to_the_game_it_draws_the_parked_buses_its_textures_have_room_for() {
+    // the budgets measured: 3750 MB (10 buses fit), 2000 MB (5 do, 10 do not), 1000 MB (2 do,
+    // 5 do not), 500 MB (2 cost 13 textures a level, the fewest drawn)
+    assert_eq!([3_750_000_000, 2_000_000_000, 1_000_000_000, 500_000_000].map(|b| parked_drawn(-1, b)), [10, 5, 2, 2]);
+    assert_eq!(parked_drawn(-1, 0), 10, "no budget set");
+    // the player's own choice stands, whatever the machine
+    assert_eq!([0, 5, 25].map(|n| parked_drawn(n, 460_000_000)), [0, 5, 25]);
+}

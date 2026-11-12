@@ -31,7 +31,7 @@ impl App {
             return;
         };
         if lan.role == omsi_net::Role::Client {
-            lan.set_parked_drawn(self.settings.parked_buses_drawn as usize);
+            lan.set_parked_drawn(crate::on_foot::parked_drawn(self.settings.parked_buses_drawn, self.world.as_ref().map(|w| w.texture_budget_bytes()).unwrap_or(0)));
             if !lan.connected {
                 self.net.speed_limit_welcome = None;
                 self.net.dedicated_teleport = None;

@@ -308,7 +308,7 @@ pub(super) fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
         "ai_max_parked" => vec![("-1", "None"), ("0", "Every space"), ("35", "At most 35"), ("100", "At most 100"), ("250", "At most 250")],
         // (OMSI's AIMaxHumans, #2087)
         "ai_max_humans" => vec![("50", "50"), ("100", "100"), ("200", "200"), ("400", "400"), ("720", "720"), ("1000", "1000")],
-        "parked_buses_drawn" => vec![("0", "None"), ("5", "At most 5"), ("10", "At most 10"), ("25", "At most 25")],
+        "parked_buses_drawn" => vec![("-1", "Automatic"), ("0", "None"), ("5", "At most 5"), ("10", "At most 10"), ("25", "At most 25")],
         "language" => omsi_launcher_lib::LANGUAGES.iter().map(|l| (l.0, l.1)).collect(),
         // (openOMSI's own look as "openomsi": the setting reads it as "")
         "ui_theme_pack" => crate::themes::choices().iter().map(|(id, name)| (if id.is_empty() { crate::themes::OWN } else { id.as_str() }, name.as_str())).collect(),
