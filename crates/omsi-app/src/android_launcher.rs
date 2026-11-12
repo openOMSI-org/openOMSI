@@ -17,12 +17,24 @@ use std::time::Duration;
 /// class by name: the system's class loader does not know them).
 static BRIDGE: OnceLock<GlobalRef> = OnceLock::new();
 
+static SERVICE: OnceLock<super::launcher::InProcess> = OnceLock::new();
+
 fn service() -> &'static super::launcher::InProcess {
-    static S: OnceLock<super::launcher::InProcess> = OnceLock::new();
-    S.get_or_init(|| {
+    SERVICE.get_or_init(|| {
         super::launcher::install();
         super::launcher::InProcess::start()
     })
+}
+
+/// The bus preview rests while a game runs (`rest`: its renderer and its bus are let go
+/// before this returns, or the game starts beside them after ten seconds) and wakes when
+/// the session ended, before the page is told and asks for its picture again.
+pub(crate) fn preview_rests(rests: bool) {
+    let Some(service) = SERVICE.get() else { return };
+    let cmd = if rests { "rest" } else { "wake" };
+    if let Err(e) = service.ask(serde_json::json!({ "cmd": cmd }), Duration::from_secs(10)) {
+        log::warn!("bus preview: {cmd}: {e}");
+    }
 }
 
 /// Call a static `void name(String...)` of `LauncherBridge` from any thread.

@@ -223,6 +223,18 @@ impl Showroom {
         }
     }
 
+    /// Let go of the bus, its map and the picture, and keep what is wanted: the next
+    /// `update` reads it again. The loaders are joined, so nothing of the bus is held
+    /// when this returns.
+    pub fn rest(&mut self) {
+        self.renderer_changed();
+        for loader in self.loaders.drain(..) {
+            if loader.join().is_err() {
+                log::warn!("showroom: loader panicked while the preview went to rest");
+            }
+        }
+    }
+
     pub fn new() -> Showroom {
         Showroom {
             shown: None,
@@ -720,6 +732,27 @@ mod tests {
         }));
         showroom.close();
         assert!(weak.upgrade().is_none(), "the loader must exit before explicit close returns");
+    }
+
+    #[test]
+    fn showroom_at_rest_holds_no_loader_and_still_knows_what_is_wanted() {
+        let mut showroom = Showroom::new();
+        let look = Look { bus: "Vehicles/a/a.bus".into(), ..Default::default() };
+        showroom.want(look.clone());
+        let (world_tx, world_rx) = channel();
+        let (prefetch_tx, prefetch_rx) = channel::<scene::VehiclePrefetch>();
+        showroom.opening = Some((world_rx, prefetch_tx));
+        let owner = Arc::new(());
+        let weak = Arc::downgrade(&owner);
+        showroom.loaders.push(std::thread::spawn(move || {
+            let _worlds = world_tx;
+            let _owner = owner;
+            assert!(prefetch_rx.recv().is_err());
+        }));
+        showroom.rest();
+        assert!(weak.upgrade().is_none(), "the loader must exit before the rest returns");
+        assert!(showroom.loaders.is_empty() && !showroom.has_picture());
+        assert_eq!(showroom.wanted, Some(look));
     }
 
     #[test]
