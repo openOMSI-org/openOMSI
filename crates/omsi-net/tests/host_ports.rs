@@ -117,7 +117,9 @@ fn host_fails_when_the_candidate_range_is_occupied() {
                 host(port, true).is_err(),
                 "do not announce a partially usable session"
             );
-            assert!(UdpSocket::bind(("0.0.0.0", port)).is_ok());
+            // This test reserves TCP only; another parallel test may own UDP
+            // at the same port. UDP cleanup is checked separately by
+            // host_releases_udp_when_tcp_cannot_be_reserved.
             return;
         }
     }
