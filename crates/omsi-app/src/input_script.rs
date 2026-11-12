@@ -136,24 +136,28 @@ impl App {
                 self.request_passenger_door();
                 return;
             }
-            // getting up (Ctrl+Shift+G) and, on foot, the walker's keys
+            // A remapped get-up key also steps out on foot, before the walker takes
+            // G, Space, F1 or a movement key (and before driving-layout fallbacks).
+            if pressed && !repeat && get_up_key(&self.input.game_keys, code, shift_now, ctrl, alt) {
+                self.game_action("get_up");
+                return;
+            }
+            // on foot, the walker's keys
             if self.foot_key(code, pressed, repeat, ctrl, shift_now) {
                 return;
             }
             // OMSI's global actions as `Inputs/keyboard.cfg` binds them ([game]); a key our
             // driving layout uses keeps that meaning (with the OMSI layout, every binding
             // counts)
-            if self.game_binding_key(event_loop, code, pressed, repeat, ctrl, alt, shift_now) {
-                return;
-            }
-            if self.shortcut_key(code, pressed, repeat, ctrl, alt, shift_now) {
-                return;
-            }
-            if self.layout_extra_key(code, pressed, repeat) {
-                return;
-            }
-            self.drive_key(code, pressed, repeat);
+            self.dispatch_driving_key(Some(event_loop), code, pressed, repeat, ctrl, alt, shift_now);
         }
+    }
+
+    pub(crate) fn dispatch_driving_key(&mut self, event_loop: Option<&ActiveEventLoop>, code: KeyCode, pressed: bool, repeat: bool, ctrl: bool, alt: bool, shift_now: bool) {
+        if self.game_binding_key(event_loop, code, pressed, repeat, ctrl, alt, shift_now) { return; }
+        if self.shortcut_key(code, pressed, repeat, ctrl, alt, shift_now) { return; }
+        if self.layout_extra_key(code, pressed, repeat) { return; }
+        self.drive_key(code, pressed, repeat);
     }
 
     /// `on_key` while the VR navigator is being placed: its keys are the only ones.
@@ -352,7 +356,7 @@ impl App {
 
     /// `on_key` for the [game] keys of keyboard.cfg; true when the key was used up.
     #[allow(clippy::too_many_arguments)]
-    fn game_binding_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode, pressed: bool, repeat: bool, ctrl: bool, alt: bool, shift_now: bool) -> bool {
+    fn game_binding_key(&mut self, event_loop: Option<&ActiveEventLoop>, code: KeyCode, pressed: bool, repeat: bool, ctrl: bool, alt: bool, shift_now: bool) -> bool {
         if pressed && !repeat {
             // (a modifier key pressed is a key of its own, not its own modifier: Shift
             // bound to gear_up in keyboard.cfg came as Shift+Shift and matched nothing,
@@ -404,7 +408,9 @@ impl App {
                     self.finish_vr_nav_edit();
                     self.menus.game_menu = None;
                     self.finish_session();
-                    crate::platform::exit(event_loop);
+                    if let Some(el) = event_loop {
+                        crate::platform::exit(el);
+                    }
                     return true;
                 }
                 if let Some(a) = action {
@@ -460,13 +466,19 @@ impl App {
                     self.skip_next_stop();
                     return true;
                 }
+                // (Ctrl+T, not Ctrl+R's pair, is OMSI's change_give)
+                KeyCode::KeyR if ctrl && !alt && !shift_now && self.player.as_ref().is_some_and(|p| p.vehicle.trolley.is_some()) && !self.chord_bound(code, shift_now, ctrl, alt) => {
+                    let msg = self.player.as_mut().map_or("", |p| p.vehicle.trolley_toggle());
+                    self.service_msg = Some((msg.into(), 2.5));
+                    return true;
+                }
                 // the object editor (`crate::editor`)
                 KeyCode::KeyE if ctrl && shift_now && !self.chord_bound(code, shift_now, ctrl, alt) => {
                     self.toggle_editor();
                     return true;
                 }
-                // OMSI's `sim_pause`
-                KeyCode::KeyP if !ctrl && !alt && !shift_now => {
+                // OMSI's `sim_pause`: fallback P only when keyboard.cfg has no `sim_pause` entry
+                KeyCode::KeyP if !ctrl && !alt && !shift_now && omsi_input::actions::is_pause_fallback(&self.input.game_keys, code, &self.input.own_keys) => {
                     self.toggle_pause();
                     return true;
                 }
@@ -1298,6 +1310,36 @@ pub(crate) fn binding_is_key(b: &omsi_content::KeyBinding, code: KeyCode, scan: 
     (b.scan_code == scan || keys::both_code(code) == Some(b.scan_code)) && (b.matches(m) || ob != 0 && b.matches(m | ob))
 }
 
+fn get_up_key(game: &[omsi_content::KeyBinding], code: KeyCode, shift: bool, ctrl: bool, alt: bool) -> bool {
+    let modifier = omsi_content::input::chord(shift, ctrl, alt) & !keys::own_modifier_bit(code);
+    keys::dik_code(code).is_some_and(|scan| game.iter().any(|b|
+        b.action.eq_ignore_ascii_case("get_up") && binding_is_key(b, code, scan, modifier)))
+}
+
+#[cfg(test)]
+mod get_up_key_tests {
+    use super::*;
+    use omsi_content::{input::{KEY_ALT, KEY_CTRL, KEY_SHIFT}, KeyBinding};
+
+    #[test]
+    fn remapped_get_up_keys_reach_the_action_before_walking_or_driving() {
+        let bound = |code, modifier| vec![KeyBinding {
+            action: "get_up".into(), scan_code: keys::dik_code(code).unwrap(), modifier,
+        }];
+        for code in [KeyCode::KeyG, KeyCode::KeyW, KeyCode::Space, KeyCode::F1] {
+            assert!(get_up_key(&bound(code, 0), code, false, false, false));
+        }
+        assert!(get_up_key(&bound(KeyCode::KeyG, KEY_ALT), KeyCode::KeyG, false, false, true));
+        assert!(!get_up_key(&bound(KeyCode::KeyG, KEY_ALT), KeyCode::KeyG, false, false, false));
+        let default = bound(KeyCode::KeyG, KEY_CTRL | KEY_SHIFT);
+        assert!(get_up_key(&default, KeyCode::KeyG, true, true, false));
+        assert!(!get_up_key(&default, KeyCode::KeyG, true, false, false), "Shift+G stays the seat key");
+        assert!(!get_up_key(&[], KeyCode::KeyG, false, false, false), "unbound G stays the seat key");
+        assert!(!get_up_key(&bound(KeyCode::KeyW, 0), KeyCode::KeyG, false, false, false));
+        assert!(!get_up_key(&[KeyBinding { action: "get_up".into(), ..Default::default() }], KeyCode::KeyG, false, false, false));
+    }
+}
+
 /// `App::key_left_free` for a key's scan code.
 pub(crate) fn key_left_free(scan: Option<i32>, action: &str, own: &std::collections::HashSet<i32>, game: &[omsi_content::KeyBinding]) -> bool {
     !scan.is_some_and(|s| own.contains(&s)) && !game.iter().any(|b| b.scan_code != 0 && b.action.eq_ignore_ascii_case(action))
@@ -1398,6 +1440,31 @@ mod key_tests {
         assert!(!super::key_left_free(Some(59), "view_set_driver", &own, &[]));
         assert!(!super::key_left_free(Some(59), "view_set_driver", &none, &[kb("view_set_driver", 2)]));
         assert!(super::key_left_free(Some(59), "view_set_driver", &none, &[kb("view_set_passenger", 60)]));
+    }
+
+    #[test]
+    fn shared_pause_and_vehicle_binding_triggers_both_once_without_double_toggle() {
+        let mut app = crate::assemble_app(<crate::cli::Args as clap::Parser>::parse_from(["openomsi"]), Default::default());
+        let (p_scan, f6_scan) = (keys::dik_code(KeyCode::KeyP).unwrap(), keys::dik_code(KeyCode::F6).unwrap());
+        let vehicle = crate::schedule::tests::script_test_vehicle("{trigger:test_honk}\n(L.L.hits) 1 + (S.L.hits)\n{end}\n", "hits\n", "");
+        app.player = Some(crate::spawn::test_player(vehicle, vec![omsi_content::KeyBinding { action: "test_honk".into(), scan_code: p_scan, modifier: 0 }]));
+        app.input.own_keys.insert(p_scan);
+        app.input.game_keys.retain(|b| !b.action.eq_ignore_ascii_case("sim_pause"));
+        app.input.game_keys.push(omsi_content::KeyBinding { action: "sim_pause".into(), scan_code: p_scan, modifier: 0 });
+        app.dispatch_driving_key(None, KeyCode::KeyP, true, false, false, false, false);
+        assert!(app.paused && app.player.as_ref().unwrap().vehicle.var("hits") == Some(1.0));
+        for scan in [f6_scan, 0] {
+            app.paused = false;
+            app.input.game_keys.iter_mut().filter(|b| b.action.eq_ignore_ascii_case("sim_pause")).for_each(|b| b.scan_code = scan);
+            app.dispatch_driving_key(None, KeyCode::KeyP, true, false, false, false, false);
+            assert!(!app.paused);
+        }
+        assert_eq!(app.player.as_ref().unwrap().vehicle.var("hits"), Some(3.0));
+        app.dispatch_driving_key(None, KeyCode::F6, true, false, false, false, false);
+        assert!(!app.paused);
+        app.input.game_keys.iter_mut().filter(|b| b.action.eq_ignore_ascii_case("sim_pause")).for_each(|b| b.scan_code = f6_scan);
+        app.dispatch_driving_key(None, KeyCode::F6, true, false, false, false, false);
+        assert!(app.paused);
     }
 }
 

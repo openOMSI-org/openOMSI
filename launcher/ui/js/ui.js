@@ -27,10 +27,11 @@ export function Field({ label, help, children }) {
 }
 
 /** A select of `options`: [value, label] pairs (labels translated unless `raw`). */
-export function Select({ value, options, onChange, disabled, raw, placeholder }) {
+export function Select({ value, options, onChange, disabled, raw, placeholder, always }) {
   const [open, setOpen] = useState(false);
   const [hi, setHi] = useState(-1);
   const [place, setPlace] = useState(null);
+  const [q, setQ] = useState('');
   const box = useRef();
   const list = useRef();
   const now = String(value ?? '');
@@ -39,9 +40,16 @@ export function Select({ value, options, onChange, disabled, raw, placeholder })
     ...(has ? [] : [[now, value === '' || value == null ? t(placeholder || 'Choose…') : now]]),
     ...options.map(([v, l]) => [String(v), raw ? l : t(l)]),
   ];
-  const at = items.findIndex(([v]) => v === now);
+  const searchable = items.length > 12;
+  const fold = (x) => String(x).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const shown = searchable && q ? items.filter(([, l]) => fold(l).includes(fold(q))) : items;
+  const lead = searchable ? 1 : 0;
+  const at = shown.findIndex(([v]) => v === now);
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setQ('');
+      return;
+    }
     const r = box.current.getBoundingClientRect();
     const below = innerHeight - r.bottom - 12;
     const up = below < 220 && r.top > below;
@@ -64,8 +72,11 @@ export function Select({ value, options, onChange, disabled, raw, placeholder })
     };
   }, [open]);
   useEffect(() => {
-    if (open && place) list.current?.children[Math.max(at, 0)]?.scrollIntoView({ block: 'nearest' });
+    if (open && place) list.current?.children[Math.max(at, 0) + lead]?.scrollIntoView({ block: 'nearest' });
   }, [place]);
+  useEffect(() => {
+    if (open) setHi(shown.length ? 0 : -1);
+  }, [q]);
   if (onPhone) {
     return html`<select class="select" value=${now} disabled=${disabled} onChange=${(e) => onChange(e.currentTarget.value)}>
       ${items.map(([v, l]) => html`<option value=${v}>${l}</option>`)}
@@ -73,12 +84,12 @@ export function Select({ value, options, onChange, disabled, raw, placeholder })
   }
   const pick = (v) => {
     setOpen(false);
-    if (v !== now) onChange(v);
+    if (v !== now || always) onChange(v);
   };
   const move = (n) => {
-    const i = Math.max(0, Math.min(items.length - 1, n));
+    const i = Math.max(0, Math.min(shown.length - 1, n));
     setHi(i);
-    list.current?.children[i]?.scrollIntoView({ block: 'nearest' });
+    list.current?.children[i + lead]?.scrollIntoView({ block: 'nearest' });
   };
   const key = (e) => {
     if (!open) {
@@ -90,26 +101,35 @@ export function Select({ value, options, onChange, disabled, raw, placeholder })
     }
     if (e.key === 'Escape') {
       e.stopPropagation();
-      setOpen(false);
+      if (q) setQ('');
+      else setOpen(false);
     } else if (e.key === 'Tab') setOpen(false);
+    else if (searchable && e.key === 'Backspace') {
+      e.preventDefault();
+      setQ((x) => x.slice(0, -1));
+    } else if (searchable && e.key.length === 1 && (e.getModifierState?.('AltGraph') || (!e.ctrlKey && !e.metaKey && !e.altKey)) && (e.key !== ' ' || q)) {
+      e.preventDefault();
+      setQ((x) => x + e.key);
+    }
     else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       move(hi + (e.key === 'ArrowDown' ? 1 : -1));
     } else if (e.key === 'Home' || e.key === 'End') {
       e.preventDefault();
-      move(e.key === 'Home' ? 0 : items.length - 1);
+      move(e.key === 'Home' ? 0 : shown.length - 1);
     } else if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      if (items[hi]) pick(items[hi][0]);
+      if (shown[hi]) pick(shown[hi][0]);
     }
   };
-  const label = items[at]?.[1] ?? '';
+  const label = items.find(([v]) => v === now)?.[1] ?? '';
   return html`<div class="dropdown" ref=${box}>
     <button type="button" class=${'select' + (open ? ' open' : '')} disabled=${disabled} title=${label} aria-haspopup="listbox" aria-expanded=${open}
       onClick=${() => setOpen(!open)} onKeyDown=${key}><span>${label}</span></button>
     ${open && place && html`<div class="dropdown-list" role="listbox" ref=${list}
       style=${(place.left != null ? `left:${place.left}px;` : `right:${place.right}px;`) + `min-width:${place.width}px;width:max-content;max-width:${place.widest}px;max-height:${place.max}px;` + (place.top != null ? `top:${place.top}px` : `bottom:${place.bottom}px`)}>
-      ${items.map(([v, l], i) => html`<div role="option" aria-selected=${v === now} title=${l}
+      ${searchable && html`<div class="dropdown-search">${q || t('Type to search')}</div>`}
+      ${shown.map(([v, l], i) => html`<div role="option" aria-selected=${v === now} title=${l}
         class=${'dropdown-item' + (v === now ? ' on' : '') + (i === hi ? ' hi' : '')}
         onMouseMove=${() => i !== hi && setHi(i)} onMouseDown=${(e) => { e.preventDefault(); pick(v); }}>${l}</div>`)}
     </div>`}
@@ -177,15 +197,42 @@ export function Tag({ kind = '', children }) {
 }
 
 /** A dialog over the page; Escape and a click beside it close it. */
-export function Dialog({ title, onClose, children, footer, wide, class: cls = '' }) {
+export function Dialog({ title, onClose, children, footer, wide, modal = false, class: cls = '' }) {
   const box = useRef();
   useEffect(() => {
     const k = (e) => e.key === 'Escape' && [...document.querySelectorAll('.overlay')].pop() === box.current && onClose?.();
     window.addEventListener('keydown', k);
     return () => window.removeEventListener('keydown', k);
   }, [onClose]);
+  useEffect(() => {
+    if (!modal) return;
+    const previous = document.activeElement;
+    const layer = box.current;
+    const hidden = [];
+    for (let node = layer; node?.parentElement; node = node.parentElement) {
+      for (const sibling of node.parentElement.children) {
+        if (sibling !== node && !sibling.inert) { hidden.push(sibling); sibling.inert = true; }
+      }
+      if (node.parentElement === document.body) break;
+    }
+    const controls = () => [...layer.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], summary')].filter((el) => el.getClientRects().length);
+    (layer.querySelector('input') || controls()[0])?.focus();
+    const trap = (e) => {
+      if (e.key !== 'Tab' || [...document.querySelectorAll('.overlay')].pop() !== layer) return;
+      const items = controls(), first = items[0], last = items[items.length - 1];
+      if (!layer.contains(document.activeElement) || (e.shiftKey && document.activeElement === first) || (!e.shiftKey && document.activeElement === last)) {
+        e.preventDefault(); (e.shiftKey ? last : first)?.focus();
+      }
+    };
+    window.addEventListener('keydown', trap);
+    return () => {
+      window.removeEventListener('keydown', trap);
+      hidden.forEach((el) => { el.inert = false; });
+      if (previous?.isConnected) previous.focus();
+    };
+  }, [modal]);
   return html`<div class="overlay" ref=${box} onMouseDown=${(e) => e.target === e.currentTarget && onClose?.()}>
-    <div class=${'dialog' + (wide ? ' wide' : '') + (cls ? ' ' + cls : '')} role="dialog">
+    <div class=${'dialog' + (wide ? ' wide' : '') + (cls ? ' ' + cls : '')} role="dialog" aria-label=${t(title)} aria-modal=${modal || undefined}>
       <div class="dialog-head"><h2>${t(title)}</h2>${onClose && html`<${Button} kind="ghost" icon="x" title="Close" onClick=${onClose} />`}</div>
       <div class="dialog-body">${children}</div>
       ${footer && html`<div class="dialog-foot">${footer}</div>`}

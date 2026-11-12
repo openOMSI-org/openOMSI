@@ -147,6 +147,7 @@ impl Offscreen<'_> {
         let inside = matches!(self.args.view.as_str(), "driver" | "pax");
         let a = &rec.audio;
         let (reverb_time, reverb_mix) = self.world.reverb_at(cam.position);
+        omsi_audio::soundset::set_master_volume(self.settings.volume);
         a.set_listener(omsi_audio::Listener {
             position: cam.position.as_vec3(),
             forward: cam.forward(),

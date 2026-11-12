@@ -146,6 +146,14 @@ impl App {
             }
             "screenshot" => self.take_screenshot(),
             "flashlight" => self.toggle_flashlight(),
+            "clean_screen" => self.toggle_clean_screen(),
+            "get_up" => {
+                if self.session.on_foot.as_ref().is_some_and(|f| f.inside.is_some()) {
+                    self.step_out();
+                } else if self.session.on_foot.is_none() && self.player.is_some() {
+                    self.get_up();
+                }
+            }
             "photo_mode" => self.enter_photo(),
             "quicksave" => self.quick_save(),
             "view_set_ego" => {
@@ -335,7 +343,7 @@ impl App {
                 self.service_msg = Some((msg.into(), 4.0));
             }
             // the zoom keys work while held: the frame reads them (`view_keys::zoom_keys`)
-            "view_zoom_in" | "view_zoom_out" => {}
+            "view_zoom_in" | "view_zoom_out" | "view_zoom_hold" => {}
             "toggel_mouse_ctrl" => {
                 self.set_mouse_drive(!self.input.mouse_drive);
                 let msg = if self.input.mouse_drive { "Mouse steering on: across steers, up is the throttle, down the brake (O turns it off)" } else { "Mouse steering off" };
@@ -347,6 +355,18 @@ impl App {
                     let msg = if !c.any() { "No game controller found" } else if c.enabled { "Game controller on" } else { "Game controller off" };
                     self.service_msg = Some((msg.into(), 3.0));
                 }
+            }
+            "head_tracking_recenter" => {
+                let msg = match self.input.headtrack.as_ref() {
+                    _ if !self.settings.head_tracking => "Head tracking is off",
+                    Some(h) => {
+                        h.recenter_every_source();
+                        self.input.headtrack_scale_bias = [0.0; 6];
+                        "Head position reset"
+                    }
+                    None => "No head tracker found",
+                };
+                self.service_msg = Some((msg.into(), 2.5));
             }
             _ => return false,
         }
@@ -420,6 +440,22 @@ impl App {
             self.settings.info_bar = on;
             crate::game_lists::remember_setting("info_bar", if on { "1" } else { "0" });
         }
+    }
+
+    pub(crate) fn toggle_clean_screen(&mut self) {
+        self.menus.clean_screen = !self.menus.clean_screen;
+    }
+
+    pub(crate) fn clean_screen_shown(&self) -> bool {
+        self.menus.clean_screen
+            && self.menus.game_menu.is_none()
+            && self.menus.chooser.is_none()
+            && !self.has_process_permission_prompt()
+            && !self.menus.navigator.as_ref().is_some_and(|n| n.map_open())
+            && self.net.remotes.chat.typing.is_none()
+            && !self.menus.game_panels.any()
+            && !self.gfx.mirror_hud.editing()
+            && self.menus.editor.is_none()
     }
 
     pub(crate) fn toggle_pause(&mut self) {

@@ -674,6 +674,9 @@ pub(crate) fn draw(sh: &mut Shell, ph: &mut Photo, info: &Info) {
     let inner = Rect::new(r.x + 18.0, r.y + 16.0, r.w - 36.0, r.h - 32.0);
     ui.icon("photo_camera", Vec2::new(inner.x + 12.0, inner.y + 14.0), 20.0, th().accent);
     ui.text("Photo mode", Vec2::new(inner.x + 32.0, inner.y + 21.0), 18.0, Weight::Bold, th().text, Align::Left);
+    if !touch && ui.button("ph-hide", Rect::new(inner.right() - 112.0, inner.y, 112.0, 30.0), &omsi_ui::tr("Hide (H)"), None, ButtonKind::Ghost) {
+        acts.push(Request::HideUi);
+    }
     let mm = ph.settings.focal(ph.pro);
     let fnum = ph.fstop();
     let exif = if ph.pro {
@@ -712,7 +715,7 @@ pub(crate) fn draw(sh: &mut Shell, ph: &mut Photo, info: &Info) {
     }
     // the keys, over the buttons (going down was nowhere to be found)
     let keys = Rect::new(inner.x, inner.bottom() - 44.0 - 46.0 - 40.0, inner.w, 34.0);
-    ui.paragraph(&omsi_ui::tr("W A S D: move, Space: up, Ctrl: down, Shift: faster, drag or arrows: look"), Vec2::new(keys.x, keys.y), keys.w, 11.5, Weight::Regular, th().text_dim);
+    ui.paragraph(&omsi_ui::tr("W A S D: move, Space: up, Ctrl: down, Shift: faster, Alt: finer, drag or arrows: look"), Vec2::new(keys.x, keys.y), keys.w, 11.5, Weight::Regular, th().text_dim);
     let b = Rect::new(inner.x, inner.bottom() - 44.0 - 46.0, inner.w, 44.0);
     if ui.button("ph-take", b, &if busy { format!("{}  {n} / {target}", omsi_ui::tr("Taking...")) } else { omsi_ui::tr("Take photo").into_owned() }, Some("photo_camera"), ButtonKind::Primary) && !busy {
         acts.push(Request::Take);

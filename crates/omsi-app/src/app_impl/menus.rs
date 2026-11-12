@@ -38,22 +38,30 @@ impl App {
     }
 
     pub(crate) fn close_game_menu(&mut self) {
+        self.shell.clear_bus_preview();
+        self.shell.ui.dismiss_popups();
+        self.shell.pause_online.management = None;
         // Never keep unconfirmed graphics changes after dismissing the entire menu.
         if self.menus.graphics_before.is_some() {
             crate::game_lists::cancel_graphics_changes(self);
         }
         self.shell.quick_edit = false;
         self.menus.key_capture = None;
+        if self.menus.menu_edit.is_some() {
+            crate::platform::text_input(self.window.as_deref(), false);
+        }
+        self.stop_search_typing();
+        self.menus.menu_search.clear();
         if self.menus.menu_edit_number {
-            if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);}
+            crate::platform::text_input(self.window.as_deref(),false);
             self.menus.menu_edit_number=false; self.menus.menu_edit=None;
         }
         if self.menus.menu_edit_ident {
-            if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);}
+            crate::platform::text_input(self.window.as_deref(),false);
             self.menus.menu_edit_ident=false; self.menus.menu_edit=None;
         }
         if self.menus.menu_edit_icao {
-            if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);}
+            crate::platform::text_input(self.window.as_deref(),false);
             self.menus.menu_edit_icao=false; self.menus.menu_edit=None;
         }
         let was_open = self.menus.game_menu.take().is_some();
@@ -65,6 +73,19 @@ impl App {
 
     pub(crate) fn menu_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode) {
         self.menus.menu_kbd = true;
+        if self.shell.pause_online.management.is_some() {
+            if code == KeyCode::Escape {
+                if let Some((_, stage)) = self.shell.pause_online.management.as_mut().filter(|(_, stage)| stage.is_some()) {
+                    *stage = None;
+                } else {
+                    self.shell.pause_online.management = None;
+                }
+            }
+            return;
+        }
+        if code == KeyCode::Escape && self.shell.ui.dismiss_date_popup() {
+            return;
+        }
         if self.menus.key_capture.is_some() {
             match code {
                 KeyCode::ShiftLeft | KeyCode::ShiftRight | KeyCode::ControlLeft | KeyCode::ControlRight | KeyCode::AltLeft | KeyCode::AltRight => {}
@@ -90,9 +111,9 @@ impl App {
         }
         if self.quick_editor_key(code) { return; }
         let sel = self.menus.game_menu.unwrap_or(0);
-        let modified = self.input.keys.iter().any(|key| {
-            matches!(*key, KeyCode::ControlLeft | KeyCode::ControlRight | KeyCode::AltLeft | KeyCode::AltRight | KeyCode::ShiftLeft | KeyCode::ShiftRight)
-        });
+        let has = |l, r| self.input.keys.contains(&l) || self.input.keys.contains(&r);
+        let (shift, ctrl, alt) = (has(KeyCode::ShiftLeft, KeyCode::ShiftRight), has(KeyCode::ControlLeft, KeyCode::ControlRight), has(KeyCode::AltLeft, KeyCode::AltRight));
+        let modified = shift || ctrl || alt;
         self.menus.menu_top = None;
         if code == KeyCode::KeyE && !modified && !self.vr_active() && self.shell.pause_category == crate::shell::pause::navigation::Category::Home {
             self.shell.quick_edit = true;
@@ -101,8 +122,8 @@ impl App {
             return;
         }
         match code {
-            // P changes only the simulation state, even while a menu is open.
-            KeyCode::KeyP if !modified => self.toggle_pause(),
+            // Pause changes only the simulation state, even while a menu is open.
+            _ if omsi_input::actions::is_pause_key(&self.input.game_keys, code, shift, ctrl, alt, &self.input.own_keys) => self.toggle_pause(),
             KeyCode::Escape => self.close_game_menu(),
             KeyCode::ArrowUp | KeyCode::KeyW => self.menus.game_menu = Some(self.pause_menu_step(sel, false)),
             KeyCode::ArrowDown | KeyCode::KeyS => self.menus.game_menu = Some(self.pause_menu_step(sel, true)),
@@ -263,6 +284,12 @@ impl App {
     /// What a line of the game menu does, by its id (all but loading, leaving and the
     /// plugins' lines): also the Alt quick menu's tiles. False when `id` is none of them.
     pub(crate) fn game_menu_action(&mut self, id: &str) -> bool {
+        if self.shell.pause_category == crate::shell::pause::navigation::Category::Online {
+            if let Some(tab) = match id { "players" => Some(0), "world" => Some(1), "admin" => Some(2), _ => None } {
+                self.close_list(); self.shell.pause_online.tab = tab; self.shell.pause_hidden = false;
+                return true;
+            }
+        }
         match id {
             "resume" => self.close_game_menu(),
             "options" => self.open_list(crate::game_lists::ListKind::Options(0)),
@@ -273,14 +300,28 @@ impl App {
             }
             "vehicle" => self.open_list(crate::game_lists::ListKind::Vehicle(0)),
             "world" => self.open_list(crate::game_lists::ListKind::World(0)),
+            "multiplayer" if self.net.lan.is_some() && self.shell.pause_category != crate::shell::pause::navigation::Category::Online => {
+                self.switch_pause_category(crate::shell::pause::navigation::Category::Online);
+                self.shell.pause_online.tab = 0;
+                self.shell.pause_online.management = None;
+                self.shell.pause_online.confirm = None;
+            }
             "multiplayer" => self.open_multiplayer(),
             "copycode" => {
                 self.close_game_menu();
                 self.copy_server_code();
             }
             "admin" => self.open_list(crate::game_lists::ListKind::Admin),
+            "players" if self.net.lan.is_some() => {
+                self.close_list();
+                self.shell.pause_category = crate::shell::pause::navigation::Category::Online;
+                self.shell.pause_online.tab = 0;
+                self.shell.pause_online.management = None;
+                self.shell.pause_hidden = false;
+            }
             "players" => self.open_list(crate::game_lists::ListKind::PlayerList),
             "duty" => self.open_list(crate::game_lists::ListKind::Lines),
+            "streets" => self.open_list(crate::game_lists::ListKind::Streets),
             "map" => {
                 self.close_game_menu();
                 if let Some(n) = self.menus.navigator.as_mut() {
@@ -395,6 +436,7 @@ impl App {
             }
             // (the game's own panels, by name for the plugins and the input script)
             "view_editor" => crate::game_panels::view_editor::open(self),
+            "refresh_now" => crate::admin::refresh_for_the_time(self),
             "mirror_hud_edit" => {
                 self.close_game_menu();
                 self.view = "driver".into();
@@ -407,6 +449,7 @@ impl App {
             "quick_menu" => crate::game_panels::quick_menu::toggle(self),
             "driver" => self.open_list(crate::game_lists::ListKind::Drivers),
             "number" => self.open_list(crate::game_lists::ListKind::Numbers),
+            "livery" => self.open_list(crate::game_lists::ListKind::Liveries),
             "dest" => self.open_list(crate::game_lists::ListKind::Destinations),
             "hof" => self.open_list(crate::game_lists::ListKind::Hofs),
             "tplist" => self.open_list(crate::game_lists::ListKind::Spots),
@@ -460,13 +503,14 @@ impl App {
 /// The game menu on a server (`--lan-join https://…`): the world's clock and weather are the
 /// server's, and the way out leaves the server. The player's own tour can still be changed
 /// or ended; the Alt menu uses these same offered actions.
-pub(crate) const SERVER_GAME_MENU: [(&str, &str); 11] = [
+pub(crate) const SERVER_GAME_MENU: [(&str, &str); 12] = [
     ("resume", "Resume"),
     ("options", "Options..."),
     ("camera", "Camera..."),
     ("vehicle", "Vehicle options..."),
     ("world", "World options..."),
     ("map", "City map"),
+    ("streets", "Find a street..."),
     ("duty", "Line and tour..."),
     ("endduty", "End the tour"),
     ("shot", "Screenshot"),
@@ -620,7 +664,7 @@ impl crate::App {
 
 /// The lines of the game menu: (what, label). What can be set is on the pages behind
 /// "Options", "Vehicle options" and "World options" (see `game_lists`).
-pub(crate) const GAME_MENU: [(&str, &str); 16] = [
+pub(crate) const GAME_MENU: [(&str, &str); 17] = [
     ("resume", "Resume"),
     ("options", "Options..."),
     ("controls", "Controls..."),
@@ -630,6 +674,7 @@ pub(crate) const GAME_MENU: [(&str, &str); 16] = [
     ("vehicle", "Vehicle options..."),
     ("world", "World options..."),
     ("map", "City map"),
+    ("streets", "Find a street..."),
     ("duty", "Line and tour..."),
     ("skipstop", "Skip the next stop"),
     ("endduty", "End the tour"),

@@ -72,6 +72,10 @@ fn packet(data: &[u8], proto: u8) -> Option<Packet<'_>> {
     }
     Some(p)
 }
+/// Is `data` an acknowledgement (a header and nothing else)?
+pub(crate) fn is_ack(data: &[u8], proto: u8) -> bool {
+    packet(data, proto).is_some_and(|p| p.ack)
+}
 pub(crate) fn address(data: &[u8], proto: u8) -> Option<Address> {
     Some(packet(data, proto)?.addr)
 }
@@ -151,7 +155,15 @@ struct Tx {
     seq: u64,
     data: Vec<u8>,
     wait: f32,
+    /// Times sent: each resend waits twice as long as the last (`RESEND`), so a slow or
+    /// throttled link is not answered with ever more of the same packets.
+    tries: u32,
 }
+/// The first resend of an unacknowledged event, and the longest wait between resends. A
+/// fixed 0.1 s through a tunnel of a few hundred ms sent every event several times over to
+/// every player; past the host's sound rate those were dropped, acknowledgements with them,
+/// and every drop made more resends.
+const RESEND: (f32, f32) = (0.1, 2.0);
 #[derive(Default)]
 struct Sender {
     next: u64,
@@ -203,6 +215,7 @@ impl Sync {
                 seq: s.next,
                 data: data.clone(),
                 wait: 0.0,
+                tries: 0,
             });
         }
     }
@@ -224,7 +237,8 @@ impl Sync {
                 if t.wait > 0.0 {
                     continue;
                 }
-                t.wait = 0.1;
+                t.wait = (RESEND.0 * 2f32.powi(t.tries.min(8) as i32)).min(RESEND.1);
+                t.tries += 1;
                 budget -= t.data.len().div_ceil(CHUNK);
                 for (part, data) in t.data.chunks(CHUNK).enumerate() {
                     let mut v = header(proto, me, peer, self.epoch, t.seq, false);
@@ -349,12 +363,32 @@ mod tests {
             vec![event("door", None), event("announce", Some(&long))]
         );
         // Lost ACK: retry is acknowledged again without replaying anything.
-        for v in a.tick(11, 1, 0.11) {
+        for v in a.tick(11, 1, 0.21) {
             let ack = b.receive(11, 2, &v).unwrap();
             a.receive(11, 1, &ack);
         }
         assert!(b.take_incoming().is_empty());
         assert!(a.tick(11, 1, 1.0).is_empty());
+    }
+    #[test]
+    fn an_unacknowledged_event_is_sent_again_ever_less_often() {
+        let mut a = Sync::default();
+        a.publish(&[2], event("door", None));
+        assert_eq!(a.tick(11, 1, 0.0).len(), 1);
+        // 0.1 s, then 0.2, 0.4 ... up to 2 s between sends: over 10 s a handful, not a hundred
+        let mut sent = 1;
+        for _ in 0..1000 {
+            sent += a.tick(11, 1, 0.01).len();
+        }
+        assert!((5..=12).contains(&sent), "{sent} sends in 10 s");
+    }
+    #[test]
+    fn an_acknowledgement_is_told_from_an_event() {
+        let (mut a, mut b) = (Sync::default(), Sync::default());
+        a.publish(&[2], event("door", None));
+        let data = a.tick(11, 1, 0.0).remove(0);
+        let ack = b.receive(11, 2, &data).unwrap();
+        assert!(is_ack(&ack, 11) && !is_ack(&data, 11) && !is_ack(&ack, 10));
     }
     #[test]
     fn validates_bounds_protocol_and_recipient() {

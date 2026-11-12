@@ -28,9 +28,7 @@ impl World {
         Some(pos)
     }
 
-    /// Draw the route arrows the map's author put up (`[helparrow]` objects) or hide them:
-    /// `on` is whether OMSI 2's route arrows are on (the `nav_arrows` setting). Nothing to
-    /// do when that has not changed; the tiles placed later follow it.
+    /// Show or hide route arrows placed by the map author. Tiles placed later follow it.
     pub fn show_help_arrows(&self, renderer: &Renderer, scene: &mut Scene, on: bool) {
         if self.help_arrows_shown.swap(on, std::sync::atomic::Ordering::Relaxed) == on {
             return;
@@ -822,22 +820,28 @@ impl World {
             // the texture is still up under that name (it may have gone meanwhile)
             let vid = self.vehicle_textures.lock().get(&path).map(|e| e.0);
             let found = match vid {
-                Some(id) => Some((id, false)),
-                None => self.gpu.lock().textures.get(&path).map(|e| (e.id, e.near_restore)),
+                Some(id) => Some((id, false, false)),
+                None => self.gpu.lock().textures.get(&path).map(|e| (e.id, e.near_restore, e.squeezed)),
             };
-            let Some((id, near)) = found else { continue };
+            let Some((id, near, squeezed)) = found else { continue };
             if data.levels.is_empty() {
                 // nothing better to be had (an upgrade that stays RGBA)
                 continue;
             }
             let card = renderer.gpu_memory(scene);
-            let room = if near {
-                card_restore_room(video_limit, card)
-            } else {
-                texture_restore_room(self.texture_budget_bytes(), usage, video_limit, card)
-            };
             let before = scene.texture_bytes_of(id);
-            let Some(upload) = fit_upgrade(&data, before.saturating_add(room)) else { continue };
+            let allowed = if near {
+                let room = card_near_room(video_limit, card);
+                if squeezed { room.min(before.saturating_add(texture_room(self.texture_budget_bytes(), usage))) } else { room }
+            } else {
+                card_near_room(video_limit, card).min(before.saturating_add(texture_restore_room(self.texture_budget_bytes(), usage, video_limit, card)))
+            };
+            let upload = if self.player_textures.lock().contains(&path) {
+                data.clone()
+            } else {
+                let Some(upload) = fit_upgrade(&data, allowed) else { continue };
+                upload
+            };
             let replaced = renderer.replace_texture(scene, id, &upload);
             usage = (usage + scene.texture_bytes_of(id)).saturating_sub(before);
             if self.freetex_reloads.snapshot(id).is_some() {
@@ -942,6 +946,7 @@ impl World {
             }
         }
         let t0 = std::time::Instant::now();
+        let player = self.player_textures.lock();
         let vehicle_bytes: u64 = self
             .vehicle_textures
             .lock()
@@ -962,7 +967,7 @@ impl World {
         // budget counted the scenery and the vehicles alone, and on an 8 GB card with a
         // 4000 MB budget the textures grew to 5.4 GB over a drive; with the picture's targets
         // the card paged to the system's memory and the frame rate fell from 140 to 25 (#2295).
-        let usage = scenery_bytes + vehicle_bytes + texture_overdraft(renderer.texture_bytes(scene));
+        let texture_usage = scenery_bytes + vehicle_bytes + texture_overdraft(renderer.texture_bytes(scene));
         // And everything the game holds on the card - the meshes, the render targets and
         // shadow maps, the driver's own - stays within the video memory setting and the
         // driver's budget: the textures counted against their budget alone, the game took
@@ -975,7 +980,7 @@ impl World {
         // second while over)
         const STEP: u64 = 32 << 20;
         let card_over = if card_cap > 0 { card.total().saturating_sub(card_cap) / STEP * STEP } else { 0 };
-        let usage = if card_over > 0 { usage.max(limit.saturating_add(card_over)) } else { usage };
+        let usage = if card_over > 0 { texture_usage.max(limit.saturating_add(card_over)) } else { texture_usage };
         memo.in_use = usage;
         if pass == BudgetPass::AfterStreaming && usage <= limit && !memo.resume {
             // (the bytes are all a forced look is for: the restores wait for the second's)
@@ -986,7 +991,7 @@ impl World {
             memo.resume = false;
             return 0;
         }
-        if pass != BudgetPass::Now && !memo.resume && !retry_due && memo.unchanged(generation, usage, limit, centers) {
+        if pass != BudgetPass::Now && !memo.resume && !retry_due && memo.unchanged(generation, usage, limit, card_restore_room(video_limit, card), centers) {
             return 0;
         }
         let ts = tile_size();
@@ -1038,6 +1043,7 @@ impl World {
                 see(p, *d);
             }
         }
+        ground_is_near(&gpu, &mut near);
         drop((trees, shared));
         drop(states);
         let mut entries: Vec<(f64, PathBuf)> = gpu
@@ -1054,10 +1060,12 @@ impl World {
             + if pass == BudgetPass::Now { std::time::Duration::from_secs(3600) } else { std::time::Duration::from_millis(2) };
         let pending = self.upgrades_pending.lock();
         let reserved = if card_cap == 0 && usage > limit { 0 } else { reserved_restore_bytes(&gpu, &pending) };
-        restoring += queue_near_restores(&mut gpu, &pending, &entries, NEAR, card_restore_room(video_limit, card).saturating_sub(reserved), t0);
+        let rooms = (card_near_room(video_limit, card).saturating_sub(reserved), texture_room(limit, texture_usage).saturating_sub(reserved));
+        restoring += queue_near_restores(&mut gpu, &pending, &entries, NEAR, rooms, t0);
         if usage > limit {
             entries.sort_by(|a, b| b.0.total_cmp(&a.0));
             let mut over = usage - limit;
+            let card_part = (usage - texture_usage.max(limit)).saturating_sub(card_hard_over(card, video_limit, card_over, STEP));
             let mut drops = renderer.begin_level_drops();
             for (d, p) in &entries {
                 // (96 a second: at 16 a map's first tiles stayed over a small card's budget
@@ -1098,8 +1106,9 @@ impl World {
                 let mut own: Vec<(TextureId, u64)> = self
                     .vehicle_textures
                     .lock()
-                    .values()
-                    .map(|(t, _)| (*t, scene.texture_bytes_of(*t)))
+                    .iter()
+                    .filter(|(p, _)| !player.contains(*p))
+                    .map(|(_, (t, _))| (*t, scene.texture_bytes_of(*t)))
                     .collect();
                 own.sort_by(|a, b| b.1.cmp(&a.1));
                 for (id, before) in own {
@@ -1120,13 +1129,15 @@ impl World {
                     }
                 }
             }
-            if over > 0 && shrunk.len() < 96 && !cut_short {
+            if over > card_part && shrunk.len() < 96 && !cut_short {
                 let mut emergency: Vec<(TextureId, Option<PathBuf>)> = entries.iter()
                     .filter_map(|(_, p)| gpu.textures.get(p).map(|e| (e.id, Some(p.clone()))))
                     .collect();
-                emergency.extend(self.vehicle_textures.lock().values().map(|(id, _)| (*id, None)));
+                emergency.extend(self.vehicle_textures.lock().iter()
+                    .filter(|(p, _)| !player.contains(*p))
+                    .map(|(_, (id, _))| (*id, None)));
                 for (id, path) in emergency {
-                    if over == 0 || shrunk.len() >= 96 {
+                    if over <= card_part || shrunk.len() >= 96 {
                         break;
                     }
                     if std::time::Instant::now() >= budget_end {
@@ -1136,7 +1147,7 @@ impl World {
                     let Some((w, h, levels)) = renderer.texture_levels(scene, id) else { continue };
                     let before = scene.texture_bytes_of(id);
                     let floor = if path.is_some() { 256 } else { 1024 };
-                    let n = budget_level_drop(w.max(h), levels, floor, before, over);
+                    let n = budget_level_drop(w.max(h), levels, floor, before, over - card_part);
                     if n > 0 && renderer.drop_top_levels_in(&mut drops, scene, id, n) {
                         let after = scene.texture_bytes_of(id);
                         over = over.saturating_sub(before.saturating_sub(after));
@@ -1183,7 +1194,7 @@ impl World {
         // Nothing left to do for now: not looked at again before something changed. (A pass
         // that shrank or sent back textures changes the bytes in use, now or when they come
         // back, and looks again.)
-        memo.remember(generation, usage, limit, centers, shrunk.is_empty() && restoring == 0);
+        memo.remember(generation, usage, limit, card_restore_room(video_limit, card), centers, shrunk.is_empty() && restoring == 0);
         memo.resume = cut_short;
         // (the swapped-in textures waiting for theirs go along)
         let shrunk_n = shrunk.len();
@@ -1446,6 +1457,7 @@ pub(super) struct BudgetMemo {
     generation: u64,
     usage: u64,
     limit: u64,
+    room: u64,
     centers: Vec<DVec3>,
     in_use: u64,
 }
@@ -1454,10 +1466,11 @@ impl BudgetMemo {
     /// How far a center may move before the textures' distances are looked at again.
     const MOVED: f64 = 25.0;
 
-    fn unchanged(&self, generation: u64, usage: u64, limit: u64, centers: &[DVec3]) -> bool {
+    fn unchanged(&self, generation: u64, usage: u64, limit: u64, room: u64, centers: &[DVec3]) -> bool {
         self.idle
             && self.generation == generation
             && self.limit == limit
+            && room <= self.room.saturating_add(64 << 20)
             && usage <= self.usage.max(limit)
             && usage + limit / 100 >= self.usage
             && self.centers.len() == centers.len()
@@ -1468,8 +1481,9 @@ impl BudgetMemo {
                 .all(|(a, b)| a.truncate().distance_squared(b.truncate()) < Self::MOVED * Self::MOVED)
     }
 
-    fn remember(&mut self, generation: u64, usage: u64, limit: u64, centers: &[DVec3], idle: bool) {
+    fn remember(&mut self, generation: u64, usage: u64, limit: u64, room: u64, centers: &[DVec3], idle: bool) {
         self.idle = idle;
+        self.room = room;
         self.generation = generation;
         self.usage = usage;
         self.limit = limit;

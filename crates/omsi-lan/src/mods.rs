@@ -40,13 +40,15 @@ mod budget;
 mod bus_files;
 mod channel;
 pub(crate) mod failure;
+mod host_bus;
+pub mod hofs;
 pub mod identity;
 mod paced;
 mod pieces;
 pub mod placeholder;
 mod quarantine;
 mod server_fleet;
-pub use server_fleet::fingerprint as fleet_fingerprint;
+pub use server_fleet::{fingerprint as fleet_fingerprint, fingerprint_loaded as fleet_fingerprint_loaded};
 mod store;
 pub mod upload;
 pub mod vehicles;
@@ -615,6 +617,11 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
                     }
                 }
             }
+            // the depot file of the host's AI buses (`hofs`)
+            ["HOF", name_hex] => match server_fleet::unhex_text(name_hex) {
+                Some(name) => hofs::answer(root, &name, &mut out)?,
+                None => writeln!(out, "ERR invalid depot name")?,
+            },
             ["BYE"] | [] => return out.flush(),
             // a player's bus for the session, and the others' by their content (`upload`,
             // `vehicles`): read and checked once (`upload::requests`), then answered
@@ -786,13 +793,22 @@ fn hash_cache_path() -> Option<std::path::PathBuf> {
     sandbox_base().map(|b| b.with_file_name("lan-hash-cache.json"))
 }
 
+/// The cache as this process knows it: read from disk once (a server's fleet check asked for
+/// it once a bus and parsed the whole file each time), and the one every save merges into
+/// (buses checked at once saved over each other's new hashes).
+static HASH_CACHE: Mutex<Option<HashCache>> = Mutex::new(None);
+
 fn hash_cache() -> HashCache {
-    hash_cache_path().and_then(|p| std::fs::read(p).ok()).and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+    let mut c = HASH_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    c.get_or_insert_with(|| hash_cache_path().and_then(|p| std::fs::read(p).ok()).and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()).clone()
 }
 
 fn save_hash_cache(c: &HashCache) {
+    let mut all = HASH_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    let all = all.get_or_insert_with(Default::default);
+    all.extend(c.iter().map(|(k, v)| (k.clone(), v.clone())));
     if let Some(p) = hash_cache_path() {
-        if let Err(e) = write_hash_cache(&p, c) {
+        if let Err(e) = write_hash_cache(&p, all) {
             log::warn!("LAN mods: could not save hash cache: {e}");
         }
     }
@@ -917,10 +933,11 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
     // The ordinary LIST remains the default for player-hosted/legacy sessions
     // that did not request server fleet downloads.
     let manifest = request_mod_manifest(&mut conn, selected_request.as_deref().unwrap_or("LIST"))?;
-    if let (Some((bus, _)), Some(_)) = (selected.as_ref(), selected_request.as_ref()) {
+    if let (Some((bus, paint)), Some(_)) = (selected.as_ref(), selected_request.as_ref()) {
         if !omsi_net::vehicle_path(bus).is_some_and(|v| v.eq_ignore_ascii_case(&manifest.bus)) {
             return Err("host returned the wrong selected bus package".into());
         }
+        host_bus::remember(bus, paint, &manifest.entries);
     }
     let (raw, out, input) = conn;
     if manifest.entries.len() > MAX_FILES {

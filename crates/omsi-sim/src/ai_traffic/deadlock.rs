@@ -164,6 +164,9 @@ impl TrafficSim {
     /// the module). Read from what every car noted in its plan, so the order the cars plan
     /// in decides nothing.
     pub fn resolve_waits(&mut self) {
+        if !self.cars.iter().any(|car| !car.holds.is_empty()) {
+            return;
+        }
         let n = self.cars.len();
         let index = |id: u64| self.index_of.get(&id).copied().filter(|&k| k < n);
         // (edges with their kinds; a car that follows another stands for it)
@@ -181,7 +184,7 @@ impl TrafficSim {
             }
         }
         // (cheap: most steps nobody waits at a junction)
-        if kinds.iter().all(|k| k.is_empty()) || !self.cars.iter().any(|c| !c.holds.is_empty()) {
+        if kinds.iter().all(|k| k.is_empty()) {
             return;
         }
         let edges: Vec<Vec<usize>> = kinds.iter().map(|k| k.iter().map(|e| e.0).collect()).collect();
@@ -190,7 +193,7 @@ impl TrafficSim {
                 .iter()
                 .flat_map(|&k| kinds[k].iter().filter(|e| part.binary_search(&e.0).is_ok()).map(|e| e.1))
                 .collect();
-            let red = part.iter().any(|&k| self.cars[k].light_hold);
+            let red = part.iter().any(|&k| self.cars[k].light_hold && self.cars[k].why.0 == "light");
             let standing = part.iter().all(|&k| self.cars[k].state.speed < 0.3);
             let kind = classify(red, standing, &inside);
             let members: Vec<(usize, f32, u64)> = part.iter().map(|&k| (k, self.cars[k].state.yield_time, self.cars[k].id)).collect();

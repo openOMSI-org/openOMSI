@@ -12,12 +12,15 @@ pub fn is_game_action(name: &str) -> bool {
                 | "screenshot"
                 | "photo_mode"
                 | "flashlight"
+                | "clean_screen"
+                | "get_up"
                 | "quicksave"
                 | "toggel_mouse_ctrl"
                 | "toggel_ctrler"
                 | "voice_radio"
                 | "voice_nearby"
                 | "pax_door_request"
+                | "head_tracking_recenter"
         )
 }
 
@@ -69,6 +72,42 @@ pub fn game_chord_bound(keys: &[omsi_content::KeyBinding], scan: i32, chord: i32
     keys.iter().any(|b| b.scan_code == scan && b.matches(chord) && (vr || !is_vr_action(&b.action)))
 }
 
+/// True when `code` + modifiers triggers pause (configured `sim_pause`, or plain `P` if unconfigured and free).
+pub fn is_pause_key(
+    game_keys: &[omsi_content::KeyBinding],
+    code: winit::keyboard::KeyCode,
+    shift: bool,
+    ctrl: bool,
+    alt: bool,
+    own_keys: &std::collections::HashSet<i32>,
+) -> bool {
+    let Some(scan) = crate::keys::dik_code(code) else {
+        return false;
+    };
+    let own_mod = crate::keys::own_modifier_bit(code);
+    let chord = omsi_content::input::chord(shift, ctrl, alt) & !own_mod;
+    if game_keys.iter().any(|b| b.action.eq_ignore_ascii_case("sim_pause")) {
+        return game_keys.iter().any(|b| {
+            b.action.eq_ignore_ascii_case("sim_pause")
+                && b.scan_code != 0
+                && (b.scan_code == scan || crate::keys::both_code(code) == Some(b.scan_code))
+                && (b.matches(chord) || (own_mod != 0 && b.matches(chord | own_mod)))
+        });
+    }
+    chord == 0 && is_pause_fallback(game_keys, code, own_keys)
+}
+
+/// True when `code` can fall back to built-in `P` pause (no `sim_pause` entry in `game_keys`).
+pub fn is_pause_fallback(
+    game_keys: &[omsi_content::KeyBinding],
+    code: winit::keyboard::KeyCode,
+    own_keys: &std::collections::HashSet<i32>,
+) -> bool {
+    code == winit::keyboard::KeyCode::KeyP
+        && !game_keys.iter().any(|b| b.action.eq_ignore_ascii_case("sim_pause"))
+        && crate::keys::dik_code(code).is_some_and(|scan| !own_keys.contains(&scan))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -82,6 +121,13 @@ mod tests {
         let chord = omsi_content::input::chord(true, true, false);
         assert!(!game_chord_bound(&keys, scan, chord, false));
         assert!(game_chord_bound(&keys, scan, chord, true));
+    }
+
+    /// A controller button on head tracking's recentre goes to the game, not to the bus.
+    #[test]
+    fn the_head_tracking_recentre_is_a_game_action() {
+        assert!(is_game_action("head_tracking_recenter"));
+        assert!(is_game_action("Head_Tracking_Recenter"));
     }
 
     /// The game's own vehicle keys count for any bus; a script's trigger, an alias and a
@@ -111,5 +157,31 @@ mod tests {
         assert_eq!(door_action("door_0"), None);
         assert_eq!(door_action("bus_doorfront0"), None);
         assert_eq!(door_action("door_x"), None);
+    }
+
+    #[test]
+    fn pause_key_respects_rebound_cleared_and_vehicle_keys() {
+        use winit::keyboard::KeyCode;
+        let kb = |c, m| omsi_content::KeyBinding {
+            action: "sim_pause".into(),
+            scan_code: crate::keys::dik_code(c).unwrap(),
+            modifier: m,
+        };
+        let none = std::collections::HashSet::new();
+        assert!(is_pause_key(&[], KeyCode::KeyP, false, false, false, &none));
+        assert!(!is_pause_key(&[], KeyCode::KeyP, true, false, false, &none));
+        let rebound = vec![kb(KeyCode::F6, 0)];
+        assert!(!is_pause_key(&rebound, KeyCode::KeyP, false, false, false, &none));
+        assert!(is_pause_key(&rebound, KeyCode::F6, false, false, false, &none));
+        let unbound = vec![omsi_content::KeyBinding { action: "sim_pause".into(), scan_code: 0, modifier: 0 }];
+        assert!(!is_pause_key(&unbound, KeyCode::KeyP, false, false, false, &none));
+        let p_scan = crate::keys::dik_code(KeyCode::KeyP).unwrap();
+        let own = [p_scan].into_iter().collect();
+        assert!(!is_pause_key(&[], KeyCode::KeyP, false, false, false, &own));
+        assert!(is_pause_fallback(&[], KeyCode::KeyP, &none));
+        assert!(!is_pause_fallback(&[kb(KeyCode::KeyP, 0)], KeyCode::KeyP, &none));
+        assert!(!is_pause_fallback(&rebound, KeyCode::KeyP, &none));
+        assert!(!is_pause_fallback(&unbound, KeyCode::KeyP, &none));
+        assert!(!is_pause_fallback(&[], KeyCode::KeyP, &own));
     }
 }

@@ -51,6 +51,7 @@ use omsi_career::career;
 use omsi_input::describe;
 pub(crate) use omsi_scene::editor;
 mod duty_book;
+mod first_graphics;
 mod game_lists;
 mod game_panels;
 mod game_controller_menu;
@@ -101,6 +102,7 @@ mod depot_bus;
 mod devtools;
 mod telemetry;
 mod themes;
+mod remote;
 use omsi_scene::threads;
 use omsi_scene::tiles;
 mod traffic;
@@ -136,7 +138,6 @@ mod on_foot;
 mod trolley_hands;
 mod trolley_mouse;
 pub(crate) mod trolley_net;
-mod trolley_sound;
 mod optimiser;
 use omsi_scene::route_arrows;
 mod server;
@@ -259,10 +260,9 @@ pub fn run() -> Result<()> {
             log::warn!("caught by the renderer: {info}");
             return;
         }
-        log::error!(
-            "the game stopped on an error (build {BUILD}): {info}\n{}",
-            std::backtrace::Backtrace::force_capture()
-        );
+        let backtrace = std::backtrace::Backtrace::force_capture();
+        log::error!("the game stopped on an error (build {BUILD}): {info}\n{backtrace}");
+        omsi_platform::diagnostics::panicked(omsi_platform::diagnostics::panic_report(info, &backtrace));
         default_hook(info);
     }));
     log::info!(
@@ -465,6 +465,8 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
         log::info!("sim thread: {}", if sim_thread { "the AI traffic, the people and the scenery scripts step beside the picture" } else { "off: every step on the main thread" });
     }
     let _lan_status = lan::StatusFileGuard;
+    // (a resumed bus loads its saved sheet by full path before any sheet is made this run)
+    omsi_scene::schedule_paper::trust_cache_dir();
     // OMSI's tutorials: the lesson's own situation
     if let Some(n) = args.tutorial.filter(|n| (1..=4).contains(n)) {
         args.situation = Some(tutorial::SITUATIONS[n - 1].to_string());
@@ -493,6 +495,9 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     season_phase::apply_season_date(&mut args);
     if args.export_glb.is_none() && args.lan_join.is_none() {
         place_on_duty(&mut args);
+    }
+    if server_cfg.is_none() && args.export_glb.is_none() {
+        omsi_platform::diagnostics::game_started();
     }
     let settings = settings::Settings::load();
     applog::log_system(&settings);
@@ -543,6 +548,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     }
     if let (Some(cfg), Some(l)) = (server_cfg.as_ref(), lan.as_ref()) {
         lan::open_public_gateway(l, server::info_of(cfg, &args.root), cfg.web_port, cfg.tunnel);
+        server::announce_fleet(cfg, &args.root);
         lan::publish_vehicles(args.root.clone(), cfg.vehicles.clone());
         server::start_public_list(cfg);
         if cfg.tunnel {
@@ -660,6 +666,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             mirror_hud: Default::default(),
             window_hidden: false,
             route_arrows: Default::default(),
+            plugin_cables: Default::default(),
             hidden_frames: 0,
             stand_in: None,
             sim_view: Default::default(),
@@ -708,6 +715,8 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             autosave_t: 0.0,
             pumping: None,
             career: Default::default(),
+            depot_base: Default::default(),
+            depot_prev: None,
             journey: None,
             wetness: 0.0,
             cloud_drift: [0.0; 4],
@@ -723,6 +732,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             list_dirty: false,
             graphics_before: None,
             page_titles: Default::default(),
+            online_weather: Default::default(),
             chooser: None,
             editor: None,
             vehicle_list: Vec::new(),
@@ -742,6 +752,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             pane_scroll_drag: None,
             pane_scroll: None,
             teleport_pick: false,
+            map_place_from: None,
             game_panels: Default::default(),
             tutorial: None,
             wheel_acc: 0.0,
@@ -756,6 +767,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             menu_prev_pause: false,
             info_bar,
             timetable: false,
+            clean_screen: false,
             hud_resize: None,
             notices: Vec::new(),
             note_watch: Default::default(),
@@ -765,8 +777,10 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             menu_edit_number: false,
             menu_edit_ident: false,
             menu_edit_search: false,
+            streets_seen: 0,
             menu_search: String::new(),
             swap_pending: false,
+            swapped_in: None,
             pending_placement: None,
             menu_drag: None,
             menu_kbd: true,
@@ -781,13 +795,16 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             head_idle_hold: Default::default(),
             ego: false,
             flashlight: false,
+            flashlight_aim: None,
             in_cab: false,
+            heard_inside: false,
             look: (0.0, 0.0),
             look_smooth: (0.0, 0.0),
             view_looks: Default::default(),
             look_view: String::new(),
             cam_blend: Default::default(),
             view_zoom: Default::default(),
+            zoom_hold: Default::default(),
             cam_zooms: Default::default(),
             orbit: ORBIT_DEFAULT,
         },
@@ -796,6 +813,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
         sound: SoundState {
             radio,
             milezero: Default::default(),
+            switch_sound: Default::default(),
             audio: None,
             ambience: None,
             soundscape: None,
@@ -821,6 +839,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             pad_look: [false; 4],
             pad_repeat: Vec::new(),
             pad_voice_radio: false,
+            pad_zoom_hold: false,
             pad_voice_nearby: false,
             arrow_glance: false,
             headtrack: None,
@@ -838,6 +857,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             cruise: None,
             look_lock: None,
             cursor_hidden: None,
+            cursor_stale: false,
             last_ctl_steer: None,
             mouse_pedals: (0.0, 0.0),
             mouse_kmh: 0.0,
@@ -869,7 +889,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             plugin_command: false,
             plugin_panels: Default::default(),
             discord: None,
-            discord_t: 0.0,
+            discord_t: 0.0, discord_max: Default::default(),
             #[cfg(steam)]
             steam,
             update_watch,
@@ -877,6 +897,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             plugins: None,
             vehicle_scripts_of: None,
             object_scripts: Default::default(),
+            remote: Default::default(),
         },
         net: NetState::default(),
         service_msg: clock_note.map(|m| (m, 10.0)),

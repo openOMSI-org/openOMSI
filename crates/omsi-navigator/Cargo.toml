@@ -10,6 +10,7 @@ omsi-cfg = { path = "../omsi-cfg" }
 omsi-lan = { path = "../omsi-lan" }
 omsi-map = { path = "../omsi-map" }
 omsi-mapdraw = { path = "../omsi-mapdraw" }
+omsi-model = { path = "../omsi-model" }
 omsi-render = { path = "../omsi-render" }
 omsi-scene = { path = "../omsi-scene" }
 omsi-sim = { path = "../omsi-sim" }

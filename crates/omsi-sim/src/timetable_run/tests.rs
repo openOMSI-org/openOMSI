@@ -204,6 +204,42 @@ fn the_ibis_stands_at_the_trips_first_stop_on_a_route_that_begins_before_it() {
     assert_eq!(target.stop, 1);
 }
 
+#[test]
+fn ibis_target_finds_encoded_hof_routes_for_night_and_express_lines() {
+    let terminus = |code: i32, tex: &str, s: &str| omsi_vehicle::hof::Terminus {
+        code,
+        texture_id: tex.into(),
+        strings: vec![s.into()],
+        ..Default::default()
+    };
+    let trip = |code: &str, name: &str, route: &str, line: &str| omsi_vehicle::hof::InfoTrip {
+        code: code.into(),
+        name: name.into(),
+        route: route.into(),
+        line: line.into(),
+        ..Default::default()
+    };
+    let hof = omsi_vehicle::Hof {
+        termini: vec![
+            terminus(712, "Birkenweg", "Birkenweg"),
+            terminus(154, "Gatow", "S+U Rathaus Spandau"),
+        ],
+        info_trips: vec![
+            trip("91502", "N15 -> Birkenweg", "712", "915"),
+            trip("93402", "Gatow", "154", "934"),
+            trip("53402", "X34", "154", "534"),
+        ],
+        info_busstop_lists: vec![vec![], vec![], vec![]],
+        ..Default::default()
+    };
+    let n15 = ibis_target(&hof, "N15", "Birkenweg", &[], None).expect("N15 target");
+    assert_eq!((n15.line, n15.suffix, n15.route), (915, 35, Some(2)));
+    let n34 = ibis_target(&hof, "N34", "S+U Rathaus Spandau", &[], None).expect("N34 target");
+    assert_eq!((n34.line, n34.suffix, n34.route), (934, 35, Some(2)));
+    let x34 = ibis_target(&hof, "X34", "S+U Rathaus Spandau", &[], None).expect("X34 target");
+    assert_eq!((x34.line, x34.suffix, x34.route), (534, 36, Some(2)));
+}
+
 fn link(a: i64, b: i64) -> Option<f64> {
     // 100 m between neighbours, 300 m from 3 to 4
     Some(if (a, b) == (3, 4) { 300.0 } else { 100.0 })
@@ -806,4 +842,14 @@ fn a_tour_bus_takes_a_trip_on_only_at_its_start() {
     // the same trip again: the bus stands on its last lane
     assert_eq!(tour_entry(&route, 16), None);
     assert_eq!(tour_entry(&route, 99), None);
+}
+
+#[test]
+fn people_still_turn_up_for_a_bus_some_minutes_late() {
+    use crate::timetable_run::sim::pax_turn_up_for;
+    let now = 10.0 * 3600.0;
+    assert!(pax_turn_up_for(now - 7.0 * 60.0, now));
+    assert!(pax_turn_up_for(now + 10.0 * 60.0, now));
+    assert!(!pax_turn_up_for(now - 20.0 * 60.0, now));
+    assert!(!pax_turn_up_for(now + 20.0 * 60.0, now));
 }

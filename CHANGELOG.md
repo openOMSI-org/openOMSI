@@ -8,6 +8,75 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **Apple MetalFX upscaling on a Mac**: Settings → Graphics → Upscaling offers *Apple MetalFX* on a Mac with Apple silicon (macOS 13 or newer), with the same quality levels as NVIDIA DLSS and AMD FSR 3 on Windows: the picture is drawn smaller and brought up to the window with the help of the last frames, in place of the anti-aliasing and the render scale, from the next start. It is part of macOS, so there is nothing to install. Where the Mac's graphics chip scales up less than Ultra performance asks for, the picture is drawn at the smallest size it takes.
+- **Rename a save**: the pencil beside a save slot in the launcher's *Continue* list gives it a name of your own, without editing its `.osn` file in the map's `Saves` folder. Saving over that slot in the game keeps the name (#3849).
+- **AI reaction time**: the new `ai_reaction` setting (25 to 200 %, default 100 %, a slider in the launcher's Traffic settings) scales how long the AI drivers wait before moving off, so a queue at a light pulls away closer together at a lower value. It never goes under 0.4 s, the shortest reaction the junction code is built for (#3793).
+- **What's new in the launcher**: after an update the launcher shows the notes of every
+  version since the one last seen, opened, and the others folded below them; *What's new*
+  beside *Check now* (Settings) opens them at any time, and the offer of an update shows that
+  version's notes before it is installed. The notes come from the releases on GitHub; links in
+  them open in the browser, and only https ones.
+- **Remote cockpit on a phone or tablet**: the game serves a page on your home network
+  (Options > Interface > Remote cockpit, off until switched on); scan the QR code or type the
+  address and the 6-digit code, and the phone or tablet shows a dashboard with the map and the
+  route, the bus's own buttons (every door, lights, indicators, kneeling...), its real
+  destination sign, a touch steering wheel and pedals, and a layout editor per bus. Nothing to
+  install, nothing leaves the network.
+- **Mouse steering keeps the system cursor in the window**: with *Hold the cursor while steering*
+  off, the cursor is the system's own (no frame of delay) and now stays inside the game window
+  while the mouse steers, so a hard turn no longer lets it slip onto another screen (Windows and
+  Linux; macOS keeps it free as before).
+- **Place the bus facing the way you want**: on the city map, Ctrl+drag from the place towards
+  the way the bus should face (a plain Ctrl+click keeps the nearest street's direction); in the
+  map camera (F4), Ctrl+click puts the bus on the street facing the way the camera looks, as in
+  OMSI 2.
+- **Go anywhere on foot from the city map**: Alt+click a place on the city map and you stand
+  there on foot; from the driver's seat you get up first, and the bus stays where it is.
+- **The radio from the Alt menu**: a Radio tile opens a small panel with what plays, the volume,
+  on and off, the station before and after, quieter and louder - for buses whose radio has no
+  volume knob or no switch of its own.
+- **Seat, view and mirrors from the Alt menu**: the quick menu has a tile that opens the panel
+  for the driver's eye, view and mirrors of the bus, without going through the options.
+- **Cleaner photos**: the photo mode hides the route arrows by itself (they come back when you
+  leave it) and its panel has a Hide (H) button at the top.
+- **More traffic for strong computers**: the game's Traffic slider (World options) and the launcher's
+  *Cars around* go on past 120 to 160, 220 and 300 vehicles, for busy maps and rush hours; more
+  cars cost frames and can jam junctions, so 120 stays the top of the usual range. Dedicated
+  servers keep their limit of 120.
+- **Your depot buses in the game**: the game menu's *Place a vehicle* lists the buses of your depot
+  first (*My depot: name | plate*). One taken replaces the bus driven, with its livery, fleet
+  number, plate, odometer and wear; the session is written back to it when it ends, and the time
+  spent in the bus driven before goes to that one (when it was a depot bus too).
+- **Choose which notes show**: under *Notes in the top-left corner* (launcher, game options, Apple
+  app) four switches turn off one kind each - why the bus does not move, the bus's own messages
+  (the announcements among them), the end of a trip, tickets and change - while the rest stay.
+- **Only the buses on the map, if you like**: under "AI vehicles on the map", *Cars on the map too*
+  (`nav_ai_cars`, launcher and game options) can be switched off: the navigator and the city map
+  then show the traffic's buses and trolleybuses, not the cars.
+- **Getting up has a key of its own**: *Get up from the seat (on foot)* is in the Controls'
+  list (keyboard and controllers), on Ctrl+Shift+G as before; it can be moved to another key or a
+  controller button, and the old built-in Ctrl+Shift+G gives way to it.
+- **A flash of the high beam waves the traffic on**: flash the headlights (high beam on for under
+  a second and a half) and for six seconds the cars that were waiting for your bus - at a junction,
+  or holding back for where the bus is about to go - take their turn first. They still stop for
+  the bus itself.
+- **The Alt menu stays open**, as in OMSI 2: a tile that does its work in place (route arrows,
+  refuel, repair, wash, reset, a screenshot...) leaves the menu open on its page, so the next
+  tile is one click away; Alt or Esc closes it. A tile that opens a list, a panel, the city map
+  or the photo mode still hands over to it.
+- **Set the world to the time it is now**: World options › Traffic and people has *Set to the time it
+  is now*: the timetable buses are put out again for the current time and the people waiting at
+  the stops are taken off; the stops fill again as people walk up, as many as the hour wants -
+  after changing the time by a little, or whenever the stops are fuller than the hour wants.
+- **Finer moves in the photo mode**: Alt now slows the turning as well as the moving (to a
+  quarter), for the small adjustments of a zoomed-in shot, and the camera rises and sinks at half
+  the speed it moves along, so it can be lowered to a kneeling height without overshooting.
+- **Several AI vehicles at once**: in Settings › AI Lists, the vehicle picker for adding to a group,
+  a depot or a line has a tick box on each vehicle; tick several and *Add the n ticked* adds them
+  all in one go (one click still previews, a double click still adds one).
+- **Long lists in the launcher filter as you type**: a drop-down with more than twelve entries
+  (the liveries, the depot files, the languages...) shows a search line at its top; typing
+  narrows it down, Backspace and Esc undo the search.
 - **Enhanced has options of its own, and the quality presets cross the modes.** Enhanced+ is no
   longer a mode: it is Enhanced with *Real-Time Ray Tracing* switched on (`ray_tracing=1`; a
   `graphics=enhanced_plus` file reads as that, and `--enhanced-plus` still asks for it for a run).
@@ -32,6 +101,11 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 - **Wet roads and water mirror the street** (Enhanced): the sheen of a wet road and still water
   trace what stands round them in screen space at their Fresnel share, not only the pools - the
   lit windows and lamps of a street stream down a wet road at night.
+- **A clean screen (Alt+U)**: the navigator, the virtual mirrors, the notes and the panels go away
+  while you drive, for a free view of the road or a quick picture; Alt+U again brings them back.
+  The menu, the city map and a plugin's permission question still show over it. It is in the
+  Controls' list as *Hide / show the whole interface*, so it can be moved to another key or a
+  controller button (`clean_screen` in keyboard.cfg's `[game]`).
 - **A flashlight (Alt+F)**: a hand lamp held beside the eye that shines where the view looks, a
   warm white cone reaching 50 m with a soft edge, in the Vanilla and the Enhanced pictures, in
   every view, by night in the dark or by day inside a dim cab. `flashlight` in keyboard.cfg's
@@ -520,9 +594,49 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   50 km/h, understeers a little at 80 km/h (yaw rate 0.92-0.98 of the geometry's), loses its hold
   across on a locked or spinning wheel. `cargo run -p omsi-sim --example handling -- <file.bus>...
   --kmh 50 [--realistic]` compares the two models; `OMSI_REALISTIC_ROAD=1` turns it on for one run.
+- **The driver can sit as in OMSI 2**: Settings → Camera → Driver's view (and the options menu in the game) has *Driver sits as in OMSI 2*, off by default. On, the driver sits back on his seat with his hands off the wheel, as in OMSI 2; off, he moves up and leans forward to hold the wheel, as before. It can be switched while driving.
 
 ### Fixes
 
+- **Vehicle-actuated traffic lights wait before the stop, not in the yellow**: a stop whose
+  request is present now holds the clock at the phase before it, so a queue can no longer
+  leave a light stuck on yellow; an exact stop time still holds, and a jump at the same time
+  is taken first. This fixes the traffic light at Ahlheim V5's Eichenhöhe Bahnhof
+  ([#2947](https://github.com/openOMSI-org/openOMSI/issues/2947)).
+- **The outside view (F3) starts straight behind the bus**, a little above it, as in OMSI 2,
+  instead of three quarters from the side. It still keeps the angle you leave it at, and Space
+  puts it back behind the bus.
+- **No more slivers of sky at crossings of raised roads** (Nova Friburgo, since 0.3.42): where
+  the ground cannot be fitted to roads it should follow, only the roads the ground covers (a
+  ditch) are cut out of it, not those lying on it.
+- **Window films and tinted glass of Brazilian buses show again**: a number written in an
+  `[alphascale]` in place of a variable's name (`[alphascale] 0.9`, as the LFD Caio Apache
+  Vip V's window film, its outer and its frosted glass have it) is that opacity, as a number
+  already is for lamps and interior lights. Read as a variable that does not exist it was 0,
+  and those panes were not drawn at all. Panes named in Portuguese (`vidro`, `janela`,
+  `parabrisa`) are now known as glass, as those named in the other languages.
+- **A junction left deep under the ground no longer digs a pit**: a `[terrainhole]` cutter that lies
+  wholly more than ten metres under the ground cuts nothing now. Berlin-Spandau has a stray
+  copy of `Einm_Poststr_Poststr` at height zero in the corner of a tile near Falkensee Bahnhof;
+  its cutter opened a pit thirty metres deep in the field, walled with tall strips of ground.
+  Tunnels and underpasses, whose cutters reach the ground or lie a few metres under it, cut as before.
+- **No more towers of ground at the end of a road**: where the ground is fitted to a road, the side of a
+  kerb - a nearly vertical face - gave the blend a slope of tens of thousands, and the ground rose
+  more than a kilometre in thin strips at the end of the road (Berlin-Spandau, Hansastrasse near
+  Falkensee Bahnhof). The slope a rim hands to the ground is now limited to about 72 degrees.
+- **A key or a wheel's button can recentre head tracking**: *Head tracking: centre again* takes
+  where your head is now as the middle (opentrack, native TrackIR and a Tobii eye tracker), without
+  putting the view straight as F1 does. It is on the keys list without a key; a button that already
+  had it in `gamectrler.cfg` did nothing until now.
+- **The flashlight no longer follows a hidden cursor**: with *Flashlight follows the cursor* on,
+  the cursor hidden while a controller drives still steered the beam; now the beam shines
+  straight ahead until the mouse brings the cursor back.
+- **The map's own sounds are quieter inside the bus**: birds, church bells, fountains and the
+  other sounds of the scenery are heard through the bus's bodywork in a cab view, louder as the
+  doors and windows open, as the AI traffic already was; outside they keep their full volume.
+- **Yesterday's night tours are offered only for their trips past midnight**: a Friday tour that
+  runs into the night was listed and drivable all Saturday, and a Sunday one all Monday; now it
+  counts by Friday's (Sunday's) clock, so it shows only until its last trip after midnight ends.
 - **Each graphics profile is a file of its own.** The launcher kept them all in one
   `graphics_profiles.json`: a file that could not be read counted as having none, and the next
   profile kept was written alone over the file, taking the rest with it. They are now in
@@ -591,6 +705,34 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   junction). The standing car now drives on after a few seconds. And a route's lane change that
   the bus missed its window for (the two lanes no longer run side by side) is made all the same
   after 12 s of waiting instead of never. `OMSI_DEBUG_STUCK` also says why a lane change waits.
+- **A zoom on a key.** *Zoom while held* (Controls › Views, no key by default, a controller
+  button too) narrows the view while it is held - to read a far sign, a mirror or the
+  dashboard - and lets go when released; *Zoom on a key* sets how far (1.25x to 5x, 2x by
+  default) and *Zoom key stays* makes one press zoom in and the next zoom out (#3114).
+- **Short rides stand by a door.** With *Short rides stand by a door* on (Options › Gameplay and
+  the launcher's passenger settings, `pax_short_rides_stand`, off by default), a passenger with
+  no set stop who rides under about three kilometres takes the free standing place nearest an exit
+  of their car instead of a seat; with no standing place free, they board as before (#2242).
+- **A new livery without a new bus.** Vehicle options › *Livery* lists the bus's liveries (with a
+  search, as the launcher's list); the one chosen is painted onto the bus you drive where it
+  stands, with its passengers, trip, odometer and fuel as they were (#3638).
+- **Graphics that fit the computer from the first start.** On a first start (no settings file,
+  no drive and no map loaded before), the game
+  picks a quality preset from its best graphics chip before it opens the window's renderer: Low
+  for software renderers, Intel HD / UHD chips and cards under 3 GB, Medium for other integrated
+  chips and cards of 3 to 6 GB, High for 6 GB cards and Apple chips, Extra from 10 GB - and says
+  so once. A player's
+  own settings are never touched (#3643).
+- **The view editor looks at the mirror being set.** Moving a mirror's slider turns the driver's
+  head to that mirror, so it shows beside the editor while it is set; another line or closing
+  the editor brings the head back to where it was (#3640).
+- **A flashlight that follows the cursor.** With *Flashlight follows the cursor* on (Options ›
+  Camera, the launcher; off by default), the flashlight lights where the mouse cursor points while
+  the cursor is free - on foot, or in the cab while the mouse does not steer - and straight ahead
+  otherwise (#3641).
+- **Find a street by its name.** The game menu has *Find a street...*: the map's streets (named
+  from its street name signs) in a list with a search; the one picked opens the city map centred
+  on it, its name drawn larger in orange (#3639).
 - **On foot, the player walks wherever the passengers' paths lead**: a staircase, a ramp, a gate
   through a fence or a doorway the map gives the AI passengers is now walkable by hand too, at
   the path's height (the step and slope limits and the walls no longer stop the walker on a
@@ -933,7 +1075,86 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   objects run, and fade out over the last part instead of stopping dead at 300 m ([#2534](https://github.com/openOMSI-org/openOMSI/issues/2534)).
 - Shader tests cover OpenGL ES 3.1/3.2 per entry point and catch the nested constant-array
   lookups the Adreno 710 refused ([#2009](https://github.com/openOMSI-org/openOMSI/issues/2009)).
+- **Static buses of Praha 200 no longer lose their outer skin**: a mesh from the Blender exporter was turned round as a mirrored one when its matrix (the quarter turn about x that thousands of ordinary meshes carry) was positive and its normals faced against its faces, so the IVECO buses at Letnany station showed their inside; Omsi.exe draws such a mesh as wound.
 ### Multiplayer
+
+- **The map's timetable buses show their fleet number, plate and the right destination for
+  every player**, not only on the server or the hosting game: the host now tells each player
+  the number and plate it drew for a bus and the depot file it reads its signs from. A player's
+  copy showed no number and read the destination in the depot file that player chose for their
+  own bus, so it showed another sign.
+- **People no longer vanish in front of the players of a server.** When the pool of people
+  (`ai_max_humans`) is full, somebody walking or standing out of sight is taken to make room,
+  as in OMSI 2. A dedicated server judged "out of sight" from its own camera, where nobody
+  plays, so it took people standing beside the players - passengers who had just got off a
+  bus among them. Now nobody near any player is taken.
+- **A server sets its own AI limits** in `server.cfg`: `ai_unsched_factor` (the random
+  traffic, percent of the map's density), `ai_max_scheduled`, `ai_max_parked` and
+  `ai_max_humans`, as the game's options have them. Left empty, the machine's `settings.cfg`
+  says, as before. They count for the whole server, so a busy one can raise them.
+- **A server that cannot keep up keeps the day.** Its world clock (the day, the timetable,
+  what the players are told) moved with its physics steps, so a server short of CPU fell
+  behind the day for good, silently: at half its steps, half a day's timetable in a day. It
+  follows the wall now, at most twice as fast while it takes back what it lost; the physics
+  still take their fixed steps, and the log says when the machine cannot keep up.
+- **The launcher shows a server's date** beside its time and weather (in the list and before
+  joining), from the server's status page (`date`); an older server shows none.
+- **Joining a busy server is quicker.** A player loading holds one of the eight loading
+  slots only while their game is heard from: one closed or stuck no longer keeps the others
+  waiting for two minutes.
+- **A server still loading its world lets players in once it is ready**, telling them it is
+  loading (an older game is told to try again); before, one let in met an empty world.
+- **A game joining through a server's tunnel tries its direct address first**, which a quick
+  tunnel's breaking connections do not touch, and keeps the tunnel if it does not answer within
+  three seconds. The server finds the address by itself: its own internet address, else the
+  one the internet sees if it reaches itself there - never behind a carrier's NAT (CGNAT), so
+  nobody waits on an address that cannot answer. `public_address` in `server.cfg` names
+  another, or `off` tells none.
+- **Many players fetching buses at once no longer take a server's CPU.** Every piece of a bus
+  was packed the moment it was asked for, on the thread of its connection (up to 160 of them),
+  and once more for every player who asked: players downloading together packed on every core,
+  and the server's traffic and people fell behind. A quarter of the cores pack at most, the
+  others' downloads wait their turn, and a piece packed is kept for the next player. A bus a
+  player sends a dedicated server is packed at its smallest at once, in the background, so the
+  others fetch it ready.
+- **A server's fleet bus is listed once, not once per player.** A player asking for a bus of
+  the server's fleet had the server load it and read every file of every paint again (the
+  seconds a bus takes in the fleet check), once for each paint asked for: many players at once
+  took every core. The list the fleet check made at the start is given instead, while the bus's
+  files are as they were; a list to make again is made by one request at a time.
+- **The launcher says why a game could not host.** When a game started to host by code could
+  not open its session (its port taken by another program, or refused by a firewall or an
+  antivirus: since 0.3.47 it reserves a TCP port for its mods beside the UDP one, and checks
+  it reaches itself there), Invite friends waited for a code that never came, without a word.
+  It now shows the game's reason.
+- **The map's buses show the server's signs on every player.** The server sends each player
+  the depot file (`.hof`) its AI buses use (else the one of that name in `HOFs`), and the
+  player's game draws those buses with it, whatever depot files it has itself.
+- **Multiplayer protocol 17.** A game of this version and a server of this version play
+  together; older ones are turned away at the door, as at every protocol change.
+- **A dedicated server opens its web port at once, before checking its fleet.** With a
+  `vehicles` list, the server read and hashed every file of every bus and paint before the
+  WebSocket gateway opened, so for minutes `/status`, the players and the admin page were
+  refused. The gateway now opens first and the fleet is announced when the check is done (players
+  who join meanwhile see a server without one, as before 0.3.47). The check itself is faster:
+  four buses at a time, each `.bus` loaded once, the hash cache read once, a bus's files gathered
+  once for all its paints and each folder read once (on a real server a list of 15 buses with
+  113 paints took about 26 s). The log tells per bus its paints and where its time went, and
+  names every bus it could not offer and why.
+- **`ai_drive_through_parked`** (`server.cfg`, `--ai-drive-through-parked` for a game): the AI
+  traffic drives on through a parked car standing in its lane, as OMSI 2's does, instead of
+  stopping behind it and going round it when it can. For maps where a parked car stands in the
+  lane with no way round and holds the traffic behind it for good. Off by default: nothing
+  changes unless it is set.
+- **A game taking its bus from the server's fleet waits to be let in** (up to two minutes more)
+  instead of starting without the bus while a busy server admits other players first, and says
+  so if it is never let in.
+- **Sound events no longer flood a server through a tunnel**: one not acknowledged is sent again
+  ever less often (0.1 s doubling up to 2 s), and acknowledgements have a rate of their own on the
+  server.
+- **A bus taken from the server's fleet is known by the server's version of it**, a copy of a font
+  file beside the original no longer makes a bus another version, and a refused upload names the
+  files that differ.
 
 - **Voice chat, built in** - off until switched on (Settings → Sound → *Voice chat*, or the game
   menu's Sound page). Hold a talk key to speak: *nearby* (V) is heard by the players within

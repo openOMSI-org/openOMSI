@@ -21,7 +21,7 @@ pub mod clouds;
 mod cookies;
 pub use cookies::{Cookie, COOKIE_LAYERS};
 mod gpu_memory;
-pub use gpu_memory::{Ceiling, GpuMemory};
+pub use gpu_memory::{card_vram_mb, Ceiling, GpuMemory};
 mod passes;
 mod device_selection;
 use passes::{Encoders, FrameArgs, FrameEnv, PassTimers, StageClock};
@@ -43,6 +43,7 @@ mod scene;
 mod sky;
 mod surface;
 mod targets;
+pub mod temporal;
 mod uniforms;
 mod view;
 pub(crate) use frame_plan::*;
@@ -55,6 +56,8 @@ pub(crate) use shaders::*;
 pub use sky::*;
 pub use surface::*;
 pub(crate) use targets::*;
+pub use temporal::{Temporal, TemporalQuality, TemporalUpscaler};
+pub(crate) use temporal::{temporal_mip_bias, TemporalFrame, TemporalPipelines, TemporalState, TEMPORAL_MASK_FORMAT, TEMPORAL_MOTION_FORMAT};
 pub use uniforms::*;
 pub use view::*;
 pub use triple::{panel_width, ScreenView, TripleScreen};
@@ -149,11 +152,23 @@ pub struct Renderer {
     /// Plain opaque, alpha-tested, and the opaque portions of blended transmap materials;
     /// each has a two-sided and a culled variant.
     prepass_pipelines: [wgpu::RenderPipeline; 6],
+    /// Temporal upscaling: the prepass with motion vectors (made when it is asked for), the
+    /// upscaler and its targets once the first frame started it, whether it could not, and
+    /// whether the picture being drawn is the window's own (`render`: the one it is for).
+    temporal_pipes: Option<TemporalPipelines>,
+    temporal: Option<TemporalState>,
+    temporal_failed: bool,
+    temporal_window: bool,
+    temporal_kept: Option<temporal::Runtime>,
+    /// The frame's numbers, waiting for `temporal_present` at the end of it.
+    temporal_pending: Option<TemporalFrame>,
     /// The same, at the main pass's sample count (colour writes off):
     /// its own depth laid first (see `encode_prefill`), so that its costly shading runs
     /// once per visible surface.
     prepass_msaa_pipelines: Option<[wgpu::RenderPipeline; 6]>,
     prepass_eye_pipelines: Option<[wgpu::RenderPipeline; 6]>,
+    pane_mask: Option<pipelines::scene::PaneMaskPipelines>,
+    pane_depth: Option<((u32, u32), wgpu::TextureView, wgpu::BindGroup)>,
     /// The ground albedo pass's pipelines (see `SceneBase::ground_pipeline_at`); none where
     /// the enhanced path is left out or on OpenGL.
     ground_pipelines: Option<[wgpu::RenderPipeline; 8]>,
@@ -283,6 +298,12 @@ pub struct RenderOptions {
     pub render_scale: f32,
     /// Experimental FSR1 spatial upscaler (at the start, or later with `set_upscaler`).
     pub fsr1: bool,
+    /// NVIDIA DLSS, AMD FSR 3 or Apple MetalFX instead of multisampling, FXAA and the render
+    /// scale: DirectX 12 or Vulkan with the vendor's DLLs beside the game, or Metal on a Mac
+    /// (see `temporal`). Elsewhere, or when it cannot start, the picture is drawn as without it.
+    pub temporal: Option<Temporal>,
+    /// The player's MSAA while an upscaler has taken its place.
+    pub msaa_fallback: u32,
     /// RCAS sharpening strength, from 0 (none) to 1.
     pub fsr_sharpness: f32,
     /// VR: each eye is drawn at this fraction of its headset image and scaled up to it (by
@@ -354,7 +375,9 @@ pub struct RenderOptions {
     /// The glare round bright lights and the lamps' halo in the night air (the settings'
     /// `light_glow`).
     pub light_glow: bool,
+    pub puddle_reflections: bool,
     pub max_scene: Option<(u32, u32)>,
+    pub detailed_trees: bool,
 }
 
 impl Default for RenderOptions {
@@ -366,6 +389,8 @@ impl Default for RenderOptions {
             ssao: true,
             render_scale: 0.0,
             fsr1: false,
+            temporal: None,
+            msaa_fallback: 0,
             xr_scale: 1.0,
             fsr_sharpness: 0.8,
             compress_textures: true,
@@ -386,7 +411,9 @@ impl Default for RenderOptions {
             light_shadows: 1,
             cloud_shadows: false,
             light_glow: false,
+            puddle_reflections: true,
             max_scene: None,
+            detailed_trees: false,
         }
     }
 }
@@ -421,7 +448,7 @@ const MASK_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const GBUF_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 const AUX_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Float;
 /// The renderer is built for Enhanced+: its HDR pipelines and targets have the two above.
-static RT_GBUF: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static RT_GBUF: crate::AdapterBool = crate::AdapterBool::new(6);
 fn rt_gbuf() -> bool {
     RT_GBUF.load(std::sync::atomic::Ordering::Relaxed)
 }
@@ -604,6 +631,14 @@ impl Renderer {
 
     /// The size the 3D scene is drawn at for a window of this size.
     pub fn scene_size(&self, width: u32, height: u32) -> (u32, u32) {
+        if let Some(t) = self.options.temporal.filter(|_| self.temporal_pipes.is_some() && !self.temporal_failed) {
+            return temporal::fallback_render_size(t.quality, (width, height));
+        }
+        self.scaled_size(width, height)
+    }
+
+    /// `scene_size` by the render scale alone: what a picture no upscaler takes is drawn at.
+    pub(crate) fn scaled_size(&self, width: u32, height: u32) -> (u32, u32) {
         let s = self.scene_scale(width, height);
         if s >= 0.999 {
             return (width, height);

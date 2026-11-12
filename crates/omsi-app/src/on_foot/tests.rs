@@ -125,6 +125,31 @@ fn kneeling_lowers_the_eyes_and_slows_the_walk() {
 }
 
 #[test]
+fn an_ai_bus_is_ridden_from_its_inside_only_in_the_walkers_own_eyes() {
+    let mut f = walker();
+    assert_eq!(f.ridden_ai(), None);
+    f.inside = Some((BusId::Ai(7), glam::Vec3::ZERO));
+    assert_eq!(f.ridden_ai(), Some(7));
+    f.inside = None;
+    f.seat = Some((BusId::Ai(7), 2));
+    assert_eq!(f.ridden_ai(), Some(7), "seated");
+    f.cam = FootCam::Free;
+    assert_eq!(f.ridden_ai(), None, "the free camera flies outside");
+    f.cam = FootCam::First;
+    f.settle = 0.5;
+    assert_eq!(f.ridden_ai(), None, "still settling");
+    f.settle = 0.0;
+    f.seat = None;
+    f.transit = Some(Transit::walk(DVec3::ZERO, DVec3::X, Some((BusId::Ai(7), glam::Vec3::ZERO))));
+    assert_eq!(f.ridden_ai(), Some(7), "walking up the aisle");
+    f.transit = Some(Transit::walk(DVec3::ZERO, DVec3::X, None));
+    assert_eq!(f.ridden_ai(), None, "stepping out");
+    f.transit = None;
+    f.seat = Some((BusId::Player, 2));
+    assert_eq!(f.ridden_ai(), None, "the own bus");
+}
+
+#[test]
 fn the_walker_gets_up_to_pace_and_stops_over_steps_not_at_once() {
     let mut v = DVec2::ZERO;
     let want = DVec2::new(0.0, 1.4);
@@ -157,4 +182,36 @@ fn a_turn_is_a_curve_with_no_speed_lost_to_a_snap() {
         last = v;
     }
     assert!((v - want).length() < 1e-9);
+}
+
+#[test]
+fn g_on_foot_sits_down_unless_it_is_the_get_up_chord() {
+    use omsi_content::input::{KEY_CTRL, KEY_SHIFT};
+    let bind = |modifier| vec![omsi_content::KeyBinding { action: "get_up".into(), scan_code: 34, modifier }];
+    let default = bind(KEY_CTRL | KEY_SHIFT);
+    assert!(super::get_up_chord(&default, true, true), "Ctrl+Shift+G steps out");
+    assert!(!super::get_up_chord(&default, false, true), "Shift+G while running sits down");
+    assert!(!super::get_up_chord(&default, true, false));
+    assert!(!super::get_up_chord(&default, false, false));
+    assert!(super::get_up_chord(&bind(KEY_CTRL), true, false), "moved to Ctrl+G");
+    assert!(!super::get_up_chord(&[], true, true), "unbound: the walker keeps G");
+}
+
+#[test]
+fn foot_key_keeps_screenshot_chord_and_rebound_pause() {
+    let mut app = crate::assemble_app(
+        <crate::cli::Args as clap::Parser>::parse_from(["openomsi"]),
+        Default::default(),
+    );
+    app.session.on_foot = Some(walker());
+    let f6_scan = omsi_input::keys::dik_code(KeyCode::F6).unwrap();
+    app.input.game_keys.retain(|b| !b.action.eq_ignore_ascii_case("sim_pause"));
+    app.input.game_keys.push(omsi_content::KeyBinding {
+        action: "sim_pause".into(),
+        scan_code: f6_scan,
+        modifier: 0,
+    });
+    assert!(!app.foot_key(KeyCode::KeyP, true, false, true, true));
+    assert!(app.foot_key(KeyCode::KeyP, true, false, false, false));
+    assert!(!app.foot_key(KeyCode::F6, true, false, false, false));
 }

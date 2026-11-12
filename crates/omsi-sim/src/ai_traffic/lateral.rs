@@ -265,6 +265,9 @@ impl TrafficSim {
             return None;
         }
         if !st.route.is_empty() {
+            if car.next_stop().is_some_and(|(ri, s)| ri == st.route_index && self.net.lanes[st.lane].length() - s >= 8.0) {
+                return None;
+            }
             let (to, dir) = st.route_change_due(&self.net)?;
             return Some(Required { need: Need::Route, to: Some((to, dir)), end: f32::MAX });
         }

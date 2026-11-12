@@ -26,9 +26,12 @@ nothing is drawn. `server.cfg` is written with a comment for every key on the fi
 | `time_speed`, `real_time` | how fast the clock runs (1 to 30), or the machine's real date and time |
 | `metar_sync`, `metar_station` | the weather follows an airport's METAR report (ICAO code; empty: the one nearest the map), downloaded every ten minutes and passed on to the players |
 | `traffic`, `timetable`, `passengers`, `passenger_density` | AI cars, timetable buses, waiting passengers and how many of them (below) |
+| `ai_drive_through_parked` | `1`: the AI drives on through a parked car standing in its lane, as OMSI 2's does, instead of stopping behind it and going round it when it can (for maps where a parked car stands in the lane with no way round); `0` (default) keeps the stop |
+| `ai_unsched_factor`, `ai_max_scheduled`, `ai_max_parked`, `ai_max_humans` | the server's own AI limits, for the whole server: random traffic in percent of the map's density (0 to 300), timetable vehicles at once (`0`: no limit), parked cars (`0`: every space, `-1`: none), people at once (1 to 4096, not per player); empty: the values of `settings.cfg` |
 | `port`, `web_port`, `max_players` | UDP port of the session (27015), TCP port of the web gateway (27025), player limit (16) |
 | `gateway_proxy_header` | the header a proxy of this machine names a WebSocket player's address in (below) |
 | `tunnel` | start a free Cloudflare quick tunnel (needs `cloudflared`) |
+| `public_address` | where players reach the web port without the tunnel (`1.2.3.4:27025`, a name, or `off`); a game joining through the tunnel tries it first. Empty: found by itself (the machine's own internet address, else the one the internet sees if the server reaches itself there, never behind a carrier's NAT) |
 | `radius` | how many tiles round the map's first entry point are kept loaded (0: the whole map) |
 | `admin_password`, `moderator_password` | administration in the game, the web panel and `POST /admin` (see [Administration](#administration)); at least 12 characters each, empty: nobody |
 | `admin_web`, `admin_web_origins`, `admin_trusted_proxies`, `admin_proxy_header` | where the web panel (`/admin/` on the web port) can be reached from: `local` (what a new `server.cfg` writes), `remote` through trusted proxies (passwords of at least 16 characters, else `local`), or `off` (a file from before the panel, without the key) |

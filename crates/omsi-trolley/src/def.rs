@@ -1,9 +1,9 @@
 //! What a vehicle file says about its trolley gear: the poles on the roof and the traction
 //! drive. The blocks are openOMSI's own (OMSI 2 has no overhead wire of its own; its trolleybus
 //! add-ons run a plugin beside the game): a `[trolley_pole]` per pole, one `[trolley_rheostat]`
-//! or `[trolley_async]` drive, an optional `[trolley_battery]` and `[trolley_vars]`. Inside a
-//! block every line is `key value ...`; keys left out keep the defaults below, and anything
-//! unknown is skipped.
+//! or `[trolley_async]` drive, an optional `[trolley_battery]` and `[trolley_vars]`, or an empty
+//! `[trolley_none]` for a vehicle that moves its poles itself. Inside a block every line is
+//! `key value ...`; keys left out keep the defaults below, and anything unknown is skipped.
 
 use glam::Vec3;
 
@@ -19,6 +19,8 @@ pub struct PoleDef {
     /// Elevation of the boom lying on its hook, and in its working position (degrees).
     pub rest_angle: f32,
     pub work_angle: f32,
+    /// The highest elevation the boom can rise to, held there by its rope (degrees).
+    pub max_angle: f32,
     /// What the spring presses the shoe up against the wire with at the working angle (N).
     pub tip_force: f32,
     /// Mass of the boom with its rope (kg) and of the head and shoe at the tip (kg).
@@ -39,6 +41,9 @@ pub struct PoleDef {
     pub retriever: f32,
     /// A motor raises and lowers the pole from the cab.
     pub motor: bool,
+    /// The boom's own bounce on a script's lifting gear: its frequency (Hz) and damping ratio.
+    pub boom_bounce: f32,
+    pub boom_damping: f32,
     /// The game draws the boom (a vehicle model that carries its own poles says 0 and takes
     /// the pole variables instead).
     pub visible: bool,
@@ -54,6 +59,7 @@ impl Default for PoleDef {
             length: 6.6,
             rest_angle: 2.5,
             work_angle: 26.0,
+            max_angle: 45.0,
             tip_force: 120.0,
             mass: 16.0,
             head_mass: 3.0,
@@ -63,6 +69,8 @@ impl Default for PoleDef {
             kink_speed: 3.0,
             retriever: 0.0,
             motor: false,
+            boom_bounce: 1.1,
+            boom_damping: 0.12,
             visible: true,
             reach: 9.0,
         }
@@ -196,6 +204,11 @@ pub struct VarNames {
     pub indicator_left: String,
     pub indicator_right: String,
     pub raise_request: String,
+    /// For radio switches: the cab's request (< -0.5 left, > 0.5 right), the route code and
+    /// the channel. A vehicle that has no request variable sends its indicator instead.
+    pub switch_request: String,
+    pub switch_code: String,
+    pub switch_channel: String,
 }
 
 impl Default for VarNames {
@@ -205,6 +218,9 @@ impl Default for VarNames {
             indicator_left: "Blinker_Left".into(),
             indicator_right: "Blinker_Right".into(),
             raise_request: "Trolley_Poles_Raise".into(),
+            switch_request: "Trolley_Switch_Request".into(),
+            switch_code: "Trolley_Switch_Code".into(),
+            switch_channel: "Trolley_Switch_Channel".into(),
         }
     }
 }
@@ -226,6 +242,9 @@ pub struct TrolleyDef {
     /// A trolleybus made for OMSI 2 as it is: a bus script drives it and its poles are two
     /// meshes the cockpit switches `cp_SHTANGALEV`/`cp_SHTANGAPRAV` show (folded or raised).
     pub legacy: Option<LegacyDef>,
+    /// `[trolley_none]`: the vehicle's own script or a plugin handles its poles, so the game
+    /// gives it no gear of its own, not even the one it would read off a plain trolleybus's model.
+    pub none: bool,
 }
 
 /// How a plain OMSI 2 trolleybus is told from its files (see `docs/TROLLEY_MODS.md`).
@@ -263,6 +282,10 @@ impl DriveKind {
 impl TrolleyDef {
     pub fn is_empty(&self) -> bool {
         self.poles.is_empty()
+    }
+
+    pub fn takes_model_poles(&self) -> bool {
+        self.is_empty() && !self.none
     }
 }
 
@@ -316,7 +339,10 @@ impl PoleDef {
                 "max_wire_angle" => p.max_wire_angle = num(&v, 0).unwrap_or(p.max_wire_angle).clamp(5.0, 80.0),
                 "kink_speed" => p.kink_speed = num(&v, 0).unwrap_or(p.kink_speed).clamp(0.2, 10.0),
                 "retriever" => p.retriever = if v.len() > 0 && num(&v, 0).is_none() { if flag(&v) { 35.0 } else { 0.0 } } else { num(&v, 0).unwrap_or(0.0).max(0.0) },
+                "max_angle" => p.max_angle = num(&v, 0).unwrap_or(p.max_angle).clamp(10.0, 80.0),
                 "motor" => p.motor = flag(&v),
+                "boom_bounce" => p.boom_bounce = num(&v, 0).unwrap_or(p.boom_bounce).clamp(0.2, 5.0),
+                "boom_damping" => p.boom_damping = num(&v, 0).unwrap_or(p.boom_damping).clamp(0.02, 1.0),
                 "visible" => p.visible = flag(&v),
                 "reach" => p.reach = num(&v, 0).unwrap_or(p.reach).clamp(1.0, 30.0),
                 _ => {}
@@ -408,6 +434,9 @@ impl VarNames {
                 "indicator_left" => into.indicator_left = n.to_string(),
                 "indicator_right" => into.indicator_right = n.to_string(),
                 "raise_request" => into.raise_request = n.to_string(),
+                "switch_request" => into.switch_request = n.to_string(),
+                "switch_code" => into.switch_code = n.to_string(),
+                "switch_channel" => into.switch_channel = n.to_string(),
                 _ => {}
             }
         }
@@ -424,6 +453,7 @@ impl TrolleyDef {
             "trolley_async" => self.drive = Some(DriveKind::Async(AsyncDef::parse(lines))),
             "trolley_battery" => self.battery = Some(BatteryDef::parse(lines)),
             "trolley_vars" => VarNames::parse(lines, &mut self.vars),
+            "trolley_none" => self.none = true,
             "trolley_aux" => {
                 if let Some(x) = pairs(lines).first().and_then(|(k, v)| num(v, 0).or_else(|| k.parse().ok())) {
                     self.aux_kw = x.max(0.0);
@@ -435,7 +465,7 @@ impl TrolleyDef {
     }
 
     pub fn keywords() -> &'static [&'static str] {
-        &["trolley_pole", "trolley_rheostat", "trolley_async", "trolley_battery", "trolley_vars", "trolley_aux"]
+        &["trolley_pole", "trolley_rheostat", "trolley_async", "trolley_battery", "trolley_vars", "trolley_aux", "trolley_none"]
     }
 }
 
@@ -450,6 +480,9 @@ mod tests {
         assert_eq!(p.base, Vec3::new(-0.4, -1.2, 3.05));
         assert_eq!(p.length, 7.0);
         assert!(p.retriever > 0.0);
+        let m = PoleDef::parse(&["motor 1", "boom_bounce 1.5", "boom_damping 0.2"]);
+        assert_eq!((m.boom_bounce, m.boom_damping), (1.5, 0.2));
+        assert_eq!((p.max_angle, PoleDef::parse(&["max_angle 38"]).max_angle), (45.0, 38.0));
         assert_eq!(p.tip_force, 120.0);
     }
 
@@ -467,6 +500,17 @@ mod tests {
             }
             _ => panic!("rheostat drive"),
         }
+    }
+
+    #[test]
+    fn trolley_none_keeps_the_model_s_poles_from_being_taken() {
+        let mut d = TrolleyDef::default();
+        assert!(d.takes_model_poles());
+        assert!(d.take_block("trolley_none", &[]));
+        assert!(d.none && d.is_empty() && !d.takes_model_poles());
+        let mut own = TrolleyDef::default();
+        own.take_block("trolley_pole", &["side 1"]);
+        assert!(!own.takes_model_poles());
     }
 
     #[test]

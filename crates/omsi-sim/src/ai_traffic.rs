@@ -28,11 +28,13 @@ pub mod obstacles;
 pub mod foot_grid;
 pub mod parked;
 pub mod planning;
+pub mod random;
 pub mod scenery;
 pub mod setup;
 pub mod stats;
 pub mod tick;
 pub mod viewer;
+pub mod waving;
 #[cfg(test)]
 mod body_tests;
 #[cfg(test)]
@@ -86,6 +88,21 @@ use viewer::*;
 /// each and a minute of stutter after loading Spandau.
 pub const AI_SCHEMES: usize = 4;
 
+fn spread_schemes(n: usize, h: u64) -> Vec<usize> {
+    let gcd = |mut a: usize, mut b: usize| {
+        while b != 0 {
+            (a, b) = (b, a % b);
+        }
+        a
+    };
+    let mut stride = 1 + ((h >> 16) % n.max(1) as u64) as usize;
+    while gcd(stride, n) != 1 {
+        stride += 1;
+    }
+    let start = (h % n.max(1) as u64) as usize;
+    (0..n.min(AI_SCHEMES)).map(|i| (start + i * stride) % n).collect()
+}
+
 pub struct TrafficSim {
     pub net: Network,
     /// Sum of the spawn weights of every street lane, updated only as tiles add lanes.
@@ -98,6 +115,12 @@ pub struct TrafficSim {
     /// not loaded yet (a road spline often starts in the next tile). Most stand in car parks
     /// and stay here.
     pub parked_waiting: Vec<DVec3>,
+    /// A car drives on through a parked car standing in the middle of its lane, as Omsi.exe's
+    /// traffic does - only when asked (`--ai-drive-through-parked`, `server.cfg`'s
+    /// `ai_drive_through_parked = 1`). By default it stops behind it and goes round it when it
+    /// can; on some maps a parked car stands in the lane with no way round, and the traffic
+    /// behind it waits for good.
+    pub drive_through_parked: bool,
     /// Tiles whose lanes the network has (lanes stay once they are in).
     pub lane_tiles: hashbrown::HashSet<(i32, i32)>,
     /// Counts the times tiles brought their lanes: whoever resolved something against the
@@ -127,16 +150,14 @@ pub struct TrafficSim {
     /// (`fill_map`), with the number of lanes they were made for.
     pub(crate) lane_weight_sums: (usize, Vec<f64>),
     pub rng: u64,
+    pub scheme_salt: u64,
+    scheme_sets: std::sync::Mutex<HashMap<std::path::PathBuf, Vec<usize>>>,
     /// Target number of cars around the camera.
     pub target: usize,
     /// Made only so that the light programs run (no traffic, no timetable): nobody is put
     /// on the roads - no aircraft, no parked car pulling out - while `target` is 0.
     pub lights_only: bool,
     pub spawn_radius: f64,
-    /// Since when (sim time) fewer than half the cars asked for drive about the player: open
-    /// country, where nothing within `NEAR_HIDE` is ever out of sight and a car coming along
-    /// the road could never be woken (see `omsi-app`'s `wake_dormant`).
-    pub starved_since: Option<f32>,
     pub time: f32,
     /// Where the camera is (the window sets it before `sync`): far cars show their script
     /// textures as stand-ins.
@@ -190,6 +211,10 @@ pub struct TrafficSim {
     /// Omsi.exe, where the 20 s check (0x7d9bdc) runs against every station's time, the ones
     /// shared out by distance too (0x616afc -> 0x73b474).
     pub timed_waits_only: bool,
+    /// The `ai_reaction` setting: a factor on every AI driver's reaction time (1.0: as
+    /// `model::personality` draws it, about 0.8 s). Below 1.0 a queue pulls away closer
+    /// together; `model::scale_reaction` keeps it from going under `PULL_OUT_WAIT`.
+    pub reaction_factor: f32,
     /// `--no-timetable-buses`: the timetable runs for the player's duty, but puts no AI
     /// bus on the road (#1762).
     pub no_timetable_buses: bool,
@@ -253,6 +278,8 @@ pub struct TrafficSim {
     pub player_signal_age: f32,
     /// ... and for how long it has been indicating so (s).
     pub player_signalling: f32,
+    pub player_beam_on: f32,
+    pub player_waved: f32,
     /// The player's vehicle and the LAN players' as the junctions see them (`way_user_on`),
     /// as of this tick.
     pub way_users: Vec<WayUser>,

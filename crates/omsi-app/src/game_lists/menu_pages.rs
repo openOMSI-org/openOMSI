@@ -14,11 +14,18 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
     let game: Vec<(String, String)> = vec![
         switch_row(app, "navigator", "Navigator", "Enables/Disables the Minimap"),
         switch_row(app, "nav_ai", "AI vehicles on the map", "Shows/hides the other (AI) vehicles on the Minimap and the city map"),
+        switch_row(app, "nav_ai_cars", "Cars on the map too", "Off: only the traffic's buses and trolleybuses are shown on the maps, not the cars").filter(|_| s.nav_ai),
         switch_row(app, "nav_surface", "Map surface under the roads", "Shows the map's ground, water, woods, houses and paved surfaces on the Minimap and the city map (and the map's package, when it has one)"),
         switch_row(app, "nav_classic_2d", "Classic 2D navigator", "A lightweight top-down route map with streets and vehicles, without detailed surfaces, buildings or shadows"),
         switch_row(app, "nav_3d", "3D buildings on the map", "The houses stand in 3D with their shadows on the Minimap, and the city map tilts into 3D when zoomed in"),
         switch_row(app, "nav_widget", "Navigator as a widget", "Drag the Minimap anywhere and change its size at its bottom right corner"),
-        switch_row(app, "nav_arrows", "Route arrows (as in OMSI 2)", "Shows OMSI 2's route arrows over the road"),
+        switch_row(
+            app,
+            "nav_dynamic_arrows",
+            "Dynamic route arrows",
+            "Shows OMSI 2's route arrows over the road",
+        ),
+        switch_row(app, "nav_map_arrows", "Map-placed route arrows", ""),
         pick("navigator_corner", "Corner", later),
         switch_row(app, "get_up", "Ability to get up (Ctrl+Shift+G)", "Allows you to get out of the car and explore the world"),
         switch_row(app, "coll_objects", "Collisions with objects", "Enables/disables collisions with objects such as buildings, streetlights, etc."),
@@ -35,6 +42,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         slider_row(app, "passenger_transfer_percent", "Connection chance", "Probability for eligible transfers; default 20%", &|v|format!("{v:.0}%")).filter(|_|s.passenger_connections),
         switch_row(app, "passenger_hailing", "Passengers signal approaching buses", "Optional visual hailing; only effective with supported natural animations"),
         switch_row(app, "passenger_full_bus_reaction", "Passengers react to full buses", "Optional visual acknowledgement when an approaching compatible bus is at passenger capacity"),
+        switch_row(app, "pax_short_rides_stand", "Short rides stand by a door", "Passengers with no set stop who ride only a few kilometres take a free standing place near an exit rather than a seat"),
         switch_row(app, "auto_announce", "Arrival announcements at the stop", "On depot files that keep two recordings per stop (the Chinese maps), the arrival one is played as the bus reaches the stop: the IBIS's next stop key, pressed as the driver would"),
         pick("boarding", "Boarding", "How passengers get their tickets"),
         pick("standing_chance", "Standing passengers", "The chance a passenger stands although a seat is free"),
@@ -52,8 +60,9 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         preset_row(&file, "Quality preset", "Sets the graphics mode and most of the options at once, from Low (Vanilla) to Ultra (Enhanced with everything on)"),
         app.can_optimise().then(|| button("Optimise for my PC", "Start", "Measures while you drive and adjusts the graphics for a smooth frame rate; your settings are saved first", "optimise")),
         omsi_launcher_lib::optimise::backup().is_some().then(|| button("Restore my previous settings", "Restore", "The graphics settings as they were before the last optimisation", "optimise_restore")),
-        pick("msaa", "Anti-aliasing", later),
-        pick("render_scale", "Render scale", if s.upscaler == "fsr1" { "With FSR 1 it changes at once" } else { later }),
+        // (DLSS, FSR 3 and MetalFX take the place of both)
+        pick("msaa", "Anti-aliasing", later).filter(|_| s.temporal_upscaling().is_none()),
+        pick("render_scale", "Render scale", if s.upscaler == "fsr1" { "With FSR 1 it changes at once" } else { later }).filter(|_| s.temporal_upscaling().is_none()),
         pick("anisotropy", "Anisotropic", later),
         switch_row(app, "ray_tracing", "Real-Time Ray Tracing", "Enhanced: the sun's shadows, the ambient occlusion and the reflections traced with hardware ray queries, where the card has them; the heaviest option (takes effect when the game starts the next time)").filter(|_| shown("ray_tracing")),
         switch_row(app, "shadows", "Sun shadows", "Enables/Disables shadows").filter(|_| shown("shadows")),
@@ -65,7 +74,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         slider_row(app, "led_glow", "LED glow", "How strongly the dots of LED destination displays glow", &|v| format!("{}/15", v as i64)).filter(|_| shown("led_glow")),
         slider_row(app, "led_mips", "LED mip strength", "Lower: sharper LED dots that shimmer from a distance; higher: calmer, softer dots", &|v| format!("{v:.2}")).filter(|_| shown("led_mips")),
         slider_row(app, "reflections", "Reflective objects reflect", "Changes show at once; turned up from Off, they come back when the game starts the next time", &|v| if v < 0.005 { "Off".to_string() } else { format!("{:.0}%", v * 100.0) }).filter(|_| shown("reflections")),
-        slider_row(app, "road_glare", "Road sunlight glare", "Enhanced: direct sunlight highlights on roads and ground; 100% is the original look", &pct).filter(|_| shown("road_glare")),
+        slider_row(app, "road_glare", "Road glare", "Enhanced: highlights of the sun, the headlights and the street lamps on roads and ground; 100% keeps the original appearance.", &pct).filter(|_| shown("road_glare")),
         slider_row(app, "traffic_headlights", "Traffic headlight brightness", "All graphics modes: other vehicles' white headlamp glow and road illumination, not the player bus or street lights", &pct).filter(|_| shown("traffic_headlights")),
         switch_row(app, "clouds", "Clouds", later),
         pick("cloud_quality", "Cloud quality", "Enhanced: the volumetric clouds marched in fewer steps - faster, a little grainier").filter(|_| shown("cloud_quality") && app.settings.clouds),
@@ -76,6 +85,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         pick("vehicle_smoke", "Vehicle smoke", "Controls the vehicles' smoke particles, not scenery effects or glowing particles."),
         pick("puddles", if shown("ray_tracing") { "Real-Time Reflections" } else { "Puddles" }, "The wet roads' reflections in the rain: Low only near the bus and in fewer rays, much cheaper; Off none (the reflections on paint and glass stay)").filter(|_| app.settings.reflections > 0.0),
         switch_row(app, "windy_trees", "Windy trees", "The trees' leaves bend and sway in the wind and its gusts; with no wind they stand still"),
+        switch_row(app, "detailed_trees", "Detailed trees", "Close up, the trees' leaf pictures no longer show as streaks seen from the side, and their crowns get shade; costs a little graphics time"),
         switch_row(app, "road_snow", "Built-up snow on roads and roofs", "While it snows, snow builds up on the roads and on the vehicles' roofs, with ruts and tyre tracks, and thaws again; off: the weather's own snow on road, as in OMSI 2").filter(|_| shown("road_snow")),
     ]
         .into_iter()
@@ -93,64 +103,8 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         ),
     ];
     // (the rig's own settings only while it is on)
-    let triple = vec![
-        switch_row(
-            app,
-            "triple_hud_center",
-            "HUD on centre screen",
-            "Keep the navigator, menus and information on the centre screen",
-        ),
-        switch_row(
-            app,
-            "triple_span",
-            "Span three monitors at startup",
-            "Borderless across three equal monitors in one horizontal row; restart required",
-        ),
-        slider_row(
-            app,
-            "triple_width_mm",
-            "Visible panel width",
-            "Width of one screen without its frame",
-            &|v| format!("{v:.0} mm"),
-        ),
-        slider_row(
-            app,
-            "triple_distance_mm",
-            "Eye distance",
-            "Eye to the centre screen",
-            &|v| format!("{v:.0} mm"),
-        ),
-        slider_row(
-            app,
-            "triple_bezel_mm",
-            "Frame width at each join",
-            "Combined width of both adjacent frames",
-            &|v| format!("{v:.0} mm"),
-        ),
-        slider_row(
-            app,
-            "triple_left_angle_deg",
-            "Left screen angle",
-            "Inward angle from a flat row",
-            &|v| format!("{v:.0}°"),
-        ),
-        slider_row(
-            app,
-            "triple_right_angle_deg",
-            "Right screen angle",
-            "Inward angle from a flat row",
-            &|v| format!("{v:.0}°"),
-        ),
-        slider_row(
-            app,
-            "triple_eye_height_mm",
-            "Eye above screen centre",
-            "Vertical eye offset",
-            &|v| format!("{v:.0} mm"),
-        ),
-    ];
     if app.settings.triple.enabled {
-        display.extend(triple);
+        display.extend(triple_rows(app));
     }
     let display: Vec<(String, String)> = display.into_iter().chain([
         switch_row(app, "vsync", "V-sync", "Waits for the screen's refresh"),
@@ -201,6 +155,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         slider_row(app, "head_idle", "Head sway at a standstill", "How much the view sways on its own when nothing is done to it - a head at rest is never quite still, most of it seen while the bus waits at a stop", &|v| if v <= 0.0 { "Off".to_string() } else { format!("{:.0}%", v * 100.0) }),
         slider_row(app, "head_idle_pace", "Sway pace", "How fast that sway moves (100% is the pace it is designed at)", &|v| format!("{:.0}%", v * 100.0)),
         switch_row(app, "hands_in_cab", "Driver's hands in the cab view", "Shows the driver's hand on the steering wheel (Cockpit only)"),
+        switch_row(app, "driver_like_omsi", "Driver sits as in OMSI 2", "The driver sits back on the seat with his hands off the wheel, as in OMSI 2, instead of leaning forward to hold it"),
         switch_row(app, "driver", "Driver at the wheel (outside views)", "Shows the driver in the outside views and in the mirrors"),
     ]
         .into_iter()
@@ -210,6 +165,9 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         slider_row(app, "look_smoothing_ms", "Smooth the mouse look", "How long the view takes to come round to where the mouse or the stick turned it (off: at once, as OMSI)", &|v| if v <= 0.0 { "Off".to_string() } else { format!("{v:.0} ms") }),
         switch_row(app, "alt_view", "Right mouse button turns the view", "Shift+right zooms; off: right zooms as in OMSI, the wheel button turns"),
         switch_row(app, "precision_zoom", "Precision mouse zoom", "The mouse zoom follows the FOV curve instead of OMSI's linear way"),
+        slider_row(app, "zoom_hold_amount", "Zoom on a key", "How far the view zooms while the zoom key is held (Controls: Zoom while held)", &|v| format!("{}x", format!("{:.2}", 1.0 / v.max(0.15)).trim_end_matches('0').trim_end_matches('.'))),
+        switch_row(app, "zoom_hold_latch", "Zoom key stays", "One press zooms in, the next zooms out; off: only while the key is held"),
+        switch_row(app, "flashlight_cursor", "Flashlight follows the cursor", "With the cursor free (on foot, or in the cab while the mouse does not steer) the flashlight lights where it points; otherwise straight ahead"),
         slider_row(app, "fov", "Field of view", "Vertical field of view; in triple screen Default uses physical measurements, an override moves the virtual eye", &|v| if v < 20.0 { "Default".to_string() } else { format!("{v:.0}°") }),
         slider_row(app, "seat 1", "Seat forward and back", "Adjust the driver's seat position forward or backward", &cm),
         slider_row(app, "seat 2", "Seat height", "Adjust the driver's seat height", &cm),
@@ -243,7 +201,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         slider_row(app, "mouse_pedal_strength", "Mouse pedal strength", "Adjust how much mouse travel is needed to reach full throttle or braking", &|v| if (v - 1.0).abs() < 0.01 { "OMSI".to_string() } else { format!("{:.0}%", v * 100.0) }),
         switch_row(app, "mouse_smooth", "Smooth mouse steering", "The wheel eases after the cursor; off: it follows at once, as in OMSI"),
         switch_row(app, "mouse_pedals", "The mouse works the pedals", "Up the throttle, down the brake, as in OMSI; off: the mouse only steers, the pedals stay on the keys"),
-        switch_row(app, "mouse_hold", "Hold the cursor while steering", "The wheel reaches its lock past the window's edges; off: the crosshair stays free and without delay, as in OMSI"),
+        switch_row(app, "mouse_hold", "Hold the cursor while steering", "The wheel reaches its lock past the window's edges; off: the system's crosshair, without delay, kept inside the window (Windows, Linux), as in OMSI"),
         slider_row(app, "key_pedal_speed", "Pedal keys speed", "How fast the throttle and brake keys press their pedals; slower is finer", &|v| if (v - 1.0).abs() < 0.01 { "OMSI".to_string() } else { format!("{:.0}%", v * 100.0) }),
         switch_row(app, "steering_linear", "Steering linearity (keys at OMSI's steady pace)", "Keyboard steering at OMSI's steady pace"),
         switch_row(app, "old_steering", "Old Steering (the wheel stays, turn it back yourself)", "The wheel stays where the keys left it"),
@@ -275,9 +233,14 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         slider_row(app, "ui_opacity", "Interface opacity", "How much of the interface's backgrounds shows", &pct),
         switch_row(app, "tooltips", "Name of the button under the mouse", "Shows the name of what the cursor points at"),
         switch_row(app, "notes", "Driving hints", "Why the vehicle does not move, the change due, what a service did: as short notifications"),
+        switch_row(app, "notes_driving", "Notes: why the bus does not move", "The handbrake, the engine, a door: what keeps the bus standing").filter(|_| s.notes),
+        switch_row(app, "notes_script", "Notes: the bus's own messages", "What the bus's scripts write on the screen, the announcements among them").filter(|_| s.notes),
+        switch_row(app, "notes_trip", "Notes: the end of a trip", "The trip's end and the next one").filter(|_| s.notes),
+        switch_row(app, "notes_tickets", "Notes: tickets and change", "What a passenger asks for, what they paid and the change due").filter(|_| s.notes),
         switch_row(app, "chat", "Chat in online games", "Shows the chat of a LAN session"),
         slider_row(app, "chat_size", "Chat size", "The chat's texts on top of the interface size (also Ctrl + the mouse wheel over the chat)", &pct),
         switch_row(app, "name_tags", "Other players' names above their buses", "Shows the names of the other players"),
+        Some(button("Remote cockpit", "Open", &app.remote_description(), "remote_panel")),
         Some(opens("Reset all settings...", "Everything but the language, the key bindings and the game folder goes back to how it came", "reset")),
     ]
         .into_iter()
@@ -300,6 +263,9 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         rows.push(button("Reset navigator position", "Reset", desc, "vr_nav_reset"));
         pages.push(("VR", rows));
     }
+    for (title, rows) in &mut pages {
+        *rows = section_option_rows(title, std::mem::take(rows));
+    }
     pages
 }
 
@@ -309,7 +275,7 @@ fn add_graphics_action_rows(app: &App, file: &serde_json::Value, graphics: &mut 
         graphics.push(button("Apply graphics changes...", "Confirm", "Apply compatible graphics options in-game. Renderer mode and device formats require restart.", "graphics_apply"));
         graphics.push(button("Discard graphics changes", "Revert", "Restore the graphics settings from before editing.", "graphics_discard"));
     }
-    let at = graphics.iter().position(|r| r.1 == "sel render_scale").map_or(graphics.len(), |k| k + 1);
+    let at = graphics.iter().position(|r| r.1 == "sel render_scale").map(|k| k + 1).or_else(|| graphics.iter().position(|r| r.1 == "sel anisotropy")).unwrap_or(graphics.len());
     graphics.splice(at..at, upscaler_rows(app, file));
 }
 
@@ -328,6 +294,9 @@ pub(super) fn vehicle_pages(app: &App) -> Vec<Page> {
         display.push(opens("Destination display", "Change the current destination", "dest"));
         display.push(opens("Depot file (HOF)", "Change the current depot file (used for the timetable)", "hof"));
         display.push(opens("Fleet number", "Change the vehicle's current fleet number", "number"));
+        if app.net.lan.is_none() && !app.player.as_ref().unwrap().vehicle.ty.paint_schemes.is_empty() {
+            display.push(opens("Livery", "Repaint the vehicle you drive where it stands: same bus, same passengers", "livery"));
+        }
         display.push((row("Custom fleet number", if app.menus.menu_edit_number{'E'}else{'e'}, &typed_number, "Enter custom fleet number (not from the list)", None), "custom_number_edit".to_string()));
         display.push((row("Custom plate", if app.menus.menu_edit_ident{'E'}else{'e'}, &typed_ident, "Enter custom plate (leave free for automatic)", None), "custom_ident_edit".to_string()));
     }
@@ -409,7 +378,7 @@ pub(super) fn world_pages(app: &App) -> Vec<Page> {
             time.extend(slider_row(app, "minute", "Minute", "Set the minute directly", &|v| format!("{:02}", v as i64)));
             // (forwards and back by a tap: the typed time wants Enter and the held keys Ctrl+Shift+Page Up,
             // neither of which a phone has)
-            for (name, text, secs) in [("Clock -1 hour", "-1 h", -3600), ("Clock -10 minutes", "-10 min", -600), ("Clock +10 minutes", "+10 min", 600), ("Clock +1 hour", "+1 h", 3600)] {
+            for (name, text, secs) in [("Clock -1 hour", "-1 h", -3600), ("Clock -10 minutes", "-10 min", -600), ("Clock -1 minute", "-1 min", -60), ("Clock +1 minute", "+1 min", 60), ("Clock +10 minutes", "+10 min", 600), ("Clock +1 hour", "+1 h", 3600)] {
                 time.push(button(name, text, "Move the clock.", &format!("clock_shift {secs}")));
             }
             for (name, hm, secs) in [("Morning", "06:00", 6 * 3600), ("Noon", "12:00", 12 * 3600), ("Evening", "18:00", 18 * 3600), ("Night", "23:00", 23 * 3600)] {
@@ -418,9 +387,8 @@ pub(super) fn world_pages(app: &App) -> Vec<Page> {
             // the date: by a day, a week or a month, the time of day kept (the timetable's
             // day, the season and the map's chrono changes follow it as at midnight)
             let (d, m) = app.clock.day_month();
-            let day = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][app.clock.weekday().rem_euclid(7) as usize];
-            let date = format!("{:04}-{m:02}-{d:02}  {}", app.clock.year, omsi_ui::tr(day));
-            time.push((row("Date", 'i', &date, "The day the timetable, the season and the map's changes follow", None), "noop".to_string()));
+            let date = format!("{:04}-{m:02}-{d:02}", app.clock.year);
+            time.push((row("Date", 'd', &date, "The day the timetable, the season and the map's changes follow", None), "date".to_string()));
             for (name, text, secs) in [
                 ("Date -1 month", "-1 month", app.clock.months_away(-1)),
                 ("Date -1 week", "-1 week", -7.0 * 86400.0),
@@ -485,10 +453,11 @@ pub(super) fn world_pages(app: &App) -> Vec<Page> {
     people.extend(slider_row(app, "traffic", "Traffic", "How many vehicles drive around the map.", &|v| omsi_ui::tr("{n} vehicles").replace("{n}", &(v as i64).to_string())));
     if !client && app.session.traffic.is_some() {
         people.push(button("Clear AI traffic", "Clear", "Remove the current AI cars from the road; random traffic will return automatically.", "traffic_clear"));
+        people.push(button("Set to the time it is now", "Refresh", "Put the timetable buses out again for the time it is now, and the people waiting at the stops anew.", "refresh_now"));
     }
     people.extend(slider_row(app, "pax", "Passengers", "How many passengers wait at the stops and ride.", &pct));
     vec![
-        ("Time", sectioned_rows(time, "Clock and time speed", &[("clock_shift -3600", "Quick time changes"), ("clock_set 21600", "Time presets"), ("noop", "Date"), ("clock_ontime", "Timetable"), ("speed", "Time speed")])),
+        ("Time", sectioned_rows(time, "Clock and time speed", &[("clock_shift -3600", "Quick time changes"), ("clock_set 21600", "Time presets"), ("date", "Date"), ("noop", "Date"), ("clock_ontime", "Timetable"), ("speed", "Time speed")])),
         ("Weather", weather_rows(weather, climate)),
         ("Traffic and people", sectioned_rows(people, "Traffic", &[("pax", "Passengers")])),
         ("Tools", tools),
@@ -598,9 +567,12 @@ mod tests {
 /// FSR 1's quality and sharpening while it is chosen.
 fn upscaler_rows(app: &App, file: &serde_json::Value) -> Vec<(String, String)> {
     let fsr = app.settings.upscaler == "fsr1";
+    let temporal = app.settings.temporal_upscaling().is_some();
+    let offered = !omsi_cfg::upscaler_files::available(&omsi_cfg::upscaler_files::program_dir()).is_empty();
     let pct = |v: f32| format!("{:.0} %", v * 100.0);
     [
-        select_row(file, "upscaler", "Upscaling", "Standard Catmull-Rom or AMD FSR 1.0; changes show at once"),
+        select_row(file, "upscaler", "Upscaling", omsi_cfg::upscaler_files::menu_help(offered)),
+        select_row(file, "upscale_quality", "Upscaling quality", "Native keeps the window's resolution and only smooths the edges; the lower the quality, the smaller the picture is drawn and the higher the frame rate").filter(|_| temporal),
         select_row(file, "fsr_quality", "FSR quality", &fsr_size(app)).filter(|_| fsr),
         slider_row(app, "fsr_sharpness", "FSR sharpness", "RCAS sharpening strength", &pct).filter(|_| fsr),
     ]
@@ -624,40 +596,17 @@ fn weather_rows(mut weather: Vec<(String, String)>, climate: Vec<(String, String
     sectioned_rows(weather, "Live weather", &[("weather", "Weather preset and clouds"), ("temp", "Temperature and humidity"), ("wind_speed", "Wind")])
 }
 
-/// Insert display-only headings while preserving every command and its relative order.
-fn sectioned_rows(rows: Vec<(String, String)>, first: &str, starts: &[(&str, &str)]) -> Vec<(String, String)> {
-    let mut out = Vec::new();
-    for (label, action) in rows {
-        let key = action.strip_suffix(ADJUST).unwrap_or(&action);
-        let title = starts.iter().find(|(id, _)| *id == key).map(|(_, title)| *title).or_else(|| out.is_empty().then_some(first));
-        if let Some(title) = title {
-            out.push((row(title, 'i', "", "", None), HEADING.to_string()));
-        }
-        out.push((label, action));
-    }
-    out
+/// Group the options tabs without changing the settings commands or their order.
+fn section_option_rows(title: &str, rows: Vec<(String, String)>) -> Vec<(String, String)> {
+    let Some((first, starts)) = omsi_settings_ui::option_sections(title) else { return rows };
+    sectioned_rows(rows, first, starts)
 }
 
-#[cfg(test)]
-mod pause_sections_tests {
-    use super::*;
-
-    #[test]
-    fn pause_nested_sections_keep_actions_in_original_order() {
-        let rows = vec![button("A", "A", "", "a"), button("B", "B", "", "b"), button("C", "C", "", "c")];
-        let sections = sectioned_rows(rows.clone(), "First", &[("b", "Second")]);
-        assert_eq!(sections.iter().filter(|r| r.1 != HEADING).cloned().collect::<Vec<_>>(), rows);
-        assert_eq!(sections.iter().filter(|r| r.1 == HEADING).count(), 2);
-    }
-
-    #[test]
-    fn pause_nested_sections_omit_missing_groups_and_match_adjustable_controls() {
-        assert!(sectioned_rows(Vec::new(), "First", &[]).is_empty());
-        let sections = sectioned_rows(vec![button("Wind", "", "", &format!("wind_speed{ADJUST}"))], "First", &[("wind_speed", "Wind")]);
-        assert_eq!(sections.len(), 2);
-        assert!(sections[0].0.starts_with("Wind"));
-        assert_eq!(sections[1].1, format!("wind_speed{ADJUST}"));
-    }
+/// Insert display-only headings while preserving every command and its relative order.
+fn sectioned_rows(rows: Vec<(String, String)>, first: &str, starts: &[(&str, &str)]) -> Vec<(String, String)> {
+    omsi_settings_ui::sectioned_rows(rows, first, starts, ADJUST).into_iter().flat_map(|(heading, (label, action))| {
+        heading.into_iter().map(|title| (row(&title, 'i', "", "", None), HEADING.to_string())).chain(std::iter::once((label, action)))
+    }).collect()
 }
 
 #[cfg(test)]
@@ -722,5 +671,64 @@ fn head_tracking_rows(app: &App, pct: &dyn Fn(f32) -> String) -> Vec<Option<(Str
         switch_row(app, "head_tracking_invert_x", "Invert TrackIR X", "Reverse left / right head movement"),
         switch_row(app, "head_tracking_invert_y", "Invert TrackIR Y", "Reverse up / down head movement"),
         switch_row(app, "head_tracking_invert_z", "Invert TrackIR Z", "Reverse forward / back head movement"),
+    ]
+}
+
+fn triple_rows(app: &App) -> Vec<Option<(String, String)>> {
+    vec![
+        switch_row(
+            app,
+            "triple_hud_center",
+            "HUD on centre screen",
+            "Keep the navigator, menus and information on the centre screen",
+        ),
+        switch_row(
+            app,
+            "triple_span",
+            "Span three monitors at startup",
+            "Borderless across three equal monitors in one horizontal row; restart required",
+        ),
+        slider_row(
+            app,
+            "triple_width_mm",
+            "Visible panel width",
+            "Width of one screen without its frame",
+            &|v| format!("{v:.0} mm"),
+        ),
+        slider_row(
+            app,
+            "triple_distance_mm",
+            "Eye distance",
+            "Eye to the centre screen",
+            &|v| format!("{v:.0} mm"),
+        ),
+        slider_row(
+            app,
+            "triple_bezel_mm",
+            "Frame width at each join",
+            "Combined width of both adjacent frames",
+            &|v| format!("{v:.0} mm"),
+        ),
+        slider_row(
+            app,
+            "triple_left_angle_deg",
+            "Left screen angle",
+            "Inward angle from a flat row",
+            &|v| format!("{v:.0}°"),
+        ),
+        slider_row(
+            app,
+            "triple_right_angle_deg",
+            "Right screen angle",
+            "Inward angle from a flat row",
+            &|v| format!("{v:.0}°"),
+        ),
+        slider_row(
+            app,
+            "triple_eye_height_mm",
+            "Eye above screen centre",
+            "Vertical eye offset",
+            &|v| format!("{v:.0} mm"),
+        ),
     ]
 }

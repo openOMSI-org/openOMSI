@@ -190,7 +190,10 @@ impl Incoming {
         if !wanted.is_empty() && crate::server_cfg::SERVER_VEHICLES.get().is_some_and(|l| !l.is_empty()) {
             self.lease = None;
             self.held = None;
-            log::info!("uploads: {} is another version of a bus this server offers: refused", m.bus);
+            // (which files differ from the server's copy: what tells a modified bus from two
+            // machines that list the same bus differently)
+            let differ: Vec<String> = wanted.iter().take(8).map(|k| format!("{} ({} bytes)", m.entries[*k].path, m.entries[*k].size)).collect();
+            log::info!("uploads: {} is another version of a bus this server offers: refused ({} of its {} files are not the server's, e.g. {})", m.bus, wanted.len(), m.entries.len(), differ.join(", "));
             return Ok(Err("this server offers its own copies of its buses only".into()));
         }
         let bytes: u64 = wanted.iter().map(|k| m.entries[*k].size).sum();
@@ -287,6 +290,7 @@ impl Incoming {
         };
         let bus = m.bus.clone();
         let got = got + uploads().take_came(&bus);
+        let files: Vec<String> = m.entries.iter().map(|e| e.sha256.clone()).collect();
         let kept = crate::mods::vehicles::commit(m);
         self.lease = None;
         let (fp, new) = match kept {
@@ -295,6 +299,14 @@ impl Incoming {
         };
         if new {
             log::info!("uploads: {bus} is kept as {fp} ({got} files came), for every player who draws it");
+            // (a dedicated server packs it at its smallest at once, in the background, one file
+            // at a time: every other player fetches it, and they get it ready rather than packed
+            // as they ask. A player's hosting game waits to be asked, its machine is playing.)
+            if crate::server_cfg::SERVER_VEHICLES.get().is_some() {
+                for sha in &files {
+                    crate::mods::vehicles::recompress_later(sha);
+                }
+            }
         } else {
             log::info!("uploads: {bus} is kept already as {fp}");
         }
@@ -385,7 +397,12 @@ pub(in crate::mods) fn send_piece(out: &mut impl Write, sha: &Sha256, i: u64, zs
         if pack_later {
             crate::mods::vehicles::recompress_later(sha);
         }
-        let (codec, wire) = crate::mods::pieces::pack_zstd(piece, crate::mods::pieces::ZSTD_FAST);
+        // (a few at a time, and kept for the next player who asks)
+        let (codec, wire) = {
+            let _slot = crate::mods::pieces::packing_slot();
+            crate::mods::pieces::pack_zstd(piece, crate::mods::pieces::ZSTD_FAST)
+        };
+        crate::mods::vehicles::keep_packed(sha, i, codec, &wire);
         return crate::mods::pieces::send_packed(out, len, codec, &wire);
     }
     crate::mods::pieces::send(out, piece)

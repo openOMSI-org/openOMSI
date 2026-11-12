@@ -132,6 +132,7 @@ impl App {
             humans.bad_driving = self.settings.pax_bad_driving;
             humans.boarding = self.settings.boarding.clone();
             humans.stand_chance = self.settings.standing_chance;
+            humans.short_rides_stand = self.settings.pax_short_rides_stand;
             humans.voices = match self.settings.pax_voices.as_str() {
                 "off" => 2,
                 "tickets" => 1,
@@ -211,7 +212,7 @@ impl App {
         self.sound.voices_waiting.clear();
         if let Some(audio) = self.sound.audio.as_ref() {
             self.sound.radio.stop(audio);
-            self.sound.milezero.update(audio, false, 0.0);
+            self.sound.milezero.update(audio, false);
         }
         self.integrations.plugin_voices.clear();
         self.sound.audio = None;

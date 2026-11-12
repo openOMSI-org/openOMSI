@@ -46,13 +46,14 @@ fn nested_view<'a>(rail: &'a [MenuLine], rows: &'a [(&'static str, String)], wor
         rail,
         rail_sel: Some(1),
         disabled: &[],
-        rail_open: Some(if world { "world" } else { "vehicle" }),
         kbd: true,
         keys: true,
         summary: Summary { bus: "Test vehicle".into(), driver: "Driver".into() },
+        online: Default::default(),
         list: Some(ListView {
             kind: MenuKind::Options,
             head: Some((omsi_ui::tr(if world { "World options..." } else { "Vehicle options..." }).into_owned(), String::new())),
+            badge: None,
             tabs: Some((titles, usize::from(world))),
             items: rows.iter().map(|(id, label)| (*id, label.as_str())).collect(),
             sel: 1,
@@ -201,7 +202,7 @@ fn pause_settings_headings_draw_accent_markers_without_actions() {
         );
         let verts = &sh.drawn.as_ref().unwrap().verts;
         for n in 0..3 {
-            let top = 201.0 + n as f32 * 34.0;
+            let top = 201.0 + n as f32 * 74.0;
             let marker: Vec<_> = verts
                 .iter()
                 .filter(|v| {
@@ -269,6 +270,8 @@ fn pause_section_markers_write_preview() {
     for (name, value) in [
         ("Clock -1 hour", "-1 h"),
         ("Clock -10 minutes", "-10 min"),
+        ("Clock -1 minute", "-1 min"),
+        ("Clock +1 minute", "+1 min"),
         ("Clock +10 minutes", "+10 min"),
         ("Clock +1 hour", "+1 h"),
     ] {
@@ -288,10 +291,10 @@ fn pause_section_markers_write_preview() {
     }
     rows.push(("#", row("Date", 'i', "", "")));
     rows.push((
-        "noop",
+        "date",
         row(
             "Date",
-            'i',
+            'd',
             "2026-10-24",
             "The day the timetable, the season and the map's changes follow",
         ),
@@ -475,4 +478,202 @@ fn pause_settings_scale_keeps_stationary_pointer_in_physical_pixels() {
     sh.pointer(300.0, 150.0);
     sh.begin(800.0, 600.0, 1.5, 0.016);
     assert_eq!(sh.ui.input.mouse, Vec2::new(200.0, 100.0));
+}
+
+#[test]
+fn pause_date_field_opens_calendar_without_changing_clock() {
+    let mut sh = Shell::new();
+    sh.begin(800.0, 600.0, 1.0, 0.016);
+    sh.ui.input.mouse = Vec2::new(300.0, 100.0);
+    sh.ui.input.pressed = true;
+    sh.ui.input.released = true;
+    let action = settings_row(
+        &mut sh.ui,
+        7,
+        "Date\u{1f}d\u{1f}2026-11-03\u{1f}Choose a date",
+        Rect::new(0.0, 80.0, 500.0, 40.0),
+        false,
+        false,
+        &mut None,
+    );
+    assert!(action.is_none(), "opening the calendar must not execute a row action");
+    sh.finish();
+    sh.ui.input.mouse = Vec2::new(260.0, 140.0);
+    assert!(
+        !sh.ui.hover(Rect::new(250.0, 130.0, 40.0, 40.0)),
+        "the calendar must capture pointer input over the page"
+    );
+}
+
+
+fn calendar_row(sh: &mut Shell) -> Option<Action> {
+    settings_row(&mut sh.ui, 7, "Date\u{1f}d\u{1f}2026-11-03", Rect::new(0.0, 80.0, 500.0, 40.0), false, false, &mut None)
+}
+
+#[test]
+fn pause_date_field_commits_only_the_selected_day() {
+    let mut sh = Shell::new();
+    for mouse in [Vec2::new(300.0, 100.0), Vec2::new(310.0, 259.0)] {
+        sh.begin(800.0, 600.0, 1.0, 0.016);
+        sh.ui.input.mouse = mouse;
+        sh.ui.input.pressed = true;
+        sh.ui.input.released = true;
+        assert!(calendar_row(&mut sh).is_none());
+        sh.finish();
+    }
+    sh.begin(800.0, 600.0, 1.0, 0.016);
+    assert_eq!(calendar_row(&mut sh), Some(Action::Date("2026-11-10".into())));
+    assert!(!sh.ui.dismiss_date_popup(), "selection must close the calendar");
+}
+
+#[test]
+fn pause_date_field_can_be_cancelled_without_a_clock_action() {
+    let mut sh = Shell::new();
+    sh.begin(800.0, 600.0, 1.0, 0.016);
+    sh.ui.input.mouse = Vec2::new(300.0, 100.0);
+    sh.ui.input.pressed = true;
+    sh.ui.input.released = true;
+    assert!(calendar_row(&mut sh).is_none());
+    sh.finish();
+    assert!(sh.ui.dismiss_date_popup());
+    sh.begin(800.0, 600.0, 1.0, 0.016);
+    assert!(calendar_row(&mut sh).is_none());
+    assert!(!sh.ui.dismiss_date_popup());
+}
+
+#[test]
+fn pause_read_only_date_does_not_open_a_calendar() {
+    let mut sh = Shell::new();
+    sh.begin(800.0, 600.0, 1.0, 0.016);
+    sh.ui.input.mouse = Vec2::new(300.0, 100.0);
+    sh.ui.input.pressed = true;
+    sh.ui.input.released = true;
+    assert!(settings_row(&mut sh.ui, 7, "Date and time\u{1f}i\u{1f}2026-11-03 13:24:56", Rect::new(0.0, 80.0, 500.0, 40.0), false, false, &mut None).is_none());
+    assert!(!sh.ui.dismiss_date_popup());
+}
+
+
+#[test]
+#[ignore = "Requires a graphics adapter and OPENOMSI_PAUSE_PREVIEW output directory"]
+fn render_pause_date_calendar_preview() {
+    omsi_ui::i18n::set_lookup(|lang, text| crate::_rust_i18n_try_translate(lang, text).map(|value| value.into_owned()));
+    omsi_ui::i18n::set_language("zh-tw");
+    let out = std::path::PathBuf::from(std::env::var_os("OPENOMSI_PAUSE_PREVIEW").expect("set preview directory"));
+    std::fs::create_dir_all(&out).unwrap();
+    let instance = wgpu::Instance::default();
+    let renderer = pollster::block_on(omsi_render::Renderer::new(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb))).unwrap();
+    let rows = vec![
+        ("#", "Date\u{1f}i".to_owned()),
+        ("date", "Date\u{1f}d\u{1f}2026-11-03\u{1f}The day the timetable, the season and the map's changes follow".to_owned()),
+        ("clock_shift -86400", "Date -1 day\u{1f}a\u{1f}-1 day\u{1f}Move the date.".to_owned()),
+        ("clock_shift 86400", "Date +1 day\u{1f}a\u{1f}+1 day\u{1f}Move the date.".to_owned()),
+    ];
+    let rail = vec![("resume", "Resume".into(), None), ("world", "World options...".into(), None)];
+    for (name, w, h) in [("pause-date-desktop", 1440, 900), ("pause-date-narrow", 400, 720)] {
+        let mut view = nested_view(&rail, &rows, true);
+        view.kbd = false;
+        let list = view.list.as_mut().unwrap();
+        list.tabs.as_mut().unwrap().1 = 0;
+        list.key = "World0".into();
+        let mut sh = Shell::new();
+        sh.begin(w as f32, h as f32, 1.0, 1.0 / 60.0);
+        draw(&mut sh, &view);
+        let field = sh.ui.drawn[&id_of("pause-date-1-Date")];
+        sh.finish();
+        for frame in 0..12 {
+            sh.begin(w as f32, h as f32, 1.0, 1.0 / 60.0);
+            sh.ui.input.mouse = field.center();
+            sh.ui.input.pressed = frame == 0;
+            sh.ui.input.released = frame == 0;
+            draw(&mut sh, &view);
+            sh.finish();
+        }
+        let pixels = sh.picture_for_shot(&renderer, w, h).expect("drawn calendar");
+        image::save_buffer(out.join(format!("{name}.png")), &pixels, w, h, image::ColorType::Rgba8).unwrap();
+        println!("preview: {}", out.join(format!("{name}.png")).display());
+    }
+}
+
+#[test]
+fn settings_search_keyboard_input_does_not_dispatch_game_actions() {
+    use winit::keyboard::KeyCode as K;
+    let mut sh = Shell::new();
+    assert!(!search::key(&mut sh, K::KeyW, Some("w")));
+    sh.ui.focus = Some(id_of("pause-settings-search"));
+    assert!(search::key(&mut sh, K::KeyW, Some("w")));
+    assert_eq!(sh.ui.input.text, "w");
+    assert!(sh.actions.is_empty());
+    assert!(search::key(&mut sh, K::Escape, None));
+    assert!(!search::focused(&sh));
+}
+
+#[test]
+fn settings_search_filtered_click_keeps_original_action_index() {
+    let rows = fixture(false);
+    let rail = Vec::new();
+    let v = nested_view(&rail, &rows, false);
+    let mut sh = Shell::new();
+    sh.settings_search.query = "custom plate".into();
+    sh.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
+    sh.ui.input.mouse = Vec2::new(350.0, 245.0);
+    sh.ui.input.pressed = true;
+    sh.ui.input.released = true;
+    settings_rows(&mut sh, &v, v.list.as_ref().unwrap(), Rect::new(300.0, 180.0, 800.0, 600.0), &mut None);
+    assert_eq!(sh.actions, [Action::Choose(6)]);
+    assert_eq!(sh.settings_search.visible, [6]);
+}
+
+#[test]
+fn settings_search_toolbar_types_and_resets_when_page_changes() {
+    let rows = fixture(false);
+    let rail = Vec::new();
+    let v = nested_view(&rail, &rows, false);
+    let list = v.list.as_ref().unwrap();
+    let mut sh = Shell::new();
+    sh.settings_search.page = list.key.clone();
+    sh.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
+    sh.ui.focus = Some(id_of("pause-settings-search"));
+    sh.ui.input.text = "Fleet".into();
+    let mut body = Rect::new(300.0, 180.0, 800.0, 600.0);
+    search::toolbar(&mut sh, list, Rect::new(300.0, 100.0, 700.0, 650.0), &mut body);
+    assert_eq!(sh.settings_search.query, "Fleet");
+    assert_eq!(body.y, 228.0);
+    sh.ui.input.text.clear();
+    sh.settings_search.page = "Other".into();
+    search::toolbar(&mut sh, list, Rect::new(300.0, 100.0, 700.0, 650.0), &mut body);
+    assert!(sh.settings_search.query.is_empty());
+    assert!(!search::focused(&sh));
+}
+
+#[test]
+fn settings_search_closes_phone_keyboard_and_keeps_desktop_text() {
+    use clap::Parser;
+    use winit::keyboard::KeyCode as K;
+    let mut app = crate::assemble_app(crate::cli::Args::parse_from(["openomsi"]), crate::settings::Settings::default());
+    app.menus.game_menu = Some(0);
+    app.open_list(crate::game_lists::ListKind::Options(0));
+    app.shell.ui.focus = Some(id_of("pause-settings-search"));
+    crate::platform::TEXT_INPUT_ON.with(|flag| flag.set(false));
+    crate::platform::phone_keyboard(None, true);
+    assert_eq!(crate::platform::TEXT_INPUT_ON.with(|flag| flag.get()), crate::platform::MOBILE);
+    assert!(app.settings_search_key(K::KeyE, Some("é")));
+    assert_eq!(app.shell.ui.input.text, "é");
+    assert!(app.settings_search_key(K::Escape, None));
+    assert!(!crate::platform::PHONE_KEYBOARD_ON.with(|flag| flag.get()));
+    assert!(!crate::platform::TEXT_INPUT_ON.with(|flag| flag.get()));
+}
+
+#[test]
+fn pause_unheaded_long_page_uses_right_column_with_original_action_index() {
+    let rows: Vec<_> = (0..8).map(|_| ("keybind", "Binding\u{1f}a\u{1f}Key\u{1f}Change binding".to_string())).collect();
+    let rail = Vec::new();
+    let mut v = nested_view(&rail, &rows, false);
+    v.list.as_mut().unwrap().sel = 0;
+    let mut sh = Shell::new();
+    sh.begin(1600.0, 900.0, 1.0, 1.0 / 60.0);
+    sh.ui.input.mouse = Vec2::new(1200.0, 215.0);
+    sh.ui.input.pressed = true;
+    sh.ui.input.released = true;
+    settings_rows(&mut sh, &v, v.list.as_ref().unwrap(), Rect::new(300.0, 180.0, 1100.0, 600.0), &mut None);
+    assert_eq!(sh.actions, [Action::Choose(4)]);
 }

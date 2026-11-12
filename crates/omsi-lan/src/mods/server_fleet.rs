@@ -4,6 +4,46 @@ use super::*;
 use crate::server_cfg::SERVER_VEHICLES;
 
 type Package = Arc<(Manifest, Vec<PathBuf>)>;
+
+/// A fleet bus's complete list (every paint) as the fleet check made it at the start, with
+/// its paints' names and each source's size and time: a player asking for the bus
+/// (`package`) gets it from here rather than have the bus loaded and every folder of it read
+/// again - per paint asked for, and players asked for many at once.
+struct Model {
+    paints: Vec<String>,
+    manifest: identity::VehicleManifest,
+    sources: Vec<PathBuf>,
+    stamps: Vec<Stamp>,
+}
+
+type Stamp = Option<(u64, std::time::SystemTime)>;
+
+static MODELS: Mutex<Option<HashMap<String, Arc<Model>>>> = Mutex::new(None);
+
+fn paints_of(ty: &omsi_sim::VehicleType) -> Vec<String> {
+    ty.paint_schemes.iter().take(128).map(|p| p.name.clone()).collect()
+}
+
+fn stamp(p: &Path) -> Stamp {
+    let m = std::fs::metadata(p).ok()?;
+    Some((m.len(), m.modified().ok()?))
+}
+
+fn keep_model(bus: &str, paints: Vec<String>, manifest: &identity::VehicleManifest, sources: &[PathBuf]) {
+    let model = Model {
+        paints,
+        manifest: manifest.clone(),
+        stamps: sources.iter().map(|p| stamp(p)).collect(),
+        sources: sources.to_vec(),
+    };
+    MODELS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).insert(omsi_cfg::name_key(bus), Arc::new(model));
+}
+
+/// The kept list of `bus`, while every one of its files has the size and time it had.
+fn kept_model(bus: &str) -> Option<Arc<Model>> {
+    let m = MODELS.lock().unwrap_or_else(|e| e.into_inner()).as_ref()?.get(&omsi_cfg::name_key(bus)).cloned()?;
+    m.sources.iter().zip(&m.stamps).all(|(p, s)| stamp(p) == *s).then_some(m)
+}
 type Cached = Arc<std::sync::OnceLock<Result<Package, String>>>;
 pub(super) type Cache = Mutex<HashMap<String, (Instant, Cached)>>;
 
@@ -73,11 +113,33 @@ pub(super) fn package(root: &Path, base: &(Manifest, Vec<PathBuf>), bus: &str, p
     if !trusted_source(root, &path) {
         return Err("the selected bus resolves outside the trusted content roots".into());
     }
-    let ty = omsi_sim::VehicleType::load(root, &path).map_err(|e| format!("{bus}: {e}"))?;
-    if !paint.is_empty() && !ty.paint_schemes.iter().take(128).any(|p| p.name.eq_ignore_ascii_case(paint)) {
+    // (a list not kept yet - asked for before the fleet check got to the bus, or its files
+    // changed - is made by one request at a time: players asking together wait for it)
+    static MAKING: Mutex<()> = Mutex::new(());
+    let model = match kept_model(&bus) {
+        Some(m) => m,
+        None => {
+            let _one = MAKING.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(m) = kept_model(&bus) {
+                return finish_package(base, &bus, paint, m);
+            }
+            let ty = omsi_sim::VehicleType::load(root, &path).map_err(|e| format!("{bus}: {e}"))?;
+            let (manifest, sources) = model_manifest(root, &bus, &ty)?;
+            keep_model(&bus, paints_of(&ty), &manifest, &sources);
+            kept_model(&bus).ok_or("the bus's files changed while they were listed")?
+        }
+    };
+    finish_package(base, &bus, paint, model)
+}
+
+/// `package` with the bus's kept list: the paint asked for checked, the map's files beside.
+fn finish_package(base: &(Manifest, Vec<PathBuf>), bus: &str, paint: &str, model: Arc<Model>) -> Result<(Manifest, Vec<PathBuf>), String> {
+    let bus = bus.to_string();
+    if !paint.is_empty() && !model.paints.iter().any(|p| p.eq_ignore_ascii_case(paint)) {
         return Err("the selected repaint is not offered by the server".into());
     }
-    let (manifest, sources) = model_manifest(root, &bus, &ty)?;
+    // (every source is checked again as it is sent: `trusted_source` before each GET)
+    let (manifest, sources) = (model.manifest.clone(), model.sources.clone());
     let entries = manifest.entries.clone();
     // Add the selected version on top of the optional map manifest. Keep GET indexes
     // aligned with the source paths; prefer this exact vehicle over map dependencies.
@@ -105,20 +167,48 @@ pub fn fingerprint(root: &Path, bus: &str) -> Result<String, String> {
     model_manifest(root, &bus, &ty).map(|(m, _)| m.fingerprint())
 }
 
+/// `fingerprint` of a bus already loaded from `path` (the server's fleet check loads each
+/// once, not twice).
+pub fn fingerprint_loaded(root: &Path, bus: &str, path: &Path, ty: &omsi_sim::VehicleType) -> Result<String, String> {
+    let bus = omsi_net::vehicle_path(bus).ok_or("invalid bus path")?;
+    if !trusted_source(root, path) { return Err("untrusted bus path".into()); }
+    let t = std::time::Instant::now();
+    let gathered = gathered(root, ty)?;
+    let listed = t.elapsed().as_secs_f64();
+    let (entries, cached, read) = upload::hashed_counted(&gathered);
+    log::info!(
+        "server fleet: {bus}: {} files listed in {listed:.1} s, hashed in {:.1} s ({cached} known from the hash cache, {:.1} MB read)",
+        gathered.len(),
+        t.elapsed().as_secs_f64() - listed,
+        read as f64 / 1e6
+    );
+    let (m, sources) = manifest_of(&bus, gathered, entries)?;
+    // (kept for the players who ask for the bus: `package`)
+    keep_model(&bus, paints_of(ty), &m, &sources);
+    Ok(m.fingerprint())
+}
+
+/// Every file of the bus in every paint it offers (the first 128), as `listed` names them.
+fn gathered(root: &Path, ty: &omsi_sim::VehicleType) -> Result<Vec<(String, PathBuf)>, String> {
+    let schemes: Vec<Option<usize>> = std::iter::once(None).chain((0..ty.paint_schemes.len().min(128)).map(Some)).collect();
+    let all = bus_files::of_type_paints(root, ty, &schemes);
+    if all.iter().any(|path| !trusted_source(root, path)) {
+        return Err("selected vehicle dependencies resolve outside the trusted content roots".into());
+    }
+    Ok(upload::listed(root, all.into_iter().collect()))
+}
+
 fn model_manifest(root: &Path, bus: &str, ty: &omsi_sim::VehicleType) -> Result<(identity::VehicleManifest, Vec<PathBuf>), String> {
     // The server offers the *complete configured model*, including the default
     // and all advertised repaint dependencies. A player with the same bus but
     // without a server repaint must obtain that repaint without replacing OMSI 2.
     // BTreeSet deduplicates shared textures, models, scripts and sounds.
-    let mut all = std::collections::BTreeSet::new();
-    for scheme in std::iter::once(None).chain((0..ty.paint_schemes.len().min(128)).map(Some)) {
-        all.extend(bus_files::of_type(root, &ty, scheme, None));
-    }
-    if all.iter().any(|path| !trusted_source(root, path)) {
-        return Err("selected vehicle dependencies resolve outside the trusted content roots".into());
-    }
-    let files = upload::listed(root, all.into_iter().collect());
+    let files = gathered(root, ty)?;
     let entries = upload::hashed(&files);
+    manifest_of(bus, files, entries)
+}
+
+fn manifest_of(bus: &str, files: Vec<(String, PathBuf)>, entries: Vec<Entry>) -> Result<(identity::VehicleManifest, Vec<PathBuf>), String> {
     // Hashing skips files it cannot safely read. Never zip a shortened hash
     // list with the original paths: that could serve the wrong bytes for a hash.
     if entries.len() != files.len() {
@@ -267,5 +357,23 @@ mod tests {
         assert_eq!(unhex_text("f"), None);
         assert_eq!(unhex_text("gg"), None);
         assert_eq!(unhex_text("ff"), None);
+    }
+
+    /// A bus's list kept from the fleet check is given while its files are as they were, and
+    /// made again once one of them changed (a player never gets a list whose file differs).
+    #[test]
+    fn a_kept_list_holds_while_its_files_do() {
+        let dir = std::env::temp_dir().join(format!("omsi-fleet-kept-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("kept.bus");
+        std::fs::write(&file, b"[name]\nkept\n").unwrap();
+        let entry = Entry { path: "Vehicles/Kept/kept.bus".into(), size: 13, sha256: crate::mods::sha256_of(b"[name]\nkept\n") };
+        let m = identity::VehicleManifest { bus: "Vehicles/Kept/kept.bus".into(), entries: vec![entry] };
+        keep_model("Vehicles/Kept/kept.bus", vec!["Blue".into()], &m, std::slice::from_ref(&file));
+        let kept = kept_model("vehicles/kept/KEPT.bus").expect("kept, whatever the case");
+        assert_eq!((kept.paints.clone(), kept.sources.clone()), (vec!["Blue".to_string()], vec![file.clone()]));
+        std::fs::write(&file, b"[name]\nother bytes\n").unwrap();
+        assert!(kept_model("Vehicles/Kept/kept.bus").is_none(), "a file changed: listed again");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

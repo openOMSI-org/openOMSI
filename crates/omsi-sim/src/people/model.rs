@@ -399,8 +399,7 @@ pub struct PeopleSim {
     /// the HUD shows OMSI's hint for it (`Languages/*_basic*.olf`, `RL_PassDlg_<name>`).
     pub dialog: Option<String>,
     /// The player's duty (`set_duty`): its trip, the stop of it the duty is due at, and
-    /// whether the trip has reached its last stop. None: free drive, and nobody waiting
-    /// boards the player's bus.
+    /// whether the trip has reached its last stop. A fallback for unrecognized signs.
     pub duty: Option<(Arc<DutyTrip>, usize, bool)>,
     /// Buses whose validator somebody used since the app last looked (`take_stamped`), with
     /// the index of that `[stamper]` in the bus's cabin.
@@ -434,6 +433,7 @@ pub struct PeopleSim {
     /// The chance a boarding passenger takes a standing place although a seat is free
     /// (`standing_chance` in the settings).
     pub stand_chance: f32,
+    pub short_rides_stand: bool,
     /// The driver pressed the ticket key (`ticket_give`): sell the requested ticket.
     pub give_ticket: bool,
     /// The key that sells a ticket, as the HUD names it.

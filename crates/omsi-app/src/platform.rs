@@ -61,6 +61,30 @@ pub(crate) fn set_tilt(on: bool) {
     let _ = on;
 }
 
+pub(crate) fn text_input(window: Option<&winit::window::Window>, on: bool) {
+    if let Some(w) = window {
+        w.set_ime_allowed(on);
+    }
+    #[cfg(target_os = "android")]
+    crate::android::soft_keyboard(on);
+    #[cfg(test)]
+    TEXT_INPUT_ON.with(|t| t.set(on));
+}
+
+pub(crate) fn phone_keyboard(window: Option<&winit::window::Window>, on: bool) {
+    #[cfg(test)]
+    PHONE_KEYBOARD_ON.with(|t| t.set(on));
+    if MOBILE {
+        text_input(window, on);
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    pub(crate) static TEXT_INPUT_ON: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    pub(crate) static PHONE_KEYBOARD_ON: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 /// Ask the system for the microphone now (Android's runtime permission; the other systems ask
 /// when the microphone is first opened, which the voice engine does for a moment).
 pub(crate) fn request_microphone() {

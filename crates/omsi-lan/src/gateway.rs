@@ -316,12 +316,37 @@ fn port_of_gateway() -> Option<u16> {
     WS_PATH.lock().ok()?.as_ref()?.gateway.as_ref().map(|g| g.addr.port())
 }
 
+/// The server's fleet once it has been checked (`omsi-app`'s `server::announce_fleet`): the
+/// web port opens before, telling no fleet (version 0, as servers before it did).
+pub fn update_server_fleet(fleet: Vec<omsi_net::ws::FleetPaints>, version: u32) {
+    if let Ok(w) = WS_PATH.lock() {
+        if let Some(g) = w.as_ref().and_then(|w| w.gateway.as_ref()) {
+            if let Ok(mut i) = g.info.lock() {
+                i.fleet = fleet;
+                i.fleet_version = version;
+            }
+        }
+    }
+}
+
 /// A server run: what its status page says now.
-pub fn update_server_info(players: usize, time: &str, weather: &str) {
+/// The server's direct address as it found it (see `public_address`), for its status page.
+pub fn update_server_direct(direct: &str) {
+    if let Ok(w) = WS_PATH.lock() {
+        if let Some(g) = w.as_ref().and_then(|w| w.gateway.as_ref()) {
+            if let Ok(mut i) = g.info.lock() {
+                i.direct = direct.to_string();
+            }
+        }
+    }
+}
+
+pub fn update_server_info(players: usize, date: &str, time: &str, weather: &str) {
     if let Ok(w) = WS_PATH.lock() {
         if let Some(g) = w.as_ref().and_then(|w| w.gateway.as_ref()) {
             if let Ok(mut i) = g.info.lock() {
                 i.players = players;
+                i.date = date.to_string();
                 i.time = time.to_string();
                 if !weather.is_empty() {
                     i.weather = weather.to_string();
@@ -403,9 +428,31 @@ pub fn take_local_admin() -> Vec<String> {
     Vec::new()
 }
 
+/// The server's own direct address for a tunnel's `url`, when its owner gives one
+/// (`public_address`) and it answers from here within a few seconds: a quick tunnel breaks
+/// its WebSockets now and then, the direct way does not. None: the tunnel it is.
+fn direct_of(url: &str) -> Option<String> {
+    let info = omsi_net::ws::query(url, false).ok()?;
+    // (only a public IPv4 address and port, a name resolved to one: a status naming this
+    // machine, its network or a carrier's NAT would send our requests there)
+    let addr = followable(&info.direct)?;
+    let base = omsi_net::ws::http_base(&format!("http://{addr}"))?;
+    if omsi_net::ws::http_base(url).as_deref() == Some(base.as_str()) {
+        return None;
+    }
+    if !omsi_net::ws::reachable(&base, std::time::Duration::from_secs(3)) {
+        log::info!("LAN: the server's direct address {} does not answer from here; through {url}", info.direct);
+        return None;
+    }
+    log::info!("LAN: joining by the server's direct address {} rather than {url}", info.direct);
+    omsi_net::ws::ws_url(&base)
+}
+
 /// Joining game: reach `url` (a server's or a host's tunnel) over a WebSocket; the local
 /// address to join instead.
 pub fn ws_join_target(url: &str) -> Result<String, String> {
+    let direct = direct_of(url);
+    let url = direct.as_deref().unwrap_or(url);
     let c = omsi_net::ws::WsClient::connect(url)?;
     let local = c.local;
     if let Ok(mut w) = WS_PATH.lock() {
@@ -417,6 +464,25 @@ pub fn ws_join_target(url: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A game joining through a tunnel takes the server's direct address when the server tells
+    /// one and it answers; the tunnel when it tells none, or one that does not answer.
+    #[test]
+    fn a_tunnel_gives_way_to_the_servers_direct_address_that_answers() {
+        use omsi_net::ws::{ServerInfo, WsGateway};
+        let any = std::net::SocketAddr::from(([127, 0, 0, 1], 0));
+        let target = std::net::SocketAddr::from(([127, 0, 0, 1], 9));
+        let direct = WsGateway::start(any, target, ServerInfo { name: "direct".into(), ..Default::default() }).unwrap();
+        let tunnel = WsGateway::start(any, target, ServerInfo { name: "tunnel".into(), direct: direct.addr.to_string(), ..Default::default() }).unwrap();
+        let via = format!("http://{}", tunnel.addr);
+        assert_eq!(direct_of(&via), Some(format!("ws://{}/ws", direct.addr)));
+        // (told none, or one nobody answers at: the tunnel)
+        let plain = WsGateway::start(any, target, ServerInfo { name: "plain".into(), ..Default::default() }).unwrap();
+        assert_eq!(direct_of(&format!("http://{}", plain.addr)), None);
+        let closed = std::net::TcpListener::bind(any).unwrap().local_addr().unwrap();
+        let dead = WsGateway::start(any, target, ServerInfo { name: "dead".into(), direct: closed.to_string(), ..Default::default() }).unwrap();
+        assert_eq!(direct_of(&format!("http://{}", dead.addr)), None);
+    }
 
     /// Every session starts with every bus offered: a server joined before (on a phone the
     /// launcher and the game share one process) no longer limits a drive alone or the next
@@ -465,5 +531,56 @@ mod tests {
         // (the same file name in another folder is another bus)
         assert!(!offers(&list, "Vehicles/Mod_SD200/MAN_SD77.bus"));
         assert!(!offers(&offered_keys(&[]), "Vehicles/MAN_SD200/MAN_SD77.bus"));
+    }
+}
+
+/// The WebSocket gateway of a host joined straight over UDP (by code or address), when its TCP
+/// port is out of reach: a dedicated server's web port on the same address (`web_port`, 27025 by
+/// default, or the UDP port + 10 as the defaults have them), if an openOMSI status answers there
+/// within 3 s. `ws://<address>/ws`, as a tunnel's.
+pub(crate) fn host_web_gateway(host: std::net::SocketAddr) -> Option<String> {
+    let mut ports = vec![host.port().saturating_add(10), 27025];
+    ports.dedup();
+    ports.into_iter().map(|p| std::net::SocketAddr::new(host.ip(), p)).find(|a| omsi_net::ws::reachable(&format!("http://{a}"), Duration::from_secs(3))).map(|a| {
+        log::info!("LAN mods: the host's web port answers at {a}");
+        format!("ws://{a}/ws")
+    })
+}
+
+/// The address a status's `direct` (`1.2.3.4:27025`, or `name:27025`) is followed to: its first
+/// IPv4 address that is of the internet (`public_ip`; a test's servers on this machine too).
+fn followable(direct: &str) -> Option<std::net::SocketAddrV4> {
+    use std::net::ToSocketAddrs;
+    let direct = direct.trim();
+    if direct.is_empty() {
+        return None;
+    }
+    direct.to_socket_addrs().ok()?.find_map(|a| match a {
+        std::net::SocketAddr::V4(v4) if v4.port() != 0 && (public_ip(*v4.ip()) || (cfg!(test) && v4.ip().is_loopback())) => Some(v4),
+        _ => None,
+    })
+}
+
+/// An address of the internet: not this machine's, a private network's, a link's, a carrier's NAT
+/// (100.64.0.0/10), a test network's, multicast or unspecified.
+fn public_ip(ip: std::net::Ipv4Addr) -> bool {
+    let o = ip.octets();
+    !(ip.is_private() || ip.is_loopback() || ip.is_link_local() || ip.is_multicast() || ip.is_broadcast() || ip.is_unspecified() || ip.is_documentation() || o[0] == 0 || (o[0] == 100 && (64..128).contains(&o[1])) || o[0] >= 240)
+}
+
+#[cfg(test)]
+mod public_ip_tests {
+    #[test]
+    fn only_internet_addresses_are_followed() {
+        use std::net::Ipv4Addr;
+        assert!(super::public_ip(Ipv4Addr::new(8, 8, 8, 8)));
+        // a name is followed to its address (here this machine's, as the tests allow)
+        assert_eq!(super::followable("localhost:27025").map(|a| a.port()), Some(27025));
+        assert_eq!(super::followable("10.0.0.1:27025"), None);
+        assert_eq!(super::followable("8.8.8.8:0"), None);
+        assert_eq!(super::followable(""), None);
+        for no in [[127, 0, 0, 1], [192, 168, 1, 2], [10, 0, 0, 1], [172, 16, 0, 1], [169, 254, 1, 1], [100, 72, 0, 1], [0, 0, 0, 0], [224, 0, 0, 1], [255, 255, 255, 255], [203, 0, 113, 7]] {
+            assert!(!super::public_ip(Ipv4Addr::from(no)), "{no:?}");
+        }
     }
 }

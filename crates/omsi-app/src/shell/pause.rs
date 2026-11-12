@@ -9,10 +9,14 @@
 //! the game as an [`Action`].
 
 pub(crate) mod navigation;
+pub(crate) mod search;
 mod navigation_ui;
+mod vehicles;
+pub(crate) mod online_ui;
 mod quick_actions_ui;
 pub(crate) mod quick_actions;
 
+use omsi_settings_ui::parse_row;
 use std::borrow::Cow;
 use glam::Vec2;
 use omsi_ui::paint::Align;
@@ -39,6 +43,7 @@ const LIST_ROW: f32 = 40.0;
 pub(crate) struct ListView<'a> {
     pub kind: MenuKind,
     pub head: Option<(String, String)>,
+    pub badge: Option<usize>,
     pub tabs: Option<(Vec<String>, usize)>,
     /// (what it does, what it shows)
     pub items: Vec<(&'a str, &'a str)>,
@@ -59,8 +64,6 @@ pub(crate) struct PauseView<'a> {
     /// The line the keyboard is on (the game menu's, while no list is open).
     pub rail_sel: Option<usize>,
     pub disabled: &'a [&'a str],
-    /// The line of the rail the open list belongs to.
-    pub rail_open: Option<&'static str>,
     pub list: Option<ListView<'a>>,
     /// The keyboard chose last: its line is shown lit.
     pub kbd: bool,
@@ -68,6 +71,7 @@ pub(crate) struct PauseView<'a> {
     pub keys: bool,
     /// What the home page sums up of the session.
     pub summary: Summary,
+    pub online: online_ui::View,
 }
 
 /// The session as the pause menu's sidebar shows it: the bus and the driver.
@@ -89,6 +93,7 @@ pub(crate) fn rail_icon(id: &str) -> &'static str {
         "vehicle" => "airport_shuttle",
         "world" => "partly_cloudy_day",
         "map" => "map",
+        "streets" => "search",
         "duty" => "departure_board",
         "skipstop" => "near_me",
         "endduty" => "sports_score",
@@ -97,7 +102,7 @@ pub(crate) fn rail_icon(id: &str) -> &'static str {
         "load" => "history",
         "copycode" => "content_copy",
         "admin" => "key",
-        "players" => "group",
+        "players" | "multiplayer" => "group",
         "plugin" => "extension",
         "quit" => "logout",
         _ => "chevron_right",
@@ -113,7 +118,29 @@ fn plain(label: &str) -> (&str, bool) {
     }
 }
 
+fn count_badge_rect(title_width: f32, badge_width: f32, title_x: f32, right: f32, y: f32) -> Option<Rect> {
+    let x = title_x + title_width + 12.0;
+    (x + badge_width <= right).then(|| Rect::new(x, y + 9.0, badge_width, 22.0))
+}
+
 pub(crate) fn draw(sh: &mut Shell, v: &PauseView) {
+    if sh.pause_category != navigation::Category::Online {
+        sh.pause_online.confirm = None;
+        sh.pause_online.management = None;
+    }
+    let saved_click = (sh.ui.input.pressed, sh.ui.input.released);
+    let management_open = sh.pause_online.management.is_some();
+    let saved_wheel = sh.ui.input.wheel;
+    if management_open { sh.ui.input.wheel = Vec2::ZERO; }
+    if sh.pause_online.confirm.is_some() || management_open {
+        sh.ui.input.pressed = false;
+        sh.ui.input.released = false;
+    }
+
+    if !v.list.as_ref().is_some_and(|list| list.kind == MenuKind::Options) {
+        if sh.ui.focus == Some(id_of("pause-settings-search")) { sh.ui.focus = None; }
+        sh.settings_search = Default::default();
+    }
     let size = sh.ui.size;
     // Drawing a submenu must not change the category that opened it.
     let sidebar = size.x >= if v.list.is_some() { NARROW } else { 700.0 };
@@ -140,6 +167,12 @@ pub(crate) fn draw(sh: &mut Shell, v: &PauseView) {
     if sidebar {
         navigation_ui::rail(sh, v);
     }
+    (sh.ui.input.pressed, sh.ui.input.released) = saved_click;
+    if management_open {
+        sh.ui.input.wheel = saved_wheel;
+        online_ui::management_modal(sh, &v.online);
+    }
+    online_ui::confirmation(sh);
 }
 
 /// The launcher's tabs: the titles in a row, the chosen one in the text colour over an amber
@@ -187,12 +220,27 @@ fn list_page(sh: &mut Shell, v: &PauseView, list: &ListView, page: Rect) {
         });
     }
     let tx = area.x + 46.0;
-    sh.ui.text(&title, Vec2::new(tx, area.y + 26.0), 26.0, Weight::Bold, th().ink, Align::Left);
+    let title_width = if list.kind == MenuKind::Options && area.w >= 760.0 {
+        (area.w - 46.0 - (area.w * 0.34).clamp(220.0, 360.0) - 58.0).max(100.0)
+    } else {
+        area.w - 46.0
+    };
+    sh.ui.text_in(&title, Rect::new(tx, area.y + 4.0, title_width, 34.0), 26.0, Weight::Bold, th().ink, Align::Left);
+    if let Some(count) = list.badge {
+        let text = count.to_string();
+        let badge_width = (sh.ui.width(&text, 12.0, Weight::Medium) + 16.0).max(24.0);
+        let title_width = sh.ui.width(&title, 26.0, Weight::Bold);
+        if let Some(badge) = count_badge_rect(title_width, badge_width, tx, area.right(), area.y) {
+            sh.ui.p().rounded(badge, 6.0, th().accent.alpha(0.16));
+            sh.ui.text_in(&text, badge, 12.0, Weight::Medium, th().accent, Align::Center);
+        }
+    }
     let sub = if sub.is_empty() { list_hint(list.kind) } else { sub };
     if !sub.is_empty() {
-        sh.ui.text_in(&sub, Rect::new(tx, area.y + 36.0, area.w - 46.0, 20.0), 13.0, Weight::Regular, th().ink_muted, Align::Left);
+        sh.ui.text_in(&sub, Rect::new(tx, area.y + 36.0, title_width, 20.0), 13.0, Weight::Regular, th().ink_muted, Align::Left);
     }
     let mut body = Rect::new(area.x, area.y + 70.0, area.w, (area.h - 70.0).max(40.0));
+    if list.kind == MenuKind::Options { search::toolbar(sh, list, area, &mut body); }
     // the pages of a settings window: the launcher's tabs
     if let Some((titles, at)) = list.tabs.as_ref().filter(|(t, _)| t.len() > 1) {
         let (picked, rows) = tabs(&mut sh.ui, Vec2::new(body.x, body.y - 6.0), titles, *at, body.w);
@@ -219,8 +267,9 @@ fn list_page(sh: &mut Shell, v: &PauseView, list: &ListView, page: Rect) {
     }
     let mut anchor: Option<Rect> = None;
     match list.kind {
-        MenuKind::Options => settings_rows(sh, v, list, body, &mut anchor),
+        MenuKind::Options | MenuKind::Sections => settings_rows(sh, v, list, body, &mut anchor),
         MenuKind::Lines | MenuKind::Tours => timetable_lists(sh, v, list, body),
+        MenuKind::Vehicles => vehicles::draw(sh, v, list, body),
         _ => plain_list(sh, v, list, body),
     }
     (sh.ui.input.pressed, sh.ui.input.released) = saved;
@@ -244,25 +293,6 @@ fn list_hint(kind: MenuKind) -> String {
     omsi_ui::tr(t).into_owned()
 }
 
-/// A row of a settings window, taken apart.
-struct Row<'a> {
-    name: &'a str,
-    kind: &'a str,
-    value: &'a str,
-    desc: &'a str,
-    frac: Option<f32>,
-}
-
-fn parse_row(label: &str) -> Row<'_> {
-    let mut p = label.split('\u{1f}');
-    let name = p.next().unwrap_or("");
-    let kind = p.next().unwrap_or("a");
-    let value = p.next().unwrap_or("");
-    let desc = p.next().unwrap_or("");
-    let frac = p.next().and_then(|x| x.parse().ok());
-    Row { name, kind, value, desc, frac }
-}
-
 /// How high a row of a settings window is: two lines when it has a description.
 fn row_h(id: &str, label: &str) -> f32 {
     if id == crate::game_lists::HEADING {
@@ -279,27 +309,15 @@ fn row_h(id: &str, label: &str) -> f32 {
 /// the page is wide enough, the headings of the list as the panels' section titles.
 fn settings_rows(sh: &mut Shell, v: &PauseView, list: &ListView, body: Rect, anchor: &mut Option<Rect>) {
     let items = &list.items;
-    // The groups retain original indices; the settings layout stays unchanged.
-    let shown: Vec<usize> = settings_groups(items, list.tabs.is_none()).into_iter().flatten().collect();
-    let two = body.w >= 900.0 && shown.len() > 6;
-    // (split where the heights balance, at a heading if one is near)
-    let total: f32 = shown.iter().map(|&k| row_h(items[k].0, items[k].1)).sum();
-    let mut split = shown.len();
-    if two {
-        let mut acc = 0.0;
-        for (n, &k) in shown.iter().enumerate() {
-            if acc >= total * 0.5 {
-                split = n;
-                // (a heading ends up first in the right column, not last in the left)
-                if n > 0 && items[shown[n - 1]].0 == crate::game_lists::HEADING {
-                    split = n - 1;
-                }
-                break;
-            }
-            acc += row_h(items[k].0, items[k].1);
-        }
+    let hide_back = list.tabs.is_none();
+    let back = hide_back.then(|| items.iter().position(|&(id, label)| id == "back" && plain(parse_row(label).name).0 == omsi_ui::tr("Back").as_ref())).flatten();
+    let groups = omsi_settings_ui::filter_groups(items, crate::game_lists::HEADING, back, &sh.settings_search.query);
+    sh.settings_search.visible = groups.iter().flatten().copied().filter(|&k| items[k].0 != crate::game_lists::HEADING).collect();
+    if groups.is_empty() {
+        sh.ui.text_in(&omsi_ui::tr("No matching settings"), body, 14.0, Weight::Regular, th().ink_muted, Align::Center);
     }
-    let cols: Vec<&[usize]> = if two { vec![&shown[..split], &shown[split..]] } else { vec![&shown[..]] };
+    let two = body.w >= 900.0 && groups.iter().flatten().count() > 6;
+    let cols = settings_columns(groups, two, items);
     let any_hover = sh.ui.hover(body);
     let key = format!("pause-list-{}", list.key);
     let mut acts: Vec<Action> = Vec::new();
@@ -310,39 +328,40 @@ fn settings_rows(sh: &mut Shell, v: &PauseView, list: &ListView, body: Rect, anc
         let gap = GAP * 2.0;
         let cw = if cols.len() == 2 { (view.w - 8.0 - gap) / 2.0 } else { (view.w - 8.0).min(760.0) };
         let mut tallest = 0.0f32;
-        for (c, rows) in cols.iter().enumerate() {
+        for (c, groups) in cols.iter().enumerate() {
             let x = view.x + c as f32 * (cw + gap);
-            let h: f32 = rows.iter().map(|&k| row_h(items[k].0, items[k].1)).sum::<f32>() + 28.0;
-            let panel = Rect::new(x, view.y, cw, h.max(60.0));
-            ui.panel(panel);
-            let inner = Rect::new(x + 18.0, view.y + 14.0, cw - 36.0, h - 28.0);
-            let mut y = inner.y;
-            for &k in rows.iter() {
-                let (id, label) = items[k];
-                let rh = row_h(id, label);
-                if id == crate::game_lists::HEADING {
-                    // (a group's title as the launcher's card title)
-                    let t = parse_row(label).name;
-                    ui.p().rounded(Rect::new(inner.x, y + 7.0, 3.0, 20.0), 1.5, th().accent);
-                    ui.text_in(t, Rect::new(inner.x + 12.0, y + 4.0, inner.w - 12.0, 28.0), 15.0, Weight::Bold, th().ink, Align::Left);
-                    y += rh;
-                    continue;
+            let mut y = view.y;
+            for rows in groups {
+                let h = rows.iter().map(|&k| row_h(items[k].0, items[k].1)).sum::<f32>() + 28.0;
+                ui.panel(Rect::new(x, y, cw, h.max(60.0)));
+                let inner = Rect::new(x + 18.0, y + 14.0, cw - 36.0, h - 28.0);
+                let mut row_y = inner.y;
+                for (n, &k) in rows.iter().enumerate() {
+                    let (id, label) = items[k];
+                    let rh = row_h(id, label);
+                    if id == crate::game_lists::HEADING {
+                        let t = omsi_ui::tr(parse_row(label).name);
+                        ui.p().rounded(Rect::new(inner.x, row_y + 7.0, 3.0, 20.0), 1.5, th().accent);
+                        ui.text_in(&t, Rect::new(inner.x + 12.0, row_y + 4.0, inner.w - 12.0, 28.0), 15.0, Weight::Bold, th().ink, Align::Left);
+                        row_y += rh;
+                        continue;
+                    }
+                    if n > 0 && items.get(rows[n - 1]).is_some_and(|(pid, _)| *pid != crate::game_lists::HEADING) {
+                        ui.p().rect(Rect::new(inner.x, row_y - 2.0, inner.w, 1.0), Color::rgba(255, 255, 255, 0.045));
+                    }
+                    let r = Rect::new(inner.x - 8.0, row_y, inner.w + 16.0, rh - 4.0);
+                    let kbd = v.kbd && !any_hover && k == list.sel;
+                    if kbd {
+                        sel_y = Some((row_y - view.y, rh));
+                    }
+                    if let Some(a) = settings_row(ui, k, label, r, kbd, dd_row == Some(k), &mut dd_anchor) {
+                        acts.push(a);
+                    }
+                    row_y += rh;
                 }
-                // a light line between the rows, as between the launcher's
-                if rows.first() != Some(&k) && items.get(k.wrapping_sub(1)).is_some_and(|(pid, _)| *pid != crate::game_lists::HEADING) {
-                    ui.p().rect(Rect::new(inner.x, y - 2.0, inner.w, 1.0), Color::rgba(255, 255, 255, 0.045));
-                }
-                let r = Rect::new(inner.x - 8.0, y, inner.w + 16.0, rh - 4.0);
-                let kbd = v.kbd && !any_hover && k == list.sel;
-                if kbd {
-                    sel_y = Some((y - view.y, rh));
-                }
-                if let Some(a) = settings_row(ui, k, label, r, kbd, dd_row == Some(k), &mut dd_anchor) {
-                    acts.push(a);
-                }
-                y += rh;
+                y += h + 12.0;
             }
-            tallest = tallest.max(h);
+            tallest = tallest.max(y - view.y);
         }
         tallest + 8.0
     });
@@ -356,15 +375,14 @@ fn settings_rows(sh: &mut Shell, v: &PauseView, list: &ListView, body: Rect, anc
     sh.actions.extend(acts);
 }
 
-/// Keep section boundaries and original action indices independent of screen width.
+fn settings_columns(groups: Vec<Vec<usize>>, two: bool, items: &[(&str, &str)]) -> Vec<Vec<Vec<usize>>> {
+    omsi_settings_ui::settings_columns(groups, two, |k| row_h(items[k].0, items[k].1))
+}
+
+#[cfg(test)]
 fn settings_groups(items: &[(&str, &str)], hide_back: bool) -> Vec<Vec<usize>> {
-    let mut groups: Vec<Vec<usize>> = Vec::new();
-    for (k, &(id, label)) in items.iter().enumerate() {
-        if hide_back && id == "back" && plain(parse_row(label).name).0 == omsi_ui::tr("Back").as_ref() { continue; }
-        if groups.is_empty() || id == crate::game_lists::HEADING { groups.push(Vec::new()); }
-        groups.last_mut().unwrap().push(k);
-    }
-    groups
+    let back = hide_back.then(|| items.iter().position(|&(id, label)| id == "back" && plain(parse_row(label).name).0 == omsi_ui::tr("Back").as_ref())).flatten();
+    omsi_settings_ui::settings_groups(items, crate::game_lists::HEADING, back)
 }
 
 /// One row of a settings window: its name (and description) on the left, its control on
@@ -416,6 +434,11 @@ fn settings_row(ui: &mut Ui, k: usize, label: &str, r: Rect, kbd: bool, dd_open:
             let value = row.value.to_string();
             let changed = ui.slider_without_wheel(&format!("pause-sl-{k}-{}", row.name), ctl, &mut f, 0.0, 1.0, 0.0, "", &|_| value.clone());
             changed.then_some(Action::Control(k, f))
+        }
+        // A calendar field commits only after a day is selected.
+        "d" => {
+            let mut date = row.value.to_string();
+            ui.date_field(&format!("pause-date-{k}-{}", row.name), ctl, &mut date).then_some(Action::Date(date))
         }
         // a stepper: the value between the two arrows of a field
         "c" => {
@@ -590,7 +613,7 @@ fn list_rows(sh: &mut Shell, v: &PauseView, list: &ListView, r: Rect, keep_marke
             }
             let marked = (keep_marked && k == list.sel) || kbd;
             if ui.row(&format!("pause-lr-{}-{k}", list.key), row, marked) {
-                acts.push(Action::Choose(k));
+                acts.push(if list.kind == MenuKind::Vehicles && crate::game_lists::bus_preview::selectable(id) { Action::BusSelect(k) } else { Action::Choose(k) });
             }
             let h = ui.hover(row);
             let ink = if marked || h { th().text } else { th().text_soft };
@@ -750,6 +773,13 @@ fn preview(sh: &mut Shell, p: &Preview, list: &ListView, r: Rect) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn player_count_badge_follows_the_title_without_overflowing() {
+        let badge = count_badge_rect(120.0, 28.0, 100.0, 400.0, 10.0).unwrap();
+        assert_eq!(badge, Rect::new(232.0, 19.0, 28.0, 22.0));
+        assert!(count_badge_rect(250.0, 28.0, 100.0, 370.0, 10.0).is_none());
+    }
 
     #[test]
     fn a_label_that_opens_more_loses_its_dots() {

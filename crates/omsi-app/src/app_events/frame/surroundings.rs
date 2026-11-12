@@ -98,7 +98,10 @@ pub(super) fn lights(cx: LightsCx, dt: f32, daylight: omsi_sim::Daylight, behind
         );
         drop(vehicles);
         if cx.view.cam.flashlight {
-            lights::flashlight_ahead(scene, cam);
+            match cx.view.cam.flashlight_aim {
+                Some(d) => lights::flashlight_toward(scene, cam, d),
+                None => lights::flashlight_ahead(scene, cam),
+            }
         }
         if let Some(p) = cx.player.player.as_ref() {
             if let Some(tv) = p.trolley_view.as_ref() {
@@ -207,14 +210,14 @@ pub(super) fn lights(cx: LightsCx, dt: f32, daylight: omsi_sim::Daylight, behind
                         false
                     });
                 }
-                let inside = cx.view.cam.in_cab;
+                let inside = cx.view.cam.heard_inside;
                 let __tm = Instant::now();
                 // openOMSI's ambience; with its recordings the street's rain is its own
                 let ours = if let Some(s) = cx.sound.soundscape.as_mut() {
                     s.enabled = cx.common.settings.ambient;
                     s.volume = cx.common.settings.vol_ambient;
                     let people = cx.people.humans.as_ref().map(|h| h.people.iter().filter(|p| (p.position - cam.position).length() < 40.0).count() as u32).unwrap_or(0);
-                    let open = cx.player.player.as_ref().and_then(|p| p.vehicle.var("Snd_OutsideVol")).unwrap_or(0.0);
+                    let open = cx.player.player.as_ref().filter(|_| cx.view.cam.in_cab).and_then(|p| p.vehicle.var("Snd_OutsideVol")).unwrap_or(0.0);
                     // the flashes the picture showed: their thunder comes at the speed of sound
                     if let Some(r) = cx.gfx.renderer.as_mut() {
                         for (delay, distance, dir) in r.take_strikes() {
@@ -280,6 +283,7 @@ crate::app::stage_ctx!(
 
 /// The departure boards, the map's route arrows and the scenery's scripts.
 pub(super) fn scripted(cx: ScriptedCx, dt: f32, daylight: omsi_sim::Daylight) {
+    let dt = if *cx.clock.paused { 0.0 } else { dt };
     if let (Some(w), Some(r), Some(scene), Some(cam)) = (
         cx.world.world.as_ref(),
         cx.gfx.renderer.as_ref(),
@@ -302,13 +306,12 @@ pub(super) fn scripted(cx: ScriptedCx, dt: f32, daylight: omsi_sim::Daylight) {
             &*cx.clock.clock,
         );
         cx.perf.profile.add(crate::profile_keys::ProfKey::ScriptedBoards, __tb.elapsed().as_secs_f64());
-        // the map's own route arrows, with OMSI 2's route arrows
-        w.show_help_arrows(r, scene, cx.common.settings.nav_arrows);
+        w.show_help_arrows(r, scene, cx.common.settings.nav_map_arrows);
         let mut times = omsi_scene::ScriptedTimes::default();
         // (OMSI_SIM_THREAD: what the scripts made during the last picture is shown now,
         // and their next step is made with this one's, see `sim_thread`)
         if cx.traffic.pipeline.take_scenery_stepped() {
-            w.scenery_apply(cx.world.scenery.outputs(), r, scene, dt, cam.position, cx.sound.audio.as_ref(), cx.view.cam.in_cab, &mut times);
+            w.scenery_apply(cx.world.scenery.outputs(), r, scene, dt, cam.position, cx.sound.audio.as_ref(), cx.view.cam.heard_inside, &mut times);
         }
         if cx.traffic.pipeline.takes_scenery(traffic.map(|t| &t.sim)) {
             let inputs = w.scenery_prepare(&mut *cx.world.scenery, cam.position, daylight.brightness, &mut times);
@@ -316,7 +319,7 @@ pub(super) fn scripted(cx: ScriptedCx, dt: f32, daylight: omsi_sim::Daylight) {
                 s.step(dt, &inputs.as_inputs(phase_of), &mut omsi_sim::scenery::StepTimes::default());
             });
             // (the lamps' scripts stay here: their sounds every frame, as update_scripted plays them)
-            w.lamp_sounds(&mut cx.world.scenery.lamps, cam.position, cx.sound.audio.as_ref(), cx.view.cam.in_cab, &mut times);
+            w.lamp_sounds(&mut cx.world.scenery.lamps, cam.position, cx.sound.audio.as_ref(), cx.view.cam.heard_inside, &mut times);
         } else {
             w.update_scripted(
                 &mut *cx.world.scenery,
@@ -327,7 +330,7 @@ pub(super) fn scripted(cx: ScriptedCx, dt: f32, daylight: omsi_sim::Daylight) {
                 daylight.brightness,
                 &phase,
                 cx.sound.audio.as_ref(),
-                cx.view.cam.in_cab,
+                cx.view.cam.heard_inside,
                 &mut times,
             );
         }

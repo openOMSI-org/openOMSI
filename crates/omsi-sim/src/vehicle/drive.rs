@@ -95,7 +95,11 @@ impl VehicleInstance {
             return;
         }
         let v0 = self.physics.speed;
+        let rail_turns: Option<Vec<(f32, f32)>> = self.on_rails().then(|| self.physics.wheels.iter().flatten().map(|w| (w.rotation_deg, w.turned)).collect());
         let (mut ds, dheading) = self.physics.step(dt, m_wheel, &brakes);
+        for (w, (r, t)) in self.physics.wheels.iter_mut().flatten().zip(rail_turns.into_iter().flatten()) {
+            (w.rotation_deg, w.turned) = (r, t);
+        }
         // a rail vehicle's speed is the rails', not the road tyres'
         if let Some(covered) = self.rail_override_simple(dt, v0, m_wheel, &brakes) {
             ds = covered;
@@ -321,8 +325,8 @@ impl VehicleInstance {
         for ai in 0..self.v_wheels.len() {
             let axle = self.v_wheels[ai];
             for (si, w) in axle.iter().enumerate() {
+                self.put_turn(w[0], ai, si);
                 let ws = self.physics.wheels[ai][si].clone();
-                self.put(w[0], ws.rotation_deg.to_radians());
                 self.put(w[1], ws.rpm);
                 if !self.ty.def.is_rail() {
                     self.put(w[2], if ai == self.steered_axle() { steer } else { 0.0 });
@@ -432,7 +436,11 @@ impl VehicleInstance {
                     (None, None) => &flat,
                 };
             rb.wheel_walls = self.wheel_walls;
+            let rail_turns: Option<Vec<(f32, f32)>> = self.on_rails().then(|| rb.wheels.iter().map(|w| (w.rotation_deg, w.turned)).collect());
             rb.step(dt, m_wheel, brakes, steer, probe);
+            for (w, (r, t)) in rb.wheels.iter_mut().zip(rail_turns.into_iter().flatten()) {
+                (w.rotation_deg, w.turned) = (r, t);
+            }
         }
         // a rail vehicle's speed is the rails', not the road tyres'
         self.rail_override(&mut rb, dt, v0, m_wheel, brakes);
@@ -586,7 +594,6 @@ impl VehicleInstance {
             let axle = self.v_wheels[ai];
             for (si, w) in axle.iter().enumerate() {
                 if let Some(rw) = rb.wheels.get(ai * 2 + si) {
-                    self.put(w[0], rw.rotation_deg.to_radians());
                     self.put(w[1], rw.rpm);
                     // (each axle's own angle: OMSI turns every axle towards the centre of
                     // the bend on the `[rot_pnt_long]` line - one angle for both sides)
@@ -605,10 +612,12 @@ impl VehicleInstance {
                     let shown = -rw.compression.max(0.0);
                     self.put(w[3], shown);
                     if let Some(ws) = self.physics.wheels.get_mut(ai).and_then(|a| a.get_mut(si)) {
+                        ws.turned = rw.turned;
                         ws.rotation_deg = rw.rotation_deg;
                         ws.rpm = rw.rpm;
                         ws.suspension = shown;
                     }
+                    self.put_turn(w[0], ai, si);
                 }
             }
         }

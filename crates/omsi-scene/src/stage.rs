@@ -738,7 +738,10 @@ impl World {
                         let p = curve.point_at(curve.length * 0.5);
                         log::info!("aligned spline {} {} mode {mode} mid ({:.1}, {:.1}, {:.1}) heading {:.0}", s.id, s.file, p.x, p.y, p.z, curve.heading_at(curve.length * 0.5));
                     }
-                    aligned_rims = omsi_geometry::spline_hole_rims(&st.def, &curve, s.mirror, mode);
+                    let (rims, segments) = omsi_geometry::spline_hole_rims_with_stations(
+                        &st.def, &curve, s.mirror, mode,
+                    );
+                    aligned_rims = rims;
                     for rim in &aligned_rims {
                         let ring: Vec<_> = rim.iter().map(|v| v.truncate()).collect();
                         if omsi_geometry::outline_crosses_itself(&ring) {
@@ -747,7 +750,7 @@ impl World {
                             }
                             continue;
                         }
-                        out.hole_rims.push(rim.clone());
+                        out.hole_rims.push((rim.clone(), segments));
                         spline_rims.push(rim.clone());
                     }
                 }
@@ -1040,10 +1043,9 @@ impl World {
             return Some((ot, false));
         }
         let h = (key as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 33;
-        // leave some spaces empty like the original, and all once the options' count of
-        // parked cars stands
-        let full = self.parked_max < 0 || (self.parked_max > 0 && self.parked_live.load(std::sync::atomic::Ordering::Relaxed) as i64 >= self.parked_max);
-        if h % 4 == 0 || full {
+        // leave some spaces empty like the original (the options' count of parked cars is
+        // kept when the tile is placed: see `place_step`)
+        if h % 4 == 0 || self.parked_max < 0 {
             stats.lock().empty_spaces += 1;
             return None;
         }

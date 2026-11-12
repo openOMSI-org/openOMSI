@@ -6,7 +6,7 @@ import { html, useState, useEffect, useRef } from '../../vendor/preact-htm.js';
 import { S, useStore, set, toast, remembered, remember } from '../store.js';
 import { t } from '../i18n.js';
 import { call, onPhone, inTauri } from '../api.js';
-import { Button, Card, Select, Input, Toggle, Tabs, Slider, PageHead, useConfirm } from '../ui.js';
+import { Button, Card, Select, Input, Toggle, Tabs, Slider, PageHead, Search, useConfirm } from '../ui.js';
 import { saveSettings, applyTheme, fitWindow, launcherSize, LAUNCHER_SIZES, launcherLayout, LAUNCHER_LAYOUTS } from '../data.js';
 import { UpdateRow, checkUpdates } from '../updates.js';
 import { SETTINGS_TABS, GRAPHICS_PROFILE_KEYS } from './settings-schema.js';
@@ -48,6 +48,26 @@ function asStored(cur, v) {
 
 const visible = (row, s, platform) => !row.when || row.when(s, platform);
 
+const fold = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+function matches(row, words) {
+  if (!row.label) return false;
+  const help = typeof row.help === 'function' ? row.help(S.settings) : row.help;
+  const text = fold([row.label, t(row.label), help, help && t(help), typeof row.key === 'string' && row.key].join(' '));
+  return words.every((w) => text.includes(w));
+}
+
+function SearchResults({ tabs, words, platform, ask }) {
+  const s = S.settings;
+  const groups = tabs.filter((tab) => tab.cols).map((tab) => [tab, tab.cols.flatMap((col) => col.rows.filter((row) => visible(row, s, platform) && matches(row, words)))]).filter(([, rows]) => rows.length);
+  if (!groups.length) return html`<p class="muted" style="margin:16px 0">${t('No setting matches this search')}</p>`;
+  return html`<div class="settings-grid">
+    ${groups.map(([tab, rows]) => html`<${Card} key=${tab.id} title=${tab.label}>
+      ${rows.map((row, i) => html`<${Row} key=${i + (row.key || row.label)} row=${row} ask=${ask} />`)}
+    </${Card}>`)}
+  </div>`;
+}
+
 export function SettingsPage() {
   const s = useStore();
   const [tab, setTab] = useState(() => {
@@ -55,12 +75,24 @@ export function SettingsPage() {
     return SETTINGS_TABS.some((x) => x.id === id) ? id : 'graphics';
   });
   const [ask, dialog] = useConfirm();
+  const [q, setQ] = useState('');
+  useEffect(() => {
+    const key = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        document.querySelector('.settings-search input')?.focus();
+      } else if (e.key === 'Escape' && document.activeElement?.closest?.('.settings-search')) setQ('');
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, []);
   if (!s.settings) return null;
   const platform = s.boot?.platform || '';
   // (the model test runs the game program: not on a phone)
   const phone = ['android', 'ios'].includes(platform);
   const tabs = SETTINGS_TABS.filter((x) => visible(x, s.settings, platform));
   const current = tabs.find((x) => x.id === tab) || tabs[0];
+  const words = fold(q).split(/\s+/).filter(Boolean);
   const pick = (id) => {
     // (Troubleshooting is no tab of its own: it opens that page at its model test)
     if (id === 'troubleshoot') {
@@ -72,14 +104,17 @@ export function SettingsPage() {
   };
   return html`
     <${PageHead} title="Settings" text="Every change is saved at once; the game reads them when it starts." />
-    <${Tabs} value=${current.id} options=${[...tabs.map((x) => [x.id, x.label]), ...(phone ? [] : [['troubleshoot', 'Troubleshooting']])]} onChange=${pick} />
+    <div class="settings-search" style="margin-bottom:12px"><${Search} value=${q} onInput=${setQ} placeholder="Search all settings (Ctrl+F)" /></div>
+    ${words.length
+      ? html`<${SearchResults} tabs=${tabs} words=${words} platform=${platform} ask=${ask} />`
+      : html`<${Tabs} value=${current.id} options=${[...tabs.map((x) => [x.id, x.label]), ...(phone ? [] : [['troubleshoot', 'Troubleshooting']])]} onChange=${pick} />
     ${current.page === 'ailists'
       ? html`<div key=${tab}><${AiListsPage} /></div>`
       : html`<div class="settings-grid" key=${tab}>
       ${current.cols.map((col) => html`<${Card} title=${col.title}>
         ${col.rows.filter((row) => visible(row, s.settings, platform)).map((row, i) => html`<${Row} key=${i + (row.key || row.id || row.label || row.title || '')} row=${row} ask=${ask} />`)}
       </${Card}>`)}
-    </div>`}
+    </div>`}`}
     ${dialog}
   `;
 }
@@ -123,10 +158,10 @@ function SelectRow({ row }) {
   const cur = s[row.key];
   // the choice the value means ("4" for 4); a value written by hand shows as itself
   const match = options.find(([v]) => same(cur, v) || String(cur) === String(v));
-  const value = match ? match[0] : cur == null ? '' : typeof cur === 'boolean' ? (cur ? '1' : '0') : String(cur);
+  const value = match ? match[0] : row.unknown ?? (cur == null ? '' : typeof cur === 'boolean' ? (cur ? '1' : '0') : String(cur));
   return html`<div class="setting-row">
-    <${Name} label=${row.label} help=${row.help} warn=${row.heavy?.(value, s) && 'Heavy: can cost many frames per second on most graphics cards'} />
-    <${Select} value=${value} options=${options} raw=${row.raw} onChange=${async (v) => (await saveSettings({ [row.key]: asStored(cur, v) })) && row.recheckUpdates && checkUpdates()} />
+    <${Name} label=${row.label} help=${typeof row.help === 'function' ? row.help(s) : row.help} warn=${row.heavy?.(value, s) && 'Heavy: can cost many frames per second on most graphics cards'} />
+    <${Select} value=${value} options=${options} raw=${row.raw} always=${!match && row.unknown != null} onChange=${async (v) => (await saveSettings({ [row.key]: asStored(cur, v) })) && row.recheckUpdates && checkUpdates()} />
   </div>`;
 }
 
@@ -187,6 +222,7 @@ function ButtonRow({ row }) {
 const CUSTOM = {
   preset: () => html`<${PresetRow} />`,
   optimise: () => html`<${OptimiseBlock} />`,
+  nvidia_dlss_install: () => html`<${NvidiaDlssInstall} />`,
   profiles: () => html`<${ProfilesBlock} />`,
   theme: () => html`<${ThemeRow} />`,
   launcher_layout: () => !onPhone && html`<${LauncherLayoutRow} />`,
@@ -197,6 +233,71 @@ const CUSTOM = {
   support: () => html`<${SupportRow} />`,
   radio: () => html`<${RadioStations} />`,
 };
+
+
+// The game executable is AGPLv3. NVIDIA's runtime is never part of the
+// openOMSI release: the player may separately obtain official vendor files.
+const NVIDIA_STREAMLINE_URL = 'https://github.com/NVIDIA-RTX/Streamline/releases/tag/v2.14.1';
+const NVIDIA_STREAMLINE_LICENSE = 'https://github.com/NVIDIA-RTX/Streamline/blob/v2.14.1/license.txt';
+const NVIDIA_NGX_LICENSE = 'https://github.com/NVIDIA-RTX/Streamline/blob/v2.14.1/external/ngx-sdk/license.txt';
+
+function NvidiaDlssInstall() {
+  const [status, setStatus] = useState(null);
+  const [accepted, setAccepted] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState('');
+  useEffect(() => {
+    let active = true;
+    call('nvidia_dlss_status')
+      .then((result) => active && setStatus(result))
+      .catch((error) => active && setProblem(error.message));
+    return () => { active = false; };
+  }, []);
+  const open = (url) => call('open_url', { url }).catch((e) => toast(e.message, 'error'));
+  const installed = !!status?.installed;
+  // (nothing to offer without an RTX card or beside no game)
+  if (status && !installed && (!status.rtx || !status.supported)) return null;
+  const install = async () => {
+    if (!accepted || busy || installed) return;
+    setBusy(true);
+    setProblem('');
+    try {
+      const result = await call('nvidia_dlss_install', { acceptedTerms: true });
+      if (!result?.installed) throw new Error(t('The NVIDIA runtime was not found after installation'));
+      toast(t('NVIDIA DLSS installed. Restarting the launcher to refresh available upscalers.'), 'success');
+      window.location.reload();
+    } catch (error) {
+      setProblem(error.message || String(error));
+      setBusy(false);
+    }
+  };
+  return html`
+    <div class="setting-row full">
+      <div class="stack" style="gap:10px">
+        <${Name} label="NVIDIA DLSS runtime (optional)"
+          help="Not included with openOMSI. Installs NVIDIA's own DLLs only after your approval. Windows, NVIDIA RTX and a game restart required." />
+        <p class="muted small" style="margin:0">${t(status == null ? 'Checking NVIDIA DLSS files…'
+          : installed ? 'NVIDIA DLSS runtime is installed.'
+          : 'DLSS files are not installed. The game works without them.')}</p>
+        <div class="grid-2">
+          <${Button} kind="ghost" icon="external" label="NVIDIA RTX/NGX license" onClick=${() => open(NVIDIA_NGX_LICENSE)} />
+          <${Button} kind="ghost" icon="external" label="Streamline MIT license" onClick=${() => open(NVIDIA_STREAMLINE_LICENSE)} />
+        </div>
+        <${Button} kind="ghost" icon="external" label="View official NVIDIA SDK 2.14.1" onClick=${() => open(NVIDIA_STREAMLINE_URL)} />
+        ${!installed && html`
+          <label class="small" style="display:flex;align-items:flex-start;gap:10px">
+            <input type="checkbox" checked=${accepted} onChange=${(e) => setAccepted(e.currentTarget.checked)} />
+            <span>${t("I have read and agree to NVIDIA's applicable Streamline and RTX/NGX license terms. The launcher will download the SDK directly from NVIDIA and install the four verified DLSS DLLs plus notices.")}</span>
+          </label>
+          <${Button} kind="primary" icon="download"
+            label=${busy ? 'Downloading and verifying NVIDIA DLSS…' : 'Install NVIDIA DLSS'}
+            disabled=${busy || !accepted || !status?.supported || !status?.rtx}
+            onClick=${install} />
+        `}
+        ${problem && html`<p class="warn-fg small" role="alert">${problem}</p>`}
+      </div>
+    </div>`;
+}
 
 /** The quality presets, Low to Ultra: the one the settings match, else "Custom". A preset sets
  * the graphics mode too (Low is Vanilla, Ultra Enhanced with everything on). */
@@ -221,12 +322,13 @@ function PresetRow() {
   </div>`;
 }
 
-/** Save, load and delete the graphics settings as named profiles. */
+/** Save, load, share and delete the graphics settings as named profiles. */
 function ProfilesBlock() {
   const [names, setNames] = useState(null);
   const [sel, setSel] = useState('');
   const [name, setName] = useState('');
   const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
   const reload = async (pick) => {
     const all = await call('graphics_profiles').catch(() => ({}));
     const list = Object.keys(all || {});
@@ -271,24 +373,50 @@ function ProfilesBlock() {
       setMsg(e.message);
     }
   };
+  const transfer = async (importing) => {
+    if (busy) return;
+    setBusy(true);
+    setMsg('');
+    try {
+      const result = await call(importing ? 'graphics_profile_import' : 'graphics_profile_export', importing ? {} : { name: sel });
+      if (result == null) return;
+      if (importing) {
+        setName(result);
+        await reload(result);
+        setMsg(t('Imported "{name}". Load it to apply these settings.', { name: result }));
+      } else {
+        setMsg(t('Exported "{name}".', { name: sel }));
+      }
+    } catch (e) {
+      setMsg(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
   return html`
     <div class="setting-row">
       <${Name} label="Saved profile" />
-      <${Select} raw value=${sel} disabled=${!list.length} options=${list.length ? list.map((n) => [n, n]) : [['', t('No saved profiles')]]} onChange=${(n) => {
+      <${Select} raw value=${sel} disabled=${busy || !list.length} options=${list.length ? list.map((n) => [n, n]) : [['', t('No saved profiles')]]} onChange=${(n) => {
         setSel(n);
         setName(n);
       }} />
     </div>
     <div class="setting-row full">
       <div class="grid-2">
-        <${Button} icon="download" label="Load" disabled=${!list.length} onClick=${load} />
-        <${Button} kind="danger" icon="trash" label="Delete" disabled=${!list.length} onClick=${remove} />
+        <${Button} icon="download" label="Load" disabled=${busy || !list.length} onClick=${load} />
+        <${Button} kind="danger" icon="trash" label="Delete" disabled=${busy || !list.length} onClick=${remove} />
       </div>
     </div>
+    ${!onPhone && html`<div class="setting-row full">
+      <div class="grid-2">
+        <${Button} icon="file" label="Import graphics profile" disabled=${busy} onClick=${() => transfer(true)} />
+        <${Button} icon="download" label="Export graphics profile" disabled=${busy || !list.length} onClick=${() => transfer(false)} />
+      </div>
+    </div>`}
     <div class="setting-row full">
       <div class="stack" style="gap:10px">
         <${Input} value=${name} placeholder="Profile name" onInput=${setName} maxlength="40" />
-        <${Button} kind="primary" icon="save" label="Save current graphics as profile" onClick=${save} />
+        <${Button} kind="primary" icon="save" label="Save current graphics as profile" disabled=${busy} onClick=${save} />
       </div>
     </div>
     ${msg && html`<p class="muted small" style="margin:8px 0">${msg}</p>`}

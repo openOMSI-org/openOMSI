@@ -104,6 +104,12 @@ struct RunningTrip {
 /// How long before a trip is due at a stop the people for it turn up there (s).
 pub const PAX_SPAWN_AHEAD: f64 = 15.0 * 60.0;
 
+pub const PAX_LATE_WAIT: f64 = 15.0 * 60.0;
+
+pub(crate) fn pax_turn_up_for(due: f64, tod: f64) -> bool {
+    (tod - PAX_LATE_WAIT..=tod + PAX_SPAWN_AHEAD).contains(&due)
+}
+
 /// How far from a route a bus stop may stand when the route is only a part of the trip (a
 /// stop of the missing part would otherwise be put on the nearest point of this one).
 const STOP_REACH: f64 = 25.0;
@@ -137,8 +143,8 @@ pub struct ScheduleSim {
     /// Plain `[aigroup_2]` vehicle pools, loaded the first time a trip asks for one
     /// (the Tegel approaches are flown by the group's own aircraft, not by depot buses).
     pools: HashMap<String, Vec<Arc<VehicleType>>>,
-    /// Per vehicle folder: the depot file a bus of a plain `[aigroup_2]` runs with
-    /// (see [`pool_depot`]), looked up the first time such a bus is chosen.
+    /// Per vehicle folder: the depot file a plain `[aigroup_2]` vehicle or `.zug` runs with
+    /// (see [`pool_depot`]), looked up the first time such a vehicle is chosen.
     pool_hofs: HashMap<PathBuf, Option<Arc<omsi_vehicle::Hof>>>,
     /// Departures that are due but not on the road yet. Putting twenty minutes of a Berlin
     /// timetable on the map at once costs several seconds in one frame, so they are spawned
@@ -176,6 +182,7 @@ pub struct ScheduleSim {
     /// With a single trip picked: the departure (s of the day) of that trip; the rest of
     /// the tour stays the AI's.
     player_departure: Option<f64>,
+    player_twins: HashSet<usize>,
     /// A player tour was just taken over: its buses already on the road go at the next tick.
     purge_player_tour: bool,
     /// LAN play (host): the tours the other players drive (line, tour; lower case), left to

@@ -8,6 +8,17 @@
 
 use omsi_content::weather::Weather;
 
+/// Installed preset paths and display names, discovered once per caller-owned cache.
+/// Empty catalogs are cached too; a new cache is needed after changing content roots.
+pub fn catalog(cache: &std::cell::OnceCell<Vec<(String, String)>>) -> &[(String, String)] {
+    cache.get_or_init(|| {
+        installed()
+            .into_iter()
+            .map(|(file, weather)| (file, weather.name))
+            .collect()
+    })
+}
+
 /// What the weather choice says for the cycle.
 pub const CYCLE: &str = "cycle";
 

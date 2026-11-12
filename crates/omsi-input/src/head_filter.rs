@@ -16,8 +16,8 @@
 //!   off) the view glides back straight ahead instead of jumping there; not followed for a
 //!   while (another view) it starts afresh where the head is.
 //!
-//! The player sets the smoothing and the dead zone (`Params::tobii`); opentrack's poses, which
-//! opentrack filters itself, are only glided (`Params::OPENTRACK`). All in the head's own terms
+//! The player sets the smoothing and the dead zone (`Params::tobii`) for every tracker; the
+//! `opentrack` source, which opentrack filters itself, is only glided (`Params::OPENTRACK`). All in the head's own terms
 //! (degrees, cm), before the tracker's turn is made larger (`Sample::gain`).
 
 use std::time::{Duration, Instant};
@@ -156,7 +156,7 @@ impl HeadFilter {
             }
             return Some(self.pose());
         };
-        let p = if s.tobii { tobii } else { Params::OPENTRACK };
+        let p = tobii;
         let v = [s.pose.rot[0], s.pose.rot[1], s.pose.rot[2], s.pose.pos[0], s.pose.pos[1], s.pose.pos[2], s.edge];
         if self.key != Some((s.tobii, s.seq)) {
             // (a new pose: the glide goes on from where the last one is at the time it came -
@@ -516,12 +516,18 @@ mod tests {
     /// followed closely, whatever the smoothing.
     #[test]
     fn opentrack_is_only_glided() {
-        let r = run(&|t| (60.0 * t, 0.0, 0.0), 0.0, 250.0, 144.0, 1.0, Params::tobii(1.0, 1.0), false);
+        let r = run(&|t| (60.0 * t, 0.0, 0.0), 0.0, 250.0, 144.0, 1.0, Params::OPENTRACK, false);
         for x in r.iter().filter(|x| x.t >= 0.3) {
             assert!(x.head - x.yaw <= 1.5, "{} behind", x.head - x.yaw);
         }
-        let r = run(&|t| (if t >= 0.5 { 1.0 } else { 0.0 }, 0.0, 0.0), 0.0, 250.0, 144.0, 1.0, Params::tobii(1.0, 1.0), false);
+        let r = run(&|t| (if t >= 0.5 { 1.0 } else { 0.0 }, 0.0, 0.0), 0.0, 250.0, 144.0, 1.0, Params::OPENTRACK, false);
         assert!(at(&r, 0.56).yaw >= 0.9, "{} after 60 ms", at(&r, 0.56).yaw);
+    }
+
+    #[test]
+    fn a_udp_tracker_on_auto_gets_the_players_dead_zone() {
+        let r = run(&|t| (0.3 * (t * 40.0).sin(), 0.0, 0.0), 0.0, 250.0, 144.0, 1.0, Params::tobii(0.5, 1.0), false);
+        assert!(r.iter().filter(|x| x.t >= 0.5).all(|x| x.yaw.abs() < 0.1), "a tremble inside the dead zone moves the view");
     }
 
     /// opentrack's yaw past straight behind (170 on to -170): the view turns on the short way,

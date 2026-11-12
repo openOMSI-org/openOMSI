@@ -512,7 +512,7 @@ pub(super) fn helper_text_image(tt: &omsi_model::TextTexture, atlas: Option<&oms
 /// add-ons are made in. The body-depth repair must not turn one of these opaque when the
 /// model.cfg declares it blended: a Czech bus's `okna.o3d` (windows) on the shared
 /// `body.png` was drawn as a black wall, where OMSI shows the tinted glass.
-pub(super) const GLASS_WORDS: [&str; 20] = [
+pub(super) const GLASS_WORDS: [&str; 24] = [
     "window", "fenster", "glas", "scheibe", "windshield", "windscreen", // en, de ("glas" is also German: `Leuchtmelderglas.tga`)
     "okn", "sklo", // cs, sk (okna, okno, sklo)
     "szyb", "okien", // pl
@@ -522,6 +522,7 @@ pub(super) const GLASS_WORDS: [&str; 20] = [
     "vetro", "finestr", // it
     "raam", "ruit", // nl
     "ventan", "cristal", // es
+    "vidro", "janel", "parabrisa", "para-brisa", // pt (vidro, vidros, janela, janelas)
 ];
 
 pub(super) fn is_vehicle_body_material(
@@ -559,14 +560,29 @@ pub(super) const ALPHA_MASK: usize = 256;
 /// A texture's alpha channel, thinned out to [`ALPHA_MASK`] squared (a body texture is
 /// 4096 squared, and every blended slot of a bus asks). None for a file that cannot be
 /// read or has no alpha.
-pub(super) fn alpha_mask(path: &Path) -> Option<Arc<Vec<u8>>> {
-    // (global, not a field of `World`: a memo of what the file holds, the same whatever map
-    // is open, so a new `World` reads nothing twice)
-    static MASKS: std::sync::OnceLock<Mutex<HashMap<PathBuf, Option<Arc<Vec<u8>>>>>> = std::sync::OnceLock::new();
-    let masks = MASKS.get_or_init(Default::default);
-    if let Some(m) = masks.lock().get(path) {
-        return m.clone();
+#[derive(Default)]
+pub(super) struct AlphaMasks(Mutex<HashMap<PathBuf, Option<Arc<Vec<u8>>>>>);
+
+impl Drop for AlphaMasks {
+    fn drop(&mut self) {
+        let masks = self.0.get_mut();
+        let bytes: usize = masks.values().filter_map(Option::as_ref).map(|m| m.len()).sum();
+        log::debug!("alpha masks: releasing {} entries, {} bytes", masks.len(), bytes);
     }
+}
+
+impl AlphaMasks {
+    pub(super) fn get(&self, path: &Path) -> Option<Arc<Vec<u8>>> {
+        if let Some(mask) = self.0.lock().get(path) {
+            return mask.clone();
+        }
+        let mask = alpha_mask(path);
+        self.0.lock().insert(path.to_path_buf(), mask.clone());
+        mask
+    }
+}
+
+fn alpha_mask(path: &Path) -> Option<Arc<Vec<u8>>> {
     let mask = omsi_texture::decode_file(path).ok().filter(|img| img.has_alpha && img.width > 0 && img.height > 0).map(|img| {
         let (w, h) = (img.width as usize, img.height as usize);
         let mut out = vec![255u8; ALPHA_MASK * ALPHA_MASK];
@@ -578,7 +594,6 @@ pub(super) fn alpha_mask(path: &Path) -> Option<Arc<Vec<u8>>> {
         }
         Arc::new(out)
     });
-    masks.lock().insert(path.to_path_buf(), mask.clone());
     mask
 }
 
@@ -713,4 +728,25 @@ pub(super) fn slot_overlays_another(mesh: &MeshData, slot: usize) -> bool {
         }
     }
     own.len() >= 3 && own.iter().filter(|k| others.contains(*k)).count() * 10 >= own.len() * 9
+}
+
+#[cfg(test)]
+mod alpha_cache_tests {
+    use super::*;
+
+    #[test]
+    fn alpha_masks_release_only_the_owning_worlds_data() {
+        let game = AlphaMasks::default();
+        let preview = Arc::new(AlphaMasks::default());
+        let mask = Arc::new(vec![255; ALPHA_MASK * ALPHA_MASK]);
+        let weak = Arc::downgrade(&mask);
+        preview.0.lock().insert("preview".into(), Some(mask));
+        game.0.lock().insert("game".into(), Some(Arc::new(vec![42])));
+        let prefetch = preview.clone();
+        drop(preview);
+        assert!(weak.upgrade().is_some(), "prefetch owns the cache while loading");
+        drop(prefetch);
+        assert!(weak.upgrade().is_none(), "closing the world releases its alpha data");
+        assert_eq!(game.get(Path::new("game")).unwrap().as_slice(), &[42]);
+    }
 }

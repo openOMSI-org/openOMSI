@@ -12,6 +12,9 @@ impl App {
     /// The player's duty, the personnel file's step, the placing of vehicles, the host's map
     /// edits and `--on-foot`.
     pub(super) fn frame_duty(&mut self, dt: f32) {
+        if self.session.depot_prev.is_some() {
+            self.settle_depot_switch(false);
+        }
         if self.session.duty.is_none() {
             self.session.career.no_trip();
         }
@@ -188,7 +191,10 @@ pub(super) fn humans(cx: HumansCx, dt: f32) {
         h.set_player_next_stop(
             cx.duty.duty
                 .as_ref()
-                .and_then(|d| d.trip().stops.get(d.next_stop)),
+                .and_then(|d| {
+                    let stops = &d.trip().stops;
+                    stops.get(omsi_sim::timetable_run::next_calling_stop(stops, d.next_stop))
+                }),
         );
         let step_dt = if *cx.clock.paused { 0.0 } else { dt };
         // (OMSI_SIM_THREAD: what the people's step made during the last picture is taken

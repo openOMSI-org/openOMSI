@@ -37,7 +37,7 @@ impl RigidBody {
             let tyre_c = TYRE_C * (tyre_k / TYRE_K).sqrt();
             for side in [-1.0f32, 1.0] {
                 let inertia_inv = if a.inertia_inv > 0.0 { a.inertia_inv } else { DEFAULT_INERTIA_INV };
-                wheels.push(RigidWheel { spin: 0.0, slipping: false, locked: false, inertia_inv, attach: Vec3::new(side * inner, a.long, z), lever: side * (outer - inner), radius: r, driven: a.driven, steered: (a.long - front_long).abs() < 0.01, steer: 0.0, tyre_k, tyre_c, spring: k, damper: c, max_force, spring_factor: 1.0, strut: Strut::from_block(omsi_vehicle::vehicle::Suspension::for_axle(&def.suspensions, ai)), rest_load: 0.0, compression: 0.0, compression_rate: 0.0, touch: None, on_ground: true, rotation_deg: 0.0, rpm: 0.0, load: 0.0, ground_z: 0.0, ground_seen: false, walls: Vec::new(), step_force: 0.0, lat_defl: 0.0, surface: 0, surface_now: 0, surface_was: 0, surface_mix: 1.0, mu_scale: 1.0, rough: 0.0 });
+                wheels.push(RigidWheel { spin: 0.0, slipping: false, locked: false, inertia_inv, attach: Vec3::new(side * inner, a.long, z), lever: side * (outer - inner), radius: r, driven: a.driven, steered: (a.long - front_long).abs() < 0.01, steer: 0.0, tyre_k, tyre_c, spring: k, damper: c, max_force, spring_factor: 1.0, strut: Strut::from_block(omsi_vehicle::vehicle::Suspension::for_axle(&def.suspensions, ai)), rest_load: 0.0, compression: 0.0, compression_rate: 0.0, touch: None, on_ground: true, rotation_deg: 0.0, turned: 0.0, rpm: 0.0, load: 0.0, ground_z: 0.0, ground_seen: false, walls: Vec::new(), step_force: 0.0, lat_defl: 0.0, surface: 0, surface_now: 0, surface_was: 0, surface_mix: 1.0, mu_scale: 1.0, rough: 0.0 });
                 wheel_axle.push(ai);
             }
         }
@@ -371,6 +371,7 @@ impl RigidBody {
                     w.slipping = !omsi_cfg::flags::OMSI_NO_WHEEL_SLIP.is_set();
                     w.rpm = w.spin * 60.0 / std::f32::consts::TAU;
                     w.rotation_deg = (w.rotation_deg + w.spin.to_degrees() * h).rem_euclid(360.0);
+                    w.turned += w.spin * h;
                     // the tyre off the ground (or nothing under it: the edge of the loaded
                     // world): the strut still pushes on the body
                     let f = f_world + up * n;
@@ -516,19 +517,17 @@ impl RigidBody {
     /// rolling downhill without its brakes ran on to any speed, and no gale ever moved one.
     fn air_and_road(&mut self, rot: Quat, h: f32) -> (Vec3, Vec3) {
         let inv = rot.inverse();
-        let (mut force, mut torque) = (Vec3::ZERO, Vec3::ZERO);
-        if self.realistic {
+        let (force, torque) = if self.realistic {
             // (every OMSI 2 bus already has its still-air drag in its brake script - bremse.osc
             // adds 9.5 m2 x cw 0.8 x 0.6 v2 to every wheel's brake force - so only what the weather
             // changes is added here: the wind and an air that is not 1.2 kg/m3)
             let (f, t) = realism::wind_force(&self.aero, self.air_density, inv.mul_vec3(self.velocity), inv.mul_vec3(self.wind));
-            force = rot.mul_vec3(f);
-            torque = t;
+            (rot.mul_vec3(f), t)
         } else {
             let v = self.velocity;
             let area = (self.mass / 2200.0).clamp(2.0, 8.5);
-            force = -v * v.length() * (0.5 * 1.2 * 0.6 * area);
-        }
+            (-v * v.length() * (0.5 * 1.2 * 0.6 * area), Vec3::ZERO)
+        };
         // where on the road's unevenness the body stands (a reversing bus retraces it)
         let ds = self.velocity.dot(rot.mul_vec3(Vec3::Y)) as f64 * h as f64;
         self.road_s += ds;

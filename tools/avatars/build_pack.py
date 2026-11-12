@@ -10,7 +10,8 @@ one at a time: its `_facial.fbx` (the mesh with the facial blend shapes) as it i
 textures as JPEG (the hair and eyelash texture as PNG at half size, it has alpha), its normal maps at
 half size as `<colour texture>_normal.jpg`, which openOMSI's PBR lookup finds beside the
 colour texture. The 2048x2048 TGAs (about 22 GB for the library) are fetched, converted and
-deleted one avatar at a time. Writes pack.json, LICENSE.md and CREDITS.md.
+deleted one avatar at a time. The motion clips of CLIPS (walking, standing, sitting) are taken
+unchanged from Assets/Animations. Writes pack.json, LICENSE.md and CREDITS.md.
 """
 import json, os, shutil, subprocess, sys, urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -28,6 +29,13 @@ EXCLUDE = {
     "Police_Female_01", "Police_Male_02",
     "Medical_Male_04", "Medical_Male_05",
     "Sports_Female_01", "Sports_Male_01",
+}
+
+CLIPS = {
+    "walk": ["walk_neutral_01", "walk_neutral_02", "walk_neutral_03", "walk_slow_01", "walk_slow_02",
+             "walk_stroll_01", "walk_stroll_02", "walk_fast_01", "walk_cool_01"],
+    "stand": ["idle_neutral_01", "idle_neutral_02", "idle_neutral_03", "idle_look_around_01", "idle_waiting_01"],
+    "sit": ["sit_chair_idle_neutral_01", "sit_chair_idle_neutral_02", "sit_chair_idle_waiting_01"],
 }
 
 COLOR_SIZE = 2048
@@ -94,7 +102,7 @@ def main():
         if len(parts) < 5:
             continue
         avatars.setdefault((parts[2], parts[3]), []).append(p)
-    pack = {"version": 1, "source": "https://github.com/microsoft/Microsoft-Rocketbox", "license": "MIT", "avatars": []}
+    pack = {"version": 2, "source": "https://github.com/microsoft/Microsoft-Rocketbox", "license": "MIT", "avatars": []}
     old = {}
     if os.path.exists(os.path.join(out, "pack.json")):
         old = {a["id"]: a for a in json.load(open(os.path.join(out, "pack.json")))["avatars"]}
@@ -137,6 +145,22 @@ def main():
         pack["avatars"].append(entry)
         print(f"{name}: {len(made)} textures, {entry['bytes'] >> 20} MB", flush=True)
         json.dump(pack, open(os.path.join(out, "pack.json"), "w"), indent=1)
+    clip_files = {p.split("/")[-1][:-len(".max.fbx")]: p for p in (t["path"] for t in tree)
+                  if p.startswith("Assets/Animations/all_animations_max_motextr_") and p.endswith(".max.fbx")
+                  and "motextr_xyz/" not in p}
+    pack["clips"] = []
+    os.makedirs(os.path.join(out, "clips"), exist_ok=True)
+    for kind, names in CLIPS.items():
+        for sex in ("f", "m"):
+            for name in names:
+                cid = f"{sex}_{name}"
+                if cid not in clip_files:
+                    continue
+                file = f"clips/{cid}.fbx"
+                if not os.path.exists(os.path.join(out, file)):
+                    fetch(clip_files[cid], os.path.join(out, file))
+                pack["clips"].append({"id": cid, "file": file, "kind": kind, "female": sex == "f"})
+    print(f"{len(pack['clips'])} clips, {sum(os.path.getsize(os.path.join(out, c['file'])) for c in pack['clips']) >> 20} MB")
     json.dump(pack, open(os.path.join(out, "pack.json"), "w"), indent=1)
     lic = urllib.request.urlopen(RAW + "LICENSE.md", timeout=60).read()
     open(os.path.join(out, "LICENSE.md"), "wb").write(lic)
@@ -147,7 +171,8 @@ def main():
                 "Frontiers in Virtual Reality, 2020, doi:10.3389/frvir.2020.561558.\n\n"
                 "Taken unchanged: the `_facial.fbx` meshes with their blend shapes (ARKit blend shapes by Fang Ma and\n"
                 "Matias Volonte). The textures are converted from TGA (colour as JPEG / PNG, normal maps at half size).\n\n"
-                f"{len(pack['avatars'])} avatars: " + ", ".join(a["id"] for a in pack["avatars"]) + ".\n")
+                f"{len(pack['avatars'])} avatars: " + ", ".join(a["id"] for a in pack["avatars"]) + ".\n\n"
+                f"{len(pack['clips'])} motion clips from Assets/Animations, taken unchanged: " + ", ".join(c["id"] for c in pack["clips"]) + ".\n")
     print(f"{len(pack['avatars'])} avatars, {sum(a['bytes'] for a in pack['avatars']) >> 20} MB")
 
 

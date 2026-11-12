@@ -458,6 +458,54 @@ fn synthetic_material_plan_preserves_lightmap_thresholds_and_alpha_slots() {
     assert_eq!(got[0].slot_light, vec![1.0, 1.0]);
 }
 
+#[test]
+fn a_number_in_alphascale_is_the_scale_itself() {
+    let cfg = "[mesh]\nwindows.o3d\n\
+        [matl]\nfilm.png\n0\n[matl_alpha]\n2\n[alphascale]\n0.9\n\
+        [matl]\nfrost.tga\n0\n[matl_alpha]\n2\n[alphascale]\n0.2\n\
+        [matl]\npane.tga\n0\n[matl_alpha]\n2\n[alphascale]\nno_such_var\n\
+        [matl]\ntint.tga\n0\n[matl_alpha]\n2\n[alphascale]\nenvir_brightness\n";
+    let mut ty = coupling_test_type(None);
+    let ty = Arc::get_mut(&mut ty).unwrap();
+    ty.model = Model::parse(&omsi_cfg::CfgFile::from_str("glass.cfg", cfg));
+    ty.meshes.push(VehicleMesh {
+        def_index: 0,
+        data: MeshData::default(),
+        file: PathBuf::new(),
+        materials: ["film.png", "frost.tga", "pane.tga", "tint.tga"]
+            .into_iter()
+            .map(|texture| omsi_o3d::Material {
+                texture: texture.into(),
+                ..Default::default()
+            })
+            .collect(),
+        overrides: Vec::new(),
+        pivot: Mat4::IDENTITY,
+        viewpoint: 0,
+        skin: Vec::new(),
+        keep_winding: false,
+    });
+    let index: HashMap<String, omsi_script::VarId> =
+        [("envir_brightness".to_string(), 0)].into_iter().collect();
+    let mut plan = PropsPlan::default();
+    plan.refresh(ty, &index);
+    let mut got = Vec::new();
+    for light in [0.0, 0.4, 1.0] {
+        let vars = [light];
+        plan.apply(&vars, &mut got);
+        assert_eq!(
+            got[0].slot_alpha,
+            vec![0.9, 0.2, 0.0, light],
+            "brightness {light}"
+        );
+        let want = compute_mesh_props(ty, &|name| index.get(name).map(|&i| vars[i as usize]));
+        assert_eq!(
+            got[0].slot_alpha, want[0].slot_alpha,
+            "the plan and the direct way agree"
+        );
+    }
+}
+
 /// A `[matl_lightmap]` whose variable the bus does not have is always on (Omsi.exe's
 /// index -1, 0x7fe4e7); one on a variable at 0.3 is off.
 #[test]
@@ -521,4 +569,24 @@ fn a_control_cable_hands_what_the_scripts_write_to_what_they_read() {
         v.update(1.0 / 30.0);
         assert_eq!(v.var("seen"), Some(expected), "cabled {cabled}");
     }
+}
+
+#[test]
+fn road_vehicle_variables_are_known_without_the_program_folder_and_in_any_case() {
+    let has = |v: &[String], n: &str| v.iter().any(|x| x == n);
+    let dir = std::env::temp_dir().join(format!("omsi_builtin_vars_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("bare")).unwrap();
+    std::fs::create_dir_all(dir.join("upper/Program")).unwrap();
+    std::fs::write(dir.join("upper/Program/VarList_RoadVehicle.txt"), "Throttle\r\nOwnVar\r\n").unwrap();
+    std::fs::write(dir.join("t.osc"), "{frame}\n(L.L.Throttle) (S.L.Velocity)\n(L.L.cockpit_light_sw) (S.L.Spot_Select)\n{end}\n").unwrap();
+    let read = builtin_vars(&dir.join("upper"));
+    assert!(has(&read, "OwnVar") && has_program_varlist(&dir.join("upper")));
+    assert!(!has_program_varlist(&dir.join("bare")));
+    let compile = |declare_unknown| omsi_script::compile(&omsi_script::CompileInput { builtin_vars: builtin_vars(&dir.join("bare")), scripts: vec![dir.join("t.osc")], declare_unknown, ..Default::default() });
+    let p = compile(true);
+    assert!(p.errors.is_empty(), "{:?}", p.errors);
+    assert!(["throttle", "velocity", "spot_select", "cockpit_light_sw"].iter().all(|n| p.var(n).is_some()));
+    assert!(compile(false).errors.iter().any(|e| e.message.contains("cockpit_light_sw")));
+    let _ = std::fs::remove_dir_all(&dir);
 }

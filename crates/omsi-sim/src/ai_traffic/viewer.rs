@@ -34,6 +34,7 @@ pub const NEAR_HIDE: f64 = 350.0;
 /// Within this distance of the camera an AI vehicle is animated and drawn even out of the
 /// view (m): the mirrors look behind, and a car beside the view throws its shadow into it.
 pub const UNSEEN_NEAR: f64 = 80.0;
+pub const MIRROR_REACH: f64 = 250.0;
 /// Beyond this distance a car out of the view runs its script only a few times a second (m).
 pub const UNSEEN_SCRIPT_RANGE: f64 = 150.0;
 
@@ -152,6 +153,27 @@ impl Viewer {
 }
 
 impl TrafficSim {
+    /// Who can be seen: a car out of the view (and farther than the mirrors and the
+    /// shadows reach) leaves its animations as they are and is not drawn at all.
+    pub(super) fn set_visibility(&mut self) {
+        if let Some(v) = self.viewer {
+            for c in &mut self.cars {
+                let p = c.vehicle.position;
+                let r = (c.state.front + c.state.rear).abs().max(4.0) as f64 + 2.0;
+                let d = (p - v.pos).length();
+                c.vehicle.ai_visuals = d < UNSEEN_NEAR || (d < MIRROR_REACH && (p - v.pos).dot(v.forward) < 0.0) || v.frames(p, r);
+                // (a car nobody sees, well out of earshot of the mirrors: its script runs a
+                // few times a second, not every frame - each car at its own beat, so the
+                // runs do not all fall in one frame; a bus keeps its stop handshake)
+                c.vehicle.ai_script_period = if !c.vehicle.ai_visuals && d > UNSEEN_SCRIPT_RANGE && c.bus.is_none() {
+                    0.2 + 0.05 * (c.id % 5) as f32
+                } else {
+                    0.0
+                };
+            }
+        }
+    }
+
     /// Could neither the player nor any LAN player (`lan_eyes`, host) see a vehicle of
     /// radius `r` at `p` appear or vanish? `occluded(v)`: buildings or the ground hide it
     /// from `v`. Asked of the host's own camera alone, a dedicated server's (where the map

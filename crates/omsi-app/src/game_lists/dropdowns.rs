@@ -278,7 +278,8 @@ pub(super) fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
         "light_shadows" => vec![("off", "Off"), ("street", "Street lamps and vehicles"), ("all", "Every light")],
         "msaa" => vec![("1", "Off"), ("2", "2x MSAA"), ("4", "4x MSAA"), ("8", "8x MSAA")],
         "render_scale" => vec![("auto", "Auto"), ("1", "100%"), ("0.85", "85%"), ("0.75", "75%"), ("0.67", "67%"), ("0.5", "50%")],
-        "upscaler" => vec![("default", "Standard (Catmull-Rom)"), ("fsr1", "AMD FSR 1.0")],
+        "upscaler" => [("default", "Standard (Catmull-Rom)"), ("fsr1", "AMD FSR 1")].into_iter().chain(omsi_cfg::upscaler_files::menu_choices()).collect(),
+        "upscale_quality" => vec![("native", "Native"), ("quality", "Quality"), ("balanced", "Balanced"), ("performance", "Performance"), ("ultra_performance", "Ultra performance")],
         "fsr_quality" => vec![("ultra", "Ultra Quality (77%)"), ("quality", "Quality (67%)"), ("balanced", "Balanced (59%)"), ("performance", "Performance (50%)"), ("auto", "Automatic (keeps the frame rate)"), ("custom", "Use render scale")],
         "anisotropy" => vec![("1", "Off"), ("2", "2x"), ("4", "4x"), ("8", "8x"), ("16", "16x")],
         "shadow_size" => vec![("1024", "1024"), ("2048", "2048"), ("4096", "4096")],
@@ -329,6 +330,45 @@ mod tests {
     }
 
     #[test]
+    fn selecting_custom_controls_releases_the_arrow_driving_preset() {
+        use winit::keyboard::KeyCode;
+        let args = crate::cli::Args::parse_from(["openomsi", "--drive-keys", "arrows"]);
+        let settings = crate::settings::Settings { drive_keys: "arrows".into(), ..Default::default() };
+        let mut app = crate::assemble_app(args, settings);
+        app.input.keys.insert(KeyCode::ArrowLeft);
+        assert!(crate::player::fallback_action(KeyCode::ArrowLeft, &app.args.drive_keys).is_some());
+
+        app.settings.drive_keys = "omsi".into();
+        sync_driving_keys(&mut app, "arrows");
+        assert_eq!(app.args.drive_keys, "omsi");
+        assert!(app.input.keys.is_empty());
+        for (key, scan, action) in [
+            (KeyCode::ArrowLeft, 203, "view_interiorcam_minus"),
+            (KeyCode::ArrowRight, 205, "view_interiorcam_plus"),
+        ] {
+            assert_eq!(crate::player::fallback_action(key, &app.args.drive_keys), None);
+            let binding = omsi_content::KeyBinding { action: action.into(), scan_code: scan, modifier: 0 };
+            assert!(crate::input_script::binding_is_key(&binding, key, scan, 0), "no Alt needed");
+        }
+
+        app.settings.drive_keys = "arrows".into();
+        sync_driving_keys(&mut app, "omsi");
+        assert!(crate::player::fallback_action(KeyCode::ArrowRight, &app.args.drive_keys).is_some());
+    }
+
+    #[test]
+    fn reloading_other_settings_keeps_the_command_line_driving_layout() {
+        use winit::keyboard::KeyCode;
+        let args = crate::cli::Args::parse_from(["openomsi", "--drive-keys", "arrows"]);
+        let mut app = crate::assemble_app(args, crate::settings::Settings::default());
+        app.input.keys.insert(KeyCode::ArrowRight);
+
+        sync_driving_keys(&mut app, "simple");
+        assert_eq!(app.args.drive_keys, "arrows");
+        assert!(app.input.keys.contains(&KeyCode::ArrowRight));
+    }
+
+    #[test]
     fn live_interface_theme_updates_the_navigator_map() {
         let args = crate::cli::Args::parse_from(["openomsi"]);
         let mut app = crate::assemble_app(args, crate::settings::Settings::default());
@@ -356,6 +396,8 @@ pub(super) fn select_row(file: &serde_json::Value, key: &str, name: &str, desc: 
     if options.is_empty() {
         return None;
     }
+    // (DLSS or FSR 3 whose DLLs are gone, MetalFX on another machine: the standard upscaler)
+    let at = at.or((key == "upscaler").then_some(0));
     let label = at.map(|i| omsi_ui::tr(options[i].1).into_owned()).unwrap_or(cur);
     Some((row(name, 'o', &label, desc, None), format!("sel {key}")))
 }
@@ -408,11 +450,27 @@ pub(crate) fn store_with(app: &mut App, change: impl FnOnce(&mut serde_json::Val
 pub(super) fn reload_settings(app: &mut App) {
     flush_settings(true);
     // (the seat is the bus's, see `bus_seats`: it is read again for the bus)
+    let previous_drive_keys = app.settings.drive_keys.clone();
     app.settings = settings_in_mode(session_mode(app));
+    sync_driving_keys(app, &previous_drive_keys);
     app.session.seat_bus.clear();
     crate::ui_language(&app.settings.language);
     crate::units::Units::from_setting(&app.settings.units).set();
     sync_live(app);
+}
+
+/// A layout picked during the drive must reach the key handlers too. Keeping the old
+/// `args.drive_keys` left plain arrows steering after selecting Custom controls; Alt
+/// happened to bypass that preset and let the interior-camera bindings through.
+fn sync_driving_keys(app: &mut App, previous: &str) {
+    if app.settings.drive_keys == previous {
+        return;
+    }
+    // The key-up must not be interpreted through a different layout: release the old
+    // vehicle actions first, then wait for a fresh press with the new layout.
+    app.release_vehicle_keys();
+    app.input.keys.clear();
+    app.args.drive_keys.clone_from(&app.settings.drive_keys);
 }
 
 pub(crate) fn session_mode(app: &App) -> &'static str {
@@ -484,7 +542,7 @@ pub(super) fn sync_live(app: &mut App) {
         a.set_doppler(s.doppler);
     }
     if let Some(n) = app.menus.navigator.as_mut() {
-        n.arrows = s.nav_arrows;
+        n.arrows = s.nav_dynamic_arrows;
         n.light = s.is_light_theme();
     }
     if let Some(h) = app.session.humans.as_mut() {
@@ -497,6 +555,7 @@ pub(super) fn sync_live(app: &mut App) {
         h.bad_driving = s.pax_bad_driving;
         h.boarding = s.boarding.clone();
         h.stand_chance = s.standing_chance;
+        h.short_rides_stand = s.pax_short_rides_stand;
         h.voices = match s.pax_voices.as_str() {
             "off" => 2,
             "tickets" => 1,

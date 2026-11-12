@@ -1,12 +1,13 @@
 use crate::{err, Answer};
 use omsi_launcher_lib as core;
-use omsi_timetable::{Line, TimetableData, Tour, TourTrip, Trip, TripProfile};
+use omsi_timetable::{Line, Tour, TourTrip, Trip, TripProfile};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 
 const COPY_MARK: &str = ".openomsi-ttdata-copy";
+const CHRONO_CFG_MARK: &str = ".openomsi-chrono-cfg-copy";
 /// The trips made in a map's own TTData folder (no copy of it): one name a line, so that a
 /// reset can take them away again.
 const NEW_TRIPS: &str = ".openomsi-new-trips";
@@ -118,16 +119,25 @@ impl Place {
     fn copy_dir(&self) -> PathBuf {
         self.content.join(&self.rel).join("TTData")
     }
+
+    fn layer_copy_dir(&self, layer_tt: &Path) -> PathBuf {
+        if let Ok(rel_layer) = layer_tt.strip_prefix(&self.map_dir) {
+            if rel_layer.components().next().is_some_and(|c| c.as_os_str().eq_ignore_ascii_case("Chrono")) {
+                return self.content.join(&self.rel).join(rel_layer);
+            }
+        }
+        self.copy_dir()
+    }
 }
 
-pub fn load(map: String) -> Answer {
+pub fn load(map: String, date: Option<String>) -> Answer {
     let global = core::content_path(&map).map_err(err)?;
     let map_dir = global.parent().map(Path::to_path_buf).ok_or_else(|| core::i18n::tr("{map} is not a map file").replace("{map}", &map))?;
-    Ok(read(&map_dir))
+    Ok(read(&map_dir, date.as_deref().unwrap_or("")))
 }
 
-fn read(map_dir: &Path) -> Value {
-    let mut d = TimetableData::load(map_dir);
+fn read(map_dir: &Path, date: &str) -> Value {
+    let mut d = core::timetable_for_date(map_dir, date);
     d.lines.sort_by_key(|l| l.name.to_lowercase());
     let lines: Vec<Value> = d
         .lines
@@ -159,24 +169,29 @@ fn read(map_dir: &Path) -> Value {
     json!({ "folder": folder, "lines": lines, "trips": trips, "stops": stops, "links": links })
 }
 
-pub fn save(map: String, lines: Vec<LineEdit>) -> Answer {
+pub fn save(map: String, lines: Vec<LineEdit>, date: Option<String>) -> Answer {
     let place = Place::of(&map)?;
     let _one = WRITING.lock().unwrap_or_else(|e| e.into_inner());
-    let answer = save_lines(&place, lines);
+    let answer = save_lines_on(&place, lines, date.as_deref().unwrap_or(""));
     if answer["saved"].as_array().is_some_and(|s| !s.is_empty()) {
         omsi_cfg::content_changed();
     }
     Ok(answer)
 }
 
+#[cfg(test)]
 fn save_lines(place: &Place, edits: Vec<LineEdit>) -> Value {
-    let original = omsi_cfg::resolve_path(&place.map_dir, "TTData");
-    let known = TimetableData::load(&place.map_dir).lines;
+    save_lines_on(place, edits, "")
+}
+
+fn save_lines_on(place: &Place, edits: Vec<LineEdit>, date: &str) -> Value {
+    let base_tt = omsi_cfg::resolve_path(&place.map_dir, "TTData");
+    let known = core::timetable_for_date(&place.map_dir, date).lines;
     let mut saved = Vec::new();
     let mut error = None;
     for e in edits {
         let name = e.name.trim().to_string();
-        match save_line(place, &original, &known, e) {
+        match save_line(place, &base_tt, &known, e) {
             Ok(()) => saved.push(name),
             Err(why) => {
                 error.get_or_insert(core::i18n::tr("line {name}: {why}").replace("{why}", &why).replace("{name}", &name));
@@ -193,6 +208,9 @@ pub struct TripNew {
     /// The line its displays show (empty: a depot run).
     #[serde(default)]
     line: String,
+    /// Selected timetable line whose tour receives this trip when adding from the builder.
+    #[serde(default)]
+    target_line: Option<String>,
     /// The destination text; the last stop's name when empty.
     #[serde(default)]
     terminus: String,
@@ -207,15 +225,20 @@ pub struct TripNew {
 const SPEED_MPS: f64 = 6.5;
 const DWELL_MIN: f64 = 0.35;
 
-pub fn save_trip(map: String, trip: TripNew) -> Answer {
+pub fn save_trip(map: String, trip: TripNew, date: Option<String>) -> Answer {
     let place = Place::of(&map)?;
     let _one = WRITING.lock().unwrap_or_else(|e| e.into_inner());
-    let name = write_trip(&place, trip)?;
+    let name = write_trip_on(&place, trip, date.as_deref().unwrap_or(""))?;
     omsi_cfg::content_changed();
     Ok(json!({ "name": name }))
 }
 
+#[cfg(test)]
 fn write_trip(place: &Place, e: TripNew) -> Result<String, String> {
+    write_trip_on(place, e, "")
+}
+
+fn write_trip_on(place: &Place, e: TripNew, date: &str) -> Result<String, String> {
     let name = e.name.trim().to_string();
     if !file_name_ok(&name) {
         return Err(core::i18n::tr("not a file name"));
@@ -223,8 +246,8 @@ fn write_trip(place: &Place, e: TripNew) -> Result<String, String> {
     if e.stops.len() < 2 {
         return Err(core::i18n::tr("A trip needs two stops at least."));
     }
-    let data = TimetableData::load(&place.map_dir);
-    if data.trips.iter().any(|t| t.name.eq_ignore_ascii_case(&name)) {
+    let data = core::timetable_for_date(&place.map_dir, date);
+    if data.trips.iter().any(|t| t.is_named(&name)) {
         return Err(core::i18n::trf("A trip named {name} is there already", &[("name", &name)]));
     }
     let name_of = |id: i64| data.bus_stops.iter().find(|b| b.object_id == id).map(|b| b.name.trim().to_string());
@@ -245,22 +268,43 @@ fn write_trip(place: &Place, e: TripNew) -> Result<String, String> {
         profiles: vec![TripProfile { name: "standard".into(), factor: minutes, ..Default::default() }],
         ..Default::default()
     };
-    let original = omsi_cfg::resolve_path(&place.map_dir, "TTData");
-    // (a map of the content folder itself is written in place: the trip is noted for the reset
-    // once it is written, so that the reset never takes away a file the editor did not make)
-    let in_place = place.ours(&original) && omsi_cfg::vfs::archive_of(&original).is_none();
-    let dir = if in_place {
-        original.clone()
-    } else {
-        let dir = place.copy_dir();
-        if place.original(&dir) {
-            return Err(core::i18n::tr("its copy would go into the OMSI 2 folder"));
-        }
-        if !dir.is_dir() {
-            copy_whole(&original, &dir)?;
-        }
-        dir
+    let base_tt = omsi_cfg::resolve_path(&place.map_dir, "TTData");
+    let chrono = core::chrono_dirs_for_date(&place.map_dir, date);
+    let fits = |td: &omsi_timetable::TimetableData| {
+        trip.stations.iter().all(|id| td.bus_stops.iter().any(|b| b.object_id == *id))
+            && trip.stations.windows(2).all(|w| td.stn_links.iter().any(|l| l.from_id == w[0] && l.to_id == w[1]))
     };
+    let needed_chrono = if chrono.is_empty() || fits(&omsi_timetable::TimetableData::load(&place.map_dir)) {
+        None
+    } else {
+        (0..chrono.len())
+            .find(|&i| fits(&omsi_timetable::TimetableData::load_with_chrono(&place.map_dir, &chrono[..=i], &[])))
+            .or_else(|| Some(chrono.len() - 1))
+            .map(|i| omsi_cfg::resolve_path(&chrono[i], "TTData"))
+    };
+    let target_name = e.target_line.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let line_tt = |line_name: &str| {
+        data.lines
+            .iter()
+            .find(|l| l.name.eq_ignore_ascii_case(line_name))
+            .and_then(|l| l.path.parent().map(Path::to_path_buf))
+    };
+    let layer_tt = match needed_chrono {
+        Some(ev_tt) => {
+            if target_name.and_then(line_tt).is_some_and(|dir| dir == base_tt) {
+                return Err(core::i18n::tr("This trip uses a Chrono event stop or link and cannot be added to a base line"));
+            }
+            ev_tt
+        }
+        None => target_name
+            .or_else(|| (!e.line.trim().is_empty()).then_some(e.line.trim()))
+            .and_then(line_tt)
+            .unwrap_or_else(|| base_tt.clone()),
+    };
+    let (dir, in_place) = ensure_writable_tt(place, &layer_tt)?;
+    if in_place && !dir.is_dir() {
+        std::fs::create_dir_all(&dir).map_err(err)?;
+    }
     let target = dir.join(format!("{name}.ttp"));
     if place.original(&target) {
         return Err(core::i18n::tr("it would be written into the OMSI 2 folder"));
@@ -288,7 +332,7 @@ fn file_name_ok(name: &str) -> bool {
     !matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL") && !numbered("COM") && !numbered("LPT")
 }
 
-fn save_line(place: &Place, original: &Path, known: &[Line], e: LineEdit) -> Result<(), String> {
+fn save_line(place: &Place, default_tt: &Path, known: &[Line], e: LineEdit) -> Result<(), String> {
     let name = e.name.trim().to_string();
     if !file_name_ok(&name) {
         return Err(core::i18n::tr("not a file name"));
@@ -305,33 +349,59 @@ fn save_line(place: &Place, original: &Path, known: &[Line], e: LineEdit) -> Res
         trips.sort_by(|a, b| a.departure.total_cmp(&b.departure));
         tours.push(Tour { number: t.number, ai_group: t.ai_group, extra: t.extra, trips });
     }
-    let path = known.iter().find(|l| l.name.eq_ignore_ascii_case(&name)).map(|l| l.path.clone()).unwrap_or_else(|| original.join(format!("{name}.ttl")));
+    let path = known.iter().find(|l| l.name.eq_ignore_ascii_case(&name)).map(|l| l.path.clone()).unwrap_or_else(|| default_tt.join(format!("{name}.ttl")));
     let line = Line { path, name, user_allowed: e.user_allowed, priority: e.priority, tours };
-    let target = save_target(place, &line, original)?;
+    let target = save_target(place, &line, default_tt)?;
     if place.original(&target) {
         return Err(core::i18n::tr("it would be written into the OMSI 2 folder"));
     }
     line.save(&target).map_err(|e| core::i18n::tr(&err(e)))
 }
 
-fn save_target(place: &Place, line: &Line, original: &Path) -> Result<PathBuf, String> {
-    let file = line.path.file_name().map(|f| f.to_owned()).unwrap_or_else(|| format!("{}.ttl", line.name).into());
-    if place.ours(&line.path) && omsi_cfg::vfs::archive_of(&line.path).is_none() {
-        let orig = PathBuf::from(format!("{}.orig", line.path.display()));
-        let copied = line.path.parent().is_some_and(|d| d.join(COPY_MARK).is_file());
-        if !copied && line.path.is_file() && !orig.exists() {
-            std::fs::copy(&line.path, &orig).map_err(err)?;
-        }
-        return Ok(line.path.clone());
+fn ensure_writable_tt(place: &Place, layer_tt: &Path) -> Result<(PathBuf, bool), String> {
+    if place.ours(layer_tt) && omsi_cfg::vfs::archive_of(layer_tt).is_none() {
+        return Ok((layer_tt.to_path_buf(), true));
     }
-    let dir = place.copy_dir();
+    let dir = place.layer_copy_dir(layer_tt);
     if place.original(&dir) {
         return Err(core::i18n::tr("its copy would go into the OMSI 2 folder"));
     }
     if !dir.is_dir() {
-        copy_whole(original, &dir)?;
+        if omsi_cfg::vfs::is_dir(layer_tt) {
+            copy_whole(layer_tt, &dir)?;
+        } else {
+            std::fs::create_dir_all(&dir).map_err(err)?;
+            std::fs::write(dir.join(COPY_MARK), b"TTData copied by the openOMSI launcher's timetable editor; its reset deletes this folder\n").map_err(err)?;
+        }
+        if let (Some(src_ev), Some(dst_ev)) = (layer_tt.parent(), dir.parent()) {
+            let src_cfg = src_ev.join("Chrono.cfg");
+            let dst_cfg = dst_ev.join("Chrono.cfg");
+            if dst_ev != place.content.join(&place.rel) && omsi_cfg::vfs::is_file(&src_cfg) && !dst_cfg.exists() {
+                if let Ok(bytes) = omsi_cfg::vfs::read(&src_cfg) {
+                    std::fs::write(&dst_cfg, bytes).map_err(err)?;
+                    std::fs::write(dst_ev.join(CHRONO_CFG_MARK), b"1").map_err(err)?;
+                }
+            }
+        }
     }
-    Ok(dir.join(file))
+    Ok((dir, false))
+}
+
+fn save_target(place: &Place, line: &Line, default_tt: &Path) -> Result<PathBuf, String> {
+    let file = line.path.file_name().map(|f| f.to_owned()).unwrap_or_else(|| format!("{}.ttl", line.name).into());
+    let layer_tt = line.path.parent().unwrap_or(default_tt);
+    let (dir, in_place) = ensure_writable_tt(place, layer_tt)?;
+    if in_place && !dir.is_dir() {
+        std::fs::create_dir_all(&dir).map_err(err)?;
+    }
+    let target = dir.join(file);
+    if in_place && !dir.join(COPY_MARK).is_file() {
+        let orig = PathBuf::from(format!("{}.orig", target.display()));
+        if target.is_file() && !orig.exists() {
+            std::fs::copy(&target, &orig).map_err(err)?;
+        }
+    }
+    Ok(target)
 }
 
 fn copy_whole(original: &Path, dir: &Path) -> Result<(), String> {
@@ -359,17 +429,76 @@ pub fn reset(map: String) -> Answer {
     Ok(answer)
 }
 
+fn collect_ttdata_dirs(root: &Path, out: &mut Vec<PathBuf>) {
+    if !root.is_dir() {
+        return;
+    }
+    let tt = root.join("TTData");
+    if tt.is_dir() && !out.contains(&tt) {
+        out.push(tt);
+    }
+    if let Ok(rd) = std::fs::read_dir(root.join("Chrono")) {
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                collect_chrono_ttdata(&p, out);
+            }
+        }
+    }
+}
+
+fn collect_chrono_ttdata(dir: &Path, out: &mut Vec<PathBuf>) {
+    let tt = dir.join("TTData");
+    if tt.is_dir() && !out.contains(&tt) {
+        out.push(tt);
+    }
+    if let Ok(rd) = std::fs::read_dir(dir) {
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir() && !p.file_name().is_some_and(|n| n.eq_ignore_ascii_case("TTData")) {
+                collect_chrono_ttdata(&p, out);
+            }
+        }
+    }
+}
+
 fn reset_in(place: &Place) -> Answer {
     let folder = place.folder();
-    let copy = place.copy_dir();
-    if copy.join(COPY_MARK).is_file() && place.ours(&copy) {
-        std::fs::remove_dir_all(&copy).map_err(err)?;
+    let copy_map = place.content.join(&place.rel);
+    let mut copy_dirs = Vec::new();
+    collect_ttdata_dirs(&copy_map, &mut copy_dirs);
+    let mut removed = false;
+    for copy in copy_dirs {
+        if copy.join(COPY_MARK).is_file() && place.ours(&copy) {
+            std::fs::remove_dir_all(&copy).map_err(err)?;
+            removed = true;
+            if let Some(ev) = copy.parent() {
+                if ev != copy_map && ev.join(CHRONO_CFG_MARK).is_file() {
+                    std::fs::remove_file(ev.join("Chrono.cfg")).ok();
+                    std::fs::remove_file(ev.join(CHRONO_CFG_MARK)).ok();
+                    let _ = std::fs::remove_dir(ev);
+                }
+            }
+        }
+    }
+    if removed {
         return Ok(json!({ "folder": folder, "removed": true, "restored": 0 }));
     }
-    let own = omsi_cfg::resolve_path(&place.map_dir, "TTData");
+    let mut own_dirs = Vec::new();
+    let own_base = omsi_cfg::resolve_path(&place.map_dir, "TTData");
+    if own_base.is_dir() {
+        own_dirs.push(own_base.clone());
+    }
+    collect_ttdata_dirs(&place.map_dir, &mut own_dirs);
+    let chrono_root = omsi_cfg::resolve_path(&place.map_dir, "Chrono");
+    if chrono_root.is_dir() {
+        collect_chrono_ttdata(&chrono_root, &mut own_dirs);
+    }
     let mut restored = 0;
-    if place.ours(&own) && own.is_dir() {
-        // (the trips made here go, one name a line)
+    for own in own_dirs {
+        if !(place.ours(&own) && own.is_dir()) {
+            continue;
+        }
         let tracked = own.join(NEW_TRIPS);
         if let Ok(list) = std::fs::read_to_string(&tracked) {
             for name in list.lines().map(str::trim).filter(|n| file_name_ok(n)) {
@@ -385,6 +514,9 @@ fn reset_in(place: &Place) -> Answer {
                 std::fs::rename(&p, orig).map_err(err)?;
                 restored += 1;
             }
+        }
+        if own != own_base {
+            let _ = std::fs::remove_dir(&own);
         }
     }
     Ok(json!({ "folder": folder, "removed": false, "restored": restored }))
@@ -599,11 +731,143 @@ mod tests {
     fn the_page_reads_lines_and_the_trips_they_can_run() {
         let d = dirs("read");
         let map = map_at(&d.omsi);
-        let v = read(&map);
+        let v = read(&map, "");
         assert_eq!(v["folder"], json!("Grundorf"));
         assert_eq!(v["lines"][0]["name"], json!("1"));
         assert_eq!(v["lines"][0]["tours"][0]["trips"][0], json!({ "trip": "A", "profile": 0, "departure": 360.0 }));
         assert_eq!(v["trips"][0]["terminus"], json!("Hauptbahnhof"));
+    }
+
+    #[test]
+    fn chrono_events_layer_into_the_timetable_for_matching_dates() {
+        let d = dirs("chrono");
+        let map = map_at(&d.omsi);
+        let ev = map.join("Chrono").join("Fair");
+        std::fs::create_dir_all(ev.join("TTData")).unwrap();
+        std::fs::write(ev.join("Chrono.cfg"), "[startdate]\r\n20260917\r\n[enddate]\r\n20260920\r\n[deactivate_lines]\r\n1\r\n1\r\n").unwrap();
+        std::fs::write(ev.join("TTData").join("S1.ttl"), "[priority]\r\n1\r\n[newtour]\r\n10\r\nBusses\r\n1023\r\n[addtrip]\r\nFairTrip\r\n0\r\n500.000\r\n").unwrap();
+        std::fs::write(ev.join("TTData").join("FairTrip.ttp"), "[trip]\r\n\r\nFairground\r\n1\r\n").unwrap();
+
+        let off_day = read(&map, "2026-09-10");
+        assert_eq!(off_day["lines"].as_array().unwrap().iter().map(|l| l["name"].as_str().unwrap()).collect::<Vec<_>>(), ["1"]);
+        let active = read(&map, "2026-09-17");
+        assert_eq!(active["lines"].as_array().unwrap().iter().map(|l| l["name"].as_str().unwrap()).collect::<Vec<_>>(), ["S1"]);
+        assert!(active["trips"].as_array().unwrap().iter().any(|t| t["name"] == "FairTrip" && t["terminus"] == "Fairground"));
+    }
+
+    #[test]
+    fn chrono_edits_and_trips_stay_inside_event_layer_and_reset_restores_them() {
+        let d = dirs("chrono_content");
+        let map = map_at(&d.content);
+        stops_and_links(&map);
+        let ev = map.join("Chrono").join("Fair");
+        std::fs::create_dir_all(ev.join("TTData")).unwrap();
+        std::fs::write(ev.join("Chrono.cfg"), "[startdate]\r\n20260917\r\n[enddate]\r\n20260920\r\n[deactivate_lines]\r\n1\r\n1\r\n").unwrap();
+        std::fs::write(ev.join("TTData").join("S1.ttl"), "[priority]\r\n1\r\n[newtour]\r\n10\r\nBusses\r\n1023\r\n[addtrip]\r\nFairTrip\r\n0\r\n500.000\r\n").unwrap();
+        std::fs::write(ev.join("TTData").join("FairTrip.ttp"), "[trip]\r\n\r\nFairground\r\n1\r\n").unwrap();
+        std::fs::write(ev.join("TTData").join("Busstops.cfg"), "[busstop]\r\nFairground\r\n0\r\n901\r\n0\r\n0\r\n0\r\n").unwrap();
+        std::fs::write(ev.join("TTData").join("StnLinks.cfg"), "[StnLink]\r\n400\r\n103\r\n901\r\n0\r\n0\r\n0\r\n0\r\n0\r\n0\r\n").unwrap();
+
+        let p = place(&d, &map);
+        let base_before = snapshot(&map.join("TTData"));
+        let s1_before = std::fs::read(ev.join("TTData").join("S1.ttl")).unwrap();
+
+        assert_eq!(save_lines_on(&p, vec![edit("S1", &[620.0])], "2026-09-17")["saved"], json!(["S1"]));
+        assert_eq!(write_trip_on(&p, new_trip("FairShuttle", &[103, 901]), "2026-09-17").unwrap(), "FairShuttle");
+
+        assert_eq!(snapshot(&map.join("TTData")), base_before);
+        assert!(ev.join("TTData").join("S1.ttl.orig").is_file());
+        assert!(ev.join("TTData").join("FairShuttle.ttp").is_file());
+        assert_eq!(read(&map, "2026-09-10")["lines"].as_array().unwrap().iter().map(|l| l["name"].as_str().unwrap()).collect::<Vec<_>>(), ["1"]);
+        assert_eq!(Line::load(&ev.join("TTData").join("S1.ttl")).unwrap().tours[0].trips[0].departure, 620.0);
+
+        let reset = reset_in(&p).unwrap();
+        assert_eq!(reset, json!({ "folder": "Grundorf", "removed": false, "restored": 2 }));
+        assert_eq!(std::fs::read(ev.join("TTData").join("S1.ttl")).unwrap(), s1_before);
+        assert!(!ev.join("TTData").join("S1.ttl.orig").exists());
+        assert!(!ev.join("TTData").join("FairShuttle.ttp").exists());
+    }
+
+    #[test]
+    fn base_trip_built_on_chrono_date_writes_to_base_and_event_only_trip_cannot_target_base_line() {
+        let d = dirs("chrono_base_trip");
+        let map = map_at(&d.content);
+        stops_and_links(&map);
+        let ev = map.join("Chrono").join("Fair");
+        std::fs::create_dir_all(&ev).unwrap();
+        std::fs::write(ev.join("Chrono.cfg"), "[startdate]\r\n20260917\r\n[enddate]\r\n20260920\r\n").unwrap();
+        let ev_tt = ev.join("TTData");
+
+        let p = place(&d, &map);
+        let mut base_trip = new_trip("BaseHop", &[101, 102]);
+        base_trip.target_line = Some("1".into());
+        assert_eq!(write_trip_on(&p, base_trip, "2026-09-17").unwrap(), "BaseHop");
+        assert!(map.join("TTData").join("BaseHop.ttp").is_file());
+        assert!(!ev_tt.exists());
+        let mut l1 = edit("1", &[540.0]);
+        l1.tours[0].trips[0].trip = "BaseHop".into();
+        let new_line = edit("N1", &[600.0]);
+        assert_eq!(save_lines_on(&p, vec![l1, new_line], "2026-09-17")["saved"], json!(["1", "N1"]));
+        assert!(map.join("TTData").join("N1.ttl").is_file());
+        let off = read(&map, "2026-09-10");
+        assert!(off["lines"].as_array().unwrap().iter().any(|l| l["name"] == "1"));
+        assert!(off["lines"].as_array().unwrap().iter().any(|l| l["name"] == "N1"));
+        assert!(off["trips"].as_array().unwrap().iter().any(|t| t["name"] == "BaseHop"));
+
+        std::fs::create_dir_all(&ev_tt).unwrap();
+        std::fs::write(ev_tt.join("Busstops.cfg"), "[busstop]\r\nFairground\r\n0\r\n901\r\n0\r\n0\r\n0\r\n").unwrap();
+        std::fs::write(ev_tt.join("StnLinks.cfg"), "[StnLink]\r\n400\r\n103\r\n901\r\n0\r\n0\r\n0\r\n0\r\n0\r\n0\r\n").unwrap();
+        let mut bad = new_trip("BadCross", &[103, 901]);
+        bad.target_line = Some("1".into());
+        assert!(write_trip_on(&p, bad, "2026-09-17").is_err());
+        assert!(!map.join("TTData").join("BadCross.ttp").exists());
+        assert!(!ev_tt.join("BadCross.ttp").exists());
+    }
+
+    #[test]
+    fn layer_copy_ignores_chrono_in_parent_path_and_reset_drops_empty_chrono_ttdata() {
+        let d = dirs_at("chrono_parent", "Chrono/OMSI 2", "content");
+        let map = map_at(&d.omsi);
+        let p = place(&d, &map);
+        assert_eq!(p.layer_copy_dir(&map.join("TTData")), p.copy_dir());
+        assert_eq!(
+            p.layer_copy_dir(&map.join("Chrono").join("Fair").join("TTData")),
+            d.content.join("maps").join("Grundorf").join("Chrono").join("Fair").join("TTData")
+        );
+
+        let c_map = map_at(&d.content);
+        let cp = place(&d, &c_map);
+        let p_ev = c_map.join("Chrono").join("Parade").join("TTData");
+        let (dir, in_place) = ensure_writable_tt(&cp, &p_ev).unwrap();
+        assert!(in_place);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(NEW_TRIPS), "TempTrip.ttp\n").unwrap();
+        std::fs::write(dir.join("TempTrip.ttp"), "[trip]\r\n\r\nEnd\r\n1\r\n").unwrap();
+        assert_eq!(reset_in(&cp).unwrap()["restored"], json!(1));
+        assert!(!p_ev.exists());
+    }
+
+    #[test]
+    fn chrono_edits_on_read_only_omsi_map_copy_only_event_layer_and_clean_on_reset() {
+        let d = dirs("chrono_ro");
+        let map = map_at(&d.omsi);
+        let ev = map.join("Chrono").join("Fair");
+        std::fs::create_dir_all(ev.join("TTData")).unwrap();
+        std::fs::write(ev.join("Chrono.cfg"), "[startdate]\r\n20260917\r\n[enddate]\r\n20260920\r\n").unwrap();
+        std::fs::write(ev.join("TTData").join("S1.ttl"), "[priority]\r\n1\r\n[newtour]\r\n10\r\nBusses\r\n1023\r\n[addtrip]\r\nA\r\n0\r\n500.000\r\n").unwrap();
+
+        let p = place(&d, &map);
+        let before = snapshot(&d.omsi);
+        assert_eq!(save_lines_on(&p, vec![edit("S1", &[715.0])], "2026-09-17"), json!({ "saved": ["S1"], "error": null }));
+        assert_eq!(snapshot(&d.omsi), before);
+        assert!(!d.content.join("maps").join("Grundorf").join("TTData").exists());
+        let copy_ev_tt = d.content.join("maps").join("Grundorf").join("Chrono").join("Fair").join("TTData");
+        assert!(copy_ev_tt.join(COPY_MARK).is_file());
+        assert_eq!(Line::load(&copy_ev_tt.join("S1.ttl")).unwrap().tours[0].trips[0].departure, 715.0);
+
+        assert_eq!(reset_in(&p).unwrap(), json!({ "folder": "Grundorf", "removed": true, "restored": 0 }));
+        assert!(!copy_ev_tt.exists());
+        assert_eq!(snapshot(&d.omsi), before);
     }
 
     fn stops_and_links(map: &Path) {
@@ -613,7 +877,14 @@ mod tests {
     }
 
     fn new_trip(name: &str, stops: &[i64]) -> TripNew {
-        TripNew { name: name.into(), line: "1".into(), terminus: String::new(), stops: stops.to_vec(), minutes: 0.0 }
+        TripNew {
+            name: name.into(),
+            line: "1".into(),
+            target_line: None,
+            terminus: String::new(),
+            stops: stops.to_vec(),
+            minutes: 0.0,
+        }
     }
 
     #[test]

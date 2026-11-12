@@ -43,7 +43,7 @@ pub(crate) fn open(app: &mut crate::App) {
         app.service_msg = Some(("No vehicle to set a destination for".into(), 3.0));
         return;
     };
-    let route = crate::game_lists::destination_line(&p.vehicle);
+    let route = crate::game_lists::form_route(&p.vehicle, p.blind_pick.as_ref());
     let shown = p.vehicle.host.hof.as_deref().and_then(|hof| {
         let ti = crate::schedule::shown_destination(&p.vehicle, hof, p.blind_pick.as_ref())?;
         hof.termini.get(ti).map(|t| t.menu_name())
@@ -125,20 +125,24 @@ fn set(app: &mut crate::App, form: &DestForm, clear: bool) -> String {
     if !clear && lines.iter().all(|l| l.trim().is_empty()) {
         return omsi_ui::tr("Route number set").into_owned();
     }
-    match named(&hof, &lines) {
+    let message = match named(&hof, &lines) {
         Some(ti) => {
-            p.set_destination_by_hand(&hof, &line, ti);
+            p.set_destination_by_hand(&hof, &line, ti, !clear && crate::game_lists::route_keeps_blind(&form.route));
             format!("{} {}", omsi_ui::tr("Destination:"), hof.termini[ti].menu_name())
         }
         None => {
             let (free, ti) = hof.with_free_text([&lines[0], &lines[1]]);
             let free = std::sync::Arc::new(free);
             p.vehicle.host.hof = Some(free.clone());
-            p.set_destination_by_hand(&free, &line, ti);
+            p.set_destination_by_hand(&free, &line, ti, !clear && crate::game_lists::route_keeps_blind(&form.route));
             log::info!("destination display set to free text: {:?} / {:?}", lines[0], lines[1]);
             if clear { omsi_ui::tr("Display cleared").into_owned() } else { omsi_ui::tr("Destination set as typed").into_owned() }
         }
+    };
+    if !clear && !form.route.trim().is_empty() && !crate::game_lists::numeric_ibis_line(&form.route) {
+        crate::game_lists::set_route_by_hand(app, &form.route);
     }
+    message
 }
 
 #[cfg(test)]

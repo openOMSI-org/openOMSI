@@ -411,7 +411,7 @@ impl Traffic {
             if !lamp.texts.is_empty() {
                 if let Some(s) = lamp.script.and_then(|k| lamps.get_mut(k)) {
                     let _ = s.take_refresh_strings();
-                    for (tex, st) in lamp.texts.iter_mut() {
+                    for (tex, st) in lamp.texts.iter_mut().filter(|(_, st)| dist < TEXT_NEAR || st.last_text.is_none()) {
                         let text = s.str_var(st.def.variable.trim()).to_string();
                         if st.update(&text) {
                             if let Some(rgba) = st.pending.take() {
@@ -426,23 +426,27 @@ impl Traffic {
                     }
                 }
             }
-            let raw_value = |lamp: &crate::scene::LightObject, var: &str| -> f32 {
+            let scripted = |lamp: &crate::scene::LightObject, var: &str| -> Option<f32> {
                 // Custom signals can shift phases or blink the standard channels (Numazu
                 // pedestrian lamps). Use their script outputs whenever they are available.
-                let scripted = lamp.script.and_then(|k| lamps.get(k)).and_then(|s| {
+                lamp.script.and_then(|k| lamps.get(k)).and_then(|s| {
                     // A failed/missing script can still have a varlist of zeroes. Keep
                     // stock fallback behaviour if it has no runnable frame block.
                     if s.program.frame.is_empty() { None } else { s.var(var) }
-                });
+                })
+            };
+            let raw_value = |lamp: &crate::scene::LightObject, var: &str| -> f32 {
                 crate::scene::traffic_lamp_value(
                     var,
-                    scripted,
+                    scripted(lamp, var),
                     crate::scene::standard_traffic_lamp(var, r, y, g, request),
                 )
             };
-            // A scripted lamp can leave both standard channels on at once. A road signal
-            // must never show green together with red; keep the stop aspect in that case.
-            let red_on = raw_value(lamp, "red") >= 0.5;
+            // A lamp mixing a scripted channel with the phase's can show red and green at
+            // once; keep the stop aspect in that case.
+            let scripted_red = scripted(lamp, "red");
+            let red = crate::scene::traffic_lamp_value("red", scripted_red, crate::scene::standard_traffic_lamp("red", r, y, g, request));
+            let red_on = red_masks_green(scripted_red.is_some(), scripted(lamp, "green").is_some(), red);
             let value = |lamp: &crate::scene::LightObject, var: &str| -> f32 {
                 let green = matches!(var.trim().to_ascii_lowercase().as_str(), "green" | "gruen" | "grün");
                 let v = raw_value(lamp, var);
@@ -550,7 +554,7 @@ impl Traffic {
             // where the body and its coupled parts stand and how their meshes are drawn: from
             // the snapshot (the body first, then the parts, as their renders go)
             for (part, r) in snap.parts(frame).iter().zip(std::iter::once(&r.body).chain(r.trailers.iter())) {
-                pose_part(renderer, scene, snap, part, r, &mut alpha);
+                pose_part(renderer, scene, snap, part, r, self.ridden == Some(frame.id), &mut alpha);
             }
         }
     }
@@ -628,7 +632,7 @@ fn show_looks(renderer: &Renderer, scene: &mut Scene, snap: &FrameSnapshot, part
 
 /// Bring one vehicle part's instances (`r`) to `part` of the snapshot: their transforms and
 /// per-slot values. `alpha`: a buffer for the slots' alpha, kept by the caller.
-fn pose_part(renderer: &Renderer, scene: &mut Scene, snap: &FrameSnapshot, part: &PartFrame, r: &VehicleRender, alpha: &mut Vec<f32>) {
+fn pose_part(renderer: &Renderer, scene: &mut Scene, snap: &FrameSnapshot, part: &PartFrame, r: &VehicleRender, inside: bool, alpha: &mut Vec<f32>) {
     let meshes = snap.meshes(part);
     // the lower levels of detail stand where the body does; the renderer draws them or the
     // full model by the vehicle's size on the screen
@@ -657,17 +661,35 @@ fn pose_part(renderer: &Renderer, scene: &mut Scene, snap: &FrameSnapshot, part:
                 }
             }
         }
-        renderer.set_params(scene, *inst, alpha, m.visible, snap.slot_uv(m));
+        let (shown, mirror) = mesh_shown(m.viewpoint, inside);
+        renderer.set_params(scene, *inst, alpha, m.visible && shown, snap.slot_uv(m));
+        renderer.set_mirror_only(scene, *inst, mirror);
         renderer.set_slot_light(scene, *inst, snap.slot_light(m));
         renderer.set_slot_night(scene, *inst, snap.slot_night(m));
         renderer.set_interior(scene, *inst, m.interior);
     }
 }
 
+fn mesh_shown(vp: i32, inside: bool) -> (bool, bool) {
+    if vp == 0 {
+        return (true, false);
+    }
+    if !inside {
+        return (vp & 4 != 0, false);
+    }
+    let mirror = vp & 1 != 0 && vp & 2 == 0;
+    (vp & 2 != 0 || mirror, mirror)
+}
+
 /// Lamps further than this from the viewer (m) are updated in turns (see `sync_lamps`).
 const LAMP_NEAR: f64 = 300.0;
+const TEXT_NEAR: f64 = 250.0;
 /// A far lamp is updated every this many frames.
 const LAMP_TURNS: u32 = 4;
+
+fn red_masks_green(scripted_red: bool, scripted_green: bool, red: f32) -> bool {
+    red >= 0.5 && !(scripted_red && scripted_green)
+}
 
 /// Is it the turn of the far lamp `key` in frame `turn`? (Spread by the key, so that every
 /// frame updates about the same share of them.)
@@ -691,5 +713,27 @@ mod tests {
             per_frame[due[0] as usize] += 1;
         }
         assert!(per_frame.iter().all(|&n| n > 700), "{per_frame:?}");
+    }
+
+    #[test]
+    fn red_hides_green_only_when_the_two_come_from_different_places() {
+        assert!(red_masks_green(true, false, 1.0), "scripted red, green from the phase");
+        assert!(red_masks_green(false, true, 1.0), "red from the phase, scripted green");
+        assert!(red_masks_green(false, false, 1.0));
+        assert!(!red_masks_green(true, true, 1.0), "a script lighting both is shown as it says");
+        assert!(!red_masks_green(false, false, 0.0), "no red, nothing hidden");
+    }
+
+    #[test]
+    fn the_bus_ridden_in_shows_its_inside() {
+        assert_eq!(mesh_shown(0, false), (true, false));
+        assert_eq!(mesh_shown(2, false), (false, false), "a cab mesh, from outside");
+        assert_eq!(mesh_shown(4, false), (true, false));
+        assert_eq!(mesh_shown(2, true), (true, false), "the mirrors and buttons inside");
+        assert_eq!(mesh_shown(1, true), (true, true), "the outside, in the mirrors only");
+        assert_eq!(mesh_shown(3, true), (true, false));
+        assert_eq!(mesh_shown(4, true), (false, false), "the AI stand-in, not from inside");
+        assert_eq!(mesh_shown(1, false), (false, false));
+        assert_eq!(mesh_shown(5, true), (true, true), "outside and AI: in the mirrors only");
     }
 }

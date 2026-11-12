@@ -22,12 +22,20 @@ pub struct ServerCfg {
     /// file (or not a valid number), and the server goes on using its machine's
     /// `settings.cfg` `pax_density`, as it always did.
     pub passenger_density: Option<f32>,
+    /// The AI limits of `settings.cfg`, set for this server (`ai_unsched_factor`,
+    /// `ai_max_scheduled`, `ai_max_parked`, `ai_max_humans`); a key left out or empty keeps
+    /// the machine's own.
+    pub ai_limits: AiLimits,
     /// Optional RP road speed limit (0 = off; 60, 75 or 80 km/h).
     pub speed_limit_kmh: u32,
     pub port: u16,
     pub web_port: u16,
     pub max_players: usize,
     pub tunnel: bool,
+    /// The address players may reach the web port at without the tunnel (`host:port`), which
+    /// a game joining through the tunnel tries first. Empty: found by itself (`server::direct`);
+    /// `off`: none told.
+    pub public_address: String,
     pub radius: i32,
     pub icon: Vec<u8>,
     /// Players who say `/admin <password>` in the chat administer the server (empty: nobody).
@@ -88,6 +96,11 @@ pub struct ServerCfg {
     pub owner_bans: Option<std::path::PathBuf>,
     /// A player whose game sends no hardware identifier is turned away.
     pub require_hardware_id: bool,
+    /// The AI drives on through a parked car standing in its lane (`ai_drive_through_parked
+    /// = 1`), as Omsi.exe's traffic does; by default it stops behind it and goes round it when
+    /// it can (on maps whose parked cars stand in the lane with no way round, that froze the
+    /// traffic).
+    pub ai_drive_through_parked: bool,
     /// The players' internet addresses go into the log whole (`log_addresses`); off, a
     /// public one keeps only its network (`203.0.113.x`).
     pub log_addresses: bool,
@@ -115,12 +128,29 @@ weather =
 traffic = 30
 timetable = 1
 passengers = 1
+# the AI stops behind a parked car standing in its lane and goes round it when it can (0);
+# 1 = it drives on through it, as OMSI 2's does - for maps where a parked car stands in the
+# lane with no way round and holds the traffic for good
+ai_drive_through_parked = 0
 
 # how many people the map's stops and pavements get: a factor on the map's own demand for
 # the time of day (1 = as the map says, 0.5 = half, 2 = twice; 0 to 3). 0 brings no new
 # people but keeps the passengers on (passengers = 0 switches them off). Not the AI traffic.
 # The admins can change it while the server runs; the people already there stay
 passenger_density = 1
+
+# the AI limits, as the game's options have them; left empty, the machine's settings.cfg
+# says. They are for the whole server, not for each player: with players all over the map,
+# raise them with the players (and the machine's CPU).
+# ai_unsched_factor: the random traffic, percent of the map's density (100 = as the map
+#   says, 25 = a quarter, 300 at most)
+# ai_max_scheduled: timetable vehicles on the road at once (0 = no limit)
+# ai_max_parked: parked cars in the loaded tiles (0 = every space, -1 = none at all)
+# ai_max_humans: people at once, waiting, walking and riding (1 to 4096; 200 by default)
+ai_unsched_factor =
+ai_max_scheduled =
+ai_max_parked =
+ai_max_humans =
 
 # Optional multiplayer RP road-speed governor, 0 = off (default), or 60/75/80.
 speed_limit_kmh = 0
@@ -132,6 +162,13 @@ max_players = 16
 
 # start a free Cloudflare quick tunnel (needs cloudflared) and print its https address
 tunnel = 1
+# the address players reach this server's web port at without the tunnel: a game joining
+# through the tunnel tries it first, as a quick tunnel breaks its connections now and then.
+# Empty: found by itself - this machine's internet address when it has one, else the one the
+# internet sees if the server reaches itself there (not behind a carrier's NAT, CGNAT).
+# Or an address of your own (1.2.3.4:27025, a name), or off: told to nobody. It is told to
+# whoever asks the server's status, as the join code tells it already
+public_address =
 
 # how many tiles round the map's first entry point are kept loaded (0: all of them)
 radius = 0
@@ -293,11 +330,19 @@ impl ServerCfg {
             passenger_density: kv.get("passenger_density").filter(|v| !v.is_empty()).and_then(|v| {
                 passenger_density(v).map_err(|e| log::warn!("server.cfg: passenger_density = {v}: {e}; the machine's own passengers setting is used")).ok()
             }),
+            ai_limits: AiLimits::parse(&kv),
             speed_limit_kmh: parse_speed_limit(kv.get("speed_limit_kmh").map(String::as_str)),
             port: num("port", 27015).clamp(1, 65535) as u16,
             web_port: num("web_port", 27025).clamp(1, 65535) as u16,
             max_players: num("max_players", 16).clamp(1, 64) as usize,
             tunnel: flag("tunnel", true),
+            public_address: kv.get("public_address").map(|v| v.trim().trim_start_matches("http://").trim_end_matches('/').to_string()).map(|v| {
+                let ok = v.is_empty() || v.eq_ignore_ascii_case("off") || (v.len() <= 200 && omsi_net::ws::http_base(&format!("http://{v}")).is_some());
+                if ok { if v.eq_ignore_ascii_case("off") { "off".into() } else { v } } else {
+                    log::warn!("server.cfg: public_address = {v} is not an address (host:port); it is found by itself");
+                    String::new()
+                }
+            }).unwrap_or_default(),
             radius: num("radius", 0) as i32,
             icon,
             admin_password: admin_password(kv.get("admin_password").cloned().unwrap_or_default()),
@@ -322,6 +367,7 @@ impl ServerCfg {
             public_list_url: kv.get("public_list_url").cloned().unwrap_or_default(),
             owner_bans: kv.get("owner_bans").filter(|v| !v.is_empty()).map(std::path::PathBuf::from),
             require_hardware_id: flag("require_hardware_id", false),
+            ai_drive_through_parked: flag("ai_drive_through_parked", false),
             log_addresses: flag("log_addresses", false),
             dir: dir.to_path_buf(),
         }))
@@ -436,6 +482,58 @@ fn checked_password(password: String, key: &str) -> String {
 /// The buses a dedicated server allows (`vehicles`; empty: every bus it has).
 pub static SERVER_VEHICLES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
 
+/// The AI limits a server sets for itself (`server.cfg`), over its machine's `settings.cfg`.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct AiLimits {
+    /// The random traffic, percent of the map's density (0 to 300).
+    pub unsched_factor: Option<f32>,
+    /// Timetable vehicles on the road at once (0 = no limit).
+    pub max_scheduled: Option<u32>,
+    /// Parked cars in the loaded tiles (0 = every space, -1 = none).
+    pub max_parked: Option<i32>,
+    /// People at once (1 to 4096).
+    pub max_humans: Option<u32>,
+}
+
+impl AiLimits {
+    fn parse(kv: &std::collections::HashMap<String, String>) -> AiLimits {
+        fn read<T: std::str::FromStr + PartialOrd + std::fmt::Display + Copy>(kv: &std::collections::HashMap<String, String>, key: &str, lo: T, hi: T) -> Option<T> {
+            let v = kv.get(key).map(|v| v.trim().trim_end_matches('%')).filter(|v| !v.is_empty())?;
+            match v.parse::<T>() {
+                Ok(x) if x >= lo && x <= hi => Some(x),
+                _ => {
+                    log::warn!("server.cfg: {key} = {v} is not a number from {lo} to {hi}; the machine's settings.cfg says");
+                    None
+                }
+            }
+        }
+        AiLimits {
+            unsched_factor: read(kv, "ai_unsched_factor", 0.0f32, 300.0),
+            max_scheduled: read(kv, "ai_max_scheduled", 0u32, 4096),
+            max_parked: read(kv, "ai_max_parked", -1i32, 100_000),
+            max_humans: read(kv, "ai_max_humans", 1u32, 4096),
+        }
+    }
+
+    /// The lines of `settings.cfg` they stand for (empty: none set).
+    pub fn settings_lines(&self) -> String {
+        let mut s = String::new();
+        if let Some(v) = self.unsched_factor {
+            s.push_str(&format!("ai_unsched_factor={v}\n"));
+        }
+        if let Some(v) = self.max_scheduled {
+            s.push_str(&format!("ai_max_scheduled={v}\n"));
+        }
+        if let Some(v) = self.max_parked {
+            s.push_str(&format!("ai_max_parked={v}\n"));
+        }
+        if let Some(v) = self.max_humans {
+            s.push_str(&format!("ai_max_humans={v}\n"));
+        }
+        s
+    }
+}
+
 /// Whether a `vehicles` list allows the bus `file` (an empty list: every bus). A player's
 /// game may name it with a folder before it (`D:/OMSI 2/Vehicles/…/….bus`).
 pub fn allows(list: &[String], file: &str) -> bool {
@@ -524,6 +622,31 @@ mod passenger_density_tests {
         }
         // the old trap: a number for the switch is not a density, and not on
         assert!(!load("passengers = 50\n").passengers);
+    }
+
+    /// The AI limits of the game's options, set for the server: left empty, the machine's
+    /// settings.cfg says; out of range, the same (with a warning); set, they go over it as
+    /// settings.cfg lines.
+    #[test]
+    fn the_ai_limits_are_the_servers_own_when_set() {
+        assert_eq!(load(super::DEFAULT_CFG).ai_limits, super::AiLimits::default(), "the default file leaves them to settings.cfg");
+        assert_eq!(load(super::DEFAULT_CFG).ai_limits.settings_lines(), "");
+        let set = load("ai_unsched_factor = 25%\nai_max_scheduled = 256\nai_max_parked = -1\nai_max_humans = 720\n").ai_limits;
+        assert_eq!(set, super::AiLimits { unsched_factor: Some(25.0), max_scheduled: Some(256), max_parked: Some(-1), max_humans: Some(720) });
+        assert_eq!(set.settings_lines(), "ai_unsched_factor=25\nai_max_scheduled=256\nai_max_parked=-1\nai_max_humans=720\n");
+        let bad = load("ai_unsched_factor = 400\nai_max_humans = 0\nai_max_parked = -2\nai_max_scheduled = many\n").ai_limits;
+        assert_eq!(bad, super::AiLimits::default());
+    }
+
+    /// `public_address`: as it is written (`http://` and a last `/` aside), `off`, or empty
+    /// (found by itself: the default, and what an address that is none falls back to).
+    #[test]
+    fn the_public_address_is_an_address_or_none() {
+        assert_eq!(load(super::DEFAULT_CFG).public_address, "");
+        assert_eq!(load("public_address = 203.0.113.7:27025\n").public_address, "203.0.113.7:27025");
+        assert_eq!(load("public_address = http://bus.example.org:27025/\n").public_address, "bus.example.org:27025");
+        assert_eq!(load("public_address = not an address\n").public_address, "", "found by itself");
+        assert_eq!(load("public_address = OFF\n").public_address, "off");
     }
 
     /// The file written for a new server says what it means, and is read back as 1.

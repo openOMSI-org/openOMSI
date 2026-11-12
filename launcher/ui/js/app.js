@@ -22,6 +22,7 @@ import { SetupPage } from './pages/setup.js';
 import { MobileApp } from './mobile/mobile.js';
 import { GameEndDialogs, watchGameEnds } from './crash.js';
 import { UpdateDialog, startUpdates } from './updates.js';
+import { ChangelogDialog } from './changelog.js';
 import { onPhone, onDrop } from './api.js';
 
 // (the phone app, or `?phone` for a look at it in a browser)
@@ -29,7 +30,7 @@ const PHONE = onPhone || new URLSearchParams(location.search).has('phone');
 if (PHONE) document.documentElement.classList.add('phone');
 
 const GROUPS = [
-  ['Play', [['drive', 'Drive', 'bus', DrivePage], ['depot', 'Depot', 'garage', DepotPage], ['multiplayer', 'Multiplayer', 'users', MultiplayerPage], ['games', 'Running games', 'gamepad', GamesPage]]],
+  ['Play', [['drive', 'Drive', 'bus', DrivePage], ['depot', 'Depot', 'garage', DepotPage], ['multiplayer', 'Servers', 'globe', MultiplayerPage], ['games', 'Running games', 'gamepad', GamesPage]]],
   ['Content', [['mods', 'Mods', 'puzzle', ModsPage], ['timetable', 'Timetable', 'clock', TimetablePage], ['addons', 'Add-ons', 'globe', AddonsPage]]],
   ['Options', [['settings', 'Settings', 'sliders', SettingsPage], ['controls', 'Controls', 'keyboard', ControlsPage], ['setup', 'Setup', 'folder', SetupPage]]],
   ['Help', [['tutorials', 'Tutorials', 'book', TutorialsPage], ['troubleshoot', 'Troubleshooting', 'alert', TroubleshootPage]]],
@@ -108,6 +109,7 @@ function App() {
     </main>
     <${GameEndDialogs} />
     <${UpdateDialog} />
+    <${ChangelogDialog} />
     <${Toasts} />
   </div>`;
 }

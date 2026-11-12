@@ -4,6 +4,7 @@
 pub(crate) mod common;
 pub(crate) mod coronas;
 pub(crate) mod defaults;
+pub(crate) mod temporal;
 pub(crate) mod enhanced;
 pub(crate) mod errors;
 pub(crate) mod mip;

@@ -123,7 +123,8 @@ impl App {
         // a player's screenshot is the world without the interface over it, as OMSI's
         // (#1265); the input script's pictures keep it for the visual tests
         let hud = (!include_touch).then(|| std::mem::take(&mut scene.overlays));
-        let picture = developed.map(Ok).unwrap_or_else(|| r.render_to_image(
+        let upscaled = (!include_touch).then(|| r.temporal_picture(s.config.width, s.config.height)).flatten();
+        let picture = developed.map(Ok).or(upscaled).unwrap_or_else(|| r.render_to_image(
             scene,
             s.config.width,
             s.config.height,
@@ -273,6 +274,7 @@ impl App {
         // the photo's pictures were taken, the photo had become ready meanwhile, the scene was
         // left out and the panel had no photo in it - the window flashed black)
         let photo = self.photo.is_some() && self.shell.opaque;
+        let clean = self.clean_screen_shown();
         if !photo {
             self.frame_mirrors(raw_dt, lighting);
         }
@@ -331,7 +333,7 @@ impl App {
             let rig = self.settings.triple.zoomed(
                 s.config.width,
                 s.config.height,
-                self.cam.view_zoom.get(&self.view).copied().unwrap_or(1.0),
+                self.cam.view_zoom.get(&self.view).copied().unwrap_or(1.0) * self.cam.zoom_hold.factor,
             );
             r.render_triple(
                 scene,
@@ -343,7 +345,7 @@ impl App {
                 &rig,
             );
         } else if !mirrored {
-            r.render(
+            r.render_window(
                 scene,
                 &view,
                 s.config.width,
@@ -366,7 +368,9 @@ impl App {
         // the pause menu and the photo mode's panel
         self.shell.render(r, &view, s.config.width, s.config.height);
         // the on-screen controls over the picture (a phone)
-        self.input.touch.render(r, &view, s.config.width, s.config.height);
+        if !clean {
+            self.input.touch.render(r, &view, s.config.width, s.config.height);
+        }
         self.perf.profile.add(crate::profile_keys::ProfKey::Render, __t.elapsed().as_secs_f64());
         if omsi_cfg::flags::OMSI_PROFILE_GPU.is_set() {
             // wait for the GPU here, so that its time shows as a stage of its own

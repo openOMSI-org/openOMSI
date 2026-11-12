@@ -21,6 +21,15 @@ fn fsr1_menu_settings_round_trip_into_renderer() {
 
     // A corrupt or future setting must not enable experimental shaders.
     assert_eq!(Settings::from_text("upscaler=anything_else\\n").upscaler, "default");
+    let temporal = Settings::from_text("upscaler=FSR3\nupscale_quality=ultra_performance\n");
+    assert_eq!((temporal.upscaler.as_str(), temporal.upscale_quality.as_str()), ("fsr3", "ultra_performance"));
+    let mut lost = Settings::from_text("upscaler=dlss\n");
+    lost.apply_safe_gpu(1);
+    assert_eq!(lost.upscaler, "default");
+    let mut mac = Settings::from_text("upscaler=MetalFX\n");
+    assert_eq!(mac.upscaler, "metalfx");
+    mac.apply_safe_gpu(1);
+    assert_eq!(mac.upscaler, "default");
     assert_eq!(Settings::from_text("fsr_sharpness=nan\\n").fsr_sharpness, 0.8);
 }
 
@@ -209,6 +218,25 @@ fn triple_settings_round_trip_and_reject_nonfinite_geometry() {
 use super::*;
 
 #[test]
+fn route_arrow_settings_keep_legacy_defaults_and_round_trip_independently() {
+    for (text, expected) in [
+        ("", (false, false)),
+        ("nav_arrows=1\n", (true, true)),
+        ("nav_dynamic_arrows=0\nnav_arrows=1\n", (false, true)),
+        ("nav_arrows=1\nnav_map_arrows=0\n", (true, false)),
+    ] {
+        let game = Settings::from_text(text);
+        assert_eq!((game.nav_dynamic_arrows, game.nav_map_arrows), expected);
+        assert_eq!(Settings::from_text(&game.to_text()), game);
+
+        let launcher = omsi_launcher_lib::settings_from_text(Some(text));
+        let saved = omsi_launcher_lib::settings_to_text(&launcher, Some(text));
+        let game = Settings::from_text(&saved);
+        assert_eq!((game.nav_dynamic_arrows, game.nav_map_arrows), expected);
+    }
+}
+
+#[test]
 fn old_files_board_automatically() {
     // the launcher's old default, written without a version
     assert_eq!(Settings::from_text("msaa=1\nboarding=pay\n").boarding, "auto");
@@ -386,6 +414,17 @@ fn discord_settings_round_trip_and_default_off() {
     assert!(!Settings::default().discord_status);
     let settings = Settings { discord_status: true, discord_app_id: "123456".into(), ..Default::default() };
     assert_eq!(Settings::from_text(&settings.to_text()), settings);
+    assert_eq!(Settings::default().discord_show, crate::discord::Show::default());
+    let hidden = crate::discord::Show { map: false, bus: true, line: false, stop: false, players: true, buttons: false };
+    let settings = Settings { discord_show: hidden, ..Default::default() };
+    assert_eq!(Settings::from_text(&settings.to_text()).discord_show, hidden);
+}
+
+#[test]
+fn remote_cockpit_round_trips_and_is_off_by_default() {
+    assert!(!Settings::default().remote_cockpit);
+    let s = Settings { remote_cockpit: true, remote_cockpit_port: 9000, ..Default::default() };
+    assert_eq!(Settings::from_text(&s.to_text()), s);
 }
 
 #[test]
@@ -597,6 +636,11 @@ fn full_bus_reaction_defaults_off_for_desktop_phone_and_old_settings() {
     assert!(!Settings::from_text("version=1\n").passenger_full_bus_reaction);
     assert!(Settings::from_text("passenger_full_bus_reaction=1\n").passenger_full_bus_reaction);
     assert!(!Settings::from_text("passenger_full_bus_reaction=0\n").passenger_full_bus_reaction);
+    assert!(!Settings::desktop().pax_short_rides_stand);
+    assert!(Settings::from_text("pax_short_rides_stand=1\n").pax_short_rides_stand);
+    let mut on = Settings::desktop();
+    on.pax_short_rides_stand = true;
+    assert!(Settings::from_text(&on.to_text()).pax_short_rides_stand);
 }
 #[test]
 fn full_bus_reaction_round_trips_through_both_settings_writers() {
@@ -634,3 +678,10 @@ fn graphics_brightness_defaults_clamp_and_roundtrip() {
     assert!((game.traffic_headlights - 1.6).abs() < 0.0001);
 }
 
+#[test]
+fn the_note_kinds_go_round_the_file() {
+    let mut s = Settings::desktop();
+    (s.notes_driving, s.notes_script, s.notes_trip, s.notes_tickets) = (false, true, false, true);
+    let back = Settings::from_text(&s.to_text());
+    assert_eq!((back.notes_driving, back.notes_script, back.notes_trip, back.notes_tickets), (false, true, false, true));
+}

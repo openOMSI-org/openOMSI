@@ -78,6 +78,8 @@ struct Offscreen<'a> {
     /// a dedicated server's administration and clock (see `admin`)
     srv_admin: crate::admin::ServerAdmin,
     srv_clock: f64,
+    /// the server's world clock against the wall (see `omsi_sim::world_clock`)
+    srv_wall: omsi_sim::world_clock::WorldClock,
     srv_metar: Option<String>,
     srv_metar_due: std::time::Instant,
     srv_metar_rx: Option<std::sync::mpsc::Receiver<Option<omsi_content::weather::Weather>>>,
@@ -100,11 +102,19 @@ struct Offscreen<'a> {
 pub(crate) fn run_offscreen(
     args: &Args,
     out: &PathBuf,
-    lan_off: Option<omsi_net::LanSession>,
+    mut lan_off: Option<omsi_net::LanSession>,
     remotes_off: lan::LanGame,
 ) -> Result<()> {
     crate::frame_stages::log_order();
+    // (a dedicated server lets nobody new in before its world is there: see `set_starting`)
+    let server = args.server.is_some();
+    if let Some(l) = lan_off.as_mut().filter(|_| server) {
+        l.set_starting(true);
+    }
     let mut run = Offscreen::setup(args, out, lan_off, remotes_off)?;
+    if let Some(l) = run.lan_off.as_mut().filter(|_| server) {
+        l.set_starting(false);
+    }
     let mut steps = 0;
     // OMSI_PROFILE: the steps that took long (a stutter the window would show), by name
     let profile = omsi_cfg::flags::OMSI_PROFILE.is_set();
@@ -222,7 +232,7 @@ fn pose_player(p: &mut Player, renderer: &Renderer, scene: &mut Scene, args: &Ar
     p.panto_fx.update(0.0, &mut p.vehicle);
     p.finish_window_paints(renderer, scene);
     crate::scene::sync_vehicle_damage(renderer, scene, &mut p.vehicle, &mut p.render);
-    p.sync_driver(renderer, scene, 1.0 / 30.0, settings.driver, args.view == "driver");
+    p.sync_driver_hands(renderer, scene, 1.0 / 30.0, settings.driver, args.view == "driver", false, settings.driver_like_omsi);
 }
 
 /// The lights of a picture: the lamps' cones in this weather, the corona pictures, the

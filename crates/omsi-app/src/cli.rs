@@ -143,6 +143,11 @@ pub(crate) struct Args {
     /// buses (the launcher's "Disable timetable buses" with a line chosen).
     #[arg(long)]
     pub(crate) no_timetable_buses: bool,
+    /// The AI drives on through a parked car standing in its lane, as Omsi.exe's traffic
+    /// does, instead of stopping behind it and going round it when it can (on some maps one
+    /// stands in the lane where there is no way round, and the traffic behind it froze).
+    #[arg(long)]
+    pub(crate) ai_drive_through_parked: bool,
     /// Date at start, YYYY-MM-DD (default 1989-05-30).
     #[arg(long)]
     pub(crate) date: Option<String>,
@@ -354,6 +359,11 @@ impl Args {
     /// Connections are local until passenger ownership handback is synchronized.
     pub(crate) fn passenger_connections_allowed(&self, connected: bool) -> bool {
         !connected && self.server.is_none() && self.lan_host.is_none() && self.lan_join.is_none()
+    }
+
+    /// Serving, hosting or joining an online game.
+    pub(crate) fn online(&self) -> bool {
+        self.server.is_some() || self.lan_host.is_some() || self.lan_join.is_some()
     }
 
     pub(crate) fn is_resuming(&self) -> bool {

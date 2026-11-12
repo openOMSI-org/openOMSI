@@ -73,16 +73,16 @@ fn picture(name: &str, panels: &[(Panel, Option<&str>)]) {
 }
 
 fn summary() -> crate::journey::TripSummary {
-    let row = |s: &str, p: &str, a: &str, d: &str, o: &str| [s, p, a, d, o].map(String::from);
+    let row = |s: &str, p: &str, a: &str, d: &str, st: &str, o: &str| [s, p, a, d, st, o].map(String::from);
     crate::journey::TripSummary {
         title: "Trip 3  |  137 to S+U Rathaus Spandau  |  08:20:00".into(),
         head: "Driver Test  |  Berlin-Spandau  |  MAN NL202  |  1989-05-30\nLine 137, tour 2".into(),
         rows: vec![
-            row("Hahneberg", "08:20:00", "08:20:41", "+00:00:41", "75556.6 km"),
-            row("Heerstr./Wilhelmstr.", "08:23:00", "08:24:10", "+00:01:10", "75557.9 km"),
-            row("Melanchthonplatz", "08:25:00", "08:26:02", "+00:01:02", "75558.4 km"),
-            row("Am Juliusturm", "08:28:00", "", "", ""),
-            row("S+U Rathaus Spandau", "08:32:00", "08:31:30", "-00:00:30", "75560.2 km"),
+            row("Hahneberg", "08:20:00", "08:20:41", "+00:00:41", "On time", "75556.6 km"),
+            row("Heerstr./Wilhelmstr.", "08:23:00", "08:24:10", "+00:01:10", "On time", "75557.9 km"),
+            row("Melanchthonplatz", "08:25:00", "08:29:10", "+00:04:10", "Delayed", "75558.4 km"),
+            row("Am Juliusturm", "08:28:00", "", "", "Not served", ""),
+            row("S+U Rathaus Spandau", "08:32:00", "08:31:30", "-00:00:30", "On time", "75560.2 km"),
         ],
         km: Some(3.6),
         served: (4, 5),
@@ -112,11 +112,20 @@ fn preview() {
 #[test]
 #[ignore]
 fn multiplayer_preview() {
+    let _language = omsi_ui::i18n::LanguageGuard::capture();
+    omsi_ui::i18n::set_lookup(|lang, text| {
+        crate::_rust_i18n_try_translate(lang, text).map(|value| value.into_owned())
+    });
+    omsi_ui::i18n::set_language("en");
     let form = multiplayer::Multiplayer { target: "OMSI-EXAMPLE-ROOM-CODE".into(), said: None };
     for (name, pal) in [("dark", omsi_ui::theme::palette(false)), ("light", Palette::LIGHT)] {
+        omsi_ui::theme::with_palette(pal, || {
+        picture(&format!("multiplayer-single-{name}.png"), &[(form.panel_of(false, None, None, None, pal), Some("paste"))]);
+        picture(&format!("multiplayer-host-settings-{name}.png"), &[(form.panel_of(false, None, Some(omsi_net::Role::Host), None, pal), None)]);
         picture(&format!("multiplayer-{name}.png"), &[(form.panel_of(false, None, Some(omsi_net::Role::Client), None, pal), Some("paste"))]);
         picture(&format!("multiplayer-confirm-{name}.png"), &[(form.panel_of(false, Some(("maps/Grundorf/global.cfg", true)), Some(omsi_net::Role::Client), None, pal), Some("confirm"))]);
         picture(&format!("multiplayer-host-{name}.png"), &[(form.panel_of(false, Some(("maps/Grundorf/global.cfg", false)), Some(omsi_net::Role::Host), None, pal), Some("back"))]);
         picture(&format!("multiplayer-vehicle-warning-{name}.png"), &[(form.panel_of(false, Some(("maps/Grundorf/global.cfg", false)), Some(omsi_net::Role::Client), Some(false), pal), Some("back"))]);
+        });
     }
 }

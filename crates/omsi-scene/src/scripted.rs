@@ -58,7 +58,7 @@ pub struct ScriptedView {
     pub texts: Vec<(TextureId, omsi_sim::texttex::TextTextureState)>,
     pub htmls: Vec<(usize, TextureId)>,
     pub alpha_slots: Vec<LampSlots>,
-    pub alpha_last: Vec<Vec<f32>>,
+    pub alpha_last: Vec<(Vec<f32>, Vec<[f32; 2]>)>,
     /// Its meshes' transforms and visibility as the last step left them (for the rays of
     /// the mouse).
     pub mesh_xf: Vec<Mat4>,
@@ -118,7 +118,7 @@ impl ScriptedSet {
         s.controller = controller;
         s.light_index = light_index;
         s.light_parent = light_parent;
-        s.var_parent = var_parent;
+        s.var_parent = var_parent.or((arrivals && ty.sco.is_bus_stop).then_some(map_id));
         s.arrivals = arrivals;
         s.text_vars = texts.iter().map(|(_, st)| st.def.variable.trim().to_string()).collect();
         s.text_last = vec![None; texts.len()];
@@ -556,8 +556,10 @@ impl World {
             let t = std::time::Instant::now();
             let boards = self.timetable_boards.lock();
             let controllers = self.controller_of_object.lock();
+            let trolley_net = self.trolley_net.lock().clone();
             times.lock += t.elapsed().as_secs_f64();
             let inputs = omsi_sim::scenery::SceneryInputs {
+                trolley_net: trolley_net.as_deref(),
                 clock: boards.clock.as_ref(),
                 time: now.time,
                 day,
@@ -597,6 +599,7 @@ impl World {
         let controllers = self.controller_of_object.lock();
         times.lock += t.elapsed().as_secs_f64();
         omsi_sim::scenery::OwnedSceneryInputs {
+            trolley_net: self.trolley_net.lock().clone(),
             clock: boards.clock.clone(),
             time: now.time,
             day,
@@ -693,6 +696,7 @@ impl World {
     ) -> (usize, Vec<TextureUpdate>) {
         let mut updated = 0;
         let mut texture_updates: Vec<TextureUpdate> = Vec::new();
+        let arrows = self.help_arrows_shown.load(std::sync::atomic::Ordering::Relaxed);
         let mut scripted = self.scripted.lock();
         let views = &mut scripted.views;
         let omsi_sim::scenery::SceneryOutputs { cmds, vars, transforms, visible, .. } = out;
@@ -778,14 +782,16 @@ impl World {
             }
             let (xfs, shown) = (&transforms[s.meshes.0 as usize..s.meshes.1 as usize], &visible[s.meshes.0 as usize..s.meshes.1 as usize]);
             for (k, ((inst, xf), &visible)) in v.instances.iter().zip(xfs).zip(shown).enumerate() {
+                let visible = visible && (arrows || !v.ty.sco.is_help_arrow);
                 renderer.set_transform(scene, *inst, v.pos, v.xf * *xf);
                 // (the slots its `[alphascale]` variables fade, see `ScriptedObject::alpha_slots`)
-                let alpha = v.alpha_slots.get(k).filter(|l| !l.alpha.is_empty()).map(|l| l.values(&|n| n.trim().parse::<f32>().ok().or_else(|| var(n))).0);
+                let value = |n: &str| n.trim().parse::<f32>().ok().or_else(|| var(n));
+                let alpha = v.alpha_slots.get(k).filter(|l| !l.alpha.is_empty() || !l.uv.is_empty()).map(|l| (l.values(&value).0, l.uv_values(&value)));
                 let p = &mut scene.instances[*inst];
                 match alpha {
                     Some(a) => {
                         if p.visible != visible || v.alpha_last.get(k) != Some(&a) {
-                            renderer.set_params(scene, *inst, &a, visible, &[]);
+                            renderer.set_params(scene, *inst, &a.0, visible, &a.1);
                             if let Some(last) = v.alpha_last.get_mut(k) {
                                 *last = a;
                             }
@@ -802,7 +808,8 @@ impl World {
             v.mesh_xf.clear();
             v.mesh_xf.extend_from_slice(xfs);
             v.mesh_visible.clear();
-            v.mesh_visible.extend_from_slice(shown);
+            let hidden = !arrows && v.ty.sco.is_help_arrow;
+            v.mesh_visible.extend(shown.iter().map(|&s| s && !hidden));
             updated += 1;
         }
         (updated, texture_updates)
@@ -890,7 +897,7 @@ impl World {
                 let sdir = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
                 if a.clips_ready(&omsi_audio::SoundSet::clip_paths(&cfg, &sdir)) {
                     log::info!("scenery sound {}: {} sounds ({:.0} m away)", path.display(), cfg.sounds.len(), dist);
-                    let mut ss = omsi_audio::SoundSet::new(a, &cfg, &sdir);
+                    let mut ss = omsi_audio::SoundSet::new_scenery(a, &cfg, &sdir);
                     ss.master = self.settings.sound_scenery();
                     *sounds = Some(ss);
                 }

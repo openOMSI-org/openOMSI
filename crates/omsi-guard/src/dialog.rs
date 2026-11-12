@@ -2,7 +2,9 @@
 //! own, macOS' through `osascript`, Linux' through zenity or kdialog (else on the terminal),
 //! in the settings' language where there is a text for it (English otherwise).
 
-use omsi_launcher_lib::i18n::{tr, trf};
+#[cfg(any(windows, target_os = "macos"))]
+use omsi_launcher_lib::i18n::tr;
+use omsi_launcher_lib::i18n::trf;
 
 /// The messages the guard can show.
 #[derive(Clone, Debug, PartialEq)]

@@ -211,6 +211,10 @@ pub struct Touch {
 }
 
 impl Touch {
+    pub(crate) fn pointing(&self) -> bool {
+        self.fingers.iter().any(|f| matches!(f.role, Role::Cockpit | Role::Mouse))
+    }
+
     pub fn new() -> Touch {
         Touch {
             enabled: crate::platform::touch_controls(),

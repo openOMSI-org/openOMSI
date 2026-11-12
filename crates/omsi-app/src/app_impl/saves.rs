@@ -38,6 +38,7 @@ impl App {
         }
         // the situation to continue next time (OMSI writes it when a map is left; once, as
         // the rest: `career.seconds` is zero after the first time)
+        self.settle_depot_switch(true);
         self.save_last_situation();
         if self.session.career.path.is_some() {
             if let Err(e) = self.session.career.save() {
@@ -54,18 +55,7 @@ impl App {
             log::warn!("writing the session summary: {e}");
         }
         if let (Some(id), Some(p)) = (self.args.depot.as_deref(), self.player.as_ref()) {
-            let c = &self.session.career;
-            let outing = omsi_launcher_lib::depot::Outing {
-                map: self.args.map.clone(),
-                line: self.args.line.clone().unwrap_or_default(),
-                tour: self.args.tour.clone().unwrap_or_default(),
-                metres: c.metres,
-                seconds: c.seconds,
-                stops: c.stops[0],
-                tickets: c.tickets.0,
-                takings: c.tickets.1,
-                crashes: c.crashes[0],
-            };
+            let outing = crate::depot_bus::outing_since(&self.session.career, &self.args, &self.session.depot_base);
             crate::depot_bus::record(&p.vehicle, id, &outing);
         }
         self.session.career.seconds = 0.0;
@@ -192,10 +182,14 @@ impl App {
     /// other graphics interface when the lost one was Vulkan. Twice at most in a row. False
     /// when it cannot (a LAN session, the tutorial, nothing to save): the session ends.
     pub(crate) fn restart_after_device_loss(&mut self) -> bool {
+        if cfg!(windows) && self.renderer.as_ref().is_some_and(|r| r.adapter_name.contains("(Vulkan)")) {
+            crate::startup::mark_vulkan_lost();
+        }
         let n = omsi_cfg::flags::OMSI_SAFE_GPU.parse::<u32>().unwrap_or(0);
         if n >= 2 {
             return false;
         }
+        self.settle_depot_switch(true);
         let Some(file) = self.save_last_situation() else { return false };
         let Ok(exe) = std::env::current_exe() else { return false };
         let mut cmd = std::process::Command::new(exe);
@@ -281,7 +275,9 @@ impl App {
         let taken = |n: usize| dir.join(format!("Slot {n}.osn")).exists() || fallback.as_ref().is_some_and(|f| f.join(format!("Slot {n}.osn")).exists());
         // (a slot saved over keeps its number: "Slot 3" stays the third; only one of this
         // map's own slots is ever written over)
-        let over = over.filter(|f| self.save_slots().iter().any(|s| s.file == *f));
+        let over = over.and_then(|f| self.save_slots().into_iter().find(|s| s.file == f));
+        let named = over.as_ref().filter(|s| s.chosen).map(|s| s.name.clone());
+        let over = over.map(|s| s.file);
         let number_of = |f: &std::path::Path| f.file_stem().and_then(|s| s.to_string_lossy().strip_prefix("Slot ").and_then(|n| n.trim().parse::<usize>().ok()));
         let (n, out) = match over {
             Some(f) => match number_of(&f) {
@@ -304,8 +300,9 @@ impl App {
             (None, _) => "on foot".to_string(),
         };
         let head = if out.file_stem().is_some_and(|s| s.to_string_lossy() == n) { n.clone() } else { format!("Slot {n}") };
-        let name = format!("{head}: {what}, {:02}:{:02}", (t / 3600.0) as i32 % 24, ((t % 3600.0) / 60.0) as i32);
-        let sit = build_situation(&self.args, w, &self.clock, self.args.weather.as_deref(), self.player.as_ref(), &self.session.placed, cam, self.session.duty.as_ref(), &name);
+        let name = named.clone().unwrap_or_else(|| format!("{head}: {what}, {:02}:{:02}", (t / 3600.0) as i32 % 24, ((t % 3600.0) / 60.0) as i32));
+        let mut sit = build_situation(&self.args, w, &self.clock, self.args.weather.as_deref(), self.player.as_ref(), &self.session.placed, cam, self.session.duty.as_ref(), &name);
+        sit.name_chosen = named.is_some();
         let rel = rel_dir.join(out.file_name().map(|f| f.to_os_string()).unwrap_or_else(|| format!("Slot {n}.osn").into()));
         match save_or_fallback(&sit, &out, rel.as_path()) {
             Ok(out) => {

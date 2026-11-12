@@ -24,7 +24,12 @@ pub use session::query_session;
 
 #[path = "ws/urls.rs"]
 mod urls;
-pub use urls::{http_base, web_bases, ws_url};
+#[path = "ws/bridge_close.rs"]
+mod bridge_close;
+#[cfg(test)] #[path = "ws/status_tests.rs"] mod status_tests;
+#[cfg(test)]
+mod rebind_tests;
+pub use urls::{http_base, reachable, web_bases, ws_url};
 
 use std::io::{ErrorKind, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream, UdpSocket};
@@ -50,7 +55,10 @@ pub struct ServerInfo {
     pub version: String,
     /// A PNG (64x64 like a Minecraft server's), empty for none.
     pub icon: Vec<u8>,
-    /// The time of day and weather the world has now (for the list).
+    /// The date (`YYYY-MM-DD`; none from older servers), time and weather now (for the list).
+    pub date: String,
+    /// The address the server's owner gives for reaching it without its tunnel (`public_address`).
+    pub direct: String,
     pub time: String,
     pub weather: String,
     pub password: bool,
@@ -200,7 +208,7 @@ impl ServerInfo {
 
     fn to_json_base(&self) -> String {
         format!(
-            "{{\"name\":{},\"motd\":{},\"map\":{},\"players\":{},\"max_players\":{},\"version\":{},\"icon\":{},\"time\":{},\"weather\":{},\"password\":{},\"protocol\":{},\"vehicles\":{},\"fleet_version\":{},\"fleet\":{},\"world\":{}}}",
+            "{{\"name\":{},\"motd\":{},\"map\":{},\"players\":{},\"max_players\":{},\"version\":{},\"icon\":{},\"date\":{},\"direct\":{},\"time\":{},\"weather\":{},\"password\":{},\"protocol\":{},\"vehicles\":{},\"fleet_version\":{},\"fleet\":{},\"world\":{}}}",
             json_str(&self.name),
             json_str(&self.motd),
             json_str(&self.map),
@@ -208,6 +216,8 @@ impl ServerInfo {
             self.max_players,
             json_str(&self.version),
             !self.icon.is_empty(),
+            json_str(&self.date),
+            json_str(&self.direct),
             json_str(&self.time),
             json_str(&self.weather),
             self.password,
@@ -231,6 +241,8 @@ impl ServerInfo {
             max_players: num("max_players").unwrap_or(0),
             version: text("version").unwrap_or_default(),
             icon: if json_value(s, "icon").map(|v| v.trim() == "true").unwrap_or(false) { vec![1] } else { Vec::new() },
+            date: text("date").filter(|d| crate::clean_date(d) == *d).unwrap_or_default(),
+            direct: text("direct").filter(|d| d.len() <= 200 && http_base(&format!("http://{d}")).is_some()).unwrap_or_default(),
             time: text("time").unwrap_or_default(),
             weather: text("weather").unwrap_or_default(),
             password: json_value(s, "password").map(|v| v.trim() == "true").unwrap_or(false),
@@ -429,7 +441,7 @@ struct Place<'a>(&'a AtomicUsize);
 impl Places {
     /// A place, when fewer than `max` are taken.
     fn take(&self, max: usize) -> Option<Place<'_>> {
-        self.0.fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| (n < max).then_some(n + 1)).ok().map(|_| Place(&self.0))
+        self.0.try_update(Ordering::AcqRel, Ordering::Acquire, |n| (n < max).then_some(n + 1)).ok().map(|_| Place(&self.0))
     }
 }
 
@@ -1006,7 +1018,7 @@ impl WsClient {
                                 std::thread::sleep(Duration::from_millis(2));
                             }
                         }
-                        let _ = ws.close(None);
+                        bridge_close::close(&mut ws, &udp, &mut buf);
                         Ok(())
                     })();
                     if st.load(Ordering::Relaxed) {
@@ -1085,15 +1097,6 @@ mod tests {
         assert_eq!(read.fleet, info.fleet);
         assert_eq!(read.vehicles, info.vehicles);
     }
-
-    #[test]
-    fn server_fleet_catalog_is_optional_for_old_servers() {
-        let old = r#"{"name":"Old Server","map":"maps/Test/global.cfg","vehicles":"Vehicles/Test/test.bus"}"#;
-        let read = ServerInfo::from_json(old).unwrap();
-        assert_eq!(read.fleet_version, 0);
-        assert!(read.fleet.is_empty());
-    }
-
 
     #[test]
     fn status_round_trip() {
@@ -1295,20 +1298,19 @@ mod tests {
         assert_eq!(client.reconnects(), 1);
     }
 
-    /// UDP and TCP reserve ports independently: a random UDP port may already be
-    /// occupied on TCP when tests run concurrently. Windows can report an
-    /// excluded TCP port as PermissionDenied (10013), rather than AddrInUse.
     fn session_and_mod_listener() -> (UdpSocket, TcpListener) {
-        for _ in 0..32 {
-            let session = UdpSocket::bind("127.0.0.1:0").unwrap();
-            let target = session.local_addr().unwrap();
-            match TcpListener::bind(("127.0.0.1", target.port())) {
-                Ok(mods) => return (session, mods),
-                Err(e) if matches!(e.kind(), ErrorKind::AddrInUse | ErrorKind::PermissionDenied) => continue,
-                Err(e) => panic!("cannot bind mods listener at {target}: {e}"),
+        use std::hash::BuildHasher;
+        let seed = std::collections::hash_map::RandomState::new().hash_one(0u8) as u16;
+        for i in 0..256u16 {
+            let port = 49152 + seed.wrapping_add(i.wrapping_mul(997)) % 16384;
+            if let (Ok(session), Ok(mods)) = (
+                UdpSocket::bind(("127.0.0.1", port)),
+                TcpListener::bind(("127.0.0.1", port)),
+            ) {
+                return (session, mods);
             }
         }
-        panic!("could not reserve an available UDP/TCP test port after 32 attempts");
+        panic!("could not reserve an available UDP/TCP test port");
     }
 
     /// Mod streams up to `MAX_TUNNELS`; one more is told `ERR busy` (and its game asks again),

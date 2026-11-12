@@ -20,7 +20,11 @@ impl ScheduleSim {
             Vec<omsi_map::DepotEntry>,
             Option<Arc<omsi_vehicle::Hof>>,
         ) = match (&train, self.depots.get(&group).filter(|v| !v.is_empty())) {
-            (Some(cars), _) => (cars[0].0.clone(), Vec::new(), None),
+            (Some(cars), _) => {
+                let ty = cars[0].0.clone();
+                let hof = self.pool_hof(ty.def.dir(), world);
+                (ty, Vec::new(), hof)
+            }
             (None, Some(vehicles)) => {
                 // The depot's types come out in proportion to their fleets: a typgroup
                 // listing 40 fleet numbers appears eight times as often as one with
@@ -79,8 +83,7 @@ impl ScheduleSim {
         // the plate of that line, else - unless the bus's plates are free - the plate the bus
         // gives the number ([registration_list] / [registration_automatic]); and the repaint
         // that line names, else the model's own paint (the first repaint when the default
-        // paint is "<nouse>"). Another tour's bus draws a repaint at random, as random
-        // traffic does.
+        // paint is "<nouse>"). Another tour's bus draws any of its repaints at random.
         let entry = numbers.first().cloned();
         let number = entry.as_ref().map(|e| {
             let plate = if !e.registration.trim().is_empty() {
@@ -100,10 +103,7 @@ impl ScheduleSim {
                 .position(|s| s.name.trim_end() == e.paint.trim_end())
                 .or_else(|| (ty.def.default_paint.trim() == "<nouse>").then_some(0))
         } else {
-            Some(
-                ((h >> 42) % ty.paint_schemes.len().min(crate::ai_traffic::AI_SCHEMES) as u64)
-                    as usize,
-            )
+            Some(((h >> 42) % ty.paint_schemes.len() as u64) as usize)
         };
         Some(Choice {
             ty,
@@ -176,7 +176,7 @@ impl ScheduleSim {
         self.pools.get(group).map(|v| v.as_slice()).unwrap_or(&[])
     }
 
-    /// The depot file a bus of a plain `[aigroup_2]` group runs with (see [`pool_depot`]),
+    /// The depot file a plain `[aigroup_2]` vehicle or `.zug` train runs with (see [`pool_depot`]),
     /// looked up once per vehicle folder.
     pub fn pool_hof(&mut self, dir: &Path, world: &dyn TimetableWorld) -> Option<Arc<omsi_vehicle::Hof>> {
         if let Some(h) = self.pool_hofs.get(dir) {

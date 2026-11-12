@@ -29,6 +29,7 @@ pub(super) fn option_now(app: &App, verb: &str, arg: &str) -> Option<f32> {
         "mouse_pedal_strength" => s.mouse_pedal_strength,
         "look_sens" => s.look_sens,
         "look_smoothing_ms" => s.look_smoothing_ms,
+        "zoom_hold_amount" => s.zoom_hold_amount,
         "head_tracking_smoothing" => s.head_tracking_smoothing,
         "head_tracking_dead_zone" => s.head_tracking_dead_zone,
         "pad_steer_smooth" => s.pad_steer_smooth,
@@ -173,6 +174,10 @@ pub(super) fn option_set(app: &mut App, verb: &str, arg: &str, v: f32) -> Option
         "look_smoothing_ms" => {
             app.settings.look_smoothing_ms = v.round();
             Some(("look_smoothing_ms", app.settings.look_smoothing_ms.to_string()))
+        }
+        "zoom_hold_amount" => {
+            app.settings.zoom_hold_amount = ((v * 100.0).round() / 100.0).clamp(0.15, 1.0);
+            Some(("zoom_hold_amount", app.settings.zoom_hold_amount.to_string()))
         }
         "mouse_sens" => {
             app.settings.mouse_sens = (v * 100.0).round() / 100.0;
@@ -419,8 +424,10 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "passenger_connections" => s.passenger_connections,
         "passenger_hailing" => s.passenger_hailing,
         "passenger_full_bus_reaction" => s.passenger_full_bus_reaction,
+        "pax_short_rides_stand" => s.pax_short_rides_stand,
         "navigator" => if app.vr_active() { app.vr_nav_profile().enabled } else { app.menus.navigator.as_ref().is_some_and(|n| n.enabled) },
         "nav_ai" => app.menus.navigator.as_ref().map_or(s.nav_ai, |n| n.show_ai),
+        "nav_ai_cars" => app.menus.navigator.as_ref().map_or(s.nav_ai_cars, |n| n.show_cars),
         "nav_surface" => app.menus.navigator.as_ref().map_or(s.nav_surface, |n| n.show_surface),
         "nav_3d" => app.menus.navigator.as_ref().map_or(s.nav_3d, |n| n.show_3d),
         "nav_classic_2d" => app.menus.navigator.as_ref().map_or(s.nav_classic_2d, |n| n.classic_2d),
@@ -450,6 +457,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "camcoll" => s.camera_collision,
         "steer_look" => s.steer_look,
         "hands_in_cab" => s.hands_in_cab,
+        "driver_like_omsi" => s.driver_like_omsi,
         "ff" => s.ff_enabled,
         "brake_hold" => s.brake_hold,
         "auto_clutch" => s.auto_clutch,
@@ -463,7 +471,8 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "head_tracking_invert_z" => s.head_tracking_invert_z,
         "timetable_win" => app.menus.timetable,
         "info_bar" => app.menus.info_bar,
-        "nav_arrows" => app.menus.navigator.as_ref().map_or(s.nav_arrows, |n| n.arrows),
+        "nav_dynamic_arrows" => s.nav_dynamic_arrows,
+        "nav_map_arrows" => s.nav_map_arrows,
         "exact_fare" => s.exact_fare,
         "pax_bad_driving" => s.pax_bad_driving,
         "auto_announce" => s.auto_announce,
@@ -475,6 +484,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "cloud_shadows" => s.cloud_shadows,
         "light_glow" => s.light_glow,
         "windy_trees" => s.windy_trees,
+        "detailed_trees" => s.detailed_trees,
         "road_snow" => s.road_snow,
         "mirror_hud_every_frame" => s.mirror_hud_every_frame,
         "mirror_shadows" => s.mirror_shadows,
@@ -486,6 +496,8 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "driver" => s.driver,
         "alt_view" => s.alt_view,
         "precision_zoom" => s.precision_zoom,
+        "zoom_hold_latch" => s.zoom_hold_latch,
+        "flashlight_cursor" => s.flashlight_cursor,
         "triple_screen" => s.triple.enabled,
         "triple_hud_center" => s.triple_hud_center,
         "triple_span" => s.triple_span,
@@ -507,6 +519,10 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "ui_scale_window" => s.ui_scale_window,
         "tooltips" => s.tooltips,
         "notes" => s.notes,
+        "notes_driving" => s.notes_driving,
+        "notes_script" => s.notes_script,
+        "notes_trip" => s.notes_trip,
+        "notes_tickets" => s.notes_tickets,
         "chat" => s.chat,
         "name_tags" => s.name_tags,
         "voice_enabled" => s.voice_enabled,
@@ -543,6 +559,13 @@ pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static 
             }
             Some(("passenger_full_bus_reaction", bit))
         },
+        "pax_short_rides_stand" => {
+            app.settings.pax_short_rides_stand = on;
+            if let Some(h) = app.session.humans.as_mut() {
+                h.short_rides_stand = on;
+            }
+            Some(("pax_short_rides_stand", bit))
+        },
         "navigator" => {
             if app.vr_active() {
                 if app.vr_nav_profile().enabled != on { app.vr_nav_adjust("enabled", 1.0); }
@@ -560,6 +583,13 @@ pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static 
             }
             app.settings.nav_ai = on;
             Some(("nav_ai", bit))
+        }
+        "nav_ai_cars" => {
+            if let Some(n) = app.menus.navigator.as_mut() {
+                n.show_cars = on;
+            }
+            app.settings.nav_ai_cars = on;
+            Some(("nav_ai_cars", bit))
         }
         "nav_surface" => {
             if let Some(n) = app.menus.navigator.as_mut() {
@@ -738,6 +768,10 @@ pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static 
             app.settings.hands_in_cab = on;
             Some(("hands_in_cab", bit))
         }
+        "driver_like_omsi" => {
+            app.settings.driver_like_omsi = on;
+            Some(("driver_like_omsi", bit))
+        }
         "brake_hold" => {
             app.settings.brake_hold = on;
             Some(("brake_hold", bit))
@@ -761,9 +795,13 @@ pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static 
             app.set_info_bar(on);
             None
         }
-        "nav_arrows" => {
-            app.settings.nav_arrows = on;
-            Some(("nav_arrows", bit))
+        "nav_dynamic_arrows" => {
+            app.settings.nav_dynamic_arrows = on;
+            Some(("nav_dynamic_arrows", bit))
+        }
+        "nav_map_arrows" => {
+            app.settings.nav_map_arrows = on;
+            Some(("nav_map_arrows", bit))
         }
         "exact_fare" => {
             app.settings.exact_fare = on;
@@ -818,6 +856,7 @@ fn toggle_set_graphics_and_controls(app: &mut App, id: &str, on: bool, bit: Stri
             app.settings.windy_trees = on;
             Some(("windy_trees", bit))
         }
+        "detailed_trees" => { app.settings.detailed_trees = on; Some(("detailed_trees", bit)) }
         // (the next picture tells the road snow, see `picture_lighting`)
         "road_snow" => { app.settings.road_snow = on; Some(("road_snow", bit)) }
         "mirror_hud_every_frame" => { app.settings.mirror_hud_every_frame = on; Some(("mirror_hud_every_frame", bit)) }
@@ -852,6 +891,14 @@ fn toggle_set_graphics_and_controls(app: &mut App, id: &str, on: bool, bit: Stri
         "alt_view" => {
             app.settings.alt_view = on;
             Some(("alt_view", bit))
+        }
+        "zoom_hold_latch" => {
+            app.settings.zoom_hold_latch = on;
+            Some(("zoom_hold_latch", bit))
+        }
+        "flashlight_cursor" => {
+            app.settings.flashlight_cursor = on;
+            Some(("flashlight_cursor", bit))
         }
         "precision_zoom" => {
             app.settings.precision_zoom = on;
@@ -948,6 +995,22 @@ fn toggle_set_graphics_and_controls(app: &mut App, id: &str, on: bool, bit: Stri
         "notes" => {
             app.settings.notes = on;
             Some(("notes", bit))
+        }
+        "notes_driving" => {
+            app.settings.notes_driving = on;
+            Some(("notes_driving", bit))
+        }
+        "notes_script" => {
+            app.settings.notes_script = on;
+            Some(("notes_script", bit))
+        }
+        "notes_trip" => {
+            app.settings.notes_trip = on;
+            Some(("notes_trip", bit))
+        }
+        "notes_tickets" => {
+            app.settings.notes_tickets = on;
+            Some(("notes_tickets", bit))
         }
         "chat" => {
             app.settings.chat = on;

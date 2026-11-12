@@ -388,6 +388,15 @@ index n; `[traffic_light] name` + `[phase] state seconds` (0 red, 3 red+yellow, 
 restarts). `[trafficlight]` lamp objects are placed with map flag 1, the extra line = light
 index, and `[varparent] id` = the crossing; their `[visible] red|yellow|green 1` meshes follow.
 
+`[traffic_light_stop] light time ifAnf` and `[traffic_light_jump] light time ifAnf target`
+are points on that cycle clock. `ifAnf` 1 makes the condition "nobody is asking at `light`",
+0 "somebody is asking". A stop normally holds the clock **just before** its time, so the
+phase that ends there stays shown; if the clock is already at the stop (within 1e-6 s
+either side) it holds there. A stop never holds in a red-and-yellow changeover: if the
+instant just before the stop is red-and-yellow, the clock holds at the stop's own time;
+a stop whose own time is red-and-yellow is passed. A jump whose condition holds at the
+same cycle time as a stop is taken first, and the stop is left behind.
+
 ## Timetables (`TTData`)
 
 * `Busstops.cfg`: `[busstop] name tile-index object-id offset 0 0` (tile index = position of
@@ -641,8 +650,8 @@ rim the reflection running on away from the camera.
   180° were `.x` meshes read with transposed frames); text is centred and squeezed to fit.
   A `[texttexture]` whose variable is one of the object's script string variables (the stock
   stop departure displays) is drawn from the script whenever it calls `Refresh_Strings`.
-  `[helparrow]` objects (route arrows a map's author puts up) are drawn only while OMSI 2's
-  route arrows are on (`nav_arrows`, the game menu's "Route arrows"), as in Omsi.exe.
+  `[helparrow]` objects are shown by *Map-placed route arrows* (`nav_map_arrows`). The game
+  can show these independently of the dynamic arrows it generates from the driven route.
 * `[matl_envmap]`: the reflectivity mask is the diffuse alpha; textures without an alpha
   channel (DXT1 paint schemes such as the GN92 HVL livery) do not reflect at all.
 
@@ -656,8 +665,9 @@ newachse (achse_long achse_maxwidth achse_minwidth achse_raddurchmesser achse_fe
 achse_daempfer achse_antrieb achse_inertia_inv) number registration_automatic registration_list
 registration_free kmcounter_init + model/script/sound/paths/passengercabin.
 openOMSI's own blocks (read the same way, `key value` lines to the next block): `[trolley_pole]`,
-`[trolley_rheostat]`, `[trolley_async]`, `[trolley_battery]`, `[trolley_aux]`, `[trolley_vars]`:
-the poles on the roof and the traction drive of a trolleybus (OMSI 2 has none: its trolleybus
+`[trolley_rheostat]`, `[trolley_async]`, `[trolley_battery]`, `[trolley_aux]`, `[trolley_vars]`,
+`[trolley_none]`: the poles on the roof and the traction drive of a trolleybus, or none of the
+game's own for a vehicle that moves its poles itself (OMSI 2 has none: its trolleybus
 add-ons run a plugin beside the game). Every key, the variables the game writes for models and
 the map's `trolley.txt` (`[trolley_net]`, `[trolley_section]`, `[trolley_span]`,
 `[trolley_switch]`, `[trolley_insulator]`) are in [TROLLEYBUS.md](TROLLEYBUS.md).
@@ -880,7 +890,10 @@ puts it on a material, `[matl_transmap] \S:n` uses its alpha as transparency map
 the line after the page's path makes it a **surface** - shaded by the world's light as every
 other material is, on every slot that shows the page, a scenery object's or a vehicle's -
 where a page is a display, drawn unlit at its own brightness, by default.
-An openOMSI extension; Omsi.exe draws such a slot unlit either way. The
+An openOMSI extension; Omsi.exe draws such a slot unlit either way.
+`[navigatortexture] w h [variable]` declares a screen the game's navigator draws its small map
+on, while the optional variable is not 0 (see `NAVIGATORTEXTURE.md`); `[useNavigatorTexture] n`
+puts the n-th on a material. Also an openOMSI extension. The
 scripts draw with `(M.V.ST…)` callbacks, arguments pushed in order (index first):
 `STNewTex(i)`, `STLock(i)`, `STUnlock(i)` (upload), `STFilter(i)`, `STSetColor(i, a, r, g, b)`,
 `STDrawPixel(i, x, y)`, `STDrawRect(i, x1, y1, x2, y2)`, `STTextOut(i, x, y, font, mode,

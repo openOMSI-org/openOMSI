@@ -17,6 +17,7 @@ use omsi_ui::{Draw, Gpu, Layer, Vertex};
 use omsi_ui::kit::Ui;
 
 pub(crate) mod pause;
+pub(crate) mod bus_preview;
 
 /// What a click on one of the screens asks of the game.
 #[derive(Clone, Debug, PartialEq)]
@@ -24,16 +25,22 @@ pub(crate) enum Action {
     ProcessPermission(u64, omsi_plugin::api::process::ProcessDecision),
     /// Line `k` of the game menu or of the open list, as Enter on it.
     Choose(usize),
+    /// Mark a vehicle, livery or depot file without advancing the chooser.
+    BusSelect(usize),
     /// Switch the presentation category without changing the underlying actions.
     PauseCategory(pause::navigation::Category),
     /// Edit presentation-only shortcuts without executing the underlying action.
     QuickActions(pause::quick_actions::Edit),
+    /// A row or setting acted on within a multiplayer pause tab.
+    OnlineAction(u8, String),
     /// A line of the pause menu's rail chosen while a list is open over it: the list closes
     /// and the line is done.
     Rail(usize),
     /// The control of line `k` of a settings window: a slider `fx` of the way along, a
     /// stepper's left (`fx` < 0.5) or right half.
     Control(usize, f32),
+    /// The simulation date selected in the pause calendar, as YYYY-MM-DD.
+    Date(String),
     /// Page `i` of the open settings window, or (one past the last) the way back.
     Side(usize),
     /// A click in the timetable beside a line's tours (see `App::tour_pane_click`).
@@ -48,10 +55,13 @@ pub(crate) enum Action {
 
 /// The screens' toolkit, their graphics and what was drawn last.
 pub(crate) struct Shell {
+    pub(crate) bus_preview: bus_preview::State,
+    pub(crate) settings_search: pause::search::State,
     pub(crate) process_prompt: Option<u64>,
     pub(crate) process_dialog: crate::process_permissions::DialogState,
     pub(crate) ui: Ui,
     pub(crate) pause_category: pause::navigation::Category,
+    pub(crate) pause_online: omsi_multiplayer_ui::State,
     pub(crate) quick_edit: bool,
     /// No category chosen: the pause menu shows only the rail over the dimmed paused game.
     pub(crate) pause_hidden: bool,
@@ -119,7 +129,7 @@ impl Shell {
         // (the desktop launcher's calm look: graphite surfaces, no edges)
         let mut ui = Ui::new();
         ui.flat = true;
-        Shell { process_prompt: None, process_dialog: Default::default(), ui, pause_category: Default::default(), quick_edit: false, pause_hidden: true, quick_focus: 0, gpu: None, shot_gpu: None, drawn: None, actions: Vec::new(), picture: None, picture_tex: None, logo_tex: None, shot_logo: None, logo_of: None, logo_title: None, logo_wide: None, glass: None, glass_taken: None, scale: 1.0, over_ui: false, last_sel: None, dd_anchor: None, opaque: false }
+        Shell { bus_preview: Default::default(), settings_search: Default::default(), process_prompt: None, process_dialog: Default::default(), ui, pause_category: Default::default(), pause_online: Default::default(), quick_edit: false, pause_hidden: true, quick_focus: 0, gpu: None, shot_gpu: None, drawn: None, actions: Vec::new(), picture: None, picture_tex: None, logo_tex: None, shot_logo: None, logo_of: None, logo_title: None, logo_wide: None, glass: None, glass_taken: None, scale: 1.0, over_ui: false, last_sel: None, dd_anchor: None, opaque: false }
     }
 
     /// A frame of the screens begins: the window's size in physical pixels and how many of
@@ -149,6 +159,11 @@ impl Shell {
 
     /// Nothing of the screens shows this frame.
     pub(crate) fn clear(&mut self) {
+        self.clear_bus_preview();
+        self.settings_search = Default::default();
+        self.pause_online.confirm = None;
+        self.pause_online.management = None;
+        if pause::search::focused(self) { self.ui.focus = None; }
         self.drawn = None;
         self.over_ui = false;
         self.ui.discard_input();
@@ -212,6 +227,7 @@ impl Shell {
             self.gpu = Some((Gpu::new(&r.device, format, 1, self.ui.atlas.size), format));
             self.ui.atlas.mark_all_dirty();
             self.picture_tex = None;
+            self.bus_preview.invalidate_texture();
             self.logo_tex = None;
             self.glass = None;
         }

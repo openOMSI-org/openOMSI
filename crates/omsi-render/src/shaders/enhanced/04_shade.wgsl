@@ -97,7 +97,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         let nuv = select(buv, vec2<f32>(in.uv.x, 1.0 - in.uv.y), terrain);
         night_sample = sample_nightmap(nuv);
     }
-    tex.a = night_coverage(tex.a, night_sample.a);
+    tex.a = night_coverage(tex.a, night_sample.a) * tree_card_fade(in.world);
     let mode = material.params.x;
     // Keep the filtered fractional coverage, but tighten its transition around the cutout
     // edge before MSAA turns it into sample coverage. The MSAA depth prepass skips these
@@ -561,6 +561,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
             if ((terrain || material.params2.z > 0.0) && !is_water) {
                 spec = spec * camera.lod.z;
             }
+            spec = select(spec, vec3<f32>(0.0), dot(geo_n, v) < 0.0 && !is_water);
             direct = e_sun * nl * (sf.albedo / PI * (vec3<f32>(1.0) - f_schlick(f0, nl)) + spec);
         }
     }
@@ -585,11 +586,13 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     }
     // --- sky and ground
     var ao = 1.0;
-    var bounce = vec3<f32>(0.0);
-    if (camera.clouds.w > 0.5 && !capture) {
-        let ag = ao_gi_at(in.clip.xy, in.world, surface_rt);
-        ao = ag.x;
-        bounce = ag.yzw;
+    let screen_ao = camera.clouds.w > 0.5 && !capture;
+//DX     var bounce = vec3<f32>(0.0);
+    if (screen_ao) {
+//VK         ao = ao_traced_at(in.clip.xy, in.world, surface_rt);
+//DX         let ag = ao_gi_at(in.clip.xy, in.world, surface_rt);
+//DX         ao = ag.x;
+//DX         bounce = ag.yzw;
     }
     // AO is generated from the opaque depth buffer.  A transparent bus pane therefore
     // samples the seats/dashboard behind it and makes their dark outlines crawl across the
@@ -612,11 +615,12 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     ao = mix(ao, 1.0 - (1.0 - ao) * 0.35, in_cab);
     let avg_e = enh.fog_color.rgb * (PI / 0.9);
     let cab_e = vec3<f32>(dot(avg_e, vec3<f32>(0.2126, 0.7152, 0.0722))) * vec3<f32>(1.0, 0.98, 0.95);
-    let e_amb = mix(sh_irradiance(n), cab_e * CAB_AMBIENT, 0.6 * in_cab) * ao_bounce(ao, ambient_albedo)
-        + flash_irradiance(n) * ao * (1.0 - 0.7 * in_cab)
-        // the light the street's surfaces send to each other (their last frame's picture;
-        // the cab has its own even light)
-        + bounce * mix(1.0, ao, 0.5) * (1.0 - in_cab);
+    var e_amb = mix(sh_irradiance(n), cab_e * CAB_AMBIENT, 0.6 * in_cab) * ao_bounce(ao, ambient_albedo)
+        + flash_irradiance(n) * ao * (1.0 - 0.7 * in_cab);
+//VK     if (screen_ao && in_cab < 1.0) {
+//VK         e_amb = e_amb + bounce_at(in.clip.xy, in.world) * mix(1.0, ao, 0.5) * (1.0 - in_cab);
+//VK     }
+//DX     e_amb = e_amb + bounce * mix(1.0, ao, 0.5) * (1.0 - in_cab);
     var ambient = e_amb * ambient_albedo / PI * (vec3<f32>(1.0) - fr * (1.0 - rough) * env_share);
     // --- reflections: the sky probe, as sharp as the surface is smooth
     var r = reflect(-v, normalize(mix(face_n, n, face_w)));
@@ -752,14 +756,14 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // lamps' glints, the sky, the street) and in the little its tint takes from the daylight
     // through it. Lit as a grey Lambertian layer, every lamp and the cab's own lamps laid a
     // milky veil over the windows at night, over everything seen through them.
-    // What is painted on a pane is no clear glass though: a livery's lettering or an advert
-    // on the windows (the texture's alpha near 1 there) is paint, lit by the lamps and the
-    // saloon as the body round it is. Taken as glass it was lit by the sun and the sky alone,
-    // and went black at night. (Clear and tinted glass, alpha well under that, stays unlit.)
+    // (paint on a pane, alpha near 1, is lit as the body is: unlit it went black at night)
     let paint_on_pane = select(1.0, smoothstep(0.6, 0.95, alpha), glass);
     var sf_lit = sf;
     sf_lit.albedo = sf.albedo * paint_on_pane;
-    let lamps = lamp_light(in.world, n, v, sf_lit, thin, !capture, film) * select(1.0, 0.0, material.params.y > 0.2 && material.params.y < 0.3);
+    if ((terrain || material.params2.z > 0.0) && !is_water) {
+        sf_lit.f0 = sf_lit.f0 * camera.lod.z;
+    }
+    let lamps = lamp_light(in.world, n, v, sf_lit, thin, !capture, film, dot(geo_n, v) < 0.0 && !is_water) * select(1.0, 0.0, material.params.y > 0.2 && material.params.y < 0.3);
     // [interiorlight]: OMSI adds its lamps' light to the lit meshes whatever the daylight,
     // so a switched-on saloon is brighter by day as well and only stands out more at night.
     // Taken as a lamp against the daylight exposure it vanished by day altogether.
@@ -814,8 +818,8 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
             // as the self-illuminated materials do
             // (a window lit from inside shows some 80 cd/mÂ² - a room's 300 lux off its
             // walls and through a curtain - an illuminated sign more: over the dark street
-            // round it, well over the screen's white, and the eye's glare blooms round it)
-            emit = emit + nm * select(enh.exposure.z * 3.6, mix(max(enh.exposure.z * 2.0, 0.8), 0.8, near_player_vehicle(in.world) * inside_vehicle(camera.cam_pos.xyz) * (1.0 - outside)), switched);
+            // round it, a little over the screen's white, so that it keeps its colour)
+            emit = emit + nm * select(min(enh.exposure.z * 3.6, 1.2), mix(max(enh.exposure.z * 2.0, 0.8), 0.8, near_player_vehicle(in.world) * inside_vehicle(camera.cam_pos.xyz) * (1.0 - outside)), switched);
         }
     }
     if (material.params2.x > 0.5 && !terrain && !glass) {

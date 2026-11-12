@@ -56,3 +56,22 @@ pub fn pick_hofs(title: &str, filter: &str) -> Option<Vec<PathBuf>> {
         None
     }
 }
+
+/// Profile import/export picker. Call on the window thread, like the other file pickers.
+pub fn pick_graphics_profile(export: bool) -> Option<PathBuf> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        let title = if export { "Export graphics profile" } else { "Import graphics profile" };
+        let dialog = rfd::FileDialog::new().set_title(crate::i18n::tr(title)).add_filter("JSON", &["json"]);
+        if export {
+            dialog.set_file_name("graphics-profile.json").save_file()
+        } else {
+            dialog.pick_file()
+        }
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = export;
+        None
+    }
+}

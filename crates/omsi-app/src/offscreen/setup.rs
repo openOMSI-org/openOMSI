@@ -35,8 +35,7 @@ impl<'a> Offscreen<'a> {
         crate::lights::set_corona_root(&args.root);
         let mut scene = renderer.new_scene();
         let (world, camera) = lan::answering_while(&mut lan_off, args.bus.as_deref(), || load_world(args, &renderer, &mut scene))?;
-        // the map's own route arrows, with OMSI 2's route arrows
-        world.show_help_arrows(&renderer, &mut scene, settings.nav_arrows);
+        world.show_help_arrows(&renderer, &mut scene, settings.nav_map_arrows);
         let lan_seed = lan_off.as_ref().map(lan::population_seed);
         // (a player who joins another's game draws the host's traffic in it, whatever their own
         // count says: without it the host's cars had nowhere to go - "passengers, but no
@@ -291,6 +290,7 @@ impl<'a> Offscreen<'a> {
             cabin_air,
             srv_admin,
             srv_clock,
+            srv_wall: Default::default(),
             srv_metar,
             srv_metar_due,
             srv_metar_rx,
@@ -317,6 +317,7 @@ fn new_traffic(
     let mut t = traffic::Traffic::new(&args.root, world, args.traffic)?;
     t.lights_only = !(args.traffic > 0 || args.schedule || crate::rail_drive::args_rail(args) || args.lan_join.is_some());
     t.no_timetable_buses = args.no_timetable_buses;
+    t.drive_through_parked = args.ai_drive_through_parked;
     if let Some(seed) = lan_seed {
         t.set_lan_seed(seed);
     }
@@ -431,6 +432,7 @@ fn new_humans(
         h.bad_driving = settings.pax_bad_driving;
         h.boarding = settings.boarding.clone();
         h.stand_chance = settings.standing_chance;
+        h.short_rides_stand = settings.pax_short_rides_stand;
         h.voices = match settings.pax_voices.as_str() { "off" => 2, "tickets" => 1, _ => 0 };
         if let Some(p) = player.as_mut() {
             h.set_cabin(&mut p.vehicle);

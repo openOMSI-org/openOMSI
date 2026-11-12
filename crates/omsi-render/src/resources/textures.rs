@@ -827,6 +827,30 @@ impl Renderer {
         scene.textures.get(id).map(|t| t.view.clone())
     }
 
+    /// False when `id` is no texture that can be drawn into.
+    pub fn clear_texture(&self, scene: &Scene, id: TextureId, color: wgpu::Color) -> bool {
+        // A view of a whole mip chain is no colour attachment.
+        let Some(t) = scene.textures.get(id).filter(|t| t.texture.usage().contains(wgpu::TextureUsages::RENDER_ATTACHMENT) && t.texture.mip_level_count() == 1) else {
+            return false;
+        };
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("clear texture") });
+        encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("clear texture"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &t.view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations { load: wgpu::LoadOp::Clear(color), store: wgpu::StoreOp::Store },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        self.queue.submit([encoder.finish()]);
+        true
+    }
+
     pub fn upload_speed_mb_s(&self) -> f64 {
         let n = 1024u32;
         let size = wgpu::Extent3d { width: n, height: n, depth_or_array_layers: 1 };

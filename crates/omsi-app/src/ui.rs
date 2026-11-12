@@ -249,10 +249,14 @@ pub enum MenuKind {
     /// sliders and buttons. A row's label is `name\u{1f}kind\u{1f}value\u{1f}description\u{1f}fraction`
     /// (kind: `s` switch, `v` slider, `c` stepper, `o` opens a list, `a` button, `i` information).
     Options,
+    /// A list grouped under headings, using the settings page's section layout without its search.
+    Sections,
     /// The lines of the map's timetable.
     Lines,
     /// One line's tours.
     Tours,
+    /// Vehicle placement and swapping with the launcher showroom.
+    Vehicles,
     /// Any other list (drivers, fleet numbers, destinations, liveries ...).
     List,
 }
@@ -1039,7 +1043,7 @@ pub struct Loading {
 }
 
 /// The tips under the loading screen's "Tips", one at a time.
-pub const LOADING_TIPS: [&str; 8] = [
+pub const LOADING_TIPS: [&str; 9] = [
     "Shift+U puts the bus into service: the electrics, the engine and the lights in one go",
     "F1 is the driver's seat, F2 the passengers' view, F3 outside the bus and F4 the free camera",
     "Esc opens the menu: the options, the line and tour, saving and the photo mode",
@@ -1048,6 +1052,7 @@ pub const LOADING_TIPS: [&str; 8] = [
     "Shift+M opens the city map",
     "P pauses the game; Alt+S saves the situation",
     "Shift+Y shows the information bar: the time, the speed, the temperatures and the next stop",
+    "Alt+U hides the whole interface for a clear view; press it again to bring it back",
 ];
 /// How long a tip stands (seconds).
 const TIP_SECS: f32 = 6.0;

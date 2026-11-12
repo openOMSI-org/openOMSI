@@ -44,6 +44,20 @@ impl App {
         shift_clock(ShiftClockCx::of(&mut self.parts()), secs);
     }
 
+    /// Keep calendar changes on the same path as the existing date shortcuts.
+    pub(crate) fn choose_calendar_date(&mut self, date: &str) {
+        if self.menus.game_menu.is_none()
+            || !matches!(self.menus.list_kind, Some(crate::game_lists::ListKind::World(0)))
+            || self.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client)
+        {
+            return;
+        }
+        if let Some(secs) = calendar_date_shift(&self.clock, date).filter(|secs| *secs != 0.0) {
+            self.shift_clock(secs);
+            self.refresh_list();
+        }
+    }
+
     /// The world follows the sim date as OMSI's does at the day's change:
     /// the chrono scenarios in force (the tiles they change are read again) and the
     /// season's textures - also when the weather turns to snow or thaws (every loaded tile
@@ -145,9 +159,93 @@ pub(crate) fn timetable_after_clock_jump(cx: JumpCx) {
     if jump.abs() < 120.0 {
         return;
     }
-    if let (Some(s), Some(w), Some(t), Some(r), Some(scene)) = (cx.traffic.schedule.as_mut(), cx.world.world.as_ref(), cx.traffic.traffic.as_mut(), cx.gfx.renderer.as_ref(), cx.gfx.scene.as_mut()) {
-        let day_time = t.day_time;
-        s.restart(t, day_time);
-        crate::view_sync::apply_traffic(t, &mut cx.gfx.gfx.sim_view.traffic, w, r, scene);
+    restart_timetable(cx.traffic.schedule.as_mut(), cx.traffic.traffic.as_mut(), cx.world.world.as_deref(), cx.gfx.renderer.as_ref(), cx.gfx.scene.as_mut(), &mut cx.gfx.gfx.sim_view.traffic);
+}
+
+pub(crate) fn restart_timetable(
+    schedule: Option<&mut crate::schedule::Schedule>,
+    traffic: Option<&mut crate::traffic::Traffic>,
+    world: Option<&World>,
+    renderer: Option<&Renderer>,
+    scene: Option<&mut Scene>,
+    view: &mut crate::view_sync::traffic::TrafficView,
+) -> bool {
+    let (Some(s), Some(t), Some(w), Some(r), Some(scene)) = (schedule, traffic, world, renderer, scene) else { return false };
+    let day_time = t.day_time;
+    s.restart(t, day_time);
+    crate::view_sync::apply_traffic(t, view, w, r, scene);
+    true
+}
+
+/// Whole-day jumps preserve the time of day and update traffic through shift_clock.
+fn calendar_date_shift(clock: &omsi_sim::SimClock, date: &str) -> Option<f64> {
+    let mut fields = date.split('-');
+    let year: i32 = fields.next()?.parse().ok()?;
+    let month: i32 = fields.next()?.parse().ok()?;
+    let day: i32 = fields.next()?.parse().ok()?;
+    if fields.next().is_some() || !(1..=9999).contains(&year) {
+        return None;
+    }
+    let mut there = clock.clone();
+    there.set_date(year, month, day);
+    if there.day_month() != (day, month) {
+        return None;
+    }
+    let days = |c: &omsi_sim::SimClock| -> i64 {
+        (1..c.year).map(|y| omsi_sim::clock::days_in_year(y) as i64).sum::<i64>() + c.day_of_year as i64
+    };
+    Some((days(&there) - days(clock)) as f64 * 86400.0)
+}
+
+#[cfg(test)]
+mod calendar_tests {
+    use super::*;
+
+    #[test]
+    fn calendar_date_jumps_preserve_time_across_leap_days_and_years() {
+        for (from, to, days) in [
+            ("2024-02-28", "2024-03-01", 2),
+            ("2024-03-01", "2024-02-28", -2),
+            ("2023-12-31", "2024-01-01", 1),
+            ("2024-01-01", "2023-12-31", -1),
+            ("2026-11-03", "2026-11-03", 0),
+        ] {
+            let clock = omsi_sim::SimClock::starting(Some(from), None, "13:24:56");
+            assert_eq!(calendar_date_shift(&clock, to), Some(days as f64 * 86400.0));
+            assert_eq!(clock.time, 13.0 * 3600.0 + 24.0 * 60.0 + 56.0);
+        }
+    }
+
+    #[test]
+    fn calendar_selection_refreshes_displayed_date_and_preserves_selection() {
+        use clap::Parser;
+        let settings = crate::settings::Settings { time_sync: false, ..Default::default() };
+        let mut app = crate::assemble_app(crate::Args::parse_from(["openomsi"]), settings);
+        app.clock = omsi_sim::SimClock::starting(Some("2026-11-03"), None, "13:24:56");
+        app.menus.game_menu = Some(0);
+        app.open_list(crate::game_lists::ListKind::World(0));
+        let date_row = app.menus.admin_list.as_ref().unwrap().iter().position(|(_, action)| action == "date").unwrap();
+        app.menus.chooser = Some(date_row);
+        app.menus.menu_top = Some(123.0);
+        assert!(app.menus.admin_list.as_ref().unwrap()[date_row].0.contains("2026-11-03"));
+        for (date, code) in [("2026-11-10", 20261110), ("2027-02-28", 20270228)] {
+            app.choose_calendar_date(date);
+            assert_eq!(app.clock.date_code(), code);
+            assert!(
+                app.menus.admin_list.as_ref().unwrap()[date_row].0.contains(date),
+                "the date field must use the updated clock, not the old cached row"
+            );
+            assert_eq!(app.menus.chooser, Some(date_row));
+            assert_eq!(app.menus.menu_top, Some(123.0));
+            assert_eq!(app.clock.time, 13.0 * 3600.0 + 24.0 * 60.0 + 56.0);
+        }
+    }
+
+    #[test]
+    fn calendar_date_rejects_invalid_or_clamped_dates() {
+        let clock = omsi_sim::SimClock::starting(Some("2026-11-03"), None, "13:24:56");
+        for date in ["", "2026-02-29", "2024-02-30", "2026-00-01", "2026-13-01", "2026-11-00", "0-01-01", "10000-01-01", "2026-11-03-extra"] {
+            assert_eq!(calendar_date_shift(&clock, date), None, "{date}");
+        }
     }
 }

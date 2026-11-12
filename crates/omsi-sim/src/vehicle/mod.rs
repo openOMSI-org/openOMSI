@@ -52,7 +52,7 @@ pub use rail::RailEnv;
 pub use props::*;
 pub use trailer::*;
 pub use panto::{Catenary, PantoGear};
-pub use trolley::TrolleyGear;
+pub use trolley::{TrolleyGear, ROPE_RATE};
 pub use types::*;
 use update::*;
 pub use weather::*;
@@ -223,6 +223,9 @@ pub struct VehicleInstance {
     /// Values chosen over the paint scheme's own `[setvar]`s (`--setvar`): what
     /// `apply_scheme_vars_each_frame` writes for those variables instead of the scheme's.
     scheme_overrides: Vec<(String, f32)>,
+    /// The values the paint schemes' `[setvar]` variables have without a scheme, put back
+    /// when another livery no longer sets them.
+    paint_base: Vec<(String, f32)>,
     /// Where each mesh's material properties come from, resolved against `var_index`
     /// (rebuilt when the vehicle gains engine variables).
     props_plan: PropsPlan,
@@ -253,6 +256,8 @@ pub struct VehicleInstance {
     engine_ids: std::sync::OnceLock<engine_vars::EngineVarIds>,
     /// What the control cables carry to the next car this frame (see `car_run`).
     cable_bus: car_run::CableBus,
+    cable_back: car_run::CableBus,
+    cable_back_only: (usize, Vec<usize>),
     /// The program's own variables the engine uses every frame (see `program_ids`).
     program_ids: std::sync::OnceLock<program_ids::ProgramIds>,
     /// A trolleybus's poles and traction (see `trolley`); None for every other vehicle.

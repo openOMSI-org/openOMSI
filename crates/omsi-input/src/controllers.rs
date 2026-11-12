@@ -23,7 +23,9 @@ mod held;
 use held::HeldButtons;
 mod ffb;
 pub use ffb::{FfInput, FfTune};
-use ffb::{tuned_wheel_force, Micro, ScriptVib, FF_FADE, VIB_SHARE};
+use ffb::{tuned_wheel_force, Micro, ScriptVib, FF_FADE};
+#[cfg(windows)]
+use ffb::VIB_SHARE;
 #[cfg(test)]
 use ffb::wheel_force;
 
@@ -749,7 +751,7 @@ impl Devices {
                 let buttons = 0;
                 v.push(Connected { name: pad.name().to_string(), hardware_id: id, axes: {
                     let mut slots = di_slots(&axes);
-                    if cfg!(windows) && xinput_name(pad.name()) {
+                    if (cfg!(windows) && xinput_name(pad.name())) || (cfg!(target_os = "linux") && gamepad && pad.button_code(gilrs::Button::LeftTrigger2).is_some() && pad.button_code(gilrs::Button::RightTrigger2).is_some()) {
                         let trigger = |b| pad.button_data(b).map(|d| d.value()).unwrap_or(0.0);
                         gamepad_triggers(&mut slots, trigger(gilrs::Button::LeftTrigger2), trigger(gilrs::Button::RightTrigger2));
                     }
@@ -1440,7 +1442,7 @@ impl Controllers {
         // the trembling of the tarmac and of the engine, which never stops while the bus
         // runs and needs no fade of its own
         let micro = if on {
-            self.ff_micro.sample(f.dt, f.kmh, f.street_cond, f.engine_rpm, f.engine_load, self.ff_road, self.ff_engine)
+            self.ff_micro.sample(f.dt, f.kmh, f.street_cond, f.engine_rpm, f.engine_load, self.ff_road * ffb::surface_rumble(f.surface), self.ff_engine)
         } else {
             0.0
         };
@@ -1707,6 +1709,10 @@ fn calibrated_steering_reversed(cfg: Option<&DeviceCfg>) -> bool {
 /// numbers of its square and cross: their place among the codes; they are axes).
 pub fn button_number(pad: &gilrs::Gamepad, code: gilrs::ev::Code) -> Option<usize> {
     #[cfg(target_os = "linux")]
+    if evdev_axis_code(code.into_u32()) {
+        return None;
+    }
+    #[cfg(target_os = "linux")]
     if let Some(n) = declared_button_index(pad.name(), code.into_u32()) {
         return Some(n);
     }
@@ -1721,6 +1727,11 @@ pub fn button_number(pad: &gilrs::Gamepad, code: gilrs::ev::Code) -> Option<usiz
         codes.sort_unstable();
         codes.iter().position(|c| *c == code.into_u32()).unwrap_or(usize::MAX)
     }))
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn evdev_axis_code(code: u32) -> bool {
+    code >> 16 == 3
 }
 
 #[cfg(target_os = "linux")]
@@ -2174,6 +2185,16 @@ mod cfg_tests {
 
 #[cfg(test)]
 mod button_tests {
+    #[test]
+    fn an_analog_trigger_is_no_numbered_button_on_linux() {
+        assert!(super::evdev_axis_code((3 << 16) | 0x02), "ABS_Z, a pad's left trigger");
+        assert!(super::evdev_axis_code((3 << 16) | 0x05), "ABS_RZ, its right trigger");
+        assert!(!super::evdev_axis_code((1 << 16) | 0x138), "BTN_TL2 is a key");
+        let mut slots = vec![(0, 0.0), (1, 0.0)];
+        super::gamepad_triggers(&mut slots, 0.5, 1.0);
+        assert_eq!(slots, vec![(0, 0.0), (1, 0.0), (6, 0.0), (7, 1.0)]);
+    }
+
     #[test]
     fn a_wheel_with_buttons_past_the_table_counts_them_in_order() {
         let moza = super::key_bitmap_buttons("ffffffff ffffffffffffffff ffff000000000000 0 0 0 0 ffff00000000 0 0 0 0");

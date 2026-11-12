@@ -176,7 +176,7 @@ var<private> lamp_ground: vec3<f32>;
 // `film`: a wet road's film of water - x how much of the surface it is (0: none), y how
 // rough it is, z the share of it that mirrors - with which the lamps are reflected as the
 // sky is (`refl_rough`, `wet_share` in fs_enhanced), not by the dry surface's own lobe.
-fn lamp_light(p: vec3<f32>, n: vec3<f32>, v: vec3<f32>, sf: Surface, thin: bool, shadows: bool, film: vec3<f32>) -> vec3<f32> {
+fn lamp_light(p: vec3<f32>, n: vec3<f32>, v: vec3<f32>, sf: Surface, thin: bool, shadows: bool, film: vec3<f32>, back: bool) -> vec3<f32> {
     var sum = vec3<f32>(0.0);
     lamp_ground = vec3<f32>(0.0);
     own_shadow = -1.0;
@@ -198,6 +198,7 @@ fn lamp_light(p: vec3<f32>, n: vec3<f32>, v: vec3<f32>, sf: Surface, thin: bool,
     let a = max(sf.rough * sf.rough, 0.02);
     let a_film = max(film.y * film.y, 0.02);
     let nv = max(dot(n, v), 1e-4);
+    let facing = select(1.0, 0.0, back);
     let base = (u32(y) * side + u32(x)) * CELL_CAP;
     for (var j = 0u; j < CELL_CAP; j = j + 1u) {
         let li = grid[base + j];
@@ -272,6 +273,7 @@ fn lamp_light(p: vec3<f32>, n: vec3<f32>, v: vec3<f32>, sf: Surface, thin: bool,
         if (film.x > 0.0) {
             spec = mix(spec, d_beckmann(nh, a_film) * v_smith(nv, nl, a_film) * fr * film.z, film.x);
         }
+        spec = spec * facing;
         sum = sum + irr * nl * (sf.albedo / PI + spec);
     }
     // What the lit ground throws back up: a diffuse reflector of the street's albedo (asphalt

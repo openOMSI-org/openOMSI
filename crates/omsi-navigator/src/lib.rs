@@ -264,6 +264,7 @@ struct Route {
 
 /// Roads around a centre, built into vertex buffer 0.
 struct Roads {
+    reach: f64,
     /// `Navigator::look_key` it was built for.
     look: u64,
     anchor: DVec2,
@@ -358,8 +359,8 @@ pub struct Navigator {
     duty_route: Option<Route>,
     entries: Vec<destination::EntryMarker>,
     /// The route mesh (buffers 1 and 9): the route and traffic versions, the anchor, its
-    /// size, the bus's lane and the look it was built for.
-    route_mesh: (u64, u64, DVec2, u32, usize, u64),
+    /// size, the bus's lane, look and along-lane position it was built for.
+    route_mesh: (u64, u64, DVec2, u32, usize, u64, f32),
     /// Per lane of the traffic: how congested it is (0 free … 1 standing), smoothed.
     congestion: HashMap<usize, f32>,
     /// The same for the route's lanes ahead (in the route's network), and a version that
@@ -381,8 +382,12 @@ pub struct Navigator {
     /// (degrees), how far (m) and the street it turns into.
     /// OMSI 2's route arrows are wanted (see `turn_hint`).
     pub arrows: bool,
+    pub remote: bool,
+    remote_area: Option<(DVec2, u64)>,
+    remote_pic: remote_picture::RemotePicture,
     /// The other (AI) vehicles are drawn on the maps (the `nav_ai` setting).
     pub show_ai: bool,
+    pub show_cars: bool,
     /// The map's own surface (`Maps/<Map>/openomsi-realmap`), once read, and a number that changes
     /// when it arrives (the meshes are built again).
     surface: Option<std::sync::Arc<omsi_map::package::Package>>,
@@ -416,7 +421,7 @@ pub struct Navigator {
     resizing: Option<(f32, [f32; 2], f32)>,
     /// The ground being built on a worker for the small map (its look and lane count) and for
     /// the city map, and the network's carriageways with whether the paving covers each.
-    panel_job: Option<build::Job<(u64, usize)>>,
+    panel_job: Option<build::Job<(u64, usize, f64)>>,
     city_job: Option<build::Job<CityJob>>,
     road_cache: Option<(u64, std::sync::Arc<Vec<(MapRoad, bool)>>)>,
     road_job: Option<(u64, std::sync::mpsc::Receiver<std::sync::Arc<Vec<(MapRoad, bool)>>>)>,
@@ -456,6 +461,8 @@ pub struct Navigator {
     /// Seconds of delay the jams ahead on the route cost.
     jam_cost: f32,
     first: bool,
+    screen: Option<Screen>,
+    screen_state: screen::ScreenState,
 }
 
 /// The duty as the navigator shows it: line, terminus, the stops from the next one on,
@@ -508,11 +515,13 @@ fn draw_every(now: u32, frame_dt: f32) -> u32 {
     (ideal.ceil() as u32).clamp(1, 4)
 }
 
+const MAX_ZOOM: f64 = 320.0;
+
 fn zoom_target(speed_kmh: f32, turn_dist: Option<f64>, turning_deg: f64) -> f64 {
     let speed = 150.0 + speed_kmh.abs() as f64 * 2.4;
     let turn = turn_dist.map_or(f64::MAX, |d| 150.0 + d * 0.6);
     let bend = 1.0 - (turning_deg.abs() / 25.0).clamp(0.0, 1.0) * 0.25;
-    (speed.min(turn) * bend).clamp(150.0, 320.0)
+    (speed.min(turn) * bend).clamp(150.0, MAX_ZOOM)
 }
 
 fn ease(dt: f32, tau: f32) -> f64 {
@@ -578,7 +587,7 @@ impl Navigator {
             waypoints: Vec::new(),
             duty_route: None,
             entries: Vec::new(),
-            route_mesh: (u64::MAX, 0, DVec2::ZERO, 0, 0, 0),
+            route_mesh: (u64::MAX, 0, DVec2::ZERO, 0, 0, 0, 0.0),
             congestion: HashMap::new(),
             route_jam: HashMap::new(),
             jam_version: 0,
@@ -590,7 +599,11 @@ impl Navigator {
             time: 0.0,
             next_dist: None,
             arrows: false,
+            remote: false,
+            remote_area: None,
+            remote_pic: Default::default(),
             show_ai: true,
+            show_cars: true,
             surface: None,
             surface_version: 0,
             show_surface: true,
@@ -632,6 +645,8 @@ impl Navigator {
             dist_t: 0.0,
             jam_cost: 0.0,
             first: true,
+            screen: None,
+            screen_state: Default::default(),
         }
     }
 
@@ -841,16 +856,13 @@ impl Navigator {
         }
         r.note = (r.note - f.dt).max(0.0);
         // where the next stop is on the route: the way to the route must not skip it
-        let stop_at = f.stops.first().and_then(|st| {
-            (r.progress..r.lanes.len().min(r.progress + 1500)).find(|&k| {
-                net.lanes.get(r.lanes[k]).and_then(|l| l.nearest_point(st.position)).map(|p| p.1 < 25.0).unwrap_or(false)
-            })
-        });
+        let stop_at = f.stops.first().and_then(|st| stop_on_route(net, &r.lanes[..r.lanes.len().min(r.progress + 1500)], r.progress, st.position, |_, _| true)).map(|(k, _)| k);
         // the nearest route lane near the bus that runs its way, a little back to a lot ahead
         // (before the bus first reached the route: only the stretch up to the next stop)
         let (from, to) = match (r.joined, stop_at) {
             (false, Some(k)) if r.approach => (r.progress.saturating_sub(3), (k + 2).min(r.lanes.len())),
             (false, Some(k)) => (k.saturating_sub(40).max(r.progress), (k + 2).min(r.lanes.len())),
+            (true, Some(k)) => (r.progress.saturating_sub(3), (r.progress + 60).min(k.max(r.progress) + 2).min(r.lanes.len())),
             _ => (r.progress.saturating_sub(3), (r.progress + 60).min(r.lanes.len())),
         };
         let mut best: Option<(usize, f32, f64)> = None;
@@ -1142,20 +1154,20 @@ impl Navigator {
     fn route_distance(&self, net: &Network, stop: DVec3) -> Option<f64> {
         if self.destination.is_some() { return None; }
         let r = &self.route;
-        let mut acc = -(r.s as f64);
+        if r.progress >= r.lanes.len() {
+            return None;
+        }
+        let mut acc = vec![-(r.s as f64)];
         for &l in r.lanes.iter().skip(r.progress) {
-            let lane = net.lanes.get(l)?;
-            if let Some((s, d)) = lane.nearest_point(stop) {
-                if d < 25.0 && (acc + s as f64) >= -5.0 {
-                    return Some((acc + s as f64).max(0.0));
-                }
-            }
-            acc += lane.length() as f64;
-            if acc > 30_000.0 {
+            let next = acc[acc.len() - 1] + net.lanes.get(l)?.length() as f64;
+            if next > 30_000.0 {
                 break;
             }
+            acc.push(next);
         }
-        None
+        let ahead = |k: usize| acc[k - r.progress];
+        let (k, s) = stop_on_route(net, &r.lanes[..r.progress + acc.len().min(r.lanes.len() - r.progress)], r.progress, stop, |k, s| ahead(k) + s as f64 >= -5.0)?;
+        Some((ahead(k) + s as f64).max(0.0))
     }
 
     /// Advance, draw into the texture and put it on the screen.
@@ -1191,8 +1203,14 @@ impl Navigator {
         self.panel_overlay = None;
         self.dock_slot = None;
         self.board = None;
-        // (with the navigator off the route is still followed for OMSI 2's arrows)
-        if !self.enabled && !self.city.open && !self.arrows && self.shown < 0.01 {
+        self.release_closed_city(renderer, scene);
+        if !self.enabled
+            && !self.city.open
+            && !self.arrows
+            && !self.remote
+            && self.shown < 0.01
+            && !self.screen_wants_frame()
+        {
             self.invalidate_next_stop_distance();
             return;
         }
@@ -1205,20 +1223,26 @@ impl Navigator {
         self.date = f.date;
         self.day_clock = (f.time, f.weekday);
         if let Some(rx) = self.building.as_ref() {
-            if let Ok((net, pos, streets, surface, hints)) = rx.try_recv() {
-                self.name_hints = hints;
-                log::info!("navigator: the map's road network is there ({} lanes, {} streets named)", net.lanes.len(), streets.names.len());
-                self.streets = Some(std::sync::Arc::new(streets));
-                self.set_surface(surface);
-                self.global = Some(std::sync::Arc::new(net));
-                self.stop_pos = std::sync::Arc::new(pos);
-                self.global_version += 1;
-                self.building = None;
-                // routes and roads again on the whole map
-                self.roads = None;
-                self.reset_navigation_network();
-                self.route_mesh.0 = u64::MAX;
-                self.route_jam.clear();
+            match rx.try_recv() {
+                Ok((net, pos, streets, surface, hints)) => {
+                    self.name_hints = hints;
+                    log::info!("navigator: the map's road network is there ({} lanes, {} streets named)", net.lanes.len(), streets.names.len());
+                    self.streets = Some(std::sync::Arc::new(streets));
+                    self.set_surface(surface);
+                    self.global = Some(std::sync::Arc::new(net));
+                    self.stop_pos = std::sync::Arc::new(pos);
+                    self.global_version += 1;
+                    self.building = None;
+                    // routes and roads again on the whole map
+                    self.roads = None;
+                    self.reset_navigation_network();
+                    self.route_mesh.0 = u64::MAX;
+                    self.route_jam.clear();
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) if self.streets.is_none() => {
+                    self.streets = Some(std::sync::Arc::new(Streets { names: Vec::new(), of_lane: Vec::new(), labels: Vec::new() }));
+                }
+                Err(_) => {}
             }
         }
         if let Some(rx) = self.layers_rx.as_ref() {
@@ -1279,9 +1303,11 @@ impl Navigator {
             self.update_place(f.bus.truncate());
         }
         self.first = false;
+        self.pace();
+        self.frame_screen(renderer, scene, f);
+        self.remote_picture_frame(renderer, f);
         if !self.enabled && self.shown < 0.01 {
             self.panel_rect = [0.0; 4];
-            // (followed for the route arrows alone, with the city map shut: nothing to draw)
             if self.city.open {
                 self.city(renderer, scene, f);
             }
@@ -1301,7 +1327,8 @@ impl Navigator {
         // (the widget's own size on top: `nav_size`, dragged at its corner)
         let pw = (base * f.ui_scale * self.size.clamp(0.6, 2.0)).min((sh * 0.7).max(300.0) * self.size.clamp(1.0, 2.0)).min(sw * 0.92).round();
         let map_h = (pw * 0.8).round();
-        let s = pw / 360.0;
+        let look = panel::PanelLook::hud(self, pw);
+        let s = look.scale;
         // (a plugin's board takes the stop list's place, as tall as its panel came to and
         // as there is room for; asked for the first time, it opens the lower part itself)
         if self.dock.is_some() && !self.dock_seen {
@@ -1319,8 +1346,7 @@ impl Navigator {
         self.board = self.dock.filter(|_| whole.is_none() && self.schedule && !self.cockpit_display && self.shown > 0.99).map(|h| h.max(1.0).min(room).round());
         let sched = match self.board {
             Some(h) => h,
-            None if self.schedule => (f.stops.len().clamp(1, 5) as f32 * 22.0 + 12.0) * s,
-            None => 0.0,
+            None => self.stop_list_height(s, f.stops.len()),
         };
         let ph = match whole {
             Some(p) if p.height > 0.0 => p.height.min(frame_room).round(),
@@ -1337,9 +1363,7 @@ impl Navigator {
             }
         }
 
-        if self.gpu.is_none() {
-            self.gpu = Some(Gpu::with_depth(&renderer.device, renderer.format(), map_samples(renderer.format()), self.atlas.size));
-        }
+        self.ensure_gpu(renderer);
         let resized = self.target.map(|t| (t.1, t.2) != (w, h)).unwrap_or(true);
         if resized {
             if let Some((t, _, _)) = self.target.take() {
@@ -1352,17 +1376,12 @@ impl Navigator {
         }
         let (tex, _, _) = self.target.unwrap();
         let Some(view) = renderer.texture_view(scene, tex) else { return };
-        let now = std::time::Instant::now();
-        if let Some(dt) = self.last_frame.replace(now).map(|t| (now - t).as_secs_f32()).filter(|dt| *dt < 0.1) {
-            self.frame_dt += (dt - self.frame_dt) * ease(dt, 0.5) as f32;
-        }
-        self.draw_every = draw_every(self.draw_every, self.frame_dt);
         self.frames_since_drawn = self.frames_since_drawn.saturating_add(1);
         // (a frame panel's map moved, or came or went: at once, not a few frames late)
         if !self.city.open && (resized || self.frames_since_drawn >= self.draw_every || (self.framed, self.frame_card) != self.framed_drawn) {
             self.frames_since_drawn = 0;
             self.framed_drawn = (self.framed, self.frame_card);
-            self.draw(renderer, &view, (w, h), map_h, f);
+            self.draw(renderer, &view, (w, h), map_h, &look, None, f);
         }
         // (the small navigator steps aside while the city map is open)
         if !self.city.open {
@@ -1443,12 +1462,18 @@ mod surface;
 pub use omsi_mapdraw::style;
 pub use omsi_mapdraw as mapmesh;
 mod panel;
+mod screen;
+pub use screen::Screen;
 mod live;
 mod build;
 pub use build::{Built, MapGround};
 mod cull;
 mod city_map;
 mod destination;
+mod remote;
+pub use remote::RemoteNav;
+mod remote_picture;
+pub use remote_picture::RemoteFrame;
 pub use city_map::*;
 use lines_panel::*;
 #[cfg(test)]
@@ -1458,3 +1483,17 @@ mod tests;
 #[cfg(test)]
 #[path = "destination/tests.rs"]
 mod destination_tests;
+
+fn stop_on_route(net: &Network, lanes: &[usize], from: usize, stop: DVec3, ok: impl Fn(usize, f32) -> bool) -> Option<(usize, f32)> {
+    let near = |k: usize| net.lanes.get(lanes[k]).and_then(|l| l.nearest_point(stop)).filter(|&(s, d)| d < 25.0 && ok(k, s));
+    let kerb = |k: usize| near(k).filter(|_| passes_on_its_side(net, lanes[k], stop, 25.0));
+    let first = (from..lanes.len()).find(|&k| near(k).is_some())?;
+    if let Some((s, _)) = kerb(first).filter(|&(_, d)| d < 6.0) {
+        return Some((first, s));
+    }
+    (first..lanes.len().min(first + 60))
+        .filter_map(|k| kerb(k).map(|(s, d)| (k, s, d)))
+        .min_by(|a, b| a.2.total_cmp(&b.2))
+        .map(|(k, s, _)| (k, s))
+        .or_else(|| near(first).map(|(s, _)| (first, s)))
+}

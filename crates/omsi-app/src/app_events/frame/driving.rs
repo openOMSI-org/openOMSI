@@ -241,7 +241,7 @@ pub(super) fn player_to_scene(cx: PlayerToSceneCx, dt: f32) {
     // there every photo showed the bus without its driver)
     // (out of the seat: nobody at the wheel)
     let at_eyes = *cx.view.view == "driver" && (cx.ui.photo.is_none() || cx.view.camera.as_ref().is_none_or(|c| (c.position - crate::camera_util::driver_eye(p)).length() < 0.5));
-    p.sync_driver_hands(r, scene, dt, cx.common.settings.driver && cx.people.on_foot.is_none(), at_eyes, cx.common.settings.hands_in_cab);
+    p.sync_driver_hands(r, scene, dt, cx.common.settings.driver && cx.people.on_foot.is_none(), at_eyes, cx.common.settings.hands_in_cab, cx.common.settings.driver_like_omsi);
 }
 
 crate::app::stage_ctx!(
@@ -258,7 +258,7 @@ pub(super) fn audio(cx: AudioCx, dt: f32) {
     if cx.player.player.is_none() && matches!(cx.view.view.as_str(), "free" | "foot") {
         if let Some(cam) = cx.view.camera.as_mut() {
             let base = if cx.common.settings.fov >= 20.0 { cx.common.settings.fov.min(120.0) } else { 60.0 };
-            cam.fov_deg = (base * cx.view.cam.view_zoom.get(cx.view.view.as_str()).copied().unwrap_or(1.0)).clamp(8.0, 120.0);
+            cam.fov_deg = (base * cx.view.cam.view_zoom.get(cx.view.view.as_str()).copied().unwrap_or(1.0) * cx.view.cam.zoom_hold.factor).clamp(8.0, 120.0);
         }
     }
     if let Some(a) = cx.sound.audio.as_ref() {
@@ -266,6 +266,7 @@ pub(super) fn audio(cx: AudioCx, dt: f32) {
     }
     if let (Some(a), Some(cam)) = (cx.sound.audio.as_ref(), cx.view.camera.as_ref()) {
         let (reverb_time, reverb_mix) = cx.world.world.as_ref().map(|w| w.reverb_at(cam.position)).unwrap_or((0.0, 0.0));
+        omsi_audio::soundset::set_master_volume(cx.common.settings.volume);
         a.set_listener(omsi_audio::Listener {
             position: cam.position.as_vec3(),
             forward: cam.forward(),
@@ -291,11 +292,20 @@ pub(super) fn audio(cx: AudioCx, dt: f32) {
         }
     }
     if let Some(a) = cx.sound.audio.as_ref() {
-        cx.sound.milezero.update(a, cx.common.settings.milezero, cx.common.settings.volume);
+        cx.sound.milezero.update(a, cx.common.settings.milezero);
+        if let Some(world) = cx.world.world.as_ref() {
+            if let Some(net) = world.trolley_net.lock().clone() {
+                cx.sound.switch_sound.update(a, &net, cx.view.cam.in_cab && cx.player.player.is_some(), *cx.clock.paused);
+            }
+        }
         match cx.player.player.as_mut() {
             Some(p) => {
                 let inside = cx.view.cam.in_cab;
-                p.trolley_sound.update(a, &mut p.vehicle, &[], *cx.clock.paused);
+                if let Some(g) = p.vehicle.trolley.as_deref_mut() {
+                    let net = g.net.clone();
+                    let at = p.vehicle.position.as_vec3();
+                    p.trolley_sound.update(a, &mut g.rig, net.as_deref(), p.sounds.as_ref(), &mut p.vehicle.host.fired_triggers, at, &[], inside, *cx.clock.paused);
+                }
                 cx.sound.radio.set_map(&cx.common.args.root, &cx.common.args.map);
                 cx.sound.radio.fx = cx.common.settings.radio_fx;
                 if let Some(m) = cx.sound.radio.update(a, &p.vehicle, inside) {

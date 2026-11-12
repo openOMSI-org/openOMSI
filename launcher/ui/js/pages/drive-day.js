@@ -1,7 +1,7 @@
 import { html, useState, useEffect } from '../../vendor/preact-htm.js';
 import { useStore } from '../store.js';
 import { t } from '../i18n.js';
-import { call } from '../api.js';
+import { call, onPhone } from '../api.js';
 import { Icon } from '../icons.js';
 import { Button, Field, Input, Select, Toggle, Segmented, Slider } from '../ui.js';
 import { choose, realTime, realDate, weatherName, weatherOfItsOwn } from '../data.js';
@@ -90,6 +90,7 @@ export function DayStep() {
       ? html`<div class="stack" style="gap:10px">
           <div class="muted small">${t('Set by {server}', { server: srv.name || c.lan_addr })}</div>
           <dl class="facts">
+            ${srv.date && html`<dt>${t('Date')}</dt><dd>${srv.date}</dd>`}
             <dt>${t('Time')}</dt><dd>${srv.time || '-'}</dd>
             <dt>${t('Weather')}</dt><dd>${srv.weather || t("the map's (the server's)")}</dd>
           </dl>
@@ -114,7 +115,7 @@ export function DayStep() {
           <${Segmented} full value=${c.season} options=${SEASONS} onChange=${(v) => setSeason(v, c.phase)} />
         </${Field}>
         ${c.season !== 'auto' && html`<${Segmented} full value=${c.phase} options=${PHASES} onChange=${(p) => setSeason(c.season, p)} />`}`}
-    <${Slider} label="Cars around" value=${c.traffic} min=${0} max=${120} step=${1} onChange=${(traffic) => choose({ traffic })} format=${(v) => (v ? String(Math.round(v)) : t('None'))} />
+    <${Slider} label="Cars around" value=${c.traffic} min=${0} max=${onPhone ? 120 : 300} step=${1} onChange=${(traffic) => choose({ traffic })} format=${(v) => (v ? String(Math.round(v)) : t('None'))} />
     <div class="toggles-2">
       ${[
         ['passengers', 'Passengers', 'People wait at the stops and ride along'],

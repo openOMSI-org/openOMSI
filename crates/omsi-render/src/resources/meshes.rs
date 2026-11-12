@@ -55,7 +55,7 @@ pub(crate) fn buffer_init(device: &wgpu::Device, queue: &wgpu::Queue, label: Opt
 
 /// Meshes are made for the ray tracer's acceleration structures as well (Enhanced+ on a
 /// device with ray queries: their buffers are its geometry input).
-pub(crate) static RT_BUFFERS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(crate) static RT_BUFFERS: crate::AdapterBool = crate::AdapterBool::new(7);
 
 /// Is `device` wgpu's no-op device (a dedicated server, which draws nothing)? Meshes take
 /// their place in the pages there, but their bytes are not written: that device keeps every
@@ -167,9 +167,20 @@ fn page_refused(real: bool, bytes: u64) -> bool {
     false
 }
 
+pub(crate) fn mesh_blas_usage(features: wgpu::Features) -> wgpu::BufferUsages {
+    if RT_BUFFERS.load(std::sync::atomic::Ordering::Relaxed)
+        && features.contains(wgpu::Features::EXPERIMENTAL_RAY_QUERY)
+    {
+        wgpu::BufferUsages::BLAS_INPUT | wgpu::BufferUsages::STORAGE
+    } else {
+        wgpu::BufferUsages::empty()
+    }
+}
+
 impl MeshPage {
     pub(crate) fn new(device: &wgpu::Device, vertex_bytes: u64, index_bytes: u64) -> Option<MeshPage> {
-        let blas = if RT_BUFFERS.load(std::sync::atomic::Ordering::Relaxed) { wgpu::BufferUsages::BLAS_INPUT | wgpu::BufferUsages::STORAGE } else { wgpu::BufferUsages::empty() };
+        // The device guards auxiliary uploads; the flag also honors runtime RT fallback.
+        let blas = mesh_blas_usage(device.features());
         let real = !no_device(device);
         let size = |bytes: u64| if page_refused(real, bytes) { device.limits().max_buffer_size + wgpu::COPY_BUFFER_ALIGNMENT } else if real { bytes.max(32) } else { 32 };
         let buffer = |bytes: u64, usage| try_create_buffer(device, &wgpu::BufferDescriptor { label: Some("mesh page"), size: size(bytes), usage: usage | wgpu::BufferUsages::COPY_DST | blas, mapped_at_creation: false });

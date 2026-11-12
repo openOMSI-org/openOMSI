@@ -181,3 +181,15 @@ pub(crate) struct SsaoUniform {
     pub(crate) reproj: [[f32; 4]; 4],
     pub(crate) history: [f32; 4],
 }
+
+/// Temporal upscaling's motion vectors: `Motion` in `temporal/motion.wgsl`.
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub(crate) struct MotionUniform {
+    pub(crate) vp: [[f32; 4]; 4],
+    pub(crate) vp_prev: [[f32; 4]; 4],
+    pub(crate) vp_prev_here: [[f32; 4]; 4],
+    pub(crate) vp_inv: [[f32; 4]; 4],
+    pub(crate) params: [f32; 4],
+    pub(crate) origin_delta: [f32; 4],
+}

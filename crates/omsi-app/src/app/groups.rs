@@ -8,6 +8,7 @@ pub(crate) struct SoundState {
     pub(crate) radio: radio::Radio,
     /// The MileZero card on the navigator (settings `milezero`).
     pub(crate) milezero: crate::milezero::Milezero,
+    pub(crate) switch_sound: omsi_audio::trolley::SwitchSound,
     pub(crate) audio: Option<omsi_audio::AudioEngine>,
     /// Sounds of the world around the camera (rain, footsteps).
     pub(crate) ambience: Option<ambience::Ambience>,
@@ -95,8 +96,11 @@ pub(crate) struct Integrations {
     /// The Lua plugins' panels and notifications on the screen (`omsi.ui`).
     pub(crate) plugin_panels: crate::plugin_ui::PluginPanels,
     /// Discord's "Playing openOMSI" status, and when it was last brought up to date.
+    #[cfg_attr(any(target_os = "android", target_os = "ios"), allow(dead_code))]
     pub(crate) discord: Option<crate::discord::Discord>,
+    #[cfg_attr(any(target_os = "android", target_os = "ios"), allow(dead_code))]
     pub(crate) discord_t: f32,
+    pub(crate) discord_max: crate::discord::ServerLimit,
     // Steamworks API layer and it's last updated time
     #[cfg(steam)]
     pub(crate) steam: Option<crate::steam::Steam>,
@@ -110,6 +114,7 @@ pub(crate) struct Integrations {
     pub(crate) vehicle_scripts_of: Option<std::path::PathBuf>,
     /// The scenery objects whose Lua scripts run (see `plugin_io::object`).
     pub(crate) object_scripts: crate::plugin_io::object::ObjectScripts,
+    pub(crate) remote: crate::remote::RemoteCockpit,
 }
 
 /// How the frames go and what is measured or scripted about them: the frame rate, the
@@ -225,8 +230,10 @@ pub(crate) struct GfxState {
     pub(crate) mirror_hud: crate::mirror_hud::MirrorHud,
     /// The window is minimised or out of sight, as its events last said.
     pub(crate) window_hidden: bool,
-    /// OMSI 2's route arrows over the road (the `nav_arrows` setting).
+    /// OMSI 2's route arrows over the road (the `nav_dynamic_arrows` setting).
     pub(crate) route_arrows: crate::route_arrows::RouteArrows,
+    /// The plugins' cables in the scene (`omsi.cable`).
+    pub(crate) plugin_cables: omsi_scene::plugin_cables::PluginCables,
     /// Frames the window was hidden for (they are not drawn).
     pub(crate) hidden_frames: u32,
     /// Stand-in for the window's frame while the window is hidden (OMSI_RENDER_OCCLUDED).
@@ -254,8 +261,10 @@ pub(crate) struct ViewState {
     /// The player's flashlight is on (Alt+F, `flashlight` in keyboard.cfg's `[game]`): a lamp
     /// held at the eye that shines where the view looks, in every view.
     pub(crate) flashlight: bool,
+    pub(crate) flashlight_aim: Option<glam::Vec3>,
     /// The camera is in the own bus's cab this frame (see RedrawRequested).
     pub(crate) in_cab: bool,
+    pub(crate) heard_inside: bool,
     /// How far the player has turned the head (driver, passenger) or swung the outside
     /// camera around the bus, and how far that camera sits from it.
     pub(crate) look: (f32, f32),
@@ -274,6 +283,7 @@ pub(crate) struct ViewState {
     /// The zoom of the views inside the bus (driver, passenger): their field of view is
     /// the camera's times this (the mouse wheel, + and -, a pinch), per view.
     pub(crate) view_zoom: std::collections::HashMap<String, f32>,
+    pub(crate) zoom_hold: crate::app_impl::ZoomHold,
     /// The zoom each camera of a view was left with (by `App::look_key`), put back when it
     /// is taken again: each of Omsi.exe's cameras keeps its own (#2183).
     pub(crate) cam_zooms: std::collections::HashMap<String, f32>,
@@ -318,6 +328,7 @@ pub(crate) struct InputState {
     pub(crate) pad_repeat: Vec<String>,
     /// A controller button held for the multiplayer bus radio (`voice_radio`).
     pub(crate) pad_voice_radio: bool,
+    pub(crate) pad_zoom_hold: bool,
     /// The same for the nearby talk key (`voice_nearby`).
     pub(crate) pad_voice_nearby: bool,
     /// The arrow keys turned the head (a glance that comes back when they are let go).
@@ -363,6 +374,7 @@ pub(crate) struct InputState {
     pub(crate) look_lock: Option<bool>,
     /// The cursor hidden while a controller drives: where it stood.
     pub(crate) cursor_hidden: Option<(f32, f32)>,
+    pub(crate) cursor_stale: bool,
     /// The wheel's place when it last counted as moved.
     pub(crate) last_ctl_steer: Option<f32>,
     /// The mouse's throttle and brake (eased in with the steering).
@@ -426,6 +438,8 @@ pub(crate) struct MenuState {
     /// The open settings window's page titles, kept for a moment (asked every frame, see
     /// `game_lists::page_titles`).
     pub(crate) page_titles: std::cell::RefCell<crate::game_lists::TitlesCache>,
+    /// Installed weather names, loaded once for online snapshots or local administration.
+    pub(crate) online_weather: std::cell::OnceCell<Vec<(String, String)>>,
     /// (manufacturer, type) of each vehicle of `vehicle_list`, by its path.
     pub(crate) vehicle_meta: std::collections::HashMap<String, (String, String)>,
     pub(crate) hud: Option<hud::Hud>,
@@ -463,11 +477,13 @@ pub(crate) struct MenuState {
     pub(crate) menu_edit_ident: bool,
     /// `menu_edit` is the search of the open list being typed (see `game_lists::searchable`).
     pub(crate) menu_edit_search: bool,
+    pub(crate) streets_seen: usize,
     /// The search the open list is filtered by (empty: none).
     pub(crate) menu_search: String,
     /// The vehicle being chosen in "Place a vehicle" takes the place of the one driven
     /// (the game menu's "Swap for another vehicle", #728).
     pub(crate) swap_pending: bool,
+    pub(crate) swapped_in: Option<u64>,
     /// The vehicle chosen being read on a worker thread (see `App::place_vehicle`).
     pub(crate) pending_placement: Option<crate::spawn::PendingPlacement>,
     /// The line of the open list whose slider the mouse button holds (it follows the cursor).
@@ -477,6 +493,7 @@ pub(crate) struct MenuState {
     pub(crate) menu_kbd: bool,
     /// The next click on the city map puts the bus there (Esc → Move the bus on the map).
     pub(crate) teleport_pick: bool,
+    pub(crate) map_place_from: Option<(glam::DVec2, [f32; 2])>,
     /// The game's own panels: the quick menu, the trip summary, the destination form, the
     /// view editor (`game_panels`).
     pub(crate) game_panels: crate::game_panels::GamePanels,
@@ -505,6 +522,7 @@ pub(crate) struct MenuState {
     /// air and cabin temperatures, the passengers aboard, the trip and its next stop along
     /// the top of the picture.
     pub(crate) info_bar: bool,
+    pub(crate) clean_screen: bool,
     /// OMSI's timetable window (`view_set_schedule`, Insert).
     pub(crate) timetable: bool,
     pub(crate) hud_resize: Option<(usize, f32, [f32; 2], f32)>,
@@ -574,6 +592,8 @@ pub(crate) struct SessionState {
     pub(crate) pumping: Option<Pumping>,
     /// The driver's personnel file and this session's statistics.
     pub(crate) career: career::Career,
+    pub(crate) depot_base: omsi_launcher_lib::depot::Outing,
+    pub(crate) depot_prev: Option<crate::depot_bus::DepotSwitch>,
     /// The duty's stops with their times as driven, kept in a file (`journey`).
     pub(crate) journey: Option<crate::journey::Journey>,
     /// How wet the roads are (0..1), built up by rain and dried by the sun.

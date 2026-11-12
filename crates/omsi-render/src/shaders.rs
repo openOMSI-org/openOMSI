@@ -129,14 +129,14 @@ mod tests {
     /// and the colour/mask-only headset entry point, and a self-lit blended layer's alpha giving
     /// Omsi.exe's encoded mix, and the vertex-lit Direct3D headlight excluding its own vehicle,
     /// and the traced sample read once for FXC, the road glare in its own uniform lane,
-    /// and the detail grain's octaves left out where faded, and the paint on a pane lit by the
-    /// lamps and the saloon at night.
+    /// and the detail grain's octaves left out where faded, and the instance's parameters
+    /// handed to the fragments flat (#1488), no lamp glint on a face seen from behind, no sun glint on a face seen from behind (#3359), an unswitched night map's gain capped (#3362), and the paint on a pane lit by the lamps and the saloon at night.
     /// (with Unix line ends: a Windows checkout may turn the parts' into CRLF, as it did the
     /// single files', and the 0.2.31 release's Windows test failed on that alone)
     #[test]
     fn assembled_shaders_are_the_old_files() {
         let (scene, enhanced) = (super::SCENE.replace("\r\n", "\n"), super::ENHANCED.replace("\r\n", "\n"));
-        assert_eq!((scene.len(), fnv1a(&scene)), (137753, 5786162142115336763));
-        assert_eq!((enhanced.len(), fnv1a(&enhanced)), (99_302, 12_957_070_121_798_661_400));
+        assert_eq!((scene.len(), fnv1a(&scene)), (141067, 16582456829263248557));
+        assert_eq!((enhanced.len(), fnv1a(&enhanced)), (99518, 16525452998159539451));
     }
 }

@@ -80,5 +80,32 @@ without one.
 Serve `launcher/` locally, then open `/tests/multiplayer-check.html` and press **Run multiplayer
 checks**. These checks render the real page with local command fixtures; they cover code
 validation, full and unavailable sessions, continuing while status is pending, stale queries,
-the server list, and host setup.
+the server list, code-only and address dialogs, cancellation restoring the duty, and host setup.
 They do not start a game, query a remote server, or change a real saved duty.
+
+## Sharing graphics profiles
+
+In **Settings → Graphics → Profiles**, **Export graphics profile** saves the selected
+profile as a JSON file. **Import graphics profile** adds a shared file to the saved list and
+selects it; press **Load** to apply it. Cancelling either file dialog leaves profiles and
+settings unchanged. Importing an existing name adds a numbered suffix instead of replacing it.
+These buttons use native file dialogs in the desktop launcher.
+
+The UTF-8 file uses the existing saved-profile format, for example:
+
+```json
+{"name": "Shared graphics", "graphics": {"graphics": "enhanced", "msaa": 4}}
+```
+
+Existing individual files from `~/.openomsi/graphics_profiles/` can also be imported.
+Files must not exceed 64 KiB and must contain a name and at least one supported graphics
+setting. Only the existing graphics-profile allowlist is shared; unknown keys, fullscreen,
+graphics API, paths and unrelated settings are ignored. Invalid known value types are rejected
+before the imported profile is saved.
+
+The interface regression check runs the real settings page against mocked desktop commands,
+without touching saved settings or opening native dialogs:
+
+```bash
+CHROME=/path/to/chrome node launcher/tests/graphics-profile-transfer-check.mjs
+```

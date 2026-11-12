@@ -96,7 +96,7 @@ function indexOf(data) {
     if (!next.has(a)) next.set(a, []);
     next.get(a).push([b, m]);
   }
-  const trips = new Map(data.trips.map((x) => [x.name.toLowerCase(), x]));
+  const trips = new Map(data.trips.map((x) => [x.name.trim().toLowerCase(), x]));
   return (data._ix = { names, calls, depots, next, trips });
 }
 
@@ -118,20 +118,22 @@ function suggestDeparture(tour) {
   return b.departure + Math.max(1, b.departure - a.departure);
 }
 
-async function read(map) {
-  up({ map, loaded: map, data: null, error: null, line: null, tour: 0, dirty: [], ver: {}, drafts: {}, armed: false, sel: -1, build: null, stop: null, preview: null, picker: false });
+const activeDate = () => S.choice?.date || S.boot?.now?.date || '';
+
+async function read(map, date = activeDate()) {
+  up({ map, date, loaded: `${map}|${date}`, data: null, error: null, line: null, tour: 0, dirty: [], ver: {}, drafts: {}, armed: false, sel: -1, build: null, stop: null, preview: null, picker: false });
   try {
-    const data = await call('timetable', { map });
-    if (tt().map === map) up({ data, line: data.lines[0]?.name ?? null });
+    const data = await call('timetable', { map, date });
+    if (tt().map === map && tt().date === date) up({ data, line: data.lines[0]?.name ?? null });
   } catch (e) {
-    if (tt().map === map) up({ error: e.message });
+    if (tt().map === map && tt().date === date) up({ error: e.message });
   }
 }
 
 /** The trips, stops and links as the files have them now, put under the lines being edited. */
 async function refreshTrips() {
-  const map = tt().map;
-  const fresh = await call('timetable', { map });
+  const { map, date = activeDate() } = tt();
+  const fresh = await call('timetable', { map, date });
   const s = tt();
   if (s.map !== map || !s.data) return;
   Object.assign(s.data, { trips: fresh.trips, stops: fresh.stops, links: fresh.links });
@@ -150,7 +152,7 @@ async function saveAll() {
   const sent = Object.fromEntries(lines.map((l) => [l.name, s.ver[l.name]]));
   up({ busy: true });
   try {
-    const r = await call('timetable_save', { map: s.map, lines: JSON.parse(JSON.stringify(lines)) });
+    const r = await call('timetable_save', { map: s.map, date: s.date ?? activeDate(), lines: JSON.parse(JSON.stringify(lines)) });
     const done = (n) => r.saved.includes(n) && tt().ver[n] === sent[n];
     for (const l of lines) if (done(l.name)) for (const x of l.tours) x.trips.sort((a, b) => a.departure - b.departure);
     const untouched = lines.every((l) => tt().ver[l.name] === sent[l.name]);
@@ -265,10 +267,10 @@ async function saveBuild(line, tour, addToTour) {
   const name = (b.named ? b.name : autoName(ix, b)).trim();
   if (!fileNameOk(name)) return toast(t('Type the trip\'s name (it becomes the file name, so no / \\ : * ? " < > |)'), 'error');
   if (b.stops.length < 2) return toast(t('A trip needs two stops at least.'), 'error');
-  if (ix.trips.has(name.toLowerCase())) return toast(t('A trip named {name} is there already', { name }), 'error');
+  if (ix.trips.has(name.trim().toLowerCase())) return toast(t('A trip named {name} is there already', { name }), 'error');
   up({ busy: true });
   try {
-    await call('timetable_trip_save', { map: s.map, trip: { name, line: b.line, terminus: b.to, stops: b.stops } });
+    await call('timetable_trip_save', { map: s.map, date: s.date ?? activeDate(), trip: { name, line: b.line, target_line: addToTour && line && tour ? line.name : null, terminus: b.to, stops: b.stops } });
     await refreshTrips();
     up({ build: null, busy: false });
     toast(t('Trip {name} saved', { name }), 'ok');
@@ -376,7 +378,7 @@ function TourTools({ s, line, tour }) {
 }
 
 function TripRow({ s, ix, x, i, line, tour }) {
-  const info = ix.trips.get(x.trip.toLowerCase());
+  const info = ix.trips.get(x.trip.trim().toLowerCase());
   const [from, to] = ends(ix, info);
   const draft = s.drafts[`${line.name}|${s.tour}|${i}`];
   const key = `${line.name}|${s.tour}|${i}`;
@@ -557,20 +559,22 @@ function SaveBar({ s, maps }) {
 export function TimetablePage() {
   const s = useStore();
   const maps = s.maps || [];
-  if (!s.tt) S.tt = { map: null, loaded: null, data: null, error: null, line: null, tour: 0, dirty: [], ver: {}, drafts: {}, offset: '20', until: '22:00', newLine: '', adding: false, armed: false, busy: false, sel: -1, build: null, stop: null, preview: null, picker: false, focus: null };
+  if (!s.tt) S.tt = { map: null, date: '', loaded: null, data: null, error: null, line: null, tour: 0, dirty: [], ver: {}, drafts: {}, offset: '20', until: '22:00', newLine: '', adding: false, armed: false, busy: false, sel: -1, build: null, stop: null, preview: null, picker: false, focus: null };
   const v = s.tt;
+  const date = activeDate();
   const want = v.map && (v.dirty.length || maps.some((m) => m.file === v.map)) ? v.map : maps.find((m) => m.file === s.choice?.map)?.file || maps[0]?.file;
+  const key = want ? `${want}|${date}` : null;
   useEffect(() => {
-    if (want && v.loaded !== want) read(want);
-  }, [want, v.loaded]);
+    if (key && v.loaded !== key && !v.dirty.length && !v.busy) read(want, date);
+  }, [key, v.loaded, v.dirty.length, v.busy]);
   // where the stops stand (the map's own answer, kept: the map shows the same one)
   const [pos, setPos] = useState(() => new Map());
   useEffect(() => {
     if (!v.map) return;
     let alive = true;
-    editorMap(v.map, '').then((d) => alive && setPos(new Map((d.busstops || []).map((b) => [b.id, b.at]))));
+    editorMap(v.map, v.date ?? date).then((d) => alive && setPos(new Map((d.busstops || []).map((b) => [b.id, b.at]))));
     return () => (alive = false);
-  }, [v.map]);
+  }, [v.map, v.date, date]);
   // Escape leaves what is being made
   useEffect(() => {
     const key = (e) => e.key === 'Escape' && !e.target.closest?.('input, textarea') && up({ build: null, stop: null, picker: false });
@@ -601,7 +605,7 @@ export function TimetablePage() {
       ${v.data && html`<${LinesPanel} s=${v} line=${line} />${line ? html`<${ToursPanel} s=${v} line=${line} />` : ''}`}
     </aside>
     <div class="tte-map">
-      ${v.map && html`<${RouteMap} map=${v.map} date="" trip=${route} height=${0} editor=${editor} />`}
+      ${v.map && html`<${RouteMap} map=${v.map} date=${v.date ?? date} trip=${route} height=${0} editor=${editor} />`}
       ${v.data && html`<${StopSearch} s=${v} ix=${ix} pos=${pos} line=${line} tour=${tour} />`}
       ${stopId != null && ix && !b && html`<${StopCard} s=${v} ix=${ix} id=${stopId} line=${line} tour=${tour} close=${() => up({ stop: null })} />`}
       <${SaveBar} s=${v} maps=${maps} />
