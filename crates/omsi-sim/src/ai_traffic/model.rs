@@ -573,6 +573,8 @@ pub fn personality(state: &mut AiState, seed: u64, heavy: bool, rowdy_factor: Op
     } else {
         (1.01 + 0.11 * rg(3)).clamp(0.7, 1.3)
     };
+    state.standstill_gap = 0.8 + 0.7 * ru(20);
+
 
     let r_bias = rowdy.map(|r| r.clamp(-1.5, 1.5)).unwrap_or(0.0);
 
