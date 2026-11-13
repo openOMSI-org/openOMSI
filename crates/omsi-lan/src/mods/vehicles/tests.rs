@@ -15,6 +15,21 @@ fn entry(path: &str, data: &[u8]) -> Entry {
 }
 
 #[test]
+fn an_unapproved_upload_cannot_be_downloaded_by_guessing_its_hash() {
+    let dir = temp("unapproved-blob");
+    let kept = Buses::default();
+    kept.open_in(&dir).unwrap();
+    let bus = b"[friendlyname]\nMaker\nModel\nDefault\n";
+    let entry = entry("Vehicles/Approved/model.bus", bus);
+    kept.put(&entry, bus).unwrap();
+    assert!(kept.blob(&entry.sha256).is_none(), "uploaded bytes without an approved manifest must not be served");
+    let list = VehicleManifest { bus: entry.path.clone(), entries: vec![entry.clone()] }.validated().unwrap();
+    kept.commit(list).unwrap();
+    assert_eq!(kept.blob(&entry.sha256).unwrap(), bus);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn private_vehicle_manifest_is_never_committed_or_reopened() {
     let dir = temp("private-policy");
     let kept = Buses::default();
