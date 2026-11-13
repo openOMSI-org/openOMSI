@@ -599,7 +599,7 @@ impl Navigator {
                     let here = self.street_here.clone().unwrap_or_default();
                     ui.text_in(&mut self.atlas, &self.fonts, &here, 12.0 * s, Weight::Medium, row2, Align::Left, pal.card_dim);
                 }
-                }
+            }
         }
         // --- the speed and its limit, bottom left over the card
         let (speed, unit) = units.speed(f.speed_kmh.abs());
