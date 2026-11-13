@@ -538,68 +538,68 @@ impl Navigator {
                 (if self.jam_cost >= 60.0 { format!("Traffic jam +{n:.0} min") } else { format!("Slow traffic +{n:.0} min") }, if self.jam_cost >= 60.0 { style::TRAFFIC[2] } else { style::TRAFFIC[1] })
             });
             match f.stops.first() {
-            Some(st) => {
-                let name = if f.stops.len() == 1 { format!("{} · {}", st.name.trim(), omsi_ui::tr(wd.last_stop)) } else { st.name.trim().to_string() };
-                let line_w = match f.line.as_deref().map(str::trim).filter(|l| !l.is_empty()) {
-                    Some(l) => {
-                        let px = 11.0 * s;
-                        let l = self.fonts.fit(l, px, Weight::Bold, 48.0 * s);
-                        let w = self.fonts.width(&l, px, Weight::Bold) + 10.0 * s;
-                        let r = Rect::new(row1.x, row1.y + 2.0 * s, w, 16.0 * s);
-                        ui.rounded(r, 4.0 * s, BUS);
-                        ui.text_in(&mut self.atlas, &self.fonts, &l, px, Weight::Bold, r, Align::Center, Color::WHITE);
-                        w + 7.0 * s
-                    }
-                    None => 0.0,
-                };
-                let name = self.fonts.fit(&name, 14.5 * s, Weight::Bold, row1.w - line_w);
-                let name_r = Rect::new(row1.x + line_w, row1.y, row1.w - line_w, row1.h);
-                let w = ui.text_in(&mut self.atlas, &self.fonts, &name, 14.5 * s, Weight::Bold, name_r, Align::Left, if st.closed.is_some() { pal.card_dim } else { pal.card_text });
-                if st.closed.is_some() {
-                    strike(ui, name_r.x, w, name_r, s, pal.card_dim);
-                }
-                let mut parts = Vec::new();
-                if let Some((_, d)) = self.next_dist {
-                    parts.push(units.distance(d));
-                    let secs = d / (self.speed_avg.max(5.0) as f64) + if self.jam_cost > 0.0 { self.jam_cost as f64 } else { 0.0 };
-                    parts.push(if secs < 60.0 { omsi_ui::tr("<1 min").into_owned() } else { format!("{:.0} {}", (secs / 60.0).round(), omsi_ui::tr("min")) });
-                }
-                parts.push(format!("{:02}:{:02}", (st.arrival / 3600.0) as i32 % 24, ((st.arrival % 3600.0) / 60.0) as i32));
-                let line2 = parts.join(" · ");
-                // (closed: the way round in place of the distance)
-                let closed = st.closed.as_deref().map(|via| if via.is_empty() { wd.closed.to_string() } else { format!("{} · {via}", omsi_ui::tr(wd.closed)) });
-                let (text, col) = match (&closed, &note, &jam_note) {
-                    (Some(t), _, _) => (t.clone(), WARN),
-                    (None, Some((t, c)), _) => (t.clone(), *c),
-                    (None, None, Some((t, c))) => (format!("{line2} · {}", omsi_ui::tr(t)), *c),
-                    _ => (line2, pal.card_dim),
-                };
-                let mut right = 0.0;
-                if let Some(d) = f.delay {
-                    let (txt, c) = if d > 59.0 {
-                        (format!("+{}:{:02}", (d / 60.0) as i32, (d % 60.0) as i32), style::TRAFFIC[2])
-                    } else if d < -59.0 {
-                        (format!("-{}:{:02}", (-d / 60.0) as i32, (-d % 60.0) as i32), style::TRAFFIC[0])
-                    } else {
-                        (wd.on_time.to_string(), Color::hex(0x2fa84f))
+                Some(st) => {
+                    let name = if f.stops.len() == 1 { format!("{} · {}", st.name.trim(), omsi_ui::tr(wd.last_stop)) } else { st.name.trim().to_string() };
+                    let line_w = match f.line.as_deref().map(str::trim).filter(|l| !l.is_empty()) {
+                        Some(l) => {
+                            let px = 11.0 * s;
+                            let l = self.fonts.fit(l, px, Weight::Bold, 48.0 * s);
+                            let w = self.fonts.width(&l, px, Weight::Bold) + 10.0 * s;
+                            let r = Rect::new(row1.x, row1.y + 2.0 * s, w, 16.0 * s);
+                            ui.rounded(r, 4.0 * s, BUS);
+                            ui.text_in(&mut self.atlas, &self.fonts, &l, px, Weight::Bold, r, Align::Center, Color::WHITE);
+                            w + 7.0 * s
+                        }
+                        None => 0.0,
                     };
-                    let px = 11.5 * s;
-                    let w = self.fonts.width(&txt, px, Weight::Bold) + 12.0 * s;
-                    let r = Rect::new(row2.right() - w, row2.y, w, 17.0 * s);
-                    ui.rounded(r, 8.5 * s, c.alpha(0.16));
-                    ui.text_in(&mut self.atlas, &self.fonts, &txt, px, Weight::Bold, r, Align::Center, c);
-                    right = w + 6.0 * s;
+                    let name = self.fonts.fit(&name, 14.5 * s, Weight::Bold, row1.w - line_w);
+                    let name_r = Rect::new(row1.x + line_w, row1.y, row1.w - line_w, row1.h);
+                    let w = ui.text_in(&mut self.atlas, &self.fonts, &name, 14.5 * s, Weight::Bold, name_r, Align::Left, if st.closed.is_some() { pal.card_dim } else { pal.card_text });
+                    if st.closed.is_some() {
+                        strike(ui, name_r.x, w, name_r, s, pal.card_dim);
+                    }
+                    let mut parts = Vec::new();
+                    if let Some((_, d)) = self.next_dist {
+                        parts.push(units.distance(d));
+                        let secs = d / (self.speed_avg.max(5.0) as f64) + if self.jam_cost > 0.0 { self.jam_cost as f64 } else { 0.0 };
+                        parts.push(if secs < 60.0 { omsi_ui::tr("<1 min").into_owned() } else { format!("{:.0} {}", (secs / 60.0).round(), omsi_ui::tr("min")) });
+                    }
+                    parts.push(format!("{:02}:{:02}", (st.arrival / 3600.0) as i32 % 24, ((st.arrival % 3600.0) / 60.0) as i32));
+                    let line2 = parts.join(" · ");
+                    // (closed: the way round in place of the distance)
+                    let closed = st.closed.as_deref().map(|via| if via.is_empty() { wd.closed.to_string() } else { format!("{} · {via}", omsi_ui::tr(wd.closed)) });
+                    let (text, col) = match (&closed, &note, &jam_note) {
+                        (Some(t), _, _) => (t.clone(), WARN),
+                        (None, Some((t, c)), _) => (t.clone(), *c),
+                        (None, None, Some((t, c))) => (format!("{line2} · {}", omsi_ui::tr(t)), *c),
+                        _ => (line2, pal.card_dim),
+                    };
+                    let mut right = 0.0;
+                    if let Some(d) = f.delay {
+                        let (txt, c) = if d > 59.0 {
+                            (format!("+{}:{:02}", (d / 60.0) as i32, (d % 60.0) as i32), style::TRAFFIC[2])
+                        } else if d < -59.0 {
+                            (format!("-{}:{:02}", (-d / 60.0) as i32, (-d % 60.0) as i32), style::TRAFFIC[0])
+                        } else {
+                            (wd.on_time.to_string(), Color::hex(0x2fa84f))
+                        };
+                        let px = 11.5 * s;
+                        let w = self.fonts.width(&txt, px, Weight::Bold) + 12.0 * s;
+                        let r = Rect::new(row2.right() - w, row2.y, w, 17.0 * s);
+                        ui.rounded(r, 8.5 * s, c.alpha(0.16));
+                        ui.text_in(&mut self.atlas, &self.fonts, &txt, px, Weight::Bold, r, Align::Center, c);
+                        right = w + 6.0 * s;
+                    }
+                    let text = self.fonts.fit(&text, 12.0 * s, Weight::Medium, row2.w - right);
+                    ui.text_in(&mut self.atlas, &self.fonts, &text, 12.0 * s, Weight::Medium, Rect::new(row2.x, row2.y, row2.w - right, row2.h), Align::Left, col);
                 }
-                let text = self.fonts.fit(&text, 12.0 * s, Weight::Medium, row2.w - right);
-                ui.text_in(&mut self.atlas, &self.fonts, &text, 12.0 * s, Weight::Medium, Rect::new(row2.x, row2.y, row2.w - right, row2.h), Align::Left, col);
-            }
-            None => {
-                let t = f.terminus.clone().filter(|t| !t.trim().is_empty()).unwrap_or_else(|| wd.no_duty.to_string());
-                ui.text_in(&mut self.atlas, &self.fonts, &t, 14.5 * s, Weight::Bold, row1, Align::Left, pal.card_text);
-                let here = self.street_here.clone().unwrap_or_default();
-                ui.text_in(&mut self.atlas, &self.fonts, &here, 12.0 * s, Weight::Medium, row2, Align::Left, pal.card_dim);
-            }
-            }
+                None => {
+                    let t = f.terminus.clone().filter(|t| !t.trim().is_empty()).unwrap_or_else(|| wd.no_duty.to_string());
+                    ui.text_in(&mut self.atlas, &self.fonts, &t, 14.5 * s, Weight::Bold, row1, Align::Left, pal.card_text);
+                    let here = self.street_here.clone().unwrap_or_default();
+                    ui.text_in(&mut self.atlas, &self.fonts, &here, 12.0 * s, Weight::Medium, row2, Align::Left, pal.card_dim);
+                }
+                }
         }
         // --- the speed and its limit, bottom left over the card
         let (speed, unit) = units.speed(f.speed_kmh.abs());
