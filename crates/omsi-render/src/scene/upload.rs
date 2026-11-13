@@ -496,11 +496,20 @@ pub(crate) fn draw_order_level(i: &Instance, slot: usize) -> f32 {
         return 0.0;
     }
     let max = crate::scene::overlay::MAX_LEVEL as u64;
-    match mode {
-        0 => level as f32,
+    let level = match mode {
+        0 => level,
         _ => {
             let h = 1 + (slot as u64 ^ i.draw_order).wrapping_mul(0x9e37_79b9_7f4a_7c15) % max;
-            (if mode == 1 { h } else { max + 1 - h }) as f32
+            (if mode == 1 { h } else { max + 1 - h }) as u8
         }
+    };
+    if mode != 0 {
+        return level as f32;
     }
+    let Some(cap) = i.slot_depth_caps.get(slot).copied().filter(|cap| cap.is_finite()) else {
+        return level as f32;
+    };
+    // Pack the cap into exactly representable float metadata.
+    let micrometres = (cap * 1_000_000.0).round().clamp(0.0, 1023.0) as u32;
+    (4096 | (micrometres << 2) | level as u32) as f32
 }

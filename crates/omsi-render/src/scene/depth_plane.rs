@@ -5,8 +5,7 @@ use glam::{DVec3, Mat4, Vec2, Vec2Swizzles, Vec3};
 pub(crate) const NO_PLANE: [f32; 2] = [2.0, 2.0];
 const PLANE_GAP: f64 = 5e-5;
 
-/// Encode the inverse-transpose transformed normal in two unused affine row entries.
-/// Degenerate transforms and nonplanar slots keep the existing shading-normal fallback.
+/// Encode a transformed depth normal; invalid values use the shading-normal fallback.
 pub(crate) fn encode(normal_matrix: Mat4, normal: Vec3) -> [f32; 2] {
     let Some(n) = normal_matrix.transform_vector3(normal).try_normalize() else {
         return NO_PLANE;
@@ -27,9 +26,7 @@ pub(crate) fn encode(normal_matrix: Mat4, normal: Vec3) -> [f32; 2] {
     p.to_array()
 }
 
-/// Use each slot's largest triangle as its candidate plane, then check every referenced
-/// vertex, including small faces omitted from the coplanar ordering's bounded summary.
-/// Double precision avoids losing micrometre offsets in meshes far from their local origin.
+/// Choose each slot's largest triangle plane and reject nonplanar slots.
 pub(crate) fn normals(data: &MeshData) -> Vec<Vec3> {
     let slots = data
         .ranges

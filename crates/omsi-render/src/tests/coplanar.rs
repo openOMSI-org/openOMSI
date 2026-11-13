@@ -253,10 +253,7 @@ fn a_blended_print_behind_a_pane_added_first_stays_over_its_base() {
     }
 }
 
-/// A label a fraction of a millimetre in front of a glass three steps up - a windscreen's
-/// fleet number and its prints on the pane, each its own subset, the pane's own patches piling
-/// steps on each other (#2790) - stays seen at every distance: a stack of steps takes no more
-/// than the surface in front of it, so its lift cannot carry it past that surface.
+/// A label 0.2 mm ahead of a three-step glass surface remains visible at distance.
 #[test]
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn a_label_a_fraction_of_a_millimetre_in_front_of_a_stack_of_steps_stays_seen() {
@@ -284,21 +281,23 @@ fn a_label_a_fraction_of_a_millimetre_in_front_of_a_stack_of_steps_stays_seen() 
     renderer.add_instance(&mut scene, glass, DVec3::ZERO, Mat4::IDENTITY, vec![blue, blue, blue, red]);
     let lighting = Lighting { shadows: false, fog_density: 0.0, ..Default::default() };
     for d in [2.0, 7.0, 15.0, 30.0] {
-        for pitch in [-90.0f64, -45.0] {
+        for (pitch, label_side) in [(-90.0f64, true), (-45.0, true), (45.0, false), (90.0, false)] {
             let (s, c) = pitch.to_radians().sin_cos();
             let camera = Camera { position: DVec3::new(0.0, -d * c, -d * s), yaw: 0.0, pitch: pitch as f32, roll: 0.0, fov_deg: 60.0, near: 0.1, far: 3000.0 };
             scene.dirty = true;
             let rgba = renderer.render_to_image(&mut scene, 256, 256, &camera, &lighting).unwrap();
             let green = rgba.chunks(4).filter(|p| p[1] > 150 && p[0] < 60 && p[2] < 60).count();
             let red = rgba.chunks(4).filter(|p| p[0] > 150 && p[1] < 60 && p[2] < 60).count();
-            assert!(green * 4 > red, "at {d} m, pitch {pitch}: {green} pixels of the label, {red} of the glass");
+            if label_side {
+                assert!(green * 4 > red, "at {d} m, pitch {pitch}: {green} pixels of the label, {red} of the glass");
+            } else {
+                assert!(red * 4 > green, "at {d} m, pitch {pitch}: {red} pixels of the glass, {green} of the label");
+            }
         }
     }
 }
 
-/// A broad print can touch a nearby patch after covering a stack that already has
-/// the maximum depth step. Capping it below that stack exposed the old surface
-/// at the close distances of an instrument panel.
+/// A nearby patch must not expose the base under a broad print.
 #[test]
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn a_print_covering_a_deep_stack_and_a_nearby_patch_hides_its_base() {
