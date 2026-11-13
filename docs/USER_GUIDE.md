@@ -971,6 +971,20 @@ machine from automatically uploading or serving **any** vehicle content.
 This switch is off by default and does not prevent use of installed vehicles.
 The server-wide `accept_uploads = 0` separately stops receiving players' buses.
 
+For stricter protection without turning off multiplayer, use
+`OMSI_LAN_REQUIRE_TRANSFER_OPT_IN=1`: only `.bus`/`.ovh` vehicles
+containing the explicit `allow_file_transfer 1` declaration may be shared.
+This stricter policy is **opt-in**, so existing unmarked public vehicles still
+share by default when it is not enabled.
+
+A mod author can also put an empty `.openomsi-no-share` marker file inside
+an on-disk folder of private textures, fonts, scripts or sounds. That directory
+and everything beneath it will be excluded from automatic outgoing
+transfers, even when referenced by an otherwise shareable vehicle.
+For private resources inside archives, keep them outside shared packages.
+These policies do not undo downloads already made and cannot stop
+modified clients that deliberately ignore them.
+
 Bus files authorized for sharing are offered as needed, and can include their
 model, selected livery, scripts and referenced assets. Map redistribution is
 not implicit in that vehicle workflow.
