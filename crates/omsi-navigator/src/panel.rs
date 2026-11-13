@@ -514,31 +514,30 @@ impl Navigator {
             ui.text(&mut self.atlas, &self.fonts, day, 11.0 * s, Weight::Medium, Vec2::new(b.right() - 10.0 * s - self.fonts.width(&time_text, 14.0 * s, Weight::Bold) - 5.0 * s, base), Align::Right, pal.card_dim);
             ui.text(&mut self.atlas, &self.fonts, &temp, 11.0 * s, Weight::Medium, Vec2::new(b.right() - 10.0 * s, b.y + 33.0 * s), Align::Right, pal.card_dim);
         }
-        if self.destination.is_some() {
-            self.draw_destination_card(ui, net, map, s, pal);
-            return;
-        }
-        // --- bottom: the next stop
         let bottom_h = 52.0 * s;
         let card = Rect::new(map.x + pad, map.bottom() - pad - bottom_h, map.w - 2.0 * pad, bottom_h);
-        ui.shadow(card, 14.0 * s, 8.0 * s, Color::rgba(0, 0, 0, 0.16));
-        ui.rounded(card, 14.0 * s, pal.card);
-        let inner = card.pad(12.0 * s, 0.0);
-        let row1 = Rect::new(inner.x, card.y + 7.0 * s, inner.w, 20.0 * s);
-        let row2 = Rect::new(inner.x, card.y + 28.0 * s, inner.w, 18.0 * s);
-        let row1 = stop_request_icon(ui, &mut self.atlas, f.stop_requested, row1, s * 0.8);
-        let note = if self.route.note > 0.0 {
-            Some((wd.recalculated.to_string(), ON_TIME))
-        } else if self.route.joined && !self.route.lanes.is_empty() && !self.route.on_route && self.route.off_for > OFF_ROUTE_AFTER {
-            Some(((if self.route.off_for < OFF_ROUTE_AFTER + 20.0 { wd.rerouting } else { wd.off_route }).to_string(), WARN))
+        if self.destination.is_some() {
+            self.draw_destination_card(ui, net, map, s, pal);
         } else {
-            None
-        };
-        let jam_note = (self.jam_cost >= 30.0).then(|| {
-            let n = (self.jam_cost / 60.0).max(1.0).round();
-            (if self.jam_cost >= 60.0 { format!("Traffic jam +{n:.0} min") } else { format!("Slow traffic +{n:.0} min") }, if self.jam_cost >= 60.0 { style::TRAFFIC[2] } else { style::TRAFFIC[1] })
-        });
-        match f.stops.first() {
+            // --- bottom: the next stop
+            ui.shadow(card, 14.0 * s, 8.0 * s, Color::rgba(0, 0, 0, 0.16));
+            ui.rounded(card, 14.0 * s, pal.card);
+            let inner = card.pad(12.0 * s, 0.0);
+            let row1 = Rect::new(inner.x, card.y + 7.0 * s, inner.w, 20.0 * s);
+            let row2 = Rect::new(inner.x, card.y + 28.0 * s, inner.w, 18.0 * s);
+            let row1 = stop_request_icon(ui, &mut self.atlas, f.stop_requested, row1, s * 0.8);
+            let note = if self.route.note > 0.0 {
+                Some((wd.recalculated.to_string(), ON_TIME))
+            } else if self.route.joined && !self.route.lanes.is_empty() && !self.route.on_route && self.route.off_for > OFF_ROUTE_AFTER {
+                Some(((if self.route.off_for < OFF_ROUTE_AFTER + 20.0 { wd.rerouting } else { wd.off_route }).to_string(), WARN))
+            } else {
+                None
+            };
+            let jam_note = (self.jam_cost >= 30.0).then(|| {
+                let n = (self.jam_cost / 60.0).max(1.0).round();
+                (if self.jam_cost >= 60.0 { format!("Traffic jam +{n:.0} min") } else { format!("Slow traffic +{n:.0} min") }, if self.jam_cost >= 60.0 { style::TRAFFIC[2] } else { style::TRAFFIC[1] })
+            });
+            match f.stops.first() {
             Some(st) => {
                 let name = if f.stops.len() == 1 { format!("{} · {}", st.name.trim(), omsi_ui::tr(wd.last_stop)) } else { st.name.trim().to_string() };
                 let line_w = match f.line.as_deref().map(str::trim).filter(|l| !l.is_empty()) {
@@ -599,6 +598,7 @@ impl Navigator {
                 ui.text_in(&mut self.atlas, &self.fonts, &t, 14.5 * s, Weight::Bold, row1, Align::Left, pal.card_text);
                 let here = self.street_here.clone().unwrap_or_default();
                 ui.text_in(&mut self.atlas, &self.fonts, &here, 12.0 * s, Weight::Medium, row2, Align::Left, pal.card_dim);
+            }
             }
         }
         // --- the speed and its limit, bottom left over the card
@@ -703,5 +703,77 @@ pub(super) fn car_dot(p: &mut Painter, at: Vec3, light: bool) {
     let (edge, fill) = if light { (Color::rgba(255, 255, 255, 0.95), Color::hex(0x5b6b84)) } else { (Color::rgba(14, 16, 20, 0.9), Color::hex(0x9fb0c8)) };
     p.world_disc(at, 1.9, 4.2, edge);
     p.world_disc(at, 1.35, 3.0, fill);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use omsi_sim::traffic::LaneBuilder;
+
+    #[test]
+    fn destination_card_keeps_speed_limit_indicator_data() {
+        let mut nav = Navigator::new(true, 0.85, "bottom-left");
+        nav.set_destination(DVec2::new(0.0, 50.0), None);
+
+        let mut net = Network {
+            lanes: vec![LaneBuilder::polyline(
+                vec![DVec3::new(0.0, 0.0, 0.0), DVec3::new(0.0, 100.0, 0.0)],
+                LaneKind::Street,
+                3.0,
+            )],
+            ..Default::default()
+        };
+        net.lanes[0].speed_limit_kmh = 50.0;
+        net.build_grid();
+
+        let f = NavFrame {
+            traffic: None,
+            touch: false,
+            players: Vec::new(),
+            bus: DVec3::new(0.0, 10.0, 0.0),
+            heading: 0.0,
+            speed_kmh: 30.0,
+            outside_temp: 20.0,
+            inside_temp: 22.0,
+            line: None,
+            terminus: None,
+            stops: Vec::new(),
+            delay: None,
+            passengers: None,
+            stop_requested: false,
+            time: 0.0,
+            weekday: 0,
+            date: 20261113,
+            language: "en",
+            screen: (1280.0, 720.0),
+            ui_scale: 1.0,
+            follow_window: false,
+            dt: 1.0 / 60.0,
+            info_rect: None,
+            touch_gap: None,
+        };
+        let words = Words {
+            days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+            off_route: "Off route",
+            rerouting: "Recalculating route",
+            recalculated: "Route recalculated",
+            no_duty: "Free drive",
+            last_stop: "Final stop",
+            on_time: "on time",
+            closed: "Closed",
+        };
+
+        nav.draw_cards(
+            &mut Painter::new(),
+            &f,
+            &words,
+            Some(&net),
+            Rect::new(0.0, 0.0, 360.0, 240.0),
+            1.0,
+            &style::palette(true),
+        );
+
+        assert_eq!(nav.speed_limit, Some(50.0));
+    }
 }
 
