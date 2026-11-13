@@ -732,9 +732,7 @@ impl Renderer {
         }
         // (the shadow casters' entries after the passes' own: the main pass's batches keep
         // their places in the list while only the shadows change, and its bundles are kept)
-        // A plan suppresses the ordinary environment reflection on its panes.  Only publish
-        // the pane planes when the capture pass has every target it needs; otherwise the
-        // regular glass path must remain visible for this frame.
+        // Publish pane planes only when the capture pass can run.
         let cabin_ready = self.puddles.is_some() && self.targets.ao.is_some();
         let cabin = cabin_ready.then(|| self.cabin_reflections.as_mut().and_then(|p| p.plan(scene, &f, &visible, &mut plan.list))).flatten();
         let at = plan.list.len() as u32;

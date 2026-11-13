@@ -5,6 +5,7 @@ struct CabinReflection {
 @group(3) @binding(1) var t_cabin_reflection: texture_2d_array<f32>;
 @group(3) @binding(2) var s_cabin_reflection: sampler;
 @group(3) @binding(3) var<uniform> cabin_reflection: CabinReflection;
+@group(3) @binding(4) var t_scene_depth: texture_depth_2d;
 
 fn cabin_plane_error(world: vec3<f32>, normal: vec3<f32>, plane: vec4<f32>) -> f32 {
     return abs(dot(plane.xyz, world) - plane.w) + 4.0 * (1.0 - abs(dot(normal, plane.xyz)));
@@ -28,6 +29,8 @@ fn fs_cabin_reflection(in: FsIn) -> @location(0) vec4<f32> {
     let n = safe_normal(in.normal);
     let best = cabin_plane_index(in.world, n);
     if (best < 0) { discard; }
+    let pixel = vec2<i32>(clamp(in.clip.xy, vec2(0.0), cabin_reflection.screen.xy - vec2(1.0)));
+    if (textureLoad(t_scene_depth, pixel, 0) > in.clip.z + max(abs(in.clip.z) * 1e-6, 1e-8)) { discard; }
     let uv = tex_address(in.uv);
     var coverage = diffuse_border(textureSample(t_diffuse, s_diffuse, uv), uv).a;
     if (material.params.z > 0.5) {

@@ -150,7 +150,10 @@ fn reflection_case(msaa: u32, ray_tracing: bool) {
     }
     let mut disabled_lighting = lighting.clone();
     disabled_lighting.reflection_strength = 0.0;
+    let depth_on = renderer.read_texture(&renderer.targets.ao.as_ref().unwrap().depth_tex, wgpu::TextureAspect::DepthOnly).unwrap();
     let disabled = picture(&mut renderer, &mut scene, &camera, &disabled_lighting);
+    let depth_off = renderer.read_texture(&renderer.targets.ao.as_ref().unwrap().depth_tex, wgpu::TextureAspect::DepthOnly).unwrap();
+    assert_eq!(depth_on, depth_off, "cabin composition must preserve scene depth for rain, puddles and temporal masks");
     assert!(pixel(&disabled, 54, 70)[0] <= pixel(&off, 54, 70)[0] + 2, "the existing reflection control disables the cabin capture too");
     // Turning a pane off with an ordinary script must still hide its reflection.
     scene.materials[glass].uniform.glow[2] = 0.0;

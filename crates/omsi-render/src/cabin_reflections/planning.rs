@@ -27,15 +27,14 @@ fn parameters(scene: &Scene, members: &[usize]) -> u64 {
 
 impl Pipelines {
     pub(crate) fn plan(&mut self, scene: &Scene, f: &FrameCtx, visible: &[(usize, f32, bool)], list: &mut Vec<u32>) -> Option<Plan> {
-        // XR renders each eye independently; keep cabin reflections off until their
-        // captures can be cached per eye instead of rebuilding every eye and pane.
+        // XR stays off until cabin captures are cached per eye.
         if !f.enhanced || f.lighting.reflection_strength <= 0.0 || !f.prepass_on || !f.with_overlays || f.xr_view
             || !f.lighting.inside.as_ref().is_some_and(|own| point_in_vehicle_box(f.camera.position, own)) {
             if f.with_overlays || f.xr_view { self.planned = None; }
             return None;
         }
         let resources = [scene.serial, scene.model_epoch, f.width as u64, f.height as u64];
-        let keep = !f.xr_view && self.planned.as_ref().is_some_and(|c| c.built.elapsed().as_secs_f32() < 1.0 / 30.0
+        let keep = self.planned.as_ref().is_some_and(|c| c.built.elapsed().as_secs_f32() < 1.0 / 30.0
             && c.resources == resources && c.params == parameters(scene, &c.plan.members));
         if !keep {
             let mut entries = Vec::new();
