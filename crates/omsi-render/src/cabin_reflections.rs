@@ -182,6 +182,7 @@ impl Pipelines {
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("cabin reflection picture"),
             entries: &[
+                wgpu::BindGroupLayoutEntry { binding: 5, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering), count: None },
                 wgpu::BindGroupLayoutEntry { binding: 4, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Depth, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }, count: None },
                 wgpu::BindGroupLayoutEntry { binding: 1, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2Array, multisampled: false }, count: None },
                 wgpu::BindGroupLayoutEntry { binding: 2, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), count: None },
@@ -217,7 +218,8 @@ impl Pipelines {
             let plane_bg = device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("cabin mirror plane"), layout: plane_layout, entries: &[wgpu::BindGroupEntry { binding: 0, resource: plane.as_entire_binding() }] });
             let params = buffer(std::mem::size_of::<Uniform>() as u64);
             let sampler = device.create_sampler(&wgpu::SamplerDescriptor { mag_filter: wgpu::FilterMode::Linear, min_filter: wgpu::FilterMode::Linear, ..Default::default() });
-            let picture_bg = device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("cabin picture"), layout: &self.layout, entries: &[wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&array) }, wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&sampler) }, wgpu::BindGroupEntry { binding: 3, resource: params.as_entire_binding() }, wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(scene_depth) }] });
+            let depth_sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
+            let picture_bg = device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("cabin picture"), layout: &self.layout, entries: &[wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&array) }, wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&sampler) }, wgpu::BindGroupEntry { binding: 3, resource: params.as_entire_binding() }, wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(scene_depth) }, wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::Sampler(&depth_sampler) }] });
             self.captures.push(Capture { array, color, depth, plane, plane_bg, params, picture_bg, recorded: None, refreshed: None });
         }
         let planes = camera_planes(Some(plan));
