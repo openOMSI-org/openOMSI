@@ -273,7 +273,7 @@ impl Navigator {
         let vpm = map_layer.view_proj;
 
         // --- the route (buffers 1 and 9): rebuilt for route changes or three metres of progress
-        let mut route_verts: Option<std::sync::Arc<[omsi_ui::paint::Vertex]>> = None;
+        let mut route_verts: Option<(usize, u64, std::sync::Arc<[omsi_ui::paint::Vertex]>)> = None;
         let mut route_count = 0;
         let history = look.show_history && self.destination.is_none();
         let history_slot = usize::from(history);
@@ -304,15 +304,19 @@ impl Navigator {
                 self.draw_waypoint_routes(&mut p, rn, anchor, &style, &pal);
                 let count = p.len();
                 self.route_mesh_history[history_slot] = Some((key, p.verts.into(), count));
+                self.route_mesh_generation[history_slot] = self.route_mesh_generation[history_slot].wrapping_add(1);
             }
             if let Some((_, verts, count)) = &self.route_mesh_history[history_slot] {
-                route_verts = Some(verts.clone());
                 route_count = *count;
+                let generation = self.route_mesh_generation[history_slot];
+                if self.route_mesh_uploaded != Some((history_slot, generation)) {
+                    route_verts = Some((history_slot, generation, verts.clone()));
+                }
             }
         } else if self.route_mesh_history.iter().any(Option::is_some) {
-            route_verts = Some(std::sync::Arc::from([]));
-            self.route_mesh = (self.route.version, self.jam_version, anchor, 0, 0, look_key, 0.0);
+            route_verts = self.route_mesh_uploaded.map(|_| (usize::MAX, 0, std::sync::Arc::from([])));
             self.route_mesh_history = [None, None];
+            self.route_mesh_uploaded = None;
         }
 
         // --- the land colour under everything, the traffic, the vehicles
@@ -399,10 +403,11 @@ impl Navigator {
         if let Some(b) = built {
             b.put(gpu, device, queue, [0, 12, 8, 13]);
         }
-        if let Some(v) = route_verts {
+        if let Some((slot, generation, v)) = route_verts {
             let (solid, ghost) = solid_and_ghost(&v, 0.3);
             gpu.upload(device, queue, 1, &solid);
             gpu.upload(device, queue, 9, &ghost);
+            self.route_mesh_uploaded = (slot != usize::MAX).then_some((slot, generation));
         }
         let mut all = bg.verts;
         let n_dy = dy_solid.len() as u32;
