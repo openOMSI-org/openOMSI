@@ -68,6 +68,8 @@ pub struct TrolleyGear {
     /// the values of the step (kept to be written again, no allocation).
     var_ids: Vec<omsi_script::VarId>,
     var_values: Vec<f32>,
+    /// Physical overhead crossings still beneath either pole shoe.
+    active_crossings: Vec<(u32, u32)>,
 }
 
 struct Names {
@@ -82,6 +84,8 @@ struct Names {
 pub const ROPE_RATE: f64 = 0.0025;
 /// The most poles whose ropes a script can hold.
 const MAX_ROPES: usize = 8;
+
+const CROSSING_CLEAR_RADIUS: f64 = 4.0;
 
 impl TrolleyGear {
     pub fn for_type(def: &TrolleyDef, seed: u64) -> Option<Box<TrolleyGear>> {
@@ -141,6 +145,7 @@ impl TrolleyGear {
             last_dir: 1.0,
             var_ids: Vec::new(),
             var_values: Vec::new(),
+            active_crossings: Vec::new(),
         }))
     }
 
@@ -160,6 +165,24 @@ impl TrolleyGear {
         self.grab_cursor = Some(cursor);
         self.grab_fresh = true;
         true
+    }
+
+    fn prune_crossings(&mut self, net: Option<&WireNet>) {
+        if self.active_crossings.is_empty() {
+            return;
+        }
+        // no wire network (the bus left the map's wires): nothing can still be crossed
+        let Some(net) = net else {
+            self.active_crossings.clear();
+            return;
+        };
+        let poles = &self.rig.poles;
+        self.active_crossings.retain(|&(a, b)| {
+            net.crossings
+                .iter()
+                .filter(|c| (c.a == a && c.b == b) || (c.a == b && c.b == a))
+                .any(|c| poles.iter().any(|p| (p.tip - c.pos).length() <= CROSSING_CLEAR_RADIUS))
+        });
     }
 }
 
@@ -515,6 +538,7 @@ impl VehicleInstance {
         // them (the triggers are fired below, where the gear is no longer borrowed)
         let frogs: Vec<(usize, u32)> = g.rig.frogs_crossed().collect();
         let crossings: Vec<(usize, u32)> = g.rig.crossings_crossed().collect();
+        g.prune_crossings(net.as_deref());
         // the pole variables a model animates by (written by slot once they have been made: a
         // physics step of a trolleybus looked up some twenty names by their text before)
         const GLOBAL: [&str; 7] = ["Trolley_Volts", "Trolley_Amps", "Trolley_Powered", "Trolley_Notch", "Trolley_Arc", "Trolley_Hiss", "Trolley_Battery"];
@@ -583,6 +607,23 @@ impl VehicleInstance {
             }
         }
 
+        // Keep a span pair active while either shoe is still near any of its physical
+        // intersections. The rig can report the same intersection over adjacent steps while
+        // a shoe settles on the crossing; only a later approach after both shoes leave is new.
+        let fresh_pairs: Vec<(u32, u32)> = if let (Some(g), Some(net)) = (self.trolley.as_mut(), net) {
+            let mut fresh = Vec::new();
+            for &(_, id) in crossings {
+                let Some(c) = net.crossings.get(id as usize) else { continue };
+                let pair = if c.a < c.b { (c.a, c.b) } else { (c.b, c.a) };
+                if !g.active_crossings.contains(&pair) {
+                    g.active_crossings.push(pair);
+                    fresh.push(pair);
+                }
+            }
+            fresh
+        } else {
+            Vec::new()
+        };
         let mut seen_crossings: Vec<(usize, u32)> = Vec::new();
         let mut conductors: Vec<u32> = Vec::new();
         let mut physical: Vec<(u32, u32)> = Vec::new();
@@ -604,7 +645,7 @@ impl VehicleInstance {
             } else {
                 (crossing.b, crossing.a)
             };
-            if physical.contains(&pair) {
+            if physical.contains(&pair) || !fresh_pairs.contains(&pair) {
                 continue;
             }
             physical.push(pair);
@@ -633,14 +674,18 @@ mod tests {
     #[test]
     fn physical_crossing_trigger_fires_once_for_all_conductor_intersections() {
         let mut vehicle = crate::timetable_run::tests::script_test_vehicle(
-            "{trigger:Trolley_Pole1_Joint}\n{end}\n{trigger:Trolley_Pole2_Joint}\n{end}\n{trigger:Trolley_Joint}\n{end}\n{trigger:Trolley_Crossing}\n{end}\n",
-            "",
+            "{trigger:Trolley_Pole1_Joint}\n(L.L.pole1_count) 1 + (S.L.pole1_count)\n{end}\n{trigger:Trolley_Pole2_Joint}\n(L.L.pole2_count) 1 + (S.L.pole2_count)\n{end}\n{trigger:Trolley_Joint}\n(L.L.joint_count) 1 + (S.L.joint_count)\n{end}\n{trigger:Trolley_Crossing}\n(L.L.crossing_count) 1 + (S.L.crossing_count)\n{end}\n",
+            "crossing_count\npole1_count\npole2_count\njoint_count\n",
             "",
         );
         let net = WireNet::parse(
             "[trolley_span]\np -20 0 5.5\np 20 0 5.5\n[trolley_span]\np 0 -20 5.5\np 0 20 5.5\n",
         );
         assert_eq!(net.crossings.len(), 4);
+        let def = TrolleyDef { poles: vec![omsi_trolley::PoleDef::default(); 2], ..Default::default() };
+        let mut gear = TrolleyGear::for_type(&def, 1).unwrap();
+        for pole in &mut gear.rig.poles { pole.tip = net.crossings[0].pos; }
+        vehicle.trolley = Some(gear);
         let mut events: Vec<(usize, u32)> = net
             .crossings
             .iter()
@@ -650,12 +695,25 @@ mod tests {
         events.push((0, 0));
 
         vehicle.fire_wire_triggers(&[], &events, Some(&net));
+        assert_eq!(vehicle.var("joint_count"), Some(4.0));
+        assert_eq!(vehicle.var("pole1_count"), Some(4.0));
+        assert_eq!(vehicle.var("pole2_count"), Some(4.0));
+        vehicle.fire_wire_triggers(&[], &[(0, 0)], Some(&net));
 
-        let fired = &vehicle.host.fired_triggers;
-        assert_eq!(fired.iter().filter(|name| *name == "Trolley_Crossing").count(), 1);
-        assert_eq!(fired.iter().filter(|name| *name == "Trolley_Joint").count(), 4);
-        assert_eq!(fired.iter().filter(|name| *name == "Trolley_Pole1_Joint").count(), 4);
-        assert_eq!(fired.iter().filter(|name| *name == "Trolley_Pole2_Joint").count(), 4);
+        assert_eq!(vehicle.var("crossing_count"), Some(1.0));
+
+        // both shoes drive away; a step with no events prunes the pair
+        let far = net.crossings[0].pos + glam::DVec3::new(50.0, 0.0, 0.0);
+        let g = vehicle.trolley.as_mut().unwrap();
+        for pole in &mut g.rig.poles { pole.tip = far; }
+        g.prune_crossings(Some(&net));
+        assert!(g.active_crossings.is_empty());
+
+        // one shoe returns: it is a new approach
+        let g = vehicle.trolley.as_mut().unwrap();
+        g.rig.poles[0].tip = net.crossings[0].pos;
+        vehicle.fire_wire_triggers(&[], &[(0, 0)], Some(&net));
+        assert_eq!(vehicle.var("crossing_count"), Some(2.0));
     }
 }
 

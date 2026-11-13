@@ -119,8 +119,8 @@ the constants are in the vehicle's file, not in the game.
   triggers `Trolley_Pole<k>_Joint` (that pole's own) and `Trolley_Joint` (a crossing,
   whichever pole). Each conductor intersection fires both triggers once. At a perpendicular
   crossing, each of the two conductors on one span crosses both conductors on the other span,
-  resulting in four conductor intersections. Consequently, `Trolley_Joint` and
-  the corresponding pole-specific trigger each fire **four times** for one physical crossing.
+  resulting in four conductor intersections. Consequently, `Trolley_Joint` fires **four times** and
+  the corresponding pole-specific trigger each fire **two times** for one physical crossing.
   `Trolley_Crossing` fires once for that physical crossing, regardless of which pole crosses it;
   use it when the script should react once instead of once per conductor intersection.
   Either side can trigger independently; polarity is not required. A wire that passes above
