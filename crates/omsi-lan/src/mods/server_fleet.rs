@@ -26,7 +26,18 @@ pub(super) fn cached(cache: &Cache, key: String, build: impl FnOnce() -> Result<
             entry
         }
     };
-    entry.get_or_init(|| build().map(Arc::new)).clone()
+    let package = entry.get_or_init(|| build().map(Arc::new)).clone()?;
+    // Cached packages must not bypass a marker or policy added after the
+    // package was first assembled. Check before exposing the cached GET list.
+    if package.0.entries.len() != package.1.len() {
+        return Err("cached vehicle has mismatched sources".into());
+    }
+    let files: Vec<_> = package.0.entries.iter().zip(&package.1)
+        .map(|(entry, path)| (entry.path.clone(), path.clone())).collect();
+    if !transfer_policy::allows_dependencies(&files) {
+        return Err("cached vehicle now forbids file transfers".into());
+    }
+    Ok(package)
 }
 
 pub(super) fn cache_key(exact: bool, bus: &str, paint: &str) -> String {
