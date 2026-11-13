@@ -9,28 +9,18 @@
 //!   (`omsi_launcher_lib::i18n::LANGUAGES`) is the files in `locales/`;
 //! * `language_files_only_translate_texts_of_app_yml`: no language has a key app.yml lacks
 //!   (a typo, or a text renamed or removed in app.yml only);
-//! * `new_texts_are_translated_into_every_language`: a text added to app.yml is in every
-//!   language's file. The texts some languages lacked when the files were split are listed in
-//!   `tests/translation_gaps.yml`; the list only gets shorter: a text translated since must
-//!   leave it.
-//! * `every_text_is_translated_into_every_language` (ignored, run with `--ignored`): no gap at
-//!   all, the list included.
+//! * `every_text_is_translated_into_every_language` (ignored, run with `--ignored`): which
+//!   texts each language still lacks.
 //!
-//! After translating texts of the list, or when a language is added, write the list again:
-//!
-//!     OPENOMSI_UPDATE_TRANSLATION_GAPS=1 cargo test -p omsi-launcher-core --test translations
+//! That a text added to app.yml is translated into every language is checked on the pull
+//! request, against its base (.github/scripts/check_locales.py): texts that were missing
+//! before may stay missing.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-type Gaps = BTreeMap<String, BTreeSet<String>>;
-
 fn locales() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../omsi-app/locales")
-}
-
-fn gaps_file() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("translation_gaps.yml")
 }
 
 fn read<T: serde::de::DeserializeOwned>(path: &Path) -> T {
@@ -66,7 +56,7 @@ fn languages() -> BTreeMap<String, BTreeMap<String, String>> {
 }
 
 /// The texts of app.yml each language's file lacks.
-fn missing() -> Gaps {
+fn missing() -> BTreeMap<String, BTreeSet<String>> {
     let english = reference();
     languages()
         .into_iter()
@@ -75,23 +65,6 @@ fn missing() -> Gaps {
             (lang, lacks)
         })
         .collect()
-}
-
-fn write_gaps(gaps: &Gaps) {
-    let mut out = String::from(
-        "# The texts of crates/omsi-app/locales/app.yml a language does not translate yet, by language\n\
-         # (see crates/omsi-launcher-core/tests/translations.rs). Only for texts that were already missing: a new\n\
-         # text is translated into every language. Translate a text and take it off this list, or write\n\
-         # the list again: OPENOMSI_UPDATE_TRANSLATION_GAPS=1 cargo test -p omsi-launcher-core --test translations\n",
-    );
-    for (lang, keys) in gaps.iter().filter(|(_, keys)| !keys.is_empty()) {
-        out.push_str(&format!("\n{lang}:\n"));
-        for key in keys {
-            // (a JSON string is a double-quoted YAML string)
-            out.push_str(&format!("  - {}\n", serde_json::to_string(key).unwrap()));
-        }
-    }
-    std::fs::write(gaps_file(), out).unwrap();
 }
 
 fn report(problems: &[String], what: &str) -> String {
@@ -128,30 +101,7 @@ fn language_files_only_translate_texts_of_app_yml() {
 }
 
 #[test]
-fn new_texts_are_translated_into_every_language() {
-    let missing = missing();
-    if std::env::var_os("OPENOMSI_UPDATE_TRANSLATION_GAPS").is_some() {
-        write_gaps(&missing);
-        return;
-    }
-    let known: Gaps = read::<Option<Gaps>>(&gaps_file()).unwrap_or_default();
-    let mut untranslated = Vec::new();
-    for (lang, keys) in &missing {
-        let listed = known.get(lang);
-        untranslated.extend(keys.iter().filter(|key| !listed.is_some_and(|l| l.contains(*key))).map(|key| format!("app.{lang}.yml: {key:?}")));
-    }
-    assert!(untranslated.is_empty(), "{}", report(&untranslated, "texts of app.yml are not translated (add them to each app.<language>.yml)"));
-
-    let mut done = Vec::new();
-    for (lang, keys) in &known {
-        let lacks = missing.get(lang);
-        done.extend(keys.iter().filter(|key| !lacks.is_some_and(|l| l.contains(*key))).map(|key| format!("{lang}: {key:?}")));
-    }
-    assert!(done.is_empty(), "{}", report(&done, "texts of tests/translation_gaps.yml are translated or gone: take them off the list (OPENOMSI_UPDATE_TRANSLATION_GAPS=1 writes it again)"));
-}
-
-#[test]
-#[ignore = "the languages still lack the texts of tests/translation_gaps.yml"]
+#[ignore = "some languages still lack texts that were missing before the split"]
 fn every_text_is_translated_into_every_language() {
     let english = reference().len();
     let missing = missing();

@@ -12,7 +12,9 @@ is read the same way. Errors (the check fails):
 * a file does not parse, or a key is written twice (YAML keeps the last one silently);
 * a translation added or changed here has other placeholders than its key (`%{packs}`,
   `{}`): the text the game fills in would be lost or garbled;
-* a key is removed whose text the code still uses: that text loses every language.
+* a key is removed whose text the code still uses: that text loses every language;
+* a key new in app.yml is not translated in every app.<language>.yml (texts that were missing
+  before may stay missing; only new ones must come with every language).
 
 Warnings (shown on the pull request, the check passes):
 
@@ -131,6 +133,7 @@ def main() -> int:
         return 1
     place = Places(after_path)
     code = code_strings(Path("."))
+    all_langs = sorted(language_files(Path(after_path)))
 
     changed_langs: dict[str, int] = {}
     for key, langs in after.items():
@@ -146,6 +149,10 @@ def main() -> int:
             if lang in old:
                 changed_langs[lang] = changed_langs.get(lang, 0) + 1
                 warnings.append((place(key, lang), f"{lang}: an existing translation of {key!r} is changed from {old[lang]!r} to {text!r}"))
+        if key not in before:
+            lacking = [l for l in all_langs if l not in langs]
+            if lacking:
+                errors.append((place(key), f"the new text {key!r} is not translated into: {', '.join(lacking)} (add it to each app.<language>.yml)"))
         if key not in before and key not in code:
             warnings.append((place(key), f"{key!r} is not a text the code uses, so this entry is never shown"))
     for key in before:

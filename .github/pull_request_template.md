@@ -33,6 +33,6 @@ Machine, map and settings:
 - [ ] The pull request contains a single change
 - [ ] Before/after screenshots are in the description if anything changes on screen
 - [ ] A new feature has its performance table filled in (this branch, the current release, 0.2.30)
-- [ ] New or changed interface texts are in `crates/omsi-app/locales/app.yml` and in every `app.<language>.yml` (`cargo test -p omsi-launcher-core --test translations`)
+- [ ] New or changed interface texts are in `crates/omsi-app/locales/app.yml` and in every `app.<language>.yml`
 - [ ] Online play, saves, settings and mods made for the previous release still work, or the description says what changes
 - [ ] No original OMSI 2 content and no file of a megabyte or more in the commits
