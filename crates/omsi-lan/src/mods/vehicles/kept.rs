@@ -10,8 +10,7 @@ fn shareable_manifest(store: &Store, m: &VehicleManifest) -> bool {
     let mut checked = false;
     for e in m.entries.iter().filter(|e| super::super::transfer_policy::is_descriptor(&e.path)) {
         let Ok(bytes) = store.read(e) else { return false };
-        let cfg = omsi_cfg::CfgFile::from_bytes(&e.path, &bytes);
-        if !omsi_vehicle::Vehicle::parse(&cfg).allows_file_transfer() { return false }
+        if !super::super::transfer_policy::allows_description_bytes(&e.path, &bytes) { return false }
         checked = true;
     }
     checked
