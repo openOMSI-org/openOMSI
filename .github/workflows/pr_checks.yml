@@ -60,7 +60,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: bash scripts/size-budget.sh
 
-      # The changes Rust files should be properly formatted
+      # The changed Rust files should be properly formatted
       - name: Formatting
         if: ${{ !cancelled() }}
         run: bash scripts/format-check.sh   
