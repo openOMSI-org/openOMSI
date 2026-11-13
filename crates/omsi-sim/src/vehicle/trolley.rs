@@ -562,54 +562,54 @@ impl VehicleInstance {
         }
     }
 
-    /// A shoe going through a frog fires the triggers a script can use: the pole's own
-    /// (`Trolley_Pole<k>_Frog`), the frog's (`Trolley_Frog`), and the name the map gave the
-    /// frog (`Trolley_Frog_<name>`, its spaces written as underscores). A shoe going over a
-    /// crossing of two wires fires `Trolley_Pole<k>_Joint` and `Trolley_Joint`. Each is
-    /// fired once for each crossed, even when both poles crossed at once.
     fn fire_wire_triggers(&mut self, frogs: &[(usize, u32)], crossings: &[(usize, u32)], net: Option<&WireNet>) {
-        // (a solve may cross the same place twice in a step: each crossing counts once)
-        let frogs = Self::once_crossed(frogs);
-        let crossings = Self::once_crossed(crossings);
-        for (pole, _) in &frogs {
-            self.trigger(&format!("Trolley_Pole{}_Frog", pole + 1));
-        }
-        for (pole, _) in &crossings {
-            self.trigger(&format!("Trolley_Pole{}_Joint", pole + 1));
-        }
-        // the frogs crossed, each of them once
-        let mut named: Vec<u32> = Vec::new();
-        for (_, switch) in &frogs {
-            if named.contains(switch) {
+        // Handle each event once, even if a solve reports it more than once.
+        let mut seen_frogs: Vec<(usize, u32)> = Vec::new();
+        let mut named_frogs: Vec<u32> = Vec::new();
+        for &(pole, switch) in frogs {
+            if seen_frogs.contains(&(pole, switch)) {
                 continue;
             }
-            named.push(*switch);
+            seen_frogs.push((pole, switch));
+            self.trigger(&format!("Trolley_Pole{}_Frog", pole + 1));
+            if named_frogs.contains(&switch) {
+                continue;
+            }
+            named_frogs.push(switch);
             self.trigger("Trolley_Frog");
-            if let Some(name) = net.and_then(|n| n.switches.get(*switch as usize)).map(|s| s.name.as_str()).filter(|n| !n.is_empty()) {
+            if let Some(name) = net.and_then(|n| n.switches.get(switch as usize)).map(|s| s.name.as_str()).filter(|n| !n.is_empty()) {
                 let name = name.split_whitespace().collect::<Vec<_>>().join("_");
                 self.trigger(&format!("Trolley_Frog_{name}"));
             }
         }
-        // the crossings gone over, each of them once
-        let mut over: Vec<u32> = Vec::new();
-        for (_, crossing) in &crossings {
-            if over.contains(crossing) {
+
+        let mut seen_crossings: Vec<(usize, u32)> = Vec::new();
+        let mut conductors: Vec<u32> = Vec::new();
+        let mut physical: Vec<(u32, u32)> = Vec::new();
+        for &(pole, crossing_id) in crossings {
+            if seen_crossings.contains(&(pole, crossing_id)) {
                 continue;
             }
-            over.push(*crossing);
-            self.trigger("Trolley_Joint");
-        }
-    }
-
-    /// The crossings of a step, each of them once.
-    fn once_crossed(crossed: &[(usize, u32)]) -> Vec<(usize, u32)> {
-        let mut out: Vec<(usize, u32)> = Vec::new();
-        for c in crossed {
-            if !out.contains(c) {
-                out.push(*c);
+            seen_crossings.push((pole, crossing_id));
+            self.trigger(&format!("Trolley_Pole{}_Joint", pole + 1));
+            if !conductors.contains(&crossing_id) {
+                conductors.push(crossing_id);
+                self.trigger("Trolley_Joint");
             }
+            let Some(crossing) = net.and_then(|n| n.crossings.get(crossing_id as usize)) else {
+                continue;
+            };
+            let pair = if crossing.a < crossing.b {
+                (crossing.a, crossing.b)
+            } else {
+                (crossing.b, crossing.a)
+            };
+            if physical.contains(&pair) {
+                continue;
+            }
+            physical.push(pair);
+            self.trigger("Trolley_Crossing");
         }
-        out
     }
 
     /// The torque `step_physics` drives with: the modelled drive's, or the script's scaled by
@@ -623,6 +623,39 @@ impl VehicleInstance {
                 None => script,
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn physical_crossing_trigger_fires_once_for_all_conductor_intersections() {
+        let mut vehicle = crate::timetable_run::tests::script_test_vehicle(
+            "{trigger:Trolley_Pole1_Joint}\n{end}\n{trigger:Trolley_Pole2_Joint}\n{end}\n{trigger:Trolley_Joint}\n{end}\n{trigger:Trolley_Crossing}\n{end}\n",
+            "",
+            "",
+        );
+        let net = WireNet::parse(
+            "[trolley_span]\np -20 0 5.5\np 20 0 5.5\n[trolley_span]\np 0 -20 5.5\np 0 20 5.5\n",
+        );
+        assert_eq!(net.crossings.len(), 4);
+        let mut events: Vec<(usize, u32)> = net
+            .crossings
+            .iter()
+            .enumerate()
+            .flat_map(|(id, _)| [(0, id as u32), (1, id as u32), (0, id as u32)])
+            .collect();
+        events.push((0, 0));
+
+        vehicle.fire_wire_triggers(&[], &events, Some(&net));
+
+        let fired = &vehicle.host.fired_triggers;
+        assert_eq!(fired.iter().filter(|name| *name == "Trolley_Crossing").count(), 1);
+        assert_eq!(fired.iter().filter(|name| *name == "Trolley_Joint").count(), 4);
+        assert_eq!(fired.iter().filter(|name| *name == "Trolley_Pole1_Joint").count(), 4);
+        assert_eq!(fired.iter().filter(|name| *name == "Trolley_Pole2_Joint").count(), 4);
     }
 }
 

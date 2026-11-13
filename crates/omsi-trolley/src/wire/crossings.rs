@@ -67,6 +67,9 @@ impl WireNet {
             near.sort_unstable();
             near.dedup();
             for b in near {
+                if self.spans[a].ends.iter().any(|node| self.spans[b as usize].ends.contains(node)) {
+                    continue;
+                }
                 let (alo, ahi) = boxes[a];
                 let (blo, bhi) = boxes[b as usize];
                 if ahi.x < blo.x || bhi.x < alo.x || ahi.y < blo.y || bhi.y < alo.y { continue; }
@@ -134,5 +137,42 @@ impl WireNet {
     /// Crossings on a span: crossing id and distance along the span.
     pub fn crossings_of(&self, span: u32) -> &[(u32, f64)] {
         self.span_crossings.get(span as usize).map(|v| v.as_slice()).unwrap_or(&[])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wires_crossing_at_the_same_height_are_detected() {
+        let net = WireNet::parse(
+            "[trolley_span]\np -20 0 5.5\np 20 0 5.5\n[trolley_span]\np 0 -20 5.5\np 0 20 5.5\n",
+        );
+        assert!(!net.crossings.is_empty(), "same-height wires crossing should be recorded");
+    }
+
+    #[test]
+    fn wire_passing_above_another_is_not_detected_as_a_crossing() {
+        let net = WireNet::parse(
+            "[trolley_span]\np -20 0 5.5\np 20 0 5.5\n[trolley_span]\np 0 -20 6.5\np 0 20 6.5\n",
+        );
+        assert!(net.crossings.is_empty(), "wires separated by 1 m should not cross");
+    }
+
+    #[test]
+    fn a_frog_does_not_create_wire_crossings_at_its_shared_node() {
+        let net = WireNet::parse(
+            "[trolley_span]\np -50 0 5.5\np 100 0 5.5\n[trolley_span]\np 100 0 5.5\np 400 0 5.5\n[trolley_span]\np 100 0 5.5\np 300 80 5.5\n[trolley_switch]\npos 100 0 5.5\nmode fixed\n",
+        );
+        assert!(net.crossings.is_empty(), "joined frog spans should not create crossings");
+    }
+
+    #[test]
+    fn an_angled_joint_does_not_create_wire_crossings() {
+        let net = WireNet::parse(
+            "[trolley_span]\np -50 0 5.5\np 0 0 5.5\n[trolley_span]\np 0 0 5.5\np 50 50 5.5\n",
+        );
+        assert!(net.crossings.is_empty(), "joined angled spans should not create crossings");
     }
 }

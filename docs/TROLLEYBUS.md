@@ -117,12 +117,14 @@ the constants are in the vehicle's file, not in the game.
 * **A shoe going over a crossing.** Where two wires cross without joining (an overhead
   crossing with insulated sections) the shoe goes over it: the crossing fires the script's
   triggers `Trolley_Pole<k>_Joint` (that pole's own) and `Trolley_Joint` (a crossing,
-  whichever pole). Each is fired once for each crossing gone over, even when both poles
-  crossed at once. The game offsets each span by half its `spacing` to locate its left and
-  right conductors, then detects same-height intersections between any conductors. At a
-  perpendicular crossing, each conductor crosses both conductors on the other line, so a
-  shoe fires twice as it passes those intersections. Either side can trigger independently;
-  polarity is not required. A wire that passes above another flies over it and is not fired.
+  whichever pole). Each conductor intersection fires both triggers once. At a perpendicular
+  crossing, each of the two conductors on one span crosses both conductors on the other span,
+  resulting in four conductor intersections. Consequently, `Trolley_Joint` and
+  the corresponding pole-specific trigger each fire **four times** for one physical crossing.
+  `Trolley_Crossing` fires once for that physical crossing, regardless of which pole crosses it;
+  use it when the script should react once instead of once per conductor intersection.
+  Either side can trigger independently; polarity is not required. A wire that passes above
+  another flies over it and is not fired.
 * **Arcs and sound.** Where current is broken - the shoe leaving the wire, a pole coming off,
   an insulator or a frog crossed under power - an arc burns `L I^2 / 2` of the motor circuit's
   inductance (12 mH): the game draws a flash with sparks, lights the wire and the roof and
