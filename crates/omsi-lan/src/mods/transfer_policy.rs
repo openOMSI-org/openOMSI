@@ -13,7 +13,12 @@ pub(super) fn is_descriptor(name: &str) -> bool {
 const PRIVATE_MARKER: &str = ".openomsi-no-share";
 
 fn marked_private(path: &Path) -> bool {
-    path.parent().is_some_and(|parent| parent.ancestors().any(|dir| dir.join(PRIVATE_MARKER).exists()))
+    let marked = |file: &Path| {
+        file.parent().is_some_and(|parent| parent.ancestors().any(|dir| dir.join(PRIVATE_MARKER).exists()))
+    };
+    // Check both textual and resolved locations: a symlink into a private asset
+    // directory must not bypass the marker merely by being listed under a public path.
+    marked(path) || path.canonicalize().is_ok_and(|real| marked(&real))
 }
 
 fn strict_mode() -> bool {
@@ -76,7 +81,7 @@ fn vehicle_folder(name: &str) -> Option<String> {
 /// Exclude the entire folder when any included vehicle descriptor forbids transfers.
 pub(super) fn filter_session_files(files: &mut Vec<(String, PathBuf)>) {
     if !transfers_enabled() {
-        files.retain(|(name, _)| vehicle_folder(name).is_none());
+        files.retain(|(name, path)| vehicle_folder(name).is_none() && !marked_private(path));
         return;
     }
     let private: HashSet<String> = files.iter()
