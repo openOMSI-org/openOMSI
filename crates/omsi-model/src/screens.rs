@@ -17,12 +17,12 @@ pub struct NavigatorTextureDef {
     pub fixed_north: bool,
     pub no_nav_ui: bool,
     pub nav_center: bool,
-    pub show_previous_path_bus_stop: bool,
+    pub show_history: bool,
 }
 
 impl Default for NavigatorTextureDef {
     fn default() -> Self {
-        Self { script_index: 0, width: 0, height: 0, power_var: None, map_scale: 1.0, fixed_north: false, no_nav_ui: false, nav_center: false, show_previous_path_bus_stop: false }
+        Self { script_index: 0, width: 0, height: 0, power_var: None, map_scale: 1.0, fixed_north: false, no_nav_ui: false, nav_center: false, show_history: false }
     }
 }
 
@@ -54,9 +54,9 @@ impl Model {
         let fixed_north = r.param_line().trim() == "1";
         let no_nav_ui = r.param_line().trim() == "1";
         let nav_center = r.param_line().trim() == "1";
-        let show_previous_path_bus_stop = r.param_line().trim() == "1";
+        let show_history = r.param_line().trim() == "1";
         let script_index = self.reserve_script_texture(width, height);
-        self.navigator_textures.push(NavigatorTextureDef { script_index, width, height, power_var, map_scale, fixed_north, no_nav_ui, nav_center, show_previous_path_bus_stop });
+        self.navigator_textures.push(NavigatorTextureDef { script_index, width, height, power_var, map_scale, fixed_north, no_nav_ui, nav_center, show_history });
     }
 
     pub(super) fn parse_use_navigator_texture(&mut self, r: &mut CfgReader<'_>) {
@@ -138,7 +138,7 @@ mod tests {
     fn previous_path_option_is_optional_and_preserves_the_next_keyword() {
         for (value, enabled) in [("", false), ("0", false), ("1", true), ("2", false)] {
             let m = parse(&format!("[navigatortexture]\n800\n480\n\n1\n0\n0\n0\n{value}\n[mesh]\nx.o3d\n"));
-            assert_eq!(m.navigator_textures[0].show_previous_path_bus_stop, enabled);
+            assert_eq!(m.navigator_textures[0].show_history, enabled);
             assert_eq!(m.meshes.len(), 1);
         }
     }

@@ -38,7 +38,7 @@ gps_screen.dds
   a variable the bus's scripts do not have - the screen is always on. A blank line or the next
   keyword after the size means "no variable".
 - Five optional lines after the power variable control this screen: **`mapScale`**,
-  **`fixedNorth`**, **`noNavUI`**, **`NavCenter`**, then **`showPreviousPath_BusStop`**,
+  **`fixedNorth`**, **`noNavUI`**, **`navCenter`**, then **`showHistory`**,
   in that order. These are values on separate lines,
   not additional keywords. To use them without a power variable, leave its line blank.
   Omitted options keep their defaults; use a blank line to skip an option before a later one.
@@ -52,12 +52,12 @@ gps_screen.dds
   row and the timetable. It also hides entry/spawn markers and AI scheduled-bus markers. The
   route, stop markers and the player's bus arrow remain visible. `0` shows the usual navigator
   interface. These options affect the cockpit screen only.
-- **`NavCenter`** (default `0`): `1` centers the map on the player's bus (the blue circle
+- **`navCenter`** (default `0`): `1` centers the map on the player's bus (the blue circle
   and heading arrow), removing the usual look-ahead offset. It works with either
   `fixedNorth` setting and with any `mapScale`. With `noNavUI=1`, the bus is at the center
   of the entire texture; otherwise it is at the center of the map area above the place row
   and timetable. `0` keeps the usual look-ahead view.
-- **`showPreviousPath_BusStop`** (default `0`): `1` keeps the current trip's original route
+- **`showHistory`** (default `0`): `1` keeps the current trip's original route
   visible behind the bus in the usual route color and shows completed bus stops in grey.
   Upcoming stops keep their usual colors. Completion follows the duty's stop progression;
   the final stop turns grey when the trip is complete. History resets for a new trip or

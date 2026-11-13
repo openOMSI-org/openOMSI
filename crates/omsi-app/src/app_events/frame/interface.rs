@@ -277,7 +277,9 @@ impl App {
                 }
             }
             let (line, terminus, stops, trip) = navigator::duty_parts(self.session.duty.as_ref());
-            nav.set_completed_stops(self.session.duty.as_ref());
+            if nav.screen_wants_history() {
+                nav.set_completed_stops(self.session.duty.as_ref());
+            }
             match (trip, self.session.schedule.as_ref(), self.session.traffic.as_ref(), self.world.as_ref()) {
                 (Some((key, name)), Some(sch), _, _) if nav.map_net().is_some() => {
                     if nav.wants_route(&key, 0) {

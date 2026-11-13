@@ -18,7 +18,7 @@ pub struct Screen {
     pub fixed_north: bool,
     pub no_nav_ui: bool,
     pub nav_center: bool,
-    pub show_previous_path_bus_stop: bool,
+    pub show_history: bool,
 }
 
 impl Screen {
@@ -29,7 +29,7 @@ impl Screen {
         Some(Screen {
             texture, size: (def.width.max(1) as u32, def.height.max(1) as u32), on: def.is_on(var),
             map_scale: def.map_scale, fixed_north: def.fixed_north, no_nav_ui: def.no_nav_ui, nav_center: def.nav_center,
-            show_previous_path_bus_stop: def.show_previous_path_bus_stop,
+            show_history: def.show_history,
         })
     }
 
@@ -58,6 +58,10 @@ pub(super) struct ScreenState {
 }
 
 impl Navigator {
+    pub fn screen_wants_history(&self) -> bool {
+        self.screen.is_some_and(|screen| screen.show_history)
+    }
+
     pub fn set_screen(&mut self, screen: Option<Screen>) {
         if screen != self.screen {
             self.screen_state.reach = 0.0;
@@ -91,7 +95,7 @@ impl Navigator {
         let drawn = Screen { size: (w, h), ..screen };
         let look = PanelLook {
             map_scale: drawn.map_scale, fixed_north: drawn.fixed_north, no_nav_ui: drawn.no_nav_ui, nav_center: drawn.nav_center,
-            show_previous_path_bus_stop: drawn.show_previous_path_bus_stop,
+            show_history: drawn.show_history,
             ..PanelLook::screen(drawn.size, SCREEN_POINTS_HIGH)
         };
         let map_h = drawn.map_height(self.below_map(look.scale, f.stops.len()));
@@ -115,7 +119,7 @@ mod tests {
         let m = model("[scripttexture]\n64\n32\n[navigatortexture]\n800\n480\npower\n[navigatortexture]\n10\n10\n");
         let textures = [Some(7), Some(9), Some(11)];
         let on = Screen::find(&m, &textures, |_| Some(1.0)).unwrap();
-        assert_eq!(on, Screen { texture: 9, size: (800, 480), on: true, map_scale: 1.0, fixed_north: false, no_nav_ui: false, nav_center: false, show_previous_path_bus_stop: false });
+        assert_eq!(on, Screen { texture: 9, size: (800, 480), on: true, map_scale: 1.0, fixed_north: false, no_nav_ui: false, nav_center: false, show_history: false });
         assert!(!Screen::find(&m, &textures, |_| Some(0.0)).unwrap().on);
         assert!(Screen::find(&m, &[Some(7), None], |_| None).is_none(), "its texture is not there");
         assert!(Screen::find(&model("[scripttexture]\n64\n32\n"), &textures, |_| None).is_none());
@@ -123,7 +127,7 @@ mod tests {
 
     #[test]
     fn the_map_leaves_room_under_it_but_keeps_half_the_screen() {
-        let s = Screen { texture: 0, size: (800, 480), on: true, map_scale: 1.0, fixed_north: false, no_nav_ui: false, nav_center: false, show_previous_path_bus_stop: false };
+        let s = Screen { texture: 0, size: (800, 480), on: true, map_scale: 1.0, fixed_north: false, no_nav_ui: false, nav_center: false, show_history: false };
         assert_eq!(s.map_height(40.0), 440.0);
         assert_eq!(s.map_height(400.0), 240.0);
         assert_eq!(Screen { no_nav_ui: true, ..s }.map_height(400.0), 480.0);
@@ -135,7 +139,7 @@ mod tests {
         let s = Screen::find(&m, &[Some(9)], |_| None).unwrap();
         assert_eq!((s.map_scale, s.fixed_north, s.no_nav_ui), (0.5, true, true));
         assert!(s.nav_center);
-        assert!(s.show_previous_path_bus_stop);
+        assert!(s.show_history);
     }
 
     #[test]

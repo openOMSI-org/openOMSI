@@ -48,7 +48,7 @@ pub(super) struct PanelLook {
     pub fixed_north: bool,
     pub no_nav_ui: bool,
     pub nav_center: bool,
-    pub show_previous_path_bus_stop: bool,
+    pub show_history: bool,
     pub clear: wgpu::Color,
 }
 
@@ -70,7 +70,7 @@ impl PanelLook {
             fixed_north: false,
             no_nav_ui: false,
             nav_center: false,
-            show_previous_path_bus_stop: false,
+            show_history: false,
             clear: wgpu::Color::TRANSPARENT,
         }
     }
@@ -79,7 +79,7 @@ impl PanelLook {
     /// rather than cards that overlap.
     pub(super) fn screen(size: (u32, u32), points_high: f32) -> PanelLook {
         let scale = (size.0 as f32 / PANEL_POINTS_WIDE).min(size.1 as f32 / points_high);
-        PanelLook { scale, radius: 0.0, fade: 1.0, backdrop: 1.0, grip: false, plugins: false, map_scale: 1.0, fixed_north: false, no_nav_ui: false, nav_center: false, show_previous_path_bus_stop: false, clear: wgpu::Color::BLACK }
+        PanelLook { scale, radius: 0.0, fade: 1.0, backdrop: 1.0, grip: false, plugins: false, map_scale: 1.0, fixed_north: false, no_nav_ui: false, nav_center: false, show_history: false, clear: wgpu::Color::BLACK }
     }
 
     pub(super) fn remote(size: (u32, u32)) -> PanelLook {
@@ -96,8 +96,6 @@ pub(super) fn route_position_changed(cached: f32, current: f32) -> bool {
 
 #[allow(clippy::too_many_arguments)]
 fn history_route(p: &mut Painter, net: &Network, lanes: &[usize], anchor: DVec2, reach: f64, jam: &HashMap<usize, f32>, style: &RouteStyle, bus_lane: usize, pal: &Palette) {
-    // Separate visible stretches so a distant trip origin neither hides local lanes
-    // nor joins disconnected stretches across the map.
     let visible = |id: usize| net.lanes.get(id).is_some_and(|l| {
         l.points.windows(2).any(|p| {
             let a = p[0].truncate();
@@ -276,7 +274,7 @@ impl Navigator {
 
         // --- the route (buffers 1 and 9): rebuilt for route changes or three metres of progress
         let mut route_verts = None;
-        let history = look.show_previous_path_bus_stop && self.destination.is_none();
+        let history = look.show_history && self.destination.is_none();
         let route_net = global.as_deref().or(f.traffic.map(|t| &t.net));
         if let (Some(rn), true) = (route_net, !self.route.lanes.is_empty()) {
             let first = self.route.lanes.get(self.route.progress.min(self.route.lanes.len().saturating_sub(1))).copied();
