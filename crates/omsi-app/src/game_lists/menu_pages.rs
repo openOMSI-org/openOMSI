@@ -569,10 +569,12 @@ fn upscaler_rows(app: &App, file: &serde_json::Value) -> Vec<(String, String)> {
     let fsr = app.settings.upscaler == "fsr1";
     let temporal = app.settings.temporal_upscaling().is_some();
     let offered = !omsi_cfg::upscaler_files::available(&omsi_cfg::upscaler_files::program_dir()).is_empty();
+    let generation = app.settings.temporal_upscaling().is_some_and(|t| omsi_cfg::upscaler_files::frame_generation_choices().contains(&t.upscaler.as_str()));
     let pct = |v: f32| format!("{:.0} %", v * 100.0);
     [
         select_row(file, "upscaler", "Upscaling", omsi_cfg::upscaler_files::menu_help(offered)),
         select_row(file, "upscale_quality", "Upscaling quality", "Native keeps the window's resolution and only smooths the edges; the lower the quality, the smaller the picture is drawn and the higher the frame rate").filter(|_| temporal),
+        select_row(file, "frame_generation", "Frame generation", omsi_cfg::upscaler_files::frame_generation_help()).filter(|_| generation),
         select_row(file, "fsr_quality", "FSR quality", &fsr_size(app)).filter(|_| fsr),
         slider_row(app, "fsr_sharpness", "FSR sharpness", "RCAS sharpening strength", &pct).filter(|_| fsr),
     ]

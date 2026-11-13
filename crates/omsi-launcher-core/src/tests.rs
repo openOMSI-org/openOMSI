@@ -587,6 +587,16 @@ fn comfortable_cabin_is_an_independent_opt_in_launch_flag() {
 }
 
 #[test]
+fn frame_generation_survives_the_settings_file() {
+    let page = super::settings_from_text(Some("upscaler=metalfx\nframe_generation=MetalFX\n"));
+    assert_eq!(page["frame_generation"].as_str(), Some("metalfx"));
+    assert!(super::settings_to_text(&page, None).contains("frame_generation=metalfx\n"));
+    let other = super::settings_from_text(Some("frame_generation=dlss2x\n"));
+    assert!(super::settings_to_text(&other, None).contains("frame_generation=off\n"));
+    assert!(crate::graphics_profiles::GRAPHICS_PROFILE_KEYS.contains(&"frame_generation"));
+}
+
+#[test]
 fn the_upscaler_and_its_quality_survive_the_settings_file() {
     let page = super::settings_from_text(Some("upscaler=dlss
 upscale_quality=native
