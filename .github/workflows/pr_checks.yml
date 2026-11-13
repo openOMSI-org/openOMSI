@@ -17,14 +17,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      BASE: ${{ github.event.pull_request.base.sha }}
       LOCALES: crates/omsi-app/locales/app.yml
       MAX_BYTES: 1000000
     steps:
       - uses: actions/checkout@v7
 
       - name: Fetch the base commit
-        run: git fetch --no-tags --depth=1 origin "$BASE"
+        run: |
+          # The merge commit includes newer main changes; compare only this PR.
+          git fetch --no-tags --depth=2 origin "$GITHUB_SHA"
+          echo "BASE=$(git rev-parse HEAD^1)" >> "$GITHUB_ENV"
 
       - name: No large files
         run: |
