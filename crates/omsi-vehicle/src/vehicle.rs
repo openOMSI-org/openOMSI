@@ -469,12 +469,10 @@ impl Vehicle {
                     // A present but malformed option fails closed.
                     for line in r.rest_of_block() {
                         let line = line.split("//").next().unwrap_or("").trim();
-                        let Some((key, value)) = line.split_once(char::is_whitespace) else { continue };
+                        let (key, value) = line.split_once(char::is_whitespace).unwrap_or((line, ""));
                         if key.eq_ignore_ascii_case("allow_file_transfer") {
-                            v.lan_file_transfer = Some(matches!(
-                                value.split_whitespace().next().unwrap_or("").to_ascii_lowercase().as_str(),
-                                "1" | "yes" | "on" | "true"
-                            ));
+                            let allowed = value.trim() == "1";
+                            v.lan_file_transfer = Some(v.lan_file_transfer.unwrap_or(true) && allowed);
                         }
                     }
                 }
@@ -840,6 +838,10 @@ mod tests {
         assert!(Vehicle::parse(&CfgFile::from_str("public.bus", "[openomsi_multiplayer]\nallow_file_transfer 1\n")).allows_file_transfer());
         assert!(!Vehicle::parse(&CfgFile::from_str("bad.bus", "[openomsi_multiplayer]\nallow_file_transfer typo\n")).allows_file_transfer());
         // Cars and other traffic vehicles use .ovh, not just buses (.bus).
+        for value in ["", "yes", "1 0", "0\nallow_file_transfer 1"] {
+            let config = format!("[openomsi_multiplayer]\nallow_file_transfer {value}\n");
+            assert!(!Vehicle::parse(&CfgFile::from_str("unsafe.bus", &config)).allows_file_transfer());
+        }
         let private_car = Vehicle::parse(&CfgFile::from_str("car.ovh", "[openomsi_multiplayer]\nallow_file_transfer 0\n"));
         assert!(!private_car.allows_file_transfer());
         let old_car = Vehicle::parse(&CfgFile::from_str("oldcar.ovh", "[type]\n0\n"));

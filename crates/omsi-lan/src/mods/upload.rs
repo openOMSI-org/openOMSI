@@ -28,6 +28,8 @@
 //! On the mods connection, after its greeting (encrypted as the rest):
 //!
 //! ```text
+//! UPLOAD-PREFLIGHT                                     → OK | ERR what (older host)
+//! OFFER3 <len>         + manifest and descriptor bytes → verified piece plan | ERR
 //! OFFER <len>          + JSON VehicleManifest            → OK <len> + JSON [wanted indices] | ERR
 //! PUT <index> <len>    + the bytes                      → OK | ERR
 //! DONE                                                  → OK <files that came> | ERR
@@ -45,6 +47,16 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+
+/// A modern sender proves that every descriptor in its offer permits transfers before
+/// the host requests assets. Order is the descriptor order in the validated manifest.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct UploadPreflight {
+    manifest: VehicleManifest,
+    descriptors: Vec<Vec<u8>>,
+}
+
+pub(super) const MAX_DESCRIPTOR_BYTES: u64 = 4 << 20;
 
 mod notices;
 mod own_bus;

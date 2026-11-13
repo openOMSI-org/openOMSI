@@ -6,9 +6,12 @@ use super::*;
 // Validate the actual stored .bus/.ovh bytes, never a permission asserted by a peer.
 // Used for new uploads and while reopening persisted manifests from an older release.
 fn shareable_manifest(store: &Store, m: &VehicleManifest) -> bool {
-    if !super::super::transfer_policy::transfers_enabled() { return false; }
+    if !super::super::transfer_policy::transfers_enabled() || omsi_net::vehicle_path(&m.bus).is_none() {
+        return false;
+    }
     let mut checked = false;
     for e in m.entries.iter().filter(|e| super::super::transfer_policy::is_descriptor(&e.path)) {
+        if e.size > crate::mods::upload::MAX_DESCRIPTOR_BYTES { return false; }
         let Ok(bytes) = store.read(e) else { return false };
         if !super::super::transfer_policy::allows_description_bytes(&e.path, &bytes) { return false }
         checked = true;
@@ -17,6 +20,11 @@ fn shareable_manifest(store: &Store, m: &VehicleManifest) -> bool {
 }
 
 // (what the rest of the game asks, of the game's own store)
+
+pub(in crate::mods) fn descriptors_allow_transfer(m: &VehicleManifest) -> bool {
+    let store = buses().lock().as_ref().map(|v| v.store.clone());
+    store.is_some_and(|store| shareable_manifest(&store, m))
+}
 
 pub(in crate::mods) fn open() -> bool {
     buses().open()
@@ -176,7 +184,9 @@ impl Buses {
         let mut sizes = HashMap::new();
         for (_, _, m) in &found {
             for e in &m.entries {
-                sizes.insert(e.sha256.clone(), e.size);
+                if store.has(e).is_some() {
+                    sizes.insert(e.sha256.clone(), e.size);
+                }
             }
         }
         log::info!("vehicles: {} buses players sent are kept", found.len());
@@ -276,6 +286,9 @@ impl Buses {
     /// one of them.
     pub(super) fn served(&self, sha: &str) -> Option<Arc<Vec<u8>>> {
         let sha = sha.to_ascii_lowercase();
+        if !self.lock().as_ref().is_some_and(|v| v.sizes.contains_key(&sha)) {
+            return None;
+        }
         let last = || self.served_last.lock().unwrap_or_else(|e| e.into_inner());
         {
             let mut c = last();
@@ -429,12 +442,14 @@ impl Buses {
         // (what is served by its SHA-256 is known by the kept lists after a restart: a file
         // kept before one - for a bus never finished then - was in the store but not served,
         // and the bus kept now that has it was asked for in vain: "no such file")
-        for e in &m.entries {
-            v.sizes.insert(e.sha256.to_ascii_lowercase(), e.size);
-        }
         let file = v.dir.join(format!("{fp}.json"));
         let tmp = file.with_extension("part");
         std::fs::write(&tmp, serde_json::to_vec(&m).unwrap_or_default()).and_then(|_| std::fs::rename(&tmp, &file)).map_err(|e| format!("{}: {e}", file.display()))?;
+        for e in &m.entries {
+            if v.store.has(e).is_some() {
+                v.sizes.insert(e.sha256.clone(), e.size);
+            }
+        }
         v.manifests.push((fp.clone(), m));
         write_cache_pins(v);
         drop(g);

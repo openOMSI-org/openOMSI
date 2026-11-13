@@ -36,7 +36,12 @@ impl Buses {
     /// This machine's own file at `e`'s path (in its content or the installation, never a
     /// session's), if it is that file: read only once its size and hash say so.
     pub(super) fn own_copy(&self, e: &Entry) -> Option<Vec<u8>> {
-        let (_, p) = omsi_cfg::find_in_roots(&e.path).filter(|(r, _)| !omsi_cfg::is_sandbox(r))?;
+        let (root, p) = omsi_cfg::find_in_roots(&e.path).filter(|(r, _)| !omsi_cfg::is_sandbox(r))?;
+        if !crate::mods::server_fleet::trusted_source(&root, &p)
+            || crate::mods::transfer_policy::marked_private(&p)
+        {
+            return None;
+        }
         if !self.local_sha(&p, e.size).is_some_and(|h| h.eq_ignore_ascii_case(&e.sha256)) {
             return None;
         }

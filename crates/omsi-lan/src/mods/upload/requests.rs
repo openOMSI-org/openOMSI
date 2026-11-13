@@ -55,6 +55,8 @@ pub(in crate::mods) enum Request {
     Offer { len: u64 },
     /// `OFFER2 <len>` and a list: which pieces of them.
     OfferPieces { len: u64 },
+    OfferPreflight { len: u64 },
+    PreflightCapability,
     /// `PUT <index> <len>` and the file.
     Put { index: usize, len: u64 },
     /// `PUTPIECE ...` and the piece.
@@ -92,6 +94,8 @@ impl Request {
         let r = match words {
             ["OFFER", len] => offer(len).map(|len| Request::Offer { len }),
             ["OFFER2", len] => offer(len).map(|len| Request::OfferPieces { len }),
+            ["UPLOAD-PREFLIGHT"] => Ok(Request::PreflightCapability),
+            ["OFFER3", len] => offer(len).map(|len| Request::OfferPreflight { len }),
             ["PUT", index, len] => match (index.parse(), len.parse()) {
                 (Ok(index), Ok(len)) => Ok(Request::Put { index, len }),
                 _ => Err(End("bad put")),
@@ -127,7 +131,9 @@ impl BusRequests {
     pub(in crate::mods) fn serve(&mut self, request: Request, input: &mut impl Read, out: &mut impl Write) -> std::io::Result<()> {
         match request {
             Request::Offer { len } => self.incoming.offer(input, out, len),
-            Request::OfferPieces { len } => self.incoming.offer_pieces(input, out, len),
+            Request::OfferPieces { len } => self.incoming.offer_pieces(input, out, len, false),
+            Request::PreflightCapability => writeln!(out, "OK"),
+            Request::OfferPreflight { len } => self.incoming.offer_pieces(input, out, len, true),
             Request::Put { index, len } => self.incoming.put(input, out, index, len),
             Request::PutPiece(p) => self.incoming.put_piece(input, out, &p),
             Request::Zstd => {

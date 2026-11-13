@@ -84,9 +84,10 @@ fn ask(host: SocketAddr, session: u64, request: &str) -> Result<Vec<u8>, String>
 }
 
 /// `OFFER2` on a fresh connection: the plan, and the connection.
-fn offer2(host: SocketAddr, session: u64, m: &VehicleManifest) -> (super::super::Connection, Vec<(usize, Vec<u64>)>) {
+fn offer2(host: SocketAddr, session: u64, m: &VehicleManifest, descriptor: &[u8]) -> (super::super::Connection, Vec<(usize, Vec<u64>)>) {
     let (raw, mut out, mut input) = super::super::open(host, session).unwrap();
-    let plan = offer_pieces(&mut out, &mut input, &serde_json::to_vec(m).unwrap()).unwrap();
+    let offer = UploadPreflight { manifest: m.clone(), descriptors: vec![descriptor.to_vec()] };
+    let plan = offer_pieces(&mut out, &mut input, &serde_json::to_vec(&offer).unwrap(), true).unwrap();
     ((raw, out, input), plan)
 }
 
@@ -172,7 +173,7 @@ fn an_upload_that_broke_off_goes_on_where_it_stopped() {
     let k_big = m.entries.iter().position(|e| e.path.ends_with("big.dat")).unwrap();
     // the first attempt: the server lacks every piece; two of the big file's go, then the
     // line breaks
-    let ((raw, mut out, mut input), plan) = offer2(host, session, &m);
+    let ((raw, mut out, mut input), plan) = offer2(host, session, &m, &files[0].1);
     assert_eq!(plan.iter().map(|(_, p)| p.len()).sum::<usize>(), 4, "{plan:?}");
     for i in [0u64, 2] {
         let (start, len) = super::super::pieces::span(big.len() as u64, i);
@@ -187,7 +188,7 @@ fn an_upload_that_broke_off_goes_on_where_it_stopped() {
     }
     let _ = raw.shutdown(std::net::Shutdown::Both);
     // again: only what did not come is asked for
-    let ((raw, _, _), plan) = offer2(host, session, &m);
+    let ((raw, _, _), plan) = offer2(host, session, &m, &files[0].1);
     let big_left = plan.iter().find(|(k, _)| *k == k_big).map(|(_, p)| p.clone()).unwrap();
     assert_eq!(big_left, vec![1], "the pieces that came are not sent again");
     assert_eq!(plan.len(), 2, "the small file is still wanted whole");
@@ -244,16 +245,16 @@ fn a_file_the_bus_has_twice_never_ends_the_upload() {
         out.flush().unwrap();
     };
     // one connection of the player offers the bus; another finishes the texture in `a`
-    let ((raw_late, mut out_late, mut in_late), plan) = offer2(host, session, &m);
+    let ((raw_late, mut out_late, mut in_late), plan) = offer2(host, session, &m, &files[0].1);
     assert_eq!(plan.len(), 3);
-    let ((raw, mut out, mut input), _) = offer2(host, session, &m);
+    let ((raw, mut out, mut input), _) = offer2(host, session, &m, &files[0].1);
     for i in 0..2 {
         put(&mut out, ka, i);
         assert_eq!(super::super::read_reply(&mut input).unwrap(), None);
     }
     let _ = raw.shutdown(std::net::Shutdown::Both);
     // a connection that offered after that: the texture in `b` is whole with it...
-    let ((raw2, mut out2, mut in2), plan2) = offer2(host, session, &m);
+    let ((raw2, mut out2, mut in2), plan2) = offer2(host, session, &m, &files[0].1);
     assert!(!plan2.iter().any(|(k, _)| *k == kb), "{plan2:?}");
     // ...and a piece of it still on its way there is taken, not the end of the upload
     put(&mut out2, kb, 0);
@@ -578,14 +579,14 @@ fn an_offer_and_its_plan_are_held_against_the_memory_budget() {
     let most = transfers().hold(TRANSFER_MEMORY - (64 << 10)).unwrap();
     let mut inc = Incoming::default();
     let mut out = Vec::new();
-    inc.offer_pieces(&mut &body[..], &mut out, body.len() as u64).unwrap();
+    inc.offer_pieces(&mut &body[..], &mut out, body.len() as u64, false).unwrap();
     assert!(String::from_utf8_lossy(&out).starts_with(&busy), "{}", String::from_utf8_lossy(&out));
     drop(inc);
     drop(most);
     // with the budget free the same plan is built and sent
     let mut inc = Incoming::default();
     let mut out = Vec::new();
-    inc.offer_pieces(&mut &body[..], &mut out, body.len() as u64).unwrap();
+    inc.offer_pieces(&mut &body[..], &mut out, body.len() as u64, false).unwrap();
     assert!(out.starts_with(b"OK"), "{}", String::from_utf8_lossy(&out));
     drop(inc);
     let _ = std::fs::remove_dir_all(&store_dir);
@@ -616,6 +617,7 @@ fn a_connection_keeping_its_offer_still_sends_its_files_whole() {
     // a file larger than the whole transfers' budget comes alone, the offer kept beside it
     drop(transfers().hold(2 * TRANSFER_MEMORY).expect("admitted alone"));
     // with all but this file's bytes taken, it is admitted all the same
+    inc.put(&mut &bus[..], &mut Vec::new(), 0, bus.len() as u64).unwrap();
     let most = transfers().hold(TRANSFER_MEMORY - data.len() as u64).unwrap();
     let mut out = Vec::new();
     inc.put(&mut &data[..], &mut out, idx, data.len() as u64).unwrap();
@@ -714,4 +716,46 @@ fn one_file_by_two_unicode_spellings_is_listed_once() {
     let list = listed(&root, vec![root.join("Vehicles/B/b.bus"), composed, decomposed]);
     assert_eq!(list.len(), 2, "{list:?}");
     let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn private_preflight_and_legacy_uploads_cannot_store_dependencies() {
+    let _turn = super::super::vehicles::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let store_dir = temp("private-preflight");
+    super::super::vehicles::open_for_test(&store_dir);
+    accept(true);
+    let bus = b"[openomsi_multiplayer]\nallow_file_transfer 1\n";
+    let trailer = b"[openomsi_multiplayer]\nallow_file_transfer 0\n";
+    let asset = b"private asset";
+    let manifest = VehicleManifest {
+        bus: "Vehicles/Preflight/b.bus".into(),
+        entries: vec![
+            entry("Vehicles/Preflight/b.bus", bus),
+            entry("Vehicles/Preflight/rear.ovh", trailer),
+            entry("Vehicles/Preflight/texture.dat", asset),
+        ],
+    }.validated().unwrap();
+    let offer = UploadPreflight { manifest: manifest.clone(), descriptors: vec![bus.to_vec(), trailer.to_vec()] };
+    let mut incoming = Incoming::default();
+    let proof = serde_json::to_vec(&offer).unwrap();
+    let mut out = Vec::new();
+    incoming.offer_pieces(&mut &proof[..], &mut out, proof.len() as u64, true).unwrap();
+    assert!(out.starts_with(b"ERR vehicle transfer preflight refused"));
+
+    let body = serde_json::to_vec(&manifest).unwrap();
+    let mut out = Vec::new();
+    incoming.offer(&mut &body[..], &mut out, body.len() as u64).unwrap();
+    assert!(out.starts_with(b"OK"));
+    incoming.put(&mut &bus[..], &mut Vec::new(), 0, bus.len() as u64).unwrap();
+    let mut out = Vec::new();
+    incoming.put(&mut &trailer[..], &mut out, 1, trailer.len() as u64).unwrap();
+    assert!(out.starts_with(b"ERR"));
+    let mut untouched = &asset[..];
+    let denied = incoming.put(&mut untouched, &mut Vec::new(), 2, asset.len() as u64);
+    assert!(denied.unwrap_err().to_string().contains("descriptors must be approved"));
+    assert_eq!(untouched, asset);
+    assert_eq!(super::super::vehicles::missing(&manifest), vec![1, 2]);
+    assert!(super::super::vehicles::served(&manifest.entries[2].sha256).is_none());
+    accept(false);
+    let _ = std::fs::remove_dir_all(&store_dir);
 }

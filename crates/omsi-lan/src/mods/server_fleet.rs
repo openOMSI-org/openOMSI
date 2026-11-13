@@ -72,12 +72,18 @@ pub(super) fn cached(cache: &Cache, key: String, build: impl FnOnce() -> Result<
     if package.0.entries.len() != package.1.len() {
         return Err("cached vehicle has mismatched sources".into());
     }
-    let files: Vec<_> = package.0.entries.iter().zip(&package.1)
-        .map(|(entry, path)| (entry.path.clone(), path.clone())).collect();
-    if !transfer_policy::allows_dependencies(&files) {
+    if !package_allowed(&package.0, &package.1) {
         return Err("cached vehicle now forbids file transfers".into());
     }
     Ok(package)
+}
+
+/// Only a package's vehicle descriptors and source markers decide its eligibility.
+pub(super) fn package_allowed(manifest: &Manifest, sources: &[PathBuf]) -> bool {
+    transfer_policy::transfers_enabled() && manifest.entries.iter().zip(sources).all(|(entry, path)| {
+        !transfer_policy::marked_private(path)
+            && (!transfer_policy::is_descriptor(&entry.path) || transfer_policy::allows_file(path))
+    })
 }
 
 pub(super) fn cache_key(exact: bool, bus: &str, paint: &str) -> String {
@@ -101,6 +107,11 @@ pub(super) fn trusted_source(root: &Path, source: &Path) -> bool {
     };
     // Physical files, including symlinks, must resolve inside their declared
     // content root. Do not let an existing symlink use the virtual-file bypass.
+    if let Some(archive) = omsi_cfg::vfs::archive_of(source) {
+        let boundary = if archive == *declared { archive.parent().unwrap_or(declared) } else { declared };
+        return archive.canonicalize().ok().zip(boundary.canonicalize().ok())
+            .is_some_and(|(file, base)| file.is_file() && file.starts_with(base));
+    }
     if std::fs::symlink_metadata(source).is_ok() {
         let (Ok(file), Ok(base)) = (source.canonicalize(), declared.canonicalize()) else {
             return false;

@@ -88,6 +88,7 @@ pub(in crate::mods) struct Incoming {
     held: Option<Held<'static>>,
     wanted: HashSet<usize>,
     got: usize,
+    approved: bool,
 }
 
 impl Incoming {
@@ -95,7 +96,7 @@ impl Incoming {
     /// lacks - by their content: a file of the same path in another version is another file.
     /// An empty list only asks whether the server takes uploads at all.
     pub(in crate::mods) fn offer(&mut self, input: &mut impl Read, out: &mut impl Write, len: u64) -> std::io::Result<()> {
-        let wanted = match self.take_offer(input, len)? {
+        let wanted = match self.take_offer(input, len, false)? {
             Ok(w) => w,
             Err(why) => return writeln!(out, "ERR {why}"),
         };
@@ -106,8 +107,8 @@ impl Incoming {
 
     /// `OFFER2`: as `OFFER`, answered with the pieces of each wanted file the server lacks
     /// (`pieces`: what came of it before - from this player or another - is not sent again).
-    pub(in crate::mods) fn offer_pieces(&mut self, input: &mut impl Read, out: &mut impl Write, len: u64) -> std::io::Result<()> {
-        let wanted = match self.take_offer(input, len)? {
+    pub(in crate::mods) fn offer_pieces(&mut self, input: &mut impl Read, out: &mut impl Write, len: u64, preflight: bool) -> std::io::Result<()> {
+        let wanted = match self.take_offer(input, len, preflight)? {
             Ok(w) => w,
             Err(why) => return writeln!(out, "ERR {why}"),
         };
@@ -132,7 +133,7 @@ impl Incoming {
 
     /// The offer's list read and taken: the files the server wants (or why it takes none).
     /// (`len`: checked already, `requests`.)
-    fn take_offer(&mut self, input: &mut impl Read, len: u64) -> std::io::Result<Result<Vec<usize>, String>> {
+    fn take_offer(&mut self, input: &mut impl Read, len: u64, preflight: bool) -> std::io::Result<Result<Vec<usize>, String>> {
         // (nothing kept of a list a server that takes none would refuse anyway)
         if !accepting() || !crate::mods::vehicles::is_open() {
             skip(input, len)?;
@@ -143,16 +144,31 @@ impl Incoming {
             return Ok(Err(says::BUSY.into()));
         };
         let body = read_body(input, len)?;
-        let Ok(m) = serde_json::from_slice::<VehicleManifest>(&body) else {
-            return Ok(Err("bad list".into()));
+        let (m, descriptors) = if preflight {
+            match serde_json::from_slice::<UploadPreflight>(&body) {
+                Ok(offer) => (offer.manifest, Some(offer.descriptors)),
+                Err(_) => return Ok(Err("bad preflight".into())),
+            }
+        } else {
+            match serde_json::from_slice::<VehicleManifest>(&body) {
+                Ok(m) => (m, None),
+                Err(_) => return Ok(Err("bad list".into())),
+            }
         };
         self.wanted.clear();
         self.got = 0;
+        self.approved = false;
         self.offer = None;
         self.lease = None;
         self.held = None;
         if m.entries.is_empty() {
             return Ok(Ok(Vec::new()));
+        }
+        if omsi_net::vehicle_path(&m.bus).is_none() {
+            return Ok(Err("invalid vehicle descriptor path".into()));
+        }
+        if descriptors.is_none() && super::super::transfer_policy::strict_mode() {
+            return Ok(Err("this server requires vehicle transfer preflight".into()));
         }
         if m.entries.len() > crate::mods::MAX_FILES {
             return Ok(Err("too many files".into()));
@@ -166,8 +182,35 @@ impl Incoming {
             Ok(m) => m,
             Err(e) => return Ok(Err(e)),
         };
+        let descriptor_bytes: u64 = m.entries.iter().filter(|e| super::super::transfer_policy::is_descriptor(&e.path))
+            .map(|e| e.size.min(MAX_DESCRIPTOR_BYTES + 1)).sum();
+        if descriptor_bytes > MAX_DESCRIPTOR_BYTES {
+            return Ok(Err("vehicle descriptors are too large".into()));
+        }
         if let Some(bad) = m.entries.iter().find(|e| crate::mods::refuse_path(&e.path).is_some() || e.size > crate::mods::MAX_FILE) {
             return Ok(Err(format!("{}: {}", bad.path, crate::mods::refuse_path(&bad.path).unwrap_or_else(|| "too large".into()))));
+        }
+        if m.entries.iter().any(|e| {
+            e.path.split('/').any(|part| part.eq_ignore_ascii_case(".openomsi-no-share"))
+                || omsi_cfg::find_in_roots(&e.path).is_some_and(|(_, source)| super::super::transfer_policy::marked_private(&source))
+        }) {
+            return Ok(Err("offer includes a private directory marker".into()));
+        }
+        if let Some(descriptors) = descriptors {
+            use super::super::transfer_policy::{allows_description_bytes, is_descriptor};
+            let entries = m.entries.iter().filter(|e| is_descriptor(&e.path));
+            if descriptors.iter().map(|data| data.len() as u64).sum::<u64>() > MAX_DESCRIPTOR_BYTES
+                || entries.clone().count() != descriptors.len()
+                || !entries.zip(&descriptors).all(|(e, data)| {
+                    e.size == data.len() as u64
+                        && crate::mods::sha256_of(data) == e.sha256
+                        && crate::mods::quarantine::screen(&e.path, data).is_ok()
+                        && allows_description_bytes(&e.path, data)
+                })
+            {
+                return Ok(Err("vehicle transfer preflight refused".into()));
+            }
+            self.approved = true;
         }
         // (the kept offer and lease are held against the kept lists' budget for the
         // connection's life; the body's own hold above is given back when this returns)
@@ -178,7 +221,12 @@ impl Incoming {
         self.lease = Some(crate::mods::vehicles::lease(&m));
         // (what the server has itself in the same version - a stock bus, a pack installed
         // here - is taken from its own files, not sent)
-        let adopted = crate::mods::vehicles::adopt_local(&m);
+        let adopted = if self.approved || crate::mods::vehicles::descriptors_allow_transfer(&m) {
+            self.approved = true;
+            crate::mods::vehicles::adopt_local(&m)
+        } else {
+            0
+        };
         let wanted = crate::mods::vehicles::missing(&m);
         if adopted > 0 {
             log::info!("uploads: {adopted} files of {} are the server's own, not sent", m.bus);
@@ -215,6 +263,9 @@ impl Incoming {
         // (more on the wire than the piece has: no piece of ours, and the stream is out of step)
         if wire > raw.max(64) {
             return Err(std::io::Error::other("a piece bigger than it is"));
+        }
+        if !self.allows_upload(&e) {
+            return Err(std::io::Error::other("vehicle descriptors must be approved first"));
         }
         let mut bytes = vec![0u8; wire as usize];
         input.read_exact(&mut bytes)?;
@@ -253,6 +304,9 @@ impl Incoming {
         let Some(e) = entry.filter(|e| e.size == len) else {
             return Err(std::io::Error::other("a file that was not asked for"));
         };
+        if !self.allows_upload(&e) {
+            return Err(std::io::Error::other("vehicle descriptors must be approved first"));
+        }
         // (against the transfers' budget alone: the offer this connection keeps is not in it,
         // so a file larger than all of it still comes - alone - while the offer is kept)
         let Some(_held) = transfers().hold(len) else {
@@ -278,6 +332,13 @@ impl Incoming {
             }
             Err(x) => writeln!(out, "ERR {}: {x}", e.path),
         }
+    }
+
+    fn allows_upload(&mut self, e: &Entry) -> bool {
+        if !self.approved && !super::super::transfer_policy::is_descriptor(&e.path) {
+            self.approved = self.offer.as_ref().is_some_and(crate::mods::vehicles::descriptors_allow_transfer);
+        }
+        self.approved || super::super::transfer_policy::is_descriptor(&e.path)
     }
 
     /// `DONE`: the bus is kept once every file of it is here, by the fingerprint the server
@@ -324,6 +385,9 @@ pub(in crate::mods) const MANIFEST_WAIT: Duration = Duration::from_secs(if cfg!(
 /// and asks again in a moment. The answer goes straight to the connection, its length
 /// counted first (`send_json`): no second copy of it as bytes.
 pub(in crate::mods) fn send_manifest(out: &mut impl Write, fp: &Fingerprint) -> std::io::Result<()> {
+    if !super::super::transfer_policy::transfers_enabled() {
+        return writeln!(out, "ERR {}", says::NO_SUCH_BUS);
+    }
     let fp = fp.as_str();
     if !crate::mods::vehicles::wait_for(fp, MANIFEST_WAIT) {
         return writeln!(out, "ERR {}", says::NO_SUCH_BUS);
@@ -373,6 +437,9 @@ pub(super) fn send_json(out: &mut impl Write, value: &impl serde::Serialize) -> 
 /// (`zstd`): packed at its smallest once it is (`vehicles::recompress_later`), till then at
 /// the speed of the moment.
 pub(in crate::mods) fn send_piece(out: &mut impl Write, sha: &Sha256, i: u64, zstd: bool) -> std::io::Result<()> {
+    if !super::super::transfer_policy::transfers_enabled() {
+        return writeln!(out, "ERR {}", says::NO_SUCH_FILE);
+    }
     let sha = sha.as_str();
     let mut pack_later = false;
     if zstd {
@@ -409,6 +476,9 @@ pub(in crate::mods) fn send_piece(out: &mut impl Write, sha: &Sha256, i: u64, zs
 }
 
 pub(in crate::mods) fn send_blob(out: &mut impl Write, sha: &Sha256) -> std::io::Result<()> {
+    if !super::super::transfer_policy::transfers_enabled() {
+        return writeln!(out, "ERR {}", says::NO_SUCH_FILE);
+    }
     let sha = sha.as_str();
     match crate::mods::vehicles::blob(sha) {
         Some(data) => {
@@ -463,17 +533,13 @@ impl Uploads {
         if bus.is_empty() || !self.serving() {
             return;
         }
-        if !crate::mods::transfer_policy::allows_bus(root, bus) {
-            log::info!("LAN host: {bus} is private; its files will not be offered");
-            return;
-        }
         let key = format!("{bus}|{paint}");
         {
             let mut k = self.kept_own.lock().unwrap_or_else(|e| e.into_inner());
             if k.0 == key || k.1 {
                 return;
             }
-            *k = (key.clone(), true);
+            *k = (key, true);
         }
         let (root, bus, paint) = (root.to_path_buf(), bus.to_string(), paint.to_string());
         let spawned = std::thread::Builder::new().name("lan-keep-own".into()).spawn(move || {

@@ -180,12 +180,17 @@ pub struct ModSource {
 /// from (a folder or a mounted archive).
 fn collect(args: &ModSource) -> (Manifest, Vec<PathBuf>) {
     let t0 = Instant::now();
-    let (list, _) = session_files(&args.map, args.bus.as_deref(), args.weather.as_deref(), Some(&args.root));
+    let (mut list, _) = session_files(&args.map, args.bus.as_deref(), args.weather.as_deref(), Some(&args.root));
+    list.retain(|(_, path)| server_fleet::trusted_source(&args.root, path));
+    transfer_policy::filter_session_files(&mut list);
     // (streamed by two private workers, with hashes remembered by size and time: thousands of
     // files - put on a server through a slow shared folder - is read once, not at each start)
     let entries = upload::hashed(&list);
     let by_rel: HashMap<&str, &PathBuf> = list.iter().map(|(r, p)| (r.as_str(), p)).collect();
     let sources: Vec<PathBuf> = entries.iter().filter_map(|e| by_rel.get(e.path.as_str()).map(|p| (*p).clone())).collect();
+    let bus = args.bus.as_deref().filter(|bus| {
+        entries.iter().any(|entry| entry.path.eq_ignore_ascii_case(&bus.replace('\\', "/")))
+    }).unwrap_or_default().replace('\\', "/");
     let total: u64 = entries.iter().map(|e| e.size).sum();
     log::info!(
         "LAN mods: {} files ({:.1} MB) of this session are not stock content and go to joining players (listed in {:.1} s)",
@@ -194,7 +199,7 @@ fn collect(args: &ModSource) -> (Manifest, Vec<PathBuf>) {
         t0.elapsed().as_secs_f64()
     );
     (
-        Manifest { map: args.map.replace('\\', "/"), bus: args.bus.clone().unwrap_or_default().replace('\\', "/"), entries },
+        Manifest { map: args.map.replace('\\', "/"), bus, entries },
         sources,
     )
 }
@@ -440,7 +445,6 @@ pub fn session_files(map: &str, bus: Option<&str>, weather: Option<&str>, origin
         }
     }
     let mut list: Vec<(String, PathBuf)> = files.into_values().filter(|(rel, _)| refuse_path(rel).is_none()).collect();
-    transfer_policy::filter_session_files(&mut list);
     list.sort_by(|a, b| a.0.cmp(&b.0));
     missing.sort();
     missing.dedup();
@@ -593,8 +597,22 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
                 // Re-check before every GET: files may have been replaced by a
                 // symlink since the fleet manifest was built. Never serve files
                 // that resolve outside the declared content roots.
-                if !server_fleet::trusted_source(root, src) {
-                    writeln!(out, "ERR file outside trusted content roots")?;
+                let entry = &active.0.entries[k];
+                let private_vehicle = transfer_policy::vehicle_folder(&entry.path).is_some_and(|folder| {
+                    !transfer_policy::transfers_enabled() || active.0.entries.iter().zip(sources).any(|(other, source)| {
+                        transfer_policy::is_descriptor(&other.path)
+                            && transfer_policy::vehicle_folder(&other.path).as_ref() == Some(&folder)
+                            && !transfer_policy::allows_file(source)
+                    })
+                });
+                let private_fleet = !Arc::ptr_eq(&active, &data) && active.0.entries.iter().zip(sources).any(|(other, source)| {
+                    transfer_policy::is_descriptor(&other.path) && !transfer_policy::allows_file(source)
+                });
+                if !server_fleet::trusted_source(root, src) || transfer_policy::marked_private(src)
+                    || private_vehicle || private_fleet
+                    || (transfer_policy::is_descriptor(&entry.path) && !transfer_policy::allows_file(src))
+                {
+                    writeln!(out, "ERR file is not shareable")?;
                     continue;
                 }
                 if omsi_cfg::vfs::archive_of(src).is_none() && !omsi_cfg::vfs::is_sealed(src) {

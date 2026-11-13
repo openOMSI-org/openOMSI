@@ -235,6 +235,15 @@ Player-hosted LAN leaves map sharing off. For a dedicated server, `share_maps = 
 include eligible vehicles referenced by the map. Leave it off when the rights to share
 map dependencies are unclear.
 
+Updated peers negotiate an upload preflight. The host checks the descriptors against
+their manifest hashes and permissions before asking for dependencies. In legacy mode,
+an updated host accepts older upload commands only when descriptors arrive and pass
+policy before their dependencies. An older client may have to retry or use its local
+files. Strict mode requires preflight on both ends and continues to allow local driving.
+Directory markers are checked in ordinary folders, symlink targets and mounted ZIPs.
+Outside shared files need their own marker because a vehicle descriptor does not
+establish the redistribution rights of unrelated content.
+
 The transport and file store remain encrypted. A recipient of authorized files can still
 extract them with a modified client. These settings cannot recall previously delivered files.
 
