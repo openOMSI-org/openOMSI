@@ -29,6 +29,8 @@ pub struct World {
     pub(super) object_type_loads: super::open::OnceByKey<Option<Arc<ObjectType>>>,
     pub(super) spline_type_loads: super::open::OnceByKey<Option<Arc<SplineType>>>,
     pub textures: Arc<TextureCache>,
+    /// Alpha coverage belongs to this world, including its background prefetches.
+    pub(super) alpha_masks: Arc<vehicle_materials::AlphaMasks>,
     /// What the simulation reads of the map, as one snapshot replaced whole (no lock to
     /// read it): the loaded tiles' ground, the lists made from them (stops, waiting places,
     /// obstacles, parked cars' boxes, petrol stations, echoing places), where the objects
@@ -40,6 +42,7 @@ pub struct World {
     /// its whole texture set twenty times (200 ms a spawn, 1.5 fps on Spandau).
     /// (With the number of sets holding each.)
     pub(super) vehicle_textures: Arc<Mutex<HashMap<PathBuf, (TextureId, usize)>>>,
+    pub(super) player_textures: Arc<Mutex<hashbrown::HashSet<PathBuf>>>,
     pub(super) freetex_reloads: Arc<FreeTextureReloads>,
     /// GPU meshes of vehicles by (bus file, mesh index), shared across paint schemes.
     pub(super) vehicle_meshes: Arc<Mutex<HashMap<(PathBuf, usize), (MeshId, usize)>>>,

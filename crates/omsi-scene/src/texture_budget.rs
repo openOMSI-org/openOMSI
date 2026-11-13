@@ -23,16 +23,33 @@ pub(super) fn fit_upgrade(data: &Arc<TextureData>, allowed: u64) -> Option<Arc<T
     Some(upload)
 }
 
-/// Even when the user picked Automatic for both controls, a driver-provided
-/// GPU budget is an active safety limit, not permission to allocate indefinitely.
-pub(super) fn memory_budget_active(texture_limit: u64, video_limit: u64, driver_cap: u64) -> bool {
-    texture_limit > 0 || video_limit > 0 || driver_cap > 0
-}
-
 pub(super) fn card_restore_room(video_limit: u64, card: omsi_render::GpuMemory) -> u64 {
     match card.cap(video_limit) {
         0 => u64::MAX,
         cap => (cap - cap / 10).saturating_sub(card.total()),
+    }
+}
+
+pub(super) fn card_near_room(video_limit: u64, card: omsi_render::GpuMemory) -> u64 {
+    match card.cap(video_limit) {
+        0 => u64::MAX,
+        cap => cap.saturating_sub(card.total()),
+    }
+}
+
+pub(super) fn card_hard_over(card: omsi_render::GpuMemory, video_limit: u64, card_over: u64, step: u64) -> u64 {
+    match (card.budget, video_limit) {
+        (None, _) => card_over,
+        (Some(budget), 0) => (card.total().saturating_sub(budget) / step * step).min(card_over),
+        (Some(budget), limit) => (card.total().saturating_sub(budget.min(limit)) / step * step).min(card_over),
+    }
+}
+
+pub(super) fn texture_room(limit: u64, usage: u64) -> u64 {
+    if limit == 0 {
+        u64::MAX
+    } else {
+        (limit - limit / 100 * 15).saturating_sub(usage)
     }
 }
 
@@ -42,12 +59,7 @@ pub(super) fn texture_restore_room(
     video_limit: u64,
     card: omsi_render::GpuMemory,
 ) -> u64 {
-    let room = if limit == 0 {
-        u64::MAX
-    } else {
-        (limit - limit / 100 * 15).saturating_sub(usage)
-    };
-    room.min(card_restore_room(video_limit, card))
+    texture_room(limit, usage).min(card_restore_room(video_limit, card))
 }
 
 pub(super) fn texture_restore_cost(e: &TexEntry) -> u64 {
@@ -75,7 +87,7 @@ pub(super) fn queue_near_restores(
     pending: &hashbrown::HashSet<PathBuf>,
     entries: &[(f64, PathBuf)],
     near: f64,
-    mut card_room: u64,
+    (mut card_room, mut squeezed_room): (u64, u64),
     t0: std::time::Instant,
 ) -> usize {
     let mut queued = 0;
@@ -84,20 +96,32 @@ pub(super) fn queue_near_restores(
             continue;
         }
         let Some(e) = gpu.textures.get_mut(p) else { continue };
-        if e.dropped == 0 || e.squeezed || e.retry_after.is_some_and(|t| t > t0) {
+        if e.dropped == 0 || e.retry_after.is_some_and(|t| t > t0) {
             continue;
         }
         let needed = texture_restore_cost(e);
-        if needed > card_room {
+        let peak = e.full_bytes.max(needed);
+        if peak > card_room || (e.squeezed && needed > squeezed_room) {
             continue;
         }
-        card_room -= needed;
+        card_room -= peak;
+        if e.squeezed {
+            squeezed_room -= needed;
+        }
         e.retry_after = None;
         e.near_restore = true;
         gpu.wants_restore.push(p.clone());
         queued += 1;
     }
     queued
+}
+
+pub(super) fn ground_is_near(gpu: &GpuCache, near: &mut hashbrown::HashMap<TextureId, f64>) {
+    if let Some(g) = &gpu.ground {
+        for id in g.ground_id.into_iter().chain(g.ground_detail.map(|d| d.0)) {
+            near.insert(id, 0.0);
+        }
+    }
 }
 
 pub(super) fn budget_level_drop(side: u32, levels: u32, floor: u32, bytes: u64, over: u64) -> u32 {

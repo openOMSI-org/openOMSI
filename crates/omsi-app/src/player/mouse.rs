@@ -18,7 +18,7 @@ impl Player {
     /// From outside, a switch behind another part of the bus cannot be reached through it
     /// ([`Self::reach`]); from the cab nothing hides one, as in Omsi.exe.
     pub(crate) fn pick(&self, origin: DVec3, dir: Vec3, spread: f32) -> Option<usize> {
-        let (i, centre) = pick_in(&self.vehicle, origin, dir, spread, self.reach(origin, dir))?;
+        let (i, centre) = pick_in(&self.vehicle, origin, dir, spread, self.reach(origin, dir), self.drawn_outside)?;
         if !centre && self.occlude_controls && self.control_hidden(origin, dir, None, i) {
             return None;
         }
@@ -55,7 +55,7 @@ impl Player {
 
     /// The same forgiving pick as `pick`, for the coupled sections of an articulated bus.
     pub(crate) fn pick_trailer(&self, origin: DVec3, dir: Vec3, spread: f32) -> Option<(usize, usize)> {
-        let ((ti, i), centre) = pick_trailer_in(&self.vehicle, origin, dir, spread, self.reach(origin, dir))?;
+        let ((ti, i), centre) = pick_trailer_in(&self.vehicle, origin, dir, spread, self.reach(origin, dir), self.drawn_outside)?;
         if !centre && self.occlude_controls && self.control_hidden(origin, dir, Some(ti), i) {
             return None;
         }

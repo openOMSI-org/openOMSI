@@ -5,7 +5,9 @@ use crate::*;
 
 impl Renderer {
     pub fn new_scene(&self) -> Scene {
+        static SERIAL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
         Scene {
+            serial: SERIAL.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             meshes: Vec::new(),
             textures: Vec::new(),
             glass_slot: None,
@@ -18,6 +20,7 @@ impl Renderer {
             interior_free: Vec::new(),
             coronas: Vec::new(),
             model_buf: None,
+            model_epoch: 0,
             params_buf: None,
             light_buf: None,
             grid_buf: None,

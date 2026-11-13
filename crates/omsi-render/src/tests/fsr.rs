@@ -112,6 +112,130 @@ fn fsr1_upscales_each_triple_screen_panel() {
     assert!(d > 0.05 && d < 12.0, "the panels went through FSR 1: {d}");
 }
 
+/// A triple screen turned on in the menu while an upscaler runs: the panels are not the
+/// upscaler's picture, and are drawn at their own size until the game starts anew without it.
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn a_triple_screen_turned_on_with_an_upscaler_is_not_drawn_at_its_size() {
+    let (w, h) = (288, 96);
+    let rig = TripleScreen { enabled: true, ..Default::default() };
+    let lighting = Lighting { shadows: false, fog_density: 0.0, ..Default::default() };
+    let mut plain = renderer(1.0, false);
+    let mut scene = rails_scene(&mut plain);
+    let a = plain.render_triple_to_image(&mut scene, w, h, &camera(), &lighting, &rig).unwrap();
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let temporal = Some(Temporal { upscaler: UPSCALER, quality: TemporalQuality::Performance });
+    let options = RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, temporal, ..Default::default() };
+    let mut upscaled = pollster::block_on(Renderer::new_with(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb), options)).expect("test renderer");
+    let mut scene = rails_scene(&mut upscaled);
+    let b = upscaled.render_triple_to_image(&mut scene, w, h, &camera(), &lighting, &rig).unwrap();
+    let d = difference(&a, &b);
+    assert!(d < 0.05, "the panels were drawn smaller and stretched: {d}");
+}
+
+/// The temporal upscaler these tests ask for: Apple's on a Mac, which has no other, AMD's elsewhere.
+const UPSCALER: TemporalUpscaler = if cfg!(target_os = "macos") { TemporalUpscaler::MetalFx } else { TemporalUpscaler::Fsr3 };
+
+fn upscaled_renderer() -> Renderer {
+    upscaled_renderer_at(1.0)
+}
+
+fn upscaled_renderer_at(render_scale: f32) -> Renderer {
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let temporal = Some(Temporal { upscaler: UPSCALER, quality: TemporalQuality::Performance });
+    let options = RenderOptions { msaa: 4, ssao: false, shadow_size: 1024, fxaa: false, render_scale, temporal, ..Default::default() };
+    pollster::block_on(Renderer::new_with(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb), options)).expect("test renderer")
+}
+
+/// A photo is no upscaler's picture: it is drawn at its own size, and the upscaler neither starts
+/// for it nor fails for the session because of it. The saved render scale, whose row is hidden
+/// while an upscaler is chosen, does not make it smaller either.
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn a_photo_does_not_go_through_the_upscaler() {
+    let (w, h) = (192, 128);
+    let lighting = Lighting { shadows: false, fog_density: 0.0, ..Default::default() };
+    let mut plain = renderer(1.0, false);
+    let mut scene = rails_scene(&mut plain);
+    let a = plain.render_to_image(&mut scene, w, h, &camera(), &lighting).unwrap();
+    let mut upscaled = upscaled_renderer_at(0.5);
+    let mut scene = rails_scene(&mut upscaled);
+    let b = upscaled.render_to_image(&mut scene, w, h, &camera(), &lighting).unwrap();
+    assert!(!upscaled.temporal_failed && upscaled.temporal.is_none());
+    let d = difference(&a, &b);
+    assert!(d < 0.05, "the photo was drawn smaller and stretched: {d}");
+}
+
+/// An upscaler whose DLLs cannot be loaded gives the picture back to the player's MSAA, and a
+/// rebuild while one is asked for keeps it off (the test's folder has no vendor DLLs).
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn the_msaa_comes_back_only_when_the_upscaler_gives_up() {
+    let (w, h) = (192, 128);
+    let lighting = Lighting { shadows: false, fog_density: 0.0, ..Default::default() };
+    let mut r = upscaled_renderer();
+    if r.options.temporal.is_none() {
+        return;
+    }
+    assert_eq!((r.options.msaa, r.options.msaa_fallback), (1, 4));
+    let mut scene = rails_scene(&mut r);
+    let options = RenderOptions { msaa: 4, shadow_size: 512, ..r.options };
+    assert!(r.rebuild_with(&mut scene, options));
+    assert_eq!((r.options.msaa, r.options.msaa_fallback, r.options.shadow_size), (1, 4, 512));
+    let tex = r.device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let view = tex.create_view(&Default::default());
+    for _ in 0..2 {
+        r.render_window(&mut scene, &view, w, h, &camera(), &lighting);
+    }
+    if r.temporal.is_some() {
+        return;
+    }
+    assert!(r.options.temporal.is_none());
+    assert_eq!(r.options.msaa, 4);
+}
+
+/// A rebuild without an upscaler lets the running one go, instead of keeping its context and
+/// textures for a renderer that will never take them. Needs AMD's DLLs beside the test binary.
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn a_rebuild_without_the_upscaler_frees_it() {
+    let (w, h) = (192, 128);
+    let lighting = Lighting { shadows: false, fog_density: 0.0, ..Default::default() };
+    let mut r = upscaled_renderer();
+    let mut scene = rails_scene(&mut r);
+    let tex = r.device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        view_formats: &[],
+    });
+    let view = tex.create_view(&Default::default());
+    r.render_window(&mut scene, &view, w, h, &camera(), &lighting);
+    if r.temporal.is_none() {
+        return;
+    }
+    let shadows = RenderOptions { shadow_size: 512, ..r.options };
+    assert!(r.rebuild_with(&mut scene, shadows));
+    assert!(r.temporal_kept.is_some());
+    r.render_window(&mut scene, &view, w, h, &camera(), &lighting);
+    assert!(r.temporal.is_some() && r.temporal_kept.is_none());
+    assert!(r.rebuild_with(&mut scene, RenderOptions { temporal: None, ..r.options }));
+    assert!(r.temporal_kept.is_none() && r.temporal.is_none());
+}
+
 /// VR with FSR 1: the headset image is full-sized, each eye is drawn at the eye resolution
 /// and FSR 1 scales it up to the image; without FSR 1 the image itself is that small, as
 /// before.
@@ -302,4 +426,48 @@ fn fsr1_textures_keep_their_detail_with_the_mip_bias() {
     eprintln!("detail: native {native}, FSR 50 % with the bias {with}, without {without}");
     assert!(with > without * 4.0, "the checks kept with the bias, grey without: native {native}, with {with}, without {without}");
     assert!(with < native * 1.3, "not sharper than the full-size picture: native {native}, with {with}");
+}
+
+/// Apple's MetalFX on a Mac: a still scene drawn at half the window's size settles, over the
+/// frames of a jitter cycle, nearer the picture drawn at full size than the same half-sized
+/// picture merely stretched. A jitter of the wrong sign leaves it blurred.
+#[cfg(target_os = "macos")]
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn metalfx_settles_on_the_full_sized_picture() {
+    let (w, h) = (384, 256);
+    let lighting = Lighting { shadows: false, fog_density: 0.0, ..Default::default() };
+    let mut full = renderer(1.0, false);
+    let mut scene = rails_scene(&mut full);
+    let reference = full.render_to_image(&mut scene, w, h, &camera(), &lighting).unwrap();
+    let mut half = renderer(0.5, false);
+    let mut scene = rails_scene(&mut half);
+    let stretched = half.render_to_image(&mut scene, w, h, &camera(), &lighting).unwrap();
+
+    let mut r = upscaled_renderer();
+    assert_eq!(r.options.temporal.map(|t| t.upscaler), Some(TemporalUpscaler::MetalFx), "MetalFX is not offered on this Mac's Metal");
+    let mut scene = rails_scene(&mut r);
+    let tex = r.device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let view = tex.create_view(&Default::default());
+    // (two jitter cycles of a picture scaled up twice: 32 frames each)
+    for _ in 0..64 {
+        r.render_window(&mut scene, &view, w, h, &camera(), &lighting);
+    }
+    assert!(r.temporal.is_some() && !r.temporal_failed, "MetalFX did not start, or gave up");
+    assert_eq!(r.temporal_render_size((w, h)), (w / 2, h / 2));
+    let upscaled = r.temporal_picture(w, h).expect("an upscaled picture").unwrap();
+    assert!(upscaled.chunks(4).filter(|p| p[0] > 120 && p[1] < 60).count() > 50, "the rails upscaled");
+    let (settled, plain) = (difference(&reference, &upscaled), difference(&reference, &stretched));
+    // (measured on an Apple M2: 0.29 against the stretched picture's 0.66; with the jitter
+    // of the wrong sign on one axis 0.39 or 0.57, on both 0.62)
+    assert!(settled < 0.55 * plain, "MetalFX's picture ({settled}) is not much nearer the full-sized one than the stretched picture ({plain})");
 }

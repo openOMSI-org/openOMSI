@@ -35,8 +35,7 @@ impl<'a> Offscreen<'a> {
         crate::lights::set_corona_root(&args.root);
         let mut scene = renderer.new_scene();
         let (world, camera) = lan::answering_while(&mut lan_off, args.bus.as_deref(), || load_world(args, &renderer, &mut scene))?;
-        // the map's own route arrows, with OMSI 2's route arrows
-        world.show_help_arrows(&renderer, &mut scene, settings.nav_arrows);
+        world.show_help_arrows(&renderer, &mut scene, settings.nav_map_arrows);
         let lan_seed = lan_off.as_ref().map(lan::population_seed);
         // (a player who joins another's game draws the host's traffic in it, whatever their own
         // count says: without it the host's cars had nowhere to go - "passengers, but no
@@ -291,6 +290,7 @@ impl<'a> Offscreen<'a> {
             cabin_air,
             srv_admin,
             srv_clock,
+            srv_wall: Default::default(),
             srv_metar,
             srv_metar_due,
             srv_metar_rx,

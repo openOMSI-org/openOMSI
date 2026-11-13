@@ -195,17 +195,21 @@ fn amber_decision_holds() {
 }
 
 #[test]
-fn amber_decision_holds_on_red() {
+fn an_ai_driver_that_can_stop_respects_red() {
     let f = Fixture::new();
-    let mut t = with_lights(&f, signalled(false, false), 1);
-    show(&mut t, 0, 0);
-    let id = car(&mut t, &f, 0, 100.0, 0x39, 15.0);
-    ticks(&mut t, 1.0);
-    t.cars.iter_mut().find(|c| c.id == id).unwrap().amber_decision = 0.0;
-    ticks(&mut t, 15.0);
-    let c = get(&t, id);
-    assert_eq!(c.amber_decision, 0.0, "amber decision of car was not overridden, {} != 0", c.amber_decision);
-    assert!(over_line(&t, id) > 10.0, "car did not pass the red light");
+    for phase in [0, 3] {
+        let mut t = with_lights(&f, signalled(false, false), 1);
+        show(&mut t, 0, phase);
+        let id = car(&mut t, &f, 0, 100.0, 0x39, 15.0);
+        ticks(&mut t, 1.0);
+        t.cars.iter_mut().find(|c| c.id == id).unwrap().amber_decision = 0.0;
+        ticks(&mut t, 15.0);
+        let c = get(&t, id);
+        assert_eq!(c.amber_decision, 0.0);
+        assert_eq!(c.state.lane, 0, "car crossed on phase {phase}");
+        assert!(c.state.speed < 0.1);
+        assert!(over_line(&t, id) < 0.3);
+    }
 }
 
 #[test]
@@ -856,8 +860,14 @@ fn a_circle_of_cars_giving_way_lets_the_longest_waiter_go_after_eight_seconds() 
     // a red light in it: congestion as the law wants it
     let mut t = circle_of_four(&f, Hold::Rule, [20.0; 4]);
     t.cars[0].light_hold = true;
+    t.cars[0].why = ("light", 1.0);
     t.resolve_waits();
     assert!(t.cars.iter().all(|c| c.yield_pass == f32::MIN));
+    let mut t = circle_of_four(&f, Hold::Rule, [9.0, 12.5, 8.5, 10.0]);
+    t.cars[0].light_hold = true;
+    t.resolve_waits();
+    let going: Vec<usize> = (0..4).filter(|&k| t.cars[k].yield_pass > t.time).collect();
+    assert_eq!(going, vec![1]);
 }
 
 #[test]

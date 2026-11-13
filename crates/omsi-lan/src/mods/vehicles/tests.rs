@@ -512,6 +512,12 @@ fn a_kept_file_goes_packed_at_its_smallest_once_it_has_been_asked_for() {
         assert_eq!(*data, piece(i as u64));
     }
     assert!(queued(&sha_t));
+    // and kept as packed: the next player who asks gets those bytes, not another packing
+    for i in 0..3 {
+        let (codec, wire) = (fast[i as usize].0.chars().next().unwrap(), fast[i as usize].1);
+        assert_eq!(packed(&sha_t, i).map(|(_, c, w)| (c, w.len() as u64)), Some((codec, wire)), "piece {i} kept");
+        assert_eq!(ask(&sha_t, i, true), fast[i as usize]);
+    }
     assert_eq!(ask(&sha_n, 0, true).0, "-");
     // a file not kept here queues nothing
     let mut buf = Vec::new();

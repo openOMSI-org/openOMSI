@@ -1,0 +1,10 @@
+{
+  "name": "openOMSI Remote",
+  "short_name": "openOMSI",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f1115",
+  "theme_color": "#0f1115",
+  "icons": [{ "src": "/icon.png", "sizes": "256x256", "type": "image/png" }]
+}

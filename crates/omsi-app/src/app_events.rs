@@ -97,6 +97,7 @@ impl ApplicationHandler for App {
         self.input.touch.drop_gpu();
         self.input_lost();
         self.save_last_situation();
+        omsi_platform::diagnostics::save(crate::support_bundle::diagnostics(self));
         // (a phone's app in the background is often ended without `exiting`)
         omsi_render::pipeline_cache::save();
     }
@@ -175,9 +176,8 @@ impl ApplicationHandler for App {
                 // releases go on, so that nothing held stays held)
                 if event.state == ElementState::Pressed {
                     if let PhysicalKey::Code(code) = event.physical_key {
-                        if self.integrations.plugin_typing_key(code, event.text.as_deref()) || self.devtools_typing(code, event.text.as_deref()) {
-                            return;
-                        }
+                        if self.integrations.plugin_typing_key(code, event.text.as_deref()) || self.devtools_typing(code, event.text.as_deref())
+                            || self.settings_search_key(code, event.text.as_deref()) { return; }
                         // the game's panels: the field typed into, Esc closing the one on top
                         if self.game_panel_key(code, event.text.as_deref()) {
                             return;
@@ -603,6 +603,7 @@ impl App {
                 ray,
             ) {
                 p.occlude_controls = self.view == "outside";
+                p.drawn_outside = !self.cam.in_cab;
                 if p.pick(o, d, spread).is_some() {
                     // a notch is worth a good push of the mouse: the scripts divide
                     // the movement by 10 (the ignition key), 200 (the parking brake)
@@ -998,7 +999,8 @@ fn info_line(clock: &omsi_sim::SimClock, player: Option<&Player>, duty: Option<&
             if let Some(trip) = d.trips.get(d.trip_index) {
                 let line = if trip.line.trim().is_empty() { d.line.trim() } else { trip.line.trim() };
                 data.route = Some((line.to_string(), trip.terminus.trim().to_string()));
-                data.next_stop = trip.stops.get(d.next_stop).map(|s| s.name.trim().to_string());
+                let next = omsi_sim::timetable_run::next_calling_stop(&trip.stops, d.next_stop);
+                data.next_stop = trip.stops.get(next).map(|s| s.name.trim().to_string());
                 let delay = p.vehicle.host.tt_delay;
                 data.delay = Some(format!("{}{}:{:02}", if delay < 0.0 { "-" } else { "+" }, (delay.abs() / 60.0) as i64, (delay.abs() % 60.0) as i64));
             }

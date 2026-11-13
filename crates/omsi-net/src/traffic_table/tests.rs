@@ -276,7 +276,7 @@ fn a_line_and_destination_arrive_with_the_bus_and_when_they_change() {
     let mut l = Loopback::new(Link::new(0.3, 0.02, 0.02, 3), Link::new(0.3, 0.02, 0.02, 4));
     table.begin(0.0);
     let id = table
-        .upsert(1, Kind::Bus, || look(1), || Meta { line: "37".into(), destination: "#4".into() }, truth(1, 0.0, 50.0))
+        .upsert(1, Kind::Bus, || look(1), || Meta { line: "37".into(), destination: "#4".into(), number: "80.849".into(), ident: "EMT-1234".into(), hof: "Brigadeiro".into() }, truth(1, 0.0, 50.0))
         .unwrap();
     table.finish();
     for _ in 0..200 {
@@ -285,8 +285,9 @@ fn a_line_and_destination_arrive_with_the_bus_and_when_they_change() {
     }
     let r = l.client.get(id).unwrap();
     assert_eq!((r.meta.line.as_str(), r.meta.destination.as_str()), ("37", "#4"));
+    assert_eq!((r.meta.number.as_str(), r.meta.ident.as_str(), r.meta.hof.as_str()), ("80.849", "EMT-1234", "Brigadeiro"), "the fleet number, plate and depot file come with it");
     assert_eq!(l.client.look(r).map(|x| x.file.as_str()), Some("Vehicles/Car1/car1.bus"));
-    table.set_meta(id, &Meta { line: "37".into(), destination: "#9".into() });
+    table.set_meta(id, &Meta { line: "37".into(), destination: "#9".into(), ..Default::default() });
     for _ in 0..200 {
         write_with(&mut table, id, l.now + 0.02);
         l.step(&table, CENTRE, 0.02);

@@ -17,12 +17,15 @@ impl App {
         let bus = omsi_cfg::content_roots().iter().chain(std::iter::once(&self.args.root)).find_map(|r| file.strip_prefix(r).ok()).unwrap_or(file).to_string_lossy().replace('\\', "/");
         let paint = p.vehicle.host.paint_scheme.flatten().and_then(|i| p.vehicle.ty.paint_schemes.get(i)).map(|s| s.name.clone());
         // (the depot file by its file name, as `find_hof` looks for it)
-        let hof = p.vehicle.host.hof.as_ref().and_then(|h| h.path.file_stem().map(|s| s.to_string_lossy().to_string()).or_else(|| Some(h.name.clone())));
+        let hof = p.vehicle.host.hof.as_deref().map(omsi_vehicle::hof::Hof::depot_name);
+        let identity = (p.vehicle.number(), p.vehicle.ident());
         let idle = self.menus.pending_placement.is_none();
         self.menus.swap_pending = true;
         self.place_vehicle(&bus, paint, hof);
         // (said when it is in place, see `placement`)
         if let Some(p) = self.menus.pending_placement.as_mut().filter(|_| idle) {
+            p.args.number = Some(identity.0);
+            p.args.plate = Some(identity.1);
             p.reload = true;
         }
     }
@@ -82,16 +85,14 @@ impl App {
             self.service_msg = Some(("That bus is no longer in the depot".into(), 3.0));
             return;
         };
-        let before = (self.args.number.clone(), self.args.plate.clone(), self.args.depot.clone(), self.args.bus.clone());
+        let before = (self.args.depot.clone(), self.args.bus.clone());
         let driven = self.player.as_ref().map(|p| p.uid);
-        let record = match (before.2.clone(), self.player.as_ref()) {
+        let record = match (before.0.clone(), self.player.as_ref()) {
             (Some(old), Some(p)) if crate::depot_bus::drives(&p.vehicle.ty.def.path.to_string_lossy(), crate::depot_bus::bus_of(&old).as_deref()) => {
                 Some((old, crate::depot_bus::outing_since(&self.session.career, &self.args, &self.session.depot_base), crate::depot_bus::wear(&p.vehicle)))
             }
             _ => None,
         };
-        self.args.number = Some(b.number.clone()).filter(|n| !n.trim().is_empty());
-        self.args.plate = Some(b.plate.clone()).filter(|n| !n.trim().is_empty());
         self.args.depot = Some(b.id.clone());
         self.args.bus = Some(b.bus.clone());
         let idle = self.menus.pending_placement.is_none();
@@ -100,15 +101,18 @@ impl App {
         }
         self.menus.swap_pending = driven.is_some();
         self.place_vehicle(&b.bus, Some(b.paint.clone()).filter(|p| !p.trim().is_empty()), None);
-        (self.args.number, self.args.plate) = (before.0, before.1);
+        if let Some(pending) = self.menus.pending_placement.as_mut().filter(|_| idle) {
+            pending.args.number = Some(b.number.clone()).filter(|n| !n.trim().is_empty());
+            pending.args.plate = Some(b.plate.clone()).filter(|n| !n.trim().is_empty());
+        }
         let started = idle && self.menus.pending_placement.is_some();
         let Some(old_uid) = driven.filter(|_| started) else {
-            (self.args.depot, self.args.bus) = (before.2, before.3);
+            (self.args.depot, self.args.bus) = (before.0, before.1);
             return;
         };
         let c = &self.session.career;
         let base = omsi_launcher_lib::depot::Outing { metres: c.metres, seconds: c.seconds, stops: c.stops[0], tickets: c.tickets.0, takings: c.tickets.1, crashes: c.crashes[0], ..Default::default() };
-        self.session.depot_prev = Some(crate::depot_bus::DepotSwitch { prev: (before.2, before.3), old_uid, record, base });
+        self.session.depot_prev = Some(crate::depot_bus::DepotSwitch { prev: (before.0, before.1), old_uid, record, base });
     }
 
     /// The vehicle is read and its meshes and textures made on a worker thread; the next
@@ -145,24 +149,7 @@ impl App {
                 (at.x, at.y, p.vehicle.heading)
             }
         };
-        let one = Args {
-            bus: Some(bus.clone()),
-            spawn: Some(format!("{x},{y},{heading}")),
-            // a bus placed now is a new one, also in a session started from a situation
-            // (a full tank if wanted, none of the situation's script pictures)
-            situation: None,
-            situation_vars: Vec::new(),
-            situation_strvars: Vec::new(),
-            situation_odometer_km: None,
-            situation_others: Vec::new(),
-            line: None,
-            tour: None,
-            trip: None,
-            autostart: false,
-            paint,
-            hof: hof.or(self.args.hof.clone()),
-            ..self.args.clone()
-        };
+        let one = placement_args(&self.args, bus.clone(), format!("{x},{y},{heading}"), paint, hof);
         let prefetch = w.placement_prefetch(r);
         let worker_args = one.clone();
         let (tx, receiver) = std::sync::mpsc::channel();
@@ -414,4 +401,59 @@ fn switch_vehicle(
     *player.player = Some(next);
     view.cam.look = (0.0, 0.0);
     *ui.service_msg = Some((omsi_ui::i18n::tr_fill("Now driving: {name}", &[("{name}", &name.trim())]), 4.0));
+}
+
+fn placement_args(args: &Args, bus: String, spawn: String, paint: Option<String>, hof: Option<String>) -> Args {
+    Args {
+        bus: Some(bus),
+        spawn: Some(spawn),
+        number: None,
+        plate: None,
+        // a bus placed now is a new one, also in a session started from a situation
+        // (a full tank if wanted, none of the situation's script pictures)
+        situation: None,
+        situation_vars: Vec::new(),
+        situation_strvars: Vec::new(),
+        situation_odometer_km: None,
+        situation_others: Vec::new(),
+        line: None,
+        tour: None,
+        trip: None,
+        autostart: false,
+        paint,
+        hof: hof.or(args.hof.clone()),
+        ..args.clone()
+    }
+}
+
+#[cfg(test)]
+mod identity_tests {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn fresh_placement_does_not_inherit_previous_vehicle_identity() {
+        let mut args = Args::parse_from(["openomsi", "--bus", "Vehicles/old.bus", "--number", "4711", "--plate", "OLD 123", "--depot", "old-depot"]);
+        args.situation = Some("saved.osn".into());
+        args.situation_strvars = vec![("number".into(), "9999".into()), ("ident".into(), "SAVED 123".into())];
+        args.situation_vars = vec![("engine".into(), 1.0)];
+        args.situation_odometer_km = Some(1234.0);
+        for bus in ["Vehicles/new.bus", "Vehicles/old.bus"] {
+            let placed = placement_args(&args, bus.into(), "1,2,90".into(), Some("new-paint".into()), Some("new-hof".into()));
+            assert_eq!(placed.number, None, "a new instance uses its own fleet list");
+            assert_eq!(placed.plate, None, "a new instance uses its own registration rules");
+            assert_eq!(placed.depot, args.depot);
+            assert!(!placed.is_resuming());
+            assert!(placed.situation_strvars.is_empty());
+            assert!(placed.situation_vars.is_empty());
+            assert_eq!(placed.situation_odometer_km, None);
+            assert_eq!(placed.bus.as_deref(), Some(bus));
+            assert_eq!(placed.spawn.as_deref(), Some("1,2,90"));
+            assert_eq!(placed.paint.as_deref(), Some("new-paint"));
+            assert_eq!(placed.hof.as_deref(), Some("new-hof"));
+        }
+        assert_eq!(args.number.as_deref(), Some("4711"));
+        assert_eq!(args.plate.as_deref(), Some("OLD 123"));
+        assert_eq!(args.depot.as_deref(), Some("old-depot"));
+    }
 }

@@ -249,10 +249,14 @@ pub enum MenuKind {
     /// sliders and buttons. A row's label is `name\u{1f}kind\u{1f}value\u{1f}description\u{1f}fraction`
     /// (kind: `s` switch, `v` slider, `c` stepper, `o` opens a list, `a` button, `i` information).
     Options,
+    /// A list grouped under headings, using the settings page's section layout without its search.
+    Sections,
     /// The lines of the map's timetable.
     Lines,
     /// One line's tours.
     Tours,
+    /// Vehicle placement and swapping with the launcher showroom.
+    Vehicles,
     /// Any other list (drivers, fleet numbers, destinations, liveries ...).
     List,
 }

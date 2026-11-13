@@ -41,6 +41,7 @@ impl Offscreen<'_> {
         let (args, dt) = (self.args, self.dt);
         let Self {
             ref mut srv_clock,
+            ref mut srv_wall,
             ref mut srv_admin,
             ref srv_metar,
             ref mut srv_metar_due,
@@ -59,7 +60,8 @@ impl Offscreen<'_> {
             ref settings,
             ..
         } = *self;
-        *srv_clock += dt as f64 * lan_off.as_ref().map(|l| l.clock_speed).unwrap_or(1.0);
+        // (the world clock follows the wall, not the steps: see `omsi_sim::world_clock`)
+        *srv_clock += srv_wall.step(Instant::now(), dt as f64, lan_off.as_ref().map(|l| l.clock_speed as f64).unwrap_or(1.0));
         // a server on the real time (server.cfg): its clock reads this machine's
         if i.is_multiple_of(super::steps_in(1.0)) && crate::real_time::server_real() {
             if let Some(n) = crate::real_time::now() {
@@ -723,7 +725,10 @@ impl Offscreen<'_> {
             h.eye = Some(humans::Eye::of(&eye_cam, view_aspect).widened(triple_extent(settings, &eye_cam, size.0, size.1)));
             h.set_remote_buses(remotes_off.remotes.iter().map(|(id, r)| (*id, r.vehicle())));
             h.set_duty(duty.as_ref());
-            h.set_player_next_stop(duty.as_ref().and_then(|d| d.trip().stops.get(d.next_stop)));
+            h.set_player_next_stop(duty.as_ref().and_then(|d| {
+                let stops = &d.trip().stops;
+                stops.get(omsi_sim::timetable_run::next_calling_stop(stops, d.next_stop))
+            }));
             let took = steps::tick_humans(h, &mut sim_view.people, dt, world, player.as_mut(), traffic.as_mut(), renderer, scene);
             if let Some(p) = player.as_mut() {
                 if took {

@@ -19,6 +19,7 @@ pub(crate) struct SceneBase {
     layout: wgpu::PipelineLayout,
     pub vertex_layout: wgpu::VertexBufferLayout<'static>,
     bias: i32,
+    pub(crate) trees: &'static [(&'static str, f64)],
 }
 
 /// The ground albedo picture's format (see `fs_ground`): sRGB, so that the layers blend as light.
@@ -29,7 +30,7 @@ const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![0
 impl SceneBase {
     /// `omit_enhanced`: the camera group without the enhanced path's textures (see
     /// `camera_layout_entries`).
-    pub(crate) fn new(device: &wgpu::Device, omit_enhanced: bool) -> SceneBase {
+    pub(crate) fn new(device: &wgpu::Device, omit_enhanced: bool, detailed_trees: bool) -> SceneBase {
         // One module for both paths: the enhanced fragment shader shares the vertex shader,
         // which the depth prepass relies on to the last bit (see `VsOut::clip`).
         log::info!("renderer: compiling the scene shaders");
@@ -95,7 +96,7 @@ impl SceneBase {
         };
         let bias: i32 = omsi_cfg::flags::OMSI_SURFACE_BIAS.parse()
             .unwrap_or(-24);
-        SceneBase { shader, shadow_layout, camera_layout, lm_atlas, lm_uniform, snow_track, snow_track_uniform, material_layout, corona_layout, layout, vertex_layout, bias }
+        SceneBase { shader, shadow_layout, camera_layout, lm_atlas, lm_uniform, snow_track, snow_track_uniform, material_layout, corona_layout, layout, vertex_layout, bias, trees: if detailed_trees && !GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed) { &[("DETAILED_TREES", 1.0)] } else { &[] } }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -114,6 +115,11 @@ impl SceneBase {
         surfaces: bool,
     ) -> wgpu::RenderPipeline {
         let use_alpha_to_coverage = alpha_to_coverage && samples > 1;
+        let constants: Vec<(&str, f64)> = [
+            ("ALPHA_TEST", if alpha_to_coverage { 1.0 } else { 0.0 }),
+            ("ALPHA_TO_COVERAGE", if use_alpha_to_coverage { 1.0 } else { 0.0 }),
+            ("TERRAIN_PAINT", if terrain_paint { 1.0 } else { 0.0 }),
+        ].into_iter().chain(self.trees.iter().copied()).collect();
         compile_pipeline(device, &wgpu::RenderPipelineDescriptor {
             label: Some("omsi"),
             layout: Some(&self.layout),
@@ -121,7 +127,7 @@ impl SceneBase {
                 module: &self.shader,
                 entry_point: Some("vs_main"),
                 buffers: &[self.vertex_layout.clone()],
-                compilation_options: Default::default(),
+                compilation_options: wgpu::PipelineCompilationOptions { constants: self.trees, ..Default::default() },
             },
             primitive: one_sided_primitive(cull),
             // Reversed Z: the near plane is 1 and the far plane 0, so nearer means
@@ -163,14 +169,7 @@ impl SceneBase {
                 // where it is invisible too: Omsi.exe draws `[matl_alpha] 2` with the alpha
                 // test off, and content hides things under invisible covers, #2059.)
                 compilation_options: wgpu::PipelineCompilationOptions {
-                    constants: &[
-                        ("ALPHA_TEST", if alpha_to_coverage { 1.0 } else { 0.0 }),
-                        (
-                            "ALPHA_TO_COVERAGE",
-                            if use_alpha_to_coverage { 1.0 } else { 0.0 },
-                        ),
-                        ("TERRAIN_PAINT", if terrain_paint { 1.0 } else { 0.0 }),
-                    ],
+                    constants: &constants,
                     ..Default::default()
                 },
             }),
@@ -261,6 +260,15 @@ pub(crate) struct Prepass {
     /// (drawn in the enhanced main pass, see `encode_prefill`)
     pub msaa_pipelines: Option<[wgpu::RenderPipeline; 6]>,
     pub eye_pipelines: Option<[wgpu::RenderPipeline; 6]>,
+    pub pane_mask: Option<PaneMaskPipelines>,
+}
+
+pub(crate) const PANE_MASK_TEXTURES: u32 = 17;
+
+pub(crate) struct PaneMaskPipelines {
+    pub layout: wgpu::BindGroupLayout,
+    pub panes: [wgpu::RenderPipeline; 4],
+    pub prefill: [wgpu::RenderPipeline; 2],
 }
 
 pub(crate) fn prepass(device: &wgpu::Device, scene: &SceneBase, msaa: u32, enhanced: bool) -> Prepass {
@@ -285,9 +293,38 @@ pub(crate) fn prepass(device: &wgpu::Device, scene: &SceneBase, msaa: u32, enhan
             .map(|(kind, cull)| make_prepass_samples(kind, cull, msaa, true, rt_gbuf()))
     });
     let eye_pipelines = None;
+    let pane_mask = (msaa > 1 && enhanced && MULTISAMPLED_SHADING.load(std::sync::atomic::Ordering::Relaxed) && device.limits().max_sampled_textures_per_shader_stage >= PANE_MASK_TEXTURES)
+        .then(|| pane_mask(device, scene, msaa));
     Prepass { pipelines, msaa_pipelines,
         eye_pipelines,
+        pane_mask,
     }
+}
+
+fn pane_mask(device: &wgpu::Device, scene: &SceneBase, msaa: u32) -> PaneMaskPipelines {
+    let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("pane depth"),
+        entries: &[wgpu::BindGroupLayoutEntry {
+            binding: 0,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Depth,
+                view_dimension: wgpu::TextureViewDimension::D2,
+                multisampled: true,
+            },
+            count: None,
+        }],
+    });
+    let pane_layout = pane_pl(device, scene);
+    let panes = [(false, 0), (true, 0), (false, scene.bias), (true, scene.bias)]
+        .map(|(cull, bias)| depth_pipeline(device, scene, &pane_layout, "fs_depth", cull, msaa, false, false, bias));
+    let masked_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("masked prefill"),
+        bind_group_layouts: &[Some(&scene.camera_layout), Some(&scene.material_layout), None, Some(&layout)],
+        immediate_size: 0,
+    });
+    let prefill = [false, true].map(|cull| depth_pipeline(device, scene, &masked_pl, "fs_depth_masked", cull, msaa, true, rt_gbuf(), 0));
+    PaneMaskPipelines { layout, panes, prefill }
 }
 
 pub(crate) fn eye_prepass(device: &wgpu::Device, scene: &SceneBase, msaa: u32) -> [wgpu::RenderPipeline; 6] {
@@ -314,36 +351,53 @@ fn prepass_builder<'a>(device: &'a wgpu::Device, scene: &'a SceneBase) -> impl F
             2 => "fs_depth_transmap",
             _ => unreachable!(),
         };
-        compile_pipeline(device, &wgpu::RenderPipelineDescriptor {
-            label: Some("depth prepass"),
-            layout: Some(&prepass_pl),
-            vertex: wgpu::VertexState {
-                module: &scene.shader,
-                // (the place and the cut-out's coverage only: see `vs_depth`)
-                entry_point: Some("vs_depth"),
-                buffers: &[scene.vertex_layout.clone()],
-                compilation_options: Default::default(),
-            },
-            primitive: one_sided_primitive(cull),
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: DEPTH_FORMAT,
-                depth_write_enabled: Some(true),
-                depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
-                stencil: Default::default(),
-                bias: Default::default(),
-            }),
-            multisample: wgpu::MultisampleState { count: samples, ..Default::default() },
-            fragment: Some(wgpu::FragmentState {
-                module: &scene.shader,
-                entry_point: Some(fragment),
-                targets: &if in_main {
-                            color_targets_for(HDR_FORMAT, None, wgpu::ColorWrites::empty(), false, false,
-                                surfaces,
-                            ) } else { Vec::new() },
-                compilation_options: Default::default(),
-            }),
-            multiview_mask: None,
-            cache: crate::pipeline_cache::get(device).as_ref(),
-        })
+        depth_pipeline(device, scene, &prepass_pl, fragment, cull, samples, in_main, surfaces, 0)
     }
+}
+
+fn pane_pl(device: &wgpu::Device, scene: &SceneBase) -> wgpu::PipelineLayout {
+    device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("pane depth"),
+        bind_group_layouts: &[Some(&scene.camera_layout), Some(&scene.material_layout)],
+        immediate_size: 0,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn depth_pipeline(device: &wgpu::Device, scene: &SceneBase, layout: &wgpu::PipelineLayout, fragment: &str, cull: bool, samples: u32, in_main: bool, surfaces: bool, bias: i32) -> wgpu::RenderPipeline {
+    compile_pipeline(device, &wgpu::RenderPipelineDescriptor {
+        label: Some("depth prepass"),
+        layout: Some(layout),
+        vertex: wgpu::VertexState {
+            module: &scene.shader,
+            // (the place and the cut-out's coverage only: see `vs_depth`)
+            entry_point: Some("vs_depth"),
+            buffers: &[scene.vertex_layout.clone()],
+            compilation_options: Default::default(),
+        },
+        primitive: one_sided_primitive(cull),
+        depth_stencil: Some(wgpu::DepthStencilState {
+            format: DEPTH_FORMAT,
+            depth_write_enabled: Some(true),
+            depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
+            stencil: Default::default(),
+            bias: wgpu::DepthBiasState {
+                constant: -bias,
+                slope_scale: if bias != 0 { -bias.signum() as f32 * 2.0 } else { 0.0 },
+                clamp: 0.0,
+            },
+        }),
+        multisample: wgpu::MultisampleState { count: samples, ..Default::default() },
+        fragment: Some(wgpu::FragmentState {
+            module: &scene.shader,
+            entry_point: Some(fragment),
+            targets: &if in_main {
+                        color_targets_for(HDR_FORMAT, None, wgpu::ColorWrites::empty(), false, false,
+                            surfaces,
+                        ) } else { Vec::new() },
+            compilation_options: wgpu::PipelineCompilationOptions { constants: scene.trees, ..Default::default() },
+        }),
+        multiview_mask: None,
+        cache: crate::pipeline_cache::get(device).as_ref(),
+    })
 }

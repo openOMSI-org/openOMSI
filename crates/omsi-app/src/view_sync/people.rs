@@ -484,6 +484,7 @@ impl PeopleView {
 #[derive(Default)]
 pub(crate) struct PersonView {
     pub(crate) meshes: Vec<(MeshId, usize)>,
+    clip_t: f32,
     /// Skinned positions and normals, per mesh.
     skins: Vec<(Vec<Vec3>, Vec<Vec3>)>,
     /// The bones the skins were made with, and whether this frame's pose changed them

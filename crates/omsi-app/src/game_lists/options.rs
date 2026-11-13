@@ -457,6 +457,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "camcoll" => s.camera_collision,
         "steer_look" => s.steer_look,
         "hands_in_cab" => s.hands_in_cab,
+        "driver_like_omsi" => s.driver_like_omsi,
         "ff" => s.ff_enabled,
         "brake_hold" => s.brake_hold,
         "auto_clutch" => s.auto_clutch,
@@ -470,7 +471,8 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "head_tracking_invert_z" => s.head_tracking_invert_z,
         "timetable_win" => app.menus.timetable,
         "info_bar" => app.menus.info_bar,
-        "nav_arrows" => app.menus.navigator.as_ref().map_or(s.nav_arrows, |n| n.arrows),
+        "nav_dynamic_arrows" => s.nav_dynamic_arrows,
+        "nav_map_arrows" => s.nav_map_arrows,
         "exact_fare" => s.exact_fare,
         "pax_bad_driving" => s.pax_bad_driving,
         "auto_announce" => s.auto_announce,
@@ -482,6 +484,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "cloud_shadows" => s.cloud_shadows,
         "light_glow" => s.light_glow,
         "windy_trees" => s.windy_trees,
+        "detailed_trees" => s.detailed_trees,
         "road_snow" => s.road_snow,
         "mirror_hud_every_frame" => s.mirror_hud_every_frame,
         "mirror_shadows" => s.mirror_shadows,
@@ -765,6 +768,10 @@ pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static 
             app.settings.hands_in_cab = on;
             Some(("hands_in_cab", bit))
         }
+        "driver_like_omsi" => {
+            app.settings.driver_like_omsi = on;
+            Some(("driver_like_omsi", bit))
+        }
         "brake_hold" => {
             app.settings.brake_hold = on;
             Some(("brake_hold", bit))
@@ -788,9 +795,13 @@ pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static 
             app.set_info_bar(on);
             None
         }
-        "nav_arrows" => {
-            app.settings.nav_arrows = on;
-            Some(("nav_arrows", bit))
+        "nav_dynamic_arrows" => {
+            app.settings.nav_dynamic_arrows = on;
+            Some(("nav_dynamic_arrows", bit))
+        }
+        "nav_map_arrows" => {
+            app.settings.nav_map_arrows = on;
+            Some(("nav_map_arrows", bit))
         }
         "exact_fare" => {
             app.settings.exact_fare = on;
@@ -845,6 +856,7 @@ fn toggle_set_graphics_and_controls(app: &mut App, id: &str, on: bool, bit: Stri
             app.settings.windy_trees = on;
             Some(("windy_trees", bit))
         }
+        "detailed_trees" => { app.settings.detailed_trees = on; Some(("detailed_trees", bit)) }
         // (the next picture tells the road snow, see `picture_lighting`)
         "road_snow" => { app.settings.road_snow = on; Some(("road_snow", bit)) }
         "mirror_hud_every_frame" => { app.settings.mirror_hud_every_frame = on; Some(("mirror_hud_every_frame", bit)) }

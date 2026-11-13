@@ -44,14 +44,11 @@ struct DenialKey {
 impl DenialKey {
     // entry is canonical before this is called; no filesystem work in respond().
     fn new(entry: &Path) -> Self {
-        let mut key = Self {
-            entry: entry.to_path_buf(),
-        };
         #[cfg(windows)]
-        {
-            key.entry = PathBuf::from(key.entry.as_os_str().to_string_lossy().to_ascii_lowercase());
+        let entry = PathBuf::from(entry.as_os_str().to_string_lossy().to_ascii_lowercase());
+        Self {
+            entry: entry.to_path_buf(),
         }
-        key
     }
     fn grant(grant: &ProcessGrant) -> Self {
         Self::new(&grant.entry)

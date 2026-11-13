@@ -151,7 +151,8 @@ pub(super) fn view_keys(mut cx: ViewKeysCx, dt: f32) {
 }
 
 fn aim_flashlight(cx: &mut ViewKeysCx, size: Option<(u32, u32)>) {
-    let free = cx.input.look_lock.is_none() && cx.input.mouse_grab.mode.is_none() && !cx.input.mouse_look && cx.input.cursor_hidden.is_none();
+    let live = if cx.input.touch.enabled { cx.input.touch.pointing() } else { !cx.input.cursor_stale };
+    let free = live && cx.input.look_lock.is_none() && cx.input.mouse_grab.mode.is_none() && !cx.input.mouse_look && cx.input.cursor_hidden.is_none();
     let wanted = cx.common.settings.flashlight_cursor && cx.view.cam.flashlight && free && !cx.common.settings.vr_requested();
     cx.view.cam.flashlight_aim = match (wanted, cx.view.camera.as_ref(), size) {
         (true, Some(cam), Some(size)) => {
@@ -464,6 +465,12 @@ mod tests {
         app.input.cursor_hidden = Some(app.input.cursor);
         assert_eq!(aim(&mut app), None);
         app.input.cursor_hidden = None;
+        app.input.cursor_stale = true;
+        assert_eq!(aim(&mut app), None, "a controller was used since the mouse last moved");
+        app.input.cursor_stale = false;
+        app.input.touch.enabled = true;
+        assert_eq!(aim(&mut app), None, "no finger on the screen");
+        app.input.touch.enabled = false;
         app.settings.flashlight_cursor = false;
         assert_eq!(aim(&mut app), None);
     }

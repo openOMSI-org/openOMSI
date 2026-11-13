@@ -138,7 +138,7 @@ function Servers() {
                 ${st.loading && html`<div class="row muted small"><${Spinner} /> ${t('Asking the server...')}</div>`}
                 ${st.err && html`<div class="small" style="color:var(--danger)">${t("Can't reach the server: {err}", { err: st.err })}</div>`}
                 ${st.err && !official && html`<div class="muted small selectable">${x.address}</div>`}
-                ${i && html`<div class="muted small">${[i.map && mapName(i.map), t('{n} of {max} players', { n: i.players, max: i.max_players }), i.time, i.weather].filter(Boolean).join(' - ')}</div>`}
+                ${i && html`<div class="muted small">${[i.map && mapName(i.map), t('{n} of {max} players', { n: i.players, max: i.max_players }), i.date, i.time, i.weather].filter(Boolean).join(' - ')}</div>`}
                 ${i?.motd && html`<div class="dim small">${i.motd}</div>`}
               </div>
               <div style="width:130px"><${Select} raw value=${x.protocol || 'auto'} options=${[['auto', autoLabel], ['udp', t('UDP')], ['websocket', t('WebSocket')]]} onChange=${(protocol) => save(list.map((y) => y === x ? { ...y, protocol } : y))} /></div>

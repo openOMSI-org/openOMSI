@@ -96,8 +96,11 @@ pub(crate) struct Integrations {
     /// The Lua plugins' panels and notifications on the screen (`omsi.ui`).
     pub(crate) plugin_panels: crate::plugin_ui::PluginPanels,
     /// Discord's "Playing openOMSI" status, and when it was last brought up to date.
+    #[cfg_attr(any(target_os = "android", target_os = "ios"), allow(dead_code))]
     pub(crate) discord: Option<crate::discord::Discord>,
+    #[cfg_attr(any(target_os = "android", target_os = "ios"), allow(dead_code))]
     pub(crate) discord_t: f32,
+    pub(crate) discord_max: crate::discord::ServerLimit,
     // Steamworks API layer and it's last updated time
     #[cfg(steam)]
     pub(crate) steam: Option<crate::steam::Steam>,
@@ -111,6 +114,7 @@ pub(crate) struct Integrations {
     pub(crate) vehicle_scripts_of: Option<std::path::PathBuf>,
     /// The scenery objects whose Lua scripts run (see `plugin_io::object`).
     pub(crate) object_scripts: crate::plugin_io::object::ObjectScripts,
+    pub(crate) remote: crate::remote::RemoteCockpit,
 }
 
 /// How the frames go and what is measured or scripted about them: the frame rate, the
@@ -226,8 +230,10 @@ pub(crate) struct GfxState {
     pub(crate) mirror_hud: crate::mirror_hud::MirrorHud,
     /// The window is minimised or out of sight, as its events last said.
     pub(crate) window_hidden: bool,
-    /// OMSI 2's route arrows over the road (the `nav_arrows` setting).
+    /// OMSI 2's route arrows over the road (the `nav_dynamic_arrows` setting).
     pub(crate) route_arrows: crate::route_arrows::RouteArrows,
+    /// The plugins' cables in the scene (`omsi.cable`).
+    pub(crate) plugin_cables: omsi_scene::plugin_cables::PluginCables,
     /// Frames the window was hidden for (they are not drawn).
     pub(crate) hidden_frames: u32,
     /// Stand-in for the window's frame while the window is hidden (OMSI_RENDER_OCCLUDED).
@@ -258,6 +264,7 @@ pub(crate) struct ViewState {
     pub(crate) flashlight_aim: Option<glam::Vec3>,
     /// The camera is in the own bus's cab this frame (see RedrawRequested).
     pub(crate) in_cab: bool,
+    pub(crate) heard_inside: bool,
     /// How far the player has turned the head (driver, passenger) or swung the outside
     /// camera around the bus, and how far that camera sits from it.
     pub(crate) look: (f32, f32),
@@ -367,6 +374,7 @@ pub(crate) struct InputState {
     pub(crate) look_lock: Option<bool>,
     /// The cursor hidden while a controller drives: where it stood.
     pub(crate) cursor_hidden: Option<(f32, f32)>,
+    pub(crate) cursor_stale: bool,
     /// The wheel's place when it last counted as moved.
     pub(crate) last_ctl_steer: Option<f32>,
     /// The mouse's throttle and brake (eased in with the steering).
@@ -430,6 +438,8 @@ pub(crate) struct MenuState {
     /// The open settings window's page titles, kept for a moment (asked every frame, see
     /// `game_lists::page_titles`).
     pub(crate) page_titles: std::cell::RefCell<crate::game_lists::TitlesCache>,
+    /// Installed weather names, loaded once for online snapshots or local administration.
+    pub(crate) online_weather: std::cell::OnceCell<Vec<(String, String)>>,
     /// (manufacturer, type) of each vehicle of `vehicle_list`, by its path.
     pub(crate) vehicle_meta: std::collections::HashMap<String, (String, String)>,
     pub(crate) hud: Option<hud::Hud>,

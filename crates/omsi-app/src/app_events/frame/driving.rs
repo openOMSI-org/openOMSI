@@ -241,7 +241,7 @@ pub(super) fn player_to_scene(cx: PlayerToSceneCx, dt: f32) {
     // there every photo showed the bus without its driver)
     // (out of the seat: nobody at the wheel)
     let at_eyes = *cx.view.view == "driver" && (cx.ui.photo.is_none() || cx.view.camera.as_ref().is_none_or(|c| (c.position - crate::camera_util::driver_eye(p)).length() < 0.5));
-    p.sync_driver_hands(r, scene, dt, cx.common.settings.driver && cx.people.on_foot.is_none(), at_eyes, cx.common.settings.hands_in_cab);
+    p.sync_driver_hands(r, scene, dt, cx.common.settings.driver && cx.people.on_foot.is_none(), at_eyes, cx.common.settings.hands_in_cab, cx.common.settings.driver_like_omsi);
 }
 
 crate::app::stage_ctx!(
@@ -292,7 +292,7 @@ pub(super) fn audio(cx: AudioCx, dt: f32) {
         }
     }
     if let Some(a) = cx.sound.audio.as_ref() {
-        cx.sound.milezero.update(a, cx.common.settings.milezero, cx.common.settings.volume);
+        cx.sound.milezero.update(a, cx.common.settings.milezero);
         if let Some(world) = cx.world.world.as_ref() {
             if let Some(net) = world.trolley_net.lock().clone() {
                 cx.sound.switch_sound.update(a, &net, cx.view.cam.in_cab && cx.player.player.is_some(), *cx.clock.paused);

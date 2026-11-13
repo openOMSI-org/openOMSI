@@ -5,7 +5,14 @@ use crate::*;
 
 mod fallbacks;
 mod open;
+mod upscaler_device;
 mod timers;
+mod auxiliary;
+pub use auxiliary::with_auxiliary_renderer;
+pub(crate) use auxiliary::{auxiliary_context, with_auxiliary_context, update_ceiling, AdapterBool};
+
+#[cfg(test)]
+mod isolation_tests;
 
 pub use fallbacks::*;
 pub use open::*;
@@ -23,11 +30,13 @@ pub static ADAPTER_INFO: std::sync::Mutex<Option<wgpu::AdapterInfo>> = std::sync
 pub(crate) static CEILING: std::sync::Mutex<Option<crate::gpu_memory::Ceiling>> = std::sync::Mutex::new(None);
 
 pub fn ceiling() -> Option<crate::gpu_memory::Ceiling> {
-    *CEILING.lock().unwrap_or_else(|e| e.into_inner())
+    update_ceiling(|c| *c)
 }
 
 /// The device runs on OpenGL (set in `Renderer::new`).
-pub(crate) static GL_BACKEND: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(crate) static GL_BACKEND: auxiliary::AdapterBool = auxiliary::AdapterBool::new(0);
+pub(crate) static AMD_VULKAN: auxiliary::AdapterBool = auxiliary::AdapterBool::new(1);
+pub(crate) static MULTISAMPLED_SHADING: auxiliary::AdapterBool = auxiliary::AdapterBool::new(2);
 
 /// Whether the device draws on OpenGL (known once a renderer is made).
 pub fn gl_backend() -> bool {
@@ -66,7 +75,7 @@ impl ArrayPath {
     }
 }
 
-pub(crate) static ARRAY_PATH: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+pub(crate) static ARRAY_PATH: auxiliary::AdapterArrays = auxiliary::AdapterArrays::new();
 
 pub(crate) fn array_path() -> ArrayPath {
     match ARRAY_PATH.load(std::sync::atomic::Ordering::Relaxed) {
@@ -99,7 +108,8 @@ impl GpuArray {
             return GpuArray::Buffer(device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some(label),
                 size: size.max(16).next_multiple_of(wgpu::COPY_BUFFER_ALIGNMENT),
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                // (copied from too: temporal upscaling keeps last frame's matrices)
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC,
                 mapped_at_creation: false,
             }));
         }

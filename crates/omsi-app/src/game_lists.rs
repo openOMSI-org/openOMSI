@@ -5,6 +5,7 @@
 //! the list again (or the next one: a line's tours).
 
 use crate::App;
+pub(crate) mod bus_preview;
 /// The cloud types of OMSI's weather (`Weather/clouds.cfg`): the name in a weather file and
 /// the name shown.
 use crate::weather_setup::CLOUD_KINDS;
@@ -1005,6 +1006,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                 "time_edit" | "clock_ontime" | "clock_set" | "clock_shift" if step => clock_lines::clock_action(app, verb, arg),
                 "view_editor" if step => { crate::game_panels::view_editor::open(app); return None; }
                 "mirror_hud_edit" if step => { app.page_action(verb); return None; }
+                "remote_panel" if step => { crate::game_panels::remote_panel::open(app); return None; }
                 "seat_reset" if step => {
                     // (this bus's views as its .bus file has them again)
                     app.settings.seat = [0.0; 3];

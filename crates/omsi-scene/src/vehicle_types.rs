@@ -229,6 +229,8 @@ impl FreeBuilt {
 
 #[derive(Clone)]
 pub struct FreeTex {
+    pub(super) player_textures: Arc<Mutex<hashbrown::HashSet<PathBuf>>>,
+    pub(super) is_player: bool,
     /// Remote pixels override local path lookup, even before the first image arrives.
     pub remote: Option<Option<TextureId>>,
     pub remote_key: String,
@@ -248,6 +250,7 @@ pub struct FreeTex {
     /// File name (lower case) → the picture found for it (None: no such file, the slot
     /// keeps its own texture there).
     pub pictures: HashMap<String, Option<TextureId>>,
+    pub(super) spare: Vec<TextureId>,
     /// The name currently applied (lower case).
     pub current: Option<String>,
     /// The world's shared vehicle textures (a picture is one texture for every vehicle
@@ -580,6 +583,7 @@ pub struct VehicleSet {
 pub struct VehiclePrefetch {
     pub(super) root: PathBuf,
     pub(super) textures: Arc<TextureCache>,
+    pub(super) alpha_masks: Arc<crate::vehicle_materials::AlphaMasks>,
     pub(super) on_gpu: Arc<Mutex<HashMap<PathBuf, (TextureId, usize)>>>,
     pub(super) meshes_on_gpu: Arc<Mutex<HashMap<(PathBuf, usize), (MeshId, usize)>>>,
     pub(super) ready: Arc<Mutex<PreparedVehicles>>,
@@ -635,7 +639,7 @@ impl VehiclePrefetch {
             // what its alpha covers, which the upload reads to tell glass from bodywork
             // (`slot_alpha`): the whole picture decoded for it on the thread that draws was
             // most of the 0.1 to 1 s a coach's set took there
-            let _ = crate::vehicle_materials::alpha_mask(&path);
+            let _ = self.alpha_masks.get(&path);
             if self.on_gpu.lock().contains_key(&path)
                 || self.ready.lock().textures.contains_key(&path)
             {
@@ -816,6 +820,15 @@ impl VehicleRender {
         let set = lamp_set(lamps, n);
         let blocks = self.interior_blocks.get()?;
         blocks.iter().find(|b| b.1 == set).map(|b| (b.0, set.len() as u32))
+    }
+}
+
+impl World {
+    pub(super) fn protect_player_textures(&self, set: &VehicleSet, render: &mut VehicleRender) {
+        self.player_textures.lock().extend(set.textures.iter().cloned());
+        for f in render.variants.iter_mut().flat_map(|v| &mut v.free) {
+            f.is_player = true;
+        }
     }
 }
 

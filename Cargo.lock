@@ -3786,6 +3786,7 @@ dependencies = [
  "omsi-mapdraw",
  "omsi-model",
  "omsi-mt",
+ "omsi-multiplayer-ui",
  "omsi-navigator",
  "omsi-net",
  "omsi-o3d",
@@ -3793,10 +3794,12 @@ dependencies = [
  "omsi-platform",
  "omsi-plugin",
  "omsi-plugin-ui",
+ "omsi-remote",
  "omsi-render",
  "omsi-scene",
  "omsi-scenery",
  "omsi-script",
+ "omsi-settings-ui",
  "omsi-sim",
  "omsi-soundscape",
  "omsi-srcscan",
@@ -3872,6 +3875,7 @@ dependencies = [
  "ring",
  "thiserror 2.0.21",
  "unicode-normalization",
+ "windows 0.62.2",
 ]
 
 [[package]]
@@ -4128,6 +4132,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "omsi-multiplayer-ui"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "omsi-admin",
+ "omsi-ui",
+]
+
+[[package]]
 name = "omsi-navigator"
 version = "0.1.0"
 dependencies = [
@@ -4138,6 +4151,7 @@ dependencies = [
  "omsi-lan",
  "omsi-map",
  "omsi-mapdraw",
+ "omsi-model",
  "omsi-render",
  "omsi-scene",
  "omsi-sim",
@@ -4238,6 +4252,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "omsi-remote"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "image",
+ "log",
+ "omsi-cfg",
+ "omsi-geometry",
+ "omsi-model",
+ "omsi-sim",
+ "omsi-texture",
+ "omsi-vehicle",
+ "parking_lot 0.13.0",
+ "qrcodegen",
+ "ring",
+ "serde_json",
+ "sha2",
+ "tungstenite",
+]
+
+[[package]]
 name = "omsi-render"
 version = "0.1.0"
 dependencies = [
@@ -4248,15 +4283,20 @@ dependencies = [
  "glam",
  "glow",
  "hashbrown 0.17.1",
+ "libc",
  "log",
  "naga",
+ "objc2 0.6.5",
+ "objc2-metal 0.3.2",
  "omsi-cfg",
  "omsi-geometry",
  "omsi-texture",
  "pollster 1.0.1",
  "rayon",
  "wgpu",
+ "wgpu-hal",
  "windows 0.62.2",
+ "windows-core 0.62.2",
  "winit",
 ]
 
@@ -4334,6 +4374,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "omsi-settings-ui"
+version = "0.1.0"
+dependencies = [
+ "omsi-ui",
+ "winit",
+]
+
+[[package]]
 name = "omsi-sim"
 version = "0.1.0"
 dependencies = [
@@ -4375,6 +4423,7 @@ dependencies = [
  "omsi-map",
  "omsi-platform",
  "omsi-scenery",
+ "omsi-script",
  "omsi-sim",
  "omsi-vehicle",
  "serde_json",
@@ -4965,6 +5014,12 @@ checksum = "7f6d64c71eb498fe9eae14ce4ec935c555749aef511cca85b5568910d6e48001"
 dependencies = [
  "bytemuck",
 ]
+
+[[package]]
+name = "qrcodegen"
+version = "1.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4339fc7a1021c9c1621d87f5e3505f2805c8c105420ba2f2a4df86814590c142"
 
 [[package]]
 name = "quick-error"

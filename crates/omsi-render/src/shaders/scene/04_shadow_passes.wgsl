@@ -128,7 +128,7 @@ fn fs_puddle_glass_depth(in: FsIn) {
 // (the shadow and rain maps, drawn at their own size: their textures' mips as they are)
 @fragment
 fn fs_shadow_test(in: FsIn) {
-    cutout_coverage(in.uv, in.params, 0.0);
+    cutout_coverage(in.uv, in.params, 0.0, 1.0);
 }
 
 // the depth-only passes' (`vs_depth`) fragment shaders: plain, cut out, a transmap's
@@ -142,7 +142,7 @@ fn fs_depth(in: DepthIn) {
 // where the colour then discarded, and the sky showed through)
 @fragment
 fn fs_depth_test(in: DepthIn) {
-    cutout_coverage(in.uv, in.params, camera.lod.x);
+    cutout_coverage(in.uv, in.params, camera.lod.x, tree_card_fade(in.world));
 }
 
 // (a transmap's opaque part, see `transmap_coverage`)
@@ -150,6 +150,15 @@ fn fs_depth_test(in: DepthIn) {
 fn fs_depth_transmap(in: DepthIn) {
     transmap_coverage(in.uv, in.params, camera.lod.x);
 }
+
+//MS @group(3) @binding(0) var t_pane_depth: texture_depth_multisampled_2d;
+
+//MS @fragment
+//MS fn fs_depth_masked(in: DepthIn, @builtin(sample_index) sample: u32) {
+//MS     if (in.clip.z <= textureLoad(t_pane_depth, vec2<i32>(in.clip.xy), i32(sample))) {
+//MS         discard;
+//MS     }
+//MS }
 
 // The multisampled prefill's cut-outs (foliage): their depth only where the colour pass
 // is sure to cover every sample - the alpha-to-coverage of an alpha of 1 (`shade_enhanced`:
@@ -166,7 +175,7 @@ fn fs_depth_cover(in: DepthIn) {
         discard;
     }
     let duv = tex_address(in.uv);
-    let a = diffuse_border(textureSampleBias(t_diffuse, s_diffuse, duv, camera.lod.x), duv).a;
+    let a = diffuse_border(textureSampleBias(t_diffuse, s_diffuse, duv, camera.lod.x), duv).a * tree_card_fade(in.world);
     let aa = max(fwidth(a) * 0.5, 1.0 / 255.0);
     if (a < ALPHA_REF + aa + 4.0 / 255.0) {
         discard;
@@ -175,7 +184,7 @@ fn fs_depth_cover(in: DepthIn) {
 
 // A cut-out's texel: kept where its alpha reaches the cutoff (`bias`: the mip bias its
 // pass reads the textures with, the colour pass's for the picture's depth).
-fn cutout_coverage(uv: vec2<f32>, params: vec4<f32>, bias: f32) {
+fn cutout_coverage(uv: vec2<f32>, params: vec4<f32>, bias: f32, fade: f32) {
     var duv = tex_address(uv);
     if (material.extra.x > 0.5) {
         duv = uv * material.extra.z;
@@ -193,7 +202,7 @@ fn cutout_coverage(uv: vec2<f32>, params: vec4<f32>, bias: f32) {
         let tm = sample_transmap_bias(tex_address(uv - params.zw), bias);
         a = select(1.0, tm.a, material.params.w > 0.5);
     }
-    if (a < ALPHA_REF) {
+    if (a * fade < ALPHA_REF) {
         discard;
     }
 }

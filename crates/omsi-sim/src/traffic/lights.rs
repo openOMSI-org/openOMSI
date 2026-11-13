@@ -29,6 +29,10 @@ pub const RAIL_ASK_DISTANCE: f32 = 600.0;
 /// `[approachdist]` notwithstanding (with 0 a car half a metre short never asked).
 pub const WAITING_AT_LINE: f32 = 3.0;
 
+/// How far before its stop the clock rests (s): close enough to keep the phase that ends
+/// there, and inside the wire's 0.05 s step so a client can be sent the same phase.
+const HOLD_MARGIN: f64 = 1e-5;
+
 /// The `TrafficLightPhase` of an object no crossing light drives: a signal without a
 /// `[varparent]`, one whose crossing has no program, any other scripted object. Omsi.exe
 /// binds every placed object's `TrafficLightPhase` and `TrafficLightApproach` to a light
@@ -125,6 +129,36 @@ impl TrafficLightController {
         gap <= distance
     }
 
+    /// Whether a stop or jump point's condition holds for this frame's requests.
+    fn stop_active(&self, p: &LightStop) -> bool {
+        let asked = if p.if_request {
+            self.stops.iter().any(|q| q.if_request && q.time == p.time && q.jump_to == p.jump_to && self.request.get(q.light).copied().unwrap_or(false))
+        } else {
+            self.request.get(p.light).copied().unwrap_or(false)
+        };
+        if p.if_request { !asked } else { asked }
+    }
+
+    /// The instant a stop may hold at: `at`, or `p.time` when `at` is in a red-yellow changeover; `None` when the stop itself is in one.
+    fn hold_instant(&self, p: &LightStop, at: f64, cycle: f64) -> Option<f64> {
+        let stop = p.time as f64;
+        if self.in_changeover_at(stop) {
+            // (Brixton Road's stop inside red-and-yellow would freeze the junction)
+            None
+        } else if self.in_changeover_at(at) {
+            // The stop's own time must be ahead: never rewind to it after the clock passed.
+            ((stop - at).rem_euclid(cycle) < 1e-4).then_some(stop)
+        } else {
+            Some(at)
+        }
+    }
+
+    /// Some light shows red-and-yellow at `x` and has a green later: the program is
+    /// changing over to green.
+    fn in_changeover_at(&self, x: f64) -> bool {
+        (0..self.lights.len()).any(|i| Self::aspect(self.state_at(i, x)) == Aspect::RedYellow && self.lights[i].iter().any(|&(s, _)| matches!(Self::aspect(s), Aspect::Green | Aspect::GreenYellow)))
+    }
+
     /// Run the cycle clock on by `dt` seconds of game time, honouring the stop and jump
     /// points with this frame's requests (`request`, set by the caller before).
     pub fn advance(&mut self, dt: f32) {
@@ -143,21 +177,66 @@ impl TrafficLightController {
         // Allow every coincident inactive point without losing this frame's time,
         // but still bound authored jump loops.
         for _ in 0..16 + self.stops.len() {
-            let mut best: Option<(usize, f64)> = None;
+            let mut best: Option<(usize, f64, bool)> = None;
             for (k, p) in self.stops.iter().enumerate() {
                 if self.rewound == Some(k) {
                     continue;
                 }
-                let d = (p.time as f64 - self.time).rem_euclid(cycle);
-                let d = if d > cycle - 1e-6 { 0.0 } else { d };
+                let raw = (p.time as f64 - self.time).rem_euclid(cycle);
+                let wrapped = raw > cycle - 1e-6;
+                let d = if wrapped { 0.0 } else { raw };
                 if d < 1e-6 && self.passed.contains(&k) {
                     continue;
                 }
-                if d <= left && best.map(|b| d < b.1).unwrap_or(true) {
-                    best = Some((k, d));
+                // A jump at the same time as a stop goes first; the stop is left behind.
+                let better = match best {
+                    None => true,
+                    Some((bk, bd, _)) => d < bd - 1e-6 || ((d - bd).abs() <= 1e-6 && p.jump_to.is_some() && self.stops[bk].jump_to.is_none()),
+                };
+                if d <= left && better {
+                    best = Some((k, d, wrapped));
                 }
             }
-            let Some((k, d)) = best else {
+
+            let best_d = best.map_or(f64::INFINITY, |(_, d, _)| d);
+            // (a step shorter than the hold margin reaches no point, but a held clock
+            // must stay held for the network snapshot: treat that stop as in reach)
+            let reach = if best.is_some() { left } else { HOLD_MARGIN };
+            let mut barrier: Option<(f64, f64)> = None;
+            if best.is_some() || left <= HOLD_MARGIN {
+                for (k, p) in self.stops.iter().enumerate() {
+                    if p.jump_to.is_some() || self.passed.contains(&k) {
+                        continue;
+                    }
+                    let d = (p.time as f64 - self.time).rem_euclid(cycle);
+                    if d <= 1e-6 || d > reach + 1e-6 || d > best_d + 1e-6 || !self.stop_active(p) {
+                        continue;
+                    }
+                    let at = if d > HOLD_MARGIN {
+                        (self.time + d - HOLD_MARGIN).rem_euclid(cycle)
+                    } else {
+                        self.time
+                    };
+                    if let Some(hold_at) = self.hold_instant(p, at, cycle) {
+                        if barrier.map_or(true, |(bd, _)| d < bd) {
+                            barrier = Some((d, hold_at));
+                        }
+                    }
+                }
+            }
+
+            if let Some((bd, hold_at)) = barrier {
+                let jump_first = best.is_some_and(|(k, d, _)| {
+                    let p = self.stops[k];
+                    p.jump_to.is_some() && (d - bd).abs() <= 1e-6 && self.stop_active(&p)
+                });
+                if !jump_first {
+                    self.time = hold_at.rem_euclid(cycle);
+                    self.held = true;
+                    return;
+                }
+            }
+            let Some((k, d, wrapped)) = best else {
                 if left > 0.0 {
                     clear_rewind(self, left);
                     // (a sliver of a frame left over does not make the clock leave the
@@ -169,27 +248,37 @@ impl TrafficLightController {
                 self.time = (self.time + left).rem_euclid(cycle);
                 return;
             };
+            let p = self.stops[k];
+            let is_active = self.stop_active(&p);
+
+            // A stop the clock already stands on (within 1e-6 either side) stops
+            // here, as it would after a direct placement. An inactive one is behind it.
+            if p.jump_to.is_none() && (d < 1e-6 || wrapped) {
+                if is_active {
+                    if let Some(hold_at) = self.hold_instant(&p, self.time, cycle) {
+                        self.time = hold_at.rem_euclid(cycle);
+                        self.held = true;
+                        self.passed.clear();
+                        return;
+                    }
+                }
+                self.passed.push(k);
+                continue;
+            }
+
             if d > 1e-6 {
                 self.passed.clear();
             }
             clear_rewind(self, d);
             self.time = (self.time + d).rem_euclid(cycle);
             left -= d;
-            let p = self.stops[k];
-            let asked = if p.if_request {
-                self.stops.iter().any(|q| q.if_request && q.time == p.time && q.jump_to == p.jump_to && self.request.get(q.light).copied().unwrap_or(false))
-            } else {
-                self.request.get(p.light).copied().unwrap_or(false)
-            };
-            let active = if p.if_request { !asked } else { asked };
-            // A stop does not hold the changeover to green: while some light shows
-            // red-and-yellow the clock goes on. London's Brixton Road programs put a stop a
-            // second into red-and-yellow, and a queue waiting there held the junction in the
-            // changeover for good. Any other phase may hold: green, and also flashing
-            // yellow, dark or all red (mod level crossings rest with dark road lights,
-            // night programs without a jump).
-            let holdable = p.jump_to.is_some() || !self.in_changeover();
-            if !active || !holdable {
+
+            if p.jump_to.is_none() {
+                self.passed.push(k);
+                continue;
+            }
+
+            if !is_active {
                 self.passed.push(k);
                 continue;
             }
@@ -205,6 +294,7 @@ impl TrafficLightController {
                     // wrapped round: Städtedreieck's Bergerplatz jumps to 130 s of its
                     // 127 s cycle, and taken as 3 s it ran its night flashing in every
                     // daytime cycle.
+                    let source = p.time;
                     let jump_to = f64::from(to);
                     let target = if jump_to < cycle { jump_to.rem_euclid(cycle) } else { 0.0 };
                     let no_progress = ((target - p.time as f64).rem_euclid(cycle)).abs() < 1e-6;
@@ -217,7 +307,9 @@ impl TrafficLightController {
                     // 2 -> 22 -> 2 for good: the second bus light never got its green (#3092).
                     self.passed.clear();
                     for (j, q) in self.stops.iter().enumerate() {
-                        if ((q.time as f64 - target).rem_euclid(cycle) < 1e-6 || (target - q.time as f64).rem_euclid(cycle) < 1e-6) && j != k {
+                        let at_source = q.jump_to.is_none() && (q.time - source).abs() as f64 <= 1e-6;
+                        let at_target = (q.time as f64 - target).rem_euclid(cycle) < 1e-6 || (target - q.time as f64).rem_euclid(cycle) < 1e-6;
+                        if (at_source || at_target) && j != k {
                             self.passed.push(j);
                         }
                     }
@@ -232,19 +324,9 @@ impl TrafficLightController {
                         return;
                     }
                 }
-                None => {
-                    self.time = p.time as f64;
-                    self.held = true;
-                    self.passed.clear();
-                    return;
-                }
+                None => {}
             }
         }
-    }
-
-    /// Some light shows red-and-yellow: the program is changing over to green.
-    fn in_changeover(&self) -> bool {
-        (0..self.lights.len()).any(|i| Self::aspect(self.state(i)) == Aspect::RedYellow)
     }
 
     /// State of light `i` at position `x` of the cycle (s).
@@ -253,12 +335,12 @@ impl TrafficLightController {
             Some(p) if !p.is_empty() => p,
             _ => return 6,
         };
-        let mut x = x.rem_euclid(self.cycle_len()) as f32;
+        let mut x = x.rem_euclid(self.cycle_len());
         for (state, dur) in phases {
-            if x < *dur {
+            if x < f64::from(*dur) {
                 return *state;
             }
-            x -= dur;
+            x -= f64::from(*dur);
         }
         // after the last phase its state holds until the cycle starts again
         phases.last().map(|p| p.0).unwrap_or(0)
@@ -369,7 +451,8 @@ impl TrafficLightController {
     /// May a vehicle drive over the stop line now (not counting yellow, which is the
     /// driver's decision)?
     pub fn allows_go(state: i32) -> bool {
-        matches!(Self::aspect(state), Aspect::Green | Aspect::Dark)
+        // state 8 is the go phase of some programs (Tver's left-turn arrows)
+        matches!(Self::aspect(state), Aspect::Green | Aspect::GreenYellow | Aspect::Dark)
     }
 
     /// Lamp variables (red, yellow, green) of a state, for lamp objects without a script

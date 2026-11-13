@@ -318,6 +318,7 @@ impl Offscreen<'_> {
             // the navigator, as the window shows it (its camera settled first)
             if settings.navigator {
                 let mut nav = navigator::Navigator::new(true, settings.ui_opacity, &settings.navigator_corner);
+                nav.set_screen(navigator::Screen::of_vehicle(&p.vehicle, &p.render));
                 nav.schedule = omsi_cfg::flags::OMSI_NAV_SCHEDULE.is_set();
                 nav.show_ai = settings.nav_ai;
                 nav.show_cars = settings.nav_ai_cars;
@@ -469,7 +470,7 @@ impl Offscreen<'_> {
                 glam::Mat4::perspective_rh(
                     c.fov_deg.to_radians(),
                     w as f32 / h as f32,
-                    c.far,
+                    c.depth_far(),
                     c.near,
                 )
             });

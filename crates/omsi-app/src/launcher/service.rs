@@ -119,6 +119,9 @@ fn serve(rx: std::sync::mpsc::Receiver<Value>, reply: Reply) {
     let mut renderer: Option<Renderer> = None;
     let mut quality = Quality::now();
     let mut showroom = Showroom::new();
+    // A phone's game runs in this process: for the drive the preview gives up its renderer
+    // and its bus, which the card's memory - the phone's own - held beside the game's.
+    let mut resting = false;
     let pads = super::pads::Pads::start(super::pads::paths());
     let encoder = {
         let (tx, rx) = std::sync::mpsc::channel::<Encode>();
@@ -146,7 +149,7 @@ fn serve(rx: std::sync::mpsc::Receiver<Value>, reply: Reply) {
                 }
                 let _ = omsi_launcher_lib::content_dir();
                 let root = omsi_launcher_lib::root_dir().unwrap_or_default();
-                showroom.want(Look { root, map: s("map"), bus: s("bus"), paint: s("paint"), weather: s("weather"), time: f("time", 540.0) as i32, date: s("date") });
+                showroom.want(Look { root, map: s("map"), bus: s("bus"), paint: s("paint"), paint_index: None, weather: s("weather"), time: f("time", 540.0) as i32, date: s("date") });
                 send(&id, json!({ "ok": true }), &[]);
             }
             "orbit" => {
@@ -161,14 +164,30 @@ fn serve(rx: std::sync::mpsc::Receiver<Value>, reply: Reply) {
                 showroom.auto_turn = req.get("on").and_then(Value::as_bool).unwrap_or(false);
                 send(&id, json!({ "ok": true }), &[]);
             }
+            "rest" => {
+                resting = true;
+                showroom.rest();
+                renderer = None;
+                send(&id, json!({ "ok": true }), &[]);
+            }
+            "wake" => {
+                resting = false;
+                showroom.wake();
+                send(&id, json!({ "ok": true }), &[]);
+            }
             // (the launcher starts: the renderer's pipelines are built now, not on the first picture)
             "warm" => {
-                if renderer.is_none() {
+                if renderer.is_none() && !resting {
                     renderer = open_renderer(quality.options).ok();
                 }
                 send(&id, json!({ "ok": renderer.is_some() }), &[]);
             }
             "frame" => {
+                // (`picture: true` with nothing moving is what stops the page polling until the game ends)
+                if resting {
+                    send(&id, json!({ "ok": true, "busy": false, "failed": false, "moving": false, "picture": true, "view": showroom.view.name(), "views": showroom.views() }), &[]);
+                    continue;
+                }
                 // (a drag and the wheel come with the picture they ask for: one round trip)
                 let (dx, dy, zoom) = (f("dx", 0.0) as f32, f("dy", 0.0) as f32, f("zoom", 1.0) as f32);
                 if dx != 0.0 || dy != 0.0 {

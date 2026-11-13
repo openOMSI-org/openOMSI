@@ -126,7 +126,7 @@ impl Offscreen<'_> {
             vehicle_camera(&player, &mut self.camera);
             // the driver at the wheel, as the window has him every frame (not posed, he was
             // not drawn - or stood in the aisle in the file's T-pose)
-            player.sync_driver(&self.renderer, &mut self.scene, 1.0 / 30.0, self.settings.driver, args.view == "driver");
+            player.sync_driver_hands(&self.renderer, &mut self.scene, 1.0 / 30.0, self.settings.driver, args.view == "driver", false, self.settings.driver_like_omsi);
             self.player_ref = Some(player);
         }
     }

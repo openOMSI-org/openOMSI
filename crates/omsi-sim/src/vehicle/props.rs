@@ -113,7 +113,13 @@ pub fn compute_mesh_props(ty: &VehicleType, var: &dyn Fn(&str) -> Option<f32>) -
             props.interior = interior * 0.5;
             for m in &def.materials {
                 if let Some(v) = &m.alphascale {
-                    if let (Some(x), Some(slot)) = (Some(var(v).unwrap_or(0.0)), override_slot(&vm.materials, m)) {
+                    let x = v
+                        .trim()
+                        .parse::<f32>()
+                        .ok()
+                        .or_else(|| var(v))
+                        .unwrap_or(0.0);
+                    if let Some(slot) = override_slot(&vm.materials, m) {
                         let boost = if v.trim().to_ascii_lowercase().starts_with("rain_window") {
                             1.8
                         } else {
@@ -176,8 +182,8 @@ pub(super) struct MeshPlan {
     /// boosts a raindrop-film layer (`Rain_Window_*_Wetness`) so it stays visible instead of
     /// reading as the texture's own faint alpha (its drops are only a few percent opaque,
     /// so a middling wetness value was nearly invisible against the glass behind it).
-    /// (An undeclared `[alphascale]` variable reads 0.)
-    pub(super) alpha: Vec<(usize, Option<usize>, f32)>,
+    /// An undeclared `[alphascale]` variable reads 0.
+    pub(super) alpha: Vec<(usize, PropSource, f32)>,
     pub(super) uv_x: Vec<(usize, usize)>,
     pub(super) uv_y: Vec<(usize, usize)>,
 }
@@ -238,7 +244,7 @@ impl PropsPlan {
                             } else {
                                 1.0
                             };
-                        plan.alpha.push((slot, var(name), boost));
+                        plan.alpha.push((slot, source(name), boost));
                     }
                     if let Some(i) = m.texcoord_trans_x.as_deref().and_then(var) {
                         plan.uv_x.push((slot, i));
@@ -336,10 +342,10 @@ impl PropsPlan {
                 interior = interior.max(src.value(vars, 0.0).clamp(0.0, 1.0) * range);
             }
             props.interior = interior * 0.5;
-            for &(slot, i, boost) in &plan.alpha {
-                let x = match i {
-                    Some(i) => vars.get(i).copied().unwrap_or(1.0),
-                    None => 0.0,
+            for &(slot, src, boost) in &plan.alpha {
+                let x = match src {
+                    PropSource::Missing => 0.0,
+                    src => src.value(vars, 1.0),
                 };
                 props.slot_alpha[slot] = (x * boost).clamp(0.0, 1.0);
             }

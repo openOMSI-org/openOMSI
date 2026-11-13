@@ -123,7 +123,8 @@ impl App {
         // a player's screenshot is the world without the interface over it, as OMSI's
         // (#1265); the input script's pictures keep it for the visual tests
         let hud = (!include_touch).then(|| std::mem::take(&mut scene.overlays));
-        let picture = developed.map(Ok).unwrap_or_else(|| r.render_to_image(
+        let upscaled = (!include_touch).then(|| r.temporal_picture(s.config.width, s.config.height)).flatten();
+        let picture = developed.map(Ok).or(upscaled).unwrap_or_else(|| r.render_to_image(
             scene,
             s.config.width,
             s.config.height,
@@ -344,7 +345,7 @@ impl App {
                 &rig,
             );
         } else if !mirrored {
-            r.render(
+            r.render_window(
                 scene,
                 &view,
                 s.config.width,

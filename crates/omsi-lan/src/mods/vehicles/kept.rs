@@ -90,6 +90,7 @@ pub(crate) fn announce<'a>(fps: impl Iterator<Item = &'a str>) {
     buses().announce(fps)
 }
 
+#[cfg(test)]
 pub(crate) fn mount(fp: &str) -> Option<PathBuf> {
     buses().mount(fp)
 }

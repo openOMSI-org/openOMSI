@@ -27,6 +27,7 @@ impl App {
             }
         }
         self.menus.dropdown = None;
+        self.shell.bus_preview.invalidate_selection();
         self.menus.admin_list = Some(crate::game_lists::items(self, &kind));
         self.menus.list_kind = Some(kind);
         // (on its first line, not on a heading, nor on the search line above it: Enter
@@ -328,6 +329,7 @@ impl App {
 
     /// The open list is closed: back to the game menu.
     pub(crate) fn close_list(&mut self) {
+        self.shell.clear_bus_preview();
         self.shell.ui.dismiss_popups();
         // A programmatic close cannot silently keep an unconfirmed graphics preview.
         if self.menus.graphics_before.is_some() {
@@ -465,6 +467,16 @@ impl App {
                 self.time_edit_key(code);
             }
             return;
+        }
+        if self.settings_list() && !self.shell.settings_search.query.trim().is_empty() {
+            let shown = &self.shell.settings_search.visible;
+            let sel = self.menus.chooser.unwrap_or(0);
+            let down = matches!(code, KeyCode::ArrowDown | KeyCode::KeyS);
+            if down || matches!(code, KeyCode::ArrowUp | KeyCode::KeyW) {
+                self.menus.chooser = crate::shell::pause::navigation::step(shown, sel, down).or(self.menus.chooser);
+                return;
+            }
+            if matches!(code, KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::Space | KeyCode::ArrowLeft | KeyCode::KeyA | KeyCode::ArrowRight | KeyCode::KeyD) && !shown.contains(&sel) { return; }
         }
         let n = self.menus.admin_list.as_ref().unwrap_or(&self.menus.vehicle_list).len().max(1);
         let sel = self.menus.chooser.unwrap_or(0);

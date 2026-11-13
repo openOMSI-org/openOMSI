@@ -102,6 +102,7 @@ mod depot_bus;
 mod devtools;
 mod telemetry;
 mod themes;
+mod remote;
 use omsi_scene::threads;
 use omsi_scene::tiles;
 mod traffic;
@@ -495,6 +496,9 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     if args.export_glb.is_none() && args.lan_join.is_none() {
         place_on_duty(&mut args);
     }
+    if server_cfg.is_none() && args.export_glb.is_none() {
+        omsi_platform::diagnostics::game_started();
+    }
     let settings = settings::Settings::load();
     applog::log_system(&settings);
     if args.drive_keys.eq_ignore_ascii_case("simple")
@@ -662,6 +666,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             mirror_hud: Default::default(),
             window_hidden: false,
             route_arrows: Default::default(),
+            plugin_cables: Default::default(),
             hidden_frames: 0,
             stand_in: None,
             sim_view: Default::default(),
@@ -727,6 +732,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             list_dirty: false,
             graphics_before: None,
             page_titles: Default::default(),
+            online_weather: Default::default(),
             chooser: None,
             editor: None,
             vehicle_list: Vec::new(),
@@ -791,6 +797,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             flashlight: false,
             flashlight_aim: None,
             in_cab: false,
+            heard_inside: false,
             look: (0.0, 0.0),
             look_smooth: (0.0, 0.0),
             view_looks: Default::default(),
@@ -850,6 +857,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             cruise: None,
             look_lock: None,
             cursor_hidden: None,
+            cursor_stale: false,
             last_ctl_steer: None,
             mouse_pedals: (0.0, 0.0),
             mouse_kmh: 0.0,
@@ -881,7 +889,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             plugin_command: false,
             plugin_panels: Default::default(),
             discord: None,
-            discord_t: 0.0,
+            discord_t: 0.0, discord_max: Default::default(),
             #[cfg(steam)]
             steam,
             update_watch,
@@ -889,6 +897,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             plugins: None,
             vehicle_scripts_of: None,
             object_scripts: Default::default(),
+            remote: Default::default(),
         },
         net: NetState::default(),
         service_msg: clock_note.map(|m| (m, 10.0)),

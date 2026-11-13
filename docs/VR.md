@@ -1,86 +1,78 @@
 # Virtual reality (Windows)
 
-openOMSI can render through an OpenXR headset on Windows. VR is off by default. With VR off,
-the normal desktop controls and rendering stay available.
-
-## Requirements
-
-- Windows and an OpenXR headset with an active OpenXR runtime.
-- A DirectX 12 capable graphics adapter.
-
-No runtime debug tool setting is needed. The headset runtime controls its own reprojection
-settings.
+openOMSI can render through an OpenXR headset on Windows. An active OpenXR runtime
+and a DirectX 12 capable graphics adapter are required. VR is off by default.
+The normal desktop controls and rendering remain available when VR is off.
 
 ## Start and settings
 
-1. Connect the headset.
-2. Start its OpenXR runtime before you launch a drive.
-3. In the launcher, open **Settings → Camera → Virtual reality**.
-4. Enable **Use OpenXR headset**.
-5. Start a drive. The game starts in the headset when the session opens.
+Connect the headset and start its OpenXR runtime before launching a drive. In the
+launcher, open **Settings → Camera → Virtual reality** and enable **Use OpenXR headset**.
+The game starts in the headset when the session opens.
 
-| Setting | Values | Default | What it does |
-| --- | --- | --- | --- |
-| Eye resolution | 50%, 65%, 80%, 100% | 65% | Scales the runtime's recommended resolution for each eye. Lower values reduce GPU work. |
-| Head tracking smoothing | Off, 5, 10, 20, 30 ms | Off | Smooths the headset pose. Off uses raw tracking. |
-| Bus mirror refresh | Off, 8, 16, 24, 32, 48, 60, 90, 120, 180, 240, 360/s, Every frame | 16/s | Total redraw budget shared by all bus mirrors. Off freezes their picture. Every frame redraws every mirror once per game frame. |
-| Show headset picture on monitor | On, Off | On | Copies the left eye to the desktop window. |
+| Setting | Choices | Effect |
+| --- | --- | --- |
+| Eye resolution | 50%, 65%, 80%, 100% | Scale of the runtime's recommended resolution for each eye. Lower values reduce GPU work. |
+| Head tracking smoothing | Off, 5, 10, 20, 30 ms | Smooth the headset pose; Off uses raw tracking. |
+| Bus mirror refresh | Off, 8, 16, 24, 32, 48, 60, 90, 120, 180, 240, 360/s, Every frame | Total redraw budget shared by all bus mirrors. Off freezes their picture; Every frame redraws every mirror once per game frame. |
+| Show headset picture on monitor | On or off | Copy the left eye to the desktop window. |
 
-These settings affect VR only. The other graphics settings still apply; lower them on
-demanding maps if needed.
+These settings affect VR only. The game's other graphics settings still apply
+and may need adjusting on demanding maps.
 
-### Bus mirror refresh
+The default mirror budget is 16 redraws/s in total. With four mirrors, 120/s
+targets about 30 updates/s per mirror, while 240/s targets about 60 updates/s
+per mirror. Each mirror can update at most once per game frame. **Every frame**
+removes the redraw budget, so mirrors follow the game's actual frame rate;
+headset reprojection does not generate additional mirror updates. More frequent
+mirror rendering can reduce game FPS, especially on buses with many mirrors.
 
-- The budget is a total for all mirrors. With four mirrors, 120/s gives about 30 updates/s
-  per mirror, and 240/s about 60 per mirror.
-- Each mirror updates at most once per game frame.
-- **Every frame** removes the budget: mirrors follow the game's actual frame rate. Headset
-  reprojection does not add mirror updates.
-- More frequent mirror rendering can lower game FPS, especially on buses with many mirrors.
-- For testing, `OMSI_OPENXR_MIRROR_RATE` overrides the saved budget: `-1` for Every frame,
-  `0` to freeze, or a positive total redraw rate.
+For testing, `OMSI_OPENXR_MIRROR_RATE` overrides the saved VR mirror budget.
+Set it to `-1` for Every frame, `0` to freeze, or a positive total redraw rate.
 
 ## Controls
 
-Edit the VR key bindings under **Controls → Keyboard** (search for `VR`).
+The VR key bindings are editable under **Controls → Keyboard**; search for `VR`.
+The default bindings are:
 
-| Control | Action |
+| Action | Default key |
 | --- | --- |
-| Ctrl+Shift+R | Reset the VR view |
-| F7 | Toggle the monitor preview |
-| F8 | Switch between VR and desktop |
-| Ctrl+Shift+N | Show or hide the VR navigator |
-| Ctrl+Shift+M | Position the VR navigator |
-| Right-click | Toggle a smooth zoom. The mouse stays usable while zoomed. |
+| Reset the VR view | Ctrl+Shift+R |
+| Toggle the monitor preview | F7 |
+| Switch between VR and desktop | F8 |
+| Show or hide the VR navigator | Ctrl+Shift+N |
+| Position the VR navigator | Ctrl+Shift+M |
 
-Also useful, as outside VR: Shift+N cycles the navigator (map, map with stop list, off), Esc
-opens the menu (in VR in front of the headset), the mouse points at cockpit controls and
-left-click uses the one under the pointer. Outside VR, right-drag is the normal camera control.
+Adjust your seating position while driving under **Esc → Options → Camera** with
+**Seat forward and back**, **Seat height**, **Seat left and right** and **Head pitch**.
+**Reset the seat position** puts the seat back where the bus has it. The launcher
+has the same sliders under **Settings → Camera**; those changes apply when the next
+drive starts.
 
-- The pointer fades after ten seconds without mouse movement. It comes back in the centre
-  when you move the mouse.
-- When mouse steering is active, the cockpit pointer is hidden so the mouse can steer the bus.
+**Esc** opens the menu in front of the headset. Move the mouse to point at cockpit
+controls and left-click to use them. The pointer fades after ten seconds without
+mouse movement and returns in the centre when moved again. When mouse steering is
+active, the cockpit pointer is hidden so the mouse can steer the bus.
 
-### Seat position
+In VR, **right-click** toggles a smooth zoom; the next right-click returns to the
+normal view. The mouse remains usable while zoomed. Outside VR, right-drag retains
+its normal camera control.
 
-Adjust the seat while driving under **Esc → Options → Camera**: **Seat forward and back**,
-**Seat height**, **Seat left and right** and **Head pitch**. **Reset the seat position** puts
-the seat back where the bus has it.
-
-The launcher has the same sliders under **Settings → Camera**. Those changes apply when the
-next drive starts.
+The headset runtime controls its own reprojection settings. No runtime debug tool
+setting is needed to enable openOMSI's VR mode.
 
 ## VR navigator
 
-- The navigator is off by default for buses without saved settings.
-- It stays attached to the bus as you drive and look around.
-- It is an overlay: cockpit geometry does not hide it, so place it in a clear spot.
-- The navigator controls and the placement menu are available only in VR.
+The navigator is off by default for buses without saved settings. **Ctrl+Shift+N**
+shows or hides it. **Shift+N** cycles between the map, map with stop list, and off.
+The display stays attached to the bus as you drive and look around.
 
-To place it, press **Ctrl+Shift+M** or open **Esc → Options → VR → Move and rotate with the
-mouse...**. Opening placement mode also shows the navigator.
+Press **Ctrl+Shift+M** to position it with the mouse, or open
+**Esc → Options → VR → Move and rotate with the mouse...**.
+Opening placement mode also enables the navigator. These controls and the placement
+menu are available only in VR.
 
-| Control (placement mode) | Action |
+| Input in placement mode | Action |
 | --- | --- |
 | Hold left mouse and move | Move the display |
 | Hold right mouse and move | Turn and tilt the display |
@@ -90,86 +82,70 @@ mouse...**. Opening placement mode also shows the navigator.
 | R | Reset placement and size, keeping visibility unchanged |
 | Esc or Enter | Save and finish |
 
-- The placement menu also has numeric position, width, rotation, tilt, roll and background
-  opacity settings.
-- Placement and visibility are saved separately for each bus.
-- Single-player pauses during placement. Multiplayer keeps running.
-- During placement the mouse moves the navigator, not cockpit controls.
-- Losing window focus saves and ends placement.
+The placement menu also offers numeric position, width, rotation, tilt, roll and
+background opacity settings. Placement and visibility are saved separately for
+each bus.
+
+Single-player pauses during placement; multiplayer continues running. Mouse input
+adjusts the navigator instead of operating cockpit controls. Losing window focus
+saves and ends placement. The display is an overlay, so place it in a clear spot:
+cockpit geometry does not hide it.
+
+## Headset-relative cabin input
+
+The VR pointer retains a mouse offset within the headset image. Drawing and
+picking use the same cropped eye ray, including pending mouse input; surface hits
+supply depth only. Head movement does not turn a held dial or reset mouse idle
+time. The pointer hides after ten idle seconds and returns with mouse movement or
+a menu transition. Cursor-warp events contribute no movement.
+
+VR interruption releases held controls at their current values and stops automatic
+motion with its authored stop event. Desktop release, Escape, missed clicks and
+wheel notches retain the existing automatic endpoint behaviour. VR hover refresh
+also follows head motion; it may refresh the cabin surface ray every six frames.
+Headset-free regressions cover ray alignment, pending input, idle visibility,
+precise cancellation, desktop auto movement and Escape. Mod-specific scripts and
+live headset/multiplayer behaviour are outside those tests.
 
 ## Timetable controls
 
-In VR the line-and-tour menu shows its details pane (time arrows, stops, Start trip). It uses
-the same 760-pixel width threshold as the desktop.
+The line-and-tour menu exposes its details pane in VR, including time arrows,
+stops and Start trip, using the same 760-pixel width threshold as desktop.
+## Enhanced+ headset render targets
 
-## Troubleshooting
+With Enhanced+ (ray tracing) enabled, headset eyes keep HDR colour and screen masks
+but omit unused desktop ray-reflection surfaces. The extra eye pipelines compile
+once when a VR session starts, not at desktop startup; later VR sessions reuse
+them. Desktop views keep their original surfaces and upgrade cached targets when
+needed. Rain films use the eye attachment layout even after such an upgrade.
+Without Enhanced+, this optimization changes neither pipelines nor rendering.
+Native GPU regressions compare both eye images at 1x/4x MSAA and validate rainy
+same-sized desktop/eye transitions. Per-eye history and stereo preparation remain
+separate changes. The upstream FSR 1 eye scale and mip-bias path is retained;
+a native regression covers both eyes at 75% scale with 1x/4x MSAA.
 
-- **The game does not start in the headset:** start the OpenXR runtime before the drive, and
-  check that **Use OpenXR headset** is on. A DirectX 12 capable graphics adapter is required.
-- **Low frame rate:** lower **Eye resolution** or **Bus mirror refresh**, or the game's other
-  graphics settings.
-- **No pointer:** move the mouse. With mouse steering active, the pointer stays hidden.
-- **View off centre:** press **Ctrl+Shift+R**.
 
-## Technical notes
+## GPU diagnostics and offline reproduction
 
-### Headset-relative cabin input
+`OMSI_GPU_TIMERS=1` now separates physical mirrors, desktop, left eye and right
+eye into independent query/readback slots. Existing pass figures partition the
+view's GPU timeline and include intervening untimed work. Additional `(interval)`
+figures measure each pass's own begin/end timestamps. They can overlap on tile
+GPUs and must not be summed as a frame time. `(all passes)` spans only the timed
+scene passes; it excludes OpenXR UI, the compositor and runtime pacing. Eye draw
+counts report visible meshes, batches and triangles separately.
+As in the desktop counters, "blended draws" also includes meshes that must follow
+the vehicle's authored draw order, even when some of their slots are opaque.
+Physical mirror time per frame remains a sampling estimate; its denominator now
+includes stereo pairs rather than relying on desktop renders that VR may omit.
+Normal free-drive shutdown also writes the ready GPU summaries and draw counts
+to the game log when GPU timers are enabled, without requiring a timed exit or
+waiting for pending timestamp readbacks.
 
-- The VR pointer keeps a mouse offset within the headset image.
-- Drawing and picking use the same cropped eye ray, including pending mouse input. Surface
-  hits supply depth only.
-- Head movement does not turn a held dial or reset mouse idle time.
-- The pointer hides after ten idle seconds. It returns with mouse movement or a menu
-  transition. Cursor-warp events add no movement.
-- A VR interruption releases held controls at their current values. It stops automatic motion
-  with its authored stop event.
-- Desktop release, Escape, missed clicks and wheel notches keep the existing automatic
-  endpoint behaviour.
-- VR hover refresh also follows head motion. It may refresh the cabin surface ray every six
-  frames.
-- Headset-free regression tests cover ray alignment, pending input, idle visibility, precise
-  cancellation, desktop auto movement and Escape. They do not cover mod-specific scripts or
-  live headset and multiplayer behaviour.
-
-### Enhanced+ headset render targets
-
-- With Enhanced+ (ray tracing) on, headset eyes keep HDR colour and screen masks. They omit
-  the unused desktop ray-reflection surfaces.
-- The extra eye pipelines compile once when a VR session starts, not at desktop startup.
-  Later VR sessions reuse them.
-- Desktop views keep their original surfaces and upgrade cached targets when needed. Rain
-  films use the eye attachment layout even after such an upgrade.
-- Without Enhanced+, this changes neither pipelines nor rendering.
-- Native GPU regression tests compare both eye images at 1x/4x MSAA. They also check rainy
-  same-sized desktop/eye transitions.
-- The upstream FSR 1 eye scale and mip-bias path is kept. A native regression test covers
-  both eyes at 75% scale with 1x/4x MSAA.
-
-### GPU diagnostics and offline reproduction
-
-`OMSI_GPU_TIMERS=1` gives physical mirrors, desktop, left eye and right eye their own
-query/readback slots.
-
-- Pass figures partition the view's GPU timeline and include untimed work in between.
-- `(interval)` figures measure each pass's own begin/end timestamps. They can overlap on tile
-  GPUs: do not add them up as a frame time.
-- `(all passes)` spans only the timed scene passes. It excludes OpenXR UI, the compositor and
-  runtime pacing.
-- Eye draw counts report visible meshes, batches and triangles separately.
-- As in the desktop counters, "blended draws" also counts meshes that must follow the
-  vehicle's authored draw order, even when some of their slots are opaque.
-- Physical mirror time per frame is a sampling estimate. Its denominator includes stereo
-  pairs, not desktop renders that VR may skip.
-- With GPU timers on, a normal free-drive shutdown writes the ready GPU summaries and draw
-  counts to the game log. It needs no timed exit and does not wait for pending timestamp
-  readbacks.
-
-For repeatable local comparisons without an HMD, combine `--offscreen scene.png` with
-`OMSI_BENCH=360`, `OMSI_BENCH_STEREO=1`, `OMSI_GPU_TIMERS=1` and `OMSI_PROFILE=1`.
-
-- `--size` is per eye.
-- The synthetic pair has a symmetric 100-degree vertical FOV and 64 mm IPD. It does not
-  reproduce the runtime's asymmetric projection, head motion or compositor scheduling.
-- Both targets use the production per-eye entry point.
-- Completion waits exist only in this offline benchmark. The live OpenXR submission path
-  gets no waits.
+For repeatable local comparisons without an HMD, combine `--offscreen scene.png`
+with `OMSI_BENCH=360`, `OMSI_BENCH_STEREO=1`, `OMSI_GPU_TIMERS=1` and
+`OMSI_PROFILE=1`. `--size` is per eye. The synthetic pair has a symmetric 100-degree
+vertical FOV and 64 mm IPD; it is not a reproduction of the runtime's asymmetric
+projection, head motion or compositor scheduling. Both targets use the production per-eye entry point; this benchmark does not
+require the separate shared-stereo/mirror change. Completion waits belong only to this existing
+offline benchmark; the live OpenXR submission path gains no waits.

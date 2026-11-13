@@ -250,7 +250,7 @@ pub fn load_paint_schemes(dir: &Path) -> Vec<PaintScheme> {
         while let Some(k) = r.next_keyword() {
             match k.as_str() {
                 "item" => {
-                    let name = r.str().to_string();
+                    let name = r.str().trim().to_string();
                     let ctc = r.str().to_string();
                     let tex = r.str().to_string();
                     match schemes
@@ -495,16 +495,17 @@ impl VehicleType {
         // of the whole vehicle, a part borrowed from another pack - a ticket machine, a
         // display - was turned in one bus and kept in the next, whatever its own pack's
         // exporter does: the same Atron machine inside out in some buses only (#977, #1054).
-        let mut kept = 0;
+        let mut kept = Vec::new();
         for (i, pack) in &turned {
             if votes.get(pack).is_some_and(WindingVotes::keep_authored) {
                 omsi_geometry::reverse_winding(&mut meshes[*i].data);
                 meshes[*i].keep_winding = true;
-                kept += 1;
+                kept.push(*i);
             }
         }
-        if kept > 0 {
-            log::info!("{}: {kept} meshes keep their winding (their packs' meshes with a positive determinant face along their normals: {votes:?})", bus_file.display());
+        if !kept.is_empty() {
+            let names: Vec<String> = kept.iter().map(|&i| meshes[i].file.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default()).collect();
+            log::info!("{}: {} meshes keep their winding (their packs' meshes with a positive determinant face along their normals: {votes:?}): {names:?}", bus_file.display(), kept.len());
         }
         for (pack, n) in &missing_packs {
             log::warn!(
@@ -557,7 +558,10 @@ impl VehicleType {
                 def.pantograph_detected = true;
             }
         }
-        if def.trolley.is_empty() {
+        if def.trolley.none {
+            log::info!("{}: [trolley_none], its poles are its own", bus_file.display());
+        }
+        if def.trolley.takes_model_poles() {
             def.trolley = legacy_trolley(&model, &meshes, &mesh_boxes, &program, bus_file, keep_meshes);
             take_model_poles(&mut model, &meshes, &mesh_boxes, &def.trolley);
             // the drive a trolleybus's traction motors would have, kept for when the bus script's

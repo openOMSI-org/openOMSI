@@ -19,7 +19,9 @@ impl World {
         self.mirror_aspect.lock().clear();
         self.mirror_glass.lock().clear();
         let set = self.upload_vehicle(renderer, scene, vt, scheme, true);
+        self.player_textures.lock().clear();
         let mut render = self.instantiate_vehicle(renderer, scene, vt, &set, None, None, false);
+        self.protect_player_textures(&set, &mut render);
         own_skinned_meshes(renderer, scene, vt, &mut render);
         render.own_set = Some(set);
         render
@@ -44,6 +46,7 @@ impl World {
             None
         };
         let mut render = self.instantiate_vehicle(renderer, scene, vt, &set, None, shared, false);
+        self.protect_player_textures(&set, &mut render);
         own_skinned_meshes(renderer, scene, vt, &mut render);
         render.own_set = Some(set);
         render
@@ -54,6 +57,7 @@ impl World {
         VehiclePrefetch {
             root: self.root.clone(),
             textures: self.textures.clone(),
+            alpha_masks: self.alpha_masks.clone(),
             on_gpu: self.vehicle_textures.clone(),
             meshes_on_gpu: self.vehicle_meshes.clone(),
             ready: self.vehicle_ready.clone(),
@@ -263,6 +267,7 @@ impl World {
                     own_materials.extend(built.materials());
                 }
                 for f in v.free {
+                    own_textures.extend(f.spare);
                     // the pictures it showed: shared, gone with their last holder
                     let mut shared = f.shared.lock();
                     for p in f.held {
@@ -585,9 +590,6 @@ impl World {
         lod: bool,
     ) -> VehicleRender {
         let mut gpu = self.gpu.lock();
-        let blank = |gpu: &mut GpuCache, scene: &mut Scene, w: i32, h: i32| {
-            Some(gpu.add_blank(renderer, scene, w.max(1) as u32, h.max(1) as u32))
-        };
         let blank_text = |gpu: &mut GpuCache, scene: &mut Scene, w: i32, h: i32| {
             Some(gpu.add_blank_mips(renderer, scene, w.max(1) as u32, h.max(1) as u32))
         };
@@ -603,11 +605,8 @@ impl World {
             .collect();
         let script_textures: Vec<Option<TextureId>> = match shared_script {
             Some(s) => s.to_vec(),
-            None => vt
-                .model
-                .script_textures
-                .iter()
-                .map(|(w, h)| blank(&mut gpu, scene, *w, *h))
+            None => (0..vt.model.script_textures.len())
+                .map(|i| Some(gpu.add_script_slot(renderer, scene, &vt.model, i)))
                 .collect(),
         };
         let mut instances = Vec::new();
@@ -1044,7 +1043,7 @@ impl World {
             let has_alpha = self.textures.has_alpha(&t, dirs_ref).unwrap_or(false);
             Some((id, has_alpha))
         });
-        let cx = SlotCx { vt, mesh_index, vm, def, slot, m, dirs_ref, subst: &subst, settings: &self.settings };
+        let cx = SlotCx { vt, mesh_index, vm, def, slot, m, dirs_ref, subst: &subst, settings: &self.settings, alpha_masks: &self.alpha_masks };
         let sa = slot_alpha(&cx, &ov, tex, transmap);
         let SlotAlpha { alpha, repair_body_depth, .. } = sa;
         // (a night or light map named as a [CTCTexture] is the paint scheme's
@@ -1249,36 +1248,6 @@ impl World {
         }
         base
     }
-
-    /// Cache state and reload ownership shared by free textures in this world: one
-    /// `[matl_freetex]` of a vehicle slot, standing in for `key` (`diffuse`: the slot's own
-    /// texture), on the halves its bits name (see `free_texture_defs`).
-    fn free_texture_slot(
-        &self,
-        var: String,
-        key: Option<TextureId>,
-        diffuse: bool,
-        halves: u32,
-        dirs: &[PathBuf],
-    ) -> FreeTex {
-        FreeTex {
-            remote: None,
-            remote_key: String::new(),
-            image: None,
-            reloads: self.freetex_reloads.clone(),
-            var,
-            diffuse,
-            key,
-            halves,
-            dirs: dirs.to_vec(),
-            textures: self.textures.clone(),
-            pictures: HashMap::new(),
-            current: None,
-            shared: self.vehicle_textures.clone(),
-            held: Vec::new(),
-            wants_upgrade: self.freetex_upgrades.clone(),
-        }
-    }
 }
 
 /// The records of each half of a vehicle slot in `SlotSpec` order - the plain material, its
@@ -1303,6 +1272,7 @@ pub(crate) fn shadow_blob(is_shadow: bool, positions: &[glam::Vec3]) -> bool {
 /// One material slot of a vehicle mesh being uploaded (see [`World::vehicle_slot_material`]).
 #[derive(Clone, Copy)]
 struct SlotCx<'s> {
+    alpha_masks: &'s crate::vehicle_materials::AlphaMasks,
     vt: &'s omsi_sim::VehicleType,
     mesh_index: usize,
     vm: &'s omsi_sim::vehicle::VehicleMesh,
@@ -1387,7 +1357,7 @@ fn slot_alpha(cx: &SlotCx, ov: &[&MaterialDef], tex: Option<TextureId>, transmap
     // wheel arches, far wheels and interior drawn after it showed through the
     // paint (#928, #932).
     let coverage_tex = subst(coverage_texture(ov.iter().find_map(|o| o.transmap.as_deref()), &m.texture));
-    let coverage = omsi_texture::find_texture(&coverage_tex, dirs_ref).and_then(|p| alpha_mask(&p));
+    let coverage = omsi_texture::find_texture(&coverage_tex, dirs_ref).and_then(|p| cx.alpha_masks.get(&p));
     // (an invisible cover: clear all over and writing its depth - no pane, it is
     // there to hide what comes after it, see `texture_is_clear`)
     let cover = declared_alpha == AlphaMode::Blend

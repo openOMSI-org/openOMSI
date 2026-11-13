@@ -1,20 +1,32 @@
 use omsi_net::{LanSession, WorldInfo};
+use std::collections::hash_map::RandomState;
+use std::hash::BuildHasher;
 use std::net::{TcpListener, UdpSocket};
 
 fn host(port: u16, try_next: bool) -> std::io::Result<LanSession> {
     LanSession::host(port, "port-test", WorldInfo::default(), try_next)
 }
 
-fn udp_conflict(address: &str) -> UdpSocket {
-    // A UDP-assigned port may be excluded for TCP on Windows. Keep that unrelated
-    // restriction out of tests that specifically exercise another UDP listener.
-    for _ in 0..32 {
-        let tcp = TcpListener::bind(("127.0.0.1", 0)).unwrap();
-        if let Ok(udp) = UdpSocket::bind((address, tcp.local_addr().unwrap().port())) {
-            return udp;
+fn both_transports(address: &str) -> (TcpListener, UdpSocket) {
+    let seed = RandomState::new().hash_one(0u8) as u16;
+    for i in 0..256u16 {
+        let port = 49152 + seed.wrapping_add(i.wrapping_mul(997)) % 16384;
+        if let (Ok(tcp), Ok(udp)) = (
+            TcpListener::bind(("127.0.0.1", port)),
+            UdpSocket::bind((address, port)),
+        ) {
+            return (tcp, udp);
         }
     }
     panic!("no port available for both transports");
+}
+
+fn tcp_conflict() -> TcpListener {
+    both_transports("0.0.0.0").0
+}
+
+fn udp_conflict(address: &str) -> UdpSocket {
+    both_transports(address).1
 }
 
 #[test]
@@ -29,7 +41,7 @@ fn host_rejects_a_tcp_only_conflict() {
 
 #[test]
 fn host_skips_a_tcp_only_conflict() {
-    let occupied = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let occupied = tcp_conflict();
     let port = occupied.local_addr().unwrap().port();
     let session = host(port, true).unwrap();
     assert_ne!(session.local_addr().unwrap().port(), port);
@@ -52,7 +64,7 @@ fn host_reserves_tcp_until_the_session_ends() {
 
 #[test]
 fn host_releases_udp_when_tcp_cannot_be_reserved() {
-    let occupied = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let occupied = tcp_conflict();
     let port = occupied.local_addr().unwrap().port();
     let session = host(port, false);
     assert!(session.is_err());
@@ -87,7 +99,7 @@ fn reserved_listener_is_transferred_without_rebinding() {
 #[test]
 fn host_fails_when_the_candidate_range_is_occupied() {
     for _ in 0..32 {
-        let first = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let first = tcp_conflict();
         let port = first.local_addr().unwrap().port();
         if port.checked_add(omsi_net::PORT_RANGE).is_none() {
             continue;
@@ -133,7 +145,7 @@ fn simultaneous_hosts_keep_distinct_reserved_ports() {
 fn explicitly_disabled_transfers_keep_udp_only_hosting() {
     const CHILD: &str = "PORT_RESERVATION_TEST_CHILD";
     if std::env::var_os(CHILD).is_some() {
-        let occupied = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let occupied = tcp_conflict();
         let port = occupied.local_addr().unwrap().port();
         let mut session = host(port, false).unwrap();
         assert_eq!(session.local_addr().unwrap().port(), port);

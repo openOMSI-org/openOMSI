@@ -193,7 +193,7 @@ impl TrafficSim {
                 .iter()
                 .flat_map(|&k| kinds[k].iter().filter(|e| part.binary_search(&e.0).is_ok()).map(|e| e.1))
                 .collect();
-            let red = part.iter().any(|&k| self.cars[k].light_hold);
+            let red = part.iter().any(|&k| self.cars[k].light_hold && self.cars[k].why.0 == "light");
             let standing = part.iter().all(|&k| self.cars[k].state.speed < 0.3);
             let kind = classify(red, standing, &inside);
             let members: Vec<(usize, f32, u64)> = part.iter().map(|&k| (k, self.cars[k].state.yield_time, self.cars[k].id)).collect();

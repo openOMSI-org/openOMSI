@@ -103,6 +103,17 @@ pub struct SunPlace {
     pub dst: Vec<(i32, i32, f32, f32, f32)>,
 }
 
+impl SunPlace {
+    pub fn locate(&mut self, timezone: f64, lat_lon: Option<(f64, f64)>) {
+        self.timezone = timezone;
+        match lat_lon {
+            Some((lat, lon)) => (self.latitude, self.longitude) = (lat, lon),
+            None if timezone != SunPlace::default().timezone => self.longitude = timezone * 15.0,
+            None => {}
+        }
+    }
+}
+
 impl Default for SunPlace {
     fn default() -> Self {
         SunPlace { latitude: 52.505, longitude: 13.2782, timezone: 1.0, dst: Vec::new() }
@@ -388,5 +399,23 @@ mod tests {
         assert_eq!(d.envir_tint[1], Vec3::ONE);
         // by night the stock sun is black: nothing to compare with, no tint
         assert_eq!(Daylight::compute(&clock_at(1.0), Some(&warm)).envir_tint[0], Vec3::ONE);
+    }
+
+    #[test]
+    fn a_zone_without_a_location_keeps_its_afternoon_light() {
+        let c = SimClock { day_of_year: 69, time: 16.25 * 3600.0, ..Default::default() };
+        let mut caxias = SunPlace::default();
+        caxias.locate(-3.0, None);
+        assert!(sun_position(&c, &caxias).0 > 10.0);
+        assert_eq!(caxias.latitude, SunPlace::default().latitude, "the climate keeps its latitude");
+        let mut moscow = SunPlace::default();
+        moscow.locate(3.0, None);
+        assert_eq!((moscow.latitude, moscow.longitude), (SunPlace::default().latitude, 45.0));
+        let mut berlin = SunPlace::default();
+        berlin.locate(-3.0, Some((52.505, 13.2782)));
+        assert!(sun_position(&c, &berlin).0 < 0.0);
+        let mut spandau = SunPlace::default();
+        spandau.locate(1.0, None);
+        assert_eq!(spandau.longitude, SunPlace::default().longitude);
     }
 }
