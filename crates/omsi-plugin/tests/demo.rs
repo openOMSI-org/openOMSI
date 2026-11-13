@@ -4,20 +4,24 @@ use omsi_plugin::{HostConfig, Plugin, PluginIo, Plugins, Remote};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-fn demo_library() -> PathBuf {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
-    let release = !cfg!(debug_assertions);
-    let mut cmd = std::process::Command::new(cargo);
-    cmd.args(["build", "-q", "-p", "omsi-demo-plugin", "--manifest-path"]).arg(root.join("Cargo.toml"));
-    if release {
-        cmd.arg("--release");
-    }
-    assert!(cmd.status().unwrap().success(), "building the demo plugin");
-    let name = format!("{}omsi_demo_plugin{}", std::env::consts::DLL_PREFIX, std::env::consts::DLL_SUFFIX);
-    // the test binary is target/<profile>/deps/…; the library sits in target/<profile>
-    let exe = std::env::current_exe().unwrap();
-    exe.parent().unwrap().parent().unwrap().join(name)
+fn demo_library() -> &'static Path {
+    static LIBRARY: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    LIBRARY.get_or_init(|| {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+        let target = std::env::temp_dir().join(format!("omsi-demo-plugin-{}", std::process::id()));
+        let release = !cfg!(debug_assertions);
+        let mut cmd = std::process::Command::new(cargo);
+        cmd.args(["build", "--locked", "-q", "-p", "omsi-demo-plugin", "--manifest-path"])
+            .arg(root.join("Cargo.toml"))
+            .arg("--target-dir").arg(&target);
+        if release {
+            cmd.arg("--release");
+        }
+        assert!(cmd.status().unwrap().success(), "building the demo plugin");
+        let name = format!("{}omsi_demo_plugin{}", std::env::consts::DLL_PREFIX, std::env::consts::DLL_SUFFIX);
+        target.join(if release { "release" } else { "debug" }).join(name)
+    })
 }
 
 /// A plugins folder with the demo as `Demo\demo.dll`, listed in `Demo\demo.opl`.
