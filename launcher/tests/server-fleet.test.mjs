@@ -163,3 +163,16 @@ test('a legacy server with a non-empty vehicle list still joins through LIST, wi
   assert.equal(launched().length, 1, 'legacy join must not require LISTBUS consent');
   assert.equal(launched()[0].args.duty.allow_server_fleet, false);
 });
+
+test('private fleet entries remain driveable only with an installed copy', async () => {
+  const { state, data, bus, offer, launched } = await setup();
+  state.choice.lan_server.fleet = [{ ...offer, local_only: true }];
+  assert.deepEqual([...data.selectableVehicles()[0].paints], ['Local Red']);
+  assert.equal(data.serverFleetSelection(), false);
+  await data.start();
+  assert.equal(launched().length, 1);
+  assert.equal(launched()[0].args.duty.allow_server_fleet, false);
+  state.vehicles = state.vehicles.filter((v) => v.file !== bus);
+  assert.equal(data.selectableVehicles().length, 0);
+  assert.equal(await data.start(), null);
+});

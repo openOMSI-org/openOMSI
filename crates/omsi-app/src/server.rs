@@ -68,7 +68,8 @@ fn fleet_paints(cfg: &ServerCfg, root: &Path) -> Vec<omsi_net::ws::FleetPaints> 
             let n = done.fetch_add(1, Ordering::Relaxed) + 1;
             log::info!("server fleet: {n}/{total}: {rel}: {} paints ({:.1} s, loading the bus {loaded:.1} s)", paints.len(), t.elapsed().as_secs_f64());
         }
-        Some(omsi_net::ws::FleetPaints { bus: rel, paints, content })
+        let local_only = content.is_empty();
+        Some(omsi_net::ws::FleetPaints { bus: rel, paints, content, local_only })
     };
     // four plain threads taking the next bus in turn - not a Rayon pool: the hashing inside
     // runs on a pool of its own, and a Rayon worker waiting on another pool takes more of its

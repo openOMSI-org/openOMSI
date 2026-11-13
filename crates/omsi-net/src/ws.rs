@@ -100,6 +100,9 @@ pub struct FleetPaints {
     /// may compare local bytes, but may not download based on this status alone.
     #[serde(default)]
     pub content: String,
+    /// The model can be driven when installed locally, but its files cannot be downloaded.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub local_only: bool,
 }
 
 /// What a dedicated server's shared world holds: the AI cars on the roads (`cars`), its
@@ -1088,6 +1091,7 @@ mod tests {
                 bus: "Vehicles/Test/test.bus".into(),
                 paints: vec!["Base".into(), "Azul \"especial\"".into(), "São Paulo".into()],
                 content: String::new(),
+                local_only: true,
             }],
             ..Default::default()
         };
