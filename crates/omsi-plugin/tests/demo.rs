@@ -25,7 +25,15 @@ fn demo_library() -> PathBuf {
             && message["target"]["name"] == "omsi_demo_plugin"
             && message["target"]["kind"].as_array().is_some_and(|kinds| kinds.iter().any(|kind| kind == "cdylib"));
         if is_demo_cdylib {
-            library = message["filenames"].as_array().and_then(|files| files.first()).and_then(|file| file.as_str()).map(PathBuf::from);
+            library = message["filenames"]
+                .as_array()
+                .and_then(|files| {
+                    files
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .find(|file| file.ends_with(std::env::consts::DLL_SUFFIX))
+                })
+                .map(PathBuf::from);
         }
     }
     assert!(child.wait().unwrap().success(), "building the demo plugin");
