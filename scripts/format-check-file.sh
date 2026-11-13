@@ -1,8 +1,11 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
 file=$1
-if output=$(rustfmt --check --files-with-diff $file); then
+if output=$(rustfmt --check --files-with-diff -- "$file"); then
     echo "$file is properly formatted. No further action needed."
 else
-    if [[ "$output" == *"$file"* ]]; then
+    if grep -Fxq -- "$file" <<< "$output"; then
         echo "$file is not formatted properly."
         exit 1
     else
