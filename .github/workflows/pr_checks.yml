@@ -25,6 +25,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
+
       - name: Fetch the base commit
         run: git fetch --no-tags --depth=1 origin "$BASE"
 
@@ -63,7 +64,7 @@ jobs:
       # The changed Rust files should be properly formatted
       - name: Formatting
         if: ${{ !cancelled() }}
-        run: bash scripts/format-check.sh   
+        run: bash scripts/format-check.sh
 
       # Which crate may depend on which (nothing on omsi-app, the simulation on no renderer,
       # ...) and no change growing the app crate much: scripts/arch-guard.sh, rules in scripts/arch-rules.txt.
