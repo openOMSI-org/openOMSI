@@ -194,6 +194,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_JOINT_ANGLE` | num | - | use | app | Degrees: the rear section of an articulated bus held at that angle. |
 | `OMSI_LANES_NEAR` | text | - | use | app | x,y,r: log the driving lanes passing there. |
 | `OMSI_LAN_AUDIO` | bool | off | use | app | Offscreen LAN: with the other buses' sounds. |
+| `OMSI_LAN_REQUIRE_TRANSFER_OPT_IN` | bool | off | use | lan | LAN strict privacy mode: only auto-share .bus/.ovh vehicles with an explicit allow_file_transfer 1; unmarked legacy vehicles stay private until this switch is disabled. |
 | `OMSI_LAN_SAY` | text | - | use | lan | "30=Hallo;45=Bye": LAN chat lines said at these seconds of the session. |
 | `OMSI_MOBILE` | bool | off | use | app | The phone layout on a computer (screen cut-outs). |
 | `OMSI_MUTE` | bool | off | use | audio | Mix everything as usual but play nothing. |
