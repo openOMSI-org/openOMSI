@@ -252,15 +252,7 @@ impl ObjectRun {
             if let Some(gap) = gap {
                 depth_caps[slot] = gap * 0.5;
             }
-            // (a slot more than two steps above its base is a stack - a windscreen's own patches
-            // lying on each other, a lens on a display on a panel - and its lift outgrows what
-            // the step is for: it takes no more than the lowest step of the surfaces lying just
-            // off its plane, so that it cannot carry itself past one of them, but never less than
-            // two or the highest step already under it. A slot one or two steps above its
-            // base keeps its step, which is what orders
-            // a print over its base and a second print over the first, even with a pane just in
-            // front; a slot on nothing takes the highest step beside it, so the step does not
-            // decide that pair either.)
+            // Keep the cap above covered surfaces so it cannot expose the base.
             let level = if level == 0 {
                 beside_hi.unwrap_or(0)
             } else if level > 2 {

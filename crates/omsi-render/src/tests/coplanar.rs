@@ -258,6 +258,7 @@ fn a_blended_print_behind_a_pane_added_first_stays_over_its_base() {
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn a_label_a_fraction_of_a_millimetre_in_front_of_a_stack_of_steps_stays_seen() {
     let mut renderer = renderer();
+    eprintln!("GPU adapter: {:?}", *crate::gpu::ADAPTER_INFO.lock().unwrap_or_else(|e| e.into_inner()));
     let mut scene = renderer.new_scene();
     let red = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [1.0, 0.0, 0.0, 1.0], true);
     let green = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [0.0, 1.0, 0.0, 1.0], true);

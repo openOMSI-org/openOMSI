@@ -383,8 +383,7 @@ impl Renderer {
             return;
         }
         m.pose = m.pose.wrapping_add(1);
-        // Deformation invalidates static planes. Fall back once, without rescanning
-        // Skinned geometry changes each pose, so resend its depth metadata.
+        // Deformation invalidates static planes; skinned geometry needs fresh metadata.
         let had_depth_planes = m.depth_normals.iter().any(|n| *n != Vec3::ZERO);
         m.depth_normals.clear();
         {
