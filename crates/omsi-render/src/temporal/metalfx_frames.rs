@@ -29,6 +29,58 @@ const HALF: f32 = 31.0 / 64.0;
 /// No frame is held back longer than this (s): below 10 fps there is nothing to pace.
 const LONGEST_WAIT: f32 = 0.05;
 
+/// Apple: "try to have at minimum 30 frames per second before interpolation". Below that the
+/// generated frames guess across too wide a gap (wheels and the steering wheel flickered at 10).
+/// Generation stops once the drawn frames fall under `GATE_OFF` a second (a little under 30: a
+/// 60 Hz screen with V-sync holds them at 30 exactly) and starts again only from `GATE_ON` without
+/// it, as it costs the graphics chip about a third of its frames (an M2 at 2940x1846: 14 to 9.6).
+const GATE_OFF: f32 = 27.0;
+const GATE_ON: f32 = 40.0;
+/// How long the frame rate has to stay past a bound before generation is switched (s), and how
+/// long it then stays as it is at least.
+const GATE_HOLD: f32 = 1.5;
+const GATE_REST: f32 = 5.0;
+
+/// Whether frame generation runs, from the drawn frame rate ([`GATE_OFF`]).
+pub(crate) struct Gate {
+    pub(crate) on: bool,
+    /// The drawn frames' interval, smoothed (s).
+    interval: f32,
+    /// How long the rate has been past the bound that would switch it, and since the last switch (s).
+    past: f32,
+    resting: f32,
+}
+
+impl Gate {
+    pub(crate) fn new() -> Gate {
+        Gate { on: false, interval: 0.0, past: 0.0, resting: GATE_REST }
+    }
+
+    /// The drawn frame rate now (0 until known).
+    pub(crate) fn fps(&self) -> f32 {
+        if self.interval > 0.0 { 1.0 / self.interval } else { 0.0 }
+    }
+
+    /// A drawn frame `seconds` after the last one: whether this one gets a generated frame.
+    pub(crate) fn step(&mut self, seconds: f32) -> bool {
+        if !seconds.is_finite() || seconds <= 0.0 {
+            return self.on;
+        }
+        let seconds = seconds.min(0.5);
+        self.interval = if self.interval > 0.0 { self.interval * 0.9 + seconds * 0.1 } else { seconds };
+        self.resting += seconds;
+        let fps = self.fps();
+        let switch = if self.on { fps < GATE_OFF } else { fps >= GATE_ON };
+        self.past = if switch { self.past + seconds } else { 0.0 };
+        if switch && self.past >= GATE_HOLD && self.resting >= GATE_REST {
+            self.on = !self.on;
+            self.past = 0.0;
+            self.resting = 0.0;
+        }
+        self.on
+    }
+}
+
 /// How long the drawn frame waits behind the generated one, for frames this far apart (s).
 pub(crate) fn half_interval(frame_seconds: f32) -> f32 {
     if frame_seconds.is_finite() { (frame_seconds * HALF).clamp(0.0, LONGEST_WAIT) } else { 0.0 }
@@ -310,6 +362,8 @@ pub struct GenerationWindow {
     copy: wgpu::RenderPipeline,
     pacer: Mutex<Pacer>,
     show: Show,
+    /// The 30 fps rule and when the last drawn frame was presented.
+    gate: Mutex<(Gate, Option<Instant>)>,
 }
 
 const COPY: &str = "
@@ -400,7 +454,7 @@ impl GenerationWindow {
             _ => Show::Both,
         };
         let pacer = Pacer::new(&handle.shared().device)?;
-        Ok(GenerationWindow { handle, format, size, drawn, drawn_view, drawn_group, made, made_group, layout, copy, pacer: Mutex::new(pacer), show })
+        Ok(GenerationWindow { handle, format, size, drawn, drawn_view, drawn_group, made, made_group, layout, copy, pacer: Mutex::new(pacer), show, gate: Mutex::new((Gate::new(), None)) })
     }
 
     pub(crate) fn handle(&self) -> FrameGeneration {
@@ -463,7 +517,19 @@ impl GenerationWindow {
     pub(crate) fn present(&self, surface: &wgpu::Surface<'_>, device: &wgpu::Device, queue: &wgpu::Queue, frame: wgpu::SurfaceTexture) {
         let into = frame.texture.create_view(&Default::default());
         let prepared = self.handle.take().filter(|p| p.output_size == self.size);
-        let generated = match prepared.as_ref().filter(|_| self.show != Show::Drawn && self.handle.working()) {
+        let fast_enough = {
+            let mut gate = self.gate.lock().unwrap_or_else(|e| e.into_inner());
+            let now = Instant::now();
+            let seconds = gate.1.replace(now).map_or(0.0, |last| (now - last).as_secs_f32());
+            let was = gate.0.on;
+            let on = gate.0.step(seconds);
+            if on != was {
+                log::info!("frame generation: {} ({:.0} frames drawn a second; it runs from {GATE_ON:.0} and stops under {GATE_OFF:.0})", if on { "on" } else { "paused" }, gate.0.fps());
+            }
+            // (OMSI_FG_SHOW looks at one kind of frame whatever the rate)
+            on || self.show != Show::Both
+        };
+        let generated = match prepared.as_ref().filter(|_| fast_enough && self.show != Show::Drawn && self.handle.working()) {
             Some(inputs) => self.handle.generate(queue, inputs, &self.drawn, &self.made).unwrap_or_else(|e| {
                 self.handle.stop(&e);
                 false
