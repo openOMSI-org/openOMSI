@@ -363,7 +363,7 @@ pub struct Navigator {
     /// The route mesh (buffers 1 and 9): the route and traffic versions, the anchor, its
     /// size, the bus's lane, look and along-lane position it was built for.
     route_mesh: (u64, u64, DVec2, u32, usize, u64, f32),
-    route_mesh_history: bool,
+    route_mesh_history: [Option<((u64, u64, DVec2, usize, u64, f32), std::sync::Arc<[omsi_ui::paint::Vertex]>, u32)>; 2],
     completed_stops: Vec<NavStop>,
     trip_completed: bool,
     /// Per lane of the traffic: how congested it is (0 free … 1 standing), smoothed.
@@ -576,7 +576,7 @@ impl Navigator {
             duty_route: None,
             entries: Vec::new(),
             route_mesh: (u64::MAX, 0, DVec2::ZERO, 0, 0, 0, 0.0),
-            route_mesh_history: false,
+            route_mesh_history: [None, None],
             completed_stops: Vec::new(),
             trip_completed: false,
             congestion: HashMap::new(),
@@ -1233,6 +1233,7 @@ impl Navigator {
                     self.roads = None;
                     self.reset_navigation_network();
                     self.route_mesh.0 = u64::MAX;
+                    self.route_mesh_history = [None, None];
                     self.route_jam.clear();
                 }
                 Err(std::sync::mpsc::TryRecvError::Disconnected) if self.streets.is_none() => {

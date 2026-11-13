@@ -273,21 +273,26 @@ impl Navigator {
         let vpm = map_layer.view_proj;
 
         // --- the route (buffers 1 and 9): rebuilt for route changes or three metres of progress
-        let mut route_verts = None;
+        let mut route_verts: Option<std::sync::Arc<[omsi_ui::paint::Vertex]>> = None;
+        let mut route_count = 0;
         let history = look.show_history && self.destination.is_none();
+        let history_slot = usize::from(history);
         let route_net = global.as_deref().or(f.traffic.map(|t| &t.net));
         if let (Some(rn), true) = (route_net, !self.route.lanes.is_empty()) {
             let first = self.route.lanes.get(self.route.progress.min(self.route.lanes.len().saturating_sub(1))).copied();
             let bus_lane = first.map(|l| lane_from_right(rn, l, f.bus)).unwrap_or(0);
-            if built.is_some()
-                || self.route_mesh_history != history
-                || self.route_mesh.0 != self.route.version
-                || self.route_mesh.1 != self.jam_version
-                || self.route_mesh.2 != anchor
-                || self.route_mesh.4 != bus_lane
-                || self.route_mesh.5 != look_key
-                || route_position_changed(self.route_mesh.6, self.route.s)
-            {
+            let key = (self.route.version, self.jam_version, anchor, bus_lane, look_key, self.route.s);
+            let cached_route = self.route_mesh_history[history_slot].as_ref();
+            let route_changed = cached_route.is_none_or(|(cached, _, _)| {
+                built.is_some()
+                    || cached.0 != key.0
+                    || cached.1 != key.1
+                    || cached.2 != key.2
+                    || cached.3 != key.3
+                    || cached.4 != key.4
+                    || route_position_changed(cached.5, key.5)
+            });
+            if route_changed {
                 let mut p = Painter::new();
                 let route_reach = self.roads.as_ref().map_or(PANEL_REACH, |r| r.reach.max(PANEL_REACH));
                 let style = RouteStyle { extra_m: -0.6, min_px: 5.0, arrows: Some((32.0, 900.0)), max_len: 12_000.0, near: Some((anchor, route_reach)) };
@@ -297,21 +302,17 @@ impl Navigator {
                 }
                 mapmesh::roads::build_route_to(&mut p, rn, &self.route.lanes[self.route.progress.min(self.route.lanes.len())..], anchor, self.route.s, &self.route_jam, &style, bus_lane, &pal, self.destination.as_ref().and_then(|d| d.path.as_ref().map(|p| p.end_s)));
                 self.draw_waypoint_routes(&mut p, rn, anchor, &style, &pal);
-                self.route_mesh = (
-                    self.route.version,
-                    self.jam_version,
-                    anchor,
-                    p.len(),
-                    bus_lane,
-                    look_key,
-                    self.route.s,
-                );
-                route_verts = Some(p.verts);
-                self.route_mesh_history = history;
+                let count = p.len();
+                self.route_mesh_history[history_slot] = Some((key, p.verts.into(), count));
             }
-        } else if self.route_mesh.3 != 0 {
-            route_verts = Some(Vec::new());
+            if let Some((_, verts, count)) = &self.route_mesh_history[history_slot] {
+                route_verts = Some(verts.clone());
+                route_count = *count;
+            }
+        } else if self.route_mesh_history.iter().any(Option::is_some) {
+            route_verts = Some(std::sync::Arc::from([]));
             self.route_mesh = (self.route.version, self.jam_version, anchor, 0, 0, look_key, 0.0);
+            self.route_mesh_history = [None, None];
         }
 
         // --- the land colour under everything, the traffic, the vehicles
@@ -421,7 +422,7 @@ impl Navigator {
         }
         let solid_n = self.roads.as_ref().map_or(0, |r| r.houses[1] as u32);
         let three = self.show_3d && !self.classic_2d;
-        let route_n = self.route_mesh.3;
+        let route_n = route_count;
         let mpp = map_layer.px_scale * zoom as f32 * 4.0;
         let seen = |part: usize, on: bool| match (&self.roads, on) {
             (Some(r), true) => super::cull::visible(&r.runs[part], vpm, mpp),
