@@ -323,6 +323,26 @@ are also checked. The session manifest omits a whole `Vehicles/<folder>` or
 `Trains/<folder>` if any vehicle description listed there forbids transfers.
 Previously persisted private vehicle manifests are not served after updating.
 
+### Protected asset folders and strict mode
+
+To prevent a public bus from indirectly transmitting private textures, scripts,
+fonts or sounds, create an empty file named `.openomsi-no-share` inside any
+**on-disk directory** whose contents must never be uploaded. The official
+sender checks each file and its parent directories before transfer, including
+resolved symlink locations. The server fleet and the host's map manifest
+honor this marker too. The marker itself is not uploaded. A vehicle that
+depends on such a file cannot be auto-transferred as a complete package;
+a map package omits marked files. Keep private resources separate from
+public mod dependencies.
+
+A stronger **optional** policy is `OMSI_LAN_REQUIRE_TRANSFER_OPT_IN=1`
+(set before starting the game). In this mode, only vehicles explicitly marked
+with `allow_file_transfer 1` are automatically shared; unmarked legacy
+vehicles are not uploaded. The receiving server applies the same check
+when configured in strict mode. The switch is off by default to avoid
+silently breaking the existing public mod ecosystem. Strict mode does not
+override an explicit `0`.
+
 For an additional **machine-wide emergency opt-out**, set
 `OMSI_NO_LAN_VEHICLE_TRANSFER=1` before starting openOMSI. This prevents
 automatic vehicle uploads, player-hosted sharing, dedicated fleet transfers
@@ -334,8 +354,10 @@ It does not stop map file transfer when a dedicated admin explicitly enables
 
 **Limitations:** This does not retract content already delivered, prevent
 redistribution by modified clients or older releases, or infer ownership of
-shared assets outside vehicle folders (shared sounds, fonts, displays, etc.).
-Do not place private assets in content folders shared by the map itself.
+unmarked shared assets outside vehicle folders. The directory marker applies
+to ordinary disk files; paths inside virtual archives may require a separate
+folder-level sharing policy. Do not put private assets in content folders
+shared by the map itself.
 To limit automatic sharing on dedicated servers, use `share_maps = 0`
 and/or `accept_uploads = 0`; for player-hosted LAN, `OMSI_NO_LAN_MODS=1`
 turns off all mod exchange and `OMSI_NO_LAN_UPLOADS=1` prevents receiving
