@@ -274,6 +274,24 @@ mod tests {
     }
 
     #[test]
+    fn cached_fleet_does_not_serve_a_bus_after_a_no_share_marker_is_added() {
+        let root = std::env::temp_dir().join(format!("openomsi-cache-policy-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = root.join("Vehicles/CityBus");
+        std::fs::create_dir_all(&dir).unwrap();
+        let bus = dir.join("main.bus");
+        std::fs::write(&bus, "[friendlyname]\nMaker\nCityBus\nStandard\n").unwrap();
+        let cache = Cache::default();
+        let manifest = Manifest { bus: "Vehicles/CityBus/main.bus".into(),
+            entries: vec![Entry { path: "Vehicles/CityBus/main.bus".into(), size: 4, sha256: "ab".repeat(32) }],
+            ..Default::default() };
+        assert!(cached(&cache, "bus".into(), || Ok((manifest, vec![bus.clone()]))).is_ok());
+        std::fs::write(dir.join(".openomsi-no-share"), "").unwrap();
+        assert!(cached(&cache, "bus".into(), || panic!("cache must be reused")).is_err());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn cache_keeps_new_entries_after_reaching_its_capacity() {
         let cache = Cache::default();
         for i in 0..140 {
