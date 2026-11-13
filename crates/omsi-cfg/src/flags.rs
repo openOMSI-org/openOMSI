@@ -331,8 +331,8 @@ flags! {
     OMSI_LAN_AUDIO: Bool, Test, Use, "off", "Offscreen LAN: with the other buses' sounds.";
     OMSI_LAN_IP: Text, Setup, Use, "-", "a.b.c.d[,e.f.g.h]: LAN addresses to offer first (when the detection gets them wrong).";
     OMSI_LAN_JOIN_TIMEOUT: Num, Tuning, Use, "default", "LAN: seconds to wait when joining a game.";
-    OMSI_LAN_SAY: Text, Test, Use, "-", "\"30=Hallo;45=Bye\": LAN chat lines said at these seconds of the session.";
     OMSI_LAN_REQUIRE_TRANSFER_OPT_IN: Bool, Switch, Use, "off", "LAN strict privacy mode: only auto-share .bus/.ovh vehicles with an explicit allow_file_transfer 1; unmarked legacy vehicles stay private until this switch is disabled.";
+    OMSI_LAN_SAY: Text, Test, Use, "-", "\"30=Hallo;45=Bye\": LAN chat lines said at these seconds of the session.";
     OMSI_LAN_TRACE: Text, Debug, Use, "-", "LAN CSV file: where the host's people are drawn.";
     OMSI_LAUNCHER: Text, Setup, Use, "-", "Program a plain start opens as the launcher instead of the desktop launcher (openomsi-launcher-app) beside the game.";
     OMSI_LIGHT_GRID_SQUARES: Bool, Switch, Frame, "off", "A light goes into every cell of the light grid's square round its range, the corners its range misses too (A/B).";
