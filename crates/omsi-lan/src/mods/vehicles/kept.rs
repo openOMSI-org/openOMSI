@@ -252,10 +252,10 @@ impl Buses {
         // store - and the host's frame asking which buses are in use, or mounting one - for
         // the whole write. The write goes to a file of its own and is renamed into place.)
         let store = self.lock().as_ref().ok_or("no store")?.store.clone();
+        // A received blob is not public merely because its bytes passed the
+        // hash check: it belongs to no approved vehicle until commit succeeds.
+        // Only commit() adds hashes to the table consulted by BLOB/PIECE.
         store.put(e, data).map_err(|x| x.to_string())?;
-        if let Some(v) = self.lock().as_mut() {
-            v.sizes.insert(e.sha256.to_ascii_lowercase(), e.size);
-        }
         Ok(())
     }
 
