@@ -100,6 +100,8 @@ pub enum PoleEventKind {
     GapEntered,
     GapLeft,
     FrogPassed { switch: u32, branch: bool },
+    /// The shoe went over a crossing: two wires cross there without joining.
+    CrossingPassed { crossing: u32 },
     Plate { switch: u32 },
     /// A loose boom rose as far as its rope lets it, at this speed (rad/s).
     RopeTaut { speed: f32 },
@@ -831,6 +833,21 @@ impl Pole {
                 let crossed = if towards == 0 { pss > plate_s && c.s <= plate_s } else { pss < plate_s && c.s >= plate_s };
                 if ps == c.span && crossed {
                     out.push(PoleEvent { pole, kind: PoleEventKind::Plate { switch: si as u32 }, pos: w, amps });
+                }
+            }
+        }
+        // the crossings of the wire: the shoe goes over them, whichever way it goes
+        for (ci, cs) in net.crossings_of(c.span) {
+            let crossing = &net.crossings[*ci as usize];
+            let crossing_side = if crossing.a == c.span { crossing.side_a } else { crossing.side_b };
+            if crossing_side != c.side { continue; }
+            if let Some((ps, pss)) = self.last_pos {
+                let passed_on_span = ps == c.span && ((pss < *cs && c.s >= *cs) || (pss > *cs && c.s <= *cs));
+                // A shared-node crossing can be exactly at the end of both spans. The pole
+                // changes span there, so it cannot cross the distance on a single span.
+                let entered_at_node = ps != c.span && (c.s - *cs).abs() <= 0.05;
+                if passed_on_span || entered_at_node {
+                    out.push(PoleEvent { pole, kind: PoleEventKind::CrossingPassed { crossing: *ci }, pos: w, amps });
                 }
             }
         }

@@ -102,6 +102,27 @@ the constants are in the vehicle's file, not in the game.
   For manual-only radio control, keep the route code at `0` and use a momentary toggle
   button. The driver reads the actual position from the roadside switch display. Range is
   configurable reception coverage, not a model of antenna propagation or a safety interlock.
+* **A shoe going through a frog.** A bus's script can react to a pole crossing a frog: the
+  crossing fires the script's triggers `Trolley_Pole<k>_Frog` (that pole's own),
+  `Trolley_Frog` (a pole, whichever) and, when the map gave the frog a name,
+  `Trolley_Frog_<name>` (that frog, its spaces written as underscores). The frog's own two
+  are fired once for each frog crossed, even when both poles crossed at once. The trigger
+  runs before the step's `{frame}`, so what it writes is read in the same frame:
+
+  ```
+  {trigger:Trolley_Frog_Junction}
+  (L.L.crossed) 1 + (S.L.crossed)
+  {end}
+  ```
+* **A shoe going over a crossing.** Where two wires cross without joining (an overhead
+  crossing with insulated sections) the shoe goes over it: the crossing fires the script's
+  triggers `Trolley_Pole<k>_Joint` (that pole's own) and `Trolley_Joint` (a crossing,
+  whichever pole). Each is fired once for each crossing gone over, even when both poles
+  crossed at once. The game offsets each span by half its `spacing` to locate its left and
+  right conductors, then detects same-height intersections between any conductors. At a
+  perpendicular crossing, each conductor crosses both conductors on the other line, so a
+  shoe fires twice as it passes those intersections. Either side can trigger independently;
+  polarity is not required. A wire that passes above another flies over it and is not fired.
 * **Arcs and sound.** Where current is broken - the shoe leaving the wire, a pole coming off,
   an insulator or a frog crossed under power - an arc burns `L I^2 / 2` of the motor circuit's
   inductance (12 mH): the game draws a flash with sparks, lights the wire and the roof and
@@ -531,8 +552,9 @@ the whole gear are in `crates/omsi-trolley`.
 ## Limits
 
 * Only the player's bus has gear simulated; AI vehicles do not run on the wire.
-* Crossings of two wires (an overhead crossing with insulated sections) are not modelled apart
-  from the geometry; a shoe never jumps from one wire to the other.
+* Crossings of two wires (an overhead crossing with insulated sections) are found from the
+  geometry, so that a script can react to a shoe going over one; nothing else of them is
+  modelled, and a shoe never jumps from one wire to the other.
 * The poles are drawn as plain booms with a rope, not as the model of any bus; a model that
   has its own sets `visible 0` and follows the variables.
 * Wire and gear are not sent over LAN yet; another player sees a trolleybus as an ordinary bus.

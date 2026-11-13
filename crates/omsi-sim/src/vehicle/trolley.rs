@@ -511,6 +511,10 @@ impl VehicleInstance {
         });
         g.torque = has_drive.then_some(out.wheel_force * radius);
         g.gate = g.rig.script_gate;
+        // the frogs and the crossings the shoes went over this step: the script may react to
+        // them (the triggers are fired below, where the gear is no longer borrowed)
+        let frogs: Vec<(usize, u32)> = g.rig.frogs_crossed().collect();
+        let crossings: Vec<(usize, u32)> = g.rig.crossings_crossed().collect();
         // the pole variables a model animates by (written by slot once they have been made: a
         // physics step of a trolleybus looked up some twenty names by their text before)
         const GLOBAL: [&str; 7] = ["Trolley_Volts", "Trolley_Amps", "Trolley_Powered", "Trolley_Notch", "Trolley_Arc", "Trolley_Hiss", "Trolley_Battery"];
@@ -552,6 +556,60 @@ impl VehicleInstance {
             let bf = self.get(self.v_brakeforce);
             self.put(self.v_brakeforce, bf + out.mech_brake);
         }
+        // a shoe going through a frog or over a crossing: the script may react to it
+        if !frogs.is_empty() || !crossings.is_empty() {
+            self.fire_wire_triggers(&frogs, &crossings, net.as_deref());
+        }
+    }
+
+    /// A shoe going through a frog fires the triggers a script can use: the pole's own
+    /// (`Trolley_Pole<k>_Frog`), the frog's (`Trolley_Frog`), and the name the map gave the
+    /// frog (`Trolley_Frog_<name>`, its spaces written as underscores). A shoe going over a
+    /// crossing of two wires fires `Trolley_Pole<k>_Joint` and `Trolley_Joint`. Each is
+    /// fired once for each crossed, even when both poles crossed at once.
+    fn fire_wire_triggers(&mut self, frogs: &[(usize, u32)], crossings: &[(usize, u32)], net: Option<&WireNet>) {
+        // (a solve may cross the same place twice in a step: each crossing counts once)
+        let frogs = Self::once_crossed(frogs);
+        let crossings = Self::once_crossed(crossings);
+        for (pole, _) in &frogs {
+            self.trigger(&format!("Trolley_Pole{}_Frog", pole + 1));
+        }
+        for (pole, _) in &crossings {
+            self.trigger(&format!("Trolley_Pole{}_Joint", pole + 1));
+        }
+        // the frogs crossed, each of them once
+        let mut named: Vec<u32> = Vec::new();
+        for (_, switch) in &frogs {
+            if named.contains(switch) {
+                continue;
+            }
+            named.push(*switch);
+            self.trigger("Trolley_Frog");
+            if let Some(name) = net.and_then(|n| n.switches.get(*switch as usize)).map(|s| s.name.as_str()).filter(|n| !n.is_empty()) {
+                let name = name.split_whitespace().collect::<Vec<_>>().join("_");
+                self.trigger(&format!("Trolley_Frog_{name}"));
+            }
+        }
+        // the crossings gone over, each of them once
+        let mut over: Vec<u32> = Vec::new();
+        for (_, crossing) in &crossings {
+            if over.contains(crossing) {
+                continue;
+            }
+            over.push(*crossing);
+            self.trigger("Trolley_Joint");
+        }
+    }
+
+    /// The crossings of a step, each of them once.
+    fn once_crossed(crossed: &[(usize, u32)]) -> Vec<(usize, u32)> {
+        let mut out: Vec<(usize, u32)> = Vec::new();
+        for c in crossed {
+            if !out.contains(c) {
+                out.push(*c);
+            }
+        }
+        out
     }
 
     /// The torque `step_physics` drives with: the modelled drive's, or the script's scaled by

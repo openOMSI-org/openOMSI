@@ -13,9 +13,11 @@ use hashbrown::HashMap;
 use std::sync::Mutex;
 
 mod arcs;
+mod crossings;
 mod radio;
 mod sounds;
 pub use arcs::ArcRule;
+pub use crossings::Crossing;
 pub use sounds::{SoundChoice, WireSounds};
 
 /// Where a shoe's contact point lies: on this span, this far (m) from its first point, on the
@@ -263,6 +265,10 @@ pub struct WireNet {
     pub spans: Vec<Span>,
     pub nodes: Vec<Node>,
     pub switches: Vec<SwitchDef>,
+    /// The places where two wires cross without joining.
+    pub crossings: Vec<Crossing>,
+    /// The crossings on each span: the crossing and where on the span it is.
+    span_crossings: Vec<Vec<(u32, f64)>>,
     grid: HashMap<(i32, i32), Vec<u32>>,
     dynamic: Mutex<Dyn>,
 }
@@ -515,6 +521,8 @@ impl WireNet {
             spans: Vec::new(),
             nodes: Vec::new(),
             switches: Vec::new(),
+            crossings: Vec::new(),
+            span_crossings: Vec::new(),
             grid: HashMap::new(),
             dynamic: Mutex::new(Dyn { live: Vec::new(), current: Vec::new(), accum: Vec::new(), branch: Vec::new(), lock: Vec::new(), since: Vec::new(), switch_sounds: Vec::new() }),
         };
@@ -547,6 +555,7 @@ impl WireNet {
         }
         net.build_nodes(&switches, &insulators);
         net.build_grid();
+        net.build_crossings();
         let d = Dyn {
             live: net.sections.iter().map(|s| s.live).collect(),
             current: vec![0.0; net.sections.len()],
