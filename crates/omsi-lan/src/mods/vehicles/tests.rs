@@ -668,8 +668,19 @@ fn putting_a_file_together_waits_for_room_in_the_transfers_budget() {
         });
         assert_eq!(kept.put_piece_sent(&e, 0, &data), Ok(true));
     });
-    assert_eq!(kept.blob(&e.sha256).as_deref(), Some(&data[..]));
+    // The complete bytes are stored, but the BLOB endpoint must not expose
+    // them until a vehicle manifest is validated and explicitly committed.
+    assert!(kept.blob(&e.sha256).is_none());
     assert!(kept.missing_pieces(&e).is_empty());
+    let bus = b"[friendlyname]\nTest\nPieces\nDefault\n";
+    let desc = entry("Vehicles/Pieces/pieces.bus", bus);
+    kept.put(&desc, bus).unwrap();
+    let manifest = VehicleManifest {
+        bus: desc.path.clone(),
+        entries: vec![desc, e.clone()],
+    }.validated().unwrap();
+    kept.commit(manifest).unwrap();
+    assert_eq!(kept.blob(&e.sha256).as_deref(), Some(&data[..]));
     assert_eq!(transfers().held(), 0);
     let _ = std::fs::remove_dir_all(&store);
 }
