@@ -31,7 +31,14 @@ impl Renderer {
         for (k, a) in i.slot_alpha.iter().enumerate() {
             let mut m = m;
             m[0][3] = draw_order_level(i, k);
-            let n = super::depth_plane::encode(normal_matrix, mesh.depth_normals.get(k).copied().unwrap_or(Vec3::ZERO));
+            let n = if i.slot_levels.get(k).copied().unwrap_or(0) > 0 {
+                super::depth_plane::encode(
+                    normal_matrix,
+                    mesh.depth_normals.get(k).copied().unwrap_or(Vec3::ZERO),
+                )
+            } else {
+                super::depth_plane::NO_PLANE
+            };
             m[1][3] = n[0];
             m[2][3] = n[1];
             mats.push(m);

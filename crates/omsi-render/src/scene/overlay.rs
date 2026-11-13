@@ -252,16 +252,15 @@ impl ObjectRun {
             if let Some(gap) = gap {
                 depth_caps[slot] = gap * 0.5;
             }
-            // Keep the cap above covered surfaces so it cannot expose the base.
             let level = if level == 0 {
                 beside_hi.unwrap_or(0)
             } else if level > 2 {
+                // Limit deep stacks so nearby surfaces are not overtaken.
                 level.min(beside_lo.unwrap_or(MAX_LEVEL).max(2))
             } else {
                 level
             };
-            // A nearby patch may cap the extra step, never the depth of a surface
-            // already underneath this slot: lowering it would expose that surface.
+            // Do not cap below surfaces already underneath this slot.
             let floor = under.iter().map(|&i| self.flats[i].1).max().unwrap_or(0);
             let level = level.max(floor);
             levels[slot] = level;
