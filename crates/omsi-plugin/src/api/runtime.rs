@@ -86,6 +86,8 @@ pub struct Hub {
     pub names: RefCell<Vec<String>>,
     /// Events for one plugin (by name) in its next frame: (plugin, event, arguments).
     pub direct: RefCell<Vec<(String, &'static str, Vec<Value>)>>,
+    /// What became of each plugin, for the launcher (`crate::status`).
+    pub status: RefCell<crate::status::Status>,
 }
 
 pub type SharedHub = Rc<Hub>;
@@ -308,6 +310,7 @@ impl PluginState {
             self.disabled = true;
         }
         if self.disabled {
+            self.hub.status.borrow_mut().switched_off(&self.name, why);
             self.processes.stop_all();
             // (its buttons would answer nothing any more)
             self.hub.ui.borrow_mut().remove_owner(self.owner);

@@ -13,6 +13,11 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   give each vehicle's `bounding_box` (`{width, length, height, cx, cy, cz, heading, default}`,
   the .bus/.ovh `[boundingbox]`), so a blind-spot or distance plugin knows where a truck's or an
   articulated bus's body really is, not only its origin (#3936).
+- **Plugins page in the launcher**: Content → Plugins lists the Lua, `.oop` and OMSI
+  plugins of the game's plugins folders. Each has a switch (a plugin switched off is left out
+  of the next game, its files and settings stay where they are), shows whether it ran, did not
+  load (with the error, e.g. a syntax error) or was stopped after errors in the last game, and
+  a plugin that declares settings with `plugin.settings` gets a settings form there too (#3919).
 - **Frame generation on a Mac**: with Apple MetalFX upscaling on, Settings → Graphics → *Frame generation* shows a generated frame between every two drawn ones (Apple's MetalFX frame interpolator; a Mac with Apple silicon on macOS 26 or newer), for smoother motion at the price of a little more input lag. Where fewer than 30 frames a second are drawn with it (Apple's advice), it is turned off for the drive, as SSAO and the shadows are. The frame rate's corner then reads e.g. `90 fps (45 + FG)`. Off by default, experimental.
 - **Apple MetalFX upscaling on a Mac**: Settings → Graphics → Upscaling offers *Apple MetalFX* on a Mac with Apple silicon (macOS 13 or newer), with the same quality levels as NVIDIA DLSS and AMD FSR 3 on Windows: the picture is drawn smaller and brought up to the window with the help of the last frames, in place of the anti-aliasing and the render scale, from the next start. It is part of macOS, so there is nothing to install. Where the Mac's graphics chip scales up less than Ultra performance asks for, the picture is drawn at the smallest size it takes.
 - **Rename a save**: the pencil beside a save slot in the launcher's *Continue* list gives it a name of your own, without editing its `.osn` file in the map's `Saves` folder. Saving over that slot in the game keeps the name (#3849).

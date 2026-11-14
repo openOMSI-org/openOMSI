@@ -17,6 +17,7 @@ pub mod storage;
 pub mod mods;
 pub mod map_uses;
 pub mod optimise;
+pub mod plugins;
 mod hof_sync;
 mod file_dialog;
 pub mod i18n;

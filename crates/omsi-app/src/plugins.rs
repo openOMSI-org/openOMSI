@@ -27,7 +27,13 @@ pub(crate) fn load(disabled: bool) -> Plugins {
     let permissions = std::sync::Arc::new(omsi_plugin::api::process::ProcessPermissions::new(
         crate::lan::data_dir().map(|p| p.join("plugin-process-permissions.json")),
     ));
-    Plugins::load_with_process_permissions(&dirs, &HostConfig::detect(), omsi_plugin::api::process::ProcessGrants::from_env(), permissions)
+    // (the launcher's plugin list: what the player switched off, and what became of each)
+    let mut hosts = HostConfig::detect();
+    if let Some(d) = crate::lan::data_dir() {
+        hosts.off = omsi_plugin::status::read_off(&d);
+        hosts.status_file = Some(d.join(omsi_plugin::status::STATUS_FILE));
+    }
+    Plugins::load_with_process_permissions(&dirs, &hosts, omsi_plugin::api::process::ProcessGrants::from_env(), permissions)
 }
 
 /// The game's side of a plugin frame: the whole game (the plugins taken out of it for the
