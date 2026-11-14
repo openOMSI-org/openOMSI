@@ -87,7 +87,7 @@ impl Renderer {
         // system's memory, Apple's generously
         let mem = adapter.memory_info();
         let vram = adapter_vram_mb(&adapter, &info, mem.as_ref());
-        let guess_mb = gpu_memory::texture_allowance_mb(&info, vram, mem.as_ref());
+        let guess_mb = gpu_memory::texture_allowance_mb(&info, vram, mem.as_ref(), gpu_memory::system_memory_mb());
         let discrete_vram = gpu_memory::own_card_vram_mb(&info, vram);
         log::info!("graphics adapter: {} ({:?}, {:?}{}), texture memory taken for it: {guess_mb} MB", info.name, info.device_type, info.backend, vram.map(|v| format!(", {v} MB of its own")).unwrap_or_default());
         if let Some(m) = mem {

@@ -609,6 +609,11 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   sound's name (a cut-off download, a web page), the warning now gives its path, its size and its
   first bytes. Before, the log only had the line `probe reach EOF at n bytes` with no file name,
   which read like the cause of a crash (#3956); that line is still logged just before ours.
+- **Graphics in the processor (Intel UHD, AMD APUs) no longer run out of memory on big maps**:
+  their texture allowance came from what the driver may hand out in all, up to 30 % of it,
+  which on a 16 GB machine was 2.2 GB of textures beside a big map and the game itself, and the
+  device was lost. It is now a tenth of the machine's memory at most (at least 1000 MB)
+  (#2720).
 - **Pixel XC list rows no longer cut off**: on the MZKP SOR NBG 12, the direction and line lists
   of the Pixel XC display showed each row's text sliced along its middle. The text strip of
   every row is skewed a tenth of a millimetre over its tile, and was not taken as printed on

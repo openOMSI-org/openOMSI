@@ -187,9 +187,30 @@ fn budget_mb(mem: Option<&wgpu::AdapterMemoryInfo>) -> Option<u64> {
     (budget > 0).then_some(budget)
 }
 
+/// The machine's memory (MB) the program told (`set_system_memory_mb`); 0: not told.
+static SYSTEM_MB: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// The machine's memory in MB, for the texture allowance of a graphics chip that shares it.
+pub fn set_system_memory_mb(mb: u64) {
+    SYSTEM_MB.store(mb, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub(super) fn system_memory_mb() -> Option<u64> {
+    Some(SYSTEM_MB.load(std::sync::atomic::Ordering::Relaxed)).filter(|m| *m > 0)
+}
+
+/// The most the textures of a chip that shares the system's memory take (MB): a tenth of
+/// it, at least the 1000 MB guess. The driver's budget is what it may hand out in all, not
+/// what is left once the game itself (a big map's tiles, the AI, the passengers) has its
+/// share: an Intel UHD 730 on 16 GB took 2212 MB of textures on a Hong Kong map in a LAN
+/// session and the device was lost for memory before the allowance could be lowered (#2720).
+fn shared_cap_mb(ram: Option<u64>) -> Option<u64> {
+    ram.map(|r| (r / 10).max(1000))
+}
+
 /// Conservative texture allowance in MB, distinct from physical VRAM.
 /// Low-memory discrete GPUs need room for render targets and driver allocations.
-pub(super) fn texture_allowance_mb(info: &wgpu::AdapterInfo, vram: Option<u64>, mem: Option<&wgpu::AdapterMemoryInfo>) -> u64 {
+pub(super) fn texture_allowance_mb(info: &wgpu::AdapterInfo, vram: Option<u64>, mem: Option<&wgpu::AdapterMemoryInfo>, ram: Option<u64>) -> u64 {
     let discrete_allowance = |fallback| {
         vram.filter(|v| *v >= 512).map_or(fallback, |v| {
             if v <= 2560 { v * 35 / 100 }
@@ -206,7 +227,8 @@ pub(super) fn texture_allowance_mb(info: &wgpu::AdapterInfo, vram: Option<u64>, 
         // the discrete branch's 3/10 share now, up to 4000)
         wgpu::DeviceType::IntegratedGpu | wgpu::DeviceType::VirtualGpu => {
             let guess = 1000;
-            budget_mb(mem).filter(|b| *b >= 2_600).map_or(guess, |b| (b * 3 / 10).min(4_000))
+            let from_budget = budget_mb(mem).filter(|b| *b >= 2_600).map_or(guess, |b| (b * 3 / 10).min(4_000));
+            shared_cap_mb(ram).map_or(from_budget, |c| from_budget.min(c))
         }
         _ => discrete_allowance(800),
     }
@@ -460,7 +482,7 @@ impl Renderer {
 
 #[cfg(all(test, not(target_os = "android")))]
 mod tests {
-    use super::{ceiling_for, chip_name, dxgi_names_card, one_card, picture, shared_chip_by_name, Ceiling, GpuMemory, Picture, Seen};
+    use super::{ceiling_for, chip_name, dxgi_names_card, one_card, picture, shared_cap_mb, shared_chip_by_name, texture_allowance_mb, Ceiling, GpuMemory, Picture, Seen};
     use wgpu::{Backend, DeviceType};
 
     /// The game's bound on the card: the setting and nine tenths of the driver's budget,
@@ -548,6 +570,17 @@ mod tests {
     }
 
     /// The street-scale light is off on a small or shared chip unless the player asked for it.
+    #[test]
+    fn a_shared_chip_takes_a_tenth_of_the_machines_memory_at_most() {
+        // #2720: UHD 730, 16.8 GB, a DX12 budget of ~7.4 GB took 2212 MB before
+        assert_eq!(shared_cap_mb(Some(16_849)), Some(1_684));
+        assert_eq!(shared_cap_mb(Some(8_000)), Some(1_000));
+        assert_eq!(shared_cap_mb(Some(65_536)), Some(6_553));
+        assert_eq!(shared_cap_mb(None), None);
+        let igpu = wgpu::AdapterInfo { name: String::new(), vendor: 0, device: 0, device_type: wgpu::DeviceType::IntegratedGpu, device_pci_bus_id: String::new(), driver: String::new(), driver_info: String::new(), backend: wgpu::Backend::Dx12, subgroup_min_size: 0, subgroup_max_size: 0, transient_saves_memory: false };
+        assert_eq!(texture_allowance_mb(&igpu, None, None, Some(16_849)), 1_000);
+    }
+
     #[test]
     fn the_street_light_is_off_on_a_weak_chip_unless_asked_for() {
         let chip = |device_type, backend| wgpu::AdapterInfo { name: String::new(), vendor: 0, device: 0, device_type, device_pci_bus_id: String::new(), driver: String::new(), driver_info: String::new(), backend, subgroup_min_size: 0, subgroup_max_size: 0, transient_saves_memory: false };

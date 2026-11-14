@@ -22,6 +22,9 @@ pub(crate) struct LogState {
 pub(crate) fn log_system(settings: &crate::settings::Settings) {
     let cpus = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(0);
     let ram = crate::memory::physical_memory().map(|b| b / 1_000_000).unwrap_or(0);
+    // (before the graphics device opens: a chip that shares this memory takes a part of it
+    // for textures, #2720)
+    omsi_render::set_system_memory_mb(ram);
     log::info!("system: {} {} ({}), {cpus} threads, {ram} MB memory", std::env::consts::OS, std::env::consts::ARCH, os_version());
     log::info!("command line: {}", std::env::args().collect::<Vec<_>>().join(" "));
     if let Ok(d) = std::env::current_dir() {
