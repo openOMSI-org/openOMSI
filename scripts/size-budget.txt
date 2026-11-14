@@ -11,5 +11,7 @@ file 1585 crates/omsi-model/src/lib.rs
 file 3236 crates/omsi-net/src/lib.rs
 file 1517 crates/omsi-net/src/tests.rs
 file 1511 crates/omsi-scene/src/vehicles.rs
+file 1945 crates/omsi-sim/src/vehicle/types.rs
 file 1609 crates/omsi-ui/src/kit.rs
 fn 305 crates/omsi-app::run_input_script crates/omsi-app/src/input_script.rs
+fn 371 crates/omsi-sim::load_with crates/omsi-sim/src/vehicle/types.rs
