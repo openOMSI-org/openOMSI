@@ -26,7 +26,30 @@ fn fsr1_menu_settings_round_trip_into_renderer() {
     let mut lost = Settings::from_text("upscaler=dlss\n");
     lost.apply_safe_gpu(1);
     assert_eq!(lost.upscaler, "default");
+    let mut mac = Settings::from_text("upscaler=MetalFX\n");
+    assert_eq!(mac.upscaler, "metalfx");
+    mac.apply_safe_gpu(1);
+    assert_eq!(mac.upscaler, "default");
     assert_eq!(Settings::from_text("fsr_sharpness=nan\\n").fsr_sharpness, 0.8);
+}
+
+/// Frame generation is read, written and turned off with the safer graphics; it runs only with
+/// the upscaler it takes its depth and motion from.
+#[test]
+fn frame_generation_round_trips_and_needs_its_upscaler() {
+    assert_eq!(Settings::default().frame_generation, "off");
+    let mut s = Settings::from_text("upscaler=metalfx\nframe_generation=MetalFX\n");
+    assert_eq!(s.frame_generation, "metalfx");
+    assert!(s.to_text().contains("frame_generation=metalfx\n"));
+    assert_eq!(Settings::from_text("frame_generation=dlss4x\n").frame_generation, "dlss4x", "a Windows choice is kept");
+    assert!(!Settings::from_text("upscaler=metalfx\nframe_generation=dlss4x\n").frame_generation(), "and not run on a Mac");
+    assert_eq!(Settings::from_text("frame_generation=warp\n").frame_generation, "off");
+    assert!(s.frame_generation(), "on with MetalFX upscaling chosen");
+    s.upscaler = "fsr1".into();
+    assert!(!s.frame_generation(), "not without MetalFX upscaling");
+    s.upscaler = "metalfx".into();
+    s.apply_safe_gpu(1);
+    assert_eq!(s.frame_generation, "off");
 }
 
 #[test]

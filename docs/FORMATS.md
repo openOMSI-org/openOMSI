@@ -118,7 +118,9 @@ operators compiles to nothing, silently (a lone `$`, `$=>`, `$++`, `$SetLengthM`
 another unknown word is an error.
 
 Constfiles: `[const] name value`, `[newcurve] name` followed by `[pnt] x y` (piece-wise linear,
-clamped). Varlists / stringvarlists: one name per line. A `(F.L.name)` whose curve no constfile
+clamped). Constants and curves each keep the first definition of a name (ASCII
+case-insensitive), both within a constfile and across constfiles in their listed order.
+Varlists / stringvarlists: one name per line. A `(F.L.name)` whose curve no constfile
 defines is logged as `SC_ErrorInCommand_functioninvalid` and still takes its argument, giving
 0 (the O530 Facelift's ZF-6AP-1300/1700 lack two converter curves that its `zf-eco.osc` uses
 in the line that computes `M_Wheel`).
@@ -387,6 +389,15 @@ index n; `[traffic_light] name` + `[phase] state seconds` (0 red, 3 red+yellow, 
 8 yellow, 9 all-red; the last `0 0` phase = red until the `[traffic_lights_group]` cycle
 restarts). `[trafficlight]` lamp objects are placed with map flag 1, the extra line = light
 index, and `[varparent] id` = the crossing; their `[visible] red|yellow|green 1` meshes follow.
+
+`[traffic_light_stop] light time ifAnf` and `[traffic_light_jump] light time ifAnf target`
+are points on that cycle clock. `ifAnf` 1 makes the condition "nobody is asking at `light`",
+0 "somebody is asking". A stop normally holds the clock **just before** its time, so the
+phase that ends there stays shown; if the clock is already at the stop (within 1e-6 s
+either side) it holds there. A stop never holds in a red-and-yellow changeover: if the
+instant just before the stop is red-and-yellow, the clock holds at the stop's own time;
+a stop whose own time is red-and-yellow is passed. A jump whose condition holds at the
+same cycle time as a stop is taken first, and the stop is left behind.
 
 ## Timetables (`TTData`)
 
@@ -882,7 +893,8 @@ the line after the page's path makes it a **surface** - shaded by the world's li
 other material is, on every slot that shows the page, a scenery object's or a vehicle's -
 where a page is a display, drawn unlit at its own brightness, by default.
 An openOMSI extension; Omsi.exe draws such a slot unlit either way.
-`[navigatortexture] w h [variable]` declares a screen the game's navigator draws its small map
+`[navigatortexture] w h [variable] [mapScale] [fixedNorth] [noNavUI] [navCenter] [showHistory]`
+declares a screen the game's navigator draws its small map
 on, while the optional variable is not 0 (see `NAVIGATORTEXTURE.md`); `[useNavigatorTexture] n`
 puts the n-th on a material. Also an openOMSI extension. The
 scripts draw with `(M.V.ST…)` callbacks, arguments pushed in order (index first):
