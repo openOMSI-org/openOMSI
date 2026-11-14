@@ -756,10 +756,10 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // lamps' glints, the sky, the street) and in the little its tint takes from the daylight
     // through it. Lit as a grey Lambertian layer, every lamp and the cab's own lamps laid a
     // milky veil over the windows at night, over everything seen through them.
+    // (paint on a pane, alpha near 1, is lit as the body is: unlit it went black at night)
+    let paint_on_pane = select(1.0, smoothstep(0.6, 0.95, alpha), glass);
     var sf_lit = sf;
-    if (glass) {
-        sf_lit.albedo = vec3<f32>(0.0);
-    }
+    sf_lit.albedo = sf.albedo * paint_on_pane;
     if ((terrain || material.params2.z > 0.0) && !is_water) {
         sf_lit.f0 = sf_lit.f0 * camera.lod.z;
     }
@@ -793,8 +793,8 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // full brightness in Omsi.exe: shown at the screen's white, not scaled with the eye's
     // night adaptation - a texture lit that way by [matl_allcolor] glared at several times
     // white at night (#1228, #1236). (The night maps of lit windows keep their light.)
-    // (not a pane's: glass gives off no light of its own, see `sf_lit`)
-    var emit = select(tex.rgb * material.emissive.rgb * clamp(enh.exposure.z * 2.0, 0.8, 1.0), vec3<f32>(0.0), glass);
+    // (not a pane's: glass gives off no light of its own - its paint does, see `sf_lit`)
+    var emit = tex.rgb * material.emissive.rgb * clamp(enh.exposure.z * 2.0, 0.8, 1.0) * paint_on_pane;
     // (the tile light map on the splines and [LightMapMapping] objects is the vanilla
     // path's: here the map's lamps light them, tinted from that map, as they light every
     // other surface - added on top it lit the roads twice, with a hard edge where a road
