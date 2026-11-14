@@ -3214,3 +3214,5 @@
 "Parked buses on a server": "सर्वर पर खड़ी बसें"
 "How many of the buses parked near you are drawn; fewer take less memory": "आपके पास खड़ी कितनी बसें दिखाई जाएँ; कम बसें कम मेमोरी लेती हैं"
 "At most 5": "अधिकतम 5"
+"Folders of objects and splines that no other map uses go with it: {n}, {size}.": "जिन ऑब्जेक्ट और स्प्लाइन फ़ोल्डरों को कोई दूसरा मैप इस्तेमाल नहीं करता, वे भी साथ में हट जाते हैं: {n}, {size}।"
+"Folders of objects and splines that another map still uses stay: {n}.": "जिन ऑब्जेक्ट और स्प्लाइन फ़ोल्डरों को कोई दूसरा मैप अब भी इस्तेमाल करता है, वे बने रहते हैं: {n}।"

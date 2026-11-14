@@ -3606,3 +3606,5 @@
 "Parked buses on a server": "服务器上停放的公交车"
 "How many of the buses parked near you are drawn; fewer take less memory": "绘制多少辆停在你附近的公交车；越少占用的内存越少"
 "At most 5": "最多5辆"
+"Folders of objects and splines that no other map uses go with it: {n}, {size}.": "其他地图都未使用的物体和样条文件夹会一并删除：{n} 个，{size}。"
+"Folders of objects and splines that another map still uses stay: {n}.": "其他地图仍在使用的物体和样条文件夹会保留：{n} 个。"

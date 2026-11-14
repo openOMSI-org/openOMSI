@@ -2973,3 +2973,5 @@
 "Parked buses on a server": "서버에 주차된 버스"
 "How many of the buses parked near you are drawn; fewer take less memory": "근처에 주차된 버스를 몇 대 그릴지 정합니다. 적을수록 메모리를 덜 사용합니다"
 "At most 5": "최대 5"
+"Folders of objects and splines that no other map uses go with it: {n}, {size}.": "다른 지도가 사용하지 않는 오브젝트 및 스플라인 폴더도 함께 삭제됩니다: {n}개, {size}."
+"Folders of objects and splines that another map still uses stay: {n}.": "다른 지도가 아직 사용하는 오브젝트 및 스플라인 폴더는 남습니다: {n}개."

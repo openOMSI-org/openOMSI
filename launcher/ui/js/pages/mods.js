@@ -107,7 +107,16 @@ export function ModsPage() {
     }
   });
   const remove = async (m) => {
-    if (!(await ask({ title: 'Delete this mod?', text: t('{name} and its files are deleted from the content folder. Switch it off instead to keep it.', { name: m.name }), yes: 'Delete', danger: true }))) return;
+    setBusy((b) => ({ ...b, [m.id]: true }));
+    const plan = await call('mod_remove_preview', { id: m.id }).catch((e) => (toast(t(e.message), 'error'), null));
+    setBusy((b) => ({ ...b, [m.id]: false }));
+    if (!plan) return;
+    const text = [
+      t('{name} and its files are deleted from the content folder. Switch it off instead to keep it.', { name: m.name }),
+      plan.freed.length > 0 && t('Folders of objects and splines that no other map uses go with it: {n}, {size}.', { n: plan.freed.length, size: bytes(plan.bytes) }),
+      plan.kept.length > 0 && t('Folders of objects and splines that another map still uses stay: {n}.', { n: plan.kept.length }),
+    ].filter(Boolean);
+    if (!(await ask({ title: 'Delete this mod?', text, yes: 'Delete', danger: true }))) return;
     await busyWhile(m, async () => {
       try {
         await call('mod_remove', { id: m.id });
