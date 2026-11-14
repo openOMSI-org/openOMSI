@@ -302,7 +302,7 @@ impl World {
         lm: Option<TextureId>,
     ) {
         let images: &HashMap<PathBuf, Arc<TextureData>> = &p.images;
-        let ground_dirs = vec![self.root.clone()];
+        let ground_dirs = self.ground_dirs();
         // The painted ground: every further [groundtex] the editor's brush put on this
         // tile is the same tile mesh once more, blended in through its own mask - which
         // is how OMSI's car parks get their asphalt, its side streets their cobbles and
