@@ -600,6 +600,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **Pixel XC list rows no longer cut off**: on the MZKP SOR NBG 12, the direction and line lists
+  of the Pixel XC display showed each row's text sliced along its middle. The text strip of
+  every row is skewed a tenth of a millimetre over its tile, and was not taken as printed on
+  it, so its upper half lost the depth test; such a strip is now recognised.
 - **People waiting at a stop no longer sink into the pavement**: a waiting place that the map
   puts below the footpath (the standing people of MZKP Strzelce's "Starostwo Powiatowe" are at
   z 0, the pavement is 23 cm up) now has its person lifted onto the pavement, up to a step above
