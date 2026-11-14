@@ -745,7 +745,7 @@ impl TrafficSim {
         // After a sustained wait, let one vehicle proceed only when no right-of-way,
         // crossing-traffic, pedestrian or courtesy condition is holding it. This is a
         // deadlock release, not a general relaxation of junction priority.
-        if exit_full && wait > 20.0 && !hard && !ruled && soft.is_empty() && !people && !courtesy {
+        if exit_full && wait > 10.0 && !hard && !ruled && soft.is_empty() && !people && !courtesy {
             exit_full = false;
             exit_car = None;
             if omsi_cfg::flags::OMSI_DEBUG_TRAFFIC.is_set() {
