@@ -604,6 +604,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   puts below the footpath (the standing people of MZKP Strzelce's "Starostwo Powiatowe" are at
   z 0, the pavement is 23 cm up) now has its person lifted onto the pavement, up to a step above
   the place; the floor is never lowered, and somebody on a seat keeps its bench's height.
+- **A sharper picture with Apple MetalFX upscaling**: the textures are read one level sharper
+  and the picture is sharpened a little more, so bark, grass and the numbers of the gauges come
+  closer to the picture drawn at the window's size, without halos around the lamp posts at night.
 - **Vehicle-actuated traffic lights wait before the stop, not in the yellow**: a stop whose
   request is present now holds the clock at the phase before it, so a queue can no longer
   leave a light stuck on yellow; an exact stop time still holds, and a jump at the same time
