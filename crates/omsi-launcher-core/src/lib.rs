@@ -2017,6 +2017,7 @@ pub fn get_settings() -> Result<Value> {
     // (what the page may offer beside the upscalers that are always there; not a setting)
     let game_dir = find_game(&load_config_raw().game).and_then(|g| g.parent().map(Path::to_path_buf));
     v["temporal_upscalers"] = json!(game_dir.map_or_else(omsi_cfg::upscaler_files::of_the_system, |d| omsi_cfg::upscaler_files::available(&d)));
+    v["frame_generators"] = json!(omsi_cfg::upscaler_files::frame_generation_choices());
     // no settings of our own yet: start from what the player set in OMSI 2
     if text.is_none() {
         if let Some(o) = root().ok().and_then(|r| omsi_options(&r)) {
@@ -2291,6 +2292,7 @@ fn passenger_defaults(v: &mut Value) {
 fn graphics_and_interface_defaults(v: &mut Value) {
     v["upscaler"] = json!("default");
     v["upscale_quality"] = json!("quality");
+    v["frame_generation"] = json!("off");
     v["fsr_quality"] = json!("quality");
     v["fsr_sharpness"] = json!(0.8);
     v["street_light"] = json!("off");
@@ -2461,6 +2463,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "puddles" => v[&k] = json!(puddles(val)),
             "upscaler" => v[&k] = json!(upscaler_word(val)),
             "upscale_quality" => v[&k] = json!(omsi_cfg::upscaler_files::quality_word(val)),
+            "frame_generation" => v[&k] = json!(omsi_cfg::upscaler_files::frame_generation_word(val)),
             "fsr_quality" => v[&k] = json!(match val.to_ascii_lowercase().as_str() {
                 "ultra" => "ultra", "balanced" => "balanced", "performance" => "performance",
                 "custom" => "custom", "auto" => "auto", _ => "quality",
@@ -2953,9 +2956,10 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         head_tracking_value("head_tracking_smoothing", v.get("head_tracking_smoothing").and_then(|x| x.as_f64())),
         head_tracking_value("head_tracking_dead_zone", v.get("head_tracking_dead_zone").and_then(|x| x.as_f64())),
     ));
-    text.push_str(&format!("upscaler={}\nupscale_quality={}\nfsr_quality={}\nfsr_sharpness={}\n",
+    text.push_str(&format!("upscaler={}\nupscale_quality={}\nframe_generation={}\nfsr_quality={}\nfsr_sharpness={}\n",
         upscaler_word(v.get("upscaler").and_then(|x| x.as_str()).unwrap_or("")),
         omsi_cfg::upscaler_files::quality_word(v.get("upscale_quality").and_then(|x| x.as_str()).unwrap_or("")),
+        omsi_cfg::upscaler_files::frame_generation_word(v.get("frame_generation").and_then(|x| x.as_str()).unwrap_or("")),
         match v.get("fsr_quality").and_then(|x| x.as_str()).unwrap_or("quality") {
             "ultra" => "ultra", "balanced" => "balanced", "performance" => "performance",
             "custom" => "custom", "auto" => "auto", _ => "quality",

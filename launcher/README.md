@@ -16,7 +16,7 @@ window-free model `crates/omsi-launcher-model`. The game has no launcher window 
   and reads the city map with a trip's route the way the
   navigator does (`mapview::export`), which the page draws;
   `src/i18n.rs` hands the page the game's translation tables
-  (`crates/omsi-app/locales/app.yml`, the English text is the key).
+  (`crates/omsi-app/locales/app.<language>.yml`, the English text is the key).
 * `ui/` - the page: Preact with htm from one vendored file, no build step and no npm
   (`ui/vendor/README.md` lists the third-party files). `js/pages/*.js` are the pages,
   `js/ui.js` the controls, `js/data.js` the duty and the content, `styles.css` the look.

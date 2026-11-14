@@ -45,9 +45,21 @@ fn a_screenshot_keeps_the_colours_and_is_opaque() {
 
 #[test]
 fn the_mip_bias_is_the_log_of_the_scale() {
-    assert_eq!(temporal_mip_bias(2560, 2560), 0.0);
-    assert_eq!(temporal_mip_bias(1280, 2560), -1.0);
-    assert_eq!(temporal_mip_bias(1, 3840), -3.0);
+    assert_eq!(temporal_mip_bias(2560, 2560, 0.0), 0.0);
+    assert_eq!(temporal_mip_bias(1280, 2560, 0.0), -1.0);
+    assert_eq!(temporal_mip_bias(1, 3840, 0.0), -3.0);
+}
+
+/// MetalFX's textures one level sharper, as Apple advises: -1.58 at Quality (1.5x), -2 at
+/// Performance (2x), -1 at Native; never past -3 nor above 0.
+#[test]
+fn metalfx_samples_one_mip_level_sharper() {
+    let close = |a: f32, b: f32| (a - b).abs() < 0.01;
+    assert!(close(temporal_mip_bias(1707, 2560, -1.0), -1.58));
+    assert_eq!(temporal_mip_bias(1280, 2560, -1.0), -2.0);
+    assert_eq!(temporal_mip_bias(2560, 2560, -1.0), -1.0);
+    assert_eq!(temporal_mip_bias(1, 3840, -1.0), -3.0);
+    assert_eq!(temporal_mip_bias(2560, 2560, 1.0), 0.0);
 }
 
 /// FSR 3 has its own, weaker mask on the panes and none on the screens: at DLSS's strength the
@@ -98,4 +110,17 @@ fn a_minimised_window_is_not_upscaled() {
     assert!(!super::frame::window_fits((1, 1)));
     assert!(!super::frame::window_fits((3264, 1)));
     assert!(super::frame::window_fits((640, 360)));
+}
+
+/// Frame generation shows the drawn frame a little under half a frame time after the generated
+/// one, and never holds it back long: below 10 fps there is nothing left to pace.
+#[cfg(target_os = "macos")]
+#[test]
+fn the_drawn_frame_follows_the_generated_one_at_half_a_frame() {
+    use super::metalfx_frames::half_interval;
+    assert!((half_interval(1.0 / 30.0) - 31.0 / 64.0 / 30.0).abs() < 1e-6);
+    assert!(half_interval(1.0 / 30.0) < 1.0 / 60.0);
+    assert_eq!(half_interval(0.5), 0.05);
+    assert_eq!(half_interval(0.0), 0.0);
+    assert_eq!(half_interval(f32::NAN), 0.0);
 }

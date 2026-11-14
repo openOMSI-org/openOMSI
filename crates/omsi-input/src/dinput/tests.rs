@@ -240,3 +240,11 @@ fn the_force_goes_to_the_lowest_axis_with_a_motor_whatever_the_drivers_order() {
     let (_, _, ff_axis) = format_objects(&[axis(GUID_XAxis, 0, false), axis(GUID_RzAxis, 5, true)]);
     assert_eq!(ff_axis, Some(5 * 4));
 }
+
+#[test]
+fn xinput_hid_paths_are_detected_by_ig_marker_only() {
+    assert!(is_xinput_hid_path(r"\\?\hid#vid_045e&pid_028e&ig_00#7&123456&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}"));
+    assert!(is_xinput_hid_path(r"\\?\HID#VID_045E&PID_028E&IG_01#8&ABCDEF&0&0000#"));
+    assert!(!is_xinput_hid_path(r"\\?\hid#vid_046d&pid_c262#6&123456&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}"));
+    assert!(!is_xinput_hid_path(""));
+}

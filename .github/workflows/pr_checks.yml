@@ -1,8 +1,8 @@
 # Checks on a pull request's files, beside the builds of release.yml:
-# * the interface translations: a changed `locales/app.yml` must load, keep the placeholders
+# * the interface translations: changed `locales/app.yml` / `app.<language>.yml` must load, keep the placeholders
 #   of the texts it translates and keep every text the code uses (.github/scripts/check_locales.py;
 #   changed existing translations and unused new keys are shown as warnings);
-# * no file of a megabyte or more, added or changed, the translations aside (see
+# * no file of a megabyte or more, added or changed, the Apple string catalog aside (see
 #   CONTRIBUTING.md: large data, screenshots and example content stay out of the repository).
 name: PR checks
 
@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 15
     env:
       BASE: ${{ github.event.pull_request.base.sha }}
-      LOCALES: crates/omsi-app/locales/app.yml
+      LOCALES: crates/omsi-app/locales
       MAX_BYTES: 1000000
     steps:
       - uses: actions/checkout@v7
@@ -35,8 +35,6 @@ jobs:
         run: |
           status=0
           while IFS= read -r f; do
-            # (the translations are one file for every language, checked on their own below)
-            [ "$f" = "$LOCALES" ] && continue
             [ "$f" = apple/Resources/Localizable.xcstrings ] && continue
             size=$(stat -c %s "$f" 2>/dev/null || echo 0)
             if [ "$size" -ge "$MAX_BYTES" ]; then
@@ -54,8 +52,10 @@ jobs:
             exit 0
           fi
           pip install --quiet pyyaml
-          git show "$BASE:$LOCALES" > "$RUNNER_TEMP/app.base.yml" 2>/dev/null || : > "$RUNNER_TEMP/app.base.yml"
-          python3 .github/scripts/check_locales.py "$RUNNER_TEMP/app.base.yml" "$LOCALES"
+          # the base's app.yml and app.<language>.yml (or its one app.yml with every language)
+          mkdir -p "$RUNNER_TEMP/base"
+          git archive "$BASE" "$LOCALES" | tar -x -C "$RUNNER_TEMP/base" 2>/dev/null || :
+          python3 .github/scripts/check_locales.py "$RUNNER_TEMP/base/$LOCALES" "$LOCALES"
 
       # No Rust file and no function may grow past its recorded size (+5 %), and new ones stay
       # under 1500 / 300 lines: scripts/size-budget.sh, baseline in scripts/size-budget.txt.

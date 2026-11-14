@@ -196,7 +196,7 @@ impl Renderer {
     /// its part, and the picture it gives is unchanged.)
     pub(crate) fn fsr_mip_bias(&self, f: &FrameCtx) -> f32 {
         if f.temporal_frame {
-            return temporal_mip_bias(f.width, f.full_w);
+            return self.temporal_textures_bias(f.width, f.full_w);
         }
         let off = omsi_cfg::flags::OMSI_NO_FSR_MIP_BIAS.is_set() || self.scale.fsr_mip_bias_off.get();
         if !off && self.fsr_draws(f) { (f.width as f32 / f.full_w.max(1) as f32).log2().clamp(-1.0, 0.0) } else { 0.0 }

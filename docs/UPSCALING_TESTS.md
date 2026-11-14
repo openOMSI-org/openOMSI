@@ -76,3 +76,23 @@ On a Mac with a graphics card, `cargo test -p omsi-render --lib -- --ignored fsr
 upscaler's tests with MetalFX, among them a still picture that has to settle on the full-sized
 one (`metalfx_settles_on_the_full_sized_picture`).
 
+## Frame generation (macOS)
+
+Apple's MetalFX frame interpolator (`frame_generation=metalfx`): Apple silicon, macOS 26 or newer,
+with MetalFX upscaling on. Start the game with `MTL_HUD_ENABLED=1` and the frame rate shown.
+
+| # | Mac | Settings | The log and the screen must say |
+|---|---|---|---|
+| 6 | Apple silicon, macOS 26 or newer | MetalFX Quality, Frame generation on, V-sync off | `frame generation: Apple MetalFX for WxH, the scene drawn at WxH`; the corner `N fps (M + FG)` with N about twice M; Metal HUD's frame rate about N |
+| 7 | as 6 | as 6, V-sync on | Metal HUD's frame-interval graph flat or a regular pattern, its histogram at most two buckets |
+| 8 | as 6 | switched off and on in the game's menu | `frame generation: off`, then 6's line again, no restart |
+| 9 | as 6 | Upscaling changed to Standard while on | no generated frames (the corner without `+ FG`) |
+| 10 | macOS 25 or older | - | Frame generation is not in the list |
+| 11 | as 6 | a heavy place, or full screen at the Mac's full resolution, where fewer than 30 frames a second are drawn with it | after about 10 s: `frame generation off to keep up` in the log and "The graphics card cannot keep up: frame generation off for this drive" on screen; no `+ FG` in the corner. Off and on in the menu: tried again |
+
+Look at the HUD, the cab's displays and the menus over generated frames (they must stay steady,
+not doubled or wobbling), and at fast turns and camera cuts (no smear from the frame before).
+`OMSI_FG_SHOW=generated` shows the generated frames only, `drawn` the drawn ones only, to look at
+one kind alone. `cargo test -p omsi-render --lib -- --ignored metalfx_makes_the_frame_between_two`
+checks that a generated frame lies between its two drawn ones and that the HUD stays put.
+
