@@ -80,9 +80,10 @@ struct Berth {
 }
 
 impl Berth {
-    /// The asks in the order the berth is handed out: who is there, then who came first.
+    /// The asks in the order the berth is handed out: who is there, then who is closer,
+    /// then who came first.
     fn first(&self) -> Option<u64> {
-        self.asks.iter().min_by_key(|a| (!a.there, a.since, a.dist, a.id)).map(|a| a.id)
+        self.asks.iter().min_by_key(|a| (!a.there, a.dist, a.since, a.id)).map(|a| a.id)
     }
 }
 
@@ -137,6 +138,7 @@ impl Berths {
             Some(a) => {
                 a.seen = step;
                 a.there |= there;
+                a.dist = (dist * 10.0).clamp(-1e6, 1e6) as i32;
             }
             None => b.asks.push(Ask { there, since: step, seen: step, dist: (dist * 10.0).clamp(-1e6, 1e6) as i32, id }),
         }
@@ -420,5 +422,36 @@ mod tests {
         assert!(b.held_long(K, 100.0 + BLOCKED_LONG + 1.0));
         b.note_blocked(K, false, 130.0);
         assert!(!b.held_long(K, 130.0));
+    }
+
+    #[test]
+    fn closer_vehicle_gets_berth_ahead_of_earlier_asker_further_away() {
+        let mut b = Berths::default();
+        b.begin_step(0, |_| true);
+        // Vehicle 9 asks first from 30m away
+        b.ask(K, 9, false, 30.0);
+        b.begin_step(0, |_| true);
+        b.ask(K, 9, false, 30.0);
+        // Vehicle 4 asks later, but is right in front of the stop (5m away)
+        b.ask(K, 4, false, 5.0);
+        // Closer vehicle 4 must get the berth, not vehicle 9 queued behind it
+        assert!(b.grant(K, 4, true));
+        assert!(!b.grant(K, 9, true));
+    }
+
+    #[test]
+    fn ask_distance_updates_as_vehicle_approaches() {
+        let mut b = Berths::default();
+        b.begin_step(0, |_| true);
+        b.ask(K, 9, false, 50.0);
+        b.begin_step(0, |_| true);
+        b.ask(K, 4, false, 20.0);
+        // Initially 4 is closer than 9
+        assert_eq!(b.berths.get(&K).unwrap().first(), Some(4));
+        b.begin_step(0, |_| true);
+        // 9 moves to 10m, now closer than 4 at 20m
+        b.ask(K, 9, false, 10.0);
+        b.ask(K, 4, false, 20.0);
+        assert_eq!(b.berths.get(&K).unwrap().first(), Some(9));
     }
 }
