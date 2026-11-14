@@ -69,7 +69,7 @@ pub(crate) fn name_tags(
         )]
     };
     let mut tags = Vec::new();
-    for r in game.remotes.values() {
+    for r in game.remotes.iter().filter(|(id, _)| !omsi_net::is_parked(**id)).map(|(_, r)| r) {
         let v = r.vehicle();
         // the roof: the bounding box's top when the bus says, else a bus's height
         let top = v.ty.def.bounding_box.map(|b| (b[5] + b[2] * 0.5) as f64).filter(|t| *t > 1.0).unwrap_or(3.4);

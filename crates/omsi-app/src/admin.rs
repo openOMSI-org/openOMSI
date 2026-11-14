@@ -42,7 +42,7 @@ fn append_section(out: &mut Vec<(String, String)>, title: String, rows: Vec<(Str
 pub(crate) fn items(app: &App) -> Vec<(String, String)> {
     let mut out = Vec::new();
     let Some(lan) = app.net.lan.as_ref() else { return out };
-    let mut peers: Vec<(u32, String)> = lan.peers().map(|p| (p.pose.id, if p.pose.name.is_empty() { omsi_ui::tr("Player {}").replace("{}", &p.pose.id.to_string()) } else { p.pose.name.clone() })).collect();
+    let mut peers: Vec<(u32, String)> = lan.peers().filter(|p| !omsi_net::is_parked(p.pose.id)).map(|p| (p.pose.id, if p.pose.name.is_empty() { omsi_ui::tr("Player {}").replace("{}", &p.pose.id.to_string()) } else { p.pose.name.clone() })).collect();
     peers.sort();
     let mut player_rows = Vec::new();
     for (id, name) in &peers {

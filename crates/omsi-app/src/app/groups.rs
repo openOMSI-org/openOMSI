@@ -487,6 +487,8 @@ pub(crate) struct MenuState {
     /// (the game menu's "Swap for another vehicle", #728).
     pub(crate) swap_pending: bool,
     pub(crate) swapped_in: Option<u64>,
+    /// The taking of a server's parked bus under way (`on_foot::parked`).
+    pub(crate) parked_transfer: Option<crate::on_foot::ParkedTransfer>,
     /// The vehicle chosen being read on a worker thread (see `App::place_vehicle`).
     pub(crate) pending_placement: Option<crate::spawn::PendingPlacement>,
     /// The line of the open list whose slider the mouse button holds (it follows the cursor).
