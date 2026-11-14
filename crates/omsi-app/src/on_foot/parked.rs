@@ -181,7 +181,7 @@ impl App {
         let (tx, receiver) = std::sync::mpsc::channel();
         let _ = tx.send(Ok(prepared));
         let replace = self.player.as_ref().map(|p| p.uid);
-        self.menus.pending_placement = Some(crate::spawn::PendingPlacement { receiver, world: w, args, name: bus, replace, reload: false, heading, taken: Some(id) });
+        self.menus.pending_placement = Some(crate::spawn::PendingPlacement { receiver, world: w, args, name: bus, replace, reload: false, heading, taken: Some(id), drive: false });
         true
     }
 }

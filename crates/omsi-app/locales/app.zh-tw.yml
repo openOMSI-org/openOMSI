@@ -4376,3 +4376,4 @@
 "At most 5": "最多 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "其他地圖都未使用的物件與樣條資料夾會一併刪除：{n} 個，{size}。"
 "Folders of objects and splines that another map still uses stay: {n}.": "其他地圖仍在使用的物件與樣條資料夾會保留：{n} 個。"
+"Taking over the bus...": "正在接手這輛公車..."

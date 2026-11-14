@@ -11,6 +11,7 @@
 //! feet on the ground, turning, sitting down on a seat and getting up are the passengers'
 //! own, eased as theirs are; the camera eases into each new view instead of cutting.
 
+mod ai_take;
 mod door_requests;
 mod ground;
 mod parked;
@@ -740,6 +741,13 @@ impl App {
         }
         if let Some(id) = self.parked_cab_near(pos) {
             return self.ask_for_parked(id);
+        }
+        // (a bus of the AI traffic standing with its driver's door here: #3974)
+        let own_door = self.player.as_ref().and_then(|p| self.session.humans.as_mut().and_then(|h| h.vehicle_driver_door(&p.vehicle))).is_some_and(|d| (d - pos).truncate().length() < DOOR_REACH);
+        if !own_door {
+            if let Some(id) = self.ai_cab_near(pos) {
+                return self.take_ai_bus(id);
+            }
         }
         // at the cab of a vehicle one placed (or with no bus of one's own): its wheel
         if let Some(k) = self.placed_cab_near(pos) {

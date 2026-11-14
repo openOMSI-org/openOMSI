@@ -166,6 +166,9 @@ pub(crate) struct PendingPlacement {
     pub(crate) heading: f64,
     /// A server's parked bus taken over (`on_foot::parked`): its number.
     pub(crate) taken: Option<u32>,
+    /// Put the player at its wheel once it is there (an AI bus taken over: `on_foot::ai_take`),
+    /// not into the mouse's placing.
+    pub(crate) drive: bool,
 }
 
 /// Choose the player's fleet number and registration before the script VM runs `{init}`.

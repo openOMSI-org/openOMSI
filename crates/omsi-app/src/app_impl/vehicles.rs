@@ -174,6 +174,7 @@ impl App {
                     reload: false,
                     heading,
                     taken: None,
+                    drive: false,
                 });
                 self.service_msg = Some(("Loading vehicle...".into(), 4.0));
             }
@@ -360,8 +361,10 @@ pub(crate) fn placement(mut cx: PlacementCx) {
         Ok(Some(q)) => {
             let uid = q.uid;
             cx.player.placed.push(q);
-            if let Some(id) = pending.taken {
-                cx.menus.menus.parked_transfer.iter_mut().for_each(|t| t.took(id));
+            if pending.taken.is_some() || pending.drive {
+                if let Some(id) = pending.taken {
+                    cx.menus.menus.parked_transfer.iter_mut().for_each(|t| t.took(id));
+                }
                 return crate::on_foot::take_placed(cx.player.placed.len() - 1, cx.player, cx.people, cx.view, cx.ui, cx.sound, cx.common.settings);
             }
             // (then put down with the mouse, where the player wants it)
