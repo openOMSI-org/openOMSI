@@ -103,6 +103,8 @@ struct SettingsPage: View {
         // on a Mac; one at work takes the place of the anti-aliasing and the render scale)
         let temporal = Choices.temporal(store.setting("temporal_upscalers"))
         let temporalOn = temporal.contains { $0.0 == store.setting("upscaler")?.string } && !store.flag("triple_screen")
+        let generators = Choices.temporal(store.setting("frame_generators"))
+        let generationOn = temporalOn && generators.contains { $0.0 == store.setting("upscaler")?.string }
         return Card("Graphics") {
             SettingSelect(label: "Graphics", key: "graphics", options: [("vanilla", "Vanilla (as OMSI 2)"), ("vanilla_plus", "Vanilla+"), ("enhanced", "Enhanced")])
             if enhanced {
@@ -116,6 +118,9 @@ struct SettingsPage: View {
             SettingSelect(label: "Upscaling", key: "upscaler", options: [("default", "Standard (Catmull-Rom)"), ("fsr1", "AMD FSR 1 (experimental)")] + temporal, help: temporal.isEmpty ? nil : "Standard Catmull-Rom or AMD FSR 1 change at once; Apple MetalFX takes the place of the anti-aliasing and the render scale, from the next start")
             if temporalOn {
                 SettingSelect(label: "Upscaling quality", key: "upscale_quality", options: Choices.upscaleQuality, help: "Native keeps the window's resolution and only smooths the edges; the lower the quality, the smaller the picture is drawn and the higher the frame rate", fallback: "quality")
+            }
+            if generationOn {
+                SettingSelect(label: "Frame generation", key: "frame_generation", options: [("off", "Off")] + generators, help: "Shows a generated frame between every two drawn ones: smoother motion for a little more input lag. Needs Apple MetalFX upscaling and works best from 30 drawn frames a second; with V-sync the game draws half the display's rate", fallback: "off")
             }
             if store.setting("upscaler")?.string == "fsr1" {
                 SettingSelect(label: "FSR quality", key: "fsr_quality", options: [("ultra", "Ultra Quality (77%)"), ("quality", "Quality (67%)"), ("balanced", "Balanced (59%)"), ("performance", "Performance (50%)"), ("auto", "Automatic (keeps the frame rate)"), ("custom", "Use render scale")])
