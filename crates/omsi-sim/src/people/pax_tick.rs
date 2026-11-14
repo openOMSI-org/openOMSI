@@ -3,6 +3,11 @@
 
 use super::*;
 
+/// A standing place's floor, lifted onto a pavement up to a step above it; never lowered: the road beside a kerb sank them.
+fn raised_by_ground(world: &dyn World, floor: f64, x: f64, y: f64) -> f64 {
+    world.walk_height_near(x, y, floor).filter(|g| *g > floor).unwrap_or(floor)
+}
+
 impl PeopleSim {
     /// The world position and heading of a passenger.
     pub fn pax_world(&self, p: &Pax, buses: &[BusNow], bus_ix: &HashMap<BusId, usize>) -> Option<(DVec3, f64)> {
@@ -358,6 +363,8 @@ impl PeopleSim {
         // the people in the way (sub_626860)
         let (mut block, free_r, free_l) = if st == 1 || st == 5 { self.pax_blockers(i, buses, bus_ix) } else { (0, true, true) };
         let waiting_height = self.waiting_height(i);
+        let lift = !self.waits_seated(i);
+        let floor_at = |f: f64, x: f64, y: f64| if lift { raised_by_ground(world, f, x, y) } else { f };
         let p = self.pax_mut(i).unwrap();
         // Inside a bus, people going opposite ways along the aisle or the stairs stood face to
         // face for good (the whole upper deck of a double-decker on its way out, the people
@@ -415,10 +422,11 @@ impl PeopleSim {
             // tick in every state but turning (0x62b852 -> 0x7aec3c, not when seated); the
             // waiting people stood at the height of their [passpos]'s object - a shelter
             // on the terrain - 25-35 cm down in the platform
-            // (the people waiting keep the floor of their place: see `waiting_height`)
+            // (the people waiting keep the floor of their place, or the pavement just above
+            // it: see `waiting_height`)
             if p.inside.is_none() && p.pax_state != 2.0 {
                 if let Some(f) = waiting_height {
-                    p.pos.z = f;
+                    p.pos.z = floor_at(f, p.pos.x, p.pos.y);
                 } else if let Some(g) = world.walk_height_near(p.pos.x, p.pos.y, p.pos.z) {
                     p.pos.z = g;
                 }
@@ -454,7 +462,7 @@ impl PeopleSim {
             step.z = if slope.is_finite() { moved as f64 * slope } else { d.z };
         } else {
             let at = p.pos + step;
-            step.z = match waiting_height.or_else(|| world.walk_height_near(at.x, at.y, p.pos.z)) {
+            step.z = match waiting_height.map(|f| floor_at(f, at.x, at.y)).or_else(|| world.walk_height_near(at.x, at.y, p.pos.z)) {
                 Some(g) => g - p.pos.z,
                 None => 0.0,
             };
@@ -558,3 +566,7 @@ impl PeopleSim {
         (block, free_r, free_l)
     }
 }
+
+#[cfg(test)]
+#[path = "waiting_floor_tests.rs"]
+mod waiting_floor_tests;
