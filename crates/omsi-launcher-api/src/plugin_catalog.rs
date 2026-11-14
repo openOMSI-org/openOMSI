@@ -2,13 +2,16 @@
 //! installed of it, and installing, updating and removing a plugin of it (see
 //! `omsi_launcher_lib::plugin_catalog`, which checks every file against the catalog).
 
-use crate::{err, Answer};
+use crate::{Answer, err};
 use omsi_launcher_lib::plugin_catalog as cat;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// A URL's body, at most `max` bytes.
 fn fetch(url: &str, max: u64) -> anyhow::Result<Vec<u8>> {
-    let r = omsi_platform::updater::agent().get(url).call().map_err(|e| anyhow::anyhow!("{e}"))?;
+    let r = omsi_platform::updater::agent()
+        .get(url)
+        .call()
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
     let mut out = Vec::new();
     std::io::Read::read_to_end(&mut std::io::Read::take(r.into_reader(), max + 1), &mut out)?;
     if out.len() as u64 > max {
@@ -30,7 +33,10 @@ pub(crate) fn list() -> Answer {
         .into_iter()
         .map(|e| {
             let installed = dir.as_deref().and_then(|d| cat::installed(d, &e.id));
-            let update = installed.as_deref().and_then(cat::version).is_some_and(|have| cat::version(&e.version).is_some_and(|new| new > have));
+            let update = installed
+                .as_deref()
+                .and_then(cat::version)
+                .is_some_and(|have| cat::version(&e.version).is_some_and(|new| new > have));
             let mut v = serde_json::to_value(&e).unwrap_or(Value::Null);
             v["installed"] = json!(installed);
             v["update"] = json!(update);
@@ -44,7 +50,10 @@ pub(crate) fn list() -> Answer {
 /// Install (or update) the catalog's plugin `id`; its version.
 pub(crate) fn install(id: &str) -> Answer {
     let list = entries().map_err(err)?;
-    let e = list.iter().find(|e| e.id == id).ok_or_else(|| format!("{id} is not in the plugin catalog"))?;
+    let e = list
+        .iter()
+        .find(|e| e.id == id)
+        .ok_or_else(|| format!("{id} is not in the plugin catalog"))?;
     let dir = cat::plugins_dir().map_err(err)?;
     cat::install(&dir, e, &|url| fetch(url, 2 << 20)).map_err(err)?;
     Ok(json!(e.version))

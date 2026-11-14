@@ -8,14 +8,16 @@
 //! there (`.catalog.json` beside them) are updated or removed: a folder of that name the
 //! player made is never touched.
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use std::path::{Path, PathBuf};
 
 /// The repository's catalog, and where its plugins' files are.
-pub const CATALOG_URL: &str = "https://raw.githubusercontent.com/openOMSI-org/openOMSI-Plugins/main/catalog.json";
-pub const FILES_URL: &str = "https://raw.githubusercontent.com/openOMSI-org/openOMSI-Plugins/main/plugins/";
+pub const CATALOG_URL: &str =
+    "https://raw.githubusercontent.com/openOMSI-org/openOMSI-Plugins/main/catalog.json";
+pub const FILES_URL: &str =
+    "https://raw.githubusercontent.com/openOMSI-org/openOMSI-Plugins/main/plugins/";
 /// The plugin's page in the repository (its source, for the player to read).
 pub const SOURCE_URL: &str = "https://github.com/openOMSI-org/openOMSI-Plugins/tree/main/plugins/";
 /// The catalog's format; a newer one is not read (the page says to update the launcher).
@@ -24,7 +26,9 @@ const VERSION: u32 = 1;
 const MARK: &str = ".catalog.json";
 const MAX_FILE: u64 = 2 * 1024 * 1024;
 const MAX_PLUGIN: u64 = 10 * 1024 * 1024;
-const EXTENSIONS: &[&str] = &["lua", "json", "txt", "md", "csv", "png", "jpg", "ogg", "wav", "ttf", "otf"];
+const EXTENSIONS: &[&str] = &[
+    "lua", "json", "txt", "md", "csv", "png", "jpg", "ogg", "wav", "ttf", "otf",
+];
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct FileRef {
@@ -59,38 +63,64 @@ struct Catalog {
 }
 
 fn id_ok(id: &str) -> bool {
-    (2..=40).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-') && !id.starts_with('-')
+    (2..=40).contains(&id.len())
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        && !id.starts_with('-')
 }
 
 /// A file's path inside the plugin's folder: plain names joined by `/`, no `..`, a taken
 /// extension.
 fn path_ok(p: &str) -> bool {
-    let plain = |part: &str| !part.is_empty() && !part.starts_with('.') && part.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-'));
+    let plain = |part: &str| {
+        !part.is_empty()
+            && !part.starts_with('.')
+            && part
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-'))
+    };
     p.len() <= 120
         && p.split('/').all(plain)
         && !p.split('/').any(|x| x == "..")
-        && p.rsplit_once('.').is_some_and(|(_, e)| EXTENSIONS.contains(&e.to_ascii_lowercase().as_str()))
+        && p.rsplit_once('.')
+            .is_some_and(|(_, e)| EXTENSIONS.contains(&e.to_ascii_lowercase().as_str()))
         && !p.eq_ignore_ascii_case(MARK)
-        && !p.split('/').next().is_some_and(|first| first.eq_ignore_ascii_case("data") && p.contains('/'))
+        && !p
+            .split('/')
+            .next()
+            .is_some_and(|first| first.eq_ignore_ascii_case("data") && p.contains('/'))
 }
 
 fn hex_ok(h: &str) -> bool {
-    h.len() == 64 && h.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+    h.len() == 64
+        && h.bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
 }
 
 /// What is wrong with an entry (it is then left out of the list).
 fn problem(e: &Entry) -> Option<&'static str> {
-    let line = |t: &str, n: usize| !t.trim().is_empty() && t.chars().count() <= n && !t.contains(['\n', '\r']);
+    let line = |t: &str, n: usize| {
+        !t.trim().is_empty() && t.chars().count() <= n && !t.contains(['\n', '\r'])
+    };
     if !id_ok(&e.id) {
         return Some("id");
     }
-    if !line(&e.name, 60) || !line(&e.author, 60) || !line(&e.description, 300) || !line(&e.license, 40) || version(&e.version).is_none() {
+    if !line(&e.name, 60)
+        || !line(&e.author, 60)
+        || !line(&e.description, 300)
+        || !line(&e.license, 40)
+        || version(&e.version).is_none()
+    {
         return Some("text");
     }
     if e.files.is_empty() || e.files.len() > 200 || !e.files.iter().any(|f| f.path == "main.lua") {
         return Some("files");
     }
-    if e.files.iter().any(|f| !path_ok(&f.path) || !hex_ok(&f.sha256) || f.size > MAX_FILE) {
+    if e.files
+        .iter()
+        .any(|f| !path_ok(&f.path) || !hex_ok(&f.sha256) || f.size > MAX_FILE)
+    {
         return Some("file");
     }
     if e.files.iter().map(|f| f.size).sum::<u64>() > MAX_PLUGIN {
@@ -127,8 +157,11 @@ pub fn parse(text: &str) -> Result<Vec<Entry>> {
 /// The catalog version of the plugin installed in `plugins/<id>/` (None: not from the
 /// catalog, or not there).
 pub fn installed(plugins: &Path, id: &str) -> Option<String> {
-    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(plugins.join(id).join(MARK)).ok()?).ok()?;
-    (v["id"].as_str() == Some(id)).then(|| v["version"].as_str().map(str::to_string)).flatten()
+    let v: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(plugins.join(id).join(MARK)).ok()?).ok()?;
+    (v["id"].as_str() == Some(id))
+        .then(|| v["version"].as_str().map(str::to_string))
+        .flatten()
 }
 
 /// Download (`fetch`: a URL's bytes), check and install `e` into `plugins/<id>/`, keeping its
@@ -139,7 +172,10 @@ pub fn install(plugins: &Path, e: &Entry, fetch: &dyn Fn(&str) -> Result<Vec<u8>
     }
     let target = plugins.join(&e.id);
     if target.exists() && installed(plugins, &e.id).is_none() {
-        bail!("plugins/{} is there already and did not come from the catalog: rename or remove it first", e.id);
+        bail!(
+            "plugins/{} is there already and did not come from the catalog: rename or remove it first",
+            e.id
+        );
     }
     std::fs::create_dir_all(plugins)?;
     // (beside the plugins folder, on the same disk, where the game finds no plugin)
@@ -148,16 +184,27 @@ pub fn install(plugins: &Path, e: &Entry, fetch: &dyn Fn(&str) -> Result<Vec<u8>
     let _ = std::fs::remove_dir_all(&tmp);
     let result = (|| -> Result<()> {
         for f in &e.files {
-            let bytes = fetch(&format!("{FILES_URL}{}/{}", e.id, f.path)).with_context(|| format!("{}: {}", e.id, f.path))?;
-            let got: String = sha2::Sha256::digest(&bytes).iter().map(|b| format!("{b:02x}")).collect();
+            let bytes = fetch(&format!("{FILES_URL}{}/{}", e.id, f.path))
+                .with_context(|| format!("{}: {}", e.id, f.path))?;
+            let got: String = sha2::Sha256::digest(&bytes)
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect();
             if bytes.len() as u64 != f.size || got != f.sha256 {
-                bail!("{}: {} is not the file the catalog names (changed meanwhile? try again)", e.id, f.path);
+                bail!(
+                    "{}: {} is not the file the catalog names (changed meanwhile? try again)",
+                    e.id,
+                    f.path
+                );
             }
             let to = tmp.join(&f.path);
             std::fs::create_dir_all(to.parent().unwrap_or(&tmp))?;
             std::fs::write(&to, bytes)?;
         }
-        std::fs::write(tmp.join(MARK), serde_json::to_string_pretty(&serde_json::json!({ "id": e.id, "version": e.version }))?)?;
+        std::fs::write(
+            tmp.join(MARK),
+            serde_json::to_string_pretty(&serde_json::json!({ "id": e.id, "version": e.version }))?,
+        )?;
         if target.exists() {
             if target.join("data").is_dir() {
                 std::fs::rename(target.join("data"), tmp.join("data"))?;
@@ -183,7 +230,11 @@ pub fn remove(plugins: &Path, id: &str) -> Result<()> {
 
 /// The content folder's `plugins` (made when missing): where the catalog installs.
 pub fn plugins_dir() -> Result<PathBuf> {
-    let content = crate::content_dir().ok_or_else(|| anyhow!(crate::i18n::tr("no game binary configured, so no content folder")))?;
+    let content = crate::content_dir().ok_or_else(|| {
+        anyhow!(crate::i18n::tr(
+            "no game binary configured, so no content folder"
+        ))
+    })?;
     Ok(crate::plugins::child_dir(&content, "plugins").unwrap_or_else(|| content.join("plugins")))
 }
 
@@ -192,7 +243,10 @@ mod tests {
     use super::*;
 
     fn sha(b: &[u8]) -> String {
-        sha2::Sha256::digest(b).iter().map(|x| format!("{x:02x}")).collect()
+        sha2::Sha256::digest(b)
+            .iter()
+            .map(|x| format!("{x:02x}"))
+            .collect()
     }
 
     fn entry(version: &str, main: &[u8]) -> Entry {
@@ -207,7 +261,11 @@ mod tests {
             homepage: None,
             min_game: None,
             bytes: main.len() as u64,
-            files: vec![FileRef { path: "main.lua".into(), size: main.len() as u64, sha256: sha(main) }],
+            files: vec![FileRef {
+                path: "main.lua".into(),
+                size: main.len() as u64,
+                sha256: sha(main),
+            }],
         }
     }
 
@@ -219,9 +277,13 @@ mod tests {
         let mut exe = good.clone();
         exe["id"] = "other".into();
         exe["files"] = serde_json::json!([{ "path": "main.lua", "size": 1, "sha256": sha(b"x") }, { "path": "run.exe", "size": 1, "sha256": sha(b"x") }]);
-        let text = serde_json::json!({ "version": 1, "plugins": [good, escape, exe, { "id": 5 }] }).to_string();
+        let text = serde_json::json!({ "version": 1, "plugins": [good, escape, exe, { "id": 5 }] })
+            .to_string();
         let list = parse(&text).unwrap();
-        assert_eq!(list.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(), ["speed-warning"]);
+        assert_eq!(
+            list.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(),
+            ["speed-warning"]
+        );
         assert!(parse(r#"{"version": 2, "plugins": []}"#).is_err());
         assert!(!path_ok("data/settings.json") && path_ok("data.lua") && !path_ok(".catalog.json"));
         assert!(version("1.2.3") > version("1.2.0") && version("1.2").is_none());
@@ -234,14 +296,20 @@ mod tests {
         let plugins = root.join("plugins");
         let v1 = entry("1.0.0", b"-- one");
         install(&plugins, &v1, &|_| Ok(b"-- one".to_vec())).unwrap();
-        assert_eq!(installed(&plugins, "speed-warning").as_deref(), Some("1.0.0"));
+        assert_eq!(
+            installed(&plugins, "speed-warning").as_deref(),
+            Some("1.0.0")
+        );
         std::fs::create_dir_all(plugins.join("speed-warning/data")).unwrap();
         std::fs::write(plugins.join("speed-warning/data/settings.json"), "{}").unwrap();
 
         // a file that is not the catalog's: nothing changes
         let v2 = entry("1.1.0", b"-- two");
         assert!(install(&plugins, &v2, &|_| Ok(b"-- evil".to_vec())).is_err());
-        assert_eq!(std::fs::read(plugins.join("speed-warning/main.lua")).unwrap(), b"-- one");
+        assert_eq!(
+            std::fs::read(plugins.join("speed-warning/main.lua")).unwrap(),
+            b"-- one"
+        );
         assert!(!root.join(".plugin-install-speed-warning").exists());
 
         install(&plugins, &v2, &|url| {
@@ -249,9 +317,15 @@ mod tests {
             Ok(b"-- two".to_vec())
         })
         .unwrap();
-        assert_eq!(std::fs::read(plugins.join("speed-warning/main.lua")).unwrap(), b"-- two");
+        assert_eq!(
+            std::fs::read(plugins.join("speed-warning/main.lua")).unwrap(),
+            b"-- two"
+        );
         assert!(plugins.join("speed-warning/data/settings.json").is_file());
-        assert_eq!(installed(&plugins, "speed-warning").as_deref(), Some("1.1.0"));
+        assert_eq!(
+            installed(&plugins, "speed-warning").as_deref(),
+            Some("1.1.0")
+        );
 
         // the player's own folder of that name is never replaced or removed
         std::fs::create_dir_all(plugins.join("mine")).unwrap();
