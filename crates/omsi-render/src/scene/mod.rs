@@ -200,6 +200,7 @@ pub struct Scene {
     pub serial: u64,
     pub meshes: Vec<GpuMesh>,
     pub textures: Vec<GpuTexture>,
+    pub(crate) texture_epoch: std::sync::atomic::AtomicU64,
     /// Texture slot read by procedural rain films.
     pub(crate) glass_slot: Option<TextureId>,
     pub materials: Vec<Material>,

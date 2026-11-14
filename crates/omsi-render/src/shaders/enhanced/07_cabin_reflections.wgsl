@@ -1,0 +1,49 @@
+struct CabinReflection {
+    planes: array<vec4<f32>, 2>,
+    screen: vec4<f32>, // picture width/height, this plane, number of planes
+};
+@group(3) @binding(1) var t_cabin_reflection: texture_2d_array<f32>;
+@group(3) @binding(2) var s_cabin_reflection: sampler;
+@group(3) @binding(3) var<uniform> cabin_reflection: CabinReflection;
+@group(3) @binding(4) var t_scene_depth: texture_depth_2d;
+@group(3) @binding(5) var s_scene_depth: sampler;
+
+fn cabin_plane_error(world: vec3<f32>, normal: vec3<f32>, plane: vec4<f32>) -> f32 {
+    return abs(dot(plane.xyz, world) - plane.w) + 4.0 * (1.0 - abs(dot(normal, plane.xyz)));
+}
+fn cabin_plane_matches(world: vec3<f32>, normal: vec3<f32>) -> bool {
+    return cabin_plane_error(world, normal, camera.cabin_planes[0]) < 0.22
+        || cabin_plane_error(world, normal, camera.cabin_planes[1]) < 0.22;
+}
+
+fn cabin_plane_index(world: vec3<f32>, normal: vec3<f32>) -> i32 {
+    let a = cabin_plane_error(world, normal, camera.cabin_planes[0]);
+    let b = cabin_plane_error(world, normal, camera.cabin_planes[1]);
+    if (min(a, b) >= 0.22) { return -1; }
+    return select(0, 1, b < a);
+}
+
+@fragment
+fn fs_cabin_reflection(in: FsIn) -> @location(0) vec4<f32> {
+    if (in.params.y < 0.5) { discard; }
+    // Select one plane to avoid overlapping reflected images.
+    let n = safe_normal(in.normal);
+    let best = cabin_plane_index(in.world, n);
+    if (best < 0) { discard; }
+    if (textureSampleLevel(t_scene_depth, s_scene_depth, in.clip.xy / cabin_reflection.screen.xy, 0) > in.clip.z + max(abs(in.clip.z) * 1e-6, 1e-8)) { discard; }
+    let uv = tex_address(in.uv);
+    var coverage = diffuse_border(textureSample(t_diffuse, s_diffuse, uv), uv).a;
+    if (material.params.z > 0.5) {
+        coverage = select(1.0, sample_transmap(tex_address(in.uv - in.params.zw)).a, material.params.w > 0.5);
+    }
+    coverage = smoothstep(0.0, 0.05, coverage * material.color.a);
+    // Envir_Brightness hides the daytime environment map, not the glass.
+    coverage = coverage * select(clamp(in.params.x, 0.0, 1.0), 1.0, material.glow.z > 0.5);
+    if (coverage <= 0.0) { discard; }
+    let v = normalize(camera.cam_pos.xyz - in.world);
+    let fresnel = 0.04 + 0.96 * pow(1.0 - abs(dot(n, v)), 5.0);
+    let size = vec2<f32>(textureDimensions(t_cabin_reflection));
+    let local = clamp(in.clip.xy / cabin_reflection.screen.xy, vec2<f32>(0.5) / size, vec2<f32>(1.0) - vec2<f32>(0.5) / size);
+    let reflected = textureSampleLevel(t_cabin_reflection, s_cabin_reflection, local, best, 0.0);
+    return vec4<f32>(reflected.rgb * enh.exposure.x * 1.15 * fresnel * coverage * camera.cam_pos.w, 0.0);
+}

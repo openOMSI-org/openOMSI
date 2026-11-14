@@ -27,7 +27,18 @@ fn fs_puddle_vehicle(input: FsIn) -> @location(0) vec4<f32> {
         var unused_vanilla = 0.0;
         return shade_vanilla(input, &unused_vanilla, eye);
     }
-    return shade_enhanced(input, &unused, true, eye);
+    let color = shade_enhanced(input, &unused, true, eye);
+    let fade = vehicle_reflection.cabin_fade;
+    if (fade.x > 0.0) {
+        // Ray travel also fades distant sources along side windows.
+        let eye_height = max(plane.w - dot(plane.xyz, eye), 0.0);
+        let travel = length(input.world - eye) * height / max(height + eye_height, 1e-4);
+        let weight = fade.x * fade.x / (fade.x * fade.x + travel * travel)
+            * (1.0 - smoothstep(fade.y, fade.z, travel));
+        // Cache radiance independently of eye adaptation, retaining occlusion alpha.
+        return vec4<f32>(color.rgb * weight / max(enh.exposure.x, 1e-6), color.a);
+    }
+    return color;
 }
 
 @fragment

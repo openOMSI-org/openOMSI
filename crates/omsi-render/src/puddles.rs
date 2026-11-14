@@ -25,8 +25,10 @@ struct VehicleBox {
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub(super) struct VehicleUniform {
-    plane: [f32; 4],
+    pub(crate) plane: [f32; 4],
     parts: [VehicleBox; 4],
+    // Cabin-only visibility envelope; zero leaves road captures unchanged.
+    pub(crate) cabin_fade: [f32; 4],
 }
 
 #[repr(C)]
@@ -62,7 +64,7 @@ pub(super) struct Pipelines {
     blur_y: wgpu::RenderPipeline,
     resolve: wgpu::RenderPipeline,
     glass: [wgpu::RenderPipeline; 2],
-    vehicle: Vec<wgpu::RenderPipeline>,
+    pub(crate) vehicle: Vec<wgpu::RenderPipeline>,
     chassis: wgpu::RenderPipeline,
     vehicle_params: wgpu::Buffer,
     vehicle_bg: wgpu::BindGroup,
@@ -651,7 +653,7 @@ impl Renderer {
         self.queue.write_buffer(
             &self.puddles.as_ref().unwrap().vehicle_params,
             0,
-            bytemuck::bytes_of(&VehicleUniform { plane, parts }),
+            bytemuck::bytes_of(&VehicleUniform { plane, parts, cabin_fade: [0.0; 4] }),
         );
         self.queue.write_buffer(
             &self.puddles.as_ref().unwrap().params,

@@ -29,6 +29,7 @@ use gpu_memory::adapter_vram_mb;
 pub mod pipeline_cache;
 mod pipelines;
 mod puddles;
+mod cabin_reflections;
 mod rt;
 mod rt_tex;
 mod shaders;
@@ -185,6 +186,7 @@ pub struct Renderer {
     /// The settings this renderer was built with.
     pub options: RenderOptions,
     puddles: Option<puddles::Pipelines>,
+    cabin_reflections: Option<cabin_reflections::Pipelines>,
     /// The projection's width over height while a picture is drawn into a texture (see
     /// `render_to_texture`), whatever the texture's own shape.
     texture_aspect: Option<f32>,

@@ -148,7 +148,7 @@ impl Renderer {
                 adapter.limits().max_storage_buffer_binding_size;
             limits.max_buffer_size = adapter.limits().max_buffer_size;
             limits.max_sampled_textures_per_shader_stage =
-                limits.max_sampled_textures_per_shader_stage.max(adapter.limits().max_sampled_textures_per_shader_stage.min(crate::pipelines::scene::PANE_MASK_TEXTURES));
+                limits.max_sampled_textures_per_shader_stage.max(adapter.limits().max_sampled_textures_per_shader_stage.min(18));
         }
         // an older or smaller graphics chip (an OpenGL one, a GT 530) does not reach the
         // WebGPU defaults: asked for them anyway, the device was never opened
@@ -613,6 +613,11 @@ impl Renderer {
         let puddles = (!gl && !passes.leave_out_enhanced).then(|| {
             puddles::Pipelines::new(&device, &scene.shader, &scene.camera_layout, &scene.material_layout)
         });
+        // Keep ordinary glass when cabin color and depth exceed the texture limit.
+        let cabin_reflections = puddles.as_ref().filter(|_| device.limits().max_sampled_textures_per_shader_stage >= 18).map(|p| cabin_reflections::Pipelines::new(
+            &device, &scene.shader, &scene.camera_layout, &scene.material_layout,
+            &p.vehicle[0].get_bind_group_layout(2),
+        ));
         let rt = options.ray_tracing.then(|| rt::RayTracer::new(&device));
         let cookie_atlas = cookies::CookieAtlas::new();
         Renderer {
@@ -749,6 +754,7 @@ impl Renderer {
             address_next: std::cell::Cell::new(TexAddressing::Wrap),
             light_map_next: std::cell::Cell::new(false),
             puddles,
+            cabin_reflections,
             texture_aspect: None,
             last_frame: None,
             adapter: None,

@@ -730,7 +730,10 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // Enhanced+: traced instead (rough surfaces keep the probe, which is as good as a
     // ray there): the windows, the chrome and the paint's clear coat mirror the real street
     // round them - the coat as sharply as the glass, where it is polished (`coat_rough`)
-    let traced = camera.clouds.w > 1.5 && reflects && refl_rough < 0.75 && !capture;
+    // The cabin capture replaces this pane's ordinary reflection.
+    let cabin_mirror = CABIN_REFLECTIONS && !capture && own_pane > 0.5 && cabin_plane_matches(in.world, n);
+    if (cabin_mirror) { reflection = vec3<f32>(0.0); }
+    let traced = camera.clouds.w > 1.5 && reflects && refl_rough < 0.75 && !capture && !cabin_mirror;
     if (traced) {
         var w = dot(refl_f, vec3<f32>(0.2126, 0.7152, 0.0722)) * aer.a;
         if (glass) {
