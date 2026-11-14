@@ -3321,3 +3321,5 @@
 "Parked buses on a server": "Припарковані автобуси на сервері"
 "How many of the buses parked near you are drawn; fewer take less memory": "Скільки припаркованих поруч автобусів відображається; що менше, то менше потрібно пам'яті"
 "At most 5": "Не більше 5"
+"Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Теки об'єктів і сплайнів, які не використовує жодна інша мапа, видаляються разом із ним: {n}, {size}."
+"Folders of objects and splines that another map still uses stay: {n}.": "Теки об'єктів і сплайнів, які ще використовує інша мапа, залишаються: {n}."

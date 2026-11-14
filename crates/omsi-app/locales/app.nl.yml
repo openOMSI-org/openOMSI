@@ -3586,3 +3586,5 @@
 "Parked buses on a server": "Geparkeerde bussen op een server"
 "How many of the buses parked near you are drawn; fewer take less memory": "Hoeveel van de bussen die bij je in de buurt geparkeerd staan worden getekend; minder kost minder geheugen"
 "At most 5": "Maximaal 5"
+"Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Mappen met objecten en splines die geen andere kaart gebruikt, worden mee verwijderd: {n}, {size}."
+"Folders of objects and splines that another map still uses stay: {n}.": "Mappen met objecten en splines die een andere kaart nog gebruikt, blijven staan: {n}."

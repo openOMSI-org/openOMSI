@@ -2,6 +2,7 @@
 
 use omsi_cfg::CfgFile;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Terminus {
@@ -269,6 +270,24 @@ impl Hof {
     }
 }
 
+fn shared_hofs() -> Arc<[PathBuf]> {
+    static SHARED: std::sync::OnceLock<std::sync::Mutex<(u64, Arc<[PathBuf]>)>> = std::sync::OnceLock::new();
+    let cell = SHARED.get_or_init(Default::default);
+    let generation = omsi_cfg::content_generation();
+    let mut guard = cell.lock().unwrap_or_else(|e| e.into_inner());
+    if guard.0 != generation {
+        let mut seen = std::collections::HashSet::new();
+        let mut shared: Vec<PathBuf> = omsi_cfg::read_dir_merged("HOFs")
+            .into_iter()
+            .filter(|p| p.extension().map(|e| e.eq_ignore_ascii_case("hof")).unwrap_or(false))
+            .filter(|p| seen.insert(p.file_name().unwrap_or_default().to_string_lossy().to_ascii_lowercase()))
+            .collect();
+        shared.sort_by_key(|f| f.file_name().unwrap_or_default().to_string_lossy().to_ascii_lowercase());
+        *guard = (generation, Arc::from(shared));
+    }
+    Arc::clone(&guard.1)
+}
+
 /// The `.hof` files available to a vehicle. Files next to the vehicle come first, merged
 /// over all content roots (a mod's depot beside the installation's; archives read in place
 /// too), followed by the shared top-level `HOFs/` folder. A vehicle-local file hides a
@@ -288,14 +307,11 @@ pub fn depot_files(dir: &Path) -> Vec<PathBuf> {
     }
     local.sort_by_key(|f| f.file_name().unwrap_or_default().to_string_lossy().to_ascii_lowercase());
 
-    let mut shared: Vec<PathBuf> = omsi_cfg::read_dir_merged("HOFs")
-        .into_iter()
-        .filter(|p| p.extension().map(|e| e.eq_ignore_ascii_case("hof")).unwrap_or(false))
-        .filter(|p| seen.insert(p.file_name().unwrap_or_default().to_string_lossy().to_ascii_lowercase()))
-        .collect();
-    shared.sort_by_key(|f| f.file_name().unwrap_or_default().to_string_lossy().to_ascii_lowercase());
-
-    local.extend(shared);
+    for p in shared_hofs().iter() {
+        if seen.insert(p.file_name().unwrap_or_default().to_string_lossy().to_ascii_lowercase()) {
+            local.push(p.clone());
+        }
+    }
     local
 }
 

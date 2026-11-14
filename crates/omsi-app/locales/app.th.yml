@@ -2922,3 +2922,5 @@
 "Parked buses on a server": "รถบัสที่จอดอยู่บนเซิร์ฟเวอร์"
 "How many of the buses parked near you are drawn; fewer take less memory": "จำนวนรถบัสที่จอดอยู่ใกล้คุณที่จะแสดง ยิ่งน้อยยิ่งใช้หน่วยความจำน้อย"
 "At most 5": "สูงสุด 5"
+"Folders of objects and splines that no other map uses go with it: {n}, {size}.": "โฟลเดอร์วัตถุและสไปลน์ที่ไม่มีแผนที่อื่นใช้จะถูกลบไปด้วย: {n} โฟลเดอร์, {size}"
+"Folders of objects and splines that another map still uses stay: {n}.": "โฟลเดอร์วัตถุและสไปลน์ที่แผนที่อื่นยังใช้อยู่จะยังคงอยู่: {n} โฟลเดอร์"

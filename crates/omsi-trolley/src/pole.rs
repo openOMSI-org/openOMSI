@@ -100,6 +100,8 @@ pub enum PoleEventKind {
     GapEntered,
     GapLeft,
     FrogPassed { switch: u32, branch: bool },
+    /// The shoe passed a conductor intersection, including a frog's inner crossing.
+    CrossingPassed { crossing: u32 },
     Plate { switch: u32 },
     /// A loose boom rose as far as its rope lets it, at this speed (rad/s).
     RopeTaut { speed: f32 },
@@ -223,6 +225,32 @@ pub fn rotate_tip_pub(theta: f64, psi: f64, len: f64) -> DVec3 {
 
 fn rotate_tip(theta: f64, psi: f64, len: f64) -> DVec3 {
     DVec3::new(psi.sin() * theta.cos(), -psi.cos() * theta.cos(), theta.sin()) * len
+}
+
+fn passed_crossings(net: &WireNet, mut from: Contact, to: Contact, info: &crate::wire::WalkInfo) -> Vec<u32> {
+    let mut passed = Vec::new();
+    let mut interval = |contact: Contact, end: f64| {
+        for &(ci, s) in net.crossings_of(contact.span) {
+            let crossing = &net.crossings[ci as usize];
+            let side = if crossing.a == contact.span { crossing.side_a } else { crossing.side_b };
+            if side == contact.side
+                && ((contact.s < s && s <= end) || (end <= s && s < contact.s))
+                && !passed.contains(&ci)
+            {
+                passed.push(ci);
+            }
+        }
+    };
+    for node in &info.nodes {
+        interval(from, if node.from.1 == 0 { 0.0 } else { net.spans[from.span as usize].len() });
+        if node.from.1 == node.to.1 {
+            from.side ^= 1;
+        }
+        from.span = node.to.0;
+        from.s = if node.to.1 == 0 { 0.0 } else { net.spans[from.span as usize].len() };
+    }
+    interval(from, to.s);
+    passed
 }
 
 impl Pole {
@@ -834,8 +862,10 @@ impl Pole {
                 }
             }
         }
+        for ci in passed_crossings(net, old, c, &info) {
+            out.push(PoleEvent { pole, kind: PoleEventKind::CrossingPassed { crossing: ci }, pos: w, amps });
+        }
         self.last_pos = Some((c.span, c.s));
-        let _ = old;
         // the boom against the wire's direction, seen from above
         let h = DVec3::new(w.x - base.x, w.y - base.y, 0.0);
         let th = DVec3::new(t.x, t.y, 0.0);
@@ -928,6 +958,31 @@ impl Pole {
 mod tests {
     use super::*;
     use crate::wire::WireNet;
+
+    #[test]
+    fn crossings_are_reported_across_span_transitions_in_both_directions() {
+        let net = WireNet::parse(
+            "[trolley_span]\np 0 0 5.5\np 4 0 5.5\n\
+             [trolley_span]\np 8 0 5.5\np 4 0 5.5\n\
+             [trolley_span]\np 8 0 5.5\np 12 0 5.5\n\
+             [trolley_span]\np 0.5 -10 5.5\np 0.5 10 5.5\n\
+             [trolley_span]\np 6 -10 5.5\np 6 10 5.5\n\
+             [trolley_span]\np 11.5 -10 5.5\np 11.5 10 5.5\n",
+        );
+        assert_eq!(net.crossings.len(), 12, "{:?}", net.spans);
+        for side in 0..=1 {
+            for reverse in [false, true] {
+                let start = Contact { span: if reverse { 2 } else { 0 }, s: if reverse { 3.9 } else { 0.1 }, side };
+                let mut end = start;
+                let mut dir = if reverse { -1 } else { 1 };
+                let mut info = crate::wire::WalkInfo::default();
+                net.walk(&mut end, &mut dir, 11.8, &mut info).unwrap();
+                let passed = passed_crossings(&net, start, end, &info);
+                assert_eq!(passed.len(), 6, "side={side}, reverse={reverse}: {passed:?}");
+                assert!(passed_crossings(&net, end, end, &crate::wire::WalkInfo::default()).is_empty());
+            }
+        }
+    }
 
     fn straight() -> WireNet {
         WireNet::parse("[trolley_section]\nid 1\nlive 1\n[trolley_span]\nsection 1\np -50 0 5.5\np 0 0 5.5\np 50 0 5.5\np 100 0 5.5\n")

@@ -5,6 +5,7 @@ use super::scene::SceneBase;
 use crate::*;
 
 pub(crate) struct Shadows {
+    pub size: u32,
     pub view: wgpu::TextureView,
     pub view_far: wgpu::TextureView,
     /// Where the lamps' tiles lie under the far cascade.
@@ -14,46 +15,52 @@ pub(crate) struct Shadows {
     pub pipelines: Vec<wgpu::RenderPipeline>,
 }
 
+/// The next size tried when the graphics card has no memory left for shadow maps of `size`
+/// texels: half of it, down to 512 - None for the last size tried.
+fn smaller_shadow_size(size: u32) -> Option<u32> {
+    (size > 512).then_some(size / 2)
+}
+
 /// `lamps`: the picture is an Enhanced one, which looks the lamps' shadows up (the plain ones
 /// have no tiles under the far map, nor pipelines to draw them).
 pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, shadow_size: u32, lamps: bool, cube: bool) -> Shadows {
-    // (the lamps' tiles are left out where their pipelines are: see `basic_pipelines`)
-    let lamp_atlas = LampAtlas::new(shadow_size, lamps && !basic_pipelines(), device.limits().max_texture_dimension_2d, cube);
-    if lamp_atlas.rows == 0 && lamps && !basic_pipelines() {
-        log::warn!("renderer: no room for the lamps' shadow tiles under a far shadow map of {shadow_size} texels: the lamps cast no shadows");
-    }
-    // sun shadow map: depth only, from the light's orthographic camera
-    let shadow_tex = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("shadow map"),
-        size: wgpu::Extent3d {
-            // near cascade on the left, close cascade on the right
-            width: shadow_size * 2,
-            height: shadow_size,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: DEPTH_FORMAT,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-        view_formats: &[],
-    });
-    let shadow_view = shadow_tex.create_view(&Default::default());
-    let shadow_tex_far = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("shadow map far"),
+    let depth_map = |label: &str, width: u32, height: u32| {
+        device.create_texture(&wgpu::TextureDescriptor {
+            label: Some(label),
+            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: DEPTH_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        })
+    };
+    let mut size = shadow_size;
+    let (lamp_atlas, shadow_tex, shadow_tex_far) = loop {
+        // (the lamps' tiles are left out where their pipelines are: see `basic_pipelines`)
+        let lamp_atlas = LampAtlas::new(size, lamps && !basic_pipelines(), device.limits().max_texture_dimension_2d, cube);
+        // (the smallest size is made outside the scope: a card with no room even for it fails
+        // the renderer's build in the caller's scope - see `build_with_fallbacks` - instead of
+        // drawing every frame with invalid shadow maps)
+        let smaller = smaller_shadow_size(size);
+        let scope = smaller.map(|_| device.push_error_scope(wgpu::ErrorFilter::OutOfMemory));
+        // near cascade on the left, close cascade on the right
+        let near = depth_map("shadow map", size * 2, size);
         // (and the lamps' tiles under it, see `LampAtlas`)
-        size: wgpu::Extent3d {
-            width: shadow_size,
-            height: lamp_atlas.height(),
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: DEPTH_FORMAT,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-        view_formats: &[],
-    });
+        let far = depth_map("shadow map far", size, lamp_atlas.height());
+        match (scope.map(|scope| pollster::block_on(scope.pop())), smaller) {
+            (Some(Some(_)), Some(smaller)) => {
+                log::warn!("renderer: no graphics memory left for a shadow map of {size} texels: trying {smaller}");
+                size = smaller;
+            }
+            _ => break (lamp_atlas, near, far),
+        }
+    };
+    if lamp_atlas.rows == 0 && lamps && !basic_pipelines() {
+        log::warn!("renderer: no room for the lamps' shadow tiles under a far shadow map of {size} texels: the lamps cast no shadows");
+    }
+    let shadow_view = shadow_tex.create_view(&Default::default());
     let shadow_view_far = shadow_tex_far.create_view(&Default::default());
     let shadow_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
         address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -133,6 +140,7 @@ pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, shadow_size: u32, 
         shadow_pipelines.extend(tile_pipelines.into_iter().flatten());
     }
     Shadows {
+        size,
         view: shadow_view,
         view_far: shadow_view_far,
         lamp_atlas,
@@ -182,4 +190,23 @@ fn clear_pipeline(device: &wgpu::Device) -> wgpu::RenderPipeline {
         multiview_mask: None,
         cache: crate::pipeline_cache::get(device).as_ref(),
     })
+}
+
+#[cfg(test)]
+mod fallback_tests {
+    use super::smaller_shadow_size;
+
+    #[test]
+    fn shadow_maps_halve_down_to_512_then_stop() {
+        let mut tried = vec![4096];
+        while let Some(next) = smaller_shadow_size(*tried.last().unwrap()) {
+            tried.push(next);
+        }
+        assert_eq!(tried, [4096, 2048, 1024, 512]);
+        // (the last size has no fallback, so it is made outside the out-of-memory scope and a
+        // failure there reaches the renderer's build instead of leaving invalid textures)
+        assert_eq!(smaller_shadow_size(512), None);
+        assert_eq!(smaller_shadow_size(256), None);
+        assert_eq!(smaller_shadow_size(768), Some(384));
+    }
 }

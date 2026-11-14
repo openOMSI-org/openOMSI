@@ -3229,3 +3229,5 @@
 "Parked buses on a server": "Zaparkované autobusy na serveru"
 "How many of the buses parked near you are drawn; fewer take less memory": "Kolik autobusů zaparkovaných poblíž se vykresluje; méně jich zabere méně paměti"
 "At most 5": "Nejvýše 5"
+"Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Složky objektů a splajnů, které nepoužívá žádná jiná mapa, se smažou spolu s ním: {n}, {size}."
+"Folders of objects and splines that another map still uses stay: {n}.": "Složky objektů a splajnů, které ještě používá jiná mapa, zůstanou: {n}."

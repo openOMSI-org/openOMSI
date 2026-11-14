@@ -386,6 +386,10 @@ fn mod_remove(id: String) -> Answer {
     Ok(json!(core::mod_remove(&id).map_err(err)?))
 }
 
+fn mod_remove_preview(id: String) -> Answer {
+    to_json(core::mod_remove_preview(&id).map_err(err)?)
+}
+
 /// What installing `path` would take (size, room, whether it can be used in place).
 fn mod_inspect(path: String) -> Answer {
     to_json(core::inspect_mod(Path::new(&path)).map_err(err)?)
@@ -888,6 +892,7 @@ fn answer(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "share_map_hofs" => share_map_hofs(arg::<String>(args, "map")?),
         "mod_set_enabled" => mod_set_enabled(arg::<String>(args, "id")?, arg::<bool>(args, "on")?),
         "mod_remove" => mod_remove(arg::<String>(args, "id")?),
+        "mod_remove_preview" => mod_remove_preview(arg::<String>(args, "id")?),
         "mod_inspect" => mod_inspect(arg::<String>(args, "path")?),
         "mod_install" => mod_install(arg::<String>(args, "path")?, arg::<String>(args, "mode")?),
         "mod_cancel" => Ok(json!(core::install::cancel(arg::<u64>(args, "id")?))),

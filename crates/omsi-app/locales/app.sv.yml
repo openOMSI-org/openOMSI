@@ -3820,3 +3820,5 @@
 "Parked buses on a server": "Parkerade bussar på en server"
 "How many of the buses parked near you are drawn; fewer take less memory": "Hur många av bussarna som står parkerade nära dig som ritas; färre tar mindre minne"
 "At most 5": "Högst 5"
+"Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Mappar med objekt och splines som ingen annan karta använder tas bort samtidigt: {n}, {size}."
+"Folders of objects and splines that another map still uses stay: {n}.": "Mappar med objekt och splines som en annan karta fortfarande använder blir kvar: {n}."

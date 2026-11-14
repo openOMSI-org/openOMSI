@@ -453,6 +453,7 @@ impl TrolleyRig {
                         self.spark(e.pos, net.frog_arc.scale * (0.15 * ind(a) + 0.5 * a), a, SparkKind::Frog);
                     }
                 }
+                PoleEventKind::CrossingPassed { .. } => {}
                 PoleEventKind::Plate { switch } => {
                     let definition = &net.switches[switch as usize];
                     if definition.mode == crate::wire::SwitchMode::Radio {
@@ -493,6 +494,20 @@ impl TrolleyRig {
 
     pub fn take_sounds(&mut self) -> Vec<RigSound> {
         std::mem::take(&mut self.sounds)
+    }
+
+    pub fn frogs_crossed(&self) -> impl Iterator<Item = (usize, u32)> + '_ {
+        self.events.iter().filter_map(|e| match e.kind {
+            PoleEventKind::FrogPassed { switch, .. } => Some((e.pole, switch)),
+            _ => None,
+        })
+    }
+
+    pub fn crossings_crossed(&self) -> impl Iterator<Item = (usize, u32)> + '_ {
+        self.events.iter().filter_map(|e| match e.kind {
+            PoleEventKind::CrossingPassed { crossing } => Some((e.pole, crossing)),
+            _ => None,
+        })
     }
 
     /// Both poles are on the wire.
@@ -838,6 +853,23 @@ mod tests {
             assert!(s.x > 150.0 && s.rig.all_on_wire() && s.rig.amps > 20.0);
             assert!(sparks.is_empty(), "roughness {roughness}: {sparks:?}");
         }
+    }
+
+    #[test]
+    fn a_shoe_going_through_a_frog_is_reported() {
+        let frog = "[trolley_span]\np -50 0 5.5\np 100 0 5.5\n[trolley_span]\np 100 0 5.5\np 400 0 5.5\n[trolley_span]\np 100 0 5.5\np 300 80 5.5\n";
+        let net = WireNet::parse(&format!("[trolley_net]\nfrog_arc_chance 0\n{frog}[trolley_switch]\npos 100 0 5.5\nmode fixed\n"));
+        let mut s = Sim::new();
+        s.raise_both(&net);
+        let mut crossed = Vec::new();
+        for _ in 0..(60 * 20) {
+            s.step(&net, 1.0, 0.0, &[RopeCmd::Idle; 2]);
+            crossed.extend(s.rig.frogs_crossed());
+        }
+        assert!(s.x > 150.0, "the bus did not reach the frog: {}", s.x);
+        assert!(!crossed.is_empty(), "the bus went over the frog without saying so");
+        assert!(crossed.iter().all(|(_, switch)| *switch == 0), "{crossed:?}");
+        assert!(crossed.iter().any(|(pole, _)| *pole < 2), "{crossed:?}");
     }
 
     #[test]
