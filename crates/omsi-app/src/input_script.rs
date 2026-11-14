@@ -329,10 +329,6 @@ impl App {
             return true;
         }
         if pressed && !repeat && code == KeyCode::Escape {
-            if self.menus.timetable {
-                self.menus.timetable = false;
-                return true;
-            }
             self.open_game_menu();
             return true;
         }

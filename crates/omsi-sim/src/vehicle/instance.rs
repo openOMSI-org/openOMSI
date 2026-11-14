@@ -93,7 +93,7 @@ impl VehicleInstance {
             };
             state.vars[id as usize] = value;
         }
-        let model_only_vars = collect_model_vars(&ty, &mut var_index, &mut state.vars);
+        let model_only_vars = collect_model_vars(&ty, &var_index);
 
         // `Axle_Springfactor_*` (varlist_roadvehicle.txt): the engine's spring scale, which
         // air-suspension scripts overwrite with their bellows pressure; a steel-sprung bus
@@ -143,7 +143,11 @@ impl VehicleInstance {
         let mut animators: Vec<MeshAnimator> = ty
             .meshes
             .iter()
-            .map(|m| MeshAnimator::new(&ty.model.meshes[m.def_index], m.pivot, |n| program.var(n)))
+            .map(|m| {
+                MeshAnimator::new(&ty.model.meshes[m.def_index], m.pivot, |n| {
+                    program.var(n).or_else(|| var_index.get(&n.to_ascii_lowercase()).copied())
+                })
+            })
             .collect();
         crate::anim::link_parents(
             &mut animators,
@@ -536,30 +540,24 @@ pub(super) fn control_cables(ty: &VehicleType) -> Vec<(omsi_script::VarId, omsi_
     cables
 }
 
-fn collect_model_vars(
-    ty: &VehicleType,
-    var_index: &mut std::collections::HashMap<String, omsi_script::VarId>,
-    vars: &mut Vec<f32>,
-) -> Vec<String> {
+/// The variables only the model names (its visibility conditions and animations), which the
+/// scripts do not declare. They stay out of `var_index` until something sets them
+/// ([`VehicleInstance::set_var`]): a visibility condition on a missing variable is ignored,
+/// while one on a variable at zero is compared (`MeshDef::visible_by`).
+fn collect_model_vars(ty: &VehicleType, var_index: &HashMap<String, omsi_script::VarId>) -> Vec<String> {
     let mut model_only_vars: Vec<String> = Vec::new();
+    let mut add = |name: &str| {
+        let key = name.to_ascii_lowercase();
+        if !key.is_empty() && key.parse::<f32>().is_err() && !var_index.contains_key(&key) && !model_only_vars.contains(&key) {
+            model_only_vars.push(key);
+        }
+    };
     for m in &ty.model.meshes {
-        for c in m.visible_groups().into_iter().flatten() {
-            let key = c.variable.to_ascii_lowercase();
-            if !var_index.contains_key(&key) && !model_only_vars.contains(&key) {
-                model_only_vars.push(key);
-            }
+        for c in m.visible_groups().flatten() {
+            add(&c.variable);
         }
         for a in &m.animations {
-            let key = a.variable.to_ascii_lowercase();
-            if !key.is_empty() && key.parse::<f32>().is_err() && !var_index.contains_key(&key) && !model_only_vars.contains(&key) {
-                model_only_vars.push(key);
-            }
-        }
-    }
-    for var in &model_only_vars {
-        if !var_index.contains_key(var) {
-            var_index.insert(var.clone(), vars.len() as omsi_script::VarId);
-            vars.push(0.0);
+            add(&a.variable);
         }
     }
     model_only_vars
