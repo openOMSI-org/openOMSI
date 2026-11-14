@@ -228,7 +228,7 @@ pub(crate) fn adjust_mirror(p: &mut Player, i: usize, shift: [f32; 3], turn: [f3
 pub(super) fn mirror_list(ui: &mut Ui, cams: &[omsi_vehicle::Camera], mirror: &mut usize, r: Rect) {
     ui.scroll_area("dt-mirrors", r, &mut |ui, area| {
         for (k, c) in cams.iter().enumerate() {
-            let row = Rect::new(area.x, area.y + k as f32 * LINE, area.w, LINE - 2.0);
+            let row = Rect::new(area.x, area.y + k as f32 * LINE, area.w - 8.0, LINE - 2.0);
             if !ui.rect_visible(row) {
                 continue;
             }
@@ -266,7 +266,8 @@ fn mirrors(ui: &mut Ui, d: &mut DevTools, p: Option<&mut Player>, r: Rect, out: 
     ui.heading(Rect::new(r.x, y, r.w, 26.0), "Mirrors", None);
     y += 26.0;
     let list_h = n.min(8) as f32 * LINE;
-    mirror_list(ui, &p.vehicle.ty.def.cameras_reflexion, &mut d.mirror, Rect::new(r.x, y, r.w, list_h));
+    let list = Rect::new(r.x, y, r.w, list_h);
+    mirror_list(ui, &p.vehicle.ty.def.cameras_reflexion, &mut d.mirror, list);
     y += list_h + 8.0;
     let i = d.mirror;
     let mut shift = p.mirror_shifts.get(i).copied().unwrap_or([0.0; 3]);
