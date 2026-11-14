@@ -669,8 +669,9 @@ impl PeopleView {
             // the type drawn: the person's avatar, else the content's own
             let ty = st.avatar.clone().unwrap_or_else(|| p.ty.clone());
             let dt = st.since_posed_secs.max(sdt).min(0.25);
-            // Preserve the OMSI-original pose unless the enhanced A/B mode is requested.
-            let mut bones = if enhanced && !p.puppet {
+            // Preserve the OMSI-original pose unless the enhanced A/B mode is requested. (The
+            // enhanced one has no lying pose: somebody on a berth keeps the original's.)
+            let mut bones = if enhanced && !p.puppet && !p.anim.lying() {
                 animation::bones(p, &ty, st, dt, world, &buses)
             } else {
                 omsi_sim::human::slots_from_omsi(&p.anim.bones(&ty.omsi))

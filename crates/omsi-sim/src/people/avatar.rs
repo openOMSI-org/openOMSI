@@ -467,7 +467,7 @@ impl PeopleSim {
                 p.interior = bn.interior;
                 p.vel = DVec2::ZERO;
                 p.activity = if s.seated { Activity::Sit } else { Activity::Stand };
-                AnimInput { kind: if s.seated { 2 } else { 0 }, seat_height: s.height, room_height: pax::OUTSIDE_ROOM, dt_ms, ..Default::default() }
+                AnimInput { kind: if s.seated { 2 } else { 0 }, seat_height: s.height, room_height: pax::OUTSIDE_ROOM, dt_ms, recline: s.recline, ..Default::default() }
             }
             None if cmd.aboard.is_some_and(|(b, _)| bus_ix.contains_key(&b)) => {
                 let (b, l) = cmd.aboard.unwrap();

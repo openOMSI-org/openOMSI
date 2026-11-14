@@ -93,7 +93,7 @@ fn berlin_91() -> omsi_content::tickets::TicketPack {
 
 #[test]
 fn seats_counted_by_the_scripts_numbers() {
-    let seat = |omsi_seat: usize| Seat { pos: Vec3::ZERO, floor: Vec3::ZERO, rot: 0.0, seated: true, height: 0.45, omsi_seat, switch_var: None, taken_var: None, group: 0 };
+    let seat = |omsi_seat: usize| Seat { pos: Vec3::ZERO, floor: Vec3::ZERO, rot: 0.0, seated: true, height: 0.45, omsi_seat, switch_var: None, taken_var: None, group: 0, recline: None };
     // the driver's place is seat 0, a second section's numbers follow the first's
     let seats = [seat(1), seat(2), seat(4), seat(6)];
     assert_eq!(seat_numbers(&seats, [0, 2, 2, 3].into_iter()), [0, 1, 0, 0, 2, 0, 1]);

@@ -237,6 +237,32 @@ Both are ordinary variables of the bus's varlists. A place without the lines, or
 name the scripts do not have, is always there; a blank line or the next block ends the
 list, and OMSI 2 passes over the lines.
 
+## Berths: passengers lying down
+
+OMSI 2 only seats its passengers. A sleeper coach's berths can say that the person lies on
+them: a `[passpos_lying]` block after a `[passpos]` (anywhere before the next `[passpos]`)
+gives the angle of the backrest over the horizontal in degrees - 0 lies flat, the berths of
+a double-deck sleeper coach are about 30:
+
+```
+[passpos]
+-0.956
+2.845
+2.42
+1.09
+0
+
+[passpos_lying]
+33
+```
+
+The `[passpos]` point is then where the **hips** lie on the mattress, its rotation the way
+the feet point (0: forwards), and its seat height the mattress's height above the aisle the
+passenger climbs in from (the nearest path point not above the berth). The passenger lies
+with the legs along the mattress and the back at the given angle, the hips where a seated
+person's are. The angle is taken as at most 80 degrees; a `[drivpos]` is never laid down.
+OMSI 2 does not know the block and seats the passenger on the place as on any other.
+
 ## Ticket validators: one by every door
 
 OMSI 2 uses one `[stamper]` of a `passengercabin.cfg`, the last one written. openOMSI keeps
