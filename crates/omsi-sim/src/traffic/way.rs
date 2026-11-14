@@ -154,7 +154,12 @@ fn way_search(net: &Network, bus: DVec3, heading: f64, ahead: &[usize], max_cost
     let (_, reached, k) = best?;
     let mut path = vec![reached];
     let mut c = reached;
+    let mut seen = hashbrown::HashSet::new();
+    seen.insert(c);
     while let Some(&p) = parent.get(&c) {
+        if !seen.insert(p) {
+            break;
+        }
         path.push(p);
         c = p;
     }

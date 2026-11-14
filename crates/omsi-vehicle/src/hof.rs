@@ -269,6 +269,24 @@ impl Hof {
     }
 }
 
+fn shared_hofs() -> Vec<PathBuf> {
+    static SHARED: std::sync::OnceLock<std::sync::Mutex<(u64, Vec<PathBuf>)>> = std::sync::OnceLock::new();
+    let cell = SHARED.get_or_init(Default::default);
+    let generation = omsi_cfg::content_generation();
+    let mut guard = cell.lock().unwrap_or_else(|e| e.into_inner());
+    if guard.0 != generation {
+        let mut seen = std::collections::HashSet::new();
+        let mut shared: Vec<PathBuf> = omsi_cfg::read_dir_merged("HOFs")
+            .into_iter()
+            .filter(|p| p.extension().map(|e| e.eq_ignore_ascii_case("hof")).unwrap_or(false))
+            .filter(|p| seen.insert(p.file_name().unwrap_or_default().to_string_lossy().to_ascii_lowercase()))
+            .collect();
+        shared.sort_by_key(|f| f.file_name().unwrap_or_default().to_string_lossy().to_ascii_lowercase());
+        *guard = (generation, shared);
+    }
+    guard.1.clone()
+}
+
 /// The `.hof` files available to a vehicle. Files next to the vehicle come first, merged
 /// over all content roots (a mod's depot beside the installation's; archives read in place
 /// too), followed by the shared top-level `HOFs/` folder. A vehicle-local file hides a
@@ -288,14 +306,11 @@ pub fn depot_files(dir: &Path) -> Vec<PathBuf> {
     }
     local.sort_by_key(|f| f.file_name().unwrap_or_default().to_string_lossy().to_ascii_lowercase());
 
-    let mut shared: Vec<PathBuf> = omsi_cfg::read_dir_merged("HOFs")
-        .into_iter()
-        .filter(|p| p.extension().map(|e| e.eq_ignore_ascii_case("hof")).unwrap_or(false))
-        .filter(|p| seen.insert(p.file_name().unwrap_or_default().to_string_lossy().to_ascii_lowercase()))
-        .collect();
-    shared.sort_by_key(|f| f.file_name().unwrap_or_default().to_string_lossy().to_ascii_lowercase());
-
-    local.extend(shared);
+    for p in shared_hofs() {
+        if seen.insert(p.file_name().unwrap_or_default().to_string_lossy().to_ascii_lowercase()) {
+            local.push(p);
+        }
+    }
     local
 }
 
@@ -392,6 +407,24 @@ pub fn depot_anywhere(name: &str) -> Option<Hof> {
     if let Some(path) = known {
         return path.and_then(|p| Hof::load(&p).ok());
     }
+    // 1. Fast check: look in shared HOFs folder first (already cached in-memory)
+    for p in shared_hofs() {
+        if p.file_stem().map(|s| s.to_string_lossy().trim().eq_ignore_ascii_case(name)).unwrap_or(false) {
+            if let Ok(h) = Hof::load(&p) {
+                found.lock().unwrap_or_else(|e| e.into_inner()).1.insert(key, Some(h.path.clone()));
+                return Some(h);
+            }
+        }
+    }
+    for p in shared_hofs() {
+        if Hof::read_name(&p).is_some_and(|n| n.trim().eq_ignore_ascii_case(name)) {
+            if let Ok(h) = Hof::load(&p) {
+                found.lock().unwrap_or_else(|e| e.into_inner()).1.insert(key, Some(h.path.clone()));
+                return Some(h);
+            }
+        }
+    }
+
     let sorted = |folder: &str| {
         let mut dirs: Vec<PathBuf> = omsi_cfg::read_dir_merged(folder).into_iter().filter(|d| omsi_cfg::vfs::is_dir(d)).collect();
         dirs.sort_by_key(|d| d.file_name().unwrap_or_default().to_string_lossy().to_ascii_lowercase());
@@ -399,6 +432,24 @@ pub fn depot_anywhere(name: &str) -> Option<Hof> {
     };
     let mut dirs = sorted("maps");
     dirs.extend(sorted("Vehicles"));
+
+    // 2. Fast pass across all directories: match filename stems without reading/parsing file bodies
+    for d in &dirs {
+        for sub in [d.to_path_buf(), d.join("HOFs"), d.join("hofs")] {
+            for p in omsi_cfg::vfs::read_dir_paths(&sub) {
+                if p.extension().map(|e| e.eq_ignore_ascii_case("hof")).unwrap_or(false)
+                    && p.file_stem().map(|s| s.to_string_lossy().trim().eq_ignore_ascii_case(name)).unwrap_or(false)
+                {
+                    if let Ok(h) = Hof::load(&p) {
+                        found.lock().unwrap_or_else(|e| e.into_inner()).1.insert(key, Some(h.path.clone()));
+                        return Some(h);
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Fallback pass: parse [name] in local HOFs
     let h = dirs.iter().find_map(|d| depot_in(d, name));
     found.lock().unwrap_or_else(|e| e.into_inner()).1.insert(key, h.as_ref().map(|h| h.path.clone()));
     h
