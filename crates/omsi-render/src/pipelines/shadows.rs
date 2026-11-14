@@ -15,6 +15,12 @@ pub(crate) struct Shadows {
     pub pipelines: Vec<wgpu::RenderPipeline>,
 }
 
+/// The next size tried when the graphics card has no memory left for shadow maps of `size`
+/// texels: half of it, down to 512 - None for the last size tried.
+fn smaller_shadow_size(size: u32) -> Option<u32> {
+    (size > 512).then_some(size / 2)
+}
+
 /// `lamps`: the picture is an Enhanced one, which looks the lamps' shadows up (the plain ones
 /// have no tiles under the far map, nor pipelines to draw them).
 pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, shadow_size: u32, lamps: bool, cube: bool) -> Shadows {
@@ -34,16 +40,22 @@ pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, shadow_size: u32, 
     let (lamp_atlas, shadow_tex, shadow_tex_far) = loop {
         // (the lamps' tiles are left out where their pipelines are: see `basic_pipelines`)
         let lamp_atlas = LampAtlas::new(size, lamps && !basic_pipelines(), device.limits().max_texture_dimension_2d, cube);
-        let scope = device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+        // (the smallest size is made outside the scope: a card with no room even for it fails
+        // the renderer's build in the caller's scope - see `build_with_fallbacks` - instead of
+        // drawing every frame with invalid shadow maps)
+        let smaller = smaller_shadow_size(size);
+        let scope = smaller.map(|_| device.push_error_scope(wgpu::ErrorFilter::OutOfMemory));
         // near cascade on the left, close cascade on the right
         let near = depth_map("shadow map", size * 2, size);
         // (and the lamps' tiles under it, see `LampAtlas`)
         let far = depth_map("shadow map far", size, lamp_atlas.height());
-        if pollster::block_on(scope.pop()).is_none() || size <= 512 {
-            break (lamp_atlas, near, far);
+        match (scope.map(|scope| pollster::block_on(scope.pop())), smaller) {
+            (Some(Some(_)), Some(smaller)) => {
+                log::warn!("renderer: no graphics memory left for a shadow map of {size} texels: trying {smaller}");
+                size = smaller;
+            }
+            _ => break (lamp_atlas, near, far),
         }
-        log::warn!("renderer: no graphics memory left for a shadow map of {size} texels: trying {}", size / 2);
-        size /= 2;
     };
     if lamp_atlas.rows == 0 && lamps && !basic_pipelines() {
         log::warn!("renderer: no room for the lamps' shadow tiles under a far shadow map of {size} texels: the lamps cast no shadows");
@@ -178,4 +190,23 @@ fn clear_pipeline(device: &wgpu::Device) -> wgpu::RenderPipeline {
         multiview_mask: None,
         cache: crate::pipeline_cache::get(device).as_ref(),
     })
+}
+
+#[cfg(test)]
+mod fallback_tests {
+    use super::smaller_shadow_size;
+
+    #[test]
+    fn shadow_maps_halve_down_to_512_then_stop() {
+        let mut tried = vec![4096];
+        while let Some(next) = smaller_shadow_size(*tried.last().unwrap()) {
+            tried.push(next);
+        }
+        assert_eq!(tried, [4096, 2048, 1024, 512]);
+        // (the last size has no fallback, so it is made outside the out-of-memory scope and a
+        // failure there reaches the renderer's build instead of leaving invalid textures)
+        assert_eq!(smaller_shadow_size(512), None);
+        assert_eq!(smaller_shadow_size(256), None);
+        assert_eq!(smaller_shadow_size(768), Some(384));
+    }
 }
