@@ -24,6 +24,7 @@ import { GamesPage } from '../pages/games.js';
 import { TutorialsPage } from '../pages/tutorials.js';
 import { SetupPage } from '../pages/setup.js';
 import { AddonsPage } from '../pages/addons.js';
+import { PluginsPage } from '../pages/plugins.js';
 
 const TABS = [
   ['drive', 'Drive', 'bus'],
@@ -37,12 +38,12 @@ const TABS = [
 export function MobileApp() {
   const s = useStore();
   // (the keys and the game controllers open from Settings, #2308: they fell back to Drive)
-  const page = TABS.some((x) => x[0] === s.page) || ['games', 'tutorials', 'setup', 'controls', 'addons', 'troubleshoot'].includes(s.page) ? s.page : 'drive';
-  const Body = { drive: MobileDrive, multiplayer: MultiplayerPage, profile: ProfilePage, mods: ModsPage, troubleshoot: TroubleshootPage, settings: SettingsPage, more: More, games: GamesPage, tutorials: TutorialsPage, setup: SetupPage, controls: ControlsPage, addons: AddonsPage }[page];
+  const page = TABS.some((x) => x[0] === s.page) || ['games', 'tutorials', 'setup', 'controls', 'addons', 'plugins', 'troubleshoot'].includes(s.page) ? s.page : 'drive';
+  const Body = { drive: MobileDrive, multiplayer: MultiplayerPage, profile: ProfilePage, mods: ModsPage, troubleshoot: TroubleshootPage, settings: SettingsPage, more: More, games: GamesPage, tutorials: TutorialsPage, setup: SetupPage, controls: ControlsPage, addons: AddonsPage, plugins: PluginsPage }[page];
   const running = s.poll.instances?.length || 0;
   return html`<div class="m-shell">
     <nav class="m-rail">
-      ${TABS.map(([id, label, icon]) => html`<button class=${'m-tab' + (page === id || (id === 'more' && ['games', 'tutorials', 'setup', 'addons', 'troubleshoot'].includes(page)) || (id === 'settings' && page === 'controls') ? ' on' : '')} onClick=${() => set({ page: id })}>
+      ${TABS.map(([id, label, icon]) => html`<button class=${'m-tab' + (page === id || (id === 'more' && ['games', 'tutorials', 'setup', 'addons', 'plugins', 'troubleshoot'].includes(page)) || (id === 'settings' && page === 'controls') ? ' on' : '')} onClick=${() => set({ page: id })}>
         <${Icon} name=${icon} size=${22} /><span>${t(label)}</span>${id === 'more' && running > 0 && html`<i class="m-dot"></i>`}
       </button>`)}
     </nav>
@@ -64,6 +65,7 @@ function More() {
       ${item('tutorials', 'Tutorials', 'book')}
       ${item('setup', 'Setup', 'folder')}
       ${item('addons', 'Add-ons', 'globe')}
+      ${item('plugins', 'Plugins', 'power')}
     </div>
     <p class="m-foot">openOMSI ${s.boot?.version || ''}</p>
   </div>`;

@@ -8,8 +8,8 @@
 //! `omsi_plugin::status`); a plugin's settings are its data folder's `settings.json`, and
 //! `settings.schema.json` beside it says what they are.
 
-use anyhow::{anyhow, Result};
-use serde_json::{json, Map, Value};
+use anyhow::{Result, anyhow};
+use serde_json::{Map, Value, json};
 use std::path::{Path, PathBuf};
 
 /// (`omsi_plugin::status::OFF_FILE` / `STATUS_FILE`: this crate does not depend on the game's
@@ -22,8 +22,9 @@ const SCHEMA_FILE: &str = "settings.schema.json";
 /// One plugin on disk.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Found {
-    /// The name the game knows it by: a `.lua`'s stem, a folder's name (`<folder>/main.lua`),
-    /// a `.oop`'s or `.opl`'s stem.
+    /// The name the game knows it by: a `.lua`'s or a folder's stem (`<folder>/main.lua`), a
+    /// `.oop`'s stem, an `.opl`'s path under the `plugins` folder (`Pablo/MBAS.opl`: two
+    /// `Config.opl` in different subfolders are two plugins).
     pub name: String,
     pub kind: &'static str,
     /// The file (or the folder of a `main.lua` plugin).
@@ -33,38 +34,109 @@ pub struct Found {
 }
 
 fn child(dir: &Path, name: &str) -> Option<PathBuf> {
-    std::fs::read_dir(dir).ok()?.flatten().map(|e| e.path()).find(|p| p.file_name().is_some_and(|n| n.to_string_lossy().eq_ignore_ascii_case(name)))
+    std::fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .find(|p| {
+            p.file_name()
+                .is_some_and(|n| n.to_string_lossy().eq_ignore_ascii_case(name))
+        })
 }
 
 fn key(name: &str) -> String {
     name.trim().to_ascii_lowercase()
 }
 
-/// The plugins of one `plugins` folder, as the game finds them (`omsi_plugin::lua::find_lua`,
-/// `oop::find_oop`, the `.opl` files).
-pub fn find(dir: &Path) -> Vec<Found> {
-    let Ok(rd) = std::fs::read_dir(dir) else { return Vec::new() };
+/// An `.opl`'s name: its path under the `plugins` folder, `/` between the parts
+/// (`omsi_plugin::status::opl_key`).
+fn opl_name(opl: &Path, plugins: &Path) -> String {
+    let rel = opl.strip_prefix(plugins).unwrap_or(opl);
+    rel.components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+/// Every `.opl` under `dir`, subfolders first, as `omsi_plugin::find_opls` finds them.
+fn find_opls(plugins: &Path, dir: &Path, out: &mut Vec<Found>) {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
     let mut entries: Vec<PathBuf> = rd.flatten().map(|e| e.path()).collect();
-    entries.sort_by_key(|p| p.file_name().map(|n| n.to_string_lossy().to_uppercase()).unwrap_or_default());
-    let stem = |p: &Path| p.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let ext = |p: &Path, e: &str| p.extension().is_some_and(|x| x.eq_ignore_ascii_case(e));
+    entries.sort_by_key(|p| {
+        p.file_name()
+            .map(|n| n.to_string_lossy().to_uppercase())
+            .unwrap_or_default()
+    });
+    for p in entries.iter().filter(|p| p.is_dir()) {
+        find_opls(plugins, p, out);
+    }
+    for p in entries
+        .into_iter()
+        .filter(|p| p.is_file() && p.extension().is_some_and(|e| e.eq_ignore_ascii_case("opl")))
+    {
+        out.push(Found {
+            name: opl_name(&p, plugins),
+            kind: "opl",
+            data_dir: None,
+            path: p,
+        });
+    }
+}
+
+/// The plugins of one `plugins` folder, as the game finds them: the `.opl` files of every
+/// subfolder, then `omsi_plugin::lua::find_lua`'s and `oop::find_oop`'s.
+pub fn find(dir: &Path) -> Vec<Found> {
     let mut out = Vec::new();
+    find_opls(dir, dir, &mut out);
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return out;
+    };
+    let mut entries: Vec<PathBuf> = rd.flatten().map(|e| e.path()).collect();
+    entries.sort_by_key(|p| {
+        p.file_name()
+            .map(|n| n.to_string_lossy().to_uppercase())
+            .unwrap_or_default()
+    });
+    let stem = |p: &Path| {
+        p.file_stem()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    };
+    let ext = |p: &Path, e: &str| p.extension().is_some_and(|x| x.eq_ignore_ascii_case(e));
     for p in entries {
-        let file = p.file_name().map(|n| n.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+        let file = p
+            .file_name()
+            .map(|n| n.to_string_lossy().to_ascii_lowercase())
+            .unwrap_or_default();
         if file.starts_with('.') {
             continue;
         }
         if p.is_dir() {
             if child(&p, "main.lua").is_some_and(|m| m.is_file()) {
-                let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-                out.push(Found { name, kind: "lua", data_dir: Some(p.join("data")), path: p });
+                // (the stem, as `LuaSpec::disk` names it: `my.plugin/` is `my`)
+                out.push(Found {
+                    name: stem(&p),
+                    kind: "lua",
+                    data_dir: Some(p.join("data")),
+                    path: p,
+                });
             }
         } else if ext(&p, "lua") && !file.ends_with(".save.lua") {
-            out.push(Found { name: stem(&p), kind: "lua", data_dir: Some(p.with_extension("data")), path: p });
+            out.push(Found {
+                name: stem(&p),
+                kind: "lua",
+                data_dir: Some(p.with_extension("data")),
+                path: p,
+            });
         } else if ext(&p, "oop") {
-            out.push(Found { name: stem(&p), kind: "oop", data_dir: Some(p.with_extension("data")), path: p });
-        } else if ext(&p, "opl") {
-            out.push(Found { name: stem(&p), kind: "opl", data_dir: None, path: p });
+            out.push(Found {
+                name: stem(&p),
+                kind: "oop",
+                data_dir: Some(p.with_extension("data")),
+                path: p,
+            });
         }
     }
     out
@@ -73,7 +145,10 @@ pub fn find(dir: &Path) -> Vec<Found> {
 /// The `plugins` folders the game reads: the content folder's, then the OMSI 2 folder's.
 pub fn dirs() -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = Vec::new();
-    for root in [crate::content_dir(), crate::root().ok()].into_iter().flatten() {
+    for root in [crate::content_dir(), crate::root().ok()]
+        .into_iter()
+        .flatten()
+    {
         if let Some(d) = child(&root, "plugins").filter(|d| d.is_dir()) {
             if !out.contains(&d) {
                 out.push(d);
@@ -85,7 +160,14 @@ pub fn dirs() -> Vec<PathBuf> {
 
 /// The plugins the player switched off.
 pub fn off_list(data: &Path) -> Vec<String> {
-    std::fs::read_to_string(data.join(OFF_FILE)).map(|t| t.lines().map(key).filter(|l| !l.is_empty() && !l.starts_with('#')).collect()).unwrap_or_default()
+    std::fs::read_to_string(data.join(OFF_FILE))
+        .map(|t| {
+            t.lines()
+                .map(key)
+                .filter(|l| !l.is_empty() && !l.starts_with('#'))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Switch the plugin `name` on or off for the next game.
@@ -100,7 +182,10 @@ pub fn set_enabled_in(data: &Path, name: &str, on: bool) -> Result<()> {
         off.push(k);
     }
     off.sort();
-    let text = format!("# Plugins switched off in the launcher (one name a line); the game leaves them out.\n{}", off.iter().map(|n| format!("{n}\n")).collect::<String>());
+    let text = format!(
+        "# Plugins switched off in the launcher (one name a line); the game leaves them out.\n{}",
+        off.iter().map(|n| format!("{n}\n")).collect::<String>()
+    );
     std::fs::create_dir_all(data)?;
     std::fs::write(data.join(OFF_FILE), text)?;
     Ok(())
@@ -117,7 +202,17 @@ pub fn status_in(data: &Path, dirs: &[PathBuf]) -> Value {
     let off = off_list(data);
     let report = read_json(&data.join(STATUS_FILE));
     let at = report.as_ref().and_then(|r| r["at"].as_u64());
-    let seen = |name: &str| report.as_ref().and_then(|r| r["plugins"].as_array()?.iter().find(|e| e["name"].as_str() == Some(&key(name))).cloned());
+    let seen = |name: &str, kind: &str| {
+        report.as_ref().and_then(|r| {
+            r["plugins"]
+                .as_array()?
+                .iter()
+                .find(|e| {
+                    e["name"].as_str() == Some(&key(name)) && e["kind"].as_str() == Some(kind)
+                })
+                .cloned()
+        })
+    };
     let mut names = std::collections::HashSet::new();
     let mut list = Vec::new();
     for dir in dirs {
@@ -126,12 +221,18 @@ pub fn status_in(data: &Path, dirs: &[PathBuf]) -> Value {
             if !names.insert((key(&f.name), f.kind)) {
                 continue;
             }
-            let last = seen(&f.name);
-            let schema = f.data_dir.as_ref().and_then(|d| read_json(&d.join(SCHEMA_FILE)));
-            let values = f.data_dir.as_ref().and_then(|d| read_json(&d.join(SETTINGS_FILE)));
+            let last = seen(&f.name, f.kind);
+            let schema = f
+                .data_dir
+                .as_ref()
+                .and_then(|d| read_json(&d.join(SCHEMA_FILE)));
+            let values = f
+                .data_dir
+                .as_ref()
+                .and_then(|d| read_json(&d.join(SETTINGS_FILE)));
             list.push(json!({
                 "name": f.name,
-                "title": schema.as_ref().and_then(|s| s["title"].as_str()).unwrap_or(&f.name),
+                "title": schema.as_ref().and_then(|s| s["title"].as_str()).map(str::to_string).unwrap_or_else(|| if f.kind == "opl" { f.path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default() } else { f.name.clone() }),
                 "kind": f.kind,
                 "path": f.path.display().to_string(),
                 "enabled": !off.contains(&key(&f.name)),
@@ -150,14 +251,30 @@ fn fit(setting: &Value, v: &Value) -> Option<Value> {
     match setting["type"].as_str()? {
         "bool" => v.as_bool().map(Value::from),
         "number" => {
-            let (min, max) = (setting["min"].as_f64().unwrap_or(f64::MIN), setting["max"].as_f64().unwrap_or(f64::MAX));
+            let (min, max) = (
+                setting["min"].as_f64().unwrap_or(f64::MIN),
+                setting["max"].as_f64().unwrap_or(f64::MAX),
+            );
             let n = v.as_f64()?.clamp(min, max);
             let step = setting["step"].as_f64().unwrap_or(0.0);
-            let n = if step > 0.0 && min.is_finite() { min + ((n - min) / step).round() * step } else { n };
+            let n = if step > 0.0 && min.is_finite() {
+                min + ((n - min) / step).round() * step
+            } else {
+                n
+            };
             serde_json::Number::from_f64(n).map(Value::Number)
         }
-        "text" => v.as_str().map(|s| Value::from(s.chars().take(256).collect::<String>())),
-        "choice" => v.as_str().filter(|s| setting["choices"].as_array().is_some_and(|c| c.iter().any(|x| x.as_str() == Some(s)))).map(Value::from),
+        "text" => v
+            .as_str()
+            .map(|s| Value::from(s.chars().take(256).collect::<String>())),
+        "choice" => v
+            .as_str()
+            .filter(|s| {
+                setting["choices"]
+                    .as_array()
+                    .is_some_and(|c| c.iter().any(|x| x.as_str() == Some(s)))
+            })
+            .map(Value::from),
         _ => None,
     }
 }
@@ -165,10 +282,19 @@ fn fit(setting: &Value, v: &Value) -> Option<Value> {
 /// Save the plugin's settings the player changed (only keys its description has, each held
 /// to its range); the game reads them when the plugin starts.
 pub fn save_settings_in(dirs: &[PathBuf], name: &str, values: &Value) -> Result<()> {
-    let f = dirs.iter().flat_map(|d| find(d)).find(|f| key(&f.name) == key(name)).ok_or_else(|| anyhow!("no plugin {name}"))?;
-    let data = f.data_dir.ok_or_else(|| anyhow!("{name} has no settings"))?;
-    let schema = read_json(&data.join(SCHEMA_FILE)).ok_or_else(|| anyhow!("{name} has no settings"))?;
-    let mut saved: Map<String, Value> = read_json(&data.join(SETTINGS_FILE)).and_then(|v| v.as_object().cloned()).unwrap_or_default();
+    let f = dirs
+        .iter()
+        .flat_map(|d| find(d))
+        .find(|f| key(&f.name) == key(name))
+        .ok_or_else(|| anyhow!("no plugin {name}"))?;
+    let data = f
+        .data_dir
+        .ok_or_else(|| anyhow!("{name} has no settings"))?;
+    let schema =
+        read_json(&data.join(SCHEMA_FILE)).ok_or_else(|| anyhow!("{name} has no settings"))?;
+    let mut saved: Map<String, Value> = read_json(&data.join(SETTINGS_FILE))
+        .and_then(|v| v.as_object().cloned())
+        .unwrap_or_default();
     for s in schema["settings"].as_array().into_iter().flatten() {
         let Some(k) = s["key"].as_str() else { continue };
         if let Some(v) = values.get(k).and_then(|v| fit(s, v)) {
@@ -176,7 +302,10 @@ pub fn save_settings_in(dirs: &[PathBuf], name: &str, values: &Value) -> Result<
         }
     }
     std::fs::create_dir_all(&data)?;
-    std::fs::write(data.join(SETTINGS_FILE), serde_json::to_string_pretty(&Value::Object(saved))?)?;
+    std::fs::write(
+        data.join(SETTINGS_FILE),
+        serde_json::to_string_pretty(&Value::Object(saved))?,
+    )?;
     Ok(())
 }
 
@@ -214,27 +343,85 @@ mod tests {
         std::fs::write(plugins.join("old.opl"), "").unwrap();
         std::fs::create_dir_all(plugins.join("cruise.data")).unwrap();
         std::fs::write(plugins.join("cruise.data/settings.schema.json"), r#"{"title":"Cruise","settings":[{"key":"step","type":"number","min":0,"max":10,"step":2,"label":"Step","default":4},{"key":"mode","type":"choice","choices":["a","b"],"default":"a"}]}"#).unwrap();
-        std::fs::write(data.join(STATUS_FILE), r#"{"at":5,"plugins":[{"name":"board","path":"x","kind":"lua","state":"failed","error":"syntax error"}]}"#).unwrap();
+        std::fs::write(data.join(STATUS_FILE), r#"{"at":5,"plugins":[{"name":"board","path":"x","kind":"lua","state":"failed","error":"syntax error"},{"name":"old.opl","path":"y","kind":"lua","state":"loaded"}]}"#).unwrap();
         let dirs = vec![plugins.clone()];
-        let found: Vec<_> = find(&plugins).into_iter().map(|f| (f.name, f.kind)).collect();
-        assert_eq!(found, [("Board".to_string(), "lua"), ("cruise".to_string(), "lua"), ("old".to_string(), "opl")]);
+        let found: Vec<_> = find(&plugins)
+            .into_iter()
+            .map(|f| (f.name, f.kind))
+            .collect();
+        assert_eq!(
+            found,
+            [
+                ("old.opl".to_string(), "opl"),
+                ("Board".to_string(), "lua"),
+                ("cruise".to_string(), "lua")
+            ]
+        );
 
         set_enabled_in(&data, "Cruise", false).unwrap();
         assert_eq!(off_list(&data), ["cruise"]);
         let s = status_in(&data, &dirs);
-        let get = |n: &str| s["plugins"].as_array().unwrap().iter().find(|p| p["name"] == n).unwrap().clone();
+        let get = |n: &str| {
+            s["plugins"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|p| p["name"] == n)
+                .unwrap()
+                .clone()
+        };
         assert_eq!(get("cruise")["enabled"], false);
         assert_eq!(get("cruise")["title"], "Cruise");
         assert_eq!(get("Board")["state"], "failed");
         assert_eq!(get("Board")["error"], "syntax error");
+        assert_eq!(get("old.opl")["title"], "old");
+        assert_eq!(
+            get("old.opl")["state"],
+            Value::Null,
+            "a Lua plugin's line is not an OMSI plugin's"
+        );
         set_enabled_in(&data, "cruise", true).unwrap();
         assert!(off_list(&data).is_empty());
 
-        save_settings_in(&dirs, "cruise", &json!({"step": 7.2, "mode": "zzz", "other": 1})).unwrap();
+        save_settings_in(
+            &dirs,
+            "cruise",
+            &json!({"step": 7.2, "mode": "zzz", "other": 1}),
+        )
+        .unwrap();
         let saved = read_json(&plugins.join("cruise.data/settings.json")).unwrap();
         assert_eq!(saved, json!({"step": 8.0}));
         assert!(save_settings_in(&dirs, "old", &json!({})).is_err());
         let _ = std::fs::remove_dir_all(&data);
+        let _ = std::fs::remove_dir_all(&plugins);
+    }
+
+    #[test]
+    fn opls_in_subfolders_are_listed_by_their_path_and_folders_by_their_stem() {
+        let plugins = tmp("subfolders");
+        for f in [
+            "Pablo/MBAS.opl",
+            "Pablo/Config.opl",
+            "Config.opl",
+            "my.plugin/main.lua",
+        ] {
+            std::fs::create_dir_all(plugins.join(f).parent().unwrap()).unwrap();
+            std::fs::write(plugins.join(f), "").unwrap();
+        }
+        let found: Vec<_> = find(&plugins)
+            .into_iter()
+            .map(|f| (f.name, f.kind))
+            .collect();
+        assert_eq!(
+            found,
+            [
+                ("Pablo/Config.opl", "opl"),
+                ("Pablo/MBAS.opl", "opl"),
+                ("Config.opl", "opl"),
+                ("my", "lua")
+            ]
+            .map(|(n, k)| (n.to_string(), k))
+        );
         let _ = std::fs::remove_dir_all(&plugins);
     }
 }
