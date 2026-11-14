@@ -1135,6 +1135,34 @@ pub fn reverse_winding(data: &mut MeshData) {
     }
 }
 
+/// Does the mesh have faces that turn their backs on their vertex normals?
+/// At least 90% of triangles with valid normals facing opposite to geometric winding.
+pub fn mesh_faces_against_normals(m: &omsi_o3d::Mesh) -> bool {
+    let (mut against, mut counted) = (0usize, 0usize);
+    for t in &m.triangles {
+        let v = t.indices.map(|i| &m.vertices[i as usize]);
+        let g = (v[1].position - v[0].position).cross(v[2].position - v[0].position);
+        let n = v[0].normal + v[1].normal + v[2].normal;
+        if g.length_squared() > 1e-12 && n.length_squared() > 1e-12 {
+            counted += 1;
+            if g.dot(n) < 0.0 {
+                against += 1;
+            }
+        }
+    }
+    counted >= 2 && against * 10 >= counted * 9
+}
+
+/// Convert an `.o3d`/`.x` wheel or tire mesh to [`MeshData`], ensuring inverted faces
+/// are turned round and backface culling is disabled (#3881).
+pub fn mesh_from_o3d_wheel(m: &omsi_o3d::Mesh) -> MeshData {
+    let mut out = mesh_from_o3d(m);
+    if mesh_faces_against_normals(m) && !turns_round(m) {
+        reverse_winding(&mut out);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests;
 

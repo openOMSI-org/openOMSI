@@ -596,6 +596,23 @@ fn the_exporters_quarter_turn_matrix_does_not_turn_a_mesh_round() {
 }
 
 #[test]
+fn inverted_wheel_mesh_turns_round() {
+    let v = |x: f32, y: f32| omsi_o3d::Vertex { position: Vec3::new(x, y, 1.0), normal: Vec3::new(0.0, 0.0, 1.0), uv: Vec2::ZERO };
+    let o3d = omsi_o3d::Mesh {
+        vertices: vec![v(0.0, 0.0), v(0.0, 1.0), v(1.0, 0.0), v(1.0, 1.0)],
+        triangles: vec![omsi_o3d::Triangle { indices: [0, 1, 2], material: 0 }, omsi_o3d::Triangle { indices: [2, 1, 3], material: 0 }],
+        materials: vec![omsi_o3d::Material::default()],
+        transform: glam::Mat4::IDENTITY,
+        has_transform: true,
+        ..Default::default()
+    };
+    assert!(mesh_faces_against_normals(&o3d));
+    assert!(!turns_round(&o3d));
+    let wheel = mesh_from_o3d_wheel(&o3d);
+    assert_eq!(wheel.indices[..3], [0, 2, 1]);
+}
+
+#[test]
 fn cone_filtered_rays_hit_what_the_whole_mesh_does() {
     let mut seed = 7u32;
     let mut rnd = move || {

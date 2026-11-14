@@ -280,6 +280,17 @@ pub fn load_paint_schemes(dir: &Path) -> Vec<PaintScheme> {
     schemes
 }
 
+/// Whether a vehicle mesh is a wheel, tire, rim, or axle assembly by its animation (#3881).
+pub(crate) fn is_wheel_mesh_record(md: &omsi_model::MeshDef) -> bool {
+    md.animations.iter().any(|an| {
+        let v = an.variable.to_ascii_lowercase();
+        v.starts_with("wheel_rotation_")
+            || v.starts_with("wheel_rot_")
+            || v.starts_with("axle_steering_")
+            || v.starts_with("axle_suspension_")
+    })
+}
+
 /// The vehicle pack a mesh file belongs to (the folder under `Vehicles`, lower case), the
 /// unit its exporter's winding is judged by; a file elsewhere is judged with its folder.
 pub(super) fn winding_pack(p: &Path) -> String {
@@ -431,6 +442,7 @@ impl VehicleType {
                         };
                         // (a mesh none of whose bones is bound moves as a rigid one)
                         let skin = if skin.iter().any(|b| b.def_index.is_some()) { skin } else { Vec::new() };
+                        let is_wheel = is_wheel_mesh_record(md);
                         let pack = winding_pack(&p);
                         match omsi_geometry::positive_det_faces_forward(&m) {
                             Some(forward) => votes.entry(pack.clone()).or_default().record(forward, m.triangles.len()),
@@ -439,9 +451,14 @@ impl VehicleType {
                         if omsi_geometry::turns_round(&m) {
                             turned.push((meshes.len(), pack));
                         }
+                        let data = if is_wheel {
+                            omsi_geometry::mesh_from_o3d_wheel(&m)
+                        } else {
+                            mesh_from_o3d(&m)
+                        };
                         meshes.push(VehicleMesh {
                             def_index: start + i,
-                            data: mesh_from_o3d(&m),
+                            data,
                             file: p,
                             materials: m.materials.clone(),
                             overrides: md.materials.clone(),
@@ -477,9 +494,15 @@ impl VehicleType {
                 if m.triangles.is_empty() {
                     continue;
                 }
+                let is_wheel = is_wheel_mesh_record(md);
+                let data = if is_wheel {
+                    omsi_geometry::mesh_from_o3d_wheel(&m)
+                } else {
+                    mesh_from_o3d(&m)
+                };
                 lod_meshes.push(VehicleMesh {
                     def_index: first + i,
-                    data: mesh_from_o3d(&m),
+                    data,
                     file: p,
                     materials: m.materials.clone(),
                     overrides: md.materials.clone(),
@@ -804,7 +827,14 @@ impl VehicleType {
             return Some(std::borrow::Cow::Borrowed(&m.data));
         }
         match omsi_o3d::load_mesh(&m.file) {
-            Ok(o) => Some(std::borrow::Cow::Owned(omsi_geometry::mesh_from_o3d_turning(&o, !m.keep_winding))),
+            Ok(o) => {
+                let md = &self.model.meshes[m.def_index];
+                if is_wheel_mesh_record(md) {
+                    Some(std::borrow::Cow::Owned(omsi_geometry::mesh_from_o3d_wheel(&o)))
+                } else {
+                    Some(std::borrow::Cow::Owned(omsi_geometry::mesh_from_o3d_turning(&o, !m.keep_winding)))
+                }
+            }
             Err(e) => {
                 log::warn!("{}: {e}", m.file.display());
                 None
@@ -981,6 +1011,20 @@ mod winding_exporter_tests {
     #[test]
     fn forward_majority_keeps_existing_behaviour() {
         assert!(keep_authored_winding(80, 40, 1, 1));
+    }
+
+    #[test]
+    fn wheel_mesh_identification_and_inverted_faces() {
+        let md_rot = omsi_model::MeshDef {
+            animations: vec![omsi_model::Animation {
+                variable: "Wheel_Rotation_0_L".into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        assert!(super::is_wheel_mesh_record(&md_rot));
+        let md_plain = omsi_model::MeshDef::default();
+        assert!(!super::is_wheel_mesh_record(&md_plain));
     }
 }
 
